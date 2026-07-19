@@ -1,5 +1,7 @@
 # UNAS import pipeline
 
+> A brand review, approval és Apply kezelőfelület részletes folyamata: [UNAS-BRAND-REVIEW-UI.md](./UNAS-BRAND-REVIEW-UI.md).
+
 ## Cél és biztonsági határ
 
 A pipeline UNAS katalógus XLSX exportot fogad, validál, staging rekordokba ír és

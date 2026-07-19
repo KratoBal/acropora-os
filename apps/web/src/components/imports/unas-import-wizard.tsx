@@ -20,6 +20,7 @@ import {
   type ImportIssueSeverity,
   type UnasImportReport,
 } from "@acropora/types";
+import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -461,6 +462,16 @@ export function UnasImportWizard() {
               </p>
             </div>
             <div className="flex gap-2">
+              {report.brandResolution?.products.some(
+                (product) => product.status !== "RESOLVED",
+              ) ? (
+                <Link
+                  href={`/admin/imports/unas/${encodeURIComponent(report.batchId)}/review`}
+                  className="inline-flex h-9 items-center rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white hover:bg-teal-800"
+                >
+                  Brandek ellenőrzése
+                </Link>
+              ) : null}
               <Button variant="secondary" onClick={() => void copySummary()}>
                 Összegzés másolása
               </Button>

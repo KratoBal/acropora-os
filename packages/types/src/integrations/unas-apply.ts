@@ -13,6 +13,7 @@ export interface UnasApplySummary {
   externalReferencesSynchronized: number;
   domainEventsCreated: number;
   unresolvedBrandAssociations: number;
+  durationMs?: number;
   appliedAt: string;
   appliedBy: string;
 }

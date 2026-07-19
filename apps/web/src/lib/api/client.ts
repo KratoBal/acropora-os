@@ -34,10 +34,29 @@ export async function apiRequest<T>(
     if (response.status === 403) {
       throw new ApiError("Nincs jogosultságod ehhez a művelethez.", 403);
     }
-    if (response.status === 400) {
-      throw new ApiError("A megadott szűrők nem érvényesek.", 400);
+    let serverMessage: string | undefined;
+    try {
+      const payload = (await response.json()) as {
+        message?: string | string[];
+      };
+      serverMessage = Array.isArray(payload.message)
+        ? payload.message.join(" ")
+        : payload.message;
+    } catch {
+      serverMessage = undefined;
     }
-    throw new ApiError("A kérés feldolgozása nem sikerült.", response.status);
+    const fallback: Record<number, string> = {
+      400: "A megadott adatok nem érvényesek.",
+      404: "A kért import batch nem található.",
+      409: "Az adat időközben megváltozott. Frissítsd a listát.",
+      422: "A művelet üzleti feltételei nem teljesülnek.",
+    };
+    throw new ApiError(
+      serverMessage ??
+        fallback[response.status] ??
+        "A kérés feldolgozása nem sikerült.",
+      response.status,
+    );
   }
 
   return (await response.json()) as T;

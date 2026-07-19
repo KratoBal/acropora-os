@@ -1,5 +1,9 @@
 # UNAS Apply Import Engine
 
+> Az emberi brand review és a megerősített admin felület: [UNAS-BRAND-REVIEW-UI.md](./UNAS-BRAND-REVIEW-UI.md).
+
+Az approval a #0006.9-től a külön mentett review döntéseket használja. Kompatibilitási okból a korábbi, teljes `brandDecisions` payload továbbra is elfogadott, de az admin UI üres approval payloadot küld, és a backend tranzakcióban ellenőrzi, hogy nem maradt `PENDING` sor.
+
 ## Biztonsági határ
 
 Az Apply Import egy korábban stagingelt, validált és explicit jóváhagyott UNAS katalógus-batch domainalkalmazása. Nem olvas új XLSX fájlt, nem hoz létre Brand rekordot, nem módosít készletet, StockMovementet, vevőt, rendelést vagy árat, és nem töröl vagy archivál automatikusan terméket.

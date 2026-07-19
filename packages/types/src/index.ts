@@ -58,7 +58,16 @@ export type {
   BrandResolutionSource,
   BrandResolutionStatus,
   BrandResolutionSummary,
+  BrandReviewBulkDecisionInput,
+  BrandReviewConfidence,
+  BrandReviewDecision,
+  BrandReviewDecisionInput,
+  BrandReviewDecisionStatus,
+  BrandReviewListItem,
+  BrandReviewListResponse,
   BrandReviewReason,
+  BrandReviewSourceFacts,
+  BrandReviewSummary,
 } from "./integrations/brand-resolution.js";
 export type {
   UnasApplySummary,

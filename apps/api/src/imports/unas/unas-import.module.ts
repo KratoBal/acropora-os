@@ -7,6 +7,8 @@ import { UnasImportService } from "./unas-import.service.js";
 import { UnasImportValidator } from "./unas-import.validator.js";
 import { UnasApplyRepository } from "./unas-apply.repository.js";
 import { UnasApplyService } from "./unas-apply.service.js";
+import { UnasBrandReviewRepository } from "./unas-brand-review.repository.js";
+import { UnasBrandReviewService } from "./unas-brand-review.service.js";
 import { UnasXlsxParser } from "./unas-xlsx.parser.js";
 import { BrandResolutionEngine } from "./brand-resolution/brand-resolution.engine.js";
 
@@ -21,6 +23,8 @@ import { BrandResolutionEngine } from "./brand-resolution/brand-resolution.engin
     BrandResolutionEngine,
     UnasApplyRepository,
     UnasApplyService,
+    UnasBrandReviewRepository,
+    UnasBrandReviewService,
   ],
 })
 export class UnasImportModule {}

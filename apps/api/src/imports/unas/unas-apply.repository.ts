@@ -69,19 +69,28 @@ export class UnasApplyRepository extends Repository {
           decisions.map((decision) => [decision.sourceRowNumber, decision]),
         );
         const now = new Date();
-        for (const review of batch.brandResolutionReviews) {
-          const decision = byRow.get(review.sourceRowNumber)!;
-          await transaction.brandResolutionReview.update({
-            where: { id: review.id },
-            data: {
-              status: decision.decision === "ACCEPT" ? "ACCEPTED" : "NO_BRAND",
-              resolvedBrandKey:
-                decision.decision === "ACCEPT" ? decision.brandKey : null,
-              reviewedBy: actorId,
-              reviewedAt: now,
-            },
-          });
-        }
+        if (decisions.length > 0)
+          for (const review of batch.brandResolutionReviews) {
+            const decision = byRow.get(review.sourceRowNumber)!;
+            await transaction.brandResolutionReview.update({
+              where: { id: review.id },
+              data: {
+                status:
+                  decision.decision === "ACCEPT" ? "ACCEPTED" : "NO_BRAND",
+                resolvedBrandKey:
+                  decision.decision === "ACCEPT" ? decision.brandKey : null,
+                reviewedBy: actorId,
+                reviewedAt: now,
+              },
+            });
+          }
+        else if (
+          batch.brandResolutionReviews.some(
+            (review) =>
+              review.status !== "ACCEPTED" && review.status !== "NO_BRAND",
+          )
+        )
+          throw new Error("INVALID_APPROVAL_STATE:PENDING_REVIEWS");
         return transaction.catalogImportBatch.update({
           where: { id: batchId },
           data: { status: "APPROVED", approvedBy: actorId, approvedAt: now },
@@ -103,6 +112,7 @@ export class UnasApplyRepository extends Repository {
     actorId: string,
     expectedAnalysisVersion: string,
   ): Promise<UnasApplySummary> {
+    const startedAt = Date.now();
     return prisma.$transaction(
       async (transaction) => {
         const batch = await transaction.catalogImportBatch.findUniqueOrThrow({
@@ -319,6 +329,7 @@ export class UnasApplyRepository extends Repository {
           batchId,
           status: "APPLIED",
           ...counts,
+          durationMs: Date.now() - startedAt,
           appliedAt: appliedAt.toISOString(),
           appliedBy: actorId,
         };

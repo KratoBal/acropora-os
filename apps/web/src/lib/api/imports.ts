@@ -1,4 +1,12 @@
-import type { UnasImportReport } from "@acropora/types";
+import type {
+  BrandReviewBulkDecisionInput,
+  BrandReviewDecisionInput,
+  BrandReviewListItem,
+  BrandReviewListResponse,
+  UnasApplySummary,
+  UnasApprovalResult,
+  UnasImportReport,
+} from "@acropora/types";
 
 import { ApiError, apiRequest } from "./client";
 
@@ -64,6 +72,67 @@ export const importApi = {
     return apiRequest<UnasImportReport>(
       `/imports/unas/${encodeURIComponent(batchId)}/report`,
       token,
+    );
+  },
+  brandReviews(
+    token: string,
+    batchId: string,
+    query: URLSearchParams,
+    signal?: AbortSignal,
+  ) {
+    return apiRequest<BrandReviewListResponse>(
+      `/imports/unas/${encodeURIComponent(batchId)}/brand-reviews?${query}`,
+      token,
+      { signal },
+    );
+  },
+  decideBrandReview(
+    token: string,
+    batchId: string,
+    reviewId: string,
+    input: BrandReviewDecisionInput,
+  ) {
+    return apiRequest<BrandReviewListItem>(
+      `/imports/unas/${encodeURIComponent(batchId)}/brand-reviews/${encodeURIComponent(reviewId)}`,
+      token,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
+    );
+  },
+  decideBrandReviewsBulk(
+    token: string,
+    batchId: string,
+    input: BrandReviewBulkDecisionInput,
+  ) {
+    return apiRequest<{ updated: number }>(
+      `/imports/unas/${encodeURIComponent(batchId)}/brand-reviews/bulk`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
+    );
+  },
+  approve(token: string, batchId: string) {
+    return apiRequest<UnasApprovalResult>(
+      `/imports/unas/${encodeURIComponent(batchId)}/approve`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      },
+    );
+  },
+  apply(token: string, batchId: string) {
+    return apiRequest<UnasApplySummary>(
+      `/imports/unas/${encodeURIComponent(batchId)}/apply`,
+      token,
+      { method: "POST" },
     );
   },
 };

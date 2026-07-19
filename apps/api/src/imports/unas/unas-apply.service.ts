@@ -64,15 +64,28 @@ export class UnasApplyService {
       decisions.map((decision) => [decision.sourceRowNumber, decision]),
     );
     if (
-      decisions.length !== batch.brandResolutionReviews.length ||
-      batch.brandResolutionReviews.some(
-        (review) => !decisionByRow.has(review.sourceRowNumber),
-      )
+      decisions.length > 0 &&
+      (decisions.length !== batch.brandResolutionReviews.length ||
+        batch.brandResolutionReviews.some(
+          (review) => !decisionByRow.has(review.sourceRowNumber),
+        ))
     )
       throw new BadRequestException(
         "Minden brand review sorhoz explicit ACCEPT vagy NO_BRAND döntés szükséges.",
       );
-    for (const review of batch.brandResolutionReviews) {
+    if (
+      decisions.length === 0 &&
+      batch.brandResolutionReviews.some(
+        (review) =>
+          review.status !== "ACCEPTED" && review.status !== "NO_BRAND",
+      )
+    )
+      throw new BadRequestException(
+        "Minden brand review sort le kell zárni jóváhagyás előtt.",
+      );
+    for (const review of decisions.length > 0
+      ? batch.brandResolutionReviews
+      : []) {
       const decision = decisionByRow.get(review.sourceRowNumber)!;
       if (decision.decision !== "ACCEPT") continue;
       const resolution = review.resolution as unknown as BrandResolutionResult;
