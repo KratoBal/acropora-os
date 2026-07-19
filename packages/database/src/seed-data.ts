@@ -29,7 +29,7 @@ export const seedCategories = [
   { name: "Eleség", slug: "eleseg" },
 ] as const;
 
-export const seedManufacturers = [
+export const seedBrands = [
   { name: "Red Sea", slug: "red-sea" },
   { name: "Aqua Medic", slug: "aqua-medic" },
   { name: "Tropic Marin", slug: "tropic-marin" },

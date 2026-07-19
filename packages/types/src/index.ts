@@ -33,3 +33,17 @@ export type {
   Session,
   UserRole,
 } from "./auth.js";
+export type {
+  AcroporaDomainEvent,
+  AquariumMeasurementRecorded,
+  CustomerCreated,
+  DomainEventEnvelope,
+  GoodsReceived,
+  IcpReportImported,
+  ProductCreated,
+  PurchaseOrderApproved,
+  SalesOrderConfirmed,
+  SalesOrderShipped,
+  ServiceJobCompleted,
+  StockMovementPosted,
+} from "./domain-events.js";

@@ -1,11 +1,34 @@
 export { Prisma, PrismaClient } from "@prisma/client";
 export type {
   AuditLog,
+  Aquarium,
+  AquariumMeasurement,
+  Brand,
   Category,
-  Manufacturer,
+  Customer,
+  CustomerAddress,
+  DomainEvent,
+  ExternalReference,
+  GoodsReceipt,
+  GoodsReceiptLine,
+  IcpReport,
+  IcpResult,
+  Product,
+  ProductVariant,
+  PurchaseOrder,
+  PurchaseOrderLine,
+  SalesOrder,
+  SalesOrderLine,
+  ServiceJob,
   Session,
+  StockMovement,
+  StockMovementLine,
+  Supplier,
+  SupplierProduct,
   User,
   UserRole,
+  Warehouse,
+  WarehouseLocation,
 } from "@prisma/client";
 
 export { prisma } from "./database.js";
@@ -16,4 +39,4 @@ export type {
   DatabaseHealthClient,
 } from "./database-health.js";
 export { Repository } from "./repository.js";
-export { seedCategories, seedManufacturers, seedUsers } from "./seed-data.js";
+export { seedBrands, seedCategories, seedUsers } from "./seed-data.js";

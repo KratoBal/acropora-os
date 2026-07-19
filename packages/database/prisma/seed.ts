@@ -1,10 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 
-import {
-  seedCategories,
-  seedManufacturers,
-  seedUsers,
-} from "../src/seed-data.js";
+import { seedCategories, seedBrands, seedUsers } from "../src/seed-data.js";
 
 process.env.DATABASE_URL ??=
   "postgresql://acropora:acropora@localhost:5432/acropora?schema=public&connect_timeout=2";
@@ -34,11 +30,11 @@ async function main() {
           create: category,
         }),
       ),
-      ...seedManufacturers.map((manufacturer) =>
-        prisma.manufacturer.upsert({
-          where: { slug: manufacturer.slug },
-          update: manufacturer,
-          create: manufacturer,
+      ...seedBrands.map((brand) =>
+        prisma.brand.upsert({
+          where: { slug: brand.slug },
+          update: brand,
+          create: brand,
         }),
       ),
     ]);

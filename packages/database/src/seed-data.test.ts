@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { seedCategories, seedManufacturers, seedUsers } from "./seed-data.js";
+import { seedBrands, seedCategories, seedUsers } from "./seed-data.js";
 
 describe("development seed smoke test", () => {
   it("contains the required users", () => {
@@ -13,10 +13,10 @@ describe("development seed smoke test", () => {
     ]);
   });
 
-  it("contains five unique categories and manufacturers", () => {
+  it("contains five unique categories and brands", () => {
     assert.equal(seedCategories.length, 5);
-    assert.equal(seedManufacturers.length, 5);
+    assert.equal(seedBrands.length, 5);
     assert.equal(new Set(seedCategories.map((item) => item.slug)).size, 5);
-    assert.equal(new Set(seedManufacturers.map((item) => item.slug)).size, 5);
+    assert.equal(new Set(seedBrands.map((item) => item.slug)).size, 5);
   });
 });
