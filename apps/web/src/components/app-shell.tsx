@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Avatar,
   Badge,
   Button,
   Icon,
@@ -10,6 +9,7 @@ import {
   Sidebar,
   Topbar,
 } from "@acropora/ui";
+import { hasPermission } from "@acropora/types";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useState } from "react";
@@ -19,60 +19,75 @@ import {
   primaryNavigation,
   settingsNavigation,
 } from "./navigation";
+import { useAuth } from "./auth/auth-provider";
+import { UserMenu } from "./auth/user-menu";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const { session } = useAuth();
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
 
   const navigation = (
     <>
       <div className="space-y-1">
-        {primaryNavigation.map((item) => (
-          <NavItem
-            key={item.href}
-            href={item.href}
-            label={item.label}
-            icon={<Icon name={item.icon} />}
-            active={pathname === item.href}
-            badge={
-              item.href === "/feladataim" ? (
-                <Badge className="px-1.5" variant="neutral">
-                  5
-                </Badge>
-              ) : undefined
-            }
-            onClick={() => setMobileNavigationOpen(false)}
-          />
-        ))}
+        {primaryNavigation
+          .filter(
+            (item) => session && hasPermission(session.user, item.permission),
+          )
+          .map((item) => (
+            <NavItem
+              key={item.href}
+              href={item.href}
+              label={item.label}
+              icon={<Icon name={item.icon} />}
+              active={pathname === item.href}
+              badge={
+                item.href === "/feladataim" ? (
+                  <Badge className="px-1.5" variant="neutral">
+                    5
+                  </Badge>
+                ) : undefined
+              }
+              onClick={() => setMobileNavigationOpen(false)}
+            />
+          ))}
       </div>
 
       <p className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
         Működés
       </p>
       <div className="space-y-1">
-        {businessNavigation.map((item) => (
-          <NavItem
-            key={item.href}
-            href={item.href}
-            label={item.label}
-            icon={<Icon name={item.icon} />}
-            active={pathname === item.href}
-            onClick={() => setMobileNavigationOpen(false)}
-          />
-        ))}
+        {businessNavigation
+          .filter(
+            (item) => session && hasPermission(session.user, item.permission),
+          )
+          .map((item) => (
+            <NavItem
+              key={item.href}
+              href={item.href}
+              label={item.label}
+              icon={<Icon name={item.icon} />}
+              active={pathname === item.href}
+              onClick={() => setMobileNavigationOpen(false)}
+            />
+          ))}
       </div>
 
       <div className="mt-6 space-y-1 border-t border-slate-200 pt-4">
-        {settingsNavigation.map((item) => (
-          <NavItem
-            key={item.href}
-            href={item.href}
-            label={item.label}
-            icon={<Icon name={item.icon} />}
-            active={pathname === item.href}
-            onClick={() => setMobileNavigationOpen(false)}
-          />
-        ))}
+        {settingsNavigation
+          .filter(
+            (item) => session && hasPermission(session.user, item.permission),
+          )
+          .map((item) => (
+            <NavItem
+              key={item.href}
+              href={item.href}
+              label={item.label}
+              icon={<Icon name={item.icon} />}
+              active={pathname === item.href}
+              onClick={() => setMobileNavigationOpen(false)}
+            />
+          ))}
       </div>
     </>
   );
@@ -162,26 +177,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Icon name="bell" size={19} />
                 <span className="absolute right-2 top-2 size-1.5 rounded-full bg-rose-500 ring-2 ring-white" />
               </Button>
-              <button
-                type="button"
-                className="ml-1 flex items-center gap-2 rounded-lg p-1.5 text-left transition hover:bg-slate-100"
-                aria-label="Felhasználói menü"
-              >
-                <Avatar name="Nagy Anna" size="sm" />
-                <span className="hidden sm:block">
-                  <span className="block text-xs font-semibold text-slate-800">
-                    Nagy Anna
-                  </span>
-                  <span className="block text-[10px] text-slate-400">
-                    Adminisztrátor
-                  </span>
-                </span>
-                <Icon
-                  name="chevron-down"
-                  size={14}
-                  className="hidden text-slate-400 sm:block"
-                />
-              </button>
+              <UserMenu />
             </>
           }
         />
