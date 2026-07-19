@@ -98,6 +98,51 @@ describe("UNAS XLSX parser", () => {
       /Products és Categories/,
     );
   });
+
+  it("maps real Hungarian UNAS headers and category paths", async () => {
+    const source = new ExcelJS.Workbook();
+    const products = source.addWorksheet("Products");
+    products.addRow([
+      "Cikkszám",
+      "Termék Név",
+      "Státusz",
+      "Kategória",
+      "Kiegészítő Kategóriák",
+      "Paraméter: brand||text",
+      "Kép link",
+    ]);
+    products.addRow([
+      "SKU-HU",
+      "Próba termék",
+      "2",
+      "Termékek | Szűrés ",
+      "200;300",
+      "Acme",
+      "https://example.test/1.jpg|https://example.test/2.jpg",
+    ]);
+    const categories = source.addWorksheet("Categories");
+    categories.addRow(["Azonosító", "Szülő kategória", "Kategória neve"]);
+    categories.addRow(["100", "", "Termékek"]);
+    categories.addRow(["200", "Termékek", "Szűrés"]);
+    categories.addRow(["300", "Termékek", "Pumpák"]);
+
+    const parsed = await new UnasXlsxParser().parse(
+      Buffer.from(await source.xlsx.writeBuffer()),
+    );
+
+    assert.equal(parsed.products[0]?.sku, "SKU-HU");
+    assert.equal(parsed.products[0]?.externalStatus, "2");
+    assert.equal(parsed.products[0]?.primaryCategoryExternalId, "200");
+    assert.deepEqual(parsed.products[0]?.alternativeCategoryExternalIds, [
+      "200",
+      "300",
+    ]);
+    assert.equal(parsed.categories[1]?.parentExternalId, "100");
+    assert.deepEqual(parsed.products[0]?.imageUrls, [
+      "https://example.test/1.jpg",
+      "https://example.test/2.jpg",
+    ]);
+  });
 });
 
 describe("UNAS staging validation", () => {

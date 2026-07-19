@@ -28,3 +28,8 @@ pnpm-debug.log*
 
 # Prisma
 packages/database/src/generated/
+
+# Local UNAS exports and dry-run artifacts
+UnasShop_acropora-unas-hu_*.xlsx
+*.unas-dry-run.json
+tmp/unas-import/

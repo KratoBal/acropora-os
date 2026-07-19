@@ -10,11 +10,22 @@ import type {
 type RawRow = Record<string, unknown>;
 
 const text = (value: unknown) => String(value ?? "").trim();
-const split = (value: unknown) =>
+const splitList = (value: unknown) =>
+  text(value)
+    .split(/[;,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+const splitImages = (value: unknown) =>
   text(value)
     .split(/[|;,]/)
     .map((item) => item.trim())
     .filter(Boolean);
+const categoryPath = (value: unknown) =>
+  text(value)
+    .split("|")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .join("|");
 const key = (value: unknown) =>
   text(value)
     .normalize("NFD")
@@ -71,22 +82,56 @@ export class UnasXlsxParser {
       );
     }
 
+    const categoryRows = rowsOf(categoriesSheet).map((raw) => ({
+      raw,
+      externalId: text(
+        pick(raw, "externalId", "id", "categoryId", "Azonosító"),
+      ),
+      name: text(pick(raw, "name", "categoryName", "Kategória neve")),
+      parentPath: categoryPath(
+        pick(raw, "parentId", "parentExternalId", "Szülő kategória"),
+      ),
+    }));
+    const categoryIdByPath = new Map(
+      categoryRows.map((category) => [
+        categoryPath(
+          [category.parentPath, category.name].filter(Boolean).join("|"),
+        ),
+        category.externalId,
+      ]),
+    );
+    const resolveCategory = (value: unknown) => {
+      const reference = categoryPath(value);
+      return (categoryIdByPath.get(reference) ?? reference) || undefined;
+    };
+
     const products: UnasProductImportRow[] = rowsOf(productsSheet).map(
       (raw) => ({
         sourceRowNumber: Number(raw.sourceRowNumber),
         externalId: text(pick(raw, "externalId", "id")) || undefined,
-        sku: text(pick(raw, "sku", "stockKeepingUnit")),
-        name: text(pick(raw, "name", "title", "productName")),
-        description: text(pick(raw, "description")) || undefined,
+        sku: text(pick(raw, "sku", "stockKeepingUnit", "Cikkszám")),
+        name: text(pick(raw, "name", "title", "productName", "Termék Név")),
+        description:
+          text(pick(raw, "description", "Rövid Leírás")) || undefined,
         externalStatus:
-          text(pick(raw, "status", "externalStatus")) || undefined,
-        primaryCategoryExternalId:
-          text(pick(raw, "categoryId", "primaryCategoryId")) || undefined,
-        alternativeCategoryExternalIds: split(
-          pick(raw, "alternativeCategoryIds", "categories"),
+          text(pick(raw, "status", "externalStatus", "Státusz")) || undefined,
+        primaryCategoryExternalId: resolveCategory(
+          pick(raw, "categoryId", "primaryCategoryId", "Kategória"),
         ),
-        brandName: text(pick(raw, "brand", "manufacturer")) || undefined,
-        imageUrls: split(pick(raw, "images", "imageUrls", "image")),
+        alternativeCategoryExternalIds: splitList(
+          pick(
+            raw,
+            "alternativeCategoryIds",
+            "categories",
+            "Kiegészítő Kategóriák",
+          ),
+        ),
+        brandName:
+          text(pick(raw, "brand", "manufacturer", "Paraméter: brand||text")) ||
+          undefined,
+        imageUrls: splitImages(
+          pick(raw, "images", "imageUrls", "image", "Kép link"),
+        ),
         isActive:
           pick(raw, "active", "isActive") === undefined
             ? undefined
@@ -96,13 +141,14 @@ export class UnasXlsxParser {
         rawPayload: raw,
       }),
     );
-    const categories: UnasCategoryImportRow[] = rowsOf(categoriesSheet).map(
-      (raw) => ({
+    const categories: UnasCategoryImportRow[] = categoryRows.map(
+      ({ raw, externalId, name, parentPath }) => ({
         sourceRowNumber: Number(raw.sourceRowNumber),
-        externalId: text(pick(raw, "externalId", "id", "categoryId")),
-        name: text(pick(raw, "name", "categoryName")),
-        parentExternalId:
-          text(pick(raw, "parentId", "parentExternalId")) || undefined,
+        externalId,
+        name,
+        parentExternalId: parentPath
+          ? (categoryIdByPath.get(parentPath) ?? parentPath)
+          : undefined,
         rawPayload: raw,
       }),
     );
