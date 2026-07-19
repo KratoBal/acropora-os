@@ -29,6 +29,8 @@ Fejlesztési felhasználók:
 
 A válasz mock sessiont és `dev_` előtagú bearer tokent ad. A védett végpontokon ezt az `Authorization: Bearer <token>` fejlécben kell küldeni.
 
+A fejlesztési felhasználólista az e-mailt, nevet és role-t meghatározó identity-sablon. Bejelentkezéskor az API e-mail alapján determinisztikusan létrehozza vagy frissíti a hozzá tartozó adatbázisbeli `User` rekordot, és a sessionbe már annak belső `User.id` értéke kerül. A védett kéréseknél az identity ismét feloldódik egy létező, aktív `User` rekordra; így a `DomainEvent` és `AuditLog` hivatkozások nem mock vagy külső identityt, hanem valódi belső felhasználóazonosítót tárolnak. Ismeretlen vagy inaktív identity kontrollált `401` hibát eredményez.
+
 - `GET /health`: publikus
 - `POST /auth/login`: publikus, kizárólag development
 - `GET /auth/me`: védett

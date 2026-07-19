@@ -8,6 +8,7 @@ import type { AuthenticatedUser, Session } from "@acropora/types";
 import { randomUUID } from "node:crypto";
 
 import { DEVELOPMENT_USERS } from "./development-users.js";
+import { AuthUserResolver } from "./auth-user-resolver.js";
 
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 
@@ -15,7 +16,9 @@ const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 export class AuthService {
   private readonly sessions = new Map<string, Session>();
 
-  loginWithDevelopmentUser(email: string): Session {
+  constructor(private readonly users: AuthUserResolver) {}
+
+  async loginWithDevelopmentUser(email: string): Promise<Session> {
     if (process.env.NODE_ENV === "production") {
       throw new ForbiddenException(
         "A development login production környezetben nem használható.",
@@ -31,10 +34,11 @@ export class AuthService {
       throw new NotFoundException("Ismeretlen development felhasználó.");
     }
 
+    const internalUser = await this.users.resolveDevelopmentIdentity(user);
     const token = `dev_${randomUUID()}`;
     const session: Session = {
       id: randomUUID(),
-      user,
+      user: internalUser,
       token,
       expiresAt: new Date(Date.now() + SESSION_TTL_MS).toISOString(),
     };
@@ -43,7 +47,7 @@ export class AuthService {
     return session;
   }
 
-  resolveToken(token: string): AuthenticatedUser {
+  async resolveToken(token: string): Promise<AuthenticatedUser> {
     const session = this.sessions.get(token);
 
     if (!session || new Date(session.expiresAt).getTime() <= Date.now()) {
@@ -51,7 +55,9 @@ export class AuthService {
       throw new UnauthorizedException("Érvénytelen vagy lejárt munkamenet.");
     }
 
-    return session.user;
+    const internalUser = await this.users.resolveExistingIdentity(session.user);
+    session.user = internalUser;
+    return internalUser;
   }
 
   logout(token: string): void {

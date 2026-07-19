@@ -20,7 +20,7 @@ export class AuthController {
 
   @Public()
   @Post("login")
-  login(@Body() body: DevelopmentLoginDto): Session {
+  login(@Body() body: DevelopmentLoginDto): Promise<Session> {
     return this.authService.loginWithDevelopmentUser(body.email ?? "");
   }
 
