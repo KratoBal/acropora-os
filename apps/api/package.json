@@ -8,7 +8,7 @@
     "build": "nest build",
     "start": "node dist/main.js",
     "lint": "tsc --noEmit",
-    "test": "tsc -p tsconfig.test.json && node --test test-dist/auth/guards/permission.guard.spec.js",
+    "test": "tsc -p tsconfig.test.json && node --test test-dist/auth/guards/permission.guard.spec.js test-dist/products/product.repository.spec.js test-dist/products/product.service.spec.js test-dist/products/product.controller.spec.js",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
@@ -18,6 +18,8 @@
     "@nestjs/common": "^11.1.28",
     "@nestjs/core": "^11.1.28",
     "@nestjs/platform-express": "^11.1.28",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
     "reflect-metadata": "^0.2.2",
     "redis": "^6.1.0",
     "rxjs": "^7.8.2"

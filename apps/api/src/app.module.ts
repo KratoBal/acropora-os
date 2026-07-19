@@ -6,9 +6,10 @@ import { AppService } from "./app.service.js";
 import { AuthModule } from "./auth/auth.module.js";
 import { AuthGuard } from "./auth/guards/auth.guard.js";
 import { PermissionGuard } from "./auth/guards/permission.guard.js";
+import { ProductModule } from "./products/product.module.js";
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, ProductModule],
   controllers: [AppController],
   providers: [
     AppService,
