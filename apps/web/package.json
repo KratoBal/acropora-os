@@ -2,11 +2,13 @@
   "name": "@acropora/web",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev --port 3000",
     "build": "next build",
     "start": "next start --port 3000",
     "lint": "tsc --noEmit",
+    "test": "tsc -p tsconfig.test.json && node --test test-dist/lib/products/list-state.test.js && vitest run",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf .next"
   },
@@ -19,11 +21,19 @@
   },
   "devDependencies": {
     "@acropora/config": "workspace:*",
+    "@rolldown/binding-darwin-arm64": "1.1.5",
     "@tailwindcss/postcss": "^4.3.3",
+    "@testing-library/dom": "10.4.1",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.1",
     "@types/node": "^26.1.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "6.0.3",
+    "happy-dom": "20.11.0",
     "tailwindcss": "^4.3.3",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "4.1.10"
   }
 }

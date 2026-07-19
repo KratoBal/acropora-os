@@ -81,7 +81,19 @@ const product = {
       createdAt: new Date("2026-07-19T10:00:00.000Z"),
     },
   ],
-  variants: [],
+  variants: [
+    {
+      id: "variant-1",
+      productId: "product-1",
+      sku: "REEF-SALT-01",
+      name: null,
+      unit: "db",
+      vatRate: null,
+      isActive: true,
+      createdAt: new Date("2026-07-19T10:00:00.000Z"),
+      updatedAt: new Date("2026-07-19T10:00:00.000Z"),
+    },
+  ],
 } as ProductWithRelations;
 
 function createDatabase() {
@@ -133,6 +145,18 @@ function createDatabase() {
         calls.push({ operation: "update", args });
         return product;
       },
+    },
+    category: {
+      findMany: async () => [
+        { id: "child", name: "LED lámpák", parentId: "root" },
+        { id: "root", name: "Világítás", parentId: null },
+      ],
+    },
+    brand: {
+      findMany: async () => [
+        { id: "brand-1", name: "Aqua Medic" },
+        { id: "brand-2", name: "Red Sea" },
+      ],
     },
     $transaction: (operation) => operation(transaction),
   };
@@ -213,6 +237,13 @@ describe("ProductRepository", () => {
       some: { categoryId: "category-1" },
     });
     assert.equal(result.pagination.totalPages, 3);
+    assert.equal(result.items[0]?.primarySku, "REEF-SALT-01");
+    assert.equal(
+      result.items[0]?.primaryCategory?.name,
+      "Tengeri akvarisztika",
+    );
+    assert.equal(result.items[0]?.thumbnail?.sortOrder, 1);
+    assert.equal(result.items[0]?.unasListing?.externalStatus, "3");
   });
 
   it("returns category, raw channel status and images in detail order", async () => {
@@ -237,5 +268,19 @@ describe("ProductRepository", () => {
       ?.args as { data: { isActive: boolean; archivedAt: Date } };
     assert.equal(updateArgs.data.isActive, false);
     assert.ok(updateArgs.data.archivedAt instanceof Date);
+  });
+
+  it("returns hierarchical category and ordered brand options", async () => {
+    const { database } = createDatabase();
+    const repository = new ProductRepository(database);
+
+    assert.deepEqual(await repository.listCategoryOptions(), [
+      { id: "root", label: "Világítás" },
+      { id: "child", label: "Világítás / LED lámpák" },
+    ]);
+    assert.deepEqual(await repository.listBrandOptions(), [
+      { id: "brand-1", label: "Aqua Medic" },
+      { id: "brand-2", label: "Red Sea" },
+    ]);
   });
 });

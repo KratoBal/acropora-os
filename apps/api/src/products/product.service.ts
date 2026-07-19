@@ -31,6 +31,14 @@ export class ProductService {
     return this.products.list(query);
   }
 
+  listCategoryOptions() {
+    return this.products.listCategoryOptions();
+  }
+
+  listBrandOptions() {
+    return this.products.listBrandOptions();
+  }
+
   private async requireProduct(id: string) {
     const product = await this.products.findById(id);
     if (!product) {

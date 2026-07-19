@@ -2,13 +2,19 @@ import { randomUUID } from "node:crypto";
 
 import { Inject, Injectable, Optional } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
+import type {
+  CatalogOption,
+  ProductDetail,
+  ProductListResponse,
+} from "@acropora/types";
 
 import type { CreateProductDto } from "./dto/create-product.dto.js";
 import type { ProductListQueryDto } from "./dto/product-list-query.dto.js";
 import type { UpdateProductDto } from "./dto/update-product.dto.js";
-import type {
-  ProductListResult,
-  ProductWithRelations,
+import {
+  toProductDetail,
+  toProductListItem,
+  type ProductWithRelations,
 } from "./product.types.js";
 
 const productInclude = {
@@ -24,6 +30,30 @@ const productInclude = {
   variants: true,
   channelListings: { orderBy: { channel: "asc" } },
   images: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
+} as const;
+
+const productListInclude = {
+  brand: true,
+  categories: {
+    where: { isPrimary: true },
+    include: { category: true },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    take: 1,
+  },
+  variants: {
+    where: { isActive: true },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    take: 1,
+  },
+  channelListings: {
+    where: { channel: "UNAS" },
+    orderBy: { createdAt: "asc" },
+    take: 1,
+  },
+  images: {
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    take: 1,
+  },
 } as const;
 
 interface ProductTransaction {
@@ -47,6 +77,14 @@ export interface ProductDatabase {
     findMany(args: unknown): Promise<ProductWithRelations[]>;
     count(args: unknown): Promise<number>;
     update(args: unknown): Promise<ProductWithRelations>;
+  };
+  category: {
+    findMany(
+      args: unknown,
+    ): Promise<Array<{ id: string; name: string; parentId: string | null }>>;
+  };
+  brand: {
+    findMany(args: unknown): Promise<Array<{ id: string; name: string }>>;
   };
   $transaction<T>(
     operation: (transaction: ProductTransaction) => Promise<T>,
@@ -73,7 +111,7 @@ export class ProductRepository extends Repository {
   async create(
     input: CreateProductDto,
     actorUserId?: string,
-  ): Promise<ProductWithRelations> {
+  ): Promise<ProductDetail> {
     const primaryCategoryId = input.primaryCategoryId ?? input.categoryId;
     return this.productDatabase.$transaction(
       async (transaction) => {
@@ -115,20 +153,21 @@ export class ProductRepository extends Repository {
           },
         });
 
-        return product;
+        return toProductDetail(product);
       },
       { isolationLevel: "Serializable" },
     );
   }
 
-  findById(id: string): Promise<ProductWithRelations | null> {
-    return this.productDatabase.product.findUnique({
+  async findById(id: string): Promise<ProductDetail | null> {
+    const product = await this.productDatabase.product.findUnique({
       where: { id },
       include: productInclude,
     });
+    return product ? toProductDetail(product) : null;
   }
 
-  async list(query: ProductListQueryDto): Promise<ProductListResult> {
+  async list(query: ProductListQueryDto): Promise<ProductListResponse> {
     const where: Prisma.ProductWhereInput = {
       ...(query.active === undefined ? {} : { isActive: query.active }),
       ...(query.brandId ? { brandId: query.brandId } : {}),
@@ -154,7 +193,7 @@ export class ProductRepository extends Repository {
     const [items, totalItems] = await Promise.all([
       this.productDatabase.product.findMany({
         where,
-        include: productInclude,
+        include: productListInclude,
         orderBy: [{ name: "asc" }, { id: "asc" }],
         skip,
         take: query.pageSize,
@@ -163,7 +202,7 @@ export class ProductRepository extends Repository {
     ]);
 
     return {
-      items,
+      items: items.map(toProductListItem),
       pagination: {
         page: query.page,
         pageSize: query.pageSize,
@@ -173,7 +212,7 @@ export class ProductRepository extends Repository {
     };
   }
 
-  update(id: string, input: UpdateProductDto): Promise<ProductWithRelations> {
+  update(id: string, input: UpdateProductDto): Promise<ProductDetail> {
     const primaryCategoryId =
       input.primaryCategoryId !== undefined
         ? input.primaryCategoryId
@@ -226,17 +265,54 @@ export class ProductRepository extends Repository {
         });
 
         if (!product) throw new Error("A frissített termék nem található.");
-        return product;
+        return toProductDetail(product);
       },
       { isolationLevel: "Serializable" },
     );
   }
 
-  archive(id: string): Promise<ProductWithRelations> {
-    return this.productDatabase.product.update({
+  async archive(id: string): Promise<ProductDetail> {
+    const product = await this.productDatabase.product.update({
       where: { id },
       data: { isActive: false, archivedAt: new Date() },
       include: productInclude,
     });
+    return toProductDetail(product);
+  }
+
+  async listCategoryOptions(): Promise<CatalogOption[]> {
+    const categories = await this.productDatabase.category.findMany({
+      select: { id: true, name: true, parentId: true },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+    });
+    const byId = new Map(categories.map((category) => [category.id, category]));
+
+    const labelFor = (category: (typeof categories)[number]) => {
+      const labels = [category.name];
+      const visited = new Set([category.id]);
+      let parentId = category.parentId;
+      while (parentId && !visited.has(parentId)) {
+        visited.add(parentId);
+        const parent = byId.get(parentId);
+        if (!parent) break;
+        labels.unshift(parent.name);
+        parentId = parent.parentId;
+      }
+      return labels.join(" / ");
+    };
+
+    return categories
+      .map((category) => ({ id: category.id, label: labelFor(category) }))
+      .sort((left, right) =>
+        left.label.localeCompare(right.label, "hu", { sensitivity: "base" }),
+      );
+  }
+
+  async listBrandOptions(): Promise<CatalogOption[]> {
+    const brands = await this.productDatabase.brand.findMany({
+      select: { id: true, name: true },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+    });
+    return brands.map((brand) => ({ id: brand.id, label: brand.name }));
   }
 }

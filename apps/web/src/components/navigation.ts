@@ -37,7 +37,7 @@ export const businessNavigation: AppNavigationItem[] = [
     permission: PERMISSIONS.ORDERS_VIEW,
   },
   {
-    href: "/termekek",
+    href: "/products",
     label: "Termékek",
     icon: "package",
     permission: PERMISSIONS.PRODUCTS_VIEW,

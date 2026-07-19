@@ -58,3 +58,16 @@ export type {
   UnasCategoryImportRow,
   UnasProductImportRow,
 } from "./integrations/unas.js";
+export type {
+  CatalogOption,
+  ProductBrandSummary,
+  ProductCategorySummary,
+  ProductChannelListingSummary,
+  ProductDetail,
+  ProductImageSummary,
+  ProductListApiQuery,
+  ProductListItem,
+  ProductListResponse,
+  ProductType,
+  ProductVariantSummary,
+} from "./product-catalog.js";

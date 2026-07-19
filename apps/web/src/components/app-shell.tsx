@@ -40,7 +40,10 @@ export function AppShell({ children }: { children: ReactNode }) {
               href={item.href}
               label={item.label}
               icon={<Icon name={item.icon} />}
-              active={pathname === item.href}
+              active={
+                pathname === item.href ||
+                (item.href !== "/" && pathname.startsWith(`${item.href}/`))
+              }
               badge={
                 item.href === "/feladataim" ? (
                   <Badge className="px-1.5" variant="neutral">
@@ -67,7 +70,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               href={item.href}
               label={item.label}
               icon={<Icon name={item.icon} />}
-              active={pathname === item.href}
+              active={
+                pathname === item.href || pathname.startsWith(`${item.href}/`)
+              }
               onClick={() => setMobileNavigationOpen(false)}
             />
           ))}

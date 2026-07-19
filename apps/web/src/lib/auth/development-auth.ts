@@ -1,8 +1,6 @@
 import type { AuthenticatedUser, Session } from "@acropora/types";
 
 const SESSION_STORAGE_KEY = "acropora.development-session";
-const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
-
 export const DEVELOPMENT_USERS: readonly AuthenticatedUser[] = [
   {
     id: "dev-owner",
@@ -49,6 +47,13 @@ export class DevelopmentAuthAdapter implements AuthAdapter {
         window.localStorage.removeItem(SESSION_STORAGE_KEY);
         return null;
       }
+      const response = await fetch("/api/auth/me", {
+        headers: { Authorization: `Bearer ${session.token ?? ""}` },
+      });
+      if (!response.ok) {
+        window.localStorage.removeItem(SESSION_STORAGE_KEY);
+        return null;
+      }
       return session;
     } catch {
       window.localStorage.removeItem(SESSION_STORAGE_KEY);
@@ -63,23 +68,23 @@ export class DevelopmentAuthAdapter implements AuthAdapter {
       );
     }
 
-    const user = DEVELOPMENT_USERS.find(
-      (candidate) => candidate.email === email,
-    );
-    if (!user) throw new Error("Ismeretlen development felhasználó.");
-
-    const session: Session = {
-      id: crypto.randomUUID(),
-      user,
-      token: `web_dev_${crypto.randomUUID()}`,
-      expiresAt: new Date(Date.now() + SESSION_TTL_MS).toISOString(),
-    };
+    const response = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (!response.ok) throw new Error("A development login sikertelen.");
+    const session = (await response.json()) as Session;
 
     window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
     return session;
   }
 
   async logout(_session: Session): Promise<void> {
+    await fetch("/api/auth/logout", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${_session.token ?? ""}` },
+    }).catch(() => undefined);
     window.localStorage.removeItem(SESSION_STORAGE_KEY);
   }
 }
