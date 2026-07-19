@@ -67,7 +67,8 @@ evidence-eket és verziókat ad.
 
 ## Szándékosan elhalasztva
 
-- import apply/approval workflow;
+- approval/review frontend és háttérfolyamat; a backend Apply Engine leírása:
+  `docs/UNAS-APPLY-ENGINE.md`;
 - production automatikus futtatás;
 - nyitókészlet és árak;
 - vevő- és rendelésimport;

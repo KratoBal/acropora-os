@@ -2,6 +2,9 @@
 
 Ez a dokumentum a későbbi apply végrehajtó szerződése. A #0006.6 nem valósít meg Apply Import endpointot vagy adatírást.
 
+> Implementációs állapot: az első tranzakciós backend engine a #0006.8-ban
+> elkészült. Aktuális működés: `docs/UNAS-APPLY-ENGINE.md`.
+
 ## Jóváhagyás és állapotok
 
 Apply-t kizárólag `products.manage` jogosultságú aktív felhasználó indíthat, külön, vissza nem vonható következményeket összegző megerősítéssel. Javasolt állapotok: `STAGED → VALIDATED → APPROVED → APPLYING → APPLIED`, illetve `REJECTED`, `STALE`, `FAILED`.

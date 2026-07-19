@@ -20,6 +20,18 @@ export type ProductCreated = DomainEventEnvelope<
   { name: string; productType: "PHYSICAL" | "SERVICE" | "LIVESTOCK" }
 >;
 
+export type ProductUpdated = DomainEventEnvelope<
+  "product.updated",
+  "Product",
+  { name: string; sku: string; source: "UNAS"; batchId: string }
+>;
+
+export type CatalogImportApplied = DomainEventEnvelope<
+  "catalog-import.applied",
+  "CatalogImportBatch",
+  { provider: "UNAS"; productCount: number; categoryCount: number }
+>;
+
 export type StockMovementPosted = DomainEventEnvelope<
   "stock-movement.posted",
   "StockMovement",
@@ -80,6 +92,8 @@ export type IcpReportImported = DomainEventEnvelope<
 
 export type AcroporaDomainEvent =
   | ProductCreated
+  | ProductUpdated
+  | CatalogImportApplied
   | StockMovementPosted
   | PurchaseOrderApproved
   | GoodsReceived

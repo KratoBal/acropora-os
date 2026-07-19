@@ -139,6 +139,15 @@ enum CatalogImportProvider {
 enum CatalogImportStatus {
   STAGED
   VALIDATED
+  APPROVED
+  APPLIED
+  STALE
+}
+
+enum BrandResolutionReviewStatus {
+  PENDING
+  ACCEPTED
+  NO_BRAND
 }
 
 enum CatalogImportEntityType {
@@ -242,7 +251,7 @@ model Brand {
 
 model Category {
   id        String   @id @default(cuid())
-  name      String   @unique
+  name      String
   slug      String   @unique
   parentId  String?
   createdAt DateTime @default(now())
@@ -321,12 +330,14 @@ model ProductRelation {
   targetProductId String
   relationType    ProductRelationType
   sortOrder       Int?
+  source          String?
 
   sourceProduct Product @relation("ProductRelationSource", fields: [sourceProductId], references: [id], onDelete: Cascade)
   targetProduct Product @relation("ProductRelationTarget", fields: [targetProductId], references: [id], onDelete: Cascade)
 
   @@unique([sourceProductId, targetProductId, relationType])
   @@index([targetProductId, relationType])
+  @@index([sourceProductId, source])
 }
 
 model ProductBarcode {
@@ -347,6 +358,11 @@ model CatalogImportBatch {
   analysisVersion        String                  @default("legacy")
   status                 CatalogImportStatus     @default(STAGED)
   report                 Json?
+  applyReport            Json?
+  approvedBy             String?
+  approvedAt             DateTime?
+  appliedBy              String?
+  appliedAt              DateTime?
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
   rows                   CatalogImportRow[]
@@ -379,24 +395,27 @@ model CatalogImportRow {
 }
 
 model BrandResolutionReview {
-  id               String             @id @default(cuid())
+  id               String                      @id @default(cuid())
   batchId          String
-  importRowId      String             @unique
+  importRowId      String                      @unique
   sourceRowNumber  Int
   sku              String
   productName      String
-  status           String             @default("PENDING")
+  status           BrandResolutionReviewStatus @default(PENDING)
   proposedBrandKey String?
+  resolvedBrandKey String?
+  reviewedBy       String?
+  reviewedAt       DateTime?
   confidence       Int
   reviewReasons    Json
   resolution       Json
   resolverVersion  String
   configVersion    String
   schemaVersion    String
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
-  batch            CatalogImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  importRow        CatalogImportRow   @relation(fields: [importRowId], references: [id], onDelete: Cascade)
+  createdAt        DateTime                    @default(now())
+  updatedAt        DateTime                    @updatedAt
+  batch            CatalogImportBatch          @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  importRow        CatalogImportRow            @relation(fields: [importRowId], references: [id], onDelete: Cascade)
 
   @@unique([batchId, sourceRowNumber])
   @@index([batchId, status])

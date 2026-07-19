@@ -35,12 +35,14 @@ export type {
 } from "./auth.js";
 export type {
   AcroporaDomainEvent,
+  CatalogImportApplied,
   AquariumMeasurementRecorded,
   CustomerCreated,
   DomainEventEnvelope,
   GoodsReceived,
   IcpReportImported,
   ProductCreated,
+  ProductUpdated,
   PurchaseOrderApproved,
   SalesOrderConfirmed,
   SalesOrderShipped,
@@ -58,6 +60,10 @@ export type {
   BrandResolutionSummary,
   BrandReviewReason,
 } from "./integrations/brand-resolution.js";
+export type {
+  UnasApplySummary,
+  UnasApprovalResult,
+} from "./integrations/unas-apply.js";
 export type {
   ImportIssue,
   ImportIssueSeverity,
