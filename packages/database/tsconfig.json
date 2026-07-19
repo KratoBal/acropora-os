@@ -1,0 +1,10 @@
+{
+  "extends": "@acropora/config/base.json",
+  "compilerOptions": {
+    "declaration": true,
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/generated"]
+}

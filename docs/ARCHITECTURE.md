@@ -8,13 +8,13 @@
 
 ## Adatgazdák
 
-| Adat | Elsődleges rendszer |
-|---|---|
-| Fizikai készlet és készletmozgások | Acropora ERP |
-| Beszerzési ár, beszállító, polchely | Acropora ERP |
-| Webshop termékleírás, kategória, képek | UNAS |
-| Webshopos rendelés | UNAS, ERP-ben tükrözve |
-| Számla és számlaszám | Számlázz.hu, ERP-ben és UNAS-ban visszaírva |
+| Adat                                   | Elsődleges rendszer                         |
+| -------------------------------------- | ------------------------------------------- |
+| Fizikai készlet és készletmozgások     | Acropora ERP                                |
+| Beszerzési ár, beszállító, polchely    | Acropora ERP                                |
+| Webshop termékleírás, kategória, képek | UNAS                                        |
+| Webshopos rendelés                     | UNAS, ERP-ben tükrözve                      |
+| Számla és számlaszám                   | Számlázz.hu, ERP-ben és UNAS-ban visszaírva |
 
 ## Fő folyamatok
 

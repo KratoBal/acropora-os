@@ -1,25 +1,58 @@
-# Acropora ERP
+# Acropora OS
 
-Központi készlet-, bevételezési, POS-, UNAS- és Számlázz.hu integrációs rendszer.
+Az Acropora OS egy magyar nyelvű, moduláris vállalatirányítási rendszer. A repository pnpm workspace-re és Turborepóra épül; a kezelőfelület Next.js, az API NestJS alapú.
 
-## Első cél
+## Előfeltételek
 
-1. UNAS termékek importálása.
-2. Tömeges bevételezés a saját felületen.
-3. Készletváltozás továbbítása az UNAS felé.
-4. Webshop-rendelések tükrözése.
-5. Számlázható rendelés automatikus számlázása, majd a számlaszám visszaírása az UNAS-ba.
+- Node.js 22 vagy újabb
+- pnpm 10
+- Docker és Docker Compose (a helyi PostgreSQL és Redis futtatásához)
 
-## Indítás fejlesztői környezetben
-
-1. Másold le a `.env.example` fájlt `.env` néven.
-2. Töltsd ki az adatbázis- és API-beállításokat.
-3. Indítsd a szolgáltatásokat:
+Ha a pnpm nincs telepítve, a Node.js mellé szállított Corepackkel aktiválható:
 
 ```bash
-docker compose -f infra/docker/docker-compose.yml up -d
+corepack enable
+corepack prepare pnpm@10.34.5 --activate
 ```
 
-## Következő fejlesztési lépés
+## Első indítás
 
-Az első futó modul az `UNAS connection test` lesz: belépés, terméklekérés, készlet lekérés és teszt készletmozgás.
+```bash
+cp .env.example .env
+pnpm install
+docker compose up -d
+pnpm dev
+```
+
+- Web: http://localhost:3000
+- API: http://localhost:3001
+- API állapot: http://localhost:3001/health
+
+## Hasznos parancsok
+
+| Parancs            | Leírás                          |
+| ------------------ | ------------------------------- |
+| `pnpm dev`         | Web és API fejlesztői indítása  |
+| `pnpm build`       | A teljes workspace buildelése   |
+| `pnpm typecheck`   | TypeScript-ellenőrzés           |
+| `pnpm lint`        | Statikus ellenőrzések           |
+| `pnpm infra:up`    | PostgreSQL és Redis indítása    |
+| `pnpm infra:down`  | Helyi infrastruktúra leállítása |
+| `pnpm db:validate` | Prisma-séma ellenőrzése         |
+
+## Repository felépítése
+
+```text
+apps/web             Next.js kezelőfelület
+apps/api             NestJS API
+packages/ui          Megosztott React komponensek
+packages/database    Adatbázis-séma és adatbázis-csomag
+packages/config      Megosztott TypeScript-konfigurációk
+packages/types       Megosztott üzleti típusok
+docs                 Rendszerdokumentáció
+adr                  Architektúradöntési rekordok
+backlog              Tervezett feladatok
+prototypes           Eldobható koncepciók és kísérletek
+```
+
+Az ütemezést a [ROADMAP.md](ROADMAP.md), a közreműködés szabályait a [CONTRIBUTING.md](CONTRIBUTING.md) tartalmazza.

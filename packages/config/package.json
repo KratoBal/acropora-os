@@ -1,0 +1,17 @@
+{
+  "name": "@acropora/config",
+  "version": "0.1.0",
+  "private": true,
+  "files": [
+    "*.json"
+  ],
+  "scripts": {
+    "build": "node -e \"JSON.parse(require('node:fs').readFileSync('base.json', 'utf8'))\"",
+    "lint": "node -e \"JSON.parse(require('node:fs').readFileSync('base.json', 'utf8'))\"",
+    "typecheck": "node -e \"JSON.parse(require('node:fs').readFileSync('base.json', 'utf8'))\"",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

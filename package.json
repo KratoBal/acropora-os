@@ -1,15 +1,30 @@
 {
-  "name": "acropora-erp",
-  "private": true,
+  "name": "acropora-os",
   "version": "0.1.0",
-  "packageManager": "pnpm@10",
+  "private": true,
+  "description": "Magyar nyelvű, moduláris vállalatirányítási rendszer.",
+  "license": "UNLICENSED",
+  "packageManager": "pnpm@10.34.5",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
   "scripts": {
-    "infra:up": "docker compose -f infra/docker/docker-compose.yml up -d",
-    "infra:down": "docker compose -f infra/docker/docker-compose.yml down",
-    "db:validate": "prisma validate --schema packages/database/prisma/schema.prisma",
-    "db:format": "prisma format --schema packages/database/prisma/schema.prisma"
+    "build": "turbo run build",
+    "dev": "turbo run dev --filter=@acropora/web --filter=@acropora/api",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "clean": "turbo run clean",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "db:validate": "pnpm --filter @acropora/database db:validate",
+    "db:format": "pnpm --filter @acropora/database db:format"
   },
   "devDependencies": {
-    "prisma": "^6.0.0"
+    "prettier": "^3.9.5",
+    "turbo": "^2.10.5",
+    "typescript": "^6.0.3"
   }
 }
