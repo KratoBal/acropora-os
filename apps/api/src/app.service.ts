@@ -1,5 +1,8 @@
+import { checkDatabaseHealth } from "@acropora/database";
 import { Injectable } from "@nestjs/common";
 import type { HealthResponse } from "@acropora/types";
+
+import { checkRedisHealth } from "./health/redis-health.js";
 
 @Injectable()
 export class AppService {
@@ -10,10 +13,20 @@ export class AppService {
     };
   }
 
-  getHealth(): HealthResponse {
+  async getHealth(): Promise<HealthResponse> {
+    const [database, redis] = await Promise.all([
+      checkDatabaseHealth(),
+      checkRedisHealth(),
+    ]);
+
     return {
-      service: "acropora-api",
-      status: "ok",
+      application: {
+        status: "ok",
+        version: "0.1.0",
+      },
+      database,
+      redis,
+      uptime: Math.round(process.uptime()),
       timestamp: new Date().toISOString(),
     };
   }

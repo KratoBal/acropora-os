@@ -1,4 +1,4 @@
-import { Controller, Get } from "@nestjs/common";
+import { Controller, Get, ServiceUnavailableException } from "@nestjs/common";
 import type { HealthResponse } from "@acropora/types";
 
 import { AppService } from "./app.service.js";
@@ -15,7 +15,13 @@ export class AppController {
 
   @Get("health")
   @Public()
-  getHealth(): HealthResponse {
-    return this.appService.getHealth();
+  async getHealth(): Promise<HealthResponse> {
+    const health = await this.appService.getHealth();
+
+    if (health.database.status !== "ok" || health.redis.status !== "ok") {
+      throw new ServiceUnavailableException(health);
+    }
+
+    return health;
   }
 }

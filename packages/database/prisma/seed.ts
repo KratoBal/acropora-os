@@ -1,30 +1,13 @@
-import { PrismaClient, UserRole } from "../src/generated/client";
+import { PrismaClient } from "@prisma/client";
+
+import {
+  seedCategories,
+  seedManufacturers,
+  seedUsers,
+} from "../src/seed-data.js";
 
 process.env.DATABASE_URL ??=
-  "postgresql://acropora:acropora_dev@localhost:5432/acropora_os?schema=public";
-
-export const developmentUsers = [
-  {
-    email: "owner@acropora.local",
-    displayName: "Acropora Tulajdonos",
-    role: UserRole.OWNER,
-  },
-  {
-    email: "admin@acropora.local",
-    displayName: "Acropora Admin",
-    role: UserRole.ADMIN,
-  },
-  {
-    email: "warehouse@acropora.local",
-    displayName: "Raktári Felhasználó",
-    role: UserRole.WAREHOUSE,
-  },
-  {
-    email: "service@acropora.local",
-    displayName: "Szerviz Felhasználó",
-    role: UserRole.SERVICE,
-  },
-] as const;
+  "postgresql://acropora:acropora@localhost:5432/acropora?schema=public&connect_timeout=2";
 
 async function main() {
   if (process.env.NODE_ENV === "production") {
@@ -36,17 +19,29 @@ async function main() {
   const prisma = new PrismaClient();
 
   try {
-    for (const user of developmentUsers) {
-      await prisma.user.upsert({
-        where: { email: user.email },
-        update: {
-          displayName: user.displayName,
-          role: user.role,
-          isActive: true,
-        },
-        create: user,
-      });
-    }
+    await prisma.$transaction([
+      ...seedUsers.map((user) =>
+        prisma.user.upsert({
+          where: { email: user.email },
+          update: { ...user, isActive: true },
+          create: user,
+        }),
+      ),
+      ...seedCategories.map((category) =>
+        prisma.category.upsert({
+          where: { slug: category.slug },
+          update: category,
+          create: category,
+        }),
+      ),
+      ...seedManufacturers.map((manufacturer) =>
+        prisma.manufacturer.upsert({
+          where: { slug: manufacturer.slug },
+          update: manufacturer,
+          create: manufacturer,
+        }),
+      ),
+    ]);
   } finally {
     await prisma.$disconnect();
   }

@@ -2,24 +2,24 @@ name: acropora-os
 
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: acropora_os
+      POSTGRES_DB: acropora
       POSTGRES_USER: acropora
-      POSTGRES_PASSWORD: acropora_dev
+      POSTGRES_PASSWORD: acropora
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U acropora -d acropora_os"]
+      test: ["CMD-SHELL", "pg_isready -U acropora -d acropora"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   redis:
-    image: redis:8-alpine
+    image: redis:7-alpine
     restart: unless-stopped
     command: redis-server --appendonly yes
     ports:

@@ -1,6 +1,5 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -89,28 +88,51 @@ model Session {
 }
 
 model Product {
-  id           String   @id @default(cuid())
-  unasId       String?  @unique
-  sku          String   @unique
-  name         String
-  manufacturer String?
-  category     String?
-  unit         String   @default("db")
-  vatRate      Decimal? @db.Decimal(5, 2)
-  purchaseNet  Decimal? @db.Decimal(14, 2)
-  saleGross    Decimal? @db.Decimal(14, 2)
-  minimumStock Decimal  @default(0) @db.Decimal(14, 3)
-  optimalStock Decimal  @default(0) @db.Decimal(14, 3)
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id             String   @id @default(cuid())
+  unasId         String?  @unique
+  sku            String   @unique
+  name           String
+  manufacturerId String?
+  categoryId     String?
+  unit           String   @default("db")
+  vatRate        Decimal? @db.Decimal(5, 2)
+  purchaseNet    Decimal? @db.Decimal(14, 2)
+  saleGross      Decimal? @db.Decimal(14, 2)
+  minimumStock   Decimal  @default(0) @db.Decimal(14, 3)
+  optimalStock   Decimal  @default(0) @db.Decimal(14, 3)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
+  manufacturer  Manufacturer?      @relation(fields: [manufacturerId], references: [id], onDelete: SetNull)
+  category      Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   barcodes      ProductBarcode[]
   supplierLinks SupplierProduct[]
   stocks        StockBalance[]
   movements     StockMovement[]
   receiptItems  GoodsReceiptItem[]
   orderItems    SalesOrderItem[]
+
+  @@index([categoryId])
+  @@index([manufacturerId])
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  slug      String    @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  products  Product[]
+}
+
+model Manufacturer {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  slug      String    @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  products  Product[]
 }
 
 model ProductBarcode {

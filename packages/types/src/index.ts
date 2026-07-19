@@ -1,8 +1,16 @@
-export type ServiceStatus = "ok" | "degraded";
+export type HealthStatus = "ok" | "unavailable";
+
+export interface DependencyHealth {
+  status: HealthStatus;
+  latencyMs?: number;
+  error?: string;
+}
 
 export interface HealthResponse {
-  service: "acropora-api";
-  status: ServiceStatus;
+  application: DependencyHealth & { version: string };
+  database: DependencyHealth;
+  redis: DependencyHealth;
+  uptime: number;
   timestamp: string;
 }
 

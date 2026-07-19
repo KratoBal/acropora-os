@@ -21,7 +21,12 @@
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
     "db:validate": "pnpm --filter @acropora/database db:validate",
-    "db:format": "pnpm --filter @acropora/database db:format"
+    "db:format": "pnpm --filter @acropora/database db:format",
+    "prisma:generate": "pnpm --filter @acropora/database prisma:generate",
+    "prisma:migrate": "pnpm --filter @acropora/database prisma:migrate",
+    "prisma:push": "pnpm --filter @acropora/database prisma:push",
+    "prisma:studio": "pnpm --filter @acropora/database prisma:studio",
+    "prisma:seed": "pnpm --filter @acropora/database prisma:seed"
   },
   "devDependencies": {
     "prettier": "^3.9.5",
