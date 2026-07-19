@@ -340,38 +340,67 @@ model ProductBarcode {
 }
 
 model CatalogImportBatch {
-  id             String                @id @default(cuid())
-  provider       CatalogImportProvider
-  sourceFileName String
-  fileSha256     String
-  status         CatalogImportStatus   @default(STAGED)
-  report         Json?
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
-  rows           CatalogImportRow[]
+  id                     String                  @id @default(cuid())
+  provider               CatalogImportProvider
+  sourceFileName         String
+  fileSha256             String
+  analysisVersion        String                  @default("legacy")
+  status                 CatalogImportStatus     @default(STAGED)
+  report                 Json?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  rows                   CatalogImportRow[]
+  brandResolutionReviews BrandResolutionReview[]
 
+  @@unique([provider, fileSha256, analysisVersion])
   @@index([provider, createdAt])
   @@index([fileSha256])
 }
 
 model CatalogImportRow {
-  id              String                  @id @default(cuid())
-  batchId         String
-  entityType      CatalogImportEntityType
-  sourceRowNumber Int
-  externalId      String?
-  sku             String?
-  rawPayload      Json
-  parsedPayload   Json
-  issues          Json
-  status          CatalogImportRowStatus
-  createdAt       DateTime                @default(now())
-  batch           CatalogImportBatch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  id                    String                  @id @default(cuid())
+  batchId               String
+  entityType            CatalogImportEntityType
+  sourceRowNumber       Int
+  externalId            String?
+  sku                   String?
+  rawPayload            Json
+  parsedPayload         Json
+  issues                Json
+  status                CatalogImportRowStatus
+  createdAt             DateTime                @default(now())
+  batch                 CatalogImportBatch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  brandResolutionReview BrandResolutionReview?
 
   @@unique([batchId, entityType, sourceRowNumber])
   @@index([batchId, status])
   @@index([entityType, externalId])
   @@index([entityType, sku])
+}
+
+model BrandResolutionReview {
+  id               String             @id @default(cuid())
+  batchId          String
+  importRowId      String             @unique
+  sourceRowNumber  Int
+  sku              String
+  productName      String
+  status           String             @default("PENDING")
+  proposedBrandKey String?
+  confidence       Int
+  reviewReasons    Json
+  resolution       Json
+  resolverVersion  String
+  configVersion    String
+  schemaVersion    String
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  batch            CatalogImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  importRow        CatalogImportRow   @relation(fields: [importRowId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, sourceRowNumber])
+  @@index([batchId, status])
+  @@index([proposedBrandKey, status])
 }
 
 model Supplier {

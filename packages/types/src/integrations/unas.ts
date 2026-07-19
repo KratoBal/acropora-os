@@ -10,6 +10,9 @@ export interface UnasProductImportRow {
   primaryCategoryExternalId?: string;
   alternativeCategoryExternalIds?: string[];
   brandName?: string;
+  manufacturerPartNumber?: string;
+  primaryCategoryPath?: string;
+  alternativeCategoryPaths?: string[];
   imageUrls?: string[];
   isActive?: boolean;
   seo?: {

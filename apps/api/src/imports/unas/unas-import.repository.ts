@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 import type {
   ImportRowResult,
+  BrandResolutionResult,
   UnasImportReport,
   UnasParsedWorkbook,
   UnasProductImportRow,
@@ -93,6 +94,7 @@ export class UnasImportRepository extends Repository {
     fileSha256: string,
     workbook: UnasParsedWorkbook,
     products: ImportRowResult<UnasProductImportRow>[],
+    analysisVersion: string,
   ): Promise<string> {
     const productByRow = new Map(
       products.map((item) => [item.sourceRowNumber, item]),
@@ -135,6 +137,7 @@ export class UnasImportRepository extends Repository {
         provider: "UNAS",
         sourceFileName,
         fileSha256,
+        analysisVersion,
         status: "STAGED",
         rows: { create: rows },
       },
@@ -143,22 +146,63 @@ export class UnasImportRepository extends Repository {
     return batch.id;
   }
 
-  async findReportByHash(fileSha256: string): Promise<UnasImportReport | null> {
+  async findReportByHash(
+    fileSha256: string,
+    analysisVersion: string,
+  ): Promise<UnasImportReport | null> {
     const batch = await prisma.catalogImportBatch.findFirst({
-      where: { provider: "UNAS", fileSha256, status: "VALIDATED" },
+      where: {
+        provider: "UNAS",
+        fileSha256,
+        analysisVersion,
+        status: "VALIDATED",
+      },
       orderBy: { createdAt: "desc" },
       select: { report: true },
     });
     return (batch?.report as unknown as UnasImportReport | null) ?? null;
   }
 
-  async saveReport(batchId: string, report: UnasImportReport) {
-    await prisma.catalogImportBatch.update({
-      where: { id: batchId },
-      data: {
-        status: "VALIDATED",
-        report: json(report),
-      },
+  async saveResolutionAndReport(
+    batchId: string,
+    resolutions: BrandResolutionResult[],
+    report: UnasImportReport,
+  ) {
+    await prisma.$transaction(async (transaction) => {
+      const productRows = await transaction.catalogImportRow.findMany({
+        where: { batchId, entityType: "PRODUCT" },
+        select: { id: true, sourceRowNumber: true },
+      });
+      const rowIds = new Map(
+        productRows.map((row) => [row.sourceRowNumber, row.id]),
+      );
+      const reviews = resolutions.filter(
+        (resolution) => resolution.status !== "RESOLVED",
+      );
+      await transaction.brandResolutionReview.deleteMany({
+        where: { batchId },
+      });
+      if (reviews.length)
+        await transaction.brandResolutionReview.createMany({
+          data: reviews.map((resolution) => ({
+            batchId,
+            importRowId: rowIds.get(resolution.sourceRowNumber)!,
+            sourceRowNumber: resolution.sourceRowNumber,
+            sku: resolution.sku,
+            productName: resolution.productName,
+            proposedBrandKey: resolution.selectedBrandKey,
+            confidence: resolution.confidence,
+            reviewReasons: json(resolution.reviewReasons),
+            resolution: json(resolution),
+            resolverVersion: resolution.resolverVersion,
+            configVersion: resolution.configVersion,
+            schemaVersion: resolution.schemaVersion,
+          })),
+        });
+      await transaction.catalogImportBatch.update({
+        where: { id: batchId },
+        data: { status: "VALIDATED", report: json(report) },
+      });
     });
   }
 

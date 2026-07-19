@@ -49,6 +49,16 @@ export type {
 } from "./domain-events.js";
 export { IMPORT_ISSUE_SEVERITIES } from "./integrations/import-staging.js";
 export type {
+  BrandResolutionCandidate,
+  BrandResolutionEvidence,
+  BrandResolutionResult,
+  BrandResolutionReviewItem,
+  BrandResolutionSource,
+  BrandResolutionStatus,
+  BrandResolutionSummary,
+  BrandReviewReason,
+} from "./integrations/brand-resolution.js";
+export type {
   ImportIssue,
   ImportIssueSeverity,
   ImportRowResult,

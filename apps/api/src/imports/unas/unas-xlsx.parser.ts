@@ -100,6 +100,9 @@ export class UnasXlsxParser {
         category.externalId,
       ]),
     );
+    const categoryPathById = new Map(
+      [...categoryIdByPath].map(([path, id]) => [id, path]),
+    );
     const resolveCategory = (value: unknown) => {
       const reference = categoryPath(value);
       return (categoryIdByPath.get(reference) ?? reference) || undefined;
@@ -118,6 +121,7 @@ export class UnasXlsxParser {
         primaryCategoryExternalId: resolveCategory(
           pick(raw, "categoryId", "primaryCategoryId", "Kategória"),
         ),
+        primaryCategoryPath: categoryPath(pick(raw, "Kategória")) || undefined,
         alternativeCategoryExternalIds: splitList(
           pick(
             raw,
@@ -126,9 +130,26 @@ export class UnasXlsxParser {
             "Kiegészítő Kategóriák",
           ),
         ),
+        alternativeCategoryPaths: splitList(
+          pick(
+            raw,
+            "alternativeCategoryIds",
+            "categories",
+            "Kiegészítő Kategóriák",
+          ),
+        ).map((id) => categoryPathById.get(id) ?? id),
         brandName:
           text(pick(raw, "brand", "manufacturer", "Paraméter: brand||text")) ||
           undefined,
+        manufacturerPartNumber:
+          text(
+            pick(
+              raw,
+              "manufacturerPartNumber",
+              "mpn",
+              "Paraméter: gyártói cikkszám||text",
+            ),
+          ) || undefined,
         imageUrls: splitImages(
           pick(raw, "images", "imageUrls", "image", "Kép link"),
         ),

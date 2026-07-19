@@ -57,3 +57,36 @@ Az azonos összevont fájl második feltöltése ugyanazt a batch ID-t és tarta
 - Javasolt technikai fejlesztés: kategória unchanged mérőszám, brand reference sheet vagy review mapping, apply előtti stale-batch ellenőrzés.
 
 Az exportok, a teljes dry-run JSON és az ideiglenes munkafüzet nem kerülnek Gitbe.
+
+## #0006.7 Brand Resolution újraellenőrzés
+
+A teljes 1 884 termékes katalógus újra lefutott a `brand-resolution-engine-v2`,
+`brand-resolution-config-v2`, `brand-resolution-report-v2` verziókkal. A korábbi
+1 204 `MISSING_BRAND` warning megmaradt, és külön resolution outcome készült:
+
+| Hiányzó explicit brand eredménye | Darab |
+| -------------------------------- | ----: |
+| RESOLVED                         |   333 |
+| REVIEW_REQUIRED                  |   309 |
+| UNRESOLVED                       |   562 |
+
+Confidence: high 333, medium 309, low 0, none 562. Forrástalálatok: terméknév
+637, elsődleges kategória 338, SKU-prefix 7, gyártói cikkszám-prefix 3,
+alternatív kategória 1. A forrástalálatok nem kizárólagosak, egy termék több
+evidence-et adhat.
+
+Review okok: `NO_CANDIDATE` 562, `LOW_CONFIDENCE` 309,
+`CLOSE_CANDIDATES` 2, `MULTIPLE_BRANDS_IN_NAME` 2, `SOURCE_CONFLICT` 2.
+A leggyakoribb javaslatok: Maxspect 70, Modern Reef 62, Grotech 56,
+Microbe-Lift 34, Ocean Nutrition 30, Jebao/Jecod 27, Arka 26, AquaMedic 25,
+Fauna Marin 25 és Ecotech 24.
+
+Az összes 1 884 terméket számítva 1 003 `RESOLVED`, 319 `REVIEW_REQUIRED` és
+562 `UNRESOLVED`; ezért 881 egyedi `PENDING` review sor készült. Az explicit
+branddel rendelkező termékek közül 10 konfliktusos/review eset magyarázza a
+hiányzó-brand részhalmaz 871 és a teljes queue 881 darabja közötti különbséget.
+
+A végleges batch: `cmrrx41c2000079wo92lr9clz`. Az azonos fájl ismételt futtatása
+ugyanezt a batch-et és mélyen azonos summary/product resolution eredményt adta,
+review duplikáció nélkül. Product 0, ProductVariant 0, Brand 5 és StockMovement 0
+maradt a futtatás előtt és után.

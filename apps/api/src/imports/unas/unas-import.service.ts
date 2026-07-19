@@ -11,6 +11,9 @@ import { UnasDiffEngine } from "./unas-diff.engine.js";
 import { UnasImportRepository } from "./unas-import.repository.js";
 import { UnasImportValidator } from "./unas-import.validator.js";
 import { UnasXlsxParser } from "./unas-xlsx.parser.js";
+import { BrandResolutionEngine } from "./brand-resolution/brand-resolution.engine.js";
+import { summarizeBrandResolution } from "./brand-resolution/brand-resolution.report.js";
+import { BRAND_RESOLUTION_VERSIONS } from "./brand-resolution/brand-resolution.config.js";
 
 @Injectable()
 export class UnasImportService {
@@ -19,19 +22,36 @@ export class UnasImportService {
     private readonly validator: UnasImportValidator,
     private readonly diffEngine: UnasDiffEngine,
     private readonly repository: UnasImportRepository,
+    private readonly brandResolution: BrandResolutionEngine,
   ) {}
 
   async stageAndDryRun(file: Express.Multer.File): Promise<UnasImportReport> {
     const hash = createHash("sha256").update(file.buffer).digest("hex");
-    const existing = await this.repository.findReportByHash(hash);
+    const existing = await this.repository.findReportByHash(
+      hash,
+      BRAND_RESOLUTION_VERSIONS.config,
+    );
     if (existing) return existing;
     const workbook = await this.parser.parse(file.buffer);
     const validated = this.validator.validate(workbook);
+    const resolutions = this.brandResolution.resolveAll(workbook.products);
+    const resolutionByRow = new Map(
+      resolutions.map((resolution) => [resolution.sourceRowNumber, resolution]),
+    );
+    const resolvedForDiff = validated.map((result) => {
+      const resolution = resolutionByRow.get(result.sourceRowNumber);
+      return resolution?.status === "RESOLVED" && !result.row.brandName
+        ? {
+            ...result,
+            row: { ...result.row, brandName: resolution.selectedBrandName },
+          }
+        : result;
+    });
     const [catalog, categories] = await Promise.all([
       this.repository.catalogSnapshot(),
       this.repository.categorySnapshot(),
     ]);
-    const products = this.diffEngine.diff(validated, catalog);
+    const products = this.diffEngine.diff(resolvedForDiff, catalog);
     const issues: ImportIssue[] = validated.flatMap((row) =>
       row.issues.map((item) => ({
         ...item,
@@ -102,6 +122,7 @@ export class UnasImportService {
       hash,
       workbook,
       validated,
+      BRAND_RESOLUTION_VERSIONS.config,
     );
     const report: UnasImportReport = {
       batchId,
@@ -111,8 +132,13 @@ export class UnasImportService {
       summary,
       products,
       issues,
+      schemaVersion: "unas-import-report-v2",
+      brandResolution: {
+        summary: summarizeBrandResolution(workbook.products, resolutions),
+        products: resolutions,
+      },
     };
-    await this.repository.saveReport(batchId, report);
+    await this.repository.saveResolutionAndReport(batchId, resolutions, report);
     return report;
   }
 

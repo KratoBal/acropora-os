@@ -16,6 +16,7 @@ import type { UnasImportRepository } from "./unas-import.repository.js";
 import { UnasImportService } from "./unas-import.service.js";
 import { UnasImportValidator } from "./unas-import.validator.js";
 import { UnasXlsxParser } from "./unas-xlsx.parser.js";
+import { BrandResolutionEngine } from "./brand-resolution/brand-resolution.engine.js";
 
 const product = (
   overrides: Partial<UnasProductImportRow> = {},
@@ -109,6 +110,7 @@ describe("UNAS XLSX parser", () => {
       "Kategória",
       "Kiegészítő Kategóriák",
       "Paraméter: brand||text",
+      "Paraméter: gyártói cikkszám||text",
       "Kép link",
     ]);
     products.addRow([
@@ -118,6 +120,7 @@ describe("UNAS XLSX parser", () => {
       "Termékek | Szűrés ",
       "200;300",
       "Acme",
+      "MPN-123",
       "https://example.test/1.jpg|https://example.test/2.jpg",
     ]);
     const categories = source.addWorksheet("Categories");
@@ -133,6 +136,8 @@ describe("UNAS XLSX parser", () => {
     assert.equal(parsed.products[0]?.sku, "SKU-HU");
     assert.equal(parsed.products[0]?.externalStatus, "2");
     assert.equal(parsed.products[0]?.primaryCategoryExternalId, "200");
+    assert.equal(parsed.products[0]?.primaryCategoryPath, "Termékek|Szűrés");
+    assert.equal(parsed.products[0]?.manufacturerPartNumber, "MPN-123");
     assert.deepEqual(parsed.products[0]?.alternativeCategoryExternalIds, [
       "200",
       "300",
@@ -245,7 +250,7 @@ describe("UNAS dry run service", () => {
         calls.push("staging");
         return "batch-1";
       },
-      saveReport: async () => {
+      saveResolutionAndReport: async () => {
         calls.push("report");
       },
     } as unknown as UnasImportRepository;
@@ -254,6 +259,7 @@ describe("UNAS dry run service", () => {
       new UnasImportValidator(),
       new UnasDiffEngine(),
       repository,
+      new BrandResolutionEngine(),
     );
     const file = {
       originalname: "catalog.xlsx",
@@ -299,6 +305,7 @@ describe("UNAS dry run service", () => {
       {
         findReportByHash: async () => existing,
       } as unknown as UnasImportRepository,
+      new BrandResolutionEngine(),
     );
 
     const report = await service.stageAndDryRun({

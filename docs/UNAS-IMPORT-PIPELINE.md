@@ -37,12 +37,19 @@ fejléc-aliasokat támogat, de az eredeti cellaértékeket változatlan raw payl
 nyers státusz és aktív állapot olvasható. Az ismeretlen UNAS státusz jelentését a
 rendszer nem találja ki és nem alakítja Product aktivitássá.
 
-## Validáció és diff
+## Validáció, brand resolution és diff
 
 Error: hiányzó vagy duplikált SKU, hiányzó név, hibás termék- vagy
 szülőkategória-hivatkozás, hibás kategóriaazonosító vagy név. Warning: hiányzó
 brand, nem található Brands-lapi brand, hibás kép URL és váratlan nyers státusz.
 Minden issue súlyosságot, kódot, mezőt, entity típust és forrássort adhat vissza.
+
+Az alapvalidáció után a determinisztikus Brand Resolution Engine fut. Az explicit
+brandet, kategóriaútvonalakat, terméknevet, gyártói cikkszámot és konfigurált
+SKU-prefixeket evidence-ként pontozza. Az automatikusan feloldható eredmény a
+dry-run diffben használható, a bizonytalan és feloldatlan esetek
+`BrandResolutionReview` staging sorba kerülnek. A nyers `MISSING_BRAND` warning
+ettől függetlenül megmarad. Részletes szabályok: `docs/UNAS-BRAND-RESOLUTION.md`.
 
 A diff SKU alapján hasonlít a jelenlegi katalógushoz, és külön jelzi a cím,
 kategóriák, brand, képek, UNAS channel listing, valamint aktív állapot változását.
@@ -54,7 +61,9 @@ entityType=Category)` rekordok az irányadók.
 A riport Product create/update/unchanged számokat, Category create/update
 számokat, error/warning összesítést, soronkénti műveletet és mezőszintű diffet
 tartalmaz. Az `INVALID` sorok stagingben megmaradnak, de nem számítanak létrehozási
-vagy módosítási műveletnek.
+vagy módosítási műveletnek. A visszafelé kompatibilis opcionális
+`brandResolution` blokk összesített és termékszintű döntést, jelölteket,
+evidence-eket és verziókat ad.
 
 ## Szándékosan elhalasztva
 

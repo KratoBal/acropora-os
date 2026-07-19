@@ -24,6 +24,10 @@
 
 ## Későbbi architekturális és optimalizációs munka
 
+- Brand Resolution review UI, accept/reject műveletek és auditált döntési workflow;
+- Brand Management CRUD, alias/prefix karbantartás és config verzió publikálás;
+- resolver-szabályok regressziós katalógusa és üzleti tulajdonosa;
+
 - transactional event outbox, retry és dead-letter stratégia;
 - idempotens event consumer és schema compatibility teszt;
 - nagy készletfőkönyv partitioning és projection rebuild;

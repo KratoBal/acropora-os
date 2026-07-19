@@ -4,6 +4,10 @@ import type {
   UnasCategoryImportRow,
   UnasProductImportRow,
 } from "./unas.js";
+import type {
+  BrandResolutionResult,
+  BrandResolutionSummary,
+} from "./brand-resolution.js";
 
 export interface UnasParsedWorkbook {
   products: UnasProductImportRow[];
@@ -47,4 +51,9 @@ export interface UnasImportReport {
   summary: UnasImportSummary;
   products: UnasProductDryRunRow[];
   issues: ImportIssue[];
+  schemaVersion?: string;
+  brandResolution?: {
+    summary: BrandResolutionSummary;
+    products: BrandResolutionResult[];
+  };
 }

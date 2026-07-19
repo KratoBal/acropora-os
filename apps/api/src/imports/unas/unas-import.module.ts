@@ -6,6 +6,7 @@ import { UnasImportRepository } from "./unas-import.repository.js";
 import { UnasImportService } from "./unas-import.service.js";
 import { UnasImportValidator } from "./unas-import.validator.js";
 import { UnasXlsxParser } from "./unas-xlsx.parser.js";
+import { BrandResolutionEngine } from "./brand-resolution/brand-resolution.engine.js";
 
 @Module({
   controllers: [UnasImportController],
@@ -15,6 +16,7 @@ import { UnasXlsxParser } from "./unas-xlsx.parser.js";
     UnasDiffEngine,
     UnasImportRepository,
     UnasImportService,
+    BrandResolutionEngine,
   ],
 })
 export class UnasImportModule {}
