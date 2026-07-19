@@ -4,10 +4,90 @@ import type {
   BrandListResponse,
   CreateBrandInput,
   UpdateBrandInput,
+  BrandImportAssistantResponse,
+  BrandImportAssistantSummary,
+  BrandImportBatchOption,
+  BrandImportMutationResult,
+  BulkCreateBrandsInput,
+  CreateBrandFromImportInput,
+  MapBrandAliasInput,
 } from "@acropora/types";
 import { apiRequest } from "./client";
 
 export const brandsApi = {
+  importBatches(token: string, signal?: AbortSignal) {
+    return apiRequest<BrandImportBatchOption[]>(
+      "/brands/import-assistant/batches",
+      token,
+      { signal },
+    );
+  },
+  importSummary(token: string, batchId: string, signal?: AbortSignal) {
+    return apiRequest<BrandImportAssistantSummary>(
+      `/brands/import-assistant/batches/${encodeURIComponent(batchId)}`,
+      token,
+      { signal },
+    );
+  },
+  importRows(
+    token: string,
+    batchId: string,
+    query: URLSearchParams,
+    signal?: AbortSignal,
+  ) {
+    return apiRequest<BrandImportAssistantResponse>(
+      `/brands/import-assistant/batches/${encodeURIComponent(batchId)}/rows?${query}`,
+      token,
+      { signal },
+    );
+  },
+  createFromImport(
+    token: string,
+    batchId: string,
+    rowId: string,
+    input: CreateBrandFromImportInput,
+  ) {
+    return apiRequest<BrandImportMutationResult>(
+      `/brands/import-assistant/batches/${encodeURIComponent(batchId)}/rows/${encodeURIComponent(rowId)}/create-brand`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
+    );
+  },
+  mapImportAlias(
+    token: string,
+    batchId: string,
+    rowId: string,
+    input: MapBrandAliasInput,
+  ) {
+    return apiRequest<BrandImportMutationResult>(
+      `/brands/import-assistant/batches/${encodeURIComponent(batchId)}/rows/${encodeURIComponent(rowId)}/map-alias`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
+    );
+  },
+  bulkCreateFromImport(
+    token: string,
+    batchId: string,
+    input: BulkCreateBrandsInput,
+  ) {
+    return apiRequest<{ createdBrands: Array<{ id: string; name: string }> }>(
+      `/brands/import-assistant/batches/${encodeURIComponent(batchId)}/bulk-create`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
+    );
+  },
   list(token: string, query: URLSearchParams, signal?: AbortSignal) {
     return apiRequest<BrandListResponse>(`/brands?${query}`, token, { signal });
   },

@@ -13,7 +13,10 @@ export default defineConfig({
   },
   test: {
     environment: "happy-dom",
-    include: ["src/**/*.component.test.{ts,tsx}"],
+    include: [
+      "src/**/*.component.test.{ts,tsx}",
+      "src/components/brands/brand-import-assistant-page.test.tsx",
+    ],
     setupFiles: ["./src/test/setup.ts"],
   },
 });

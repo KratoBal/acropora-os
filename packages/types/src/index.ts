@@ -28,6 +28,19 @@ export {
   USER_ROLES,
 } from "./auth.js";
 export type {
+  BrandImportAssistantResponse,
+  BrandImportBatchOption,
+  BrandImportAssistantRow,
+  BrandImportAssistantSummary,
+  BrandImportClassification,
+  BrandImportExample,
+  BrandImportMutationResult,
+  BulkCreateBrandsInput,
+  CreateBrandFromImportInput,
+  MapBrandAliasInput,
+  MapBrandExternalInput,
+} from "./brand-import-assistant.js";
+export type {
   BrandAlias,
   BrandAliasInput,
   BrandDetail,

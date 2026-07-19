@@ -462,6 +462,12 @@ export function UnasImportWizard() {
               </p>
             </div>
             <div className="flex gap-2">
+              <Link
+                href={`/admin/brands/import-assistant?batchId=${encodeURIComponent(report.batchId)}&returnTo=${encodeURIComponent(`/admin/imports/unas?batchId=${report.batchId}`)}`}
+                className="inline-flex h-9 items-center rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Márkaimport asszisztens
+              </Link>
               {report.brandResolution?.products.some(
                 (product) => product.status !== "RESOLVED",
               ) ? (

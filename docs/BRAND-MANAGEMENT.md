@@ -1,5 +1,7 @@
 # Brand master-data kezelés
 
+Az importból érkező forrásmárkák kézi előkészítését a [Márkaimport asszisztens](./BRAND-IMPORT-ASSISTANT.md) végzi, ugyanazzal a normalizálással és adatbázis-ütközésvédelemmel.
+
 A Brand az Acropora OS kanonikus gyártói/márkaidentitása. A `/admin/brands` lista `products.view`, a létrehozás, módosítás, alias-kezelés, archiválás és visszaállítás `products.manage` jogosultságot igényel.
 
 ## Identitás és normalizálás

@@ -98,11 +98,16 @@ export function BrandListPage() {
         title="Márkák"
         description="Kanonikus márkaadatok, aliasok és UNAS megfeleltetések."
         actions={
-          canManage ? (
-            <Link href="/admin/brands/new">
-              <Button>Új márka</Button>
+          <div className="flex gap-2">
+            <Link href="/admin/brands/import-assistant">
+              <Button variant="secondary">Import asszisztens</Button>
             </Link>
-          ) : undefined
+            {canManage ? (
+              <Link href="/admin/brands/new">
+                <Button>Új márka</Button>
+              </Link>
+            ) : null}
+          </div>
         }
       />
       {error ? (

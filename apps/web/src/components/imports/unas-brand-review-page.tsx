@@ -206,7 +206,17 @@ export function UnasBrandReviewPage({ batchId }: { batchId: string }) {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="UNAS brand review" description={`Batch: ${batchId}`} />
+      <PageHeader
+        title="UNAS brand review"
+        description={`Batch: ${batchId}`}
+        actions={
+          <Link
+            href={`/admin/brands/import-assistant?batchId=${encodeURIComponent(batchId)}&classification=MISSING_BRAND&returnTo=${encodeURIComponent(`${pathname}?${searchParams}`)}`}
+          >
+            <Button variant="secondary">Márka master data előkészítése</Button>
+          </Link>
+        }
+      />
       {error ? (
         <Alert
           variant="danger"

@@ -1,5 +1,7 @@
 # UNAS Brand Resolution Engine
 
+A resolver történeti evidence-ét a [Márkaimport asszisztens](./BRAND-IMPORT-ASSISTANT.md) nem írja át és nem számolja újra; a perzisztált forrásértékeket az aktuális Brand master data-val egyezteti.
+
 > A perzisztált kanonikus nevek és aliasok kezelését a [Brand master-data modul](./BRAND-MANAGEMENT.md) végzi. A szótár önmagában nem helyettesíti a Brand rekordot.
 
 ## Biztonsági határ
