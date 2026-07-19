@@ -32,7 +32,10 @@ export class UnasBrandReviewService {
   ): Promise<BrandReviewListResponse> {
     const batch = await this.repository.getBatch(batchId);
     if (!batch) throw new NotFoundException("Az import batch nem található.");
-    const all = batch.brandResolutionReviews.map((review) => this.item(review));
+    const brands = await this.repository.getBrandMasterData();
+    const all = batch.brandResolutionReviews.map((review) =>
+      this.item(review, brands),
+    );
     const needle = query.search?.trim().toLocaleLowerCase("hu-HU");
     const filtered = all.filter((item) => {
       if (query.status && item.status !== query.status) return false;
@@ -131,15 +134,19 @@ export class UnasBrandReviewService {
     );
     if (!review) throw new NotFoundException("A review sor nem található.");
     const resolution = review.resolution as unknown as BrandResolutionResult;
+    const brands = await this.repository.getBrandMasterData();
+    const candidate = resolution.candidates.find(
+      (item) => item.brandKey === input.brandKey,
+    );
+    const master = candidate
+      ? this.masterBrand(candidate.brandName, brands)
+      : undefined;
     if (
       input.decision === "ACCEPT" &&
-      (!input.brandKey ||
-        !resolution.candidates.some(
-          (candidate) => candidate.brandKey === input.brandKey,
-        ))
+      (!input.brandKey || !candidate || !master || !master.brand.isActive)
     )
       throw new BadRequestException(
-        "Csak a mentett brand jelöltek egyike fogadható el.",
+        "Csak aktív master-data rekordhoz kapcsolt, mentett brand jelölt fogadható el.",
       );
     const now = new Date();
     try {
@@ -165,6 +172,7 @@ export class UnasBrandReviewService {
     const refreshed = await this.repository.getBatch(batchId);
     return this.item(
       refreshed!.brandResolutionReviews.find((item) => item.id === reviewId)!,
+      brands,
     );
   }
 
@@ -176,6 +184,7 @@ export class UnasBrandReviewService {
     const byId = new Map(
       batch.brandResolutionReviews.map((review) => [review.id, review]),
     );
+    const brands = await this.repository.getBrandMasterData();
     const now = new Date();
     const updates = input.reviewIds.map((id) => {
       const review = byId.get(id);
@@ -191,6 +200,13 @@ export class UnasBrandReviewService {
       if (input.decision === "ACCEPT_SUGGESTED" && !candidate)
         throw new BadRequestException(
           `A(z) ${review.sourceRowNumber}. sornak nincs elfogadható jelöltje.`,
+        );
+      if (
+        input.decision === "ACCEPT_SUGGESTED" &&
+        !this.masterBrand(candidate!.brandName, brands)?.brand.isActive
+      )
+        throw new BadRequestException(
+          `A(z) ${review.sourceRowNumber}. sor javasolt márkája nem létező aktív master adat.`,
         );
       const expected = input.expectedUpdatedAt[id];
       if (!expected)
@@ -224,6 +240,9 @@ export class UnasBrandReviewService {
     review: NonNullable<
       Awaited<ReturnType<UnasBrandReviewRepository["getBatch"]>>
     >["brandResolutionReviews"][number],
+    brands: Awaited<
+      ReturnType<UnasBrandReviewRepository["getBrandMasterData"]>
+    >,
   ): BrandReviewListItem {
     const resolution = review.resolution as unknown as BrandResolutionResult;
     const row = review.importRow
@@ -238,7 +257,20 @@ export class UnasBrandReviewService {
       resolvedBrandKey: review.resolvedBrandKey ?? undefined,
       confidence: review.confidence,
       reviewReasons: review.reviewReasons as unknown as BrandReviewReason[],
-      candidates: resolution.candidates,
+      candidates: resolution.candidates.map((candidate) => {
+        const master = this.masterBrand(candidate.brandName, brands);
+        return {
+          ...candidate,
+          masterData: master
+            ? {
+                brandId: master.brand.id,
+                brandName: master.brand.name,
+                status: master.brand.isActive ? "ACTIVE" : "ARCHIVED",
+                match: master.match,
+              }
+            : undefined,
+        };
+      }),
       evidence: resolution.evidence,
       sourceFacts: {
         explicitBrand: row.brandName,
@@ -249,6 +281,22 @@ export class UnasBrandReviewService {
       updatedAt: review.updatedAt.toISOString(),
       reviewedAt: review.reviewedAt?.toISOString(),
     };
+  }
+
+  private masterBrand(
+    candidateName: string,
+    brands: Awaited<
+      ReturnType<UnasBrandReviewRepository["getBrandMasterData"]>
+    >,
+  ) {
+    const normalized = normalize(candidateName);
+    for (const brand of brands) {
+      if (brand.normalizedName === normalized)
+        return { brand, match: "CANONICAL" as const };
+      if (brand.aliases.some((alias) => alias.normalizedAlias === normalized))
+        return { brand, match: "ALIAS" as const };
+    }
+    return undefined;
   }
 
   private mapMutationError(error: unknown): never {
@@ -265,6 +313,17 @@ export class UnasBrandReviewService {
     throw error;
   }
 }
+
+const normalize = (value: string) =>
+  value
+    .replace(/&/g, " and ")
+    .replace(/[\p{P}\p{S}]+/gu, " ")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
 
 function confidenceBand(value: number): "high" | "medium" | "low" | "none" {
   if (value >= 75) return "high";

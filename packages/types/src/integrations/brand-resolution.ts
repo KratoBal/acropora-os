@@ -37,6 +37,12 @@ export interface BrandResolutionCandidate {
   sources: BrandResolutionSource[];
   evidence: BrandResolutionEvidence[];
   conflicts: BrandReviewReason[];
+  masterData?: {
+    brandId: string;
+    brandName: string;
+    status: "ACTIVE" | "ARCHIVED";
+    match: "CANONICAL" | "ALIAS";
+  };
 }
 
 export interface BrandResolutionResult {

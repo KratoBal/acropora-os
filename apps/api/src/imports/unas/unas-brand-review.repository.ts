@@ -20,6 +20,10 @@ export class UnasBrandReviewRepository extends Repository {
     });
   }
 
+  getBrandMasterData() {
+    return prisma.brand.findMany({ include: { aliases: true } });
+  }
+
   async updateDecision(
     batchId: string,
     reviewId: string,

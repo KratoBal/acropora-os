@@ -415,13 +415,19 @@ export class UnasApplyRepository extends Repository {
   }
 
   private async brandIdsByDictionaryKey(transaction: Prisma.TransactionClient) {
-    const brands = await transaction.brand.findMany();
+    const brands = await transaction.brand.findMany({
+      where: { isActive: true },
+      include: { aliases: true },
+    });
     const result = new Map<string, string>();
     for (const brand of brands) {
-      const normalized = normalizeBrandText(brand.name);
+      const normalizedNames = [
+        normalizeBrandText(brand.name),
+        ...brand.aliases.map((alias) => alias.normalizedAlias),
+      ];
       const entry = BRAND_DICTIONARY.find((candidate) =>
-        candidate.aliases.some(
-          (alias) => normalizeBrandText(alias) === normalized,
+        candidate.aliases.some((alias) =>
+          normalizedNames.includes(normalizeBrandText(alias)),
         ),
       );
       if (entry) result.set(entry.key, brand.id);

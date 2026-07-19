@@ -1,5 +1,7 @@
 # UNAS Brand Resolution Engine
 
+> A perzisztált kanonikus nevek és aliasok kezelését a [Brand master-data modul](./BRAND-MANAGEMENT.md) végzi. A szótár önmagában nem helyettesíti a Brand rekordot.
+
 ## Biztonsági határ
 
 A motor kizárólag stagingadatot elemez és dry-run riportot készít. Nem hoz létre vagy módosít Brand, Product, ProductVariant, StockMovement vagy más domain rekordot. Nincs fuzzy/AI-alapú felismerés; ismeretlen értékből nem talál ki brandet.

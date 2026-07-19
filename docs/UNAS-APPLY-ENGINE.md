@@ -1,5 +1,7 @@
 # UNAS Apply Import Engine
 
+Az elfogadott brand jelöltnek aktív, perzisztált [Brand master-adathoz](./BRAND-MANAGEMENT.md) kell kapcsolódnia; a `NO_BRAND` út változatlanul támogatott.
+
 > Az emberi brand review és a megerősített admin felület: [UNAS-BRAND-REVIEW-UI.md](./UNAS-BRAND-REVIEW-UI.md).
 
 Az approval a #0006.9-től a külön mentett review döntéseket használja. Kompatibilitási okból a korábbi, teljes `brandDecisions` payload továbbra is elfogadott, de az admin UI üres approval payloadot küld, és a backend tranzakcióban ellenőrzi, hogy nem maradt `PENDING` sor.

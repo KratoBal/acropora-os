@@ -88,6 +88,12 @@ export const businessNavigation: AppNavigationItem[] = [
 
 export const settingsNavigation: AppNavigationItem[] = [
   {
+    href: "/admin/brands",
+    label: "Márkák",
+    icon: "package",
+    permission: PERMISSIONS.PRODUCTS_VIEW,
+  },
+  {
     href: "/beallitasok",
     label: "Beállítások",
     icon: "settings",

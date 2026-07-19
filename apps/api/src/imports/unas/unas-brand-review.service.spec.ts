@@ -63,6 +63,7 @@ const batch = (reviews = [review()]) => ({
 describe("UNAS brand review service", () => {
   it("paginates and filters deterministically", async () => {
     const service = new UnasBrandReviewService({
+      getBrandMasterData: async () => [],
       getBatch: async () =>
         batch([
           review(),
@@ -88,6 +89,7 @@ describe("UNAS brand review service", () => {
 
   it("accepts only a persisted candidate and rejects free text", async () => {
     const repository = {
+      getBrandMasterData: async () => [],
       getBatch: async () => batch(),
       updateDecision: async () => review({ status: "ACCEPTED" }),
     } as unknown as UnasBrandReviewRepository;
@@ -110,6 +112,7 @@ describe("UNAS brand review service", () => {
 
   it("maps optimistic concurrency failure to conflict", async () => {
     const repository = {
+      getBrandMasterData: async () => [],
       getBatch: async () => batch(),
       updateDecision: async () => {
         throw new Error("CONCURRENT_UPDATE");
@@ -133,6 +136,15 @@ describe("UNAS brand review service", () => {
   it("keeps bulk updates explicit and validates every concurrency token", async () => {
     let calls = 0;
     const repository = {
+      getBrandMasterData: async () => [
+        {
+          id: "brand-1",
+          name: "Tunze",
+          normalizedName: "tunze",
+          isActive: true,
+          aliases: [],
+        },
+      ],
       getBatch: async () => batch(),
       bulkUpdate: async (_batchId: string, updates: unknown[]) => {
         calls = updates.length;
@@ -167,6 +179,7 @@ describe("UNAS brand review service", () => {
 
   it("reports approval eligibility only at complete valid state", async () => {
     const service = new UnasBrandReviewService({
+      getBrandMasterData: async () => [],
       getBatch: async () => batch([review({ status: "ACCEPTED" })]),
     } as unknown as UnasBrandReviewRepository);
     const result = await service.list("batch-1", { page: 1, pageSize: 25 });

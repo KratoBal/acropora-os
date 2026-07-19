@@ -26,6 +26,37 @@ export type ProductUpdated = DomainEventEnvelope<
   { name: string; sku: string; source: "UNAS"; batchId: string }
 >;
 
+export type BrandCreated = DomainEventEnvelope<
+  "brand.created",
+  "Brand",
+  { name: string }
+>;
+export type BrandUpdated = DomainEventEnvelope<
+  "brand.updated",
+  "Brand",
+  { name: string; previousName: string }
+>;
+export type BrandArchived = DomainEventEnvelope<
+  "brand.archived",
+  "Brand",
+  { name: string }
+>;
+export type BrandRestored = DomainEventEnvelope<
+  "brand.restored",
+  "Brand",
+  { name: string }
+>;
+export type BrandAliasAdded = DomainEventEnvelope<
+  "brand.alias-added",
+  "Brand",
+  { alias: string; source: string }
+>;
+export type BrandAliasRemoved = DomainEventEnvelope<
+  "brand.alias-removed",
+  "Brand",
+  { alias: string }
+>;
+
 export type CatalogImportApplied = DomainEventEnvelope<
   "catalog-import.applied",
   "CatalogImportBatch",
@@ -93,6 +124,12 @@ export type IcpReportImported = DomainEventEnvelope<
 export type AcroporaDomainEvent =
   | ProductCreated
   | ProductUpdated
+  | BrandCreated
+  | BrandUpdated
+  | BrandArchived
+  | BrandRestored
+  | BrandAliasAdded
+  | BrandAliasRemoved
   | CatalogImportApplied
   | StockMovementPosted
   | PurchaseOrderApproved

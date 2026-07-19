@@ -35,4 +35,7 @@ export const seedBrands = [
   { name: "Tropic Marin", slug: "tropic-marin" },
   { name: "Eheim", slug: "eheim" },
   { name: "JBL", slug: "jbl" },
-] as const;
+].map((brand) => ({
+  ...brand,
+  normalizedName: brand.name.toLowerCase(),
+}));

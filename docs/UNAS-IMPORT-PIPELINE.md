@@ -1,5 +1,7 @@
 # UNAS import pipeline
 
+A resolver szótára bizonyítékforrás, míg a Product-asszociáció célja az aktív [Brand master adat](./BRAND-MANAGEMENT.md). Hiányzó rekord nem jön létre automatikusan.
+
 > A brand review, approval és Apply kezelőfelület részletes folyamata: [UNAS-BRAND-REVIEW-UI.md](./UNAS-BRAND-REVIEW-UI.md).
 
 ## Cél és biztonsági határ

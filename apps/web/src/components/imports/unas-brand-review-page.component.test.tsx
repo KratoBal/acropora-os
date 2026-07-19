@@ -69,6 +69,12 @@ const item = {
         },
       ],
       conflicts: [],
+      masterData: {
+        brandId: "brand-tunze",
+        brandName: "Tunze",
+        status: "ACTIVE" as const,
+        match: "CANONICAL" as const,
+      },
     },
   ],
   evidence: [],

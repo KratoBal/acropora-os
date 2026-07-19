@@ -1,5 +1,7 @@
 # UNAS brand review és import-jóváhagyás
 
+Hiányzó jelöltnél a felület a [Brand master-data kezelésbe](./BRAND-MANAGEMENT.md) vezet előtöltött névvel és visszatérési URL-lel. A létrehozás nem jelent automatikus elfogadást.
+
 Az admin felület útvonala: `/admin/imports/unas/{batchId}/review`. Használatához és minden kapcsolódó API-művelethez `products.manage` jogosultság szükséges.
 
 ## Review folyamat

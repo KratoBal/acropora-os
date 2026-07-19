@@ -342,6 +342,7 @@ export function UnasBrandReviewPage({ batchId }: { batchId: string }) {
           ) : (
             <ReviewTable
               data={data}
+              batchId={batchId}
               selected={selected}
               readOnly={data.summary.readOnly}
               busy={busy}
@@ -444,6 +445,7 @@ export function UnasBrandReviewPage({ batchId }: { batchId: string }) {
 
 function ReviewTable({
   data,
+  batchId,
   selected,
   readOnly,
   busy,
@@ -452,6 +454,7 @@ function ReviewTable({
   onDecision,
 }: {
   data: BrandReviewListResponse;
+  batchId: string;
   selected: Set<string>;
   readOnly: boolean;
   busy: boolean;
@@ -535,18 +538,54 @@ function ReviewTable({
                     Bizonyíték
                   </Button>
                   {item.candidates.map((candidate) => (
-                    <Button
+                    <div
                       key={candidate.brandKey}
-                      size="sm"
-                      disabled={readOnly || busy}
-                      onClick={() =>
-                        void onDecision(item, "ACCEPT", candidate.brandKey)
-                      }
+                      className="flex items-center gap-1"
                     >
-                      {candidate.rank === 1
-                        ? "Javaslat elfogadása"
-                        : candidate.brandName}
-                    </Button>
+                      {candidate.masterData ? (
+                        <>
+                          <Badge
+                            variant={
+                              candidate.masterData.status === "ACTIVE"
+                                ? "success"
+                                : "neutral"
+                            }
+                          >
+                            {candidate.masterData.status === "ACTIVE"
+                              ? candidate.masterData.match === "ALIAS"
+                                ? "Aktív · alias"
+                                : "Aktív master adat"
+                              : "Archivált master adat"}
+                          </Badge>
+                          <Button
+                            size="sm"
+                            disabled={
+                              readOnly ||
+                              busy ||
+                              candidate.masterData.status !== "ACTIVE"
+                            }
+                            onClick={() =>
+                              void onDecision(
+                                item,
+                                "ACCEPT",
+                                candidate.brandKey,
+                              )
+                            }
+                          >
+                            {candidate.rank === 1
+                              ? "Javaslat elfogadása"
+                              : candidate.brandName}
+                          </Button>
+                        </>
+                      ) : (
+                        <Link
+                          className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-teal-700"
+                          href={`/admin/brands/new?name=${encodeURIComponent(candidate.brandName)}&sourceName=${encodeURIComponent(candidate.brandName)}&source=UNAS&returnTo=${encodeURIComponent(`/admin/imports/unas/${batchId}/review`)}`}
+                        >
+                          Márka létrehozása
+                        </Link>
+                      )}
+                    </div>
                   ))}
                   <Button
                     size="sm"

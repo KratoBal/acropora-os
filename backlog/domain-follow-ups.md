@@ -1,5 +1,8 @@
 # Domain follow-up backlog
 
+- Brand merge és automatikus duplikátum-egyesítés továbbra is külön, auditált workflow-t igényel.
+- A több tízezres brandkatalógushoz dedikált keresési index és import assistant későbbi fejlesztés.
+
 ## Szándékosan elhalasztott kérdések
 
 - termékvariáns attribútumséma, képek, dokumentumok, árlisták és árérvényesség;

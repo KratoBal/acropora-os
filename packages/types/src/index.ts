@@ -28,6 +28,19 @@ export {
   USER_ROLES,
 } from "./auth.js";
 export type {
+  BrandAlias,
+  BrandAliasInput,
+  BrandDetail,
+  BrandExternalMapping,
+  BrandListResponse,
+  BrandMutationResponse,
+  BrandStatusFilter,
+  BrandSummary,
+  BrandUsage,
+  CreateBrandInput,
+  UpdateBrandInput,
+} from "./brand-management.js";
+export type {
   AuthenticatedUser,
   Permission,
   Session,
@@ -37,6 +50,12 @@ export type {
   AcroporaDomainEvent,
   CatalogImportApplied,
   AquariumMeasurementRecorded,
+  BrandAliasAdded,
+  BrandAliasRemoved,
+  BrandArchived,
+  BrandCreated,
+  BrandRestored,
+  BrandUpdated,
   CustomerCreated,
   DomainEventEnvelope,
   GoodsReceived,
