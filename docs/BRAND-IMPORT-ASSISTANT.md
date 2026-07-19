@@ -18,7 +18,7 @@ A `&`, írásjelek, kis-/nagybetűk és ékezetek normalizálása a Brand Manage
 
 A `products.view` jogosultság olvasást, a `products.manage` módosítást enged. Egy hiányzó forrásból létrehozható szerkeszthető nevű Brand és — eltérő névnél — UNAS alias. Létező aktív Brand csak választómezőből célozható. Külső mapping kizárólag igazolt stabil UNAS azonosítóval készülhet; megjelenítési névből az asszisztens nem gyárt external ID-t.
 
-A bulk művelet csak explicit, az aktuális oldalon kijelölt `MISSING_BRAND` sorokat fogad, legfeljebb 50-et. A `CREATE <count> BRANDS` szöveges megerősítés után Serializable tranzakcióban, all-or-none módon fut. Normalizált belső ütközés, kanonikus/alias/archivált ütközés vagy elavult `updatedAt` esetén 409 érkezik és a UI frissíthető. DomainEvent tartalmazza a batch korrelációs azonosítóját és a forrásértéket.
+A bulk művelet csak explicit, az aktuális oldalon kijelölt `MISSING_BRAND` sorokat fogad, legfeljebb 200-at. A `CREATE <count> BRANDS` szöveges megerősítés után a backend stabil sorazonosítók alapján újraelemzi a batch aktuális állapotát. Minden létrehozás külön Serializable tranzakció: a Brand és saját DomainEventje atomi, miközben egy ütköző sor nem teszi használhatatlanná a többi eredményt. A válasz soronként `CREATED`, `ALREADY_RESOLVED`, `SKIPPED`, `CONFLICT` vagy `FAILED` státuszt ad. Az adatbázis unique constraintjei és az újraelemzés teszik az ismételt vagy párhuzamos kérést idempotenssé. A kérés végén strukturált AuditLog rögzíti a felhasználót, batch-et és az összesített darabszámokat.
 
 Archivált találat nem áll vissza automatikusan; a Brand adatlapján külön, jogosult művelet szükséges. Ambiguous és conflict sor nem bulk-feldolgozható.
 

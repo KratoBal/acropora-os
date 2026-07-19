@@ -92,6 +92,24 @@ export interface BulkCreateBrandsInput {
   expectedUpdatedAt: Record<string, string>;
 }
 
+export type BulkBrandCreateStatus =
+  "CREATED" | "ALREADY_RESOLVED" | "SKIPPED" | "CONFLICT" | "FAILED";
+
+export interface BulkBrandCreateResult {
+  sourceBrandId: string;
+  sourceName: string;
+  status: BulkBrandCreateStatus;
+  targetBrandId?: string;
+  reason: string;
+}
+
+export interface BulkBrandCreateResponse {
+  batchId: string;
+  requestedCount: number;
+  results: BulkBrandCreateResult[];
+  summary: Record<BulkBrandCreateStatus, number>;
+}
+
 export interface BrandImportMutationResult {
   row: BrandImportAssistantRow;
   createdBrands?: Array<{ id: string; name: string }>;

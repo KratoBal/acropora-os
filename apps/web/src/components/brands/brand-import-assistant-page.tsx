@@ -20,6 +20,7 @@ import {
   type BrandImportBatchOption,
   type BrandImportClassification,
   type BrandListResponse,
+  type BulkBrandCreateResponse,
 } from "@acropora/types";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -66,6 +67,10 @@ export function BrandImportAssistantPage() {
   const [canonicalName, setCanonicalName] = useState("");
   const [targetBrandId, setTargetBrandId] = useState("");
   const [confirmation, setConfirmation] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkResult, setBulkResult] = useState<BulkBrandCreateResponse | null>(
+    null,
+  );
   const batchId = params.get("batchId") ?? "";
   const query = useMemo(() => {
     const value = new URLSearchParams(params.toString());
@@ -73,7 +78,7 @@ export function BrandImportAssistantPage() {
     value.delete("returnTo");
     value.delete("status");
     if (!value.has("page")) value.set("page", "1");
-    if (!value.has("pageSize")) value.set("pageSize", "25");
+    if (!value.has("pageSize")) value.set("pageSize", "100");
     const classification = value.get("classification");
     if (classification)
       value.set("classification", classification.toUpperCase());
@@ -129,6 +134,9 @@ export function BrandImportAssistantPage() {
     }, 350);
     return () => clearTimeout(timer);
   }, [navigate, params, search]);
+  useEffect(() => {
+    setSelected(new Set());
+  }, [batchId, query]);
   const loadTargets = async () => {
     if (brands) return;
     const q = new URLSearchParams({
@@ -179,23 +187,50 @@ export function BrandImportAssistantPage() {
   };
   const bulk = async () => {
     const rows = data?.items.filter((row) => selected.has(row.id)) ?? [];
-    if (confirmation !== `CREATE ${rows.length} BRANDS`) return;
+    if (
+      bulkBusy ||
+      !rows.length ||
+      confirmation !== `CREATE ${rows.length} BRANDS`
+    )
+      return;
+    setBulkBusy(true);
+    setError(null);
     try {
-      await brandsApi.bulkCreateFromImport(token, batchId, {
+      const result = await brandsApi.bulkCreateFromImport(token, batchId, {
         rowIds: rows.map((row) => row.id),
         expectedUpdatedAt: Object.fromEntries(
           rows.map((row) => [row.id, row.updatedAt]),
         ),
       });
+      setBulkResult(result);
       await refreshAfter();
     } catch (cause) {
       setError(
         cause instanceof Error
           ? cause.message
-          : "Az atomi bulk művelet sikertelen.",
+          : "A tömeges márkalétrehozás sikertelen.",
       );
       if (cause instanceof ApiError && cause.status === 409) await load();
+    } finally {
+      setBulkBusy(false);
     }
+  };
+  const creatableRows =
+    data?.items.filter((row) => row.classification === "MISSING_BRAND") ?? [];
+  const allCreatableSelected =
+    creatableRows.length > 0 &&
+    creatableRows.every((row) => selected.has(row.id));
+  const toggleCurrentPage = () => {
+    setSelected((old) => {
+      const next = new Set(old);
+      if (allCreatableSelected) {
+        for (const row of creatableRows) next.delete(row.id);
+      } else {
+        for (const row of creatableRows.slice(0, 200 - next.size))
+          next.add(row.id);
+      }
+      return next;
+    });
   };
   if (!canView)
     return (
@@ -226,6 +261,12 @@ export function BrandImportAssistantPage() {
               Frissítés
             </Button>
           }
+        />
+      ) : null}
+      {bulkResult ? (
+        <Alert
+          title="A tömeges művelet befejeződött"
+          description={`${bulkResult.summary.CREATED} márka létrehozva, ${bulkResult.summary.ALREADY_RESOLVED} már időközben egyezett, ${bulkResult.summary.CONFLICT} ütközés, ${bulkResult.summary.SKIPPED} kihagyva, ${bulkResult.summary.FAILED} sikertelen.`}
         />
       ) : null}
       <Card className="grid gap-3 p-4 sm:grid-cols-3">
@@ -294,19 +335,40 @@ export function BrandImportAssistantPage() {
                 {data.summary.batch.status} ·{" "}
                 {data.summary.batch.analysisVersion}
               </div>
-              {canManage && selected.size ? (
-                <Button onClick={() => setAction("bulk")}>
-                  Kijelölt {selected.size} létrehozása
-                </Button>
-              ) : null}
             </div>
           </Card>
+          {canManage && selected.size ? (
+            <Card className="border-teal-200 bg-teal-50 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <strong>{selected.size} márka kijelölve</strong>
+                <div className="flex gap-2">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setSelected(new Set())}
+                  >
+                    Kijelölés törlése
+                  </Button>
+                  <Button onClick={() => setAction("bulk")}>
+                    Márkák létrehozása
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          ) : null}
           {data.items.length ? (
             <Card className="overflow-x-auto">
               <table className="w-full min-w-[1050px] text-left text-sm">
                 <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
                   <tr>
-                    <th className="p-3">Kijelölés</th>
+                    <th className="p-3">
+                      <input
+                        aria-label="Aktuális oldal hiányzó márkáinak kijelölése"
+                        type="checkbox"
+                        disabled={!canManage || !creatableRows.length}
+                        checked={allCreatableSelected}
+                        onChange={toggleCurrentPage}
+                      />
+                    </th>
                     <th>Forrás</th>
                     <th>Előfordulás</th>
                     <th>Besorolás</th>
@@ -325,7 +387,7 @@ export function BrandImportAssistantPage() {
                           disabled={
                             !canManage ||
                             row.classification !== "MISSING_BRAND" ||
-                            (selected.size >= 50 && !selected.has(row.id))
+                            (selected.size >= 200 && !selected.has(row.id))
                           }
                           checked={selected.has(row.id)}
                           onChange={() =>
@@ -544,8 +606,9 @@ export function BrandImportAssistantPage() {
             {action === "bulk" ? (
               <>
                 <p className="text-sm">
-                  Ez atomi módon módosítja a Brand master data-t, de nem fogad
-                  el review döntést. Érintett termék-előfordulás:{" "}
+                  Új Brand Master rekordok jönnek létre. A backend minden sort
+                  újra ellenőriz, és a művelet nem fogad el review döntést.
+                  Érintett termék-előfordulás:{" "}
                   {data?.items
                     .filter((row) => selected.has(row.id))
                     .reduce((sum, row) => sum + row.occurrenceCount, 0)}
@@ -571,11 +634,12 @@ export function BrandImportAssistantPage() {
               </Button>
               <Button
                 disabled={
-                  action === "create"
+                  bulkBusy ||
+                  (action === "create"
                     ? !canonicalName.trim()
                     : action === "alias"
                       ? !targetBrandId
-                      : confirmation !== `CREATE ${selected.size} BRANDS`
+                      : confirmation !== `CREATE ${selected.size} BRANDS`)
                 }
                 onClick={() =>
                   void (action === "create"
@@ -585,7 +649,7 @@ export function BrandImportAssistantPage() {
                       : bulk())
                 }
               >
-                Megerősítés
+                {bulkBusy ? "Feldolgozás…" : "Megerősítés"}
               </Button>
             </div>
           </Card>

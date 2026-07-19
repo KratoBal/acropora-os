@@ -9,6 +9,7 @@ import type {
   BrandImportBatchOption,
   BrandImportMutationResult,
   BulkCreateBrandsInput,
+  BulkBrandCreateResponse,
   CreateBrandFromImportInput,
   MapBrandAliasInput,
 } from "@acropora/types";
@@ -78,7 +79,7 @@ export const brandsApi = {
     batchId: string,
     input: BulkCreateBrandsInput,
   ) {
-    return apiRequest<{ createdBrands: Array<{ id: string; name: string }> }>(
+    return apiRequest<BulkBrandCreateResponse>(
       `/brands/import-assistant/batches/${encodeURIComponent(batchId)}/bulk-create`,
       token,
       {

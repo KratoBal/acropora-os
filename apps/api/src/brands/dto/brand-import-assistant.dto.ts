@@ -49,7 +49,7 @@ export class MapImportExternalDto {
 export class BulkCreateImportBrandsDto {
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(50)
+  @ArrayMaxSize(200)
   @IsString({ each: true })
   rowIds!: string[];
   @IsObject() expectedUpdatedAt!: Record<string, string>;

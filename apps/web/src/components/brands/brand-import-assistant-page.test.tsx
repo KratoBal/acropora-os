@@ -101,7 +101,26 @@ describe("Brand import assistant UI", () => {
     });
     api.createFromImport.mockResolvedValue({ row: response.items[0] });
     api.mapImportAlias.mockResolvedValue({ row: response.items[0] });
-    api.bulkCreateFromImport.mockResolvedValue({ createdBrands: [] });
+    api.bulkCreateFromImport.mockResolvedValue({
+      batchId: "batch-1",
+      requestedCount: 1,
+      results: [
+        {
+          sourceBrandId: "row-1",
+          sourceName: "OASE",
+          targetBrandId: "brand-1",
+          status: "CREATED",
+          reason: "Létrejött.",
+        },
+      ],
+      summary: {
+        CREATED: 1,
+        ALREADY_RESOLVED: 0,
+        SKIPPED: 0,
+        CONFLICT: 0,
+        FAILED: 0,
+      },
+    });
   });
   it("shows loading", () => {
     api.importBatches.mockReturnValue(new Promise(() => undefined));
@@ -181,7 +200,8 @@ describe("Brand import assistant UI", () => {
   it("selects only explicit rows and requires typed bulk confirmation", async () => {
     render(<BrandImportAssistantPage />);
     fireEvent.click(await screen.findByLabelText("OASE kijelölése"));
-    fireEvent.click(screen.getByText("Kijelölt 1 létrehozása"));
+    expect(screen.getByText("1 márka kijelölve")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Márkák létrehozása"));
     expect(screen.getByText("Megerősítés")).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Bulk megerősítés"), {
       target: { value: "CREATE 1 BRANDS" },
@@ -191,7 +211,7 @@ describe("Brand import assistant UI", () => {
   it("submits an atomic bulk request", async () => {
     render(<BrandImportAssistantPage />);
     fireEvent.click(await screen.findByLabelText("OASE kijelölése"));
-    fireEvent.click(screen.getByText("Kijelölt 1 létrehozása"));
+    fireEvent.click(screen.getByText("Márkák létrehozása"));
     fireEvent.change(screen.getByLabelText("Bulk megerősítés"), {
       target: { value: "CREATE 1 BRANDS" },
     });
@@ -203,6 +223,48 @@ describe("Brand import assistant UI", () => {
         expect.objectContaining({ rowIds: ["row-1"] }),
       ),
     );
+  });
+  it("selects every creatable row on the current page from the header", async () => {
+    render(<BrandImportAssistantPage />);
+    fireEvent.click(
+      await screen.findByLabelText(
+        "Aktuális oldal hiányzó márkáinak kijelölése",
+      ),
+    );
+    expect(screen.getByLabelText("OASE kijelölése")).toBeChecked();
+    expect(screen.getByText("1 márka kijelölve")).toBeInTheDocument();
+  });
+  it("clears the explicit bulk selection", async () => {
+    render(<BrandImportAssistantPage />);
+    fireEvent.click(await screen.findByLabelText("OASE kijelölése"));
+    fireEvent.click(screen.getByText("Kijelölés törlése"));
+    expect(screen.getByLabelText("OASE kijelölése")).not.toBeChecked();
+  });
+  it("prevents a duplicate bulk submit while the request is pending", async () => {
+    api.bulkCreateFromImport.mockReturnValue(new Promise(() => undefined));
+    render(<BrandImportAssistantPage />);
+    fireEvent.click(await screen.findByLabelText("OASE kijelölése"));
+    fireEvent.click(screen.getByText("Márkák létrehozása"));
+    fireEvent.change(screen.getByLabelText("Bulk megerősítés"), {
+      target: { value: "CREATE 1 BRANDS" },
+    });
+    fireEvent.click(screen.getByText("Megerősítés"));
+    expect(await screen.findByText("Feldolgozás…")).toBeDisabled();
+    expect(api.bulkCreateFromImport).toHaveBeenCalledTimes(1);
+  });
+  it("shows the row-level bulk result summary and clears selection", async () => {
+    render(<BrandImportAssistantPage />);
+    fireEvent.click(await screen.findByLabelText("OASE kijelölése"));
+    fireEvent.click(screen.getByText("Márkák létrehozása"));
+    fireEvent.change(screen.getByLabelText("Bulk megerősítés"), {
+      target: { value: "CREATE 1 BRANDS" },
+    });
+    fireEvent.click(screen.getByText("Megerősítés"));
+    expect(
+      await screen.findByText("A tömeges művelet befejeződött"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/1 márka létrehozva/)).toBeInTheDocument();
+    expect(screen.queryByText("1 márka kijelölve")).not.toBeInTheDocument();
   });
   it("renders read-only users without mutation actions", async () => {
     state.session = { ...owner, user: { ...owner.user, role: "VIEWER" } };

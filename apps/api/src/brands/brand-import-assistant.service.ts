@@ -11,6 +11,9 @@ import type {
   BrandImportAssistantRow,
   BrandImportClassification,
   BrandSummary,
+  BulkBrandCreateResponse,
+  BulkBrandCreateResult,
+  BulkBrandCreateStatus,
   UnasProductImportRow,
 } from "@acropora/types";
 import { BRAND_RESOLUTION_VERSIONS } from "../imports/unas/brand-resolution/brand-resolution.config.js";
@@ -298,45 +301,72 @@ export class BrandImportAssistantService {
     batchId: string,
     input: BulkCreateImportBrandsDto,
     actorId: string,
-  ) {
+  ): Promise<BulkBrandCreateResponse> {
     await this.assertMutableBatch(batchId);
     if (new Set(input.rowIds).size !== input.rowIds.length)
       throw new BadRequestException("Duplikált sorazonosító.");
-    const analyzed = await this.analyze(batchId);
-    const selected = input.rowIds.map((id) =>
-      analyzed.rows.find((row) => row.id === id),
+    const initialRows = new Map(
+      (await this.analyze(batchId)).rows.map((row) => [row.id, row]),
     );
-    if (selected.some((row) => !row))
-      throw new BadRequestException("Ismeretlen asszisztens sor.");
-    const rows = selected as BrandImportAssistantRow[];
-    for (const row of rows) {
-      if (row.classification !== "MISSING_BRAND")
-        throw new ConflictException(
-          "A bulk művelet csak hiányzó márkákat kezelhet.",
-        );
-      if (input.expectedUpdatedAt[row.id] !== row.updatedAt)
-        throw new ConflictException(
-          "Az asszisztens állapota időközben megváltozott.",
-        );
-    }
-    const normalized = rows.map((row) =>
-      normalizeBrandName(row.proposedCanonicalName),
-    );
-    if (new Set(normalized).size !== normalized.length)
-      throw new ConflictException(
-        "A kijelölt sorok között normalizált névütközés van.",
-      );
-    try {
-      const created = await prisma.$transaction(
-        async (tx) => {
-          const result: Array<{ id: string; name: string }> = [];
-          for (const row of rows) {
-            await this.assertIdentityFree(tx, row.normalizedSourceValue);
+    const results: BulkBrandCreateResult[] = [];
+
+    for (const sourceBrandId of input.rowIds) {
+      const initial = initialRows.get(sourceBrandId);
+      if (!initial) {
+        results.push({
+          sourceBrandId,
+          sourceName: "Ismeretlen forrásmárka",
+          status: "SKIPPED",
+          reason: "A stabil forrásazonosító nem tartozik a batchhez.",
+        });
+        continue;
+      }
+
+      const current = initial;
+      if (completed.has(current.classification) && current.matchedBrand) {
+        results.push({
+          sourceBrandId,
+          sourceName: current.sourceValue,
+          targetBrandId: current.matchedBrand.id,
+          status: "ALREADY_RESOLVED",
+          reason: "A forrásmárka időközben már biztonságosan feloldódott.",
+        });
+        continue;
+      }
+      if (current.classification !== "MISSING_BRAND") {
+        results.push({
+          sourceBrandId,
+          sourceName: current.sourceValue,
+          targetBrandId: current.matchedBrand?.id,
+          status: "CONFLICT",
+          reason: `A jelenlegi besorolás kézi feloldást igényel: ${current.classification}.`,
+        });
+        continue;
+      }
+      if (input.expectedUpdatedAt[sourceBrandId] !== current.updatedAt) {
+        results.push({
+          sourceBrandId,
+          sourceName: current.sourceValue,
+          status: "CONFLICT",
+          reason: "A forrásmárka állapota a kijelölés óta megváltozott.",
+        });
+        continue;
+      }
+
+      try {
+        const created = await prisma.$transaction(
+          async (tx) => {
+            await this.assertIdentityFree(tx, current.normalizedSourceValue);
             const brand = await tx.brand.create({
               data: {
-                name: row.proposedCanonicalName,
-                normalizedName: row.normalizedSourceValue,
-                slug: row.normalizedSourceValue.replace(/ /g, "-"),
+                name: current.proposedCanonicalName,
+                normalizedName: normalizeBrandName(
+                  current.proposedCanonicalName,
+                ),
+                slug: normalizeBrandName(current.proposedCanonicalName).replace(
+                  / /g,
+                  "-",
+                ),
               },
             });
             await tx.domainEvent.create({
@@ -349,22 +379,95 @@ export class BrandImportAssistantService {
                 correlationId: batchId,
                 payload: {
                   name: brand.name,
-                  source: "UNAS_IMPORT_ASSISTANT",
-                  sourceValue: row.sourceValue,
+                  source: "UNAS_IMPORT_ASSISTANT_BULK",
+                  sourceBrandId,
+                  sourceValue: current.sourceValue,
                 },
                 occurredAt: new Date(),
               },
             });
-            result.push({ id: brand.id, name: brand.name });
-          }
-          return result;
-        },
-        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-      );
-      return { createdBrands: created };
-    } catch (error) {
-      this.map(error);
+            return brand;
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+        results.push({
+          sourceBrandId,
+          sourceName: current.sourceValue,
+          targetBrandId: created.id,
+          status: "CREATED",
+          reason: "Új Brand Master rekord létrejött.",
+        });
+      } catch (error) {
+        const refreshed = (await this.analyze(batchId)).rows.find(
+          (row) => row.id === sourceBrandId,
+        );
+        if (
+          refreshed &&
+          completed.has(refreshed.classification) &&
+          refreshed.matchedBrand
+        ) {
+          results.push({
+            sourceBrandId,
+            sourceName: refreshed.sourceValue,
+            targetBrandId: refreshed.matchedBrand.id,
+            status: "ALREADY_RESOLVED",
+            reason: "Párhuzamos művelet közben már létrejött az egyezés.",
+          });
+        } else if (
+          (error instanceof Prisma.PrismaClientKnownRequestError &&
+            ["P2002", "P2034"].includes(error.code)) ||
+          (error instanceof Error && error.message === "IDENTITY_CONFLICT")
+        ) {
+          results.push({
+            sourceBrandId,
+            sourceName: current.sourceValue,
+            status: "CONFLICT",
+            reason:
+              "A normalizált márkaidentitást egy párhuzamos művelet lefoglalta.",
+          });
+        } else {
+          results.push({
+            sourceBrandId,
+            sourceName: current.sourceValue,
+            status: "FAILED",
+            reason:
+              "A márka létrehozása váratlan adatbázishiba miatt sikertelen.",
+          });
+        }
+      }
     }
+
+    const summary = this.bulkSummary(results);
+    await prisma.auditLog.create({
+      data: {
+        userId: actorId,
+        action: "brand.import-assistant.bulk-create",
+        entityType: "CatalogImportBatch",
+        entityId: batchId,
+        metadata: {
+          requestedCount: input.rowIds.length,
+          ...summary,
+        },
+      },
+    });
+    return {
+      batchId,
+      requestedCount: input.rowIds.length,
+      results,
+      summary,
+    };
+  }
+
+  private bulkSummary(results: BulkBrandCreateResult[]) {
+    const summary: Record<BulkBrandCreateStatus, number> = {
+      CREATED: 0,
+      ALREADY_RESOLVED: 0,
+      SKIPPED: 0,
+      CONFLICT: 0,
+      FAILED: 0,
+    };
+    for (const result of results) summary[result.status] += 1;
+    return summary;
   }
 
   private async analyze(batchId: string) {

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { validate } from "class-validator";
+import { PERMISSIONS } from "@acropora/types";
 import type { BrandSummary } from "@acropora/types";
+import { REQUIRED_PERMISSIONS_KEY } from "../auth/decorators/require-permissions.decorator.js";
+import { BrandImportAssistantController } from "./brand-import-assistant.controller.js";
 import { BrandImportAssistantService } from "./brand-import-assistant.service.js";
+import { BulkCreateImportBrandsDto } from "./dto/brand-import-assistant.dto.js";
 
 const now = "2026-01-01T00:00:00.000Z";
 const brand = (
@@ -131,4 +136,22 @@ describe("BrandImportAssistant classification", () => {
       ]).candidates.map((item) => item.id),
       ["b1", "b2"],
     ));
+});
+
+describe("BrandImportAssistant bulk contract", () => {
+  it("rejects requests above the 200 source limit", async () => {
+    const input = new BulkCreateImportBrandsDto();
+    input.rowIds = Array.from({ length: 201 }, (_, index) => `row-${index}`);
+    input.expectedUpdatedAt = {};
+    assert.ok(
+      (await validate(input)).some((error) => error.property === "rowIds"),
+    );
+  });
+  it("requires products.manage on the bulk endpoint", () => {
+    const permissions = Reflect.getMetadata(
+      REQUIRED_PERMISSIONS_KEY,
+      BrandImportAssistantController.prototype.bulkCreate,
+    );
+    assert.deepEqual(permissions, [PERMISSIONS.PRODUCTS_MANAGE]);
+  });
 });
