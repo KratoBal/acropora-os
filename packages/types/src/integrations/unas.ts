@@ -9,7 +9,9 @@ export interface UnasProductImportRow {
   externalStatus?: string;
   primaryCategoryExternalId?: string;
   alternativeCategoryExternalIds?: string[];
+  brandName?: string;
   imageUrls?: string[];
+  isActive?: boolean;
   seo?: {
     slug?: string;
     title?: string;
@@ -17,6 +19,14 @@ export interface UnasProductImportRow {
     keywords?: string;
     robots?: string;
   };
+  rawPayload: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UnasBrandImportRow {
+  sourceRowNumber: number;
+  externalId?: string;
+  name: string;
   rawPayload: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 }

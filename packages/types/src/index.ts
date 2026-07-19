@@ -55,6 +55,15 @@ export type {
 } from "./integrations/import-staging.js";
 export { stageUnasProductRow } from "./integrations/unas.js";
 export type {
+  CatalogDiffField,
+  CatalogFieldDiff,
+  UnasImportReport,
+  UnasImportSummary,
+  UnasParsedWorkbook,
+  UnasProductDryRunRow,
+} from "./integrations/unas-import-report.js";
+export type {
+  UnasBrandImportRow,
   UnasCategoryImportRow,
   UnasProductImportRow,
 } from "./integrations/unas.js";

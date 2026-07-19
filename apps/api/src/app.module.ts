@@ -6,10 +6,11 @@ import { AppService } from "./app.service.js";
 import { AuthModule } from "./auth/auth.module.js";
 import { AuthGuard } from "./auth/guards/auth.guard.js";
 import { PermissionGuard } from "./auth/guards/permission.guard.js";
+import { UnasImportModule } from "./imports/unas/unas-import.module.js";
 import { ProductModule } from "./products/product.module.js";
 
 @Module({
-  imports: [AuthModule, ProductModule],
+  imports: [AuthModule, ProductModule, UnasImportModule],
   controllers: [AppController],
   providers: [
     AppService,

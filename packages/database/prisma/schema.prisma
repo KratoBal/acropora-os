@@ -132,6 +132,26 @@ enum ProductRelationType {
   UP_SELL
 }
 
+enum CatalogImportProvider {
+  UNAS
+}
+
+enum CatalogImportStatus {
+  STAGED
+  VALIDATED
+}
+
+enum CatalogImportEntityType {
+  PRODUCT
+  CATEGORY
+  BRAND
+}
+
+enum CatalogImportRowStatus {
+  VALID
+  INVALID
+}
+
 model User {
   id          String   @id @default(cuid())
   email       String   @unique
@@ -317,6 +337,41 @@ model ProductBarcode {
   variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
 
   @@index([variantId])
+}
+
+model CatalogImportBatch {
+  id             String                @id @default(cuid())
+  provider       CatalogImportProvider
+  sourceFileName String
+  fileSha256     String
+  status         CatalogImportStatus   @default(STAGED)
+  report         Json?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  rows           CatalogImportRow[]
+
+  @@index([provider, createdAt])
+  @@index([fileSha256])
+}
+
+model CatalogImportRow {
+  id              String                  @id @default(cuid())
+  batchId         String
+  entityType      CatalogImportEntityType
+  sourceRowNumber Int
+  externalId      String?
+  sku             String?
+  rawPayload      Json
+  parsedPayload   Json
+  issues          Json
+  status          CatalogImportRowStatus
+  createdAt       DateTime                @default(now())
+  batch           CatalogImportBatch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, entityType, sourceRowNumber])
+  @@index([batchId, status])
+  @@index([entityType, externalId])
+  @@index([entityType, sku])
 }
 
 model Supplier {

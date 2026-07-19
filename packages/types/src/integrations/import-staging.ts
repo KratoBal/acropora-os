@@ -6,6 +6,8 @@ export interface ImportIssue {
   code: string;
   message: string;
   field?: string;
+  sourceRowNumber?: number;
+  entityType?: "PRODUCT" | "CATEGORY" | "BRAND";
 }
 
 export interface ImportRowResult<TRow> {
