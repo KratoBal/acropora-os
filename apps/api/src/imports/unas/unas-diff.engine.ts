@@ -31,6 +31,7 @@ export class UnasDiffEngine {
         return {
           sourceRowNumber: result.sourceRowNumber,
           sku: result.row.sku,
+          productName: result.row.name,
           action: "INVALID",
           changes: [],
           issues: result.issues,
@@ -41,6 +42,7 @@ export class UnasDiffEngine {
         return {
           sourceRowNumber: result.sourceRowNumber,
           sku: result.row.sku,
+          productName: result.row.name,
           action: "CREATE",
           changes: [],
           issues: result.issues,
@@ -81,6 +83,7 @@ export class UnasDiffEngine {
       return {
         sourceRowNumber: result.sourceRowNumber,
         sku: result.row.sku,
+        productName: result.row.name,
         action: changes.length ? "UPDATE" : "UNCHANGED",
         changes,
         issues: result.issues,

@@ -23,6 +23,7 @@ export interface CatalogFieldDiff {
 export interface UnasProductDryRunRow {
   sourceRowNumber: number;
   sku: string;
+  productName: string;
   action: "CREATE" | "UPDATE" | "UNCHANGED" | "INVALID";
   changes: CatalogFieldDiff[];
   issues: ImportIssue[];

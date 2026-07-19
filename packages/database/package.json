@@ -17,6 +17,7 @@
     "lint": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:validate": "prisma validate",
+    "prisma:validate": "prisma validate",
     "db:format": "prisma format",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",

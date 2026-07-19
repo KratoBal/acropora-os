@@ -19,6 +19,18 @@ SHA-256 hash a batch idempotencia- és auditnyoma.
 - `GET /imports/unas/:batchId/report`: korábban elkészült JSON/UI-ready riport,
   `products.view` jogosultság.
 
+## Admin varázsló
+
+A `/admin/imports/unas` oldal kizárólag `products.manage` jogosultsággal érhető
+el. Az ötlépéses felület XLSX drag-and-dropot és fájlválasztót, feltöltési
+progress állapotot, dry-run összegző kártyákat, külön error/warning validációs
+tabokat, entitás- és szövegszűrést, termékenként csoportosított meződiffet,
+valamint JSON letöltést és másolható összegzést ad.
+
+Korábbi dry-run a staging batch ID megadásával újranyitható. A varázslóban nincs
+import jóváhagyás vagy alkalmazás gomb, ezért a frontend sem tud Product táblát
+módosító végpontot meghívni.
+
 Kötelező munkalapok: `Products`, `Categories`. A `Brands` opcionális. A parser
 fejléc-aliasokat támogat, de az eredeti cellaértékeket változatlan raw payloadban
 őrzi meg. A `Products` exportból legalább SKU, név, kategória, brand, kép URL,
