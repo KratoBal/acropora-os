@@ -121,6 +121,17 @@ enum SyncStatus {
   PERMANENT_ERROR
 }
 
+enum CatalogChannel {
+  UNAS
+}
+
+enum ProductRelationType {
+  ACCESSORY
+  CROSS_SELL
+  SIMILAR
+  UP_SELL
+}
+
 model User {
   id          String   @id @default(cuid())
   email       String   @unique
@@ -156,15 +167,21 @@ model Product {
   description String?
   type        ProductType @default(PHYSICAL)
   brandId     String?
+  /// @deprecated Compatibility pointer. ProductCategory is the category source of truth.
   categoryId  String?
   isActive    Boolean     @default(true)
   archivedAt  DateTime?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
-  brand    Brand?           @relation(fields: [brandId], references: [id], onDelete: SetNull)
-  category Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  variants ProductVariant[]
+  brand           Brand?            @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  legacyCategory  Category?         @relation("LegacyProductCategory", fields: [categoryId], references: [id], onDelete: SetNull)
+  categories      ProductCategory[]
+  variants        ProductVariant[]
+  channelListings ChannelListing[]
+  images          ProductImage[]
+  sourceRelations ProductRelation[] @relation("ProductRelationSource")
+  targetRelations ProductRelation[] @relation("ProductRelationTarget")
 
   @@index([brandId])
   @@index([categoryId])
@@ -211,11 +228,85 @@ model Category {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children Category[] @relation("CategoryTree")
-  products Product[]
+  parent            Category?         @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children          Category[]        @relation("CategoryTree")
+  legacyProducts    Product[]         @relation("LegacyProductCategory")
+  productCategories ProductCategory[]
 
   @@index([parentId])
+}
+
+model ProductCategory {
+  id         String   @id @default(cuid())
+  productId  String
+  categoryId String
+  isPrimary  Boolean  @default(false)
+  sortOrder  Int?
+  source     String?
+  createdAt  DateTime @default(now())
+
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, categoryId])
+  @@index([categoryId, productId])
+  @@index([productId, isPrimary])
+}
+
+model ChannelListing {
+  id               String         @id @default(cuid())
+  productId        String
+  channel          CatalogChannel
+  externalStatus   String?
+  isPublished      Boolean        @default(false)
+  slug             String?
+  productUrl       String?
+  seoTitle         String?
+  seoDescription   String?
+  seoKeywords      String?
+  seoRobots        String?
+  backorderAllowed Boolean        @default(false)
+  sourceCreatedAt  DateTime?
+  sourceUpdatedAt  DateTime?
+  metadata         Json?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, channel])
+  @@index([channel, isPublished])
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  url       String
+  sortOrder Int      @default(0)
+  altText   String?
+  title     String?
+  fileName  String?
+  source    String
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, url])
+  @@index([productId, sortOrder])
+}
+
+model ProductRelation {
+  id              String              @id @default(cuid())
+  sourceProductId String
+  targetProductId String
+  relationType    ProductRelationType
+  sortOrder       Int?
+
+  sourceProduct Product @relation("ProductRelationSource", fields: [sourceProductId], references: [id], onDelete: Cascade)
+  targetProduct Product @relation("ProductRelationTarget", fields: [targetProductId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceProductId, targetProductId, relationType])
+  @@index([targetProductId, relationType])
 }
 
 model ProductBarcode {

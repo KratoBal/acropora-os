@@ -47,3 +47,14 @@ export type {
   ServiceJobCompleted,
   StockMovementPosted,
 } from "./domain-events.js";
+export { IMPORT_ISSUE_SEVERITIES } from "./integrations/import-staging.js";
+export type {
+  ImportIssue,
+  ImportIssueSeverity,
+  ImportRowResult,
+} from "./integrations/import-staging.js";
+export { stageUnasProductRow } from "./integrations/unas.js";
+export type {
+  UnasCategoryImportRow,
+  UnasProductImportRow,
+} from "./integrations/unas.js";

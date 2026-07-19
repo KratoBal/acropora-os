@@ -18,9 +18,9 @@ Minden végpont hitelesítést igényel.
 | `PATCH`  | `/products/:id` | `products.manage` | részleges módosítás        |
 | `DELETE` | `/products/:id` | `products.manage` | soft archive               |
 
-A create mezői: `name`, opcionális `description`, `productType`, opcionális `brandId` és `categoryId`. A támogatott típusok: `PHYSICAL`, `SERVICE`, `LIVESTOCK`.
+A create mezői: `name`, opcionális `description`, `productType`, opcionális `brandId` és `primaryCategoryId`. A támogatott típusok: `PHYSICAL`, `SERVICE`, `LIVESTOCK`. A korábbi `categoryId` request mező átmenetileg támogatott, de deprecated.
 
-A válasz a Product mellett a brandet, kategóriát és variantlistát is tartalmazza. Nem létező ID esetén a detail, update és archive HTTP 404 választ ad.
+A detail válasz a Product mellett brandet, rendezett elsődleges és alternatív kategóriakapcsolatokat, variantlistát, csatornalistingeket és sorrendezett képeket is tartalmaz. Nem létező ID esetén a detail, update és archive HTTP 404 választ ad.
 
 ## Lista, keresés és lapozás
 
@@ -31,7 +31,7 @@ Query paraméterek:
 - `search`: kis- és nagybetűtől független részszöveg a Product nevében vagy variant SKU-ban;
 - `active`: `true` vagy `false`; elhagyva aktív és archivált rekordot is visszaad;
 - `brandId`: pontos brand szűrő;
-- `categoryId`: pontos kategóriaszűrő.
+- `categoryId`: pontos kategóriaszűrő a ProductCategory M:N kapcsolaton keresztül.
 
 A rendezés név, majd belső ID szerint stabil. A válasz `items` mellett `page`, `pageSize`, `totalItems` és `totalPages` lapozási metaadatot ad.
 
@@ -43,7 +43,7 @@ A controller nem használ PrismaClientet. A hívási lánc:
 ProductController → ProductService → ProductRepository → Prisma
 ```
 
-A `ProductRepository.create` egy adatbázis-tranzakcióban hozza létre a Productot és a `product.created` típusú `DomainEvent` rekordot. Event bus vagy aszinkron publisher még nincs; a rekord a későbbi outbox/publisher alapja.
+A `ProductRepository.create` egy adatbázis-tranzakcióban hozza létre a Productot, az opcionális elsődleges ProductCategory kapcsolatot és a `product.created` típusú `DomainEvent` rekordot. Update esetén a repository előbb megszünteti a korábbi primary jelölést, majd upserteli az újat, így alkalmazásszinten egyetlen elsődleges kategória marad. Event bus vagy aszinkron publisher még nincs; a rekord a későbbi outbox/publisher alapja.
 
 ## Archive stratégia
 

@@ -29,5 +29,10 @@ export class CreateProductDto {
 
   @IsOptional()
   @IsString()
+  primaryCategoryId?: string;
+
+  /** @deprecated Használd a primaryCategoryId mezőt. */
+  @IsOptional()
+  @IsString()
   categoryId?: string;
 }

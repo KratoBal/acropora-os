@@ -30,5 +30,10 @@ export class UpdateProductDto {
 
   @IsOptional()
   @IsString()
+  primaryCategoryId?: string | null;
+
+  /** @deprecated Használd a primaryCategoryId mezőt. */
+  @IsOptional()
+  @IsString()
   categoryId?: string | null;
 }

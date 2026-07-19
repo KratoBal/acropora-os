@@ -12,7 +12,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "tsc -p tsconfig.test.json && node --test test-dist/auth.test.js test-dist/domain-events.test.js",
+    "test": "tsc -p tsconfig.test.json && node --test test-dist/auth.test.js test-dist/domain-events.test.js test-dist/integrations/unas.test.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "clean": "rm -rf dist"
   },
