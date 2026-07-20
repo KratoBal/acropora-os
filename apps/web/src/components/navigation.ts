@@ -94,6 +94,12 @@ export const settingsNavigation: AppNavigationItem[] = [
     permission: PERMISSIONS.PRODUCTS_VIEW,
   },
   {
+    href: "/admin/integrations/unas/connection",
+    label: "UNAS kapcsolat",
+    icon: "key",
+    permission: PERMISSIONS.SETTINGS_MANAGE,
+  },
+  {
     href: "/admin/brands",
     label: "Márkák",
     icon: "package",

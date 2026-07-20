@@ -7,6 +7,7 @@ import { UnasProductSyncPage } from "./unas-product-sync-page";
 const api = vi.hoisted(() => ({ listRuns: vi.fn(), run: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session, isLoading: false }),
 }));
@@ -85,5 +86,15 @@ describe("UnasProductSyncPage", () => {
     expect(
       screen.queryByRole("button", { name: "Szinkron indítása" }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Kapcsolat beállításai" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("links owners to the connection settings page", async () => {
+    render(<UnasProductSyncPage />);
+    expect(
+      await screen.findByRole("button", { name: "Kapcsolat beállításai" }),
+    ).toBeInTheDocument();
   });
 });
