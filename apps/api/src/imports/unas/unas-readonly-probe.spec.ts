@@ -3,9 +3,11 @@ import { afterEach, describe, it } from "node:test";
 
 import type { UnasApiCategory, UnasApiProduct } from "@acropora/types";
 
-import type {
-  UnasCategoryPageRequest,
-  UnasProductPageRequest,
+import {
+  UnasApiError,
+  type UnasApiErrorCode,
+  type UnasCategoryPageRequest,
+  type UnasProductPageRequest,
 } from "./unas-api.client.js";
 import { main, type UnasProbeOutput } from "./unas-readonly-probe.cli.js";
 import {
@@ -184,6 +186,153 @@ describe("UNAS read-only probe", () => {
     }
     assert.equal(normalizeUnasProbeError(caught), "UNAS_PROBE_LIVE_FAILED");
     assert.equal(String(caught).includes("raw secret response"), false);
+  });
+
+  it("maps allowlisted client failures to stage-specific codes", async () => {
+    process.env.UNAS_API_KEY = "environment-only-key";
+    const reasons: readonly UnasApiErrorCode[] = [
+      "AUTH_REJECTED",
+      "RATE_LIMITED",
+      "HTTP_4XX",
+      "HTTP_5XX",
+      "HTTP_OTHER",
+      "NETWORK_FAILED",
+      "TIMEOUT",
+      "API_REJECTED",
+      "XML_INVALID",
+      "XML_TOO_LARGE",
+      "XML_FORBIDDEN",
+      "RESPONSE_SHAPE_INVALID",
+      "FIELD_FORMAT_INVALID",
+      "REQUEST_INVALID",
+    ];
+    for (const reason of reasons) {
+      const client = new FakeClient();
+      client.getProductPage = () => Promise.reject(new UnasApiError(reason));
+      let caught: unknown;
+      try {
+        await runUnasReadonlyProbe(client, { pageSize: 10, pages: 1 });
+      } catch (error) {
+        caught = error;
+      }
+      assert.equal(
+        normalizeUnasProbeError(caught),
+        `UNAS_PROBE_LIVE_${reason}`,
+      );
+    }
+  });
+
+  it("preserves the login, category and deleted failure stages", async () => {
+    process.env.UNAS_API_KEY = "environment-only-key";
+    const cases: Array<{
+      configure(client: FakeClient): void;
+      expected: string;
+    }> = [
+      {
+        configure: (client) => {
+          client.login = () =>
+            Promise.reject(new UnasApiError("AUTH_REJECTED"));
+        },
+        expected: "UNAS_PROBE_LOGIN_AUTH_REJECTED",
+      },
+      {
+        configure: (client) => {
+          client.getCategoryPage = () =>
+            Promise.reject(new UnasApiError("API_REJECTED"));
+        },
+        expected: "UNAS_PROBE_CATEGORY_API_REJECTED",
+      },
+      {
+        configure: (client) => {
+          client.getProductPage = (_token, request) =>
+            request.state === "deleted"
+              ? Promise.reject(new UnasApiError("TIMEOUT"))
+              : Promise.resolve([product("20", "live")]);
+        },
+        expected: "UNAS_PROBE_DELETED_TIMEOUT",
+      },
+    ];
+
+    for (const item of cases) {
+      const client = new FakeClient();
+      item.configure(client);
+      let caught: unknown;
+      try {
+        await runUnasReadonlyProbe(client, { pageSize: 10, pages: 1 });
+      } catch (error) {
+        caught = error;
+      }
+      assert.equal(normalizeUnasProbeError(caught), item.expected);
+    }
+  });
+
+  it("checks known permissions without rejecting unknown permission shapes", async () => {
+    process.env.UNAS_API_KEY = "environment-only-key";
+    const missingCategory = new FakeClient();
+    missingCategory.login = async () => ({
+      token: "sensitive-token",
+      expireTime: 2_000_000_000,
+      permissions: ["getProduct"],
+    });
+    await assert.rejects(
+      () => runUnasReadonlyProbe(missingCategory, { pageSize: 10, pages: 1 }),
+      { message: "UNAS_PROBE_CATEGORY_PERMISSION_MISSING" },
+    );
+    assert.deepEqual(
+      missingCategory.calls.map((call) => call.operation),
+      [],
+    );
+
+    const missingProduct = new FakeClient();
+    missingProduct.login = async () => ({
+      token: "sensitive-token",
+      expireTime: 2_000_000_000,
+      permissions: ["getCategory"],
+    });
+    await assert.rejects(
+      () => runUnasReadonlyProbe(missingProduct, { pageSize: 10, pages: 1 }),
+      { message: "UNAS_PROBE_LIVE_PERMISSION_MISSING" },
+    );
+    assert.equal(
+      missingProduct.calls.some((call) => call.operation === "product"),
+      false,
+    );
+
+    const unknownPermissions = new FakeClient();
+    unknownPermissions.login = async () => ({
+      token: "sensitive-token",
+      expireTime: 2_000_000_000,
+      permissions: null,
+    });
+    const result = await runUnasReadonlyProbe(unknownPermissions, {
+      pageSize: 10,
+      pages: 1,
+    });
+    assert.equal(result.ok, true);
+  });
+
+  it("uses zero internally for the first page and a positive second offset", async () => {
+    process.env.UNAS_API_KEY = "environment-only-key";
+    const client = new FakeClient();
+    client.getProductPage = (_token, request) => {
+      client.calls.push({ operation: "product", request });
+      if (request.state === "live" && request.limitStart === 0)
+        return Promise.resolve([product("10", "live"), product("11", "live")]);
+      return Promise.resolve([]);
+    };
+    await runUnasReadonlyProbe(client, { pageSize: 2, pages: 2 });
+    assert.deepEqual(
+      client.calls
+        .filter(
+          (call) =>
+            call.operation === "product" &&
+            call.request &&
+            "state" in call.request &&
+            call.request.state === "live",
+        )
+        .map((call) => call.request?.limitStart),
+      [0, 2],
+    );
   });
 
   it("keeps CLI stdout and stderr free of source and credential data", async () => {

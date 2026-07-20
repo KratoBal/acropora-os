@@ -1,9 +1,11 @@
 import type { UnasApiCategory, UnasApiProduct } from "@acropora/types";
 
-import type {
-  UnasCategoryPageRequest,
-  UnasLoginResult,
-  UnasProductPageRequest,
+import {
+  UnasApiError,
+  type UnasApiErrorCode,
+  type UnasCategoryPageRequest,
+  type UnasLoginResult,
+  type UnasProductPageRequest,
 } from "./unas-api.client.js";
 
 export const DEFAULT_UNAS_PROBE_PAGE_SIZE = 10;
@@ -53,13 +55,13 @@ export interface UnasReadonlyProbeSummary {
   durationMs: number;
 }
 
+type UnasProbeStage = "LOGIN" | "CATEGORY" | "LIVE" | "DELETED";
+type UnasProbeStageReason = UnasApiErrorCode | "PERMISSION_MISSING" | "FAILED";
+
 export type UnasProbeErrorCode =
   | "UNAS_PROBE_API_KEY_MISSING"
   | "UNAS_PROBE_INVALID_ARGUMENT"
-  | "UNAS_PROBE_LOGIN_FAILED"
-  | "UNAS_PROBE_CATEGORY_FAILED"
-  | "UNAS_PROBE_LIVE_FAILED"
-  | "UNAS_PROBE_DELETED_FAILED"
+  | `UNAS_PROBE_${UnasProbeStage}_${UnasProbeStageReason}`
   | "UNAS_PROBE_FAILED";
 
 export class UnasProbeError extends Error {
@@ -87,14 +89,26 @@ async function fetchPages<T>(
 }
 
 async function protectedCall<T>(
-  code: UnasProbeErrorCode,
+  stage: UnasProbeStage,
   operation: () => Promise<T>,
 ): Promise<T> {
   try {
     return await operation();
-  } catch {
-    throw new UnasProbeError(code);
+  } catch (error) {
+    const reason =
+      error instanceof UnasApiError ? error.code : ("FAILED" as const);
+    throw new UnasProbeError(`UNAS_PROBE_${stage}_${reason}`);
   }
+}
+
+function assertPermission(
+  login: UnasLoginResult,
+  permission: "getCategory" | "getProduct",
+  stage: "CATEGORY" | "LIVE",
+) {
+  if (login.permissions == null) return;
+  if (!login.permissions.includes(permission))
+    throw new UnasProbeError(`UNAS_PROBE_${stage}_PERMISSION_MISSING`);
 }
 
 export function parseUnasProbeOptions(
@@ -139,10 +153,9 @@ export async function runUnasReadonlyProbe(
   const apiKey = process.env.UNAS_API_KEY?.trim();
   if (!apiKey) throw new UnasProbeError("UNAS_PROBE_API_KEY_MISSING");
 
-  const token = await protectedCall("UNAS_PROBE_LOGIN_FAILED", () =>
-    client.login(apiKey),
-  );
-  const categories = await protectedCall("UNAS_PROBE_CATEGORY_FAILED", () =>
+  const token = await protectedCall("LOGIN", () => client.login(apiKey));
+  assertPermission(token, "getCategory", "CATEGORY");
+  const categories = await protectedCall("CATEGORY", () =>
     fetchPages(options.pages, options.pageSize, (limitStart, limitNum) =>
       client.getCategoryPage(token.token, {
         limitStart,
@@ -151,7 +164,8 @@ export async function runUnasReadonlyProbe(
       }),
     ),
   );
-  const liveProducts = await protectedCall("UNAS_PROBE_LIVE_FAILED", () =>
+  assertPermission(token, "getProduct", "LIVE");
+  const liveProducts = await protectedCall("LIVE", () =>
     fetchPages(options.pages, options.pageSize, (limitStart, limitNum) =>
       client.getProductPage(token.token, {
         limitStart,
@@ -161,7 +175,7 @@ export async function runUnasReadonlyProbe(
       }),
     ),
   );
-  const deletedProducts = await protectedCall("UNAS_PROBE_DELETED_FAILED", () =>
+  const deletedProducts = await protectedCall("DELETED", () =>
     fetchPages(options.pages, options.pageSize, (limitStart, limitNum) =>
       client.getProductPage(token.token, {
         limitStart,

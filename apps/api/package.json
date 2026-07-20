@@ -13,7 +13,7 @@
     "test:smoke": "tsc -p tsconfig.test.json && node --test test-dist/health/health.smoke.spec.js",
     "test:integration": "tsc -p tsconfig.test.json && RUN_DB_INTEGRATION=1 node --test --test-concurrency=1 test-dist/imports/unas/unas-import.integration.spec.js test-dist/imports/unas/unas-apply.integration.spec.js test-dist/imports/unas/unas-product-sync.integration.spec.js",
     "test:brands:integration": "tsc -p tsconfig.test.json && RUN_BRAND_INTEGRATION=1 node --test --test-concurrency=1 test-dist/brands/brands.integration.spec.js",
-    "test:unas:probe": "tsc -p tsconfig.test.json && node --test test-dist/imports/unas/unas-readonly-probe.spec.js",
+    "test:unas:probe": "tsc -p tsconfig.test.json && node --test test-dist/imports/unas/unas-api.spec.js test-dist/imports/unas/unas-readonly-probe.spec.js",
     "unas:probe": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-readonly-probe.cli.js",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
