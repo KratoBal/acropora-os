@@ -1,10 +1,12 @@
-# ADR-0004 – UNAS connection settings és credential-kezelés
+# ADR-014 – UNAS connection settings és credential-kezelés
 
-- Állapot: elfogadott
-- Dátum: 2026-07-20
-- Munkacsomag: M2.2 – UNAS Connection Settings
+## Állapot
+
+Elfogadva – 2026-07-20
 
 ## Kontextus
+
+Munkacsomag: M2.2 – UNAS Connection Settings.
 
 Az M2.1 szerveroldali `UNAS_API_KEY` változót használ. Az M2.2 célja adminisztrátori
 webes beállítás előkészítése úgy, hogy a titok ne legyen visszaolvasható API-n,
@@ -60,7 +62,7 @@ Forrás: [UNAS login válasz](https://unas.hu/tudastar/api/azonositas-login-vala
   DISABLED credential nélkül érvényes. Hiba esetén az API fail-fast módon nem
   indul el.
 
-## API-szerződés
+### API-szerződés
 
 - `GET /integrations/unas/connection`
 - `PUT /integrations/unas/connection/credential` – `{ "apiKey": "..." }`
@@ -71,7 +73,7 @@ A response csak `configured`, fix `masked`, `modifiedAt`, valamint a verificatio
 `status`, `checkedAt` és allowlistes `code` mezőit tartalmazza. Credential source,
 ciphertext, IV, tag, kulcsverzió, revision, token és UNAS payload nem publikus.
 
-## Audit és hibák
+### Audit és hibák
 
 Audit metadata csak actiont, actort, módváltást, revisiont, mezőneveket,
 verification állapotot és allowlistes kódot tartalmazhat. API-kulcs, token,
