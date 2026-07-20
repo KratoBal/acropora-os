@@ -10,9 +10,10 @@ export type ProductWithRelations = Prisma.ProductGetPayload<{
   include: {
     brand: true;
     categories: { include: { category: true } };
-    variants: true;
+    variants: { include: { extension: true } };
     channelListings: true;
     images: true;
+    unasSnapshot: true;
   };
 }>;
 
@@ -74,7 +75,11 @@ export function toProductListItem(
   };
 }
 
-export function toProductDetail(product: ProductWithRelations): ProductDetail {
+export function toProductDetail(
+  product: ProductWithRelations,
+  externalId: string | null = null,
+): ProductDetail {
+  const snapshot = product.unasSnapshot;
   return {
     ...toProductListItem(product),
     description: product.description,
@@ -90,8 +95,64 @@ export function toProductDetail(product: ProductWithRelations): ProductDetail {
       name: variant.name,
       unit: variant.unit,
       isActive: variant.isActive,
+      vatRate: variant.vatRate?.toString() ?? null,
+      manufacturerPartNumber: variant.manufacturerPartNumber,
+      secondaryUnit: variant.secondaryUnit,
+      secondaryUnitFactor: variant.secondaryUnitFactor?.toString() ?? null,
+      extension: variant.extension
+        ? {
+            variantId: variant.id,
+            preferredSupplierId: variant.extension.preferredSupplierId,
+            defaultPurchaseCurrency: variant.extension.defaultPurchaseCurrency,
+            defaultWarehouseId: variant.extension.defaultWarehouseId,
+            defaultLocationId: variant.extension.defaultLocationId,
+            minimumStock: variant.extension.minimumStock?.toString() ?? null,
+            optimalStock: variant.extension.optimalStock?.toString() ?? null,
+            reorderPoint: variant.extension.reorderPoint?.toString() ?? null,
+            safetyStock: variant.extension.safetyStock?.toString() ?? null,
+            stockTrackingEnabled: variant.extension.stockTrackingEnabled,
+            purchasingDisabled: variant.extension.purchasingDisabled,
+            phaseOut: variant.extension.phaseOut,
+            autoReorderEnabled: variant.extension.autoReorderEnabled,
+            internalNote: variant.extension.internalNote,
+            updatedAt: variant.extension.updatedAt.toISOString(),
+          }
+        : null,
     })),
     images: product.images.map(imageSummary),
     channelListings: product.channelListings.map(channelSummary),
+    unasMirror:
+      product.mirrorSource === "UNAS"
+        ? {
+            source: "UNAS",
+            state: product.mirrorState,
+            externalId,
+            sourceCreatedAt: product.sourceCreatedAt?.toISOString() ?? null,
+            sourceUpdatedAt: product.sourceUpdatedAt?.toISOString() ?? null,
+            lastSyncedAt: product.lastSyncedAt?.toISOString() ?? null,
+            missingSince: product.missingSince?.toISOString() ?? null,
+            currency: snapshot?.currency ?? null,
+            netPrice: snapshot?.netPrice?.toString() ?? null,
+            grossPrice: snapshot?.grossPrice?.toString() ?? null,
+            saleNetPrice: snapshot?.saleNetPrice?.toString() ?? null,
+            saleGrossPrice: snapshot?.saleGrossPrice?.toString() ?? null,
+            saleStartsAt: snapshot?.saleStartsAt?.toISOString() ?? null,
+            saleEndsAt: snapshot?.saleEndsAt?.toISOString() ?? null,
+            priceDisplay: snapshot?.priceDisplay ?? null,
+            productUrl: snapshot?.productUrl ?? null,
+            manufacturerUrl: snapshot?.manufacturerUrl ?? null,
+            minimumOrderQuantity:
+              snapshot?.minimumOrderQuantity?.toString() ?? null,
+            maximumOrderQuantity:
+              snapshot?.maximumOrderQuantity?.toString() ?? null,
+            orderQuantityStep: snapshot?.orderQuantityStep?.toString() ?? null,
+            lowStockThreshold: snapshot?.lowStockThreshold?.toString() ?? null,
+            backorderAllowed: snapshot?.backorderAllowed ?? null,
+            variantStockEnabled: snapshot?.variantStockEnabled ?? null,
+            reportedStock: snapshot?.reportedStock?.toString() ?? null,
+            reportedStockSyncedAt:
+              snapshot?.reportedStockSyncedAt?.toISOString() ?? null,
+          }
+        : null,
   };
 }

@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 
 import type { CreateProductDto } from "./dto/create-product.dto.js";
 import type { ProductListQueryDto } from "./dto/product-list-query.dto.js";
@@ -14,12 +18,14 @@ export class ProductService {
   }
 
   async updateProduct(id: string, input: UpdateProductDto) {
-    await this.requireProduct(id);
+    const product = await this.requireProduct(id);
+    this.assertLocallyManaged(product);
     return this.products.update(id, input);
   }
 
   async archiveProduct(id: string) {
-    await this.requireProduct(id);
+    const product = await this.requireProduct(id);
+    this.assertLocallyManaged(product);
     return this.products.archive(id);
   }
 
@@ -45,5 +51,10 @@ export class ProductService {
       throw new NotFoundException("A termék nem található.");
     }
     return product;
+  }
+
+  private assertLocallyManaged(product: { unasMirror?: unknown }) {
+    if (product.unasMirror)
+      throw new ConflictException("PRODUCT_MANAGED_BY_UNAS");
   }
 }

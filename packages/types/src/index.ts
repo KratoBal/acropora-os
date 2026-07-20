@@ -84,6 +84,10 @@ export type {
   ServiceJobCompleted,
   StockMovementPosted,
 } from "./domain-events.js";
+export type {
+  ProductExtensionDetail,
+  ProductExtensionUpdateInput,
+} from "./product-extension.js";
 export { IMPORT_ISSUE_SEVERITIES } from "./integrations/import-staging.js";
 export type {
   BrandResolutionCandidate,
@@ -108,6 +112,20 @@ export type {
   UnasApplySummary,
   UnasApprovalResult,
 } from "./integrations/unas-apply.js";
+export type {
+  CanonicalUnasProduct,
+  UnasApiCategory,
+  UnasApiProduct,
+  UnasProductIdentitySnapshot,
+  UnasProductSyncAction,
+  UnasProductSyncDiff,
+} from "./integrations/unas-api.js";
+export type {
+  UnasProductSyncKind,
+  UnasProductSyncRun,
+  UnasProductSyncRunStatus,
+  UnasProductSyncSummary,
+} from "./integrations/unas-product-sync.js";
 export type {
   ImportIssue,
   ImportIssueSeverity,
@@ -136,6 +154,7 @@ export type {
   ProductImageSummary,
   ProductListApiQuery,
   ProductListItem,
+  UnasProductMirrorDetail,
   ProductListResponse,
   ProductType,
   ProductVariantSummary,

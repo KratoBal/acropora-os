@@ -2,9 +2,19 @@
 
 ## Felelősség
 
-A Product Catalog a közös termékidentitás source of truth-ja. A `Product` tartalmazza a közös nevet, leírást, terméktípust, brandet, kategóriát és archiválási állapotot. A konkrét SKU, barcode, ár és készlet a későbbi `ProductVariant` funkció része.
+A Product Catalog az UNAS-ban létező termékek helyi, read-only mirror
+projectionje; a Product Master az UNAS. A `Product` tartalmazza a közös nevet,
+leírást, terméktípust, brandet és kategóriát, a `ProductVariant` az SKU-val
+azonosított értékesíthető és készletezhető egység. Az Acropora saját statikus
+beállításai külön `ProductExtension` modellhez tartoznak. A normatív döntés az
+[ADR-013](../adr/0013-unas-product-master-and-local-extension.md), az M2.1
+szerződés az
+[UNAS Product Synchronization](./M2.1-UNAS-PRODUCT-SYNCHRONIZATION.md)
+dokumentumban található.
 
-A backend első szelete kizárólag Product műveleteket ad. Nem tartalmaz frontend felületet, variant CRUD-ot vagy készletkezelést.
+A backend első szelete történetileg Product CRUD műveleteket adott. Az M2.1-ben
+ezek az UNAS mirror rekordokra letiltandók; a read API megmarad, a helyi írások
+külön Product Extension API-ra kerülnek. Nem tartalmaz készletkezelést.
 
 ## API
 
@@ -17,6 +27,10 @@ Minden végpont hitelesítést igényel.
 | `POST`   | `/products`     | `products.manage` | Product létrehozása        |
 | `PATCH`  | `/products/:id` | `products.manage` | részleges módosítás        |
 | `DELETE` | `/products/:id` | `products.manage` | soft archive               |
+
+> M2.1 átmeneti megjegyzés: a `POST`, `PATCH` és `DELETE` végpontok jelenleg
+> létező legacy képességek. UNAS mirror rekordra az M2.1 implementációban
+> `409 PRODUCT_MANAGED_BY_UNAS` választ kell adniuk.
 
 A create mezői: `name`, opcionális `description`, `productType`, opcionális `brandId` és `primaryCategoryId`. A támogatott típusok: `PHYSICAL`, `SERVICE`, `LIVESTOCK`. A korábbi `categoryId` request mező átmenetileg támogatott, de deprecated.
 
