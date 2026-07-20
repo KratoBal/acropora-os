@@ -80,6 +80,28 @@ const category: UnasApiCategory = {
   rawPayload: { Id: "10", Name: "Integration pumps" },
 };
 
+const deletedParentCategory: UnasApiCategory = {
+  externalId: "9",
+  name: "Discontinued line",
+  state: "deleted",
+  parentExternalId: null,
+  sortOrder: 0,
+  sourceCreatedAt: "2026-07-20T08:00:00.000Z",
+  sourceUpdatedAt: "2026-07-20T09:00:00.000Z",
+  rawPayload: { Id: "9", Name: "Discontinued line" },
+};
+
+const liveChildOfDeletedParent: UnasApiCategory = {
+  externalId: "11",
+  name: "Integration pumps (sub)",
+  state: "live",
+  parentExternalId: "9",
+  sortOrder: 1,
+  sourceCreatedAt: "2026-07-20T08:00:00.000Z",
+  sourceUpdatedAt: "2026-07-20T09:00:00.000Z",
+  rawPayload: { Id: "11", Name: "Integration pumps (sub)" },
+};
+
 async function cleanup() {
   await prisma.auditLog.deleteMany({
     where: { entityType: "ProductExtension" },
@@ -99,9 +121,10 @@ async function cleanup() {
 describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
   let liveProducts = [product("INTEGRATION-SKU-1")];
   let deletedProducts: UnasApiProduct[] = [];
+  let categoryPage: UnasApiCategory[] = [category];
   const api = {
     getCategoryPage: async (_token: string, request: { limitStart: number }) =>
-      request.limitStart === 0 ? [category] : [],
+      request.limitStart === 0 ? categoryPage : [],
     getProductPage: async (
       _token: string,
       request: { limitStart: number; state?: "live" | "deleted" },
@@ -209,6 +232,48 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
     assert.equal(productRecord.mirrorState, "ACTIVE");
     assert.equal(productRecord.missingSince, null);
     assert.equal(await prisma.productExtension.count(), 1);
+  });
+
+  it("materializes a deleted parent category so a live child can resolve its parentId", async () => {
+    categoryPage = [category, deletedParentCategory, liveChildOfDeletedParent];
+    await prisma.integrationCursor.deleteMany({
+      where: { provider: "UNAS", stream: "PRODUCTS" },
+    });
+
+    await assert.doesNotReject(
+      service.runIncremental(
+        "integration-token",
+        new Date("2026-07-20T16:00:00.000Z"),
+        100,
+      ),
+    );
+
+    const parentReference = await prisma.externalReference.findUniqueOrThrow({
+      where: {
+        system_entityType_externalId: {
+          system: "UNAS",
+          entityType: "Category",
+          externalId: "9",
+        },
+      },
+    });
+    const childReference = await prisma.externalReference.findUniqueOrThrow({
+      where: {
+        system_entityType_externalId: {
+          system: "UNAS",
+          entityType: "Category",
+          externalId: "11",
+        },
+      },
+    });
+    const child = await prisma.category.findUniqueOrThrow({
+      where: { id: childReference.entityId },
+    });
+    assert.equal(child.parentId, parentReference.entityId);
+    const parent = await prisma.category.findUniqueOrThrow({
+      where: { id: parentReference.entityId },
+    });
+    assert.equal(parent.name, "Discontinued line");
   });
 
   it("rejects a concurrent run with a database-level conflict", async () => {
