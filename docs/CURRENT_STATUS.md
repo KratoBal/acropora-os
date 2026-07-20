@@ -9,7 +9,8 @@ https://github.com/KratoBal/acropora-os
 ## Current milestone
 
 M1 – First Production Import és stabilization: elkészült. M2.1 – UNAS Product
-Synchronization specifikáció és implementáció-előkészítés folyamatban.
+Synchronization: elkészült és mainbe merge-elve. M2.2 – UNAS Connection
+Settings (backend és admin webes UI): elkészült és mainbe merge-elve.
 
 ## Completed
 
@@ -26,7 +27,7 @@ Synchronization specifikáció és implementáció-előkészítés folyamatban.
 
 ## Current focus
 
-M2.1 UNAS Product Synchronization:
+M2.1 UNAS Product Synchronization (elkészült):
 
 - UNAS Product Master és Acropora read-only mirror határ;
 - a 38 mezős XLSX contract és az UNAS API discovery;
@@ -47,16 +48,39 @@ Extension blokkokat jelenít meg, a generikus Product írás pedig blokkolt az
 UNAS-managed rekordokon. A Product Extension saját készlet- és beszerzési
 beállításai a termékrészleten jogosultsággal szerkeszthetők; a tényleges
 változások actorhoz kötött AuditLog és domain event rekorddal, egy tranzakcióban
-mentődnek. A PostgreSQL sync lifecycle integrációs teszt és a migration/recovery
-runbook elkészült, de ebben a környezetben PostgreSQL hiányában a teszt még nem
-futott le. Nyitott maradt az éles probe, az alapár pénznemének feloldása, a nem
-dokumentált kezdeti mennyiség és a törölt kategóriák retention policy-ja.
+mentődnek. A PostgreSQL sync lifecycle integrációs teszt lefutott, izolált
+PostgreSQL adatbázison; a migration/recovery runbook elkészült. Nyitott maradt
+az éles probe eredményének teljes körű kiértékelése, az alapár pénznemének
+feloldása, a nem dokumentált kezdeti mennyiség és a törölt kategóriák retention
+policy-ja.
+
+M2.2 UNAS Connection Settings (elkészült, backend és admin webes UI):
+
+- additív `UnasConnectionSetting` Prisma modell és migráció, singleton és
+  envelope/error-code DB CHECK constraint-ekkel;
+- AES-256-GCM titkosítás, verziózott env-alapú master key;
+- fail-closed credential provider (`DATABASE` / `ENV_FALLBACK` / `DISABLED`);
+- revision-alapú UNAS token cache;
+- admin connection API (`GET/PUT/POST test/DELETE /integrations/unas/connection`),
+  mentés előtti read-only validációval, stored credential teszttel, DB-idő
+  alapú cooldownnal és stale-test védelemmel;
+- production startup validation;
+- admin webes UI a `/admin/integrations/unas/connection` oldalon
+  (settings.manage jogosultsághoz kötve): állapot, ellenőrzés, új kulcs
+  mentése, teszt, letiltás.
+
+Egy független read-only kódreview megerősítette, hogy a fejlesztés közben
+talált 6 hiba mindegyike javítva van a kódban, és a dokumentált biztonsági
+döntések (fix maszk, titokmentes audit, credential mode sosem publikus API-n)
+a kódban is érvényesülnek. KMS/HSM integráció és a mentés előtti validáció és
+DB-commit közötti dokumentált TOCTOU rés zárása későbbi hardening feladat
+marad (lásd [ADR-014](../adr/0014-unas-connection-settings.md) és
+[M2.2 spec](./M2.2-UNAS-CONNECTION-SETTINGS.md)).
 
 ## Next steps
 
-1. Az elkészült M2.1 integrációs teszt futtatása izolált PostgreSQL adatbázison
-2. Éles, read-only UNAS probe a nyitott contract kérdések igazolására
-3. Riasztási/monitoring integráció kialakítása
+Nincs kijelölve következő munkacsomag – M2.1 és M2.2 lezárva, PR #4 és #5
+mainbe merge-elve.
 
 ## Relevant commands
 
@@ -73,6 +97,8 @@ pnpm --filter @acropora/api test:integration
 pnpm --filter @acropora/api test:brands:integration
 pnpm --filter @acropora/api test:bootstrap
 pnpm --filter @acropora/api test:smoke
+pnpm --filter @acropora/api test:unas:connection
+pnpm --filter @acropora/web test
 pnpm build
 ```
 
@@ -82,6 +108,7 @@ pnpm build
 - Login: http://localhost:3000/login
 - Brand Import Assistant: http://localhost:3000/admin/brands/import-assistant
 - UNAS Product Sync: http://localhost:3000/admin/integrations/unas
+- UNAS Connection Settings: http://localhost:3000/admin/integrations/unas/connection
 - API health: http://localhost:3001/health
 
 ## Known limitations
