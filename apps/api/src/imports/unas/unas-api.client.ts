@@ -34,6 +34,30 @@ export interface UnasCategoryPageRequest {
 export interface UnasLoginResult {
   token: string;
   expireTime: number;
+  permissions?: readonly string[] | null;
+}
+
+export type UnasApiErrorCode =
+  | "AUTH_REJECTED"
+  | "RATE_LIMITED"
+  | "HTTP_4XX"
+  | "HTTP_5XX"
+  | "HTTP_OTHER"
+  | "NETWORK_FAILED"
+  | "TIMEOUT"
+  | "API_REJECTED"
+  | "XML_INVALID"
+  | "XML_TOO_LARGE"
+  | "XML_FORBIDDEN"
+  | "RESPONSE_SHAPE_INVALID"
+  | "FIELD_FORMAT_INVALID"
+  | "REQUEST_INVALID";
+
+export class UnasApiError extends BadGatewayException {
+  constructor(readonly code: UnasApiErrorCode) {
+    super(code);
+    this.name = "UnasApiError";
+  }
 }
 
 const child = (node: XmlNode, name: string) =>
@@ -84,8 +108,8 @@ export function unasRetryDelayMs(
 
 function parseXml(xml: string): XmlNode {
   if (Buffer.byteLength(xml, "utf8") > MAX_XML_BYTES)
-    throw new Error("XML_RESPONSE_TOO_LARGE");
-  if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw new Error("XML_DTD_FORBIDDEN");
+    throw new UnasApiError("XML_TOO_LARGE");
+  if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw new UnasApiError("XML_FORBIDDEN");
 
   const roots: XmlNode[] = [];
   const stack: XmlNode[] = [];
@@ -108,9 +132,48 @@ function parseXml(xml: string): XmlNode {
   parser.on("closetag", () => {
     stack.pop();
   });
-  parser.write(xml).close();
-  if (roots.length !== 1) throw new Error("INVALID_XML_ROOT");
+  try {
+    parser.write(xml).close();
+  } catch {
+    throw new UnasApiError("XML_INVALID");
+  }
+  if (roots.length !== 1) throw new UnasApiError("XML_INVALID");
   return roots[0]!;
+}
+
+function parsePermissions(root: XmlNode): readonly string[] | null {
+  const permissions = child(root, "Permissions");
+  if (!permissions) return null;
+  if (permissions.text.trim().length > 0) return null;
+  if (permissions.children.some((item) => item.name !== "Permission"))
+    return null;
+  const values = permissions.children.map((item) => item.text.trim());
+  return values.some((item) => item.length === 0) ? null : values;
+}
+
+function hasUnasErrorRoot(xml: string): boolean {
+  try {
+    return parseXml(xml).name === "Error";
+  } catch {
+    return false;
+  }
+}
+
+function classifyHttpFailure(status: number, responseBody: string) {
+  if (status === 401 || status === 403)
+    return new UnasApiError("AUTH_REJECTED");
+  if (status === 429) return new UnasApiError("RATE_LIMITED");
+  if (hasUnasErrorRoot(responseBody)) return new UnasApiError("API_REJECTED");
+  if (status >= 400 && status < 500) return new UnasApiError("HTTP_4XX");
+  if (status >= 500 && status < 600) return new UnasApiError("HTTP_5XX");
+  return new UnasApiError("HTTP_OTHER");
+}
+
+function isTimeoutError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === "TimeoutError" || error.name === "AbortError")
+  );
 }
 
 function nodePayload(node: XmlNode): unknown {
@@ -133,7 +196,7 @@ function unixTimestamp(valueToParse: string | undefined): string | null {
   if (!valueToParse) return null;
   const seconds = Number(valueToParse);
   if (!Number.isSafeInteger(seconds) || seconds < 0)
-    throw new Error("INVALID_UNAS_TIMESTAMP");
+    throw new UnasApiError("FIELD_FORMAT_INVALID");
   return new Date(seconds * 1000).toISOString();
 }
 
@@ -141,8 +204,14 @@ function decimal(valueToParse: string | undefined): string | null {
   if (!valueToParse) return null;
   const normalized = valueToParse.trim().replace(",", ".");
   if (!/^-?\d+(?:\.\d+)?$/.test(normalized))
-    throw new Error("INVALID_UNAS_DECIMAL");
+    throw new UnasApiError("FIELD_FORMAT_INVALID");
   return normalized;
+}
+
+function vatRate(valueToParse: string | undefined): string | null {
+  if (!valueToParse) return null;
+  const trimmed = valueToParse.trim();
+  return decimal(trimmed.endsWith("%") ? trimmed.slice(0, -1).trim() : trimmed);
 }
 
 function flag(valueToParse: string | undefined): boolean | null {
@@ -151,13 +220,13 @@ function flag(valueToParse: string | undefined): boolean | null {
     return true;
   if (["0", "no", "false", "off"].includes(valueToParse.toLowerCase()))
     return false;
-  throw new Error("INVALID_UNAS_BOOLEAN");
+  throw new UnasApiError("FIELD_FORMAT_INVALID");
 }
 
 function unasDate(valueToParse: string | undefined): string | null {
   if (!valueToParse) return null;
   const match = /^(\d{4})\.(\d{2})\.(\d{2})$/.exec(valueToParse);
-  if (!match) throw new Error("INVALID_UNAS_DATE");
+  if (!match) throw new UnasApiError("FIELD_FORMAT_INVALID");
   return `${match[1]}-${match[2]}-${match[3]}T00:00:00.000Z`;
 }
 
@@ -200,8 +269,9 @@ function parameterValue(
 
 export function parseUnasProductResponse(xml: string): UnasApiProduct[] {
   const root = parseXml(xml);
-  if (root.name === "Error") throw new Error(`UNAS_ERROR:${root.text.trim()}`);
-  if (root.name !== "Products") throw new Error("INVALID_PRODUCT_RESPONSE");
+  if (root.name === "Error") throw new UnasApiError("API_REJECTED");
+  if (root.name !== "Products")
+    throw new UnasApiError("RESPONSE_SHAPE_INVALID");
 
   return root.children
     .filter((item) => item.name === "Product")
@@ -209,8 +279,8 @@ export function parseUnasProductResponse(xml: string): UnasApiProduct[] {
       const externalId = value(product, "Id") ?? "";
       const sku = value(product, "Sku") ?? "";
       const name = value(product, "Name") ?? "";
-      if (!/^\d+$/.test(externalId)) throw new Error("INVALID_UNAS_PRODUCT_ID");
-      if (!sku) throw new Error("MISSING_UNAS_PRODUCT_SKU");
+      if (!/^\d+$/.test(externalId) || !sku)
+        throw new UnasApiError("FIELD_FORMAT_INVALID");
       const normalPrice = price(product, "normal");
       const salePrice = price(product, "sale");
       const categories = children(child(product, "Categories"), "Category");
@@ -261,7 +331,7 @@ export function parseUnasProductResponse(xml: string): UnasApiProduct[] {
         secondaryUnitFactor: decimal(nestedValue(product, "AlterUnit", "Qty")),
         manufacturerPartNumber: parameterValue(parameters, "Gyártói cikkszám"),
         brandName: parameterValue(parameters, "brand"),
-        vatRate: prices ? decimal(value(prices, "Vat")) : null,
+        vatRate: prices ? vatRate(value(prices, "Vat")) : null,
         netPrice: normalPrice ? decimal(value(normalPrice, "Net")) : null,
         grossPrice: normalPrice ? decimal(value(normalPrice, "Gross")) : null,
         saleNetPrice: salePrice ? decimal(value(salePrice, "Net")) : null,
@@ -308,13 +378,13 @@ export function parseUnasProductResponse(xml: string): UnasApiProduct[] {
 
 export function buildUnasProductPageXml(request: UnasProductPageRequest) {
   if (!Number.isSafeInteger(request.limitStart) || request.limitStart < 0)
-    throw new Error("INVALID_LIMIT_START");
+    throw new UnasApiError("REQUEST_INVALID");
   if (!Number.isSafeInteger(request.limitNum) || request.limitNum < 1)
-    throw new Error("INVALID_LIMIT_NUM");
+    throw new UnasApiError("REQUEST_INVALID");
   return paramsXml({
     TimeStart: request.timeStart,
     TimeEnd: request.timeEnd,
-    LimitStart: request.limitStart,
+    LimitStart: request.limitStart === 0 ? undefined : request.limitStart,
     LimitNum: request.limitNum,
     State: request.state,
     ContentType: request.contentType ?? "full",
@@ -323,13 +393,13 @@ export function buildUnasProductPageXml(request: UnasProductPageRequest) {
 
 export function buildUnasCategoryPageXml(request: UnasCategoryPageRequest) {
   if (!Number.isSafeInteger(request.limitStart) || request.limitStart < 0)
-    throw new Error("INVALID_LIMIT_START");
+    throw new UnasApiError("REQUEST_INVALID");
   if (!Number.isSafeInteger(request.limitNum) || request.limitNum < 1)
-    throw new Error("INVALID_LIMIT_NUM");
+    throw new UnasApiError("REQUEST_INVALID");
   return paramsXml({
     TimeStart: request.timeStart,
     TimeEnd: request.timeEnd,
-    LimitStart: request.limitStart,
+    LimitStart: request.limitStart === 0 ? undefined : request.limitStart,
     LimitNum: request.limitNum,
     ContentType: request.contentType ?? "normal",
   });
@@ -337,11 +407,13 @@ export function buildUnasCategoryPageXml(request: UnasCategoryPageRequest) {
 
 export function parseUnasCategoryResponse(xml: string): UnasApiCategory[] {
   const root = parseXml(xml);
-  if (root.name === "Error") throw new Error(`UNAS_ERROR:${root.text.trim()}`);
-  if (root.name !== "Categories") throw new Error("INVALID_CATEGORY_RESPONSE");
+  if (root.name === "Error") throw new UnasApiError("API_REJECTED");
+  if (root.name !== "Categories")
+    throw new UnasApiError("RESPONSE_SHAPE_INVALID");
   return children(root, "Category").map((category) => {
     const externalId = value(category, "Id") ?? "";
-    if (!/^\d+$/.test(externalId)) throw new Error("INVALID_UNAS_CATEGORY_ID");
+    if (!/^\d+$/.test(externalId))
+      throw new UnasApiError("FIELD_FORMAT_INVALID");
     const parent = child(category, "Parent");
     const order = value(category, "Order");
     return {
@@ -362,11 +434,13 @@ export class UnasApiClient {
   async login(apiKey: string): Promise<UnasLoginResult> {
     const xml = await this.post("login", paramsXml({ ApiKey: apiKey }));
     const root = parseXml(xml);
+    if (root.name === "Error") throw new UnasApiError("API_REJECTED");
+    if (root.name !== "Login") throw new UnasApiError("RESPONSE_SHAPE_INVALID");
     const token = value(root, "Token");
     const expireTime = Number(value(root, "ExpireTime"));
     if (!token || !Number.isSafeInteger(expireTime))
-      throw new BadGatewayException("Az UNAS login válasza érvénytelen.");
-    return { token, expireTime };
+      throw new UnasApiError("RESPONSE_SHAPE_INVALID");
+    return { token, expireTime, permissions: parsePermissions(root) };
   }
 
   async getProductPage(
@@ -415,22 +489,20 @@ export class UnasApiClient {
           attempt === MAX_HTTP_ATTEMPTS ||
           !RETRYABLE_HTTP_STATUSES.has(response.status)
         )
-          throw new BadGatewayException(
-            `UNAS_${endpoint.toUpperCase()}_HTTP_${response.status}`,
-          );
+          throw classifyHttpFailure(response.status, responseBody);
         await this.wait(
           unasRetryDelayMs(attempt, response.headers.get("retry-after")),
         );
       } catch (error) {
-        if (error instanceof BadGatewayException) throw error;
+        if (error instanceof UnasApiError) throw error;
         if (attempt === MAX_HTTP_ATTEMPTS)
-          throw new BadGatewayException(
-            `UNAS_${endpoint.toUpperCase()}_NETWORK_FAILED`,
+          throw new UnasApiError(
+            isTimeoutError(error) ? "TIMEOUT" : "NETWORK_FAILED",
           );
         await this.wait(unasRetryDelayMs(attempt, null));
       }
     }
-    throw new BadGatewayException(`UNAS_${endpoint.toUpperCase()}_FAILED`);
+    throw new UnasApiError("NETWORK_FAILED");
   }
 
   protected wait(milliseconds: number) {
