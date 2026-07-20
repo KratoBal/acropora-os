@@ -1,6 +1,8 @@
 import type {
   CatalogOption,
   ProductDetail,
+  ProductExtensionDetail,
+  ProductExtensionUpdateInput,
   ProductListApiQuery,
   ProductListResponse,
 } from "@acropora/types";
@@ -29,6 +31,21 @@ export const productApi = {
     return apiRequest<ProductDetail>(
       `/products/${encodeURIComponent(id)}`,
       token,
+    );
+  },
+  updateExtension(
+    token: string,
+    variantId: string,
+    input: ProductExtensionUpdateInput,
+  ) {
+    return apiRequest<ProductExtensionDetail>(
+      `/product-extensions/${encodeURIComponent(variantId)}`,
+      token,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
     );
   },
   categoryOptions(token: string) {

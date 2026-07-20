@@ -50,12 +50,18 @@ A katalógusimport nem írhat aktuális készletet, StockItem értéket vagy Sto
 | Adat                                       | Elsődleges forrás az első migrációnál | Hosszú távú szabály                                                   |
 | ------------------------------------------ | ------------------------------------- | --------------------------------------------------------------------- |
 | UNAS external ID, slug, URL, nyers státusz | UNAS                                  | ChannelListing/ExternalReference őrzi                                 |
-| Név, leírás, kategóriák, képlinkek         | UNAS kezdeti import                   | később mezőnként explicit ownership kell                              |
+| Név, leírás, kategóriák, képlinkek         | UNAS                                  | read-only mirror; az UNAS a Product Master                            |
 | Brand                                      | jóváhagyott mapping                   | Acropora OS törzsadat; ismeretlen név nem hozható létre automatikusan |
 | UNAS 0/1/2/3 státusz jelentése             | nincs meghatározva                    | üzleti mappingig csak raw `externalStatus`                            |
-| Acropora aktív/archivált állapot           | Acropora OS                           | raw státuszból nem képezhető automatikusan                            |
-| Ár                                         | nincs ebben a pipeline-ban            | külön árimport és ownership                                           |
+| Mirror lifecycle állapot                   | UNAS teljes snapshot                  | hiányból nem következik azonnali archiválás                           |
+| Eladási ár                                 | UNAS                                  | read-only mirror; beszerzési ártól elkülönítve                        |
 | Készlet                                    | készletmozgások főkönyve              | UNAS katalógusimport soha nem írja közvetlenül                        |
+
+A hosszú távú ownershipot az
+[ADR-013](../adr/0013-unas-product-master-and-local-extension.md), a következő
+szinkronmérföldkövet az
+[M2.1 UNAS Product Synchronization](./M2.1-UNAS-PRODUCT-SYNCHRONIZATION.md)
+rögzíti.
 
 ## Helyi reprodukció
 

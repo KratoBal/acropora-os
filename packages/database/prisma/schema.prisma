@@ -23,6 +23,24 @@ enum ProductType {
   LIVESTOCK
 }
 
+enum ProductMirrorState {
+  ACTIVE
+  MISSING
+  CONFLICT
+}
+
+enum UnasProductSyncKind {
+  FULL
+  INCREMENTAL
+}
+
+enum UnasProductSyncRunStatus {
+  PENDING
+  RUNNING
+  APPLIED
+  FAILED
+}
+
 enum StockMovementType {
   PURCHASE_RECEIPT
   SALE
@@ -191,42 +209,55 @@ model Session {
 }
 
 model Product {
-  id          String      @id @default(cuid())
-  name        String
-  description String?
-  type        ProductType @default(PHYSICAL)
-  brandId     String?
+  id              String              @id @default(cuid())
+  name            String
+  description     String?
+  type            ProductType         @default(PHYSICAL)
+  brandId         String?
   /// @deprecated Compatibility pointer. ProductCategory is the category source of truth.
-  categoryId  String?
-  isActive    Boolean     @default(true)
-  archivedAt  DateTime?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  categoryId      String?
+  isActive        Boolean             @default(true)
+  archivedAt      DateTime?
+  mirrorSource    ExternalSystem?
+  mirrorState     ProductMirrorState?
+  sourceCreatedAt DateTime?
+  sourceUpdatedAt DateTime?
+  lastSyncedAt    DateTime?
+  missingSince    DateTime?
+  rawSourceHash   String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
 
-  brand           Brand?            @relation(fields: [brandId], references: [id], onDelete: SetNull)
-  legacyCategory  Category?         @relation("LegacyProductCategory", fields: [categoryId], references: [id], onDelete: SetNull)
+  brand           Brand?               @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  legacyCategory  Category?            @relation("LegacyProductCategory", fields: [categoryId], references: [id], onDelete: SetNull)
   categories      ProductCategory[]
   variants        ProductVariant[]
   channelListings ChannelListing[]
   images          ProductImage[]
-  sourceRelations ProductRelation[] @relation("ProductRelationSource")
-  targetRelations ProductRelation[] @relation("ProductRelationTarget")
+  sourceRelations ProductRelation[]    @relation("ProductRelationSource")
+  targetRelations ProductRelation[]    @relation("ProductRelationTarget")
+  unasSnapshot    UnasProductSnapshot?
 
   @@index([brandId])
   @@index([categoryId])
   @@index([type, isActive])
+  @@index([mirrorSource, mirrorState])
+  @@index([missingSince])
 }
 
 model ProductVariant {
-  id        String   @id @default(cuid())
-  productId String
-  sku       String   @unique
-  name      String?
-  unit      String   @default("db")
-  vatRate   Decimal? @db.Decimal(5, 2)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                     String   @id @default(cuid())
+  productId              String
+  sku                    String   @unique
+  name                   String?
+  unit                   String   @default("db")
+  vatRate                Decimal? @db.Decimal(5, 2)
+  manufacturerPartNumber String?
+  secondaryUnit          String?
+  secondaryUnitFactor    Decimal? @db.Decimal(19, 6)
+  isActive               Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   product          Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
   barcodes         ProductBarcode[]
@@ -236,23 +267,24 @@ model ProductVariant {
   salesOrderLines  SalesOrderLine[]
   purchaseLines    PurchaseOrderLine[]
   receiptLines     GoodsReceiptLine[]
+  extension        ProductExtension?
 
   @@index([productId, isActive])
 }
 
 model Brand {
-  id             String    @id @default(cuid())
+  id             String       @id @default(cuid())
   name           String
-  normalizedName String    @unique
-  slug           String    @unique
+  normalizedName String       @unique
+  slug           String       @unique
   description    String?
   websiteUrl     String?
   logoUrl        String?
-  isActive       Boolean   @default(true)
+  isActive       Boolean      @default(true)
   archivedAt     DateTime?
   metadata       Json?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
   products       Product[]
   aliases        BrandAlias[]
 
@@ -269,7 +301,7 @@ model BrandAlias {
   isPreferred      Boolean  @default(false)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
-  brand             Brand   @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  brand            Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
 
   @@index([brandId, source])
 }
@@ -455,20 +487,24 @@ model Supplier {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  products       SupplierProduct[]
-  purchaseOrders PurchaseOrder[]
+  products              SupplierProduct[]
+  purchaseOrders        PurchaseOrder[]
+  preferredByExtensions ProductExtension[]
 }
 
 model SupplierProduct {
-  id              String         @id @default(cuid())
-  supplierId      String
-  variantId       String
-  supplierSku     String
-  supplierName    String?
-  lastPurchaseNet Decimal?       @db.Decimal(19, 4)
-  currency        String         @default("HUF") @db.VarChar(3)
-  supplier        Supplier       @relation(fields: [supplierId], references: [id], onDelete: Cascade)
-  variant         ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  id                   String         @id @default(cuid())
+  supplierId           String
+  variantId            String
+  supplierSku          String
+  supplierName         String?
+  lastPurchaseNet      Decimal?       @db.Decimal(19, 4)
+  currency             String         @default("HUF") @db.VarChar(3)
+  minimumOrderQuantity Decimal?       @db.Decimal(19, 6)
+  packageSize          Decimal?       @db.Decimal(19, 6)
+  leadTimeDays         Int?
+  supplier             Supplier       @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  variant              ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
 
   @@unique([supplierId, supplierSku])
   @@unique([supplierId, variantId])
@@ -482,12 +518,13 @@ model Warehouse {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  locations       WarehouseLocation[]
-  stockItems      StockItem[]
-  sourceMovements StockMovement[]     @relation("MovementSourceWarehouse")
-  targetMovements StockMovement[]     @relation("MovementTargetWarehouse")
-  purchaseOrders  PurchaseOrder[]
-  goodsReceipts   GoodsReceipt[]
+  locations            WarehouseLocation[]
+  stockItems           StockItem[]
+  sourceMovements      StockMovement[]     @relation("MovementSourceWarehouse")
+  targetMovements      StockMovement[]     @relation("MovementTargetWarehouse")
+  purchaseOrders       PurchaseOrder[]
+  goodsReceipts        GoodsReceipt[]
+  defaultForExtensions ProductExtension[]
 }
 
 model WarehouseLocation {
@@ -499,12 +536,87 @@ model WarehouseLocation {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  warehouse           Warehouse           @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
-  stockItems          StockItem[]
-  sourceMovementLines StockMovementLine[] @relation("MovementSourceLocation")
-  targetMovementLines StockMovementLine[] @relation("MovementTargetLocation")
+  warehouse            Warehouse           @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  stockItems           StockItem[]
+  sourceMovementLines  StockMovementLine[] @relation("MovementSourceLocation")
+  targetMovementLines  StockMovementLine[] @relation("MovementTargetLocation")
+  defaultForExtensions ProductExtension[]
 
   @@unique([warehouseId, code])
+}
+
+/// UNAS-owned product fields mirrored for read-only operational use.
+/// Reported stock is a comparison snapshot and never the local stock ledger.
+model UnasProductSnapshot {
+  id                             String    @id @default(cuid())
+  productId                      String    @unique
+  currency                       String?   @db.VarChar(3)
+  netPrice                       Decimal?  @db.Decimal(19, 4)
+  grossPrice                     Decimal?  @db.Decimal(19, 4)
+  saleNetPrice                   Decimal?  @db.Decimal(19, 4)
+  saleGrossPrice                 Decimal?  @db.Decimal(19, 4)
+  saleStartsAt                   DateTime?
+  saleEndsAt                     DateTime?
+  priceDisplay                   String?
+  descriptionShort               String?
+  descriptionLong                String?
+  descriptionShortIsHtml         Boolean?
+  descriptionLongIsHtml          Boolean?
+  productUrl                     String?
+  sefUrl                         String?
+  manufacturerUrl                String?
+  vatRate                        Decimal?  @db.Decimal(5, 2)
+  propertiesHtml                 String?
+  minimumOrderQuantity           Decimal?  @db.Decimal(19, 6)
+  initialOrderQuantity           Decimal?  @db.Decimal(19, 6)
+  maximumOrderQuantity           Decimal?  @db.Decimal(19, 6)
+  orderQuantityStep              Decimal?  @db.Decimal(19, 6)
+  backorderAllowed               Boolean?
+  variantStockEnabled            Boolean?
+  lowStockThreshold              Decimal?  @db.Decimal(19, 6)
+  reportedStock                  Decimal?  @db.Decimal(19, 6)
+  reportedStockSyncedAt          DateTime?
+  primaryCategoryExternalId      String?
+  alternativeCategoryExternalIds Json?
+  images                         Json?
+  parameters                     Json?
+  seo                            Json?
+  rawPayload                     Json
+  createdAt                      DateTime  @default(now())
+  updatedAt                      DateTime  @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+/// Acropora-owned static operational settings for a sellable/stockable variant.
+/// Purchase cost history belongs to GoodsReceiptLine, not this model.
+model ProductExtension {
+  id                      String   @id @default(cuid())
+  variantId               String   @unique
+  preferredSupplierId     String?
+  defaultPurchaseCurrency String?  @db.VarChar(3)
+  defaultWarehouseId      String?
+  defaultLocationId       String?
+  minimumStock            Decimal? @db.Decimal(19, 6)
+  optimalStock            Decimal? @db.Decimal(19, 6)
+  reorderPoint            Decimal? @db.Decimal(19, 6)
+  safetyStock             Decimal? @db.Decimal(19, 6)
+  stockTrackingEnabled    Boolean  @default(true)
+  purchasingDisabled      Boolean  @default(false)
+  phaseOut                Boolean  @default(false)
+  autoReorderEnabled      Boolean  @default(false)
+  internalNote            String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  variant           ProductVariant     @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  preferredSupplier Supplier?          @relation(fields: [preferredSupplierId], references: [id], onDelete: SetNull)
+  defaultWarehouse  Warehouse?         @relation(fields: [defaultWarehouseId], references: [id], onDelete: SetNull)
+  defaultLocation   WarehouseLocation? @relation(fields: [defaultLocationId], references: [id], onDelete: SetNull)
+
+  @@index([preferredSupplierId])
+  @@index([defaultWarehouseId])
+  @@index([defaultLocationId])
 }
 
 /// Read-optimized projection rebuilt from posted stock movement lines; never the stock source of truth.
@@ -857,6 +969,39 @@ model IntegrationSyncState {
   updatedAt      DateTime   @updatedAt
 
   @@index([status, nextAttemptAt])
+}
+
+model IntegrationCursor {
+  id                      String    @id @default(cuid())
+  provider                String
+  stream                  String
+  lastSuccessfulWindowEnd DateTime?
+  updatedAt               DateTime  @updatedAt
+
+  @@unique([provider, stream])
+}
+
+model UnasProductSyncRun {
+  id             String                   @id @default(cuid())
+  activeKey      String?                  @unique
+  kind           UnasProductSyncKind
+  status         UnasProductSyncRunStatus @default(PENDING)
+  windowStart    DateTime?
+  windowEnd      DateTime
+  startedAt      DateTime?
+  completedAt    DateTime?
+  productsSeen   Int                      @default(0)
+  createdCount   Int                      @default(0)
+  updatedCount   Int                      @default(0)
+  unchangedCount Int                      @default(0)
+  conflictCount  Int                      @default(0)
+  missingCount   Int                      @default(0)
+  errorCode      String?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+
+  @@index([status, createdAt])
+  @@index([kind, completedAt])
 }
 
 model AuditLog {

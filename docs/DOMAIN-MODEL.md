@@ -17,20 +17,20 @@ Alapelvek:
 
 ## Bounded contexteek
 
-| Context             | Felelősség és fő entitások                            | Source of truth / birtokolt adat                                                    | Hivatkozott adat és kapcsolatok                                             |
-| ------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Identity & Access   | felhasználó, session, role, permission                | `User`, `Session`, hozzáférési állapot                                              | más contextektől semmit; minden context `User.id`-t hivatkozhat aktorként   |
-| Product Catalog     | közös termékidentitás és értékesíthető változat       | `Product`, `ProductVariant`, `Brand`, `Category`, barcode, kép, dokumentum, árlista | Supplier ID a Purchasingből; készletet nem birtokol                         |
-| Inventory           | fizikai készlet főkönyve és foglalások                | raktár, location, movement/line, reservation, lot, serial, count                    | variant ID a Catalogból; rendelési és szerviz referenciák                   |
-| Purchasing          | beszállítói rendelés és beérkeztetés                  | `Supplier`, contact, `PurchaseOrder`, `GoodsReceipt`, supplier invoice reference    | variant, warehouse és finance referencia                                    |
-| Sales & Orders      | rendelés, teljesítés és csatorna                      | `SalesOrder`, sorok, státusztörténet, shipment                                      | customer, variant; Inventory foglalást kér; Finance fizetési referenciát ad |
-| Customers / CRM     | ügyféltörzs és ügyfélkapcsolatok                      | `Customer`, contact, address, note, tag, customer timeline                          | külső ID az Integrationsben; order/service/aquarium csak hivatkozza         |
-| Finance             | pénzügyi tények referenciái                           | payment, refund, invoice reference, supplier invoice reference                      | order/purchase ID; a számla source of truth-ja a Számlázz.hu                |
-| Service             | kérésből végrehajtott szervizmunka                    | request, `ServiceJob`, visit, task, time entry, material usage                      | customer/aquarium; anyagfelhasználással Inventory mozgást kér               |
-| Aquarium Management | akvárium-nyilvántartás és üzemeltetés                 | `Aquarium`, equipment, livestock, measurement, task, visit, timeline                | customer és felelős user; ICP jelentést hivatkozik                          |
-| ICP Laboratory      | minták, elemmérések és ajánlások                      | `IcpReport`, sample, result, element definition, recommendation                     | aquarium; labor/fájl külső referenciája Integrationsből                     |
-| Integrations        | külső rendszerek megfeleltetése és adatcsere állapota | `ExternalReference`, sync state, integration event, webhook/import/export job       | minden aggregate belső ID-ját polimorf módon hivatkozza                     |
-| Audit & Timeline    | technikai audit, üzleti esemény és olvasási timeline  | `AuditLog`, `DomainEvent`, contextenkénti `TimelineEvent`                           | user/aggregate ID; payload pillanatképet tárol, nem domain source of truth  |
+| Context             | Felelősség és fő entitások                            | Source of truth / birtokolt adat                                                 | Hivatkozott adat és kapcsolatok                                             |
+| ------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Identity & Access   | felhasználó, session, role, permission                | `User`, `Session`, hozzáférési állapot                                           | más contextektől semmit; minden context `User.id`-t hivatkozhat aktorként   |
+| Product Catalog     | UNAS terméktükör és értékesíthető változat            | helyi projection és Acropora `ProductExtension`; az UNAS a Product Master        | Supplier ID a Purchasingből; készletet nem birtokol                         |
+| Inventory           | fizikai készlet főkönyve és foglalások                | raktár, location, movement/line, reservation, lot, serial, count                 | variant ID a Catalogból; rendelési és szerviz referenciák                   |
+| Purchasing          | beszállítói rendelés és beérkeztetés                  | `Supplier`, contact, `PurchaseOrder`, `GoodsReceipt`, supplier invoice reference | variant, warehouse és finance referencia                                    |
+| Sales & Orders      | rendelés, teljesítés és csatorna                      | `SalesOrder`, sorok, státusztörténet, shipment                                   | customer, variant; Inventory foglalást kér; Finance fizetési referenciát ad |
+| Customers / CRM     | ügyféltörzs és ügyfélkapcsolatok                      | `Customer`, contact, address, note, tag, customer timeline                       | külső ID az Integrationsben; order/service/aquarium csak hivatkozza         |
+| Finance             | pénzügyi tények referenciái                           | payment, refund, invoice reference, supplier invoice reference                   | order/purchase ID; a számla source of truth-ja a Számlázz.hu                |
+| Service             | kérésből végrehajtott szervizmunka                    | request, `ServiceJob`, visit, task, time entry, material usage                   | customer/aquarium; anyagfelhasználással Inventory mozgást kér               |
+| Aquarium Management | akvárium-nyilvántartás és üzemeltetés                 | `Aquarium`, equipment, livestock, measurement, task, visit, timeline             | customer és felelős user; ICP jelentést hivatkozik                          |
+| ICP Laboratory      | minták, elemmérések és ajánlások                      | `IcpReport`, sample, result, element definition, recommendation                  | aquarium; labor/fájl külső referenciája Integrationsből                     |
+| Integrations        | külső rendszerek megfeleltetése és adatcsere állapota | `ExternalReference`, sync state, integration event, webhook/import/export job    | minden aggregate belső ID-ját polimorf módon hivatkozza                     |
+| Audit & Timeline    | technikai audit, üzleti esemény és olvasási timeline  | `AuditLog`, `DomainEvent`, contextenkénti `TimelineEvent`                        | user/aggregate ID; payload pillanatképet tárol, nem domain source of truth  |
 
 ```mermaid
 flowchart LR
@@ -70,6 +70,11 @@ Logikai értékobjektumok (a Prisma első változatában beágyazott mezőcsopor
 ## Contextenkénti modellterv
 
 ### Product Catalog
+
+Az UNAS-ban létező termékek Product Master rendszere az UNAS. A `Product` és
+`ProductVariant` ezek helyi mirror projectionje; az Acropora-specifikus statikus
+beállításokat a varianthez kapcsolt `ProductExtension` birtokolja. Részletes
+döntés: [ADR-013](../adr/0013-unas-product-master-and-local-extension.md).
 
 - `Product`: közös név, leírás, típus (`PHYSICAL`, `SERVICE`, `LIVESTOCK`), brand és kategória.
 - `ProductVariant`: az egyedi belső SKU-val, unit- és áfaadatokkal rendelkező kereskedelmi egység.

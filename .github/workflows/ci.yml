@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  DATABASE_URL: postgresql://acropora:acropora@localhost:5432/acropora_ci?schema=public
+  REDIS_URL: redis://localhost:6379
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: acropora_ci
+          POSTGRES_USER: acropora
+          POSTGRES_PASSWORD: acropora
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U acropora -d acropora_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm prisma:generate
+
+      - name: Deploy migrations to empty PostgreSQL
+        run: pnpm prisma:deploy
+
+      - name: Seed development reference data
+        run: pnpm prisma:seed
+
+      - name: Static verification
+        run: |
+          pnpm lint
+          pnpm typecheck
+
+      - name: Unit and workspace tests
+        run: pnpm test
+
+      - name: Database integration tests
+        run: |
+          pnpm --filter @acropora/api test:integration
+          pnpm --filter @acropora/api test:brands:integration
+
+      - name: Health HTTP smoke test
+        run: pnpm --filter @acropora/api test:smoke
+
+      - name: Production build
+        run: pnpm build

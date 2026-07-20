@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { NotFoundException } from "@nestjs/common";
+import { ConflictException, NotFoundException } from "@nestjs/common";
 
 import type { ProductRepository } from "./product.repository.js";
 import { ProductService } from "./product.service.js";
 
-function repositoryWith(product: { id: string } | null) {
+function repositoryWith(
+  product: { id: string; unasMirror?: { source: "UNAS" } | null } | null,
+) {
   const calls: string[] = [];
   return {
     calls,
@@ -45,10 +47,33 @@ describe("ProductService", () => {
   });
 
   it("checks existence before update and archive", async () => {
-    const { repository, calls } = repositoryWith({ id: "product-1" });
+    const { repository, calls } = repositoryWith({
+      id: "product-1",
+      unasMirror: null,
+    });
     const service = new ProductService(repository);
     await service.updateProduct("product-1", { name: "Updated" });
     await service.archiveProduct("product-1");
     assert.deepEqual(calls, ["update", "archive"]);
+  });
+
+  it("blocks generic writes to an UNAS managed product", async () => {
+    const { repository, calls } = repositoryWith({
+      id: "product-1",
+      unasMirror: { source: "UNAS" },
+    });
+    const service = new ProductService(repository);
+
+    await assert.rejects(
+      service.updateProduct("product-1", { name: "Forbidden" }),
+      (error) =>
+        error instanceof ConflictException &&
+        error.message === "PRODUCT_MANAGED_BY_UNAS",
+    );
+    await assert.rejects(
+      service.archiveProduct("product-1"),
+      ConflictException,
+    );
+    assert.deepEqual(calls, []);
   });
 });

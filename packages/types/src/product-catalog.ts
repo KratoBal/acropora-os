@@ -18,6 +18,39 @@ export interface ProductVariantSummary {
   name: string | null;
   unit: string;
   isActive: boolean;
+  vatRate: string | null;
+  manufacturerPartNumber: string | null;
+  secondaryUnit: string | null;
+  secondaryUnitFactor: string | null;
+  extension: import("./product-extension.js").ProductExtensionDetail | null;
+}
+
+export interface UnasProductMirrorDetail {
+  source: "UNAS";
+  state: "ACTIVE" | "MISSING" | "CONFLICT" | null;
+  externalId: string | null;
+  sourceCreatedAt: string | null;
+  sourceUpdatedAt: string | null;
+  lastSyncedAt: string | null;
+  missingSince: string | null;
+  currency: string | null;
+  netPrice: string | null;
+  grossPrice: string | null;
+  saleNetPrice: string | null;
+  saleGrossPrice: string | null;
+  saleStartsAt: string | null;
+  saleEndsAt: string | null;
+  priceDisplay: string | null;
+  productUrl: string | null;
+  manufacturerUrl: string | null;
+  minimumOrderQuantity: string | null;
+  maximumOrderQuantity: string | null;
+  orderQuantityStep: string | null;
+  lowStockThreshold: string | null;
+  backorderAllowed: boolean | null;
+  variantStockEnabled: boolean | null;
+  reportedStock: string | null;
+  reportedStockSyncedAt: string | null;
 }
 
 export interface ProductImageSummary {
@@ -67,6 +100,7 @@ export interface ProductDetail extends ProductListItem {
   variants: ProductVariantSummary[];
   images: ProductImageSummary[];
   channelListings: ProductChannelListingSummary[];
+  unasMirror: UnasProductMirrorDetail | null;
 }
 
 export interface CatalogOption {

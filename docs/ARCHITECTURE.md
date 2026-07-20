@@ -12,9 +12,15 @@
 | -------------------------------------- | ------------------------------------------- |
 | Fizikai készlet és készletmozgások     | Acropora ERP                                |
 | Beszerzési ár, beszállító, polchely    | Acropora ERP                                |
-| Webshop termékleírás, kategória, képek | UNAS                                        |
+| Terméktörzs, eladási ár és webshopadat | UNAS, Acropora OS-ben read-only tükör       |
 | Webshopos rendelés                     | UNAS, ERP-ben tükrözve                      |
 | Számla és számlaszám                   | Számlázz.hu, ERP-ben és UNAS-ban visszaírva |
+
+A terméktulajdonlás és a helyi extension határa az
+[ADR-013](../adr/0013-unas-product-master-and-local-extension.md), az M2.1
+szinkronszerződés a
+[UNAS Product Synchronization](./M2.1-UNAS-PRODUCT-SYNCHRONIZATION.md)
+dokumentumban található.
 
 ## Fő folyamatok
 

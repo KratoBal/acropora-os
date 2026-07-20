@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { Prisma } from "@acropora/database";
 import type { ProductDatabase } from "./product.repository.js";
 import { ProductRepository } from "./product.repository.js";
 import type { ProductWithRelations } from "./product.types.js";
@@ -14,6 +15,13 @@ const product = {
   categoryId: null,
   isActive: true,
   archivedAt: null,
+  mirrorSource: "UNAS",
+  mirrorState: "ACTIVE",
+  sourceCreatedAt: new Date("2026-07-18T10:00:00.000Z"),
+  sourceUpdatedAt: new Date("2026-07-20T09:00:00.000Z"),
+  lastSyncedAt: new Date("2026-07-20T10:00:00.000Z"),
+  missingSince: null,
+  rawSourceHash: "hash",
   createdAt: new Date("2026-07-19T10:00:00.000Z"),
   updatedAt: new Date("2026-07-19T10:00:00.000Z"),
   brand: null,
@@ -89,11 +97,53 @@ const product = {
       name: null,
       unit: "db",
       vatRate: null,
+      manufacturerPartNumber: "MPN-1",
+      secondaryUnit: "karton",
+      secondaryUnitFactor: new Prisma.Decimal("12"),
       isActive: true,
       createdAt: new Date("2026-07-19T10:00:00.000Z"),
       updatedAt: new Date("2026-07-19T10:00:00.000Z"),
+      extension: {
+        id: "extension-1",
+        variantId: "variant-1",
+        preferredSupplierId: null,
+        defaultPurchaseCurrency: "EUR",
+        defaultWarehouseId: null,
+        defaultLocationId: null,
+        minimumStock: new Prisma.Decimal("2"),
+        optimalStock: new Prisma.Decimal("8"),
+        reorderPoint: new Prisma.Decimal("3"),
+        safetyStock: new Prisma.Decimal("1"),
+        stockTrackingEnabled: true,
+        purchasingDisabled: false,
+        phaseOut: false,
+        autoReorderEnabled: true,
+        internalNote: "Belső adat",
+        createdAt: new Date("2026-07-19T10:00:00.000Z"),
+        updatedAt: new Date("2026-07-20T08:00:00.000Z"),
+      },
     },
   ],
+  unasSnapshot: {
+    currency: "HUF",
+    netPrice: new Prisma.Decimal("1000"),
+    grossPrice: new Prisma.Decimal("1270"),
+    saleNetPrice: null,
+    saleGrossPrice: null,
+    saleStartsAt: null,
+    saleEndsAt: null,
+    priceDisplay: "normal",
+    productUrl: "https://shop.example/reef-salt",
+    manufacturerUrl: null,
+    minimumOrderQuantity: new Prisma.Decimal("1"),
+    maximumOrderQuantity: null,
+    orderQuantityStep: new Prisma.Decimal("1"),
+    lowStockThreshold: new Prisma.Decimal("2"),
+    backorderAllowed: true,
+    variantStockEnabled: false,
+    reportedStock: new Prisma.Decimal("7.5"),
+    reportedStockSyncedAt: new Date("2026-07-20T10:00:00.000Z"),
+  },
 } as ProductWithRelations;
 
 function createDatabase() {
@@ -157,6 +207,9 @@ function createDatabase() {
         { id: "brand-1", name: "Aqua Medic" },
         { id: "brand-2", name: "Red Sea" },
       ],
+    },
+    externalReference: {
+      findFirst: async () => ({ externalId: "159850145" }),
     },
     $transaction: (operation) => operation(transaction),
   };
@@ -257,6 +310,11 @@ describe("ProductRepository", () => {
       detail?.images.map((image) => image.sortOrder),
       [1, 2],
     );
+    assert.equal(detail?.unasMirror?.externalId, "159850145");
+    assert.equal(detail?.unasMirror?.grossPrice, "1270");
+    assert.equal(detail?.unasMirror?.reportedStock, "7.5");
+    assert.equal(detail?.variants[0]?.manufacturerPartNumber, "MPN-1");
+    assert.equal(detail?.variants[0]?.extension?.minimumStock, "2");
   });
 
   it("soft archives instead of deleting", async () => {
