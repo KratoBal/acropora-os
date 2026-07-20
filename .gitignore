@@ -12,12 +12,12 @@ test-dist/
 
 # Environment and secrets
 .env
-.env.local
-.env.*.local
+.env.*
 !.env.example
 
 # Logs
 *.log
+logs/
 pnpm-debug.log*
 
 # Editors and operating systems
@@ -32,4 +32,28 @@ packages/database/src/generated/
 # Local UNAS exports and dry-run artifacts
 UnasShop_acropora-unas-hu_*.xlsx
 *.unas-dry-run.json
+*.import-report.json
+import-reports/
 tmp/unas-import/
+
+# Database backups and local SQL dumps
+*.backup
+*.bak
+*.dump
+*.pgdump
+*.sql
+!packages/database/prisma/migrations/**/*.sql
+!**/fixtures/**/*.sql
+!**/*.example.sql
+acropora-pre-m1.sql
+
+# Real import exports (synthetic fixtures remain allowed)
+*.csv
+*.xls
+*.xlsx
+!**/fixtures/**/*.csv
+!**/fixtures/**/*.xls
+!**/fixtures/**/*.xlsx
+!**/*.example.csv
+!**/*.example.xls
+!**/*.example.xlsx

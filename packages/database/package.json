@@ -20,6 +20,7 @@
     "prisma:validate": "prisma validate",
     "db:format": "prisma format",
     "prisma:generate": "prisma generate",
+    "prisma:deploy": "prisma migrate deploy",
     "prisma:migrate": "prisma migrate dev",
     "prisma:push": "prisma db push",
     "prisma:studio": "prisma studio",

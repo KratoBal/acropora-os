@@ -23,6 +23,7 @@
     "db:validate": "pnpm --filter @acropora/database db:validate",
     "db:format": "pnpm --filter @acropora/database db:format",
     "prisma:generate": "pnpm --filter @acropora/database prisma:generate",
+    "prisma:deploy": "pnpm --filter @acropora/database prisma:deploy",
     "prisma:migrate": "pnpm --filter @acropora/database prisma:migrate",
     "prisma:push": "pnpm --filter @acropora/database prisma:push",
     "prisma:studio": "pnpm --filter @acropora/database prisma:studio",
