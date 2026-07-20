@@ -244,10 +244,18 @@ export class UnasProductSyncRepository extends Repository {
         if (diffs.some((diff) => diff.action === "CONFLICT"))
           throw new Error("UNAS_PRODUCT_IDENTITY_CONFLICT");
 
+        // Materialize every UNAS category locally, including ones with
+        // state "deleted". UNAS's getCategory endpoint has no state filter
+        // and always returns live and deleted categories together; a live
+        // category's parent can itself be deleted in UNAS. If we only
+        // materialized "live" categories, a live child under a deleted
+        // parent could never resolve its parentId, and the whole sync
+        // transaction would fail with UNAS_CATEGORY_PARENT_NOT_FOUND. The
+        // Category schema has no active/inactive flag today, so a deleted
+        // UNAS category is stored as an ordinary-looking local row; only
+        // its ExternalReference distinguishes it as UNAS-sourced.
         const categoryIds = new Map<string, string>();
-        for (const category of categories.filter(
-          (item) => item.state === "live",
-        )) {
+        for (const category of categories) {
           const reference = await transaction.externalReference.findUnique({
             where: {
               system_entityType_externalId: {
@@ -288,9 +296,7 @@ export class UnasProductSyncRepository extends Repository {
           });
         for (const reference of existingCategoryReferences)
           categoryIds.set(reference.externalId, reference.entityId);
-        for (const category of categories.filter(
-          (item) => item.state === "live",
-        )) {
+        for (const category of categories) {
           const id = categoryIds.get(category.externalId)!;
           const parentId = category.parentExternalId
             ? categoryIds.get(category.parentExternalId)
