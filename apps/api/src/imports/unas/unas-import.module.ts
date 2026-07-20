@@ -19,13 +19,30 @@ import { UnasProductSyncScheduler } from "./unas-product-sync.scheduler.js";
 import { UnasProductSyncService } from "./unas-product-sync.service.js";
 import { UnasProductSyncController } from "./unas-product-sync.controller.js";
 import { BrandResolutionEngine } from "./brand-resolution/brand-resolution.engine.js";
+import { UnasConnectionController } from "./unas-connection.controller.js";
+import { UnasConnectionRepository } from "./unas-connection.repository.js";
+import { UnasConnectionService } from "./unas-connection.service.js";
+import { UnasCredentialCryptoService } from "./unas-credential-crypto.service.js";
+import { UnasCredentialProvider } from "./unas-credential.provider.js";
+import { UnasConnectionStartupValidator } from "./unas-connection-startup.validator.js";
+import { UnasClock } from "./unas-login-expiry.js";
 
 @Module({
-  controllers: [UnasImportController, UnasProductSyncController],
+  controllers: [
+    UnasImportController,
+    UnasProductSyncController,
+    UnasConnectionController,
+  ],
   providers: [
     UnasXlsxParser,
     UnasApiClient,
     UnasAuthService,
+    UnasConnectionRepository,
+    UnasConnectionService,
+    UnasConnectionStartupValidator,
+    UnasCredentialCryptoService,
+    UnasCredentialProvider,
+    UnasClock,
     UnasProductCanonicalizer,
     UnasProductSyncDiffEngine,
     UnasProductSyncRepository,

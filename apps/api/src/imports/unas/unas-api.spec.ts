@@ -301,6 +301,26 @@ describe("UNAS API transport policy", () => {
     );
     assert.equal((await unknown.login("test-key")).permissions, null);
   });
+
+  it("accepts the documented Expire login field and rejects ambiguous expiry", async () => {
+    const documented = new ResponseClient(() =>
+      Promise.resolve(
+        new Response(
+          "<Login><Token>test-token</Token><Expire>1999999999</Expire></Login>",
+        ),
+      ),
+    );
+    assert.equal((await documented.login("test-key")).expireTime, 1999999999);
+
+    const ambiguous = new ResponseClient(() =>
+      Promise.resolve(
+        new Response(
+          "<Login><Token>test-token</Token><Expire>1999999999</Expire><ExpireTime>1999999999</ExpireTime></Login>",
+        ),
+      ),
+    );
+    await assert.rejects(ambiguous.login("test-key"), /RESPONSE_SHAPE_INVALID/);
+  });
 });
 
 describe("UNAS canonical identity diff", () => {
