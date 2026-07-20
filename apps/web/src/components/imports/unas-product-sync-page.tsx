@@ -17,6 +17,7 @@ import {
   type UnasProductSyncRunStatus,
   type UnasProductSyncSummary,
 } from "@acropora/types";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -47,6 +48,7 @@ const dateTime = (value: string | null) =>
 
 export function UnasProductSyncPage() {
   const { session } = useAuth();
+  const router = useRouter();
   const [runs, setRuns] = useState<UnasProductSyncRun[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
@@ -59,6 +61,9 @@ export function UnasProductSyncPage() {
   );
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.PRODUCTS_MANAGE),
+  );
+  const canManageConnection = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.SETTINGS_MANAGE),
   );
   const token = session?.token ?? "";
 
@@ -140,6 +145,16 @@ export function UnasProductSyncPage() {
         description="Az UNAS Product Master read-only tükrének futásai. A szinkron nem módosítja az Acropora készlet-ledgert vagy a beszerzési adatokat."
         actions={
           <div className="flex gap-2">
+            {canManageConnection ? (
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  router.push("/admin/integrations/unas/connection")
+                }
+              >
+                Kapcsolat beállításai
+              </Button>
+            ) : null}
             <Button
               variant="secondary"
               disabled={loading}

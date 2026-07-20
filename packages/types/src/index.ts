@@ -127,6 +127,10 @@ export type {
   UnasProductSyncSummary,
 } from "./integrations/unas-product-sync.js";
 export type {
+  UnasConnectionVerificationStatus,
+  UnasConnectionView,
+} from "./integrations/unas-connection.js";
+export type {
   ImportIssue,
   ImportIssueSeverity,
   ImportRowResult,
