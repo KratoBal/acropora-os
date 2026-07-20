@@ -302,24 +302,32 @@ describe("UNAS API transport policy", () => {
     assert.equal((await unknown.login("test-key")).permissions, null);
   });
 
-  it("accepts the documented Expire login field and rejects ambiguous expiry", async () => {
-    const documented = new ResponseClient(() =>
+  it("uses the documented ExpireTime UNIX timestamp and ignores the human-readable Expire field", async () => {
+    // Real UNAS login responses always include both fields together: `Expire`
+    // is a formatted "Y.m.d H:i:s" display string in the shop's timezone,
+    // and `ExpireTime` is the UNIX timestamp intended for programmatic use.
+    // Earlier revisions of this parser mistakenly required exactly one of
+    // the two fields to be present, which rejected every real login response.
+    const withBoth = new ResponseClient(() =>
       Promise.resolve(
         new Response(
-          "<Login><Token>test-token</Token><Expire>1999999999</Expire></Login>",
+          "<Login><Token>test-token</Token><Expire>2026.07.21 00:41:51</Expire><ExpireTime>1999999999</ExpireTime></Login>",
         ),
       ),
     );
-    assert.equal((await documented.login("test-key")).expireTime, 1999999999);
+    assert.equal((await withBoth.login("test-key")).expireTime, 1999999999);
 
-    const ambiguous = new ResponseClient(() =>
+    const missingExpireTime = new ResponseClient(() =>
       Promise.resolve(
         new Response(
-          "<Login><Token>test-token</Token><Expire>1999999999</Expire><ExpireTime>1999999999</ExpireTime></Login>",
+          "<Login><Token>test-token</Token><Expire>2026.07.21 00:41:51</Expire></Login>",
         ),
       ),
     );
-    await assert.rejects(ambiguous.login("test-key"), /RESPONSE_SHAPE_INVALID/);
+    await assert.rejects(
+      missingExpireTime.login("test-key"),
+      /RESPONSE_SHAPE_INVALID/,
+    );
   });
 });
 

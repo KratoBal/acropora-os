@@ -437,14 +437,19 @@ export class UnasApiClient {
     if (root.name === "Error") throw new UnasApiError("API_REJECTED");
     if (root.name !== "Login") throw new UnasApiError("RESPONSE_SHAPE_INVALID");
     const token = value(root, "Token");
-    const expiryValues = [
-      value(root, "ExpireTime"),
-      value(root, "Expire"),
-    ].filter((item): item is string => item !== undefined);
-    const expireTime = Number(expiryValues[0]);
-    if (!token || !Number.isSafeInteger(expireTime))
-      throw new UnasApiError("RESPONSE_SHAPE_INVALID");
-    if (expiryValues.length !== 1)
+    // The documented `ExpireTime` field is the UNIX timestamp intended for
+    // programmatic use. The documented `Expire` field is a separate,
+    // human-readable "Y.m.d H:i:s" string in the shop's timezone, not a
+    // timestamp; real UNAS login responses always include both fields
+    // together, so `Expire` is intentionally ignored here rather than
+    // treated as an alternate or mutually-exclusive source for `expireTime`.
+    const expireTimeRaw = value(root, "ExpireTime");
+    const expireTime = Number(expireTimeRaw);
+    if (
+      !token ||
+      expireTimeRaw === undefined ||
+      !Number.isSafeInteger(expireTime)
+    )
       throw new UnasApiError("RESPONSE_SHAPE_INVALID");
     return { token, expireTime, permissions: parsePermissions(root) };
   }

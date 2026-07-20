@@ -44,10 +44,13 @@ továbbra is kizárólag az `UNAS_API_KEY` környezeti változót olvassa.
 - A manuális teszt az induláskori módot és revisiont rögzíti. Eredménye csak ezek
   atomikus egyezésekor írhat verification állapotot; közben történt csere vagy
   disable esetén az audit eredménye `STALE_TEST_RESULT`.
-- A login dokumentált `Expire` (kompatibilitásként `ExpireTime`) mezője UNIX
-  timestamp. A dokumentált kétórás token-élettartamhoz
-  képest lejárt, egy percnél rövidebb vagy több mint öt perccel túl hosszú lejárat
-  érvénytelen UNAS válasz.
+- A login dokumentált `ExpireTime` mezője a programozott feldolgozásra szánt
+  UNIX timestamp; a szintén dokumentált `Expire` mező az áruház időzónája
+  szerinti, formázott ("Y.m.d H:i:s") megjelenítési szöveg, ezért a kód nem
+  használja fel numerikus lejáratként. A két mező minden valódi UNAS
+  válaszban egyszerre van jelen. A dokumentált kétórás token-élettartamhoz
+  képest lejárt, egy percnél rövidebb vagy több mint öt perccel túl hosszú
+  lejárat érvénytelen UNAS válasz.
 
 Forrás: [UNAS login válasz](https://unas.hu/tudastar/api/azonositas-login-valasz)
 és [UNAS azonosítási limitek](https://unas.hu/tudastar/api/azonositas).
