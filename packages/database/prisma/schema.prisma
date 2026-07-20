@@ -179,6 +179,19 @@ enum CatalogImportRowStatus {
   INVALID
 }
 
+enum UnasCredentialMode {
+  ENV_FALLBACK
+  DATABASE
+  DISABLED
+}
+
+enum UnasVerificationStatus {
+  NEVER
+  SUCCESS
+  FAILED
+  INDETERMINATE
+}
+
 model User {
   id          String   @id @default(cuid())
   email       String   @unique
@@ -189,10 +202,11 @@ model User {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  sessions       Session[]
-  auditLogs      AuditLog[]
-  domainEvents   DomainEvent[]
-  stockMovements StockMovement[]
+  sessions               Session[]
+  auditLogs              AuditLog[]
+  domainEvents           DomainEvent[]
+  stockMovements         StockMovement[]
+  unasCredentialsUpdated UnasConnectionSetting[] @relation("UnasCredentialUpdatedBy")
 
   @@index([role, isActive])
 }
@@ -979,6 +993,29 @@ model IntegrationCursor {
   updatedAt               DateTime  @updatedAt
 
   @@unique([provider, stream])
+}
+
+model UnasConnectionSetting {
+  id                        String                 @id
+  credentialMode            UnasCredentialMode     @default(ENV_FALLBACK)
+  encryptedApiKey           Bytes?
+  encryptionIv              Bytes?
+  authenticationTag         Bytes?
+  keyVersion                String?
+  credentialRevision        Int                    @default(0)
+  credentialUpdatedAt       DateTime?
+  credentialUpdatedByUserId String?
+  verificationStatus        UnasVerificationStatus @default(NEVER)
+  lastVerifiedAt            DateTime?
+  lastVerificationCode      String?
+  credentialAttemptedAt     DateTime?
+  testAttemptedAt           DateTime?
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
+
+  credentialUpdatedBy User? @relation("UnasCredentialUpdatedBy", fields: [credentialUpdatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([credentialUpdatedByUserId])
 }
 
 model UnasProductSyncRun {

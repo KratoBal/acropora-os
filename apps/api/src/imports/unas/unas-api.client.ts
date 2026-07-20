@@ -437,8 +437,14 @@ export class UnasApiClient {
     if (root.name === "Error") throw new UnasApiError("API_REJECTED");
     if (root.name !== "Login") throw new UnasApiError("RESPONSE_SHAPE_INVALID");
     const token = value(root, "Token");
-    const expireTime = Number(value(root, "ExpireTime"));
+    const expiryValues = [
+      value(root, "ExpireTime"),
+      value(root, "Expire"),
+    ].filter((item): item is string => item !== undefined);
+    const expireTime = Number(expiryValues[0]);
     if (!token || !Number.isSafeInteger(expireTime))
+      throw new UnasApiError("RESPONSE_SHAPE_INVALID");
+    if (expiryValues.length !== 1)
       throw new UnasApiError("RESPONSE_SHAPE_INVALID");
     return { token, expireTime, permissions: parsePermissions(root) };
   }
