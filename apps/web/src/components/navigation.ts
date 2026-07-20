@@ -88,6 +88,12 @@ export const businessNavigation: AppNavigationItem[] = [
 
 export const settingsNavigation: AppNavigationItem[] = [
   {
+    href: "/admin/integrations/unas",
+    label: "UNAS szinkron",
+    icon: "activity",
+    permission: PERMISSIONS.PRODUCTS_VIEW,
+  },
+  {
     href: "/admin/brands",
     label: "Márkák",
     icon: "package",

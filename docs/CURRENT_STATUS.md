@@ -1,6 +1,6 @@
 # Acropora OS – Current Status
 
-Utolsó ellenőrzés: 2026-07-19
+Utolsó ellenőrzés: 2026-07-20
 
 ## Repository
 
@@ -8,7 +8,8 @@ https://github.com/KratoBal/acropora-os
 
 ## Current milestone
 
-M1 – First Production Import: elkészült, stabilization folyamatban.
+M1 – First Production Import és stabilization: elkészült. M2.1 – UNAS Product
+Synchronization specifikáció és implementáció-előkészítés folyamatban.
 
 ## Completed
 
@@ -25,18 +26,37 @@ M1 – First Production Import: elkészült, stabilization folyamatban.
 
 ## Current focus
 
-M1 stabilization:
+M2.1 UNAS Product Synchronization:
 
-- teljes Nest AppModule bootstrap ellenőrzése;
-- HTTP health smoke PostgreSQL és Redis szolgáltatással;
-- CI migráció-, seed-, integration- és build ellenőrzések;
-- repository safety és publikus dokumentáció hardening.
+- UNAS Product Master és Acropora read-only mirror határ;
+- a 38 mezős XLSX contract és az UNAS API discovery;
+- Product Extension, reported stock és sync lifecycle adatmodell;
+- ownership-aware diff, idempotens apply és read-only Product API.
+
+Az API adapter, canonical hash, identity-aware diff, perzisztens sync run/cursor,
+tranzakciós mirror apply, a dokumentált product mezők API mappingje, a
+full-snapshot missing/restore, a
+`State=deleted` terméklekérés, a Category parent-fa reconciliation, valamint az
+UNAS-forrású ProductCategory és ProductImage normalizált apply, a szerveroldali
+token-cache, az adatbázis-szintű single-run kizárás, valamint a kézi admin sync és
+run-status API, továbbá a korlátozott retry/Retry-After policy és a beragadt
+futásokat felszabadító heartbeat, valamint az opt-in időzített háttérfuttatás
+és az operátori sync run-history/kézi indítás webfelülete elkészült. Az új
+Product Detail projection külön read-only UNAS mirror és Acropora Product
+Extension blokkokat jelenít meg, a generikus Product írás pedig blokkolt az
+UNAS-managed rekordokon. A Product Extension saját készlet- és beszerzési
+beállításai a termékrészleten jogosultsággal szerkeszthetők; a tényleges
+változások actorhoz kötött AuditLog és domain event rekorddal, egy tranzakcióban
+mentődnek. A PostgreSQL sync lifecycle integrációs teszt és a migration/recovery
+runbook elkészült, de ebben a környezetben PostgreSQL hiányában a teszt még nem
+futott le. Nyitott maradt az éles probe, az alapár pénznemének feloldása, a nem
+dokumentált kezdeti mennyiség és a törölt kategóriák retention policy-ja.
 
 ## Next steps
 
-1. Stabilization ellenőrzések zöldre futtatása és review
-2. M1 változások jóváhagyott commitokra bontása
-3. M2 Product Import előkészítése
+1. Az elkészült M2.1 integrációs teszt futtatása izolált PostgreSQL adatbázison
+2. Éles, read-only UNAS probe a nyitott contract kérdések igazolására
+3. Riasztási/monitoring integráció kialakítása
 
 ## Relevant commands
 
@@ -61,6 +81,7 @@ pnpm build
 - Web: http://localhost:3000
 - Login: http://localhost:3000/login
 - Brand Import Assistant: http://localhost:3000/admin/brands/import-assistant
+- UNAS Product Sync: http://localhost:3000/admin/integrations/unas
 - API health: http://localhost:3001/health
 
 ## Known limitations

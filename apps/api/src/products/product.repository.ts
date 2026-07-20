@@ -27,9 +27,10 @@ const productInclude = {
       { createdAt: "asc" },
     ],
   },
-  variants: true,
+  variants: { include: { extension: true } },
   channelListings: { orderBy: { channel: "asc" } },
   images: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
+  unasSnapshot: true,
 } as const;
 
 const productListInclude = {
@@ -85,6 +86,9 @@ export interface ProductDatabase {
   };
   brand: {
     findMany(args: unknown): Promise<Array<{ id: string; name: string }>>;
+  };
+  externalReference: {
+    findFirst(args: unknown): Promise<{ externalId: string } | null>;
   };
   $transaction<T>(
     operation: (transaction: ProductTransaction) => Promise<T>,
@@ -160,11 +164,19 @@ export class ProductRepository extends Repository {
   }
 
   async findById(id: string): Promise<ProductDetail | null> {
-    const product = await this.productDatabase.product.findUnique({
-      where: { id },
-      include: productInclude,
-    });
-    return product ? toProductDetail(product) : null;
+    const [product, externalReference] = await Promise.all([
+      this.productDatabase.product.findUnique({
+        where: { id },
+        include: productInclude,
+      }),
+      this.productDatabase.externalReference.findFirst({
+        where: { system: "UNAS", entityType: "Product", entityId: id },
+        select: { externalId: true },
+      }),
+    ]);
+    return product
+      ? toProductDetail(product, externalReference?.externalId ?? null)
+      : null;
   }
 
   async list(query: ProductListQueryDto): Promise<ProductListResponse> {
