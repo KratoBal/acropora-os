@@ -97,6 +97,9 @@ const populatedResponse: ProductListResponse = {
         seoTitle: null,
         backorderAllowed: false,
       },
+      grossPrice: "24900",
+      saleGrossPrice: "19900",
+      stockOnHand: "12",
     },
   ],
   pagination: {
@@ -158,12 +161,10 @@ describe("ProductListPage", () => {
     expect(screen.getByText("RS-RM500")).toBeInTheDocument();
     expect(
       screen.getByRole("table").querySelector("tbody")?.textContent,
-    ).toContain("Red Sea");
-    expect(screen.getByText("Szűréstechnika")).toBeInTheDocument();
-    expect(
-      screen.getByRole("table").querySelector("tbody")?.textContent,
     ).toContain("Aktív");
-    expect(screen.getByText("UNAS · kód: 3")).toBeInTheDocument();
+    expect(screen.getByText(/24.900\s?Ft/)).toBeInTheDocument();
+    expect(screen.getByText(/19.900\s?Ft/)).toBeInTheDocument();
+    expect(screen.getByText("12")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "ReefMat 500" })).toHaveAttribute(
       "src",
       "https://example.test/reefmat.jpg",

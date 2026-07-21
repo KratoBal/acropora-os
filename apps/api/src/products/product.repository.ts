@@ -27,7 +27,7 @@ const productInclude = {
       { createdAt: "asc" },
     ],
   },
-  variants: { include: { extension: true } },
+  variants: { include: { extension: true, stockItems: true } },
   channelListings: { orderBy: { channel: "asc" } },
   images: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
   unasSnapshot: true,
@@ -45,6 +45,7 @@ const productListInclude = {
     where: { isActive: true },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     take: 1,
+    include: { stockItems: true },
   },
   channelListings: {
     where: { channel: "UNAS" },
@@ -54,6 +55,9 @@ const productListInclude = {
   images: {
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     take: 1,
+  },
+  unasSnapshot: {
+    select: { grossPrice: true, saleGrossPrice: true },
   },
 } as const;
 

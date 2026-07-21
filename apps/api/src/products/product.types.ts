@@ -1,4 +1,4 @@
-import type { Prisma } from "@acropora/database";
+import { Prisma } from "@acropora/database";
 import type {
   ProductChannelListingSummary,
   ProductDetail,
@@ -10,7 +10,7 @@ export type ProductWithRelations = Prisma.ProductGetPayload<{
   include: {
     brand: true;
     categories: { include: { category: true } };
-    variants: { include: { extension: true } };
+    variants: { include: { extension: true; stockItems: true } };
     channelListings: true;
     images: true;
     unasSnapshot: true;
@@ -50,6 +50,8 @@ export function toProductListItem(
   const unasListing = product.channelListings.find(
     (listing) => listing.channel === "UNAS",
   );
+  const primaryVariant = product.variants.find((variant) => variant.isActive);
+  const stockItems = primaryVariant?.stockItems ?? [];
 
   return {
     id: product.id,
@@ -68,10 +70,17 @@ export function toProductListItem(
           sortOrder: primaryCategory.sortOrder,
         }
       : null,
-    primarySku:
-      product.variants.find((variant) => variant.isActive)?.sku ?? null,
+    primarySku: primaryVariant?.sku ?? null,
     thumbnail: product.images[0] ? imageSummary(product.images[0]) : null,
     unasListing: unasListing ? channelSummary(unasListing) : null,
+    grossPrice: product.unasSnapshot?.grossPrice?.toString() ?? null,
+    saleGrossPrice: product.unasSnapshot?.saleGrossPrice?.toString() ?? null,
+    stockOnHand:
+      stockItems.length > 0
+        ? stockItems
+            .reduce((sum, item) => sum.plus(item.onHand), new Prisma.Decimal(0))
+            .toString()
+        : null,
   };
 }
 
