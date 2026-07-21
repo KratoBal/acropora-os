@@ -25,6 +25,18 @@ function formatHuf(value: string): string {
   return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} Ft`;
 }
 
+const STATUS_LABEL: Record<string, string> = {
+  DRAFT: "Piszkozat",
+  PENDING: "Függőben",
+  CONFIRMED: "Visszaigazolva",
+  PICKING: "Szedés alatt",
+  PACKED: "Csomagolva",
+  SHIPPED: "Kiszállítva",
+  COMPLETED: "Lezárva",
+  CANCELLED: "Törölve",
+  ON_HOLD: "Felfüggesztve",
+};
+
 export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
   const { session } = useAuth();
   const router = useRouter();
@@ -102,11 +114,13 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
                       : "neutral"
                 }
               >
-                {detail.status}
+                {detail.unasStatusLabel ??
+                  STATUS_LABEL[detail.status] ??
+                  detail.status}
               </Badge>
             </CardHeader>
             <CardContent>
-              <dl className="grid gap-3 text-xs sm:grid-cols-4">
+              <dl className="grid gap-3 text-xs sm:grid-cols-3 lg:grid-cols-6">
                 <div>
                   <dt className="text-slate-400">Vevő</dt>
                   <dd className="mt-1 text-slate-700">
@@ -117,6 +131,19 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
                   <dt className="text-slate-400">E-mail</dt>
                   <dd className="mt-1 text-slate-700">
                     {detail.buyerEmail ?? "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Fizetés</dt>
+                  <dd className="mt-1 text-slate-700">
+                    {detail.paymentName ?? "—"}
+                    {detail.paymentStatus ? ` (${detail.paymentStatus})` : ""}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Szállítás</dt>
+                  <dd className="mt-1 text-slate-700">
+                    {detail.shippingName ?? "—"}
                   </dd>
                 </div>
                 <div>

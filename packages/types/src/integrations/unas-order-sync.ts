@@ -32,7 +32,11 @@ export interface UnasOrderListItem {
   id: string;
   orderNumber: string;
   status: string;
+  /** UNAS's own status text (e.g. "Kiszállítás", "Megrendelés lezárva"), for display; null for orders synced before this field existed. */
+  unasStatusLabel: string | null;
   buyerName: string | null;
+  paymentName: string | null;
+  shippingName: string | null;
   totalGross: string;
   currency: string;
   lineCount: number;
@@ -68,8 +72,13 @@ export interface UnasOrderDetail {
   id: string;
   orderNumber: string;
   status: string;
+  /** UNAS's own status text (e.g. "Kiszállítás", "Megrendelés lezárva"), for display; null for orders synced before this field existed. */
+  unasStatusLabel: string | null;
   buyerName: string | null;
   buyerEmail: string | null;
+  paymentName: string | null;
+  paymentStatus: string | null;
+  shippingName: string | null;
   currency: string;
   totalNet: string;
   totalTax: string;

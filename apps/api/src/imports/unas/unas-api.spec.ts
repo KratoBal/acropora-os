@@ -209,6 +209,8 @@ describe("UNAS getOrder contract", () => {
 <Status>Feldolgozás alatt</Status><StatusType>open_normal</StatusType><StatusID>3</StatusID>
 <Customer><Email>vevo@example.com</Email><Contact><Name>Kovács Anna</Name></Contact></Customer>
 <Currency>HUF</Currency><SumPriceGross>12700</SumPriceGross>
+<Payment><Name>Bankkártya</Name><Type>bankcard</Type><Status>paid</Status></Payment>
+<Shipping><Name>GLS</Name></Shipping>
 <Items>
 <Item><Id>1</Id><Sku>pump_1</Sku><Name>Reef Pump</Name><Unit>db</Unit><Quantity>2</Quantity><PriceNet>5000</PriceNet><PriceGross>6350</PriceGross><Vat>27%</Vat></Item>
 <Item><Id>shipping-cost</Id><Name>Szállítási költség</Name><Quantity>1</Quantity><PriceGross>0</PriceGross></Item>
@@ -225,6 +227,10 @@ describe("UNAS getOrder contract", () => {
     assert.equal(order.customerName, "Kovács Anna");
     assert.equal(order.customerEmail, "vevo@example.com");
     assert.equal(order.sumPriceGross, "12700");
+    assert.equal(order.paymentName, "Bankkártya");
+    assert.equal(order.paymentType, "bankcard");
+    assert.equal(order.paymentStatus, "paid");
+    assert.equal(order.shippingName, "GLS");
     assert.equal(order.items.length, 2);
     assert.equal(order.items[0]?.sku, "pump_1");
     assert.equal(order.items[0]?.quantity, "2");
@@ -253,6 +259,16 @@ describe("UNAS getOrder contract", () => {
 
   it("returns an empty list when there are no orders", () => {
     assert.deepEqual(parseUnasOrderResponse("<Orders></Orders>"), []);
+  });
+
+  it("defaults payment/shipping to null when the order has no such nodes", () => {
+    const order = parseUnasOrderResponse(
+      "<Orders><Order><Key>UN-2</Key></Order></Orders>",
+    )[0]!;
+    assert.equal(order.paymentName, null);
+    assert.equal(order.paymentType, null);
+    assert.equal(order.paymentStatus, null);
+    assert.equal(order.shippingName, null);
   });
 });
 

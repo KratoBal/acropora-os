@@ -18,6 +18,10 @@ function order(key: string): UnasApiOrder {
     customerEmail: null,
     currency: "HUF",
     sumPriceGross: "1000",
+    paymentName: null,
+    paymentType: null,
+    paymentStatus: null,
+    shippingName: null,
     items: [],
   };
 }
@@ -106,7 +110,10 @@ describe("UnasOrderSyncService.runIncremental", () => {
       (pageRequests[0]!.input as { timeModStart: number }).timeModStart,
       Math.floor((cursor.getTime() - 120_000) / 1000),
     );
-    assert.equal(calls.some((call) => call.operation === "apply"), true);
+    assert.equal(
+      calls.some((call) => call.operation === "apply"),
+      true,
+    );
     assert.equal(
       calls.some((call) => call.operation === "recordMismatch"),
       true,
@@ -152,7 +159,10 @@ describe("UnasOrderSyncService.runIncremental", () => {
       service.runIncremental("token", new Date(), 10),
       /UNAS_DOWN/,
     );
-    assert.equal(calls.some((call) => call.operation === "apply"), false);
+    assert.equal(
+      calls.some((call) => call.operation === "apply"),
+      false,
+    );
     assert.equal(
       calls.some((call) => call.operation === "reconciliation"),
       false,

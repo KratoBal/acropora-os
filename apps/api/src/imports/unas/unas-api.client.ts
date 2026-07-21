@@ -484,6 +484,8 @@ export function parseUnasOrderResponse(xml: string): UnasApiOrder[] {
     if (!key) throw new UnasApiError("FIELD_FORMAT_INVALID");
     const customer = child(order, "Customer");
     const contact = customer ? child(customer, "Contact") : undefined;
+    const payment = child(order, "Payment");
+    const shipping = child(order, "Shipping");
     const itemsNode = child(order, "Items");
     const items = children(itemsNode, "Item").map((item) => {
       const sku = value(item, "Sku");
@@ -509,6 +511,10 @@ export function parseUnasOrderResponse(xml: string): UnasApiOrder[] {
       customerEmail: customer ? (value(customer, "Email") ?? null) : null,
       currency: value(order, "Currency") ?? null,
       sumPriceGross: decimal(value(order, "SumPriceGross")),
+      paymentName: payment ? (value(payment, "Name") ?? null) : null,
+      paymentType: payment ? (value(payment, "Type") ?? null) : null,
+      paymentStatus: payment ? (value(payment, "Status") ?? null) : null,
+      shippingName: shipping ? (value(shipping, "Name") ?? null) : null,
       items,
     };
   });

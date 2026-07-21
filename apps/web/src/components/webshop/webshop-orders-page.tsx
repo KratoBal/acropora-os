@@ -43,6 +43,18 @@ function statusVariant(status: string): "success" | "danger" | "neutral" {
   return "neutral";
 }
 
+function statusLabel(order: UnasOrderListItem): string {
+  return order.unasStatusLabel ?? STATUS_LABEL[order.status] ?? order.status;
+}
+
+function formatOrderDate(order: UnasOrderListItem): string {
+  const value = order.orderedAt ?? order.createdAt;
+  return new Date(value).toLocaleString("hu-HU", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+}
+
 export function WebshopOrdersPage() {
   const { session } = useAuth();
   const router = useRouter();
@@ -150,33 +162,56 @@ export function WebshopOrdersPage() {
               Még nincs szinkronizált webshop rendelés.
             </p>
           ) : null}
-          {orders.map((order) => (
-            <button
-              key={order.id}
-              type="button"
-              onClick={() => router.push(`/webshop/${order.id}`)}
-              className="flex w-full items-center justify-between rounded-lg border border-slate-100 px-3 py-2 text-left text-sm transition hover:bg-slate-50"
-            >
-              <div>
-                <p className="font-medium text-slate-900">
-                  {order.orderNumber}
-                </p>
-                <p className="text-xs text-slate-500">
-                  {new Date(order.createdAt).toLocaleString("hu-HU")} ·{" "}
-                  {order.buyerName ?? "Ismeretlen vevő"} · {order.lineCount}{" "}
-                  tétel
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <Badge variant={statusVariant(order.status)}>
-                  {STATUS_LABEL[order.status] ?? order.status}
-                </Badge>
-                <p className="font-semibold text-slate-900">
-                  {formatHuf(order.totalGross)}
-                </p>
-              </div>
-            </button>
-          ))}
+          {orders.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] border-collapse text-left">
+                <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-5 py-3">Azonosító</th>
+                    <th className="px-4 py-3">Dátum</th>
+                    <th className="px-4 py-3">Vevő</th>
+                    <th className="px-4 py-3">Fizetés / szállítás</th>
+                    <th className="px-4 py-3 text-right">Összeg</th>
+                    <th className="px-5 py-3">Státusz</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {orders.map((order) => (
+                    <tr
+                      key={order.id}
+                      onClick={() => router.push(`/webshop/${order.id}`)}
+                      className="cursor-pointer transition hover:bg-slate-50"
+                    >
+                      <td className="px-5 py-3 text-sm font-medium text-slate-900">
+                        {order.orderNumber}
+                        <p className="mt-0.5 text-xs font-normal text-slate-400">
+                          {order.lineCount} tétel
+                        </p>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600">
+                        {formatOrderDate(order)}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600">
+                        {order.buyerName ?? "Ismeretlen vevő"}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-500">
+                        {order.paymentName ?? "—"}
+                        {order.shippingName ? ` · ${order.shippingName}` : ""}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm font-semibold text-slate-900">
+                        {formatHuf(order.totalGross)}
+                      </td>
+                      <td className="px-5 py-3">
+                        <Badge variant={statusVariant(order.status)}>
+                          {statusLabel(order)}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
     </div>

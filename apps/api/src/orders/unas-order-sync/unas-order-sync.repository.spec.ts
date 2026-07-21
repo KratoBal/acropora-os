@@ -52,6 +52,7 @@ class FakeDb {
     id: string;
     entityId: string;
     externalId: string;
+    metadata: Record<string, unknown> | null;
   }> = [];
   movements: FakeMovement[] = [];
   runs: Array<Record<string, unknown>> = [];
@@ -128,22 +129,46 @@ class FakeDb {
 
   externalReference = {
     findUnique: async (args: any) => {
-      const key = args.where.system_entityType_externalId;
+      if (args.where.system_entityType_externalId) {
+        const key = args.where.system_entityType_externalId;
+        const found = this.externalReferences.find(
+          (reference) => reference.externalId === key.externalId,
+        );
+        return found ? { id: found.id, entityId: found.entityId } : null;
+      }
+      const key = args.where.system_entityType_entityId;
       const found = this.externalReferences.find(
-        (reference) => reference.externalId === key.externalId,
+        (reference) => reference.entityId === key.entityId,
       );
-      return found ? { id: found.id, entityId: found.entityId } : null;
+      return found ? { metadata: found.metadata } : null;
+    },
+    findMany: async (args: any) => {
+      const ids: string[] = args.where.entityId.in;
+      return this.externalReferences
+        .filter((reference) => ids.includes(reference.entityId))
+        .map((reference) => ({
+          entityId: reference.entityId,
+          metadata: reference.metadata,
+        }));
     },
     create: async (args: any) => {
       const row = {
         id: nextId("ref"),
         entityId: args.data.entityId as string,
         externalId: args.data.externalId as string,
+        metadata: (args.data.metadata as Record<string, unknown>) ?? null,
       };
       this.externalReferences.push(row);
       return row;
     },
-    update: async () => ({}),
+    update: async (args: any) => {
+      const row = this.externalReferences.find(
+        (reference) => reference.id === args.where.id,
+      );
+      if (row && args.data.metadata !== undefined)
+        row.metadata = args.data.metadata as Record<string, unknown>;
+      return row ?? {};
+    },
   };
 
   salesOrder = {
@@ -270,6 +295,10 @@ function baseOrder(overrides: Partial<UnasApiOrder> = {}): UnasApiOrder {
     customerEmail: "vevo@example.com",
     currency: "HUF",
     sumPriceGross: "12700",
+    paymentName: "Bankkártya",
+    paymentType: "bankcard",
+    paymentStatus: "paid",
+    shippingName: "GLS",
     items: [
       {
         id: "1",

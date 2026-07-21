@@ -84,6 +84,14 @@ export interface UnasApiOrder {
   customerEmail: string | null;
   currency: string | null;
   sumPriceGross: string | null;
+  /** e.g. "Bankkártya", "Utánvét" - UNAS's own payment method name, for display only. */
+  paymentName: string | null;
+  /** e.g. bankcard | cod | transfer | ... - UNAS's own payment type code. */
+  paymentType: string | null;
+  /** e.g. "paid" | "unpaid" | "partly paid" | "overpaid" - free-text per UNAS docs, not a closed enum. */
+  paymentStatus: string | null;
+  /** e.g. "GLS", "FoxPost" - UNAS's own shipping/courier name, for display only. */
+  shippingName: string | null;
   items: UnasApiOrderItem[];
 }
 

@@ -27,6 +27,7 @@ import {
   toUnasOrderListItem,
   type SalesOrderListWithRelations,
   type SalesOrderWithRelations,
+  type UnasOrderMetadata,
 } from "./unas-order-sync.types.js";
 
 const ACTIVE_SYNC_KEY = "UNAS_ORDERS";
@@ -130,6 +131,12 @@ export interface UnasOrderSyncDatabase {
     findMany(
       args: unknown,
     ): Promise<Array<{ variantId: string; onHand: Prisma.Decimal }>>;
+  };
+  externalReference: {
+    findUnique(args: unknown): Promise<{ metadata: Prisma.JsonValue } | null>;
+    findMany(
+      args: unknown,
+    ): Promise<Array<{ entityId: string; metadata: Prisma.JsonValue }>>;
   };
   $transaction<T>(
     operation: (transaction: UnasOrderSyncTransaction) => Promise<T>,
@@ -336,6 +343,10 @@ export class UnasOrderSyncRepository extends Repository {
               metadata: json({
                 unasStatus: order.status,
                 unasStatusType: order.statusType,
+                paymentName: order.paymentName,
+                paymentType: order.paymentType,
+                paymentStatus: order.paymentStatus,
+                shippingName: order.shippingName,
               }),
               lastSyncedAt: windowEnd,
             },
@@ -547,6 +558,10 @@ export class UnasOrderSyncRepository extends Repository {
         metadata: json({
           unasStatus: order.status,
           unasStatusType: order.statusType,
+          paymentName: order.paymentName,
+          paymentType: order.paymentType,
+          paymentStatus: order.paymentStatus,
+          shippingName: order.shippingName,
         }),
         lastSyncedAt: new Date(),
       },
@@ -629,8 +644,13 @@ export class UnasOrderSyncRepository extends Repository {
       }),
       this.syncDatabase.salesOrder.count({ where }),
     ]);
+    const metadataByOrderId = await this.loadMetadataFor(
+      items.map((item) => item.id),
+    );
     return {
-      items: items.map(toUnasOrderListItem),
+      items: items.map((item) =>
+        toUnasOrderListItem(item, metadataByOrderId.get(item.id) ?? null),
+      ),
       pagination: {
         page: query.page,
         pageSize: query.pageSize,
@@ -645,7 +665,43 @@ export class UnasOrderSyncRepository extends Repository {
       where: { id },
       include: detailInclude,
     });
-    return order ? toUnasOrderDetail(order) : null;
+    if (!order) return null;
+    const reference = await this.syncDatabase.externalReference.findUnique({
+      where: {
+        system_entityType_entityId: {
+          system: "UNAS",
+          entityType: "SalesOrder",
+          entityId: id,
+        },
+      },
+    });
+    return toUnasOrderDetail(
+      order,
+      reference ? (reference.metadata as UnasOrderMetadata | null) : null,
+    );
+  }
+
+  /// Orders have no direct Prisma relation to ExternalReference (it's a
+  /// loose system/entityType/entityId join, reused across every integration
+  /// - see the model comment), so list rows are enriched via a single batch
+  /// query rather than N+1 lookups.
+  private async loadMetadataFor(
+    orderIds: string[],
+  ): Promise<Map<string, UnasOrderMetadata | null>> {
+    if (orderIds.length === 0) return new Map();
+    const references = await this.syncDatabase.externalReference.findMany({
+      where: {
+        system: "UNAS",
+        entityType: "SalesOrder",
+        entityId: { in: orderIds },
+      },
+    });
+    return new Map(
+      references.map((reference) => [
+        reference.entityId,
+        reference.metadata as UnasOrderMetadata | null,
+      ]),
+    );
   }
 
   /// Pure read, no UNAS call: compares StockItem.onHand against the
