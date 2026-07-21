@@ -228,7 +228,7 @@ function ProductExtensionEditor({
             {formIsHuf ? (
               <>
                 <div className="text-xs font-medium text-slate-600">
-                  <span>Nettó ár</span>
+                  <span>Utolsó beszerzési nettó ár</span>
                   <Input
                     aria-label="Utolsó beszerzési nettó ár"
                     className="mt-1"
@@ -241,7 +241,7 @@ function ProductExtensionEditor({
                   />
                 </div>
                 <div className="text-xs font-medium text-slate-600">
-                  <span>ÁFA (%)</span>
+                  <span>Utolsó beszerzési ÁFA (%)</span>
                   <Input
                     aria-label="Utolsó beszerzési ÁFA"
                     className="mt-1"
