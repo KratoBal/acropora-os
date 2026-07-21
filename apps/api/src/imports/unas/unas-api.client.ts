@@ -1,5 +1,9 @@
 import { BadGatewayException, Injectable } from "@nestjs/common";
-import type { UnasApiCategory, UnasApiProduct } from "@acropora/types";
+import type {
+  UnasApiCategory,
+  UnasApiOrder,
+  UnasApiProduct,
+} from "@acropora/types";
 import { SaxesParser } from "saxes";
 
 const DEFAULT_API_BASE_URL = "https://api.unas.eu/shop";
@@ -29,6 +33,15 @@ export interface UnasCategoryPageRequest {
   limitStart: number;
   limitNum: number;
   contentType?: "minimal" | "normal" | "full";
+}
+
+export interface UnasGetOrderRequest {
+  /** Only orders whose last status/content change is at or after this unix timestamp. Omit for a first, full pull. */
+  timeModStart?: number;
+  timeModEnd?: number;
+  limitStart: number;
+  /** Max 500 per UNAS's own documented cap. */
+  limitNum: number;
 }
 
 export interface UnasSetStockRequest {
@@ -242,6 +255,27 @@ function unasDate(valueToParse: string | undefined): string | null {
   return `${match[1]}-${match[2]}-${match[3]}T00:00:00.000Z`;
 }
 
+// UNAS's order data-structure docs don't specify a concrete format for the
+// response's Date/DateMod fields (unlike the getOrder request filters, whose
+// formats are documented explicitly). Rather than throwing and failing an
+// entire sync batch over one unrecognized order timestamp, this parses
+// best-effort and returns null on anything it can't confidently read - the
+// order-sync's own windowEnd (not this field) is what advances the cursor,
+// so a null orderedAt only affects display, never correctness.
+function looseOrderDateTime(valueToParse: string | undefined): string | null {
+  if (!valueToParse) return null;
+  const trimmed = valueToParse.trim();
+  const dotted =
+    /^(\d{4})\.(\d{2})\.(\d{2})(?:[ T](\d{2}):(\d{2}):(\d{2}))?$/.exec(trimmed);
+  const iso = dotted
+    ? `${dotted[1]}-${dotted[2]}-${dotted[3]}T${dotted[4] ?? "00"}:${
+        dotted[5] ?? "00"
+      }:${dotted[6] ?? "00"}.000Z`
+    : trimmed;
+  const parsed = new Date(iso);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
 function baseStatus(product: XmlNode): string | null {
   const statuses = child(product, "Statuses");
   if (!statuses) return null;
@@ -417,6 +451,69 @@ export function buildUnasCategoryPageXml(request: UnasCategoryPageRequest) {
   });
 }
 
+export function buildUnasGetOrderXml(request: UnasGetOrderRequest) {
+  if (!Number.isSafeInteger(request.limitStart) || request.limitStart < 0)
+    throw new UnasApiError("REQUEST_INVALID");
+  if (
+    !Number.isSafeInteger(request.limitNum) ||
+    request.limitNum < 1 ||
+    request.limitNum > 500
+  )
+    throw new UnasApiError("REQUEST_INVALID");
+  return paramsXml({
+    TimeModStart: request.timeModStart,
+    TimeModEnd: request.timeModEnd,
+    LimitStart: request.limitStart === 0 ? undefined : request.limitStart,
+    LimitNum: request.limitNum,
+  });
+}
+
+// NOTE: the exact response root/item element names ("Orders"/"Order") follow
+// every other UNAS list endpoint's plural-root/singular-item convention
+// (Products/Product, Categories/Category) - the megrendelesek-getOrder-valasz
+// page wasn't fetchable at implementation time to confirm this directly, so
+// this should be double-checked against a real getOrder response the first
+// time this runs against live UNAS data.
+export function parseUnasOrderResponse(xml: string): UnasApiOrder[] {
+  const root = parseXml(xml);
+  if (root.name === "Error") throw new UnasApiError("API_REJECTED");
+  if (root.name !== "Orders") throw new UnasApiError("RESPONSE_SHAPE_INVALID");
+
+  return children(root, "Order").map((order) => {
+    const key = value(order, "Key");
+    if (!key) throw new UnasApiError("FIELD_FORMAT_INVALID");
+    const customer = child(order, "Customer");
+    const contact = customer ? child(customer, "Contact") : undefined;
+    const itemsNode = child(order, "Items");
+    const items = children(itemsNode, "Item").map((item) => {
+      const sku = value(item, "Sku");
+      return {
+        id: value(item, "Id") ?? "",
+        sku: sku && sku.trim() ? sku.trim() : null,
+        name: value(item, "Name") ?? "",
+        unit: value(item, "Unit") ?? null,
+        quantity: decimal(value(item, "Quantity")) ?? "0",
+        priceNet: decimal(value(item, "PriceNet")),
+        priceGross: decimal(value(item, "PriceGross")),
+        vatRate: vatRate(value(item, "Vat")),
+      };
+    });
+    return {
+      key,
+      internalKey: value(order, "InternalKey") ?? null,
+      status: value(order, "Status") ?? null,
+      statusType: value(order, "StatusType") ?? null,
+      statusId: value(order, "StatusID") ?? null,
+      orderedAt: looseOrderDateTime(value(order, "Date")),
+      customerName: contact ? (value(contact, "Name") ?? null) : null,
+      customerEmail: customer ? (value(customer, "Email") ?? null) : null,
+      currency: value(order, "Currency") ?? null,
+      sumPriceGross: decimal(value(order, "SumPriceGross")),
+      items,
+    };
+  });
+}
+
 export function buildUnasSetStockXml(request: UnasSetStockRequest) {
   if (!request.sku.trim()) throw new UnasApiError("REQUEST_INVALID");
   const stockFields = [
@@ -437,11 +534,11 @@ export function buildUnasSetStockXml(request: UnasSetStockRequest) {
 export function parseUnasSetStockResponse(xml: string): UnasSetStockResult {
   const root = parseXml(xml);
   if (root.name === "Error") throw new UnasApiError("API_REJECTED");
-  if (root.name !== "Products") throw new UnasApiError("RESPONSE_SHAPE_INVALID");
+  if (root.name !== "Products")
+    throw new UnasApiError("RESPONSE_SHAPE_INVALID");
   const product = child(root, "Product");
   if (!product) throw new UnasApiError("RESPONSE_SHAPE_INVALID");
-  if (value(product, "Status") !== "ok")
-    throw new UnasApiError("API_REJECTED");
+  if (value(product, "Status") !== "ok") throw new UnasApiError("API_REJECTED");
   return {
     externalId: value(product, "Id") ?? null,
     sku: value(product, "Sku") ?? "",
@@ -526,6 +623,18 @@ export class UnasApiClient {
       token,
     );
     return parseUnasCategoryResponse(response);
+  }
+
+  async getOrderPage(
+    token: string,
+    request: UnasGetOrderRequest,
+  ): Promise<UnasApiOrder[]> {
+    const response = await this.post(
+      "getOrder",
+      buildUnasGetOrderXml(request),
+      token,
+    );
+    return parseUnasOrderResponse(response);
   }
 
   async setStock(

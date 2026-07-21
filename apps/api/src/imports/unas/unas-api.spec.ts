@@ -3,9 +3,11 @@ import { describe, it } from "node:test";
 
 import {
   buildUnasCategoryPageXml,
+  buildUnasGetOrderXml,
   buildUnasProductPageXml,
   buildUnasSetStockXml,
   parseUnasCategoryResponse,
+  parseUnasOrderResponse,
   parseUnasProductResponse,
   parseUnasSetStockResponse,
   unasRetryDelayMs,
@@ -173,6 +175,84 @@ describe("UNAS API XML contract", () => {
       () => parseUnasSetStockResponse("<Error>Invalid Sku</Error>"),
       (error) => error instanceof UnasApiError && error.code === "API_REJECTED",
     );
+  });
+});
+
+describe("UNAS getOrder contract", () => {
+  it("builds a TimeModStart-bounded page request", () => {
+    const xml = buildUnasGetOrderXml({
+      timeModStart: 100,
+      limitStart: 0,
+      limitNum: 500,
+    });
+    assert.match(xml, /<TimeModStart>100<\/TimeModStart>/);
+    assert.match(xml, /<LimitNum>500<\/LimitNum>/);
+    assert.doesNotMatch(xml, /<LimitStart>/);
+
+    const secondPage = buildUnasGetOrderXml({ limitStart: 500, limitNum: 500 });
+    assert.match(secondPage, /<LimitStart>500<\/LimitStart>/);
+    assert.doesNotMatch(secondPage, /<TimeModStart>/);
+  });
+
+  it("rejects an out-of-range page size", () => {
+    assert.throws(
+      () => buildUnasGetOrderXml({ limitStart: 0, limitNum: 501 }),
+      (error) =>
+        error instanceof UnasApiError && error.code === "REQUEST_INVALID",
+    );
+  });
+
+  const orderResponse = `<?xml version="1.0" encoding="UTF-8"?>
+<Orders><Order>
+<Key>UN-1001</Key><InternalKey>internal-1</InternalKey>
+<Date>2026.07.20 14:05:00</Date>
+<Status>Feldolgozás alatt</Status><StatusType>open_normal</StatusType><StatusID>3</StatusID>
+<Customer><Email>vevo@example.com</Email><Contact><Name>Kovács Anna</Name></Contact></Customer>
+<Currency>HUF</Currency><SumPriceGross>12700</SumPriceGross>
+<Items>
+<Item><Id>1</Id><Sku>pump_1</Sku><Name>Reef Pump</Name><Unit>db</Unit><Quantity>2</Quantity><PriceNet>5000</PriceNet><PriceGross>6350</PriceGross><Vat>27%</Vat></Item>
+<Item><Id>shipping-cost</Id><Name>Szállítási költség</Name><Quantity>1</Quantity><PriceGross>0</PriceGross></Item>
+</Items>
+</Order></Orders>`;
+
+  it("parses order identity, status, customer and line items", () => {
+    const order = parseUnasOrderResponse(orderResponse)[0]!;
+    assert.equal(order.key, "UN-1001");
+    assert.equal(order.internalKey, "internal-1");
+    assert.equal(order.statusType, "open_normal");
+    assert.equal(order.statusId, "3");
+    assert.equal(order.orderedAt, "2026-07-20T14:05:00.000Z");
+    assert.equal(order.customerName, "Kovács Anna");
+    assert.equal(order.customerEmail, "vevo@example.com");
+    assert.equal(order.sumPriceGross, "12700");
+    assert.equal(order.items.length, 2);
+    assert.equal(order.items[0]?.sku, "pump_1");
+    assert.equal(order.items[0]?.quantity, "2");
+    assert.equal(order.items[0]?.vatRate, "27");
+    assert.equal(order.items[1]?.sku, null);
+    assert.equal(order.items[1]?.id, "shipping-cost");
+  });
+
+  it("rejects an order without a Key", () => {
+    assert.throws(
+      () =>
+        parseUnasOrderResponse(
+          "<Orders><Order><Status>open_normal</Status></Order></Orders>",
+        ),
+      (error) =>
+        error instanceof UnasApiError && error.code === "FIELD_FORMAT_INVALID",
+    );
+  });
+
+  it("rejects a top-level Error root from getOrder", () => {
+    assert.throws(
+      () => parseUnasOrderResponse("<Error>Invalid Key</Error>"),
+      (error) => error instanceof UnasApiError && error.code === "API_REJECTED",
+    );
+  });
+
+  it("returns an empty list when there are no orders", () => {
+    assert.deepEqual(parseUnasOrderResponse("<Orders></Orders>"), []);
   });
 });
 

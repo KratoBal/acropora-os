@@ -57,6 +57,36 @@ export interface UnasApiProduct {
   rawPayload: Record<string, unknown>;
 }
 
+export interface UnasApiOrderItem {
+  /** Special line ids (e.g. "shipping-cost", "discount-amount") have no SKU and aren't stock-relevant. */
+  id: string;
+  sku: string | null;
+  name: string;
+  unit: string | null;
+  quantity: string;
+  priceNet: string | null;
+  priceGross: string | null;
+  /** e.g. "27" (percent, "%" suffix already stripped). Null for non-stock lines without VAT. */
+  vatRate: string | null;
+}
+
+export interface UnasApiOrder {
+  /** UNAS's own order identifier, used for idempotency (ExternalReference.externalId). */
+  key: string;
+  internalKey: string | null;
+  status: string | null;
+  /** open_normal | open_prepare | close_ok | close_fault, when present. */
+  statusType: string | null;
+  statusId: string | null;
+  /** Best-effort parse of the Date field; null if the format couldn't be recognized. */
+  orderedAt: string | null;
+  customerName: string | null;
+  customerEmail: string | null;
+  currency: string | null;
+  sumPriceGross: string | null;
+  items: UnasApiOrderItem[];
+}
+
 export interface UnasApiCategory {
   externalId: string;
   name: string;

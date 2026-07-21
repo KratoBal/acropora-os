@@ -55,6 +55,12 @@ export const businessNavigation: AppNavigationItem[] = [
     permission: PERMISSIONS.INVENTORY_VIEW,
   },
   {
+    href: "/keszlet-egyeztetes",
+    label: "Készlet-egyeztetés",
+    icon: "box",
+    permission: PERMISSIONS.INVENTORY_VIEW,
+  },
+  {
     href: "/beszerzes",
     label: "Beszerzés",
     icon: "cart",
