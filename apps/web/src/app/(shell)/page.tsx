@@ -1,3 +1,5 @@
+"use client";
+
 import {
   Avatar,
   Badge,
@@ -9,6 +11,14 @@ import {
   PageHeader,
   StatCard,
 } from "@acropora/ui";
+
+import { useAuth } from "@/components/auth/auth-provider";
+
+function getGreeting(hour: number) {
+  if (hour < 10) return "Jó reggelt";
+  if (hour < 18) return "Jó napot";
+  return "Jó estét";
+}
 
 const tasks = [
   {
@@ -82,11 +92,15 @@ const inventoryAlerts = [
 ];
 
 export default function DashboardPage() {
+  const { session } = useAuth();
+  const firstName = session?.user.displayName.split(" ")[0];
+  const greeting = getGreeting(new Date().getHours());
+
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="2026. július 19., vasárnap"
-        title="Jó reggelt, Anna!"
+        title={firstName ? `${greeting}, ${firstName}!` : `${greeting}!`}
         description="Itt találod a vállalat mai legfontosabb történéseit és teendőit."
         actions={
           <Button variant="secondary">
