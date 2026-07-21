@@ -6,8 +6,15 @@ import { ProductDetailPage } from "./product-detail-page";
 
 const api = vi.hoisted(() => ({ detail: vi.fn(), updateExtension: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
+const navigation = vi.hoisted(() => ({
+  push: vi.fn(),
+  params: new URLSearchParams(),
+}));
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: navigation.push }),
+  useSearchParams: () => navigation.params,
+}));
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session, isLoading: false }),
 }));
@@ -95,6 +102,7 @@ const detail: ProductDetail = {
 describe("ProductDetailPage mirror ownership", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    navigation.params = new URLSearchParams();
     auth.session = {
       id: "session-owner",
       token: "token-owner",
@@ -150,5 +158,26 @@ describe("ProductDetailPage mirror ownership", () => {
       ),
     );
     await waitFor(() => expect(api.detail).toHaveBeenCalledTimes(2));
+  });
+
+  it("visszalépéskor megőrzi a lista szűrt URL-jét a returnTo paraméterből", async () => {
+    navigation.params = new URLSearchParams(
+      `returnTo=${encodeURIComponent("q=reef&page=3")}`,
+    );
+    render(<ProductDetailPage productId="product-1" />);
+    await screen.findByText("UNAS terméktükör");
+
+    fireEvent.click(screen.getByRole("button", { name: "Vissza a listához" }));
+
+    expect(navigation.push).toHaveBeenCalledWith("/products?q=reef&page=3");
+  });
+
+  it("returnTo paraméter nélkül az alap lista URL-re lép vissza", async () => {
+    render(<ProductDetailPage productId="product-1" />);
+    await screen.findByText("UNAS terméktükör");
+
+    fireEvent.click(screen.getByRole("button", { name: "Vissza a listához" }));
+
+    expect(navigation.push).toHaveBeenCalledWith("/products");
   });
 });
