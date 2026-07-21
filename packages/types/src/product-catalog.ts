@@ -82,6 +82,15 @@ export interface ProductListItem {
   primarySku: string | null;
   thumbnail: ProductImageSummary | null;
   unasListing: ProductChannelListingSummary | null;
+  /** UNAS-mirrored list gross price; null for purely local (non-webshop) products. */
+  grossPrice: string | null;
+  /** UNAS-mirrored sale gross price; null when there's no active discount. */
+  saleGrossPrice: string | null;
+  /** Summed StockItem.onHand across warehouses for the primary variant; null
+   *  means no StockItem row exists yet (never counted/sold), which is
+   *  distinct from a confirmed 0 in stock - see the stock-reconciliation
+   *  logic for the same distinction. */
+  stockOnHand: string | null;
 }
 
 export interface ProductListResponse {

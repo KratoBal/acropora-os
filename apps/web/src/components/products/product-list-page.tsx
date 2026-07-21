@@ -37,6 +37,16 @@ import {
   type ProductListUrlState,
 } from "@/lib/products/list-state";
 
+function formatHuf(value: string | null): string {
+  if (value === null) return "—";
+  return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} Ft`;
+}
+
+function formatStock(value: string | null): string {
+  if (value === null) return "—";
+  return Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 });
+}
+
 function ProductTableSkeleton() {
   return (
     <Card className="overflow-hidden" aria-label="Terméklista betöltése">
@@ -374,10 +384,10 @@ export function ProductListPage() {
                 <tr>
                   <th className="px-5 py-3">Termék</th>
                   <th className="px-4 py-3">SKU</th>
-                  <th className="px-4 py-3">Márka</th>
-                  <th className="px-4 py-3">Elsődleges kategória</th>
+                  <th className="px-4 py-3 text-right">Bruttó ár</th>
+                  <th className="px-4 py-3 text-right">Akciós ár</th>
+                  <th className="px-4 py-3 text-right">Készlet</th>
                   <th className="px-4 py-3">Állapot</th>
-                  <th className="px-4 py-3">Webshop</th>
                   <th className="px-5 py-3 text-right">Művelet</th>
                 </tr>
               </thead>
@@ -416,30 +426,21 @@ export function ProductListPage() {
                     <td className="px-4 py-3.5 font-mono text-xs text-slate-600">
                       {product.primarySku ?? "—"}
                     </td>
-                    <td className="px-4 py-3.5 text-sm text-slate-600">
-                      {product.brand?.name ?? "—"}
+                    <td className="px-4 py-3.5 text-right text-sm text-slate-600">
+                      {formatHuf(product.grossPrice)}
                     </td>
-                    <td className="max-w-64 px-4 py-3.5 text-sm text-slate-600">
-                      <span className="block truncate">
-                        {product.primaryCategory?.name ?? "—"}
-                      </span>
+                    <td className="px-4 py-3.5 text-right text-sm font-semibold text-rose-600">
+                      {product.saleGrossPrice
+                        ? formatHuf(product.saleGrossPrice)
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-3.5 text-right text-sm text-slate-600">
+                      {formatStock(product.stockOnHand)}
                     </td>
                     <td className="px-4 py-3.5">
                       <Badge variant={product.isActive ? "success" : "neutral"}>
                         {product.isActive ? "Aktív" : "Archivált"}
                       </Badge>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      {product.unasListing ? (
-                        <span className="text-xs text-slate-600">
-                          UNAS · kód:{" "}
-                          {product.unasListing.externalStatus ?? "—"}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-slate-400">
-                          Nincs listing
-                        </span>
-                      )}
                     </td>
                     <td className="px-5 py-3.5 text-right">
                       <Button

@@ -124,6 +124,18 @@ const product = {
         createdAt: new Date("2026-07-19T10:00:00.000Z"),
         updatedAt: new Date("2026-07-20T08:00:00.000Z"),
       },
+      stockItems: [
+        {
+          id: "stock-1",
+          variantId: "variant-1",
+          warehouseId: "wh-1",
+          locationId: null,
+          lotId: null,
+          onHand: new Prisma.Decimal("6"),
+          reserved: new Prisma.Decimal("0"),
+          updatedAt: new Date("2026-07-20T08:00:00.000Z"),
+        },
+      ],
     },
   ],
   unasSnapshot: {
@@ -299,6 +311,9 @@ describe("ProductRepository", () => {
     );
     assert.equal(result.items[0]?.thumbnail?.sortOrder, 1);
     assert.equal(result.items[0]?.unasListing?.externalStatus, "3");
+    assert.equal(result.items[0]?.grossPrice, "1270");
+    assert.equal(result.items[0]?.saleGrossPrice, null);
+    assert.equal(result.items[0]?.stockOnHand, "6");
   });
 
   it("returns category, raw channel status and images in detail order", async () => {
