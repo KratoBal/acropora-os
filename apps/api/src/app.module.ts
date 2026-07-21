@@ -8,10 +8,17 @@ import { BrandsModule } from "./brands/brands.module.js";
 import { AuthGuard } from "./auth/guards/auth.guard.js";
 import { PermissionGuard } from "./auth/guards/permission.guard.js";
 import { UnasImportModule } from "./imports/unas/unas-import.module.js";
+import { InventoryModule } from "./inventory/inventory.module.js";
 import { ProductModule } from "./products/product.module.js";
 
 @Module({
-  imports: [AuthModule, BrandsModule, ProductModule, UnasImportModule],
+  imports: [
+    AuthModule,
+    BrandsModule,
+    ProductModule,
+    UnasImportModule,
+    InventoryModule,
+  ],
   controllers: [AppController],
   providers: [
     AppService,

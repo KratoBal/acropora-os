@@ -61,6 +61,22 @@ enum StockMovementStatus {
   REVERSED
 }
 
+/// DRAFT: az Excel sablon kiment, számlálásra vár.
+/// UPLOADED: a leltározott mennyiségek visszatöltve, korrekcióra várnak.
+/// CORRECTED: a korrekció lefutott (StockItem frissült, UNAS push megtörtént).
+enum InventoryCountStatus {
+  DRAFT
+  UPLOADED
+  CORRECTED
+}
+
+/// Soronkénti UNAS setStock push kimenetele a korrekció során.
+enum InventoryCountLineSyncStatus {
+  PENDING
+  OK
+  FAILED
+}
+
 enum PurchaseOrderStatus {
   DRAFT
   APPROVED
@@ -206,6 +222,7 @@ model User {
   auditLogs              AuditLog[]
   domainEvents           DomainEvent[]
   stockMovements         StockMovement[]
+  startedInventoryCounts InventoryCount[]
   unasCredentialsUpdated UnasConnectionSetting[] @relation("UnasCredentialUpdatedBy")
 
   @@index([role, isActive])
@@ -273,15 +290,16 @@ model ProductVariant {
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
-  product          Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
-  barcodes         ProductBarcode[]
-  supplierProducts SupplierProduct[]
-  stockItems       StockItem[]
-  movementLines    StockMovementLine[]
-  salesOrderLines  SalesOrderLine[]
-  purchaseLines    PurchaseOrderLine[]
-  receiptLines     GoodsReceiptLine[]
-  extension        ProductExtension?
+  product             Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
+  barcodes            ProductBarcode[]
+  supplierProducts    SupplierProduct[]
+  stockItems          StockItem[]
+  movementLines       StockMovementLine[]
+  salesOrderLines     SalesOrderLine[]
+  purchaseLines       PurchaseOrderLine[]
+  receiptLines        GoodsReceiptLine[]
+  extension           ProductExtension?
+  inventoryCountLines InventoryCountLine[]
 
   @@index([productId, isActive])
 }
@@ -539,6 +557,7 @@ model Warehouse {
   purchaseOrders       PurchaseOrder[]
   goodsReceipts        GoodsReceipt[]
   defaultForExtensions ProductExtension[]
+  inventoryCounts      InventoryCount[]
 }
 
 model WarehouseLocation {
@@ -697,6 +716,43 @@ model StockMovementLine {
 
   @@index([variantId])
   @@index([movementId])
+}
+
+/// Egy leltározási folyamat: Excel-exporttal induló, felhasználó által
+/// kitöltött, majd visszatöltött darabszám-számlálás, amiből egy StockMovement
+/// (ADJUSTMENT) korrekció és UNAS setStock push készül.
+model InventoryCount {
+  id          String               @id @default(cuid())
+  countNumber String               @unique
+  warehouseId String
+  status      InventoryCountStatus @default(DRAFT)
+  startedById String?
+  uploadedAt  DateTime?
+  correctedAt DateTime?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  warehouse Warehouse            @relation(fields: [warehouseId], references: [id])
+  startedBy User?                @relation(fields: [startedById], references: [id], onDelete: SetNull)
+  lines     InventoryCountLine[]
+
+  @@index([status, createdAt])
+}
+
+model InventoryCountLine {
+  id               String                        @id @default(cuid())
+  inventoryCountId String
+  variantId        String
+  expectedQty      Decimal                        @db.Decimal(19, 6)
+  countedQty       Decimal?                       @db.Decimal(19, 6)
+  syncStatus       InventoryCountLineSyncStatus   @default(PENDING)
+  syncError        String?
+
+  inventoryCount InventoryCount @relation(fields: [inventoryCountId], references: [id], onDelete: Cascade)
+  variant        ProductVariant @relation(fields: [variantId], references: [id])
+
+  @@unique([inventoryCountId, variantId])
+  @@index([inventoryCountId])
 }
 
 model Customer {

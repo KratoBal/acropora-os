@@ -4,8 +4,10 @@ import { describe, it } from "node:test";
 import {
   buildUnasCategoryPageXml,
   buildUnasProductPageXml,
+  buildUnasSetStockXml,
   parseUnasCategoryResponse,
   parseUnasProductResponse,
+  parseUnasSetStockResponse,
   unasRetryDelayMs,
   UnasApiError,
   UnasApiClient,
@@ -129,6 +131,48 @@ describe("UNAS API XML contract", () => {
       "<Categories><Category><State>live</State><Id>11</Id><Name>Termékek 2</Name></Category></Categories>",
     )[0]!;
     assert.equal(noParentNode.parentExternalId, null);
+  });
+
+  it("builds a modify-action setStock request with an absolute quantity", () => {
+    const xml = buildUnasSetStockXml({ sku: "product_1", qty: "10" });
+    assert.match(xml, /<Action>modify<\/Action>/);
+    assert.match(xml, /<Sku>product_1<\/Sku>/);
+    assert.match(xml, /<Qty>10<\/Qty>/);
+    assert.doesNotMatch(xml, /<Comment>/);
+  });
+
+  it("includes an optional comment in the setStock request", () => {
+    const xml = buildUnasSetStockXml({
+      sku: "product_1",
+      qty: "10",
+      comment: "Leltár korrekció",
+    });
+    assert.match(xml, /<Comment><!\[CDATA\[Leltár korrekció\]\]><\/Comment>/);
+  });
+
+  it("parses a successful setStock response", () => {
+    const result = parseUnasSetStockResponse(
+      "<Products><Product><Id>159850145</Id><Sku>product_1</Sku><Action>modify</Action><Status>ok</Status></Product></Products>",
+    );
+    assert.equal(result.externalId, "159850145");
+    assert.equal(result.sku, "product_1");
+  });
+
+  it("rejects a setStock response without Status ok", () => {
+    assert.throws(
+      () =>
+        parseUnasSetStockResponse(
+          "<Products><Product><Id>159850145</Id><Sku>product_1</Sku><Status>error</Status></Product></Products>",
+        ),
+      (error) => error instanceof UnasApiError && error.code === "API_REJECTED",
+    );
+  });
+
+  it("rejects a top-level Error root from setStock", () => {
+    assert.throws(
+      () => parseUnasSetStockResponse("<Error>Invalid Sku</Error>"),
+      (error) => error instanceof UnasApiError && error.code === "API_REJECTED",
+    );
   });
 });
 
