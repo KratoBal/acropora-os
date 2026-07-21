@@ -267,6 +267,42 @@ describe("ProductListPage", () => {
     );
   });
 
+  it("termékre kattintva megőrzi a szűrt lista URL-jét returnTo paraméterként", async () => {
+    navigation.params = new URLSearchParams("q=reef&page=3");
+    api.list.mockResolvedValue(populatedResponse);
+
+    render(createElement(ProductListPage));
+
+    fireEvent.click(await screen.findByText("Red Sea ReefMat 500"));
+
+    expect(navigation.push).toHaveBeenCalledWith(
+      `/products/product-1?returnTo=${encodeURIComponent("q=reef&page=3")}`,
+    );
+  });
+
+  it("a Részletek gomb is átadja a returnTo paramétert és nem lapoz újra a sorra", async () => {
+    navigation.params = new URLSearchParams("categoryId=category-1");
+    api.list.mockResolvedValue(populatedResponse);
+
+    render(createElement(ProductListPage));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Részletek" }));
+
+    expect(navigation.push).toHaveBeenCalledWith(
+      `/products/product-1?returnTo=${encodeURIComponent("categoryId=category-1")}`,
+    );
+  });
+
+  it("szűrők nélkül nem ad hozzá returnTo paramétert", async () => {
+    api.list.mockResolvedValue(populatedResponse);
+
+    render(createElement(ProductListPage));
+
+    fireEvent.click(await screen.findByText("Red Sea ReefMat 500"));
+
+    expect(navigation.push).toHaveBeenCalledWith("/products/product-1");
+  });
+
   it("products.view jogosultság nélkül megtagadja a hozzáférést", () => {
     auth.session = null;
 

@@ -200,6 +200,10 @@ export function ProductListPage() {
     setSearch("");
     replaceState(DEFAULT_PRODUCT_LIST_STATE);
   };
+  const detailHref = (productId: string) =>
+    queryKey
+      ? `/products/${productId}?returnTo=${encodeURIComponent(queryKey)}`
+      : `/products/${productId}`;
 
   return (
     <div className="space-y-6">
@@ -383,11 +387,11 @@ export function ProductListPage() {
                     key={product.id}
                     tabIndex={0}
                     className="cursor-pointer transition hover:bg-slate-50 focus:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-500"
-                    onClick={() => router.push(`/products/${product.id}`)}
+                    onClick={() => router.push(detailHref(product.id))}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
-                        router.push(`/products/${product.id}`);
+                        router.push(detailHref(product.id));
                       }
                     }}
                   >
@@ -443,7 +447,7 @@ export function ProductListPage() {
                         size="sm"
                         onClick={(event) => {
                           event.stopPropagation();
-                          router.push(`/products/${product.id}`);
+                          router.push(detailHref(product.id));
                         }}
                       >
                         Részletek

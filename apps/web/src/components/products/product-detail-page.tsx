@@ -18,7 +18,7 @@ import {
   type ProductExtensionDetail,
   type ProductExtensionUpdateInput,
 } from "@acropora/types";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -316,6 +316,9 @@ function ProductExtensionEditor({
 export function ProductDetailPage({ productId }: { productId: string }) {
   const { session } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = searchParams.get("returnTo");
+  const listHref = returnTo ? `/products?${returnTo}` : "/products";
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [requestVersion, setRequestVersion] = useState(0);
@@ -394,7 +397,7 @@ export function ProductDetailPage({ productId }: { productId: string }) {
         title={product.name}
         description={product.description ?? "Ehhez a termékhez nincs leírás."}
         actions={
-          <Button variant="secondary" onClick={() => router.push("/products")}>
+          <Button variant="secondary" onClick={() => router.push(listHref)}>
             Vissza a listához
           </Button>
         }
