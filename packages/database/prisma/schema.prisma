@@ -77,6 +77,20 @@ enum InventoryCountLineSyncStatus {
   FAILED
 }
 
+/// A pénztári (POS) eladás kiegyenlítésének módja.
+enum PosPaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+}
+
+/// Soronkénti UNAS setStock push kimenetele egy POS eladás után.
+enum SalesOrderLineSyncStatus {
+  PENDING
+  OK
+  FAILED
+}
+
 enum PurchaseOrderStatus {
   DRAFT
   APPROVED
@@ -223,6 +237,7 @@ model User {
   domainEvents           DomainEvent[]
   stockMovements         StockMovement[]
   startedInventoryCounts InventoryCount[]
+  posSales               SalesOrder[]
   unasCredentialsUpdated UnasConnectionSetting[] @relation("UnasCredentialUpdatedBy")
 
   @@index([role, isActive])
@@ -558,6 +573,7 @@ model Warehouse {
   goodsReceipts        GoodsReceipt[]
   defaultForExtensions ProductExtension[]
   inventoryCounts      InventoryCount[]
+  salesOrders          SalesOrder[]
 }
 
 model WarehouseLocation {
@@ -799,40 +815,56 @@ model CustomerAddress {
 }
 
 model SalesOrder {
-  id          String           @id @default(cuid())
-  orderNumber String           @unique
-  customerId  String?
-  channel     SalesChannel
-  status      SalesOrderStatus @default(DRAFT)
-  currency    String           @default("HUF") @db.VarChar(3)
-  totalNet    Decimal          @default(0) @db.Decimal(19, 4)
-  totalTax    Decimal          @default(0) @db.Decimal(19, 4)
-  totalGross  Decimal          @default(0) @db.Decimal(19, 4)
-  orderedAt   DateTime?
-  confirmedAt DateTime?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id               String            @id @default(cuid())
+  orderNumber      String            @unique
+  customerId       String?
+  channel          SalesChannel
+  status           SalesOrderStatus  @default(DRAFT)
+  currency         String            @default("HUF") @db.VarChar(3)
+  totalNet         Decimal           @default(0) @db.Decimal(19, 4)
+  totalTax         Decimal           @default(0) @db.Decimal(19, 4)
+  totalGross       Decimal           @default(0) @db.Decimal(19, 4)
+  /// POS-only ma (webshop rendeléseknél NULL): melyik raktárból ment ki az áru.
+  warehouseId      String?
+  /// A pénztárt kezelő felhasználó (POS eladásoknál).
+  soldById         String?
+  /// A kiegyenlítés módja (jelenleg csak POS eladásoknál kötelező).
+  paymentMethod    PosPaymentMethod?
+  /// Előkészítve a jövőbeli számlázz.hu integrációhoz; ma még nem használt.
+  invoiceRequested Boolean           @default(false)
+  orderedAt        DateTime?
+  confirmedAt      DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
-  customer Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  lines    SalesOrderLine[]
+  customer  Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  warehouse Warehouse?       @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  soldBy    User?            @relation(fields: [soldById], references: [id], onDelete: SetNull)
+  lines     SalesOrderLine[]
 
   @@index([status, createdAt])
   @@index([customerId, createdAt])
+  @@index([channel, createdAt])
 }
 
 model SalesOrderLine {
-  id          String          @id @default(cuid())
+  id          String                   @id @default(cuid())
   orderId     String
   variantId   String?
   sku         String
   description String
-  quantity    Decimal         @db.Decimal(19, 6)
+  quantity    Decimal                  @db.Decimal(19, 6)
   unit        String
-  unitNet     Decimal         @db.Decimal(19, 4)
-  taxRate     Decimal         @db.Decimal(5, 2)
-  lineGross   Decimal         @db.Decimal(19, 4)
-  order       SalesOrder      @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  variant     ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  unitNet     Decimal                  @db.Decimal(19, 4)
+  taxRate     Decimal                  @db.Decimal(5, 2)
+  lineGross   Decimal                  @db.Decimal(19, 4)
+  /// UNAS setStock push kimenetele erre a tételre (POS eladásoknál).
+  syncStatus  SalesOrderLineSyncStatus @default(PENDING)
+  syncError   String?
+
+  order   SalesOrder      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
 
   @@index([orderId])
   @@index([variantId])

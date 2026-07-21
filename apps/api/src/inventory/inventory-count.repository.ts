@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import { Inject, Injectable, Optional } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 import type {
@@ -7,6 +5,15 @@ import type {
   InventoryCountListResponse,
 } from "@acropora/types";
 
+import { generateCode } from "../common/code-generator.util.js";
+import {
+  setStockItemQuantity,
+  type StockItemWriterDatabase,
+} from "../common/stock-item-writer.js";
+import {
+  ensureMainWarehouse,
+  type WarehouseLookupDatabase,
+} from "../common/warehouse.util.js";
 import type { InventoryCountListQueryDto } from "./dto/inventory-count-list-query.dto.js";
 import {
   toInventoryCountDetail,
@@ -55,17 +62,7 @@ interface InventoryCountApplyTransaction {
     >;
     update(args: unknown): Promise<unknown>;
   };
-  stockItem: {
-    // Not upsert(): the compound unique key includes the nullable
-    // locationId/lotId columns, and Prisma's generated compound-unique
-    // "where" input rejects null for those (Postgres doesn't treat NULLs
-    // as equal, so it can't guarantee the lookup is actually unique).
-    // findFirst + explicit update/create works because ordinary field
-    // filters do support null.
-    findFirst(args: unknown): Promise<{ id: string } | null>;
-    update(args: unknown): Promise<unknown>;
-    create(args: unknown): Promise<unknown>;
-  };
+  stockItem: StockItemWriterDatabase["stockItem"];
   stockMovement: {
     create(args: unknown): Promise<{ id: string; movementNumber: string }>;
   };
@@ -78,10 +75,7 @@ interface InventoryCountApplyTransaction {
 }
 
 export interface InventoryCountDatabase {
-  warehouse: {
-    findFirst(args: unknown): Promise<{ id: string; name: string } | null>;
-    create(args: unknown): Promise<{ id: string; name: string }>;
-  };
+  warehouse: WarehouseLookupDatabase["warehouse"];
   productVariant: {
     findMany(args: unknown): Promise<
       Array<{
@@ -118,16 +112,6 @@ export interface InventoryCountDatabase {
 
 export const INVENTORY_COUNT_DATABASE = Symbol("INVENTORY_COUNT_DATABASE");
 
-function generateCode(prefix: string): string {
-  const now = new Date();
-  const stamp = now
-    .toISOString()
-    .replace(/[-:]/g, "")
-    .replace("T", "-")
-    .slice(0, 15);
-  return `${prefix}-${stamp}-${randomUUID().slice(0, 4).toUpperCase()}`;
-}
-
 @Injectable()
 export class InventoryCountRepository extends Repository {
   private readonly countDatabase: InventoryCountDatabase;
@@ -140,18 +124,6 @@ export class InventoryCountRepository extends Repository {
     super(prisma);
     this.countDatabase =
       countDatabase ?? (prisma as unknown as InventoryCountDatabase);
-  }
-
-  private async ensureMainWarehouse(): Promise<{ id: string; name: string }> {
-    const existing = await this.countDatabase.warehouse.findFirst({
-      orderBy: { createdAt: "asc" },
-      select: { id: true, name: true },
-    });
-    if (existing) return existing;
-    return this.countDatabase.warehouse.create({
-      data: { code: "FO", name: "Fő raktár" },
-      select: { id: true, name: true },
-    });
   }
 
   async list(
@@ -191,7 +163,7 @@ export class InventoryCountRepository extends Repository {
   }
 
   async create(actorUserId: string): Promise<InventoryCountDetail> {
-    const warehouse = await this.ensureMainWarehouse();
+    const warehouse = await ensureMainWarehouse(this.countDatabase);
     const variants = await this.countDatabase.productVariant.findMany({
       where: { isActive: true, product: { isActive: true } },
       select: {
@@ -357,29 +329,11 @@ export class InventoryCountRepository extends Repository {
                 unit: line.variant.unit,
               },
             });
-            const existingStockItem = await transaction.stockItem.findFirst({
-              where: {
-                variantId: line.variantId,
-                warehouseId,
-                locationId: null,
-                lotId: null,
-              },
-              select: { id: true },
+            await setStockItemQuantity(transaction, {
+              variantId: line.variantId,
+              warehouseId,
+              onHand: line.countedQty!,
             });
-            if (existingStockItem) {
-              await transaction.stockItem.update({
-                where: { id: existingStockItem.id },
-                data: { onHand: line.countedQty! },
-              });
-            } else {
-              await transaction.stockItem.create({
-                data: {
-                  variantId: line.variantId,
-                  warehouseId,
-                  onHand: line.countedQty!,
-                },
-              });
-            }
           }
 
           const pushResult = pushResults.get(line.id);
