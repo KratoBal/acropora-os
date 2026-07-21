@@ -12,6 +12,7 @@ import { InventoryModule } from "./inventory/inventory.module.js";
 import { UnasOrderSyncModule } from "./orders/unas-order-sync/unas-order-sync.module.js";
 import { PosModule } from "./pos/pos.module.js";
 import { ProductModule } from "./products/product.module.js";
+import { UsersModule } from "./users/users.module.js";
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { ProductModule } from "./products/product.module.js";
     InventoryModule,
     PosModule,
     UnasOrderSyncModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [

@@ -112,6 +112,12 @@ export const settingsNavigation: AppNavigationItem[] = [
     permission: PERMISSIONS.PRODUCTS_VIEW,
   },
   {
+    href: "/admin/users",
+    label: "Felhasználók",
+    icon: "shield",
+    permission: PERMISSIONS.USERS_MANAGE,
+  },
+  {
     href: "/beallitasok",
     label: "Beállítások",
     icon: "settings",

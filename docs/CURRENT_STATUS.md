@@ -82,6 +82,22 @@ marad (lásd [ADR-014](../adr/0014-unas-connection-settings.md) és
 Nincs kijelölve következő munkacsomag – M2.1 és M2.2 lezárva, PR #4 és #5
 mainbe merge-elve.
 
+Felhasználókezelés (admin webes UI, `/admin/users`, `users.manage`
+jogosultsághoz kötve): a `User` modell vezetéknév/keresztnév és hash-elt
+jelszó mezőkkel bővült (`firstName`, `lastName`, `passwordHash`,
+`passwordUpdatedAt`); admin CRUD API (`GET/POST/PATCH /users`,
+`POST /users/:id/password`, `/activate`, `/deactivate`). A jelszó jelenleg
+kizárólag adatmodell és admin-kezelt mező — a bejelentkezés egyelőre marad a
+dokumentált development mock login módban (lásd
+[AUTHENTICATION.md](./AUTHENTICATION.md)), valódi jelszavas login külön
+munkacsomag. A jogosultság továbbra is a meglévő role-alapú
+`ROLE_PERMISSIONS` mátrixon keresztül működik (lásd
+[AUTHORIZATION.md](./AUTHORIZATION.md)); az admin felület role-választóval
+és az adott role menüpont-hozzáféréseinek megjelenítésével dolgozik, nem
+felhasználónkénti egyedi jogosultság-felülbírálással. Migráció:
+`20260721200000_add_user_profile_and_password`. Helyi futtatás előtt
+szükséges: `pnpm prisma:generate` és `pnpm prisma:migrate`.
+
 ## Relevant commands
 
 ```bash

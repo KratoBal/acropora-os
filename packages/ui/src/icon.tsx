@@ -20,6 +20,7 @@ export type IconName =
   | "search"
   | "service"
   | "settings"
+  | "shield"
   | "store"
   | "users"
   | "warehouse";
@@ -137,6 +138,12 @@ export function Icon({ className, name, size = 18, ...props }: IconProps) {
       {name === "bell" && (
         <>
           <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />
+        </>
+      )}
+      {name === "shield" && (
+        <>
+          <path d="M12 3 4 6.5V11c0 5 3.4 8.7 8 10 4.6-1.3 8-5 8-10V6.5L12 3Z" />
+          <path d="m9 12 2 2 4-4.5" />
         </>
       )}
       {name === "chevron-down" && <path d="m7 9 5 5 5-5" />}
