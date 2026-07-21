@@ -41,6 +41,13 @@ enum UnasProductSyncRunStatus {
   FAILED
 }
 
+enum UnasOrderSyncRunStatus {
+  PENDING
+  RUNNING
+  APPLIED
+  FAILED
+}
+
 enum StockMovementType {
   PURCHASE_RECEIPT
   SALE
@@ -824,7 +831,7 @@ model SalesOrder {
   totalNet         Decimal           @default(0) @db.Decimal(19, 4)
   totalTax         Decimal           @default(0) @db.Decimal(19, 4)
   totalGross       Decimal           @default(0) @db.Decimal(19, 4)
-  /// POS-only ma (webshop rendeléseknél NULL): melyik raktárból ment ki az áru.
+  /// Melyik raktárból ment/megy ki az áru (POS és UNAS webshop rendeléseknél is kitöltött).
   warehouseId      String?
   /// A pénztárt kezelő felhasználó (POS eladásoknál).
   soldById         String?
@@ -832,6 +839,10 @@ model SalesOrder {
   paymentMethod    PosPaymentMethod?
   /// Előkészítve a jövőbeli számlázz.hu integrációhoz; ma még nem használt.
   invoiceRequested Boolean           @default(false)
+  /// Webshop (UNAS) rendeléseknél a vásárló neve; nincs még Customer modul,
+  /// ezért csak megjelenítésre tárolt sima szöveg, nem kapcsolt entitás.
+  buyerName        String?
+  buyerEmail       String?
   orderedAt        DateTime?
   confirmedAt      DateTime?
   completedAt      DateTime?
@@ -1129,6 +1140,31 @@ model UnasProductSyncRun {
 
   @@index([status, createdAt])
   @@index([kind, completedAt])
+}
+
+/// Egy webshop (UNAS) rendelés-szinkron futás: a getOrder TimeModStart
+/// kurzor alapján lekért, új vagy módosult rendelések feldolgozása.
+/// Nincs FULL/INCREMENTAL megkülönböztetés (a UnasProductSyncRun-nal
+/// ellentétben) - alacsony rendelésszám mellett minden futás ugyanazt az
+/// egy "ami a kurzor óta módosult" ablakot dolgozza fel.
+model UnasOrderSyncRun {
+  id                 String                 @id @default(cuid())
+  activeKey          String?                @unique
+  status             UnasOrderSyncRunStatus @default(PENDING)
+  windowStart        DateTime?
+  windowEnd          DateTime
+  startedAt          DateTime?
+  completedAt        DateTime?
+  ordersSeen         Int                    @default(0)
+  createdCount       Int                    @default(0)
+  updatedCount       Int                    @default(0)
+  reversedCount      Int                    @default(0)
+  stockMismatchCount Int                    @default(0)
+  errorCode          String?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  @@index([status, createdAt])
 }
 
 model AuditLog {

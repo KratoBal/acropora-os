@@ -138,11 +138,24 @@ export type {
 export type {
   CanonicalUnasProduct,
   UnasApiCategory,
+  UnasApiOrder,
+  UnasApiOrderItem,
   UnasApiProduct,
   UnasProductIdentitySnapshot,
   UnasProductSyncAction,
   UnasProductSyncDiff,
 } from "./integrations/unas-api.js";
+export type {
+  StockReconciliationMismatch,
+  StockReconciliationReport,
+  UnasOrderDetail,
+  UnasOrderLineDetail,
+  UnasOrderListItem,
+  UnasOrderListResponse,
+  UnasOrderSyncRun,
+  UnasOrderSyncRunStatus,
+  UnasOrderSyncSummary,
+} from "./integrations/unas-order-sync.js";
 export type {
   UnasProductSyncKind,
   UnasProductSyncRun,
