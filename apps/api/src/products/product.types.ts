@@ -110,6 +110,10 @@ export function toProductDetail(
             optimalStock: variant.extension.optimalStock?.toString() ?? null,
             reorderPoint: variant.extension.reorderPoint?.toString() ?? null,
             safetyStock: variant.extension.safetyStock?.toString() ?? null,
+            lastPurchaseNetPrice:
+              variant.extension.lastPurchaseNetPrice?.toString() ?? null,
+            lastPurchaseVatRate:
+              variant.extension.lastPurchaseVatRate?.toString() ?? null,
             stockTrackingEnabled: variant.extension.stockTrackingEnabled,
             purchasingDisabled: variant.extension.purchasingDisabled,
             phaseOut: variant.extension.phaseOut,

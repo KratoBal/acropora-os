@@ -114,6 +114,8 @@ const product = {
         optimalStock: new Prisma.Decimal("8"),
         reorderPoint: new Prisma.Decimal("3"),
         safetyStock: new Prisma.Decimal("1"),
+        lastPurchaseNetPrice: null,
+        lastPurchaseVatRate: null,
         stockTrackingEnabled: true,
         purchasingDisabled: false,
         phaseOut: false,
@@ -144,7 +146,7 @@ const product = {
     reportedStock: new Prisma.Decimal("7.5"),
     reportedStockSyncedAt: new Date("2026-07-20T10:00:00.000Z"),
   },
-} as ProductWithRelations;
+} as unknown as ProductWithRelations;
 
 function createDatabase() {
   const calls: Array<{ operation: string; args: unknown }> = [];

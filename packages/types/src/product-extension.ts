@@ -8,6 +8,8 @@ export interface ProductExtensionDetail {
   optimalStock: string | null;
   reorderPoint: string | null;
   safetyStock: string | null;
+  lastPurchaseNetPrice: string | null;
+  lastPurchaseVatRate: string | null;
   stockTrackingEnabled: boolean;
   purchasingDisabled: boolean;
   phaseOut: boolean;
@@ -22,6 +24,8 @@ export interface ProductExtensionUpdateInput {
   optimalStock?: string | null;
   reorderPoint?: string | null;
   safetyStock?: string | null;
+  lastPurchaseNetPrice?: string | null;
+  lastPurchaseVatRate?: string | null;
   stockTrackingEnabled?: boolean;
   purchasingDisabled?: boolean;
   phaseOut?: boolean;
