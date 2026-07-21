@@ -2,21 +2,29 @@ export const seedUsers = [
   {
     email: "owner@acropora.local",
     displayName: "Acropora Tulajdonos",
+    firstName: "Acropora",
+    lastName: "Tulajdonos",
     role: "OWNER" as const,
   },
   {
     email: "admin@acropora.local",
     displayName: "Acropora Admin",
+    firstName: "Acropora",
+    lastName: "Admin",
     role: "ADMIN" as const,
   },
   {
     email: "warehouse@acropora.local",
     displayName: "Raktári Felhasználó",
+    firstName: "Raktári",
+    lastName: "Felhasználó",
     role: "WAREHOUSE" as const,
   },
   {
     email: "service@acropora.local",
     displayName: "Szerviz Felhasználó",
+    firstName: "Szerviz",
+    lastName: "Felhasználó",
     role: "SERVICE" as const,
   },
 ] as const;

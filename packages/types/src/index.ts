@@ -199,3 +199,12 @@ export type {
   ProductType,
   ProductVariantSummary,
 } from "./product-catalog.js";
+export type {
+  CreateUserInput,
+  SetUserPasswordInput,
+  UpdateUserInput,
+  UserDetail,
+  UserListResponse,
+  UserStatusFilter,
+  UserSummary,
+} from "./user-management.js";
