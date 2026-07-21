@@ -62,7 +62,9 @@ interface InventoryCountApplyTransaction {
     >;
     update(args: unknown): Promise<unknown>;
   };
-  stockItem: StockItemWriterDatabase["stockItem"];
+  stockItem: StockItemWriterDatabase["stockItem"] & {
+    findMany(args: unknown): Promise<Array<{ variantId: string }>>;
+  };
   stockMovement: {
     create(args: unknown): Promise<{ id: string; movementNumber: string }>;
   };
@@ -300,6 +302,27 @@ export class InventoryCountRepository extends Repository {
           include: { variant: { select: { sku: true, unit: true } } },
         });
 
+        // A variant with no StockItem row yet had its expectedQty fall back
+        // to the UNAS reported-stock snapshot at leltár-creation time (see
+        // create() above), not a real local baseline. If the count happens
+        // to match that fallback, the "difference" below is zero even
+        // though this is the variant's very first real local count - so
+        // "no numeric difference" must not be confused with "already
+        // tracked locally", or the leltár would leave it permanently
+        // showing as untracked (—) even after being physically counted.
+        const existingStockItems = await transaction.stockItem.findMany({
+          where: {
+            variantId: { in: lines.map((line) => line.variantId) },
+            warehouseId,
+            locationId: null,
+            lotId: null,
+          },
+          select: { variantId: true },
+        });
+        const trackedVariantIds = new Set(
+          existingStockItems.map((item) => item.variantId),
+        );
+
         const movement = await transaction.stockMovement.create({
           data: {
             movementNumber,
@@ -319,6 +342,8 @@ export class InventoryCountRepository extends Repository {
             ? line.countedQty!.minus(line.expectedQty)
             : new Prisma.Decimal(0);
           const changed = hasCount && !difference.isZero();
+          const needsBaseline =
+            hasCount && !trackedVariantIds.has(line.variantId);
 
           if (changed) {
             await transaction.stockMovementLine.create({
@@ -329,6 +354,8 @@ export class InventoryCountRepository extends Repository {
                 unit: line.variant.unit,
               },
             });
+          }
+          if (changed || needsBaseline) {
             await setStockItemQuantity(transaction, {
               variantId: line.variantId,
               warehouseId,
