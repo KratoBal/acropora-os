@@ -45,6 +45,8 @@ interface ExtensionForm {
   optimalStock: string;
   reorderPoint: string;
   safetyStock: string;
+  lastPurchaseNetPrice: string;
+  lastPurchaseVatRate: string;
   stockTrackingEnabled: boolean;
   purchasingDisabled: boolean;
   phaseOut: boolean;
@@ -60,12 +62,30 @@ const extensionForm = (
   optimalStock: extension?.optimalStock ?? "",
   reorderPoint: extension?.reorderPoint ?? "",
   safetyStock: extension?.safetyStock ?? "",
+  lastPurchaseNetPrice: extension?.lastPurchaseNetPrice ?? "",
+  lastPurchaseVatRate: extension?.lastPurchaseVatRate ?? "",
   stockTrackingEnabled: extension?.stockTrackingEnabled ?? true,
   purchasingDisabled: extension?.purchasingDisabled ?? false,
   phaseOut: extension?.phaseOut ?? false,
   autoReorderEnabled: extension?.autoReorderEnabled ?? false,
   internalNote: extension?.internalNote ?? "",
 });
+
+const isHufCurrency = (currency: string | null | undefined) =>
+  (currency ?? "").trim().toUpperCase() === "HUF";
+
+// Display-only computed value (never persisted): gross = net * (1 + vat / 100).
+// The stored source of truth is always the net price and the VAT rate.
+const computeGrossPrice = (
+  netPrice: string | null | undefined,
+  vatRate: string | null | undefined,
+): string | null => {
+  if (!netPrice) return null;
+  const net = Number(netPrice.replace(",", "."));
+  if (!Number.isFinite(net)) return null;
+  const vat = Number((vatRate ?? "0").replace(",", "."));
+  return (net * (1 + (Number.isFinite(vat) ? vat : 0) / 100)).toFixed(2);
+};
 
 function ProductExtensionEditor({
   canManage,
@@ -91,6 +111,10 @@ function ProductExtensionEditor({
     setForm((current) => ({ ...current, [field]: nextValue }));
   const toggle = (field: keyof ExtensionForm, checked: boolean) =>
     setForm((current) => ({ ...current, [field]: checked }));
+  const formIsHuf = isHufCurrency(form.defaultPurchaseCurrency);
+  const formGrossPrice = formIsHuf
+    ? computeGrossPrice(form.lastPurchaseNetPrice, form.lastPurchaseVatRate)
+    : null;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -108,6 +132,7 @@ function ProductExtensionEditor({
       return normalized || null;
     };
 
+    const isHuf = isHufCurrency(currency);
     setSaving(true);
     setError(null);
     try {
@@ -117,6 +142,8 @@ function ProductExtensionEditor({
         optimalStock: decimal(form.optimalStock),
         reorderPoint: decimal(form.reorderPoint),
         safetyStock: decimal(form.safetyStock),
+        lastPurchaseNetPrice: decimal(form.lastPurchaseNetPrice),
+        lastPurchaseVatRate: isHuf ? decimal(form.lastPurchaseVatRate) : null,
         stockTrackingEnabled: form.stockTrackingEnabled,
         purchasingDisabled: form.purchasingDisabled,
         phaseOut: form.phaseOut,
@@ -193,6 +220,68 @@ function ProductExtensionEditor({
               </div>
             ))}
           </div>
+
+          <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-2 lg:grid-cols-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500 sm:col-span-2 lg:col-span-4">
+              Utolsó beszerzés
+            </p>
+            {formIsHuf ? (
+              <>
+                <div className="text-xs font-medium text-slate-600">
+                  <span>Nettó ár</span>
+                  <Input
+                    aria-label="Utolsó beszerzési nettó ár"
+                    className="mt-1"
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={form.lastPurchaseNetPrice}
+                    onChange={(event) =>
+                      textField("lastPurchaseNetPrice", event.target.value)
+                    }
+                  />
+                </div>
+                <div className="text-xs font-medium text-slate-600">
+                  <span>ÁFA (%)</span>
+                  <Input
+                    aria-label="Utolsó beszerzési ÁFA"
+                    className="mt-1"
+                    inputMode="decimal"
+                    placeholder="27"
+                    value={form.lastPurchaseVatRate}
+                    onChange={(event) =>
+                      textField("lastPurchaseVatRate", event.target.value)
+                    }
+                  />
+                </div>
+                <div className="text-xs font-medium text-slate-600">
+                  <span>Bruttó ár</span>
+                  <p className="mt-1 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                    {formGrossPrice ?? "—"} HUF
+                  </p>
+                </div>
+              </>
+            ) : (
+              <div className="text-xs font-medium text-slate-600">
+                <span>
+                  Utolsó beszerzési ár
+                  {form.defaultPurchaseCurrency
+                    ? ` (${form.defaultPurchaseCurrency})`
+                    : ""}
+                </span>
+                <Input
+                  aria-label="Utolsó beszerzési ár"
+                  className="mt-1"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={form.lastPurchaseNetPrice}
+                  onChange={(event) =>
+                    textField("lastPurchaseNetPrice", event.target.value)
+                  }
+                />
+              </div>
+            )}
+          </div>
+
           <div className="grid gap-2 text-xs text-slate-700 sm:grid-cols-2">
             {[
               ["stockTrackingEnabled", "Készletkövetés engedélyezve"],
@@ -241,73 +330,122 @@ function ProductExtensionEditor({
             </Button>
           </div>
         </form>
-      ) : extension ? (
-        <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-3">
-          <div>
-            <dt className="text-slate-400">Beszerzési deviza</dt>
-            <dd className="mt-1 text-slate-700">
-              {value(extension.defaultPurchaseCurrency)}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-slate-400">Minimumkészlet</dt>
-            <dd className="mt-1 text-slate-700">
-              {value(extension.minimumStock)}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-slate-400">Optimális készlet</dt>
-            <dd className="mt-1 text-slate-700">
-              {value(extension.optimalStock)}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-slate-400">Újrarendelési pont</dt>
-            <dd className="mt-1 text-slate-700">
-              {value(extension.reorderPoint)}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-slate-400">Biztonsági készlet</dt>
-            <dd className="mt-1 text-slate-700">
-              {value(extension.safetyStock)}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-slate-400">Készletkövetés</dt>
-            <dd className="mt-1 text-slate-700">
-              {flag(extension.stockTrackingEnabled)}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-slate-400">Automatikus újrarendelés</dt>
-            <dd className="mt-1 text-slate-700">
-              {flag(extension.autoReorderEnabled)}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-slate-400">Beszerzésből kizárva</dt>
-            <dd className="mt-1 text-slate-700">
-              {flag(extension.purchasingDisabled)}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-slate-400">Kifutó termék</dt>
-            <dd className="mt-1 text-slate-700">{flag(extension.phaseOut)}</dd>
-          </div>
-          {extension.internalNote ? (
-            <div className="sm:col-span-3">
-              <dt className="text-slate-400">Belső megjegyzés</dt>
-              <dd className="mt-1 whitespace-pre-wrap text-slate-700">
-                {extension.internalNote}
+      ) : (
+        <>
+          {!extension ? (
+            <p className="mt-2 text-xs text-slate-500">
+              Ehhez a változathoz még nincs mentett saját beállítás — az alábbi
+              mezők üresek.
+            </p>
+          ) : null}
+          <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-3">
+            <div>
+              <dt className="text-slate-400">Beszerzési deviza</dt>
+              <dd className="mt-1 text-slate-700">
+                {value(extension?.defaultPurchaseCurrency)}
               </dd>
             </div>
-          ) : null}
-        </dl>
-      ) : (
-        <p className="mt-2 text-xs text-slate-500">
-          Ehhez a változathoz még nincs saját működési beállítás.
-        </p>
+            {isHufCurrency(extension?.defaultPurchaseCurrency) ? (
+              <>
+                <div>
+                  <dt className="text-slate-400">Utolsó beszerzési nettó ár</dt>
+                  <dd className="mt-1 text-slate-700">
+                    {value(extension?.lastPurchaseNetPrice)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Utolsó beszerzési ÁFA</dt>
+                  <dd className="mt-1 text-slate-700">
+                    {extension?.lastPurchaseVatRate
+                      ? `${extension.lastPurchaseVatRate}%`
+                      : "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">
+                    Utolsó beszerzési bruttó ár
+                  </dt>
+                  <dd className="mt-1 text-slate-700">
+                    {value(
+                      computeGrossPrice(
+                        extension?.lastPurchaseNetPrice,
+                        extension?.lastPurchaseVatRate,
+                      ),
+                    )}
+                  </dd>
+                </div>
+              </>
+            ) : (
+              <div>
+                <dt className="text-slate-400">
+                  Utolsó beszerzési ár
+                  {extension?.defaultPurchaseCurrency
+                    ? ` (${extension.defaultPurchaseCurrency})`
+                    : ""}
+                </dt>
+                <dd className="mt-1 text-slate-700">
+                  {value(extension?.lastPurchaseNetPrice)}
+                </dd>
+              </div>
+            )}
+            <div>
+              <dt className="text-slate-400">Minimumkészlet</dt>
+              <dd className="mt-1 text-slate-700">
+                {value(extension?.minimumStock)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-slate-400">Optimális készlet</dt>
+              <dd className="mt-1 text-slate-700">
+                {value(extension?.optimalStock)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-slate-400">Újrarendelési pont</dt>
+              <dd className="mt-1 text-slate-700">
+                {value(extension?.reorderPoint)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-slate-400">Biztonsági készlet</dt>
+              <dd className="mt-1 text-slate-700">
+                {value(extension?.safetyStock)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-slate-400">Készletkövetés</dt>
+              <dd className="mt-1 text-slate-700">
+                {flag(extension?.stockTrackingEnabled)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-slate-400">Automatikus újrarendelés</dt>
+              <dd className="mt-1 text-slate-700">
+                {flag(extension?.autoReorderEnabled)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-slate-400">Beszerzésből kizárva</dt>
+              <dd className="mt-1 text-slate-700">
+                {flag(extension?.purchasingDisabled)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-slate-400">Kifutó termék</dt>
+              <dd className="mt-1 text-slate-700">
+                {flag(extension?.phaseOut)}
+              </dd>
+            </div>
+            {extension?.internalNote ? (
+              <div className="sm:col-span-3">
+                <dt className="text-slate-400">Belső megjegyzés</dt>
+                <dd className="mt-1 whitespace-pre-wrap text-slate-700">
+                  {extension.internalNote}
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+        </>
       )}
     </div>
   );
@@ -395,7 +533,6 @@ export function ProductDetailPage({ productId }: { productId: string }) {
       <PageHeader
         eyebrow={product.primarySku ?? "Nincs SKU"}
         title={product.name}
-        description={product.description ?? "Ehhez a termékhez nincs leírás."}
         actions={
           <Button variant="secondary" onClick={() => router.push(listHref)}>
             Vissza a listához
@@ -611,6 +748,25 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                 </p>
               )}
             </div>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <h2 className="text-sm font-semibold text-slate-900">
+                Termékleírás
+              </h2>
+            </CardHeader>
+            <CardContent>
+              {product.description ? (
+                <p className="whitespace-pre-wrap text-sm text-slate-700">
+                  {product.description}
+                </p>
+              ) : (
+                <p className="text-sm text-slate-500">
+                  Ehhez a termékhez nincs leírás.
+                </p>
+              )}
+            </CardContent>
           </Card>
 
           <Card>

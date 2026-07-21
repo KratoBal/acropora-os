@@ -615,6 +615,8 @@ model ProductExtension {
   optimalStock            Decimal? @db.Decimal(19, 6)
   reorderPoint            Decimal? @db.Decimal(19, 6)
   safetyStock             Decimal? @db.Decimal(19, 6)
+  lastPurchaseNetPrice    Decimal? @db.Decimal(19, 6)
+  lastPurchaseVatRate     Decimal? @db.Decimal(5, 2)
   stockTrackingEnabled    Boolean  @default(true)
   purchasingDisabled      Boolean  @default(false)
   phaseOut                Boolean  @default(false)

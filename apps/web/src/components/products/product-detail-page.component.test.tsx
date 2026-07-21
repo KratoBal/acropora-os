@@ -61,6 +61,8 @@ const detail: ProductDetail = {
         optimalStock: "8",
         reorderPoint: "3",
         safetyStock: "1",
+        lastPurchaseNetPrice: "10",
+        lastPurchaseVatRate: null,
         stockTrackingEnabled: true,
         purchasingDisabled: false,
         phaseOut: false,
@@ -97,6 +99,26 @@ const detail: ProductDetail = {
     reportedStock: "7.5",
     reportedStockSyncedAt: "2026-07-20T10:00:00.000Z",
   },
+};
+
+const noExtensionDetail: ProductDetail = {
+  ...detail,
+  variants: [{ ...detail.variants[0]!, extension: null }],
+};
+
+const hufDetail: ProductDetail = {
+  ...detail,
+  variants: [
+    {
+      ...detail.variants[0]!,
+      extension: {
+        ...detail.variants[0]!.extension!,
+        defaultPurchaseCurrency: "HUF",
+        lastPurchaseNetPrice: "1000",
+        lastPurchaseVatRate: "27",
+      },
+    },
+  ],
 };
 
 describe("ProductDetailPage mirror ownership", () => {
@@ -179,5 +201,111 @@ describe("ProductDetailPage mirror ownership", () => {
     fireEvent.click(screen.getByRole("button", { name: "Vissza a listához" }));
 
     expect(navigation.push).toHaveBeenCalledWith("/products");
+  });
+
+  it("a termékleírást a Képek kártya fölött, külön kártyában jeleníti meg", async () => {
+    render(<ProductDetailPage productId="product-1" />);
+
+    const description = await screen.findByText("Termékleírás");
+    expect(screen.getByText("Tengeri só")).toBeInTheDocument();
+    const images = screen.getByText("Képek");
+    expect(
+      description.compareDocumentPosition(images) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("mentett beállítás nélkül is kiírja a deviza és ár mezőket üresen", async () => {
+    api.detail.mockResolvedValue(noExtensionDetail);
+    render(<ProductDetailPage productId="product-1" />);
+    await screen.findByText("UNAS terméktükör");
+
+    expect(
+      screen.getByText(
+        "Ehhez a változathoz még nincs mentett saját beállítás — az alábbi mezők üresek.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Beszerzési deviza")).toBeInTheDocument();
+    expect(screen.getByText("Utolsó beszerzési ár")).toBeInTheDocument();
+  });
+
+  it("nem forintos devizánál egyetlen beszerzési ár mezőt mutat", async () => {
+    render(<ProductDetailPage productId="product-1" />);
+    await screen.findByText("UNAS terméktükör");
+
+    expect(screen.getByText("Utolsó beszerzési ár (EUR)")).toBeInTheDocument();
+    expect(screen.getByText("10")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Utolsó beszerzési nettó ár"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("forintos devizánál nettó, ÁFA és számított bruttó árat mutat", async () => {
+    api.detail.mockResolvedValue(hufDetail);
+    render(<ProductDetailPage productId="product-1" />);
+    await screen.findByText("UNAS terméktükör");
+
+    expect(screen.getByText("Utolsó beszerzési nettó ár")).toBeInTheDocument();
+    expect(screen.getByText("1000")).toBeInTheDocument();
+    expect(screen.getByText("Utolsó beszerzési ÁFA")).toBeInTheDocument();
+    expect(screen.getByText("27%")).toBeInTheDocument();
+    expect(screen.getByText("Utolsó beszerzési bruttó ár")).toBeInTheDocument();
+    expect(screen.getByText("1270.00")).toBeInTheDocument();
+  });
+
+  it("nem forintos devizánál egy mezőként menti az utolsó beszerzési árat", async () => {
+    render(<ProductDetailPage productId="product-1" />);
+    await screen.findByText("UNAS terméktükör");
+
+    fireEvent.click(screen.getByRole("button", { name: "Szerkesztés" }));
+    fireEvent.change(screen.getByLabelText("Utolsó beszerzési ár"), {
+      target: { value: "12,5" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
+
+    await waitFor(() =>
+      expect(api.updateExtension).toHaveBeenCalledWith(
+        "token-owner",
+        "variant-1",
+        expect.objectContaining({
+          lastPurchaseNetPrice: "12.5",
+          lastPurchaseVatRate: null,
+        }),
+      ),
+    );
+  });
+
+  it("HUF devizára váltva a nettó/ÁFA mezőket menti, a bruttót nem", async () => {
+    render(<ProductDetailPage productId="product-1" />);
+    await screen.findByText("UNAS terméktükör");
+
+    fireEvent.click(screen.getByRole("button", { name: "Szerkesztés" }));
+    fireEvent.change(screen.getByLabelText("Beszerzési deviza"), {
+      target: { value: "HUF" },
+    });
+    expect(
+      await screen.findByText("Utolsó beszerzési nettó ár"),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Utolsó beszerzési nettó ár"), {
+      target: { value: "1000" },
+    });
+    fireEvent.change(screen.getByLabelText("Utolsó beszerzési ÁFA"), {
+      target: { value: "27" },
+    });
+    expect(await screen.findByText("1270.00 HUF")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
+
+    await waitFor(() =>
+      expect(api.updateExtension).toHaveBeenCalledWith(
+        "token-owner",
+        "variant-1",
+        expect.objectContaining({
+          defaultPurchaseCurrency: "HUF",
+          lastPurchaseNetPrice: "1000",
+          lastPurchaseVatRate: "27",
+        }),
+      ),
+    );
   });
 });

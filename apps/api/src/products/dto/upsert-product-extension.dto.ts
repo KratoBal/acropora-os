@@ -42,6 +42,14 @@ export class UpsertProductExtensionDto {
   safetyStock?: string | null;
 
   @IsOptional()
+  @Matches(DECIMAL_PATTERN)
+  lastPurchaseNetPrice?: string | null;
+
+  @IsOptional()
+  @Matches(DECIMAL_PATTERN)
+  lastPurchaseVatRate?: string | null;
+
+  @IsOptional()
   @IsBoolean()
   stockTrackingEnabled?: boolean;
 

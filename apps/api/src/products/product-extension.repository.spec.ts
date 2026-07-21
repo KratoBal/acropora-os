@@ -19,6 +19,8 @@ const extension = (overrides: Record<string, unknown> = {}) => ({
   optimalStock: null,
   reorderPoint: new Prisma.Decimal("3"),
   safetyStock: null,
+  lastPurchaseNetPrice: null,
+  lastPurchaseVatRate: null,
   stockTrackingEnabled: true,
   purchasingDisabled: false,
   phaseOut: false,
