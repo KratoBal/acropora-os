@@ -89,6 +89,19 @@ export type {
   ProductExtensionUpdateInput,
 } from "./product-extension.js";
 export type {
+  CreatePosSaleInput,
+  CreatePosSaleLineInput,
+  PosPaymentMethod,
+  PosProductSearchResult,
+  PosSaleDetail,
+  PosSaleLineDetail,
+  PosSaleListItem,
+  PosSaleListResponse,
+  PosSaleResult,
+  PosSaleStockWarning,
+  SalesOrderLineSyncStatus,
+} from "./pos.js";
+export type {
   InventoryCountApplyResult,
   InventoryCountDetail,
   InventoryCountLineDetail,

@@ -9,6 +9,7 @@ import { AuthGuard } from "./auth/guards/auth.guard.js";
 import { PermissionGuard } from "./auth/guards/permission.guard.js";
 import { UnasImportModule } from "./imports/unas/unas-import.module.js";
 import { InventoryModule } from "./inventory/inventory.module.js";
+import { PosModule } from "./pos/pos.module.js";
 import { ProductModule } from "./products/product.module.js";
 
 @Module({
@@ -18,6 +19,7 @@ import { ProductModule } from "./products/product.module.js";
     ProductModule,
     UnasImportModule,
     InventoryModule,
+    PosModule,
   ],
   controllers: [AppController],
   providers: [
