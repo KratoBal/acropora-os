@@ -416,11 +416,18 @@ export function parseUnasCategoryResponse(xml: string): UnasApiCategory[] {
       throw new UnasApiError("FIELD_FORMAT_INVALID");
     const parent = child(category, "Parent");
     const order = value(category, "Order");
+    // UNAS represents a top-level category by sending <Parent><Id>0</Id>
+    // </Parent> rather than omitting the <Parent> node entirely. "0" is not
+    // a real category id (no category is ever assigned externalId "0"), so
+    // it must be treated the same as a missing parent, or every top-level
+    // category's children would fail to resolve their parent and the whole
+    // sync would throw UNAS_CATEGORY_PARENT_NOT_FOUND.
+    const parentId = parent ? (value(parent, "Id") ?? null) : null;
     return {
       externalId,
       name: value(category, "Name") ?? "",
       state: value(category, "State") === "deleted" ? "deleted" : "live",
-      parentExternalId: parent ? (value(parent, "Id") ?? null) : null,
+      parentExternalId: parentId && parentId !== "0" ? parentId : null,
       sortOrder: order && /^-?\d+$/.test(order) ? Number(order) : null,
       sourceCreatedAt: unixTimestamp(value(category, "CreateTime")),
       sourceUpdatedAt: unixTimestamp(value(category, "LastModTime")),
