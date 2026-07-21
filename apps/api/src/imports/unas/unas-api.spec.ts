@@ -118,6 +118,18 @@ describe("UNAS API XML contract", () => {
     assert.equal(category.sortOrder, 3);
     assert.equal(category.sourceUpdatedAt, "2024-07-03T09:48:20.000Z");
   });
+
+  it("treats a Parent Id of 0 as no parent (UNAS's top-level sentinel)", () => {
+    const topLevel = parseUnasCategoryResponse(
+      "<Categories><Category><State>live</State><Id>10</Id><Name>Termékek</Name><Parent><Id>0</Id></Parent></Category></Categories>",
+    )[0]!;
+    assert.equal(topLevel.parentExternalId, null);
+
+    const noParentNode = parseUnasCategoryResponse(
+      "<Categories><Category><State>live</State><Id>11</Id><Name>Termékek 2</Name></Category></Categories>",
+    )[0]!;
+    assert.equal(noParentNode.parentExternalId, null);
+  });
 });
 
 describe("UNAS API transport policy", () => {

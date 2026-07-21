@@ -302,7 +302,9 @@ export class UnasProductSyncRepository extends Repository {
             ? categoryIds.get(category.parentExternalId)
             : null;
           if (category.parentExternalId && !parentId)
-            throw new Error("UNAS_CATEGORY_PARENT_NOT_FOUND");
+            throw new Error(
+              `UNAS_CATEGORY_PARENT_NOT_FOUND:child=${category.externalId}:parent=${category.parentExternalId}`,
+            );
           await transaction.category.update({
             where: { id },
             data: { parentId },
