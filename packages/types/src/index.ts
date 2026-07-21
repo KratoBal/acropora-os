@@ -88,6 +88,16 @@ export type {
   ProductExtensionDetail,
   ProductExtensionUpdateInput,
 } from "./product-extension.js";
+export type {
+  InventoryCountApplyResult,
+  InventoryCountDetail,
+  InventoryCountLineDetail,
+  InventoryCountLineSyncStatus,
+  InventoryCountListItem,
+  InventoryCountListResponse,
+  InventoryCountStatus,
+  InventoryCountUploadResult,
+} from "./inventory-count.js";
 export { IMPORT_ISSUE_SEVERITIES } from "./integrations/import-staging.js";
 export type {
   BrandResolutionCandidate,

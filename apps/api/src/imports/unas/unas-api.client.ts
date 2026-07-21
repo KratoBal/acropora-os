@@ -31,6 +31,18 @@ export interface UnasCategoryPageRequest {
   contentType?: "minimal" | "normal" | "full";
 }
 
+export interface UnasSetStockRequest {
+  sku: string;
+  /** Absolute quantity to set (UNAS "modify" action, not a delta). */
+  qty: string;
+  comment?: string;
+}
+
+export interface UnasSetStockResult {
+  externalId: string | null;
+  sku: string;
+}
+
 export interface UnasLoginResult {
   token: string;
   expireTime: number;
@@ -405,6 +417,37 @@ export function buildUnasCategoryPageXml(request: UnasCategoryPageRequest) {
   });
 }
 
+export function buildUnasSetStockXml(request: UnasSetStockRequest) {
+  if (!request.sku.trim()) throw new UnasApiError("REQUEST_INVALID");
+  const stockFields = [
+    `<Qty>${escapeXml(request.qty)}</Qty>`,
+    request.comment !== undefined
+      ? `<Comment><![CDATA[${request.comment}]]></Comment>`
+      : "",
+  ].join("");
+  return (
+    `<?xml version="1.0" encoding="UTF-8"?><Products><Product>` +
+    `<Action>modify</Action>` +
+    `<Sku>${escapeXml(request.sku)}</Sku>` +
+    `<Stocks><Stock>${stockFields}</Stock></Stocks>` +
+    `</Product></Products>`
+  );
+}
+
+export function parseUnasSetStockResponse(xml: string): UnasSetStockResult {
+  const root = parseXml(xml);
+  if (root.name === "Error") throw new UnasApiError("API_REJECTED");
+  if (root.name !== "Products") throw new UnasApiError("RESPONSE_SHAPE_INVALID");
+  const product = child(root, "Product");
+  if (!product) throw new UnasApiError("RESPONSE_SHAPE_INVALID");
+  if (value(product, "Status") !== "ok")
+    throw new UnasApiError("API_REJECTED");
+  return {
+    externalId: value(product, "Id") ?? null,
+    sku: value(product, "Sku") ?? "",
+  };
+}
+
 export function parseUnasCategoryResponse(xml: string): UnasApiCategory[] {
   const root = parseXml(xml);
   if (root.name === "Error") throw new UnasApiError("API_REJECTED");
@@ -483,6 +526,18 @@ export class UnasApiClient {
       token,
     );
     return parseUnasCategoryResponse(response);
+  }
+
+  async setStock(
+    token: string,
+    request: UnasSetStockRequest,
+  ): Promise<UnasSetStockResult> {
+    const response = await this.post(
+      "setStock",
+      buildUnasSetStockXml(request),
+      token,
+    );
+    return parseUnasSetStockResponse(response);
   }
 
   private async post(endpoint: string, body: string, token?: string) {

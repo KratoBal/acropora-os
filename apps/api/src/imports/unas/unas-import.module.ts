@@ -58,5 +58,6 @@ import { UnasClock } from "./unas-login-expiry.js";
     UnasBrandReviewRepository,
     UnasBrandReviewService,
   ],
+  exports: [UnasApiClient, UnasAuthService],
 })
 export class UnasImportModule {}
