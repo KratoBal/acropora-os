@@ -4,8 +4,10 @@ import { BrandsRepository } from "./brands.repository.js";
 import { BrandsService } from "./brands.service.js";
 import { BrandImportAssistantController } from "./brand-import-assistant.controller.js";
 import { BrandImportAssistantService } from "./brand-import-assistant.service.js";
+import { ProductModule } from "../products/product.module.js";
 
 @Module({
+  imports: [ProductModule],
   controllers: [BrandImportAssistantController, BrandsController],
   providers: [BrandImportAssistantService, BrandsRepository, BrandsService],
   exports: [BrandsRepository],

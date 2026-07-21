@@ -14,9 +14,8 @@ export class CatalogOptionsController {
     return this.products.listCategoryOptions();
   }
 
-  @Get("brands/options")
-  @RequirePermissions(PERMISSIONS.PRODUCTS_VIEW)
-  listBrandOptions() {
-    return this.products.listBrandOptions();
-  }
+  // GET /brands/options is served by BrandsController instead: that
+  // controller also owns GET /brands/:id, and the "options" route has to
+  // be declared in the same controller, before ":id", to avoid Nest/Express
+  // matching "options" as an :id parameter (see brands.controller.ts).
 }

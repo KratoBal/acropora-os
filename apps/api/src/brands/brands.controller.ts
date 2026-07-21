@@ -12,6 +12,7 @@ import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
+import { ProductService } from "../products/product.service.js";
 import { BrandsService } from "./brands.service.js";
 import {
   BrandAliasDto,
@@ -22,11 +23,21 @@ import {
 
 @Controller("brands")
 export class BrandsController {
-  constructor(private readonly service: BrandsService) {}
+  constructor(
+    private readonly service: BrandsService,
+    private readonly products: ProductService,
+  ) {}
   @Get() @RequirePermissions(PERMISSIONS.PRODUCTS_VIEW) list(
     @Query() query: BrandListQueryDto,
   ) {
     return this.service.list(query);
+  }
+  // Must stay declared before the ":id" route below: Nest/Express match
+  // routes in registration order, so a literal "options" segment has to
+  // win over ":id" here or GET /brands/options resolves to
+  // detail("options") and 404s with "A márka nem található.".
+  @Get("options") @RequirePermissions(PERMISSIONS.PRODUCTS_VIEW) options() {
+    return this.products.listBrandOptions();
   }
   @Get(":id") @RequirePermissions(PERMISSIONS.PRODUCTS_VIEW) detail(
     @Param("id") id: string,
