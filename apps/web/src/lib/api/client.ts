@@ -23,7 +23,8 @@ export async function apiRequest<T>(
         ...init?.headers,
       },
     });
-  } catch {
+  } catch (cause) {
+    if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
     throw new ApiError("A szerver nem érhető el. Ellenőrizd a kapcsolatot.", 0);
   }
 
