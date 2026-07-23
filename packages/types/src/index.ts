@@ -102,6 +102,25 @@ export type {
   ProductExtensionUpdateInput,
 } from "./product-extension.js";
 export type {
+  CreateSupplierInput,
+  SupplierListResponse,
+  SupplierSummary,
+} from "./supplier-management.js";
+export type {
+  CreatePurchaseInvoiceInput,
+  CreatePurchaseInvoiceLineInput,
+  ExchangeRateLookupResult,
+  PurchaseInvoiceDetail,
+  PurchaseInvoiceLineDetail,
+  PurchaseInvoiceLineSyncStatus,
+  PurchaseInvoiceListResponse,
+  PurchaseInvoiceResult,
+  PurchaseInvoiceSource,
+  PurchaseInvoiceStatus,
+  PurchaseInvoiceSummary,
+  PurchaseProductSearchResult,
+} from "./purchasing.js";
+export type {
   CreatePosSaleInput,
   CreatePosSaleLineInput,
   PosPaymentMethod,

@@ -9,6 +9,8 @@ coverage/
 test-dist/
 .turbo/
 *.tsbuildinfo
+apps/api/tmp-*-check-dist/
+apps/api/tsconfig.*-check.json
 
 # Environment and secrets
 .env
