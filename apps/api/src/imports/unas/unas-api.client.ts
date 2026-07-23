@@ -1,6 +1,8 @@
 import { BadGatewayException, Injectable } from "@nestjs/common";
 import type {
   UnasApiCategory,
+  UnasApiCustomer,
+  UnasApiCustomerAddress,
   UnasApiOrder,
   UnasApiProduct,
 } from "@acropora/types";
@@ -41,6 +43,14 @@ export interface UnasGetOrderRequest {
   timeModEnd?: number;
   limitStart: number;
   /** Max 500 per UNAS's own documented cap. */
+  limitNum: number;
+}
+
+export interface UnasGetCustomerRequest {
+  /** Only customers last modified at or after this unix timestamp. Omit for a first, full pull. */
+  modTimeStart?: number;
+  modTimeEnd?: number;
+  limitStart: number;
   limitNum: number;
 }
 
@@ -520,6 +530,83 @@ export function parseUnasOrderResponse(xml: string): UnasApiOrder[] {
   });
 }
 
+export function buildUnasGetCustomerXml(request: UnasGetCustomerRequest) {
+  if (!Number.isSafeInteger(request.limitStart) || request.limitStart < 0)
+    throw new UnasApiError("REQUEST_INVALID");
+  if (!Number.isSafeInteger(request.limitNum) || request.limitNum < 1)
+    throw new UnasApiError("REQUEST_INVALID");
+  return paramsXml({
+    ModTimeStart: request.modTimeStart,
+    ModTimeEnd: request.modTimeEnd,
+    LimitStart: request.limitStart === 0 ? undefined : request.limitStart,
+    LimitNum: request.limitNum,
+  });
+}
+
+function customerAddress(
+  node: XmlNode | undefined,
+): UnasApiCustomerAddress | null {
+  if (!node) return null;
+  const customerType = value(node, "CustomerType");
+  return {
+    name: value(node, "Name") ?? null,
+    zip: value(node, "ZIP") ?? null,
+    city: value(node, "City") ?? null,
+    street: value(node, "Street") ?? null,
+    country: value(node, "Country") ?? null,
+    countryCode: value(node, "CountryCode") ?? null,
+    taxNumber: value(node, "TaxNumber") ?? null,
+    customerType:
+      customerType === "private" ||
+      customerType === "company" ||
+      customerType === "other_customer_without_tax_number"
+        ? customerType
+        : null,
+  };
+}
+
+// NOTE: like parseUnasOrderResponse, the exact response root/item element
+// names ("Customers"/"Customer") follow every other UNAS list endpoint's
+// plural-root/singular-item convention (Products/Product, Orders/Order) -
+// the vasarlok-getCustomer-valasz page only links to the shared Adatszerkezet
+// section without spelling out the envelope, so this should be double-checked
+// against a real getCustomer response the first time it runs against live
+// UNAS data.
+export function parseUnasCustomerResponse(xml: string): UnasApiCustomer[] {
+  const root = parseXml(xml);
+  if (root.name === "Error") throw new UnasApiError("API_REJECTED");
+  if (root.name !== "Customers")
+    throw new UnasApiError("RESPONSE_SHAPE_INVALID");
+
+  return children(root, "Customer").map((customer) => {
+    const externalId = value(customer, "Id");
+    if (!externalId || !/^\d+$/.test(externalId))
+      throw new UnasApiError("FIELD_FORMAT_INVALID");
+    const contact = child(customer, "Contact");
+    const addresses = child(customer, "Addresses");
+    const dates = child(customer, "Dates");
+    return {
+      externalId,
+      email: value(customer, "Email") ?? null,
+      contactName: contact ? (value(contact, "Name") ?? null) : null,
+      contactPhone: contact ? (value(contact, "Phone") ?? null) : null,
+      contactMobile: contact ? (value(contact, "Mobile") ?? null) : null,
+      invoiceAddress: customerAddress(
+        addresses ? child(addresses, "Invoice") : undefined,
+      ),
+      shippingAddress: customerAddress(
+        addresses ? child(addresses, "Shipping") : undefined,
+      ),
+      sourceCreatedAt: dates
+        ? looseOrderDateTime(value(dates, "Registration"))
+        : null,
+      sourceUpdatedAt: dates
+        ? looseOrderDateTime(value(dates, "Modification"))
+        : null,
+    };
+  });
+}
+
 export function buildUnasSetStockXml(request: UnasSetStockRequest) {
   if (!request.sku.trim()) throw new UnasApiError("REQUEST_INVALID");
   const stockFields = [
@@ -641,6 +728,18 @@ export class UnasApiClient {
       token,
     );
     return parseUnasOrderResponse(response);
+  }
+
+  async getCustomerPage(
+    token: string,
+    request: UnasGetCustomerRequest,
+  ): Promise<UnasApiCustomer[]> {
+    const response = await this.post(
+      "getCustomer",
+      buildUnasGetCustomerXml(request),
+      token,
+    );
+    return parseUnasCustomerResponse(response);
   }
 
   async setStock(

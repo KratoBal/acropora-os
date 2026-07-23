@@ -48,6 +48,13 @@ enum UnasOrderSyncRunStatus {
   FAILED
 }
 
+enum UnasCustomerSyncRunStatus {
+  PENDING
+  RUNNING
+  APPLIED
+  FAILED
+}
+
 enum StockMovementType {
   PURCHASE_RECEIPT
   SALE
@@ -1167,6 +1174,31 @@ model UnasOrderSyncRun {
   errorCode          String?
   createdAt          DateTime               @default(now())
   updatedAt          DateTime               @updatedAt
+
+  @@index([status, createdAt])
+}
+
+/// Egy webshop (UNAS) vásárló-szinkron futás: a getCustomer ModTimeStart
+/// kurzoron alapuló, új vagy módosult vásárlók feldolgozása. Az
+/// UnasOrderSyncRun mintáját követi: nincs FULL/INCREMENTAL megkülönböztetés,
+/// minden futás a kurzor óta módosult ablakot dolgozza fel. A UNAS oldali
+/// azonosítót (Customer.Id) kizárólag ExternalReference tárolja, a Customer
+/// modellen nincs UNAS-specifikus mező (ld. ADR-0009).
+model UnasCustomerSyncRun {
+  id             String                     @id @default(cuid())
+  activeKey      String?                    @unique
+  status         UnasCustomerSyncRunStatus  @default(PENDING)
+  windowStart    DateTime?
+  windowEnd      DateTime
+  startedAt      DateTime?
+  completedAt    DateTime?
+  customersSeen  Int                        @default(0)
+  createdCount   Int                        @default(0)
+  updatedCount   Int                        @default(0)
+  unchangedCount Int                        @default(0)
+  errorCode      String?
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
 
   @@index([status, createdAt])
 }

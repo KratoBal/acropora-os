@@ -63,6 +63,19 @@ export type {
   UserRole,
 } from "./auth.js";
 export type {
+  CreateCustomerAddressInput,
+  CreateCustomerInput,
+  CustomerAddress,
+  CustomerAddressType,
+  CustomerDetail,
+  CustomerListResponse,
+  CustomerSource,
+  CustomerStatusFilter,
+  CustomerSummary,
+  CustomerType,
+  UpdateCustomerInput,
+} from "./customer-management.js";
+export type {
   AcroporaDomainEvent,
   CatalogImportApplied,
   AquariumMeasurementRecorded,
@@ -138,6 +151,8 @@ export type {
 export type {
   CanonicalUnasProduct,
   UnasApiCategory,
+  UnasApiCustomer,
+  UnasApiCustomerAddress,
   UnasApiOrder,
   UnasApiOrderItem,
   UnasApiProduct,
@@ -145,6 +160,11 @@ export type {
   UnasProductSyncAction,
   UnasProductSyncDiff,
 } from "./integrations/unas-api.js";
+export type {
+  UnasCustomerSyncRun,
+  UnasCustomerSyncRunStatus,
+  UnasCustomerSyncSummary,
+} from "./integrations/unas-customer-sync.js";
 export type {
   StockReconciliationMismatch,
   StockReconciliationReport,
@@ -166,6 +186,11 @@ export type {
   UnasConnectionVerificationStatus,
   UnasConnectionView,
 } from "./integrations/unas-connection.js";
+export type {
+  NavTaxpayerAddress,
+  NavTaxpayerLookupResult,
+} from "./integrations/nav-taxpayer.js";
+export type { PostalCodeLookupResult } from "./integrations/postal-code.js";
 export type {
   ImportIssue,
   ImportIssueSeverity,

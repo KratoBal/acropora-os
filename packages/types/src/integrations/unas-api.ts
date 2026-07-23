@@ -106,6 +106,37 @@ export interface UnasApiCategory {
   rawPayload: Record<string, unknown>;
 }
 
+/** Mirrors one of UNAS's Addresses.Invoice / Addresses.Shipping nodes. */
+export interface UnasApiCustomerAddress {
+  name: string | null;
+  zip: string | null;
+  city: string | null;
+  street: string | null;
+  country: string | null;
+  countryCode: string | null;
+  taxNumber: string | null;
+  customerType:
+    | "private"
+    | "company"
+    | "other_customer_without_tax_number"
+    | null;
+}
+
+export interface UnasApiCustomer {
+  /** UNAS's own vásárló identifier, used for idempotency (ExternalReference.externalId). */
+  externalId: string;
+  email: string | null;
+  contactName: string | null;
+  contactPhone: string | null;
+  contactMobile: string | null;
+  invoiceAddress: UnasApiCustomerAddress | null;
+  shippingAddress: UnasApiCustomerAddress | null;
+  /** Dates.Registration, best-effort parsed. */
+  sourceCreatedAt: string | null;
+  /** Dates.Modification, best-effort parsed. */
+  sourceUpdatedAt: string | null;
+}
+
 export interface CanonicalUnasProduct extends UnasApiProduct {
   canonicalHash: string;
 }
