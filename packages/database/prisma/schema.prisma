@@ -121,6 +121,23 @@ enum GoodsReceiptStatus {
   CANCELLED
 }
 
+/// Honnan származik a beérkezett számla: EU-s beszállítói számla kézi
+/// rögzítése, belföldi számla kézi rögzítése (pl. ha a NAV-lekérdezés nem
+/// elérhető), vagy belföldi számla a NAV Online Számla lekérdezéséből
+/// előtöltve. A HU_NAV forrás egyelőre csak a séma szintjén létezik, a
+/// hozzá tartozó lekérdezés-integráció külön munkacsomag.
+enum PurchaseInvoiceSource {
+  EU
+  HU_MANUAL
+  HU_NAV
+}
+
+enum PurchaseInvoiceStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
 enum SalesOrderStatus {
   DRAFT
   PENDING
@@ -256,6 +273,7 @@ model User {
   stockMovements         StockMovement[]
   startedInventoryCounts InventoryCount[]
   posSales               SalesOrder[]
+  createdPurchaseInvoices PurchaseInvoice[]
   unasCredentialsUpdated UnasConnectionSetting[] @relation("UnasCredentialUpdatedBy")
 
   @@index([role, isActive])
@@ -331,6 +349,7 @@ model ProductVariant {
   salesOrderLines     SalesOrderLine[]
   purchaseLines       PurchaseOrderLine[]
   receiptLines        GoodsReceiptLine[]
+  purchaseInvoiceLines PurchaseInvoiceLine[]
   extension           ProductExtension?
   inventoryCountLines InventoryCountLine[]
 
@@ -545,16 +564,25 @@ model BrandResolutionReview {
 }
 
 model Supplier {
-  id        String   @id @default(cuid())
-  code      String   @unique
-  name      String
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(cuid())
+  code       String   @unique
+  name       String
+  /// EU-s beszállítónál a közösségi adószám (pl. "DE123456789"), belföldinél a magyar adószám; opcionális.
+  taxNumber  String?
+  /// ISO 3166-1 alpha-2 országkód; a "HU"-tól eltérő érték jelöli az EU-n belüli beszerzést.
+  country    String   @default("HU") @db.VarChar(2)
+  email      String?
+  phone      String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   products              SupplierProduct[]
   purchaseOrders        PurchaseOrder[]
+  purchaseInvoices      PurchaseInvoice[]
   preferredByExtensions ProductExtension[]
+
+  @@index([country, isActive])
 }
 
 model SupplierProduct {
@@ -589,6 +617,7 @@ model Warehouse {
   targetMovements      StockMovement[]     @relation("MovementTargetWarehouse")
   purchaseOrders       PurchaseOrder[]
   goodsReceipts        GoodsReceipt[]
+  purchaseInvoices     PurchaseInvoice[]
   defaultForExtensions ProductExtension[]
   inventoryCounts      InventoryCount[]
   salesOrders          SalesOrder[]
@@ -967,6 +996,69 @@ model GoodsReceiptLine {
   variant           ProductVariant    @relation(fields: [variantId], references: [id])
 
   @@unique([goodsReceiptId, purchaseOrderLineId])
+}
+
+/// Beérkezett beszállítói számla rögzítése: nálunk ez maga a beszerzés
+/// bevételezési eseménye, nincs külön előzetes rendelés-jóváhagyási lépés
+/// (lásd docs/DOMAIN-MODEL.md-től eltérő, tényleges üzleti folyamat). A
+/// PurchaseOrder/GoodsReceipt pár változatlanul megmarad, de ez a modell nem
+/// épül rájuk.
+model PurchaseInvoice {
+  id                    String                @id @default(cuid())
+  /// Belső, generált bizonylatszám (pl. "BESZ-...").
+  documentNumber        String                @unique
+  /// A beszállítói számlán szereplő tényleges számlaszám.
+  supplierInvoiceNumber String
+  source                PurchaseInvoiceSource
+  status                PurchaseInvoiceStatus @default(POSTED)
+  supplierId            String
+  warehouseId           String
+  /// ISO 4217 pénznemkód; belföldi/HUF esetén nincs átváltás.
+  currency              String                @default("HUF") @db.VarChar(3)
+  /// MNB hivatalos árfolyam a számla keltének napján, HUF/deviza egységre; HUF számlánál null.
+  exchangeRate          Decimal?              @db.Decimal(19, 6)
+  invoiceDate           DateTime
+  dueDate               DateTime?
+  isPaid                Boolean               @default(false)
+  paidAt                DateTime?
+  /// Belföldi kézi rögzítésnél használt ÁFA-kulcs (alapértelmezetten 27); EU-s számlánál jellemzően null.
+  vatRate               Decimal?              @db.Decimal(5, 2)
+  note                  String?
+  createdById           String?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  supplier  Supplier              @relation(fields: [supplierId], references: [id])
+  warehouse Warehouse             @relation(fields: [warehouseId], references: [id])
+  createdBy User?                 @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  lines     PurchaseInvoiceLine[]
+
+  @@unique([supplierId, supplierInvoiceNumber])
+  @@index([status, invoiceDate])
+  @@index([warehouseId])
+}
+
+model PurchaseInvoiceLine {
+  id                String   @id @default(cuid())
+  purchaseInvoiceId String
+  variantId         String
+  /// A számlán szereplő eredeti (nem a saját) megnevezés, tájékoztató jelleggel.
+  sourceDescription String?
+  orderedQuantity   Decimal  @db.Decimal(19, 6)
+  actualQuantity    Decimal  @db.Decimal(19, 6)
+  unit              String
+  /// Egységár a számla pénznemében, kedvezmény levonása előtt.
+  unitNet           Decimal  @db.Decimal(19, 4)
+  discountPercent   Decimal? @db.Decimal(5, 2)
+  /// A tétel UNAS készlet-push eredménye (OK / FAILED / PENDING).
+  syncStatus        String   @default("PENDING")
+  syncError         String?
+
+  purchaseInvoice PurchaseInvoice @relation(fields: [purchaseInvoiceId], references: [id], onDelete: Cascade)
+  variant         ProductVariant  @relation(fields: [variantId], references: [id])
+
+  @@index([purchaseInvoiceId])
+  @@index([variantId])
 }
 
 model ServiceJob {

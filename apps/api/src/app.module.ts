@@ -16,6 +16,8 @@ import { InventoryModule } from "./inventory/inventory.module.js";
 import { UnasOrderSyncModule } from "./orders/unas-order-sync/unas-order-sync.module.js";
 import { PosModule } from "./pos/pos.module.js";
 import { ProductModule } from "./products/product.module.js";
+import { PurchasingModule } from "./purchasing/purchasing.module.js";
+import { SuppliersModule } from "./suppliers/suppliers.module.js";
 import { UsersModule } from "./users/users.module.js";
 
 @Module({
@@ -31,6 +33,8 @@ import { UsersModule } from "./users/users.module.js";
     UnasCustomerSyncModule,
     NavOnlineInvoiceModule,
     PostalCodeModule,
+    SuppliersModule,
+    PurchasingModule,
     UsersModule,
   ],
   controllers: [AppController],

@@ -11,9 +11,10 @@ https://github.com/KratoBal/acropora-os
 M1 – First Production Import és stabilization, valamint M2.1 – UNAS Product
 Synchronization és M2.2 – UNAS Connection Settings lezárva, mainbe
 merge-elve. Azóta a webes admin felület önálló üzleti modulokkal bővült:
-Felhasználókezelés, POS, Raktár/Leltár, UNAS webshop rendelés-szinkron, és
-legutóbb a Vevők (Customers) modul UNAS vevő-szinkronnal és NAV Online
-Számla adószám-lekérdezéssel.
+Felhasználókezelés, POS, Raktár/Leltár, UNAS webshop rendelés-szinkron, a
+Vevők (Customers) modul UNAS vevő-szinkronnal és NAV Online Számla
+adószám-lekérdezéssel, és legutóbb a Beszerzés modul első köre (EU-s
+beérkezett számla rögzítése MNB árfolyammal).
 
 ## Completed
 
@@ -36,6 +37,8 @@ Számla adószám-lekérdezéssel.
 - Dashboard napszaknak megfelelő dinamikus üdvözlés
 - `apiRequest` javítás: megszakított (AbortError) kérés többé nem jelenik meg hamis "szerver nem érhető el" hibaként
 - **Vevők (Customers) modul** (`/vevok`, `customers.view` / `customers.manage`) – lásd lent
+- **Beszerzés modul, EU-s számla rögzítés első köre** (`/beszerzes`,
+  `purchasing.view` / `purchasing.manage`) – lásd lent
 
 ## UNAS Product Synchronization (M2.1, elkészült)
 
@@ -105,10 +108,63 @@ Nyitott pont: a `getCustomer` válasz gyökérelemének pontos neve
 (`Customers`/`Customer`) az UNAS többi list-végpontjának konvenciója alapján
 feltételezett, valós UNAS-válasszal még nincs megerősítve.
 
+## Beszerzés modul – EU-s beérkezett számla rögzítése, első kör
+
+A tényleges üzleti folyamatot követi, nem a `docs/DOMAIN-MODEL.md`-ben
+korábban vázolt, külön rendelés-jóváhagyást feltételező `PurchaseOrder` →
+`GoodsReceipt` láncot: nálunk a beérkezett beszállítói számla rögzítése maga
+a bevételezés, nincs külön előzetes megrendelés-jóváhagyási lépés. Emiatt a
+séma egy új, számla-központú `PurchaseInvoice`/`PurchaseInvoiceLine` párral
+bővült; a régi `PurchaseOrder`/`GoodsReceipt` modellek változatlanul,
+érintetlenül megmaradtak a sémában egy esetleges későbbi felhasználásra.
+
+Ez a kör kizárólag az **EU-n belüli beszerzés** kézi rögzítését szolgálja ki
+ténylegesen; a belföldi (kézi ÁFA-kulcsos, illetve NAV Online Számla
+lekérdezéses) folyamat még nem indult el, lásd alább.
+
+- **`Supplier` törzs bővítése**: adószám, ISO országkód (a "HU"-tól eltérő
+  érték jelöli az EU-s beszállítót), e-mail, telefon. Új `/suppliers`
+  API (`purchasing.view` / `purchasing.manage`), beágyazva a számla
+  rögzítő űrlapba (keresés + soron kívüli létrehozás).
+- **`PurchaseInvoice`/`PurchaseInvoiceLine` séma**: számlafej (belső
+  bizonylatszám, a beszállítói számla saját száma, pénznem, MNB árfolyam,
+  számla kelte, fizetési határidő, fizetve/fizetés dátuma, forrás
+  EU/HU_MANUAL/HU_NAV), sor (termékvariáns, rendelt és tényleges átvett
+  mennyiség, egység, egységár, kedvezmény%, UNAS szinkronállapot).
+- **MNB hivatalos árfolyam automatikus lekérdezése (jelenleg nem működik
+  élesben, lásd Known limitations)**: a `GetExchangeRates` SOAP végpont
+  hitelesítés nélküli lekérdezése a számla kelte alapján, visszafelé néző
+  ablakkal hétvége/ünnepnap miatti hiányzó jegyzésre; a frontend előtölti,
+  de kézzel mindig felülírható/megadható. Az MNB oldala 2026-07-23 óta
+  bot-védelemmel blokkolja a programozott SOAP-hívásokat, ezért az árfolyam
+  mező a gyakorlatban kézi bevitelre szorul.
+- **Tételes bevételezés**: a számla mentésekor egy tranzakcióban jön létre a
+  `PurchaseInvoice`, a `PURCHASE_RECEIPT` típusú `StockMovement` és a
+  `StockItem` frissítés (a leltár/POS mintájával megegyező additív logika,
+  több sor is hivatkozhat ugyanarra a termékre egy számlán belül), valamint
+  a `ProductExtension.lastPurchaseNetPrice`/`defaultPurchaseCurrency`/
+  `preferredSupplierId` frissítése. A UNAS `setStock` push a POS/leltár
+  mintáját követi: a helyi írás előtt fut le, soronkénti siker/hiba
+  állapottal.
+- **Admin webes UI** (`/beszerzes` lista, `/beszerzes/uj` EU-s rögzítő
+  űrlap, `/beszerzes/:id` részletnézet): beszállító keresés/létrehozás,
+  pénznem + MNB árfolyam, tételes termékkeresés (cikkszám/név alapján),
+  rendelt mennyiség beírásakor a tényleges mennyiség automatikus előtöltése.
+
+Migráció: `20260723120000_add_purchase_invoice`. Helyi futtatás előtt
+szükséges: `pnpm prisma:generate` és `pnpm prisma:migrate`.
+
+Nyitott pont: a rendelt és tényleges mennyiség közötti eltérés kezelése
+(jelzés, jóváhagyás) szándékosan később kerül kidolgozásra; ebben a körben a
+két mező egymástól függetlenül szabadon szerkeszthető.
+
 ## Next steps
 
-Nincs kijelölt következő munkacsomag. Lehetséges további irányok: Vevő
-szerkesztés (update) UI, kapcsolattartó/jegyzet/címke CRM-mezők (lásd
+Nincs kijelölt következő munkacsomag. Lehetséges további irányok: belföldi
+számlarögzítés a Beszerzés modulban (kézi ÁFA-kulcsos rögzítés, majd NAV
+Online Számla lekérdezés integráció), rendelt/tényleges mennyiség eltérés
+jelzése és jóváhagyása, Vevő szerkesztés (update) UI,
+kapcsolattartó/jegyzet/címke CRM-mezők (lásd
 [backlog/domain-follow-ups.md](../backlog/domain-follow-ups.md)), valódi
 jelszavas login (jelenleg development mock login, lásd
 [AUTHENTICATION.md](./AUTHENTICATION.md)).
@@ -142,6 +198,8 @@ pnpm build
 - POS: http://localhost:3000/pos
 - Termékek: http://localhost:3000/products
 - Vevők: http://localhost:3000/vevok
+- Beszerzés: http://localhost:3000/beszerzes
+- Új EU-s beszerzési számla: http://localhost:3000/beszerzes/uj
 - Raktár: http://localhost:3000/raktar
 - Készlet-egyeztetés: http://localhost:3000/keszlet-egyeztetes
 - Felhasználók: http://localhost:3000/admin/users
@@ -162,6 +220,9 @@ pnpm build
 - Vevő szerkesztés (update) UI még nincs, csak létrehozás; a backend `update` végpont már készen áll.
 - A NAV adószám-lekérdezés és az UNAS vevő-szinkron éles hitelesítő adatok nélkül nem tesztelhető helyben.
 - Az irányítószám → város lookup nem hivatalos, harmadik féltől származó API-ra épül; kimenete nem tekinthető hatóságilag hitelesnek.
+- A Beszerzés modul jelenleg csak az EU-s kézi számlarögzítést szolgálja ki; a belföldi (kézi ÁFA-kulcsos és NAV-lekérdezéses) folyamat nincs implementálva.
+- **Az MNB automatikus árfolyam-lekérdezés jelenleg nem működik**: az `arfolyamok.asmx` élesben (2026-07-23-i teszt szerint) F5 bot-védelemmel válaszol minden POST SOAP-hívásra (`TS...` cookie, `Clear-Site-Data` fejléc, üres törzsű 404 - feltehetően TLS-ujjlenyomat alapú szűrés, kóddal nem megkerülhető). A kliens/szolgáltatás implementálva marad (SOAP 1.1 és 1.2 megpróbálása, szerveroldali naplózás), de gyakorlatilag mindig a kézi megadásra visszaeső hibaágat futtatja; az űrlapon az árfolyam mező emiatt elsődlegesen kézi bevitelre való.
+- A rendelt/tényleges mennyiség közötti eltérés jelzése és jóváhagyása szándékosan még nincs kidolgozva.
 
 ## Important constraints
 
