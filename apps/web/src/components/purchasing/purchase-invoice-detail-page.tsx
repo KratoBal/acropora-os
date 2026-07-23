@@ -25,7 +25,11 @@ function formatMoney(value: string, currency: string): string {
   return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} ${currency}`;
 }
 
-export function PurchaseInvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
+export function PurchaseInvoiceDetailPage({
+  invoiceId,
+}: {
+  invoiceId: string;
+}) {
   const { session } = useAuth();
   const router = useRouter();
   const token = session?.token ?? "";
@@ -140,7 +144,9 @@ export function PurchaseInvoiceDetailPage({ invoiceId }: { invoiceId: string }) 
                       {detail.isPaid
                         ? `Igen (${
                             detail.paidAt
-                              ? new Date(detail.paidAt).toLocaleDateString("hu-HU")
+                              ? new Date(detail.paidAt).toLocaleDateString(
+                                  "hu-HU",
+                                )
                               : "—"
                           })`
                         : "Nyitott"}
@@ -215,7 +221,9 @@ export function PurchaseInvoiceDetailPage({ invoiceId }: { invoiceId: string }) 
                         {formatMoney(line.unitNet, detail.currency)}
                       </td>
                       <td className="px-4 py-3 text-right text-sm text-slate-600">
-                        {line.discountPercent ? `${line.discountPercent}%` : "—"}
+                        {line.discountPercent
+                          ? `${line.discountPercent}%`
+                          : "—"}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-semibold text-slate-900">
                         {formatMoney(line.lineNet, detail.currency)}

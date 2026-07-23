@@ -176,7 +176,9 @@ export function PurchaseInvoiceListPage() {
                         </Badge>
                       </td>
                       <td>
-                        <Badge variant={item.source === "EU" ? "info" : "neutral"}>
+                        <Badge
+                          variant={item.source === "EU" ? "info" : "neutral"}
+                        >
                           {item.source === "EU" ? "EU" : "Belföldi"}
                         </Badge>
                       </td>

@@ -40,7 +40,9 @@ function lineNet(line: {
 }): Prisma.Decimal {
   const gross = line.actualQuantity.times(line.unitNet);
   if (!line.discountPercent) return gross;
-  return gross.times(new Prisma.Decimal(1).minus(line.discountPercent.dividedBy(100)));
+  return gross.times(
+    new Prisma.Decimal(1).minus(line.discountPercent.dividedBy(100)),
+  );
 }
 
 function totalNet(lines: PurchaseInvoiceSummaryRow["lines"]): Prisma.Decimal {

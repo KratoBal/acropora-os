@@ -33,6 +33,8 @@ describe("MnbExchangeRateService", () => {
 
   it("throws when no rate is available in the lookback window", async () => {
     const service = new MnbExchangeRateService(new FakeClient([]) as never);
-    await assert.rejects(() => service.getRateForDate("EUR", new Date("2026-07-19")));
+    await assert.rejects(() =>
+      service.getRateForDate("EUR", new Date("2026-07-19")),
+    );
   });
 });

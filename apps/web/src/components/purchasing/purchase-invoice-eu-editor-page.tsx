@@ -64,9 +64,8 @@ export function PurchaseInvoiceEuEditorPage() {
 
   const [supplierSearch, setSupplierSearch] = useState("");
   const [supplierResults, setSupplierResults] = useState<SupplierSummary[]>([]);
-  const [selectedSupplier, setSelectedSupplier] = useState<SupplierSummary | null>(
-    null,
-  );
+  const [selectedSupplier, setSelectedSupplier] =
+    useState<SupplierSummary | null>(null);
   const [showNewSupplier, setShowNewSupplier] = useState(false);
   const [newSupplierName, setNewSupplierName] = useState("");
   const [newSupplierTaxNumber, setNewSupplierTaxNumber] = useState("");
@@ -87,9 +86,9 @@ export function PurchaseInvoiceEuEditorPage() {
   const [note, setNote] = useState("");
 
   const [productSearch, setProductSearch] = useState("");
-  const [productResults, setProductResults] = useState<PurchaseProductSearchResult[]>(
-    [],
-  );
+  const [productResults, setProductResults] = useState<
+    PurchaseProductSearchResult[]
+  >([]);
   const [searchingProducts, setSearchingProducts] = useState(false);
   const [lines, setLines] = useState<InvoiceLineState[]>([]);
 
@@ -273,7 +272,9 @@ export function PurchaseInvoiceEuEditorPage() {
           unit: line.unit,
           unitNet: line.unitNet,
           discountPercent:
-            line.discountPercent === "" ? undefined : Number(line.discountPercent),
+            line.discountPercent === ""
+              ? undefined
+              : Number(line.discountPercent),
         })),
       });
       // Nem navigálunk el azonnal: a UNAS szinkron soronkénti sikeres/
@@ -283,7 +284,9 @@ export function PurchaseInvoiceEuEditorPage() {
       setLines([]);
     } catch (cause) {
       setError(
-        cause instanceof Error ? cause.message : "A számla rögzítése nem sikerült.",
+        cause instanceof Error
+          ? cause.message
+          : "A számla rögzítése nem sikerült.",
       );
     } finally {
       setSubmitting(false);
@@ -313,7 +316,11 @@ export function PurchaseInvoiceEuEditorPage() {
       />
 
       {error ? (
-        <Alert variant="danger" title="A művelet nem sikerült" description={error} />
+        <Alert
+          variant="danger"
+          title="A művelet nem sikerült"
+          description={error}
+        />
       ) : null}
 
       {lastResult ? (
@@ -407,7 +414,9 @@ export function PurchaseInvoiceEuEditorPage() {
                       <Input
                         aria-label="Beszállító neve"
                         value={newSupplierName}
-                        onChange={(event) => setNewSupplierName(event.target.value)}
+                        onChange={(event) =>
+                          setNewSupplierName(event.target.value)
+                        }
                       />
                     </FormField>
                     <FormField label="Közösségi adószám">
@@ -426,7 +435,9 @@ export function PurchaseInvoiceEuEditorPage() {
                         value={newSupplierCountry}
                         maxLength={2}
                         onChange={(event) =>
-                          setNewSupplierCountry(event.target.value.toUpperCase())
+                          setNewSupplierCountry(
+                            event.target.value.toUpperCase(),
+                          )
                         }
                         placeholder="DE"
                       />
@@ -435,14 +446,18 @@ export function PurchaseInvoiceEuEditorPage() {
                       <Input
                         aria-label="E-mail"
                         value={newSupplierEmail}
-                        onChange={(event) => setNewSupplierEmail(event.target.value)}
+                        onChange={(event) =>
+                          setNewSupplierEmail(event.target.value)
+                        }
                       />
                     </FormField>
                     <FormField label="Telefon">
                       <Input
                         aria-label="Telefon"
                         value={newSupplierPhone}
-                        onChange={(event) => setNewSupplierPhone(event.target.value)}
+                        onChange={(event) =>
+                          setNewSupplierPhone(event.target.value)
+                        }
                       />
                     </FormField>
                   </div>
@@ -459,7 +474,9 @@ export function PurchaseInvoiceEuEditorPage() {
                       disabled={!newSupplierName.trim() || creatingSupplier}
                       onClick={() => void createSupplier()}
                     >
-                      {creatingSupplier ? "Létrehozás…" : "Beszállító létrehozása"}
+                      {creatingSupplier
+                        ? "Létrehozás…"
+                        : "Beszállító létrehozása"}
                     </Button>
                   </div>
                 </div>
@@ -475,7 +492,9 @@ export function PurchaseInvoiceEuEditorPage() {
               <Input
                 aria-label="Számlaszám"
                 value={supplierInvoiceNumber}
-                onChange={(event) => setSupplierInvoiceNumber(event.target.value)}
+                onChange={(event) =>
+                  setSupplierInvoiceNumber(event.target.value)
+                }
               />
             </FormField>
             <FormField label="Pénznem">
@@ -483,7 +502,9 @@ export function PurchaseInvoiceEuEditorPage() {
                 aria-label="Pénznem"
                 value={currency}
                 maxLength={3}
-                onChange={(event) => setCurrency(event.target.value.toUpperCase())}
+                onChange={(event) =>
+                  setCurrency(event.target.value.toUpperCase())
+                }
               />
             </FormField>
             <FormField label="MNB árfolyam (HUF)">
@@ -501,7 +522,9 @@ export function PurchaseInvoiceEuEditorPage() {
                 }
               />
               {rateLoading ? (
-                <p className="mt-1 text-xs text-slate-500">Árfolyam lekérdezése…</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Árfolyam lekérdezése…
+                </p>
               ) : rateNotice ? (
                 <p className="mt-1 text-xs text-slate-500">{rateNotice}</p>
               ) : null}
@@ -555,8 +578,8 @@ export function PurchaseInvoiceEuEditorPage() {
         <Card className="p-6">
           <h2 className="font-semibold">Tételek</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Keresd meg a saját termékedet a számlán szereplő tétel alapján (cikkszám
-            vagy terméknév).
+            Keresd meg a saját termékedet a számlán szereplő tétel alapján
+            (cikkszám vagy terméknév).
           </p>
           <div className="mt-4">
             <Input
@@ -566,9 +589,7 @@ export function PurchaseInvoiceEuEditorPage() {
               placeholder="Cikkszám vagy terméknév…"
               leadingIcon={<Icon name="search" size={17} />}
             />
-            {searchingProducts ? (
-              <Skeleton className="mt-2 h-4 w-1/3" />
-            ) : null}
+            {searchingProducts ? <Skeleton className="mt-2 h-4 w-1/3" /> : null}
             {productResults.length > 0 ? (
               <Card className="mt-2 divide-y divide-slate-100 overflow-hidden">
                 {productResults.map((product) => (
@@ -602,13 +623,18 @@ export function PurchaseInvoiceEuEditorPage() {
           ) : (
             <div className="mt-4 space-y-3">
               {lines.map((line) => (
-                <div key={line.key} className="rounded-lg border border-slate-200 p-3">
+                <div
+                  key={line.key}
+                  className="rounded-lg border border-slate-200 p-3"
+                >
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="text-sm font-semibold text-slate-900">
                         {line.productName}
                       </p>
-                      <p className="font-mono text-xs text-slate-500">{line.sku}</p>
+                      <p className="font-mono text-xs text-slate-500">
+                        {line.sku}
+                      </p>
                     </div>
                     <button
                       type="button"
@@ -624,7 +650,9 @@ export function PurchaseInvoiceEuEditorPage() {
                       <input
                         value={line.sourceDescription}
                         onChange={(event) =>
-                          updateLine(line.key, { sourceDescription: event.target.value })
+                          updateLine(line.key, {
+                            sourceDescription: event.target.value,
+                          })
                         }
                         className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
                       />
@@ -639,7 +667,10 @@ export function PurchaseInvoiceEuEditorPage() {
                         step="any"
                         value={line.orderedQuantity}
                         onChange={(event) =>
-                          updateOrderedQuantity(line.key, Number(event.target.value))
+                          updateOrderedQuantity(
+                            line.key,
+                            Number(event.target.value),
+                          )
                         }
                         className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
                       />
@@ -677,7 +708,9 @@ export function PurchaseInvoiceEuEditorPage() {
                         step="any"
                         value={line.unitNet}
                         onChange={(event) =>
-                          updateLine(line.key, { unitNet: Number(event.target.value) })
+                          updateLine(line.key, {
+                            unitNet: Number(event.target.value),
+                          })
                         }
                         className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
                       />

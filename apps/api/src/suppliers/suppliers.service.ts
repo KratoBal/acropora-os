@@ -1,8 +1,15 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 
 import { SuppliersRepository } from "./suppliers.repository.js";
-import type { CreateSupplierDto, SupplierListQueryDto } from "./dto/supplier.dto.js";
+import type {
+  CreateSupplierDto,
+  SupplierListQueryDto,
+} from "./dto/supplier.dto.js";
 
 @Injectable()
 export class SuppliersService {
@@ -26,7 +33,9 @@ export class SuppliersService {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2002"
       )
-        throw new ConflictException("Ez a beszállítói kód már használatban van.");
+        throw new ConflictException(
+          "Ez a beszállítói kód már használatban van.",
+        );
       throw error;
     }
   }

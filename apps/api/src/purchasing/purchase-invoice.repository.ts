@@ -298,7 +298,10 @@ export class PurchaseInvoiceRepository extends Repository {
 
         return invoice;
       },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30_000 },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        timeout: 30_000,
+      },
     );
 
     return toPurchaseInvoiceDetail(created);
@@ -322,7 +325,9 @@ export class PurchaseInvoiceRepository extends Repository {
                 },
               },
               {
-                supplier: { name: { contains: query.search, mode: "insensitive" } },
+                supplier: {
+                  name: { contains: query.search, mode: "insensitive" },
+                },
               },
             ],
           }

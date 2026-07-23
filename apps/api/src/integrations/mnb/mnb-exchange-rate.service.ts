@@ -32,7 +32,8 @@ export class MnbExchangeRateService {
     date: Date,
   ): Promise<ResolvedExchangeRate> {
     const normalizedCurrency = currency.trim().toUpperCase();
-    if (normalizedCurrency === "HUF") return { quotedDate: toIsoDate(date), rate: "1" };
+    if (normalizedCurrency === "HUF")
+      return { quotedDate: toIsoDate(date), rate: "1" };
 
     const endDate = toIsoDate(date);
     const startDate = toIsoDate(

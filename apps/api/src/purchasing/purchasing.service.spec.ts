@@ -86,7 +86,9 @@ function buildService(options: {
   } as unknown as PurchaseInvoiceRepository;
   const suppliers = {
     detail: async () =>
-      (options.supplierExists ?? true) ? { id: "supplier-1", name: "Test" } : null,
+      (options.supplierExists ?? true)
+        ? { id: "supplier-1", name: "Test" }
+        : null,
   } as unknown as SuppliersRepository;
   const productSearch = {} as unknown as PurchaseProductSearchService;
   const mnbRates = {
@@ -105,7 +107,9 @@ function buildService(options: {
         sku: request.sku,
       })),
   } as unknown as UnasApiClient;
-  const unasAuth = { getToken: async () => "token" } as unknown as UnasAuthService;
+  const unasAuth = {
+    getToken: async () => "token",
+  } as unknown as UnasAuthService;
   const service = new PurchasingService(
     invoices,
     suppliers,
@@ -261,7 +265,9 @@ describe("PurchasingService.createInvoice", () => {
     assert.equal(result.successCount, 1);
     assert.equal(result.failedCount, 1);
     const params = getCapturedCreateParams();
-    const failedLine = params?.lines.find((line) => line.variantId === "variant-1");
+    const failedLine = params?.lines.find(
+      (line) => line.variantId === "variant-1",
+    );
     const okLine = params?.lines.find((line) => line.variantId === "variant-2");
     assert.equal(failedLine?.syncStatus, "FAILED");
     assert.equal(failedLine?.syncError, "UNAS_TIMEOUT");

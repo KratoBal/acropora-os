@@ -60,7 +60,9 @@ describe("toPurchaseInvoiceSummary", () => {
 
   it("applies a per-line discount percentage before summing", () => {
     const summary = toPurchaseInvoiceSummary(
-      summaryRow([line({ actualQuantity: "10", unitNet: "10", discountPercent: "20" })]),
+      summaryRow([
+        line({ actualQuantity: "10", unitNet: "10", discountPercent: "20" }),
+      ]),
     );
     // 10 * 10 = 100, minus 20% = 80
     assert.equal(summary.totalNet, "80");

@@ -5,7 +5,10 @@ import { Prisma, prisma, Repository, type Supplier } from "@acropora/database";
 import type { SupplierListResponse, SupplierSummary } from "@acropora/types";
 
 import { generateCode } from "../common/code-generator.util.js";
-import type { CreateSupplierDto, SupplierListQueryDto } from "./dto/supplier.dto.js";
+import type {
+  CreateSupplierDto,
+  SupplierListQueryDto,
+} from "./dto/supplier.dto.js";
 
 function toSummary(supplier: Supplier): SupplierSummary {
   return {
@@ -30,7 +33,9 @@ export class SuppliersRepository extends Repository {
 
   async list(query: SupplierListQueryDto): Promise<SupplierListResponse> {
     const where: Prisma.SupplierWhereInput = {
-      ...(query.status === "ALL" ? {} : { isActive: query.status === "ACTIVE" }),
+      ...(query.status === "ALL"
+        ? {}
+        : { isActive: query.status === "ACTIVE" }),
       ...(query.search
         ? {
             OR: [

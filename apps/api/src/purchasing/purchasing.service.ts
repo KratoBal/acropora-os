@@ -37,7 +37,9 @@ export class PurchasingService {
     private readonly unasAuth: UnasAuthService,
   ) {}
 
-  searchProducts(query: string | undefined): Promise<PurchaseProductSearchResult[]> {
+  searchProducts(
+    query: string | undefined,
+  ): Promise<PurchaseProductSearchResult[]> {
     return this.productSearch.search(query);
   }
 
@@ -72,13 +74,16 @@ export class PurchasingService {
     );
   }
 
-  list(query: PurchaseInvoiceListQueryDto): Promise<PurchaseInvoiceListResponse> {
+  list(
+    query: PurchaseInvoiceListQueryDto,
+  ): Promise<PurchaseInvoiceListResponse> {
     return this.invoices.list(query);
   }
 
   async getDetail(id: string): Promise<PurchaseInvoiceDetail> {
     const detail = await this.invoices.findById(id);
-    if (!detail) throw new NotFoundException("A beszerzési számla nem található.");
+    if (!detail)
+      throw new NotFoundException("A beszerzési számla nem található.");
     return detail;
   }
 
@@ -95,7 +100,9 @@ export class PurchasingService {
       );
     }
     if (input.lines.length === 0)
-      throw new BadRequestException("Legalább egy tétel szükséges a számlához.");
+      throw new BadRequestException(
+        "Legalább egy tétel szükséges a számlához.",
+      );
 
     const supplier = await this.suppliers.detail(input.supplierId);
     if (!supplier) throw new NotFoundException("A beszállító nem található.");
@@ -116,7 +123,10 @@ export class PurchasingService {
       // hagyni összeomlani, helyette egyértelmű kérést adunk a kézi
       // árfolyam megadására.
       try {
-        const resolved = await this.mnbRates.getRateForDate(currency, invoiceDate);
+        const resolved = await this.mnbRates.getRateForDate(
+          currency,
+          invoiceDate,
+        );
         exchangeRate = new Prisma.Decimal(resolved.rate);
       } catch {
         throw new BadRequestException(
@@ -126,7 +136,8 @@ export class PurchasingService {
     }
 
     const variantIds = input.lines.map((line) => line.variantId);
-    const { warehouseId, variants } = await this.invoices.currentStock(variantIds);
+    const { warehouseId, variants } =
+      await this.invoices.currentStock(variantIds);
 
     // Több sor is hivatkozhat ugyanarra a termékre egy számlán belül
     // (pl. eltérő beszerzési áron/kedvezménnyel); a készlethatásukat
@@ -148,10 +159,13 @@ export class PurchasingService {
       if (!Number.isFinite(line.actualQuantity) || line.actualQuantity < 0)
         throw new BadRequestException(`Érvénytelen mennyiség: ${info.sku}.`);
       if (!Number.isFinite(line.unitNet) || line.unitNet < 0)
-        throw new BadRequestException(`Érvénytelen beszerzési ár: ${info.sku}.`);
+        throw new BadRequestException(
+          `Érvénytelen beszerzési ár: ${info.sku}.`,
+        );
 
       const actualQuantity = new Prisma.Decimal(line.actualQuantity);
-      const before = runningQtyByVariant.get(line.variantId) ?? new Prisma.Decimal(0);
+      const before =
+        runningQtyByVariant.get(line.variantId) ?? new Prisma.Decimal(0);
       const resultingQty = before.plus(actualQuantity);
       runningQtyByVariant.set(line.variantId, resultingQty);
 
@@ -210,9 +224,7 @@ export class PurchasingService {
       invoiceDate,
       dueDate: input.dueDate ? new Date(input.dueDate) : null,
       isPaid: input.isPaid ?? false,
-      paidAt: input.isPaid
-        ? new Date(input.paidAt ?? now.toISOString())
-        : null,
+      paidAt: input.isPaid ? new Date(input.paidAt ?? now.toISOString()) : null,
       vatRate: null,
       note: input.note?.trim() || null,
       actorUserId,
