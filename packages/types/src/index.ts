@@ -105,6 +105,7 @@ export type {
   CreateSupplierInput,
   SupplierListResponse,
   SupplierSummary,
+  UpdateSupplierInput,
 } from "./supplier-management.js";
 export type {
   CreatePurchaseInvoiceInput,
@@ -209,7 +210,19 @@ export type {
   NavTaxpayerAddress,
   NavTaxpayerLookupResult,
 } from "./integrations/nav-taxpayer.js";
+export type {
+  NavIncomingInvoiceAddress,
+  NavIncomingInvoiceDetail,
+  NavIncomingInvoiceLine,
+  NavIncomingInvoiceListResponse,
+  NavIncomingInvoiceStatus,
+  NavIncomingInvoiceSummary,
+  NavInvoiceSyncRun,
+  NavInvoiceSyncRunStatus,
+  NavInvoiceSyncSummary,
+} from "./integrations/nav-incoming-invoice.js";
 export type { PostalCodeLookupResult } from "./integrations/postal-code.js";
+export type { ViesVatLookupResult } from "./integrations/vies-vat.js";
 export type {
   ImportIssue,
   ImportIssueSeverity,

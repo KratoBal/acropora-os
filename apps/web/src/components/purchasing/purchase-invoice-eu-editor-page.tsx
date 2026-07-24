@@ -2,6 +2,7 @@
 
 import {
   Alert,
+  Badge,
   Button,
   Card,
   FormField,
@@ -14,20 +15,31 @@ import {
   hasPermission,
   PERMISSIONS,
   type PurchaseInvoiceResult,
+  type PurchaseInvoiceSource,
   type PurchaseProductSearchResult,
   type SupplierSummary,
+  type ViesVatLookupResult,
 } from "@acropora/types";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { inferCountryFromTaxNumber } from "@/components/customers/country-options";
+import { navIncomingInvoicesApi } from "@/lib/api/nav-incoming-invoices";
 import { purchasingApi } from "@/lib/api/purchasing";
 import { suppliersApi } from "@/lib/api/suppliers";
+import { viesVatApi } from "@/lib/api/vies-vat";
 import { createDebouncer } from "@/lib/products/list-state";
+
+// Ez a komponens az EU-s és a belföldi (kézi és NAV-alapú) beszerzési
+// számla rögzítést is kiszolgálja ugyanazon a felületen - a fájl-/export
+// név a történeti EU-s eredetből maradt, de a `source` állapot dönti el a
+// tényleges viselkedést (deviza+MNB árfolyam vs. HUF+ÁFA-kulcs).
 
 interface InvoiceLineState {
   key: string;
-  variantId: string;
+  /** Nincs, ha a tétel nincs a terméktörzsben - ilyenkor a sourceDescription kötelező, és nincs UNAS-szinkron. */
+  variantId: string | null;
   sku: string;
   productName: string;
   unit: string;
@@ -54,13 +66,31 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function toDateInput(isoDate: string | undefined): string {
+  return isoDate ? isoDate.slice(0, 10) : "";
+}
+
 export function PurchaseInvoiceEuEditorPage() {
   const { session } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const navInvoiceId = searchParams.get("navInvoiceId") ?? undefined;
   const token = session?.token ?? "";
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.PURCHASING_MANAGE),
   );
+
+  // NAV-alapú bevételezésnél a forrás fixen HU_NAV, nincs váltó; egyébként
+  // a felhasználó választhat EU-s és belföldi kézi rögzítés között.
+  const [source, setSource] = useState<PurchaseInvoiceSource>(
+    navInvoiceId ? "HU_NAV" : "EU",
+  );
+  const isDomestic = source !== "EU";
+  const [navPrefillLoading, setNavPrefillLoading] = useState(
+    Boolean(navInvoiceId),
+  );
+  const [navPrefillError, setNavPrefillError] = useState<string | null>(null);
+  const [navPrefillNumber, setNavPrefillNumber] = useState<string | null>(null);
 
   const [supplierSearch, setSupplierSearch] = useState("");
   const [supplierResults, setSupplierResults] = useState<SupplierSummary[]>([]);
@@ -73,12 +103,17 @@ export function PurchaseInvoiceEuEditorPage() {
   const [newSupplierEmail, setNewSupplierEmail] = useState("");
   const [newSupplierPhone, setNewSupplierPhone] = useState("");
   const [creatingSupplier, setCreatingSupplier] = useState(false);
+  const [viesBusy, setViesBusy] = useState(false);
+  const [viesResult, setViesResult] = useState<ViesVatLookupResult | null>(
+    null,
+  );
 
   const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState("");
   const [currency, setCurrency] = useState("EUR");
   const [exchangeRate, setExchangeRate] = useState<number | "">("");
   const [rateLoading, setRateLoading] = useState(false);
   const [rateNotice, setRateNotice] = useState<string | null>(null);
+  const [vatRate, setVatRate] = useState<number | "">(27);
   const [invoiceDate, setInvoiceDate] = useState(todayIso());
   const [dueDate, setDueDate] = useState("");
   const [isPaid, setIsPaid] = useState(false);
@@ -97,6 +132,72 @@ export function PurchaseInvoiceEuEditorPage() {
   const [lastResult, setLastResult] = useState<PurchaseInvoiceResult | null>(
     null,
   );
+
+  const changeSource = (next: PurchaseInvoiceSource) => {
+    setSource(next);
+    setCurrency(next === "EU" ? "EUR" : "HUF");
+  };
+
+  // NAV-alapú bevételezés előtöltése: a beszállító nevét/adószámát a
+  // keresőmezőbe és a soron kívüli gyorslétrehozás mezőibe is betöltjük
+  // (a felhasználó választja ki a találatot vagy hozza létre egy
+  // kattintással), a tételeket pedig a NAV-on szereplő megnevezéssel,
+  // mennyiséggel és egységárral - ezeket írja át a saját elnevezésére és a
+  // ténylegesen átvett mennyiségre a bevételezés előtt.
+  useEffect(() => {
+    if (!navInvoiceId || !token) return;
+    setNavPrefillLoading(true);
+    setNavPrefillError(null);
+    void navIncomingInvoicesApi
+      .detail(token, navInvoiceId)
+      .then((detail) => {
+        setNavPrefillNumber(detail.navInvoiceNumber);
+        setSupplierInvoiceNumber(detail.navInvoiceNumber);
+        setInvoiceDate(toDateInput(detail.invoiceIssueDate) || todayIso());
+        setDueDate(toDateInput(detail.paymentDate));
+        setVatRate(
+          detail.suggestedVatRatePercent
+            ? Number(detail.suggestedVatRatePercent)
+            : 27,
+        );
+        setSupplierSearch(detail.supplierTaxNumber);
+        setNewSupplierName(detail.supplierName);
+        setNewSupplierTaxNumber(detail.supplierTaxNumber);
+        setNewSupplierCountry("HU");
+        setLines(
+          detail.lines.map((line, index) => {
+            const quantity = Number(line.quantity) || 0;
+            const unitPrice =
+              line.unitPrice !== undefined
+                ? Number(line.unitPrice)
+                : quantity > 0
+                  ? Number(line.lineNetAmount) / quantity
+                  : 0;
+            return {
+              key: `nav-${index}-${line.lineNumber}`,
+              variantId: null,
+              sku: "",
+              productName: "",
+              unit: line.unit,
+              sourceDescription: line.description,
+              orderedQuantity: quantity,
+              actualQuantity: quantity,
+              unitNet: Number.isFinite(unitPrice) ? unitPrice : 0,
+              discountPercent: "",
+            };
+          }),
+        );
+      })
+      .catch((cause: unknown) =>
+        setNavPrefillError(
+          cause instanceof Error
+            ? cause.message
+            : "A NAV számla adatai nem tölthetők be.",
+        ),
+      )
+      .finally(() => setNavPrefillLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navInvoiceId, token]);
 
   useEffect(() => {
     if (!token || !supplierSearch.trim()) {
@@ -131,6 +232,13 @@ export function PurchaseInvoiceEuEditorPage() {
   }, [productSearch, token]);
 
   useEffect(() => {
+    // Belföldi (HU_MANUAL/HU_NAV) számlánál nincs MNB-lekérdezés: a
+    // pénznem mindig HUF, az árfolyam mező nem értelmezett.
+    if (isDomestic) {
+      setExchangeRate("");
+      setRateNotice(null);
+      return;
+    }
     if (!token || !invoiceDate) return;
     if (currency.trim().toUpperCase() === "HUF") {
       setExchangeRate("");
@@ -158,7 +266,7 @@ export function PurchaseInvoiceEuEditorPage() {
       )
       .finally(() => setRateLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currency, invoiceDate, token]);
+  }, [currency, invoiceDate, token, isDomestic]);
 
   const addLine = (product: PurchaseProductSearchResult) => {
     setLines((previous) => [
@@ -180,6 +288,24 @@ export function PurchaseInvoiceEuEditorPage() {
     ]);
     setProductSearch("");
     setProductResults([]);
+  };
+
+  const addManualLine = () => {
+    setLines((previous) => [
+      ...previous,
+      {
+        key: `manual-${previous.length}-${Date.now()}`,
+        variantId: null,
+        sku: "",
+        productName: "",
+        unit: "",
+        sourceDescription: "",
+        orderedQuantity: 1,
+        actualQuantity: 1,
+        unitNet: 0,
+        discountPercent: "",
+      },
+    ]);
   };
 
   const updateLine = (key: string, patch: Partial<InvoiceLineState>) => {
@@ -231,6 +357,24 @@ export function PurchaseInvoiceEuEditorPage() {
     }
   };
 
+  const checkVies = async () => {
+    if (!newSupplierTaxNumber.trim() || viesBusy) return;
+    setViesBusy(true);
+    setViesResult(null);
+    try {
+      setViesResult(await viesVatApi.check(token, newSupplierTaxNumber.trim()));
+    } catch (cause) {
+      setViesResult({
+        message:
+          cause instanceof Error
+            ? cause.message
+            : "A VIES ellenőrzés nem sikerült.",
+      });
+    } finally {
+      setViesBusy(false);
+    }
+  };
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
@@ -246,26 +390,45 @@ export function PurchaseInvoiceEuEditorPage() {
       setError("A pénznem megadása kötelező.");
       return;
     }
+    if (isDomestic && vatRate === "") {
+      setError("Belföldi számlánál az ÁFA-kulcs megadása kötelező.");
+      return;
+    }
     if (lines.length === 0) {
       setError("Legalább egy tétel szükséges a számlához.");
       return;
+    }
+    for (const line of lines) {
+      if (!line.variantId && !line.sourceDescription.trim()) {
+        setError(
+          "A terméktörzsben nem szereplő tételeknél a számlán szereplő megnevezés megadása kötelező.",
+        );
+        return;
+      }
+      if (!line.unit.trim()) {
+        setError("Az egység megadása minden tételnél kötelező.");
+        return;
+      }
     }
     setSubmitting(true);
     setLastResult(null);
     try {
       const result = await purchasingApi.create(token, {
-        source: "EU",
+        source,
         supplierId: selectedSupplier.id,
         supplierInvoiceNumber: supplierInvoiceNumber.trim(),
         currency: currency.trim().toUpperCase(),
-        exchangeRate: exchangeRate === "" ? undefined : Number(exchangeRate),
+        exchangeRate:
+          !isDomestic && exchangeRate !== "" ? Number(exchangeRate) : undefined,
+        vatRate: isDomestic && vatRate !== "" ? Number(vatRate) : undefined,
         invoiceDate: new Date(invoiceDate).toISOString(),
         dueDate: dueDate ? new Date(dueDate).toISOString() : undefined,
         isPaid,
         paidAt: isPaid && paidAt ? new Date(paidAt).toISOString() : undefined,
         note: note.trim() || undefined,
+        navIncomingInvoiceId: navInvoiceId,
         lines: lines.map((line) => ({
-          variantId: line.variantId,
+          variantId: line.variantId ?? undefined,
           sourceDescription: line.sourceDescription.trim() || undefined,
           orderedQuantity: line.orderedQuantity,
           actualQuantity: line.actualQuantity,
@@ -303,17 +466,78 @@ export function PurchaseInvoiceEuEditorPage() {
     );
   }
 
+  const pageTitle = navInvoiceId
+    ? "Belföldi számla bevételezése (NAV)"
+    : isDomestic
+      ? "Új belföldi beszerzési számla"
+      : "Új EU-s beszerzési számla";
+  const pageDescription = navInvoiceId
+    ? "A NAV Online Számla rendszerből lekérdezett belföldi számla bevételezése."
+    : isDomestic
+      ? "Belföldi beszállítói számla kézi rögzítése, tételes bevételezéssel."
+      : "Beérkezett EU-n belüli beszállítói számla rögzítése, tételes bevételezéssel.";
+
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Új EU-s beszerzési számla"
-        description="Beérkezett EU-n belüli beszállítói számla rögzítése, tételes bevételezéssel."
+        title={pageTitle}
+        description={pageDescription}
         actions={
-          <Button variant="secondary" onClick={() => router.push("/beszerzes")}>
-            Vissza a listához
+          <Button
+            variant="secondary"
+            onClick={() =>
+              router.push(
+                navInvoiceId
+                  ? `/beszerzes/nav-szamlak/${navInvoiceId}`
+                  : "/beszerzes",
+              )
+            }
+          >
+            {navInvoiceId ? "Vissza a NAV számlához" : "Vissza a listához"}
           </Button>
         }
       />
+
+      {!navInvoiceId ? (
+        <Card className="flex gap-2 p-4">
+          <Button
+            type="button"
+            variant={source === "EU" ? "primary" : "secondary"}
+            onClick={() => changeSource("EU")}
+          >
+            EU-s beszerzés
+          </Button>
+          <Button
+            type="button"
+            variant={source === "HU_MANUAL" ? "primary" : "secondary"}
+            onClick={() => changeSource("HU_MANUAL")}
+          >
+            Belföldi (kézi)
+          </Button>
+        </Card>
+      ) : null}
+
+      {navPrefillLoading ? (
+        <Card className="p-5">
+          <Skeleton className="h-4 w-1/3" />
+        </Card>
+      ) : null}
+
+      {navPrefillError ? (
+        <Alert
+          variant="danger"
+          title="A NAV számla nem tölthető be"
+          description={navPrefillError}
+        />
+      ) : null}
+
+      {navPrefillNumber && !navPrefillLoading ? (
+        <Alert
+          variant="info"
+          title="NAV számla alapján előtöltve"
+          description={`Számlaszám: ${navPrefillNumber}. Ellenőrizd/írd át a tételek megnevezését a saját termékneveidre, és add meg a ténylegesen beérkezett mennyiséget.`}
+        />
+      ) : null}
 
       {error ? (
         <Alert
@@ -419,15 +643,60 @@ export function PurchaseInvoiceEuEditorPage() {
                         }
                       />
                     </FormField>
-                    <FormField label="Közösségi adószám">
-                      <Input
-                        aria-label="Adószám"
-                        value={newSupplierTaxNumber}
-                        onChange={(event) =>
-                          setNewSupplierTaxNumber(event.target.value)
-                        }
-                        placeholder="DE123456789"
-                      />
+                    <FormField
+                      label={isDomestic ? "Adószám" : "Közösségi adószám"}
+                    >
+                      <div className="flex gap-2">
+                        <Input
+                          aria-label="Adószám"
+                          value={newSupplierTaxNumber}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            setNewSupplierTaxNumber(value);
+                            setViesResult(null);
+                            if (!isDomestic) {
+                              const inferred = inferCountryFromTaxNumber(value);
+                              if (inferred) setNewSupplierCountry(inferred);
+                            }
+                          }}
+                          placeholder={
+                            isDomestic ? "12345678-2-13" : "DE123456789"
+                          }
+                        />
+                        {!isDomestic ? (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            disabled={!newSupplierTaxNumber.trim() || viesBusy}
+                            onClick={() => void checkVies()}
+                          >
+                            {viesBusy ? "Ellenőrzés…" : "VIES"}
+                          </Button>
+                        ) : null}
+                      </div>
+                      {!isDomestic && viesResult ? (
+                        viesResult.valid === undefined ? (
+                          <p className="mt-1 text-xs text-amber-600">
+                            {viesResult.message}
+                          </p>
+                        ) : (
+                          <div className="mt-1 flex items-center gap-2">
+                            <Badge
+                              variant={viesResult.valid ? "success" : "danger"}
+                            >
+                              {viesResult.valid ? "Érvényes" : "Érvénytelen"}
+                            </Badge>
+                            {viesResult.valid &&
+                            (viesResult.name || viesResult.address) ? (
+                              <span className="text-xs text-slate-500">
+                                {[viesResult.name, viesResult.address]
+                                  .filter(Boolean)
+                                  .join(" - ")}
+                              </span>
+                            ) : null}
+                          </div>
+                        )
+                      ) : null}
                     </FormField>
                     <FormField label="Ország (ISO kód)">
                       <Input
@@ -439,7 +708,7 @@ export function PurchaseInvoiceEuEditorPage() {
                             event.target.value.toUpperCase(),
                           )
                         }
-                        placeholder="DE"
+                        placeholder={isDomestic ? "HU" : "DE"}
                       />
                     </FormField>
                     <FormField label="E-mail">
@@ -502,33 +771,56 @@ export function PurchaseInvoiceEuEditorPage() {
                 aria-label="Pénznem"
                 value={currency}
                 maxLength={3}
+                disabled={isDomestic}
                 onChange={(event) =>
                   setCurrency(event.target.value.toUpperCase())
                 }
               />
             </FormField>
-            <FormField label="MNB árfolyam (HUF)">
-              <Input
-                aria-label="Árfolyam"
-                type="number"
-                step="any"
-                min={0}
-                value={exchangeRate}
-                disabled={currency.trim().toUpperCase() === "HUF"}
-                onChange={(event) =>
-                  setExchangeRate(
-                    event.target.value === "" ? "" : Number(event.target.value),
-                  )
-                }
-              />
-              {rateLoading ? (
-                <p className="mt-1 text-xs text-slate-500">
-                  Árfolyam lekérdezése…
-                </p>
-              ) : rateNotice ? (
-                <p className="mt-1 text-xs text-slate-500">{rateNotice}</p>
-              ) : null}
-            </FormField>
+            {isDomestic ? (
+              <FormField label="ÁFA-kulcs (%)">
+                <Input
+                  aria-label="ÁFA-kulcs"
+                  type="number"
+                  step="any"
+                  min={0}
+                  max={100}
+                  value={vatRate}
+                  onChange={(event) =>
+                    setVatRate(
+                      event.target.value === ""
+                        ? ""
+                        : Number(event.target.value),
+                    )
+                  }
+                />
+              </FormField>
+            ) : (
+              <FormField label="MNB árfolyam (HUF)">
+                <Input
+                  aria-label="Árfolyam"
+                  type="number"
+                  step="any"
+                  min={0}
+                  value={exchangeRate}
+                  disabled={currency.trim().toUpperCase() === "HUF"}
+                  onChange={(event) =>
+                    setExchangeRate(
+                      event.target.value === ""
+                        ? ""
+                        : Number(event.target.value),
+                    )
+                  }
+                />
+                {rateLoading ? (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Árfolyam lekérdezése…
+                  </p>
+                ) : rateNotice ? (
+                  <p className="mt-1 text-xs text-slate-500">{rateNotice}</p>
+                ) : null}
+              </FormField>
+            )}
             <FormField label="Számla kelte">
               <Input
                 aria-label="Számla kelte"
@@ -579,7 +871,9 @@ export function PurchaseInvoiceEuEditorPage() {
           <h2 className="font-semibold">Tételek</h2>
           <p className="mt-1 text-sm text-slate-500">
             Keresd meg a saját termékedet a számlán szereplő tétel alapján
-            (cikkszám vagy terméknév).
+            (cikkszám vagy terméknév). Ha a tétel nincs a terméktörzsben, kézzel
+            is felvehető - ilyenkor a helyi készlet és a UNAS-szinkron nem
+            érinti.
           </p>
           <div className="mt-4">
             <Input
@@ -614,11 +908,20 @@ export function PurchaseInvoiceEuEditorPage() {
                 ))}
               </Card>
             ) : null}
+            <Button
+              type="button"
+              variant="secondary"
+              className="mt-2"
+              onClick={addManualLine}
+            >
+              Kézi tétel felvétele (nincs a terméktörzsben)
+            </Button>
           </div>
 
           {lines.length === 0 ? (
             <p className="mt-4 text-sm text-slate-500">
-              Még nincs felvett tétel. Keress rá egy termékre a hozzáadáshoz.
+              Még nincs felvett tétel. Keress rá egy termékre, vagy vegyél fel
+              egy kézi tételt.
             </p>
           ) : (
             <div className="mt-4 space-y-3">
@@ -629,12 +932,23 @@ export function PurchaseInvoiceEuEditorPage() {
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <p className="text-sm font-semibold text-slate-900">
-                        {line.productName}
-                      </p>
-                      <p className="font-mono text-xs text-slate-500">
-                        {line.sku}
-                      </p>
+                      {line.variantId ? (
+                        <>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {line.productName}
+                          </p>
+                          <p className="font-mono text-xs text-slate-500">
+                            {line.sku}
+                          </p>
+                        </>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-slate-900">
+                            {line.sourceDescription || "Kézi tétel"}
+                          </p>
+                          <Badge variant="warning">Nincs terméktörzsben</Badge>
+                        </div>
+                      )}
                     </div>
                     <button
                       type="button"
@@ -646,7 +960,8 @@ export function PurchaseInvoiceEuEditorPage() {
                   </div>
                   <div className="mt-2">
                     <label className="text-xs text-slate-500">
-                      Megnevezés a számlán (opcionális)
+                      Megnevezés a számlán
+                      {line.variantId ? " (opcionális)" : " (kötelező)"}
                       <input
                         value={line.sourceDescription}
                         onChange={(event) =>

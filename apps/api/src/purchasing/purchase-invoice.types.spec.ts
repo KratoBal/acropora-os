@@ -108,4 +108,33 @@ describe("toPurchaseInvoiceDetail", () => {
     assert.equal(detail.totalNet, "50");
     assert.equal(detail.supplierName, "Test Supplier");
   });
+
+  it("handles a line without a matching product variant", () => {
+    const row = {
+      ...summaryRow([]),
+      lines: [
+        {
+          id: "line-1",
+          purchaseInvoiceId: "invoice-1",
+          variantId: null,
+          sourceDescription: "Egyedi csomagolóanyag",
+          orderedQuantity: new Prisma.Decimal("2"),
+          actualQuantity: new Prisma.Decimal("2"),
+          unit: "db",
+          unitNet: new Prisma.Decimal("3"),
+          discountPercent: null,
+          syncStatus: "NOT_LINKED",
+          syncError: null,
+          variant: null,
+        },
+      ],
+    } as unknown as PurchaseInvoiceDetailRow;
+
+    const detail = toPurchaseInvoiceDetail(row);
+    assert.equal(detail.lines[0]?.variantId, undefined);
+    assert.equal(detail.lines[0]?.sku, undefined);
+    assert.equal(detail.lines[0]?.productName, undefined);
+    assert.equal(detail.lines[0]?.syncStatus, "NOT_LINKED");
+    assert.equal(detail.lines[0]?.lineNet, "6");
+  });
 });

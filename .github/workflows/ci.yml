@@ -85,3 +85,166 @@ jobs:
 
       - name: Production build
         run: pnpm build
+
+  docker-build-scan:
+    name: Docker build & vulnerability scan (${{ matrix.app }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [api, web]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Builds through every stage the final image depends on (pruner ->
+      # builder -> pruned -> runner for api; pruner -> builder -> runner for
+      # web), including the "builder" stage that also doubles as the
+      # production migration image (see docs/DEPLOYMENT.md, Section 5) —
+      # there is no separate build step needed to validate that stage, it's
+      # a prerequisite of the default target built here.
+      - name: Build ${{ matrix.app }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          push: false
+          load: true
+          tags: acropora-${{ matrix.app }}:ci
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+
+      # Pinned to a commit SHA rather than a version tag on purpose:
+      # aquasecurity/trivy-action (and trivy itself) suffered a real
+      # supply-chain compromise in March 2026 — credential-stealing code was
+      # injected via imposter commits into every trivy-action tag from
+      # 0.0.1 through 0.34.2. Aqua's own post-incident guidance is to pin
+      # Actions to an immutable commit SHA, not a mutable tag, going
+      # forward. This SHA is v0.36.0's release commit (GitHub-verified
+      # signature), the latest release as of this writing.
+      #
+      # CRITICAL-severity, fixable vulnerabilities fail the build outright;
+      # everything else is reported but non-blocking for now. Tightening
+      # this (e.g. to also gate on HIGH) is a reasonable future step once
+      # the baseline is clean — see the production readiness review in
+      # docs/PRODUCTION-DEPLOYMENT-ARCHITECTURE-REVIEW.md.
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: acropora-${{ matrix.app }}:ci
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: os,library
+
+  docker-smoke-test:
+    name: Docker runtime smoke test (api)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: docker-build-scan
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: acropora_docker_smoke
+          POSTGRES_USER: acropora
+          POSTGRES_PASSWORD: acropora
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U acropora -d acropora_docker_smoke"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://acropora:acropora@localhost:5432/acropora_docker_smoke?schema=public
+      REDIS_URL: redis://localhost:6379
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # This is the actual production migration path end to end: build the
+      # pre-prune "builder" stage and run `prisma migrate deploy` from it,
+      # exactly as documented in docs/COOLIFY.md's pre-deployment command.
+      - name: Build migration image (builder stage)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          target: builder
+          push: false
+          load: true
+          tags: acropora-api:migrate-ci
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+      - name: Run migrations against the CI database
+        run: |
+          docker run --rm --network host \
+            --env DATABASE_URL="$DATABASE_URL" \
+            acropora-api:migrate-ci \
+            pnpm --filter @acropora/database exec prisma migrate deploy
+
+      - name: Build runtime image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: false
+          load: true
+          tags: acropora-api:ci
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+      - name: Start container and verify /health
+        run: |
+          set -euo pipefail
+          container_id=$(docker run -d --network host \
+            --env NODE_ENV=production \
+            --env DATABASE_URL="$DATABASE_URL" \
+            --env REDIS_URL="$REDIS_URL" \
+            --env PORT=3001 \
+            --env WEB_URL=http://127.0.0.1:3000 \
+            --env UNAS_CREDENTIAL_ACTIVE_KEY_VERSION=1 \
+            --env UNAS_CREDENTIAL_MASTER_KEY_V1="$(openssl rand -base64 32)" \
+            --env UNAS_API_KEY=ci-smoke-test-key \
+            acropora-api:ci)
+
+          cleanup() {
+            docker logs "$container_id" || true
+            docker rm -f "$container_id" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          for attempt in $(seq 1 20); do
+            if response=$(curl -sf http://127.0.0.1:3001/health); then
+              echo "$response"
+              echo "api container is healthy after ${attempt} attempt(s)"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "api container never became healthy" >&2
+          exit 1

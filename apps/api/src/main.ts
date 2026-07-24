@@ -16,6 +16,11 @@ async function bootstrap() {
     }),
   );
 
+  // Let Nest forward SIGTERM/SIGINT into onModuleDestroy/beforeApplicationShutdown
+  // hooks (Prisma disconnect, in-flight scheduler timers, etc.) instead of the
+  // process being hard-killed mid-request during a Coolify rolling restart.
+  app.enableShutdownHooks();
+
   const port = Number(process.env.PORT ?? 3001);
   await app.listen(port);
   console.log(`Acropora API: http://localhost:${port}`);
