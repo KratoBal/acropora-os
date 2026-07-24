@@ -16,7 +16,11 @@
 #    needed to build and to run `prisma generate`.
 # 3. `pnpm --filter @acropora/api deploy --prod` (pnpm's own workspace-aware
 #    deploy command, see the "deployed" stage below) then produces a
-#    self-contained, portable production directory for @acropora/api alone.
+#    self-contained, portable production directory for @acropora/api alone,
+#    followed by regenerating the Prisma Client directly into that
+#    directory (deploy does not carry forward Prisma's generated
+#    artifacts — see the "deployed" stage for why and how this was
+#    verified).
 #
 #    This replaced an earlier `pnpm prune --prod` (stripping devDependencies
 #    out of the built tree in place) after that approach was found, in
@@ -117,26 +121,70 @@ RUN --mount=type=cache,id=acropora-api-turbo-cache,target=/app/.turbo \
 FROM builder AS deployed
 RUN pnpm --filter @acropora/api deploy /app/deploy --prod
 
+# `pnpm deploy` reconstructs @acropora/api's production node_modules from
+# pnpm's own content-addressable store, which holds each dependency's
+# pristine, as-published contents only. Prisma's generated client (the
+# schema-specific code, plus the query engine binary, written into a
+# `.prisma/client` directory that lives alongside wherever `@prisma/client`
+# resolves) is produced by running `prisma generate` — a mutation applied
+# to a project's on-disk copy AFTER install, never folded back into that
+# shared store. Verified directly (outside this Docker build, same pnpm
+# version): manually placing a `.prisma/client` marker file next to the
+# builder stage's own resolved `@prisma/client`, then running `pnpm
+# --filter @acropora/api deploy` again, shows the marker does not appear
+# anywhere in the deploy output — confirming `pnpm deploy` genuinely does
+# not carry forward Prisma's generated artifacts. The deploy output
+# therefore ships a pristine, ungenerated `@prisma/client`, which is
+# exactly what produced `SyntaxError: Named export 'PrismaClient' not
+# found` at runtime: @prisma/client's own entrypoint does
+# `require('.prisma/client/default')`, and that directory doesn't exist.
+#
+# Fix: regenerate directly into the deployed tree, using the Prisma CLI
+# from this builder-derived stage (never present in the final runner
+# image — `prisma` is a devDependency of @acropora/database, and --prod
+# deploy correctly excludes it) against the schema and config belonging
+# to the DEPLOYED copy of @acropora/database, not the builder's own copy.
+# Setting the working directory to the deployed package's own directory
+# (rather than passing --schema as a flag from a different cwd, which
+# would leave it ambiguous whether the builder's own prisma.config.ts or
+# the flag wins) was verified directly to correctly auto-discover the
+# deployed prisma.config.ts ("Loaded Prisma config from prisma.config.ts",
+# confirmed pointing at the deployed path) — so @prisma/client's
+# generation target resolves starting from the deployed tree, exactly
+# where the deployed @acropora/database's own compiled code will look for
+# it at runtime.
+RUN cd /app/deploy/node_modules/@acropora/database \
+  && /app/packages/database/node_modules/.bin/prisma generate
+
 # Fail the build here, not at container startup, if the deployed production
-# tree is missing something the app imports. This is exactly the class of
-# bug that motivated switching away from `pnpm prune --prod` above — verify
-# it can't recur silently. Run from the same working directory the runner
-# stage actually executes `node dist/main.js` from.
+# tree is missing something the app imports, or if the regenerate step
+# above didn't actually produce a loadable Prisma Client. Run from the
+# same working directory the runner stage actually executes
+# `node dist/main.js` from.
 #
 # reflect-metadata / @nestjs/core / @nestjs/platform-express have no
 # meaningful import-time side effects, so a real `import()` is a fine,
-# simple check. @acropora/database is deliberately NOT import()'d here:
-# its entrypoint eagerly constructs a PrismaClient, and evaluating that
-# through a plain `node -e` eval script hits a Prisma ESM/CJS interop
-# error unrelated to whether the deploy actually packaged the dependency
-# correctly. Instead, resolve it (confirming pnpm deploy's exports/module
-# wiring is intact) and confirm the resolved file is actually present on
-# disk, without ever evaluating the module body.
+# simple check. @acropora/database itself is deliberately NOT import()'d:
+# its entrypoint eagerly constructs a PrismaClient, so this only resolves
+# it and confirms the resolved file exists on disk, without evaluating
+# the module body. @prisma/client's PrismaClient, on the other hand, IS
+# constructed below — that's the actual regression class this stage
+# exists to catch, so it needs a real construction, not just a resolve —
+# run from the same directory @acropora/database's own compiled code
+# resolves @prisma/client from, i.e. the same resolution context the app
+# uses at runtime. Constructing PrismaClient does not itself open a
+# database connection (Prisma connects lazily, on the first query), so
+# this needs no live database and is safe to run at build time; the
+# immediate $disconnect() is a safe no-op on a client that never
+# connected.
 WORKDIR /app/deploy
 RUN node --input-type=module -e "import('reflect-metadata')" \
   && node --input-type=module -e "import('@nestjs/core')" \
   && node --input-type=module -e "import('@nestjs/platform-express')" \
   && node --input-type=module -e "import { existsSync } from 'node:fs'; import { fileURLToPath } from 'node:url'; const resolved = import.meta.resolve('@acropora/database'); const path = fileURLToPath(resolved); if (!existsSync(path)) { throw new Error('@acropora/database resolved to ' + path + ' but that file does not exist'); } console.log('@acropora/database OK ->', path);"
+
+WORKDIR /app/deploy/node_modules/@acropora/database
+RUN node --input-type=module -e "import { PrismaClient } from '@prisma/client'; const client = new PrismaClient(); await client.\$disconnect(); console.log('Prisma Client generated and loadable OK');"
 
 # -----------------------------------------------------------------------------
 # 4. Runtime: minimal, non-root, only the deployed @acropora/api production
