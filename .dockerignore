@@ -1,0 +1,62 @@
+# Applies to the build context for both apps/api/Dockerfile and
+# apps/web/Dockerfile (repo root build context). Keep this in sync with
+# .gitignore's intent, but note Docker does NOT read .gitignore itself —
+# this file is authoritative for what enters the build context.
+#
+# Do NOT exclude apps/ or packages/ source here: `turbo prune` (run inside
+# the image) needs the full workspace to compute the dependency graph.
+
+# Dependencies and package manager state
+node_modules
+**/node_modules
+.pnpm-store
+
+# Build output and caches (regenerated inside the image)
+.next
+**/.next
+dist
+**/dist
+test-dist
+**/test-dist
+coverage
+**/coverage
+.turbo
+**/.turbo
+*.tsbuildinfo
+apps/api/tmp-*-check-dist
+apps/api/tsconfig.*-check.json
+
+# Environment and secrets — never bake these into an image layer.
+.env
+.env.*
+!.env.example
+
+# Version control and editor/OS cruft
+.git
+.github
+.DS_Store
+.idea
+.vscode
+
+# Logs
+*.log
+logs
+
+# Project documentation and planning — not needed to build or run either app
+docs
+adr
+backlog
+prototypes
+CONTRIBUTING.md
+README.md
+ROADMAP.md
+SECURITY.md
+
+# Large local artifacts that must never enter a build context
+acropora-pre-m1.sql
+*.sql
+!packages/database/prisma/migrations/**/*.sql
+*.dump
+*.pgdump
+*.backup
+*.bak
