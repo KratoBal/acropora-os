@@ -117,6 +117,28 @@ RUN apk add --no-cache libc6-compat openssl tini \
   && addgroup -g 1001 -S nodejs \
   && adduser -S -u 1001 -G nodejs nestjs
 
+# Every stock Node.js image (this one included) ships npm and corepack
+# pre-installed, each vendoring their own bundled copies of packages like
+# tar, sigstore, picomatch and brace-expansion for their own internal use.
+# Those vendored copies are invisible to `pnpm why`/pnpm-lock.yaml — they
+# aren't part of this project's dependency graph at all — but a container
+# vulnerability scanner (Trivy in this repo's CI) still finds and flags
+# them, since the files are physically present in the image regardless of
+# whether anything ever calls them. This container only ever runs
+# `node dist/main.js`; npm, npx, corepack, pnpm and yarn are never invoked
+# at runtime, so the correct, minimal fix is to delete them outright
+# rather than try to patch vendored copies this project doesn't control.
+RUN rm -rf \
+    /usr/local/lib/node_modules/npm \
+    /usr/local/lib/node_modules/corepack \
+    /usr/local/bin/npm \
+    /usr/local/bin/npx \
+    /usr/local/bin/corepack \
+    /usr/local/bin/pnpm \
+    /usr/local/bin/pnpx \
+    /usr/local/bin/yarn \
+    /usr/local/bin/yarnpkg
+
 WORKDIR /app
 ENV NODE_ENV=production
 

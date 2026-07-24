@@ -78,6 +78,27 @@ RUN apk add --no-cache libc6-compat tini \
   && addgroup -g 1001 -S nodejs \
   && adduser -S -u 1001 -G nodejs nextjs
 
+# Every stock Node.js image (this one included) ships npm and corepack
+# pre-installed, each vendoring their own bundled copies of packages like
+# tar, sigstore, picomatch and brace-expansion for their own internal use
+# — invisible to pnpm-lock.yaml, but still flagged by a container
+# vulnerability scanner (Trivy in this repo's CI) since the files are
+# physically present regardless of whether anything calls them. This
+# container only ever runs `node apps/web/server.js`; npm, npx, corepack,
+# pnpm and yarn are never invoked at runtime, so the correct, minimal fix
+# is to delete them rather than try to patch vendored copies this project
+# doesn't control. See apps/api/Dockerfile for the fuller rationale.
+RUN rm -rf \
+    /usr/local/lib/node_modules/npm \
+    /usr/local/lib/node_modules/corepack \
+    /usr/local/bin/npm \
+    /usr/local/bin/npx \
+    /usr/local/bin/corepack \
+    /usr/local/bin/pnpm \
+    /usr/local/bin/pnpx \
+    /usr/local/bin/yarn \
+    /usr/local/bin/yarnpkg
+
 WORKDIR /app
 ENV NODE_ENV=production
 
