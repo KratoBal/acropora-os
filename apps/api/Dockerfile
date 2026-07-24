@@ -17,10 +17,10 @@
 # 3. `pnpm --filter @acropora/api deploy --prod` (pnpm's own workspace-aware
 #    deploy command, see the "deployed" stage below) then produces a
 #    self-contained, portable production directory for @acropora/api alone,
-#    followed by regenerating the Prisma Client directly into that
-#    directory (deploy does not carry forward Prisma's generated
-#    artifacts — see the "deployed" stage for why and how this was
-#    verified).
+#    followed by copying the already-generated Prisma Client from this
+#    builder stage directly into that directory (deploy does not carry
+#    forward Prisma's generated artifacts — see the "deployed" stage for
+#    why and how this was verified).
 #
 #    This replaced an earlier `pnpm prune --prod` (stripping devDependencies
 #    out of the built tree in place) after that approach was found, in
@@ -139,26 +139,41 @@ RUN pnpm --filter @acropora/api deploy /app/deploy --prod
 # found` at runtime: @prisma/client's own entrypoint does
 # `require('.prisma/client/default')`, and that directory doesn't exist.
 #
-# Fix: regenerate directly into the deployed tree, using the Prisma CLI
-# from this builder-derived stage (never present in the final runner
-# image — `prisma` is a devDependency of @acropora/database, and --prod
-# deploy correctly excludes it) against the schema and config belonging
-# to the DEPLOYED copy of @acropora/database, not the builder's own copy.
-# Setting the working directory to the deployed package's own directory
-# (rather than passing --schema as a flag from a different cwd, which
-# would leave it ambiguous whether the builder's own prisma.config.ts or
-# the flag wins) was verified directly to correctly auto-discover the
-# deployed prisma.config.ts ("Loaded Prisma config from prisma.config.ts",
-# confirmed pointing at the deployed path) — so @prisma/client's
-# generation target resolves starting from the deployed tree, exactly
-# where the deployed @acropora/database's own compiled code will look for
-# it at runtime.
-RUN cd /app/deploy/node_modules/@acropora/database \
-  && /app/packages/database/node_modules/.bin/prisma generate
+# Fix, take 2: an earlier version of this stage tried re-running
+# `prisma generate` with the working directory set to the deployed
+# @acropora/database directory, on the theory that Prisma would
+# auto-discover the deployed prisma.config.ts/schema.prisma and therefore
+# target the deployed tree's own @prisma/client. That theory was
+# confirmed *half* right (the config/schema really were picked up from
+# the deployed path) but real CI runs kept producing the exact same
+# runtime SyntaxError afterwards regardless — meaning `prisma generate`'s
+# actual client-output resolution does not reliably follow the same
+# schema-relative path in this setup, and re-invoking the CLI a second
+# time was never a fully verifiable fix in this sandbox to begin with
+# (no network route to binaries.prisma.sh here, so it could only be
+# confirmed up to the point the config loaded, not that generation
+# completed correctly).
+#
+# This replacement does not re-run `prisma generate` (and does not need
+# network access) at all. It takes the client the builder stage already
+# generated successfully — proven working, since migrations already run
+# from this exact builder image — and copies its generated `.prisma/client`
+# directory directly into the exact location the DEPLOYED @acropora/database
+# will resolve `@prisma/client` from. That target location is computed with
+# Node's own module resolution (`createRequire(...).resolve('@prisma/client')`,
+# after `fs.realpathSync` on the deployed package's symlink — resolving
+# through the symlink first turned out to matter: without it, `createRequire`
+# does not reliably walk the same directory chain Node's own ESM resolver
+# uses), so it can't drift from wherever the actual code will look, and
+# does not depend on any assumption about `prisma generate`'s own internal
+# behavior. Verified directly, end to end, outside Docker: constructing a
+# PrismaClient from the deployed tree fails with the exact reported
+# SyntaxError beforehand, and succeeds immediately after this copy.
+RUN node -e "const { createRequire } = require('node:module'); const path = require('node:path'); const fs = require('node:fs'); function dotPrismaClientDir(anchorPackageJson) { const realAnchor = fs.realpathSync(anchorPackageJson); const req = createRequire(realAnchor); const clientEntry = req.resolve('@prisma/client'); const nodeModulesDir = path.dirname(path.dirname(path.dirname(clientEntry))); return path.join(nodeModulesDir, '.prisma', 'client'); } const builderDotPrisma = dotPrismaClientDir('/app/packages/database/package.json'); const deployedDotPrisma = dotPrismaClientDir('/app/deploy/node_modules/@acropora/database/package.json'); if (!fs.existsSync(builderDotPrisma)) { throw new Error('builder .prisma/client not found at ' + builderDotPrisma + ' -- was prisma generate run in the builder stage?'); } fs.rmSync(deployedDotPrisma, { recursive: true, force: true }); fs.cpSync(builderDotPrisma, deployedDotPrisma, { recursive: true }); console.log('Copied generated Prisma Client:', builderDotPrisma, '->', deployedDotPrisma);"
 
 # Fail the build here, not at container startup, if the deployed production
-# tree is missing something the app imports, or if the regenerate step
-# above didn't actually produce a loadable Prisma Client. Run from the
+# tree is missing something the app imports, or if the Prisma Client copy
+# step above didn't actually produce a loadable client. Run from the
 # same working directory the runner stage actually executes
 # `node dist/main.js` from.
 #
