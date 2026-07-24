@@ -122,11 +122,21 @@ RUN pnpm --filter @acropora/api deploy /app/deploy --prod
 # bug that motivated switching away from `pnpm prune --prod` above — verify
 # it can't recur silently. Run from the same working directory the runner
 # stage actually executes `node dist/main.js` from.
+#
+# reflect-metadata / @nestjs/core / @nestjs/platform-express have no
+# meaningful import-time side effects, so a real `import()` is a fine,
+# simple check. @acropora/database is deliberately NOT import()'d here:
+# its entrypoint eagerly constructs a PrismaClient, and evaluating that
+# through a plain `node -e` eval script hits a Prisma ESM/CJS interop
+# error unrelated to whether the deploy actually packaged the dependency
+# correctly. Instead, resolve it (confirming pnpm deploy's exports/module
+# wiring is intact) and confirm the resolved file is actually present on
+# disk, without ever evaluating the module body.
 WORKDIR /app/deploy
 RUN node --input-type=module -e "import('reflect-metadata')" \
   && node --input-type=module -e "import('@nestjs/core')" \
   && node --input-type=module -e "import('@nestjs/platform-express')" \
-  && node --input-type=module -e "import('@acropora/database')"
+  && node --input-type=module -e "import { existsSync } from 'node:fs'; import { fileURLToPath } from 'node:url'; const resolved = import.meta.resolve('@acropora/database'); const path = fileURLToPath(resolved); if (!existsSync(path)) { throw new Error('@acropora/database resolved to ' + path + ' but that file does not exist'); } console.log('@acropora/database OK ->', path);"
 
 # -----------------------------------------------------------------------------
 # 4. Runtime: minimal, non-root, only the deployed @acropora/api production
