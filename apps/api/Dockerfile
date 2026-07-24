@@ -34,6 +34,13 @@ FROM node:${NODE_VERSION}-alpine AS base
 # libc6-compat: covers native addons that expect glibc-shaped symbols.
 RUN apk add --no-cache libc6-compat openssl
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+# pnpm 10+ prompts for confirmation before removing/recreating node_modules
+# (e.g. during `pnpm prune --prod` below), and aborts immediately with
+# ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY when no TTY is attached, which
+# is always the case in a Docker build. CI=true is pnpm's documented signal
+# to skip that interactive prompt; set once here so it applies to every
+# pnpm invocation in every stage derived from this one.
+ENV CI=true
 
 # -----------------------------------------------------------------------------
 # 1. Prune: reduce the monorepo to only what @acropora/api needs.
@@ -92,7 +99,10 @@ RUN --mount=type=cache,id=acropora-api-turbo-cache,target=/app/.turbo \
 #    copyable path.
 # -----------------------------------------------------------------------------
 FROM builder AS pruned
-RUN pnpm prune --prod
+# Belt-and-suspenders alongside the base stage's CI=true: pass the same
+# intent explicitly as a config flag, per pnpm's own guidance for
+# non-interactive environments (https://github.com/pnpm/pnpm/issues/11562).
+RUN pnpm prune --prod --config.confirmModulesPurge=false
 
 # -----------------------------------------------------------------------------
 # 4. Runtime: minimal, non-root, only the pruned + built workspace subset.

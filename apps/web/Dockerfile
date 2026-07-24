@@ -29,6 +29,15 @@ ARG TURBO_VERSION=2.10.5
 FROM node:${NODE_VERSION}-alpine AS base
 RUN apk add --no-cache libc6-compat
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+# pnpm 10+ prompts for confirmation before removing/recreating node_modules,
+# and aborts with ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY when no TTY is
+# attached, which is always the case in a Docker build. CI=true is pnpm's
+# documented signal to skip that interactive prompt for every pnpm
+# invocation in every stage derived from this one — see
+# apps/api/Dockerfile for the fuller rationale (that's where this was
+# actually hit, in `pnpm prune --prod`; set here too for consistency and
+# because this stage runs the same pnpm install/turbo build steps).
+ENV CI=true
 
 # -----------------------------------------------------------------------------
 # 1. Prune: reduce the monorepo to only what @acropora/web needs.
