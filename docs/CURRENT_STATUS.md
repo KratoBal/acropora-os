@@ -242,6 +242,38 @@ rendszer nem hívja). Új opcionális env-változók az időszakos szinkronhoz:
 `NAV_INVOICE_SYNC_ENABLED` (`"true"` esetén aktív), alapértelmezetten 15
 perces `NAV_INVOICE_SYNC_INTERVAL_MINUTES`.
 
+## Számlázz.hu integráció – adatmodell (M8, ADR-005 spec-fázis)
+
+2026-07-24-én a tulajdonos megerősítette (lásd
+[DECISIONS.md](./DECISIONS.md) ADR-005): a bejövő/kimenő
+**számlanyilvántartás** elsődleges szinkronforrása a Számlázz.hu lesz, a
+NAV Online Számla csak napi, független ellenőrzésre szolgál. Hosszabb
+távon a Számlázz.hu bejövő számla push a fenti NAV-alapú bevételezési
+segédletet (`/beszerzes/nav-szamlak`) is ki fogja váltani, de ez **nem
+azonnali** - a NAV-alapú bevételezés változatlanul üzemel, amíg ez külön
+jóváhagyást nem kap.
+
+Ebben a körben, a felhasználó explicit kérésére, **csak az adatmodell**
+készült el, élő Számlázz.hu-kapcsolat vagy hitelesítő adat nélkül:
+
+- `Invoice`/`InvoiceLine`: a teljes bejövő+kimenő számlaregiszter (irány,
+  bizonylattípus, forrás, Számlázz.hu belső ID mint idempotenciakulcs,
+  sztornó/helyesbítő lánc, tételek) - szándékosan **nem** azonos a
+  `PurchaseInvoice`-zal, ami a fizikai bevételezés bizonylata marad;
+- `SzamlazzConnectionSetting`: az `UnasConnectionSetting` mintáját követő
+  kapcsolatbeállítás, de két külön titkosított credentiallel (Agent kulcs a
+  kimenő számlázáshoz, pénzügyi adatkapcsolati kulcs a push-fogadáshoz),
+  mert eltérő Számlázz.hu-oldali jogosultsághoz tartoznak.
+
+Migráció: `20260724130000_add_invoice_registry_and_szamlazz_connection`.
+
+**Nyitva, nem ebben a körben:** kapcsolatbeállítás service/UI, a
+`POST /api/integrations/szamlazz/{outgoing,incoming}-invoices` fogadó
+endpoint (XML validáció, XXE-védelem, idempotens upsert), a kimenő
+automatikus számlázás workerje, és az, hogy a Számlázz.hu bejövő push
+pontosan hogyan kapcsolódik/vált-e ki a meglévő NAV-alapú bevételezési
+UI-hoz - ez utóbbi tisztázása implementáció előtt szükséges.
+
 ## Next steps
 
 Nincs kijelölt következő munkacsomag. Lehetséges további irányok: NAV-számla

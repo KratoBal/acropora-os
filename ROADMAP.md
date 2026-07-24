@@ -58,7 +58,16 @@
 - UNAS webshop rendelésszinkron ✅
 - UNAS vevő-szinkron ✅
 - NAV Online Számla adószám-lekérdezés ✅ (nem számlázás, cégadat-lookup)
-- Számlázz.hu számlázási folyamat — nem indult el
+- NAV Online Számla belföldi bejövőszámla-lekérdezés (`queryInvoiceDigest`/
+  `queryInvoiceData`) ✅ — a bevételezési segédlet része, lásd #0003b
+- Számlázz.hu számlázási folyamat — nem indult el; **2026-07-24-től
+  kiválasztott irány** (ADR-005, [docs/DECISIONS.md](docs/DECISIONS.md)):
+  Számlázz.hu lesz az elsődleges bejövő/kimenő számlaszinkron-forrás, a NAV
+  csak napi ellenőrzés. Eddig csak adatmodell (`Invoice`/`InvoiceLine`,
+  `SzamlazzConnectionSetting`) készült el, élő kapcsolat, endpoint és UI
+  még nem — lásd
+  [docs/ACROPORA-OS-MASTER-MILESTONE-PLAN.md](docs/ACROPORA-OS-MASTER-MILESTONE-PLAN.md)
+  M8 fejezet
 
 ## #0004b – Vevők / CRM — alap elkészült
 
