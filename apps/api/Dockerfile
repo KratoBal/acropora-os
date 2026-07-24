@@ -24,7 +24,7 @@
 # 4. The runtime stage copies the already built-and-pruned workspace as-is
 #    and runs as a non-root user.
 
-ARG NODE_VERSION=22
+ARG NODE_VERSION=22.23.1
 ARG PNPM_VERSION=10.34.5
 # Keep in sync with the "turbo" devDependency version in the root package.json.
 ARG TURBO_VERSION=2.10.5
@@ -76,7 +76,8 @@ RUN --mount=type=cache,id=acropora-pnpm-store,target=/root/.local/share/pnpm/sto
 # config), so an unfiltered build compiles exactly that set, in the correct
 # dependency order (turbo.json's "build" task depends on "^build").
 COPY --from=pruner /app/out/full/ .
-RUN pnpm turbo run build
+RUN --mount=type=cache,id=acropora-api-turbo-cache,target=/app/.turbo \
+    pnpm turbo run build
 
 # -----------------------------------------------------------------------------
 # 3. Prune devDependencies out of the built tree, in place.
@@ -97,7 +98,12 @@ RUN pnpm prune --prod
 # 4. Runtime: minimal, non-root, only the pruned + built workspace subset.
 # -----------------------------------------------------------------------------
 FROM node:${NODE_VERSION}-alpine AS runner
-RUN apk add --no-cache libc6-compat openssl \
+# tini: correct PID-1 signal forwarding and zombie reaping. Nest's own
+# enableShutdownHooks() already reacts to SIGTERM directly, so this is
+# defense-in-depth rather than a fix for a known bug — cheap to include,
+# and removes a whole class of "container won't stop cleanly" issues if a
+# future dependency ever forks a child process.
+RUN apk add --no-cache libc6-compat openssl tini \
   && addgroup -g 1001 -S nodejs \
   && adduser -S -u 1001 -G nodejs nestjs
 
@@ -116,4 +122,5 @@ EXPOSE 3001
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
   CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 3001) + '/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
+ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "dist/main.js"]

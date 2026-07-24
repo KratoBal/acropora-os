@@ -21,7 +21,7 @@
 #    public/ — no devDependencies, no build tools, no unrelated workspace
 #    source.
 
-ARG NODE_VERSION=22
+ARG NODE_VERSION=22.23.1
 ARG PNPM_VERSION=10.34.5
 # Keep in sync with the "turbo" devDependency version in the root package.json.
 ARG TURBO_VERSION=2.10.5
@@ -56,13 +56,16 @@ COPY --from=pruner /app/out/full/ .
 # client bundles via NEXT_PUBLIC_*). None exist yet in this app, but the
 # build-arg plumbing is left here, ready, rather than added later as a
 # surprise — see docs/PRODUCTION-DEPLOYMENT-ARCHITECTURE-REVIEW.md.
-RUN pnpm turbo run build
+RUN --mount=type=cache,id=acropora-web-turbo-cache,target=/app/.turbo \
+    pnpm turbo run build
 
 # -----------------------------------------------------------------------------
 # 3. Runtime: minimal, non-root, standalone Next.js output only.
 # -----------------------------------------------------------------------------
 FROM node:${NODE_VERSION}-alpine AS runner
-RUN apk add --no-cache libc6-compat \
+# tini: correct PID-1 signal forwarding and zombie reaping (see
+# apps/api/Dockerfile for the fuller rationale — applies here too).
+RUN apk add --no-cache libc6-compat tini \
   && addgroup -g 1001 -S nodejs \
   && adduser -S -u 1001 -G nodejs nextjs
 
@@ -82,4 +85,5 @@ ENV HOSTNAME=0.0.0.0
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
   CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 3000) + '/').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
+ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "apps/web/server.js"]
