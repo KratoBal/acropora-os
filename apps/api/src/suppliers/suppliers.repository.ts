@@ -8,6 +8,7 @@ import { generateCode } from "../common/code-generator.util.js";
 import type {
   CreateSupplierDto,
   SupplierListQueryDto,
+  UpdateSupplierDto,
 } from "./dto/supplier.dto.js";
 
 function toSummary(supplier: Supplier): SupplierSummary {
@@ -19,6 +20,16 @@ function toSummary(supplier: Supplier): SupplierSummary {
     country: supplier.country,
     email: supplier.email ?? undefined,
     phone: supplier.phone ?? undefined,
+    iban: supplier.iban ?? undefined,
+    swiftCode: supplier.swiftCode ?? undefined,
+    bankAccountNumber: supplier.bankAccountNumber ?? undefined,
+    contactPersonName: supplier.contactPersonName ?? undefined,
+    contactPersonPhone: supplier.contactPersonPhone ?? undefined,
+    contactPersonEmail: supplier.contactPersonEmail ?? undefined,
+    postalCode: supplier.postalCode ?? undefined,
+    city: supplier.city ?? undefined,
+    addressLine1: supplier.addressLine1 ?? undefined,
+    addressLine2: supplier.addressLine2 ?? undefined,
     isActive: supplier.isActive,
     createdAt: supplier.createdAt.toISOString(),
     updatedAt: supplier.updatedAt.toISOString(),
@@ -42,6 +53,13 @@ export class SuppliersRepository extends Repository {
               { name: { contains: query.search, mode: "insensitive" } },
               { code: { contains: query.search, mode: "insensitive" } },
               { taxNumber: { contains: query.search, mode: "insensitive" } },
+              {
+                contactPersonName: {
+                  contains: query.search,
+                  mode: "insensitive",
+                },
+              },
+              { city: { contains: query.search, mode: "insensitive" } },
             ],
           }
         : {}),
@@ -83,6 +101,16 @@ export class SuppliersRepository extends Repository {
             country: (input.country ?? "HU").trim().toUpperCase(),
             email: input.email?.trim() || undefined,
             phone: input.phone?.trim() || undefined,
+            iban: input.iban?.trim() || undefined,
+            swiftCode: input.swiftCode?.trim() || undefined,
+            bankAccountNumber: input.bankAccountNumber?.trim() || undefined,
+            contactPersonName: input.contactPersonName?.trim() || undefined,
+            contactPersonPhone: input.contactPersonPhone?.trim() || undefined,
+            contactPersonEmail: input.contactPersonEmail?.trim() || undefined,
+            postalCode: input.postalCode?.trim() || undefined,
+            city: input.city?.trim() || undefined,
+            addressLine1: input.addressLine1?.trim() || undefined,
+            addressLine2: input.addressLine2?.trim() || undefined,
           },
         });
         await tx.domainEvent.create({
@@ -97,6 +125,74 @@ export class SuppliersRepository extends Repository {
             schemaVersion: 1,
           },
         });
+        return toSummary(supplier);
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
+
+  update(
+    id: string,
+    input: UpdateSupplierDto,
+    actorId: string,
+  ): Promise<SupplierSummary> {
+    return prisma.$transaction(
+      async (tx) => {
+        const existing = await tx.supplier.findUniqueOrThrow({ where: { id } });
+        const changed = await tx.supplier.updateMany({
+          where: { id, updatedAt: new Date(input.expectedUpdatedAt) },
+          data: {
+            name: input.name?.trim(),
+            taxNumber:
+              input.taxNumber === null ? null : input.taxNumber?.trim(),
+            country: input.country?.trim().toUpperCase(),
+            email: input.email === null ? null : input.email?.trim(),
+            phone: input.phone === null ? null : input.phone?.trim(),
+            iban: input.iban === null ? null : input.iban?.trim(),
+            swiftCode:
+              input.swiftCode === null ? null : input.swiftCode?.trim(),
+            bankAccountNumber:
+              input.bankAccountNumber === null
+                ? null
+                : input.bankAccountNumber?.trim(),
+            contactPersonName:
+              input.contactPersonName === null
+                ? null
+                : input.contactPersonName?.trim(),
+            contactPersonPhone:
+              input.contactPersonPhone === null
+                ? null
+                : input.contactPersonPhone?.trim(),
+            contactPersonEmail:
+              input.contactPersonEmail === null
+                ? null
+                : input.contactPersonEmail?.trim(),
+            postalCode:
+              input.postalCode === null ? null : input.postalCode?.trim(),
+            city: input.city === null ? null : input.city?.trim(),
+            addressLine1:
+              input.addressLine1 === null ? null : input.addressLine1?.trim(),
+            addressLine2:
+              input.addressLine2 === null ? null : input.addressLine2?.trim(),
+          },
+        });
+        if (changed.count !== 1) throw new Error("STALE_UPDATE");
+        await tx.domainEvent.create({
+          data: {
+            id: randomUUID(),
+            eventType: "supplier.updated",
+            aggregateType: "Supplier",
+            aggregateId: id,
+            actorUserId: actorId,
+            payload: {
+              previousName: existing.name,
+              name: input.name ?? existing.name,
+            },
+            occurredAt: new Date(),
+            schemaVersion: 1,
+          },
+        });
+        const supplier = await tx.supplier.findUniqueOrThrow({ where: { id } });
         return toSummary(supplier);
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },

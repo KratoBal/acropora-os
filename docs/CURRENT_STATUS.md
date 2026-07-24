@@ -108,7 +108,7 @@ Nyitott pont: a `getCustomer` válasz gyökérelemének pontos neve
 (`Customers`/`Customer`) az UNAS többi list-végpontjának konvenciója alapján
 feltételezett, valós UNAS-válasszal még nincs megerősítve.
 
-## Beszerzés modul – EU-s beérkezett számla rögzítése, első kör
+## Beszerzés modul – EU-s és belföldi (NAV-alapú) beérkezett számla rögzítése
 
 A tényleges üzleti folyamatot követi, nem a `docs/DOMAIN-MODEL.md`-ben
 korábban vázolt, külön rendelés-jóváhagyást feltételező `PurchaseOrder` →
@@ -123,9 +123,27 @@ ténylegesen; a belföldi (kézi ÁFA-kulcsos, illetve NAV Online Számla
 lekérdezéses) folyamat még nem indult el, lásd alább.
 
 - **`Supplier` törzs bővítése**: adószám, ISO országkód (a "HU"-tól eltérő
-  érték jelöli az EU-s beszállítót), e-mail, telefon. Új `/suppliers`
-  API (`purchasing.view` / `purchasing.manage`), beágyazva a számla
-  rögzítő űrlapba (keresés + soron kívüli létrehozás).
+  érték jelöli az EU-s beszállítót), e-mail, telefon, bankszámla-adatok
+  (EU-s beszállítónál IBAN + SWIFT/BIC, belföldinél hazai formátumú
+  bankszámlaszám), ügyintéző (név, telefon, e-mail) és cím (irányítószám,
+  város, utca/házszám, cím kiegészítés - irányítószám → város
+  best-effort automatikus kitöltéssel, mint a Vevő űrlapon). Az Ország mező
+  az adószámból automatikusan meghatározott (kétbetűs EU-s adószám-előtag →
+  az adott ország, betűjel nélküli/belföldi formátum → "HU"; szükség esetén
+  felülírható), mind a Partnerek szerkesztőben, mind az EU-s számla űrlap
+  soron kívüli beszállító-létrehozásában. Az EU-s adószámok a hivatalos VIES
+  (`ec.europa.eu/taxation_customs/vies/rest-api/check-vat-number`) REST
+  szolgáltatással is ellenőrizhetők egy "VIES ellenőrzés" gombbal (mindkét
+  helyen) - érvényes/érvénytelen jelzéssel és a VIES-ben nyilvántartott
+  cégnév/cím megjelenítésével, ha a tagállam visszaadja; a nyers VIES
+  hibaválasz csak szerveroldalon naplózódik. `/suppliers` API
+  (`purchasing.view` / `purchasing.manage`) kereséssel, létrehozással és
+  szerkesztéssel (`PATCH`, optimista konkurrenciakezeléssel,
+  `expectedUpdatedAt` alapján) - beágyazva a számla rögzítő űrlapba
+  (keresés + soron kívüli, minimális adatokkal történő létrehozás), illetve
+  önálló **Partnerek** menüpontként (`/partnerek`, `/partnerek/uj`,
+  `/partnerek/:id`) kereshető/szűrhető listával és teljes
+  létrehozás/szerkesztés űrlappal.
 - **`PurchaseInvoice`/`PurchaseInvoiceLine` séma**: számlafej (belső
   bizonylatszám, a beszállítói számla saját száma, pénznem, MNB árfolyam,
   számla kelte, fizetési határidő, fizetve/fizetés dátuma, forrás
@@ -151,19 +169,121 @@ lekérdezéses) folyamat még nem indult el, lásd alább.
   pénznem + MNB árfolyam, tételes termékkeresés (cikkszám/név alapján),
   rendelt mennyiség beírásakor a tényleges mennyiség automatikus előtöltése.
 
-Migráció: `20260723120000_add_purchase_invoice`. Helyi futtatás előtt
-szükséges: `pnpm prisma:generate` és `pnpm prisma:migrate`.
+- **Terméktörzsben nem szereplő tétel felvétele**: a számla soron a
+  termékvariáns kiválasztása immár nem kötelező - "Kézi tétel felvétele
+  (nincs a terméktörzsben)" gombbal olyan sor is felvehető, aminek nincs
+  megfeleltethető `ProductVariant`-ja (pl. a számlán szereplő, de a
+  terméktörzsben nem vezetett tétel). Ilyenkor a számlán szereplő megnevezés
+  (`sourceDescription`) és az egység kötelező, cikkszám/termléknév nincs. A
+  sor `syncStatus`-a `NOT_LINKED`, nem generál `StockMovement`/`StockItem`
+  frissítést, és nem kerül be a UNAS `setStock` push körbe (sem
+  siker-, sem hibaszámlálóba) - kizárólag a terméktörzshöz kötött sorok
+  szinkronizálódnak. A számla lista és részletnézet "Nincs terméktörzsben"
+  jelzéssel jeleníti meg ezeket a sorokat.
+
+Migráció: `20260723120000_add_purchase_invoice`,
+`20260723140000_add_supplier_bank_contact_details`,
+`20260723150000_add_supplier_address`,
+`20260724100000_purchase_invoice_line_optional_variant`. Helyi futtatás
+előtt szükséges: `pnpm prisma:generate` és `pnpm prisma:migrate`.
 
 Nyitott pont: a rendelt és tényleges mennyiség közötti eltérés kezelése
 (jelzés, jóváhagyás) szándékosan később kerül kidolgozásra; ebben a körben a
 két mező egymástól függetlenül szabadon szerkeszthető.
 
+## Belföldi beszerzés – NAV Online Számla alapú bevételezés
+
+A belföldi beszállítói számlák bevételezését a NAV Online Számla rendszerből
+letöltött adatok segítik, ugyanazt az űrlapot használva, mint az EU-s
+folyamat (`/beszerzes/uj`), csak deviza+MNB árfolyam helyett HUF+ÁFA-kulcs
+mezővel.
+
+- **"NAV számla lekérés" menüpont** (`/beszerzes/nav-szamlak`,
+  `purchasing.view`/`purchasing.manage`): a NAV-tól letöltött belföldi
+  bejövő (INBOUND irányú) számlák listája, "Frissítés" gombbal kézi
+  szinkron-indítással, illetve env-kapcsolt (`NAV_INVOICE_SYNC_ENABLED`)
+  időszakos háttérfuttatással (a UNAS vevő-szinkron mintáját követve,
+  `insDate`-kurzoros ablakos lekérdezéssel, 120s átfedéssel). A digest-ben
+  szereplő MODIFY/STORNO műveletű tételeket a v1 szándékosan kihagyja
+  (csak CREATE-tételek kerülnek be) - lásd Known limitations.
+- **Lusta teljes adat lekérdezés**: a lista csak a NAV `queryInvoiceDigest`
+  kivonatát tárolja; a részletnézet megnyitásakor kerül lekérdezésre és
+  elparszolásra a teljes számla-XML (`queryInvoiceData`, base64+opcionális
+  gzip dekódolással) - a beszállító neve/adószáma/címe, valamint a tételek
+  (megnevezés, mennyiség, egység, egységár, ÁFA-kulcs).
+- **"Bevételezés" gomb** a részletnézeten a bevételező űrlapra visz
+  (`/beszerzes/uj?navInvoiceId=...`), előtöltve a beszállító
+  keresőmezőjét/soron kívüli gyorslétrehozás mezőit (adószám alapú
+  egyeztetés, nem automatikus összekapcsolás) és a tételeket (a NAV-on
+  szereplő megnevezéssel, mennyiséggel, egységárral, `variantId` nélkül) -
+  ezeket írja át a felhasználó a saját termékneveire és a ténylegesen
+  átvett mennyiségre, mielőtt rögzíti. A számla mentésekor a NAV számla
+  `RECEIVED` állapotba kerül és összekapcsolódik a létrejött
+  `PurchaseInvoice`-dzsal (egy NAV számla csak egyszer vételezhető be).
+- **ÁFA-kulcs egyszerűsítés**: mivel a `PurchaseInvoice` séma szándékosan
+  egyetlen, számla-szintű ÁFA-kulcsot tárol (nem soronkéntit), vegyes
+  ÁFA-kulcsú NAV-számlánál a form a tételek leggyakoribb kulcsával
+  töltődik elő, amit a felhasználó felülírhat.
+- **Belföldi kézi rögzítés**: a bevételező űrlapon "Belföldi (kézi)" forrás
+  is választható NAV-előtöltés nélkül, ugyanazokkal a HUF+ÁFA-kulcs
+  mezőkkel - ez zárja a korábban nyitott "belföldi kézi ÁFA-kulcsos
+  rögzítés" pontot.
+
+Migráció: `20260724110000_add_nav_incoming_invoice`. Helyi futtatás előtt
+szükséges: `pnpm prisma:generate` és `pnpm prisma:migrate`. A NAV Online
+Számla lekérdezéshez ugyanaz a technikai felhasználó/szoftver env-készlet
+kell, mint a meglévő `queryTaxpayer`-hez
+(`NAV_TECHNICAL_USER_LOGIN/PASSWORD/TAX_NUMBER/SIGN_KEY`,
+`NAV_SOFTWARE_*`) - nincs külön regisztráció, mivel a `queryInvoiceDigest`/
+`queryInvoiceData` csak a "Számla lekérdezés" jogosultságot igényli a
+technikai felhasználón (nem a "Számlák kezelése"/adatszolgáltatás
+jogosultságot, amit a `manageInvoice`/`tokenExchange` igényelne - ezeket a
+rendszer nem hívja). Új opcionális env-változók az időszakos szinkronhoz:
+`NAV_INVOICE_SYNC_ENABLED` (`"true"` esetén aktív), alapértelmezetten 15
+perces `NAV_INVOICE_SYNC_INTERVAL_MINUTES`.
+
+## Számlázz.hu integráció – adatmodell (M8, ADR-005 spec-fázis)
+
+2026-07-24-én a tulajdonos megerősítette (lásd
+[DECISIONS.md](./DECISIONS.md) ADR-005): a bejövő/kimenő
+**számlanyilvántartás** elsődleges szinkronforrása a Számlázz.hu lesz, a
+NAV Online Számla csak napi, független ellenőrzésre szolgál. Hosszabb
+távon a Számlázz.hu bejövő számla push a fenti NAV-alapú bevételezési
+segédletet (`/beszerzes/nav-szamlak`) is ki fogja váltani, de ez **nem
+azonnali** - a NAV-alapú bevételezés változatlanul üzemel, amíg ez külön
+jóváhagyást nem kap.
+
+Ebben a körben, a felhasználó explicit kérésére, **csak az adatmodell**
+készült el, élő Számlázz.hu-kapcsolat vagy hitelesítő adat nélkül:
+
+- `Invoice`/`InvoiceLine`: a teljes bejövő+kimenő számlaregiszter (irány,
+  bizonylattípus, forrás, Számlázz.hu belső ID mint idempotenciakulcs,
+  sztornó/helyesbítő lánc, tételek) - szándékosan **nem** azonos a
+  `PurchaseInvoice`-zal, ami a fizikai bevételezés bizonylata marad;
+- `SzamlazzConnectionSetting`: az `UnasConnectionSetting` mintáját követő
+  kapcsolatbeállítás, de két külön titkosított credentiallel (Agent kulcs a
+  kimenő számlázáshoz, pénzügyi adatkapcsolati kulcs a push-fogadáshoz),
+  mert eltérő Számlázz.hu-oldali jogosultsághoz tartoznak.
+
+Migráció: `20260724130000_add_invoice_registry_and_szamlazz_connection`.
+
+**Nyitva, nem ebben a körben:** kapcsolatbeállítás service/UI, a
+`POST /api/integrations/szamlazz/{outgoing,incoming}-invoices` fogadó
+endpoint (XML validáció, XXE-védelem, idempotens upsert), a kimenő
+automatikus számlázás workerje, és az, hogy a Számlázz.hu bejövő push
+pontosan hogyan kapcsolódik/vált-e ki a meglévő NAV-alapú bevételezési
+UI-hoz - ez utóbbi tisztázása implementáció előtt szükséges.
+
 ## Next steps
 
-Nincs kijelölt következő munkacsomag. Lehetséges további irányok: belföldi
-számlarögzítés a Beszerzés modulban (kézi ÁFA-kulcsos rögzítés, majd NAV
-Online Számla lekérdezés integráció), rendelt/tényleges mennyiség eltérés
-jelzése és jóváhagyása, Vevő szerkesztés (update) UI,
+Nincs kijelölt következő munkacsomag. Lehetséges további irányok: NAV-számla
+sor összekapcsolása meglévő terméktörzsbeli variantnal (jelenleg a
+bevételezéskor minden NAV-tétel kézi/`NOT_LINKED` sorként kerül át, a
+felhasználó csak átírja a megnevezést - a formális, UNAS-szinkronált
+variant-hozzárendelés soronként külön munkacsomag lenne), a NAV
+digest-ben szereplő MODIFY/STORNO számlamódosítások kezelése (jelenleg
+csak az eredeti CREATE-számlák kerülnek be), rendelt/tényleges mennyiség
+eltérés jelzése és jóváhagyása, Vevő szerkesztés (update) UI,
 kapcsolattartó/jegyzet/címke CRM-mezők (lásd
 [backlog/domain-follow-ups.md](../backlog/domain-follow-ups.md)), valódi
 jelszavas login (jelenleg development mock login, lásd
@@ -199,7 +319,10 @@ pnpm build
 - Termékek: http://localhost:3000/products
 - Vevők: http://localhost:3000/vevok
 - Beszerzés: http://localhost:3000/beszerzes
-- Új EU-s beszerzési számla: http://localhost:3000/beszerzes/uj
+- Új EU-s/belföldi beszerzési számla: http://localhost:3000/beszerzes/uj
+- NAV számla lekérés: http://localhost:3000/beszerzes/nav-szamlak
+- Partnerek (beszállítók): http://localhost:3000/partnerek
+- Új beszállító: http://localhost:3000/partnerek/uj
 - Raktár: http://localhost:3000/raktar
 - Készlet-egyeztetés: http://localhost:3000/keszlet-egyeztetes
 - Felhasználók: http://localhost:3000/admin/users
@@ -220,7 +343,9 @@ pnpm build
 - Vevő szerkesztés (update) UI még nincs, csak létrehozás; a backend `update` végpont már készen áll.
 - A NAV adószám-lekérdezés és az UNAS vevő-szinkron éles hitelesítő adatok nélkül nem tesztelhető helyben.
 - Az irányítószám → város lookup nem hivatalos, harmadik féltől származó API-ra épül; kimenete nem tekinthető hatóságilag hitelesnek.
-- A Beszerzés modul jelenleg csak az EU-s kézi számlarögzítést szolgálja ki; a belföldi (kézi ÁFA-kulcsos és NAV-lekérdezéses) folyamat nincs implementálva.
+- A NAV Online Számla `queryInvoiceDigest`/`queryInvoiceData` integráció éles technikai felhasználó nélkül nem tesztelhető helyben - a válasz-XML mezőnevei (invoiceApi.xsd/invoiceData.xsd) a NAV nyilvános specifikációja és a közösségi `nav-online-invoice` referenciakliens alapján implementáltak, de valós NAV-válasszal még nincs megerősítve (ugyanaz a caveat, mint a UNAS `getCustomer` válasz gyökérelemén él).
+- A NAV digest-szinkron v1-ben csak az eredeti (`CREATE` műveletű) számlákat dolgozza fel; a módosító/sztornó (`MODIFY`/`STORNO`) digest-tételeket szándékosan kihagyja.
+- A NAV-alapú bevételezés a számla tételeit `variantId` nélküli, kézi sorként tölti elő - nincs automatikus terméktörzs-egyeztetés soronként, a felhasználó írja át a saját megnevezésére (vagy törli és keres rá egy létező termékre).
 - **Az MNB automatikus árfolyam-lekérdezés jelenleg nem működik**: az `arfolyamok.asmx` élesben (2026-07-23-i teszt szerint) F5 bot-védelemmel válaszol minden POST SOAP-hívásra (`TS...` cookie, `Clear-Site-Data` fejléc, üres törzsű 404 - feltehetően TLS-ujjlenyomat alapú szűrés, kóddal nem megkerülhető). A kliens/szolgáltatás implementálva marad (SOAP 1.1 és 1.2 megpróbálása, szerveroldali naplózás), de gyakorlatilag mindig a kézi megadásra visszaeső hibaágat futtatja; az űrlapon az árfolyam mező emiatt elsődlegesen kézi bevitelre való.
 - A rendelt/tényleges mennyiség közötti eltérés jelzése és jóváhagyása szándékosan még nincs kidolgozva.
 

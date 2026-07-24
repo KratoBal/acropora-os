@@ -1,9 +1,21 @@
-import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from "@nestjs/common";
 import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
-import { CreateSupplierDto, SupplierListQueryDto } from "./dto/supplier.dto.js";
+import {
+  CreateSupplierDto,
+  SupplierListQueryDto,
+  UpdateSupplierDto,
+} from "./dto/supplier.dto.js";
 import { SuppliersService } from "./suppliers.service.js";
 
 @Controller("suppliers")
@@ -29,5 +41,15 @@ export class SuppliersController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.create(input, user.id);
+  }
+
+  @Patch(":id")
+  @RequirePermissions(PERMISSIONS.PURCHASING_MANAGE)
+  update(
+    @Param("id") id: string,
+    @Body() input: UpdateSupplierDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.update(id, input, user.id);
   }
 }

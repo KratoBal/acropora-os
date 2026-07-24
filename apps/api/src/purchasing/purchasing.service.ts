@@ -91,14 +91,6 @@ export class PurchasingService {
     input: CreatePurchaseInvoiceDto,
     actorUserId: string,
   ): Promise<PurchaseInvoiceResult> {
-    if (input.source !== "EU") {
-      // v1 scope: csak az EU-s kézi rögzítés van bekötve; a belföldi
-      // (kézi vagy NAV-lekérdezéses) folyamat külön munkacsomag, lásd
-      // docs/CURRENT_STATUS.md.
-      throw new BadRequestException(
-        "Belföldi számla rögzítése egyelőre nem támogatott ezen a végponton.",
-      );
-    }
     if (input.lines.length === 0)
       throw new BadRequestException(
         "Legalább egy tétel szükséges a számlához.",
@@ -113,29 +105,49 @@ export class PurchasingService {
       throw new BadRequestException("Érvénytelen számla kelte.");
 
     let exchangeRate: Prisma.Decimal | null;
-    if (currency === "HUF") {
-      exchangeRate = null;
-    } else if (input.exchangeRate !== undefined) {
-      exchangeRate = new Prisma.Decimal(input.exchangeRate);
-    } else {
-      // Az MNB automatikus lekérdezése jelenleg megbízhatatlan (lásd
-      // mapExchangeRateError) - a számla rögzítését emiatt nem szabad
-      // hagyni összeomlani, helyette egyértelmű kérést adunk a kézi
-      // árfolyam megadására.
-      try {
-        const resolved = await this.mnbRates.getRateForDate(
-          currency,
-          invoiceDate,
-        );
-        exchangeRate = new Prisma.Decimal(resolved.rate);
-      } catch {
-        throw new BadRequestException(
-          "Az árfolyam automatikus lekérdezése nem sikerült. Add meg az árfolyamot kézzel.",
-        );
+    let vatRate: Prisma.Decimal | null;
+    if (input.source === "EU") {
+      vatRate = null;
+      if (currency === "HUF") {
+        exchangeRate = null;
+      } else if (input.exchangeRate !== undefined) {
+        exchangeRate = new Prisma.Decimal(input.exchangeRate);
+      } else {
+        // Az MNB automatikus lekérdezése jelenleg megbízhatatlan (lásd
+        // mapExchangeRateError) - a számla rögzítését emiatt nem szabad
+        // hagyni összeomlani, helyette egyértelmű kérést adunk a kézi
+        // árfolyam megadására.
+        try {
+          const resolved = await this.mnbRates.getRateForDate(
+            currency,
+            invoiceDate,
+          );
+          exchangeRate = new Prisma.Decimal(resolved.rate);
+        } catch {
+          throw new BadRequestException(
+            "Az árfolyam automatikus lekérdezése nem sikerült. Add meg az árfolyamot kézzel.",
+          );
+        }
       }
+    } else {
+      // HU_MANUAL / HU_NAV: belföldi számla, mindig HUF, nincs MNB-lekérdezés
+      // (lásd docs/CURRENT_STATUS.md - a séma szándékosan egyetlen,
+      // számla-szintű ÁFA-kulcsot tárol, nem soronkéntit).
+      if (currency !== "HUF")
+        throw new BadRequestException(
+          "Belföldi számlánál a pénznem csak HUF lehet.",
+        );
+      exchangeRate = null;
+      if (input.vatRate === undefined)
+        throw new BadRequestException(
+          "Belföldi számlánál az ÁFA-kulcs megadása kötelező.",
+        );
+      vatRate = new Prisma.Decimal(input.vatRate);
     }
 
-    const variantIds = input.lines.map((line) => line.variantId);
+    const variantIds = input.lines
+      .map((line) => line.variantId)
+      .filter((variantId): variantId is string => Boolean(variantId));
     const { warehouseId, variants } =
       await this.invoices.currentStock(variantIds);
 
@@ -153,6 +165,47 @@ export class PurchasingService {
     const documentNumber = generateCode("BESZ");
     const preparedLines: CreatePurchaseInvoiceLine[] = [];
     for (const line of input.lines) {
+      // Terméktörzsben nem szereplő tétel is rögzíthető (pl. a számlán van,
+      // de a termék még nincs felvéve nálunk) - ilyenkor nincs mit
+      // egyeztetni a saját cikkszámmal/mennyiséggel, ezért a számlán
+      // szereplő megnevezés és az egység kötelező, a helyi készlethatás és
+      // a UNAS-szinkron pedig kimarad rá (lásd repository/create).
+      if (!line.variantId) {
+        const sourceDescription = line.sourceDescription?.trim();
+        if (!sourceDescription)
+          throw new BadRequestException(
+            "A terméktörzsben nem szereplő tételeknél a számlán szereplő megnevezés megadása kötelező.",
+          );
+        if (!line.unit.trim())
+          throw new BadRequestException(
+            `Az egység megadása kötelező: ${sourceDescription}.`,
+          );
+        if (!Number.isFinite(line.actualQuantity) || line.actualQuantity < 0)
+          throw new BadRequestException(
+            `Érvénytelen mennyiség: ${sourceDescription}.`,
+          );
+        if (!Number.isFinite(line.unitNet) || line.unitNet < 0)
+          throw new BadRequestException(
+            `Érvénytelen beszerzési ár: ${sourceDescription}.`,
+          );
+        preparedLines.push({
+          variantId: null,
+          sourceDescription,
+          orderedQuantity: new Prisma.Decimal(line.orderedQuantity),
+          actualQuantity: new Prisma.Decimal(line.actualQuantity),
+          unit: line.unit.trim(),
+          unitNet: new Prisma.Decimal(line.unitNet),
+          discountPercent:
+            line.discountPercent !== undefined
+              ? new Prisma.Decimal(line.discountPercent)
+              : null,
+          resultingQty: null,
+          syncStatus: "NOT_LINKED",
+          syncError: null,
+        });
+        continue;
+      }
+
       const info = variants.get(line.variantId);
       if (!info)
         throw new BadRequestException(`Ismeretlen termék: ${line.variantId}.`);
@@ -194,11 +247,17 @@ export class PurchasingService {
     let failedCount = 0;
     const token = await this.unasAuth.getToken();
     for (const line of preparedLines) {
+      // Terméktörzs nélküli tételnél (syncStatus már "NOT_LINKED") nincs
+      // cikkszám, amit a UNAS-nak push-olni lehetne - kihagyjuk, és nem
+      // számít bele a sikeres/sikertelen szinkron összesítésbe sem.
+      if (!line.variantId) continue;
       const info = variants.get(line.variantId)!;
       try {
         await this.unasApi.setStock(token, {
           sku: info.sku,
-          qty: line.resultingQty.toString(),
+          // A fenti "continue" miatt ide csak variantId-vel rendelkező sorok
+          // jutnak el, azoknál pedig a resultingQty mindig ki van töltve.
+          qty: line.resultingQty!.toString(),
           comment: `Beszerzés (${documentNumber})`,
         });
         line.syncStatus = "OK";
@@ -225,8 +284,9 @@ export class PurchasingService {
       dueDate: input.dueDate ? new Date(input.dueDate) : null,
       isPaid: input.isPaid ?? false,
       paidAt: input.isPaid ? new Date(input.paidAt ?? now.toISOString()) : null,
-      vatRate: null,
+      vatRate,
       note: input.note?.trim() || null,
+      navIncomingInvoiceId: input.navIncomingInvoiceId,
       actorUserId,
       lines: preparedLines,
     });

@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 
-import { Inject, Injectable, Optional } from "@nestjs/common";
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  Optional,
+} from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 import type {
   PurchaseInvoiceDetail,
@@ -41,16 +46,17 @@ export interface PurchaseInvoiceCurrentStock {
 }
 
 export interface CreatePurchaseInvoiceLine {
-  variantId: string;
+  /** Nincs, ha a tétel nincs a terméktörzsben - ilyenkor nincs helyi készlethatás/UNAS push. */
+  variantId: string | null;
   sourceDescription: string | null;
   orderedQuantity: Prisma.Decimal;
   actualQuantity: Prisma.Decimal;
   unit: string;
   unitNet: Prisma.Decimal;
   discountPercent: Prisma.Decimal | null;
-  /** Absolute on-hand quantity after this receipt (currentQty + actualQuantity); the UNAS push for this value already happened before this call runs. */
-  resultingQty: Prisma.Decimal;
-  syncStatus: "OK" | "FAILED";
+  /** Absolute on-hand quantity after this receipt (currentQty + actualQuantity); the UNAS push for this value already happened before this call runs. `null` when there's no variantId. */
+  resultingQty: Prisma.Decimal | null;
+  syncStatus: "OK" | "FAILED" | "NOT_LINKED";
   syncError: string | null;
 }
 
@@ -68,6 +74,8 @@ export interface CreatePurchaseInvoiceParams {
   paidAt: Date | null;
   vatRate: Prisma.Decimal | null;
   note: string | null;
+  /** Ha a számla egy NAV bejövő számla bevételezéseként jön létre - a mentés a NavIncomingInvoice-ot RECEIVED állapotba állítja és összeköti ezzel a számlával. */
+  navIncomingInvoiceId?: string;
   actorUserId: string;
   lines: CreatePurchaseInvoiceLine[];
 }
@@ -85,6 +93,9 @@ interface PurchaseInvoiceCreateTransaction {
   stockItem: StockItemWriterDatabase["stockItem"];
   productExtension: {
     upsert(args: unknown): Promise<unknown>;
+  };
+  navIncomingInvoice: {
+    updateMany(args: unknown): Promise<{ count: number }>;
   };
   domainEvent: {
     create(args: unknown): Promise<unknown>;
@@ -234,6 +245,21 @@ export class PurchaseInvoiceRepository extends Repository {
           include: purchaseInvoiceDetailInclude,
         });
 
+        if (params.navIncomingInvoiceId) {
+          // Atomi: csak akkor RECEIVED-eli a NAV bejövő számlát, ha még nem
+          // volt bevételezve - kizárja, hogy ugyanaz a NAV számla két
+          // beszerzési bizonylathoz is hozzákötődjön versenyhelyzetben.
+          const linked = await transaction.navIncomingInvoice.updateMany({
+            where: {
+              id: params.navIncomingInvoiceId,
+              status: { not: "RECEIVED" },
+            },
+            data: { status: "RECEIVED", purchaseInvoiceId: invoice.id },
+          });
+          if (linked.count !== 1)
+            throw new ConflictException("NAV_INVOICE_ALREADY_RECEIVED");
+        }
+
         const movement = await transaction.stockMovement.create({
           data: {
             movementNumber: `BESZMOZG-${invoice.documentNumber}`,
@@ -249,6 +275,11 @@ export class PurchaseInvoiceRepository extends Repository {
         });
 
         for (const line of params.lines) {
+          // Terméktörzs nélküli tételnél nincs mit mozgatni a helyi
+          // készleten (nincs ProductVariant, amire a StockMovementLine/
+          // StockItem/ProductExtension hivatkozhatna) - a sor a számlán és
+          // az összegzésben megjelenik, de készlet- és UNAS-hatása nincs.
+          if (!line.variantId) continue;
           await transaction.stockMovementLine.create({
             data: {
               movementId: movement.id,
@@ -260,7 +291,7 @@ export class PurchaseInvoiceRepository extends Repository {
           await setStockItemQuantity(transaction, {
             variantId: line.variantId,
             warehouseId: params.warehouseId,
-            onHand: line.resultingQty,
+            onHand: line.resultingQty!,
           });
           await transaction.productExtension.upsert({
             where: { variantId: line.variantId },

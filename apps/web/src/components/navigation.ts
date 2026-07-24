@@ -67,6 +67,18 @@ export const businessNavigation: AppNavigationItem[] = [
     permission: PERMISSIONS.PURCHASING_VIEW,
   },
   {
+    href: "/partnerek",
+    label: "Partnerek",
+    icon: "truck",
+    permission: PERMISSIONS.PURCHASING_VIEW,
+  },
+  {
+    href: "/beszerzes/nav-szamlak",
+    label: "NAV számla lekérés",
+    icon: "download",
+    permission: PERMISSIONS.PURCHASING_VIEW,
+  },
+  {
     href: "/penzugy",
     label: "Pénzügy",
     icon: "finance",

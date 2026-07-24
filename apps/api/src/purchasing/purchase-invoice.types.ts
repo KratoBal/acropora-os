@@ -81,9 +81,9 @@ function toLineDetail(
 ): PurchaseInvoiceLineDetail {
   return {
     id: line.id,
-    variantId: line.variantId,
-    sku: line.variant.sku,
-    productName: line.variant.product.name,
+    variantId: line.variantId ?? undefined,
+    sku: line.variant?.sku,
+    productName: line.variant?.product.name,
     sourceDescription: line.sourceDescription ?? undefined,
     orderedQuantity: line.orderedQuantity.toString(),
     actualQuantity: line.actualQuantity.toString(),

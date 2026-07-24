@@ -1,5 +1,9 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // "native" keeps the locally-installed engine (darwin-arm64 in local dev,
+  // whatever CI runs on) working as before; the musl target is required for
+  // the node:22-alpine Docker runtime, which uses musl libc instead of glibc.
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -53,6 +57,26 @@ enum UnasCustomerSyncRunStatus {
   RUNNING
   APPLIED
   FAILED
+}
+
+enum NavInvoiceSyncRunStatus {
+  PENDING
+  RUNNING
+  APPLIED
+  FAILED
+}
+
+/// A NAV-tól letöltött belföldi beszállítói (bejövő) számla állapota a
+/// bevételezési folyamatban: NEW - csak a digest ismert; DATA_FETCHED - a
+/// teljes számla-XML lekérve és feldolgozva, bevételezhető; RECEIVED - már
+/// bevételezve, a purchaseInvoiceId mutat a létrejött PurchaseInvoice-ra;
+/// ERROR - a queryInvoiceData vagy a feldolgozás sikertelen volt, újra
+/// próbálható.
+enum NavIncomingInvoiceStatus {
+  NEW
+  DATA_FETCHED
+  RECEIVED
+  ERROR
 }
 
 enum StockMovementType {
@@ -253,6 +277,50 @@ enum UnasVerificationStatus {
   INDETERMINATE
 }
 
+enum SzamlazzCredentialMode {
+  ENV_FALLBACK
+  DATABASE
+  DISABLED
+}
+
+enum SzamlazzVerificationStatus {
+  NEVER
+  SUCCESS
+  FAILED
+  INDETERMINATE
+}
+
+enum InvoiceDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum InvoiceDocumentType {
+  INVOICE
+  ADVANCE_INVOICE
+  FINAL_INVOICE
+  STORNO
+  CORRECTION
+  PROFORMA
+}
+
+/// Az adott Invoice-sor rögzítésének eredeti adatforrása. A NAV itt csak
+/// egyeztetési/import célból jelenhet meg (lásd ADR-005) - a napi
+/// Számlázz.hu <-> NAV egyeztetés eredményeként keletkező eltérés-jelzés
+/// külön, még nem modellezett entitás lesz (M9 munka).
+enum InvoiceSource {
+  SZAMLAZZ
+  NAV
+  MANUAL
+  IMPORT
+}
+
+enum InvoiceSyncStatus {
+  PENDING
+  RECEIVED
+  ERROR
+}
+
 model User {
   id                String    @id @default(cuid())
   email             String    @unique
@@ -275,6 +343,7 @@ model User {
   posSales               SalesOrder[]
   createdPurchaseInvoices PurchaseInvoice[]
   unasCredentialsUpdated UnasConnectionSetting[] @relation("UnasCredentialUpdatedBy")
+  szamlazzCredentialsUpdated SzamlazzConnectionSetting[] @relation("SzamlazzCredentialUpdatedBy")
 
   @@index([role, isActive])
 }
@@ -573,6 +642,21 @@ model Supplier {
   country    String   @default("HU") @db.VarChar(2)
   email      String?
   phone      String?
+  /// EU-s (nem "HU") beszállítónál a nemzetközi bankszámlaszám.
+  iban              String?
+  /// EU-s (nem "HU") beszállítónál a bank SWIFT/BIC kódja.
+  swiftCode         String?
+  /// Belföldi ("HU") beszállítónál a hazai formátumú bankszámlaszám.
+  bankAccountNumber String?
+  /// Kapcsolattartó neve, mindkét beszállítói körnél.
+  contactPersonName  String?
+  contactPersonPhone String?
+  contactPersonEmail String?
+  /// Cím adatok; a "country" mező (fent) az irányadó országkód, itt nincs külön tárolva.
+  postalCode   String?
+  city         String?
+  addressLine1 String?
+  addressLine2 String?
   isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -581,6 +665,7 @@ model Supplier {
   purchaseOrders        PurchaseOrder[]
   purchaseInvoices      PurchaseInvoice[]
   preferredByExtensions ProductExtension[]
+  invoices              Invoice[]
 
   @@index([country, isActive])
 }
@@ -838,6 +923,7 @@ model Customer {
   salesOrders SalesOrder[]
   aquariums   Aquarium[]
   serviceJobs ServiceJob[]
+  invoices    Invoice[]
 
   @@index([displayName])
   @@index([email])
@@ -1032,6 +1118,10 @@ model PurchaseInvoice {
   warehouse Warehouse             @relation(fields: [warehouseId], references: [id])
   createdBy User?                 @relation(fields: [createdById], references: [id], onDelete: SetNull)
   lines     PurchaseInvoiceLine[]
+  /// Ha a számla egy NAV-ból lekérdezett belföldi bejövő számla
+  /// bevételezéseként jött létre - a fordított irányú, opcionális kapcsolat
+  /// a NavIncomingInvoice oldalán él (purchaseInvoiceId).
+  navIncomingInvoice NavIncomingInvoice?
 
   @@unique([supplierId, supplierInvoiceNumber])
   @@index([status, invoiceDate])
@@ -1041,8 +1131,13 @@ model PurchaseInvoice {
 model PurchaseInvoiceLine {
   id                String   @id @default(cuid())
   purchaseInvoiceId String
-  variantId         String
-  /// A számlán szereplő eredeti (nem a saját) megnevezés, tájékoztató jelleggel.
+  /// Opcionális: ha a számla tétele nincs a terméktörzsben (pl. egyszeri
+  /// tétel, vagy a termék felvétele még nem történt meg), a sor variant
+  /// nélkül is rögzíthető - ilyenkor nincs helyi készlethatás és UNAS
+  /// szinkron sem (lásd syncStatus "NOT_LINKED").
+  variantId         String?
+  /// A számlán szereplő eredeti (nem a saját) megnevezés; variant nélküli
+  /// sornál ez az egyetlen megnevezés, ezért ilyenkor kötelező.
   sourceDescription String?
   orderedQuantity   Decimal  @db.Decimal(19, 6)
   actualQuantity    Decimal  @db.Decimal(19, 6)
@@ -1050,15 +1145,158 @@ model PurchaseInvoiceLine {
   /// Egységár a számla pénznemében, kedvezmény levonása előtt.
   unitNet           Decimal  @db.Decimal(19, 4)
   discountPercent   Decimal? @db.Decimal(5, 2)
-  /// A tétel UNAS készlet-push eredménye (OK / FAILED / PENDING).
+  /// A tétel UNAS készlet-push eredménye (OK / FAILED / PENDING / NOT_LINKED
+  /// - utóbbi: nincs terméktörzsbeli variant, nincs mit szinkronizálni).
   syncStatus        String   @default("PENDING")
   syncError         String?
 
   purchaseInvoice PurchaseInvoice @relation(fields: [purchaseInvoiceId], references: [id], onDelete: Cascade)
-  variant         ProductVariant  @relation(fields: [variantId], references: [id])
+  variant         ProductVariant? @relation(fields: [variantId], references: [id])
 
   @@index([purchaseInvoiceId])
   @@index([variantId])
+}
+
+/// A NAV Online Számla queryInvoiceDigest szinkronból lekerülő belföldi
+/// bejövő (INBOUND irányú) számla lokális tükre. A digest-lekérdezés csak
+/// egy kivonatot ad (lásd NEW állapot); a teljes tétellista csak a
+/// queryInvoiceData lusta (részletnézetkori) hívásakor kerül le és
+/// parszolódik a parsedData mezőbe (lásd nav-invoice-data.parser.ts) -
+/// nincs értelme minden digest-sorhoz azonnal lekérni a teljes adatot,
+/// hiszen a legtöbb sosem kerül ténylegesen bevételezésre.
+model NavIncomingInvoice {
+  id                  String                   @id @default(cuid())
+  navInvoiceNumber    String
+  supplierTaxNumber   String
+  supplierName        String
+  invoiceIssueDate    DateTime
+  invoiceDeliveryDate DateTime?
+  paymentDate         DateTime?
+  currency            String                   @default("HUF") @db.VarChar(3)
+  invoiceNetAmount    Decimal?                 @db.Decimal(19, 2)
+  invoiceVatAmount    Decimal?                 @db.Decimal(19, 2)
+  /// A NAV-oldali regisztrálás időpontja - ez a szinkron kurzor alapja
+  /// (lásd IntegrationCursor provider="NAV" stream="INBOUND_INVOICES"),
+  /// nem az invoiceIssueDate (ami a kiállító által megadott, nem a NAV
+  /// szerver órája szerinti időpont).
+  insDate             DateTime
+  status              NavIncomingInvoiceStatus @default(NEW)
+  /// A queryInvoiceData válaszból felparszolt, bevételezéshez szükséges
+  /// pillanatkép (beszállító adatok, cím, tételek) - lásd
+  /// ParsedNavInvoiceData (nav-invoice-data.parser.ts). Csak DATA_FETCHED
+  /// vagy RECEIVED állapotban nem null.
+  parsedData          Json?
+  errorCode           String?
+  purchaseInvoiceId   String?                  @unique
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+
+  purchaseInvoice PurchaseInvoice? @relation(fields: [purchaseInvoiceId], references: [id], onDelete: SetNull)
+
+  @@unique([navInvoiceNumber, supplierTaxNumber])
+  @@index([status, insDate])
+}
+
+/// Egy NAV bejövő-számla digest-szinkron futás: az insDate kurzoron alapuló,
+/// a UnasCustomerSyncRun mintáját követő ablakos lekérdezés (nincs
+/// FULL/INCREMENTAL megkülönböztetés, minden futás a kurzor óta regisztrált
+/// ablakot dolgozza fel).
+model NavInvoiceSyncRun {
+  id           String                  @id @default(cuid())
+  activeKey    String?                 @unique
+  status       NavInvoiceSyncRunStatus @default(PENDING)
+  windowStart  DateTime?
+  windowEnd    DateTime
+  startedAt    DateTime?
+  completedAt  DateTime?
+  invoicesSeen Int                     @default(0)
+  createdCount Int                     @default(0)
+  /// A digest-ben szereplő, de v1-ben szándékosan figyelmen kívül hagyott
+  /// MODIFY/STORNO műveletű tételek száma (lásd docs/CURRENT_STATUS.md).
+  skippedCount Int                     @default(0)
+  errorCode    String?
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+
+  @@index([status, createdAt])
+}
+
+/// A teljes bejövő+kimenő számlanyilvántartás (M8.4, ADR-005). Ez a
+/// Számlázz.hu push-fogadásból (elsődleges forrás) és a NAV napi
+/// egyeztetésből (másodlagos, ellenőrző forrás) táplálkozó, cégszintű
+/// számlaregiszter - NEM azonos a PurchaseInvoice-zal, ami a fizikai
+/// bevételezési/készlet-workflow bizonylata. Egy adott üzleti eseménynek
+/// (pl. egy beszállítói számla beérkezése) elvben mindkét oldalon lehet
+/// nyoma: a PurchaseInvoice a raktári bevételezést, az Invoice a pénzügyi
+/// nyilvántartást rögzíti. Az összekapcsolásuk (pl. közös
+/// supplierInvoiceNumber alapján) még nem implementált - lásd a
+/// docs/DECISIONS.md ADR-005 nyitott kérdését erről.
+model Invoice {
+  id           String              @id @default(cuid())
+  direction    InvoiceDirection
+  documentType InvoiceDocumentType @default(INVOICE)
+  source       InvoiceSource
+  /// A Számlázz.hu belső <alap><id> azonosítója - ez az idempotens upsert
+  /// kulcsa a bejövő/kimenő push fogadásakor (M8.3). NAV/MANUAL/IMPORT
+  /// forrásnál jellemzően null.
+  szamlazzInvoiceId String?
+  /// A ténylegesen kiállított/kapott számla saját, emberi olvasható száma.
+  invoiceNumber     String
+  partnerName       String
+  partnerTaxNumber  String?
+  customerId        String?
+  supplierId        String?
+  issueDate         DateTime
+  fulfillmentDate   DateTime?
+  dueDate           DateTime?
+  /// ISO 4217 pénznemkód.
+  currency          String              @default("HUF") @db.VarChar(3)
+  exchangeRate      Decimal?            @db.Decimal(19, 6)
+  netAmount         Decimal             @db.Decimal(19, 4)
+  vatAmount         Decimal             @db.Decimal(19, 4)
+  grossAmount       Decimal             @db.Decimal(19, 4)
+  isPaid            Boolean             @default(false)
+  paidAt            DateTime?
+  /// Sztornó/helyesbítő bizonylatnál az eredeti számlára mutat.
+  referencedInvoiceId String?
+  syncStatus        InvoiceSyncStatus   @default(PENDING)
+  syncError         String?
+  /// Nyers XML megőrzése objektumtár-kulcsként, nem DB-blobként (7.5).
+  rawPayloadStorageKey String?
+  pdfStorageKey     String?
+  bookkeepingStatus String?
+  tags              String[]
+  note              String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  customer           Customer?     @relation(fields: [customerId], references: [id])
+  supplier            Supplier?     @relation(fields: [supplierId], references: [id])
+  referencedInvoice   Invoice?      @relation("InvoiceCorrectionChain", fields: [referencedInvoiceId], references: [id])
+  correctionInvoices  Invoice[]     @relation("InvoiceCorrectionChain")
+  lines               InvoiceLine[]
+
+  @@unique([source, szamlazzInvoiceId])
+  @@index([direction, issueDate])
+  @@index([partnerTaxNumber])
+  @@index([syncStatus])
+}
+
+model InvoiceLine {
+  id             String  @id @default(cuid())
+  invoiceId      String
+  description    String
+  quantity       Decimal @db.Decimal(19, 6)
+  unit           String?
+  unitNet        Decimal @db.Decimal(19, 4)
+  vatRatePercent Decimal @db.Decimal(5, 2)
+  netAmount      Decimal @db.Decimal(19, 4)
+  vatAmount      Decimal @db.Decimal(19, 4)
+  grossAmount    Decimal @db.Decimal(19, 4)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
 }
 
 model ServiceJob {
@@ -1218,6 +1456,45 @@ model UnasConnectionSetting {
   updatedAt                 DateTime               @updatedAt
 
   credentialUpdatedBy User? @relation("UnasCredentialUpdatedBy", fields: [credentialUpdatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([credentialUpdatedByUserId])
+}
+
+/// Számlázz.hu kapcsolatbeállítás (M8.1, ADR-005) - az UnasConnectionSetting
+/// mintáját követi, de két, egymástól független titkosított credentiallel:
+/// az Agent kulcs (kimenő automatikus számlázáshoz, M8.2) és a pénzügyi
+/// adatkapcsolati kulcs (bejövő/kimenő push fogadás hitelesítéséhez, M8.3)
+/// külön kezelendő, mert eltérő Számlázz.hu-oldali jogosultsághoz
+/// tartoznak, és külön is rotálhatók/tilthatók.
+model SzamlazzConnectionSetting {
+  id                  String                     @id
+  credentialMode      SzamlazzCredentialMode     @default(ENV_FALLBACK)
+
+  encryptedAgentKey         Bytes?
+  agentKeyEncryptionIv      Bytes?
+  agentKeyAuthenticationTag Bytes?
+  agentKeyVersion           String?
+
+  encryptedFinancialApiKey         Bytes?
+  financialApiKeyEncryptionIv      Bytes?
+  financialApiKeyAuthenticationTag Bytes?
+  financialApiKeyVersion           String?
+
+  credentialRevision        Int                        @default(0)
+  credentialUpdatedAt        DateTime?
+  credentialUpdatedByUserId String?
+  verificationStatus        SzamlazzVerificationStatus @default(NEVER)
+  lastVerifiedAt             DateTime?
+  lastVerificationCode      String?
+  credentialAttemptedAt      DateTime?
+  testAttemptedAt            DateTime?
+  /// M8.5: a visszamenőleges backfill kezdődátuma, a kapcsolat
+  /// aktiválásakor rögzítve - a bulk betöltés ehhez képest dolgozik.
+  backfillStartDate         DateTime?
+  createdAt                  DateTime                   @default(now())
+  updatedAt                  DateTime                   @updatedAt
+
+  credentialUpdatedBy User? @relation("SzamlazzCredentialUpdatedBy", fields: [credentialUpdatedByUserId], references: [id], onDelete: SetNull)
 
   @@index([credentialUpdatedByUserId])
 }

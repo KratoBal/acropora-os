@@ -21,13 +21,20 @@
 
 - terméktörzs (UNAS mirror + Product Extension) ✅
 - raktárak és Leltár/készlet-egyeztetés modul ✅
-- Beszerzés – EU-s beérkezett számla rögzítése (`/beszerzes`) ✅ (részletek
-  lent, [#0003b](#0003b--beszerzés--eu-s-számla-rögzítés-alap-elkészült));
-  belföldi (kézi és NAV-lekérdezéses) számlarögzítés — nem indult el
+- Beszerzés – EU-s és belföldi (kézi + NAV-lekérdezéses) beérkezett számla
+  rögzítése (`/beszerzes`) ✅ (részletek lent, #0003b)
 
-## #0003b – Beszerzés / EU-s számla rögzítés — alap elkészült
+## #0003b – Beszerzés / EU-s és belföldi (NAV) számla rögzítés — elkészült
 
-- `Supplier` törzs bővítve adószám/ország/elérhetőség mezőkkel ✅
+- `Supplier` törzs bővítve adószám/ország/elérhetőség mezőkkel ✅, valamint
+  bankszámla-adatokkal (EU-s beszállítónál IBAN + SWIFT, belföldinél
+  bankszámlaszám), ügyintéző (név/telefon/e-mail) és cím (irányítószám,
+  város, utca/házszám, cím kiegészítés, irányítószám → város automatikus
+  kitöltéssel) mezőkkel ✅; az ország az adószámból automatikusan
+  meghatározott, EU-s adószám a hivatalos VIES REST szolgáltatással
+  ellenőrizhető ✅
+- Partnerek menüpont (`/partnerek`): kereshető/szűrhető beszállítói lista,
+  létrehozás és szerkesztés (optimista konkurrenciakezeléssel) ✅
 - `PurchaseInvoice`/`PurchaseInvoiceLine` séma: a valós üzleti folyamatot
   követi (nincs külön előzetes rendelés-jóváhagyás, a beérkezett számla maga
   a bevételezés) ✅
@@ -36,8 +43,13 @@
   blokkolja - lásd CURRENT_STATUS.md; addig kézi árfolyam megadása az elsődleges út)
 - EU-s beszállítói számla kézi rögzítése tételes bevételezéssel, `StockItem`
   és UNAS `setStock` frissítéssel ✅
-- Belföldi (kézi ÁFA-kulcsos, illetve NAV Online Számla lekérdezéses)
-  számlarögzítés — nem indult el
+- terméktörzsben nem szereplő tétel is felvehető a számlára (kézi
+  megnevezéssel), UNAS/készlet-szinkron nélkül ✅
+- Belföldi számlarögzítés: kézi (HUF + ÁFA-kulcs) és NAV Online Számla
+  lekérdezés-alapú bevételezés ("NAV számla lekérés" menüpont, digest +
+  teljes adat lekérdezés, kézi és időszakos szinkron) ✅ - a NAV-tételek
+  soronkénti terméktörzs-egyeztetése (formális variant-hozzárendelés,
+  nem csak átnevezés) még nem indult el
 
 ## #0004 – External Integrations — részben elkészült
 
@@ -46,7 +58,16 @@
 - UNAS webshop rendelésszinkron ✅
 - UNAS vevő-szinkron ✅
 - NAV Online Számla adószám-lekérdezés ✅ (nem számlázás, cégadat-lookup)
-- Számlázz.hu számlázási folyamat — nem indult el
+- NAV Online Számla belföldi bejövőszámla-lekérdezés (`queryInvoiceDigest`/
+  `queryInvoiceData`) ✅ — a bevételezési segédlet része, lásd #0003b
+- Számlázz.hu számlázási folyamat — nem indult el; **2026-07-24-től
+  kiválasztott irány** (ADR-005, [docs/DECISIONS.md](docs/DECISIONS.md)):
+  Számlázz.hu lesz az elsődleges bejövő/kimenő számlaszinkron-forrás, a NAV
+  csak napi ellenőrzés. Eddig csak adatmodell (`Invoice`/`InvoiceLine`,
+  `SzamlazzConnectionSetting`) készült el, élő kapcsolat, endpoint és UI
+  még nem — lásd
+  [docs/ACROPORA-OS-MASTER-MILESTONE-PLAN.md](docs/ACROPORA-OS-MASTER-MILESTONE-PLAN.md)
+  M8 fejezet
 
 ## #0004b – Vevők / CRM — alap elkészült
 
