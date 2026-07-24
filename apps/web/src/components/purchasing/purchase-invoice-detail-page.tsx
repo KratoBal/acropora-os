@@ -201,15 +201,26 @@ export function PurchaseInvoiceDetailPage({
                   {detail.lines.map((line) => (
                     <tr key={line.id}>
                       <td className="px-5 py-3 font-mono text-xs text-slate-700">
-                        {line.sku}
+                        {line.sku ?? "—"}
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-600">
-                        {line.productName}
-                        {line.sourceDescription ? (
-                          <div className="text-xs text-slate-400">
-                            Számlán: {line.sourceDescription}
+                        {line.variantId ? (
+                          <>
+                            {line.productName}
+                            {line.sourceDescription ? (
+                              <div className="text-xs text-slate-400">
+                                Számlán: {line.sourceDescription}
+                              </div>
+                            ) : null}
+                          </>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span>{line.sourceDescription ?? "—"}</span>
+                            <Badge variant="warning">
+                              Nincs terméktörzsben
+                            </Badge>
                           </div>
-                        ) : null}
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right text-sm text-slate-600">
                         {line.orderedQuantity} {line.unit}
@@ -242,7 +253,9 @@ export function PurchaseInvoiceDetailPage({
                             ? "OK"
                             : line.syncStatus === "FAILED"
                               ? "Hiba"
-                              : "Függőben"}
+                              : line.syncStatus === "NOT_LINKED"
+                                ? "Nincs szinkronizálva"
+                                : "Függőben"}
                         </Badge>
                         {line.syncError ? (
                           <p className="mt-1 text-xs text-rose-600">

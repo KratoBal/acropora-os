@@ -1,12 +1,14 @@
 export type PurchaseInvoiceSource = "EU" | "HU_MANUAL" | "HU_NAV";
 export type PurchaseInvoiceStatus = "DRAFT" | "POSTED" | "CANCELLED";
-export type PurchaseInvoiceLineSyncStatus = "PENDING" | "OK" | "FAILED";
+export type PurchaseInvoiceLineSyncStatus =
+  "PENDING" | "OK" | "FAILED" | "NOT_LINKED";
 
 export interface PurchaseInvoiceLineDetail {
   id: string;
-  variantId: string;
-  sku: string;
-  productName: string;
+  /** Nincs, ha a tétel nincs a terméktörzsben rögzítve (lásd syncStatus "NOT_LINKED"). */
+  variantId?: string;
+  sku?: string;
+  productName?: string;
   sourceDescription?: string;
   orderedQuantity: string;
   actualQuantity: string;
@@ -57,7 +59,8 @@ export interface PurchaseInvoiceListResponse {
 }
 
 export interface CreatePurchaseInvoiceLineInput {
-  variantId: string;
+  /** Ha nincs megadva, a tétel a terméktörzs nélkül rögzül - ilyenkor a sourceDescription kötelező. */
+  variantId?: string;
   sourceDescription?: string;
   orderedQuantity: number;
   actualQuantity: number;
@@ -77,7 +80,11 @@ export interface CreatePurchaseInvoiceInput {
   dueDate?: string;
   isPaid?: boolean;
   paidAt?: string;
+  /** Belföldi (HU_MANUAL/HU_NAV) számla-szintű ÁFA-kulcsa, pl. 27. EU-s számlánál nem használt. */
+  vatRate?: number;
   note?: string;
+  /** Ha a számla egy NAV-ból lekérdezett belföldi bejövő számla bevételezéseként jön létre - lásd NavIncomingInvoiceDetail. */
+  navIncomingInvoiceId?: string;
   lines: CreatePurchaseInvoiceLineInput[];
 }
 

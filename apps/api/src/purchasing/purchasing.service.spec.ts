@@ -68,9 +68,15 @@ function buildService(options: {
         note: params.note ?? undefined,
         lines: params.lines.map((line, index) => ({
           id: `line-${index}`,
-          variantId: line.variantId,
-          sku: options.variants.get(line.variantId)?.sku ?? "",
-          productName: options.variants.get(line.variantId)?.productName ?? "",
+          variantId: line.variantId ?? undefined,
+          sku:
+            (line.variantId
+              ? options.variants.get(line.variantId)?.sku
+              : undefined) ?? "",
+          productName:
+            (line.variantId
+              ? options.variants.get(line.variantId)?.productName
+              : undefined) ?? "",
           sourceDescription: line.sourceDescription ?? undefined,
           orderedQuantity: line.orderedQuantity.toString(),
           actualQuantity: line.actualQuantity.toString(),
@@ -149,10 +155,60 @@ function baseInput(
 }
 
 describe("PurchasingService.createInvoice", () => {
-  it("rejects a non-EU source (not implemented yet)", async () => {
-    const { service } = buildService({ variants: new Map() });
+  it("rejects a HU_MANUAL/HU_NAV invoice whose currency isn't HUF", async () => {
+    const { service } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+    });
     await assert.rejects(() =>
-      service.createInvoice(baseInput({ source: "HU_MANUAL" }), "user-1"),
+      service.createInvoice(
+        baseInput({ source: "HU_MANUAL", currency: "EUR", vatRate: 27 }),
+        "user-1",
+      ),
+    );
+  });
+
+  it("rejects a HU_MANUAL/HU_NAV invoice without a vatRate", async () => {
+    const { service } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+    });
+    await assert.rejects(() =>
+      service.createInvoice(
+        baseInput({ source: "HU_NAV", currency: "HUF" }),
+        "user-1",
+      ),
+    );
+  });
+
+  it("accepts a HU_MANUAL invoice with HUF currency and a vatRate, without calling MNB", async () => {
+    const { service, getCapturedCreateParams, getMnbCallCount } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+    });
+    await service.createInvoice(
+      baseInput({ source: "HU_MANUAL", currency: "HUF", vatRate: 27 }),
+      "user-1",
+    );
+    const params = getCapturedCreateParams();
+    assert.equal(params?.vatRate?.toString(), "27");
+    assert.equal(params?.exchangeRate, null);
+    assert.equal(getMnbCallCount(), 0);
+  });
+
+  it("passes navIncomingInvoiceId through for a HU_NAV invoice", async () => {
+    const { service, getCapturedCreateParams } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+    });
+    await service.createInvoice(
+      baseInput({
+        source: "HU_NAV",
+        currency: "HUF",
+        vatRate: 27,
+        navIncomingInvoiceId: "nav-invoice-1",
+      }),
+      "user-1",
+    );
+    assert.equal(
+      getCapturedCreateParams()?.navIncomingInvoiceId,
+      "nav-invoice-1",
     );
   });
 
@@ -224,8 +280,8 @@ describe("PurchasingService.createInvoice", () => {
       "user-1",
     );
     const params = getCapturedCreateParams();
-    assert.equal(params?.lines[0]?.resultingQty.toString(), "15");
-    assert.equal(params?.lines[1]?.resultingQty.toString(), "18");
+    assert.equal(params?.lines[0]?.resultingQty?.toString(), "15");
+    assert.equal(params?.lines[1]?.resultingQty?.toString(), "18");
   });
 
   it("keeps going and reports a per-line UNAS push failure without blocking the invoice", async () => {
@@ -272,5 +328,94 @@ describe("PurchasingService.createInvoice", () => {
     assert.equal(failedLine?.syncStatus, "FAILED");
     assert.equal(failedLine?.syncError, "UNAS_TIMEOUT");
     assert.equal(okLine?.syncStatus, "OK");
+  });
+
+  it("accepts a line without a matching product variant, skipping stock and UNAS sync for it", async () => {
+    let setStockCallCount = 0;
+    const { service, getCapturedCreateParams } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+      setStock: async (_token, request) => {
+        setStockCallCount += 1;
+        return { externalId: "1", sku: request.sku };
+      },
+    });
+
+    const result = await service.createInvoice(
+      baseInput({
+        lines: [
+          {
+            variantId: "variant-1",
+            orderedQuantity: 1,
+            actualQuantity: 1,
+            unit: "db",
+            unitNet: 10,
+          },
+          {
+            sourceDescription: "Egyedi csomagolóanyag",
+            orderedQuantity: 2,
+            actualQuantity: 2,
+            unit: "db",
+            unitNet: 3,
+          },
+        ],
+      }),
+      "user-1",
+    );
+
+    // A terméktörzs nélküli sor nem számít bele a UNAS szinkron
+    // összesítésbe (sem sikeresként, sem hibásként), és nem hívja meg a
+    // UNAS-t sem - csak a variantId-vel rendelkező sor teszi.
+    assert.equal(result.successCount, 1);
+    assert.equal(result.failedCount, 0);
+    assert.equal(setStockCallCount, 1);
+
+    const params = getCapturedCreateParams();
+    const unmatchedLine = params?.lines.find((line) => !line.variantId);
+    assert.equal(unmatchedLine?.syncStatus, "NOT_LINKED");
+    assert.equal(unmatchedLine?.resultingQty, null);
+    assert.equal(unmatchedLine?.sourceDescription, "Egyedi csomagolóanyag");
+  });
+
+  it("rejects an unmatched line without a sourceDescription", async () => {
+    const { service } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+    });
+    await assert.rejects(() =>
+      service.createInvoice(
+        baseInput({
+          lines: [
+            {
+              orderedQuantity: 1,
+              actualQuantity: 1,
+              unit: "db",
+              unitNet: 10,
+            },
+          ],
+        }),
+        "user-1",
+      ),
+    );
+  });
+
+  it("rejects an unmatched line without a unit", async () => {
+    const { service } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+    });
+    await assert.rejects(() =>
+      service.createInvoice(
+        baseInput({
+          lines: [
+            {
+              sourceDescription: "Egyedi tétel",
+              orderedQuantity: 1,
+              actualQuantity: 1,
+              unit: "",
+              unitNet: 10,
+            },
+          ],
+        }),
+        "user-1",
+      ),
+    );
   });
 });

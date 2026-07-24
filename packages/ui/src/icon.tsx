@@ -13,6 +13,7 @@ export type IconName =
   | "clipboard"
   | "credit-card"
   | "dashboard"
+  | "download"
   | "finance"
   | "key"
   | "menu"
@@ -22,6 +23,7 @@ export type IconName =
   | "settings"
   | "shield"
   | "store"
+  | "truck"
   | "users"
   | "warehouse";
 
@@ -146,9 +148,24 @@ export function Icon({ className, name, size = 18, ...props }: IconProps) {
           <path d="m9 12 2 2 4-4.5" />
         </>
       )}
+      {name === "truck" && (
+        <>
+          <path d="M3 7h11v10H3V7Z" />
+          <path d="M14 10h4l3 3v4h-7v-7Z" />
+          <circle cx="7.5" cy="18" r="1.8" />
+          <circle cx="17.5" cy="18" r="1.8" />
+        </>
+      )}
       {name === "chevron-down" && <path d="m7 9 5 5 5-5" />}
       {name === "menu" && <path d="M4 7h16M4 12h16M4 17h16" />}
       {name === "activity" && <path d="M3 12h4l2-7 4 14 2-7h6" />}
+      {name === "download" && (
+        <>
+          <path d="M12 3v12" />
+          <path d="m7 10 5 5 5-5" />
+          <path d="M4 19h16" />
+        </>
+      )}
     </svg>
   );
 }

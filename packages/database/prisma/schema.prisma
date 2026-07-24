@@ -55,6 +55,26 @@ enum UnasCustomerSyncRunStatus {
   FAILED
 }
 
+enum NavInvoiceSyncRunStatus {
+  PENDING
+  RUNNING
+  APPLIED
+  FAILED
+}
+
+/// A NAV-tól letöltött belföldi beszállítói (bejövő) számla állapota a
+/// bevételezési folyamatban: NEW - csak a digest ismert; DATA_FETCHED - a
+/// teljes számla-XML lekérve és feldolgozva, bevételezhető; RECEIVED - már
+/// bevételezve, a purchaseInvoiceId mutat a létrejött PurchaseInvoice-ra;
+/// ERROR - a queryInvoiceData vagy a feldolgozás sikertelen volt, újra
+/// próbálható.
+enum NavIncomingInvoiceStatus {
+  NEW
+  DATA_FETCHED
+  RECEIVED
+  ERROR
+}
+
 enum StockMovementType {
   PURCHASE_RECEIPT
   SALE
@@ -573,6 +593,21 @@ model Supplier {
   country    String   @default("HU") @db.VarChar(2)
   email      String?
   phone      String?
+  /// EU-s (nem "HU") beszállítónál a nemzetközi bankszámlaszám.
+  iban              String?
+  /// EU-s (nem "HU") beszállítónál a bank SWIFT/BIC kódja.
+  swiftCode         String?
+  /// Belföldi ("HU") beszállítónál a hazai formátumú bankszámlaszám.
+  bankAccountNumber String?
+  /// Kapcsolattartó neve, mindkét beszállítói körnél.
+  contactPersonName  String?
+  contactPersonPhone String?
+  contactPersonEmail String?
+  /// Cím adatok; a "country" mező (fent) az irányadó országkód, itt nincs külön tárolva.
+  postalCode   String?
+  city         String?
+  addressLine1 String?
+  addressLine2 String?
   isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -1032,6 +1067,10 @@ model PurchaseInvoice {
   warehouse Warehouse             @relation(fields: [warehouseId], references: [id])
   createdBy User?                 @relation(fields: [createdById], references: [id], onDelete: SetNull)
   lines     PurchaseInvoiceLine[]
+  /// Ha a számla egy NAV-ból lekérdezett belföldi bejövő számla
+  /// bevételezéseként jött létre - a fordított irányú, opcionális kapcsolat
+  /// a NavIncomingInvoice oldalán él (purchaseInvoiceId).
+  navIncomingInvoice NavIncomingInvoice?
 
   @@unique([supplierId, supplierInvoiceNumber])
   @@index([status, invoiceDate])
@@ -1041,8 +1080,13 @@ model PurchaseInvoice {
 model PurchaseInvoiceLine {
   id                String   @id @default(cuid())
   purchaseInvoiceId String
-  variantId         String
-  /// A számlán szereplő eredeti (nem a saját) megnevezés, tájékoztató jelleggel.
+  /// Opcionális: ha a számla tétele nincs a terméktörzsben (pl. egyszeri
+  /// tétel, vagy a termék felvétele még nem történt meg), a sor variant
+  /// nélkül is rögzíthető - ilyenkor nincs helyi készlethatás és UNAS
+  /// szinkron sem (lásd syncStatus "NOT_LINKED").
+  variantId         String?
+  /// A számlán szereplő eredeti (nem a saját) megnevezés; variant nélküli
+  /// sornál ez az egyetlen megnevezés, ezért ilyenkor kötelező.
   sourceDescription String?
   orderedQuantity   Decimal  @db.Decimal(19, 6)
   actualQuantity    Decimal  @db.Decimal(19, 6)
@@ -1050,15 +1094,80 @@ model PurchaseInvoiceLine {
   /// Egységár a számla pénznemében, kedvezmény levonása előtt.
   unitNet           Decimal  @db.Decimal(19, 4)
   discountPercent   Decimal? @db.Decimal(5, 2)
-  /// A tétel UNAS készlet-push eredménye (OK / FAILED / PENDING).
+  /// A tétel UNAS készlet-push eredménye (OK / FAILED / PENDING / NOT_LINKED
+  /// - utóbbi: nincs terméktörzsbeli variant, nincs mit szinkronizálni).
   syncStatus        String   @default("PENDING")
   syncError         String?
 
   purchaseInvoice PurchaseInvoice @relation(fields: [purchaseInvoiceId], references: [id], onDelete: Cascade)
-  variant         ProductVariant  @relation(fields: [variantId], references: [id])
+  variant         ProductVariant? @relation(fields: [variantId], references: [id])
 
   @@index([purchaseInvoiceId])
   @@index([variantId])
+}
+
+/// A NAV Online Számla queryInvoiceDigest szinkronból lekerülő belföldi
+/// bejövő (INBOUND irányú) számla lokális tükre. A digest-lekérdezés csak
+/// egy kivonatot ad (lásd NEW állapot); a teljes tétellista csak a
+/// queryInvoiceData lusta (részletnézetkori) hívásakor kerül le és
+/// parszolódik a parsedData mezőbe (lásd nav-invoice-data.parser.ts) -
+/// nincs értelme minden digest-sorhoz azonnal lekérni a teljes adatot,
+/// hiszen a legtöbb sosem kerül ténylegesen bevételezésre.
+model NavIncomingInvoice {
+  id                  String                   @id @default(cuid())
+  navInvoiceNumber    String
+  supplierTaxNumber   String
+  supplierName        String
+  invoiceIssueDate    DateTime
+  invoiceDeliveryDate DateTime?
+  paymentDate         DateTime?
+  currency            String                   @default("HUF") @db.VarChar(3)
+  invoiceNetAmount    Decimal?                 @db.Decimal(19, 2)
+  invoiceVatAmount    Decimal?                 @db.Decimal(19, 2)
+  /// A NAV-oldali regisztrálás időpontja - ez a szinkron kurzor alapja
+  /// (lásd IntegrationCursor provider="NAV" stream="INBOUND_INVOICES"),
+  /// nem az invoiceIssueDate (ami a kiállító által megadott, nem a NAV
+  /// szerver órája szerinti időpont).
+  insDate             DateTime
+  status              NavIncomingInvoiceStatus @default(NEW)
+  /// A queryInvoiceData válaszból felparszolt, bevételezéshez szükséges
+  /// pillanatkép (beszállító adatok, cím, tételek) - lásd
+  /// ParsedNavInvoiceData (nav-invoice-data.parser.ts). Csak DATA_FETCHED
+  /// vagy RECEIVED állapotban nem null.
+  parsedData          Json?
+  errorCode           String?
+  purchaseInvoiceId   String?                  @unique
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+
+  purchaseInvoice PurchaseInvoice? @relation(fields: [purchaseInvoiceId], references: [id], onDelete: SetNull)
+
+  @@unique([navInvoiceNumber, supplierTaxNumber])
+  @@index([status, insDate])
+}
+
+/// Egy NAV bejövő-számla digest-szinkron futás: az insDate kurzoron alapuló,
+/// a UnasCustomerSyncRun mintáját követő ablakos lekérdezés (nincs
+/// FULL/INCREMENTAL megkülönböztetés, minden futás a kurzor óta regisztrált
+/// ablakot dolgozza fel).
+model NavInvoiceSyncRun {
+  id           String                  @id @default(cuid())
+  activeKey    String?                 @unique
+  status       NavInvoiceSyncRunStatus @default(PENDING)
+  windowStart  DateTime?
+  windowEnd    DateTime
+  startedAt    DateTime?
+  completedAt  DateTime?
+  invoicesSeen Int                     @default(0)
+  createdCount Int                     @default(0)
+  /// A digest-ben szereplő, de v1-ben szándékosan figyelmen kívül hagyott
+  /// MODIFY/STORNO műveletű tételek száma (lásd docs/CURRENT_STATUS.md).
+  skippedCount Int                     @default(0)
+  errorCode    String?
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+
+  @@index([status, createdAt])
 }
 
 model ServiceJob {
