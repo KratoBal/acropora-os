@@ -103,8 +103,8 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       # Builds through every stage the final image depends on (pruner ->
-      # builder -> pruned -> runner for api; pruner -> builder -> runner for
-      # web), including the "builder" stage that also doubles as the
+      # builder -> deployed -> runner for api; pruner -> builder -> runner
+      # for web), including the "builder" stage that also doubles as the
       # production migration image (see docs/DEPLOYMENT.md, Section 5) —
       # there is no separate build step needed to validate that stage, it's
       # a prerequisite of the default target built here.

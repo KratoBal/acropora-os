@@ -14,15 +14,24 @@
 # 2. A single `pnpm install` brings in both prod and dev dependencies, since
 #    the NestJS CLI, TypeScript and the Prisma CLI (all devDependencies) are
 #    needed to build and to run `prisma generate`.
-# 3. `pnpm prune --prod` then strips devDependencies back out of that SAME
-#    node_modules tree in place. This is deliberate: reinstalling a second,
-#    separate prod-only node_modules in a fresh stage and trying to copy the
-#    generated Prisma client into it afterwards is a well-known source of
-#    breakage with pnpm's symlinked/content-addressable store layout, since
-#    the generated client lives deep inside pnpm's virtual store rather than
-#    at a flat, easily-copyable path. Pruning in place avoids that entirely.
-# 4. The runtime stage copies the already built-and-pruned workspace as-is
-#    and runs as a non-root user.
+# 3. `pnpm --filter @acropora/api deploy --prod` (pnpm's own workspace-aware
+#    deploy command, see the "deployed" stage below) then produces a
+#    self-contained, portable production directory for @acropora/api alone.
+#
+#    This replaced an earlier `pnpm prune --prod` (stripping devDependencies
+#    out of the built tree in place) after that approach was found, in
+#    production, to produce a runtime image missing direct dependencies
+#    (reflect-metadata, @nestjs/core) with an ERR_MODULE_NOT_FOUND at
+#    startup. Reproduced directly outside Docker: `pnpm prune --prod
+#    --config.confirmModulesPurge=false`, run at this pruned workspace's
+#    root, left node_modules for the root, apps/api and packages/database
+#    all effectively empty instead of correctly re-resolving a
+#    production-only tree. `pnpm deploy` is pnpm's supported alternative for
+#    exactly this — producing a correct, portable production directory for
+#    one workspace project — and does not exhibit this failure (verified
+#    the same way). See the "deployed" stage below for the config it needs.
+# 4. The runtime stage copies the deployed directory as-is and runs as a
+#    non-root user.
 
 ARG NODE_VERSION=22.23.1
 ARG PNPM_VERSION=10.34.5
@@ -35,7 +44,7 @@ FROM node:${NODE_VERSION}-alpine AS base
 RUN apk add --no-cache libc6-compat openssl
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 # pnpm 10+ prompts for confirmation before removing/recreating node_modules
-# (e.g. during `pnpm prune --prod` below), and aborts immediately with
+# in various non-interactive scenarios, and aborts immediately with
 # ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY when no TTY is attached, which
 # is always the case in a Docker build. CI=true is pnpm's documented signal
 # to skip that interactive prompt; set once here so it applies to every
@@ -64,7 +73,8 @@ RUN pnpm dlx turbo@${TURBO_VERSION} prune @acropora/api --docker
 #    This is what the Coolify pre-deployment command should point at (see
 #    docs/PRODUCTION-DEPLOYMENT-ARCHITECTURE-REVIEW.md, Section 6) — never
 #    `migrate dev` or `db push` against production, and never run migrations
-#    from the pruned `runner` image below, since it no longer has the CLI.
+#    from the `runner` image below, since its deployed production
+#    dependency tree deliberately has no Prisma CLI.
 # -----------------------------------------------------------------------------
 FROM base AS builder
 WORKDIR /app
@@ -87,25 +97,40 @@ RUN --mount=type=cache,id=acropora-api-turbo-cache,target=/app/.turbo \
     pnpm turbo run build
 
 # -----------------------------------------------------------------------------
-# 3. Prune devDependencies out of the built tree, in place.
+# 3. Deploy: produce a self-contained, portable production directory for
+#    @acropora/api using `pnpm deploy`, pnpm's own workspace-aware command
+#    for exactly this purpose.
 #
 #    Done as its own stage (rather than mutating `builder`) so `builder`
 #    stays available, unmodified, as the migrator image described above.
-#    Pruning in place — instead of installing a second, separate prod-only
-#    node_modules in a fresh stage and copying the generated Prisma client
-#    into it afterwards — avoids a well-known source of breakage with pnpm's
-#    symlinked/content-addressable store layout, since the generated client
-#    lives deep inside pnpm's virtual store rather than at a flat, easily
-#    copyable path.
+#
+#    Requires `inject-workspace-packages=true` in the repo's root .npmrc
+#    (present in this pruned workspace via `out/json`/`out/full` above, and
+#    baked into pnpm-lock.yaml's own `settings:` block so `--frozen-lockfile`
+#    installs keep working) so that internal workspace packages
+#    (@acropora/database, @acropora/types) are copied into the deploy
+#    output as real files rather than symlinks back into the monorepo —
+#    symlinks that wouldn't resolve to anything once copied into the
+#    `runner` stage below, since the monorepo they point into doesn't exist
+#    there.
 # -----------------------------------------------------------------------------
-FROM builder AS pruned
-# Belt-and-suspenders alongside the base stage's CI=true: pass the same
-# intent explicitly as a config flag, per pnpm's own guidance for
-# non-interactive environments (https://github.com/pnpm/pnpm/issues/11562).
-RUN pnpm prune --prod --config.confirmModulesPurge=false
+FROM builder AS deployed
+RUN pnpm --filter @acropora/api deploy /app/deploy --prod
+
+# Fail the build here, not at container startup, if the deployed production
+# tree is missing something the app imports. This is exactly the class of
+# bug that motivated switching away from `pnpm prune --prod` above — verify
+# it can't recur silently. Run from the same working directory the runner
+# stage actually executes `node dist/main.js` from.
+WORKDIR /app/deploy
+RUN node --input-type=module -e "import('reflect-metadata')" \
+  && node --input-type=module -e "import('@nestjs/core')" \
+  && node --input-type=module -e "import('@nestjs/platform-express')" \
+  && node --input-type=module -e "import('@acropora/database')"
 
 # -----------------------------------------------------------------------------
-# 4. Runtime: minimal, non-root, only the pruned + built workspace subset.
+# 4. Runtime: minimal, non-root, only the deployed @acropora/api production
+#    tree (dist/, production node_modules, generated Prisma client).
 # -----------------------------------------------------------------------------
 FROM node:${NODE_VERSION}-alpine AS runner
 # tini: correct PID-1 signal forwarding and zombie reaping. Nest's own
@@ -142,10 +167,12 @@ RUN rm -rf \
 WORKDIR /app
 ENV NODE_ENV=production
 
-COPY --from=pruned --chown=nestjs:nodejs /app .
+# The deploy output is already @acropora/api's own root (package.json,
+# dist/, node_modules/ at the top level) — no apps/api subdirectory to
+# WORKDIR into, unlike the old pruned-monorepo-tree copy.
+COPY --from=deployed --chown=nestjs:nodejs /app/deploy ./
 
 USER nestjs
-WORKDIR /app/apps/api
 
 EXPOSE 3001
 
