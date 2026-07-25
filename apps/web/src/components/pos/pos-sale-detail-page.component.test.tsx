@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import type { PosSaleDetail, Session } from "@acropora/types";
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -117,7 +117,15 @@ describe("PosSaleDetailPage", () => {
       expect(api.getSale).toHaveBeenCalledWith("", "sale-1"),
     );
     expect(await screen.findByText("Red Sea ReefMat 500")).toBeInTheDocument();
-    expect(screen.getByText(/24.900\s?Ft/)).toBeInTheDocument();
+
+    // A "24 900 Ft" összeg szándékosan jelenik meg kétszer: egyszer az
+    // összesítő "Bruttó" mezőjében, egyszer a tételsor "Bruttó" oszlopában.
+    // getByText itt hibás lenne (több találat) - explicit megszámoljuk a
+    // két előfordulást, majd within()-nel bizonyítjuk, hogy az egyik
+    // ténylegesen a tételsorban van.
+    expect(screen.getAllByText(/24.900\s?Ft/)).toHaveLength(2);
+    const lineRow = screen.getByRole("row", { name: /RS-RM500/ });
+    expect(within(lineRow).getByText(/24.900\s?Ft/)).toBeInTheDocument();
   });
 
   it("API-hibát jelenít meg cookie-alapú sessionnel is", async () => {
