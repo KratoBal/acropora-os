@@ -42,7 +42,7 @@ export function PurchaseInvoiceDetailPage({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!canView || !token) return;
+    if (!canView) return;
     setLoading(true);
     setError(null);
     void purchasingApi

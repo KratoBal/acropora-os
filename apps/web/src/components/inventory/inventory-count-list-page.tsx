@@ -78,7 +78,7 @@ export function InventoryCountListPage() {
   const [requestVersion, setRequestVersion] = useState(0);
 
   useEffect(() => {
-    if (!canView || !token) return;
+    if (!canView) return;
     let active = true;
     setError(null);
     setLoading(true);
@@ -108,7 +108,8 @@ export function InventoryCountListPage() {
   }, [canView, page, requestVersion, status, token]);
 
   const startNewCount = () => {
-    if (!token || creating) return;
+    // Matches the button's own `canManage ? ... : undefined` rendering guard.
+    if (!canManage || creating) return;
     setCreating(true);
     void inventoryApi
       .create(token)

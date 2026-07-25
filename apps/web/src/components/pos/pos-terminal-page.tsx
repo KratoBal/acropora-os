@@ -71,22 +71,26 @@ export function PosTerminalPage() {
   const [loadingRecent, setLoadingRecent] = useState(true);
 
   const loadRecentSales = useCallback(() => {
-    if (!token) return;
+    // Gate on the permission, not on having a client-readable token: in
+    // production the session is an httpOnly cookie and `token` is always
+    // "" (see ProductionAuthAdapter) - apiRequest already knows to rely on
+    // the cookie when no Bearer token is given.
+    if (!canView) return;
     setLoadingRecent(true);
     void posApi
       .listSales(token, { page: 1, pageSize: 10 })
       .then((response) => setRecentSales(response.items))
       .catch(() => undefined)
       .finally(() => setLoadingRecent(false));
-  }, [token]);
+  }, [canView, token]);
 
   useEffect(() => {
-    if (!canView || !token) return;
+    if (!canView) return;
     loadRecentSales();
-  }, [canView, loadRecentSales, token]);
+  }, [canView, loadRecentSales]);
 
   useEffect(() => {
-    if (!canView || !token) return;
+    if (!canView) return;
     if (!searchTerm.trim()) {
       setSearchResults([]);
       return;
@@ -157,7 +161,12 @@ export function PosTerminalPage() {
   );
 
   const checkout = () => {
-    if (!token || cart.length === 0 || checkingOut) return;
+    // Mirrors the button's own `canManage ? ... : null` rendering guard -
+    // reasserted here so this can't silently no-op or (worse) proceed if
+    // ever called from anywhere else. Not a token check: apiRequest
+    // relies on the session cookie in production, same as everywhere
+    // else in this component.
+    if (!canManage || cart.length === 0 || checkingOut) return;
     setCheckingOut(true);
     setError(null);
     void posApi

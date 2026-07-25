@@ -68,7 +68,7 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
   const [savingLineId, setSavingLineId] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    if (!token) return;
+    if (!canView) return;
     setError(null);
     setLoading(true);
     void inventoryApi
@@ -82,12 +82,12 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
         ),
       )
       .finally(() => setLoading(false));
-  }, [countId, token]);
+  }, [canView, countId, token]);
 
   useEffect(() => {
-    if (!canView || !token) return;
+    if (!canView) return;
     load();
-  }, [canView, load, token]);
+  }, [canView, load]);
 
   if (!canView) {
     return (
@@ -100,7 +100,9 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
   }
 
   const downloadTemplate = () => {
-    if (!token || !detail || downloading) return;
+    // Matches the surrounding `detail.status !== "CORRECTED" && canManage`
+    // rendering guard for this whole action block.
+    if (!canManage || !detail || downloading) return;
     setDownloading(true);
     void inventoryApi
       .downloadTemplate(token, detail.id, `${detail.countNumber}.xlsx`)
@@ -116,7 +118,7 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
 
   const uploadFile = () => {
     const file = fileInputRef.current?.files?.[0];
-    if (!token || !detail || uploading) return;
+    if (!canManage || !detail || uploading) return;
     if (!file) {
       setError("Előbb válassz ki egy kitöltött XLSX fájlt a feltöltéshez.");
       return;
@@ -142,7 +144,8 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
   };
 
   const saveLineCount = (lineId: string, rawValue: string) => {
-    if (!token || !detail) return;
+    // Only reachable from the input rendered under `pending && canManage`.
+    if (!canManage || !detail) return;
     if (rawValue.trim() === "") return;
     const value = Number(rawValue);
     if (!Number.isFinite(value) || value < 0) {
@@ -172,7 +175,9 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
   };
 
   const applyCorrection = () => {
-    if (!token || !detail || applying) return;
+    // Matches the surrounding `detail.status === "UPLOADED" && canManage`
+    // rendering guard.
+    if (!canManage || !detail || applying) return;
     setApplying(true);
     setError(null);
     void inventoryApi

@@ -73,7 +73,7 @@ export function WebshopOrdersPage() {
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   const loadOrders = useCallback(() => {
-    if (!token) return;
+    if (!canView) return;
     setLoading(true);
     setError(null);
     void unasOrdersApi
@@ -87,15 +87,17 @@ export function WebshopOrdersPage() {
         ),
       )
       .finally(() => setLoading(false));
-  }, [token]);
+  }, [canView, token]);
 
   useEffect(() => {
-    if (!canView || !token) return;
+    if (!canView) return;
     loadOrders();
-  }, [canView, token, loadOrders]);
+  }, [canView, loadOrders]);
 
   const runSync = () => {
-    if (!token || syncing) return;
+    // Matches the button's own `canManage ? ... : undefined` rendering
+    // guard - sync is a manage action, not merely a view action.
+    if (!canManage || syncing) return;
     setSyncing(true);
     setSyncMessage(null);
     void unasOrdersApi

@@ -145,7 +145,10 @@ export function PurchaseInvoiceEuEditorPage() {
   // mennyiséggel és egységárral - ezeket írja át a saját elnevezésére és a
   // ténylegesen átvett mennyiségre a bevételezés előtt.
   useEffect(() => {
-    if (!navInvoiceId || !token) return;
+    // A teljes oldal canManage jogosultsághoz kötött (lásd lent), a token
+    // önmagában nem feltétel: cookie-alapú authnál üres, az apiRequest
+    // ilyenkor a httpOnly session cookie-t használja.
+    if (!navInvoiceId) return;
     setNavPrefillLoading(true);
     setNavPrefillError(null);
     void navIncomingInvoicesApi
@@ -200,7 +203,7 @@ export function PurchaseInvoiceEuEditorPage() {
   }, [navInvoiceId, token]);
 
   useEffect(() => {
-    if (!token || !supplierSearch.trim()) {
+    if (!supplierSearch.trim()) {
       setSupplierResults([]);
       return;
     }
@@ -215,7 +218,7 @@ export function PurchaseInvoiceEuEditorPage() {
   }, [supplierSearch, token]);
 
   useEffect(() => {
-    if (!token || !productSearch.trim()) {
+    if (!productSearch.trim()) {
       setProductResults([]);
       return;
     }
@@ -239,7 +242,7 @@ export function PurchaseInvoiceEuEditorPage() {
       setRateNotice(null);
       return;
     }
-    if (!token || !invoiceDate) return;
+    if (!invoiceDate) return;
     if (currency.trim().toUpperCase() === "HUF") {
       setExchangeRate("");
       setRateNotice(null);

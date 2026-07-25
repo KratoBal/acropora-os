@@ -466,13 +466,19 @@ export function ProductDetailPage({ productId }: { productId: string }) {
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.PRODUCTS_MANAGE),
   );
+  // Matches the same fallback used throughout the rest of the app: in
+  // production the session is an httpOnly cookie and `token` is always
+  // undefined (see ProductionAuthAdapter) - apiRequest already relies on
+  // the cookie when no Bearer token is given, so this must never gate an
+  // effect or action, only be passed through as a call parameter.
+  const token = session?.token ?? "";
 
   useEffect(() => {
-    if (!canView || !session?.token) return;
+    if (!canView) return;
     let active = true;
     setError(null);
     void productApi
-      .detail(session.token, productId)
+      .detail(token, productId)
       .then((response) => {
         if (active) setProduct(response);
       })
@@ -487,7 +493,7 @@ export function ProductDetailPage({ productId }: { productId: string }) {
     return () => {
       active = false;
     };
-  }, [canView, productId, requestVersion, session?.token]);
+  }, [canView, productId, requestVersion, token]);
 
   if (!canView) {
     return (
@@ -737,7 +743,7 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                       onSaved={() =>
                         setRequestVersion((current) => current + 1)
                       }
-                      token={session?.token ?? ""}
+                      token={token}
                       variantId={variant.id}
                     />
                   </div>
