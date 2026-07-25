@@ -47,6 +47,38 @@ export class AuthService {
     return session;
   }
 
+  /**
+   * The real, production login path: verifies a password against the
+   * stored `passwordHash` (via AuthUserResolver.resolveByEmailAndPassword,
+   * which already exists for user-management but was never wired to any
+   * login endpoint) and issues a session through the exact same in-memory
+   * `sessions` map and `Session`/`AuthenticatedUser` contract the
+   * development login already uses — no new session storage, no new
+   * identity model, per docs/AUTHENTICATION.md's own "Providercsere"
+   * guidance that a real provider only needs to replace *this* piece.
+   *
+   * Unlike the development login's `dev_`-prefixed token, this session's
+   * token is delivered to the client exclusively via an httpOnly cookie
+   * (see AuthController) — it is never present in a JSON response body or
+   * readable by client-side JS.
+   */
+  async loginWithPassword(email: string, password: string): Promise<Session> {
+    const internalUser = await this.users.resolveByEmailAndPassword(
+      email,
+      password,
+    );
+    const token = randomUUID();
+    const session: Session = {
+      id: randomUUID(),
+      user: internalUser,
+      token,
+      expiresAt: new Date(Date.now() + SESSION_TTL_MS).toISOString(),
+    };
+
+    this.sessions.set(token, session);
+    return session;
+  }
+
   async resolveToken(token: string): Promise<AuthenticatedUser> {
     const session = this.sessions.get(token);
 

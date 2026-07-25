@@ -8,6 +8,28 @@ import { prisma } from "@acropora/database";
 import type { AuthenticatedUser } from "@acropora/types";
 import { createHash } from "node:crypto";
 
+import { hashPassword, verifyPassword } from "../users/password.util.js";
+
+/**
+ * Deliberately identical, generic message for "no such user", "user has no
+ * password set yet" and "wrong password" — distinguishing them in the
+ * response would let an attacker enumerate valid e-mail addresses.
+ */
+const INVALID_CREDENTIALS_MESSAGE = "Hibás e-mail cím vagy jelszó.";
+
+// Lazily computed once and reused: when there's no real stored hash to
+// compare against (unknown e-mail, or a user that has never had a
+// password set), still run a real scrypt computation against *some* hash
+// rather than short-circuiting immediately — otherwise "unknown e-mail"
+// responds measurably faster than "wrong password for a real e-mail",
+// which is a timing side-channel an attacker could use to enumerate
+// valid accounts.
+let dummyHashPromise: Promise<string> | undefined;
+function getDummyHash(): Promise<string> {
+  dummyHashPromise ??= hashPassword("timing-attack-mitigation-placeholder");
+  return dummyHashPromise;
+}
+
 @Injectable()
 export class AuthUserResolver {
   private readonly logger = new Logger(AuthUserResolver.name);
@@ -57,6 +79,28 @@ export class AuthUserResolver {
         "Az autentikált felhasználóhoz nem tartozik aktív belső User rekord.",
       );
     }
+    return this.toAuthenticatedUser(user);
+  }
+
+  async resolveByEmailAndPassword(
+    email: string,
+    password: string,
+  ): Promise<AuthenticatedUser> {
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    const storedHash = user?.passwordHash ?? (await getDummyHash());
+    const passwordMatches = await verifyPassword(password, storedHash);
+
+    if (!user || !user.isActive || !user.passwordHash || !passwordMatches) {
+      this.logger.warn(
+        `Sikertelen jelszavas bejelentkezési kísérlet: emailHash=${this.emailHash(normalizedEmail)}`,
+      );
+      throw new UnauthorizedException(INVALID_CREDENTIALS_MESSAGE);
+    }
+
     return this.toAuthenticatedUser(user);
   }
 

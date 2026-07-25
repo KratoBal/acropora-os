@@ -30,7 +30,10 @@ export const DEVELOPMENT_USERS: readonly AuthenticatedUser[] = [
 
 export interface AuthAdapter {
   restoreSession(): Promise<Session | null>;
-  login(email: string): Promise<Session>;
+  // `password` is only meaningful for ProductionAuthAdapter — kept optional
+  // here so the /login page can call the same `login(email, password)`
+  // shape regardless of which adapter is active.
+  login(email: string, password?: string): Promise<Session>;
   logout(session: Session): Promise<void>;
 }
 
@@ -61,7 +64,7 @@ export class DevelopmentAuthAdapter implements AuthAdapter {
     }
   }
 
-  async login(email: string): Promise<Session> {
+  async login(email: string, _password?: string): Promise<Session> {
     if (process.env.NODE_ENV === "production") {
       throw new Error(
         "A development login production környezetben le van tiltva.",

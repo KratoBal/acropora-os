@@ -1,3 +1,7 @@
+const CSRF_COOKIE_NAME = "acropora_csrf";
+const CSRF_HEADER_NAME = "X-CSRF-Token";
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -8,6 +12,20 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Reads the CSRF cookie the production (password-based) login sets. Only
+ * ever present when using cookie-based session auth — the development
+ * login never sets it, so this is a harmless no-op in development.
+ */
+function readCsrfCookie(): string | undefined {
+  if (typeof document === "undefined") return undefined;
+  for (const part of document.cookie.split(";")) {
+    const [name, ...rest] = part.trim().split("=");
+    if (name === CSRF_COOKIE_NAME) return decodeURIComponent(rest.join("="));
+  }
+  return undefined;
+}
+
 export async function apiRequest<T>(
   path: string,
   token: string,
@@ -15,11 +33,21 @@ export async function apiRequest<T>(
 ): Promise<T> {
   let response: Response;
   try {
+    const method = (init?.method ?? "GET").toUpperCase();
+    const csrfToken = SAFE_METHODS.has(method) ? undefined : readCsrfCookie();
     response = await fetch(`/api${path}`, {
       ...init,
       headers: {
         Accept: "application/json",
-        Authorization: `Bearer ${token}`,
+        // With a production (cookie-based) session there is no
+        // client-readable token — the browser sends the httpOnly session
+        // cookie automatically instead. Only attach a Bearer header when
+        // there's an actual token (the development login path); sending
+        // `Authorization: Bearer ` with an empty value would otherwise
+        // make the API guard reject the request before it ever falls
+        // back to checking the cookie.
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(csrfToken ? { [CSRF_HEADER_NAME]: csrfToken } : {}),
         ...init?.headers,
       },
     });
