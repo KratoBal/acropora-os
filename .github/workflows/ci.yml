@@ -134,11 +134,8 @@ jobs:
       # forward. This SHA is v0.36.0's release commit (GitHub-verified
       # signature), the latest release as of this writing.
       #
-      # CRITICAL-severity, fixable vulnerabilities fail the build outright;
-      # everything else is reported but non-blocking for now. Tightening
-      # this (e.g. to also gate on HIGH) is a reasonable future step once
-      # the baseline is clean — see the production readiness review in
-      # docs/PRODUCTION-DEPLOYMENT-ARCHITECTURE-REVIEW.md.
+      # Fixable HIGH and CRITICAL vulnerabilities fail the build. A narrowly
+      # scoped, expiring exception may be documented in .trivyignore.yaml.
       - name: Scan image for vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -148,6 +145,7 @@ jobs:
           exit-code: "1"
           ignore-unfixed: true
           vuln-type: os,library
+          trivyignores: .trivyignore.yaml
 
   docker-smoke-test:
     name: Docker runtime smoke test (api)
