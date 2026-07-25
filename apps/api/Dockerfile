@@ -97,6 +97,44 @@ RUN --mount=type=cache,id=acropora-pnpm-store,target=/root/.local/share/pnpm/sto
 # config), so an unfiltered build compiles exactly that set, in the correct
 # dependency order (turbo.json's "build" task depends on "^build").
 COPY --from=pruner /app/out/full/ .
+
+# Generate the Prisma Client here, explicitly, OUTSIDE Turbo's task graph —
+# never let it be gated by the `/app/.turbo` cache mount above.
+#
+# @acropora/database's own "build" script is `prisma generate && tsc`, run
+# by Turbo as the "^build" dependency of @acropora/api's build. Turbo's task
+# cache only records whether that task *ran* and replays its declared
+# `outputs` (dist/**) on a hit — it has no notion of `.prisma/client`, which
+# `prisma generate` writes into pnpm's node_modules structure, outside any
+# package's own directory entirely. Because `/app/.turbo` is a persistent
+# BuildKit cache mount shared across builds, a cache hit for
+# @acropora/database#build on a later build means `prisma generate` never
+# actually executes against *this* build's freshly-installed node_modules —
+# even though Turbo's log reports the task as successful — leaving
+# @prisma/client's generated `.prisma/client` directory missing. That
+# surfaces downstream as apps/api's own tsc pass failing with dozens of
+# "Module '@prisma/client' has no exported member 'PrismaClient'"-style
+# errors, since apps/api type-checks against @acropora/database's *source*
+# (its package.json "types" condition points at src/index.ts, not a
+# generated .d.ts), which itself imports the real generated Prisma types.
+#
+# Running generation here, unconditionally, before Turbo ever touches the
+# cache mount, guarantees the client physically exists in this build's
+# node_modules regardless of Turbo's cache state. It's left in place inside
+# @acropora/database's own build script too (so `turbo run build` still
+# works correctly in isolation, e.g. outside Docker) — running it twice is
+# idempotent and cheap.
+RUN pnpm --filter @acropora/database exec prisma generate
+
+# Fail fast, right here, if generation didn't actually produce a loadable
+# client — instead of discovering it forty tsc errors later. Run from
+# @acropora/database's own directory, the same place its compiled code
+# resolves `@prisma/client` from, so this exercises the real resolution
+# path rather than some other node_modules copy.
+WORKDIR /app/packages/database
+RUN node --input-type=module -e "import { PrismaClient } from '@prisma/client'; const client = new PrismaClient(); await client.\$disconnect(); console.log('Prisma Client generated and loadable OK (builder stage, pre-turbo-build)');"
+WORKDIR /app
+
 RUN --mount=type=cache,id=acropora-api-turbo-cache,target=/app/.turbo \
     pnpm turbo run build
 
