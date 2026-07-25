@@ -113,7 +113,14 @@ export function ProductListPage() {
   }, [replaceState, search, state]);
 
   useEffect(() => {
-    if (!canView || !token) return;
+    // Gate only on a valid session + products.view permission, never on
+    // having a client-readable token: in production the session lives in
+    // an httpOnly cookie (ProductionAuthAdapter never populates
+    // session.token), so `!token` would permanently block this effect and
+    // leave the page stuck on its initial loading state. `token` itself
+    // (possibly "") still has to reach apiRequest unchanged — it decides
+    // there whether to send a Bearer header or rely on the cookie.
+    if (!canView) return;
     let active = true;
     setError(null);
     if (data) setRefreshing(true);
@@ -158,7 +165,9 @@ export function ProductListPage() {
   }, [canView, requestVersion, replaceState, state, token]);
 
   useEffect(() => {
-    if (!canView || !token) return;
+    // Same reasoning as the effect above: gate on canView (session +
+    // permission), not on the presence of a client-readable token.
+    if (!canView) return;
     let active = true;
     void Promise.all([
       productApi.categoryOptions(token),

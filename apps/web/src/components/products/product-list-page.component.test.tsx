@@ -65,6 +65,21 @@ const ownerSession: Session = {
   },
 };
 
+// Mirrors what ProductionAuthAdapter actually returns in production: a
+// valid, cookie-authenticated session with no client-readable token at
+// all (see apps/web/src/lib/auth/production-auth.ts).
+const cookieSession: Session = {
+  id: "session-cookie",
+  token: undefined,
+  expiresAt: "2099-01-01T00:00:00.000Z",
+  user: {
+    id: "owner",
+    email: "owner@acropora.local",
+    displayName: "Acropora Tulajdonos",
+    role: "OWNER",
+  },
+};
+
 const populatedResponse: ProductListResponse = {
   items: [
     {
@@ -313,5 +328,20 @@ describe("ProductListPage", () => {
       screen.getByText("Nincs hozzáférésed a termékkatalógushoz"),
     ).toBeInTheDocument();
     expect(api.list).not.toHaveBeenCalled();
+  });
+
+  it("cookie-alapú production session esetén (token: undefined) is elindulnak a lekérések, nem ragad be loading állapotban", async () => {
+    auth.session = cookieSession;
+    api.list.mockResolvedValue(populatedResponse);
+
+    render(createElement(ProductListPage));
+
+    expect(await screen.findByRole("table")).toBeInTheDocument();
+    expect(api.list).toHaveBeenCalledWith(
+      "",
+      expect.objectContaining({ page: 1 }),
+    );
+    expect(api.categoryOptions).toHaveBeenCalledWith("");
+    expect(api.brandOptions).toHaveBeenCalledWith("");
   });
 });
