@@ -3,7 +3,7 @@
 # Acropora OS — Web (Next.js) production image.
 #
 # Build context is the REPOSITORY ROOT (this is a pnpm/Turborepo monorepo):
-#   docker build -f apps/web/Dockerfile -t acropora-web .
+#   docker build -f apps/web/Dockerfile --build-arg API_URL=http://acropora-api:3001 -t acropora-web .
 #
 # Strategy
 # --------
@@ -61,10 +61,13 @@ RUN --mount=type=cache,id=acropora-pnpm-store,target=/root/.local/share/pnpm/sto
 
 COPY --from=pruner /app/out/full/ .
 
-# Next.js reads a handful of env vars at build time (e.g. to inline into
-# client bundles via NEXT_PUBLIC_*). None exist yet in this app, but the
-# build-arg plumbing is left here, ready, rather than added later as a
-# surprise — see docs/PRODUCTION-DEPLOYMENT-ARCHITECTURE-REVIEW.md.
+# Next evaluates next.config.ts during the image build. API_URL therefore must
+# be supplied as a Docker build argument; a runtime-only environment variable
+# arrives too late and would otherwise produce a broken rewrite in the bundle.
+ARG API_URL
+ENV API_URL=${API_URL}
+RUN test -n "$API_URL"
+
 RUN --mount=type=cache,id=acropora-web-turbo-cache,target=/app/.turbo \
     pnpm turbo run build
 

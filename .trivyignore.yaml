@@ -1,0 +1,10 @@
+vulnerabilities:
+  - id: CVE-2026-14257
+    expired_at: 2026-10-31
+    statement: >-
+      Temporary exception for brace-expansion 1.1.16 and 2.1.2, pulled into the
+      API runtime image transitively by exceljs 4.4.0 through archiver, glob,
+      minimatch, and readdir-glob. Acropora OS does not expose user-controlled
+      brace or glob patterns to these dependencies. Remove this exception when
+      ExcelJS or its archive dependency chain adopts a compatible patched
+      brace-expansion release.
