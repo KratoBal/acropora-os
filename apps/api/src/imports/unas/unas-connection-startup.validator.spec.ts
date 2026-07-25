@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { afterEach, describe, it } from "node:test";
+import { afterEach, describe, it, mock } from "node:test";
+
+import { Logger } from "@nestjs/common";
 
 import type { UnasConnectionRepository } from "./unas-connection.repository.js";
 import { UnasConnectionStartupValidator } from "./unas-connection-startup.validator.js";
@@ -97,17 +99,25 @@ describe("UnasConnectionStartupValidator", () => {
     }
   });
 
-  it("fails production ENV_FALLBACK startup when its credential is absent", async () => {
+  it("allows production ENV_FALLBACK startup to continue, with a warning, when no credential is set yet", async () => {
     process.env.NODE_ENV = "production";
-    const { instance } = validator(setting("ENV_FALLBACK"), {
-      validationError: new UnasConnectionError(
-        "UNAS_CONNECTION_NOT_CONFIGURED",
-      ),
-    });
-    await assert.rejects(
-      instance.onModuleInit(),
-      /UNAS_CONNECTION_NOT_CONFIGURED/,
-    );
+    const warnSpy = mock.method(Logger.prototype, "warn");
+    try {
+      const { instance, calls } = validator(setting("ENV_FALLBACK"), {
+        validationError: new UnasConnectionError(
+          "UNAS_CONNECTION_NOT_CONFIGURED",
+        ),
+      });
+      await instance.onModuleInit();
+      assert.deepEqual(calls, { activeKey: 1, validate: 1 });
+      assert.equal(warnSpy.mock.calls.length, 1);
+      assert.match(
+        String(warnSpy.mock.calls[0]?.arguments[0]),
+        /UNAS_CONNECTION_NOT_CONFIGURED/,
+      );
+    } finally {
+      warnSpy.mock.restore();
+    }
   });
 
   it("requires a decryptable DATABASE envelope", async () => {
