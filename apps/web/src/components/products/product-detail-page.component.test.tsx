@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { ProductDetail, Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -122,6 +128,34 @@ const hufDetail: ProductDetail = {
       },
     },
   ],
+};
+
+const stockDetail: ProductDetail = {
+  ...detail,
+  stockOnHand: "24900",
+};
+
+const richDescriptionHtml = [
+  "<p>Leírás <strong>vastagon</strong> és <em>dőlt</em> szöveggel.</p>",
+  "<ul><li>Első tulajdonság</li><li>Második tulajdonság</li></ul>",
+  '<a href="https://example.com/adatlap" onclick="alert(1)">Gyártói adatlap</a>',
+  '<img src="https://example.com/kep.jpg" onerror="alert(2)" alt="Termékkép" />',
+  "<script>alert(3)</script>",
+  '<a href="javascript:alert(4)">Veszélyes hivatkozás</a>',
+].join("");
+
+const richDescriptionDetail: ProductDetail = {
+  ...detail,
+  description: richDescriptionHtml,
+};
+
+// Finds the <dt>/<dd> pair for a given UNAS mirror field label and scopes
+// queries to just that pair, so assertions don't collide with the same
+// "10"/"—" text appearing elsewhere on the page (e.g. in the Acropora
+// Product Extension editor for the same variant).
+const findMirrorField = (label: string) => {
+  const dt = screen.getByText(label);
+  return within(dt.parentElement as HTMLElement);
 };
 
 describe("ProductDetailPage mirror ownership", () => {
@@ -310,5 +344,94 @@ describe("ProductDetailPage mirror ownership", () => {
         }),
       ),
     );
+  });
+
+  it("nem mutatja a Minimum mennyiséget és a Lépésközt az UNAS terméktükörben", async () => {
+    render(<ProductDetailPage productId="product-1" />);
+    await screen.findByText("UNAS terméktükör");
+
+    expect(screen.queryByText("Minimum mennyiség")).not.toBeInTheDocument();
+    expect(screen.queryByText("Lépésköz")).not.toBeInTheDocument();
+  });
+
+  it("az UNAS terméktükörben megjeleníti az utolsó beszerárat a devizájával", async () => {
+    render(<ProductDetailPage productId="product-1" />);
+    await screen.findByText("UNAS terméktükör");
+
+    // detail fixture: primarySku "SALT-1" variant extension has
+    // lastPurchaseNetPrice "10" / defaultPurchaseCurrency "EUR".
+    const field = findMirrorField("Utolsó beszerár");
+    expect(field.getByText("10 EUR")).toBeInTheDocument();
+  });
+
+  it("az UNAS terméktükörben megjeleníti az Acropora OS készletet", async () => {
+    api.detail.mockResolvedValue(stockDetail);
+    render(<ProductDetailPage productId="product-1" />);
+    await screen.findByText("UNAS terméktükör");
+
+    const field = findMirrorField("Acropora OS készlet");
+    // hu-HU grouping separator character varies by ICU data (space, NBSP,
+    // narrow NBSP) - same tolerant pattern used by product-list-page's
+    // stock/price assertions, "." here is a regex wildcard not a literal dot.
+    expect(field.getByText(/^24.900$/)).toBeInTheDocument();
+  });
+
+  it("hiányzó beszerár esetén csak gondolatjelet mutat, önálló deviza nélkül", async () => {
+    api.detail.mockResolvedValue(noExtensionDetail);
+    render(<ProductDetailPage productId="product-1" />);
+    await screen.findByText("UNAS terméktükör");
+
+    const field = findMirrorField("Utolsó beszerár");
+    expect(field.getByText("—")).toBeInTheDocument();
+    expect(field.queryByText(/EUR|HUF|USD/)).not.toBeInTheDocument();
+  });
+
+  it("a termékleírásban megtartja az engedélyezett HTML-formázást", async () => {
+    api.detail.mockResolvedValue(richDescriptionDetail);
+    const { container } = render(<ProductDetailPage productId="product-1" />);
+    await screen.findByText("UNAS terméktükör");
+
+    expect(
+      container.querySelector("strong")?.textContent,
+    ).toBe("vastagon");
+    expect(container.querySelector("em")?.textContent).toBe("dőlt");
+    const items = container.querySelectorAll("ul li");
+    expect(items).toHaveLength(2);
+    expect(items[0]?.textContent).toBe("Első tulajdonság");
+    expect(items[1]?.textContent).toBe("Második tulajdonság");
+
+    const safeLink = screen.getByText("Gyártói adatlap");
+    expect(safeLink.getAttribute("href")).toBe(
+      "https://example.com/adatlap",
+    );
+    expect(safeLink.getAttribute("target")).toBe("_blank");
+    expect(safeLink.getAttribute("rel")).toBe("noopener noreferrer");
+
+    const image = container.querySelector("img");
+    expect(image?.getAttribute("src")).toBe("https://example.com/kep.jpg");
+    expect(image?.getAttribute("alt")).toBe("Termékkép");
+  });
+
+  it("eltávolítja a script, az eseménykezelő és a javascript: URL-eket a leírásból", async () => {
+    api.detail.mockResolvedValue(richDescriptionDetail);
+    const { container } = render(<ProductDetailPage productId="product-1" />);
+    await screen.findByText("UNAS terméktükör");
+
+    const html = container.innerHTML;
+    expect(html).not.toContain("<script");
+    expect(html).not.toContain("alert(3)");
+    expect(html).not.toContain("onclick");
+    expect(html).not.toContain("onerror");
+    expect(html).not.toContain("javascript:");
+
+    const dangerousLink = screen.getByText("Veszélyes hivatkozás");
+    expect(dangerousLink.hasAttribute("href")).toBe(false);
+    expect(dangerousLink.getAttribute("target")).toBe("_blank");
+
+    const safeLink = screen.getByText("Gyártói adatlap");
+    expect(safeLink.hasAttribute("onclick")).toBe(false);
+
+    const image = container.querySelector("img");
+    expect(image?.hasAttribute("onerror")).toBe(false);
   });
 });

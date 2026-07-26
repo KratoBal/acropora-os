@@ -19,7 +19,8 @@ import {
   type ProductExtensionUpdateInput,
 } from "@acropora/types";
 import { useRouter, useSearchParams } from "next/navigation";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { FilterXSS, type IFilterXSSOptions } from "xss";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { productApi } from "@/lib/api/products";
@@ -38,6 +39,159 @@ const flag = (candidate: boolean | null | undefined) =>
     : candidate
       ? "Igen"
       : "Nem";
+// Same money-formatting convention used across the app's detail/list pages
+// (see e.g. product-list-page.tsx's formatHuf/formatStock, and the
+// formatMoney helpers in the purchasing pages): hu-HU grouped digits via
+// Intl/toLocaleString, currency as a plain trailing code. No standalone
+// currency is ever shown without an amount.
+const formatMoney = (
+  amount: string | null | undefined,
+  currency: string | null | undefined,
+): string => {
+  if (!amount) return "—";
+  const formatted = Number(amount).toLocaleString("hu-HU", {
+    maximumFractionDigits: 2,
+  });
+  return currency ? `${formatted} ${currency}` : formatted;
+};
+// Matches product-list-page.tsx's formatStock exactly, so the same
+// on-hand quantity reads identically on the list and detail pages.
+const formatStock = (candidate: string | null | undefined): string =>
+  candidate == null
+    ? "—"
+    : Number(candidate).toLocaleString("hu-HU", { maximumFractionDigits: 2 });
+
+// The UNAS product description is rich HTML (bold, lists, tables, links)
+// copied from the UNAS editor. We want it to display the same way it does
+// in UNAS, so it's rendered via dangerouslySetInnerHTML rather than as
+// plain text.
+//
+// Sanitization uses `xss` (js-xss, leizongmin/js-xss) - NOT sanitize-html.
+// sanitize-html's own GitHub repo was archived by its owner in Feb 2026
+// (read-only, no further fixes will land there), and worse, its 2.17.6
+// release depends on htmlparser2@^12, which resolves to htmlparser2@12.0.0
+// - an ESM-only package ("type": "module", no CJS entry point). sanitize-
+// html itself is CommonJS and does a plain `require("htmlparser2")`, so
+// the two are simply incompatible: loading it throws ERR_REQUIRE_ESM. This
+// was confirmed against a clean `pnpm install --frozen-lockfile` - both
+// Vitest and Next's own Node runtime hit the same failure importing this
+// file. It isn't something a transitive-dependency override should paper
+// over (forcing a pre-12 htmlparser2 via a pnpm override would just mean
+// running an unpatched, no-longer-compatible version of a dependency of an
+// archived package - the underlying tool is what needed to change).
+//
+// `xss` avoids this whole category of problem structurally: it's plain
+// CommonJS end to end (its only two dependencies, cssfilter and commander,
+// are CommonJS too - no mixed module systems anywhere in the chain), and
+// it's a hand-written string tokenizer rather than a DOM-based sanitizer.
+// It never touches `DOMParser`, `jsdom`, or any HTML5 parser implementation,
+// so the exact same code runs during SSR, under Vitest, and in the browser
+// - there's no "two different parsers that might disagree" risk the way
+// there would be with e.g. DOMPurify+jsdom on the server vs. native
+// DOMPurify in the browser. Output is therefore byte-for-byte identical
+// between server and client, so it can't cause a hydration mismatch. The
+// project (leizongmin/js-xss) is still actively published (last release
+// Feb 2026), not archived, and has ~5.3k GitHub stars / hundreds of forks.
+const DESCRIPTION_ALLOWED_TAGS: NonNullable<IFilterXSSOptions["whiteList"]> = {
+  a: ["href", "title"],
+  abbr: ["title"],
+  b: [],
+  blockquote: [],
+  br: [],
+  caption: [],
+  code: [],
+  div: [],
+  em: [],
+  figcaption: [],
+  figure: [],
+  h1: [],
+  h2: [],
+  h3: [],
+  h4: [],
+  h5: [],
+  h6: [],
+  hr: [],
+  i: [],
+  img: ["src", "alt", "title", "width", "height"],
+  li: [],
+  ol: [],
+  p: [],
+  pre: [],
+  s: [],
+  small: [],
+  span: [],
+  strong: [],
+  sub: [],
+  sup: [],
+  table: [],
+  tbody: [],
+  td: ["colspan", "rowspan"],
+  tfoot: [],
+  th: ["colspan", "rowspan"],
+  thead: [],
+  tr: [],
+  u: [],
+  ul: [],
+};
+
+const ALLOWED_LINK_SCHEME = /^(https?:|mailto:|tel:)/i;
+const ALLOWED_IMAGE_SCHEME = /^https?:/i;
+
+const descriptionFilter = new FilterXSS({
+  whiteList: DESCRIPTION_ALLOWED_TAGS,
+  // No tag above whitelists a "style" attribute, so `xss`'s CSS-filtering
+  // codepath (cssfilter) is never even reached for any attribute - there's
+  // no way for CSS-based content (position:fixed overlays, url(javascript:
+  // ...), etc.) to survive sanitization.
+  //
+  // script/style/SVG/MathML and embed-style tags are dropped together with
+  // their entire subtree (not just unwrapped/escaped-as-text), in case
+  // something dangerous is smuggled in as a nested child.
+  stripIgnoreTagBody: [
+    "script",
+    "style",
+    "iframe",
+    "object",
+    "embed",
+    "noscript",
+    "svg",
+    "math",
+    "template",
+    "head",
+    "title",
+    "textarea",
+    "option",
+  ],
+  allowCommentTag: false,
+  // href/src get a narrow scheme allowlist - anything else (javascript:,
+  // data:, vbscript:, etc.) is dropped as a whole attribute rather than
+  // left behind as an empty/bogus one.
+  onTagAttr(tag, name, value) {
+    if (name === "href" || name === "src") {
+      const trimmed = value.trim();
+      const allowed =
+        tag === "img"
+          ? ALLOWED_IMAGE_SCHEME.test(trimmed)
+          : ALLOWED_LINK_SCHEME.test(trimmed);
+      if (!allowed) return "";
+    }
+    return undefined;
+  },
+});
+
+const sanitizeDescriptionHtml = (html: string): string => {
+  if (!html) return "";
+  const sanitized = descriptionFilter.process(html);
+  // Force every remaining link to open safely in a new tab. This string
+  // replace runs on `sanitized`, not on the untrusted input: by this point
+  // every literal "<" from the original HTML has already been escaped to
+  // "&lt;" by the filter above, so every remaining literal "<a" here is a
+  // real anchor tag the filter itself just emitted, never attacker text.
+  return sanitized.replace(
+    /<a(?=[\s>])/gi,
+    '<a target="_blank" rel="noopener noreferrer"',
+  );
+};
 
 interface ExtensionForm {
   defaultPurchaseCurrency: string;
@@ -495,6 +649,11 @@ export function ProductDetailPage({ productId }: { productId: string }) {
     };
   }, [canView, productId, requestVersion, token]);
 
+  const descriptionHtml = useMemo(
+    () => sanitizeDescriptionHtml(product?.description ?? ""),
+    [product?.description],
+  );
+
   if (!canView) {
     return (
       <Alert
@@ -533,6 +692,13 @@ export function ProductDetailPage({ productId }: { productId: string }) {
       </div>
     );
   }
+
+  // UNAS-mirrored products are synced 1:1 with a single variant (see
+  // UNAS_MIRROR_VARIANT_CARDINALITY), so the primary/only variant's purchase
+  // extension is what "Utolsó beszerár" in the UNAS mirror card refers to.
+  const primaryPurchaseExtension =
+    product.variants.find((variant) => variant.sku === product.primarySku)
+      ?.extension ?? product.variants[0]?.extension ?? null;
 
   return (
     <div className="space-y-6">
@@ -654,16 +820,21 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                     </div>
                     <div>
                       <dt className="text-xs text-slate-400">
-                        Minimum mennyiség
+                        Utolsó beszerár
                       </dt>
                       <dd className="mt-1 text-slate-800">
-                        {value(product.unasMirror.minimumOrderQuantity)}
+                        {formatMoney(
+                          primaryPurchaseExtension?.lastPurchaseNetPrice,
+                          primaryPurchaseExtension?.defaultPurchaseCurrency,
+                        )}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-xs text-slate-400">Lépésköz</dt>
-                      <dd className="mt-1 text-slate-800">
-                        {value(product.unasMirror.orderQuantityStep)}
+                      <dt className="text-xs text-slate-400">
+                        Acropora OS készlet
+                      </dt>
+                      <dd className="mt-1 font-semibold text-slate-800">
+                        {formatStock(product.stockOnHand)}
                       </dd>
                     </div>
                     <div>
@@ -764,9 +935,12 @@ export function ProductDetailPage({ productId }: { productId: string }) {
             </CardHeader>
             <CardContent>
               {product.description ? (
-                <p className="whitespace-pre-wrap text-sm text-slate-700">
-                  {product.description}
-                </p>
+                <div
+                  className="max-w-none text-sm text-slate-700 [&_a]:text-teal-700 [&_a]:underline [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_img]:max-w-full [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_table]:w-full [&_td]:border [&_td]:border-slate-200 [&_td]:p-2 [&_th]:border [&_th]:border-slate-200 [&_th]:p-2 [&_ul]:list-disc [&_ul]:pl-5"
+                  dangerouslySetInnerHTML={{
+                    __html: descriptionHtml,
+                  }}
+                />
               ) : (
                 <p className="text-sm text-slate-500">
                   Ehhez a termékhez nincs leírás.
