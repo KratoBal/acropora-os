@@ -830,8 +830,7 @@ Az online és kézi értékesítési rendelések egységes teljesítési folyama
 - negatív készlet figyelmeztetéssel;
 - helyi készletcsökkentés és UNAS push;
 - napi eladási lista;
-- eladáslista/részlet és receipt-szerű nézet;
-- `invoiceRequested` előkészítő mező a későbbi számlázáshoz.
+- eladáslista/részlet és receipt-szerű nézet.
 
 ### Nyitott POS- és fulfilment-funkciók
 
@@ -847,17 +846,74 @@ Az online és kézi értékesítési rendelések egységes teljesítési folyama
 
 ## M8 – Számlázz.hu Integration and Invoice Registry
 
-**Állapot:** COMMITTED — **kiválasztott következő fő irány (2026-07-24)**
+**Állapot:** RÉSZBEN ÁTDOLGOZVA (2026-07-27) — az eredeti, 2026-07-24-én
+COMMITTED terv M8.2 alpontja (Acropora OS által kezdeményezett kimenő
+webshop-számlázás) **architekturálisan elvetésre került** egy 2026-07-27-i
+audit után, és teljes egészében visszabontásra/lecserélésre került egy
+read-only UNAS-számlatükörre (lásd lent). Az M8 többi alpontja (connection
+settings, bejövő pénzügyi adatkapcsolat, általános számlanyilvántartás,
+backfill) továbbra is érvényes, jövőbeli irány marad, csak a hatóköre lett
+pontosítva: ezek mostantól kifejezetten a **B) bejövő bizonylatok** és **C)
+nem webshopos kimenő számlázás** irányokhoz tartoznak (lásd alább), NEM a
+UNAS-webshoprendelésekhez.
 
-### Cél
+### Végleges architektúra (2026-07-27)
 
-A kimenő számlázás automatizálása, valamint a bejövő és kimenő számlák teljes
-helyi nyilvántartása, **Számlázz.hu-t elsődleges szinkronforrásként
-használva; a NAV Online Számla csak napi teljességi/eltérés-ellenőrzés
-(M9), nem elsődleges adatforrás** — 2026-07-24-én megerősített irány, lásd
-6.0A és 11. döntés #6.
+**A) Webshopos kimenő számlázás** — **IMPLEMENTÁLVA (2026-07-27)**, csak
+read-only irányban:
+
+```text
+UNAS-rendelés → UNAS beépített Számlázz.hu modulja → Számlázz.hu
+              → Acropora OS (read-only UNAS-számlatükör)
+```
+
+Az Acropora OS webshoprendelés alapján **sosem**:
+- hív `createInvoice` (vagy bármilyen Számlázz.hu Agent API) végpontot;
+- kezdeményez számlakiállítást;
+- ír vissza számlaszámot vagy számlázási állapotot a UNAS-ba;
+- működtet számlakiállítási workert vagy schedulert;
+- tart fenn számlakiállítási retry- vagy lease-állapotgépet.
+
+Az egyetlen adatfolyam iránya UNAS → Acropora OS: a meglévő UNAS
+rendelésszinkron (`UnasOrderSyncRepository.apply()`) minden lekérésnél
+feldolgozza a UNAS `getOrder` válaszának `Invoice` alobjektumát
+(`Status`/`Number`/`Url` - a UNAS "Adatszerkezet" doksi szerint ennél
+többet, pl. dátumot vagy összeget, a UNAS nem ad). `SalesOrder.
+unasInvoiceStatus` tükrözi a UNAS-oldali NOT_BILLABLE/BILLABLE/BILLED
+állapotot; amint ez BILLED-re vált és van számlaszám + számlázási név,
+`syncInvoiceMirror()` egy `Invoice` sort upsertel `source=UNAS`-sal,
+`@@unique([source, invoiceNumber])` alapú idempotenciával. Az `Invoice.
+netAmount/vatAmount/grossAmount/issueDate` mezők source=UNAS soroknál
+`null`-ok maradnak (a UNAS getOrder API nem ad ezekhez adatot) - ezeket
+majd a jövőbeli B) pont (Számlázz.hu pénzügyi adatkapcsolat) töltheti fel
+utólag, ugyanarra az `invoiceNumber`-re párosítva.
+
+**B) Bejövő bizonylatok** — **TERVEZETT, még nem implementált** (lásd M8.1,
+M8.3, M8.4, M8.5 lent):
+
+```text
+Számlázz.hu Online Pénzügyi Adatkapcsolat → Acropora OS
+NAV Online Számla → ellenőrzés és egyeztetés (nem elsődleges forrás)
+```
+
+**C) Nem webshopos kimenő számlázás** — **TERVEZETT, önálló jövőbeli
+mérföldkő, még nem specifikált**:
+
+```text
+Munkalap / projekt / POS / kézi számlatervezet → Acropora OS → Számlázz.hu API
+```
+
+Ide tartozik pl. munkalap lezárása, akvárium-karbantartás, helyszíni
+munkavégzés, kivitelezési projekt, POS-eladás, kézi számla, díjbekérő,
+előlegszámla, végszámla, webshoptól független értékesítés. Ez a korábbi
+"Támogatandó bizonylatok" lista (számla, előlegszámla, végszámla, sztornó,
+helyesbítő/jóváíró, díjbekérő, nyugta) erre az irányra vonatkozik, NEM a
+UNAS-rendelésekre - önálló specifikáció és ADR szükséges hozzá, mielőtt
+elkezdődik.
 
 ### M8.1 – Számlázz.hu Connection Settings
+
+**Állapot:** TERVEZETT (B/C irányhoz szükséges, a UNAS-tükörhöz nem)
 
 - Agent kulcs és pénzügyi adatkapcsolati kulcs elkülönített kezelése;
 - titkosított credentialtárolás;
@@ -866,28 +922,23 @@ használva; a NAV Online Számla csak napi teljességi/eltérés-ellenőrzés
 - jogosultság és audit;
 - környezeti fallback és kulcsrotáció.
 
-### M8.2 – Kimenő automatikus számlázás
+### M8.2 – UNAS kimenő számla read-only tükrözése
 
-1. rendelés számlázható állapotba kerül;
-2. Acropora OS idempotens invoice requestet hoz létre;
-3. kötött sorrendű Számlázz.hu XML készül;
-4. worker elküldi a kérést;
-5. válaszból számlaszám, PDF és hivatkozás mentődik;
-6. UNAS rendelésben számlastátusz, szám és URL visszaíródik;
-7. UNAS-visszaírás hibája esetén csak a visszaírás ismétlődik;
-8. új számla ugyanarra az idempotenciakulcsra nem készülhet.
-
-### Támogatandó bizonylatok
-
-- számla;
-- előlegszámla;
-- végszámla;
-- sztornó;
-- helyesbítő/jóváíró;
-- díjbekérő opcionálisan;
-- nyugta külön későbbi döntés alapján.
+**Állapot:** IMPLEMENTÁLVA (2026-07-27) — lásd "Végleges architektúra A)"
+fent. Ez az alpont már NEM a Számlázz.hu Agent API-t hívó automatikus
+számlázásról szól (az elvetve), hanem a UNAS `getOrder` válaszának
+read-only feldolgozásáról.
 
 ### M8.3 – Online pénzügyi adatkapcsolat
+
+**Állapot:** TERVEZETT (B irány - bejövő bizonylatok elsődleges forrása).
+A `.../outgoing-invoices` végpont NEM azért kell, hogy Acropora OS
+webshop-számlát *kezdeményezzen* (azt a UNAS Számlázz.hu-modulja teszi,
+lásd M8.2 fent) - hanem azért, hogy a Számlázz.hu push-üzenete (ami a
+fiókban keletkező MINDEN kimenő számlát tartalmazza, a UNAS-modul által
+kiállítottakat is) utólag feltöltse a read-only UNAS-tükör
+dátum/összeg-mezőit (lásd M8.2 - ezeket a UNAS getOrder API nem adja),
+`invoiceNumber` alapján párosítva a már létező `source=UNAS` sorral.
 
 Külön fogadó végpontok:
 
@@ -923,6 +974,14 @@ záró bekezdése és a 10. fejezet).
 
 ### M8.4 – Számlanyilvántartás
 
+**Állapot:** RÉSZBEN KÉSZ — az `Invoice`/`InvoiceLine` modell (forrás,
+irány, bizonylattípus, számlaszám, kapcsolódó SalesOrder, pénznem,
+összegek, sync-státusz stb.) 2026-07-27-én forrásfüggetlenné/általánossá
+lett alakítva, és a `source=UNAS` sorokat már tölti a M8.2 read-only
+tükör. A lenti mezőlista a jövőbeli B/C irányok (Számlázz.hu pénzügyi
+adatkapcsolat, NAV egyeztetés, Acropora OS-kezdeményezésű számlázás)
+teljes lefedéséhez szükséges kiegészítéseket sorolja fel.
+
 - bejövő/kimenő irány;
 - bizonylattípus;
 - számlaszám és külső belső ID;
@@ -936,12 +995,16 @@ záró bekezdése és a 10. fejezet).
 - sztornó/helyesbítő lánc;
 - fizetettség;
 - PDF és eredeti XML;
-- forrás: Számlázz.hu, NAV, kézi, import;
+- forrás: UNAS (read-only webshop-tükör, lásd M8.2), Számlázz.hu, NAV, kézi, import;
 - iktatási és könyvelési státusz;
 - címkék és megjegyzés;
 - keresés, szűrés és export.
 
 ### M8.5 – Visszamenőleges betöltés
+
+**Állapot:** TERVEZETT (B irány - a Számlázz.hu pénzügyi adatkapcsolat
+backfillje; a UNAS read-only számlatükörre - M8.2 - nem vonatkozik, az a
+folyamatos rendelésszinkronnal automatikusan épül fel).
 
 - kezdődátum megadása a Számlázz.hu kapcsolat aktiválásakor;
 - bulk backfill biztonságos feldolgozása;
@@ -1616,6 +1679,7 @@ Ezeket az implementáció előtt a tulajdonosnak külön jóvá kell hagynia:
 10. Mely riportok szükségesek az első éles verzióhoz?
 11. Az akvárium/szerviz modul belső használatú lesz, vagy az Acropora Tools ügyfélalkalmazással is összekapcsolódik?
 12. Mely modulok alkotják a legkisebb éles MVP-t?
+13. (2026-07-27, M8.2 read-only tükör auditja során felmerült) Ha egy UNAS-rendelés egy tétele eltűnik egy módosítás után (`unas-order-sync.repository.ts` `syncLines()` jelenleg megtartja a helyi sort, nem törli), kell-e ezt helyben is törölni/inaktiválni, és ha igen, kell-e ehhez készletkorrekciós (StockMovement) mozgást is generálni? Jelenleg szándékosan nincs implementálva, mert találgatás nélkül nem dönthető el, hogy a törölt tételhez tartozó készletmozgás visszapörgetése üzletileg helyes-e minden esetben (pl. részleges módosítás vs. teljes sztornó).
 
 ---
 

@@ -1,0 +1,4 @@
+-- No-op: superseded before being applied. See
+-- 20260726090000_add_sales_order_invoice_status/migration.sql for the full
+-- explanation. Real change now in
+-- 20260727120000_m8_2_invoicing_state_machine_rework.

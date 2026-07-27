@@ -1,0 +1,12 @@
+-- No-op: this migration's changes (and the three that followed it -
+-- 20260726093000_add_sales_order_unas_invoice_status,
+-- 20260726094500_add_sales_order_billing_address,
+-- 20260726100000_add_sales_order_invoice_attempts) were superseded before
+-- ever being applied to any database, first by the M8.2 direct-invoicing
+-- rework, then by the 2026-07-27 architecture rollback (Acropora OS never
+-- calls Számlázz.hu or writes back to UNAS - only a read-only UNAS
+-- invoice mirror remains). All four are kept in place as empty migrations
+-- (rather than deleted) to preserve the migration history/timeline; the
+-- actual schema change now lives in
+-- 20260727120000_m8_2_invoicing_state_machine_rework (folder name is
+-- historical - see that file's own header).
