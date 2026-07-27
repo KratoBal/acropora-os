@@ -14,8 +14,6 @@ import type {
 } from "@acropora/types";
 
 import { generateCode } from "../common/code-generator.util.js";
-import { UnasApiClient } from "../imports/unas/unas-api.client.js";
-import { UnasAuthService } from "../imports/unas/unas-auth.service.js";
 import { MnbExchangeRateService } from "../integrations/mnb/mnb-exchange-rate.service.js";
 import { SuppliersRepository } from "../suppliers/suppliers.repository.js";
 import type { CreatePurchaseInvoiceDto } from "./dto/create-purchase-invoice.dto.js";
@@ -28,13 +26,19 @@ import { PurchaseProductSearchService } from "./purchase-product-search.service.
 
 @Injectable()
 export class PurchasingService {
+  // No UnasApiClient/UnasAuthService dependency anymore - the synchronous
+  // UNAS stock push that used to happen here has been removed entirely.
+  // Local stock is written (via the shared postInventoryMovement primitive,
+  // see purchase-invoice.repository.ts) in the same DB transaction as the
+  // invoice itself, and a UnasStockSyncOutbox row is created alongside it;
+  // the actual UNAS publish happens later, out of band, in
+  // unas-stock-sync-outbox.service.ts. This means invoice creation can no
+  // longer fail or block because UNAS is slow or unreachable.
   constructor(
     private readonly invoices: PurchaseInvoiceRepository,
     private readonly suppliers: SuppliersRepository,
     private readonly productSearch: PurchaseProductSearchService,
     private readonly mnbRates: MnbExchangeRateService,
-    private readonly unasApi: UnasApiClient,
-    private readonly unasAuth: UnasAuthService,
   ) {}
 
   searchProducts(
@@ -151,17 +155,6 @@ export class PurchasingService {
     const { warehouseId, variants } =
       await this.invoices.currentStock(variantIds);
 
-    // Több sor is hivatkozhat ugyanarra a termékre egy számlán belül
-    // (pl. eltérő beszerzési áron/kedvezménnyel); a készlethatásukat
-    // sorrendben, egymásra épülve kell számolni, különben az utolsó ilyen
-    // sor felülírná a korábbiak hatását ahelyett, hogy hozzáadódna.
-    const runningQtyByVariant = new Map(
-      [...variants.entries()].map(([variantId, info]) => [
-        variantId,
-        info.currentQty,
-      ]),
-    );
-
     const documentNumber = generateCode("BESZ");
     const preparedLines: CreatePurchaseInvoiceLine[] = [];
     for (const line of input.lines) {
@@ -190,6 +183,7 @@ export class PurchasingService {
           );
         preparedLines.push({
           variantId: null,
+          sku: null,
           sourceDescription,
           orderedQuantity: new Prisma.Decimal(line.orderedQuantity),
           actualQuantity: new Prisma.Decimal(line.actualQuantity),
@@ -199,7 +193,6 @@ export class PurchasingService {
             line.discountPercent !== undefined
               ? new Prisma.Decimal(line.discountPercent)
               : null,
-          resultingQty: null,
           syncStatus: "NOT_LINKED",
           syncError: null,
         });
@@ -216,59 +209,26 @@ export class PurchasingService {
           `Érvénytelen beszerzési ár: ${info.sku}.`,
         );
 
-      const actualQuantity = new Prisma.Decimal(line.actualQuantity);
-      const before =
-        runningQtyByVariant.get(line.variantId) ?? new Prisma.Decimal(0);
-      const resultingQty = before.plus(actualQuantity);
-      runningQtyByVariant.set(line.variantId, resultingQty);
-
       preparedLines.push({
         variantId: line.variantId,
+        sku: info.sku,
         sourceDescription: line.sourceDescription?.trim() || null,
         orderedQuantity: new Prisma.Decimal(line.orderedQuantity),
-        actualQuantity,
+        actualQuantity: new Prisma.Decimal(line.actualQuantity),
         unit: line.unit.trim() || info.unit,
         unitNet: new Prisma.Decimal(line.unitNet),
         discountPercent:
           line.discountPercent !== undefined
             ? new Prisma.Decimal(line.discountPercent)
             : null,
-        resultingQty,
-        syncStatus: "OK",
+        // "PENDING": the stock effect and its UnasStockSyncOutbox row are
+        // posted atomically with the invoice itself (see
+        // purchase-invoice.repository.ts); actual UNAS publication is the
+        // background worker's job from here on, so this must not claim a
+        // synchronous OK it can no longer guarantee.
+        syncStatus: "PENDING",
         syncError: null,
       });
-    }
-
-    // A UNAS-push a helyi írás előtt történik (ugyanaz a sorrend, mint a
-    // POS eladásnál és a leltár korrekciónál): mire a tranzakció lefut, már
-    // minden sor szinkron-eredménye ismert, és rögtön az első íráskor
-    // rögzíthető.
-    let successCount = 0;
-    let failedCount = 0;
-    const token = await this.unasAuth.getToken();
-    for (const line of preparedLines) {
-      // Terméktörzs nélküli tételnél (syncStatus már "NOT_LINKED") nincs
-      // cikkszám, amit a UNAS-nak push-olni lehetne - kihagyjuk, és nem
-      // számít bele a sikeres/sikertelen szinkron összesítésbe sem.
-      if (!line.variantId) continue;
-      const info = variants.get(line.variantId)!;
-      try {
-        await this.unasApi.setStock(token, {
-          sku: info.sku,
-          // A fenti "continue" miatt ide csak variantId-vel rendelkező sorok
-          // jutnak el, azoknál pedig a resultingQty mindig ki van töltve.
-          qty: line.resultingQty!.toString(),
-          comment: `Beszerzés (${documentNumber})`,
-        });
-        line.syncStatus = "OK";
-        line.syncError = null;
-        successCount += 1;
-      } catch (error) {
-        line.syncStatus = "FAILED";
-        line.syncError =
-          error instanceof Error ? error.message : "UNAS_PUSH_FAILED";
-        failedCount += 1;
-      }
     }
 
     const now = new Date();
@@ -291,6 +251,15 @@ export class PurchasingService {
       lines: preparedLines,
     });
 
-    return { detail, successCount, failedCount };
+    const linkedLineCount = preparedLines.filter(
+      (line) => line.variantId,
+    ).length;
+    // Always 0: the invoice + stock movement + outbox are one atomic
+    // transaction (see repository.create) - a real failure throws and
+    // rolls back the whole thing rather than reporting a partial failure
+    // here. "successCount" now means "lines whose stock change was
+    // committed locally and queued for UNAS", not "UNAS confirmed the
+    // update" - see docs/INVENTORY-CONSISTENCY.md.
+    return { detail, successCount: linkedLineCount, failedCount: 0 };
   }
 }
