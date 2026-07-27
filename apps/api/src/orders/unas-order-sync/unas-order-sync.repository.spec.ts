@@ -21,6 +21,7 @@ interface FakeOrder {
   id: string;
   orderNumber: string;
   status: string;
+  unasInvoiceStatus: string | null;
   lines: FakeOrderLine[];
 }
 
@@ -68,6 +69,12 @@ class FakeDb {
   }> = [];
   runs: Array<Record<string, unknown>> = [];
   cursor: Date | null = null;
+  // Counts salesOrderLine.create/update calls - a direct, unambiguous
+  // signal of whether syncLines() (the active-order line-resync path) ran,
+  // independent of the generic updatedCount summary field (which also
+  // legitimately increments for the narrow, CANCELLED-order
+  // unasInvoiceStatus-only refresh - see the CANCELLED->CANCELLED tests).
+  lineWriteCount = 0;
   products: Array<{
     id: string;
     name: string;
@@ -198,6 +205,12 @@ class FakeDb {
         id: nextId("order"),
         orderNumber: args.data.orderNumber as string,
         status: args.data.status as string,
+        // Real createNewOrder() always passes this explicitly (see
+        // repository.ts), but default to null (Prisma's own default for
+        // an omitted nullable field) so this fake doesn't silently diverge
+        // from real Prisma behavior if a future caller ever omits it.
+        unasInvoiceStatus:
+          (args.data.unasInvoiceStatus as string | null | undefined) ?? null,
         lines,
       };
       this.orders.push(order);
@@ -214,6 +227,13 @@ class FakeDb {
       return {
         id: order.id,
         status: order.status,
+        // Must mirror the real select in apply() (unasInvoiceStatus: true)
+        // - omitting this previously made existing.unasInvoiceStatus
+        // always `undefined` here even when the real column held `null`,
+        // which spuriously made `order.invoiceStatus !== existing.
+        // unasInvoiceStatus` (repository.ts) evaluate true on every
+        // CANCELLED->CANCELLED resync regardless of any real change.
+        unasInvoiceStatus: order.unasInvoiceStatus,
         lines: order.lines.map((line) => ({
           id: line.id,
           sku: line.sku,
@@ -229,6 +249,7 @@ class FakeDb {
 
   salesOrderLine = {
     create: async (args: any) => {
+      this.lineWriteCount += 1;
       const order = this.orders.find((o) => o.id === args.data.orderId);
       const line: FakeOrderLine = {
         id: nextId("line"),
@@ -242,6 +263,7 @@ class FakeDb {
       return line;
     },
     update: async (args: any) => {
+      this.lineWriteCount += 1;
       for (const order of this.orders) {
         const line = order.lines.find((l) => l.id === args.where.id);
         if (line) {
@@ -598,11 +620,20 @@ describe("UnasOrderSyncRepository.apply", () => {
     const cancelled = baseOrder({ statusType: "close_fault", status: "Sztornó" });
     await repository.apply("run-2", [cancelled], null, new Date());
     const linesBefore = db.orders[0]!.lines.length;
+    const movementCountBefore = db.movements.length;
+    const stockBefore = db.stockItems[0]!.onHand.toString();
 
     // A subsequent CANCELLED sighting that also carries a changed price on
-    // an existing line: if the live-order branch (syncLines + totals
-    // update) were mistakenly still reachable, this price change would
-    // show up locally. It must not.
+    // an existing line and no invoice-status change: if the live-order
+    // branch (syncLines + totals update) were mistakenly still reachable,
+    // this price change would show up locally. It must not. Since
+    // invoiceStatus stays null across all three runs (never overridden by
+    // baseOrder()), and FakeDb.salesOrder.findUnique now correctly
+    // projects the previously-persisted unasInvoiceStatus (see the
+    // salesOrder fake above), invoiceStatusChanged correctly evaluates to
+    // false here too - just as it would against a real Prisma database -
+    // so the CANCELLED->CANCELLED branch's own targeted unasInvoiceStatus
+    // refresh must not fire either, and summary.updatedCount stays 0.
     db.runs.push({ id: "run-3", status: "RUNNING", activeKey: "UNAS_ORDERS" });
     const cancelledWithPriceEdit = baseOrder({
       statusType: "close_fault",
@@ -620,6 +651,9 @@ describe("UnasOrderSyncRepository.apply", () => {
         },
       ],
     });
+    const lineWriteCountBefore = db.lineWriteCount;
+    const totalsBefore = (db.orders[0] as unknown as Record<string, unknown>)
+      .totalGross;
     const summary = await repository.apply(
       "run-3",
       [cancelledWithPriceEdit],
@@ -627,12 +661,92 @@ describe("UnasOrderSyncRepository.apply", () => {
       new Date(),
     );
 
+    // No targeted unasInvoiceStatus update fired either, since nothing
+    // about the UNAS-side invoice status actually changed between run-2
+    // and run-3 - this is the real, meaningful signal (not just an
+    // absence-of-syncLines proxy).
     assert.equal(summary.updatedCount, 0);
+    // syncLines() (the active-order line resync) never ran.
+    assert.equal(
+      db.lineWriteCount,
+      lineWriteCountBefore,
+      "syncLines() must not call salesOrderLine.create/update for a CANCELLED->CANCELLED resync",
+    );
     assert.equal(db.orders[0]!.lines.length, linesBefore);
     assert.equal(db.orders[0]!.lines[0]?.sku, "pump_1");
     // unitNet/description aren't tracked on FakeOrderLine, so absence of a
-    // new/replaced line row is itself the proof that syncLines() (which
-    // would update-in-place or create a new line) never ran.
+    // new/replaced line row (and the lineWriteCount check above) is proof
+    // that syncLines() never ran.
+    // totalGross is only ever written by the live-order branch's
+    // salesOrder.update (Object.assign onto the untyped fake row) - it
+    // must stay whatever it was before this run (undefined, since neither
+    // createNewOrder nor the CANCELLED branches ever set it in this fake).
+    assert.equal(
+      (db.orders[0] as unknown as Record<string, unknown>).totalGross,
+      totalsBefore,
+    );
+    // No new StockMovement (reverseOrder() must not run again - it already
+    // ran exactly once on the ACTIVE->CANCELLED transition in run-2).
+    assert.equal(db.movements.length, movementCountBefore);
+    assert.equal(db.stockItems[0]!.onHand.toString(), stockBefore);
+    assert.equal(
+      db.movements.filter((movement) => movement.type === "RETURN_IN")
+        .length,
+      1,
+      "reverseOrder() must have run exactly once in total, not again on this resync",
+    );
+    assert.equal(db.orders[0]?.status, "CANCELLED");
+  });
+
+  it("CANCELLED->CANCELLED resync still lets the read-only invoice mirror pick up a genuine UNAS invoice-status change", async () => {
+    const db = new FakeDb();
+    db.warehouses.push({
+      id: "wh-1",
+      name: "Fő raktár",
+      createdAt: new Date(0),
+    });
+    db.variants.push({ id: "variant-1", sku: "pump_1" });
+    db.stockItems.push({
+      id: "stock-1",
+      variantId: "variant-1",
+      warehouseId: "wh-1",
+      onHand: new Prisma.Decimal(10),
+    });
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [baseOrder()], null, new Date());
+
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const cancelled = baseOrder({ statusType: "close_fault", status: "Sztornó" });
+    await repository.apply("run-2", [cancelled], null, new Date());
+    assert.equal(db.invoices.length, 0);
+
+    // UNAS/Számlázz.hu can still bill (or storno) an order that's already
+    // CANCELLED locally. This is a genuine invoiceStatus change
+    // (null -> BILLED), so the targeted unasInvoiceStatus refresh in the
+    // CANCELLED->CANCELLED branch SHOULD fire this time (updatedCount=1
+    // is correct here, unlike the previous test) - and the read-only
+    // invoice mirror must pick up the invoice regardless, since
+    // syncInvoiceMirror() runs unconditionally after the branch.
+    db.runs.push({ id: "run-3", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const cancelledAndBilled = baseOrder({
+      statusType: "close_fault",
+      status: "Sztornó",
+      invoiceStatus: "BILLED",
+      invoiceNumber: "SZ-2026-CANCEL-2",
+    });
+    const summary = await repository.apply(
+      "run-3",
+      [cancelledAndBilled],
+      null,
+      new Date(),
+    );
+
+    assert.equal(summary.updatedCount, 1);
+    assert.equal(db.invoices.length, 1);
+    assert.equal(db.invoices[0]?.invoiceNumber, "SZ-2026-CANCEL-2");
+    assert.equal(db.invoices[0]?.salesOrderId, db.orders[0]?.id);
+    assert.equal(db.orders[0]?.status, "CANCELLED");
   });
 
   it("still mirrors a UNAS invoice onto a CANCELLED order (invoice mirror is unconditional)", async () => {
