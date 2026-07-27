@@ -218,7 +218,9 @@ describe("UnasOrderSyncService.refreshOrder", () => {
     const api = {
       getOrderByKey: async (_token: string, key: string) => {
         calls.push({ operation: "getOrderByKey", input: key });
-        return input?.fetchedOrder ?? order("UN-1");
+        return input?.fetchedOrder === undefined
+          ? order("UN-1")
+          : input.fetchedOrder;
       },
     } as unknown as UnasApiClient;
     const repository = {
