@@ -9,12 +9,9 @@ import type {
   PosSaleDetail,
   PosSaleListResponse,
   PosSaleResult,
-  PosSaleStockWarning,
 } from "@acropora/types";
 
 import { generateCode } from "../common/code-generator.util.js";
-import { UnasApiClient } from "../imports/unas/unas-api.client.js";
-import { UnasAuthService } from "../imports/unas/unas-auth.service.js";
 import type { PosSaleListQueryDto } from "./dto/pos-sale-list-query.dto.js";
 import {
   PosSaleRepository,
@@ -23,11 +20,16 @@ import {
 
 @Injectable()
 export class PosSaleService {
-  constructor(
-    private readonly sales: PosSaleRepository,
-    private readonly unasApi: UnasApiClient,
-    private readonly unasAuth: UnasAuthService,
-  ) {}
+  // No UnasApiClient/UnasAuthService dependency anymore - the synchronous
+  // per-line UNAS push that used to happen here has been removed entirely.
+  // Local stock is written (via the shared postInventoryMovement primitive,
+  // see pos-sale.repository.ts) in the same DB transaction as the SalesOrder
+  // itself, and a UnasStockSyncOutbox row is created alongside it; the
+  // actual UNAS publish happens later, out of band, in
+  // unas-stock-sync-outbox.service.ts. This means checkout can no longer
+  // fail or block because UNAS is slow or unreachable - a UNAS outage never
+  // fails an already safely-booked local sale.
+  constructor(private readonly sales: PosSaleRepository) {}
 
   list(query: PosSaleListQueryDto): Promise<PosSaleListResponse> {
     return this.sales.list(query);
@@ -72,7 +74,6 @@ export class PosSaleService {
     const variantIds = [...mergedByVariant.keys()];
     const { warehouseId, variants } = await this.sales.currentStock(variantIds);
 
-    const stockWarnings: PosSaleStockWarning[] = [];
     const preparedLines: CreatePosSaleLine[] = [];
     let totalNet = new Prisma.Decimal(0);
     let totalTax = new Prisma.Decimal(0);
@@ -102,20 +103,18 @@ export class PosSaleService {
       const lineGross = unitGross.times(quantity);
       const lineNet = unitNet.times(quantity);
       const lineTax = lineGross.minus(lineNet);
-      const resultingQty = info.currentQty.minus(quantity);
-
-      if (resultingQty.isNegative()) {
-        stockWarnings.push({
-          sku: info.sku,
-          productName: info.productName,
-          resultingQty: resultingQty.toString(),
-        });
-      }
 
       totalNet = totalNet.plus(lineNet);
       totalTax = totalTax.plus(lineTax);
       totalGross = totalGross.plus(lineGross);
 
+      // Nincs itt előre kiszámolt resultingQty/negatív-figyelmeztetés
+      // többé: az egyetlen hiteles "mennyi marad" érték a
+      // postInventoryMovement zár alatti, a tényleges könyveléskor
+      // számított eredménye (l. pos-sale.repository.ts createSale) - egy
+      // ilyen, tranzakció ELŐTTI becslés két egyidejű eladás esetén
+      // elavulttá válhatna (pl. mindkettő 5-nek látja a készletet, holott
+      // az egyik lekönyvelése után már csak 2 van).
       preparedLines.push({
         variantId,
         sku: info.sku,
@@ -125,41 +124,12 @@ export class PosSaleService {
         taxRate,
         unitNet,
         lineGross,
-        resultingQty,
-        syncStatus: "OK",
-        syncError: null,
       });
     }
 
     const orderNumber = generateCode("POS");
 
-    // UNAS pushes happen before the local write (same ordering as the
-    // leltár korrekció): the DB transaction that actually applies the
-    // stock change and creates the sale record only runs once, after every
-    // per-line push result is already known, so it can bake the sync
-    // status straight into the initial create instead of a second pass.
-    let successCount = 0;
-    let failedCount = 0;
-    const token = await this.unasAuth.getToken();
-    for (const line of preparedLines) {
-      try {
-        await this.unasApi.setStock(token, {
-          sku: line.sku,
-          qty: line.resultingQty.toString(),
-          comment: `POS eladás (${orderNumber})`,
-        });
-        line.syncStatus = "OK";
-        line.syncError = null;
-        successCount += 1;
-      } catch (error) {
-        line.syncStatus = "FAILED";
-        line.syncError =
-          error instanceof Error ? error.message : "UNAS_PUSH_FAILED";
-        failedCount += 1;
-      }
-    }
-
-    const detail = await this.sales.createSale({
+    const { detail, stockWarnings } = await this.sales.createSale({
       orderNumber,
       warehouseId,
       actorUserId,
@@ -169,6 +139,18 @@ export class PosSaleService {
       totals: { totalNet, totalTax, totalGross },
     });
 
-    return { detail, stockWarnings, successCount, failedCount };
+    // A SalesOrder és a készletmozgás EGYETLEN tranzakcióban jön létre a
+    // repository-ban (postInventoryMovement hívással) - sikeres eladás
+    // emiatt sosem létezhet könyvelt készletmozgás nélkül, és fordítva sem.
+    // successCount/failedCount innentől mindig a linkelt sorok száma / 0:
+    // egy valódi könyvelési hiba a teljes tranzakciót visszagörgeti és
+    // kivételt dob, nem egy soronkénti szinkron UNAS-hiba eredménye - lásd
+    // docs/INVENTORY-CONSISTENCY.md.
+    return {
+      detail,
+      stockWarnings,
+      successCount: preparedLines.length,
+      failedCount: 0,
+    };
   }
 }
