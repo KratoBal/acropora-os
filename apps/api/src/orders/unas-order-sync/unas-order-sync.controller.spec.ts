@@ -23,10 +23,9 @@ describe("UnasOrderSyncController permissions", () => {
   });
 
   it("requires orders.view to read runs and orders", () => {
-    assert.deepEqual(
-      permissionsFor(UnasOrderSyncController.prototype.getRun),
-      [PERMISSIONS.ORDERS_VIEW],
-    );
+    assert.deepEqual(permissionsFor(UnasOrderSyncController.prototype.getRun), [
+      PERMISSIONS.ORDERS_VIEW,
+    ]);
     assert.deepEqual(
       permissionsFor(UnasOrderSyncController.prototype.listRuns),
       [PERMISSIONS.ORDERS_VIEW],
@@ -34,10 +33,9 @@ describe("UnasOrderSyncController permissions", () => {
     assert.deepEqual(permissionsFor(UnasOrderSyncController.prototype.list), [
       PERMISSIONS.ORDERS_VIEW,
     ]);
-    assert.deepEqual(
-      permissionsFor(UnasOrderSyncController.prototype.getOne),
-      [PERMISSIONS.ORDERS_VIEW],
-    );
+    assert.deepEqual(permissionsFor(UnasOrderSyncController.prototype.getOne), [
+      PERMISSIONS.ORDERS_VIEW,
+    ]);
   });
 
   it("requires inventory.view for the stock reconciliation report", () => {
@@ -46,6 +44,13 @@ describe("UnasOrderSyncController permissions", () => {
         UnasOrderSyncController.prototype.checkStockReconciliation,
       ),
       [PERMISSIONS.INVENTORY_VIEW],
+    );
+  });
+
+  it("requires orders.manage for the manual single-order refresh - same as the general sync trigger, not orders.view, since it mutates order/invoice/stock state", () => {
+    assert.deepEqual(
+      permissionsFor(UnasOrderSyncController.prototype.refresh),
+      [PERMISSIONS.ORDERS_MANAGE],
     );
   });
 });
@@ -96,5 +101,27 @@ describe("UnasOrderSyncController delegation", () => {
 
     await controller.checkStockReconciliation();
     assert.equal(called, true);
+  });
+
+  it("refreshes a single order using a server-side token, delegated to the service", async () => {
+    let receivedToken = "";
+    let receivedOrderId = "";
+    const controller = new UnasOrderSyncController(
+      { getToken: async () => "server-token" } as UnasAuthService,
+      {
+        refreshOrder: async (token: string, orderId: string) => {
+          receivedToken = token;
+          receivedOrderId = orderId;
+          return { id: orderId };
+        },
+      } as unknown as UnasOrderSyncService,
+      {} as UnasOrderSyncRepository,
+    );
+
+    const result = await controller.refresh("order-1");
+
+    assert.equal(receivedToken, "server-token");
+    assert.equal(receivedOrderId, "order-1");
+    assert.equal((result as { id: string }).id, "order-1");
   });
 });

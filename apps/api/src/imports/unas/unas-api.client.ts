@@ -46,6 +46,18 @@ export interface UnasGetOrderRequest {
   limitNum: number;
 }
 
+/// A single-order getOrder fetch by UNAS's own documented `Key` filter
+/// (unas.hu/tudastar/api/megrendelesek-getOrder-keres: "A megrendelés
+/// egyedi azonosítója. Csak az ebben a mezőben meghatározott azonosítójú
+/// megrendelés szerepel majd a válaszban.") - a standalone filter, not a
+/// time-window page, so it's a distinct request shape from
+/// UnasGetOrderRequest rather than an optional field bolted onto it (mixing
+/// Key with TimeModStart/LimitStart would be misleading, since UNAS's own
+/// docs describe Key as replacing the rest of the filter set entirely).
+export interface UnasGetOrderByKeyRequest {
+  key: string;
+}
+
 export interface UnasGetCustomerRequest {
   /** Only customers last modified at or after this unix timestamp. Omit for a first, full pull. */
   modTimeStart?: number;
@@ -478,6 +490,12 @@ export function buildUnasGetOrderXml(request: UnasGetOrderRequest) {
   });
 }
 
+export function buildUnasGetOrderByKeyXml(request: UnasGetOrderByKeyRequest) {
+  if (!request.key || !request.key.trim())
+    throw new UnasApiError("REQUEST_INVALID");
+  return paramsXml({ Key: request.key.trim() });
+}
+
 // NOTE: the exact response root/item element names ("Orders"/"Order") follow
 // every other UNAS list endpoint's plural-root/singular-item convention
 // (Products/Product, Categories/Category) - the megrendelesek-getOrder-valasz
@@ -591,8 +609,8 @@ export function parseUnasOrderResponse(xml: string): UnasApiOrder[] {
       // of null for a genuinely-missing URL. `||` also treats "" as
       // falsy, collapsing both "tag absent" and "tag present but empty"
       // to null uniformly. A real, non-empty number/URL is unaffected.
-      invoiceNumber: invoice ? (value(invoice, "Number") || null) : null,
-      invoiceUrl: invoice ? (value(invoice, "Url") || null) : null,
+      invoiceNumber: invoice ? value(invoice, "Number") || null : null,
+      invoiceUrl: invoice ? value(invoice, "Url") || null : null,
       items,
     };
   });
@@ -796,6 +814,26 @@ export class UnasApiClient {
       token,
     );
     return parseUnasOrderResponse(response);
+  }
+
+  /// Targeted single-order refresh (see unas-order-sync.repository.ts
+  /// refreshOrder()) - fetches by UNAS's own `Key` filter only, never a
+  /// TimeModStart/LimitStart window. Returns null if UNAS's response
+  /// contains no matching order (e.g. the order was deleted/never existed
+  /// under this Key), rather than throwing, since "not found" is an
+  /// expected, recoverable outcome for the caller to turn into a 404 - not
+  /// a malformed-response error.
+  async getOrderByKey(
+    token: string,
+    key: string,
+  ): Promise<UnasApiOrder | null> {
+    const response = await this.post(
+      "getOrder",
+      buildUnasGetOrderByKeyXml({ key }),
+      token,
+    );
+    const orders = parseUnasOrderResponse(response);
+    return orders[0] ?? null;
   }
 
   async getCustomerPage(

@@ -159,7 +159,9 @@ class FakeDb {
       const found = this.externalReferences.find(
         (reference) => reference.entityId === key.entityId,
       );
-      return found ? { metadata: found.metadata } : null;
+      return found
+        ? { metadata: found.metadata, externalId: found.externalId }
+        : null;
     },
     findMany: async (args: any) => {
       const ids: string[] = args.where.entityId.in;
@@ -284,9 +286,7 @@ class FakeDb {
           invoice.source === key.source &&
           invoice.invoiceNumber === key.invoiceNumber,
       );
-      return found
-        ? { id: found.id, salesOrderId: found.salesOrderId }
-        : null;
+      return found ? { id: found.id, salesOrderId: found.salesOrderId } : null;
     },
     create: async (args: any) => {
       const row = {
@@ -618,7 +618,10 @@ describe("UnasOrderSyncRepository.apply", () => {
     await repository.apply("run-1", [baseOrder()], null, new Date());
 
     db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
-    const cancelled = baseOrder({ statusType: "close_fault", status: "Sztornó" });
+    const cancelled = baseOrder({
+      statusType: "close_fault",
+      status: "Sztornó",
+    });
     await repository.apply("run-2", [cancelled], null, new Date());
     const linesBefore = db.orders[0]!.lines.length;
     const movementCountBefore = db.movements.length;
@@ -691,8 +694,7 @@ describe("UnasOrderSyncRepository.apply", () => {
     assert.equal(db.movements.length, movementCountBefore);
     assert.equal(db.stockItems[0]!.onHand.toString(), stockBefore);
     assert.equal(
-      db.movements.filter((movement) => movement.type === "RETURN_IN")
-        .length,
+      db.movements.filter((movement) => movement.type === "RETURN_IN").length,
       1,
       "reverseOrder() must have run exactly once in total, not again on this resync",
     );
@@ -718,7 +720,10 @@ describe("UnasOrderSyncRepository.apply", () => {
     await repository.apply("run-1", [baseOrder()], null, new Date());
 
     db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
-    const cancelled = baseOrder({ statusType: "close_fault", status: "Sztornó" });
+    const cancelled = baseOrder({
+      statusType: "close_fault",
+      status: "Sztornó",
+    });
     await repository.apply("run-2", [cancelled], null, new Date());
     assert.equal(db.invoices.length, 0);
 
@@ -769,7 +774,10 @@ describe("UnasOrderSyncRepository.apply", () => {
     await repository.apply("run-1", [baseOrder()], null, new Date());
 
     db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
-    const cancelled = baseOrder({ statusType: "close_fault", status: "Sztornó" });
+    const cancelled = baseOrder({
+      statusType: "close_fault",
+      status: "Sztornó",
+    });
     await repository.apply("run-2", [cancelled], null, new Date());
     assert.equal(db.invoices.length, 0);
 
@@ -790,6 +798,314 @@ describe("UnasOrderSyncRepository.apply", () => {
     assert.equal(db.invoices[0]?.invoiceNumber, "SZ-2026-CANCEL-1");
     assert.equal(db.invoices[0]?.salesOrderId, db.orders[0]?.id);
     assert.equal(db.orders[0]?.status, "CANCELLED");
+  });
+});
+
+describe("UnasOrderSyncRepository.refreshOrder", () => {
+  function seededDb(): { db: FakeDb; orderId: string } {
+    const db = new FakeDb();
+    db.warehouses.push({
+      id: "wh-1",
+      name: "Fő raktár",
+      createdAt: new Date(0),
+    });
+    db.variants.push({ id: "variant-1", sku: "pump_1" });
+    db.stockItems.push({
+      id: "stock-1",
+      variantId: "variant-1",
+      warehouseId: "wh-1",
+      onHand: new Prisma.Decimal(10),
+    });
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    return { db, orderId: "" };
+  }
+
+  it("refreshes a single already-known order in place", async () => {
+    const { db } = seededDb();
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [baseOrder()], null, new Date());
+    const orderId = db.orders[0]!.id;
+    assert.equal(db.orders[0]?.status, "CONFIRMED");
+
+    const result = await repository.refreshOrder(
+      orderId,
+      baseOrder({ statusType: "close_ok", status: "Lezárva" }),
+    );
+
+    assert.equal(result.updated, true);
+    assert.equal(result.reversed, false);
+    assert.equal(db.orders[0]?.status, "COMPLETED");
+    // Still exactly one order - a refresh of an existing order must never
+    // create a second SalesOrder row.
+    assert.equal(db.orders.length, 1);
+  });
+
+  it("saves a newly-reported invoice number/link on refresh", async () => {
+    const { db } = seededDb();
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [baseOrder()], null, new Date());
+    const orderId = db.orders[0]!.id;
+    assert.equal(db.invoices.length, 0);
+
+    await repository.refreshOrder(
+      orderId,
+      baseOrder({
+        invoiceStatus: "BILLED",
+        invoiceNumber: "SZ-2026-REFRESH-1",
+        invoiceUrl: "https://www.szamlazz.hu/szamla/pdf/SZ-2026-REFRESH-1",
+      }),
+    );
+
+    assert.equal(db.invoices.length, 1);
+    assert.equal(db.invoices[0]?.invoiceNumber, "SZ-2026-REFRESH-1");
+    assert.equal(db.invoices[0]?.salesOrderId, orderId);
+    assert.equal(
+      db.invoices[0]?.externalUrl,
+      "https://www.szamlazz.hu/szamla/pdf/SZ-2026-REFRESH-1",
+    );
+  });
+
+  it("updates an already-mirrored invoice's link on a later refresh", async () => {
+    const { db } = seededDb();
+    const repository = repositoryWith(db);
+    await repository.apply(
+      "run-1",
+      [
+        baseOrder({
+          invoiceStatus: "BILLED",
+          invoiceNumber: "SZ-2026-REFRESH-2",
+          invoiceUrl: null,
+        }),
+      ],
+      null,
+      new Date(),
+    );
+    const orderId = db.orders[0]!.id;
+    assert.equal(db.invoices[0]?.externalUrl, null);
+
+    await repository.refreshOrder(
+      orderId,
+      baseOrder({
+        invoiceStatus: "BILLED",
+        invoiceNumber: "SZ-2026-REFRESH-2",
+        invoiceUrl: "https://www.szamlazz.hu/szamla/pdf/SZ-2026-REFRESH-2",
+      }),
+    );
+
+    assert.equal(db.invoices.length, 1);
+    assert.equal(
+      db.invoices[0]?.externalUrl,
+      "https://www.szamlazz.hu/szamla/pdf/SZ-2026-REFRESH-2",
+    );
+  });
+
+  it("never touches the incremental sync cursor", async () => {
+    const { db } = seededDb();
+    const repository = repositoryWith(db);
+    await repository.apply(
+      "run-1",
+      [baseOrder()],
+      null,
+      new Date("2026-07-20T15:00:00.000Z"),
+    );
+    const orderId = db.orders[0]!.id;
+    const cursorAfterApply = db.cursor;
+    assert.notEqual(cursorAfterApply, null);
+
+    await repository.refreshOrder(
+      orderId,
+      baseOrder({ statusType: "close_ok", status: "Lezárva" }),
+    );
+
+    assert.equal(db.cursor?.getTime(), cursorAfterApply?.getTime());
+  });
+
+  it("does not create a second SALE stock movement when refreshing an existing order", async () => {
+    const { db } = seededDb();
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [baseOrder()], null, new Date());
+    const orderId = db.orders[0]!.id;
+    assert.equal(db.movements.length, 1);
+    assert.equal(db.stockItems[0]?.onHand.toString(), "8");
+
+    await repository.refreshOrder(
+      orderId,
+      baseOrder({ statusType: "close_ok", status: "Lezárva" }),
+    );
+
+    // No new StockMovement, and stock is untouched by the refresh - only
+    // createNewOrder() ever creates a SALE movement, and refreshOrder()
+    // never calls it for an order that already exists locally.
+    assert.equal(db.movements.length, 1);
+    assert.equal(
+      db.movements.filter((movement) => movement.type === "SALE").length,
+      1,
+    );
+    assert.equal(db.stockItems[0]?.onHand.toString(), "8");
+  });
+
+  it("reverses stock exactly once for an existing order that transitions to cancelled via refresh", async () => {
+    const { db } = seededDb();
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [baseOrder()], null, new Date());
+    const orderId = db.orders[0]!.id;
+
+    const result = await repository.refreshOrder(
+      orderId,
+      baseOrder({ statusType: "close_fault", status: "Sztornó" }),
+    );
+
+    assert.equal(result.reversed, true);
+    assert.equal(db.orders[0]?.status, "CANCELLED");
+    assert.equal(db.stockItems[0]?.onHand.toString(), "10");
+  });
+
+  it("throws when the fetched order's Key does not belong to the given local order id", async () => {
+    const { db } = seededDb();
+    const repository = repositoryWith(db);
+    await repository.apply(
+      "run-1",
+      [baseOrder({ key: "UN-1" })],
+      null,
+      new Date(),
+    );
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply(
+      "run-2",
+      [baseOrder({ key: "UN-2", items: [] })],
+      null,
+      new Date(),
+    );
+    const [firstOrder, secondOrder] = db.orders;
+
+    await assert.rejects(() =>
+      repository.refreshOrder(firstOrder!.id, baseOrder({ key: "UN-2" })),
+    );
+    // Neither order's status is perturbed by the rejected mismatched call.
+    assert.notEqual(firstOrder!.id, secondOrder!.id);
+  });
+
+  it("never stock-manages shipping-cost/handel-cost/handling-cost lines, even when UNAS attaches a real catalog SKU to them", async () => {
+    const { db } = seededDb();
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [baseOrder()], null, new Date());
+    const orderId = db.orders[0]!.id;
+    const movementCountBefore = db.movements.length;
+    const stockBefore = db.stockItems[0]!.onHand.toString();
+
+    for (const technicalId of [
+      "shipping-cost",
+      "handel-cost",
+      "handling-cost",
+    ]) {
+      await repository.refreshOrder(
+        orderId,
+        baseOrder({
+          statusType: "open_normal",
+          status: "Feldolgozás alatt",
+          items: [
+            {
+              id: "1",
+              sku: "pump_1",
+              name: "Reef Pump",
+              unit: "db",
+              quantity: "2",
+              priceNet: "5000",
+              priceGross: "6350",
+              vatRate: "27",
+            },
+            {
+              // UNAS's docs say these never carry a Sku, but a webshop
+              // config could still attach one (deliberately a distinct sku
+              // from the real product line above, so this test can't pass
+              // by accident via a sku collision masking a real bug) - it
+              // must still never be stock-managed, since it's still
+              // recognized by its technical Id regardless of the Sku.
+              id: technicalId,
+              sku: `REAL-SKU-${technicalId}`,
+              name: "Kezelési/szállítási költség",
+              unit: "db",
+              quantity: "1",
+              priceNet: "500",
+              priceGross: "635",
+              vatRate: "27",
+            },
+          ],
+        }),
+      );
+    }
+
+    // No additional StockMovement created by any of the three refreshes,
+    // and on-hand stock is unaffected - technical cost lines must never
+    // enter stockLines regardless of what Sku UNAS attaches to them.
+    assert.equal(db.movements.length, movementCountBefore);
+    assert.equal(db.stockItems[0]?.onHand.toString(), stockBefore);
+    // Each technical-cost line landed as its own non-stock SalesOrderLine
+    // row, never resolved against the ProductVariant its (fake) Sku
+    // happened to name.
+    for (const technicalId of [
+      "shipping-cost",
+      "handel-cost",
+      "handling-cost",
+    ]) {
+      const line = db.orders[0]!.lines.find(
+        (l) => l.sku === `REAL-SKU-${technicalId}`,
+      );
+      assert.equal(line?.variantId, null);
+      assert.equal(line?.syncStatus, "OK");
+    }
+  });
+
+  it("corrects a previously mis-stock-managed technical cost line back to non-stock on refresh", async () => {
+    const { db } = seededDb();
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [baseOrder()], null, new Date());
+    const orderId = db.orders[0]!.id;
+    const order = db.orders[0]!;
+
+    // Simulate a line that was, before this fix existed, incorrectly
+    // resolved against a real ProductVariant despite actually being a
+    // shipping-cost technical line (e.g. because UNAS attached a
+    // real-looking catalog Sku to it and the old code only checked
+    // `!item.sku`, so it fell through to the ordinary variant lookup).
+    // Kept under its own distinct sku (not "pump_1", the real product's
+    // sku already on the order) so this test unambiguously targets only
+    // the mis-tagged line via existingBySku.
+    db.variants.push({ id: "variant-ship", sku: "SHIP-REAL-SKU" });
+    order.lines.length = 0;
+    order.lines.push({
+      id: "line-broken",
+      variantId: "variant-ship",
+      sku: "SHIP-REAL-SKU",
+      quantity: new Prisma.Decimal(1),
+      syncStatus: "OK",
+      syncError: null,
+    });
+
+    await repository.refreshOrder(
+      orderId,
+      baseOrder({
+        items: [
+          {
+            // Still recognized as a technical cost line by Id alone, even
+            // though UNAS attached the real catalog Sku to it here.
+            id: "shipping-cost",
+            sku: "SHIP-REAL-SKU",
+            name: "Szállítási költség",
+            unit: "db",
+            quantity: "1",
+            priceNet: "500",
+            priceGross: "635",
+            vatRate: "27",
+          },
+        ],
+      }),
+    );
+
+    const corrected = order.lines.find((line) => line.sku === "SHIP-REAL-SKU");
+    assert.equal(corrected?.variantId, null);
+    assert.equal(corrected?.syncStatus, "OK");
+    assert.equal(corrected?.syncError, null);
   });
 });
 

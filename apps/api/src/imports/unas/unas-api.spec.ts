@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   buildUnasCategoryPageXml,
+  buildUnasGetOrderByKeyXml,
   buildUnasGetOrderXml,
   buildUnasProductPageXml,
   buildUnasSetStockXml,
@@ -197,6 +198,28 @@ describe("UNAS getOrder contract", () => {
   it("rejects an out-of-range page size", () => {
     assert.throws(
       () => buildUnasGetOrderXml({ limitStart: 0, limitNum: 501 }),
+      (error) =>
+        error instanceof UnasApiError && error.code === "REQUEST_INVALID",
+    );
+  });
+
+  it("builds a Key-only single-order request (no time-window params)", () => {
+    const xml = buildUnasGetOrderByKeyXml({ key: "UN-1001" });
+    assert.match(xml, /<Key>UN-1001<\/Key>/);
+    assert.doesNotMatch(xml, /<TimeModStart>/);
+    assert.doesNotMatch(xml, /<TimeModEnd>/);
+    assert.doesNotMatch(xml, /<LimitStart>/);
+    assert.doesNotMatch(xml, /<LimitNum>/);
+  });
+
+  it("rejects an empty or missing Key", () => {
+    assert.throws(
+      () => buildUnasGetOrderByKeyXml({ key: "" }),
+      (error) =>
+        error instanceof UnasApiError && error.code === "REQUEST_INVALID",
+    );
+    assert.throws(
+      () => buildUnasGetOrderByKeyXml({ key: "   " }),
       (error) =>
         error instanceof UnasApiError && error.code === "REQUEST_INVALID",
     );
