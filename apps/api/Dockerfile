@@ -34,8 +34,10 @@
 #    exactly this — producing a correct, portable production directory for
 #    one workspace project — and does not exhibit this failure (verified
 #    the same way). See the "deployed" stage below for the config it needs.
-# 4. The runtime stage copies the deployed directory as-is and runs as a
-#    non-root user.
+# 4. The runtime stage copies the deployed directory as-is, adds
+#    docker-entrypoint.sh (which runs `prisma migrate deploy` and refuses
+#    to start the API if it fails — see that file and the "runner" stage
+#    below), and runs as a non-root user.
 
 ARG NODE_VERSION=22.23.1
 ARG PNPM_VERSION=10.34.5
@@ -66,19 +68,30 @@ RUN pnpm dlx turbo@${TURBO_VERSION} prune @acropora/api --docker
 # -----------------------------------------------------------------------------
 # 2. Build: install, compile, generate Prisma client.
 #
-#    This stage is intentionally also usable directly as a one-off
-#    "migrator" image, since it still has the Prisma CLI, the migrations
-#    folder and a generated client:
+#    This stage is also usable directly as a one-off "migrator" image (it
+#    still has the Prisma CLI, the migrations folder and a generated
+#    client), useful for running a migration manually, out of band, without
+#    starting the API at all:
 #
 #      docker build -f apps/api/Dockerfile --target builder -t acropora-api:migrate .
 #      docker run --rm --env DATABASE_URL=... acropora-api:migrate \
 #        pnpm --filter @acropora/database exec prisma migrate deploy
 #
-#    This is what the Coolify pre-deployment command should point at (see
-#    docs/PRODUCTION-DEPLOYMENT-ARCHITECTURE-REVIEW.md, Section 6) — never
-#    `migrate dev` or `db push` against production, and never run migrations
-#    from the `runner` image below, since its deployed production
-#    dependency tree deliberately has no Prisma CLI.
+#    This is NOT the only place migrations run anymore, and is no longer
+#    required for a normal deploy to be safe. The `runner` stage below (the
+#    actual image that serves traffic) now carries its own copy of the
+#    Prisma CLI, schema.prisma and migrations/, and its
+#    docker-entrypoint.sh runs `prisma migrate deploy` itself, gating
+#    `node dist/main.js` on it succeeding — see that file. That change
+#    exists specifically so migration-before-boot is a property of the
+#    container image itself, not something that also depends on a
+#    separately configured, external Coolify pre-deployment command
+#    continuing to exist and stay correctly wired up (see
+#    docs/DEPLOYMENT.md Section 5 and docs/COOLIFY.md for how the two are
+#    meant to fit together now — the pre-deployment command is still fine
+#    to keep as an extra, earlier gate, but the entrypoint is the one that
+#    always runs). Never `migrate dev` or `db push` against production,
+#    from either place.
 # -----------------------------------------------------------------------------
 FROM base AS builder
 WORKDIR /app
@@ -239,9 +252,39 @@ RUN node --input-type=module -e "import('reflect-metadata')" \
 WORKDIR /app/deploy/node_modules/@acropora/database
 RUN node --input-type=module -e "import { PrismaClient } from '@prisma/client'; const client = new PrismaClient(); await client.\$disconnect(); console.log('Prisma Client generated and loadable OK');"
 
+# Fail the build, not a production container's crash loop, if
+# packages/database/prisma/schema.prisma or its migrations/ directory
+# didn't make it into the deployed tree, or if the Prisma CLI ("prisma",
+# moved into @acropora/database's production "dependencies" specifically
+# so pnpm deploy --prod carries it forward) doesn't resolve to a real,
+# loadable entry point. Both schema.prisma and migrations/ actually arrive
+# here for free — `turbo prune --docker` copies each depended-on workspace
+# package's entire directory (verified directly: out/full/packages/database
+# already contains prisma/schema.prisma and all 26 migrations before pnpm
+# deploy even runs), and pnpm deploy --prod then copies that whole
+# @acropora/database directory as-is into the deploy output, same as any
+# other injected workspace dependency — no explicit COPY of either is
+# needed. What genuinely does need an explicit fix is the CLI: it's a
+# devDependency by default, which pnpm deploy --prod would strip.
+#
+# The path resolution below intentionally avoids hardcoding anything under
+# node_modules/.pnpm/ — those directory names are version-string-derived
+# and not stable across dependency bumps. It instead mirrors the
+# .prisma/client copy step above: realpath the @acropora/database
+# package.json (following the node_modules/@acropora/database symlink to
+# its real physical location in the pnpm virtual store) and let
+# createRequire's own module resolution find the actual files. This same
+# logic is what apps/api/docker-entrypoint-migrate.cjs runs at container
+# startup — see that file for the full reasoning, including why a plain
+# node_modules/.bin/prisma shell shim was tried and rejected (its
+# relative-path math breaks when invoked through that symlink).
+WORKDIR /app/deploy
+RUN node -e "const { createRequire } = require('node:module'); const fs = require('node:fs'); const path = require('node:path'); const dbPkg = fs.realpathSync('node_modules/@acropora/database/package.json'); const req = createRequire(dbPkg); const cliEntry = req.resolve('prisma/build/index.js'); const schema = req.resolve('./prisma/schema.prisma'); const migrations = path.join(path.dirname(schema), 'migrations'); if (!fs.existsSync(cliEntry)) { throw new Error('prisma CLI entry missing: ' + cliEntry); } if (!fs.existsSync(schema)) { throw new Error('schema.prisma missing: ' + schema); } const migrationDirs = fs.existsSync(migrations) ? fs.readdirSync(migrations).filter((e) => fs.statSync(path.join(migrations, e)).isDirectory()) : []; if (migrationDirs.length === 0) { throw new Error('no migrations found under ' + migrations); } console.log('Prisma CLI, schema.prisma and ' + migrationDirs.length + ' migration(s) present in the deployed tree:'); console.log('  CLI:', cliEntry); console.log('  schema:', schema); console.log('  migrations:', migrations);"
+
 # -----------------------------------------------------------------------------
 # 4. Runtime: minimal, non-root, only the deployed @acropora/api production
-#    tree (dist/, production node_modules, generated Prisma client).
+#    tree (dist/, production node_modules, generated Prisma client, the
+#    Prisma CLI, schema.prisma and migrations/ — see docker-entrypoint.sh).
 # -----------------------------------------------------------------------------
 FROM node:${NODE_VERSION}-alpine AS runner
 # tini: correct PID-1 signal forwarding and zombie reaping. Nest's own
@@ -283,6 +326,14 @@ ENV NODE_ENV=production
 # WORKDIR into, unlike the old pruned-monorepo-tree copy.
 COPY --from=deployed --chown=nestjs:nodejs /app/deploy ./
 
+# docker-entrypoint.sh / docker-entrypoint-migrate.cjs are ordinary repo
+# source files (apps/api/), not something pnpm deploy produces, so they're
+# copied straight from the build context rather than from the "deployed"
+# stage. --chmod=755 because a COPY'd file otherwise keeps its host
+# permissions, which aren't guaranteed executable across checkouts/CI.
+COPY --chown=nestjs:nodejs --chmod=755 \
+  apps/api/docker-entrypoint.sh apps/api/docker-entrypoint-migrate.cjs ./
+
 USER nestjs
 
 EXPOSE 3001
@@ -292,5 +343,11 @@ EXPOSE 3001
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
   CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 3001) + '/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
-ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["node", "dist/main.js"]
+# docker-entrypoint.sh runs `prisma migrate deploy` (never `db push`) to
+# completion, or exits non-zero without ever execing `node dist/main.js` —
+# see that file for the full reasoning. This makes migration-before-boot
+# a property of the container itself instead of depending solely on an
+# external, separately-configured Coolify pre-deployment command staying
+# correctly wired up (see docs/COOLIFY.md and docs/DEPLOYMENT.md Section 5
+# for how the two now fit together).
+ENTRYPOINT ["/sbin/tini", "--", "/app/docker-entrypoint.sh"]

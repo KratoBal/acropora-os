@@ -89,9 +89,12 @@ green signal before cutting traffic over:
 1. **Postgres and Redis resources** must exist and be healthy before the
    first `api` deploy. Provision these as Coolify-managed resources (see
    "Persistent volumes" below) or point at externally-managed instances.
-2. **Run `prisma migrate deploy`** via the pre-deployment command (next
-   section) — before the new `api` container starts receiving traffic,
-   every time, not just on first boot.
+2. **`prisma migrate deploy` now runs automatically**, as part of the
+   `api` container's own startup (its entrypoint), before the new
+   container starts receiving traffic, every time, not just on first
+   boot — no Coolify configuration required for this to happen. The
+   optional pre-deployment command below is an extra, earlier gate if you
+   want one, not a prerequisite.
 3. **Deploy `acropora-api`**, confirm `GET /health` is green.
 4. **Deploy `acropora-web`** only after `api` is healthy and reachable at
    the `API_URL` you configured.
@@ -100,14 +103,17 @@ green signal before cutting traffic over:
    beyond "api should already exist," since `web`'s rewrite just proxies
    requests at request time.
 
-### Pre-deployment command (api only)
+### Pre-deployment command (api only, optional)
 
-Configure `acropora-api`'s **pre-deployment command** (Coolify's hook that
-runs before the new container takes traffic) to run migrations against the
-*build*-stage image, not the pruned runtime image — the runtime image has
-its devDependencies, including the Prisma CLI, deliberately stripped out.
-See `docs/DEPLOYMENT.md` Section 5 for the full reasoning; the command
-itself:
+`acropora-api`'s container now runs `prisma migrate deploy` itself, via
+its own entrypoint, before starting the API — see `docs/DEPLOYMENT.md`
+Section 5. **No Coolify configuration is required for that.** This
+section is only for teams who additionally want migrations to run *before*
+the new image even starts building/booting, as an earlier gate.
+
+If you want that extra gate, configure `acropora-api`'s **pre-deployment
+command** (Coolify's hook that runs before the new container takes
+traffic) to run migrations against the *build*-stage image:
 
 ```bash
 docker build -f apps/api/Dockerfile --target builder -t acropora-api:migrate .
@@ -118,10 +124,28 @@ docker run --rm --env-file .env.production \
 
 If Coolify's pre-deployment command runs inside the already-built image
 for that deploy rather than needing its own separate `docker build`,
-adjust accordingly — the essential requirement is: run
-`prisma migrate deploy` using an image that still has the Prisma CLI
-(the `builder` target), against the same `DATABASE_URL` the new `api`
-container will use, and block the deploy if it fails.
+adjust accordingly. Either way, do not treat this command as your only
+protection against a missing migration — the entrypoint is what actually
+guarantees it, since this command being missing, misconfigured, or not
+actually blocking a failed deploy is the suspected root cause of the
+2026-07-27 `P2022` incident this change fixes.
+
+### Verifying the runtime image directly
+
+Two read-only, non-mutating checks worth running against any freshly
+built `acropora-api` image before trusting it, in addition to whatever
+Coolify's own health check reports:
+
+```bash
+# No database needed - confirms schema.prisma, migrations/, and the
+# Prisma CLI all resolve correctly inside this exact image.
+docker run --rm acropora-api node docker-entrypoint-migrate.cjs --check
+
+# Needs a reachable DATABASE_URL (staging is fine) - read-only, never
+# mutates the database.
+docker run --rm --env DATABASE_URL=<staging_url> acropora-api \
+  node docker-entrypoint-migrate.cjs --status
+```
 
 ---
 

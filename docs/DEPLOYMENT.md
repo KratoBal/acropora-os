@@ -124,10 +124,14 @@ your chosen branch/webhook policy). Each deploy:
 
 1. Builds the relevant image(s) from the current commit using the
    Dockerfiles in Section 1.
-2. For `api`: runs the pre-deployment migration step (Section 5) against
-   the production database **before** the new container starts receiving
-   traffic.
-3. Starts the new container, waits for `HEALTHCHECK` to pass.
+2. For `api`: the new container's own entrypoint runs `prisma migrate
+   deploy` against the production database as the first thing it does,
+   before the API process starts — see Section 5. (If you've also kept a
+   Coolify pre-deployment command configured, that runs even earlier, as
+   an additional gate — but the entrypoint is what actually protects you
+   even if that command is missing or misconfigured.)
+3. Starts the new container, waits for `HEALTHCHECK` to pass — which now
+   also implicitly waits for the entrypoint's migration step to finish.
 4. Once healthy, Coolify's rolling restart swaps traffic to the new
    container and stops the old one — `app.enableShutdownHooks()`
    (`apps/api/src/main.ts`) means the old `api` container gets a real
@@ -157,12 +161,39 @@ wrong, so it gets its own detailed section.
 
 ### How migrations actually run
 
-The `api` Dockerfile's runtime image (`runner` stage) has its
-devDependencies — including the Prisma CLI — deliberately pruned out (see
-Section 6 of the review doc and the in-file comments). That means
-migrations do **not** run inside the same container that serves traffic.
-Instead, the Dockerfile's `builder` stage (before that pruning step) is
-directly buildable and runnable as a one-off migration image:
+As of the fix for the 2026-07-27 `P2022: SalesOrder.unasInvoiceStatus does
+not exist` incident, migrations run **inside the same container that
+serves traffic**, as the first thing that container does, before it ever
+starts the API process:
+
+- `apps/api/Dockerfile`'s `runner` stage carries the Prisma CLI (moved into
+  `packages/database/package.json`'s `dependencies` specifically for this,
+  so `pnpm deploy --prod` keeps it), `schema.prisma`, and the full
+  `migrations/` directory — `schema.prisma`/`migrations/` arrive there for
+  free (they're just part of `@acropora/database`'s own directory, copied
+  wholesale like any other injected workspace dependency); the CLI needed
+  the explicit dependency move.
+- The image's `ENTRYPOINT` is `apps/api/docker-entrypoint.sh`, which runs
+  `apps/api/docker-entrypoint-migrate.cjs` — this resolves the CLI and
+  schema paths via Node's own module resolution (never a hardcoded
+  `node_modules/.pnpm/...` path, since those are version-string-derived
+  and not stable across dependency bumps), then runs `prisma migrate
+  deploy` (never `db push`). If that exits non-zero, the entrypoint exits
+  non-zero too — `node dist/main.js` is never `exec`'d, the container never
+  comes up, and Docker's `HEALTHCHECK` never turns green, so Coolify never
+  cuts traffic over to it.
+
+The previous design — a *separate*, one-off `builder`-target "migrator"
+image, triggered by a Coolify **pre-deployment command** the operator
+configures by hand outside version control — is still available (see the
+`builder` stage's own comments in the Dockerfile) and still useful as an
+earlier, out-of-band gate if you want one, but it is no longer the only
+thing standing between a schema change and a broken production `api`
+container. That gap — the pre-deployment command silently not being
+configured, or not actually blocking a bad deploy — is the most likely
+root cause of the 2026-07-27 incident itself, which is exactly what this
+change is defense-in-depth against. If you do keep using the
+pre-deployment command, it still runs as documented in `docs/COOLIFY.md`:
 
 ```bash
 docker build -f apps/api/Dockerfile --target builder -t acropora-api:migrate .
@@ -171,11 +202,34 @@ docker run --rm --env-file .env.production \
   pnpm --filter @acropora/database exec prisma migrate deploy
 ```
 
-In Coolify, this is what the api application's **pre-deployment command**
-should run — see `docs/COOLIFY.md` for exactly where that's configured.
-Running it as a distinct pre-deployment step (rather than, say, on
-container startup) means a migration failure blocks the deploy outright,
-instead of the new container coming up against a half-migrated schema.
+### Verifying the image before trusting it in production
+
+Three independent checks, none of which mutate anything or require the
+other two to pass first:
+
+```bash
+# 1. Build-time: fails the Docker build itself if schema.prisma, migrations/,
+#    or the Prisma CLI didn't make it into the deployed tree. Runs
+#    automatically as part of `docker build` — see the "deployed" stage.
+
+# 2. Runtime, no database needed: confirms the CLI/schema/migrations
+#    resolve correctly *inside the actual built image*, without touching
+#    DATABASE_URL at all.
+docker run --rm acropora-api node docker-entrypoint-migrate.cjs --check
+
+# 3. Runtime, against a real (e.g. staging) database, read-only: runs
+#    `prisma migrate status` — never mutates anything, safe to run
+#    repeatedly.
+docker run --rm --env DATABASE_URL=<staging_url> acropora-api \
+  node docker-entrypoint-migrate.cjs --status
+```
+
+Check 2 and 3 are deliberately separate commands: 2 proves the image is
+built correctly regardless of database reachability; 3 proves the CLI can
+actually talk to a real database once pointed at one. Neither one runs
+`migrate deploy` — the entrypoint itself is the only thing that does that,
+and only against the real production `DATABASE_URL`, on real container
+startup.
 
 ### Connection pooling
 
@@ -240,6 +294,7 @@ undo`. Two consequences worth planning for explicitly:
 |---|---|
 | `api` crash-loops immediately after a fresh deploy, before serving any traffic | Missing `UNAS_CREDENTIAL_ACTIVE_KEY_VERSION`/`UNAS_CREDENTIAL_MASTER_KEY_V<n>` or `UNAS_API_KEY` — see Section 3, step 3–4. |
 | `api` fails at startup with a `DATABASE_URL` error instead of silently connecting to `localhost` | Expected and intentional (see `packages/database/prisma.config.ts`) — it means `DATABASE_URL` genuinely isn't set in the environment Coolify is passing through. |
-| Migration step fails during deploy | Check it ran against the `builder`/`migrate` image target (Section 5), not the pruned runtime image, which has no Prisma CLI. |
+| Migration step fails during deploy | The `api` container itself will refuse to start (its entrypoint exits non-zero before `node dist/main.js` runs) — check that container's logs first, not a separate migrator image. See Section 5. If you're still also running the optional `builder`/`migrate` pre-deployment step, check that ran too. |
+| `api` never becomes healthy, logs show `prisma migrate deploy` output but nothing from Nest | Expected while migrations are still applying — `HEALTHCHECK`'s `--start-period` needs to cover however long your migration step takes, not just Nest's own boot time. |
 | Duplicate UNAS/NAV sync activity, rate-limit errors from those APIs | Check `api` replica count — see Section 1's single-replica constraint. |
 | `GET /health` returns 503 | Either Postgres or Redis is unreachable from the `api` container — check the response body, it reports which one and the connection latency/error. |
