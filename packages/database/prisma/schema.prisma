@@ -924,7 +924,7 @@ enum UnasStockSyncSourceProcess {
 /// módosul - a UNAS HTTP hívás soha nem történik ebben a tranzakcióban,
 /// azt egy külön háttér-worker végzi (lásd
 /// apps/api/src/inventory/unas-stock-sync-outbox.worker.ts és
-/// docs/architecture/inventory-consistency.md).
+/// docs/INVENTORY-CONSISTENCY.md).
 ///
 /// targetOnHand mindig egy ABSZOLÚT készletértéket hordoz (nem delta-t):
 /// amikor egy variánshoz gyors egymásutánban több készletváltozás is
@@ -955,6 +955,15 @@ model UnasStockSyncOutbox {
   /// valódi sikeres UNAS-publikálástól, miközben a status mező az 5
   /// előírt érték egyikén marad.
   resolutionNote String?
+  /// PROCESSING lease lejárati ideje - lásd unas-stock-sync-outbox.worker
+  /// dokumentációját. Egy worker-crash után egy másik (vagy egy később
+  /// induló) worker-példány ez alapján ismeri fel és veszi vissza az
+  /// elárvult sort, NULL amíg a sor sosem volt PROCESSING állapotban.
+  leaseExpiresAt DateTime?
+  /// Diagnosztikai célú, nem funkcionális: melyik worker-példány (process)
+  /// foglalta le utoljára - segít éles incidens esetén beazonosítani, hogy
+  /// melyik instance akadt el.
+  claimedBy      String?
   sequence       BigInt                     @default(autoincrement())
   createdAt      DateTime                   @default(now())
   updatedAt      DateTime                   @updatedAt
@@ -964,6 +973,7 @@ model UnasStockSyncOutbox {
   warehouse Warehouse      @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
 
   @@index([status, nextAttemptAt])
+  @@index([status, leaseExpiresAt])
   @@index([variantId, warehouseId, status])
   @@index([sourceProcess, sourceRecordId])
 }

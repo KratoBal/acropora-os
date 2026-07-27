@@ -28,7 +28,7 @@ import { Prisma } from "@acropora/database";
 ///     for the same (variantId, warehouseId) is closed out first so a
 ///     stale event can never overwrite a fresher one once processed.
 ///
-/// See docs/architecture/inventory-consistency.md for the full design
+/// See docs/INVENTORY-CONSISTENCY.md for the full design
 /// rationale and how each of the four (soon five) channels calls this.
 export type InventoryMovementSourceProcess =
   | "INVENTORY_COUNT"
@@ -102,7 +102,7 @@ export interface PostedInventoryMovementLine {
   resultingOnHand: Prisma.Decimal;
   /** True when resultingOnHand < 0. Never blocks the posting (negative
    * stock is an allowed, warned-about business state for POS - see
-   * docs/architecture/inventory-consistency.md, "Negatív készlet"). */
+   * docs/INVENTORY-CONSISTENCY.md, "Negatív készlet"). */
   wentNegative: boolean;
 }
 
