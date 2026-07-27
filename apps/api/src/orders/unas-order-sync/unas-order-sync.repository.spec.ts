@@ -55,6 +55,17 @@ class FakeDb {
     metadata: Record<string, unknown> | null;
   }> = [];
   movements: FakeMovement[] = [];
+  invoices: Array<{
+    id: string;
+    source: string;
+    invoiceNumber: string;
+    salesOrderId: string | null;
+    partnerName: string;
+    partnerTaxNumber: string | null;
+    currency: string;
+    externalUrl: string | null;
+    syncStatus: string;
+  }> = [];
   runs: Array<Record<string, unknown>> = [];
   cursor: Date | null = null;
   products: Array<{
@@ -205,6 +216,7 @@ class FakeDb {
         status: order.status,
         lines: order.lines.map((line) => ({
           id: line.id,
+          sku: line.sku,
           variantId: line.variantId,
           quantity: line.quantity,
           syncStatus: line.syncStatus,
@@ -213,6 +225,66 @@ class FakeDb {
     },
     findMany: async () => [],
     count: async () => this.orders.length,
+  };
+
+  salesOrderLine = {
+    create: async (args: any) => {
+      const order = this.orders.find((o) => o.id === args.data.orderId);
+      const line: FakeOrderLine = {
+        id: nextId("line"),
+        variantId: args.data.variantId,
+        sku: args.data.sku,
+        quantity: args.data.quantity,
+        syncStatus: args.data.syncStatus,
+        syncError: args.data.syncError,
+      };
+      order?.lines.push(line);
+      return line;
+    },
+    update: async (args: any) => {
+      for (const order of this.orders) {
+        const line = order.lines.find((l) => l.id === args.where.id);
+        if (line) {
+          Object.assign(line, args.data);
+          return line;
+        }
+      }
+      return {};
+    },
+  };
+
+  invoice = {
+    findUnique: async (args: any) => {
+      const key = args.where.source_invoiceNumber;
+      const found = this.invoices.find(
+        (invoice) =>
+          invoice.source === key.source &&
+          invoice.invoiceNumber === key.invoiceNumber,
+      );
+      return found
+        ? { id: found.id, salesOrderId: found.salesOrderId }
+        : null;
+    },
+    create: async (args: any) => {
+      const row = {
+        id: nextId("invoice"),
+        source: args.data.source as string,
+        invoiceNumber: args.data.invoiceNumber as string,
+        salesOrderId: (args.data.salesOrderId as string) ?? null,
+        partnerName: args.data.partnerName as string,
+        partnerTaxNumber: (args.data.partnerTaxNumber as string) ?? null,
+        currency: args.data.currency as string,
+        externalUrl: (args.data.externalUrl as string) ?? null,
+        syncStatus: args.data.syncStatus as string,
+      };
+      this.invoices.push(row);
+      return row;
+    },
+    update: async (args: any) => {
+      const row = this.invoices.find((invoice) => invoice.id === args.where.id);
+      if (row) Object.assign(row, args.data);
+      return row ?? {};
+    },
   };
 
   stockMovement = {
@@ -293,12 +365,24 @@ function baseOrder(overrides: Partial<UnasApiOrder> = {}): UnasApiOrder {
     orderedAt: "2026-07-20T14:05:00.000Z",
     customerName: "Kovács Anna",
     customerEmail: "vevo@example.com",
+    buyerInvoiceName: "Kovács Anna",
+    buyerTaxNumber: null,
+    buyerEuTaxNumber: null,
+    buyerCustomerType: "private",
+    buyerCountryCode: "HU",
+    buyerZip: "2030",
+    buyerCity: "Érd",
+    buyerAddress: "Tárnoki út 23.",
+    invoiceStatus: null,
+    invoiceNumber: null,
+    invoiceUrl: null,
     currency: "HUF",
     sumPriceGross: "12700",
     paymentName: "Bankkártya",
     paymentType: "bankcard",
     paymentStatus: "paid",
     shippingName: "GLS",
+    couponCode: null,
     items: [
       {
         id: "1",
@@ -470,6 +554,10 @@ describe("UnasOrderSyncRepository.apply", () => {
     // Re-processing the same cancelled order (e.g. a later admin comment
     // bumps its DateMod again) must not reverse stock a second time.
     db.runs.push({ id: "run-3", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const movementCountAfterCancel = db.movements.length;
+    const lineSnapshotAfterCancel = db.orders[0]!.lines.map((line) => ({
+      ...line,
+    }));
     const summaryAgain = await repository.apply(
       "run-3",
       [cancelled],
@@ -478,6 +566,374 @@ describe("UnasOrderSyncRepository.apply", () => {
     );
     assert.equal(summaryAgain.reversedCount, 0);
     assert.equal(db.stockItems[0]?.onHand.toString(), "10");
+    // No third StockMovement (SALE + RETURN_IN only) on the repeated
+    // CANCELLED->CANCELLED sighting.
+    assert.equal(db.movements.length, movementCountAfterCancel);
+    // Status must stay CANCELLED, never perturbed by the repeated sighting.
+    assert.equal(db.orders[0]?.status, "CANCELLED");
+    // Line items must be untouched - the CANCELLED->CANCELLED branch must
+    // not fall into the live-order syncLines()/full-update path.
+    assert.deepEqual(db.orders[0]!.lines, lineSnapshotAfterCancel);
+  });
+
+  it("CANCELLED->CANCELLED resync does not run the active-order line/total resync path", async () => {
+    const db = new FakeDb();
+    db.warehouses.push({
+      id: "wh-1",
+      name: "Fő raktár",
+      createdAt: new Date(0),
+    });
+    db.variants.push({ id: "variant-1", sku: "pump_1" });
+    db.stockItems.push({
+      id: "stock-1",
+      variantId: "variant-1",
+      warehouseId: "wh-1",
+      onHand: new Prisma.Decimal(10),
+    });
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [baseOrder()], null, new Date());
+
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const cancelled = baseOrder({ statusType: "close_fault", status: "Sztornó" });
+    await repository.apply("run-2", [cancelled], null, new Date());
+    const linesBefore = db.orders[0]!.lines.length;
+
+    // A subsequent CANCELLED sighting that also carries a changed price on
+    // an existing line: if the live-order branch (syncLines + totals
+    // update) were mistakenly still reachable, this price change would
+    // show up locally. It must not.
+    db.runs.push({ id: "run-3", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const cancelledWithPriceEdit = baseOrder({
+      statusType: "close_fault",
+      status: "Sztornó",
+      items: [
+        {
+          id: "1",
+          sku: "pump_1",
+          name: "Reef Pump (edited)",
+          unit: "db",
+          quantity: "2",
+          priceNet: "9999",
+          priceGross: "12698.73",
+          vatRate: "27",
+        },
+      ],
+    });
+    const summary = await repository.apply(
+      "run-3",
+      [cancelledWithPriceEdit],
+      null,
+      new Date(),
+    );
+
+    assert.equal(summary.updatedCount, 0);
+    assert.equal(db.orders[0]!.lines.length, linesBefore);
+    assert.equal(db.orders[0]!.lines[0]?.sku, "pump_1");
+    // unitNet/description aren't tracked on FakeOrderLine, so absence of a
+    // new/replaced line row is itself the proof that syncLines() (which
+    // would update-in-place or create a new line) never ran.
+  });
+
+  it("still mirrors a UNAS invoice onto a CANCELLED order (invoice mirror is unconditional)", async () => {
+    const db = new FakeDb();
+    db.warehouses.push({
+      id: "wh-1",
+      name: "Fő raktár",
+      createdAt: new Date(0),
+    });
+    db.variants.push({ id: "variant-1", sku: "pump_1" });
+    db.stockItems.push({
+      id: "stock-1",
+      variantId: "variant-1",
+      warehouseId: "wh-1",
+      onHand: new Prisma.Decimal(10),
+    });
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [baseOrder()], null, new Date());
+
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const cancelled = baseOrder({ statusType: "close_fault", status: "Sztornó" });
+    await repository.apply("run-2", [cancelled], null, new Date());
+    assert.equal(db.invoices.length, 0);
+
+    // UNAS/Számlázz.hu can still issue a real invoice/storno document for
+    // an order that's already CANCELLED locally - the read-only mirror
+    // must still pick it up deterministically, unaffected by the
+    // CANCELLED->CANCELLED branch above it.
+    db.runs.push({ id: "run-3", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const cancelledAndBilled = baseOrder({
+      statusType: "close_fault",
+      status: "Sztornó",
+      invoiceStatus: "BILLED",
+      invoiceNumber: "SZ-2026-CANCEL-1",
+    });
+    await repository.apply("run-3", [cancelledAndBilled], null, new Date());
+
+    assert.equal(db.invoices.length, 1);
+    assert.equal(db.invoices[0]?.invoiceNumber, "SZ-2026-CANCEL-1");
+    assert.equal(db.invoices[0]?.salesOrderId, db.orders[0]?.id);
+    assert.equal(db.orders[0]?.status, "CANCELLED");
+  });
+});
+
+describe("UnasOrderSyncRepository.apply - read-only UNAS invoice mirror", () => {
+  function runningDb(): FakeDb {
+    const db = new FakeDb();
+    db.warehouses.push({
+      id: "wh-1",
+      name: "Fő raktár",
+      createdAt: new Date(0),
+    });
+    db.variants.push({ id: "variant-1", sku: "pump_1" });
+    db.stockItems.push({
+      id: "stock-1",
+      variantId: "variant-1",
+      warehouseId: "wh-1",
+      onHand: new Prisma.Decimal(10),
+    });
+    return db;
+  }
+
+  it("does not create an Invoice row when the UNAS order has no invoice data", async () => {
+    const db = runningDb();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+
+    await repository.apply("run-1", [baseOrder()], null, new Date());
+
+    assert.equal(db.invoices.length, 0);
+  });
+
+  it("does not create an Invoice row for a known-but-unbillable or billable-not-yet-billed status", async () => {
+    const db = runningDb();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+
+    await repository.apply(
+      "run-1",
+      [baseOrder({ invoiceStatus: "BILLABLE" })],
+      null,
+      new Date(),
+    );
+
+    assert.equal(db.invoices.length, 0);
+  });
+
+  it("does not fabricate an Invoice row when BILLED but the invoice number or buyer name is missing", async () => {
+    const db = runningDb();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+
+    await repository.apply(
+      "run-1",
+      [
+        baseOrder({
+          invoiceStatus: "BILLED",
+          invoiceNumber: null,
+        }),
+      ],
+      null,
+      new Date(),
+    );
+
+    assert.equal(db.invoices.length, 0);
+  });
+
+  it("mirrors an already-billed order on first sighting (create path)", async () => {
+    const db = runningDb();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+
+    await repository.apply(
+      "run-1",
+      [
+        baseOrder({
+          invoiceStatus: "BILLED",
+          invoiceNumber: "SZ-2026-001",
+          invoiceUrl: "https://www.szamlazz.hu/szamla/pdf/SZ-2026-001",
+        }),
+      ],
+      null,
+      new Date(),
+    );
+
+    assert.equal(db.invoices.length, 1);
+    assert.equal(db.invoices[0]?.source, "UNAS");
+    assert.equal(db.invoices[0]?.invoiceNumber, "SZ-2026-001");
+    assert.equal(db.invoices[0]?.salesOrderId, db.orders[0]?.id);
+    assert.equal(
+      db.invoices[0]?.externalUrl,
+      "https://www.szamlazz.hu/szamla/pdf/SZ-2026-001",
+    );
+  });
+
+  it("only saves an externalUrl when UNAS genuinely provides one", async () => {
+    const db = runningDb();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+
+    await repository.apply(
+      "run-1",
+      [
+        baseOrder({
+          invoiceStatus: "BILLED",
+          invoiceNumber: "SZ-2026-002",
+          invoiceUrl: null,
+        }),
+      ],
+      null,
+      new Date(),
+    );
+
+    assert.equal(db.invoices[0]?.externalUrl, null);
+  });
+
+  it("mirrors an order that becomes billed on a later sighting (update path) and persists the UNAS invoice status", async () => {
+    const db = runningDb();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    await repository.apply(
+      "run-1",
+      [baseOrder({ invoiceStatus: "BILLABLE" })],
+      null,
+      new Date(),
+    );
+    assert.equal(db.invoices.length, 0);
+
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply(
+      "run-2",
+      [
+        baseOrder({
+          invoiceStatus: "BILLED",
+          invoiceNumber: "SZ-2026-003",
+        }),
+      ],
+      null,
+      new Date(),
+    );
+
+    assert.equal(db.invoices.length, 1);
+    assert.equal(db.invoices[0]?.invoiceNumber, "SZ-2026-003");
+  });
+
+  it("does not duplicate the Invoice row on repeated sync of the same billed order", async () => {
+    const db = runningDb();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    const billed = baseOrder({
+      invoiceStatus: "BILLED",
+      invoiceNumber: "SZ-2026-004",
+    });
+    await repository.apply("run-1", [billed], null, new Date());
+
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply("run-2", [billed], null, new Date());
+    db.runs.push({ id: "run-3", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply("run-3", [billed], null, new Date());
+
+    assert.equal(db.invoices.length, 1);
+  });
+
+  it("controllably updates the local mirror when UNAS invoice data changes", async () => {
+    const db = runningDb();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    await repository.apply(
+      "run-1",
+      [
+        baseOrder({
+          invoiceStatus: "BILLED",
+          invoiceNumber: "SZ-2026-005",
+          invoiceUrl: null,
+        }),
+      ],
+      null,
+      new Date(),
+    );
+    assert.equal(db.invoices[0]?.externalUrl, null);
+
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply(
+      "run-2",
+      [
+        baseOrder({
+          invoiceStatus: "BILLED",
+          invoiceNumber: "SZ-2026-005",
+          invoiceUrl: "https://www.szamlazz.hu/szamla/pdf/SZ-2026-005",
+        }),
+      ],
+      null,
+      new Date(),
+    );
+
+    assert.equal(db.invoices.length, 1);
+    assert.equal(
+      db.invoices[0]?.externalUrl,
+      "https://www.szamlazz.hu/szamla/pdf/SZ-2026-005",
+    );
+  });
+
+  it("never merges two different local orders onto the same mirrored invoice number", async () => {
+    const db = runningDb();
+    db.variants.push({ id: "variant-2", sku: "pump_2" });
+    db.stockItems.push({
+      id: "stock-2",
+      variantId: "variant-2",
+      warehouseId: "wh-1",
+      onHand: new Prisma.Decimal(10),
+    });
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+
+    await repository.apply(
+      "run-1",
+      [
+        baseOrder({
+          key: "UN-1",
+          invoiceStatus: "BILLED",
+          invoiceNumber: "SZ-2026-006",
+        }),
+      ],
+      null,
+      new Date(),
+    );
+    assert.equal(db.invoices.length, 1);
+    const firstOrderId = db.invoices[0]?.salesOrderId;
+
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply(
+      "run-2",
+      [
+        baseOrder({
+          key: "UN-2",
+          invoiceStatus: "BILLED",
+          invoiceNumber: "SZ-2026-006",
+          items: [
+            {
+              id: "1",
+              sku: "pump_2",
+              name: "Reef Pump 2",
+              unit: "db",
+              quantity: "1",
+              priceNet: "5000",
+              priceGross: "6350",
+              vatRate: "27",
+            },
+          ],
+        }),
+      ],
+      null,
+      new Date(),
+    );
+
+    // Still exactly one Invoice row, still pointing at the first order -
+    // the conflicting second order's sighting must not reassign it.
+    assert.equal(db.invoices.length, 1);
+    assert.equal(db.invoices[0]?.salesOrderId, firstOrderId);
+    assert.equal(db.orders.length, 2);
   });
 });
 

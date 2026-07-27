@@ -47,6 +47,7 @@ interface ExternalReferenceRow {
 
 interface OrderLineRow {
   id: string;
+  sku: string;
   variantId: string | null;
   quantity: Prisma.Decimal;
   syncStatus: string;
@@ -55,7 +56,21 @@ interface OrderLineRow {
 interface OrderRow {
   id: string;
   status: string;
+  unasInvoiceStatus: string | null;
   lines: OrderLineRow[];
+}
+
+interface LineInput {
+  variantId: string | null;
+  sku: string;
+  description: string;
+  quantity: Prisma.Decimal;
+  unit: string;
+  unitNet: Prisma.Decimal;
+  taxRate: Prisma.Decimal;
+  lineGross: Prisma.Decimal;
+  syncStatus: "OK" | "FAILED";
+  syncError: string | null;
 }
 
 interface UnasOrderSyncTransaction extends WarehouseLookupDatabase {
@@ -78,6 +93,17 @@ interface UnasOrderSyncTransaction extends WarehouseLookupDatabase {
     create(args: unknown): Promise<{ id: string }>;
     update(args: unknown): Promise<unknown>;
     findUnique(args: unknown): Promise<OrderRow | null>;
+  };
+  salesOrderLine: {
+    create(args: unknown): Promise<unknown>;
+    update(args: unknown): Promise<unknown>;
+  };
+  invoice: {
+    findUnique(
+      args: unknown,
+    ): Promise<{ id: string; salesOrderId: string | null } | null>;
+    create(args: unknown): Promise<unknown>;
+    update(args: unknown): Promise<unknown>;
   };
   stockMovement: {
     create(args: unknown): Promise<{ id: string }>;
@@ -174,6 +200,108 @@ function toRunView(run: {
     stockMismatchCount: run.stockMismatchCount,
     errorCode: run.errorCode,
   };
+}
+
+/// Pure order-total computation shared by createNewOrder and the update
+/// path's re-sync, so "totals" always means exactly "sum of order.items" -
+/// includes shipping-cost/discount-amount/handling-cost special lines,
+/// since those are just items without a sku (see UnasApiOrderItem doc).
+function orderTotals(order: UnasApiOrder): {
+  totalNet: Prisma.Decimal;
+  totalGross: Prisma.Decimal;
+} {
+  let totalNet = new Prisma.Decimal(0);
+  let totalGross = new Prisma.Decimal(0);
+  for (const item of order.items) {
+    const quantity = new Prisma.Decimal(item.quantity);
+    const unitNet = new Prisma.Decimal(item.priceNet ?? "0");
+    const lineGross = new Prisma.Decimal(item.priceGross ?? "0").times(
+      quantity,
+    );
+    totalNet = totalNet.plus(unitNet.times(quantity));
+    totalGross = totalGross.plus(lineGross);
+  }
+  return { totalNet, totalGross };
+}
+
+/// Builds the SalesOrderLine input rows for every current UNAS order item
+/// (real product lines resolved against ProductVariant by sku, plus
+/// special non-stock lines like shipping-cost/discount-amount keyed by
+/// their UNAS item id) - shared by order creation and by syncLines' update
+/// path so both use identical pricing/variant-resolution logic.
+async function buildLineInputs(
+  transaction: Pick<UnasOrderSyncTransaction, "productVariant">,
+  order: UnasApiOrder,
+): Promise<{
+  lineInputs: LineInput[];
+  stockLines: Array<{ variantId: string; quantity: Prisma.Decimal }>;
+}> {
+  const lineInputs: LineInput[] = [];
+  const stockLines: Array<{ variantId: string; quantity: Prisma.Decimal }> =
+    [];
+
+  for (const item of order.items) {
+    const quantity = new Prisma.Decimal(item.quantity);
+    const unitNet = new Prisma.Decimal(item.priceNet ?? "0");
+    const taxRate = new Prisma.Decimal(item.vatRate ?? "0");
+    const lineGross = new Prisma.Decimal(item.priceGross ?? "0").times(
+      quantity,
+    );
+
+    if (!item.sku) {
+      // Non-stock line (shipping-cost, discount-amount, etc.): counts
+      // toward the order total but never toward stock.
+      lineInputs.push({
+        variantId: null,
+        sku: item.id,
+        description: item.name,
+        quantity,
+        unit: item.unit ?? "db",
+        unitNet,
+        taxRate,
+        lineGross,
+        syncStatus: "OK",
+        syncError: null,
+      });
+      continue;
+    }
+
+    const variant = await transaction.productVariant.findFirst({
+      where: { sku: item.sku },
+      select: { id: true },
+    });
+    if (!variant) {
+      lineInputs.push({
+        variantId: null,
+        sku: item.sku,
+        description: item.name,
+        quantity,
+        unit: item.unit ?? "db",
+        unitNet,
+        taxRate,
+        lineGross,
+        syncStatus: "FAILED",
+        syncError: `UNKNOWN_SKU:${item.sku}`,
+      });
+      continue;
+    }
+
+    lineInputs.push({
+      variantId: variant.id,
+      sku: item.sku,
+      description: item.name,
+      quantity,
+      unit: item.unit ?? "db",
+      unitNet,
+      taxRate,
+      lineGross,
+      syncStatus: "OK",
+      syncError: null,
+    });
+    stockLines.push({ variantId: variant.id, quantity });
+  }
+
+  return { lineInputs, stockLines };
 }
 
 @Injectable()
@@ -313,9 +441,11 @@ export class UnasOrderSyncRepository extends Repository {
             select: {
               id: true,
               status: true,
+              unasInvoiceStatus: true,
               lines: {
                 select: {
                   id: true,
+                  sku: true,
                   variantId: true,
                   quantity: true,
                   syncStatus: true,
@@ -326,16 +456,98 @@ export class UnasOrderSyncRepository extends Repository {
           if (!existing) continue; // Order row missing locally; nothing safe to reconcile against.
 
           const newStatus = mapUnasOrderStatus(order.statusType);
+          const invoiceStatusChanged =
+            order.invoiceStatus !== existing.unasInvoiceStatus;
+          const billingFields = {
+            buyerName: order.buyerInvoiceName,
+            buyerTaxNumber: order.buyerTaxNumber,
+            buyerEuTaxNumber: order.buyerEuTaxNumber,
+            buyerCustomerType: order.buyerCustomerType,
+            buyerCountryCode: order.buyerCountryCode,
+            buyerZip: order.buyerZip,
+            buyerCity: order.buyerCity,
+            buyerAddress: order.buyerAddress,
+          };
+          const totals = orderTotals(order);
+
           if (newStatus === "CANCELLED" && existing.status !== "CANCELLED") {
             await this.reverseOrder(transaction, existing, warehouse.id);
             reversedCount += 1;
-          } else if (newStatus !== existing.status) {
             await transaction.salesOrder.update({
               where: { id: existing.id },
-              data: { status: newStatus },
+              data: {
+                unasInvoiceStatus: order.invoiceStatus,
+                ...billingFields,
+              },
             });
-            updatedCount += 1;
+          } else if (
+            newStatus === "CANCELLED" &&
+            existing.status === "CANCELLED"
+          ) {
+            // Repeated sighting of an order that's already CANCELLED
+            // locally and is still CANCELLED per UNAS (e.g. re-surfaced by
+            // the TimeModStart overlap window, or an admin comment bumping
+            // DateMod). Deliberately skipped entirely: NOT the live-order
+            // branch below (no syncLines - a dead order's line items don't
+            // need to track UNAS price/description edits, and re-running it
+            // would be pure waste) and NOT reverseOrder (already reversed
+            // exactly once when it first transitioned to CANCELLED - see
+            // the "reverses stock exactly once" test - re-running it would
+            // either double-reverse stock or, thanks to its own
+            // already-reversed guard, silently no-op every single poll,
+            // neither of which is useful). status/totals/billingFields are
+            // intentionally NOT rewritten here either, so a cancelled
+            // order's terminal state can never be perturbed by a later
+            // sighting. The only thing that may still legitimately change
+            // for an already-cancelled order is its UNAS-side invoice
+            // status (UNAS/Számlázz.hu can still bill or storno a
+            // cancelled order after the fact) - that alone is refreshed,
+            // conditionally, to avoid a no-op write on every stable
+            // resighting. The read-only invoice mirror itself
+            // (syncInvoiceMirror below) always runs regardless of this
+            // branch and reads straight from the fresh `order` payload, so
+            // it stays accurate even without touching SalesOrder here.
+            if (invoiceStatusChanged) {
+              await transaction.salesOrder.update({
+                where: { id: existing.id },
+                data: { unasInvoiceStatus: order.invoiceStatus },
+              });
+              updatedCount += 1;
+            }
+          } else {
+            // Every sighting of an already-known, still-live order refreshes
+            // its line items/prices/discounts/shipping/currency/totals from
+            // the fresh UNAS payload - not just on a status or invoice-status
+            // change. Previously only status + billing address were kept
+            // current, so a modified-but-not-yet-cancelled order's actual
+            // items/amounts could silently drift from what UNAS reports.
+            // Deliberately does NOT touch stock here: matched lines only
+            // have their pricing/description fields refreshed (no
+            // quantity-driven StockItem/StockMovement adjustment), and
+            // removed items are left in place rather than deleted -
+            // reconciling stock deltas for an edited order, and whether a
+            // UNAS-removed line should ever be deleted locally, is an open
+            // business decision, not something to guess at here (see
+            // docs/ACROPORA-OS-MASTER-MILESTONE-PLAN.md, "11. Nyitott
+            // üzleti döntések", #13).
+            await this.syncLines(transaction, existing, order);
+            await transaction.salesOrder.update({
+              where: { id: existing.id },
+              data: {
+                status: newStatus,
+                unasInvoiceStatus: order.invoiceStatus,
+                currency: order.currency ?? "HUF",
+                totalNet: totals.totalNet,
+                totalTax: totals.totalGross.minus(totals.totalNet),
+                totalGross: totals.totalGross,
+                ...billingFields,
+              },
+            });
+            if (newStatus !== existing.status || invoiceStatusChanged)
+              updatedCount += 1;
           }
+
+          await this.syncInvoiceMirror(transaction, existing.id, order);
 
           await transaction.externalReference.update({
             where: { id: reference.id },
@@ -347,6 +559,7 @@ export class UnasOrderSyncRepository extends Repository {
                 paymentType: order.paymentType,
                 paymentStatus: order.paymentStatus,
                 shippingName: order.shippingName,
+                couponCode: order.couponCode,
               }),
               lastSyncedAt: windowEnd,
             },
@@ -409,85 +622,11 @@ export class UnasOrderSyncRepository extends Repository {
     order: UnasApiOrder,
     warehouseId: string,
   ): Promise<void> {
-    let totalNet = new Prisma.Decimal(0);
-    let totalGross = new Prisma.Decimal(0);
-    const lineInputs: Array<{
-      variantId: string | null;
-      sku: string;
-      description: string;
-      quantity: Prisma.Decimal;
-      unit: string;
-      unitNet: Prisma.Decimal;
-      taxRate: Prisma.Decimal;
-      lineGross: Prisma.Decimal;
-      syncStatus: "OK" | "FAILED";
-      syncError: string | null;
-    }> = [];
-    const stockLines: Array<{ variantId: string; quantity: Prisma.Decimal }> =
-      [];
-
-    for (const item of order.items) {
-      const quantity = new Prisma.Decimal(item.quantity);
-      const unitNet = new Prisma.Decimal(item.priceNet ?? "0");
-      const taxRate = new Prisma.Decimal(item.vatRate ?? "0");
-      const lineGross = new Prisma.Decimal(item.priceGross ?? "0").times(
-        quantity,
-      );
-      totalNet = totalNet.plus(unitNet.times(quantity));
-      totalGross = totalGross.plus(lineGross);
-
-      if (!item.sku) {
-        // Non-stock line (shipping-cost, discount-amount, etc.): counts
-        // toward the order total but never toward stock.
-        lineInputs.push({
-          variantId: null,
-          sku: item.id,
-          description: item.name,
-          quantity,
-          unit: item.unit ?? "db",
-          unitNet,
-          taxRate,
-          lineGross,
-          syncStatus: "OK",
-          syncError: null,
-        });
-        continue;
-      }
-
-      const variant = await transaction.productVariant.findFirst({
-        where: { sku: item.sku },
-        select: { id: true },
-      });
-      if (!variant) {
-        lineInputs.push({
-          variantId: null,
-          sku: item.sku,
-          description: item.name,
-          quantity,
-          unit: item.unit ?? "db",
-          unitNet,
-          taxRate,
-          lineGross,
-          syncStatus: "FAILED",
-          syncError: `UNKNOWN_SKU:${item.sku}`,
-        });
-        continue;
-      }
-
-      lineInputs.push({
-        variantId: variant.id,
-        sku: item.sku,
-        description: item.name,
-        quantity,
-        unit: item.unit ?? "db",
-        unitNet,
-        taxRate,
-        lineGross,
-        syncStatus: "OK",
-        syncError: null,
-      });
-      stockLines.push({ variantId: variant.id, quantity });
-    }
+    const { lineInputs, stockLines } = await buildLineInputs(
+      transaction,
+      order,
+    );
+    const totals = orderTotals(order);
 
     const orderRow = await transaction.salesOrder.create({
       data: {
@@ -496,11 +635,19 @@ export class UnasOrderSyncRepository extends Repository {
         status: mapUnasOrderStatus(order.statusType),
         currency: order.currency ?? "HUF",
         warehouseId,
-        buyerName: order.customerName,
+        buyerName: order.buyerInvoiceName,
         buyerEmail: order.customerEmail,
-        totalNet,
-        totalTax: totalGross.minus(totalNet),
-        totalGross,
+        buyerTaxNumber: order.buyerTaxNumber,
+        buyerEuTaxNumber: order.buyerEuTaxNumber,
+        buyerCustomerType: order.buyerCustomerType,
+        buyerCountryCode: order.buyerCountryCode,
+        buyerZip: order.buyerZip,
+        buyerCity: order.buyerCity,
+        buyerAddress: order.buyerAddress,
+        unasInvoiceStatus: order.invoiceStatus,
+        totalNet: totals.totalNet,
+        totalTax: totals.totalGross.minus(totals.totalNet),
+        totalGross: totals.totalGross,
         orderedAt: order.orderedAt ? new Date(order.orderedAt) : null,
         lines: { create: lineInputs },
       },
@@ -564,6 +711,134 @@ export class UnasOrderSyncRepository extends Repository {
           shippingName: order.shippingName,
         }),
         lastSyncedAt: new Date(),
+      },
+    });
+
+    // Edge case: an order can already be BILLED by the time we first see
+    // it (e.g. a late first sync of an old order) - mirror it immediately
+    // rather than waiting for the next poll.
+    await this.syncInvoiceMirror(transaction, orderRow.id, order);
+  }
+
+  /// Refreshes existing SalesOrderLine rows' pricing/description (matched
+  /// to the fresh UNAS item by sku, which is also how special non-stock
+  /// lines like shipping-cost are keyed - see buildLineInputs) and adds
+  /// rows for items that weren't seen before. Deliberately does NOT delete
+  /// lines whose item disappeared from the UNAS order, and does NOT touch
+  /// StockItem/StockMovement for quantity changes on existing lines (see
+  /// the call site's comment in apply() for why this is a documented,
+  /// bounded limitation rather than full stock-delta reconciliation).
+  private async syncLines(
+    transaction: UnasOrderSyncTransaction,
+    existing: OrderRow,
+    order: UnasApiOrder,
+  ): Promise<void> {
+    const { lineInputs } = await buildLineInputs(transaction, order);
+    const existingBySku = new Map(
+      existing.lines.map((line) => [line.sku, line]),
+    );
+    for (const input of lineInputs) {
+      const match = existingBySku.get(input.sku);
+      if (match) {
+        await transaction.salesOrderLine.update({
+          where: { id: match.id },
+          data: {
+            description: input.description,
+            quantity: input.quantity,
+            unit: input.unit,
+            unitNet: input.unitNet,
+            taxRate: input.taxRate,
+            lineGross: input.lineGross,
+            // Only re-resolve variant linkage forward (FAILED -> OK, e.g. a
+            // product that was missing at order-creation time got added to
+            // the catalog since); never regress an already-OK, stock-linked
+            // line to FAILED just because of a transient lookup miss within
+            // this same pass, since buildLineInputs re-does the variantId
+            // lookup identically to order creation and would otherwise be
+            // safe to trust either way - kept one-directional purely to
+            // avoid ever silently unlinking stock history from a line.
+            ...(match.syncStatus === "FAILED" && input.syncStatus === "OK"
+              ? { variantId: input.variantId, syncStatus: "OK", syncError: null }
+              : {}),
+          },
+        });
+      } else {
+        await transaction.salesOrderLine.create({
+          data: { orderId: existing.id, ...input },
+        });
+      }
+    }
+  }
+
+  /// Read-only UNAS -> Acropora OS invoice mirror. The actual outgoing
+  /// webshop invoice is issued by UNAS's own built-in Számlázz.hu module,
+  /// never by Acropora OS (see docs/ACROPORA-OS-MASTER-MILESTONE-PLAN.md
+  /// "Kimenő számlázás architektúrája") - this only records what UNAS
+  /// itself reports once Invoice.Status reaches BILLED (2). Never calls
+  /// Számlázz.hu, never writes back to UNAS. Idempotent via the
+  /// @@unique([source, invoiceNumber]) constraint on Invoice: repeated
+  /// sightings of the same order/invoice update the same row instead of
+  /// duplicating it, and two different local orders can never collapse
+  /// onto the same mirrored invoice (see the conflict guard below).
+  private async syncInvoiceMirror(
+    transaction: UnasOrderSyncTransaction,
+    salesOrderId: string,
+    order: UnasApiOrder,
+  ): Promise<void> {
+    if (order.invoiceStatus !== "BILLED") return;
+    // UNAS reports "billed" but didn't (yet) give a number, or gave no
+    // invoice-address name to bill under (Invoice.partnerName is
+    // required) - nothing safe to persist. Retried on the next sighting
+    // rather than guessed at now.
+    if (!order.invoiceNumber || !order.buyerInvoiceName) return;
+
+    const existing = await transaction.invoice.findUnique({
+      where: {
+        source_invoiceNumber: {
+          source: "UNAS",
+          invoiceNumber: order.invoiceNumber,
+        },
+      },
+    });
+    if (
+      existing &&
+      existing.salesOrderId &&
+      existing.salesOrderId !== salesOrderId
+    ) {
+      // Should be impossible - Számlázz.hu invoice numbers are unique per
+      // billing account - but never silently reassign an already-mirrored
+      // invoice from one local order to another; leave it as an
+      // unresolved conflict rather than merge two orders' data.
+      return;
+    }
+
+    if (existing) {
+      await transaction.invoice.update({
+        where: { id: existing.id },
+        data: {
+          salesOrderId,
+          partnerName: order.buyerInvoiceName,
+          partnerTaxNumber: order.buyerTaxNumber,
+          currency: order.currency ?? "HUF",
+          externalUrl: order.invoiceUrl,
+          syncStatus: "RECEIVED",
+        },
+      });
+      return;
+    }
+
+    await transaction.invoice.create({
+      data: {
+        direction: "OUTBOUND",
+        documentType: "INVOICE",
+        source: "UNAS",
+        invoiceNumber: order.invoiceNumber,
+        partnerName: order.buyerInvoiceName,
+        partnerTaxNumber: order.buyerTaxNumber,
+        salesOrderId,
+        currency: order.currency ?? "HUF",
+        externalUrl: order.invoiceUrl,
+        syncStatus: "RECEIVED",
       },
     });
   }

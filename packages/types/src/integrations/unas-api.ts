@@ -82,6 +82,26 @@ export interface UnasApiOrder {
   orderedAt: string | null;
   customerName: string | null;
   customerEmail: string | null;
+  /**
+   * UNAS Customer.Addresses.Invoice - the billing address, mirrored
+   * read-only onto SalesOrder for display/reporting. taxNumber null for
+   * consumers without one.
+   */
+  /** Customer.Addresses.Invoice.Name - the billing name. NOT the same as customerName (Customer.Contact.Name), which can be a different person. */
+  buyerInvoiceName: string | null;
+  buyerTaxNumber: string | null;
+  /** Customer.Addresses.Invoice.EUTaxNumber - EU VAT number, when present. */
+  buyerEuTaxNumber: string | null;
+  /** Customer.Addresses.Invoice.CustomerType, raw UNAS enum value. */
+  buyerCustomerType:
+    | "private"
+    | "company"
+    | "other_customer_without_tax_number"
+    | null;
+  buyerCountryCode: string | null;
+  buyerZip: string | null;
+  buyerCity: string | null;
+  buyerAddress: string | null;
   currency: string | null;
   sumPriceGross: string | null;
   /** e.g. "Bankkártya", "Utánvét" - UNAS's own payment method name, for display only. */
@@ -92,6 +112,30 @@ export interface UnasApiOrder {
   paymentStatus: string | null;
   /** e.g. "GLS", "FoxPost" - UNAS's own shipping/courier name, for display only. */
   shippingName: string | null;
+  /** Coupon per the "Adatszerkezet" docs - the coupon code the buyer used, if any. Display/reporting only; the discount's financial effect is already captured via the order's discount-amount/discount-percent item lines. */
+  couponCode: string | null;
+  /**
+   * UNAS's own Invoice.Status (0/1/2 per the "Adatszerkezet" docs), mapped
+   * to a named tri-state - a dedicated field independent of Status/
+   * StatusType above. The actual outgoing invoice is issued by UNAS's own
+   * built-in Számlázz.hu module, never by Acropora OS; this is read-only
+   * mirrored data only. Null if the Invoice node was absent from the
+   * response (shouldn't normally happen, but treated as "unknown" rather
+   * than assumed).
+   */
+  invoiceStatus: "NOT_BILLABLE" | "BILLABLE" | "BILLED" | null;
+  /**
+   * Invoice.Number per the "Adatszerkezet" docs - the human-readable
+   * invoice number UNAS/Számlázz.hu assigned. Null until invoiceStatus
+   * reaches BILLED (and even then only if UNAS actually reported one).
+   */
+  invoiceNumber: string | null;
+  /**
+   * Invoice.Url per the "Adatszerkezet" docs - a direct link to the PDF,
+   * hosted by Számlázz.hu/UNAS, not Acropora OS. Never fabricated when
+   * absent; a blank/missing value here must stay null, not become "".
+   */
+  invoiceUrl: string | null;
   items: UnasApiOrderItem[];
 }
 

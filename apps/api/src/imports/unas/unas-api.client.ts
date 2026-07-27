@@ -483,7 +483,29 @@ export function buildUnasGetOrderXml(request: UnasGetOrderRequest) {
 // (Products/Product, Categories/Category) - the megrendelesek-getOrder-valasz
 // page wasn't fetchable at implementation time to confirm this directly, so
 // this should be double-checked against a real getOrder response the first
-// time this runs against live UNAS data.
+// time this runs against live UNAS data. The field-level structure below
+// (including the Invoice sub-object) IS confirmed against the official
+// "Adatszerkezet" docs (unas.hu/tudastar/api/megrendelesek-adatszerkezet).
+function unasInvoiceStatus(
+  raw: string | undefined,
+): "NOT_BILLABLE" | "BILLABLE" | "BILLED" | null {
+  if (raw === "0") return "NOT_BILLABLE";
+  if (raw === "1") return "BILLABLE";
+  if (raw === "2") return "BILLED";
+  return null;
+}
+
+// Customer.Addresses.Invoice.CustomerType per the "Adatszerkezet" docs -
+// stored as the raw UNAS enum value (not remapped) so it stays meaningful
+// even before any consumer of it exists beyond display/blocking checks.
+function unasCustomerType(
+  raw: string | undefined,
+): "private" | "company" | "other_customer_without_tax_number" | null {
+  if (raw === "private" || raw === "company") return raw;
+  if (raw === "other_customer_without_tax_number") return raw;
+  return null;
+}
+
 export function parseUnasOrderResponse(xml: string): UnasApiOrder[] {
   const root = parseXml(xml);
   if (root.name === "Error") throw new UnasApiError("API_REJECTED");
@@ -494,8 +516,11 @@ export function parseUnasOrderResponse(xml: string): UnasApiOrder[] {
     if (!key) throw new UnasApiError("FIELD_FORMAT_INVALID");
     const customer = child(order, "Customer");
     const contact = customer ? child(customer, "Contact") : undefined;
+    const addresses = customer ? child(customer, "Addresses") : undefined;
+    const invoiceAddress = addresses ? child(addresses, "Invoice") : undefined;
     const payment = child(order, "Payment");
     const shipping = child(order, "Shipping");
+    const invoice = child(order, "Invoice");
     const itemsNode = child(order, "Items");
     const items = children(itemsNode, "Item").map((item) => {
       const sku = value(item, "Sku");
@@ -519,12 +544,55 @@ export function parseUnasOrderResponse(xml: string): UnasApiOrder[] {
       orderedAt: looseOrderDateTime(value(order, "Date")),
       customerName: contact ? (value(contact, "Name") ?? null) : null,
       customerEmail: customer ? (value(customer, "Email") ?? null) : null,
+      // The billing name MUST come from the invoice address, not the
+      // contact person (Customer.Contact.Name can be a completely
+      // different person, e.g. an assistant placing the order on behalf
+      // of a company) - see Customer.Addresses.Invoice.Name in the
+      // official "Adatszerkezet" docs. Deliberately no fallback to
+      // customerName here: a missing invoice-address name should surface
+      // as a genuinely missing billing name in the local mirror, not be
+      // masked by silently substituting the contact's name.
+      buyerInvoiceName: invoiceAddress
+        ? (value(invoiceAddress, "Name") ?? null)
+        : null,
+      buyerTaxNumber: invoiceAddress
+        ? (value(invoiceAddress, "TaxNumber") ?? null)
+        : null,
+      buyerEuTaxNumber: invoiceAddress
+        ? (value(invoiceAddress, "EUTaxNumber") ?? null)
+        : null,
+      buyerCustomerType: invoiceAddress
+        ? (unasCustomerType(value(invoiceAddress, "CustomerType")) ?? null)
+        : null,
+      buyerCountryCode: invoiceAddress
+        ? (value(invoiceAddress, "CountryCode") ?? null)
+        : null,
+      buyerZip: invoiceAddress ? (value(invoiceAddress, "ZIP") ?? null) : null,
+      buyerCity: invoiceAddress
+        ? (value(invoiceAddress, "City") ?? null)
+        : null,
+      buyerAddress: invoiceAddress
+        ? (value(invoiceAddress, "Street") ?? null)
+        : null,
       currency: value(order, "Currency") ?? null,
       sumPriceGross: decimal(value(order, "SumPriceGross")),
       paymentName: payment ? (value(payment, "Name") ?? null) : null,
       paymentType: payment ? (value(payment, "Type") ?? null) : null,
       paymentStatus: payment ? (value(payment, "Status") ?? null) : null,
       shippingName: shipping ? (value(shipping, "Name") ?? null) : null,
+      couponCode: value(order, "Coupon") ?? null,
+      invoiceStatus: invoice
+        ? unasInvoiceStatus(value(invoice, "Status"))
+        : null,
+      // `|| null` (not `?? null`): value() already .trim()s, so a present
+      // but empty/whitespace-only <Number>/<Url> tag parses to "" - `??`
+      // would let that empty string through as-is (only null/undefined
+      // trigger it), which would let Invoice.externalUrl end up "" instead
+      // of null for a genuinely-missing URL. `||` also treats "" as
+      // falsy, collapsing both "tag absent" and "tag present but empty"
+      // to null uniformly. A real, non-empty number/URL is unaffected.
+      invoiceNumber: invoice ? (value(invoice, "Number") || null) : null,
+      invoiceUrl: invoice ? (value(invoice, "Url") || null) : null,
       items,
     };
   });

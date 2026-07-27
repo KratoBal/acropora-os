@@ -270,6 +270,165 @@ describe("UNAS getOrder contract", () => {
     assert.equal(order.paymentStatus, null);
     assert.equal(order.shippingName, null);
   });
+
+  it("parses the billing address and Invoice.Status", () => {
+    const billableOrder = `<?xml version="1.0" encoding="UTF-8"?>
+<Orders><Order>
+<Key>UN-3</Key>
+<Customer><Email>vevo@example.com</Email>
+<Contact><Name>Kovács Anna</Name></Contact>
+<Addresses><Invoice><Name>Kovács Anna</Name><ZIP>2030</ZIP><City>Érd</City>
+<Street>Tárnoki út 23.</Street><Country>Hungary</Country><CountryCode>HU</CountryCode>
+<TaxNumber>12345678-1-42</TaxNumber></Invoice></Addresses></Customer>
+<Invoice><Status>1</Status><StatusText>Számlázható</StatusText></Invoice>
+<Items></Items>
+</Order></Orders>`;
+    const order = parseUnasOrderResponse(billableOrder)[0]!;
+    assert.equal(order.buyerZip, "2030");
+    assert.equal(order.buyerCity, "Érd");
+    assert.equal(order.buyerAddress, "Tárnoki út 23.");
+    assert.equal(order.buyerCountryCode, "HU");
+    assert.equal(order.buyerTaxNumber, "12345678-1-42");
+    assert.equal(order.invoiceStatus, "BILLABLE");
+  });
+
+  it("maps Invoice.Status 0/2 and treats a missing Invoice node as null", () => {
+    const notBillable = parseUnasOrderResponse(
+      "<Orders><Order><Key>UN-4</Key><Invoice><Status>0</Status></Invoice></Order></Orders>",
+    )[0]!;
+    assert.equal(notBillable.invoiceStatus, "NOT_BILLABLE");
+    const billed = parseUnasOrderResponse(
+      "<Orders><Order><Key>UN-5</Key><Invoice><Status>2</Status></Invoice></Order></Orders>",
+    )[0]!;
+    assert.equal(billed.invoiceStatus, "BILLED");
+    const noInvoiceNode = parseUnasOrderResponse(
+      "<Orders><Order><Key>UN-6</Key></Order></Orders>",
+    )[0]!;
+    assert.equal(noInvoiceNode.invoiceStatus, null);
+  });
+
+  it("treats an unrecognized Invoice.Status value as null rather than guessing", () => {
+    const order = parseUnasOrderResponse(
+      "<Orders><Order><Key>UN-4B</Key><Invoice><Status>99</Status></Invoice></Order></Orders>",
+    )[0]!;
+    assert.equal(order.invoiceStatus, null);
+  });
+
+  it("parses Invoice.Number and Invoice.Url only when the Invoice node is present", () => {
+    const withInvoice = parseUnasOrderResponse(
+      `<Orders><Order><Key>UN-4C</Key>
+<Invoice><Status>2</Status><Number>SZ-2026-100</Number><Url>https://www.szamlazz.hu/szamla/pdf/SZ-2026-100</Url></Invoice>
+</Order></Orders>`,
+    )[0]!;
+    assert.equal(withInvoice.invoiceNumber, "SZ-2026-100");
+    assert.equal(
+      withInvoice.invoiceUrl,
+      "https://www.szamlazz.hu/szamla/pdf/SZ-2026-100",
+    );
+
+    const withoutUrl = parseUnasOrderResponse(
+      "<Orders><Order><Key>UN-4D</Key><Invoice><Status>2</Status><Number>SZ-2026-101</Number></Invoice></Order></Orders>",
+    )[0]!;
+    assert.equal(withoutUrl.invoiceNumber, "SZ-2026-101");
+    // Never treat a missing Url node as an empty-string "real" link.
+    assert.equal(withoutUrl.invoiceUrl, null);
+
+    const noInvoiceNode = parseUnasOrderResponse(
+      "<Orders><Order><Key>UN-4E</Key></Order></Orders>",
+    )[0]!;
+    assert.equal(noInvoiceNode.invoiceNumber, null);
+    assert.equal(noInvoiceNode.invoiceUrl, null);
+  });
+
+  it("treats a present-but-empty Invoice.Number/Invoice.Url as null, never as an empty string", () => {
+    // UNAS can send the Invoice node with the Url/Number tag present but
+    // empty (e.g. before a document is actually generated) - this must
+    // collapse to null exactly like a missing tag, never persist as "".
+    const emptyTags = parseUnasOrderResponse(
+      "<Orders><Order><Key>UN-4H</Key><Invoice><Status>2</Status><Number></Number><Url></Url></Invoice></Order></Orders>",
+    )[0]!;
+    assert.equal(emptyTags.invoiceNumber, null);
+    assert.equal(emptyTags.invoiceUrl, null);
+
+    // Whitespace-only content must be treated identically to empty.
+    const whitespaceTags = parseUnasOrderResponse(
+      "<Orders><Order><Key>UN-4I</Key><Invoice><Status>2</Status><Number>   </Number><Url>\n\t </Url></Invoice></Order></Orders>",
+    )[0]!;
+    assert.equal(whitespaceTags.invoiceNumber, null);
+    assert.equal(whitespaceTags.invoiceUrl, null);
+
+    // A genuine, non-empty number/URL is unaffected by the null-collapsing.
+    const realTags = parseUnasOrderResponse(
+      "<Orders><Order><Key>UN-4J</Key><Invoice><Status>2</Status><Number>SZ-2026-200</Number><Url>https://www.szamlazz.hu/szamla/pdf/SZ-2026-200</Url></Invoice></Order></Orders>",
+    )[0]!;
+    assert.equal(realTags.invoiceNumber, "SZ-2026-200");
+    assert.equal(
+      realTags.invoiceUrl,
+      "https://www.szamlazz.hu/szamla/pdf/SZ-2026-200",
+    );
+  });
+
+  it("parses the order Coupon code, defaulting to null when absent", () => {
+    const withCoupon = parseUnasOrderResponse(
+      "<Orders><Order><Key>UN-4F</Key><Coupon>SUMMER10</Coupon></Order></Orders>",
+    )[0]!;
+    assert.equal(withCoupon.couponCode, "SUMMER10");
+
+    const withoutCoupon = parseUnasOrderResponse(
+      "<Orders><Order><Key>UN-4G</Key></Order></Orders>",
+    )[0]!;
+    assert.equal(withoutCoupon.couponCode, null);
+  });
+
+  it("takes the billing name from Customer.Addresses.Invoice.Name, never from Contact.Name", () => {
+    // The contact person and the invoice/billing name deliberately differ
+    // here to prove the fix: an assistant (Contact) placing an order on
+    // behalf of a company (Invoice.Name) must never end up billed under
+    // the assistant's name.
+    const order = parseUnasOrderResponse(
+      `<Orders><Order><Key>UN-7</Key>
+<Customer><Contact><Name>Kis Béla</Name></Contact>
+<Addresses><Invoice><Name>Acropora Kft.</Name></Invoice></Addresses></Customer>
+</Order></Orders>`,
+    )[0]!;
+    assert.equal(order.customerName, "Kis Béla");
+    assert.equal(order.buyerInvoiceName, "Acropora Kft.");
+  });
+
+  it("parses EUTaxNumber and CustomerType from the invoice address", () => {
+    const company = parseUnasOrderResponse(
+      `<Orders><Order><Key>UN-8</Key>
+<Customer><Addresses><Invoice><Name>ACME GmbH</Name>
+<EUTaxNumber>DE123456789</EUTaxNumber><CustomerType>company</CustomerType>
+</Invoice></Addresses></Customer></Order></Orders>`,
+    )[0]!;
+    assert.equal(company.buyerEuTaxNumber, "DE123456789");
+    assert.equal(company.buyerCustomerType, "company");
+
+    const privatePerson = parseUnasOrderResponse(
+      `<Orders><Order><Key>UN-9</Key>
+<Customer><Addresses><Invoice><Name>Kovács Anna</Name>
+<CustomerType>private</CustomerType></Invoice></Addresses></Customer></Order></Orders>`,
+    )[0]!;
+    assert.equal(privatePerson.buyerEuTaxNumber, null);
+    assert.equal(privatePerson.buyerCustomerType, "private");
+
+    const noInvoiceAddress = parseUnasOrderResponse(
+      "<Orders><Order><Key>UN-10</Key></Order></Orders>",
+    )[0]!;
+    assert.equal(noInvoiceAddress.buyerInvoiceName, null);
+    assert.equal(noInvoiceAddress.buyerEuTaxNumber, null);
+    assert.equal(noInvoiceAddress.buyerCustomerType, null);
+  });
+
+  it("normalizes an unrecognized CustomerType value to null rather than guessing", () => {
+    const order = parseUnasOrderResponse(
+      `<Orders><Order><Key>UN-11</Key>
+<Customer><Addresses><Invoice><Name>Test</Name>
+<CustomerType>some_future_type</CustomerType></Invoice></Addresses></Customer></Order></Orders>`,
+    )[0]!;
+    assert.equal(order.buyerCustomerType, null);
+  });
 });
 
 describe("UNAS API transport policy", () => {

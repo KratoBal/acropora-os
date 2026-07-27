@@ -51,3 +51,40 @@ csak ez után, ehhez képest egyeztető szerepben épül tovább. A meglévő
 NAV-alapú bevételezési UI/kód (`/beszerzes/nav-szamlak`,
 `NavIncomingInvoice`, `nav-online-invoice.client.ts`) érintetlen marad,
 amíg a tulajdonos külön jóvá nem hagyja a leváltását.
+
+## ADR-006 – M8.2 kimenő automatikus számlázás visszabontása read-only UNAS-tükörré
+
+**Dátum:** 2026-07-27
+
+**Döntés:** a korábban megépített M8.2 "kimenő automatikus számlázás" (worker
++ állapotgép + lease/retry + Számlázz.hu Agent API `createInvoice` hívás +
+UNAS-visszaírás) teljes egészében visszabontásra került. A webshop
+(UNAS) rendelésekhez tartozó kimenő számlát **soha nem** az Acropora OS
+állítja ki – azt a UNAS beépített Számlázz.hu-modulja végzi. Az Acropora
+OS ehelyett egyirányú, read-only tükröt vezet: a meglévő UNAS
+rendelésszinkron (`unas-order-sync`) a `getOrder` válasz
+`Invoice.Status`/`Number`/`Url` mezőit `SalesOrder.unasInvoiceStatus`-ba
+és egy általános `Invoice` sorba (`source=UNAS`) másolja, konfliktus
+esetén (két rendelés ugyanarra a számlaszámra) felülírás nélkül. Ez lezárja
+a korábban nyitott architektúra-kérdést (lásd
+`ACROPORA-OS-MASTER-MILESTONE-PLAN.md`, "M8 – Számlázz.hu Integration and
+Invoice Registry", "Végleges architektúra (2026-07-27)" alfejezet, A) pont).
+
+**Miért:** a UNAS Számlázz.hu-modulja már ki van fizetve és üzemel a
+webshopon – egy párhuzamos, Acropora OS-oldali `createInvoice`-hívás
+dupla számlázás, számsorrend-ütközés és jogi/adózási kockázat nélkül nem
+építhető biztonságosan a jelenlegi UNAS-adatstruktúra mellett (nincs
+UNAS-oldali "foglalás"/zárolás a dupla kiállítás ellen). Az egyirányú,
+read-only tükrözés ugyanazt az üzleti célt (a webshop-számla adatai
+látszanak Acropora OS-ben) kockázat nélkül szolgálja ki.
+
+**Hogyan alkalmazzuk:** az Acropora OS soha nem hív Számlázz.hu Agent API
+`createInvoice`-t webshop-rendeléshez, soha nem ír vissza számlaadatot a
+UNAS-ba, és nem futtat számlázási workert/ütemezőt/lease-állapotgépet.
+Hiányzó UNAS-adatot (dátum, összeg) nem szabad kitalálni vagy
+rendelés-összegből levezetni – ezek a mezők `null` maradnak, amíg a
+Számlázz.hu pénzügyi adatkapcsolat (M8.3, még nem implementált) utólag,
+`invoiceNumber` alapján párosítva fel nem tölti őket. A nem-webshopos
+(munkalap/POS/kézi) kimenő számlázás – ahol Acropora OS ténylegesen
+kezdeményezhet Számlázz.hu API-hívást – külön, jövőbeli mérföldkő, ez a
+döntés nem vonatkozik rá (lásd a milestone-terv C) pontja).

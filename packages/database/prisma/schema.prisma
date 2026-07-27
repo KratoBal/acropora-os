@@ -182,6 +182,20 @@ enum SalesChannel {
   API
 }
 
+/// A UNAS rendelés saját, dedikált Invoice.Status mezőjének read-only
+/// tükrözése (getOrder API, "Adatszerkezet" dokumentáció) - NEM a UNAS
+/// rendelésstátusz (Status/StatusType), hanem egy attól független
+/// számlázás-állapot mező. 0=NOT_BILLABLE, 1=BILLABLE ("Számlázható"),
+/// 2=BILLED ("Számlázva"). Az Acropora OS ezt kizárólag olvassa - a
+/// tényleges kimenő webshop-számlázást a UNAS beépített Számlázz.hu modulja
+/// végzi, Acropora OS-en kívül (lásd docs/ACROPORA-OS-MASTER-MILESTONE-PLAN.md
+/// "Kimenő számlázás architektúrája").
+enum UnasInvoiceStatus {
+  NOT_BILLABLE
+  BILLABLE
+  BILLED
+}
+
 enum CustomerType {
   PERSON
   COMPANY
@@ -307,12 +321,16 @@ enum InvoiceDocumentType {
 /// Az adott Invoice-sor rögzítésének eredeti adatforrása. A NAV itt csak
 /// egyeztetési/import célból jelenhet meg (lásd ADR-005) - a napi
 /// Számlázz.hu <-> NAV egyeztetés eredményeként keletkező eltérés-jelzés
-/// külön, még nem modellezett entitás lesz (M9 munka).
+/// külön, még nem modellezett entitás lesz (M9 munka). UNAS: a webshop
+/// rendelés UNAS getOrder válaszából (Invoice.Number/Url/Status) read-only
+/// tükrözött, ténylegesen a UNAS beépített Számlázz.hu modulja által
+/// kiállított számla - az Acropora OS ezt sosem maga hozza létre.
 enum InvoiceSource {
   SZAMLAZZ
   NAV
   MANUAL
   IMPORT
+  UNAS
 }
 
 enum InvoiceSyncStatus {
@@ -963,12 +981,36 @@ model SalesOrder {
   soldById         String?
   /// A kiegyenlítés módja (jelenleg csak POS eladásoknál kötelező).
   paymentMethod    PosPaymentMethod?
-  /// Előkészítve a jövőbeli számlázz.hu integrációhoz; ma még nem használt.
-  invoiceRequested Boolean           @default(false)
+  /// A UNAS-oldali Invoice.Status (getOrder API) legutóbb szinkronizált,
+  /// read-only tükrözése - lásd UnasInvoiceStatus doc-comment. Null = nem
+  /// UNAS-eredetű rendelés, vagy még nem érkezett hozzá UNAS-szinkron. Az
+  /// Acropora OS ezt sosem írja vissza a UNAS-ba, és nem is kezdeményez
+  /// belőle számlázást - lásd docs/ACROPORA-OS-MASTER-MILESTONE-PLAN.md
+  /// "Kimenő számlázás architektúrája".
+  unasInvoiceStatus    UnasInvoiceStatus?
   /// Webshop (UNAS) rendeléseknél a vásárló neve; nincs még Customer modul,
   /// ezért csak megjelenítésre tárolt sima szöveg, nem kapcsolt entitás.
   buyerName        String?
   buyerEmail       String?
+  /// A UNAS Customer.Addresses.Invoice (számlázási cím) read-only
+  /// tükrözése - ugyanaz a "nincs még Customer modul" indok, mint
+  /// buyerName/buyerEmail esetén. Kizárólag megjelenítésre/riportálásra
+  /// és a UNAS-eredetű Invoice-tükör (lásd Invoice.source=UNAS)
+  /// partnerNévhez/adószámhoz szolgál - az Acropora OS ezekből nem épít
+  /// számlakérést. adószám nélküli (magánszemély) vevőnél buyerTaxNumber
+  /// null.
+  buyerTaxNumber   String?
+  /// UNAS Customer.Addresses.Invoice.EUTaxNumber - közösségi adószám,
+  /// megjelenítésre/riportálásra tükrözve.
+  buyerEuTaxNumber String?
+  /// UNAS Customer.Addresses.Invoice.CustomerType (private/company/
+  /// other_customer_without_tax_number) tükrözése - megjelenítésre és a
+  /// magánszemély/cég megkülönböztetésre.
+  buyerCustomerType String?
+  buyerCountryCode String?
+  buyerZip         String?
+  buyerCity        String?
+  buyerAddress     String?
   orderedAt        DateTime?
   confirmedAt      DateTime?
   completedAt      DateTime?
@@ -979,10 +1021,12 @@ model SalesOrder {
   warehouse Warehouse?       @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
   soldBy    User?            @relation(fields: [soldById], references: [id], onDelete: SetNull)
   lines     SalesOrderLine[]
+  invoices  Invoice[]
 
   @@index([status, createdAt])
   @@index([customerId, createdAt])
   @@index([channel, createdAt])
+  @@index([unasInvoiceStatus])
 }
 
 model SalesOrderLine {
@@ -1221,16 +1265,22 @@ model NavInvoiceSyncRun {
   @@index([status, createdAt])
 }
 
-/// A teljes bejövő+kimenő számlanyilvántartás (M8.4, ADR-005). Ez a
-/// Számlázz.hu push-fogadásból (elsődleges forrás) és a NAV napi
-/// egyeztetésből (másodlagos, ellenőrző forrás) táplálkozó, cégszintű
-/// számlaregiszter - NEM azonos a PurchaseInvoice-zal, ami a fizikai
-/// bevételezési/készlet-workflow bizonylata. Egy adott üzleti eseménynek
-/// (pl. egy beszállítói számla beérkezése) elvben mindkét oldalon lehet
-/// nyoma: a PurchaseInvoice a raktári bevételezést, az Invoice a pénzügyi
-/// nyilvántartást rögzíti. Az összekapcsolásuk (pl. közös
-/// supplierInvoiceNumber alapján) még nem implementált - lásd a
-/// docs/DECISIONS.md ADR-005 nyitott kérdését erről.
+/// A teljes bejövő+kimenő számlanyilvántartás (M8.4, ADR-005) - forrástól
+/// független modell, hogy a jövőben ide kerülhessen: a Számlázz.hu
+/// Online Pénzügyi Adatkapcsolatból érkező bejövő bizonylat (elsődleges
+/// forrás, még nem implementálva), a NAV napi egyeztetés (másodlagos,
+/// ellenőrző forrás, még nem implementálva), a webshop (UNAS) rendelésekhez
+/// tartozó, UNAS getOrder API-ból read-only tükrözött kimenő számla
+/// (source=UNAS - lásd Invoice.source doc-comment; ezt a UNAS beépített
+/// Számlázz.hu modulja állítja ki, NEM az Acropora OS), és később az
+/// Acropora OS saját kezdeményezésű, nem webshopos számlázása (pl.
+/// munkalap/POS/kézi számla, még nem implementálva). NEM azonos a
+/// PurchaseInvoice-zal, ami a fizikai bevételezési/készlet-workflow
+/// bizonylata. Egy adott üzleti eseménynek (pl. egy beszállítói számla
+/// beérkezése) elvben mindkét oldalon lehet nyoma: a PurchaseInvoice a
+/// raktári bevételezést, az Invoice a pénzügyi nyilvántartást rögzíti. Az
+/// összekapcsolásuk (pl. közös supplierInvoiceNumber alapján) még nem
+/// implementált - lásd a docs/DECISIONS.md ADR-005 nyitott kérdését erről.
 model Invoice {
   id           String              @id @default(cuid())
   direction    InvoiceDirection
@@ -1246,15 +1296,29 @@ model Invoice {
   partnerTaxNumber  String?
   customerId        String?
   supplierId        String?
-  issueDate         DateTime
+  /// A kapcsolódó webshop (UNAS) rendelés, ha van - elsősorban a
+  /// source=UNAS read-only számlatükörnél töltött (lásd Invoice.source
+  /// doc-comment). Szándékosan nem unique - egy rendeléshez később
+  /// jóváíró/sztornó számla is tartozhat; a duplikálás elleni védelem a
+  /// @@unique([source, invoiceNumber]) megkötés, nem ez a mező.
+  salesOrderId      String?
+  /// A UNAS getOrder API nem ad számla-kiállítási dátumot (az Invoice
+  /// alobjektum csak Status/StatusText/Number/Url mezőt dokumentál - lásd
+  /// unas.hu/tudastar/api/megrendelesek-adatszerkezet), ezért source=UNAS
+  /// soroknál ez null: nem találgatjuk a szinkron időpontjából.
+  issueDate         DateTime?
   fulfillmentDate   DateTime?
   dueDate           DateTime?
   /// ISO 4217 pénznemkód.
   currency          String              @default("HUF") @db.VarChar(3)
   exchangeRate      Decimal?            @db.Decimal(19, 6)
-  netAmount         Decimal             @db.Decimal(19, 4)
-  vatAmount         Decimal             @db.Decimal(19, 4)
-  grossAmount       Decimal             @db.Decimal(19, 4)
+  /// A UNAS getOrder API nem ad összeget a rendelés Invoice alobjektumában
+  /// (csak Status/Number/Url) - source=UNAS soroknál ez a három összeg-mező
+  /// null, NEM 0, amíg egy valódi számlaösszeg-forrás (pl. Számlázz.hu
+  /// Online Pénzügyi Adatkapcsolat) nincs bekötve.
+  netAmount         Decimal?            @db.Decimal(19, 4)
+  vatAmount         Decimal?            @db.Decimal(19, 4)
+  grossAmount       Decimal?            @db.Decimal(19, 4)
   isPaid            Boolean             @default(false)
   paidAt            DateTime?
   /// Sztornó/helyesbítő bizonylatnál az eredeti számlára mutat.
@@ -1264,6 +1328,12 @@ model Invoice {
   /// Nyers XML megőrzése objektumtár-kulcsként, nem DB-blobként (7.5).
   rawPayloadStorageKey String?
   pdfStorageKey     String?
+  /// Egy külső rendszer (pl. UNAS Invoice.Url, ami valójában a Számlázz.hu
+  /// által hosztolt PDF linkje) által adott, közvetlenül elérhető
+  /// számla-URL - NEM object-storage kulcs (lásd pdfStorageKey fent), csak
+  /// akkor töltött, ha a forrás API ténylegesen adott ilyet; üres/hiányzó
+  /// válasz esetén marad null, sosem generált/kitalált érték.
+  externalUrl       String?
   bookkeepingStatus String?
   tags              String[]
   note              String?
@@ -1272,14 +1342,20 @@ model Invoice {
 
   customer           Customer?     @relation(fields: [customerId], references: [id])
   supplier            Supplier?     @relation(fields: [supplierId], references: [id])
+  salesOrder          SalesOrder?   @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
   referencedInvoice   Invoice?      @relation("InvoiceCorrectionChain", fields: [referencedInvoiceId], references: [id])
   correctionInvoices  Invoice[]     @relation("InvoiceCorrectionChain")
   lines               InvoiceLine[]
 
   @@unique([source, szamlazzInvoiceId])
+  /// Idempotencia-kulcs a UNAS read-only számlatükör upsertjéhez (és
+  /// általában: egy adott forrás sosem adhatja ki kétszer ugyanazt a
+  /// számlaszámot) - lásd unas-order-sync.repository.ts syncInvoiceMirror.
+  @@unique([source, invoiceNumber])
   @@index([direction, issueDate])
   @@index([partnerTaxNumber])
   @@index([syncStatus])
+  @@index([salesOrderId])
 }
 
 model InvoiceLine {

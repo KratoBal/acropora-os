@@ -8,7 +8,7 @@ import type {
 } from "@acropora/types";
 
 // Hand-written instead of `Prisma.SalesOrderGetPayload<...>`: several of the
-// fields read here (warehouseId, soldById, paymentMethod, invoiceRequested,
+// fields read here (warehouseId, soldById, paymentMethod, unasInvoiceStatus,
 // completedAt on SalesOrder; syncStatus, syncError on SalesOrderLine) were
 // added to the schema in the same change as this module, and the Prisma
 // Client checked into node_modules hasn't been regenerated against it
