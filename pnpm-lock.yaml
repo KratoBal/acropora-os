@@ -165,6 +165,9 @@ importers:
       '@prisma/client':
         specifier: ^6.19.3
         version: 6.19.3(prisma@6.19.3(typescript@6.0.3))(typescript@6.0.3)
+      prisma:
+        specifier: ^6.19.3
+        version: 6.19.3(typescript@6.0.3)
     devDependencies:
       '@acropora/config':
         specifier: workspace:*
@@ -172,9 +175,6 @@ importers:
       '@types/node':
         specifier: ^26.1.1
         version: 26.1.1
-      prisma:
-        specifier: ^6.19.3
-        version: 6.19.3(typescript@6.0.3)
       tsx:
         specifier: ^4.23.1
         version: 4.23.1
