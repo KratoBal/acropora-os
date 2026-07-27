@@ -7,6 +7,7 @@ import {
   UnasOrderSyncRepository,
   type UnasOrderSyncDatabase,
 } from "./unas-order-sync.repository.js";
+import type { SalesOrderWithRelations } from "./unas-order-sync.types.js";
 
 interface FakeOrderLine {
   id: string;
@@ -1114,5 +1115,97 @@ describe("UnasOrderSyncRepository.findStockDiscrepancies", () => {
 
     assert.equal(report.checkedCount, 0);
     assert.equal(report.mismatches.length, 0);
+  });
+});
+
+// A small, purpose-built fake instead of extending the big FakeDb above:
+// FakeDb's salesOrder.findUnique returns the narrow { id, status,
+// unasInvoiceStatus, lines } shape apply() selects internally (see its
+// own comment re: mirroring the real select), not the wider detail shape
+// findById() needs (orderNumber, buyerName, totals, invoices, ...) - and
+// this task deliberately doesn't touch anything apply()-related, so it
+// doesn't widen a fake that dozens of existing apply() tests depend on.
+describe("UnasOrderSyncRepository.findById", () => {
+  function repositoryWithOrder(
+    order: SalesOrderWithRelations | null,
+    referenceMetadata: Record<string, unknown> | null = null,
+  ) {
+    const fakeDatabase = {
+      salesOrder: { findUnique: async () => order },
+      externalReference: {
+        findUnique: async () =>
+          order ? { metadata: referenceMetadata } : null,
+      },
+    } as unknown as UnasOrderSyncDatabase;
+    return new UnasOrderSyncRepository(fakeDatabase);
+  }
+
+  it("returns null for an unknown order id instead of throwing", async () => {
+    const repository = repositoryWithOrder(null);
+    assert.equal(await repository.findById("missing"), null);
+  });
+
+  it("includes the mirrored UNAS invoice in the detail response when one exists", async () => {
+    const order: SalesOrderWithRelations = {
+      id: "order-1",
+      orderNumber: "UNAS-47679-738905",
+      status: "CONFIRMED",
+      buyerName: "Nagy Péter",
+      buyerEmail: "nagy.peter@example.com",
+      currency: "HUF",
+      totalNet: new Prisma.Decimal("10000"),
+      totalTax: new Prisma.Decimal("2700"),
+      totalGross: new Prisma.Decimal("12700"),
+      orderedAt: new Date("2026-07-20T14:05:00.000Z"),
+      createdAt: new Date("2026-07-20T14:06:00.000Z"),
+      lines: [],
+      unasInvoiceStatus: "BILLED",
+      invoices: [
+        {
+          id: "invoice-1",
+          invoiceNumber: "SZ-2026-000123",
+          externalUrl: "https://szamlazz.hu/szamla/SZ-2026-000123.pdf",
+          syncStatus: "RECEIVED",
+          createdAt: new Date("2026-07-21T09:00:00.000Z"),
+        },
+      ],
+    };
+    const repository = repositoryWithOrder(order, { unasStatus: "Lezárva" });
+
+    const detail = await repository.findById("order-1");
+
+    assert.equal(detail?.unasInvoiceStatus, "BILLED");
+    assert.equal(detail?.invoices.length, 1);
+    assert.equal(detail?.invoices[0]?.invoiceNumber, "SZ-2026-000123");
+    assert.equal(
+      detail?.invoices[0]?.externalUrl,
+      "https://szamlazz.hu/szamla/SZ-2026-000123.pdf",
+    );
+    assert.equal(detail?.unasStatusLabel, "Lezárva");
+  });
+
+  it("returns an empty invoices array for an order UNAS has never billed", async () => {
+    const order: SalesOrderWithRelations = {
+      id: "order-2",
+      orderNumber: "UNAS-1002",
+      status: "CONFIRMED",
+      buyerName: "Kiss Éva",
+      buyerEmail: null,
+      currency: "HUF",
+      totalNet: new Prisma.Decimal("5000"),
+      totalTax: new Prisma.Decimal("1350"),
+      totalGross: new Prisma.Decimal("6350"),
+      orderedAt: new Date("2026-07-22T10:00:00.000Z"),
+      createdAt: new Date("2026-07-22T10:01:00.000Z"),
+      lines: [],
+      unasInvoiceStatus: "BILLABLE",
+      invoices: [],
+    };
+    const repository = repositoryWithOrder(order);
+
+    const detail = await repository.findById("order-2");
+
+    assert.equal(detail?.unasInvoiceStatus, "BILLABLE");
+    assert.deepEqual(detail?.invoices, []);
   });
 });

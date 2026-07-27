@@ -37,7 +37,26 @@ const RECONCILIATION_EPSILON = "0.001";
 const json = (value: unknown) =>
   JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 
-const detailInclude = { lines: true } as const;
+// invoices: only the fields the order-detail view actually renders (see
+// UnasOrderInvoiceSummary and toUnasOrderDetail) - not amounts/dates,
+// which are always null on a source=UNAS Invoice row anyway (the UNAS
+// getOrder API never provides them, see Invoice.netAmount's doc-comment
+// in schema.prisma). orderBy so a future multi-invoice order (see
+// Invoice.salesOrderId's doc-comment re: correction/storno rows) renders
+// most-recent-first without the frontend having to sort.
+const detailInclude = {
+  lines: true,
+  invoices: {
+    select: {
+      id: true,
+      invoiceNumber: true,
+      externalUrl: true,
+      syncStatus: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "desc" },
+  },
+} as const;
 const listInclude = { _count: { select: { lines: true } } } as const;
 
 interface ExternalReferenceRow {

@@ -37,6 +37,41 @@ const STATUS_LABEL: Record<string, string> = {
   ON_HOLD: "Felfüggesztve",
 };
 
+// Literal-union-keyed (not Record<string, ...>, unlike STATUS_LABEL above)
+// so a future addition to UnasOrderDetail's unasInvoiceStatus/invoices
+// syncStatus union that's missed here is a compile error, not a silently
+// undefined badge/label at runtime.
+type UnasInvoiceStatus = NonNullable<UnasOrderDetail["unasInvoiceStatus"]>;
+type UnasInvoiceSyncStatus = UnasOrderDetail["invoices"][number]["syncStatus"];
+type BadgeVariant = "neutral" | "success" | "warning" | "danger" | "info";
+
+const INVOICE_STATUS_LABEL: Record<UnasInvoiceStatus, string> = {
+  NOT_BILLABLE: "Nem számlázható",
+  BILLABLE: "Számlázható",
+  BILLED: "Számlázva",
+};
+
+const INVOICE_STATUS_BADGE_VARIANT: Record<UnasInvoiceStatus, BadgeVariant> = {
+  NOT_BILLABLE: "neutral",
+  BILLABLE: "warning",
+  BILLED: "success",
+};
+
+const INVOICE_SYNC_STATUS_LABEL: Record<UnasInvoiceSyncStatus, string> = {
+  PENDING: "Feldolgozás alatt",
+  RECEIVED: "Fogadva",
+  ERROR: "Hiba",
+};
+
+const INVOICE_SYNC_STATUS_BADGE_VARIANT: Record<
+  UnasInvoiceSyncStatus,
+  BadgeVariant
+> = {
+  PENDING: "warning",
+  RECEIVED: "success",
+  ERROR: "danger",
+};
+
 export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
   const { session } = useAuth();
   const router = useRouter();
@@ -181,6 +216,64 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
                   </p>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <h2 className="text-sm font-semibold text-slate-900">Számla</h2>
+              <Badge
+                variant={
+                  detail.unasInvoiceStatus
+                    ? INVOICE_STATUS_BADGE_VARIANT[detail.unasInvoiceStatus]
+                    : "neutral"
+                }
+              >
+                {detail.unasInvoiceStatus
+                  ? INVOICE_STATUS_LABEL[detail.unasInvoiceStatus]
+                  : "Nincs adat"}
+              </Badge>
+            </CardHeader>
+            <CardContent>
+              {detail.invoices.length > 0 ? (
+                <ul className="divide-y divide-slate-100">
+                  {detail.invoices.map((invoice) => (
+                    <li
+                      key={invoice.id}
+                      className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
+                    >
+                      <div>
+                        <p className="text-slate-400">Számlaszám</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">
+                          {invoice.invoiceNumber}
+                        </p>
+                      </div>
+                      <Badge
+                        variant={
+                          INVOICE_SYNC_STATUS_BADGE_VARIANT[invoice.syncStatus]
+                        }
+                      >
+                        {INVOICE_SYNC_STATUS_LABEL[invoice.syncStatus]}
+                      </Badge>
+                      {invoice.externalUrl ? (
+                        <a
+                          href={invoice.externalUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-semibold text-sky-600 hover:text-sky-700"
+                        >
+                          Számla megnyitása ↗
+                        </a>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-slate-500">
+                  Ehhez a rendeléshez a UNAS egyelőre nem jelentett kiállított
+                  számlát.
+                </p>
+              )}
             </CardContent>
           </Card>
 

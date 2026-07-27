@@ -68,6 +68,27 @@ export interface UnasOrderLineDetail {
   syncError: string | null;
 }
 
+/**
+ * One read-only UNAS invoice-mirror row for a SalesOrder - see the
+ * `Invoice` Prisma model (source=UNAS) and
+ * `UnasOrderSyncRepository.syncInvoiceMirror()`. Only the fields the
+ * order-detail view needs, not a full Invoice representation - deliberately
+ * excludes amounts/dates, which the UNAS getOrder API never provides for
+ * its Invoice sub-object (see the Invoice.netAmount/vatAmount/grossAmount/
+ * issueDate doc-comments in schema.prisma) and would otherwise have to be
+ * faked as null everywhere they're rendered.
+ */
+export interface UnasOrderInvoiceSummary {
+  id: string;
+  /** Invoice.invoiceNumber - the human-readable number UNAS/Számlázz.hu assigned. */
+  invoiceNumber: string;
+  /** Invoice.externalUrl - UNAS/Számlázz.hu-hosted PDF link, if UNAS reported one. Null if UNAS gave a number but no URL (yet). */
+  externalUrl: string | null;
+  /** Invoice.syncStatus - whether this mirrored row was received/stored cleanly by our own sync, independent of anything UNAS-side. */
+  syncStatus: "PENDING" | "RECEIVED" | "ERROR";
+  createdAt: string;
+}
+
 export interface UnasOrderDetail {
   id: string;
   orderNumber: string;
@@ -86,6 +107,19 @@ export interface UnasOrderDetail {
   orderedAt: string | null;
   createdAt: string;
   lines: UnasOrderLineDetail[];
+  /**
+   * SalesOrder.unasInvoiceStatus - the UNAS-side Invoice.Status (getOrder
+   * API) last synced, read-only. Null = not yet synced, or the order has
+   * no UNAS billing info at all (e.g. synced before this field existed).
+   */
+  unasInvoiceStatus: "NOT_BILLABLE" | "BILLABLE" | "BILLED" | null;
+  /**
+   * Read-only UNAS invoice-mirror rows for this order (see
+   * UnasOrderInvoiceSummary). Empty array if UNAS hasn't reported a billed
+   * invoice for this order yet - never null, so callers don't need a
+   * separate "missing vs. empty" check.
+   */
+  invoices: UnasOrderInvoiceSummary[];
 }
 
 /// Egy SKU-szintű eltérés a helyi StockItem és a UNAS-on utoljára jelentett

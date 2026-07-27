@@ -189,6 +189,7 @@ export type {
   StockReconciliationMismatch,
   StockReconciliationReport,
   UnasOrderDetail,
+  UnasOrderInvoiceSummary,
   UnasOrderLineDetail,
   UnasOrderListItem,
   UnasOrderListResponse,
