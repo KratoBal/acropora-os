@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { Session, UnasOrderDetail } from "@acropora/types";
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,6 +11,7 @@ const navigation = vi.hoisted(() => ({
 
 const api = vi.hoisted(() => ({
   getOne: vi.fn(),
+  refreshOrder: vi.fn(),
 }));
 
 const auth = vi.hoisted(() => ({
@@ -44,6 +45,18 @@ const ownerSession: Session = {
   },
 };
 
+const viewerSession: Session = {
+  id: "session-viewer",
+  token: "token-viewer",
+  expiresAt: "2099-01-01T00:00:00.000Z",
+  user: {
+    id: "viewer",
+    email: "viewer@acropora.local",
+    displayName: "Acropora Néző",
+    role: "VIEWER",
+  },
+};
+
 function baseDetail(overrides: Partial<UnasOrderDetail> = {}): UnasOrderDetail {
   return {
     id: "order-1",
@@ -72,6 +85,7 @@ beforeEach(() => {
   auth.session = ownerSession;
   navigation.push.mockReset();
   api.getOne.mockReset();
+  api.refreshOrder.mockReset();
 });
 
 describe("WebshopOrderDetailPage - Számla kártya", () => {
@@ -149,7 +163,7 @@ describe("WebshopOrderDetailPage - Számla kártya", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("\"Nincs adat\" jelzést mutat, ha unasInvoiceStatus null (nem UNAS-eredetű vagy még nem szinkronizált rendelés)", async () => {
+  it('"Nincs adat" jelzést mutat, ha unasInvoiceStatus null (nem UNAS-eredetű vagy még nem szinkronizált rendelés)', async () => {
     api.getOne.mockResolvedValue(
       baseDetail({ unasInvoiceStatus: null, invoices: [] }),
     );
@@ -157,5 +171,124 @@ describe("WebshopOrderDetailPage - Számla kártya", () => {
     render(createElement(WebshopOrderDetailPage, { orderId: "order-1" }));
 
     expect(await screen.findByText("Nincs adat")).toBeInTheDocument();
+  });
+});
+
+describe("WebshopOrderDetailPage - Rendelés frissítése gomb", () => {
+  it("megjelenik orders.manage jogosultsággal", async () => {
+    api.getOne.mockResolvedValue(baseDetail());
+    render(createElement(WebshopOrderDetailPage, { orderId: "order-1" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Rendelés frissítése" }),
+    ).toBeInTheDocument();
+  });
+
+  it("nem jelenik meg orders.manage jogosultság nélkül", async () => {
+    // VIEWER has orders.view (sees the page normally) but not orders.manage
+    // (per ROLE_PERMISSIONS) - the order detail still renders, but the
+    // mutating "Rendelés frissítése" button must not.
+    auth.session = viewerSession;
+    api.getOne.mockResolvedValue(baseDetail());
+    render(createElement(WebshopOrderDetailPage, { orderId: "order-1" }));
+
+    expect(await screen.findByText("UNAS-47679-738905")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Rendelés frissítése" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("frissítés közben letiltott, betöltés-feliratú állapotot mutat", async () => {
+    api.getOne.mockResolvedValue(baseDetail());
+    let resolveRefresh: (value: UnasOrderDetail) => void = () => {};
+    api.refreshOrder.mockReturnValue(
+      new Promise<UnasOrderDetail>((resolve) => {
+        resolveRefresh = resolve;
+      }),
+    );
+    render(createElement(WebshopOrderDetailPage, { orderId: "order-1" }));
+    const button = await screen.findByRole("button", {
+      name: "Rendelés frissítése",
+    });
+
+    fireEvent.click(button);
+
+    const loadingButton = await screen.findByRole("button", {
+      name: "Frissítés…",
+    });
+    expect(loadingButton).toBeDisabled();
+
+    resolveRefresh(baseDetail());
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Rendelés frissítése" }),
+      ).not.toBeDisabled(),
+    );
+  });
+
+  it("sikeres frissítés után lecseréli a képernyőn látható rendelés- és számlaadatokat", async () => {
+    api.getOne.mockResolvedValue(
+      baseDetail({
+        status: "CONFIRMED",
+        unasInvoiceStatus: null,
+        invoices: [],
+      }),
+    );
+    api.refreshOrder.mockResolvedValue(
+      baseDetail({
+        status: "COMPLETED",
+        // Overrides baseDetail's default "Kiszállítás" - the status badge
+        // prefers unasStatusLabel over the STATUS_LABEL[status] fallback
+        // (see the component), so this must be cleared for the refreshed
+        // "Lezárva" (COMPLETED) label to actually be the one rendered.
+        unasStatusLabel: null,
+        unasInvoiceStatus: "BILLED",
+        invoices: [
+          {
+            id: "invoice-1",
+            invoiceNumber: "SZ-2026-000200",
+            externalUrl: "https://szamlazz.hu/szamla/SZ-2026-000200.pdf",
+            syncStatus: "RECEIVED",
+            createdAt: "2026-07-26T09:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    render(createElement(WebshopOrderDetailPage, { orderId: "order-1" }));
+    const button = await screen.findByRole("button", {
+      name: "Rendelés frissítése",
+    });
+
+    fireEvent.click(button);
+
+    expect(await screen.findByText("Lezárva")).toBeInTheDocument();
+    expect(await screen.findByText("SZ-2026-000200")).toBeInTheDocument();
+    expect(screen.getByText("Számlázva")).toBeInTheDocument();
+    expect(
+      screen.getByText(/A rendelés adatai frissültek/),
+    ).toBeInTheDocument();
+    expect(api.refreshOrder).toHaveBeenCalledWith("token-owner", "order-1");
+  });
+
+  it("hiba esetén egyértelmű hibaüzenetet mutat, és nem cseréli le a meglévő adatokat", async () => {
+    api.getOne.mockResolvedValue(baseDetail({ status: "CONFIRMED" }));
+    api.refreshOrder.mockRejectedValue(
+      new Error("A UNAS API átmenetileg nem elérhető."),
+    );
+    render(createElement(WebshopOrderDetailPage, { orderId: "order-1" }));
+    const button = await screen.findByRole("button", {
+      name: "Rendelés frissítése",
+    });
+
+    fireEvent.click(button);
+
+    expect(
+      await screen.findByText("A UNAS API átmenetileg nem elérhető."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("A rendelés frissítése nem sikerült"),
+    ).toBeInTheDocument();
+    // The order detail already on screen is untouched by the failed refresh.
+    expect(screen.getByText("Nagy Péter")).toBeInTheDocument();
   });
 });

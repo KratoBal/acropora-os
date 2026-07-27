@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { UnasApiOrder } from "@acropora/types";
+import { NotFoundException } from "@nestjs/common";
+import type { UnasApiOrder, UnasOrderDetail } from "@acropora/types";
 
 import type { UnasApiClient } from "../../imports/unas/unas-api.client.js";
 import type { UnasOrderSyncRepository } from "./unas-order-sync.repository.js";
@@ -180,5 +181,105 @@ describe("UnasOrderSyncService.runIncremental", () => {
       false,
     );
     assert.equal(calls.at(-1)?.operation, "failed");
+  });
+});
+
+function detail(overrides: Partial<UnasOrderDetail> = {}): UnasOrderDetail {
+  return {
+    id: "order-1",
+    orderNumber: "UNAS-UN-1",
+    status: "CONFIRMED",
+    unasStatusLabel: null,
+    buyerName: "Kovács Anna",
+    buyerEmail: "vevo@example.com",
+    paymentName: null,
+    paymentStatus: null,
+    shippingName: null,
+    currency: "HUF",
+    totalNet: "1000",
+    totalTax: "270",
+    totalGross: "1270",
+    orderedAt: null,
+    createdAt: "2026-07-20T14:05:00.000Z",
+    lines: [],
+    unasInvoiceStatus: null,
+    invoices: [],
+    ...overrides,
+  };
+}
+
+describe("UnasOrderSyncService.refreshOrder", () => {
+  function fixture(input?: {
+    key?: string | null;
+    fetchedOrder?: UnasApiOrder | null;
+    detailAfterRefresh?: UnasOrderDetail | null;
+  }) {
+    const calls: Array<{ operation: string; input?: unknown }> = [];
+    const api = {
+      getOrderByKey: async (_token: string, key: string) => {
+        calls.push({ operation: "getOrderByKey", input: key });
+        return input?.fetchedOrder ?? order("UN-1");
+      },
+    } as unknown as UnasApiClient;
+    const repository = {
+      getUnasKey: async (orderId: string) => {
+        calls.push({ operation: "getUnasKey", input: orderId });
+        return input?.key === undefined ? "UN-1" : input.key;
+      },
+      refreshOrder: async (orderId: string, fetched: UnasApiOrder) => {
+        calls.push({ operation: "refreshOrder", input: { orderId, fetched } });
+        return { updated: true, reversed: false };
+      },
+      findById: async (orderId: string) => {
+        calls.push({ operation: "findById", input: orderId });
+        return input?.detailAfterRefresh === undefined
+          ? detail({ id: orderId })
+          : input.detailAfterRefresh;
+      },
+    } as unknown as UnasOrderSyncRepository;
+    return { service: new UnasOrderSyncService(api, repository), calls };
+  }
+
+  it("fetches only the targeted order by its UNAS Key, refreshes it, and returns the freshly re-read detail", async () => {
+    const { service, calls } = fixture();
+
+    const result = await service.refreshOrder("token", "order-1");
+
+    assert.equal(
+      calls.map((call) => call.operation).join(","),
+      "getUnasKey,getOrderByKey,refreshOrder,findById",
+    );
+    assert.equal(
+      calls.find((call) => call.operation === "getOrderByKey")?.input,
+      "UN-1",
+    );
+    assert.equal(result.id, "order-1");
+  });
+
+  it("throws 404 when the order was never UNAS-synced (no Key on file)", async () => {
+    const { service } = fixture({ key: null });
+
+    await assert.rejects(
+      () => service.refreshOrder("token", "order-1"),
+      (error) => error instanceof NotFoundException,
+    );
+  });
+
+  it("throws 404 when UNAS no longer has an order under that Key", async () => {
+    const { service } = fixture({ fetchedOrder: null });
+
+    await assert.rejects(
+      () => service.refreshOrder("token", "order-1"),
+      (error) => error instanceof NotFoundException,
+    );
+  });
+
+  it("throws 404 if the order can no longer be found locally after applying the refresh", async () => {
+    const { service } = fixture({ detailAfterRefresh: null });
+
+    await assert.rejects(
+      () => service.refreshOrder("token", "order-1"),
+      (error) => error instanceof NotFoundException,
+    );
   });
 });

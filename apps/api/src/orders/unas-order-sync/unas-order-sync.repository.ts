@@ -90,6 +90,60 @@ interface LineInput {
   lineGross: Prisma.Decimal;
   syncStatus: "OK" | "FAILED";
   syncError: string | null;
+  /// True for UNAS's own technical cost/discount line items (see
+  /// isTechnicalCostItem below) - carried alongside the row instead of
+  /// re-derived from variantId/syncStatus in syncLines(), because a
+  /// variantId===null + syncStatus==="OK" row is ALSO what a genuine
+  /// no-SKU special line already looks like, and (before this field
+  /// existed) so would a syncStatus==="FAILED" UNKNOWN_SKU row that syncLines
+  /// must NOT be silently reclassified as non-stock - only an item this
+  /// function positively identified as a technical cost line should ever
+  /// force an existing line back to non-stock in syncLines().
+  isTechnicalCost: boolean;
+}
+
+/// UNAS's own documented special Items.Item.Id values for order-level cost
+/// lines (unas.hu/tudastar/api/megrendelesek-adatszerkezet, "Items.Item.Id"
+/// - "handel-cost" kezelési költség, "shipping-cost" szállítási költség).
+/// "handling-cost" isn't in UNAS's own documented list but is matched
+/// defensively too, in case a different UNAS API version/webshop
+/// configuration ever emits it. These must never be treated as real,
+/// stock-tracked products, under any circumstance, even if a webshop
+/// configuration somehow attaches a real-looking Sku to one (see
+/// isTechnicalCostItem below for why Sku/Name are checked too, not just Id).
+const TECHNICAL_COST_ITEM_IDENTIFIERS = new Set([
+  "shipping-cost",
+  "handel-cost",
+  "handling-cost",
+]);
+
+/// Recognizes a UNAS order item as a technical cost/discount line (never a
+/// real, stock-tracked product) by Id, Sku, or Name - not just Id, even
+/// though UNAS's own docs say these should only ever appear via a special
+/// Id and no Sku. Checking Sku/Name too is deliberate defense-in-depth: if
+/// a webshop configuration or a future UNAS API version ever attaches a
+/// real-looking Sku (or a product-like Name) to one of these rows, it must
+/// still never be resolved against ProductVariant / never enter a stock
+/// movement - see buildLineInputs and the syncLines() correction below.
+function isTechnicalCostItem(item: UnasApiOrder["items"][number]): boolean {
+  return [item.id, item.sku, item.name]
+    .filter((candidate): candidate is string => Boolean(candidate))
+    .some((candidate) =>
+      TECHNICAL_COST_ITEM_IDENTIFIERS.has(candidate.trim().toLowerCase()),
+    );
+}
+
+/// LineInput.isTechnicalCost exists purely for internal correction logic
+/// (see syncLines' isTechnicalCost branch below) - it isn't, and must never
+/// become, a SalesOrderLine column. Every call site that hands a LineInput
+/// to Prisma's salesOrderLine create/nested-create MUST route through this
+/// first, or the extra property would fail as an unknown Prisma argument at
+/// runtime (TS's excess-property check doesn't catch this through a spread).
+function toLineCreateData(
+  input: LineInput,
+): Omit<LineInput, "isTechnicalCost"> {
+  const { isTechnicalCost: _isTechnicalCost, ...data } = input;
+  return data;
 }
 
 interface UnasOrderSyncTransaction extends WarehouseLookupDatabase {
@@ -178,7 +232,9 @@ export interface UnasOrderSyncDatabase {
     ): Promise<Array<{ variantId: string; onHand: Prisma.Decimal }>>;
   };
   externalReference: {
-    findUnique(args: unknown): Promise<{ metadata: Prisma.JsonValue } | null>;
+    findUnique(
+      args: unknown,
+    ): Promise<{ metadata: Prisma.JsonValue; externalId: string } | null>;
     findMany(
       args: unknown,
     ): Promise<Array<{ entityId: string; metadata: Prisma.JsonValue }>>;
@@ -256,8 +312,7 @@ async function buildLineInputs(
   stockLines: Array<{ variantId: string; quantity: Prisma.Decimal }>;
 }> {
   const lineInputs: LineInput[] = [];
-  const stockLines: Array<{ variantId: string; quantity: Prisma.Decimal }> =
-    [];
+  const stockLines: Array<{ variantId: string; quantity: Prisma.Decimal }> = [];
 
   for (const item of order.items) {
     const quantity = new Prisma.Decimal(item.quantity);
@@ -267,8 +322,32 @@ async function buildLineInputs(
       quantity,
     );
 
+    // Checked BEFORE the `!item.sku` branch below, and takes priority over
+    // it: a technical cost item is never stock-tracked even in the (per
+    // UNAS's own docs, unexpected) case where it does carry a Sku - see
+    // isTechnicalCostItem's own comment for why. Falling through to the
+    // ordinary ProductVariant lookup for one of these would risk either a
+    // spurious UNKNOWN_SKU "Hiba" badge, or, worse, a real stock deduction
+    // if the Sku ever happened to collide with an actual catalog SKU.
+    if (isTechnicalCostItem(item)) {
+      lineInputs.push({
+        variantId: null,
+        sku: item.sku ?? item.id,
+        description: item.name,
+        quantity,
+        unit: item.unit ?? "db",
+        unitNet,
+        taxRate,
+        lineGross,
+        syncStatus: "OK",
+        syncError: null,
+        isTechnicalCost: true,
+      });
+      continue;
+    }
+
     if (!item.sku) {
-      // Non-stock line (shipping-cost, discount-amount, etc.): counts
+      // Non-stock line (discount-amount, discount-percent, etc.): counts
       // toward the order total but never toward stock.
       lineInputs.push({
         variantId: null,
@@ -281,6 +360,7 @@ async function buildLineInputs(
         lineGross,
         syncStatus: "OK",
         syncError: null,
+        isTechnicalCost: false,
       });
       continue;
     }
@@ -301,6 +381,7 @@ async function buildLineInputs(
         lineGross,
         syncStatus: "FAILED",
         syncError: `UNKNOWN_SKU:${item.sku}`,
+        isTechnicalCost: false,
       });
       continue;
     }
@@ -316,6 +397,7 @@ async function buildLineInputs(
       lineGross,
       syncStatus: "OK",
       syncError: null,
+      isTechnicalCost: false,
     });
     stockLines.push({ variantId: variant.id, quantity });
   }
@@ -455,134 +537,16 @@ export class UnasOrderSyncRepository extends Repository {
             continue;
           }
 
-          const existing = await transaction.salesOrder.findUnique({
-            where: { id: reference.entityId },
-            select: {
-              id: true,
-              status: true,
-              unasInvoiceStatus: true,
-              lines: {
-                select: {
-                  id: true,
-                  sku: true,
-                  variantId: true,
-                  quantity: true,
-                  syncStatus: true,
-                },
-              },
-            },
-          });
-          if (!existing) continue; // Order row missing locally; nothing safe to reconcile against.
-
-          const newStatus = mapUnasOrderStatus(order.statusType);
-          const invoiceStatusChanged =
-            order.invoiceStatus !== existing.unasInvoiceStatus;
-          const billingFields = {
-            buyerName: order.buyerInvoiceName,
-            buyerTaxNumber: order.buyerTaxNumber,
-            buyerEuTaxNumber: order.buyerEuTaxNumber,
-            buyerCustomerType: order.buyerCustomerType,
-            buyerCountryCode: order.buyerCountryCode,
-            buyerZip: order.buyerZip,
-            buyerCity: order.buyerCity,
-            buyerAddress: order.buyerAddress,
-          };
-          const totals = orderTotals(order);
-
-          if (newStatus === "CANCELLED" && existing.status !== "CANCELLED") {
-            await this.reverseOrder(transaction, existing, warehouse.id);
-            reversedCount += 1;
-            await transaction.salesOrder.update({
-              where: { id: existing.id },
-              data: {
-                unasInvoiceStatus: order.invoiceStatus,
-                ...billingFields,
-              },
-            });
-          } else if (
-            newStatus === "CANCELLED" &&
-            existing.status === "CANCELLED"
-          ) {
-            // Repeated sighting of an order that's already CANCELLED
-            // locally and is still CANCELLED per UNAS (e.g. re-surfaced by
-            // the TimeModStart overlap window, or an admin comment bumping
-            // DateMod). Deliberately skipped entirely: NOT the live-order
-            // branch below (no syncLines - a dead order's line items don't
-            // need to track UNAS price/description edits, and re-running it
-            // would be pure waste) and NOT reverseOrder (already reversed
-            // exactly once when it first transitioned to CANCELLED - see
-            // the "reverses stock exactly once" test - re-running it would
-            // either double-reverse stock or, thanks to its own
-            // already-reversed guard, silently no-op every single poll,
-            // neither of which is useful). status/totals/billingFields are
-            // intentionally NOT rewritten here either, so a cancelled
-            // order's terminal state can never be perturbed by a later
-            // sighting. The only thing that may still legitimately change
-            // for an already-cancelled order is its UNAS-side invoice
-            // status (UNAS/Számlázz.hu can still bill or storno a
-            // cancelled order after the fact) - that alone is refreshed,
-            // conditionally, to avoid a no-op write on every stable
-            // resighting. The read-only invoice mirror itself
-            // (syncInvoiceMirror below) always runs regardless of this
-            // branch and reads straight from the fresh `order` payload, so
-            // it stays accurate even without touching SalesOrder here.
-            if (invoiceStatusChanged) {
-              await transaction.salesOrder.update({
-                where: { id: existing.id },
-                data: { unasInvoiceStatus: order.invoiceStatus },
-              });
-              updatedCount += 1;
-            }
-          } else {
-            // Every sighting of an already-known, still-live order refreshes
-            // its line items/prices/discounts/shipping/currency/totals from
-            // the fresh UNAS payload - not just on a status or invoice-status
-            // change. Previously only status + billing address were kept
-            // current, so a modified-but-not-yet-cancelled order's actual
-            // items/amounts could silently drift from what UNAS reports.
-            // Deliberately does NOT touch stock here: matched lines only
-            // have their pricing/description fields refreshed (no
-            // quantity-driven StockItem/StockMovement adjustment), and
-            // removed items are left in place rather than deleted -
-            // reconciling stock deltas for an edited order, and whether a
-            // UNAS-removed line should ever be deleted locally, is an open
-            // business decision, not something to guess at here (see
-            // docs/ACROPORA-OS-MASTER-MILESTONE-PLAN.md, "11. Nyitott
-            // üzleti döntések", #13).
-            await this.syncLines(transaction, existing, order);
-            await transaction.salesOrder.update({
-              where: { id: existing.id },
-              data: {
-                status: newStatus,
-                unasInvoiceStatus: order.invoiceStatus,
-                currency: order.currency ?? "HUF",
-                totalNet: totals.totalNet,
-                totalTax: totals.totalGross.minus(totals.totalNet),
-                totalGross: totals.totalGross,
-                ...billingFields,
-              },
-            });
-            if (newStatus !== existing.status || invoiceStatusChanged)
-              updatedCount += 1;
-          }
-
-          await this.syncInvoiceMirror(transaction, existing.id, order);
-
-          await transaction.externalReference.update({
-            where: { id: reference.id },
-            data: {
-              metadata: json({
-                unasStatus: order.status,
-                unasStatusType: order.statusType,
-                paymentName: order.paymentName,
-                paymentType: order.paymentType,
-                paymentStatus: order.paymentStatus,
-                shippingName: order.shippingName,
-                couponCode: order.couponCode,
-              }),
-              lastSyncedAt: windowEnd,
-            },
-          });
+          const result = await this.applyExistingOrderUpdate(
+            transaction,
+            reference,
+            order,
+            warehouse.id,
+            windowEnd,
+          );
+          if (result === null) continue; // Order row missing locally; nothing safe to reconcile against.
+          if (result.updated) updatedCount += 1;
+          if (result.reversed) reversedCount += 1;
         }
 
         await transaction.integrationCursor.upsert({
@@ -622,6 +586,226 @@ export class UnasOrderSyncRepository extends Repository {
       {
         isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
         timeout: 60_000,
+      },
+    );
+  }
+
+  /// Shared existing-order update logic for one UNAS order sighting -
+  /// status-transition (incl. one-time stock reversal on cancellation),
+  /// billing/line/total refresh, and the read-only invoice mirror. Used by
+  /// both apply()'s per-order batch loop and refreshOrder()'s single-order
+  /// path, so a manual refresh and a batch poll sighting of the same order
+  /// always produce identical results (e.g. a since-cancelled order still
+  /// gets reversed exactly once either way). Returns null if the
+  /// ExternalReference points at a SalesOrder row that no longer exists
+  /// locally (nothing safe to reconcile against); otherwise {updated,
+  /// reversed} flags for the caller to fold into its own counters (apply())
+  /// or ignore (refreshOrder()).
+  private async applyExistingOrderUpdate(
+    transaction: UnasOrderSyncTransaction,
+    reference: ExternalReferenceRow,
+    order: UnasApiOrder,
+    warehouseId: string,
+    syncedAt: Date,
+  ): Promise<{ updated: boolean; reversed: boolean } | null> {
+    const existing = await transaction.salesOrder.findUnique({
+      where: { id: reference.entityId },
+      select: {
+        id: true,
+        status: true,
+        unasInvoiceStatus: true,
+        lines: {
+          select: {
+            id: true,
+            sku: true,
+            variantId: true,
+            quantity: true,
+            syncStatus: true,
+          },
+        },
+      },
+    });
+    if (!existing) return null; // Order row missing locally; nothing safe to reconcile against.
+
+    let updated = false;
+    let reversed = false;
+
+    const newStatus = mapUnasOrderStatus(order.statusType);
+    const invoiceStatusChanged =
+      order.invoiceStatus !== existing.unasInvoiceStatus;
+    const billingFields = {
+      buyerName: order.buyerInvoiceName,
+      buyerTaxNumber: order.buyerTaxNumber,
+      buyerEuTaxNumber: order.buyerEuTaxNumber,
+      buyerCustomerType: order.buyerCustomerType,
+      buyerCountryCode: order.buyerCountryCode,
+      buyerZip: order.buyerZip,
+      buyerCity: order.buyerCity,
+      buyerAddress: order.buyerAddress,
+    };
+    const totals = orderTotals(order);
+
+    if (newStatus === "CANCELLED" && existing.status !== "CANCELLED") {
+      await this.reverseOrder(transaction, existing, warehouseId);
+      reversed = true;
+      await transaction.salesOrder.update({
+        where: { id: existing.id },
+        data: {
+          unasInvoiceStatus: order.invoiceStatus,
+          ...billingFields,
+        },
+      });
+    } else if (newStatus === "CANCELLED" && existing.status === "CANCELLED") {
+      // Repeated sighting of an order that's already CANCELLED locally and
+      // is still CANCELLED per UNAS (e.g. re-surfaced by the TimeModStart
+      // overlap window, an admin comment bumping DateMod, or a manual
+      // refresh of an already-cancelled order). Deliberately skipped
+      // entirely: NOT the live-order branch below (no syncLines - a dead
+      // order's line items don't need to track UNAS price/description
+      // edits, and re-running it would be pure waste) and NOT reverseOrder
+      // (already reversed exactly once when it first transitioned to
+      // CANCELLED - see the "reverses stock exactly once" test - re-running
+      // it would either double-reverse stock or, thanks to its own
+      // already-reversed guard, silently no-op every single call, neither
+      // of which is useful). status/totals/billingFields are intentionally
+      // NOT rewritten here either, so a cancelled order's terminal state
+      // can never be perturbed by a later sighting. The only thing that may
+      // still legitimately change for an already-cancelled order is its
+      // UNAS-side invoice status (UNAS/Számlázz.hu can still bill or storno
+      // a cancelled order after the fact) - that alone is refreshed,
+      // conditionally, to avoid a no-op write on every stable resighting.
+      // The read-only invoice mirror itself (syncInvoiceMirror below)
+      // always runs regardless of this branch and reads straight from the
+      // fresh `order` payload, so it stays accurate even without touching
+      // SalesOrder here.
+      if (invoiceStatusChanged) {
+        await transaction.salesOrder.update({
+          where: { id: existing.id },
+          data: { unasInvoiceStatus: order.invoiceStatus },
+        });
+        updated = true;
+      }
+    } else {
+      // Every sighting of an already-known, still-live order refreshes its
+      // line items/prices/discounts/shipping/currency/totals from the fresh
+      // UNAS payload - not just on a status or invoice-status change.
+      // Previously only status + billing address were kept current, so a
+      // modified-but-not-yet-cancelled order's actual items/amounts could
+      // silently drift from what UNAS reports. Deliberately does NOT touch
+      // stock here: matched lines only have their pricing/description
+      // fields refreshed (no quantity-driven StockItem/StockMovement
+      // adjustment), and removed items are left in place rather than
+      // deleted - reconciling stock deltas for an edited order, and whether
+      // a UNAS-removed line should ever be deleted locally, is an open
+      // business decision, not something to guess at here (see
+      // docs/ACROPORA-OS-MASTER-MILESTONE-PLAN.md, "11. Nyitott üzleti
+      // döntések", #13). syncLines also corrects any previously
+      // mis-stock-managed technical cost line (see isTechnicalCost) back to
+      // non-stock, regardless of which entry point (apply() or
+      // refreshOrder()) triggered this branch.
+      await this.syncLines(transaction, existing, order);
+      await transaction.salesOrder.update({
+        where: { id: existing.id },
+        data: {
+          status: newStatus,
+          unasInvoiceStatus: order.invoiceStatus,
+          currency: order.currency ?? "HUF",
+          totalNet: totals.totalNet,
+          totalTax: totals.totalGross.minus(totals.totalNet),
+          totalGross: totals.totalGross,
+          ...billingFields,
+        },
+      });
+      if (newStatus !== existing.status || invoiceStatusChanged) updated = true;
+    }
+
+    await this.syncInvoiceMirror(transaction, existing.id, order);
+
+    await transaction.externalReference.update({
+      where: { id: reference.id },
+      data: {
+        metadata: json({
+          unasStatus: order.status,
+          unasStatusType: order.statusType,
+          paymentName: order.paymentName,
+          paymentType: order.paymentType,
+          paymentStatus: order.paymentStatus,
+          shippingName: order.shippingName,
+          couponCode: order.couponCode,
+        }),
+        lastSyncedAt: syncedAt,
+      },
+    });
+
+    return { updated, reversed };
+  }
+
+  /// Looks up the UNAS order Key for a local SalesOrder id, for
+  /// refreshOrder()'s targeted single-order getOrder fetch. Null if this
+  /// order was never UNAS-synced (e.g. a purely local/POS order), in which
+  /// case there's nothing to refresh it against.
+  async getUnasKey(orderId: string): Promise<string | null> {
+    const reference = await this.syncDatabase.externalReference.findUnique({
+      where: {
+        system_entityType_entityId: {
+          system: "UNAS",
+          entityType: "SalesOrder",
+          entityId: orderId,
+        },
+      },
+    });
+    return reference?.externalId ?? null;
+  }
+
+  /// Manual single-order refresh: re-applies one already-fetched UNAS
+  /// order (fetched by the caller via the UNAS getOrder `Key` filter - see
+  /// UnasApiClient.getOrderByKey - never a time-window/batch fetch) through
+  /// the exact same applyExistingOrderUpdate logic apply() uses, in its own
+  /// short transaction. Deliberately never touches unasOrderSyncRun or
+  /// integrationCursor (both are only ever written inside apply()'s batch
+  /// transaction, above) - structurally guarantees the general incremental
+  /// sync cursor is unaffected by a manual refresh. Deliberately never calls
+  /// createNewOrder either (only reachable via apply()'s !reference branch)
+  /// - guarantees a refresh of an existing order can never create a second,
+  /// duplicate SALE stock movement, since only createNewOrder ever creates
+  /// one. Throws if the order's UNAS Key doesn't match the order this was
+  /// invoked for (defensive: would only happen if the local ExternalReference
+  /// and the fetched order's Key have somehow diverged), or if the order
+  /// isn't found locally at all.
+  async refreshOrder(
+    orderId: string,
+    order: UnasApiOrder,
+  ): Promise<{ updated: boolean; reversed: boolean }> {
+    return this.syncDatabase.$transaction(
+      async (transaction) => {
+        const reference = await transaction.externalReference.findUnique({
+          where: {
+            system_entityType_externalId: {
+              system: "UNAS",
+              entityType: "SalesOrder",
+              externalId: order.key,
+            },
+          },
+        });
+        if (!reference || reference.entityId !== orderId) {
+          throw new ConflictException("UNAS_ORDER_KEY_MISMATCH");
+        }
+
+        const warehouse = await ensureMainWarehouse(transaction);
+        const result = await this.applyExistingOrderUpdate(
+          transaction,
+          reference,
+          order,
+          warehouse.id,
+          new Date(),
+        );
+        if (result === null)
+          throw new NotFoundException("A rendelés nem található.");
+        return result;
+      },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        timeout: 30_000,
       },
     );
   }
@@ -668,7 +852,7 @@ export class UnasOrderSyncRepository extends Repository {
         totalTax: totals.totalGross.minus(totals.totalNet),
         totalGross: totals.totalGross,
         orderedAt: order.orderedAt ? new Date(order.orderedAt) : null,
-        lines: { create: lineInputs },
+        lines: { create: lineInputs.map(toLineCreateData) },
       },
     });
 
@@ -768,22 +952,38 @@ export class UnasOrderSyncRepository extends Repository {
             unitNet: input.unitNet,
             taxRate: input.taxRate,
             lineGross: input.lineGross,
-            // Only re-resolve variant linkage forward (FAILED -> OK, e.g. a
-            // product that was missing at order-creation time got added to
-            // the catalog since); never regress an already-OK, stock-linked
-            // line to FAILED just because of a transient lookup miss within
-            // this same pass, since buildLineInputs re-does the variantId
-            // lookup identically to order creation and would otherwise be
-            // safe to trust either way - kept one-directional purely to
-            // avoid ever silently unlinking stock history from a line.
-            ...(match.syncStatus === "FAILED" && input.syncStatus === "OK"
-              ? { variantId: input.variantId, syncStatus: "OK", syncError: null }
-              : {}),
+            // A technical cost line (shipping-cost/handel-cost/handling-cost,
+            // see isTechnicalCostItem) is always forced back to non-stock
+            // here, regardless of its current variantId/syncStatus - this is
+            // the "correction" path for a line that was previously
+            // mis-matched against a real ProductVariant (e.g. before this
+            // check existed, or because a webshop config attached a
+            // real-looking Sku to it). Checked before, and takes priority
+            // over, the ordinary FAILED->OK forward-resolution rule below,
+            // since a technical-cost line must never end up stock-linked no
+            // matter which direction the correction runs.
+            ...(input.isTechnicalCost
+              ? { variantId: null, syncStatus: "OK", syncError: null }
+              : // Only re-resolve variant linkage forward (FAILED -> OK, e.g. a
+                // product that was missing at order-creation time got added to
+                // the catalog since); never regress an already-OK, stock-linked
+                // line to FAILED just because of a transient lookup miss within
+                // this same pass, since buildLineInputs re-does the variantId
+                // lookup identically to order creation and would otherwise be
+                // safe to trust either way - kept one-directional purely to
+                // avoid ever silently unlinking stock history from a line.
+                match.syncStatus === "FAILED" && input.syncStatus === "OK"
+                ? {
+                    variantId: input.variantId,
+                    syncStatus: "OK",
+                    syncError: null,
+                  }
+                : {}),
           },
         });
       } else {
         await transaction.salesOrderLine.create({
-          data: { orderId: existing.id, ...input },
+          data: { orderId: existing.id, ...toLineCreateData(input) },
         });
       }
     }

@@ -79,10 +79,41 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.ORDERS_VIEW),
   );
+  const canManage = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.ORDERS_MANAGE),
+  );
 
   const [detail, setDetail] = useState<UnasOrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [refreshSuccessAt, setRefreshSuccessAt] = useState<Date | null>(null);
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    setRefreshError(null);
+    setRefreshSuccessAt(null);
+    void unasOrdersApi
+      .refreshOrder(token, orderId)
+      .then((refreshed) => {
+        // Replaces the on-screen order and invoice data with what the
+        // targeted UNAS refresh just returned - see
+        // UnasOrderSyncService.refreshOrder(), which re-reads via
+        // repository.findById() after applying the fetched order, so this
+        // is exactly the same detail shape as the initial GET above.
+        setDetail(refreshed);
+        setRefreshSuccessAt(new Date());
+      })
+      .catch((cause: unknown) =>
+        setRefreshError(
+          cause instanceof Error
+            ? cause.message
+            : "A rendelés frissítése nem sikerült.",
+        ),
+      )
+      .finally(() => setRefreshing(false));
+  };
 
   useEffect(() => {
     if (!canView) return;
@@ -117,9 +148,20 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
         title={detail ? detail.orderNumber : "Rendelés"}
         description="Webshop (UNAS) rendelés részletei"
         actions={
-          <Button variant="secondary" onClick={() => router.push("/webshop")}>
-            Vissza a listához
-          </Button>
+          <div className="flex gap-2">
+            {canManage && detail ? (
+              <Button
+                variant="primary"
+                onClick={handleRefresh}
+                disabled={refreshing}
+              >
+                {refreshing ? "Frissítés…" : "Rendelés frissítése"}
+              </Button>
+            ) : null}
+            <Button variant="secondary" onClick={() => router.push("/webshop")}>
+              Vissza a listához
+            </Button>
+          </div>
         }
       />
 
@@ -131,6 +173,22 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
 
       {error ? (
         <Alert variant="danger" title="Hiba történt" description={error} />
+      ) : null}
+
+      {refreshError ? (
+        <Alert
+          variant="danger"
+          title="A rendelés frissítése nem sikerült"
+          description={refreshError}
+        />
+      ) : null}
+
+      {refreshSuccessAt && !refreshError ? (
+        <Alert
+          variant="info"
+          title="A rendelés adatai frissültek"
+          description={`Utolsó UNAS-frissítés: ${refreshSuccessAt.toLocaleString("hu-HU")}`}
+        />
       ) : null}
 
       {detail ? (

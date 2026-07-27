@@ -33,6 +33,17 @@ export const unasOrdersApi = {
       token,
     );
   },
+  /** Manual single-order refresh ("Rendelés frissítése") - refetches only
+   * this order from UNAS by its own Key, never a general/time-window sync.
+   * Returns the fully refreshed order detail (incl. invoice data) so the
+   * caller can replace its on-screen state directly from the response. */
+  refreshOrder(token: string, id: string) {
+    return apiRequest<UnasOrderDetail>(
+      `/integrations/unas/orders/${encodeURIComponent(id)}/refresh`,
+      token,
+      { method: "POST" },
+    );
+  },
   triggerSync(token: string) {
     return apiRequest<UnasOrderSyncSummary>(
       `/integrations/unas/orders/sync`,

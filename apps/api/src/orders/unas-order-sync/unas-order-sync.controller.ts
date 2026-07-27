@@ -30,6 +30,19 @@ export class UnasOrderSyncController {
     return this.sync.runIncremental(token);
   }
 
+  // Manual single-order refresh ("Rendelés frissítése" a rendelés
+  // részletező oldalon) - same permission as the general sync trigger, not
+  // ORDERS_VIEW, since this actively mutates order/invoice/stock state.
+  // Fetches only this order from UNAS by its own Key; never a
+  // time-window/general sync, and never touches the incremental sync
+  // cursor - see UnasOrderSyncService.refreshOrder().
+  @Post(":id/refresh")
+  @RequirePermissions(PERMISSIONS.ORDERS_MANAGE)
+  async refresh(@Param("id") id: string) {
+    const token = await this.auth.getToken();
+    return this.sync.refreshOrder(token, id);
+  }
+
   @Get("sync-runs/:runId")
   @RequirePermissions(PERMISSIONS.ORDERS_VIEW)
   getRun(@Param("runId") runId: string) {

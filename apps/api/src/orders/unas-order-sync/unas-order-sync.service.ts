@@ -1,7 +1,8 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import type {
   StockReconciliationReport,
   UnasApiOrder,
+  UnasOrderDetail,
   UnasOrderSyncSummary,
 } from "@acropora/types";
 
@@ -27,9 +28,7 @@ export class UnasOrderSyncService {
     pageSize = DEFAULT_PAGE_SIZE,
   ): Promise<UnasOrderSyncSummary> {
     const cursor = await this.repository.getCursor();
-    const windowStart = cursor
-      ? new Date(cursor.getTime() - OVERLAP_MS)
-      : null;
+    const windowStart = cursor ? new Date(cursor.getTime() - OVERLAP_MS) : null;
     const runId = await this.repository.createRun({ windowStart, windowEnd });
     try {
       const orders = await this.downloadOrders(
@@ -53,7 +52,10 @@ export class UnasOrderSyncService {
         runId,
         reconciliation.mismatches.length,
       );
-      return { ...summary, stockMismatchCount: reconciliation.mismatches.length };
+      return {
+        ...summary,
+        stockMismatchCount: reconciliation.mismatches.length,
+      };
     } catch (error) {
       const errorCode =
         error instanceof Error ? error.message : "UNAS_ORDER_SYNC_FAILED";
@@ -64,6 +66,30 @@ export class UnasOrderSyncService {
 
   checkStockReconciliation(): Promise<StockReconciliationReport> {
     return this.repository.findStockDiscrepancies();
+  }
+
+  /// Manual single-order refresh (see the order-detail page's "Rendelés
+  /// frissítése" button): fetches exactly one order from UNAS by its own
+  /// Key - never a time-window/batch page, and never touches the general
+  /// incremental sync's cursor or run bookkeeping (both are only ever
+  /// written by runIncremental -> repository.apply()). Reuses
+  /// applyExistingOrderUpdate via repository.refreshOrder() so status
+  /// transitions, stock reversal, invoice mirroring, and technical-cost-line
+  /// correction all behave identically to a batch sighting of the same
+  /// order.
+  async refreshOrder(token: string, orderId: string): Promise<UnasOrderDetail> {
+    const key = await this.repository.getUnasKey(orderId);
+    if (!key)
+      throw new NotFoundException(
+        "Ehhez a rendeléshez nem tartozik UNAS-azonosító.",
+      );
+    const order = await this.api.getOrderByKey(token, key);
+    if (!order)
+      throw new NotFoundException("A rendelés már nem található a UNAS-ban.");
+    await this.repository.refreshOrder(orderId, order);
+    const detail = await this.repository.findById(orderId);
+    if (!detail) throw new NotFoundException("A rendelés nem található.");
+    return detail;
   }
 
   private async downloadOrders(
