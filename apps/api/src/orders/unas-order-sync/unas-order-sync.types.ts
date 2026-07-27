@@ -1,6 +1,7 @@
 import type { Prisma } from "@acropora/database";
 import type {
   UnasOrderDetail,
+  UnasOrderInvoiceSummary,
   UnasOrderLineDetail,
   UnasOrderListItem,
 } from "@acropora/types";
@@ -33,6 +34,18 @@ export interface SalesOrderWithRelations {
     lineGross: Prisma.Decimal;
     syncStatus: "PENDING" | "OK" | "FAILED";
     syncError: string | null;
+  }>;
+  /// UNAS-oldali Invoice.Status read-only tükrözése - lásd
+  /// SalesOrder.unasInvoiceStatus doc-comment a schema.prisma-ban.
+  unasInvoiceStatus: "NOT_BILLABLE" | "BILLABLE" | "BILLED" | null;
+  /// A repository detailInclude-jában lekért, szűkített Invoice-mezők - lásd
+  /// unas-order-sync.repository.ts detailInclude.invoices.select.
+  invoices: Array<{
+    id: string;
+    invoiceNumber: string;
+    externalUrl: string | null;
+    syncStatus: "PENDING" | "RECEIVED" | "ERROR";
+    createdAt: Date;
   }>;
 }
 
@@ -80,6 +93,18 @@ function toLineDetail(
   };
 }
 
+function toInvoiceSummary(
+  invoice: SalesOrderWithRelations["invoices"][number],
+): UnasOrderInvoiceSummary {
+  return {
+    id: invoice.id,
+    invoiceNumber: invoice.invoiceNumber,
+    externalUrl: invoice.externalUrl,
+    syncStatus: invoice.syncStatus,
+    createdAt: invoice.createdAt.toISOString(),
+  };
+}
+
 export function toUnasOrderDetail(
   order: SalesOrderWithRelations,
   metadata: UnasOrderMetadata | null = null,
@@ -101,6 +126,13 @@ export function toUnasOrderDetail(
     orderedAt: order.orderedAt?.toISOString() ?? null,
     createdAt: order.createdAt.toISOString(),
     lines: order.lines.map(toLineDetail),
+    // order.unasInvoiceStatus is already null (not undefined) for orders
+    // with no UNAS billing info yet - `?? null` here is defensive, not
+    // load-bearing, matching the pattern already used for buyerName above.
+    unasInvoiceStatus: order.unasInvoiceStatus ?? null,
+    // Never undefined -> [] instead of null: see UnasOrderDetail.invoices
+    // doc-comment (callers shouldn't need a separate missing/empty check).
+    invoices: (order.invoices ?? []).map(toInvoiceSummary),
   };
 }
 

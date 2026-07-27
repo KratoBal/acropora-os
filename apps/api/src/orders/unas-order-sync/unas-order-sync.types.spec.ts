@@ -38,6 +38,8 @@ describe("toUnasOrderDetail", () => {
           syncError: null,
         },
       ],
+      unasInvoiceStatus: null,
+      invoices: [],
     };
 
     const detail = toUnasOrderDetail(order, {
@@ -75,6 +77,8 @@ describe("toUnasOrderDetail", () => {
       orderedAt: null,
       createdAt: new Date("2026-07-20T14:06:00.000Z"),
       lines: [],
+      unasInvoiceStatus: null,
+      invoices: [],
     };
     const detail = toUnasOrderDetail(order);
     assert.equal(detail.unasStatusLabel, null);
@@ -96,8 +100,71 @@ describe("toUnasOrderDetail", () => {
       orderedAt: null,
       createdAt: new Date("2026-07-20T14:06:00.000Z"),
       lines: [],
+      unasInvoiceStatus: null,
+      invoices: [],
     };
     assert.equal(toUnasOrderDetail(order).orderedAt, null);
+  });
+
+  it("maps unasInvoiceStatus and a mirrored invoice when the order has been billed by UNAS", () => {
+    const order: SalesOrderWithRelations = {
+      id: "order-4",
+      orderNumber: "UNAS-47679-738905",
+      status: "CONFIRMED",
+      buyerName: "Nagy Péter",
+      buyerEmail: "nagy.peter@example.com",
+      currency: "HUF",
+      totalNet: new Prisma.Decimal("10000"),
+      totalTax: new Prisma.Decimal("2700"),
+      totalGross: new Prisma.Decimal("12700"),
+      orderedAt: new Date("2026-07-20T14:05:00.000Z"),
+      createdAt: new Date("2026-07-20T14:06:00.000Z"),
+      lines: [],
+      unasInvoiceStatus: "BILLED",
+      invoices: [
+        {
+          id: "invoice-1",
+          invoiceNumber: "SZ-2026-000123",
+          externalUrl: "https://szamlazz.hu/szamla/SZ-2026-000123.pdf",
+          syncStatus: "RECEIVED",
+          createdAt: new Date("2026-07-21T09:00:00.000Z"),
+        },
+      ],
+    };
+
+    const detail = toUnasOrderDetail(order);
+    assert.equal(detail.unasInvoiceStatus, "BILLED");
+    assert.equal(detail.invoices.length, 1);
+    assert.deepEqual(detail.invoices[0], {
+      id: "invoice-1",
+      invoiceNumber: "SZ-2026-000123",
+      externalUrl: "https://szamlazz.hu/szamla/SZ-2026-000123.pdf",
+      syncStatus: "RECEIVED",
+      createdAt: "2026-07-21T09:00:00.000Z",
+    });
+  });
+
+  it("returns an empty invoices array and null unasInvoiceStatus for an order UNAS has never billed", () => {
+    const order: SalesOrderWithRelations = {
+      id: "order-5",
+      orderNumber: "UNAS-1005",
+      status: "CONFIRMED",
+      buyerName: "Kiss Éva",
+      buyerEmail: null,
+      currency: "HUF",
+      totalNet: new Prisma.Decimal("5000"),
+      totalTax: new Prisma.Decimal("1350"),
+      totalGross: new Prisma.Decimal("6350"),
+      orderedAt: new Date("2026-07-22T10:00:00.000Z"),
+      createdAt: new Date("2026-07-22T10:01:00.000Z"),
+      lines: [],
+      unasInvoiceStatus: "BILLABLE",
+      invoices: [],
+    };
+
+    const detail = toUnasOrderDetail(order);
+    assert.equal(detail.unasInvoiceStatus, "BILLABLE");
+    assert.deepEqual(detail.invoices, []);
   });
 });
 
