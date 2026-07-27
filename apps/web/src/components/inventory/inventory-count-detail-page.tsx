@@ -323,9 +323,9 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
 
               {applySummary ? (
                 <Alert
-                  variant={applySummary.failedCount > 0 ? "danger" : "info"}
+                  variant="info"
                   title={`Korrekció mozgásszám: ${applySummary.movementNumber}`}
-                  description={`Sikeres UNAS szinkron: ${applySummary.successCount} tétel. Sikertelen: ${applySummary.failedCount} tétel.`}
+                  description={`Készlet helyileg lekönyvelve ${applySummary.successCount} tételnél. A UNAS-szinkron a háttérben, ettől függetlenül fut - ennek állapota itt (lásd a UNAS szinkron oszlopot) frissül, ahogy lezajlik.`}
                 />
               ) : null}
 

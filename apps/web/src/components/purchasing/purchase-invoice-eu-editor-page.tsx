@@ -443,9 +443,11 @@ export function PurchaseInvoiceEuEditorPage() {
               : Number(line.discountPercent),
         })),
       });
-      // Nem navigálunk el azonnal: a UNAS szinkron soronkénti sikeres/
-      // sikertelen eredményét itt is meg kell mutatni, különben egy
-      // csendben elhasaló push észrevétlen maradna.
+      // Nem navigálunk el azonnal: meg kell mutatni, hány tétel készlete
+      // lett helyileg lekönyvelve. A tényleges UNAS-push mostantól mindig
+      // a háttérben, ettől a hívástól függetlenül fut (lásd
+      // purchase-invoice.repository.ts create()) - itt már nincs
+      // szinkron siker/hiba, amit meg kellene jeleníteni.
       setLastResult(result);
       setLines([]);
     } catch (cause) {
@@ -552,13 +554,9 @@ export function PurchaseInvoiceEuEditorPage() {
 
       {lastResult ? (
         <Alert
-          variant={lastResult.failedCount > 0 ? "danger" : "info"}
+          variant="info"
           title={`Számla rögzítve: ${lastResult.detail.documentNumber}`}
-          description={
-            lastResult.failedCount > 0
-              ? `A készlet helyileg frissült, de a UNAS-szinkron ${lastResult.failedCount} tételnél sikertelen volt (${lastResult.successCount} sikeres). Nyisd meg a számlát a részletekért.`
-              : `Készlet és UNAS-szinkron frissítve (${lastResult.successCount} tétel).`
-          }
+          description={`Készlet helyileg lekönyvelve ${lastResult.successCount} tételnél. A UNAS-szinkron a háttérben, ettől függetlenül fut - nyisd meg a számlát az egyes tételek szinkronállapotáért.`}
           action={
             <Button
               variant="secondary"
