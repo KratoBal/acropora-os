@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { Prisma } from "@acropora/database";
 
-import type { InventoryCountLinePushResult } from "./inventory-count.repository.js";
 import {
   InventoryCountRepository,
   type InventoryCountDatabase,
@@ -24,12 +23,32 @@ function nextId(prefix: string): string {
   return `${prefix}-${idCounter}`;
 }
 
+/// Fake exercising InventoryCountRepository.applyCorrection() end to end,
+/// including the shared postInventoryMovement() primitive (this repository
+/// no longer has its own StockMovement/StockItem-writing code - it's all in
+/// inventory-movement-writer.ts). Note this in-memory double can prove
+/// *ordering* (e.g. the leltár is only marked CORRECTED after all lines are
+/// processed) but not genuine cross-statement rollback - that's a real
+/// Postgres transaction guarantee, checked instead by
+/// inventory-movement-writer.spec.ts's unit tests of the shared primitive
+/// plus a real DB integration test would be needed for full end-to-end
+/// proof (none exists yet for this specific flow - see the checkpoint
+/// report's "known limits").
 class FakeDb {
   warehouseId = "wh-1";
   lines: FakeLine[] = [];
   stockItems: Array<{ id: string; variantId: string; onHand: Prisma.Decimal }> =
     [];
+  movements: Array<{ id: string; idempotencyKey: string | null }> = [];
   movementLines: Array<{ variantId: string; quantity: Prisma.Decimal }> = [];
+  outbox: Array<{
+    id: string;
+    variantId: string;
+    warehouseId: string;
+    status: string;
+    idempotencyKey: string;
+    targetOnHand: Prisma.Decimal;
+  }> = [];
   count = {
     id: "count-1",
     countNumber: "LELTAR-1",
@@ -84,7 +103,7 @@ class FakeDb {
       const item = this.stockItems.find(
         (stockItem) => stockItem.variantId === args.where.variantId,
       );
-      return item ? { id: item.id } : null;
+      return item ? { id: item.id, onHand: item.onHand } : null;
     },
     update: async (args: any) => {
       const item = this.stockItems.find((s) => s.id === args.where.id)!;
@@ -103,7 +122,20 @@ class FakeDb {
   };
 
   stockMovement = {
-    create: async () => ({ id: nextId("movement"), movementNumber: "KORR-1" }),
+    findFirst: async (args: any) => {
+      const found = this.movements.find(
+        (m) => m.idempotencyKey === args.where.idempotencyKey,
+      );
+      return found ? { id: found.id } : null;
+    },
+    create: async (args: any) => {
+      const movement = {
+        id: nextId("movement"),
+        idempotencyKey: args.data.idempotencyKey ?? null,
+      };
+      this.movements.push(movement);
+      return movement;
+    },
   };
 
   stockMovementLine = {
@@ -115,6 +147,38 @@ class FakeDb {
       return {};
     },
   };
+
+  unasStockSyncOutbox = {
+    updateMany: async (args: any) => {
+      let count = 0;
+      for (const row of this.outbox) {
+        if (
+          row.variantId === args.where.variantId &&
+          row.warehouseId === args.where.warehouseId &&
+          args.where.status.in.includes(row.status)
+        ) {
+          row.status = args.data.status;
+          count += 1;
+        }
+      }
+      return { count };
+    },
+    create: async (args: any) => {
+      this.outbox.push({
+        id: nextId("outbox"),
+        variantId: args.data.variantId,
+        warehouseId: args.data.warehouseId,
+        status: "PENDING",
+        idempotencyKey: args.data.idempotencyKey,
+        targetOnHand: args.data.targetOnHand,
+      });
+      return {};
+    },
+  };
+
+  async $executeRaw() {
+    return 1;
+  }
 
   warehouse = {
     findFirst: async () => ({ id: this.warehouseId, name: "Fő raktár" }),
@@ -133,7 +197,7 @@ function repositoryWith(db: FakeDb) {
 }
 
 describe("InventoryCountRepository.applyCorrection", () => {
-  it("creates a StockItem baseline and a movement line when the count differs from expected", async () => {
+  it("creates an ADJUSTMENT movement, updates StockItem, and creates exactly one outbox row when the count differs from expected", async () => {
     const db = new FakeDb();
     db.lines.push({
       id: "line-1",
@@ -146,13 +210,45 @@ describe("InventoryCountRepository.applyCorrection", () => {
     });
 
     const repository = repositoryWith(db);
-    const pushResults = new Map<string, InventoryCountLinePushResult>();
-    await repository.applyCorrection("count-1", "user-1", pushResults);
+    const result = await repository.applyCorrection("count-1", "user-1");
 
     assert.equal(db.movementLines.length, 1);
-    assert.equal(db.movementLines[0]?.quantity.toString(), "-2");
+    assert.equal(db.movementLines[0]?.quantity.toString(), "2"); // stored as abs(delta)
     assert.equal(db.stockItems.length, 1);
     assert.equal(db.stockItems[0]?.onHand.toString(), "8");
+    assert.equal(db.outbox.length, 1);
+    assert.equal(db.outbox[0]?.targetOnHand.toString(), "8");
+    assert.equal(db.lines[0]?.syncStatus, "PENDING");
+    assert.equal(result.successCount, 1);
+    assert.equal(result.failedCount, 0);
+    assert.equal(db.count.status, "CORRECTED");
+  });
+
+  it("rejects (does not double-book) when the same leltár is applied a second time via a fresh call with the same idempotency key", async () => {
+    const db = new FakeDb();
+    db.lines.push({
+      id: "line-1",
+      variantId: "variant-1",
+      expectedQty: new Prisma.Decimal("10"),
+      countedQty: new Prisma.Decimal("8"),
+      syncStatus: "PENDING",
+      syncError: null,
+      variant: { sku: "sku-1", unit: "db", product: { name: "Reef Pump" } },
+    });
+    const repository = repositoryWith(db);
+    await repository.applyCorrection("count-1", "user-1");
+    assert.equal(db.movements.length, 1);
+
+    // Simulate a second concurrent call reaching this method again for the
+    // same count id before the service-layer status guard would normally
+    // stop it (see inventory-count.service.ts) - the repository's own
+    // idempotency check must still catch it.
+    await assert.rejects(
+      () => repository.applyCorrection("count-1", "user-1"),
+      /már lekönyvelte/,
+    );
+    assert.equal(db.movements.length, 1, "no second movement was created");
+    assert.equal(db.outbox.length, 1, "no second outbox row was created");
   });
 
   // This is the exact scenario Balázs hit: UNAS shows 4 in stock, the leltár
@@ -161,7 +257,7 @@ describe("InventoryCountRepository.applyCorrection", () => {
   // counting 4 too meant the naive "no numeric difference" check used to
   // skip creating a local StockItem row entirely, leaving /products stuck
   // showing "—" forever even though the product had just been counted.
-  it("still creates a StockItem baseline when the count matches expected but no StockItem row exists yet", async () => {
+  it("still creates a StockItem baseline (without a movement or outbox row) when the count matches expected but no StockItem row exists yet", async () => {
     const db = new FakeDb();
     db.lines.push({
       id: "line-1",
@@ -178,17 +274,13 @@ describe("InventoryCountRepository.applyCorrection", () => {
     });
 
     const repository = repositoryWith(db);
-    const pushResults = new Map<string, InventoryCountLinePushResult>();
-    const result = await repository.applyCorrection(
-      "count-1",
-      "user-1",
-      pushResults,
-    );
+    const result = await repository.applyCorrection("count-1", "user-1");
 
     assert.equal(db.movementLines.length, 0);
     assert.equal(db.stockItems.length, 1);
     assert.equal(db.stockItems[0]?.variantId, "variant-1");
     assert.equal(db.stockItems[0]?.onHand.toString(), "4");
+    assert.equal(db.outbox.length, 0, "a baseline-only set must not publish to UNAS");
     assert.equal(result.successCount, 1);
     assert.equal(result.failedCount, 0);
   });
@@ -215,11 +307,100 @@ describe("InventoryCountRepository.applyCorrection", () => {
     });
 
     const repository = repositoryWith(db);
-    const pushResults = new Map<string, InventoryCountLinePushResult>();
-    await repository.applyCorrection("count-1", "user-1", pushResults);
+    await repository.applyCorrection("count-1", "user-1");
 
     assert.equal(db.movementLines.length, 0);
     assert.equal(db.stockItems.length, 1);
     assert.equal(db.stockItems[0]?.onHand.toString(), "4");
+  });
+
+  it("still creates a (line-less) movement and returns a movementNumber when nothing changed at all", async () => {
+    const db = new FakeDb();
+    db.stockItems.push({
+      id: "stock-1",
+      variantId: "variant-1",
+      onHand: new Prisma.Decimal("4"),
+    });
+    db.lines.push({
+      id: "line-1",
+      variantId: "variant-1",
+      expectedQty: new Prisma.Decimal("4"),
+      countedQty: new Prisma.Decimal("4"),
+      syncStatus: "PENDING",
+      syncError: null,
+      variant: { sku: "sku-1", unit: "db", product: { name: "Reef Pump" } },
+    });
+
+    const repository = repositoryWith(db);
+    const result = await repository.applyCorrection("count-1", "user-1");
+
+    assert.equal(db.movements.length, 1);
+    assert.ok(result.movementNumber.startsWith("KORR-"));
+    assert.equal(db.outbox.length, 0);
+    assert.equal(db.count.status, "CORRECTED");
+  });
+
+  it("handles a multi-line correction: each variant gets its own movement line, StockItem, and outbox row", async () => {
+    const db = new FakeDb();
+    db.lines.push(
+      {
+        id: "line-1",
+        variantId: "variant-1",
+        expectedQty: new Prisma.Decimal("10"),
+        countedQty: new Prisma.Decimal("8"),
+        syncStatus: "PENDING",
+        syncError: null,
+        variant: { sku: "sku-1", unit: "db", product: { name: "A" } },
+      },
+      {
+        id: "line-2",
+        variantId: "variant-2",
+        expectedQty: new Prisma.Decimal("3"),
+        countedQty: new Prisma.Decimal("5"),
+        syncStatus: "PENDING",
+        syncError: null,
+        variant: { sku: "sku-2", unit: "db", product: { name: "B" } },
+      },
+    );
+
+    const repository = repositoryWith(db);
+    const result = await repository.applyCorrection("count-1", "user-1");
+
+    assert.equal(db.movementLines.length, 2);
+    assert.equal(db.stockItems.length, 2);
+    assert.equal(db.outbox.length, 2);
+    assert.equal(result.successCount, 2);
+    assert.equal(db.movements.length, 1, "one movement document for the whole leltár, with two lines");
+  });
+
+  it("only finalizes the leltár (status CORRECTED) after every line has been processed, never leaving a half-applied state", async () => {
+    const db = new FakeDb();
+    db.lines.push({
+      id: "line-1",
+      variantId: "variant-1",
+      expectedQty: new Prisma.Decimal("10"),
+      countedQty: new Prisma.Decimal("8"),
+      syncStatus: "PENDING",
+      syncError: null,
+      variant: { sku: "sku-1", unit: "db", product: { name: "Reef Pump" } },
+    });
+    // Force a failure partway through by breaking stockMovementLine.create.
+    const originalCreate = db.stockMovementLine.create;
+    let calls = 0;
+    db.stockMovementLine.create = async (args: any) => {
+      calls += 1;
+      throw new Error("simulated failure");
+    };
+
+    const repository = repositoryWith(db);
+    await assert.rejects(() => repository.applyCorrection("count-1", "user-1"));
+
+    assert.equal(calls, 1);
+    assert.notEqual(
+      db.count.status,
+      "CORRECTED",
+      "the leltár must not be marked CORRECTED when the movement failed to post",
+    );
+    void originalCreate;
   });
 });

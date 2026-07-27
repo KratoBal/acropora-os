@@ -4,6 +4,7 @@ import { Prisma } from "@acropora/database";
 
 import {
   buildOutboxIdempotencyKey,
+  isDuplicateMovementIdempotencyKeyError,
   postInventoryMovement,
   type InventoryMovementDatabase,
 } from "./inventory-movement-writer.js";
@@ -360,6 +361,106 @@ describe("postInventoryMovement", () => {
           lines: [],
         }),
       /at least one line/,
+    );
+  });
+
+  it("locks multi-variant lines in a deterministic (sorted by variantId) order regardless of input order, to avoid cross-transaction deadlocks", async () => {
+    const fake = createFakeDatabase();
+
+    await postInventoryMovement(fake.database, {
+      idempotencyKey: "PURCHASE_INVOICE:INV-DEADLOCK-TEST",
+      movementNumber: "BESZ-6",
+      type: "PURCHASE_RECEIPT",
+      warehouseId: "warehouse-1",
+      referenceType: "PurchaseInvoice",
+      referenceId: "invoice-6",
+      sourceProcess: "PURCHASE_INVOICE",
+      lines: [
+        {
+          variantId: "variant-z",
+          sku: "SKU-Z",
+          unit: "db",
+          quantityDelta: new Prisma.Decimal(1),
+        },
+        {
+          variantId: "variant-a",
+          sku: "SKU-A",
+          unit: "db",
+          quantityDelta: new Prisma.Decimal(1),
+        },
+      ],
+    });
+
+    assert.deepEqual(fake.lockedKeys, [
+      "variant-a:warehouse-1",
+      "variant-z:warehouse-1",
+    ]);
+  });
+
+  it("applies two lines for the same variant sequentially, in their original relative order, so the second builds on the first", async () => {
+    const fake = createFakeDatabase();
+
+    const posted = await postInventoryMovement(fake.database, {
+      idempotencyKey: "PURCHASE_INVOICE:INV-MULTI-LINE",
+      movementNumber: "BESZ-7",
+      type: "PURCHASE_RECEIPT",
+      warehouseId: "warehouse-1",
+      referenceType: "PurchaseInvoice",
+      referenceId: "invoice-7",
+      sourceProcess: "PURCHASE_INVOICE",
+      lines: [
+        {
+          variantId: "variant-1",
+          sku: "SKU-1",
+          unit: "db",
+          quantityDelta: new Prisma.Decimal(5),
+        },
+        {
+          variantId: "variant-1",
+          sku: "SKU-1",
+          unit: "db",
+          quantityDelta: new Prisma.Decimal(3),
+        },
+      ],
+    });
+
+    assert.equal(posted.lines[0]?.resultingOnHand.toString(), "5");
+    assert.equal(posted.lines[1]?.resultingOnHand.toString(), "8");
+    assert.equal(fake.stockItems[0]?.onHand.toString(), "8");
+  });
+});
+
+describe("isDuplicateMovementIdempotencyKeyError", () => {
+  it("recognizes a P2002 violation on the idempotencyKey unique index", async () => {
+    const { Prisma: RuntimePrisma } = await import("@acropora/database");
+    const error = new RuntimePrisma.PrismaClientKnownRequestError(
+      "duplicate",
+      {
+        code: "P2002",
+        clientVersion: "test",
+        meta: { target: ["idempotencyKey"] },
+      },
+    );
+    assert.equal(isDuplicateMovementIdempotencyKeyError(error), true);
+  });
+
+  it("does not misclassify a P2002 on a different unique field", async () => {
+    const { Prisma: RuntimePrisma } = await import("@acropora/database");
+    const error = new RuntimePrisma.PrismaClientKnownRequestError(
+      "duplicate",
+      {
+        code: "P2002",
+        clientVersion: "test",
+        meta: { target: ["documentNumber"] },
+      },
+    );
+    assert.equal(isDuplicateMovementIdempotencyKeyError(error), false);
+  });
+
+  it("returns false for an unrelated error", () => {
+    assert.equal(
+      isDuplicateMovementIdempotencyKeyError(new Error("boom")),
+      false,
     );
   });
 });

@@ -1,4 +1,4 @@
-import { Inject, Injectable, Optional } from "@nestjs/common";
+import { ConflictException, Inject, Injectable, Optional } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 import type {
   InventoryCountDetail,
@@ -7,9 +7,12 @@ import type {
 
 import { generateCode } from "../common/code-generator.util.js";
 import {
-  setStockItemQuantity,
-  type StockItemWriterDatabase,
-} from "../common/stock-item-writer.js";
+  isDuplicateMovementIdempotencyKeyError,
+  lockVariantWarehouse,
+  postInventoryMovement,
+  type InventoryMovementDatabase,
+} from "../common/inventory-movement-writer.js";
+import { setStockItemQuantity } from "../common/stock-item-writer.js";
 import {
   ensureMainWarehouse,
   type WarehouseLookupDatabase,
@@ -36,20 +39,25 @@ const listInclude = {
   _count: { select: { lines: true } },
 } as const;
 
-export interface InventoryCountLinePushResult {
-  lineId: string;
-  status: "OK" | "FAILED";
-  errorMessage: string | null;
-}
-
 export interface InventoryCountApplyResultRow {
   detail: InventoryCountDetail;
   movementNumber: string;
+  /** Tétel, aminek a helyi könyvelése rendben lezajlott (megváltozott
+   * mennyiség -> ADJUSTMENT + outbox a közös writeren át; változatlan vagy
+   * csak most alapkészletet kapó tétel -> nincs is mit könyvelni). A tényleges
+   * UNAS-publikálás ETTŐL FÜGGETLENÜL, később, a háttér-workeren keresztül
+   * történik - ez a szám NEM azt jelenti, hogy a UNAS már megkapta a
+   * frissítést, csak hogy a helyi tranzakció sikeres volt. Lásd
+   * docs/INVENTORY-CONSISTENCY.md. */
   successCount: number;
+  /** A jelenlegi tranzakciós modell mellett gyakorlatilag mindig 0: egy
+   * valódi hiba a teljes korrekciós tranzakciót visszagörgeti (nincs
+   * részleges, "néhány tétel sikertelen" állapot) - a mező a válasz
+   * visszafelé-kompatibilitása miatt maradt meg. */
   failedCount: number;
 }
 
-interface InventoryCountApplyTransaction {
+interface InventoryCountApplyTransaction extends InventoryMovementDatabase {
   inventoryCountLine: {
     findMany(args: unknown): Promise<
       Array<{
@@ -62,14 +70,12 @@ interface InventoryCountApplyTransaction {
     >;
     update(args: unknown): Promise<unknown>;
   };
-  stockItem: StockItemWriterDatabase["stockItem"] & {
+  // Widened beyond InventoryMovementDatabase's stockItem (which only needs
+  // findFirst/update/create): the "needsBaseline" scan below has to see
+  // which variants already have a StockItem row *before* touching any of
+  // them, hence the extra findMany.
+  stockItem: InventoryMovementDatabase["stockItem"] & {
     findMany(args: unknown): Promise<Array<{ variantId: string }>>;
-  };
-  stockMovement: {
-    create(args: unknown): Promise<{ id: string; movementNumber: string }>;
-  };
-  stockMovementLine: {
-    create(args: unknown): Promise<unknown>;
   };
   inventoryCount: {
     update(args: unknown): Promise<InventoryCountWithRelations>;
@@ -277,10 +283,16 @@ export class InventoryCountRepository extends Repository {
     return toInventoryCountDetail(updated!);
   }
 
+  /// Egyetlen tranzakció: leltárállapot ellenőrzés, ADJUSTMENT-mozgás a
+  /// közös postInventoryMovement-en át (StockMovement+StockMovementLine+
+  /// StockItem+UnasStockSyncOutbox mind ugyanabban a DB tranzakcióban),
+  /// baseline-only sorok, majd a leltár lezárása. A UNAS-push innentől nem
+  /// itt, hanem a háttér-workerben történik (lásd
+  /// unas-stock-sync-outbox.service.ts) - ez a metódus commit után visszatér,
+  /// mielőtt a UNAS egyáltalán tudna a változásról.
   async applyCorrection(
     id: string,
     actorUserId: string,
-    pushResults: Map<string, InventoryCountLinePushResult>,
   ): Promise<InventoryCountApplyResultRow> {
     const countBeforeApply = await this.countDatabase.inventoryCount.findUnique(
       {
@@ -290,72 +302,112 @@ export class InventoryCountRepository extends Repository {
     );
     if (!countBeforeApply) throw new Error("A leltár nem található.");
     const warehouseId = countBeforeApply.warehouseId;
-
     const movementNumber = generateCode("KORR");
+
     let successCount = 0;
-    let failedCount = 0;
 
-    await this.countDatabase.$transaction(
-      async (transaction) => {
-        const lines = await transaction.inventoryCountLine.findMany({
-          where: { inventoryCountId: id },
-          include: { variant: { select: { sku: true, unit: true } } },
-        });
+    try {
+      await this.countDatabase.$transaction(
+        async (transaction) => {
+          const lines = await transaction.inventoryCountLine.findMany({
+            where: { inventoryCountId: id },
+            include: { variant: { select: { sku: true, unit: true } } },
+          });
 
-        // A variant with no StockItem row yet had its expectedQty fall back
-        // to the UNAS reported-stock snapshot at leltár-creation time (see
-        // create() above), not a real local baseline. If the count happens
-        // to match that fallback, the "difference" below is zero even
-        // though this is the variant's very first real local count - so
-        // "no numeric difference" must not be confused with "already
-        // tracked locally", or the leltár would leave it permanently
-        // showing as untracked (—) even after being physically counted.
-        const existingStockItems = await transaction.stockItem.findMany({
-          where: {
-            variantId: { in: lines.map((line) => line.variantId) },
-            warehouseId,
-            locationId: null,
-            lotId: null,
-          },
-          select: { variantId: true },
-        });
-        const trackedVariantIds = new Set(
-          existingStockItems.map((item) => item.variantId),
-        );
+          // A variant with no StockItem row yet had its expectedQty fall back
+          // to the UNAS reported-stock snapshot at leltár-creation time (see
+          // create() above), not a real local baseline. If the count happens
+          // to match that fallback, the "difference" below is zero even
+          // though this is the variant's very first real local count - so
+          // "no numeric difference" must not be confused with "already
+          // tracked locally", or the leltár would leave it permanently
+          // showing as untracked (—) even after being physically counted.
+          const existingStockItems = await transaction.stockItem.findMany({
+            where: {
+              variantId: { in: lines.map((line) => line.variantId) },
+              warehouseId,
+              locationId: null,
+              lotId: null,
+            },
+            select: { variantId: true },
+          });
+          const trackedVariantIds = new Set(
+            existingStockItems.map((item) => item.variantId),
+          );
 
-        const movement = await transaction.stockMovement.create({
-          data: {
-            movementNumber,
-            type: "ADJUSTMENT",
-            status: "POSTED",
-            referenceType: "InventoryCount",
-            referenceId: id,
-            performedById: actorUserId,
-            occurredAt: new Date(),
-            postedAt: new Date(),
-          },
-        });
+          const changedLines = lines.filter((line) => {
+            if (line.countedQty === null) return false;
+            return !line.countedQty.minus(line.expectedQty).isZero();
+          });
+          const baselineOnlyLines = lines.filter((line) => {
+            if (line.countedQty === null) return false;
+            if (trackedVariantIds.has(line.variantId)) return false;
+            // Already covered as a real change above - avoid double-setting.
+            return line.countedQty.minus(line.expectedQty).isZero();
+          });
 
-        for (const line of lines) {
-          const hasCount = line.countedQty !== null;
-          const difference = hasCount
-            ? line.countedQty!.minus(line.expectedQty)
-            : new Prisma.Decimal(0);
-          const changed = hasCount && !difference.isZero();
-          const needsBaseline =
-            hasCount && !trackedVariantIds.has(line.variantId);
-
-          if (changed) {
-            await transaction.stockMovementLine.create({
-              data: {
-                movementId: movement.id,
+          if (changedLines.length > 0) {
+            const posted = await postInventoryMovement(transaction, {
+              idempotencyKey: `INVENTORY_COUNT:${id}`,
+              movementNumber,
+              type: "ADJUSTMENT",
+              warehouseId,
+              referenceType: "InventoryCount",
+              referenceId: id,
+              performedById: actorUserId,
+              sourceProcess: "INVENTORY_COUNT",
+              lines: changedLines.map((line) => ({
                 variantId: line.variantId,
-                quantity: difference,
+                sku: line.variant.sku,
                 unit: line.variant.unit,
+                quantityDelta: line.countedQty!.minus(line.expectedQty),
+              })),
+            });
+            // Should be rare (the service layer already guards against
+            // re-applying a CORRECTED count), but two concurrent
+            // applyCorrection calls for the same count - e.g. a double
+            // click, or two admins closing it at once - could both pass
+            // that check before either commits. postInventoryMovement's own
+            // idempotency check (backed by StockMovement's unique
+            // idempotencyKey) is what actually decides the race, and this
+            // makes the loser's outcome an explicit, honest error instead of
+            // silently reporting success with nothing actually re-posted.
+            if (posted.alreadyPosted) {
+              throw new ConflictException(
+                "A leltár korrekciója közben egy másik feldolgozás már lekönyvelte ezt a leltárt.",
+              );
+            }
+          } else {
+            // Nothing to adjust, but a movement record is still created for
+            // this leltár-closing event (preserves the existing, exposed
+            // "movementNumber is always returned" API contract) - there is
+            // nothing to post to the shared writer (it requires >=1 line by
+            // design, see inventory-movement-writer.ts), so this bypasses it
+            // deliberately for this one, real "nothing changed" case.
+            await transaction.stockMovement.create({
+              data: {
+                movementNumber,
+                type: "ADJUSTMENT",
+                status: "POSTED",
+                referenceType: "InventoryCount",
+                referenceId: id,
+                performedById: actorUserId,
+                occurredAt: new Date(),
+                postedAt: new Date(),
               },
             });
           }
-          if (changed || needsBaseline) {
+
+          for (const line of baselineOnlyLines) {
+            // Establishing a first-ever StockItem baseline is not a real
+            // stock movement (nothing to adjust, no outbox needed - UNAS
+            // already reports this same value), but it still touches the
+            // exact same (variantId, warehouseId) contention point the
+            // writer protects, so it takes the same advisory lock before
+            // writing, directly via setStockItemQuantity rather than through
+            // postInventoryMovement (which would require treating a
+            // zero-quantity "change" as a postable line).
+            await lockVariantWarehouse(transaction, line.variantId, warehouseId);
             await setStockItemQuantity(transaction, {
               variantId: line.variantId,
               warehouseId,
@@ -363,35 +415,51 @@ export class InventoryCountRepository extends Repository {
             });
           }
 
-          const pushResult = pushResults.get(line.id);
-          const syncStatus = !hasCount
-            ? "OK"
-            : !changed
-              ? "OK"
-              : (pushResult?.status ?? "FAILED");
-          if (syncStatus === "OK") successCount += 1;
-          else failedCount += 1;
+          const changedLineIds = new Set(changedLines.map((line) => line.id));
+          for (const line of lines) {
+            const hasCount = line.countedQty !== null;
+            const changed = changedLineIds.has(line.id);
+            // "PENDING" for a real change - the local movement is
+            // committed, but actual UNAS publication is now the outbox
+            // worker's job and hasn't necessarily happened yet by the time
+            // this transaction commits. syncStatus therefore no longer
+            // claims a (possibly false) synchronous OK/FAILED outcome - see
+            // docs/INVENTORY-CONSISTENCY.md.
+            const syncStatus = !hasCount ? "OK" : changed ? "PENDING" : "OK";
+            // Always "successful" at this synchronous layer - a real
+            // failure throws and aborts the whole transaction instead of
+            // producing a per-line FAILED status (see failedCount's doc
+            // comment on InventoryCountApplyResultRow above).
+            successCount += 1;
+            await transaction.inventoryCountLine.update({
+              where: { id: line.id },
+              data: { syncStatus, syncError: null },
+            });
+          }
 
-          await transaction.inventoryCountLine.update({
-            where: { id: line.id },
-            data: {
-              syncStatus,
-              syncError: changed ? (pushResult?.errorMessage ?? null) : null,
-            },
+          await transaction.inventoryCount.update({
+            where: { id },
+            data: { status: "CORRECTED", correctedAt: new Date() },
           });
-        }
-
-        await transaction.inventoryCount.update({
-          where: { id },
-          data: { status: "CORRECTED", correctedAt: new Date() },
-        });
-      },
-      // Large leltárs can have thousands of lines, each needing its own
-      // sequential read/write inside this transaction; Prisma's 5s default
-      // interactive-transaction timeout is easily too short for that, so
-      // it's raised here to give big corrections enough room to finish.
-      { isolationLevel: "Serializable", timeout: 120_000 },
-    );
+        },
+        // Large leltárs can have thousands of lines, each needing its own
+        // sequential read/write inside this transaction; Prisma's 5s default
+        // interactive-transaction timeout is easily too short for that, so
+        // it's raised here to give big corrections enough room to finish.
+        // This also means the whole correction is all-or-nothing: either
+        // every changed line is posted, baseline is established, and the
+        // count is marked CORRECTED together, or (on any error, including a
+        // timeout) none of it is - there is no partially-corrected leltár.
+        { isolationLevel: "Serializable", timeout: 120_000 },
+      );
+    } catch (error) {
+      if (isDuplicateMovementIdempotencyKeyError(error)) {
+        throw new ConflictException(
+          "A leltár korrekciója közben egy másik feldolgozás már lekönyvelte ezt a leltárt.",
+        );
+      }
+      throw error;
+    }
 
     const updated = await this.countDatabase.inventoryCount.findUnique({
       where: { id },
@@ -401,7 +469,7 @@ export class InventoryCountRepository extends Repository {
       detail: toInventoryCountDetail(updated!),
       movementNumber,
       successCount,
-      failedCount,
+      failedCount: 0,
     };
   }
 }

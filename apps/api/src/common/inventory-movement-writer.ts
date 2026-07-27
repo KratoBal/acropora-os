@@ -1,5 +1,24 @@
 import { Prisma } from "@acropora/database";
 
+/// True for a Prisma unique-constraint violation on `StockMovement`'s
+/// idempotency key - i.e. two concurrent callers raced past this module's
+/// own `stockMovement.findFirst` idempotency check (both saw "not posted
+/// yet") and both tried to insert the same key; the database's unique
+/// index is the actual, final guarantee, this check is only there so
+/// callers can translate the resulting P2002 into a clear domain error
+/// (e.g. a 409 Conflict) instead of an opaque 500. See each flow's
+/// repository (inventory-count/purchase-invoice/pos-sale) for where this
+/// is caught.
+export function isDuplicateMovementIdempotencyKeyError(
+  error: unknown,
+): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2002" &&
+    JSON.stringify(error.meta?.target ?? "").includes("idempotencyKey")
+  );
+}
+
 /// Central, transaction-scoped inventory posting primitive.
 ///
 /// Every stock-affecting flow (leltár korrekció, beszerzési bevételezés,
@@ -163,8 +182,8 @@ export interface InventoryMovementDatabase {
 /// the sole serialization point covers both the "row exists, don't lose an
 /// update" case and the "row doesn't exist yet, don't create it twice"
 /// case with one mechanism.
-async function lockVariantWarehouse(
-  database: InventoryMovementDatabase,
+export async function lockVariantWarehouse(
+  database: Pick<InventoryMovementDatabase, "$executeRaw">,
   variantId: string,
   warehouseId: string,
 ): Promise<void> {
@@ -217,7 +236,23 @@ export async function postInventoryMovement(
 
   const resultLines: PostedInventoryMovementLine[] = [];
 
-  for (const line of input.lines) {
+  // Deterministic lock acquisition order: two concurrent multi-line
+  // postings that touch an overlapping set of variants (e.g. two large
+  // purchase invoices sharing a few SKUs) must always lock those SKUs in
+  // the same relative order, or they can deadlock (A locks variant-1 then
+  // waits on variant-2, while B locks variant-2 then waits on variant-1).
+  // Sorting by variantId here - rather than trusting whatever order the
+  // caller's cart/spreadsheet/invoice happened to list lines in - is a
+  // stable sort (JS `Array.prototype.sort` is guaranteed stable), so
+  // multiple lines for the *same* variant (e.g. two purchase-invoice lines
+  // for one SKU at different prices) keep their original relative order,
+  // which matters: each such line's delta is applied sequentially, so the
+  // second line's resulting quantity correctly builds on the first's.
+  const orderedLines = [...input.lines].sort((a, b) =>
+    a.variantId < b.variantId ? -1 : a.variantId > b.variantId ? 1 : 0,
+  );
+
+  for (const line of orderedLines) {
     await lockVariantWarehouse(database, line.variantId, input.warehouseId);
 
     await database.stockMovementLine.create({
