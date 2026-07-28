@@ -804,6 +804,175 @@ helyesnek ítélhető, de VALÓS lefutás és PASS még mindig nincs bizonyítva
   futtathatók (lásd "Ismert korlátok") - kizárólag kézi kód-átvizsgálással
   (és teljes `tsc --noEmit` tisztasággal) ellenőrzöttek.
 
+## Checkpoint 7: release evidence, valódi futási ellenőrzés
+
+### Legfontosabb szabály (a checkpoint saját megfogalmazása)
+
+Sem a tesztkód létezése, sem egy kézzel beállított flag nem bizonyítja a
+PostgreSQL-konkurenciabiztonságot. Az activation-readiness csak a
+vizsgált release commitra ténylegesen lefutott, hiteles és gépileg
+ellenőrizhető PostgreSQL-teszteredményt fogadhat el.
+
+### Valódi, izolált PostgreSQL-környezet: új felfedezés
+
+A checkpoint 5/6 idején dokumentált korlátozás ("nincs elérhető Postgres
+ebben a sandboxban") RÉSZBEN pontosításra szorult. Az `embedded-postgres`
+npm csomag (portable, felhasználói jogosultsággal futtatható Postgres-
+bináris, NEM az `apt`/`dpkg`-n vagy `docker`-en keresztül) sikeresen
+telepíthető és futtatható volt - egy VALÓDI, izolált PostgreSQL 18.4
+szerver indult el `/tmp`-ben, sosem érintve a production
+`DATABASE_URL`-t. Ezzel:
+
+- a teljes, 30 elemű migrációs láncot (checkpoint 1-től a checkpoint 7-es
+  `add_release_evidence`-ig) ténylegesen lefuttattam, sorban, tranzakciónként,
+  egy üres adatbázison - mind a 30 migráció `OK` státusszal futott le,
+  nulla hiba; utólagos ellenőrzés: 58 tábla, a `StockReconciliationRepair`
+  és `ReleaseEvidence` táblák pontosan a várt oszlopokkal/típusokkal/
+  nullable-séggel/foreign key-ekkel/indexekkel jöttek létre (enumértékek,
+  unique index az idempotencyKey-en, `RESTRICT`/`SET NULL` delete rule-ok
+  - mind egyezik a schema.prisma-val);
+- egy ÖNÁLLÓ (nem Prisma-alapú, nyers `pg` drivert használó) teszttel
+  ténylegesen bebizonyítottam a `pg_advisory_xact_lock` primitívum - amire
+  `lockVariantWarehouse` és `lockUnasOrder` is épül - konkurenciasemantikáját
+  egy valódi Postgres ellen: (1) ugyanarra a kulcsra induló két egyidejű
+  tranzakció szerializálódik (a második ténylegesen az első COMMIT-ja UTÁN
+  szerzte meg a zárolást, mérve: 808ms várakozás egy 800ms-os tartás
+  mellett); (2) két KÜLÖNBÖZŐ kulcs nem blokkolja egymást (0ms); (3)
+  ROLLBACK ugyanúgy felszabadítja a zárolást, mint COMMIT (508ms várakozás
+  egy 500ms-os tartás mellett); (4) három egyidejű, különböző kulcsú
+  zárolás holtpont nélkül, azonnal lefut.
+
+**Fontos, pontos elhatárolás**: ez NEM a tényleges
+`unas-order-sync.repository.integration.spec.ts` (76d8c80) vagy bármelyik
+NestJS/Prisma-alapú repository-teszt lefutása - azok továbbra sem
+futtathatók, mert a Prisma CLI (generate/format/validate mind) ebben a
+sandboxban a proxy szintjén, konkrétan a `binaries.prisma.sh` hoszton
+kap `403 Forbidden`-t (`curl` közvetlenül is megerősítette: "Received
+HTTP code 403 from proxy after CONNECT" - ez a sandbox saját proxyjának
+explicit tiltása, nem javítható innen). Emiatt a Prisma-kliens generálása
+kategorikusan lehetetlen itt, ami kizár minden olyan tesztet, ami
+`@acropora/database`-t importál. Ez a fenti, nyers-SQL-alapú bizonyíték
+tehát az ALAPMECHANIZMUS valódi, mért, végrehajtott igazolása, nem a teljes
+alkalmazáskód lefutása.
+
+Egy további, ugyanilyen fontos technikai felfedezés: ez a sandbox minden
+egyes bash-hívást saját, elkülönített PID-namespace-ben indít
+(`bwrap --unshare-pid`), ami a hívás végén a NAMESPACE TELJES tartalmát
+leállítja - egy `nohup ... & disown`-nal indított háttérfolyamat (pl. egy
+hosszan futó Postgres szerver) NEM éli túl a hívás lezárását, függetlenül
+attól, hogy a fájlrendszer (pl. `/tmp`) egyébként megmarad. Emiatt minden
+valódi Postgres-műveletet EGY bash-hívásban kellett elvégezni (indítás,
+használat, tiszta leállítás), 45 másodperces korláton belül.
+
+### Prisma generate/format/validate: pontosított ok
+
+Mindhárom parancsot újra megpróbáltam, immár azután, hogy megerősítettem:
+az `npm`/`github` registry elérhető ebből a sandboxból. A hiba
+MINDHÁROMNÁL azonos és pontos: `Failed to fetch ... at
+https://binaries.prisma.sh/... - 403 Forbidden`. Ez nem hálózati
+általános hiba, hanem KIFEJEZETTEN ennek az egy hosztnak a tiltása -
+minden más külső hoszt (npm registry, github.com,
+zonkyio/embedded-postgres-binaries) elérhető volt. Ez egy végleges,
+innen nem megkerülhető korlátozás.
+
+### Unit/integration tesztek: megerősített, pontosított ok
+
+`tsc -p tsconfig.test.json` (a teszt-build, amit `node --test` előtt
+mindenképp le kell futtatni) 159 hibával bukik, ebből 42 pontosan a
+`@prisma/client`-ből hiányzó, generálás-függő exportok (`PrismaClient`,
+`Prisma`, minden modell-típus) - tehát a build maga sem készül el, a
+`node --test`-hez szükséges `test-dist/` soha nem jön létre. Egyetlen
+tesztfájl sem futtatható emiatt - ez pontosan ugyanaz az ok, mint
+checkpoint 5/6-ban, most a Prisma-oldali gyökérokkal pontosítva.
+
+### ReleaseEvidence modell
+
+Két új enum (`ReleaseEvidenceType` - ma egyetlen érték,
+`INVENTORY_POSTGRES_CONCURRENCY_TEST`; `ReleaseEvidenceStatus` - `SUCCESS`/
+`FAILURE`) és a `ReleaseEvidence` tábla
+(`packages/database/prisma/migrations/20260729090000_add_release_evidence/`).
+Mezők: `commitSha`, `workflowRunId`, `environment`, `databaseEngine`+
+`databaseEngineVersion`, `testSuite`, `startedAt`/`completedAt`,
+`resultDetail` (JSON, csak technikai adat), `createdAt`. Nincs egyedi
+kényszer az (evidenceType, commitSha) páron - egy commit többször is
+tesztelhető, az activation-readiness mindig a legújabb SUCCESS sort nézi.
+Ezt a migrációt is lefuttattam a fenti valódi Postgres ellen, a teljes
+lánc részeként - lásd fent.
+
+**A tábla KIZÁRÓLAG egy hiteles CI/release-folyamat által írható**: az
+egyetlen írási út a `packages/database/prisma/record-release-evidence.ts`
+önálló szkript, amit `tsx`-szel kell futtatni
+(`pnpm --filter @acropora/database release-evidence:record`) - ez a fájl
+NINCS importálva semelyik NestJS modulból, nincs hozzá route, a futó API-
+ból elérhetetlen. Minden mező kötelező, környezeti változóból olvasva
+(sosem CLI-flag, hogy CI natívan tudja átadni pl. `${{ github.sha }}`-t);
+egyetlen mező sincs alapértelmezve (szemben `seed.ts` fejlesztői
+`DATABASE_URL`-fallback-jével) - egy csendben alapértelmezett mezőjű
+bizonyíték aláásná a tábla egész célját. Nincs és nem lesz általános
+admin API, amivel valaki kézzel SUCCESS-re állíthatna egy sort.
+
+`.github/workflows/ci.yml` most már, a `test:integration` lépés után, egy
+`if: always()` lépésben ténylegesen meghívja ezt a szkriptet - de FONTOS,
+DOKUMENTÁLT KORLÁTTAL: ez a CI job SAJÁT, a job végén megsemmisülő
+ideiglenes Postgres-je ellen ír, nem production ellen - ez bizonyítja,
+hogy a szkript mechanikája valódi CI-infrastruktúrán működik, de NEM teszi
+automatikusan láthatóvá ezt a bizonyítékot egy futó production-példány
+saját adatbázisában. A CI -> production evidence-írás egy éles
+release/deploy-lépésként valósítható meg (production `DATABASE_URL`
+secret-tel, amivel a CI ma nem rendelkezik) - ez szándékosan
+dokumentált TERVKÉNT marad, mert a tényleges bekötése production-deploy
+jellegű módosítás lenne, ami ennek a checkpointnak kifejezetten NEM
+része.
+
+### Activation-readiness: valódi evidence-integráció
+
+`stock-diagnostics.service.ts::activationReadiness()` mostantól:
+
+1. beolvassa a futó build saját commit SHA-ját
+   (`common/release-info.util.ts`, `RELEASE_COMMIT_SHA` env - ÚJ
+   konvenció, ma még semelyik deploy-lépés nem állítja be ténylegesen,
+   lásd lentebb);
+2. ha ez nincs beállítva: `concurrencyTestEvidence: "NOT_CONFIGURED"`,
+   blokkolva;
+3. ha be van állítva, lekéri a legújabb `SUCCESS` `ReleaseEvidence` sort
+   PONTOSAN erre a commitra (`findLatestConcurrencyTestEvidence`) - egy
+   RÉGEBBI vagy IDEGEN commit sikere SOSEM oldja fel a blokkolást (ez a
+   checkpoint saját, explicit követelménye: egy N commitban javított hiba
+   könnyen visszakerülhet N+5-ben, és "valamikor egy korábbi commit
+   átment" semmit nem mond N+5-ről);
+4. ha nincs ilyen sor: `"NOT_DEMONSTRATED"`, blokkolva;
+5. ha van, de a sor `completedAt`-je `RELEASE_EVIDENCE_MAX_AGE_DAYS`-nél
+   (30 nap, `stock-diagnostics.thresholds.ts`) régebbi: szintén
+   `"NOT_DEMONSTRATED"`, blokkolva;
+6. egyébként `"DEMONSTRATED"`, ez a blokkoló ok megszűnik (a többi -
+   migráció, UNAS-rendelés-audit - továbbra is önállóan blokkolhat).
+
+**Ebben a sandboxban `RELEASE_COMMIT_SHA` soha nincs beállítva, és nincs
+is production `ReleaseEvidence` sor** - az activation-readiness emiatt
+ma is, változatlanul `NOT_CONFIGURED`/`NOT_DEMONSTRATED` és BLOCKED, ahogy
+lennie kell. A `DEMONSTRATED` ág kódszinten megépült és teszteltek (5 új
+teszt: NOT_CONFIGURED, NOT_DEMONSTRATED ismert commitra, idegen-commit
+sikere nem elég, friss egyező commit SUCCESS = DEMONSTRATED, túl régi
+egyező commit SUCCESS mégsem elég), de VALÓS production-adatbázis ellen
+nem lett kipróbálva - ugyanaz a Prisma-generálási korlát miatt.
+
+### ESTABLISH_CONTROLLED_BASELINE ("C" repair-típus) - továbbra sem implementált
+
+A checkpoint kifejezetten csak "a futási baseline stabilizálása UTÁN"
+engedélyezte ennek megépítését. Ez a feltétel ebben a checkpointban SEM
+teljesült: a Prisma-kliens generálása kategorikusan lehetetlen ebben a
+sandboxban (proxy-szintű tiltás, nem javítható), tehát semmilyen új,
+mutáló kód (mint amilyen a C típus lenne) nem lenne itt jobban
+ellenőrizhető, mint az A/B típus volt checkpoint 6-ban. Új, verifikálatlan
+mutáló kód hozzáadása pontosan akkor, amikor a felhasználó kifejezetten a
+"ne állíts bizonyítatlan dolgokról, hogy működnek" elvet hangsúlyozza,
+fegyelmezetlen döntés lenne. A checkpoint 6-ban dokumentált konkrét terv
+(`BASELINE_INCREASE`/`BASELINE_DECREASE` mozgástípusok + a reconciliation
+bizonyíthatósági ablakának a legutóbbi baseline-tól számított
+újraszámítása) változatlanul érvényes, következő lépésként javasolt, ha a
+Prisma-generálási korlát elhárul (pl. valódi CI-ban vagy egy Prisma-
+binárisokat engedélyező környezetben).
+
 ## Konfiguráció
 
 `.env.example` (production secret/config NEM módosult):
