@@ -99,11 +99,32 @@ class FakeDiagnosticsDb {
     completedAt: Date;
   } | null = null;
 
+  // Checkpoint 9: a second, independent fixture for the contradicting-
+  // FAILURE lookup (findContradictingFailureForWorkflowRun) - kept
+  // separate from releaseEvidenceRow so a test can set up a SUCCESS row
+  // and a contradicting FAILURE row for the SAME workflowRunId without
+  // the two overwriting each other.
+  contradictingFailureRow: { id: string; status: string; createdAt: Date } | null = null;
+
   releaseEvidence = {
-    findFirst: async (args: { where: { commitSha: string } }) =>
-      this.releaseEvidenceRow && this.releaseEvidenceRow.commitSha === args.where.commitSha
+    findFirst: async (args: {
+      where: { commitSha?: string; workflowRunId?: string; status?: string };
+    }) => {
+      // The contradiction-check query (workflowRunId + status: FAILURE,
+      // no commitSha) is dispatched separately from the exact-commit
+      // SUCCESS lookup (commitSha + status: SUCCESS, no workflowRunId) -
+      // this fake distinguishes them the same way the real Prisma query
+      // does, by which where-clause fields are actually present.
+      if (args.where.workflowRunId !== undefined && args.where.commitSha === undefined) {
+        return this.contradictingFailureRow &&
+          this.contradictingFailureRow.status === "FAILURE"
+          ? this.contradictingFailureRow
+          : null;
+      }
+      return this.releaseEvidenceRow && this.releaseEvidenceRow.commitSha === args.where.commitSha
         ? this.releaseEvidenceRow
-        : null,
+        : null;
+    },
   };
 }
 
@@ -121,6 +142,7 @@ function authenticEvidenceFixture(overrides: {
   databaseEngine?: string;
   databaseEngineVersion?: string;
   workflowRunId?: string;
+  testSuite?: string;
 }) {
   const now = new Date();
   return {
@@ -134,7 +156,9 @@ function authenticEvidenceFixture(overrides: {
     environment: "github-actions-ci",
     databaseEngine: overrides.databaseEngine ?? "postgres",
     databaseEngineVersion: overrides.databaseEngineVersion ?? "16-alpine",
-    testSuite: "apps/api test:integration (unas-order-sync.repository.integration.spec.ts)",
+    testSuite:
+      overrides.testSuite ??
+      "apps/api test:integration (unas-order-sync.repository.integration.spec.ts)",
     createdAt: overrides.createdAt ?? now,
     completedAt: overrides.completedAt ?? now,
   };
@@ -445,6 +469,58 @@ describe("StockDiagnosticsService.activationReadiness", () => {
       assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
       assert.equal(result.safeToActivate, false);
       assert.ok(result.blockingReasons.some((reason) => reason.includes("workflowRunId")));
+    });
+  });
+
+  // --- Checkpoint 9 additions.
+
+  it("a SUCCESS row whose testSuite does not identify the expected test does not satisfy the gate", async () => {
+    await withReleaseCommitSha("commit-current", async () => {
+      const db = new FakeDiagnosticsDb();
+      db.releaseEvidenceRow = authenticEvidenceFixture({
+        commitSha: "commit-current",
+        testSuite: "apps/api test (some unrelated suite)",
+      });
+      const service = buildService(db);
+      const result = await service.activationReadiness();
+      assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
+      assert.equal(result.safeToActivate, false);
+      assert.ok(result.blockingReasons.some((reason) => reason.includes("testSuite")));
+    });
+  });
+
+  it("a SUCCESS row contradicted by a FAILURE row for the SAME workflowRunId does not satisfy the gate", async () => {
+    await withReleaseCommitSha("commit-current", async () => {
+      const db = new FakeDiagnosticsDb();
+      db.releaseEvidenceRow = authenticEvidenceFixture({
+        commitSha: "commit-current",
+        workflowRunId: "run-42",
+      });
+      db.contradictingFailureRow = {
+        id: "evidence-failure-42",
+        status: "FAILURE",
+        createdAt: new Date(),
+      };
+      const service = buildService(db);
+      const result = await service.activationReadiness();
+      assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
+      assert.equal(result.safeToActivate, false);
+      assert.ok(result.blockingReasons.some((reason) => reason.includes("Ellentmondó evidence")));
+    });
+  });
+
+  it("a SUCCESS row with NO contradicting FAILURE for its own workflowRunId is unaffected", async () => {
+    await withReleaseCommitSha("commit-current", async () => {
+      const db = new FakeDiagnosticsDb();
+      db.releaseEvidenceRow = authenticEvidenceFixture({
+        commitSha: "commit-current",
+        workflowRunId: "run-99",
+      });
+      db.contradictingFailureRow = null;
+      const service = buildService(db);
+      const result = await service.activationReadiness();
+      assert.equal(result.concurrencyTestEvidence, "DEMONSTRATED");
+      assert.equal(result.safeToActivate, true);
     });
   });
 
