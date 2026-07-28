@@ -366,9 +366,15 @@ model User {
   @@index([role, isActive])
 }
 
+/// A session token maga sosem kerül adatbázisba - kizárólag a SHA-256
+/// lenyomata (tokenHash). Ez a Bearer/cookie token szerver oldali
+/// perzisztens párja: AuthService ezen keresztül oldja fel a tokent
+/// felhasználóra, API-újraindítás vagy több API-példány esetén is
+/// (korábban memóriabeli Map volt, ami ezt nem tudta).
 model Session {
   id        String   @id @default(cuid())
   userId    String
+  tokenHash String   @unique
   expiresAt DateTime
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)

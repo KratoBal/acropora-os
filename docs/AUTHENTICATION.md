@@ -5,9 +5,12 @@
 A Commit #0003 óta providerfüggetlen session-absztrakció létezik. Ez a
 commit vezeti be az első valódi, jelszó-alapú production bejelentkezést:
 `POST /auth/login/password`, ami a `User.passwordHash` mezőt és a már
-korábban is létező `verifyPassword` (scrypt) utilt használja. Session-store
-egyelőre továbbra is memóriában él (lásd alább) — ez egy külön, még nyitott
-korlát, nem ennek a commitnak a hatóköre. Többfaktoros azonosítás nincs.
+korábban is létező `verifyPassword` (scrypt) utilt használja.
+
+A session-store a Prisma `Session` modellt használja (lásd alább) — nem
+memóriabeli többé. Egy session tokenből csak a SHA-256 lenyomata
+(`Session.tokenHash`) kerül adatbázisba, a nyers token soha. Többfaktoros
+azonosítás nincs.
 
 ## Development auth
 
@@ -103,15 +106,45 @@ kérésen kötelező az egyező CSRF fejléc, különben `403`.
 - `GET /health`: publikus
 - `POST /auth/login`: publikus, kizárólag development
 - `POST /auth/login/password`: publikus, kizárólag ez a valódi,
-  jelszó-ellenőrzött bejelentkezés
+  jelszó-ellenőrzött bejelentkezés (web)
+- `POST /auth/mobile/login/password`: publikus, ugyanaz a
+  jelszó-ellenőrzés mint a webes production loginé, lásd lent
 - `GET /auth/me`: védett (mindkét auth-mód elfogadott)
 - `POST /auth/logout`: védett; cookie-alapú sessionnél törli mindkét sütit is
 
-Az API session-store (mindkét login-útvonalon) jelenleg memóriában él,
-ezért szerver-újraindításkor minden session elvész, és több `api` replika
-esetén a session nem osztott — ez egy ismert, dokumentált korlát (lásd
-`docs/PRODUCTION-DEPLOYMENT-ARCHITECTURE-REVIEW.md`), amit ez a commit nem
-old meg, csak a jelszó-ellenőrzést és a session-átadás biztonságát javítja.
+Az API session-store (mindkét login-útvonalon) a Prisma `Session` táblában
+él (`SessionRepository`, `apps/api/src/auth/session.repository.ts`):
+szerver-újraindítás és több `api` replika esetén is ugyanúgy feloldható egy
+korábban kiadott token, mert a state az adatbázisban van, nem egyetlen
+process memóriájában. Csak a token SHA-256 lenyomata kerül tárolásra
+(`Session.tokenHash`); a nyers token soha nem éri el az adatbázist. Lejárt
+session feloldásakor az `AuthGuard`/`AuthService` `401`-et ad, és a lejárt
+sort törli.
+
+### Mobil auth
+
+`POST /auth/mobile/login/password` törzse:
+
+```json
+{ "email": "owner@acropora.hu", "password": "..." }
+```
+
+Válasz:
+
+```json
+{ "token": "...", "expiresAt": "2026-07-28T18:00:00.000Z", "user": { "...": "AuthenticatedUser" } }
+```
+
+Ugyanazt a jelszó-ellenőrzést és `AuthService.loginWithPassword` hívást
+használja, mint a webes production login — csak a token kézbesítése más: a
+mobil kliensnek nincs böngésző-sütitárolója, ezért a token közvetlenül a
+JSON válaszban érkezik, és a mobil kliens (`apps/mobile/src/lib/auth/token-store.ts`,
+Expo SecureStore) tárolja, majd minden kérésen
+`Authorization: Bearer <token>` fejlécként küldi (lásd
+`apps/mobile/src/lib/api/client.ts`). Ez az endpoint nem állít be sem
+session-, sem CSRF-sütit — a CSRF double-submit védelem kizárólag a
+cookie-alapú auth-útvonalra vonatkozik, a Bearer-útvonalra sosem (lásd
+`AuthGuard`).
 
 ### Jelszó beállítása egy felhasználónak
 

@@ -4,6 +4,7 @@ import { UnauthorizedException } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
 import { AuthService } from "../auth/auth.service.js";
 import { AuthUserResolver } from "../auth/auth-user-resolver.js";
+import { SessionRepository } from "../auth/session.repository.js";
 import { BrandsRepository } from "./brands.repository.js";
 import { BrandImportAssistantService } from "./brand-import-assistant.service.js";
 
@@ -94,6 +95,7 @@ describe("Brand database integration", { skip: !enabled }, () => {
   it("development login resolves a persisted User.id for DomainEvent audit", async () => {
     const session = await new AuthService(
       new AuthUserResolver(),
+      new SessionRepository(),
     ).loginWithDevelopmentUser("owner@acropora.local");
     const persisted = await prisma.user.findUnique({
       where: { id: session.user.id },
@@ -341,6 +343,7 @@ describe("Brand database integration", { skip: !enabled }, () => {
     });
     const session = await new AuthService(
       new AuthUserResolver(),
+      new SessionRepository(),
     ).loginWithDevelopmentUser("owner@acropora.local");
     const listed = await assistant.rows(batch.id, {
       page: 1,
