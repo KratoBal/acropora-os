@@ -362,6 +362,7 @@ model User {
   createdPurchaseInvoices PurchaseInvoice[]
   unasCredentialsUpdated UnasConnectionSetting[] @relation("UnasCredentialUpdatedBy")
   szamlazzCredentialsUpdated SzamlazzConnectionSetting[] @relation("SzamlazzCredentialUpdatedBy")
+  stockReconciliationRepairs StockReconciliationRepair[]
 
   @@index([role, isActive])
 }
@@ -440,6 +441,7 @@ model ProductVariant {
   extension           ProductExtension?
   inventoryCountLines InventoryCountLine[]
   unasStockSyncOutboxEntries UnasStockSyncOutbox[]
+  stockReconciliationRepairs StockReconciliationRepair[]
 
   @@index([productId, isActive])
 }
@@ -726,6 +728,7 @@ model Warehouse {
   inventoryCounts      InventoryCount[]
   salesOrders          SalesOrder[]
   unasStockSyncOutboxEntries UnasStockSyncOutbox[]
+  stockReconciliationRepairs StockReconciliationRepair[]
 }
 
 model WarehouseLocation {
@@ -836,9 +839,115 @@ model StockItem {
   variant   ProductVariant     @relation(fields: [variantId], references: [id], onDelete: Cascade)
   warehouse Warehouse          @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
   location  WarehouseLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  reconciliationRepairs StockReconciliationRepair[]
 
   @@unique([variantId, warehouseId, locationId, lotId])
   @@index([warehouseId, variantId])
+}
+
+/// Milyen fajta helyreállítást hajtott végre egy
+/// StockReconciliationRepair sor - lásd
+/// apps/api/src/inventory/stock-reconciliation-repair.service.ts.
+/// Szándékosan csak két érték: a checkpoint 6 "C" típusa (ESTABLISH_
+/// CONTROLLED_BASELINE, kontrollált fizikai baseline létrehozása) NEM
+/// implementálódott ebben a checkpointban - lásd
+/// docs/INVENTORY-CONSISTENCY.md "Biztonságos javítási terv" - mert
+/// ehhez a StockMovementType enum bővítése (két új, egyértelmű előjelű
+/// típus, BASELINE_INCREASE/BASELINE_DECREASE) ÉS a reconciliation
+/// ledger-provability ablak (a legutóbbi baseline mozgástól számítva)
+/// átalakítása szükséges - ezt a checkpoint kifejezetten csak akkor kéri
+/// megépíteni, ha egyértelműen és biztonságosan reprezentálható, egyébként
+/// dokumentált tervként kell hagyni. Emiatt ez az enum sem sorolja fel
+/// most - egy jövőbeli, additív migráció bővítheti majd.
+enum StockReconciliationRepairType {
+  LOCAL_FROM_PROVEN_LEDGER
+  REPUBLISH_LOCAL_TO_UNAS
+}
+
+/// APPLIED: a StockItem/outbox ténylegesen módosult. NOOP: a művelet
+/// lefutott, de nem volt mit módosítani (pl. a ledger már egyezett az
+/// onHand-del) - ez is auditálandó eset, nem csak a tényleges változás.
+/// REJECTED: egy üzleti szabály (bizonyítatlan baseline, elavult
+/// expectedCurrentOnHand, hiányzó UNAS-link, már versengő publikálás stb.)
+/// miatt a művelet el sem indult - a StockItem/outbox nem változott.
+/// Szándékosan NINCS külön FAILED érték: egy valódi, váratlan
+/// tranzakció-hiba esetén a teljes tranzakció (beleértve MAGÁT ez audit
+/// sor létrehozását is) visszagördül, tehát ilyenkor EGYÁLTALÁN nem
+/// keletkezik sor - soha nem fordulhat elő "SUCCESS audit részleges
+/// módosítással" állapot, mert nincs olyan út, amin egy sikertelen
+/// tranzakció mellett bármi (akár csak az audit sor) megmaradna. Ugyanezt
+/// a mintát követi inventory-count.repository.ts applyCorrection-je is
+/// (failedCount doc-comment: "a jelenlegi tranzakciós modell mellett
+/// gyakorlatilag mindig 0").
+enum StockReconciliationRepairStatus {
+  APPLIED
+  NOOP
+  REJECTED
+}
+
+/// Auditálható, egyedi rekordokra korlátozott admin-repair a
+/// checkpoint 5 read-only reconciliation-jének eredményére építve - lásd
+/// docs/INVENTORY-CONSISTENCY.md "Biztonságos javítási terv". Minden
+/// mutáló repair-kísérlet (dry-run KIVÉTELÉVEL - az explicit nem ír
+/// semmit, se StockItem-et, se ide) pontosan egy sort ír ide, ugyanabban
+/// a tranzakcióban, amiben a StockItem/outbox is módosul (ha módosul).
+/// dryRun NINCS mezőként - a dry-run futás definíció szerint sosem jut el
+/// idáig (lásd a service doc-commentjét).
+model StockReconciliationRepair {
+  id         String                           @id @default(cuid())
+  repairType StockReconciliationRepairType
+  status     StockReconciliationRepairStatus
+  /// Nullable: egy jövőbeli baseline-típus (l. StockReconciliationRepairType
+  /// doc-comment) olyan variánst is érinthetne, aminek MÉG nincs StockItem
+  /// sora - a jelenlegi két típus (A, B) mindig egy már létező StockItem-re
+  /// vonatkozik, tehát ezeknél gyakorlatilag mindig kitöltött.
+  stockItemId String?
+  variantId   String
+  warehouseId String
+  /// Szerveroldalon, a munkamenetből feloldott, sosem a kliens által
+  /// küldött mezőből - lásd stock-reconciliation-repair.controller.ts.
+  actorUserId String
+  reason      String
+  /// `RECONCILIATION_REPAIR:<repairType>:<stockItemId>:<expectedCurrentOnHand>`
+  /// - lásd a service doc-commentjét a pontos indoklásért.
+  idempotencyKey        String  @unique
+  expectedCurrentOnHand Decimal @db.Decimal(19, 6)
+  /// Null egy REJECTED sornál (sosem olvasta újra zárolás alatt, mert a
+  /// zárolás előtti ellenőrzés már elutasította).
+  beforeOnHand         Decimal? @db.Decimal(19, 6)
+  /// Null egy REJECTED sornál (nem történt módosítás). Egy NOOP sornál
+  /// SZÁNDÉKOSAN NEM null, hanem ugyanaz az érték, mint beforeOnHand - a
+  /// "semmi nem változott, mert a ledger már egyezett" tény önmagában is
+  /// auditálandó adat, nem csak "nincs adat".
+  afterOnHand          Decimal? @db.Decimal(19, 6)
+  /// A reconciliation által számított, bizonyított ledger-elméleti érték a
+  /// döntés pillanatában - null, ha nem volt bizonyítható (ez maga a
+  /// leggyakoribb REJECTED-ok).
+  ledgerExpectedOnHand Decimal? @db.Decimal(19, 6)
+  /// Ehhez a két repair-típushoz sosem jön létre StockMovement (lásd a
+  /// repairType doc-commentjét: "ne hozzon létre normál üzleti
+  /// StockMovementet") - a mező egy jövőbeli baseline-típushoz van
+  /// fenntartva.
+  movementId String?
+  /// A REPUBLISH_LOCAL_TO_UNAS által létrehozott (vagy a
+  /// LOCAL_FROM_PROVEN_LEDGER által, ha a helyi érték változott,
+  /// szintúgy létrehozott) UnasStockSyncOutbox sor azonosítója.
+  outboxId String?
+  /// Csak technikai, nem-érzékeny mezők (pl. a reconciliation adott
+  /// pillanatban számított teljes állapota) - sosem rendelési/vevői adat.
+  requestDetail Json?
+  resultDetail  Json?
+  createdAt     DateTime  @default(now())
+  completedAt   DateTime?
+
+  actor     User            @relation(fields: [actorUserId], references: [id])
+  variant   ProductVariant  @relation(fields: [variantId], references: [id])
+  warehouse Warehouse       @relation(fields: [warehouseId], references: [id])
+  stockItem StockItem?      @relation(fields: [stockItemId], references: [id], onDelete: SetNull)
+
+  @@index([variantId, warehouseId])
+  @@index([status, createdAt])
+  @@index([actorUserId, createdAt])
 }
 
 /// idempotencyKey: a központi InventoryMovementWriter (lásd
