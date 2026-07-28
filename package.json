@@ -12,6 +12,8 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev --filter=@acropora/web --filter=@acropora/api",
+    "dev:mobile": "npm --prefix apps/mobile run dev",
+    "dev:mobile:go": "npm --prefix apps/mobile run start:go",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
@@ -27,7 +29,10 @@
     "prisma:migrate": "pnpm --filter @acropora/database prisma:migrate",
     "prisma:push": "pnpm --filter @acropora/database prisma:push",
     "prisma:studio": "pnpm --filter @acropora/database prisma:studio",
-    "prisma:seed": "pnpm --filter @acropora/database prisma:seed"
+    "prisma:seed": "pnpm --filter @acropora/database prisma:seed",
+    "mobile:doctor": "npm --prefix apps/mobile run doctor",
+    "mobile:lint": "npm --prefix apps/mobile run lint",
+    "mobile:typecheck": "npm --prefix apps/mobile run typecheck"
   },
   "devDependencies": {
     "prettier": "^3.9.5",
