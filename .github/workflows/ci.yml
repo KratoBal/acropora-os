@@ -84,6 +84,24 @@ jobs:
           pnpm --filter @acropora/api test:integration
           pnpm --filter @acropora/api test:brands:integration
 
+      # Checkpoint 9: the recorded databaseEngineVersion must be machine-
+      # queried from the actual running server, never a hardcoded literal
+      # that could silently drift from what the service container is
+      # really running (e.g. after bumping the `postgres:16-alpine` image
+      # tag above without remembering to update a hardcoded string
+      # elsewhere). `psql` ships preinstalled on GitHub's ubuntu-latest
+      # runner image. Runs regardless of the integration tests' own
+      # outcome (`if: always()`) - the version to RECORD alongside a
+      # FAILURE result is just as much "what did we actually run against"
+      # as it is for a SUCCESS.
+      - name: Query the actual PostgreSQL server version
+        id: postgres_version
+        if: always()
+        run: |
+          version=$(PGPASSWORD=acropora psql -h localhost -U acropora -d acropora_ci -tAc "SHOW server_version;" | xargs)
+          echo "server version reported by the running container: $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       # Records a checkpoint-7 ReleaseEvidence row (see
       # packages/database/prisma/record-release-evidence.ts and
       # schema.prisma's ReleaseEvidence doc comment) for the real-Postgres
@@ -136,7 +154,7 @@ jobs:
           RELEASE_EVIDENCE_TRIGGER_EVENT: ${{ github.event_name }}
           RELEASE_EVIDENCE_ENVIRONMENT: github-actions-ci
           RELEASE_EVIDENCE_DB_ENGINE: postgres
-          RELEASE_EVIDENCE_DB_ENGINE_VERSION: "16-alpine"
+          RELEASE_EVIDENCE_DB_ENGINE_VERSION: ${{ steps.postgres_version.outputs.version }}
           RELEASE_EVIDENCE_TEST_SUITE: "apps/api test:integration (unas-order-sync.repository.integration.spec.ts)"
           RELEASE_EVIDENCE_STARTED_AT: ${{ steps.db_integration_tests.outputs.started_at }}
         run: |

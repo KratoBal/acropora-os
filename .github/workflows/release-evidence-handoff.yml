@@ -53,6 +53,16 @@ name: Release evidence handoff (production)
 #     database whose ReleaseEvidence table doesn't yet have this
 #     checkpoint's provenance columns.
 
+# Checkpoint 9: deliberately NO `inputs:` block at all. Every value this
+# workflow's steps record (commit SHA, repository, workflow/job name,
+# trigger event) comes exclusively from GitHub's own run-time context
+# expressions (github.sha/github.repository/github.workflow/github.job/
+# github.event_name) - never from a workflow_dispatch input a dispatcher
+# could set to an arbitrary string. If a future need arises to let a
+# human choose which ref/branch to verify, that choice already exists
+# natively in GitHub's own "Run workflow" UI (it lets you pick the branch/
+# tag to run against) - it does not require, and must never gain, a
+# freeform text input for the commit/repository/etc. themselves.
 on:
   workflow_dispatch: {}
 
@@ -128,6 +138,16 @@ jobs:
           pnpm --filter @acropora/api test:integration
           pnpm --filter @acropora/api test:brands:integration
 
+      # Checkpoint 9: machine-queried, not hardcoded - see ci.yml's own
+      # identical step for the full rationale.
+      - name: Query the actual PostgreSQL server version
+        id: postgres_version
+        if: always()
+        run: |
+          version=$(PGPASSWORD=acropora psql -h localhost -U acropora -d acropora_release_evidence_check -tAc "SHOW server_version;" | xargs)
+          echo "server version reported by the running container: $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Fail the job if the re-run integration suite failed
         if: steps.integration_tests.outcome != 'success'
         run: |
@@ -165,7 +185,7 @@ jobs:
           RELEASE_EVIDENCE_TRIGGER_EVENT: ${{ github.event_name }}
           RELEASE_EVIDENCE_ENVIRONMENT: production
           RELEASE_EVIDENCE_DB_ENGINE: postgres
-          RELEASE_EVIDENCE_DB_ENGINE_VERSION: "16-alpine"
+          RELEASE_EVIDENCE_DB_ENGINE_VERSION: ${{ steps.postgres_version.outputs.version }}
           RELEASE_EVIDENCE_TEST_SUITE: "apps/api test:integration (unas-order-sync.repository.integration.spec.ts) - re-run for production release evidence"
           RELEASE_EVIDENCE_STARTED_AT: ${{ steps.integration_tests.outputs.started_at }}
         run: |
@@ -186,7 +206,7 @@ jobs:
           RELEASE_EVIDENCE_TRIGGER_EVENT: ${{ github.event_name }}
           RELEASE_EVIDENCE_ENVIRONMENT: production
           RELEASE_EVIDENCE_DB_ENGINE: postgres
-          RELEASE_EVIDENCE_DB_ENGINE_VERSION: "16-alpine"
+          RELEASE_EVIDENCE_DB_ENGINE_VERSION: ${{ steps.postgres_version.outputs.version }}
           RELEASE_EVIDENCE_TEST_SUITE: "apps/api test:integration (unas-order-sync.repository.integration.spec.ts) - re-run for production release evidence"
           RELEASE_EVIDENCE_STARTED_AT: ${{ steps.integration_tests.outputs.started_at }}
         run: |
