@@ -45,6 +45,12 @@ module.exports = ({ config }) => {
     icon: "./assets/images/icon.png",
     scheme: selected.scheme,
     userInterfaceStyle: "automatic",
+updates: {
+  url: "https://u.expo.dev/95c3f5b6-fd32-4ca8-8465-62a4c1e6243c",
+},
+runtimeVersion: {
+  policy: "appVersion",
+},					
     ios: {
       supportsTablet: true,
       bundleIdentifier: selected.bundleIdentifier,
