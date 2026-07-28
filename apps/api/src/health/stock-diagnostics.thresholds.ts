@@ -107,3 +107,16 @@ export const EXPECTED_RELEASE_EVIDENCE_REPOSITORY =
 /// .github/workflows/ci.yml's own fork guard on the evidence-recording
 /// step, which is defense-in-depth to THIS check, not a substitute for it).
 export const TRUSTED_RELEASE_EVIDENCE_TRIGGER_EVENTS = new Set(["push", "workflow_dispatch"]);
+
+/// Checkpoint 9: activation-readiness must also confirm the SUCCESS row
+/// actually identifies the specific test this gate cares about (the
+/// application-level UNAS order-sync advisory-lock concurrency test),
+/// not merely "some PostgreSQL 16 test suite, from the right repository,
+/// on a trusted trigger, passed" - a row whose testSuite field names an
+/// unrelated or incomplete suite must not satisfy this gate. Checked as
+/// a substring match (not exact equality) against
+/// ReleaseEvidence.testSuite, since the exact wording of that field is a
+/// human-written CI step description (see ci.yml/release-evidence-
+/// handoff.yml's RELEASE_EVIDENCE_TEST_SUITE values) that may reasonably
+/// vary in framing without changing what was actually tested.
+export const EXPECTED_TEST_SUITE_SUBSTRING = "unas-order-sync.repository.integration.spec.ts";

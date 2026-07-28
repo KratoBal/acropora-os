@@ -6,6 +6,7 @@ import { UnasOrderStockAuditService } from "../orders/unas-order-sync/unas-order
 import { StockDiagnosticsRepository } from "./stock-diagnostics.repository.js";
 import {
   EXPECTED_RELEASE_EVIDENCE_REPOSITORY,
+  EXPECTED_TEST_SUITE_SUBSTRING,
   OUTBOX_DEAD_LETTER_COUNT_BLOCKED,
   OUTBOX_FAILED_COUNT_BLOCKED,
   OUTBOX_OLDEST_PENDING_AGE_MINUTES_BLOCKED,
@@ -284,6 +285,29 @@ export class StockDiagnosticsService {
       ) {
         authenticityViolations.push(
           `A talált evidence sor nem PostgreSQL ${REQUIRED_DATABASE_ENGINE_MAJOR_VERSION_PREFIX}-on futott (${evidence.databaseEngine} ${evidence.databaseEngineVersion}) - a production postgres:16-alpine-ot futtat, egy másik főverzión (pl. a checkpoint 7 kiegészítő PostgreSQL 18.4 futása) lefutott teszt önmagában nem elég.`,
+        );
+      }
+      if (!evidence.testSuite.includes(EXPECTED_TEST_SUITE_SUBSTRING)) {
+        authenticityViolations.push(
+          `A talált evidence sor testSuite mezője nem azonosítja a várt tesztet ("${evidence.testSuite}", elvárt részlet: "${EXPECTED_TEST_SUITE_SUBSTRING}") - egy más/hiányos suite-ra rögzített SUCCESS nem bizonyítja pont AZT, amit ez a kapu megkövetel.`,
+        );
+      }
+
+      // Checkpoint 9: a GitHub Actions run_id marad a workflow run
+      // ÚJRAFUTTATásai (retry) között is - ezért egy régebbi FAILURE és egy
+      // újabb SUCCESS (vagy fordítva) ugyanahhoz a workflowRunId-hoz
+      // tartozhat. findLatestConcurrencyTestEvidence önmagában csak a
+      // SUCCESS oldalt látja - ez a külön lekérdezés kifejezetten azt
+      // ellenőrzi, hogy UGYANEHHEZ a workflowRunId-hoz nem létezik-e
+      // ELLENTMONDÓ FAILURE sor is. Egy ilyen ellentmondó pár esetén a
+      // sor - még ha egyébként minden más feltételnek megfelelne is -
+      // nem tekinthető megbízhatónak.
+      const contradictingFailure = await this.repository.findContradictingFailureForWorkflowRun(
+        evidence.workflowRunId,
+      );
+      if (contradictingFailure) {
+        authenticityViolations.push(
+          `Ellentmondó evidence: a(z) ${evidence.workflowRunId} workflowRunId-hoz SUCCESS ÉS FAILURE sor is tartozik (FAILURE id: ${contradictingFailure.id}) - ez a helyzet önmagában blokkolja a kaput, függetlenül attól, hogy a SUCCESS sor egyébként minden más feltételnek megfelelne.`,
         );
       }
 

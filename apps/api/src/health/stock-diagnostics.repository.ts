@@ -222,4 +222,32 @@ export class StockDiagnosticsRepository {
       },
     });
   }
+
+  /// Checkpoint 9: a GitHub Actions run_id is stable across re-runs of the
+  /// SAME workflow run (GitHub's own "Re-run jobs" keeps github.run_id
+  /// identical) - so it is possible, in principle, for the SAME
+  /// workflowRunId to have recorded BOTH a FAILURE (an earlier attempt)
+  /// and a SUCCESS (a later, genuinely successful re-run) row, or the
+  /// reverse. findLatestConcurrencyTestEvidence's own WHERE clause only
+  /// ever looks at status=SUCCESS, so it would happily return an OLDER
+  /// SUCCESS row without any awareness that a LATER FAILURE row exists for
+  /// that exact same run - an ambiguous, contradictory state this
+  /// checkpoint's own rule explicitly forbids treating as trustworthy.
+  /// This is a separate, explicit lookup rather than folding it into
+  /// findLatestConcurrencyTestEvidence's own query, so the two concerns
+  /// (find the best candidate vs. check whether it is fatally
+  /// contradicted) stay independently testable.
+  async findContradictingFailureForWorkflowRun(
+    workflowRunId: string,
+  ): Promise<{ id: string; status: string; createdAt: Date } | null> {
+    return this.database.releaseEvidence.findFirst({
+      where: {
+        evidenceType: "INVENTORY_POSTGRES_CONCURRENCY_TEST",
+        workflowRunId,
+        status: "FAILURE",
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, status: true, createdAt: true },
+    });
+  }
 }
