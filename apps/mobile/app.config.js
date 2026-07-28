@@ -1,15 +1,4 @@
-import type { ConfigContext, ExpoConfig } from "expo/config";
-
-type AppVariant = "development" | "preview" | "production";
-
-const variants: Record<
-  AppVariant,
-  {
-    displayName: string;
-    bundleIdentifier: string;
-    scheme: string;
-  }
-> = {
+const variants = {
   development: {
     displayName: "Acropora OS Dev",
     bundleIdentifier: "hu.acropora.os.dev",
@@ -27,9 +16,14 @@ const variants: Record<
   },
 };
 
-function resolveVariant(): AppVariant {
+function resolveVariant() {
   const value = process.env.APP_VARIANT ?? "development";
-  if (value === "development" || value === "preview" || value === "production") {
+
+  if (
+    value === "development" ||
+    value === "preview" ||
+    value === "production"
+  ) {
     return value;
   }
 
@@ -38,7 +32,7 @@ function resolveVariant(): AppVariant {
   );
 }
 
-export default ({ config }: ConfigContext): ExpoConfig => {
+module.exports = ({ config }) => {
   const variant = resolveVariant();
   const selected = variants[variant];
 
@@ -89,8 +83,11 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       typedRoutes: true,
       reactCompiler: true,
     },
-    extra: {
-      appVariant: variant,
-    },
+extra: {
+  appVariant: variant,
+  eas: {
+    projectId: "95c3f5b6-fd32-4ca8-8465-62a4c1e6243c",
+  },
+},
   };
 };
