@@ -107,13 +107,33 @@ jobs:
       # docs/INVENTORY-CONSISTENCY.md's "Release evidence" section - since
       # actually wiring it up crosses into production-deploy territory,
       # explicitly out of this checkpoint's scope.
+      # Checkpoint 8 hardening: this step is skipped entirely for pull_request
+      # runs whose head repository differs from this repository (i.e. a
+      # fork). A fork's tests still run (the `verify` job itself has no such
+      # guard) and forks still get real pass/fail feedback in the PR - only
+      # the ReleaseEvidence *recording* is skipped, because a fork PR's
+      # commitSha, while real, was never reviewed/merged here and must never
+      # be able to produce a row that could later be mistaken for trustworthy
+      # evidence. This is defense-in-depth: today this step only ever writes
+      # to CI's own ephemeral database anyway (see the long comment on the
+      # "Database integration tests" step above), but the guard is meant to
+      # hold unconditionally once a real CI -> production handoff exists
+      # (see release-evidence-handoff.yml, added in checkpoint 8).
       - name: Record release evidence (CI's own ephemeral database)
-        if: always()
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         env:
           RELEASE_EVIDENCE_TYPE: INVENTORY_POSTGRES_CONCURRENCY_TEST
           RELEASE_EVIDENCE_STATUS: ${{ steps.db_integration_tests.outcome == 'success' && 'SUCCESS' || 'FAILURE' }}
           RELEASE_EVIDENCE_COMMIT_SHA: ${{ github.sha }}
           RELEASE_EVIDENCE_WORKFLOW_RUN_ID: ${{ github.run_id }}
+          # Checkpoint 8: GitHub's own trustworthy context expressions, not
+          # anything the job's own commands could override - see
+          # record-release-evidence.ts and schema.prisma's ReleaseEvidence
+          # doc comments.
+          RELEASE_EVIDENCE_REPOSITORY: ${{ github.repository }}
+          RELEASE_EVIDENCE_WORKFLOW_NAME: ${{ github.workflow }}
+          RELEASE_EVIDENCE_JOB_NAME: ${{ github.job }}
+          RELEASE_EVIDENCE_TRIGGER_EVENT: ${{ github.event_name }}
           RELEASE_EVIDENCE_ENVIRONMENT: github-actions-ci
           RELEASE_EVIDENCE_DB_ENGINE: postgres
           RELEASE_EVIDENCE_DB_ENGINE_VERSION: "16-alpine"
@@ -143,8 +163,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Checkpoint 8: bakes the exact commit under test into the api
+          # image via the Dockerfile's RELEASE_COMMIT_SHA build ARG (see
+          # that file) - so this CI job also exercises the build-time
+          # well-formedness check added there, using a real, valid SHA.
           - app: api
-            build_args: ""
+            build_args: RELEASE_COMMIT_SHA=${{ github.sha }}
           - app: web
             build_args: API_URL=http://127.0.0.1:3001
 
@@ -248,6 +272,7 @@ jobs:
           push: false
           load: true
           tags: acropora-api:migrate-ci
+          build-args: RELEASE_COMMIT_SHA=${{ github.sha }}
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
 
@@ -266,8 +291,25 @@ jobs:
           push: false
           load: true
           tags: acropora-api:ci
+          build-args: RELEASE_COMMIT_SHA=${{ github.sha }}
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
+
+      # Checkpoint 8: proves the Dockerfile's RELEASE_COMMIT_SHA build ARG
+      # actually lands as a real environment variable in the built image,
+      # with the exact value CI passed - without needing an authenticated
+      # HTTP call (activation-readiness itself is permission-gated, so a
+      # plain curl here couldn't reach it). `docker inspect` reads the
+      # image's baked config directly, no running container needed.
+      - name: Verify RELEASE_COMMIT_SHA is baked into the image
+        run: |
+          set -euo pipefail
+          baked=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' acropora-api:ci | grep '^RELEASE_COMMIT_SHA=' | cut -d= -f2)
+          echo "baked RELEASE_COMMIT_SHA=$baked"
+          if [ "$baked" != "${{ github.sha }}" ]; then
+            echo "expected ${{ github.sha }}, got '$baked'" >&2
+            exit 1
+          fi
 
       - name: Start container and verify /health
         run: |
