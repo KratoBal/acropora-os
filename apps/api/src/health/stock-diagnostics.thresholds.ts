@@ -69,3 +69,41 @@ export const UNAS_ORDER_AUDIT_RISK_ORDER_COUNT_DEGRADED = 1;
 /// an edge case, not the primary defense, since the primary defense is the
 /// exact commitSha match itself).
 export const RELEASE_EVIDENCE_MAX_AGE_DAYS = 30;
+
+/// Checkpoint 8: production runs `postgres:16-alpine` (see
+/// docker-compose.yml and .github/workflows/ci.yml's service containers).
+/// A ReleaseEvidence row is only sufficient to unblock activation-readiness
+/// if it was recorded against this exact PostgreSQL MAJOR version - a
+/// PostgreSQL 18.4 run (checkpoint 7's own embedded-postgres verification,
+/// still valuable as supplementary compatibility evidence, see
+/// docs/INVENTORY-CONSISTENCY.md) must never be treated as equivalent to a
+/// PostgreSQL 16 run for this gate. Compared as a string prefix against
+/// ReleaseEvidence.databaseEngineVersion (e.g. "16-alpine", "16.14"), not
+/// an exact-string match, since the exact patch/build suffix legitimately
+/// varies between CI runs.
+export const REQUIRED_DATABASE_ENGINE = "postgres";
+export const REQUIRED_DATABASE_ENGINE_MAJOR_VERSION_PREFIX = "16";
+
+/// Checkpoint 8: the GitHub repository slug this deployment's evidence
+/// must have been recorded against - rejects a foreign repository's
+/// (e.g. a similarly-named unrelated fork's) evidence row even in the
+/// hypothetical case its commitSha happened to collide. Overridable via
+/// env var only for local/alternate-fork development; the fallback is
+/// this project's actual repository.
+export const EXPECTED_RELEASE_EVIDENCE_REPOSITORY =
+  process.env.RELEASE_EVIDENCE_EXPECTED_REPOSITORY?.trim() || "KratoBal/acropora-os";
+
+/// Checkpoint 8: GitHub Actions event names trusted enough to unblock
+/// production activation-readiness. `push` (a real merge/commit landing on
+/// a branch) and `workflow_dispatch` (the release-evidence-handoff.yml
+/// manual, reviewer-gated re-run) both represent evidence tied to a
+/// reviewed, non-fork-controlled action. `pull_request`/
+/// `pull_request_target` are deliberately excluded - even a same-repo PR's
+/// tests passing is real and useful CI signal, but treating it as
+/// sufficient for PRODUCTION activation-readiness would mean an
+/// as-yet-unmerged, unreviewed branch could satisfy the gate for whatever
+/// commit ends up on main with the same SHA prefix confusion risk, and
+/// forked PRs must categorically never be able to (see
+/// .github/workflows/ci.yml's own fork guard on the evidence-recording
+/// step, which is defense-in-depth to THIS check, not a substitute for it).
+export const TRUSTED_RELEASE_EVIDENCE_TRIGGER_EVENTS = new Set(["push", "workflow_dispatch"]);

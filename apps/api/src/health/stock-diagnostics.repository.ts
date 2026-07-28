@@ -31,6 +31,15 @@ export interface StockDiagnosticsDatabase {
       id: string;
       status: string;
       commitSha: string;
+      workflowRunId: string;
+      repository: string;
+      workflowName: string;
+      jobName: string;
+      triggerEvent: string;
+      environment: string;
+      databaseEngine: string;
+      databaseEngineVersion: string;
+      testSuite: string;
       createdAt: Date;
       completedAt: Date;
     } | null>;
@@ -174,9 +183,21 @@ export class StockDiagnosticsRepository {
   /// stock-diagnostics.service.ts::activationReadiness's own comment on
   /// why a stale commit's SUCCESS must never silently unblock a new
   /// release).
-  async findLatestConcurrencyTestEvidence(
-    commitSha: string,
-  ): Promise<{ id: string; commitSha: string; createdAt: Date; completedAt: Date } | null> {
+  async findLatestConcurrencyTestEvidence(commitSha: string): Promise<{
+    id: string;
+    commitSha: string;
+    workflowRunId: string;
+    repository: string;
+    workflowName: string;
+    jobName: string;
+    triggerEvent: string;
+    environment: string;
+    databaseEngine: string;
+    databaseEngineVersion: string;
+    testSuite: string;
+    createdAt: Date;
+    completedAt: Date;
+  } | null> {
     return this.database.releaseEvidence.findFirst({
       where: {
         evidenceType: "INVENTORY_POSTGRES_CONCURRENCY_TEST",
@@ -184,7 +205,21 @@ export class StockDiagnosticsRepository {
         commitSha,
       },
       orderBy: { createdAt: "desc" },
-      select: { id: true, commitSha: true, createdAt: true, completedAt: true },
+      select: {
+        id: true,
+        commitSha: true,
+        workflowRunId: true,
+        repository: true,
+        workflowName: true,
+        jobName: true,
+        triggerEvent: true,
+        environment: true,
+        databaseEngine: true,
+        databaseEngineVersion: true,
+        testSuite: true,
+        createdAt: true,
+        completedAt: true,
+      },
     });
   }
 }

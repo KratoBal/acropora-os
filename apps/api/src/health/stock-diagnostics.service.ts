@@ -5,6 +5,7 @@ import { StockReconciliationService } from "../inventory/stock-reconciliation.se
 import { UnasOrderStockAuditService } from "../orders/unas-order-sync/unas-order-stock-audit.service.js";
 import { StockDiagnosticsRepository } from "./stock-diagnostics.repository.js";
 import {
+  EXPECTED_RELEASE_EVIDENCE_REPOSITORY,
   OUTBOX_DEAD_LETTER_COUNT_BLOCKED,
   OUTBOX_FAILED_COUNT_BLOCKED,
   OUTBOX_OLDEST_PENDING_AGE_MINUTES_BLOCKED,
@@ -13,6 +14,9 @@ import {
   OUTBOX_PENDING_COUNT_DEGRADED,
   RECONCILIATION_LOCAL_LEDGER_MISMATCH_COUNT_DEGRADED,
   RELEASE_EVIDENCE_MAX_AGE_DAYS,
+  REQUIRED_DATABASE_ENGINE,
+  REQUIRED_DATABASE_ENGINE_MAJOR_VERSION_PREFIX,
+  TRUSTED_RELEASE_EVIDENCE_TRIGGER_EVENTS,
   UNAS_ORDER_AUDIT_RISK_ORDER_COUNT_DEGRADED,
   UNAS_SNAPSHOT_STALE_HOURS_DEGRADED,
   UNAS_SNAPSHOT_STALE_HOURS_UNKNOWN,
@@ -242,11 +246,50 @@ export class StockDiagnosticsService {
       );
     } else {
       const ageDays = (Date.now() - evidence.completedAt.getTime()) / (1000 * 60 * 60 * 24);
+      // Checkpoint 8: an exact-commit SUCCESS row that isn't too old is
+      // STILL not automatically sufficient - the "most important rule"
+      // (the user's own framing for this checkpoint) is that a raw
+      // advisory-lock primitive proof is not application-level proof, and
+      // only a genuine, identifiable, PostgreSQL-16, GitHub-Actions-
+      // originated CI/release run may lift this gate. Each authenticity
+      // violation below is reported as its own distinct blocking reason,
+      // rather than a single generic "invalid evidence" message, so a
+      // future release/deploy engineer can see exactly which property
+      // failed instead of having to guess.
+      const authenticityViolations: string[] = [];
+
       if (ageDays > RELEASE_EVIDENCE_MAX_AGE_DAYS) {
-        concurrencyTestEvidence = "NOT_DEMONSTRATED";
-        blockingReasons.push(
+        authenticityViolations.push(
           `A jelenlegi commitra (${evaluatedCommitSha}) talált SUCCESS evidence túl régi (${Math.round(ageDays)} nap) - lásd RELEASE_EVIDENCE_MAX_AGE_DAYS.`,
         );
+      }
+      if (!evidence.workflowRunId.trim()) {
+        authenticityViolations.push(
+          "A talált evidence sornak nincs workflowRunId-ja - nem vezethető vissza egy konkrét, ellenőrizhető CI-futásra.",
+        );
+      }
+      if (evidence.repository !== EXPECTED_RELEASE_EVIDENCE_REPOSITORY) {
+        authenticityViolations.push(
+          `A talált evidence sor egy másik repositoryból származik ("${evidence.repository}", elvárt: "${EXPECTED_RELEASE_EVIDENCE_REPOSITORY}") - még egy véletlenül egyező commitSha esetén sem fogadható el.`,
+        );
+      }
+      if (!TRUSTED_RELEASE_EVIDENCE_TRIGGER_EVENTS.has(evidence.triggerEvent)) {
+        authenticityViolations.push(
+          `A talált evidence sor nem megbízható GitHub Actions eseményből származik ("${evidence.triggerEvent}") - egy pull_request (különösen egy fork pull_requestje) sosem elég a production activation-readiness feloldásához, lásd TRUSTED_RELEASE_EVIDENCE_TRIGGER_EVENTS.`,
+        );
+      }
+      if (
+        evidence.databaseEngine !== REQUIRED_DATABASE_ENGINE ||
+        !evidence.databaseEngineVersion.startsWith(REQUIRED_DATABASE_ENGINE_MAJOR_VERSION_PREFIX)
+      ) {
+        authenticityViolations.push(
+          `A talált evidence sor nem PostgreSQL ${REQUIRED_DATABASE_ENGINE_MAJOR_VERSION_PREFIX}-on futott (${evidence.databaseEngine} ${evidence.databaseEngineVersion}) - a production postgres:16-alpine-ot futtat, egy másik főverzión (pl. a checkpoint 7 kiegészítő PostgreSQL 18.4 futása) lefutott teszt önmagában nem elég.`,
+        );
+      }
+
+      if (authenticityViolations.length > 0) {
+        concurrencyTestEvidence = "NOT_DEMONSTRATED";
+        blockingReasons.push(...authenticityViolations);
       } else {
         concurrencyTestEvidence = "DEMONSTRATED";
       }
