@@ -1,5 +1,7 @@
 import { Prisma } from "@acropora/database";
 
+import { isPrismaUniqueConstraintViolation } from "./prisma-error.util.js";
+
 /// True for a Prisma unique-constraint violation on `StockMovement`'s
 /// idempotency key - i.e. two concurrent callers raced past this module's
 /// own `stockMovement.findFirst` idempotency check (both saw "not posted
@@ -9,14 +11,15 @@ import { Prisma } from "@acropora/database";
 /// (e.g. a 409 Conflict) instead of an opaque 500. See each flow's
 /// repository (inventory-count/purchase-invoice/pos-sale) for where this
 /// is caught.
+///
+/// Uses the structural (non-`instanceof`) check from prisma-error.util.ts -
+/// see that file's doc comment for why `instanceof
+/// Prisma.PrismaClientKnownRequestError` can't be relied on to narrow
+/// `error` in this environment.
 export function isDuplicateMovementIdempotencyKeyError(
   error: unknown,
 ): boolean {
-  return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === "P2002" &&
-    JSON.stringify(error.meta?.target ?? "").includes("idempotencyKey")
-  );
+  return isPrismaUniqueConstraintViolation(error, "idempotencyKey");
 }
 
 /// Central, transaction-scoped inventory posting primitive.

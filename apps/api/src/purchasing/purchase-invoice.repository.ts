@@ -18,6 +18,7 @@ import {
   postInventoryMovement,
   type InventoryMovementDatabase,
 } from "../common/inventory-movement-writer.js";
+import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
 import {
   ensureMainWarehouse,
   type WarehouseLookupDatabase,
@@ -39,12 +40,13 @@ import {
 /// doc comment). Deliberately narrower than a blanket "any P2002 during
 /// invoice creation" check, so an (astronomically unlikely) documentNumber
 /// collision isn't misreported as "duplicate invoice".
+///
+/// Uses the structural (non-`instanceof`) check from prisma-error.util.ts -
+/// see that file's doc comment for why `instanceof
+/// Prisma.PrismaClientKnownRequestError` can't be relied on to narrow
+/// `error` in this environment.
 function isDuplicateSupplierInvoiceError(error: unknown): boolean {
-  return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === "P2002" &&
-    JSON.stringify(error.meta?.target ?? "").includes("supplierInvoiceNumber")
-  );
+  return isPrismaUniqueConstraintViolation(error, "supplierInvoiceNumber");
 }
 
 export interface PurchaseInvoiceVariantInfo {
