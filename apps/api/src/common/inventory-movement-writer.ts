@@ -162,7 +162,7 @@ export interface InventoryMovementDatabase {
   };
   unasStockSyncOutbox: {
     updateMany(args: unknown): Promise<{ count: number }>;
-    create(args: unknown): Promise<unknown>;
+    create(args: unknown): Promise<{ id: string }>;
   };
 }
 
@@ -199,6 +199,56 @@ export function buildOutboxIdempotencyKey(
   variantId: string,
 ): string {
   return `${movementIdempotencyKey}:${variantId}`;
+}
+
+/// Shared "close out any still-open older publish target, then enqueue the
+/// new one" step - extracted out of postInventoryMovement's own per-line
+/// loop (below) so the checkpoint-6 reconciliation-repair service
+/// (stock-reconciliation-repair.service.ts) can enqueue an outbox entry
+/// through the EXACT same supersede contract without going through
+/// postInventoryMovement itself. This matters because a repair's StockItem
+/// correction (LOCAL_FROM_PROVEN_LEDGER) or UNAS republish
+/// (REPUBLISH_LOCAL_TO_UNAS) must NEVER create a StockMovement - see each
+/// repair type's own doc comment for why a data-integrity correction back
+/// to what the ledger already says was true is not a new physical stock
+/// event. Callers MUST already hold lockVariantWarehouse for
+/// (variantId, warehouseId) before calling this, exactly like
+/// postInventoryMovement's own loop does.
+export async function enqueueStockSyncOutboxEntry(
+  database: Pick<InventoryMovementDatabase, "unasStockSyncOutbox">,
+  params: {
+    variantId: string;
+    warehouseId: string;
+    sku: string;
+    targetOnHand: Prisma.Decimal;
+    idempotencyKey: string;
+    sourceProcess: InventoryMovementSourceProcess;
+    sourceRecordId: string;
+  },
+): Promise<{ id: string }> {
+  await database.unasStockSyncOutbox.updateMany({
+    where: {
+      variantId: params.variantId,
+      warehouseId: params.warehouseId,
+      status: { in: [...OUTBOX_SUPERSEDABLE_STATUSES] },
+    },
+    data: {
+      status: "SUCCEEDED",
+      resolutionNote: `superseded_by:${params.idempotencyKey}`,
+      processedAt: new Date(),
+    },
+  });
+  return database.unasStockSyncOutbox.create({
+    data: {
+      variantId: params.variantId,
+      warehouseId: params.warehouseId,
+      sku: params.sku,
+      targetOnHand: params.targetOnHand,
+      idempotencyKey: params.idempotencyKey,
+      sourceProcess: params.sourceProcess,
+      sourceRecordId: params.sourceRecordId,
+    },
+  });
 }
 
 export async function postInventoryMovement(
@@ -310,33 +360,21 @@ export async function postInventoryMovement(
     // never sees two competing PENDING/FAILED/DEAD_LETTER rows for the
     // same key. A row currently PROCESSING is deliberately left alone -
     // the worker itself re-checks for a newer row right before it calls
-    // UNAS, as a second line of defense for that narrow window.
-    const outboxIdempotencyKey = buildOutboxIdempotencyKey(
-      input.idempotencyKey,
-      line.variantId,
-    );
-    await database.unasStockSyncOutbox.updateMany({
-      where: {
-        variantId: line.variantId,
-        warehouseId: input.warehouseId,
-        status: { in: [...OUTBOX_SUPERSEDABLE_STATUSES] },
-      },
-      data: {
-        status: "SUCCEEDED",
-        resolutionNote: `superseded_by:${outboxIdempotencyKey}`,
-        processedAt: new Date(),
-      },
-    });
-    await database.unasStockSyncOutbox.create({
-      data: {
-        variantId: line.variantId,
-        warehouseId: input.warehouseId,
-        sku: line.sku,
-        targetOnHand: resultingOnHand,
-        idempotencyKey: outboxIdempotencyKey,
-        sourceProcess: input.sourceProcess,
-        sourceRecordId: input.referenceId,
-      },
+    // UNAS, as a second line of defense for that narrow window. Delegates
+    // to enqueueStockSyncOutboxEntry (above) - the same helper the
+    // checkpoint-6 reconciliation-repair service uses directly, so both
+    // paths supersede/enqueue identically.
+    await enqueueStockSyncOutboxEntry(database, {
+      variantId: line.variantId,
+      warehouseId: input.warehouseId,
+      sku: line.sku,
+      targetOnHand: resultingOnHand,
+      idempotencyKey: buildOutboxIdempotencyKey(
+        input.idempotencyKey,
+        line.variantId,
+      ),
+      sourceProcess: input.sourceProcess,
+      sourceRecordId: input.referenceId,
     });
   }
 

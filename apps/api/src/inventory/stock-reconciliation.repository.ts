@@ -135,6 +135,26 @@ export class StockReconciliationRepository extends Repository {
     };
   }
 
+  /// Single-pair reconciliation, reusing buildRows exactly like
+  /// reconcilePage does - used by the checkpoint-6 repair service to
+  /// (re)compute a fresh status/ledgerExpectedOnHand for one StockItem
+  /// right before deciding whether a repair may proceed. Null if no such
+  /// StockItem row exists (e.g. deleted between the client's read and this
+  /// call - callers must treat that as "nothing to repair", not retry a
+  /// stale id).
+  async reconcileByStockItemId(
+    stockItemId: string,
+  ): Promise<StockReconciliationRow | null> {
+    const stockItems = await this.reconciliationDatabase.stockItem.findMany({
+      where: { id: stockItemId },
+      include: { variant: { select: { sku: true } }, warehouse: { select: { code: true } } },
+      take: 1,
+    });
+    if (stockItems.length === 0) return null;
+    const [row] = await this.buildRows(stockItems);
+    return row ?? null;
+  }
+
   /// Shared row-building for a batch of StockItem rows - one round-trip per
   /// dependency (ledger movements, UNAS product link, outbox history)
   /// regardless of batch size, never one query per row.

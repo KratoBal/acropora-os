@@ -160,8 +160,9 @@ function createFakeDatabase() {
             };
           }
         ).data;
+        const id = nextId("outbox");
         outbox.push({
-          id: nextId("outbox"),
+          id,
           variantId: data.variantId,
           warehouseId: data.warehouseId,
           status: "PENDING",
@@ -171,7 +172,7 @@ function createFakeDatabase() {
           sourceProcess: data.sourceProcess,
           sourceRecordId: data.sourceRecordId,
         });
-        return {};
+        return { id };
       },
     },
   };
