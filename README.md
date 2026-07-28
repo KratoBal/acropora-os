@@ -20,6 +20,7 @@ corepack prepare pnpm@10.34.5 --activate
 ```bash
 cp .env.example .env
 pnpm install --frozen-lockfile
+npm --prefix apps/mobile ci
 docker compose up -d
 pnpm prisma:generate
 pnpm prisma:migrate
@@ -33,11 +34,23 @@ Windows PowerShellben a másolás parancsa: `Copy-Item .env.example .env`. A gy�
 - API: http://localhost:3001
 - API állapot: http://localhost:3001/health
 
+A mobilalkalmazás külön Metro folyamatként indul:
+
+```bash
+cp apps/mobile/.env.example apps/mobile/.env.local
+pnpm dev:mobile
+```
+
 ## Hasznos parancsok
 
 | Parancs                                  | Leírás                                  |
 | ---------------------------------------- | --------------------------------------- |
 | `pnpm dev`                               | Web és API fejlesztői indítása          |
+| `pnpm dev:mobile`                        | Expo development client indítása        |
+| `pnpm dev:mobile:go`                     | Ideiglenes Expo Go fejlesztői indítás   |
+| `pnpm mobile:doctor`                     | Expo projektkonzisztencia ellenőrzése    |
+| `pnpm mobile:lint`                       | Mobil statikus ellenőrzés                |
+| `pnpm mobile:typecheck`                  | Mobil TypeScript-ellenőrzés              |
 | `pnpm lint`                              | Workspace statikus ellenőrzések         |
 | `pnpm typecheck`                         | Workspace TypeScript-ellenőrzés         |
 | `pnpm test`                              | Unit- és alap workspace tesztek         |
@@ -56,6 +69,7 @@ Windows PowerShellben a másolás parancsa: `Copy-Item .env.example .env`. A gy�
 ```text
 apps/web             Next.js kezelőfelület
 apps/api             NestJS API
+apps/mobile          Expo/React Native terepi alkalmazás
 packages/ui          Megosztott React komponensek
 packages/database    Adatbázis-séma és adatbázis-csomag
 packages/config      Megosztott TypeScript-konfigurációk
@@ -66,9 +80,16 @@ backlog              Tervezett feladatok
 prototypes           Eldobható koncepciók és kísérletek
 ```
 
+A szerveroldali workspace pnpm-lockot használ. Az Expo/EAS alkalmazás saját
+`apps/mobile/package-lock.json` fájllal rendelkezik, ezért a mobil
+függőségeket `npm --prefix apps/mobile ci` telepíti. Ez megakadályozza, hogy a
+natív csomagok bekerüljenek a production API/web Docker buildjeibe.
+
 Részletes dokumentáció:
 
 - [Helyi fejlesztés](docs/LOCAL-DEVELOPMENT.md)
+- [Mobilfejlesztés](docs/MOBILE-DEVELOPMENT.md)
+- [Hetzner mobil staging](docs/HETZNER-MOBILE-STAGING.md)
 - [Aktuális projektállapot](docs/CURRENT_STATUS.md)
 - [Architektúra](docs/ARCHITECTURE.md)
 - [Autentikáció](docs/AUTHENTICATION.md) és [jogosultságkezelés](docs/AUTHORIZATION.md)

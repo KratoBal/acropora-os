@@ -1,5 +1,8 @@
 packages:
   - "apps/*"
+  # Expo/EAS uses the app-local npm lockfile. Keeping native dependencies out
+  # of the server workspace also prevents them from affecting Docker builds.
+  - "!apps/mobile"
   - "packages/*"
 
 onlyBuiltDependencies:

@@ -5,17 +5,26 @@
 - Node.js 22+
 - pnpm 10+
 - Docker Desktop vagy Docker Engine Compose pluginnal
+- mobilfejlesztéshez macOS-en Xcode és/vagy Android Studio
 
 ## Első indítás
 
 ```bash
 cp .env.example .env
 pnpm install
+npm --prefix apps/mobile ci
 docker compose up -d
 pnpm prisma:generate
 pnpm prisma:migrate
 pnpm prisma:seed
 pnpm dev
+```
+
+A mobil Metro bundler egy második terminálban indul:
+
+```bash
+cp apps/mobile/.env.example apps/mobile/.env.local
+pnpm dev:mobile
 ```
 
 A szolgáltatások alapértelmezett címei:
@@ -27,6 +36,7 @@ A szolgáltatások alapértelmezett címei:
 | Health       | `http://localhost:3001/health` |
 | PostgreSQL   | `localhost:5432`               |
 | Redis        | `localhost:6379`               |
+| Expo Metro   | a CLI által kijelzett helyi cím |
 
 ## Docker Compose
 
@@ -99,6 +109,10 @@ pnpm prisma:studio
 - Docker Desktop indítása után várd meg, amíg az engine állapota zöld.
 - Apple Siliconon a hivatalos PostgreSQL és Redis alpine image-ek natívan futnak.
 - Ha az 5432-es port foglalt, ellenőrizd a Homebrew PostgreSQL szolgáltatásokat: `brew services list`.
+- iOS development buildhez telepítsd az aktuális Xcode-verziót és fogadd el
+  az Xcode licencét. Valódi iOS készülékhez Apple Developer jogosultság kell.
+- Fizikai telefonon a `localhost` nem a Macet jelenti; az
+  `apps/mobile/.env.local` fájlban a Mac LAN-címét használd.
 
 ### Windows
 
