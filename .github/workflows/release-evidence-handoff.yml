@@ -1,0 +1,227 @@
+name: Release evidence handoff (production)
+
+# Checkpoint 8, Section 10 - CI -> release/deploy evidence handoff,
+# pattern B: this workflow independently RE-RUNS the real PostgreSQL 16
+# NestJS/Prisma integration suite against the exact commit being
+# considered for release, and only writes a ReleaseEvidence row into the
+# PRODUCTION database if that re-run genuinely exits 0. It does not trust
+# or reuse the `verify` job's own ephemeral-database evidence row from
+# ci.yml - it produces its own, independent, second data point, tied to
+# the same commit via the same commitSha field.
+#
+# This file is prepared, deliberately-not-triggerable-by-anyone-but-a-
+# repo-collaborator code: it is NEVER run automatically (workflow_dispatch
+# only - no `push`/`pull_request` trigger exists here at all), and this
+# checkpoint does not invoke it. Actually using it for a real release
+# requires the manual GitHub environment setup documented at the bottom of
+# this file and in docs/INVENTORY-CONSISTENCY.md's "Checkpoint 8" section
+# - none of which has been done from this sandbox, and none of which
+# creates, requests, or uses any actual secret value.
+#
+# Security properties this design provides:
+#   - workflow_dispatch is the ONLY trigger. GitHub does not allow a fork's
+#     pull_request to invoke workflow_dispatch on the upstream repository
+#     at all - only a collaborator with write access, acting directly
+#     against a branch/tag of THIS repository, can start this workflow.
+#   - The `environment: production-release-evidence` on the single job
+#     below is a real GitHub Environment (configured in repo Settings, not
+#     in this file), which can independently require: manual reviewer
+#     approval before the job is allowed to start, and restriction of which
+#     branches/tags may deploy to it. Both are configured outside this
+#     file (GitHub does not let workflow YAML itself bypass environment
+#     protection rules) - see the setup notes at the bottom.
+#   - The production DATABASE_URL used to record evidence is an
+#     Environment secret bound to that same protected environment - it is
+#     therefore only ever exposed to a run that has already passed the
+#     Environment's own approval gate, never to an unapproved or forked
+#     run.
+#   - SUCCESS is written by exactly one step, gated on
+#     `steps.integration_tests.outcome == 'success'` (a real subprocess
+#     exit code, not a manually-settable input) - a failed or
+#     aborted/cancelled test run cannot reach that step. FAILURE is
+#     written by a separate, mutually exclusive step, so no run can
+#     produce both, and a run that produces neither (e.g. the job itself
+#     crashes before either step) simply leaves no new row - never a
+#     silently-invented SUCCESS.
+#   - The commit under test is `github.sha`, resolved from whichever
+#     ref/branch/tag the dispatcher chose when starting the run - not a
+#     freeform text input a caller could set to an arbitrary string.
+#   - A migration-status check (read-only `prisma migrate status`) against
+#     the SAME production DATABASE_URL runs before either recording step,
+#     and fails the job if production isn't already on the schema this
+#     evidence write expects - this prevents writing a row into a
+#     database whose ReleaseEvidence table doesn't yet have this
+#     checkpoint's provenance columns.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  verify-and-record:
+    name: Re-verify PostgreSQL 16 integration suite and record production evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # This is what actually enforces "only an approved, non-fork run may
+    # reach the production secret" - see the setup notes at the bottom for
+    # the manual GitHub UI steps this depends on (required reviewers,
+    # branch/tag restriction). No amount of workflow YAML alone can
+    # substitute for this - it must be configured in repo Settings.
+    environment: production-release-evidence
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: acropora_release_evidence_check
+          POSTGRES_USER: acropora
+          POSTGRES_PASSWORD: acropora
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U acropora -d acropora_release_evidence_check"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # This is a DISPOSABLE, job-local database used only to re-run the
+      # integration suite - it is NOT the production database, and is
+      # destroyed with the job's runner. It exists so the actual test
+      # subprocess has something real (real Postgres 16, real Prisma
+      # client, real repository code) to run against; it is deliberately
+      # never referenced again after the "Re-run..." step below.
+      DATABASE_URL: postgresql://acropora:acropora@localhost:5432/acropora_release_evidence_check?schema=public
+      REDIS_URL: redis://localhost:6379
+
+    steps:
+      - name: Checkout the exact commit being considered for release
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm prisma:generate
+
+      - name: Deploy migrations to the disposable check database
+        run: pnpm prisma:deploy
+
+      - name: Re-run the real PostgreSQL 16 integration suite
+        id: integration_tests
+        continue-on-error: true
+        run: |
+          echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" >> "$GITHUB_OUTPUT"
+          pnpm --filter @acropora/api test:integration
+          pnpm --filter @acropora/api test:brands:integration
+
+      - name: Fail the job if the re-run integration suite failed
+        if: steps.integration_tests.outcome != 'success'
+        run: |
+          echo "Integration suite failed on re-run for commit ${{ github.sha }} - refusing to write any evidence (see the two mutually-exclusive recording steps below for the FAILURE row, which still gets written for auditability)." >&2
+
+      # --- From here on, PRODUCTION_RELEASE_EVIDENCE_DATABASE_URL is the
+      # ONLY production-scoped secret this workflow touches, and it is
+      # only reachable because this job's `environment:` above has already
+      # been approved. This secret does NOT exist yet in this repository -
+      # see the setup notes at the bottom of this file. Nothing in this
+      # checkpoint creates, requests, or reads its value.
+      - name: Check production is on the expected migration state
+        if: always()
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_RELEASE_EVIDENCE_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DATABASE_URL:-}" ]; then
+            echo "PRODUCTION_RELEASE_EVIDENCE_DATABASE_URL is not configured - see this file's setup notes. Refusing to proceed." >&2
+            exit 1
+          fi
+          pnpm --filter @acropora/database exec prisma migrate status
+
+      - name: Record SUCCESS evidence into production
+        if: steps.integration_tests.outcome == 'success'
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_RELEASE_EVIDENCE_DATABASE_URL }}
+          RELEASE_EVIDENCE_TYPE: INVENTORY_POSTGRES_CONCURRENCY_TEST
+          RELEASE_EVIDENCE_STATUS: SUCCESS
+          RELEASE_EVIDENCE_COMMIT_SHA: ${{ github.sha }}
+          RELEASE_EVIDENCE_WORKFLOW_RUN_ID: ${{ github.run_id }}
+          RELEASE_EVIDENCE_REPOSITORY: ${{ github.repository }}
+          RELEASE_EVIDENCE_WORKFLOW_NAME: ${{ github.workflow }}
+          RELEASE_EVIDENCE_JOB_NAME: ${{ github.job }}
+          RELEASE_EVIDENCE_TRIGGER_EVENT: ${{ github.event_name }}
+          RELEASE_EVIDENCE_ENVIRONMENT: production
+          RELEASE_EVIDENCE_DB_ENGINE: postgres
+          RELEASE_EVIDENCE_DB_ENGINE_VERSION: "16-alpine"
+          RELEASE_EVIDENCE_TEST_SUITE: "apps/api test:integration (unas-order-sync.repository.integration.spec.ts) - re-run for production release evidence"
+          RELEASE_EVIDENCE_STARTED_AT: ${{ steps.integration_tests.outputs.started_at }}
+        run: |
+          export RELEASE_EVIDENCE_COMPLETED_AT="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+          pnpm --filter @acropora/database release-evidence:record
+
+      - name: Record FAILURE evidence into production
+        if: steps.integration_tests.outcome != 'success'
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_RELEASE_EVIDENCE_DATABASE_URL }}
+          RELEASE_EVIDENCE_TYPE: INVENTORY_POSTGRES_CONCURRENCY_TEST
+          RELEASE_EVIDENCE_STATUS: FAILURE
+          RELEASE_EVIDENCE_COMMIT_SHA: ${{ github.sha }}
+          RELEASE_EVIDENCE_WORKFLOW_RUN_ID: ${{ github.run_id }}
+          RELEASE_EVIDENCE_REPOSITORY: ${{ github.repository }}
+          RELEASE_EVIDENCE_WORKFLOW_NAME: ${{ github.workflow }}
+          RELEASE_EVIDENCE_JOB_NAME: ${{ github.job }}
+          RELEASE_EVIDENCE_TRIGGER_EVENT: ${{ github.event_name }}
+          RELEASE_EVIDENCE_ENVIRONMENT: production
+          RELEASE_EVIDENCE_DB_ENGINE: postgres
+          RELEASE_EVIDENCE_DB_ENGINE_VERSION: "16-alpine"
+          RELEASE_EVIDENCE_TEST_SUITE: "apps/api test:integration (unas-order-sync.repository.integration.spec.ts) - re-run for production release evidence"
+          RELEASE_EVIDENCE_STARTED_AT: ${{ steps.integration_tests.outputs.started_at }}
+        run: |
+          export RELEASE_EVIDENCE_COMPLETED_AT="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+          pnpm --filter @acropora/database release-evidence:record
+
+      - name: Fail the workflow if the integration suite failed
+        if: steps.integration_tests.outcome != 'success'
+        run: exit 1
+
+# -----------------------------------------------------------------------
+# Manual, one-time setup this workflow needs before it can actually be run
+# (none of this has been done - documented here, not performed):
+#
+#   1. In GitHub repo Settings -> Environments, create an environment named
+#      exactly `production-release-evidence`.
+#   2. On that environment, add at least one required reviewer (a human
+#      who must approve before the job is allowed to start) and, if this
+#      repo has protected branches, restrict "Deployment branches" to
+#      those branches/tags only.
+#   3. On that same environment, add an environment secret named exactly
+#      `PRODUCTION_RELEASE_EVIDENCE_DATABASE_URL`, whose value is a
+#      Postgres connection string with write access to ONLY the
+#      ReleaseEvidence table's database (ideally a narrowly-scoped DB
+#      role, not the application's own full-privilege connection string) -
+#      this is a production secret and is intentionally never created,
+#      requested, or referenced by value anywhere in this checkpoint.
+#   4. Confirm the production database has actually had this checkpoint's
+#      `20260730090000_harden_release_evidence_provenance` migration (and
+#      everything before it) applied - e.g. via the existing
+#      `prisma migrate deploy` step in a real deploy - before ever
+#      dispatching this workflow; the "Check production is on the expected
+#      migration state" step above only reads status, it does not apply
+#      anything.
+#   5. To actually produce production evidence for a given commit: from
+#      GitHub's Actions tab, choose this workflow, click "Run workflow",
+#      and select the exact branch/tag/commit to verify. A required
+#      reviewer must then approve the run before it proceeds.
