@@ -22,6 +22,7 @@ import {
   type InventoryMovementSourceProcess,
 } from "../../common/inventory-movement-writer.js";
 import { isPrismaErrorCode } from "../../common/prisma-error.util.js";
+import { sumOrderBookedOut } from "../../common/stock-ledger.util.js";
 import {
   ensureMainWarehouse,
   type WarehouseLookupDatabase,
@@ -70,7 +71,13 @@ interface ExternalReferenceRow {
   entityId: string;
 }
 
-interface OrderLineRow {
+// Exported (along with LineInput, resolveEffectiveVariantId,
+// aggregateTargetOut below) so the read-only historical UNAS order audit
+// (unas-order-stock-audit.service.ts) can recompute the EXACT same
+// "effective variant"/"target booked-out quantity" a live import/resync
+// would - never a second, independently-maintained approximation of this
+// logic.
+export interface OrderLineRow {
   id: string;
   sku: string;
   variantId: string | null;
@@ -85,7 +92,7 @@ interface OrderRow {
   lines: OrderLineRow[];
 }
 
-interface LineInput {
+export interface LineInput {
   variantId: string | null;
   sku: string;
   description: string;
@@ -173,7 +180,7 @@ function toLineCreateData(
 ///    catalog since";
 ///  - anything else (still-unresolved existing line, or a brand-new line
 ///    this pass whose own lookup failed) has no stock-relevant variant.
-function resolveEffectiveVariantId(
+export function resolveEffectiveVariantId(
   match: OrderLineRow | undefined,
   input: LineInput,
 ): string | null {
@@ -195,7 +202,7 @@ function resolveEffectiveVariantId(
 /// against yet); non-null for an existing order's resync (syncLines'
 /// `existingBySku`, built from the order's pre-this-pass SalesOrderLine
 /// rows).
-function aggregateTargetOut(
+export function aggregateTargetOut(
   lineInputs: LineInput[],
   existingBySku: Map<string, OrderLineRow> | null,
 ): Map<string, Prisma.Decimal> {
@@ -1134,14 +1141,12 @@ export class UnasOrderSyncRepository extends Repository {
       },
       select: { type: true, lines: { select: { variantId: true, quantity: true } } },
     });
-    const bookedOut = new Map<string, Prisma.Decimal>();
-    for (const movement of movements) {
-      const sign = movement.type === "SALE" ? 1 : -1;
-      for (const line of movement.lines) {
-        const running = bookedOut.get(line.variantId) ?? new Prisma.Decimal(0);
-        bookedOut.set(line.variantId, running.plus(line.quantity.times(sign)));
-      }
-    }
+    // Sign convention (SALE=+1 "taken out", RETURN_IN=-1 "given back") lives
+    // in common/stock-ledger.util.ts's sumOrderBookedOut - shared verbatim
+    // with the read-only historical order audit
+    // (unas-order-stock-audit.service.ts), so the two can never silently
+    // disagree on what "already booked" means for the same order.
+    const bookedOut = sumOrderBookedOut(movements);
     return { bookedOut, generation: movements.length };
   }
 
