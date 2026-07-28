@@ -19,5 +19,10 @@ import { UnasOrderSyncService } from "./unas-order-sync.service.js";
     UnasOrderStockAuditRepository,
     UnasOrderStockAuditService,
   ],
+  // UnasOrderStockAuditService is also consumed by health/health.module.ts
+  // (StockDiagnosticsService) - the checkpoint-6 diagnostics/activation-
+  // readiness surface reuses this EXACT read-only summarize() rather than
+  // re-implementing its own order audit.
+  exports: [UnasOrderStockAuditService],
 })
 export class UnasOrderSyncModule {}
