@@ -60,3 +60,12 @@ export const RECONCILIATION_LOCAL_LEDGER_MISMATCH_COUNT_DEGRADED = 1;
 /// broader signal than the activation gate) uses the same "any is already
 /// meaningful" threshold rather than a silently different one.
 export const UNAS_ORDER_AUDIT_RISK_ORDER_COUNT_DEGRADED = 1;
+
+/// Checkpoint 7: even a SUCCESS ReleaseEvidence row for the EXACT current
+/// commit is only trusted if it isn't implausibly old - guards against a
+/// long-running container that was deployed, then had its evidence row's
+/// underlying CI run's guarantees erode over an extended period (e.g. a
+/// dependency's transitive behavior changing without a new commit/deploy -
+/// an edge case, not the primary defense, since the primary defense is the
+/// exact commitSha match itself).
+export const RELEASE_EVIDENCE_MAX_AGE_DAYS = 30;

@@ -26,6 +26,15 @@ export interface StockDiagnosticsDatabase {
       args: unknown,
     ): Promise<Array<{ reportedStock: unknown; reportedStockSyncedAt: Date | null }>>;
   };
+  releaseEvidence: {
+    findFirst(args: unknown): Promise<{
+      id: string;
+      status: string;
+      commitSha: string;
+      createdAt: Date;
+      completedAt: Date;
+    } | null>;
+  };
 }
 
 export const STOCK_DIAGNOSTICS_DATABASE = Symbol("STOCK_DIAGNOSTICS_DATABASE");
@@ -155,5 +164,27 @@ export class StockDiagnosticsRepository {
     } catch {
       return { checked: false, expected, applied: [] };
     }
+  }
+
+  /// Newest SUCCESS row for the given (evidenceType, commitSha) pair - see
+  /// schema.prisma's own ReleaseEvidence doc comment. Deliberately does NOT
+  /// return a FAILURE row as if it were usable evidence, and deliberately
+  /// does NOT fall back to a different commit's evidence - an exact,
+  /// current-commit match is the entire point (see
+  /// stock-diagnostics.service.ts::activationReadiness's own comment on
+  /// why a stale commit's SUCCESS must never silently unblock a new
+  /// release).
+  async findLatestConcurrencyTestEvidence(
+    commitSha: string,
+  ): Promise<{ id: string; commitSha: string; createdAt: Date; completedAt: Date } | null> {
+    return this.database.releaseEvidence.findFirst({
+      where: {
+        evidenceType: "INVENTORY_POSTGRES_CONCURRENCY_TEST",
+        status: "SUCCESS",
+        commitSha,
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, commitSha: true, createdAt: true, completedAt: true },
+    });
   }
 }

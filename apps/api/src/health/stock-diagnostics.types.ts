@@ -110,17 +110,30 @@ export interface StockDiagnosticsReport {
 /// can disagree (e.g. a healthy-looking system can still be BLOCKED here
 /// solely because the Postgres concurrency test has no recorded release
 /// evidence).
+/// - "NOT_CONFIGURED": the running build doesn't even know its own commit
+///   (RELEASE_COMMIT_SHA unset) - no evidence lookup is even possible.
+/// - "NOT_DEMONSTRATED": the commit is known, but no matching SUCCESS
+///   ReleaseEvidence row exists for it (checkpoint 6's permanent state,
+///   before any real CI wiring existed at all).
+/// - "DEMONSTRATED": a genuine SUCCESS row exists for the EXACT running
+///   commit - see ActivationReadinessResult's own doc comment for why an
+///   old commit's SUCCESS may never satisfy a new one.
+export type ConcurrencyTestEvidenceState = "NOT_CONFIGURED" | "NOT_DEMONSTRATED" | "DEMONSTRATED";
+
 export interface ActivationReadinessResult {
   safeToActivate: boolean;
   blockingReasons: string[];
   warnings: string[];
   checkedAt: string;
-  /** Always "NOT_DEMONSTRATED" today - see
-   * stock-diagnostics.service.ts's own doc comment on why this can't
-   * honestly be anything else until a real release pipeline records
-   * verifiable evidence that 76d8c80's integration test ran against a real
-   * Postgres and passed. A runtime health check calling itself "the test
-   * ran" would be exactly the conflation the checkpoint explicitly warned
-   * against. */
-  concurrencyTestEvidence: "NOT_DEMONSTRATED";
+  /** The commit this check was evaluated against, or null if
+   * RELEASE_COMMIT_SHA isn't configured on the running build - see
+   * common/release-info.util.ts. */
+  evaluatedCommitSha: string | null;
+  /** See stock-diagnostics.service.ts's own doc comment on why a stale or
+   * foreign-commit SUCCESS row must never silently unblock a new release -
+   * this can only become "DEMONSTRATED" via a genuine
+   * packages/database/prisma/record-release-evidence.ts run (itself only
+   * runnable by a real CI/release process, never through any HTTP API),
+   * for the EXACT commit currently evaluated. */
+  concurrencyTestEvidence: ConcurrencyTestEvidenceState;
 }

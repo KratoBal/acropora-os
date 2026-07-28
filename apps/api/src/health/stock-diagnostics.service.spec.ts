@@ -82,6 +82,16 @@ class FakeDiagnosticsDb {
     count: async () => this.snapshotRows.length,
     findMany: async () => this.snapshotRows,
   };
+
+  releaseEvidenceRow: { id: string; commitSha: string; createdAt: Date; completedAt: Date } | null =
+    null;
+
+  releaseEvidence = {
+    findFirst: async (args: { where: { commitSha: string } }) =>
+      this.releaseEvidenceRow && this.releaseEvidenceRow.commitSha === args.where.commitSha
+        ? this.releaseEvidenceRow
+        : null,
+  };
 }
 
 function buildService(db: FakeDiagnosticsDb, options?: {
@@ -240,6 +250,7 @@ describe("StockDiagnosticsService - no secrets, no mutation", () => {
       salesOrder: Object.keys(db.salesOrder),
       unasStockSyncOutbox: Object.keys(db.unasStockSyncOutbox),
       unasProductSnapshot: Object.keys(db.unasProductSnapshot),
+      releaseEvidence: Object.keys(db.releaseEvidence),
     };
     const allowed = new Set(["count", "groupBy", "findFirst", "findMany"]);
     for (const [modelName, methodNames] of Object.entries(methodsByModel)) {
@@ -250,14 +261,89 @@ describe("StockDiagnosticsService - no secrets, no mutation", () => {
   });
 });
 
+async function withReleaseCommitSha(sha: string | undefined, run: () => Promise<void>) {
+  const original = process.env.RELEASE_COMMIT_SHA;
+  if (sha === undefined) delete process.env.RELEASE_COMMIT_SHA;
+  else process.env.RELEASE_COMMIT_SHA = sha;
+  try {
+    await run();
+  } finally {
+    if (original === undefined) delete process.env.RELEASE_COMMIT_SHA;
+    else process.env.RELEASE_COMMIT_SHA = original;
+  }
+}
+
 describe("StockDiagnosticsService.activationReadiness", () => {
-  it("is never safe to activate today - the Postgres concurrency test has no recorded release evidence", async () => {
-    const db = new FakeDiagnosticsDb();
-    const service = buildService(db);
-    const result = await service.activationReadiness();
-    assert.equal(result.safeToActivate, false);
-    assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
-    assert.ok(result.blockingReasons.some((reason) => reason.includes("PostgreSQL")));
+  it("is NOT_CONFIGURED when the running build doesn't know its own commit (RELEASE_COMMIT_SHA unset)", async () => {
+    await withReleaseCommitSha(undefined, async () => {
+      const db = new FakeDiagnosticsDb();
+      const service = buildService(db);
+      const result = await service.activationReadiness();
+      assert.equal(result.safeToActivate, false);
+      assert.equal(result.concurrencyTestEvidence, "NOT_CONFIGURED");
+      assert.equal(result.evaluatedCommitSha, null);
+    });
+  });
+
+  it("is NOT_DEMONSTRATED when the commit is known but no ReleaseEvidence row exists for it", async () => {
+    await withReleaseCommitSha("commit-abc", async () => {
+      const db = new FakeDiagnosticsDb();
+      const service = buildService(db);
+      const result = await service.activationReadiness();
+      assert.equal(result.safeToActivate, false);
+      assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
+      assert.equal(result.evaluatedCommitSha, "commit-abc");
+      assert.ok(result.blockingReasons.some((reason) => reason.includes("INVENTORY_POSTGRES_CONCURRENCY_TEST")));
+    });
+  });
+
+  it("a SUCCESS evidence row for an OLDER, DIFFERENT commit does not satisfy the current commit's gate", async () => {
+    await withReleaseCommitSha("commit-new", async () => {
+      const db = new FakeDiagnosticsDb();
+      db.releaseEvidenceRow = {
+        id: "evidence-1",
+        commitSha: "commit-old",
+        createdAt: new Date(),
+        completedAt: new Date(),
+      };
+      const service = buildService(db);
+      const result = await service.activationReadiness();
+      assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
+      assert.equal(result.safeToActivate, false);
+    });
+  });
+
+  it("is DEMONSTRATED when a fresh SUCCESS row matches the exact current commit", async () => {
+    await withReleaseCommitSha("commit-current", async () => {
+      const db = new FakeDiagnosticsDb();
+      db.releaseEvidenceRow = {
+        id: "evidence-2",
+        commitSha: "commit-current",
+        createdAt: new Date(),
+        completedAt: new Date(),
+      };
+      const service = buildService(db);
+      const result = await service.activationReadiness();
+      assert.equal(result.concurrencyTestEvidence, "DEMONSTRATED");
+      assert.equal(result.safeToActivate, true);
+    });
+  });
+
+  it("an implausibly old SUCCESS row for the exact current commit still does not satisfy the gate", async () => {
+    await withReleaseCommitSha("commit-current", async () => {
+      const db = new FakeDiagnosticsDb();
+      const veryOld = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000); // 400 days ago
+      db.releaseEvidenceRow = {
+        id: "evidence-3",
+        commitSha: "commit-current",
+        createdAt: veryOld,
+        completedAt: veryOld,
+      };
+      const service = buildService(db);
+      const result = await service.activationReadiness();
+      assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
+      assert.equal(result.safeToActivate, false);
+    });
   });
 
   it("folds in the UNAS order audit's own blocking reasons", async () => {

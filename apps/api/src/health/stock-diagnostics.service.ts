@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 
+import { currentReleaseCommitSha } from "../common/release-info.util.js";
 import { StockReconciliationService } from "../inventory/stock-reconciliation.service.js";
 import { UnasOrderStockAuditService } from "../orders/unas-order-sync/unas-order-stock-audit.service.js";
 import { StockDiagnosticsRepository } from "./stock-diagnostics.repository.js";
@@ -11,6 +12,7 @@ import {
   OUTBOX_PENDING_COUNT_BLOCKED,
   OUTBOX_PENDING_COUNT_DEGRADED,
   RECONCILIATION_LOCAL_LEDGER_MISMATCH_COUNT_DEGRADED,
+  RELEASE_EVIDENCE_MAX_AGE_DAYS,
   UNAS_ORDER_AUDIT_RISK_ORDER_COUNT_DEGRADED,
   UNAS_SNAPSHOT_STALE_HOURS_DEGRADED,
   UNAS_SNAPSHOT_STALE_HOURS_UNKNOWN,
@@ -182,15 +184,35 @@ export class StockDiagnosticsService {
     };
   }
 
-  /// Section 9's read-only UNAS delta-engine activation-readiness gate.
-  /// Builds on the checkpoint-5 UNAS order audit's own
-  /// safeToActivateWithoutBackfill/blockingReasons and adds two further,
-  /// release-process-level gates that no runtime check can honestly
-  /// satisfy on its own: a migration and a Postgres concurrency test.
+  /// Section 9's (checkpoint 6) / section 7's (checkpoint 7) read-only
+  /// UNAS delta-engine activation-readiness gate. Builds on the
+  /// checkpoint-5 UNAS order audit's own safeToActivateWithoutBackfill/
+  /// blockingReasons, a migration-applied check, and now (checkpoint 7) a
+  /// genuine ReleaseEvidence lookup - see
+  /// packages/database/prisma/record-release-evidence.ts and
+  /// schema.prisma's ReleaseEvidence doc comment for how a row can ever
+  /// come to exist at all (never through this API, never through any
+  /// admin action - only a real CI/release process holding a real
+  /// DATABASE_URL can write one).
+  ///
+  /// The "most important rule" (checkpoint 7's own framing): neither the
+  /// existence of test CODE nor a manually-set flag proves PostgreSQL
+  /// concurrency safety. This method enforces that by requiring ALL of:
+  /// the running build to know its own commit (RELEASE_COMMIT_SHA set);
+  /// a ReleaseEvidence row with status SUCCESS; that row's commitSha to
+  /// match the running commit EXACTLY (an old commit's SUCCESS must never
+  /// silently unblock a new, different release - a bug fixed in commit N
+  /// could easily be a regression reintroduced in commit N+5, and nothing
+  /// about "some earlier commit once passed" says anything about N+5);
+  /// and that row not to be implausibly old even for a matching commit.
   async activationReadiness(): Promise<ActivationReadinessResult> {
-    const [auditSummary, migrationStatus] = await Promise.all([
+    const evaluatedCommitSha = currentReleaseCommitSha();
+    const [auditSummary, migrationStatus, evidence] = await Promise.all([
       this.unasOrderAudit.summarize(),
       this.repository.migrationStatus(),
+      evaluatedCommitSha
+        ? this.repository.findLatestConcurrencyTestEvidence(evaluatedCommitSha)
+        : Promise.resolve(null),
     ]);
 
     const blockingReasons = [...auditSummary.blockingReasons];
@@ -207,28 +229,36 @@ export class StockDiagnosticsService {
       );
     }
 
-    // This is deliberately, permanently "NOT_DEMONSTRATED" from a runtime
-    // health check's perspective: there is no persisted, verifiable record
-    // in this codebase today of "the 76d8c80 integration test ran against a
-    // real Postgres in THIS release and passed" - a spec FILE existing on
-    // disk proves only that the test was WRITTEN, not that it ran. Claiming
-    // otherwise here would be exactly the "runtime health and release
-    // evidence are two separate things" conflation the checkpoint
-    // explicitly warned against (section 9). A future release pipeline
-    // could close this gap by writing a signed/timestamped record (e.g. a
-    // dedicated small DB table or artifact) that this method then reads -
-    // deliberately not built here, since fabricating one now would itself
-    // be a false, unearned "yes it ran".
-    blockingReasons.push(
-      "A rendelésenkénti (unas-order-sync) PostgreSQL advisory lock konkurenciatesztjének (76d8c80) valódi lefutása nincs igazolva ebben a release-folyamatban - lásd checkpoint 6 zárójelentését a pontos futtatási kísérlet eredményéért.",
-    );
+    let concurrencyTestEvidence: ActivationReadinessResult["concurrencyTestEvidence"];
+    if (!evaluatedCommitSha) {
+      concurrencyTestEvidence = "NOT_CONFIGURED";
+      blockingReasons.push(
+        "A futó build nem ismeri a saját commit SHA-ját (RELEASE_COMMIT_SHA nincs beállítva), ezért semmilyen release evidence nem köthető hozzá.",
+      );
+    } else if (!evidence) {
+      concurrencyTestEvidence = "NOT_DEMONSTRATED";
+      blockingReasons.push(
+        `A PostgreSQL advisory-lock konkurenciateszt (INVENTORY_POSTGRES_CONCURRENCY_TEST) SUCCESS bizonyítéka nem található a jelenlegi commitra (${evaluatedCommitSha}). Régebbi commitra futott siker NEM oldja fel ezt a blokkolást - lásd record-release-evidence.ts.`,
+      );
+    } else {
+      const ageDays = (Date.now() - evidence.completedAt.getTime()) / (1000 * 60 * 60 * 24);
+      if (ageDays > RELEASE_EVIDENCE_MAX_AGE_DAYS) {
+        concurrencyTestEvidence = "NOT_DEMONSTRATED";
+        blockingReasons.push(
+          `A jelenlegi commitra (${evaluatedCommitSha}) talált SUCCESS evidence túl régi (${Math.round(ageDays)} nap) - lásd RELEASE_EVIDENCE_MAX_AGE_DAYS.`,
+        );
+      } else {
+        concurrencyTestEvidence = "DEMONSTRATED";
+      }
+    }
 
     return {
       safeToActivate: blockingReasons.length === 0,
       blockingReasons,
       warnings,
       checkedAt: new Date().toISOString(),
-      concurrencyTestEvidence: "NOT_DEMONSTRATED",
+      evaluatedCommitSha,
+      concurrencyTestEvidence,
     };
   }
 
