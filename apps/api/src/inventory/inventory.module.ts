@@ -5,6 +5,9 @@ import { InventoryCountXlsx } from "./inventory-count-xlsx.js";
 import { InventoryCountController } from "./inventory-count.controller.js";
 import { InventoryCountRepository } from "./inventory-count.repository.js";
 import { InventoryCountService } from "./inventory-count.service.js";
+import { StockReconciliationRepairController } from "./stock-reconciliation-repair.controller.js";
+import { StockReconciliationRepairRepository } from "./stock-reconciliation-repair.repository.js";
+import { StockReconciliationRepairService } from "./stock-reconciliation-repair.service.js";
 import { StockReconciliationController } from "./stock-reconciliation.controller.js";
 import { StockReconciliationRepository } from "./stock-reconciliation.repository.js";
 import { StockReconciliationService } from "./stock-reconciliation.service.js";
@@ -19,6 +22,7 @@ import { UnasStockSyncOutboxService } from "./unas-stock-sync-outbox.service.js"
     InventoryCountController,
     UnasStockSyncOutboxController,
     StockReconciliationController,
+    StockReconciliationRepairController,
   ],
   providers: [
     InventoryCountRepository,
@@ -29,7 +33,13 @@ import { UnasStockSyncOutboxService } from "./unas-stock-sync-outbox.service.js"
     UnasStockSyncOutboxScheduler,
     StockReconciliationRepository,
     StockReconciliationService,
+    StockReconciliationRepairRepository,
+    StockReconciliationRepairService,
   ],
-  exports: [UnasStockSyncOutboxRepository],
+  // StockReconciliationService is also consumed by health/health.module.ts
+  // (StockDiagnosticsService) - the checkpoint-6 diagnostics report reuses
+  // this EXACT read-only summarize() rather than re-implementing its own
+  // reconciliation pass.
+  exports: [UnasStockSyncOutboxRepository, StockReconciliationService],
 })
 export class InventoryModule {}
