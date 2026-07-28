@@ -950,6 +950,65 @@ model StockReconciliationRepair {
   @@index([actorUserId, createdAt])
 }
 
+/// Ma az egyetlen érték: a checkpoint 4/5-ös
+/// unas-order-sync.repository.integration.spec.ts (76d8c80) valódi
+/// PostgreSQL advisory-lock konkurenciatesztjének release-bizonyítéka.
+/// Új típus hozzáadása additív migráció.
+enum ReleaseEvidenceType {
+  INVENTORY_POSTGRES_CONCURRENCY_TEST
+}
+
+enum ReleaseEvidenceStatus {
+  SUCCESS
+  FAILURE
+}
+
+/// Gépileg olvasható, hiteles bizonyíték arra, hogy egy adott commit-ra
+/// egy adott teszt-suite ténylegesen lefutott egy valódi PostgreSQL
+/// ellen, és milyen eredménnyel - lásd
+/// apps/api/src/health/stock-diagnostics.service.ts::activationReadiness()
+/// és docs/INVENTORY-CONSISTENCY.md "Release evidence" szakaszát.
+///
+/// KRITIKUS: ezt a táblát KIZÁRÓLAG egy hiteles CI/release-folyamat írhatja
+/// - lásd packages/database/scripts/record-release-evidence.ts, ami egy
+/// önálló, a NestJS HTTP API-tól teljesen független szkript (nincs
+/// controller/route, ami elérné). Nincs és nem is lesz általános admin
+/// endpoint, amivel valaki kézzel SUCCESS-re állíthatna egy sort - ez a
+/// checkpoint 7 saját, kifejezett "legfontosabb szabálya".
+///
+/// Nincs egyedi kényszer (unique) az (evidenceType, commitSha) párra -
+/// egy commit többször is tesztelhető (pl. újrafuttatott CI job), minden
+/// kísérlet saját sort kap; az activation-readiness mindig a
+/// LEGÚJABB, státusz szerint SUCCESS sort keresi a vizsgált commitra.
+model ReleaseEvidence {
+  id                    String                @id @default(cuid())
+  evidenceType          ReleaseEvidenceType
+  status                ReleaseEvidenceStatus
+  /// A tesztelt release pontos commit SHA-ja - lásd
+  /// apps/api/src/common/release-info.util.ts: a futó appnak ISMERNIE
+  /// kell a saját commitját (RELEASE_COMMIT_SHA env), különben nem tudja
+  /// összevetni ezt a mezőt önmagával, és az activation-readiness
+  /// NOT_DEMONSTRATED marad.
+  commitSha             String
+  /// Stabil CI-azonosító (pl. GitHub Actions run id) - kizárólag
+  /// nyomkövetési/audit célra, az activation-readiness logikája nem
+  /// épít rá.
+  workflowRunId         String
+  environment           String
+  databaseEngine        String
+  databaseEngineVersion String
+  testSuite             String
+  startedAt             DateTime
+  completedAt           DateTime
+  /// Szabad-formátumú, nem-érzékeny technikai részlet (pl. hány
+  /// forgatókönyv futott le/ment át) - sosem rendelési/vevői adat.
+  resultDetail          Json?
+  createdAt             DateTime              @default(now())
+
+  @@index([evidenceType, commitSha, status])
+  @@index([evidenceType, createdAt])
+}
+
 /// idempotencyKey: a központi InventoryMovementWriter (lásd
 /// apps/api/src/common/inventory-movement-writer.ts) által kötelezően
 /// megadott, forrásfolyamatonként egyedi kulcs (pl. "POS_SALE:<orderNumber>",

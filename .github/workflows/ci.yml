@@ -77,9 +77,57 @@ jobs:
         run: pnpm test
 
       - name: Database integration tests
+        id: db_integration_tests
+        continue-on-error: true
         run: |
+          echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" >> "$GITHUB_OUTPUT"
           pnpm --filter @acropora/api test:integration
           pnpm --filter @acropora/api test:brands:integration
+
+      # Records a checkpoint-7 ReleaseEvidence row (see
+      # packages/database/prisma/record-release-evidence.ts and
+      # schema.prisma's ReleaseEvidence doc comment) for the real-Postgres
+      # advisory-lock concurrency test inside test:integration
+      # (unas-order-sync.repository.integration.spec.ts, commit 76d8c80).
+      # This is the ONLY place in the codebase that ever writes to this
+      # table - there is no HTTP endpoint, and there never should be.
+      #
+      # IMPORTANT, KNOWN GAP (documented, not fixed in this checkpoint):
+      # this writes into the CI job's OWN ephemeral `postgres` service
+      # container above - the same one test:integration itself just ran
+      # against - which is destroyed when this job ends. That proves the
+      # recorder script's mechanics work end-to-end against a real,
+      # disposable Postgres in real CI infrastructure, but it does NOT by
+      # itself make this evidence visible to a running PRODUCTION
+      # instance's /health/inventory/activation-readiness (which queries
+      # ITS OWN database). Wiring a genuine CI -> production evidence
+      # write (e.g. as an explicit step in an actual release/deploy
+      # pipeline, using a production DATABASE_URL secret CI does not
+      # currently have) is deliberately left as a documented plan - see
+      # docs/INVENTORY-CONSISTENCY.md's "Release evidence" section - since
+      # actually wiring it up crosses into production-deploy territory,
+      # explicitly out of this checkpoint's scope.
+      - name: Record release evidence (CI's own ephemeral database)
+        if: always()
+        env:
+          RELEASE_EVIDENCE_TYPE: INVENTORY_POSTGRES_CONCURRENCY_TEST
+          RELEASE_EVIDENCE_STATUS: ${{ steps.db_integration_tests.outcome == 'success' && 'SUCCESS' || 'FAILURE' }}
+          RELEASE_EVIDENCE_COMMIT_SHA: ${{ github.sha }}
+          RELEASE_EVIDENCE_WORKFLOW_RUN_ID: ${{ github.run_id }}
+          RELEASE_EVIDENCE_ENVIRONMENT: github-actions-ci
+          RELEASE_EVIDENCE_DB_ENGINE: postgres
+          RELEASE_EVIDENCE_DB_ENGINE_VERSION: "16-alpine"
+          RELEASE_EVIDENCE_TEST_SUITE: "apps/api test:integration (unas-order-sync.repository.integration.spec.ts)"
+          RELEASE_EVIDENCE_STARTED_AT: ${{ steps.db_integration_tests.outputs.started_at }}
+        run: |
+          export RELEASE_EVIDENCE_COMPLETED_AT="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+          pnpm --filter @acropora/database release-evidence:record
+
+      - name: Fail the job if the database integration tests failed
+        if: steps.db_integration_tests.outcome != 'success'
+        run: |
+          echo "Database integration tests failed - see the 'Database integration tests' step above." >&2
+          exit 1
 
       - name: Health HTTP smoke test
         run: pnpm --filter @acropora/api test:smoke

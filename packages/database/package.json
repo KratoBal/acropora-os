@@ -26,6 +26,7 @@
     "prisma:push": "prisma db push",
     "prisma:studio": "prisma studio",
     "prisma:seed": "prisma generate && tsx prisma/seed.ts",
+    "release-evidence:record": "prisma generate && tsx prisma/record-release-evidence.ts",
     "test": "prisma generate && tsc -p tsconfig.test.json && node --test test-dist/database.test.js test-dist/seed-data.test.js",
     "clean": "rm -rf dist test-dist src/generated"
   },
