@@ -517,16 +517,20 @@ ténylegesen lekönyvelt, és ugyanezt a ledgert olvassa az új
    számolni, ha a state változatlan - nincs kockázata annak, hogy az
    éles bevezetés "újra levonná" a már meglévő rendeléseket.
 
-### Biztonságos javítási terv (ebben a checkpointban NEM implementált mutáció)
+### Biztonságos javítási terv (checkpoint 5: még csak terv - checkpoint 6-ban A és B megvalósult, lásd lentebb)
 
-A checkpoint kifejezetten megengedi, hogy a mutáló repair-mechanizmust
+A checkpoint 5 kifejezetten megengedte, hogy a mutáló repair-mechanizmust
 csak TERVEZZÜK, ha a jelenlegi auth/audit modell nem elég egyértelmű hozzá
 - ez a döntés itt élt: a jelenlegi jogosultsági modell csak `INVENTORY_VIEW`/
 `INVENTORY_MANAGE`-et ismer (utóbbi a `WAREHOUSE` szerepkörnek is jár), és
 NINCS olyan Prisma-modell, ami egy repair-művelet reason/actor/előtte-utána
-értékét auditálhatóan rögzítené. Emiatt ebben a checkpointban KIZÁRÓLAG a
-read-only diagnosztika készült el; az alábbi terv a jövőbeli, mutáló
-repair API-hoz:
+értékét auditálhatóan rögzítené. Emiatt checkpoint 5-ben KIZÁRÓLAG a
+read-only diagnosztika készült el; az alábbi terv volt a jövőbeli, mutáló
+repair API-hoz - **checkpoint 6 ezt a tervet valósította meg A és B
+típusra, lásd a "Checkpoint 6" szakaszt lentebb a tényleges
+implementációért (a részletek némileg eltérnek az itteni eredeti
+vázlattól, pl. az idempotenciakulcs pontos formátuma és a `StockItem`
+saját üzleti kulcson - nem surrogate id-n - történő újraolvasása).**
 
 **A. `StockItem` helyreállítása a bizonyított ledgerből** - csak
 `ledgerProvable: true` párra engedhető meg; tranzakcióban, a writer saját
@@ -560,6 +564,245 @@ időközben megváltozott), kötelező `reason`, `actorUserId` naplózása,
 idempotenciakulcs, advisory tranzakciós lock, teljes tranzakció,
 változás előtti újraellenőrzés, részletes eredmény visszaadása, tömeges
 ("minden eltérést egyszerre javíts") művelet alapértelmezetten tiltva.
+
+## Checkpoint 6: auditálható repair, hiteles baseline és health/diagnosztika
+
+A checkpoint 5 read-only reconciliation/diagnosztika eredményére építve ez
+a checkpoint egy admin-only, EGYEDI rekordokra korlátozott, teljes
+audittal rendelkező javítási mechanizmust ad hozzá, plusz egy health/
+diagnosztika felületet - mindkettő szigorúan a checkpoint 5-ben már
+felállított biztonsági elvek mentén (soha nem találgat, soha nem javít
+tömegesen, soha nem hív élő UNAS API-t egy javításhoz).
+
+### A legfontosabb biztonsági szabály
+
+`LOCAL_FROM_PROVEN_LEDGER` repair KIZÁRÓLAG bizonyított abszolút
+ledger-baseline esetén futhat. A `HISTORICAL_BASELINE_UNKNOWN` (és az
+`INVALID_LEDGER_DATA`) állapot NEM "javítandó eltérés", hanem olyan
+blokkoló bizonytalanság, amelyet csak kontrollált fizikai leltár és
+explicit baseline létrehozása oldhat fel - ezt a repair-mechanizmus
+(`evaluateLocalFromProvenLedgerPreconditions`,
+`stock-reconciliation-repair.util.ts`) kódszinten kényszeríti ki: ha a
+reconciliation `ledgerProvable: false`-t jelez, a repair `REJECTED`
+státusszal (`LEDGER_NOT_PROVABLE`) áll meg, mielőtt bármit módosítana.
+
+### Auth/audit-modell feltérképezése (a mutáció megépítése ELŐTT)
+
+- Az aktuális felhasználó forrása mindig `@CurrentUser()`
+  (`auth/decorators/current-user.decorator.ts`), ami az `AuthGuard` által
+  már ellenőrzött Bearer-token vagy httpOnly session-cookie+CSRF alapján
+  feloldott, szerveroldali `AuthenticatedUser`-t adja vissza - SOSEM egy
+  kliens által küldött mező. A repair-kérés body-ja emiatt szándékosan NEM
+  fogad el `actorUserId`-t.
+- Jogosultság: bevezetve egy ÚJ, szűk `INVENTORY_RECONCILIATION_REPAIR`
+  permission (`packages/types/src/auth.ts`), amit KIZÁRÓLAG `OWNER`/`ADMIN`
+  kap meg - a sima `INVENTORY_MANAGE` (amit a `WAREHOUSE` szerepkör is bír
+  a napi leltár/beszerzés/POS munkához) nem volt elég szűk egy olyan
+  művelethez, ami közvetlenül felülírja a készlet "igazságát". A `MANAGER`
+  szerepkör kifejezetten ki van zárva ez alól is (`ROLE_PERMISSIONS.MANAGER`
+  szűrője).
+- Audit-modell: nem volt megfelelő, általános előtte/utána+actor+reason
+  napló a repóban - ezért egy célzott, KIZÁRÓLAG erre a célra szolgáló
+  `StockReconciliationRepair` Prisma-modell készült (lásd lentebb), nem egy
+  általános workflow-motor.
+- Tranzakció/lock minta: ugyanaz az `pg_advisory_xact_lock`-alapú,
+  tranzakció-scope-olt advisory lock (`lockVariantWarehouse`,
+  `common/inventory-movement-writer.ts`), amit a writer és a UNAS
+  rendelés-szinkron is használ - nincs új lock-mechanizmus bevezetve.
+
+### `StockReconciliationRepair` Prisma-modell
+
+Új migráció: `packages/database/prisma/migrations/20260728090000_add_stock_reconciliation_repair/`
+(kézzel írt, mert a `prisma generate`/`migrate dev` ebben a sandboxban nem
+fut - lásd "Ismert korlátok"). Csak ÚJ tábla/enum jön létre, semmilyen
+meglévő adatot nem módosít. Mezők: `id`, `repairType`
+(`LOCAL_FROM_PROVEN_LEDGER` | `REPUBLISH_LOCAL_TO_UNAS` - a "C" típus
+szándékosan NINCS az enumban, lásd lentebb), `status` (`APPLIED` | `NOOP` |
+`REJECTED` - szándékosan NINCS `FAILED`, mert egy valódi tranzakció-hiba
+esetén a TELJES tranzakció visszagördül, beleértve magát az audit-sor
+beszúrását is - soha nem maradhat "SUCCESS audit részleges módosítással"
+állapot), `stockItemId` (nullable - egy jövőbeli baseline-típus miatt),
+`variantId`, `warehouseId`, `actorUserId` (kötelező FK `User`-re),
+`reason` (kötelező), `idempotencyKey` (egyedi), `expectedCurrentOnHand`,
+`beforeOnHand`/`afterOnHand`/`ledgerExpectedOnHand` (mind nullable a
+fenti szabályok szerint), `movementId` (fenntartva, ma mindig null - A/B
+típus sosem hoz létre `StockMovement`-et), `outboxId`, `requestDetail`/
+`resultDetail` (JSON, csak technikai, sosem rendelési/vevői adat),
+`createdAt`/`completedAt`.
+
+### Megvalósított repair-típusok
+
+**A. `LOCAL_FROM_PROVEN_LEDGER`** (`stock-reconciliation-repair.repository.ts`
+- `applyLocalFromProvenLedger`) - EGY tranzakción belül: advisory lock a
+(variantId, warehouseId) párra -> `StockItem` friss újraolvasása a valódi
+üzleti kulcsán (`variantId`+`warehouseId`+`locationId: null`+`lotId: null`
+- NEM egy esetlegesen elavult surrogate id-n) -> a ledger-bizonyíthatóság
+ÚJRA-számítása egy, a TRANZAKCIÓS kliens köré épített
+`StockReconciliationRepository`-példánnyal (kritikus: ha ez a másik,
+külső `prisma`-hoz kötött repository-példányt használná, a "zárolás
+utáni friss újraolvasás ugyanabban a tranzakcióban" garancia csendben
+sérülne - ezt a végleges kódba kerülés előtt saját review során vettem
+észre és javítottam) -> ugyanaz a `evaluateLocalFromProvenLedgerPreconditions`
+függvény fut le, mint a dry-run előnézetnél -> elutasítás esetén egy
+`REJECTED` audit-sor (StockItem érintetlen); ha a ledger már egyezik az
+`onHand`-del, egy `NOOP` sor (szintén auditálva, de nincs írás); egyébként
+`StockItem.onHand` frissül a bizonyított ledger-értékre, EGY outbox-sor
+jön létre a megosztott `enqueueStockSyncOutboxEntry` helperen át (ugyanaz,
+amit `postInventoryMovement` is használ), és egy `APPLIED` audit-sor
+zárja a tranzakciót. SOHA nem hoz létre `StockMovement`-et - ez egy
+adatintegritás-helyreállítás a ledger már bizonyított állapotára, nem egy
+új fizikai készletmozgás.
+
+**B. `REPUBLISH_LOCAL_TO_UNAS`** (`applyRepublishLocalToUnas`) - ugyanaz a
+lock+újraolvasás minta, de a cél a JELENLEGI (zárolás alatt frissen
+ellenőrzött) `localOnHand` újraküldése az outboxon át - sosem közvetlen
+UNAS API hívás. Elutasít, ha nincs UNAS-link, ha az `expectedCurrentOnHand`
+elavult, vagy ha már létezik `PENDING`/`PROCESSING` sor ugyanarra a párra
+(`ALREADY_QUEUED`).
+
+**C. `ESTABLISH_CONTROLLED_BASELINE` - SZÁNDÉKOSAN NEM implementálva.**
+A checkpoint kifejezetten megengedte ezt, ha nem egyértelműen és
+biztonságosan reprezentálható a jelenlegi modellben - ez itt a helyzet.
+Konkrét, jövőbeli terv (nem homályos TBD): két új, FIX előjelű
+`StockMovementType` érték (`BASELINE_INCREASE`/`BASELINE_DECREASE`, a
+meglévő `RETURN_IN`/`RETURN_OUT` mintájára - lásd `stock-ledger.util.ts`),
+PLUSZ a reconciliation "ledger-bizonyíthatósági ablak" fogalmának
+bővítése úgy, hogy egy `ADJUSTMENT`-et megelőző korábbi bizonytalanság ne
+számítson bele, ha van egy ennél KÉSŐBBI, explicit baseline-esemény (azaz
+a bizonyíthatóság a legutóbbi baseline-tól számítódna, nem a ledger
+elejétől). Ez két okból maradt ki ebből a checkpointból: (1) egy új
+kereszt-modul függőséget vezetne be a reconciliation repository és a
+repair audit-modell között, (2) a checkpoint már így is nagyon nagy
+terjedelmű (A/B repair, teljes health/diagnosztika, aktiválási kapu,
+Postgres-teszt-futtatási kísérlet, ~30 teszt). Egy pontatlan, közelítő
+megoldás megépítése itt kifejezetten kockázatosabb lett volna, mint a
+tervezett elhalasztás.
+
+### Idempotencia és tranzakcióhatár
+
+Formátum: `RECONCILIATION_REPAIR:<repairType>:<stockItemId>:<expectedCurrentOnHand>`
+(`stock-reconciliation-repair.util.ts::buildRepairIdempotencyKey`) -
+SZERVEROLDALON származtatva, SOSEM a kliens által küldve (ellentétben a
+checkpoint specifikáció egy lehetséges olvasatával, ami "a kérés
+tartalmazza az idempotenciakulcsot" - ez a kódbázis MINDEN MÁS
+idempotenciakulcsának mintáját követi: mindig az üzleti állapotból
+származtatott, sosem kliens-bemenet). Nem tartalmaz érzékeny adatot, elfér
+egy szöveges oszlopban, egy ismételt hívás UGYANARRA az
+`expectedCurrentOnHand`-ra ugyanaz az üzleti kísérlet (a service-réteg
+`findByIdempotencyKey`-jel visszaadja a korábbi eredményt, újra sem
+futtatva a tranzakciót), egy KÉSŐBBI, valóban eltérő állapotú javítás
+viszont automatikusan új kulcsot kap. A tranzakción belül EGY lépésben
+történik: lock megszerzése -> `StockItem` és a ledger friss újraolvasása
+-> `expectedCurrentOnHand` ellenőrzése -> reconciliation újraszámítása ->
+audit-sor létrehozása -> `StockItem`/outbox módosítása (ha releváns) ->
+mindez egyetlen `$transaction`-ben, tehát egy váratlan hiba esetén SEMMI
+(még az audit-sor sem) nem marad meg részlegesen.
+
+### Repair API felület
+
+`stock-reconciliation-repair.controller.ts`, ugyanazon
+`/inventory/reconciliation` prefix alatt, mint a checkpoint 5 read-only
+végpontjai:
+
+- `POST /inventory/reconciliation/:stockItemId/repair-local`
+- `POST /inventory/reconciliation/:stockItemId/republish-unas`
+- `GET /inventory/reconciliation/repairs/:repairId`
+
+Minden mutáló kérés body-ja: `dryRun` (opcionális, alapértelmezett
+`false`), `expectedCurrentOnHand` (kötelező), `reason` (kötelező,
+nem-üres). `dryRun: true` esetén SEMMI nem íródik adatbázisba - még audit-
+sor sem (a checkpoint kifejezett előírása szerint, mivel nincs olyan
+meglévő konvenció a kódbázisban, ami ezt megkövetelné). Minden végpont
+`INVENTORY_RECONCILIATION_REPAIR`-rel védett, tömeges (bulk) végpont
+nincs - mindegyik pontosan egy `StockItem`-et céloz.
+
+### Health és diagnosztika (`apps/api/src/health/`)
+
+Négy státusz: `OK` / `DEGRADED` / `BLOCKED` / `UNKNOWN` (ez utóbbi
+SZÁNDÉKOSAN a `DEGRADED` FÖLÖTT rangsorolva egy kombinált státusz
+számításakor - "nem tudjuk eldönteni" sosem csúszhat el csendben "kicsi
+gond, de rendben" felé). Küszöbértékek KÖZPONTOSÍTVA
+(`stock-diagnostics.thresholds.ts`), nincs szórt "mágikus szám".
+
+- `GET /health/inventory/live` - triviális liveness, publikus, nincs
+  függőség-ellenőrzés.
+- `GET /health/inventory/ready` - csak DB + a néhány kritikus tábla
+  elérhetősége, publikus, NEM tartalmaz üzleti adatot vagy számot.
+- `GET /health/inventory/diagnostics` - részletes, `INVENTORY_VIEW`-val
+  védett riport: DB, kötelező táblák, outbox-torlódás (PENDING/FAILED/
+  DEAD_LETTER/PROCESSING darabszám, legrégebbi PENDING kora, lejárt
+  PROCESSING lease-ek), UNAS-pillanatkép frissessége
+  (`UnasProductSnapshot.reportedStockSyncedAt` - NEM egy élő UNAS-hívás),
+  reconciliation-összegzés (a checkpoint 5 `summarize()`-jának
+  újrafelhasználásával), UNAS-rendelés-audit összegzés (a checkpoint 5
+  `UnasOrderStockAuditService.summarize()` újrafelhasználásával),
+  migrációk állapota (lásd lentebb), UNAS-konfiguráció megléte (kulcs/URL
+  ÉRTÉKE SOSEM szerepel a válaszban, csak boolean). A
+  `HISTORICAL_BASELINE_UNKNOWN` állapotú `StockItem`-ek megléte önmagában
+  SOSEM teszi a teljes riportot `BLOCKED`-dá - csak egy `notes`
+  figyelmeztetés.
+- `GET /health/inventory/activation-readiness` - a UNAS delta-motor éles
+  aktiválási kapuja: a checkpoint 5 UNAS-rendelés-audit
+  `safeToActivateWithoutBackfill`/`blockingReasons`-ára épül, PLUSZ két
+  további, kizárólag release-folyamat-szintű feltétel: a migrációk
+  ténylegesen alkalmazva vannak-e (`_prisma_migrations` táblából
+  ellenőrizve a lemezen található migrációs mappákkal szemben), és a
+  Postgres konkurenciateszt lefutása - ez utóbbi MINDIG
+  `"NOT_DEMONSTRATED"`, mert nincs a kódbázisban semmilyen hitelesített,
+  release-idejű bizonyíték arra, hogy a `76d8c80` teszt lefutott és
+  átment egy adott kiadásban - egy teszt-FÁJL megléte csak azt bizonyítja,
+  hogy megírták, nem hogy lefutott. Ezt a végpontot úgy terveztem, hogy
+  ezt SOHA ne állítsa magától - ez pontosan az a keveredés lenne
+  (runtime health vs. release-bizonyíték), amit a checkpoint kifejezetten
+  tiltott.
+
+A migrációk saját, elérhetőségi ellenőrzése: a
+`packages/database/prisma/migrations/` mappa tartalmát veti össze a
+`_prisma_migrations` tábla `finished_at IS NOT NULL` soraival - ha
+BÁRMELYIK oldal nem olvasható (pl. egy éles image nem tartalmazza a
+migrációs forrásmappát), `UNKNOWN`-t ad vissza, SOSEM hamis "minden
+rendben"-t.
+
+### Valódi Postgres-konkurenciateszt: a futtatási kísérlet eredménye
+
+Megkíséreltem ténylegesen lefuttatni a checkpoint 5-ben megírt
+`unas-order-sync.repository.repository.integration.spec.ts` tesztet.
+Pontos blokkoló ok: (1) a `.env`-ben szereplő `DATABASE_URL` a
+`localhost:5432`-re mutat, de ebben a sandboxban semmi nem figyel ott
+(`Connection refused`); (2) sem `psql`/`postgres` bináris, sem `docker`
+nincs telepítve; (3) az `apt-get install postgresql` `Permission denied`-
+del bukik (nincs root/dpkg-lock jogosultság), a `sudo` pedig explicit
+tiltva van ("no new privileges" flag). Ez PONTOSAN ugyanaz a, a
+checkpoint 5-ben is dokumentált korlátozás - nem egy új probléma.
+Reprodukálható parancs (helyi gépen vagy CI-ban, ahol fut egy Postgres):
+
+```
+docker compose up -d postgres   # repo gyökerében, a docker-compose.yml szerint
+cd apps/api
+RUN_DB_INTEGRATION=1 npm run test:integration
+```
+
+Statikus felülvizsgálat (mivel futtatni nem lehetett): a teszt saját maga
+hoz létre egy időbélyeggel egyedi raktárat/terméket/variánst (`before`
+hook), és az `after` hook FK-biztos sorrendben törli mindet, majd
+`$disconnect()`-el zár - tehát izolált és önmagát takarítja. Mindhárom
+`it()` blokk explicit `{ timeout: 30_000 }`-t kap, tehát egy holtpont
+(deadlock) a teszt BUKÁSÁT okozná (Postgres saját `deadlock_timeout`-ja
+után), nem egy örökké lógó futást. A teszt emiatt strukturálisan
+helyesnek ítélhető, de VALÓS lefutás és PASS még mindig nincs bizonyítva
+- ezt a checkpoint 6 zárójelentése is így, félreérthetetlenül állítja.
+
+### Ismert, ebben a checkpointban NEM megoldott kockázatok
+
+- A "C" (`ESTABLISH_CONTROLLED_BASELINE`) repair-típus terv szinten van
+  csak kész - lásd fent.
+- A Postgres-konkurenciateszt (mind a checkpoint 4-es
+  `unas-order-sync.repository.integration.spec.ts`, mind a régebbi outbox-
+  worker-integrációs teszt) még mindig nincs ténylegesen lefuttatva ebben
+  a projektben - ez blokkolja is az aktiválási kaput, szándékosan.
+- A repair-repository és a hozzá tartozó tesztek ebben a sandboxban NEM
+  futtathatók (lásd "Ismert korlátok") - kizárólag kézi kód-átvizsgálással
+  (és teljes `tsc --noEmit` tisztasággal) ellenőrzöttek.
 
 ## Konfiguráció
 
@@ -619,3 +862,17 @@ UNAS_STOCK_SYNC_WORKER_MAX_BACKOFF_SECONDS=1800
 - A POS-eladás idempotenciájának ismert hiánya (nincs stabil kliensoldali
   checkout-azonosító) a checkpoint 3-ban elfogadott, még nyitott
   architekturális rés - ezt a UNAS-delta munka nem érinti.
+- Checkpoint 6: `prisma validate`/`prisma format` nem futtatható ebben a
+  sandboxban (a `prisma` CLI a schema-engine bináris letöltésekor
+  `403 Forbidden`-nel bukik - hálózati korlátozás) - a séma és a
+  migráció helyette kézi átvizsgálással lett ellenőrizve (mezőnkénti
+  egyeztetés a `schema.prisma` és a migráció SQL-je között).
+- Checkpoint 6: a `nest build` (teljes production build) ebben a
+  sandboxban `EPERM: operation not permitted, unlink`-kel bukik a meglévő
+  `apps/api/dist/` könyvtár egyes fájljainál - ez egy, a projekt korábbi
+  checkpointjaiban is dokumentált mount/jogosultsági sajátosság (lásd a
+  `dist.discard-*` könyvtárakat), NEM a checkpoint 6 kódjából ered. A
+  `tsc --noEmit` (amit ez a checkpoint minden lépés után lefuttatott) a
+  TELJES típusellenőrzést elvégzi enélkül, és 0 új hibát talált a
+  checkpoint 6 kódjában a már meglévő, Prisma-generálási hiányból eredő
+  159 alap-hibához képest.
