@@ -1277,3 +1277,138 @@ TOVÁBBRA IS csak dokumentált terv marad - nincs implementálva.
   a `git remote -v` kimenetéből lett levezetve ebben a sandboxban -
   érdemes megerősíteni, hogy ez pontosan egyezik a GitHub-on tényleg
   használt repository slug-gal.
+
+## Checkpoint 9: valódi Prisma/PostgreSQL CI bizonyíték és release-evidence handoff demonstráció (részleges)
+
+Ugyanabban a git worktree-ben folytatva (`/tmp/acropora-os-inventory-checkpoint-8`,
+mert az már a helyes ágon, a helyes commiton állt - nem volt szükség új
+worktree létrehozására). A fő munkamappa (`feat/field-service-mobile-foundation`,
+HEAD `70ef401`) ellenőrizve, változatlan maradt.
+
+**Fontos strukturális felismerés:** ez a worktree ugyanazt a git object
+store-t osztja a fő munkamappával (linked worktree) - ezért a
+`feat/inventory-consistency-hardening` ág ÚJ commitjai a fő munkamappából
+(a felhasználó valós, szinkronizált `Documents/acropora-os` mappájából)
+azonnal láthatók lettek, bundle vagy fájlmásolás nélkül (ellenőrizve:
+`git log feat/inventory-consistency-hardening` a fő munkamappából
+azonnal mutatta a checkpoint 8 commitjait).
+
+### A legfontosabb szabály ŐSZINTE státusza
+
+**Ez a checkpoint NEM felel meg a kimondott legfontosabb szabálynak.** A
+sandboxban továbbra sincs GitHub push-hitelesítés (`gh` CLI hiányzik, nincs
+credential helper, `git push --dry-run` `could not read Username`-mel
+bukik - újra ellenőrizve, változatlan), ezért:
+- nem tudtam GitHub Actionst indítani;
+- nem tudok run ID-t mutatni;
+- a `binaries.prisma.sh` továbbra is 403-mal blokkolt (újra ellenőrizve),
+  ezért `prisma generate` itt sem futtatható;
+- nincs `docker` a sandboxban, ezért a 9. rész image-buildje sem
+  futtatható itt.
+
+Emiatt a 3-6., 8-9. részek "ténylegesen fusson" követelménye NEM
+teljesült ebben a munkamenetben - ezeket egy valódi push + GitHub Actions
+futtatás nélkül nem lehet becsületesen "sikeresnek" nyilvánítani, és ez a
+jelentés nem is állítja ezt.
+
+### Amit ehelyett ténylegesen elvégeztem: célzott, valós kódszintű javítások
+
+A checkpoint 8 kódjának újraátvizsgálásával három konkrét, valós rést
+találtam és javítottam - mindegyiket statikusan (tsc --noEmit: 159 alap-
+hiba, 0 új) és ahol lehetett, valós PostgreSQL 16-tal is ellenőriztem:
+
+1. **Géppel lekérdezett PostgreSQL-verzió.** A `databaseEngineVersion`
+   eddig egy kézzel beírt `"16-alpine"` sztring volt `ci.yml`-ben és
+   `release-evidence-handoff.yml`-ben - ez elvben elszakadhatna a
+   ténylegesen futó konténer valódi verziójától. Mindkét workflow most
+   `psql -tAc "SHOW server_version;"`-vel LEKÉRDEZI a valós szervertől.
+   A pontos `SHOW server_version;` szintaxist egy valós, ebben a
+   sandboxban futtatott PostgreSQL 16.14 (embedded-postgres) ellen
+   ellenőriztem - a lekérdezés helyesen `"16.14"`-et ad vissza.
+2. **Ellentmondó SUCCESS/FAILURE evidence felismerése.** Egy GitHub
+   Actions `run_id` újrafuttatás (retry) esetén is állandó marad - ezért
+   elvben ugyanahhoz a workflowRunId-hoz tartozhat egy korábbi FAILURE ÉS
+   egy későbbi SUCCESS sor (vagy fordítva). Az eddigi
+   `findLatestConcurrencyTestEvidence` csak a SUCCESS oldalt látta, egy
+   esetleges ellentmondó FAILURE sorról nem tudott. Új
+   `findContradictingFailureForWorkflowRun` repository-metódus + az
+   `activationReadiness()`-ben egy külön ellenőrzés: ha UGYANAHHOZ a
+   workflowRunId-hoz FAILURE sor is tartozik, a gate NOT_DEMONSTRATED
+   marad, függetlenül attól, hogy a SUCCESS sor minden más feltételnek
+   megfelelne.
+3. **testSuite tartalom-ellenőrzés.** Eddig a `testSuite` mező tárolva
+   volt, de sosem lett ellenőrizve - egy másik/hiányos suite-ra rögzített
+   SUCCESS elméletileg feloldhatta volna a kaput. Új
+   `EXPECTED_TEST_SUITE_SUBSTRING` küszöbérték + ellenőrzés.
+4. **`workflow_dispatch` input-mentesség megerősítése.** A
+   `release-evidence-handoff.yml`-nek explicit módon NINCS `inputs:`
+   blokkja - dokumentálva, hogy ez szándékos: semmi nem írható felül egy
+   dispatch inputtal.
+
+Mind a négy változtatás `tsc --noEmit`-tel statikusan ellenőrizve (159
+alaphiba, 0 új). A `stock-diagnostics.service.spec.ts`-hez három új teszt
+készült (testSuite-eltérés, ellentmondó FAILURE, nem-ellentmondó eset) -
+ÍRVA és statikusan típusellenőrizve, de FUTTATVA NEM lettek, ugyanazon,
+korábban dokumentált `@prisma/client` futásidejű blokkoló miatt, ami
+minden más, `@acropora/database`-től függő specet is érint ebben a
+sandboxban.
+
+### A teljes 79 spec fájlos suite és a 76d8c80/repair konkurenciateszt
+
+Nem futott újra ebben a checkpointban (a checkpoint 8-as futtatás óta nem
+változott a Prisma-generálási helyzet, és a checkpoint 8-ban dokumentált
+191/129/62-es eredmény pontossága nem évült el, de újbóli, valódi
+generált klienssel való futtatás - ahogy a felhasználó 2. minősítése is
+mondja - továbbra sincs bizonyítva).
+
+### Handoff demonstráció (8. rész)
+
+NEM végezhető el ebben a sandboxban: a `record-release-evidence.ts` script
+maga is `@prisma/client`-et importál a fájl tetején - már ez az import
+lefagyasztja a scriptet a generálás hiánya miatt, mielőtt bármilyen
+validációs logika lefutna. Emiatt MÉG egy nem-production céladatbázis
+elleni helyi szimuláció sem végezhető el itt.
+
+### Docker/RELEASE_COMMIT_SHA (9. rész)
+
+NEM végezhető el: nincs `docker` parancs ebben a sandboxban. A checkpoint
+8-ban elkészült Dockerfile/ci.yml-kód változatlanul készen áll, de a
+tényleges image-build és `docker inspect` ellenőrzés egy valódi GitHub
+Actions futtatást (vagy egy Dockerrel rendelkező fejlesztői gépet)
+igényel.
+
+### Pontos parancssor a felhasználónak a valódi CI-futtatáshoz
+
+Mivel ez a worktree UGYANAZT a git object store-t osztja a felhasználó
+valós, szinkronizált `Documents/acropora-os` mappájával, a checkpoint 8-9
+összes commitja MÁR most is látható onnan (nincs szükség bundle-re vagy
+fájlmásolásra) - csak push kell, amihez ennek a sandboxnak nincs
+jogosultsága. A felhasználó saját termináljából, a valós mappából:
+
+```
+cd ~/Documents/acropora-os
+git fetch origin
+git log feat/inventory-consistency-hardening --oneline -12   # ellenőrzés: 0c6ab2f és az új checkpoint-9 commitok látszanak-e
+git push origin feat/inventory-consistency-hardening
+```
+
+Ezután a GitHub Actions felületén (`Actions` fül) a `CI` workflow
+automatikusan lefut a push-ra - ennek `run_id`-ját és eredményét kell
+visszaadni ehhez a beszélgetéshez, hogy a checkpoint ténylegesen
+lezárható legyen a "legfontosabb szabály" szerint. A
+`release-evidence-handoff.yml` ezután kézzel indítható a GitHub Actions
+"Run workflow" gombjával (csak a `production-release-evidence`
+Environment beállítása - required reviewer, `PRODUCTION_RELEASE_EVIDENCE_DATABASE_URL`
+secret - után, lásd a fájl saját záró kommentjeit).
+
+### Activation-readiness záró állapota
+
+BLOCKED marad - nincs `RELEASE_COMMIT_SHA` ebben a sandboxban, és nincs
+semmilyen valódi evidence-sor egyetlen adatbázisban sem (sem CI-ban, sem
+productionben).
+
+### ESTABLISH_CONTROLLED_BASELINE
+
+Előfeltételei továbbra sem teljesülnek - a Prisma generate, a valódi
+alkalmazásszintű tesztek és a release-evidence útvonal egyike sem lett
+ténylegesen demonstrálva egy valódi futtatásban. Dokumentált terv marad.
