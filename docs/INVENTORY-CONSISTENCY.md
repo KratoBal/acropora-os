@@ -1045,3 +1045,235 @@ UNAS_STOCK_SYNC_WORKER_MAX_BACKOFF_SECONDS=1800
   TELJES típusellenőrzést elvégzi enélkül, és 0 új hibát talált a
   checkpoint 6 kódjában a már meglévő, Prisma-generálási hiányból eredő
   159 alap-hibához képest.
+
+## Checkpoint 8: valódi alkalmazásszintű PostgreSQL-tesztek és release-evidence deploy integráció
+
+Munkaterület-izoláció: ez a checkpoint egy KÜLÖN git worktree-ben készült
+(`/tmp/acropora-os-inventory-checkpoint-8`, a `feat/inventory-consistency-hardening`
+ágból, `38ea010`-ról indulva), mert a live-mounted fő munkamappa eközben
+szándékosan a `feat/field-service-mobile-foundation` ágon dolgozott
+(párhuzamos, független munkafolyamat). A fő munkamappát ez a checkpoint
+egyáltalán nem érintette - lásd a checkpoint elején lezajlott, a
+felhasználó által jóváhagyott worktree-izolációs eljárást.
+
+### A sandbox tényleges végrehajtási korlátai (őszinte helyzetkép)
+
+Ebben a sandboxban nincs GitHub push-hitelesítés (nincs `gh` CLI, nincs
+git credential helper; `git push --dry-run origin HEAD` `fatal: could not
+read Username for 'https://github.com'`-tal bukik) - ezért ez a
+checkpoint NEM tudta elindítani vagy megfigyelni a valódi GitHub Actions
+CI-t. A `binaries.prisma.sh` proxyszintű 403-as blokkolása (lásd
+checkpoint 7) is változatlanul fennáll - ellenőrizve újra, közvetlen
+`curl`-lal és egy valódi `prisma validate` kísérlettel is, mindkettő
+ugyanazt a `Failed to fetch sha256 checksum ... 403 Forbidden` hibát adta.
+
+Emiatt ez a checkpoint alapvetően KÓD-ELŐKÉSZÍTŐ jellegű volt a CI/
+release-oldali részeknél (5. rész kivételével, lásd lent) - a tényleges
+GitHub Actions-futtatás és a `release-evidence-handoff.yml` valódi,
+jóváhagyott lefuttatása egy, a repositoryhoz valódi jogosultsággal
+rendelkező embertől (vagy egy erre képes jövőbeli sandboxtól) igényel
+egy manuális lépést.
+
+### Váratlan, de értékes felismerés: a tesztek futtathatósága pontosabban jellemezhető
+
+A checkpoint 7 azt állította, hogy "egyetlen spec fájl sem futtatható,
+mert a `tsc -p tsconfig.test.json` build maga bukik". Ez a checkpoint egy
+FRISS `pnpm install`-lal (lásd lent) pontosított rajta: a `tsc` build
+VALÓJÁBAN lefut és JS-t emittál annak ellenére, hogy 159 (api) / 42
+(database) típushiba van - a `tsc` alapértelmezetten nem állítja le az
+emittálást hibák esetén (`noEmitOnError` nincs bekapcsolva). A tényleges,
+pontos blokkoló ok NEM a tsc build, hanem az, hogy `@prisma/client`
+(generálás - azaz `prisma generate` - nélkül) nem tartalmaz valódi
+`.prisma/client` futásidejű modult, ezért bármely teszt, ami (közvetlenül
+vagy közvetve, pl. `@acropora/database`-en keresztül) importálja
+`@prisma/client`-et, futásidőben `SyntaxError: Named export 'PrismaClient'
+not found`-dal bukik - pontosan az a hiba, amit `apps/api/Dockerfile`
+saját, bőséges kommentjei is dokumentálnak.
+
+Ennek a pontosításnak köszönhetően kiderült: egy `@acropora/database`-től
+FÜGGETLEN spec fájl VALÓBAN lefuttatható ebben a sandboxban, valódi
+`node --test`-tel, valódi kimenettel. Lásd az 5. részt.
+
+### 3-4. rész: PostgreSQL 16 migrációs lánc
+
+Valódi PostgreSQL 16.14 szerver (`embedded-postgres@16.14.0-beta.17`,
+127.0.0.1:55436, teljesen egyszer használatos, sosem érintette a valós
+`DATABASE_URL`-t) - a teljes 31 migrációs mappa (a checkpoint 8 saját,
+új `20260730090000_harden_release_evidence_provenance` mappájával együtt)
+lefutott egy üres adatbázison: **31/31 OK**, 58 tábla, minden várt enum
+érték jelen van. Izoláció: külön port, külön, egyszer használatos
+adatkönyvtár (`/tmp/pgtest16/data-pg16-v2`), a futtatás után törölve.
+Cleanup: `pg.stop()` + `rm -rf` az adatkönyvtáron.
+
+`prisma generate`/`format`/`validate`: újra megkísérelve, változatlanul
+403 Forbidden a `binaries.prisma.sh`-n - lásd fent.
+
+A checkpoint 7 saját PostgreSQL 18.4 eredménye TOVÁBBRA IS érvényes,
+kiegészítő kompatibilitási bizonyítékként, változatlan státusszal - nem
+lett törölve vagy leminősítve.
+
+### 5. rész: valódi unit tesztek
+
+Egy friss `npm install pnpm@10.34.5` + `pnpm install --frozen-lockfile
+--store-dir /tmp/pnpm-store-checkpoint8` (a `.pnpm-store`-ba írt szimlink
+ugyanabba a mount-szintű EPERM-be ütközött, mint a git lock fájlok -
+külön store-dir-rel megkerülve) telepítette a workspace függőségeit ebben
+a worktree-ben. `packages/types` (nincs Prisma-függősége) és
+`packages/database` (van, de a `tsc` rész külön lefut a `prisma
+generate`-től) mindkettő lebuildelve sima `tsc -p tsconfig.json`-nal.
+
+A teljes, meglévő `apps/api` teszt-lista (79 spec fájl, a `package.json`
+`test` szkriptjéből) ténylegesen lefuttatva `node --test`-tel:
+**191 teszt, 25 suite, 129 sikeres, 62 sikertelen.** A 62 sikertelen
+MINDEGYIKE ugyanarra az egyetlen, pontosan azonosított okra vezethető
+vissza: `@prisma/client` hiányzó, generálás nélküli futásidejű modulja
+(lásd fent) - nem logikai hiba, nem regresszió, nem lazított feltétel.
+Egyetlen assert sem lett enyhítve, mert egyetlen valódi assertion-hibát
+sem találtunk - minden bukás importálási/modulbetöltési hiba volt,
+még a teszt kódjának lefutása előtt.
+
+Ez alól az egyetlen kivétel a checkpoint 8 saját, új
+`common/release-info.util.spec.ts` fájlja (nincs `@acropora/database`
+függősége) - ez VALÓBAN, teljes egészében lefutott: **8/8 teszt sikeres**,
+valódi `node --test` kimenettel.
+
+A checkpoint eredeti listája (inventory reconciliation, historical order
+audit, movement writer, repair util/repository/service/controller,
+health/diagnostics, activation-readiness, ReleaseEvidence-integráció)
+KIVÉTEL NÉLKÜL `@acropora/database`-től függ, ezért ezek a konkrét
+suite-ok NEM futtathatók le ebben a sandboxban - pontosan ugyanazon ok
+miatt, mint a checkpoint 7-ben, csak most pontosabban jellemezve.
+
+### 6-7. rész: 76d8c80 alkalmazásszintű integrációs teszt és a repair konkurenciateszt
+
+NEM futtatható ebben a sandboxban - mindkettő valódi, generált
+`@prisma/client`-et igényel futásidőben (a repository-kód ténylegesen
+`PrismaClient`-et importál és Prisma tranzakciókat/advisory lockokat
+használ), ami a fent dokumentált, kategorikus blokkoló miatt ehelyütt
+lehetetlen. A checkpoint 7 raw pg-driveres advisory-lock bizonyítéka
+VÁLTOZATLANUL NEM helyettesíti ezt - lásd a felhasználó saját, e
+checkpointhoz fűzött minősítését. Mindkét teszt VALÓDI, generált
+Prisma-klienssel, GitHub Actions CI-ban vagy egy ellenőrzött fejlesztői
+gépen futtatandó le - ehhez a meglévő `ci.yml` `verify` job-ja már eleve
+tartalmazza a szükséges lépéseket (`pnpm --filter @acropora/api
+test:integration`, ami lefuttatja a 76d8c80 tesztet valódi
+`postgres:16-alpine`-on).
+
+### 8. rész: ReleaseEvidence hitelesség-modell szigorítása
+
+Új migráció: `20260730090000_harden_release_evidence_provenance` - négy
+új, kötelező mező a `ReleaseEvidence` táblán: `repository`,
+`workflowName`, `jobName`, `triggerEvent`, mindegyik GitHub Actions saját,
+a job kódja által felül nem írható kontextuskifejezéséből
+(`github.repository`/`github.workflow`/`github.job`/`github.event_name`)
+töltve ki - lásd `ci.yml` "Record release evidence" lépését. A
+`record-release-evidence.ts` mind a négyet KÖTELEZŐVÉ tette (nincs
+alapértelmezett érték egyikhez sem sem).
+
+A jelenlegi folyamat pontos leírása: a `verify` job saját, egyszer
+használatos `postgres:16-alpine` service konténerében fut a teszt, majd a
+"Record release evidence" lépés ugyanabba az egyszer használatos
+adatbázisba ír egy sort - a job végén ez az adatbázis megsemmisül. Ez a
+sor NEM érhető el a production `/health/inventory/activation-readiness`
+számára (az a PRODUCTION saját adatbázisát kérdezi le, ami egy teljesen
+más Postgres-példány). Ez a rés - amit a checkpoint 7 már dokumentált -
+VÁLTOZATLANUL fennáll; a 10. rész `release-evidence-handoff.yml`-je egy
+ELŐKÉSZÍTETT (nem lefuttatott) tervet ad a lezárására.
+
+Új, a `ci.yml` "Record release evidence" lépésén hozzáadott védelem: a
+lépés `if:`-je mostantól kihagyja magát fork-eredetű pull_requestnél
+(`github.event.pull_request.head.repo.full_name != github.repository`) -
+defense-in-depth, mivel ma ez a lépés amúgy is csak a CI saját, egyszer
+használatos adatbázisába ír.
+
+### 9. rész: RELEASE_COMMIT_SHA build-time integráció
+
+`apps/api/Dockerfile`: új `RELEASE_COMMIT_SHA` build ARG (alapértelmezett
+üres string - a hiánya NEM hiba, hanem NOT_CONFIGURED-ot eredményez), a
+`runner` stage-ben újra deklarálva és VALÓDI environment változóként
+beégetve (`ENV RELEASE_COMMIT_SHA=${RELEASE_COMMIT_SHA}`), egy build-time
+formátumellenőrzéssel (`grep -Eq '^[0-9a-f]{40}$'`) - egy hibás/hamis
+érték BUKTATJA a buildet, egy ÜRES érték átmegy (mert az "nincs
+beállítva" jogos állapot marad). `apps/api/src/common/release-info.util.ts`
+saját `currentReleaseCommitSha()`-ja is ugyanezt a mintát (40 karakteres,
+kisbetűs hex) validálja futásidőben, és egy hibás értéket NULL-ként kezel
+(nem különálló hibaállapotként) - ez pontosan az elvárt "hibás érték
+elutasítva" viselkedés.
+
+`.github/workflows/ci.yml`: mindhárom releváns Docker build lépés
+(`docker-build-scan`/api mátrix-ág, `docker-smoke-test` mindkét
+buildje) mostantól átadja `--build-arg RELEASE_COMMIT_SHA=${{ github.sha
+}}`-t, plusz egy új `docker inspect`-alapú ellenőrzés a
+`docker-smoke-test` jobban, ami VALÓBAN összeveti a lebuildelt image-be
+sütött értéket `github.sha`-val (nem csak feltételezi, hogy működik).
+
+### 10. rész: CI → release/deploy evidence handoff
+
+Új fájl: `.github/workflows/release-evidence-handoff.yml` - kizárólag
+`workflow_dispatch`-csel indítható (nincs `push`/`pull_request` trigger),
+egyetlen jobbal, ami egy `environment: production-release-evidence`
+GitHub Environment-hez van kötve (ez maga - required reviewer, branch
+restriction - a GitHub repo Settings-jében állítandó be, NEM ebből a
+YAML-ból). A job: (1) valódi PostgreSQL 16 service konténerrel újra
+lefuttatja a 76d8c80 integrációs suite-ot a pontos vizsgált commitra;
+(2) csak VALÓDI, 0-ás kilépőkóddal záruló siker esetén ír SUCCESS
+evidence-t egy production-scoped `DATABASE_URL` secret-tel (a secret NEM
+lett létrehozva, kérve vagy felhasználva - csak a névvel hivatkozva:
+`PRODUCTION_RELEASE_EVIDENCE_DATABASE_URL`); (3) sikertelen futásnál egy
+KÜLÖN, kizárólagos lépés FAILURE evidence-t ír, sosem ugyanaz a lépés,
+ami SUCCESS-t is írhatna; (4) a production migrációs állapotot
+`prisma migrate status`-szal ELLENŐRZI (nem alkalmazza) az evidence-írás
+előtt. A fájl alján részletes, manuális beüzemelési útmutató (5 lépés) -
+egyike sem lett elvégezve ebből a sandboxból.
+
+### 11. rész: activation-readiness szigorítása
+
+`stock-diagnostics.thresholds.ts`: új konstansok -
+`REQUIRED_DATABASE_ENGINE`/`REQUIRED_DATABASE_ENGINE_MAJOR_VERSION_PREFIX`
+("postgres"/"16"), `EXPECTED_RELEASE_EVIDENCE_REPOSITORY`
+("KratoBal/acropora-os", env-override-olható),
+`TRUSTED_RELEASE_EVIDENCE_TRIGGER_EVENTS` (`push`, `workflow_dispatch` -
+`pull_request`/`pull_request_target` szándékosan kizárva).
+
+`stock-diagnostics.service.ts::activationReadiness()`: egy pontos
+commitra talált, nem túl régi SUCCESS sor MOST MÁR csak akkor elég, ha
+EGYSZERRE igaz: van `workflowRunId`; `repository` egyezik az elvárttal;
+`triggerEvent` megbízható; `databaseEngine`/`databaseEngineVersion`
+PostgreSQL 16. Minden megsértett feltétel KÜLÖN, konkrét blokkoló okot ad
+hozzá (nem egy generikus "invalid evidence" üzenetet) - lásd a
+`authenticityViolations` tömböt. A raw advisory-lock primitívum
+bizonyítéka (checkpoint 7) ÖNMAGÁBAN továbbra sem tudja feloldani ezt a
+kaput - ehhez a fenti VALAMENNYI mezőnek pontosan egyeznie kell egy
+valódi CI/release-futásból származó sorral.
+
+A gate a checkpoint 8 végén is BLOCKED marad (nincs `RELEASE_COMMIT_SHA`
+beállítva ebben a sandboxban, és nincs semmilyen valódi evidence-sor sem
+egy éles adatbázisban).
+
+### 12. rész: ESTABLISH_CONTROLLED_BASELINE
+
+A user által megfogalmazott előfeltétel-lista (Prisma generate/format/
+validate siker; PostgreSQL 16 migrációs lánc siker; valódi unit suite
+siker; 76d8c80 alkalmazásszintű teszt siker; repair konkurenciateszt
+siker; release-evidence útvonal demonstrálva legalább CI/release
+környezetben; stabil RELEASE_COMMIT_SHA szerződés) EGYIKE sem teljesül
+maradéktalanul ebben a checkpointban (a Prisma generate/format/validate
+kategorikusan blokkolt; a 76d8c80 és a repair konkurenciateszt nem
+futtatható; a release-evidence útvonal csak KÓDSZINTEN készült el,
+ténylegesen NEM lett demonstrálva egyetlen valódi CI-futásban sem, mivel
+ez a sandbox nem tud GitHub Actions-t indítani). A baseline C ezért
+TOVÁBBRA IS csak dokumentált terv marad - nincs implementálva.
+
+### Ismert, nyitott kockázatok
+
+- A `release-evidence-handoff.yml` VALÓS lefuttatásához a felhasználónak
+  saját kézzel kell beállítania a GitHub Environment-et, a required
+  reviewer-t és a `PRODUCTION_RELEASE_EVIDENCE_DATABASE_URL` secretet -
+  ezek egyike sincs kész.
+- A 76d8c80 és a repair konkurenciateszt éles, alkalmazásszintű futtatása
+  továbbra is csak a valódi GitHub Actions CI-ban vagy egy fejlesztői
+  gépen történhet meg - ez a checkpoint ezt nem tudta elvégezni.
+- `EXPECTED_RELEASE_EVIDENCE_REPOSITORY` alapértéke ("KratoBal/acropora-os")
+  a `git remote -v` kimenetéből lett levezetve ebben a sandboxban -
+  érdemes megerősíteni, hogy ez pontosan egyezik a GitHub-on tényleg
+  használt repository slug-gal.
