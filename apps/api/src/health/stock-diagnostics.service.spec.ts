@@ -83,14 +83,60 @@ class FakeDiagnosticsDb {
     findMany: async () => this.snapshotRows,
   };
 
-  releaseEvidenceRow: { id: string; commitSha: string; createdAt: Date; completedAt: Date } | null =
-    null;
+  releaseEvidenceRow: {
+    id: string;
+    commitSha: string;
+    workflowRunId: string;
+    repository: string;
+    workflowName: string;
+    jobName: string;
+    triggerEvent: string;
+    environment: string;
+    databaseEngine: string;
+    databaseEngineVersion: string;
+    testSuite: string;
+    createdAt: Date;
+    completedAt: Date;
+  } | null = null;
 
   releaseEvidence = {
     findFirst: async (args: { where: { commitSha: string } }) =>
       this.releaseEvidenceRow && this.releaseEvidenceRow.commitSha === args.where.commitSha
         ? this.releaseEvidenceRow
         : null,
+  };
+}
+
+/// A fully-authentic, checkpoint-8-shaped ReleaseEvidence fixture - every
+/// test that wants a genuinely DEMONSTRATED result starts from this and
+/// overrides only the ONE field it means to test, so a test asserting
+/// "foreign repository blocks the gate" can't accidentally also be
+/// (silently) exercising "wrong database engine blocks the gate".
+function authenticEvidenceFixture(overrides: {
+  commitSha: string;
+  createdAt?: Date;
+  completedAt?: Date;
+  repository?: string;
+  triggerEvent?: string;
+  databaseEngine?: string;
+  databaseEngineVersion?: string;
+  workflowRunId?: string;
+}) {
+  const now = new Date();
+  return {
+    id: "evidence-fixture",
+    commitSha: overrides.commitSha,
+    workflowRunId: overrides.workflowRunId ?? "12345",
+    repository: overrides.repository ?? "KratoBal/acropora-os",
+    workflowName: "CI",
+    jobName: "verify",
+    triggerEvent: overrides.triggerEvent ?? "push",
+    environment: "github-actions-ci",
+    databaseEngine: overrides.databaseEngine ?? "postgres",
+    databaseEngineVersion: overrides.databaseEngineVersion ?? "16-alpine",
+    testSuite: "apps/api test:integration (unas-order-sync.repository.integration.spec.ts)",
+    createdAt: overrides.createdAt ?? now,
+    completedAt: overrides.completedAt ?? now,
   };
 }
 
@@ -300,12 +346,7 @@ describe("StockDiagnosticsService.activationReadiness", () => {
   it("a SUCCESS evidence row for an OLDER, DIFFERENT commit does not satisfy the current commit's gate", async () => {
     await withReleaseCommitSha("commit-new", async () => {
       const db = new FakeDiagnosticsDb();
-      db.releaseEvidenceRow = {
-        id: "evidence-1",
-        commitSha: "commit-old",
-        createdAt: new Date(),
-        completedAt: new Date(),
-      };
+      db.releaseEvidenceRow = authenticEvidenceFixture({ commitSha: "commit-old" });
       const service = buildService(db);
       const result = await service.activationReadiness();
       assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
@@ -313,15 +354,10 @@ describe("StockDiagnosticsService.activationReadiness", () => {
     });
   });
 
-  it("is DEMONSTRATED when a fresh SUCCESS row matches the exact current commit", async () => {
+  it("is DEMONSTRATED when a fresh, fully-authentic SUCCESS row matches the exact current commit", async () => {
     await withReleaseCommitSha("commit-current", async () => {
       const db = new FakeDiagnosticsDb();
-      db.releaseEvidenceRow = {
-        id: "evidence-2",
-        commitSha: "commit-current",
-        createdAt: new Date(),
-        completedAt: new Date(),
-      };
+      db.releaseEvidenceRow = authenticEvidenceFixture({ commitSha: "commit-current" });
       const service = buildService(db);
       const result = await service.activationReadiness();
       assert.equal(result.concurrencyTestEvidence, "DEMONSTRATED");
@@ -333,16 +369,82 @@ describe("StockDiagnosticsService.activationReadiness", () => {
     await withReleaseCommitSha("commit-current", async () => {
       const db = new FakeDiagnosticsDb();
       const veryOld = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000); // 400 days ago
-      db.releaseEvidenceRow = {
-        id: "evidence-3",
+      db.releaseEvidenceRow = authenticEvidenceFixture({
         commitSha: "commit-current",
         createdAt: veryOld,
         completedAt: veryOld,
-      };
+      });
       const service = buildService(db);
       const result = await service.activationReadiness();
       assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
       assert.equal(result.safeToActivate, false);
+    });
+  });
+
+  // --- Checkpoint 8: the raw advisory-lock primitive is not application-
+  // level proof, and only a genuine PostgreSQL-16, GitHub-Actions-
+  // originated CI/release run may lift this gate - see
+  // stock-diagnostics.service.ts::activationReadiness's own comment and
+  // stock-diagnostics.thresholds.ts's EXPECTED_RELEASE_EVIDENCE_REPOSITORY/
+  // TRUSTED_RELEASE_EVIDENCE_TRIGGER_EVENTS/REQUIRED_DATABASE_ENGINE*.
+
+  it("a SUCCESS row from a foreign repository does not satisfy the gate, even with a matching commitSha", async () => {
+    await withReleaseCommitSha("commit-current", async () => {
+      const db = new FakeDiagnosticsDb();
+      db.releaseEvidenceRow = authenticEvidenceFixture({
+        commitSha: "commit-current",
+        repository: "someone-else/acropora-os-fork",
+      });
+      const service = buildService(db);
+      const result = await service.activationReadiness();
+      assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
+      assert.equal(result.safeToActivate, false);
+      assert.ok(result.blockingReasons.some((reason) => reason.includes("másik repositoryból")));
+    });
+  });
+
+  it("a SUCCESS row recorded from a pull_request trigger event does not satisfy the gate", async () => {
+    await withReleaseCommitSha("commit-current", async () => {
+      const db = new FakeDiagnosticsDb();
+      db.releaseEvidenceRow = authenticEvidenceFixture({
+        commitSha: "commit-current",
+        triggerEvent: "pull_request",
+      });
+      const service = buildService(db);
+      const result = await service.activationReadiness();
+      assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
+      assert.equal(result.safeToActivate, false);
+      assert.ok(result.blockingReasons.some((reason) => reason.includes("pull_request")));
+    });
+  });
+
+  it("a SUCCESS row recorded against PostgreSQL 18 (not 16) does not satisfy the gate", async () => {
+    await withReleaseCommitSha("commit-current", async () => {
+      const db = new FakeDiagnosticsDb();
+      db.releaseEvidenceRow = authenticEvidenceFixture({
+        commitSha: "commit-current",
+        databaseEngineVersion: "18.4",
+      });
+      const service = buildService(db);
+      const result = await service.activationReadiness();
+      assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
+      assert.equal(result.safeToActivate, false);
+      assert.ok(result.blockingReasons.some((reason) => reason.includes("PostgreSQL 16")));
+    });
+  });
+
+  it("a SUCCESS row with an empty workflowRunId does not satisfy the gate", async () => {
+    await withReleaseCommitSha("commit-current", async () => {
+      const db = new FakeDiagnosticsDb();
+      db.releaseEvidenceRow = authenticEvidenceFixture({
+        commitSha: "commit-current",
+        workflowRunId: "",
+      });
+      const service = buildService(db);
+      const result = await service.activationReadiness();
+      assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
+      assert.equal(result.safeToActivate, false);
+      assert.ok(result.blockingReasons.some((reason) => reason.includes("workflowRunId")));
     });
   });
 
