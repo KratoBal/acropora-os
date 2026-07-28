@@ -215,6 +215,138 @@ időpontja (a szuperszedeált SUCCEEDED sorokat kiszűrve). `GET
 utolsó futása, worker fut-e stb. egy nézetben) a következő
 checkpointban készül el.
 
+## UNAS webshoprendelések: delta-alapú készletkönyvelés és sztornó
+
+Fájl: `apps/api/src/orders/unas-order-sync/unas-order-sync.repository.ts`.
+Minden rendelésimport/frissítés/sztornó a `postInventoryMovement`-en
+keresztül könyvel - nincs többé közvetlen `StockItem`/`StockMovement`/
+`StockMovementLine` írás vagy UNAS `setStock` hívás ebben a fájlban.
+
+### A könyvelt mennyiség forrása: a ledger, nem egy tárolt mező
+
+Ahelyett, hogy egy új Prisma-mezőben tárolnánk "ennyi lett eddig levonva
+ehhez a rendeléshez", ez a `StockMovement`/`StockMovementLine` ledgerből
+számolódik minden alkalommal újra
+(`computeBookedOutAndGeneration`): az adott rendelésre
+(`referenceType="SalesOrder"`, `referenceId=orderId`) mutató összes
+`SALE`/`RETURN_IN` mozgás sorait variánsonként előjelesen összegezve
+(`SALE` = +, `RETURN_IN` = -) kapjuk a `bookedOut` térképet. Ez eleve
+ellenálló megszakadt/replay-elt importra, párhuzamos ugyanazon-sor
+variánsokra és utólagos `SalesOrderItem`-szerkesztésre, mert a ledger
+maga a bizonyíték arra, mi történt ténylegesen - nincs külön "state"
+mező, ami elszakadhatna tőle. **Nincs ehhez új Prisma-modell vagy
+migráció** - ez tudatos döntés, nem elmaradt munka.
+
+### Delta-algoritmus
+
+Rendelésenként, variánsonként: `delta = targetOut - bookedOut`, ahol
+`targetOut` a jelen UNAS-sighting alapján számolt, kumulált cél-mennyiség
+(`aggregateTargetOut` - ugyanaz a variáns több UNAS-soron át egy célba
+összegződik). `delta > 0` -> egy `SALE` mozgás sora `quantityDelta =
+-delta`; `delta < 0` -> egy `RETURN_IN` mozgás sora `quantityDelta =
+|delta|`; `delta = 0` -> nincs mozgás erre a variánsra. Egy hívás
+(`applyOrderStockDelta`) akár mindkét irányú mozgást is posztolhatja
+egyszerre (ha az egyik sor mennyisége nőtt, a másiké csökkent) - ilyenkor
+két külön `postInventoryMovement`-hívás történik ugyanabban a
+tranzakcióban, mert egy `StockMovement.type` csak egy érték lehet.
+`targetOut` üres `Map` (minden korábban könyvelt variáns célja 0) a
+sztornó/törlés esetén - ez automatikusan pontosan a még vissza nem adott
+mennyiséget adja vissza, nem duplán.
+
+### Idempotenciakulcs és az A -> B -> A eset
+
+`UNAS_ORDER:<unasKey>:g<generation>:<SALE|RETURN>`, ahol `generation` a
+rendelés eddigi `SALE`/`RETURN_IN` mozgásainak SZÁMA (ugyanaz a lekérdezés
+adja, ami a `bookedOut`-ot is számolja, az order-szintű advisory lock
+alatt olvasva). **Ez tudatos eltérés** a checkpoint saját javasolt
+hash-alapú kulcsformátumától (`<canonicalInventoryStateHash>`): a hash
+maga vetette fel a checkpoint specifikációja, hogy A -> B -> A esetén a
+második A ugyanazt a hash-t, tehát ugyanazt a kulcsot adná, mint az
+első A - ezt `postInventoryMovement` idempotencia-ellenőrzése tévesen már
+lekönyveltként kezelné. A ledger-alapú generation-számláló szigorúan
+monoton (minden tényleges posztolás eggyel, vagy SALE+RETURN egyidejű
+posztolásakor kettővel nő), és nem igényel se hash-t, se külön verzió-
+mezőt: egy valódi retry (pl. egy összeomlott worker újrafutása, mielőtt
+bármi új sighting érkezne) ugyanazt a deltát ugyanarra a generation-re
+számolja újra, amit `postInventoryMovement` saját idempotencyKey-
+ellenőrzése természetesen kiszűr; egy később érkező, valódi átmenet
+(akár A -> B -> A) mindig magasabb generation-t lát, tehát friss kulcsot
+kap.
+
+### Konkurencia és tranzakció
+
+`lockUnasOrder` (`pg_advisory_xact_lock(hashtextextended('UNAS_ORDER:'||
+key, 0))`) az adott rendelés STABIL UNAS `key`-ére zárolva - nem a helyi
+cuid-ra, mert `createNewOrder` a helyi id létrejötte előtt számolja ezt -
+ugyanaz a minta, mint `inventory-movement-writer.ts`
+`lockVariantWarehouse`-a, csak rendelés-szinten. A zárolás a ledger-
+olvasás ELŐTT történik, hogy két egyidejű sighting (ütemezett batch-tick
+és egy manuális "Rendelés frissítése" admin-hívás) sose olvashassa
+ugyanazt a "már könyvelt" pillanatképet, mielőtt bármelyik commitolna.
+Minden lépés (zárolás, ledger-olvasás, delta-számítás, `SalesOrder`/
+`SalesOrderLine` frissítés, `postInventoryMovement` hívás(ok)) ugyanabban
+a hívó-szintű tranzakcióban történik (`apply()`/`refreshOrder()` saját
+`$transaction`-je, `Serializable` izolációval) -
+`postInventoryMovement` sosem nyit saját tranzakciót. Több variáns esetén
+a writer saját, variantId szerinti determinisztikus zárolási sorrendje
+(lásd feljebb) érvényesül, változatlanul.
+
+### Nem kapcsolt (unlinked) termékek és a FAILED -> OK előreoldás
+
+`resolveEffectiveVariantId` egyetlen, mindkét helyen (a
+`SalesOrderLine`-írásban és a `targetOut`-aggregálásban) használt szabály:
+egy technikai költségsor sosem készletes; egy már OK-lekötött meglévő sor
+MEGTARTJA a perzisztált variantId-ját (akkor is, ha a friss SKU-keresés
+most máshogy vagy sikertelenül oldódna) - a készlettörténet sosem íródik
+felül csendben; egy FAILED meglévő sor, aminek a SKU-ja most feloldódik,
+előre-oldódik az új variantId-ra; minden más eset (még mindig
+feloldatlan, vagy egy új sor sikertelen kereséssel) nem készletes. Ebből
+következik: egy ismeretlen SKU sosem nyúl a készlethez és sosem kap
+outbox-sort; amikor később linkelhetővé válik, a még szükséges delta
+PONTOSAN egyszer könyvelődik (a `bookedOut` addig 0 volt rá); egy korábban
+linkelt, később fel nem oldható tétel megőrzi a történeti variantId-ját,
+így a sztornója biztonságos marad (a sztornó-ág nem is végez élő
+SKU-keresést, csak a perzisztált `existing.lines`-ra és a ledgerre
+támaszkodik).
+
+### UNAS-státusz -> Acropora állapot mapping (a sztornó/törlés alapja)
+
+`unas-order-status.mapper.ts`: `close_fault` -> `CANCELLED`, `close_ok`
+-> `COMPLETED`, `open_prepare` -> `ON_HOLD`, `open_normal`/egyéb ->
+`CONFIRMED`. Kizárólag a `CANCELLED`-be történő ÁTMENET (azaz `existing.
+status !== "CANCELLED"` -> `newStatus === "CANCELLED"`) váltja ki a
+sztornó-ágat (`targetOut` = üres `Map`); egy már `CANCELLED` rendelés
+ismételt `CANCELLED` sightingja szándékosan semmit nem csinál a
+készlettel (lásd a kód hosszú kommentjét) - a ledger-alapú `bookedOut`
+ellenőrzés emiatt is biztonságos lenne, ha mégis lefutna, de az explicit
+korai-kilépés elkerüli a felesleges munkát.
+
+### Felfedezett és javított látens hiba
+
+Egy rendelés, ami MÁR `CANCELLED`/`close_fault` állapotban érkezik meg
+első sightingra (soha nem volt élő), a régi kódban feltétel nélkül kapott
+egy `SALE` mozgást, amit soha nem lehetett visszafordítani (az aktív ->
+CANCELLED átmenet-ág egy születésétől fogva halott rendelésre sosem fut
+le). Az egységes delta-modell mellékhatásként javítja ezt: `createNewOrder`
+`targetOut`-ja üres, ha a rendelés már CANCELLED-ként érkezik, így
+`delta = 0` minden variánsra - nincs mozgás, nincs mit visszafordítani.
+
+### Meglévő (checkpoint előtti) rendelések migrációs/aktiválási biztonsága
+
+Nincs Prisma-migráció, tehát nincs backfill-kockázat: minden már importált
+rendelés `StockMovement`/`StockMovementLine` ledgerje pontosan azt
+tükrözi, ami ténylegesen lekönyvelődött a régi kóddal - ugyanaz a ledger,
+amit az új `computeBookedOutAndGeneration` olvas. Az első resync
+deploy után minden érintett rendelésre helyesen számolja ki a deltát a
+VALÓDI ledger-állapotból, különleges eset-kezelés nélkül: ha egy rendelés
+korábban pl. 3 egységet könyvelt el SALE-ként és azóta nem változott, a
+következő sighting `targetOut=3`, `bookedOut=3`, `delta=0` - nincs
+újra-levonás. Egyetlen előfeltétel: hogy a régi kód ugyanazt a
+`referenceType="SalesOrder"`/`referenceId`-mintát használta - ez már
+korábban is így volt (l. a régi `reverseOrder` és a manuális
+stock-mozgás-létrehozás kódja), tehát a ledger visszamenőleg is helyesen
+olvasható.
+
 ## Konfiguráció
 
 `.env.example` (production secret/config NEM módosult):
@@ -232,10 +364,10 @@ UNAS_STOCK_SYNC_WORKER_MAX_BACKOFF_SECONDS=1800
 
 ## Ismert korlátok (folyamatosan frissül)
 
-- A leltár/beszerzés/POS jelenlegi implementációja **még nem** hívja az
-  új `postInventoryMovement`-et (ez a következő checkpoint) - ezért az
-  outbox ma még nem kap valódi forgalmat ezekből a folyamatokból, csak a
-  writer-t közvetlenül hívó jövőbeli kódból.
+- Leltár, beszerzés, POS és UNAS webshoprendelés (import/módosítás/
+  sztornó) **mind** a `postInventoryMovement`-en keresztül könyvelnek
+  (checkpoint 3-4 lezárva) - közvetlen `StockItem`/`StockMovement` írás
+  ezekben a folyamatokban nincs.
 - A `StockItem` egyedi kulcsának NULL-`locationId`/`lotId` problémája
   (két duplikált sor keletkezhetne, ha valaki megkerülné az advisory
   lock-ot) máig nincs adatbázis-szinten (partial unique index)
@@ -247,3 +379,14 @@ UNAS_STOCK_SYNC_WORKER_MAX_BACKOFF_SECONDS=1800
   projekt "sandbox limitations" jegyzetét), a usernek helyben kell
   lefuttatnia (`pnpm --filter @acropora/api test:integration`) a
   checkpoint végleges lezárásához.
+- Ugyanez igaz a UNAS rendelés-delta motor `lockUnasOrder`/
+  `lockVariantWarehouse` konkurenciavédelmére: a "két egyidejű import nem
+  könyvel duplán" garancia valódi Postgres advisory lock-ot igényel, amit
+  a `FakeDb`-alapú unit tesztek (`unas-order-sync.repository.spec.ts`)
+  nem tudnak bizonyítani (a fake `$executeRaw` no-op) - csak azt
+  bizonyítják, hogy a delta-számítás logikája helyes egyetlen szálon. Egy
+  valódi Postgres elleni konkurrens-import integrációs teszt még nem
+  létezik, felvéve a következő checkpointok kockázatai közé.
+- A POS-eladás idempotenciájának ismert hiánya (nincs stabil kliensoldali
+  checkout-azonosító) a checkpoint 3-ban elfogadott, még nyitott
+  architekturális rés - ezt a UNAS-delta munka nem érinti.
