@@ -42,6 +42,15 @@ function getPrismaErrorMetaTarget(error: unknown): unknown {
   return (meta as { target: unknown }).target;
 }
 
+/// True when `error` is a Prisma error with exactly this `code` (e.g.
+/// "P2002" for any unique-constraint violation, regardless of which
+/// field/index was hit) - for call sites that don't need to distinguish
+/// which unique constraint fired, unlike isPrismaUniqueConstraintViolation
+/// below.
+export function isPrismaErrorCode(error: unknown, code: string): boolean {
+  return getPrismaErrorCode(error) === code;
+}
+
 /// True when `error` is a Prisma P2002 (unique constraint violation) whose
 /// `meta.target` mentions `targetField` - e.g. the name of the unique
 /// column/index that was violated. `target` can be a string or a string
