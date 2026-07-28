@@ -40,6 +40,15 @@ const REQUIRED_ENV_VARS = [
   "RELEASE_EVIDENCE_STATUS",
   "RELEASE_EVIDENCE_COMMIT_SHA",
   "RELEASE_EVIDENCE_WORKFLOW_RUN_ID",
+  // --- Checkpoint 8: bound to GitHub Actions' own trustworthy context
+  // expressions (github.repository / github.workflow / github.job /
+  // github.event_name) in the calling workflow step - never a
+  // freeform/user-suppliable value. See docs/INVENTORY-CONSISTENCY.md's
+  // "Checkpoint 8" section for the full authenticity-model rationale.
+  "RELEASE_EVIDENCE_REPOSITORY",
+  "RELEASE_EVIDENCE_WORKFLOW_NAME",
+  "RELEASE_EVIDENCE_JOB_NAME",
+  "RELEASE_EVIDENCE_TRIGGER_EVENT",
   "RELEASE_EVIDENCE_ENVIRONMENT",
   "RELEASE_EVIDENCE_DB_ENGINE",
   "RELEASE_EVIDENCE_DB_ENGINE_VERSION",
@@ -47,6 +56,20 @@ const REQUIRED_ENV_VARS = [
   "RELEASE_EVIDENCE_STARTED_AT",
   "RELEASE_EVIDENCE_COMPLETED_AT",
 ] as const;
+
+// NOTE: this script deliberately does NOT decide here whether a given
+// triggerEvent/repository/environment combination is "trustworthy enough
+// to unblock production activation-readiness" - it only records what CI
+// truthfully observed (including for ordinary same-repo pull_request runs,
+// which are legitimate test executions in their own right). That trust
+// decision belongs entirely to the READER side - see
+// apps/api/src/health/stock-diagnostics.service.ts's activationReadiness(),
+// which is the only place allowed to treat a row as sufficient to lift the
+// concurrency-test block, and which checks repository/triggerEvent/
+// databaseEngineVersion in addition to commitSha. Conflating "did this
+// honestly happen" (this script) with "is this acceptable for production"
+// (activation-readiness) would let a stricter future policy change silently
+// break this script's CI callers.
 
 const KNOWN_EVIDENCE_TYPES = new Set(["INVENTORY_POSTGRES_CONCURRENCY_TEST"]);
 const KNOWN_STATUSES = new Set(["SUCCESS", "FAILURE"]);
@@ -118,6 +141,10 @@ async function main() {
         status,
         commitSha: readRequiredEnv("RELEASE_EVIDENCE_COMMIT_SHA"),
         workflowRunId: readRequiredEnv("RELEASE_EVIDENCE_WORKFLOW_RUN_ID"),
+        repository: readRequiredEnv("RELEASE_EVIDENCE_REPOSITORY"),
+        workflowName: readRequiredEnv("RELEASE_EVIDENCE_WORKFLOW_NAME"),
+        jobName: readRequiredEnv("RELEASE_EVIDENCE_JOB_NAME"),
+        triggerEvent: readRequiredEnv("RELEASE_EVIDENCE_TRIGGER_EVENT"),
         environment: readRequiredEnv("RELEASE_EVIDENCE_ENVIRONMENT"),
         databaseEngine: readRequiredEnv("RELEASE_EVIDENCE_DB_ENGINE"),
         databaseEngineVersion: readRequiredEnv("RELEASE_EVIDENCE_DB_ENGINE_VERSION"),

@@ -990,12 +990,36 @@ model ReleaseEvidence {
   /// összevetni ezt a mezőt önmagával, és az activation-readiness
   /// NOT_DEMONSTRATED marad.
   commitSha             String
-  /// Stabil CI-azonosító (pl. GitHub Actions run id) - kizárólag
-  /// nyomkövetési/audit célra, az activation-readiness logikája nem
-  /// épít rá.
+  /// Stabil CI-azonosító (pl. GitHub Actions run id). Checkpoint 8 óta az
+  /// activation-readiness logikája IS megköveteli (nem lehet üres), mert
+  /// enélkül egy sor nem lenne visszavezethető egy konkrét, ellenőrizhető
+  /// CI-futásra.
   workflowRunId         String
+  /// --- Checkpoint 8: GitHub Actions saját, a job kódja által NEM
+  /// felülírható kontextusváltozóiból (github.repository / github.workflow /
+  /// github.job / github.event_name) származó provenance-mezők - lásd
+  /// .github/workflows/ci.yml "Record release evidence" lépését és
+  /// docs/INVENTORY-CONSISTENCY.md "Checkpoint 8" szakaszát. Ezek NEM
+  /// helyettesítik a commitSha-alapú egyezést, hanem kiegészítik: egy
+  /// idegen repóból, más workflow/job névvel, vagy nem megbízható
+  /// eseményből (pl. fork pull_request) érkező sor gyanúsnak minősül, még
+  /// ha a commitSha véletlenül egyezne is.
+  repository            String
+  workflowName          String
+  jobName               String
+  /// GitHub Actions esemény neve (pl. "push", "pull_request",
+  /// "workflow_dispatch"). Az activation-readiness ezt is megvizsgálja:
+  /// egy fork-eredetű pull_request-tesztfutás sosem tekinthető a
+  /// production release hiteles bizonyítékának.
+  triggerEvent          String
   environment           String
   databaseEngine        String
+  /// A tesztelt PostgreSQL tényleges főverziója (pl. "16"). Checkpoint 8:
+  /// az activation-readiness KIZÁRÓLAG "16" főverziójú bizonyítékot fogad
+  /// el production release-hez, mert a production postgres:16-alpine-ot
+  /// futtat - egy PostgreSQL 18.4-en lefutott teszt (lásd checkpoint 7)
+  /// értékes kiegészítő kompatibilitási bizonyíték marad, de önmagában
+  /// nem elég a gate feloldásához.
   databaseEngineVersion String
   testSuite             String
   startedAt             DateTime
