@@ -130,11 +130,15 @@ jobs:
       - name: Deploy migrations to the disposable check database
         run: pnpm prisma:deploy
 
+      - name: Capture release evidence start time
+        if: always()
+        run: |
+          echo "RELEASE_EVIDENCE_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" >> "$GITHUB_ENV"
+
       - name: Re-run the real PostgreSQL 16 integration suite
         id: integration_tests
         continue-on-error: true
         run: |
-          echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" >> "$GITHUB_OUTPUT"
           pnpm --filter @acropora/api test:integration
           pnpm --filter @acropora/api test:brands:integration
 
@@ -187,7 +191,6 @@ jobs:
           RELEASE_EVIDENCE_DB_ENGINE: postgres
           RELEASE_EVIDENCE_DB_ENGINE_VERSION: ${{ steps.postgres_version.outputs.version }}
           RELEASE_EVIDENCE_TEST_SUITE: "apps/api test:integration (unas-order-sync.repository.integration.spec.ts) - re-run for production release evidence"
-          RELEASE_EVIDENCE_STARTED_AT: ${{ steps.integration_tests.outputs.started_at }}
         run: |
           export RELEASE_EVIDENCE_COMPLETED_AT="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
           pnpm --filter @acropora/database release-evidence:record
@@ -208,7 +211,6 @@ jobs:
           RELEASE_EVIDENCE_DB_ENGINE: postgres
           RELEASE_EVIDENCE_DB_ENGINE_VERSION: ${{ steps.postgres_version.outputs.version }}
           RELEASE_EVIDENCE_TEST_SUITE: "apps/api test:integration (unas-order-sync.repository.integration.spec.ts) - re-run for production release evidence"
-          RELEASE_EVIDENCE_STARTED_AT: ${{ steps.integration_tests.outputs.started_at }}
         run: |
           export RELEASE_EVIDENCE_COMPLETED_AT="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
           pnpm --filter @acropora/database release-evidence:record

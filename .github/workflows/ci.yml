@@ -81,11 +81,15 @@ jobs:
       - name: Unit and workspace tests
         run: pnpm test
 
+      - name: Capture release evidence start time
+        if: always()
+        run: |
+          echo "RELEASE_EVIDENCE_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" >> "$GITHUB_ENV"
+
       - name: Database integration tests
         id: db_integration_tests
         continue-on-error: true
         run: |
-          echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" >> "$GITHUB_OUTPUT"
           pnpm --filter @acropora/api test:integration
           pnpm --filter @acropora/api test:brands:integration
 
@@ -161,7 +165,6 @@ jobs:
           RELEASE_EVIDENCE_DB_ENGINE: postgres
           RELEASE_EVIDENCE_DB_ENGINE_VERSION: ${{ steps.postgres_version.outputs.version }}
           RELEASE_EVIDENCE_TEST_SUITE: "apps/api test:integration (unas-order-sync.repository.integration.spec.ts)"
-          RELEASE_EVIDENCE_STARTED_AT: ${{ steps.db_integration_tests.outputs.started_at }}
         run: |
           export RELEASE_EVIDENCE_COMPLETED_AT="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
           pnpm --filter @acropora/database release-evidence:record
