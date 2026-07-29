@@ -55,14 +55,33 @@ class FakeDb implements StockReconciliationDatabase {
   outboxRows: FakeOutboxRow[] = [];
 
   stockItem = {
+    // Three distinct shapes hit this same fake, from three different
+    // repository methods: reconcilePage's plain-string variantId/
+    // warehouseId equality filter, reconcileByStockItemId's `{ id }`
+    // lookup, and findVariantsMissingStockItem's `variantId: { in: [...] }`
+    // membership filter - this previously only handled the first shape, so
+    // any `{ in: [...] }` value was compared with `===` against a string
+    // and always failed to match, making findVariantsMissingStockItem's
+    // "already has a StockItem" exclusion silently return nothing.
     findMany: async (args: {
-      where?: { variantId?: string; warehouseId?: string };
+      where?: {
+        id?: string;
+        variantId?: string | { in: string[] };
+        warehouseId?: string;
+      };
       skip?: number;
       take?: number;
     }) => {
+      const variantIdFilter = args.where?.variantId;
+      const matchesVariantId = (candidate: string): boolean => {
+        if (variantIdFilter === undefined) return true;
+        if (typeof variantIdFilter === "string") return candidate === variantIdFilter;
+        return variantIdFilter.in.includes(candidate);
+      };
       const filtered = this.stockItems.filter(
         (item) =>
-          (!args.where?.variantId || item.variantId === args.where.variantId) &&
+          (!args.where?.id || item.id === args.where.id) &&
+          matchesVariantId(item.variantId) &&
           (!args.where?.warehouseId || item.warehouseId === args.where.warehouseId),
       );
       const sorted = [...filtered].sort((a, b) =>
@@ -117,10 +136,18 @@ class FakeDb implements StockReconciliationDatabase {
   };
 
   productVariant = {
-    findMany: async (args: { where: { id: { in: string[] } } }) => {
-      const ids = new Set(args.where.id.in);
+    // findVariantsMissingStockItem (stock-reconciliation.repository.ts) does
+    // NOT pre-filter by variant id here - it fetches every product-variant
+    // whose PRODUCT has a UNAS snapshot with a non-null reportedStock (see
+    // that method's own doc comment: a broad "should exist but doesn't"
+    // candidate universe), then separately queries StockItem to find out
+    // which of those already have a row, subtracting that set afterwards.
+    // This fixture previously filtered by `args.where.id.in`, a shape the
+    // real query never sends (it has no variantId-based where clause at
+    // all here) - every call landed on `args.where.id` being undefined.
+    findMany: async (_args: unknown) => {
       return this.productLinks
-        .filter((link) => ids.has(link.variantId))
+        .filter((link) => link.reportedStock !== null)
         .map((link) => ({
           id: link.variantId,
           productId: link.productId,

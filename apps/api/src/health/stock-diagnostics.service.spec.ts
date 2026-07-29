@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { readdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 
 import type { StockReconciliationService } from "../inventory/stock-reconciliation.service.js";
 import type { UnasOrderStockAuditService } from "../orders/unas-order-sync/unas-order-stock-audit.service.js";
@@ -43,6 +46,19 @@ const BASE_AUDIT_SUMMARY = {
   blockingReasons: [] as string[],
 };
 
+/// Mirrors stock-diagnostics.repository.ts::migrationsDir() exactly (same
+/// relative path from this file's own directory) so the fixture's default
+/// "fully migrated, healthy" state tracks the real, on-disk migration
+/// folder instead of drifting out of sync with it (and so this list never
+/// has to be hand-maintained/hard-coded here).
+function realMigrationNames(): string[] {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const migrationsDir = path.resolve(here, "../../../../packages/database/prisma/migrations");
+  return readdirSync(migrationsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+}
+
 class FakeDiagnosticsDb {
   dbReachable = true;
   outboxCounts: Record<string, number> = {};
@@ -50,12 +66,20 @@ class FakeDiagnosticsDb {
   expiredLeaseCount = 0;
   snapshotRows: Array<{ reportedStock: unknown; reportedStockSyncedAt: Date | null }> = [];
   migrationsChecked = true;
-  expectedMigrations: string[] = [];
-  appliedMigrations: string[] = [];
+  // Default to "everything on disk is applied" - the healthy-by-default
+  // state every test in this suite other than a migrations-specific one
+  // implicitly relies on. Previously these two fields were never actually
+  // wired into $queryRaw below, so migrationStatus() always saw 0 applied
+  // migrations against the real on-disk folder and every diagnostics()
+  // call in this file was silently BLOCKED by a false migrations gate,
+  // masking whatever the individual test actually meant to exercise.
+  expectedMigrations: string[] = realMigrationNames();
+  appliedMigrations: string[] = realMigrationNames();
 
   async $queryRaw() {
     if (!this.dbReachable) throw new Error("connection refused");
-    return [] as unknown;
+    if (!this.migrationsChecked) throw new Error("_prisma_migrations not readable");
+    return this.appliedMigrations.map((name) => ({ migration_name: name })) as unknown;
   }
 
   stockItem = { count: async () => 0 };
@@ -356,21 +380,21 @@ describe("StockDiagnosticsService.activationReadiness", () => {
   });
 
   it("is NOT_DEMONSTRATED when the commit is known but no ReleaseEvidence row exists for it", async () => {
-    await withReleaseCommitSha("commit-abc", async () => {
+    await withReleaseCommitSha("4444444444444444444444444444444444444444", async () => {
       const db = new FakeDiagnosticsDb();
       const service = buildService(db);
       const result = await service.activationReadiness();
       assert.equal(result.safeToActivate, false);
       assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
-      assert.equal(result.evaluatedCommitSha, "commit-abc");
+      assert.equal(result.evaluatedCommitSha, "4444444444444444444444444444444444444444");
       assert.ok(result.blockingReasons.some((reason) => reason.includes("INVENTORY_POSTGRES_CONCURRENCY_TEST")));
     });
   });
 
   it("a SUCCESS evidence row for an OLDER, DIFFERENT commit does not satisfy the current commit's gate", async () => {
-    await withReleaseCommitSha("commit-new", async () => {
+    await withReleaseCommitSha("3333333333333333333333333333333333333333", async () => {
       const db = new FakeDiagnosticsDb();
-      db.releaseEvidenceRow = authenticEvidenceFixture({ commitSha: "commit-old" });
+      db.releaseEvidenceRow = authenticEvidenceFixture({ commitSha: "2222222222222222222222222222222222222222" });
       const service = buildService(db);
       const result = await service.activationReadiness();
       assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
@@ -379,9 +403,9 @@ describe("StockDiagnosticsService.activationReadiness", () => {
   });
 
   it("is DEMONSTRATED when a fresh, fully-authentic SUCCESS row matches the exact current commit", async () => {
-    await withReleaseCommitSha("commit-current", async () => {
+    await withReleaseCommitSha("1111111111111111111111111111111111111111", async () => {
       const db = new FakeDiagnosticsDb();
-      db.releaseEvidenceRow = authenticEvidenceFixture({ commitSha: "commit-current" });
+      db.releaseEvidenceRow = authenticEvidenceFixture({ commitSha: "1111111111111111111111111111111111111111" });
       const service = buildService(db);
       const result = await service.activationReadiness();
       assert.equal(result.concurrencyTestEvidence, "DEMONSTRATED");
@@ -390,11 +414,11 @@ describe("StockDiagnosticsService.activationReadiness", () => {
   });
 
   it("an implausibly old SUCCESS row for the exact current commit still does not satisfy the gate", async () => {
-    await withReleaseCommitSha("commit-current", async () => {
+    await withReleaseCommitSha("1111111111111111111111111111111111111111", async () => {
       const db = new FakeDiagnosticsDb();
       const veryOld = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000); // 400 days ago
       db.releaseEvidenceRow = authenticEvidenceFixture({
-        commitSha: "commit-current",
+        commitSha: "1111111111111111111111111111111111111111",
         createdAt: veryOld,
         completedAt: veryOld,
       });
@@ -413,10 +437,10 @@ describe("StockDiagnosticsService.activationReadiness", () => {
   // TRUSTED_RELEASE_EVIDENCE_TRIGGER_EVENTS/REQUIRED_DATABASE_ENGINE*.
 
   it("a SUCCESS row from a foreign repository does not satisfy the gate, even with a matching commitSha", async () => {
-    await withReleaseCommitSha("commit-current", async () => {
+    await withReleaseCommitSha("1111111111111111111111111111111111111111", async () => {
       const db = new FakeDiagnosticsDb();
       db.releaseEvidenceRow = authenticEvidenceFixture({
-        commitSha: "commit-current",
+        commitSha: "1111111111111111111111111111111111111111",
         repository: "someone-else/acropora-os-fork",
       });
       const service = buildService(db);
@@ -428,10 +452,10 @@ describe("StockDiagnosticsService.activationReadiness", () => {
   });
 
   it("a SUCCESS row recorded from a pull_request trigger event does not satisfy the gate", async () => {
-    await withReleaseCommitSha("commit-current", async () => {
+    await withReleaseCommitSha("1111111111111111111111111111111111111111", async () => {
       const db = new FakeDiagnosticsDb();
       db.releaseEvidenceRow = authenticEvidenceFixture({
-        commitSha: "commit-current",
+        commitSha: "1111111111111111111111111111111111111111",
         triggerEvent: "pull_request",
       });
       const service = buildService(db);
@@ -443,10 +467,10 @@ describe("StockDiagnosticsService.activationReadiness", () => {
   });
 
   it("a SUCCESS row recorded against PostgreSQL 18 (not 16) does not satisfy the gate", async () => {
-    await withReleaseCommitSha("commit-current", async () => {
+    await withReleaseCommitSha("1111111111111111111111111111111111111111", async () => {
       const db = new FakeDiagnosticsDb();
       db.releaseEvidenceRow = authenticEvidenceFixture({
-        commitSha: "commit-current",
+        commitSha: "1111111111111111111111111111111111111111",
         databaseEngineVersion: "18.4",
       });
       const service = buildService(db);
@@ -458,10 +482,10 @@ describe("StockDiagnosticsService.activationReadiness", () => {
   });
 
   it("a SUCCESS row with an empty workflowRunId does not satisfy the gate", async () => {
-    await withReleaseCommitSha("commit-current", async () => {
+    await withReleaseCommitSha("1111111111111111111111111111111111111111", async () => {
       const db = new FakeDiagnosticsDb();
       db.releaseEvidenceRow = authenticEvidenceFixture({
-        commitSha: "commit-current",
+        commitSha: "1111111111111111111111111111111111111111",
         workflowRunId: "",
       });
       const service = buildService(db);
@@ -475,10 +499,10 @@ describe("StockDiagnosticsService.activationReadiness", () => {
   // --- Checkpoint 9 additions.
 
   it("a SUCCESS row whose testSuite does not identify the expected test does not satisfy the gate", async () => {
-    await withReleaseCommitSha("commit-current", async () => {
+    await withReleaseCommitSha("1111111111111111111111111111111111111111", async () => {
       const db = new FakeDiagnosticsDb();
       db.releaseEvidenceRow = authenticEvidenceFixture({
-        commitSha: "commit-current",
+        commitSha: "1111111111111111111111111111111111111111",
         testSuite: "apps/api test (some unrelated suite)",
       });
       const service = buildService(db);
@@ -490,10 +514,10 @@ describe("StockDiagnosticsService.activationReadiness", () => {
   });
 
   it("a SUCCESS row contradicted by a FAILURE row for the SAME workflowRunId does not satisfy the gate", async () => {
-    await withReleaseCommitSha("commit-current", async () => {
+    await withReleaseCommitSha("1111111111111111111111111111111111111111", async () => {
       const db = new FakeDiagnosticsDb();
       db.releaseEvidenceRow = authenticEvidenceFixture({
-        commitSha: "commit-current",
+        commitSha: "1111111111111111111111111111111111111111",
         workflowRunId: "run-42",
       });
       db.contradictingFailureRow = {
@@ -510,10 +534,10 @@ describe("StockDiagnosticsService.activationReadiness", () => {
   });
 
   it("a SUCCESS row with NO contradicting FAILURE for its own workflowRunId is unaffected", async () => {
-    await withReleaseCommitSha("commit-current", async () => {
+    await withReleaseCommitSha("1111111111111111111111111111111111111111", async () => {
       const db = new FakeDiagnosticsDb();
       db.releaseEvidenceRow = authenticEvidenceFixture({
-        commitSha: "commit-current",
+        commitSha: "1111111111111111111111111111111111111111",
         workflowRunId: "run-99",
       });
       db.contradictingFailureRow = null;

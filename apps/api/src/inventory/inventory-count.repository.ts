@@ -346,6 +346,35 @@ export class InventoryCountRepository extends Repository {
             return line.countedQty.minus(line.expectedQty).isZero();
           });
 
+          // A changed line whose variant has no local StockItem row yet has
+          // the exact same "expectedQty is only a UNAS-fallback snapshot,
+          // never a real local baseline" problem as baselineOnlyLines above
+          // (see that block's own comment) - postInventoryMovement always
+          // computes the resulting onHand from the ACTUAL current StockItem
+          // row (0 for a brand-new one, by its own documented contract,
+          // correctly so for every other caller like a first purchase
+          // receipt), never from this leltár's expectedQty snapshot. Without
+          // this, a first-ever count of a previously-untracked variant would
+          // silently compute onHand as `0 + (countedQty - expectedQty)`
+          // instead of the true counted value - e.g. UNAS reports 10,
+          // nothing tracked locally yet, physical count is 8, and onHand
+          // would land on -2 instead of 8. Establishing the StockItem at the
+          // assumed baseline first (same value, same lock, same
+          // create-if-missing primitive as baselineOnlyLines) makes
+          // postInventoryMovement's delta apply on top of that baseline
+          // instead of on top of a phantom zero, while the movement's own
+          // audit line still correctly reports the physical adjustment size
+          // (abs(countedQty - expectedQty)), not the absolute counted value.
+          for (const line of changedLines) {
+            if (trackedVariantIds.has(line.variantId)) continue;
+            await lockVariantWarehouse(transaction, line.variantId, warehouseId);
+            await setStockItemQuantity(transaction, {
+              variantId: line.variantId,
+              warehouseId,
+              onHand: line.expectedQty,
+            });
+          }
+
           if (changedLines.length > 0) {
             const posted = await postInventoryMovement(transaction, {
               idempotencyKey: `INVENTORY_COUNT:${id}`,

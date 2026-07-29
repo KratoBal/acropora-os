@@ -53,6 +53,20 @@ class FakeDb {
   domainEvents: unknown[] = [];
 
   purchaseInvoice = {
+    // The real call always passes `include: purchaseInvoiceDetailInclude`
+    // (see purchase-invoice.repository.ts's create()) - a real Prisma
+    // client hydrates `supplier`/`lines[].variant.product` from that
+    // include automatically. This fixture previously ignored `args.include`
+    // entirely and returned a hand-picked handful of scalar fields, missing
+    // `supplier` (and everything else purchase-invoice.types.ts's
+    // toPurchaseInvoiceDetail/toPurchaseInvoiceSummary read) - every test
+    // failed inside the mapper, before its own assertions ever ran. Since
+    // `supplier` is a genuinely mandatory relation here (every
+    // PurchaseInvoice has one, the include always requests it, and
+    // PurchaseInvoiceSummary.supplierName is a required, non-optional
+    // string), the fix is to make this fixture actually honor the include
+    // contract - not to add `invoice.supplier?.name` in the mapper, which
+    // would silently hide a real missing-relation bug in production too.
     create: async (args: any) => {
       const duplicate = this.invoices.find(
         (invoice) =>
@@ -67,18 +81,52 @@ class FakeDb {
         });
       }
       const id = nextId("invoice");
+      const now = new Date();
       this.invoices.push({
         id,
         documentNumber: args.data.documentNumber,
         supplierId: args.data.supplierId,
         supplierInvoiceNumber: args.data.supplierInvoiceNumber,
       });
+      const lineInputs: any[] = args.data.lines?.create ?? [];
+      const lines = lineInputs.map((line: any) => ({
+        id: nextId("invoice-line"),
+        variantId: line.variantId ?? null,
+        sourceDescription: line.sourceDescription ?? null,
+        orderedQuantity: line.orderedQuantity,
+        actualQuantity: line.actualQuantity,
+        unit: line.unit,
+        unitNet: line.unitNet,
+        discountPercent: line.discountPercent ?? null,
+        syncStatus: line.syncStatus,
+        syncError: line.syncError ?? null,
+        variant: line.variantId
+          ? {
+              sku: `sku-${line.variantId}`,
+              product: { name: `Product ${line.variantId}` },
+            }
+          : null,
+      }));
       return {
         id,
         documentNumber: args.data.documentNumber,
-        source: args.data.source,
-        supplierId: args.data.supplierId,
         supplierInvoiceNumber: args.data.supplierInvoiceNumber,
+        source: args.data.source,
+        status: args.data.status,
+        supplierId: args.data.supplierId,
+        supplier: { name: `Supplier ${args.data.supplierId}` },
+        warehouseId: args.data.warehouseId,
+        currency: args.data.currency,
+        exchangeRate: args.data.exchangeRate ?? null,
+        invoiceDate: args.data.invoiceDate,
+        dueDate: args.data.dueDate ?? null,
+        isPaid: args.data.isPaid,
+        paidAt: args.data.paidAt ?? null,
+        vatRate: args.data.vatRate ?? null,
+        note: args.data.note ?? null,
+        createdAt: now,
+        updatedAt: now,
+        lines,
       };
     },
     findMany: async () => [],

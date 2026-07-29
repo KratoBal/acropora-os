@@ -259,7 +259,13 @@ export function computeRiskFlags(params: {
   } else {
     let positiveBooked = false;
     for (const [, quantity] of params.bookedOut) {
-      if (quantity.isPositive()) {
+      // Prisma.Decimal's own isPositive() is "not negative" (decimal.js
+      // convention: 0 counts as positive), which silently flagged every
+      // cancelled order whose bookedOut had already correctly drained to
+      // exactly zero. This flag is specifically about a cancelled order
+      // that STILL holds booked stock it should have released - a
+      // strictly-greater-than-zero check, not "non-negative".
+      if (quantity.greaterThan(0)) {
         positiveBooked = true;
         break;
       }
