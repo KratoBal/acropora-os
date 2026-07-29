@@ -50,7 +50,7 @@ updates: {
 },
 runtimeVersion: {
   policy: "appVersion",
-},					
+},
     ios: {
       supportsTablet: true,
       bundleIdentifier: selected.bundleIdentifier,

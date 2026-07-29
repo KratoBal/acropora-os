@@ -43,6 +43,20 @@ ARG NODE_VERSION=22.23.1
 ARG PNPM_VERSION=10.34.5
 # Keep in sync with the "turbo" devDependency version in the root package.json.
 ARG TURBO_VERSION=2.10.5
+# Checkpoint 8: the exact commit this image was built from, meant to be
+# passed as `--build-arg RELEASE_COMMIT_SHA=$(git rev-parse HEAD)` (in CI:
+# `${{ github.sha }}` - see .github/workflows/ci.yml's docker-build-scan
+# job). Deliberately has NO default here: an image built without this arg
+# ends up with RELEASE_COMMIT_SHA unset in the running container, which
+# apps/api/src/common/release-info.util.ts::currentReleaseCommitSha()
+# then correctly reports as null, keeping /health/inventory/
+# activation-readiness's concurrencyTestEvidence at NOT_CONFIGURED rather
+# than silently matching some placeholder value. This is validated for
+# well-formedness (not merely "non-empty") below, in the runner stage,
+# so a malformed value fails the BUILD rather than silently producing a
+# container that can never match any real evidence row without an
+# obvious signal why.
+ARG RELEASE_COMMIT_SHA=""
 
 FROM node:${NODE_VERSION}-alpine AS base
 # openssl: required by Prisma's query engine on Alpine (musl).
@@ -320,6 +334,25 @@ RUN rm -rf \
 
 WORKDIR /app
 ENV NODE_ENV=production
+
+# Re-declare in this stage - Docker ARGs do not automatically carry across
+# FROM boundaries, each stage that needs one must re-declare it.
+ARG RELEASE_COMMIT_SHA=""
+# Bake the build-arg into the image itself as a real environment variable,
+# so the running container knows its own commit regardless of whatever
+# (if anything) the deploy platform's own runtime env config sets. Fails
+# the build outright if a non-empty value doesn't look like a real, full
+# git commit SHA (40 lowercase hex chars) - this catches a copy-paste
+# mistake or a placeholder string at build time rather than silently
+# shipping a container whose activation-readiness can never demonstrate
+# anything for a subtly-wrong reason. An EMPTY value is allowed through on
+# purpose (see the ARG's own comment above) - "not configured" must stay
+# possible and must never look like "misconfigured".
+RUN if [ -n "$RELEASE_COMMIT_SHA" ]; then \
+      echo "$RELEASE_COMMIT_SHA" | grep -Eq '^[0-9a-f]{40}$' || \
+      (echo "RELEASE_COMMIT_SHA=\"$RELEASE_COMMIT_SHA\" is not a well-formed 40-char lowercase hex git commit SHA" >&2 && exit 1); \
+    fi
+ENV RELEASE_COMMIT_SHA=${RELEASE_COMMIT_SHA}
 
 # The deploy output is already @acropora/api's own root (package.json,
 # dist/, node_modules/ at the top level) — no apps/api subdirectory to

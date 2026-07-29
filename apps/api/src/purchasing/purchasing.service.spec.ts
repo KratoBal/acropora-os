@@ -3,8 +3,6 @@ import { describe, it } from "node:test";
 import { Prisma } from "@acropora/database";
 
 import type { CreatePurchaseInvoiceDto } from "./dto/create-purchase-invoice.dto.js";
-import type { UnasApiClient } from "../imports/unas/unas-api.client.js";
-import type { UnasAuthService } from "../imports/unas/unas-auth.service.js";
 import type { MnbExchangeRateService } from "../integrations/mnb/mnb-exchange-rate.service.js";
 import type { SuppliersRepository } from "../suppliers/suppliers.repository.js";
 import type {
@@ -32,13 +30,16 @@ function buildService(options: {
   variants: Map<string, PurchaseInvoiceVariantInfo>;
   warehouseId?: string;
   supplierExists?: boolean;
-  setStock?: (
-    ...args: Parameters<UnasApiClient["setStock"]>
-  ) => ReturnType<UnasApiClient["setStock"]>;
   getRateForDate?: MnbExchangeRateService["getRateForDate"];
 }) {
   let capturedCreateParams: CreatePurchaseInvoiceParams | undefined;
   let mnbCallCount = 0;
+  // No UnasApiClient/UnasAuthService dependency anymore - PurchasingService
+  // no longer talks to UNAS synchronously at all (see purchasing.service.ts
+  // constructor comment); the fake repository below stands in for
+  // PurchaseInvoiceRepository, whose real implementation now posts stock via
+  // the shared postInventoryMovement primitive instead of a manual
+  // stockMovement/stockItem/UNAS-push loop.
   const invoices = {
     currentStock: async () => ({
       warehouseId: options.warehouseId ?? "warehouse-1",
@@ -69,10 +70,7 @@ function buildService(options: {
         lines: params.lines.map((line, index) => ({
           id: `line-${index}`,
           variantId: line.variantId ?? undefined,
-          sku:
-            (line.variantId
-              ? options.variants.get(line.variantId)?.sku
-              : undefined) ?? "",
+          sku: line.sku ?? "",
           productName:
             (line.variantId
               ? options.variants.get(line.variantId)?.productName
@@ -105,24 +103,11 @@ function buildService(options: {
         return { quotedDate: "2026-07-20", rate: "400" };
       }),
   } as unknown as MnbExchangeRateService;
-  const unasApi = {
-    setStock:
-      options.setStock ??
-      (async (_token: string, request: { sku: string }) => ({
-        externalId: "1",
-        sku: request.sku,
-      })),
-  } as unknown as UnasApiClient;
-  const unasAuth = {
-    getToken: async () => "token",
-  } as unknown as UnasAuthService;
   const service = new PurchasingService(
     invoices,
     suppliers,
     productSearch,
     mnbRates,
-    unasApi,
-    unasAuth,
   );
   return {
     service,
@@ -252,10 +237,11 @@ describe("PurchasingService.createInvoice", () => {
     assert.equal(getMnbCallCount(), 0);
   });
 
-  it("accumulates the resulting stock across two lines for the same variant instead of overwriting", async () => {
+  it("marks every product-linked line PENDING and carries its SKU through, without computing a resultingQty (the writer computes the absolute onHand under lock, not this service)", async () => {
     const { service, getCapturedCreateParams } = buildService({
       variants: new Map([
-        ["variant-1", variant({ currentQty: new Prisma.Decimal("10") })],
+        ["variant-1", variant({ sku: "REEF-SALT-01" })],
+        ["variant-2", variant({ variantId: "variant-2", sku: "PUMP-XL" })],
       ]),
     });
     await service.createInvoice(
@@ -269,7 +255,7 @@ describe("PurchasingService.createInvoice", () => {
             unitNet: 10,
           },
           {
-            variantId: "variant-1",
+            variantId: "variant-2",
             orderedQuantity: 3,
             actualQuantity: 3,
             unit: "db",
@@ -280,20 +266,19 @@ describe("PurchasingService.createInvoice", () => {
       "user-1",
     );
     const params = getCapturedCreateParams();
-    assert.equal(params?.lines[0]?.resultingQty?.toString(), "15");
-    assert.equal(params?.lines[1]?.resultingQty?.toString(), "18");
+    assert.equal(params?.lines[0]?.syncStatus, "PENDING");
+    assert.equal(params?.lines[0]?.sku, "REEF-SALT-01");
+    assert.equal(params?.lines[1]?.syncStatus, "PENDING");
+    assert.equal(params?.lines[1]?.sku, "PUMP-XL");
+    assert.equal((params?.lines[0] as { resultingQty?: unknown }).resultingQty, undefined);
   });
 
-  it("keeps going and reports a per-line UNAS push failure without blocking the invoice", async () => {
-    const { service, getCapturedCreateParams } = buildService({
+  it("always reports successCount = linked line count and failedCount = 0 - a real posting failure now throws and rolls back the whole transaction instead of producing a per-line synchronous failure (see repository.create)", async () => {
+    const { service } = buildService({
       variants: new Map([
         ["variant-1", variant({ sku: "REEF-SALT-01" })],
         ["variant-2", variant({ variantId: "variant-2", sku: "PUMP-XL" })],
       ]),
-      setStock: async (_token, request) => {
-        if (request.sku === "REEF-SALT-01") throw new Error("UNAS_TIMEOUT");
-        return { externalId: "1", sku: request.sku };
-      },
     });
 
     const result = await service.createInvoice(
@@ -318,26 +303,13 @@ describe("PurchasingService.createInvoice", () => {
       "user-1",
     );
 
-    assert.equal(result.successCount, 1);
-    assert.equal(result.failedCount, 1);
-    const params = getCapturedCreateParams();
-    const failedLine = params?.lines.find(
-      (line) => line.variantId === "variant-1",
-    );
-    const okLine = params?.lines.find((line) => line.variantId === "variant-2");
-    assert.equal(failedLine?.syncStatus, "FAILED");
-    assert.equal(failedLine?.syncError, "UNAS_TIMEOUT");
-    assert.equal(okLine?.syncStatus, "OK");
+    assert.equal(result.successCount, 2);
+    assert.equal(result.failedCount, 0);
   });
 
-  it("accepts a line without a matching product variant, skipping stock and UNAS sync for it", async () => {
-    let setStockCallCount = 0;
+  it("accepts a line without a matching product variant, marking it NOT_LINKED with no sku and skipping it from the linked-line count", async () => {
     const { service, getCapturedCreateParams } = buildService({
       variants: new Map([["variant-1", variant()]]),
-      setStock: async (_token, request) => {
-        setStockCallCount += 1;
-        return { externalId: "1", sku: request.sku };
-      },
     });
 
     const result = await service.createInvoice(
@@ -362,17 +334,17 @@ describe("PurchasingService.createInvoice", () => {
       "user-1",
     );
 
-    // A terméktörzs nélküli sor nem számít bele a UNAS szinkron
-    // összesítésbe (sem sikeresként, sem hibásként), és nem hívja meg a
-    // UNAS-t sem - csak a variantId-vel rendelkező sor teszi.
+    // A terméktörzs nélküli sor nem számít bele a linkedLineCount-ba (sem
+    // sikeresként, sem hibásként) - a repository is kihagyja a helyi
+    // készlethatásból és a UnasStockSyncOutbox-ból (lásd
+    // purchase-invoice.repository.ts create()).
     assert.equal(result.successCount, 1);
     assert.equal(result.failedCount, 0);
-    assert.equal(setStockCallCount, 1);
 
     const params = getCapturedCreateParams();
     const unmatchedLine = params?.lines.find((line) => !line.variantId);
     assert.equal(unmatchedLine?.syncStatus, "NOT_LINKED");
-    assert.equal(unmatchedLine?.resultingQty, null);
+    assert.equal(unmatchedLine?.sku, null);
     assert.equal(unmatchedLine?.sourceDescription, "Egyedi csomagolóanyag");
   });
 

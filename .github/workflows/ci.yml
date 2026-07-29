@@ -81,10 +81,99 @@ jobs:
       - name: Unit and workspace tests
         run: pnpm test
 
+      - name: Capture release evidence start time
+        if: always()
+        run: |
+          echo "RELEASE_EVIDENCE_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" >> "$GITHUB_ENV"
+
       - name: Database integration tests
+        id: db_integration_tests
+        continue-on-error: true
         run: |
           pnpm --filter @acropora/api test:integration
           pnpm --filter @acropora/api test:brands:integration
+
+      # Checkpoint 9: the recorded databaseEngineVersion must be machine-
+      # queried from the actual running server, never a hardcoded literal
+      # that could silently drift from what the service container is
+      # really running (e.g. after bumping the `postgres:16-alpine` image
+      # tag above without remembering to update a hardcoded string
+      # elsewhere). `psql` ships preinstalled on GitHub's ubuntu-latest
+      # runner image. Runs regardless of the integration tests' own
+      # outcome (`if: always()`) - the version to RECORD alongside a
+      # FAILURE result is just as much "what did we actually run against"
+      # as it is for a SUCCESS.
+      - name: Query the actual PostgreSQL server version
+        id: postgres_version
+        if: always()
+        run: |
+          version=$(PGPASSWORD=acropora psql -h localhost -U acropora -d acropora_ci -tAc "SHOW server_version;" | xargs)
+          echo "server version reported by the running container: $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # Records a checkpoint-7 ReleaseEvidence row (see
+      # packages/database/prisma/record-release-evidence.ts and
+      # schema.prisma's ReleaseEvidence doc comment) for the real-Postgres
+      # advisory-lock concurrency test inside test:integration
+      # (unas-order-sync.repository.integration.spec.ts, commit 76d8c80).
+      # This is the ONLY place in the codebase that ever writes to this
+      # table - there is no HTTP endpoint, and there never should be.
+      #
+      # IMPORTANT, KNOWN GAP (documented, not fixed in this checkpoint):
+      # this writes into the CI job's OWN ephemeral `postgres` service
+      # container above - the same one test:integration itself just ran
+      # against - which is destroyed when this job ends. That proves the
+      # recorder script's mechanics work end-to-end against a real,
+      # disposable Postgres in real CI infrastructure, but it does NOT by
+      # itself make this evidence visible to a running PRODUCTION
+      # instance's /health/inventory/activation-readiness (which queries
+      # ITS OWN database). Wiring a genuine CI -> production evidence
+      # write (e.g. as an explicit step in an actual release/deploy
+      # pipeline, using a production DATABASE_URL secret CI does not
+      # currently have) is deliberately left as a documented plan - see
+      # docs/INVENTORY-CONSISTENCY.md's "Release evidence" section - since
+      # actually wiring it up crosses into production-deploy territory,
+      # explicitly out of this checkpoint's scope.
+      # Checkpoint 8 hardening: this step is skipped entirely for pull_request
+      # runs whose head repository differs from this repository (i.e. a
+      # fork). A fork's tests still run (the `verify` job itself has no such
+      # guard) and forks still get real pass/fail feedback in the PR - only
+      # the ReleaseEvidence *recording* is skipped, because a fork PR's
+      # commitSha, while real, was never reviewed/merged here and must never
+      # be able to produce a row that could later be mistaken for trustworthy
+      # evidence. This is defense-in-depth: today this step only ever writes
+      # to CI's own ephemeral database anyway (see the long comment on the
+      # "Database integration tests" step above), but the guard is meant to
+      # hold unconditionally once a real CI -> production handoff exists
+      # (see release-evidence-handoff.yml, added in checkpoint 8).
+      - name: Record release evidence (CI's own ephemeral database)
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        env:
+          RELEASE_EVIDENCE_TYPE: INVENTORY_POSTGRES_CONCURRENCY_TEST
+          RELEASE_EVIDENCE_STATUS: ${{ steps.db_integration_tests.outcome == 'success' && 'SUCCESS' || 'FAILURE' }}
+          RELEASE_EVIDENCE_COMMIT_SHA: ${{ github.sha }}
+          RELEASE_EVIDENCE_WORKFLOW_RUN_ID: ${{ github.run_id }}
+          # Checkpoint 8: GitHub's own trustworthy context expressions, not
+          # anything the job's own commands could override - see
+          # record-release-evidence.ts and schema.prisma's ReleaseEvidence
+          # doc comments.
+          RELEASE_EVIDENCE_REPOSITORY: ${{ github.repository }}
+          RELEASE_EVIDENCE_WORKFLOW_NAME: ${{ github.workflow }}
+          RELEASE_EVIDENCE_JOB_NAME: ${{ github.job }}
+          RELEASE_EVIDENCE_TRIGGER_EVENT: ${{ github.event_name }}
+          RELEASE_EVIDENCE_ENVIRONMENT: github-actions-ci
+          RELEASE_EVIDENCE_DB_ENGINE: postgres
+          RELEASE_EVIDENCE_DB_ENGINE_VERSION: ${{ steps.postgres_version.outputs.version }}
+          RELEASE_EVIDENCE_TEST_SUITE: "apps/api test:integration (unas-order-sync.repository.integration.spec.ts)"
+        run: |
+          export RELEASE_EVIDENCE_COMPLETED_AT="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+          pnpm --filter @acropora/database release-evidence:record
+
+      - name: Fail the job if the database integration tests failed
+        if: steps.db_integration_tests.outcome != 'success'
+        run: |
+          echo "Database integration tests failed - see the 'Database integration tests' step above." >&2
+          exit 1
 
       - name: Health HTTP smoke test
         run: pnpm --filter @acropora/api test:smoke
@@ -100,8 +189,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Checkpoint 8: bakes the exact commit under test into the api
+          # image via the Dockerfile's RELEASE_COMMIT_SHA build ARG (see
+          # that file) - so this CI job also exercises the build-time
+          # well-formedness check added there, using a real, valid SHA.
           - app: api
-            build_args: ""
+            build_args: RELEASE_COMMIT_SHA=${{ github.sha }}
           - app: web
             build_args: API_URL=http://127.0.0.1:3001
 
@@ -205,6 +298,7 @@ jobs:
           push: false
           load: true
           tags: acropora-api:migrate-ci
+          build-args: RELEASE_COMMIT_SHA=${{ github.sha }}
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
 
@@ -223,8 +317,25 @@ jobs:
           push: false
           load: true
           tags: acropora-api:ci
+          build-args: RELEASE_COMMIT_SHA=${{ github.sha }}
           cache-from: type=gha,scope=api
           cache-to: type=gha,mode=max,scope=api
+
+      # Checkpoint 8: proves the Dockerfile's RELEASE_COMMIT_SHA build ARG
+      # actually lands as a real environment variable in the built image,
+      # with the exact value CI passed - without needing an authenticated
+      # HTTP call (activation-readiness itself is permission-gated, so a
+      # plain curl here couldn't reach it). `docker inspect` reads the
+      # image's baked config directly, no running container needed.
+      - name: Verify RELEASE_COMMIT_SHA is baked into the image
+        run: |
+          set -euo pipefail
+          baked=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' acropora-api:ci | grep '^RELEASE_COMMIT_SHA=' | cut -d= -f2)
+          echo "baked RELEASE_COMMIT_SHA=$baked"
+          if [ "$baked" != "${{ github.sha }}" ]; then
+            echo "expected ${{ github.sha }}, got '$baked'" >&2
+            exit 1
+          fi
 
       - name: Start container and verify /health
         run: |

@@ -33,6 +33,14 @@ export const PERMISSIONS = {
   ICP_MANAGE: "icp.manage",
   SETTINGS_MANAGE: "settings.manage",
   USERS_MANAGE: "users.manage",
+  /// Egyedi rekordokra korlátozott, auditált készlet-repair (checkpoint 6
+  /// - lásd apps/api/src/inventory/stock-reconciliation-repair.*).
+  /// Szándékosan KÜLÖN a sima INVENTORY_MANAGE-től, amit a WAREHOUSE
+  /// szerepkör is megkap a mindennapi leltár/beszerzés/POS munkához - egy
+  /// repair közvetlenül felülírja a készlet "igazságát", ezért ugyanolyan
+  /// szűk körnek jár, mint a SETTINGS_MANAGE/USERS_MANAGE (lásd
+  /// ROLE_PERMISSIONS lent: csak OWNER/ADMIN, még a MANAGER sem).
+  INVENTORY_RECONCILIATION_REPAIR: "inventory.reconciliation.repair",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -61,7 +69,8 @@ export const ROLE_PERMISSIONS: Readonly<
   MANAGER: ALL_PERMISSIONS.filter(
     (permission) =>
       permission !== PERMISSIONS.SETTINGS_MANAGE &&
-      permission !== PERMISSIONS.USERS_MANAGE,
+      permission !== PERMISSIONS.USERS_MANAGE &&
+      permission !== PERMISSIONS.INVENTORY_RECONCILIATION_REPAIR,
   ),
   SALES: [
     PERMISSIONS.DASHBOARD_VIEW,

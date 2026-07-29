@@ -10,22 +10,15 @@ import type {
   InventoryCountUploadResult,
 } from "@acropora/types";
 
-import { UnasApiClient } from "../imports/unas/unas-api.client.js";
-import { UnasAuthService } from "../imports/unas/unas-auth.service.js";
 import type { InventoryCountListQueryDto } from "./dto/inventory-count-list-query.dto.js";
 import { InventoryCountXlsx } from "./inventory-count-xlsx.js";
-import {
-  InventoryCountRepository,
-  type InventoryCountLinePushResult,
-} from "./inventory-count.repository.js";
+import { InventoryCountRepository } from "./inventory-count.repository.js";
 
 @Injectable()
 export class InventoryCountService {
   constructor(
     private readonly counts: InventoryCountRepository,
     private readonly xlsx: InventoryCountXlsx,
-    private readonly unasApi: UnasApiClient,
-    private readonly unasAuth: UnasAuthService,
   ) {}
 
   list(query: InventoryCountListQueryDto) {
@@ -94,6 +87,14 @@ export class InventoryCountService {
     return this.counts.updateLineCount(id, lineId, String(countedQty));
   }
 
+  // A tényleges készletkönyvelés (StockMovement/StockItem/UnasStockSyncOutbox)
+  // teljes egészében a repository egyetlen tranzakciójában, a közös
+  // postInventoryMovement-en keresztül történik - lásd
+  // inventory-count.repository.ts applyCorrection(). A UNAS-push innentől
+  // MINDIG a háttér-worker feladata (lásd
+  // unas-stock-sync-outbox.{service,scheduler}.ts), nem ez a szolgáltatás -
+  // ezért ennek már nincs szüksége UnasApiClient/UnasAuthService
+  // függőségre.
   async applyCorrection(
     id: string,
     actorUserId: string,
@@ -113,42 +114,7 @@ export class InventoryCountService {
       );
     }
 
-    const changedLines = current.lines.filter(
-      (line) => line.differenceQty !== null && Number(line.differenceQty) !== 0,
-    );
-
-    const pushResults = new Map<string, InventoryCountLinePushResult>();
-    if (changedLines.length > 0) {
-      const token = await this.unasAuth.getToken();
-      for (const line of changedLines) {
-        try {
-          await this.unasApi.setStock(token, {
-            sku: line.sku,
-            qty: line.countedQty!,
-            comment: `Leltár korrekció (${current.countNumber})`,
-          });
-          pushResults.set(line.id, {
-            lineId: line.id,
-            status: "OK",
-            errorMessage: null,
-          });
-        } catch (error) {
-          pushResults.set(line.id, {
-            lineId: line.id,
-            status: "FAILED",
-            errorMessage:
-              error instanceof Error ? error.message : "UNAS_PUSH_FAILED",
-          });
-        }
-      }
-    }
-
-    const result = await this.counts.applyCorrection(
-      id,
-      actorUserId,
-      pushResults,
-    );
-    return result;
+    return this.counts.applyCorrection(id, actorUserId);
   }
 
   private async requireCount(id: string) {

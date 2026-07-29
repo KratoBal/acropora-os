@@ -4,13 +4,14 @@ import type {
   PosPaymentMethod,
   PosSaleDetail,
   PosSaleListResponse,
+  PosSaleStockWarning,
 } from "@acropora/types";
 
 import { generateCode } from "../common/code-generator.util.js";
 import {
-  setStockItemQuantity,
-  type StockItemWriterDatabase,
-} from "../common/stock-item-writer.js";
+  postInventoryMovement,
+  type InventoryMovementDatabase,
+} from "../common/inventory-movement-writer.js";
 import {
   ensureMainWarehouse,
   type WarehouseLookupDatabase,
@@ -60,10 +61,6 @@ export interface CreatePosSaleLine {
   taxRate: Prisma.Decimal;
   unitNet: Prisma.Decimal;
   lineGross: Prisma.Decimal;
-  /** The absolute quantity now known to remain after this sale; written to StockItem and pushed to UNAS. */
-  resultingQty: Prisma.Decimal;
-  syncStatus: "OK" | "FAILED";
-  syncError: string | null;
 }
 
 export interface CreatePosSaleParams {
@@ -80,17 +77,19 @@ export interface CreatePosSaleParams {
   };
 }
 
-interface PosSaleTransaction {
+export interface CreatePosSaleResult {
+  detail: PosSaleDetail;
+  /** Computed from postInventoryMovement's real, under-lock resulting onHand
+   * for each line - never from a pre-transaction read (which two concurrent
+   * checkouts could race past each other on). See
+   * PosSaleService.createSale for why this must never block the sale. */
+  stockWarnings: PosSaleStockWarning[];
+}
+
+interface PosSaleTransaction extends InventoryMovementDatabase {
   salesOrder: {
     create(args: unknown): Promise<SalesOrderWithRelations>;
   };
-  stockMovement: {
-    create(args: unknown): Promise<{ id: string }>;
-  };
-  stockMovementLine: {
-    create(args: unknown): Promise<unknown>;
-  };
-  stockItem: StockItemWriterDatabase["stockItem"];
 }
 
 export interface PosSaleDatabase extends WarehouseLookupDatabase {
@@ -193,8 +192,25 @@ export class PosSaleRepository extends Repository {
     return { warehouseId: warehouse.id, variants: result };
   }
 
-  async createSale(params: CreatePosSaleParams): Promise<PosSaleDetail> {
+  /// Stabil, üzleti azonosítóból (nem véletlenszerűen) származó
+  /// idempotenciakulcs a postInventoryMovement számára. KORLÁT: az
+  /// orderNumber-t a service minden hívásnál újra generálja
+  /// (generateCode("POS")), és a jelenlegi CreatePosSaleInput/kliens nem
+  /// küld semmilyen stabil checkout/fizetési/nyugta-azonosítót, amire
+  /// támaszkodni lehetne (l. PosSaleService.createSale megjegyzése) - így
+  /// ez a kulcs UGYANAZT a feldolgozási kísérletet (pl. egy belső retry,
+  /// ami ugyanazt az orderNumber-t újra látja) védi ki, de egy tényleges
+  /// kliensoldali dupla-submitot (két különböző orderNumber-rel) NEM.
+  /// Új kötelező mezőt a kérésbe emiatt szándékosan NEM vezetünk be - ez
+  /// dokumentált, ismert korlát, amíg a POS UI nem küld stabil kulcsot.
+  private buildIdempotencyKey(orderNumber: string): string {
+    return `POS_SALE:${orderNumber}`;
+  }
+
+  async createSale(params: CreatePosSaleParams): Promise<CreatePosSaleResult> {
     const now = new Date();
+    const stockWarnings: PosSaleStockWarning[] = [];
+
     const created = await this.saleDatabase.$transaction(
       async (transaction) => {
         const order = await transaction.salesOrder.create({
@@ -223,41 +239,56 @@ export class PosSaleRepository extends Repository {
                 unitNet: line.unitNet,
                 taxRate: line.taxRate,
                 lineGross: line.lineGross,
-                syncStatus: line.syncStatus,
-                syncError: line.syncError,
+                // "PENDING": a helyi könyvelés és a
+                // UnasStockSyncOutbox-publikálás a postInventoryMovement
+                // hívással egy tranzakcióban történik lejjebb; a tényleges
+                // UNAS-push a háttér-workeré, ez a sor sosem állíthat
+                // szinkron OK-t.
+                syncStatus: "PENDING",
+                syncError: null,
               })),
             },
           },
           include: detailInclude,
         });
 
-        const movement = await transaction.stockMovement.create({
-          data: {
-            movementNumber: generateCode("ELAD"),
-            type: "SALE",
-            status: "POSTED",
-            sourceWarehouseId: params.warehouseId,
-            referenceType: "SalesOrder",
-            referenceId: order.id,
-            performedById: params.actorUserId,
-            occurredAt: now,
-            postedAt: now,
-          },
+        // Egyetlen postInventoryMovement hívás könyveli az összes sort:
+        // negatív quantityDelta minden esetben (ELADÁS mindig csökkenti a
+        // készletet), és a negatív készlet EZEN a flow-n szándékosan
+        // megengedett (l. docs/INVENTORY-CONSISTENCY.md, "Negatív
+        // készlet") - a writer sosem dobja el/blokkolja emiatt a
+        // könyvelést, csak jelzi a `wentNegative` flaget soronként.
+        const posted = await postInventoryMovement(transaction, {
+          idempotencyKey: this.buildIdempotencyKey(params.orderNumber),
+          movementNumber: generateCode("ELAD"),
+          type: "SALE",
+          warehouseId: params.warehouseId,
+          referenceType: "SalesOrder",
+          referenceId: order.id,
+          performedById: params.actorUserId,
+          occurredAt: now,
+          sourceProcess: "POS_SALE",
+          lines: params.lines.map((line) => ({
+            variantId: line.variantId,
+            sku: line.sku,
+            quantityDelta: line.quantity.negated(),
+            unit: line.unit,
+          })),
         });
 
-        for (const line of params.lines) {
-          await transaction.stockMovementLine.create({
-            data: {
-              movementId: movement.id,
-              variantId: line.variantId,
-              quantity: line.quantity,
-              unit: line.unit,
-            },
-          });
-          await setStockItemQuantity(transaction, {
-            variantId: line.variantId,
-            warehouseId: params.warehouseId,
-            onHand: line.resultingQty,
+        // A figyelmeztetés a writer VALÓS, zár alatt számított eredményéből
+        // épül, nem egy tranzakció-előtti (ezért versenyhelyzetben elavulttá
+        // válható) becslésből - két egyidejű eladás így sem tud egymás
+        // negatív-készlet jelzését elnyomni vagy hamisan kihagyni.
+        const productNameByVariant = new Map(
+          params.lines.map((line) => [line.variantId, line.productName]),
+        );
+        for (const line of posted.lines) {
+          if (!line.wentNegative) continue;
+          stockWarnings.push({
+            sku: line.sku,
+            productName: productNameByVariant.get(line.variantId) ?? line.sku,
+            resultingQty: line.resultingOnHand.toString(),
           });
         }
 
@@ -265,7 +296,7 @@ export class PosSaleRepository extends Repository {
       },
     );
 
-    return toPosSaleDetail(created);
+    return { detail: toPosSaleDetail(created), stockWarnings };
   }
 
   async list(query: PosSaleListQueryDto): Promise<PosSaleListResponse> {

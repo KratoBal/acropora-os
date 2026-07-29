@@ -2,13 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { InventoryCountDetail } from "@acropora/types";
 
-import type { UnasApiClient } from "../imports/unas/unas-api.client.js";
-import type { UnasAuthService } from "../imports/unas/unas-auth.service.js";
 import type { InventoryCountXlsx } from "./inventory-count-xlsx.js";
-import type {
-  InventoryCountLinePushResult,
-  InventoryCountRepository,
-} from "./inventory-count.repository.js";
+import type { InventoryCountRepository } from "./inventory-count.repository.js";
 import { InventoryCountService } from "./inventory-count.service.js";
 
 function baseDetail(
@@ -54,9 +49,6 @@ function baseDetail(
 
 function buildService(options: {
   detail: InventoryCountDetail;
-  setStock?: (
-    ...args: Parameters<UnasApiClient["setStock"]>
-  ) => ReturnType<UnasApiClient["setStock"]>;
   applyCorrection?: InventoryCountRepository["applyCorrection"];
   updateLineCount?: InventoryCountRepository["updateLineCount"];
 }) {
@@ -64,32 +56,20 @@ function buildService(options: {
     findById: async () => options.detail,
     applyCorrection:
       options.applyCorrection ??
-      (async (
-        id: string,
-        _actorUserId: string,
-        pushResults: Map<string, InventoryCountLinePushResult>,
-      ) => ({
+      (async () => ({
         detail: options.detail,
         movementNumber: "KORR-1",
-        successCount: [...pushResults.values()].filter(
-          (result) => result.status === "OK",
-        ).length,
-        failedCount: [...pushResults.values()].filter(
-          (result) => result.status === "FAILED",
-        ).length,
+        successCount: options.detail.lines.length,
+        failedCount: 0,
       })),
     updateLineCount: options.updateLineCount ?? (async () => options.detail),
   } as unknown as InventoryCountRepository;
   const xlsx = {} as InventoryCountXlsx;
-  const unasApi = {
-    setStock:
-      options.setStock ??
-      (async () => ({ externalId: "1", sku: "REEF-SALT-01" })),
-  } as unknown as UnasApiClient;
-  const unasAuth = {
-    getToken: async () => "token",
-  } as unknown as UnasAuthService;
-  return new InventoryCountService(repository, xlsx, unasApi, unasAuth);
+  // No UnasApiClient/UnasAuthService dependency anymore - the service can no
+  // longer reach UNAS synchronously at all (that's the point: the
+  // constructor literally has no way to). See InventoryCountService's own
+  // constructor signature.
+  return new InventoryCountService(repository, xlsx);
 }
 
 describe("InventoryCountService.applyCorrection", () => {
@@ -113,65 +93,42 @@ describe("InventoryCountService.applyCorrection", () => {
     await assert.rejects(() => service.applyCorrection("count-1", "user-1"));
   });
 
-  it("only pushes setStock for lines whose counted quantity differs", async () => {
-    const pushedSkus: string[] = [];
-    const service = buildService({
-      detail: baseDetail(),
-      setStock: async (_token, request) => {
-        pushedSkus.push(request.sku);
-        return { externalId: "1", sku: request.sku };
-      },
-    });
-
-    await service.applyCorrection("count-1", "user-1");
-
-    assert.deepEqual(pushedSkus, ["REEF-SALT-01"]);
-  });
-
-  it("keeps going and reports a per-line failure when a UNAS push fails", async () => {
-    let capturedResults: Map<string, InventoryCountLinePushResult> | undefined;
+  it("delegates directly to the repository once the guard checks pass, with no UNAS push in between", async () => {
+    let capturedArgs: [string, string] | undefined;
     const detail = baseDetail();
-    detail.lines.push({
-      id: "line-3",
-      variantId: "variant-3",
-      sku: "FILTER-99",
-      productName: "Szűrő",
-      expectedQty: "5",
-      countedQty: "7",
-      differenceQty: "2",
-      syncStatus: "PENDING",
-      syncError: null,
-    });
     const service = buildService({
       detail,
-      setStock: async (_token, request) => {
-        if (request.sku === "REEF-SALT-01") {
-          throw new Error("UNAS_TIMEOUT");
-        }
-        return { externalId: "1", sku: request.sku };
-      },
-      applyCorrection: async (id, actorUserId, pushResults) => {
-        capturedResults = pushResults;
+      applyCorrection: async (id, actorUserId) => {
+        capturedArgs = [id, actorUserId];
         return {
           detail,
           movementNumber: "KORR-1",
-          successCount: [...pushResults.values()].filter(
-            (result) => result.status === "OK",
-          ).length,
-          failedCount: [...pushResults.values()].filter(
-            (result) => result.status === "FAILED",
-          ).length,
+          successCount: 2,
+          failedCount: 0,
         };
       },
     });
 
     const result = await service.applyCorrection("count-1", "user-1");
 
-    assert.equal(capturedResults?.get("line-1")?.status, "FAILED");
-    assert.equal(capturedResults?.get("line-1")?.errorMessage, "UNAS_TIMEOUT");
-    assert.equal(capturedResults?.get("line-3")?.status, "OK");
-    assert.equal(result.successCount, 1);
-    assert.equal(result.failedCount, 1);
+    assert.deepEqual(capturedArgs, ["count-1", "user-1"]);
+    assert.equal(result.movementNumber, "KORR-1");
+    assert.equal(result.successCount, 2);
+    assert.equal(result.failedCount, 0);
+  });
+
+  it("propagates a repository-level conflict (e.g. a detected concurrent double-apply) instead of swallowing it", async () => {
+    const service = buildService({
+      detail: baseDetail(),
+      applyCorrection: async () => {
+        throw new Error("A leltár korrekciója közben egy másik feldolgozás már lekönyvelte ezt a leltárt.");
+      },
+    });
+
+    await assert.rejects(
+      () => service.applyCorrection("count-1", "user-1"),
+      /már lekönyvelte/,
+    );
   });
 });
 

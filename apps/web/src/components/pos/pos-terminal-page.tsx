@@ -218,7 +218,7 @@ export function PosTerminalPage() {
 
       {lastResult ? (
         <Alert
-          variant={lastResult.failedCount > 0 ? "danger" : "info"}
+          variant={lastResult.stockWarnings.length > 0 ? "danger" : "info"}
           title={`Eladás rögzítve: ${lastResult.detail.orderNumber}`}
           description={
             lastResult.stockWarnings.length > 0
@@ -227,10 +227,8 @@ export function PosTerminalPage() {
                     (warning) =>
                       `${warning.productName} (${warning.resultingQty})`,
                   )
-                  .join(
-                    ", ",
-                  )}. UNAS szinkron: ${lastResult.successCount} sikeres, ${lastResult.failedCount} sikertelen.`
-              : `UNAS szinkron: ${lastResult.successCount} sikeres, ${lastResult.failedCount} sikertelen.`
+                  .join(", ")}. Ez nem akadályozta meg az eladás rögzítését.`
+              : "A készlet helyileg lekönyvelve. A UNAS-szinkron a háttérben, ettől függetlenül fut."
           }
         />
       ) : null}

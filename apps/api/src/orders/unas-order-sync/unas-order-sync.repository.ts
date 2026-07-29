@@ -15,7 +15,15 @@ import type {
   UnasOrderSyncSummary,
 } from "@acropora/types";
 
-import { setStockItemQuantity } from "../../common/stock-item-writer.js";
+import {
+  postInventoryMovement,
+  type InventoryMovementDatabase,
+  type InventoryMovementLineInput,
+  type InventoryMovementSourceProcess,
+} from "../../common/inventory-movement-writer.js";
+import { isPrismaErrorCode } from "../../common/prisma-error.util.js";
+import { sumOrderBookedOut } from "../../common/stock-ledger.util.js";
+import { retryOnSerializationConflict } from "../../common/transaction-retry.util.js";
 import {
   ensureMainWarehouse,
   type WarehouseLookupDatabase,
@@ -64,7 +72,13 @@ interface ExternalReferenceRow {
   entityId: string;
 }
 
-interface OrderLineRow {
+// Exported (along with LineInput, resolveEffectiveVariantId,
+// aggregateTargetOut below) so the read-only historical UNAS order audit
+// (unas-order-stock-audit.service.ts) can recompute the EXACT same
+// "effective variant"/"target booked-out quantity" a live import/resync
+// would - never a second, independently-maintained approximation of this
+// logic.
+export interface OrderLineRow {
   id: string;
   sku: string;
   variantId: string | null;
@@ -79,7 +93,7 @@ interface OrderRow {
   lines: OrderLineRow[];
 }
 
-interface LineInput {
+export interface LineInput {
   variantId: string | null;
   sku: string;
   description: string;
@@ -146,14 +160,90 @@ function toLineCreateData(
   return data;
 }
 
-interface UnasOrderSyncTransaction extends WarehouseLookupDatabase {
-  stockItem: {
-    findFirst(
-      args: unknown,
-    ): Promise<{ id: string; onHand: Prisma.Decimal } | null>;
-    update(args: unknown): Promise<unknown>;
-    create(args: unknown): Promise<unknown>;
-  };
+/// Determines the FINAL, stock-relevant variantId for one current-pass UNAS
+/// order item, given the existing (pre-this-pass) SalesOrderLine it matches
+/// by sku, if any. This is the exact same one-directional resolution rule
+/// syncLines() already applied to its own Prisma update payload (see that
+/// method's own long comment) - pulled out into a pure function so the new
+/// stock-delta engine (aggregateTargetOut below) computes quantities against
+/// PRECISELY the same effective linkage syncLines() writes to the DB, never
+/// a subtly different one:
+///  - a technical cost line (isTechnicalCost) is never stock-linked, however
+///    it was previously classified;
+///  - an already-OK-linked existing line KEEPS its persisted variantId
+///    (which is `null` for a non-stock line like a discount/shipping row,
+///    or a real variant id for a genuine product line) even if this pass's
+///    fresh sku lookup would now resolve differently or fail - stock
+///    history/linkage is never silently reassigned or unlinked;
+///  - a FAILED existing line whose sku now resolves (input.syncStatus
+///    "OK") is forward-resolved to the newly found variantId - covers "a
+///    product that was missing at order-creation time got added to the
+///    catalog since";
+///  - anything else (still-unresolved existing line, or a brand-new line
+///    this pass whose own lookup failed) has no stock-relevant variant.
+export function resolveEffectiveVariantId(
+  match: OrderLineRow | undefined,
+  input: LineInput,
+): string | null {
+  if (input.isTechnicalCost) return null;
+  if (!match) return input.variantId;
+  if (match.syncStatus === "OK") return match.variantId;
+  if (match.syncStatus === "FAILED" && input.syncStatus === "OK") {
+    return input.variantId;
+  }
+  return null;
+}
+
+/// Aggregates the CURRENT sighting's desired cumulative "removed from
+/// stock" quantity per variantId - the target half of `delta = target -
+/// alreadyBooked` (see applyOrderStockDelta). Two UNAS items resolving to
+/// the same variantId (e.g. the same SKU listed twice) correctly sum
+/// together rather than overwrite. `existingBySku` is `null` for a
+/// brand-new order (createNewOrder - nothing to preserve/forward-resolve
+/// against yet); non-null for an existing order's resync (syncLines'
+/// `existingBySku`, built from the order's pre-this-pass SalesOrderLine
+/// rows).
+export function aggregateTargetOut(
+  lineInputs: LineInput[],
+  existingBySku: Map<string, OrderLineRow> | null,
+): Map<string, Prisma.Decimal> {
+  const target = new Map<string, Prisma.Decimal>();
+  for (const input of lineInputs) {
+    const match = existingBySku?.get(input.sku);
+    const variantId = resolveEffectiveVariantId(match, input);
+    if (!variantId) continue;
+    const running = target.get(variantId) ?? new Prisma.Decimal(0);
+    target.set(variantId, running.plus(input.quantity));
+  }
+  return target;
+}
+
+/// Postgres transaction-scoped advisory lock serializing every stock-delta
+/// computation/posting for one UNAS order (keyed by its own stable UNAS
+/// `key`, never the local cuid, since createNewOrder computes this before a
+/// local id even exists). Without this, two concurrent sightings of the
+/// SAME order (e.g. a scheduled batch tick and a manual "Rendelés
+/// frissítése" refresh overlapping) could both read the same "already
+/// booked" ledger snapshot before either commits and independently compute
+/// - and both post - the same delta, double-booking it. Mirrors
+/// lockVariantWarehouse's same rationale in inventory-movement-writer.ts,
+/// just keyed by order instead of (variantId, warehouseId).
+async function lockUnasOrder(
+  database: Pick<UnasOrderSyncTransaction, "$executeRaw">,
+  unasKey: string,
+): Promise<void> {
+  const key = `UNAS_ORDER:${unasKey}`;
+  await database.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`;
+}
+
+interface OrderStockMovementWithLines {
+  type: string;
+  lines: Array<{ variantId: string; quantity: Prisma.Decimal }>;
+}
+
+interface UnasOrderSyncTransaction
+  extends WarehouseLookupDatabase,
+    InventoryMovementDatabase {
   externalReference: {
     findUnique(args: unknown): Promise<ExternalReferenceRow | null>;
     create(args: unknown): Promise<unknown>;
@@ -178,12 +268,13 @@ interface UnasOrderSyncTransaction extends WarehouseLookupDatabase {
     create(args: unknown): Promise<unknown>;
     update(args: unknown): Promise<unknown>;
   };
-  stockMovement: {
-    create(args: unknown): Promise<{ id: string }>;
-    findFirst(args: unknown): Promise<{ id: string } | null>;
-  };
-  stockMovementLine: {
-    create(args: unknown): Promise<unknown>;
+  // Widens InventoryMovementDatabase's own {findFirst, create} with the
+  // findMany the new delta engine needs to derive "already booked" quantity
+  // straight from the ledger (see computeBookedOutAndGeneration) - no direct
+  // StockItem/StockMovement writes happen in this file anymore, everything
+  // routes through postInventoryMovement.
+  stockMovement: InventoryMovementDatabase["stockMovement"] & {
+    findMany(args: unknown): Promise<OrderStockMovementWithLines[]>;
   };
   unasOrderSyncRun: {
     updateMany(args: unknown): Promise<unknown>;
@@ -309,10 +400,8 @@ async function buildLineInputs(
   order: UnasApiOrder,
 ): Promise<{
   lineInputs: LineInput[];
-  stockLines: Array<{ variantId: string; quantity: Prisma.Decimal }>;
 }> {
   const lineInputs: LineInput[] = [];
-  const stockLines: Array<{ variantId: string; quantity: Prisma.Decimal }> = [];
 
   for (const item of order.items) {
     const quantity = new Prisma.Decimal(item.quantity);
@@ -399,10 +488,9 @@ async function buildLineInputs(
       syncError: null,
       isTechnicalCost: false,
     });
-    stockLines.push({ variantId: variant.id, quantity });
   }
 
-  return { lineInputs, stockLines };
+  return { lineInputs };
 }
 
 @Injectable()
@@ -456,11 +544,14 @@ export class UnasOrderSyncRepository extends Repository {
       });
       return run.id;
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
-      )
+      // Structural (non-instanceof) check - see prisma-error.util.ts's own
+      // doc comment for why `instanceof Prisma.PrismaClientKnownRequestError`
+      // can't be relied on to narrow `error` in this environment. Opportunistically
+      // fixed here (this file was already being substantially rewritten for
+      // the delta engine) rather than left as the one remaining occurrence.
+      if (isPrismaErrorCode(error, "P2002")) {
         throw new ConflictException("UNAS_ORDER_SYNC_ALREADY_RUNNING");
+      }
       throw error;
     }
   }
@@ -494,99 +585,113 @@ export class UnasOrderSyncRepository extends Repository {
   }
 
   /// Idempotently applies a batch of UNAS orders: new orders create a
-  /// SalesOrder + a SALE stock movement (decrementing on-hand); orders that
-  /// newly transition to a cancelled/failed status get a one-time RETURN_IN
-  /// reversal; anything else just refreshes the mirrored status. Guards
-  /// against re-processing the same UNAS Key twice via ExternalReference,
-  /// and against double-reversal via an existing RETURN_IN movement check -
-  /// both matter because TimeModStart re-surfaces an order on every poll
-  /// until a newer windowEnd passes it by.
+  /// SalesOrder, and every order (new or existing) has its stock delta
+  /// posted via applyOrderStockDelta - the difference between what's
+  /// currently desired (the order's live line items, or nothing at all once
+  /// cancelled) and what this order has already, net, booked out of stock
+  /// per the StockMovement/StockMovementLine ledger; anything else just
+  /// refreshes the mirrored status. Guards against re-processing the same
+  /// UNAS Key twice via ExternalReference, and against double-booking a
+  /// delta via the order-level advisory lock plus the ledger-derived
+  /// "already booked" comparison (see applyOrderStockDelta) - both matter
+  /// because TimeModStart re-surfaces an order on every poll until a newer
+  /// windowEnd passes it by.
   async apply(
     runId: string,
     orders: readonly UnasApiOrder[],
     windowStart: Date | null,
     windowEnd: Date,
   ): Promise<UnasOrderSyncSummary> {
-    return this.syncDatabase.$transaction(
-      async (transaction) => {
-        const run = await transaction.unasOrderSyncRun.findUniqueOrThrow({
-          where: { id: runId },
-        });
-        if (run.status !== "RUNNING")
-          throw new Error(`INVALID_ORDER_SYNC_RUN_STATE:${run.status}`);
+    // The whole transaction retries as a unit (never a single statement
+    // inside it) on a genuine Postgres SERIALIZABLE conflict (Prisma
+    // P2034) - see transaction-retry.util.ts's own doc comment for why
+    // this is expected, standard behavior for Serializable isolation, not
+    // a sign that the order-level advisory lock (lockUnasOrder, inside
+    // applyOrderStockDelta below) or any idempotency check is broken. Any
+    // other error - including a real business error thrown from inside
+    // the callback - is rethrown immediately, never retried.
+    return retryOnSerializationConflict(() =>
+      this.syncDatabase.$transaction(
+        async (transaction) => {
+          const run = await transaction.unasOrderSyncRun.findUniqueOrThrow({
+            where: { id: runId },
+          });
+          if (run.status !== "RUNNING")
+            throw new Error(`INVALID_ORDER_SYNC_RUN_STATE:${run.status}`);
 
-        const warehouse = await ensureMainWarehouse(transaction);
-        let createdCount = 0;
-        let updatedCount = 0;
-        let reversedCount = 0;
+          const warehouse = await ensureMainWarehouse(transaction);
+          let createdCount = 0;
+          let updatedCount = 0;
+          let reversedCount = 0;
 
-        for (const order of orders) {
-          const reference = await transaction.externalReference.findUnique({
-            where: {
-              system_entityType_externalId: {
-                system: "UNAS",
-                entityType: "SalesOrder",
-                externalId: order.key,
+          for (const order of orders) {
+            const reference = await transaction.externalReference.findUnique({
+              where: {
+                system_entityType_externalId: {
+                  system: "UNAS",
+                  entityType: "SalesOrder",
+                  externalId: order.key,
+                },
               },
+            });
+
+            if (!reference) {
+              await this.createNewOrder(transaction, order, warehouse.id);
+              createdCount += 1;
+              continue;
+            }
+
+            const result = await this.applyExistingOrderUpdate(
+              transaction,
+              reference,
+              order,
+              warehouse.id,
+              windowEnd,
+            );
+            if (result === null) continue; // Order row missing locally; nothing safe to reconcile against.
+            if (result.updated) updatedCount += 1;
+            if (result.reversed) reversedCount += 1;
+          }
+
+          await transaction.integrationCursor.upsert({
+            where: { provider_stream: { provider: "UNAS", stream: "ORDERS" } },
+            create: {
+              provider: "UNAS",
+              stream: "ORDERS",
+              lastSuccessfulWindowEnd: windowEnd,
+            },
+            update: { lastSuccessfulWindowEnd: windowEnd },
+          });
+          await transaction.unasOrderSyncRun.update({
+            where: { id: runId },
+            data: {
+              activeKey: null,
+              status: "APPLIED",
+              completedAt: new Date(),
+              ordersSeen: orders.length,
+              createdCount,
+              updatedCount,
+              reversedCount,
             },
           });
 
-          if (!reference) {
-            await this.createNewOrder(transaction, order, warehouse.id);
-            createdCount += 1;
-            continue;
-          }
-
-          const result = await this.applyExistingOrderUpdate(
-            transaction,
-            reference,
-            order,
-            warehouse.id,
-            windowEnd,
-          );
-          if (result === null) continue; // Order row missing locally; nothing safe to reconcile against.
-          if (result.updated) updatedCount += 1;
-          if (result.reversed) reversedCount += 1;
-        }
-
-        await transaction.integrationCursor.upsert({
-          where: { provider_stream: { provider: "UNAS", stream: "ORDERS" } },
-          create: {
-            provider: "UNAS",
-            stream: "ORDERS",
-            lastSuccessfulWindowEnd: windowEnd,
-          },
-          update: { lastSuccessfulWindowEnd: windowEnd },
-        });
-        await transaction.unasOrderSyncRun.update({
-          where: { id: runId },
-          data: {
-            activeKey: null,
-            status: "APPLIED",
-            completedAt: new Date(),
+          return {
+            runId,
+            status: "APPLIED" as const,
             ordersSeen: orders.length,
             createdCount,
             updatedCount,
             reversedCount,
-          },
-        });
-
-        return {
-          runId,
-          status: "APPLIED" as const,
-          ordersSeen: orders.length,
-          createdCount,
-          updatedCount,
-          reversedCount,
-          stockMismatchCount: 0,
-          windowStart: windowStart?.toISOString() ?? null,
-          windowEnd: windowEnd.toISOString(),
-        };
-      },
-      {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        timeout: 60_000,
-      },
+            stockMismatchCount: 0,
+            windowStart: windowStart?.toISOString() ?? null,
+            windowEnd: windowEnd.toISOString(),
+          };
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          timeout: 60_000,
+        },
+      ),
     );
   }
 
@@ -646,11 +751,25 @@ export class UnasOrderSyncRepository extends Repository {
     const totals = orderTotals(order);
 
     if (newStatus === "CANCELLED" && existing.status !== "CANCELLED") {
-      await this.reverseOrder(transaction, existing, warehouseId);
-      reversed = true;
+      // Sztornó: a cél mindig 0 minden variánsra, amit ez a rendelés valaha
+      // ténylegesen levont a készletből - a deltás motor (targetOut=üres
+      // Map) így magától csak azt adja vissza, ami MÉG nincs visszaadva
+      // (l. applyOrderStockDelta doksi: "3 -> 1 -> sztornó" eset: a 3 -> 1
+      // lépésnél már visszajött 2, sztornókor csak a fennmaradó 1 jön
+      // vissza - nincs kettős visszavétel).
+      const deltaResult = await this.applyOrderStockDelta(transaction, {
+        orderId: existing.id,
+        unasKey: order.key,
+        warehouseId,
+        targetOut: new Map(),
+        variantMeta: this.buildVariantMeta(existing.lines, []),
+        sourceProcess: "UNAS_ORDER_CANCEL",
+      });
+      reversed = deltaResult.changed;
       await transaction.salesOrder.update({
         where: { id: existing.id },
         data: {
+          status: newStatus,
           unasInvoiceStatus: order.invoiceStatus,
           ...billingFields,
         },
@@ -662,12 +781,13 @@ export class UnasOrderSyncRepository extends Repository {
       // refresh of an already-cancelled order). Deliberately skipped
       // entirely: NOT the live-order branch below (no syncLines - a dead
       // order's line items don't need to track UNAS price/description
-      // edits, and re-running it would be pure waste) and NOT reverseOrder
-      // (already reversed exactly once when it first transitioned to
-      // CANCELLED - see the "reverses stock exactly once" test - re-running
-      // it would either double-reverse stock or, thanks to its own
-      // already-reversed guard, silently no-op every single call, neither
-      // of which is useful). status/totals/billingFields are intentionally
+      // edits, and re-running it would be pure waste) and NOT
+      // applyOrderStockDelta (already brought bookedOut to 0 for every
+      // variant when it first transitioned to CANCELLED - see the
+      // "reverses stock exactly once" test; re-running it here would
+      // recompute delta=0 for everything anyway thanks to the ledger-based
+      // bookedOut check, so skipping it entirely is purely an optimization,
+      // not a correctness requirement). status/totals/billingFields are intentionally
       // NOT rewritten here either, so a cancelled order's terminal state
       // can never be perturbed by a later sighting. The only thing that may
       // still legitimately change for an already-cancelled order is its
@@ -699,11 +819,31 @@ export class UnasOrderSyncRepository extends Repository {
       // a UNAS-removed line should ever be deleted locally, is an open
       // business decision, not something to guess at here (see
       // docs/ACROPORA-OS-MASTER-MILESTONE-PLAN.md, "11. Nyitott üzleti
-      // döntések", #13). syncLines also corrects any previously
-      // mis-stock-managed technical cost line (see isTechnicalCost) back to
-      // non-stock, regardless of which entry point (apply() or
-      // refreshOrder()) triggered this branch.
-      await this.syncLines(transaction, existing, order);
+      // döntések", #13 - immár MEGVÁLASZOLVA ebben a checkpointban: a
+      // korábbi "nem tudjuk, hogyan reagáljunk a mennyiségváltozásra"
+      // döntés helyett a deltás motor pontosan a különbséget könyveli (l.
+      // applyOrderStockDelta), amint egy tétel mennyisége/hozzárendelése
+      // változik - lásd docs/INVENTORY-CONSISTENCY.md "UNAS
+      // webshoprendelések". syncLines a soronkénti mezőket (ár/leírás/
+      // mennyiség a SalesOrderLine-on) frissíti és a technikai
+      // költségsorokat korrigálja vissza nem-készletesre; az effektív
+      // variantId-t (resolveEffectiveVariantId) UGYANÚGY számolja, mint a
+      // lentebbi targetOut aggregálás, hogy a két lépés sose térjen el
+      // egymástól.
+      const { lineInputs } = await buildLineInputs(transaction, order);
+      await this.syncLines(transaction, existing, lineInputs);
+      const existingBySku = new Map(
+        existing.lines.map((line) => [line.sku, line]),
+      );
+      const targetOut = aggregateTargetOut(lineInputs, existingBySku);
+      const deltaResult = await this.applyOrderStockDelta(transaction, {
+        orderId: existing.id,
+        unasKey: order.key,
+        warehouseId,
+        targetOut,
+        variantMeta: this.buildVariantMeta(existing.lines, lineInputs),
+        sourceProcess: "UNAS_ORDER_UPDATE",
+      });
       await transaction.salesOrder.update({
         where: { id: existing.id },
         data: {
@@ -716,7 +856,14 @@ export class UnasOrderSyncRepository extends Repository {
           ...billingFields,
         },
       });
-      if (newStatus !== existing.status || invoiceStatusChanged) updated = true;
+      // deltaResult.changed folded in: a puszta mennyiségváltozás (pl. 2 ->
+      // 3 ugyanazon az élő rendelésen, státusz/számlaállapot változása
+      // nélkül) korábban NEM számított "updated"-nek az összegzésben - ez
+      // pontatlan volt, most már valódi készlethatás is "updated"-nek
+      // számít.
+      if (newStatus !== existing.status || invoiceStatusChanged || deltaResult.changed) {
+        updated = true;
+      }
     }
 
     await this.syncInvoiceMirror(transaction, existing.id, order);
@@ -776,37 +923,46 @@ export class UnasOrderSyncRepository extends Repository {
     orderId: string,
     order: UnasApiOrder,
   ): Promise<{ updated: boolean; reversed: boolean }> {
-    return this.syncDatabase.$transaction(
-      async (transaction) => {
-        const reference = await transaction.externalReference.findUnique({
-          where: {
-            system_entityType_externalId: {
-              system: "UNAS",
-              entityType: "SalesOrder",
-              externalId: order.key,
+    // Same whole-transaction retry as apply() above, for the same reason -
+    // two concurrent refreshOrder() calls for the SAME order (or one
+    // overlapping apply()'s own batch window) are exactly the scenario
+    // lockUnasOrder already serializes at the stock-delta level, but a
+    // genuine Postgres Serializable conflict (Prisma P2034) can still abort
+    // one of two such concurrent transactions - see
+    // transaction-retry.util.ts's doc comment.
+    return retryOnSerializationConflict(() =>
+      this.syncDatabase.$transaction(
+        async (transaction) => {
+          const reference = await transaction.externalReference.findUnique({
+            where: {
+              system_entityType_externalId: {
+                system: "UNAS",
+                entityType: "SalesOrder",
+                externalId: order.key,
+              },
             },
-          },
-        });
-        if (!reference || reference.entityId !== orderId) {
-          throw new ConflictException("UNAS_ORDER_KEY_MISMATCH");
-        }
+          });
+          if (!reference || reference.entityId !== orderId) {
+            throw new ConflictException("UNAS_ORDER_KEY_MISMATCH");
+          }
 
-        const warehouse = await ensureMainWarehouse(transaction);
-        const result = await this.applyExistingOrderUpdate(
-          transaction,
-          reference,
-          order,
-          warehouse.id,
-          new Date(),
-        );
-        if (result === null)
-          throw new NotFoundException("A rendelés nem található.");
-        return result;
-      },
-      {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        timeout: 30_000,
-      },
+          const warehouse = await ensureMainWarehouse(transaction);
+          const result = await this.applyExistingOrderUpdate(
+            transaction,
+            reference,
+            order,
+            warehouse.id,
+            new Date(),
+          );
+          if (result === null)
+            throw new NotFoundException("A rendelés nem található.");
+          return result;
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          timeout: 30_000,
+        },
+      ),
     );
   }
 
@@ -825,17 +981,15 @@ export class UnasOrderSyncRepository extends Repository {
     order: UnasApiOrder,
     warehouseId: string,
   ): Promise<void> {
-    const { lineInputs, stockLines } = await buildLineInputs(
-      transaction,
-      order,
-    );
+    const { lineInputs } = await buildLineInputs(transaction, order);
     const totals = orderTotals(order);
+    const newStatus = mapUnasOrderStatus(order.statusType);
 
     const orderRow = await transaction.salesOrder.create({
       data: {
         orderNumber: `UNAS-${order.key}`,
         channel: "UNAS",
-        status: mapUnasOrderStatus(order.statusType),
+        status: newStatus,
         currency: order.currency ?? "HUF",
         warehouseId,
         buyerName: order.buyerInvoiceName,
@@ -856,47 +1010,29 @@ export class UnasOrderSyncRepository extends Repository {
       },
     });
 
-    if (stockLines.length > 0) {
-      const movement = await transaction.stockMovement.create({
-        data: {
-          movementNumber: `WEBSHOP-${order.key}`,
-          type: "SALE",
-          status: "POSTED",
-          sourceWarehouseId: warehouseId,
-          referenceType: "SalesOrder",
-          referenceId: orderRow.id,
-          occurredAt: new Date(),
-          postedAt: new Date(),
-        },
-      });
-      for (const line of stockLines) {
-        await transaction.stockMovementLine.create({
-          data: {
-            movementId: movement.id,
-            variantId: line.variantId,
-            quantity: line.quantity,
-            unit: "db",
-          },
-        });
-        const current = await transaction.stockItem.findFirst({
-          where: {
-            variantId: line.variantId,
-            warehouseId,
-            locationId: null,
-            lotId: null,
-          },
-          select: { id: true, onHand: true },
-        });
-        const resultingQty = (current?.onHand ?? new Prisma.Decimal(0)).minus(
-          line.quantity,
-        );
-        await setStockItemQuantity(transaction, {
-          variantId: line.variantId,
-          warehouseId,
-          onHand: resultingQty,
-        });
-      }
-    }
+    // targetOut is empty (not aggregateTargetOut(lineInputs, null)) when the
+    // order already arrives CANCELLED/close_fault on its very FIRST sighting
+    // - a real, previously-latent bug this rewrite fixes as a byproduct of
+    // the unified model: the old code unconditionally created a SALE
+    // movement for a brand-new order's stock lines regardless of status,
+    // which for an order that's already dead on arrival could never be
+    // reversed afterwards (the ACTIVE->CANCELLED transition branch never
+    // fires for an order that's CANCELLED from birth). Under the delta
+    // model, bookedOut is empty for a brand-new order either way, so
+    // targetOut=empty simply yields delta=0 for every variant - no
+    // movement, no outbox row, nothing to ever need reversing.
+    const targetOut =
+      newStatus === "CANCELLED"
+        ? new Map<string, Prisma.Decimal>()
+        : aggregateTargetOut(lineInputs, null);
+    await this.applyOrderStockDelta(transaction, {
+      orderId: orderRow.id,
+      unasKey: order.key,
+      warehouseId,
+      targetOut,
+      variantMeta: this.buildVariantMeta([], lineInputs),
+      sourceProcess: "UNAS_ORDER_IMPORT",
+    });
 
     await transaction.externalReference.create({
       data: {
@@ -927,22 +1063,28 @@ export class UnasOrderSyncRepository extends Repository {
   /// to the fresh UNAS item by sku, which is also how special non-stock
   /// lines like shipping-cost are keyed - see buildLineInputs) and adds
   /// rows for items that weren't seen before. Deliberately does NOT delete
-  /// lines whose item disappeared from the UNAS order, and does NOT touch
-  /// StockItem/StockMovement for quantity changes on existing lines (see
-  /// the call site's comment in apply() for why this is a documented,
-  /// bounded limitation rather than full stock-delta reconciliation).
+  /// lines whose item disappeared from the UNAS order (its quantity simply
+  /// stops contributing to aggregateTargetOut, which is what drives that
+  /// variant's RETURN_IN at the call site - see applyExistingOrderUpdate).
+  /// `lineInputs` is computed once by the caller (buildLineInputs) and
+  /// passed in rather than recomputed here, since the caller also needs it
+  /// for the stock-delta step right afterward.
   private async syncLines(
     transaction: UnasOrderSyncTransaction,
     existing: OrderRow,
-    order: UnasApiOrder,
+    lineInputs: LineInput[],
   ): Promise<void> {
-    const { lineInputs } = await buildLineInputs(transaction, order);
     const existingBySku = new Map(
       existing.lines.map((line) => [line.sku, line]),
     );
     for (const input of lineInputs) {
       const match = existingBySku.get(input.sku);
       if (match) {
+        // effectiveVariantId mirrors resolveEffectiveVariantId exactly (see
+        // that function's doc comment) - computed inline here as the actual
+        // Prisma update payload rather than calling it twice, but must stay
+        // logically identical to what aggregateTargetOut derives for the
+        // same (match, input) pair.
         await transaction.salesOrderLine.update({
           where: { id: match.id },
           data: {
@@ -952,27 +1094,9 @@ export class UnasOrderSyncRepository extends Repository {
             unitNet: input.unitNet,
             taxRate: input.taxRate,
             lineGross: input.lineGross,
-            // A technical cost line (shipping-cost/handel-cost/handling-cost,
-            // see isTechnicalCostItem) is always forced back to non-stock
-            // here, regardless of its current variantId/syncStatus - this is
-            // the "correction" path for a line that was previously
-            // mis-matched against a real ProductVariant (e.g. before this
-            // check existed, or because a webshop config attached a
-            // real-looking Sku to it). Checked before, and takes priority
-            // over, the ordinary FAILED->OK forward-resolution rule below,
-            // since a technical-cost line must never end up stock-linked no
-            // matter which direction the correction runs.
             ...(input.isTechnicalCost
               ? { variantId: null, syncStatus: "OK", syncError: null }
-              : // Only re-resolve variant linkage forward (FAILED -> OK, e.g. a
-                // product that was missing at order-creation time got added to
-                // the catalog since); never regress an already-OK, stock-linked
-                // line to FAILED just because of a transient lookup miss within
-                // this same pass, since buildLineInputs re-does the variantId
-                // lookup identically to order creation and would otherwise be
-                // safe to trust either way - kept one-directional purely to
-                // avoid ever silently unlinking stock history from a line.
-                match.syncStatus === "FAILED" && input.syncStatus === "OK"
+              : match.syncStatus === "FAILED" && input.syncStatus === "OK"
                 ? {
                     variantId: input.variantId,
                     syncStatus: "OK",
@@ -987,6 +1111,189 @@ export class UnasOrderSyncRepository extends Repository {
         });
       }
     }
+  }
+
+  /// Sku/unit lookup for the outbox's denormalized fields, merging the
+  /// CURRENT sighting's lines (preferred) with the order's pre-existing
+  /// lines (fallback - covers a variant that only appears in `bookedOut`
+  /// because its line vanished from the current UNAS payload entirely, e.g.
+  /// a full cancellation or a removed order line).
+  private buildVariantMeta(
+    existingLines: OrderLineRow[],
+    lineInputs: LineInput[],
+  ): Map<string, { sku: string; unit: string }> {
+    const meta = new Map<string, { sku: string; unit: string }>();
+    for (const line of existingLines) {
+      if (line.variantId) meta.set(line.variantId, { sku: line.sku, unit: "db" });
+    }
+    for (const input of lineInputs) {
+      if (input.variantId) {
+        meta.set(input.variantId, { sku: input.sku, unit: input.unit });
+      }
+    }
+    return meta;
+  }
+
+  /// Derives, straight from the StockMovement/StockMovementLine ledger, how
+  /// much of each variant this specific order has NET already removed from
+  /// stock so far ("bookedOut" - positive = taken out, matching the sign
+  /// convention targetOut uses) - deliberately never SalesOrderLine.quantity,
+  /// which is just the order's CURRENT stated quantity, not a record of what
+  /// was actually posted. SALE movements count positively (they reduced
+  /// on-hand for this order), RETURN_IN movements count negatively (they
+  /// gave stock back) - summed per variant across every movement this exact
+  /// order (referenceType/referenceId) has ever produced. Resilient to
+  /// partial/interrupted previous imports, replays, and multi-line-per-
+  /// variant movements by construction: it is a plain aggregation of
+  /// whatever actually got committed, nothing more. Also returns
+  /// `generation` (the movement count itself) for the idempotency-key
+  /// scheme - see applyOrderStockDelta's own doc comment for why a
+  /// ledger-derived counter is used instead of a content hash.
+  private async computeBookedOutAndGeneration(
+    transaction: Pick<UnasOrderSyncTransaction, "stockMovement">,
+    orderId: string,
+  ): Promise<{ bookedOut: Map<string, Prisma.Decimal>; generation: number }> {
+    const movements = await transaction.stockMovement.findMany({
+      where: {
+        referenceType: "SalesOrder",
+        referenceId: orderId,
+        type: { in: ["SALE", "RETURN_IN"] },
+      },
+      select: { type: true, lines: { select: { variantId: true, quantity: true } } },
+    });
+    // Sign convention (SALE=+1 "taken out", RETURN_IN=-1 "given back") lives
+    // in common/stock-ledger.util.ts's sumOrderBookedOut - shared verbatim
+    // with the read-only historical order audit
+    // (unas-order-stock-audit.service.ts), so the two can never silently
+    // disagree on what "already booked" means for the same order.
+    const bookedOut = sumOrderBookedOut(movements);
+    return { bookedOut, generation: movements.length };
+  }
+
+  /// The unified UNAS webshop stock-delta engine - the single place every
+  /// order-stock-affecting event (initial import, an active order's
+  /// quantity/linkage edit, or a cancellation) funnels through. For each
+  /// variant relevant to this order (union of `targetOut`'s keys and the
+  /// ledger's own `bookedOut` keys - so a variant whose line vanished
+  /// entirely, or a full cancellation with an empty targetOut, is still
+  /// considered), computes `delta = target - alreadyBooked` and posts
+  /// exactly that much through the shared postInventoryMovement primitive -
+  /// never a second, independent write path. A positive delta (need to
+  /// remove MORE from stock) becomes part of one SALE movement; a negative
+  /// delta (need to give some back) becomes part of one RETURN_IN movement;
+  /// both can legitimately happen in the SAME call (e.g. one line's quantity
+  /// went up while another's went down) and are posted as two separate
+  /// movements in the same transaction, since StockMovement.type is a single
+  /// value per movement. delta=0 for every variant is a true no-op: no
+  /// movement, no outbox row, not even a call into postInventoryMovement.
+  ///
+  /// Idempotency key: `UNAS_ORDER:<key>:g<generation>:<SALE|RETURN>`, where
+  /// `generation` is the COUNT of SALE/RETURN_IN movements this order has
+  /// produced so far (from computeBookedOutAndGeneration, read under the
+  /// order-level advisory lock below) rather than a content hash of the
+  /// order's state. This is a deliberate simplification: the brief's own
+  /// example key (`UNAS_ORDER:<key>:<canonicalInventoryStateHash>`) has a
+  /// real correctness gap the brief itself flags - state A -> B -> A would
+  /// hash back to the SAME key on the second A, and postInventoryMovement's
+  /// idempotency check would then wrongly treat the second, legitimate A
+  /// transition as an already-applied replay of the first. A ledger-derived
+  /// monotonic generation counter sidesteps this without needing a second
+  /// "transition version" field alongside the hash: it strictly increases by
+  /// exactly one (or two, if both a SALE and a RETURN post in the same
+  /// call) every time this function actually posts something, is read
+  /// consistently under the SAME order-level lock and (for apply()'s batch
+  /// path) the same Serializable transaction that computed the delta, and
+  /// needs no schema change or stored hash at all. A genuine retry of the
+  /// exact same attempt (e.g. a crashed worker re-processing the same
+  /// order before any new sighting arrives) recomputes the SAME delta
+  /// against the SAME generation and is naturally deduped by
+  /// postInventoryMovement's own idempotencyKey check; a later, distinct
+  /// transition always sees a higher generation and gets a fresh key.
+  private async applyOrderStockDelta(
+    transaction: UnasOrderSyncTransaction,
+    params: {
+      orderId: string;
+      unasKey: string;
+      warehouseId: string;
+      targetOut: Map<string, Prisma.Decimal>;
+      variantMeta: Map<string, { sku: string; unit: string }>;
+      sourceProcess: InventoryMovementSourceProcess;
+    },
+  ): Promise<{ changed: boolean }> {
+    // Serializes every stock-delta computation/posting for this exact order
+    // - MUST be acquired before reading the ledger below, or two concurrent
+    // sightings (batch tick + manual refresh) could both read the same
+    // "already booked" snapshot and each post the same delta.
+    await lockUnasOrder(transaction, params.unasKey);
+
+    const { bookedOut, generation } = await this.computeBookedOutAndGeneration(
+      transaction,
+      params.orderId,
+    );
+
+    const saleLines: InventoryMovementLineInput[] = [];
+    const returnLines: InventoryMovementLineInput[] = [];
+    const variantIds = new Set([
+      ...params.targetOut.keys(),
+      ...bookedOut.keys(),
+    ]);
+    for (const variantId of variantIds) {
+      const target = params.targetOut.get(variantId) ?? new Prisma.Decimal(0);
+      const booked = bookedOut.get(variantId) ?? new Prisma.Decimal(0);
+      const delta = target.minus(booked);
+      if (delta.isZero()) continue;
+      const meta = params.variantMeta.get(variantId) ?? {
+        sku: variantId,
+        unit: "db",
+      };
+      if (delta.isPositive()) {
+        // Need to remove `delta` MORE from stock than already booked.
+        saleLines.push({
+          variantId,
+          sku: meta.sku,
+          quantityDelta: delta.negated(),
+          unit: meta.unit,
+        });
+      } else {
+        // delta is negative: need to give back `abs(delta)`.
+        returnLines.push({
+          variantId,
+          sku: meta.sku,
+          quantityDelta: delta.negated(),
+          unit: meta.unit,
+        });
+      }
+    }
+
+    if (saleLines.length === 0 && returnLines.length === 0) {
+      return { changed: false };
+    }
+
+    if (saleLines.length > 0) {
+      await postInventoryMovement(transaction, {
+        idempotencyKey: `UNAS_ORDER:${params.unasKey}:g${generation}:SALE`,
+        movementNumber: `WEBSHOP-${params.unasKey}-g${generation}-SALE`,
+        type: "SALE",
+        warehouseId: params.warehouseId,
+        referenceType: "SalesOrder",
+        referenceId: params.orderId,
+        sourceProcess: params.sourceProcess,
+        lines: saleLines,
+      });
+    }
+    if (returnLines.length > 0) {
+      await postInventoryMovement(transaction, {
+        idempotencyKey: `UNAS_ORDER:${params.unasKey}:g${generation}:RETURN`,
+        movementNumber: `WEBSHOP-${params.unasKey}-g${generation}-RETURN`,
+        type: "RETURN_IN",
+        warehouseId: params.warehouseId,
+        referenceType: "SalesOrder",
+        referenceId: params.orderId,
+        sourceProcess: params.sourceProcess,
+        lines: returnLines,
+      });
+    }
+    return { changed: true };
   }
 
   /// Read-only UNAS -> Acropora OS invoice mirror. The actual outgoing
@@ -1059,69 +1366,6 @@ export class UnasOrderSyncRepository extends Repository {
         externalUrl: order.invoiceUrl,
         syncStatus: "RECEIVED",
       },
-    });
-  }
-
-  private async reverseOrder(
-    transaction: UnasOrderSyncTransaction,
-    order: OrderRow,
-    warehouseId: string,
-  ): Promise<void> {
-    const alreadyReversed = await transaction.stockMovement.findFirst({
-      where: {
-        type: "RETURN_IN",
-        referenceType: "SalesOrder",
-        referenceId: order.id,
-      },
-      select: { id: true },
-    });
-    const stockLines = order.lines.filter(
-      (line) => line.variantId && line.syncStatus === "OK",
-    );
-    if (!alreadyReversed && stockLines.length > 0) {
-      const movement = await transaction.stockMovement.create({
-        data: {
-          movementNumber: `WEBSHOP-CANCEL-${order.id}`,
-          type: "RETURN_IN",
-          status: "POSTED",
-          targetWarehouseId: warehouseId,
-          referenceType: "SalesOrder",
-          referenceId: order.id,
-          occurredAt: new Date(),
-          postedAt: new Date(),
-        },
-      });
-      for (const line of stockLines) {
-        await transaction.stockMovementLine.create({
-          data: {
-            movementId: movement.id,
-            variantId: line.variantId!,
-            quantity: line.quantity,
-            unit: "db",
-          },
-        });
-        const current = await transaction.stockItem.findFirst({
-          where: {
-            variantId: line.variantId!,
-            warehouseId,
-            locationId: null,
-            lotId: null,
-          },
-          select: { id: true, onHand: true },
-        });
-        const resultingQty = (current?.onHand ?? new Prisma.Decimal(0)).plus(
-          line.quantity,
-        );
-        await setStockItemQuantity(transaction, {
-          variantId: line.variantId!,
-          warehouseId,
-          onHand: resultingQty,
-        });
-      }
-    }
-    await transaction.salesOrder.update({
-      where: { id: order.id },
-      data: { status: "CANCELLED" },
     });
   }
 

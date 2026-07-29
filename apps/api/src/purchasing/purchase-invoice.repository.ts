@@ -14,9 +14,11 @@ import type {
 } from "@acropora/types";
 
 import {
-  setStockItemQuantity,
-  type StockItemWriterDatabase,
-} from "../common/stock-item-writer.js";
+  isDuplicateMovementIdempotencyKeyError,
+  postInventoryMovement,
+  type InventoryMovementDatabase,
+} from "../common/inventory-movement-writer.js";
+import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
 import {
   ensureMainWarehouse,
   type WarehouseLookupDatabase,
@@ -30,6 +32,22 @@ import {
   type PurchaseInvoiceDetailRow,
   type PurchaseInvoiceSummaryRow,
 } from "./purchase-invoice.types.js";
+
+/// True for a P2002 on PurchaseInvoice's own (supplierId,
+/// supplierInvoiceNumber) unique constraint - i.e. the same real-world
+/// supplier invoice was already posted once (this IS the idempotency
+/// boundary for this flow, see CreatePurchaseInvoiceParams' idempotencyKey
+/// doc comment). Deliberately narrower than a blanket "any P2002 during
+/// invoice creation" check, so an (astronomically unlikely) documentNumber
+/// collision isn't misreported as "duplicate invoice".
+///
+/// Uses the structural (non-`instanceof`) check from prisma-error.util.ts -
+/// see that file's doc comment for why `instanceof
+/// Prisma.PrismaClientKnownRequestError` can't be relied on to narrow
+/// `error` in this environment.
+function isDuplicateSupplierInvoiceError(error: unknown): boolean {
+  return isPrismaUniqueConstraintViolation(error, "supplierInvoiceNumber");
+}
 
 export interface PurchaseInvoiceVariantInfo {
   variantId: string;
@@ -48,15 +66,21 @@ export interface PurchaseInvoiceCurrentStock {
 export interface CreatePurchaseInvoiceLine {
   /** Nincs, ha a tétel nincs a terméktörzsben - ilyenkor nincs helyi készlethatás/UNAS push. */
   variantId: string | null;
+  /** UNAS SKU a variantId-hez; kötelező amikor variantId nem null (kell a
+   * postInventoryMovement-nek/UnasStockSyncOutbox-nak), egyébként null. */
+  sku: string | null;
   sourceDescription: string | null;
   orderedQuantity: Prisma.Decimal;
   actualQuantity: Prisma.Decimal;
   unit: string;
   unitNet: Prisma.Decimal;
   discountPercent: Prisma.Decimal | null;
-  /** Absolute on-hand quantity after this receipt (currentQty + actualQuantity); the UNAS push for this value already happened before this call runs. `null` when there's no variantId. */
-  resultingQty: Prisma.Decimal | null;
-  syncStatus: "OK" | "FAILED" | "NOT_LINKED";
+  /// "PENDING" a helyi könyvelést és a UnasStockSyncOutbox-publikálást
+  /// megelőlegezve (a tényleges UNAS-push a háttér-workeré, lásd
+  /// PurchasingService.createInvoice), "NOT_LINKED" változatlanul a
+  /// terméktörzsben nem szereplő tételeknél. Már sosem "OK"/"FAILED" itt -
+  /// azt egy szinkron UNAS-hívás eredménye adta korábban, ami megszűnt.
+  syncStatus: "PENDING" | "NOT_LINKED";
   syncError: string | null;
 }
 
@@ -80,17 +104,10 @@ export interface CreatePurchaseInvoiceParams {
   lines: CreatePurchaseInvoiceLine[];
 }
 
-interface PurchaseInvoiceCreateTransaction {
+interface PurchaseInvoiceCreateTransaction extends InventoryMovementDatabase {
   purchaseInvoice: {
     create(args: unknown): Promise<PurchaseInvoiceDetailRow>;
   };
-  stockMovement: {
-    create(args: unknown): Promise<{ id: string }>;
-  };
-  stockMovementLine: {
-    create(args: unknown): Promise<unknown>;
-  };
-  stockItem: StockItemWriterDatabase["stockItem"];
   productExtension: {
     upsert(args: unknown): Promise<unknown>;
   };
@@ -205,135 +222,165 @@ export class PurchaseInvoiceRepository extends Repository {
     return { warehouseId: warehouse.id, variants: result };
   }
 
+  /// Stabil, a valós üzleti eseményből (nem véletlenszerűen) származó
+  /// idempotenciakulcs a postInventoryMovement számára. A
+  /// (supplierId, supplierInvoiceNumber) pár már ma is egyedi a
+  /// PurchaseInvoice táblán (@@unique) - ez a beszerzés flow tényleges
+  /// dupla-beküldés elleni védelme (l. isDuplicateSupplierInvoiceError
+  /// lejjebb): egy megismételt kérés a PurchaseInvoice.create()-nél
+  /// megbukik P2002-vel, még mielőtt a postInventoryMovement egyáltalán
+  /// lefutna. A StockMovement saját idempotencyKey-je ugyanerre a párra
+  /// épül, hogy a másik két flow-val (leltár, POS) egységes maradjon a
+  /// minta, és hogy egy elméleti részleges-tranzakció utáni retry esetén
+  /// (más documentNumber-rel, mert azt a service minden hívásnál újra
+  /// generálja) is ugyanazt a mozgást ismerje fel újraként.
+  private buildIdempotencyKey(params: CreatePurchaseInvoiceParams): string {
+    return `PURCHASE_INVOICE:${params.supplierId}:${params.supplierInvoiceNumber}`;
+  }
+
   async create(
     params: CreatePurchaseInvoiceParams,
   ): Promise<PurchaseInvoiceDetail> {
     const now = new Date();
-    const created = await this.invoiceDatabase.$transaction(
-      async (transaction) => {
-        const invoice = await transaction.purchaseInvoice.create({
-          data: {
-            documentNumber: params.documentNumber,
-            supplierInvoiceNumber: params.supplierInvoiceNumber,
-            source: params.source,
-            status: "POSTED",
-            supplierId: params.supplierId,
-            warehouseId: params.warehouseId,
-            currency: params.currency,
-            exchangeRate: params.exchangeRate,
-            invoiceDate: params.invoiceDate,
-            dueDate: params.dueDate,
-            isPaid: params.isPaid,
-            paidAt: params.paidAt,
-            vatRate: params.vatRate,
-            note: params.note,
-            createdById: params.actorUserId,
-            lines: {
-              create: params.lines.map((line) => ({
-                variantId: line.variantId,
-                sourceDescription: line.sourceDescription,
-                orderedQuantity: line.orderedQuantity,
-                actualQuantity: line.actualQuantity,
-                unit: line.unit,
-                unitNet: line.unitNet,
-                discountPercent: line.discountPercent,
-                syncStatus: line.syncStatus,
-                syncError: line.syncError,
-              })),
-            },
-          },
-          include: purchaseInvoiceDetailInclude,
-        });
-
-        if (params.navIncomingInvoiceId) {
-          // Atomi: csak akkor RECEIVED-eli a NAV bejövő számlát, ha még nem
-          // volt bevételezve - kizárja, hogy ugyanaz a NAV számla két
-          // beszerzési bizonylathoz is hozzákötődjön versenyhelyzetben.
-          const linked = await transaction.navIncomingInvoice.updateMany({
-            where: {
-              id: params.navIncomingInvoiceId,
-              status: { not: "RECEIVED" },
-            },
-            data: { status: "RECEIVED", purchaseInvoiceId: invoice.id },
-          });
-          if (linked.count !== 1)
-            throw new ConflictException("NAV_INVOICE_ALREADY_RECEIVED");
-        }
-
-        const movement = await transaction.stockMovement.create({
-          data: {
-            movementNumber: `BESZMOZG-${invoice.documentNumber}`,
-            type: "PURCHASE_RECEIPT",
-            status: "POSTED",
-            targetWarehouseId: params.warehouseId,
-            referenceType: "PurchaseInvoice",
-            referenceId: invoice.id,
-            performedById: params.actorUserId,
-            occurredAt: params.invoiceDate,
-            postedAt: now,
-          },
-        });
-
-        for (const line of params.lines) {
-          // Terméktörzs nélküli tételnél nincs mit mozgatni a helyi
-          // készleten (nincs ProductVariant, amire a StockMovementLine/
-          // StockItem/ProductExtension hivatkozhatna) - a sor a számlán és
-          // az összegzésben megjelenik, de készlet- és UNAS-hatása nincs.
-          if (!line.variantId) continue;
-          await transaction.stockMovementLine.create({
+    let created: PurchaseInvoiceDetailRow;
+    try {
+      created = await this.invoiceDatabase.$transaction(
+        async (transaction) => {
+          const invoice = await transaction.purchaseInvoice.create({
             data: {
-              movementId: movement.id,
-              variantId: line.variantId,
-              quantity: line.actualQuantity,
-              unit: line.unit,
+              documentNumber: params.documentNumber,
+              supplierInvoiceNumber: params.supplierInvoiceNumber,
+              source: params.source,
+              status: "POSTED",
+              supplierId: params.supplierId,
+              warehouseId: params.warehouseId,
+              currency: params.currency,
+              exchangeRate: params.exchangeRate,
+              invoiceDate: params.invoiceDate,
+              dueDate: params.dueDate,
+              isPaid: params.isPaid,
+              paidAt: params.paidAt,
+              vatRate: params.vatRate,
+              note: params.note,
+              createdById: params.actorUserId,
+              lines: {
+                create: params.lines.map((line) => ({
+                  variantId: line.variantId,
+                  sourceDescription: line.sourceDescription,
+                  orderedQuantity: line.orderedQuantity,
+                  actualQuantity: line.actualQuantity,
+                  unit: line.unit,
+                  unitNet: line.unitNet,
+                  discountPercent: line.discountPercent,
+                  syncStatus: line.syncStatus,
+                  syncError: line.syncError,
+                })),
+              },
             },
+            include: purchaseInvoiceDetailInclude,
           });
-          await setStockItemQuantity(transaction, {
-            variantId: line.variantId,
-            warehouseId: params.warehouseId,
-            onHand: line.resultingQty!,
-          });
-          await transaction.productExtension.upsert({
-            where: { variantId: line.variantId },
-            update: {
-              lastPurchaseNetPrice: line.unitNet,
-              defaultPurchaseCurrency: params.currency,
-              preferredSupplierId: params.supplierId,
-            },
-            create: {
-              variantId: line.variantId,
-              lastPurchaseNetPrice: line.unitNet,
-              defaultPurchaseCurrency: params.currency,
-              preferredSupplierId: params.supplierId,
-            },
-          });
-        }
 
-        await transaction.domainEvent.create({
-          data: {
-            id: randomUUID(),
-            eventType: "purchase_invoice.posted",
-            aggregateType: "PurchaseInvoice",
-            aggregateId: invoice.id,
-            actorUserId: params.actorUserId,
-            payload: {
-              documentNumber: invoice.documentNumber,
-              source: invoice.source,
-              supplierId: invoice.supplierId,
-              lineCount: params.lines.length,
-            },
-            occurredAt: now,
-            schemaVersion: 1,
-          },
-        });
+          if (params.navIncomingInvoiceId) {
+            // Atomi: csak akkor RECEIVED-eli a NAV bejövő számlát, ha még nem
+            // volt bevételezve - kizárja, hogy ugyanaz a NAV számla két
+            // beszerzési bizonylathoz is hozzákötődjön versenyhelyzetben.
+            const linked = await transaction.navIncomingInvoice.updateMany({
+              where: {
+                id: params.navIncomingInvoiceId,
+                status: { not: "RECEIVED" },
+              },
+              data: { status: "RECEIVED", purchaseInvoiceId: invoice.id },
+            });
+            if (linked.count !== 1)
+              throw new ConflictException("NAV_INVOICE_ALREADY_RECEIVED");
+          }
 
-        return invoice;
-      },
-      {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        timeout: 30_000,
-      },
-    );
+          // Csak a terméktörzsben szereplő (NOT_LINKED-nek NEM jelölt)
+          // tételek hatnak a helyi készletre és kapnak
+          // UnasStockSyncOutbox-sort - a régi kód is ezt csinálta
+          // (`if (!line.variantId) continue`), csak most a shared writer
+          // végzi a mozgás/StockItem/outbox írását EGYETLEN, ugyanebben a
+          // tranzakcióban futó hívással, szinkron UNAS-hívás nélkül.
+          const linkedLines = params.lines.filter(
+            (line): line is CreatePurchaseInvoiceLine & { variantId: string; sku: string } =>
+              Boolean(line.variantId),
+          );
+
+          if (linkedLines.length > 0) {
+            await postInventoryMovement(transaction, {
+              idempotencyKey: this.buildIdempotencyKey(params),
+              movementNumber: `BESZMOZG-${invoice.documentNumber}`,
+              type: "PURCHASE_RECEIPT",
+              warehouseId: params.warehouseId,
+              referenceType: "PurchaseInvoice",
+              referenceId: invoice.id,
+              performedById: params.actorUserId,
+              occurredAt: params.invoiceDate,
+              sourceProcess: "PURCHASE_INVOICE",
+              lines: linkedLines.map((line) => ({
+                variantId: line.variantId,
+                sku: line.sku ?? line.variantId,
+                // Bevételezés mindig növeli a készletet - a felhasználó
+                // által beírt tényleges (nem a rendelt!) mennyiséggel.
+                quantityDelta: line.actualQuantity,
+                unit: line.unit,
+              })),
+            });
+
+            for (const line of linkedLines) {
+              await transaction.productExtension.upsert({
+                where: { variantId: line.variantId },
+                update: {
+                  lastPurchaseNetPrice: line.unitNet,
+                  defaultPurchaseCurrency: params.currency,
+                  preferredSupplierId: params.supplierId,
+                },
+                create: {
+                  variantId: line.variantId,
+                  lastPurchaseNetPrice: line.unitNet,
+                  defaultPurchaseCurrency: params.currency,
+                  preferredSupplierId: params.supplierId,
+                },
+              });
+            }
+          }
+
+          await transaction.domainEvent.create({
+            data: {
+              id: randomUUID(),
+              eventType: "purchase_invoice.posted",
+              aggregateType: "PurchaseInvoice",
+              aggregateId: invoice.id,
+              actorUserId: params.actorUserId,
+              payload: {
+                documentNumber: invoice.documentNumber,
+                source: invoice.source,
+                supplierId: invoice.supplierId,
+                lineCount: params.lines.length,
+              },
+              occurredAt: now,
+              schemaVersion: 1,
+            },
+          });
+
+          return invoice;
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          timeout: 30_000,
+        },
+      );
+    } catch (error) {
+      if (
+        isDuplicateSupplierInvoiceError(error) ||
+        isDuplicateMovementIdempotencyKeyError(error)
+      ) {
+        throw new ConflictException(
+          "Ez a beszállítói számla (szám alapján) már rögzítve van - ismételt beküldés nem hoz létre új bizonylatot.",
+        );
+      }
+      throw error;
+    }
 
     return toPurchaseInvoiceDetail(created);
   }

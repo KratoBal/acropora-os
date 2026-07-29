@@ -1,6 +1,5 @@
 import { Module } from "@nestjs/common";
 
-import { UnasImportModule } from "../imports/unas/unas-import.module.js";
 import { MnbModule } from "../integrations/mnb/mnb.module.js";
 import { SuppliersModule } from "../suppliers/suppliers.module.js";
 import { NavIncomingInvoiceModule } from "./nav-incoming-invoices/nav-incoming-invoice.module.js";
@@ -10,13 +9,13 @@ import { PurchaseProductSearchService } from "./purchase-product-search.service.
 import { PurchasingController } from "./purchasing.controller.js";
 import { PurchasingService } from "./purchasing.service.js";
 
+// No longer imports UnasImportModule - PurchasingService's synchronous UNAS
+// push was removed (stock now goes through the shared postInventoryMovement
+// primitive + UnasStockSyncOutbox worker, see purchase-invoice.repository.ts),
+// and no other provider in this module ever used
+// UnasApiClient/UnasAuthService.
 @Module({
-  imports: [
-    UnasImportModule,
-    MnbModule,
-    SuppliersModule,
-    NavIncomingInvoiceModule,
-  ],
+  imports: [MnbModule, SuppliersModule, NavIncomingInvoiceModule],
   controllers: [PurchasingController],
   providers: [
     PurchaseInvoiceRepository,

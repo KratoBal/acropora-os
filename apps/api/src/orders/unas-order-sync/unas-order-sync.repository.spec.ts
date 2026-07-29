@@ -32,6 +32,8 @@ interface FakeMovement {
   type: string;
   referenceType: string | null;
   referenceId: string | null;
+  idempotencyKey: string | null;
+  lines: Array<{ variantId: string; quantity: Prisma.Decimal }>;
 }
 
 let idCounter = 0;
@@ -76,6 +78,11 @@ class FakeDb {
   // legitimately increments for the narrow, CANCELLED-order
   // unasInvoiceStatus-only refresh - see the CANCELLED->CANCELLED tests).
   lineWriteCount = 0;
+  // Counts stockMovementLine.create calls - used to assert the delta engine
+  // creates exactly the expected number of movement lines (e.g. one SALE
+  // line per newly-linked variant), independent of the higher-level
+  // db.movements.length check.
+  movementLineWriteCount = 0;
   products: Array<{
     id: string;
     name: string;
@@ -318,24 +325,102 @@ class FakeDb {
         type: args.data.type as string,
         referenceType: (args.data.referenceType as string) ?? null,
         referenceId: (args.data.referenceId as string) ?? null,
+        idempotencyKey: (args.data.idempotencyKey as string) ?? null,
+        lines: [],
       };
       this.movements.push(movement);
       return { id: movement.id };
     },
+    // postInventoryMovement's own idempotency check queries by
+    // idempotencyKey alone; nothing in this file's repository code queries
+    // stockMovement.findFirst any other way anymore (the old
+    // type/referenceType/referenceId "alreadyReversed" check was removed
+    // along with reverseOrder() - see unas-order-sync.repository.ts).
     findFirst: async (args: any) => {
       const found = this.movements.find(
-        (movement) =>
-          movement.type === args.where.type &&
-          movement.referenceType === args.where.referenceType &&
-          movement.referenceId === args.where.referenceId,
+        (movement) => movement.idempotencyKey === args.where.idempotencyKey,
       );
       return found ? { id: found.id } : null;
+    },
+    // Backs computeBookedOutAndGeneration: every SALE/RETURN_IN movement
+    // this exact order has ever produced, with its lines - the ledger the
+    // new delta engine derives "already booked" quantity from.
+    findMany: async (args: any) => {
+      const typeFilter: string[] = args.where.type?.in ?? [];
+      return this.movements
+        .filter(
+          (movement) =>
+            movement.referenceType === args.where.referenceType &&
+            movement.referenceId === args.where.referenceId &&
+            (typeFilter.length === 0 || typeFilter.includes(movement.type)),
+        )
+        .map((movement) => ({
+          type: movement.type,
+          lines: movement.lines.map((line) => ({ ...line })),
+        }));
     },
   };
 
   stockMovementLine = {
-    create: async () => ({}),
+    create: async (args: any) => {
+      const movement = this.movements.find(
+        (movement_) => movement_.id === args.data.movementId,
+      );
+      movement?.lines.push({
+        variantId: args.data.variantId as string,
+        quantity: args.data.quantity as Prisma.Decimal,
+      });
+      this.movementLineWriteCount += 1;
+      return {};
+    },
   };
+
+  outbox: Array<{
+    id: string;
+    variantId: string;
+    warehouseId: string;
+    sku: string;
+    status: string;
+    idempotencyKey: string;
+    sourceProcess: string;
+    sourceRecordId: string;
+    targetOnHand: Prisma.Decimal;
+  }> = [];
+
+  unasStockSyncOutbox = {
+    updateMany: async (args: any) => {
+      let count = 0;
+      for (const row of this.outbox) {
+        if (
+          row.variantId === args.where.variantId &&
+          row.warehouseId === args.where.warehouseId &&
+          args.where.status.in.includes(row.status)
+        ) {
+          row.status = args.data.status;
+          count += 1;
+        }
+      }
+      return { count };
+    },
+    create: async (args: any) => {
+      this.outbox.push({
+        id: nextId("outbox"),
+        variantId: args.data.variantId,
+        warehouseId: args.data.warehouseId,
+        sku: args.data.sku,
+        status: "PENDING",
+        idempotencyKey: args.data.idempotencyKey,
+        sourceProcess: args.data.sourceProcess,
+        sourceRecordId: args.data.sourceRecordId,
+        targetOnHand: args.data.targetOnHand,
+      });
+      return {};
+    },
+  };
+
+  async $executeRaw() {
+    return 1;
+  }
 
   stockItem = {
     findFirst: async (args: any) => {
@@ -798,6 +883,582 @@ describe("UnasOrderSyncRepository.apply", () => {
     assert.equal(db.invoices[0]?.invoiceNumber, "SZ-2026-CANCEL-1");
     assert.equal(db.invoices[0]?.salesOrderId, db.orders[0]?.id);
     assert.equal(db.orders[0]?.status, "CANCELLED");
+  });
+});
+
+// The delta engine (applyOrderStockDelta/aggregateTargetOut/
+// computeBookedOutAndGeneration in unas-order-sync.repository.ts) replaces
+// the old "always SALE the full quantity on create, always RETURN_IN the
+// full quantity on cancel" model with `delta = target - alreadyBooked`,
+// derived from the StockMovement/StockMovementLine ledger rather than
+// SalesOrderLine.quantity. These tests cover the specific worked examples
+// and edge cases from the checkpoint brief that the pre-existing test suite
+// above didn't exercise (it only ever created-then-cancelled a single,
+// unmodified order).
+describe("UnasOrderSyncRepository.apply - delta-based stock updates", () => {
+  function seeded(): FakeDb {
+    const db = new FakeDb();
+    db.warehouses.push({
+      id: "wh-1",
+      name: "Fő raktár",
+      createdAt: new Date(0),
+    });
+    db.variants.push({ id: "variant-1", sku: "pump_1" });
+    db.variants.push({ id: "variant-2", sku: "filter_1" });
+    db.stockItems.push({
+      id: "stock-1",
+      variantId: "variant-1",
+      warehouseId: "wh-1",
+      onHand: new Prisma.Decimal(10),
+    });
+    db.stockItems.push({
+      id: "stock-2",
+      variantId: "variant-2",
+      warehouseId: "wh-1",
+      onHand: new Prisma.Decimal(10),
+    });
+    return db;
+  }
+
+  function orderWithQty(qty: number, overrides: Partial<UnasApiOrder> = {}) {
+    return baseOrder({
+      items: [
+        {
+          id: "1",
+          sku: "pump_1",
+          name: "Reef Pump",
+          unit: "db",
+          quantity: String(qty),
+          priceNet: "5000",
+          priceGross: "6350",
+          vatRate: "27",
+        },
+      ],
+      ...overrides,
+    });
+  }
+
+  it("2 -> 3: books exactly 1 additional SALE unit, not the full 3 again", async () => {
+    const db = seeded();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [orderWithQty(2)], null, new Date());
+    assert.equal(db.stockItems[0]?.onHand.toString(), "8");
+    assert.equal(db.movements.length, 1);
+
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply("run-2", [orderWithQty(3)], null, new Date());
+
+    assert.equal(db.stockItems[0]?.onHand.toString(), "7");
+    assert.equal(db.movements.length, 2);
+    const secondMovement = db.movements[1]!;
+    assert.equal(secondMovement.type, "SALE");
+    assert.equal(secondMovement.lines[0]?.quantity.toString(), "1");
+  });
+
+  it("3 -> 1: books a single RETURN_IN of 2, restoring the difference in one movement", async () => {
+    const db = seeded();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [orderWithQty(3)], null, new Date());
+    assert.equal(db.stockItems[0]?.onHand.toString(), "7");
+
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply("run-2", [orderWithQty(1)], null, new Date());
+
+    assert.equal(db.stockItems[0]?.onHand.toString(), "9");
+    assert.equal(db.movements.length, 2);
+    const secondMovement = db.movements[1]!;
+    assert.equal(secondMovement.type, "RETURN_IN");
+    assert.equal(secondMovement.lines[0]?.quantity.toString(), "2");
+  });
+
+  it("2 -> 3 -> sztornó: the cancellation returns exactly 3 total (all of it, none returned before)", async () => {
+    const db = seeded();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [orderWithQty(2)], null, new Date());
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply("run-2", [orderWithQty(3)], null, new Date());
+    assert.equal(db.stockItems[0]?.onHand.toString(), "7");
+
+    db.runs.push({ id: "run-3", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply(
+      "run-3",
+      [orderWithQty(3, { statusType: "close_fault", status: "Sztornó" })],
+      null,
+      new Date(),
+    );
+
+    assert.equal(db.stockItems[0]?.onHand.toString(), "10");
+    const returnMovements = db.movements.filter((m) => m.type === "RETURN_IN");
+    assert.equal(returnMovements.length, 1);
+    assert.equal(returnMovements[0]?.lines[0]?.quantity.toString(), "3");
+  });
+
+  it("3 -> 1 -> sztornó: 2 already returned at the edit step, cancellation returns only the remaining 1", async () => {
+    const db = seeded();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [orderWithQty(3)], null, new Date());
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply("run-2", [orderWithQty(1)], null, new Date());
+    assert.equal(db.stockItems[0]?.onHand.toString(), "9");
+    const returnAfterEdit = db.movements.filter((m) => m.type === "RETURN_IN");
+    assert.equal(returnAfterEdit.length, 1);
+    assert.equal(returnAfterEdit[0]?.lines[0]?.quantity.toString(), "2");
+
+    db.runs.push({ id: "run-3", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply(
+      "run-3",
+      [orderWithQty(1, { statusType: "close_fault", status: "Sztornó" })],
+      null,
+      new Date(),
+    );
+
+    assert.equal(db.stockItems[0]?.onHand.toString(), "10");
+    const returnMovements = db.movements.filter((m) => m.type === "RETURN_IN");
+    assert.equal(returnMovements.length, 2, "one RETURN_IN from the edit, one from the cancel");
+    assert.equal(
+      returnMovements[1]?.lines[0]?.quantity.toString(),
+      "1",
+      "cancellation must only return what's still net-booked (1), not the full original 3",
+    );
+  });
+
+  it("A -> B -> A: each transition posts its own movement, the second A is not treated as an already-applied replay", async () => {
+    const db = seeded();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [orderWithQty(2)], null, new Date()); // A: booked 2
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply("run-2", [orderWithQty(5)], null, new Date()); // B: booked 5 total
+    assert.equal(db.stockItems[0]?.onHand.toString(), "5");
+
+    db.runs.push({ id: "run-3", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply("run-3", [orderWithQty(2)], null, new Date()); // back to A: booked 2 total again
+
+    // Must actually apply a RETURN_IN of 3 (5 -> 2), not be silently
+    // skipped as "the same state we already saw for hash(A)".
+    assert.equal(db.stockItems[0]?.onHand.toString(), "8");
+    assert.equal(db.movements.length, 3);
+    assert.equal(db.movements[2]?.type, "RETURN_IN");
+    assert.equal(db.movements[2]?.lines[0]?.quantity.toString(), "3");
+  });
+
+  it("unchanged replay of the same order/state creates no movement and no outbox row", async () => {
+    const db = seeded();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [orderWithQty(2)], null, new Date());
+    const movementCountBefore = db.movements.length;
+    const outboxCountBefore = db.outbox.length;
+
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const summary = await repository.apply(
+      "run-2",
+      [orderWithQty(2)],
+      null,
+      new Date(),
+    );
+
+    assert.equal(db.movements.length, movementCountBefore);
+    assert.equal(db.outbox.length, outboxCountBefore);
+    assert.equal(summary.updatedCount, 0);
+  });
+
+  it("a non-stock-relevant field change (e.g. price only) does not create a movement", async () => {
+    const db = seeded();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [orderWithQty(2)], null, new Date());
+    const movementCountBefore = db.movements.length;
+
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply(
+      "run-2",
+      [
+        orderWithQty(2, {
+          items: [
+            {
+              id: "1",
+              sku: "pump_1",
+              name: "Reef Pump (new price)",
+              unit: "db",
+              quantity: "2",
+              priceNet: "9999",
+              priceGross: "12698.73",
+              vatRate: "27",
+            },
+          ],
+        }),
+      ],
+      null,
+      new Date(),
+    );
+
+    assert.equal(db.movements.length, movementCountBefore);
+    assert.equal(db.orders[0]?.lines[0]?.sku, "pump_1");
+  });
+
+  it("a new line for an additional variant on an already-live order books its own SALE, leaving the first variant untouched", async () => {
+    const db = seeded();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [orderWithQty(2)], null, new Date());
+
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply(
+      "run-2",
+      [
+        baseOrder({
+          items: [
+            {
+              id: "1",
+              sku: "pump_1",
+              name: "Reef Pump",
+              unit: "db",
+              quantity: "2",
+              priceNet: "5000",
+              priceGross: "6350",
+              vatRate: "27",
+            },
+            {
+              id: "2",
+              sku: "filter_1",
+              name: "Reef Filter",
+              unit: "db",
+              quantity: "1",
+              priceNet: "3000",
+              priceGross: "3810",
+              vatRate: "27",
+            },
+          ],
+        }),
+      ],
+      null,
+      new Date(),
+    );
+
+    assert.equal(db.stockItems[0]?.onHand.toString(), "8"); // pump_1 unaffected
+    assert.equal(db.stockItems[1]?.onHand.toString(), "9"); // filter_1: 10 - 1
+    assert.equal(db.movements.length, 2);
+    assert.equal(db.movements[1]?.type, "SALE");
+    assert.equal(db.movements[1]?.lines[0]?.variantId, "variant-2");
+  });
+
+  it("a line that vanishes entirely from the order gets its full quantity RETURN_IN'd", async () => {
+    const db = seeded();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    await repository.apply(
+      "run-1",
+      [
+        baseOrder({
+          items: [
+            {
+              id: "1",
+              sku: "pump_1",
+              name: "Reef Pump",
+              unit: "db",
+              quantity: "2",
+              priceNet: "5000",
+              priceGross: "6350",
+              vatRate: "27",
+            },
+            {
+              id: "2",
+              sku: "filter_1",
+              name: "Reef Filter",
+              unit: "db",
+              quantity: "1",
+              priceNet: "3000",
+              priceGross: "3810",
+              vatRate: "27",
+            },
+          ],
+        }),
+      ],
+      null,
+      new Date(),
+    );
+    assert.equal(db.stockItems[1]?.onHand.toString(), "9");
+
+    // filter_1's line is gone entirely from this sighting - only pump_1 remains.
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply("run-2", [orderWithQty(2)], null, new Date());
+
+    assert.equal(db.stockItems[0]?.onHand.toString(), "8", "pump_1 unaffected");
+    assert.equal(
+      db.stockItems[1]?.onHand.toString(),
+      "10",
+      "filter_1 fully returned since its line disappeared",
+    );
+    const returnMovements = db.movements.filter((m) => m.type === "RETURN_IN");
+    assert.equal(returnMovements.length, 1);
+    assert.equal(returnMovements[0]?.lines[0]?.variantId, "variant-2");
+    assert.equal(returnMovements[0]?.lines[0]?.quantity.toString(), "1");
+  });
+
+  it("two order lines for the same variant aggregate into a single delta, not two independent ones", async () => {
+    const db = seeded();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    await repository.apply(
+      "run-1",
+      [
+        baseOrder({
+          items: [
+            {
+              id: "1",
+              sku: "pump_1",
+              name: "Reef Pump",
+              unit: "db",
+              quantity: "2",
+              priceNet: "5000",
+              priceGross: "6350",
+              vatRate: "27",
+            },
+            {
+              id: "2",
+              sku: "pump_1",
+              name: "Reef Pump (second line, same SKU)",
+              unit: "db",
+              quantity: "1",
+              priceNet: "5000",
+              priceGross: "6350",
+              vatRate: "27",
+            },
+          ],
+        }),
+      ],
+      null,
+      new Date(),
+    );
+
+    // 2 + 1 = 3 taken out of variant-1, in one SALE movement/line.
+    assert.equal(db.stockItems[0]?.onHand.toString(), "7");
+    assert.equal(db.movements.length, 1);
+    assert.equal(db.movements[0]?.lines.length, 1);
+    assert.equal(db.movements[0]?.lines[0]?.quantity.toString(), "3");
+  });
+
+  it("an unlinked new line (unknown SKU) never touches stock, even on an otherwise-live order", async () => {
+    const db = seeded();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [orderWithQty(2)], null, new Date());
+
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply(
+      "run-2",
+      [
+        baseOrder({
+          items: [
+            {
+              id: "1",
+              sku: "pump_1",
+              name: "Reef Pump",
+              unit: "db",
+              quantity: "2",
+              priceNet: "5000",
+              priceGross: "6350",
+              vatRate: "27",
+            },
+            {
+              id: "2",
+              sku: "not_in_catalog",
+              name: "Ismeretlen tétel",
+              unit: "db",
+              quantity: "5",
+              priceNet: "1000",
+              priceGross: "1270",
+              vatRate: "27",
+            },
+          ],
+        }),
+      ],
+      null,
+      new Date(),
+    );
+
+    assert.equal(db.stockItems[0]?.onHand.toString(), "8");
+    assert.equal(db.movements.length, 1, "no movement for the unlinked line");
+    const unlinkedLine = db.orders[0]?.lines.find(
+      (line) => line.sku === "not_in_catalog",
+    );
+    assert.equal(unlinkedLine?.syncStatus, "FAILED");
+  });
+
+  it("a line whose SKU only resolves to a catalog product on a LATER sighting books its delta exactly once", async () => {
+    const db = seeded();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    const orderWithUnresolved = baseOrder({
+      items: [
+        {
+          id: "1",
+          sku: "not_yet_in_catalog",
+          name: "Új termék",
+          unit: "db",
+          quantity: "4",
+          priceNet: "2000",
+          priceGross: "2540",
+          vatRate: "27",
+        },
+      ],
+    });
+    await repository.apply("run-1", [orderWithUnresolved], null, new Date());
+    assert.equal(db.movements.length, 0, "nothing to book while unresolved");
+
+    // The product gets added to the catalog between sightings.
+    db.variants.push({ id: "variant-late", sku: "not_yet_in_catalog" });
+    db.stockItems.push({
+      id: "stock-late",
+      variantId: "variant-late",
+      warehouseId: "wh-1",
+      onHand: new Prisma.Decimal(20),
+    });
+
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply("run-2", [orderWithUnresolved], null, new Date());
+
+    assert.equal(
+      db.stockItems.find((item) => item.variantId === "variant-late")?.onHand.toString(),
+      "16",
+      "booked exactly once, on the sighting where it first resolved",
+    );
+    assert.equal(db.movements.length, 1);
+
+    // A third, still-unchanged sighting must not book it again.
+    db.runs.push({ id: "run-3", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply("run-3", [orderWithUnresolved], null, new Date());
+    assert.equal(
+      db.stockItems.find((item) => item.variantId === "variant-late")?.onHand.toString(),
+      "16",
+    );
+    assert.equal(db.movements.length, 1);
+  });
+
+  it("a previously-linked line that becomes unresolvable keeps its historical variantId, so its eventual storno is safe", async () => {
+    const db = seeded();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [orderWithQty(2)], null, new Date());
+    assert.equal(db.stockItems[0]?.onHand.toString(), "8");
+
+    // Simulate the ProductVariant becoming unresolvable (e.g. deleted) by
+    // removing it from the fake catalog - buildLineInputs' lookup will now
+    // fail for "pump_1" even though the order's line was already linked.
+    db.variants.length = 0;
+
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply(
+      "run-2",
+      [orderWithQty(2, { statusType: "close_fault", status: "Sztornó" })],
+      null,
+      new Date(),
+    );
+
+    // The cancellation must still find and return the 2 units originally
+    // booked for variant-1, even though a fresh lookup of "pump_1" would
+    // now fail - it relies on the ledger (referenceId), not a live re-lookup.
+    assert.equal(db.stockItems[0]?.onHand.toString(), "10");
+    assert.equal(
+      db.movements.some((m) => m.type === "RETURN_IN" && m.lines[0]?.variantId === "variant-1"),
+      true,
+    );
+  });
+
+  it("posts an outbox row with the correct sourceProcess and sourceRecordId for a new order", async () => {
+    const db = seeded();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [orderWithQty(2)], null, new Date());
+
+    assert.equal(db.outbox.length, 1);
+    assert.equal(db.outbox[0]?.sourceProcess, "UNAS_ORDER_IMPORT");
+    assert.equal(db.outbox[0]?.sourceRecordId, db.orders[0]?.id);
+    assert.equal(db.outbox[0]?.variantId, "variant-1");
+    assert.equal(db.outbox[0]?.targetOnHand.toString(), "8");
+  });
+
+  it("posts an outbox row tagged UNAS_ORDER_UPDATE for a live-order quantity edit, and UNAS_ORDER_CANCEL for a cancellation", async () => {
+    const db = seeded();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [orderWithQty(2)], null, new Date());
+
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply("run-2", [orderWithQty(3)], null, new Date());
+    const updateRow = db.outbox.find(
+      (row) => row.sourceProcess === "UNAS_ORDER_UPDATE",
+    );
+    assert.ok(updateRow, "expected an outbox row tagged UNAS_ORDER_UPDATE");
+
+    db.runs.push({ id: "run-3", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply(
+      "run-3",
+      [orderWithQty(3, { statusType: "close_fault", status: "Sztornó" })],
+      null,
+      new Date(),
+    );
+    const cancelRow = db.outbox.find(
+      (row) => row.sourceProcess === "UNAS_ORDER_CANCEL",
+    );
+    assert.ok(cancelRow, "expected an outbox row tagged UNAS_ORDER_CANCEL");
+  });
+
+  it("an order that arrives already cancelled on its very first sighting never books (and thus never needs to reverse) any stock", async () => {
+    const db = seeded();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+
+    await repository.apply(
+      "run-1",
+      [orderWithQty(2, { statusType: "close_fault", status: "Sztornó" })],
+      null,
+      new Date(),
+    );
+
+    assert.equal(db.stockItems[0]?.onHand.toString(), "10", "never decremented");
+    assert.equal(db.movements.length, 0);
+    assert.equal(db.outbox.length, 0);
+    assert.equal(db.orders[0]?.status, "CANCELLED");
+  });
+
+  it("a writer failure mid-delta leaves StockItem/run state unadvanced (no partial application)", async () => {
+    const db = seeded();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [orderWithQty(2)], null, new Date());
+
+    // Fails BEFORE any StockItem write for the line (postInventoryMovement
+    // creates the StockMovement row, then the StockMovementLine, THEN
+    // updates StockItem, per line - throwing at the StockMovementLine step
+    // proves the StockItem update genuinely never runs for this attempt,
+    // regardless of this in-memory fake's lack of true cross-statement
+    // rollback - see the class comment re: what this fake can and can't
+    // prove).
+    db.stockMovementLine.create = async () => {
+      throw new Error("simulated writer failure");
+    };
+
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await assert.rejects(() =>
+      repository.apply("run-2", [orderWithQty(5)], null, new Date()),
+    );
+
+    assert.equal(
+      db.stockItems[0]?.onHand.toString(),
+      "8",
+      "StockItem must not reflect a partially-applied delta",
+    );
+    assert.notEqual(
+      db.runs.find((run) => run.id === "run-2")?.status,
+      "APPLIED",
+      "the run must not be marked APPLIED when posting failed",
+    );
   });
 });
 
