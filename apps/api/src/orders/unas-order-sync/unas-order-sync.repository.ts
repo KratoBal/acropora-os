@@ -23,6 +23,7 @@ import {
 } from "../../common/inventory-movement-writer.js";
 import { isPrismaErrorCode } from "../../common/prisma-error.util.js";
 import { sumOrderBookedOut } from "../../common/stock-ledger.util.js";
+import { retryOnSerializationConflict } from "../../common/transaction-retry.util.js";
 import {
   ensureMainWarehouse,
   type WarehouseLookupDatabase,
@@ -601,86 +602,96 @@ export class UnasOrderSyncRepository extends Repository {
     windowStart: Date | null,
     windowEnd: Date,
   ): Promise<UnasOrderSyncSummary> {
-    return this.syncDatabase.$transaction(
-      async (transaction) => {
-        const run = await transaction.unasOrderSyncRun.findUniqueOrThrow({
-          where: { id: runId },
-        });
-        if (run.status !== "RUNNING")
-          throw new Error(`INVALID_ORDER_SYNC_RUN_STATE:${run.status}`);
+    // The whole transaction retries as a unit (never a single statement
+    // inside it) on a genuine Postgres SERIALIZABLE conflict (Prisma
+    // P2034) - see transaction-retry.util.ts's own doc comment for why
+    // this is expected, standard behavior for Serializable isolation, not
+    // a sign that the order-level advisory lock (lockUnasOrder, inside
+    // applyOrderStockDelta below) or any idempotency check is broken. Any
+    // other error - including a real business error thrown from inside
+    // the callback - is rethrown immediately, never retried.
+    return retryOnSerializationConflict(() =>
+      this.syncDatabase.$transaction(
+        async (transaction) => {
+          const run = await transaction.unasOrderSyncRun.findUniqueOrThrow({
+            where: { id: runId },
+          });
+          if (run.status !== "RUNNING")
+            throw new Error(`INVALID_ORDER_SYNC_RUN_STATE:${run.status}`);
 
-        const warehouse = await ensureMainWarehouse(transaction);
-        let createdCount = 0;
-        let updatedCount = 0;
-        let reversedCount = 0;
+          const warehouse = await ensureMainWarehouse(transaction);
+          let createdCount = 0;
+          let updatedCount = 0;
+          let reversedCount = 0;
 
-        for (const order of orders) {
-          const reference = await transaction.externalReference.findUnique({
-            where: {
-              system_entityType_externalId: {
-                system: "UNAS",
-                entityType: "SalesOrder",
-                externalId: order.key,
+          for (const order of orders) {
+            const reference = await transaction.externalReference.findUnique({
+              where: {
+                system_entityType_externalId: {
+                  system: "UNAS",
+                  entityType: "SalesOrder",
+                  externalId: order.key,
+                },
               },
+            });
+
+            if (!reference) {
+              await this.createNewOrder(transaction, order, warehouse.id);
+              createdCount += 1;
+              continue;
+            }
+
+            const result = await this.applyExistingOrderUpdate(
+              transaction,
+              reference,
+              order,
+              warehouse.id,
+              windowEnd,
+            );
+            if (result === null) continue; // Order row missing locally; nothing safe to reconcile against.
+            if (result.updated) updatedCount += 1;
+            if (result.reversed) reversedCount += 1;
+          }
+
+          await transaction.integrationCursor.upsert({
+            where: { provider_stream: { provider: "UNAS", stream: "ORDERS" } },
+            create: {
+              provider: "UNAS",
+              stream: "ORDERS",
+              lastSuccessfulWindowEnd: windowEnd,
+            },
+            update: { lastSuccessfulWindowEnd: windowEnd },
+          });
+          await transaction.unasOrderSyncRun.update({
+            where: { id: runId },
+            data: {
+              activeKey: null,
+              status: "APPLIED",
+              completedAt: new Date(),
+              ordersSeen: orders.length,
+              createdCount,
+              updatedCount,
+              reversedCount,
             },
           });
 
-          if (!reference) {
-            await this.createNewOrder(transaction, order, warehouse.id);
-            createdCount += 1;
-            continue;
-          }
-
-          const result = await this.applyExistingOrderUpdate(
-            transaction,
-            reference,
-            order,
-            warehouse.id,
-            windowEnd,
-          );
-          if (result === null) continue; // Order row missing locally; nothing safe to reconcile against.
-          if (result.updated) updatedCount += 1;
-          if (result.reversed) reversedCount += 1;
-        }
-
-        await transaction.integrationCursor.upsert({
-          where: { provider_stream: { provider: "UNAS", stream: "ORDERS" } },
-          create: {
-            provider: "UNAS",
-            stream: "ORDERS",
-            lastSuccessfulWindowEnd: windowEnd,
-          },
-          update: { lastSuccessfulWindowEnd: windowEnd },
-        });
-        await transaction.unasOrderSyncRun.update({
-          where: { id: runId },
-          data: {
-            activeKey: null,
-            status: "APPLIED",
-            completedAt: new Date(),
+          return {
+            runId,
+            status: "APPLIED" as const,
             ordersSeen: orders.length,
             createdCount,
             updatedCount,
             reversedCount,
-          },
-        });
-
-        return {
-          runId,
-          status: "APPLIED" as const,
-          ordersSeen: orders.length,
-          createdCount,
-          updatedCount,
-          reversedCount,
-          stockMismatchCount: 0,
-          windowStart: windowStart?.toISOString() ?? null,
-          windowEnd: windowEnd.toISOString(),
-        };
-      },
-      {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        timeout: 60_000,
-      },
+            stockMismatchCount: 0,
+            windowStart: windowStart?.toISOString() ?? null,
+            windowEnd: windowEnd.toISOString(),
+          };
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          timeout: 60_000,
+        },
+      ),
     );
   }
 
@@ -912,37 +923,46 @@ export class UnasOrderSyncRepository extends Repository {
     orderId: string,
     order: UnasApiOrder,
   ): Promise<{ updated: boolean; reversed: boolean }> {
-    return this.syncDatabase.$transaction(
-      async (transaction) => {
-        const reference = await transaction.externalReference.findUnique({
-          where: {
-            system_entityType_externalId: {
-              system: "UNAS",
-              entityType: "SalesOrder",
-              externalId: order.key,
+    // Same whole-transaction retry as apply() above, for the same reason -
+    // two concurrent refreshOrder() calls for the SAME order (or one
+    // overlapping apply()'s own batch window) are exactly the scenario
+    // lockUnasOrder already serializes at the stock-delta level, but a
+    // genuine Postgres Serializable conflict (Prisma P2034) can still abort
+    // one of two such concurrent transactions - see
+    // transaction-retry.util.ts's doc comment.
+    return retryOnSerializationConflict(() =>
+      this.syncDatabase.$transaction(
+        async (transaction) => {
+          const reference = await transaction.externalReference.findUnique({
+            where: {
+              system_entityType_externalId: {
+                system: "UNAS",
+                entityType: "SalesOrder",
+                externalId: order.key,
+              },
             },
-          },
-        });
-        if (!reference || reference.entityId !== orderId) {
-          throw new ConflictException("UNAS_ORDER_KEY_MISMATCH");
-        }
+          });
+          if (!reference || reference.entityId !== orderId) {
+            throw new ConflictException("UNAS_ORDER_KEY_MISMATCH");
+          }
 
-        const warehouse = await ensureMainWarehouse(transaction);
-        const result = await this.applyExistingOrderUpdate(
-          transaction,
-          reference,
-          order,
-          warehouse.id,
-          new Date(),
-        );
-        if (result === null)
-          throw new NotFoundException("A rendelés nem található.");
-        return result;
-      },
-      {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        timeout: 30_000,
-      },
+          const warehouse = await ensureMainWarehouse(transaction);
+          const result = await this.applyExistingOrderUpdate(
+            transaction,
+            reference,
+            order,
+            warehouse.id,
+            new Date(),
+          );
+          if (result === null)
+            throw new NotFoundException("A rendelés nem található.");
+          return result;
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          timeout: 30_000,
+        },
+      ),
     );
   }
 
