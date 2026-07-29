@@ -82,6 +82,25 @@ export class AuthUserResolver {
     return this.toAuthenticatedUser(user);
   }
 
+  /**
+   * Same "must resolve to an active internal User" contract as
+   * `resolveExistingIdentity`, but keyed purely by `User.id` — used by
+   * `AuthService.resolveToken`, where the persisted `Session` row only
+   * stores `userId` (no cached e-mail/displayName/role to fall back on).
+   */
+  async resolveById(userId: string): Promise<AuthenticatedUser> {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.isActive) {
+      this.logger.warn(
+        `Az autentikált sessionhöz nincs aktív belső User: userId=${userId}`,
+      );
+      throw new UnauthorizedException(
+        "Az autentikált felhasználóhoz nem tartozik aktív belső User rekord.",
+      );
+    }
+    return this.toAuthenticatedUser(user);
+  }
+
   async resolveByEmailAndPassword(
     email: string,
     password: string,

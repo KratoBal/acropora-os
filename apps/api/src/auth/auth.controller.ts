@@ -53,12 +53,38 @@ export class AuthController {
     return { user: session.user };
   }
 
+  /**
+   * Mobile counterpart to `login/password`: same credential check and
+   * `AuthService.loginWithPassword` call, but there is no browser cookie
+   * jar shared with the API, so the token is returned directly in the JSON
+   * body instead of an httpOnly cookie. Deliberately does not set — or
+   * clear — any cookies (no session cookie, no CSRF cookie): a mobile
+   * client authenticates every request with the returned `token` as a
+   * `Authorization: Bearer` header (see AuthGuard), which the CSRF
+   * double-submit check in AuthGuard does not apply to in the first place.
+   */
+  @Public()
+  @Post("mobile/login/password")
+  async loginMobileWithPassword(
+    @Body() body: ProductionLoginDto,
+  ): Promise<{ token: string; expiresAt: string; user: AuthenticatedUser }> {
+    const session = await this.authService.loginWithPassword(
+      body.email,
+      body.password,
+    );
+    return {
+      token: session.token ?? "",
+      expiresAt: session.expiresAt,
+      user: session.user,
+    };
+  }
+
   @Post("logout")
-  logout(
+  async logout(
     @Req() request: AuthenticatedRequest,
     @Res({ passthrough: true }) response: CookieResponse,
   ) {
-    if (request.authToken) this.authService.logout(request.authToken);
+    if (request.authToken) await this.authService.logout(request.authToken);
     if (request.authViaCookie) {
       response.clearCookie(SESSION_COOKIE_NAME, { path: "/" });
       response.clearCookie(CSRF_COOKIE_NAME, { path: "/" });
