@@ -49,6 +49,10 @@ function isDuplicateSupplierInvoiceError(error: unknown): boolean {
   return isPrismaUniqueConstraintViolation(error, "supplierInvoiceNumber");
 }
 
+function isDuplicateLocalProductSkuError(error: unknown): boolean {
+  return isPrismaUniqueConstraintViolation(error, "sku");
+}
+
 export interface PurchaseInvoiceVariantInfo {
   variantId: string;
   sku: string;
@@ -56,6 +60,7 @@ export interface PurchaseInvoiceVariantInfo {
   unit: string;
   /** Best known current quantity: local StockItem, falling back to 0. */
   currentQty: Prisma.Decimal;
+  catalogAuthority: "UNAS" | "ACROPORA" | null;
 }
 
 export interface PurchaseInvoiceCurrentStock {
@@ -69,6 +74,13 @@ export interface CreatePurchaseInvoiceLine {
   /** UNAS SKU a variantId-hez; kötelező amikor variantId nem null (kell a
    * postInventoryMovement-nek/UnasStockSyncOutbox-nak), egyébként null. */
   sku: string | null;
+  /** Ha jelen van, a repository a számlával azonos tranzakcióban hozza
+   * létre a LOCAL/ACROPORA terméket és első variantját. */
+  createLocalProduct: {
+    name: string;
+    sku: string;
+    primaryCategoryId: string | null;
+  } | null;
   sourceDescription: string | null;
   orderedQuantity: Prisma.Decimal;
   actualQuantity: Prisma.Decimal;
@@ -77,11 +89,11 @@ export interface CreatePurchaseInvoiceLine {
   discountPercent: Prisma.Decimal | null;
   /// "PENDING" a helyi könyvelést és a UnasStockSyncOutbox-publikálást
   /// megelőlegezve (a tényleges UNAS-push a háttér-workeré, lásd
-  /// PurchasingService.createInvoice), "NOT_LINKED" változatlanul a
-  /// terméktörzsben nem szereplő tételeknél. Már sosem "OK"/"FAILED" itt -
-  /// azt egy szinkron UNAS-hívás eredménye adta korábban, ami megszűnt.
-  syncStatus: "PENDING" | "NOT_LINKED";
+  /// PurchasingService.createInvoice), "NOT_APPLICABLE" helyi terméknél,
+  /// "NOT_LINKED" pedig terméktörzs nélkül hagyott sornál.
+  syncStatus: "PENDING" | "NOT_LINKED" | "NOT_APPLICABLE";
   syncError: string | null;
+  syncToUnas: boolean;
 }
 
 export interface CreatePurchaseInvoiceParams {
@@ -105,6 +117,15 @@ export interface CreatePurchaseInvoiceParams {
 }
 
 interface PurchaseInvoiceCreateTransaction extends InventoryMovementDatabase {
+  product: {
+    create(args: unknown): Promise<{
+      id: string;
+      name: string;
+      origin: "LOCAL";
+      catalogAuthority: "ACROPORA";
+      variants: Array<{ id: string; sku: string; unit: string }>;
+    }>;
+  };
   purchaseInvoice: {
     create(args: unknown): Promise<PurchaseInvoiceDetailRow>;
   };
@@ -128,6 +149,7 @@ export interface PurchaseInvoiceDatabase extends WarehouseLookupDatabase {
         unit: string;
         product: {
           name: string;
+          catalogAuthority: "UNAS" | "ACROPORA" | null;
           unasSnapshot: { reportedStock: Prisma.Decimal | null } | null;
         };
       }>
@@ -182,6 +204,7 @@ export class PurchaseInvoiceRepository extends Repository {
         product: {
           select: {
             name: true,
+            catalogAuthority: true,
             unasSnapshot: { select: { reportedStock: true } },
           },
         },
@@ -207,6 +230,7 @@ export class PurchaseInvoiceRepository extends Repository {
         sku: variant.sku,
         productName: variant.product.name,
         unit: variant.unit,
+        catalogAuthority: variant.product.catalogAuthority,
         // A helyi StockItem ledger csak leltár-korrekció vagy POS eladás
         // után kap sort egy variantra; addig az egyetlen ismert "jelenlegi
         // mennyiség" a UNAS reported stock snapshot - enélkül az első
@@ -246,6 +270,78 @@ export class PurchaseInvoiceRepository extends Repository {
     try {
       created = await this.invoiceDatabase.$transaction(
         async (transaction) => {
+          const localProducts: Array<{
+            productId: string;
+            variantId: string;
+            sku: string;
+            name: string;
+          }> = [];
+          const resolvedLines: CreatePurchaseInvoiceLine[] = [];
+
+          for (const line of params.lines) {
+            if (!line.createLocalProduct) {
+              resolvedLines.push(line);
+              continue;
+            }
+
+            const requestedLocalProduct = line.createLocalProduct;
+            const local = await transaction.product.create({
+              data: {
+                name: requestedLocalProduct.name,
+                type: "PHYSICAL",
+                origin: "LOCAL",
+                catalogAuthority: "ACROPORA",
+                createdById: params.actorUserId,
+                categoryId: requestedLocalProduct.primaryCategoryId,
+                ...(requestedLocalProduct.primaryCategoryId
+                  ? {
+                      categories: {
+                        create: {
+                          categoryId: requestedLocalProduct.primaryCategoryId,
+                          isPrimary: true,
+                          source: "MANUAL",
+                        },
+                      },
+                    }
+                  : {}),
+                variants: {
+                  create: {
+                    sku: requestedLocalProduct.sku,
+                    unit: line.unit,
+                  },
+                },
+              },
+              select: {
+                id: true,
+                name: true,
+                origin: true,
+                catalogAuthority: true,
+                variants: {
+                  select: { id: true, sku: true, unit: true },
+                  take: 1,
+                },
+              },
+            });
+            const variant = local.variants[0];
+            if (!variant)
+              throw new Error("LOCAL_PRODUCT_VARIANT_CREATION_FAILED");
+
+            localProducts.push({
+              productId: local.id,
+              variantId: variant.id,
+              sku: variant.sku,
+              name: local.name,
+            });
+            resolvedLines.push({
+              ...line,
+              variantId: variant.id,
+              sku: variant.sku,
+              createLocalProduct: null,
+              syncStatus: "NOT_APPLICABLE",
+              syncToUnas: false,
+            });
+          }
+
           const invoice = await transaction.purchaseInvoice.create({
             data: {
               documentNumber: params.documentNumber,
@@ -264,7 +360,7 @@ export class PurchaseInvoiceRepository extends Repository {
               note: params.note,
               createdById: params.actorUserId,
               lines: {
-                create: params.lines.map((line) => ({
+                create: resolvedLines.map((line) => ({
                   variantId: line.variantId,
                   sourceDescription: line.sourceDescription,
                   orderedQuantity: line.orderedQuantity,
@@ -295,15 +391,16 @@ export class PurchaseInvoiceRepository extends Repository {
               throw new ConflictException("NAV_INVOICE_ALREADY_RECEIVED");
           }
 
-          // Csak a terméktörzsben szereplő (NOT_LINKED-nek NEM jelölt)
-          // tételek hatnak a helyi készletre és kapnak
-          // UnasStockSyncOutbox-sort - a régi kód is ezt csinálta
-          // (`if (!line.variantId) continue`), csak most a shared writer
-          // végzi a mozgás/StockItem/outbox írását EGYETLEN, ugyanebben a
-          // tranzakcióban futó hívással, szinkron UNAS-hívás nélkül.
-          const linkedLines = params.lines.filter(
-            (line): line is CreatePurchaseInvoiceLine & { variantId: string; sku: string } =>
-              Boolean(line.variantId),
+          // Minden termékhez kapcsolt sor hat a helyi készletre. UNAS
+          // outbox-sort viszont csak az authority alapján
+          // syncToUnas=true sorok kapnak; helyi termék soha.
+          const linkedLines = resolvedLines.filter(
+            (
+              line,
+            ): line is CreatePurchaseInvoiceLine & {
+              variantId: string;
+              sku: string;
+            } => Boolean(line.variantId),
           );
 
           if (linkedLines.length > 0) {
@@ -324,6 +421,7 @@ export class PurchaseInvoiceRepository extends Repository {
                 // által beírt tényleges (nem a rendelt!) mennyiséggel.
                 quantityDelta: line.actualQuantity,
                 unit: line.unit,
+                syncToUnas: line.syncToUnas,
               })),
             });
 
@@ -345,6 +443,28 @@ export class PurchaseInvoiceRepository extends Repository {
             }
           }
 
+          for (const localProduct of localProducts) {
+            await transaction.domainEvent.create({
+              data: {
+                id: randomUUID(),
+                eventType: "product.created",
+                aggregateType: "Product",
+                aggregateId: localProduct.productId,
+                actorUserId: params.actorUserId,
+                payload: {
+                  name: localProduct.name,
+                  sku: localProduct.sku,
+                  variantId: localProduct.variantId,
+                  origin: "LOCAL",
+                  catalogAuthority: "ACROPORA",
+                  createdFromPurchaseInvoiceId: invoice.id,
+                },
+                occurredAt: now,
+                schemaVersion: 1,
+              },
+            });
+          }
+
           await transaction.domainEvent.create({
             data: {
               id: randomUUID(),
@@ -356,7 +476,8 @@ export class PurchaseInvoiceRepository extends Repository {
                 documentNumber: invoice.documentNumber,
                 source: invoice.source,
                 supplierId: invoice.supplierId,
-                lineCount: params.lines.length,
+                lineCount: resolvedLines.length,
+                localProductCreatedCount: localProducts.length,
               },
               occurredAt: now,
               schemaVersion: 1,
@@ -378,6 +499,9 @@ export class PurchaseInvoiceRepository extends Repository {
         throw new ConflictException(
           "Ez a beszállítói számla (szám alapján) már rögzítve van - ismételt beküldés nem hoz létre új bizonylatot.",
         );
+      }
+      if (isDuplicateLocalProductSkuError(error)) {
+        throw new ConflictException("LOCAL_PRODUCT_SKU_ALREADY_EXISTS");
       }
       throw error;
     }

@@ -24,6 +24,10 @@ const purchasingApiMock = vi.hoisted(() => ({
   searchProducts: vi.fn(),
 }));
 
+const productApiMock = vi.hoisted(() => ({
+  categoryOptions: vi.fn(),
+}));
+
 const suppliersApiMock = vi.hoisted(() => ({
   create: vi.fn(),
   search: vi.fn(),
@@ -57,6 +61,10 @@ vi.mock("@/lib/api/nav-incoming-invoices", () => ({
 
 vi.mock("@/lib/api/purchasing", () => ({
   purchasingApi: purchasingApiMock,
+}));
+
+vi.mock("@/lib/api/products", () => ({
+  productApi: productApiMock,
 }));
 
 vi.mock("@/lib/api/suppliers", () => ({
@@ -125,9 +133,14 @@ beforeEach(() => {
     detail: { id: "purchase-invoice-1", documentNumber: "BEV-0001" },
     successCount: 1,
     failedCount: 0,
+    unasQueuedCount: 1,
+    localProductCreatedCount: 0,
   });
   purchasingApiMock.getExchangeRate.mockReset();
   purchasingApiMock.searchProducts.mockReset().mockResolvedValue([]);
+  productApiMock.categoryOptions
+    .mockReset()
+    .mockResolvedValue([{ id: "category-1", label: "Technika / Szivattyúk" }]);
   suppliersApiMock.create.mockReset();
   suppliersApiMock.search.mockReset().mockResolvedValue({
     items: [supplier],
@@ -162,6 +175,49 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
         source: "HU_NAV",
         currency: "HUF",
         navIncomingInvoiceId: "nav-invoice-1",
+      }),
+    );
+  });
+
+  it("a NAV-sorból új helyi terméket készít és a számlával együtt küldi", async () => {
+    render(createElement(PurchaseInvoiceEuEditorPage));
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Új helyi termék létrehozása",
+      }),
+    );
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Új helyi termék cikkszáma" }),
+      { target: { value: "local-pump-01" } },
+    );
+    fireEvent.change(
+      screen.getByRole("combobox", {
+        name: "Új helyi termék kategóriája",
+      }),
+      { target: { value: "category-1" } },
+    );
+    fireEvent.click(await screen.findByText(supplier.name));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Számla rögzítése és készlet frissítése",
+      }),
+    );
+
+    await waitFor(() => expect(purchasingApiMock.create).toHaveBeenCalled());
+    expect(purchasingApiMock.create).toHaveBeenCalledWith(
+      "token-owner",
+      expect.objectContaining({
+        lines: [
+          expect.objectContaining({
+            createLocalProduct: {
+              name: "Teszt termék",
+              sku: "LOCAL-PUMP-01",
+              primaryCategoryId: "category-1",
+            },
+            sourceDescription: "Teszt termék",
+          }),
+        ],
       }),
     );
   });

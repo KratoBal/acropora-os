@@ -255,7 +255,9 @@ export function PurchaseInvoiceDetailPage({
                               ? "Hiba"
                               : line.syncStatus === "NOT_LINKED"
                                 ? "Nincs szinkronizálva"
-                                : "Függőben"}
+                                : line.syncStatus === "NOT_APPLICABLE"
+                                  ? "Nem UNAS-termék"
+                                  : "Függőben"}
                         </Badge>
                         {line.syncError ? (
                           <p className="mt-1 text-xs text-rose-600">

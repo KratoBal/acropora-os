@@ -45,6 +45,8 @@ export interface PosSaleVariantInfo {
   vatRate: Prisma.Decimal | null;
   /** Best known current quantity: local StockItem, falling back to the UNAS reported stock, then 0. */
   currentQty: Prisma.Decimal;
+  /** A helyi termék készletmozgása nem kerülhet az UNAS outboxba. */
+  syncToUnas: boolean;
 }
 
 export interface PosSaleCurrentStock {
@@ -61,6 +63,7 @@ export interface CreatePosSaleLine {
   taxRate: Prisma.Decimal;
   unitNet: Prisma.Decimal;
   lineGross: Prisma.Decimal;
+  syncToUnas: boolean;
 }
 
 export interface CreatePosSaleParams {
@@ -102,6 +105,7 @@ export interface PosSaleDatabase extends WarehouseLookupDatabase {
         vatRate: Prisma.Decimal | null;
         product: {
           name: string;
+          catalogAuthority: "UNAS" | "ACROPORA" | null;
           unasSnapshot: {
             vatRate: Prisma.Decimal | null;
             reportedStock: Prisma.Decimal | null;
@@ -147,7 +151,10 @@ export class PosSaleRepository extends Repository {
     }
 
     const variants = await this.saleDatabase.productVariant.findMany({
-      where: { id: { in: variantIds } },
+      where: {
+        id: { in: variantIds },
+        product: { catalogAuthority: "UNAS" },
+      },
       select: {
         id: true,
         sku: true,
@@ -156,6 +163,7 @@ export class PosSaleRepository extends Repository {
         product: {
           select: {
             name: true,
+            catalogAuthority: true,
             unasSnapshot: { select: { vatRate: true, reportedStock: true } },
           },
         },
@@ -187,6 +195,7 @@ export class PosSaleRepository extends Repository {
           onHandByVariant.get(variant.id) ??
           variant.product.unasSnapshot?.reportedStock ??
           new Prisma.Decimal(0),
+        syncToUnas: variant.product.catalogAuthority === "UNAS",
       });
     }
     return { warehouseId: warehouse.id, variants: result };
@@ -273,6 +282,7 @@ export class PosSaleRepository extends Repository {
             sku: line.sku,
             quantityDelta: line.quantity.negated(),
             unit: line.unit,
+            syncToUnas: line.syncToUnas,
           })),
         });
 

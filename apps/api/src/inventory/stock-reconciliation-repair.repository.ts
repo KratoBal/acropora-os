@@ -26,7 +26,13 @@ interface StockItemForRepair {
   variantId: string;
   warehouseId: string;
   onHand: Prisma.Decimal;
-  variant: { sku: string };
+  variant: {
+    sku: string;
+    product: {
+      catalogAuthority: "UNAS" | "ACROPORA" | null;
+      unasSnapshot: { id: string } | null;
+    };
+  };
 }
 
 interface RepairRow {
@@ -68,7 +74,10 @@ interface RepairRow {
 // type back to InventoryMovementDatabase's own bare `{id, onHand}`
 // StockItemRow instead of the richer shape this file actually needs).
 // Each nested property is instead spelled out once, explicitly, below.
-interface RepairTransaction extends Pick<InventoryMovementDatabase, "$executeRaw" | "stockMovement"> {
+interface RepairTransaction extends Pick<
+  InventoryMovementDatabase,
+  "$executeRaw" | "stockMovement"
+> {
   stockItem: {
     findFirst(args: unknown): Promise<StockItemForRepair | null>;
     update(args: unknown): Promise<unknown>;
@@ -110,7 +119,9 @@ export const STOCK_RECONCILIATION_REPAIR_DATABASE = Symbol(
 
 function toRecord(row: RepairRow): StockReconciliationRepairRecord {
   const detail =
-    row.resultDetail && typeof row.resultDetail === "object" && !Array.isArray(row.resultDetail)
+    row.resultDetail &&
+    typeof row.resultDetail === "object" &&
+    !Array.isArray(row.resultDetail)
       ? (row.resultDetail as Record<string, unknown>)
       : {};
   return {
@@ -127,13 +138,17 @@ function toRecord(row: RepairRow): StockReconciliationRepairRecord {
     afterOnHand: row.afterOnHand?.toString() ?? null,
     ledgerExpectedOnHand: row.ledgerExpectedOnHand?.toString() ?? null,
     outboxId: row.outboxId,
-    rejectionCode: (detail.rejectionCode as RepairRejectionCode | undefined) ?? null,
+    rejectionCode:
+      (detail.rejectionCode as RepairRejectionCode | undefined) ?? null,
     createdAt: row.createdAt.toISOString(),
     completedAt: row.completedAt?.toISOString() ?? null,
   };
 }
 
-function toOutcome(row: RepairRow, replayedExisting: boolean): StockReconciliationRepairOutcome {
+function toOutcome(
+  row: RepairRow,
+  replayedExisting: boolean,
+): StockReconciliationRepairOutcome {
   const record = toRecord(row);
   return {
     dryRun: false,
@@ -174,7 +189,9 @@ export class StockReconciliationRepairRepository extends Repository {
       database ?? (prisma as unknown as StockReconciliationRepairDatabase);
   }
 
-  async findByIdempotencyKey(idempotencyKey: string): Promise<StockReconciliationRepairRecord | null> {
+  async findByIdempotencyKey(
+    idempotencyKey: string,
+  ): Promise<StockReconciliationRepairRecord | null> {
     const row = await this.repairDatabase.stockReconciliationRepair.findFirst({
       where: { idempotencyKey },
     });
@@ -182,7 +199,9 @@ export class StockReconciliationRepairRepository extends Repository {
   }
 
   async findById(id: string): Promise<StockReconciliationRepairRecord | null> {
-    const row = await this.repairDatabase.stockReconciliationRepair.findUnique({ where: { id } });
+    const row = await this.repairDatabase.stockReconciliationRepair.findUnique({
+      where: { id },
+    });
     return row ? toRecord(row) : null;
   }
 
@@ -195,10 +214,12 @@ export class StockReconciliationRepairRepository extends Repository {
   /// evaluateLocalFromProvenLedgerPreconditions the pre-lock preview used
   /// -> if rejected, insert a REJECTED audit row (no StockItem write); if
   /// the ledger already matches onHand, insert a NOOP row (no StockItem
-  /// write); otherwise update StockItem.onHand to ledgerExpectedOnHand,
-  /// enqueue an outbox entry via the SAME enqueueStockSyncOutboxEntry
-  /// helper postInventoryMovement itself uses, and insert an APPLIED row -
-  /// all before the transaction commits. Deliberately never creates a
+  /// write); otherwise update StockItem.onHand to ledgerExpectedOnHand and,
+  /// only for an explicit UNAS-authority product, enqueue an outbox entry
+  /// via the SAME enqueueStockSyncOutboxEntry helper postInventoryMovement
+  /// itself uses, then insert an APPLIED row - all before the transaction
+  /// commits. A local ACROPORA product is repaired without an UNAS outbox.
+  /// Deliberately never creates a
   /// StockMovement: this corrects the ledger's OWN already-recorded
   /// conclusion back onto StockItem, it is not a new physical stock event.
   async applyLocalFromProvenLedger(params: {
@@ -210,7 +231,11 @@ export class StockReconciliationRepairRepository extends Repository {
     idempotencyKey: string;
   }): Promise<StockReconciliationRepairOutcome> {
     const row = await this.repairDatabase.$transaction(async (transaction) => {
-      await lockVariantWarehouse(transaction, params.variantId, params.warehouseId);
+      await lockVariantWarehouse(
+        transaction,
+        params.variantId,
+        params.warehouseId,
+      );
 
       const stockItem = await transaction.stockItem.findFirst({
         where: {
@@ -219,7 +244,19 @@ export class StockReconciliationRepairRepository extends Repository {
           locationId: null,
           lotId: null,
         },
-        include: { variant: { select: { sku: true } } },
+        include: {
+          variant: {
+            select: {
+              sku: true,
+              product: {
+                select: {
+                  catalogAuthority: true,
+                  unasSnapshot: { select: { id: true } },
+                },
+              },
+            },
+          },
+        },
       });
       if (!stockItem) {
         // Structurally shouldn't happen - StockItem rows are never
@@ -270,7 +307,9 @@ export class StockReconciliationRepairRepository extends Repository {
         });
       }
 
-      const ledgerExpectedOnHand = new Prisma.Decimal(fresh.ledgerExpectedOnHand!);
+      const ledgerExpectedOnHand = new Prisma.Decimal(
+        fresh.ledgerExpectedOnHand!,
+      );
       if (ledgerExpectedOnHand.equals(stockItem.onHand)) {
         return transaction.stockReconciliationRepair.create({
           data: {
@@ -289,15 +328,18 @@ export class StockReconciliationRepairRepository extends Repository {
         data: { onHand: ledgerExpectedOnHand },
       });
 
-      const outbox = await enqueueStockSyncOutboxEntry(transaction, {
-        variantId: params.variantId,
-        warehouseId: params.warehouseId,
-        sku: stockItem.variant.sku,
-        targetOnHand: ledgerExpectedOnHand,
-        idempotencyKey: `${params.idempotencyKey}:outbox`,
-        sourceProcess: "RECONCILIATION",
-        sourceRecordId: params.idempotencyKey,
-      });
+      const outbox =
+        stockItem.variant.product.catalogAuthority === "UNAS"
+          ? await enqueueStockSyncOutboxEntry(transaction, {
+              variantId: params.variantId,
+              warehouseId: params.warehouseId,
+              sku: stockItem.variant.sku,
+              targetOnHand: ledgerExpectedOnHand,
+              idempotencyKey: `${params.idempotencyKey}:outbox`,
+              sourceProcess: "RECONCILIATION",
+              sourceRecordId: params.idempotencyKey,
+            })
+          : null;
 
       return transaction.stockReconciliationRepair.create({
         data: {
@@ -305,7 +347,7 @@ export class StockReconciliationRepairRepository extends Repository {
           status: "APPLIED",
           beforeOnHand: stockItem.onHand,
           afterOnHand: ledgerExpectedOnHand,
-          outboxId: outbox.id,
+          outboxId: outbox?.id ?? null,
           completedAt: new Date(),
         },
       });
@@ -330,7 +372,11 @@ export class StockReconciliationRepairRepository extends Repository {
     idempotencyKey: string;
   }): Promise<StockReconciliationRepairOutcome> {
     const row = await this.repairDatabase.$transaction(async (transaction) => {
-      await lockVariantWarehouse(transaction, params.variantId, params.warehouseId);
+      await lockVariantWarehouse(
+        transaction,
+        params.variantId,
+        params.warehouseId,
+      );
 
       const stockItem = await transaction.stockItem.findFirst({
         where: {
@@ -339,7 +385,19 @@ export class StockReconciliationRepairRepository extends Repository {
           locationId: null,
           lotId: null,
         },
-        include: { variant: { select: { sku: true } } },
+        include: {
+          variant: {
+            select: {
+              sku: true,
+              product: {
+                select: {
+                  catalogAuthority: true,
+                  unasSnapshot: { select: { id: true } },
+                },
+              },
+            },
+          },
+        },
       });
       if (!stockItem) throw new Error("STOCK_ITEM_VANISHED_DURING_REPAIR");
 
@@ -352,7 +410,9 @@ export class StockReconciliationRepairRepository extends Repository {
       });
 
       const rejectionCode = evaluateRepublishPreconditions({
-        hasUnasLink: params.hasUnasLink,
+        hasUnasLink:
+          stockItem.variant.product.catalogAuthority === "UNAS" &&
+          stockItem.variant.product.unasSnapshot !== null,
         localOnHand: stockItem.onHand,
         expectedCurrentOnHand: params.expectedCurrentOnHand,
         hasCompetingOpenOutboxRow: Boolean(competingRow),

@@ -102,6 +102,26 @@ ProductController → ProductService → ProductRepository → Prisma
 
 A `ProductRepository.create` egy adatbázis-tranzakcióban hozza létre a Productot, az opcionális elsődleges ProductCategory kapcsolatot és a `product.created` típusú `DomainEvent` rekordot. Update esetén a repository előbb megszünteti a korábbi primary jelölést, majd upserteli az újat, így alkalmazásszinten egyetlen elsődleges kategória marad. Event bus vagy aszinkron publisher még nincs; a rekord a későbbi outbox/publisher alapja.
 
+## Helyi termék létrehozása beszerzési számlából
+
+A HU_NAV, HU_MANUAL és EU beszerzési számlák ismeretlen sora a rögzítő
+felületen meglévő termékvariánshoz kapcsolható, vagy új, készletezett helyi
+termékként hozható létre. Az új termékhez kötelező a név, az egyedi belső
+SKU és a mértékegység; az elsődleges kategória opcionális. Az SKU a mentés
+előtt trimelve és nagybetűsítve kerül az egyedi `ProductVariant.sku` mezőbe.
+
+A termék, az első variáns, a beszerzési számla, a `PURCHASE_RECEIPT`
+készletmozgás, a `StockItem`-frissítés, a beszerzési ár kiterjesztés és a
+`product.created` audit-esemény egyetlen adatbázis-tranzakcióban jön létre.
+Az eredet és Product Master explicit `LOCAL`/`ACROPORA`, a `createdById` a
+számlát rögzítő felhasználó. Ütköző SKU esetén a teljes tranzakció
+`409 LOCAL_PRODUCT_SKU_ALREADY_EXISTS` hibával visszagördül.
+
+A helyi termék készletváltozása nem hoz létre UNAS stock outbox sort, a
+számlasor szinkronállapota `NOT_APPLICABLE`. A POS-kereső szándékosan csak
+`catalogAuthority=UNAS` terméket ad vissza; a helyi termék POS-csatornába
+engedése későbbi, explicit üzleti kapcsoló feladata.
+
 ## Archive stratégia
 
 A `DELETE` fizikai törlés helyett:
@@ -148,10 +168,15 @@ Használt read-only API contractok:
 - `GET /categories/options`: breadcrumb labellel rendezett kategóriák;
 - `GET /brands/options`: név szerint rendezett brandek.
 
-A listához és detailhez kizárólag `products.view` szükséges. A még nem létező „Új termék” funkció disabled „hamarosan” jelzést kap; a felület nem végez create, update vagy archive műveletet.
+A listához és detailhez kizárólag `products.view` szükséges. Önálló
+terméklétrehozó felület még nincs; helyi termék jelenleg a beszerzési
+számlasorból hozható létre `purchasing.manage` jogosultsággal. A Product
+List nem végez create, update vagy archive műveletet.
 
 Fejlesztői környezetben a termék API valódi bearer sessiont vár. Emiatt a webes development auth a mock felhasználóválasztás megtartása mellett az API `/auth/login`, `/auth/me` és `/auth/logout` végpontjait használja. Így a Product List nem egy, kizárólag a böngésző által ismert ál-tokenhez kötődik. A kliens a lejárt, az API által elutasított vagy elérhetetlen API mellett nem validálható sessiont törli; ez továbbra is kizárólag development auth, productionben tiltott.
 
 Állapotkezelés: táblaszerkezetű initial skeleton, meglévő adatok megtartása alatti frissítésjelző, külön üres katalógus és szűrt no-results állapot, továbbá felhasználóbarát retry lehetőség hálózati/API hibánál.
 
-Szándékosan elhalasztott UI-funkciók: szerkesztő, létrehozás, archiválás/visszaállítás, variant CRUD, képkezelés, merchandising, channel listing, ár, készlet, bulk action, saved view és oszlopszemélyre szabás.
+Szándékosan elhalasztott UI-funkciók: önálló terméklétrehozó, szerkesztő,
+archiválás/visszaállítás, variant CRUD, képkezelés, merchandising, channel
+listing, ár, készlet, bulk action, saved view és oszlopszemélyre szabás.

@@ -84,6 +84,11 @@ export class PosSaleService {
       if (!info) {
         throw new BadRequestException(`Ismeretlen termék: ${variantId}.`);
       }
+      if (!info.syncToUnas) {
+        throw new BadRequestException(
+          `A helyi Acropora OS-termék POS-értékesítése még nincs engedélyezve: ${info.sku}.`,
+        );
+      }
       if (info.vatRate === null) {
         throw new BadRequestException(
           `Nincs beállítva ÁFA kulcs ehhez a termékhez: ${info.sku}.`,
@@ -124,6 +129,7 @@ export class PosSaleService {
         taxRate,
         unitNet,
         lineGross,
+        syncToUnas: info.syncToUnas,
       });
     }
 

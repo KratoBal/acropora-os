@@ -62,7 +62,11 @@ export class PosProductSearchRepository extends Repository {
     const variants = await this.searchDatabase.productVariant.findMany({
       where: {
         isActive: true,
-        product: { isActive: true },
+        // A helyi termék POS-csatornája még nincs külön engedélyezhetően
+        // modellezve. Addig csak az UNAS-kezelésű webshoptermékek jelenhetnek
+        // meg a POS-ban; a beszerzési kereső ettől függetlenül mindkettőt
+        // látja.
+        product: { isActive: true, catalogAuthority: "UNAS" },
         OR: [
           { sku: { contains: term, mode: "insensitive" } },
           { product: { name: { contains: term, mode: "insensitive" } } },

@@ -62,9 +62,11 @@ function createFakeDatabase() {
         return found ? { id: found.id } : null;
       },
       async create(args) {
-        const data = (args as { data: { idempotencyKey: string | null } })
-          .data;
-        const row = { id: nextId("movement"), idempotencyKey: data.idempotencyKey };
+        const data = (args as { data: { idempotencyKey: string | null } }).data;
+        const row = {
+          id: nextId("movement"),
+          idempotencyKey: data.idempotencyKey,
+        };
         movements.push(row);
         return { id: row.id };
       },
@@ -198,6 +200,7 @@ describe("postInventoryMovement", () => {
           sku: "SKU-1",
           unit: "db",
           quantityDelta: new Prisma.Decimal(-2),
+          syncToUnas: true,
         },
       ],
     });
@@ -240,12 +243,40 @@ describe("postInventoryMovement", () => {
           sku: "SKU-1",
           unit: "db",
           quantityDelta: new Prisma.Decimal(10),
+          syncToUnas: true,
         },
       ],
     });
 
     assert.equal(posted.lines[0]?.resultingOnHand.toString(), "15");
     assert.equal(fake.stockItems[0]?.onHand.toString(), "15");
+  });
+
+  it("books local product stock without creating an UNAS outbox row", async () => {
+    const fake = createFakeDatabase();
+
+    const posted = await postInventoryMovement(fake.database, {
+      idempotencyKey: "PURCHASE_INVOICE:LOCAL-1",
+      movementNumber: "BESZ-LOCAL-1",
+      type: "PURCHASE_RECEIPT",
+      warehouseId: "warehouse-1",
+      referenceType: "PurchaseInvoice",
+      referenceId: "invoice-local-1",
+      sourceProcess: "PURCHASE_INVOICE",
+      lines: [
+        {
+          variantId: "variant-local-1",
+          sku: "LOCAL-1",
+          unit: "db",
+          quantityDelta: new Prisma.Decimal(4),
+          syncToUnas: false,
+        },
+      ],
+    });
+
+    assert.equal(posted.lines[0]?.resultingOnHand.toString(), "4");
+    assert.equal(fake.stockItems[0]?.onHand.toString(), "4");
+    assert.equal(fake.outbox.length, 0);
   });
 
   it("is idempotent: replaying the same idempotencyKey does not double-count", async () => {
@@ -265,6 +296,7 @@ describe("postInventoryMovement", () => {
           sku: "SKU-2",
           unit: "db",
           quantityDelta: new Prisma.Decimal(-3),
+          syncToUnas: true,
         },
       ],
     });
@@ -284,6 +316,7 @@ describe("postInventoryMovement", () => {
           sku: "SKU-2",
           unit: "db",
           quantityDelta: new Prisma.Decimal(-3),
+          syncToUnas: true,
         },
       ],
     });
@@ -314,6 +347,7 @@ describe("postInventoryMovement", () => {
           sku: "SKU-3",
           unit: "db",
           quantityDelta: new Prisma.Decimal(-1),
+          syncToUnas: true,
         },
       ],
     });
@@ -336,6 +370,7 @@ describe("postInventoryMovement", () => {
           sku: "SKU-3",
           unit: "db",
           quantityDelta: new Prisma.Decimal(-1),
+          syncToUnas: true,
         },
       ],
     });
@@ -382,12 +417,14 @@ describe("postInventoryMovement", () => {
           sku: "SKU-Z",
           unit: "db",
           quantityDelta: new Prisma.Decimal(1),
+          syncToUnas: true,
         },
         {
           variantId: "variant-a",
           sku: "SKU-A",
           unit: "db",
           quantityDelta: new Prisma.Decimal(1),
+          syncToUnas: true,
         },
       ],
     });
@@ -415,12 +452,14 @@ describe("postInventoryMovement", () => {
           sku: "SKU-1",
           unit: "db",
           quantityDelta: new Prisma.Decimal(5),
+          syncToUnas: true,
         },
         {
           variantId: "variant-1",
           sku: "SKU-1",
           unit: "db",
           quantityDelta: new Prisma.Decimal(3),
+          syncToUnas: true,
         },
       ],
     });
@@ -434,27 +473,21 @@ describe("postInventoryMovement", () => {
 describe("isDuplicateMovementIdempotencyKeyError", () => {
   it("recognizes a P2002 violation on the idempotencyKey unique index", async () => {
     const { Prisma: RuntimePrisma } = await import("@acropora/database");
-    const error = new RuntimePrisma.PrismaClientKnownRequestError(
-      "duplicate",
-      {
-        code: "P2002",
-        clientVersion: "test",
-        meta: { target: ["idempotencyKey"] },
-      },
-    );
+    const error = new RuntimePrisma.PrismaClientKnownRequestError("duplicate", {
+      code: "P2002",
+      clientVersion: "test",
+      meta: { target: ["idempotencyKey"] },
+    });
     assert.equal(isDuplicateMovementIdempotencyKeyError(error), true);
   });
 
   it("does not misclassify a P2002 on a different unique field", async () => {
     const { Prisma: RuntimePrisma } = await import("@acropora/database");
-    const error = new RuntimePrisma.PrismaClientKnownRequestError(
-      "duplicate",
-      {
-        code: "P2002",
-        clientVersion: "test",
-        meta: { target: ["documentNumber"] },
-      },
-    );
+    const error = new RuntimePrisma.PrismaClientKnownRequestError("duplicate", {
+      code: "P2002",
+      clientVersion: "test",
+      meta: { target: ["documentNumber"] },
+    });
     assert.equal(isDuplicateMovementIdempotencyKeyError(error), false);
   });
 

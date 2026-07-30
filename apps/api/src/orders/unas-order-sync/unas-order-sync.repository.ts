@@ -242,8 +242,7 @@ interface OrderStockMovementWithLines {
 }
 
 interface UnasOrderSyncTransaction
-  extends WarehouseLookupDatabase,
-    InventoryMovementDatabase {
+  extends WarehouseLookupDatabase, InventoryMovementDatabase {
   externalReference: {
     findUnique(args: unknown): Promise<ExternalReferenceRow | null>;
     create(args: unknown): Promise<unknown>;
@@ -861,7 +860,11 @@ export class UnasOrderSyncRepository extends Repository {
       // nélkül) korábban NEM számított "updated"-nek az összegzésben - ez
       // pontatlan volt, most már valódi készlethatás is "updated"-nek
       // számít.
-      if (newStatus !== existing.status || invoiceStatusChanged || deltaResult.changed) {
+      if (
+        newStatus !== existing.status ||
+        invoiceStatusChanged ||
+        deltaResult.changed
+      ) {
         updated = true;
       }
     }
@@ -1124,7 +1127,8 @@ export class UnasOrderSyncRepository extends Repository {
   ): Map<string, { sku: string; unit: string }> {
     const meta = new Map<string, { sku: string; unit: string }>();
     for (const line of existingLines) {
-      if (line.variantId) meta.set(line.variantId, { sku: line.sku, unit: "db" });
+      if (line.variantId)
+        meta.set(line.variantId, { sku: line.sku, unit: "db" });
     }
     for (const input of lineInputs) {
       if (input.variantId) {
@@ -1159,7 +1163,10 @@ export class UnasOrderSyncRepository extends Repository {
         referenceId: orderId,
         type: { in: ["SALE", "RETURN_IN"] },
       },
-      select: { type: true, lines: { select: { variantId: true, quantity: true } } },
+      select: {
+        type: true,
+        lines: { select: { variantId: true, quantity: true } },
+      },
     });
     // Sign convention (SALE=+1 "taken out", RETURN_IN=-1 "given back") lives
     // in common/stock-ledger.util.ts's sumOrderBookedOut - shared verbatim
@@ -1253,6 +1260,9 @@ export class UnasOrderSyncRepository extends Repository {
           sku: meta.sku,
           quantityDelta: delta.negated(),
           unit: meta.unit,
+          // Ez a flow kizárólag az UNAS-ból feloldott rendelési
+          // variantokat kezeli.
+          syncToUnas: true,
         });
       } else {
         // delta is negative: need to give back `abs(delta)`.
@@ -1261,6 +1271,7 @@ export class UnasOrderSyncRepository extends Repository {
           sku: meta.sku,
           quantityDelta: delta.negated(),
           unit: meta.unit,
+          syncToUnas: true,
         });
       }
     }

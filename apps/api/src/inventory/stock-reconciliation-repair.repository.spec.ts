@@ -23,6 +23,7 @@ interface FakeStockItem {
   warehouseId: string;
   onHand: Prisma.Decimal;
   sku: string;
+  catalogAuthority?: "UNAS" | "ACROPORA" | null;
 }
 
 interface FakeMovementLine {
@@ -91,11 +92,28 @@ class FakeDb {
         (row) =>
           (!args.where.id || row.id === args.where.id) &&
           (!args.where.variantId || row.variantId === args.where.variantId) &&
-          (!args.where.warehouseId || row.warehouseId === args.where.warehouseId),
+          (!args.where.warehouseId ||
+            row.warehouseId === args.where.warehouseId),
       );
-      return item ? { ...item, variant: { sku: item.sku } } : null;
+      return item
+        ? {
+            ...item,
+            variant: {
+              sku: item.sku,
+              product: {
+                catalogAuthority: item.catalogAuthority ?? "UNAS",
+                unasSnapshot: this.hasUnasLinkByVariant.has(item.variantId)
+                  ? { id: `snapshot-${item.variantId}` }
+                  : null,
+              },
+            },
+          }
+        : null;
     },
-    update: async (args: { where: { id: string }; data: { onHand: Prisma.Decimal } }) => {
+    update: async (args: {
+      where: { id: string };
+      data: { onHand: Prisma.Decimal };
+    }) => {
       const item = this.stockItems.find((row) => row.id === args.where.id)!;
       item.onHand = args.data.onHand;
       return item;
@@ -123,16 +141,26 @@ class FakeDb {
   stockMovementLine = {
     create: async () => ({}),
     findMany: async (args: {
-      where: { variantId: { in: string[] }; movement: { sourceWarehouseId: { in: string[] } } };
+      where: {
+        variantId: { in: string[] };
+        movement: { sourceWarehouseId: { in: string[] } };
+      };
     }) => {
       const variantIds = new Set(args.where.variantId.in);
       const warehouseIds = new Set(args.where.movement.sourceWarehouseId.in);
       return this.movementLines
-        .filter((line) => variantIds.has(line.variantId) && warehouseIds.has(line.sourceWarehouseId))
+        .filter(
+          (line) =>
+            variantIds.has(line.variantId) &&
+            warehouseIds.has(line.sourceWarehouseId),
+        )
         .map((line) => ({
           variantId: line.variantId,
           quantity: line.quantity,
-          movement: { type: line.type, sourceWarehouseId: line.sourceWarehouseId },
+          movement: {
+            type: line.type,
+            sourceWarehouseId: line.sourceWarehouseId,
+          },
         }));
     },
   };
@@ -146,6 +174,7 @@ class FakeDb {
           id: row.variantId,
           productId: `p-${row.variantId}`,
           product: {
+            catalogAuthority: row.catalogAuthority ?? "UNAS",
             unasSnapshot: this.hasUnasLinkByVariant.has(row.variantId)
               ? { reportedStock: row.onHand }
               : null,
@@ -157,7 +186,11 @@ class FakeDb {
 
   unasStockSyncOutbox = {
     updateMany: async (args: {
-      where: { variantId: string; warehouseId: string; status: { in: string[] } };
+      where: {
+        variantId: string;
+        warehouseId: string;
+        status: { in: string[] };
+      };
     }) => {
       let count = 0;
       for (const row of this.outboxRows) {
@@ -173,7 +206,12 @@ class FakeDb {
       return { count };
     },
     create: async (args: {
-      data: { variantId: string; warehouseId: string; targetOnHand: Prisma.Decimal; idempotencyKey: string };
+      data: {
+        variantId: string;
+        warehouseId: string;
+        targetOnHand: Prisma.Decimal;
+        idempotencyKey: string;
+      };
     }) => {
       const row = {
         id: nextId("outbox"),
@@ -187,7 +225,11 @@ class FakeDb {
       return { id: row.id };
     },
     findFirst: async (args: {
-      where: { variantId: string; warehouseId: string; status: { in: string[] } };
+      where: {
+        variantId: string;
+        warehouseId: string;
+        status: { in: string[] };
+      };
     }) => {
       const row = this.outboxRows.find(
         (candidate) =>
@@ -201,7 +243,9 @@ class FakeDb {
   };
 
   stockReconciliationRepair = {
-    create: async (args: { data: Omit<FakeRepairRow, "id" | "createdAt"> & { createdAt?: Date } }) => {
+    create: async (args: {
+      data: Omit<FakeRepairRow, "id" | "createdAt"> & { createdAt?: Date };
+    }) => {
       const row: FakeRepairRow = {
         id: nextId("repair"),
         createdAt: new Date(),
@@ -211,12 +255,16 @@ class FakeDb {
       return row;
     },
     findFirst: async (args: { where: { idempotencyKey: string } }) =>
-      this.repairRows.find((row) => row.idempotencyKey === args.where.idempotencyKey) ?? null,
+      this.repairRows.find(
+        (row) => row.idempotencyKey === args.where.idempotencyKey,
+      ) ?? null,
     findUnique: async (args: { where: { id: string } }) =>
       this.repairRows.find((row) => row.id === args.where.id) ?? null,
   };
 
-  async $transaction<T>(operation: (transaction: unknown) => Promise<T>): Promise<T> {
+  async $transaction<T>(
+    operation: (transaction: unknown) => Promise<T>,
+  ): Promise<T> {
     return operation(this);
   }
 }
@@ -230,10 +278,26 @@ function repositoryWith(db: FakeDb) {
 describe("StockReconciliationRepairRepository.applyLocalFromProvenLedger", () => {
   it("corrects StockItem.onHand to the proven ledger value, creates an outbox row, and persists an APPLIED audit row", async () => {
     const db = new FakeDb();
-    db.stockItems.push({ id: "si-1", variantId: "v1", warehouseId: "wh-1", onHand: d("999"), sku: "sku-1" });
+    db.stockItems.push({
+      id: "si-1",
+      variantId: "v1",
+      warehouseId: "wh-1",
+      onHand: d("999"),
+      sku: "sku-1",
+    });
     db.movementLines.push(
-      { variantId: "v1", quantity: d("10"), type: "PURCHASE_RECEIPT", sourceWarehouseId: "wh-1" },
-      { variantId: "v1", quantity: d("3"), type: "SALE", sourceWarehouseId: "wh-1" },
+      {
+        variantId: "v1",
+        quantity: d("10"),
+        type: "PURCHASE_RECEIPT",
+        sourceWarehouseId: "wh-1",
+      },
+      {
+        variantId: "v1",
+        quantity: d("3"),
+        type: "SALE",
+        sourceWarehouseId: "wh-1",
+      },
     );
     const repository = repositoryWith(db);
 
@@ -268,10 +332,56 @@ describe("StockReconciliationRepairRepository.applyLocalFromProvenLedger", () =>
     assert.equal(db.movementLines.length, 2); // only the two seeded ledger lines - none added
   });
 
+  it("repairs a local product without creating an UNAS outbox row", async () => {
+    const db = new FakeDb();
+    db.stockItems.push({
+      id: "si-local",
+      variantId: "v-local",
+      warehouseId: "wh-1",
+      onHand: d("999"),
+      sku: "local-sku-1",
+      catalogAuthority: "ACROPORA",
+    });
+    db.movementLines.push({
+      variantId: "v-local",
+      quantity: d("7"),
+      type: "PURCHASE_RECEIPT",
+      sourceWarehouseId: "wh-1",
+    });
+    const repository = repositoryWith(db);
+
+    const outcome = await repository.applyLocalFromProvenLedger({
+      variantId: "v-local",
+      warehouseId: "wh-1",
+      expectedCurrentOnHand: d("999"),
+      reason: "Helyi ledger-eltérés javítása",
+      actorUserId: "user-1",
+      idempotencyKey:
+        "RECONCILIATION_REPAIR:LOCAL_FROM_PROVEN_LEDGER:si-local:999",
+    });
+
+    assert.equal(outcome.status, "APPLIED");
+    assert.equal(outcome.afterOnHand, "7");
+    assert.equal(outcome.outboxId, null);
+    assert.equal(db.stockItems[0]!.onHand.toString(), "7");
+    assert.equal(db.outboxRows.length, 0);
+  });
+
   it("rejects (persisting a REJECTED audit row, no StockItem write) when the ledger is not provable", async () => {
     const db = new FakeDb();
-    db.stockItems.push({ id: "si-1", variantId: "v1", warehouseId: "wh-1", onHand: d("5"), sku: "sku-1" });
-    db.movementLines.push({ variantId: "v1", quantity: d("5"), type: "ADJUSTMENT", sourceWarehouseId: "wh-1" });
+    db.stockItems.push({
+      id: "si-1",
+      variantId: "v1",
+      warehouseId: "wh-1",
+      onHand: d("5"),
+      sku: "sku-1",
+    });
+    db.movementLines.push({
+      variantId: "v1",
+      quantity: d("5"),
+      type: "ADJUSTMENT",
+      sourceWarehouseId: "wh-1",
+    });
     const repository = repositoryWith(db);
 
     const outcome = await repository.applyLocalFromProvenLedger({
@@ -292,7 +402,13 @@ describe("StockReconciliationRepairRepository.applyLocalFromProvenLedger", () =>
 
   it("rejects with HISTORICAL_BASELINE_UNKNOWN-equivalent LEDGER_NOT_PROVABLE when there is no ledger movement at all", async () => {
     const db = new FakeDb();
-    db.stockItems.push({ id: "si-1", variantId: "v1", warehouseId: "wh-1", onHand: d("42"), sku: "sku-1" });
+    db.stockItems.push({
+      id: "si-1",
+      variantId: "v1",
+      warehouseId: "wh-1",
+      onHand: d("42"),
+      sku: "sku-1",
+    });
     // No movement lines at all - baseline-only StockItem.
     const repository = repositoryWith(db);
 
@@ -311,8 +427,19 @@ describe("StockReconciliationRepairRepository.applyLocalFromProvenLedger", () =>
 
   it("rejects with STALE_EXPECTED_CURRENT_VALUE when the caller's snapshot no longer matches current onHand", async () => {
     const db = new FakeDb();
-    db.stockItems.push({ id: "si-1", variantId: "v1", warehouseId: "wh-1", onHand: d("7"), sku: "sku-1" });
-    db.movementLines.push({ variantId: "v1", quantity: d("7"), type: "PURCHASE_RECEIPT", sourceWarehouseId: "wh-1" });
+    db.stockItems.push({
+      id: "si-1",
+      variantId: "v1",
+      warehouseId: "wh-1",
+      onHand: d("7"),
+      sku: "sku-1",
+    });
+    db.movementLines.push({
+      variantId: "v1",
+      quantity: d("7"),
+      type: "PURCHASE_RECEIPT",
+      sourceWarehouseId: "wh-1",
+    });
     const repository = repositoryWith(db);
 
     const outcome = await repository.applyLocalFromProvenLedger({
@@ -330,8 +457,19 @@ describe("StockReconciliationRepairRepository.applyLocalFromProvenLedger", () =>
 
   it("is a NOOP (no StockItem write, but still audited) when the ledger already matches onHand exactly", async () => {
     const db = new FakeDb();
-    db.stockItems.push({ id: "si-1", variantId: "v1", warehouseId: "wh-1", onHand: d("7"), sku: "sku-1" });
-    db.movementLines.push({ variantId: "v1", quantity: d("7"), type: "PURCHASE_RECEIPT", sourceWarehouseId: "wh-1" });
+    db.stockItems.push({
+      id: "si-1",
+      variantId: "v1",
+      warehouseId: "wh-1",
+      onHand: d("7"),
+      sku: "sku-1",
+    });
+    db.movementLines.push({
+      variantId: "v1",
+      quantity: d("7"),
+      type: "PURCHASE_RECEIPT",
+      sourceWarehouseId: "wh-1",
+    });
     const repository = repositoryWith(db);
 
     const outcome = await repository.applyLocalFromProvenLedger({
@@ -350,8 +488,19 @@ describe("StockReconciliationRepairRepository.applyLocalFromProvenLedger", () =>
 
   it("acquires the advisory lock (via $executeRaw) exactly once per call", async () => {
     const db = new FakeDb();
-    db.stockItems.push({ id: "si-1", variantId: "v1", warehouseId: "wh-1", onHand: d("999"), sku: "sku-1" });
-    db.movementLines.push({ variantId: "v1", quantity: d("7"), type: "PURCHASE_RECEIPT", sourceWarehouseId: "wh-1" });
+    db.stockItems.push({
+      id: "si-1",
+      variantId: "v1",
+      warehouseId: "wh-1",
+      onHand: d("999"),
+      sku: "sku-1",
+    });
+    db.movementLines.push({
+      variantId: "v1",
+      quantity: d("7"),
+      type: "PURCHASE_RECEIPT",
+      sourceWarehouseId: "wh-1",
+    });
     const repository = repositoryWith(db);
     await repository.applyLocalFromProvenLedger({
       variantId: "v1",
@@ -368,7 +517,13 @@ describe("StockReconciliationRepairRepository.applyLocalFromProvenLedger", () =>
 describe("StockReconciliationRepairRepository.applyRepublishLocalToUnas", () => {
   it("enqueues an outbox row targeting the current localOnHand and persists an APPLIED audit row", async () => {
     const db = new FakeDb();
-    db.stockItems.push({ id: "si-1", variantId: "v1", warehouseId: "wh-1", onHand: d("12"), sku: "sku-1" });
+    db.stockItems.push({
+      id: "si-1",
+      variantId: "v1",
+      warehouseId: "wh-1",
+      onHand: d("12"),
+      sku: "sku-1",
+    });
     db.hasUnasLinkByVariant.add("v1");
     const repository = repositoryWith(db);
 
@@ -389,7 +544,13 @@ describe("StockReconciliationRepairRepository.applyRepublishLocalToUnas", () => 
 
   it("rejects with MISSING_UNAS_LINK and creates no outbox row", async () => {
     const db = new FakeDb();
-    db.stockItems.push({ id: "si-1", variantId: "v1", warehouseId: "wh-1", onHand: d("12"), sku: "sku-1" });
+    db.stockItems.push({
+      id: "si-1",
+      variantId: "v1",
+      warehouseId: "wh-1",
+      onHand: d("12"),
+      sku: "sku-1",
+    });
     const repository = repositoryWith(db);
 
     const outcome = await repository.applyRepublishLocalToUnas({
@@ -407,9 +568,45 @@ describe("StockReconciliationRepairRepository.applyRepublishLocalToUnas", () => 
     assert.equal(db.outboxRows.length, 0);
   });
 
+  it("rejects republish for a local product even if the caller supplies a stale positive link hint", async () => {
+    const db = new FakeDb();
+    db.stockItems.push({
+      id: "si-local",
+      variantId: "v-local",
+      warehouseId: "wh-1",
+      onHand: d("12"),
+      sku: "local-sku-1",
+      catalogAuthority: "ACROPORA",
+    });
+    // Defensive corrupt/stale relation: authority remains decisive.
+    db.hasUnasLinkByVariant.add("v-local");
+    const repository = repositoryWith(db);
+
+    const outcome = await repository.applyRepublishLocalToUnas({
+      variantId: "v-local",
+      warehouseId: "wh-1",
+      hasUnasLink: true,
+      expectedCurrentOnHand: d("12"),
+      reason: "stale kliensadat ellenőrzése",
+      actorUserId: "user-1",
+      idempotencyKey: "k-republish-local",
+    });
+
+    assert.equal(outcome.status, "REJECTED");
+    assert.equal(outcome.rejectionCode, "MISSING_UNAS_LINK");
+    assert.equal(db.outboxRows.length, 0);
+  });
+
   it("rejects with ALREADY_QUEUED when a PENDING row already covers this exact pair", async () => {
     const db = new FakeDb();
-    db.stockItems.push({ id: "si-1", variantId: "v1", warehouseId: "wh-1", onHand: d("12"), sku: "sku-1" });
+    db.stockItems.push({
+      id: "si-1",
+      variantId: "v1",
+      warehouseId: "wh-1",
+      onHand: d("12"),
+      sku: "sku-1",
+    });
+    db.hasUnasLinkByVariant.add("v1");
     db.outboxRows.push({
       id: "existing-outbox",
       variantId: "v1",

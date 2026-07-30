@@ -14,6 +14,7 @@ import {
 import {
   hasPermission,
   PERMISSIONS,
+  type CatalogOption,
   type PurchaseInvoiceResult,
   type PurchaseInvoiceSource,
   type PurchaseProductSearchResult,
@@ -26,6 +27,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { inferCountryFromTaxNumber } from "@/components/customers/country-options";
 import { navIncomingInvoicesApi } from "@/lib/api/nav-incoming-invoices";
+import { productApi } from "@/lib/api/products";
 import { purchasingApi } from "@/lib/api/purchasing";
 import { suppliersApi } from "@/lib/api/suppliers";
 import { viesVatApi } from "@/lib/api/vies-vat";
@@ -40,6 +42,11 @@ interface InvoiceLineState {
   key: string;
   /** Nincs, ha a tétel nincs a terméktörzsben - ilyenkor a sourceDescription kötelező, és nincs UNAS-szinkron. */
   variantId: string | null;
+  createLocalProduct: {
+    name: string;
+    sku: string;
+    primaryCategoryId: string;
+  } | null;
   sku: string;
   productName: string;
   unit: string;
@@ -121,10 +128,14 @@ export function PurchaseInvoiceEuEditorPage() {
   const [note, setNote] = useState("");
 
   const [productSearch, setProductSearch] = useState("");
+  const [productSearchTargetKey, setProductSearchTargetKey] = useState<
+    string | null
+  >(null);
   const [productResults, setProductResults] = useState<
     PurchaseProductSearchResult[]
   >([]);
   const [searchingProducts, setSearchingProducts] = useState(false);
+  const [categoryOptions, setCategoryOptions] = useState<CatalogOption[]>([]);
   const [lines, setLines] = useState<InvoiceLineState[]>([]);
 
   const [submitting, setSubmitting] = useState(false);
@@ -181,6 +192,7 @@ export function PurchaseInvoiceEuEditorPage() {
             return {
               key: `nav-${index}-${line.lineNumber}`,
               variantId: null,
+              createLocalProduct: null,
               sku: "",
               productName: "",
               unit: line.unit,
@@ -237,6 +249,14 @@ export function PurchaseInvoiceEuEditorPage() {
   }, [productSearch, token]);
 
   useEffect(() => {
+    if (!canManage) return;
+    void productApi
+      .categoryOptions(token)
+      .then(setCategoryOptions)
+      .catch(() => setCategoryOptions([]));
+  }, [canManage, token]);
+
+  useEffect(() => {
     // Belföldi (HU_MANUAL/HU_NAV) számlánál nincs MNB-lekérdezés: a
     // pénznem mindig HUF, az árfolyam mező nem értelmezett.
     if (isDomestic) {
@@ -274,11 +294,32 @@ export function PurchaseInvoiceEuEditorPage() {
   }, [currency, invoiceDate, token, isDomestic]);
 
   const addLine = (product: PurchaseProductSearchResult) => {
+    if (productSearchTargetKey) {
+      setLines((previous) =>
+        previous.map((line) =>
+          line.key === productSearchTargetKey
+            ? {
+                ...line,
+                variantId: product.variantId,
+                createLocalProduct: null,
+                sku: product.sku,
+                productName: product.productName,
+                unit: product.unit,
+              }
+            : line,
+        ),
+      );
+      setProductSearchTargetKey(null);
+      setProductSearch("");
+      setProductResults([]);
+      return;
+    }
     setLines((previous) => [
       ...previous,
       {
         key: `${product.variantId}-${previous.length}-${Date.now()}`,
         variantId: product.variantId,
+        createLocalProduct: null,
         sku: product.sku,
         productName: product.productName,
         unit: product.unit,
@@ -301,6 +342,7 @@ export function PurchaseInvoiceEuEditorPage() {
       {
         key: `manual-${previous.length}-${Date.now()}`,
         variantId: null,
+        createLocalProduct: null,
         sku: "",
         productName: "",
         unit: "",
@@ -319,6 +361,29 @@ export function PurchaseInvoiceEuEditorPage() {
     );
   };
 
+  const beginExistingProductLink = (line: InvoiceLineState) => {
+    setProductSearchTargetKey(line.key);
+    setProductSearch(line.sourceDescription || line.productName);
+  };
+
+  const beginLocalProductCreation = (line: InvoiceLineState) => {
+    if (productSearchTargetKey === line.key) {
+      setProductSearchTargetKey(null);
+      setProductSearch("");
+      setProductResults([]);
+    }
+    updateLine(line.key, {
+      variantId: null,
+      sku: "",
+      productName: "",
+      createLocalProduct: {
+        name: line.sourceDescription,
+        sku: "",
+        primaryCategoryId: "",
+      },
+    });
+  };
+
   const updateOrderedQuantity = (key: string, value: number) => {
     // A rendelt mennyiség beírásakor automatikusan a tényleges (átvett)
     // mennyiséghez is bemásoljuk - eltérés esetén ezt utána külön
@@ -326,8 +391,14 @@ export function PurchaseInvoiceEuEditorPage() {
     updateLine(key, { orderedQuantity: value, actualQuantity: value });
   };
 
-  const removeLine = (key: string) =>
+  const removeLine = (key: string) => {
+    if (productSearchTargetKey === key) {
+      setProductSearchTargetKey(null);
+      setProductSearch("");
+      setProductResults([]);
+    }
     setLines((previous) => previous.filter((line) => line.key !== key));
+  };
 
   const totalNet = lines.reduce((sum, line) => sum + lineNet(line), 0);
   const effectiveCurrency = isDomestic ? "HUF" : currency.trim().toUpperCase();
@@ -405,7 +476,11 @@ export function PurchaseInvoiceEuEditorPage() {
       return;
     }
     for (const line of lines) {
-      if (!line.variantId && !line.sourceDescription.trim()) {
+      if (
+        !line.variantId &&
+        !line.createLocalProduct &&
+        !line.sourceDescription.trim()
+      ) {
         setError(
           "A terméktörzsben nem szereplő tételeknél a számlán szereplő megnevezés megadása kötelező.",
         );
@@ -414,6 +489,16 @@ export function PurchaseInvoiceEuEditorPage() {
       if (!line.unit.trim()) {
         setError("Az egység megadása minden tételnél kötelező.");
         return;
+      }
+      if (line.createLocalProduct) {
+        if (line.createLocalProduct.name.trim().length < 2) {
+          setError("Az új helyi termék neve legalább 2 karakter legyen.");
+          return;
+        }
+        if (!line.createLocalProduct.sku.trim()) {
+          setError("Az új helyi termék belső cikkszáma kötelező.");
+          return;
+        }
       }
     }
     setSubmitting(true);
@@ -435,6 +520,14 @@ export function PurchaseInvoiceEuEditorPage() {
         navIncomingInvoiceId: navInvoiceId,
         lines: lines.map((line) => ({
           variantId: line.variantId ?? undefined,
+          createLocalProduct: line.createLocalProduct
+            ? {
+                name: line.createLocalProduct.name.trim(),
+                sku: line.createLocalProduct.sku.trim().toUpperCase(),
+                primaryCategoryId:
+                  line.createLocalProduct.primaryCategoryId || undefined,
+              }
+            : undefined,
           sourceDescription: line.sourceDescription.trim() || undefined,
           orderedQuantity: line.orderedQuantity,
           actualQuantity: line.actualQuantity,
@@ -453,6 +546,9 @@ export function PurchaseInvoiceEuEditorPage() {
       // szinkron siker/hiba, amit meg kellene jeleníteni.
       setLastResult(result);
       setLines([]);
+      setProductSearchTargetKey(null);
+      setProductSearch("");
+      setProductResults([]);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -559,7 +655,7 @@ export function PurchaseInvoiceEuEditorPage() {
         <Alert
           variant="info"
           title={`Számla rögzítve: ${lastResult.detail.documentNumber}`}
-          description={`Készlet helyileg lekönyvelve ${lastResult.successCount} tételnél. A UNAS-szinkron a háttérben, ettől függetlenül fut - nyisd meg a számlát az egyes tételek szinkronállapotáért.`}
+          description={`Készlet helyileg lekönyvelve ${lastResult.successCount} tételnél. Létrejött ${lastResult.localProductCreatedCount} helyi termék; ${lastResult.unasQueuedCount} UNAS-termék készletszinkronja került sorba.`}
           action={
             <Button
               variant="secondary"
@@ -875,11 +971,27 @@ export function PurchaseInvoiceEuEditorPage() {
           <h2 className="font-semibold">Tételek</h2>
           <p className="mt-1 text-sm text-slate-500">
             Keresd meg a saját termékedet a számlán szereplő tétel alapján
-            (cikkszám vagy terméknév). Ha a tétel nincs a terméktörzsben, kézzel
-            is felvehető - ilyenkor a helyi készlet és a UNAS-szinkron nem
-            érinti.
+            (cikkszám vagy terméknév). Egy ismeretlen sor meglévő termékhez
+            kapcsolható, vagy készletezett helyi Acropora OS-termékként
+            létrehozható.
           </p>
           <div className="mt-4">
+            {productSearchTargetKey ? (
+              <div className="mb-2 flex items-center justify-between rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-800">
+                <span>A kiválasztott számlasorhoz keresel terméket.</span>
+                <button
+                  type="button"
+                  className="font-semibold hover:underline"
+                  onClick={() => {
+                    setProductSearchTargetKey(null);
+                    setProductSearch("");
+                    setProductResults([]);
+                  }}
+                >
+                  Mégse
+                </button>
+              </div>
+            ) : null}
             <Input
               aria-label="Termék keresése"
               value={productSearch}
@@ -898,9 +1010,22 @@ export function PurchaseInvoiceEuEditorPage() {
                     className="flex w-full items-center justify-between px-4 py-2 text-left text-sm hover:bg-slate-50"
                   >
                     <div>
-                      <p className="font-medium text-slate-900">
-                        {product.productName}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-slate-900">
+                          {product.productName}
+                        </p>
+                        <Badge
+                          variant={
+                            product.origin === "UNAS" ? "info" : "neutral"
+                          }
+                        >
+                          {product.origin === "UNAS"
+                            ? "UNAS-termék"
+                            : product.origin === "LOCAL"
+                              ? "Helyi termék"
+                              : "Ismeretlen eredet"}
+                        </Badge>
+                      </div>
                       <p className="font-mono text-xs text-slate-500">
                         {product.sku}
                       </p>
@@ -936,7 +1061,18 @@ export function PurchaseInvoiceEuEditorPage() {
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      {line.variantId ? (
+                      {line.createLocalProduct ? (
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-slate-900">
+                            {line.createLocalProduct.name ||
+                              line.sourceDescription ||
+                              "Új helyi termék"}
+                          </p>
+                          <Badge variant="info">
+                            Új helyi Acropora OS-termék
+                          </Badge>
+                        </div>
+                      ) : line.variantId ? (
                         <>
                           <p className="text-sm font-semibold text-slate-900">
                             {line.productName}
@@ -962,10 +1098,108 @@ export function PurchaseInvoiceEuEditorPage() {
                       Eltávolítás
                     </button>
                   </div>
+                  {!line.variantId && !line.createLocalProduct ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => beginExistingProductLink(line)}
+                      >
+                        Kapcsolás meglévő termékhez
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => beginLocalProductCreation(line)}
+                      >
+                        Új helyi termék létrehozása
+                      </Button>
+                    </div>
+                  ) : null}
+                  {line.createLocalProduct ? (
+                    <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 p-3">
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <label className="text-xs text-slate-600">
+                          Terméknév
+                          <input
+                            aria-label="Új helyi termék neve"
+                            value={line.createLocalProduct.name}
+                            onChange={(event) =>
+                              updateLine(line.key, {
+                                createLocalProduct: {
+                                  ...line.createLocalProduct!,
+                                  name: event.target.value,
+                                },
+                              })
+                            }
+                            className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                          />
+                        </label>
+                        <label className="text-xs text-slate-600">
+                          Belső cikkszám
+                          <input
+                            aria-label="Új helyi termék cikkszáma"
+                            value={line.createLocalProduct.sku}
+                            onChange={(event) =>
+                              updateLine(line.key, {
+                                createLocalProduct: {
+                                  ...line.createLocalProduct!,
+                                  sku: event.target.value.toUpperCase(),
+                                },
+                              })
+                            }
+                            className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 font-mono text-sm"
+                          />
+                        </label>
+                        <label className="text-xs text-slate-600">
+                          Kategória (opcionális)
+                          <select
+                            aria-label="Új helyi termék kategóriája"
+                            value={line.createLocalProduct.primaryCategoryId}
+                            onChange={(event) =>
+                              updateLine(line.key, {
+                                createLocalProduct: {
+                                  ...line.createLocalProduct!,
+                                  primaryCategoryId: event.target.value,
+                                },
+                              })
+                            }
+                            className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm"
+                          >
+                            <option value="">Nincs kategória</option>
+                            {categoryOptions.map((option) => (
+                              <option key={option.id} value={option.id}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between gap-3">
+                        <p className="text-xs text-sky-800">
+                          Készletezett fizikai termék lesz, UNAS-szinkron
+                          nélkül.
+                        </p>
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-slate-600 hover:underline"
+                          onClick={() =>
+                            updateLine(line.key, {
+                              createLocalProduct: null,
+                            })
+                          }
+                        >
+                          Mégse
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="mt-2">
                     <label className="text-xs text-slate-500">
                       Megnevezés a számlán
-                      {line.variantId ? " (opcionális)" : " (kötelező)"}
+                      {line.variantId || line.createLocalProduct
+                        ? " (opcionális)"
+                        : " (kötelező)"}
                       <input
                         value={line.sourceDescription}
                         onChange={(event) =>
