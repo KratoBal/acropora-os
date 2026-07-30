@@ -2,12 +2,31 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  NavOnlineInvoiceClient,
   parseQueryInvoiceDataResponse,
   parseQueryInvoiceDigestResponse,
+  type NavSoftwareData,
+  type NavTechnicalUser,
 } from "./nav-online-invoice.client.js";
 import { NavApiError } from "./nav-xml.util.js";
 
 const HEADER = `<?xml version="1.0" encoding="UTF-8"?>`;
+const TECHNICAL_USER: NavTechnicalUser = {
+  login: "technical-user",
+  password: "secret",
+  taxNumber: "23916229",
+  signKey: "sign-key",
+};
+const SOFTWARE: NavSoftwareData = {
+  softwareId: "ACROPORAOS00000001",
+  softwareName: "Acropora OS",
+  softwareOperation: "ONLINE_SERVICE",
+  softwareMainVersion: "1.0",
+  softwareDevName: "Acropora Kft.",
+  softwareDevContact: "info@acropora.hu",
+  softwareDevCountryCode: "HU",
+  softwareDevTaxNumber: "23916229",
+};
 
 describe("parseQueryInvoiceDigestResponse", () => {
   it("parses a digest page with multiple invoices", () => {
@@ -94,5 +113,43 @@ describe("parseQueryInvoiceDataResponse", () => {
       (error: unknown) =>
         error instanceof NavApiError && error.code === "API_REJECTED",
     );
+  });
+});
+
+describe("NavOnlineInvoiceClient.queryInvoiceData", () => {
+  it("sends only the eight-digit supplier taxpayer id to NAV", async () => {
+    class CapturingClient extends NavOnlineInvoiceClient {
+      requestBody = "";
+
+      protected override request(_input: string, init: RequestInit) {
+        this.requestBody = String(init.body);
+        return Promise.resolve(
+          new Response(
+            `${HEADER}<QueryInvoiceDataResponse>` +
+              `<result><funcCode>OK</funcCode></result>` +
+              `<invoiceDataResult>` +
+              `<compressedContentIndicator>false</compressedContentIndicator>` +
+              `</invoiceDataResult>` +
+              `</QueryInvoiceDataResponse>`,
+            { status: 200 },
+          ),
+        );
+      }
+    }
+
+    const client = new CapturingClient();
+    await client.queryInvoiceData(
+      "TESZT-2026-001",
+      "INBOUND",
+      "32435119-2-43",
+      TECHNICAL_USER,
+      SOFTWARE,
+    );
+
+    assert.match(
+      client.requestBody,
+      /<supplierTaxNumber>32435119<\/supplierTaxNumber>/,
+    );
+    assert.doesNotMatch(client.requestBody, /32435119-2-43/);
   });
 });
