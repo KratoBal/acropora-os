@@ -32,6 +32,19 @@ const OVERLAP_MS = 120_000;
 const MAX_WINDOW_MS = 30 * 24 * 60 * 60_000;
 const MAX_PAGES = 50;
 
+function hasParsedLines(row: { parsedData: unknown }): boolean {
+  if (
+    !row.parsedData ||
+    typeof row.parsedData !== "object" ||
+    Array.isArray(row.parsedData)
+  )
+    return false;
+  return (
+    Array.isArray((row.parsedData as { lines?: unknown }).lines) &&
+    (row.parsedData as { lines: unknown[] }).lines.length > 0
+  );
+}
+
 @Injectable()
 export class NavIncomingInvoiceService {
   constructor(
@@ -54,7 +67,15 @@ export class NavIncomingInvoiceService {
   async detail(id: string): Promise<NavIncomingInvoiceDetail> {
     const row = await this.repository.findById(id);
     if (!row) throw new NotFoundException("A NAV számla nem található.");
-    if (row.status === "NEW" || row.status === "ERROR") {
+    // A korábbi parser a szabványos lineNetAmountData wrapper miatt üres
+    // tétellistát tudott DATA_FETCHED állapotban elmenteni. Az ilyen
+    // rekordokat egyszer újrakérjük, hogy a javítás deployja után a már
+    // megnyitott számlák is automatikusan helyreálljanak.
+    if (
+      row.status === "NEW" ||
+      row.status === "ERROR" ||
+      (row.status === "DATA_FETCHED" && !hasParsedLines(row))
+    ) {
       try {
         const credentials = await this.credentials.resolve();
         const dataResult = await this.client.queryInvoiceData(
@@ -74,6 +95,11 @@ export class NavIncomingInvoiceService {
           dataResult.compressed,
         );
         const parsed = parseNavInvoiceData(businessXml);
+        if (parsed.lines.length === 0)
+          throw new NavApiError(
+            "RESPONSE_SHAPE_INVALID",
+            "A NAV invoiceData nem tartalmaz feldolgozható tételsort.",
+          );
         const stored: StoredNavInvoiceParsedData = {
           ...parsed,
           suggestedVatRatePercent: suggestedVatRatePercent(parsed.lines),

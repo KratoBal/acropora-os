@@ -12,7 +12,7 @@ import type { NavIncomingInvoiceRow } from "./nav-incoming-invoice.types.js";
 function sampleInvoiceXml(): string {
   return (
     `<?xml version="1.0" encoding="UTF-8"?>` +
-    `<Invoice><invoiceMain><invoice>` +
+    `<InvoiceData><invoiceNumber>SZLA-2026-001</invoiceNumber><invoiceIssueDate>2026-07-24</invoiceIssueDate><completenessIndicator>false</completenessIndicator><invoiceMain><invoice>` +
     `<invoiceHead>` +
     `<supplierInfo>` +
     `<supplierTaxNumber><taxpayerId>87654321</taxpayerId><vatCode>2</vatCode><countyCode>13</countyCode></supplierTaxNumber>` +
@@ -21,9 +21,9 @@ function sampleInvoiceXml(): string {
     `<invoiceDetail><currencyCode>HUF</currencyCode></invoiceDetail>` +
     `</invoiceHead>` +
     `<invoiceLines>` +
-    `<line><lineNumber>1</lineNumber><lineDescription>Akvárium szűrő</lineDescription><quantity>1</quantity><unitOfMeasure>PIECE</unitOfMeasure><unitPrice>15000</unitPrice><lineAmountsNormal><lineNetAmount>15000</lineNetAmount><lineVatRate><vatPercentage>0.27</vatPercentage></lineVatRate></lineAmountsNormal></line>` +
+    `<line><lineNumber>1</lineNumber><lineDescription>Akvárium szűrő</lineDescription><quantity>1</quantity><unitOfMeasure>PIECE</unitOfMeasure><unitPrice>15000</unitPrice><lineAmountsNormal><lineNetAmountData><lineNetAmount>15000</lineNetAmount><lineNetAmountHUF>15000</lineNetAmountHUF></lineNetAmountData><lineVatRate><vatPercentage>0.27</vatPercentage></lineVatRate></lineAmountsNormal></line>` +
     `</invoiceLines>` +
-    `</invoice></invoiceMain></Invoice>`
+    `</invoice></invoiceMain></InvoiceData>`
   );
 }
 
@@ -204,7 +204,15 @@ describe("NavIncomingInvoiceService.detail", () => {
       parsedData: {
         supplierName: "Akvarisztika Kft.",
         currency: "HUF",
-        lines: [],
+        lines: [
+          {
+            lineNumber: 1,
+            description: "Akvárium szűrő",
+            quantity: "1",
+            unit: "db",
+            lineNetAmount: "15000",
+          },
+        ],
       },
     });
     let queryInvoiceDataCalled = false;
@@ -221,6 +229,51 @@ describe("NavIncomingInvoiceService.detail", () => {
     assert.equal(queryInvoiceDataCalled, false);
   });
 
+  it("refetches a DATA_FETCHED row whose cached line list is empty", async () => {
+    const row = baseRow({
+      status: "DATA_FETCHED",
+      parsedData: {
+        supplierName: "Akvarisztika Kft.",
+        currency: "HUF",
+        lines: [],
+      },
+    });
+    const refreshedRow = baseRow({
+      status: "DATA_FETCHED",
+      parsedData: {
+        supplierName: "Akvarisztika Kft.",
+        currency: "HUF",
+        lines: [
+          {
+            lineNumber: 1,
+            description: "Akvárium szűrő",
+            quantity: "1",
+            unit: "db",
+            lineNetAmount: "15000",
+          },
+        ],
+      },
+    });
+    let queryInvoiceDataCalled = false;
+    const { service } = buildService({
+      row,
+      refreshedRow,
+      queryInvoiceData: async () => {
+        queryInvoiceDataCalled = true;
+        return {
+          invoiceDataBase64: Buffer.from(sampleInvoiceXml(), "utf8").toString(
+            "base64",
+          ),
+          compressed: false,
+        };
+      },
+    });
+
+    const detail = await service.detail("nav-invoice-1");
+    assert.equal(queryInvoiceDataCalled, true);
+    assert.equal(detail.lines.length, 1);
+  });
+
   it("marks the row as ERROR when queryInvoiceData fails", async () => {
     const row = baseRow({ status: "NEW" });
     const { service, getMarkedErrorCode } = buildService({
@@ -232,6 +285,31 @@ describe("NavIncomingInvoiceService.detail", () => {
 
     await assert.rejects(() => service.detail("nav-invoice-1"));
     assert.equal(getMarkedErrorCode(), "NAV_INVOICE_DATA_FETCH_FAILED");
+  });
+
+  it("does not cache a successful-looking invoiceData response with no parsable lines", async () => {
+    const row = baseRow({ status: "NEW" });
+    const xmlWithoutLines =
+      `<InvoiceData><invoiceNumber>SZLA-2026-001</invoiceNumber>` +
+      `<invoiceIssueDate>2026-07-24</invoiceIssueDate>` +
+      `<completenessIndicator>false</completenessIndicator>` +
+      `<invoiceMain><invoice><invoiceHead><supplierInfo>` +
+      `<supplierName>Akvarisztika Kft.</supplierName>` +
+      `</supplierInfo><invoiceDetail><currencyCode>HUF</currencyCode>` +
+      `</invoiceDetail></invoiceHead></invoice></invoiceMain></InvoiceData>`;
+    const { service, getMarkedErrorCode, getSavedParsedData } = buildService({
+      row,
+      queryInvoiceData: async () => ({
+        invoiceDataBase64: Buffer.from(xmlWithoutLines, "utf8").toString(
+          "base64",
+        ),
+        compressed: false,
+      }),
+    });
+
+    await assert.rejects(() => service.detail("nav-invoice-1"));
+    assert.equal(getSavedParsedData(), undefined);
+    assert.equal(getMarkedErrorCode(), "RESPONSE_SHAPE_INVALID");
   });
 
   it("decodes gzip-compressed invoice data", async () => {

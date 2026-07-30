@@ -11,7 +11,10 @@ import { decodeInvoiceDataXml, parseXml } from "./nav-xml.util.js";
 function sampleInvoiceXml(): string {
   return (
     `<?xml version="1.0" encoding="UTF-8"?>` +
-    `<Invoice>` +
+    `<InvoiceData>` +
+    `<invoiceNumber>FM-2026-001</invoiceNumber>` +
+    `<invoiceIssueDate>2026-07-24</invoiceIssueDate>` +
+    `<completenessIndicator>false</completenessIndicator>` +
     `<invoiceMain><invoice>` +
     `<invoiceHead>` +
     `<supplierInfo>` +
@@ -34,7 +37,7 @@ function sampleInvoiceXml(): string {
     `<quantity>2</quantity>` +
     `<unitOfMeasure>PIECE</unitOfMeasure>` +
     `<unitPrice>8000</unitPrice>` +
-    `<lineAmountsNormal><lineNetAmount>16000</lineNetAmount><lineVatRate><vatPercentage>0.27</vatPercentage></lineVatRate></lineAmountsNormal>` +
+    `<lineAmountsNormal><lineNetAmountData><lineNetAmount>16000</lineNetAmount><lineNetAmountHUF>16000</lineNetAmountHUF></lineNetAmountData><lineVatRate><vatPercentage>0.27</vatPercentage></lineVatRate></lineAmountsNormal>` +
     `</line>` +
     `<line>` +
     `<lineNumber>2</lineNumber>` +
@@ -42,11 +45,11 @@ function sampleInvoiceXml(): string {
     `<quantity>1</quantity>` +
     `<unitOfMeasureOwn>alkalom</unitOfMeasureOwn>` +
     `<unitPrice>3000</unitPrice>` +
-    `<lineAmountsNormal><lineNetAmount>3000</lineNetAmount><lineVatRate><vatPercentage>0.27</vatPercentage></lineVatRate></lineAmountsNormal>` +
+    `<lineAmountsNormal><lineNetAmountData><lineNetAmount>3000</lineNetAmount><lineNetAmountHUF>3000</lineNetAmountHUF></lineNetAmountData><lineVatRate><vatPercentage>0.27</vatPercentage></lineVatRate></lineAmountsNormal>` +
     `</line>` +
     `</invoiceLines>` +
     `</invoice></invoiceMain>` +
-    `</Invoice>`
+    `</InvoiceData>`
   );
 }
 
@@ -71,6 +74,7 @@ describe("parseNavInvoiceData", () => {
     assert.equal(parsed.lines.length, 2);
     assert.equal(parsed.lines[0]?.description, "Tengeri só 25kg");
     assert.equal(parsed.lines[0]?.unit, "db");
+    assert.equal(parsed.lines[0]?.lineNetAmount, "16000");
     assert.equal(parsed.lines[0]?.vatRatePercent, "27");
     assert.equal(parsed.lines[1]?.unit, "alkalom");
   });
