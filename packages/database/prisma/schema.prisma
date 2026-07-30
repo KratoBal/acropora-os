@@ -79,6 +79,18 @@ enum NavIncomingInvoiceStatus {
   ERROR
 }
 
+enum NavCredentialMode {
+  ENV_FALLBACK
+  DATABASE
+  DISABLED
+}
+
+enum NavVerificationStatus {
+  NEVER
+  SUCCESS
+  FAILED
+}
+
 enum StockMovementType {
   PURCHASE_RECEIPT
   SALE
@@ -353,14 +365,15 @@ model User {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  sessions               Session[]
-  auditLogs              AuditLog[]
-  domainEvents           DomainEvent[]
-  stockMovements         StockMovement[]
-  startedInventoryCounts InventoryCount[]
-  posSales               SalesOrder[]
-  createdPurchaseInvoices PurchaseInvoice[]
-  unasCredentialsUpdated UnasConnectionSetting[] @relation("UnasCredentialUpdatedBy")
+  sessions                   Session[]
+  auditLogs                  AuditLog[]
+  domainEvents               DomainEvent[]
+  stockMovements             StockMovement[]
+  startedInventoryCounts     InventoryCount[]
+  posSales                   SalesOrder[]
+  createdPurchaseInvoices    PurchaseInvoice[]
+  unasCredentialsUpdated     UnasConnectionSetting[]     @relation("UnasCredentialUpdatedBy")
+  navCredentialsUpdated      NavConnectionSetting[]      @relation("NavCredentialUpdatedBy")
   szamlazzCredentialsUpdated SzamlazzConnectionSetting[] @relation("SzamlazzCredentialUpdatedBy")
   stockReconciliationRepairs StockReconciliationRepair[]
 
@@ -435,17 +448,17 @@ model ProductVariant {
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
-  product             Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
-  barcodes            ProductBarcode[]
-  supplierProducts    SupplierProduct[]
-  stockItems          StockItem[]
-  movementLines       StockMovementLine[]
-  salesOrderLines     SalesOrderLine[]
-  purchaseLines       PurchaseOrderLine[]
-  receiptLines        GoodsReceiptLine[]
-  purchaseInvoiceLines PurchaseInvoiceLine[]
-  extension           ProductExtension?
-  inventoryCountLines InventoryCountLine[]
+  product                    Product                     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  barcodes                   ProductBarcode[]
+  supplierProducts           SupplierProduct[]
+  stockItems                 StockItem[]
+  movementLines              StockMovementLine[]
+  salesOrderLines            SalesOrderLine[]
+  purchaseLines              PurchaseOrderLine[]
+  receiptLines               GoodsReceiptLine[]
+  purchaseInvoiceLines       PurchaseInvoiceLine[]
+  extension                  ProductExtension?
+  inventoryCountLines        InventoryCountLine[]
   unasStockSyncOutboxEntries UnasStockSyncOutbox[]
   stockReconciliationRepairs StockReconciliationRepair[]
 
@@ -660,33 +673,33 @@ model BrandResolutionReview {
 }
 
 model Supplier {
-  id         String   @id @default(cuid())
-  code       String   @unique
-  name       String
+  id                 String   @id @default(cuid())
+  code               String   @unique
+  name               String
   /// EU-s beszállítónál a közösségi adószám (pl. "DE123456789"), belföldinél a magyar adószám; opcionális.
-  taxNumber  String?
+  taxNumber          String?
   /// ISO 3166-1 alpha-2 országkód; a "HU"-tól eltérő érték jelöli az EU-n belüli beszerzést.
-  country    String   @default("HU") @db.VarChar(2)
-  email      String?
-  phone      String?
+  country            String   @default("HU") @db.VarChar(2)
+  email              String?
+  phone              String?
   /// EU-s (nem "HU") beszállítónál a nemzetközi bankszámlaszám.
-  iban              String?
+  iban               String?
   /// EU-s (nem "HU") beszállítónál a bank SWIFT/BIC kódja.
-  swiftCode         String?
+  swiftCode          String?
   /// Belföldi ("HU") beszállítónál a hazai formátumú bankszámlaszám.
-  bankAccountNumber String?
+  bankAccountNumber  String?
   /// Kapcsolattartó neve, mindkét beszállítói körnél.
   contactPersonName  String?
   contactPersonPhone String?
   contactPersonEmail String?
   /// Cím adatok; a "country" mező (fent) az irányadó országkód, itt nincs külön tárolva.
-  postalCode   String?
-  city         String?
-  addressLine1 String?
-  addressLine2 String?
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  postalCode         String?
+  city               String?
+  addressLine1       String?
+  addressLine2       String?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   products              SupplierProduct[]
   purchaseOrders        PurchaseOrder[]
@@ -723,16 +736,16 @@ model Warehouse {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  locations            WarehouseLocation[]
-  stockItems           StockItem[]
-  sourceMovements      StockMovement[]     @relation("MovementSourceWarehouse")
-  targetMovements      StockMovement[]     @relation("MovementTargetWarehouse")
-  purchaseOrders       PurchaseOrder[]
-  goodsReceipts        GoodsReceipt[]
-  purchaseInvoices     PurchaseInvoice[]
-  defaultForExtensions ProductExtension[]
-  inventoryCounts      InventoryCount[]
-  salesOrders          SalesOrder[]
+  locations                  WarehouseLocation[]
+  stockItems                 StockItem[]
+  sourceMovements            StockMovement[]             @relation("MovementSourceWarehouse")
+  targetMovements            StockMovement[]             @relation("MovementTargetWarehouse")
+  purchaseOrders             PurchaseOrder[]
+  goodsReceipts              GoodsReceipt[]
+  purchaseInvoices           PurchaseInvoice[]
+  defaultForExtensions       ProductExtension[]
+  inventoryCounts            InventoryCount[]
+  salesOrders                SalesOrder[]
   unasStockSyncOutboxEntries UnasStockSyncOutbox[]
   stockReconciliationRepairs StockReconciliationRepair[]
 }
@@ -842,9 +855,9 @@ model StockItem {
   reserved    Decimal  @default(0) @db.Decimal(19, 6)
   updatedAt   DateTime @updatedAt
 
-  variant   ProductVariant     @relation(fields: [variantId], references: [id], onDelete: Cascade)
-  warehouse Warehouse          @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
-  location  WarehouseLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  variant               ProductVariant              @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  warehouse             Warehouse                   @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  location              WarehouseLocation?          @relation(fields: [locationId], references: [id], onDelete: SetNull)
   reconciliationRepairs StockReconciliationRepair[]
 
   @@unique([variantId, warehouseId, locationId, lotId])
@@ -900,56 +913,56 @@ enum StockReconciliationRepairStatus {
 /// dryRun NINCS mezőként - a dry-run futás definíció szerint sosem jut el
 /// idáig (lásd a service doc-commentjét).
 model StockReconciliationRepair {
-  id         String                           @id @default(cuid())
-  repairType StockReconciliationRepairType
-  status     StockReconciliationRepairStatus
+  id                    String                          @id @default(cuid())
+  repairType            StockReconciliationRepairType
+  status                StockReconciliationRepairStatus
   /// Nullable: egy jövőbeli baseline-típus (l. StockReconciliationRepairType
   /// doc-comment) olyan variánst is érinthetne, aminek MÉG nincs StockItem
   /// sora - a jelenlegi két típus (A, B) mindig egy már létező StockItem-re
   /// vonatkozik, tehát ezeknél gyakorlatilag mindig kitöltött.
-  stockItemId String?
-  variantId   String
-  warehouseId String
+  stockItemId           String?
+  variantId             String
+  warehouseId           String
   /// Szerveroldalon, a munkamenetből feloldott, sosem a kliens által
   /// küldött mezőből - lásd stock-reconciliation-repair.controller.ts.
-  actorUserId String
-  reason      String
+  actorUserId           String
+  reason                String
   /// `RECONCILIATION_REPAIR:<repairType>:<stockItemId>:<expectedCurrentOnHand>`
   /// - lásd a service doc-commentjét a pontos indoklásért.
-  idempotencyKey        String  @unique
-  expectedCurrentOnHand Decimal @db.Decimal(19, 6)
+  idempotencyKey        String                          @unique
+  expectedCurrentOnHand Decimal                         @db.Decimal(19, 6)
   /// Null egy REJECTED sornál (sosem olvasta újra zárolás alatt, mert a
   /// zárolás előtti ellenőrzés már elutasította).
-  beforeOnHand         Decimal? @db.Decimal(19, 6)
+  beforeOnHand          Decimal?                        @db.Decimal(19, 6)
   /// Null egy REJECTED sornál (nem történt módosítás). Egy NOOP sornál
   /// SZÁNDÉKOSAN NEM null, hanem ugyanaz az érték, mint beforeOnHand - a
   /// "semmi nem változott, mert a ledger már egyezett" tény önmagában is
   /// auditálandó adat, nem csak "nincs adat".
-  afterOnHand          Decimal? @db.Decimal(19, 6)
+  afterOnHand           Decimal?                        @db.Decimal(19, 6)
   /// A reconciliation által számított, bizonyított ledger-elméleti érték a
   /// döntés pillanatában - null, ha nem volt bizonyítható (ez maga a
   /// leggyakoribb REJECTED-ok).
-  ledgerExpectedOnHand Decimal? @db.Decimal(19, 6)
+  ledgerExpectedOnHand  Decimal?                        @db.Decimal(19, 6)
   /// Ehhez a két repair-típushoz sosem jön létre StockMovement (lásd a
   /// repairType doc-commentjét: "ne hozzon létre normál üzleti
   /// StockMovementet") - a mező egy jövőbeli baseline-típushoz van
   /// fenntartva.
-  movementId String?
+  movementId            String?
   /// A REPUBLISH_LOCAL_TO_UNAS által létrehozott (vagy a
   /// LOCAL_FROM_PROVEN_LEDGER által, ha a helyi érték változott,
   /// szintúgy létrehozott) UnasStockSyncOutbox sor azonosítója.
-  outboxId String?
+  outboxId              String?
   /// Csak technikai, nem-érzékeny mezők (pl. a reconciliation adott
   /// pillanatban számított teljes állapota) - sosem rendelési/vevői adat.
-  requestDetail Json?
-  resultDetail  Json?
-  createdAt     DateTime  @default(now())
-  completedAt   DateTime?
+  requestDetail         Json?
+  resultDetail          Json?
+  createdAt             DateTime                        @default(now())
+  completedAt           DateTime?
 
-  actor     User            @relation(fields: [actorUserId], references: [id])
-  variant   ProductVariant  @relation(fields: [variantId], references: [id])
-  warehouse Warehouse       @relation(fields: [warehouseId], references: [id])
-  stockItem StockItem?      @relation(fields: [stockItemId], references: [id], onDelete: SetNull)
+  actor     User           @relation(fields: [actorUserId], references: [id])
+  variant   ProductVariant @relation(fields: [variantId], references: [id])
+  warehouse Warehouse      @relation(fields: [warehouseId], references: [id])
+  stockItem StockItem?     @relation(fields: [stockItemId], references: [id], onDelete: SetNull)
 
   @@index([variantId, warehouseId])
   @@index([status, createdAt])
@@ -1198,12 +1211,12 @@ model InventoryCount {
 }
 
 model InventoryCountLine {
-  id               String                        @id @default(cuid())
+  id               String                       @id @default(cuid())
   inventoryCountId String
   variantId        String
-  expectedQty      Decimal                        @db.Decimal(19, 6)
-  countedQty       Decimal?                       @db.Decimal(19, 6)
-  syncStatus       InventoryCountLineSyncStatus   @default(PENDING)
+  expectedQty      Decimal                      @db.Decimal(19, 6)
+  countedQty       Decimal?                     @db.Decimal(19, 6)
+  syncStatus       InventoryCountLineSyncStatus @default(PENDING)
   syncError        String?
 
   inventoryCount InventoryCount @relation(fields: [inventoryCountId], references: [id], onDelete: Cascade)
@@ -1258,32 +1271,32 @@ model CustomerAddress {
 }
 
 model SalesOrder {
-  id               String            @id @default(cuid())
-  orderNumber      String            @unique
-  customerId       String?
-  channel          SalesChannel
-  status           SalesOrderStatus  @default(DRAFT)
-  currency         String            @default("HUF") @db.VarChar(3)
-  totalNet         Decimal           @default(0) @db.Decimal(19, 4)
-  totalTax         Decimal           @default(0) @db.Decimal(19, 4)
-  totalGross       Decimal           @default(0) @db.Decimal(19, 4)
+  id                String             @id @default(cuid())
+  orderNumber       String             @unique
+  customerId        String?
+  channel           SalesChannel
+  status            SalesOrderStatus   @default(DRAFT)
+  currency          String             @default("HUF") @db.VarChar(3)
+  totalNet          Decimal            @default(0) @db.Decimal(19, 4)
+  totalTax          Decimal            @default(0) @db.Decimal(19, 4)
+  totalGross        Decimal            @default(0) @db.Decimal(19, 4)
   /// Melyik raktárból ment/megy ki az áru (POS és UNAS webshop rendeléseknél is kitöltött).
-  warehouseId      String?
+  warehouseId       String?
   /// A pénztárt kezelő felhasználó (POS eladásoknál).
-  soldById         String?
+  soldById          String?
   /// A kiegyenlítés módja (jelenleg csak POS eladásoknál kötelező).
-  paymentMethod    PosPaymentMethod?
+  paymentMethod     PosPaymentMethod?
   /// A UNAS-oldali Invoice.Status (getOrder API) legutóbb szinkronizált,
   /// read-only tükrözése - lásd UnasInvoiceStatus doc-comment. Null = nem
   /// UNAS-eredetű rendelés, vagy még nem érkezett hozzá UNAS-szinkron. Az
   /// Acropora OS ezt sosem írja vissza a UNAS-ba, és nem is kezdeményez
   /// belőle számlázást - lásd docs/ACROPORA-OS-MASTER-MILESTONE-PLAN.md
   /// "Kimenő számlázás architektúrája".
-  unasInvoiceStatus    UnasInvoiceStatus?
+  unasInvoiceStatus UnasInvoiceStatus?
   /// Webshop (UNAS) rendeléseknél a vásárló neve; nincs még Customer modul,
   /// ezért csak megjelenítésre tárolt sima szöveg, nem kapcsolt entitás.
-  buyerName        String?
-  buyerEmail       String?
+  buyerName         String?
+  buyerEmail        String?
   /// A UNAS Customer.Addresses.Invoice (számlázási cím) read-only
   /// tükrözése - ugyanaz a "nincs még Customer modul" indok, mint
   /// buyerName/buyerEmail esetén. Kizárólag megjelenítésre/riportálásra
@@ -1291,23 +1304,23 @@ model SalesOrder {
   /// partnerNévhez/adószámhoz szolgál - az Acropora OS ezekből nem épít
   /// számlakérést. adószám nélküli (magánszemély) vevőnél buyerTaxNumber
   /// null.
-  buyerTaxNumber   String?
+  buyerTaxNumber    String?
   /// UNAS Customer.Addresses.Invoice.EUTaxNumber - közösségi adószám,
   /// megjelenítésre/riportálásra tükrözve.
-  buyerEuTaxNumber String?
+  buyerEuTaxNumber  String?
   /// UNAS Customer.Addresses.Invoice.CustomerType (private/company/
   /// other_customer_without_tax_number) tükrözése - megjelenítésre és a
   /// magánszemély/cég megkülönböztetésre.
   buyerCustomerType String?
-  buyerCountryCode String?
-  buyerZip         String?
-  buyerCity        String?
-  buyerAddress     String?
-  orderedAt        DateTime?
-  confirmedAt      DateTime?
-  completedAt      DateTime?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  buyerCountryCode  String?
+  buyerZip          String?
+  buyerCity         String?
+  buyerAddress      String?
+  orderedAt         DateTime?
+  confirmedAt       DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   customer  Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
   warehouse Warehouse?       @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
@@ -1450,10 +1463,10 @@ model PurchaseInvoice {
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
 
-  supplier  Supplier              @relation(fields: [supplierId], references: [id])
-  warehouse Warehouse             @relation(fields: [warehouseId], references: [id])
-  createdBy User?                 @relation(fields: [createdById], references: [id], onDelete: SetNull)
-  lines     PurchaseInvoiceLine[]
+  supplier           Supplier              @relation(fields: [supplierId], references: [id])
+  warehouse          Warehouse             @relation(fields: [warehouseId], references: [id])
+  createdBy          User?                 @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  lines              PurchaseInvoiceLine[]
   /// Ha a számla egy NAV-ból lekérdezett belföldi bejövő számla
   /// bevételezéseként jött létre - a fordított irányú, opcionális kapcsolat
   /// a NavIncomingInvoice oldalán él (purchaseInvoiceId).
@@ -1574,70 +1587,70 @@ model NavInvoiceSyncRun {
 /// összekapcsolásuk (pl. közös supplierInvoiceNumber alapján) még nem
 /// implementált - lásd a docs/DECISIONS.md ADR-005 nyitott kérdését erről.
 model Invoice {
-  id           String              @id @default(cuid())
-  direction    InvoiceDirection
-  documentType InvoiceDocumentType @default(INVOICE)
-  source       InvoiceSource
+  id                   String              @id @default(cuid())
+  direction            InvoiceDirection
+  documentType         InvoiceDocumentType @default(INVOICE)
+  source               InvoiceSource
   /// A Számlázz.hu belső <alap><id> azonosítója - ez az idempotens upsert
   /// kulcsa a bejövő/kimenő push fogadásakor (M8.3). NAV/MANUAL/IMPORT
   /// forrásnál jellemzően null.
-  szamlazzInvoiceId String?
+  szamlazzInvoiceId    String?
   /// A ténylegesen kiállított/kapott számla saját, emberi olvasható száma.
-  invoiceNumber     String
-  partnerName       String
-  partnerTaxNumber  String?
-  customerId        String?
-  supplierId        String?
+  invoiceNumber        String
+  partnerName          String
+  partnerTaxNumber     String?
+  customerId           String?
+  supplierId           String?
   /// A kapcsolódó webshop (UNAS) rendelés, ha van - elsősorban a
   /// source=UNAS read-only számlatükörnél töltött (lásd Invoice.source
   /// doc-comment). Szándékosan nem unique - egy rendeléshez később
   /// jóváíró/sztornó számla is tartozhat; a duplikálás elleni védelem a
   /// @@unique([source, invoiceNumber]) megkötés, nem ez a mező.
-  salesOrderId      String?
+  salesOrderId         String?
   /// A UNAS getOrder API nem ad számla-kiállítási dátumot (az Invoice
   /// alobjektum csak Status/StatusText/Number/Url mezőt dokumentál - lásd
   /// unas.hu/tudastar/api/megrendelesek-adatszerkezet), ezért source=UNAS
   /// soroknál ez null: nem találgatjuk a szinkron időpontjából.
-  issueDate         DateTime?
-  fulfillmentDate   DateTime?
-  dueDate           DateTime?
+  issueDate            DateTime?
+  fulfillmentDate      DateTime?
+  dueDate              DateTime?
   /// ISO 4217 pénznemkód.
-  currency          String              @default("HUF") @db.VarChar(3)
-  exchangeRate      Decimal?            @db.Decimal(19, 6)
+  currency             String              @default("HUF") @db.VarChar(3)
+  exchangeRate         Decimal?            @db.Decimal(19, 6)
   /// A UNAS getOrder API nem ad összeget a rendelés Invoice alobjektumában
   /// (csak Status/Number/Url) - source=UNAS soroknál ez a három összeg-mező
   /// null, NEM 0, amíg egy valódi számlaösszeg-forrás (pl. Számlázz.hu
   /// Online Pénzügyi Adatkapcsolat) nincs bekötve.
-  netAmount         Decimal?            @db.Decimal(19, 4)
-  vatAmount         Decimal?            @db.Decimal(19, 4)
-  grossAmount       Decimal?            @db.Decimal(19, 4)
-  isPaid            Boolean             @default(false)
-  paidAt            DateTime?
+  netAmount            Decimal?            @db.Decimal(19, 4)
+  vatAmount            Decimal?            @db.Decimal(19, 4)
+  grossAmount          Decimal?            @db.Decimal(19, 4)
+  isPaid               Boolean             @default(false)
+  paidAt               DateTime?
   /// Sztornó/helyesbítő bizonylatnál az eredeti számlára mutat.
-  referencedInvoiceId String?
-  syncStatus        InvoiceSyncStatus   @default(PENDING)
-  syncError         String?
+  referencedInvoiceId  String?
+  syncStatus           InvoiceSyncStatus   @default(PENDING)
+  syncError            String?
   /// Nyers XML megőrzése objektumtár-kulcsként, nem DB-blobként (7.5).
   rawPayloadStorageKey String?
-  pdfStorageKey     String?
+  pdfStorageKey        String?
   /// Egy külső rendszer (pl. UNAS Invoice.Url, ami valójában a Számlázz.hu
   /// által hosztolt PDF linkje) által adott, közvetlenül elérhető
   /// számla-URL - NEM object-storage kulcs (lásd pdfStorageKey fent), csak
   /// akkor töltött, ha a forrás API ténylegesen adott ilyet; üres/hiányzó
   /// válasz esetén marad null, sosem generált/kitalált érték.
-  externalUrl       String?
-  bookkeepingStatus String?
-  tags              String[]
-  note              String?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
+  externalUrl          String?
+  bookkeepingStatus    String?
+  tags                 String[]
+  note                 String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
 
   customer           Customer?     @relation(fields: [customerId], references: [id])
-  supplier            Supplier?     @relation(fields: [supplierId], references: [id])
-  salesOrder          SalesOrder?   @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
-  referencedInvoice   Invoice?      @relation("InvoiceCorrectionChain", fields: [referencedInvoiceId], references: [id])
-  correctionInvoices  Invoice[]     @relation("InvoiceCorrectionChain")
-  lines               InvoiceLine[]
+  supplier           Supplier?     @relation(fields: [supplierId], references: [id])
+  salesOrder         SalesOrder?   @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
+  referencedInvoice  Invoice?      @relation("InvoiceCorrectionChain", fields: [referencedInvoiceId], references: [id])
+  correctionInvoices Invoice[]     @relation("InvoiceCorrectionChain")
+  lines              InvoiceLine[]
 
   @@unique([source, szamlazzInvoiceId])
   /// Idempotencia-kulcs a UNAS read-only számlatükör upsertjéhez (és
@@ -1828,6 +1841,32 @@ model UnasConnectionSetting {
   @@index([credentialUpdatedByUserId])
 }
 
+/// NAV Online Számla kapcsolatbeállítás. A teljes technikai felhasználói és
+/// szoftver-azonosító készlet egyetlen, verziózott AES-GCM borítékban él:
+/// egyik mező sem olvasható vissza a böngészőbe vagy tárolódik plaintextként.
+model NavConnectionSetting {
+  id                        String                @id
+  credentialMode            NavCredentialMode     @default(ENV_FALLBACK)
+  encryptedCredentials      Bytes?
+  encryptionIv              Bytes?
+  authenticationTag         Bytes?
+  keyVersion                String?
+  credentialRevision        Int                   @default(0)
+  credentialUpdatedAt       DateTime?
+  credentialUpdatedByUserId String?
+  verificationStatus        NavVerificationStatus @default(NEVER)
+  lastVerifiedAt            DateTime?
+  lastVerificationCode      String?
+  credentialAttemptedAt     DateTime?
+  testAttemptedAt           DateTime?
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+
+  credentialUpdatedBy User? @relation("NavCredentialUpdatedBy", fields: [credentialUpdatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([credentialUpdatedByUserId])
+}
+
 /// Számlázz.hu kapcsolatbeállítás (M8.1, ADR-005) - az UnasConnectionSetting
 /// mintáját követi, de két, egymástól független titkosított credentiallel:
 /// az Agent kulcs (kimenő automatikus számlázáshoz, M8.2) és a pénzügyi
@@ -1835,8 +1874,8 @@ model UnasConnectionSetting {
 /// külön kezelendő, mert eltérő Számlázz.hu-oldali jogosultsághoz
 /// tartoznak, és külön is rotálhatók/tilthatók.
 model SzamlazzConnectionSetting {
-  id                  String                     @id
-  credentialMode      SzamlazzCredentialMode     @default(ENV_FALLBACK)
+  id             String                 @id
+  credentialMode SzamlazzCredentialMode @default(ENV_FALLBACK)
 
   encryptedAgentKey         Bytes?
   agentKeyEncryptionIv      Bytes?
@@ -1849,18 +1888,18 @@ model SzamlazzConnectionSetting {
   financialApiKeyVersion           String?
 
   credentialRevision        Int                        @default(0)
-  credentialUpdatedAt        DateTime?
+  credentialUpdatedAt       DateTime?
   credentialUpdatedByUserId String?
   verificationStatus        SzamlazzVerificationStatus @default(NEVER)
-  lastVerifiedAt             DateTime?
+  lastVerifiedAt            DateTime?
   lastVerificationCode      String?
-  credentialAttemptedAt      DateTime?
-  testAttemptedAt            DateTime?
+  credentialAttemptedAt     DateTime?
+  testAttemptedAt           DateTime?
   /// M8.5: a visszamenőleges backfill kezdődátuma, a kapcsolat
   /// aktiválásakor rögzítve - a bulk betöltés ehhez képest dolgozik.
   backfillStartDate         DateTime?
-  createdAt                  DateTime                   @default(now())
-  updatedAt                  DateTime                   @updatedAt
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
 
   credentialUpdatedBy User? @relation("SzamlazzCredentialUpdatedBy", fields: [credentialUpdatedByUserId], references: [id], onDelete: SetNull)
 
@@ -1922,20 +1961,20 @@ model UnasOrderSyncRun {
 /// azonosítót (Customer.Id) kizárólag ExternalReference tárolja, a Customer
 /// modellen nincs UNAS-specifikus mező (ld. ADR-0009).
 model UnasCustomerSyncRun {
-  id             String                     @id @default(cuid())
-  activeKey      String?                    @unique
-  status         UnasCustomerSyncRunStatus  @default(PENDING)
+  id             String                    @id @default(cuid())
+  activeKey      String?                   @unique
+  status         UnasCustomerSyncRunStatus @default(PENDING)
   windowStart    DateTime?
   windowEnd      DateTime
   startedAt      DateTime?
   completedAt    DateTime?
-  customersSeen  Int                        @default(0)
-  createdCount   Int                        @default(0)
-  updatedCount   Int                        @default(0)
-  unchangedCount Int                        @default(0)
+  customersSeen  Int                       @default(0)
+  createdCount   Int                       @default(0)
+  updatedCount   Int                       @default(0)
+  unchangedCount Int                       @default(0)
   errorCode      String?
-  createdAt      DateTime                   @default(now())
-  updatedAt      DateTime                   @updatedAt
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
 
   @@index([status, createdAt])
 }

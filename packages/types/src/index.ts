@@ -212,6 +212,11 @@ export type {
   NavTaxpayerLookupResult,
 } from "./integrations/nav-taxpayer.js";
 export type {
+  NavConnectionCredentialInput,
+  NavConnectionVerificationStatus,
+  NavConnectionView,
+} from "./integrations/nav-connection.js";
+export type {
   NavIncomingInvoiceAddress,
   NavIncomingInvoiceDetail,
   NavIncomingInvoiceLine,

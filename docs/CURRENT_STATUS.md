@@ -229,18 +229,19 @@ mezővel.
   mezőkkel - ez zárja a korábban nyitott "belföldi kézi ÁFA-kulcsos
   rögzítés" pontot.
 
-Migráció: `20260724110000_add_nav_incoming_invoice`. Helyi futtatás előtt
-szükséges: `pnpm prisma:generate` és `pnpm prisma:migrate`. A NAV Online
-Számla lekérdezéshez ugyanaz a technikai felhasználó/szoftver env-készlet
-kell, mint a meglévő `queryTaxpayer`-hez
-(`NAV_TECHNICAL_USER_LOGIN/PASSWORD/TAX_NUMBER/SIGN_KEY`,
-`NAV_SOFTWARE_*`) - nincs külön regisztráció, mivel a `queryInvoiceDigest`/
-`queryInvoiceData` csak a "Számla lekérdezés" jogosultságot igényli a
-technikai felhasználón (nem a "Számlák kezelése"/adatszolgáltatás
-jogosultságot, amit a `manageInvoice`/`tokenExchange` igényelne - ezeket a
-rendszer nem hívja). Új opcionális env-változók az időszakos szinkronhoz:
-`NAV_INVOICE_SYNC_ENABLED` (`"true"` esetén aktív), alapértelmezetten 15
-perces `NAV_INVOICE_SYNC_INTERVAL_MINUTES`.
+Migrációk: `20260724110000_add_nav_incoming_invoice` és
+`20260730110000_add_nav_connection_settings`. A technikai felhasználó és a
+kötelező szoftveradatok a **Beállítások → NAV** oldalon menthetők. A teljes
+adatcsomag AES-256-GCM titkosítással kerül adatbázisba, visszaolvasó API
+nélkül; mentés előtt a rendszer valódi `queryInvoiceDigest` hívással
+ellenőrzi a hitelesítést és a "Számla lekérdezés" jogosultságot. Ehhez a
+szerveren egyszer be kell állítani a
+`NAV_CREDENTIAL_ACTIVE_KEY_VERSION`/`NAV_CREDENTIAL_MASTER_KEY_V*`
+titkosítási kulcsot. A korábbi `NAV_TECHNICAL_USER_*` és `NAV_SOFTWARE_*`
+env-készlet kompatibilis fallback marad az első UI-mentésig. Cserekulcs
+nem kell, mert a rendszer nem hív `manageInvoice`/`tokenExchange`
+műveletet. Az időszakos szinkront a `NAV_INVOICE_SYNC_ENABLED` kapcsolja
+be, alapértelmezett intervalluma 15 perc.
 
 ## Számlázz.hu integráció – adatmodell (M8, ADR-005 spec-fázis)
 

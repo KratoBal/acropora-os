@@ -15,10 +15,11 @@ export class NavTaxpayerService {
     const coreTaxNumber = taxNumber.replace(/[^0-9]/g, "").slice(0, 8);
     if (coreTaxNumber.length !== 8)
       throw new ServiceUnavailableException("NAV_TAX_NUMBER_INVALID");
+    const credentials = await this.credentials.resolve();
     return this.client.queryTaxpayer(
       coreTaxNumber,
-      this.credentials.technicalUser(),
-      this.credentials.software(),
+      credentials.technicalUser,
+      credentials.software,
     );
   }
 }
