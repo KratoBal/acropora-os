@@ -6,6 +6,7 @@ export interface AppNavigationItem {
   label: string;
   icon: IconName;
   permission: Permission;
+  exact?: boolean;
 }
 
 export const primaryNavigation: AppNavigationItem[] = [
@@ -104,24 +105,43 @@ export const businessNavigation: AppNavigationItem[] = [
   },
 ];
 
-export const settingsNavigation: AppNavigationItem[] = [
-  {
-    href: "/admin/integrations/unas",
-    label: "UNAS szinkron",
-    icon: "activity",
-    permission: PERMISSIONS.PRODUCTS_VIEW,
-  },
+export const unasSettingsNavigation: AppNavigationItem[] = [
   {
     href: "/admin/integrations/unas/connection",
-    label: "UNAS kapcsolat",
+    label: "Kapcsolat",
     icon: "key",
     permission: PERMISSIONS.SETTINGS_MANAGE,
   },
+  {
+    href: "/admin/integrations/unas",
+    label: "Szinkron",
+    icon: "activity",
+    permission: PERMISSIONS.PRODUCTS_VIEW,
+    exact: true,
+  },
+];
+
+export const secondaryNavigation: AppNavigationItem[] = [
   {
     href: "/admin/brands",
     label: "Márkák",
     icon: "package",
     permission: PERMISSIONS.PRODUCTS_VIEW,
+  },
+];
+
+export const settingsNavigation: AppNavigationItem[] = [
+  {
+    href: "/beallitasok",
+    label: "Általános",
+    icon: "settings",
+    permission: PERMISSIONS.SETTINGS_MANAGE,
+  },
+  {
+    href: "/admin/integrations/nav",
+    label: "NAV",
+    icon: "finance",
+    permission: PERMISSIONS.SETTINGS_MANAGE,
   },
   {
     href: "/admin/users",
@@ -129,10 +149,19 @@ export const settingsNavigation: AppNavigationItem[] = [
     icon: "shield",
     permission: PERMISSIONS.USERS_MANAGE,
   },
-  {
-    href: "/beallitasok",
-    label: "Beállítások",
-    icon: "settings",
-    permission: PERMISSIONS.SETTINGS_MANAGE,
-  },
 ];
+
+export const allSettingsNavigation: AppNavigationItem[] = [
+  ...unasSettingsNavigation,
+  ...settingsNavigation,
+];
+
+export function isNavigationItemActive(
+  pathname: string,
+  item: AppNavigationItem,
+) {
+  return (
+    pathname === item.href ||
+    (!item.exact && pathname.startsWith(`${item.href}/`))
+  );
+}
