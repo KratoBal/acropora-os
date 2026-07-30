@@ -46,10 +46,12 @@ const UNIT_LABELS: Record<string, string> = {
   PIECE: "db",
   KILOGRAM: "kg",
   TON: "t",
+  LITER: "l",
   LITRE: "l",
   KWH: "kWh",
   DAY: "nap",
   HOUR: "óra",
+  MINUTE: "perc",
   MONTH: "hónap",
   YEAR: "év",
   CARTON: "karton",
@@ -57,6 +59,7 @@ const UNIT_LABELS: Record<string, string> = {
   METER: "m",
   LINEAR_METER: "fm",
   CUBIC_METER: "m3",
+  KILOMETER: "km",
   MILLIGRAM: "mg",
   TONNE: "t",
   MILLILITER: "ml",
@@ -128,8 +131,14 @@ function parseLine(node: XmlNode): ParsedNavInvoiceLine | null {
   const lineNumber = Number(value(node, "lineNumber") ?? "");
   const description = value(node, "lineDescription");
   const quantity = value(node, "quantity");
+  const normalAmounts = child(node, "lineAmountsNormal");
+  // A NAV invoiceData.xsd szerint a nettó összeg nem közvetlenül a
+  // lineAmountsNormal alatt, hanem egy lineNetAmountData wrapperben van.
+  // A közvetlen alakot kompatibilitási tartalékként továbbra is elfogadjuk.
+  const netAmountData = child(normalAmounts, "lineNetAmountData");
   const netAmount =
-    value(child(node, "lineAmountsNormal"), "lineNetAmount") ??
+    value(netAmountData, "lineNetAmount") ??
+    value(normalAmounts, "lineNetAmount") ??
     value(node, "lineNetAmount");
   if (!Number.isFinite(lineNumber) || !description || !quantity || !netAmount)
     return null;
@@ -142,7 +151,7 @@ function parseLine(node: XmlNode): ParsedNavInvoiceLine | null {
     unitPrice,
     lineNetAmount: netAmount,
     vatRatePercent: vatRatePercentFromNode(
-      child(node, "lineAmountsNormal") ?? node,
+      normalAmounts ?? child(node, "lineAmountsSimplified") ?? node,
     ),
   };
 }
