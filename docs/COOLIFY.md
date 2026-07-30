@@ -19,27 +19,27 @@ since they have different Dockerfiles, ports, and health checks.
 
 ### `acropora-api`
 
-| Setting | Value |
-|---|---|
-| Source | `KratoBal/acropora-os`, branch `main` (or your chosen deploy branch) |
-| Build pack | Dockerfile |
-| **Build context** | Repository root (`/`) — required, not `apps/api/`. The Dockerfile does `turbo prune` against the whole monorepo and needs the full workspace as its build context. |
-| **Dockerfile path** | `apps/api/Dockerfile` |
-| Dockerfile build target | *(default — last stage, `runner`)*. Do not set this to `builder`; that's the separate migration image, see "Pre-deployment command" below. |
-| **Port** | Container port `3001`. Map to whatever public/internal port your setup needs; if `api` isn't meant to be publicly reachable, don't attach a domain — only `web`'s rewrite and any direct integration/webhook callers need it. |
-| **Health check** | HTTP `GET /health` on port `3001`. A Dockerfile `HEALTHCHECK` already exists; also configure Coolify's own health check to the same path so Coolify's rolling-deploy gate uses it too. Expect `200` when Postgres and Redis are both reachable, `503` otherwise — treat 503 as unhealthy, not as "starting up" (the response body distinguishes real outages from startup timing if you need to debug). |
+| Setting                 | Value                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Source                  | `KratoBal/acropora-os`, branch `main` (or your chosen deploy branch)                                                                                                                                                                                                                                                                                                                                    |
+| Build pack              | Dockerfile                                                                                                                                                                                                                                                                                                                                                                                              |
+| **Build context**       | Repository root (`/`) — required, not `apps/api/`. The Dockerfile does `turbo prune` against the whole monorepo and needs the full workspace as its build context.                                                                                                                                                                                                                                      |
+| **Dockerfile path**     | `apps/api/Dockerfile`                                                                                                                                                                                                                                                                                                                                                                                   |
+| Dockerfile build target | _(default — last stage, `runner`)_. Do not set this to `builder`; that's the separate migration image, see "Pre-deployment command" below.                                                                                                                                                                                                                                                              |
+| **Port**                | Container port `3001`. Map to whatever public/internal port your setup needs; if `api` isn't meant to be publicly reachable, don't attach a domain — only `web`'s rewrite and any direct integration/webhook callers need it.                                                                                                                                                                           |
+| **Health check**        | HTTP `GET /health` on port `3001`. A Dockerfile `HEALTHCHECK` already exists; also configure Coolify's own health check to the same path so Coolify's rolling-deploy gate uses it too. Expect `200` when Postgres and Redis are both reachable, `503` otherwise — treat 503 as unhealthy, not as "starting up" (the response body distinguishes real outages from startup timing if you need to debug). |
 
 ### `acropora-web`
 
-| Setting | Value |
-|---|---|
-| Source | Same repository, same branch |
-| Build pack | Dockerfile |
-| **Build context** | Repository root (`/`) |
-| **Dockerfile path** | `apps/web/Dockerfile` |
-| Dockerfile build target | *(default — last stage, `runner`)* |
-| **Port** | Container port `3000` |
-| **Health check** | HTTP `GET /` on port `3000`. This is liveness only (does the Next.js server respond at all), not a real dependency check — `api`'s `/health` is where actual Postgres/Redis status lives. A future improvement worth scheduling: a dedicated `/api/health` route in the web app that also checks `API_URL` reachability (a small code addition, not something to add unreviewed as part of this infra work). |
+| Setting                 | Value                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Source                  | Same repository, same branch                                                                                                                                                                                                                                                                                                                                                                                 |
+| Build pack              | Dockerfile                                                                                                                                                                                                                                                                                                                                                                                                   |
+| **Build context**       | Repository root (`/`)                                                                                                                                                                                                                                                                                                                                                                                        |
+| **Dockerfile path**     | `apps/web/Dockerfile`                                                                                                                                                                                                                                                                                                                                                                                        |
+| Dockerfile build target | _(default — last stage, `runner`)_                                                                                                                                                                                                                                                                                                                                                                           |
+| **Port**                | Container port `3000`                                                                                                                                                                                                                                                                                                                                                                                        |
+| **Health check**        | HTTP `GET /` on port `3000`. This is liveness only (does the Next.js server respond at all), not a real dependency check — `api`'s `/health` is where actual Postgres/Redis status lives. A future improvement worth scheduling: a dedicated `/api/health` route in the web app that also checks `API_URL` reachability (a small code addition, not something to add unreviewed as part of this infra work). |
 
 ---
 
@@ -60,9 +60,9 @@ only covers where each group of variables goes.
   `http://acropora-api:3001` — not the public domain, and not through
   TLS internally).
 - Mark every credential (`UNAS_API_KEY`, `UNAS_CREDENTIAL_MASTER_KEY_V*`,
-  all `NAV_TECHNICAL_USER_*`, `NAV_SOFTWARE_DEV_TAX_NUMBER`) as a
-  Coolify **secret**, not a plain environment variable, so it's masked in
-  the UI and build logs.
+  `NAV_CREDENTIAL_MASTER_KEY_V*`, all `NAV_TECHNICAL_USER_*`,
+  `NAV_SOFTWARE_DEV_TAX_NUMBER`) as a Coolify **secret**, not a plain
+  environment variable, so it's masked in the UI and build logs.
 - If `web` ever gains `NEXT_PUBLIC_*` variables, they must be passed as
   Docker **build arguments**, not runtime environment variables — Next.js
   inlines them into the client bundle at build time. `apps/web/Dockerfile`
@@ -108,12 +108,12 @@ green signal before cutting traffic over:
 `acropora-api`'s container now runs `prisma migrate deploy` itself, via
 its own entrypoint, before starting the API — see `docs/DEPLOYMENT.md`
 Section 5. **No Coolify configuration is required for that.** This
-section is only for teams who additionally want migrations to run *before*
+section is only for teams who additionally want migrations to run _before_
 the new image even starts building/booting, as an earlier gate.
 
 If you want that extra gate, configure `acropora-api`'s **pre-deployment
 command** (Coolify's hook that runs before the new container takes
-traffic) to run migrations against the *build*-stage image:
+traffic) to run migrations against the _build_-stage image:
 
 ```bash
 docker build -f apps/api/Dockerfile --target builder -t acropora-api:migrate .
@@ -151,10 +151,10 @@ docker run --rm --env DATABASE_URL=<staging_url> acropora-api \
 
 ## Persistent volumes
 
-| Volume | Attached to | Notes |
-|---|---|---|
-| Postgres data directory | Postgres resource | Use Coolify's managed Postgres resource type for this rather than a hand-rolled volume where practical — it comes with built-in scheduled backups and simpler upgrade handling. |
-| Redis data directory (`appendonly yes`) | Redis resource | Low priority today (cache/health-check only — see `docs/DEPLOYMENT.md` Section 6); becomes important if Redis is later used for session storage. |
+| Volume                                  | Attached to       | Notes                                                                                                                                                                           |
+| --------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Postgres data directory                 | Postgres resource | Use Coolify's managed Postgres resource type for this rather than a hand-rolled volume where practical — it comes with built-in scheduled backups and simpler upgrade handling. |
+| Redis data directory (`appendonly yes`) | Redis resource    | Low priority today (cache/health-check only — see `docs/DEPLOYMENT.md` Section 6); becomes important if Redis is later used for session storage.                                |
 
 **Neither `web` nor `api` needs a persistent volume.** Both are stateless
 by design — `web` serves only its build output, `api` holds no local

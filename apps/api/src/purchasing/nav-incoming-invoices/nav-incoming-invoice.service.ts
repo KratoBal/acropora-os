@@ -56,12 +56,13 @@ export class NavIncomingInvoiceService {
     if (!row) throw new NotFoundException("A NAV számla nem található.");
     if (row.status === "NEW" || row.status === "ERROR") {
       try {
+        const credentials = await this.credentials.resolve();
         const dataResult = await this.client.queryInvoiceData(
           row.navInvoiceNumber,
           "INBOUND",
           row.supplierTaxNumber,
-          this.credentials.technicalUser(),
-          this.credentials.software(),
+          credentials.technicalUser,
+          credentials.software,
         );
         if (!dataResult.invoiceDataBase64)
           throw new NavApiError(
@@ -129,8 +130,7 @@ export class NavIncomingInvoiceService {
     windowStart: Date,
     windowEnd: Date,
   ): Promise<NavInvoiceDigestItem[]> {
-    const user = this.credentials.technicalUser();
-    const software = this.credentials.software();
+    const credentials = await this.credentials.resolve();
     const items: NavInvoiceDigestItem[] = [];
     for (let page = 1; page <= MAX_PAGES; page += 1) {
       const result = await this.client.queryInvoiceDigest(
@@ -138,8 +138,8 @@ export class NavIncomingInvoiceService {
         "INBOUND",
         windowStart,
         windowEnd,
-        user,
-        software,
+        credentials.technicalUser,
+        credentials.software,
       );
       items.push(...result.items);
       if (page >= result.availablePage) break;

@@ -84,21 +84,23 @@ function buildService(options: {
   } as unknown as ConstructorParameters<typeof NavIncomingInvoiceService>[0];
 
   const credentials = {
-    technicalUser: () => ({
-      login: "user",
-      password: "pass",
-      taxNumber: "12345678",
-      signKey: "key",
-    }),
-    software: () => ({
-      softwareId: "123456789123456789",
-      softwareName: "Acropora OS",
-      softwareOperation: "ONLINE_SERVICE" as const,
-      softwareMainVersion: "1.0",
-      softwareDevName: "Dev",
-      softwareDevContact: "dev@example.com",
-      softwareDevCountryCode: "HU",
-      softwareDevTaxNumber: "12345678",
+    resolve: async () => ({
+      technicalUser: {
+        login: "user",
+        password: "pass",
+        taxNumber: "12345678",
+        signKey: "key",
+      },
+      software: {
+        softwareId: "123456789123456789",
+        softwareName: "Acropora OS",
+        softwareOperation: "ONLINE_SERVICE" as const,
+        softwareMainVersion: "1.0",
+        softwareDevName: "Dev",
+        softwareDevContact: "dev@example.com",
+        softwareDevCountryCode: "HU",
+        softwareDevTaxNumber: "12345678",
+      },
     }),
   } as unknown as ConstructorParameters<typeof NavIncomingInvoiceService>[1];
 
