@@ -1,4 +1,6 @@
 export type ProductType = "PHYSICAL" | "SERVICE" | "LIVESTOCK";
+export type ProductOrigin = "UNAS" | "LOCAL";
+export type ProductCatalogAuthority = "UNAS" | "ACROPORA";
 
 export interface ProductBrandSummary {
   id: string;
@@ -75,6 +77,8 @@ export interface ProductListItem {
   id: string;
   name: string;
   productType: ProductType;
+  origin: ProductOrigin | null;
+  catalogAuthority: ProductCatalogAuthority | null;
   isActive: boolean;
   archivedAt: string | null;
   brand: ProductBrandSummary | null;

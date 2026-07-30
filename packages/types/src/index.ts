@@ -257,6 +257,8 @@ export type {
   ProductImageSummary,
   ProductListApiQuery,
   ProductListItem,
+  ProductOrigin,
+  ProductCatalogAuthority,
   UnasProductMirrorDetail,
   ProductListResponse,
   ProductType,

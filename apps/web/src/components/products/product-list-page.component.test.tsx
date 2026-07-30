@@ -86,6 +86,8 @@ const populatedResponse: ProductListResponse = {
       id: "product-1",
       name: "Red Sea ReefMat 500",
       productType: "PHYSICAL",
+      origin: "UNAS",
+      catalogAuthority: "UNAS",
       isActive: true,
       archivedAt: null,
       primarySku: "RS-RM500",
@@ -174,6 +176,7 @@ describe("ProductListPage", () => {
     expect(await screen.findByRole("table")).toBeInTheDocument();
     expect(screen.getByText("Red Sea ReefMat 500")).toBeInTheDocument();
     expect(screen.getByText("RS-RM500")).toBeInTheDocument();
+    expect(screen.getByText("UNAS-termék")).toBeInTheDocument();
     expect(
       screen.getByRole("table").querySelector("tbody")?.textContent,
     ).toContain("Aktív");
@@ -184,6 +187,25 @@ describe("ProductListPage", () => {
       "src",
       "https://example.test/reefmat.jpg",
     );
+  });
+
+  it("a helyi terméket külön Acropora OS badge-dzsel jelöli", async () => {
+    api.list.mockResolvedValue({
+      ...populatedResponse,
+      items: [
+        {
+          ...populatedResponse.items[0]!,
+          origin: "LOCAL",
+          catalogAuthority: "ACROPORA",
+        },
+      ],
+    });
+
+    render(createElement(ProductListPage));
+
+    expect(
+      await screen.findByText("Helyi Acropora OS-termék"),
+    ).toBeInTheDocument();
   });
 
   it("üres katalógus állapotot jelenít meg", async () => {

@@ -47,6 +47,16 @@ function formatStock(value: string | null): string {
   return Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 });
 }
 
+function provenanceBadge(origin: "UNAS" | "LOCAL" | null): {
+  label: string;
+  variant: "info" | "neutral" | "warning";
+} {
+  if (origin === "UNAS") return { label: "UNAS-termék", variant: "info" };
+  if (origin === "LOCAL")
+    return { label: "Helyi Acropora OS-termék", variant: "neutral" };
+  return { label: "Eredet ellenőrzendő", variant: "warning" };
+}
+
 function ProductTableSkeleton() {
   return (
     <Card className="overflow-hidden" aria-label="Terméklista betöltése">
@@ -427,9 +437,16 @@ export function ProductListPage() {
                             <Icon name="package" size={17} />
                           </span>
                         )}
-                        <span className="truncate text-sm font-semibold text-slate-900">
-                          {product.name}
-                        </span>
+                        <div className="min-w-0 space-y-1">
+                          <span className="block truncate text-sm font-semibold text-slate-900">
+                            {product.name}
+                          </span>
+                          <Badge
+                            variant={provenanceBadge(product.origin).variant}
+                          >
+                            {provenanceBadge(product.origin).label}
+                          </Badge>
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-3.5 font-mono text-xs text-slate-600">

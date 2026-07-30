@@ -203,6 +203,17 @@ export class UnasApplyRepository extends Repository {
           });
           const existingId =
             existingReference?.entityId ?? existingVariant?.productId;
+          if (existingId) {
+            const existingProduct = await transaction.product.findUnique({
+              where: { id: existingId },
+              select: { origin: true, catalogAuthority: true },
+            });
+            if (
+              existingProduct?.origin !== "UNAS" ||
+              existingProduct.catalogAuthority !== "UNAS"
+            )
+              throw new Error("UNAS_PRODUCT_AUTHORITY_CONFLICT");
+          }
           const resolution = resolutionByRow.get(row.sourceRowNumber);
           const review = reviewByRow.get(row.sourceRowNumber);
           const brandKey = review
@@ -227,6 +238,8 @@ export class UnasApplyRepository extends Repository {
                   description: row.description,
                   type: "PHYSICAL",
                   brandId: brandId ?? null,
+                  origin: "UNAS",
+                  catalogAuthority: "UNAS",
                 },
               });
           existingId

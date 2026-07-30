@@ -7,7 +7,11 @@ import type { ProductRepository } from "./product.repository.js";
 import { ProductService } from "./product.service.js";
 
 function repositoryWith(
-  product: { id: string; unasMirror?: { source: "UNAS" } | null } | null,
+  product: {
+    id: string;
+    catalogAuthority: "UNAS" | "ACROPORA" | null;
+    unasMirror?: { source: "UNAS" } | null;
+  } | null,
 ) {
   const calls: string[] = [];
   return {
@@ -30,10 +34,14 @@ function repositoryWith(
 
 describe("ProductService", () => {
   it("returns a product", async () => {
-    const { repository } = repositoryWith({ id: "product-1" });
+    const { repository } = repositoryWith({
+      id: "product-1",
+      catalogAuthority: "ACROPORA",
+    });
     const service = new ProductService(repository);
     assert.deepEqual(await service.getProduct("product-1"), {
       id: "product-1",
+      catalogAuthority: "ACROPORA",
     });
   });
 
@@ -49,6 +57,7 @@ describe("ProductService", () => {
   it("checks existence before update and archive", async () => {
     const { repository, calls } = repositoryWith({
       id: "product-1",
+      catalogAuthority: "ACROPORA",
       unasMirror: null,
     });
     const service = new ProductService(repository);
@@ -60,6 +69,7 @@ describe("ProductService", () => {
   it("blocks generic writes to an UNAS managed product", async () => {
     const { repository, calls } = repositoryWith({
       id: "product-1",
+      catalogAuthority: "UNAS",
       unasMirror: { source: "UNAS" },
     });
     const service = new ProductService(repository);
@@ -73,6 +83,22 @@ describe("ProductService", () => {
     await assert.rejects(
       service.archiveProduct("product-1"),
       ConflictException,
+    );
+    assert.deepEqual(calls, []);
+  });
+
+  it("fails closed when catalog authority has not been resolved", async () => {
+    const { repository, calls } = repositoryWith({
+      id: "product-1",
+      catalogAuthority: null,
+    });
+    const service = new ProductService(repository);
+
+    await assert.rejects(
+      service.updateProduct("product-1", { name: "Forbidden" }),
+      (error) =>
+        error instanceof ConflictException &&
+        error.message === "PRODUCT_CATALOG_AUTHORITY_UNRESOLVED",
     );
     assert.deepEqual(calls, []);
   });

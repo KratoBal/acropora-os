@@ -698,7 +698,9 @@ export function ProductDetailPage({ productId }: { productId: string }) {
   // extension is what "Utolsó beszerár" in the UNAS mirror card refers to.
   const primaryPurchaseExtension =
     product.variants.find((variant) => variant.sku === product.primarySku)
-      ?.extension ?? product.variants[0]?.extension ?? null;
+      ?.extension ??
+    product.variants[0]?.extension ??
+    null;
 
   return (
     <div className="space-y-6">
@@ -706,9 +708,26 @@ export function ProductDetailPage({ productId }: { productId: string }) {
         eyebrow={product.primarySku ?? "Nincs SKU"}
         title={product.name}
         actions={
-          <Button variant="secondary" onClick={() => router.push(listHref)}>
-            Vissza a listához
-          </Button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Badge
+              variant={
+                product.origin === "UNAS"
+                  ? "info"
+                  : product.origin === "LOCAL"
+                    ? "neutral"
+                    : "warning"
+              }
+            >
+              {product.origin === "UNAS"
+                ? "UNAS-termék"
+                : product.origin === "LOCAL"
+                  ? "Helyi Acropora OS-termék"
+                  : "Eredet ellenőrzendő"}
+            </Badge>
+            <Button variant="secondary" onClick={() => router.push(listHref)}>
+              Vissza a listához
+            </Button>
+          </div>
         }
       />
 

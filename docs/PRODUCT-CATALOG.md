@@ -1,20 +1,62 @@
-# Product Catalog backend
+# Product Catalog
 
 ## Felelősség
 
 A Product Catalog az UNAS-ban létező termékek helyi, read-only mirror
-projectionje; a Product Master az UNAS. A `Product` tartalmazza a közös nevet,
-leírást, terméktípust, brandet és kategóriát, a `ProductVariant` az SKU-val
-azonosított értékesíthető és készletezhető egység. Az Acropora saját statikus
-beállításai külön `ProductExtension` modellhez tartoznak. A normatív döntés az
-[ADR-013](../adr/0013-unas-product-master-and-local-extension.md), az M2.1
-szerződés az
+projectionját és az Acropora OS-ben létrehozott helyi termékek közös törzsét
+adja. Az UNAS-ból szinkronizált termék Product Mastere az UNAS; a helyi
+terméké az Acropora OS.
+
+A `Product.origin` a történeti, megváltoztathatatlan származás:
+
+- `UNAS`: UNAS terméktörzsből szinkronizált termék;
+- `LOCAL`: az Acropora OS-ben létrehozott helyi termék.
+
+A `Product.catalogAuthority` az aktuális Product Master:
+
+- `UNAS`: a generikus Product API nem módosíthatja és nem archiválhatja;
+- `ACROPORA`: a generikus Product API által kezelhető.
+
+Az eredet és az authority külön mező, mert egy későbbi, ellenőrzött
+helyi–UNAS összekapcsoláskor az authority változhat, miközben a történeti
+eredet megmarad. Ilyen átmeneti folyamat ebben a PR-ban még nincs.
+
+A `Product` tartalmazza a közös nevet, leírást, terméktípust, brandet és
+kategóriát, a `ProductVariant` az SKU-val azonosított értékesíthető és
+készletezhető egység. Az Acropora saját statikus beállításai külön
+`ProductExtension` modellhez tartoznak. A normatív UNAS-mirror döntés az
+[ADR-013](../adr/0013-unas-product-master-and-local-extension.md), az M2.1 szerződés az
 [UNAS Product Synchronization](./M2.1-UNAS-PRODUCT-SYNCHRONIZATION.md)
 dokumentumban található.
 
 A backend első szelete történetileg Product CRUD műveleteket adott. Az M2.1-ben
-ezek az UNAS mirror rekordokra letiltandók; a read API megmarad, a helyi írások
-külön Product Extension API-ra kerülnek. Nem tartalmaz készletkezelést.
+ezek az UNAS-authority rekordokra le vannak tiltva; a read API megmarad, az
+UNAS-termékek helyi írásai külön Product Extension API-ra kerülnek. Nem
+tartalmaz készletkezelést.
+
+## Provenance migráció
+
+Az első migráció expand–backfill lépés:
+
+- a `ProductOrigin` és `ProductCatalogAuthority` enumok létrejönnek;
+- az új mezők átmenetileg nullable értékűek;
+- `mirrorSource=UNAS` esetén `UNAS`/`UNAS` a backfill;
+- minden más meglévő rekord `LOCAL`/`ACROPORA` értéket kap;
+- a generikus create mindig explicit `LOCAL`/`ACROPORA` értéket és
+  `createdById` auditkapcsolatot ír;
+- az UNAS termékszinkron minden új terméket explicit `UNAS`/`UNAS` értékkel
+  hoz létre, meglévő rekordot pedig csak akkor frissít, ha már mindkét mező
+  szerint UNAS-kezelésű.
+
+A nullable állapot szándékos telepítési biztonsági lépés. A
+`packages/database/prisma/diagnostics/product-provenance-preflight.sql`
+read-only riportja jelzi a `mirrorSource`, `UnasProductSnapshot` és UNAS
+`ExternalReference` közötti konfliktusokat. Production-ellenőrzés után külön
+contract migráció állíthatja `NOT NULL`-ra a mezőket.
+
+Az `origin` és `catalogAuthority` nem része a create/update DTO-knak, ezért
+kliensoldalról nem írhatók. Ismeretlen/null authority esetén a generic update
+és archive fail-closed módon `PRODUCT_CATALOG_AUTHORITY_UNRESOLVED` hibát ad.
 
 ## API
 
@@ -28,13 +70,14 @@ Minden végpont hitelesítést igényel.
 | `PATCH`  | `/products/:id` | `products.manage` | részleges módosítás        |
 | `DELETE` | `/products/:id` | `products.manage` | soft archive               |
 
-> M2.1 átmeneti megjegyzés: a `POST`, `PATCH` és `DELETE` végpontok jelenleg
-> létező legacy képességek. UNAS mirror rekordra az M2.1 implementációban
-> `409 PRODUCT_MANAGED_BY_UNAS` választ kell adniuk.
+UNAS authority rekordra a `PATCH` és `DELETE` végpont
+`409 PRODUCT_MANAGED_BY_UNAS` választ ad.
 
 A create mezői: `name`, opcionális `description`, `productType`, opcionális `brandId` és `primaryCategoryId`. A támogatott típusok: `PHYSICAL`, `SERVICE`, `LIVESTOCK`. A korábbi `categoryId` request mező átmenetileg támogatott, de deprecated.
 
 A detail válasz a Product mellett brandet, rendezett elsődleges és alternatív kategóriakapcsolatokat, variantlistát, csatornalistingeket és sorrendezett képeket is tartalmaz. Nem létező ID esetén a detail, update és archive HTTP 404 választ ad.
+Mind a lista-, mind a detail-contract visszaadja az `origin` és
+`catalogAuthority` mezőt.
 
 ## Lista, keresés és lapozás
 
@@ -80,6 +123,7 @@ A hitelesített alkalmazás `/products` útvonala nagy katalógusra optimalizál
 Megjelenített oszlopok:
 
 - terméknév és első rendezett kép;
+- termékeredet badge: „UNAS-termék” vagy „Helyi Acropora OS-termék”;
 - első aktív variant SKU;
 - brand;
 - elsődleges kategória;

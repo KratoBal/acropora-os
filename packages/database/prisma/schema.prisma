@@ -33,6 +33,16 @@ enum ProductMirrorState {
   CONFLICT
 }
 
+enum ProductOrigin {
+  UNAS
+  LOCAL
+}
+
+enum ProductCatalogAuthority {
+  UNAS
+  ACROPORA
+}
+
 enum UnasProductSyncKind {
   FULL
   INCREMENTAL
@@ -376,6 +386,7 @@ model User {
   navCredentialsUpdated      NavConnectionSetting[]      @relation("NavCredentialUpdatedBy")
   szamlazzCredentialsUpdated SzamlazzConnectionSetting[] @relation("SzamlazzCredentialUpdatedBy")
   stockReconciliationRepairs StockReconciliationRepair[]
+  createdProducts            Product[]                   @relation("ProductCreatedBy")
 
   @@index([role, isActive])
 }
@@ -398,27 +409,31 @@ model Session {
 }
 
 model Product {
-  id              String              @id @default(cuid())
-  name            String
-  description     String?
-  type            ProductType         @default(PHYSICAL)
-  brandId         String?
+  id               String                   @id @default(cuid())
+  name             String
+  description      String?
+  type             ProductType              @default(PHYSICAL)
+  brandId          String?
   /// @deprecated Compatibility pointer. ProductCategory is the category source of truth.
-  categoryId      String?
-  isActive        Boolean             @default(true)
-  archivedAt      DateTime?
-  mirrorSource    ExternalSystem?
-  mirrorState     ProductMirrorState?
-  sourceCreatedAt DateTime?
-  sourceUpdatedAt DateTime?
-  lastSyncedAt    DateTime?
-  missingSince    DateTime?
-  rawSourceHash   String?
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  categoryId       String?
+  isActive         Boolean                  @default(true)
+  archivedAt       DateTime?
+  origin           ProductOrigin?
+  catalogAuthority ProductCatalogAuthority?
+  createdById      String?
+  mirrorSource     ExternalSystem?
+  mirrorState      ProductMirrorState?
+  sourceCreatedAt  DateTime?
+  sourceUpdatedAt  DateTime?
+  lastSyncedAt     DateTime?
+  missingSince     DateTime?
+  rawSourceHash    String?
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
 
   brand           Brand?               @relation(fields: [brandId], references: [id], onDelete: SetNull)
   legacyCategory  Category?            @relation("LegacyProductCategory", fields: [categoryId], references: [id], onDelete: SetNull)
+  createdBy       User?                @relation("ProductCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   categories      ProductCategory[]
   variants        ProductVariant[]
   channelListings ChannelListing[]
@@ -429,7 +444,9 @@ model Product {
 
   @@index([brandId])
   @@index([categoryId])
+  @@index([createdById])
   @@index([type, isActive])
+  @@index([origin, catalogAuthority])
   @@index([mirrorSource, mirrorState])
   @@index([missingSince])
 }

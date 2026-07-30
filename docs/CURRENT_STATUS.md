@@ -1,6 +1,6 @@
 # Acropora OS – Current Status
 
-Utolsó ellenőrzés: 2026-07-23
+Utolsó ellenőrzés: 2026-07-30
 
 ## Repository
 
@@ -34,6 +34,10 @@ beérkezett számla rögzítése MNB árfolyammal).
 - Raktár és Leltár (inventory count) modul (`/raktar`, `/keszlet-egyeztetes`), `StockItem` baseline javítás leltárszámláláskor
 - UNAS webshop rendelés-szinkron időszakos pollinggal (`/webshop`), UNAS státusz, fizetési és szállítási adatok megjelenítése
 - Termék lista ár/készlet oszlopok, utolsó beszerzési ár mező a Product Extensionön
+- Product provenance és Product Master authority alapok:
+  `Product.origin` (`UNAS`/`LOCAL`), `Product.catalogAuthority`
+  (`UNAS`/`ACROPORA`), helyi létrehozás `createdById` auditja, determinisztikus
+  expand/backfill migráció és termékeredet badge a listán/részleten
 - Dashboard napszaknak megfelelő dinamikus üdvözlés
 - `apiRequest` javítás: megszakított (AbortError) kérés többé nem jelenik meg hamis "szerver nem érhető el" hibaként
 - **Vevők (Customers) modul** (`/vevok`, `customers.view` / `customers.manage`) – lásd lent
@@ -53,7 +57,12 @@ felszabadító heartbeat, valamint az opt-in időzített háttérfuttatás és a
 operátori sync run-history/kézi indítás webfelülete elkészült. A Product
 Detail projection külön read-only UNAS mirror és Acropora Product Extension
 blokkokat jelenít meg, a generikus Product írás pedig blokkolt az
-UNAS-managed rekordokon.
+`catalogAuthority=UNAS` rekordokon. Az UNAS sync új rekordot explicit
+`origin=UNAS`/`catalogAuthority=UNAS` értékekkel hoz létre, meglévő rekordot
+pedig csak igazolt `UNAS`/`UNAS` authority esetén frissít; a generikus Product
+create explicit `LOCAL`/`ACROPORA` értéket ír. A két mező az első expand
+migrációban átmenetileg nullable; a production preflight után külön contract
+migráció szigorítja majd őket.
 
 ## UNAS Connection Settings (M2.2, elkészült)
 
@@ -161,9 +170,10 @@ lekérdezéses) folyamat még nem indult el, lásd alább.
   `StockItem` frissítés (a leltár/POS mintájával megegyező additív logika,
   több sor is hivatkozhat ugyanarra a termékre egy számlán belül), valamint
   a `ProductExtension.lastPurchaseNetPrice`/`defaultPurchaseCurrency`/
-  `preferredSupplierId` frissítése. A UNAS `setStock` push a POS/leltár
-  mintáját követi: a helyi írás előtt fut le, soronkénti siker/hiba
-  állapottal.
+  `preferredSupplierId` frissítése. A készletmódosítás ugyanabban a
+  tranzakcióban UNAS stock outbox rekordot hoz létre; az aszinkron worker
+  lease/retry/backoff/dead-letter védelemmel küldi ki az aktuális
+  `StockItem.onHand` értéket.
 - **Admin webes UI** (`/beszerzes` lista, `/beszerzes/uj` EU-s rögzítő
   űrlap, `/beszerzes/:id` részletnézet): beszállító keresés/létrehozás,
   pénznem + MNB árfolyam, tételes termékkeresés (cikkszám/név alapján),
@@ -176,7 +186,7 @@ lekérdezéses) folyamat még nem indult el, lásd alább.
   terméktörzsben nem vezetett tétel). Ilyenkor a számlán szereplő megnevezés
   (`sourceDescription`) és az egység kötelező, cikkszám/termléknév nincs. A
   sor `syncStatus`-a `NOT_LINKED`, nem generál `StockMovement`/`StockItem`
-  frissítést, és nem kerül be a UNAS `setStock` push körbe (sem
+  frissítést, és nem kerül be a UNAS stock outbox körbe (sem
   siker-, sem hibaszámlálóba) - kizárólag a terméktörzshöz kötött sorok
   szinkronizálódnak. A számla lista és részletnézet "Nincs terméktörzsben"
   jelzéssel jeleníti meg ezeket a sorokat.

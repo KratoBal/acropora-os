@@ -161,6 +161,8 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
       where: { sku: "INTEGRATION-SKU-1" },
       include: { product: { include: { unasSnapshot: true } } },
     });
+    assert.equal(variant.product.origin, "UNAS");
+    assert.equal(variant.product.catalogAuthority, "UNAS");
     assert.equal(variant.product.mirrorSource, "UNAS");
     assert.equal(variant.product.mirrorState, "ACTIVE");
     assert.equal(

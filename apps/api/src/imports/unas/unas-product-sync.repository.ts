@@ -244,6 +244,25 @@ export class UnasProductSyncRepository extends Repository {
         if (diffs.some((diff) => diff.action === "CONFLICT"))
           throw new Error("UNAS_PRODUCT_IDENTITY_CONFLICT");
 
+        const existingProductIds = diffs.flatMap((diff) =>
+          diff.action === "CREATE" ? [] : [diff.productId!],
+        );
+        if (existingProductIds.length > 0) {
+          const managedProducts = await transaction.product.findMany({
+            where: { id: { in: existingProductIds } },
+            select: { id: true, origin: true, catalogAuthority: true },
+          });
+          if (
+            managedProducts.length !== new Set(existingProductIds).size ||
+            managedProducts.some(
+              (product) =>
+                product.origin !== "UNAS" ||
+                product.catalogAuthority !== "UNAS",
+            )
+          )
+            throw new Error("UNAS_PRODUCT_AUTHORITY_CONFLICT");
+        }
+
         // Materialize every UNAS category locally, including ones with
         // state "deleted". UNAS's getCategory endpoint has no state filter
         // and always returns live and deleted categories together; a live
@@ -341,6 +360,8 @@ export class UnasProductSyncRepository extends Repository {
                     name: diff.product.name,
                     description: diff.product.descriptionShort,
                     type: "PHYSICAL",
+                    origin: "UNAS",
+                    catalogAuthority: "UNAS",
                     mirrorSource: "UNAS",
                     mirrorState: "ACTIVE",
                     sourceCreatedAt,
@@ -575,6 +596,27 @@ export class UnasProductSyncRepository extends Repository {
             missingReferences.set(reference.externalId, reference);
         }
         if (missingReferences.size) {
+          const missingProductIds = [
+            ...new Set(
+              [...missingReferences.values()].map(
+                (reference) => reference.entityId,
+              ),
+            ),
+          ];
+          const managedMissingProducts = await transaction.product.findMany({
+            where: { id: { in: missingProductIds } },
+            select: { id: true, origin: true, catalogAuthority: true },
+          });
+          if (
+            managedMissingProducts.length !== missingProductIds.length ||
+            managedMissingProducts.some(
+              (product) =>
+                product.origin !== "UNAS" ||
+                product.catalogAuthority !== "UNAS",
+            )
+          )
+            throw new Error("UNAS_PRODUCT_AUTHORITY_CONFLICT");
+
           for (const reference of missingReferences.values()) {
             const result = await transaction.product.updateMany({
               where: {

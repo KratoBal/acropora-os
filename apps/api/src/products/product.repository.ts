@@ -129,6 +129,9 @@ export class ProductRepository extends Repository {
             description: input.description,
             type: input.productType,
             brandId: input.brandId,
+            origin: "LOCAL",
+            catalogAuthority: "ACROPORA",
+            createdById: actorUserId,
             categoryId: primaryCategoryId,
             ...(primaryCategoryId
               ? {
@@ -157,6 +160,8 @@ export class ProductRepository extends Repository {
             payload: {
               name: product.name,
               productType: product.type,
+              origin: product.origin,
+              catalogAuthority: product.catalogAuthority,
             } satisfies Prisma.JsonObject,
           },
         });
