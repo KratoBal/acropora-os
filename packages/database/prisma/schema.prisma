@@ -184,6 +184,20 @@ enum PurchaseInvoiceStatus {
   CANCELLED
 }
 
+enum ProjectStatus {
+  DRAFT
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum ProjectInventoryReservationStatus {
+  ACTIVE
+  RELEASED
+  CONSUMED
+}
+
 enum SalesOrderStatus {
   DRAFT
   PENDING
@@ -382,11 +396,13 @@ model User {
   startedInventoryCounts     InventoryCount[]
   posSales                   SalesOrder[]
   createdPurchaseInvoices    PurchaseInvoice[]
-  unasCredentialsUpdated     UnasConnectionSetting[]     @relation("UnasCredentialUpdatedBy")
-  navCredentialsUpdated      NavConnectionSetting[]      @relation("NavCredentialUpdatedBy")
-  szamlazzCredentialsUpdated SzamlazzConnectionSetting[] @relation("SzamlazzCredentialUpdatedBy")
+  unasCredentialsUpdated     UnasConnectionSetting[]       @relation("UnasCredentialUpdatedBy")
+  navCredentialsUpdated      NavConnectionSetting[]        @relation("NavCredentialUpdatedBy")
+  szamlazzCredentialsUpdated SzamlazzConnectionSetting[]   @relation("SzamlazzCredentialUpdatedBy")
   stockReconciliationRepairs StockReconciliationRepair[]
-  createdProducts            Product[]                   @relation("ProductCreatedBy")
+  createdProducts            Product[]                     @relation("ProductCreatedBy")
+  createdProjects            Project[]                     @relation("ProjectCreatedBy")
+  projectReservations        ProjectInventoryReservation[]
 
   @@index([role, isActive])
 }
@@ -465,7 +481,7 @@ model ProductVariant {
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
-  product                    Product                     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product                    Product                       @relation(fields: [productId], references: [id], onDelete: Cascade)
   barcodes                   ProductBarcode[]
   supplierProducts           SupplierProduct[]
   stockItems                 StockItem[]
@@ -478,6 +494,7 @@ model ProductVariant {
   inventoryCountLines        InventoryCountLine[]
   unasStockSyncOutboxEntries UnasStockSyncOutbox[]
   stockReconciliationRepairs StockReconciliationRepair[]
+  projectReservations        ProjectInventoryReservation[]
 
   @@index([productId, isActive])
 }
@@ -755,8 +772,8 @@ model Warehouse {
 
   locations                  WarehouseLocation[]
   stockItems                 StockItem[]
-  sourceMovements            StockMovement[]             @relation("MovementSourceWarehouse")
-  targetMovements            StockMovement[]             @relation("MovementTargetWarehouse")
+  sourceMovements            StockMovement[]               @relation("MovementSourceWarehouse")
+  targetMovements            StockMovement[]               @relation("MovementTargetWarehouse")
   purchaseOrders             PurchaseOrder[]
   goodsReceipts              GoodsReceipt[]
   purchaseInvoices           PurchaseInvoice[]
@@ -765,6 +782,7 @@ model Warehouse {
   salesOrders                SalesOrder[]
   unasStockSyncOutboxEntries UnasStockSyncOutbox[]
   stockReconciliationRepairs StockReconciliationRepair[]
+  projectReservations        ProjectInventoryReservation[]
 }
 
 model WarehouseLocation {
@@ -872,10 +890,11 @@ model StockItem {
   reserved    Decimal  @default(0) @db.Decimal(19, 6)
   updatedAt   DateTime @updatedAt
 
-  variant               ProductVariant              @relation(fields: [variantId], references: [id], onDelete: Cascade)
-  warehouse             Warehouse                   @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
-  location              WarehouseLocation?          @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  variant               ProductVariant                @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  warehouse             Warehouse                     @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  location              WarehouseLocation?            @relation(fields: [locationId], references: [id], onDelete: SetNull)
   reconciliationRepairs StockReconciliationRepair[]
+  projectReservations   ProjectInventoryReservation[]
 
   @@unique([variantId, warehouseId, locationId, lotId])
   @@index([warehouseId, variantId])
@@ -1264,6 +1283,7 @@ model Customer {
   aquariums   Aquarium[]
   serviceJobs ServiceJob[]
   invoices    Invoice[]
+  projects    Project[]
 
   @@index([displayName])
   @@index([email])
@@ -1516,11 +1536,66 @@ model PurchaseInvoiceLine {
   syncStatus        String   @default("PENDING")
   syncError         String?
 
-  purchaseInvoice PurchaseInvoice @relation(fields: [purchaseInvoiceId], references: [id], onDelete: Cascade)
-  variant         ProductVariant? @relation(fields: [variantId], references: [id])
+  purchaseInvoice     PurchaseInvoice               @relation(fields: [purchaseInvoiceId], references: [id], onDelete: Cascade)
+  variant             ProductVariant?               @relation(fields: [variantId], references: [id])
+  projectReservations ProjectInventoryReservation[]
 
   @@index([purchaseInvoiceId])
   @@index([variantId])
+}
+
+/// Egyedi kivitelezési, dekorációs vagy intézményi projekt minimális
+/// törzsadata. A részletes M15 projektworkflow később bővíti ezt a modellt;
+/// a beszerzési projektkészlethez már most stabil belső hivatkozás kell.
+model Project {
+  id            String        @id @default(cuid())
+  projectNumber String        @unique
+  name          String
+  status        ProjectStatus @default(ACTIVE)
+  customerId    String?
+  createdById   String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  customer     Customer?                     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  createdBy    User?                         @relation("ProjectCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  reservations ProjectInventoryReservation[]
+
+  @@index([status, name])
+  @@index([customerId])
+  @@index([createdById])
+}
+
+/// Egy bevételezett számlasor projektnek félretett mennyisége. A rekord az
+/// üzleti tény; StockItem.reserved ennek gyors, tranzakcióban karbantartott
+/// projectionje. ACTIVE állapotban a mennyiség fizikailag on hand, de nem
+/// eladható és az UNAS felé sem szabad készlet.
+model ProjectInventoryReservation {
+  id                    String                            @id @default(cuid())
+  projectId             String
+  purchaseInvoiceLineId String
+  stockItemId           String
+  variantId             String
+  warehouseId           String
+  quantity              Decimal                           @db.Decimal(19, 6)
+  status                ProjectInventoryReservationStatus @default(ACTIVE)
+  createdById           String?
+  releasedAt            DateTime?
+  consumedAt            DateTime?
+  createdAt             DateTime                          @default(now())
+  updatedAt             DateTime                          @updatedAt
+
+  project             Project             @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  purchaseInvoiceLine PurchaseInvoiceLine @relation(fields: [purchaseInvoiceLineId], references: [id], onDelete: Restrict)
+  stockItem           StockItem           @relation(fields: [stockItemId], references: [id], onDelete: Restrict)
+  variant             ProductVariant      @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  warehouse           Warehouse           @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  createdBy           User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([purchaseInvoiceLineId, projectId])
+  @@index([projectId, status])
+  @@index([stockItemId, status])
+  @@index([variantId, warehouseId, status])
 }
 
 /// A NAV Online Számla queryInvoiceDigest szinkronból lekerülő belföldi

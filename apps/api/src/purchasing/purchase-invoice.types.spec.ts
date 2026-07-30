@@ -97,6 +97,7 @@ describe("toPurchaseInvoiceDetail", () => {
           syncStatus: "OK",
           syncError: null,
           variant: { sku: "REEF-SALT-01", product: { name: "Reef Salt" } },
+          projectReservations: [],
         },
       ],
     } as unknown as PurchaseInvoiceDetailRow;
@@ -126,6 +127,7 @@ describe("toPurchaseInvoiceDetail", () => {
           syncStatus: "NOT_LINKED",
           syncError: null,
           variant: null,
+          projectReservations: [],
         },
       ],
     } as unknown as PurchaseInvoiceDetailRow;
@@ -136,5 +138,47 @@ describe("toPurchaseInvoiceDetail", () => {
     assert.equal(detail.lines[0]?.productName, undefined);
     assert.equal(detail.lines[0]?.syncStatus, "NOT_LINKED");
     assert.equal(detail.lines[0]?.lineNet, "6");
+  });
+
+  it("exposes project-reserved and remaining warehouse quantities", () => {
+    const row = {
+      ...summaryRow([]),
+      lines: [
+        {
+          id: "line-1",
+          purchaseInvoiceId: "invoice-1",
+          variantId: "variant-1",
+          sourceDescription: null,
+          orderedQuantity: new Prisma.Decimal("10"),
+          actualQuantity: new Prisma.Decimal("10"),
+          unit: "db",
+          unitNet: new Prisma.Decimal("3"),
+          discountPercent: null,
+          syncStatus: "PENDING",
+          syncError: null,
+          variant: { sku: "PUMP-1", product: { name: "Pump" } },
+          projectReservations: [
+            {
+              id: "reservation-1",
+              quantity: new Prisma.Decimal("4"),
+              project: {
+                id: "project-1",
+                projectNumber: "PRJ-000001",
+                name: "Zoo build",
+              },
+            },
+          ],
+        },
+      ],
+    } as unknown as PurchaseInvoiceDetailRow;
+
+    const detail = toPurchaseInvoiceDetail(row);
+
+    assert.equal(detail.lines[0]?.reservedQuantity, "4");
+    assert.equal(detail.lines[0]?.warehouseQuantity, "6");
+    assert.equal(
+      detail.lines[0]?.projectAllocations[0]?.projectNumber,
+      "PRJ-000001",
+    );
   });
 });

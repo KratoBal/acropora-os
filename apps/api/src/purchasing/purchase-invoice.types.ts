@@ -17,6 +17,15 @@ export const purchaseInvoiceDetailInclude = {
   lines: {
     include: {
       variant: { select: { sku: true, product: { select: { name: true } } } },
+      projectReservations: {
+        where: { status: "ACTIVE" },
+        include: {
+          project: {
+            select: { id: true, projectNumber: true, name: true },
+          },
+        },
+        orderBy: { createdAt: "asc" },
+      },
     },
   },
 } satisfies Prisma.PurchaseInvoiceInclude;
@@ -79,6 +88,10 @@ export function toPurchaseInvoiceSummary(
 function toLineDetail(
   line: PurchaseInvoiceDetailRow["lines"][number],
 ): PurchaseInvoiceLineDetail {
+  const reservedQuantity = line.projectReservations.reduce(
+    (sum, reservation) => sum.plus(reservation.quantity),
+    new Prisma.Decimal(0),
+  );
   return {
     id: line.id,
     variantId: line.variantId ?? undefined,
@@ -93,6 +106,15 @@ function toLineDetail(
     lineNet: lineNet(line).toString(),
     syncStatus: line.syncStatus as PurchaseInvoiceLineDetail["syncStatus"],
     syncError: line.syncError ?? undefined,
+    projectAllocations: line.projectReservations.map((reservation) => ({
+      id: reservation.id,
+      projectId: reservation.project.id,
+      projectNumber: reservation.project.projectNumber,
+      projectName: reservation.project.name,
+      quantity: reservation.quantity.toString(),
+    })),
+    reservedQuantity: reservedQuantity.toString(),
+    warehouseQuantity: line.actualQuantity.minus(reservedQuantity).toString(),
   };
 }
 

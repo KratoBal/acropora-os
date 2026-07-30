@@ -15,6 +15,7 @@ import {
   hasPermission,
   PERMISSIONS,
   type CatalogOption,
+  type ProjectOption,
   type PurchaseInvoiceResult,
   type PurchaseInvoiceSource,
   type PurchaseProductSearchResult,
@@ -54,6 +55,11 @@ interface InvoiceLineState {
   actualQuantity: number;
   unitNet: number;
   discountPercent: number | "";
+  projectAllocations: Array<{
+    key: string;
+    projectId: string;
+    quantity: number;
+  }>;
 }
 
 function lineNet(line: InvoiceLineState): number {
@@ -62,6 +68,13 @@ function lineNet(line: InvoiceLineState): number {
     ? gross * (Number(line.discountPercent) / 100)
     : 0;
   return gross - discount;
+}
+
+function allocatedQuantity(line: InvoiceLineState): number {
+  return line.projectAllocations.reduce(
+    (sum, allocation) => sum + (Number(allocation.quantity) || 0),
+    0,
+  );
 }
 
 function formatMoney(value: number, currency: string): string {
@@ -135,6 +148,9 @@ export function PurchaseInvoiceEuEditorPage() {
   >([]);
   const [searchingProducts, setSearchingProducts] = useState(false);
   const [categoryOptions, setCategoryOptions] = useState<CatalogOption[]>([]);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [creatingProject, setCreatingProject] = useState(false);
   const [lines, setLines] = useState<InvoiceLineState[]>([]);
 
   const [submitting, setSubmitting] = useState(false);
@@ -200,6 +216,7 @@ export function PurchaseInvoiceEuEditorPage() {
               actualQuantity: quantity,
               unitNet: Number.isFinite(unitPrice) ? unitPrice : 0,
               discountPercent: "",
+              projectAllocations: [],
             };
           }),
         );
@@ -214,6 +231,13 @@ export function PurchaseInvoiceEuEditorPage() {
       .finally(() => setNavPrefillLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navInvoiceId, token]);
+
+  useEffect(() => {
+    void purchasingApi
+      .listProjects(token)
+      .then(setProjects)
+      .catch(() => setProjects([]));
+  }, [token]);
 
   useEffect(() => {
     if (!supplierSearch.trim()) {
@@ -329,6 +353,7 @@ export function PurchaseInvoiceEuEditorPage() {
           ? Number(product.lastPurchaseNetPrice)
           : 0,
         discountPercent: "",
+        projectAllocations: [],
       },
     ]);
     setProductSearch("");
@@ -350,6 +375,7 @@ export function PurchaseInvoiceEuEditorPage() {
         actualQuantity: 1,
         unitNet: 0,
         discountPercent: "",
+        projectAllocations: [],
       },
     ]);
   };
@@ -358,6 +384,72 @@ export function PurchaseInvoiceEuEditorPage() {
     setLines((previous) =>
       previous.map((line) => (line.key === key ? { ...line, ...patch } : line)),
     );
+  };
+
+  const createProject = async () => {
+    const name = newProjectName.trim();
+    if (name.length < 2 || creatingProject) return;
+    setCreatingProject(true);
+    setError(null);
+    try {
+      const project = await purchasingApi.createProject(token, { name });
+      setProjects((previous) =>
+        [...previous, project].sort((left, right) =>
+          left.name.localeCompare(right.name, "hu"),
+        ),
+      );
+      setNewProjectName("");
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "A projekt létrehozása nem sikerült.",
+      );
+    } finally {
+      setCreatingProject(false);
+    }
+  };
+
+  const addProjectAllocation = (line: InvoiceLineState) => {
+    const usedIds = new Set(
+      line.projectAllocations.map((allocation) => allocation.projectId),
+    );
+    const firstAvailable = projects.find((project) => !usedIds.has(project.id));
+    updateLine(line.key, {
+      projectAllocations: [
+        ...line.projectAllocations,
+        {
+          key: `allocation-${line.key}-${Date.now()}`,
+          projectId: firstAvailable?.id ?? "",
+          quantity: Math.max(0, line.actualQuantity - allocatedQuantity(line)),
+        },
+      ],
+    });
+  };
+
+  const updateProjectAllocation = (
+    line: InvoiceLineState,
+    allocationKey: string,
+    patch: Partial<InvoiceLineState["projectAllocations"][number]>,
+  ) => {
+    updateLine(line.key, {
+      projectAllocations: line.projectAllocations.map((allocation) =>
+        allocation.key === allocationKey
+          ? { ...allocation, ...patch }
+          : allocation,
+      ),
+    });
+  };
+
+  const removeProjectAllocation = (
+    line: InvoiceLineState,
+    allocationKey: string,
+  ) => {
+    updateLine(line.key, {
+      projectAllocations: line.projectAllocations.filter(
+        (allocation) => allocation.key !== allocationKey,
+      ),
+    });
   };
 
   const beginExistingProductLink = (line: InvoiceLineState) => {
@@ -494,6 +586,32 @@ export function PurchaseInvoiceEuEditorPage() {
           return;
         }
       }
+      const usedProjectIds = new Set<string>();
+      for (const allocation of line.projectAllocations) {
+        if (!allocation.projectId) {
+          setError("Válassz projektet minden projektfoglaláshoz.");
+          return;
+        }
+        if (usedProjectIds.has(allocation.projectId)) {
+          setError(
+            "Egy számlasoron ugyanaz a projekt csak egyszer szerepelhet.",
+          );
+          return;
+        }
+        usedProjectIds.add(allocation.projectId);
+        if (!Number.isFinite(allocation.quantity) || allocation.quantity <= 0) {
+          setError(
+            "A projektfoglalás mennyiségének nullánál nagyobbnak kell lennie.",
+          );
+          return;
+        }
+      }
+      if (allocatedQuantity(line) > line.actualQuantity) {
+        setError(
+          "A projektekhez rendelt összmennyiség nem lehet több a ténylegesen bevételezett mennyiségnél.",
+        );
+        return;
+      }
     }
     setSubmitting(true);
     setLastResult(null);
@@ -530,6 +648,10 @@ export function PurchaseInvoiceEuEditorPage() {
             line.discountPercent === ""
               ? undefined
               : Number(line.discountPercent),
+          projectAllocations: line.projectAllocations.map((allocation) => ({
+            projectId: allocation.projectId,
+            quantity: allocation.quantity,
+          })),
         })),
       });
       // Nem navigálunk el azonnal: meg kell mutatni, hány tétel készlete
@@ -648,7 +770,7 @@ export function PurchaseInvoiceEuEditorPage() {
         <Alert
           variant="info"
           title={`Számla rögzítve: ${lastResult.detail.documentNumber}`}
-          description={`Készlet helyileg lekönyvelve ${lastResult.successCount} tételnél. Létrejött ${lastResult.localProductCreatedCount} helyi termék; ${lastResult.unasQueuedCount} UNAS-termék készletszinkronja került sorba.`}
+          description={`Készlet helyileg lekönyvelve ${lastResult.successCount} tételnél. Létrejött ${lastResult.localProductCreatedCount} helyi termék és ${lastResult.projectReservationCount} projektfoglalás; ${lastResult.unasQueuedCount} UNAS-termék szabad készletének szinkronja került sorba.`}
           action={
             <Button
               variant="secondary"
@@ -968,6 +1090,32 @@ export function PurchaseInvoiceEuEditorPage() {
             kapcsolható, vagy készletezett helyi Acropora OS-termékként
             létrehozható.
           </p>
+          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <p className="text-sm font-semibold text-slate-900">
+              Projektkészlet
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              A projekthez rendelt mennyiség fizikailag készleten marad, de
+              azonnal foglalt lesz: nem számít eladható készletnek, és az UNAS
+              felé sem jelenik meg szabad mennyiségként.
+            </p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <Input
+                aria-label="Új projekt neve"
+                value={newProjectName}
+                onChange={(event) => setNewProjectName(event.target.value)}
+                placeholder="Új projekt neve…"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={newProjectName.trim().length < 2 || creatingProject}
+                onClick={() => void createProject()}
+              >
+                {creatingProject ? "Létrehozás…" : "Projekt létrehozása"}
+              </Button>
+            </div>
+          </div>
           <div className="mt-4">
             {productSearchTargetKey ? (
               <div className="mb-2 flex items-center justify-between rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-800">
@@ -1173,6 +1321,104 @@ export function PurchaseInvoiceEuEditorPage() {
                           Mégse
                         </button>
                       </div>
+                    </div>
+                  ) : null}
+                  {line.variantId || line.createLocalProduct ? (
+                    <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-xs font-semibold text-emerald-900">
+                            Projekt-hozzárendelés
+                          </p>
+                          <p className="text-xs text-emerald-800">
+                            Szabad raktárkészlet ebből a sorból:{" "}
+                            {Math.max(
+                              0,
+                              line.actualQuantity - allocatedQuantity(line),
+                            )}{" "}
+                            {line.unit}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          disabled={
+                            projects.length === 0 ||
+                            line.projectAllocations.length >= projects.length
+                          }
+                          onClick={() => addProjectAllocation(line)}
+                        >
+                          Projekt hozzáadása
+                        </Button>
+                      </div>
+                      {projects.length === 0 ? (
+                        <p className="mt-2 text-xs text-amber-700">
+                          Előbb hozz létre egy projektet a fenti mezővel.
+                        </p>
+                      ) : null}
+                      {line.projectAllocations.length > 0 ? (
+                        <div className="mt-3 space-y-2">
+                          {line.projectAllocations.map((allocation) => (
+                            <div
+                              key={allocation.key}
+                              className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem_auto]"
+                            >
+                              <select
+                                aria-label="Projekt"
+                                value={allocation.projectId}
+                                onChange={(event) =>
+                                  updateProjectAllocation(
+                                    line,
+                                    allocation.key,
+                                    { projectId: event.target.value },
+                                  )
+                                }
+                                className="h-9 rounded-lg border border-emerald-200 bg-white px-2 text-sm"
+                              >
+                                <option value="">Válassz projektet</option>
+                                {projects.map((project) => (
+                                  <option
+                                    key={project.id}
+                                    value={project.id}
+                                    disabled={line.projectAllocations.some(
+                                      (other) =>
+                                        other.key !== allocation.key &&
+                                        other.projectId === project.id,
+                                    )}
+                                  >
+                                    {project.projectNumber} · {project.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <input
+                                aria-label="Projekthez rendelt mennyiség"
+                                type="number"
+                                min={0}
+                                max={line.actualQuantity}
+                                step="any"
+                                value={allocation.quantity}
+                                onChange={(event) =>
+                                  updateProjectAllocation(
+                                    line,
+                                    allocation.key,
+                                    { quantity: Number(event.target.value) },
+                                  )
+                                }
+                                className="h-9 rounded-lg border border-emerald-200 bg-white px-2 text-sm"
+                              />
+                              <button
+                                type="button"
+                                className="px-2 text-xs font-semibold text-rose-600 hover:underline"
+                                onClick={() =>
+                                  removeProjectAllocation(line, allocation.key)
+                                }
+                              >
+                                Törlés
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                   <div className="mt-2">

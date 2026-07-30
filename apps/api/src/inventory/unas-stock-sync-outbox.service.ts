@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import { Prisma, prisma } from "@acropora/database";
 
-import { UnasApiClient, UnasApiError } from "../imports/unas/unas-api.client.js";
+import {
+  UnasApiClient,
+  UnasApiError,
+} from "../imports/unas/unas-api.client.js";
 import type { UnasApiErrorCode } from "../imports/unas/unas-api.client.js";
 import { UnasAuthService } from "../imports/unas/unas-auth.service.js";
 import {
@@ -171,9 +174,10 @@ export function computeNextAttemptDelayMs(
 
 export interface StockLookupDatabase {
   stockItem: {
-    findFirst(
-      args: unknown,
-    ): Promise<{ onHand: Prisma.Decimal } | null>;
+    findFirst(args: unknown): Promise<{
+      onHand: Prisma.Decimal;
+      reserved: Prisma.Decimal;
+    } | null>;
   };
 }
 
@@ -209,7 +213,9 @@ export class UnasStockSyncOutboxService {
   /// timer, and by the manual "run now" admin endpoint - both go through
   /// this exact same path, so there is no separate, less-tested code
   /// route for the manual trigger.
-  async processBatch(config: UnasStockSyncWorkerConfig): Promise<ProcessBatchSummary> {
+  async processBatch(
+    config: UnasStockSyncWorkerConfig,
+  ): Promise<ProcessBatchSummary> {
     const summary: ProcessBatchSummary = {
       claimed: 0,
       succeeded: 0,
@@ -277,9 +283,11 @@ export class UnasStockSyncOutboxService {
         locationId: null,
         lotId: null,
       },
-      select: { onHand: true },
+      select: { onHand: true, reserved: true },
     });
-    const quantityToPublish = currentStock?.onHand ?? row.targetOnHand;
+    const quantityToPublish = currentStock
+      ? currentStock.onHand.minus(currentStock.reserved)
+      : row.targetOnHand;
 
     try {
       await this.unasApi.setStock(token, {

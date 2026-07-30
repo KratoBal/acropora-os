@@ -34,8 +34,13 @@ class FakeDb {
     supplierId: string;
     supplierInvoiceNumber: string;
   }> = [];
-  stockItems: Array<{ id: string; variantId: string; onHand: Prisma.Decimal }> =
-    [];
+  invoiceDetails: any[] = [];
+  stockItems: Array<{
+    id: string;
+    variantId: string;
+    onHand: Prisma.Decimal;
+    reserved?: Prisma.Decimal;
+  }> = [];
   movements: Array<{ id: string; idempotencyKey: string | null }> = [];
   movementLines: Array<{ variantId: string; quantity: Prisma.Decimal }> = [];
   outbox: Array<{
@@ -134,7 +139,7 @@ class FakeDb {
       });
       const lineInputs: any[] = args.data.lines?.create ?? [];
       const lines = lineInputs.map((line: any) => ({
-        id: nextId("invoice-line"),
+        id: line.id ?? nextId("invoice-line"),
         variantId: line.variantId ?? null,
         sourceDescription: line.sourceDescription ?? null,
         orderedQuantity: line.orderedQuantity,
@@ -150,8 +155,9 @@ class FakeDb {
               product: { name: `Product ${line.variantId}` },
             }
           : null,
+        projectReservations: [],
       }));
-      return {
+      const detail = {
         id,
         documentNumber: args.data.documentNumber,
         supplierInvoiceNumber: args.data.supplierInvoiceNumber,
@@ -172,9 +178,13 @@ class FakeDb {
         updatedAt: now,
         lines,
       };
+      this.invoiceDetails.push(detail);
+      return detail;
     },
     findMany: async () => [],
-    findUnique: async () => null,
+    findUnique: async (args: any) =>
+      this.invoiceDetails.find((invoice) => invoice.id === args.where.id) ??
+      null,
     count: async () => 0,
   };
 
@@ -204,16 +214,64 @@ class FakeDb {
     },
   };
 
+  project = {
+    findMany: async (args: any) =>
+      ((args.where?.id?.in as string[] | undefined) ?? []).map((id) => ({
+        id,
+      })),
+  };
+
+  projectReservations: Array<{
+    id: string;
+    projectId: string;
+    purchaseInvoiceLineId: string;
+    quantity: Prisma.Decimal;
+  }> = [];
+
+  projectInventoryReservation = {
+    create: async (args: any) => {
+      const reservation = {
+        id: nextId("project-reservation"),
+        projectId: args.data.projectId as string,
+        purchaseInvoiceLineId: args.data.purchaseInvoiceLineId as string,
+        quantity: args.data.quantity as Prisma.Decimal,
+      };
+      this.projectReservations.push(reservation);
+      const line = this.invoiceDetails
+        .flatMap((invoice) => invoice.lines)
+        .find(
+          (candidate) => candidate.id === reservation.purchaseInvoiceLineId,
+        );
+      line?.projectReservations.push({
+        id: reservation.id,
+        quantity: reservation.quantity,
+        project: {
+          id: reservation.projectId,
+          projectNumber: "PRJ-000001",
+          name: "Test project",
+        },
+      });
+      return { id: reservation.id };
+    },
+  };
+
   stockItem = {
     findFirst: async (args: any) => {
       const item = this.stockItems.find(
         (stockItem) => stockItem.variantId === args.where.variantId,
       );
-      return item ? { id: item.id, onHand: item.onHand } : null;
+      return item
+        ? {
+            id: item.id,
+            onHand: item.onHand,
+            reserved: item.reserved ?? new Prisma.Decimal(0),
+          }
+        : null;
     },
     update: async (args: any) => {
       const item = this.stockItems.find((s) => s.id === args.where.id)!;
-      item.onHand = args.data.onHand;
+      if (args.data.onHand !== undefined) item.onHand = args.data.onHand;
+      if (args.data.reserved !== undefined) item.reserved = args.data.reserved;
       return item;
     },
     create: async (args: any) => {
@@ -221,6 +279,7 @@ class FakeDb {
         id: nextId("stock"),
         variantId: args.data.variantId as string,
         onHand: args.data.onHand as Prisma.Decimal,
+        reserved: new Prisma.Decimal(0),
       };
       this.stockItems.push(item);
       return item;
@@ -257,6 +316,14 @@ class FakeDb {
 
   unasStockSyncOutbox = {
     updateMany: async (args: any) => {
+      if (args.where.idempotencyKey) {
+        const row = this.outbox.find(
+          (candidate) => candidate.idempotencyKey === args.where.idempotencyKey,
+        );
+        if (!row) return { count: 0 };
+        row.targetOnHand = args.data.targetOnHand;
+        return { count: 1 };
+      }
       let count = 0;
       for (const row of this.outbox) {
         if (
@@ -549,7 +616,35 @@ describe("PurchaseInvoiceRepository.create", () => {
     assert.equal(db.outbox.length, 1);
   });
 
-  it("accumulates quantity across two lines for the same variant sequentially rather than overwriting", async () => {
+  it("reserves the allocated quantity for a project and publishes only the remaining available stock", async () => {
+    const db = new FakeDb();
+    const repository = repositoryWith(db);
+
+    await repository.create(
+      baseParams({
+        lines: [
+          {
+            ...baseParams().lines[0]!,
+            projectAllocations: [
+              {
+                projectId: "project-1",
+                quantity: new Prisma.Decimal("3"),
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    assert.equal(db.stockItems[0]?.onHand.toString(), "5");
+    assert.equal(db.stockItems[0]?.reserved?.toString(), "3");
+    assert.equal(db.projectReservations.length, 1);
+    assert.equal(db.projectReservations[0]?.projectId, "project-1");
+    assert.equal(db.projectReservations[0]?.quantity.toString(), "3");
+    assert.equal(db.outbox[0]?.targetOnHand.toString(), "2");
+  });
+
+  it("aggregates two invoice lines for the same variant into one physical movement without losing quantity", async () => {
     const db = new FakeDb();
     const repository = repositoryWith(db);
 
@@ -588,12 +683,10 @@ describe("PurchaseInvoiceRepository.create", () => {
       }),
     );
 
-    // Two lines for the same variant must not collide on the same
-    // (movementIdempotencyKey:variantId) outbox key nor lose the first
-    // line's quantity - the writer applies both deltas sequentially under
-    // the same advisory lock, ending at 5 + 3 = 8. The outbox row for that
-    // variant is superseded-and-replaced once (still only one live row).
-    assert.equal(db.movementLines.length, 2);
+    // The invoice keeps both commercial lines (and their separate prices),
+    // while the physical ledger receives one summed delta for the variant.
+    assert.equal(db.movementLines.length, 1);
+    assert.equal(db.movementLines[0]?.quantity.toString(), "8");
     assert.equal(db.stockItems.length, 1);
     assert.equal(db.stockItems[0]?.onHand.toString(), "8");
     const liveOutboxRows = db.outbox.filter((row) => row.status === "PENDING");

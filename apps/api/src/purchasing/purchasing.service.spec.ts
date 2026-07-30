@@ -11,6 +11,7 @@ import type {
   PurchaseInvoiceVariantInfo,
 } from "./purchase-invoice.repository.js";
 import type { PurchaseProductSearchService } from "./purchase-product-search.service.js";
+import type { ProjectRepository } from "./project.repository.js";
 import { PurchasingService } from "./purchasing.service.js";
 
 function variant(
@@ -85,6 +86,9 @@ function buildService(options: {
           lineNet: "0",
           syncStatus: line.syncStatus,
           syncError: line.syncError ?? undefined,
+          projectAllocations: [],
+          reservedQuantity: "0",
+          warehouseQuantity: line.actualQuantity.toString(),
         })),
       };
     },
@@ -104,11 +108,28 @@ function buildService(options: {
         return { quotedDate: "2026-07-20", rate: "400" };
       }),
   } as unknown as MnbExchangeRateService;
+  const projects = {
+    listAssignable: async () => [
+      {
+        id: "project-1",
+        projectNumber: "PRJ-000001",
+        name: "Test project",
+        status: "ACTIVE",
+      },
+    ],
+    create: async (name: string) => ({
+      id: "project-new",
+      projectNumber: "PRJ-000002",
+      name,
+      status: "ACTIVE",
+    }),
+  } as unknown as ProjectRepository;
   const service = new PurchasingService(
     invoices,
     suppliers,
     productSearch,
     mnbRates,
+    projects,
   );
   return {
     service,
@@ -141,6 +162,29 @@ function baseInput(
 }
 
 describe("PurchasingService.createInvoice", () => {
+  it("rejects project allocations whose total exceeds the received quantity", async () => {
+    const { service } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+    });
+
+    await assert.rejects(
+      () =>
+        service.createInvoice(
+          baseInput({
+            lines: [
+              {
+                ...baseInput().lines[0]!,
+                actualQuantity: 5,
+                projectAllocations: [{ projectId: "project-1", quantity: 6 }],
+              },
+            ],
+          }),
+          "user-1",
+        ),
+      /projektekhez rendelt összmennyiség/i,
+    );
+  });
+
   it("rejects a HU_MANUAL/HU_NAV invoice whose currency isn't HUF", async () => {
     const { service } = buildService({
       variants: new Map([["variant-1", variant()]]),

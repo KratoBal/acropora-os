@@ -101,6 +101,7 @@ function buildFakeRepository(options: {
 
 function buildFakeStockLookup(
   onHandByVariant: Map<string, Prisma.Decimal>,
+  reservedByVariant: Map<string, Prisma.Decimal> = new Map(),
 ): StockLookupDatabase {
   return {
     stockItem: {
@@ -108,7 +109,13 @@ function buildFakeStockLookup(
         const variantId = (args as { where: { variantId: string } }).where
           .variantId;
         const onHand = onHandByVariant.get(variantId);
-        return onHand ? { onHand } : null;
+        return onHand
+          ? {
+              onHand,
+              reserved:
+                reservedByVariant.get(variantId) ?? new Prisma.Decimal(0),
+            }
+          : null;
       },
     },
   };
@@ -120,6 +127,7 @@ function buildService(params: {
     row: ClaimedUnasStockSyncOutboxRow,
   ) => { supersededByOutboxId: string } | null;
   onHandByVariant?: Map<string, Prisma.Decimal>;
+  reservedByVariant?: Map<string, Prisma.Decimal>;
   setStock?: (sku: string, qty: string) => Promise<unknown>;
 }) {
   const { repository, calls } = buildFakeRepository({
@@ -128,10 +136,7 @@ function buildService(params: {
   });
   const setStockCalls: Array<{ sku: string; qty: string }> = [];
   const unasApi = {
-    setStock: async (
-      _token: string,
-      request: { sku: string; qty: string },
-    ) => {
+    setStock: async (_token: string, request: { sku: string; qty: string }) => {
       setStockCalls.push({ sku: request.sku, qty: request.qty });
       if (params.setStock) return params.setStock(request.sku, request.qty);
       return { externalId: "1", sku: request.sku };
@@ -142,6 +147,7 @@ function buildService(params: {
   } as unknown as UnasAuthService;
   const stockLookup = buildFakeStockLookup(
     params.onHandByVariant ?? new Map(),
+    params.reservedByVariant ?? new Map(),
   );
   const service = new UnasStockSyncOutboxService(
     repository,
@@ -193,6 +199,19 @@ describe("UnasStockSyncOutboxService.processBatch", () => {
     assert.equal(setStockCalls[0]?.qty, "7");
   });
 
+  it("publishes available stock after subtracting active reservations", async () => {
+    const claimed = row({ targetOnHand: new Prisma.Decimal("8") });
+    const { service, setStockCalls } = buildService({
+      claimed: [claimed],
+      onHandByVariant: new Map([["variant-1", new Prisma.Decimal("10")]]),
+      reservedByVariant: new Map([["variant-1", new Prisma.Decimal("4")]]),
+    });
+
+    await service.processBatch(config());
+
+    assert.equal(setStockCalls[0]?.qty, "6");
+  });
+
   it("skips the UNAS call and marks superseded-success when a newer outbox row exists for the same key", async () => {
     const claimed = row();
     const { service, calls, setStockCalls } = buildService({
@@ -203,7 +222,11 @@ describe("UnasStockSyncOutboxService.processBatch", () => {
     const summary = await service.processBatch(config());
 
     assert.equal(summary.superseded, 1);
-    assert.equal(setStockCalls.length, 0, "must never call UNAS for a superseded row");
+    assert.equal(
+      setStockCalls.length,
+      0,
+      "must never call UNAS for a superseded row",
+    );
     assert.deepEqual(calls.markSupersededSuccessArgs, [
       { id: "outbox-1", by: "outbox-2" },
     ]);

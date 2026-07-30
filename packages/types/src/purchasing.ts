@@ -3,6 +3,28 @@ export type PurchaseInvoiceStatus = "DRAFT" | "POSTED" | "CANCELLED";
 export type PurchaseInvoiceLineSyncStatus =
   "PENDING" | "OK" | "FAILED" | "NOT_LINKED" | "NOT_APPLICABLE";
 
+export type ProjectStatus =
+  "DRAFT" | "ACTIVE" | "ON_HOLD" | "COMPLETED" | "CANCELLED";
+
+export interface ProjectOption {
+  id: string;
+  projectNumber: string;
+  name: string;
+  status: ProjectStatus;
+}
+
+export interface CreateProjectInput {
+  name: string;
+}
+
+export interface PurchaseInvoiceLineProjectAllocation {
+  id: string;
+  projectId: string;
+  projectNumber: string;
+  projectName: string;
+  quantity: string;
+}
+
 export interface PurchaseInvoiceLineDetail {
   id: string;
   /** Nincs, ha a tétel nincs a terméktörzsben rögzítve (lásd syncStatus "NOT_LINKED"). */
@@ -19,6 +41,11 @@ export interface PurchaseInvoiceLineDetail {
   lineNet: string;
   syncStatus: PurchaseInvoiceLineSyncStatus;
   syncError?: string;
+  projectAllocations: PurchaseInvoiceLineProjectAllocation[];
+  /** A ténylegesen bevételezett mennyiségből projektekhez lefoglalt rész. */
+  reservedQuantity: string;
+  /** A ténylegesen bevételezett mennyiség foglalás után raktárban szabad része. */
+  warehouseQuantity: string;
 }
 
 export interface PurchaseInvoiceSummary {
@@ -73,6 +100,12 @@ export interface CreatePurchaseInvoiceLineInput {
   unit: string;
   unitNet: number;
   discountPercent?: number;
+  /** A ténylegesen bevételezett mennyiség projektek között felosztott része.
+   * Az összeg nem haladhatja meg az actualQuantity értékét. */
+  projectAllocations?: Array<{
+    projectId: string;
+    quantity: number;
+  }>;
 }
 
 export interface CreatePurchaseInvoiceInput {
@@ -109,6 +142,8 @@ export interface PurchaseInvoiceResult {
   unasQueuedCount: number;
   /** A számlával atomi tranzakcióban létrehozott helyi termékek száma. */
   localProductCreatedCount: number;
+  /** Azonnal létrehozott aktív projektkészlet-foglalások száma. */
+  projectReservationCount: number;
 }
 
 export interface PurchaseProductSearchResult {

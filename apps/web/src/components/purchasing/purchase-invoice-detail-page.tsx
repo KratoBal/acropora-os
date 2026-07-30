@@ -184,13 +184,14 @@ export function PurchaseInvoiceDetailPage({
               </span>
             </CardHeader>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[860px] border-collapse text-left">
+              <table className="w-full min-w-[1040px] border-collapse text-left">
                 <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-500">
                   <tr>
                     <th className="px-5 py-3">Cikkszám</th>
                     <th className="px-4 py-3">Termék</th>
                     <th className="px-4 py-3 text-right">Rendelt</th>
                     <th className="px-4 py-3 text-right">Tényleges</th>
+                    <th className="px-4 py-3">Projektkészlet</th>
                     <th className="px-4 py-3 text-right">Egységár</th>
                     <th className="px-4 py-3 text-right">Kedvezmény</th>
                     <th className="px-4 py-3 text-right">Nettó sorérték</th>
@@ -227,6 +228,30 @@ export function PurchaseInvoiceDetailPage({
                       </td>
                       <td className="px-4 py-3 text-right text-sm text-slate-600">
                         {line.actualQuantity} {line.unit}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600">
+                        {line.projectAllocations.length > 0 ? (
+                          <div className="space-y-1">
+                            {line.projectAllocations.map((allocation) => (
+                              <div key={allocation.id}>
+                                <span className="font-medium text-slate-800">
+                                  {allocation.projectNumber} ·{" "}
+                                  {allocation.projectName}
+                                </span>
+                                <span className="ml-1 text-xs text-slate-500">
+                                  {allocation.quantity} {line.unit}
+                                </span>
+                              </div>
+                            ))}
+                            <p className="text-xs text-slate-400">
+                              Raktári: {line.warehouseQuantity} {line.unit}
+                            </p>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">
+                            Raktári: {line.warehouseQuantity} {line.unit}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right text-sm text-slate-600">
                         {formatMoney(line.unitNet, detail.currency)}

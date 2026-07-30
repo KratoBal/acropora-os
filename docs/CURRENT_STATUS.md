@@ -296,13 +296,34 @@ automatikus számlázás workerje, és az, hogy a Számlázz.hu bejövő push
 pontosan hogyan kapcsolódik/vált-e ki a meglévő NAV-alapú bevételezési
 UI-hoz - ez utóbbi tisztázása implementáció előtt szükséges.
 
+## Projektkészlet a bevételezésben
+
+A beszerzési számlasorok mennyisége egy vagy több projekthez rendelhető. A
+hozzárendelések összege legfeljebb a ténylegesen bevételezett mennyiség
+lehet; a fennmaradó rész automatikusan normál raktárkészlet.
+
+- `Project`: minimális projekttörzs automatikus `PRJ-000001` formátumú
+  projektszámmal; a teljes M15 workflow ezt később bővíti;
+- `ProjectInventoryReservation`: a számlasor, projekt, variant, raktár és
+  StockItem közötti auditálható foglalási tény;
+- `StockItem.onHand` továbbra is a fizikailag jelen lévő mennyiség;
+- `StockItem.reserved` az aktív projektfoglalások projectionje;
+- eladható/UNAS felé publikálható készlet: `onHand - reserved`;
+- a számla, a fizikai `PURCHASE_RECEIPT` mozgás, a foglalások, a
+  `reserved` projection és az UNAS-outbox célértéke egyetlen tranzakcióban
+  készül;
+- UNAS- és helyi Acropora OS-termék is rendelhető projekthez; helyi termék
+  továbbra sem kerül UNAS-outboxba;
+- a POS-termékkereső már a szabad, nem a teljes fizikai készletet mutatja.
+
+Migráció:
+`20260730190000_add_project_inventory_reservations`.
+
 ## Next steps
 
-Nincs kijelölt következő munkacsomag. Lehetséges további irányok: NAV-számla
-sor összekapcsolása meglévő terméktörzsbeli variantnal (jelenleg a
-bevételezéskor minden NAV-tétel kézi/`NOT_LINKED` sorként kerül át, a
-felhasználó csak átírja a megnevezést - a formális, UNAS-szinkronált
-variant-hozzárendelés soronként külön munkacsomag lenne), a NAV
+Következő projektkészlet-munkacsomag: a foglalás felhasználása/felszabadítása
+a Szerviz és Projekt modulból, projektlezárási szabályokkal és külön
+készletmozgással. További irányok: a NAV
 digest-ben szereplő MODIFY/STORNO számlamódosítások kezelése (jelenleg
 csak az eredeti CREATE-számlák kerülnek be), rendelt/tényleges mennyiség
 eltérés jelzése és jóváhagyása, Vevő szerkesztés (update) UI,
@@ -370,6 +391,9 @@ pnpm build
 - A NAV-alapú bevételezés a számla tételeit `variantId` nélküli, kézi sorként tölti elő - nincs automatikus terméktörzs-egyeztetés soronként, a felhasználó írja át a saját megnevezésére (vagy törli és keres rá egy létező termékre).
 - **Az MNB automatikus árfolyam-lekérdezés jelenleg nem működik**: az `arfolyamok.asmx` élesben (2026-07-23-i teszt szerint) F5 bot-védelemmel válaszol minden POST SOAP-hívásra (`TS...` cookie, `Clear-Site-Data` fejléc, üres törzsű 404 - feltehetően TLS-ujjlenyomat alapú szűrés, kóddal nem megkerülhető). A kliens/szolgáltatás implementálva marad (SOAP 1.1 és 1.2 megpróbálása, szerveroldali naplózás), de gyakorlatilag mindig a kézi megadásra visszaeső hibaágat futtatja; az űrlapon az árfolyam mező emiatt elsődlegesen kézi bevitelre való.
 - A rendelt/tényleges mennyiség közötti eltérés jelzése és jóváhagyása szándékosan még nincs kidolgozva.
+- A projektkészlet bevételezéskori foglalása elkészült, de a foglalás
+  felhasználása, részleges felszabadítása és projektlezáráskor történő
+  rendezése a későbbi Szerviz/Projekt workflow része.
 
 ## Important constraints
 

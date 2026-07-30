@@ -1,6 +1,8 @@
 import type {
   CreatePurchaseInvoiceInput,
+  CreateProjectInput,
   ExchangeRateLookupResult,
+  ProjectOption,
   PurchaseInvoiceDetail,
   PurchaseInvoiceListResponse,
   PurchaseInvoiceResult,
@@ -40,6 +42,16 @@ export const purchasingApi = {
   },
   create(token: string, input: CreatePurchaseInvoiceInput) {
     return apiRequest<PurchaseInvoiceResult>(`/purchasing/invoices`, token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  },
+  listProjects(token: string) {
+    return apiRequest<ProjectOption[]>(`/purchasing/projects`, token);
+  },
+  createProject(token: string, input: CreateProjectInput) {
+    return apiRequest<ProjectOption>(`/purchasing/projects`, token, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),

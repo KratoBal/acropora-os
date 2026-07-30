@@ -59,12 +59,7 @@ export type ReconciliationStatus =
   | "INVALID_LEDGER_DATA";
 
 export type OutboxLatestStatus =
-  | "PENDING"
-  | "PROCESSING"
-  | "SUCCEEDED"
-  | "FAILED"
-  | "DEAD_LETTER"
-  | "NONE";
+  "PENDING" | "PROCESSING" | "SUCCEEDED" | "FAILED" | "DEAD_LETTER" | "NONE";
 
 export interface OutboxDiagnosis {
   latestStatus: OutboxLatestStatus;
@@ -82,17 +77,18 @@ export interface OutboxDiagnosis {
    * supersede (resolutionNote set) rather than an actual UNAS publish, or
    * there are simply no non-superseded rows left. */
   onlySupersededRows: boolean;
-  /** The most recent row's targetOnHand at the time it was created, if any
-   * ever existed for this pair - compared against localOnHand below to
+  /** The most recent row's publishable target (onHand - reserved) at the
+   * time it was created, if any ever existed for this pair - compared
+   * against the current local available quantity below to
    * catch "worker reported success, but local stock has since moved and
    * nothing queued the follow-up" (shouldn't happen given the writer's own
    * supersede-on-write step, but checked independently here rather than
    * assumed). */
   latestRecordedTargetOnHand: string | null;
   /** False only when the latest row is SUCCEEDED (a real publish, not a
-   * supersede) and its targetOnHand no longer matches current localOnHand -
-   * null when there's no successful row to compare, or the pair has no
-   * StockItem at all. */
+   * supersede) and its target no longer matches current local available
+   * quantity; null when there's no successful row to compare, or the pair
+   * has no StockItem at all. */
   latestSuccessMatchesCurrentLocal: boolean | null;
   /** Count of rows still in PENDING or PROCESSING for this pair - more than
    * one at once would indicate the supersede step didn't run as expected. */

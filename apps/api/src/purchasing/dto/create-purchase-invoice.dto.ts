@@ -20,6 +20,11 @@ export class CreateLocalPurchaseProductDto {
   @IsString() @IsOptional() primaryCategoryId?: string;
 }
 
+export class PurchaseInvoiceProjectAllocationDto {
+  @IsString() @MinLength(1) projectId!: string;
+  @IsNumber() @Min(0.000001) quantity!: number;
+}
+
 export class CreatePurchaseInvoiceLineDto {
   // Opcionális: ha nincs megadva, a tétel a terméktörzs nélkül rögzül -
   // ilyenkor a sourceDescription megadása kötelező (lásd PurchasingService).
@@ -34,6 +39,11 @@ export class CreatePurchaseInvoiceLineDto {
   @IsString() @MinLength(1) unit!: string;
   @IsNumber() @Min(0) unitNet!: number;
   @IsNumber() @Min(0) @Max(100) @IsOptional() discountPercent?: number;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PurchaseInvoiceProjectAllocationDto)
+  @IsOptional()
+  projectAllocations?: PurchaseInvoiceProjectAllocationDto[];
 }
 
 export class CreatePurchaseInvoiceDto {

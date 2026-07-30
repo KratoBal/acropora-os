@@ -14,6 +14,7 @@ import type {
 } from "@acropora/types";
 
 import {
+  buildOutboxIdempotencyKey,
   isDuplicateMovementIdempotencyKeyError,
   postInventoryMovement,
   type InventoryMovementDatabase,
@@ -104,6 +105,10 @@ export interface CreatePurchaseInvoiceLine {
   syncStatus: "PENDING" | "NOT_LINKED" | "NOT_APPLICABLE";
   syncError: string | null;
   syncToUnas: boolean;
+  projectAllocations?: Array<{
+    projectId: string;
+    quantity: Prisma.Decimal;
+  }>;
 }
 
 export interface CreatePurchaseInvoiceParams {
@@ -139,9 +144,16 @@ interface PurchaseInvoiceCreateTransaction extends InventoryMovementDatabase {
   };
   purchaseInvoice: {
     create(args: unknown): Promise<PurchaseInvoiceDetailRow>;
+    findUnique(args: unknown): Promise<PurchaseInvoiceDetailRow | null>;
   };
   productExtension: {
     upsert(args: unknown): Promise<unknown>;
+  };
+  project: {
+    findMany(args: unknown): Promise<Array<{ id: string }>>;
+  };
+  projectInventoryReservation: {
+    create(args: unknown): Promise<{ id: string }>;
   };
   navIncomingInvoice: {
     updateMany(args: unknown): Promise<{ count: number }>;
@@ -371,6 +383,15 @@ export class PurchaseInvoiceRepository extends Repository {
               });
             }
 
+            const persistedLines: Array<
+              CreatePurchaseInvoiceLine & {
+                purchaseInvoiceLineId: string;
+              }
+            > = resolvedLines.map((line) => ({
+              ...line,
+              purchaseInvoiceLineId: randomUUID(),
+            }));
+
             const invoice = await transaction.purchaseInvoice.create({
               data: {
                 documentNumber: params.documentNumber,
@@ -389,7 +410,8 @@ export class PurchaseInvoiceRepository extends Repository {
                 note: params.note,
                 createdById: params.actorUserId,
                 lines: {
-                  create: resolvedLines.map((line) => ({
+                  create: persistedLines.map((line) => ({
+                    id: line.purchaseInvoiceLineId,
                     variantId: line.variantId,
                     sourceDescription: line.sourceDescription,
                     orderedQuantity: line.orderedQuantity,
@@ -423,16 +445,43 @@ export class PurchaseInvoiceRepository extends Repository {
             // Minden termékhez kapcsolt sor hat a helyi készletre. UNAS
             // outbox-sort viszont csak az authority alapján
             // syncToUnas=true sorok kapnak; helyi termék soha.
-            const linkedLines = resolvedLines.filter(
+            const linkedLines = persistedLines.filter(
               (
                 line,
               ): line is CreatePurchaseInvoiceLine & {
                 variantId: string;
                 sku: string;
+                purchaseInvoiceLineId: string;
               } => Boolean(line.variantId),
             );
 
             if (linkedLines.length > 0) {
+              const movementLinesByVariant = new Map<
+                string,
+                {
+                  variantId: string;
+                  sku: string;
+                  quantityDelta: Prisma.Decimal;
+                  unit: string;
+                  syncToUnas: boolean;
+                }
+              >();
+              for (const line of linkedLines) {
+                const existing = movementLinesByVariant.get(line.variantId);
+                if (existing) {
+                  existing.quantityDelta = existing.quantityDelta.plus(
+                    line.actualQuantity,
+                  );
+                } else {
+                  movementLinesByVariant.set(line.variantId, {
+                    variantId: line.variantId,
+                    sku: line.sku,
+                    quantityDelta: line.actualQuantity,
+                    unit: line.unit,
+                    syncToUnas: line.syncToUnas,
+                  });
+                }
+              }
               await postInventoryMovement(transaction, {
                 idempotencyKey: this.buildIdempotencyKey(params),
                 movementNumber: `BESZMOZG-${invoice.documentNumber}`,
@@ -443,15 +492,11 @@ export class PurchaseInvoiceRepository extends Repository {
                 performedById: params.actorUserId,
                 occurredAt: params.invoiceDate,
                 sourceProcess: "PURCHASE_INVOICE",
-                lines: linkedLines.map((line) => ({
-                  variantId: line.variantId,
-                  sku: line.sku ?? line.variantId,
-                  // Bevételezés mindig növeli a készletet - a felhasználó
-                  // által beírt tényleges (nem a rendelt!) mennyiséggel.
-                  quantityDelta: line.actualQuantity,
-                  unit: line.unit,
-                  syncToUnas: line.syncToUnas,
-                })),
+                // Azonos variant több számlasoron is szerepelhet eltérő
+                // egységárral; a fizikai készletmozgásban egyetlen összegzett
+                // sor kell, a számlasorok és projektfoglalások ettől még
+                // külön maradnak.
+                lines: [...movementLinesByVariant.values()],
               });
 
               for (const line of linkedLines) {
@@ -469,6 +514,109 @@ export class PurchaseInvoiceRepository extends Repository {
                     preferredSupplierId: params.supplierId,
                   },
                 });
+              }
+
+              const reservationLines = linkedLines.filter(
+                (line) => (line.projectAllocations?.length ?? 0) > 0,
+              );
+              if (reservationLines.length > 0) {
+                const projectIds = [
+                  ...new Set(
+                    reservationLines.flatMap((line) =>
+                      (line.projectAllocations ?? []).map(
+                        (allocation) => allocation.projectId,
+                      ),
+                    ),
+                  ),
+                ];
+                const projects = await transaction.project.findMany({
+                  where: {
+                    id: { in: projectIds },
+                    status: { in: ["DRAFT", "ACTIVE", "ON_HOLD"] },
+                  },
+                  select: { id: true },
+                });
+                if (projects.length !== projectIds.length)
+                  throw new ConflictException(
+                    "A kiválasztott projekt időközben lezárult vagy már nem fogadhat készletfoglalást.",
+                  );
+
+                for (const line of reservationLines) {
+                  const stockItem = await transaction.stockItem.findFirst({
+                    where: {
+                      variantId: line.variantId,
+                      warehouseId: params.warehouseId,
+                      locationId: null,
+                      lotId: null,
+                    },
+                    select: { id: true, onHand: true, reserved: true },
+                  });
+                  if (!stockItem)
+                    throw new Error("PROJECT_RESERVATION_STOCK_ITEM_MISSING");
+
+                  const reservedDelta = (line.projectAllocations ?? []).reduce(
+                    (sum, allocation) => sum.plus(allocation.quantity),
+                    new Prisma.Decimal(0),
+                  );
+                  const resultingReserved = (
+                    stockItem.reserved ?? new Prisma.Decimal(0)
+                  ).plus(reservedDelta);
+
+                  for (const allocation of line.projectAllocations ?? []) {
+                    const reservation =
+                      await transaction.projectInventoryReservation.create({
+                        data: {
+                          projectId: allocation.projectId,
+                          purchaseInvoiceLineId: line.purchaseInvoiceLineId,
+                          stockItemId: stockItem.id,
+                          variantId: line.variantId,
+                          warehouseId: params.warehouseId,
+                          quantity: allocation.quantity,
+                          status: "ACTIVE",
+                          createdById: params.actorUserId,
+                        },
+                        select: { id: true },
+                      });
+                    await transaction.domainEvent.create({
+                      data: {
+                        id: randomUUID(),
+                        eventType: "project_inventory.reserved",
+                        aggregateType: "ProjectInventoryReservation",
+                        aggregateId: reservation.id,
+                        actorUserId: params.actorUserId,
+                        payload: {
+                          projectId: allocation.projectId,
+                          purchaseInvoiceId: invoice.id,
+                          purchaseInvoiceLineId: line.purchaseInvoiceLineId,
+                          variantId: line.variantId,
+                          warehouseId: params.warehouseId,
+                          quantity: allocation.quantity.toString(),
+                        },
+                        occurredAt: now,
+                        schemaVersion: 1,
+                      },
+                    });
+                  }
+
+                  await transaction.stockItem.update({
+                    where: { id: stockItem.id },
+                    data: { reserved: resultingReserved },
+                  });
+
+                  if (line.syncToUnas) {
+                    await transaction.unasStockSyncOutbox.updateMany({
+                      where: {
+                        idempotencyKey: buildOutboxIdempotencyKey(
+                          this.buildIdempotencyKey(params),
+                          line.variantId,
+                        ),
+                      },
+                      data: {
+                        targetOnHand: stockItem.onHand.minus(resultingReserved),
+                      },
+                    });
+                  }
+                }
               }
             }
 
@@ -513,7 +661,14 @@ export class PurchaseInvoiceRepository extends Repository {
               },
             });
 
-            return invoice;
+            const completedInvoice =
+              await transaction.purchaseInvoice.findUnique({
+                where: { id: invoice.id },
+                include: purchaseInvoiceDetailInclude,
+              });
+            if (!completedInvoice)
+              throw new Error("PURCHASE_INVOICE_RELOAD_FAILED");
+            return completedInvoice;
           },
           {
             isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
