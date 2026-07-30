@@ -1,7 +1,7 @@
 export type PurchaseInvoiceSource = "EU" | "HU_MANUAL" | "HU_NAV";
 export type PurchaseInvoiceStatus = "DRAFT" | "POSTED" | "CANCELLED";
 export type PurchaseInvoiceLineSyncStatus =
-  "PENDING" | "OK" | "FAILED" | "NOT_LINKED";
+  "PENDING" | "OK" | "FAILED" | "NOT_LINKED" | "NOT_APPLICABLE";
 
 export interface PurchaseInvoiceLineDetail {
   id: string;
@@ -61,6 +61,14 @@ export interface PurchaseInvoiceListResponse {
 export interface CreatePurchaseInvoiceLineInput {
   /** Ha nincs megadva, a tétel a terméktörzs nélkül rögzül - ilyenkor a sourceDescription kötelező. */
   variantId?: string;
+  /** A számlával egy tranzakcióban létrehozandó, készletezett helyi termék.
+   * A variantId és ez a mező kölcsönösen kizárják egymást. */
+  createLocalProduct?: {
+    name: string;
+    /** Egyedi belső cikkszám; a backend trimeli és nagybetűsíti. */
+    sku: string;
+    primaryCategoryId?: string;
+  };
   sourceDescription?: string;
   orderedQuantity: number;
   actualQuantity: number;
@@ -96,14 +104,20 @@ export interface ExchangeRateLookupResult {
 
 export interface PurchaseInvoiceResult {
   detail: PurchaseInvoiceDetail;
+  /** Helyileg készletre könyvelt, termékhez kapcsolt sorok száma. */
   successCount: number;
   failedCount: number;
+  /** Az UNAS készletszinkron-outboxba tett sorok száma. */
+  unasQueuedCount: number;
+  /** A számlával atomi tranzakcióban létrehozott helyi termékek száma. */
+  localProductCreatedCount: number;
 }
 
 export interface PurchaseProductSearchResult {
   variantId: string;
   sku: string;
   productName: string;
+  origin: "UNAS" | "LOCAL" | null;
   unit: string;
   lastPurchaseNetPrice?: string;
   lastPurchaseCurrency?: string;

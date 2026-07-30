@@ -16,7 +16,7 @@ export interface PurchaseProductSearchDatabase extends WarehouseLookupDatabase {
         id: string;
         sku: string;
         unit: string;
-        product: { name: string };
+        product: { name: string; origin: "UNAS" | "LOCAL" | null };
         extension: {
           lastPurchaseNetPrice: Prisma.Decimal | null;
           defaultPurchaseCurrency: string | null;
@@ -69,7 +69,7 @@ export class PurchaseProductSearchRepository extends Repository {
         id: true,
         sku: true,
         unit: true,
-        product: { select: { name: true } },
+        product: { select: { name: true, origin: true } },
         extension: {
           select: {
             lastPurchaseNetPrice: true,
@@ -99,6 +99,7 @@ export class PurchaseProductSearchRepository extends Repository {
       variantId: variant.id,
       sku: variant.sku,
       productName: variant.product.name,
+      origin: variant.product.origin,
       unit: variant.unit,
       lastPurchaseNetPrice:
         variant.extension?.lastPurchaseNetPrice?.toString() ?? undefined,

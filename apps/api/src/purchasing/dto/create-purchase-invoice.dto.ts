@@ -8,16 +8,27 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  MaxLength,
   Max,
   Min,
   MinLength,
   ValidateNested,
 } from "class-validator";
 
+export class CreateLocalPurchaseProductDto {
+  @IsString() @MinLength(2) @MaxLength(200) name!: string;
+  @IsString() @MinLength(1) @MaxLength(100) sku!: string;
+  @IsString() @IsOptional() primaryCategoryId?: string;
+}
+
 export class CreatePurchaseInvoiceLineDto {
   // Opcionális: ha nincs megadva, a tétel a terméktörzs nélkül rögzül -
   // ilyenkor a sourceDescription megadása kötelező (lásd PurchasingService).
   @IsString() @IsOptional() variantId?: string;
+  @ValidateNested()
+  @Type(() => CreateLocalPurchaseProductDto)
+  @IsOptional()
+  createLocalProduct?: CreateLocalPurchaseProductDto;
   @IsString() @IsOptional() sourceDescription?: string;
   @IsNumber() @Min(0) orderedQuantity!: number;
   @IsNumber() @Min(0) actualQuantity!: number;

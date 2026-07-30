@@ -127,9 +127,8 @@ séma egy új, számla-központú `PurchaseInvoice`/`PurchaseInvoiceLine` párra
 bővült; a régi `PurchaseOrder`/`GoodsReceipt` modellek változatlanul,
 érintetlenül megmaradtak a sémában egy esetleges későbbi felhasználásra.
 
-Ez a kör kizárólag az **EU-n belüli beszerzés** kézi rögzítését szolgálja ki
-ténylegesen; a belföldi (kézi ÁFA-kulcsos, illetve NAV Online Számla
-lekérdezéses) folyamat még nem indult el, lásd alább.
+Az EU-n belüli kézi, a belföldi kézi ÁFA-kulcsos és a NAV Online Számla
+alapú folyamat ugyanazt a bevételezési modellt használja.
 
 - **`Supplier` törzs bővítése**: adószám, ISO országkód (a "HU"-tól eltérő
   érték jelöli az EU-s beszállítót), e-mail, telefon, bankszámla-adatok
@@ -170,10 +169,11 @@ lekérdezéses) folyamat még nem indult el, lásd alább.
   `StockItem` frissítés (a leltár/POS mintájával megegyező additív logika,
   több sor is hivatkozhat ugyanarra a termékre egy számlán belül), valamint
   a `ProductExtension.lastPurchaseNetPrice`/`defaultPurchaseCurrency`/
-  `preferredSupplierId` frissítése. A készletmódosítás ugyanabban a
-  tranzakcióban UNAS stock outbox rekordot hoz létre; az aszinkron worker
-  lease/retry/backoff/dead-letter védelemmel küldi ki az aktuális
-  `StockItem.onHand` értéket.
+  `preferredSupplierId` frissítése. UNAS-authority terméknél a
+  készletmódosítás ugyanabban a tranzakcióban UNAS stock outbox rekordot
+  hoz létre; az aszinkron worker lease/retry/backoff/dead-letter védelemmel
+  küldi ki az aktuális `StockItem.onHand` értéket. ACROPORA-authority helyi
+  terméknél nincs UNAS outbox.
 - **Admin webes UI** (`/beszerzes` lista, `/beszerzes/uj` EU-s rögzítő
   űrlap, `/beszerzes/:id` részletnézet): beszállító keresés/létrehozás,
   pénznem + MNB árfolyam, tételes termékkeresés (cikkszám/név alapján),
@@ -190,6 +190,15 @@ lekérdezéses) folyamat még nem indult el, lásd alább.
   siker-, sem hibaszámlálóba) - kizárólag a terméktörzshöz kötött sorok
   szinkronizálódnak. A számla lista és részletnézet "Nincs terméktörzsben"
   jelzéssel jeleníti meg ezeket a sorokat.
+
+- **Új helyi termék létrehozása számlasorból**: az ismeretlen HU_NAV,
+  HU_MANUAL vagy EU sor meglévő termékhez kapcsolható, vagy név, egyedi
+  belső SKU, mértékegység és opcionális kategória megadásával készletezett
+  fizikai termékké alakítható. A `LOCAL`/`ACROPORA` termék, első variáns,
+  számla, készletmozgás és audit egyetlen tranzakcióban jön létre. A sor
+  `NOT_APPLICABLE` státuszú, készletre kerül, de UNAS outboxot nem kap. A
+  helyi termék nem jelenik meg a POS keresőben, amíg külön POS-csatorna
+  nincs számára engedélyezve.
 
 Migráció: `20260723120000_add_purchase_invoice`,
 `20260723140000_add_supplier_bank_contact_details`,

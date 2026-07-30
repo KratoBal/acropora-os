@@ -27,6 +27,7 @@ interface ProductLinkRow {
   id: string; // variantId
   productId: string;
   product: {
+    catalogAuthority: "UNAS" | "ACROPORA" | null;
     unasSnapshot: { reportedStock: Prisma.Decimal | null } | null;
     variants: Array<{ id: string }>; // the product's first variant only (query already orders+takes 1)
   };
@@ -52,7 +53,9 @@ export interface StockReconciliationDatabase {
     count(args: unknown): Promise<number>;
     groupBy(
       args: unknown,
-    ): Promise<Array<{ variantId: string; _sum: { onHand: Prisma.Decimal | null } }>>;
+    ): Promise<
+      Array<{ variantId: string; _sum: { onHand: Prisma.Decimal | null } }>
+    >;
   };
   stockMovementLine: {
     findMany(args: unknown): Promise<
@@ -116,7 +119,10 @@ export class StockReconciliationRepository extends Repository {
     const [stockItems, totalItems] = await Promise.all([
       this.reconciliationDatabase.stockItem.findMany({
         where,
-        include: { variant: { select: { sku: true } }, warehouse: { select: { code: true } } },
+        include: {
+          variant: { select: { sku: true } },
+          warehouse: { select: { code: true } },
+        },
         orderBy: [{ variantId: "asc" }, { warehouseId: "asc" }],
         skip,
         take: query.pageSize,
@@ -147,7 +153,10 @@ export class StockReconciliationRepository extends Repository {
   ): Promise<StockReconciliationRow | null> {
     const stockItems = await this.reconciliationDatabase.stockItem.findMany({
       where: { id: stockItemId },
-      include: { variant: { select: { sku: true } }, warehouse: { select: { code: true } } },
+      include: {
+        variant: { select: { sku: true } },
+        warehouse: { select: { code: true } },
+      },
       take: 1,
     });
     if (stockItems.length === 0) return null;
@@ -187,6 +196,7 @@ export class StockReconciliationRepository extends Repository {
           productId: true,
           product: {
             select: {
+              catalogAuthority: true,
               unasSnapshot: { select: { reportedStock: true } },
               variants: {
                 select: { id: true },
@@ -243,7 +253,10 @@ export class StockReconciliationRepository extends Repository {
                 where: { variantId: { in: firstVariantIds } },
                 _sum: { onHand: true },
               })
-            ).map((row) => [row.variantId, row._sum.onHand ?? new Prisma.Decimal(0)]),
+            ).map((row) => [
+              row.variantId,
+              row._sum.onHand ?? new Prisma.Decimal(0),
+            ]),
           )
         : new Map<string, Prisma.Decimal>();
 
@@ -264,15 +277,23 @@ export class StockReconciliationRepository extends Repository {
       );
       const hasAnyMovement = (movementsByPair.get(pairKey) ?? []).length > 0;
       const ledgerProvable =
-        hasAnyMovement && !classification.unprovableVariantIds.has(item.variantId);
+        hasAnyMovement &&
+        !classification.unprovableVariantIds.has(item.variantId);
       const ledgerExpectedOnHand = ledgerProvable
-        ? (classification.provableNetByVariant.get(item.variantId) ?? new Prisma.Decimal(0))
+        ? (classification.provableNetByVariant.get(item.variantId) ??
+          new Prisma.Decimal(0))
         : null;
 
       const productLink = productLinkByVariant.get(item.variantId);
-      const isFirstVariant = productLink?.product.variants[0]?.id === item.variantId;
+      const requiresUnasSync = productLink?.product.catalogAuthority === "UNAS";
+      const isLocalProduct =
+        productLink?.product.catalogAuthority === "ACROPORA";
+      const isFirstVariant =
+        productLink?.product.variants[0]?.id === item.variantId;
       const unasOnHand =
-        isFirstVariant && productLink?.product.unasSnapshot?.reportedStock != null
+        requiresUnasSync &&
+        isFirstVariant &&
+        productLink?.product.unasSnapshot?.reportedStock != null
           ? productLink.product.unasSnapshot.reportedStock
           : null;
       const localSumAcrossWarehouses = isFirstVariant
@@ -294,8 +315,17 @@ export class StockReconciliationRepository extends Repository {
           `A termékhez ${productLink.product.variants.length >= 1 ? "több variáns tartozik" : "nincs variáns-adat"} - a UNAS csak az első variánshoz van hasonlítva, ez nem az.`,
         );
       }
-      if (!productLink || productLink.product.unasSnapshot?.reportedStock == null) {
-        notes.push("Nincs UNAS-termékadat (UnasProductSnapshot) ehhez a variánshoz.");
+      if (productLink?.product.catalogAuthority === "ACROPORA") {
+        notes.push(
+          "Helyi Acropora OS-termék - UNAS-készletszinkron nem alkalmazandó.",
+        );
+      } else if (
+        !productLink ||
+        productLink.product.unasSnapshot?.reportedStock == null
+      ) {
+        notes.push(
+          "Nincs UNAS-termékadat (UnasProductSnapshot) ehhez a variánshoz.",
+        );
       }
 
       const outboxDiagnosis = this.diagnoseOutbox(
@@ -317,7 +347,8 @@ export class StockReconciliationRepository extends Repository {
         ledgerProvable,
         hasAnyMovement,
         localVsLedgerDelta,
-        hasUnasLink: unasOnHand !== null,
+        hasUnasLink:
+          isLocalProduct || (requiresUnasSync && unasOnHand !== null),
         unasVsLocalDelta,
         outbox: outboxDiagnosis,
       });
@@ -365,7 +396,9 @@ export class StockReconciliationRepository extends Repository {
       ),
       processingLeaseExpired:
         latest?.status === "PROCESSING"
-          ? (latest.leaseExpiresAt ? latest.leaseExpiresAt.getTime() < Date.now() : true)
+          ? latest.leaseExpiresAt
+            ? latest.leaseExpiresAt.getTime() < Date.now()
+            : true
           : null,
       onlySupersededRows:
         rowsNewestFirst.length > 0 &&
@@ -377,7 +410,8 @@ export class StockReconciliationRepository extends Repository {
         ? latestSuccess.targetOnHand.equals(localOnHand)
         : null,
       competingOpenRowCount: openRows.length,
-      lastSuccessfulPublishAt: latestSuccess?.processedAt?.toISOString() ?? null,
+      lastSuccessfulPublishAt:
+        latestSuccess?.processedAt?.toISOString() ?? null,
       lastFailureAt: lastFailure?.updatedAt.toISOString() ?? null,
     };
   }
@@ -400,25 +434,30 @@ export class StockReconciliationRepository extends Repository {
     totalItems: number;
   }> {
     const skip = (params.page - 1) * params.pageSize;
-    const candidates = await this.reconciliationDatabase.productVariant.findMany({
-      where: {
-        product: { unasSnapshot: { reportedStock: { not: null } } },
-      },
-      select: {
-        id: true,
-        productId: true,
-        product: {
-          select: {
-            unasSnapshot: { select: { reportedStock: true } },
-            variants: {
-              select: { id: true },
-              orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-              take: 1,
+    const candidates =
+      await this.reconciliationDatabase.productVariant.findMany({
+        where: {
+          product: {
+            catalogAuthority: "UNAS",
+            unasSnapshot: { reportedStock: { not: null } },
+          },
+        },
+        select: {
+          id: true,
+          productId: true,
+          product: {
+            select: {
+              catalogAuthority: true,
+              unasSnapshot: { select: { reportedStock: true } },
+              variants: {
+                select: { id: true },
+                orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+                take: 1,
+              },
             },
           },
         },
-      },
-    });
+      });
     const firstVariants = candidates.filter(
       (link) => link.product.variants[0]?.id === link.id,
     );
@@ -426,7 +465,10 @@ export class StockReconciliationRepository extends Repository {
     const existing = new Set(
       (
         await this.reconciliationDatabase.stockItem.findMany({
-          where: { variantId: { in: variantIds }, warehouseId: params.warehouseId },
+          where: {
+            variantId: { in: variantIds },
+            warehouseId: params.warehouseId,
+          },
           select: { variantId: true } as never,
         })
       ).map((row) => (row as unknown as { variantId: string }).variantId),
@@ -442,7 +484,9 @@ export class StockReconciliationRepository extends Repository {
       items: page.map((link) => ({
         variantId: link.id,
         sku: link.id,
-        unasOnHand: (link.product.unasSnapshot?.reportedStock ?? new Prisma.Decimal(0)).toString(),
+        unasOnHand: (
+          link.product.unasSnapshot?.reportedStock ?? new Prisma.Decimal(0)
+        ).toString(),
       })),
       page: params.page,
       pageSize: params.pageSize,

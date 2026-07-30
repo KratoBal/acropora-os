@@ -51,6 +51,49 @@ class FakeDb {
   > = new Map();
   navIncomingInvoices: Map<string, { status: string }> = new Map();
   domainEvents: unknown[] = [];
+  localProducts: Array<{
+    id: string;
+    name: string;
+    variantId: string;
+    sku: string;
+    origin: "LOCAL";
+    catalogAuthority: "ACROPORA";
+  }> = [];
+
+  product = {
+    create: async (args: any) => {
+      const sku = args.data.variants.create.sku as string;
+      if (this.localProducts.some((product) => product.sku === sku)) {
+        throw new Prisma.PrismaClientKnownRequestError("duplicate", {
+          code: "P2002",
+          clientVersion: "test",
+          meta: { target: ["sku"] },
+        });
+      }
+      const product = {
+        id: nextId("product"),
+        name: args.data.name as string,
+        variantId: nextId("variant"),
+        sku,
+        origin: "LOCAL" as const,
+        catalogAuthority: "ACROPORA" as const,
+      };
+      this.localProducts.push(product);
+      return {
+        id: product.id,
+        name: product.name,
+        origin: product.origin,
+        catalogAuthority: product.catalogAuthority,
+        variants: [
+          {
+            id: product.variantId,
+            sku: product.sku,
+            unit: args.data.variants.create.unit,
+          },
+        ],
+      };
+    },
+  };
 
   purchaseInvoice = {
     // The real call always passes `include: purchaseInvoiceDetailInclude`
@@ -256,7 +299,9 @@ class FakeDb {
 }
 
 function repositoryWith(db: FakeDb) {
-  return new PurchaseInvoiceRepository(db as unknown as PurchaseInvoiceDatabase);
+  return new PurchaseInvoiceRepository(
+    db as unknown as PurchaseInvoiceDatabase,
+  );
 }
 
 function baseParams(
@@ -281,6 +326,7 @@ function baseParams(
       {
         variantId: "variant-1",
         sku: "REEF-SALT-01",
+        createLocalProduct: null,
         sourceDescription: null,
         orderedQuantity: new Prisma.Decimal("5"),
         actualQuantity: new Prisma.Decimal("5"),
@@ -289,6 +335,7 @@ function baseParams(
         discountPercent: null,
         syncStatus: "PENDING",
         syncError: null,
+        syncToUnas: true,
       },
     ],
     ...overrides,
@@ -308,7 +355,10 @@ describe("PurchaseInvoiceRepository.create", () => {
     assert.equal(db.stockItems[0]?.onHand.toString(), "5");
     assert.equal(db.outbox.length, 1);
     assert.equal(db.outbox[0]?.targetOnHand.toString(), "5");
-    assert.equal(db.productExtensions.get("variant-1")?.lastPurchaseNetPrice.toString(), "10");
+    assert.equal(
+      db.productExtensions.get("variant-1")?.lastPurchaseNetPrice.toString(),
+      "10",
+    );
   });
 
   it("does not create a StockMovementLine, StockItem, or outbox row for a NOT_LINKED (no product match) line", async () => {
@@ -318,6 +368,7 @@ describe("PurchaseInvoiceRepository.create", () => {
     const notLinked: CreatePurchaseInvoiceLine = {
       variantId: null,
       sku: null,
+      createLocalProduct: null,
       sourceDescription: "Egyedi csomagolóanyag",
       orderedQuantity: new Prisma.Decimal("2"),
       actualQuantity: new Prisma.Decimal("2"),
@@ -326,14 +377,107 @@ describe("PurchaseInvoiceRepository.create", () => {
       discountPercent: null,
       syncStatus: "NOT_LINKED",
       syncError: null,
+      syncToUnas: false,
     };
     await repository.create(baseParams({ lines: [notLinked] }));
 
-    assert.equal(db.movements.length, 0, "no stock movement at all when every line is unlinked");
+    assert.equal(
+      db.movements.length,
+      0,
+      "no stock movement at all when every line is unlinked",
+    );
     assert.equal(db.movementLines.length, 0);
     assert.equal(db.stockItems.length, 0);
     assert.equal(db.outbox.length, 0);
     assert.equal(db.productExtensions.size, 0);
+  });
+
+  it("creates a LOCAL/ACROPORA product and its stock atomically without an UNAS outbox row", async () => {
+    const db = new FakeDb();
+    const repository = repositoryWith(db);
+
+    await repository.create(
+      baseParams({
+        lines: [
+          {
+            variantId: null,
+            sku: "LOCAL-PUMP-01",
+            createLocalProduct: {
+              name: "Egyedi szivattyú",
+              sku: "LOCAL-PUMP-01",
+              primaryCategoryId: null,
+            },
+            sourceDescription: "Pump model X",
+            orderedQuantity: new Prisma.Decimal("2"),
+            actualQuantity: new Prisma.Decimal("2"),
+            unit: "db",
+            unitNet: new Prisma.Decimal("150"),
+            discountPercent: null,
+            syncStatus: "NOT_APPLICABLE",
+            syncError: null,
+            syncToUnas: false,
+          },
+        ],
+      }),
+    );
+
+    assert.equal(db.localProducts.length, 1);
+    assert.equal(db.localProducts[0]?.origin, "LOCAL");
+    assert.equal(db.localProducts[0]?.catalogAuthority, "ACROPORA");
+    assert.equal(db.movementLines.length, 1);
+    assert.equal(db.stockItems[0]?.onHand.toString(), "2");
+    assert.equal(db.outbox.length, 0);
+    assert.equal(db.productExtensions.size, 1);
+    assert.equal(db.domainEvents.length, 2);
+  });
+
+  it("maps an existing local SKU collision to a controlled conflict before booking the invoice", async () => {
+    const db = new FakeDb();
+    db.localProducts.push({
+      id: "existing-product",
+      name: "Meglévő helyi termék",
+      variantId: "existing-variant",
+      sku: "LOCAL-PUMP-01",
+      origin: "LOCAL",
+      catalogAuthority: "ACROPORA",
+    });
+    const repository = repositoryWith(db);
+
+    await assert.rejects(
+      () =>
+        repository.create(
+          baseParams({
+            lines: [
+              {
+                variantId: null,
+                sku: "LOCAL-PUMP-01",
+                createLocalProduct: {
+                  name: "Másik helyi termék",
+                  sku: "LOCAL-PUMP-01",
+                  primaryCategoryId: null,
+                },
+                sourceDescription: "Másik termék a számlán",
+                orderedQuantity: new Prisma.Decimal("1"),
+                actualQuantity: new Prisma.Decimal("1"),
+                unit: "db",
+                unitNet: new Prisma.Decimal("100"),
+                discountPercent: null,
+                syncStatus: "NOT_APPLICABLE",
+                syncError: null,
+                syncToUnas: false,
+              },
+            ],
+          }),
+        ),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        error.message === "LOCAL_PRODUCT_SKU_ALREADY_EXISTS",
+    );
+
+    assert.equal(db.invoices.length, 0);
+    assert.equal(db.movements.length, 0);
+    assert.equal(db.stockItems.length, 0);
+    assert.equal(db.outbox.length, 0);
   });
 
   it("still books the linked line's stock effect when it's mixed with a NOT_LINKED line, skipping only the unlinked one", async () => {
@@ -343,6 +487,7 @@ describe("PurchaseInvoiceRepository.create", () => {
     const notLinked: CreatePurchaseInvoiceLine = {
       variantId: null,
       sku: null,
+      createLocalProduct: null,
       sourceDescription: "Egyedi csomagolóanyag",
       orderedQuantity: new Prisma.Decimal("2"),
       actualQuantity: new Prisma.Decimal("2"),
@@ -351,6 +496,7 @@ describe("PurchaseInvoiceRepository.create", () => {
       discountPercent: null,
       syncStatus: "NOT_LINKED",
       syncError: null,
+      syncToUnas: false,
     };
     await repository.create(
       baseParams({ lines: [...baseParams().lines, notLinked] }),
@@ -371,6 +517,7 @@ describe("PurchaseInvoiceRepository.create", () => {
           {
             variantId: "variant-1",
             sku: "REEF-SALT-01",
+            createLocalProduct: null,
             sourceDescription: null,
             orderedQuantity: new Prisma.Decimal("5"),
             actualQuantity: new Prisma.Decimal("5"),
@@ -379,10 +526,12 @@ describe("PurchaseInvoiceRepository.create", () => {
             discountPercent: null,
             syncStatus: "PENDING",
             syncError: null,
+            syncToUnas: true,
           },
           {
             variantId: "variant-1",
             sku: "REEF-SALT-01",
+            createLocalProduct: null,
             sourceDescription: null,
             orderedQuantity: new Prisma.Decimal("3"),
             actualQuantity: new Prisma.Decimal("3"),
@@ -391,6 +540,7 @@ describe("PurchaseInvoiceRepository.create", () => {
             discountPercent: null,
             syncStatus: "PENDING",
             syncError: null,
+            syncToUnas: true,
           },
         ],
       }),
@@ -432,9 +582,17 @@ describe("PurchaseInvoiceRepository.create", () => {
       ConflictException,
     );
 
-    assert.equal(db.movements.length, 1, "no second stock movement was created");
+    assert.equal(
+      db.movements.length,
+      1,
+      "no second stock movement was created",
+    );
     assert.equal(db.stockItems.length, 1);
-    assert.equal(db.stockItems[0]?.onHand.toString(), "5", "stock was not double-booked");
+    assert.equal(
+      db.stockItems[0]?.onHand.toString(),
+      "5",
+      "stock was not double-booked",
+    );
     assert.equal(db.outbox.length, 1);
   });
 
@@ -446,7 +604,12 @@ describe("PurchaseInvoiceRepository.create", () => {
     await assert.rejects(
       () =>
         repository.create(
-          baseParams({ navIncomingInvoiceId: "nav-1", source: "HU_NAV", currency: "HUF", vatRate: new Prisma.Decimal("27") }),
+          baseParams({
+            navIncomingInvoiceId: "nav-1",
+            source: "HU_NAV",
+            currency: "HUF",
+            vatRate: new Prisma.Decimal("27"),
+          }),
         ),
       ConflictException,
     );
@@ -462,7 +625,12 @@ describe("PurchaseInvoiceRepository.create", () => {
     const repository = repositoryWith(db);
 
     await repository.create(
-      baseParams({ navIncomingInvoiceId: "nav-1", source: "HU_NAV", currency: "HUF", vatRate: new Prisma.Decimal("27") }),
+      baseParams({
+        navIncomingInvoiceId: "nav-1",
+        source: "HU_NAV",
+        currency: "HUF",
+        vatRate: new Prisma.Decimal("27"),
+      }),
     );
 
     assert.equal(db.navIncomingInvoices.get("nav-1")?.status, "RECEIVED");
@@ -481,6 +649,7 @@ describe("PurchaseInvoiceRepository.create", () => {
           {
             variantId: "variant-2",
             sku: "PUMP-XL",
+            createLocalProduct: null,
             sourceDescription: null,
             orderedQuantity: new Prisma.Decimal("1"),
             actualQuantity: new Prisma.Decimal("1"),
@@ -489,6 +658,7 @@ describe("PurchaseInvoiceRepository.create", () => {
             discountPercent: null,
             syncStatus: "PENDING",
             syncError: null,
+            syncToUnas: true,
           },
         ],
       }),

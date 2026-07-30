@@ -33,6 +33,7 @@ interface FakeProductLink {
   reportedStock: Prisma.Decimal | null;
   firstVariantId: string; // the product's own first variant - same for every variant of that product
   variantCount: number;
+  catalogAuthority?: "UNAS" | "ACROPORA" | null;
 }
 
 interface FakeOutboxRow {
@@ -75,21 +76,26 @@ class FakeDb implements StockReconciliationDatabase {
       const variantIdFilter = args.where?.variantId;
       const matchesVariantId = (candidate: string): boolean => {
         if (variantIdFilter === undefined) return true;
-        if (typeof variantIdFilter === "string") return candidate === variantIdFilter;
+        if (typeof variantIdFilter === "string")
+          return candidate === variantIdFilter;
         return variantIdFilter.in.includes(candidate);
       };
       const filtered = this.stockItems.filter(
         (item) =>
           (!args.where?.id || item.id === args.where.id) &&
           matchesVariantId(item.variantId) &&
-          (!args.where?.warehouseId || item.warehouseId === args.where.warehouseId),
+          (!args.where?.warehouseId ||
+            item.warehouseId === args.where.warehouseId),
       );
       const sorted = [...filtered].sort((a, b) =>
         a.variantId === b.variantId
           ? a.warehouseId.localeCompare(b.warehouseId)
           : a.variantId.localeCompare(b.variantId),
       );
-      const page = sorted.slice(args.skip ?? 0, (args.skip ?? 0) + (args.take ?? sorted.length));
+      const page = sorted.slice(
+        args.skip ?? 0,
+        (args.skip ?? 0) + (args.take ?? sorted.length),
+      );
       return page.map((item) => ({
         id: item.id,
         variantId: item.variantId,
@@ -99,11 +105,14 @@ class FakeDb implements StockReconciliationDatabase {
         warehouse: { code: item.warehouseCode },
       }));
     },
-    count: async (args: { where?: { variantId?: string; warehouseId?: string } }) => {
+    count: async (args: {
+      where?: { variantId?: string; warehouseId?: string };
+    }) => {
       return this.stockItems.filter(
         (item) =>
           (!args.where?.variantId || item.variantId === args.where.variantId) &&
-          (!args.where?.warehouseId || item.warehouseId === args.where.warehouseId),
+          (!args.where?.warehouseId ||
+            item.warehouseId === args.where.warehouseId),
       ).length;
     },
     groupBy: async (args: { where?: { variantId?: { in: string[] } } }) => {
@@ -119,45 +128,63 @@ class FakeDb implements StockReconciliationDatabase {
 
   stockMovementLine = {
     findMany: async (args: {
-      where: { variantId: { in: string[] }; movement: { sourceWarehouseId: { in: string[] } } };
+      where: {
+        variantId: { in: string[] };
+        movement: { sourceWarehouseId: { in: string[] } };
+      };
     }) => {
       const variantIds = new Set(args.where.variantId.in);
       const warehouseIds = new Set(args.where.movement.sourceWarehouseId.in);
       return this.movementLines
         .filter(
-          (line) => variantIds.has(line.variantId) && warehouseIds.has(line.sourceWarehouseId),
+          (line) =>
+            variantIds.has(line.variantId) &&
+            warehouseIds.has(line.sourceWarehouseId),
         )
         .map((line) => ({
           variantId: line.variantId,
           quantity: line.quantity,
-          movement: { type: line.type, sourceWarehouseId: line.sourceWarehouseId },
+          movement: {
+            type: line.type,
+            sourceWarehouseId: line.sourceWarehouseId,
+          },
         }));
     },
   };
 
   productVariant = {
-    // findVariantsMissingStockItem (stock-reconciliation.repository.ts) does
-    // NOT pre-filter by variant id here - it fetches every product-variant
-    // whose PRODUCT has a UNAS snapshot with a non-null reportedStock (see
-    // that method's own doc comment: a broad "should exist but doesn't"
-    // candidate universe), then separately queries StockItem to find out
-    // which of those already have a row, subtracting that set afterwards.
-    // This fixture previously filtered by `args.where.id.in`, a shape the
-    // real query never sends (it has no variantId-based where clause at
-    // all here) - every call landed on `args.where.id` being undefined.
-    findMany: async (_args: unknown) => {
-      return this.productLinks
-        .filter((link) => link.reportedStock !== null)
-        .map((link) => ({
-          id: link.variantId,
-          productId: link.productId,
-          product: {
-            unasSnapshot: link.reportedStock !== null ? { reportedStock: link.reportedStock } : null,
-            variants: Array.from({ length: link.variantCount }, (_, index) =>
-              index === 0 ? { id: link.firstVariantId } : { id: `${link.firstVariantId}-other-${index}` },
-            ).slice(0, 1),
-          },
-        }));
+    // buildRows asks for specific variants regardless of authority, while
+    // findVariantsMissingStockItem asks for every UNAS product with a known
+    // reported stock. Mirror both query shapes so local products remain
+    // visible to reconciliation without entering the UNAS-only missing-row
+    // candidate universe.
+    findMany: async (args: { where?: { id?: { in: string[] } } }) => {
+      const requestedVariantIds = args.where?.id?.in;
+      const links = requestedVariantIds
+        ? this.productLinks.filter((link) =>
+            requestedVariantIds.includes(link.variantId),
+          )
+        : this.productLinks.filter(
+            (link) =>
+              (link.catalogAuthority ?? "UNAS") === "UNAS" &&
+              link.reportedStock !== null,
+          );
+      return links.map((link) => ({
+        id: link.variantId,
+        productId: link.productId,
+        product: {
+          catalogAuthority: link.catalogAuthority ?? "UNAS",
+          unasSnapshot:
+            link.reportedStock !== null
+              ? { reportedStock: link.reportedStock }
+              : null,
+          variants: Array.from({ length: link.variantCount }, (_, index) =>
+            index === 0
+              ? { id: link.firstVariantId }
+              : { id: `${link.firstVariantId}-other-${index}` },
+          ).slice(0, 1),
+        },
+      }));
     },
   };
 
@@ -168,8 +195,13 @@ class FakeDb implements StockReconciliationDatabase {
       const variantIds = new Set(args.where.variantId.in);
       const warehouseIds = new Set(args.where.warehouseId.in);
       return this.outboxRows
-        .filter((row) => variantIds.has(row.variantId) && warehouseIds.has(row.warehouseId))
-        .sort((a, b) => (a.sequence > b.sequence ? -1 : a.sequence < b.sequence ? 1 : 0))
+        .filter(
+          (row) =>
+            variantIds.has(row.variantId) && warehouseIds.has(row.warehouseId),
+        )
+        .sort((a, b) =>
+          a.sequence > b.sequence ? -1 : a.sequence < b.sequence ? 1 : 0,
+        )
         .map((row, index) => ({ id: `outbox-${index}`, ...row }));
     },
   };
@@ -187,8 +219,18 @@ describe("StockReconciliationRepository.reconcilePage", () => {
       warehouseCode: "FO",
     });
     db.movementLines.push(
-      { variantId: "v1", quantity: d("10"), type: "PURCHASE_RECEIPT", sourceWarehouseId: "wh-1" },
-      { variantId: "v1", quantity: d("3"), type: "SALE", sourceWarehouseId: "wh-1" },
+      {
+        variantId: "v1",
+        quantity: d("10"),
+        type: "PURCHASE_RECEIPT",
+        sourceWarehouseId: "wh-1",
+      },
+      {
+        variantId: "v1",
+        quantity: d("3"),
+        type: "SALE",
+        sourceWarehouseId: "wh-1",
+      },
     );
     const repository = new StockReconciliationRepository(db);
     const page = await repository.reconcilePage({ page: 1, pageSize: 10 });
@@ -210,13 +252,56 @@ describe("StockReconciliationRepository.reconcilePage", () => {
       warehouseCode: "FO",
     });
     db.movementLines.push(
-      { variantId: "v1", quantity: d("10"), type: "PURCHASE_RECEIPT", sourceWarehouseId: "wh-1" },
-      { variantId: "v1", quantity: d("3"), type: "SALE", sourceWarehouseId: "wh-1" },
+      {
+        variantId: "v1",
+        quantity: d("10"),
+        type: "PURCHASE_RECEIPT",
+        sourceWarehouseId: "wh-1",
+      },
+      {
+        variantId: "v1",
+        quantity: d("3"),
+        type: "SALE",
+        sourceWarehouseId: "wh-1",
+      },
     );
     // No productLinks entry at all - no UNAS product/snapshot linked.
     const repository = new StockReconciliationRepository(db);
     const page = await repository.reconcilePage({ page: 1, pageSize: 10 });
     assert.equal(page.items[0]!.status, "MISSING_UNAS_LINK");
+  });
+
+  it("treats a local Acropora product as CONSISTENT without an UNAS snapshot", async () => {
+    const db = new FakeDb();
+    db.stockItems.push({
+      id: "si-1",
+      variantId: "v1",
+      warehouseId: "wh-1",
+      onHand: d("7"),
+      sku: "local-sku-1",
+      warehouseCode: "FO",
+    });
+    db.movementLines.push({
+      variantId: "v1",
+      quantity: d("7"),
+      type: "PURCHASE_RECEIPT",
+      sourceWarehouseId: "wh-1",
+    });
+    db.productLinks.push({
+      variantId: "v1",
+      productId: "p1",
+      reportedStock: null,
+      firstVariantId: "v1",
+      variantCount: 1,
+      catalogAuthority: "ACROPORA",
+    });
+
+    const repository = new StockReconciliationRepository(db);
+    const page = await repository.reconcilePage({ page: 1, pageSize: 10 });
+
+    assert.equal(page.items[0]!.status, "CONSISTENT");
+    assert.equal(page.items[0]!.unasOnHand, null);
+    assert.match(page.items[0]!.notes.join(" "), /nem alkalmazandó/);
   });
 
   it("is HISTORICAL_BASELINE_UNKNOWN when a StockItem exists with no ledger movement at all", async () => {
@@ -261,13 +346,42 @@ describe("StockReconciliationRepository.reconcilePage", () => {
   it("keeps two warehouses' ledgers and onHand fully independent for the same variant", async () => {
     const db = new FakeDb();
     db.stockItems.push(
-      { id: "si-1", variantId: "v1", warehouseId: "wh-1", onHand: d("7"), sku: "sku-1", warehouseCode: "FO" },
-      { id: "si-2", variantId: "v1", warehouseId: "wh-2", onHand: d("100"), sku: "sku-1", warehouseCode: "MASODIK" },
+      {
+        id: "si-1",
+        variantId: "v1",
+        warehouseId: "wh-1",
+        onHand: d("7"),
+        sku: "sku-1",
+        warehouseCode: "FO",
+      },
+      {
+        id: "si-2",
+        variantId: "v1",
+        warehouseId: "wh-2",
+        onHand: d("100"),
+        sku: "sku-1",
+        warehouseCode: "MASODIK",
+      },
     );
     db.movementLines.push(
-      { variantId: "v1", quantity: d("10"), type: "PURCHASE_RECEIPT", sourceWarehouseId: "wh-1" },
-      { variantId: "v1", quantity: d("3"), type: "SALE", sourceWarehouseId: "wh-1" },
-      { variantId: "v1", quantity: d("100"), type: "PURCHASE_RECEIPT", sourceWarehouseId: "wh-2" },
+      {
+        variantId: "v1",
+        quantity: d("10"),
+        type: "PURCHASE_RECEIPT",
+        sourceWarehouseId: "wh-1",
+      },
+      {
+        variantId: "v1",
+        quantity: d("3"),
+        type: "SALE",
+        sourceWarehouseId: "wh-1",
+      },
+      {
+        variantId: "v1",
+        quantity: d("100"),
+        type: "PURCHASE_RECEIPT",
+        sourceWarehouseId: "wh-2",
+      },
     );
     const repository = new StockReconciliationRepository(db);
     const page = await repository.reconcilePage({ page: 1, pageSize: 10 });
@@ -288,12 +402,36 @@ describe("StockReconciliationRepository.reconcilePage", () => {
   it("compares UNAS reportedStock against the SUM of localOnHand across ALL warehouses, not just one row's warehouse", async () => {
     const db = new FakeDb();
     db.stockItems.push(
-      { id: "si-1", variantId: "v1", warehouseId: "wh-1", onHand: d("7"), sku: "sku-1", warehouseCode: "FO" },
-      { id: "si-2", variantId: "v1", warehouseId: "wh-2", onHand: d("3"), sku: "sku-1", warehouseCode: "MASODIK" },
+      {
+        id: "si-1",
+        variantId: "v1",
+        warehouseId: "wh-1",
+        onHand: d("7"),
+        sku: "sku-1",
+        warehouseCode: "FO",
+      },
+      {
+        id: "si-2",
+        variantId: "v1",
+        warehouseId: "wh-2",
+        onHand: d("3"),
+        sku: "sku-1",
+        warehouseCode: "MASODIK",
+      },
     );
     db.movementLines.push(
-      { variantId: "v1", quantity: d("7"), type: "PURCHASE_RECEIPT", sourceWarehouseId: "wh-1" },
-      { variantId: "v1", quantity: d("3"), type: "PURCHASE_RECEIPT", sourceWarehouseId: "wh-2" },
+      {
+        variantId: "v1",
+        quantity: d("7"),
+        type: "PURCHASE_RECEIPT",
+        sourceWarehouseId: "wh-1",
+      },
+      {
+        variantId: "v1",
+        quantity: d("3"),
+        type: "PURCHASE_RECEIPT",
+        sourceWarehouseId: "wh-2",
+      },
     );
     db.productLinks.push({
       variantId: "v1",
@@ -313,9 +451,27 @@ describe("StockReconciliationRepository.reconcilePage", () => {
 
   it("flags UNAS_MISMATCH_NO_PENDING_SYNC when UNAS disagrees and there is no outbox row at all", async () => {
     const db = new FakeDb();
-    db.stockItems.push({ id: "si-1", variantId: "v1", warehouseId: "wh-1", onHand: d("5"), sku: "sku-1", warehouseCode: "FO" });
-    db.movementLines.push({ variantId: "v1", quantity: d("5"), type: "PURCHASE_RECEIPT", sourceWarehouseId: "wh-1" });
-    db.productLinks.push({ variantId: "v1", productId: "p1", reportedStock: d("999"), firstVariantId: "v1", variantCount: 1 });
+    db.stockItems.push({
+      id: "si-1",
+      variantId: "v1",
+      warehouseId: "wh-1",
+      onHand: d("5"),
+      sku: "sku-1",
+      warehouseCode: "FO",
+    });
+    db.movementLines.push({
+      variantId: "v1",
+      quantity: d("5"),
+      type: "PURCHASE_RECEIPT",
+      sourceWarehouseId: "wh-1",
+    });
+    db.productLinks.push({
+      variantId: "v1",
+      productId: "p1",
+      reportedStock: d("999"),
+      firstVariantId: "v1",
+      variantCount: 1,
+    });
     const repository = new StockReconciliationRepository(db);
     const page = await repository.reconcilePage({ page: 1, pageSize: 10 });
     assert.equal(page.items[0]!.status, "UNAS_MISMATCH_NO_PENDING_SYNC");
@@ -323,9 +479,27 @@ describe("StockReconciliationRepository.reconcilePage", () => {
 
   it("flags UNAS_BEHIND_PENDING_SYNC when UNAS disagrees but a PENDING outbox row is already queued", async () => {
     const db = new FakeDb();
-    db.stockItems.push({ id: "si-1", variantId: "v1", warehouseId: "wh-1", onHand: d("5"), sku: "sku-1", warehouseCode: "FO" });
-    db.movementLines.push({ variantId: "v1", quantity: d("5"), type: "PURCHASE_RECEIPT", sourceWarehouseId: "wh-1" });
-    db.productLinks.push({ variantId: "v1", productId: "p1", reportedStock: d("999"), firstVariantId: "v1", variantCount: 1 });
+    db.stockItems.push({
+      id: "si-1",
+      variantId: "v1",
+      warehouseId: "wh-1",
+      onHand: d("5"),
+      sku: "sku-1",
+      warehouseCode: "FO",
+    });
+    db.movementLines.push({
+      variantId: "v1",
+      quantity: d("5"),
+      type: "PURCHASE_RECEIPT",
+      sourceWarehouseId: "wh-1",
+    });
+    db.productLinks.push({
+      variantId: "v1",
+      productId: "p1",
+      reportedStock: d("999"),
+      firstVariantId: "v1",
+      variantCount: 1,
+    });
     db.outboxRows.push({
       variantId: "v1",
       warehouseId: "wh-1",
@@ -346,8 +520,20 @@ describe("StockReconciliationRepository.reconcilePage", () => {
 
   it("flags SYNC_FAILED when the latest outbox row is DEAD_LETTER", async () => {
     const db = new FakeDb();
-    db.stockItems.push({ id: "si-1", variantId: "v1", warehouseId: "wh-1", onHand: d("5"), sku: "sku-1", warehouseCode: "FO" });
-    db.movementLines.push({ variantId: "v1", quantity: d("5"), type: "PURCHASE_RECEIPT", sourceWarehouseId: "wh-1" });
+    db.stockItems.push({
+      id: "si-1",
+      variantId: "v1",
+      warehouseId: "wh-1",
+      onHand: d("5"),
+      sku: "sku-1",
+      warehouseCode: "FO",
+    });
+    db.movementLines.push({
+      variantId: "v1",
+      quantity: d("5"),
+      type: "PURCHASE_RECEIPT",
+      sourceWarehouseId: "wh-1",
+    });
     db.outboxRows.push({
       variantId: "v1",
       warehouseId: "wh-1",
@@ -367,8 +553,20 @@ describe("StockReconciliationRepository.reconcilePage", () => {
 
   it("flags PROCESSING_LEASE_EXPIRED when the latest row is PROCESSING with a lease in the past", async () => {
     const db = new FakeDb();
-    db.stockItems.push({ id: "si-1", variantId: "v1", warehouseId: "wh-1", onHand: d("5"), sku: "sku-1", warehouseCode: "FO" });
-    db.movementLines.push({ variantId: "v1", quantity: d("5"), type: "PURCHASE_RECEIPT", sourceWarehouseId: "wh-1" });
+    db.stockItems.push({
+      id: "si-1",
+      variantId: "v1",
+      warehouseId: "wh-1",
+      onHand: d("5"),
+      sku: "sku-1",
+      warehouseCode: "FO",
+    });
+    db.movementLines.push({
+      variantId: "v1",
+      quantity: d("5"),
+      type: "PURCHASE_RECEIPT",
+      sourceWarehouseId: "wh-1",
+    });
     db.outboxRows.push({
       variantId: "v1",
       warehouseId: "wh-1",
@@ -388,8 +586,20 @@ describe("StockReconciliationRepository.reconcilePage", () => {
 
   it("does NOT flag PROCESSING_LEASE_EXPIRED when the lease is still valid", async () => {
     const db = new FakeDb();
-    db.stockItems.push({ id: "si-1", variantId: "v1", warehouseId: "wh-1", onHand: d("5"), sku: "sku-1", warehouseCode: "FO" });
-    db.movementLines.push({ variantId: "v1", quantity: d("5"), type: "PURCHASE_RECEIPT", sourceWarehouseId: "wh-1" });
+    db.stockItems.push({
+      id: "si-1",
+      variantId: "v1",
+      warehouseId: "wh-1",
+      onHand: d("5"),
+      sku: "sku-1",
+      warehouseCode: "FO",
+    });
+    db.movementLines.push({
+      variantId: "v1",
+      quantity: d("5"),
+      type: "PURCHASE_RECEIPT",
+      sourceWarehouseId: "wh-1",
+    });
     db.outboxRows.push({
       variantId: "v1",
       warehouseId: "wh-1",
@@ -409,8 +619,20 @@ describe("StockReconciliationRepository.reconcilePage", () => {
 
   it("recognizes an only-superseded outbox history distinctly (onlySupersededRows)", async () => {
     const db = new FakeDb();
-    db.stockItems.push({ id: "si-1", variantId: "v1", warehouseId: "wh-1", onHand: d("5"), sku: "sku-1", warehouseCode: "FO" });
-    db.movementLines.push({ variantId: "v1", quantity: d("5"), type: "PURCHASE_RECEIPT", sourceWarehouseId: "wh-1" });
+    db.stockItems.push({
+      id: "si-1",
+      variantId: "v1",
+      warehouseId: "wh-1",
+      onHand: d("5"),
+      sku: "sku-1",
+      warehouseCode: "FO",
+    });
+    db.movementLines.push({
+      variantId: "v1",
+      quantity: d("5"),
+      type: "PURCHASE_RECEIPT",
+      sourceWarehouseId: "wh-1",
+    });
     db.outboxRows.push({
       variantId: "v1",
       warehouseId: "wh-1",
@@ -431,8 +653,20 @@ describe("StockReconciliationRepository.reconcilePage", () => {
 
   it("compares the latest real SUCCEEDED publish's targetOnHand against current localOnHand", async () => {
     const db = new FakeDb();
-    db.stockItems.push({ id: "si-1", variantId: "v1", warehouseId: "wh-1", onHand: d("9"), sku: "sku-1", warehouseCode: "FO" });
-    db.movementLines.push({ variantId: "v1", quantity: d("9"), type: "PURCHASE_RECEIPT", sourceWarehouseId: "wh-1" });
+    db.stockItems.push({
+      id: "si-1",
+      variantId: "v1",
+      warehouseId: "wh-1",
+      onHand: d("9"),
+      sku: "sku-1",
+      warehouseCode: "FO",
+    });
+    db.movementLines.push({
+      variantId: "v1",
+      quantity: d("9"),
+      type: "PURCHASE_RECEIPT",
+      sourceWarehouseId: "wh-1",
+    });
     db.outboxRows.push({
       variantId: "v1",
       warehouseId: "wh-1",
@@ -469,22 +703,61 @@ describe("StockReconciliationRepository.reconcilePage", () => {
     assert.equal(second.items.length, 2);
     assert.equal(first.totalItems, 5);
     assert.equal(first.totalPages, 3);
-    assert.notDeepEqual(first.items.map((row) => row.variantId), second.items.map((row) => row.variantId));
+    assert.notDeepEqual(
+      first.items.map((row) => row.variantId),
+      second.items.map((row) => row.variantId),
+    );
   });
 
   it("only compares a multi-variant product's FIRST variant against UNAS - other variants get unasOnHand=null", async () => {
     const db = new FakeDb();
     db.stockItems.push(
-      { id: "si-1", variantId: "v1", warehouseId: "wh-1", onHand: d("5"), sku: "sku-1", warehouseCode: "FO" },
-      { id: "si-2", variantId: "v2", warehouseId: "wh-1", onHand: d("2"), sku: "sku-2", warehouseCode: "FO" },
+      {
+        id: "si-1",
+        variantId: "v1",
+        warehouseId: "wh-1",
+        onHand: d("5"),
+        sku: "sku-1",
+        warehouseCode: "FO",
+      },
+      {
+        id: "si-2",
+        variantId: "v2",
+        warehouseId: "wh-1",
+        onHand: d("2"),
+        sku: "sku-2",
+        warehouseCode: "FO",
+      },
     );
     db.movementLines.push(
-      { variantId: "v1", quantity: d("5"), type: "PURCHASE_RECEIPT", sourceWarehouseId: "wh-1" },
-      { variantId: "v2", quantity: d("2"), type: "PURCHASE_RECEIPT", sourceWarehouseId: "wh-1" },
+      {
+        variantId: "v1",
+        quantity: d("5"),
+        type: "PURCHASE_RECEIPT",
+        sourceWarehouseId: "wh-1",
+      },
+      {
+        variantId: "v2",
+        quantity: d("2"),
+        type: "PURCHASE_RECEIPT",
+        sourceWarehouseId: "wh-1",
+      },
     );
     db.productLinks.push(
-      { variantId: "v1", productId: "p1", reportedStock: d("5"), firstVariantId: "v1", variantCount: 2 },
-      { variantId: "v2", productId: "p1", reportedStock: d("5"), firstVariantId: "v1", variantCount: 2 },
+      {
+        variantId: "v1",
+        productId: "p1",
+        reportedStock: d("5"),
+        firstVariantId: "v1",
+        variantCount: 2,
+      },
+      {
+        variantId: "v2",
+        productId: "p1",
+        reportedStock: d("5"),
+        firstVariantId: "v1",
+        variantCount: 2,
+      },
     );
     const repository = new StockReconciliationRepository(db);
     const page = await repository.reconcilePage({ page: 1, pageSize: 10 });
@@ -514,7 +787,10 @@ describe("StockReconciliationRepository.reconcilePage", () => {
     const allowed = new Set(["findMany", "count", "groupBy"]);
     for (const [modelName, methodNames] of Object.entries(methodsByModel)) {
       for (const methodName of methodNames) {
-        assert.ok(allowed.has(methodName), `unexpected mutating-looking method ${modelName}.${methodName}`);
+        assert.ok(
+          allowed.has(methodName),
+          `unexpected mutating-looking method ${modelName}.${methodName}`,
+        );
       }
     }
   });
@@ -542,6 +818,29 @@ describe("StockReconciliationRepository.findVariantsMissingStockItem", () => {
     assert.equal(result.items[0]!.unasOnHand, "15");
   });
 
+  it("never lists a local product as missing an UNAS-backed StockItem", async () => {
+    const db = new FakeDb();
+    db.productLinks.push({
+      variantId: "v-local",
+      productId: "p-local",
+      // Defensive fixture: even a stale/corrupt snapshot must not turn a
+      // local-authority product into an UNAS reconciliation candidate.
+      reportedStock: d("15"),
+      firstVariantId: "v-local",
+      variantCount: 1,
+      catalogAuthority: "ACROPORA",
+    });
+
+    const repository = new StockReconciliationRepository(db);
+    const result = await repository.findVariantsMissingStockItem({
+      warehouseId: "wh-1",
+      page: 1,
+      pageSize: 10,
+    });
+
+    assert.equal(result.items.length, 0);
+  });
+
   it("excludes a variant that already has a StockItem row in the target warehouse", async () => {
     const db = new FakeDb();
     db.productLinks.push({
@@ -551,7 +850,14 @@ describe("StockReconciliationRepository.findVariantsMissingStockItem", () => {
       firstVariantId: "v1",
       variantCount: 1,
     });
-    db.stockItems.push({ id: "si-1", variantId: "v1", warehouseId: "wh-1", onHand: d("15"), sku: "sku-1", warehouseCode: "FO" });
+    db.stockItems.push({
+      id: "si-1",
+      variantId: "v1",
+      warehouseId: "wh-1",
+      onHand: d("15"),
+      sku: "sku-1",
+      warehouseCode: "FO",
+    });
     const repository = new StockReconciliationRepository(db);
     const result = await repository.findVariantsMissingStockItem({
       warehouseId: "wh-1",

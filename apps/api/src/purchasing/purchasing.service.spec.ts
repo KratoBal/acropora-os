@@ -22,6 +22,7 @@ function variant(
     productName: "Reef Salt",
     unit: "db",
     currentQty: new Prisma.Decimal("10"),
+    catalogAuthority: "UNAS",
     ...overrides,
   };
 }
@@ -270,7 +271,109 @@ describe("PurchasingService.createInvoice", () => {
     assert.equal(params?.lines[0]?.sku, "REEF-SALT-01");
     assert.equal(params?.lines[1]?.syncStatus, "PENDING");
     assert.equal(params?.lines[1]?.sku, "PUMP-XL");
-    assert.equal((params?.lines[0] as { resultingQty?: unknown }).resultingQty, undefined);
+    assert.equal(
+      (params?.lines[0] as { resultingQty?: unknown }).resultingQty,
+      undefined,
+    );
+  });
+
+  it("marks an existing local product NOT_APPLICABLE and never queues it for UNAS", async () => {
+    const { service, getCapturedCreateParams } = buildService({
+      variants: new Map([
+        [
+          "variant-local",
+          variant({
+            variantId: "variant-local",
+            sku: "LOCAL-1",
+            catalogAuthority: "ACROPORA",
+          }),
+        ],
+      ]),
+    });
+
+    const result = await service.createInvoice(
+      baseInput({
+        lines: [
+          {
+            variantId: "variant-local",
+            orderedQuantity: 2,
+            actualQuantity: 2,
+            unit: "db",
+            unitNet: 5,
+          },
+        ],
+      }),
+      "user-1",
+    );
+
+    assert.equal(
+      getCapturedCreateParams()?.lines[0]?.syncStatus,
+      "NOT_APPLICABLE",
+    );
+    assert.equal(getCapturedCreateParams()?.lines[0]?.syncToUnas, false);
+    assert.equal(result.successCount, 1);
+    assert.equal(result.unasQueuedCount, 0);
+  });
+
+  it("prepares a normalized local product for atomic creation with the invoice", async () => {
+    const { service, getCapturedCreateParams } = buildService({
+      variants: new Map(),
+    });
+
+    const result = await service.createInvoice(
+      baseInput({
+        lines: [
+          {
+            createLocalProduct: {
+              name: " Egyedi szivattyú ",
+              sku: " local-pump-01 ",
+            },
+            sourceDescription: "Pump model X",
+            orderedQuantity: 2,
+            actualQuantity: 2,
+            unit: " db ",
+            unitNet: 150,
+          },
+        ],
+      }),
+      "user-1",
+    );
+
+    const line = getCapturedCreateParams()?.lines[0];
+    assert.deepEqual(line?.createLocalProduct, {
+      name: "Egyedi szivattyú",
+      sku: "LOCAL-PUMP-01",
+      primaryCategoryId: null,
+    });
+    assert.equal(line?.syncStatus, "NOT_APPLICABLE");
+    assert.equal(line?.syncToUnas, false);
+    assert.equal(result.successCount, 1);
+    assert.equal(result.localProductCreatedCount, 1);
+    assert.equal(result.unasQueuedCount, 0);
+  });
+
+  it("rejects a line that both links an existing variant and requests a new local product", async () => {
+    const { service } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+    });
+
+    await assert.rejects(() =>
+      service.createInvoice(
+        baseInput({
+          lines: [
+            {
+              variantId: "variant-1",
+              createLocalProduct: { name: "Másik termék", sku: "LOCAL-2" },
+              orderedQuantity: 1,
+              actualQuantity: 1,
+              unit: "db",
+              unitNet: 10,
+            },
+          ],
+        }),
+        "user-1",
+      ),
+    );
   });
 
   it("always reports successCount = linked line count and failedCount = 0 - a real posting failure now throws and rolls back the whole transaction instead of producing a per-line synchronous failure (see repository.create)", async () => {

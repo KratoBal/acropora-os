@@ -42,13 +42,13 @@ export function isDuplicateMovementIdempotencyKeyError(
 ///     `Serializable` isolation or `SELECT ... FOR UPDATE`) closes both the
 ///     classic lost-update race *and* the rarer duplicate-StockItem-row
 ///     bootstrap race;
-///  4. creates one `UnasStockSyncOutbox` row per line in the SAME
-///     transaction, carrying the freshly-computed ABSOLUTE resulting
-///     onHand - never a delta - so a background worker can publish it to
-///     UNAS later, retrying independently of this transaction (see
-///     unas-stock-sync-outbox.worker.ts). Any still-open older outbox row
-///     for the same (variantId, warehouseId) is closed out first so a
-///     stale event can never overwrite a fresher one once processed.
+///  4. for lines whose Product Master is UNAS (`syncToUnas=true`), creates
+///     one `UnasStockSyncOutbox` row in the SAME transaction, carrying the
+///     freshly-computed ABSOLUTE resulting onHand - never a delta - so a
+///     background worker can publish it to UNAS later. Local
+///     Acropora-catalog products MUST pass false and never enter the UNAS
+///     outbox. Callers have to provide this flag explicitly, so adding a
+///     new stock-writing flow cannot silently inherit the wrong behavior.
 ///
 /// See docs/INVENTORY-CONSISTENCY.md for the full design
 /// rationale and how each of the four (soon five) channels calls this.
@@ -93,6 +93,8 @@ export interface InventoryMovementLineInput {
    * value at posting time. */
   quantityDelta: Prisma.Decimal;
   unit: string;
+  /** True only when the variant's catalogAuthority is UNAS. */
+  syncToUnas: boolean;
   sourceLocationId?: string | null;
   targetLocationId?: string | null;
   lotId?: string | null;
@@ -355,27 +357,24 @@ export async function postInventoryMovement(
       wentNegative: resultingOnHand.isNegative(),
     });
 
-    // Close out any still-open earlier publish target for this exact
-    // (variant, warehouse) before inserting the new one, so the worker
-    // never sees two competing PENDING/FAILED/DEAD_LETTER rows for the
-    // same key. A row currently PROCESSING is deliberately left alone -
-    // the worker itself re-checks for a newer row right before it calls
-    // UNAS, as a second line of defense for that narrow window. Delegates
-    // to enqueueStockSyncOutboxEntry (above) - the same helper the
-    // checkpoint-6 reconciliation-repair service uses directly, so both
-    // paths supersede/enqueue identically.
-    await enqueueStockSyncOutboxEntry(database, {
-      variantId: line.variantId,
-      warehouseId: input.warehouseId,
-      sku: line.sku,
-      targetOnHand: resultingOnHand,
-      idempotencyKey: buildOutboxIdempotencyKey(
-        input.idempotencyKey,
-        line.variantId,
-      ),
-      sourceProcess: input.sourceProcess,
-      sourceRecordId: input.referenceId,
-    });
+    if (line.syncToUnas) {
+      // Close out any still-open earlier publish target for this exact
+      // (variant, warehouse) before inserting the new one, so the worker
+      // never sees two competing PENDING/FAILED/DEAD_LETTER rows for the
+      // same key. Local catalog products deliberately skip this block.
+      await enqueueStockSyncOutboxEntry(database, {
+        variantId: line.variantId,
+        warehouseId: input.warehouseId,
+        sku: line.sku,
+        targetOnHand: resultingOnHand,
+        idempotencyKey: buildOutboxIdempotencyKey(
+          input.idempotencyKey,
+          line.variantId,
+        ),
+        sourceProcess: input.sourceProcess,
+        sourceRecordId: input.referenceId,
+      });
+    }
   }
 
   return { movementId: movement.id, alreadyPosted: false, lines: resultLines };

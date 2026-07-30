@@ -55,19 +55,21 @@ class FakeDb {
         totalGross: args.data.totalGross,
         createdAt: new Date(),
         completedAt: args.data.completedAt,
-        lines: (args.data.lines?.create ?? []).map((line: any, index: number) => ({
-          id: `line-${index}`,
-          variantId: line.variantId,
-          sku: line.sku,
-          productName: line.description,
-          quantity: line.quantity,
-          unit: line.unit,
-          unitNet: line.unitNet,
-          taxRate: line.taxRate,
-          lineGross: line.lineGross,
-          syncStatus: line.syncStatus,
-          syncError: line.syncError,
-        })),
+        lines: (args.data.lines?.create ?? []).map(
+          (line: any, index: number) => ({
+            id: `line-${index}`,
+            variantId: line.variantId,
+            sku: line.sku,
+            productName: line.description,
+            quantity: line.quantity,
+            unit: line.unit,
+            unitNet: line.unitNet,
+            taxRate: line.taxRate,
+            lineGross: line.lineGross,
+            syncStatus: line.syncStatus,
+            syncError: line.syncError,
+          }),
+        ),
       };
     },
     findMany: async () => [],
@@ -184,6 +186,7 @@ function line(overrides: Partial<CreatePosSaleLine> = {}): CreatePosSaleLine {
     taxRate: new Prisma.Decimal("27"),
     unitNet: new Prisma.Decimal("100"),
     lineGross: new Prisma.Decimal("127"),
+    syncToUnas: true,
     ...overrides,
   };
 }
@@ -263,7 +266,9 @@ describe("PosSaleRepository.createSale", () => {
       onHand: new Prisma.Decimal("10"),
     });
     const repository = repositoryWith(db);
-    const params = baseParams({ lines: [line({ quantity: new Prisma.Decimal("3") })] });
+    const params = baseParams({
+      lines: [line({ quantity: new Prisma.Decimal("3") })],
+    });
 
     await repository.createSale(params);
     assert.equal(db.movements.length, 1);
@@ -277,7 +282,11 @@ describe("PosSaleRepository.createSale", () => {
     // see buildIdempotencyKey's doc comment).
     await repository.createSale(params);
     assert.equal(db.movements.length, 1, "no second movement was created");
-    assert.equal(db.stockItems[0]?.onHand.toString(), "7", "stock was not double-decremented");
+    assert.equal(
+      db.stockItems[0]?.onHand.toString(),
+      "7",
+      "stock was not double-decremented",
+    );
     assert.equal(db.outbox.length, 1, "no second outbox row was created");
   });
 

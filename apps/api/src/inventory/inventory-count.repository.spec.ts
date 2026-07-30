@@ -14,7 +14,14 @@ interface FakeLine {
   countedQty: Prisma.Decimal | null;
   syncStatus: string;
   syncError: string | null;
-  variant: { sku: string; unit: string; product: { name: string } };
+  variant: {
+    sku: string;
+    unit: string;
+    product: {
+      name: string;
+      catalogAuthority: "UNAS" | "ACROPORA" | null;
+    };
+  };
 }
 
 let idCounter = 0;
@@ -206,7 +213,11 @@ describe("InventoryCountRepository.applyCorrection", () => {
       countedQty: new Prisma.Decimal("8"),
       syncStatus: "PENDING",
       syncError: null,
-      variant: { sku: "sku-1", unit: "db", product: { name: "Reef Pump" } },
+      variant: {
+        sku: "sku-1",
+        unit: "db",
+        product: { name: "Reef Pump", catalogAuthority: "UNAS" },
+      },
     });
 
     const repository = repositoryWith(db);
@@ -224,6 +235,29 @@ describe("InventoryCountRepository.applyCorrection", () => {
     assert.equal(db.count.status, "CORRECTED");
   });
 
+  it("corrects a local product's stock without creating an UNAS outbox row", async () => {
+    const db = new FakeDb();
+    db.lines.push({
+      id: "line-local-1",
+      variantId: "variant-local-1",
+      expectedQty: new Prisma.Decimal("5"),
+      countedQty: new Prisma.Decimal("4"),
+      syncStatus: "PENDING",
+      syncError: null,
+      variant: {
+        sku: "LOCAL-1",
+        unit: "db",
+        product: { name: "Helyi termék", catalogAuthority: "ACROPORA" },
+      },
+    });
+
+    await repositoryWith(db).applyCorrection("count-1", "user-1");
+
+    assert.equal(db.movementLines.length, 1);
+    assert.equal(db.stockItems[0]?.onHand.toString(), "4");
+    assert.equal(db.outbox.length, 0);
+  });
+
   it("rejects (does not double-book) when the same leltár is applied a second time via a fresh call with the same idempotency key", async () => {
     const db = new FakeDb();
     db.lines.push({
@@ -233,7 +267,11 @@ describe("InventoryCountRepository.applyCorrection", () => {
       countedQty: new Prisma.Decimal("8"),
       syncStatus: "PENDING",
       syncError: null,
-      variant: { sku: "sku-1", unit: "db", product: { name: "Reef Pump" } },
+      variant: {
+        sku: "sku-1",
+        unit: "db",
+        product: { name: "Reef Pump", catalogAuthority: "UNAS" },
+      },
     });
     const repository = repositoryWith(db);
     await repository.applyCorrection("count-1", "user-1");
@@ -269,7 +307,10 @@ describe("InventoryCountRepository.applyCorrection", () => {
       variant: {
         sku: "AI-PFAN",
         unit: "db",
-        product: { name: "Aqua Illumination Prime hűtőventillátor" },
+        product: {
+          name: "Aqua Illumination Prime hűtőventillátor",
+          catalogAuthority: "UNAS",
+        },
       },
     });
 
@@ -280,7 +321,11 @@ describe("InventoryCountRepository.applyCorrection", () => {
     assert.equal(db.stockItems.length, 1);
     assert.equal(db.stockItems[0]?.variantId, "variant-1");
     assert.equal(db.stockItems[0]?.onHand.toString(), "4");
-    assert.equal(db.outbox.length, 0, "a baseline-only set must not publish to UNAS");
+    assert.equal(
+      db.outbox.length,
+      0,
+      "a baseline-only set must not publish to UNAS",
+    );
     assert.equal(result.successCount, 1);
     assert.equal(result.failedCount, 0);
   });
@@ -302,7 +347,10 @@ describe("InventoryCountRepository.applyCorrection", () => {
       variant: {
         sku: "AI-PFAN",
         unit: "db",
-        product: { name: "Aqua Illumination Prime hűtőventillátor" },
+        product: {
+          name: "Aqua Illumination Prime hűtőventillátor",
+          catalogAuthority: "UNAS",
+        },
       },
     });
 
@@ -328,7 +376,11 @@ describe("InventoryCountRepository.applyCorrection", () => {
       countedQty: new Prisma.Decimal("4"),
       syncStatus: "PENDING",
       syncError: null,
-      variant: { sku: "sku-1", unit: "db", product: { name: "Reef Pump" } },
+      variant: {
+        sku: "sku-1",
+        unit: "db",
+        product: { name: "Reef Pump", catalogAuthority: "UNAS" },
+      },
     });
 
     const repository = repositoryWith(db);
@@ -350,7 +402,11 @@ describe("InventoryCountRepository.applyCorrection", () => {
         countedQty: new Prisma.Decimal("8"),
         syncStatus: "PENDING",
         syncError: null,
-        variant: { sku: "sku-1", unit: "db", product: { name: "A" } },
+        variant: {
+          sku: "sku-1",
+          unit: "db",
+          product: { name: "A", catalogAuthority: "UNAS" },
+        },
       },
       {
         id: "line-2",
@@ -359,7 +415,11 @@ describe("InventoryCountRepository.applyCorrection", () => {
         countedQty: new Prisma.Decimal("5"),
         syncStatus: "PENDING",
         syncError: null,
-        variant: { sku: "sku-2", unit: "db", product: { name: "B" } },
+        variant: {
+          sku: "sku-2",
+          unit: "db",
+          product: { name: "B", catalogAuthority: "UNAS" },
+        },
       },
     );
 
@@ -370,7 +430,11 @@ describe("InventoryCountRepository.applyCorrection", () => {
     assert.equal(db.stockItems.length, 2);
     assert.equal(db.outbox.length, 2);
     assert.equal(result.successCount, 2);
-    assert.equal(db.movements.length, 1, "one movement document for the whole leltár, with two lines");
+    assert.equal(
+      db.movements.length,
+      1,
+      "one movement document for the whole leltár, with two lines",
+    );
   });
 
   it("only finalizes the leltár (status CORRECTED) after every line has been processed, never leaving a half-applied state", async () => {
@@ -382,7 +446,11 @@ describe("InventoryCountRepository.applyCorrection", () => {
       countedQty: new Prisma.Decimal("8"),
       syncStatus: "PENDING",
       syncError: null,
-      variant: { sku: "sku-1", unit: "db", product: { name: "Reef Pump" } },
+      variant: {
+        sku: "sku-1",
+        unit: "db",
+        product: { name: "Reef Pump", catalogAuthority: "UNAS" },
+      },
     });
     // Force a failure partway through by breaking stockMovementLine.create.
     const originalCreate = db.stockMovementLine.create;

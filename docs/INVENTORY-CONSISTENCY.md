@@ -16,7 +16,7 @@ termékadat-master (név, ár, leírás, kép), de a belső készletkönyvelést
 Acropora OS vezeti - a UNAS-ban látott készlet mindig az Acropora OS által
 számított, aktuális abszolút készlet **tükörképe**, soha nem fordítva (azon
 egy kivétellel, hogy a webshopon leadott rendelés maga az esemény, amit
-könyvelni kell - de a *könyvelt mennyiséget* onnantól az Acropora OS
+könyvelni kell - de a _könyvelt mennyiséget_ onnantól az Acropora OS
 tekinti hitelesnek).
 
 ## Egységes készletmódosító primitív
@@ -25,7 +25,7 @@ tekinti hitelesnek).
 
 Minden készletet érintő folyamat (leltár, beszerzés, POS, UNAS
 webshoprendelés import/módosítás/sztornó, később reconciliation-javítás)
-ezen a függvényen keresztül, a saját tranzakcióján *belülről* hívva
+ezen a függvényen keresztül, a saját tranzakcióján _belülről_ hívva
 módosítja a készletet. Egy hívás:
 
 1. ellenőrzi az `idempotencyKey`-t a `StockMovement` táblán - ismételt
@@ -35,15 +35,19 @@ módosítja a készletet. Egy hívás:
 3. minden sor előjeles `quantityDelta`-ját atomian alkalmazza a
    `StockItem.onHand`-re, (variantId, warehouseId) kulcsonként
    sorosítva egy Postgres tranzakció-szintű **advisory lock**-kal;
-4. ugyanabban a tranzakcióban soronként egy `UnasStockSyncOutbox` sort ír,
-   ami az imént kiszámított ABSZOLÚT eredő készletet hordozza.
+4. ugyanabban a tranzakcióban az UNAS-szinkronra jogosult sorokhoz egy
+   `UnasStockSyncOutbox` sort ír, ami az imént kiszámított ABSZOLÚT eredő
+   készletet hordozza. A hívó minden soron explicit `syncToUnas` értéket ad;
+   ez csak `catalogAuthority=UNAS` terméknél lehet igaz. A
+   `catalogAuthority=ACROPORA` helyi termék készlete ugyanitt könyvelődik,
+   de outbox nélkül.
 
 ### Miért advisory lock, és nem `Serializable`/`SELECT ... FOR UPDATE`
 
 A `StockItem` egyedi kulcsa `(variantId, warehouseId, locationId, lotId)` -
 Postgres a NULL `locationId`/`lotId` értékeket nem tekinti egyenlőnek/
 ütközőnek, így `SELECT ... FOR UPDATE` nem tud zárolni egy még nem létező
-sort, és két egyidejű *első* mozgás akár `Serializable` alatt is
+sort, és két egyidejű _első_ mozgás akár `Serializable` alatt is
 létrehozhatna két duplikált sort. A `pg_advisory_xact_lock(hashtextextended(
 variantId || ':' || warehouseId, 0))` mindkét esetet (lost update ÉS
 duplikált bootstrap-sor) egy mechanizmussal zárja ki, tranzakció-scope-pal
@@ -364,11 +368,11 @@ mutáló metódust, így az erre épülő kód nem is tudna véletlenül írni.
 
 ### Igazságforrások és amit önmagában bizonyítanak
 
-1. **`StockMovement`/`StockMovementLine` ledger** - mit *könyveltünk el*.
+1. **`StockMovement`/`StockMovementLine` ledger** - mit _könyveltünk el_.
 2. **`StockItem.onHand`** - a jelenlegi, gyorsítótárazott abszolút készlet.
-3. **`UnasProductSnapshot.reportedStock`** - amit a UNAS *jelent* (termék-
+3. **`UnasProductSnapshot.reportedStock`** - amit a UNAS _jelent_ (termék-
    szinten, nem variánsonként - lásd alább).
-4. **`UnasStockSyncOutbox`** - mi van *folyamatban* a kettő összehangolására.
+4. **`UnasStockSyncOutbox`** - mi van _folyamatban_ a kettő összehangolására.
 
 ### A ledger NEM bizonyítja önmagában az abszolút készletet - miért
 
@@ -420,6 +424,13 @@ már várakozó korrekció) → `CONSISTENT`. A helyi integritás (ledger/onHand
 mindig megelőzi a UNAS-összevetést - egy hibás helyi szám mellett a UNAS-
 eltérés vizsgálata értelmetlen lenne.
 
+`catalogAuthority=ACROPORA` helyi terméknél az UNAS-link és
+`UnasProductSnapshot` hiánya szándékos, ezért önmagában nem eredményez
+`MISSING_UNAS_LINK` státuszt. A ledger és a `StockItem.onHand` egyezésekor
+az ilyen sor `CONSISTENT`, `unasOnHand=null` értékkel és „UNAS-szinkron nem
+alkalmazandó” megjegyzéssel. Hiányzó termékkapcsolat vagy ismeretlen
+authority továbbra is fail-closed módon `MISSING_UNAS_LINK`.
+
 **PENDING vs FAILED vs DEAD_LETTER**: egy még próbálkozási kerettel
 rendelkező `FAILED` sor ugyanabba a "van már várakozó korrekció" kategóriába
 esik, mint `PENDING` (`UNAS_BEHIND_PENDING_SYNC`) - csak a véglegesen
@@ -456,9 +467,10 @@ Lapozott (`page`/`pageSize`, max 200), `variantId`/`warehouseId` szerint
 szűrhető. `GET /inventory/reconciliation/missing-stock-item` - a
 "kellene legyen `StockItem` sor, de nincs" eset (UNAS-linkelt, riportolt
 készletű variáns a fő raktárban). `GET /inventory/reconciliation/summary`
+
 - korlátozott batch-mérettel (`batchSize`, alapértelmezett 200) minden
-lapon végigmegy, és csak a státuszonkénti darabszámot adja vissza - nem
-tölt be mindent egyszerre a memóriába.
+  lapon végigmegy, és csak a státuszonkénti darabszámot adja vissza - nem
+  tölt be mindent egyszerre a memóriába.
 
 Minden lekérdezés batchelt: egy oldalnyi (variantId, warehouseId) párhoz
 EGY lekérdezés megy a ledgerre, EGY a UNAS-termékadatra, EGY az outboxra -
@@ -521,16 +533,17 @@ ténylegesen lekönyvelt, és ugyanezt a ledgert olvassa az új
 
 A checkpoint 5 kifejezetten megengedte, hogy a mutáló repair-mechanizmust
 csak TERVEZZÜK, ha a jelenlegi auth/audit modell nem elég egyértelmű hozzá
+
 - ez a döntés itt élt: a jelenlegi jogosultsági modell csak `INVENTORY_VIEW`/
-`INVENTORY_MANAGE`-et ismer (utóbbi a `WAREHOUSE` szerepkörnek is jár), és
-NINCS olyan Prisma-modell, ami egy repair-művelet reason/actor/előtte-utána
-értékét auditálhatóan rögzítené. Emiatt checkpoint 5-ben KIZÁRÓLAG a
-read-only diagnosztika készült el; az alábbi terv volt a jövőbeli, mutáló
-repair API-hoz - **checkpoint 6 ezt a tervet valósította meg A és B
-típusra, lásd a "Checkpoint 6" szakaszt lentebb a tényleges
-implementációért (a részletek némileg eltérnek az itteni eredeti
-vázlattól, pl. az idempotenciakulcs pontos formátuma és a `StockItem`
-saját üzleti kulcson - nem surrogate id-n - történő újraolvasása).**
+  `INVENTORY_MANAGE`-et ismer (utóbbi a `WAREHOUSE` szerepkörnek is jár), és
+  NINCS olyan Prisma-modell, ami egy repair-művelet reason/actor/előtte-utána
+  értékét auditálhatóan rögzítené. Emiatt checkpoint 5-ben KIZÁRÓLAG a
+  read-only diagnosztika készült el; az alábbi terv volt a jövőbeli, mutáló
+  repair API-hoz - **checkpoint 6 ezt a tervet valósította meg A és B
+  típusra, lásd a "Checkpoint 6" szakaszt lentebb a tényleges
+  implementációért (a részletek némileg eltérnek az itteni eredeti
+  vázlattól, pl. az idempotenciakulcs pontos formátuma és a `StockItem`
+  saját üzleti kulcson - nem surrogate id-n - történő újraolvasása).**
 
 **A. `StockItem` helyreállítása a bizonyított ledgerből** - csak
 `ledgerProvable: true` párra engedhető meg; tranzakcióban, a writer saját
@@ -633,25 +646,27 @@ típus sosem hoz létre `StockMovement`-et), `outboxId`, `requestDetail`/
 ### Megvalósított repair-típusok
 
 **A. `LOCAL_FROM_PROVEN_LEDGER`** (`stock-reconciliation-repair.repository.ts`
+
 - `applyLocalFromProvenLedger`) - EGY tranzakción belül: advisory lock a
-(variantId, warehouseId) párra -> `StockItem` friss újraolvasása a valódi
-üzleti kulcsán (`variantId`+`warehouseId`+`locationId: null`+`lotId: null`
+  (variantId, warehouseId) párra -> `StockItem` friss újraolvasása a valódi
+  üzleti kulcsán (`variantId`+`warehouseId`+`locationId: null`+`lotId: null`
 - NEM egy esetlegesen elavult surrogate id-n) -> a ledger-bizonyíthatóság
-ÚJRA-számítása egy, a TRANZAKCIÓS kliens köré épített
-`StockReconciliationRepository`-példánnyal (kritikus: ha ez a másik,
-külső `prisma`-hoz kötött repository-példányt használná, a "zárolás
-utáni friss újraolvasás ugyanabban a tranzakcióban" garancia csendben
-sérülne - ezt a végleges kódba kerülés előtt saját review során vettem
-észre és javítottam) -> ugyanaz a `evaluateLocalFromProvenLedgerPreconditions`
-függvény fut le, mint a dry-run előnézetnél -> elutasítás esetén egy
-`REJECTED` audit-sor (StockItem érintetlen); ha a ledger már egyezik az
-`onHand`-del, egy `NOOP` sor (szintén auditálva, de nincs írás); egyébként
-`StockItem.onHand` frissül a bizonyított ledger-értékre, EGY outbox-sor
-jön létre a megosztott `enqueueStockSyncOutboxEntry` helperen át (ugyanaz,
-amit `postInventoryMovement` is használ), és egy `APPLIED` audit-sor
-zárja a tranzakciót. SOHA nem hoz létre `StockMovement`-et - ez egy
-adatintegritás-helyreállítás a ledger már bizonyított állapotára, nem egy
-új fizikai készletmozgás.
+  ÚJRA-számítása egy, a TRANZAKCIÓS kliens köré épített
+  `StockReconciliationRepository`-példánnyal (kritikus: ha ez a másik,
+  külső `prisma`-hoz kötött repository-példányt használná, a "zárolás
+  utáni friss újraolvasás ugyanabban a tranzakcióban" garancia csendben
+  sérülne - ezt a végleges kódba kerülés előtt saját review során vettem
+  észre és javítottam) -> ugyanaz a `evaluateLocalFromProvenLedgerPreconditions`
+  függvény fut le, mint a dry-run előnézetnél -> elutasítás esetén egy
+  `REJECTED` audit-sor (StockItem érintetlen); ha a ledger már egyezik az
+  `onHand`-del, egy `NOOP` sor (szintén auditálva, de nincs írás); egyébként
+  `StockItem.onHand` frissül a bizonyított ledger-értékre; explicit
+  `catalogAuthority=UNAS` terméknél EGY outbox-sor is létrejön a megosztott
+  `enqueueStockSyncOutboxEntry` helperen át (ugyanaz, amit
+  `postInventoryMovement` is használ), helyi ACROPORA terméknél viszont
+  nincs outbox. Egy `APPLIED` audit-sor zárja a tranzakciót. SOHA nem hoz
+  létre `StockMovement`-et - ez egy adatintegritás-helyreállítás a ledger
+  már bizonyított állapotára, nem egy új fizikai készletmozgás.
 
 **B. `REPUBLISH_LOCAL_TO_UNAS`** (`applyRepublishLocalToUnas`) - ugyanaz a
 lock+újraolvasás minta, de a cél a JELENLEGI (zárolás alatt frissen
@@ -790,6 +805,7 @@ hook), és az `after` hook FK-biztos sorrendben törli mindet, majd
 (deadlock) a teszt BUKÁSÁT okozná (Postgres saját `deadlock_timeout`-ja
 után), nem egy örökké lógó futást. A teszt emiatt strukturálisan
 helyesnek ítélhető, de VALÓS lefutás és PASS még mindig nincs bizonyítva
+
 - ezt a checkpoint 6 zárójelentése is így, félreérthetetlenül állítja.
 
 ### Ismert, ebben a checkpointban NEM megoldott kockázatok
@@ -1299,6 +1315,7 @@ azonnal mutatta a checkpoint 8 commitjait).
 sandboxban továbbra sincs GitHub push-hitelesítés (`gh` CLI hiányzik, nincs
 credential helper, `git push --dry-run` `could not read Username`-mel
 bukik - újra ellenőrizve, változatlan), ezért:
+
 - nem tudtam GitHub Actionst indítani;
 - nem tudok run ID-t mutatni;
 - a `binaries.prisma.sh` továbbra is 403-mal blokkolt (újra ellenőrizve),

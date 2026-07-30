@@ -152,6 +152,24 @@ export class PurchasingService {
     const variantIds = input.lines
       .map((line) => line.variantId)
       .filter((variantId): variantId is string => Boolean(variantId));
+    const requestedLocalSkus = new Set<string>();
+    for (const line of input.lines) {
+      if (line.variantId && line.createLocalProduct)
+        throw new BadRequestException(
+          "Egy számlasor vagy meglévő termékhez kapcsolható, vagy új helyi terméket hozhat létre; a kettő egyszerre nem adható meg.",
+        );
+      if (!line.createLocalProduct) continue;
+      const sku = line.createLocalProduct.sku.trim().toUpperCase();
+      if (!sku)
+        throw new BadRequestException(
+          "Az új helyi termék belső cikkszáma kötelező.",
+        );
+      if (requestedLocalSkus.has(sku))
+        throw new BadRequestException(
+          `Ugyanaz a helyi cikkszám többször szerepel a számlán: ${sku}.`,
+        );
+      requestedLocalSkus.add(sku);
+    }
     const { warehouseId, variants } =
       await this.invoices.currentStock(variantIds);
 
@@ -163,7 +181,7 @@ export class PurchasingService {
       // egyeztetni a saját cikkszámmal/mennyiséggel, ezért a számlán
       // szereplő megnevezés és az egység kötelező, a helyi készlethatás és
       // a UNAS-szinkron pedig kimarad rá (lásd repository/create).
-      if (!line.variantId) {
+      if (!line.variantId && !line.createLocalProduct) {
         const sourceDescription = line.sourceDescription?.trim();
         if (!sourceDescription)
           throw new BadRequestException(
@@ -184,6 +202,7 @@ export class PurchasingService {
         preparedLines.push({
           variantId: null,
           sku: null,
+          createLocalProduct: null,
           sourceDescription,
           orderedQuantity: new Prisma.Decimal(line.orderedQuantity),
           actualQuantity: new Prisma.Decimal(line.actualQuantity),
@@ -195,11 +214,56 @@ export class PurchasingService {
               : null,
           syncStatus: "NOT_LINKED",
           syncError: null,
+          syncToUnas: false,
         });
         continue;
       }
 
-      const info = variants.get(line.variantId);
+      if (line.createLocalProduct) {
+        const name = line.createLocalProduct.name.trim();
+        const sku = line.createLocalProduct.sku.trim().toUpperCase();
+        const sourceDescription = line.sourceDescription?.trim() || name;
+        if (name.length < 2)
+          throw new BadRequestException(
+            "Az új helyi termék neve legalább 2 karakter legyen.",
+          );
+        if (!line.unit.trim())
+          throw new BadRequestException(
+            `Az egység megadása kötelező: ${name}.`,
+          );
+        if (!Number.isFinite(line.actualQuantity) || line.actualQuantity < 0)
+          throw new BadRequestException(`Érvénytelen mennyiség: ${name}.`);
+        if (!Number.isFinite(line.unitNet) || line.unitNet < 0)
+          throw new BadRequestException(`Érvénytelen beszerzési ár: ${name}.`);
+        preparedLines.push({
+          variantId: null,
+          sku,
+          createLocalProduct: {
+            name,
+            sku,
+            primaryCategoryId:
+              line.createLocalProduct.primaryCategoryId?.trim() || null,
+          },
+          sourceDescription,
+          orderedQuantity: new Prisma.Decimal(line.orderedQuantity),
+          actualQuantity: new Prisma.Decimal(line.actualQuantity),
+          unit: line.unit.trim(),
+          unitNet: new Prisma.Decimal(line.unitNet),
+          discountPercent:
+            line.discountPercent !== undefined
+              ? new Prisma.Decimal(line.discountPercent)
+              : null,
+          syncStatus: "NOT_APPLICABLE",
+          syncError: null,
+          syncToUnas: false,
+        });
+        continue;
+      }
+
+      const variantId = line.variantId;
+      if (!variantId)
+        throw new BadRequestException("A számlasor termékfeloldása hiányos.");
+      const info = variants.get(variantId);
       if (!info)
         throw new BadRequestException(`Ismeretlen termék: ${line.variantId}.`);
       if (!Number.isFinite(line.actualQuantity) || line.actualQuantity < 0)
@@ -208,10 +272,19 @@ export class PurchasingService {
         throw new BadRequestException(
           `Érvénytelen beszerzési ár: ${info.sku}.`,
         );
+      if (
+        info.catalogAuthority !== "UNAS" &&
+        info.catalogAuthority !== "ACROPORA"
+      )
+        throw new BadRequestException(
+          `A termék Product Master besorolása nem egyértelmű: ${info.sku}.`,
+        );
+      const syncToUnas = info.catalogAuthority === "UNAS";
 
       preparedLines.push({
-        variantId: line.variantId,
+        variantId,
         sku: info.sku,
+        createLocalProduct: null,
         sourceDescription: line.sourceDescription?.trim() || null,
         orderedQuantity: new Prisma.Decimal(line.orderedQuantity),
         actualQuantity: new Prisma.Decimal(line.actualQuantity),
@@ -226,8 +299,9 @@ export class PurchasingService {
         // purchase-invoice.repository.ts); actual UNAS publication is the
         // background worker's job from here on, so this must not claim a
         // synchronous OK it can no longer guarantee.
-        syncStatus: "PENDING",
+        syncStatus: syncToUnas ? "PENDING" : "NOT_APPLICABLE",
         syncError: null,
+        syncToUnas,
       });
     }
 
@@ -252,14 +326,23 @@ export class PurchasingService {
     });
 
     const linkedLineCount = preparedLines.filter(
-      (line) => line.variantId,
+      (line) => line.variantId || line.createLocalProduct,
     ).length;
     // Always 0: the invoice + stock movement + outbox are one atomic
     // transaction (see repository.create) - a real failure throws and
     // rolls back the whole thing rather than reporting a partial failure
     // here. "successCount" now means "lines whose stock change was
-    // committed locally and queued for UNAS", not "UNAS confirmed the
-    // update" - see docs/INVENTORY-CONSISTENCY.md.
-    return { detail, successCount: linkedLineCount, failedCount: 0 };
+    // committed locally"; unasQueuedCount separately reports the subset
+    // queued for UNAS. Neither value claims an UNAS-side confirmation -
+    // see docs/INVENTORY-CONSISTENCY.md.
+    return {
+      detail,
+      successCount: linkedLineCount,
+      failedCount: 0,
+      unasQueuedCount: preparedLines.filter((line) => line.syncToUnas).length,
+      localProductCreatedCount: preparedLines.filter(
+        (line) => line.createLocalProduct,
+      ).length,
+    };
   }
 }

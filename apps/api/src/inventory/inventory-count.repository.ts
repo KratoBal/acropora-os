@@ -1,4 +1,9 @@
-import { ConflictException, Inject, Injectable, Optional } from "@nestjs/common";
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  Optional,
+} from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 import type {
   InventoryCountDetail,
@@ -65,7 +70,11 @@ interface InventoryCountApplyTransaction extends InventoryMovementDatabase {
         variantId: string;
         expectedQty: Prisma.Decimal;
         countedQty: Prisma.Decimal | null;
-        variant: { sku: string; unit: string };
+        variant: {
+          sku: string;
+          unit: string;
+          product: { catalogAuthority: "UNAS" | "ACROPORA" | null };
+        };
       }>
     >;
     update(args: unknown): Promise<unknown>;
@@ -367,7 +376,11 @@ export class InventoryCountRepository extends Repository {
           // (abs(countedQty - expectedQty)), not the absolute counted value.
           for (const line of changedLines) {
             if (trackedVariantIds.has(line.variantId)) continue;
-            await lockVariantWarehouse(transaction, line.variantId, warehouseId);
+            await lockVariantWarehouse(
+              transaction,
+              line.variantId,
+              warehouseId,
+            );
             await setStockItemQuantity(transaction, {
               variantId: line.variantId,
               warehouseId,
@@ -390,6 +403,7 @@ export class InventoryCountRepository extends Repository {
                 sku: line.variant.sku,
                 unit: line.variant.unit,
                 quantityDelta: line.countedQty!.minus(line.expectedQty),
+                syncToUnas: line.variant.product.catalogAuthority === "UNAS",
               })),
             });
             // Should be rare (the service layer already guards against
@@ -436,7 +450,11 @@ export class InventoryCountRepository extends Repository {
             // writing, directly via setStockItemQuantity rather than through
             // postInventoryMovement (which would require treating a
             // zero-quantity "change" as a postable line).
-            await lockVariantWarehouse(transaction, line.variantId, warehouseId);
+            await lockVariantWarehouse(
+              transaction,
+              line.variantId,
+              warehouseId,
+            );
             await setStockItemQuantity(transaction, {
               variantId: line.variantId,
               warehouseId,

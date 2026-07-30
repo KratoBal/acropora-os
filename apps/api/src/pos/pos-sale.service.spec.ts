@@ -21,6 +21,7 @@ function variant(
     unit: "db",
     vatRate: new Prisma.Decimal("27"),
     currentQty: new Prisma.Decimal("10"),
+    syncToUnas: true,
     ...overrides,
   };
 }
@@ -117,6 +118,36 @@ describe("PosSaleService.createSale", () => {
   it("rejects an unknown variant", async () => {
     const { service } = buildService({ variants: new Map() });
     await assert.rejects(() => service.createSale(baseInput(), "user-1"));
+  });
+
+  it("rejects a local Acropora OS product until the POS channel is explicitly enabled", async () => {
+    const { service } = buildService({
+      variants: new Map([
+        [
+          "variant-local",
+          variant({
+            variantId: "variant-local",
+            sku: "LOCAL-1",
+            syncToUnas: false,
+          }),
+        ],
+      ]),
+    });
+
+    await assert.rejects(() =>
+      service.createSale(
+        baseInput({
+          lines: [
+            {
+              variantId: "variant-local",
+              quantity: 1,
+              unitGross: 127,
+            },
+          ],
+        }),
+        "user-1",
+      ),
+    );
   });
 
   it("rejects a variant with no configured VAT rate", async () => {
