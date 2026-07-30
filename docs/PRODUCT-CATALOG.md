@@ -106,16 +106,20 @@ A `ProductRepository.create` egy adatbázis-tranzakcióban hozza létre a Produc
 
 A HU_NAV, HU_MANUAL és EU beszerzési számlák ismeretlen sora a rögzítő
 felületen meglévő termékvariánshoz kapcsolható, vagy új, készletezett helyi
-termékként hozható létre. Az új termékhez kötelező a név, az egyedi belső
-SKU és a mértékegység; az elsődleges kategória opcionális. Az SKU a mentés
-előtt trimelve és nagybetűsítve kerül az egyedi `ProductVariant.sku` mezőbe.
+termékként hozható létre. Az új termékhez kötelező a név és a mértékegység;
+az elsődleges kategória opcionális. A belső SKU-t
+nem a felhasználó adja meg: a backend mentéskor, adatbázis-szekvenciából
+automatikusan képezi `ACR-L-000001` formában, majd az egyedi
+`ProductVariant.sku` mezőbe menti. A szekvencia párhuzamos tranzakciók
+között is egyedi; visszagörgetés után a sorszámban maradhat hézag.
 
 A termék, az első variáns, a beszerzési számla, a `PURCHASE_RECEIPT`
 készletmozgás, a `StockItem`-frissítés, a beszerzési ár kiterjesztés és a
 `product.created` audit-esemény egyetlen adatbázis-tranzakcióban jön létre.
 Az eredet és Product Master explicit `LOCAL`/`ACROPORA`, a `createdById` a
-számlát rögzítő felhasználó. Ütköző SKU esetén a teljes tranzakció
-`409 LOCAL_PRODUCT_SKU_ALREADY_EXISTS` hibával visszagördül.
+számlát rögzítő felhasználó. A globális SKU-egyediségi korlát egy váratlan
+prefixütközést is megfog; ilyenkor a teljes tranzakció visszagördül, és a
+backend új szekvenciaértékkel legfeljebb háromszor automatikusan próbálkozik.
 
 A helyi termék készletváltozása nem hoz létre UNAS stock outbox sort, a
 számlasor szinkronállapota `NOT_APPLICABLE`. A POS-kereső szándékosan csak

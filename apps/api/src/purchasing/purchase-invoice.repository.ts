@@ -53,6 +53,16 @@ function isDuplicateLocalProductSkuError(error: unknown): boolean {
   return isPrismaUniqueConstraintViolation(error, "sku");
 }
 
+const LOCAL_PRODUCT_SKU_PREFIX = "ACR-L-";
+const LOCAL_PRODUCT_SKU_PAD_LENGTH = 6;
+const LOCAL_PRODUCT_SKU_MAX_ATTEMPTS = 3;
+
+function formatLocalProductSku(value: bigint): string {
+  return `${LOCAL_PRODUCT_SKU_PREFIX}${value
+    .toString()
+    .padStart(LOCAL_PRODUCT_SKU_PAD_LENGTH, "0")}`;
+}
+
 export interface PurchaseInvoiceVariantInfo {
   variantId: string;
   sku: string;
@@ -71,14 +81,14 @@ export interface PurchaseInvoiceCurrentStock {
 export interface CreatePurchaseInvoiceLine {
   /** Nincs, ha a tétel nincs a terméktörzsben - ilyenkor nincs helyi készlethatás/UNAS push. */
   variantId: string | null;
-  /** UNAS SKU a variantId-hez; kötelező amikor variantId nem null (kell a
-   * postInventoryMovement-nek/UnasStockSyncOutbox-nak), egyébként null. */
+  /** Belső SKU a variantId-hez; kötelező amikor variantId nem null (kell a
+   * postInventoryMovement-nek, UNAS-authority terméknél pedig az
+   * UnasStockSyncOutbox-nak), egyébként null. */
   sku: string | null;
   /** Ha jelen van, a repository a számlával azonos tranzakcióban hozza
    * létre a LOCAL/ACROPORA terméket és első variantját. */
   createLocalProduct: {
     name: string;
-    sku: string;
     primaryCategoryId: string | null;
   } | null;
   sourceDescription: string | null;
@@ -117,6 +127,7 @@ export interface CreatePurchaseInvoiceParams {
 }
 
 interface PurchaseInvoiceCreateTransaction extends InventoryMovementDatabase {
+  $queryRaw<T = unknown>(query: Prisma.Sql): Promise<T>;
   product: {
     create(args: unknown): Promise<{
       id: string;
@@ -262,250 +273,277 @@ export class PurchaseInvoiceRepository extends Repository {
     return `PURCHASE_INVOICE:${params.supplierId}:${params.supplierInvoiceNumber}`;
   }
 
+  private async nextLocalProductSku(
+    transaction: PurchaseInvoiceCreateTransaction,
+  ): Promise<string> {
+    const rows = await transaction.$queryRaw<Array<{ value: bigint }>>(
+      Prisma.sql`SELECT nextval('"LocalProductSkuSequence"') AS value`,
+    );
+    const value = rows[0]?.value;
+    if (value === undefined)
+      throw new Error("LOCAL_PRODUCT_SKU_SEQUENCE_FAILED");
+    return formatLocalProductSku(value);
+  }
+
   async create(
     params: CreatePurchaseInvoiceParams,
   ): Promise<PurchaseInvoiceDetail> {
     const now = new Date();
-    let created: PurchaseInvoiceDetailRow;
-    try {
-      created = await this.invoiceDatabase.$transaction(
-        async (transaction) => {
-          const localProducts: Array<{
-            productId: string;
-            variantId: string;
-            sku: string;
-            name: string;
-          }> = [];
-          const resolvedLines: CreatePurchaseInvoiceLine[] = [];
-
-          for (const line of params.lines) {
-            if (!line.createLocalProduct) {
-              resolvedLines.push(line);
-              continue;
-            }
-
-            const requestedLocalProduct = line.createLocalProduct;
-            const local = await transaction.product.create({
-              data: {
-                name: requestedLocalProduct.name,
-                type: "PHYSICAL",
-                origin: "LOCAL",
-                catalogAuthority: "ACROPORA",
-                createdById: params.actorUserId,
-                categoryId: requestedLocalProduct.primaryCategoryId,
-                ...(requestedLocalProduct.primaryCategoryId
-                  ? {
-                      categories: {
-                        create: {
-                          categoryId: requestedLocalProduct.primaryCategoryId,
-                          isPrimary: true,
-                          source: "MANUAL",
-                        },
-                      },
-                    }
-                  : {}),
-                variants: {
-                  create: {
-                    sku: requestedLocalProduct.sku,
-                    unit: line.unit,
-                  },
-                },
-              },
-              select: {
-                id: true,
-                name: true,
-                origin: true,
-                catalogAuthority: true,
-                variants: {
-                  select: { id: true, sku: true, unit: true },
-                  take: 1,
-                },
-              },
-            });
-            const variant = local.variants[0];
-            if (!variant)
-              throw new Error("LOCAL_PRODUCT_VARIANT_CREATION_FAILED");
-
-            localProducts.push({
-              productId: local.id,
-              variantId: variant.id,
-              sku: variant.sku,
-              name: local.name,
-            });
-            resolvedLines.push({
-              ...line,
-              variantId: variant.id,
-              sku: variant.sku,
-              createLocalProduct: null,
-              syncStatus: "NOT_APPLICABLE",
-              syncToUnas: false,
-            });
-          }
-
-          const invoice = await transaction.purchaseInvoice.create({
-            data: {
-              documentNumber: params.documentNumber,
-              supplierInvoiceNumber: params.supplierInvoiceNumber,
-              source: params.source,
-              status: "POSTED",
-              supplierId: params.supplierId,
-              warehouseId: params.warehouseId,
-              currency: params.currency,
-              exchangeRate: params.exchangeRate,
-              invoiceDate: params.invoiceDate,
-              dueDate: params.dueDate,
-              isPaid: params.isPaid,
-              paidAt: params.paidAt,
-              vatRate: params.vatRate,
-              note: params.note,
-              createdById: params.actorUserId,
-              lines: {
-                create: resolvedLines.map((line) => ({
-                  variantId: line.variantId,
-                  sourceDescription: line.sourceDescription,
-                  orderedQuantity: line.orderedQuantity,
-                  actualQuantity: line.actualQuantity,
-                  unit: line.unit,
-                  unitNet: line.unitNet,
-                  discountPercent: line.discountPercent,
-                  syncStatus: line.syncStatus,
-                  syncError: line.syncError,
-                })),
-              },
-            },
-            include: purchaseInvoiceDetailInclude,
-          });
-
-          if (params.navIncomingInvoiceId) {
-            // Atomi: csak akkor RECEIVED-eli a NAV bejövő számlát, ha még nem
-            // volt bevételezve - kizárja, hogy ugyanaz a NAV számla két
-            // beszerzési bizonylathoz is hozzákötődjön versenyhelyzetben.
-            const linked = await transaction.navIncomingInvoice.updateMany({
-              where: {
-                id: params.navIncomingInvoiceId,
-                status: { not: "RECEIVED" },
-              },
-              data: { status: "RECEIVED", purchaseInvoiceId: invoice.id },
-            });
-            if (linked.count !== 1)
-              throw new ConflictException("NAV_INVOICE_ALREADY_RECEIVED");
-          }
-
-          // Minden termékhez kapcsolt sor hat a helyi készletre. UNAS
-          // outbox-sort viszont csak az authority alapján
-          // syncToUnas=true sorok kapnak; helyi termék soha.
-          const linkedLines = resolvedLines.filter(
-            (
-              line,
-            ): line is CreatePurchaseInvoiceLine & {
+    let created: PurchaseInvoiceDetailRow | undefined;
+    for (
+      let attempt = 1;
+      attempt <= LOCAL_PRODUCT_SKU_MAX_ATTEMPTS;
+      attempt += 1
+    ) {
+      try {
+        created = await this.invoiceDatabase.$transaction(
+          async (transaction) => {
+            const localProducts: Array<{
+              productId: string;
               variantId: string;
               sku: string;
-            } => Boolean(line.variantId),
-          );
+              name: string;
+            }> = [];
+            const resolvedLines: CreatePurchaseInvoiceLine[] = [];
 
-          if (linkedLines.length > 0) {
-            await postInventoryMovement(transaction, {
-              idempotencyKey: this.buildIdempotencyKey(params),
-              movementNumber: `BESZMOZG-${invoice.documentNumber}`,
-              type: "PURCHASE_RECEIPT",
-              warehouseId: params.warehouseId,
-              referenceType: "PurchaseInvoice",
-              referenceId: invoice.id,
-              performedById: params.actorUserId,
-              occurredAt: params.invoiceDate,
-              sourceProcess: "PURCHASE_INVOICE",
-              lines: linkedLines.map((line) => ({
-                variantId: line.variantId,
-                sku: line.sku ?? line.variantId,
-                // Bevételezés mindig növeli a készletet - a felhasználó
-                // által beírt tényleges (nem a rendelt!) mennyiséggel.
-                quantityDelta: line.actualQuantity,
-                unit: line.unit,
-                syncToUnas: line.syncToUnas,
-              })),
+            for (const line of params.lines) {
+              if (!line.createLocalProduct) {
+                resolvedLines.push(line);
+                continue;
+              }
+
+              const requestedLocalProduct = line.createLocalProduct;
+              const sku = await this.nextLocalProductSku(transaction);
+              const local = await transaction.product.create({
+                data: {
+                  name: requestedLocalProduct.name,
+                  type: "PHYSICAL",
+                  origin: "LOCAL",
+                  catalogAuthority: "ACROPORA",
+                  createdById: params.actorUserId,
+                  categoryId: requestedLocalProduct.primaryCategoryId,
+                  ...(requestedLocalProduct.primaryCategoryId
+                    ? {
+                        categories: {
+                          create: {
+                            categoryId: requestedLocalProduct.primaryCategoryId,
+                            isPrimary: true,
+                            source: "MANUAL",
+                          },
+                        },
+                      }
+                    : {}),
+                  variants: {
+                    create: {
+                      sku,
+                      unit: line.unit,
+                    },
+                  },
+                },
+                select: {
+                  id: true,
+                  name: true,
+                  origin: true,
+                  catalogAuthority: true,
+                  variants: {
+                    select: { id: true, sku: true, unit: true },
+                    take: 1,
+                  },
+                },
+              });
+              const variant = local.variants[0];
+              if (!variant)
+                throw new Error("LOCAL_PRODUCT_VARIANT_CREATION_FAILED");
+
+              localProducts.push({
+                productId: local.id,
+                variantId: variant.id,
+                sku: variant.sku,
+                name: local.name,
+              });
+              resolvedLines.push({
+                ...line,
+                variantId: variant.id,
+                sku: variant.sku,
+                createLocalProduct: null,
+                syncStatus: "NOT_APPLICABLE",
+                syncToUnas: false,
+              });
+            }
+
+            const invoice = await transaction.purchaseInvoice.create({
+              data: {
+                documentNumber: params.documentNumber,
+                supplierInvoiceNumber: params.supplierInvoiceNumber,
+                source: params.source,
+                status: "POSTED",
+                supplierId: params.supplierId,
+                warehouseId: params.warehouseId,
+                currency: params.currency,
+                exchangeRate: params.exchangeRate,
+                invoiceDate: params.invoiceDate,
+                dueDate: params.dueDate,
+                isPaid: params.isPaid,
+                paidAt: params.paidAt,
+                vatRate: params.vatRate,
+                note: params.note,
+                createdById: params.actorUserId,
+                lines: {
+                  create: resolvedLines.map((line) => ({
+                    variantId: line.variantId,
+                    sourceDescription: line.sourceDescription,
+                    orderedQuantity: line.orderedQuantity,
+                    actualQuantity: line.actualQuantity,
+                    unit: line.unit,
+                    unitNet: line.unitNet,
+                    discountPercent: line.discountPercent,
+                    syncStatus: line.syncStatus,
+                    syncError: line.syncError,
+                  })),
+                },
+              },
+              include: purchaseInvoiceDetailInclude,
             });
 
-            for (const line of linkedLines) {
-              await transaction.productExtension.upsert({
-                where: { variantId: line.variantId },
-                update: {
-                  lastPurchaseNetPrice: line.unitNet,
-                  defaultPurchaseCurrency: params.currency,
-                  preferredSupplierId: params.supplierId,
+            if (params.navIncomingInvoiceId) {
+              // Atomi: csak akkor RECEIVED-eli a NAV bejövő számlát, ha még nem
+              // volt bevételezve - kizárja, hogy ugyanaz a NAV számla két
+              // beszerzési bizonylathoz is hozzákötődjön versenyhelyzetben.
+              const linked = await transaction.navIncomingInvoice.updateMany({
+                where: {
+                  id: params.navIncomingInvoiceId,
+                  status: { not: "RECEIVED" },
                 },
-                create: {
+                data: { status: "RECEIVED", purchaseInvoiceId: invoice.id },
+              });
+              if (linked.count !== 1)
+                throw new ConflictException("NAV_INVOICE_ALREADY_RECEIVED");
+            }
+
+            // Minden termékhez kapcsolt sor hat a helyi készletre. UNAS
+            // outbox-sort viszont csak az authority alapján
+            // syncToUnas=true sorok kapnak; helyi termék soha.
+            const linkedLines = resolvedLines.filter(
+              (
+                line,
+              ): line is CreatePurchaseInvoiceLine & {
+                variantId: string;
+                sku: string;
+              } => Boolean(line.variantId),
+            );
+
+            if (linkedLines.length > 0) {
+              await postInventoryMovement(transaction, {
+                idempotencyKey: this.buildIdempotencyKey(params),
+                movementNumber: `BESZMOZG-${invoice.documentNumber}`,
+                type: "PURCHASE_RECEIPT",
+                warehouseId: params.warehouseId,
+                referenceType: "PurchaseInvoice",
+                referenceId: invoice.id,
+                performedById: params.actorUserId,
+                occurredAt: params.invoiceDate,
+                sourceProcess: "PURCHASE_INVOICE",
+                lines: linkedLines.map((line) => ({
                   variantId: line.variantId,
-                  lastPurchaseNetPrice: line.unitNet,
-                  defaultPurchaseCurrency: params.currency,
-                  preferredSupplierId: params.supplierId,
+                  sku: line.sku ?? line.variantId,
+                  // Bevételezés mindig növeli a készletet - a felhasználó
+                  // által beírt tényleges (nem a rendelt!) mennyiséggel.
+                  quantityDelta: line.actualQuantity,
+                  unit: line.unit,
+                  syncToUnas: line.syncToUnas,
+                })),
+              });
+
+              for (const line of linkedLines) {
+                await transaction.productExtension.upsert({
+                  where: { variantId: line.variantId },
+                  update: {
+                    lastPurchaseNetPrice: line.unitNet,
+                    defaultPurchaseCurrency: params.currency,
+                    preferredSupplierId: params.supplierId,
+                  },
+                  create: {
+                    variantId: line.variantId,
+                    lastPurchaseNetPrice: line.unitNet,
+                    defaultPurchaseCurrency: params.currency,
+                    preferredSupplierId: params.supplierId,
+                  },
+                });
+              }
+            }
+
+            for (const localProduct of localProducts) {
+              await transaction.domainEvent.create({
+                data: {
+                  id: randomUUID(),
+                  eventType: "product.created",
+                  aggregateType: "Product",
+                  aggregateId: localProduct.productId,
+                  actorUserId: params.actorUserId,
+                  payload: {
+                    name: localProduct.name,
+                    sku: localProduct.sku,
+                    variantId: localProduct.variantId,
+                    origin: "LOCAL",
+                    catalogAuthority: "ACROPORA",
+                    createdFromPurchaseInvoiceId: invoice.id,
+                  },
+                  occurredAt: now,
+                  schemaVersion: 1,
                 },
               });
             }
-          }
 
-          for (const localProduct of localProducts) {
             await transaction.domainEvent.create({
               data: {
                 id: randomUUID(),
-                eventType: "product.created",
-                aggregateType: "Product",
-                aggregateId: localProduct.productId,
+                eventType: "purchase_invoice.posted",
+                aggregateType: "PurchaseInvoice",
+                aggregateId: invoice.id,
                 actorUserId: params.actorUserId,
                 payload: {
-                  name: localProduct.name,
-                  sku: localProduct.sku,
-                  variantId: localProduct.variantId,
-                  origin: "LOCAL",
-                  catalogAuthority: "ACROPORA",
-                  createdFromPurchaseInvoiceId: invoice.id,
+                  documentNumber: invoice.documentNumber,
+                  source: invoice.source,
+                  supplierId: invoice.supplierId,
+                  lineCount: resolvedLines.length,
+                  localProductCreatedCount: localProducts.length,
                 },
                 occurredAt: now,
                 schemaVersion: 1,
               },
             });
-          }
 
-          await transaction.domainEvent.create({
-            data: {
-              id: randomUUID(),
-              eventType: "purchase_invoice.posted",
-              aggregateType: "PurchaseInvoice",
-              aggregateId: invoice.id,
-              actorUserId: params.actorUserId,
-              payload: {
-                documentNumber: invoice.documentNumber,
-                source: invoice.source,
-                supplierId: invoice.supplierId,
-                lineCount: resolvedLines.length,
-                localProductCreatedCount: localProducts.length,
-              },
-              occurredAt: now,
-              schemaVersion: 1,
-            },
-          });
-
-          return invoice;
-        },
-        {
-          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-          timeout: 30_000,
-        },
-      );
-    } catch (error) {
-      if (
-        isDuplicateSupplierInvoiceError(error) ||
-        isDuplicateMovementIdempotencyKeyError(error)
-      ) {
-        throw new ConflictException(
-          "Ez a beszállítói számla (szám alapján) már rögzítve van - ismételt beküldés nem hoz létre új bizonylatot.",
+            return invoice;
+          },
+          {
+            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+            timeout: 30_000,
+          },
         );
+        break;
+      } catch (error) {
+        if (
+          isDuplicateLocalProductSkuError(error) &&
+          attempt < LOCAL_PRODUCT_SKU_MAX_ATTEMPTS
+        ) {
+          continue;
+        }
+        if (
+          isDuplicateSupplierInvoiceError(error) ||
+          isDuplicateMovementIdempotencyKeyError(error)
+        ) {
+          throw new ConflictException(
+            "Ez a beszállítói számla (szám alapján) már rögzítve van - ismételt beküldés nem hoz létre új bizonylatot.",
+          );
+        }
+        if (isDuplicateLocalProductSkuError(error)) {
+          throw new ConflictException("LOCAL_PRODUCT_SKU_GENERATION_FAILED");
+        }
+        throw error;
       }
-      if (isDuplicateLocalProductSkuError(error)) {
-        throw new ConflictException("LOCAL_PRODUCT_SKU_ALREADY_EXISTS");
-      }
-      throw error;
     }
 
+    if (!created) throw new Error("PURCHASE_INVOICE_CREATION_FAILED");
     return toPurchaseInvoiceDetail(created);
   }
 

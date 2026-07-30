@@ -65,8 +65,6 @@ export interface CreatePurchaseInvoiceLineInput {
    * A variantId és ez a mező kölcsönösen kizárják egymást. */
   createLocalProduct?: {
     name: string;
-    /** Egyedi belső cikkszám; a backend trimeli és nagybetűsíti. */
-    sku: string;
     primaryCategoryId?: string;
   };
   sourceDescription?: string;

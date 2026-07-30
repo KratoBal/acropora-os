@@ -326,7 +326,6 @@ describe("PurchasingService.createInvoice", () => {
           {
             createLocalProduct: {
               name: " Egyedi szivattyú ",
-              sku: " local-pump-01 ",
             },
             sourceDescription: "Pump model X",
             orderedQuantity: 2,
@@ -342,9 +341,9 @@ describe("PurchasingService.createInvoice", () => {
     const line = getCapturedCreateParams()?.lines[0];
     assert.deepEqual(line?.createLocalProduct, {
       name: "Egyedi szivattyú",
-      sku: "LOCAL-PUMP-01",
       primaryCategoryId: null,
     });
+    assert.equal(line?.sku, null);
     assert.equal(line?.syncStatus, "NOT_APPLICABLE");
     assert.equal(line?.syncToUnas, false);
     assert.equal(result.successCount, 1);
@@ -363,7 +362,7 @@ describe("PurchasingService.createInvoice", () => {
           lines: [
             {
               variantId: "variant-1",
-              createLocalProduct: { name: "Másik termék", sku: "LOCAL-2" },
+              createLocalProduct: { name: "Másik termék" },
               orderedQuantity: 1,
               actualQuantity: 1,
               unit: "db",

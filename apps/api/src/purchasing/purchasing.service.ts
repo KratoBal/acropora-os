@@ -152,23 +152,11 @@ export class PurchasingService {
     const variantIds = input.lines
       .map((line) => line.variantId)
       .filter((variantId): variantId is string => Boolean(variantId));
-    const requestedLocalSkus = new Set<string>();
     for (const line of input.lines) {
       if (line.variantId && line.createLocalProduct)
         throw new BadRequestException(
           "Egy számlasor vagy meglévő termékhez kapcsolható, vagy új helyi terméket hozhat létre; a kettő egyszerre nem adható meg.",
         );
-      if (!line.createLocalProduct) continue;
-      const sku = line.createLocalProduct.sku.trim().toUpperCase();
-      if (!sku)
-        throw new BadRequestException(
-          "Az új helyi termék belső cikkszáma kötelező.",
-        );
-      if (requestedLocalSkus.has(sku))
-        throw new BadRequestException(
-          `Ugyanaz a helyi cikkszám többször szerepel a számlán: ${sku}.`,
-        );
-      requestedLocalSkus.add(sku);
     }
     const { warehouseId, variants } =
       await this.invoices.currentStock(variantIds);
@@ -221,7 +209,6 @@ export class PurchasingService {
 
       if (line.createLocalProduct) {
         const name = line.createLocalProduct.name.trim();
-        const sku = line.createLocalProduct.sku.trim().toUpperCase();
         const sourceDescription = line.sourceDescription?.trim() || name;
         if (name.length < 2)
           throw new BadRequestException(
@@ -237,10 +224,9 @@ export class PurchasingService {
           throw new BadRequestException(`Érvénytelen beszerzési ár: ${name}.`);
         preparedLines.push({
           variantId: null,
-          sku,
+          sku: null,
           createLocalProduct: {
             name,
-            sku,
             primaryCategoryId:
               line.createLocalProduct.primaryCategoryId?.trim() || null,
           },

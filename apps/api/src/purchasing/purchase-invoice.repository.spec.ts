@@ -27,6 +27,7 @@ function nextId(prefix: string): string {
 /// test for full end-to-end proof (none exists yet for this flow).
 class FakeDb {
   warehouseId = "wh-1";
+  localProductSkuSequenceValue = 0n;
   invoices: Array<{
     id: string;
     documentNumber: string;
@@ -286,6 +287,11 @@ class FakeDb {
     return 1;
   }
 
+  async $queryRaw<T>() {
+    this.localProductSkuSequenceValue += 1n;
+    return [{ value: this.localProductSkuSequenceValue }] as unknown as T;
+  }
+
   warehouse = {
     findFirst: async () => ({ id: this.warehouseId, name: "Fő raktár" }),
     create: async () => ({ id: this.warehouseId, name: "Fő raktár" }),
@@ -401,10 +407,9 @@ describe("PurchaseInvoiceRepository.create", () => {
         lines: [
           {
             variantId: null,
-            sku: "LOCAL-PUMP-01",
+            sku: null,
             createLocalProduct: {
               name: "Egyedi szivattyú",
-              sku: "LOCAL-PUMP-01",
               primaryCategoryId: null,
             },
             sourceDescription: "Pump model X",
@@ -424,6 +429,7 @@ describe("PurchaseInvoiceRepository.create", () => {
     assert.equal(db.localProducts.length, 1);
     assert.equal(db.localProducts[0]?.origin, "LOCAL");
     assert.equal(db.localProducts[0]?.catalogAuthority, "ACROPORA");
+    assert.equal(db.localProducts[0]?.sku, "ACR-L-000001");
     assert.equal(db.movementLines.length, 1);
     assert.equal(db.stockItems[0]?.onHand.toString(), "2");
     assert.equal(db.outbox.length, 0);
@@ -431,52 +437,88 @@ describe("PurchaseInvoiceRepository.create", () => {
     assert.equal(db.domainEvents.length, 2);
   });
 
-  it("maps an existing local SKU collision to a controlled conflict before booking the invoice", async () => {
+  it("retries automatic local SKU allocation after a collision", async () => {
     const db = new FakeDb();
     db.localProducts.push({
       id: "existing-product",
       name: "Meglévő helyi termék",
       variantId: "existing-variant",
-      sku: "LOCAL-PUMP-01",
+      sku: "ACR-L-000001",
       origin: "LOCAL",
       catalogAuthority: "ACROPORA",
     });
     const repository = repositoryWith(db);
 
-    await assert.rejects(
-      () =>
-        repository.create(
-          baseParams({
-            lines: [
-              {
-                variantId: null,
-                sku: "LOCAL-PUMP-01",
-                createLocalProduct: {
-                  name: "Másik helyi termék",
-                  sku: "LOCAL-PUMP-01",
-                  primaryCategoryId: null,
-                },
-                sourceDescription: "Másik termék a számlán",
-                orderedQuantity: new Prisma.Decimal("1"),
-                actualQuantity: new Prisma.Decimal("1"),
-                unit: "db",
-                unitNet: new Prisma.Decimal("100"),
-                discountPercent: null,
-                syncStatus: "NOT_APPLICABLE",
-                syncError: null,
-                syncToUnas: false,
-              },
-            ],
-          }),
-        ),
-      (error: unknown) =>
-        error instanceof ConflictException &&
-        error.message === "LOCAL_PRODUCT_SKU_ALREADY_EXISTS",
+    await repository.create(
+      baseParams({
+        lines: [
+          {
+            variantId: null,
+            sku: null,
+            createLocalProduct: {
+              name: "Másik helyi termék",
+              primaryCategoryId: null,
+            },
+            sourceDescription: "Másik termék a számlán",
+            orderedQuantity: new Prisma.Decimal("1"),
+            actualQuantity: new Prisma.Decimal("1"),
+            unit: "db",
+            unitNet: new Prisma.Decimal("100"),
+            discountPercent: null,
+            syncStatus: "NOT_APPLICABLE",
+            syncError: null,
+            syncToUnas: false,
+          },
+        ],
+      }),
     );
 
-    assert.equal(db.invoices.length, 0);
-    assert.equal(db.movements.length, 0);
-    assert.equal(db.stockItems.length, 0);
+    assert.equal(db.localProducts.length, 2);
+    assert.equal(db.localProducts[1]?.sku, "ACR-L-000002");
+    assert.equal(db.invoices.length, 1);
+    assert.equal(db.movements.length, 1);
+    assert.equal(db.stockItems.length, 1);
+    assert.equal(db.outbox.length, 0);
+  });
+
+  it("allocates a different automatic SKU to every local product on the same invoice", async () => {
+    const db = new FakeDb();
+    const repository = repositoryWith(db);
+    const localLine = (
+      name: string,
+      quantity: string,
+    ): CreatePurchaseInvoiceLine => ({
+      variantId: null,
+      sku: null,
+      createLocalProduct: {
+        name,
+        primaryCategoryId: null,
+      },
+      sourceDescription: name,
+      orderedQuantity: new Prisma.Decimal(quantity),
+      actualQuantity: new Prisma.Decimal(quantity),
+      unit: "db",
+      unitNet: new Prisma.Decimal("100"),
+      discountPercent: null,
+      syncStatus: "NOT_APPLICABLE",
+      syncError: null,
+      syncToUnas: false,
+    });
+
+    await repository.create(
+      baseParams({
+        lines: [
+          localLine("Első helyi termék", "1"),
+          localLine("Második helyi termék", "2"),
+        ],
+      }),
+    );
+
+    assert.deepEqual(
+      db.localProducts.map((product) => product.sku),
+      ["ACR-L-000001", "ACR-L-000002"],
+    );
+    assert.equal(db.movementLines.length, 2);
     assert.equal(db.outbox.length, 0);
   });
 

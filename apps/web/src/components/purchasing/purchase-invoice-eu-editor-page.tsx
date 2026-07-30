@@ -44,7 +44,6 @@ interface InvoiceLineState {
   variantId: string | null;
   createLocalProduct: {
     name: string;
-    sku: string;
     primaryCategoryId: string;
   } | null;
   sku: string;
@@ -378,7 +377,6 @@ export function PurchaseInvoiceEuEditorPage() {
       productName: "",
       createLocalProduct: {
         name: line.sourceDescription,
-        sku: "",
         primaryCategoryId: "",
       },
     });
@@ -495,10 +493,6 @@ export function PurchaseInvoiceEuEditorPage() {
           setError("Az új helyi termék neve legalább 2 karakter legyen.");
           return;
         }
-        if (!line.createLocalProduct.sku.trim()) {
-          setError("Az új helyi termék belső cikkszáma kötelező.");
-          return;
-        }
       }
     }
     setSubmitting(true);
@@ -523,7 +517,6 @@ export function PurchaseInvoiceEuEditorPage() {
           createLocalProduct: line.createLocalProduct
             ? {
                 name: line.createLocalProduct.name.trim(),
-                sku: line.createLocalProduct.sku.trim().toUpperCase(),
                 primaryCategoryId:
                   line.createLocalProduct.primaryCategoryId || undefined,
               }
@@ -1118,7 +1111,7 @@ export function PurchaseInvoiceEuEditorPage() {
                   ) : null}
                   {line.createLocalProduct ? (
                     <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 p-3">
-                      <div className="grid gap-3 sm:grid-cols-3">
+                      <div className="grid gap-3 sm:grid-cols-2">
                         <label className="text-xs text-slate-600">
                           Terméknév
                           <input
@@ -1133,22 +1126,6 @@ export function PurchaseInvoiceEuEditorPage() {
                               })
                             }
                             className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
-                          />
-                        </label>
-                        <label className="text-xs text-slate-600">
-                          Belső cikkszám
-                          <input
-                            aria-label="Új helyi termék cikkszáma"
-                            value={line.createLocalProduct.sku}
-                            onChange={(event) =>
-                              updateLine(line.key, {
-                                createLocalProduct: {
-                                  ...line.createLocalProduct!,
-                                  sku: event.target.value.toUpperCase(),
-                                },
-                              })
-                            }
-                            className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 font-mono text-sm"
                           />
                         </label>
                         <label className="text-xs text-slate-600">
@@ -1175,6 +1152,10 @@ export function PurchaseInvoiceEuEditorPage() {
                           </select>
                         </label>
                       </div>
+                      <p className="mt-2 text-xs text-slate-500">
+                        A belső cikkszámot az Acropora OS automatikusan
+                        generálja mentéskor.
+                      </p>
                       <div className="mt-2 flex items-center justify-between gap-3">
                         <p className="text-xs text-sky-800">
                           Készletezett fizikai termék lesz, UNAS-szinkron
