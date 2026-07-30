@@ -11,6 +11,9 @@ const product = {
   name: "Reef Salt",
   description: null,
   type: "PHYSICAL",
+  origin: "UNAS",
+  catalogAuthority: "UNAS",
+  createdById: null,
   brandId: null,
   categoryId: null,
   isActive: true,
@@ -258,10 +261,16 @@ describe("ProductRepository", () => {
     );
     const createArgs = calls[0]?.args as {
       data: {
+        origin: string;
+        catalogAuthority: string;
+        createdById: string;
         categoryId: string;
         categories: { create: { isPrimary: boolean } };
       };
     };
+    assert.equal(createArgs.data.origin, "LOCAL");
+    assert.equal(createArgs.data.catalogAuthority, "ACROPORA");
+    assert.equal(createArgs.data.createdById, "user-1");
     assert.equal(createArgs.data.categoryId, "category-1");
     assert.equal(createArgs.data.categories.create.isPrimary, true);
   });
@@ -305,6 +314,8 @@ describe("ProductRepository", () => {
     });
     assert.equal(result.pagination.totalPages, 3);
     assert.equal(result.items[0]?.primarySku, "REEF-SALT-01");
+    assert.equal(result.items[0]?.origin, "UNAS");
+    assert.equal(result.items[0]?.catalogAuthority, "UNAS");
     assert.equal(
       result.items[0]?.primaryCategory?.name,
       "Tengeri akvarisztika",

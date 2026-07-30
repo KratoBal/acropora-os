@@ -14,6 +14,8 @@ function baseProduct(
     id: "product-1",
     name: "Reef Salt",
     type: "PHYSICAL",
+    origin: "LOCAL",
+    catalogAuthority: "ACROPORA",
     isActive: true,
     archivedAt: null,
     brand: null,
@@ -70,6 +72,8 @@ describe("toProductListItem", () => {
 
   it("defaults price fields to null for a non-UNAS-mirrored product", () => {
     const item = toProductListItem(baseProduct());
+    assert.equal(item.origin, "LOCAL");
+    assert.equal(item.catalogAuthority, "ACROPORA");
     assert.equal(item.grossPrice, null);
     assert.equal(item.saleGrossPrice, null);
     assert.equal(item.stockOnHand, null);

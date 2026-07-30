@@ -167,6 +167,8 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
     assert.equal(second.categoriesUpdated, 1);
     assert.equal(await prisma.product.count(), 2);
     assert.equal(updated.product.name, "Eheim updated filter");
+    assert.equal(updated.product.origin, "UNAS");
+    assert.equal(updated.product.catalogAuthority, "UNAS");
     assert.deepEqual(
       updated.product.images.map((image) => image.url),
       ["https://example.test/updated.jpg"],

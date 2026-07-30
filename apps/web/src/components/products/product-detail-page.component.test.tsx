@@ -30,6 +30,8 @@ const detail: ProductDetail = {
   id: "product-1",
   name: "Reef Salt",
   productType: "PHYSICAL",
+  origin: "UNAS",
+  catalogAuthority: "UNAS",
   isActive: true,
   archivedAt: null,
   brand: { id: "brand-1", name: "Acme" },
@@ -115,6 +117,13 @@ const noExtensionDetail: ProductDetail = {
   variants: [{ ...detail.variants[0]!, extension: null }],
 };
 
+const localDetail: ProductDetail = {
+  ...detail,
+  origin: "LOCAL",
+  catalogAuthority: "ACROPORA",
+  unasMirror: null,
+};
+
 const hufDetail: ProductDetail = {
   ...detail,
   variants: [
@@ -180,6 +189,7 @@ describe("ProductDetailPage mirror ownership", () => {
   it("separates the read-only UNAS mirror from Acropora extension data", async () => {
     render(<ProductDetailPage productId="product-1" />);
 
+    expect(await screen.findByText("UNAS-termék")).toBeInTheDocument();
     expect(await screen.findByText("UNAS terméktükör")).toBeInTheDocument();
     expect(
       screen.getByText("Product Master adatok · csak olvasható"),
@@ -191,6 +201,17 @@ describe("ProductDetailPage mirror ownership", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Acropora Product Extension")).toBeInTheDocument();
     expect(screen.getByText("Csak belső adat")).toBeInTheDocument();
+  });
+
+  it("a helyi terméket külön Acropora OS badge-dzsel jelöli", async () => {
+    api.detail.mockResolvedValue(localDetail);
+
+    render(<ProductDetailPage productId="product-1" />);
+
+    expect(
+      await screen.findByText("Helyi Acropora OS-termék"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("UNAS terméktükör")).not.toBeInTheDocument();
   });
 
   it("edits only the Acropora-owned extension fields", async () => {
@@ -391,9 +412,7 @@ describe("ProductDetailPage mirror ownership", () => {
     const { container } = render(<ProductDetailPage productId="product-1" />);
     await screen.findByText("UNAS terméktükör");
 
-    expect(
-      container.querySelector("strong")?.textContent,
-    ).toBe("vastagon");
+    expect(container.querySelector("strong")?.textContent).toBe("vastagon");
     expect(container.querySelector("em")?.textContent).toBe("dőlt");
     const items = container.querySelectorAll("ul li");
     expect(items).toHaveLength(2);
@@ -401,9 +420,7 @@ describe("ProductDetailPage mirror ownership", () => {
     expect(items[1]?.textContent).toBe("Második tulajdonság");
 
     const safeLink = screen.getByText("Gyártói adatlap");
-    expect(safeLink.getAttribute("href")).toBe(
-      "https://example.com/adatlap",
-    );
+    expect(safeLink.getAttribute("href")).toBe("https://example.com/adatlap");
     expect(safeLink.getAttribute("target")).toBe("_blank");
     expect(safeLink.getAttribute("rel")).toBe("noopener noreferrer");
 

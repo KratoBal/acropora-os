@@ -57,6 +57,8 @@ export function toProductListItem(
     id: product.id,
     name: product.name,
     productType: product.type,
+    origin: product.origin,
+    catalogAuthority: product.catalogAuthority,
     isActive: product.isActive,
     archivedAt: product.archivedAt?.toISOString() ?? null,
     brand: product.brand
