@@ -103,7 +103,8 @@ Mindkét eset SUCCEEDED státuszban zárul (a kért 5 státusz egyike marad),
 kerül**: minden sikeresen könyvelt készletmozgás létrehoz egy saját outbox
 sort. Ha egy sor (A) feldolgozás közben (PROCESSING) van, amikor egy újabb
 mozgás egy másik sort (B) hoz létre, A nem szuperszedeálódik íráskor - de A
-feldolgozásakor a worker az AKTUÁLIS `StockItem.onHand`-et olvassa újra
+feldolgozásakor a worker az AKTUÁLIS
+`StockItem.onHand - StockItem.reserved` értéket olvassa újra
 (nem a beírt `targetOnHand`-et), tehát A vagy a B előtti, vagy a B utáni
 (véletlenül helyes) értéket küldi ki - mindegy, mert B saját, önálló sorként
 biztosan feldolgozásra kerül egy következő worker-tick-ben, és ekkor is
@@ -113,15 +114,14 @@ frissebb sor még), tehát B mindenképp lefut és a ténylegesen legfrissebb
 
 ### Mit publikálunk ténylegesen: outboxban tárolt érték vs friss újraolvasás
 
-A worker a UNAS-hívás előtt **újraolvassa** a `StockItem.onHand`-et (nem az
-outbox sorban rögzített `targetOnHand`-et küldi). Mivel a `StockItem`
-kizárólag a `postInventoryMovement`-en keresztül változik, és az minden
-mozgáshoz ír egy outbox sort, ez az érték - amikor nincs nála frissebb
-outbox sor a kulcsra (ezt az `isSuperseded` ellenőrzés már garantálja) -
-bizonyíthatóan megegyezik a `targetOnHand`-del. A friss újraolvasás mégis
-megmarad védekező rétegként: ha ez az invariáns valaha megsérülne (pl. egy
-jövőbeli kód közvetlenül írna `StockItem`-et), a UNAS akkor is a ténylegesen
-aktuális készletet kapja, nem egy elavult pillanatképet.
+A worker a UNAS-hívás előtt **újraolvassa** a
+`StockItem.onHand - StockItem.reserved` értéket (nem az outbox sorban
+rögzített `targetOnHand`-et küldi). Az `onHand` a fizikailag jelen lévő
+mennyiség, a `reserved` az aktív projektfoglalás; az UNAS kizárólag a szabad,
+eladható készletet kaphatja. A bevételezés a fizikai mozgást, a foglalást és
+az outbox végleges célértékét egy tranzakcióban írja, ezért a worker már csak
+konzisztens állapotot láthat. A friss újraolvasás védekező rétegként is
+megmarad: az UNAS nem kaphat elavult pillanatképet.
 
 ## Outbox worker: claim, retry, dead-letter
 
@@ -555,7 +555,7 @@ csak eddig senki nem használta); idempotenciakulcs
 `RECONCILIATION_REPAIR:<variantId>:<warehouseId>:<expectedCurrentValue>`.
 
 **B. UNAS újrapublikálása** - sosem közvetlen `setStock`; egy új, önálló
-outbox-sor a jelenlegi helyes `onHand`-del, csak ha nincs már nála frissebb
+outbox-sor a jelenlegi helyes `onHand - reserved` értékkel, csak ha nincs már nála frissebb
 várakozó sor (`isSuperseded`-hez hasonló ellenőrzéssel).
 
 **C. Historikus baseline létrehozása** - csak kontrollált leltárból (a

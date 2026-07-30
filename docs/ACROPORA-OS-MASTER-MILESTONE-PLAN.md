@@ -84,20 +84,20 @@ Az Acropora OS nem váltja ki automatikusan az összes külső rendszert. A rend
 
 ## 3. Rögzített rendszer- és adatgazda-határok
 
-| Adatkör | Elsődleges rendszer | Acropora OS szerepe |
-|---|---|---|
-| Terméktörzs, webshopnév, leírás, eladási ár, webshop-státusz | UNAS | Read-only, normalizált helyi tükör |
-| Acropora-specifikus termékbeállítások | Acropora OS | Elsődleges adatgazda |
-| Fizikai készlet és készletmozgás | Acropora OS | Elsődleges adatgazda |
-| Webshopban publikált eladható készlet | Acropora OS → UNAS | Számítás és visszaírás |
-| Webshopos rendelés | UNAS | Helyi, idempotens tükör és teljesítési workflow |
-| Beszállító, beszállítói cikkszám és beszerzési feltétel | Acropora OS | Elsődleges adatgazda |
-| Beszerzési ár története | Acropora OS | Bevételezési tételekből képzett történet |
-| Kimenő számla jogi bizonylata és számlaszáma | Számlázz.hu | Helyi tükör, státusz és dokumentumhivatkozás |
-| Bejövő számlák napi adatforrása | Számlázz.hu pénzügyi adatkapcsolat (**tervezett elsődleges forrás, lásd 6.0A**) | Push alapú helyi fogadás |
-| NAV-nak jelentett számlák | NAV Online Számla | Napi teljességi és eltérésellenőrző forrás (**másodlagos, nem elsődleges adatforrás – döntés megerősítve 2026-07-24, lásd 11. döntés #6**) |
-| Banki tranzakciók | Bank/Számlázz.hu Autokassza vagy külön banki kapcsolat | Import, párosítás és egyeztetés |
-| Ügyfél, akvárium, szerviz és mérés | Acropora OS | Elsődleges adatgazda |
+| Adatkör                                                      | Elsődleges rendszer                                                             | Acropora OS szerepe                                                                                                                        |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Terméktörzs, webshopnév, leírás, eladási ár, webshop-státusz | UNAS                                                                            | Read-only, normalizált helyi tükör                                                                                                         |
+| Acropora-specifikus termékbeállítások                        | Acropora OS                                                                     | Elsődleges adatgazda                                                                                                                       |
+| Fizikai készlet és készletmozgás                             | Acropora OS                                                                     | Elsődleges adatgazda                                                                                                                       |
+| Webshopban publikált eladható készlet                        | Acropora OS → UNAS                                                              | Számítás és visszaírás                                                                                                                     |
+| Webshopos rendelés                                           | UNAS                                                                            | Helyi, idempotens tükör és teljesítési workflow                                                                                            |
+| Beszállító, beszállítói cikkszám és beszerzési feltétel      | Acropora OS                                                                     | Elsődleges adatgazda                                                                                                                       |
+| Beszerzési ár története                                      | Acropora OS                                                                     | Bevételezési tételekből képzett történet                                                                                                   |
+| Kimenő számla jogi bizonylata és számlaszáma                 | Számlázz.hu                                                                     | Helyi tükör, státusz és dokumentumhivatkozás                                                                                               |
+| Bejövő számlák napi adatforrása                              | Számlázz.hu pénzügyi adatkapcsolat (**tervezett elsődleges forrás, lásd 6.0A**) | Push alapú helyi fogadás                                                                                                                   |
+| NAV-nak jelentett számlák                                    | NAV Online Számla                                                               | Napi teljességi és eltérésellenőrző forrás (**másodlagos, nem elsődleges adatforrás – döntés megerősítve 2026-07-24, lásd 11. döntés #6**) |
+| Banki tranzakciók                                            | Bank/Számlázz.hu Autokassza vagy külön banki kapcsolat                          | Import, párosítás és egyeztetés                                                                                                            |
+| Ügyfél, akvárium, szerviz és mérés                           | Acropora OS                                                                     | Elsődleges adatgazda                                                                                                                       |
 
 ### Megváltoztathatatlan alapelvek
 
@@ -149,35 +149,35 @@ repositoryban tényleges adatmodell, migráció, API-, UI- és/vagy tesztkód
 található. A „részben” megjelölés azt jelenti, hogy használható első iteráció
 elkészült, de a teljes üzleti vagy production workflow még nem.
 
-| Terület | Tényleges állapot a `main` ágon | Bizonyíték/jellemző képesség |
-|---|---|---|
-| Repository foundation | DONE | pnpm/Turborepo, Next.js, NestJS, PostgreSQL, Redis, Prisma, teszt/build parancsok |
-| Development auth és RBAC | DONE fejlesztéshez | globális Auth/Permission guard, központi role-permission mátrix |
-| Admin felhasználókezelés | DONE | `/admin/users`, profil, role, scrypt jelszóhash, aktiválás/inaktiválás, audit |
-| Production bejelentkezés | NOT STARTED | a jelszómezők elkészültek, de a login továbbra is development mock |
-| Brand Management/Import Assistant | DONE | staging, review, bulk brand, alias, conflict/idempotencia |
-| UNAS terméktükör | DONE | teljes/inkrementális sync, kategória, kép, missing/restore, Product Extension |
-| UNAS kapcsolatbeállítás | DONE | AES-256-GCM, DATABASE/ENV_FALLBACK/DISABLED, admin API és UI |
-| Éles UNAS termék-sync | DONE első éles validálással | 1884 termékes teljes futás dokumentált, valós UNAS parserhibák javítva |
-| Terméklista/részlet | DONE első iteráció | ár, akciós ár, helyi készlet, UNAS mirror, Product Extension |
-| Utolsó beszerzési ár | DONE | Product Extension nettó ár, pénznem és HUF ÁFA-kezelés |
-| Raktár és leltár | DONE első iteráció | XLSX leltár, inline számlálás, diff, StockMovement/StockItem korrekció |
-| UNAS készlet-visszaírás | PARTIAL | leltár, POS és beszerzés közvetlen `setStock` hívásai elkészültek |
-| POS | DONE első iteráció | termékkeresés, kosár, fizetési mód, készletcsökkentés, napi eladások |
-| UNAS rendelésszinkron | DONE első iteráció | polling, cursor, SalesOrder, SALE/RETURN_IN mozgás, discrepancy nézet |
-| Vevőtörzs | DONE első iteráció | lista, részlet, létrehozás, backend update, címek, forrásjelölés |
-| UNAS vevőszinkron | DONE implementáció, live contract nyitott | cursor/overlap, scheduler, run history, admin sync |
-| NAV adózólekérdezés | DONE | `queryTaxpayer`, NAV-aláírás, cégnév/cím előtöltés |
-| Irányítószám-lookup | DONE best-effort | nem hivatalos külső API, NAV-adatot nem ír felül |
-| Beszállítótörzs | DONE első iteráció | lista/keresés/létrehozás, adószám, ország, elérhetőség, **önálló Partnerek modul (`/partnerek`) bank-/cím-/kapcsolattartó-mezőkkel és VIES adószám-ellenőrzéssel (2026-07-24)** |
-| EU-s beszerzés | DONE első iteráció | PurchaseInvoice, tételek, készletnövelés, UNAS push, termékextension-frissítés, **terméktörzsben nem szereplő tétel manuális (`NOT_LINKED`) felvétele (2026-07-24)** |
-| MNB árfolyamkliens | IMPLEMENTED BUT BLOCKED | SOAP 1.1/1.2 és fallback elkészült, éles botvédelem miatt kézi árfolyam kell |
-| Belföldi beszerzés | **DONE első iteráció (2026-07-24)** | kézi ÁFA-kulcsos rögzítés és NAV Online Számla (`queryInvoiceDigest`/`queryInvoiceData`) alapú bejövőszámla-betöltés a közös `/beszerzes/uj` űrlapon; NAV-sorok soronkénti formális termékvariáns-egyeztetése még nem indult el |
-| Számlázz.hu | NOT STARTED | adatmodellben/POS-ban előkészítő mező van, működő integráció nincs; **2026-07-24-től az elsődleges bejövő/kimenő számlaszinkron tervezett forrása, lásd 6.0A** |
-| NAV számlareconciliation | NOT STARTED | csak `queryTaxpayer` és a belföldi bevételezéshez épített `queryInvoiceDigest`/`queryInvoiceData` készült el, önálló napi teljességi/eltérés-egyeztetés (M9) nem |
-| CRM-bővítések | NOT STARTED | kontaktok, jegyzetek, címkék, timeline hiányzik |
-| Akvárium/szerviz/ICP | SCHEMA-ONLY | Prisma modellek vannak, regisztrált NestJS modul/UI nincs |
-| Operations | NOT STARTED | production auth, monitoring, backup/restore és deployment hardening hiányzik |
+| Terület                           | Tényleges állapot a `main` ágon           | Bizonyíték/jellemző képesség                                                                                                                                                                                                    |
+| --------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository foundation             | DONE                                      | pnpm/Turborepo, Next.js, NestJS, PostgreSQL, Redis, Prisma, teszt/build parancsok                                                                                                                                               |
+| Development auth és RBAC          | DONE fejlesztéshez                        | globális Auth/Permission guard, központi role-permission mátrix                                                                                                                                                                 |
+| Admin felhasználókezelés          | DONE                                      | `/admin/users`, profil, role, scrypt jelszóhash, aktiválás/inaktiválás, audit                                                                                                                                                   |
+| Production bejelentkezés          | NOT STARTED                               | a jelszómezők elkészültek, de a login továbbra is development mock                                                                                                                                                              |
+| Brand Management/Import Assistant | DONE                                      | staging, review, bulk brand, alias, conflict/idempotencia                                                                                                                                                                       |
+| UNAS terméktükör                  | DONE                                      | teljes/inkrementális sync, kategória, kép, missing/restore, Product Extension                                                                                                                                                   |
+| UNAS kapcsolatbeállítás           | DONE                                      | AES-256-GCM, DATABASE/ENV_FALLBACK/DISABLED, admin API és UI                                                                                                                                                                    |
+| Éles UNAS termék-sync             | DONE első éles validálással               | 1884 termékes teljes futás dokumentált, valós UNAS parserhibák javítva                                                                                                                                                          |
+| Terméklista/részlet               | DONE első iteráció                        | ár, akciós ár, helyi készlet, UNAS mirror, Product Extension                                                                                                                                                                    |
+| Utolsó beszerzési ár              | DONE                                      | Product Extension nettó ár, pénznem és HUF ÁFA-kezelés                                                                                                                                                                          |
+| Raktár és leltár                  | DONE első iteráció                        | XLSX leltár, inline számlálás, diff, StockMovement/StockItem korrekció                                                                                                                                                          |
+| UNAS készlet-visszaírás           | PARTIAL                                   | leltár, POS és beszerzés közvetlen `setStock` hívásai elkészültek                                                                                                                                                               |
+| POS                               | DONE első iteráció                        | termékkeresés, kosár, fizetési mód, készletcsökkentés, napi eladások                                                                                                                                                            |
+| UNAS rendelésszinkron             | DONE első iteráció                        | polling, cursor, SalesOrder, SALE/RETURN_IN mozgás, discrepancy nézet                                                                                                                                                           |
+| Vevőtörzs                         | DONE első iteráció                        | lista, részlet, létrehozás, backend update, címek, forrásjelölés                                                                                                                                                                |
+| UNAS vevőszinkron                 | DONE implementáció, live contract nyitott | cursor/overlap, scheduler, run history, admin sync                                                                                                                                                                              |
+| NAV adózólekérdezés               | DONE                                      | `queryTaxpayer`, NAV-aláírás, cégnév/cím előtöltés                                                                                                                                                                              |
+| Irányítószám-lookup               | DONE best-effort                          | nem hivatalos külső API, NAV-adatot nem ír felül                                                                                                                                                                                |
+| Beszállítótörzs                   | DONE első iteráció                        | lista/keresés/létrehozás, adószám, ország, elérhetőség, **önálló Partnerek modul (`/partnerek`) bank-/cím-/kapcsolattartó-mezőkkel és VIES adószám-ellenőrzéssel (2026-07-24)**                                                 |
+| EU-s beszerzés                    | DONE első iteráció                        | PurchaseInvoice, tételek, készletnövelés, UNAS push, termékextension-frissítés, **terméktörzsben nem szereplő tétel manuális (`NOT_LINKED`) felvétele (2026-07-24)**                                                            |
+| MNB árfolyamkliens                | IMPLEMENTED BUT BLOCKED                   | SOAP 1.1/1.2 és fallback elkészült, éles botvédelem miatt kézi árfolyam kell                                                                                                                                                    |
+| Belföldi beszerzés                | **DONE első iteráció (2026-07-24)**       | kézi ÁFA-kulcsos rögzítés és NAV Online Számla (`queryInvoiceDigest`/`queryInvoiceData`) alapú bejövőszámla-betöltés a közös `/beszerzes/uj` űrlapon; NAV-sorok soronkénti formális termékvariáns-egyeztetése még nem indult el |
+| Számlázz.hu                       | NOT STARTED                               | adatmodellben/POS-ban előkészítő mező van, működő integráció nincs; **2026-07-24-től az elsődleges bejövő/kimenő számlaszinkron tervezett forrása, lásd 6.0A**                                                                  |
+| NAV számlareconciliation          | NOT STARTED                               | csak `queryTaxpayer` és a belföldi bevételezéshez épített `queryInvoiceDigest`/`queryInvoiceData` készült el, önálló napi teljességi/eltérés-egyeztetés (M9) nem                                                                |
+| CRM-bővítések                     | NOT STARTED                               | kontaktok, jegyzetek, címkék, timeline hiányzik                                                                                                                                                                                 |
+| Akvárium/szerviz/ICP              | SCHEMA-ONLY                               | Prisma modellek vannak, regisztrált NestJS modul/UI nincs                                                                                                                                                                       |
+| Operations                        | NOT STARTED                               | production auth, monitoring, backup/restore és deployment hardening hiányzik                                                                                                                                                    |
 
 ### 6.0A Frissen megerősített üzleti döntés: Számlázz.hu elsődleges, NAV másodlagos
 
@@ -868,6 +868,7 @@ UNAS-rendelés → UNAS beépített Számlázz.hu modulja → Számlázz.hu
 ```
 
 Az Acropora OS webshoprendelés alapján **sosem**:
+
 - hív `createInvoice` (vagy bármilyen Számlázz.hu Agent API) végpontot;
 - kezdeményez számlakiállítást;
 - ír vissza számlaszámot vagy számlázási állapotot a UNAS-ba;
@@ -933,7 +934,7 @@ read-only feldolgozásáról.
 
 **Állapot:** TERVEZETT (B irány - bejövő bizonylatok elsődleges forrása).
 A `.../outgoing-invoices` végpont NEM azért kell, hogy Acropora OS
-webshop-számlát *kezdeményezzen* (azt a UNAS Számlázz.hu-modulja teszi,
+webshop-számlát _kezdeményezzen_ (azt a UNAS Számlázz.hu-modulja teszi,
 lásd M8.2 fent) - hanem azért, hogy a Számlázz.hu push-üzenete (ami a
 fiókban keletkező MINDEN kimenő számlát tartalmazza, a UNAS-modul által
 kiállítottakat is) utólag feltöltse a read-only UNAS-tükör
@@ -1067,7 +1068,7 @@ az M8 után kezdhető munka.
 
 ## M10 – Financial Operations and Bank Reconciliation
 
-**Állapot:** PROPOSED
+**Állapot:** PARTIAL – beszerzési projektkészlet-foglalás elkészült
 
 ### Cél
 
@@ -1317,6 +1318,16 @@ Egyedi akváriumépítési, dekorációs és intézményi projektek kezelése.
 - átadás-átvétel;
 - garanciális feladat;
 - projekt eredményességi riport.
+
+### Elkészült alap
+
+- minimális projekttörzs automatikus projektszámmal;
+- projekt gyors létrehozása a bevételezési felületen;
+- egy számlasor mennyiségének felosztása több projekt között;
+- auditálható `ProjectInventoryReservation`;
+- `onHand` fizikai készlet, `reserved` projektfoglalás,
+  `available = onHand - reserved`;
+- csak az available mennyiség publikálható az UNAS felé.
 
 ---
 
@@ -1603,26 +1614,26 @@ Minden külső import és export rendelkezzen:
 
 # 9. Függőségi térkép
 
-| Mérföldkő | Kötelező előzmény |
-|---|---|
-| M2.2 | M0, M1, M2.1 |
-| M2.3 | M2.1, M2.2 |
-| M3 | M0, M1, Product mirror |
-| M4 | M3 alapok, Product Extension |
-| M5 | M3, M4 bevételezés, M2 UNAS kapcsolat |
-| M6 | M2 UNAS kapcsolat, Product mirror |
-| M7 | M3, M6 |
-| M8 | M6/M7 a rendelésalapú számlázáshoz; registry önállóan is kezdhető |
-| M9 | M8 számlanyilvántartás |
-| M10 | M8; banki párosításhoz tranzakcióforrás |
-| M11 | M1 |
-| M12 | M11 |
-| M13 | M12 |
-| M14 | M11, M12; készletfelhasználáshoz M3 |
-| M15 | M4, M7, M8, M11, M14 |
-| M16 | érintett domainmodulok |
-| M17 | érintett domainmodulok és stabil riportprojekciók |
-| M18 | folyamatosan, production előtt teljes egészében |
+| Mérföldkő | Kötelező előzmény                                                 |
+| --------- | ----------------------------------------------------------------- |
+| M2.2      | M0, M1, M2.1                                                      |
+| M2.3      | M2.1, M2.2                                                        |
+| M3        | M0, M1, Product mirror                                            |
+| M4        | M3 alapok, Product Extension                                      |
+| M5        | M3, M4 bevételezés, M2 UNAS kapcsolat                             |
+| M6        | M2 UNAS kapcsolat, Product mirror                                 |
+| M7        | M3, M6                                                            |
+| M8        | M6/M7 a rendelésalapú számlázáshoz; registry önállóan is kezdhető |
+| M9        | M8 számlanyilvántartás                                            |
+| M10       | M8; banki párosításhoz tranzakcióforrás                           |
+| M11       | M1                                                                |
+| M12       | M11                                                               |
+| M13       | M12                                                               |
+| M14       | M11, M12; készletfelhasználáshoz M3                               |
+| M15       | M4, M7, M8, M11, M14                                              |
+| M16       | érintett domainmodulok                                            |
+| M17       | érintett domainmodulok és stabil riportprojekciók                 |
+| M18       | folyamatosan, production előtt teljes egészében                   |
 
 ---
 
@@ -1687,25 +1698,25 @@ Ezeket az implementáció előtt a tulajdonosnak külön jóvá kell hagynia:
 
 A státuszok meghatározásakor figyelembe vett fő implementációs checkpointok:
 
-| Commit/PR | Tartalom |
-|---|---|
-| PR #1–#3 | M1 stabilizáció, M2.1 UNAS termékszinkron, safe read-only probe |
-| PR #4 | M2.2 UNAS Connection Settings backend |
-| PR #5 | M2.2 admin UI |
-| PR #6–#8 | valós UNAS login- és kategóriaválaszokhoz szükséges javítások |
-| `4af1b2a` / PR #11 | Product Extension utolsó beszerzési ár |
-| `2d9b5aa` / PR #12 | leltár/készlet-egyeztetés |
-| `7655328` / PR #13 | POS |
-| `e645700` / PR #14 | UNAS rendelésszinkron |
-| `bebfc64` / PR #15 | admin felhasználókezelés |
-| `82d1f4b` / PR #16 | leltár utáni StockItem baseline javítás |
-| PR #17 | terméklista ár- és készletoszlopok |
-| PR #18 | dinamikus dashboard-üdvözlés |
-| `70a2b29` | Customer modul, UNAS vevősync, NAV `queryTaxpayer` |
-| `ed092b3` | projektstátusz és roadmap frissítése |
-| `97517a1` | EU-s Purchase Invoice/beszerzés modul |
-| `235cac9` | beszerzés modul formázási checkpoint |
-| `87cee32` | **(2026-07-24)** belföldi beszerzés NAV Online Számla alapon, Partnerek modul, VIES ellenőrzés, `NOT_LINKED` számlasor — helyi commit, push a sandboxból hitelesítés hiányában nem történt meg, a felhasználónak kell push-olnia vagy hitelesítést biztosítania |
+| Commit/PR          | Tartalom                                                                                                                                                                                                                                                        |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PR #1–#3           | M1 stabilizáció, M2.1 UNAS termékszinkron, safe read-only probe                                                                                                                                                                                                 |
+| PR #4              | M2.2 UNAS Connection Settings backend                                                                                                                                                                                                                           |
+| PR #5              | M2.2 admin UI                                                                                                                                                                                                                                                   |
+| PR #6–#8           | valós UNAS login- és kategóriaválaszokhoz szükséges javítások                                                                                                                                                                                                   |
+| `4af1b2a` / PR #11 | Product Extension utolsó beszerzési ár                                                                                                                                                                                                                          |
+| `2d9b5aa` / PR #12 | leltár/készlet-egyeztetés                                                                                                                                                                                                                                       |
+| `7655328` / PR #13 | POS                                                                                                                                                                                                                                                             |
+| `e645700` / PR #14 | UNAS rendelésszinkron                                                                                                                                                                                                                                           |
+| `bebfc64` / PR #15 | admin felhasználókezelés                                                                                                                                                                                                                                        |
+| `82d1f4b` / PR #16 | leltár utáni StockItem baseline javítás                                                                                                                                                                                                                         |
+| PR #17             | terméklista ár- és készletoszlopok                                                                                                                                                                                                                              |
+| PR #18             | dinamikus dashboard-üdvözlés                                                                                                                                                                                                                                    |
+| `70a2b29`          | Customer modul, UNAS vevősync, NAV `queryTaxpayer`                                                                                                                                                                                                              |
+| `ed092b3`          | projektstátusz és roadmap frissítése                                                                                                                                                                                                                            |
+| `97517a1`          | EU-s Purchase Invoice/beszerzés modul                                                                                                                                                                                                                           |
+| `235cac9`          | beszerzés modul formázási checkpoint                                                                                                                                                                                                                            |
+| `87cee32`          | **(2026-07-24)** belföldi beszerzés NAV Online Számla alapon, Partnerek modul, VIES ellenőrzés, `NOT_LINKED` számlasor — helyi commit, push a sandboxból hitelesítés hiányában nem történt meg, a felhasználónak kell push-olnia vagy hitelesítést biztosítania |
 
 Az audit során látott aktív vagy megmaradt feature/fix branchek nem jelentenek
 automatikusan mainen kívüli, szükséges funkciót. A roadmap állapotát a `main`

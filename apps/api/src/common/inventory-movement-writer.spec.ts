@@ -19,6 +19,7 @@ interface FakeStockItem {
   variantId: string;
   warehouseId: string;
   onHand: Prisma.Decimal;
+  reserved?: Prisma.Decimal;
 }
 
 interface FakeOutboxRow {
@@ -89,7 +90,13 @@ function createFakeDatabase() {
             item.variantId === where.variantId &&
             item.warehouseId === where.warehouseId,
         );
-        return found ? { id: found.id, onHand: found.onHand } : null;
+        return found
+          ? {
+              id: found.id,
+              onHand: found.onHand,
+              reserved: found.reserved ?? new Prisma.Decimal(0),
+            }
+          : null;
       },
       async update(args) {
         const { where, data } = args as {
@@ -116,6 +123,7 @@ function createFakeDatabase() {
           variantId: data.variantId,
           warehouseId: data.warehouseId,
           onHand: data.onHand,
+          reserved: new Prisma.Decimal(0),
         });
         return {};
       },

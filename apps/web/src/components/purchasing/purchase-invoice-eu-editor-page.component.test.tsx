@@ -22,6 +22,8 @@ const purchasingApiMock = vi.hoisted(() => ({
   create: vi.fn(),
   getExchangeRate: vi.fn(),
   searchProducts: vi.fn(),
+  listProjects: vi.fn(),
+  createProject: vi.fn(),
 }));
 
 const productApiMock = vi.hoisted(() => ({
@@ -135,9 +137,12 @@ beforeEach(() => {
     failedCount: 0,
     unasQueuedCount: 1,
     localProductCreatedCount: 0,
+    projectReservationCount: 0,
   });
   purchasingApiMock.getExchangeRate.mockReset();
   purchasingApiMock.searchProducts.mockReset().mockResolvedValue([]);
+  purchasingApiMock.listProjects.mockReset().mockResolvedValue([]);
+  purchasingApiMock.createProject.mockReset();
   productApiMock.categoryOptions
     .mockReset()
     .mockResolvedValue([{ id: "category-1", label: "Technika / Szivattyúk" }]);
@@ -219,6 +224,48 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
               primaryCategoryId: "category-1",
             },
             sourceDescription: "Teszt termék",
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("a bevételezett mennyiséget projekthez tudja foglalni", async () => {
+    purchasingApiMock.listProjects.mockResolvedValue([
+      {
+        id: "project-1",
+        projectNumber: "PRJ-000001",
+        name: "Állatkerti projekt",
+        status: "ACTIVE",
+      },
+    ]);
+    render(createElement(PurchaseInvoiceEuEditorPage));
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Új helyi termék létrehozása",
+      }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Projekt hozzáadása" }),
+    );
+    expect(screen.getByRole("combobox", { name: "Projekt" })).toHaveValue(
+      "project-1",
+    );
+    fireEvent.click(await screen.findByText(supplier.name));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Számla rögzítése és készlet frissítése",
+      }),
+    );
+
+    await waitFor(() => expect(purchasingApiMock.create).toHaveBeenCalled());
+    expect(purchasingApiMock.create).toHaveBeenCalledWith(
+      "token-owner",
+      expect.objectContaining({
+        lines: [
+          expect.objectContaining({
+            projectAllocations: [{ projectId: "project-1", quantity: 1 }],
           }),
         ],
       }),

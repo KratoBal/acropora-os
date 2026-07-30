@@ -7,6 +7,7 @@ import {
 import { Prisma } from "@acropora/database";
 import type {
   ExchangeRateLookupResult,
+  ProjectOption,
   PurchaseInvoiceDetail,
   PurchaseInvoiceListResponse,
   PurchaseInvoiceResult,
@@ -23,6 +24,7 @@ import {
   type CreatePurchaseInvoiceLine,
 } from "./purchase-invoice.repository.js";
 import { PurchaseProductSearchService } from "./purchase-product-search.service.js";
+import { ProjectRepository } from "./project.repository.js";
 
 @Injectable()
 export class PurchasingService {
@@ -39,7 +41,21 @@ export class PurchasingService {
     private readonly suppliers: SuppliersRepository,
     private readonly productSearch: PurchaseProductSearchService,
     private readonly mnbRates: MnbExchangeRateService,
+    private readonly projects: ProjectRepository,
   ) {}
+
+  listProjects(): Promise<ProjectOption[]> {
+    return this.projects.listAssignable();
+  }
+
+  createProject(name: string, actorUserId: string): Promise<ProjectOption> {
+    const normalizedName = name.trim();
+    if (normalizedName.length < 2)
+      throw new BadRequestException(
+        "A projekt neve legalább 2 karakter legyen.",
+      );
+    return this.projects.create(normalizedName, actorUserId);
+  }
 
   searchProducts(
     query: string | undefined,
@@ -160,10 +176,69 @@ export class PurchasingService {
     }
     const { warehouseId, variants } =
       await this.invoices.currentStock(variantIds);
+    const requestedProjectIds = new Set(
+      input.lines.flatMap((line) =>
+        (line.projectAllocations ?? []).map(
+          (allocation) => allocation.projectId,
+        ),
+      ),
+    );
+    if (requestedProjectIds.size > 0) {
+      const assignableProjects = await this.projects.listAssignable();
+      const assignableIds = new Set(
+        assignableProjects.map((project) => project.id),
+      );
+      for (const projectId of requestedProjectIds) {
+        if (!assignableIds.has(projectId))
+          throw new BadRequestException(
+            "A kiválasztott projekt nem található vagy már nem fogadhat új készletfoglalást.",
+          );
+      }
+    }
 
     const documentNumber = generateCode("BESZ");
     const preparedLines: CreatePurchaseInvoiceLine[] = [];
     for (const line of input.lines) {
+      if (!Number.isFinite(line.actualQuantity) || line.actualQuantity < 0)
+        throw new BadRequestException(
+          "A ténylegesen bevételezett mennyiség nem lehet negatív.",
+        );
+      const allocationProjectIds = new Set<string>();
+      const projectAllocations = (line.projectAllocations ?? []).map(
+        (allocation) => {
+          if (allocationProjectIds.has(allocation.projectId))
+            throw new BadRequestException(
+              "Egy számlasoron ugyanaz a projekt csak egyszer szerepelhet.",
+            );
+          allocationProjectIds.add(allocation.projectId);
+          if (!Number.isFinite(allocation.quantity) || allocation.quantity <= 0)
+            throw new BadRequestException(
+              "A projektfoglalás mennyiségének nullánál nagyobbnak kell lennie.",
+            );
+          return {
+            projectId: allocation.projectId,
+            quantity: new Prisma.Decimal(allocation.quantity),
+          };
+        },
+      );
+      const allocatedQuantity = projectAllocations.reduce(
+        (sum, allocation) => sum.plus(allocation.quantity),
+        new Prisma.Decimal(0),
+      );
+      const actualQuantity = new Prisma.Decimal(line.actualQuantity);
+      if (allocatedQuantity.greaterThan(actualQuantity))
+        throw new BadRequestException(
+          "A projektekhez rendelt összmennyiség nem lehet több a ténylegesen bevételezett mennyiségnél.",
+        );
+      if (
+        projectAllocations.length > 0 &&
+        !line.variantId &&
+        !line.createLocalProduct
+      )
+        throw new BadRequestException(
+          "Projektkészlet csak termékhez kapcsolt számlasorból hozható létre.",
+        );
+
       // Terméktörzsben nem szereplő tétel is rögzíthető (pl. a számlán van,
       // de a termék még nincs felvéve nálunk) - ilyenkor nincs mit
       // egyeztetni a saját cikkszámmal/mennyiséggel, ezért a számlán
@@ -203,6 +278,7 @@ export class PurchasingService {
           syncStatus: "NOT_LINKED",
           syncError: null,
           syncToUnas: false,
+          projectAllocations,
         });
         continue;
       }
@@ -242,6 +318,7 @@ export class PurchasingService {
           syncStatus: "NOT_APPLICABLE",
           syncError: null,
           syncToUnas: false,
+          projectAllocations,
         });
         continue;
       }
@@ -288,6 +365,7 @@ export class PurchasingService {
         syncStatus: syncToUnas ? "PENDING" : "NOT_APPLICABLE",
         syncError: null,
         syncToUnas,
+        projectAllocations,
       });
     }
 
@@ -329,6 +407,10 @@ export class PurchasingService {
       localProductCreatedCount: preparedLines.filter(
         (line) => line.createLocalProduct,
       ).length,
+      projectReservationCount: preparedLines.reduce(
+        (count, line) => count + (line.projectAllocations?.length ?? 0),
+        0,
+      ),
     };
   }
 }

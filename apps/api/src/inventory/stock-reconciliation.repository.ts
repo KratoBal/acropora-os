@@ -19,6 +19,7 @@ interface StockItemRow {
   variantId: string;
   warehouseId: string;
   onHand: Prisma.Decimal;
+  reserved?: Prisma.Decimal;
   variant: { sku: string };
   warehouse: { code: string };
 }
@@ -51,10 +52,14 @@ export interface StockReconciliationDatabase {
   stockItem: {
     findMany(args: unknown): Promise<StockItemRow[]>;
     count(args: unknown): Promise<number>;
-    groupBy(
-      args: unknown,
-    ): Promise<
-      Array<{ variantId: string; _sum: { onHand: Prisma.Decimal | null } }>
+    groupBy(args: unknown): Promise<
+      Array<{
+        variantId: string;
+        _sum: {
+          onHand: Prisma.Decimal | null;
+          reserved?: Prisma.Decimal | null;
+        };
+      }>
     >;
   };
   stockMovementLine: {
@@ -251,11 +256,13 @@ export class StockReconciliationRepository extends Repository {
               await this.reconciliationDatabase.stockItem.groupBy({
                 by: ["variantId"],
                 where: { variantId: { in: firstVariantIds } },
-                _sum: { onHand: true },
+                _sum: { onHand: true, reserved: true },
               })
             ).map((row) => [
               row.variantId,
-              row._sum.onHand ?? new Prisma.Decimal(0),
+              (row._sum.onHand ?? new Prisma.Decimal(0)).minus(
+                row._sum.reserved ?? new Prisma.Decimal(0),
+              ),
             ]),
           )
         : new Map<string, Prisma.Decimal>();
@@ -330,7 +337,7 @@ export class StockReconciliationRepository extends Repository {
 
       const outboxDiagnosis = this.diagnoseOutbox(
         outboxByPair.get(pairKey) ?? [],
-        item.onHand,
+        item.onHand.minus(item.reserved ?? new Prisma.Decimal(0)),
       );
 
       const localVsLedgerDelta =

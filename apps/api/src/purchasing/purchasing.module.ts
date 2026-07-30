@@ -6,6 +6,7 @@ import { NavIncomingInvoiceModule } from "./nav-incoming-invoices/nav-incoming-i
 import { PurchaseInvoiceRepository } from "./purchase-invoice.repository.js";
 import { PurchaseProductSearchRepository } from "./purchase-product-search.repository.js";
 import { PurchaseProductSearchService } from "./purchase-product-search.service.js";
+import { ProjectRepository } from "./project.repository.js";
 import { PurchasingController } from "./purchasing.controller.js";
 import { PurchasingService } from "./purchasing.service.js";
 
@@ -21,6 +22,7 @@ import { PurchasingService } from "./purchasing.service.js";
     PurchaseInvoiceRepository,
     PurchaseProductSearchRepository,
     PurchaseProductSearchService,
+    ProjectRepository,
     PurchasingService,
   ],
 })

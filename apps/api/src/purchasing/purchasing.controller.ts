@@ -4,6 +4,7 @@ import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import { CreatePurchaseInvoiceDto } from "./dto/create-purchase-invoice.dto.js";
+import { CreateProjectDto } from "./dto/create-project.dto.js";
 import { ExchangeRateQueryDto } from "./dto/exchange-rate-query.dto.js";
 import { PurchaseInvoiceListQueryDto } from "./dto/purchase-invoice-list-query.dto.js";
 import { PurchaseProductSearchQueryDto } from "./dto/purchase-product-search-query.dto.js";
@@ -17,6 +18,21 @@ export class PurchasingController {
   @RequirePermissions(PERMISSIONS.PURCHASING_VIEW)
   searchProducts(@Query() query: PurchaseProductSearchQueryDto) {
     return this.service.searchProducts(query.q);
+  }
+
+  @Get("projects")
+  @RequirePermissions(PERMISSIONS.PURCHASING_VIEW)
+  listProjects() {
+    return this.service.listProjects();
+  }
+
+  @Post("projects")
+  @RequirePermissions(PERMISSIONS.PURCHASING_MANAGE)
+  createProject(
+    @Body() input: CreateProjectDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.createProject(input.name, user.id);
   }
 
   @Get("exchange-rate")

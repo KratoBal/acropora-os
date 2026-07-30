@@ -26,6 +26,7 @@ interface StockItemForRepair {
   variantId: string;
   warehouseId: string;
   onHand: Prisma.Decimal;
+  reserved?: Prisma.Decimal;
   variant: {
     sku: string;
     product: {
@@ -334,7 +335,9 @@ export class StockReconciliationRepairRepository extends Repository {
               variantId: params.variantId,
               warehouseId: params.warehouseId,
               sku: stockItem.variant.sku,
-              targetOnHand: ledgerExpectedOnHand,
+              targetOnHand: ledgerExpectedOnHand.minus(
+                stockItem.reserved ?? new Prisma.Decimal(0),
+              ),
               idempotencyKey: `${params.idempotencyKey}:outbox`,
               sourceProcess: "RECONCILIATION",
               sourceRecordId: params.idempotencyKey,
@@ -444,7 +447,9 @@ export class StockReconciliationRepairRepository extends Repository {
         variantId: params.variantId,
         warehouseId: params.warehouseId,
         sku: stockItem.variant.sku,
-        targetOnHand: stockItem.onHand,
+        targetOnHand: stockItem.onHand.minus(
+          stockItem.reserved ?? new Prisma.Decimal(0),
+        ),
         idempotencyKey: `${params.idempotencyKey}:outbox`,
         sourceProcess: "RECONCILIATION",
         sourceRecordId: params.idempotencyKey,

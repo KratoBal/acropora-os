@@ -29,9 +29,13 @@ export interface PosProductSearchDatabase extends WarehouseLookupDatabase {
     >;
   };
   stockItem: {
-    findMany(
-      args: unknown,
-    ): Promise<Array<{ variantId: string; onHand: Prisma.Decimal }>>;
+    findMany(args: unknown): Promise<
+      Array<{
+        variantId: string;
+        onHand: Prisma.Decimal;
+        reserved?: Prisma.Decimal;
+      }>
+    >;
   };
 }
 
@@ -103,15 +107,18 @@ export class PosProductSearchRepository extends Repository {
         lotId: null,
         variantId: { in: variants.map((variant) => variant.id) },
       },
-      select: { variantId: true, onHand: true },
+      select: { variantId: true, onHand: true, reserved: true },
     });
-    const onHandByVariant = new Map(
-      stockItems.map((item) => [item.variantId, item.onHand]),
+    const availableByVariant = new Map(
+      stockItems.map((item) => [
+        item.variantId,
+        item.onHand.minus(item.reserved ?? new Prisma.Decimal(0)),
+      ]),
     );
 
     return variants.map((variant) => {
       const currentStock =
-        onHandByVariant.get(variant.id) ??
+        availableByVariant.get(variant.id) ??
         variant.product.unasSnapshot?.reportedStock ??
         new Prisma.Decimal(0);
       const vatRate =

@@ -110,9 +110,13 @@ export type {
 export type {
   CreatePurchaseInvoiceInput,
   CreatePurchaseInvoiceLineInput,
+  CreateProjectInput,
   ExchangeRateLookupResult,
+  ProjectOption,
+  ProjectStatus,
   PurchaseInvoiceDetail,
   PurchaseInvoiceLineDetail,
+  PurchaseInvoiceLineProjectAllocation,
   PurchaseInvoiceLineSyncStatus,
   PurchaseInvoiceListResponse,
   PurchaseInvoiceResult,

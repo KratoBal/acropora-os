@@ -143,6 +143,7 @@ export interface PostInventoryMovementResult {
 interface StockItemRow {
   id: string;
   onHand: Prisma.Decimal;
+  reserved?: Prisma.Decimal;
 }
 
 export interface InventoryMovementDatabase {
@@ -330,9 +331,11 @@ export async function postInventoryMovement(
         locationId: null,
         lotId: null,
       },
-      select: { id: true, onHand: true },
+      select: { id: true, onHand: true, reserved: true },
     });
     const currentOnHand = existingStockItem?.onHand ?? new Prisma.Decimal(0);
+    const currentReserved =
+      existingStockItem?.reserved ?? new Prisma.Decimal(0);
     const resultingOnHand = currentOnHand.plus(line.quantityDelta);
 
     if (existingStockItem) {
@@ -366,7 +369,9 @@ export async function postInventoryMovement(
         variantId: line.variantId,
         warehouseId: input.warehouseId,
         sku: line.sku,
-        targetOnHand: resultingOnHand,
+        // UNAS only receives stock that is free to sell. Project-reserved
+        // quantity remains physically on hand but is excluded here.
+        targetOnHand: resultingOnHand.minus(currentReserved),
         idempotencyKey: buildOutboxIdempotencyKey(
           input.idempotencyKey,
           line.variantId,

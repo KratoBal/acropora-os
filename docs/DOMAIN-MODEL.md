@@ -201,6 +201,12 @@ erDiagram
 - **incoming**: jóváhagyott/sent beszerzési sor még át nem vett mennyisége.
 - **committed**: megerősített vevői vagy szervizigény, amelyhez teljesítés szükséges; lehet részben még nem foglalt.
 
+A bevételezéskori projektkészletet a
+`ProjectInventoryReservation` rögzíti. Egy számlasor több projektre
+osztható; az aktív rekordok összege képezi a kapcsolódó
+`StockItem.reserved` projectiont. A foglalás nem fizikai
+`StockMovement`: az `onHand` nem változik, csak az `available` csökken.
+
 ## Státuszfolyamatok
 
 ```mermaid
