@@ -187,10 +187,14 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
         name: "Új helyi termék létrehozása",
       }),
     );
-    fireEvent.change(
-      screen.getByRole("textbox", { name: "Új helyi termék cikkszáma" }),
-      { target: { value: "local-pump-01" } },
-    );
+    expect(
+      screen.getByText(
+        "A belső cikkszámot az Acropora OS automatikusan generálja mentéskor.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("textbox", { name: "Új helyi termék cikkszáma" }),
+    ).not.toBeInTheDocument();
     fireEvent.change(
       screen.getByRole("combobox", {
         name: "Új helyi termék kategóriája",
@@ -212,7 +216,6 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
           expect.objectContaining({
             createLocalProduct: {
               name: "Teszt termék",
-              sku: "LOCAL-PUMP-01",
               primaryCategoryId: "category-1",
             },
             sourceDescription: "Teszt termék",

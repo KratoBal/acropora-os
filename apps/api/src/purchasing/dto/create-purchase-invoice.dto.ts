@@ -17,7 +17,6 @@ import {
 
 export class CreateLocalPurchaseProductDto {
   @IsString() @MinLength(2) @MaxLength(200) name!: string;
-  @IsString() @MinLength(1) @MaxLength(100) sku!: string;
   @IsString() @IsOptional() primaryCategoryId?: string;
 }
 

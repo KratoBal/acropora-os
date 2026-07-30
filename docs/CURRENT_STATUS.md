@@ -192,9 +192,11 @@ alapú folyamat ugyanazt a bevételezési modellt használja.
   jelzéssel jeleníti meg ezeket a sorokat.
 
 - **Új helyi termék létrehozása számlasorból**: az ismeretlen HU_NAV,
-  HU_MANUAL vagy EU sor meglévő termékhez kapcsolható, vagy név, egyedi
-  belső SKU, mértékegység és opcionális kategória megadásával készletezett
-  fizikai termékké alakítható. A `LOCAL`/`ACROPORA` termék, első variáns,
+  HU_MANUAL vagy EU sor meglévő termékhez kapcsolható, vagy név,
+  mértékegység és opcionális kategória megadásával készletezett fizikai
+  termékké alakítható. A belső SKU-t a backend automatikusan generálja
+  `ACR-L-000001` formában, párhuzamos kérések között is egyedi
+  adatbázis-szekvenciából. A `LOCAL`/`ACROPORA` termék, első variáns,
   számla, készletmozgás és audit egyetlen tranzakcióban jön létre. A sor
   `NOT_APPLICABLE` státuszú, készletre kerül, de UNAS outboxot nem kap. A
   helyi termék nem jelenik meg a POS keresőben, amíg külön POS-csatorna
