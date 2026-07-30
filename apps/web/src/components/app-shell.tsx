@@ -12,87 +12,203 @@ import {
 import { hasPermission } from "@acropora/types";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   businessNavigation,
+  isNavigationItemActive,
   primaryNavigation,
+  secondaryNavigation,
   settingsNavigation,
+  unasSettingsNavigation,
+  type AppNavigationItem,
 } from "./navigation";
 import { useAuth } from "./auth/auth-provider";
 import { UserMenu } from "./auth/user-menu";
+
+interface NavigationGroupProps {
+  active: boolean;
+  children: ReactNode;
+  icon: ReactNode;
+  label: string;
+  level?: 0 | 1;
+}
+
+function NavigationGroup({
+  active,
+  children,
+  icon,
+  label,
+  level = 0,
+}: NavigationGroupProps) {
+  const [open, setOpen] = useState(active);
+
+  useEffect(() => {
+    if (active) setOpen(true);
+  }, [active]);
+
+  return (
+    <div>
+      <button
+        type="button"
+        className={[
+          "group flex h-9 w-full items-center gap-3 rounded-lg text-sm font-medium transition-colors",
+          level === 1 ? "px-2" : "px-3",
+          active
+            ? "bg-white text-slate-950 shadow-sm ring-1 ring-slate-200/80"
+            : "text-slate-600 hover:bg-white/70 hover:text-slate-950",
+        ].join(" ")}
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span
+          className={[
+            "text-slate-400 transition-colors group-hover:text-slate-600",
+            active ? "text-teal-700" : "",
+          ].join(" ")}
+        >
+          {icon}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+        <Icon
+          name="chevron-down"
+          size={16}
+          className={[
+            "text-slate-400 transition-transform",
+            open ? "rotate-180" : "",
+          ].join(" ")}
+        />
+      </button>
+      {open ? children : null}
+    </div>
+  );
+}
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { session } = useAuth();
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
 
+  const canAccess = (item: AppNavigationItem) =>
+    Boolean(session && hasPermission(session.user, item.permission));
+  const visibleUnasNavigation = unasSettingsNavigation.filter(canAccess);
+  const visibleSettingsNavigation = settingsNavigation.filter(canAccess);
+  const settingsActive = [
+    ...visibleUnasNavigation,
+    ...visibleSettingsNavigation,
+  ].some((item) => isNavigationItemActive(pathname, item));
+  const unasActive = visibleUnasNavigation.some((item) =>
+    isNavigationItemActive(pathname, item),
+  );
+
   const navigation = (
     <>
       <div className="space-y-1">
-        {primaryNavigation
-          .filter(
-            (item) => session && hasPermission(session.user, item.permission),
-          )
-          .map((item) => (
-            <NavItem
-              key={item.href}
-              href={item.href}
-              label={item.label}
-              icon={<Icon name={item.icon} />}
-              active={
-                pathname === item.href ||
-                (item.href !== "/" && pathname.startsWith(`${item.href}/`))
-              }
-              badge={
-                item.href === "/feladataim" ? (
-                  <Badge className="px-1.5" variant="neutral">
-                    5
-                  </Badge>
-                ) : undefined
-              }
-              onClick={() => setMobileNavigationOpen(false)}
-            />
-          ))}
+        {primaryNavigation.filter(canAccess).map((item) => (
+          <NavItem
+            key={item.href}
+            href={item.href}
+            label={item.label}
+            icon={<Icon name={item.icon} />}
+            active={isNavigationItemActive(pathname, item)}
+            badge={
+              item.href === "/feladataim" ? (
+                <Badge className="px-1.5" variant="neutral">
+                  5
+                </Badge>
+              ) : undefined
+            }
+            onClick={() => setMobileNavigationOpen(false)}
+          />
+        ))}
       </div>
 
       <p className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
         Működés
       </p>
       <div className="space-y-1">
-        {businessNavigation
-          .filter(
-            (item) => session && hasPermission(session.user, item.permission),
-          )
-          .map((item) => (
-            <NavItem
-              key={item.href}
-              href={item.href}
-              label={item.label}
-              icon={<Icon name={item.icon} />}
-              active={
-                pathname === item.href || pathname.startsWith(`${item.href}/`)
-              }
-              onClick={() => setMobileNavigationOpen(false)}
-            />
-          ))}
+        {businessNavigation.filter(canAccess).map((item) => (
+          <NavItem
+            key={item.href}
+            href={item.href}
+            label={item.label}
+            icon={<Icon name={item.icon} />}
+            active={isNavigationItemActive(pathname, item)}
+            onClick={() => setMobileNavigationOpen(false)}
+          />
+        ))}
       </div>
 
       <div className="mt-6 space-y-1 border-t border-slate-200 pt-4">
-        {settingsNavigation
-          .filter(
-            (item) => session && hasPermission(session.user, item.permission),
-          )
-          .map((item) => (
-            <NavItem
-              key={item.href}
-              href={item.href}
-              label={item.label}
-              icon={<Icon name={item.icon} />}
-              active={pathname === item.href}
-              onClick={() => setMobileNavigationOpen(false)}
-            />
-          ))}
+        {secondaryNavigation.filter(canAccess).map((item) => (
+          <NavItem
+            key={item.href}
+            href={item.href}
+            label={item.label}
+            icon={<Icon name={item.icon} />}
+            active={isNavigationItemActive(pathname, item)}
+            onClick={() => setMobileNavigationOpen(false)}
+          />
+        ))}
+        {visibleUnasNavigation.length > 0 ||
+        visibleSettingsNavigation.length > 0 ? (
+          <NavigationGroup
+            label="Beállítások"
+            icon={<Icon name="settings" />}
+            active={settingsActive}
+          >
+            <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-2">
+              {visibleSettingsNavigation
+                .filter((item) => item.href === "/beallitasok")
+                .map((item) => (
+                  <NavItem
+                    key={item.href}
+                    href={item.href}
+                    label={item.label}
+                    icon={<Icon name={item.icon} />}
+                    active={isNavigationItemActive(pathname, item)}
+                    onClick={() => setMobileNavigationOpen(false)}
+                  />
+                ))}
+
+              {visibleUnasNavigation.length > 0 ? (
+                <NavigationGroup
+                  label="UNAS"
+                  icon={<Icon name="store" />}
+                  active={unasActive}
+                  level={1}
+                >
+                  <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-2">
+                    {visibleUnasNavigation.map((item) => (
+                      <NavItem
+                        key={item.href}
+                        href={item.href}
+                        label={item.label}
+                        icon={<Icon name={item.icon} />}
+                        active={isNavigationItemActive(pathname, item)}
+                        className="h-8 text-[13px]"
+                        onClick={() => setMobileNavigationOpen(false)}
+                      />
+                    ))}
+                  </div>
+                </NavigationGroup>
+              ) : null}
+
+              {visibleSettingsNavigation
+                .filter((item) => item.href !== "/beallitasok")
+                .map((item) => (
+                  <NavItem
+                    key={item.href}
+                    href={item.href}
+                    label={item.label}
+                    icon={<Icon name={item.icon} />}
+                    active={isNavigationItemActive(pathname, item)}
+                    onClick={() => setMobileNavigationOpen(false)}
+                  />
+                ))}
+            </div>
+          </NavigationGroup>
+        ) : null}
       </div>
     </>
   );

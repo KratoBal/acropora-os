@@ -16,9 +16,10 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import {
+  allSettingsNavigation,
   businessNavigation,
   primaryNavigation,
-  settingsNavigation,
+  secondaryNavigation,
 } from "@/components/navigation";
 import { ApiError } from "@/lib/api/client";
 import { usersApi } from "@/lib/api/users";
@@ -27,7 +28,8 @@ import { ROLE_LABELS, ROLE_OPTIONS } from "./role-labels";
 const allNavigationItems = [
   ...primaryNavigation,
   ...businessNavigation,
-  ...settingsNavigation,
+  ...secondaryNavigation,
+  ...allSettingsNavigation,
 ];
 
 export function UserEditorPage({ userId }: { userId?: string }) {
@@ -41,9 +43,8 @@ export function UserEditorPage({ userId }: { userId?: string }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<(typeof ROLE_OPTIONS)[number]["value"]>(
-    "VIEWER",
-  );
+  const [role, setRole] =
+    useState<(typeof ROLE_OPTIONS)[number]["value"]>("VIEWER");
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [passwordBusy, setPasswordBusy] = useState(false);
@@ -133,13 +134,17 @@ export function UserEditorPage({ userId }: { userId?: string }) {
   };
   const submitPassword = async () => {
     if (!user || newPassword.length < 8) {
-      setPasswordNotice("A jelszónak legalább 8 karakter hosszúnak kell lennie.");
+      setPasswordNotice(
+        "A jelszónak legalább 8 karakter hosszúnak kell lennie.",
+      );
       return;
     }
     setPasswordBusy(true);
     setPasswordNotice(null);
     try {
-      setUser(await usersApi.setPassword(token, user.id, { password: newPassword }));
+      setUser(
+        await usersApi.setPassword(token, user.id, { password: newPassword }),
+      );
       setNewPassword("");
       setPasswordNotice("A jelszó frissítve.");
     } catch (cause) {
@@ -225,9 +230,7 @@ export function UserEditorPage({ userId }: { userId?: string }) {
               <Select
                 aria-label="Szerepkör"
                 value={role}
-                onChange={(event) =>
-                  setRole(event.target.value as typeof role)
-                }
+                onChange={(event) => setRole(event.target.value as typeof role)}
               >
                 {ROLE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -266,8 +269,8 @@ export function UserEditorPage({ userId }: { userId?: string }) {
         <Card className="p-6">
           <h2 className="font-semibold">Elérhető menüpontok</h2>
           <p className="mt-1 text-sm text-slate-500">
-            A(z) {ROLE_LABELS[role]} szerepkör jelenleg ezekhez a
-            menüpontokhoz biztosít hozzáférést.
+            A(z) {ROLE_LABELS[role]} szerepkör jelenleg ezekhez a menüpontokhoz
+            biztosít hozzáférést.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             {accessibleItems.length ? (
@@ -329,9 +332,7 @@ export function UserEditorPage({ userId }: { userId?: string }) {
               variant={user.isActive ? "danger" : "secondary"}
               disabled={isSelf}
               title={
-                isSelf
-                  ? "Saját magadat nem tudod inaktiválni."
-                  : undefined
+                isSelf ? "Saját magadat nem tudod inaktiválni." : undefined
               }
               onClick={() =>
                 user.isActive ? setConfirmDeactivate(true) : void toggleActive()
