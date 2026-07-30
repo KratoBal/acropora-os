@@ -226,12 +226,17 @@ function buildQueryInvoiceDataXml(
   // A supplierTaxNumber INBOUND irányú lekérdezésnél kötelező (a NAV
   // specifikáció szerint egy számlaszám önmagában nem egyértelmű vevői
   // oldalról, több beszállító is kiállíthatott azonos sorszámú számlát).
+  // A mező TaxpayerIdType, ezért a NAV itt csak a nyolcjegyű törzsszámot
+  // fogadja el, nem a helyben tárolt teljes magyar adószámot (xxxxxxxx-y-zz).
+  const supplierTaxpayerId = supplierTaxNumber
+    ?.replace(/[^0-9]/g, "")
+    .slice(0, 8);
   const body =
     `<invoiceNumberQuery>` +
     `<invoiceNumber>${escapeXml(invoiceNumber)}</invoiceNumber>` +
     `<invoiceDirection>${direction}</invoiceDirection>` +
-    (direction === "INBOUND" && supplierTaxNumber
-      ? `<supplierTaxNumber>${escapeXml(supplierTaxNumber)}</supplierTaxNumber>`
+    (direction === "INBOUND" && supplierTaxpayerId
+      ? `<supplierTaxNumber>${escapeXml(supplierTaxpayerId)}</supplierTaxNumber>`
       : "") +
     `</invoiceNumberQuery>`;
   return buildEnvelopeXml("QueryInvoiceDataRequest", body, user, software, now);
