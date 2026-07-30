@@ -109,7 +109,7 @@ export function PurchaseInvoiceEuEditorPage() {
   );
 
   const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState("");
-  const [currency, setCurrency] = useState("EUR");
+  const [currency, setCurrency] = useState(navInvoiceId ? "HUF" : "EUR");
   const [exchangeRate, setExchangeRate] = useState<number | "">("");
   const [rateLoading, setRateLoading] = useState(false);
   const [rateNotice, setRateNotice] = useState<string | null>(null);
@@ -149,6 +149,8 @@ export function PurchaseInvoiceEuEditorPage() {
     // önmagában nem feltétel: cookie-alapú authnál üres, az apiRequest
     // ilyenkor a httpOnly session cookie-t használja.
     if (!navInvoiceId) return;
+    setSource("HU_NAV");
+    setCurrency("HUF");
     setNavPrefillLoading(true);
     setNavPrefillError(null);
     void navIncomingInvoicesApi
@@ -328,6 +330,7 @@ export function PurchaseInvoiceEuEditorPage() {
     setLines((previous) => previous.filter((line) => line.key !== key));
 
   const totalNet = lines.reduce((sum, line) => sum + lineNet(line), 0);
+  const effectiveCurrency = isDomestic ? "HUF" : currency.trim().toUpperCase();
 
   const createSupplier = async () => {
     if (!newSupplierName.trim() || creatingSupplier) return;
@@ -389,7 +392,7 @@ export function PurchaseInvoiceEuEditorPage() {
       setError("A számlaszám megadása kötelező.");
       return;
     }
-    if (!currency.trim()) {
+    if (!effectiveCurrency) {
       setError("A pénznem megadása kötelező.");
       return;
     }
@@ -420,7 +423,7 @@ export function PurchaseInvoiceEuEditorPage() {
         source,
         supplierId: selectedSupplier.id,
         supplierInvoiceNumber: supplierInvoiceNumber.trim(),
-        currency: currency.trim().toUpperCase(),
+        currency: effectiveCurrency,
         exchangeRate:
           !isDomestic && exchangeRate !== "" ? Number(exchangeRate) : undefined,
         vatRate: isDomestic && vatRate !== "" ? Number(vatRate) : undefined,
@@ -770,7 +773,7 @@ export function PurchaseInvoiceEuEditorPage() {
             <FormField label="Pénznem">
               <Input
                 aria-label="Pénznem"
-                value={currency}
+                value={effectiveCurrency}
                 maxLength={3}
                 disabled={isDomestic}
                 onChange={(event) =>
@@ -1017,7 +1020,7 @@ export function PurchaseInvoiceEuEditorPage() {
                       />
                     </label>
                     <label className="text-xs text-slate-500">
-                      Egységár ({currency || "—"})
+                      Egységár ({effectiveCurrency || "—"})
                       <input
                         type="number"
                         min={0}
@@ -1052,7 +1055,7 @@ export function PurchaseInvoiceEuEditorPage() {
                     </label>
                   </div>
                   <p className="mt-2 text-right text-sm font-semibold text-slate-900">
-                    {formatMoney(lineNet(line), currency)}
+                    {formatMoney(lineNet(line), effectiveCurrency)}
                   </p>
                 </div>
               ))}
@@ -1063,7 +1066,7 @@ export function PurchaseInvoiceEuEditorPage() {
             <div className="text-right">
               <p className="text-slate-400">Nettó összeg</p>
               <p className="text-lg font-bold text-slate-900">
-                {formatMoney(totalNet, currency)}
+                {formatMoney(totalNet, effectiveCurrency)}
               </p>
             </div>
           </div>

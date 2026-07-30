@@ -91,7 +91,7 @@ export function NavIncomingInvoiceListPage() {
   const filter = (key: string, value: string) => {
     const next = new URLSearchParams(params.toString());
     value ? next.set(key, value) : next.delete(key);
-    next.set("page", "1");
+    if (key !== "page") next.set("page", "1");
     router.replace(`${pathname}?${next}`);
   };
 
