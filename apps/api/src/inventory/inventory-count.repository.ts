@@ -320,7 +320,15 @@ export class InventoryCountRepository extends Repository {
         async (transaction) => {
           const lines = await transaction.inventoryCountLine.findMany({
             where: { inventoryCountId: id },
-            include: { variant: { select: { sku: true, unit: true } } },
+            include: {
+              variant: {
+                select: {
+                  sku: true,
+                  unit: true,
+                  product: { select: { catalogAuthority: true } },
+                },
+              },
+            },
           });
 
           // A variant with no StockItem row yet had its expectedQty fall back
