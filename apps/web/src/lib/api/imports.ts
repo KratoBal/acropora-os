@@ -8,7 +8,7 @@ import type {
   UnasImportReport,
 } from "@acropora/types";
 
-import { ApiError, apiRequest } from "./client";
+import { ApiError, apiAuthHeaders, apiRequest } from "./client";
 
 const MAX_XLSX_SIZE = 25 * 1024 * 1024;
 
@@ -29,7 +29,9 @@ function uploadDryRun(
     const request = new XMLHttpRequest();
     request.open("POST", "/api/imports/unas/catalog/dry-run");
     request.setRequestHeader("Accept", "application/json");
-    request.setRequestHeader("Authorization", `Bearer ${token}`);
+    for (const [name, value] of Object.entries(apiAuthHeaders(token, "POST"))) {
+      request.setRequestHeader(name, value);
+    }
     request.upload.addEventListener("progress", (event) => {
       if (event.lengthComputable)
         onProgress(Math.round((event.loaded / event.total) * 100));

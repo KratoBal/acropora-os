@@ -1,5 +1,5 @@
 import type { AuthenticatedUser } from "@acropora/types";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProductionAuthAdapter } from "./production-auth";
 
@@ -12,8 +12,20 @@ const owner: AuthenticatedUser = {
 
 const originalFetch = globalThis.fetch;
 
+function clearCookies() {
+  for (const part of document.cookie.split(";")) {
+    const name = part.split("=")[0]?.trim();
+    if (name) {
+      document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+    }
+  }
+}
+
+beforeEach(() => clearCookies());
+
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  clearCookies();
   vi.restoreAllMocks();
 });
 
@@ -92,6 +104,7 @@ describe("ProductionAuthAdapter", () => {
   });
 
   it("logs out by calling the logout endpoint, tolerating network failure", async () => {
+    document.cookie = "acropora_csrf=logout-csrf";
     globalThis.fetch = vi.fn().mockRejectedValue(new Error("offline"));
     const session = {
       id: owner.id,
@@ -103,6 +116,7 @@ describe("ProductionAuthAdapter", () => {
     ).resolves.toBeUndefined();
     expect(globalThis.fetch).toHaveBeenCalledWith("/api/auth/logout", {
       method: "POST",
+      headers: { "X-CSRF-Token": "logout-csrf" },
     });
   });
 });

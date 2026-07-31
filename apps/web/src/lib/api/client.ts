@@ -26,6 +26,25 @@ function readCsrfCookie(): string | undefined {
   return undefined;
 }
 
+/**
+ * Builds the authentication headers shared by fetch- and XHR-based API
+ * calls. Production relies on the session cookie and mirrors the readable
+ * CSRF cookie on mutating requests; development uses a Bearer token.
+ */
+export function apiAuthHeaders(
+  token: string,
+  method = "GET",
+): Record<string, string> {
+  const csrfToken = SAFE_METHODS.has(method.toUpperCase())
+    ? undefined
+    : readCsrfCookie();
+
+  return {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(csrfToken ? { [CSRF_HEADER_NAME]: csrfToken } : {}),
+  };
+}
+
 export async function apiRequest<T>(
   path: string,
   token: string,
@@ -34,7 +53,6 @@ export async function apiRequest<T>(
   let response: Response;
   try {
     const method = (init?.method ?? "GET").toUpperCase();
-    const csrfToken = SAFE_METHODS.has(method) ? undefined : readCsrfCookie();
     response = await fetch(`/api${path}`, {
       ...init,
       headers: {
@@ -46,13 +64,13 @@ export async function apiRequest<T>(
         // `Authorization: Bearer ` with an empty value would otherwise
         // make the API guard reject the request before it ever falls
         // back to checking the cookie.
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(csrfToken ? { [CSRF_HEADER_NAME]: csrfToken } : {}),
+        ...apiAuthHeaders(token, method),
         ...init?.headers,
       },
     });
   } catch (cause) {
-    if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
+    if (cause instanceof DOMException && cause.name === "AbortError")
+      throw cause;
     throw new ApiError("A szerver nem érhető el. Ellenőrizd a kapcsolatot.", 0);
   }
 

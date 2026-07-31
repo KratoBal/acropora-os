@@ -16,6 +16,8 @@ export default defineConfig({
     include: [
       "src/**/*.component.test.{ts,tsx}",
       "src/components/brands/brand-import-assistant-page.test.tsx",
+      "src/lib/api/**/*.test.ts",
+      "src/lib/auth/production-auth.test.ts",
     ],
     setupFiles: ["./src/test/setup.ts"],
   },
