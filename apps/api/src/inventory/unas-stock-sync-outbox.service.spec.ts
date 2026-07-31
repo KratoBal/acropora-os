@@ -55,6 +55,7 @@ interface RepoCalls {
   isSupersededArgs: unknown[];
   markSucceededIds: string[];
   markSupersededSuccessArgs: Array<{ id: string; by: string }>;
+  markPackageProductSuccessIds: string[];
   markFailedForRetryArgs: unknown[];
   markDeadLetterArgs: unknown[];
 }
@@ -70,6 +71,7 @@ function buildFakeRepository(options: {
     isSupersededArgs: [],
     markSucceededIds: [],
     markSupersededSuccessArgs: [],
+    markPackageProductSuccessIds: [],
     markFailedForRetryArgs: [],
     markDeadLetterArgs: [],
   };
@@ -89,6 +91,9 @@ function buildFakeRepository(options: {
     markSupersededSuccess: async (id: string, by: string) => {
       calls.markSupersededSuccessArgs.push({ id, by });
     },
+    markPackageProductSuccess: async (id: string) => {
+      calls.markPackageProductSuccessIds.push(id);
+    },
     markFailedForRetry: async (args: unknown) => {
       calls.markFailedForRetryArgs.push(args);
     },
@@ -102,8 +107,21 @@ function buildFakeRepository(options: {
 function buildFakeStockLookup(
   onHandByVariant: Map<string, Prisma.Decimal>,
   reservedByVariant: Map<string, Prisma.Decimal> = new Map(),
+  packageVariantIds: Set<string> = new Set(),
 ): StockLookupDatabase {
   return {
+    productVariant: {
+      findUnique: async (args: unknown) => {
+        const variantId = (args as { where: { id: string } }).where.id;
+        return {
+          product: {
+            unasSnapshot: {
+              isPackageProduct: packageVariantIds.has(variantId),
+            },
+          },
+        };
+      },
+    },
     stockItem: {
       findFirst: async (args: unknown) => {
         const variantId = (args as { where: { variantId: string } }).where
@@ -128,6 +146,7 @@ function buildService(params: {
   ) => { supersededByOutboxId: string } | null;
   onHandByVariant?: Map<string, Prisma.Decimal>;
   reservedByVariant?: Map<string, Prisma.Decimal>;
+  packageVariantIds?: Set<string>;
   setStock?: (sku: string, qty: string) => Promise<unknown>;
 }) {
   const { repository, calls } = buildFakeRepository({
@@ -142,12 +161,17 @@ function buildService(params: {
       return { externalId: "1", sku: request.sku };
     },
   } as unknown as UnasApiClient;
+  let authCallCount = 0;
   const unasAuth = {
-    getToken: async () => "token",
+    getToken: async () => {
+      authCallCount += 1;
+      return "token";
+    },
   } as unknown as UnasAuthService;
   const stockLookup = buildFakeStockLookup(
     params.onHandByVariant ?? new Map(),
     params.reservedByVariant ?? new Map(),
+    params.packageVariantIds ?? new Set(),
   );
   const service = new UnasStockSyncOutboxService(
     repository,
@@ -155,7 +179,12 @@ function buildService(params: {
     unasAuth,
     stockLookup,
   );
-  return { service, calls, setStockCalls };
+  return {
+    service,
+    calls,
+    setStockCalls,
+    getAuthCallCount: () => authCallCount,
+  };
 }
 
 describe("computeNextAttemptDelayMs", () => {
@@ -230,6 +259,21 @@ describe("UnasStockSyncOutboxService.processBatch", () => {
     assert.deepEqual(calls.markSupersededSuccessArgs, [
       { id: "outbox-1", by: "outbox-2" },
     ]);
+  });
+
+  it("closes a package-product row locally without acquiring a token or calling setStock", async () => {
+    const claimed = row();
+    const { service, calls, setStockCalls, getAuthCallCount } = buildService({
+      claimed: [claimed],
+      packageVariantIds: new Set(["variant-1"]),
+    });
+
+    const summary = await service.processBatch(config());
+
+    assert.equal(summary.superseded, 1);
+    assert.equal(getAuthCallCount(), 0);
+    assert.equal(setStockCalls.length, 0);
+    assert.deepEqual(calls.markPackageProductSuccessIds, ["outbox-1"]);
   });
 
   it("schedules a retry with backoff on a transient error, keeping retry budget", async () => {

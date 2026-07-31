@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import type { UnasApiProduct } from "@acropora/types";
+import type { UnasApiProduct, UnasApiStock } from "@acropora/types";
 
 import type { UnasApiClient } from "./unas-api.client.js";
 import { UnasProductCanonicalizer } from "./unas-product-canonicalizer.js";
@@ -41,6 +41,8 @@ const product = (externalId: string, sku: string): UnasApiProduct => ({
   backorderAllowed: null,
   variantStockEnabled: null,
   reportedStock: null,
+  isPackageProduct: false,
+  packageComponents: [],
   productUrl: null,
   sefUrl: null,
   manufacturerUrl: null,
@@ -55,6 +57,7 @@ const product = (externalId: string, sku: string): UnasApiProduct => ({
 function fixture(input?: {
   cursor?: Date | null;
   pages?: UnasApiProduct[][];
+  stockPages?: UnasApiStock[][];
   snapshots?: Array<{
     productId: string;
     externalId: string;
@@ -64,6 +67,7 @@ function fixture(input?: {
 }) {
   const calls: Array<{ operation: string; input?: unknown }> = [];
   const pages = [...(input?.pages ?? [[product("1", "SKU-1")], []])];
+  const stockPages = [...(input?.stockPages ?? [[]])];
   const api = {
     getCategoryPage: async (_token: string, request: unknown) => {
       calls.push({ operation: "categoryPage", input: request });
@@ -72,6 +76,10 @@ function fixture(input?: {
     getProductPage: async (_token: string, request: unknown) => {
       calls.push({ operation: "page", input: request });
       return pages.shift() ?? [];
+    },
+    getStockPage: async (_token: string, request: unknown) => {
+      calls.push({ operation: "stockPage", input: request });
+      return stockPages.shift() ?? [];
     },
   } as unknown as UnasApiClient;
   const repository = {
@@ -89,8 +97,11 @@ function fixture(input?: {
       diffs: Array<{ action: string }>,
       windowStart: Date | null,
       windowEnd: Date,
+      _categories: unknown,
+      _deletedExternalIds: unknown,
+      stocks: UnasApiStock[],
     ) => {
-      calls.push({ operation: "apply", input: diffs });
+      calls.push({ operation: "apply", input: { diffs, stocks } });
       return {
         runId: "run-1",
         status: "APPLIED" as const,
@@ -127,6 +138,7 @@ describe("UnasProductSyncService", () => {
     const windowEnd = new Date("2026-07-20T13:00:00.000Z");
     const { service, calls } = fixture({
       cursor,
+      stockPages: [[{ externalId: "1", sku: "SKU-1", reportedStock: "0" }]],
       pages: [
         [product("1", "SKU-1"), product("2", "SKU-2")],
         [product("2", "SKU-2")],
@@ -153,6 +165,17 @@ describe("UnasProductSyncService", () => {
       ),
       true,
     );
+    const stockRequest = calls.find((call) => call.operation === "stockPage")
+      ?.input as { timeStart: number };
+    assert.equal(
+      stockRequest.timeStart,
+      Math.floor((cursor.getTime() - 120_000) / 1000),
+    );
+    const applyInput = calls.find((call) => call.operation === "apply")
+      ?.input as { stocks: UnasApiStock[] };
+    assert.deepEqual(applyInput.stocks, [
+      { externalId: "1", sku: "SKU-1", reportedStock: "0" },
+    ]);
     assert.equal(calls.at(-1)?.operation, "apply");
   });
 

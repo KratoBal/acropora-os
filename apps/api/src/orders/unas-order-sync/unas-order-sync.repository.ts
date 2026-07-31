@@ -24,6 +24,7 @@ import {
 import { isPrismaErrorCode } from "../../common/prisma-error.util.js";
 import { sumOrderBookedOut } from "../../common/stock-ledger.util.js";
 import { retryOnSerializationConflict } from "../../common/transaction-retry.util.js";
+import { parseUnasPackageComponents } from "../../common/unas-package-product.util.js";
 import {
   ensureMainWarehouse,
   type WarehouseLookupDatabase,
@@ -114,6 +115,15 @@ export interface LineInput {
   /// function positively identified as a technical cost line should ever
   /// force an existing line back to non-stock in syncLines().
   isTechnicalCost: boolean;
+  /** Physical variants affected by selling one unit of this order line.
+   * Normal products contain themselves with qty=1; UNAS package products
+   * contain their component variants and never the package variant. */
+  stockTargets: Array<{
+    variantId: string;
+    sku: string;
+    unit: string;
+    quantityPerItem: Prisma.Decimal;
+  }>;
 }
 
 /// UNAS's own documented special Items.Item.Id values for order-level cost
@@ -155,8 +165,12 @@ function isTechnicalCostItem(item: UnasApiOrder["items"][number]): boolean {
 /// runtime (TS's excess-property check doesn't catch this through a spread).
 function toLineCreateData(
   input: LineInput,
-): Omit<LineInput, "isTechnicalCost"> {
-  const { isTechnicalCost: _isTechnicalCost, ...data } = input;
+): Omit<LineInput, "isTechnicalCost" | "stockTargets"> {
+  const {
+    isTechnicalCost: _isTechnicalCost,
+    stockTargets: _stockTargets,
+    ...data
+  } = input;
   return data;
 }
 
@@ -212,8 +226,18 @@ export function aggregateTargetOut(
     const match = existingBySku?.get(input.sku);
     const variantId = resolveEffectiveVariantId(match, input);
     if (!variantId) continue;
-    const running = target.get(variantId) ?? new Prisma.Decimal(0);
-    target.set(variantId, running.plus(input.quantity));
+    // An empty list means that no physical stock target was resolved safely
+    // (technical/non-stock/unknown line, or an invalid package). Never fall
+    // back to booking the package/master variant itself.
+    if (input.stockTargets.length === 0) continue;
+    for (const stockTarget of input.stockTargets) {
+      const running =
+        target.get(stockTarget.variantId) ?? new Prisma.Decimal(0);
+      target.set(
+        stockTarget.variantId,
+        running.plus(input.quantity.times(stockTarget.quantityPerItem)),
+      );
+    }
   }
   return target;
 }
@@ -249,7 +273,29 @@ interface UnasOrderSyncTransaction
     update(args: unknown): Promise<unknown>;
   };
   productVariant: {
-    findFirst(args: unknown): Promise<{ id: string } | null>;
+    findFirst(args: unknown): Promise<{
+      id: string;
+      sku: string;
+      unit: string;
+      product: {
+        catalogAuthority: "UNAS" | "ACROPORA" | null;
+        unasSnapshot: {
+          isPackageProduct: boolean;
+          packageComponents: Prisma.JsonValue;
+        } | null;
+      };
+    } | null>;
+    findMany(args: unknown): Promise<
+      Array<{
+        id: string;
+        sku: string;
+        unit: string;
+        product: {
+          catalogAuthority: "UNAS" | "ACROPORA" | null;
+          unasSnapshot: { isPackageProduct: boolean } | null;
+        };
+      }>
+    >;
   };
   salesOrder: {
     create(args: unknown): Promise<{ id: string }>;
@@ -311,6 +357,7 @@ export interface UnasOrderSyncDatabase {
         unasSnapshot: {
           reportedStock: Prisma.Decimal | null;
           reportedStockSyncedAt: Date | null;
+          isPackageProduct: boolean;
         } | null;
         variants: Array<{ id: string; sku: string }>;
       }>
@@ -430,6 +477,7 @@ async function buildLineInputs(
         syncStatus: "OK",
         syncError: null,
         isTechnicalCost: true,
+        stockTargets: [],
       });
       continue;
     }
@@ -449,13 +497,26 @@ async function buildLineInputs(
         syncStatus: "OK",
         syncError: null,
         isTechnicalCost: false,
+        stockTargets: [],
       });
       continue;
     }
 
     const variant = await transaction.productVariant.findFirst({
       where: { sku: item.sku },
-      select: { id: true },
+      select: {
+        id: true,
+        sku: true,
+        unit: true,
+        product: {
+          select: {
+            catalogAuthority: true,
+            unasSnapshot: {
+              select: { isPackageProduct: true, packageComponents: true },
+            },
+          },
+        },
+      },
     });
     if (!variant) {
       lineInputs.push({
@@ -470,8 +531,87 @@ async function buildLineInputs(
         syncStatus: "FAILED",
         syncError: `UNKNOWN_SKU:${item.sku}`,
         isTechnicalCost: false,
+        stockTargets: [],
       });
       continue;
+    }
+
+    const packageComponents = variant.product.unasSnapshot?.isPackageProduct
+      ? parseUnasPackageComponents(
+          variant.product.unasSnapshot.packageComponents,
+        )
+      : [];
+    let stockTargets: LineInput["stockTargets"];
+    if (variant.product.unasSnapshot?.isPackageProduct) {
+      const componentVariants =
+        packageComponents.length > 0
+          ? await transaction.productVariant.findMany({
+              where: {
+                sku: {
+                  in: packageComponents.map((component) => component.sku),
+                },
+                isActive: true,
+              },
+              select: {
+                id: true,
+                sku: true,
+                unit: true,
+                product: {
+                  select: {
+                    catalogAuthority: true,
+                    unasSnapshot: { select: { isPackageProduct: true } },
+                  },
+                },
+              },
+            })
+          : [];
+      const componentBySku = new Map(
+        componentVariants.map((component) => [component.sku, component]),
+      );
+      stockTargets = packageComponents.flatMap((component) => {
+        const resolved = componentBySku.get(component.sku);
+        return resolved &&
+          resolved.product.catalogAuthority === "UNAS" &&
+          !resolved.product.unasSnapshot?.isPackageProduct
+          ? [
+              {
+                variantId: resolved.id,
+                sku: resolved.sku,
+                unit: resolved.unit,
+                quantityPerItem: component.qty,
+              },
+            ]
+          : [];
+      });
+      if (
+        packageComponents.length === 0 ||
+        stockTargets.length !== packageComponents.length
+      ) {
+        lineInputs.push({
+          variantId: null,
+          sku: item.sku,
+          description: item.name,
+          quantity,
+          unit: item.unit ?? "db",
+          unitNet,
+          taxRate,
+          lineGross,
+          syncStatus: "FAILED",
+          syncError: `PACKAGE_COMPONENT_UNRESOLVED:${item.sku}`,
+          isTechnicalCost: false,
+          stockTargets: [],
+        });
+        continue;
+      }
+    } else {
+      stockTargets = [
+        {
+          variantId: variant.id,
+          sku: variant.sku,
+          unit: variant.unit,
+          quantityPerItem: new Prisma.Decimal(1),
+        },
+      ];
     }
 
     lineInputs.push({
@@ -486,6 +626,7 @@ async function buildLineInputs(
       syncStatus: "OK",
       syncError: null,
       isTechnicalCost: false,
+      stockTargets,
     });
   }
 
@@ -1131,8 +1272,11 @@ export class UnasOrderSyncRepository extends Repository {
         meta.set(line.variantId, { sku: line.sku, unit: "db" });
     }
     for (const input of lineInputs) {
-      if (input.variantId) {
-        meta.set(input.variantId, { sku: input.sku, unit: input.unit });
+      for (const stockTarget of input.stockTargets) {
+        meta.set(stockTarget.variantId, {
+          sku: stockTarget.sku,
+          unit: stockTarget.unit,
+        });
       }
     }
     return meta;
@@ -1244,14 +1388,46 @@ export class UnasOrderSyncRepository extends Repository {
       ...params.targetOut.keys(),
       ...bookedOut.keys(),
     ]);
+    const variants =
+      variantIds.size > 0
+        ? await transaction.productVariant.findMany({
+            where: { id: { in: [...variantIds] } },
+            select: {
+              id: true,
+              sku: true,
+              unit: true,
+              product: {
+                select: {
+                  catalogAuthority: true,
+                  unasSnapshot: { select: { isPackageProduct: true } },
+                },
+              },
+            },
+          })
+        : [];
+    const liveVariantMeta = new Map(
+      variants.map((variant) => [
+        variant.id,
+        {
+          sku: variant.sku,
+          unit: variant.unit,
+          syncToUnas:
+            variant.product.catalogAuthority === "UNAS" &&
+            !variant.product.unasSnapshot?.isPackageProduct,
+        },
+      ]),
+    );
     for (const variantId of variantIds) {
       const target = params.targetOut.get(variantId) ?? new Prisma.Decimal(0);
       const booked = bookedOut.get(variantId) ?? new Prisma.Decimal(0);
       const delta = target.minus(booked);
       if (delta.isZero()) continue;
-      const meta = params.variantMeta.get(variantId) ?? {
-        sku: variantId,
-        unit: "db",
+      const fallback = params.variantMeta.get(variantId);
+      const meta = liveVariantMeta.get(variantId) ?? {
+        sku: fallback?.sku ?? variantId,
+        unit: fallback?.unit ?? "db",
+        // Missing catalog metadata is not safe to publish externally.
+        syncToUnas: false,
       };
       if (delta.isPositive()) {
         // Need to remove `delta` MORE from stock than already booked.
@@ -1260,9 +1436,7 @@ export class UnasOrderSyncRepository extends Repository {
           sku: meta.sku,
           quantityDelta: delta.negated(),
           unit: meta.unit,
-          // Ez a flow kizárólag az UNAS-ból feloldott rendelési
-          // variantokat kezeli.
-          syncToUnas: true,
+          syncToUnas: meta.syncToUnas,
         });
       } else {
         // delta is negative: need to give back `abs(delta)`.
@@ -1271,7 +1445,7 @@ export class UnasOrderSyncRepository extends Repository {
           sku: meta.sku,
           quantityDelta: delta.negated(),
           unit: meta.unit,
-          syncToUnas: true,
+          syncToUnas: meta.syncToUnas,
         });
       }
     }
@@ -1465,12 +1639,21 @@ export class UnasOrderSyncRepository extends Repository {
   /// falsely show up as a mismatch against whatever UNAS reports.
   async findStockDiscrepancies(): Promise<StockReconciliationReport> {
     const products = await this.syncDatabase.product.findMany({
-      where: { unasSnapshot: { reportedStock: { not: null } } },
+      where: {
+        unasSnapshot: {
+          reportedStock: { not: null },
+          isPackageProduct: false,
+        },
+      },
       select: {
         id: true,
         name: true,
         unasSnapshot: {
-          select: { reportedStock: true, reportedStockSyncedAt: true },
+          select: {
+            reportedStock: true,
+            reportedStockSyncedAt: true,
+            isPackageProduct: true,
+          },
         },
         variants: {
           select: { id: true, sku: true },

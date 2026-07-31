@@ -31,17 +31,32 @@ const ALL_RISK_FLAGS: readonly UnasOrderAuditRiskFlag[] = [
 export class UnasOrderStockAuditService {
   constructor(private readonly repository: UnasOrderStockAuditRepository) {}
 
-  async auditPage(params: { page: number; pageSize: number }): Promise<UnasOrderAuditPage> {
-    const [{ orders, unasKeyByOrderId, bookedOutByOrderId, totalItems }, duplicates] =
-      await Promise.all([
-        this.repository.auditPage(params),
-        this.repository.findDuplicateUnasKeys(),
-      ]);
-    const duplicateOrderIds = new Set(duplicates.flatMap((entry) => entry.salesOrderIds));
+  async auditPage(params: {
+    page: number;
+    pageSize: number;
+  }): Promise<UnasOrderAuditPage> {
+    const [
+      {
+        orders,
+        unasKeyByOrderId,
+        bookedOutByOrderId,
+        targetOutByOrderId,
+        totalItems,
+      },
+      duplicates,
+    ] = await Promise.all([
+      this.repository.auditPage(params),
+      this.repository.findDuplicateUnasKeys(),
+    ]);
+    const duplicateOrderIds = new Set(
+      duplicates.flatMap((entry) => entry.salesOrderIds),
+    );
 
     const items: UnasOrderAuditRow[] = orders.map((order) => {
       const unasKey = unasKeyByOrderId.get(order.id) ?? null;
-      const targetOut = computeCurrentTargetOut(order.lines);
+      const targetOut =
+        targetOutByOrderId.get(order.id) ??
+        computeCurrentTargetOut(order.lines);
       const bookedOut = bookedOutByOrderId.get(order.id) ?? new Map();
       const riskFlags = computeRiskFlags({
         status: order.status,
@@ -86,10 +101,11 @@ export class UnasOrderStockAuditService {
   }
 
   async findAnomalies(): Promise<UnasOrderAuditAnomalies> {
-    const [duplicateUnasKeys, orphanStockMovementReferenceIds] = await Promise.all([
-      this.repository.findDuplicateUnasKeys(),
-      this.repository.findOrphanStockMovementReferences(),
-    ]);
+    const [duplicateUnasKeys, orphanStockMovementReferenceIds] =
+      await Promise.all([
+        this.repository.findDuplicateUnasKeys(),
+        this.repository.findOrphanStockMovementReferences(),
+      ]);
     return {
       checkedAt: new Date().toISOString(),
       duplicateUnasKeys,
@@ -102,7 +118,9 @@ export class UnasOrderStockAuditService {
   /// docs/INVENTORY-CONSISTENCY.md's activation-plan section for exactly
   /// what "safe" means here (in short: no risk flags on any order, and no
   /// global anomaly).
-  async summarize(params: { batchSize?: number } = {}): Promise<UnasOrderAuditSummary> {
+  async summarize(
+    params: { batchSize?: number } = {},
+  ): Promise<UnasOrderAuditSummary> {
     const pageSize = params.batchSize ?? 200;
     const riskFlagCounts: Record<UnasOrderAuditRiskFlag, number> = {
       MISSING_EXTERNAL_REFERENCE: 0,
@@ -149,7 +167,8 @@ export class UnasOrderStockAuditService {
       ordersWithRiskFlags,
       riskFlagCounts,
       duplicateUnasKeyCount: anomalies.duplicateUnasKeys.length,
-      orphanStockMovementReferenceCount: anomalies.orphanStockMovementReferenceIds.length,
+      orphanStockMovementReferenceCount:
+        anomalies.orphanStockMovementReferenceIds.length,
       safeToActivateWithoutBackfill: blockingReasons.length === 0,
       blockingReasons,
     };

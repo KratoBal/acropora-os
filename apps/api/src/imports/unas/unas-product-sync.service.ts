@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import type {
   CanonicalUnasProduct,
   UnasApiCategory,
+  UnasApiStock,
   UnasProductSyncSummary,
 } from "@acropora/types";
 
@@ -58,6 +59,12 @@ export class UnasProductSyncService {
         pageSize,
         "deleted",
       );
+      const stocks = await this.downloadStocks(
+        runId,
+        token,
+        windowStart,
+        pageSize,
+      );
       this.assertUniqueSourceIdentity(products);
       const snapshots = await this.repository.identitySnapshots();
       const diffs = this.diffEngine.diff(products, snapshots);
@@ -70,6 +77,7 @@ export class UnasProductSyncService {
         windowEnd,
         categories,
         deletedProducts.map((product) => product.externalId),
+        stocks,
       );
     } catch (error) {
       const errorCode =
@@ -77,6 +85,28 @@ export class UnasProductSyncService {
       await this.repository.markFailed(runId, errorCode);
       throw error;
     }
+  }
+
+  private async downloadStocks(
+    runId: string,
+    token: string,
+    windowStart: Date | null,
+    pageSize: number,
+  ): Promise<UnasApiStock[]> {
+    const byId = new Map<string, UnasApiStock>();
+    for (let limitStart = 0; ; limitStart += pageSize) {
+      const page = await this.api.getStockPage(token, {
+        timeStart: windowStart
+          ? Math.floor(windowStart.getTime() / 1000)
+          : undefined,
+        limitStart,
+        limitNum: pageSize,
+      });
+      for (const stock of page) byId.set(stock.externalId, stock);
+      await this.repository.heartbeat(runId);
+      if (page.length < pageSize) break;
+    }
+    return [...byId.values()];
   }
 
   private async downloadProducts(

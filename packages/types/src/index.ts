@@ -180,6 +180,8 @@ export type {
   UnasApiOrder,
   UnasApiOrderItem,
   UnasApiProduct,
+  UnasApiStock,
+  UnasPackageComponent,
   UnasProductIdentitySnapshot,
   UnasProductSyncAction,
   UnasProductSyncDiff,

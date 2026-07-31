@@ -72,6 +72,7 @@ export interface PurchaseInvoiceVariantInfo {
   /** Best known current quantity: local StockItem, falling back to 0. */
   currentQty: Prisma.Decimal;
   catalogAuthority: "UNAS" | "ACROPORA" | null;
+  isPackageProduct: boolean;
 }
 
 export interface PurchaseInvoiceCurrentStock {
@@ -173,7 +174,10 @@ export interface PurchaseInvoiceDatabase extends WarehouseLookupDatabase {
         product: {
           name: string;
           catalogAuthority: "UNAS" | "ACROPORA" | null;
-          unasSnapshot: { reportedStock: Prisma.Decimal | null } | null;
+          unasSnapshot: {
+            reportedStock: Prisma.Decimal | null;
+            isPackageProduct: boolean;
+          } | null;
         };
       }>
     >;
@@ -228,7 +232,9 @@ export class PurchaseInvoiceRepository extends Repository {
           select: {
             name: true,
             catalogAuthority: true,
-            unasSnapshot: { select: { reportedStock: true } },
+            unasSnapshot: {
+              select: { reportedStock: true, isPackageProduct: true },
+            },
           },
         },
       },
@@ -254,6 +260,8 @@ export class PurchaseInvoiceRepository extends Repository {
         productName: variant.product.name,
         unit: variant.unit,
         catalogAuthority: variant.product.catalogAuthority,
+        isPackageProduct:
+          variant.product.unasSnapshot?.isPackageProduct ?? false,
         // A helyi StockItem ledger csak leltár-korrekció vagy POS eladás
         // után kap sort egy variantra; addig az egyetlen ismert "jelenlegi
         // mennyiség" a UNAS reported stock snapshot - enélkül az első

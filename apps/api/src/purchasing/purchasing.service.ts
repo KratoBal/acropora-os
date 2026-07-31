@@ -342,6 +342,10 @@ export class PurchasingService {
         throw new BadRequestException(
           `A termék Product Master besorolása nem egyértelmű: ${info.sku}.`,
         );
+      if (info.isPackageProduct)
+        throw new BadRequestException(
+          `A csomagtermék nem vételezhető be önálló készletként; válaszd az összetevőket: ${info.sku}.`,
+        );
       const syncToUnas = info.catalogAuthority === "UNAS";
 
       preparedLines.push({

@@ -19,6 +19,26 @@ egy kivétellel, hogy a webshopon leadott rendelés maga az esemény, amit
 könyvelni kell - de a _könyvelt mennyiséget_ onnantól az Acropora OS
 tekinti hitelesnek).
 
+### UNAS készletpillanatkép és csomagtermékek
+
+A terméktörzs `getProduct` inkrementális ablaka a termék `LastModTime`
+értékét követi, ezért önmagában nem alkalmas készletváltozások biztos
+észlelésére. Minden kézi és időzített termékszinkron ugyanabban a futásban
+lekéri a dedikált `getStock` streamet is, és abból frissíti a
+`UnasProductSnapshot.reportedStock` / `reportedStockSyncedAt` mezőket. A
+termék- és készletváltozások közös cursorral, közös tranzakcióban lépnek
+előre; sikertelen futás nem hagy előreléptetett cursort.
+
+Az UNAS `PackageProduct` terméke nem rendelkezik önálló fizikai készlettel:
+az eladható mennyiségét a `PackageComponents` összetevőkből számítja. Az
+Acropora OS ezért eltárolja a normalizált `{sku, qty}` komponenseket, és a
+csomagterméket kizárja az önálló leltárból, bevételezésből,
+készlet-egyeztetésből és közvetlen `setStock` publikálásból. POS- vagy
+UNAS-rendeléskor a csomagsor megmarad értékesítési tételnek, de a fizikai
+készletmozgás és az outbox az összetevő-variánsokra, a komponensszorzókkal
+kerül. Ha bármely komponens nem oldható fel egyértelműen, részleges
+könyvelés helyett a sor kontrollált hibát kap.
+
 ## Egységes készletmódosító primitív
 
 `apps/api/src/common/inventory-movement-writer.ts` - `postInventoryMovement`.
@@ -98,6 +118,13 @@ Mezők: `variantId`, `warehouseId`, `sku`, `targetOnHand` (abszolút érték),
 
 Mindkét eset SUCCEEDED státuszban zárul (a kért 5 státusz egyike marad),
 `resolutionNote` különbözteti meg a tényleges UNAS-publikálástól.
+
+Csomagtermékhez tartozó történeti vagy véletlenül létrehozott outbox sor
+szintén UNAS-hívás nélkül zárul `SUCCEEDED` állapotba,
+`resolutionNote=package_product_not_stock_managed` megjegyzéssel. A
+bevezető migráció a már létező package `PENDING`/`PROCESSING`/`FAILED`/
+`DEAD_LETTER` sorokat ugyanígy, törlés nélkül lezárja, így az auditnyom
+megmarad.
 
 **Miért garantált, hogy a legfrissebb állapot végül tényleg kiküldésre
 kerül**: minden sikeresen könyvelt készletmozgás létrehoz egy saját outbox
@@ -258,6 +285,11 @@ tranzakcióban, mert egy `StockMovement.type` csak egy érték lehet.
 `targetOut` üres `Map` (minden korábban könyvelt variáns célja 0) a
 sztornó/törlés esetén - ez automatikusan pontosan a még vissza nem adott
 mennyiséget adja vissza, nem duplán.
+
+Csomagterméknél a `targetOut` nem a csomag variánsára, hanem az összetevőkre
+épül (`rendelt csomagmennyiség × komponens qty`). Ugyanezt a feloldást
+használja a read-only történeti rendelésszinkron-audit is, ezért a csomag
+sora és a komponensek ledger-mozgásai nem okoznak hamis eltérést.
 
 ### Idempotenciakulcs és az A -> B -> A eset
 

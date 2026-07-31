@@ -24,6 +24,7 @@ function variant(
     unit: "db",
     currentQty: new Prisma.Decimal("10"),
     catalogAuthority: "UNAS",
+    isPackageProduct: false,
     ...overrides,
   };
 }

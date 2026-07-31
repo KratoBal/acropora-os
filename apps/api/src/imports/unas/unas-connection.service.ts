@@ -219,7 +219,8 @@ export class UnasConnectionService {
       };
     if (
       !login.permissions.includes("getProduct") ||
-      !login.permissions.includes("getCategory")
+      !login.permissions.includes("getCategory") ||
+      !login.permissions.includes("getStock")
     )
       throw new UnasConnectionError("UNAS_CONNECTION_PERMISSION_MISSING");
     return { status: "SUCCESS", code: null };

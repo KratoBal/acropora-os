@@ -45,6 +45,8 @@ const product = (sku: string): UnasApiProduct => ({
   backorderAllowed: true,
   variantStockEnabled: false,
   reportedStock: "7.5",
+  isPackageProduct: false,
+  packageComponents: [],
   productUrl: "https://example.test/integration-pump",
   sefUrl: "integration-pump",
   manufacturerUrl: null,
@@ -132,6 +134,7 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
       if (request.limitStart !== 0) return [];
       return request.state === "deleted" ? deletedProducts : liveProducts;
     },
+    getStockPage: async () => [],
   } as unknown as UnasApiClient;
   const repository = new UnasProductSyncRepository();
   const service = new UnasProductSyncService(

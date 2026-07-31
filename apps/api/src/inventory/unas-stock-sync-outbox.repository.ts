@@ -1,12 +1,13 @@
-import { ConflictException, Inject, Injectable, Optional } from "@nestjs/common";
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  Optional,
+} from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 
 export type UnasStockSyncOutboxStatus =
-  | "PENDING"
-  | "PROCESSING"
-  | "SUCCEEDED"
-  | "FAILED"
-  | "DEAD_LETTER";
+  "PENDING" | "PROCESSING" | "SUCCEEDED" | "FAILED" | "DEAD_LETTER";
 
 export interface ClaimedUnasStockSyncOutboxRow {
   id: string;
@@ -210,6 +211,19 @@ export class UnasStockSyncOutboxRepository extends Repository {
         status: "SUCCEEDED",
         leaseExpiresAt: null,
         resolutionNote: `superseded_by_outbox_id:${supersededByOutboxId}`,
+        processedAt: new Date(),
+      },
+    });
+  }
+
+  async markPackageProductSuccess(id: string): Promise<void> {
+    await this.outboxDatabase.unasStockSyncOutbox.update({
+      where: { id },
+      data: {
+        status: "SUCCEEDED",
+        lastError: null,
+        leaseExpiresAt: null,
+        resolutionNote: "package_product_not_stock_managed",
         processedAt: new Date(),
       },
     });

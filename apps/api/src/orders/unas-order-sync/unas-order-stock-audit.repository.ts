@@ -2,6 +2,7 @@ import { Inject, Injectable, Optional } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 
 import { sumOrderBookedOut } from "../../common/stock-ledger.util.js";
+import { parseUnasPackageComponents } from "../../common/unas-package-product.util.js";
 import type { UnasOrderAuditRiskFlag } from "./unas-order-stock-audit.types.js";
 
 interface AuditOrderRow {
@@ -15,6 +16,18 @@ interface AuditMovementRow {
   referenceId: string | null;
   type: string;
   lines: Array<{ variantId: string; quantity: Prisma.Decimal }>;
+}
+
+interface AuditVariantRow {
+  id: string;
+  sku: string;
+  product: {
+    catalogAuthority: "UNAS" | "ACROPORA" | null;
+    unasSnapshot: {
+      isPackageProduct: boolean;
+      packageComponents: Prisma.JsonValue;
+    } | null;
+  };
 }
 
 // Every method below maps 1:1 onto a real Prisma client method (findMany /
@@ -34,13 +47,18 @@ export interface UnasOrderStockAuditDatabase {
     count(args: unknown): Promise<number>;
   };
   externalReference: {
-    findMany(args: unknown): Promise<Array<{ entityId: string; externalId: string }>>;
+    findMany(
+      args: unknown,
+    ): Promise<Array<{ entityId: string; externalId: string }>>;
     groupBy(
       args: unknown,
     ): Promise<Array<{ externalId: string; _count: { externalId: number } }>>;
   };
   stockMovement: {
     findMany(args: unknown): Promise<AuditMovementRow[]>;
+  };
+  productVariant: {
+    findMany(args: unknown): Promise<AuditVariantRow[]>;
   };
 }
 
@@ -63,19 +81,18 @@ export class UnasOrderStockAuditRepository extends Repository {
     database?: UnasOrderStockAuditDatabase,
   ) {
     super(prisma);
-    this.auditDatabase = database ?? (prisma as unknown as UnasOrderStockAuditDatabase);
+    this.auditDatabase =
+      database ?? (prisma as unknown as UnasOrderStockAuditDatabase);
   }
 
   /// One page of UNAS-channel orders, each paired with its ExternalReference
   /// (if any) and its ledger-derived bookedOut - both batched across the
   /// whole page in two extra queries, never one query per order.
-  async auditPage(params: {
-    page: number;
-    pageSize: number;
-  }): Promise<{
+  async auditPage(params: { page: number; pageSize: number }): Promise<{
     orders: AuditOrderRow[];
     unasKeyByOrderId: Map<string, string>;
     bookedOutByOrderId: Map<string, Map<string, Prisma.Decimal>>;
+    targetOutByOrderId: Map<string, Map<string, Prisma.Decimal>>;
     totalItems: number;
   }> {
     const where = { channel: "UNAS" } as const;
@@ -98,12 +115,107 @@ export class UnasOrderStockAuditRepository extends Repository {
 
     const orderIds = orders.map((order) => order.id);
     if (orderIds.length === 0) {
-      return { orders, unasKeyByOrderId: new Map(), bookedOutByOrderId: new Map(), totalItems };
+      return {
+        orders,
+        unasKeyByOrderId: new Map(),
+        bookedOutByOrderId: new Map(),
+        targetOutByOrderId: new Map(),
+        totalItems,
+      };
     }
+
+    const lineVariantIds = [
+      ...new Set(
+        orders.flatMap((order) =>
+          order.lines.flatMap((line) =>
+            line.variantId ? [line.variantId] : [],
+          ),
+        ),
+      ),
+    ];
+    const lineVariants =
+      lineVariantIds.length > 0
+        ? await this.auditDatabase.productVariant.findMany({
+            where: { id: { in: lineVariantIds } },
+            select: {
+              id: true,
+              sku: true,
+              product: {
+                select: {
+                  catalogAuthority: true,
+                  unasSnapshot: {
+                    select: {
+                      isPackageProduct: true,
+                      packageComponents: true,
+                    },
+                  },
+                },
+              },
+            },
+          })
+        : [];
+    const packageComponentSkus = [
+      ...new Set(
+        lineVariants.flatMap((variant) =>
+          variant.product.unasSnapshot?.isPackageProduct
+            ? parseUnasPackageComponents(
+                variant.product.unasSnapshot.packageComponents,
+              ).map((component) => component.sku)
+            : [],
+        ),
+      ),
+    ];
+    const componentVariants =
+      packageComponentSkus.length > 0
+        ? await this.auditDatabase.productVariant.findMany({
+            where: { sku: { in: packageComponentSkus }, isActive: true },
+            select: {
+              id: true,
+              sku: true,
+              product: {
+                select: {
+                  catalogAuthority: true,
+                  unasSnapshot: {
+                    select: {
+                      isPackageProduct: true,
+                      packageComponents: true,
+                    },
+                  },
+                },
+              },
+            },
+          })
+        : [];
+    const lineVariantById = new Map(
+      lineVariants.map((variant) => [variant.id, variant]),
+    );
+    const componentVariantBySku = new Map(
+      componentVariants
+        .filter(
+          (variant) =>
+            variant.product.catalogAuthority === "UNAS" &&
+            !variant.product.unasSnapshot?.isPackageProduct,
+        )
+        .map((variant) => [variant.sku, variant]),
+    );
+    const targetOutByOrderId = new Map(
+      orders.map((order) => [
+        order.id,
+        computeCurrentTargetOut(
+          order.lines,
+          lineVariantById,
+          componentVariantBySku,
+        ),
+      ]),
+    );
 
     const [references, movements] = await Promise.all([
       this.auditDatabase.externalReference.findMany({
-        where: { system: "UNAS", entityType: "SalesOrder", entityId: { in: orderIds } },
+        where: {
+          system: "UNAS",
+          entityType: "SalesOrder",
+          entityId: { in: orderIds },
+        },
         select: { entityId: true, externalId: true },
       }),
       this.auditDatabase.stockMovement.findMany({
@@ -139,14 +251,22 @@ export class UnasOrderStockAuditRepository extends Repository {
       );
     }
 
-    return { orders, unasKeyByOrderId, bookedOutByOrderId, totalItems };
+    return {
+      orders,
+      unasKeyByOrderId,
+      bookedOutByOrderId,
+      targetOutByOrderId,
+      totalItems,
+    };
   }
 
   /// Every UNAS key (ExternalReference.externalId, system="UNAS",
   /// entityType="SalesOrder") that appears on more than one local
   /// SalesOrder - cheap, bounded query (groupBy only ever returns as many
   /// rows as there are distinct keys, and duplicates should be rare/never).
-  async findDuplicateUnasKeys(): Promise<Array<{ unasKey: string; salesOrderIds: string[] }>> {
+  async findDuplicateUnasKeys(): Promise<
+    Array<{ unasKey: string; salesOrderIds: string[] }>
+  > {
     const groups = await this.auditDatabase.externalReference.groupBy({
       by: ["externalId"],
       where: { system: "UNAS", entityType: "SalesOrder" },
@@ -158,7 +278,11 @@ export class UnasOrderStockAuditRepository extends Repository {
     if (duplicateKeys.length === 0) return [];
 
     const rows = await this.auditDatabase.externalReference.findMany({
-      where: { system: "UNAS", entityType: "SalesOrder", externalId: { in: duplicateKeys } },
+      where: {
+        system: "UNAS",
+        entityType: "SalesOrder",
+        externalId: { in: duplicateKeys },
+      },
       select: { entityId: true, externalId: true },
     });
     const byKey = new Map<string, string[]>();
@@ -167,7 +291,10 @@ export class UnasOrderStockAuditRepository extends Repository {
       bucket.push(row.entityId);
       byKey.set(row.externalId, bucket);
     }
-    return [...byKey.entries()].map(([unasKey, salesOrderIds]) => ({ unasKey, salesOrderIds }));
+    return [...byKey.entries()].map(([unasKey, salesOrderIds]) => ({
+      unasKey,
+      salesOrderIds,
+    }));
   }
 
   /// Distinct StockMovement.referenceId values (SalesOrder-typed SALE/
@@ -181,7 +308,10 @@ export class UnasOrderStockAuditRepository extends Repository {
     // interface doc comment for why that's the deliberate convention here
     // rather than a separate fictional method name.
     const movements = await this.auditDatabase.stockMovement.findMany({
-      where: { referenceType: "SalesOrder", type: { in: ["SALE", "RETURN_IN"] } },
+      where: {
+        referenceType: "SalesOrder",
+        type: { in: ["SALE", "RETURN_IN"] },
+      },
       select: { referenceId: true },
       distinct: ["referenceId"],
     });
@@ -219,12 +349,38 @@ export class UnasOrderStockAuditRepository extends Repository {
 /// with no live lookup needed.
 export function computeCurrentTargetOut(
   lines: Array<{ variantId: string | null; quantity: Prisma.Decimal }>,
+  variantById: Map<string, AuditVariantRow> = new Map(),
+  componentVariantBySku: Map<string, AuditVariantRow> = new Map(),
 ): Map<string, Prisma.Decimal> {
   const target = new Map<string, Prisma.Decimal>();
+  const add = (variantId: string, quantity: Prisma.Decimal) => {
+    const running = target.get(variantId) ?? new Prisma.Decimal(0);
+    target.set(variantId, running.plus(quantity));
+  };
   for (const line of lines) {
     if (!line.variantId) continue;
-    const running = target.get(line.variantId) ?? new Prisma.Decimal(0);
-    target.set(line.variantId, running.plus(line.quantity));
+    const variant = variantById.get(line.variantId);
+    if (variant?.product.unasSnapshot?.isPackageProduct) {
+      const components = parseUnasPackageComponents(
+        variant.product.unasSnapshot.packageComponents,
+      );
+      const resolved = components.flatMap((component) => {
+        const componentVariant = componentVariantBySku.get(component.sku);
+        return componentVariant
+          ? [{ variantId: componentVariant.id, qty: component.qty }]
+          : [];
+      });
+      if (components.length > 0 && resolved.length === components.length) {
+        for (const component of resolved) {
+          add(component.variantId, line.quantity.times(component.qty));
+        }
+        continue;
+      }
+      // Preserve the old package target as a visible anomaly when package
+      // metadata is incomplete; silently dropping it would make the audit
+      // claim the order has no stock target at all.
+    }
+    add(line.variantId, line.quantity);
   }
   return target;
 }

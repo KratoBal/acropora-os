@@ -30,6 +30,8 @@ export interface UnasApiProduct {
   backorderAllowed: boolean | null;
   variantStockEnabled: boolean | null;
   reportedStock: string | null;
+  isPackageProduct: boolean;
+  packageComponents: UnasPackageComponent[];
   productUrl: string | null;
   sefUrl: string | null;
   manufacturerUrl: string | null;
@@ -55,6 +57,18 @@ export interface UnasApiProduct {
     robots: string | null;
   };
   rawPayload: Record<string, unknown>;
+}
+
+export interface UnasPackageComponent {
+  sku: string;
+  qty: string;
+}
+
+/** One product-level base-stock snapshot returned by UNAS getStock. */
+export interface UnasApiStock {
+  externalId: string;
+  sku: string;
+  reportedStock: string;
 }
 
 export interface UnasApiOrderItem {
@@ -94,10 +108,7 @@ export interface UnasApiOrder {
   buyerEuTaxNumber: string | null;
   /** Customer.Addresses.Invoice.CustomerType, raw UNAS enum value. */
   buyerCustomerType:
-    | "private"
-    | "company"
-    | "other_customer_without_tax_number"
-    | null;
+    "private" | "company" | "other_customer_without_tax_number" | null;
   buyerCountryCode: string | null;
   buyerZip: string | null;
   buyerCity: string | null;
@@ -160,10 +171,7 @@ export interface UnasApiCustomerAddress {
   countryCode: string | null;
   taxNumber: string | null;
   customerType:
-    | "private"
-    | "company"
-    | "other_customer_without_tax_number"
-    | null;
+    "private" | "company" | "other_customer_without_tax_number" | null;
 }
 
 export interface UnasApiCustomer {

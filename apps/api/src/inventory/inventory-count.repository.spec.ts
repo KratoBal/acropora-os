@@ -20,6 +20,7 @@ interface FakeLine {
     product: {
       name: string;
       catalogAuthority: "UNAS" | "ACROPORA" | null;
+      unasSnapshot?: { isPackageProduct: boolean } | null;
     };
   };
 }
@@ -239,9 +240,41 @@ describe("InventoryCountRepository.applyCorrection", () => {
     assert.equal(db.count.status, "CORRECTED");
     assert.deepEqual(
       db.inventoryCountLineFindManyArgs.include.variant.select.product,
-      { select: { catalogAuthority: true } },
+      {
+        select: {
+          catalogAuthority: true,
+          unasSnapshot: { select: { isPackageProduct: true } },
+        },
+      },
       "the correction query must load catalogAuthority before deciding whether to sync to UNAS",
     );
+  });
+
+  it("never applies an independent inventory correction to a package product", async () => {
+    const db = new FakeDb();
+    db.lines.push({
+      id: "line-package",
+      variantId: "variant-package",
+      expectedQty: new Prisma.Decimal("5"),
+      countedQty: new Prisma.Decimal("0"),
+      syncStatus: "PENDING",
+      syncError: null,
+      variant: {
+        sku: "BUNDLE-1",
+        unit: "db",
+        product: {
+          name: "Csomagtermék",
+          catalogAuthority: "UNAS",
+          unasSnapshot: { isPackageProduct: true },
+        },
+      },
+    });
+
+    await repositoryWith(db).applyCorrection("count-1", "user-1");
+
+    assert.equal(db.movementLines.length, 0);
+    assert.equal(db.stockItems.length, 0);
+    assert.equal(db.outbox.length, 0);
   });
 
   it("corrects a local product's stock without creating an UNAS outbox row", async () => {

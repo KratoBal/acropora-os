@@ -29,7 +29,10 @@ interface ProductLinkRow {
   productId: string;
   product: {
     catalogAuthority: "UNAS" | "ACROPORA" | null;
-    unasSnapshot: { reportedStock: Prisma.Decimal | null } | null;
+    unasSnapshot: {
+      reportedStock: Prisma.Decimal | null;
+      isPackageProduct: boolean;
+    } | null;
     variants: Array<{ id: string }>; // the product's first variant only (query already orders+takes 1)
   };
 }
@@ -119,6 +122,14 @@ export class StockReconciliationRepository extends Repository {
     const where = {
       ...(query.variantId ? { variantId: query.variantId } : {}),
       ...(query.warehouseId ? { warehouseId: query.warehouseId } : {}),
+      variant: {
+        product: {
+          OR: [
+            { catalogAuthority: "ACROPORA" },
+            { unasSnapshot: { isPackageProduct: false } },
+          ],
+        },
+      },
     };
     const skip = (query.page - 1) * query.pageSize;
     const [stockItems, totalItems] = await Promise.all([
@@ -157,7 +168,17 @@ export class StockReconciliationRepository extends Repository {
     stockItemId: string,
   ): Promise<StockReconciliationRow | null> {
     const stockItems = await this.reconciliationDatabase.stockItem.findMany({
-      where: { id: stockItemId },
+      where: {
+        id: stockItemId,
+        variant: {
+          product: {
+            OR: [
+              { catalogAuthority: "ACROPORA" },
+              { unasSnapshot: { isPackageProduct: false } },
+            ],
+          },
+        },
+      },
       include: {
         variant: { select: { sku: true } },
         warehouse: { select: { code: true } },
@@ -202,7 +223,9 @@ export class StockReconciliationRepository extends Repository {
           product: {
             select: {
               catalogAuthority: true,
-              unasSnapshot: { select: { reportedStock: true } },
+              unasSnapshot: {
+                select: { reportedStock: true, isPackageProduct: true },
+              },
               variants: {
                 select: { id: true },
                 orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -446,7 +469,10 @@ export class StockReconciliationRepository extends Repository {
         where: {
           product: {
             catalogAuthority: "UNAS",
-            unasSnapshot: { reportedStock: { not: null } },
+            unasSnapshot: {
+              reportedStock: { not: null },
+              isPackageProduct: false,
+            },
           },
         },
         select: {
@@ -455,7 +481,9 @@ export class StockReconciliationRepository extends Repository {
           product: {
             select: {
               catalogAuthority: true,
-              unasSnapshot: { select: { reportedStock: true } },
+              unasSnapshot: {
+                select: { reportedStock: true, isPackageProduct: true },
+              },
               variants: {
                 select: { id: true },
                 orderBy: [{ createdAt: "asc" }, { id: "asc" }],

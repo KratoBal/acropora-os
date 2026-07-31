@@ -44,7 +44,14 @@ function nextId(prefix: string): string {
 
 class FakeDb {
   warehouses: Array<{ id: string; name: string; createdAt: Date }> = [];
-  variants: Array<{ id: string; sku: string }> = [];
+  variants: Array<{
+    id: string;
+    sku: string;
+    unit?: string;
+    catalogAuthority?: "UNAS" | "ACROPORA" | null;
+    isPackageProduct?: boolean;
+    packageComponents?: Array<{ sku: string; qty: string }>;
+  }> = [];
   stockItems: Array<{
     id: string;
     variantId: string;
@@ -89,6 +96,7 @@ class FakeDb {
     unasSnapshot: {
       reportedStock: Prisma.Decimal | null;
       reportedStockSyncedAt: Date | null;
+      isPackageProduct: boolean;
     } | null;
     variants: Array<{ id: string; sku: string }>;
   }> = [];
@@ -149,9 +157,35 @@ class FakeDb {
   productVariant = {
     findFirst: async (args: any) => {
       const variant = this.variants.find((v) => v.sku === args.where.sku);
-      return variant ? { id: variant.id } : null;
+      return variant ? this.variantView(variant) : null;
+    },
+    findMany: async (args: any) => {
+      const requestedIds: string[] | undefined = args.where?.id?.in;
+      const requestedSkus: string[] | undefined = args.where?.sku?.in;
+      return this.variants
+        .filter(
+          (variant) =>
+            (!requestedIds || requestedIds.includes(variant.id)) &&
+            (!requestedSkus || requestedSkus.includes(variant.sku)),
+        )
+        .map((variant) => this.variantView(variant));
     },
   };
+
+  private variantView(variant: (typeof this.variants)[number]) {
+    return {
+      id: variant.id,
+      sku: variant.sku,
+      unit: variant.unit ?? "db",
+      product: {
+        catalogAuthority: variant.catalogAuthority ?? "UNAS",
+        unasSnapshot: {
+          isPackageProduct: variant.isPackageProduct ?? false,
+          packageComponents: variant.packageComponents ?? [],
+        },
+      },
+    };
+  }
 
   externalReference = {
     findUnique: async (args: any) => {
@@ -554,6 +588,110 @@ describe("UnasOrderSyncRepository.apply", () => {
     assert.equal(db.movements.length, 1);
     assert.equal(db.movements[0]?.type, "SALE");
     assert.equal(db.externalReferences.length, 1);
+  });
+
+  it("books a package sale against every component and never against the package SKU", async () => {
+    const db = new FakeDb();
+    db.warehouses.push({
+      id: "wh-1",
+      name: "Fő raktár",
+      createdAt: new Date(0),
+    });
+    db.variants.push(
+      {
+        id: "variant-package",
+        sku: "bundle_1",
+        isPackageProduct: true,
+        packageComponents: [
+          { sku: "component_a", qty: "2" },
+          { sku: "component_b", qty: "0.5" },
+        ],
+      },
+      { id: "variant-a", sku: "component_a" },
+      { id: "variant-b", sku: "component_b" },
+    );
+    db.stockItems.push(
+      {
+        id: "stock-a",
+        variantId: "variant-a",
+        warehouseId: "wh-1",
+        onHand: new Prisma.Decimal(10),
+      },
+      {
+        id: "stock-b",
+        variantId: "variant-b",
+        warehouseId: "wh-1",
+        onHand: new Prisma.Decimal(5),
+      },
+    );
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+
+    const repository = repositoryWith(db);
+    await repository.apply(
+      "run-1",
+      [
+        baseOrder({
+          items: [
+            {
+              id: "bundle-id",
+              sku: "bundle_1",
+              name: "Tesztcsomag",
+              unit: "db",
+              quantity: "2",
+              priceNet: "1000",
+              priceGross: "1270",
+              vatRate: "27",
+            },
+          ],
+        }),
+      ],
+      null,
+      new Date("2026-07-20T15:00:00.000Z"),
+    );
+
+    assert.equal(db.orders[0]?.lines[0]?.variantId, "variant-package");
+    assert.equal(
+      db.stockItems.find((item) => item.id === "stock-a")?.onHand.toString(),
+      "6",
+    );
+    assert.equal(
+      db.stockItems.find((item) => item.id === "stock-b")?.onHand.toString(),
+      "4",
+    );
+    assert.deepEqual(db.outbox.map((row) => row.sku).sort(), [
+      "component_a",
+      "component_b",
+    ]);
+    assert.equal(
+      db.outbox.some((row) => row.sku === "bundle_1"),
+      false,
+    );
+  });
+
+  it("fails a package line safely when any component SKU cannot be resolved", async () => {
+    const db = new FakeDb();
+    db.variants.push({
+      id: "variant-package",
+      sku: "bundle_1",
+      isPackageProduct: true,
+      packageComponents: [{ sku: "missing_component", qty: "1" }],
+    });
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+
+    await repositoryWith(db).apply(
+      "run-1",
+      [baseOrder({ items: [{ ...baseOrder().items[0]!, sku: "bundle_1" }] })],
+      null,
+      new Date("2026-07-20T15:00:00.000Z"),
+    );
+
+    assert.equal(db.orders[0]?.lines[0]?.syncStatus, "FAILED");
+    assert.equal(
+      db.orders[0]?.lines[0]?.syncError,
+      "PACKAGE_COMPONENT_UNRESOLVED:bundle_1",
+    );
+    assert.equal(db.movements.length, 0);
+    assert.equal(db.outbox.length, 0);
   });
 
   it("flags an unknown SKU as FAILED without touching stock for it", async () => {
@@ -1018,7 +1156,11 @@ describe("UnasOrderSyncRepository.apply - delta-based stock updates", () => {
 
     assert.equal(db.stockItems[0]?.onHand.toString(), "10");
     const returnMovements = db.movements.filter((m) => m.type === "RETURN_IN");
-    assert.equal(returnMovements.length, 2, "one RETURN_IN from the edit, one from the cancel");
+    assert.equal(
+      returnMovements.length,
+      2,
+      "one RETURN_IN from the edit, one from the cancel",
+    );
     assert.equal(
       returnMovements[1]?.lines[0]?.quantity.toString(),
       "1",
@@ -1324,7 +1466,9 @@ describe("UnasOrderSyncRepository.apply - delta-based stock updates", () => {
     await repository.apply("run-2", [orderWithUnresolved], null, new Date());
 
     assert.equal(
-      db.stockItems.find((item) => item.variantId === "variant-late")?.onHand.toString(),
+      db.stockItems
+        .find((item) => item.variantId === "variant-late")
+        ?.onHand.toString(),
       "16",
       "booked exactly once, on the sighting where it first resolved",
     );
@@ -1334,7 +1478,9 @@ describe("UnasOrderSyncRepository.apply - delta-based stock updates", () => {
     db.runs.push({ id: "run-3", status: "RUNNING", activeKey: "UNAS_ORDERS" });
     await repository.apply("run-3", [orderWithUnresolved], null, new Date());
     assert.equal(
-      db.stockItems.find((item) => item.variantId === "variant-late")?.onHand.toString(),
+      db.stockItems
+        .find((item) => item.variantId === "variant-late")
+        ?.onHand.toString(),
       "16",
     );
     assert.equal(db.movements.length, 1);
@@ -1365,7 +1511,9 @@ describe("UnasOrderSyncRepository.apply - delta-based stock updates", () => {
     // now fail - it relies on the ledger (referenceId), not a live re-lookup.
     assert.equal(db.stockItems[0]?.onHand.toString(), "10");
     assert.equal(
-      db.movements.some((m) => m.type === "RETURN_IN" && m.lines[0]?.variantId === "variant-1"),
+      db.movements.some(
+        (m) => m.type === "RETURN_IN" && m.lines[0]?.variantId === "variant-1",
+      ),
       true,
     );
   });
@@ -1421,7 +1569,11 @@ describe("UnasOrderSyncRepository.apply - delta-based stock updates", () => {
       new Date(),
     );
 
-    assert.equal(db.stockItems[0]?.onHand.toString(), "10", "never decremented");
+    assert.equal(
+      db.stockItems[0]?.onHand.toString(),
+      "10",
+      "never decremented",
+    );
     assert.equal(db.movements.length, 0);
     assert.equal(db.outbox.length, 0);
     assert.equal(db.orders[0]?.status, "CANCELLED");
@@ -2038,6 +2190,7 @@ describe("UnasOrderSyncRepository.findStockDiscrepancies", () => {
       unasSnapshot: {
         reportedStock: new Prisma.Decimal(5),
         reportedStockSyncedAt: new Date("2026-07-20T00:00:00.000Z"),
+        isPackageProduct: false,
       },
       variants: [{ id: "variant-1", sku: "pump_1" }],
     });
@@ -2047,6 +2200,7 @@ describe("UnasOrderSyncRepository.findStockDiscrepancies", () => {
       unasSnapshot: {
         reportedStock: new Prisma.Decimal(3),
         reportedStockSyncedAt: new Date(),
+        isPackageProduct: false,
       },
       variants: [{ id: "variant-2", sku: "filter_1" }],
     });
@@ -2080,6 +2234,7 @@ describe("UnasOrderSyncRepository.findStockDiscrepancies", () => {
       unasSnapshot: {
         reportedStock: new Prisma.Decimal(5),
         reportedStockSyncedAt: new Date(),
+        isPackageProduct: false,
       },
       variants: [{ id: "variant-1", sku: "never_counted" }],
     });
