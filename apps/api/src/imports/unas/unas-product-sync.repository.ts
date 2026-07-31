@@ -15,6 +15,12 @@ import type {
   UnasProductSyncSummary,
 } from "@acropora/types";
 
+import {
+  unasVariantKey,
+  unasVariantLabel,
+  unasVariantSku,
+} from "../../common/unas-variant.util.js";
+
 const json = (value: unknown) =>
   JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 const eventId = (...parts: string[]) =>
@@ -57,10 +63,16 @@ const snapshotData = (product: CanonicalUnasProduct, syncedAt: Date) => ({
   maximumOrderQuantity: product.maximumOrderQuantity,
   orderQuantityStep: product.orderQuantityStep,
   backorderAllowed: product.backorderAllowed,
-  variantStockEnabled: product.variantStockEnabled,
+  variantStockEnabled:
+    product.variantStockEnabled === true || product.variantStocks.length > 0,
   lowStockThreshold: product.lowStockThreshold,
   reportedStock: product.reportedStock,
-  reportedStockSyncedAt: product.reportedStock !== null ? syncedAt : undefined,
+  reportedStockSyncedAt:
+    product.variantStocks.length > 0
+      ? null
+      : product.reportedStock !== null
+        ? syncedAt
+        : undefined,
   isPackageProduct: product.isPackageProduct,
   packageComponents: json(product.packageComponents),
   primaryCategoryExternalId: product.primaryCategoryExternalId,
@@ -72,6 +84,189 @@ const snapshotData = (product: CanonicalUnasProduct, syncedAt: Date) => ({
 });
 const ACTIVE_SYNC_KEY = "UNAS_PRODUCTS";
 const STALE_RUN_AFTER_MS = 15 * 60_000;
+
+async function closeRetiredVariantOutbox(
+  transaction: Prisma.TransactionClient,
+  variantIds: string[],
+  syncedAt: Date,
+) {
+  if (variantIds.length === 0) return;
+  await transaction.unasStockSyncOutbox.updateMany({
+    where: {
+      variantId: { in: variantIds },
+      status: { in: ["PENDING", "PROCESSING", "FAILED", "DEAD_LETTER"] },
+    },
+    data: {
+      status: "SUCCEEDED",
+      lastError: null,
+      leaseExpiresAt: null,
+      resolutionNote: "unas_variant_mapping_retired:product_sync",
+      processedAt: syncedAt,
+    },
+  });
+}
+
+async function syncProductVariants(
+  transaction: Prisma.TransactionClient,
+  productId: string,
+  source: CanonicalUnasProduct,
+  syncedAt: Date,
+) {
+  const hasVariantStock =
+    source.variantStockEnabled === true || source.variantStocks.length > 0;
+  if (hasVariantStock && source.variantStocks.length === 0)
+    throw new Error(`UNAS_VARIANT_STOCK_ROWS_MISSING:${source.sku}`);
+
+  const expected = hasVariantStock
+    ? source.variantStocks.map((stock) => {
+        const key = unasVariantKey(stock.values);
+        if (!key) throw new Error(`UNAS_VARIANT_VALUES_MISSING:${source.sku}`);
+        return {
+          key,
+          sku: unasVariantSku(source.sku, key),
+          name: `${source.name} — ${unasVariantLabel(stock.values)}`,
+          values: stock.values,
+          reportedStock: stock.reportedStock,
+        };
+      })
+    : [
+        {
+          key: null,
+          sku: source.sku,
+          name: source.name,
+          values: null,
+          reportedStock: source.reportedStock,
+        },
+      ];
+  const keys = expected.flatMap((item) => (item.key ? [item.key] : []));
+  if (new Set(keys).size !== keys.length)
+    throw new Error(`DUPLICATE_UNAS_VARIANT_COMBINATION:${source.sku}`);
+
+  const existing = await transaction.productVariant.findMany({
+    where: { productId },
+    select: { id: true, sku: true, unasVariantKey: true, isActive: true },
+  });
+
+  if (!hasVariantStock) {
+    const mapped = existing.filter((item) => item.unasVariantKey === null);
+    if (mapped.length > 1)
+      throw new Error(`UNAS_MIRROR_VARIANT_CARDINALITY:${source.sku}`);
+    const target = mapped[0];
+    if (target) {
+      await transaction.productVariant.update({
+        where: { id: target.id },
+        data: {
+          sku: source.sku,
+          name: source.name,
+          unit: source.unit ?? "db",
+          vatRate: source.vatRate,
+          manufacturerPartNumber: source.manufacturerPartNumber,
+          secondaryUnit: source.secondaryUnit,
+          secondaryUnitFactor: source.secondaryUnitFactor,
+          isActive: true,
+          unasBaseSku: source.sku,
+          unasVariantValues: Prisma.DbNull,
+          unasReportedStock: source.reportedStock,
+          unasReportedStockSyncedAt:
+            source.reportedStock === null ? null : syncedAt,
+        },
+      });
+    } else {
+      await transaction.productVariant.create({
+        data: {
+          productId,
+          sku: source.sku,
+          name: source.name,
+          unit: source.unit ?? "db",
+          vatRate: source.vatRate,
+          manufacturerPartNumber: source.manufacturerPartNumber,
+          secondaryUnit: source.secondaryUnit,
+          secondaryUnitFactor: source.secondaryUnitFactor,
+          unasBaseSku: source.sku,
+          unasReportedStock: source.reportedStock,
+          unasReportedStockSyncedAt:
+            source.reportedStock === null ? null : syncedAt,
+        },
+      });
+    }
+    const retired = existing.filter(
+      (item) => item.unasVariantKey !== null && item.isActive,
+    );
+    if (retired.length > 0) {
+      await transaction.productVariant.updateMany({
+        where: { id: { in: retired.map((item) => item.id) } },
+        data: { isActive: false },
+      });
+      await closeRetiredVariantOutbox(
+        transaction,
+        retired.map((item) => item.id),
+        syncedAt,
+      );
+    }
+    return;
+  }
+
+  // The old single aggregate variant is kept as inactive history instead
+  // of being assigned to an arbitrary first UNAS combination.
+  const legacy = existing.filter((item) => item.unasVariantKey === null);
+  if (legacy.length > 0) {
+    await transaction.productVariant.updateMany({
+      where: { id: { in: legacy.map((item) => item.id) } },
+      data: { isActive: false, unasBaseSku: source.sku },
+    });
+    await closeRetiredVariantOutbox(
+      transaction,
+      legacy.map((item) => item.id),
+      syncedAt,
+    );
+  }
+
+  const activeKeys = new Set(keys);
+  const retired = existing.filter(
+    (item) => item.unasVariantKey && !activeKeys.has(item.unasVariantKey),
+  );
+  if (retired.length > 0) {
+    await transaction.productVariant.updateMany({
+      where: { id: { in: retired.map((item) => item.id) } },
+      data: { isActive: false },
+    });
+    await closeRetiredVariantOutbox(
+      transaction,
+      retired.map((item) => item.id),
+      syncedAt,
+    );
+  }
+
+  for (const item of expected) {
+    const mapped = existing.find(
+      (candidate) => candidate.unasVariantKey === item.key,
+    );
+    const data = {
+      sku: item.sku,
+      name: item.name,
+      unit: source.unit ?? "db",
+      vatRate: source.vatRate,
+      manufacturerPartNumber: source.manufacturerPartNumber,
+      secondaryUnit: source.secondaryUnit,
+      secondaryUnitFactor: source.secondaryUnitFactor,
+      isActive: true,
+      unasBaseSku: source.sku,
+      unasVariantKey: item.key,
+      unasVariantValues: json(item.values),
+      unasReportedStock: item.reportedStock,
+      unasReportedStockSyncedAt: syncedAt,
+    };
+    if (mapped)
+      await transaction.productVariant.update({
+        where: { id: mapped.id },
+        data,
+      });
+    else
+      await transaction.productVariant.create({
+        data: { productId, ...data },
+      });
+  }
+}
 
 @Injectable()
 export class UnasProductSyncRepository extends Repository {
@@ -200,7 +395,8 @@ export class UnasProductSyncRepository extends Repository {
         rawSourceHash: true,
         mirrorState: true,
         variants: {
-          select: { sku: true },
+          where: { isActive: true },
+          select: { sku: true, unasBaseSku: true },
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
           take: 1,
         },
@@ -209,7 +405,10 @@ export class UnasProductSyncRepository extends Repository {
     const byId = new Map(products.map((product) => [product.id, product]));
     return references.flatMap((reference) => {
       const product = byId.get(reference.entityId);
-      const sku = product?.variants[0]?.sku ?? reference.externalKey;
+      const sku =
+        reference.externalKey ??
+        product?.variants[0]?.unasBaseSku ??
+        product?.variants[0]?.sku;
       return product && sku
         ? [
             {
@@ -379,18 +578,6 @@ export class UnasProductSyncRepository extends Repository {
                     sourceUpdatedAt,
                     lastSyncedAt: windowEnd,
                     rawSourceHash: diff.product.canonicalHash,
-                    variants: {
-                      create: {
-                        sku: diff.product.sku,
-                        name: diff.product.name,
-                        unit: diff.product.unit ?? "db",
-                        vatRate: diff.product.vatRate,
-                        manufacturerPartNumber:
-                          diff.product.manufacturerPartNumber,
-                        secondaryUnit: diff.product.secondaryUnit,
-                        secondaryUnitFactor: diff.product.secondaryUnitFactor,
-                      },
-                    },
                   },
                 })
               : await transaction.product.update({
@@ -408,28 +595,12 @@ export class UnasProductSyncRepository extends Repository {
                   },
                 });
 
-          if (diff.action === "UPDATE") {
-            const variants = await transaction.productVariant.findMany({
-              where: { productId: product.id },
-              select: { id: true },
-              orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-              take: 2,
-            });
-            if (variants.length !== 1)
-              throw new Error("UNAS_MIRROR_VARIANT_CARDINALITY");
-            await transaction.productVariant.update({
-              where: { id: variants[0]!.id },
-              data: {
-                sku: diff.product.sku,
-                name: diff.product.name,
-                unit: diff.product.unit ?? "db",
-                vatRate: diff.product.vatRate,
-                manufacturerPartNumber: diff.product.manufacturerPartNumber,
-                secondaryUnit: diff.product.secondaryUnit,
-                secondaryUnitFactor: diff.product.secondaryUnitFactor,
-              },
-            });
-          }
+          await syncProductVariants(
+            transaction,
+            product.id,
+            diff.product,
+            windowEnd,
+          );
 
           const referenceByEntity =
             await transaction.externalReference.findUnique({
@@ -710,13 +881,30 @@ export class UnasProductSyncRepository extends Repository {
             if (!reference) continue;
             if (reference.sku && reference.sku !== stock.sku)
               throw new Error("UNAS_STOCK_IDENTITY_CONFLICT");
-            await transaction.unasProductSnapshot.updateMany({
-              where: { productId: reference.productId },
+            const key = unasVariantKey(stock.variantValues);
+            const updatedVariant = await transaction.productVariant.updateMany({
+              where: {
+                productId: reference.productId,
+                isActive: true,
+                unasVariantKey: key || null,
+              },
               data: {
-                reportedStock: stock.reportedStock,
-                reportedStockSyncedAt: windowEnd,
+                unasReportedStock: stock.reportedStock,
+                unasReportedStockSyncedAt: windowEnd,
               },
             });
+            if (updatedVariant.count !== 1)
+              throw new Error(
+                `UNAS_STOCK_VARIANT_NOT_RESOLVED:${stock.sku}:${key || "base"}`,
+              );
+            if (!key)
+              await transaction.unasProductSnapshot.updateMany({
+                where: { productId: reference.productId },
+                data: {
+                  reportedStock: stock.reportedStock,
+                  reportedStockSyncedAt: windowEnd,
+                },
+              });
           }
         }
 

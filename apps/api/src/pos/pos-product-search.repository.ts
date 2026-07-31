@@ -15,8 +15,10 @@ export interface PosProductSearchDatabase extends WarehouseLookupDatabase {
       Array<{
         id: string;
         sku: string;
+        name: string | null;
         unit: string;
         vatRate: Prisma.Decimal | null;
+        unasReportedStock: Prisma.Decimal | null;
         product: {
           name: string;
           unasSnapshot: {
@@ -80,8 +82,10 @@ export class PosProductSearchRepository extends Repository {
       select: {
         id: true,
         sku: true,
+        name: true,
         unit: true,
         vatRate: true,
+        unasReportedStock: true,
         product: {
           select: {
             name: true,
@@ -119,6 +123,7 @@ export class PosProductSearchRepository extends Repository {
     return variants.map((variant) => {
       const currentStock =
         availableByVariant.get(variant.id) ??
+        variant.unasReportedStock ??
         variant.product.unasSnapshot?.reportedStock ??
         new Prisma.Decimal(0);
       const vatRate =
@@ -126,7 +131,7 @@ export class PosProductSearchRepository extends Repository {
       return {
         variantId: variant.id,
         sku: variant.sku,
-        productName: variant.product.name,
+        productName: variant.name ?? variant.product.name,
         unit: variant.unit,
         vatRate: vatRate ? vatRate.toString() : null,
         grossPrice:

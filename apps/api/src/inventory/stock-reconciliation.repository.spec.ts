@@ -713,7 +713,7 @@ describe("StockReconciliationRepository.reconcilePage", () => {
     );
   });
 
-  it("only compares a multi-variant product's FIRST variant against UNAS - other variants get unasOnHand=null", async () => {
+  it("compares every variant of a multi-variant product against its UNAS snapshot", async () => {
     const db = new FakeDb();
     db.stockItems.push(
       {
@@ -768,8 +768,8 @@ describe("StockReconciliationRepository.reconcilePage", () => {
     const v1 = page.items.find((row) => row.variantId === "v1")!;
     const v2 = page.items.find((row) => row.variantId === "v2")!;
     assert.equal(v1.unasOnHand, "5");
-    assert.equal(v2.unasOnHand, null);
-    assert.equal(v2.status, "MISSING_UNAS_LINK");
+    assert.equal(v2.unasOnHand, "5");
+    assert.equal(v2.status, "UNAS_MISMATCH_NO_PENDING_SYNC");
   });
 
   it("never calls a mutating method - the injected FakeDb only exposes findMany/count/groupBy", () => {

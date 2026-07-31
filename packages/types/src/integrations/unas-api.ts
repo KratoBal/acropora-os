@@ -30,6 +30,10 @@ export interface UnasApiProduct {
   backorderAllowed: boolean | null;
   variantStockEnabled: boolean | null;
   reportedStock: string | null;
+  /** Main-warehouse stock rows for every UNAS variant combination. Empty
+   * for products without variant-level stock management. The order of
+   * values is the order UNAS requires in setStock. */
+  variantStocks: UnasApiVariantStock[];
   isPackageProduct: boolean;
   packageComponents: UnasPackageComponent[];
   productUrl: string | null;
@@ -59,6 +63,16 @@ export interface UnasApiProduct {
   rawPayload: Record<string, unknown>;
 }
 
+export interface UnasVariantValue {
+  name: string;
+  value: string;
+}
+
+export interface UnasApiVariantStock {
+  values: UnasVariantValue[];
+  reportedStock: string;
+}
+
 export interface UnasPackageComponent {
   sku: string;
   qty: string;
@@ -69,6 +83,10 @@ export interface UnasApiStock {
   externalId: string;
   sku: string;
   reportedStock: string;
+  /** Empty for ordinary product-level stock, ordered values for a variant
+   * combination. Axis names are unavailable in getStock and are therefore
+   * intentionally blank there. */
+  variantValues: UnasVariantValue[];
 }
 
 export interface UnasApiOrderItem {
@@ -82,6 +100,10 @@ export interface UnasApiOrderItem {
   priceGross: string | null;
   /** e.g. "27" (percent, "%" suffix already stripped). Null for non-stock lines without VAT. */
   vatRate: string | null;
+  /** UNAS selectable properties in their numeric Id order. Optional only
+   * for backwards-compatible test/fixture callers; the XML parser always
+   * supplies it. */
+  variants?: Array<{ id: string | null; name: string; value: string }>;
 }
 
 export interface UnasApiOrder {

@@ -693,14 +693,12 @@ export function ProductDetailPage({ productId }: { productId: string }) {
     );
   }
 
-  // UNAS-mirrored products are synced 1:1 with a single variant (see
-  // UNAS_MIRROR_VARIANT_CARDINALITY), so the primary/only variant's purchase
-  // extension is what "Utolsó beszerár" in the UNAS mirror card refers to.
+  // The product-level mirror card can only show one purchase extension.
+  // Keep that compatibility display for single-variant products; every
+  // multi-variant product has its own editor and values in the list below.
+  const activeVariants = product.variants.filter((variant) => variant.isActive);
   const primaryPurchaseExtension =
-    product.variants.find((variant) => variant.sku === product.primarySku)
-      ?.extension ??
-    product.variants[0]?.extension ??
-    null;
+    activeVariants.length === 1 ? (activeVariants[0]?.extension ?? null) : null;
 
   return (
     <div className="space-y-6">
@@ -937,14 +935,30 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                           {variant.name ?? product.name}
                         </p>
                         <p className="mt-0.5 font-mono text-xs text-slate-500">
-                          {variant.sku}
+                          {variant.unasBaseSku ?? variant.sku}
                         </p>
                       </div>
                       <Badge variant={variant.isActive ? "success" : "neutral"}>
                         {variant.isActive ? "Aktív" : "Inaktív"}
                       </Badge>
                     </div>
-                    <dl className="mt-4 grid gap-3 text-xs sm:grid-cols-3">
+                    <dl className="mt-4 grid gap-3 text-xs sm:grid-cols-4">
+                      {variant.unasVariantValues ? (
+                        <div>
+                          <dt className="text-slate-400">UNAS-változat</dt>
+                          <dd className="mt-1 text-slate-700">
+                            {variant.unasVariantValues
+                              .map((item) => `${item.name}: ${item.value}`)
+                              .join(", ")}
+                          </dd>
+                        </div>
+                      ) : null}
+                      <div>
+                        <dt className="text-slate-400">UNAS készlet</dt>
+                        <dd className="mt-1 text-slate-700">
+                          {value(variant.unasReportedStock)}
+                        </dd>
+                      </div>
                       <div>
                         <dt className="text-slate-400">Egység</dt>
                         <dd className="mt-1 text-slate-700">{variant.unit}</dd>

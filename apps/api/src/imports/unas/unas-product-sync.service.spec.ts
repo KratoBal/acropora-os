@@ -41,6 +41,7 @@ const product = (externalId: string, sku: string): UnasApiProduct => ({
   backorderAllowed: null,
   variantStockEnabled: null,
   reportedStock: null,
+  variantStocks: [],
   isPackageProduct: false,
   packageComponents: [],
   productUrl: null,
@@ -142,7 +143,16 @@ describe("UnasProductSyncService", () => {
     const { service, calls } = fixture({
       cursor,
       stockCursor,
-      stockPages: [[{ externalId: "1", sku: "SKU-1", reportedStock: "0" }]],
+      stockPages: [
+        [
+          {
+            externalId: "1",
+            sku: "SKU-1",
+            reportedStock: "0",
+            variantValues: [],
+          },
+        ],
+      ],
       pages: [
         [product("1", "SKU-1"), product("2", "SKU-2")],
         [product("2", "SKU-2")],
@@ -178,7 +188,12 @@ describe("UnasProductSyncService", () => {
     const applyInput = calls.find((call) => call.operation === "apply")
       ?.input as { stocks: UnasApiStock[] };
     assert.deepEqual(applyInput.stocks, [
-      { externalId: "1", sku: "SKU-1", reportedStock: "0" },
+      {
+        externalId: "1",
+        sku: "SKU-1",
+        reportedStock: "0",
+        variantValues: [],
+      },
     ]);
     assert.equal(calls.at(-1)?.operation, "apply");
   });
@@ -198,6 +213,46 @@ describe("UnasProductSyncService", () => {
     const stockRequest = calls.find((call) => call.operation === "stockPage")
       ?.input as { timeStart?: number };
     assert.equal(stockRequest.timeStart, undefined);
+  });
+
+  it("preserves every stock row of a variant-stock product", async () => {
+    const { service, calls } = fixture({
+      stockPages: [
+        [
+          {
+            externalId: "1",
+            sku: "RF-BLUEM",
+            reportedStock: "2",
+            variantValues: [{ name: "", value: "Fekete" }],
+          },
+          {
+            externalId: "1",
+            sku: "RF-BLUEM",
+            reportedStock: "3",
+            variantValues: [{ name: "", value: "Fehér" }],
+          },
+        ],
+      ],
+    });
+
+    await service.runIncremental("token", new Date(), 500);
+
+    const applyInput = calls.find((call) => call.operation === "apply")
+      ?.input as { stocks: UnasApiStock[] };
+    assert.deepEqual(applyInput.stocks, [
+      {
+        externalId: "1",
+        sku: "RF-BLUEM",
+        reportedStock: "2",
+        variantValues: [{ name: "", value: "Fekete" }],
+      },
+      {
+        externalId: "1",
+        sku: "RF-BLUEM",
+        reportedStock: "3",
+        variantValues: [{ name: "", value: "Fehér" }],
+      },
+    ]);
   });
 
   it("marks the run failed and never applies duplicate source SKUs", async () => {

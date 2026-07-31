@@ -108,15 +108,23 @@ function buildFakeStockLookup(
   onHandByVariant: Map<string, Prisma.Decimal>,
   reservedByVariant: Map<string, Prisma.Decimal> = new Map(),
   packageVariantIds: Set<string> = new Set(),
+  variantMappings: Map<
+    string,
+    { baseSku: string; values: Array<{ name: string; value: string }> }
+  > = new Map(),
 ): StockLookupDatabase {
   return {
     productVariant: {
       findUnique: async (args: unknown) => {
         const variantId = (args as { where: { id: string } }).where.id;
+        const mapping = variantMappings.get(variantId);
         return {
+          unasBaseSku: mapping?.baseSku ?? null,
+          unasVariantValues: mapping?.values ?? null,
           product: {
             unasSnapshot: {
               isPackageProduct: packageVariantIds.has(variantId),
+              variantStockEnabled: Boolean(mapping),
             },
           },
         };
@@ -147,16 +155,31 @@ function buildService(params: {
   onHandByVariant?: Map<string, Prisma.Decimal>;
   reservedByVariant?: Map<string, Prisma.Decimal>;
   packageVariantIds?: Set<string>;
+  variantMappings?: Map<
+    string,
+    { baseSku: string; values: Array<{ name: string; value: string }> }
+  >;
   setStock?: (sku: string, qty: string) => Promise<unknown>;
 }) {
   const { repository, calls } = buildFakeRepository({
     claimed: params.claimed,
     isSuperseded: params.isSuperseded,
   });
-  const setStockCalls: Array<{ sku: string; qty: string }> = [];
+  const setStockCalls: Array<{
+    sku: string;
+    qty: string;
+    variantValues?: string[];
+  }> = [];
   const unasApi = {
-    setStock: async (_token: string, request: { sku: string; qty: string }) => {
-      setStockCalls.push({ sku: request.sku, qty: request.qty });
+    setStock: async (
+      _token: string,
+      request: { sku: string; qty: string; variantValues?: string[] },
+    ) => {
+      setStockCalls.push({
+        sku: request.sku,
+        qty: request.qty,
+        variantValues: request.variantValues,
+      });
       if (params.setStock) return params.setStock(request.sku, request.qty);
       return { externalId: "1", sku: request.sku };
     },
@@ -172,6 +195,7 @@ function buildService(params: {
     params.onHandByVariant ?? new Map(),
     params.reservedByVariant ?? new Map(),
     params.packageVariantIds ?? new Set(),
+    params.variantMappings ?? new Map(),
   );
   const service = new UnasStockSyncOutboxService(
     repository,
@@ -214,6 +238,52 @@ describe("UnasStockSyncOutboxService.processBatch", () => {
     assert.equal(setStockCalls.length, 1);
     assert.equal(setStockCalls[0]?.qty, "3");
     assert.deepEqual(calls.markSucceededIds, ["outbox-1"]);
+  });
+
+  it("publishes a mapped UNAS variant with the base SKU and ordered values", async () => {
+    const { service, setStockCalls } = buildService({
+      claimed: [row({ sku: "RF-BLUEM#UNASV#local" })],
+      onHandByVariant: new Map([["variant-1", new Prisma.Decimal("4")]]),
+      variantMappings: new Map([
+        [
+          "variant-1",
+          {
+            baseSku: "RF-BLUEM",
+            values: [{ name: "Szín", value: "Fekete" }],
+          },
+        ],
+      ]),
+    });
+
+    await service.processBatch(config());
+
+    assert.deepEqual(setStockCalls, [
+      { sku: "RF-BLUEM", qty: "4", variantValues: ["Fekete"] },
+    ]);
+  });
+
+  it("dead-letters a variant-stock row with no exact local mapping without calling UNAS", async () => {
+    const { service, calls, setStockCalls, getAuthCallCount } = buildService({
+      claimed: [row()],
+      variantMappings: new Map([
+        [
+          "variant-1",
+          {
+            baseSku: "",
+            values: [{ name: "Szín", value: "Fekete" }],
+          },
+        ],
+      ]),
+    });
+
+    const summary = await service.processBatch(config());
+
+    assert.equal(summary.deadLettered, 1);
+    assert.equal(getAuthCallCount(), 0);
+    assert.equal(setStockCalls.length, 0);
+    assert.deepEqual(calls.markDeadLetterArgs, [
+      { id: "outbox-1", lastError: "UNAS_VARIANT_MAPPING_MISSING" },
+    ]);
   });
 
   it("falls back to the outbox's targetOnHand when the StockItem row can't be found", async () => {

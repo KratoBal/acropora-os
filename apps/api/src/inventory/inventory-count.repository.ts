@@ -102,6 +102,7 @@ export interface InventoryCountDatabase {
         id: string;
         sku: string;
         unit: string;
+        unasReportedStock: Prisma.Decimal | null;
         product: {
           name: string;
           unasSnapshot: { reportedStock: Prisma.Decimal | null } | null;
@@ -198,6 +199,7 @@ export class InventoryCountRepository extends Repository {
       select: {
         id: true,
         sku: true,
+        unasReportedStock: true,
         unit: true,
         product: {
           select: {
@@ -224,6 +226,7 @@ export class InventoryCountRepository extends Repository {
     // reported stock snapshot, so that's the fallback source here.
     const expectedQtyFor = (variant: (typeof variants)[number]) =>
       onHandByVariant.get(variant.id) ??
+      variant.unasReportedStock ??
       variant.product.unasSnapshot?.reportedStock ??
       new Prisma.Decimal(0);
 

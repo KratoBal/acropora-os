@@ -44,7 +44,6 @@ const productListInclude = {
   variants: {
     where: { isActive: true },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    take: 1,
     include: { stockItems: true },
   },
   channelListings: {

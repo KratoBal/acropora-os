@@ -468,18 +468,32 @@ model Product {
 }
 
 model ProductVariant {
-  id                     String   @id @default(cuid())
-  productId              String
-  sku                    String   @unique
-  name                   String?
-  unit                   String   @default("db")
-  vatRate                Decimal? @db.Decimal(5, 2)
-  manufacturerPartNumber String?
-  secondaryUnit          String?
-  secondaryUnitFactor    Decimal? @db.Decimal(19, 6)
-  isActive               Boolean  @default(true)
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  id                        String    @id @default(cuid())
+  productId                 String
+  sku                       String    @unique
+  name                      String?
+  unit                      String    @default("db")
+  vatRate                   Decimal?  @db.Decimal(5, 2)
+  manufacturerPartNumber    String?
+  secondaryUnit             String?
+  secondaryUnitFactor       Decimal?  @db.Decimal(19, 6)
+  isActive                  Boolean   @default(true)
+  /// Original product-level SKU used by UNAS getStock/setStock. Equal to
+  /// sku for ordinary products; shared by the locally separated variants
+  /// of an UNAS variant-stock product.
+  unasBaseSku               String?
+  /// Deterministic, ordered value-only key for one UNAS combination.
+  /// NULL for ordinary product-level stock.
+  unasVariantKey            String?
+  /// Ordered [{ name, value }] values mirrored from UNAS. The order is
+  /// significant because setStock identifies a combination positionally.
+  unasVariantValues         Json?
+  /// UNAS comparison snapshot for this exact local variant. Ordinary
+  /// products retain the product-level snapshot as a compatibility fallback.
+  unasReportedStock         Decimal?  @db.Decimal(19, 6)
+  unasReportedStockSyncedAt DateTime?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
 
   product                    Product                       @relation(fields: [productId], references: [id], onDelete: Cascade)
   barcodes                   ProductBarcode[]
@@ -496,7 +510,9 @@ model ProductVariant {
   stockReconciliationRepairs StockReconciliationRepair[]
   projectReservations        ProjectInventoryReservation[]
 
+  @@unique([productId, unasVariantKey])
   @@index([productId, isActive])
+  @@index([unasBaseSku])
 }
 
 model Brand {

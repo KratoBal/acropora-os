@@ -25,6 +25,7 @@ import { isPrismaErrorCode } from "../../common/prisma-error.util.js";
 import { sumOrderBookedOut } from "../../common/stock-ledger.util.js";
 import { retryOnSerializationConflict } from "../../common/transaction-retry.util.js";
 import { parseUnasPackageComponents } from "../../common/unas-package-product.util.js";
+import { unasVariantKey } from "../../common/unas-variant.util.js";
 import {
   ensureMainWarehouse,
   type WarehouseLookupDatabase,
@@ -359,7 +360,12 @@ export interface UnasOrderSyncDatabase {
           reportedStockSyncedAt: Date | null;
           isPackageProduct: boolean;
         } | null;
-        variants: Array<{ id: string; sku: string }>;
+        variants: Array<{
+          id: string;
+          sku: string;
+          unasReportedStock?: Prisma.Decimal | null;
+          unasReportedStockSyncedAt?: Date | null;
+        }>;
       }>
     >;
   };
@@ -502,8 +508,23 @@ async function buildLineInputs(
       continue;
     }
 
+    const orderVariantKey = unasVariantKey(
+      (item.variants ?? []).map((variant) => ({
+        name: variant.name,
+        value: variant.value,
+      })),
+    );
     const variant = await transaction.productVariant.findFirst({
-      where: { sku: item.sku },
+      where: orderVariantKey
+        ? {
+            isActive: true,
+            unasBaseSku: item.sku,
+            unasVariantKey: orderVariantKey,
+          }
+        : {
+            isActive: true,
+            sku: item.sku,
+          },
       select: {
         id: true,
         sku: true,
@@ -529,7 +550,9 @@ async function buildLineInputs(
         taxRate,
         lineGross,
         syncStatus: "FAILED",
-        syncError: `UNKNOWN_SKU:${item.sku}`,
+        syncError: orderVariantKey
+          ? `UNKNOWN_UNAS_VARIANT:${item.sku}:${orderVariantKey}`
+          : `UNKNOWN_SKU:${item.sku}`,
         isTechnicalCost: false,
         stockTargets: [],
       });
@@ -1656,15 +1679,20 @@ export class UnasOrderSyncRepository extends Repository {
           },
         },
         variants: {
-          select: { id: true, sku: true },
+          where: { isActive: true },
+          select: {
+            id: true,
+            sku: true,
+            unasReportedStock: true,
+            unasReportedStockSyncedAt: true,
+          },
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-          take: 1,
         },
       },
     });
-    const variantIds = products
-      .map((product) => product.variants[0]?.id)
-      .filter((id): id is string => Boolean(id));
+    const variantIds = products.flatMap((product) =>
+      product.variants.map((variant) => variant.id),
+    );
     const stockItems = await this.syncDatabase.stockItem.findMany({
       where: { variantId: { in: variantIds } },
       select: { variantId: true, onHand: true },
@@ -1677,35 +1705,37 @@ export class UnasOrderSyncRepository extends Repository {
     }
 
     const epsilon = new Prisma.Decimal(RECONCILIATION_EPSILON);
-    const trackedProducts = products.filter((product) => {
-      const variant = product.variants[0];
-      return variant && onHandByVariant.has(variant.id);
-    });
-    const mismatches = trackedProducts.flatMap((product) => {
-      const variant = product.variants[0];
-      const reportedStock = product.unasSnapshot?.reportedStock;
-      if (!variant || reportedStock === null || reportedStock === undefined)
-        return [];
-      const localOnHand = onHandByVariant.get(variant.id)!;
-      const difference = localOnHand.minus(reportedStock);
-      if (difference.abs().lessThanOrEqualTo(epsilon)) return [];
-      return [
-        {
-          variantId: variant.id,
-          sku: variant.sku,
-          productName: product.name,
-          localOnHand: localOnHand.toString(),
-          unasReportedStock: reportedStock.toString(),
-          difference: difference.toString(),
-          reportedStockSyncedAt:
-            product.unasSnapshot?.reportedStockSyncedAt?.toISOString() ?? null,
-        },
-      ];
-    });
+    const mismatches = products.flatMap((product) =>
+      product.variants.flatMap((variant) => {
+        if (!onHandByVariant.has(variant.id)) return [];
+        const reportedStock =
+          variant.unasReportedStock ?? product.unasSnapshot?.reportedStock;
+        if (reportedStock === null || reportedStock === undefined) return [];
+        const localOnHand = onHandByVariant.get(variant.id)!;
+        const difference = localOnHand.minus(reportedStock);
+        if (difference.abs().lessThanOrEqualTo(epsilon)) return [];
+        return [
+          {
+            variantId: variant.id,
+            sku: variant.sku,
+            productName: product.name,
+            localOnHand: localOnHand.toString(),
+            unasReportedStock: reportedStock.toString(),
+            difference: difference.toString(),
+            reportedStockSyncedAt:
+              variant.unasReportedStockSyncedAt?.toISOString() ??
+              product.unasSnapshot?.reportedStockSyncedAt?.toISOString() ??
+              null,
+          },
+        ];
+      }),
+    );
 
     return {
       checkedAt: new Date().toISOString(),
-      checkedCount: trackedProducts.length,
+      checkedCount: variantIds.filter((variantId) =>
+        onHandByVariant.has(variantId),
+      ).length,
       mismatches,
     };
   }

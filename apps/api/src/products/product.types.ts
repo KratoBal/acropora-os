@@ -6,6 +6,8 @@ import type {
   ProductListItem,
 } from "@acropora/types";
 
+import { parseStoredUnasVariantValues } from "../common/unas-variant.util.js";
+
 export type ProductWithRelations = Prisma.ProductGetPayload<{
   include: {
     brand: true;
@@ -66,7 +68,9 @@ export function toProductListItem(
     (listing) => listing.channel === "UNAS",
   );
   const primaryVariant = product.variants.find((variant) => variant.isActive);
-  const stockItems = primaryVariant?.stockItems ?? [];
+  const stockItems = product.variants
+    .filter((variant) => variant.isActive)
+    .flatMap((variant) => variant.stockItems);
 
   return {
     id: product.id,
@@ -87,7 +91,7 @@ export function toProductListItem(
           sortOrder: primaryCategory.sortOrder,
         }
       : null,
-    primarySku: primaryVariant?.sku ?? null,
+    primarySku: primaryVariant?.unasBaseSku ?? primaryVariant?.sku ?? null,
     thumbnail: product.images[0] ? imageSummary(product.images[0]) : null,
     unasListing: unasListing ? channelSummary(unasListing) : null,
     grossPrice: product.unasSnapshot?.grossPrice?.toString() ?? null,
@@ -125,6 +129,13 @@ export function toProductDetail(
       manufacturerPartNumber: variant.manufacturerPartNumber,
       secondaryUnit: variant.secondaryUnit,
       secondaryUnitFactor: variant.secondaryUnitFactor?.toString() ?? null,
+      unasBaseSku: variant.unasBaseSku,
+      unasVariantValues: parseStoredUnasVariantValues(
+        variant.unasVariantValues,
+      ),
+      unasReportedStock: variant.unasReportedStock?.toString() ?? null,
+      unasReportedStockSyncedAt:
+        variant.unasReportedStockSyncedAt?.toISOString() ?? null,
       extension: variant.extension
         ? {
             variantId: variant.id,

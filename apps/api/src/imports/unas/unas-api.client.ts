@@ -78,6 +78,8 @@ export interface UnasSetStockRequest {
   sku: string;
   /** Absolute quantity to set (UNAS "modify" action, not a delta). */
   qty: string;
+  /** Ordered UNAS variant values. Empty/omitted for product-level stock. */
+  variantValues?: string[];
   comment?: string;
 }
 
@@ -376,9 +378,41 @@ export function parseUnasProductResponse(xml: string): UnasApiProduct[] {
       const stocks = child(product, "Stocks");
       const stockStatus = stocks ? child(stocks, "Status") : undefined;
       const stockRows = children(stocks, "Stock");
+      const variantNames = children(child(product, "Variants"), "Variant").map(
+        (variant, index) => value(variant, "Name") ?? `Változat ${index + 1}`,
+      );
+      const mainStockRows = stockRows.filter(
+        (stock) => !value(stock, "WarehouseId"),
+      );
       const baseStock =
-        stockRows.find((stock) => !value(stock, "WarehouseId")) ??
-        (stockRows.length === 1 ? stockRows[0] : undefined);
+        mainStockRows.find(
+          (stock) => children(child(stock, "Variants"), "Variant").length === 0,
+        ) ??
+        (mainStockRows.length === 1 && variantNames.length === 0
+          ? mainStockRows[0]
+          : undefined);
+      const variantStocks = mainStockRows.flatMap((stock) => {
+        const variantValues = children(child(stock, "Variants"), "Variant").map(
+          (variant) => variant.text.trim(),
+        );
+        if (variantValues.length === 0) return [];
+        const reportedStock = decimal(value(stock, "Qty"));
+        if (
+          reportedStock === null ||
+          (variantNames.length > 0 &&
+            variantNames.length !== variantValues.length)
+        )
+          throw new UnasApiError("FIELD_FORMAT_INVALID");
+        return [
+          {
+            values: variantValues.map((variantValue, index) => ({
+              name: variantNames[index] ?? `Változat ${index + 1}`,
+              value: variantValue,
+            })),
+            reportedStock,
+          },
+        ];
+      });
       const meta = child(product, "Meta");
       const description = child(product, "Description");
       const prices = child(product, "Prices");
@@ -437,6 +471,7 @@ export function parseUnasProductResponse(xml: string): UnasApiProduct[] {
           ? flag(value(stockStatus, "Variant"))
           : null,
         reportedStock: baseStock ? decimal(value(baseStock, "Qty")) : null,
+        variantStocks,
         isPackageProduct: packageProductFlag ?? packageComponents.length > 0,
         packageComponents,
         productUrl: value(product, "Url") ?? null,
@@ -517,18 +552,22 @@ export function parseUnasStockResponse(xml: string): UnasApiStock[] {
     const sku = value(product, "Sku") ?? "";
     if (!/^\d+$/.test(externalId) || !sku)
       throw new UnasApiError("FIELD_FORMAT_INVALID");
-    const stockRows = children(child(product, "Stocks"), "Stock");
-    const baseRows = stockRows.filter(
-      (stock) =>
-        !value(stock, "WarehouseId") &&
-        children(child(stock, "Variants"), "Variant").length === 0,
+    const stockRows = children(child(product, "Stocks"), "Stock").filter(
+      (stock) => !value(stock, "WarehouseId"),
     );
-    const baseStock =
-      baseRows[0] ?? (stockRows.length === 1 ? stockRows[0] : undefined);
-    if (!baseStock) return [];
-    const reportedStock = decimal(value(baseStock, "Qty"));
-    if (reportedStock === null) throw new UnasApiError("FIELD_FORMAT_INVALID");
-    return [{ externalId, sku, reportedStock }];
+    return stockRows.map((stock) => {
+      const reportedStock = decimal(value(stock, "Qty"));
+      if (reportedStock === null)
+        throw new UnasApiError("FIELD_FORMAT_INVALID");
+      return {
+        externalId,
+        sku,
+        reportedStock,
+        variantValues: children(child(stock, "Variants"), "Variant").map(
+          (variant) => ({ name: "", value: variant.text.trim() }),
+        ),
+      };
+    });
   });
 }
 
@@ -601,6 +640,20 @@ export function parseUnasOrderResponse(xml: string): UnasApiOrder[] {
     const itemsNode = child(order, "Items");
     const items = children(itemsNode, "Item").map((item) => {
       const sku = value(item, "Sku");
+      const variants = children(child(item, "Variants"), "Variant")
+        .map((variant) => ({
+          id: value(variant, "Id") ?? null,
+          name: value(variant, "Name") ?? "",
+          value: value(variant, "Value") ?? "",
+        }))
+        .filter((variant) => variant.value.trim())
+        .sort((left, right) => {
+          const leftId = Number(left.id);
+          const rightId = Number(right.id);
+          return Number.isFinite(leftId) && Number.isFinite(rightId)
+            ? leftId - rightId
+            : 0;
+        });
       return {
         id: value(item, "Id") ?? "",
         sku: sku && sku.trim() ? sku.trim() : null,
@@ -610,6 +663,7 @@ export function parseUnasOrderResponse(xml: string): UnasApiOrder[] {
         priceNet: decimal(value(item, "PriceNet")),
         priceGross: decimal(value(item, "PriceGross")),
         vatRate: vatRate(value(item, "Vat")),
+        variants,
       };
     });
     return {
@@ -754,7 +808,15 @@ export function parseUnasCustomerResponse(xml: string): UnasApiCustomer[] {
 
 export function buildUnasSetStockXml(request: UnasSetStockRequest) {
   if (!request.sku.trim()) throw new UnasApiError("REQUEST_INVALID");
+  if (request.variantValues?.some((item) => !item.trim()))
+    throw new UnasApiError("REQUEST_INVALID");
+  const variants = request.variantValues?.length
+    ? `<Variants>${request.variantValues
+        .map((item) => `<Variant>${escapeXml(item)}</Variant>`)
+        .join("")}</Variants>`
+    : "";
   const stockFields = [
+    variants,
     `<Qty>${escapeXml(request.qty)}</Qty>`,
     request.comment !== undefined
       ? `<Comment><![CDATA[${request.comment}]]></Comment>`
