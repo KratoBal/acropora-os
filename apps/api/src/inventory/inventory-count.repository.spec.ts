@@ -44,6 +44,7 @@ function nextId(prefix: string): string {
 class FakeDb {
   warehouseId = "wh-1";
   lines: FakeLine[] = [];
+  inventoryCountLineFindManyArgs: any;
   stockItems: Array<{ id: string; variantId: string; onHand: Prisma.Decimal }> =
     [];
   movements: Array<{ id: string; idempotencyKey: string | null }> = [];
@@ -90,7 +91,10 @@ class FakeDb {
   };
 
   inventoryCountLine = {
-    findMany: async () => this.lines,
+    findMany: async (args: any) => {
+      this.inventoryCountLineFindManyArgs = args;
+      return this.lines;
+    },
     update: async (args: any) => {
       const line = this.lines.find((l) => l.id === args.where.id)!;
       Object.assign(line, args.data);
@@ -233,6 +237,11 @@ describe("InventoryCountRepository.applyCorrection", () => {
     assert.equal(result.successCount, 1);
     assert.equal(result.failedCount, 0);
     assert.equal(db.count.status, "CORRECTED");
+    assert.deepEqual(
+      db.inventoryCountLineFindManyArgs.include.variant.select.product,
+      { select: { catalogAuthority: true } },
+      "the correction query must load catalogAuthority before deciding whether to sync to UNAS",
+    );
   });
 
   it("corrects a local product's stock without creating an UNAS outbox row", async () => {
