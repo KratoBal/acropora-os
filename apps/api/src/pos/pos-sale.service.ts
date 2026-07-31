@@ -89,6 +89,11 @@ export class PosSaleService {
           `A helyi Acropora OS-termék POS-értékesítése még nincs engedélyezve: ${info.sku}.`,
         );
       }
+      if (info.stockComponents.length === 0) {
+        throw new BadRequestException(
+          `A csomagtermék összetevői nem oldhatók fel biztonságosan: ${info.sku}.`,
+        );
+      }
       if (info.vatRate === null) {
         throw new BadRequestException(
           `Nincs beállítva ÁFA kulcs ehhez a termékhez: ${info.sku}.`,
@@ -130,6 +135,7 @@ export class PosSaleService {
         unitNet,
         lineGross,
         syncToUnas: info.syncToUnas,
+        stockComponents: info.stockComponents,
       });
     }
 

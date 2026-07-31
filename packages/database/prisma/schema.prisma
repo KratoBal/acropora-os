@@ -834,6 +834,12 @@ model UnasProductSnapshot {
   lowStockThreshold              Decimal?  @db.Decimal(19, 6)
   reportedStock                  Decimal?  @db.Decimal(19, 6)
   reportedStockSyncedAt          DateTime?
+  /// UNAS computed bundle/package product. It has no independently managed
+  /// physical stock in Acropora OS; its sellable quantity is derived from
+  /// packageComponents.
+  isPackageProduct               Boolean   @default(false)
+  /// Normalized [{ sku, qty }] rows from UNAS PackageComponents.Component.
+  packageComponents              Json      @default("[]")
   primaryCategoryExternalId      String?
   alternativeCategoryExternalIds Json?
   images                         Json?
@@ -844,6 +850,8 @@ model UnasProductSnapshot {
   updatedAt                      DateTime  @updatedAt
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([isPackageProduct])
 }
 
 /// Acropora-owned static operational settings for a sellable/stockable variant.

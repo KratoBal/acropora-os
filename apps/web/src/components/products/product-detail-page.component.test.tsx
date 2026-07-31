@@ -109,6 +109,8 @@ const detail: ProductDetail = {
     variantStockEnabled: false,
     reportedStock: "7.5",
     reportedStockSyncedAt: "2026-07-20T10:00:00.000Z",
+    isPackageProduct: false,
+    packageComponents: [],
   },
 };
 
@@ -142,6 +144,19 @@ const hufDetail: ProductDetail = {
 const stockDetail: ProductDetail = {
   ...detail,
   stockOnHand: "24900",
+};
+
+const packageDetail: ProductDetail = {
+  ...detail,
+  stockOnHand: null,
+  unasMirror: {
+    ...detail.unasMirror!,
+    isPackageProduct: true,
+    packageComponents: [
+      { sku: "COMP-A", qty: "2" },
+      { sku: "COMP-B", qty: "0.5" },
+    ],
+  },
 };
 
 const richDescriptionHtml = [
@@ -212,6 +227,20 @@ describe("ProductDetailPage mirror ownership", () => {
       await screen.findByText("Helyi Acropora OS-termék"),
     ).toBeInTheDocument();
     expect(screen.queryByText("UNAS terméktükör")).not.toBeInTheDocument();
+  });
+
+  it("a csomagterméket számított készlettel és komponenslistával jelöli", async () => {
+    api.detail.mockResolvedValue(packageDetail);
+
+    render(<ProductDetailPage productId="product-1" />);
+
+    expect(
+      await screen.findByText("Számított csomagtermék"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Nincs önálló készlet")).toBeInTheDocument();
+    expect(screen.getByText("Csomag összetevői")).toBeInTheDocument();
+    expect(screen.getByText("COMP-A")).toBeInTheDocument();
+    expect(screen.getByText("COMP-B")).toBeInTheDocument();
   });
 
   it("edits only the Acropora-owned extension fields", async () => {

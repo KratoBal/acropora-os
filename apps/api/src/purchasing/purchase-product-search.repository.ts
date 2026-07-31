@@ -58,7 +58,13 @@ export class PurchaseProductSearchRepository extends Repository {
     const variants = await this.searchDatabase.productVariant.findMany({
       where: {
         isActive: true,
-        product: { isActive: true },
+        product: {
+          isActive: true,
+          OR: [
+            { catalogAuthority: "ACROPORA" },
+            { unasSnapshot: { isPackageProduct: false } },
+          ],
+        },
         OR: [
           { sku: { contains: term, mode: "insensitive" } },
           { product: { name: { contains: term, mode: "insensitive" } } },

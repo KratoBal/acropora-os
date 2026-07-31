@@ -73,7 +73,10 @@ interface InventoryCountApplyTransaction extends InventoryMovementDatabase {
         variant: {
           sku: string;
           unit: string;
-          product: { catalogAuthority: "UNAS" | "ACROPORA" | null };
+          product: {
+            catalogAuthority: "UNAS" | "ACROPORA" | null;
+            unasSnapshot: { isPackageProduct: boolean } | null;
+          };
         };
       }>
     >;
@@ -182,7 +185,16 @@ export class InventoryCountRepository extends Repository {
   async create(actorUserId: string): Promise<InventoryCountDetail> {
     const warehouse = await ensureMainWarehouse(this.countDatabase);
     const variants = await this.countDatabase.productVariant.findMany({
-      where: { isActive: true, product: { isActive: true } },
+      where: {
+        isActive: true,
+        product: {
+          isActive: true,
+          OR: [
+            { catalogAuthority: "ACROPORA" },
+            { unasSnapshot: { isPackageProduct: false } },
+          ],
+        },
+      },
       select: {
         id: true,
         sku: true,
@@ -325,11 +337,21 @@ export class InventoryCountRepository extends Repository {
                 select: {
                   sku: true,
                   unit: true,
-                  product: { select: { catalogAuthority: true } },
+                  product: {
+                    select: {
+                      catalogAuthority: true,
+                      unasSnapshot: {
+                        select: { isPackageProduct: true },
+                      },
+                    },
+                  },
                 },
               },
             },
           });
+          const inventoryLines = lines.filter(
+            (line) => !line.variant.product.unasSnapshot?.isPackageProduct,
+          );
 
           // A variant with no StockItem row yet had its expectedQty fall back
           // to the UNAS reported-stock snapshot at leltár-creation time (see
@@ -341,7 +363,7 @@ export class InventoryCountRepository extends Repository {
           // showing as untracked (—) even after being physically counted.
           const existingStockItems = await transaction.stockItem.findMany({
             where: {
-              variantId: { in: lines.map((line) => line.variantId) },
+              variantId: { in: inventoryLines.map((line) => line.variantId) },
               warehouseId,
               locationId: null,
               lotId: null,
@@ -352,11 +374,11 @@ export class InventoryCountRepository extends Repository {
             existingStockItems.map((item) => item.variantId),
           );
 
-          const changedLines = lines.filter((line) => {
+          const changedLines = inventoryLines.filter((line) => {
             if (line.countedQty === null) return false;
             return !line.countedQty.minus(line.expectedQty).isZero();
           });
-          const baselineOnlyLines = lines.filter((line) => {
+          const baselineOnlyLines = inventoryLines.filter((line) => {
             if (line.countedQty === null) return false;
             if (trackedVariantIds.has(line.variantId)) return false;
             // Already covered as a real change above - avoid double-setting.
@@ -411,7 +433,9 @@ export class InventoryCountRepository extends Repository {
                 sku: line.variant.sku,
                 unit: line.variant.unit,
                 quantityDelta: line.countedQty!.minus(line.expectedQty),
-                syncToUnas: line.variant.product.catalogAuthority === "UNAS",
+                syncToUnas:
+                  line.variant.product.catalogAuthority === "UNAS" &&
+                  !line.variant.product.unasSnapshot?.isPackageProduct,
               })),
             });
             // Should be rare (the service layer already guards against

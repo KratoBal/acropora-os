@@ -179,6 +179,13 @@ export interface StockLookupDatabase {
       reserved: Prisma.Decimal;
     } | null>;
   };
+  productVariant: {
+    findUnique(args: unknown): Promise<{
+      product: {
+        unasSnapshot: { isPackageProduct: boolean } | null;
+      };
+    } | null>;
+  };
 }
 
 export const STOCK_LOOKUP_DATABASE = Symbol("STOCK_LOOKUP_DATABASE");
@@ -231,10 +238,10 @@ export class UnasStockSyncOutboxService {
     summary.claimed = claimed.length;
     if (claimed.length === 0) return summary;
 
-    // Fetch the token once per batch, not once per row - setStock still
-    // handles a mid-batch expiry itself via its own retry loop, this just
-    // avoids N redundant getToken() calls for the common case.
-    const token = await this.unasAuth.getToken();
+    // Resolve the token lazily: package-product rows can be closed locally
+    // without any UNAS request, even during an authentication outage. The
+    // mutable holder still guarantees at most one login per batch.
+    const token = { value: null as string | null };
 
     for (const row of claimed) {
       const outcome = await this.processOne(row, token, config);
@@ -245,7 +252,7 @@ export class UnasStockSyncOutboxService {
 
   private async processOne(
     row: ClaimedUnasStockSyncOutboxRow,
-    token: string,
+    token: { value: string | null },
     config: UnasStockSyncWorkerConfig,
   ): Promise<"succeeded" | "superseded" | "retried" | "deadLettered"> {
     // Requirement: never let an older event overwrite a newer one, even if
@@ -265,6 +272,26 @@ export class UnasStockSyncOutboxService {
       );
       return "superseded";
     }
+
+    // UNAS bundle stock is computed from component stock and rejects a
+    // direct setStock call. This is defense in depth for historical rows or
+    // a future caller that accidentally sets syncToUnas=true on a package.
+    const variant = await this.stockLookup.productVariant.findUnique({
+      where: { id: row.variantId },
+      select: {
+        product: {
+          select: {
+            unasSnapshot: { select: { isPackageProduct: true } },
+          },
+        },
+      },
+    });
+    if (variant?.product.unasSnapshot?.isPackageProduct) {
+      await this.outbox.markPackageProductSuccess(row.id);
+      return "superseded";
+    }
+
+    token.value ??= await this.unasAuth.getToken();
 
     // Re-read the current local on-hand rather than trusting the value
     // captured when this row was written (see docs/architecture/
@@ -290,7 +317,7 @@ export class UnasStockSyncOutboxService {
       : row.targetOnHand;
 
     try {
-      await this.unasApi.setStock(token, {
+      await this.unasApi.setStock(token.value, {
         sku: row.sku,
         qty: quantityToPublish.toString(),
         comment: `${row.sourceProcess}:${row.sourceRecordId}`,

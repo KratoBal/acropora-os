@@ -744,23 +744,28 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                     Product Master adatok · csak olvasható
                   </p>
                 </div>
-                <Badge
-                  variant={
-                    product.unasMirror.state === "ACTIVE"
-                      ? "success"
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {product.unasMirror.isPackageProduct ? (
+                    <Badge variant="warning">Számított csomagtermék</Badge>
+                  ) : null}
+                  <Badge
+                    variant={
+                      product.unasMirror.state === "ACTIVE"
+                        ? "success"
+                        : product.unasMirror.state === "MISSING"
+                          ? "warning"
+                          : "danger"
+                    }
+                  >
+                    {product.unasMirror.state === "ACTIVE"
+                      ? "Szinkronban"
                       : product.unasMirror.state === "MISSING"
-                        ? "warning"
-                        : "danger"
-                  }
-                >
-                  {product.unasMirror.state === "ACTIVE"
-                    ? "Szinkronban"
-                    : product.unasMirror.state === "MISSING"
-                      ? "Hiányzik az UNAS-ból"
-                      : product.unasMirror.state === "CONFLICT"
-                        ? "Azonosítási konfliktus"
-                        : "Ismeretlen állapot"}
-                </Badge>
+                        ? "Hiányzik az UNAS-ból"
+                        : product.unasMirror.state === "CONFLICT"
+                          ? "Azonosítási konfliktus"
+                          : "Ismeretlen állapot"}
+                  </Badge>
+                </div>
               </CardHeader>
               <CardContent className="space-y-5">
                 <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
@@ -828,7 +833,9 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                     </div>
                     <div>
                       <dt className="text-xs text-slate-400">
-                        UNAS jelentett készlet
+                        {product.unasMirror.isPackageProduct
+                          ? "UNAS számított csomagkészlet"
+                          : "UNAS jelentett készlet"}
                       </dt>
                       <dd className="mt-1 font-semibold text-slate-800">
                         {value(product.unasMirror.reportedStock)}
@@ -853,7 +860,9 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                         Acropora OS készlet
                       </dt>
                       <dd className="mt-1 font-semibold text-slate-800">
-                        {formatStock(product.stockOnHand)}
+                        {product.unasMirror.isPackageProduct
+                          ? "Nincs önálló készlet"
+                          : formatStock(product.stockOnHand)}
                       </dd>
                     </div>
                     <div>
@@ -873,6 +882,35 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                       </dd>
                     </div>
                   </dl>
+                  {product.unasMirror.isPackageProduct ? (
+                    <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                      <p className="text-xs font-bold uppercase tracking-wide text-amber-800">
+                        Csomag összetevői
+                      </p>
+                      <p className="mt-1 text-xs text-amber-700">
+                        A csomag készletét az UNAS az összetevők elérhető
+                        mennyiségéből számítja; a csomaghoz nem tartozik önálló
+                        Acropora OS készlet.
+                      </p>
+                      <ul className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                        {product.unasMirror.packageComponents.map(
+                          (component) => (
+                            <li
+                              key={`${component.sku}:${component.qty}`}
+                              className="flex items-center justify-between rounded-md bg-white px-3 py-2"
+                            >
+                              <span className="font-mono text-xs text-slate-700">
+                                {component.sku}
+                              </span>
+                              <span className="font-semibold text-slate-800">
+                                {component.qty} db
+                              </span>
+                            </li>
+                          ),
+                        )}
+                      </ul>
+                    </div>
+                  ) : null}
                 </div>
               </CardContent>
             </Card>

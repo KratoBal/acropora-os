@@ -112,22 +112,62 @@ class FakeAuditDb implements UnasOrderStockAuditDatabase {
     type: string;
     lines: Array<{ variantId: string; quantity: Prisma.Decimal }>;
   }> = [];
+  variants: Array<{
+    id: string;
+    sku: string;
+    catalogAuthority?: "UNAS" | "ACROPORA" | null;
+    isPackageProduct?: boolean;
+    packageComponents?: Array<{ sku: string; qty: string }>;
+  }> = [];
+
+  productVariant = {
+    findMany: async (args: any) => {
+      const ids: string[] | undefined = args.where?.id?.in;
+      const skus: string[] | undefined = args.where?.sku?.in;
+      return this.variants
+        .filter(
+          (variant) =>
+            (!ids || ids.includes(variant.id)) &&
+            (!skus || skus.includes(variant.sku)),
+        )
+        .map((variant) => ({
+          id: variant.id,
+          sku: variant.sku,
+          product: {
+            catalogAuthority: variant.catalogAuthority ?? "UNAS",
+            unasSnapshot: {
+              isPackageProduct: variant.isPackageProduct ?? false,
+              packageComponents: variant.packageComponents ?? [],
+            },
+          },
+        }));
+    },
+  };
 
   salesOrder = {
-    findMany: async (args: { where?: { id?: { in: string[] } }; skip?: number; take?: number }) => {
+    findMany: async (args: {
+      where?: { id?: { in: string[] } };
+      skip?: number;
+      take?: number;
+    }) => {
       let filtered = this.orders;
       if (args.where?.id) {
         const ids = new Set(args.where.id.in);
         filtered = filtered.filter((order) => ids.has(order.id));
       }
       const sorted = [...filtered].sort((a, b) => a.id.localeCompare(b.id));
-      return sorted.slice(args.skip ?? 0, (args.skip ?? 0) + (args.take ?? sorted.length));
+      return sorted.slice(
+        args.skip ?? 0,
+        (args.skip ?? 0) + (args.take ?? sorted.length),
+      );
     },
     count: async () => this.orders.length,
   };
 
   externalReference = {
-    findMany: async (args: { where: { entityId?: { in: string[] }; externalId?: { in: string[] } } }) => {
+    findMany: async (args: {
+      where: { entityId?: { in: string[] }; externalId?: { in: string[] } };
+    }) => {
       let filtered = this.references;
       if (args.where.entityId) {
         const ids = new Set(args.where.entityId.in);
@@ -156,7 +196,9 @@ class FakeAuditDb implements UnasOrderStockAuditDatabase {
       let filtered = this.movements;
       if (args.where.referenceId) {
         const ids = new Set(args.where.referenceId.in);
-        filtered = filtered.filter((movement) => movement.referenceId && ids.has(movement.referenceId));
+        filtered = filtered.filter(
+          (movement) => movement.referenceId && ids.has(movement.referenceId),
+        );
       }
       return filtered;
     },
@@ -183,7 +225,14 @@ describe("UnasOrderStockAuditRepository", () => {
     const page = await repository.auditPage({ page: 1, pageSize: 10 });
     assert.equal(page.orders.length, 1);
     assert.equal(page.unasKeyByOrderId.get("order-1"), "UN-1");
-    assert.equal(page.bookedOutByOrderId.get("order-1")?.get("v1")?.toString(), "2");
+    assert.equal(
+      page.bookedOutByOrderId.get("order-1")?.get("v1")?.toString(),
+      "2",
+    );
+    assert.equal(
+      page.targetOutByOrderId.get("order-1")?.get("v1")?.toString(),
+      "2",
+    );
     assert.equal(page.totalItems, 1);
   });
 
@@ -198,12 +247,20 @@ describe("UnasOrderStockAuditRepository", () => {
     const duplicates = await repository.findDuplicateUnasKeys();
     assert.equal(duplicates.length, 1);
     assert.equal(duplicates[0]!.unasKey, "UN-DUP");
-    assert.deepEqual(new Set(duplicates[0]!.salesOrderIds), new Set(["order-1", "order-2"]));
+    assert.deepEqual(
+      new Set(duplicates[0]!.salesOrderIds),
+      new Set(["order-1", "order-2"]),
+    );
   });
 
   it("finds a StockMovement referencing a SalesOrder id that no longer exists (orphan reference)", async () => {
     const db = new FakeAuditDb();
-    db.orders.push({ id: "order-1", orderNumber: "UNAS-1", status: "CONFIRMED", lines: [] });
+    db.orders.push({
+      id: "order-1",
+      orderNumber: "UNAS-1",
+      status: "CONFIRMED",
+      lines: [],
+    });
     db.movements.push(
       { referenceId: "order-1", type: "SALE", lines: [] },
       { referenceId: "order-does-not-exist", type: "SALE", lines: [] },
@@ -215,7 +272,12 @@ describe("UnasOrderStockAuditRepository", () => {
 
   it("never writes anything - the injected FakeDb only implements findMany/count/groupBy", () => {
     const db = new FakeAuditDb();
-    for (const modelName of ["salesOrder", "externalReference", "stockMovement"] as const) {
+    for (const modelName of [
+      "salesOrder",
+      "externalReference",
+      "stockMovement",
+      "productVariant",
+    ] as const) {
       for (const methodName of Object.keys(db[modelName])) {
         assert.ok(
           ["findMany", "count", "groupBy"].includes(methodName),

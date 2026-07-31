@@ -187,6 +187,16 @@ function line(overrides: Partial<CreatePosSaleLine> = {}): CreatePosSaleLine {
     unitNet: new Prisma.Decimal("100"),
     lineGross: new Prisma.Decimal("127"),
     syncToUnas: true,
+    stockComponents: [
+      {
+        variantId: "variant-1",
+        sku: "REEF-SALT-01",
+        productName: "Reef Salt",
+        unit: "db",
+        quantityPerSale: new Prisma.Decimal(1),
+        syncToUnas: true,
+      },
+    ],
     ...overrides,
   };
 }
@@ -233,6 +243,73 @@ describe("PosSaleRepository.createSale", () => {
     assert.equal(db.outbox[0]?.targetOnHand.toString(), "7");
     assert.equal(result.stockWarnings.length, 0);
     assert.equal(result.detail.status, "COMPLETED");
+  });
+
+  it("books a package sale against component variants instead of the package variant", async () => {
+    const db = new FakeDb();
+    db.stockItems.push(
+      {
+        id: "stock-a",
+        variantId: "component-a",
+        onHand: new Prisma.Decimal("10"),
+      },
+      {
+        id: "stock-b",
+        variantId: "component-b",
+        onHand: new Prisma.Decimal("5"),
+      },
+    );
+
+    await repositoryWith(db).createSale(
+      baseParams({
+        lines: [
+          line({
+            variantId: "package-1",
+            sku: "BUNDLE-1",
+            quantity: new Prisma.Decimal("2"),
+            stockComponents: [
+              {
+                variantId: "component-a",
+                sku: "COMP-A",
+                productName: "Komponens A",
+                unit: "db",
+                quantityPerSale: new Prisma.Decimal("2"),
+                syncToUnas: true,
+              },
+              {
+                variantId: "component-b",
+                sku: "COMP-B",
+                productName: "Komponens B",
+                unit: "db",
+                quantityPerSale: new Prisma.Decimal("0.5"),
+                syncToUnas: true,
+              },
+            ],
+          }),
+        ],
+      }),
+    );
+
+    assert.equal(
+      db.stockItems
+        .find((item) => item.variantId === "component-a")
+        ?.onHand.toString(),
+      "6",
+    );
+    assert.equal(
+      db.stockItems
+        .find((item) => item.variantId === "component-b")
+        ?.onHand.toString(),
+      "4",
+    );
+    assert.equal(
+      db.stockItems.some((item) => item.variantId === "package-1"),
+      false,
+    );
+    assert.deepEqual(db.outbox.map((row) => row.variantId).sort(), [
+      "component-a",
+      "component-b",
+    ]);
   });
 
   it("allows the resulting stock to go negative and reports it as a stockWarning, without blocking or throwing", async () => {
@@ -290,7 +367,7 @@ describe("PosSaleRepository.createSale", () => {
     assert.equal(db.outbox.length, 1, "no second outbox row was created");
   });
 
-  it("accumulates quantity across two lines for the same variant sequentially rather than losing an update", async () => {
+  it("aggregates two lines for the same physical variant without losing quantity", async () => {
     const db = new FakeDb();
     db.stockItems.push({
       id: "stock-1",
@@ -308,7 +385,7 @@ describe("PosSaleRepository.createSale", () => {
       }),
     );
 
-    assert.equal(db.movementLines.length, 2);
+    assert.equal(db.movementLines.length, 1);
     assert.equal(db.stockItems[0]?.onHand.toString(), "5");
   });
 

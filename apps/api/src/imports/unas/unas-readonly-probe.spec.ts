@@ -70,6 +70,8 @@ const product = (
   backorderAllowed: null,
   variantStockEnabled: null,
   reportedStock: "2",
+  isPackageProduct: false,
+  packageComponents: [],
   productUrl: `https://sensitive.example/${externalId}`,
   sefUrl: null,
   manufacturerUrl: null,

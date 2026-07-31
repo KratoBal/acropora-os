@@ -57,7 +57,11 @@ const productListInclude = {
     take: 1,
   },
   unasSnapshot: {
-    select: { grossPrice: true, saleGrossPrice: true },
+    select: {
+      grossPrice: true,
+      saleGrossPrice: true,
+      isPackageProduct: true,
+    },
   },
 } as const;
 

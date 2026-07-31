@@ -16,6 +16,7 @@ import {
   ensureMainWarehouse,
   type WarehouseLookupDatabase,
 } from "../common/warehouse.util.js";
+import { parseUnasPackageComponents } from "../common/unas-package-product.util.js";
 import type { PosSaleListQueryDto } from "./dto/pos-sale-list-query.dto.js";
 import {
   toPosSaleDetail,
@@ -47,6 +48,16 @@ export interface PosSaleVariantInfo {
   currentQty: Prisma.Decimal;
   /** A helyi termék készletmozgása nem kerülhet az UNAS outboxba. */
   syncToUnas: boolean;
+  stockComponents: PosSaleStockComponent[];
+}
+
+export interface PosSaleStockComponent {
+  variantId: string;
+  sku: string;
+  productName: string;
+  unit: string;
+  quantityPerSale: Prisma.Decimal;
+  syncToUnas: boolean;
 }
 
 export interface PosSaleCurrentStock {
@@ -64,6 +75,7 @@ export interface CreatePosSaleLine {
   unitNet: Prisma.Decimal;
   lineGross: Prisma.Decimal;
   syncToUnas: boolean;
+  stockComponents: PosSaleStockComponent[];
 }
 
 export interface CreatePosSaleParams {
@@ -109,6 +121,8 @@ export interface PosSaleDatabase extends WarehouseLookupDatabase {
           unasSnapshot: {
             vatRate: Prisma.Decimal | null;
             reportedStock: Prisma.Decimal | null;
+            isPackageProduct: boolean;
+            packageComponents: Prisma.JsonValue;
           } | null;
         };
       }>
@@ -164,11 +178,58 @@ export class PosSaleRepository extends Repository {
           select: {
             name: true,
             catalogAuthority: true,
-            unasSnapshot: { select: { vatRate: true, reportedStock: true } },
+            unasSnapshot: {
+              select: {
+                vatRate: true,
+                reportedStock: true,
+                isPackageProduct: true,
+                packageComponents: true,
+              },
+            },
           },
         },
       },
     });
+    const packageComponentSkus = [
+      ...new Set(
+        variants.flatMap((variant) =>
+          variant.product.unasSnapshot?.isPackageProduct
+            ? parseUnasPackageComponents(
+                variant.product.unasSnapshot.packageComponents,
+              ).map((component) => component.sku)
+            : [],
+        ),
+      ),
+    ];
+    const componentVariants =
+      packageComponentSkus.length > 0
+        ? await this.saleDatabase.productVariant.findMany({
+            where: { sku: { in: packageComponentSkus }, isActive: true },
+            select: {
+              id: true,
+              sku: true,
+              unit: true,
+              vatRate: true,
+              product: {
+                select: {
+                  name: true,
+                  catalogAuthority: true,
+                  unasSnapshot: {
+                    select: {
+                      vatRate: true,
+                      reportedStock: true,
+                      isPackageProduct: true,
+                      packageComponents: true,
+                    },
+                  },
+                },
+              },
+            },
+          })
+        : [];
+    const componentVariantBySku = new Map(
+      componentVariants.map((variant) => [variant.sku, variant]),
+    );
     const stockItems = await this.saleDatabase.stockItem.findMany({
       where: {
         warehouseId: warehouse.id,
@@ -184,18 +245,56 @@ export class PosSaleRepository extends Repository {
 
     const result = new Map<string, PosSaleVariantInfo>();
     for (const variant of variants) {
+      const snapshot = variant.product.unasSnapshot;
+      const packageComponents = snapshot?.isPackageProduct
+        ? parseUnasPackageComponents(snapshot.packageComponents)
+        : [];
+      const stockComponents = snapshot?.isPackageProduct
+        ? packageComponents.flatMap((component) => {
+            const resolved = componentVariantBySku.get(component.sku);
+            if (
+              !resolved ||
+              resolved.product.catalogAuthority !== "UNAS" ||
+              resolved.product.unasSnapshot?.isPackageProduct
+            )
+              return [];
+            return [
+              {
+                variantId: resolved.id,
+                sku: resolved.sku,
+                productName: resolved.product.name,
+                unit: resolved.unit,
+                quantityPerSale: component.qty,
+                syncToUnas: true,
+              },
+            ];
+          })
+        : [
+            {
+              variantId: variant.id,
+              sku: variant.sku,
+              productName: variant.product.name,
+              unit: variant.unit,
+              quantityPerSale: new Prisma.Decimal(1),
+              syncToUnas: variant.product.catalogAuthority === "UNAS",
+            },
+          ];
       result.set(variant.id, {
         variantId: variant.id,
         sku: variant.sku,
         productName: variant.product.name,
         unit: variant.unit,
-        vatRate:
-          variant.vatRate ?? variant.product.unasSnapshot?.vatRate ?? null,
+        vatRate: variant.vatRate ?? snapshot?.vatRate ?? null,
         currentQty:
           onHandByVariant.get(variant.id) ??
-          variant.product.unasSnapshot?.reportedStock ??
+          snapshot?.reportedStock ??
           new Prisma.Decimal(0),
         syncToUnas: variant.product.catalogAuthority === "UNAS",
+        stockComponents:
+          snapshot?.isPackageProduct &&
+          stockComponents.length !== packageComponents.length
+            ? []
+            : stockComponents,
       });
     }
     return { warehouseId: warehouse.id, variants: result };
@@ -267,6 +366,36 @@ export class PosSaleRepository extends Repository {
         // megengedett (l. docs/INVENTORY-CONSISTENCY.md, "Negatív
         // készlet") - a writer sosem dobja el/blokkolja emiatt a
         // könyvelést, csak jelzi a `wentNegative` flaget soronként.
+        const movementLinesByVariant = new Map<
+          string,
+          {
+            variantId: string;
+            sku: string;
+            productName: string;
+            quantityDelta: Prisma.Decimal;
+            unit: string;
+            syncToUnas: boolean;
+          }
+        >();
+        for (const line of params.lines) {
+          for (const component of line.stockComponents) {
+            const delta = line.quantity
+              .times(component.quantityPerSale)
+              .negated();
+            const existing = movementLinesByVariant.get(component.variantId);
+            if (existing) {
+              existing.quantityDelta = existing.quantityDelta.plus(delta);
+            } else
+              movementLinesByVariant.set(component.variantId, {
+                variantId: component.variantId,
+                sku: component.sku,
+                productName: component.productName,
+                quantityDelta: delta,
+                unit: component.unit,
+                syncToUnas: component.syncToUnas,
+              });
+          }
+        }
         const posted = await postInventoryMovement(transaction, {
           idempotencyKey: this.buildIdempotencyKey(params.orderNumber),
           movementNumber: generateCode("ELAD"),
@@ -277,10 +406,10 @@ export class PosSaleRepository extends Repository {
           performedById: params.actorUserId,
           occurredAt: now,
           sourceProcess: "POS_SALE",
-          lines: params.lines.map((line) => ({
+          lines: [...movementLinesByVariant.values()].map((line) => ({
             variantId: line.variantId,
             sku: line.sku,
-            quantityDelta: line.quantity.negated(),
+            quantityDelta: line.quantityDelta,
             unit: line.unit,
             syncToUnas: line.syncToUnas,
           })),
@@ -291,7 +420,10 @@ export class PosSaleRepository extends Repository {
         // válható) becslésből - két egyidejű eladás így sem tud egymás
         // negatív-készlet jelzését elnyomni vagy hamisan kihagyni.
         const productNameByVariant = new Map(
-          params.lines.map((line) => [line.variantId, line.productName]),
+          [...movementLinesByVariant.values()].map((line) => [
+            line.variantId,
+            line.productName,
+          ]),
         );
         for (const line of posted.lines) {
           if (!line.wentNegative) continue;

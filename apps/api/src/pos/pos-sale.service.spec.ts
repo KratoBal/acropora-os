@@ -22,6 +22,16 @@ function variant(
     vatRate: new Prisma.Decimal("27"),
     currentQty: new Prisma.Decimal("10"),
     syncToUnas: true,
+    stockComponents: [
+      {
+        variantId: "variant-1",
+        sku: "REEF-SALT-01",
+        productName: "Reef Salt",
+        unit: "db",
+        quantityPerSale: new Prisma.Decimal(1),
+        syncToUnas: true,
+      },
+    ],
     ...overrides,
   };
 }

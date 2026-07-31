@@ -43,6 +43,21 @@ function channelSummary(
   };
 }
 
+function packageComponents(
+  value: Prisma.JsonValue | null | undefined,
+): Array<{ sku: string; qty: string }> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const sku = (item as Record<string, Prisma.JsonValue>).sku;
+    const qty = (item as Record<string, Prisma.JsonValue>).qty;
+    return typeof sku === "string" &&
+      (typeof qty === "string" || typeof qty === "number")
+      ? [{ sku, qty: String(qty) }]
+      : [];
+  });
+}
+
 export function toProductListItem(
   product: ProductWithRelations,
 ): ProductListItem {
@@ -78,7 +93,7 @@ export function toProductListItem(
     grossPrice: product.unasSnapshot?.grossPrice?.toString() ?? null,
     saleGrossPrice: product.unasSnapshot?.saleGrossPrice?.toString() ?? null,
     stockOnHand:
-      stockItems.length > 0
+      !product.unasSnapshot?.isPackageProduct && stockItems.length > 0
         ? stockItems
             .reduce((sum, item) => sum.plus(item.onHand), new Prisma.Decimal(0))
             .toString()
@@ -167,6 +182,8 @@ export function toProductDetail(
             reportedStock: snapshot?.reportedStock?.toString() ?? null,
             reportedStockSyncedAt:
               snapshot?.reportedStockSyncedAt?.toISOString() ?? null,
+            isPackageProduct: snapshot?.isPackageProduct ?? false,
+            packageComponents: packageComponents(snapshot?.packageComponents),
           }
         : null,
   };

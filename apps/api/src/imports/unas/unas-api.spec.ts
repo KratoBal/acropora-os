@@ -7,10 +7,12 @@ import {
   buildUnasGetOrderXml,
   buildUnasProductPageXml,
   buildUnasSetStockXml,
+  buildUnasStockPageXml,
   parseUnasCategoryResponse,
   parseUnasOrderResponse,
   parseUnasProductResponse,
   parseUnasSetStockResponse,
+  parseUnasStockResponse,
   unasRetryDelayMs,
   UnasApiError,
   UnasApiClient,
@@ -79,7 +81,47 @@ describe("UNAS API XML contract", () => {
     assert.equal(product.manufacturerPartNumber, "MPN-1");
     assert.equal(product.backorderAllowed, true);
     assert.equal(product.reportedStock, "7.5");
+    assert.equal(product.isPackageProduct, false);
+    assert.deepEqual(product.packageComponents, []);
     assert.equal(product.seo.title, "SEO title");
+  });
+
+  it("parses package-product components from a full product response", () => {
+    const packageProduct = parseUnasProductResponse(
+      response.replace(
+        "<Meta>",
+        "<PackageProduct>yes</PackageProduct><PackageComponents>" +
+          "<Component><Sku>COMP-A</Sku><Qty>2</Qty></Component>" +
+          "<Component><Sku>COMP-B</Sku><Qty>0.5</Qty></Component>" +
+          "</PackageComponents><Meta>",
+      ),
+    )[0]!;
+
+    assert.equal(packageProduct.isPackageProduct, true);
+    assert.deepEqual(packageProduct.packageComponents, [
+      { sku: "COMP-A", qty: "2" },
+      { sku: "COMP-B", qty: "0.5" },
+    ]);
+  });
+
+  it("builds and parses the dedicated incremental getStock contract", () => {
+    const request = buildUnasStockPageXml({
+      timeStart: 123,
+      limitStart: 100,
+      limitNum: 100,
+    });
+    assert.match(request, /<TimeStart>123<\/TimeStart>/);
+    assert.match(request, /<LimitStart>100<\/LimitStart>/);
+    assert.match(request, /<LimitNum>100<\/LimitNum>/);
+
+    const stocks = parseUnasStockResponse(
+      "<Products><Product><Id>159850145</Id><Sku>pump_1</Sku>" +
+        "<Stocks><Stock><Qty>0</Qty></Stock></Stocks>" +
+        "</Product></Products>",
+    );
+    assert.deepEqual(stocks, [
+      { externalId: "159850145", sku: "pump_1", reportedStock: "0" },
+    ]);
   });
 
   it("accepts bare VAT but keeps percentage signs invalid for decimals", () => {

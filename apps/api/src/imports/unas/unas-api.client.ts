@@ -5,6 +5,7 @@ import type {
   UnasApiCustomerAddress,
   UnasApiOrder,
   UnasApiProduct,
+  UnasApiStock,
 } from "@acropora/types";
 import { SaxesParser } from "saxes";
 
@@ -35,6 +36,13 @@ export interface UnasCategoryPageRequest {
   limitStart: number;
   limitNum: number;
   contentType?: "minimal" | "normal" | "full";
+}
+
+export interface UnasStockPageRequest {
+  /** Only products with a stock movement at/after this unix timestamp. */
+  timeStart?: number;
+  limitStart: number;
+  limitNum: number;
 }
 
 export interface UnasGetOrderRequest {
@@ -374,6 +382,17 @@ export function parseUnasProductResponse(xml: string): UnasApiProduct[] {
       const meta = child(product, "Meta");
       const description = child(product, "Description");
       const prices = child(product, "Prices");
+      const packageComponents = children(
+        child(product, "PackageComponents"),
+        "Component",
+      ).map((component) => {
+        const componentSku = value(component, "Sku") ?? "";
+        const componentQty = decimal(value(component, "Qty"));
+        if (!componentSku || componentQty === null)
+          throw new UnasApiError("FIELD_FORMAT_INVALID");
+        return { sku: componentSku, qty: componentQty };
+      });
+      const packageProductFlag = flag(value(product, "PackageProduct"));
       return {
         externalId,
         sku,
@@ -418,6 +437,8 @@ export function parseUnasProductResponse(xml: string): UnasApiProduct[] {
           ? flag(value(stockStatus, "Variant"))
           : null,
         reportedStock: baseStock ? decimal(value(baseStock, "Qty")) : null,
+        isPackageProduct: packageProductFlag ?? packageComponents.length > 0,
+        packageComponents,
         productUrl: value(product, "Url") ?? null,
         sefUrl: value(product, "SefUrl") ?? null,
         manufacturerUrl: value(product, "ManufacturerUrl") ?? null,
@@ -470,6 +491,44 @@ export function buildUnasCategoryPageXml(request: UnasCategoryPageRequest) {
     LimitStart: request.limitStart === 0 ? undefined : request.limitStart,
     LimitNum: request.limitNum,
     ContentType: request.contentType ?? "normal",
+  });
+}
+
+export function buildUnasStockPageXml(request: UnasStockPageRequest) {
+  if (!Number.isSafeInteger(request.limitStart) || request.limitStart < 0)
+    throw new UnasApiError("REQUEST_INVALID");
+  if (!Number.isSafeInteger(request.limitNum) || request.limitNum < 1)
+    throw new UnasApiError("REQUEST_INVALID");
+  return paramsXml({
+    TimeStart: request.timeStart,
+    LimitStart: request.limitStart === 0 ? undefined : request.limitStart,
+    LimitNum: request.limitNum,
+  });
+}
+
+export function parseUnasStockResponse(xml: string): UnasApiStock[] {
+  const root = parseXml(xml);
+  if (root.name === "Error") throw new UnasApiError("API_REJECTED");
+  if (root.name !== "Products")
+    throw new UnasApiError("RESPONSE_SHAPE_INVALID");
+
+  return children(root, "Product").flatMap((product) => {
+    const externalId = value(product, "Id") ?? "";
+    const sku = value(product, "Sku") ?? "";
+    if (!/^\d+$/.test(externalId) || !sku)
+      throw new UnasApiError("FIELD_FORMAT_INVALID");
+    const stockRows = children(child(product, "Stocks"), "Stock");
+    const baseRows = stockRows.filter(
+      (stock) =>
+        !value(stock, "WarehouseId") &&
+        children(child(stock, "Variants"), "Variant").length === 0,
+    );
+    const baseStock =
+      baseRows[0] ?? (stockRows.length === 1 ? stockRows[0] : undefined);
+    if (!baseStock) return [];
+    const reportedStock = decimal(value(baseStock, "Qty"));
+    if (reportedStock === null) throw new UnasApiError("FIELD_FORMAT_INVALID");
+    return [{ externalId, sku, reportedStock }];
   });
 }
 
@@ -802,6 +861,18 @@ export class UnasApiClient {
       token,
     );
     return parseUnasCategoryResponse(response);
+  }
+
+  async getStockPage(
+    token: string,
+    request: UnasStockPageRequest,
+  ): Promise<UnasApiStock[]> {
+    const response = await this.post(
+      "getStock",
+      buildUnasStockPageXml(request),
+      token,
+    );
+    return parseUnasStockResponse(response);
   }
 
   async getOrderPage(

@@ -53,6 +53,8 @@ export interface UnasProductMirrorDetail {
   variantStockEnabled: boolean | null;
   reportedStock: string | null;
   reportedStockSyncedAt: string | null;
+  isPackageProduct: boolean;
+  packageComponents: Array<{ sku: string; qty: string }>;
 }
 
 export interface ProductImageSummary {

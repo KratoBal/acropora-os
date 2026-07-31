@@ -34,6 +34,7 @@ interface FakeProductLink {
   firstVariantId: string; // the product's own first variant - same for every variant of that product
   variantCount: number;
   catalogAuthority?: "UNAS" | "ACROPORA" | null;
+  isPackageProduct?: boolean;
 }
 
 interface FakeOutboxRow {
@@ -176,7 +177,10 @@ class FakeDb implements StockReconciliationDatabase {
           catalogAuthority: link.catalogAuthority ?? "UNAS",
           unasSnapshot:
             link.reportedStock !== null
-              ? { reportedStock: link.reportedStock }
+              ? {
+                  reportedStock: link.reportedStock,
+                  isPackageProduct: link.isPackageProduct ?? false,
+                }
               : null,
           variants: Array.from({ length: link.variantCount }, (_, index) =>
             index === 0

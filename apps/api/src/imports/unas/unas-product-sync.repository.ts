@@ -9,6 +9,7 @@ import { Prisma, Repository, prisma } from "@acropora/database";
 import type {
   CanonicalUnasProduct,
   UnasApiCategory,
+  UnasApiStock,
   UnasProductIdentitySnapshot,
   UnasProductSyncDiff,
   UnasProductSyncSummary,
@@ -60,6 +61,8 @@ const snapshotData = (product: CanonicalUnasProduct, syncedAt: Date) => ({
   lowStockThreshold: product.lowStockThreshold,
   reportedStock: product.reportedStock,
   reportedStockSyncedAt: product.reportedStock !== null ? syncedAt : undefined,
+  isPackageProduct: product.isPackageProduct,
+  packageComponents: json(product.packageComponents),
   primaryCategoryExternalId: product.primaryCategoryExternalId,
   alternativeCategoryExternalIds: json(product.alternativeCategoryExternalIds),
   images: json(product.images),
@@ -233,6 +236,7 @@ export class UnasProductSyncRepository extends Repository {
     windowEnd: Date,
     categories: readonly UnasApiCategory[],
     deletedExternalIds: readonly string[],
+    stocks: readonly UnasApiStock[],
   ): Promise<UnasProductSyncSummary> {
     return prisma.$transaction(
       async (transaction) => {
@@ -489,6 +493,30 @@ export class UnasProductSyncRepository extends Repository {
             },
             update: snapshotData(diff.product, windowEnd),
           });
+          if (diff.product.isPackageProduct) {
+            const packageVariants = await transaction.productVariant.findMany({
+              where: { productId: product.id },
+              select: { id: true },
+            });
+            await transaction.unasStockSyncOutbox.updateMany({
+              where: {
+                variantId: {
+                  in: packageVariants.map((variant) => variant.id),
+                },
+                status: {
+                  in: ["PENDING", "PROCESSING", "FAILED", "DEAD_LETTER"],
+                },
+              },
+              data: {
+                status: "SUCCEEDED",
+                lastError: null,
+                leaseExpiresAt: null,
+                resolutionNote:
+                  "package_product_not_stock_managed:product_sync",
+                processedAt: windowEnd,
+              },
+            });
+          }
           const categoryExternalIds = [
             diff.product.primaryCategoryExternalId,
             ...diff.product.alternativeCategoryExternalIds,
@@ -642,6 +670,44 @@ export class UnasProductSyncRepository extends Repository {
                 correlationId: runId,
                 payload: json({ externalId: reference.externalId }),
                 occurredAt: windowEnd,
+              },
+            });
+          }
+        }
+
+        // Product LastModTime and stock movements are separate UNAS
+        // streams. Always apply the dedicated getStock result, including
+        // when the corresponding getProduct row was UNCHANGED or absent
+        // from this incremental window.
+        if (stocks.length > 0) {
+          const stockReferences = await transaction.externalReference.findMany({
+            where: {
+              system: "UNAS",
+              entityType: "Product",
+              externalId: {
+                in: stocks.map((stock) => stock.externalId),
+              },
+            },
+          });
+          const productIdByExternalId = new Map(
+            stockReferences.map((reference) => [
+              reference.externalId,
+              {
+                productId: reference.entityId,
+                sku: reference.externalKey,
+              },
+            ]),
+          );
+          for (const stock of stocks) {
+            const reference = productIdByExternalId.get(stock.externalId);
+            if (!reference) continue;
+            if (reference.sku && reference.sku !== stock.sku)
+              throw new Error("UNAS_STOCK_IDENTITY_CONFLICT");
+            await transaction.unasProductSnapshot.updateMany({
+              where: { productId: reference.productId },
+              data: {
+                reportedStock: stock.reportedStock,
+                reportedStockSyncedAt: windowEnd,
               },
             });
           }

@@ -175,7 +175,11 @@ describe("UnasConnectionService", () => {
     let received = "";
     const result = await service(repository, async (apiKey) => {
       received = apiKey;
-      return (await login(["getProduct", "getCategory"])()) as UnasLoginResult;
+      return (await login([
+        "getProduct",
+        "getCategory",
+        "getStock",
+      ])()) as UnasLoginResult;
     }).replaceCredential(" candidate-secret ", "admin-1", new Date(0));
 
     assert.equal(received, "candidate-secret");
@@ -248,7 +252,7 @@ describe("UnasConnectionService", () => {
       service(repository, async () => ({
         token: "expired-token",
         expireTime: LOGIN_NOW_MS / 1000,
-        permissions: ["getProduct", "getCategory"],
+        permissions: ["getProduct", "getCategory", "getStock"],
       })).replaceCredential("candidate-secret", "admin-1"),
     );
     assert.equal(code, "UNAS_CONNECTION_RESPONSE_INVALID");
@@ -259,7 +263,7 @@ describe("UnasConnectionService", () => {
     const repository = new FakeRepository();
     await service(
       repository,
-      login(["getProduct", "getCategory"]).bind(null),
+      login(["getProduct", "getCategory", "getStock"]).bind(null),
     ).testStoredCredential("admin-1", new Date(0));
     assert.deepEqual(repository.manualAudits, [
       { status: "SUCCESS", code: null },
@@ -298,7 +302,7 @@ describe("UnasConnectionService", () => {
     };
     const result = await service(
       repository,
-      login(["getProduct", "getCategory"]).bind(null),
+      login(["getProduct", "getCategory", "getStock"]).bind(null),
     ).testStoredCredential("admin-1");
     assert.equal(result.verification.status, "INDETERMINATE");
     assert.equal(
@@ -329,7 +333,7 @@ describe("UnasConnectionService", () => {
     };
     const result = await service(
       repository,
-      login(["getProduct", "getCategory"]).bind(null),
+      login(["getProduct", "getCategory", "getStock"]).bind(null),
     ).testStoredCredential("admin-1");
     assert.equal(result.configured, false);
     assert.equal(result.verification.status, "NEVER");
