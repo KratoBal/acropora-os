@@ -1461,3 +1461,211 @@ productionben).
 Előfeltételei továbbra sem teljesülnek - a Prisma generate, a valódi
 alkalmazásszintű tesztek és a release-evidence útvonal egyike sem lett
 ténylegesen demonstrálva egy valódi futtatásban. Dokumentált terv marad.
+
+## UNAS-ból fizikailag törölt rendelések: reconciliation és készlet-visszaforgatás
+
+Ág: `fix/unas-deleted-order-reconciliation`. Ez a szakasz egy konkrét,
+éles készletkonzisztencia-hibát javít: ha egy UNAS-rendelést valaki
+**fizikailag törölt** a UNAS admin felületén (nem sztornózott), a
+rendelés az Acropora OS-ben aktív maradt, és a korábban levont készlet
+sosem került vissza.
+
+### Gyökérok
+
+Az inkrementális import (`UnasOrderSyncRepository.apply`) kizárólag a
+UNAS `getOrder` válaszában ténylegesen megjelenő rendeléseken iterál. Egy
+fizikailag törölt rendelés egyszerűen eltűnik ebből a válaszból - sosem
+éri el a meglévő `targetOut=0` sztornó-ágat, mert az egy adott rendelésre
+csak akkor fut le, ha az a rendelés egyáltalán szerepel a feldolgozandó
+listában. Az egyedi "Rendelés frissítése" gomb
+(`UnasOrderSyncService.refreshOrder`) korábban ezt egyszerűen egy
+generikus 404-re fordította (`getOrderByKey` → `null` → `NotFoundException`),
+reconciliation nélkül.
+
+### Miért NEM elég a lista-válaszból hiányzás
+
+Az UNAS API-nak számos módja van arra, hogy egy rendelés NEM szerepeljen
+egy adott `getOrder` batch-válaszban anélkül, hogy fizikailag törölve
+lenne: hálózati hiba, timeout, hitelesítési hiba (401/403), rate limit
+(429), 5xx, hibásan formázott/váratlan válasz, üres inkrementális ablak,
+lapozási hiba. Egyik eset sem bizonyítja a törlést - ezért a törlés
+KIZÁRÓLAG egy **célzott, `Key` szerinti, EGYETLEN rendelésre irányuló**
+lekérdezés EGYÉRTELMŰ, jól formázott, "nincs ilyen rendelés" válaszából
+állapítható meg, és csak akkor, ha a rendelés helyben MÁR létezik.
+
+`UnasApiClient.getOrderByKey(token, key)` ezt a megkülönböztetést a
+visszatérési érték szintjén kényszeríti ki: `null` KIZÁRÓLAG egy
+jólformázott, 200-as válaszra jön, ami genuinely nem tartalmazza a
+keresett `Key`-t; minden más kimenet (hálózat/timeout/401/403/429/5xx/
+hibás XML/váratlan alak) `UnasApiError`-t dob egy zárt `UnasApiErrorCode`
+értékkel - sosem `null`-t. `UnasOrderSyncService.refreshOrder` csak a
+`null` ágon indítja el a törlés-reconciliation-t; minden dobott hiba
+egyszerűen továbbterjed, a rendelés és a készlet érintetlen marad. Az
+automatikus háttérellenőrző worker (lásd lentebb) ugyanígy: egy dobott
+hiba SOSEM számít törlésnek, csak a következő próbálkozás időpontját
+tolja el backoff-fal.
+
+### UNAS Key vs Id
+
+A hivatalos UNAS API-dokumentáció (`megrendelesek-adatszerkezet`) szerint
+a **Key** újra kiosztható egy korábban törölt rendelés után ("Korábban
+törölt rendelés azonosítóját újra kioszthatjuk!"), az **Id** viszont a
+rendelés valódi, stabil, soha nem újrafelhasznált azonosítója (csak
+lekérdezésre használható, `setOrder`-nél nem). Ez azt jelenti, hogy a
+`Key` önmagában NEM alkalmas egy törölt rendelés hosszú távú, biztonságos
+azonosítására: ha egy UNAS-felhasználó ugyanazt a Key-t egy vadonatúj
+rendeléshez rendeli hozzá, egy pusztán Key-alapú `ExternalReference`
+összefüggés tévesen a régi, már törölt rendeléshez kötné az új adatokat.
+
+Emiatt a `SalesOrder` -> UNAS összefüggés elsődleges kulcsa mostantól az
+`Id` (`ExternalReference.externalId`), a `Key` pedig külön,
+`ExternalReference.externalKey` mezőben marad meg (ez korábban is
+létezett, csak eddig ugyanazt az értéket - a Key-t - tárolta mindkét
+mezőben). Visszamenőleges kompatibilitás: `findExternalReferenceForOrder`
+elsőként az `Id` szerint keres; ha nincs találat, egy **lazy backfill**
+ágon a régi, Key-alapú `externalId` bejegyzést nézi meg - de KIZÁRÓLAG
+akkor fogadja el találatnak, ha a hozzá kapcsolt `SalesOrder` MÉG NEM
+`unasDeletedAt` (azaz nem lett fizikailag törölve). Ha talál egyezést, a
+sor `externalId`-ját opportunistikusan frissíti a friss `Id`-ra. Ez
+strukturálisan kizárja, hogy egy újra kiosztott Key valaha átfedésbe
+kerüljön egy megőrzött, törölt renddeléssel: egy törölt rendelés Key-e a
+fallback-ágban eleve nem egyezhet (a `unasDeletedAt` guard miatt), tehát
+az új UNAS-rendelés mindig önálló, új helyi `SalesOrder`-ként jön létre,
+nincs egyedi kulcs-ütközés és nincs téves készlet-delta. Nincs szükség
+külön batch-migrációs szkriptre - a backfill magától, olvasás közben
+történik meg minden érintett meglévő rendelésnél.
+
+### A rendelés sosem törlődik fizikailag - `unasDeletedAt`
+
+A `SalesOrderStatus` enum szándékosan NEM kapott új értéket (pl.
+"DELETED") - ez összekeverné egy legitim UNAS-sztornót (`close_fault` ->
+`CANCELLED`) egy fizikai törléssel minden meglévő, kimerítő
+status-switch/UI-címke-map helyen. Ehelyett egy additív
+`unasDeletedAt: DateTime?` oszlop szolgál egyszerre jelzőként (jelenléte
+= fizikailag törölve a UNAS-ból) ÉS felismerési időbélyegként. A rendelés
+`status`-a a reconciliation során `CANCELLED`-re vált (ugyanaz, mint egy
+sztornó), de a UI-n külön, jól látható "Törölve a UNAS-ban (dátum)"
+jelvényt kap, és a manuális frissítés eredménye is külön üzenetet mutat -
+sosem keverve össze egy hétköznapi sztornóval. A rendelés sorai, korábbi
+készletmozgásai és teljes története VÁLTOZATLANUL megmaradnak - nincs
+`delete`/`deleteMany` hívás egyetlen érintett táblán sem.
+
+### Készlet-visszaforgatás: a meglévő delta-motor újrahasználata
+
+A törlés-reconciliation (`UnasOrderSyncRepository.reconcileDeletedOrder`)
+NEM vezet be új készletkönyvelési logikát - pontosan ugyanazt a
+`applyOrderStockDelta`/`targetOut` mechanizmust hívja, amit egy legitim
+UNAS-sztornó is használ, `targetOut: new Map()` (minden korábban könyvelt
+variáns célja nulla) paraméterrel. Mivel a könyvelt mennyiség mindig a
+ledgerből (`computeBookedOutAndGeneration`) számolódik újra, ez a hívás
+automatikusan, extra esetkezelés nélkül helyesen kezeli:
+
+- a még semmit vissza nem adott rendelést (a teljes kint lévő mennyiség
+  egy `RETURN_IN`-ként visszaáll);
+- a korábbi szerkesztéssel már részben visszaadott rendelést (csak a
+  ténylegesen még kint lévő maradék megy vissza);
+- a már korábban sztornózott/nulla nettójú rendelést (nincs új mozgás,
+  `alreadyReconciled`/`reversed: false`-hoz hasonló no-op).
+
+A hívás a meglévő `lockUnasOrder` (`pg_advisory_xact_lock`) alá esik, egy
+`Serializable` tranzakcióban, `retryOnSerializationConflict`-tal
+csomagolva - ugyanaz a minta, mint minden más UNAS-rendelés-mutáció ebben
+a fájlban. Egy `unasDeletedAt` már beállított rendelésre a hívás azonnal
+`{ reversed: false, alreadyReconciled: true }`-t ad vissza, ÚJRA lefutás
+vagy párhuzamos hívás nélkül - ez zárja ki a kétszeres visszaforgatást
+akár egy ismételt manuális frissítésből, akár egy ugyanarra a rendelésre
+egyszerre futó automatikus ellenőrzésből.
+
+### Egyedi rendelésfrissítés: NOT_FOUND kezelése
+
+`UnasOrderSyncService.refreshOrder` NOT_FOUND ága immár nem dob generikus
+404-et: meghívja `reconcileDeletedOrder`-t, majd visszaadja a (immár
+`unasDeletedAt`-jelölt) friss rendelésdetailt. A UI (`webshop-order-
+detail-page.tsx`) ezt egy külön, jól megkülönböztethető figyelmeztető
+üzenettel jelzi ("A rendelést törölték a UNAS-ban" + a visszaforgatás
+ténye + a felismerés időpontja), a rendelés fejlécén pedig egy tartós
+jelvény ("Törölve a UNAS-ban (dátum)") látszik, amíg a rendelés létezik -
+a rendelés sosem tűnik el vagy törlődik a felületről.
+
+### Automatikus háttérellenőrző worker
+
+Az egyedi frissítés csak akkor old fel egy törlést, ha valaki ténylegesen
+rákattint - ha egy törölt rendelést senki nem frissít kézzel, és az
+sosem kerül elő újra egy inkrementális ablakban (mert végleg eltűnt),
+készlet-eltérés maradhatna korlátlan ideig. Erre épült egy korlátozott,
+kötegelt, alapból KIKAPCSOLT háttérellenőrző:
+
+- `unas-order-deletion-reconciliation.repository.ts` - `claimBatch`
+  ugyanazt a `FOR UPDATE SKIP LOCKED` + lease claim mintát használja, mint
+  `UnasStockSyncOutboxRepository`, de közvetlenül a `SalesOrder` saját
+  `unasExistenceCheck*` oszlopai ellen (nincs külön dedikált queue-tábla).
+  Csak `channel='UNAS'`, `unasDeletedAt IS NULL`, nem-terminális
+  (`status NOT IN ('CANCELLED','COMPLETED')`) rendelést claimel - sosem
+  vizsgál újra egy már lezárt vagy már reconciliált rendelést, és sosem
+  fut le a teljes rendeléstörténeten egyszerre.
+- `unas-order-deletion-reconciliation.service.ts` - soronként: ha nincs
+  feloldható UNAS Key, kihagyja (UNAS-hívás nélkül); ha a célzott
+  `getOrderByKey` a rendelést megtalálja, csak a következő ellenőrzés
+  időpontját tolja el (`recheckIntervalMs`, alapból 24 óra - ritka esemény
+  elleni védőháló, nem az inkrementális szinkron helyettesítője); ha
+  egyértelmű NOT_FOUND-ot ad, a PONTOSAN UGYANAZT a
+  `reconcileDeletedOrder`-t hívja, amit a manuális frissítés is használ;
+  ha a hívás bármilyen hibát dob, a próbálkozás átmenetinek számít,
+  exponenciális backoff-fal (`computeReconciliationBackoffMs`) újra
+  ütemeződik, a rendelés és a készlet érintetlen marad.
+- `unas-order-deletion-reconciliation.scheduler.ts` - önütemező poller
+  (`setTimeout(...).unref()`), pontosan ugyanaz a minta, mint
+  `UnasStockSyncOutboxScheduler`; a `runOnce()` metódust az időzített
+  ciklus ÉS egy admin "futtasd most" végpont is ugyanúgy hívja
+  (`POST /orders/unas/deletion-reconciliation/run`,
+  `PERMISSIONS.ORDERS_MANAGE`; állapot: `GET
+  /orders/unas/deletion-reconciliation/status`, `PERMISSIONS.ORDERS_VIEW`).
+
+**Feature flag, alapból kikapcsolva**: `UNAS_ORDER_DELETION_RECONCILIATION_ENABLED`
+(alapérték `false`) - üzleti szabály szerint minden új automatizálás
+alapból ki van kapcsolva. Amíg ez `false`, a `runOnce()` azonnal
+`"DISABLED"`-t ad vissza, a claim SQL egyszer sem fut le. További
+paraméterek (`.env.example`): `..._INTERVAL_MINUTES=30`,
+`..._STARTUP_DELAY_SECONDS=60`, `..._BATCH_SIZE=10` (kicsi és óvatos,
+mert ugyanazt az óránkénti UNAS API-limitet osztja meg minden más
+UNAS-hívással - lásd `unas.hu/tudastar/api/limitaciok`),
+`..._LEASE_SECONDS=120`, `..._RECHECK_HOURS=24`,
+`..._BASE_BACKOFF_SECONDS=60`, `..._MAX_BACKOFF_MINUTES=60`.
+
+### Konkurencia
+
+Két egyidejű ellenőrzés (akár két worker-tick, akár egy worker-tick és
+egy egyidejű manuális frissítés) sosem könyvelhet kétszer: a `claimBatch`
+`FOR UPDATE SKIP LOCKED` miatt egyetlen rendelést sosem claimel két
+worker-példány egyszerre; a `reconcileDeletedOrder` saját
+`lockUnasOrder`+`Serializable` tranzakciója pedig ugyanígy szerializálja
+a manuális frissítés és a worker közötti versenyt. Amelyik hívás másodikra
+fut le, a `unasDeletedAt` mezőt már beállítva találja, és
+`alreadyReconciled: true`-val, új mozgás nélkül tér vissza. Egy
+tranzakció közbeni hiba esetén (pl. írási hiba a
+`postInventoryMovement`-en belül) a TELJES tranzakció visszagördül -
+sem a rendelés állapota, sem a készletmozgás nem marad félkész -, egy
+későbbi retry pedig pontosan egyszeri, teljes helyreállítást eredményez
+(ugyanaz a `retryOnSerializationConflict`+`Serializable` garancia, mint
+minden más UNAS-rendelés-mutációnál ebben a fájlban).
+
+### Tesztlefedettség
+
+Lásd `unas-order-sync.repository.spec.ts` (`UnasOrderSyncRepository.
+reconcileDeletedOrder` és `UNAS Key reuse after a physical deletion`
+describe blokkok), `unas-order-sync.service.spec.ts`
+(`UnasOrderSyncService.refreshOrder`), valamint a három új
+`unas-order-deletion-reconciliation.*.spec.ts` fájl (repository/service/
+scheduler). A teljes eset-lista (normál import, mennyiség-változás,
+sor-törlés, hálózati/timeout/hitelesítési/rate-limit/5xx hiba sosem
+törlés, üres inkrementális lap sosem törlés, ismeretlen helyi id sosem
+nyúl készlethez, Key-újrafelhasználás, párhuzamos reconciliation,
+tranzakciós hiba utáni biztonságos retry stb.) a PR-leírásban és a commit
+üzenetében is fel van sorolva.
+
+### Éles hiba helyreállítása
+
+A már érintett, éles környezetben elakadt rendelés helyreállítási
+lépéseit **külön dokumentum** írja le, szándékosan NEM ebben a
+munkamenetben végrehajtva: lásd
+`docs/RUNBOOK-UNAS-DELETED-ORDER-RECOVERY.md`.

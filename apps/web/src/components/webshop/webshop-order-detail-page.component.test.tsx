@@ -74,6 +74,7 @@ function baseDetail(overrides: Partial<UnasOrderDetail> = {}): UnasOrderDetail {
     totalGross: "12700",
     orderedAt: "2026-07-20T14:05:00.000Z",
     createdAt: "2026-07-20T14:06:00.000Z",
+    unasDeletedAt: null,
     lines: [],
     unasInvoiceStatus: null,
     invoices: [],

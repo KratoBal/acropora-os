@@ -26,6 +26,7 @@ const runIntegration = process.env.RUN_DB_INTEGRATION === "1";
 function baseOrder(overrides: Partial<UnasApiOrder> = {}): UnasApiOrder {
   return {
     key: overrides.key ?? "CONCURRENCY-TEST-1",
+    id: overrides.id ?? "5000001",
     internalKey: null,
     status: "Feldolgozás alatt",
     statusType: "open_normal",

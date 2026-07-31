@@ -23,6 +23,7 @@ describe("toUnasOrderDetail", () => {
       totalGross: new Prisma.Decimal("12700"),
       orderedAt: new Date("2026-07-20T14:05:00.000Z"),
       createdAt: new Date("2026-07-20T14:06:00.000Z"),
+      unasDeletedAt: null,
       lines: [
         {
           id: "line-1",
@@ -76,6 +77,7 @@ describe("toUnasOrderDetail", () => {
       totalGross: new Prisma.Decimal("0"),
       orderedAt: null,
       createdAt: new Date("2026-07-20T14:06:00.000Z"),
+      unasDeletedAt: null,
       lines: [],
       unasInvoiceStatus: null,
       invoices: [],
@@ -99,6 +101,7 @@ describe("toUnasOrderDetail", () => {
       totalGross: new Prisma.Decimal("0"),
       orderedAt: null,
       createdAt: new Date("2026-07-20T14:06:00.000Z"),
+      unasDeletedAt: null,
       lines: [],
       unasInvoiceStatus: null,
       invoices: [],
@@ -119,6 +122,7 @@ describe("toUnasOrderDetail", () => {
       totalGross: new Prisma.Decimal("12700"),
       orderedAt: new Date("2026-07-20T14:05:00.000Z"),
       createdAt: new Date("2026-07-20T14:06:00.000Z"),
+      unasDeletedAt: null,
       lines: [],
       unasInvoiceStatus: "BILLED",
       invoices: [
@@ -157,6 +161,7 @@ describe("toUnasOrderDetail", () => {
       totalGross: new Prisma.Decimal("6350"),
       orderedAt: new Date("2026-07-22T10:00:00.000Z"),
       createdAt: new Date("2026-07-22T10:01:00.000Z"),
+      unasDeletedAt: null,
       lines: [],
       unasInvoiceStatus: "BILLABLE",
       invoices: [],

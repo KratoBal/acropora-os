@@ -92,6 +92,14 @@ interface OrderRow {
   id: string;
   status: string;
   unasInvoiceStatus: string | null;
+  /// Nem NULL = a rendelést UNAS-ból FIZIKAILAG törölték - lásd
+  /// SalesOrder.unasDeletedAt doc-comment a schema.prisma-ban. Csak azokban
+  /// a select-ekben töltött ki ténylegesen, ahol szükséges (l. az egyes
+  /// hívási helyeket) - más helyeken undefined marad futásidőben, annak
+  /// ellenére, hogy a típus mindig jelenlévőnek jelöli (ugyanaz a
+  /// pragmatikus, `args: unknown`-alapú minta, mint e fájl többi
+  /// hand-written Prisma interfésze).
+  unasDeletedAt: Date | null;
   lines: OrderLineRow[];
 }
 
@@ -788,15 +796,10 @@ export class UnasOrderSyncRepository extends Repository {
           let reversedCount = 0;
 
           for (const order of orders) {
-            const reference = await transaction.externalReference.findUnique({
-              where: {
-                system_entityType_externalId: {
-                  system: "UNAS",
-                  entityType: "SalesOrder",
-                  externalId: order.key,
-                },
-              },
-            });
+            const reference = await this.findExternalReferenceForOrder(
+              transaction,
+              order,
+            );
 
             if (!reference) {
               await this.createNewOrder(transaction, order, warehouse.id);
@@ -858,6 +861,86 @@ export class UnasOrderSyncRepository extends Repository {
     );
   }
 
+  /// Resolves the ExternalReference for one UNAS order sighting - the
+  /// single place both apply()'s per-order discovery loop and
+  /// refreshOrder() look up (or fail to find) the locally-known order for
+  /// a given UNAS `order.key`/`order.id` pair.
+  ///
+  /// See UnasApiOrder.id's own doc-comment: UNAS's official docs state a
+  /// deleted order's `Key` CAN be reissued later, while `Id` never is - so
+  /// from this checkpoint onward ExternalReference.externalId stores the
+  /// stable `Id`, and the PRIMARY lookup here is by Id, never Key. A
+  /// FALLBACK lookup by the legacy externalId=Key convention covers every
+  /// ExternalReference row created before this change (never bulk-
+  /// backfilled - see docs/INVENTORY-CONSISTENCY.md "UNAS Key/Id") for an
+  /// order that's still the SAME, live/still-tracked order. Matching via
+  /// the fallback is safe specifically because a genuinely REUSED Key can
+  /// only ever collide with a row whose SalesOrder is already
+  /// unasDeletedAt (UNAS only reissues a Key after deleting the order that
+  /// held it) - and the fallback deliberately refuses to match such a row,
+  /// so a reused Key can never resurrect or overwrite the old, preserved,
+  /// deleted order (see reconcileDeletedOrder and business rule 5's
+  /// "ne frissítsd felül a korábbi, törölt rendelést"). On a successful
+  /// fallback match for a NOT-YET-deleted order, the row is
+  /// opportunistically, lazily backfilled to the Id-based convention
+  /// (externalId := order.id) so every later sighting of this SAME order
+  /// takes the fast, primary path - no separate batch migration job
+  /// needed. If `order.id` is ever null (defensive-only; not expected per
+  /// UNAS's own docs), only the legacy fallback runs.
+  private async findExternalReferenceForOrder(
+    transaction: UnasOrderSyncTransaction,
+    order: UnasApiOrder,
+  ): Promise<ExternalReferenceRow | null> {
+    if (order.id) {
+      const byId = await transaction.externalReference.findUnique({
+        where: {
+          system_entityType_externalId: {
+            system: "UNAS",
+            entityType: "SalesOrder",
+            externalId: order.id,
+          },
+        },
+      });
+      if (byId) return byId;
+    }
+
+    const byLegacyKey = await transaction.externalReference.findUnique({
+      where: {
+        system_entityType_externalId: {
+          system: "UNAS",
+          entityType: "SalesOrder",
+          externalId: order.key,
+        },
+      },
+    });
+    if (!byLegacyKey) return null;
+
+    const linkedOrder = await transaction.salesOrder.findUnique({
+      where: { id: byLegacyKey.entityId },
+      select: { id: true, unasDeletedAt: true },
+    });
+    if (!linkedOrder || linkedOrder.unasDeletedAt) {
+      // Either the row is already an orphaned reference (shouldn't happen,
+      // but never trusted blindly), or it points at an order already
+      // confirmed deleted-in-UNAS - in both cases this Key sighting must be
+      // treated as a brand-new, distinct order (apply()'s !reference
+      // branch), never as this old row.
+      return null;
+    }
+
+    if (order.id) {
+      // Lazy backfill: from now on this SAME order is found via the fast,
+      // primary Id-based lookup above. Never touches unasDeletedAt/status/
+      // any other field - purely a key-convention migration for this one
+      // row.
+      await transaction.externalReference.update({
+        where: { id: byLegacyKey.id },
+        data: { externalId: order.id },
+      });
+    }
+    return byLegacyKey;
+  }
+
   /// Shared existing-order update logic for one UNAS order sighting -
   /// status-transition (incl. one-time stock reversal on cancellation),
   /// billing/line/total refresh, and the read-only invoice mirror. Used by
@@ -882,6 +965,7 @@ export class UnasOrderSyncRepository extends Repository {
         id: true,
         status: true,
         unasInvoiceStatus: true,
+        unasDeletedAt: true,
         lines: {
           select: {
             id: true,
@@ -894,6 +978,18 @@ export class UnasOrderSyncRepository extends Repository {
       },
     });
     if (!existing) return null; // Order row missing locally; nothing safe to reconcile against.
+    if (existing.unasDeletedAt) {
+      // Already confirmed physically deleted from UNAS (see
+      // reconcileDeletedOrder) - a later sighting of the SAME order in an
+      // incremental window (e.g. TimeModStart re-surfacing it, or a Key
+      // reused by a brand-new order momentarily still resolving to this
+      // same ExternalReference row before findExternalReferenceForOrder's
+      // lazy backfill catches up) must never resurrect it: no status
+      // change, no line resync, no stock delta. The order stays exactly as
+      // reconcileDeletedOrder left it - permanently, until an operator
+      // decides otherwise (there is no supported "undelete" path).
+      return { updated: false, reversed: false };
+    }
 
     let updated = false;
     let reversed = false;
@@ -1100,15 +1196,10 @@ export class UnasOrderSyncRepository extends Repository {
     return retryOnSerializationConflict(() =>
       this.syncDatabase.$transaction(
         async (transaction) => {
-          const reference = await transaction.externalReference.findUnique({
-            where: {
-              system_entityType_externalId: {
-                system: "UNAS",
-                entityType: "SalesOrder",
-                externalId: order.key,
-              },
-            },
-          });
+          const reference = await this.findExternalReferenceForOrder(
+            transaction,
+            order,
+          );
           if (!reference || reference.entityId !== orderId) {
             throw new ConflictException("UNAS_ORDER_KEY_MISMATCH");
           }
@@ -1124,6 +1215,110 @@ export class UnasOrderSyncRepository extends Repository {
           if (result === null)
             throw new NotFoundException("A rendelés nem található.");
           return result;
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          timeout: 30_000,
+        },
+      ),
+    );
+  }
+
+  /// Reconciles a UNAS order confirmed - via a TARGETED, single-order UNAS
+  /// lookup that returned a genuine NOT_FOUND (never a mere absence from
+  /// an incremental list/window response - see docs/INVENTORY-CONSISTENCY.md
+  /// "UNAS-ból fizikailag törölt rendelések" and business rule 4's "A
+  /// hiány önmagában nem törlésbizonyíték") - to have been PHYSICALLY
+  /// DELETED from UNAS. Used by both the manual single-order refresh path
+  /// (unas-order-sync.service.ts's refreshOrder(), on a confirmed
+  /// getOrderByKey NOT_FOUND) and the automatic deletion-reconciliation
+  /// worker (unas-order-deletion-reconciliation.service.ts) - both call
+  /// this exact same method, never a separate/duplicated implementation.
+  ///
+  /// What it does, in one Serializable transaction (retried as a whole on
+  /// a genuine Postgres conflict, same as apply()/refreshOrder() above):
+  ///  1. locks this exact order (lockUnasOrder) - the same order-level
+  ///     advisory lock applyOrderStockDelta already relies on, so this can
+  ///     never race a concurrent apply()/refreshOrder() sighting of the
+  ///     SAME order, nor a second, parallel reconciliation attempt for it;
+  ///  2. if already unasDeletedAt (a previous call already reconciled it -
+  ///     manual refresh and the automatic worker can genuinely race each
+  ///     other for the same order), returns immediately - alreadyReconciled:
+  ///     true, reversed: false - no re-processing, no second RETURN_IN;
+  ///  3. otherwise posts targetOut=empty through the EXACT SAME
+  ///     applyOrderStockDelta the CANCELLED-transition branch above uses -
+  ///     never a second, independent stock-reversal code path. This nets
+  ///     out to reversing only whatever net quantity is STILL booked out
+  ///     per the ledger (computeBookedOutAndGeneration): an order already
+  ///     fully reversed by a prior partial cancellation/edit, or already
+  ///     CANCELLED via a legitimate earlier storno, correctly produces
+  ///     delta=0 - changed: false - and posts NO new movement (business
+  ///     rule 2's "csak a fennmaradó nettó kimenetet" / rule 9's "már
+  ///     sztornózott... rendelésnél nem keletkezik új készletmozgás");
+  ///  4. sets status=CANCELLED (matches the same terminal/inactive
+  ///     handling a real storno gets) AND unasDeletedAt=now() - the field
+  ///     that actually distinguishes "physically deleted" from "properly
+  ///     sztornózott in UNAS" (see SalesOrder.unasDeletedAt's own doc
+  ///     comment) - both written together with the delta in the SAME
+  ///     transaction, so a crash/rollback can never leave the order status
+  ///     and the stock ledger disagreeing with each other.
+  ///
+  /// The order row itself is NEVER deleted - only ever marked. Its lines,
+  /// prior StockMovement history, and this new RETURN_IN movement (when
+  /// one is posted) remain permanently in place as the audit trail.
+  async reconcileDeletedOrder(
+    orderId: string,
+    unasKey: string,
+  ): Promise<{ reversed: boolean; alreadyReconciled: boolean }> {
+    return retryOnSerializationConflict(() =>
+      this.syncDatabase.$transaction(
+        async (transaction) => {
+          await lockUnasOrder(transaction, unasKey);
+
+          const existing = await transaction.salesOrder.findUnique({
+            where: { id: orderId },
+            select: {
+              id: true,
+              status: true,
+              unasInvoiceStatus: true,
+              unasDeletedAt: true,
+              lines: {
+                select: {
+                  id: true,
+                  sku: true,
+                  variantId: true,
+                  quantity: true,
+                  syncStatus: true,
+                },
+              },
+            },
+          });
+          if (!existing) {
+            throw new NotFoundException("A rendelés nem található.");
+          }
+          if (existing.unasDeletedAt) {
+            return { reversed: false, alreadyReconciled: true };
+          }
+
+          const warehouse = await ensureMainWarehouse(transaction);
+          const deltaResult = await this.applyOrderStockDelta(transaction, {
+            orderId: existing.id,
+            unasKey,
+            warehouseId: warehouse.id,
+            targetOut: new Map(),
+            variantMeta: this.buildVariantMeta(existing.lines, []),
+            sourceProcess: "UNAS_ORDER_DELETED",
+          });
+
+          await transaction.salesOrder.update({
+            where: { id: existing.id },
+            data: {
+              status: "CANCELLED",
+              unasDeletedAt: new Date(),
+            },
+          });
+
+          return { reversed: deltaResult.changed, alreadyReconciled: false };
         },
         {
           isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
@@ -1206,7 +1401,16 @@ export class UnasOrderSyncRepository extends Repository {
         system: "UNAS",
         entityType: "SalesOrder",
         entityId: orderRow.id,
-        externalId: order.key,
+        // externalId = UNAS's stable Id (never reassigned), externalKey =
+        // UNAS's reassignable Key - see UnasApiOrder.id's own doc-comment
+        // and findExternalReferenceForOrder above for why these must stay
+        // distinct from this checkpoint onward. Falls back to `key` only
+        // if a response is ever missing `Id` entirely (defensive; not
+        // expected per UNAS's own docs) - this exactly matches every
+        // pre-existing row's convention, so it degrades to the same
+        // (imperfect, but no worse than before) behavior rather than
+        // crashing the import.
+        externalId: order.id ?? order.key,
         externalKey: order.key,
         metadata: json({
           unasStatus: order.status,

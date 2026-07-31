@@ -22,6 +22,10 @@ export interface SalesOrderWithRelations {
   totalGross: Prisma.Decimal;
   orderedAt: Date | null;
   createdAt: Date;
+  /// Lásd UnasOrderDetail.unasDeletedAt doc-comment - a fizikai UNAS-
+  /// törlés felismerésének időpontja, NULL egy élő vagy szabályosan
+  /// sztornózott rendelésnél.
+  unasDeletedAt: Date | null;
   lines: Array<{
     id: string;
     variantId: string | null;
@@ -125,6 +129,7 @@ export function toUnasOrderDetail(
     totalGross: order.totalGross.toString(),
     orderedAt: order.orderedAt?.toISOString() ?? null,
     createdAt: order.createdAt.toISOString(),
+    unasDeletedAt: order.unasDeletedAt?.toISOString() ?? null,
     lines: order.lines.map(toLineDetail),
     // order.unasInvoiceStatus is already null (not undefined) for orders
     // with no UNAS billing info yet - `?? null` here is defensive, not

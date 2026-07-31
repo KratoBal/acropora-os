@@ -84,8 +84,25 @@ export class UnasOrderSyncService {
         "Ehhez a rendeléshez nem tartozik UNAS-azonosító.",
       );
     const order = await this.api.getOrderByKey(token, key);
-    if (!order)
-      throw new NotFoundException("A rendelés már nem található a UNAS-ban.");
+    if (!order) {
+      // getOrderByKey returns null ONLY for a well-formed UNAS response
+      // that genuinely contains no matching order for this exact Key (see
+      // that method's own doc comment) - every other outcome (network
+      // failure, timeout, 401/403, 429, 5xx, malformed response) throws
+      // UnasApiError instead and never reaches this branch. This IS the
+      // "targeted, single-order lookup confirms NOT_FOUND" proof business
+      // rule 4 requires before anything is allowed to be treated as a
+      // physical UNAS deletion - so, unlike before, this no longer ends in
+      // a plain 404: it starts the same reconciliation the automatic
+      // worker uses (reconcileDeletedOrder), reverses whatever net stock
+      // is still booked out, marks the local order accordingly, and
+      // returns 200 with its (now-flagged) detail - never a 404 - per
+      // business rule 3's explicit UI requirement.
+      await this.repository.reconcileDeletedOrder(orderId, key);
+      const detail = await this.repository.findById(orderId);
+      if (!detail) throw new NotFoundException("A rendelés nem található.");
+      return detail;
+    }
     await this.repository.refreshOrder(orderId, order);
     const detail = await this.repository.findById(orderId);
     if (!detail) throw new NotFoundException("A rendelés nem található.");
