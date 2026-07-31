@@ -24,6 +24,10 @@ export interface ProductVariantSummary {
   manufacturerPartNumber: string | null;
   secondaryUnit: string | null;
   secondaryUnitFactor: string | null;
+  unasBaseSku: string | null;
+  unasVariantValues: Array<{ name: string; value: string }> | null;
+  unasReportedStock: string | null;
+  unasReportedStockSyncedAt: string | null;
   extension: import("./product-extension.js").ProductExtensionDetail | null;
 }
 
@@ -92,7 +96,7 @@ export interface ProductListItem {
   grossPrice: string | null;
   /** UNAS-mirrored sale gross price; null when there's no active discount. */
   saleGrossPrice: string | null;
-  /** Summed StockItem.onHand across warehouses for the primary variant; null
+  /** Summed StockItem.onHand across warehouses and all active variants; null
    *  means no StockItem row exists yet (never counted/sold), which is
    *  distinct from a confirmed 0 in stock - see the stock-reconciliation
    *  logic for the same distinction. */

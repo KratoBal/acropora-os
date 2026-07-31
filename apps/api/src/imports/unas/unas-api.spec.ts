@@ -81,6 +81,7 @@ describe("UNAS API XML contract", () => {
     assert.equal(product.manufacturerPartNumber, "MPN-1");
     assert.equal(product.backorderAllowed, true);
     assert.equal(product.reportedStock, "7.5");
+    assert.deepEqual(product.variantStocks, []);
     assert.equal(product.isPackageProduct, false);
     assert.deepEqual(product.packageComponents, []);
     assert.equal(product.seo.title, "SEO title");
@@ -104,6 +105,34 @@ describe("UNAS API XML contract", () => {
     ]);
   });
 
+  it("parses every variant-stock combination with ordered axis names", () => {
+    const variantProduct = parseUnasProductResponse(
+      response
+        .replace(
+          "<Stocks>",
+          "<Variants><Variant><Name>Szín</Name></Variant></Variants><Stocks>",
+        )
+        .replace("<Variant>0</Variant>", "<Variant>1</Variant>")
+        .replace(
+          "<Stock><Qty>7.5</Qty></Stock>",
+          "<Stock><Variants><Variant>Fekete</Variant></Variants><Qty>2</Qty></Stock>" +
+            "<Stock><Variants><Variant>Fehér</Variant></Variants><Qty>3</Qty></Stock>",
+        ),
+    )[0]!;
+
+    assert.equal(variantProduct.reportedStock, null);
+    assert.deepEqual(variantProduct.variantStocks, [
+      {
+        values: [{ name: "Szín", value: "Fekete" }],
+        reportedStock: "2",
+      },
+      {
+        values: [{ name: "Szín", value: "Fehér" }],
+        reportedStock: "3",
+      },
+    ]);
+  });
+
   it("builds and parses the dedicated incremental getStock contract", () => {
     const request = buildUnasStockPageXml({
       timeStart: 123,
@@ -120,7 +149,12 @@ describe("UNAS API XML contract", () => {
         "</Product></Products>",
     );
     assert.deepEqual(stocks, [
-      { externalId: "159850145", sku: "pump_1", reportedStock: "0" },
+      {
+        externalId: "159850145",
+        sku: "pump_1",
+        reportedStock: "0",
+        variantValues: [],
+      },
     ]);
   });
 
@@ -193,6 +227,18 @@ describe("UNAS API XML contract", () => {
       comment: "Leltár korrekció",
     });
     assert.match(xml, /<Comment><!\[CDATA\[Leltár korrekció\]\]><\/Comment>/);
+  });
+
+  it("includes ordered variant values in a setStock request", () => {
+    const xml = buildUnasSetStockXml({
+      sku: "RF-BLUEM",
+      qty: "3",
+      variantValues: ["Fekete", "M"],
+    });
+    assert.match(
+      xml,
+      /<Variants><Variant>Fekete<\/Variant><Variant>M<\/Variant><\/Variants><Qty>3<\/Qty>/,
+    );
   });
 
   it("parses a successful setStock response", () => {
@@ -277,7 +323,7 @@ describe("UNAS getOrder contract", () => {
 <Payment><Name>Bankkártya</Name><Type>bankcard</Type><Status>paid</Status></Payment>
 <Shipping><Name>GLS</Name></Shipping>
 <Items>
-<Item><Id>1</Id><Sku>pump_1</Sku><Name>Reef Pump</Name><Unit>db</Unit><Quantity>2</Quantity><PriceNet>5000</PriceNet><PriceGross>6350</PriceGross><Vat>27%</Vat></Item>
+<Item><Id>1</Id><Sku>pump_1</Sku><Name>Reef Pump</Name><Variants><Variant><Id>2</Id><Name>Méret</Name><Value>M</Value></Variant><Variant><Id>1</Id><Name>Szín</Name><Value>Fekete</Value></Variant></Variants><Unit>db</Unit><Quantity>2</Quantity><PriceNet>5000</PriceNet><PriceGross>6350</PriceGross><Vat>27%</Vat></Item>
 <Item><Id>shipping-cost</Id><Name>Szállítási költség</Name><Quantity>1</Quantity><PriceGross>0</PriceGross></Item>
 </Items>
 </Order></Orders>`;
@@ -300,6 +346,10 @@ describe("UNAS getOrder contract", () => {
     assert.equal(order.items[0]?.sku, "pump_1");
     assert.equal(order.items[0]?.quantity, "2");
     assert.equal(order.items[0]?.vatRate, "27");
+    assert.deepEqual(order.items[0]?.variants, [
+      { id: "1", name: "Szín", value: "Fekete" },
+      { id: "2", name: "Méret", value: "M" },
+    ]);
     assert.equal(order.items[1]?.sku, null);
     assert.equal(order.items[1]?.id, "shipping-cost");
   });

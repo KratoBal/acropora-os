@@ -15,6 +15,7 @@ export interface PurchaseProductSearchDatabase extends WarehouseLookupDatabase {
       Array<{
         id: string;
         sku: string;
+        name: string | null;
         unit: string;
         product: { name: string; origin: "UNAS" | "LOCAL" | null };
         extension: {
@@ -74,6 +75,7 @@ export class PurchaseProductSearchRepository extends Repository {
       select: {
         id: true,
         sku: true,
+        name: true,
         unit: true,
         product: { select: { name: true, origin: true } },
         extension: {
@@ -104,7 +106,7 @@ export class PurchaseProductSearchRepository extends Repository {
     return variants.map((variant) => ({
       variantId: variant.id,
       sku: variant.sku,
-      productName: variant.product.name,
+      productName: variant.name ?? variant.product.name,
       origin: variant.product.origin,
       unit: variant.unit,
       lastPurchaseNetPrice:

@@ -113,8 +113,10 @@ export interface PosSaleDatabase extends WarehouseLookupDatabase {
       Array<{
         id: string;
         sku: string;
+        name: string | null;
         unit: string;
         vatRate: Prisma.Decimal | null;
+        unasReportedStock: Prisma.Decimal | null;
         product: {
           name: string;
           catalogAuthority: "UNAS" | "ACROPORA" | null;
@@ -172,8 +174,10 @@ export class PosSaleRepository extends Repository {
       select: {
         id: true,
         sku: true,
+        name: true,
         unit: true,
         vatRate: true,
+        unasReportedStock: true,
         product: {
           select: {
             name: true,
@@ -273,7 +277,7 @@ export class PosSaleRepository extends Repository {
             {
               variantId: variant.id,
               sku: variant.sku,
-              productName: variant.product.name,
+              productName: variant.name ?? variant.product.name,
               unit: variant.unit,
               quantityPerSale: new Prisma.Decimal(1),
               syncToUnas: variant.product.catalogAuthority === "UNAS",
@@ -282,11 +286,12 @@ export class PosSaleRepository extends Repository {
       result.set(variant.id, {
         variantId: variant.id,
         sku: variant.sku,
-        productName: variant.product.name,
+        productName: variant.name ?? variant.product.name,
         unit: variant.unit,
         vatRate: variant.vatRate ?? snapshot?.vatRate ?? null,
         currentQty:
           onHandByVariant.get(variant.id) ??
+          variant.unasReportedStock ??
           snapshot?.reportedStock ??
           new Prisma.Decimal(0),
         syncToUnas: variant.product.catalogAuthority === "UNAS",

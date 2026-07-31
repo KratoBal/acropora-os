@@ -47,6 +47,8 @@ class FakeDb {
   variants: Array<{
     id: string;
     sku: string;
+    unasBaseSku?: string;
+    unasVariantKey?: string;
     unit?: string;
     catalogAuthority?: "UNAS" | "ACROPORA" | null;
     isPackageProduct?: boolean;
@@ -156,7 +158,13 @@ class FakeDb {
 
   productVariant = {
     findFirst: async (args: any) => {
-      const variant = this.variants.find((v) => v.sku === args.where.sku);
+      const variant = args.where.unasBaseSku
+        ? this.variants.find(
+            (candidate) =>
+              candidate.unasBaseSku === args.where.unasBaseSku &&
+              candidate.unasVariantKey === args.where.unasVariantKey,
+          )
+        : this.variants.find((candidate) => candidate.sku === args.where.sku);
       return variant ? this.variantView(variant) : null;
     },
     findMany: async (args: any) => {
@@ -588,6 +596,49 @@ describe("UnasOrderSyncRepository.apply", () => {
     assert.equal(db.movements.length, 1);
     assert.equal(db.movements[0]?.type, "SALE");
     assert.equal(db.externalReferences.length, 1);
+  });
+
+  it("resolves a webshop order line to the exact UNAS variant combination", async () => {
+    const db = new FakeDb();
+    db.warehouses.push({
+      id: "wh-1",
+      name: "Fő raktár",
+      createdAt: new Date(0),
+    });
+    db.variants.push({
+      id: "variant-black",
+      sku: "RF-BLUEM#UNASV#black",
+      unasBaseSku: "RF-BLUEM",
+      unasVariantKey: '["Fekete"]',
+    });
+    db.stockItems.push({
+      id: "stock-black",
+      variantId: "variant-black",
+      warehouseId: "wh-1",
+      onHand: new Prisma.Decimal(10),
+    });
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+
+    await repositoryWith(db).apply(
+      "run-1",
+      [
+        baseOrder({
+          items: [
+            {
+              ...baseOrder().items[0]!,
+              sku: "RF-BLUEM",
+              variants: [{ id: "1", name: "Szín", value: "Fekete" }],
+            },
+          ],
+        }),
+      ],
+      null,
+      new Date("2026-07-20T15:00:00.000Z"),
+    );
+
+    assert.equal(db.orders[0]?.lines[0]?.variantId, "variant-black");
+    assert.equal(db.stockItems[0]?.onHand.toString(), "8");
+    assert.equal(db.outbox[0]?.sku, "RF-BLUEM#UNASV#black");
   });
 
   it("books a package sale against every component and never against the package SKU", async () => {

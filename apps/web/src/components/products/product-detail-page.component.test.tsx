@@ -62,6 +62,10 @@ const detail: ProductDetail = {
       manufacturerPartNumber: "MPN-1",
       secondaryUnit: "karton",
       secondaryUnitFactor: "12",
+      unasBaseSku: "SKU-1",
+      unasVariantValues: null,
+      unasReportedStock: "5",
+      unasReportedStockSyncedAt: "2026-07-31T10:00:00.000Z",
       extension: {
         variantId: "variant-1",
         preferredSupplierId: null,

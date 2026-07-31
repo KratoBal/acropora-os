@@ -8,6 +8,7 @@ import {
 } from "../imports/unas/unas-api.client.js";
 import type { UnasApiErrorCode } from "../imports/unas/unas-api.client.js";
 import { UnasAuthService } from "../imports/unas/unas-auth.service.js";
+import { parseStoredUnasVariantValues } from "../common/unas-variant.util.js";
 import {
   UnasStockSyncOutboxRepository,
   type ClaimedUnasStockSyncOutboxRow,
@@ -181,8 +182,13 @@ export interface StockLookupDatabase {
   };
   productVariant: {
     findUnique(args: unknown): Promise<{
+      unasBaseSku: string | null;
+      unasVariantValues: Prisma.JsonValue | null;
       product: {
-        unasSnapshot: { isPackageProduct: boolean } | null;
+        unasSnapshot: {
+          isPackageProduct: boolean;
+          variantStockEnabled: boolean | null;
+        } | null;
       };
     } | null>;
   };
@@ -279,9 +285,13 @@ export class UnasStockSyncOutboxService {
     const variant = await this.stockLookup.productVariant.findUnique({
       where: { id: row.variantId },
       select: {
+        unasBaseSku: true,
+        unasVariantValues: true,
         product: {
           select: {
-            unasSnapshot: { select: { isPackageProduct: true } },
+            unasSnapshot: {
+              select: { isPackageProduct: true, variantStockEnabled: true },
+            },
           },
         },
       },
@@ -289,6 +299,20 @@ export class UnasStockSyncOutboxService {
     if (variant?.product.unasSnapshot?.isPackageProduct) {
       await this.outbox.markPackageProductSuccess(row.id);
       return "superseded";
+    }
+
+    const variantValues = parseStoredUnasVariantValues(
+      variant?.unasVariantValues,
+    );
+    if (
+      variant?.product.unasSnapshot?.variantStockEnabled &&
+      (!variant.unasBaseSku || !variantValues)
+    ) {
+      await this.outbox.markDeadLetter({
+        id: row.id,
+        lastError: "UNAS_VARIANT_MAPPING_MISSING",
+      });
+      return "deadLettered";
     }
 
     token.value ??= await this.unasAuth.getToken();
@@ -318,8 +342,9 @@ export class UnasStockSyncOutboxService {
 
     try {
       await this.unasApi.setStock(token.value, {
-        sku: row.sku,
+        sku: variant?.unasBaseSku ?? row.sku,
         qty: quantityToPublish.toString(),
+        variantValues: variantValues?.map((item) => item.value),
         comment: `${row.sourceProcess}:${row.sourceRecordId}`,
       });
       await this.outbox.markSucceeded(row.id);

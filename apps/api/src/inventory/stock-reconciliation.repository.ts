@@ -26,14 +26,15 @@ interface StockItemRow {
 
 interface ProductLinkRow {
   id: string; // variantId
+  sku?: string;
   productId: string;
+  unasReportedStock?: Prisma.Decimal | null;
   product: {
     catalogAuthority: "UNAS" | "ACROPORA" | null;
     unasSnapshot: {
       reportedStock: Prisma.Decimal | null;
       isPackageProduct: boolean;
     } | null;
-    variants: Array<{ id: string }>; // the product's first variant only (query already orders+takes 1)
   };
 }
 
@@ -219,17 +220,14 @@ export class StockReconciliationRepository extends Repository {
         where: { id: { in: variantIds } },
         select: {
           id: true,
+          sku: true,
           productId: true,
+          unasReportedStock: true,
           product: {
             select: {
               catalogAuthority: true,
               unasSnapshot: {
                 select: { reportedStock: true, isPackageProduct: true },
-              },
-              variants: {
-                select: { id: true },
-                orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-                take: 1,
               },
             },
           },
@@ -260,25 +258,22 @@ export class StockReconciliationRepository extends Repository {
       movementsByPair.set(key, bucket);
     }
 
-    // UNAS comparison is product-level, not warehouse-level (UNAS has no
-    // concept of Acropora's internal warehouses) - only a variant that IS
-    // its product's first variant (matching the existing, accepted
-    // convention in unas-order-sync.repository.ts's findStockDiscrepancies)
-    // is ever compared; every other variant of a multi-variant product gets
-    // unasOnHand=null with an explanatory note.
+    // UNAS comparison is variant-level but not Acropora-warehouse-level:
+    // every UNAS combination has its own reported snapshot, while local
+    // stock is summed across Acropora warehouses for that same variant.
     const productLinkByVariant = new Map(
       productLinks.map((link) => [link.id, link]),
     );
-    const firstVariantIds = productLinks
-      .filter((link) => link.product.variants[0]?.id === link.id)
+    const unasVariantIds = productLinks
+      .filter((link) => link.product.catalogAuthority === "UNAS")
       .map((link) => link.id);
     const localSumByVariant =
-      firstVariantIds.length > 0
+      unasVariantIds.length > 0
         ? new Map(
             (
               await this.reconciliationDatabase.stockItem.groupBy({
                 by: ["variantId"],
-                where: { variantId: { in: firstVariantIds } },
+                where: { variantId: { in: unasVariantIds } },
                 _sum: { onHand: true, reserved: true },
               })
             ).map((row) => [
@@ -318,15 +313,13 @@ export class StockReconciliationRepository extends Repository {
       const requiresUnasSync = productLink?.product.catalogAuthority === "UNAS";
       const isLocalProduct =
         productLink?.product.catalogAuthority === "ACROPORA";
-      const isFirstVariant =
-        productLink?.product.variants[0]?.id === item.variantId;
+      const reportedStock =
+        productLink?.unasReportedStock ??
+        productLink?.product.unasSnapshot?.reportedStock ??
+        null;
       const unasOnHand =
-        requiresUnasSync &&
-        isFirstVariant &&
-        productLink?.product.unasSnapshot?.reportedStock != null
-          ? productLink.product.unasSnapshot.reportedStock
-          : null;
-      const localSumAcrossWarehouses = isFirstVariant
+        requiresUnasSync && reportedStock != null ? reportedStock : null;
+      const localSumAcrossWarehouses = requiresUnasSync
         ? (localSumByVariant.get(item.variantId) ?? new Prisma.Decimal(0))
         : null;
 
@@ -340,19 +333,11 @@ export class StockReconciliationRepository extends Repository {
           "ADJUSTMENT (vagy fel nem ismert típusú) mozgás található - az előjel a ledgerből önmagában nem rekonstruálható.",
         );
       }
-      if (productLink && !isFirstVariant) {
-        notes.push(
-          `A termékhez ${productLink.product.variants.length >= 1 ? "több variáns tartozik" : "nincs variáns-adat"} - a UNAS csak az első variánshoz van hasonlítva, ez nem az.`,
-        );
-      }
       if (productLink?.product.catalogAuthority === "ACROPORA") {
         notes.push(
           "Helyi Acropora OS-termék - UNAS-készletszinkron nem alkalmazandó.",
         );
-      } else if (
-        !productLink ||
-        productLink.product.unasSnapshot?.reportedStock == null
-      ) {
+      } else if (!productLink || reportedStock == null) {
         notes.push(
           "Nincs UNAS-termékadat (UnasProductSnapshot) ehhez a variánshoz.",
         );
@@ -467,36 +452,32 @@ export class StockReconciliationRepository extends Repository {
     const candidates =
       await this.reconciliationDatabase.productVariant.findMany({
         where: {
+          isActive: true,
           product: {
             catalogAuthority: "UNAS",
-            unasSnapshot: {
-              reportedStock: { not: null },
-              isPackageProduct: false,
-            },
+            unasSnapshot: { isPackageProduct: false },
           },
+          OR: [
+            { unasReportedStock: { not: null } },
+            { product: { unasSnapshot: { reportedStock: { not: null } } } },
+          ],
         },
         select: {
           id: true,
+          sku: true,
           productId: true,
+          unasReportedStock: true,
           product: {
             select: {
               catalogAuthority: true,
               unasSnapshot: {
                 select: { reportedStock: true, isPackageProduct: true },
               },
-              variants: {
-                select: { id: true },
-                orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-                take: 1,
-              },
             },
           },
         },
       });
-    const firstVariants = candidates.filter(
-      (link) => link.product.variants[0]?.id === link.id,
-    );
-    const variantIds = firstVariants.map((link) => link.id);
+    const variantIds = candidates.map((link) => link.id);
     const existing = new Set(
       (
         await this.reconciliationDatabase.stockItem.findMany({
@@ -508,19 +489,16 @@ export class StockReconciliationRepository extends Repository {
         })
       ).map((row) => (row as unknown as { variantId: string }).variantId),
     );
-    const missing = firstVariants.filter((link) => !existing.has(link.id));
+    const missing = candidates.filter((link) => !existing.has(link.id));
     const page = missing.slice(skip, skip + params.pageSize);
-    // sku isn't selected above (kept the query minimal) - the controller
-    // layer re-attaches it if needed; here we just expose what's cheap to
-    // compute without a second per-row query. Left as variantId for now,
-    // sku re-fetched by the caller if it needs to render one - documented
-    // limitation, not a silent gap.
     return {
       items: page.map((link) => ({
         variantId: link.id,
-        sku: link.id,
+        sku: link.sku ?? link.id,
         unasOnHand: (
-          link.product.unasSnapshot?.reportedStock ?? new Prisma.Decimal(0)
+          link.unasReportedStock ??
+          link.product.unasSnapshot?.reportedStock ??
+          new Prisma.Decimal(0)
         ).toString(),
       })),
       page: params.page,

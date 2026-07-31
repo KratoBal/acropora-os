@@ -29,7 +29,7 @@ function baseProduct(
 }
 
 describe("toProductListItem", () => {
-  it("sums StockItem.onHand across warehouses for the primary variant", () => {
+  it("sums StockItem.onHand across warehouses and active variants", () => {
     const product = baseProduct({
       variants: [
         {
@@ -41,10 +41,22 @@ describe("toProductListItem", () => {
             { onHand: new Prisma.Decimal("2") },
           ],
         },
+        {
+          id: "variant-2",
+          sku: "sku-2",
+          isActive: true,
+          stockItems: [{ onHand: new Prisma.Decimal("4") }],
+        },
+        {
+          id: "variant-retired",
+          sku: "sku-retired",
+          isActive: false,
+          stockItems: [{ onHand: new Prisma.Decimal("100") }],
+        },
       ],
     } as unknown as Partial<ProductWithRelations>);
 
-    assert.equal(toProductListItem(product).stockOnHand, "5");
+    assert.equal(toProductListItem(product).stockOnHand, "9");
   });
 
   it("reports null stock (not 0) when the variant has no StockItem row at all", () => {

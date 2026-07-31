@@ -6,6 +6,8 @@ import type {
   UnasProductSyncSummary,
 } from "@acropora/types";
 
+import { unasVariantKey } from "../../common/unas-variant.util.js";
+
 import { UnasApiClient } from "./unas-api.client.js";
 import { UnasProductCanonicalizer } from "./unas-product-canonicalizer.js";
 import { UnasProductSyncDiffEngine } from "./unas-product-sync-diff.engine.js";
@@ -97,7 +99,7 @@ export class UnasProductSyncService {
     windowStart: Date | null,
     pageSize: number,
   ): Promise<UnasApiStock[]> {
-    const byId = new Map<string, UnasApiStock>();
+    const byIdentity = new Map<string, UnasApiStock>();
     for (let limitStart = 0; ; limitStart += pageSize) {
       const page = await this.api.getStockPage(token, {
         timeStart: windowStart
@@ -106,11 +108,15 @@ export class UnasProductSyncService {
         limitStart,
         limitNum: pageSize,
       });
-      for (const stock of page) byId.set(stock.externalId, stock);
+      for (const stock of page)
+        byIdentity.set(
+          `${stock.externalId}:${unasVariantKey(stock.variantValues)}`,
+          stock,
+        );
       await this.repository.heartbeat(runId);
       if (page.length < pageSize) break;
     }
-    return [...byId.values()];
+    return [...byIdentity.values()];
   }
 
   private async downloadProducts(

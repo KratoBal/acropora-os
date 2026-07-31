@@ -45,6 +45,7 @@ const product = (sku: string): UnasApiProduct => ({
   backorderAllowed: true,
   variantStockEnabled: false,
   reportedStock: "7.5",
+  variantStocks: [],
   isPackageProduct: false,
   packageComponents: [],
   productUrl: "https://example.test/integration-pump",
@@ -301,6 +302,57 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
       where: { id: parentReference.entityId },
     });
     assert.equal(parent.name, "Discontinued line");
+  });
+
+  it("retires the aggregate variant and materializes each UNAS stock combination", async () => {
+    liveProducts = [
+      {
+        ...product("RF-BLUEM"),
+        variantStockEnabled: true,
+        reportedStock: null,
+        variantStocks: [
+          {
+            values: [{ name: "Szín", value: "Fekete" }],
+            reportedStock: "2",
+          },
+          {
+            values: [{ name: "Szín", value: "Fehér" }],
+            reportedStock: "3",
+          },
+        ],
+      },
+    ];
+    await prisma.integrationCursor.deleteMany({
+      where: { provider: "UNAS", stream: "PRODUCTS" },
+    });
+
+    await service.runIncremental(
+      "integration-token",
+      new Date("2026-07-20T17:00:00.000Z"),
+      100,
+    );
+
+    const variants = await prisma.productVariant.findMany({
+      orderBy: [{ isActive: "desc" }, { name: "asc" }],
+    });
+    const active = variants.filter((variant) => variant.isActive);
+    assert.equal(active.length, 2);
+    assert.deepEqual(
+      active.map((variant) => ({
+        baseSku: variant.unasBaseSku,
+        reported: variant.unasReportedStock?.toString(),
+      })),
+      [
+        { baseSku: "RF-BLUEM", reported: "3" },
+        { baseSku: "RF-BLUEM", reported: "2" },
+      ],
+    );
+    assert.equal(
+      variants.some(
+        (variant) => !variant.isActive && variant.unasVariantKey === null,
+      ),
+      true,
+    );
   });
 
   it("rejects a concurrent run with a database-level conflict", async () => {
