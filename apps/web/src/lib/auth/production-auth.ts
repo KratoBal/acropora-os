@@ -1,5 +1,6 @@
 import type { AuthenticatedUser, Session } from "@acropora/types";
 
+import { apiAuthHeaders } from "../api/client";
 import type { AuthAdapter } from "./development-auth";
 
 /**
@@ -61,7 +62,10 @@ export class ProductionAuthAdapter implements AuthAdapter {
   }
 
   async logout(_session: Session): Promise<void> {
-    await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+    await fetch("/api/auth/logout", {
+      method: "POST",
+      headers: apiAuthHeaders("", "POST"),
+    }).catch(() => undefined);
   }
 }
 

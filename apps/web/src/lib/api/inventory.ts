@@ -5,7 +5,7 @@ import type {
   InventoryCountUploadResult,
 } from "@acropora/types";
 
-import { ApiError, apiRequest } from "./client";
+import { ApiError, apiAuthHeaders, apiRequest } from "./client";
 
 export interface InventoryCountListQuery {
   page?: number;
@@ -33,7 +33,9 @@ function uploadCounts(
       `/api/inventory/counts/${encodeURIComponent(id)}/upload`,
     );
     request.setRequestHeader("Accept", "application/json");
-    request.setRequestHeader("Authorization", `Bearer ${token}`);
+    for (const [name, value] of Object.entries(apiAuthHeaders(token, "POST"))) {
+      request.setRequestHeader(name, value);
+    }
     request.addEventListener("error", () =>
       reject(
         new ApiError("A szerver nem érhető el. Ellenőrizd a kapcsolatot.", 0),
@@ -72,7 +74,7 @@ async function downloadTemplate(
 ): Promise<void> {
   const response = await fetch(
     `/api/inventory/counts/${encodeURIComponent(id)}/template.xlsx`,
-    { headers: { Authorization: `Bearer ${token}` } },
+    { headers: apiAuthHeaders(token) },
   );
   if (!response.ok) {
     throw new ApiError("A sablon letöltése nem sikerült.", response.status);
