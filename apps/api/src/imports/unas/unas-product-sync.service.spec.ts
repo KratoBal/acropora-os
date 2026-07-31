@@ -56,6 +56,7 @@ const product = (externalId: string, sku: string): UnasApiProduct => ({
 
 function fixture(input?: {
   cursor?: Date | null;
+  stockCursor?: Date | null;
   pages?: UnasApiProduct[][];
   stockPages?: UnasApiStock[][];
   snapshots?: Array<{
@@ -84,6 +85,7 @@ function fixture(input?: {
   } as unknown as UnasApiClient;
   const repository = {
     getCursor: async () => input?.cursor ?? null,
+    getStockCursor: async () => input?.stockCursor ?? null,
     createRun: async (run: unknown) => {
       calls.push({ operation: "createRun", input: run });
       return "run-1";
@@ -133,11 +135,13 @@ function fixture(input?: {
 }
 
 describe("UnasProductSyncService", () => {
-  it("uses an overlapped cursor window and applies all pages once", async () => {
+  it("uses independent overlapped product and stock cursors", async () => {
     const cursor = new Date("2026-07-20T12:00:00.000Z");
+    const stockCursor = new Date("2026-07-20T11:30:00.000Z");
     const windowEnd = new Date("2026-07-20T13:00:00.000Z");
     const { service, calls } = fixture({
       cursor,
+      stockCursor,
       stockPages: [[{ externalId: "1", sku: "SKU-1", reportedStock: "0" }]],
       pages: [
         [product("1", "SKU-1"), product("2", "SKU-2")],
@@ -169,7 +173,7 @@ describe("UnasProductSyncService", () => {
       ?.input as { timeStart: number };
     assert.equal(
       stockRequest.timeStart,
-      Math.floor((cursor.getTime() - 120_000) / 1000),
+      Math.floor((stockCursor.getTime() - 120_000) / 1000),
     );
     const applyInput = calls.find((call) => call.operation === "apply")
       ?.input as { stocks: UnasApiStock[] };
@@ -177,6 +181,23 @@ describe("UnasProductSyncService", () => {
       { externalId: "1", sku: "SKU-1", reportedStock: "0" },
     ]);
     assert.equal(calls.at(-1)?.operation, "apply");
+  });
+
+  it("performs a full getStock download when no stock cursor exists", async () => {
+    const { service, calls } = fixture({
+      cursor: new Date("2026-07-20T12:00:00.000Z"),
+      stockCursor: null,
+    });
+
+    await service.runIncremental(
+      "token",
+      new Date("2026-07-20T13:00:00.000Z"),
+      500,
+    );
+
+    const stockRequest = calls.find((call) => call.operation === "stockPage")
+      ?.input as { timeStart?: number };
+    assert.equal(stockRequest.timeStart, undefined);
   });
 
   it("marks the run failed and never applies duplicate source SKUs", async () => {
