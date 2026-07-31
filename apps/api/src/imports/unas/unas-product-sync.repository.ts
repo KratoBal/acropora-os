@@ -86,6 +86,13 @@ export class UnasProductSyncRepository extends Repository {
     return cursor?.lastSuccessfulWindowEnd ?? null;
   }
 
+  async getStockCursor(): Promise<Date | null> {
+    const cursor = await prisma.integrationCursor.findUnique({
+      where: { provider_stream: { provider: "UNAS", stream: "STOCKS" } },
+    });
+    return cursor?.lastSuccessfulWindowEnd ?? null;
+  }
+
   async createRun(input: {
     kind: "FULL" | "INCREMENTAL";
     windowStart: Date | null;
@@ -718,6 +725,15 @@ export class UnasProductSyncRepository extends Repository {
           create: {
             provider: "UNAS",
             stream: "PRODUCTS",
+            lastSuccessfulWindowEnd: windowEnd,
+          },
+          update: { lastSuccessfulWindowEnd: windowEnd },
+        });
+        await transaction.integrationCursor.upsert({
+          where: { provider_stream: { provider: "UNAS", stream: "STOCKS" } },
+          create: {
+            provider: "UNAS",
+            stream: "STOCKS",
             lastSuccessfulWindowEnd: windowEnd,
           },
           update: { lastSuccessfulWindowEnd: windowEnd },

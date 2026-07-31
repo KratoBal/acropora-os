@@ -112,7 +112,7 @@ async function cleanup() {
     where: { correlationId: { not: null } },
   });
   await prisma.integrationCursor.deleteMany({
-    where: { provider: "UNAS", stream: "PRODUCTS" },
+    where: { provider: "UNAS", stream: { in: ["PRODUCTS", "STOCKS"] } },
   });
   await prisma.unasProductSyncRun.deleteMany();
   await prisma.externalReference.deleteMany({ where: { system: "UNAS" } });
@@ -171,6 +171,28 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
     assert.equal(
       variant.product.unasSnapshot?.reportedStock?.toString(),
       "7.5",
+    );
+    const cursors = await prisma.integrationCursor.findMany({
+      where: { provider: "UNAS" },
+      select: { stream: true, lastSuccessfulWindowEnd: true },
+      orderBy: { stream: "asc" },
+    });
+    assert.deepEqual(
+      cursors.map((cursor) => ({
+        stream: cursor.stream,
+        lastSuccessfulWindowEnd:
+          cursor.lastSuccessfulWindowEnd?.toISOString() ?? null,
+      })),
+      [
+        {
+          stream: "PRODUCTS",
+          lastSuccessfulWindowEnd: "2026-07-20T10:00:00.000Z",
+        },
+        {
+          stream: "STOCKS",
+          lastSuccessfulWindowEnd: "2026-07-20T10:00:00.000Z",
+        },
+      ],
     );
     await prisma.productExtension.create({
       data: {

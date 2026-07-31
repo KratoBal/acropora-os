@@ -29,7 +29,11 @@ export class UnasProductSyncService {
     pageSize = DEFAULT_PAGE_SIZE,
   ): Promise<UnasProductSyncSummary> {
     const cursor = await this.repository.getCursor();
+    const stockCursor = await this.repository.getStockCursor();
     const windowStart = cursor ? new Date(cursor.getTime() - OVERLAP_MS) : null;
+    const stockWindowStart = stockCursor
+      ? new Date(stockCursor.getTime() - OVERLAP_MS)
+      : null;
     const runId = await this.repository.createRun({
       kind: cursor ? "INCREMENTAL" : "FULL",
       windowStart,
@@ -62,7 +66,7 @@ export class UnasProductSyncService {
       const stocks = await this.downloadStocks(
         runId,
         token,
-        windowStart,
+        stockWindowStart,
         pageSize,
       );
       this.assertUniqueSourceIdentity(products);
