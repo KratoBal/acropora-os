@@ -41,7 +41,9 @@
   },
   "pnpm": {
     "overrides": {
-      "brace-expansion@2.0.2": "2.1.2",
+      "brace-expansion@1.1.16": "1.1.18",
+      "brace-expansion@2.0.2": "2.1.4",
+      "brace-expansion@5.0.7": "5.0.9",
       "picomatch@4.0.3": "4.0.4",
       "sigstore@3.1.0": "4.1.1",
       "tar@7.5.11": "7.5.19",
