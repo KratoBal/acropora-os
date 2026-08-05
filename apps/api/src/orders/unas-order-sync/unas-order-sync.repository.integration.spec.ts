@@ -23,9 +23,23 @@ const runIntegration = process.env.RUN_DB_INTEGRATION === "1";
 /// locally (`pnpm --filter @acropora/api test:integration`) before
 /// checkpoint 5 is considered verified end-to-end. NOT reported as passing
 /// here - only as written and unexecuted.
+/// Every order built by this fixture gets a DETERMINISTIC, key-derived
+/// UNAS Id by default (`ID-<key>`) rather than a single shared constant -
+/// this file previously defaulted every order to the same `id: "5000001"`
+/// regardless of `key`, which made `findExternalReferenceForOrder`'s
+/// primary Id-based lookup (see unas-order-sync.repository.ts) treat
+/// logically distinct test orders as the SAME UNAS order once more than
+/// one order had ever been imported in a test run - the exact bug this
+/// integration suite exists to catch, not reproduce. Deriving the default
+/// from `key` keeps the required invariants automatic: the SAME key
+/// (e.g. a later resync/refresh of an already-imported order, never
+/// overriding `id` itself) always yields the SAME Id, while two DIFFERENT
+/// keys always yield two DIFFERENT Ids, without every call site having to
+/// track its own id.
 function baseOrder(overrides: Partial<UnasApiOrder> = {}): UnasApiOrder {
   return {
     key: overrides.key ?? "CONCURRENCY-TEST-1",
+    id: overrides.id ?? `ID-${overrides.key ?? "CONCURRENCY-TEST-1"}`,
     internalKey: null,
     status: "Feldolgozás alatt",
     statusType: "open_normal",
@@ -141,10 +155,22 @@ describe(
 
         // Establish the order at quantity 2 first (its own, uncontended import).
         const firstRun = await createRunningRun();
-        await repository.apply(firstRun, [orderWithQty(key, sku, 2)], null, new Date());
+        const initialOrder = orderWithQty(key, sku, 2);
+        await repository.apply(firstRun, [initialOrder], null, new Date());
 
+        // The repository stores ExternalReference.externalId as the UNAS
+        // Id (not the Key - see unas-order-sync.repository.ts
+        // createNewOrder/findExternalReferenceForOrder and business rule 5
+        // in docs/INVENTORY-CONSISTENCY.md), so the lookup must match on
+        // the order's Id, never its Key.
         const reference = await prisma.externalReference.findUniqueOrThrow({
-          where: { system_entityType_externalId: { system: "UNAS", entityType: "SalesOrder", externalId: key } },
+          where: {
+            system_entityType_externalId: {
+              system: "UNAS",
+              entityType: "SalesOrder",
+              externalId: initialOrder.id!,
+            },
+          },
         });
         const orderId = reference.entityId;
 
@@ -159,6 +185,10 @@ describe(
         // only ONE of them may actually be the one that posts the +1 delta,
         // the other must re-read the ledger under the lock and no-op.
         const order3 = orderWithQty(key, sku, 3);
+        // Same Key -> same Id across an order's own resync/refresh
+        // sightings (business rule 5) - not a re-derivation, the actual
+        // guarantee the fixture's default depends on.
+        assert.equal(order3.id, initialOrder.id);
         const [resultA, resultB] = await Promise.all([
           repository.refreshOrder(orderId, order3),
           repository.refreshOrder(orderId, order3),
@@ -215,12 +245,20 @@ describe(
           }),
         ]);
 
+        const orderA = orderWithQty(keyA, skuA, 1);
+        const orderB = orderWithQty(keyB, skuB, 1);
+        // Precondition for this test to actually exercise two DIFFERENT
+        // orders (rather than accidentally re-touching the same one twice
+        // under a shared fixture id): both Key and Id must differ.
+        assert.notEqual(orderA.key, orderB.key);
+        assert.notEqual(orderA.id, orderB.id);
+
         const runA = await createRunningRun();
         const runB = await createRunningRun();
 
         await Promise.all([
-          repository.apply(runA, [orderWithQty(keyA, skuA, 1)], null, new Date()),
-          repository.apply(runB, [orderWithQty(keyB, skuB, 1)], null, new Date()),
+          repository.apply(runA, [orderA], null, new Date()),
+          repository.apply(runB, [orderB], null, new Date()),
         ]);
 
         const [stockA, stockB] = await Promise.all([
@@ -239,6 +277,40 @@ describe(
           stockB.onHand.minus(onHandBeforeB?.onHand ?? 0).toString(),
           "-1",
         );
+
+        // Regression guard (business rule 5): two orders with distinct
+        // Key+Id pairs must resolve to two DISTINCT local SalesOrder rows
+        // via two DISTINCT ExternalReference rows, keyed by the UNAS Id -
+        // not the Key. Before this fixture derived a per-key Id, every
+        // order in this file defaulted to the same id ("5000001"), which
+        // made findExternalReferenceForOrder's primary Id-based lookup
+        // (unas-order-sync.repository.ts) treat orderB as an update to
+        // orderA's already-created SalesOrder instead of a new order -
+        // exactly the failure this assertion would have caught.
+        const [referenceA, referenceB] = await Promise.all([
+          prisma.externalReference.findUniqueOrThrow({
+            where: {
+              system_entityType_externalId: {
+                system: "UNAS",
+                entityType: "SalesOrder",
+                externalId: orderA.id!,
+              },
+            },
+          }),
+          prisma.externalReference.findUniqueOrThrow({
+            where: {
+              system_entityType_externalId: {
+                system: "UNAS",
+                entityType: "SalesOrder",
+                externalId: orderB.id!,
+              },
+            },
+          }),
+        ]);
+        assert.notEqual(referenceA.entityId, referenceB.entityId);
+        assert.equal(referenceA.externalKey, keyA);
+        assert.equal(referenceB.externalKey, keyB);
+        assert.notEqual(referenceA.externalId, referenceB.externalId);
       },
     );
 
@@ -264,7 +336,14 @@ describe(
         // never deadlocks against this order-level lock, regardless of the
         // order the two orders' own advisory locks happen to be acquired in.
         const keyD = `LOCK-MULTI-D-${Date.now()}`;
-        const multiOrderD = baseOrder({ ...multiOrder, key: keyD });
+        // NOTE: deliberately NOT `{ ...multiOrder, key: keyD }` - that would
+        // carry multiOrder's already-resolved `id` (derived from keyC)
+        // straight through, leaving multiOrderD with keyD but orderC's Id -
+        // a mismatched Key/Id pair that would collide with multiOrder on
+        // the very same bug this file's other fixes address. Passing only
+        // `items` lets baseOrder derive keyD's own Id fresh.
+        const multiOrderD = baseOrder({ key: keyD, items: multiOrder.items });
+        assert.notEqual(multiOrderD.id, multiOrder.id);
         await Promise.all([
           repository.apply(runC, [multiOrder], null, new Date()),
           repository.apply(runD, [multiOrderD], null, new Date()),

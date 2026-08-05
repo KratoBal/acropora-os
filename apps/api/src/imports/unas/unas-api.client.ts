@@ -630,6 +630,18 @@ export function parseUnasOrderResponse(xml: string): UnasApiOrder[] {
   return children(root, "Order").map((order) => {
     const key = value(order, "Key");
     if (!key) throw new UnasApiError("FIELD_FORMAT_INVALID");
+    // The official "Adatszerkezet" docs (unas.hu/tudastar/api/
+    // megrendelesek-adatszerkezet) describe Key and Id as deliberately
+    // distinct: "Key: ... Korábban törölt rendelés azonosítóját újra
+    // kioszthatjuk!" (Key CAN be reissued after a deletion) versus "Id: A
+    // megrendelés egyedi azonosítója. A setOrder funkciónál azonosításra
+    // NEM használható" (Id is the order's genuinely unique identifier, but
+    // can't be used for setOrder identification - Key remains the correct
+    // field for that). `id` is GET-only and best-effort - a response
+    // missing it (shouldn't normally happen per the docs) degrades to null
+    // rather than failing the whole parse, since every existing caller
+    // already treats `key` as the sole required identifier.
+    const id = value(order, "Id") ?? null;
     const customer = child(order, "Customer");
     const contact = customer ? child(customer, "Contact") : undefined;
     const addresses = customer ? child(customer, "Addresses") : undefined;
@@ -668,6 +680,7 @@ export function parseUnasOrderResponse(xml: string): UnasApiOrder[] {
     });
     return {
       key,
+      id,
       internalKey: value(order, "InternalKey") ?? null,
       status: value(order, "Status") ?? null,
       statusType: value(order, "StatusType") ?? null,

@@ -102,6 +102,12 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
         // UnasOrderSyncService.refreshOrder(), which re-reads via
         // repository.findById() after applying the fetched order, so this
         // is exactly the same detail shape as the initial GET above.
+        // unasDeletedAt non-null means this exact call just confirmed (or
+        // had already confirmed) a physical UNAS deletion - see
+        // UnasOrderSyncService.refreshOrder()'s NOT_FOUND branch - which
+        // gets its own distinct message below instead of the generic
+        // "adatai frissültek" one, per business rule 3's explicit
+        // requirement for an understandable result either way.
         setDetail(refreshed);
         setRefreshSuccessAt(new Date());
       })
@@ -183,7 +189,13 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
         />
       ) : null}
 
-      {refreshSuccessAt && !refreshError ? (
+      {refreshSuccessAt && !refreshError && detail?.unasDeletedAt ? (
+        <Alert
+          variant="danger"
+          title="A rendelést törölték a UNAS-ban"
+          description={`A rendelés a UNAS-ban fizikailag törölve lett - a még ki nem forgatott készlet visszakönyvelésre került. A rendelés és korábbi mozgásai a rendszerben megmaradnak. Felismerve: ${new Date(detail.unasDeletedAt).toLocaleString("hu-HU")}`}
+        />
+      ) : refreshSuccessAt && !refreshError ? (
         <Alert
           variant="info"
           title="A rendelés adatai frissültek"
@@ -198,19 +210,30 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
               <h2 className="text-sm font-semibold text-slate-900">
                 Áttekintés
               </h2>
-              <Badge
-                variant={
-                  detail.status === "CANCELLED"
-                    ? "danger"
-                    : detail.status === "COMPLETED"
-                      ? "success"
-                      : "neutral"
-                }
-              >
-                {detail.unasStatusLabel ??
-                  STATUS_LABEL[detail.status] ??
-                  detail.status}
-              </Badge>
+              <div className="flex items-center gap-2">
+                {detail.unasDeletedAt ? (
+                  <Badge variant="danger">
+                    Törölve a UNAS-ban (
+                    {new Date(detail.unasDeletedAt).toLocaleDateString(
+                      "hu-HU",
+                    )}
+                    )
+                  </Badge>
+                ) : null}
+                <Badge
+                  variant={
+                    detail.status === "CANCELLED"
+                      ? "danger"
+                      : detail.status === "COMPLETED"
+                        ? "success"
+                        : "neutral"
+                  }
+                >
+                  {detail.unasStatusLabel ??
+                    STATUS_LABEL[detail.status] ??
+                    detail.status}
+                </Badge>
+              </div>
             </CardHeader>
             <CardContent>
               <dl className="grid gap-3 text-xs sm:grid-cols-3 lg:grid-cols-6">

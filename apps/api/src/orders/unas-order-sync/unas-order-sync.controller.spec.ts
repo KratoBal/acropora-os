@@ -7,6 +7,7 @@ import { PERMISSIONS } from "@acropora/types";
 
 import { REQUIRED_PERMISSIONS_KEY } from "../../auth/decorators/require-permissions.decorator.js";
 import type { UnasAuthService } from "../../imports/unas/unas-auth.service.js";
+import type { UnasOrderDeletionReconciliationScheduler } from "./unas-order-deletion-reconciliation.scheduler.js";
 import { UnasOrderSyncController } from "./unas-order-sync.controller.js";
 import type { UnasOrderSyncRepository } from "./unas-order-sync.repository.js";
 import type { UnasOrderSyncService } from "./unas-order-sync.service.js";
@@ -53,6 +54,21 @@ describe("UnasOrderSyncController permissions", () => {
       [PERMISSIONS.ORDERS_MANAGE],
     );
   });
+
+  it("requires orders.view for the deletion-reconciliation status, orders.manage to trigger it manually", () => {
+    assert.deepEqual(
+      permissionsFor(
+        UnasOrderSyncController.prototype.deletionReconciliationStatus,
+      ),
+      [PERMISSIONS.ORDERS_VIEW],
+    );
+    assert.deepEqual(
+      permissionsFor(
+        UnasOrderSyncController.prototype.runDeletionReconciliation,
+      ),
+      [PERMISSIONS.ORDERS_MANAGE],
+    );
+  });
 });
 
 describe("UnasOrderSyncController delegation", () => {
@@ -67,6 +83,7 @@ describe("UnasOrderSyncController delegation", () => {
         },
       } as unknown as UnasOrderSyncService,
       {} as UnasOrderSyncRepository,
+      {} as UnasOrderDeletionReconciliationScheduler,
     );
 
     await controller.run();
@@ -78,6 +95,7 @@ describe("UnasOrderSyncController delegation", () => {
       {} as UnasAuthService,
       {} as UnasOrderSyncService,
       { findById: async () => null } as unknown as UnasOrderSyncRepository,
+      {} as UnasOrderDeletionReconciliationScheduler,
     );
 
     await assert.rejects(
@@ -97,6 +115,7 @@ describe("UnasOrderSyncController delegation", () => {
         },
       } as unknown as UnasOrderSyncService,
       {} as UnasOrderSyncRepository,
+      {} as UnasOrderDeletionReconciliationScheduler,
     );
 
     await controller.checkStockReconciliation();
@@ -116,6 +135,7 @@ describe("UnasOrderSyncController delegation", () => {
         },
       } as unknown as UnasOrderSyncService,
       {} as UnasOrderSyncRepository,
+      {} as UnasOrderDeletionReconciliationScheduler,
     );
 
     const result = await controller.refresh("order-1");

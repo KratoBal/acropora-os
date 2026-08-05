@@ -59,6 +59,7 @@ export type InventoryMovementSourceProcess =
   | "UNAS_ORDER_IMPORT"
   | "UNAS_ORDER_UPDATE"
   | "UNAS_ORDER_CANCEL"
+  | "UNAS_ORDER_DELETED"
   | "RECONCILIATION";
 
 export type InventoryMovementType =

@@ -23,6 +23,7 @@ interface FakeOrder {
   orderNumber: string;
   status: string;
   unasInvoiceStatus: string | null;
+  unasDeletedAt: Date | null;
   lines: FakeOrderLine[];
 }
 
@@ -237,6 +238,8 @@ class FakeDb {
       );
       if (row && args.data.metadata !== undefined)
         row.metadata = args.data.metadata as Record<string, unknown>;
+      if (row && args.data.externalId !== undefined)
+        row.externalId = args.data.externalId as string;
       return row ?? {};
     },
   };
@@ -263,6 +266,7 @@ class FakeDb {
         // from real Prisma behavior if a future caller ever omits it.
         unasInvoiceStatus:
           (args.data.unasInvoiceStatus as string | null | undefined) ?? null,
+        unasDeletedAt: null,
         lines,
       };
       this.orders.push(order);
@@ -286,6 +290,7 @@ class FakeDb {
         // unasInvoiceStatus` (repository.ts) evaluate true on every
         // CANCELLED->CANCELLED resync regardless of any real change.
         unasInvoiceStatus: order.unasInvoiceStatus,
+        unasDeletedAt: order.unasDeletedAt,
         lines: order.lines.map((line) => ({
           id: line.id,
           sku: line.sku,
@@ -508,6 +513,12 @@ class FakeDb {
 function baseOrder(overrides: Partial<UnasApiOrder> = {}): UnasApiOrder {
   return {
     key: "UN-1",
+    // Derived from the effective key (not a fixed constant) so that two
+    // baseOrder({ key: ... }) calls with DIFFERENT keys in the same test
+    // never accidentally collide on the same Id, unless a test explicitly
+    // overrides `id` itself to simulate a genuine UNAS Key-reuse scenario
+    // (see the "UNAS Key reuse after a physical deletion" describe block).
+    id: overrides.key ? `id-${overrides.key}` : "9001",
     internalKey: null,
     status: "Feldolgozás alatt",
     statusType: "open_normal",
@@ -1072,6 +1083,45 @@ describe("UnasOrderSyncRepository.apply", () => {
     assert.equal(db.invoices[0]?.invoiceNumber, "SZ-2026-CANCEL-1");
     assert.equal(db.invoices[0]?.salesOrderId, db.orders[0]?.id);
     assert.equal(db.orders[0]?.status, "CANCELLED");
+  });
+
+  it("an empty incremental page (empty orders array) never modifies any existing order or stock (#12) - absence from a list response is never proof of deletion", async () => {
+    const db = new FakeDb();
+    db.warehouses.push({
+      id: "wh-1",
+      name: "Fő raktár",
+      createdAt: new Date(0),
+    });
+    db.variants.push({ id: "variant-1", sku: "pump_1" });
+    db.stockItems.push({
+      id: "stock-1",
+      variantId: "variant-1",
+      warehouseId: "wh-1",
+      onHand: new Prisma.Decimal(10),
+    });
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [baseOrder()], null, new Date());
+    const stockAfterCreate = db.stockItems[0]?.onHand.toString();
+    const orderSnapshot = JSON.stringify(db.orders[0]);
+
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const summary = await repository.apply(
+      "run-2",
+      [],
+      new Date("2026-07-20T15:00:00.000Z"),
+      new Date("2026-07-20T16:00:00.000Z"),
+    );
+
+    assert.equal(summary.ordersSeen, 0);
+    assert.equal(summary.createdCount, 0);
+    assert.equal(summary.updatedCount, 0);
+    assert.equal(summary.reversedCount, 0);
+    assert.equal(db.orders.length, 1);
+    assert.equal(JSON.stringify(db.orders[0]), orderSnapshot);
+    assert.equal(db.stockItems[0]?.onHand.toString(), stockAfterCreate);
+    assert.equal(db.movements.length, 1);
+    assert.equal(db.orders[0]?.unasDeletedAt, null);
   });
 });
 
@@ -1973,6 +2023,409 @@ describe("UnasOrderSyncRepository.refreshOrder", () => {
   });
 });
 
+// Covers the mandatory test cases for physically-deleted UNAS orders (see
+// docs/INVENTORY-CONSISTENCY.md "UNAS-ból fizikailag törölt rendelések"):
+// #4 (net stock reversal), #5 (order preserved + marked), #6 (repeated
+// NOT_FOUND is a no-op), #8 (partial-already-reversed nets only the
+// remainder), #9 (already-cancelled/zero net produces no new movement),
+// #10 (multi-variant order reverses onto the right variants).
+describe("UnasOrderSyncRepository.reconcileDeletedOrder", () => {
+  function seededDb(): FakeDb {
+    const db = new FakeDb();
+    db.warehouses.push({
+      id: "wh-1",
+      name: "Fő raktár",
+      createdAt: new Date(0),
+    });
+    db.variants.push({ id: "variant-1", sku: "pump_1" });
+    db.stockItems.push({
+      id: "stock-1",
+      variantId: "variant-1",
+      warehouseId: "wh-1",
+      onHand: new Prisma.Decimal(10),
+    });
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    return db;
+  }
+
+  it("reverses the net booked-out quantity, marks the order CANCELLED + unasDeletedAt, and never deletes it (#4, #5)", async () => {
+    const db = seededDb();
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [baseOrder()], null, new Date());
+    const orderId = db.orders[0]!.id;
+    assert.equal(db.stockItems[0]?.onHand.toString(), "8");
+
+    const result = await repository.reconcileDeletedOrder(orderId, "UN-1");
+
+    assert.equal(result.reversed, true);
+    assert.equal(result.alreadyReconciled, false);
+    // Net quantity (2, the order's only stock-relevant line) is fully
+    // restored - same mechanism (targetOut=empty) a real UNAS storno uses.
+    assert.equal(db.stockItems[0]?.onHand.toString(), "10");
+    assert.equal(
+      db.movements.some((movement) => movement.type === "RETURN_IN"),
+      true,
+    );
+    // The order itself is NEVER physically deleted - it's still present,
+    // preserved, with its full line/history intact, only marked.
+    assert.equal(db.orders.length, 1);
+    assert.equal(db.orders[0]?.id, orderId);
+    assert.equal(db.orders[0]?.status, "CANCELLED");
+    assert.ok(db.orders[0]?.unasDeletedAt instanceof Date);
+  });
+
+  it("does not create a second reversal on a repeated confirmed NOT_FOUND (#6)", async () => {
+    const db = seededDb();
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [baseOrder()], null, new Date());
+    const orderId = db.orders[0]!.id;
+
+    const first = await repository.reconcileDeletedOrder(orderId, "UN-1");
+    assert.equal(first.alreadyReconciled, false);
+    assert.equal(db.stockItems[0]?.onHand.toString(), "10");
+    const movementCountAfterFirst = db.movements.length;
+
+    const second = await repository.reconcileDeletedOrder(orderId, "UN-1");
+
+    assert.equal(second.alreadyReconciled, true);
+    assert.equal(second.reversed, false);
+    // No new movement, no double-restoration of stock.
+    assert.equal(db.movements.length, movementCountAfterFirst);
+    assert.equal(db.stockItems[0]?.onHand.toString(), "10");
+  });
+
+  it("only reverses the remaining net quantity when the order was already partially reversed by an earlier edit (#8)", async () => {
+    const db = seededDb();
+    const repository = repositoryWith(db);
+    // Quantity 2 booked out on import (onHand 10 -> 8).
+    await repository.apply("run-1", [baseOrder()], null, new Date());
+    assert.equal(db.stockItems[0]?.onHand.toString(), "8");
+
+    // Live edit: quantity drops from 2 to 1 - already returns 1 unit
+    // (onHand 8 -> 9) BEFORE the physical deletion is ever detected.
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply(
+      "run-2",
+      [
+        baseOrder({
+          items: [{ ...baseOrder().items[0]!, quantity: "1" }],
+        }),
+      ],
+      null,
+      new Date(),
+    );
+    assert.equal(db.stockItems[0]?.onHand.toString(), "9");
+    const orderId = db.orders[0]!.id;
+
+    const result = await repository.reconcileDeletedOrder(orderId, "UN-1");
+
+    // Only the STILL-outstanding 1 unit comes back, not the original 2 -
+    // never a double-return of the unit already given back at the edit
+    // step.
+    assert.equal(result.reversed, true);
+    assert.equal(db.stockItems[0]?.onHand.toString(), "10");
+  });
+
+  it("posts no new stock movement for an order that was already properly cancelled/fully reversed in UNAS before the physical deletion is detected (#9)", async () => {
+    const db = seededDb();
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [baseOrder()], null, new Date());
+    assert.equal(db.stockItems[0]?.onHand.toString(), "8");
+
+    // A legitimate UNAS storno already reversed everything.
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply(
+      "run-2",
+      [baseOrder({ statusType: "close_fault", status: "Sztornó" })],
+      null,
+      new Date(),
+    );
+    assert.equal(db.stockItems[0]?.onHand.toString(), "10");
+    assert.equal(db.orders[0]?.status, "CANCELLED");
+    const orderId = db.orders[0]!.id;
+    const movementCountBeforeDeletion = db.movements.length;
+
+    // Later, the order also turns out to have been physically deleted.
+    const result = await repository.reconcileDeletedOrder(orderId, "UN-1");
+
+    assert.equal(result.reversed, false); // delta=0: nothing left to give back.
+    assert.equal(db.movements.length, movementCountBeforeDeletion); // no new movement
+    assert.equal(db.stockItems[0]?.onHand.toString(), "10");
+    assert.ok(db.orders[0]?.unasDeletedAt instanceof Date); // still correctly flagged
+  });
+
+  it("reverses onto every distinct ProductVariant a multi-line order affected, never onto the wrong one (#10)", async () => {
+    const db = new FakeDb();
+    db.warehouses.push({
+      id: "wh-1",
+      name: "Fő raktár",
+      createdAt: new Date(0),
+    });
+    db.variants.push(
+      { id: "variant-a", sku: "sku_a" },
+      { id: "variant-b", sku: "sku_b" },
+    );
+    db.stockItems.push(
+      {
+        id: "stock-a",
+        variantId: "variant-a",
+        warehouseId: "wh-1",
+        onHand: new Prisma.Decimal(10),
+      },
+      {
+        id: "stock-b",
+        variantId: "variant-b",
+        warehouseId: "wh-1",
+        onHand: new Prisma.Decimal(20),
+      },
+    );
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    await repository.apply(
+      "run-1",
+      [
+        baseOrder({
+          items: [
+            {
+              id: "1",
+              sku: "sku_a",
+              name: "Termék A",
+              unit: "db",
+              quantity: "3",
+              priceNet: "1000",
+              priceGross: "1270",
+              vatRate: "27",
+            },
+            {
+              id: "2",
+              sku: "sku_b",
+              name: "Termék B",
+              unit: "db",
+              quantity: "5",
+              priceNet: "2000",
+              priceGross: "2540",
+              vatRate: "27",
+            },
+          ],
+        }),
+      ],
+      null,
+      new Date(),
+    );
+    const stockA = () => db.stockItems.find((item) => item.variantId === "variant-a")!;
+    const stockB = () => db.stockItems.find((item) => item.variantId === "variant-b")!;
+    assert.equal(stockA().onHand.toString(), "7");
+    assert.equal(stockB().onHand.toString(), "15");
+    const orderId = db.orders[0]!.id;
+
+    await repository.reconcileDeletedOrder(orderId, "UN-1");
+
+    assert.equal(stockA().onHand.toString(), "10");
+    assert.equal(stockB().onHand.toString(), "20");
+  });
+
+  it("throws for an unknown local order id instead of silently doing nothing", async () => {
+    const db = seededDb();
+    const repository = repositoryWith(db);
+    await assert.rejects(() =>
+      repository.reconcileDeletedOrder("missing-order", "UN-1"),
+    );
+  });
+
+  it("two reconciliation attempts racing for the same order book the reversal only once (#7)", async () => {
+    // Honest scope note: this in-memory FakeDb has no cross-statement
+    // isolation and no lock semantics at all, so issuing the two calls via
+    // Promise.all here would prove nothing - both would race past the
+    // "already reconciled?" read before either write lands, regardless of
+    // whether the production code is correct. The real guarantee against
+    // two genuinely concurrent callers comes from lockUnasOrder's
+    // pg_advisory_xact_lock plus the Serializable transaction +
+    // retryOnSerializationConflict wrapping in reconcileDeletedOrder (see
+    // unas-order-sync.repository.ts) serializing the two transactions so
+    // the second one only ever runs its read AFTER the first one's write is
+    // committed - which is exactly what this test simulates by awaiting the
+    // first call before issuing the second. Proving the lock itself
+    // actually serializes concurrent Postgres transactions requires a real
+    // Postgres instance (environment-blocked here, consistent with this
+    // repo's other Postgres-only concurrency proofs).
+    const db = seededDb();
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [baseOrder()], null, new Date());
+    const orderId = db.orders[0]!.id;
+
+    const first = await repository.reconcileDeletedOrder(orderId, "UN-1");
+    const second = await repository.reconcileDeletedOrder(orderId, "UN-1");
+
+    const outcomes = [first, second];
+    assert.equal(
+      outcomes.filter((o) => o.reversed).length,
+      1,
+      "exactly one of the two attempts must perform the actual reversal",
+    );
+    assert.equal(
+      outcomes.filter((o) => o.alreadyReconciled).length,
+      1,
+      "the other attempt must observe it as already reconciled",
+    );
+    assert.equal(db.stockItems[0]?.onHand.toString(), "10");
+    assert.equal(
+      db.movements.filter(
+        (m) => m.type === "RETURN_IN" && m.lines.length > 0,
+      ).length,
+      1,
+      "only a single, fully-posted RETURN_IN movement must exist, never two",
+    );
+  });
+
+  it("a transactional failure during reconciliation leaves neither the order status nor the stock ledger half-finished, and a retry recovers exactly once (#15)", async () => {
+    const db = seededDb();
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [baseOrder()], null, new Date());
+    const orderId = db.orders[0]!.id;
+
+    // Simulate a failure partway through the shared stock-posting
+    // primitive, mirroring the existing apply()-level proof above ("a
+    // writer failure mid-delta leaves StockItem/run state unadvanced") but
+    // for the reconcileDeletedOrder path specifically. This FakeDb doesn't
+    // roll back the orphaned StockMovement header row a real Postgres
+    // transaction abort would (see that test's own comment on the fake's
+    // limits) - it always has empty `lines`, so it never contributes to
+    // computeBookedOutAndGeneration's ledger read and is filtered out below
+    // exactly like the successful-path assertions do above.
+    let calls = 0;
+    const realCreate = db.stockMovementLine.create.bind(db.stockMovementLine);
+    db.stockMovementLine.create = async (args: any) => {
+      calls += 1;
+      if (calls === 1) throw new Error("simulated writer failure");
+      return realCreate(args);
+    };
+
+    await assert.rejects(() =>
+      repository.reconcileDeletedOrder(orderId, "UN-1"),
+    );
+    assert.equal(
+      db.stockItems[0]?.onHand.toString(),
+      "8",
+      "no partial reversal applied on the failed attempt",
+    );
+    assert.equal(db.orders[0]?.unasDeletedAt, null);
+    assert.equal(db.orders[0]?.status, "CONFIRMED");
+
+    const retried = await repository.reconcileDeletedOrder(orderId, "UN-1");
+
+    assert.equal(retried.reversed, true);
+    assert.equal(db.stockItems[0]?.onHand.toString(), "10");
+    assert.equal(db.orders[0]?.status, "CANCELLED");
+    assert.notEqual(db.orders[0]?.unasDeletedAt, null);
+    assert.equal(
+      db.movements.filter(
+        (m) => m.type === "RETURN_IN" && m.lines.length > 0,
+      ).length,
+      1,
+      "the retry must produce exactly one fully-posted reversal movement, not a second",
+    );
+  });
+});
+
+// Covers mandatory test case #14: a Key UNAS legitimately reissues to a
+// brand-new order after the original was physically deleted must never
+// overwrite - or collide with - the old, preserved, deleted order.
+describe("UnasOrderSyncRepository - UNAS Key reuse after a physical deletion", () => {
+  it("treats a reused Key as a brand-new order once the old one is unasDeletedAt, without a unique-key collision", async () => {
+    const db = new FakeDb();
+    db.warehouses.push({
+      id: "wh-1",
+      name: "Fő raktár",
+      createdAt: new Date(0),
+    });
+    db.variants.push({ id: "variant-1", sku: "pump_1" });
+    db.stockItems.push({
+      id: "stock-1",
+      variantId: "variant-1",
+      warehouseId: "wh-1",
+      onHand: new Prisma.Decimal(10),
+    });
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+
+    // Original order, Key=UN-1, Id=9001 (baseOrder()'s default id).
+    await repository.apply("run-1", [baseOrder()], null, new Date());
+    const originalOrderId = db.orders[0]!.id;
+    await repository.reconcileDeletedOrder(originalOrderId, "UN-1");
+    assert.equal(db.orders[0]?.unasDeletedAt !== null, true);
+    assert.equal(db.orders.length, 1);
+    assert.equal(db.externalReferences.length, 1);
+
+    // UNAS reissues Key=UN-1 to a brand-new, unrelated order with a
+    // DIFFERENT Id.
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const summary = await repository.apply(
+      "run-2",
+      [baseOrder({ key: "UN-1", id: "9002" })],
+      null,
+      new Date(),
+    );
+
+    // A brand-new local order is created - the old, deleted one is never
+    // touched/overwritten.
+    assert.equal(summary.createdCount, 1);
+    assert.equal(db.orders.length, 2);
+    assert.equal(db.externalReferences.length, 2);
+    const original = db.orders.find((order) => order.id === originalOrderId)!;
+    assert.equal(original.status, "CANCELLED");
+    assert.ok(original.unasDeletedAt instanceof Date);
+    const fresh = db.orders.find((order) => order.id !== originalOrderId)!;
+    assert.equal(fresh.status, "CONFIRMED");
+    assert.equal(fresh.unasDeletedAt, null);
+    // No unique-key collision: both ExternalReference rows coexist, keyed
+    // by their distinct Ids (9001 vs 9002), not the shared Key.
+    const externalIds = db.externalReferences.map((ref) => ref.externalId);
+    assert.equal(new Set(externalIds).size, 2);
+  });
+
+  it("does not confuse two different, still-live orders that happen to share a legacy (pre-migration, Key-based) ExternalReference lookup path", async () => {
+    const db = new FakeDb();
+    db.warehouses.push({
+      id: "wh-1",
+      name: "Fő raktár",
+      createdAt: new Date(0),
+    });
+    db.variants.push({ id: "variant-1", sku: "pump_1" });
+    db.stockItems.push({
+      id: "stock-1",
+      variantId: "variant-1",
+      warehouseId: "wh-1",
+      onHand: new Prisma.Decimal(10),
+    });
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [baseOrder()], null, new Date());
+    const orderId = db.orders[0]!.id;
+
+    // Simulate a pre-migration row: externalId still literally equals the
+    // Key (as every row created before this checkpoint would).
+    db.externalReferences[0]!.externalId = "UN-1";
+
+    // A later sighting of the SAME still-live order (same Key, same Id)
+    // must still resolve to the SAME local order - the legacy fallback
+    // lookup, plus lazy backfill.
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const summary = await repository.apply(
+      "run-2",
+      [baseOrder({ statusType: "close_ok", status: "Lezárva" })],
+      null,
+      new Date(),
+    );
+
+    assert.equal(summary.createdCount, 0); // not treated as a new order
+    assert.equal(db.orders.length, 1);
+    assert.equal(db.orders[0]?.id, orderId);
+    assert.equal(db.orders[0]?.status, "COMPLETED");
+    // Lazily backfilled to the Id-based convention.
+    assert.equal(db.externalReferences[0]?.externalId, "9001");
+  });
+});
+
 describe("UnasOrderSyncRepository.apply - read-only UNAS invoice mirror", () => {
   function runningDb(): FakeDb {
     const db = new FakeDb();
@@ -2341,6 +2794,7 @@ describe("UnasOrderSyncRepository.findById", () => {
       totalGross: new Prisma.Decimal("12700"),
       orderedAt: new Date("2026-07-20T14:05:00.000Z"),
       createdAt: new Date("2026-07-20T14:06:00.000Z"),
+      unasDeletedAt: null,
       lines: [],
       unasInvoiceStatus: "BILLED",
       invoices: [
@@ -2380,6 +2834,7 @@ describe("UnasOrderSyncRepository.findById", () => {
       totalGross: new Prisma.Decimal("6350"),
       orderedAt: new Date("2026-07-22T10:00:00.000Z"),
       createdAt: new Date("2026-07-22T10:01:00.000Z"),
+      unasDeletedAt: null,
       lines: [],
       unasInvoiceStatus: "BILLABLE",
       invoices: [],

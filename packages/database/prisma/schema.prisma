@@ -1184,6 +1184,13 @@ enum UnasStockSyncSourceProcess {
   UNAS_ORDER_IMPORT
   UNAS_ORDER_UPDATE
   UNAS_ORDER_CANCEL
+  /// Nettó készlet-visszaforgatás egy UNAS-ból fizikailag törölt (nem
+  /// sztornózott!) rendelésnél - lásd SalesOrder.unasDeletedAt doc-comment
+  /// és docs/INVENTORY-CONSISTENCY.md "UNAS-ból fizikailag törölt
+  /// rendelések". Külön érték a UNAS_ORDER_CANCEL-től, hogy a diagnosztika/
+  /// admin szűrés egyértelműen megkülönböztesse a két, azonos mechanizmust
+  /// (targetOut=0) használó, de üzletileg más eseményt.
+  UNAS_ORDER_DELETED
   RECONCILIATION
 }
 
@@ -1354,6 +1361,36 @@ model SalesOrder {
   /// belőle számlázást - lásd docs/ACROPORA-OS-MASTER-MILESTONE-PLAN.md
   /// "Kimenő számlázás architektúrája".
   unasInvoiceStatus UnasInvoiceStatus?
+  /// Nem NULL, ha ezt a rendelést a UNAS-ban FIZIKAILAG törölték (nem
+  /// sztornózták!) - lásd docs/INVENTORY-CONSISTENCY.md "UNAS-ból
+  /// fizikailag törölt rendelések". Kizárólag egy konkrét, rendelés-
+  /// azonosítóval végzett UNAS-lekérdezés igazolt NOT_FOUND eredménye
+  /// állíthatja be (soha nem az inkrementális lista/időablak válaszából
+  /// való puszta hiány - lásd unas-order-deletion.util.ts). Amikor ez
+  /// kitöltött, a `status` mező is CANCELLED-re áll (ugyanaz a lezárt/
+  /// inaktív jelleg, mint egy szabályos UNAS-sztornónál), DE ez a mező
+  /// egyértelműen megkülönbözteti a kettőt: egy szabályos, UNAS-oldali
+  /// sztornónál (status=CANCELLED, close_fault) ez a mező NULL marad. A
+  /// rendelést magát SOHA nem töröljük fizikailag - lásd az auditnyom-
+  /// megőrzés követelményét.
+  unasDeletedAt     DateTime?
+  /// Mikor esedékes legközelebb egy UNAS létezés-ellenőrzés erre a
+  /// rendelésre (a korlátozott, kötegelt automatikus reconciliation
+  /// workerhez - lásd unas-order-deletion-reconciliation.service.ts). NULL
+  /// = még sosem volt ütemezve (azonnal jogosult, amint a worker
+  /// bekapcsolásra kerül); csak channel=UNAS és unasDeletedAt IS NULL és
+  /// nem-terminális `status` esetén releváns.
+  unasExistenceCheckDueAt          DateTime?
+  /// PROCESSING-jellegű lease lejárati ideje egy claim-elt existence-check
+  /// próbálkozáshoz - ugyanaz a minta, mint UnasStockSyncOutbox.leaseExpiresAt,
+  /// hogy két párhuzamos worker sose dolgozza fel ugyanazt a rendelést.
+  unasExistenceCheckLeaseExpiresAt DateTime?
+  /// Diagnosztikai célú, nem funkcionális: melyik worker-példány foglalta le
+  /// utoljára - lásd UnasStockSyncOutbox.claimedBy doc-comment.
+  unasExistenceCheckClaimedBy      String?
+  /// Az existence-check próbálkozások száma - a backoff kiszámításához
+  /// (lásd computeNextAttemptDelayMs mintáját unas-stock-sync-outbox.service.ts-ben).
+  unasExistenceCheckAttempts       Int       @default(0)
   /// Webshop (UNAS) rendeléseknél a vásárló neve; nincs még Customer modul,
   /// ezért csak megjelenítésre tárolt sima szöveg, nem kapcsolt entitás.
   buyerName         String?
@@ -1393,6 +1430,7 @@ model SalesOrder {
   @@index([customerId, createdAt])
   @@index([channel, createdAt])
   @@index([unasInvoiceStatus])
+  @@index([channel, unasDeletedAt, unasExistenceCheckDueAt])
 }
 
 model SalesOrderLine {

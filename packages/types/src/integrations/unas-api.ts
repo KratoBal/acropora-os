@@ -107,8 +107,22 @@ export interface UnasApiOrderItem {
 }
 
 export interface UnasApiOrder {
-  /** UNAS's own order identifier, used for idempotency (ExternalReference.externalId). */
+  /** UNAS's own order handle (Key) - reassignable: per UNAS's own
+   * "Adatszerkezet" docs, a previously deleted order's Key CAN be reissued
+   * to a brand-new order later. Used for identification/lookup
+   * (getOrderByKey, setOrder), and mirrored onto ExternalReference.externalKey -
+   * never as the sole uniqueness anchor once an order may be deleted-but-
+   * preserved locally (see `id` below). */
   key: string;
+  /** UNAS's own genuinely stable, never-reassigned order identifier (GET
+   * only - the docs explicitly say it can't be used for identification in
+   * setOrder, only `key` can). This is what ExternalReference.externalId
+   * stores from this checkpoint onward, specifically so a reused `key`
+   * (see above) can never collide with - or silently overwrite - a
+   * previously deleted order's preserved local record. Null only if a
+   * response is missing the node entirely (not expected per the docs, but
+   * parsed defensively). */
+  id: string | null;
   internalKey: string | null;
   status: string | null;
   /** open_normal | open_prepare | close_ok | close_fault, when present. */

@@ -3,13 +3,18 @@ import { describe, it } from "node:test";
 import { NotFoundException } from "@nestjs/common";
 import type { UnasApiOrder, UnasOrderDetail } from "@acropora/types";
 
-import type { UnasApiClient } from "../../imports/unas/unas-api.client.js";
+import {
+  UnasApiError,
+  type UnasApiClient,
+  type UnasApiErrorCode,
+} from "../../imports/unas/unas-api.client.js";
 import type { UnasOrderSyncRepository } from "./unas-order-sync.repository.js";
 import { UnasOrderSyncService } from "./unas-order-sync.service.js";
 
 function order(key: string): UnasApiOrder {
   return {
     key,
+    id: `id-${key}`,
     internalKey: null,
     status: "open",
     statusType: "open_normal",
@@ -201,6 +206,7 @@ function detail(overrides: Partial<UnasOrderDetail> = {}): UnasOrderDetail {
     totalGross: "1270",
     orderedAt: null,
     createdAt: "2026-07-20T14:05:00.000Z",
+    unasDeletedAt: null,
     lines: [],
     unasInvoiceStatus: null,
     invoices: [],
@@ -213,6 +219,7 @@ describe("UnasOrderSyncService.refreshOrder", () => {
     key?: string | null;
     fetchedOrder?: UnasApiOrder | null;
     detailAfterRefresh?: UnasOrderDetail | null;
+    reconcileResult?: { reversed: boolean; alreadyReconciled: boolean };
   }) {
     const calls: Array<{ operation: string; input?: unknown }> = [];
     const api = {
@@ -231,6 +238,15 @@ describe("UnasOrderSyncService.refreshOrder", () => {
       refreshOrder: async (orderId: string, fetched: UnasApiOrder) => {
         calls.push({ operation: "refreshOrder", input: { orderId, fetched } });
         return { updated: true, reversed: false };
+      },
+      reconcileDeletedOrder: async (orderId: string, unasKey: string) => {
+        calls.push({
+          operation: "reconcileDeletedOrder",
+          input: { orderId, unasKey },
+        });
+        return (
+          input?.reconcileResult ?? { reversed: true, alreadyReconciled: false }
+        );
       },
       findById: async (orderId: string) => {
         calls.push({ operation: "findById", input: orderId });
@@ -258,26 +274,91 @@ describe("UnasOrderSyncService.refreshOrder", () => {
     assert.equal(result.id, "order-1");
   });
 
-  it("throws 404 when the order was never UNAS-synced (no Key on file)", async () => {
-    const { service } = fixture({ key: null });
+  it("throws 404 when the order was never UNAS-synced (no Key on file), and never touches UNAS or stock for a locally-nonexistent order id (#13)", async () => {
+    const { service, calls } = fixture({ key: null });
 
     await assert.rejects(
-      () => service.refreshOrder("token", "order-1"),
+      () => service.refreshOrder("token", "does-not-exist-locally"),
       (error) => error instanceof NotFoundException,
+    );
+    // Business rule 3/4: a targeted lookup that never even reaches UNAS
+    // (because the order isn't known locally in the first place) must
+    // never be treated as a confirmed deletion - reconcileDeletedOrder
+    // must not run, and the UNAS API must never be called.
+    assert.equal(
+      calls.map((call) => call.operation).join(","),
+      "getUnasKey",
     );
   });
 
-  it("throws 404 when UNAS no longer has an order under that Key", async () => {
-    const { service } = fixture({ fetchedOrder: null });
+  const transientErrorCodes: UnasApiErrorCode[] = [
+    "NETWORK_FAILED",
+    "TIMEOUT",
+    "AUTH_REJECTED",
+    "HTTP_4XX",
+    "RATE_LIMITED",
+    "HTTP_5XX",
+    "RESPONSE_SHAPE_INVALID",
+  ];
+  for (const code of transientErrorCodes) {
+    it(`propagates a ${code} UnasApiError without treating it as a deletion (#11) - order/stock must stay unmodified`, async () => {
+      const calls: Array<{ operation: string; input?: unknown }> = [];
+      const api = {
+        getOrderByKey: async () => {
+          calls.push({ operation: "getOrderByKey" });
+          throw new UnasApiError(code);
+        },
+      } as unknown as UnasApiClient;
+      const repository = {
+        getUnasKey: async () => "UN-1",
+        reconcileDeletedOrder: async () => {
+          calls.push({ operation: "reconcileDeletedOrder" });
+          return { reversed: true, alreadyReconciled: false };
+        },
+      } as unknown as UnasOrderSyncRepository;
+      const service = new UnasOrderSyncService(api, repository);
 
-    await assert.rejects(
-      () => service.refreshOrder("token", "order-1"),
-      (error) => error instanceof NotFoundException,
+      await assert.rejects(
+        () => service.refreshOrder("token", "order-1"),
+        (error) => error instanceof UnasApiError && error.code === code,
+      );
+      assert.equal(
+        calls.some((call) => call.operation === "reconcileDeletedOrder"),
+        false,
+      );
+    });
+  }
+
+  it("reconciles a physical UNAS deletion instead of throwing a generic 404 when UNAS confirms the order is gone", async () => {
+    const { service, calls } = fixture({ fetchedOrder: null });
+
+    const result = await service.refreshOrder("token", "order-1");
+
+    assert.equal(
+      calls.map((call) => call.operation).join(","),
+      "getUnasKey,getOrderByKey,reconcileDeletedOrder,findById",
     );
+    assert.deepEqual(
+      calls.find((call) => call.operation === "reconcileDeletedOrder")?.input,
+      { orderId: "order-1", unasKey: "UN-1" },
+    );
+    assert.equal(result.id, "order-1");
   });
 
   it("throws 404 if the order can no longer be found locally after applying the refresh", async () => {
     const { service } = fixture({ detailAfterRefresh: null });
+
+    await assert.rejects(
+      () => service.refreshOrder("token", "order-1"),
+      (error) => error instanceof NotFoundException,
+    );
+  });
+
+  it("throws 404 if the order can no longer be found locally after a deletion reconciliation", async () => {
+    const { service } = fixture({
+      fetchedOrder: null,
+      detailAfterRefresh: null,
+    });
 
     await assert.rejects(
       () => service.refreshOrder("token", "order-1"),

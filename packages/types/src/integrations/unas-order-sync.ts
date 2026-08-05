@@ -106,6 +106,18 @@ export interface UnasOrderDetail {
   totalGross: string;
   orderedAt: string | null;
   createdAt: string;
+  /**
+   * SalesOrder.unasDeletedAt - non-null ONLY when this order was confirmed
+   * PHYSICALLY DELETED from UNAS (via a targeted, single-order lookup that
+   * returned NOT_FOUND - never inferred from a mere absence in an
+   * incremental list/window response). Null for a normal, still-live order
+   * AND for one that was properly sztornózott (cancelled) in UNAS itself -
+   * `status === "CANCELLED"` alone does not distinguish the two; this
+   * field is what does. The order row and its full history are never
+   * deleted locally - see docs/INVENTORY-CONSISTENCY.md "UNAS-ból
+   * fizikailag törölt rendelések".
+   */
+  unasDeletedAt: string | null;
   lines: UnasOrderLineDetail[];
   /**
    * SalesOrder.unasInvoiceStatus - the UNAS-side Invoice.Status (getOrder
