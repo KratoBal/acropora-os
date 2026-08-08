@@ -334,7 +334,10 @@ describe("UNAS getOrder contract", () => {
     assert.equal(order.internalKey, "internal-1");
     assert.equal(order.statusType, "open_normal");
     assert.equal(order.statusId, "3");
-    assert.equal(order.orderedAt, "2026-07-20T14:05:00.000Z");
+    // UNAS's dotted Date is shop-local time. Europe/Budapest is UTC+2 in
+    // July, so the stored UTC instant must be two hours earlier; rendering
+    // it in the shop/browser timezone shows the original 14:05 again.
+    assert.equal(order.orderedAt, "2026-07-20T12:05:00.000Z");
     assert.equal(order.customerName, "Kovács Anna");
     assert.equal(order.customerEmail, "vevo@example.com");
     assert.equal(order.sumPriceGross, "12700");
@@ -352,6 +355,31 @@ describe("UNAS getOrder contract", () => {
     ]);
     assert.equal(order.items[1]?.sku, null);
     assert.equal(order.items[1]?.id, "shipping-cost");
+  });
+
+  it("converts UNAS shop-local order dates with Budapest daylight-saving time", () => {
+    const summer = parseUnasOrderResponse(orderResponse, "Europe/Budapest")[0]!;
+    const winter = parseUnasOrderResponse(
+      orderResponse.replace("2026.07.20 14:05:00", "2026.01.20 14:05:00"),
+      "Europe/Budapest",
+    )[0]!;
+
+    assert.equal(summer.orderedAt, "2026-07-20T12:05:00.000Z");
+    assert.equal(winter.orderedAt, "2026-01-20T13:05:00.000Z");
+  });
+
+  it("keeps an explicit ISO offset authoritative and returns null for an invalid shop timezone", () => {
+    const explicit = parseUnasOrderResponse(
+      orderResponse.replace("2026.07.20 14:05:00", "2026-07-20T14:05:00+02:00"),
+      "Europe/Budapest",
+    )[0]!;
+    const invalidZone = parseUnasOrderResponse(
+      orderResponse,
+      "Not/A-Time-Zone",
+    )[0]!;
+
+    assert.equal(explicit.orderedAt, "2026-07-20T12:05:00.000Z");
+    assert.equal(invalidZone.orderedAt, null);
   });
 
   it("rejects an order without a Key", () => {

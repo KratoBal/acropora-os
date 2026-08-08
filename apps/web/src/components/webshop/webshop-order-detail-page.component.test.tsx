@@ -271,6 +271,32 @@ describe("WebshopOrderDetailPage - Rendelés frissítése gomb", () => {
     expect(api.refreshOrder).toHaveBeenCalledWith("token-owner", "order-1");
   });
 
+  it("egyértelműen jelzi, ha egy élő UNAS-rendelés stabil Id alapján helyreállította a korábbi téves törlésjelölést", async () => {
+    api.getOne.mockResolvedValue(
+      baseDetail({
+        status: "CANCELLED",
+        unasDeletedAt: "2026-08-08T20:13:16.000Z",
+      }),
+    );
+    api.refreshOrder.mockResolvedValue(
+      baseDetail({ status: "CONFIRMED", unasDeletedAt: null }),
+    );
+    render(createElement(WebshopOrderDetailPage, { orderId: "order-1" }));
+    const button = await screen.findByRole("button", {
+      name: "Rendelés frissítése",
+    });
+
+    fireEvent.click(button);
+
+    expect(
+      await screen.findByText("A téves törlésjelölés helyreállt"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/auditált készletmozgással megtörtént/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Törölve a UNAS-ban/)).not.toBeInTheDocument();
+  });
+
   it("hiba esetén egyértelmű hibaüzenetet mutat, és nem cseréli le a meglévő adatokat", async () => {
     api.getOne.mockResolvedValue(baseDetail({ status: "CONFIRMED" }));
     api.refreshOrder.mockRejectedValue(

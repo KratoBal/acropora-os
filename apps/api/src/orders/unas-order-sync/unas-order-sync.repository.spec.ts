@@ -66,6 +66,7 @@ class FakeDb {
     id: string;
     entityId: string;
     externalId: string;
+    externalKey: string | null;
     metadata: Record<string, unknown> | null;
   }> = [];
   movements: FakeMovement[] = [];
@@ -203,14 +204,25 @@ class FakeDb {
         const found = this.externalReferences.find(
           (reference) => reference.externalId === key.externalId,
         );
-        return found ? { id: found.id, entityId: found.entityId } : null;
+        return found
+          ? {
+              id: found.id,
+              entityId: found.entityId,
+              externalId: found.externalId,
+              externalKey: found.externalKey,
+            }
+          : null;
       }
       const key = args.where.system_entityType_entityId;
       const found = this.externalReferences.find(
         (reference) => reference.entityId === key.entityId,
       );
       return found
-        ? { metadata: found.metadata, externalId: found.externalId }
+        ? {
+            metadata: found.metadata,
+            externalId: found.externalId,
+            externalKey: found.externalKey,
+          }
         : null;
     },
     findMany: async (args: any) => {
@@ -227,6 +239,7 @@ class FakeDb {
         id: nextId("ref"),
         entityId: args.data.entityId as string,
         externalId: args.data.externalId as string,
+        externalKey: (args.data.externalKey as string | null) ?? null,
         metadata: (args.data.metadata as Record<string, unknown>) ?? null,
       };
       this.externalReferences.push(row);
@@ -240,6 +253,8 @@ class FakeDb {
         row.metadata = args.data.metadata as Record<string, unknown>;
       if (row && args.data.externalId !== undefined)
         row.externalId = args.data.externalId as string;
+      if (row && args.data.externalKey !== undefined)
+        row.externalKey = args.data.externalKey as string | null;
       return row ?? {};
     },
   };
@@ -1754,6 +1769,83 @@ describe("UnasOrderSyncRepository.refreshOrder", () => {
     assert.equal(db.orders.length, 1);
   });
 
+  it("uses ExternalReference.externalKey for the targeted UNAS lookup, never the distinct stable externalId", async () => {
+    const { db } = seededDb();
+    const repository = repositoryWith(db);
+    await repository.apply(
+      "run-1",
+      [baseOrder({ key: "47679-530114", id: "123456789" })],
+      null,
+      new Date(),
+    );
+    const orderId = db.orders[0]!.id;
+
+    assert.equal(db.externalReferences[0]?.externalId, "123456789");
+    assert.equal(db.externalReferences[0]?.externalKey, "47679-530114");
+    assert.equal(await repository.getUnasKey(orderId), "47679-530114");
+  });
+
+  it("fails closed when externalKey is missing instead of sending externalId as a Key", async () => {
+    const { db } = seededDb();
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [baseOrder()], null, new Date());
+    db.externalReferences[0]!.externalKey = null;
+
+    assert.equal(await repository.getUnasKey(db.orders[0]!.id), null);
+  });
+
+  it("restores a falsely-deleted live order only through the same stable UNAS Id and books the corrective SALE exactly once", async () => {
+    const { db } = seededDb();
+    const repository = repositoryWith(db);
+    const liveOrder = baseOrder({ key: "47679-530114", id: "123456789" });
+    await repository.apply("run-1", [liveOrder], null, new Date());
+    const orderId = db.orders[0]!.id;
+    assert.equal(db.stockItems[0]?.onHand.toString(), "8");
+
+    await repository.reconcileDeletedOrder(orderId, liveOrder.key);
+    assert.equal(db.stockItems[0]?.onHand.toString(), "10");
+    assert.ok(db.orders[0]?.unasDeletedAt);
+
+    const recovered = await repository.refreshOrder(orderId, liveOrder);
+    assert.equal(recovered.updated, true);
+    assert.equal(db.orders[0]?.unasDeletedAt, null);
+    assert.equal(db.orders[0]?.status, "CONFIRMED");
+    assert.equal(db.stockItems[0]?.onHand.toString(), "8");
+    assert.deepEqual(
+      db.movements.map((movement) => movement.type),
+      ["SALE", "RETURN_IN", "SALE"],
+    );
+
+    await repository.refreshOrder(orderId, liveOrder);
+    assert.equal(db.stockItems[0]?.onHand.toString(), "8");
+    assert.deepEqual(
+      db.movements.map((movement) => movement.type),
+      ["SALE", "RETURN_IN", "SALE"],
+    );
+  });
+
+  it("never restores a deletion marker when the fetched order has a different stable UNAS Id", async () => {
+    const { db } = seededDb();
+    const repository = repositoryWith(db);
+    const original = baseOrder({ key: "47679-530114", id: "123456789" });
+    await repository.apply("run-1", [original], null, new Date());
+    const orderId = db.orders[0]!.id;
+    await repository.reconcileDeletedOrder(orderId, original.key);
+
+    await assert.rejects(() =>
+      repository.refreshOrder(
+        orderId,
+        baseOrder({ key: original.key, id: "DIFFERENT-STABLE-ID" }),
+      ),
+    );
+    assert.ok(db.orders[0]?.unasDeletedAt);
+    assert.equal(db.stockItems[0]?.onHand.toString(), "10");
+    assert.deepEqual(
+      db.movements.map((movement) => movement.type),
+      ["SALE", "RETURN_IN"],
+    );
+  });
+
   it("saves a newly-reported invoice number/link on refresh", async () => {
     const { db } = seededDb();
     const repository = repositoryWith(db);
@@ -2212,8 +2304,10 @@ describe("UnasOrderSyncRepository.reconcileDeletedOrder", () => {
       null,
       new Date(),
     );
-    const stockA = () => db.stockItems.find((item) => item.variantId === "variant-a")!;
-    const stockB = () => db.stockItems.find((item) => item.variantId === "variant-b")!;
+    const stockA = () =>
+      db.stockItems.find((item) => item.variantId === "variant-a")!;
+    const stockB = () =>
+      db.stockItems.find((item) => item.variantId === "variant-b")!;
     assert.equal(stockA().onHand.toString(), "7");
     assert.equal(stockB().onHand.toString(), "15");
     const orderId = db.orders[0]!.id;
@@ -2269,9 +2363,8 @@ describe("UnasOrderSyncRepository.reconcileDeletedOrder", () => {
     );
     assert.equal(db.stockItems[0]?.onHand.toString(), "10");
     assert.equal(
-      db.movements.filter(
-        (m) => m.type === "RETURN_IN" && m.lines.length > 0,
-      ).length,
+      db.movements.filter((m) => m.type === "RETURN_IN" && m.lines.length > 0)
+        .length,
       1,
       "only a single, fully-posted RETURN_IN movement must exist, never two",
     );
@@ -2318,9 +2411,8 @@ describe("UnasOrderSyncRepository.reconcileDeletedOrder", () => {
     assert.equal(db.orders[0]?.status, "CANCELLED");
     assert.notEqual(db.orders[0]?.unasDeletedAt, null);
     assert.equal(
-      db.movements.filter(
-        (m) => m.type === "RETURN_IN" && m.lines.length > 0,
-      ).length,
+      db.movements.filter((m) => m.type === "RETURN_IN" && m.lines.length > 0)
+        .length,
       1,
       "the retry must produce exactly one fully-posted reversal movement, not a second",
     );
