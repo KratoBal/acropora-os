@@ -201,6 +201,8 @@ export type {
   UnasOrderLineDetail,
   UnasOrderListItem,
   UnasOrderListResponse,
+  UnasOrderRefreshResult,
+  UnasOrderStockPublishSummary,
   UnasOrderSyncRun,
   UnasOrderSyncRunStatus,
   UnasOrderSyncSummary,

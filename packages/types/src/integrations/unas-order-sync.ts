@@ -134,6 +134,21 @@ export interface UnasOrderDetail {
   invoices: UnasOrderInvoiceSummary[];
 }
 
+export interface UnasOrderStockPublishSummary {
+  claimed: number;
+  succeeded: number;
+  superseded: number;
+  retried: number;
+  deadLettered: number;
+}
+
+/** Result of the explicit single-order refresh. The order shape remains
+ * directly usable by existing detail consumers, while stockPublish reports
+ * the exact-order outbox drain performed after the local transaction. */
+export interface UnasOrderRefreshResult extends UnasOrderDetail {
+  stockPublish: UnasOrderStockPublishSummary;
+}
+
 /// Egy SKU-szintű eltérés a helyi StockItem és a UNAS-on utoljára jelentett
 /// reportedStock között. Nem hív külön UNAS API-t: a termék-szinkron job
 /// által már úgyis frissen tartott UnasProductSnapshot.reportedStock-ot

@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 
 import { UnasImportModule } from "../../imports/unas/unas-import.module.js";
+import { InventoryModule } from "../../inventory/inventory.module.js";
 import { UnasOrderDeletionReconciliationRepository } from "./unas-order-deletion-reconciliation.repository.js";
 import { UnasOrderDeletionReconciliationScheduler } from "./unas-order-deletion-reconciliation.scheduler.js";
 import { UnasOrderDeletionReconciliationService } from "./unas-order-deletion-reconciliation.service.js";
@@ -13,7 +14,7 @@ import { UnasOrderSyncScheduler } from "./unas-order-sync.scheduler.js";
 import { UnasOrderSyncService } from "./unas-order-sync.service.js";
 
 @Module({
-  imports: [UnasImportModule],
+  imports: [UnasImportModule, InventoryModule],
   controllers: [UnasOrderSyncController, UnasOrderStockAuditController],
   providers: [
     UnasOrderSyncRepository,

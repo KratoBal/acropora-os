@@ -52,6 +52,7 @@ function config(
 
 interface RepoCalls {
   claimBatchArgs: unknown[];
+  claimForUnasOrderArgs: unknown[];
   isSupersededArgs: unknown[];
   markSucceededIds: string[];
   markSupersededSuccessArgs: Array<{ id: string; by: string }>;
@@ -68,6 +69,7 @@ function buildFakeRepository(options: {
 }) {
   const calls: RepoCalls = {
     claimBatchArgs: [],
+    claimForUnasOrderArgs: [],
     isSupersededArgs: [],
     markSucceededIds: [],
     markSupersededSuccessArgs: [],
@@ -78,6 +80,10 @@ function buildFakeRepository(options: {
   const repository = {
     claimBatch: async (args: unknown) => {
       calls.claimBatchArgs.push(args);
+      return options.claimed;
+    },
+    claimForUnasOrder: async (args: unknown) => {
+      calls.claimForUnasOrderArgs.push(args);
       return options.claimed;
     },
     isSuperseded: async (args: { id: string }) => {
@@ -464,5 +470,34 @@ describe("UnasStockSyncOutboxService.processBatch", () => {
 
     assert.equal(summary.claimed, 0);
     assert.equal(setStockCalls.length, 0);
+  });
+});
+
+describe("UnasStockSyncOutboxService.processForUnasOrder", () => {
+  it("claims only the requested order and reuses the refresh token", async () => {
+    const claimed = row({
+      sourceProcess: "UNAS_ORDER_UPDATE",
+      sourceRecordId: "order-1",
+    });
+    const { service, calls, setStockCalls, getAuthCallCount } = buildService({
+      claimed: [claimed],
+      onHandByVariant: new Map([["variant-1", new Prisma.Decimal("3")]]),
+    });
+
+    const summary = await service.processForUnasOrder(
+      "order-1",
+      "already-authenticated-token",
+    );
+
+    assert.equal(summary.claimed, 1);
+    assert.equal(summary.succeeded, 1);
+    assert.equal(calls.claimBatchArgs.length, 0);
+    assert.equal(calls.claimForUnasOrderArgs.length, 1);
+    assert.equal(
+      (calls.claimForUnasOrderArgs[0] as { orderId: string }).orderId,
+      "order-1",
+    );
+    assert.equal(setStockCalls.length, 1);
+    assert.equal(getAuthCallCount(), 0);
   });
 });

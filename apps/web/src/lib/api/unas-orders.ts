@@ -1,6 +1,7 @@
 import type {
   StockReconciliationReport,
   UnasOrderDetail,
+  UnasOrderRefreshResult,
   UnasOrderListResponse,
   UnasOrderSyncRun,
   UnasOrderSyncSummary,
@@ -38,7 +39,7 @@ export const unasOrdersApi = {
    * Returns the fully refreshed order detail (incl. invoice data) so the
    * caller can replace its on-screen state directly from the response. */
   refreshOrder(token: string, id: string) {
-    return apiRequest<UnasOrderDetail>(
+    return apiRequest<UnasOrderRefreshResult>(
       `/integrations/unas/orders/${encodeURIComponent(id)}/refresh`,
       token,
       { method: "POST" },

@@ -156,6 +156,55 @@ export class UnasStockSyncOutboxRepository extends Repository {
     return rows;
   }
 
+  /// Atomically claims only stock-publish rows created by one UNAS order.
+  /// This is the narrow manual recovery path used by the single-order
+  /// refresh endpoint while the global worker is disabled. The
+  /// sourceRecordId filter is the local SalesOrder.id written by
+  /// postInventoryMovement; the sourceProcess allow-list prevents a
+  /// coincidentally equal id from another stock-writing flow from being
+  /// published. It deliberately shares the same lease/attempt semantics as
+  /// claimBatch, so concurrent manual refreshes and a future enabled worker
+  /// still cannot claim the same row twice.
+  async claimForUnasOrder(params: {
+    orderId: string;
+    batchSize: number;
+    leaseSeconds: number;
+    workerId: string;
+  }): Promise<ClaimedUnasStockSyncOutboxRow[]> {
+    return this.outboxDatabase.$queryRaw<ClaimedUnasStockSyncOutboxRow[]>`
+      WITH claimable AS (
+        SELECT "id" FROM "UnasStockSyncOutbox"
+        WHERE "sourceRecordId" = ${params.orderId}
+          AND "sourceProcess" IN (
+            'UNAS_ORDER_IMPORT',
+            'UNAS_ORDER_UPDATE',
+            'UNAS_ORDER_CANCEL',
+            'UNAS_ORDER_DELETED'
+          )
+          AND (
+            ("status" IN ('PENDING', 'FAILED') AND "nextAttemptAt" <= now())
+            OR ("status" = 'PROCESSING' AND "leaseExpiresAt" IS NOT NULL AND "leaseExpiresAt" < now())
+          )
+        ORDER BY "sequence" ASC
+        LIMIT ${params.batchSize}
+        FOR UPDATE SKIP LOCKED
+      )
+      UPDATE "UnasStockSyncOutbox" AS o
+      SET
+        "status" = 'PROCESSING',
+        "attempts" = o."attempts" + 1,
+        "leaseExpiresAt" = now() + make_interval(secs => ${params.leaseSeconds}),
+        "claimedBy" = ${params.workerId},
+        "updatedAt" = now()
+      FROM claimable AS c
+      WHERE o."id" = c."id"
+      RETURNING
+        o."id", o."variantId", o."warehouseId", o."sku", o."targetOnHand",
+        o."idempotencyKey", o."sourceProcess", o."sourceRecordId",
+        o."attempts", o."sequence"
+    `;
+  }
+
   /// True when a NEWER outbox row exists for the same (variantId,
   /// warehouseId) - i.e. a stock movement happened after this row was
   /// written, so publishing this row's `targetOnHand` would push a stale

@@ -40,6 +40,10 @@ import { UnasStockSyncOutboxService } from "./unas-stock-sync-outbox.service.js"
   // (StockDiagnosticsService) - the checkpoint-6 diagnostics report reuses
   // this EXACT read-only summarize() rather than re-implementing its own
   // reconciliation pass.
-  exports: [UnasStockSyncOutboxRepository, StockReconciliationService],
+  exports: [
+    UnasStockSyncOutboxRepository,
+    UnasStockSyncOutboxService,
+    StockReconciliationService,
+  ],
 })
 export class InventoryModule {}

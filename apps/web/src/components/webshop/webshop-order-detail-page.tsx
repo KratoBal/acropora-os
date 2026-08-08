@@ -14,6 +14,7 @@ import {
   hasPermission,
   PERMISSIONS,
   type UnasOrderDetail,
+  type UnasOrderStockPublishSummary,
 } from "@acropora/types";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -90,6 +91,8 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [refreshSuccessAt, setRefreshSuccessAt] = useState<Date | null>(null);
   const [restoredFalseDeletion, setRestoredFalseDeletion] = useState(false);
+  const [stockPublish, setStockPublish] =
+    useState<UnasOrderStockPublishSummary | null>(null);
 
   const handleRefresh = () => {
     const wasMarkedDeleted = Boolean(detail?.unasDeletedAt);
@@ -97,6 +100,7 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
     setRefreshError(null);
     setRefreshSuccessAt(null);
     setRestoredFalseDeletion(false);
+    setStockPublish(null);
     void unasOrdersApi
       .refreshOrder(token, orderId)
       .then((refreshed) => {
@@ -115,6 +119,7 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
         setRestoredFalseDeletion(
           wasMarkedDeleted && refreshed.unasDeletedAt === null,
         );
+        setStockPublish(refreshed.stockPublish);
         setRefreshSuccessAt(new Date());
       })
       .catch((cause: unknown) =>
@@ -195,11 +200,38 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
         />
       ) : null}
 
+      {stockPublish && stockPublish.succeeded > 0 ? (
+        <Alert
+          variant="info"
+          title="Az UNAS készlet frissült"
+          description={`${stockPublish.succeeded} célzott készletpublikálás sikeresen befejeződött. Más rendelések várakozó készletsorai nem kerültek feldolgozásra.`}
+        />
+      ) : null}
+
+      {stockPublish &&
+      (stockPublish.retried > 0 || stockPublish.deadLettered > 0) ? (
+        <Alert
+          variant="danger"
+          title="Az UNAS készletfrissítés nem fejeződött be"
+          description={`Újrapróbálásra vár: ${stockPublish.retried}, végleges hibára került: ${stockPublish.deadLettered}. A helyi készletkönyvelés megmaradt; további rendelést ne állíts helyre a hiba kivizsgálásáig.`}
+        />
+      ) : null}
+
+      {stockPublish &&
+      stockPublish.superseded > 0 &&
+      stockPublish.succeeded === 0 ? (
+        <Alert
+          variant="info"
+          title="Újabb készletmozgás vár publikálásra"
+          description="A rendeléshez tartozó sor időközben elavult, ezért nem írta felül az újabb készletállapotot. A globális készletszinkront továbbra se kapcsold be."
+        />
+      ) : null}
+
       {refreshSuccessAt && !refreshError && restoredFalseDeletion ? (
         <Alert
           variant="info"
           title="A téves törlésjelölés helyreállt"
-          description="Az UNAS ugyanazzal a stabil rendelésazonosítóval visszaigazolta, hogy a rendelés él. A törlésjelölés megszűnt, és a készletkorrekció auditált készletmozgással megtörtént."
+          description="Az UNAS ugyanazzal a stabil rendelésazonosítóval visszaigazolta, hogy a rendelés él. A törlésjelölés megszűnt, és a helyi készletkorrekció auditált készletmozgással megtörtént."
         />
       ) : refreshSuccessAt && !refreshError && detail?.unasDeletedAt ? (
         <Alert
