@@ -287,6 +287,96 @@ function unasDate(valueToParse: string | undefined): string | null {
   return `${match[1]}-${match[2]}-${match[3]}T00:00:00.000Z`;
 }
 
+const DEFAULT_UNAS_SHOP_TIME_ZONE = "Europe/Budapest";
+
+function zonedLocalDateTimeToIso(
+  parts: {
+    year: number;
+    month: number;
+    day: number;
+    hour: number;
+    minute: number;
+    second: number;
+  },
+  timeZone: string,
+): string | null {
+  const localAsUtc = Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
+  );
+  const roundTrip = new Date(localAsUtc);
+  if (
+    roundTrip.getUTCFullYear() !== parts.year ||
+    roundTrip.getUTCMonth() + 1 !== parts.month ||
+    roundTrip.getUTCDate() !== parts.day ||
+    roundTrip.getUTCHours() !== parts.hour ||
+    roundTrip.getUTCMinutes() !== parts.minute ||
+    roundTrip.getUTCSeconds() !== parts.second
+  ) {
+    return null;
+  }
+
+  let formatter: Intl.DateTimeFormat;
+  try {
+    formatter = new Intl.DateTimeFormat("en-US-u-ca-gregory-nu-latn", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    });
+  } catch {
+    return null;
+  }
+
+  const zonedParts = (instant: number) => {
+    const values = Object.fromEntries(
+      formatter
+        .formatToParts(new Date(instant))
+        .filter((part) => part.type !== "literal")
+        .map((part) => [part.type, Number(part.value)]),
+    );
+    return {
+      year: values.year,
+      month: values.month,
+      day: values.day,
+      hour: values.hour,
+      minute: values.minute,
+      second: values.second,
+    };
+  };
+
+  let instant = localAsUtc;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const shown = zonedParts(instant);
+    const shownAsUtc = Date.UTC(
+      shown.year!,
+      shown.month! - 1,
+      shown.day!,
+      shown.hour!,
+      shown.minute!,
+      shown.second!,
+    );
+    const next = localAsUtc - (shownAsUtc - instant);
+    if (next === instant) break;
+    instant = next;
+  }
+
+  const shown = zonedParts(instant);
+  return Object.entries(parts).every(
+    ([name, expected]) => shown[name as keyof typeof shown] === expected,
+  )
+    ? new Date(instant).toISOString()
+    : null;
+}
+
 // UNAS's order data-structure docs don't specify a concrete format for the
 // response's Date/DateMod fields (unlike the getOrder request filters, whose
 // formats are documented explicitly). Rather than throwing and failing an
@@ -294,17 +384,28 @@ function unasDate(valueToParse: string | undefined): string | null {
 // best-effort and returns null on anything it can't confidently read - the
 // order-sync's own windowEnd (not this field) is what advances the cursor,
 // so a null orderedAt only affects display, never correctness.
-function looseOrderDateTime(valueToParse: string | undefined): string | null {
+function looseOrderDateTime(
+  valueToParse: string | undefined,
+  timeZone = process.env.UNAS_SHOP_TIME_ZONE ?? DEFAULT_UNAS_SHOP_TIME_ZONE,
+): string | null {
   if (!valueToParse) return null;
   const trimmed = valueToParse.trim();
   const dotted =
     /^(\d{4})\.(\d{2})\.(\d{2})(?:[ T](\d{2}):(\d{2}):(\d{2}))?$/.exec(trimmed);
-  const iso = dotted
-    ? `${dotted[1]}-${dotted[2]}-${dotted[3]}T${dotted[4] ?? "00"}:${
-        dotted[5] ?? "00"
-      }:${dotted[6] ?? "00"}.000Z`
-    : trimmed;
-  const parsed = new Date(iso);
+  if (dotted) {
+    return zonedLocalDateTimeToIso(
+      {
+        year: Number(dotted[1]),
+        month: Number(dotted[2]),
+        day: Number(dotted[3]),
+        hour: Number(dotted[4] ?? "0"),
+        minute: Number(dotted[5] ?? "0"),
+        second: Number(dotted[6] ?? "0"),
+      },
+      timeZone,
+    );
+  }
+  const parsed = new Date(trimmed);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
@@ -622,7 +723,10 @@ function unasCustomerType(
   return null;
 }
 
-export function parseUnasOrderResponse(xml: string): UnasApiOrder[] {
+export function parseUnasOrderResponse(
+  xml: string,
+  shopTimeZone = process.env.UNAS_SHOP_TIME_ZONE ?? DEFAULT_UNAS_SHOP_TIME_ZONE,
+): UnasApiOrder[] {
   const root = parseXml(xml);
   if (root.name === "Error") throw new UnasApiError("API_REJECTED");
   if (root.name !== "Orders") throw new UnasApiError("RESPONSE_SHAPE_INVALID");
@@ -685,7 +789,7 @@ export function parseUnasOrderResponse(xml: string): UnasApiOrder[] {
       status: value(order, "Status") ?? null,
       statusType: value(order, "StatusType") ?? null,
       statusId: value(order, "StatusID") ?? null,
-      orderedAt: looseOrderDateTime(value(order, "Date")),
+      orderedAt: looseOrderDateTime(value(order, "Date"), shopTimeZone),
       customerName: contact ? (value(contact, "Name") ?? null) : null,
       customerEmail: customer ? (value(customer, "Email") ?? null) : null,
       // The billing name MUST come from the invoice address, not the

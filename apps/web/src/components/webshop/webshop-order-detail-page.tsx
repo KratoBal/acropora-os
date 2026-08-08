@@ -89,11 +89,14 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [refreshSuccessAt, setRefreshSuccessAt] = useState<Date | null>(null);
+  const [restoredFalseDeletion, setRestoredFalseDeletion] = useState(false);
 
   const handleRefresh = () => {
+    const wasMarkedDeleted = Boolean(detail?.unasDeletedAt);
     setRefreshing(true);
     setRefreshError(null);
     setRefreshSuccessAt(null);
+    setRestoredFalseDeletion(false);
     void unasOrdersApi
       .refreshOrder(token, orderId)
       .then((refreshed) => {
@@ -109,6 +112,9 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
         // "adatai frissültek" one, per business rule 3's explicit
         // requirement for an understandable result either way.
         setDetail(refreshed);
+        setRestoredFalseDeletion(
+          wasMarkedDeleted && refreshed.unasDeletedAt === null,
+        );
         setRefreshSuccessAt(new Date());
       })
       .catch((cause: unknown) =>
@@ -189,7 +195,13 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
         />
       ) : null}
 
-      {refreshSuccessAt && !refreshError && detail?.unasDeletedAt ? (
+      {refreshSuccessAt && !refreshError && restoredFalseDeletion ? (
+        <Alert
+          variant="info"
+          title="A téves törlésjelölés helyreállt"
+          description="Az UNAS ugyanazzal a stabil rendelésazonosítóval visszaigazolta, hogy a rendelés él. A törlésjelölés megszűnt, és a készletkorrekció auditált készletmozgással megtörtént."
+        />
+      ) : refreshSuccessAt && !refreshError && detail?.unasDeletedAt ? (
         <Alert
           variant="danger"
           title="A rendelést törölték a UNAS-ban"
@@ -214,9 +226,7 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
                 {detail.unasDeletedAt ? (
                   <Badge variant="danger">
                     Törölve a UNAS-ban (
-                    {new Date(detail.unasDeletedAt).toLocaleDateString(
-                      "hu-HU",
-                    )}
+                    {new Date(detail.unasDeletedAt).toLocaleDateString("hu-HU")}
                     )
                   </Badge>
                 ) : null}

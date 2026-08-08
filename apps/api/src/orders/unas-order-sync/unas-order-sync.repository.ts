@@ -72,6 +72,8 @@ const listInclude = { _count: { select: { lines: true } } } as const;
 interface ExternalReferenceRow {
   id: string;
   entityId: string;
+  externalId: string;
+  externalKey: string | null;
 }
 
 // Exported (along with LineInput, resolveEffectiveVariantId,
@@ -383,9 +385,11 @@ export interface UnasOrderSyncDatabase {
     ): Promise<Array<{ variantId: string; onHand: Prisma.Decimal }>>;
   };
   externalReference: {
-    findUnique(
-      args: unknown,
-    ): Promise<{ metadata: Prisma.JsonValue; externalId: string } | null>;
+    findUnique(args: unknown): Promise<{
+      metadata: Prisma.JsonValue;
+      externalId: string;
+      externalKey: string | null;
+    } | null>;
     findMany(
       args: unknown,
     ): Promise<Array<{ entityId: string; metadata: Prisma.JsonValue }>>;
@@ -937,6 +941,7 @@ export class UnasOrderSyncRepository extends Repository {
         where: { id: byLegacyKey.id },
         data: { externalId: order.id },
       });
+      return { ...byLegacyKey, externalId: order.id };
     }
     return byLegacyKey;
   }
@@ -978,17 +983,24 @@ export class UnasOrderSyncRepository extends Repository {
       },
     });
     if (!existing) return null; // Order row missing locally; nothing safe to reconcile against.
-    if (existing.unasDeletedAt) {
-      // Already confirmed physically deleted from UNAS (see
-      // reconcileDeletedOrder) - a later sighting of the SAME order in an
-      // incremental window (e.g. TimeModStart re-surfacing it, or a Key
-      // reused by a brand-new order momentarily still resolving to this
-      // same ExternalReference row before findExternalReferenceForOrder's
-      // lazy backfill catches up) must never resurrect it: no status
-      // change, no line resync, no stock delta. The order stays exactly as
-      // reconcileDeletedOrder left it - permanently, until an operator
-      // decides otherwise (there is no supported "undelete" path).
-      return { updated: false, reversed: false };
+    const restoresFalseDeletion = existing.unasDeletedAt !== null;
+    if (restoresFalseDeletion) {
+      // A fresh, targeted/list UNAS response can safely repair a false
+      // deletion marker only when it resolves through the SAME stable UNAS
+      // Id. Key alone is deliberately insufficient because UNAS may reuse a
+      // deleted order's Key for a different order. findExternalReferenceForOrder
+      // already rejects a deleted legacy-Key match; this explicit identity
+      // check is the final guard before stock can be deducted again.
+      if (!order.id || reference.externalId !== order.id) {
+        throw new ConflictException("UNAS_ORDER_RECOVERY_ID_MISMATCH");
+      }
+      // Clear the marker inside the same Serializable transaction as the
+      // corrective stock delta and order refresh below. Any later failure
+      // rolls the whole recovery back, so status/ledger/marker cannot split.
+      await transaction.salesOrder.update({
+        where: { id: existing.id },
+        data: { unasDeletedAt: null },
+      });
     }
 
     let updated = false;
@@ -1121,6 +1133,7 @@ export class UnasOrderSyncRepository extends Repository {
       // pontatlan volt, most már valódi készlethatás is "updated"-nek
       // számít.
       if (
+        restoresFalseDeletion ||
         newStatus !== existing.status ||
         invoiceStatusChanged ||
         deltaResult.changed
@@ -1147,7 +1160,7 @@ export class UnasOrderSyncRepository extends Repository {
       },
     });
 
-    return { updated, reversed };
+    return { updated: updated || restoresFalseDeletion, reversed };
   }
 
   /// Looks up the UNAS order Key for a local SalesOrder id, for
@@ -1164,7 +1177,10 @@ export class UnasOrderSyncRepository extends Repository {
         },
       },
     });
-    return reference?.externalId ?? null;
+    // getOrder's targeted lookup accepts Key, not the stable Id. Never fall
+    // back to externalId: after the Id/Key split that would turn a missing
+    // Key into a false NOT_FOUND and could reverse live-order stock.
+    return reference?.externalKey ?? null;
   }
 
   /// Manual single-order refresh: re-applies one already-fetched UNAS
@@ -1176,9 +1192,11 @@ export class UnasOrderSyncRepository extends Repository {
   /// transaction, above) - structurally guarantees the general incremental
   /// sync cursor is unaffected by a manual refresh. Deliberately never calls
   /// createNewOrder either (only reachable via apply()'s !reference branch)
-  /// - guarantees a refresh of an existing order can never create a second,
-  /// duplicate SALE stock movement, since only createNewOrder ever creates
-  /// one. Throws if the order's UNAS Key doesn't match the order this was
+  /// - guarantees a refresh cannot create a second SalesOrder row. A stock
+  /// delta can still legitimately create a later SALE movement (quantity
+  /// increase, newly resolved line, or stable-Id-verified false-deletion
+  /// recovery), but always only for the ledger-derived net difference.
+  /// Throws if the order's UNAS Key doesn't match the order this was
   /// invoked for (defensive: would only happen if the local ExternalReference
   /// and the fetched order's Key have somehow diverged), or if the order
   /// isn't found locally at all.
