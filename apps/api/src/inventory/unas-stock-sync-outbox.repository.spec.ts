@@ -95,6 +95,41 @@ describe("UnasStockSyncOutboxRepository.claimBatch", () => {
   });
 });
 
+describe("UnasStockSyncOutboxRepository.claimForUnasOrder", () => {
+  it("passes only the exact SalesOrder id and claim lease parameters to the targeted SQL", async () => {
+    let capturedValues: unknown[] = [];
+    const claimedRow = {
+      id: "outbox-recovery",
+      variantId: "variant-1",
+      warehouseId: "warehouse-1",
+      sku: "SKU-1",
+      targetOnHand: new Prisma.Decimal("3"),
+      idempotencyKey: "UNAS_ORDER:KEY:g2:SALE:variant-1",
+      sourceProcess: "UNAS_ORDER_UPDATE",
+      sourceRecordId: "order-1",
+      attempts: 1,
+      sequence: 9n,
+    };
+    const { database } = buildFakeDatabase({
+      queryRawImpl: (values) => {
+        capturedValues = values;
+        return [claimedRow];
+      },
+    });
+    const repository = new UnasStockSyncOutboxRepository(database);
+
+    const claimed = await repository.claimForUnasOrder({
+      orderId: "order-1",
+      batchSize: 20,
+      leaseSeconds: 120,
+      workerId: "manual-worker",
+    });
+
+    assert.deepEqual(claimed, [claimedRow]);
+    assert.deepEqual(capturedValues, ["order-1", 20, 120, "manual-worker"]);
+  });
+});
+
 describe("UnasStockSyncOutboxRepository.isSuperseded", () => {
   it("returns null when this row is already the latest for its key", async () => {
     const { database } = buildFakeDatabase({
@@ -161,7 +196,9 @@ describe("UnasStockSyncOutboxRepository.manualRetry", () => {
     const result = await repository.manualRetry("outbox-1", "user-1");
 
     assert.deepEqual(result, { retried: true, status: "PENDING" });
-    const call = updateManyCalls[0] as { data: { attempts: number; status: string } };
+    const call = updateManyCalls[0] as {
+      data: { attempts: number; status: string };
+    };
     assert.equal(call.data.status, "PENDING");
     assert.equal(call.data.attempts, 0);
   });
@@ -201,7 +238,9 @@ describe("UnasStockSyncOutboxRepository mark* methods", () => {
 
     await repository.markSucceeded("outbox-1");
 
-    const call = updateCalls[0] as { data: { status: string; leaseExpiresAt: null } };
+    const call = updateCalls[0] as {
+      data: { status: string; leaseExpiresAt: null };
+    };
     assert.equal(call.data.status, "SUCCEEDED");
     assert.equal(call.data.leaseExpiresAt, null);
   });
@@ -218,7 +257,12 @@ describe("UnasStockSyncOutboxRepository mark* methods", () => {
     });
 
     const call = updateCalls[0] as {
-      data: { status: string; lastError: string; nextAttemptAt: Date; leaseExpiresAt: null };
+      data: {
+        status: string;
+        lastError: string;
+        nextAttemptAt: Date;
+        leaseExpiresAt: null;
+      };
     };
     assert.equal(call.data.status, "FAILED");
     assert.equal(call.data.lastError, "HTTP_5XX");
@@ -230,9 +274,14 @@ describe("UnasStockSyncOutboxRepository mark* methods", () => {
     const { database, updateCalls } = buildFakeDatabase({});
     const repository = new UnasStockSyncOutboxRepository(database);
 
-    await repository.markDeadLetter({ id: "outbox-1", lastError: "REQUEST_INVALID" });
+    await repository.markDeadLetter({
+      id: "outbox-1",
+      lastError: "REQUEST_INVALID",
+    });
 
-    const call = updateCalls[0] as { data: { status: string; lastError: string } };
+    const call = updateCalls[0] as {
+      data: { status: string; lastError: string };
+    };
     assert.equal(call.data.status, "DEAD_LETTER");
     assert.equal(call.data.lastError, "REQUEST_INVALID");
   });

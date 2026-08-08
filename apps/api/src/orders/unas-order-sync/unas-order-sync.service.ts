@@ -2,11 +2,12 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import type {
   StockReconciliationReport,
   UnasApiOrder,
-  UnasOrderDetail,
+  UnasOrderRefreshResult,
   UnasOrderSyncSummary,
 } from "@acropora/types";
 
 import { UnasApiClient } from "../../imports/unas/unas-api.client.js";
+import { UnasStockSyncOutboxService } from "../../inventory/unas-stock-sync-outbox.service.js";
 import { UnasOrderSyncRepository } from "./unas-order-sync.repository.js";
 
 // Mirrors UnasProductSyncService's overlap window: re-checks a small slice
@@ -20,6 +21,7 @@ export class UnasOrderSyncService {
   constructor(
     private readonly api: UnasApiClient,
     private readonly repository: UnasOrderSyncRepository,
+    private readonly stockPublisher: UnasStockSyncOutboxService,
   ) {}
 
   async runIncremental(
@@ -77,7 +79,10 @@ export class UnasOrderSyncService {
   /// transitions, stock reversal, invoice mirroring, and technical-cost-line
   /// correction all behave identically to a batch sighting of the same
   /// order.
-  async refreshOrder(token: string, orderId: string): Promise<UnasOrderDetail> {
+  async refreshOrder(
+    token: string,
+    orderId: string,
+  ): Promise<UnasOrderRefreshResult> {
     const key = await this.repository.getUnasKey(orderId);
     if (!key)
       throw new NotFoundException(
@@ -101,12 +106,20 @@ export class UnasOrderSyncService {
       await this.repository.reconcileDeletedOrder(orderId, key);
       const detail = await this.repository.findById(orderId);
       if (!detail) throw new NotFoundException("A rendelés nem található.");
-      return detail;
+      const stockPublish = await this.stockPublisher.processForUnasOrder(
+        orderId,
+        token,
+      );
+      return { ...detail, stockPublish };
     }
     await this.repository.refreshOrder(orderId, order);
     const detail = await this.repository.findById(orderId);
     if (!detail) throw new NotFoundException("A rendelés nem található.");
-    return detail;
+    const stockPublish = await this.stockPublisher.processForUnasOrder(
+      orderId,
+      token,
+    );
+    return { ...detail, stockPublish };
   }
 
   private async downloadOrders(

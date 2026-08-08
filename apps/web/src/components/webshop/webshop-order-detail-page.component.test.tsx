@@ -1,5 +1,9 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { Session, UnasOrderDetail } from "@acropora/types";
+import type {
+  Session,
+  UnasOrderDetail,
+  UnasOrderRefreshResult,
+} from "@acropora/types";
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -79,6 +83,23 @@ function baseDetail(overrides: Partial<UnasOrderDetail> = {}): UnasOrderDetail {
     unasInvoiceStatus: null,
     invoices: [],
     ...overrides,
+  };
+}
+
+function refreshResult(
+  detailOverrides: Partial<UnasOrderDetail> = {},
+  publishOverrides: Partial<UnasOrderRefreshResult["stockPublish"]> = {},
+): UnasOrderRefreshResult {
+  return {
+    ...baseDetail(detailOverrides),
+    stockPublish: {
+      claimed: 1,
+      succeeded: 1,
+      superseded: 0,
+      retried: 0,
+      deadLettered: 0,
+      ...publishOverrides,
+    },
   };
 }
 
@@ -201,9 +222,9 @@ describe("WebshopOrderDetailPage - Rendelés frissítése gomb", () => {
 
   it("frissítés közben letiltott, betöltés-feliratú állapotot mutat", async () => {
     api.getOne.mockResolvedValue(baseDetail());
-    let resolveRefresh: (value: UnasOrderDetail) => void = () => {};
+    let resolveRefresh: (value: UnasOrderRefreshResult) => void = () => {};
     api.refreshOrder.mockReturnValue(
-      new Promise<UnasOrderDetail>((resolve) => {
+      new Promise<UnasOrderRefreshResult>((resolve) => {
         resolveRefresh = resolve;
       }),
     );
@@ -219,7 +240,7 @@ describe("WebshopOrderDetailPage - Rendelés frissítése gomb", () => {
     });
     expect(loadingButton).toBeDisabled();
 
-    resolveRefresh(baseDetail());
+    resolveRefresh(refreshResult());
     await waitFor(() =>
       expect(
         screen.getByRole("button", { name: "Rendelés frissítése" }),
@@ -236,7 +257,7 @@ describe("WebshopOrderDetailPage - Rendelés frissítése gomb", () => {
       }),
     );
     api.refreshOrder.mockResolvedValue(
-      baseDetail({
+      refreshResult({
         status: "COMPLETED",
         // Overrides baseDetail's default "Kiszállítás" - the status badge
         // prefers unasStatusLabel over the STATUS_LABEL[status] fallback
@@ -279,7 +300,7 @@ describe("WebshopOrderDetailPage - Rendelés frissítése gomb", () => {
       }),
     );
     api.refreshOrder.mockResolvedValue(
-      baseDetail({ status: "CONFIRMED", unasDeletedAt: null }),
+      refreshResult({ status: "CONFIRMED", unasDeletedAt: null }),
     );
     render(createElement(WebshopOrderDetailPage, { orderId: "order-1" }));
     const button = await screen.findByRole("button", {
@@ -294,7 +315,28 @@ describe("WebshopOrderDetailPage - Rendelés frissítése gomb", () => {
     expect(
       screen.getByText(/auditált készletmozgással megtörtént/),
     ).toBeInTheDocument();
+    expect(screen.getByText("Az UNAS készlet frissült")).toBeInTheDocument();
     expect(screen.queryByText(/Törölve a UNAS-ban/)).not.toBeInTheDocument();
+  });
+
+  it("külön jelzi, ha a célzott UNAS készletpublikálás hibára fut", async () => {
+    api.getOne.mockResolvedValue(baseDetail());
+    api.refreshOrder.mockResolvedValue(
+      refreshResult(
+        {},
+        { claimed: 1, succeeded: 0, retried: 1, deadLettered: 0 },
+      ),
+    );
+    render(createElement(WebshopOrderDetailPage, { orderId: "order-1" }));
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Rendelés frissítése" }),
+    );
+
+    expect(
+      await screen.findByText("Az UNAS készletfrissítés nem fejeződött be"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Újrapróbálásra vár: 1/)).toBeInTheDocument();
   });
 
   it("hiba esetén egyértelmű hibaüzenetet mutat, és nem cseréli le a meglévő adatokat", async () => {

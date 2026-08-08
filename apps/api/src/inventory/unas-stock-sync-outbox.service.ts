@@ -123,6 +123,20 @@ export function unasStockSyncWorkerConfig(
   };
 }
 
+/// A targeted, explicitly requested publish uses the worker's validated
+/// processing limits even when the periodic worker feature flag is off.
+/// Overriding only the enabled bit is intentional: it does not mutate
+/// process.env and cannot start the scheduler; it merely supplies non-zero
+/// lease/retry settings to the exact-order claim path below.
+export function unasStockSyncTargetedPublishConfig(
+  environment: NodeJS.ProcessEnv = process.env,
+): UnasStockSyncWorkerConfig {
+  return unasStockSyncWorkerConfig({
+    ...environment,
+    UNAS_STOCK_SYNC_WORKER_ENABLED: "true",
+  });
+}
+
 /// Codes for which retrying the *identical* request will never succeed on
 /// its own (malformed payload, response shape UNAS will always reject the
 /// same way, forbidden/oversized content) - these go straight to
@@ -229,25 +243,52 @@ export class UnasStockSyncOutboxService {
   async processBatch(
     config: UnasStockSyncWorkerConfig,
   ): Promise<ProcessBatchSummary> {
-    const summary: ProcessBatchSummary = {
-      claimed: 0,
-      succeeded: 0,
-      superseded: 0,
-      retried: 0,
-      deadLettered: 0,
-    };
     const claimed = await this.outbox.claimBatch({
       batchSize: config.batchSize,
       leaseSeconds: config.leaseSeconds,
       workerId: this.workerId,
     });
-    summary.claimed = claimed.length;
+    return this.processClaimedRows(claimed, config);
+  }
+
+  /// Publishes only rows tied to one local SalesOrder.id. This bypasses the
+  /// scheduler feature flag without ever broadening the claim to the global
+  /// queue, which is what makes a one-order recovery safe while historical
+  /// PENDING rows still exist. The already-authenticated order-refresh token
+  /// is reused, so the recovery cannot fail merely because a second login
+  /// attempt races token expiry/configuration changes.
+  async processForUnasOrder(
+    orderId: string,
+    token: string,
+  ): Promise<ProcessBatchSummary> {
+    const config = unasStockSyncTargetedPublishConfig();
+    const claimed = await this.outbox.claimForUnasOrder({
+      orderId,
+      batchSize: config.batchSize,
+      leaseSeconds: config.leaseSeconds,
+      workerId: this.workerId,
+    });
+    return this.processClaimedRows(claimed, config, token);
+  }
+
+  private async processClaimedRows(
+    claimed: ClaimedUnasStockSyncOutboxRow[],
+    config: UnasStockSyncWorkerConfig,
+    initialToken: string | null = null,
+  ): Promise<ProcessBatchSummary> {
+    const summary: ProcessBatchSummary = {
+      claimed: claimed.length,
+      succeeded: 0,
+      superseded: 0,
+      retried: 0,
+      deadLettered: 0,
+    };
     if (claimed.length === 0) return summary;
 
     // Resolve the token lazily: package-product rows can be closed locally
     // without any UNAS request, even during an authentication outage. The
     // mutable holder still guarantees at most one login per batch.
-    const token = { value: null as string | null };
+    const token = { value: initialToken };
 
     for (const row of claimed) {
       const outcome = await this.processOne(row, token, config);

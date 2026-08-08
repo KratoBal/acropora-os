@@ -9,6 +9,7 @@ import {
   type UnasApiErrorCode,
 } from "../../imports/unas/unas-api.client.js";
 import type { UnasOrderSyncRepository } from "./unas-order-sync.repository.js";
+import type { UnasStockSyncOutboxService } from "../../inventory/unas-stock-sync-outbox.service.js";
 import { UnasOrderSyncService } from "./unas-order-sync.service.js";
 
 function order(key: string): UnasApiOrder {
@@ -105,7 +106,19 @@ function fixture(input?: {
       calls.push({ operation: "failed", input: errorCode });
     },
   } as unknown as UnasOrderSyncRepository;
-  return { service: new UnasOrderSyncService(api, repository), calls };
+  const stockPublisher = {
+    processForUnasOrder: async () => ({
+      claimed: 0,
+      succeeded: 0,
+      superseded: 0,
+      retried: 0,
+      deadLettered: 0,
+    }),
+  } as unknown as UnasStockSyncOutboxService;
+  return {
+    service: new UnasOrderSyncService(api, repository, stockPublisher),
+    calls,
+  };
 }
 
 describe("UnasOrderSyncService.runIncremental", () => {
@@ -171,7 +184,15 @@ describe("UnasOrderSyncService.runIncremental", () => {
         calls.push({ operation: "failed", input: errorCode });
       },
     } as unknown as UnasOrderSyncRepository;
-    const service = new UnasOrderSyncService(api, repository);
+    const service = new UnasOrderSyncService(api, repository, {
+      processForUnasOrder: async () => ({
+        claimed: 0,
+        succeeded: 0,
+        superseded: 0,
+        retried: 0,
+        deadLettered: 0,
+      }),
+    } as unknown as UnasStockSyncOutboxService);
 
     await assert.rejects(
       service.runIncremental("token", new Date(), 10),
@@ -255,7 +276,25 @@ describe("UnasOrderSyncService.refreshOrder", () => {
           : input.detailAfterRefresh;
       },
     } as unknown as UnasOrderSyncRepository;
-    return { service: new UnasOrderSyncService(api, repository), calls };
+    const stockPublisher = {
+      processForUnasOrder: async (orderId: string, token: string) => {
+        calls.push({
+          operation: "processForUnasOrder",
+          input: { orderId, token },
+        });
+        return {
+          claimed: 1,
+          succeeded: 1,
+          superseded: 0,
+          retried: 0,
+          deadLettered: 0,
+        };
+      },
+    } as unknown as UnasStockSyncOutboxService;
+    return {
+      service: new UnasOrderSyncService(api, repository, stockPublisher),
+      calls,
+    };
   }
 
   it("fetches only the targeted order by its UNAS Key, refreshes it, and returns the freshly re-read detail", async () => {
@@ -265,13 +304,18 @@ describe("UnasOrderSyncService.refreshOrder", () => {
 
     assert.equal(
       calls.map((call) => call.operation).join(","),
-      "getUnasKey,getOrderByKey,refreshOrder,findById",
+      "getUnasKey,getOrderByKey,refreshOrder,findById,processForUnasOrder",
     );
     assert.equal(
       calls.find((call) => call.operation === "getOrderByKey")?.input,
       "UN-1",
     );
     assert.equal(result.id, "order-1");
+    assert.equal(result.stockPublish.succeeded, 1);
+    assert.deepEqual(
+      calls.find((call) => call.operation === "processForUnasOrder")?.input,
+      { orderId: "order-1", token: "token" },
+    );
   });
 
   it("throws 404 when the order was never UNAS-synced (no Key on file), and never touches UNAS or stock for a locally-nonexistent order id (#13)", async () => {
@@ -285,10 +329,7 @@ describe("UnasOrderSyncService.refreshOrder", () => {
     // (because the order isn't known locally in the first place) must
     // never be treated as a confirmed deletion - reconcileDeletedOrder
     // must not run, and the UNAS API must never be called.
-    assert.equal(
-      calls.map((call) => call.operation).join(","),
-      "getUnasKey",
-    );
+    assert.equal(calls.map((call) => call.operation).join(","), "getUnasKey");
   });
 
   const transientErrorCodes: UnasApiErrorCode[] = [
@@ -316,7 +357,18 @@ describe("UnasOrderSyncService.refreshOrder", () => {
           return { reversed: true, alreadyReconciled: false };
         },
       } as unknown as UnasOrderSyncRepository;
-      const service = new UnasOrderSyncService(api, repository);
+      const service = new UnasOrderSyncService(api, repository, {
+        processForUnasOrder: async () => {
+          calls.push({ operation: "processForUnasOrder" });
+          return {
+            claimed: 0,
+            succeeded: 0,
+            superseded: 0,
+            retried: 0,
+            deadLettered: 0,
+          };
+        },
+      } as unknown as UnasStockSyncOutboxService);
 
       await assert.rejects(
         () => service.refreshOrder("token", "order-1"),
@@ -336,7 +388,7 @@ describe("UnasOrderSyncService.refreshOrder", () => {
 
     assert.equal(
       calls.map((call) => call.operation).join(","),
-      "getUnasKey,getOrderByKey,reconcileDeletedOrder,findById",
+      "getUnasKey,getOrderByKey,reconcileDeletedOrder,findById,processForUnasOrder",
     );
     assert.deepEqual(
       calls.find((call) => call.operation === "reconcileDeletedOrder")?.input,
