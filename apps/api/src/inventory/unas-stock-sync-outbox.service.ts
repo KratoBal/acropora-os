@@ -388,7 +388,12 @@ export class UnasStockSyncOutboxService {
         variantValues: variantValues?.map((item) => item.value),
         comment: `${row.sourceProcess}:${row.sourceRecordId}`,
       });
-      await this.outbox.markSucceeded(row.id);
+      await this.outbox.markSucceeded({
+        id: row.id,
+        variantId: row.variantId,
+        reportedStock: quantityToPublish,
+        publishedAt: new Date(),
+      });
       return "succeeded";
     } catch (error) {
       const { code, permanent } = classifyError(error);

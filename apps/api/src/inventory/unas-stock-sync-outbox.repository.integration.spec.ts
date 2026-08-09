@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { prisma } from "@acropora/database";
+import { Prisma, prisma } from "@acropora/database";
 
 import { UnasStockSyncOutboxRepository } from "./unas-stock-sync-outbox.repository.js";
 
@@ -17,7 +17,7 @@ const runIntegration = process.env.RUN_DB_INTEGRATION === "1";
 /// it must be run locally (`pnpm --filter @acropora/api test:integration`)
 /// before this checkpoint is considered verified end-to-end.
 describe(
-  "UnasStockSyncOutboxRepository.claimBatch integration",
+  "UnasStockSyncOutboxRepository integration",
   { skip: !runIntegration },
   () => {
     const repository = new UnasStockSyncOutboxRepository();
@@ -94,7 +94,11 @@ describe(
       const overlap = [...idsA].filter((id) => idsB.has(id));
 
       assert.equal(overlap.length, 0, "no row may be claimed by both workers");
-      assert.equal(idsA.size + idsB.size, 6, "all six rows must be claimed exactly once between the two batches");
+      assert.equal(
+        idsA.size + idsB.size,
+        6,
+        "all six rows must be claimed exactly once between the two batches",
+      );
     });
 
     it("reclaims a PROCESSING row once its lease has expired (orphan recovery)", async () => {
@@ -152,6 +156,99 @@ describe(
       assert.ok(
         !claimed.some((row) => row.id === stillAlive.id),
         "a row still within its lease window must not be reclaimed",
+      );
+    });
+
+    it("atomically closes a successful publish and refreshes the variant's UNAS snapshot", async () => {
+      const publishedAt = new Date();
+      const outbox = await prisma.unasStockSyncOutbox.create({
+        data: {
+          variantId: variantIds[2]!,
+          warehouseId,
+          sku: "snapshot-sku",
+          targetOnHand: "4.5",
+          idempotencyKey: `integration-snapshot-${Date.now()}`,
+          sourceProcess: "POS_SALE",
+          sourceRecordId: "integration-test-snapshot",
+          status: "PROCESSING",
+          attempts: 1,
+          leaseExpiresAt: new Date(Date.now() + 60_000),
+        },
+      });
+
+      await repository.markSucceeded({
+        id: outbox.id,
+        variantId: variantIds[2]!,
+        reportedStock: new Prisma.Decimal("4.5"),
+        publishedAt,
+      });
+
+      const [savedOutbox, savedVariant] = await Promise.all([
+        prisma.unasStockSyncOutbox.findUniqueOrThrow({
+          where: { id: outbox.id },
+        }),
+        prisma.productVariant.findUniqueOrThrow({
+          where: { id: variantIds[2]! },
+        }),
+      ]);
+      assert.equal(savedOutbox.status, "SUCCEEDED");
+      assert.equal(savedOutbox.leaseExpiresAt, null);
+      assert.equal(
+        savedOutbox.processedAt?.toISOString(),
+        publishedAt.toISOString(),
+      );
+      assert.equal(savedVariant.unasReportedStock?.toString(), "4.5");
+      assert.equal(
+        savedVariant.unasReportedStockSyncedAt?.toISOString(),
+        publishedAt.toISOString(),
+      );
+    });
+
+    it("closes the outbox row without overwriting a newer UNAS snapshot", async () => {
+      const publishedAt = new Date();
+      const newerSnapshotAt = new Date(publishedAt.getTime() + 60_000);
+      await prisma.productVariant.update({
+        where: { id: variantIds[3]! },
+        data: {
+          unasReportedStock: "9",
+          unasReportedStockSyncedAt: newerSnapshotAt,
+        },
+      });
+      const outbox = await prisma.unasStockSyncOutbox.create({
+        data: {
+          variantId: variantIds[3]!,
+          warehouseId,
+          sku: "older-snapshot-sku",
+          targetOnHand: "4",
+          idempotencyKey: `integration-older-snapshot-${Date.now()}`,
+          sourceProcess: "POS_SALE",
+          sourceRecordId: "integration-test-older-snapshot",
+          status: "PROCESSING",
+          attempts: 1,
+          leaseExpiresAt: new Date(Date.now() + 60_000),
+        },
+      });
+
+      await repository.markSucceeded({
+        id: outbox.id,
+        variantId: variantIds[3]!,
+        reportedStock: new Prisma.Decimal("4"),
+        publishedAt,
+      });
+
+      const [savedOutbox, savedVariant] = await Promise.all([
+        prisma.unasStockSyncOutbox.findUniqueOrThrow({
+          where: { id: outbox.id },
+        }),
+        prisma.productVariant.findUniqueOrThrow({
+          where: { id: variantIds[3]! },
+        }),
+      ]);
+      assert.equal(savedOutbox.status, "SUCCEEDED");
+      assert.equal(savedVariant.unasReportedStock?.toString(), "9");
+      assert.equal(
+        savedVariant.unasReportedStockSyncedAt?.toISOString(),
+        newerSnapshotAt.toISOString(),
       );
     });
   },

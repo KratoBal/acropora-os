@@ -5,6 +5,7 @@ import { Prisma } from "@acropora/database";
 import {
   UnasStockSyncOutboxRepository,
   type UnasStockSyncOutboxDatabase,
+  type UnasStockSyncOutboxTransaction,
 } from "./unas-stock-sync-outbox.repository.js";
 
 interface FakeRow {
@@ -20,9 +21,17 @@ function buildFakeDatabase(options: {
   outboxRows?: FakeRow[];
 }) {
   const updateCalls: unknown[] = [];
+  const productVariantUpdateCalls: unknown[] = [];
   const updateManyCalls: unknown[] = [];
+  const transactionCalls: unknown[] = [];
   const rows = options.outboxRows ?? [];
   const database: UnasStockSyncOutboxDatabase = {
+    async $transaction<T>(
+      callback: (transaction: UnasStockSyncOutboxTransaction) => Promise<T>,
+    ) {
+      transactionCalls.push(true);
+      return callback(database);
+    },
     async $queryRaw(_strings, ...values) {
       if (options.queryRawImpl) return options.queryRawImpl(values) as never;
       return [] as never;
@@ -57,8 +66,20 @@ function buildFakeDatabase(options: {
         return { _max: { processedAt: null } };
       },
     },
+    productVariant: {
+      async updateMany(args) {
+        productVariantUpdateCalls.push(args);
+        return { count: 1 };
+      },
+    },
   };
-  return { database, updateCalls, updateManyCalls };
+  return {
+    database,
+    updateCalls,
+    productVariantUpdateCalls,
+    updateManyCalls,
+    transactionCalls,
+  };
 }
 
 describe("UnasStockSyncOutboxRepository.claimBatch", () => {
@@ -232,17 +253,54 @@ describe("UnasStockSyncOutboxRepository.manualRetry", () => {
 });
 
 describe("UnasStockSyncOutboxRepository mark* methods", () => {
-  it("markSucceeded sets status SUCCEEDED and clears the lease", async () => {
-    const { database, updateCalls } = buildFakeDatabase({});
+  it("markSucceeded transactionally stores the exact published stock snapshot and closes the outbox row", async () => {
+    const {
+      database,
+      updateCalls,
+      productVariantUpdateCalls,
+      transactionCalls,
+    } = buildFakeDatabase({});
     const repository = new UnasStockSyncOutboxRepository(database);
+    const publishedAt = new Date("2026-08-09T15:00:00.000Z");
 
-    await repository.markSucceeded("outbox-1");
+    await repository.markSucceeded({
+      id: "outbox-1",
+      variantId: "variant-1",
+      reportedStock: new Prisma.Decimal("4.5"),
+      publishedAt,
+    });
 
     const call = updateCalls[0] as {
-      data: { status: string; leaseExpiresAt: null };
+      data: {
+        status: string;
+        lastError: null;
+        leaseExpiresAt: null;
+        processedAt: Date;
+      };
     };
+    assert.equal(transactionCalls.length, 1);
     assert.equal(call.data.status, "SUCCEEDED");
+    assert.equal(call.data.lastError, null);
     assert.equal(call.data.leaseExpiresAt, null);
+    assert.equal(call.data.processedAt, publishedAt);
+
+    const snapshotCall = productVariantUpdateCalls[0] as {
+      where: {
+        id: string;
+        OR: Array<unknown>;
+      };
+      data: {
+        unasReportedStock: Prisma.Decimal;
+        unasReportedStockSyncedAt: Date;
+      };
+    };
+    assert.equal(snapshotCall.where.id, "variant-1");
+    assert.deepEqual(snapshotCall.where.OR, [
+      { unasReportedStockSyncedAt: null },
+      { unasReportedStockSyncedAt: { lte: publishedAt } },
+    ]);
+    assert.equal(snapshotCall.data.unasReportedStock.toString(), "4.5");
+    assert.equal(snapshotCall.data.unasReportedStockSyncedAt, publishedAt);
   });
 
   it("markFailedForRetry sets status FAILED with the given nextAttemptAt and clears the lease", async () => {
