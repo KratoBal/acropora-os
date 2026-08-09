@@ -37,13 +37,16 @@ const STATUS_LABEL: Record<string, string> = {
   ON_HOLD: "Felfüggesztve",
 };
 
-function statusVariant(status: string): "success" | "danger" | "neutral" {
-  if (status === "CANCELLED") return "danger";
-  if (status === "COMPLETED") return "success";
+function statusVariant(
+  order: UnasOrderListItem,
+): "success" | "danger" | "neutral" {
+  if (order.unasDeletedAt || order.status === "CANCELLED") return "danger";
+  if (order.status === "COMPLETED") return "success";
   return "neutral";
 }
 
 function statusLabel(order: UnasOrderListItem): string {
+  if (order.unasDeletedAt) return "Törölve a UNAS-ban";
   return order.unasStatusLabel ?? STATUS_LABEL[order.status] ?? order.status;
 }
 
@@ -204,7 +207,7 @@ export function WebshopOrdersPage() {
                         {formatHuf(order.totalGross)}
                       </td>
                       <td className="px-5 py-3">
-                        <Badge variant={statusVariant(order.status)}>
+                        <Badge variant={statusVariant(order)}>
                           {statusLabel(order)}
                         </Badge>
                       </td>

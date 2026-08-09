@@ -291,6 +291,28 @@ Csomagterméknél a `targetOut` nem a csomag variánsára, hanem az összetevők
 használja a read-only történeti rendelésszinkron-audit is, ezért a csomag
 sora és a komponensek ledger-mozgásai nem okoznak hamis eltérést.
 
+### Rendeléstétel módosítása, törlése és szétbontása
+
+Az aktuális UNAS-válasz tételei SKU-n belül egy-egyhez párosulnak a még
+aktív helyi `SalesOrderLine` sorokkal. Ez azért nem egyszerű `Map<SKU, sor>`,
+mert ugyanaz a SKU több külön rendeléstételen is szerepelhet; minden friss
+sor legfeljebb egy helyi sort módosíthat. Az új, pár nélküli tétel új helyi
+sort kap.
+
+Ha egy korábbi tétel eltűnik a friss UNAS-válaszból, fizikailag nem töröljük:
+`SalesOrderLine.unasRemovedAt` időbélyeget kap. Így az auditnyom megmarad,
+de a sor nem számít bele az aktív tételszámba és a történeti stock-audit
+aktuális `targetOut` értékébe. Ha ugyanaz a SKU később újra megjelenik, új
+aktív sor keletkezik; a korábbi eltávolítás története nem íródik felül.
+
+A készlethatás továbbra is kizárólag a ledger-deltából származik:
+
+- mennyiségmódosításkor csak a különbség könyvelődik;
+- termékcserénél a régi variáns `RETURN_IN`, az új variáns `SALE` deltát kap;
+- teljes tételtörléskor a még kint lévő mennyiség `RETURN_IN`;
+- rendelés-szétbontáskor az eredeti rendelésből kivett mennyiség visszajön,
+  az új rendelés ugyanazt levonja, ezért az összesített készlet változatlan.
+
 ### Idempotenciakulcs és az A -> B -> A eset
 
 `UNAS_ORDER:<unasKey>:g<generation>:<SALE|RETURN>`, ahol `generation` a
@@ -371,8 +393,8 @@ le). Az egységes delta-modell mellékhatásként javítja ezt: `createNewOrder`
 
 ### Meglévő (checkpoint előtti) rendelések migrációs/aktiválási biztonsága
 
-Nincs Prisma-migráció, tehát nincs backfill-kockázat: minden már importált
-rendelés `StockMovement`/`StockMovementLine` ledgerje pontosan azt
+A booked mennyiséghez továbbra sincs új állapotmező vagy backfill: minden már
+importált rendelés `StockMovement`/`StockMovementLine` ledgerje pontosan azt
 tükrözi, ami ténylegesen lekönyvelődött a régi kóddal - ugyanaz a ledger,
 amit az új `computeBookedOutAndGeneration` olvas. Az első resync
 deploy után minden érintett rendelésre helyesen számolja ki a deltát a
@@ -384,6 +406,11 @@ következő sighting `targetOut=3`, `bookedOut=3`, `delta=0` - nincs
 korábban is így volt (l. a régi `reverseOrder` és a manuális
 stock-mozgás-létrehozás kódja), tehát a ledger visszamenőleg is helyesen
 olvasható.
+
+Az ettől független `SalesOrderLine.unasRemovedAt` migráció nullable oszlopot
+ad hozzá, ezért a meglévő sorok alapértelmezetten aktívak maradnak. Nincs
+találgató visszamenőleges eltávolítás: egy régi sort csak egy későbbi, friss
+UNAS rendelésválasz igazolt hiánya jelöl eltávolítottnak.
 
 ## Készlet-reconciliation, diagnosztika és biztonságos javítási folyamat
 

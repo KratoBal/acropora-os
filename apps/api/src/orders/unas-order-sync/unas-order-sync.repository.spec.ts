@@ -13,9 +13,11 @@ interface FakeOrderLine {
   id: string;
   variantId: string | null;
   sku: string;
+  description: string;
   quantity: Prisma.Decimal;
   syncStatus: string;
   syncError: string | null;
+  unasRemovedAt: Date | null;
 }
 
 interface FakeOrder {
@@ -266,9 +268,11 @@ class FakeDb {
           id: nextId("line"),
           variantId: line.variantId,
           sku: line.sku,
+          description: line.description,
           quantity: line.quantity,
           syncStatus: line.syncStatus,
           syncError: line.syncError,
+          unasRemovedAt: null,
         }),
       );
       const order: FakeOrder = {
@@ -312,6 +316,7 @@ class FakeDb {
           variantId: line.variantId,
           quantity: line.quantity,
           syncStatus: line.syncStatus,
+          unasRemovedAt: line.unasRemovedAt,
         })),
       };
     },
@@ -327,9 +332,11 @@ class FakeDb {
         id: nextId("line"),
         variantId: args.data.variantId,
         sku: args.data.sku,
+        description: args.data.description,
         quantity: args.data.quantity,
         syncStatus: args.data.syncStatus,
         syncError: args.data.syncError,
+        unasRemovedAt: null,
       };
       order?.lines.push(line);
       return line;
@@ -1456,6 +1463,84 @@ describe("UnasOrderSyncRepository.apply - delta-based stock updates", () => {
     assert.equal(returnMovements.length, 1);
     assert.equal(returnMovements[0]?.lines[0]?.variantId, "variant-2");
     assert.equal(returnMovements[0]?.lines[0]?.quantity.toString(), "1");
+    const removedLine = db.orders[0]?.lines.find(
+      (line) => line.sku === "filter_1",
+    );
+    assert.ok(removedLine?.unasRemovedAt instanceof Date);
+    assert.equal(
+      db.orders[0]?.lines.filter((line) => !line.unasRemovedAt).length,
+      1,
+      "only the still-present UNAS row remains active",
+    );
+  });
+
+  it("a product replacement returns the old SKU, sells the new SKU, and keeps the old line only as audit history", async () => {
+    const db = seeded();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [orderWithQty(2)], null, new Date());
+
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply(
+      "run-2",
+      [
+        baseOrder({
+          items: [
+            {
+              id: "2",
+              sku: "filter_1",
+              name: "Reef Filter",
+              unit: "db",
+              quantity: "1",
+              priceNet: "3000",
+              priceGross: "3810",
+              vatRate: "27",
+            },
+          ],
+        }),
+      ],
+      null,
+      new Date("2026-08-09T09:00:00.000Z"),
+    );
+
+    assert.equal(db.stockItems[0]?.onHand.toString(), "10");
+    assert.equal(db.stockItems[1]?.onHand.toString(), "9");
+    const oldLine = db.orders[0]?.lines.find((line) => line.sku === "pump_1");
+    const newLine = db.orders[0]?.lines.find((line) => line.sku === "filter_1");
+    assert.ok(oldLine?.unasRemovedAt instanceof Date);
+    assert.equal(newLine?.unasRemovedAt, null);
+    assert.deepEqual(
+      db.movements
+        .slice(1)
+        .map((movement) => movement.type)
+        .sort(),
+      ["RETURN_IN", "SALE"],
+    );
+  });
+
+  it("splitting a line into a new UNAS order returns and re-sells the same quantity without changing total stock", async () => {
+    const db = seeded();
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    const repository = repositoryWith(db);
+    await repository.apply("run-1", [orderWithQty(2)], null, new Date());
+    assert.equal(db.stockItems[0]?.onHand.toString(), "8");
+
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply(
+      "run-2",
+      [baseOrder({ items: [] }), orderWithQty(2, { key: "UN-2", id: "9002" })],
+      null,
+      new Date("2026-08-09T10:00:00.000Z"),
+    );
+
+    assert.equal(db.orders.length, 2);
+    assert.equal(db.stockItems[0]?.onHand.toString(), "8");
+    assert.ok(db.orders[0]?.lines[0]?.unasRemovedAt instanceof Date);
+    assert.equal(db.orders[1]?.lines[0]?.unasRemovedAt, null);
+    assert.deepEqual(
+      db.movements.map((movement) => movement.type),
+      ["SALE", "RETURN_IN", "SALE"],
+    );
   });
 
   it("two order lines for the same variant aggregate into a single delta, not two independent ones", async () => {
@@ -1499,6 +1584,50 @@ describe("UnasOrderSyncRepository.apply - delta-based stock updates", () => {
     assert.equal(db.movements.length, 1);
     assert.equal(db.movements[0]?.lines.length, 1);
     assert.equal(db.movements[0]?.lines[0]?.quantity.toString(), "3");
+
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    await repository.apply(
+      "run-2",
+      [
+        baseOrder({
+          items: [
+            {
+              id: "1",
+              sku: "pump_1",
+              name: "Reef Pump A",
+              unit: "db",
+              quantity: "4",
+              priceNet: "5000",
+              priceGross: "6350",
+              vatRate: "27",
+            },
+            {
+              id: "2",
+              sku: "pump_1",
+              name: "Reef Pump B",
+              unit: "db",
+              quantity: "2",
+              priceNet: "5000",
+              priceGross: "6350",
+              vatRate: "27",
+            },
+          ],
+        }),
+      ],
+      null,
+      new Date(),
+    );
+
+    const activeLines = db.orders[0]?.lines.filter(
+      (line) => !line.unasRemovedAt,
+    );
+    assert.equal(activeLines?.length, 2);
+    assert.deepEqual(
+      activeLines?.map((line) => line.quantity.toString()),
+      ["4", "2"],
+      "each repeated SKU row is updated once instead of both inputs overwriting one row",
+    );
+    assert.equal(db.stockItems[0]?.onHand.toString(), "4");
   });
 
   it("an unlinked new line (unknown SKU) never touches stock, even on an otherwise-live order", async () => {
@@ -2086,6 +2215,8 @@ describe("UnasOrderSyncRepository.refreshOrder", () => {
       quantity: new Prisma.Decimal(1),
       syncStatus: "OK",
       syncError: null,
+      description: "Szállítási költség",
+      unasRemovedAt: null,
     });
 
     await repository.refreshOrder(

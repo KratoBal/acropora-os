@@ -38,6 +38,7 @@ export interface SalesOrderWithRelations {
     lineGross: Prisma.Decimal;
     syncStatus: "PENDING" | "OK" | "FAILED";
     syncError: string | null;
+    unasRemovedAt: Date | null;
   }>;
   /// UNAS-oldali Invoice.Status read-only tükrözése - lásd
   /// SalesOrder.unasInvoiceStatus doc-comment a schema.prisma-ban.
@@ -62,6 +63,7 @@ export interface SalesOrderListWithRelations {
   currency: string;
   orderedAt: Date | null;
   createdAt: Date;
+  unasDeletedAt: Date | null;
   _count: { lines: number };
 }
 
@@ -94,6 +96,7 @@ function toLineDetail(
     lineGross: line.lineGross.toString(),
     syncStatus: line.syncStatus,
     syncError: line.syncError,
+    unasRemovedAt: line.unasRemovedAt?.toISOString() ?? null,
   };
 }
 
@@ -158,5 +161,6 @@ export function toUnasOrderListItem(
     lineCount: order._count.lines,
     createdAt: order.createdAt.toISOString(),
     orderedAt: order.orderedAt?.toISOString() ?? null,
+    unasDeletedAt: order.unasDeletedAt?.toISOString() ?? null,
   };
 }

@@ -104,7 +104,11 @@ class FakeAuditDb implements UnasOrderStockAuditDatabase {
     id: string;
     orderNumber: string;
     status: string;
-    lines: Array<{ variantId: string | null; quantity: Prisma.Decimal }>;
+    lines: Array<{
+      variantId: string | null;
+      quantity: Prisma.Decimal;
+      unasRemovedAt?: Date | null;
+    }>;
   }> = [];
   references: Array<{ entityId: string; externalId: string }> = [];
   movements: Array<{
@@ -149,6 +153,7 @@ class FakeAuditDb implements UnasOrderStockAuditDatabase {
       where?: { id?: { in: string[] } };
       skip?: number;
       take?: number;
+      select?: { lines?: { where?: { unasRemovedAt?: null } } };
     }) => {
       let filtered = this.orders;
       if (args.where?.id) {
@@ -156,10 +161,15 @@ class FakeAuditDb implements UnasOrderStockAuditDatabase {
         filtered = filtered.filter((order) => ids.has(order.id));
       }
       const sorted = [...filtered].sort((a, b) => a.id.localeCompare(b.id));
-      return sorted.slice(
-        args.skip ?? 0,
-        (args.skip ?? 0) + (args.take ?? sorted.length),
-      );
+      return sorted
+        .slice(args.skip ?? 0, (args.skip ?? 0) + (args.take ?? sorted.length))
+        .map((order) => ({
+          ...order,
+          lines:
+            args.select?.lines?.where?.unasRemovedAt === null
+              ? order.lines.filter((line) => !line.unasRemovedAt)
+              : order.lines,
+        }));
     },
     count: async () => this.orders.length,
   };
@@ -212,7 +222,14 @@ describe("UnasOrderStockAuditRepository", () => {
       id: "order-1",
       orderNumber: "UNAS-1",
       status: "CONFIRMED",
-      lines: [{ variantId: "v1", quantity: d("2") }],
+      lines: [
+        { variantId: "v1", quantity: d("2"), unasRemovedAt: null },
+        {
+          variantId: "v1",
+          quantity: d("99"),
+          unasRemovedAt: new Date("2026-08-09T09:00:00.000Z"),
+        },
+      ],
     });
     db.references.push({ entityId: "order-1", externalId: "UN-1" });
     db.movements.push({

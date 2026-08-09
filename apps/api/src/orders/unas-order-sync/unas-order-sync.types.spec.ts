@@ -37,6 +37,7 @@ describe("toUnasOrderDetail", () => {
           lineGross: new Prisma.Decimal("12700"),
           syncStatus: "OK",
           syncError: null,
+          unasRemovedAt: null,
         },
       ],
       unasInvoiceStatus: null,
@@ -184,6 +185,7 @@ describe("toUnasOrderListItem", () => {
       currency: "HUF",
       orderedAt: new Date("2026-07-20T14:05:00.000Z"),
       createdAt: new Date("2026-07-20T14:06:00.000Z"),
+      unasDeletedAt: null,
       _count: { lines: 3 },
     };
     const item = toUnasOrderListItem(order, {
@@ -197,6 +199,29 @@ describe("toUnasOrderListItem", () => {
     assert.equal(item.unasStatusLabel, "Megrendelés lezárva");
     assert.equal(item.paymentName, "Utánvét");
     assert.equal(item.shippingName, "FoxPost");
+    assert.equal(item.unasDeletedAt, null);
+  });
+
+  it("exposes the physical UNAS deletion marker independently from the last mirrored status", () => {
+    const order: SalesOrderListWithRelations = {
+      id: "order-deleted",
+      orderNumber: "UNAS-47679-234831",
+      status: "CANCELLED",
+      buyerName: null,
+      totalGross: new Prisma.Decimal("0"),
+      currency: "HUF",
+      orderedAt: null,
+      createdAt: new Date("2026-08-09T09:00:00.000Z"),
+      unasDeletedAt: new Date("2026-08-09T09:05:00.000Z"),
+      _count: { lines: 1 },
+    };
+
+    const item = toUnasOrderListItem(order, {
+      unasStatus: "Feldolgozásra vár",
+    });
+
+    assert.equal(item.unasStatusLabel, "Feldolgozásra vár");
+    assert.equal(item.unasDeletedAt, "2026-08-09T09:05:00.000Z");
   });
 
   it("defaults metadata-derived fields to null when no metadata is given", () => {
@@ -209,6 +234,7 @@ describe("toUnasOrderListItem", () => {
       currency: "HUF",
       orderedAt: null,
       createdAt: new Date("2026-07-20T14:06:00.000Z"),
+      unasDeletedAt: null,
       _count: { lines: 0 },
     };
     const item = toUnasOrderListItem(order);
