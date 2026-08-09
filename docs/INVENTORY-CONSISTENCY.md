@@ -150,6 +150,14 @@ az outbox végleges célértékét egy tranzakcióban írja, ezért a worker má
 konzisztens állapotot láthat. A friss újraolvasás védekező rétegként is
 megmarad: az UNAS nem kaphat elavult pillanatképet.
 
+Sikeres `setStock` után a worker ugyanabban a helyi adatbázis-tranzakcióban
+zárja `SUCCEEDED` állapotúra az outbox sort, amelyben az UNAS által éppen
+elfogadott pontos mennyiséget és az időbélyegét a
+`ProductVariant.unasReportedStock` / `unasReportedStockSyncedAt` mezőkbe
+írja. A készlet-egyeztető oldal ezt a pillanatképet olvassa, ezért így a
+sikeres publikálás azonnal látható, külön termékszinkron nélkül. Egy későbbi
+időbélyegű pillanatképet egy késve befejeződő worker nem írhat felül.
+
 ## Outbox worker: claim, retry, dead-letter
 
 Fájlok: `unas-stock-sync-outbox.repository.ts` (adat-hozzáférés + claim

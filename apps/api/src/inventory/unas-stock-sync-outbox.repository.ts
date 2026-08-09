@@ -41,6 +41,9 @@ export interface UnasStockSyncOutboxListItem {
 }
 
 export interface UnasStockSyncOutboxDatabase {
+  $transaction<T>(
+    callback: (transaction: UnasStockSyncOutboxTransaction) => Promise<T>,
+  ): Promise<T>;
   $queryRaw<T = unknown>(
     query: TemplateStringsArray,
     ...values: unknown[]
@@ -56,7 +59,15 @@ export interface UnasStockSyncOutboxDatabase {
     groupBy(args: unknown): Promise<Array<{ status: string; _count: number }>>;
     aggregate(args: unknown): Promise<{ _max: { processedAt: Date | null } }>;
   };
+  productVariant: {
+    updateMany(args: unknown): Promise<{ count: number }>;
+  };
 }
+
+export type UnasStockSyncOutboxTransaction = Pick<
+  UnasStockSyncOutboxDatabase,
+  "unasStockSyncOutbox" | "productVariant"
+>;
 
 export const UNAS_STOCK_SYNC_OUTBOX_DATABASE = Symbol(
   "UNAS_STOCK_SYNC_OUTBOX_DATABASE",
@@ -233,14 +244,39 @@ export class UnasStockSyncOutboxRepository extends Repository {
     return { supersededByOutboxId: latest.id };
   }
 
-  async markSucceeded(id: string): Promise<void> {
-    await this.outboxDatabase.unasStockSyncOutbox.update({
-      where: { id },
-      data: {
-        status: "SUCCEEDED",
-        leaseExpiresAt: null,
-        processedAt: new Date(),
-      },
+  /// Commits the successful outbox outcome and the exact quantity accepted
+  /// by UNAS as one local transaction. The reconciliation UI reads the
+  /// ProductVariant snapshot, so closing only the outbox row would leave a
+  /// stale comparison value even though setStock already succeeded.
+  async markSucceeded(params: {
+    id: string;
+    variantId: string;
+    reportedStock: Prisma.Decimal;
+    publishedAt: Date;
+  }): Promise<void> {
+    await this.outboxDatabase.$transaction(async (transaction) => {
+      await transaction.productVariant.updateMany({
+        where: {
+          id: params.variantId,
+          OR: [
+            { unasReportedStockSyncedAt: null },
+            { unasReportedStockSyncedAt: { lte: params.publishedAt } },
+          ],
+        },
+        data: {
+          unasReportedStock: params.reportedStock,
+          unasReportedStockSyncedAt: params.publishedAt,
+        },
+      });
+      await transaction.unasStockSyncOutbox.update({
+        where: { id: params.id },
+        data: {
+          status: "SUCCEEDED",
+          lastError: null,
+          leaseExpiresAt: null,
+          processedAt: params.publishedAt,
+        },
+      });
     });
   }
 

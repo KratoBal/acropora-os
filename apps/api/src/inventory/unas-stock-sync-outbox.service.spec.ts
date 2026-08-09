@@ -54,7 +54,12 @@ interface RepoCalls {
   claimBatchArgs: unknown[];
   claimForUnasOrderArgs: unknown[];
   isSupersededArgs: unknown[];
-  markSucceededIds: string[];
+  markSucceededArgs: Array<{
+    id: string;
+    variantId: string;
+    reportedStock: Prisma.Decimal;
+    publishedAt: Date;
+  }>;
   markSupersededSuccessArgs: Array<{ id: string; by: string }>;
   markPackageProductSuccessIds: string[];
   markFailedForRetryArgs: unknown[];
@@ -71,7 +76,7 @@ function buildFakeRepository(options: {
     claimBatchArgs: [],
     claimForUnasOrderArgs: [],
     isSupersededArgs: [],
-    markSucceededIds: [],
+    markSucceededArgs: [],
     markSupersededSuccessArgs: [],
     markPackageProductSuccessIds: [],
     markFailedForRetryArgs: [],
@@ -91,8 +96,13 @@ function buildFakeRepository(options: {
       const found = options.claimed.find((item) => item.id === args.id);
       return found && options.isSuperseded ? options.isSuperseded(found) : null;
     },
-    markSucceeded: async (id: string) => {
-      calls.markSucceededIds.push(id);
+    markSucceeded: async (args: {
+      id: string;
+      variantId: string;
+      reportedStock: Prisma.Decimal;
+      publishedAt: Date;
+    }) => {
+      calls.markSucceededArgs.push(args);
     },
     markSupersededSuccess: async (id: string, by: string) => {
       calls.markSupersededSuccessArgs.push({ id, by });
@@ -243,7 +253,11 @@ describe("UnasStockSyncOutboxService.processBatch", () => {
     assert.equal(summary.succeeded, 1);
     assert.equal(setStockCalls.length, 1);
     assert.equal(setStockCalls[0]?.qty, "3");
-    assert.deepEqual(calls.markSucceededIds, ["outbox-1"]);
+    assert.equal(calls.markSucceededArgs.length, 1);
+    assert.equal(calls.markSucceededArgs[0]?.id, "outbox-1");
+    assert.equal(calls.markSucceededArgs[0]?.variantId, "variant-1");
+    assert.equal(calls.markSucceededArgs[0]?.reportedStock.toString(), "3");
+    assert.ok(calls.markSucceededArgs[0]?.publishedAt instanceof Date);
   });
 
   it("publishes a mapped UNAS variant with the base SKU and ordered values", async () => {
@@ -460,7 +474,10 @@ describe("UnasStockSyncOutboxService.processBatch", () => {
 
     assert.equal(summary.claimed, 2);
     assert.equal(summary.succeeded, 2);
-    assert.deepEqual(calls.markSucceededIds.sort(), ["outbox-1", "outbox-2"]);
+    assert.deepEqual(calls.markSucceededArgs.map((args) => args.id).sort(), [
+      "outbox-1",
+      "outbox-2",
+    ]);
   });
 
   it("returns an all-zero summary without calling UNAS when nothing is claimed", async () => {
