@@ -17,9 +17,11 @@ infrastructure, not field-service domain screens yet:
 - an API health diagnostic screen;
 - EAS development/preview/production profiles.
 
-The first business increment built on this foundation is the contractual field
-workflow. Aquarium maintenance and customer-facing ICP views remain later
-increments.
+The first business increment built on this foundation is the Webshop Manager
+workspace. It reuses the existing Acropora OS permissions and backend APIs for
+orders, purchasing, products/inventory, NAV incoming invoices and suppliers.
+The contractual field workflow follows after the webshop operations surface;
+aquarium maintenance and customer-facing ICP views remain later increments.
 
 ## Supported toolchain
 
@@ -66,12 +68,12 @@ app-local npm scripts.
 
 Set `EXPO_PUBLIC_API_URL` in `apps/mobile/.env.local`:
 
-| Client | Local API URL |
-|---|---|
-| iOS simulator | `http://localhost:3001` |
-| Android emulator | `http://10.0.2.2:3001` |
-| Physical phone | `http://<mac-lan-ip>:3001` |
-| Preview build | `https://<staging-api-domain>` |
+| Client           | Local API URL                  |
+| ---------------- | ------------------------------ |
+| iOS simulator    | `http://localhost:3001`        |
+| Android emulator | `http://10.0.2.2:3001`         |
+| Physical phone   | `http://<mac-lan-ip>:3001`     |
+| Preview build    | `https://<staging-api-domain>` |
 
 The local firewall must allow Node/NestJS traffic from the LAN. Do not disable
 the firewall globally. Allow only the development process/network that is
@@ -102,11 +104,11 @@ identifier; it is not a secret. Do not invent it before the project exists.
 
 Create the following non-secret variables in all three EAS environments:
 
-| EAS environment | `EXPO_PUBLIC_APP_ENV` | `EXPO_PUBLIC_API_URL` |
-|---|---|---|
-| development | `development` | local/LAN API used by the developer |
-| preview | `preview` | HTTPS staging API |
-| production | `production` | HTTPS production API |
+| EAS environment | `EXPO_PUBLIC_APP_ENV` | `EXPO_PUBLIC_API_URL`               |
+| --------------- | --------------------- | ----------------------------------- |
+| development     | `development`         | local/LAN API used by the developer |
+| preview         | `preview`             | HTTPS staging API                   |
+| production      | `production`          | HTTPS production API                |
 
 The build profiles set `APP_VARIANT` themselves. This produces separately
 installable bundle identifiers:
@@ -125,6 +127,34 @@ against the already-merged backend endpoint `POST
 /auth/mobile/login/password` (see `apps/api/src/auth/auth.controller.ts` and
 `docs/AUTHENTICATION.md`). ServiceJob, the daily field task list and any other
 domain feature are explicitly out of scope of this checkpoint and come later.
+
+## Webshop Manager boundary
+
+The first authenticated business slice is available after checkpoint 2:
+
+- the home screen is filtered from the existing `UserRole` permission matrix;
+- `SERVICE` does not enter the Webshop Manager workspace;
+- `OWNER`, `ADMIN`, `MANAGER`, `SALES`, `WAREHOUSE` and `VIEWER` see only the
+  webshop modules allowed by the matching server-side permissions;
+- the orders module reads real data from
+  `GET /integrations/unas/orders` and
+  `GET /integrations/unas/orders/:id`;
+- the dashboard shows the latest orders and the exact server-provided total;
+- the order list is paginated and supports pull-to-refresh;
+- the detail view shows customer, payment, shipping, totals, invoice mirror,
+  current/historically removed lines and sync failures.
+
+The mobile role mapping is only a presentation gate. The API remains the source
+of truth and enforces `orders.view` (or the permission relevant to a later
+module) on every request. The Expo app keeps a manual, tested mirror because its
+isolated npm dependency boundary deliberately does not import the pnpm-managed
+`@acropora/types` package.
+
+Purchasing, products/inventory, NAV incoming invoices and suppliers already
+appear as permission-filtered roadmap entries on the home screen. They remain
+disabled until their own vertical slices add API clients, list/detail screens
+and mutation safety rules. The current orders slice is read-only; order refresh
+and general UNAS synchronization remain web-only management actions for now.
 
 ### Login flow
 

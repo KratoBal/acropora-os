@@ -23,7 +23,11 @@
     "src/lib/auth/sign-in.spec.ts",
     "src/lib/auth/sign-out.ts",
     "src/lib/auth/sign-out.spec.ts",
+    "src/lib/auth/webshop-authorization.ts",
+    "src/lib/auth/webshop-authorization.spec.ts",
     "src/lib/api/request-auth.ts",
-    "src/lib/api/request-auth.spec.ts"
+    "src/lib/api/request-auth.spec.ts",
+    "src/lib/orders/presentation.ts",
+    "src/lib/orders/presentation.spec.ts"
   ]
 }
