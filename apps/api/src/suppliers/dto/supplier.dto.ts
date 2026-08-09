@@ -50,6 +50,7 @@ export class SupplierListQueryDto {
   @Type(() => Number) @IsInt() @Min(1) @IsOptional() page = 1;
   @Type(() => Number) @IsInt() @Min(1) @Max(100) @IsOptional() pageSize = 25;
   @IsString() @IsOptional() search?: string;
+  @IsIn(["DOMESTIC", "EU"]) @IsOptional() countryScope?: "DOMESTIC" | "EU";
   @IsIn(["ACTIVE", "INACTIVE", "ALL"]) @IsOptional() status:
     "ACTIVE" | "INACTIVE" | "ALL" = "ACTIVE";
 }

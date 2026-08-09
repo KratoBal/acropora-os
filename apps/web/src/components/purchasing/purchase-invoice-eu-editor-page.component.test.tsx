@@ -126,6 +126,15 @@ const supplier: SupplierSummary = {
   updatedAt: "2026-01-01T00:00:00.000Z",
 };
 
+const euSupplier: SupplierSummary = {
+  ...supplier,
+  id: "supplier-eu-1",
+  code: "SUP-EU-0001",
+  name: "Német Beszállító GmbH",
+  taxNumber: "DE123456789",
+  country: "DE",
+};
+
 beforeEach(() => {
   auth.session = ownerSession;
   navigation.params = new URLSearchParams("navInvoiceId=nav-invoice-1");
@@ -296,6 +305,119 @@ describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
             projectAllocations: [{ projectId: "project-1", quantity: 1 }],
           }),
         ],
+      }),
+    );
+  });
+
+  it("EU-s beszerzésnél csak nem magyarországi beszállítót mutat", async () => {
+    navigation.params = new URLSearchParams();
+    suppliersApiMock.search.mockResolvedValue({
+      items: [supplier, euSupplier],
+      pagination: { page: 1, pageSize: 10, totalItems: 2, totalPages: 1 },
+    });
+    render(createElement(PurchaseInvoiceEuEditorPage));
+
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Beszállító keresése" }),
+      {
+        target: { value: "Beszállító" },
+      },
+    );
+
+    await waitFor(() =>
+      expect(suppliersApiMock.search).toHaveBeenCalledWith(
+        "token-owner",
+        "Beszállító",
+        "EU",
+      ),
+    );
+    expect(await screen.findByText(euSupplier.name)).toBeInTheDocument();
+    expect(screen.queryByText(supplier.name)).not.toBeInTheDocument();
+  });
+
+  it("belföldi beszerzésnél csak magyarországi beszállítót mutat", async () => {
+    navigation.params = new URLSearchParams();
+    suppliersApiMock.search.mockResolvedValue({
+      items: [supplier, euSupplier],
+      pagination: { page: 1, pageSize: 10, totalItems: 2, totalPages: 1 },
+    });
+    render(createElement(PurchaseInvoiceEuEditorPage));
+
+    fireEvent.click(screen.getByRole("button", { name: "Belföldi (kézi)" }));
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Beszállító keresése" }),
+      {
+        target: { value: "Beszállító" },
+      },
+    );
+
+    await waitFor(() =>
+      expect(suppliersApiMock.search).toHaveBeenCalledWith(
+        "token-owner",
+        "Beszállító",
+        "DOMESTIC",
+      ),
+    );
+    expect(await screen.findByText(supplier.name)).toBeInTheDocument();
+    expect(screen.queryByText(euSupplier.name)).not.toBeInTheDocument();
+  });
+
+  it("belföldi új beszállítónál zárolt HU országkódot küld", async () => {
+    navigation.params = new URLSearchParams();
+    suppliersApiMock.create.mockResolvedValue(supplier);
+    render(createElement(PurchaseInvoiceEuEditorPage));
+
+    fireEvent.click(screen.getByRole("button", { name: "Belföldi (kézi)" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Új beszállító létrehozása" }),
+    );
+    const country = screen.getByRole("textbox", { name: "Ország" });
+    expect(country).toHaveValue("HU");
+    expect(country).toBeDisabled();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Beszállító neve" }), {
+      target: { value: supplier.name },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Beszállító létrehozása" }),
+    );
+
+    await waitFor(() => expect(suppliersApiMock.create).toHaveBeenCalled());
+    expect(suppliersApiMock.create).toHaveBeenCalledWith(
+      "token-owner",
+      expect.objectContaining({ country: "HU" }),
+    );
+  });
+
+  it("EU-s új beszállítónál az adószámból tölti ki az országkódot", async () => {
+    navigation.params = new URLSearchParams();
+    suppliersApiMock.create.mockResolvedValue(euSupplier);
+    render(createElement(PurchaseInvoiceEuEditorPage));
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Új beszállító létrehozása" }),
+    );
+    const country = screen.getByRole("textbox", { name: "Ország" });
+    expect(country).toHaveValue("");
+    expect(country).toBeDisabled();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Adószám" }), {
+      target: { value: "DE123456789" },
+    });
+    expect(country).toHaveValue("DE");
+    fireEvent.change(screen.getByRole("textbox", { name: "Beszállító neve" }), {
+      target: { value: euSupplier.name },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Beszállító létrehozása" }),
+    );
+
+    await waitFor(() => expect(suppliersApiMock.create).toHaveBeenCalled());
+    expect(suppliersApiMock.create).toHaveBeenCalledWith(
+      "token-owner",
+      expect.objectContaining({
+        taxNumber: "DE123456789",
+        country: "DE",
       }),
     );
   });

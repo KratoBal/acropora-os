@@ -47,6 +47,16 @@ export class SuppliersRepository extends Repository {
       ...(query.status === "ALL"
         ? {}
         : { isActive: query.status === "ACTIVE" }),
+      ...(query.countryScope === "DOMESTIC"
+        ? { country: { equals: "HU", mode: "insensitive" } }
+        : query.countryScope === "EU"
+          ? {
+              NOT: [
+                { country: { equals: "HU", mode: "insensitive" } },
+                { country: "" },
+              ],
+            }
+          : {}),
       ...(query.search
         ? {
             OR: [

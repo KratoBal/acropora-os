@@ -118,7 +118,7 @@ export function PurchaseInvoiceEuEditorPage() {
   const [showNewSupplier, setShowNewSupplier] = useState(false);
   const [newSupplierName, setNewSupplierName] = useState("");
   const [newSupplierTaxNumber, setNewSupplierTaxNumber] = useState("");
-  const [newSupplierCountry, setNewSupplierCountry] = useState("DE");
+  const [newSupplierCountry, setNewSupplierCountry] = useState("");
   const [newSupplierEmail, setNewSupplierEmail] = useState("");
   const [newSupplierPhone, setNewSupplierPhone] = useState("");
   const [creatingSupplier, setCreatingSupplier] = useState(false);
@@ -165,6 +165,22 @@ export function PurchaseInvoiceEuEditorPage() {
   const changeSource = (next: PurchaseInvoiceSource) => {
     setSource(next);
     setCurrency(next === "EU" ? "EUR" : "HUF");
+    setSelectedSupplier((current) => {
+      if (!current) return null;
+      const isHungarian = current.country.trim().toUpperCase() === "HU";
+      return (next === "EU" && !isHungarian) || (next !== "EU" && isHungarian)
+        ? current
+        : null;
+    });
+    setSupplierResults([]);
+    const inferred = inferCountryFromTaxNumber(newSupplierTaxNumber);
+    setNewSupplierCountry(
+      next === "EU" && inferred && inferred !== "HU"
+        ? inferred
+        : next === "EU"
+          ? ""
+          : "HU",
+    );
   };
 
   // NAV-alapú bevételezés előtöltése: a beszállító nevét/adószámát a
@@ -249,13 +265,21 @@ export function PurchaseInvoiceEuEditorPage() {
     }
     const debouncer = createDebouncer((value: string) => {
       void suppliersApi
-        .search(token, value)
-        .then((response) => setSupplierResults(response.items))
+        .search(token, value, isDomestic ? "DOMESTIC" : "EU")
+        .then((response) =>
+          setSupplierResults(
+            response.items.filter((supplier) => {
+              const isHungarian =
+                supplier.country.trim().toUpperCase() === "HU";
+              return isDomestic ? isHungarian : !isHungarian;
+            }),
+          ),
+        )
         .catch(() => setSupplierResults([]));
     }, 300);
     debouncer.schedule(supplierSearch);
     return () => debouncer.cancel();
-  }, [supplierSearch, token]);
+  }, [supplierSearch, token, isDomestic]);
 
   useEffect(() => {
     if (!productSearch.trim()) {
@@ -498,13 +522,25 @@ export function PurchaseInvoiceEuEditorPage() {
 
   const createSupplier = async () => {
     if (!newSupplierName.trim() || creatingSupplier) return;
+    const inferredCountry = inferCountryFromTaxNumber(newSupplierTaxNumber);
+    const supplierCountry = isDomestic
+      ? "HU"
+      : inferredCountry && inferredCountry !== "HU"
+        ? inferredCountry
+        : undefined;
+    if (!supplierCountry) {
+      setError(
+        "EU-s beszállítónál adj meg országkóddal kezdődő közösségi adószámot (például DE123456789).",
+      );
+      return;
+    }
     setCreatingSupplier(true);
     setError(null);
     try {
       const created = await suppliersApi.create(token, {
         name: newSupplierName.trim(),
         taxNumber: newSupplierTaxNumber.trim() || undefined,
-        country: newSupplierCountry.trim() || undefined,
+        country: supplierCountry,
         email: newSupplierEmail.trim() || undefined,
         phone: newSupplierPhone.trim() || undefined,
       });
@@ -876,7 +912,9 @@ export function PurchaseInvoiceEuEditorPage() {
                             setViesResult(null);
                             if (!isDomestic) {
                               const inferred = inferCountryFromTaxNumber(value);
-                              if (inferred) setNewSupplierCountry(inferred);
+                              setNewSupplierCountry(
+                                inferred && inferred !== "HU" ? inferred : "",
+                              );
                             }
                           }}
                           placeholder={
@@ -923,12 +961,8 @@ export function PurchaseInvoiceEuEditorPage() {
                         aria-label="Ország"
                         value={newSupplierCountry}
                         maxLength={2}
-                        onChange={(event) =>
-                          setNewSupplierCountry(
-                            event.target.value.toUpperCase(),
-                          )
-                        }
-                        placeholder={isDomestic ? "HU" : "DE"}
+                        disabled
+                        placeholder={isDomestic ? "HU" : "Adószámból"}
                       />
                     </FormField>
                     <FormField label="E-mail">
@@ -960,7 +994,11 @@ export function PurchaseInvoiceEuEditorPage() {
                     </Button>
                     <Button
                       type="button"
-                      disabled={!newSupplierName.trim() || creatingSupplier}
+                      disabled={
+                        !newSupplierName.trim() ||
+                        (!isDomestic && !newSupplierCountry) ||
+                        creatingSupplier
+                      }
                       onClick={() => void createSupplier()}
                     >
                       {creatingSupplier

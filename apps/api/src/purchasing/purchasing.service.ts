@@ -118,6 +118,15 @@ export class PurchasingService {
 
     const supplier = await this.suppliers.detail(input.supplierId);
     if (!supplier) throw new NotFoundException("A beszállító nem található.");
+    const supplierCountry = supplier.country.trim().toUpperCase();
+    if (input.source === "EU" && (!supplierCountry || supplierCountry === "HU"))
+      throw new BadRequestException(
+        "EU-s beszerzéshez csak nem magyarországi beszállító választható.",
+      );
+    if (input.source !== "EU" && supplierCountry !== "HU")
+      throw new BadRequestException(
+        "Belföldi beszerzéshez csak magyarországi beszállító választható.",
+      );
 
     const currency = input.currency.trim().toUpperCase();
     const invoiceDate = new Date(input.invoiceDate);
