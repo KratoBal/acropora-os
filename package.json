@@ -32,7 +32,8 @@
     "prisma:seed": "pnpm --filter @acropora/database prisma:seed",
     "mobile:doctor": "npm --prefix apps/mobile run doctor",
     "mobile:lint": "npm --prefix apps/mobile run lint",
-    "mobile:typecheck": "npm --prefix apps/mobile run typecheck"
+    "mobile:typecheck": "npm --prefix apps/mobile run typecheck",
+    "mobile:test": "npm --prefix apps/mobile run test"
   },
   "devDependencies": {
     "prettier": "^3.9.5",
