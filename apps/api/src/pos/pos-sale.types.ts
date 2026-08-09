@@ -24,6 +24,7 @@ export interface SalesOrderWithRelations {
   totalNet: Prisma.Decimal;
   totalTax: Prisma.Decimal;
   totalGross: Prisma.Decimal;
+  discountPercent: Prisma.Decimal | null;
   createdAt: Date;
   completedAt: Date | null;
   customer: { displayName: string } | null;
@@ -38,6 +39,7 @@ export interface SalesOrderWithRelations {
     unitNet: Prisma.Decimal;
     taxRate: Prisma.Decimal;
     lineGross: Prisma.Decimal;
+    discountPercent: Prisma.Decimal | null;
     syncStatus: SalesOrderLineSyncStatus;
     syncError: string | null;
   }>;
@@ -68,6 +70,7 @@ function toLineDetail(
     unitNet: line.unitNet.toString(),
     taxRate: line.taxRate.toString(),
     lineGross: line.lineGross.toString(),
+    discountPercent: line.discountPercent?.toString() ?? null,
     syncStatus: line.syncStatus,
     syncError: line.syncError,
   };
@@ -85,6 +88,7 @@ export function toPosSaleDetail(order: SalesOrderWithRelations): PosSaleDetail {
     totalNet: order.totalNet.toString(),
     totalTax: order.totalTax.toString(),
     totalGross: order.totalGross.toString(),
+    discountPercent: order.discountPercent?.toString() ?? null,
     createdAt: order.createdAt.toISOString(),
     completedAt: order.completedAt?.toISOString() ?? null,
     lines: order.lines.map(toLineDetail),

@@ -34,6 +34,7 @@ interface CartLine {
   unit: string;
   quantity: number;
   unitGross: number;
+  discountPercent: number;
 }
 
 const PAYMENT_METHOD_LABEL: Record<PosPaymentMethod, string> = {
@@ -44,6 +45,20 @@ const PAYMENT_METHOD_LABEL: Record<PosPaymentMethod, string> = {
 
 function formatHuf(value: number): string {
   return `${value.toLocaleString("hu-HU", { maximumFractionDigits: 2 })} Ft`;
+}
+
+function localDayRange(now = new Date()): {
+  createdFrom: string;
+  createdTo: string;
+} {
+  const from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const to = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  return { createdFrom: from.toISOString(), createdTo: to.toISOString() };
+}
+
+function clampDiscount(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(100, Math.max(0, value));
 }
 
 export function PosTerminalPage() {
@@ -64,6 +79,7 @@ export function PosTerminalPage() {
   const [searching, setSearching] = useState(false);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<PosPaymentMethod>("CASH");
+  const [discountPercent, setDiscountPercent] = useState(0);
   const [checkingOut, setCheckingOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<PosSaleResult | null>(null);
@@ -78,7 +94,7 @@ export function PosTerminalPage() {
     if (!canView) return;
     setLoadingRecent(true);
     void posApi
-      .listSales(token, { page: 1, pageSize: 10 })
+      .listSales(token, { page: 1, pageSize: 10, ...localDayRange() })
       .then((response) => setRecentSales(response.items))
       .catch(() => undefined)
       .finally(() => setLoadingRecent(false));
@@ -128,6 +144,7 @@ export function PosTerminalPage() {
           unit: product.unit,
           quantity: 1,
           unitGross: product.grossPrice ? Number(product.grossPrice) : 0,
+          discountPercent: 0,
         },
       ];
     });
@@ -149,16 +166,33 @@ export function PosTerminalPage() {
     );
   };
 
+  const updateLineDiscount = (variantId: string, value: number) => {
+    setCart((previous) =>
+      previous.map((line) =>
+        line.variantId === variantId
+          ? { ...line, discountPercent: clampDiscount(value) }
+          : line,
+      ),
+    );
+  };
+
   const removeLine = (variantId: string) => {
     setCart((previous) =>
       previous.filter((line) => line.variantId !== variantId),
     );
   };
 
-  const totalGross = useMemo(
-    () => cart.reduce((sum, line) => sum + line.unitGross * line.quantity, 0),
+  const subtotalGross = useMemo(
+    () =>
+      cart.reduce(
+        (sum, line) =>
+          sum +
+          line.unitGross * line.quantity * (1 - line.discountPercent / 100),
+        0,
+      ),
     [cart],
   );
+  const totalGross = subtotalGross * (1 - discountPercent / 100);
 
   const checkout = () => {
     // Mirrors the button's own `canManage ? ... : null` rendering guard -
@@ -172,15 +206,18 @@ export function PosTerminalPage() {
     void posApi
       .createSale(token, {
         paymentMethod,
+        discountPercent,
         lines: cart.map((line) => ({
           variantId: line.variantId,
           quantity: line.quantity,
           unitGross: line.unitGross,
+          discountPercent: line.discountPercent,
         })),
       })
       .then((result) => {
         setLastResult(result);
         setCart([]);
+        setDiscountPercent(0);
         setSearchTerm("");
         setSearchResults([]);
         loadRecentSales();
@@ -366,7 +403,7 @@ export function PosTerminalPage() {
                           Eltávolítás
                         </button>
                       </div>
-                      <div className="mt-2 grid grid-cols-2 gap-2">
+                      <div className="mt-2 grid grid-cols-3 gap-2">
                         <label className="text-xs text-slate-500">
                           Mennyiség ({line.unit})
                           <input
@@ -399,9 +436,31 @@ export function PosTerminalPage() {
                             className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
                           />
                         </label>
+                        <label className="text-xs text-slate-500">
+                          Kedvezmény (%)
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step="any"
+                            value={line.discountPercent}
+                            onChange={(event) =>
+                              updateLineDiscount(
+                                line.variantId,
+                                Number(event.target.value),
+                              )
+                            }
+                            aria-label={`${line.productName} kedvezmény`}
+                            className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                          />
+                        </label>
                       </div>
                       <p className="mt-2 text-right text-sm font-semibold text-slate-900">
-                        {formatHuf(line.unitGross * line.quantity)}
+                        {formatHuf(
+                          line.unitGross *
+                            line.quantity *
+                            (1 - line.discountPercent / 100),
+                        )}
                       </p>
                     </div>
                   ))}
@@ -409,6 +468,23 @@ export function PosTerminalPage() {
               )}
 
               <div className="border-t border-slate-100 pt-3">
+                <label className="mb-3 block text-xs text-slate-500">
+                  Végösszeg kedvezmény (%)
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="any"
+                    value={discountPercent}
+                    onChange={(event) =>
+                      setDiscountPercent(
+                        clampDiscount(Number(event.target.value)),
+                      )
+                    }
+                    aria-label="Végösszeg kedvezmény"
+                    className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                  />
+                </label>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-slate-500">Fizetendő</span>
                   <span className="text-lg font-bold text-slate-900">

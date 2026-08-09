@@ -21,11 +21,15 @@ export interface CreatePosSaleLineInput {
   quantity: number;
   /** Gross unit price actually charged; defaults from grossPrice but overridable per line. */
   unitGross: number;
+  /** Percentage discount applied to this cart line before the order discount. */
+  discountPercent?: number;
 }
 
 export interface CreatePosSaleInput {
   paymentMethod: PosPaymentMethod;
   customerId?: string | null;
+  /** Percentage discount applied to the line-discounted order total. */
+  discountPercent?: number;
   lines: CreatePosSaleLineInput[];
 }
 
@@ -39,6 +43,7 @@ export interface PosSaleLineDetail {
   unitNet: string;
   taxRate: string;
   lineGross: string;
+  discountPercent: string | null;
   syncStatus: SalesOrderLineSyncStatus;
   syncError: string | null;
 }
@@ -54,6 +59,7 @@ export interface PosSaleDetail {
   totalNet: string;
   totalTax: string;
   totalGross: string;
+  discountPercent: string | null;
   createdAt: string;
   completedAt: string | null;
   lines: PosSaleLineDetail[];

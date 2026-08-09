@@ -11,12 +11,16 @@ import { apiRequest } from "./client";
 export interface PosSaleListQuery {
   page?: number;
   pageSize?: number;
+  createdFrom?: string;
+  createdTo?: string;
 }
 
 function listQueryString(query: PosSaleListQuery): string {
   const params = new URLSearchParams();
   if (query.page) params.set("page", String(query.page));
   if (query.pageSize) params.set("pageSize", String(query.pageSize));
+  if (query.createdFrom) params.set("createdFrom", query.createdFrom);
+  if (query.createdTo) params.set("createdTo", query.createdTo);
   return params.toString();
 }
 

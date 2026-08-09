@@ -20,6 +20,7 @@ describe("toPosSaleDetail", () => {
       totalNet: new Prisma.Decimal("200"),
       totalTax: new Prisma.Decimal("54"),
       totalGross: new Prisma.Decimal("254"),
+      discountPercent: new Prisma.Decimal("5"),
       createdAt: new Date("2026-07-21T10:00:00.000Z"),
       completedAt: new Date("2026-07-21T10:00:05.000Z"),
       customer: null,
@@ -35,6 +36,7 @@ describe("toPosSaleDetail", () => {
           unitNet: new Prisma.Decimal("100"),
           taxRate: new Prisma.Decimal("27"),
           lineGross: new Prisma.Decimal("254"),
+          discountPercent: new Prisma.Decimal("10"),
           syncStatus: "OK",
           syncError: null,
         },
@@ -46,9 +48,11 @@ describe("toPosSaleDetail", () => {
     assert.equal(detail.customerName, null);
     assert.equal(detail.soldByName, "Teszt Pénztáros");
     assert.equal(detail.totalGross, "254");
+    assert.equal(detail.discountPercent, "5");
     assert.equal(detail.lines.length, 1);
     assert.equal(detail.lines[0]?.productName, "Reef Salt");
     assert.equal(detail.lines[0]?.quantity, "2");
+    assert.equal(detail.lines[0]?.discountPercent, "10");
   });
 });
 

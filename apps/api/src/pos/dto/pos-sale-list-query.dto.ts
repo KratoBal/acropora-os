@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsInt, IsOptional, Max, Min } from "class-validator";
+import { IsISO8601, IsInt, IsOptional, Max, Min } from "class-validator";
 
 export class PosSaleListQueryDto {
   @IsOptional()
@@ -14,4 +14,12 @@ export class PosSaleListQueryDto {
   @Min(1)
   @Max(100)
   pageSize = 20;
+
+  @IsOptional()
+  @IsISO8601()
+  createdFrom?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  createdTo?: string;
 }

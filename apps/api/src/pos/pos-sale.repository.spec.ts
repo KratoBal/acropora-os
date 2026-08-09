@@ -37,6 +37,8 @@ class FakeDb {
     idempotencyKey: string;
     targetOnHand: Prisma.Decimal;
   }> = [];
+  lastSalesOrderFindManyArgs: any;
+  lastSalesOrderCountArgs: any;
 
   salesOrder = {
     create: async (args: any) => {
@@ -53,6 +55,7 @@ class FakeDb {
         totalNet: args.data.totalNet,
         totalTax: args.data.totalTax,
         totalGross: args.data.totalGross,
+        discountPercent: args.data.discountPercent,
         createdAt: new Date(),
         completedAt: args.data.completedAt,
         lines: (args.data.lines?.create ?? []).map(
@@ -66,15 +69,22 @@ class FakeDb {
             unitNet: line.unitNet,
             taxRate: line.taxRate,
             lineGross: line.lineGross,
+            discountPercent: line.discountPercent,
             syncStatus: line.syncStatus,
             syncError: line.syncError,
           }),
         ),
       };
     },
-    findMany: async () => [],
+    findMany: async (args: any) => {
+      this.lastSalesOrderFindManyArgs = args;
+      return [];
+    },
     findUnique: async () => null,
-    count: async () => 0,
+    count: async (args: any) => {
+      this.lastSalesOrderCountArgs = args;
+      return 0;
+    },
   };
 
   stockItem = {
@@ -186,6 +196,7 @@ function line(overrides: Partial<CreatePosSaleLine> = {}): CreatePosSaleLine {
     taxRate: new Prisma.Decimal("27"),
     unitNet: new Prisma.Decimal("100"),
     lineGross: new Prisma.Decimal("127"),
+    discountPercent: null,
     syncToUnas: true,
     stockComponents: [
       {
@@ -210,6 +221,7 @@ function baseParams(
     actorUserId: "user-1",
     paymentMethod: "CASH",
     customerId: null,
+    discountPercent: null,
     lines: [line()],
     totals: {
       totalNet: new Prisma.Decimal("100"),
@@ -398,5 +410,34 @@ describe("PosSaleRepository.createSale", () => {
     for (const detailLine of result.detail.lines) {
       assert.equal(detailLine.syncStatus, "PENDING");
     }
+  });
+});
+
+describe("PosSaleRepository.list", () => {
+  it("filters by the requested half-open date range and orders newest first", async () => {
+    const db = new FakeDb();
+    const repository = repositoryWith(db);
+
+    await repository.list({
+      page: 1,
+      pageSize: 10,
+      createdFrom: "2026-08-08T22:00:00.000Z",
+      createdTo: "2026-08-09T22:00:00.000Z",
+    });
+
+    assert.deepEqual(db.lastSalesOrderFindManyArgs.where, {
+      channel: "POS",
+      createdAt: {
+        gte: new Date("2026-08-08T22:00:00.000Z"),
+        lt: new Date("2026-08-09T22:00:00.000Z"),
+      },
+    });
+    assert.deepEqual(db.lastSalesOrderFindManyArgs.orderBy, {
+      createdAt: "desc",
+    });
+    assert.deepEqual(
+      db.lastSalesOrderCountArgs.where,
+      db.lastSalesOrderFindManyArgs.where,
+    );
   });
 });

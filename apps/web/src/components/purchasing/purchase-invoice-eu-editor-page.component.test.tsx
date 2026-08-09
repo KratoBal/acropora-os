@@ -139,7 +139,11 @@ beforeEach(() => {
     localProductCreatedCount: 0,
     projectReservationCount: 0,
   });
-  purchasingApiMock.getExchangeRate.mockReset();
+  purchasingApiMock.getExchangeRate.mockReset().mockResolvedValue({
+    currency: "EUR",
+    quotedDate: new Date().toISOString().slice(0, 10),
+    rate: "398.5",
+  });
   purchasingApiMock.searchProducts.mockReset().mockResolvedValue([]);
   purchasingApiMock.listProjects.mockReset().mockResolvedValue([]);
   purchasingApiMock.createProject.mockReset();
@@ -155,6 +159,30 @@ beforeEach(() => {
 });
 
 describe("PurchaseInvoiceEuEditorPage NAV bevételezés", () => {
+  it("üres számlaszámnál piros hibát jelez és a mezőre fókuszál", async () => {
+    navigation.params = new URLSearchParams();
+    render(createElement(PurchaseInvoiceEuEditorPage));
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Számla rögzítése és készlet frissítése",
+      }),
+    );
+
+    const invoiceNumber = screen.getByRole("textbox", { name: "Számlaszám" });
+    expect(invoiceNumber).toHaveFocus();
+    expect(invoiceNumber).toHaveAttribute("aria-invalid", "true");
+    expect(invoiceNumber).toHaveAttribute(
+      "placeholder",
+      "A számlaszám megadása kötelező.",
+    );
+    expect(invoiceNumber).toHaveClass("border-rose-500");
+    expect(
+      screen.getByText("A számlaszám megadása kötelező."),
+    ).toBeInTheDocument();
+    expect(purchasingApiMock.create).not.toHaveBeenCalled();
+  });
+
   it("a pénznemet fixen HUF-ként jeleníti meg", async () => {
     render(createElement(PurchaseInvoiceEuEditorPage));
 

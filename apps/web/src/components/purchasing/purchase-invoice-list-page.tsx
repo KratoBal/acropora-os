@@ -105,7 +105,7 @@ export function PurchaseInvoiceListPage() {
         actions={
           canManage ? (
             <Link href="/beszerzes/uj">
-              <Button>Új EU-s számla</Button>
+              <Button>Új beszerzés</Button>
             </Link>
           ) : undefined
         }
@@ -194,11 +194,11 @@ export function PurchaseInvoiceListPage() {
                   ? "Nincs találat"
                   : "Még nincs rögzített beszerzési számla"
               }
-              description="Módosítsd a keresést vagy rögzíts új EU-s számlát."
+              description="Módosítsd a keresést vagy rögzíts új beszerzést."
               action={
                 canManage && !data.pagination.totalItems ? (
                   <Link href="/beszerzes/uj">
-                    <Button variant="secondary">Új EU-s számla</Button>
+                    <Button variant="secondary">Új beszerzés</Button>
                   </Link>
                 ) : undefined
               }

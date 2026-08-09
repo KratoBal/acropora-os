@@ -132,6 +132,14 @@ export function PosSaleDetailPage({ saleId }: { saleId: string }) {
                 </div>
               </dl>
               <div className="mt-4 flex justify-end gap-6 border-t border-slate-100 pt-4 text-sm">
+                {detail.discountPercent ? (
+                  <div className="text-right">
+                    <p className="text-slate-400">Végösszeg kedvezmény</p>
+                    <p className="font-semibold text-slate-700">
+                      {detail.discountPercent}%
+                    </p>
+                  </div>
+                ) : null}
                 <div className="text-right">
                   <p className="text-slate-400">Nettó</p>
                   <p className="font-semibold text-slate-700">
@@ -170,6 +178,7 @@ export function PosSaleDetailPage({ saleId }: { saleId: string }) {
                     <th className="px-4 py-3 text-right">Menny.</th>
                     <th className="px-4 py-3 text-right">Nettó egységár</th>
                     <th className="px-4 py-3 text-right">ÁFA</th>
+                    <th className="px-4 py-3 text-right">Kedvezmény</th>
                     <th className="px-4 py-3 text-right">Bruttó</th>
                     <th className="px-5 py-3">UNAS szinkron</th>
                   </tr>
@@ -191,6 +200,11 @@ export function PosSaleDetailPage({ saleId }: { saleId: string }) {
                       </td>
                       <td className="px-4 py-3 text-right text-sm text-slate-600">
                         {line.taxRate}%
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-slate-600">
+                        {line.discountPercent
+                          ? `${line.discountPercent}%`
+                          : "—"}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-semibold text-slate-900">
                         {formatHuf(line.lineGross)}
