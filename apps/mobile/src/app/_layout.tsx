@@ -31,7 +31,12 @@ function RootNavigator() {
   const { status, restoreNetworkError, retryRestore } = useAuth();
 
   if (status === "restoring") {
-    return <RestoringScreen networkError={restoreNetworkError} onRetry={retryRestore} />;
+    return (
+      <RestoringScreen
+        networkError={restoreNetworkError}
+        onRetry={retryRestore}
+      />
+    );
   }
 
   return (
@@ -45,6 +50,11 @@ function RootNavigator() {
     >
       <Stack.Screen name="index" options={{ title: "Acropora OS" }} />
       <Stack.Screen name="login" options={{ headerShown: false }} />
+      <Stack.Screen name="orders/index" options={{ title: "Rendelések" }} />
+      <Stack.Screen
+        name="orders/[id]"
+        options={{ title: "Rendelés részletei" }}
+      />
     </Stack>
   );
 }

@@ -1,25 +1,47 @@
 import { useQuery } from "@tanstack/react-query";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Redirect, useRouter } from "expo-router";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Redirect } from "expo-router";
 
-import { env } from "@/config/env";
-import { getApiHealth } from "@/lib/api/health";
+import { OrderListCard } from "@/components/orders/OrderListCard";
+import { listUnasOrders } from "@/lib/api/orders";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import {
+  getWebshopCapabilities,
+  userRoleLabel,
+} from "@/lib/auth/webshop-authorization";
+
+interface ModuleCardProps {
+  code: string;
+  title: string;
+  description: string;
+  available: boolean;
+  enabled: boolean;
+  onPress?(): void;
+}
 
 export default function HomeScreen() {
+  const router = useRouter();
   const { status, user, signOut } = useAuth();
-  const health = useQuery({
-    queryKey: ["api-health"],
-    queryFn: getApiHealth,
-    retry: false,
-    enabled: status === "authenticated",
+  const capabilities = user ? getWebshopCapabilities(user.role) : null;
+  const orders = useQuery({
+    queryKey: ["unas-orders", { page: 1, pageSize: 5 }],
+    queryFn: () => listUnasOrders(1, 5),
+    enabled: Boolean(capabilities?.ordersView && status === "authenticated"),
   });
 
-  // Stay mounted through "signingOut" so the button below can show its own
-  // in-progress state; only bounce to the login screen once the sign-out
-  // flow has actually finished (status becomes "unauthenticated").
-  if ((status !== "authenticated" && status !== "signingOut") || !user) {
+  if (
+    (status !== "authenticated" && status !== "signingOut") ||
+    !user ||
+    !capabilities
+  ) {
     return <Redirect href="/login" />;
   }
 
@@ -29,184 +51,355 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.safeArea} edges={["bottom", "left", "right"]}>
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.hero}>
-          <Text style={styles.eyebrow}>TEREPI RENDSZER</Text>
+          <View style={styles.heroTopline}>
+            <Text style={styles.eyebrow}>WEBSHOP MANAGER</Text>
+            <View style={styles.roleBadge}>
+              <Text style={styles.roleBadgeText}>
+                {userRoleLabel(user.role)}
+              </Text>
+            </View>
+          </View>
           <Text style={styles.title}>Szia, {user.displayName}!</Text>
-          <Text style={styles.subtitle}>{user.email}</Text>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Környezet</Text>
-          <DiagnosticRow label="Alkalmazás" value={env.appEnvironment} />
-          <DiagnosticRow label="API" value={env.apiUrl} />
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>API-kapcsolat</Text>
-          {health.isPending ? (
-            <ActivityIndicator color="#52d6c7" />
-          ) : (
-            <Text style={health.isSuccess ? styles.success : styles.error}>
-              {health.isSuccess
-                ? `Elérhető · ${health.data.status}`
-                : health.error instanceof Error
-                  ? health.error.message
-                  : "Az API nem érhető el."}
-            </Text>
-          )}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Kapcsolat újraellenőrzése"
-            onPress={() => void health.refetch()}
-            style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
-          >
-            <Text style={styles.buttonText}>Kapcsolat újraellenőrzése</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Napi terepi feladatlista</Text>
-          <Text style={styles.noticeText}>
-            A napi terepi feladatlista és a ServiceJob-modul egy következő
-            checkpointban készül el. Ez a képernyő egyelőre csak a bejelentkezett
-            munkamenetet és az API-kapcsolatot mutatja.
+          <Text style={styles.subtitle}>
+            A webshop napi működéséhez tartozó adatok egy helyen.
           </Text>
         </View>
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Kijelentkezés"
-          accessibilityState={{ disabled: signingOut }}
-          disabled={signingOut}
-          onPress={() => void signOut()}
-          style={({ pressed }) => [
-            styles.signOutButton,
-            (pressed || signingOut) && styles.signOutButtonPressed,
-          ]}
-        >
-          {signingOut ? (
-            <ActivityIndicator color="#ff9f92" />
-          ) : (
-            <Text style={styles.signOutButtonText}>Kijelentkezés</Text>
-          )}
-        </Pressable>
+        {!capabilities.workspace ? (
+          <View style={styles.accessCard}>
+            <Text style={styles.accessTitle}>
+              Ehhez a munkaterülethez nincs hozzáférésed
+            </Text>
+            <Text style={styles.accessText}>
+              A Webshop Manager mobilnézetet az OWNER, ADMIN, MANAGER, SALES,
+              WAREHOUSE és VIEWER szerepkörök használhatják. A szerver minden
+              adatlekérést külön is jogosultság alapján ellenőriz.
+            </Text>
+          </View>
+        ) : (
+          <>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Modulok</Text>
+              <Text style={styles.sectionHint}>Jogosultságod szerint</Text>
+            </View>
+
+            <View style={styles.modules}>
+              <ModuleCard
+                code="RE"
+                title="Rendelések"
+                description="UNAS rendelések, státuszok és tételek"
+                available={capabilities.ordersView}
+                enabled
+                onPress={() => router.push("/orders")}
+              />
+              <ModuleCard
+                code="BE"
+                title="Beszerzés"
+                description="Szállítói számlák és bevételezés"
+                available={capabilities.purchasingView}
+                enabled={false}
+              />
+              <ModuleCard
+                code="TE"
+                title="Termékek"
+                description="Terméktörzs és készletállapot"
+                available={capabilities.productsView}
+                enabled={false}
+              />
+              <ModuleCard
+                code="NAV"
+                title="NAV-szinkron"
+                description="Bejövő számlák és párosítások"
+                available={capabilities.navView}
+                enabled={false}
+              />
+              <ModuleCard
+                code="PA"
+                title="Partnerek"
+                description="Beszállítók és kapcsolattartók"
+                available={capabilities.partnersView}
+                enabled={false}
+              />
+            </View>
+
+            {capabilities.ordersView ? (
+              <View style={styles.ordersSection}>
+                <View style={styles.sectionHeader}>
+                  <View>
+                    <Text style={styles.sectionTitle}>
+                      Legutóbbi rendelések
+                    </Text>
+                    <Text style={styles.sectionSubtext}>
+                      {orders.data
+                        ? `${orders.data.pagination.totalItems.toLocaleString("hu-HU")} rendelés összesen`
+                        : "Valódi Acropora OS-adatok"}
+                    </Text>
+                  </View>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Összes rendelés megnyitása"
+                    onPress={() => router.push("/orders")}
+                    style={({ pressed }) => [
+                      styles.textButton,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <Text style={styles.textButtonLabel}>Összes</Text>
+                  </Pressable>
+                </View>
+
+                {orders.isPending ? (
+                  <ActivityIndicator color="#52d6c7" />
+                ) : null}
+                {orders.isError ? (
+                  <ErrorCard
+                    message={
+                      orders.error instanceof Error
+                        ? orders.error.message
+                        : "A rendelések betöltése nem sikerült."
+                    }
+                    onRetry={() => void orders.refetch()}
+                  />
+                ) : null}
+                {orders.data?.items.length === 0 ? (
+                  <View style={styles.emptyCard}>
+                    <Text style={styles.emptyText}>
+                      Még nincs szinkronizált webshop rendelés.
+                    </Text>
+                  </View>
+                ) : null}
+                {orders.data?.items.slice(0, 3).map((order) => (
+                  <OrderListCard
+                    key={order.id}
+                    order={order}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/orders/[id]",
+                        params: { id: order.id },
+                      })
+                    }
+                  />
+                ))}
+              </View>
+            ) : null}
+          </>
+        )}
+
+        <View style={styles.accountCard}>
+          <View style={styles.accountText}>
+            <Text style={styles.accountName}>{user.displayName}</Text>
+            <Text style={styles.accountEmail}>{user.email}</Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Kijelentkezés"
+            accessibilityState={{ disabled: signingOut }}
+            disabled={signingOut}
+            onPress={() => void signOut()}
+            style={({ pressed }) => [
+              styles.signOutButton,
+              (pressed || signingOut) && styles.pressed,
+            ]}
+          >
+            {signingOut ? (
+              <ActivityIndicator color="#ff9f92" />
+            ) : (
+              <Text style={styles.signOutText}>Kijelentkezés</Text>
+            )}
+          </Pressable>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function DiagnosticRow({ label, value }: { label: string; value: string }) {
+function ModuleCard({
+  code,
+  title,
+  description,
+  available,
+  enabled,
+  onPress,
+}: ModuleCardProps) {
+  if (!available) return null;
   return (
-    <View style={styles.row}>
-      <Text style={styles.label}>{label}</Text>
-      <Text selectable style={styles.value}>
-        {value}
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${title}${enabled ? " megnyitása" : ", következő ütem"}`}
+      accessibilityState={{ disabled: !enabled }}
+      disabled={!enabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.moduleCard,
+        !enabled && styles.moduleCardDisabled,
+        pressed && styles.pressed,
+      ]}
+    >
+      <View style={[styles.moduleCode, !enabled && styles.moduleCodeDisabled]}>
+        <Text
+          style={[
+            styles.moduleCodeText,
+            !enabled && styles.moduleCodeTextDisabled,
+          ]}
+        >
+          {code}
+        </Text>
+      </View>
+      <View style={styles.moduleText}>
+        <Text style={styles.moduleTitle}>{title}</Text>
+        <Text style={styles.moduleDescription}>{description}</Text>
+      </View>
+      <Text style={enabled ? styles.moduleArrow : styles.comingSoon}>
+        {enabled ? "›" : "Következő ütem"}
       </Text>
+    </Pressable>
+  );
+}
+
+function ErrorCard({ message, onRetry }: { message: string; onRetry(): void }) {
+  return (
+    <View style={styles.errorCard}>
+      <Text style={styles.errorText}>{message}</Text>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onRetry}
+        style={styles.retryButton}
+      >
+        <Text style={styles.retryText}>Újrapróbálás</Text>
+      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#071827",
-  },
-  container: {
-    padding: 20,
-    gap: 16,
-  },
-  hero: {
-    paddingVertical: 20,
-    gap: 10,
+  safeArea: { flex: 1, backgroundColor: "#071827" },
+  container: { gap: 18, padding: 20, paddingBottom: 36 },
+  hero: { gap: 10, paddingBottom: 8, paddingTop: 18 },
+  heroTopline: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
   eyebrow: {
     color: "#52d6c7",
     fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 1.6,
+    fontWeight: "900",
+    letterSpacing: 1.5,
   },
-  title: {
-    color: "#f4fbff",
-    fontSize: 28,
-    fontWeight: "800",
-    lineHeight: 34,
+  roleBadge: {
+    backgroundColor: "#123f3b",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
-  subtitle: {
-    color: "#b7cedd",
-    fontSize: 16,
-    lineHeight: 22,
+  roleBadgeText: { color: "#6de0ce", fontSize: 11, fontWeight: "800" },
+  title: { color: "#f4fbff", fontSize: 30, fontWeight: "900", lineHeight: 36 },
+  subtitle: { color: "#9ab8ca", fontSize: 15, lineHeight: 22 },
+  sectionHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
   },
-  card: {
+  sectionTitle: { color: "#f4fbff", fontSize: 19, fontWeight: "800" },
+  sectionHint: { color: "#6f93a8", fontSize: 12 },
+  sectionSubtext: { color: "#6f93a8", fontSize: 12, marginTop: 3 },
+  modules: { gap: 10 },
+  moduleCard: {
+    alignItems: "center",
     backgroundColor: "#0b263d",
     borderColor: "#164668",
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: 1,
-    gap: 14,
-    padding: 18,
+    flexDirection: "row",
+    gap: 13,
+    minHeight: 78,
+    padding: 14,
   },
-  cardTitle: {
-    color: "#f4fbff",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  row: {
-    gap: 4,
-  },
-  label: {
-    color: "#7ea3b9",
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
-  },
-  value: {
-    color: "#d9edf7",
-    fontSize: 14,
-  },
-  success: {
-    color: "#52d6c7",
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  error: {
-    color: "#ff9f92",
-    fontSize: 15,
-    lineHeight: 21,
-  },
-  noticeText: {
-    color: "#b7cedd",
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  button: {
+  moduleCardDisabled: { opacity: 0.68 },
+  moduleCode: {
     alignItems: "center",
     backgroundColor: "#166a7a",
     borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  buttonPressed: {
-    opacity: 0.75,
-  },
-  buttonText: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  signOutButton: {
-    alignItems: "center",
-    borderColor: "#5c2b28",
-    borderRadius: 12,
-    borderWidth: 1,
-    marginTop: 4,
-    minHeight: 48,
+    height: 46,
     justifyContent: "center",
-    paddingVertical: 12,
+    width: 46,
   },
-  signOutButtonPressed: {
-    opacity: 0.7,
+  moduleCodeDisabled: { backgroundColor: "#173b55" },
+  moduleCodeText: { color: "#ffffff", fontSize: 13, fontWeight: "900" },
+  moduleCodeTextDisabled: { color: "#91adbd" },
+  moduleText: { flex: 1, gap: 4 },
+  moduleTitle: { color: "#f4fbff", fontSize: 16, fontWeight: "800" },
+  moduleDescription: { color: "#86a7ba", fontSize: 12, lineHeight: 17 },
+  moduleArrow: { color: "#52d6c7", fontSize: 30, fontWeight: "300" },
+  comingSoon: {
+    color: "#7798ab",
+    fontSize: 10,
+    fontWeight: "800",
+    maxWidth: 62,
+    textAlign: "right",
   },
-  signOutButtonText: {
+  ordersSection: { gap: 12, paddingTop: 6 },
+  textButton: {
+    backgroundColor: "#123f3b",
+    borderRadius: 10,
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+  },
+  textButtonLabel: { color: "#6de0ce", fontSize: 12, fontWeight: "800" },
+  accessCard: {
+    backgroundColor: "#3b2b2d",
+    borderColor: "#664047",
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 9,
+    padding: 18,
+  },
+  accessTitle: { color: "#ffd0ca", fontSize: 17, fontWeight: "800" },
+  accessText: { color: "#dbaea9", fontSize: 13, lineHeight: 20 },
+  errorCard: {
+    alignItems: "flex-start",
+    backgroundColor: "#3b2b2d",
+    borderRadius: 14,
+    gap: 10,
+    padding: 14,
+  },
+  errorText: { color: "#ffb4ab", fontSize: 13, lineHeight: 19 },
+  retryButton: {
+    borderColor: "#8c5552",
+    borderRadius: 9,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+  },
+  retryText: { color: "#ffd0ca", fontSize: 12, fontWeight: "800" },
+  emptyCard: { backgroundColor: "#0b263d", borderRadius: 14, padding: 16 },
+  emptyText: { color: "#86a7ba", fontSize: 13 },
+  accountCard: {
+    alignItems: "center",
+    borderTopColor: "#143a55",
+    borderTopWidth: 1,
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+    marginTop: 8,
+    paddingTop: 20,
+  },
+  accountText: { flex: 1, gap: 3 },
+  accountName: { color: "#d9edf7", fontSize: 14, fontWeight: "700" },
+  accountEmail: { color: "#6f93a8", fontSize: 12 },
+  signOutButton: {
+    borderColor: "#5c2b28",
+    borderRadius: 10,
+    borderWidth: 1,
+    minWidth: 108,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  signOutText: {
     color: "#ff9f92",
-    fontSize: 15,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "800",
+    textAlign: "center",
   },
+  pressed: { opacity: 0.7 },
 });
