@@ -33,6 +33,7 @@ function buildService(options: {
   variants: Map<string, PurchaseInvoiceVariantInfo>;
   warehouseId?: string;
   supplierExists?: boolean;
+  supplierCountry?: string;
   getRateForDate?: MnbExchangeRateService["getRateForDate"];
 }) {
   let capturedCreateParams: CreatePurchaseInvoiceParams | undefined;
@@ -97,7 +98,11 @@ function buildService(options: {
   const suppliers = {
     detail: async () =>
       (options.supplierExists ?? true)
-        ? { id: "supplier-1", name: "Test" }
+        ? {
+            id: "supplier-1",
+            name: "Test",
+            country: options.supplierCountry ?? "DE",
+          }
         : null,
   } as unknown as SuppliersRepository;
   const productSearch = {} as unknown as PurchaseProductSearchService;
@@ -189,6 +194,7 @@ describe("PurchasingService.createInvoice", () => {
   it("rejects a HU_MANUAL/HU_NAV invoice whose currency isn't HUF", async () => {
     const { service } = buildService({
       variants: new Map([["variant-1", variant()]]),
+      supplierCountry: "HU",
     });
     await assert.rejects(() =>
       service.createInvoice(
@@ -201,6 +207,7 @@ describe("PurchasingService.createInvoice", () => {
   it("rejects a HU_MANUAL/HU_NAV invoice without a vatRate", async () => {
     const { service } = buildService({
       variants: new Map([["variant-1", variant()]]),
+      supplierCountry: "HU",
     });
     await assert.rejects(() =>
       service.createInvoice(
@@ -213,6 +220,7 @@ describe("PurchasingService.createInvoice", () => {
   it("accepts a HU_MANUAL invoice with HUF currency and a vatRate, without calling MNB", async () => {
     const { service, getCapturedCreateParams, getMnbCallCount } = buildService({
       variants: new Map([["variant-1", variant()]]),
+      supplierCountry: "HU",
     });
     await service.createInvoice(
       baseInput({ source: "HU_MANUAL", currency: "HUF", vatRate: 27 }),
@@ -227,6 +235,7 @@ describe("PurchasingService.createInvoice", () => {
   it("passes navIncomingInvoiceId through for a HU_NAV invoice", async () => {
     const { service, getCapturedCreateParams } = buildService({
       variants: new Map([["variant-1", variant()]]),
+      supplierCountry: "HU",
     });
     await service.createInvoice(
       baseInput({
@@ -249,6 +258,32 @@ describe("PurchasingService.createInvoice", () => {
       supplierExists: false,
     });
     await assert.rejects(() => service.createInvoice(baseInput(), "user-1"));
+  });
+
+  it("rejects a Hungarian supplier for an EU purchase", async () => {
+    const { service } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+      supplierCountry: "HU",
+    });
+    await assert.rejects(
+      () => service.createInvoice(baseInput(), "user-1"),
+      /csak nem magyarországi beszállító/i,
+    );
+  });
+
+  it("rejects a non-Hungarian supplier for a domestic purchase", async () => {
+    const { service } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+      supplierCountry: "DE",
+    });
+    await assert.rejects(
+      () =>
+        service.createInvoice(
+          baseInput({ source: "HU_MANUAL", currency: "HUF", vatRate: 27 }),
+          "user-1",
+        ),
+      /csak magyarországi beszállító/i,
+    );
   });
 
   it("rejects an unknown product variant", async () => {

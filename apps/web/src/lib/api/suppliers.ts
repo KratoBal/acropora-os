@@ -12,8 +12,17 @@ export const suppliersApi = {
       signal,
     });
   },
-  search(token: string, search: string, signal?: AbortSignal) {
-    const params = new URLSearchParams({ search, pageSize: "10" });
+  search(
+    token: string,
+    search: string,
+    countryScope: "DOMESTIC" | "EU",
+    signal?: AbortSignal,
+  ) {
+    const params = new URLSearchParams({
+      search,
+      pageSize: "10",
+      countryScope,
+    });
     return apiRequest<SupplierListResponse>(`/suppliers?${params}`, token, {
       signal,
     });
