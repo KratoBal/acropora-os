@@ -1,5 +1,7 @@
 import { env } from "@/config/env";
-import { authTokenStore } from "@/lib/auth/token-store";
+import { authSessionStore } from "@/lib/auth/token-store";
+
+import { resolveRequestToken } from "./request-auth";
 
 export class ApiError extends Error {
   constructor(
@@ -11,25 +13,60 @@ export class ApiError extends Error {
   }
 }
 
+/** Thrown when `fetch` itself fails (no connectivity, DNS, TLS, timeout,
+ * ...) — distinct from `ApiError`, which means the server was reached and
+ * responded with a non-2xx status. Callers (see restore-session.ts,
+ * sign-in.ts) rely on this distinction to avoid treating "the server is
+ * temporarily unreachable" the same as "this token/credential is
+ * invalid". */
+export class ApiNetworkError extends Error {
+  constructor(cause?: unknown) {
+    super("A szerver jelenleg nem érhető el.");
+    this.name = "ApiNetworkError";
+    this.cause = cause;
+  }
+}
+
+export interface ApiRequestOptions extends RequestInit {
+  /** Skip attaching any Authorization header, even if a token is stored
+   * locally. Used for the login request itself, so a stale or invalid
+   * previously-stored token is never sent alongside new credentials. */
+  skipAuth?: boolean;
+  /** Explicit Bearer token to send instead of the one in SecureStore.
+   * Used only to invalidate a just-issued session that failed to persist
+   * locally, before it was ever saved (see sign-in.ts). */
+  authToken?: string;
+}
+
 export async function apiRequest<T>(
   path: `/${string}`,
-  init: RequestInit = {},
+  init: ApiRequestOptions = {},
 ): Promise<T> {
-  const token = await authTokenStore.get();
-  const headers = new Headers(init.headers);
+  const { skipAuth, authToken, ...requestInit } = init;
+  const storedToken = await authSessionStore.getToken();
+  const token = resolveRequestToken({ skipAuth, authToken, storedToken });
+
+  const headers = new Headers(requestInit.headers);
   headers.set("Accept", "application/json");
 
-  if (init.body && !headers.has("Content-Type")) {
+  if (requestInit.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const response = await fetch(`${env.apiUrl}${path}`, {
-    ...init,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${env.apiUrl}${path}`, {
+      ...requestInit,
+      headers,
+    });
+  } catch (cause) {
+    // Never let a raw fetch error (which may embed request details)
+    // surface directly — normalize to a fixed, safe message.
+    throw new ApiNetworkError(cause);
+  }
 
   if (!response.ok) {
     const message = await readErrorMessage(response);

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "commonjs",
+    "ignoreDeprecations": "6.0",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "types": ["node"],
+    "outDir": "./test-dist",
+    "rootDir": "./src"
+  },
+  "include": [
+    "src/lib/auth/types.ts",
+    "src/lib/auth/auth-reducer.ts",
+    "src/lib/auth/auth-reducer.spec.ts",
+    "src/lib/auth/restore-session.ts",
+    "src/lib/auth/restore-session.spec.ts",
+    "src/lib/auth/sign-in.ts",
+    "src/lib/auth/sign-in.spec.ts",
+    "src/lib/auth/sign-out.ts",
+    "src/lib/auth/sign-out.spec.ts",
+    "src/lib/api/request-auth.ts",
+    "src/lib/api/request-auth.spec.ts"
+  ]
+}

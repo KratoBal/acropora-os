@@ -120,19 +120,111 @@ changing the architecture.
 
 ## Authentication boundary
 
-The current production web login returns a session only in an HTTP-only cookie.
-The API guard can already validate bearer tokens, but production login does not
-currently issue a native-client token. Therefore:
+Checkpoint 2 (mobile login UI) is complete: password login works end to end
+against the already-merged backend endpoint `POST
+/auth/mobile/login/password` (see `apps/api/src/auth/auth.controller.ts` and
+`docs/AUTHENTICATION.md`). ServiceJob, the daily field task list and any other
+domain feature are explicitly out of scope of this checkpoint and come later.
 
-1. the mobile scaffold stores tokens only in SecureStore;
-2. it does not pretend that production mobile login is ready;
-3. the next backend increment must add a mobile session/token exchange with
-   expiry, revocation, device/session listing and logout;
-4. authorization remains the existing server-side RBAC source of truth;
-5. no development login mode may be exposed through the public staging domain.
+### Login flow
 
-Until that increment is complete, staging access must remain network-gated and
-the diagnostic screen should use only public endpoints such as `/health`.
+1. The login screen (`src/app/login.tsx`) collects e-mail + password and
+   calls `loginWithPassword` (`src/lib/auth/api.ts`), which posts to
+   `POST /auth/mobile/login/password` with `skipAuth: true` — this request
+   deliberately never attaches a previously stored (possibly stale or
+   invalid) `Authorization` header.
+2. On success the server returns `{ token, expiresAt, user }`. The app
+   validates the minimally required fields, saves `{ token, expiresAt }` to
+   SecureStore (`src/lib/auth/token-store.ts`), and only then moves to the
+   authenticated state. If the SecureStore write itself fails, the app
+   invalidates the just-created server session (`POST /auth/logout` with
+   that explicit token) and shows an error — it never leaves the app in a
+   half-authenticated state.
+3. Every authenticated request after that reads the token from SecureStore
+   and sends it as `Authorization: Bearer <token>` (`src/lib/api/client.ts`).
+   The mobile client never sets or reads a session or CSRF cookie — that
+   double-submit-cookie mechanism only applies to the existing web
+   cookie-based login (`POST /auth/login/password`), which this work does
+   not change.
+
+### Session restore on app start
+
+On every app start (`AuthProvider`, `src/lib/auth/AuthProvider.tsx`):
+
+1. read the stored `{ token, expiresAt }` from SecureStore;
+2. no stored session -> show the login screen;
+3. `expiresAt` already in the past -> discard the token locally without
+   calling the server, then show the login screen (the token is opaque,
+   never a JWT — the app performs no client-side decoding, only compares
+   the server-issued `expiresAt` string);
+4. otherwise call `GET /auth/me`:
+   - success -> restore the user, show the authenticated home screen;
+   - `401` -> the token is genuinely invalid server-side, discard it and
+     show the login screen;
+   - any other failure (no connectivity, timeout, 5xx) -> treat as
+     transient: the token is **not** discarded, and the restoring screen
+     shows a retryable "couldn't reach the server" state instead of
+     bouncing to login.
+
+While restore is in progress, the app shows only a dedicated "Munkamenet
+ellenőrzése…" screen — the route stack (login/home) is not mounted at all
+during this phase, so a valid session never causes a visible flash of the
+login screen.
+
+### Logout
+
+`signOut` (`src/lib/auth/sign-out.ts`) always calls `POST /auth/logout`
+first, then unconditionally clears the local SecureStore session — even if
+the server call fails (network error, or the token was already invalid
+server-side, e.g. 401). Accepted trade-off: if the logout request never
+reaches the server, the device stops authenticating locally immediately,
+but the server-side session row may keep existing until its own 8h TTL
+elapses (or a future explicit admin revocation). Logout also clears the
+entire React Query cache (`queryClient.clear()`) so no data scoped to the
+signed-out user is visible after a different user logs in on the same
+device.
+
+### Token storage and security rules
+
+- The Bearer token lives **only** in `expo-secure-store` (iOS Keychain /
+  Android Keystore) — never in `AsyncStorage`, SQLite, or the React Query
+  persist cache.
+- The raw token is never logged, and never rendered in any error message
+  or UI element. Login failures always show a fixed, generic Hungarian
+  message ("Hibás e-mail cím vagy jelszó.") that does not reveal whether
+  the e-mail or the password was wrong; a distinct message is shown for a
+  network failure so the two are visually and behaviorally
+  distinguishable.
+- The token is opaque; the app does not implement its own JWT decoding or
+  any client-side trust in the token's contents. The server (`/auth/me`)
+  remains the final source of truth for whether a session is valid.
+- Auth state machine (`src/lib/auth/auth-reducer.ts`,
+  `restore-session.ts`, `sign-in.ts`, `sign-out.ts`) is plain,
+  dependency-free TypeScript with no Expo/React Native imports, so it
+  compiles and runs under plain `tsc` + `node --test`
+  (`npm --prefix apps/mobile run test`) without a native runtime or a new
+  test framework. `token-store.ts` (the actual `expo-secure-store` calls)
+  and the React glue in `AuthProvider.tsx` are the native/React-dependent
+  layer and are **not** covered by this automated suite — they need a real
+  device/simulator or an Expo/RN-aware test runner (e.g. Detox or an
+  RN-flavored Jest preset), neither of which exists in this repository
+  today. Manual acceptance testing (below) is what currently covers that
+  layer.
+
+### Non-secret client configuration
+
+`EXPO_PUBLIC_API_URL` (and every other `EXPO_PUBLIC_*` variable) is baked
+into the client bundle and is public by construction — it must never hold a
+production/staging secret, API key, signing credential or anything else
+that needs to stay confidential. It only ever points at an API base URL.
+For local development against a physical iPhone, set it to the Mac's LAN
+IP address (see the physical-device table above), and make sure the Mac's
+firewall allows inbound connections to the API's port from the LAN — do not
+disable the firewall entirely, only allow the specific
+Node/NestJS development process. Production and staging API URLs (or any
+other secret) belong in the EAS environment configuration
+(`eas.json`/EAS dashboard secrets), never in a value read through
+`EXPO_PUBLIC_*` beyond a plain base URL.
 
 ## Offline boundary
 
@@ -167,6 +259,7 @@ started automatically. Before enabling it:
 pnpm mobile:lint
 pnpm mobile:typecheck
 pnpm mobile:doctor
+pnpm mobile:test
 pnpm lint
 pnpm typecheck
 ```
