@@ -56,19 +56,42 @@ export class PosSaleService {
     // client for something this easy to get right server-side.
     const mergedByVariant = new Map<
       string,
-      { quantity: number; unitGross: number }
+      { quantity: number; unitGross: number; discountPercent: number }
     >();
     for (const line of input.lines) {
+      const discountPercent = line.discountPercent ?? 0;
+      if (
+        !Number.isFinite(discountPercent) ||
+        discountPercent < 0 ||
+        discountPercent > 100
+      ) {
+        throw new BadRequestException(
+          "A tételkedvezmény 0 és 100% közötti lehet.",
+        );
+      }
       const existing = mergedByVariant.get(line.variantId);
       if (existing) {
         existing.quantity += line.quantity;
         existing.unitGross = line.unitGross;
+        existing.discountPercent = discountPercent;
       } else {
         mergedByVariant.set(line.variantId, {
           quantity: line.quantity,
           unitGross: line.unitGross,
+          discountPercent,
         });
       }
+    }
+
+    const discountPercent = input.discountPercent ?? 0;
+    if (
+      !Number.isFinite(discountPercent) ||
+      discountPercent < 0 ||
+      discountPercent > 100
+    ) {
+      throw new BadRequestException(
+        "A végösszegkedvezmény 0 és 100% közötti lehet.",
+      );
     }
 
     const variantIds = [...mergedByVariant.keys()];
@@ -110,8 +133,12 @@ export class PosSaleService {
       const unitGross = new Prisma.Decimal(cartLine.unitGross);
       const taxRate = info.vatRate;
       const unitNet = unitGross.dividedBy(taxRate.dividedBy(100).plus(1));
-      const lineGross = unitGross.times(quantity);
-      const lineNet = unitNet.times(quantity);
+      const lineDiscountPercent = new Prisma.Decimal(cartLine.discountPercent);
+      const lineDiscountFactor = new Prisma.Decimal(1).minus(
+        lineDiscountPercent.dividedBy(100),
+      );
+      const lineGross = unitGross.times(quantity).times(lineDiscountFactor);
+      const lineNet = unitNet.times(quantity).times(lineDiscountFactor);
       const lineTax = lineGross.minus(lineNet);
 
       totalNet = totalNet.plus(lineNet);
@@ -134,12 +161,22 @@ export class PosSaleService {
         taxRate,
         unitNet,
         lineGross,
+        discountPercent: lineDiscountPercent.isZero()
+          ? null
+          : lineDiscountPercent,
         syncToUnas: info.syncToUnas,
         stockComponents: info.stockComponents,
       });
     }
 
     const orderNumber = generateCode("POS");
+    const orderDiscountPercent = new Prisma.Decimal(discountPercent);
+    const orderDiscountFactor = new Prisma.Decimal(1).minus(
+      orderDiscountPercent.dividedBy(100),
+    );
+    totalNet = totalNet.times(orderDiscountFactor);
+    totalTax = totalTax.times(orderDiscountFactor);
+    totalGross = totalGross.times(orderDiscountFactor);
 
     const { detail, stockWarnings } = await this.sales.createSale({
       orderNumber,
@@ -147,6 +184,9 @@ export class PosSaleService {
       actorUserId,
       paymentMethod: input.paymentMethod,
       customerId: input.customerId ?? null,
+      discountPercent: orderDiscountPercent.isZero()
+        ? null
+        : orderDiscountPercent,
       lines: preparedLines,
       totals: { totalNet, totalTax, totalGross },
     });

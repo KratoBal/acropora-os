@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  Max,
   Min,
   ValidateNested,
 } from "class-validator";
@@ -27,6 +28,13 @@ export class CreatePosSaleLineDto {
   @IsNumber()
   @Min(0)
   unitGross!: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  @IsOptional()
+  discountPercent?: number;
 }
 
 export class CreatePosSaleDto {
@@ -36,6 +44,13 @@ export class CreatePosSaleDto {
   @IsOptional()
   @IsString()
   customerId?: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  @IsOptional()
+  discountPercent?: number;
 
   @IsArray()
   @ArrayMinSize(1)

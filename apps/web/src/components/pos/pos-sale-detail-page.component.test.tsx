@@ -70,6 +70,7 @@ const saleDetail: PosSaleDetail = {
   totalNet: "19606",
   totalTax: "5294",
   totalGross: "24900",
+  discountPercent: "5",
   createdAt: "2026-07-25T10:00:00.000Z",
   completedAt: "2026-07-25T10:00:01.000Z",
   lines: [
@@ -83,6 +84,7 @@ const saleDetail: PosSaleDetail = {
       unitNet: "19606",
       taxRate: "27",
       lineGross: "24900",
+      discountPercent: "10",
       syncStatus: "OK",
       syncError: null,
     },
@@ -113,9 +115,7 @@ describe("PosSaleDetailPage", () => {
 
     render(createElement(PosSaleDetailPage, { saleId: "sale-1" }));
 
-    await waitFor(() =>
-      expect(api.getSale).toHaveBeenCalledWith("", "sale-1"),
-    );
+    await waitFor(() => expect(api.getSale).toHaveBeenCalledWith("", "sale-1"));
     expect(await screen.findByText("Red Sea ReefMat 500")).toBeInTheDocument();
 
     // A "24 900 Ft" összeg szándékosan jelenik meg kétszer: egyszer az
@@ -126,11 +126,15 @@ describe("PosSaleDetailPage", () => {
     expect(screen.getAllByText(/24.900\s?Ft/)).toHaveLength(2);
     const lineRow = screen.getByRole("row", { name: /RS-RM500/ });
     expect(within(lineRow).getByText(/24.900\s?Ft/)).toBeInTheDocument();
+    expect(within(lineRow).getByText("10%")).toBeInTheDocument();
+    expect(screen.getByText("5%")).toBeInTheDocument();
   });
 
   it("API-hibát jelenít meg cookie-alapú sessionnel is", async () => {
     auth.session = cookieSession;
-    api.getSale.mockRejectedValue(new Error("Az eladás betöltése nem sikerült."));
+    api.getSale.mockRejectedValue(
+      new Error("Az eladás betöltése nem sikerült."),
+    );
 
     render(createElement(PosSaleDetailPage, { saleId: "sale-1" }));
 

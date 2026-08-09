@@ -87,6 +87,7 @@ function buildService(options: {
           totalNet: params.totals.totalNet.toString(),
           totalTax: params.totals.totalTax.toString(),
           totalGross: params.totals.totalGross.toString(),
+          discountPercent: params.discountPercent?.toString() ?? null,
           createdAt: new Date().toISOString(),
           completedAt: new Date().toISOString(),
           lines: params.lines.map((line, index) => ({
@@ -99,6 +100,7 @@ function buildService(options: {
             unitNet: line.unitNet.toString(),
             taxRate: line.taxRate.toString(),
             lineGross: line.lineGross.toString(),
+            discountPercent: line.discountPercent?.toString() ?? null,
             syncStatus: "PENDING" as const,
             syncError: null,
           })),
@@ -197,6 +199,60 @@ describe("PosSaleService.createSale", () => {
     assert.equal(params?.totals.totalNet.toString(), "200");
     assert.equal(params?.totals.totalTax.toString(), "54");
     assert.equal(params?.totals.totalGross.toString(), "254");
+  });
+
+  it("applies the line discount before the order discount and persists both percentages", async () => {
+    const { service, getCapturedCreateSaleParams } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+    });
+
+    await service.createSale(
+      baseInput({
+        discountPercent: 20,
+        lines: [
+          {
+            variantId: "variant-1",
+            quantity: 2,
+            unitGross: 127,
+            discountPercent: 10,
+          },
+        ],
+      }),
+      "user-1",
+    );
+
+    const params = getCapturedCreateSaleParams();
+    assert.equal(params?.lines[0]?.discountPercent?.toString(), "10");
+    assert.equal(params?.lines[0]?.lineGross.toString(), "228.6");
+    assert.equal(params?.discountPercent?.toString(), "20");
+    assert.equal(params?.totals.totalNet.toString(), "144");
+    assert.equal(params?.totals.totalTax.toString(), "38.88");
+    assert.equal(params?.totals.totalGross.toString(), "182.88");
+  });
+
+  it("rejects discounts outside the 0-100 percent range", async () => {
+    const { service } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+    });
+
+    await assert.rejects(() =>
+      service.createSale(
+        baseInput({
+          lines: [
+            {
+              variantId: "variant-1",
+              quantity: 1,
+              unitGross: 127,
+              discountPercent: 101,
+            },
+          ],
+        }),
+        "user-1",
+      ),
+    );
+    await assert.rejects(() =>
+      service.createSale(baseInput({ discountPercent: -1 }), "user-1"),
+    );
   });
 
   it("does not compute resultingQty/warnings itself anymore - it just forwards lines and returns whatever the repository (i.e. the writer) reports back", async () => {

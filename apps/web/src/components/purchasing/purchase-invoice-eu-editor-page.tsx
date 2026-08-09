@@ -23,7 +23,7 @@ import {
   type ViesVatLookupResult,
 } from "@acropora/types";
 import { useRouter, useSearchParams } from "next/navigation";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { inferCountryFromTaxNumber } from "@/components/customers/country-options";
@@ -128,6 +128,9 @@ export function PurchaseInvoiceEuEditorPage() {
   );
 
   const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState("");
+  const [supplierInvoiceNumberError, setSupplierInvoiceNumberError] =
+    useState(false);
+  const supplierInvoiceNumberFieldRef = useRef<HTMLDivElement>(null);
   const [currency, setCurrency] = useState(navInvoiceId ? "HUF" : "EUR");
   const [exchangeRate, setExchangeRate] = useState<number | "">("");
   const [rateLoading, setRateLoading] = useState(false);
@@ -545,12 +548,14 @@ export function PurchaseInvoiceEuEditorPage() {
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
-    if (!selectedSupplier) {
-      setError("Válassz ki egy beszállítót, vagy hozz létre újat.");
+    if (!supplierInvoiceNumber.trim()) {
+      setSupplierInvoiceNumberError(true);
+      supplierInvoiceNumberFieldRef.current?.querySelector("input")?.focus();
       return;
     }
-    if (!supplierInvoiceNumber.trim()) {
-      setError("A számlaszám megadása kötelező.");
+    setSupplierInvoiceNumberError(false);
+    if (!selectedSupplier) {
+      setError("Válassz ki egy beszállítót, vagy hozz létre újat.");
       return;
     }
     if (!effectiveCurrency) {
@@ -972,14 +977,36 @@ export function PurchaseInvoiceEuEditorPage() {
         <Card className="p-6">
           <h2 className="font-semibold">Számla adatai</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
-            <FormField label="Számlaszám">
-              <Input
-                aria-label="Számlaszám"
-                value={supplierInvoiceNumber}
-                onChange={(event) =>
-                  setSupplierInvoiceNumber(event.target.value)
-                }
-              />
+            <FormField
+              label="Számlaszám"
+              error={
+                supplierInvoiceNumberError
+                  ? "A számlaszám megadása kötelező."
+                  : undefined
+              }
+            >
+              <div ref={supplierInvoiceNumberFieldRef}>
+                <Input
+                  aria-label="Számlaszám"
+                  aria-invalid={supplierInvoiceNumberError}
+                  value={supplierInvoiceNumber}
+                  placeholder={
+                    supplierInvoiceNumberError
+                      ? "A számlaszám megadása kötelező."
+                      : undefined
+                  }
+                  className={
+                    supplierInvoiceNumberError
+                      ? "border-rose-500 focus:border-rose-500 focus:ring-rose-500/15"
+                      : undefined
+                  }
+                  onChange={(event) => {
+                    setSupplierInvoiceNumber(event.target.value);
+                    if (event.target.value.trim())
+                      setSupplierInvoiceNumberError(false);
+                  }}
+                />
+              </div>
             </FormField>
             <FormField label="Pénznem">
               <Input

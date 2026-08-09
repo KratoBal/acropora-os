@@ -74,6 +74,7 @@ export interface CreatePosSaleLine {
   taxRate: Prisma.Decimal;
   unitNet: Prisma.Decimal;
   lineGross: Prisma.Decimal;
+  discountPercent: Prisma.Decimal | null;
   syncToUnas: boolean;
   stockComponents: PosSaleStockComponent[];
 }
@@ -84,6 +85,7 @@ export interface CreatePosSaleParams {
   actorUserId: string;
   paymentMethod: PosPaymentMethod;
   customerId: string | null;
+  discountPercent: Prisma.Decimal | null;
   lines: CreatePosSaleLine[];
   totals: {
     totalNet: Prisma.Decimal;
@@ -339,6 +341,7 @@ export class PosSaleRepository extends Repository {
             totalNet: params.totals.totalNet,
             totalTax: params.totals.totalTax,
             totalGross: params.totals.totalGross,
+            discountPercent: params.discountPercent,
             orderedAt: now,
             confirmedAt: now,
             completedAt: now,
@@ -352,6 +355,7 @@ export class PosSaleRepository extends Repository {
                 unitNet: line.unitNet,
                 taxRate: line.taxRate,
                 lineGross: line.lineGross,
+                discountPercent: line.discountPercent,
                 // "PENDING": a helyi könyvelés és a
                 // UnasStockSyncOutbox-publikálás a postInventoryMovement
                 // hívással egy tranzakcióban történik lejjebb; a tényleges
@@ -447,7 +451,19 @@ export class PosSaleRepository extends Repository {
   }
 
   async list(query: PosSaleListQueryDto): Promise<PosSaleListResponse> {
-    const where = { channel: "POS" } as const;
+    const where = {
+      channel: "POS" as const,
+      ...(query.createdFrom || query.createdTo
+        ? {
+            createdAt: {
+              ...(query.createdFrom
+                ? { gte: new Date(query.createdFrom) }
+                : {}),
+              ...(query.createdTo ? { lt: new Date(query.createdTo) } : {}),
+            },
+          }
+        : {}),
+    };
     const skip = (query.page - 1) * query.pageSize;
     const [items, totalItems] = await Promise.all([
       this.saleDatabase.salesOrder.findMany({
