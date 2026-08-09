@@ -237,6 +237,18 @@ export type {
   NavInvoiceSyncRunStatus,
   NavInvoiceSyncSummary,
 } from "./integrations/nav-incoming-invoice.js";
+export type {
+  FoxpostMonthlyReportSummary,
+  FoxpostReprocessResult,
+  FoxpostResolutionSource,
+  FoxpostSettlementDetail,
+  FoxpostSettlementLine,
+  FoxpostSettlementLineStatus,
+  FoxpostSettlementListResponse,
+  FoxpostSettlementStatus,
+  FoxpostSettlementSummary,
+  FoxpostSyncSummary,
+} from "./integrations/foxpost-settlement.js";
 export type { PostalCodeLookupResult } from "./integrations/postal-code.js";
 export type { ViesVatLookupResult } from "./integrations/vies-vat.js";
 export type {
