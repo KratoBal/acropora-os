@@ -84,6 +84,13 @@ export const businessNavigation: AppNavigationItem[] = [
     label: "Pénzügy",
     icon: "finance",
     permission: PERMISSIONS.FINANCE_VIEW,
+    exact: true,
+  },
+  {
+    href: "/penzugy/foxpost",
+    label: "Foxpost elszámolás",
+    icon: "download",
+    permission: PERMISSIONS.FINANCE_VIEW,
   },
   {
     href: "/szerviz",
