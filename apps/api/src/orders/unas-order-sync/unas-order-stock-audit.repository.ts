@@ -104,7 +104,10 @@ export class UnasOrderStockAuditRepository extends Repository {
           id: true,
           orderNumber: true,
           status: true,
-          lines: { select: { variantId: true, quantity: true } },
+          lines: {
+            where: { unasRemovedAt: null },
+            select: { variantId: true, quantity: true },
+          },
         },
         orderBy: { id: "asc" },
         skip,

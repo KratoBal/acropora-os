@@ -67,7 +67,11 @@ const detailInclude = {
     orderBy: { createdAt: "desc" },
   },
 } as const;
-const listInclude = { _count: { select: { lines: true } } } as const;
+const listInclude = {
+  _count: {
+    select: { lines: { where: { unasRemovedAt: null } } },
+  },
+} as const;
 
 interface ExternalReferenceRow {
   id: string;
@@ -88,6 +92,7 @@ export interface OrderLineRow {
   variantId: string | null;
   quantity: Prisma.Decimal;
   syncStatus: string;
+  unasRemovedAt: Date | null;
 }
 
 interface OrderRow {
@@ -219,6 +224,34 @@ export function resolveEffectiveVariantId(
   return null;
 }
 
+interface MatchedLineInput {
+  input: LineInput;
+  match: OrderLineRow | undefined;
+}
+
+/// Pairs each fresh UNAS line with at most one still-active local line.
+/// A queue per SKU is required here: Map<SKU, line> silently collapsed
+/// duplicate order rows and caused one local line to be updated repeatedly.
+/// Removed audit rows are deliberately excluded, so a later reappearance
+/// creates a new active row instead of erasing the historical removal.
+function matchLineInputs(
+  lineInputs: LineInput[],
+  existingLines: OrderLineRow[],
+): MatchedLineInput[] {
+  const activeBySku = new Map<string, OrderLineRow[]>();
+  for (const line of existingLines) {
+    if (line.unasRemovedAt) continue;
+    const queue = activeBySku.get(line.sku) ?? [];
+    queue.push(line);
+    activeBySku.set(line.sku, queue);
+  }
+
+  return lineInputs.map((input) => ({
+    input,
+    match: activeBySku.get(input.sku)?.shift(),
+  }));
+}
+
 /// Aggregates the CURRENT sighting's desired cumulative "removed from
 /// stock" quantity per variantId - the target half of `delta = target -
 /// alreadyBooked` (see applyOrderStockDelta). Two UNAS items resolving to
@@ -230,11 +263,13 @@ export function resolveEffectiveVariantId(
 /// rows).
 export function aggregateTargetOut(
   lineInputs: LineInput[],
-  existingBySku: Map<string, OrderLineRow> | null,
+  existingLines: OrderLineRow[] | null,
 ): Map<string, Prisma.Decimal> {
   const target = new Map<string, Prisma.Decimal>();
-  for (const input of lineInputs) {
-    const match = existingBySku?.get(input.sku);
+  for (const { input, match } of matchLineInputs(
+    lineInputs,
+    existingLines ?? [],
+  )) {
     const variantId = resolveEffectiveVariantId(match, input);
     if (!variantId) continue;
     // An empty list means that no physical stock target was resolved safely
@@ -978,6 +1013,7 @@ export class UnasOrderSyncRepository extends Repository {
             variantId: true,
             quantity: true,
             syncStatus: true,
+            unasRemovedAt: true,
           },
         },
       },
@@ -1102,11 +1138,8 @@ export class UnasOrderSyncRepository extends Repository {
       // lentebbi targetOut aggregálás, hogy a két lépés sose térjen el
       // egymástól.
       const { lineInputs } = await buildLineInputs(transaction, order);
-      await this.syncLines(transaction, existing, lineInputs);
-      const existingBySku = new Map(
-        existing.lines.map((line) => [line.sku, line]),
-      );
-      const targetOut = aggregateTargetOut(lineInputs, existingBySku);
+      await this.syncLines(transaction, existing, lineInputs, syncedAt);
+      const targetOut = aggregateTargetOut(lineInputs, existing.lines);
       const deltaResult = await this.applyOrderStockDelta(transaction, {
         orderId: existing.id,
         unasKey: order.key,
@@ -1307,6 +1340,7 @@ export class UnasOrderSyncRepository extends Repository {
                   variantId: true,
                   quantity: true,
                   syncStatus: true,
+                  unasRemovedAt: true,
                 },
               },
             },
@@ -1448,13 +1482,11 @@ export class UnasOrderSyncRepository extends Repository {
     await this.syncInvoiceMirror(transaction, orderRow.id, order);
   }
 
-  /// Refreshes existing SalesOrderLine rows' pricing/description (matched
-  /// to the fresh UNAS item by sku, which is also how special non-stock
-  /// lines like shipping-cost are keyed - see buildLineInputs) and adds
-  /// rows for items that weren't seen before. Deliberately does NOT delete
-  /// lines whose item disappeared from the UNAS order (its quantity simply
-  /// stops contributing to aggregateTargetOut, which is what drives that
-  /// variant's RETURN_IN at the call site - see applyExistingOrderUpdate).
+  /// Refreshes existing active SalesOrderLine rows' pricing/description,
+  /// one-to-one within each SKU, and adds rows for fresh unmatched items.
+  /// Lines absent from the new UNAS payload are preserved as audit history
+  /// with unasRemovedAt set; they stop contributing to active counts and to
+  /// aggregateTargetOut, which drives the matching RETURN_IN delta.
   /// `lineInputs` is computed once by the caller (buildLineInputs) and
   /// passed in rather than recomputed here, since the caller also needs it
   /// for the stock-delta step right afterward.
@@ -1462,13 +1494,15 @@ export class UnasOrderSyncRepository extends Repository {
     transaction: UnasOrderSyncTransaction,
     existing: OrderRow,
     lineInputs: LineInput[],
+    syncedAt: Date,
   ): Promise<void> {
-    const existingBySku = new Map(
-      existing.lines.map((line) => [line.sku, line]),
-    );
-    for (const input of lineInputs) {
-      const match = existingBySku.get(input.sku);
+    const matchedIds = new Set<string>();
+    for (const { input, match } of matchLineInputs(
+      lineInputs,
+      existing.lines,
+    )) {
       if (match) {
+        matchedIds.add(match.id);
         // effectiveVariantId mirrors resolveEffectiveVariantId exactly (see
         // that function's doc comment) - computed inline here as the actual
         // Prisma update payload rather than calling it twice, but must stay
@@ -1499,6 +1533,14 @@ export class UnasOrderSyncRepository extends Repository {
           data: { orderId: existing.id, ...toLineCreateData(input) },
         });
       }
+    }
+
+    for (const line of existing.lines) {
+      if (line.unasRemovedAt || matchedIds.has(line.id)) continue;
+      await transaction.salesOrderLine.update({
+        where: { id: line.id },
+        data: { unasRemovedAt: syncedAt },
+      });
     }
   }
 

@@ -42,6 +42,8 @@ export interface UnasOrderListItem {
   lineCount: number;
   createdAt: string;
   orderedAt: string | null;
+  /** Physical UNAS deletion marker. Takes display/filter precedence over the last mirrored UNAS status label. */
+  unasDeletedAt: string | null;
 }
 
 export interface UnasOrderListResponse {
@@ -66,6 +68,8 @@ export interface UnasOrderLineDetail {
   lineGross: string;
   syncStatus: "PENDING" | "OK" | "FAILED";
   syncError: string | null;
+  /** Non-null when this historical line disappeared from a later UNAS order payload. */
+  unasRemovedAt: string | null;
 }
 
 /**

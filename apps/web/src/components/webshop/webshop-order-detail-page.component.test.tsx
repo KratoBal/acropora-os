@@ -196,6 +196,51 @@ describe("WebshopOrderDetailPage - Számla kártya", () => {
   });
 });
 
+describe("WebshopOrderDetailPage - rendeléstétel audit", () => {
+  it("az eltávolított sort auditként mutatja, de csak az aktív sorokat számolja", async () => {
+    api.getOne.mockResolvedValue(
+      baseDetail({
+        lines: [
+          {
+            id: "line-active",
+            variantId: "variant-1",
+            sku: "pump_1",
+            description: "Reef Pump",
+            quantity: "2",
+            unit: "db",
+            unitNet: "5000",
+            taxRate: "27",
+            lineGross: "12700",
+            syncStatus: "OK",
+            syncError: null,
+            unasRemovedAt: null,
+          },
+          {
+            id: "line-removed",
+            variantId: "variant-2",
+            sku: "filter_1",
+            description: "Régi Reef Filter",
+            quantity: "1",
+            unit: "db",
+            unitNet: "3000",
+            taxRate: "27",
+            lineGross: "3810",
+            syncStatus: "OK",
+            syncError: null,
+            unasRemovedAt: "2026-08-09T09:00:00.000Z",
+          },
+        ],
+      }),
+    );
+
+    render(createElement(WebshopOrderDetailPage, { orderId: "order-1" }));
+
+    expect(await screen.findByText("1 aktív tétel")).toBeInTheDocument();
+    expect(screen.getByText("Régi Reef Filter")).toBeInTheDocument();
+    expect(screen.getByText("Eltávolítva az UNAS-ból")).toBeInTheDocument();
+  });
+});
+
 describe("WebshopOrderDetailPage - Rendelés frissítése gomb", () => {
   it("megjelenik orders.manage jogosultsággal", async () => {
     api.getOne.mockResolvedValue(baseDetail());

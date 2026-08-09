@@ -262,19 +262,21 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
                     )
                   </Badge>
                 ) : null}
-                <Badge
-                  variant={
-                    detail.status === "CANCELLED"
-                      ? "danger"
-                      : detail.status === "COMPLETED"
-                        ? "success"
-                        : "neutral"
-                  }
-                >
-                  {detail.unasStatusLabel ??
-                    STATUS_LABEL[detail.status] ??
-                    detail.status}
-                </Badge>
+                {!detail.unasDeletedAt ? (
+                  <Badge
+                    variant={
+                      detail.status === "CANCELLED"
+                        ? "danger"
+                        : detail.status === "COMPLETED"
+                          ? "success"
+                          : "neutral"
+                    }
+                  >
+                    {detail.unasStatusLabel ??
+                      STATUS_LABEL[detail.status] ??
+                      detail.status}
+                  </Badge>
+                ) : null}
               </div>
             </CardHeader>
             <CardContent>
@@ -404,7 +406,10 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
             <CardHeader>
               <h2 className="text-sm font-semibold text-slate-900">Tételek</h2>
               <span className="text-xs text-slate-500">
-                {detail.lines.length.toLocaleString("hu-HU")} tétel
+                {detail.lines
+                  .filter((line) => !line.unasRemovedAt)
+                  .length.toLocaleString("hu-HU")}{" "}
+                aktív tétel
               </span>
             </CardHeader>
             <div className="overflow-x-auto">
@@ -422,7 +427,10 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
                   {detail.lines.map((line) => (
-                    <tr key={line.id}>
+                    <tr
+                      key={line.id}
+                      className={line.unasRemovedAt ? "bg-slate-50/70" : ""}
+                    >
                       <td className="px-5 py-3 font-mono text-xs text-slate-700">
                         {line.sku}
                       </td>
@@ -442,7 +450,12 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
                         {formatHuf(line.lineGross)}
                       </td>
                       <td className="px-5 py-3">
-                        {line.variantId === null && line.syncStatus === "OK" ? (
+                        {line.unasRemovedAt ? (
+                          <Badge variant="neutral">
+                            Eltávolítva az UNAS-ból
+                          </Badge>
+                        ) : line.variantId === null &&
+                          line.syncStatus === "OK" ? (
                           <Badge variant="neutral">Nem raktárkészlet</Badge>
                         ) : (
                           <Badge
