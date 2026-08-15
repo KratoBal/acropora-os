@@ -15,6 +15,7 @@ import {
   hasPermission,
   PERMISSIONS,
   type AssetDetail,
+  type AssetDocumentType,
   type AssetQrCode,
   type AssetStatus,
 } from "@acropora/types";
@@ -31,14 +32,20 @@ import {
 } from "./asset-labels";
 
 const inputDate = (value?: string) => (value ? value.slice(0, 10) : "");
-const isoDate = (value: string) =>
-  value ? `${value}T00:00:00.000Z` : null;
+const isoDate = (value: string) => (value ? `${value}T00:00:00.000Z` : null);
 
 function statusVariant(status: AssetStatus) {
   if (status === "ACTIVE") return "success" as const;
   if (status === "RETIRED") return "neutral" as const;
   return "warning" as const;
 }
+
+const documentTypeLabel: Record<AssetDocumentType, string> = {
+  INVOICE: "Számla",
+  WARRANTY: "Garanciajegy",
+  MANUAL: "Használati utasítás",
+  OTHER: "Egyéb",
+};
 
 export function AssetDetailPage({ assetId }: { assetId: string }) {
   const { session } = useAuth();
@@ -58,6 +65,9 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [documentType, setDocumentType] =
+    useState<AssetDocumentType>("INVOICE");
+  const [documentFile, setDocumentFile] = useState<File | null>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -164,16 +174,92 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
     URL.revokeObjectURL(url);
   };
 
+  const uploadDocument = async () => {
+    if (!asset || !documentFile || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await assetsApi.uploadDocument(
+        token,
+        asset.id,
+        documentType,
+        documentFile,
+      );
+      setDocumentFile(null);
+      await load();
+      setNotice("A PDF dokumentum feltöltve.");
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "A dokumentum nem tölthető fel.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const downloadDocument = async (documentId: string, fileName: string) => {
+    if (!asset) return;
+    try {
+      const blob = await assetsApi.downloadDocument(
+        token,
+        asset.id,
+        documentId,
+      );
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = fileName;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "A dokumentum nem tölthető le.",
+      );
+    }
+  };
+
+  const deleteDocument = async (documentId: string) => {
+    if (
+      !asset ||
+      busy ||
+      !window.confirm("Biztosan törlöd ezt a dokumentumot?")
+    )
+      return;
+    setBusy(true);
+    try {
+      await assetsApi.deleteDocument(token, asset.id, documentId);
+      await load();
+      setNotice("A dokumentum törölve.");
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "A dokumentum nem törölhető.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Szerviz / Eszközök"
+        eyebrow="Szerviz / Eszköznyilvántartás"
         title={asset?.name ?? "Eszköz adatlap"}
         description={asset?.assetNumber}
         actions={
-          <Link href="/szerviz/eszkozok">
-            <Button variant="secondary">Vissza a listához</Button>
-          </Link>
+          <div className="flex gap-2">
+            {canManage && asset ? (
+              <Link href={`/szerviz/eszkozok/${asset.id}/szerkesztes`}>
+                <Button>Eszköz módosítása</Button>
+              </Link>
+            ) : null}
+            <Link href="/szerviz/eszkozok">
+              <Button variant="secondary">Vissza a listához</Button>
+            </Link>
+          </div>
         }
       />
       {error ? (
@@ -212,8 +298,8 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                   <Badge>{assetCriticalityLabel[asset.criticality]}</Badge>
                 </div>
                 <dl className="mt-6 grid gap-x-8 gap-y-5 sm:grid-cols-2">
-                  <Data label="Partner" value={asset.customer.displayName} />
-                  <Data label="Partnerkód" value={asset.customer.customerNumber} />
+                  <Data label="Tulajdonos" value={asset.owner.displayName} />
+                  <Data label="Partnerkód" value={asset.owner.code} />
                   <Data label="Helyszín" value={asset.address?.formatted} />
                   <Data label="Akvárium" value={asset.aquarium?.name} />
                   <Data label="Gyártó" value={asset.manufacturer} />
@@ -298,6 +384,101 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
               )}
 
               <Card className="p-6">
+                <h2 className="font-semibold text-slate-950">Dokumentumok</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Számla, garanciajegy és használati utasítás PDF formátumban,
+                  legfeljebb 10 MB méretben.
+                </p>
+                {asset.documents.length > 0 ? (
+                  <div className="mt-4 divide-y rounded-lg border">
+                    {asset.documents.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex flex-wrap items-center justify-between gap-3 px-3 py-3"
+                      >
+                        <div>
+                          <p className="text-sm font-semibold text-slate-800">
+                            {documentTypeLabel[item.type]} · {item.fileName}
+                          </p>
+                          <p className="mt-0.5 text-xs text-slate-500">
+                            {formatFileSize(item.sizeBytes)} ·{" "}
+                            {formatDateTime(item.createdAt)}
+                            {item.uploadedBy
+                              ? ` · ${item.uploadedBy.displayName}`
+                              : ""}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() =>
+                              void downloadDocument(item.id, item.fileName)
+                            }
+                          >
+                            Letöltés
+                          </Button>
+                          {canManage ? (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              disabled={busy}
+                              onClick={() => void deleteDocument(item.id)}
+                            >
+                              Törlés
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-slate-500">
+                    Ehhez az eszközhöz még nincs dokumentum feltöltve.
+                  </p>
+                )}
+                {canManage ? (
+                  <div className="mt-5 grid gap-3 border-t pt-5 md:grid-cols-[180px_minmax(0,1fr)_auto] md:items-end">
+                    <FormField label="Dokumentumtípus">
+                      <Select
+                        aria-label="Dokumentumtípus"
+                        value={documentType}
+                        onChange={(event) =>
+                          setDocumentType(
+                            event.target.value as AssetDocumentType,
+                          )
+                        }
+                      >
+                        {Object.entries(documentTypeLabel).map(
+                          ([value, label]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ),
+                        )}
+                      </Select>
+                    </FormField>
+                    <FormField label="PDF fájl">
+                      <Input
+                        type="file"
+                        accept="application/pdf,.pdf"
+                        aria-label="PDF fájl"
+                        onChange={(event) =>
+                          setDocumentFile(event.target.files?.[0] ?? null)
+                        }
+                      />
+                    </FormField>
+                    <Button
+                      disabled={!documentFile || busy}
+                      onClick={() => void uploadDocument()}
+                    >
+                      Feltöltés
+                    </Button>
+                  </div>
+                ) : null}
+              </Card>
+
+              <Card className="p-6">
                 <h2 className="font-semibold text-slate-950">Előzmények</h2>
                 <div className="mt-4 divide-y">
                   {asset.events.map((event) => (
@@ -362,11 +543,13 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                           setStatus(event.target.value as AssetStatus)
                         }
                       >
-                        {Object.entries(assetStatusLabel).map(([value, label]) => (
-                          <option key={value} value={value}>
-                            {label}
-                          </option>
-                        ))}
+                        {Object.entries(assetStatusLabel).map(
+                          ([value, label]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ),
+                        )}
                       </Select>
                     </FormField>
                     <FormField label="Következő karbantartás">
@@ -374,7 +557,9 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                         type="date"
                         aria-label="Következő karbantartás"
                         value={nextServiceAt}
-                        onChange={(event) => setNextServiceAt(event.target.value)}
+                        onChange={(event) =>
+                          setNextServiceAt(event.target.value)
+                        }
                       />
                     </FormField>
                     <FormField label="Belső megjegyzés">
@@ -406,7 +591,9 @@ function Data({ label, value }: { label: string; value?: string }) {
       <dt className="text-xs font-bold uppercase tracking-wide text-slate-400">
         {label}
       </dt>
-      <dd className="mt-1 text-sm font-medium text-slate-800">{value ?? "—"}</dd>
+      <dd className="mt-1 text-sm font-medium text-slate-800">
+        {value ?? "—"}
+      </dd>
     </div>
   );
 }
@@ -424,4 +611,10 @@ function formatDateTime(value: string) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function formatFileSize(bytes: number) {
+  return bytes < 1024 * 1024
+    ? `${Math.max(1, Math.round(bytes / 1024))} kB`
+    : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }

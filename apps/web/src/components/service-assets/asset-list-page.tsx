@@ -197,7 +197,7 @@ export function AssetListPage() {
                     </div>
                   </td>
                   <td>
-                    <div className="font-medium">{asset.customer.displayName}</div>
+                    <div className="font-medium">{asset.owner.displayName}</div>
                     <div className="text-xs text-slate-500">
                       {asset.address?.formatted ?? "Nincs pontosított helyszín"}
                     </div>

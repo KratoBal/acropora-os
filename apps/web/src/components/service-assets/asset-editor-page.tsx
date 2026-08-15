@@ -15,8 +15,9 @@ import {
   type AssetCriticality,
   type AssetKind,
   type AssetListItem,
-  type CustomerAddress,
-  type CustomerSummary,
+  type AssetOwnerOption,
+  type AssetOwnerType,
+  type AssetStatus,
 } from "@acropora/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -24,28 +25,33 @@ import { type FormEvent, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { assetsApi } from "@/lib/api/assets";
-import { customersApi } from "@/lib/api/customers";
-import { assetCriticalityLabel, assetKindLabel } from "./asset-labels";
+import {
+  assetCriticalityLabel,
+  assetKindLabel,
+  assetStatusLabel,
+} from "./asset-labels";
 
 const toIsoDate = (value: string) =>
   value ? `${value}T00:00:00.000Z` : undefined;
+const inputDate = (value?: string) => value?.slice(0, 10) ?? "";
 
-export function AssetEditorPage() {
+const ownerKey = (type: AssetOwnerType, id: string) => `${type}:${id}`;
+
+export function AssetEditorPage({ assetId }: { assetId?: string }) {
   const { session } = useAuth();
   const router = useRouter();
   const token = session?.token ?? "";
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_MANAGE),
   );
-  const [customers, setCustomers] = useState<CustomerSummary[]>([]);
-  const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
+  const [owners, setOwners] = useState<AssetOwnerOption[]>([]);
   const [parentAssets, setParentAssets] = useState<AssetListItem[]>([]);
-  const [customerId, setCustomerId] = useState("");
+  const [selectedOwner, setSelectedOwner] = useState("");
   const [customerAddressId, setCustomerAddressId] = useState("");
   const [parentAssetId, setParentAssetId] = useState("");
   const [kind, setKind] = useState<AssetKind>("EQUIPMENT");
-  const [criticality, setCriticality] =
-    useState<AssetCriticality>("NORMAL");
+  const [status, setStatus] = useState<AssetStatus>("ACTIVE");
+  const [criticality, setCriticality] = useState<AssetCriticality>("NORMAL");
   const [name, setName] = useState("");
   const [category, setCategory] = useState("");
   const [manufacturer, setManufacturer] = useState("");
@@ -61,18 +67,45 @@ export function AssetEditorPage() {
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [updatedAt, setUpdatedAt] = useState("");
+
+  const owner = owners.find(
+    (item) => ownerKey(item.type, item.id) === selectedOwner,
+  );
+  const addresses = owner?.addresses ?? [];
 
   useEffect(() => {
     if (!canManage) return;
     const controller = new AbortController();
-    const query = new URLSearchParams({
-      page: "1",
-      pageSize: "100",
-      status: "ACTIVE",
-    });
-    customersApi
-      .list(token, query, controller.signal)
-      .then((result) => setCustomers(result.items))
+    Promise.all([
+      assetsApi.owners(token, controller.signal),
+      assetId ? assetsApi.detail(token, assetId, controller.signal) : null,
+    ])
+      .then(([ownerResult, asset]) => {
+        setOwners(ownerResult.items);
+        if (!asset) return;
+        setSelectedOwner(ownerKey(asset.owner.type, asset.owner.id));
+        setCustomerAddressId(
+          asset.owner.type === "CUSTOMER" ? (asset.address?.id ?? "") : "",
+        );
+        setParentAssetId(asset.parent?.id ?? "");
+        setKind(asset.kind);
+        setStatus(asset.status);
+        setCriticality(asset.criticality);
+        setName(asset.name);
+        setCategory(asset.category ?? "");
+        setManufacturer(asset.manufacturer ?? "");
+        setModel(asset.model ?? "");
+        setSerialNumber(asset.serialNumber ?? "");
+        setInventoryNumber(asset.inventoryNumber ?? "");
+        setInstalledAt(inputDate(asset.installedAt));
+        setWarrantyExpiresAt(inputDate(asset.warrantyExpiresAt));
+        setServiceIntervalDays(asset.serviceIntervalDays?.toString() ?? "");
+        setNextServiceAt(inputDate(asset.nextServiceAt));
+        setDescription(asset.description ?? "");
+        setNotes(asset.notes ?? "");
+        setUpdatedAt(asset.updatedAt);
+      })
       .catch((cause) => {
         if (!(cause instanceof DOMException && cause.name === "AbortError"))
           setError(
@@ -83,38 +116,45 @@ export function AssetEditorPage() {
       })
       .finally(() => setLoadingOptions(false));
     return () => controller.abort();
-  }, [canManage, token]);
+  }, [assetId, canManage, token]);
 
   useEffect(() => {
-    setCustomerAddressId("");
-    setParentAssetId("");
-    setAddresses([]);
     setParentAssets([]);
-    if (!customerId) return;
+    if (!owner) return;
     const controller = new AbortController();
     const assetQuery = new URLSearchParams({
       page: "1",
       pageSize: "100",
       status: "ACTIVE",
-      customerId,
+      ownerType: owner.type,
+      ownerId: owner.id,
     });
-    void Promise.all([
-      customersApi
-        .detail(token, customerId, controller.signal)
-        .then((customer) => setAddresses(customer.addresses)),
-      assetsApi
-        .list(token, assetQuery, controller.signal)
-        .then((result) => setParentAssets(result.items)),
-    ]).catch((cause) => {
-      if (!(cause instanceof DOMException && cause.name === "AbortError"))
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : "A partner eszközadatai nem tölthetők be.",
-        );
-    });
+    void assetsApi
+      .list(token, assetQuery, controller.signal)
+      .then((result) =>
+        setParentAssets(result.items.filter((item) => item.id !== assetId)),
+      )
+      .catch((cause) => {
+        if (!(cause instanceof DOMException && cause.name === "AbortError"))
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "A partner eszközadatai nem tölthetők be.",
+          );
+      });
     return () => controller.abort();
-  }, [customerId, token]);
+  }, [assetId, owner, token]);
+
+  useEffect(() => {
+    if (assetId) return;
+    const interval = Number.parseInt(serviceIntervalDays, 10);
+    if (!Number.isInteger(interval) || interval < 1) return;
+    const base = installedAt
+      ? new Date(`${installedAt}T00:00:00.000Z`)
+      : new Date();
+    base.setUTCDate(base.getUTCDate() + interval);
+    setNextServiceAt(base.toISOString().slice(0, 10));
+  }, [assetId, installedAt, serviceIntervalDays]);
 
   if (!canManage)
     return (
@@ -127,40 +167,68 @@ export function AssetEditorPage() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!customerId || !name.trim()) {
+    if (!owner || !name.trim()) {
       setError("A partner és az eszköz neve kötelező.");
       return;
     }
     const interval = serviceIntervalDays
       ? Number.parseInt(serviceIntervalDays, 10)
       : undefined;
-    if (interval !== undefined && (!Number.isInteger(interval) || interval < 1)) {
+    if (
+      interval !== undefined &&
+      (!Number.isInteger(interval) || interval < 1)
+    ) {
       setError("A karbantartási intervallum legalább 1 nap legyen.");
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const created = await assetsApi.create(token, {
-        customerId,
-        customerAddressId: customerAddressId || undefined,
-        parentAssetId: parentAssetId || undefined,
-        kind,
-        criticality,
-        name: name.trim(),
-        category: category.trim() || undefined,
-        manufacturer: manufacturer.trim() || undefined,
-        model: model.trim() || undefined,
-        serialNumber: serialNumber.trim() || undefined,
-        inventoryNumber: inventoryNumber.trim() || undefined,
-        installedAt: toIsoDate(installedAt),
-        warrantyExpiresAt: toIsoDate(warrantyExpiresAt),
-        serviceIntervalDays: interval,
-        nextServiceAt: toIsoDate(nextServiceAt),
-        description: description.trim() || undefined,
-        notes: notes.trim() || undefined,
-      });
-      router.push(`/szerviz/eszkozok/${created.id}`);
+      const saved = assetId
+        ? await assetsApi.update(token, assetId, {
+            ownerType: owner.type,
+            ownerId: owner.id,
+            customerAddressId: customerAddressId || null,
+            parentAssetId: parentAssetId || null,
+            kind,
+            status,
+            criticality,
+            name: name.trim(),
+            category: category.trim() || null,
+            manufacturer: manufacturer.trim() || null,
+            model: model.trim() || null,
+            serialNumber: serialNumber.trim() || null,
+            inventoryNumber: inventoryNumber.trim() || null,
+            installedAt: toIsoDate(installedAt) ?? null,
+            warrantyExpiresAt: toIsoDate(warrantyExpiresAt) ?? null,
+            serviceIntervalDays: interval ?? null,
+            nextServiceAt: toIsoDate(nextServiceAt) ?? null,
+            description: description.trim() || null,
+            notes: notes.trim() || null,
+            expectedUpdatedAt: updatedAt,
+          })
+        : await assetsApi.create(token, {
+            ownerType: owner.type,
+            ownerId: owner.id,
+            customerAddressId: customerAddressId || undefined,
+            parentAssetId: parentAssetId || undefined,
+            kind,
+            status,
+            criticality,
+            name: name.trim(),
+            category: category.trim() || undefined,
+            manufacturer: manufacturer.trim() || undefined,
+            model: model.trim() || undefined,
+            serialNumber: serialNumber.trim() || undefined,
+            inventoryNumber: inventoryNumber.trim() || undefined,
+            installedAt: toIsoDate(installedAt),
+            warrantyExpiresAt: toIsoDate(warrantyExpiresAt),
+            serviceIntervalDays: interval,
+            nextServiceAt: toIsoDate(nextServiceAt),
+            description: description.trim() || undefined,
+            notes: notes.trim() || undefined,
+          });
+      router.push(`/szerviz/eszkozok/${saved.id}`);
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Az eszköz nem menthető.",
@@ -173,8 +241,8 @@ export function AssetEditorPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Szerviz / Eszközök"
-        title="Új eszköz"
+        eyebrow="Szerviz / Eszköznyilvántartás"
+        title={assetId ? "Eszköz módosítása" : "Új eszköz"}
         description="Önálló berendezés vagy egy meglévő rendszer részegységének rögzítése."
         actions={
           <Link href="/szerviz/eszkozok">
@@ -183,7 +251,11 @@ export function AssetEditorPage() {
         }
       />
       {error ? (
-        <Alert variant="danger" title="A művelet nem sikerült" description={error} />
+        <Alert
+          variant="danger"
+          title="A művelet nem sikerült"
+          description={error}
+        />
       ) : null}
       <form className="space-y-6" onSubmit={submit}>
         <Card className="p-6">
@@ -193,14 +265,22 @@ export function AssetEditorPage() {
               <Select
                 required
                 aria-label="Partner"
-                value={customerId}
+                value={selectedOwner}
                 disabled={loadingOptions}
-                onChange={(event) => setCustomerId(event.target.value)}
+                onChange={(event) => {
+                  setSelectedOwner(event.target.value);
+                  setCustomerAddressId("");
+                  setParentAssetId("");
+                }}
               >
                 <option value="">Válassz partnert…</option>
-                {customers.map((customer) => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.displayName} ({customer.partnerCode})
+                {owners.map((item) => (
+                  <option
+                    key={ownerKey(item.type, item.id)}
+                    value={ownerKey(item.type, item.id)}
+                  >
+                    {item.type === "CUSTOMER" ? "Vevő" : "Partner"} ·{" "}
+                    {item.displayName} ({item.code})
                   </option>
                 ))}
               </Select>
@@ -209,14 +289,14 @@ export function AssetEditorPage() {
               <Select
                 aria-label="Helyszín"
                 value={customerAddressId}
-                disabled={!customerId}
+                disabled={!owner || owner.type !== "CUSTOMER"}
                 onChange={(event) => setCustomerAddressId(event.target.value)}
               >
                 <option value="">Nincs pontosítva</option>
                 {addresses.map((address) => (
                   <option key={address.id} value={address.id}>
                     {address.name ? `${address.name} – ` : ""}
-                    {address.postalCode} {address.city}, {address.line1}
+                    {address.formatted}
                   </option>
                 ))}
               </Select>
@@ -225,7 +305,7 @@ export function AssetEditorPage() {
               <Select
                 aria-label="Szülőeszköz"
                 value={parentAssetId}
-                disabled={!customerId}
+                disabled={!owner}
                 onChange={(event) => setParentAssetId(event.target.value)}
               >
                 <option value="">Önálló / főegység</option>
@@ -243,6 +323,21 @@ export function AssetEditorPage() {
                 onChange={(event) => setKind(event.target.value as AssetKind)}
               >
                 {Object.entries(assetKindLabel).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+            </FormField>
+            <FormField label="Státusz">
+              <Select
+                aria-label="Eszköz státusza"
+                value={status}
+                onChange={(event) =>
+                  setStatus(event.target.value as AssetStatus)
+                }
+              >
+                {Object.entries(assetStatusLabel).map(([value, label]) => (
                   <option key={value} value={value}>
                     {label}
                   </option>
@@ -378,7 +473,11 @@ export function AssetEditorPage() {
 
         <div className="flex justify-end">
           <Button type="submit" disabled={busy || loadingOptions}>
-            {busy ? "Mentés…" : "Eszköz létrehozása"}
+            {busy
+              ? "Mentés…"
+              : assetId
+                ? "Módosítások mentése"
+                : "Eszköz létrehozása"}
           </Button>
         </div>
       </form>

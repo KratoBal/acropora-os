@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
+import * as Print from "expo-print";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
+import * as Sharing from "expo-sharing";
 import {
   ActivityIndicator,
   Pressable,
@@ -11,7 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { ReactNode } from "react";
 
-import { getAsset } from "@/lib/api/assets";
+import { getAsset, getAssetQr } from "@/lib/api/assets";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 
@@ -42,6 +44,23 @@ export default function AssetDetailScreen() {
     enabled:
       status === "authenticated" && Boolean(id && capabilities?.assetsView),
   });
+
+  const printLabel = async (share: boolean) => {
+    if (!query.data) return;
+    const qr = await getAssetQr(query.data.id);
+    const html = labelHtml(qr.svg, query.data.assetNumber, query.data.name);
+    if (share) {
+      const { uri } = await Print.printToFileAsync({ html });
+      if (await Sharing.isAvailableAsync())
+        await Sharing.shareAsync(uri, {
+          mimeType: "application/pdf",
+          UTI: "com.adobe.pdf",
+          dialogTitle: `${query.data.assetNumber} QR-címke`,
+        });
+      return;
+    }
+    await Print.printAsync({ html });
+  };
 
   if (status !== "authenticated" || !user) return <Redirect href="/login" />;
   if (!capabilities?.assetsView) return <Redirect href="/" />;
@@ -75,8 +94,8 @@ export default function AssetDetailScreen() {
             </View>
 
             <Section title="Elhelyezés">
-              <Info label="Partner" value={query.data.customer.displayName} />
-              <Info label="Partnerkód" value={query.data.customer.customerNumber} />
+              <Info label="Tulajdonos" value={query.data.owner.displayName} />
+              <Info label="Partnerkód" value={query.data.owner.code} />
               <Info label="Helyszín" value={query.data.address?.formatted} />
               <Info label="Akvárium" value={query.data.aquarium?.name} />
             </Section>
@@ -108,6 +127,19 @@ export default function AssetDetailScreen() {
                 }
               />
               <Info label="Megjegyzés" value={query.data.notes} />
+            </Section>
+
+            <Section title="QR-címke · 30 × 30 mm">
+              <AssetLink
+                label="Nyomtatás"
+                meta="Rendszer nyomtatási párbeszédablak"
+                onPress={() => void printLabel(false)}
+              />
+              <AssetLink
+                label="PDF megosztása"
+                meta="Megnyitás a címkenyomtató alkalmazásában"
+                onPress={() => void printLabel(true)}
+              />
             </Section>
 
             {query.data.ancestors.length > 0 ? (
@@ -181,7 +213,10 @@ function AssetLink({
   onPress(): void;
 }) {
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.assetLink, pressed && styles.pressed]}>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.assetLink, pressed && styles.pressed]}
+    >
       <View>
         <Text style={styles.assetLinkLabel}>{label}</Text>
         <Text style={styles.assetLinkMeta}>{meta}</Text>
@@ -219,6 +254,27 @@ function formatDate(value?: string) {
     : undefined;
 }
 
+function escapeHtml(value: string) {
+  return value.replace(
+    /[&<>"']/g,
+    (character) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        character
+      ]!,
+  );
+}
+
+function labelHtml(svg: string, assetNumber: string, name: string) {
+  return `<!doctype html><html><head><meta name="viewport" content="width=device-width"><style>
+    @page { size: 30mm 30mm; margin: 0; }
+    html, body { width: 30mm; height: 30mm; margin: 0; padding: 0; overflow: hidden; }
+    body { box-sizing: border-box; padding: 1.2mm; font-family: -apple-system, Arial, sans-serif; text-align: center; color: #000; }
+    svg { display: block; width: 23mm; height: 23mm; margin: 0 auto; }
+    .number { margin-top: .4mm; font-size: 2.2mm; font-weight: 800; line-height: 1; }
+    .name { margin-top: .3mm; font-size: 1.6mm; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  </style></head><body>${svg}<div class="number">${escapeHtml(assetNumber)}</div><div class="name">${escapeHtml(name)}</div></body></html>`;
+}
+
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#071827" },
   container: { padding: 18, paddingBottom: 40, gap: 14 },
@@ -250,15 +306,36 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { color: "#f4fbff", fontSize: 16, fontWeight: "900" },
   sectionBody: { marginTop: 8 },
-  infoRow: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#153c52" },
-  infoLabel: { color: "#789cad", fontSize: 11, fontWeight: "800", textTransform: "uppercase" },
+  infoRow: {
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#153c52",
+  },
+  infoLabel: {
+    color: "#789cad",
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
   infoValue: { color: "#e4f3f8", fontSize: 14, lineHeight: 20, marginTop: 3 },
-  assetLink: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 10 },
+  assetLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+  },
   assetLinkLabel: { color: "#e4f3f8", fontSize: 15, fontWeight: "700" },
   assetLinkMeta: { color: "#75a0b2", fontSize: 11, marginTop: 2 },
   chevron: { color: "#52d6c7", fontSize: 26 },
   pressed: { opacity: 0.68 },
   message: { color: "#a9c4d1", lineHeight: 20, marginTop: 8 },
-  retryButton: { alignSelf: "flex-start", backgroundColor: "#177b74", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 9, marginTop: 14 },
+  retryButton: {
+    alignSelf: "flex-start",
+    backgroundColor: "#177b74",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    marginTop: 14,
+  },
   retryText: { color: "#fff", fontWeight: "800" },
 });

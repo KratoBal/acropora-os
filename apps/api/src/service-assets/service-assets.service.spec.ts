@@ -15,9 +15,10 @@ const asset = {
   kind: "COMPONENT",
   status: "ACTIVE",
   criticality: "HIGH",
-  customer: {
+  owner: {
+    type: "CUSTOMER",
     id: "customer-1",
-    customerNumber: "VEVO-1",
+    code: "VEVO-1",
     displayName: "Fóka",
   },
   childCount: 0,
@@ -25,6 +26,7 @@ const asset = {
   ancestors: [],
   children: [],
   events: [],
+  documents: [],
   createdAt: "2026-08-15T10:00:00.000Z",
 } satisfies AssetDetail;
 
@@ -36,6 +38,7 @@ function repository(
     detailByQrToken: async () => asset,
     validationContext: async () => ({
       customer: { id: "customer-1", isActive: true },
+      supplier: null,
       address: null,
       aquarium: null,
       parent: null,
@@ -44,6 +47,7 @@ function repository(
     basic: async () => ({
       id: "asset-1",
       customerId: "customer-1",
+      supplierId: null,
       customerAddressId: null,
       aquariumId: null,
       parentAssetId: null,
@@ -62,11 +66,13 @@ test("rejects a parent asset owned by a different customer", async () => {
     repository({
       validationContext: async () => ({
         customer: { id: "customer-1", isActive: true },
+        supplier: null,
         address: null,
         aquarium: null,
         parent: {
           id: "parent-1",
           customerId: "customer-2",
+          supplierId: null,
           customerAddressId: null,
           aquariumId: null,
           status: "ACTIVE",
@@ -79,7 +85,8 @@ test("rejects a parent asset owned by a different customer", async () => {
     () =>
       service.create(
         {
-          customerId: "customer-1",
+          ownerType: "CUSTOMER",
+          ownerId: "customer-1",
           parentAssetId: "parent-1",
           kind: "COMPONENT",
           name: "Szivattyú",
@@ -120,13 +127,16 @@ test("generates an app deep link QR without exposing database ids", async () => 
   const previous = process.env.ASSET_QR_BASE_URL;
   process.env.ASSET_QR_BASE_URL = "acropora-os://assets/scan";
   try {
-    const result = await new ServiceAssetsService(repository()).qrCode("asset-1");
+    const result = await new ServiceAssetsService(repository()).qrCode(
+      "asset-1",
+    );
     assert.equal(
       result.value,
       "acropora-os://assets/scan/550e8400-e29b-41d4-a716-446655440000",
     );
     assert.doesNotMatch(result.value, /asset-1/);
     assert.match(result.svg, /^<svg /);
+    assert.equal(result.labelSizeMm, 30);
   } finally {
     if (previous === undefined) delete process.env.ASSET_QR_BASE_URL;
     else process.env.ASSET_QR_BASE_URL = previous;

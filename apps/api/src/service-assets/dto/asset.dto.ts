@@ -24,31 +24,42 @@ const ASSET_STATUSES = [
   "RETIRED",
 ] as const;
 const ASSET_CRITICALITIES = ["LOW", "NORMAL", "HIGH", "CRITICAL"] as const;
+const ASSET_OWNER_TYPES = ["CUSTOMER", "SUPPLIER"] as const;
+export const ASSET_DOCUMENT_TYPES = [
+  "INVOICE",
+  "WARRANTY",
+  "MANUAL",
+  "OTHER",
+] as const;
 
 export class AssetListQueryDto {
   @Type(() => Number) @IsInt() @Min(1) @IsOptional() page = 1;
   @Type(() => Number) @IsInt() @Min(10) @Max(100) @IsOptional() pageSize = 25;
   @IsString() @IsOptional() search?: string;
-  @IsString() @IsOptional() customerId?: string;
+  @IsIn(ASSET_OWNER_TYPES)
+  @IsOptional()
+  ownerType?: (typeof ASSET_OWNER_TYPES)[number];
+  @IsString() @IsOptional() ownerId?: string;
   @IsString() @IsOptional() aquariumId?: string;
   @IsString() @IsOptional() parentAssetId?: string;
   @IsIn([...ASSET_STATUSES, "ALL"]) @IsOptional() status:
-    | (typeof ASSET_STATUSES)[number]
-    | "ALL" = "ACTIVE";
+    (typeof ASSET_STATUSES)[number] | "ALL" = "ACTIVE";
   @IsIn(ASSET_KINDS) @IsOptional() kind?: (typeof ASSET_KINDS)[number];
   @IsISO8601() @IsOptional() dueBefore?: string;
 }
 
 export class CreateAssetDto {
-  @IsString() @MinLength(1) customerId!: string;
+  @IsIn(ASSET_OWNER_TYPES) ownerType!: (typeof ASSET_OWNER_TYPES)[number];
+  @IsString() @MinLength(1) ownerId!: string;
   @IsString() @IsOptional() customerAddressId?: string;
   @IsString() @IsOptional() aquariumId?: string;
   @IsString() @IsOptional() parentAssetId?: string;
   @IsString() @IsOptional() productVariantId?: string;
   @IsIn(ASSET_KINDS) kind!: (typeof ASSET_KINDS)[number];
   @IsIn(ASSET_STATUSES) @IsOptional() status?: (typeof ASSET_STATUSES)[number];
-  @IsIn(ASSET_CRITICALITIES) @IsOptional() criticality?:
-    (typeof ASSET_CRITICALITIES)[number];
+  @IsIn(ASSET_CRITICALITIES)
+  @IsOptional()
+  criticality?: (typeof ASSET_CRITICALITIES)[number];
   @IsString() @MinLength(1) name!: string;
   @IsString() @IsOptional() category?: string;
   @IsString() @IsOptional() manufacturer?: string;
@@ -71,14 +82,19 @@ export class CreateAssetDto {
 }
 
 export class UpdateAssetDto {
+  @IsIn(ASSET_OWNER_TYPES)
+  @IsOptional()
+  ownerType?: (typeof ASSET_OWNER_TYPES)[number];
+  @IsString() @MinLength(1) @IsOptional() ownerId?: string;
   @IsString() @IsOptional() customerAddressId?: string | null;
   @IsString() @IsOptional() aquariumId?: string | null;
   @IsString() @IsOptional() parentAssetId?: string | null;
   @IsString() @IsOptional() productVariantId?: string | null;
   @IsIn(ASSET_KINDS) @IsOptional() kind?: (typeof ASSET_KINDS)[number];
   @IsIn(ASSET_STATUSES) @IsOptional() status?: (typeof ASSET_STATUSES)[number];
-  @IsIn(ASSET_CRITICALITIES) @IsOptional() criticality?:
-    (typeof ASSET_CRITICALITIES)[number];
+  @IsIn(ASSET_CRITICALITIES)
+  @IsOptional()
+  criticality?: (typeof ASSET_CRITICALITIES)[number];
   @IsString() @MinLength(1) @IsOptional() name?: string;
   @IsString() @IsOptional() category?: string | null;
   @IsString() @IsOptional() manufacturer?: string | null;
@@ -99,4 +115,9 @@ export class UpdateAssetDto {
   @IsISO8601() @IsOptional() nextServiceAt?: string | null;
   @IsString() @IsOptional() notes?: string | null;
   @IsISO8601() expectedUpdatedAt!: string;
+}
+
+export class UploadAssetDocumentDto {
+  @IsIn(ASSET_DOCUMENT_TYPES)
+  type!: (typeof ASSET_DOCUMENT_TYPES)[number];
 }

@@ -23,6 +23,10 @@ export class ServiceAssetsService {
     return this.repository.list(query);
   }
 
+  owners() {
+    return this.repository.owners();
+  }
+
   async detail(id: string) {
     const asset = await this.repository.detail(id);
     if (!asset) throw new NotFoundException("Az eszköz nem található.");
@@ -40,7 +44,8 @@ export class ServiceAssetsService {
 
   async create(input: CreateAssetDto, actorUserId: string) {
     await this.validateReferences({
-      customerId: input.customerId,
+      ownerType: input.ownerType,
+      ownerId: input.ownerId,
       customerAddressId: input.customerAddressId,
       aquariumId: input.aquariumId,
       parentAssetId: input.parentAssetId,
@@ -56,6 +61,15 @@ export class ServiceAssetsService {
   async update(id: string, input: UpdateAssetDto, actorUserId: string) {
     const existing = await this.repository.basic(id);
     if (!existing) throw new NotFoundException("Az eszköz nem található.");
+    if ((input.ownerType === undefined) !== (input.ownerId === undefined))
+      throw new BadRequestException(
+        "A tulajdonos típusa és azonosítója csak együtt módosítható.",
+      );
+    const ownerType =
+      input.ownerType ?? (existing.customerId ? "CUSTOMER" : "SUPPLIER");
+    const ownerId = input.ownerId ?? existing.customerId ?? existing.supplierId;
+    if (!ownerId)
+      throw new BadRequestException("Az eszköz tulajdonosa hiányzik.");
     const parentAssetId =
       input.parentAssetId === undefined
         ? existing.parentAssetId
@@ -68,13 +82,20 @@ export class ServiceAssetsService {
         "Az eszközhierarchia nem tartalmazhat önmagába visszatérő kapcsolatot.",
       );
     await this.validateReferences({
-      customerId: existing.customerId,
+      ownerType,
+      ownerId,
       customerAddressId:
-        input.customerAddressId === undefined
-          ? existing.customerAddressId
-          : input.customerAddressId,
+        ownerType === "SUPPLIER"
+          ? null
+          : input.customerAddressId === undefined
+            ? existing.customerAddressId
+            : input.customerAddressId,
       aquariumId:
-        input.aquariumId === undefined ? existing.aquariumId : input.aquariumId,
+        ownerType === "SUPPLIER"
+          ? null
+          : input.aquariumId === undefined
+            ? existing.aquariumId
+            : input.aquariumId,
       parentAssetId,
       productVariantId:
         input.productVariantId === undefined
@@ -100,8 +121,7 @@ export class ServiceAssetsService {
   async qrCode(id: string): Promise<AssetQrCode> {
     const asset = await this.detail(id);
     const base = (
-      process.env.ASSET_QR_BASE_URL?.trim() ||
-      "acropora-os://assets/scan"
+      process.env.ASSET_QR_BASE_URL?.trim() || "acropora-os://assets/scan"
     ).replace(/\/+$/, "");
     const value = `${base}/${asset.qrToken}`;
     return {
@@ -109,26 +129,72 @@ export class ServiceAssetsService {
       assetNumber: asset.assetNumber,
       value,
       svg: createAssetQrSvg(value),
+      labelSizeMm: 30,
     };
   }
 
+  async addDocument(
+    id: string,
+    type: "INVOICE" | "WARRANTY" | "MANUAL" | "OTHER",
+    file: Express.Multer.File,
+    actorUserId: string,
+  ) {
+    await this.detail(id);
+    if (
+      file.mimetype !== "application/pdf" ||
+      !file.buffer.subarray(0, 5).equals(Buffer.from("%PDF-"))
+    )
+      throw new BadRequestException("Csak érvényes PDF fájl tölthető fel.");
+    const safeName = file.originalname
+      .normalize("NFKC")
+      .replace(/[\\/\u0000-\u001f\u007f]/g, "-")
+      .slice(0, 180);
+    return this.repository.addDocument({
+      assetId: id,
+      type,
+      fileName: safeName || "dokumentum.pdf",
+      content: file.buffer,
+      actorUserId,
+    });
+  }
+
+  async document(id: string, documentId: string) {
+    const document = await this.repository.document(id, documentId);
+    if (!document) throw new NotFoundException("A dokumentum nem található.");
+    return document;
+  }
+
+  async deleteDocument(id: string, documentId: string, actorUserId: string) {
+    if (!(await this.repository.deleteDocument(id, documentId, actorUserId)))
+      throw new NotFoundException("A dokumentum nem található.");
+  }
+
   private async validateReferences(input: {
-    customerId: string;
+    ownerType: "CUSTOMER" | "SUPPLIER";
+    ownerId: string;
     customerAddressId?: string | null;
     aquariumId?: string | null;
     parentAssetId?: string | null;
     productVariantId?: string | null;
   }) {
     const context = await this.repository.validationContext(input);
-    if (!context.customer)
+    const owner = context.customer ?? context.supplier;
+    if (!owner)
       throw new BadRequestException("A kiválasztott partner nem található.");
-    if (!context.customer.isActive)
+    if (!owner.isActive)
       throw new BadRequestException(
         "Archivált partnerhez nem rögzíthető új eszköz vagy elhelyezés.",
       );
+    if (
+      input.ownerType === "SUPPLIER" &&
+      (input.customerAddressId || input.aquariumId)
+    )
+      throw new BadRequestException(
+        "Beszállító partnerhez vevői cím vagy akvárium nem rendelhető.",
+      );
     if (input.customerAddressId && !context.address)
       throw new BadRequestException("A kiválasztott partnercím nem található.");
-    if (context.address && context.address.customerId !== input.customerId)
+    if (context.address && context.address.customerId !== input.ownerId)
       throw new BadRequestException(
         "A kiválasztott cím nem ehhez a partnerhez tartozik.",
       );
@@ -136,15 +202,23 @@ export class ServiceAssetsService {
       throw new BadRequestException("A kiválasztott akvárium nem található.");
     if (
       context.aquarium &&
-      (context.aquarium.customerId !== input.customerId ||
+      (context.aquarium.customerId !== input.ownerId ||
         !context.aquarium.isActive)
     )
       throw new BadRequestException(
         "Az akvárium nem aktív, vagy nem ehhez a partnerhez tartozik.",
       );
     if (input.parentAssetId && !context.parent)
-      throw new BadRequestException("A kiválasztott szülőeszköz nem található.");
-    if (context.parent && context.parent.customerId !== input.customerId)
+      throw new BadRequestException(
+        "A kiválasztott szülőeszköz nem található.",
+      );
+    if (
+      context.parent &&
+      (context.parent.customerId !==
+        (input.ownerType === "CUSTOMER" ? input.ownerId : null) ||
+        context.parent.supplierId !==
+          (input.ownerType === "SUPPLIER" ? input.ownerId : null))
+    )
       throw new BadRequestException(
         "A szülő- és gyermekeszköznek ugyanahhoz a partnerhez kell tartoznia.",
       );

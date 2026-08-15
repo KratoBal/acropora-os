@@ -1,17 +1,13 @@
 export type AssetKind =
-  | "SYSTEM"
-  | "EQUIPMENT"
-  | "COMPONENT"
-  | "SENSOR"
-  | "OTHER";
+  "SYSTEM" | "EQUIPMENT" | "COMPONENT" | "SENSOR" | "OTHER";
 
-export type AssetStatus =
-  | "ACTIVE"
-  | "OUT_OF_SERVICE"
-  | "IN_REPAIR"
-  | "RETIRED";
+export type AssetStatus = "ACTIVE" | "OUT_OF_SERVICE" | "IN_REPAIR" | "RETIRED";
 
 export type AssetCriticality = "LOW" | "NORMAL" | "HIGH" | "CRITICAL";
+
+export type AssetOwnerType = "CUSTOMER" | "SUPPLIER";
+
+export type AssetDocumentType = "INVOICE" | "WARRANTY" | "MANUAL" | "OTHER";
 
 export type AssetEventType =
   | "CREATED"
@@ -19,12 +15,31 @@ export type AssetEventType =
   | "PLACEMENT_CHANGED"
   | "PARENT_CHANGED"
   | "STATUS_CHANGED"
-  | "QR_ROTATED";
+  | "QR_ROTATED"
+  | "DOCUMENT_UPLOADED"
+  | "DOCUMENT_DELETED";
 
 export interface AssetCustomerSummary {
   id: string;
   customerNumber: string;
   displayName: string;
+}
+
+export interface AssetOwnerSummary {
+  type: AssetOwnerType;
+  id: string;
+  code: string;
+  displayName: string;
+}
+
+export interface AssetOwnerOption extends AssetOwnerSummary {
+  isActive: boolean;
+  address?: AssetAddressSummary;
+  addresses: AssetAddressSummary[];
+}
+
+export interface AssetOwnerListResponse {
+  items: AssetOwnerOption[];
 }
 
 export interface AssetAddressSummary {
@@ -55,7 +70,7 @@ export interface AssetProductSummary {
 
 export interface AssetListItem extends AssetHierarchyItem {
   criticality: AssetCriticality;
-  customer: AssetCustomerSummary;
+  owner: AssetOwnerSummary;
   address?: AssetAddressSummary;
   aquarium?: AssetAquariumSummary;
   parent?: AssetHierarchyItem;
@@ -65,6 +80,17 @@ export interface AssetListItem extends AssetHierarchyItem {
   nextServiceAt?: string;
   childCount: number;
   updatedAt: string;
+}
+
+export interface AssetDocumentSummary {
+  id: string;
+  type: AssetDocumentType;
+  fileName: string;
+  contentType: "application/pdf";
+  sizeBytes: number;
+  sha256: string;
+  uploadedBy?: { id: string; displayName: string };
+  createdAt: string;
 }
 
 export interface AssetEventSummary {
@@ -94,6 +120,7 @@ export interface AssetDetail extends AssetListItem {
   ancestors: AssetHierarchyItem[];
   children: AssetHierarchyItem[];
   events: AssetEventSummary[];
+  documents: AssetDocumentSummary[];
   createdAt: string;
 }
 
@@ -108,7 +135,8 @@ export interface AssetListResponse {
 }
 
 export interface CreateAssetInput {
-  customerId: string;
+  ownerType: AssetOwnerType;
+  ownerId: string;
   customerAddressId?: string;
   aquariumId?: string;
   parentAssetId?: string;
@@ -133,6 +161,8 @@ export interface CreateAssetInput {
 }
 
 export interface UpdateAssetInput {
+  ownerType?: AssetOwnerType;
+  ownerId?: string;
   customerAddressId?: string | null;
   aquariumId?: string | null;
   parentAssetId?: string | null;
@@ -162,4 +192,5 @@ export interface AssetQrCode {
   assetNumber: string;
   value: string;
   svg: string;
+  labelSizeMm: 30;
 }

@@ -1,16 +1,24 @@
 import type {
   AssetDetail,
   AssetListResponse,
+  AssetDocumentSummary,
+  AssetDocumentType,
+  AssetOwnerListResponse,
   AssetQrCode,
   CreateAssetInput,
   UpdateAssetInput,
 } from "@acropora/types";
 
-import { apiRequest } from "./client";
+import { apiAuthHeaders, apiRequest } from "./client";
 
 export const assetsApi = {
   list(token: string, query: URLSearchParams, signal?: AbortSignal) {
     return apiRequest<AssetListResponse>(`/service/assets?${query}`, token, {
+      signal,
+    });
+  },
+  owners(token: string, signal?: AbortSignal) {
+    return apiRequest<AssetOwnerListResponse>("/service/assets/owners", token, {
       signal,
     });
   },
@@ -51,6 +59,36 @@ export const assetsApi = {
       `/service/assets/${encodeURIComponent(id)}/qr/rotate`,
       token,
       { method: "POST" },
+    );
+  },
+  uploadDocument(
+    token: string,
+    id: string,
+    type: AssetDocumentType,
+    file: File,
+  ) {
+    const body = new FormData();
+    body.append("type", type);
+    body.append("file", file);
+    return apiRequest<AssetDocumentSummary>(
+      `/service/assets/${encodeURIComponent(id)}/documents`,
+      token,
+      { method: "POST", body },
+    );
+  },
+  async downloadDocument(token: string, id: string, documentId: string) {
+    const response = await fetch(
+      `/api/service/assets/${encodeURIComponent(id)}/documents/${encodeURIComponent(documentId)}`,
+      { credentials: "same-origin", headers: apiAuthHeaders(token) },
+    );
+    if (!response.ok) throw new Error("A dokumentum nem tölthető le.");
+    return response.blob();
+  },
+  deleteDocument(token: string, id: string, documentId: string) {
+    return apiRequest<{ ok: true }>(
+      `/service/assets/${encodeURIComponent(id)}/documents/${encodeURIComponent(documentId)}`,
+      token,
+      { method: "DELETE" },
     );
   },
 };
