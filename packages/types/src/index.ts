@@ -238,6 +238,8 @@ export type {
   NavInvoiceSyncSummary,
 } from "./integrations/nav-incoming-invoice.js";
 export type {
+  FoxpostManualApprovalInput,
+  FoxpostManualApprovalResult,
   FoxpostMonthlyReportSummary,
   FoxpostReprocessResult,
   FoxpostResolutionSource,

@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { createHash } from "node:crypto";
 import type {
+  FoxpostManualApprovalInput,
+  FoxpostManualApprovalResult,
   FoxpostReprocessResult,
   FoxpostSettlementDetail,
   FoxpostSettlementListResponse,
@@ -62,12 +64,13 @@ export class FoxpostSettlementService {
     return this.repository.listReports();
   }
 
-  downloadReport(year: number, month: number) {
+  async downloadReport(year: number, month: number) {
     if (!Number.isInteger(year) || year < 2020 || year > 2100)
       throw new BadRequestException("FOXPOST_REPORT_YEAR_INVALID");
     if (!Number.isInteger(month) || month < 1 || month > 12)
       throw new BadRequestException("FOXPOST_REPORT_MONTH_INVALID");
-    return this.repository.downloadReport(year, month);
+    const report = await this.buildReport(year, month);
+    return { filename: report.filename, buffer: report.buffer };
   }
 
   async sync(): Promise<FoxpostSyncSummary> {
@@ -151,6 +154,32 @@ export class FoxpostSettlementService {
     }
   }
 
+  async approveLine(
+    settlementId: string,
+    lineId: string,
+    input: FoxpostManualApprovalInput,
+    actorUserId: string,
+  ): Promise<FoxpostManualApprovalResult> {
+    const invoiceNumber = input.invoiceNumber.trim();
+    if (!invoiceNumber)
+      throw new BadRequestException("FOXPOST_INVOICE_NUMBER_REQUIRED");
+    const expectedUpdatedAt = new Date(input.expectedUpdatedAt);
+    if (Number.isNaN(expectedUpdatedAt.getTime()))
+      throw new BadRequestException("FOXPOST_LINE_VERSION_INVALID");
+    const period = await this.repository.approveLine({
+      settlementId,
+      lineId,
+      invoiceNumber,
+      expectedUpdatedAt,
+      actorUserId,
+    });
+    await this.rebuildReport(period.year, period.month);
+    return {
+      settlement: await this.repository.detail(settlementId),
+      reportRegenerated: true,
+    };
+  }
+
   private async process(
     settlementId: string,
     xlsxBuffer: Buffer,
@@ -161,18 +190,35 @@ export class FoxpostSettlementService {
       this.parser.parsePdf(pdfBuffer),
     ]);
     validateFoxpostPair(xlsx, pdf);
-    const lines = await this.resolveLines(xlsx.lines);
+    const [resolvedLines, manualResolutions] = await Promise.all([
+      this.resolveLines(xlsx.lines),
+      this.repository.manualLineResolutions(settlementId),
+    ]);
+    const manualBySourceRow = new Map(
+      manualResolutions.map((line) => [line.sourceRowNumber, line]),
+    );
+    const lines = resolvedLines.map((line) => {
+      const manual = manualBySourceRow.get(line.sourceRowNumber);
+      if (!manual || manual.referenceCode !== line.referenceCode) return line;
+      return {
+        ...line,
+        salesOrderId: null,
+        invoiceId: null,
+        invoiceNumber: manual.invoiceNumber,
+        resolutionSource: "MANUAL" as const,
+        status: "MATCHED" as const,
+        errorCode: null,
+        manualApprovedByUserId: manual.manualApprovedByUserId,
+        manualApprovedAt: manual.manualApprovedAt,
+      };
+    });
     await this.repository.saveProcessingResult(settlementId, xlsx, pdf, lines);
     const completed = lines.every((line) => line.status === "MATCHED");
-    let reportRegenerated = false;
-    if (completed) {
-      await this.rebuildReport(
-        pdf.invoiceIssueDate.getUTCFullYear(),
-        pdf.invoiceIssueDate.getUTCMonth() + 1,
-      );
-      reportRegenerated = true;
-    }
-    return { completed, reportRegenerated };
+    await this.rebuildReport(
+      pdf.invoiceIssueDate.getUTCFullYear(),
+      pdf.invoiceIssueDate.getUTCMonth() + 1,
+    );
+    return { completed, reportRegenerated: true };
   }
 
   private async resolveLines(
@@ -288,10 +334,14 @@ export class FoxpostSettlementService {
   }
 
   private async rebuildReport(year: number, month: number): Promise<void> {
+    const report = await this.buildReport(year, month);
+    await this.repository.saveReport(year, month, report);
+  }
+
+  private async buildReport(year: number, month: number) {
     const source = await this.repository.reportSource(year, month);
     if (!source.length)
       throw new FoxpostParseError("FOXPOST_MONTHLY_REPORT_SOURCE_EMPTY");
-    const report = await this.reports.build(year, month, source);
-    await this.repository.saveReport(year, month, report);
+    return this.reports.build(year, month, source);
   }
 }

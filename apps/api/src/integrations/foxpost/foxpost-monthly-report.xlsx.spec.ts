@@ -19,6 +19,20 @@ describe("FoxpostMonthlyReportXlsx", () => {
           "ACRW-2026/00409",
           "ACRW-2026/00408",
         ],
+        unresolvedLines: [
+          {
+            gmailMessageId: "gmail-message-1",
+            gmailSubject: "FOXPOST heti elszámolás",
+            sourceRowNumber: 14,
+            referenceCode: "ACRW-2026/00400",
+            transactionDate: new Date("2026-08-01T00:00:00.000Z"),
+            recipientName: "Kovács András",
+            parcelBarcode: "CLFOX123",
+            collectedAmount: 4_000,
+            status: "ORDER_NOT_FOUND",
+            errorCode: "FOXPOST_UNAS_ORDER_NOT_FOUND",
+          },
+        ],
       },
     ]);
     assert.equal(report.filename, "foxpost-2026-08.xlsx");
@@ -36,5 +50,12 @@ describe("FoxpostMonthlyReportXlsx", () => {
       result: 89_183,
     });
     assert.equal(sheet.getCell("F5").value, "FX01015386");
+    const reviewSheet = workbook.getWorksheet("Ellenőrzendő tételek");
+    assert.ok(reviewSheet);
+    assert.equal(reviewSheet.getCell("A2").value, "26H31");
+    assert.equal(reviewSheet.getCell("C2").value, "gmail-message-1");
+    assert.equal(reviewSheet.getCell("F2").value, "ACRW-2026/00400");
+    assert.equal(reviewSheet.getCell("J2").value, 4_000);
+    assert.equal(reviewSheet.getCell("K2").value, "Rendelés nem található");
   });
 });

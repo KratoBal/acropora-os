@@ -10,6 +10,7 @@ const api = vi.hoisted(() => ({
   detail: vi.fn(),
   sync: vi.fn(),
   reprocess: vi.fn(),
+  approveLine: vi.fn(),
   reports: vi.fn(),
   downloadReport: vi.fn(),
 }));
@@ -84,6 +85,7 @@ beforeEach(() => {
   });
   api.detail.mockReset();
   api.reprocess.mockReset();
+  api.approveLine.mockReset();
   api.downloadReport.mockReset();
 });
 
@@ -105,5 +107,105 @@ describe("FoxpostSettlementsPage", () => {
       await screen.findByText(/Gmail ellenőrzés kész: 1 új/),
     ).toBeInTheDocument();
     expect(api.sync).toHaveBeenCalledWith("token-owner");
+  });
+
+  it("keeps the monthly XLSX downloadable when it contains unresolved rows", async () => {
+    api.reports.mockResolvedValue([
+      {
+        id: "report-1",
+        year: 2026,
+        month: 7,
+        filename: "foxpost-2026-07.xlsx",
+        settlementCount: 4,
+        invoiceCount: 12,
+        collectedAmount: "200000",
+        invoiceGrossAmount: "16000",
+        transferredAmount: "184000",
+        generatedAt: "2026-08-01T12:00:00.000Z",
+        blockedByUnresolvedSettlements: 1,
+        unresolvedLineCount: 1,
+      },
+    ]);
+    render(createElement(FoxpostSettlementsPage));
+
+    const download = await screen.findByRole("button", {
+      name: "XLSX letöltése",
+    });
+    expect(download).toBeEnabled();
+    expect(
+      screen.getByText(/1 ellenőrzendő tétel a külön munkalapon/),
+    ).toBeInTheDocument();
+    fireEvent.click(download);
+    expect(api.downloadReport).toHaveBeenCalled();
+  });
+
+  it("accepts an invoice number from the Foxpost reference and approves the row", async () => {
+    const unresolvedDetail = {
+      ...settlements.items[0],
+      gmailMessageId: "gmail-message-1",
+      xlsxFileName: "foxpost.xlsx",
+      pdfFileName: "FX01015386.pdf",
+      status: "NEEDS_REVIEW" as const,
+      matchedLineCount: 0,
+      unresolvedLineCount: 1,
+      lines: [
+        {
+          id: "line-1",
+          sourceRowNumber: 14,
+          referenceCode: "ACRW-2026/00400",
+          transactionDate: "2026-07-09T00:00:00.000Z",
+          recipientName: "Kovács András",
+          parcelBarcode: "CLFOX123",
+          collectedAmount: "4000",
+          status: "ORDER_NOT_FOUND" as const,
+          errorCode: "FOXPOST_UNAS_ORDER_NOT_FOUND",
+          updatedAt: "2026-08-15T08:00:00.000Z",
+        },
+      ],
+    };
+    api.detail.mockResolvedValue(unresolvedDetail);
+    api.approveLine.mockResolvedValue({
+      settlement: {
+        ...unresolvedDetail,
+        status: "COMPLETED",
+        matchedLineCount: 1,
+        unresolvedLineCount: 0,
+        lines: [
+          {
+            ...unresolvedDetail.lines[0],
+            invoiceNumber: "ACRW-2026/00400",
+            resolutionSource: "MANUAL",
+            status: "MATCHED",
+            errorCode: undefined,
+            manualApprovedAt: "2026-08-15T09:00:00.000Z",
+            manualApprovedByUserId: "owner",
+            manualApprovedByDisplayName: "Acropora Tulajdonos",
+            updatedAt: "2026-08-15T09:00:00.000Z",
+          },
+        ],
+      },
+      reportRegenerated: true,
+    });
+
+    render(createElement(FoxpostSettlementsPage));
+    fireEvent.click(await screen.findByText("26H31"));
+    const invoiceInput = await screen.findByRole("textbox", {
+      name: "Számlaszám – ACRW-2026/00400",
+    });
+    expect(invoiceInput).toHaveValue("ACRW-2026/00400");
+    fireEvent.click(screen.getByRole("button", { name: "Jóváhagyás" }));
+
+    expect(api.approveLine).toHaveBeenCalledWith(
+      "token-owner",
+      "settlement-1",
+      "line-1",
+      {
+        invoiceNumber: "ACRW-2026/00400",
+        expectedUpdatedAt: "2026-08-15T08:00:00.000Z",
+      },
+    );
+    expect(
+      await screen.findByText(/A tétel jóváhagyva, az elszámolás elkészült/),
+    ).toBeInTheDocument();
   });
 });

@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   Param,
@@ -7,9 +8,11 @@ import {
   Query,
   StreamableFile,
 } from "@nestjs/common";
-import { PERMISSIONS } from "@acropora/types";
+import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
+import { CurrentUser } from "../../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../../auth/decorators/require-permissions.decorator.js";
+import { ApproveFoxpostSettlementLineDto } from "./dto/approve-foxpost-settlement-line.dto.js";
 import { FoxpostSettlementListQueryDto } from "./dto/foxpost-settlement-list-query.dto.js";
 import { FoxpostSettlementService } from "./foxpost-settlement.service.js";
 
@@ -42,6 +45,17 @@ export class FoxpostSettlementController {
   @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
   reprocess(@Param("id") id: string) {
     return this.settlements.reprocess(id);
+  }
+
+  @Post("settlements/:id/lines/:lineId/approve")
+  @RequirePermissions(PERMISSIONS.FINANCE_MANAGE)
+  approveLine(
+    @Param("id") id: string,
+    @Param("lineId") lineId: string,
+    @Body() input: ApproveFoxpostSettlementLineDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.settlements.approveLine(id, lineId, input, user.id);
   }
 
   @Get("reports")

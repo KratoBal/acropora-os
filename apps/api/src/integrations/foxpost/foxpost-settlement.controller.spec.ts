@@ -31,13 +31,17 @@ describe("FoxpostSettlementController permissions", () => {
     );
   });
 
-  it("uses finance.manage for Gmail sync and reprocessing", () => {
+  it("uses finance.manage for Gmail sync, reprocessing and manual approval", () => {
     assert.deepEqual(
       permissionsFor(FoxpostSettlementController.prototype.sync),
       [PERMISSIONS.FINANCE_MANAGE],
     );
     assert.deepEqual(
       permissionsFor(FoxpostSettlementController.prototype.reprocess),
+      [PERMISSIONS.FINANCE_MANAGE],
+    );
+    assert.deepEqual(
+      permissionsFor(FoxpostSettlementController.prototype.approveLine),
       [PERMISSIONS.FINANCE_MANAGE],
     );
   });
