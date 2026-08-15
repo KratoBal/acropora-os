@@ -285,6 +285,37 @@ enum AquariumOwnershipType {
   CUSTOMER
 }
 
+enum AssetKind {
+  SYSTEM
+  EQUIPMENT
+  COMPONENT
+  SENSOR
+  OTHER
+}
+
+enum AssetStatus {
+  ACTIVE
+  OUT_OF_SERVICE
+  IN_REPAIR
+  RETIRED
+}
+
+enum AssetCriticality {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum AssetEventType {
+  CREATED
+  UPDATED
+  PLACEMENT_CHANGED
+  PARENT_CHANGED
+  STATUS_CHANGED
+  QR_ROTATED
+}
+
 enum ExternalSystem {
   UNAS
   SZAMLAZZ_HU
@@ -429,6 +460,9 @@ model User {
   createdProjects            Project[]                     @relation("ProjectCreatedBy")
   projectReservations        ProjectInventoryReservation[]
   approvedFoxpostLines       FoxpostSettlementLine[]       @relation("FoxpostLineManualApprovedBy")
+  createdAssets              Asset[]                        @relation("AssetCreatedBy")
+  updatedAssets              Asset[]                        @relation("AssetUpdatedBy")
+  assetEvents                AssetEvent[]
 
   @@index([role, isActive])
 }
@@ -535,6 +569,7 @@ model ProductVariant {
   unasStockSyncOutboxEntries UnasStockSyncOutbox[]
   stockReconciliationRepairs StockReconciliationRepair[]
   projectReservations        ProjectInventoryReservation[]
+  assets                     Asset[]
 
   @@unique([productId, unasVariantKey])
   @@index([productId, isActive])
@@ -1341,6 +1376,7 @@ model Customer {
   serviceJobs ServiceJob[]
   invoices    Invoice[]
   projects    Project[]
+  assets      Asset[]
 
   @@index([displayName])
   @@index([email])
@@ -1360,6 +1396,7 @@ model CustomerAddress {
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
   customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  assets     Asset[]
 
   @@index([customerId, type])
 }
@@ -1890,6 +1927,7 @@ model ServiceJob {
 
   customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
   aquarium Aquarium? @relation(fields: [aquariumId], references: [id], onDelete: SetNull)
+  assets   ServiceJobAsset[]
 
   @@index([status, scheduledAt])
   @@index([customerId])
@@ -1914,8 +1952,100 @@ model Aquarium {
   customer     Customer?             @relation(fields: [customerId], references: [id], onDelete: SetNull)
   measurements AquariumMeasurement[]
   serviceJobs  ServiceJob[]
+  assets       Asset[]
 
   @@index([customerId, isActive])
+}
+
+/// A partnernél üzemelő, fizikailag azonosítható rendszer, berendezés vagy
+/// alkatrész. A `parentAssetId` önhivatkozó fa teszi lehetővé az összetett
+/// rendszereket (pl. szűrőrendszer -> felnyomó szivattyú). A kötelező
+/// customerId biztosítja, hogy minden eszköz mindig pontosan egy partnerhez
+/// legyen rendelve; a cím és az akvárium opcionális, finomabb elhelyezés.
+model Asset {
+  id                  String           @id @default(cuid())
+  assetNumber         String           @unique
+  qrToken             String           @unique @default(uuid()) @db.Uuid
+  customerId          String
+  customerAddressId   String?
+  aquariumId          String?
+  parentAssetId       String?
+  productVariantId    String?
+  kind                AssetKind        @default(EQUIPMENT)
+  status              AssetStatus      @default(ACTIVE)
+  criticality         AssetCriticality @default(NORMAL)
+  name                String
+  category            String?
+  manufacturer        String?
+  model               String?
+  serialNumber        String?
+  inventoryNumber     String?
+  description         String?
+  installedAt         DateTime?
+  purchasedAt         DateTime?
+  warrantyExpiresAt   DateTime?
+  serviceIntervalDays Int?
+  lastServicedAt      DateTime?
+  nextServiceAt       DateTime?
+  notes               String?
+  archivedAt          DateTime?
+  createdById         String?
+  updatedById         String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  customer        Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  customerAddress CustomerAddress? @relation(fields: [customerAddressId], references: [id], onDelete: SetNull)
+  aquarium        Aquarium?        @relation(fields: [aquariumId], references: [id], onDelete: SetNull)
+  parentAsset     Asset?           @relation("AssetHierarchy", fields: [parentAssetId], references: [id], onDelete: SetNull)
+  childAssets     Asset[]          @relation("AssetHierarchy")
+  productVariant ProductVariant?  @relation(fields: [productVariantId], references: [id], onDelete: SetNull)
+  createdBy       User?            @relation("AssetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy       User?            @relation("AssetUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  events          AssetEvent[]
+  serviceJobs     ServiceJobAsset[]
+
+  @@index([customerId, status])
+  @@index([customerAddressId])
+  @@index([aquariumId])
+  @@index([parentAssetId])
+  @@index([productVariantId])
+  @@index([nextServiceAt, status])
+  @@index([serialNumber])
+  @@index([inventoryNumber])
+}
+
+/// Append-only üzleti előzmény az eszköz létrehozásáról, áthelyezéséről,
+/// státusz- és hierarchiaváltásáról, valamint QR-token cseréjéről.
+model AssetEvent {
+  id          String         @id @default(cuid())
+  assetId     String
+  type        AssetEventType
+  actorUserId String?
+  payload     Json
+  occurredAt  DateTime       @default(now())
+
+  asset     Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  actorUser User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([assetId, occurredAt])
+  @@index([actorUserId, occurredAt])
+}
+
+/// Egy szervizmunka több eszközt érinthet, és ugyanazon eszköznek több
+/// szervizelőzménye lehet. A kapcsolótábla ezt a sok-sok kapcsolatot őrzi.
+model ServiceJobAsset {
+  id           String   @id @default(cuid())
+  serviceJobId String
+  assetId      String
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  serviceJob ServiceJob @relation(fields: [serviceJobId], references: [id], onDelete: Cascade)
+  asset      Asset      @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@unique([serviceJobId, assetId])
+  @@index([assetId, createdAt])
 }
 
 model AquariumMeasurement {

@@ -14,6 +14,12 @@ export interface WebshopCapabilities {
   partnersManage: boolean;
 }
 
+export interface ServiceCapabilities {
+  workspace: boolean;
+  assetsView: boolean;
+  assetsManage: boolean;
+}
+
 const FULL_ACCESS: WebshopCapabilities = {
   workspace: true,
   ordersView: true,
@@ -98,6 +104,24 @@ const ROLE_CAPABILITIES: Readonly<Record<UserRole, WebshopCapabilities>> = {
 
 export function getWebshopCapabilities(role: UserRole): WebshopCapabilities {
   return ROLE_CAPABILITIES[role];
+}
+
+export function getServiceCapabilities(role: UserRole): ServiceCapabilities {
+  const canView =
+    role === "OWNER" ||
+    role === "ADMIN" ||
+    role === "MANAGER" ||
+    role === "SERVICE" ||
+    role === "VIEWER";
+  return {
+    workspace: canView,
+    assetsView: canView,
+    assetsManage:
+      role === "OWNER" ||
+      role === "ADMIN" ||
+      role === "MANAGER" ||
+      role === "SERVICE",
+  };
 }
 
 export function userRoleLabel(role: UserRole): string {

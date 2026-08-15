@@ -1,4 +1,6 @@
 import "reflect-metadata";
+import "./service-assets/qr-svg.spec.js";
+import "./service-assets/service-assets.service.spec.js";
 
 import assert from "node:assert/strict";
 import { after, describe, it } from "node:test";

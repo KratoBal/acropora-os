@@ -11,11 +11,12 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Redirect } from "expo-router";
+import { Redirect, useLocalSearchParams } from "expo-router";
 
 import { useAuth } from "@/lib/auth/AuthProvider";
 
 export default function LoginScreen() {
+  const { assetToken } = useLocalSearchParams<{ assetToken?: string }>();
   const { status, signInError, signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -26,7 +27,13 @@ export default function LoginScreen() {
   // mounted) — never show the login form on top of an authenticated
   // session.
   if (status === "authenticated") {
-    return <Redirect href="/" />;
+    return assetToken ? (
+      <Redirect
+        href={{ pathname: "/assets/scan/[token]", params: { token: assetToken } }}
+      />
+    ) : (
+      <Redirect href="/" />
+    );
   }
 
   const submitting = status === "signingIn";

@@ -1,0 +1,102 @@
+import { Type } from "class-transformer";
+import {
+  IsIn,
+  IsInt,
+  IsISO8601,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+  MinLength,
+} from "class-validator";
+
+const ASSET_KINDS = [
+  "SYSTEM",
+  "EQUIPMENT",
+  "COMPONENT",
+  "SENSOR",
+  "OTHER",
+] as const;
+const ASSET_STATUSES = [
+  "ACTIVE",
+  "OUT_OF_SERVICE",
+  "IN_REPAIR",
+  "RETIRED",
+] as const;
+const ASSET_CRITICALITIES = ["LOW", "NORMAL", "HIGH", "CRITICAL"] as const;
+
+export class AssetListQueryDto {
+  @Type(() => Number) @IsInt() @Min(1) @IsOptional() page = 1;
+  @Type(() => Number) @IsInt() @Min(10) @Max(100) @IsOptional() pageSize = 25;
+  @IsString() @IsOptional() search?: string;
+  @IsString() @IsOptional() customerId?: string;
+  @IsString() @IsOptional() aquariumId?: string;
+  @IsString() @IsOptional() parentAssetId?: string;
+  @IsIn([...ASSET_STATUSES, "ALL"]) @IsOptional() status:
+    | (typeof ASSET_STATUSES)[number]
+    | "ALL" = "ACTIVE";
+  @IsIn(ASSET_KINDS) @IsOptional() kind?: (typeof ASSET_KINDS)[number];
+  @IsISO8601() @IsOptional() dueBefore?: string;
+}
+
+export class CreateAssetDto {
+  @IsString() @MinLength(1) customerId!: string;
+  @IsString() @IsOptional() customerAddressId?: string;
+  @IsString() @IsOptional() aquariumId?: string;
+  @IsString() @IsOptional() parentAssetId?: string;
+  @IsString() @IsOptional() productVariantId?: string;
+  @IsIn(ASSET_KINDS) kind!: (typeof ASSET_KINDS)[number];
+  @IsIn(ASSET_STATUSES) @IsOptional() status?: (typeof ASSET_STATUSES)[number];
+  @IsIn(ASSET_CRITICALITIES) @IsOptional() criticality?:
+    (typeof ASSET_CRITICALITIES)[number];
+  @IsString() @MinLength(1) name!: string;
+  @IsString() @IsOptional() category?: string;
+  @IsString() @IsOptional() manufacturer?: string;
+  @IsString() @IsOptional() model?: string;
+  @IsString() @IsOptional() serialNumber?: string;
+  @IsString() @IsOptional() inventoryNumber?: string;
+  @IsString() @IsOptional() description?: string;
+  @IsISO8601() @IsOptional() installedAt?: string;
+  @IsISO8601() @IsOptional() purchasedAt?: string;
+  @IsISO8601() @IsOptional() warrantyExpiresAt?: string;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(3650)
+  @IsOptional()
+  serviceIntervalDays?: number;
+  @IsISO8601() @IsOptional() lastServicedAt?: string;
+  @IsISO8601() @IsOptional() nextServiceAt?: string;
+  @IsString() @IsOptional() notes?: string;
+}
+
+export class UpdateAssetDto {
+  @IsString() @IsOptional() customerAddressId?: string | null;
+  @IsString() @IsOptional() aquariumId?: string | null;
+  @IsString() @IsOptional() parentAssetId?: string | null;
+  @IsString() @IsOptional() productVariantId?: string | null;
+  @IsIn(ASSET_KINDS) @IsOptional() kind?: (typeof ASSET_KINDS)[number];
+  @IsIn(ASSET_STATUSES) @IsOptional() status?: (typeof ASSET_STATUSES)[number];
+  @IsIn(ASSET_CRITICALITIES) @IsOptional() criticality?:
+    (typeof ASSET_CRITICALITIES)[number];
+  @IsString() @MinLength(1) @IsOptional() name?: string;
+  @IsString() @IsOptional() category?: string | null;
+  @IsString() @IsOptional() manufacturer?: string | null;
+  @IsString() @IsOptional() model?: string | null;
+  @IsString() @IsOptional() serialNumber?: string | null;
+  @IsString() @IsOptional() inventoryNumber?: string | null;
+  @IsString() @IsOptional() description?: string | null;
+  @IsISO8601() @IsOptional() installedAt?: string | null;
+  @IsISO8601() @IsOptional() purchasedAt?: string | null;
+  @IsISO8601() @IsOptional() warrantyExpiresAt?: string | null;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(3650)
+  @IsOptional()
+  serviceIntervalDays?: number | null;
+  @IsISO8601() @IsOptional() lastServicedAt?: string | null;
+  @IsISO8601() @IsOptional() nextServiceAt?: string | null;
+  @IsString() @IsOptional() notes?: string | null;
+  @IsISO8601() expectedUpdatedAt!: string;
+}
