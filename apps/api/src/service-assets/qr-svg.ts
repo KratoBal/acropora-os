@@ -69,7 +69,8 @@ function reedSolomonDivisor(degree: number): number[] {
   for (let iteration = 0; iteration < degree; iteration++) {
     for (let index = 0; index < degree; index++) {
       result[index] = multiply(result[index]!, root);
-      if (index + 1 < degree) result[index] ^= result[index + 1]!;
+      if (index + 1 < degree)
+        result[index] = result[index]! ^ result[index + 1]!;
     }
     root = multiply(root, 0x02);
   }
