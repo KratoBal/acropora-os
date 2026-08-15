@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { getWebshopCapabilities } from "./webshop-authorization";
+import {
+  getServiceCapabilities,
+  getWebshopCapabilities,
+} from "./webshop-authorization";
 
 describe("getWebshopCapabilities", () => {
   it("gives managers the complete webshop workspace", () => {
@@ -36,5 +39,20 @@ describe("getWebshopCapabilities", () => {
     assert.equal(capabilities.ordersManage, false);
     assert.equal(capabilities.purchasingManage, false);
     assert.equal(capabilities.partnersManage, false);
+  });
+});
+
+describe("getServiceCapabilities", () => {
+  it("opens the field asset workspace for service users", () => {
+    const capabilities = getServiceCapabilities("SERVICE");
+    assert.equal(capabilities.workspace, true);
+    assert.equal(capabilities.assetsView, true);
+    assert.equal(capabilities.assetsManage, true);
+  });
+
+  it("keeps viewers read-only and webshop-only roles outside", () => {
+    assert.equal(getServiceCapabilities("VIEWER").assetsManage, false);
+    assert.equal(getServiceCapabilities("WAREHOUSE").workspace, false);
+    assert.equal(getServiceCapabilities("SALES").assetsView, false);
   });
 });

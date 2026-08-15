@@ -20,7 +20,8 @@ infrastructure, not field-service domain screens yet:
 The first business increment built on this foundation is the Webshop Manager
 workspace. It reuses the existing Acropora OS permissions and backend APIs for
 orders, purchasing, products/inventory, NAV incoming invoices and suppliers.
-The contractual field workflow follows after the webshop operations surface;
+The contractual field workflow now starts with the partner asset registry and
+authenticated QR deep links (`docs/SERVICE-ASSET-MANAGEMENT.md`). Work orders,
 aquarium maintenance and customer-facing ICP views remain later increments.
 
 ## Supported toolchain

@@ -55,6 +55,15 @@ function RootNavigator() {
         name="orders/[id]"
         options={{ title: "Rendelés részletei" }}
       />
+      <Stack.Screen name="assets/index" options={{ title: "Eszközök" }} />
+      <Stack.Screen
+        name="assets/[id]"
+        options={{ title: "Eszköz adatlap" }}
+      />
+      <Stack.Screen
+        name="assets/scan/[token]"
+        options={{ title: "QR-azonosítás" }}
+      />
     </Stack>
   );
 }

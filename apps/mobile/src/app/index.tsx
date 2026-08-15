@@ -14,6 +14,7 @@ import { OrderListCard } from "@/components/orders/OrderListCard";
 import { listUnasOrders } from "@/lib/api/orders";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import {
+  getServiceCapabilities,
   getWebshopCapabilities,
   userRoleLabel,
 } from "@/lib/auth/webshop-authorization";
@@ -31,6 +32,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const { status, user, signOut } = useAuth();
   const capabilities = user ? getWebshopCapabilities(user.role) : null;
+  const serviceCapabilities = user ? getServiceCapabilities(user.role) : null;
   const orders = useQuery({
     queryKey: ["unas-orders", { page: 1, pageSize: 5 }],
     queryFn: () => listUnasOrders(1, 5),
@@ -40,7 +42,8 @@ export default function HomeScreen() {
   if (
     (status !== "authenticated" && status !== "signingOut") ||
     !user ||
-    !capabilities
+    !capabilities ||
+    !serviceCapabilities
   ) {
     return <Redirect href="/login" />;
   }
@@ -52,7 +55,9 @@ export default function HomeScreen() {
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.hero}>
           <View style={styles.heroTopline}>
-            <Text style={styles.eyebrow}>WEBSHOP MANAGER</Text>
+            <Text style={styles.eyebrow}>
+              {capabilities.workspace ? "ACROPORA OS" : "FIELD SERVICE"}
+            </Text>
             <View style={styles.roleBadge}>
               <Text style={styles.roleBadgeText}>
                 {userRoleLabel(user.role)}
@@ -61,18 +66,21 @@ export default function HomeScreen() {
           </View>
           <Text style={styles.title}>Szia, {user.displayName}!</Text>
           <Text style={styles.subtitle}>
-            A webshop napi működéséhez tartozó adatok egy helyen.
+            {capabilities.workspace
+              ? "A napi működéshez tartozó adatok egy helyen."
+              : "Helyszíni eszközök, karbantartások és munkalapok."}
           </Text>
         </View>
 
-        {!capabilities.workspace ? (
+        {!capabilities.workspace && !serviceCapabilities.workspace ? (
           <View style={styles.accessCard}>
             <Text style={styles.accessTitle}>
               Ehhez a munkaterülethez nincs hozzáférésed
             </Text>
             <Text style={styles.accessText}>
               A Webshop Manager mobilnézetet az OWNER, ADMIN, MANAGER, SALES,
-              WAREHOUSE és VIEWER szerepkörök használhatják. A szerver minden
+              WAREHOUSE és VIEWER szerepkörök használhatják. A Szerviz
+              munkaterületet a SERVICE szerepkör is eléri. A szerver minden
               adatlekérést külön is jogosultság alapján ellenőriz.
             </Text>
           </View>
@@ -84,6 +92,14 @@ export default function HomeScreen() {
             </View>
 
             <View style={styles.modules}>
+              <ModuleCard
+                code="ES"
+                title="Eszközök"
+                description="Partnereszközök, QR-azonosítás és hierarchia"
+                available={serviceCapabilities.assetsView}
+                enabled
+                onPress={() => router.push("/assets")}
+              />
               <ModuleCard
                 code="RE"
                 title="Rendelések"

@@ -63,6 +63,24 @@ export type {
   UserRole,
 } from "./auth.js";
 export type {
+  AssetAddressSummary,
+  AssetAquariumSummary,
+  AssetCriticality,
+  AssetCustomerSummary,
+  AssetDetail,
+  AssetEventSummary,
+  AssetEventType,
+  AssetHierarchyItem,
+  AssetKind,
+  AssetListItem,
+  AssetListResponse,
+  AssetProductSummary,
+  AssetQrCode,
+  AssetStatus,
+  CreateAssetInput,
+  UpdateAssetInput,
+} from "./asset-management.js";
+export type {
   CreateCustomerAddressInput,
   CreateCustomerInput,
   CustomerAddress,

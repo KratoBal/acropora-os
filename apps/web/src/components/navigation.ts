@@ -93,7 +93,7 @@ export const businessNavigation: AppNavigationItem[] = [
     permission: PERMISSIONS.FINANCE_VIEW,
   },
   {
-    href: "/szerviz",
+    href: "/szerviz/eszkozok",
     label: "Szerviz",
     icon: "service",
     permission: PERMISSIONS.SERVICE_VIEW,
