@@ -4,7 +4,7 @@ export type FoxpostSettlementStatus =
 export type FoxpostSettlementLineStatus =
   "MATCHED" | "ORDER_NOT_FOUND" | "INVOICE_NOT_FOUND";
 
-export type FoxpostResolutionSource = "LOCAL" | "UNAS";
+export type FoxpostResolutionSource = "LOCAL" | "UNAS" | "MANUAL";
 
 export interface FoxpostSettlementLine {
   id: string;
@@ -20,6 +20,10 @@ export interface FoxpostSettlementLine {
   resolutionSource?: FoxpostResolutionSource;
   status: FoxpostSettlementLineStatus;
   errorCode?: string;
+  manualApprovedAt?: string;
+  manualApprovedByUserId?: string;
+  manualApprovedByDisplayName?: string;
+  updatedAt: string;
 }
 
 export interface FoxpostSettlementSummary {
@@ -74,6 +78,7 @@ export interface FoxpostMonthlyReportSummary {
   transferredAmount: string;
   generatedAt: string;
   blockedByUnresolvedSettlements: number;
+  unresolvedLineCount: number;
 }
 
 export interface FoxpostSyncSummary {
@@ -90,3 +95,10 @@ export interface FoxpostReprocessResult {
   settlement: FoxpostSettlementDetail;
   reportRegenerated: boolean;
 }
+
+export interface FoxpostManualApprovalInput {
+  invoiceNumber: string;
+  expectedUpdatedAt: string;
+}
+
+export type FoxpostManualApprovalResult = FoxpostReprocessResult;

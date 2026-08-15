@@ -27,7 +27,12 @@ const summaryInclude = {
 } as const;
 
 const detailInclude = {
-  lines: { orderBy: { sourceRowNumber: "asc" } },
+  lines: {
+    orderBy: { sourceRowNumber: "asc" },
+    include: {
+      manualApprovedBy: { select: { id: true, displayName: true } },
+    },
+  },
 } as const;
 
 type SettlementSummaryRow = Prisma.FoxpostSettlementGetPayload<{
@@ -106,6 +111,11 @@ function toDetail(row: SettlementDetailRow): FoxpostSettlementDetail {
       resolutionSource: line.resolutionSource ?? undefined,
       status: line.status,
       errorCode: line.errorCode ?? undefined,
+      manualApprovedAt: line.manualApprovedAt?.toISOString(),
+      manualApprovedByUserId: line.manualApprovedByUserId ?? undefined,
+      manualApprovedByDisplayName:
+        line.manualApprovedBy?.displayName ?? undefined,
+      updatedAt: line.updatedAt.toISOString(),
     })),
   };
 }
@@ -136,9 +146,19 @@ export interface FoxpostResolvedLineInput {
   salesOrderId: string | null;
   invoiceId: string | null;
   invoiceNumber: string | null;
-  resolutionSource: "LOCAL" | "UNAS" | null;
+  resolutionSource: "LOCAL" | "UNAS" | "MANUAL" | null;
   status: "MATCHED" | "ORDER_NOT_FOUND" | "INVOICE_NOT_FOUND";
   errorCode: string | null;
+  manualApprovedByUserId?: string | null;
+  manualApprovedAt?: Date | null;
+}
+
+export interface FoxpostManualLineResolution {
+  sourceRowNumber: number;
+  referenceCode: string;
+  invoiceNumber: string;
+  manualApprovedByUserId: string | null;
+  manualApprovedAt: Date;
 }
 
 export interface LocalOrderResolution {
@@ -259,6 +279,39 @@ export class FoxpostSettlementRepository extends Repository {
       xlsx: Buffer.from(row.xlsxContent),
       pdf: Buffer.from(row.pdfContent),
     };
+  }
+
+  async manualLineResolutions(
+    settlementId: string,
+  ): Promise<FoxpostManualLineResolution[]> {
+    const rows = await prisma.foxpostSettlementLine.findMany({
+      where: {
+        settlementId,
+        resolutionSource: "MANUAL",
+        invoiceNumber: { not: null },
+        manualApprovedAt: { not: null },
+      },
+      select: {
+        sourceRowNumber: true,
+        referenceCode: true,
+        invoiceNumber: true,
+        manualApprovedByUserId: true,
+        manualApprovedAt: true,
+      },
+    });
+    return rows.flatMap((row) =>
+      row.invoiceNumber && row.manualApprovedAt
+        ? [
+            {
+              sourceRowNumber: row.sourceRowNumber,
+              referenceCode: row.referenceCode,
+              invoiceNumber: row.invoiceNumber,
+              manualApprovedByUserId: row.manualApprovedByUserId,
+              manualApprovedAt: row.manualApprovedAt,
+            },
+          ]
+        : [],
+    );
   }
 
   async saveProcessingResult(
@@ -396,10 +449,103 @@ export class FoxpostSettlementRepository extends Repository {
     return toDetail(row);
   }
 
+  async approveLine(input: {
+    settlementId: string;
+    lineId: string;
+    invoiceNumber: string;
+    expectedUpdatedAt: Date;
+    actorUserId: string;
+  }): Promise<{ year: number; month: number }> {
+    return prisma.$transaction(async (tx) => {
+      const line = await tx.foxpostSettlementLine.findFirst({
+        where: { id: input.lineId, settlementId: input.settlementId },
+        select: {
+          id: true,
+          sourceRowNumber: true,
+          referenceCode: true,
+          invoiceNumber: true,
+          status: true,
+          updatedAt: true,
+          settlement: {
+            select: {
+              gmailMessageId: true,
+              invoiceIssueDate: true,
+            },
+          },
+        },
+      });
+      if (!line)
+        throw new NotFoundException("FOXPOST_SETTLEMENT_LINE_NOT_FOUND");
+      if (line.updatedAt.getTime() !== input.expectedUpdatedAt.getTime())
+        throw new ConflictException("FOXPOST_SETTLEMENT_LINE_CHANGED");
+      if (!line.settlement.invoiceIssueDate)
+        throw new ConflictException("FOXPOST_SETTLEMENT_NOT_PROCESSED");
+
+      const updated = await tx.foxpostSettlementLine.updateMany({
+        where: {
+          id: input.lineId,
+          settlementId: input.settlementId,
+          updatedAt: input.expectedUpdatedAt,
+        },
+        data: {
+          salesOrderId: null,
+          invoiceId: null,
+          invoiceNumber: input.invoiceNumber,
+          resolutionSource: "MANUAL",
+          status: "MATCHED",
+          errorCode: null,
+          manualApprovedByUserId: input.actorUserId,
+          manualApprovedAt: new Date(),
+        },
+      });
+      if (updated.count !== 1)
+        throw new ConflictException("FOXPOST_SETTLEMENT_LINE_CHANGED");
+
+      const unresolvedLineCount = await tx.foxpostSettlementLine.count({
+        where: {
+          settlementId: input.settlementId,
+          status: { not: "MATCHED" },
+        },
+      });
+      await tx.foxpostSettlement.update({
+        where: { id: input.settlementId },
+        data: {
+          status: unresolvedLineCount ? "NEEDS_REVIEW" : "COMPLETED",
+          errorCode: unresolvedLineCount
+            ? "FOXPOST_ORDER_INVOICE_REVIEW_REQUIRED"
+            : null,
+          processedAt: new Date(),
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          userId: input.actorUserId,
+          action: "FOXPOST_SETTLEMENT_LINE_MANUALLY_APPROVED",
+          entityType: "FoxpostSettlement",
+          entityId: input.settlementId,
+          metadata: {
+            settlementId: input.settlementId,
+            settlementLineId: input.lineId,
+            gmailMessageId: line.settlement.gmailMessageId,
+            sourceRowNumber: line.sourceRowNumber,
+            referenceCode: line.referenceCode,
+            previousInvoiceNumber: line.invoiceNumber,
+            previousStatus: line.status,
+            approvedInvoiceNumber: input.invoiceNumber,
+          },
+        },
+      });
+      return {
+        year: line.settlement.invoiceIssueDate.getUTCFullYear(),
+        month: line.settlement.invoiceIssueDate.getUTCMonth() + 1,
+      };
+    });
+  }
+
   async reportSource(year: number, month: number) {
     const rows = await prisma.foxpostSettlement.findMany({
       where: {
-        status: "COMPLETED",
+        status: { in: ["COMPLETED", "NEEDS_REVIEW"] },
         invoiceIssueDate: {
           gte: new Date(Date.UTC(year, month - 1, 1)),
           lt: new Date(Date.UTC(year, month, 1)),
@@ -412,9 +558,21 @@ export class FoxpostSettlementRepository extends Repository {
         collectedAmount: true,
         invoiceGrossAmount: true,
         transferredAmount: true,
+        gmailMessageId: true,
+        gmailSubject: true,
         lines: {
-          where: { status: "MATCHED", invoiceNumber: { not: null } },
-          select: { invoiceNumber: true },
+          select: {
+            sourceRowNumber: true,
+            referenceCode: true,
+            transactionDate: true,
+            recipientName: true,
+            parcelBarcode: true,
+            collectedAmount: true,
+            invoiceNumber: true,
+            status: true,
+            errorCode: true,
+          },
+          orderBy: { sourceRowNumber: "asc" },
         },
       },
       orderBy: [{ invoiceIssueDate: "asc" }, { settlementCode: "asc" }],
@@ -427,7 +585,27 @@ export class FoxpostSettlementRepository extends Repository {
       invoiceGrossAmount: row.invoiceGrossAmount!.toNumber(),
       transferredAmount: row.transferredAmount!.toNumber(),
       invoiceNumbers: row.lines.flatMap((line) =>
-        line.invoiceNumber ? [line.invoiceNumber] : [],
+        line.status === "MATCHED" && line.invoiceNumber
+          ? [line.invoiceNumber]
+          : [],
+      ),
+      unresolvedLines: row.lines.flatMap((line) =>
+        line.status !== "MATCHED"
+          ? [
+              {
+                gmailMessageId: row.gmailMessageId,
+                gmailSubject: row.gmailSubject,
+                sourceRowNumber: line.sourceRowNumber,
+                referenceCode: line.referenceCode,
+                transactionDate: line.transactionDate,
+                recipientName: line.recipientName,
+                parcelBarcode: line.parcelBarcode,
+                collectedAmount: line.collectedAmount.toNumber(),
+                status: line.status,
+                errorCode: line.errorCode,
+              },
+            ]
+          : [],
       ),
     }));
   }
@@ -474,6 +652,10 @@ export class FoxpostSettlementRepository extends Repository {
           report.year,
           report.month,
         ),
+        unresolvedLineCount: await this.unresolvedLinesForMonth(
+          report.year,
+          report.month,
+        ),
       })),
     );
   }
@@ -482,9 +664,6 @@ export class FoxpostSettlementRepository extends Repository {
     year: number,
     month: number,
   ): Promise<{ filename: string; buffer: Buffer }> {
-    const unresolved = await this.unresolvedForMonth(year, month);
-    if (unresolved > 0)
-      throw new ConflictException("FOXPOST_MONTH_HAS_UNRESOLVED_SETTLEMENTS");
     const report = await prisma.foxpostMonthlyReport.findUnique({
       where: { year_month: { year, month } },
       select: { filename: true, content: true },
@@ -501,6 +680,23 @@ export class FoxpostSettlementRepository extends Repository {
         invoiceIssueDate: {
           gte: new Date(Date.UTC(year, month - 1, 1)),
           lt: new Date(Date.UTC(year, month, 1)),
+        },
+      },
+    });
+  }
+
+  private unresolvedLinesForMonth(
+    year: number,
+    month: number,
+  ): Promise<number> {
+    return prisma.foxpostSettlementLine.count({
+      where: {
+        status: { not: "MATCHED" },
+        settlement: {
+          invoiceIssueDate: {
+            gte: new Date(Date.UTC(year, month - 1, 1)),
+            lt: new Date(Date.UTC(year, month, 1)),
+          },
         },
       },
     });

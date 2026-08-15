@@ -28,8 +28,15 @@ adatot.
    Ha a helyi tükörből hiányzik a rendelés vagy a számla, a rendszer célzott,
    read-only UNAS `getOrderByKey` hívást végez.
 6. Hiányzó rendelés vagy még ki nem állított számla esetén az elszámolás
-   `NEEDS_REVIEW` állapotú. A havi könyvelési fájl addig nem tölthető le.
-7. Sikeres újrafeldolgozás után a havi riport automatikusan újragenerálódik.
+   `NEEDS_REVIEW` állapotú. Ez nem blokkolja a havi fájlt: az automatikusan
+   feloldott számlák a `FOXPOST`, a hibás sorok az `Ellenőrzendő tételek`
+   munkalapon jelennek meg, Gmail- és sorazonosítókkal együtt.
+7. A kezelő az eredeti referenciát közvetlen számlaszámként elfogadhatja, vagy
+   más számlaszámot adhat meg. A kézi döntés ideje és felhasználója megmarad,
+   és egy későbbi újrafeldolgozás sem írja felül.
+8. Kézi jóváhagyás és újrafeldolgozás után a havi riport automatikusan
+   újragenerálódik; csak a továbbra is feloldatlan sorok maradnak az
+   ellenőrzési munkalapon.
 
 ## Idempotencia és fájlmegőrzés
 
@@ -75,4 +82,5 @@ API-replika mellett használható.
 - `finance.view`: elszámolások, sorhibák és havi riportok megtekintése,
   riportletöltés;
 - `finance.manage`: kézi Gmail-ellenőrzés és egy elszámolás
-  újrafeldolgozása.
+  újrafeldolgozása, valamint az ellenőrzendő sorok számlaszámának kézi
+  jóváhagyása vagy felülírása.

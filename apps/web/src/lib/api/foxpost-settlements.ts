@@ -1,4 +1,6 @@
 import type {
+  FoxpostManualApprovalInput,
+  FoxpostManualApprovalResult,
   FoxpostMonthlyReportSummary,
   FoxpostReprocessResult,
   FoxpostSettlementDetail,
@@ -80,6 +82,22 @@ export const foxpostSettlementsApi = {
       `/integrations/foxpost/settlements/${encodeURIComponent(id)}/reprocess`,
       token,
       { method: "POST" },
+    );
+  },
+  approveLine(
+    token: string,
+    settlementId: string,
+    lineId: string,
+    input: FoxpostManualApprovalInput,
+  ) {
+    return apiRequest<FoxpostManualApprovalResult>(
+      `/integrations/foxpost/settlements/${encodeURIComponent(settlementId)}/lines/${encodeURIComponent(lineId)}/approve`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
     );
   },
   reports(token: string) {

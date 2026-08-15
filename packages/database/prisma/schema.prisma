@@ -92,6 +92,7 @@ enum FoxpostSettlementLineStatus {
 enum FoxpostResolutionSource {
   LOCAL
   UNAS
+  MANUAL
 }
 
 enum FoxpostSyncRunStatus {
@@ -427,6 +428,7 @@ model User {
   createdProducts            Product[]                     @relation("ProductCreatedBy")
   createdProjects            Project[]                     @relation("ProjectCreatedBy")
   projectReservations        ProjectInventoryReservation[]
+  approvedFoxpostLines       FoxpostSettlementLine[]       @relation("FoxpostLineManualApprovedBy")
 
   @@index([role, isActive])
 }
@@ -2213,32 +2215,36 @@ model FoxpostSettlement {
 }
 
 model FoxpostSettlementLine {
-  id               String                      @id @default(cuid())
-  settlementId     String
-  sourceRowNumber  Int
-  referenceCode    String
-  transactionDate  DateTime
-  recipientName    String?
-  parcelBarcode    String?
-  collectedAmount  Decimal                     @db.Decimal(19, 4)
-  salesOrderId     String?
-  invoiceId        String?
-  invoiceNumber    String?
-  resolutionSource FoxpostResolutionSource?
-  status           FoxpostSettlementLineStatus
-  errorCode        String?
-  createdAt        DateTime                    @default(now())
-  updatedAt        DateTime                    @updatedAt
+  id                     String                      @id @default(cuid())
+  settlementId           String
+  sourceRowNumber        Int
+  referenceCode          String
+  transactionDate        DateTime
+  recipientName          String?
+  parcelBarcode          String?
+  collectedAmount        Decimal                     @db.Decimal(19, 4)
+  salesOrderId           String?
+  invoiceId              String?
+  invoiceNumber          String?
+  resolutionSource       FoxpostResolutionSource?
+  status                 FoxpostSettlementLineStatus
+  errorCode              String?
+  manualApprovedByUserId String?
+  manualApprovedAt       DateTime?
+  createdAt              DateTime                    @default(now())
+  updatedAt              DateTime                    @updatedAt
 
-  settlement FoxpostSettlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
-  salesOrder SalesOrder?       @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
-  invoice    Invoice?          @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  settlement       FoxpostSettlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  salesOrder       SalesOrder?       @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
+  invoice          Invoice?          @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  manualApprovedBy User?             @relation("FoxpostLineManualApprovedBy", fields: [manualApprovedByUserId], references: [id], onDelete: SetNull)
 
   @@unique([settlementId, sourceRowNumber])
   @@index([referenceCode])
   @@index([status])
   @@index([salesOrderId])
   @@index([invoiceId])
+  @@index([manualApprovedByUserId, manualApprovedAt])
 }
 
 /// A könyvelésnek átadható havi Foxpost XLSX mindig újragenerálódik, amikor

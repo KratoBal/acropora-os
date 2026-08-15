@@ -9,6 +9,20 @@ export interface FoxpostReportSettlement {
   invoiceGrossAmount: number;
   transferredAmount: number;
   invoiceNumbers: string[];
+  unresolvedLines: FoxpostReportUnresolvedLine[];
+}
+
+export interface FoxpostReportUnresolvedLine {
+  gmailMessageId: string;
+  gmailSubject: string | null;
+  sourceRowNumber: number;
+  referenceCode: string;
+  transactionDate: Date;
+  recipientName: string | null;
+  parcelBarcode: string | null;
+  collectedAmount: number;
+  status: "ORDER_NOT_FOUND" | "INVOICE_NOT_FOUND";
+  errorCode: string | null;
 }
 
 export interface BuiltFoxpostMonthlyReport {
@@ -27,6 +41,14 @@ function monthLabel(year: number, month: number): string {
     month: "long",
     timeZone: "UTC",
   }).format(new Date(Date.UTC(year, month - 1, 1)));
+}
+
+function unresolvedStatusLabel(
+  status: FoxpostReportUnresolvedLine["status"],
+): string {
+  return status === "ORDER_NOT_FOUND"
+    ? "Rendelés nem található"
+    : "Számla nem található";
 }
 
 @Injectable()
@@ -213,6 +235,80 @@ export class FoxpostMonthlyReportXlsx {
     }
     sheet.headerFooter.oddFooter = "Acropora OS - Foxpost elszámolás";
     sheet.headerFooter.oddHeader = `${year}-${String(month).padStart(2, "0")}`;
+
+    const reviewSheet = workbook.addWorksheet("Ellenőrzendő tételek", {
+      views: [{ state: "frozen", ySplit: 1, showGridLines: false }],
+      pageSetup: {
+        orientation: "landscape",
+        paperSize: 9,
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 0,
+      },
+    });
+    reviewSheet.columns = [
+      { header: "Elszámolás", key: "settlementCode", width: 14 },
+      { header: "Foxpost számla", key: "foxpostInvoiceNumber", width: 20 },
+      { header: "Gmail üzenet ID", key: "gmailMessageId", width: 24 },
+      { header: "Gmail tárgy", key: "gmailSubject", width: 34 },
+      { header: "Forrás sor", key: "sourceRowNumber", width: 12 },
+      { header: "Referencia kód", key: "referenceCode", width: 24 },
+      { header: "Tranzakció", key: "transactionDate", width: 14 },
+      { header: "Címzett", key: "recipientName", width: 26 },
+      { header: "Vonalkód", key: "parcelBarcode", width: 22 },
+      { header: "Beszedett", key: "collectedAmount", width: 16 },
+      { header: "Állapot", key: "status", width: 24 },
+      { header: "Hibakód", key: "errorCode", width: 34 },
+    ];
+    const unresolvedRows = settlements.flatMap((settlement) =>
+      settlement.unresolvedLines.map((line) => ({
+        settlementCode: settlement.settlementCode,
+        foxpostInvoiceNumber: settlement.foxpostInvoiceNumber,
+        ...line,
+        status: unresolvedStatusLabel(line.status),
+      })),
+    );
+    if (unresolvedRows.length) {
+      for (const row of unresolvedRows) reviewSheet.addRow(row);
+      reviewSheet.getColumn("transactionDate").numFmt = "yyyy-mm-dd";
+      reviewSheet.getColumn("collectedAmount").numFmt = '#,##0 "Ft"';
+      reviewSheet.autoFilter = {
+        from: { row: 1, column: 1 },
+        to: { row: unresolvedRows.length + 1, column: 12 },
+      };
+    } else {
+      reviewSheet.addRow({
+        settlementCode: "Nincs ellenőrzendő tétel.",
+      });
+      reviewSheet.mergeCells("A2:L2");
+    }
+    reviewSheet.getRow(1).font = {
+      name: "Aptos",
+      size: 10,
+      bold: true,
+      color: { argb: "FFFFFFFF" },
+    };
+    reviewSheet.getRow(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF334155" },
+    };
+    reviewSheet.getRow(1).alignment = { vertical: "middle" };
+    reviewSheet.getRow(1).height = 22;
+    for (let row = 2; row <= reviewSheet.rowCount; row += 1) {
+      reviewSheet.getRow(row).font = {
+        name: "Aptos",
+        size: 10,
+        color: { argb: "FF0F172A" },
+      };
+      reviewSheet.getRow(row).alignment = {
+        vertical: "middle",
+        wrapText: true,
+      };
+      reviewSheet.getRow(row).height = 30;
+    }
+    reviewSheet.headerFooter.oddFooter =
+      "Acropora OS - kézi ellenőrzést igénylő Foxpost tételek";
 
     const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
     return {

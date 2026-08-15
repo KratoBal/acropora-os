@@ -16,6 +16,7 @@ import {
   PERMISSIONS,
   type FoxpostMonthlyReportSummary,
   type FoxpostSettlementDetail,
+  type FoxpostSettlementLine,
   type FoxpostSettlementListResponse,
   type FoxpostSettlementStatus,
 } from "@acropora/types";
@@ -55,6 +56,17 @@ function lineStatus(status: string) {
   return <Badge variant="warning">Számla még nincs</Badge>;
 }
 
+function lineResolution(line: FoxpostSettlementLine) {
+  if (line.resolutionSource === "MANUAL")
+    return <Badge variant="info">Kézzel jóváhagyva</Badge>;
+  return lineStatus(line.status);
+}
+
+function suggestedInvoiceNumber(line: FoxpostSettlementLine): string {
+  if (line.invoiceNumber) return line.invoiceNumber;
+  return line.referenceCode.includes("/") ? line.referenceCode : "";
+}
+
 export function FoxpostSettlementsPage() {
   const { session } = useAuth();
   const token = session?.token ?? "";
@@ -74,6 +86,9 @@ export function FoxpostSettlementsPage() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [invoiceDrafts, setInvoiceDrafts] = useState<Record<string, string>>(
+    {},
+  );
 
   const load = useCallback(async () => {
     if (!canView) return;
@@ -126,13 +141,62 @@ export function FoxpostSettlementsPage() {
   const openDetail = async (id: string) => {
     setError(null);
     try {
-      setSelected(await foxpostSettlementsApi.detail(token, id));
+      const detail = await foxpostSettlementsApi.detail(token, id);
+      setSelected(detail);
+      setInvoiceDrafts(
+        Object.fromEntries(
+          detail.lines.map((line) => [line.id, suggestedInvoiceNumber(line)]),
+        ),
+      );
     } catch (cause) {
       setError(
         cause instanceof Error
           ? cause.message
           : "A részletek nem tölthetők be.",
       );
+    }
+  };
+
+  const approveLine = async (line: FoxpostSettlementLine) => {
+    if (!selected || !canManage || working) return;
+    const invoiceNumber = (invoiceDrafts[line.id] ?? "").trim();
+    if (!invoiceNumber) {
+      setError("A jóváhagyáshoz add meg a számlaszámot.");
+      return;
+    }
+    setWorking(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await foxpostSettlementsApi.approveLine(
+        token,
+        selected.id,
+        line.id,
+        { invoiceNumber, expectedUpdatedAt: line.updatedAt },
+      );
+      setSelected(result.settlement);
+      setInvoiceDrafts(
+        Object.fromEntries(
+          result.settlement.lines.map((item) => [
+            item.id,
+            suggestedInvoiceNumber(item),
+          ]),
+        ),
+      );
+      setNotice(
+        result.settlement.status === "COMPLETED"
+          ? "A tétel jóváhagyva, az elszámolás elkészült és a havi XLSX frissült."
+          : "A tétel jóváhagyva és a havi XLSX frissült; maradt még ellenőrzendő sor.",
+      );
+      await load();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "A tétel jóváhagyása nem sikerült.",
+      );
+    } finally {
+      setWorking(false);
     }
   };
 
@@ -227,12 +291,12 @@ export function FoxpostSettlementsPage() {
           {loading ? <Skeleton className="h-20" /> : null}
           {!loading && reports.length === 0 ? (
             <p className="text-sm text-slate-500">
-              Még nincs teljesen feldolgozott havi Foxpost riport.
+              Még nincs feldolgozott havi Foxpost riport.
             </p>
           ) : null}
           {reports.length ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-left text-sm">
+              <table className="w-full min-w-[1040px] text-left text-sm">
                 <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
                   <tr>
                     <th className="p-3">Hónap</th>
@@ -263,21 +327,24 @@ export function FoxpostSettlementsPage() {
                         {formatAmount(report.transferredAmount)}
                       </td>
                       <td className="p-3 text-right">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          disabled={
-                            report.blockedByUnresolvedSettlements > 0 ||
-                            downloadingId === report.id
-                          }
-                          onClick={() => void download(report)}
-                        >
-                          {report.blockedByUnresolvedSettlements > 0
-                            ? `${report.blockedByUnresolvedSettlements} ellenőrzendő`
-                            : downloadingId === report.id
+                        <div className="flex flex-col items-end gap-1">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={downloadingId === report.id}
+                            onClick={() => void download(report)}
+                          >
+                            {downloadingId === report.id
                               ? "Letöltés…"
                               : "XLSX letöltése"}
-                        </Button>
+                          </Button>
+                          {report.unresolvedLineCount > 0 ? (
+                            <span className="text-xs text-amber-700">
+                              {report.unresolvedLineCount} ellenőrzendő tétel a
+                              külön munkalapon
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -379,7 +446,7 @@ export function FoxpostSettlementsPage() {
               <Alert
                 variant="info"
                 title="Ellenőrzés szükséges"
-                description={selected.errorCode}
+                description="Add meg a helyes számlaszámot az érintett sornál. Ha a Foxpost referencia már maga a számlaszám, a mező előre kitöltve jelenik meg; ellenőrzés után hagyd jóvá."
               />
             ) : null}
             <div className="grid gap-3 text-sm sm:grid-cols-3">
@@ -399,13 +466,13 @@ export function FoxpostSettlementsPage() {
               </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-left text-sm">
+              <table className="w-full min-w-[1040px] text-left text-sm">
                 <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
                   <tr>
                     <th className="p-3">Referencia kód</th>
                     <th>Címzett</th>
                     <th>Tranzakció</th>
-                    <th>Rendelési számla</th>
+                    <th>Rendelési számla / kézi jóváhagyás</th>
                     <th className="p-3">Párosítás</th>
                   </tr>
                 </thead>
@@ -420,10 +487,48 @@ export function FoxpostSettlementsPage() {
                         {formatDate(line.transactionDate)} ·{" "}
                         {formatAmount(line.collectedAmount)}
                       </td>
-                      <td className="font-mono text-xs">
-                        {line.invoiceNumber ?? "—"}
+                      <td className="py-2 pr-3">
+                        {line.status !== "MATCHED" && canManage ? (
+                          <div className="flex min-w-[290px] items-center gap-2">
+                            <input
+                              aria-label={`Számlaszám – ${line.referenceCode}`}
+                              className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                              value={invoiceDrafts[line.id] ?? ""}
+                              placeholder={line.referenceCode}
+                              maxLength={100}
+                              onChange={(event) =>
+                                setInvoiceDrafts((current) => ({
+                                  ...current,
+                                  [line.id]: event.target.value,
+                                }))
+                              }
+                            />
+                            <Button
+                              size="sm"
+                              onClick={() => void approveLine(line)}
+                              disabled={
+                                working ||
+                                !(invoiceDrafts[line.id] ?? "").trim()
+                              }
+                            >
+                              Jóváhagyás
+                            </Button>
+                          </div>
+                        ) : (
+                          <div>
+                            <span className="font-mono text-xs">
+                              {line.invoiceNumber ?? "—"}
+                            </span>
+                            {line.manualApprovedByDisplayName ? (
+                              <p className="mt-1 text-xs text-slate-500">
+                                {line.manualApprovedByDisplayName} ·{" "}
+                                {formatDate(line.manualApprovedAt)}
+                              </p>
+                            ) : null}
+                          </div>
+                        )}
                       </td>
-                      <td className="p-3">{lineStatus(line.status)}</td>
+                      <td className="p-3">{lineResolution(line)}</td>
                     </tr>
                   ))}
                 </tbody>
