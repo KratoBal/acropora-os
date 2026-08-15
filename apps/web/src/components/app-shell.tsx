@@ -19,6 +19,7 @@ import {
   isNavigationItemActive,
   primaryNavigation,
   secondaryNavigation,
+  serviceNavigation,
   settingsNavigation,
   unasSettingsNavigation,
   type AppNavigationItem,
@@ -100,6 +101,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const unasActive = visibleUnasNavigation.some((item) =>
     isNavigationItemActive(pathname, item),
   );
+  const visibleServiceNavigation = serviceNavigation.filter(canAccess);
+  const serviceActive = visibleServiceNavigation.some((item) =>
+    isNavigationItemActive(pathname, item),
+  );
 
   const navigation = (
     <>
@@ -137,6 +142,27 @@ export function AppShell({ children }: { children: ReactNode }) {
             onClick={() => setMobileNavigationOpen(false)}
           />
         ))}
+        {visibleServiceNavigation.length > 0 ? (
+          <NavigationGroup
+            label="Szerviz"
+            icon={<Icon name="service" />}
+            active={serviceActive}
+          >
+            <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-2">
+              {visibleServiceNavigation.map((item) => (
+                <NavItem
+                  key={item.href}
+                  href={item.href}
+                  label={item.label}
+                  icon={<Icon name={item.icon} />}
+                  active={isNavigationItemActive(pathname, item)}
+                  className="h-8 text-[13px]"
+                  onClick={() => setMobileNavigationOpen(false)}
+                />
+              ))}
+            </div>
+          </NavigationGroup>
+        ) : null}
       </div>
 
       <div className="mt-6 space-y-1 border-t border-slate-200 pt-4">

@@ -314,6 +314,15 @@ enum AssetEventType {
   PARENT_CHANGED
   STATUS_CHANGED
   QR_ROTATED
+  DOCUMENT_UPLOADED
+  DOCUMENT_DELETED
+}
+
+enum AssetDocumentType {
+  INVOICE
+  WARRANTY
+  MANUAL
+  OTHER
 }
 
 enum ExternalSystem {
@@ -460,9 +469,10 @@ model User {
   createdProjects            Project[]                     @relation("ProjectCreatedBy")
   projectReservations        ProjectInventoryReservation[]
   approvedFoxpostLines       FoxpostSettlementLine[]       @relation("FoxpostLineManualApprovedBy")
-  createdAssets              Asset[]                        @relation("AssetCreatedBy")
-  updatedAssets              Asset[]                        @relation("AssetUpdatedBy")
+  createdAssets              Asset[]                       @relation("AssetCreatedBy")
+  updatedAssets              Asset[]                       @relation("AssetUpdatedBy")
   assetEvents                AssetEvent[]
+  uploadedAssetDocuments     AssetDocument[]               @relation("AssetDocumentUploadedBy")
 
   @@index([role, isActive])
 }
@@ -817,6 +827,7 @@ model Supplier {
   purchaseInvoices      PurchaseInvoice[]
   preferredByExtensions ProductExtension[]
   invoices              Invoice[]
+  assets                Asset[]
 
   @@index([country, isActive])
 }
@@ -1925,8 +1936,8 @@ model ServiceJob {
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
-  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  aquarium Aquarium? @relation(fields: [aquariumId], references: [id], onDelete: SetNull)
+  customer Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  aquarium Aquarium?         @relation(fields: [aquariumId], references: [id], onDelete: SetNull)
   assets   ServiceJobAsset[]
 
   @@index([status, scheduledAt])
@@ -1959,14 +1970,17 @@ model Aquarium {
 
 /// A partnernél üzemelő, fizikailag azonosítható rendszer, berendezés vagy
 /// alkatrész. A `parentAssetId` önhivatkozó fa teszi lehetővé az összetett
-/// rendszereket (pl. szűrőrendszer -> felnyomó szivattyú). A kötelező
-/// customerId biztosítja, hogy minden eszköz mindig pontosan egy partnerhez
-/// legyen rendelve; a cím és az akvárium opcionális, finomabb elhelyezés.
+/// rendszereket (pl. szűrőrendszer -> felnyomó szivattyú). A
+/// customerId/supplierId közül pontosan az egyik van kitöltve (adatbázis
+/// CHECK constraint): az eszköz tulajdonosa lehet vevő vagy a Partnerek
+/// törzsében nyilvántartott beszállító. A cím és az akvárium csak vevőnél
+/// használható, finomabb elhelyezésként.
 model Asset {
   id                  String           @id @default(cuid())
   assetNumber         String           @unique
   qrToken             String           @unique @default(uuid()) @db.Uuid
-  customerId          String
+  customerId          String?
+  supplierId          String?
   customerAddressId   String?
   aquariumId          String?
   parentAssetId       String?
@@ -1994,18 +2008,21 @@ model Asset {
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
-  customer        Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  customerAddress CustomerAddress? @relation(fields: [customerAddressId], references: [id], onDelete: SetNull)
-  aquarium        Aquarium?        @relation(fields: [aquariumId], references: [id], onDelete: SetNull)
-  parentAsset     Asset?           @relation("AssetHierarchy", fields: [parentAssetId], references: [id], onDelete: SetNull)
-  childAssets     Asset[]          @relation("AssetHierarchy")
-  productVariant ProductVariant?  @relation(fields: [productVariantId], references: [id], onDelete: SetNull)
-  createdBy       User?            @relation("AssetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy       User?            @relation("AssetUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  customer        Customer?         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  supplier        Supplier?         @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  customerAddress CustomerAddress?  @relation(fields: [customerAddressId], references: [id], onDelete: SetNull)
+  aquarium        Aquarium?         @relation(fields: [aquariumId], references: [id], onDelete: SetNull)
+  parentAsset     Asset?            @relation("AssetHierarchy", fields: [parentAssetId], references: [id], onDelete: SetNull)
+  childAssets     Asset[]           @relation("AssetHierarchy")
+  productVariant  ProductVariant?   @relation(fields: [productVariantId], references: [id], onDelete: SetNull)
+  createdBy       User?             @relation("AssetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy       User?             @relation("AssetUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   events          AssetEvent[]
   serviceJobs     ServiceJobAsset[]
+  documents       AssetDocument[]
 
   @@index([customerId, status])
+  @@index([supplierId, status])
   @@index([customerAddressId])
   @@index([aquariumId])
   @@index([parentAssetId])
@@ -2013,6 +2030,28 @@ model Asset {
   @@index([nextServiceAt, status])
   @@index([serialNumber])
   @@index([inventoryNumber])
+}
+
+/// Eszközhöz csatolt, jogosultsággal védett PDF. A tartalom első körben az
+/// adatbázisban marad, hogy külön object storage nélkül is konzisztensen
+/// menthető és backupolható legyen; később Paperless hivatkozásra migrálható.
+model AssetDocument {
+  id           String            @id @default(cuid())
+  assetId      String
+  type         AssetDocumentType
+  fileName     String
+  contentType  String            @default("application/pdf")
+  sizeBytes    Int
+  sha256       String            @db.VarChar(64)
+  content      Bytes
+  uploadedById String?
+  createdAt    DateTime          @default(now())
+
+  asset      Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  uploadedBy User? @relation("AssetDocumentUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([assetId, type, createdAt])
+  @@index([sha256])
 }
 
 /// Append-only üzleti előzmény az eszköz létrehozásáról, áthelyezéséről,

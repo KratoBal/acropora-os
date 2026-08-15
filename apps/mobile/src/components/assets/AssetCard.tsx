@@ -28,7 +28,7 @@ export function AssetCard({
         <Text style={styles.status}>{STATUS_LABELS[asset.status]}</Text>
       </View>
       <Text style={styles.name}>{asset.name}</Text>
-      <Text style={styles.customer}>{asset.customer.displayName}</Text>
+      <Text style={styles.customer}>{asset.owner.displayName}</Text>
       {asset.address ? (
         <Text style={styles.meta}>{asset.address.formatted}</Text>
       ) : null}

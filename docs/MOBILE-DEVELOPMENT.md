@@ -24,6 +24,12 @@ The contractual field workflow now starts with the partner asset registry and
 authenticated QR deep links (`docs/SERVICE-ASSET-MANAGEMENT.md`). Work orders,
 aquarium maintenance and customer-facing ICP views remain later increments.
 
+Az eszközmodul `expo-camera`, `expo-print` és `expo-sharing` natív modulokat
+használ a QR-beolvasáshoz, valamint a 30×30 mm-es címke nyomtatásához és
+gyártói nyomtatóapp felé továbbításához. E függőségek hozzáadása után új EAS
+development/preview/production build szükséges; OTA frissítés önmagában nem
+elég.
+
 ## Supported toolchain
 
 - Node.js 22 or newer (the repository CI uses Node 22);

@@ -34,4 +34,6 @@ export const assetEventLabel: Record<AssetEventType, string> = {
   PARENT_CHANGED: "Hierarchia módosítva",
   STATUS_CHANGED: "Státusz módosítva",
   QR_ROTATED: "QR-kód lecserélve",
+  DOCUMENT_UPLOADED: "Dokumentum feltöltve",
+  DOCUMENT_DELETED: "Dokumentum törölve",
 };

@@ -1,14 +1,16 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 import type {
   AssetAddressSummary,
   AssetDetail,
+  AssetDocumentSummary,
   AssetEventSummary,
   AssetHierarchyItem,
   AssetListItem,
   AssetListResponse,
+  AssetOwnerListResponse,
 } from "@acropora/types";
 
 import { generateCode } from "../common/code-generator.util.js";
@@ -33,6 +35,12 @@ function optionalText(value: string | null | undefined) {
 function optionalDate(value: string | null | undefined) {
   if (value === undefined) return undefined;
   return value === null ? null : new Date(value);
+}
+
+function addDays(value: Date, days: number) {
+  const result = new Date(value);
+  result.setUTCDate(result.getUTCDate() + days);
+  return result;
 }
 
 function hierarchyItem(row: {
@@ -62,6 +70,22 @@ function addressSummary(
   };
 }
 
+function supplierAddressSummary(
+  row: AssetSummaryRow["supplier"],
+): AssetAddressSummary | undefined {
+  if (!row) return undefined;
+  const formatted = [
+    [row.postalCode, row.city].filter(Boolean).join(" "),
+    row.addressLine1,
+    row.addressLine2,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  return formatted
+    ? { id: `supplier:${row.id}`, name: undefined, formatted }
+    : undefined;
+}
+
 function jsonPayload(value: Record<string, unknown>): Prisma.InputJsonObject {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonObject;
 }
@@ -76,7 +100,11 @@ export class ServiceAssetsRepository extends Repository {
     const where: Prisma.AssetWhereInput = {
       ...(query.status === "ALL" ? {} : { status: query.status }),
       ...(query.kind ? { kind: query.kind } : {}),
-      ...(query.customerId ? { customerId: query.customerId } : {}),
+      ...(query.ownerType === "CUSTOMER" && query.ownerId
+        ? { customerId: query.ownerId }
+        : query.ownerType === "SUPPLIER" && query.ownerId
+          ? { supplierId: query.ownerId }
+          : {}),
       ...(query.aquariumId ? { aquariumId: query.aquariumId } : {}),
       ...(query.parentAssetId ? { parentAssetId: query.parentAssetId } : {}),
       ...(query.dueBefore
@@ -90,10 +118,20 @@ export class ServiceAssetsRepository extends Repository {
               { manufacturer: { contains: query.search, mode: "insensitive" } },
               { model: { contains: query.search, mode: "insensitive" } },
               { serialNumber: { contains: query.search, mode: "insensitive" } },
-              { inventoryNumber: { contains: query.search, mode: "insensitive" } },
+              {
+                inventoryNumber: {
+                  contains: query.search,
+                  mode: "insensitive",
+                },
+              },
               {
                 customer: {
                   displayName: { contains: query.search, mode: "insensitive" },
+                },
+              },
+              {
+                supplier: {
+                  name: { contains: query.search, mode: "insensitive" },
                 },
               },
             ],
@@ -121,12 +159,68 @@ export class ServiceAssetsRepository extends Repository {
     };
   }
 
+  async owners(): Promise<AssetOwnerListResponse> {
+    const [customers, suppliers] = await Promise.all([
+      prisma.customer.findMany({
+        where: { isActive: true },
+        include: {
+          addresses: { orderBy: [{ isDefault: "desc" }, { id: "asc" }] },
+        },
+        orderBy: [{ displayName: "asc" }, { id: "asc" }],
+      }),
+      prisma.supplier.findMany({
+        where: { isActive: true },
+        orderBy: [{ name: "asc" }, { id: "asc" }],
+      }),
+    ]);
+    const items: AssetOwnerListResponse["items"] = [
+      ...customers.map((customer) => ({
+        type: "CUSTOMER" as const,
+        id: customer.id,
+        code: customer.customerNumber,
+        displayName: customer.displayName,
+        isActive: customer.isActive,
+        addresses: customer.addresses.map((address) => ({
+          id: address.id,
+          name: address.name ?? undefined,
+          formatted: `${address.postalCode} ${address.city}, ${address.line1}${address.line2 ? `, ${address.line2}` : ""}`,
+        })),
+      })),
+      ...suppliers.map((supplier) => {
+        const formatted = [
+          [supplier.postalCode, supplier.city].filter(Boolean).join(" "),
+          supplier.addressLine1,
+          supplier.addressLine2,
+        ]
+          .filter(Boolean)
+          .join(", ");
+        const address = formatted
+          ? { id: `supplier:${supplier.id}`, formatted }
+          : undefined;
+        return {
+          type: "SUPPLIER" as const,
+          id: supplier.id,
+          code: supplier.code,
+          displayName: supplier.name,
+          isActive: supplier.isActive,
+          address,
+          addresses: [],
+        };
+      }),
+    ].sort((left, right) =>
+      left.displayName.localeCompare(right.displayName, "hu"),
+    );
+    return { items };
+  }
+
   async detail(id: string): Promise<AssetDetail | null> {
     const row = await prisma.asset.findUnique({
       where: { id },
       include: assetDetailInclude,
     });
-    return row ? this.toDetail(row, await this.ancestors(row.parentAssetId)) : null;
+    return row
+      ? this.toDetail(row, await this.ancestors(row.parentAssetId))
+      : null;
   }
 
   async detailByQrToken(qrToken: string): Promise<AssetDetail | null> {
@@ -134,22 +228,33 @@ export class ServiceAssetsRepository extends Repository {
       where: { qrToken },
       include: assetDetailInclude,
     });
-    return row ? this.toDetail(row, await this.ancestors(row.parentAssetId)) : null;
+    return row
+      ? this.toDetail(row, await this.ancestors(row.parentAssetId))
+      : null;
   }
 
   async validationContext(input: {
-    customerId: string;
+    ownerType: "CUSTOMER" | "SUPPLIER";
+    ownerId: string;
     customerAddressId?: string | null;
     aquariumId?: string | null;
     parentAssetId?: string | null;
     productVariantId?: string | null;
   }) {
-    const [customer, address, aquarium, parent, productVariant] =
+    const [customer, supplier, address, aquarium, parent, productVariant] =
       await Promise.all([
-        prisma.customer.findUnique({
-          where: { id: input.customerId },
-          select: { id: true, isActive: true },
-        }),
+        input.ownerType === "CUSTOMER"
+          ? prisma.customer.findUnique({
+              where: { id: input.ownerId },
+              select: { id: true, isActive: true },
+            })
+          : null,
+        input.ownerType === "SUPPLIER"
+          ? prisma.supplier.findUnique({
+              where: { id: input.ownerId },
+              select: { id: true, isActive: true },
+            })
+          : null,
         input.customerAddressId
           ? prisma.customerAddress.findUnique({
               where: { id: input.customerAddressId },
@@ -168,6 +273,7 @@ export class ServiceAssetsRepository extends Repository {
               select: {
                 id: true,
                 customerId: true,
+                supplierId: true,
                 customerAddressId: true,
                 aquariumId: true,
                 status: true,
@@ -181,7 +287,7 @@ export class ServiceAssetsRepository extends Repository {
             })
           : null,
       ]);
-    return { customer, address, aquarium, parent, productVariant };
+    return { customer, supplier, address, aquarium, parent, productVariant };
   }
 
   async basic(id: string) {
@@ -190,11 +296,16 @@ export class ServiceAssetsRepository extends Repository {
       select: {
         id: true,
         customerId: true,
+        supplierId: true,
         customerAddressId: true,
         aquariumId: true,
         parentAssetId: true,
         productVariantId: true,
         status: true,
+        installedAt: true,
+        lastServicedAt: true,
+        serviceIntervalDays: true,
+        nextServiceAt: true,
         updatedAt: true,
         _count: { select: { childAssets: true } },
       },
@@ -227,9 +338,12 @@ export class ServiceAssetsRepository extends Repository {
         const row = await tx.asset.create({
           data: {
             assetNumber: generateCode("ESZK"),
-            customerId: input.customerId,
-            customerAddressId: input.customerAddressId,
-            aquariumId: input.aquariumId,
+            customerId: input.ownerType === "CUSTOMER" ? input.ownerId : null,
+            supplierId: input.ownerType === "SUPPLIER" ? input.ownerId : null,
+            customerAddressId:
+              input.ownerType === "CUSTOMER" ? input.customerAddressId : null,
+            aquariumId:
+              input.ownerType === "CUSTOMER" ? input.aquariumId : null,
             parentAssetId: input.parentAssetId,
             productVariantId: input.productVariantId,
             kind: input.kind,
@@ -247,7 +361,16 @@ export class ServiceAssetsRepository extends Repository {
             warrantyExpiresAt: optionalDate(input.warrantyExpiresAt),
             serviceIntervalDays: input.serviceIntervalDays,
             lastServicedAt: optionalDate(input.lastServicedAt),
-            nextServiceAt: optionalDate(input.nextServiceAt),
+            nextServiceAt:
+              optionalDate(input.nextServiceAt) ??
+              (input.serviceIntervalDays
+                ? addDays(
+                    optionalDate(input.lastServicedAt) ??
+                      optionalDate(input.installedAt) ??
+                      new Date(),
+                    input.serviceIntervalDays,
+                  )
+                : undefined),
             notes: optionalText(input.notes),
             archivedAt: input.status === "RETIRED" ? new Date() : undefined,
             createdById: actorUserId,
@@ -264,6 +387,7 @@ export class ServiceAssetsRepository extends Repository {
             payload: jsonPayload({
               assetNumber: row.assetNumber,
               customerId: row.customerId,
+              supplierId: row.supplierId,
               parentAssetId: row.parentAssetId,
               status: row.status,
             }),
@@ -304,9 +428,39 @@ export class ServiceAssetsRepository extends Repository {
           }
         }
         const existing = await tx.asset.findUniqueOrThrow({ where: { id } });
+        const maintenanceInputsChanged =
+          input.serviceIntervalDays !== undefined ||
+          input.lastServicedAt !== undefined ||
+          input.installedAt !== undefined;
+        const interval =
+          input.serviceIntervalDays === undefined
+            ? existing.serviceIntervalDays
+            : input.serviceIntervalDays;
+        const lastServicedAt =
+          input.lastServicedAt === undefined
+            ? existing.lastServicedAt
+            : optionalDate(input.lastServicedAt);
+        const installedAt =
+          input.installedAt === undefined
+            ? existing.installedAt
+            : optionalDate(input.installedAt);
+        const baseDate = lastServicedAt ?? installedAt ?? new Date();
         const data: Prisma.AssetUncheckedUpdateManyInput = {
-          customerAddressId: input.customerAddressId,
-          aquariumId: input.aquariumId,
+          customerId:
+            input.ownerType === undefined
+              ? undefined
+              : input.ownerType === "CUSTOMER"
+                ? input.ownerId
+                : null,
+          supplierId:
+            input.ownerType === undefined
+              ? undefined
+              : input.ownerType === "SUPPLIER"
+                ? input.ownerId
+                : null,
+          customerAddressId:
+            input.ownerType === "SUPPLIER" ? null : input.customerAddressId,
+          aquariumId: input.ownerType === "SUPPLIER" ? null : input.aquariumId,
           parentAssetId: input.parentAssetId,
           productVariantId: input.productVariantId,
           kind: input.kind,
@@ -324,11 +478,18 @@ export class ServiceAssetsRepository extends Repository {
           warrantyExpiresAt: optionalDate(input.warrantyExpiresAt),
           serviceIntervalDays: input.serviceIntervalDays,
           lastServicedAt: optionalDate(input.lastServicedAt),
-          nextServiceAt: optionalDate(input.nextServiceAt),
+          nextServiceAt:
+            input.nextServiceAt !== undefined
+              ? optionalDate(input.nextServiceAt)
+              : maintenanceInputsChanged
+                ? interval
+                  ? addDays(baseDate, interval)
+                  : null
+                : undefined,
           notes: optionalText(input.notes),
           archivedAt:
             input.status === "RETIRED"
-              ? existing.archivedAt ?? new Date()
+              ? (existing.archivedAt ?? new Date())
               : input.status
                 ? null
                 : undefined,
@@ -355,6 +516,8 @@ export class ServiceAssetsRepository extends Repository {
             payload: jsonPayload({ from: existing.status, to: updated.status }),
           });
         if (
+          existing.customerId !== updated.customerId ||
+          existing.supplierId !== updated.supplierId ||
           existing.customerAddressId !== updated.customerAddressId ||
           existing.aquariumId !== updated.aquariumId
         )
@@ -362,10 +525,14 @@ export class ServiceAssetsRepository extends Repository {
             type: "PLACEMENT_CHANGED",
             payload: jsonPayload({
               from: {
+                customerId: existing.customerId,
+                supplierId: existing.supplierId,
                 customerAddressId: existing.customerAddressId,
                 aquariumId: existing.aquariumId,
               },
               to: {
+                customerId: updated.customerId,
+                supplierId: updated.supplierId,
                 customerAddressId: updated.customerAddressId,
                 aquariumId: updated.aquariumId,
               },
@@ -384,6 +551,8 @@ export class ServiceAssetsRepository extends Repository {
             ![
               "expectedUpdatedAt",
               "status",
+              "ownerType",
+              "ownerId",
               "customerAddressId",
               "aquariumId",
               "parentAssetId",
@@ -438,6 +607,86 @@ export class ServiceAssetsRepository extends Repository {
     return detail;
   }
 
+  async addDocument(input: {
+    assetId: string;
+    type: "INVOICE" | "WARRANTY" | "MANUAL" | "OTHER";
+    fileName: string;
+    content: Buffer;
+    actorUserId: string;
+  }): Promise<AssetDocumentSummary> {
+    const id = randomUUID();
+    const sha256 = createHash("sha256").update(input.content).digest("hex");
+    await prisma.$transaction(async (tx) => {
+      await tx.assetDocument.create({
+        data: {
+          id,
+          assetId: input.assetId,
+          type: input.type,
+          fileName: input.fileName,
+          contentType: "application/pdf",
+          sizeBytes: input.content.length,
+          sha256,
+          content: Uint8Array.from(input.content),
+          uploadedById: input.actorUserId,
+        },
+      });
+      await tx.assetEvent.create({
+        data: {
+          id: randomUUID(),
+          assetId: input.assetId,
+          type: "DOCUMENT_UPLOADED",
+          actorUserId: input.actorUserId,
+          payload: {
+            documentId: id,
+            documentType: input.type,
+            fileName: input.fileName,
+          },
+        },
+      });
+    });
+    const document = await prisma.assetDocument.findUniqueOrThrow({
+      where: { id },
+      include: { uploadedBy: true },
+    });
+    return this.toDocumentSummary(document);
+  }
+
+  async document(assetId: string, documentId: string) {
+    return prisma.assetDocument.findFirst({
+      where: { id: documentId, assetId },
+      select: { fileName: true, contentType: true, content: true },
+    });
+  }
+
+  async deleteDocument(
+    assetId: string,
+    documentId: string,
+    actorUserId: string,
+  ) {
+    return prisma.$transaction(async (tx) => {
+      const document = await tx.assetDocument.findFirst({
+        where: { id: documentId, assetId },
+        select: { id: true, type: true, fileName: true },
+      });
+      if (!document) return false;
+      await tx.assetDocument.delete({ where: { id: document.id } });
+      await tx.assetEvent.create({
+        data: {
+          id: randomUUID(),
+          assetId,
+          type: "DOCUMENT_DELETED",
+          actorUserId,
+          payload: {
+            documentId: document.id,
+            documentType: document.type,
+            fileName: document.fileName,
+          },
+        },
+      });
+      return true;
+    });
+  }
+
   private async ancestors(parentAssetId: string | null) {
     const ancestors: AssetHierarchyItem[] = [];
     const visited = new Set<string>();
@@ -463,15 +712,30 @@ export class ServiceAssetsRepository extends Repository {
   }
 
   private toListItem(row: AssetSummaryRow): AssetListItem {
+    const owner = row.customer
+      ? {
+          type: "CUSTOMER" as const,
+          id: row.customer.id,
+          code: row.customer.customerNumber,
+          displayName: row.customer.displayName,
+        }
+      : row.supplier
+        ? {
+            type: "SUPPLIER" as const,
+            id: row.supplier.id,
+            code: row.supplier.code,
+            displayName: row.supplier.name,
+          }
+        : (() => {
+            throw new Error("ASSET_OWNER_MISSING");
+          })();
     return {
       ...hierarchyItem(row),
       criticality: row.criticality,
-      customer: {
-        id: row.customer.id,
-        customerNumber: row.customer.customerNumber,
-        displayName: row.customer.displayName,
-      },
-      address: addressSummary(row.customerAddress),
+      owner,
+      address:
+        addressSummary(row.customerAddress) ??
+        supplierAddressSummary(row.supplier),
       aquarium: row.aquarium
         ? {
             id: row.aquarium.id,
@@ -515,21 +779,49 @@ export class ServiceAssetsRepository extends Repository {
         : undefined,
       ancestors,
       children: row.childAssets.map(hierarchyItem),
-      events: row.events.map(
-        (event): AssetEventSummary => ({
-          id: event.id,
-          type: event.type,
-          actor: event.actorUser
-            ? {
-                id: event.actorUser.id,
-                displayName: event.actorUser.displayName,
-              }
-            : undefined,
-          payload: event.payload as Record<string, unknown>,
-          occurredAt: event.occurredAt.toISOString(),
-        }),
+      events: row.events.map((event): AssetEventSummary => ({
+        id: event.id,
+        type: event.type,
+        actor: event.actorUser
+          ? {
+              id: event.actorUser.id,
+              displayName: event.actorUser.displayName,
+            }
+          : undefined,
+        payload: event.payload as Record<string, unknown>,
+        occurredAt: event.occurredAt.toISOString(),
+      })),
+      documents: row.documents.map((document) =>
+        this.toDocumentSummary(document),
       ),
       createdAt: row.createdAt.toISOString(),
+    };
+  }
+
+  private toDocumentSummary(document: {
+    id: string;
+    type: AssetDocumentSummary["type"];
+    fileName: string;
+    contentType: string;
+    sizeBytes: number;
+    sha256: string;
+    createdAt: Date;
+    uploadedBy: { id: string; displayName: string } | null;
+  }): AssetDocumentSummary {
+    return {
+      id: document.id,
+      type: document.type,
+      fileName: document.fileName,
+      contentType: "application/pdf",
+      sizeBytes: document.sizeBytes,
+      sha256: document.sha256,
+      uploadedBy: document.uploadedBy
+        ? {
+            id: document.uploadedBy.id,
+            displayName: document.uploadedBy.displayName,
+          }
+        : undefined,
+      createdAt: document.createdAt.toISOString(),
     };
   }
 }

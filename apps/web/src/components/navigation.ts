@@ -93,12 +93,6 @@ export const businessNavigation: AppNavigationItem[] = [
     permission: PERMISSIONS.FINANCE_VIEW,
   },
   {
-    href: "/szerviz/eszkozok",
-    label: "Szerviz",
-    icon: "service",
-    permission: PERMISSIONS.SERVICE_VIEW,
-  },
-  {
     href: "/akvariumok",
     label: "Akváriumok",
     icon: "aquarium",
@@ -109,6 +103,15 @@ export const businessNavigation: AppNavigationItem[] = [
     label: "ICP",
     icon: "briefcase",
     permission: PERMISSIONS.ICP_VIEW,
+  },
+];
+
+export const serviceNavigation: AppNavigationItem[] = [
+  {
+    href: "/szerviz/eszkozok",
+    label: "Eszköznyilvántartás",
+    icon: "box",
+    permission: PERMISSIONS.SERVICE_VIEW,
   },
 ];
 

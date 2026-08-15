@@ -20,6 +20,7 @@ import {
   businessNavigation,
   primaryNavigation,
   secondaryNavigation,
+  serviceNavigation,
 } from "@/components/navigation";
 import { ApiError } from "@/lib/api/client";
 import { usersApi } from "@/lib/api/users";
@@ -28,6 +29,7 @@ import { ROLE_LABELS, ROLE_OPTIONS } from "./role-labels";
 const allNavigationItems = [
   ...primaryNavigation,
   ...businessNavigation,
+  ...serviceNavigation,
   ...secondaryNavigation,
   ...allSettingsNavigation,
 ];

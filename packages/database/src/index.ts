@@ -4,6 +4,8 @@ export type {
   Aquarium,
   AquariumMeasurement,
   Asset,
+  AssetDocument,
+  AssetDocumentType,
   AssetEvent,
   Brand,
   Category,

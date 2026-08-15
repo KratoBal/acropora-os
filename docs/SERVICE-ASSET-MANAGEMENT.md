@@ -3,9 +3,11 @@
 ## Cél
 
 Az eszköznyilvántartás a partnereknél üzemelő rendszerek, berendezések,
-részegységek és szenzorok tartós törzsadata. Minden eszköz kötelezően egy
-`Customer` rekordhoz tartozik, opcionálisan pedig partnercímhez, akváriumhoz,
-UNAS-ból tükrözött termékváltozathoz és szülőeszközhöz is kapcsolható.
+részegységek és szenzorok tartós törzsadata. Minden eszköz pontosan egy
+tulajdonoshoz tartozik: ez lehet `Customer` (Vevők) vagy `Supplier`
+(Partnerek). Vevő esetén opcionálisan partnercímhez és akváriumhoz, mindkét
+tulajdonostípusnál UNAS-ból tükrözött termékváltozathoz és szülőeszközhöz is
+kapcsolható.
 
 Példa:
 
@@ -24,11 +26,13 @@ Az `Asset` legfontosabb mezői:
 
 - ember által olvasható, egyedi `assetNumber` (`ESZK-...`);
 - stabil, véletlenszerű `qrToken` – a QR soha nem tartalmaz adatbázis-ID-t;
-- kötelező `customerId`, opcionális `customerAddressId` és `aquariumId`;
+- egymást kizáró `customerId` vagy `supplierId` adatbázis-korláttal;
+- vevőnél opcionális `customerAddressId` és `aquariumId`;
 - opcionális `parentAssetId` és `productVariantId`;
 - típus, státusz és kritikusság;
 - gyártó, modell, sorozatszám, leltári szám és műszaki leírás;
-- telepítés, vásárlás, garancia és karbantartási ütemezés;
+- telepítés, vásárlás, garancia és karbantartási ütemezés; az intervallumból a
+  következő karbantartás automatikusan számolódik;
 - létrehozó/módosító felhasználó és időbélyegek.
 
 Az `AssetEvent` append-only előzményként őrzi a létrehozást, státusz-,
@@ -36,14 +40,20 @@ elhelyezés- és hierarchiaváltást, valamint a QR-token cseréjét. A
 `ServiceJobAsset` előkészíti a több eszközt érintő munkalapokat és az egy
 eszközhöz tartozó teljes szerviztörténetet.
 
+Az `AssetDocument` jogosultsággal védett, legfeljebb 10 MB-os PDF-eket tárol:
+számlát, garanciajegyet, használati utasítást vagy egyéb dokumentumot. A fájl
+első körben a PostgreSQL-adatbázisban marad, SHA-256 lenyomattal és feltöltési
+audittal. Ez nem zárja ki a későbbi Paperless-ngx integrációt; akkor a rekord
+külső dokumentumazonosítóval és szinkronállapottal bővíthető.
+
 ## QR-folyamat
 
 1. Az API az eszköz létrehozásakor UUID QR-tokent generál.
 2. `GET /service/assets/:id/qr` helyben, külső szolgáltatás nélkül készíti el az
    SVG QR-kódot.
 3. A QR értéke: `${ASSET_QR_BASE_URL}/<qrToken>`.
-4. A telefon gyári kamerája a megfelelő Acropora OS appvariáns
-   `/assets/scan/[token]` route-ját nyitja meg.
+4. A mobilapp saját QR-kamera nézete vagy a telefon gyári kamerája a megfelelő
+   Acropora OS appvariáns `/assets/scan/[token]` route-ját nyitja meg.
 5. A mobilapp hitelesítve hívja a `GET /service/assets/scan/:qrToken` végpontot.
 6. Az API csak `service.view` jogosultsággal adja vissza az eszközadatot.
 
@@ -66,17 +76,23 @@ Web:
 - `/szerviz/eszkozok` – kereshető és szűrhető lista;
 - `/szerviz/eszkozok/uj` – partner, helyszín és szülő kiválasztásával létrehozás;
 - `/szerviz/eszkozok/:id` – adatlap, hierarchia, előzmények, állapot és QR.
+- `/szerviz/eszkozok/:id/szerkesztes` – teljes szerkesztés OWNER, ADMIN,
+  MANAGER és SERVICE szerepkörrel;
+- az adatlapon PDF feltöltés, letöltés és törlés.
 
 Mobil:
 
 - `/assets` – SERVICE-kompatibilis aktív eszközlista;
+- `/assets/scanner` – alkalmazáson belüli kameraalapú QR-keresés;
+- `/assets/new` – terepi eszközfelvitel;
 - `/assets/:id` – terepi adatlap és komponenshierarchia;
+- az adatlapon 30×30 mm-es QR-címke natív nyomtatása vagy PDF-megosztása;
 - `/assets/scan/:token` – QR-feloldás, szükség esetén bejelentkezés után.
 
 ## API-jogosultság
 
 - olvasás, QR-feloldás és QR-letöltés: `service.view`;
-- létrehozás, módosítás és QR-rotáció: `service.manage`.
+- létrehozás, módosítás, dokumentumkezelés és QR-rotáció: `service.manage`.
 
 A mobil szerepkör-mátrix csak prezentációs kapu; minden jogosultságot az API is
 ellenőriz.
@@ -85,4 +101,5 @@ ellenőriz.
 
 Az asset registryre épülhet a teljes munkalap-flow: `ServiceJobAsset`
 kapcsolás, checklist, munkaidő, felhasznált anyag, fotók, aláírás,
-teljesítésigazolás és automatikusan számolt következő karbantartás.
+teljesítésigazolás és a munkalap lezárásából újraszámolt következő
+karbantartás.

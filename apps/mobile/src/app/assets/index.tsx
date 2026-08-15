@@ -45,6 +45,22 @@ export default function AssetListScreen() {
               Húzd le a listát a frissítéshez, vagy olvasd le a matricán lévő
               QR-kódot a telefon kamerájával.
             </Text>
+            <View style={styles.headerActions}>
+              <Pressable
+                onPress={() => router.push("/assets/scanner")}
+                style={styles.primaryButton}
+              >
+                <Text style={styles.buttonText}>QR-kód beolvasása</Text>
+              </Pressable>
+              {capabilities.assetsManage ? (
+                <Pressable
+                  onPress={() => router.push("/assets/new")}
+                  style={styles.secondaryButton}
+                >
+                  <Text style={styles.buttonText}>Új eszköz</Text>
+                </Pressable>
+              ) : null}
+            </View>
           </View>
         }
         ListEmptyComponent={
@@ -52,7 +68,9 @@ export default function AssetListScreen() {
             <ActivityIndicator color="#52d6c7" />
           ) : query.isError ? (
             <View style={styles.messageCard}>
-              <Text style={styles.errorTitle}>Az eszközök nem tölthetők be</Text>
+              <Text style={styles.errorTitle}>
+                Az eszközök nem tölthetők be
+              </Text>
               <Text style={styles.messageText}>
                 {query.error instanceof Error
                   ? query.error.message
@@ -100,6 +118,26 @@ const styles = StyleSheet.create({
   title: { color: "#f4fbff", fontSize: 28, fontWeight: "900", marginTop: 6 },
   subtitle: { color: "#91afbe", fontSize: 14, lineHeight: 21, marginTop: 6 },
   separator: { height: 12 },
+  headerActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 16,
+  },
+  primaryButton: {
+    borderRadius: 10,
+    backgroundColor: "#177b74",
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+  secondaryButton: {
+    borderRadius: 10,
+    backgroundColor: "#16495e",
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderWidth: 1,
+    borderColor: "#2b657d",
+  },
   messageCard: {
     borderRadius: 18,
     backgroundColor: "#0d2b40",
