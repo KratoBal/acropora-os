@@ -132,7 +132,11 @@ sort törli.
 Válasz:
 
 ```json
-{ "token": "...", "expiresAt": "2026-07-28T18:00:00.000Z", "user": { "...": "AuthenticatedUser" } }
+{
+  "token": "...",
+  "expiresAt": "2026-07-28T18:00:00.000Z",
+  "user": { "...": "AuthenticatedUser" }
+}
 ```
 
 Ugyanazt a jelszó-ellenőrzést és `AuthService.loginWithPassword` hívást

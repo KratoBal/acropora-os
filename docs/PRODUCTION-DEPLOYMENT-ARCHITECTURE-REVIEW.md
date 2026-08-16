@@ -29,7 +29,7 @@ i.e. if `DATABASE_URL` is ever unset, Prisma silently falls back to a local dev 
 
 **Local infrastructure.** Root `docker-compose.yml` provides Postgres 16-alpine and Redis 7-alpine for local development only — hardcoded weak credentials (`acropora`/`acropora`), both ports published directly to the host. There is currently no production compose file, no Dockerfile for either app, and no `.dockerignore`.
 
-**CI.** A single GitHub Actions workflow (`.github/workflows/ci.yml`) spins up Postgres+Redis service containers, installs with a frozen lockfile, runs `prisma generate` → `prisma migrate deploy` → `prisma:seed` → lint/typecheck → unit tests → DB integration tests → HTTP smoke test → `turbo build`. This is a good correctness gate, but it never builds a container image, publishes an artifact, or scans anything — it validates the *code*, not the *deployable*.
+**CI.** A single GitHub Actions workflow (`.github/workflows/ci.yml`) spins up Postgres+Redis service containers, installs with a frozen lockfile, runs `prisma generate` → `prisma migrate deploy` → `prisma:seed` → lint/typecheck → unit tests → DB integration tests → HTTP smoke test → `turbo build`. This is a good correctness gate, but it never builds a container image, publishes an artifact, or scans anything — it validates the _code_, not the _deployable_.
 
 **Authentication.** This is architecturally important enough to call out here as well as under blockers: the team has already built a provider-independent `Session`/`AuthenticatedUser` abstraction (a good decision, see `docs/AUTHENTICATION.md`), but the only implementation behind it today is an explicitly development-only mock: email-only login (no password), four hardcoded users, sessions held in an in-memory `Map` inside a singleton Nest service, and `AuthService.loginWithDevelopmentUser` throws `ForbiddenException` whenever `NODE_ENV=production`. The team's own docs and `ROADMAP.md` (#0002) already flag this as incomplete. See Section 2A.
 
@@ -110,26 +110,26 @@ These four are minimal, deployment-only, and don't touch business logic, APIs, o
 
 - **Two Coolify applications** from the same GitHub repo (via the GitHub App integration), one per Dockerfile/build context (`web`, `api`).
 - **Managed Postgres and Redis as Coolify-native resources** rather than embedding them in an app-level compose file — this gets one-click backup scheduling and independent upgrade lifecycle management "for free" from Coolify, versus hand-rolling it. (Recommendation, not a hard requirement — your call.)
-- **Migrations run as a pre-deployment step**, not inside the running container's startup path: `prisma migrate deploy` executed as a one-off Coolify deployment hook *before* the new `api` container starts receiving traffic. Never `migrate dev`, never `db push` against production. `prisma:seed` must **not** run against production data — it's dev-only reference-data seeding and should be explicitly excluded from any production deploy hook, unlike in CI where it seeds a disposable database.
+- **Migrations run as a pre-deployment step**, not inside the running container's startup path: `prisma migrate deploy` executed as a one-off Coolify deployment hook _before_ the new `api` container starts receiving traffic. Never `migrate dev`, never `db push` against production. `prisma:seed` must **not** run against production data — it's dev-only reference-data seeding and should be explicitly excluded from any production deploy hook, unlike in CI where it seeds a disposable database.
 - **Single replica for `api`** is the recommended starting point, given the in-process scheduler constraint (Section 2, 3). `web` is fully stateless and can scale horizontally without any changes.
 - **Zero-downtime deploys** via Coolify's default rolling restart gated on the `HEALTHCHECK`/`/health` endpoint passing before the old container is stopped.
-- **Rollback**: Coolify retains the previous image, so a bad app-code deploy rolls back cleanly. Database migrations are forward-only in Prisma; a bad *schema* change is not automatically reversible — the plan will document an expand/contract migration convention and a "backup immediately before any migration marked risky" step, rather than relying on rollback alone.
+- **Rollback**: Coolify retains the previous image, so a bad app-code deploy rolls back cleanly. Database migrations are forward-only in Prisma; a bad _schema_ change is not automatically reversible — the plan will document an expand/contract migration convention and a "backup immediately before any migration marked risky" step, rather than relying on rollback alone.
 - **Backups**: nightly automated Postgres dumps with a retention policy (e.g. 7 daily + 4 weekly) to Hetzner Object Storage or equivalent, plus a periodically-tested restore drill — a backup strategy is unproven until it's been restored once. Redis in this system is currently pure cache/health-check usage, so its backup priority is much lower unless it later becomes the session store (Section 2A option 2), in which case AOF persistence (already enabled in dev compose) should carry into production.
 - **Networking**: internal Docker network between `web`, `api`, Postgres, Redis; only `web` (and `api` if it needs to be directly reachable by external integrations/webhooks) exposed via Coolify's proxy with TLS. Postgres and Redis must never be published to a public port, unlike the current dev compose file.
 - **Disaster recovery**: documented runbook covering full-stack redeploy from the GitHub repo + latest Postgres backup, target RTO/RPO to be agreed with you rather than assumed.
 
 ## 7. Risks
 
-| Risk | Severity | Notes |
-|---|---|---|
-| No production auth path exists; login is disabled when `NODE_ENV=production` | Critical | Blocks real usage regardless of infra quality; decision needed (Section 2A) |
-| Multi-replica scaling silently duplicates scheduled UNAS/NAV syncs | High | Must document single-replica constraint; mitigate later with a distributed lock or dedicated worker |
-| In-memory sessions don't survive restarts or multiple replicas | High | Tied to whichever auth option is chosen |
-| Real integration secrets (NAV, UNAS) currently sit in a local `.env` | Medium | Must migrate to Coolify secrets before go-live; already gitignored so no repo exposure today |
-| Silent `DATABASE_URL` fallback to localhost | Medium | Should fail fast instead; small, safe fix |
-| No image/dependency vulnerability scanning yet | Medium | Add Trivy/`pnpm audit` to CI as part of this work |
-| Backup/restore strategy unproven | Medium | Must run at least one real restore drill before relying on it |
-| MNB exchange-rate API blocked by bot protection in production | Low | Known, documented, unrelated to this work; manual rate entry is the existing workaround |
+| Risk                                                                         | Severity | Notes                                                                                               |
+| ---------------------------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------- |
+| No production auth path exists; login is disabled when `NODE_ENV=production` | Critical | Blocks real usage regardless of infra quality; decision needed (Section 2A)                         |
+| Multi-replica scaling silently duplicates scheduled UNAS/NAV syncs           | High     | Must document single-replica constraint; mitigate later with a distributed lock or dedicated worker |
+| In-memory sessions don't survive restarts or multiple replicas               | High     | Tied to whichever auth option is chosen                                                             |
+| Real integration secrets (NAV, UNAS) currently sit in a local `.env`         | Medium   | Must migrate to Coolify secrets before go-live; already gitignored so no repo exposure today        |
+| Silent `DATABASE_URL` fallback to localhost                                  | Medium   | Should fail fast instead; small, safe fix                                                           |
+| No image/dependency vulnerability scanning yet                               | Medium   | Add Trivy/`pnpm audit` to CI as part of this work                                                   |
+| Backup/restore strategy unproven                                             | Medium   | Must run at least one real restore drill before relying on it                                       |
+| MNB exchange-rate API blocked by bot protection in production                | Low      | Known, documented, unrelated to this work; manual rate entry is the existing workaround             |
 
 ## 8. Recommended Implementation Plan
 
@@ -145,7 +145,7 @@ Sequenced so that infrastructure work (Phases 1–4, 6–8) can proceed independ
 
 **Phase 4 — Observability & lifecycle**: structured JSON logging, startup validation that fails fast on missing required env vars, `enableShutdownHooks()` + `SIGTERM` handling, container `HEALTHCHECK`s, a documented failure-recovery runbook.
 
-**Phase 5 — Coolify configuration & first deploy** *(gated on the Section 2A decision)*: connect the GitHub App, define the `web`/`api` applications plus Postgres/Redis resources, wire env vars/secrets, configure health checks/domains/TLS, deploy, smoke test.
+**Phase 5 — Coolify configuration & first deploy** _(gated on the Section 2A decision)_: connect the GitHub App, define the `web`/`api` applications plus Postgres/Redis resources, wire env vars/secrets, configure health checks/domains/TLS, deploy, smoke test.
 
 **Phase 6 — CI hardening**: add a Docker build-validation step to CI (every PR proves both images build), add dependency/image vulnerability scanning, keep the existing lint/typecheck/test/migrate-deploy/build gates.
 

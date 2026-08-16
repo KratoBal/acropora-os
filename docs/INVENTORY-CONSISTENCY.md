@@ -1654,7 +1654,7 @@ kötegelt, alapból KIKAPCSOLT háttérellenőrző:
   ciklus ÉS egy admin "futtasd most" végpont is ugyanúgy hívja
   (`POST /orders/unas/deletion-reconciliation/run`,
   `PERMISSIONS.ORDERS_MANAGE`; állapot: `GET
-  /orders/unas/deletion-reconciliation/status`, `PERMISSIONS.ORDERS_VIEW`).
+/orders/unas/deletion-reconciliation/status`, `PERMISSIONS.ORDERS_VIEW`).
 
 **Feature flag, alapból kikapcsolva**: `UNAS_ORDER_DELETION_RECONCILIATION_ENABLED`
 (alapérték `false`) - üzleti szabály szerint minden új automatizálás

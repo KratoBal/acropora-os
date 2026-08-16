@@ -129,8 +129,7 @@ GET /integrations/unas/orders/:id
 Várt eredmény: `status: "CANCELLED"`, `unasDeletedAt` egy nemrégi
 időbélyeg, a `lines` VÁLTOZATLAN (a rendelés sorai nem törlődtek).
 
-4.2. Ellenőrizd az érintett variáns(ok) `StockItem.onHand` értékét - a
-2. lépés előtti "előtte" értékhez képest pontosan a rendelésen még kint
+4.2. Ellenőrizd az érintett variáns(ok) `StockItem.onHand` értékét - a 2. lépés előtti "előtte" értékhez képest pontosan a rendelésen még kint
 lévő nettó mennyiséggel kell nőnie.
 
 4.3. Ellenőrizd, hogy PONTOSAN EGY új `RETURN_IN` mozgás jött létre erre

@@ -63,11 +63,11 @@ eszköztörténetbe kerül.
 
 Környezeti értékek:
 
-| Környezet | `ASSET_QR_BASE_URL` |
-| --- | --- |
-| development | `acropora-os-dev://assets/scan` |
+| Környezet       | `ASSET_QR_BASE_URL`                 |
+| --------------- | ----------------------------------- |
+| development     | `acropora-os-dev://assets/scan`     |
 | preview/staging | `acropora-os-preview://assets/scan` |
-| production | `acropora-os://assets/scan` |
+| production      | `acropora-os://assets/scan`         |
 
 ## Felületek
 
