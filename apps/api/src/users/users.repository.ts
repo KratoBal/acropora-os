@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 
 import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma, type User } from "@acropora/database";
-import type { UserDetail, UserListResponse, UserSummary } from "@acropora/types";
+import type {
+  UserDetail,
+  UserListResponse,
+  UserSummary,
+} from "@acropora/types";
 
 import { hashPassword } from "./password.util.js";
 import type {
@@ -23,7 +27,9 @@ export class UsersRepository extends Repository {
 
   async list(query: UserListQueryDto): Promise<UserListResponse> {
     const where: Prisma.UserWhereInput = {
-      ...(query.status === "ALL" ? {} : { isActive: query.status === "ACTIVE" }),
+      ...(query.status === "ALL"
+        ? {}
+        : { isActive: query.status === "ACTIVE" }),
       ...(query.role ? { role: query.role } : {}),
       ...(query.search
         ? {

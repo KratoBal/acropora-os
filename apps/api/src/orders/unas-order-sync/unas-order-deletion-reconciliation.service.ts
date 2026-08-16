@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { Injectable, Logger } from "@nestjs/common";
 
-import { UnasApiClient, UnasApiError } from "../../imports/unas/unas-api.client.js";
+import {
+  UnasApiClient,
+  UnasApiError,
+} from "../../imports/unas/unas-api.client.js";
 import { UnasAuthService } from "../../imports/unas/unas-auth.service.js";
 import {
   UnasOrderDeletionReconciliationRepository,
@@ -245,7 +248,9 @@ export class UnasOrderDeletionReconciliationService {
         row.unasKey,
       );
       await this.candidates.clearAfterDeletion(row.id);
-      return result.alreadyReconciled ? "alreadyReconciled" : "reconciledDeleted";
+      return result.alreadyReconciled
+        ? "alreadyReconciled"
+        : "reconciledDeleted";
     } catch (error) {
       // Every other outcome (network/timeout/auth/rate-limit/5xx/malformed
       // response - UnasApiError, or anything else thrown by getToken())

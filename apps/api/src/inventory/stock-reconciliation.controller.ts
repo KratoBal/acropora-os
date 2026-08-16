@@ -13,7 +13,9 @@ function parsePage(value: unknown): number {
 
 function parsePageSize(value: unknown): number {
   const parsed = Number(value);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? Math.min(parsed, 200) : 50;
+  return Number.isSafeInteger(parsed) && parsed > 0
+    ? Math.min(parsed, 200)
+    : 50;
 }
 
 function parseOptionalString(value: unknown): string | undefined {
@@ -55,7 +57,8 @@ export class StockReconciliationController {
     @Query("pageSize") pageSize: unknown,
   ) {
     const resolvedWarehouseId =
-      parseOptionalString(warehouseId) ?? (await ensureMainWarehouse(prisma)).id;
+      parseOptionalString(warehouseId) ??
+      (await ensureMainWarehouse(prisma)).id;
     return this.service.findVariantsMissingStockItem({
       warehouseId: resolvedWarehouseId,
       page: parsePage(page),

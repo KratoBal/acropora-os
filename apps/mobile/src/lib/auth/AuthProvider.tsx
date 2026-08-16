@@ -10,7 +10,12 @@ import {
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { getCurrentUser, invalidateToken, loginWithPassword, logout as logoutRequest } from "./api";
+import {
+  getCurrentUser,
+  invalidateToken,
+  loginWithPassword,
+  logout as logoutRequest,
+} from "./api";
 import { authReducer, initialAuthState, type AuthState } from "./auth-reducer";
 import { restoreSession } from "./restore-session";
 import { signIn as signInFlow, type SignInOutcome } from "./sign-in";

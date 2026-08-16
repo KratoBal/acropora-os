@@ -32,7 +32,11 @@ export const initialAuthState: AuthState = {
 export type AuthAction =
   | { type: "RESTORE_RETRY" }
   | { type: "RESTORE_UNAUTHENTICATED" }
-  | { type: "RESTORE_AUTHENTICATED"; user: AuthenticatedUser; expiresAt: string }
+  | {
+      type: "RESTORE_AUTHENTICATED";
+      user: AuthenticatedUser;
+      expiresAt: string;
+    }
   | { type: "RESTORE_NETWORK_ERROR" }
   | { type: "SIGN_IN_START" }
   | { type: "SIGN_IN_SUCCESS"; user: AuthenticatedUser; expiresAt: string }

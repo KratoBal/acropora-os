@@ -4,8 +4,7 @@
 /// javítási terv" for the full design rationale - in particular why only
 /// two of the three originally-sketched repair types exist here.
 export type StockReconciliationRepairType =
-  | "LOCAL_FROM_PROVEN_LEDGER"
-  | "REPUBLISH_LOCAL_TO_UNAS";
+  "LOCAL_FROM_PROVEN_LEDGER" | "REPUBLISH_LOCAL_TO_UNAS";
 
 /// Persisted outcome of a non-dry-run repair attempt. There is
 /// deliberately no FAILED value - see schema.prisma's own doc comment on

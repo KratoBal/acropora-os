@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from "@nestjs/common";
 
 import {
   unasOrderDeletionReconciliationConfig,
@@ -24,7 +29,9 @@ export class UnasOrderDeletionReconciliationScheduler
   private timer: NodeJS.Timeout | null = null;
   private stopped = false;
 
-  constructor(private readonly service: UnasOrderDeletionReconciliationService) {}
+  constructor(
+    private readonly service: UnasOrderDeletionReconciliationService,
+  ) {}
 
   onModuleInit() {
     const config = unasOrderDeletionReconciliationConfig();
@@ -62,7 +69,9 @@ export class UnasOrderDeletionReconciliationScheduler
         error instanceof Error && /^[A-Z0-9_:.-]+$/.test(error.message)
           ? error.message.slice(0, 200)
           : "UNAS_ORDER_DELETION_RECONCILIATION_BATCH_FAILED";
-      this.logger.error(`UNAS order deletion-reconciliation batch failed: ${code}`);
+      this.logger.error(
+        `UNAS order deletion-reconciliation batch failed: ${code}`,
+      );
       return "FAILED";
     }
   }

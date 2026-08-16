@@ -54,7 +54,8 @@ describe("retryOnSerializationConflict", () => {
           calls += 1;
           throw new FakePrismaKnownRequestError("P2002");
         }),
-      (error: unknown) => error instanceof FakePrismaKnownRequestError && error.code === "P2002",
+      (error: unknown) =>
+        error instanceof FakePrismaKnownRequestError && error.code === "P2002",
     );
     assert.equal(calls, 1);
   });
@@ -67,9 +68,14 @@ describe("retryOnSerializationConflict", () => {
           calls += 1;
           throw new FakePrismaKnownRequestError("P2034");
         }, 3),
-      (error: unknown) => error instanceof FakePrismaKnownRequestError && error.code === "P2034",
+      (error: unknown) =>
+        error instanceof FakePrismaKnownRequestError && error.code === "P2034",
     );
-    assert.equal(calls, 3, "must attempt exactly maxAttempts times, no more, no fewer");
+    assert.equal(
+      calls,
+      3,
+      "must attempt exactly maxAttempts times, no more, no fewer",
+    );
   });
 
   it("each attempt is an independent call to operation() - no shared/leaked state assumed", async () => {

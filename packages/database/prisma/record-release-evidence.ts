@@ -88,7 +88,9 @@ function readRequiredEnv(name: string): string {
 function parseDate(name: string, value: string): Date {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
-    throw new Error(`record-release-evidence: ${name}="${value}" is not a valid ISO date-time.`);
+    throw new Error(
+      `record-release-evidence: ${name}="${value}" is not a valid ISO date-time.`,
+    );
   }
   return parsed;
 }
@@ -112,13 +114,18 @@ async function main() {
   }
   const status = statusRaw;
 
-  const startedAt = parseDate("RELEASE_EVIDENCE_STARTED_AT", readRequiredEnv("RELEASE_EVIDENCE_STARTED_AT"));
+  const startedAt = parseDate(
+    "RELEASE_EVIDENCE_STARTED_AT",
+    readRequiredEnv("RELEASE_EVIDENCE_STARTED_AT"),
+  );
   const completedAt = parseDate(
     "RELEASE_EVIDENCE_COMPLETED_AT",
     readRequiredEnv("RELEASE_EVIDENCE_COMPLETED_AT"),
   );
   if (completedAt.getTime() < startedAt.getTime()) {
-    throw new Error("record-release-evidence: RELEASE_EVIDENCE_COMPLETED_AT is before STARTED_AT.");
+    throw new Error(
+      "record-release-evidence: RELEASE_EVIDENCE_COMPLETED_AT is before STARTED_AT.",
+    );
   }
 
   let resultDetail: Prisma.InputJsonValue | undefined;
@@ -147,7 +154,9 @@ async function main() {
         triggerEvent: readRequiredEnv("RELEASE_EVIDENCE_TRIGGER_EVENT"),
         environment: readRequiredEnv("RELEASE_EVIDENCE_ENVIRONMENT"),
         databaseEngine: readRequiredEnv("RELEASE_EVIDENCE_DB_ENGINE"),
-        databaseEngineVersion: readRequiredEnv("RELEASE_EVIDENCE_DB_ENGINE_VERSION"),
+        databaseEngineVersion: readRequiredEnv(
+          "RELEASE_EVIDENCE_DB_ENGINE_VERSION",
+        ),
         testSuite: readRequiredEnv("RELEASE_EVIDENCE_TEST_SUITE"),
         startedAt,
         completedAt,

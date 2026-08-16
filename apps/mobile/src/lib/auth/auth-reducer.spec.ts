@@ -34,19 +34,25 @@ describe("authReducer", () => {
       user: testUser,
       expiresAt: "2026-08-10T00:00:00.000Z",
     });
-    const state = authReducer(authenticated, { type: "RESTORE_UNAUTHENTICATED" });
+    const state = authReducer(authenticated, {
+      type: "RESTORE_UNAUTHENTICATED",
+    });
     assert.equal(state.status, "unauthenticated");
     assert.equal(state.user, null);
   });
 
   it("RESTORE_NETWORK_ERROR stays in restoring and sets the retryable flag without touching user state", () => {
-    const state = authReducer(initialAuthState, { type: "RESTORE_NETWORK_ERROR" });
+    const state = authReducer(initialAuthState, {
+      type: "RESTORE_NETWORK_ERROR",
+    });
     assert.equal(state.status, "restoring");
     assert.equal(state.restoreNetworkError, true);
   });
 
   it("RESTORE_RETRY resets the network-error flag and re-enters restoring", () => {
-    const withError = authReducer(initialAuthState, { type: "RESTORE_NETWORK_ERROR" });
+    const withError = authReducer(initialAuthState, {
+      type: "RESTORE_NETWORK_ERROR",
+    });
     const state = authReducer(withError, { type: "RESTORE_RETRY" });
     assert.equal(state.status, "restoring");
     assert.equal(state.restoreNetworkError, false);
@@ -65,7 +71,11 @@ describe("authReducer", () => {
   it("SIGN_IN_SUCCESS moves to authenticated with the returned user", () => {
     const state = authReducer(
       { ...initialAuthState, status: "signingIn" },
-      { type: "SIGN_IN_SUCCESS", user: testUser, expiresAt: "2026-08-10T00:00:00.000Z" },
+      {
+        type: "SIGN_IN_SUCCESS",
+        user: testUser,
+        expiresAt: "2026-08-10T00:00:00.000Z",
+      },
     );
     assert.equal(state.status, "authenticated");
     assert.deepEqual(state.user, testUser);

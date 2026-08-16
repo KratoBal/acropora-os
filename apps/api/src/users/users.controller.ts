@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from "@nestjs/common";
 import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
@@ -27,10 +35,7 @@ export class UsersController {
   }
 
   @Post()
-  create(
-    @Body() input: CreateUserDto,
-    @CurrentUser() user: AuthenticatedUser,
-  ) {
+  create(@Body() input: CreateUserDto, @CurrentUser() user: AuthenticatedUser) {
     return this.service.create(input, user.id);
   }
 

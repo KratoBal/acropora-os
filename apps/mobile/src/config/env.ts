@@ -2,7 +2,11 @@ type AppEnvironment = "development" | "preview" | "production";
 
 function parseAppEnvironment(value: string | undefined): AppEnvironment {
   const resolved = value ?? "development";
-  if (resolved === "development" || resolved === "preview" || resolved === "production") {
+  if (
+    resolved === "development" ||
+    resolved === "preview" ||
+    resolved === "production"
+  ) {
     return resolved;
   }
 
@@ -22,7 +26,9 @@ function parseApiUrl(value: string | undefined): string {
   try {
     parsed = new URL(value);
   } catch {
-    throw new Error(`EXPO_PUBLIC_API_URL is not a valid absolute URL: "${value}".`);
+    throw new Error(
+      `EXPO_PUBLIC_API_URL is not a valid absolute URL: "${value}".`,
+    );
   }
 
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {

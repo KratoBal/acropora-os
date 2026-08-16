@@ -45,8 +45,7 @@ function encodeData(bytes: Uint8Array): number[] {
 }
 
 function appendBits(target: number[], value: number, length: number) {
-  for (let bit = length - 1; bit >= 0; bit--)
-    target.push((value >>> bit) & 1);
+  for (let bit = length - 1; bit >= 0; bit--) target.push((value >>> bit) & 1);
 }
 
 function reedSolomonRemainder(data: number[]): number[] {
@@ -152,7 +151,11 @@ function drawAlignment(
 ) {
   for (let dy = -2; dy <= 2; dy++)
     for (let dx = -2; dx <= 2; dx++)
-      set(centerX + dx, centerY + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
+      set(
+        centerX + dx,
+        centerY + dy,
+        Math.max(Math.abs(dx), Math.abs(dy)) !== 1,
+      );
 }
 
 function drawFormatBits(
@@ -171,8 +174,7 @@ function drawFormatBits(
   set(8, 8, bit(7));
   set(7, 8, bit(8));
   for (let index = 9; index < 15; index++) set(14 - index, 8, bit(index));
-  for (let index = 0; index < 8; index++)
-    set(SIZE - 1 - index, 8, bit(index));
+  for (let index = 0; index < 8; index++) set(SIZE - 1 - index, 8, bit(index));
   for (let index = 8; index < 15; index++)
     set(8, SIZE - 15 + index, bit(index));
   set(8, SIZE - 8, true);

@@ -24,7 +24,9 @@ export { computeReconciliationStatus } from "./stock-reconciliation-status.util.
 export class StockReconciliationService {
   constructor(private readonly repository: StockReconciliationRepository) {}
 
-  reconcilePage(query: StockReconciliationQuery): Promise<StockReconciliationPage> {
+  reconcilePage(
+    query: StockReconciliationQuery,
+  ): Promise<StockReconciliationPage> {
     return this.repository.reconcilePage(query);
   }
 

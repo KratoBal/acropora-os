@@ -17,7 +17,11 @@ describe("signOut", () => {
         calls.push("clearUserScopedQueries");
       },
     });
-    assert.deepEqual(calls, ["logout", "clearSession", "clearUserScopedQueries"]);
+    assert.deepEqual(calls, [
+      "logout",
+      "clearSession",
+      "clearUserScopedQueries",
+    ]);
   });
 
   it("still clears the local token when the server call fails (network error or already-401)", async () => {

@@ -7,7 +7,8 @@ const originalFetch = globalThis.fetch;
 function clearCookies() {
   for (const part of document.cookie.split(";")) {
     const name = part.split("=")[0]?.trim();
-    if (name) document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+    if (name)
+      document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
   }
 }
 
@@ -76,10 +77,7 @@ describe("apiRequest", () => {
 
     const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock
       .calls[0] as [string, RequestInit];
-    expect(init.headers).toHaveProperty(
-      "X-CSRF-Token",
-      "csrf-token-value",
-    );
+    expect(init.headers).toHaveProperty("X-CSRF-Token", "csrf-token-value");
   });
 
   it("sends no CSRF header on a mutating request when there is no CSRF cookie (development mode)", async () => {

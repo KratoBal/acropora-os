@@ -91,7 +91,8 @@ export const REQUIRED_DATABASE_ENGINE_MAJOR_VERSION_PREFIX = "16";
 /// env var only for local/alternate-fork development; the fallback is
 /// this project's actual repository.
 export const EXPECTED_RELEASE_EVIDENCE_REPOSITORY =
-  process.env.RELEASE_EVIDENCE_EXPECTED_REPOSITORY?.trim() || "KratoBal/acropora-os";
+  process.env.RELEASE_EVIDENCE_EXPECTED_REPOSITORY?.trim() ||
+  "KratoBal/acropora-os";
 
 /// Checkpoint 8: GitHub Actions event names trusted enough to unblock
 /// production activation-readiness. `push` (a real merge/commit landing on
@@ -106,7 +107,10 @@ export const EXPECTED_RELEASE_EVIDENCE_REPOSITORY =
 /// forked PRs must categorically never be able to (see
 /// .github/workflows/ci.yml's own fork guard on the evidence-recording
 /// step, which is defense-in-depth to THIS check, not a substitute for it).
-export const TRUSTED_RELEASE_EVIDENCE_TRIGGER_EVENTS = new Set(["push", "workflow_dispatch"]);
+export const TRUSTED_RELEASE_EVIDENCE_TRIGGER_EVENTS = new Set([
+  "push",
+  "workflow_dispatch",
+]);
 
 /// Checkpoint 9: activation-readiness must also confirm the SUCCESS row
 /// actually identifies the specific test this gate cares about (the
@@ -119,4 +123,5 @@ export const TRUSTED_RELEASE_EVIDENCE_TRIGGER_EVENTS = new Set(["push", "workflo
 /// human-written CI step description (see ci.yml/release-evidence-
 /// handoff.yml's RELEASE_EVIDENCE_TEST_SUITE values) that may reasonably
 /// vary in framing without changing what was actually tested.
-export const EXPECTED_TEST_SUITE_SUBSTRING = "unas-order-sync.repository.integration.spec.ts";
+export const EXPECTED_TEST_SUITE_SUBSTRING =
+  "unas-order-sync.repository.integration.spec.ts";

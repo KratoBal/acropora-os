@@ -4,3 +4,6 @@ dist
 .turbo
 pnpm-lock.yaml
 packages/database/src/generated
+
+# Generated Expo asset, not hand-written source.
+apps/mobile/assets/expo.icon/icon.json

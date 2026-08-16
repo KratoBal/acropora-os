@@ -23,9 +23,7 @@ export class UnasCustomerSyncService {
     pageSize = DEFAULT_PAGE_SIZE,
   ): Promise<UnasCustomerSyncSummary> {
     const cursor = await this.repository.getCursor();
-    const windowStart = cursor
-      ? new Date(cursor.getTime() - OVERLAP_MS)
-      : null;
+    const windowStart = cursor ? new Date(cursor.getTime() - OVERLAP_MS) : null;
     const runId = await this.repository.createRun({ windowStart, windowEnd });
     try {
       const customers = await this.downloadCustomers(
@@ -34,7 +32,12 @@ export class UnasCustomerSyncService {
         windowEnd,
         pageSize,
       );
-      return await this.repository.apply(runId, customers, windowStart, windowEnd);
+      return await this.repository.apply(
+        runId,
+        customers,
+        windowStart,
+        windowEnd,
+      );
     } catch (error) {
       const errorCode =
         error instanceof Error ? error.message : "UNAS_CUSTOMER_SYNC_FAILED";
@@ -59,7 +62,8 @@ export class UnasCustomerSyncService {
         limitStart,
         limitNum: pageSize,
       });
-      for (const customer of page) byExternalId.set(customer.externalId, customer);
+      for (const customer of page)
+        byExternalId.set(customer.externalId, customer);
       if (page.length < pageSize) break;
     }
     return [...byExternalId.values()];

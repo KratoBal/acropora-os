@@ -7,7 +7,9 @@ import { randomBytes } from "node:crypto";
  * cookies only ever need to be read here, in the auth guard, so a tiny
  * parser is enough.
  */
-export function parseCookies(header: string | undefined): Record<string, string> {
+export function parseCookies(
+  header: string | undefined,
+): Record<string, string> {
   const cookies: Record<string, string> = {};
   if (!header) return cookies;
   for (const part of header.split(";")) {

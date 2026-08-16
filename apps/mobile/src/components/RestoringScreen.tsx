@@ -1,4 +1,10 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 /**
@@ -30,7 +36,10 @@ export function RestoringScreen({
               accessibilityRole="button"
               accessibilityLabel="Kapcsolat újrapróbálása"
               onPress={onRetry}
-              style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}
+              style={({ pressed }) => [
+                styles.button,
+                pressed && styles.buttonPressed,
+              ]}
             >
               <Text style={styles.buttonText}>Újrapróbálás</Text>
             </Pressable>

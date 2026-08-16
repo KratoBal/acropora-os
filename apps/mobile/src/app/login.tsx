@@ -29,7 +29,10 @@ export default function LoginScreen() {
   if (status === "authenticated") {
     return assetToken ? (
       <Redirect
-        href={{ pathname: "/assets/scan/[token]", params: { token: assetToken } }}
+        href={{
+          pathname: "/assets/scan/[token]",
+          params: { token: assetToken },
+        }}
       />
     ) : (
       <Redirect href="/" />
@@ -64,7 +67,9 @@ export default function LoginScreen() {
           <View style={styles.hero}>
             <Text style={styles.eyebrow}>ACROPORA OS</Text>
             <Text style={styles.title}>Terepi rendszer</Text>
-            <Text style={styles.subtitle}>Jelentkezz be a munkamenet indításához.</Text>
+            <Text style={styles.subtitle}>
+              Jelentkezz be a munkamenet indításához.
+            </Text>
           </View>
 
           <View style={styles.form}>
@@ -104,13 +109,21 @@ export default function LoginScreen() {
                   onChangeText={setPassword}
                   placeholder="Jelszó"
                   placeholderTextColor="#5b7c92"
-                  style={[styles.input, styles.passwordInput, submitting && styles.inputDisabled]}
+                  style={[
+                    styles.input,
+                    styles.passwordInput,
+                    submitting && styles.inputDisabled,
+                  ]}
                   returnKeyType="done"
                   onSubmitEditing={handleSubmit}
                 />
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={passwordVisible ? "Jelszó elrejtése" : "Jelszó megjelenítése"}
+                  accessibilityLabel={
+                    passwordVisible
+                      ? "Jelszó elrejtése"
+                      : "Jelszó megjelenítése"
+                  }
                   disabled={submitting}
                   onPress={() => setPasswordVisible((visible) => !visible)}
                   style={styles.toggleButton}

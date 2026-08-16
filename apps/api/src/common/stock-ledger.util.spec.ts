@@ -15,7 +15,10 @@ function d(value: string): Prisma.Decimal {
 describe("classifyLedgerMovements", () => {
   it("sums PURCHASE_RECEIPT positively and SALE negatively for the same variant", () => {
     const movements: LedgerMovement[] = [
-      { type: "PURCHASE_RECEIPT", lines: [{ variantId: "v1", quantity: d("10") }] },
+      {
+        type: "PURCHASE_RECEIPT",
+        lines: [{ variantId: "v1", quantity: d("10") }],
+      },
       { type: "SALE", lines: [{ variantId: "v1", quantity: d("4") }] },
     ];
     const result = classifyLedgerMovements(movements);
@@ -34,7 +37,10 @@ describe("classifyLedgerMovements", () => {
 
   it("marks a variant unprovable when any ADJUSTMENT movement touches it - sign is not recoverable", () => {
     const movements: LedgerMovement[] = [
-      { type: "PURCHASE_RECEIPT", lines: [{ variantId: "v1", quantity: d("10") }] },
+      {
+        type: "PURCHASE_RECEIPT",
+        lines: [{ variantId: "v1", quantity: d("10") }],
+      },
       { type: "ADJUSTMENT", lines: [{ variantId: "v1", quantity: d("2") }] },
     ];
     const result = classifyLedgerMovements(movements);

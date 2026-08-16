@@ -1,6 +1,9 @@
 import type { Prisma } from "@acropora/database";
 
-import type { RepairRejectionCode, StockReconciliationRepairType } from "./stock-reconciliation-repair.types.js";
+import type {
+  RepairRejectionCode,
+  StockReconciliationRepairType,
+} from "./stock-reconciliation-repair.types.js";
 
 /// `RECONCILIATION_REPAIR:<repairType>:<stockItemId>:<expectedCurrentOnHand>`.
 ///
@@ -48,7 +51,10 @@ export function evaluateLocalFromProvenLedgerPreconditions(params: {
   // Numeric comparison, not string comparison: "5", "5.0" and "5.000000"
   // must all be treated as the same value - Decimal.equals handles this
   // correctly, a raw string compare would not.
-  if (!params.localOnHand || !params.localOnHand.equals(params.expectedCurrentOnHand)) {
+  if (
+    !params.localOnHand ||
+    !params.localOnHand.equals(params.expectedCurrentOnHand)
+  ) {
     return "STALE_EXPECTED_CURRENT_VALUE";
   }
   return null;
@@ -64,7 +70,10 @@ export function evaluateRepublishPreconditions(params: {
   hasCompetingOpenOutboxRow: boolean;
 }): RepairRejectionCode | null {
   if (!params.hasUnasLink) return "MISSING_UNAS_LINK";
-  if (!params.localOnHand || !params.localOnHand.equals(params.expectedCurrentOnHand)) {
+  if (
+    !params.localOnHand ||
+    !params.localOnHand.equals(params.expectedCurrentOnHand)
+  ) {
     return "STALE_EXPECTED_CURRENT_VALUE";
   }
   if (params.hasCompetingOpenOutboxRow) return "ALREADY_QUEUED";

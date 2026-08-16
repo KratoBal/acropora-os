@@ -10,7 +10,9 @@ import type {
 import type { StockReconciliationRepository } from "./stock-reconciliation.repository.js";
 import type { StockReconciliationRow } from "./stock-reconciliation.types.js";
 
-function baseRow(overrides: Partial<StockReconciliationRow> = {}): StockReconciliationRow {
+function baseRow(
+  overrides: Partial<StockReconciliationRow> = {},
+): StockReconciliationRow {
   return {
     variantId: "v1",
     sku: "sku-1",
@@ -42,7 +44,9 @@ function baseRow(overrides: Partial<StockReconciliationRow> = {}): StockReconcil
 class FakeReconciliationRepository {
   row: StockReconciliationRow | null = null;
   calls = 0;
-  async reconcileByStockItemId(_stockItemId: string): Promise<StockReconciliationRow | null> {
+  async reconcileByStockItemId(
+    _stockItemId: string,
+  ): Promise<StockReconciliationRow | null> {
     this.calls += 1;
     return this.row;
   }
@@ -59,7 +63,9 @@ class FakeRepairRepository {
     return this.byIdempotencyKey.get(idempotencyKey) ?? null;
   }
   async findById(id: string) {
-    return [...this.byIdempotencyKey.values()].find((row) => row.id === id) ?? null;
+    return (
+      [...this.byIdempotencyKey.values()].find((row) => row.id === id) ?? null
+    );
   }
   async applyLocalFromProvenLedger(params: unknown) {
     this.applyLocalCalls.push(params);
@@ -71,7 +77,10 @@ class FakeRepairRepository {
   }
 }
 
-function buildService(reconciliation: FakeReconciliationRepository, repairs: FakeRepairRepository) {
+function buildService(
+  reconciliation: FakeReconciliationRepository,
+  repairs: FakeRepairRepository,
+) {
   return new StockReconciliationRepairService(
     reconciliation as unknown as StockReconciliationRepository,
     repairs as unknown as StockReconciliationRepairRepository,
