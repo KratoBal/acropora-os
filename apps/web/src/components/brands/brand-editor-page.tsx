@@ -9,6 +9,7 @@ import {
   PageHeader,
   Select,
   Skeleton,
+  Textarea,
 } from "@acropora/ui";
 import { hasPermission, PERMISSIONS, type BrandDetail } from "@acropora/types";
 import Link from "next/link";
@@ -207,9 +208,9 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
           <h2 className="font-semibold">Megjelenés</h2>
           <div className="mt-4 grid gap-4">
             <FormField label="Leírás">
-              <textarea
+              <Textarea
                 aria-label="Leírás"
-                className="min-h-24 w-full rounded-lg border border-slate-200 p-3 text-sm"
+                className="min-h-24"
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
               />

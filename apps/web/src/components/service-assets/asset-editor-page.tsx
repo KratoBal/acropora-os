@@ -8,6 +8,7 @@ import {
   Input,
   PageHeader,
   Select,
+  Textarea,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -412,12 +413,11 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             </FormField>
           </div>
           <FormField label="Leírás" className="mt-4">
-            <textarea
+            <Textarea
               aria-label="Leírás"
               rows={4}
               value={description}
               onChange={(event) => setDescription(event.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
             />
           </FormField>
         </Card>
@@ -461,12 +461,11 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             </FormField>
           </div>
           <FormField label="Belső megjegyzés" className="mt-4">
-            <textarea
+            <Textarea
               aria-label="Belső megjegyzés"
               rows={3}
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
             />
           </FormField>
         </Card>
