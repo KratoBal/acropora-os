@@ -473,6 +473,9 @@ model User {
   updatedAssets              Asset[]                       @relation("AssetUpdatedBy")
   assetEvents                AssetEvent[]
   uploadedAssetDocuments     AssetDocument[]               @relation("AssetDocumentUploadedBy")
+  assignedTasks              Task[]                        @relation("TaskAssignee")
+  createdTasks               Task[]                        @relation("TaskCreatedBy")
+  closedTasks                Task[]                        @relation("TaskClosedBy")
 
   @@index([role, isActive])
 }
@@ -2488,4 +2491,50 @@ model DomainEvent {
   @@index([aggregateType, aggregateId, occurredAt])
   @@index([publishedAt, occurredAt])
   @@index([correlationId])
+}
+
+enum TaskStatus {
+  OPEN
+  DONE
+}
+
+/// Honnan jött a feladat. A gépi (AGENT) felvitel a flotta ügynökeitől
+/// érkezik, egy kizárólag létrehozásra képes service tokennel - lásd a
+/// docs/TASKS.md "Gépi felvitel" szakaszát.
+enum TaskSource {
+  MANUAL
+  AGENT
+}
+
+/// Személyes feladat- és kérdéslista. Nem projektmenedzsment: egyetlen
+/// felelőse van, két állapota, és a fő tartalma a `description` indoklás
+/// (miért kérdezzük, mit blokkol), nem a cím.
+model Task {
+  id          String     @id @default(cuid())
+  title       String
+  description String?
+  status      TaskStatus @default(OPEN)
+  /// Külső hivatkozás (jellemzően a Discord-szál URL-je), hogy a tétel a
+  /// beszélgetés helyére vezessen vissza. Csak http/https engedett.
+  linkUrl     String?
+  source      TaskSource @default(MANUAL)
+  /// A forrásrendszer saját azonosítója (pl. "polip:required-inputs#1.3").
+  /// A [source, sourceRef] egyediség adja a gépi felvitel idempotenciáját:
+  /// egy újraküldött tétel nem keletkezik kétszer. Kézi felvitelnél NULL,
+  /// és PostgreSQL-ben a NULL minden más NULL-tól különbözik, ezért ez a
+  /// kézi tételek számát nem korlátozza.
+  sourceRef   String?
+  assigneeId  String
+  createdById String?
+  closedById  String?
+  closedAt    DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  assignee  User  @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: Cascade)
+  createdBy User? @relation("TaskCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  closedBy  User? @relation("TaskClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+
+  @@unique([source, sourceRef])
+  @@index([assigneeId, status, createdAt])
 }
