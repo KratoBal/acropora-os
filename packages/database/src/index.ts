@@ -41,6 +41,7 @@ export type {
   SalesOrderLine,
   ServiceJob,
   ServiceJobAsset,
+  ServiceToken,
   Session,
   StockMovement,
   StockMovementLine,

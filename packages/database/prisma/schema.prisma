@@ -2538,3 +2538,29 @@ model Task {
   @@unique([source, sourceRef])
   @@index([assigneeId, status, createdAt])
 }
+
+/// Gépi (ember nélküli) hívó a feladat-felvitelhez. Szándékosan nem User és
+/// nem Session: egy session token MINDEN végponton érvényes, és csak a
+/// jogosultsági mátrix szűkíti. Ezt a tokent viszont egyetlen végpont
+/// fogadja el (POST /tasks/ingest), mert a ServiceTokenGuard sehol máshol
+/// nem szerepel a kódbázisban. A korlát így konstrukciós, nem
+/// konfigurációs: a token nem azért nem tud mást csinálni, mert nincs rá
+/// joga, hanem mert nincs másik végpont, amely elfogadná.
+model ServiceToken {
+  id         String    @id @default(cuid())
+  /// Emberi olvasásra szánt név, pl. "Flotta - polip".
+  name       String
+  /// Névtér-előtag. A token által felvitt minden feladat sourceRef-je
+  /// "<slug>:<hivatkozás>" alakban tárolódik, a szerver által összefűzve.
+  /// Így két gépi hívó nem tud ütközni egymás egyedi indexén, és nem tud
+  /// egymás nevében tételt felvinni.
+  slug       String    @unique
+  /// A nyers token sosem kerül adatbázisba, kizárólag a SHA-256 lenyomata -
+  /// ugyanaz az elv, mint a Session.tokenHash mezőnél.
+  tokenHash  String    @unique
+  /// Napi felvitel-plafon, elszabadult ügynök-ciklus ellen.
+  dailyLimit Int       @default(200)
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+}

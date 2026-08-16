@@ -6,3 +6,4 @@ Az ADR-ek a jelentős, hosszú távú technikai döntéseket és azok indoklás�
 
 - [ADR-013 – UNAS Product Master és helyi Product Extension](./0013-unas-product-master-and-local-extension.md)
 - [ADR-014 – UNAS connection settings és credential-kezelés](./0014-unas-connection-settings.md)
+- [ADR-015 – Gépi feladat-felvitel hatókör-korlátozott service tokennel](./0015-service-token-machine-ingest.md)

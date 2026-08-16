@@ -82,12 +82,61 @@ helyett, így a placeholder holt kód lett volna.
 
 ## Gépi felvitel
 
-A `TaskSource.AGENT` és a `sourceRef` a séma szintjén már készen áll arra, hogy
-a flotta ügynökei is vegyenek fel tételt, **de a hozzá tartozó hitelesítés még
-nincs implementálva**. A tervezett megoldás egy külön `ServiceToken` modell és
-egy kizárólag egyetlen `POST /tasks/ingest` végponton használt guard, tehát a
-token nem azért nem tud mást csinálni, mert nincs rá joga, hanem azért, mert
-nincs másik végpont, amely elfogadná.
+A flotta ügynökei a `POST /tasks/ingest` végponton vesznek fel feladatot. Ez az
+alkalmazás **teljes** gépi felülete: egy controller, egy metódus, egy útvonal. A
+hitelesítést a `ServiceTokenGuard` végzi, amely a kódbázisban sehol máshol nem
+szerepel, tehát a token nem azért nem tud mást csinálni, mert nincs rá joga,
+hanem mert nincs másik végpont, amely elfogadná a credentialt. A döntés
+indoklása és a vállalt kompromisszumok: [ADR-015](../adr/0015-service-token-machine-ingest.md).
 
-Addig `AGENT` forrású tétel csak adatbázisból keletkezhet, és a felületen a
-"Flotta" jelöléssel különül el a kézi felviteltől.
+A végponton `@Public()` szerepel, de az nem publikus végpontot jelent, csak azt,
+hogy a globális `AuthGuard` álljon félre. Session cookie-t a guard nem néz, ezért
+CSRF-ellenőrzés sem kell: a kérés nem hordoz ambient credentialt.
+
+### Kérés
+
+```http
+POST /tasks/ingest
+Authorization: Bearer svc_...
+Content-Type: application/json
+
+{
+  "title": "Nyers termékexport",
+  "description": "Enélkül polip nem tud importra kész fájlt adni.",
+  "linkUrl": "https://discord.com/channels/...",
+  "assigneeEmail": "balazs@example.hu",
+  "reference": "required-inputs#1.2"
+}
+```
+
+Válasz: `{ "id": "...", "status": "OPEN", "created": true }`.
+
+- A `reference` **kötelező**. A szerver a token slugjával fűzi össze, tehát a
+  tárolt érték `"<slug>:<reference>"`, és a hívó a névteret nem választhatja meg.
+  Ezért két ügynök azonos hivatkozása nem ütközik, és egyik sem tud a másik
+  nevében írni.
+- Az újraküldés biztonságos: ugyanaz a `reference` a meglévő feladatot adja
+  vissza `created: false` értékkel, nem hoz létre másodikat. Egyidejű dupla hívás
+  esetén a vesztes ág is a nyertes sorára oldódik fel.
+- Ismeretlen vagy inaktív `assigneeEmail` esetén a válasz `422`. Ez a `201`-től
+  való eltérés elárulja egy e-mail cím létezését az érvényes token birtokosának;
+  ezt tudatosan vállaltuk, lásd az ADR-t.
+- Tokenenkénti napi plafon van (`dailyLimit`, alapértelmezés 200). Túllépésnél
+  `429`.
+- Minden felvitel `AuditLog` sort ír `userId = NULL` értékkel; a metadata csak a
+  token slugját és a `sourceRef` értéket tartalmazza, a címet és a leírást nem.
+
+### Token kiadása és visszavonása
+
+Nincs hozzá admin felület, operátori CLI van. A nyers token **egyszer**, a
+létrehozáskor jelenik meg; az adatbázisban csak a SHA-256 lenyomata van, tehát
+elvesztés esetén nem visszaállítható, hanem újat kell kiadni.
+
+```bash
+pnpm --filter @acropora/api service-token -- create --slug polip --name "Flotta - polip"
+pnpm --filter @acropora/api service-token -- list
+pnpm --filter @acropora/api service-token -- revoke --slug polip
+```
+
+A `--slug` kiadás után gyakorlatilag nem nevezhető át, mert a már felvitt
+feladatok `sourceRef` értékének tartós része.
