@@ -1,13 +1,10 @@
 import { EmptyState, Icon, PageHeader } from "@acropora/ui";
 import { notFound } from "next/navigation";
 
+// "feladataim" is deliberately absent: /feladataim now has a real page of
+// its own (app/(shell)/feladataim), and Next.js prefers the static segment
+// over this dynamic one — a placeholder left here would be dead code.
 const sections = {
-  feladataim: {
-    title: "Feladataim",
-    description:
-      "Személyes és csapatszintű feladatok, határidők és prioritások.",
-    icon: "clipboard" as const,
-  },
   webshop: {
     title: "Webshop",
     description: "UNAS rendelések, szinkronizációk és webshopműveletek.",

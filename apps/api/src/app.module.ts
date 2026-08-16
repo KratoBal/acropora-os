@@ -22,6 +22,7 @@ import { ProductModule } from "./products/product.module.js";
 import { PurchasingModule } from "./purchasing/purchasing.module.js";
 import { ServiceAssetsModule } from "./service-assets/service-assets.module.js";
 import { SuppliersModule } from "./suppliers/suppliers.module.js";
+import { TasksModule } from "./tasks/tasks.module.js";
 import { UsersModule } from "./users/users.module.js";
 
 @Module({
@@ -42,6 +43,7 @@ import { UsersModule } from "./users/users.module.js";
     SuppliersModule,
     PurchasingModule,
     ServiceAssetsModule,
+    TasksModule,
     UsersModule,
     HealthModule,
   ],

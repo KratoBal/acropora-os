@@ -313,6 +313,16 @@ export type {
   ProductVariantSummary,
 } from "./product-catalog.js";
 export type {
+  CreateTaskInput,
+  TaskAssigneeOptionsResponse,
+  TaskListResponse,
+  TaskPersonSummary,
+  TaskSource,
+  TaskStatus,
+  TaskStatusFilter,
+  TaskSummary,
+} from "./task-management.js";
+export type {
   CreateUserInput,
   SetUserPasswordInput,
   UpdateUserInput,
