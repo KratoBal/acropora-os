@@ -18,6 +18,8 @@ pnpm test
 pnpm build
 ```
 
+A `pnpm install` beállítja a `core.hooksPath` értékét a repository `.githooks` mappájára, így egy pre-commit hook visszautasítja a formázatlan fájlokat tartalmazó commitot. Ez gyors helyi jelzés, nem maga a szabály: kihagyható (`git commit --no-verify`), és csak azon a gépen létezik, ahol lefutott a telepítés. A mérvadó ellenőrzés a `pnpm format:check`.
+
 Adatbázist érintő API-változásnál külön futtasd az érintett opt-in integrációs tesztet. A teljes Nest dependency graph ellenőrzése: `pnpm --filter @acropora/api test:bootstrap`. Élő PostgreSQL és Redis mellett a health smoke: `pnpm --filter @acropora/api test:smoke`.
 
 ## Irányelvek

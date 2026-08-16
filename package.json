@@ -10,6 +10,7 @@
     "pnpm": ">=10.0.0"
   },
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks || true",
     "build": "turbo run build",
     "dev": "turbo run dev --filter=@acropora/web --filter=@acropora/api",
     "dev:mobile": "npm --prefix apps/mobile run dev",
