@@ -5,8 +5,14 @@ node_modules/
 # Build output and caches
 .next/
 dist/
+# A renamed build directory (`mv dist dist.old-<timestamp>`, to keep a build
+# around while rebuilding) no longer matches `dist/`, so git starts tracking
+# it. That is exactly how apps/api/dist.old-1784904974 - 486 files of compiled
+# output - ended up committed in 0dc1c65.
+dist.*/
 coverage/
 test-dist/
+test-dist.*/
 .turbo/
 *.tsbuildinfo
 apps/api/tmp-*-check-dist/
