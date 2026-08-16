@@ -10,6 +10,12 @@ const DEV_URL =
   "postgresql://acropora:acropora@acropora-postgres:5432/acropora";
 const TEST_URL =
   "postgresql://acropora:acropora@acropora-postgres:5432/acropora_test?schema=public";
+// Copied verbatim from .github/workflows/ci.yml. The first version of this
+// gate accepted only `_test` and turned CI red, because CI's throwaway
+// service container is named acropora_ci. Pinning the real string here means
+// the workflow and the gate cannot drift apart silently again.
+const CI_URL =
+  "postgresql://acropora:acropora@localhost:5432/acropora_ci?schema=public";
 
 describe("integrationDatabaseGate", () => {
   it("skips quietly when the suite was not opted into", () => {
@@ -26,6 +32,15 @@ describe("integrationDatabaseGate", () => {
         DATABASE_URL: TEST_URL,
       }),
       { mode: "run", database: "acropora_test" },
+    ));
+
+  it("accepts the database CI actually uses", () =>
+    assert.deepEqual(
+      integrationDatabaseGate({
+        RUN_DB_INTEGRATION: "1",
+        DATABASE_URL: CI_URL,
+      }),
+      { mode: "run", database: "acropora_ci" },
     ));
 
   it("refuses the ordinary development database rather than skipping", () => {

@@ -15,7 +15,16 @@
  *                              integration suite and got silence would assume
  *                              it passed.
  */
-export const TEST_DATABASE_SUFFIX = "_test";
+/**
+ * Suffixes that mark a database as existing to be written to and thrown away.
+ *
+ * `_ci` is here because the CI workflow's PostgreSQL service container is
+ * named `acropora_ci` and is destroyed when the job ends - as disposable as a
+ * database gets. Leaving it out turned CI red on the very commit that
+ * introduced this gate, so the list is pinned by a test against the real
+ * connection string from .github/workflows/ci.yml.
+ */
+export const TEST_DATABASE_SUFFIXES = ["_test", "_ci"] as const;
 
 export type IntegrationDatabaseGate =
   | { mode: "skip" }
@@ -42,11 +51,13 @@ export function integrationDatabaseGate(
       reason: `A DATABASE_URL-ből nem olvasható ki adatbázisnév, ezért nem állapítható meg, hogy teszt-adatbázisra mutat-e.`,
     };
 
-  if (!database.endsWith(TEST_DATABASE_SUFFIX))
+  if (!TEST_DATABASE_SUFFIXES.some((suffix) => database.endsWith(suffix)))
     return {
       mode: "refuse",
       reason:
-        `Az integrációs teszt "${database}" adatbázisra futna, ami nem "${TEST_DATABASE_SUFFIX}" végű. ` +
+        `Az integrációs teszt "${database}" adatbázisra futna, aminek a neve nem ${TEST_DATABASE_SUFFIXES.map(
+          (suffix) => `"${suffix}"`,
+        ).join(" vagy ")} végű. ` +
         "Ezek a tesztek sorokat hoznak létre és törölnek, ezért kizárólag erre a célra létrehozott adatbázison futhatnak. " +
         "Lásd a CONTRIBUTING.md 'Integrációs tesztek' szakaszát.",
     };

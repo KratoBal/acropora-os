@@ -22,7 +22,7 @@ Adatbázist érintő API-változásnál külön futtasd az érintett opt-in inte
 
 ## Integrációs tesztek
 
-Az integrációs tesztek sorokat hoznak létre és törölnek, ezért **saját, erre a célra létrehozott adatbázison futnak**, nem a fejlesztői adatbázison. A `RUN_DB_INTEGRATION=1` önmagában nem elég: a `DATABASE_URL`-nek `_test` végű adatbázisnévre kell mutatnia, különben a futás hangosan elszáll (`integrationDatabaseGate`, `apps/api/src/common/integration-database.ts`).
+Az integrációs tesztek sorokat hoznak létre és törölnek, ezért **saját, erre a célra létrehozott adatbázison futnak**, nem a fejlesztői adatbázison. A `RUN_DB_INTEGRATION=1` önmagában nem elég: a `DATABASE_URL`-nek `_test` vagy `_ci` végű adatbázisnévre kell mutatnia, különben a futás hangosan elszáll (`integrationDatabaseGate`, `apps/api/src/common/integration-database.ts`). A `_ci` a CI eldobható service konténerének neve (`acropora_ci`); ha ez a név valaha változik, a `TEST_DATABASE_SUFFIXES` listát vele együtt kell módosítani, és van rá teszt, ami erre figyelmeztet.
 
 Ez nem bizalmatlanság a teszttel szemben, hanem az egyszeri tévedés ára: egy elgépelt connection string egy sorokat törlő tesztben nem javítható vissza.
 
