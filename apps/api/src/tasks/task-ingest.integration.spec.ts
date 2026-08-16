@@ -3,6 +3,7 @@ import { after, before, describe, it } from "node:test";
 import { prisma } from "@acropora/database";
 
 import { hashSessionToken } from "../auth/session-token.util.js";
+import { integrationDatabaseGate } from "../common/integration-database.js";
 import { ServiceTokenGuard } from "./service-token.guard.js";
 import { ServiceTokenRepository } from "./service-token.repository.js";
 import { TaskIngestRepository } from "./task-ingest.repository.js";
@@ -12,21 +13,31 @@ import { TaskIngestService } from "./task-ingest.service.js";
 // both database-level: only the SHA-256 hash of a service token is ever
 // stored, and the [source, sourceRef] unique index is what makes a replay
 // idempotent. Neither can be proven with a mocked repository.
-const runIntegration = process.env.RUN_DB_INTEGRATION === "1";
+//
+// This suite writes and deletes rows, so it runs only against a database
+// named for testing; see integrationDatabaseGate.
+const gate = integrationDatabaseGate(process.env);
 
-describe("Task ingest integration", { skip: !runIntegration }, () => {
+// Every row this suite creates carries this domain or slug prefix, so a run
+// that was killed before its cleanup does not poison the next one.
+const TEST_EMAIL_DOMAIN = "ingest-integration.invalid";
+const TEST_SLUG_PREFIX = "ingest-integration-";
+
+describe("Task ingest integration", { skip: gate.mode === "skip" }, () => {
   const suffix = Date.now();
   const tokens = new ServiceTokenRepository();
   const repository = new TaskIngestRepository();
   const service = new TaskIngestService(repository, tokens);
-  const email = `ingest-assignee-${suffix}@example.invalid`;
-  const slug = `polip-${suffix}`;
-  const otherSlug = `korall-${suffix}`;
+  const email = `ingest-assignee-${suffix}@${TEST_EMAIL_DOMAIN}`;
+  const slug = `${TEST_SLUG_PREFIX}polip-${suffix}`;
+  const otherSlug = `${TEST_SLUG_PREFIX}korall-${suffix}`;
   let assigneeId: string;
   let rawToken: string;
   let otherRawToken: string;
 
   before(async () => {
+    if (gate.mode === "refuse") throw new Error(gate.reason);
+    await removeLeftovers();
     const user = await prisma.user.create({
       data: {
         email,
@@ -53,13 +64,38 @@ describe("Task ingest integration", { skip: !runIntegration }, () => {
   });
 
   after(async () => {
-    await prisma.auditLog.deleteMany({ where: { action: "task.ingested" } });
-    await prisma.task.deleteMany({ where: { assigneeId } });
-    await prisma.user.delete({ where: { id: assigneeId } });
-    await prisma.serviceToken.deleteMany({
-      where: { slug: { in: [slug, otherSlug] } },
-    });
+    if (gate.mode !== "run") return;
+    await removeLeftovers();
   });
+
+  /**
+   * Deletes only rows this suite could have written, matched by the test
+   * e-mail domain and slug prefix. Audit rows are removed by the id of the
+   * tasks they belong to, never by `action` alone - "every task.ingested row
+   * in the database" is not this suite's to delete. Runs before as well as
+   * after, so an aborted run cleans up on the next attempt.
+   */
+  async function removeLeftovers() {
+    const users = await prisma.user.findMany({
+      where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
+      select: { id: true },
+    });
+    const ids = users.map((user) => user.id);
+    if (ids.length) {
+      const tasks = await prisma.task.findMany({
+        where: { assigneeId: { in: ids } },
+        select: { id: true },
+      });
+      await prisma.auditLog.deleteMany({
+        where: { entityId: { in: tasks.map((task) => task.id) } },
+      });
+      await prisma.task.deleteMany({ where: { assigneeId: { in: ids } } });
+      await prisma.user.deleteMany({ where: { id: { in: ids } } });
+    }
+    await prisma.serviceToken.deleteMany({
+      where: { slug: { startsWith: TEST_SLUG_PREFIX } },
+    });
+  }
 
   const payload = (reference: string) => ({
     title: "Nyers termékexport",
@@ -81,7 +117,7 @@ describe("Task ingest integration", { skip: !runIntegration }, () => {
     assert.equal(await tokens.findActive("svc_never-issued"), null);
 
     const throwaway = `svc_throwaway_${suffix}`;
-    const throwawaySlug = `throwaway-${suffix}`;
+    const throwawaySlug = `${TEST_SLUG_PREFIX}throwaway-${suffix}`;
     await tokens.create({
       name: "Throwaway",
       slug: throwawaySlug,
