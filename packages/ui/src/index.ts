@@ -27,6 +27,8 @@ export { Skeleton } from "./skeleton";
 export type { SkeletonProps } from "./skeleton";
 export { StatCard } from "./stat-card";
 export type { StatCardProps } from "./stat-card";
+export { Textarea } from "./textarea";
+export type { TextareaProps } from "./textarea";
 export { Topbar } from "./topbar";
 export type { TopbarProps } from "./topbar";
 export { Alert } from "./alert";
