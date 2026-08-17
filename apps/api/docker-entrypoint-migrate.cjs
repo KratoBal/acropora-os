@@ -70,10 +70,17 @@ function resolvePrismaPaths() {
     );
   }
   if (!fs.existsSync(schemaPath)) {
-    throw new Error(`schema.prisma resolved to ${schemaPath} but does not exist.`);
+    throw new Error(
+      `schema.prisma resolved to ${schemaPath} but does not exist.`,
+    );
   }
-  if (!fs.existsSync(migrationsDir) || fs.readdirSync(migrationsDir).length === 0) {
-    throw new Error(`migrations directory missing or empty at ${migrationsDir}`);
+  if (
+    !fs.existsSync(migrationsDir) ||
+    fs.readdirSync(migrationsDir).length === 0
+  ) {
+    throw new Error(
+      `migrations directory missing or empty at ${migrationsDir}`,
+    );
   }
 
   return { cliEntry, schemaPath, migrationsDir };
@@ -83,11 +90,16 @@ function main() {
   const { cliEntry, schemaPath, migrationsDir } = resolvePrismaPaths();
   const migrationCount = fs
     .readdirSync(migrationsDir)
-    .filter((entry) => fs.statSync(path.join(migrationsDir, entry)).isDirectory()).length;
+    .filter((entry) =>
+      fs.statSync(path.join(migrationsDir, entry)).isDirectory(),
+    ).length;
 
   console.log("Resolved Prisma CLI:", cliEntry);
   console.log("Resolved schema.prisma:", schemaPath);
-  console.log(`Resolved migrations directory (${migrationCount} migrations):`, migrationsDir);
+  console.log(
+    `Resolved migrations directory (${migrationCount} migrations):`,
+    migrationsDir,
+  );
 
   if (mode === "--check") {
     console.log(
@@ -112,11 +124,15 @@ function main() {
     process.exit(1);
   }
   if (result.status !== 0) {
-    console.error(`prisma ${prismaArgs[0]} ${prismaArgs[1]} exited with code ${result.status}`);
+    console.error(
+      `prisma ${prismaArgs[0]} ${prismaArgs[1]} exited with code ${result.status}`,
+    );
     process.exit(result.status ?? 1);
   }
   console.log(
-    mode === "--status" ? "Migration status check completed." : "Migrations applied successfully.",
+    mode === "--status"
+      ? "Migration status check completed."
+      : "Migrations applied successfully.",
   );
 }
 

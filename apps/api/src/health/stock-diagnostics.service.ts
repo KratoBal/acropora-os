@@ -86,13 +86,20 @@ export class StockDiagnosticsService {
       this.repository.checkDatabase(),
       this.repository.checkRequiredTables(),
     ]);
-    const anyTableUnreachable = requiredTables.some((table) => !table.reachable);
+    const anyTableUnreachable = requiredTables.some(
+      (table) => !table.reachable,
+    );
     const status: DiagnosticStatus = !database.reachable
       ? "BLOCKED"
       : anyTableUnreachable
         ? "BLOCKED"
         : "OK";
-    return { status, database, requiredTables, timestamp: new Date().toISOString() };
+    return {
+      status,
+      database,
+      requiredTables,
+      timestamp: new Date().toISOString(),
+    };
   }
 
   /// Detailed, permission-gated diagnostics report - see this file's
@@ -137,9 +144,12 @@ export class StockDiagnosticsService {
 
     const reconciliation = {
       checkedCount: reconciliationSummary.checkedCount,
-      historicalBaselineUnknownCount: reconciliationSummary.byStatus.HISTORICAL_BASELINE_UNKNOWN,
-      invalidLedgerDataCount: reconciliationSummary.byStatus.INVALID_LEDGER_DATA,
-      localLedgerMismatchCount: reconciliationSummary.byStatus.LOCAL_LEDGER_MISMATCH,
+      historicalBaselineUnknownCount:
+        reconciliationSummary.byStatus.HISTORICAL_BASELINE_UNKNOWN,
+      invalidLedgerDataCount:
+        reconciliationSummary.byStatus.INVALID_LEDGER_DATA,
+      localLedgerMismatchCount:
+        reconciliationSummary.byStatus.LOCAL_LEDGER_MISMATCH,
     };
     if (reconciliation.historicalBaselineUnknownCount > 0) {
       notes.push(
@@ -147,7 +157,8 @@ export class StockDiagnosticsService {
       );
     }
     const reconciliationStatus: DiagnosticStatus =
-      reconciliation.localLedgerMismatchCount >= RECONCILIATION_LOCAL_LEDGER_MISMATCH_COUNT_DEGRADED
+      reconciliation.localLedgerMismatchCount >=
+      RECONCILIATION_LOCAL_LEDGER_MISMATCH_COUNT_DEGRADED
         ? "DEGRADED"
         : "OK";
 
@@ -156,14 +167,17 @@ export class StockDiagnosticsService {
       ordersWithRiskFlags: unasOrderAuditSummary.ordersWithRiskFlags,
     };
     const unasOrderAuditStatus: DiagnosticStatus =
-      unasOrderAuditSnapshot.ordersWithRiskFlags >= UNAS_ORDER_AUDIT_RISK_ORDER_COUNT_DEGRADED
+      unasOrderAuditSnapshot.ordersWithRiskFlags >=
+      UNAS_ORDER_AUDIT_RISK_ORDER_COUNT_DEGRADED
         ? "BLOCKED" // matches section 8: "historical order audit critical risk: BLOCKED for UNAS delta engine production activation" - surfaced here too so the general diagnostics report doesn't understate it.
         : "OK";
 
     const unasConfig = this.computeUnasConfigDiagnostics();
 
     const readinessStatus: DiagnosticStatus =
-      !database.reachable || requiredTables.some((t) => !t.reachable) ? "BLOCKED" : "OK";
+      !database.reachable || requiredTables.some((t) => !t.reachable)
+        ? "BLOCKED"
+        : "OK";
 
     const status = worst(
       readinessStatus,
@@ -246,7 +260,8 @@ export class StockDiagnosticsService {
         `A PostgreSQL advisory-lock konkurenciateszt (INVENTORY_POSTGRES_CONCURRENCY_TEST) SUCCESS bizonyítéka nem található a jelenlegi commitra (${evaluatedCommitSha}). Régebbi commitra futott siker NEM oldja fel ezt a blokkolást - lásd record-release-evidence.ts.`,
       );
     } else {
-      const ageDays = (Date.now() - evidence.completedAt.getTime()) / (1000 * 60 * 60 * 24);
+      const ageDays =
+        (Date.now() - evidence.completedAt.getTime()) / (1000 * 60 * 60 * 24);
       // Checkpoint 8: an exact-commit SUCCESS row that isn't too old is
       // STILL not automatically sufficient - the "most important rule"
       // (the user's own framing for this checkpoint) is that a raw
@@ -281,7 +296,9 @@ export class StockDiagnosticsService {
       }
       if (
         evidence.databaseEngine !== REQUIRED_DATABASE_ENGINE ||
-        !evidence.databaseEngineVersion.startsWith(REQUIRED_DATABASE_ENGINE_MAJOR_VERSION_PREFIX)
+        !evidence.databaseEngineVersion.startsWith(
+          REQUIRED_DATABASE_ENGINE_MAJOR_VERSION_PREFIX,
+        )
       ) {
         authenticityViolations.push(
           `A talált evidence sor nem PostgreSQL ${REQUIRED_DATABASE_ENGINE_MAJOR_VERSION_PREFIX}-on futott (${evidence.databaseEngine} ${evidence.databaseEngineVersion}) - a production postgres:16-alpine-ot futtat, egy másik főverzión (pl. a checkpoint 7 kiegészítő PostgreSQL 18.4 futása) lefutott teszt önmagában nem elég.`,
@@ -302,9 +319,10 @@ export class StockDiagnosticsService {
       // ELLENTMONDÓ FAILURE sor is. Egy ilyen ellentmondó pár esetén a
       // sor - még ha egyébként minden más feltételnek megfelelne is -
       // nem tekinthető megbízhatónak.
-      const contradictingFailure = await this.repository.findContradictingFailureForWorkflowRun(
-        evidence.workflowRunId,
-      );
+      const contradictingFailure =
+        await this.repository.findContradictingFailureForWorkflowRun(
+          evidence.workflowRunId,
+        );
       if (contradictingFailure) {
         authenticityViolations.push(
           `Ellentmondó evidence: a(z) ${evidence.workflowRunId} workflowRunId-hoz SUCCESS ÉS FAILURE sor is tartozik (FAILURE id: ${contradictingFailure.id}) - ez a helyzet önmagában blokkolja a kaput, függetlenül attól, hogy a SUCCESS sor egyébként minden más feltételnek megfelelne.`,
@@ -399,7 +417,8 @@ export class StockDiagnosticsService {
       syncedAt ? (now - syncedAt.getTime()) / (1000 * 60 * 60) : null,
     );
     const knownAges = ages.filter((age): age is number => age !== null);
-    const oldestSyncAgeHours = knownAges.length > 0 ? Math.max(...knownAges) : null;
+    const oldestSyncAgeHours =
+      knownAges.length > 0 ? Math.max(...knownAges) : null;
     const productsWithUnknownFreshness = ages.filter(
       (age) => age === null || age >= UNAS_SNAPSHOT_STALE_HOURS_UNKNOWN,
     ).length;
@@ -437,7 +456,9 @@ export class StockDiagnosticsService {
       };
     }
     const appliedSet = new Set(migrationStatus.applied);
-    const missing = migrationStatus.expected.filter((name) => !appliedSet.has(name));
+    const missing = migrationStatus.expected.filter(
+      (name) => !appliedSet.has(name),
+    );
     return {
       status: missing.length > 0 ? "BLOCKED" : "OK",
       checked: true,

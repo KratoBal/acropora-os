@@ -124,6 +124,9 @@ describe("AuthController", () => {
     await controller.logout(request, response);
 
     assert.equal(loggedOutToken, "cookie-token");
-    assert.deepEqual(response.cleared.sort(), [CSRF_COOKIE_NAME, SESSION_COOKIE_NAME].sort());
+    assert.deepEqual(
+      response.cleared.sort(),
+      [CSRF_COOKIE_NAME, SESSION_COOKIE_NAME].sort(),
+    );
   });
 });

@@ -118,7 +118,8 @@ export interface StockDiagnosticsReport {
 /// - "DEMONSTRATED": a genuine SUCCESS row exists for the EXACT running
 ///   commit - see ActivationReadinessResult's own doc comment for why an
 ///   old commit's SUCCESS may never satisfy a new one.
-export type ConcurrencyTestEvidenceState = "NOT_CONFIGURED" | "NOT_DEMONSTRATED" | "DEMONSTRATED";
+export type ConcurrencyTestEvidenceState =
+  "NOT_CONFIGURED" | "NOT_DEMONSTRATED" | "DEMONSTRATED";
 
 export interface ActivationReadinessResult {
   safeToActivate: boolean;

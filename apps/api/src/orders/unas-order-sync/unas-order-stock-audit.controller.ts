@@ -11,7 +11,9 @@ function parsePage(value: unknown): number {
 
 function parsePageSize(value: unknown): number {
   const parsed = Number(value);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? Math.min(parsed, 200) : 50;
+  return Number.isSafeInteger(parsed) && parsed > 0
+    ? Math.min(parsed, 200)
+    : 50;
 }
 
 /// Read-only admin surface for the historical UNAS order audit - the
@@ -25,7 +27,10 @@ export class UnasOrderStockAuditController {
   @Get()
   @RequirePermissions(PERMISSIONS.INVENTORY_VIEW)
   page(@Query("page") page: unknown, @Query("pageSize") pageSize: unknown) {
-    return this.service.auditPage({ page: parsePage(page), pageSize: parsePageSize(pageSize) });
+    return this.service.auditPage({
+      page: parsePage(page),
+      pageSize: parsePageSize(pageSize),
+    });
   }
 
   @Get("anomalies")

@@ -9,13 +9,7 @@
  * matching manual update.
  */
 export type UserRole =
-  | "OWNER"
-  | "ADMIN"
-  | "MANAGER"
-  | "SALES"
-  | "WAREHOUSE"
-  | "SERVICE"
-  | "VIEWER";
+  "OWNER" | "ADMIN" | "MANAGER" | "SALES" | "WAREHOUSE" | "SERVICE" | "VIEWER";
 
 export interface AuthenticatedUser {
   id: string;

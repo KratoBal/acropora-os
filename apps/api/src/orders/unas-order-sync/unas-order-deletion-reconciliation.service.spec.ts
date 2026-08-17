@@ -41,9 +41,7 @@ interface RepoCalls {
   skipUnresolvableArgs: Array<{ orderId: string; nextCheckDelayMs: number }>;
 }
 
-function buildFakeCandidates(options: {
-  claimed: ClaimedDeletionCandidate[];
-}) {
+function buildFakeCandidates(options: { claimed: ClaimedDeletionCandidate[] }) {
   const calls: RepoCalls = {
     claimBatchArgs: [],
     releaseAfterCheckArgs: [],
@@ -82,7 +80,9 @@ function buildService(params: {
     unasKey: string,
   ) => Promise<{ reversed: boolean; alreadyReconciled: boolean }>;
 }) {
-  const { candidates, calls } = buildFakeCandidates({ claimed: params.claimed });
+  const { candidates, calls } = buildFakeCandidates({
+    claimed: params.claimed,
+  });
   const getOrderByKeyCalls: string[] = [];
   const api = {
     getOrderByKey: async (_token: string, key: string) => {

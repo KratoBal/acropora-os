@@ -132,15 +132,25 @@ describe(
     });
 
     after(async () => {
-      await prisma.stockMovementLine.deleteMany({ where: { variantId: { in: variantIds } } });
-      await prisma.stockMovement.deleteMany({ where: { sourceWarehouseId: warehouseId } });
+      await prisma.stockMovementLine.deleteMany({
+        where: { variantId: { in: variantIds } },
+      });
+      await prisma.stockMovement.deleteMany({
+        where: { sourceWarehouseId: warehouseId },
+      });
       await prisma.unasStockSyncOutbox.deleteMany({ where: { warehouseId } });
       await prisma.stockItem.deleteMany({ where: { warehouseId } });
       await prisma.salesOrderLine.deleteMany({});
-      await prisma.externalReference.deleteMany({ where: { system: "UNAS", entityType: "SalesOrder" } });
+      await prisma.externalReference.deleteMany({
+        where: { system: "UNAS", entityType: "SalesOrder" },
+      });
       await prisma.salesOrder.deleteMany({ where: { warehouseId } });
-      await prisma.unasOrderSyncRun.deleteMany({ where: { id: { in: runIds } } });
-      await prisma.productVariant.deleteMany({ where: { id: { in: variantIds } } });
+      await prisma.unasOrderSyncRun.deleteMany({
+        where: { id: { in: runIds } },
+      });
+      await prisma.productVariant.deleteMany({
+        where: { id: { in: variantIds } },
+      });
       await prisma.product.deleteMany({ where: { id: { in: productIds } } });
       await prisma.warehouse.delete({ where: { id: warehouseId } });
       await prisma.$disconnect();
@@ -151,7 +161,11 @@ describe(
       { timeout: 30_000 },
       async () => {
         const key = `LOCK-ORDER-${Date.now()}`;
-        const sku = (await prisma.productVariant.findUniqueOrThrow({ where: { id: variantIds[0]! } })).sku;
+        const sku = (
+          await prisma.productVariant.findUniqueOrThrow({
+            where: { id: variantIds[0]! },
+          })
+        ).sku;
 
         // Establish the order at quantity 2 first (its own, uncontended import).
         const firstRun = await createRunningRun();
@@ -175,7 +189,12 @@ describe(
         const orderId = reference.entityId;
 
         const stockAfterFirst = await prisma.stockItem.findFirstOrThrow({
-          where: { variantId: variantIds[0]!, warehouseId, locationId: null, lotId: null },
+          where: {
+            variantId: variantIds[0]!,
+            warehouseId,
+            locationId: null,
+            lotId: null,
+          },
         });
         assert.equal(stockAfterFirst.onHand.toString(), "-2");
 
@@ -195,24 +214,38 @@ describe(
         ]);
 
         const stockAfterBoth = await prisma.stockItem.findFirstOrThrow({
-          where: { variantId: variantIds[0]!, warehouseId, locationId: null, lotId: null },
+          where: {
+            variantId: variantIds[0]!,
+            warehouseId,
+            locationId: null,
+            lotId: null,
+          },
         });
         // 2 units sold (-2), then exactly 1 more (-1) = -3 total - NOT -4,
         // which is what double-booking the 2->3 delta would produce.
         assert.equal(stockAfterBoth.onHand.toString(), "-3");
 
         const movements = await prisma.stockMovement.findMany({
-          where: { referenceType: "SalesOrder", referenceId: orderId, type: { in: ["SALE", "RETURN_IN"] } },
+          where: {
+            referenceType: "SalesOrder",
+            referenceId: orderId,
+            type: { in: ["SALE", "RETURN_IN"] },
+          },
           include: { lines: true },
         });
         // Exactly 2 movements total for this order: the initial import's
         // SALE(2), and ONE resync SALE(1) - not two competing SALE(1) rows.
         assert.equal(movements.length, 2);
         const saleQuantities = (
-          movements as Array<{ type: string; lines: Array<{ quantity: { toString(): string } }> }>
+          movements as Array<{
+            type: string;
+            lines: Array<{ quantity: { toString(): string } }>;
+          }>
         )
           .filter((movement) => movement.type === "SALE")
-          .flatMap((movement) => movement.lines.map((line) => line.quantity.toString()));
+          .flatMap((movement) =>
+            movement.lines.map((line) => line.quantity.toString()),
+          );
         assert.deepEqual(saleQuantities.sort(), ["1", "2"]);
 
         // Exactly one of the two concurrent refreshOrder calls should have
@@ -228,8 +261,16 @@ describe(
       async () => {
         const keyA = `LOCK-PARALLEL-A-${Date.now()}`;
         const keyB = `LOCK-PARALLEL-B-${Date.now()}`;
-        const skuA = (await prisma.productVariant.findUniqueOrThrow({ where: { id: variantIds[0]! } })).sku;
-        const skuB = (await prisma.productVariant.findUniqueOrThrow({ where: { id: variantIds[1]! } })).sku;
+        const skuA = (
+          await prisma.productVariant.findUniqueOrThrow({
+            where: { id: variantIds[0]! },
+          })
+        ).sku;
+        const skuB = (
+          await prisma.productVariant.findUniqueOrThrow({
+            where: { id: variantIds[1]! },
+          })
+        ).sku;
 
         // Read "before" rather than assuming a fresh/zero starting point -
         // this suite's tests share the same two variants and Postgres
@@ -238,10 +279,20 @@ describe(
         // regardless of what earlier tests in this file already posted.
         const [onHandBeforeA, onHandBeforeB] = await Promise.all([
           prisma.stockItem.findFirst({
-            where: { variantId: variantIds[0]!, warehouseId, locationId: null, lotId: null },
+            where: {
+              variantId: variantIds[0]!,
+              warehouseId,
+              locationId: null,
+              lotId: null,
+            },
           }),
           prisma.stockItem.findFirst({
-            where: { variantId: variantIds[1]!, warehouseId, locationId: null, lotId: null },
+            where: {
+              variantId: variantIds[1]!,
+              warehouseId,
+              locationId: null,
+              lotId: null,
+            },
           }),
         ]);
 
@@ -263,10 +314,20 @@ describe(
 
         const [stockA, stockB] = await Promise.all([
           prisma.stockItem.findFirstOrThrow({
-            where: { variantId: variantIds[0]!, warehouseId, locationId: null, lotId: null },
+            where: {
+              variantId: variantIds[0]!,
+              warehouseId,
+              locationId: null,
+              lotId: null,
+            },
           }),
           prisma.stockItem.findFirstOrThrow({
-            where: { variantId: variantIds[1]!, warehouseId, locationId: null, lotId: null },
+            where: {
+              variantId: variantIds[1]!,
+              warehouseId,
+              locationId: null,
+              lotId: null,
+            },
           }),
         ]);
         assert.equal(
@@ -319,13 +380,39 @@ describe(
       { timeout: 30_000 },
       async () => {
         const keyC = `LOCK-MULTI-${Date.now()}`;
-        const skuA = (await prisma.productVariant.findUniqueOrThrow({ where: { id: variantIds[0]! } })).sku;
-        const skuB = (await prisma.productVariant.findUniqueOrThrow({ where: { id: variantIds[1]! } })).sku;
+        const skuA = (
+          await prisma.productVariant.findUniqueOrThrow({
+            where: { id: variantIds[0]! },
+          })
+        ).sku;
+        const skuB = (
+          await prisma.productVariant.findUniqueOrThrow({
+            where: { id: variantIds[1]! },
+          })
+        ).sku;
         const multiOrder = baseOrder({
           key: keyC,
           items: [
-            { id: "1", sku: skuA, name: "A", unit: "db", quantity: "1", priceNet: "1000", priceGross: "1270", vatRate: "27" },
-            { id: "2", sku: skuB, name: "B", unit: "db", quantity: "1", priceNet: "1000", priceGross: "1270", vatRate: "27" },
+            {
+              id: "1",
+              sku: skuA,
+              name: "A",
+              unit: "db",
+              quantity: "1",
+              priceNet: "1000",
+              priceGross: "1270",
+              vatRate: "27",
+            },
+            {
+              id: "2",
+              sku: skuB,
+              name: "B",
+              unit: "db",
+              quantity: "1",
+              priceNet: "1000",
+              priceGross: "1270",
+              vatRate: "27",
+            },
           ],
         });
         const runC = await createRunningRun();
@@ -352,7 +439,10 @@ describe(
         // actual assertion - a deadlock would hang until Postgres's own
         // deadlock_timeout kills one side with an error, which would fail
         // the test rather than hang it forever either way.
-        assert.ok(true, "both concurrent multi-variant imports completed without deadlocking");
+        assert.ok(
+          true,
+          "both concurrent multi-variant imports completed without deadlocking",
+        );
       },
     );
   },

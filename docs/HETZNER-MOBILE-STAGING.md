@@ -11,19 +11,19 @@ separate resources, secrets, volumes and domain names.
 
 ## Target topology
 
-| Resource | Staging requirement |
-|---|---|
-| Coolify project | `acropora-staging` |
-| API application | `acropora-api-staging` |
-| Source | `KratoBal/acropora-os`, dedicated feature/staging branch |
-| Build context | repository root `/` |
-| Dockerfile | `apps/api/Dockerfile` |
-| Port/health | `3001`, `GET /health` |
-| Replica count | exactly 1 |
-| PostgreSQL | dedicated PostgreSQL 16 resource and volume |
-| Redis | dedicated Redis 7 resource and volume |
-| Public endpoint | HTTPS subdomain such as `api-staging.acropora.hu` |
-| Access before mobile auth | Tailscale/VPN or strict IP allowlist |
+| Resource                  | Staging requirement                                      |
+| ------------------------- | -------------------------------------------------------- |
+| Coolify project           | `acropora-staging`                                       |
+| API application           | `acropora-api-staging`                                   |
+| Source                    | `KratoBal/acropora-os`, dedicated feature/staging branch |
+| Build context             | repository root `/`                                      |
+| Dockerfile                | `apps/api/Dockerfile`                                    |
+| Port/health               | `3001`, `GET /health`                                    |
+| Replica count             | exactly 1                                                |
+| PostgreSQL                | dedicated PostgreSQL 16 resource and volume              |
+| Redis                     | dedicated Redis 7 resource and volume                    |
+| Public endpoint           | HTTPS subdomain such as `api-staging.acropora.hu`        |
+| Access before mobile auth | Tailscale/VPN or strict IP allowlist                     |
 
 Do not attach the production Postgres or Redis resource to the staging API.
 Do not expose either datastore on a public host port.
@@ -53,16 +53,16 @@ production database.
 
 For `acropora-api-staging`:
 
-| Setting | Value |
-|---|---|
-| Build pack | Dockerfile |
-| Build context | `/` |
-| Dockerfile path | `apps/api/Dockerfile` |
-| Container port | `3001` |
-| Health path | `/health` |
-| Auto deploy | feature/staging branch only |
-| Domain | chosen HTTPS staging API domain |
-| Replicas | `1` |
+| Setting         | Value                           |
+| --------------- | ------------------------------- |
+| Build pack      | Dockerfile                      |
+| Build context   | `/`                             |
+| Dockerfile path | `apps/api/Dockerfile`           |
+| Container port  | `3001`                          |
+| Health path     | `/health`                       |
+| Auto deploy     | feature/staging branch only     |
+| Domain          | chosen HTTPS staging API domain |
+| Replicas        | `1`                             |
 
 The API image runs `prisma migrate deploy` in its entrypoint. Never configure
 `prisma migrate dev`, `prisma db push` or seed execution for staging

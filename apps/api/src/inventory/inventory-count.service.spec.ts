@@ -121,7 +121,9 @@ describe("InventoryCountService.applyCorrection", () => {
     const service = buildService({
       detail: baseDetail(),
       applyCorrection: async () => {
-        throw new Error("A leltár korrekciója közben egy másik feldolgozás már lekönyvelte ezt a leltárt.");
+        throw new Error(
+          "A leltár korrekciója közben egy másik feldolgozás már lekönyvelte ezt a leltárt.",
+        );
       },
     });
 

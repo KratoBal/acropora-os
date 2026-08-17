@@ -127,10 +127,7 @@ describe("UsersService", () => {
 
   it("activates and deactivates users", async () => {
     const service = new UsersService(repository());
-    assert.equal(
-      (await service.deactivate("user-1", "owner")).isActive,
-      false,
-    );
+    assert.equal((await service.deactivate("user-1", "owner")).isActive, false);
     assert.equal((await service.activate("user-1", "owner")).isActive, true);
   });
 

@@ -53,7 +53,10 @@ const BASE_AUDIT_SUMMARY = {
 /// has to be hand-maintained/hard-coded here).
 function realMigrationNames(): string[] {
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const migrationsDir = path.resolve(here, "../../../../packages/database/prisma/migrations");
+  const migrationsDir = path.resolve(
+    here,
+    "../../../../packages/database/prisma/migrations",
+  );
   return readdirSync(migrationsDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name);
@@ -64,7 +67,10 @@ class FakeDiagnosticsDb {
   outboxCounts: Record<string, number> = {};
   oldestPendingAgeSeconds: number | null = null;
   expiredLeaseCount = 0;
-  snapshotRows: Array<{ reportedStock: unknown; reportedStockSyncedAt: Date | null }> = [];
+  snapshotRows: Array<{
+    reportedStock: unknown;
+    reportedStockSyncedAt: Date | null;
+  }> = [];
   migrationsChecked = true;
   // Default to "everything on disk is applied" - the healthy-by-default
   // state every test in this suite other than a migrations-specific one
@@ -78,8 +84,11 @@ class FakeDiagnosticsDb {
 
   async $queryRaw() {
     if (!this.dbReachable) throw new Error("connection refused");
-    if (!this.migrationsChecked) throw new Error("_prisma_migrations not readable");
-    return this.appliedMigrations.map((name) => ({ migration_name: name })) as unknown;
+    if (!this.migrationsChecked)
+      throw new Error("_prisma_migrations not readable");
+    return this.appliedMigrations.map((name) => ({
+      migration_name: name,
+    })) as unknown;
   }
 
   stockItem = { count: async () => 0 };
@@ -87,7 +96,9 @@ class FakeDiagnosticsDb {
   salesOrder = { count: async () => 0 };
 
   unasStockSyncOutbox = {
-    count: async (args?: { where?: { status?: string; leaseExpiresAt?: unknown } }) => {
+    count: async (args?: {
+      where?: { status?: string; leaseExpiresAt?: unknown };
+    }) => {
       if (args?.where?.status === "PROCESSING") return this.expiredLeaseCount;
       return 0;
     },
@@ -98,7 +109,11 @@ class FakeDiagnosticsDb {
       })),
     findFirst: async () =>
       this.oldestPendingAgeSeconds !== null
-        ? { createdAt: new Date(Date.now() - this.oldestPendingAgeSeconds * 1000) }
+        ? {
+            createdAt: new Date(
+              Date.now() - this.oldestPendingAgeSeconds * 1000,
+            ),
+          }
         : null,
   };
 
@@ -128,7 +143,11 @@ class FakeDiagnosticsDb {
   // separate from releaseEvidenceRow so a test can set up a SUCCESS row
   // and a contradicting FAILURE row for the SAME workflowRunId without
   // the two overwriting each other.
-  contradictingFailureRow: { id: string; status: string; createdAt: Date } | null = null;
+  contradictingFailureRow: {
+    id: string;
+    status: string;
+    createdAt: Date;
+  } | null = null;
 
   releaseEvidence = {
     findFirst: async (args: {
@@ -139,13 +158,17 @@ class FakeDiagnosticsDb {
       // SUCCESS lookup (commitSha + status: SUCCESS, no workflowRunId) -
       // this fake distinguishes them the same way the real Prisma query
       // does, by which where-clause fields are actually present.
-      if (args.where.workflowRunId !== undefined && args.where.commitSha === undefined) {
+      if (
+        args.where.workflowRunId !== undefined &&
+        args.where.commitSha === undefined
+      ) {
         return this.contradictingFailureRow &&
           this.contradictingFailureRow.status === "FAILURE"
           ? this.contradictingFailureRow
           : null;
       }
-      return this.releaseEvidenceRow && this.releaseEvidenceRow.commitSha === args.where.commitSha
+      return this.releaseEvidenceRow &&
+        this.releaseEvidenceRow.commitSha === args.where.commitSha
         ? this.releaseEvidenceRow
         : null;
     },
@@ -188,20 +211,28 @@ function authenticEvidenceFixture(overrides: {
   };
 }
 
-function buildService(db: FakeDiagnosticsDb, options?: {
-  reconciliationSummary?: typeof BASE_RECONCILIATION_SUMMARY;
-  auditSummary?: typeof BASE_AUDIT_SUMMARY;
-}) {
+function buildService(
+  db: FakeDiagnosticsDb,
+  options?: {
+    reconciliationSummary?: typeof BASE_RECONCILIATION_SUMMARY;
+    auditSummary?: typeof BASE_AUDIT_SUMMARY;
+  },
+) {
   const repository = new StockDiagnosticsRepository(
     db as unknown as StockDiagnosticsDatabase,
   );
   const reconciliation = {
-    summarize: async () => options?.reconciliationSummary ?? BASE_RECONCILIATION_SUMMARY,
+    summarize: async () =>
+      options?.reconciliationSummary ?? BASE_RECONCILIATION_SUMMARY,
   } as unknown as StockReconciliationService;
   const unasOrderAudit = {
     summarize: async () => options?.auditSummary ?? BASE_AUDIT_SUMMARY,
   } as unknown as UnasOrderStockAuditService;
-  return new StockDiagnosticsService(repository, reconciliation, unasOrderAudit);
+  return new StockDiagnosticsService(
+    repository,
+    reconciliation,
+    unasOrderAudit,
+  );
 }
 
 describe("StockDiagnosticsService.readiness", () => {
@@ -280,7 +311,10 @@ describe("StockDiagnosticsService.diagnostics - UNAS snapshot freshness", () => 
   it("is DEGRADED when the oldest sync crosses the staleness threshold", async () => {
     const db = new FakeDiagnosticsDb();
     db.snapshotRows = [
-      { reportedStock: 5, reportedStockSyncedAt: new Date(Date.now() - 30 * 60 * 60 * 1000) }, // 30h ago
+      {
+        reportedStock: 5,
+        reportedStockSyncedAt: new Date(Date.now() - 30 * 60 * 60 * 1000),
+      }, // 30h ago
     ];
     const service = buildService(db);
     const report = await service.diagnostics();
@@ -310,12 +344,17 @@ describe("StockDiagnosticsService.diagnostics - historical order audit anomalies
       reconciliationSummary: {
         ...BASE_RECONCILIATION_SUMMARY,
         checkedCount: 5,
-        byStatus: { ...BASE_RECONCILIATION_SUMMARY.byStatus, HISTORICAL_BASELINE_UNKNOWN: 5 },
+        byStatus: {
+          ...BASE_RECONCILIATION_SUMMARY.byStatus,
+          HISTORICAL_BASELINE_UNKNOWN: 5,
+        },
       },
     });
     const report = await service.diagnostics();
     assert.notEqual(report.status, "BLOCKED");
-    assert.ok(report.notes.some((note) => note.includes("HISTORICAL_BASELINE_UNKNOWN")));
+    assert.ok(
+      report.notes.some((note) => note.includes("HISTORICAL_BASELINE_UNKNOWN")),
+    );
   });
 });
 
@@ -349,13 +388,19 @@ describe("StockDiagnosticsService - no secrets, no mutation", () => {
     const allowed = new Set(["count", "groupBy", "findFirst", "findMany"]);
     for (const [modelName, methodNames] of Object.entries(methodsByModel)) {
       for (const methodName of methodNames) {
-        assert.ok(allowed.has(methodName), `unexpected mutating-looking method ${modelName}.${methodName}`);
+        assert.ok(
+          allowed.has(methodName),
+          `unexpected mutating-looking method ${modelName}.${methodName}`,
+        );
       }
     }
   });
 });
 
-async function withReleaseCommitSha(sha: string | undefined, run: () => Promise<void>) {
+async function withReleaseCommitSha(
+  sha: string | undefined,
+  run: () => Promise<void>,
+) {
   const original = process.env.RELEASE_COMMIT_SHA;
   if (sha === undefined) delete process.env.RELEASE_COMMIT_SHA;
   else process.env.RELEASE_COMMIT_SHA = sha;
@@ -380,53 +425,76 @@ describe("StockDiagnosticsService.activationReadiness", () => {
   });
 
   it("is NOT_DEMONSTRATED when the commit is known but no ReleaseEvidence row exists for it", async () => {
-    await withReleaseCommitSha("4444444444444444444444444444444444444444", async () => {
-      const db = new FakeDiagnosticsDb();
-      const service = buildService(db);
-      const result = await service.activationReadiness();
-      assert.equal(result.safeToActivate, false);
-      assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
-      assert.equal(result.evaluatedCommitSha, "4444444444444444444444444444444444444444");
-      assert.ok(result.blockingReasons.some((reason) => reason.includes("INVENTORY_POSTGRES_CONCURRENCY_TEST")));
-    });
+    await withReleaseCommitSha(
+      "4444444444444444444444444444444444444444",
+      async () => {
+        const db = new FakeDiagnosticsDb();
+        const service = buildService(db);
+        const result = await service.activationReadiness();
+        assert.equal(result.safeToActivate, false);
+        assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
+        assert.equal(
+          result.evaluatedCommitSha,
+          "4444444444444444444444444444444444444444",
+        );
+        assert.ok(
+          result.blockingReasons.some((reason) =>
+            reason.includes("INVENTORY_POSTGRES_CONCURRENCY_TEST"),
+          ),
+        );
+      },
+    );
   });
 
   it("a SUCCESS evidence row for an OLDER, DIFFERENT commit does not satisfy the current commit's gate", async () => {
-    await withReleaseCommitSha("3333333333333333333333333333333333333333", async () => {
-      const db = new FakeDiagnosticsDb();
-      db.releaseEvidenceRow = authenticEvidenceFixture({ commitSha: "2222222222222222222222222222222222222222" });
-      const service = buildService(db);
-      const result = await service.activationReadiness();
-      assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
-      assert.equal(result.safeToActivate, false);
-    });
+    await withReleaseCommitSha(
+      "3333333333333333333333333333333333333333",
+      async () => {
+        const db = new FakeDiagnosticsDb();
+        db.releaseEvidenceRow = authenticEvidenceFixture({
+          commitSha: "2222222222222222222222222222222222222222",
+        });
+        const service = buildService(db);
+        const result = await service.activationReadiness();
+        assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
+        assert.equal(result.safeToActivate, false);
+      },
+    );
   });
 
   it("is DEMONSTRATED when a fresh, fully-authentic SUCCESS row matches the exact current commit", async () => {
-    await withReleaseCommitSha("1111111111111111111111111111111111111111", async () => {
-      const db = new FakeDiagnosticsDb();
-      db.releaseEvidenceRow = authenticEvidenceFixture({ commitSha: "1111111111111111111111111111111111111111" });
-      const service = buildService(db);
-      const result = await service.activationReadiness();
-      assert.equal(result.concurrencyTestEvidence, "DEMONSTRATED");
-      assert.equal(result.safeToActivate, true);
-    });
+    await withReleaseCommitSha(
+      "1111111111111111111111111111111111111111",
+      async () => {
+        const db = new FakeDiagnosticsDb();
+        db.releaseEvidenceRow = authenticEvidenceFixture({
+          commitSha: "1111111111111111111111111111111111111111",
+        });
+        const service = buildService(db);
+        const result = await service.activationReadiness();
+        assert.equal(result.concurrencyTestEvidence, "DEMONSTRATED");
+        assert.equal(result.safeToActivate, true);
+      },
+    );
   });
 
   it("an implausibly old SUCCESS row for the exact current commit still does not satisfy the gate", async () => {
-    await withReleaseCommitSha("1111111111111111111111111111111111111111", async () => {
-      const db = new FakeDiagnosticsDb();
-      const veryOld = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000); // 400 days ago
-      db.releaseEvidenceRow = authenticEvidenceFixture({
-        commitSha: "1111111111111111111111111111111111111111",
-        createdAt: veryOld,
-        completedAt: veryOld,
-      });
-      const service = buildService(db);
-      const result = await service.activationReadiness();
-      assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
-      assert.equal(result.safeToActivate, false);
-    });
+    await withReleaseCommitSha(
+      "1111111111111111111111111111111111111111",
+      async () => {
+        const db = new FakeDiagnosticsDb();
+        const veryOld = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000); // 400 days ago
+        db.releaseEvidenceRow = authenticEvidenceFixture({
+          commitSha: "1111111111111111111111111111111111111111",
+          createdAt: veryOld,
+          completedAt: veryOld,
+        });
+        const service = buildService(db);
+        const result = await service.activationReadiness();
+        assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
+        assert.equal(result.safeToActivate, false);
+      },
+    );
   });
 
   // --- Checkpoint 8: the raw advisory-lock primitive is not application-
@@ -437,115 +505,158 @@ describe("StockDiagnosticsService.activationReadiness", () => {
   // TRUSTED_RELEASE_EVIDENCE_TRIGGER_EVENTS/REQUIRED_DATABASE_ENGINE*.
 
   it("a SUCCESS row from a foreign repository does not satisfy the gate, even with a matching commitSha", async () => {
-    await withReleaseCommitSha("1111111111111111111111111111111111111111", async () => {
-      const db = new FakeDiagnosticsDb();
-      db.releaseEvidenceRow = authenticEvidenceFixture({
-        commitSha: "1111111111111111111111111111111111111111",
-        repository: "someone-else/acropora-os-fork",
-      });
-      const service = buildService(db);
-      const result = await service.activationReadiness();
-      assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
-      assert.equal(result.safeToActivate, false);
-      assert.ok(result.blockingReasons.some((reason) => reason.includes("másik repositoryból")));
-    });
+    await withReleaseCommitSha(
+      "1111111111111111111111111111111111111111",
+      async () => {
+        const db = new FakeDiagnosticsDb();
+        db.releaseEvidenceRow = authenticEvidenceFixture({
+          commitSha: "1111111111111111111111111111111111111111",
+          repository: "someone-else/acropora-os-fork",
+        });
+        const service = buildService(db);
+        const result = await service.activationReadiness();
+        assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
+        assert.equal(result.safeToActivate, false);
+        assert.ok(
+          result.blockingReasons.some((reason) =>
+            reason.includes("másik repositoryból"),
+          ),
+        );
+      },
+    );
   });
 
   it("a SUCCESS row recorded from a pull_request trigger event does not satisfy the gate", async () => {
-    await withReleaseCommitSha("1111111111111111111111111111111111111111", async () => {
-      const db = new FakeDiagnosticsDb();
-      db.releaseEvidenceRow = authenticEvidenceFixture({
-        commitSha: "1111111111111111111111111111111111111111",
-        triggerEvent: "pull_request",
-      });
-      const service = buildService(db);
-      const result = await service.activationReadiness();
-      assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
-      assert.equal(result.safeToActivate, false);
-      assert.ok(result.blockingReasons.some((reason) => reason.includes("pull_request")));
-    });
+    await withReleaseCommitSha(
+      "1111111111111111111111111111111111111111",
+      async () => {
+        const db = new FakeDiagnosticsDb();
+        db.releaseEvidenceRow = authenticEvidenceFixture({
+          commitSha: "1111111111111111111111111111111111111111",
+          triggerEvent: "pull_request",
+        });
+        const service = buildService(db);
+        const result = await service.activationReadiness();
+        assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
+        assert.equal(result.safeToActivate, false);
+        assert.ok(
+          result.blockingReasons.some((reason) =>
+            reason.includes("pull_request"),
+          ),
+        );
+      },
+    );
   });
 
   it("a SUCCESS row recorded against PostgreSQL 18 (not 16) does not satisfy the gate", async () => {
-    await withReleaseCommitSha("1111111111111111111111111111111111111111", async () => {
-      const db = new FakeDiagnosticsDb();
-      db.releaseEvidenceRow = authenticEvidenceFixture({
-        commitSha: "1111111111111111111111111111111111111111",
-        databaseEngineVersion: "18.4",
-      });
-      const service = buildService(db);
-      const result = await service.activationReadiness();
-      assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
-      assert.equal(result.safeToActivate, false);
-      assert.ok(result.blockingReasons.some((reason) => reason.includes("PostgreSQL 16")));
-    });
+    await withReleaseCommitSha(
+      "1111111111111111111111111111111111111111",
+      async () => {
+        const db = new FakeDiagnosticsDb();
+        db.releaseEvidenceRow = authenticEvidenceFixture({
+          commitSha: "1111111111111111111111111111111111111111",
+          databaseEngineVersion: "18.4",
+        });
+        const service = buildService(db);
+        const result = await service.activationReadiness();
+        assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
+        assert.equal(result.safeToActivate, false);
+        assert.ok(
+          result.blockingReasons.some((reason) =>
+            reason.includes("PostgreSQL 16"),
+          ),
+        );
+      },
+    );
   });
 
   it("a SUCCESS row with an empty workflowRunId does not satisfy the gate", async () => {
-    await withReleaseCommitSha("1111111111111111111111111111111111111111", async () => {
-      const db = new FakeDiagnosticsDb();
-      db.releaseEvidenceRow = authenticEvidenceFixture({
-        commitSha: "1111111111111111111111111111111111111111",
-        workflowRunId: "",
-      });
-      const service = buildService(db);
-      const result = await service.activationReadiness();
-      assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
-      assert.equal(result.safeToActivate, false);
-      assert.ok(result.blockingReasons.some((reason) => reason.includes("workflowRunId")));
-    });
+    await withReleaseCommitSha(
+      "1111111111111111111111111111111111111111",
+      async () => {
+        const db = new FakeDiagnosticsDb();
+        db.releaseEvidenceRow = authenticEvidenceFixture({
+          commitSha: "1111111111111111111111111111111111111111",
+          workflowRunId: "",
+        });
+        const service = buildService(db);
+        const result = await service.activationReadiness();
+        assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
+        assert.equal(result.safeToActivate, false);
+        assert.ok(
+          result.blockingReasons.some((reason) =>
+            reason.includes("workflowRunId"),
+          ),
+        );
+      },
+    );
   });
 
   // --- Checkpoint 9 additions.
 
   it("a SUCCESS row whose testSuite does not identify the expected test does not satisfy the gate", async () => {
-    await withReleaseCommitSha("1111111111111111111111111111111111111111", async () => {
-      const db = new FakeDiagnosticsDb();
-      db.releaseEvidenceRow = authenticEvidenceFixture({
-        commitSha: "1111111111111111111111111111111111111111",
-        testSuite: "apps/api test (some unrelated suite)",
-      });
-      const service = buildService(db);
-      const result = await service.activationReadiness();
-      assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
-      assert.equal(result.safeToActivate, false);
-      assert.ok(result.blockingReasons.some((reason) => reason.includes("testSuite")));
-    });
+    await withReleaseCommitSha(
+      "1111111111111111111111111111111111111111",
+      async () => {
+        const db = new FakeDiagnosticsDb();
+        db.releaseEvidenceRow = authenticEvidenceFixture({
+          commitSha: "1111111111111111111111111111111111111111",
+          testSuite: "apps/api test (some unrelated suite)",
+        });
+        const service = buildService(db);
+        const result = await service.activationReadiness();
+        assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
+        assert.equal(result.safeToActivate, false);
+        assert.ok(
+          result.blockingReasons.some((reason) => reason.includes("testSuite")),
+        );
+      },
+    );
   });
 
   it("a SUCCESS row contradicted by a FAILURE row for the SAME workflowRunId does not satisfy the gate", async () => {
-    await withReleaseCommitSha("1111111111111111111111111111111111111111", async () => {
-      const db = new FakeDiagnosticsDb();
-      db.releaseEvidenceRow = authenticEvidenceFixture({
-        commitSha: "1111111111111111111111111111111111111111",
-        workflowRunId: "run-42",
-      });
-      db.contradictingFailureRow = {
-        id: "evidence-failure-42",
-        status: "FAILURE",
-        createdAt: new Date(),
-      };
-      const service = buildService(db);
-      const result = await service.activationReadiness();
-      assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
-      assert.equal(result.safeToActivate, false);
-      assert.ok(result.blockingReasons.some((reason) => reason.includes("Ellentmondó evidence")));
-    });
+    await withReleaseCommitSha(
+      "1111111111111111111111111111111111111111",
+      async () => {
+        const db = new FakeDiagnosticsDb();
+        db.releaseEvidenceRow = authenticEvidenceFixture({
+          commitSha: "1111111111111111111111111111111111111111",
+          workflowRunId: "run-42",
+        });
+        db.contradictingFailureRow = {
+          id: "evidence-failure-42",
+          status: "FAILURE",
+          createdAt: new Date(),
+        };
+        const service = buildService(db);
+        const result = await service.activationReadiness();
+        assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");
+        assert.equal(result.safeToActivate, false);
+        assert.ok(
+          result.blockingReasons.some((reason) =>
+            reason.includes("Ellentmondó evidence"),
+          ),
+        );
+      },
+    );
   });
 
   it("a SUCCESS row with NO contradicting FAILURE for its own workflowRunId is unaffected", async () => {
-    await withReleaseCommitSha("1111111111111111111111111111111111111111", async () => {
-      const db = new FakeDiagnosticsDb();
-      db.releaseEvidenceRow = authenticEvidenceFixture({
-        commitSha: "1111111111111111111111111111111111111111",
-        workflowRunId: "run-99",
-      });
-      db.contradictingFailureRow = null;
-      const service = buildService(db);
-      const result = await service.activationReadiness();
-      assert.equal(result.concurrencyTestEvidence, "DEMONSTRATED");
-      assert.equal(result.safeToActivate, true);
-    });
+    await withReleaseCommitSha(
+      "1111111111111111111111111111111111111111",
+      async () => {
+        const db = new FakeDiagnosticsDb();
+        db.releaseEvidenceRow = authenticEvidenceFixture({
+          commitSha: "1111111111111111111111111111111111111111",
+          workflowRunId: "run-99",
+        });
+        db.contradictingFailureRow = null;
+        const service = buildService(db);
+        const result = await service.activationReadiness();
+        assert.equal(result.concurrencyTestEvidence, "DEMONSTRATED");
+        assert.equal(result.safeToActivate, true);
+      },
+    );
   });
 
   it("folds in the UNAS order audit's own blocking reasons", async () => {
@@ -558,6 +669,8 @@ describe("StockDiagnosticsService.activationReadiness", () => {
       },
     });
     const result = await service.activationReadiness();
-    assert.ok(result.blockingReasons.includes("egy rendelésen negatív bookedOut van"));
+    assert.ok(
+      result.blockingReasons.includes("egy rendelésen negatív bookedOut van"),
+    );
   });
 });

@@ -127,7 +127,10 @@ describe("signIn", () => {
       testUser.email,
       "correct horse battery staple",
     );
-    assert.deepEqual(receivedArgs, [testUser.email, "correct horse battery staple"]);
+    assert.deepEqual(receivedArgs, [
+      testUser.email,
+      "correct horse battery staple",
+    ]);
   });
 
   it("if saving the token locally fails, the server session is invalidated and no half-authenticated state is returned", async () => {
@@ -155,7 +158,11 @@ describe("signIn", () => {
     const outcome = await signIn(
       {
         loginWithPassword: async () =>
-          ({ token: "", expiresAt: "", user: undefined } as unknown as LoginResult),
+          ({
+            token: "",
+            expiresAt: "",
+            user: undefined,
+          }) as unknown as LoginResult,
         saveSession: async () => {
           saveSessionCalled = true;
         },

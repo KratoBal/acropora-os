@@ -35,7 +35,9 @@ const emptyAddress = (): AddressState => ({
 });
 
 const addressHasData = (address: AddressState) =>
-  Boolean(address.postalCode.trim() || address.city.trim() || address.line1.trim());
+  Boolean(
+    address.postalCode.trim() || address.city.trim() || address.line1.trim(),
+  );
 
 function AddressFields({
   idPrefix,
@@ -81,7 +83,9 @@ function AddressFields({
           <Select
             aria-label={`${idPrefix} ország`}
             value={address.country}
-            onChange={(event) => onChange({ ...address, country: event.target.value })}
+            onChange={(event) =>
+              onChange({ ...address, country: event.target.value })
+            }
           >
             {COUNTRY_OPTIONS.map((option) => (
               <option key={option.code} value={option.code}>
@@ -94,14 +98,18 @@ function AddressFields({
           <Input
             aria-label={`${idPrefix} irányítószám`}
             value={address.postalCode}
-            onChange={(event) => onChange({ ...address, postalCode: event.target.value })}
+            onChange={(event) =>
+              onChange({ ...address, postalCode: event.target.value })
+            }
           />
         </FormField>
         <FormField label="Város">
           <Input
             aria-label={`${idPrefix} város`}
             value={address.city}
-            onChange={(event) => onChange({ ...address, city: event.target.value })}
+            onChange={(event) =>
+              onChange({ ...address, city: event.target.value })
+            }
           />
         </FormField>
       </div>
@@ -110,14 +118,18 @@ function AddressFields({
           <Input
             aria-label={`${idPrefix} utca, házszám`}
             value={address.line1}
-            onChange={(event) => onChange({ ...address, line1: event.target.value })}
+            onChange={(event) =>
+              onChange({ ...address, line1: event.target.value })
+            }
           />
         </FormField>
         <FormField label="Cím kiegészítés">
           <Input
             aria-label={`${idPrefix} cím kiegészítés`}
             value={address.line2}
-            onChange={(event) => onChange({ ...address, line2: event.target.value })}
+            onChange={(event) =>
+              onChange({ ...address, line2: event.target.value })
+            }
           />
         </FormField>
       </div>
@@ -207,17 +219,25 @@ export function CustomerEditorPage() {
     const billingFilled = addressHasData(billing);
     if (
       billingFilled &&
-      (!billing.postalCode.trim() || !billing.city.trim() || !billing.line1.trim())
+      (!billing.postalCode.trim() ||
+        !billing.city.trim() ||
+        !billing.line1.trim())
     ) {
-      setError("A számlázási cím megadásához az irányítószám, a város és az utca is kötelező.");
+      setError(
+        "A számlázási cím megadásához az irányítószám, a város és az utca is kötelező.",
+      );
       return;
     }
     const shippingFilled = !shipSameAsBilling && addressHasData(shipping);
     if (
       shippingFilled &&
-      (!shipping.postalCode.trim() || !shipping.city.trim() || !shipping.line1.trim())
+      (!shipping.postalCode.trim() ||
+        !shipping.city.trim() ||
+        !shipping.line1.trim())
     ) {
-      setError("A szállítási cím megadásához az irányítószám, a város és az utca is kötelező.");
+      setError(
+        "A szállítási cím megadásához az irányítószám, a város és az utca is kötelező.",
+      );
       return;
     }
     setBusy(true);
@@ -263,9 +283,7 @@ export function CustomerEditorPage() {
       });
       router.push("/vevok");
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "A vevő nem menthető.",
-      );
+      setError(cause instanceof Error ? cause.message : "A vevő nem menthető.");
     } finally {
       setBusy(false);
     }
@@ -283,7 +301,11 @@ export function CustomerEditorPage() {
         }
       />
       {error ? (
-        <Alert variant="danger" title="A művelet nem sikerült" description={error} />
+        <Alert
+          variant="danger"
+          title="A művelet nem sikerült"
+          description={error}
+        />
       ) : null}
       <form className="space-y-6" onSubmit={submit}>
         <Card className="p-6">
@@ -320,7 +342,9 @@ export function CustomerEditorPage() {
                   </Button>
                 </div>
                 {navLookupNotice ? (
-                  <p className="mt-1 text-xs text-slate-500">{navLookupNotice}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {navLookupNotice}
+                  </p>
                 ) : null}
               </FormField>
             ) : (
@@ -381,7 +405,9 @@ export function CustomerEditorPage() {
               <input
                 type="checkbox"
                 checked={marketingSmsConsent}
-                onChange={(event) => setMarketingSmsConsent(event.target.checked)}
+                onChange={(event) =>
+                  setMarketingSmsConsent(event.target.checked)
+                }
               />
               Hírlevél SMS-ben
             </label>
@@ -390,7 +416,8 @@ export function CustomerEditorPage() {
         <Card className="p-6">
           <h2 className="font-semibold">Számlázási cím</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Opcionális; ha kitöltöd, az irányítószám, a város és az utca kötelező.
+            Opcionális; ha kitöltöd, az irányítószám, a város és az utca
+            kötelező.
           </p>
           <div className="mt-4">
             <AddressFields

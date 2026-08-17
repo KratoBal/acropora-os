@@ -21,11 +21,17 @@ const EXTERNAL_ENTITY_TYPE = "Customer";
 const addressesInclude = {
   orderBy: [{ isDefault: "desc" as const }, { createdAt: "asc" as const }],
 };
-const include = { addresses: addressesInclude } satisfies Prisma.CustomerInclude;
+const include = {
+  addresses: addressesInclude,
+} satisfies Prisma.CustomerInclude;
 
-type CustomerWithAddresses = Prisma.CustomerGetPayload<{ include: typeof include }>;
+type CustomerWithAddresses = Prisma.CustomerGetPayload<{
+  include: typeof include;
+}>;
 
-function toAddress(row: CustomerWithAddresses["addresses"][number]): CustomerAddress {
+function toAddress(
+  row: CustomerWithAddresses["addresses"][number],
+): CustomerAddress {
   return {
     id: row.id,
     type: row.type,
@@ -66,7 +72,9 @@ export class CustomersRepository extends Repository {
       ? await this.loadUnasCustomerIds()
       : null;
     const where: Prisma.CustomerWhereInput = {
-      ...(query.status === "ALL" ? {} : { isActive: query.status === "ACTIVE" }),
+      ...(query.status === "ALL"
+        ? {}
+        : { isActive: query.status === "ACTIVE" }),
       ...(query.source === "UNAS" ? { id: { in: unasCustomerIds! } } : {}),
       ...(query.source === "MANUAL" ? { id: { notIn: unasCustomerIds! } } : {}),
       ...(query.search

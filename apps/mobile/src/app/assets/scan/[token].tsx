@@ -72,6 +72,11 @@ const styles = StyleSheet.create({
     padding: 28,
     gap: 12,
   },
-  title: { color: "#f4fbff", fontSize: 21, fontWeight: "900", textAlign: "center" },
+  title: {
+    color: "#f4fbff",
+    fontSize: 21,
+    fontWeight: "900",
+    textAlign: "center",
+  },
   text: { color: "#a9c4d1", fontSize: 14, lineHeight: 21, textAlign: "center" },
 });

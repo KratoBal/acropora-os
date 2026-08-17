@@ -22,10 +22,10 @@ explicitly out of scope for this work — see
 
 Two independently deployable images, built from the same monorepo:
 
-| Service | Dockerfile | Build context | Port | Health check |
-|---|---|---|---|---|
-| `web` (Next.js) | `apps/web/Dockerfile` | repo root | 3000 | `GET /` |
-| `api` (NestJS) | `apps/api/Dockerfile` | repo root | 3001 | `GET /health` |
+| Service         | Dockerfile            | Build context | Port | Health check  |
+| --------------- | --------------------- | ------------- | ---- | ------------- |
+| `web` (Next.js) | `apps/web/Dockerfile` | repo root     | 3000 | `GET /`       |
+| `api` (NestJS)  | `apps/api/Dockerfile` | repo root     | 3001 | `GET /health` |
 
 Plus two stateful dependencies, provisioned as Coolify-managed resources
 (recommended) or an equivalent externally-managed Postgres/Redis:
@@ -125,7 +125,7 @@ your chosen branch/webhook policy). Each deploy:
 1. Builds the relevant image(s) from the current commit using the
    Dockerfiles in Section 1.
 2. For `api`: the new container's own entrypoint runs `prisma migrate
-   deploy` against the production database as the first thing it does,
+deploy` against the production database as the first thing it does,
    before the API process starts — see Section 5. (If you've also kept a
    Coolify pre-deployment command configured, that runs even earlier, as
    an additional gate — but the entrypoint is what actually protects you
@@ -152,11 +152,11 @@ wrong, so it gets its own detailed section.
 
 ### What to use, and what never to use
 
-| Command | Use in production? |
-|---|---|
-| `prisma migrate deploy` | **Yes — the only production path.** Applies pending migrations from `packages/database/prisma/migrations/`, in order, without generating new ones. |
-| `prisma migrate dev` | **Never.** Interactive, generates new migrations, can prompt for destructive resets. Development only. |
-| `prisma db push` | **Never.** Bypasses the migration history entirely; fine for local prototyping, dangerous and untracked in production. |
+| Command                                            | Use in production?                                                                                                                                                                                                                                                                                                                                                                                              |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `prisma migrate deploy`                            | **Yes — the only production path.** Applies pending migrations from `packages/database/prisma/migrations/`, in order, without generating new ones.                                                                                                                                                                                                                                                              |
+| `prisma migrate dev`                               | **Never.** Interactive, generates new migrations, can prompt for destructive resets. Development only.                                                                                                                                                                                                                                                                                                          |
+| `prisma db push`                                   | **Never.** Bypasses the migration history entirely; fine for local prototyping, dangerous and untracked in production.                                                                                                                                                                                                                                                                                          |
 | `prisma:seed` (`packages/database/prisma/seed.ts`) | **Never against production data.** The script already self-guards (`throw`s immediately if `NODE_ENV=production`), which is a real safety net — but don't rely on that as the only line of defense; don't wire it into any production deploy hook in the first place. It seeds fixed development reference data (four hardcoded dev users, etc.), not something a real production database should ever receive. |
 
 ### How migrations actually run
@@ -178,12 +178,12 @@ starts the API process:
   schema paths via Node's own module resolution (never a hardcoded
   `node_modules/.pnpm/...` path, since those are version-string-derived
   and not stable across dependency bumps), then runs `prisma migrate
-  deploy` (never `db push`). If that exits non-zero, the entrypoint exits
+deploy` (never `db push`). If that exits non-zero, the entrypoint exits
   non-zero too — `node dist/main.js` is never `exec`'d, the container never
   comes up, and Docker's `HEALTHCHECK` never turns green, so Coolify never
   cuts traffic over to it.
 
-The previous design — a *separate*, one-off `builder`-target "migrator"
+The previous design — a _separate_, one-off `builder`-target "migrator"
 image, triggered by a Coolify **pre-deployment command** the operator
 configures by hand outside version control — is still available (see the
 `builder` stage's own comments in the Dockerfile) and still useful as an
@@ -290,11 +290,11 @@ undo`. Two consequences worth planning for explicitly:
 
 ## 7. Troubleshooting quick reference
 
-| Symptom | Likely cause |
-|---|---|
-| `api` crash-loops immediately after a fresh deploy, before serving any traffic | Missing `UNAS_CREDENTIAL_ACTIVE_KEY_VERSION`/`UNAS_CREDENTIAL_MASTER_KEY_V<n>` or `UNAS_API_KEY` — see Section 3, step 3–4. |
-| `api` fails at startup with a `DATABASE_URL` error instead of silently connecting to `localhost` | Expected and intentional (see `packages/database/prisma.config.ts`) — it means `DATABASE_URL` genuinely isn't set in the environment Coolify is passing through. |
-| Migration step fails during deploy | The `api` container itself will refuse to start (its entrypoint exits non-zero before `node dist/main.js` runs) — check that container's logs first, not a separate migrator image. See Section 5. If you're still also running the optional `builder`/`migrate` pre-deployment step, check that ran too. |
-| `api` never becomes healthy, logs show `prisma migrate deploy` output but nothing from Nest | Expected while migrations are still applying — `HEALTHCHECK`'s `--start-period` needs to cover however long your migration step takes, not just Nest's own boot time. |
-| Duplicate UNAS/NAV sync activity, rate-limit errors from those APIs | Check `api` replica count — see Section 1's single-replica constraint. |
-| `GET /health` returns 503 | Either Postgres or Redis is unreachable from the `api` container — check the response body, it reports which one and the connection latency/error. |
+| Symptom                                                                                          | Likely cause                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `api` crash-loops immediately after a fresh deploy, before serving any traffic                   | Missing `UNAS_CREDENTIAL_ACTIVE_KEY_VERSION`/`UNAS_CREDENTIAL_MASTER_KEY_V<n>` or `UNAS_API_KEY` — see Section 3, step 3–4.                                                                                                                                                                               |
+| `api` fails at startup with a `DATABASE_URL` error instead of silently connecting to `localhost` | Expected and intentional (see `packages/database/prisma.config.ts`) — it means `DATABASE_URL` genuinely isn't set in the environment Coolify is passing through.                                                                                                                                          |
+| Migration step fails during deploy                                                               | The `api` container itself will refuse to start (its entrypoint exits non-zero before `node dist/main.js` runs) — check that container's logs first, not a separate migrator image. See Section 5. If you're still also running the optional `builder`/`migrate` pre-deployment step, check that ran too. |
+| `api` never becomes healthy, logs show `prisma migrate deploy` output but nothing from Nest      | Expected while migrations are still applying — `HEALTHCHECK`'s `--start-period` needs to cover however long your migration step takes, not just Nest's own boot time.                                                                                                                                     |
+| Duplicate UNAS/NAV sync activity, rate-limit errors from those APIs                              | Check `api` replica count — see Section 1's single-replica constraint.                                                                                                                                                                                                                                    |
+| `GET /health` returns 503                                                                        | Either Postgres or Redis is unreachable from the `api` container — check the response body, it reports which one and the connection latency/error.                                                                                                                                                        |

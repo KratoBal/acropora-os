@@ -113,10 +113,7 @@ describe("AuthService user resolution", () => {
     // development session is — same underlying SessionRepository, same
     // contract — even though production storage is now the database
     // rather than a shared map.
-    assert.deepEqual(
-      await service.resolveToken(session.token!),
-      internalOwner,
-    );
+    assert.deepEqual(await service.resolveToken(session.token!), internalOwner);
   });
 
   it("propagates a bad-credentials rejection from the resolver without issuing a session", async () => {
@@ -149,9 +146,10 @@ describe("AuthService user resolution", () => {
     try {
       await assert.rejects(
         () =>
-          new AuthService(resolver, createFakeSessionRepository()).loginWithDevelopmentUser(
-            internalOwner.email,
-          ),
+          new AuthService(
+            resolver,
+            createFakeSessionRepository(),
+          ).loginWithDevelopmentUser(internalOwner.email),
         ForbiddenException,
       );
       assert.equal(resolverCalled, false);

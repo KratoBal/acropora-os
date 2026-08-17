@@ -29,13 +29,13 @@ pnpm dev:mobile
 
 A szolgáltatások alapértelmezett címei:
 
-| Szolgáltatás | Cím                            |
-| ------------ | ------------------------------ |
-| Web          | `http://localhost:3000`        |
-| API          | `http://localhost:3001`        |
-| Health       | `http://localhost:3001/health` |
-| PostgreSQL   | `localhost:5432`               |
-| Redis        | `localhost:6379`               |
+| Szolgáltatás | Cím                             |
+| ------------ | ------------------------------- |
+| Web          | `http://localhost:3000`         |
+| API          | `http://localhost:3001`         |
+| Health       | `http://localhost:3001/health`  |
+| PostgreSQL   | `localhost:5432`                |
+| Redis        | `localhost:6379`                |
 | Expo Metro   | a CLI által kijelzett helyi cím |
 
 ## Docker Compose

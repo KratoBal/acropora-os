@@ -38,7 +38,11 @@ describe("computeReconciliationStatus", () => {
 
   it("is MISSING_STOCK_ITEM when there is no StockItem row at all, ahead of every other check", () => {
     assert.equal(
-      computeReconciliationStatus({ ...baseParams, hasStockItem: false, localVsLedgerDelta: null }),
+      computeReconciliationStatus({
+        ...baseParams,
+        hasStockItem: false,
+        localVsLedgerDelta: null,
+      }),
       "MISSING_STOCK_ITEM",
     );
   });
@@ -68,7 +72,10 @@ describe("computeReconciliationStatus", () => {
 
   it("is LOCAL_LEDGER_MISMATCH when the provable ledger sum disagrees with StockItem.onHand", () => {
     assert.equal(
-      computeReconciliationStatus({ ...baseParams, localVsLedgerDelta: d("5") }),
+      computeReconciliationStatus({
+        ...baseParams,
+        localVsLedgerDelta: d("5"),
+      }),
       "LOCAL_LEDGER_MISMATCH",
     );
   });
@@ -86,7 +93,11 @@ describe("computeReconciliationStatus", () => {
 
   it("is MISSING_UNAS_LINK when local is fine but no UNAS product/snapshot links to this variant", () => {
     assert.equal(
-      computeReconciliationStatus({ ...baseParams, hasUnasLink: false, unasVsLocalDelta: null }),
+      computeReconciliationStatus({
+        ...baseParams,
+        hasUnasLink: false,
+        unasVsLocalDelta: null,
+      }),
       "MISSING_UNAS_LINK",
     );
   });
@@ -96,7 +107,11 @@ describe("computeReconciliationStatus", () => {
       computeReconciliationStatus({
         ...baseParams,
         unasVsLocalDelta: d("3"),
-        outbox: { ...noOutboxActivity, latestStatus: "PENDING", hasPendingCorrection: true },
+        outbox: {
+          ...noOutboxActivity,
+          latestStatus: "PENDING",
+          hasPendingCorrection: true,
+        },
       }),
       "UNAS_BEHIND_PENDING_SYNC",
     );
@@ -107,7 +122,11 @@ describe("computeReconciliationStatus", () => {
       computeReconciliationStatus({
         ...baseParams,
         unasVsLocalDelta: d("3"),
-        outbox: { ...noOutboxActivity, latestStatus: "FAILED", hasPendingCorrection: true },
+        outbox: {
+          ...noOutboxActivity,
+          latestStatus: "FAILED",
+          hasPendingCorrection: true,
+        },
       }),
       "UNAS_BEHIND_PENDING_SYNC",
     );
@@ -134,7 +153,11 @@ describe("computeReconciliationStatus", () => {
     assert.equal(
       computeReconciliationStatus({
         ...baseParams,
-        outbox: { ...noOutboxActivity, latestStatus: "PROCESSING", processingLeaseExpired: true },
+        outbox: {
+          ...noOutboxActivity,
+          latestStatus: "PROCESSING",
+          processingLeaseExpired: true,
+        },
       }),
       "PROCESSING_LEASE_EXPIRED",
     );
@@ -144,7 +167,11 @@ describe("computeReconciliationStatus", () => {
     assert.equal(
       computeReconciliationStatus({
         ...baseParams,
-        outbox: { ...noOutboxActivity, latestStatus: "PROCESSING", processingLeaseExpired: false },
+        outbox: {
+          ...noOutboxActivity,
+          latestStatus: "PROCESSING",
+          processingLeaseExpired: false,
+        },
       }),
       "CONSISTENT",
     );
@@ -152,7 +179,11 @@ describe("computeReconciliationStatus", () => {
 
   it("treats a zero delta as CONSISTENT even when Decimal(0) is passed rather than null", () => {
     assert.equal(
-      computeReconciliationStatus({ ...baseParams, localVsLedgerDelta: d("0"), unasVsLocalDelta: d("0") }),
+      computeReconciliationStatus({
+        ...baseParams,
+        localVsLedgerDelta: d("0"),
+        unasVsLocalDelta: d("0"),
+      }),
       "CONSISTENT",
     );
   });

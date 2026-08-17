@@ -50,10 +50,7 @@ describe("AuthGuard", () => {
   it("allows public routes without any credential", async () => {
     const guard = new AuthGuard(reflectorReturning(true), fakeAuthService());
     const request: { headers: Record<string, string> } = { headers: {} };
-    assert.equal(
-      await guard.canActivate(createContext(request)),
-      true,
-    );
+    assert.equal(await guard.canActivate(createContext(request)), true);
   });
 
   it("rejects a request with neither a Bearer header nor a session cookie", async () => {

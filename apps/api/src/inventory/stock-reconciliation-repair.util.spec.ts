@@ -14,31 +14,63 @@ function d(value: string): Prisma.Decimal {
 
 describe("buildRepairIdempotencyKey", () => {
   it("is deterministic for the same (repairType, stockItemId, expectedCurrentOnHand)", () => {
-    const a = buildRepairIdempotencyKey("LOCAL_FROM_PROVEN_LEDGER", "si-1", "5");
-    const b = buildRepairIdempotencyKey("LOCAL_FROM_PROVEN_LEDGER", "si-1", "5");
+    const a = buildRepairIdempotencyKey(
+      "LOCAL_FROM_PROVEN_LEDGER",
+      "si-1",
+      "5",
+    );
+    const b = buildRepairIdempotencyKey(
+      "LOCAL_FROM_PROVEN_LEDGER",
+      "si-1",
+      "5",
+    );
     assert.equal(a, b);
   });
 
   it("differs when expectedCurrentOnHand differs - a later, distinct repair gets its own key", () => {
-    const a = buildRepairIdempotencyKey("LOCAL_FROM_PROVEN_LEDGER", "si-1", "5");
-    const b = buildRepairIdempotencyKey("LOCAL_FROM_PROVEN_LEDGER", "si-1", "7");
+    const a = buildRepairIdempotencyKey(
+      "LOCAL_FROM_PROVEN_LEDGER",
+      "si-1",
+      "5",
+    );
+    const b = buildRepairIdempotencyKey(
+      "LOCAL_FROM_PROVEN_LEDGER",
+      "si-1",
+      "7",
+    );
     assert.notEqual(a, b);
   });
 
   it("differs between the two repair types for the same StockItem/value", () => {
-    const a = buildRepairIdempotencyKey("LOCAL_FROM_PROVEN_LEDGER", "si-1", "5");
+    const a = buildRepairIdempotencyKey(
+      "LOCAL_FROM_PROVEN_LEDGER",
+      "si-1",
+      "5",
+    );
     const b = buildRepairIdempotencyKey("REPUBLISH_LOCAL_TO_UNAS", "si-1", "5");
     assert.notEqual(a, b);
   });
 
   it("differs between two different StockItems asserting the same value", () => {
-    const a = buildRepairIdempotencyKey("LOCAL_FROM_PROVEN_LEDGER", "si-1", "5");
-    const b = buildRepairIdempotencyKey("LOCAL_FROM_PROVEN_LEDGER", "si-2", "5");
+    const a = buildRepairIdempotencyKey(
+      "LOCAL_FROM_PROVEN_LEDGER",
+      "si-1",
+      "5",
+    );
+    const b = buildRepairIdempotencyKey(
+      "LOCAL_FROM_PROVEN_LEDGER",
+      "si-2",
+      "5",
+    );
     assert.notEqual(a, b);
   });
 
   it("never embeds anything beyond repairType/stockItemId/expectedCurrentOnHand (no sensitive data)", () => {
-    const key = buildRepairIdempotencyKey("LOCAL_FROM_PROVEN_LEDGER", "si-1", "5");
+    const key = buildRepairIdempotencyKey(
+      "LOCAL_FROM_PROVEN_LEDGER",
+      "si-1",
+      "5",
+    );
     assert.equal(key, "RECONCILIATION_REPAIR:LOCAL_FROM_PROVEN_LEDGER:si-1:5");
   });
 });

@@ -57,18 +57,19 @@ amíg a tulajdonos külön jóvá nem hagyja a leváltását.
 **Dátum:** 2026-07-27
 
 **Döntés:** a korábban megépített M8.2 "kimenő automatikus számlázás" (worker
-+ állapotgép + lease/retry + Számlázz.hu Agent API `createInvoice` hívás +
-UNAS-visszaírás) teljes egészében visszabontásra került. A webshop
-(UNAS) rendelésekhez tartozó kimenő számlát **soha nem** az Acropora OS
-állítja ki – azt a UNAS beépített Számlázz.hu-modulja végzi. Az Acropora
-OS ehelyett egyirányú, read-only tükröt vezet: a meglévő UNAS
-rendelésszinkron (`unas-order-sync`) a `getOrder` válasz
-`Invoice.Status`/`Number`/`Url` mezőit `SalesOrder.unasInvoiceStatus`-ba
-és egy általános `Invoice` sorba (`source=UNAS`) másolja, konfliktus
-esetén (két rendelés ugyanarra a számlaszámra) felülírás nélkül. Ez lezárja
-a korábban nyitott architektúra-kérdést (lásd
-`ACROPORA-OS-MASTER-MILESTONE-PLAN.md`, "M8 – Számlázz.hu Integration and
-Invoice Registry", "Végleges architektúra (2026-07-27)" alfejezet, A) pont).
+
+- állapotgép + lease/retry + Számlázz.hu Agent API `createInvoice` hívás +
+  UNAS-visszaírás) teljes egészében visszabontásra került. A webshop
+  (UNAS) rendelésekhez tartozó kimenő számlát **soha nem** az Acropora OS
+  állítja ki – azt a UNAS beépített Számlázz.hu-modulja végzi. Az Acropora
+  OS ehelyett egyirányú, read-only tükröt vezet: a meglévő UNAS
+  rendelésszinkron (`unas-order-sync`) a `getOrder` válasz
+  `Invoice.Status`/`Number`/`Url` mezőit `SalesOrder.unasInvoiceStatus`-ba
+  és egy általános `Invoice` sorba (`source=UNAS`) másolja, konfliktus
+  esetén (két rendelés ugyanarra a számlaszámra) felülírás nélkül. Ez lezárja
+  a korábban nyitott architektúra-kérdést (lásd
+  `ACROPORA-OS-MASTER-MILESTONE-PLAN.md`, "M8 – Számlázz.hu Integration and
+  Invoice Registry", "Végleges architektúra (2026-07-27)" alfejezet, A) pont).
 
 **Miért:** a UNAS Számlázz.hu-modulja már ki van fizetve és üzemel a
 webshopon – egy párhuzamos, Acropora OS-oldali `createInvoice`-hívás

@@ -26,7 +26,10 @@ export const authSessionStore = {
 
     try {
       const parsed = JSON.parse(raw) as Partial<StoredSession>;
-      if (typeof parsed.token !== "string" || typeof parsed.expiresAt !== "string") {
+      if (
+        typeof parsed.token !== "string" ||
+        typeof parsed.expiresAt !== "string"
+      ) {
         return null;
       }
       return { token: parsed.token, expiresAt: parsed.expiresAt };

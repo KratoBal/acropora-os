@@ -31,7 +31,9 @@ function isUnauthorized(error: unknown): boolean {
   );
 }
 
-function isValidLoginResult(result: LoginResult | undefined | null): result is LoginResult {
+function isValidLoginResult(
+  result: LoginResult | undefined | null,
+): result is LoginResult {
   return (
     !!result &&
     typeof result.token === "string" &&
@@ -73,7 +75,10 @@ export async function signIn(
     result = await deps.loginWithPassword(email, password);
   } catch (error) {
     if (isUnauthorized(error)) {
-      return { type: "invalid-credentials", message: INVALID_CREDENTIALS_MESSAGE };
+      return {
+        type: "invalid-credentials",
+        message: INVALID_CREDENTIALS_MESSAGE,
+      };
     }
     return { type: "network-error", message: NETWORK_ERROR_MESSAGE };
   }
@@ -83,7 +88,10 @@ export async function signIn(
   }
 
   try {
-    await deps.saveSession({ token: result.token, expiresAt: result.expiresAt });
+    await deps.saveSession({
+      token: result.token,
+      expiresAt: result.expiresAt,
+    });
   } catch {
     await deps.invalidateToken(result.token).catch(() => undefined);
     return { type: "error", message: SAVE_FAILED_MESSAGE };

@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 
 import { StockReconciliationRepository } from "./stock-reconciliation.repository.js";
@@ -50,7 +54,9 @@ export class StockReconciliationRepairService {
     if (!input.reason.trim()) {
       throw new BadRequestException("A javítás indoklása (reason) kötelező.");
     }
-    const expectedCurrentOnHand = this.parseDecimal(input.expectedCurrentOnHand);
+    const expectedCurrentOnHand = this.parseDecimal(
+      input.expectedCurrentOnHand,
+    );
     const idempotencyKey = buildRepairIdempotencyKey(
       "LOCAL_FROM_PROVEN_LEDGER",
       input.stockItemId,
@@ -62,9 +68,13 @@ export class StockReconciliationRepairService {
       if (existing) return this.toReplayOutcome(existing);
     }
 
-    const preview = await this.reconciliation.reconcileByStockItemId(input.stockItemId);
+    const preview = await this.reconciliation.reconcileByStockItemId(
+      input.stockItemId,
+    );
     if (!preview) {
-      throw new NotFoundException("Nincs ilyen StockItem (törölve, vagy soha nem is létezett).");
+      throw new NotFoundException(
+        "Nincs ilyen StockItem (törölve, vagy soha nem is létezett).",
+      );
     }
     if (preview.localOnHand === null) {
       // Structurally shouldn't happen: reconcileByStockItemId only ever
@@ -72,7 +82,9 @@ export class StockReconciliationRepairService {
       // in StockReconciliationRow only for the complementary "missing
       // StockItem" universe (findVariantsMissingStockItem), which never
       // reaches here. Defensive, not expected.
-      throw new BadRequestException("A StockItem aktuális készlete nem olvasható.");
+      throw new BadRequestException(
+        "A StockItem aktuális készlete nem olvasható.",
+      );
     }
 
     const rejectionCode = evaluateLocalFromProvenLedgerPreconditions({
@@ -113,7 +125,9 @@ export class StockReconciliationRepairService {
     if (!input.reason.trim()) {
       throw new BadRequestException("A javítás indoklása (reason) kötelező.");
     }
-    const expectedCurrentOnHand = this.parseDecimal(input.expectedCurrentOnHand);
+    const expectedCurrentOnHand = this.parseDecimal(
+      input.expectedCurrentOnHand,
+    );
     const idempotencyKey = buildRepairIdempotencyKey(
       "REPUBLISH_LOCAL_TO_UNAS",
       input.stockItemId,
@@ -125,12 +139,18 @@ export class StockReconciliationRepairService {
       if (existing) return this.toReplayOutcome(existing);
     }
 
-    const preview = await this.reconciliation.reconcileByStockItemId(input.stockItemId);
+    const preview = await this.reconciliation.reconcileByStockItemId(
+      input.stockItemId,
+    );
     if (!preview) {
-      throw new NotFoundException("Nincs ilyen StockItem (törölve, vagy soha nem is létezett).");
+      throw new NotFoundException(
+        "Nincs ilyen StockItem (törölve, vagy soha nem is létezett).",
+      );
     }
     if (preview.localOnHand === null) {
-      throw new BadRequestException("A StockItem aktuális készlete nem olvasható.");
+      throw new BadRequestException(
+        "A StockItem aktuális készlete nem olvasható.",
+      );
     }
 
     // Best-effort preview only - see this class's own doc comment above:
@@ -141,7 +161,8 @@ export class StockReconciliationRepairService {
     // one open state that flag doesn't (see diagnoseOutbox's
     // SUPERSEDABLE_STATUSES, which deliberately excludes PROCESSING).
     const hasCompetingOpenOutboxRow =
-      preview.outbox.hasPendingCorrection || preview.outbox.latestStatus === "PROCESSING";
+      preview.outbox.hasPendingCorrection ||
+      preview.outbox.latestStatus === "PROCESSING";
 
     const rejectionCode = evaluateRepublishPreconditions({
       hasUnasLink: preview.unasOnHand !== null,
@@ -205,7 +226,9 @@ export class StockReconciliationRepairService {
     try {
       return new Prisma.Decimal(value);
     } catch {
-      throw new BadRequestException("Az expectedCurrentOnHand nem érvényes decimális szám.");
+      throw new BadRequestException(
+        "Az expectedCurrentOnHand nem érvényes decimális szám.",
+      );
     }
   }
 }

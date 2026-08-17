@@ -67,7 +67,11 @@ export default function LoginPage() {
                 </p>
               </div>
 
-              <form className="space-y-4" onSubmit={(event) => void handleLogin(event)} noValidate>
+              <form
+                className="space-y-4"
+                onSubmit={(event) => void handleLogin(event)}
+                noValidate
+              >
                 <FormField label="E-mail cím" htmlFor="login-email">
                   <Input
                     id="login-email"
@@ -79,7 +83,11 @@ export default function LoginPage() {
                   />
                 </FormField>
 
-                <FormField label="Jelszó" htmlFor="login-password" error={error}>
+                <FormField
+                  label="Jelszó"
+                  htmlFor="login-password"
+                  error={error}
+                >
                   <Input
                     id="login-password"
                     type="password"

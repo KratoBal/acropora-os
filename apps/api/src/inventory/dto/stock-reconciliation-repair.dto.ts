@@ -1,5 +1,11 @@
 import { Type } from "class-transformer";
-import { IsBoolean, IsNotEmpty, IsOptional, IsString, Matches } from "class-validator";
+import {
+  IsBoolean,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+} from "class-validator";
 
 // Matches an optionally-signed, optionally-decimal plain number string
 // ("5", "-3.25", "0.000000") - the same shape Prisma.Decimal.toString()
@@ -24,7 +30,8 @@ export class StockReconciliationRepairRequestDto {
 
   @IsString()
   @Matches(DECIMAL_PATTERN, {
-    message: "Az expectedCurrentOnHand egy decimális szám karakterlánca kell legyen (pl. \"12\" vagy \"12.5\").",
+    message:
+      'Az expectedCurrentOnHand egy decimális szám karakterlánca kell legyen (pl. "12" vagy "12.5").',
   })
   expectedCurrentOnHand!: string;
 

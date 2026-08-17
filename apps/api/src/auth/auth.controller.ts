@@ -92,10 +92,7 @@ export class AuthController {
     return { success: true };
   }
 
-  private setSessionCookies(
-    response: CookieResponse,
-    session: Session,
-  ): void {
+  private setSessionCookies(response: CookieResponse, session: Session): void {
     const maxAgeMs = Math.max(
       0,
       new Date(session.expiresAt).getTime() - Date.now(),

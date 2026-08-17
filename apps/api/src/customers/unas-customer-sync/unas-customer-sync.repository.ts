@@ -71,7 +71,9 @@ interface AddressInput {
   line1: string;
 }
 
-function customerType(address: UnasApiCustomerAddress | null): "PERSON" | "COMPANY" {
+function customerType(
+  address: UnasApiCustomerAddress | null,
+): "PERSON" | "COMPANY" {
   return address?.customerType === "company" ? "COMPANY" : "PERSON";
 }
 
@@ -107,7 +109,8 @@ function toCanonical(customer: UnasApiCustomer): CanonicalCustomer {
     type: customerType(customer.invoiceAddress ?? customer.shippingAddress),
     displayName,
     email: customer.email?.trim() || null,
-    phone: customer.contactPhone?.trim() || customer.contactMobile?.trim() || null,
+    phone:
+      customer.contactPhone?.trim() || customer.contactMobile?.trim() || null,
     billing: toAddressInput("BILLING", customer.invoiceAddress),
     shipping: toAddressInput("SHIPPING", customer.shippingAddress),
   };
@@ -241,7 +244,9 @@ export class UnasCustomerSyncRepository extends Repository {
                 phone: canonical.phone,
                 addresses: {
                   create: [canonical.billing, canonical.shipping]
-                    .filter((address): address is AddressInput => Boolean(address))
+                    .filter((address): address is AddressInput =>
+                      Boolean(address),
+                    )
                     .map((address, index) => ({
                       type: address.type,
                       name: address.name,

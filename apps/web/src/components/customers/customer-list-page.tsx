@@ -180,7 +180,9 @@ export function CustomerListPage() {
                       </td>
                       <td>{item.address ?? "—"}</td>
                       <td>
-                        <Badge variant={item.source === "UNAS" ? "info" : "neutral"}>
+                        <Badge
+                          variant={item.source === "UNAS" ? "info" : "neutral"}
+                        >
                           {item.source === "UNAS"
                             ? "Webshopos"
                             : "Általunk rögzített"}
@@ -194,9 +196,7 @@ export function CustomerListPage() {
           ) : (
             <EmptyState
               title={
-                data.pagination.totalItems
-                  ? "Nincs találat"
-                  : "Nincsenek vevők"
+                data.pagination.totalItems ? "Nincs találat" : "Nincsenek vevők"
               }
               description="Módosítsd a szűrőket vagy rögzíts új vevőt."
               action={
