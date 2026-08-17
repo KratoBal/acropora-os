@@ -1,1 +1,0 @@
-{"version":3,"file":"exchange-rate-query.dto.js","sourceRoot":"","sources":["../../../src/purchasing/dto/exchange-rate-query.dto.ts"],"names":[],"mappings":";;;;;;;;;AAAA,OAAO,EAAE,SAAS,EAAE,QAAQ,EAAE,SAAS,EAAE,MAAM,iBAAiB,CAAC;AAEjE,MAAM,OAAO,oBAAoB;IACL,QAAQ,CAAU;IAC/B,IAAI,CAAU;CAC5B;AAF2B;IAAzB,QAAQ,EAAE;IAAE,SAAS,CAAC,CAAC,CAAC;;sDAAmB;AAC/B;IAAZ,SAAS,EAAE;;kDAAe"}
