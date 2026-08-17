@@ -155,17 +155,24 @@ node dist/tasks/service-token.cli.js revoke --slug polip
 
 #### Production: a hostról
 
-Ugyanaz a minta, mint a `docs/COOLIFY.md` migrációs és ellenőrző parancsainál:
-egyszeri futtatás az image-ből, a production környezeti fájllal.
+Egyszeri futtatás az image-ből, a production környezeti fájllal. **A
+`--entrypoint node` kötelező**, lásd az indoklást a blokk alatt.
 
 ```bash
-docker run --rm --env-file .env.production acropora-api \
-  node dist/tasks/service-token.cli.js create --slug polip --name "Flotta - polip"
-docker run --rm --env-file .env.production acropora-api \
-  node dist/tasks/service-token.cli.js list
-docker run --rm --env-file .env.production acropora-api \
-  node dist/tasks/service-token.cli.js revoke --slug polip
+docker run --rm --entrypoint node --env-file .env.production acropora-api \
+  dist/tasks/service-token.cli.js create --slug polip --name "Flotta - polip"
+docker run --rm --entrypoint node --env-file .env.production acropora-api \
+  dist/tasks/service-token.cli.js list
+docker run --rm --entrypoint node --env-file .env.production acropora-api \
+  dist/tasks/service-token.cli.js revoke --slug polip
 ```
+
+A runner image belépőpontja a `docker-entrypoint.sh`, ami **eldobja a
+konténernek átadott parancsot**: migrációt futtat, majd `exec node dist/main.js`
+-- sehol nem hivatkozik `"$@"`-ra. `--entrypoint node` nélkül tehát a fenti
+parancs nem hibázik, hanem migrál és elindítja az API-t, a CLI pedig **soha nem
+fut le**. Ez csendes: a konténer működni látszik, csak nem azt csinálja, amit
+kértek tőle.
 
 A `create` a nyers tokent a **standard kimenetre** írja, a figyelmeztetést a
 standard hibakimenetre. Ha a kimenetet fájlba irányítod, a token is oda kerül,
