@@ -158,6 +158,13 @@ docker run --rm --entrypoint node --env DATABASE_URL=<staging_url> acropora-api 
 > pre-deployment command further up needs no override because it uses the
 > `acropora-api:migrate` **builder** image, which declares no entrypoint. Do not
 > carry that form over to the runner image.
+>
+> Worth stating plainly, because the previous wording actively misled: these two
+> are introduced as "read-only, non-mutating", and the second says "never mutates
+> the database". Without `--entrypoint node` that is inverted — the entrypoint
+> runs `prisma migrate deploy` against whatever `DATABASE_URL` was handed in. The
+> commands did not merely fail to check anything; they did the opposite of what
+> their own label promised.
 
 ---
 
