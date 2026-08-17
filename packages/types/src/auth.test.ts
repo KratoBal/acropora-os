@@ -24,6 +24,19 @@ describe("role permission mapping", () => {
     assert.equal(ROLE_PERMISSIONS.ADMIN.length, permissionCount);
   });
 
+  it("keeps closed-worksheet amendment away from the service role", () => {
+    assert.ok(ROLE_PERMISSIONS.SERVICE.includes(PERMISSIONS.SERVICE_MANAGE));
+    assert.ok(
+      !ROLE_PERMISSIONS.SERVICE.includes(PERMISSIONS.SERVICE_WORKSHEET_AMEND),
+    );
+    assert.ok(
+      !ROLE_PERMISSIONS.MANAGER.includes(PERMISSIONS.SERVICE_WORKSHEET_AMEND),
+    );
+    assert.ok(
+      ROLE_PERMISSIONS.OWNER.includes(PERMISSIONS.SERVICE_WORKSHEET_AMEND),
+    );
+  });
+
   it("keeps warehouse permissions scoped to warehouse work", () => {
     assert.ok(
       ROLE_PERMISSIONS.WAREHOUSE.includes(PERMISSIONS.INVENTORY_MANAGE),
