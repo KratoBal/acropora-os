@@ -111,7 +111,7 @@ export function toVersionDetail(
   return {
     ...toVersionSummary(row, worksheetNumber),
     subject: row.subject,
-    unitText: row.unitText,
+    unitName: row.unitName,
     description: row.description,
     issueDate: toDateOnly(row.issueDate),
     fulfillmentDate: toDateOnly(row.fulfillmentDate),
@@ -198,7 +198,7 @@ export function toComparableVersion(
 ): ComparableWorksheetVersion {
   return {
     subject: row.subject,
-    unitText: row.unitText,
+    unitName: row.unitName,
     description: row.description,
     issueDate: toDateOnly(row.issueDate),
     fulfillmentDate: toDateOnly(row.fulfillmentDate),

@@ -2120,10 +2120,13 @@ model ServiceJobAsset {
   @@index([assetId, createdAt])
 }
 
-/// A partner egy részlege a munkalap-számozáshoz (pl. a Fánk Biodom
-/// részlege: `BIO`). A kód partneren belül egyedi, mert a számláló
-/// partner + részleg + év hármasonként fut: azonos kód ugyanabban az évben
-/// két sorozatot mosna össze.
+/// A partner egy alegysége (pl. a Fánk „PP Üzemeltetés" vagy „Biodóm"
+/// egysége). Ez EGY fogalom, nem kettő: ugyanaz a sor adja a munkalap-szám
+/// középső tagját (`BIO`) és a lapon megjelenő szöveget (`Biodóm`) is
+/// (Balázs döntése, megerősítve 2026-08-18 00:56, Discord). A kód
+/// partneren belül egyedi, mert a
+/// számláló partner + alegység + év hármasonként fut: azonos kód ugyanabban
+/// az évben két sorozatot mosna össze.
 model WorksheetDepartment {
   id         String   @id @default(cuid())
   customerId String
@@ -2215,9 +2218,11 @@ model WorksheetVersion {
 
   /// Munka tárgya, ma szabad szöveg.
   subject     String
-  /// Az egység/alegység (pl. "PP Üzemeltetés") az egység-fa elkészültéig
-  /// szabad szöveg. A számozás részlege ettől külön dolog: az kód, ez leírás.
-  unitText    String?
+  /// Az alegység neve ABBAN a pillanatban, amikor ez a verzió íródott. Nem
+  /// külön szerkeszthető mező: a `Worksheet.department` sorból másolódik.
+  /// Azért másolat, mert az alegység átnevezése különben visszamenőleg
+  /// átírná a már lezárt (és esetleg aláírt) lapokon látható szöveget.
+  unitName    String?
   description String?
 
   issueDate       DateTime? @db.Date

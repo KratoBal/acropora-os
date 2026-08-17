@@ -191,6 +191,39 @@ describe(
       );
     });
 
+    it("copies the sub-unit name onto the version and keeps it after a rename", async () => {
+      const id = await createDraft(bioDepartmentId);
+      await repository.close(id, actorUserId, new Date());
+
+      const closed = await prisma.worksheetVersion.findFirstOrThrow({
+        where: { worksheetId: id },
+        orderBy: { version: "desc" },
+        select: { unitName: true },
+      });
+      assert.equal(closed.unitName, "Biodóm");
+
+      // Az alegység átnevezése nem írhatja át visszamenőleg azt, ami egy
+      // lezárt lapon áll: a szám középső tagja és a lapon látható szöveg
+      // ugyanabból a sorból jön, de a lezárt verzió a saját pillanatát őrzi.
+      await prisma.worksheetDepartment.update({
+        where: { id: bioDepartmentId },
+        data: { name: "Biodóm II." },
+      });
+      try {
+        const afterRename = await prisma.worksheetVersion.findFirstOrThrow({
+          where: { worksheetId: id },
+          orderBy: { version: "desc" },
+          select: { unitName: true },
+        });
+        assert.equal(afterRename.unitName, "Biodóm");
+      } finally {
+        await prisma.worksheetDepartment.update({
+          where: { id: bioDepartmentId },
+          data: { name: "Biodóm" },
+        });
+      }
+    });
+
     it("refuses to close a partner that has no abbreviation", async () => {
       const otherCustomer = await prisma.customer.create({
         data: {

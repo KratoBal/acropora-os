@@ -19,7 +19,7 @@ export interface ComparableWorksheetLine {
 
 export interface ComparableWorksheetVersion {
   subject: string;
-  unitText: string | null;
+  unitName: string | null;
   description: string | null;
   issueDate: string | null;
   fulfillmentDate: string | null;
@@ -36,7 +36,7 @@ const HEADER_FIELDS: ReadonlyArray<{
   label: string;
 }> = [
   { field: "subject", label: "Tárgy" },
-  { field: "unitText", label: "Egység" },
+  { field: "unitName", label: "Egység" },
   { field: "description", label: "Leírás" },
   { field: "issueDate", label: "Keltezés" },
   { field: "fulfillmentDate", label: "Teljesítés" },

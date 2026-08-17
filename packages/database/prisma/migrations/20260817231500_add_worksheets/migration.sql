@@ -64,7 +64,7 @@ CREATE TABLE "WorksheetVersion" (
     "version" INTEGER NOT NULL,
     "status" "WorksheetVersionStatus" NOT NULL DEFAULT 'DRAFT',
     "subject" TEXT NOT NULL,
-    "unitText" TEXT,
+    "unitName" TEXT,
     "description" TEXT,
     "issueDate" DATE,
     "fulfillmentDate" DATE,

@@ -29,7 +29,7 @@ function version(
 ): ComparableWorksheetVersion {
   return {
     subject: "Cápasuli kompresszorok bevizsgálása",
-    unitText: "PP Üzemeltetés",
+    unitName: "PP Üzemeltetés",
     description: null,
     issueDate: "2026-06-15",
     fulfillmentDate: "2026-06-15",

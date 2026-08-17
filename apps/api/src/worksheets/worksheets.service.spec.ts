@@ -35,7 +35,7 @@ function versionRow(
     version: 1,
     status: "DRAFT",
     subject: "Cápasuli kompresszorok bevizsgálása",
-    unitText: "PP Üzemeltetés",
+    unitName: "PP Üzemeltetés",
     description: null,
     issueDate: new Date("2026-06-15T00:00:00.000Z"),
     fulfillmentDate: new Date("2026-06-15T00:00:00.000Z"),

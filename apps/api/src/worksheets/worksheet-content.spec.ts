@@ -25,11 +25,15 @@ function content(
 describe("worksheet content normalisation", () => {
   it("trims the subject and drops whitespace-only optional fields", () => {
     const normalized = normalizeWorksheetContent(
-      content({ unitText: "   ", description: "  PP Üzemeltetés  " }),
+      content({ description: "  Kiszállás nélkül  " }),
     );
     assert.equal(normalized.subject, "Cápasuli kompresszorok bevizsgálása");
-    assert.equal(normalized.unitText, null);
-    assert.equal(normalized.description, "PP Üzemeltetés");
+    assert.equal(normalized.description, "Kiszállás nélkül");
+  });
+
+  it("does not accept the unit as content: it comes from the sub-unit row", () => {
+    const normalized = normalizeWorksheetContent(content());
+    assert.equal("unitName" in normalized, false);
   });
 
   it("numbers the lines by the submitted order", () => {

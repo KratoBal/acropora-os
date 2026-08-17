@@ -55,6 +55,10 @@ export interface WorksheetCustomerSummary {
   worksheetPartnerCode: string | null;
 }
 
+/**
+ * A partner alegysége: ugyanaz az entitás adja a szám középső tagját
+ * (`code`) és a lapon megjelenő szöveget (`name`). Nem két fogalom.
+ */
 export interface WorksheetDepartmentSummary {
   id: string;
   code: string;
@@ -125,7 +129,12 @@ export interface WorksheetVersionSummary {
 
 export interface WorksheetVersionDetail extends WorksheetVersionSummary {
   subject: string;
-  unitText: string | null;
+  /**
+   * Az alegység neve, ahogy ennek a verziónak a kiírásakor szólt. A
+   * felvitelkor nem küldhető: a munkalap alegységéből másolódik, hogy egy
+   * későbbi átnevezés ne írja át a már lezárt lapot.
+   */
+  unitName: string | null;
   description: string | null;
   issueDate: string | null;
   fulfillmentDate: string | null;
@@ -176,7 +185,6 @@ export interface WorksheetListResponse {
 
 export interface WorksheetContentInput {
   subject: string;
-  unitText?: string | null;
   description?: string | null;
   issueDate?: string | null;
   fulfillmentDate?: string | null;

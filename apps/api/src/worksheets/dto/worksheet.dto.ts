@@ -49,7 +49,10 @@ export class WorksheetLineDto {
 
 export class WorksheetContentDto {
   @IsString() @MinLength(1) @MaxLength(500) subject!: string;
-  @IsString() @MaxLength(200) @IsOptional() unitText?: string | null;
+  // Az alegység NEM része a beküldött tartalomnak: a munkalap alegységéből
+  // másolódik a verzióra. Egy külön szerkeszthető szövegmező mellett a szám
+  // középső tagja és a lapon látható egység elcsúszhatna egymástól, pedig
+  // ez egy fogalom.
   @IsString() @MaxLength(4000) @IsOptional() description?: string | null;
   @IsISO8601() @IsOptional() issueDate?: string | null;
   @IsISO8601() @IsOptional() fulfillmentDate?: string | null;

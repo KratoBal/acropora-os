@@ -41,10 +41,19 @@ export type WorksheetSignResult =
 
 type TransactionClient = Prisma.TransactionClient;
 
-function versionContentData(content: NormalizedWorksheetContent) {
+/**
+ * Az alegység neve nem a beküldött tartalomból jön, hanem a munkalap
+ * alegységéből, a kiírás pillanatában. Így a lapon látható egység és a szám
+ * középső tagja ugyanaz a sor, egy későbbi átnevezés viszont nem írja át
+ * visszamenőleg a már lezárt verziót.
+ */
+function versionContentData(
+  content: NormalizedWorksheetContent,
+  unitName: string,
+) {
   return {
     subject: content.subject,
-    unitText: content.unitText,
+    unitName,
     description: content.description,
     issueDate: content.issueDate,
     fulfillmentDate: content.fulfillmentDate,
@@ -206,6 +215,11 @@ export class WorksheetsRepository extends Repository {
     actorUserId: string;
   }): Promise<string> {
     return this.database.$transaction(async (transaction) => {
+      const department =
+        await transaction.worksheetDepartment.findUniqueOrThrow({
+          where: { id: input.departmentId },
+          select: { name: true },
+        });
       const worksheet = await transaction.worksheet.create({
         data: {
           customerId: input.customerId,
@@ -216,7 +230,7 @@ export class WorksheetsRepository extends Repository {
               version: 1,
               status: "DRAFT",
               createdById: input.actorUserId,
-              ...versionContentData(input.content),
+              ...versionContentData(input.content, department.name),
             },
           },
         },
@@ -239,9 +253,20 @@ export class WorksheetsRepository extends Repository {
     content: NormalizedWorksheetContent;
   }): Promise<boolean> {
     return this.database.$transaction(async (transaction) => {
+      const version = await transaction.worksheetVersion.findUnique({
+        where: { id: input.versionId },
+        select: {
+          worksheet: { select: { department: { select: { name: true } } } },
+        },
+      });
+      if (!version) return false;
+
       const claimed = await transaction.worksheetVersion.updateMany({
         where: { id: input.versionId, status: "DRAFT" },
-        data: versionContentData(input.content),
+        data: versionContentData(
+          input.content,
+          version.worksheet.department.name,
+        ),
       });
       if (claimed.count !== 1) return false;
 
@@ -353,6 +378,7 @@ export class WorksheetsRepository extends Repository {
           where: { id: input.worksheetId },
           select: {
             id: true,
+            department: { select: { name: true } },
             versions: {
               orderBy: { version: "desc" },
               take: 1,
@@ -375,7 +401,7 @@ export class WorksheetsRepository extends Repository {
             status: "DRAFT",
             changeReason: input.changeReason,
             createdById: input.actorUserId,
-            ...versionContentData(input.content),
+            ...versionContentData(input.content, worksheet.department.name),
           },
           select: { id: true },
         });

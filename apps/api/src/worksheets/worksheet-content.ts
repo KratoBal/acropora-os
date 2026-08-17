@@ -23,7 +23,6 @@ export interface NormalizedWorksheetLine {
 
 export interface NormalizedWorksheetContent {
   subject: string;
-  unitText: string | null;
   description: string | null;
   issueDate: Date | null;
   fulfillmentDate: Date | null;
@@ -82,7 +81,6 @@ export function normalizeWorksheetContent(
 
   return {
     subject: input.subject.trim(),
-    unitText: optionalText(input.unitText),
     description: optionalText(input.description),
     issueDate: toDateOnly(input.issueDate),
     fulfillmentDate: toDateOnly(input.fulfillmentDate),
