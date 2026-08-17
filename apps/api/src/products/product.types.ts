@@ -12,7 +12,9 @@ export type ProductWithRelations = Prisma.ProductGetPayload<{
   include: {
     brand: true;
     categories: { include: { category: true } };
-    variants: { include: { extension: true; stockItems: true } };
+    variants: {
+      include: { extension: true; stockItems: true; barcodes: true };
+    };
     channelListings: true;
     images: true;
     unasSnapshot: true;
@@ -136,6 +138,11 @@ export function toProductDetail(
       unasReportedStock: variant.unasReportedStock?.toString() ?? null,
       unasReportedStockSyncedAt:
         variant.unasReportedStockSyncedAt?.toISOString() ?? null,
+      barcodes: variant.barcodes.map((barcode) => ({
+        id: barcode.id,
+        code: barcode.code,
+        isPrimary: barcode.isPrimary,
+      })),
       extension: variant.extension
         ? {
             variantId: variant.id,

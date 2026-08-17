@@ -14,6 +14,17 @@ export interface ProductCategorySummary {
   sortOrder: number | null;
 }
 
+/**
+ * A barcode belonging to one variant. Codes are unique across the whole
+ * catalogue, not merely within a variant, so a scan resolves to exactly one
+ * variant with no further context.
+ */
+export interface ProductBarcodeSummary {
+  id: string;
+  code: string;
+  isPrimary: boolean;
+}
+
 export interface ProductVariantSummary {
   id: string;
   sku: string;
@@ -29,6 +40,18 @@ export interface ProductVariantSummary {
   unasReportedStock: string | null;
   unasReportedStockSyncedAt: string | null;
   extension: import("./product-extension.js").ProductExtensionDetail | null;
+  barcodes: ProductBarcodeSummary[];
+}
+
+export interface AddProductBarcodeInput {
+  code: string;
+  /** Defaults to true for a variant's first barcode, false afterwards. */
+  isPrimary?: boolean;
+}
+
+export interface ProductBarcodeListResponse {
+  variantId: string;
+  items: ProductBarcodeSummary[];
 }
 
 export interface UnasProductMirrorDetail {

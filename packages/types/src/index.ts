@@ -297,7 +297,10 @@ export type {
   UnasProductImportRow,
 } from "./integrations/unas.js";
 export type {
+  AddProductBarcodeInput,
   CatalogOption,
+  ProductBarcodeListResponse,
+  ProductBarcodeSummary,
   ProductBrandSummary,
   ProductCategorySummary,
   ProductChannelListingSummary,

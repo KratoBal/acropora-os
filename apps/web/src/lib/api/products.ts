@@ -1,5 +1,8 @@
 import type {
+  AddProductBarcodeInput,
   CatalogOption,
+  ProductBarcodeListResponse,
+  ProductBarcodeSummary,
   ProductDetail,
   ProductExtensionDetail,
   ProductExtensionUpdateInput,
@@ -46,6 +49,31 @@ export const productApi = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
       },
+    );
+  },
+  addBarcode(token: string, variantId: string, input: AddProductBarcodeInput) {
+    return apiRequest<ProductBarcodeSummary>(
+      `/product-barcodes/${encodeURIComponent(variantId)}`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      },
+    );
+  },
+  setPrimaryBarcode(token: string, variantId: string, barcodeId: string) {
+    return apiRequest<ProductBarcodeListResponse>(
+      `/product-barcodes/${encodeURIComponent(variantId)}/${encodeURIComponent(barcodeId)}/primary`,
+      token,
+      { method: "PATCH" },
+    );
+  },
+  removeBarcode(token: string, variantId: string, barcodeId: string) {
+    return apiRequest<ProductBarcodeListResponse>(
+      `/product-barcodes/${encodeURIComponent(variantId)}/${encodeURIComponent(barcodeId)}`,
+      token,
+      { method: "DELETE" },
     );
   },
   categoryOptions(token: string) {
