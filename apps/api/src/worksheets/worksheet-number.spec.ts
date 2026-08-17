@@ -38,6 +38,21 @@ describe("worksheet number", () => {
     assert.equal(next.number, "FANK-BIO-2026-1000");
   });
 
+  it("keeps growing past four digits as well", () => {
+    // A hárommal feltöltés alsó korlát, nem felső: a sorszám nem vágódik és
+    // nem fordul át, csak hosszabb lesz. Egy sorozat sem áll meg attól, hogy
+    // egy partner sokat dolgozik.
+    assert.equal(
+      buildWorksheetNumber({
+        partnerCode: "FANK",
+        departmentCode: "BIO",
+        year: 2026,
+        sequence: 10000,
+      }).number,
+      "FANK-BIO-2026-10000",
+    );
+  });
+
   it("refuses a partner without an abbreviation", () => {
     assert.equal(
       worksheetNumberIssue({ partnerCode: null, departmentCode: "BIO" }),
