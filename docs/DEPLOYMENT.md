@@ -232,6 +232,13 @@ docker run --rm --entrypoint node --env DATABASE_URL=<staging_url> acropora-api 
 > migrates and starts the API, and the check never runs, which looks like success.
 > Check 1's pre-deployment command needs no override because it uses the
 > `acropora-api:migrate` **builder** image, which declares no entrypoint.
+>
+> Worth stating plainly, because the previous wording actively misled: these are
+> introduced as "none of which mutate anything", and check 3 says "never mutates
+> anything, safe to run repeatedly". Without `--entrypoint node` that is inverted
+> — the entrypoint runs `prisma migrate deploy` against whatever `DATABASE_URL`
+> was handed in. The commands did not merely fail to check anything; they did the
+> opposite of what their own label promised.
 
 Check 2 and 3 are deliberately separate commands: 2 proves the image is
 built correctly regardless of database reachability; 3 proves the CLI can
