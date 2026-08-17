@@ -10,6 +10,7 @@ import {
   PageHeader,
   Select,
   Skeleton,
+  Textarea,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -563,12 +564,11 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                       />
                     </FormField>
                     <FormField label="Belső megjegyzés">
-                      <textarea
+                      <Textarea
                         rows={5}
                         aria-label="Belső megjegyzés"
                         value={notes}
                         onChange={(event) => setNotes(event.target.value)}
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
                       />
                     </FormField>
                     <Button disabled={busy} onClick={() => void save()}>

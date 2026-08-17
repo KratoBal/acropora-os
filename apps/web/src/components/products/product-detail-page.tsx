@@ -10,6 +10,7 @@ import {
   Input,
   PageHeader,
   Skeleton,
+  Textarea,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -458,8 +459,8 @@ function ProductExtensionEditor({
           </div>
           <label className="block text-xs font-medium text-slate-600">
             Belső megjegyzés
-            <textarea
-              className="mt-1 min-h-24 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/15"
+            <Textarea
+              className="mt-1 min-h-24"
               maxLength={5000}
               value={form.internalNote}
               onChange={(event) =>
