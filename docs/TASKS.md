@@ -132,11 +132,64 @@ Nincs hozzá admin felület, operátori CLI van. A nyers token **egyszer**, a
 létrehozáskor jelenik meg; az adatbázisban csak a SHA-256 lenyomata van, tehát
 elvesztés esetén nem visszaállítható, hanem újat kell kiadni.
 
+A parancs alakja **nem ugyanaz** a két környezetben, ezért mindkettő itt áll.
+
+#### Fejlesztői gépen
+
 ```bash
 pnpm --filter @acropora/api service-token -- create --slug polip --name "Flotta - polip"
 pnpm --filter @acropora/api service-token -- list
 pnpm --filter @acropora/api service-token -- revoke --slug polip
 ```
+
+#### Production: a konténer termináljából (pl. Coolify)
+
+Itt már a konténerben állsz, a munkakönyvtár `/app`, és a `DATABASE_URL` a
+környezetben van, tehát nem kell átadni:
+
+```bash
+node dist/tasks/service-token.cli.js create --slug polip --name "Flotta - polip"
+node dist/tasks/service-token.cli.js list
+node dist/tasks/service-token.cli.js revoke --slug polip
+```
+
+#### Production: a hostról
+
+Egyszeri futtatás az image-ből, a production környezeti fájllal. **A
+`--entrypoint node` kötelező**, lásd az indoklást a blokk alatt.
+
+```bash
+docker run --rm --entrypoint node --env-file .env.production acropora-api \
+  dist/tasks/service-token.cli.js create --slug polip --name "Flotta - polip"
+docker run --rm --entrypoint node --env-file .env.production acropora-api \
+  dist/tasks/service-token.cli.js list
+docker run --rm --entrypoint node --env-file .env.production acropora-api \
+  dist/tasks/service-token.cli.js revoke --slug polip
+```
+
+A runner image belépőpontja a `docker-entrypoint.sh`, ami **eldobja a
+konténernek átadott parancsot**: migrációt futtat, majd `exec node dist/main.js`
+-- sehol nem hivatkozik `"$@"`-ra. `--entrypoint node` nélkül tehát a fenti
+parancs nem hibázik, hanem migrál és elindítja az API-t, a CLI pedig **soha nem
+fut le**. Ez csendes: a konténer működni látszik, csak nem azt csinálja, amit
+kértek tőle.
+
+A `create` a nyers tokent a **standard kimenetre** írja, a figyelmeztetést a
+standard hibakimenetre. Ha a kimenetet fájlba irányítod, a token is oda kerül,
+tehát ne tedd — a terminálból másold ki, és onnan mentsd biztonságos helyre.
+
+**A fejlesztői alak élesben nem fut le**, két egymástól független okból:
+
+- Az `apps/api/Dockerfile` runner stage-e szándékosan törli a
+  csomagkezelőket (`npm`, `npx`, `corepack`, `pnpm`, `yarn`), mert a futó
+  szolgáltatásnak nincs rájuk szüksége, és a támadási felületet csökkenti.
+  `pnpm`-mel kezdődő parancs ott nem létezik.
+- A `service-token` npm-script `tsc -p tsconfig.json`-t futtat és a monorepo
+  gyökeréből olvassa a `.env`-et. A `tsc` devDependency, amit a
+  `pnpm deploy --prod` kihagy, a gyökér `.env` pedig nincs a deployolt fában.
+
+Vagyis a különbség nem konfigurációs, hanem a production image felépítéséből
+következik; a konténerben a lefordított CLI közvetlen hívása a helyes út.
 
 A `--slug` kiadás után gyakorlatilag nem nevezhető át, mert a már felvitt
 feladatok `sourceRef` értékének tartós része.

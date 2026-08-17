@@ -215,14 +215,23 @@ other two to pass first:
 # 2. Runtime, no database needed: confirms the CLI/schema/migrations
 #    resolve correctly *inside the actual built image*, without touching
 #    DATABASE_URL at all.
-docker run --rm acropora-api node docker-entrypoint-migrate.cjs --check
+docker run --rm --entrypoint node acropora-api \
+  docker-entrypoint-migrate.cjs --check
 
 # 3. Runtime, against a real (e.g. staging) database, read-only: runs
 #    `prisma migrate status` — never mutates anything, safe to run
 #    repeatedly.
-docker run --rm --env DATABASE_URL=<staging_url> acropora-api \
-  node docker-entrypoint-migrate.cjs --status
+docker run --rm --entrypoint node --env DATABASE_URL=<staging_url> acropora-api \
+  docker-entrypoint-migrate.cjs --status
 ```
+
+> **Why `--entrypoint node` on checks 2 and 3.** The runner image's entrypoint is
+> `docker-entrypoint.sh`, which **discards whatever command the container is
+> given**: it applies migrations and then runs `exec node dist/main.js`, never
+> referencing `"$@"`. Without the override neither check fails — the container
+> migrates and starts the API, and the check never runs, which looks like success.
+> Check 1's pre-deployment command needs no override because it uses the
+> `acropora-api:migrate` **builder** image, which declares no entrypoint.
 
 Check 2 and 3 are deliberately separate commands: 2 proves the image is
 built correctly regardless of database reachability; 3 proves the CLI can

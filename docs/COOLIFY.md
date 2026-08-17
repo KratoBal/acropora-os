@@ -136,16 +136,28 @@ Two read-only, non-mutating checks worth running against any freshly
 built `acropora-api` image before trusting it, in addition to whatever
 Coolify's own health check reports:
 
+`--entrypoint node` is required on both, see the note below the block.
+
 ```bash
 # No database needed - confirms schema.prisma, migrations/, and the
 # Prisma CLI all resolve correctly inside this exact image.
-docker run --rm acropora-api node docker-entrypoint-migrate.cjs --check
+docker run --rm --entrypoint node acropora-api \
+  docker-entrypoint-migrate.cjs --check
 
 # Needs a reachable DATABASE_URL (staging is fine) - read-only, never
 # mutates the database.
-docker run --rm --env DATABASE_URL=<staging_url> acropora-api \
-  node docker-entrypoint-migrate.cjs --status
+docker run --rm --entrypoint node --env DATABASE_URL=<staging_url> acropora-api \
+  docker-entrypoint-migrate.cjs --status
 ```
+
+> **Why `--entrypoint node`.** The runner image's entrypoint is
+> `docker-entrypoint.sh`, which **discards whatever command the container is
+> given**: it applies migrations and then runs `exec node dist/main.js`, never
+> referencing `"$@"`. Without the override these commands do not fail — they
+> migrate and start the API, while the check you asked for never runs. The
+> pre-deployment command further up needs no override because it uses the
+> `acropora-api:migrate` **builder** image, which declares no entrypoint. Do not
+> carry that form over to the runner image.
 
 ---
 
