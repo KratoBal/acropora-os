@@ -47,7 +47,7 @@ export async function main(
   if (!filePath) {
     output.stderr(
       "Használat: barcode-import <fájl.csv> [--dry-run]\n" +
-        "A fájl fejléce: sku,barcode[,isPrimary]\n",
+        "A fájl fejléce: unas_id,barcode[,isPrimary]  (vagy sku,barcode[,isPrimary])\n",
     );
     return 1;
   }
@@ -71,15 +71,25 @@ export async function main(
   if (dryRun) output.stdout("\n-- PRÓBAFUTÁS: semmi nem íródik ki --\n\n");
 
   for (const row of parsed.rows) {
-    const variant = await prisma.productVariant.findUnique({
-      where: { sku: row.sku },
-      select: { id: true },
-    });
-    if (!variant) {
-      outcomes.push("UNKNOWN_SKU");
-      output.stdout(`${row.line}. sor  UNKNOWN_SKU  ${row.sku}\n`);
+    const resolved = await resolveVariant(parsed.keyKind, row.key);
+    if (resolved.kind === "none") {
+      outcomes.push("UNKNOWN_KEY");
+      output.stdout(`${row.line}. sor  UNKNOWN_KEY  ${row.key}\n`);
       continue;
     }
+    if (resolved.kind === "ambiguous") {
+      // A UNAS id names a *product*, and a product may hold several variants
+      // (UNAS variant-stock products are separated locally, one row each). A
+      // barcode belongs to exactly one of them, and nothing in the file says
+      // which. Guessing would put the code on the wrong shelf, so the row is
+      // reported with its candidates and left for a human decision.
+      outcomes.push("AMBIGUOUS_VARIANT");
+      output.stdout(
+        `${row.line}. sor  AMBIGUOUS_VARIANT  ${row.key} -> ${resolved.skus.length} változat: ${resolved.skus.join(", ")}\n`,
+      );
+      continue;
+    }
+    const variant = { id: resolved.variantId };
 
     const owner = await prisma.productBarcode.findUnique({
       where: { code: row.code },
@@ -90,7 +100,7 @@ export async function main(
       outcomes.push(same ? "ALREADY_PRESENT" : "TAKEN_BY_OTHER_VARIANT");
       output.stdout(
         same
-          ? `${row.line}. sor  ALREADY_PRESENT  ${row.sku}  ${row.code}\n`
+          ? `${row.line}. sor  ALREADY_PRESENT  ${row.key}  ${row.code}\n`
           : `${row.line}. sor  TAKEN_BY_OTHER_VARIANT  ${row.code} már a(z) ${owner.variant.sku} változaté\n`,
       );
       continue;
@@ -112,31 +122,86 @@ export async function main(
     }
 
     outcomes.push("CREATED");
-    const warning =
-      row.eanCheckDigitValid === false
-        ? "  (EAN ellenőrző számjegy hibás)"
-        : "";
-    output.stdout(
-      `${row.line}. sor  CREATED  ${row.sku}  ${row.code}${warning}\n`,
-    );
+    output.stdout(`${row.line}. sor  CREATED  ${row.key}  ${row.code}\n`);
   }
 
   const totals = summarise(outcomes);
+  const label = parsed.keyKind === "unasId" ? "UNAS-azonosító" : "cikkszám";
   output.stdout(
     "\n" +
-      `Feldolgozott sorok:        ${outcomes.length}\n` +
-      `  létrehozva:              ${totals.CREATED}${dryRun ? " (próbafutás, nem íródott ki)" : ""}\n` +
-      `  már megvolt:             ${totals.ALREADY_PRESENT}\n` +
-      `  más változaté:           ${totals.TAKEN_BY_OTHER_VARIANT}\n` +
-      `  ismeretlen cikkszám:     ${totals.UNKNOWN_SKU}\n` +
-      `  érvénytelen vonalkód:    ${totals.INVALID_BARCODE}\n` +
-      `  hibás sor:               ${totals.MALFORMED_ROW}\n` +
-      `  duplikátum a fájlban:    ${totals.DUPLICATE_IN_FILE}\n`,
+      `Azonosító oszlop:            ${label}\n` +
+      `Feldolgozott sorok:          ${outcomes.length}\n` +
+      `  létrehozva:                ${totals.CREATED}${dryRun ? " (próbafutás, nem íródott ki)" : ""}\n` +
+      `  már megvolt:               ${totals.ALREADY_PRESENT}\n` +
+      `  más változaté:             ${totals.TAKEN_BY_OTHER_VARIANT}\n` +
+      `  ismeretlen ${label}:${" ".repeat(Math.max(1, 14 - label.length))}${totals.UNKNOWN_KEY}\n` +
+      `  több változat, döntés kell: ${totals.AMBIGUOUS_VARIANT}\n` +
+      `  érvénytelen vonalkód:      ${totals.INVALID_BARCODE}\n` +
+      `  hibás EAN ellenőrző jegy:  ${totals.INVALID_EAN_CHECK_DIGIT}\n` +
+      `  hibás sor:                 ${totals.MALFORMED_ROW}\n` +
+      `  duplikátum a fájlban:      ${totals.DUPLICATE_IN_FILE}\n`,
   );
+
+  if (totals.AMBIGUOUS_VARIANT)
+    output.stdout(
+      "\nA több változatot adó sorok NEM kerültek be. Egy UNAS-azonosító a\n" +
+        "terméket nevezi meg, egy vonalkód viszont pontosan egy változaté; a\n" +
+        "fájl nem mondja meg, melyiké. Ezekhez változatonkénti döntés kell.\n",
+    );
 
   // A completed run is a success even with skipped rows: the skips are facts
   // about the data, and the operator can see every one of them above.
   return 0;
+}
+
+type ResolvedVariant =
+  | { kind: "one"; variantId: string }
+  | { kind: "ambiguous"; skus: string[] }
+  | { kind: "none" };
+
+/**
+ * Finds the variant a row refers to.
+ *
+ * A SKU identifies a variant directly. A UNAS id does not: it is recorded on
+ * `ExternalReference(UNAS, "Product", externalId)` and points at a *Product*,
+ * exactly as the UNAS sync writes it. A product with one variant resolves
+ * cleanly; a UNAS variant-stock product is separated locally into one row per
+ * combination, and then the file alone cannot say which one the barcode
+ * belongs to.
+ */
+async function resolveVariant(
+  keyKind: "unasId" | "sku",
+  key: string,
+): Promise<ResolvedVariant> {
+  if (keyKind === "sku") {
+    const variant = await prisma.productVariant.findUnique({
+      where: { sku: key },
+      select: { id: true },
+    });
+    return variant ? { kind: "one", variantId: variant.id } : { kind: "none" };
+  }
+
+  const reference = await prisma.externalReference.findUnique({
+    where: {
+      system_entityType_externalId: {
+        system: "UNAS",
+        entityType: "Product",
+        externalId: key,
+      },
+    },
+    select: { entityId: true },
+  });
+  if (!reference) return { kind: "none" };
+
+  const variants = await prisma.productVariant.findMany({
+    where: { productId: reference.entityId },
+    select: { id: true, sku: true },
+    orderBy: { sku: "asc" },
+  });
+  if (variants.length === 0) return { kind: "none" };
+  if (variants.length > 1)
+    return { kind: "ambiguous", skus: variants.map((v) => v.sku) };
+  return { kind: "one", variantId: variants[0]!.id };
 }
 
 const invokedPath = process.argv[1];

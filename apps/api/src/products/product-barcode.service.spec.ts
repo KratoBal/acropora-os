@@ -44,11 +44,23 @@ describe("ProductBarcodeService", () => {
     assert.equal(stored, "5901234123457");
   });
 
-  it("accepts a code whose EAN check digit fails", async () => {
-    // The shop's own internal numbering is not EAN; refusing it would make
-    // the feature unusable for exactly the codes it was built for.
-    const added = await service().add("variant-1", { code: "5901234123458" });
-    assert.equal(added.code, "5901234123458");
+  it("refuses an EAN-shaped code whose own check digit disagrees", async () =>
+    // Seven fabricated codes are already known in the catalogue; this field is
+    // typed into by hand daily, so the check belongs here too, not only in the
+    // one-off import.
+    assert.rejects(
+      () => service().add("variant-1", { code: "5901234123458" }),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        error.message.includes("ellenőrző számjegye"),
+    ));
+
+  it("still accepts a code that is not EAN-shaped at all", async () => {
+    // The shop's internal numbering is not EAN and never claimed to be. The
+    // rule above keys on "wrong" (false), never on "not applicable" (null),
+    // which is what keeps these codes usable.
+    const internal = await service().add("variant-1", { code: "ACRO12345" });
+    assert.equal(internal.code, "ACRO12345");
   });
 
   it("rejects a code that is not storable at all", async () =>

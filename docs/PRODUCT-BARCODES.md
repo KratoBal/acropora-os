@@ -68,11 +68,28 @@ Mind `products.view` (olvasás) vagy `products.manage` (írás) jogot igényel.
 - nagybetűsít, hogy a keresés találjon;
 - csak számot és angol nagybetűt enged; **az írásjelet elutasítja, nem
   eldobja** -- egy csendben kiszedett kötőjel két különböző kódot mosna egybe;
-- az **EAN ellenőrző számjegyet jelzi, de nem kényszeríti ki**. A bolt saját
-  belső számozása nem EAN, és sosem állította magáról; egy hibás ellenőrző
-  számjegy miatti elutasítás pont azokat a kódokat tiltaná ki, amikért a
-  funkció készült. A „nem értelmezhető rá" (nem EAN alakú) külön eset a
-  „hibás"-tól.
+- az **EAN ellenőrző számjegyet ellenőrzi, és hibás számjegy esetén elutasít.**
+
+### Miért nem zárja ki ez a belső kódokat
+
+A szabály a `false` értékre szűr, **soha nem a `null`-ra**, és ez a különbség
+tartja használhatónak a boltot:
+
+| kód                                       | ellenőrzés | eredmény       |
+| ----------------------------------------- | ---------- | -------------- |
+| `5901234123457` (13 jegy, jó számjegy)    | `true`     | bekerül        |
+| `5901234123458` (13 jegy, rossz számjegy) | `false`    | **elutasítva** |
+| `ACRO12345` (nem EAN alakú)               | `null`     | bekerül        |
+
+A bolt saját belső számozása nem EAN alakú, tehát `null`-t ad, és érintetlen
+marad. Amit a szabály kizár, az a **kitalált EAN**: olyan kód, amely EAN-nak
+adja ki magát, de a saját ellenőrző számjegye ellentmond neki. A katalógusban
+hét ilyen ismert (öt AquaForte UV-C izzó és két Grotech bögre, ahol valaki a
+variánsok utolsó jegyét a teljesítményhez rendelte).
+
+Ezért az ellenőrzés **két helyen** van, és ez nem redundancia: az egyszeri
+betöltő listája egyszer fut le, a beolvasó mező viszont naponta kap kódot
+emberi kézből.
 
 ## Egyszeri betöltés a meglévő vonalkódokhoz
 
@@ -84,14 +101,32 @@ A cikkszám mezőben álló vonalkódok bemásolása a táblába. **A betöltő 
 Ez szerződés a lista előállítójával, nem találgatás. Fejléces CSV:
 
 ```csv
-sku,barcode
-ACR-113,5901234123457
-ACR-114,96385074
+unas_id,barcode,isPrimary
+159850145,5901234123457,igen
 ```
 
-Opcionális harmadik oszlop: `isPrimary` (`igen`/`nem`, `true`/`false`, `1`/`0`).
-**A fejléc kötelező**, és név szerint olvassuk az oszlopokat -- egy felcserélt
-oszlopsorrend így hangosan elszáll, nem vonalkódokat importál cikkszámként.
+A terméket **vagy** `unas_id`, **vagy** `sku` azonosítja, sosem mindkettő. A
+lista az UNAS oldaláról készül, ahol csak UNAS-azonosító létezik -- a
+`variantId` az Acropora belső azonosítója, amit kívülről senki nem ismerhet --,
+ezért az `unas_id` a várt oszlop. A `sku` kézzel írt fájlhoz marad meg.
+
+**A fejléc kötelező**, és név szerint olvassuk az oszlopokat: egy felcserélt
+oszlopsorrend így hangosan elszáll, nem vonalkódokat importál cikkszámként. Ha
+mindkét azonosító szerepel a fejlécben, a betöltő elutasítja a fájlt -- hogy
+melyik nyerne, az csendes találgatás lenne arról, hova kerül a vonalkód.
+
+### A UNAS-azonosító terméket nevez meg, nem változatot
+
+Az `unas_id` az `ExternalReference(UNAS, "Product", externalId)` soron keresztül
+egy **termékre** mutat, pontosan úgy, ahogy a szinkron írja. Egy termék viszont
+több változatot is tarthat (az UNAS variánskészletes termékei helyben
+változatonként külön sorra bomlanak).
+
+- Egy változat esetén a feloldás egyértelmű.
+- **Több változat esetén a sor `AMBIGUOUS_VARIANT` eredményt kap, és NEM kerül
+  be.** Egy vonalkód pontosan egy változaté, a fájl viszont nem mondja meg,
+  melyiké. A kimenet felsorolja a szóba jövő cikkszámokat, és a döntés emberé
+  marad. Rossz polcra tett vonalkód rosszabb, mint egy kihagyott sor.
 
 ### Futtatás
 
@@ -111,11 +146,9 @@ adatbázison érdemes ezzel kezdeni.
 - **Egyetlen sor sem állítja meg.** Minden sor kap egy eredményt, és a végén
   összesítés jön. Egy 412. sornál megálló futás után senki nem tudná, mi
   történt és mi nem.
-- **Számot ad.** Létrehozva / már megvolt / más változaté / ismeretlen cikkszám
-  / érvénytelen vonalkód / hibás sor / duplikátum a fájlban.
-
-A hibás EAN ellenőrző számjeggyel rendelkező sorok bekerülnek, de a kimenetben
-meg vannak jelölve.
+- **Számot ad.** Létrehozva / már megvolt / más változaté / ismeretlen
+  azonosító / több változat (döntés kell) / érvénytelen vonalkód / hibás EAN
+  ellenőrző jegy / hibás sor / duplikátum a fájlban.
 
 Kihagyott sorokkal a futás **sikeres** (kilépési kód 0): a kihagyás az adatról
 szóló tény, és mind ott áll a kimenetben. Nem-nulla kilépési kód csak akkor van,

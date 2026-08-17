@@ -4,32 +4,70 @@ import { describe, it } from "node:test";
 import { parseImportFile, summarise } from "./barcode-import.js";
 
 describe("parseImportFile", () => {
-  it("reads sku and barcode by header name, not by position", () => {
-    const result = parseImportFile("barcode,sku\n5901234123457,ACR-113\n");
+  it("reads the key and the barcode by header name, not by position", () => {
+    const result = parseImportFile(
+      "barcode,unas_id\n5901234123457,159850145\n",
+    );
+    assert.equal(result.keyKind, "unasId");
     assert.deepEqual(
-      result.rows.map((row) => [row.sku, row.code]),
-      [["ACR-113", "5901234123457"]],
+      result.rows.map((row) => [row.key, row.code]),
+      [["159850145", "5901234123457"]],
     );
   });
 
-  it("refuses a file whose header does not name the columns", () => {
-    // Importing barcodes as SKUs because someone swapped two columns is
-    // exactly the failure a required header exists to prevent.
+  it("still accepts a hand-written file keyed by sku", () => {
+    const result = parseImportFile("sku,barcode\nACR-113,5901234123457\n");
+    assert.equal(result.keyKind, "sku");
+    assert.equal(result.rows[0]?.key, "ACR-113");
+  });
+
+  it("refuses a file that names both identifiers", () =>
+    // Which one wins would be a silent guess about where the barcode belongs.
     assert.throws(
-      () => parseImportFile("ACR-113,5901234123457\n"),
+      () => parseImportFile("unas_id,sku,barcode\n1,ACR-113,5901234123457\n"),
+      /Pontosan az egyik azonosítót/,
+    ));
+
+  it("refuses a file whose header does not name the columns", () => {
+    assert.throws(
+      () => parseImportFile("159850145,5901234123457\n"),
       /Hiányzó oszlop/,
     );
+    assert.throws(
+      () => parseImportFile("barcode\n5901234123457\n"),
+      /Hiányzó azonosító oszlop/,
+    );
     assert.throws(() => parseImportFile("   \n"), /üres/);
+  });
+
+  it("rejects an EAN-shaped code whose check digit disagrees", () => {
+    // Seven such codes exist in the catalogue, invented by hand rather than
+    // read off a product. They must not be imported quietly.
+    const result = parseImportFile(
+      ["unas_id,barcode", "1,5901234123458"].join("\n"),
+    );
+    assert.equal(result.rows.length, 0);
+    assert.equal(result.rejected[0]?.outcome, "INVALID_EAN_CHECK_DIGIT");
+  });
+
+  it("still accepts a code that is not EAN-shaped at all", () => {
+    // The shop's internal numbering is not EAN and never claimed to be, so
+    // "not applicable" must not be treated as "wrong".
+    const result = parseImportFile(
+      ["unas_id,barcode", "1,ACRO12345"].join("\n"),
+    );
+    assert.equal(result.rows.length, 1);
+    assert.equal(result.rejected.length, 0);
   });
 
   it("keeps going after a bad row and reports it by line number", () => {
     const result = parseImportFile(
       [
-        "sku,barcode",
-        "ACR-113,5901234123457",
-        "ACR-114,59/8",
-        ",5901234123458",
-        "ACR-115,96385074",
+        "unas_id,barcode",
+        "1,5901234123457",
+        "2,59/8",
+        ",5998200310010",
+        "3,96385074",
       ].join("\n"),
     );
     assert.equal(result.rows.length, 2);
@@ -44,9 +82,7 @@ describe("parseImportFile", () => {
 
   it("catches a code repeated inside the file before it reaches the database", () => {
     const result = parseImportFile(
-      ["sku,barcode", "ACR-113,5901234123457", "ACR-114,5901234123457"].join(
-        "\n",
-      ),
+      ["unas_id,barcode", "1,5901234123457", "2,5901234123457"].join("\n"),
     );
     assert.equal(result.rows.length, 1);
     assert.equal(result.rejected[0]?.outcome, "DUPLICATE_IN_FILE");
@@ -54,32 +90,17 @@ describe("parseImportFile", () => {
   });
 
   it("normalises codes, so a spreadsheet's stray space is not a new barcode", () => {
-    const result = parseImportFile("sku,barcode\nACR-113,  5901234 123457 \n");
+    const result = parseImportFile("unas_id,barcode\n1,  5901234 123457 \n");
     assert.equal(result.rows[0]?.code, "5901234123457");
-  });
-
-  it("carries the EAN verdict per row without rejecting on it", () => {
-    const result = parseImportFile(
-      [
-        "sku,barcode",
-        "ACR-113,5901234123457",
-        "ACR-114,5901234123458",
-        "ACR-115,ACRO12345",
-      ].join("\n"),
-    );
-    assert.deepEqual(
-      result.rows.map((row) => row.eanCheckDigitValid),
-      [true, false, null],
-    );
   });
 
   it("reads the optional isPrimary column in the forms a human writes", () => {
     const result = parseImportFile(
       [
-        "sku,barcode,isPrimary",
-        "ACR-113,5901234123457,igen",
-        "ACR-114,96385074,0",
-        "ACR-115,036000291452,",
+        "unas_id,barcode,isPrimary",
+        "1,5901234123457,igen",
+        "2,96385074,0",
+        "3,036000291452,",
       ].join("\n"),
     );
     assert.deepEqual(
@@ -90,23 +111,25 @@ describe("parseImportFile", () => {
 
   it("ignores blank lines and surrounding quotes", () => {
     const result = parseImportFile(
-      ["sku,barcode", "", '"ACR-113","5901234123457"', ""].join("\n"),
+      ["unas_id,barcode", "", '"159850145","5901234123457"', ""].join("\n"),
     );
     assert.deepEqual(
-      result.rows.map((row) => [row.sku, row.code]),
-      [["ACR-113", "5901234123457"]],
+      result.rows.map((row) => [row.key, row.code]),
+      [["159850145", "5901234123457"]],
     );
   });
 });
 
 describe("summarise", () => {
   it("counts every outcome, including the ones that did not occur", () =>
-    assert.deepEqual(summarise(["CREATED", "CREATED", "UNKNOWN_SKU"]), {
+    assert.deepEqual(summarise(["CREATED", "CREATED", "AMBIGUOUS_VARIANT"]), {
       CREATED: 2,
       ALREADY_PRESENT: 0,
       TAKEN_BY_OTHER_VARIANT: 0,
-      UNKNOWN_SKU: 1,
+      UNKNOWN_KEY: 0,
+      AMBIGUOUS_VARIANT: 1,
       INVALID_BARCODE: 0,
+      INVALID_EAN_CHECK_DIGIT: 0,
       MALFORMED_ROW: 0,
       DUPLICATE_IN_FILE: 0,
     }));

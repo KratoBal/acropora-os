@@ -4,43 +4,54 @@ export type ImportRowOutcome =
   | "CREATED"
   | "ALREADY_PRESENT"
   | "TAKEN_BY_OTHER_VARIANT"
-  | "UNKNOWN_SKU"
+  | "UNKNOWN_KEY"
+  | "AMBIGUOUS_VARIANT"
   | "INVALID_BARCODE"
+  | "INVALID_EAN_CHECK_DIGIT"
   | "MALFORMED_ROW"
   | "DUPLICATE_IN_FILE";
 
+/** Which column identified the product in this file. */
+export type ImportKeyKind = "unasId" | "sku";
+
 export interface ParsedImportRow {
   line: number;
-  sku: string;
+  key: string;
   code: string;
   isPrimary?: boolean;
-  eanCheckDigitValid: boolean | null;
 }
 
 export interface RejectedImportRow {
   line: number;
   outcome: Extract<
     ImportRowOutcome,
-    "MALFORMED_ROW" | "INVALID_BARCODE" | "DUPLICATE_IN_FILE"
+    | "MALFORMED_ROW"
+    | "INVALID_BARCODE"
+    | "INVALID_EAN_CHECK_DIGIT"
+    | "DUPLICATE_IN_FILE"
   >;
   reason: string;
   raw: string;
 }
 
 export interface ParsedImportFile {
+  keyKind: ImportKeyKind;
   rows: ParsedImportRow[];
   rejected: RejectedImportRow[];
 }
-
-const REQUIRED_HEADER = ["sku", "barcode"];
 
 /**
  * Parses the barcode import file.
  *
  * The format is a deliberate contract with whoever produces the list, not a
- * guess: a header row naming the columns, then `sku,barcode` and optionally
- * `isPrimary`. The header is required so that a shifted column order fails
- * loudly instead of importing barcodes as SKUs.
+ * guess: a header row naming the columns, then the product key and `barcode`,
+ * optionally `isPrimary`. The header is required so that a shifted column
+ * order fails loudly instead of importing barcodes as SKUs.
+ *
+ * The product is identified by **either** `unas_id` or `sku`, never both. The
+ * list is prepared from the UNAS side, where only UNAS ids exist - `variantId`
+ * is an Acropora-internal identifier nobody outside can know - so `unas_id` is
+ * the expected column. `sku` stays supported for a hand-written file.
  *
  * A bad row never aborts the file. This import runs once, against production,
  * with someone watching - "row 412 is malformed, the other 790 went in" is
@@ -63,13 +74,24 @@ export function parseImportFile(content: string): ParsedImportFile {
 
   if (headerIndex === -1)
     throw new Error("A fájl üres, nincs benne fejléc sem.");
-  for (const required of REQUIRED_HEADER)
-    if (!columns.includes(required))
-      throw new Error(
-        `Hiányzó oszlop a fejlécben: "${required}". Várt fejléc: sku,barcode[,isPrimary]`,
-      );
+  if (!columns.includes("barcode"))
+    throw new Error(
+      'Hiányzó oszlop a fejlécben: "barcode". Várt fejléc: unas_id,barcode[,isPrimary]',
+    );
 
-  const skuAt = columns.indexOf("sku");
+  const hasUnasId = columns.includes("unas_id");
+  const hasSku = columns.includes("sku");
+  if (hasUnasId && hasSku)
+    throw new Error(
+      'A fejléc "unas_id" és "sku" oszlopot is tartalmaz. Pontosan az egyik azonosítót add meg, hogy egyértelmű legyen, melyik szerint keresünk.',
+    );
+  if (!hasUnasId && !hasSku)
+    throw new Error(
+      'Hiányzó azonosító oszlop: "unas_id" vagy "sku" kell a fejlécbe.',
+    );
+
+  const keyKind: ImportKeyKind = hasUnasId ? "unasId" : "sku";
+  const keyAt = columns.indexOf(hasUnasId ? "unas_id" : "sku");
   const codeAt = columns.indexOf("barcode");
   const primaryAt = columns.indexOf("isprimary");
 
@@ -78,13 +100,13 @@ export function parseImportFile(content: string): ParsedImportFile {
     const cells = splitRow(line);
     const number = index + 1;
 
-    const sku = cells[skuAt]?.trim();
+    const key = cells[keyAt]?.trim();
     const rawCode = cells[codeAt];
-    if (!sku || rawCode === undefined) {
+    if (!key || rawCode === undefined) {
       rejected.push({
         line: number,
         outcome: "MALFORMED_ROW",
-        reason: "Hiányzó cikkszám vagy vonalkód oszlop.",
+        reason: "Hiányzó azonosító vagy vonalkód oszlop.",
         raw: line,
       });
       continue;
@@ -96,6 +118,21 @@ export function parseImportFile(content: string): ParsedImportFile {
         line: number,
         outcome: "INVALID_BARCODE",
         reason: parsed.reason,
+        raw: line,
+      });
+      continue;
+    }
+
+    // A code that claims to be an EAN/UPC but fails its own check digit is
+    // refused outright. Seven such codes are already known in the catalogue,
+    // invented by hand rather than read off a product. A code that is not
+    // EAN-shaped at all yields `null` here and passes, so internal numbering
+    // is unaffected.
+    if (parsed.eanCheckDigitValid === false) {
+      rejected.push({
+        line: number,
+        outcome: "INVALID_EAN_CHECK_DIGIT",
+        reason: `A(z) ${parsed.code} EAN/UPC alakú, de az ellenőrző számjegye hibás.`,
         raw: line,
       });
       continue;
@@ -115,16 +152,15 @@ export function parseImportFile(content: string): ParsedImportFile {
 
     rows.push({
       line: number,
-      sku,
+      key,
       code: parsed.code,
       ...(primaryAt === -1
         ? {}
         : { isPrimary: parseBoolean(cells[primaryAt]) }),
-      eanCheckDigitValid: parsed.eanCheckDigitValid,
     });
   }
 
-  return { rows, rejected };
+  return { keyKind, rows, rejected };
 }
 
 function splitRow(line: string): string[] {
@@ -151,8 +187,10 @@ export function summarise(
     CREATED: 0,
     ALREADY_PRESENT: 0,
     TAKEN_BY_OTHER_VARIANT: 0,
-    UNKNOWN_SKU: 0,
+    UNKNOWN_KEY: 0,
+    AMBIGUOUS_VARIANT: 0,
     INVALID_BARCODE: 0,
+    INVALID_EAN_CHECK_DIGIT: 0,
     MALFORMED_ROW: 0,
     DUPLICATE_IN_FILE: 0,
   };

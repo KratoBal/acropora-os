@@ -31,6 +31,18 @@ export class ProductBarcodeService {
     const parsed = parseBarcode(input.code);
     if (!parsed.valid) throw new BadRequestException(parsed.reason);
 
+    // Rejected only when the code *claims* to be an EAN/UPC and its own check
+    // digit disagrees - i.e. `false`, never `null`. A code that is not
+    // EAN-shaped at all (the shop's internal numbering) yields `null` and
+    // passes, so this refuses fabrications without locking out the codes the
+    // feature exists for. Seven such fabrications are known to be in the
+    // catalogue already; this field is typed into by hand every day, so the
+    // check belongs here as well as in the one-off import.
+    if (parsed.eanCheckDigitValid === false)
+      throw new BadRequestException(
+        "Ez a vonalkód EAN/UPC alakú, de az ellenőrző számjegye hibás. Ellenőrizd a beolvasást, vagy használj belső (nem EAN) kódot.",
+      );
+
     const owner = await this.repository.owner(parsed.code);
     if (owner) {
       // Naming the SKU is deliberate: this endpoint requires products.manage,
