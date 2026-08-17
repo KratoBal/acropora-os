@@ -22,6 +22,29 @@ A `pnpm install` beállítja a `core.hooksPath` értékét a repository `.githoo
 
 Adatbázist érintő API-változásnál külön futtasd az érintett opt-in integrációs tesztet. A teljes Nest dependency graph ellenőrzése: `pnpm --filter @acropora/api test:bootstrap`. Élő PostgreSQL és Redis mellett a health smoke: `pnpm --filter @acropora/api test:smoke`.
 
+## Integrációs tesztek
+
+Az integrációs tesztek sorokat hoznak létre és törölnek, ezért **saját, erre a célra létrehozott adatbázison futnak**, nem a fejlesztői adatbázison. A `RUN_DB_INTEGRATION=1` önmagában nem elég: a `DATABASE_URL`-nek `_test` vagy `_ci` végű adatbázisnévre kell mutatnia, különben a futás hangosan elszáll (`integrationDatabaseGate`, `apps/api/src/common/integration-database.ts`). A `_ci` a CI eldobható service konténerének neve (`acropora_ci`); ha ez a név valaha változik, a `TEST_DATABASE_SUFFIXES` listát vele együtt kell módosítani, és van rá teszt, ami erre figyelmeztet.
+
+Ez nem bizalmatlanság a teszttel szemben, hanem az egyszeri tévedés ára: egy elgépelt connection string egy sorokat törlő tesztben nem javítható vissza.
+
+Az adatbázist **minden teljes futás előtt újra kell építeni**, mert néhány meglévő suite (jelenleg a `unas-product-sync.integration.spec.ts`) tiszta adatbázist feltételez, és a benne maradt sorokra ráasserteál. Egy dedikált teszt-adatbázisnál ez nem probléma, mert eldobható:
+
+```bash
+docker compose exec -T postgres psql -U acropora -d postgres -c 'DROP DATABASE IF EXISTS acropora_test;'
+docker compose exec -T postgres psql -U acropora -d postgres -c 'CREATE DATABASE acropora_test;'
+DATABASE_URL='postgresql://acropora:acropora@localhost:5432/acropora_test?schema=public' pnpm prisma:deploy
+```
+
+Futtatás:
+
+```bash
+DATABASE_URL='postgresql://acropora:acropora@localhost:5432/acropora_test?schema=public' \
+  pnpm --filter @acropora/api test:integration
+```
+
+A tesztek a saját soraikat felismerhető jelölés alapján takarítják (dedikált e-mail domain, slug-előtag), és a takarítás a futás **elején is** lefut, hogy egy megszakadt futás ne hagyjon szemetet a következőnek. Egyetlen teszt sem törölhet olyan feltétellel, amely idegen sorokra is illeszkedhet: a `deleteMany({ where: { action: "..." } })` típusú, csak típusra szűrő törlés nem elfogadható.
+
 ## Irányelvek
 
 - A felhasználói felület és az üzleti szövegek magyar nyelvűek.

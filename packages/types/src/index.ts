@@ -315,6 +315,8 @@ export type {
 export type {
   CreateTaskInput,
   TaskAssigneeOptionsResponse,
+  TaskIngestInput,
+  TaskIngestResult,
   TaskListResponse,
   TaskPersonSummary,
   TaskSource,

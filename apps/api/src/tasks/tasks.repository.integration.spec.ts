@@ -2,26 +2,34 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { Prisma, prisma } from "@acropora/database";
 
+import { integrationDatabaseGate } from "../common/integration-database.js";
 import { TasksRepository } from "./tasks.repository.js";
 
 // The scoping guarantee of the personal board ("you only ever see your own
 // tasks") and the idempotency guarantee of machine ingest are both
 // database-level properties - a mocked repository can only prove that the
-// service asked for the right thing, not that Postgres enforces it. Hence
-// the established RUN_DB_INTEGRATION opt-in, as in
-// session.repository.integration.spec.ts.
-const runIntegration = process.env.RUN_DB_INTEGRATION === "1";
+// service asked for the right thing, not that Postgres enforces it.
+//
+// This suite writes and deletes rows, so it runs only against a database
+// named for testing; see integrationDatabaseGate.
+const gate = integrationDatabaseGate(process.env);
 
-describe("TasksRepository integration", { skip: !runIntegration }, () => {
+// Every row this suite creates carries this domain, so a run that was killed
+// before its cleanup does not poison the next one.
+const TEST_EMAIL_DOMAIN = "tasks-integration.invalid";
+
+describe("TasksRepository integration", { skip: gate.mode === "skip" }, () => {
   const suffix = Date.now();
   const repository = new TasksRepository();
   let ownerId: string;
   let otherId: string;
 
   before(async () => {
+    if (gate.mode === "refuse") throw new Error(gate.reason);
+    await removeLeftovers();
     const owner = await prisma.user.create({
       data: {
-        email: `tasks-owner-${suffix}@example.invalid`,
+        email: `tasks-owner-${suffix}@${TEST_EMAIL_DOMAIN}`,
         displayName: "Tasks Integration Owner",
         role: "OWNER",
         isActive: true,
@@ -29,7 +37,7 @@ describe("TasksRepository integration", { skip: !runIntegration }, () => {
     });
     const other = await prisma.user.create({
       data: {
-        email: `tasks-other-${suffix}@example.invalid`,
+        email: `tasks-other-${suffix}@${TEST_EMAIL_DOMAIN}`,
         displayName: "Tasks Integration Other",
         role: "MANAGER",
         isActive: true,
@@ -40,11 +48,29 @@ describe("TasksRepository integration", { skip: !runIntegration }, () => {
   });
 
   after(async () => {
-    await prisma.task.deleteMany({
-      where: { assigneeId: { in: [ownerId, otherId] } },
-    });
-    await prisma.user.deleteMany({ where: { id: { in: [ownerId, otherId] } } });
+    if (gate.mode !== "run") return;
+    await removeLeftovers();
   });
+
+  /**
+   * Deletes only rows this suite could have written, matched by the test
+   * e-mail domain. Runs before as well as after, so an aborted run cleans up
+   * on the next attempt instead of leaving debris behind.
+   */
+  async function removeLeftovers() {
+    const users = await prisma.user.findMany({
+      where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
+      select: { id: true },
+    });
+    if (!users.length) return;
+    const ids = users.map((user) => user.id);
+    await prisma.task.deleteMany({
+      where: {
+        OR: [{ assigneeId: { in: ids } }, { createdById: { in: ids } }],
+      },
+    });
+    await prisma.user.deleteMany({ where: { id: { in: ids } } });
+  }
 
   it("lists only the tasks assigned to the requester", async () => {
     await repository.create({

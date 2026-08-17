@@ -158,6 +158,22 @@ szerkesztésekor. Egy `User`-nek addig nincs jelszava (`passwordHash: null`),
 amíg valaki ezt explicit be nem állítja — jelszó nélküli felhasználóval a
 production login mindig a fent leírt generikus `401`-et adja.
 
+## Gépi hitelesítés (service token)
+
+A felhasználói session mellett létezik egy **második, tőle teljesen független**
+bejövő hitelesítési út: a `ServiceToken` tábla és a `ServiceTokenGuard`. Ez nem
+felhasználót és nem sessiont old fel, hanem gépi hívót, és a kódbázisban
+**egyetlen** ponton szerepel: a `POST /tasks/ingest` végponton. A service token
+más végponton nem használható, mert más végpont nem is nézi.
+
+Ami a két útban közös: a nyers tokenből csak a SHA-256 lenyomat kerül
+adatbázisba (`ServiceToken.tokenHash`, ugyanaz a `hashSessionToken` util).
+
+Ami eltér: a service token nem jár le, nincs hozzá szerepkör vagy permission, és
+nem jelenik meg a felhasználókezelésben. A visszavonás explicit
+(`ServiceToken.revokedAt`), operátori CLI-vel. Részletek: `docs/TASKS.md` és
+[ADR-015](../adr/0015-service-token-machine-ingest.md).
+
 ## Providercsere
 
 Egy jövőbeli, teljesebb auth providernek (pl. SSO, MFA) az alkalmazás által
