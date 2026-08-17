@@ -106,6 +106,14 @@ const product = {
       isActive: true,
       createdAt: new Date("2026-07-19T10:00:00.000Z"),
       updatedAt: new Date("2026-07-19T10:00:00.000Z"),
+      barcodes: [
+        {
+          id: "barcode-1",
+          variantId: "variant-1",
+          code: "5901234123457",
+          isPrimary: true,
+        },
+      ],
       extension: {
         id: "extension-1",
         variantId: "variant-1",

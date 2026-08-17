@@ -27,7 +27,15 @@ const productInclude = {
       { createdAt: "asc" },
     ],
   },
-  variants: { include: { extension: true, stockItems: true } },
+  variants: {
+    include: {
+      extension: true,
+      stockItems: true,
+      // Primary first, then stable by code so the detail response and the
+      // barcode editor never disagree about ordering.
+      barcodes: { orderBy: [{ isPrimary: "desc" }, { code: "asc" }] },
+    },
+  },
   channelListings: { orderBy: { channel: "asc" } },
   images: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
   unasSnapshot: true,

@@ -66,6 +66,10 @@ const detail: ProductDetail = {
       unasVariantValues: null,
       unasReportedStock: "5",
       unasReportedStockSyncedAt: "2026-07-31T10:00:00.000Z",
+      barcodes: [
+        { id: "barcode-1", code: "5901234123457", isPrimary: true },
+        { id: "barcode-2", code: "96385074", isPrimary: false },
+      ],
       extension: {
         variantId: "variant-1",
         preferredSupplierId: null,
@@ -445,9 +449,16 @@ describe("ProductDetailPage mirror ownership", () => {
     const { container } = render(<ProductDetailPage productId="product-1" />);
     await screen.findByText("UNAS terméktükör");
 
-    expect(container.querySelector("strong")?.textContent).toBe("vastagon");
-    expect(container.querySelector("em")?.textContent).toBe("dőlt");
-    const items = container.querySelectorAll("ul li");
+    // Scoped to the rendered description block rather than the whole page:
+    // other cards (the barcode list, for one) legitimately contain their own
+    // <ul><li>, and this test is about the description's own markup.
+    const description = container.querySelector(
+      "[data-testid=product-description]",
+    );
+    expect(description).not.toBeNull();
+    expect(description?.querySelector("strong")?.textContent).toBe("vastagon");
+    expect(description?.querySelector("em")?.textContent).toBe("dőlt");
+    const items = description?.querySelectorAll("ul li") ?? [];
     expect(items).toHaveLength(2);
     expect(items[0]?.textContent).toBe("Első tulajdonság");
     expect(items[1]?.textContent).toBe("Második tulajdonság");

@@ -25,6 +25,7 @@ import { FilterXSS, type IFilterXSSOptions } from "xss";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { productApi } from "@/lib/api/products";
+import { BarcodeEditor } from "./barcode-editor";
 
 const value = (candidate: string | null | undefined) => candidate || "—";
 const dateTime = (candidate: string | null | undefined) =>
@@ -980,6 +981,16 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                       </div>
                     </dl>
 
+                    <BarcodeEditor
+                      barcodes={variant.barcodes}
+                      canManage={canManage}
+                      onChanged={() =>
+                        setRequestVersion((current) => current + 1)
+                      }
+                      token={token}
+                      variantId={variant.id}
+                    />
+
                     <ProductExtensionEditor
                       canManage={canManage}
                       extension={variant.extension}
@@ -1008,6 +1019,7 @@ export function ProductDetailPage({ productId }: { productId: string }) {
             <CardContent>
               {product.description ? (
                 <div
+                  data-testid="product-description"
                   className="max-w-none text-sm text-slate-700 [&_a]:text-teal-700 [&_a]:underline [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_img]:max-w-full [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_table]:w-full [&_td]:border [&_td]:border-slate-200 [&_td]:p-2 [&_th]:border [&_th]:border-slate-200 [&_th]:p-2 [&_ul]:list-disc [&_ul]:pl-5"
                   dangerouslySetInnerHTML={{
                     __html: descriptionHtml,
