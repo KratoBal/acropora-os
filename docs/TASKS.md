@@ -132,11 +132,39 @@ Nincs hozzá admin felület, operátori CLI van. A nyers token **egyszer**, a
 létrehozáskor jelenik meg; az adatbázisban csak a SHA-256 lenyomata van, tehát
 elvesztés esetén nem visszaállítható, hanem újat kell kiadni.
 
+A parancs alakja **nem ugyanaz** a két környezetben, ezért mindkettő itt áll.
+
+#### Fejlesztői gépen
+
 ```bash
 pnpm --filter @acropora/api service-token -- create --slug polip --name "Flotta - polip"
 pnpm --filter @acropora/api service-token -- list
 pnpm --filter @acropora/api service-token -- revoke --slug polip
 ```
+
+#### Production konténerben
+
+```bash
+node dist/tasks/service-token.cli.js create --slug polip --name "Flotta - polip"
+node dist/tasks/service-token.cli.js list
+node dist/tasks/service-token.cli.js revoke --slug polip
+```
+
+A konténer munkakönyvtára `/app`, és a `DATABASE_URL` már a környezetben van,
+tehát nem kell átadni.
+
+**A fejlesztői alak élesben nem fut le**, két egymástól független okból:
+
+- Az `apps/api/Dockerfile` runner stage-e szándékosan törli a
+  csomagkezelőket (`npm`, `npx`, `corepack`, `pnpm`, `yarn`), mert a futó
+  szolgáltatásnak nincs rájuk szüksége, és a támadási felületet csökkenti.
+  `pnpm`-mel kezdődő parancs ott nem létezik.
+- A `service-token` npm-script `tsc -p tsconfig.json`-t futtat és a monorepo
+  gyökeréből olvassa a `.env`-et. A `tsc` devDependency, amit a
+  `pnpm deploy --prod` kihagy, a gyökér `.env` pedig nincs a deployolt fában.
+
+Vagyis a különbség nem konfigurációs, hanem a production image felépítéséből
+következik; a konténerben a lefordított CLI közvetlen hívása a helyes út.
 
 A `--slug` kiadás után gyakorlatilag nem nevezhető át, mert a már felvitt
 feladatok `sourceRef` értékének tartós része.

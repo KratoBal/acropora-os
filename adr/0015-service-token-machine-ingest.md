@@ -45,7 +45,12 @@ lejáró álsessiont, ami magát az auth modellt rontaná el.
   tokent kell kiadni, visszafejteni nem lehet.
 - Nincs token-kezelő admin felület. Két-három token mellett egy ilyen képernyő
   több támadási felület lenne, mint kényelem. A kiadás és visszavonás operátori
-  CLI-vel történik (`pnpm --filter @acropora/api service-token`).
+  CLI-vel történik: fejlesztői gépen
+  `pnpm --filter @acropora/api service-token`, production konténerben
+  `node dist/tasks/service-token.cli.js` — a runner image-ből szándékosan
+  hiányzik minden csomagkezelő, ezért ott a lefordított CLI közvetlen hívása az
+  egyetlen út. Mindkét alak a `docs/TASKS.md` "Token kiadása és visszavonása"
+  szakaszában áll, indoklással.
 
 ### Névtér és idempotencia
 
