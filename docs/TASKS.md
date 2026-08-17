@@ -142,7 +142,10 @@ pnpm --filter @acropora/api service-token -- list
 pnpm --filter @acropora/api service-token -- revoke --slug polip
 ```
 
-#### Production konténerben
+#### Production: a konténer termináljából (pl. Coolify)
+
+Itt már a konténerben állsz, a munkakönyvtár `/app`, és a `DATABASE_URL` a
+környezetben van, tehát nem kell átadni:
 
 ```bash
 node dist/tasks/service-token.cli.js create --slug polip --name "Flotta - polip"
@@ -150,8 +153,23 @@ node dist/tasks/service-token.cli.js list
 node dist/tasks/service-token.cli.js revoke --slug polip
 ```
 
-A konténer munkakönyvtára `/app`, és a `DATABASE_URL` már a környezetben van,
-tehát nem kell átadni.
+#### Production: a hostról
+
+Ugyanaz a minta, mint a `docs/COOLIFY.md` migrációs és ellenőrző parancsainál:
+egyszeri futtatás az image-ből, a production környezeti fájllal.
+
+```bash
+docker run --rm --env-file .env.production acropora-api \
+  node dist/tasks/service-token.cli.js create --slug polip --name "Flotta - polip"
+docker run --rm --env-file .env.production acropora-api \
+  node dist/tasks/service-token.cli.js list
+docker run --rm --env-file .env.production acropora-api \
+  node dist/tasks/service-token.cli.js revoke --slug polip
+```
+
+A `create` a nyers tokent a **standard kimenetre** írja, a figyelmeztetést a
+standard hibakimenetre. Ha a kimenetet fájlba irányítod, a token is oda kerül,
+tehát ne tedd — a terminálból másold ki, és onnan mentsd biztonságos helyre.
 
 **A fejlesztői alak élesben nem fut le**, két egymástól független okból:
 
