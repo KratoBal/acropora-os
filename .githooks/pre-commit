@@ -1,0 +1,31 @@
+#!/bin/sh
+# Refuses a commit that would introduce unformatted files.
+#
+# This is the local half of the formatting guarantee; the authoritative half is
+# `pnpm format:check` in CI. A hook can be skipped (`git commit --no-verify`)
+# and only exists on machines that ran `pnpm install`, so it is a fast warning,
+# not the rule itself.
+#
+# Only staged files are checked, so the cost is proportional to the change
+# rather than to the size of the repository. Prettier applies .gitignore and
+# .prettierignore itself, and --ignore-unknown skips file types it has no
+# parser for (.prisma, .sql, images), so nothing here needs its own list of
+# extensions to keep in sync.
+
+set -e
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+
+[ -z "$staged" ] && exit 0
+
+# --no-error-on-unmatched-pattern: after .gitignore/.prettierignore filtering
+# the list can end up empty, which is a pass, not a failure.
+if ! printf '%s\n' "$staged" | xargs -d '\n' -r \
+  pnpm exec prettier --check --ignore-unknown --no-error-on-unmatched-pattern
+then
+  echo >&2
+  echo "A commit elutasitva: a fenti fajlok nincsenek formazva." >&2
+  echo "Javitas:  pnpm format    majd  git add  es commit ujra." >&2
+  echo "Kihagyas (indokolt esetben):  git commit --no-verify" >&2
+  exit 1
+fi
