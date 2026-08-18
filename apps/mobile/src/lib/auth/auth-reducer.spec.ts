@@ -113,22 +113,78 @@ describe("authReducer", () => {
     assert.deepEqual(state, { ...initialAuthState, status: "unauthenticated" });
   });
 
-  it("RESTORE_LOCKED is its own state, not a logged-out one", () => {
-    const state = authReducer(initialAuthState, { type: "RESTORE_LOCKED" });
+  it("SESSION_LOCKED is its own state, not a logged-out one", () => {
+    const state = authReducer(initialAuthState, {
+      type: "SESSION_LOCKED",
+      reason: "rejected",
+    });
     assert.equal(state.status, "locked");
     assert.notEqual(state.status, "unauthenticated");
-    assert.equal(state.user, null);
     assert.equal(state.signInError, null);
   });
 
+  it("locks without a reason when nobody has been asked yet", () => {
+    // Returning to the foreground after a long absence: the gate shut,
+    // but no prompt has run, so calling it a rejection would be a lie.
+    const state = authReducer(initialAuthState, { type: "SESSION_LOCKED" });
+    assert.equal(state.status, "locked");
+    assert.equal(state.lockReason, null);
+  });
+
+  it("carries why it locked, so the screen knows what to offer", () => {
+    const rejected = authReducer(initialAuthState, {
+      type: "SESSION_LOCKED",
+      reason: "rejected",
+    });
+    assert.equal(rejected.lockReason, "rejected");
+    const unavailable = authReducer(initialAuthState, {
+      type: "SESSION_LOCKED",
+      reason: "unavailable",
+    });
+    assert.equal(unavailable.lockReason, "unavailable");
+  });
+
+  it("remembers who is locked out when the gate closes on a running app", () => {
+    // Keeping the user is what lets the way back in skip the server: the
+    // session is on the device, and after a successful unlock there is
+    // nothing left to ask anyone about.
+    const authenticated = authReducer(initialAuthState, {
+      type: "RESTORE_AUTHENTICATED",
+      user: testUser,
+      expiresAt: "2026-08-10T00:00:00.000Z",
+    });
+    const state = authReducer(authenticated, {
+      type: "SESSION_LOCKED",
+      reason: "rejected",
+    });
+    assert.equal(state.status, "locked");
+    assert.deepEqual(state.user, testUser);
+    assert.equal(state.expiresAt, "2026-08-10T00:00:00.000Z");
+  });
+
+  it("has nobody to remember when it locks before anyone signed in", () => {
+    const state = authReducer(initialAuthState, {
+      type: "SESSION_LOCKED",
+      reason: "rejected",
+    });
+    assert.equal(state.user, null);
+  });
+
   it("RESTORE_RETRY from locked goes back to restoring, so the prompt runs again", () => {
-    const locked = authReducer(initialAuthState, { type: "RESTORE_LOCKED" });
+    const locked = authReducer(initialAuthState, {
+      type: "SESSION_LOCKED",
+      reason: "rejected",
+    });
     const state = authReducer(locked, { type: "RESTORE_RETRY" });
     assert.equal(state.status, "restoring");
+    assert.equal(state.lockReason, null, "a fresh attempt starts unexplained");
   });
 
   it("signing in with the password from a locked state lands authenticated", () => {
-    const locked = authReducer(initialAuthState, { type: "RESTORE_LOCKED" });
+    const locked = authReducer(initialAuthState, {
+      type: "SESSION_LOCKED",
+      reason: "rejected",
+    });
     const signingIn = authReducer(locked, { type: "SIGN_IN_START" });
     const state = authReducer(signingIn, {
       type: "SIGN_IN_SUCCESS",

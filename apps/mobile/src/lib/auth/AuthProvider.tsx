@@ -10,14 +10,20 @@ import {
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
+import { environment } from "@/config/env";
+
 import {
   getCurrentUser,
   invalidateToken,
   loginWithPassword,
   logout as logoutRequest,
 } from "./api";
+import { subscribeToAppState } from "./app-state";
 import { authReducer, initialAuthState, type AuthState } from "./auth-reducer";
+import { unlockWithBiometrics } from "./biometric-unlock";
+import { watchForegroundLock } from "./foreground-watcher";
 import { restoreSession } from "./restore-session";
+import { resumeSession } from "./resume-session";
 import { signIn as signInFlow, type SignInOutcome } from "./sign-in";
 import { signOut as signOutFlow } from "./sign-out";
 import { authSessionStore } from "./token-store";
@@ -29,6 +35,8 @@ export interface AuthContextValue extends AuthState {
   signOut(): Promise<void>;
   /** Re-attempts app-start session restore after a network-error state. */
   retryRestore(): void;
+  /** Asks the device to confirm the owner again from the locked state. */
+  unlock(): Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -46,6 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       getSession: () => authSessionStore.getSession(),
       clearSession: () => authSessionStore.clearSession(),
       getCurrentUser,
+      unlock: unlockWithBiometrics,
     });
 
     if (attemptId !== restoreAttemptId.current) return; // superseded
@@ -64,6 +73,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       case "network-error":
         dispatch({ type: "RESTORE_NETWORK_ERROR" });
         break;
+      case "locked":
+        dispatch({ type: "SESSION_LOCKED", reason: outcome.reason });
+        break;
     }
   }, []);
 
@@ -78,6 +90,80 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     dispatch({ type: "RESTORE_RETRY" });
     void runRestore();
   }, [runRestore]);
+
+  // Held in a ref so the foreground watcher can be mounted once and still
+  // see who is signed in now. Re-subscribing on every state change would
+  // restart the clock that measures how long the app was away.
+  //
+  // Written from an effect rather than during render: the watcher reads it
+  // from a callback, long after the commit, so there is nothing to gain
+  // from updating it earlier and a lint rule against doing so.
+  const currentUser = useRef(state.user);
+  useEffect(() => {
+    currentUser.current = state.user;
+  }, [state.user]);
+
+  const unlock = useCallback(async () => {
+    const user = currentUser.current;
+    if (!user) {
+      // Locked before anyone was restored - a cold start. There is no
+      // session in memory to return to, so the full restore runs again,
+      // server check included.
+      retryRestore();
+      return;
+    }
+
+    const outcome = await resumeSession(
+      {
+        getSession: () => authSessionStore.getSession(),
+        clearSession: () => authSessionStore.clearSession(),
+        unlock: unlockWithBiometrics,
+      },
+      user,
+    );
+
+    switch (outcome.type) {
+      case "authenticated":
+        dispatch({
+          type: "RESTORE_AUTHENTICATED",
+          user: outcome.user,
+          expiresAt: outcome.expiresAt,
+        });
+        break;
+      case "unauthenticated":
+        dispatch({ type: "RESTORE_UNAUTHENTICATED" });
+        break;
+      case "locked":
+        dispatch({ type: "SESSION_LOCKED", reason: outcome.reason });
+        break;
+    }
+  }, [retryRestore]);
+
+  // One subscription for the life of the provider. The watcher itself
+  // decides whether an absence was long enough to matter; see
+  // lock-policy.ts for the threshold and foreground-watcher.ts for the
+  // events it deliberately ignores.
+  useEffect(
+    () =>
+      watchForegroundLock({
+        subscribe: subscribeToAppState,
+        now: Date.now,
+        thresholdMs: environment.ok
+          ? environment.config.foregroundLockThresholdMs
+          : 0,
+        onLock: () => {
+          // Only worth locking something that is open. Nothing to shut on
+          // the login screen, and re-locking an already locked app would
+          // throw away the reason it locked for.
+          if (currentUser.current) {
+            // No reason: nobody has been asked yet. The locked screen
+            // takes it from here.
+            dispatch({ type: "SESSION_LOCKED" });
+          }
+        },
+      }),
+    [],
+  );
 
   const signIn = useCallback(async (email: string, password: string) => {
     dispatch({ type: "SIGN_IN_START" });
@@ -117,8 +203,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [queryClient]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ ...state, signIn, signOut, retryRestore }),
-    [state, signIn, signOut, retryRestore],
+    () => ({ ...state, signIn, signOut, retryRestore, unlock }),
+    [state, signIn, signOut, retryRestore, unlock],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

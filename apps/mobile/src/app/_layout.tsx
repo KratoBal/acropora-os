@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 
+import { LockedScreen } from "@/components/LockedScreen";
 import { RestoringScreen } from "@/components/RestoringScreen";
 import { environment } from "@/config/env";
 import { AuthProvider, useAuth } from "@/lib/auth/AuthProvider";
@@ -47,13 +48,35 @@ export default function RootLayout() {
  * declares both routes once mounted.
  */
 function RootNavigator() {
-  const { status, restoreNetworkError, retryRestore } = useAuth();
+  const {
+    status,
+    user,
+    lockReason,
+    restoreNetworkError,
+    retryRestore,
+    unlock,
+    signOut,
+  } = useAuth();
 
   if (status === "restoring") {
     return (
       <RestoringScreen
         networkError={restoreNetworkError}
         onRetry={retryRestore}
+      />
+    );
+  }
+
+  // Like `restoring`, this replaces the route Stack rather than sitting on
+  // top of it: with the gate shut, no authenticated screen should mount at
+  // all, not even for the frame it would take to redirect away.
+  if (status === "locked") {
+    return (
+      <LockedScreen
+        displayName={user?.displayName}
+        reason={lockReason}
+        onUnlock={unlock}
+        onSignOut={() => void signOut()}
       />
     );
   }
