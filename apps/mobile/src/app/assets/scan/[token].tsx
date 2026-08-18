@@ -1,9 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams } from "expo-router";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { scanAsset } from "@/lib/api/assets";
+import { describeScanFailure } from "@/lib/assets/scan-failure";
 import { useAuth } from "@/lib/auth/AuthProvider";
 
 export default function AssetScanScreen() {
@@ -34,14 +41,10 @@ export default function AssetScanScreen() {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.card}>
         {query.isError ? (
-          <>
-            <Text style={styles.title}>A QR-kód nem azonosítható</Text>
-            <Text style={styles.text}>
-              {query.error instanceof Error
-                ? query.error.message
-                : "A kód hibás vagy időközben lecserélték."}
-            </Text>
-          </>
+          <ScanFailureCard
+            error={query.error}
+            onRetry={() => void query.refetch()}
+          />
         ) : (
           <>
             <ActivityIndicator color="#52d6c7" size="large" />
@@ -53,6 +56,40 @@ export default function AssetScanScreen() {
         )}
       </View>
     </SafeAreaView>
+  );
+}
+
+/**
+ * Says which of the two failures happened. Without the distinction the
+ * screen blamed the sticker for a missing signal, and someone standing in
+ * a basement would go and replace a QR code that was never broken.
+ */
+function ScanFailureCard({
+  error,
+  onRetry,
+}: {
+  error: unknown;
+  onRetry(): void;
+}) {
+  const failure = describeScanFailure(error);
+  return (
+    <>
+      <Text style={styles.title}>{failure.title}</Text>
+      <Text style={styles.text}>{failure.message}</Text>
+      {failure.canRetry ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Beolvasás újrapróbálása"
+          onPress={onRetry}
+          style={({ pressed }) => [
+            styles.retryButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Text style={styles.retryText}>Újrapróbálás</Text>
+        </Pressable>
+      ) : null}
+    </>
   );
 }
 
@@ -79,4 +116,13 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   text: { color: "#a9c4d1", fontSize: 14, lineHeight: 21, textAlign: "center" },
+  retryButton: {
+    backgroundColor: "#177b74",
+    borderRadius: 10,
+    marginTop: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  retryText: { color: "#fff", fontWeight: "800" },
+  pressed: { opacity: 0.7 },
 });

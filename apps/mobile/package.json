@@ -48,7 +48,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "doctor": "expo-doctor",
-    "test": "tsc -p tsconfig.test.json && node --test test-dist/config/*.spec.js test-dist/lib/auth/*.spec.js test-dist/lib/api/*.spec.js test-dist/lib/orders/*.spec.js"
+    "test": "tsc -p tsconfig.test.json && node --test test-dist/config/*.spec.js test-dist/lib/assets/*.spec.js test-dist/lib/auth/*.spec.js test-dist/lib/api/*.spec.js test-dist/lib/orders/*.spec.js"
   },
   "private": true
 }
