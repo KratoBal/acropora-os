@@ -17,6 +17,8 @@
     "src/lib/auth/types.ts",
     "src/lib/auth/auth-reducer.ts",
     "src/lib/auth/auth-reducer.spec.ts",
+    "src/lib/auth/lock-policy.ts",
+    "src/lib/auth/lock-policy.spec.ts",
     "src/lib/auth/restore-session.ts",
     "src/lib/auth/restore-session.spec.ts",
     "src/lib/auth/sign-in.ts",
