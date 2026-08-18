@@ -1,3 +1,6 @@
+export { personDisplayName, personLegalName } from "./person-name.js";
+export type { NamedPerson } from "./person-name.js";
+
 export type HealthStatus = "ok" | "unavailable";
 
 export interface DependencyHealth {

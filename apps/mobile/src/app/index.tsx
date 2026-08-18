@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { OrderListCard } from "@/components/orders/OrderListCard";
 import { listUnasOrders } from "@/lib/api/orders";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { personDisplayName } from "@/lib/auth/person-name";
 import {
   getServiceCapabilities,
   getWebshopCapabilities,
@@ -64,7 +65,7 @@ export default function HomeScreen() {
               </Text>
             </View>
           </View>
-          <Text style={styles.title}>Szia, {user.displayName}!</Text>
+          <Text style={styles.title}>Szia, {personDisplayName(user)}!</Text>
           <Text style={styles.subtitle}>
             {capabilities.workspace
               ? "A napi működéshez tartozó adatok egy helyen."
@@ -203,7 +204,7 @@ export default function HomeScreen() {
 
         <View style={styles.accountCard}>
           <View style={styles.accountText}>
-            <Text style={styles.accountName}>{user.displayName}</Text>
+            <Text style={styles.accountName}>{personDisplayName(user)}</Text>
             <Text style={styles.accountEmail}>{user.email}</Text>
           </View>
           <Pressable

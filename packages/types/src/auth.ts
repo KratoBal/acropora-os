@@ -116,7 +116,10 @@ export const ROLE_PERMISSIONS: Readonly<
 export interface AuthenticatedUser {
   id: string;
   email: string;
+  /** The official, full name. Documents use this one. */
   displayName: string;
+  /** What the team calls them; see `personDisplayName`. */
+  nickname?: string | null;
   role: UserRole;
   avatarUrl?: string | null;
 }

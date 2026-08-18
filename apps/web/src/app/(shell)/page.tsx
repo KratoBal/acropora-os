@@ -13,6 +13,7 @@ import {
 } from "@acropora/ui";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { personDisplayName } from "@acropora/types";
 
 function getGreeting(hour: number) {
   if (hour < 10) return "Jó reggelt";
@@ -93,14 +94,18 @@ const inventoryAlerts = [
 
 export default function DashboardPage() {
   const { session } = useAuth();
-  const firstName = session?.user.displayName.split(" ")[0];
+  // A nickname is already the short form somebody goes by, so it is used
+  // whole; only a full name gets cut down to its first word.
+  const greetingName = session?.user
+    ? personDisplayName(session.user).split(" ")[0]
+    : undefined;
   const greeting = getGreeting(new Date().getHours());
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="2026. július 19., vasárnap"
-        title={firstName ? `${greeting}, ${firstName}!` : `${greeting}!`}
+        title={greetingName ? `${greeting}, ${greetingName}!` : `${greeting}!`}
         description="Itt találod a vállalat mai legfontosabb történéseit és teendőit."
         actions={
           <Button variant="secondary">

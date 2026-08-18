@@ -21,6 +21,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { usersApi } from "@/lib/api/users";
 import { ROLE_LABELS, ROLE_OPTIONS } from "./role-labels";
+import { personDisplayName } from "@acropora/types";
 
 export function UserListPage() {
   const { session } = useAuth();
@@ -172,7 +173,7 @@ export function UserListPage() {
                           className="font-semibold text-teal-700"
                           href={`/admin/users/${item.id}`}
                         >
-                          {item.lastName} {item.firstName}
+                          {personDisplayName(item)}
                         </Link>
                       </td>
                       <td>{item.email}</td>

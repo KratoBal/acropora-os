@@ -16,6 +16,7 @@ import {
 } from "@acropora/ui";
 import {
   hasPermission,
+  personDisplayName,
   PERMISSIONS,
   type TaskListResponse,
   type TaskPersonSummary,
@@ -264,12 +265,15 @@ function TaskCard({
       <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500">
         <span>Felvéve: {formatTaskDate(task.createdAt)}</span>
         <span>
-          Kérte: {task.createdBy?.displayName ?? TASK_SOURCE_LABELS.AGENT}
+          Kérte:{" "}
+          {task.createdBy
+            ? personDisplayName(task.createdBy)
+            : TASK_SOURCE_LABELS.AGENT}
         </span>
         {task.closedAt ? (
           <span>
             Lezárva: {formatTaskDate(task.closedAt)}
-            {task.closedBy ? ` (${task.closedBy.displayName})` : ""}
+            {task.closedBy ? ` (${personDisplayName(task.closedBy)})` : ""}
           </span>
         ) : null}
         {task.linkUrl ? (
@@ -389,7 +393,7 @@ function TaskForm({
             <option value="">Én magam</option>
             {assignees.map((assignee) => (
               <option key={assignee.id} value={assignee.id}>
-                {assignee.displayName}
+                {personDisplayName(assignee)}
               </option>
             ))}
           </Select>

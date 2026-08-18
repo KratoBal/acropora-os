@@ -22,6 +22,9 @@ export class CreateUserDto {
 export class UpdateUserDto {
   @IsString() @MinLength(1) @IsOptional() firstName?: string;
   @IsString() @MinLength(1) @IsOptional() lastName?: string;
+  /** Empty string clears it; absent leaves it alone. Deliberately not
+   * `@MinLength(1)` - clearing a nickname has to be possible. */
+  @IsString() @IsOptional() nickname?: string;
   @IsEmail() @IsOptional() email?: string;
   @IsIn(USER_ROLES) @IsOptional() role?: UserRole;
   @IsString() expectedUpdatedAt!: string;
