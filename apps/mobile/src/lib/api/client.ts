@@ -1,4 +1,4 @@
-import { env } from "@/config/env";
+import { environment } from "@/config/env";
 import { authSessionStore } from "@/lib/auth/token-store";
 
 import { resolveRequestToken } from "./request-auth";
@@ -27,6 +27,18 @@ export class ApiNetworkError extends Error {
   }
 }
 
+/** Thrown when the app was launched without a usable server address. In
+ * practice `src/app/_layout.tsx` shows the configuration problems instead
+ * of the app, so this never reaches a screen — it exists so that a call
+ * made anyway fails as a handled error rather than taking the process
+ * down, which is the failure this whole path is here to prevent. */
+export class ApiConfigError extends Error {
+  constructor(readonly problems: string[]) {
+    super("Az alkalmazás nincs beállítva: hiányzik vagy hibás a szerver címe.");
+    this.name = "ApiConfigError";
+  }
+}
+
 export interface ApiRequestOptions extends RequestInit {
   /** Skip attaching any Authorization header, even if a token is stored
    * locally. Used for the login request itself, so a stale or invalid
@@ -42,6 +54,10 @@ export async function apiRequest<T>(
   path: `/${string}`,
   init: ApiRequestOptions = {},
 ): Promise<T> {
+  if (!environment.ok) {
+    throw new ApiConfigError(environment.problems);
+  }
+
   const { skipAuth, authToken, ...requestInit } = init;
   const storedToken = await authSessionStore.getToken();
   const token = resolveRequestToken({ skipAuth, authToken, storedToken });
@@ -58,7 +74,7 @@ export async function apiRequest<T>(
 
   let response: Response;
   try {
-    response = await fetch(`${env.apiUrl}${path}`, {
+    response = await fetch(`${environment.config.apiUrl}${path}`, {
       ...requestInit,
       headers,
     });

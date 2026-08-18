@@ -5,10 +5,29 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 
 import { RestoringScreen } from "@/components/RestoringScreen";
+import { environment } from "@/config/env";
 import { AuthProvider, useAuth } from "@/lib/auth/AuthProvider";
 import { queryClient } from "@/lib/query-client";
 
 export default function RootLayout() {
+  // Checked before anything else mounts. A missing or unreadable server
+  // address used to throw while `config/env.ts` was being imported, which
+  // killed the app on launch with nothing on screen to explain it. Now it
+  // is a state the app can render, and the person holding the phone can
+  // read what is wrong instead of watching it disappear.
+  if (!environment.ok) {
+    return (
+      <>
+        <StatusBar style="light" />
+        <RestoringScreen
+          networkError={false}
+          onRetry={() => undefined}
+          configProblems={environment.problems}
+        />
+      </>
+    );
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
