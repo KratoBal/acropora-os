@@ -8,3 +8,18 @@ vulnerabilities:
       brace or glob patterns to these dependencies. Remove this exception when
       ExcelJS or its archive dependency chain adopts a compatible patched
       brace-expansion release.
+  - id: CVE-2026-40345
+    expired_at: 2026-10-31
+    statement: >-
+      Temporary exception for deepmerge-ts 7.1.5, pulled into the API runtime
+      image transitively by the Prisma toolchain: @prisma/config 6.19.3 lists
+      it as a direct dependency, and no workspace package depends on it. The
+      vulnerability is stack exhaustion when merging deeply recursive
+      structures, and @prisma/config merges the Prisma configuration files
+      that live in this repository - not user-supplied data, and not anything
+      reachable from a request path. Remove this exception when Prisma ships a
+      @prisma/config release that depends on deepmerge-ts 8.0.0 or newer; a
+      pnpm override forcing 8.0.0 under the current @prisma/config was
+      considered and rejected, because a major bump underneath Prisma's own
+      config loader would put migrations and client generation at risk for a
+      vulnerability we cannot reach.
