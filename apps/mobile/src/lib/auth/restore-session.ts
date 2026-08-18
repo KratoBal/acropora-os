@@ -27,6 +27,13 @@ export interface RestoreSessionDeps {
   now?: () => number;
 }
 
+/**
+ * Why the gate stayed shut. Both end at the password form - the owner's
+ * decision - but they differ in one visible way: offering "try Face ID
+ * again" to a phone that has no Face ID is a button that cannot work.
+ */
+export type LockReason = "rejected" | "unavailable";
+
 export type RestoreOutcome =
   | { type: "unauthenticated" }
   | { type: "authenticated"; user: AuthenticatedUser; expiresAt: string }
@@ -37,7 +44,7 @@ export type RestoreOutcome =
    * nothing about whether the session is still valid. The UI should offer
    * another attempt, or signing in with the password instead.
    */
-  | { type: "locked" };
+  | { type: "locked"; reason: LockReason };
 
 /**
  * Duck-types the one thing restore-session.ts needs to know about a
@@ -91,15 +98,15 @@ export async function restoreSession(
   }
 
   if (deps.unlock) {
+    // A device that cannot offer biometrics is treated the same as one
+    // that refused them: the owner decided that both fall back to the
+    // password rather than to an unguarded restore. The reason is carried
+    // out so the UI can tell "try again" apart from "there is nothing to
+    // try".
     const unlocked = await deps.unlock();
-    if (unlocked === "rejected") {
-      return { type: "locked" };
+    if (unlocked !== "unlocked") {
+      return { type: "locked", reason: unlocked };
     }
-    // `unavailable` deliberately falls through to the restore that
-    // happened before biometrics existed. A device with no Face ID and no
-    // passcode would otherwise lose its stored session on every launch -
-    // a security-relevant behaviour change that belongs to the owner, not
-    // to this function. See the open question in the handover notes.
   }
 
   try {

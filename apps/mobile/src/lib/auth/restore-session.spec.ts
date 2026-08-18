@@ -151,22 +151,29 @@ describe("restoreSession", () => {
           return testUser;
         },
       });
-      assert.deepEqual(outcome, { type: "locked" });
+      assert.deepEqual(outcome, { type: "locked", reason: "rejected" });
       assert.equal(getCurrentUserCalled, false);
       // A cancelled prompt is not evidence that the session went bad.
       assert.equal(cleared, false);
     });
 
-    it("restores as before on a device that has no biometrics to offer", async () => {
+    it("locks a device that has no biometrics to offer, without discarding the session", async () => {
+      let getCurrentUserCalled = false;
       const outcome = await restoreSession({
         getSession: async () => validSession,
         clearSession: async () => {
           throw new Error("must not clear a valid session");
         },
         unlock: async () => "unavailable",
-        getCurrentUser: async () => testUser,
+        getCurrentUser: async () => {
+          getCurrentUserCalled = true;
+          return testUser;
+        },
       });
-      assert.equal(outcome.type, "authenticated");
+      assert.deepEqual(outcome, { type: "locked", reason: "unavailable" });
+      // The password form is the way in, so the token stays put and the
+      // server is never told about a session the owner has not confirmed.
+      assert.equal(getCurrentUserCalled, false);
     });
 
     it("never prompts for an already-expired session", async () => {
