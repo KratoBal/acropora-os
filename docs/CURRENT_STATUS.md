@@ -1,6 +1,28 @@
 # Acropora OS – Current Status
 
-Utolsó ellenőrzés: 2026-07-30
+Utolsó ellenőrzés: 2026-08-18
+
+## Hogyan készült ez a dokumentum
+
+A 2026-07-31 és 2026-08-17 közötti szakaszt a `git log` alapján
+rekonstruáltuk, nem emlékezetből és nem a dokumentum korábbi állapotából. A
+kiindulópont a `ba504a3` commit (`#39`, projektkészlet-foglalás), mert a
+dokumentum eddig bezárólag volt naprakész; azóta **29 pull request**
+került a `main` ágba, **30 commitban**.
+
+A két szám azért tér el, mert a `#46` nem squash-merge-dzsel érkezett:
+egy merge commit és egy saját commit tartozik hozzá. A `#62` pedig nem
+található a `main` ágban.
+
+Két dolgot érdemes tudni az olvasáshoz:
+
+- **A „beolvasztva" és az „élesben fut" nem ugyanaz.** A git csak azt
+  mondja meg, mi került a `main` ágba. Hogy egy adott változás benne
+  van-e a futó production image-ben, abból nem derül ki: a repository
+  nem tartalmaz release tageket és changelogot. Ahol az alábbiakban nincs
+  külön megjegyzés, ott az állítás **beolvasztásra** vonatkozik.
+- Amit a commitokból nem lehetett eldönteni, az `[KITÖLTENDŐ]` jelölést
+  kapott. Ezeket ki kell tölteni, nem kitalálni.
 
 ## Repository
 
@@ -15,6 +37,13 @@ Felhasználókezelés, POS, Raktár/Leltár, UNAS webshop rendelés-szinkron, a
 Vevők (Customers) modul UNAS vevő-szinkronnal és NAV Online Számla
 adószám-lekérdezéssel, és legutóbb a Beszerzés modul első köre (EU-s
 beérkezett számla rögzítése MNB árfolyammal).
+
+Az azóta beolvasztott munkát a
+[2026-07-31 óta beolvasztva](#2026-07-31-óta-beolvasztva-git-log-alapján)
+szakasz sorolja fel: UNAS készlet- és rendelés-javítások, mobil
+alkalmazás, POS kedvezmények, Foxpost elszámolás, szerviz eszközkezelés,
+személyes feladattábla gépi ingesttel, repository-higiénia és a
+termék-vonalkódok írási útja.
 
 ## Completed
 
@@ -43,6 +72,111 @@ beérkezett számla rögzítése MNB árfolyammal).
 - **Vevők (Customers) modul** (`/vevok`, `customers.view` / `customers.manage`) – lásd lent
 - **Beszerzés modul, EU-s számla rögzítés első köre** (`/beszerzes`,
   `purchasing.view` / `purchasing.manage`) – lásd lent
+
+## 2026-07-31 óta beolvasztva (git log alapján)
+
+Huszonkilenc pull request a `#40`--`#69` tartományból (a `#62` nem
+található a `main` ágban). Témánként csoportosítva, a
+commitok dátumával. Egyik sorról sem állítjuk, hogy élesben fut -- lásd
+fent.
+
+### UNAS készlet és rendelés javítások (2026-07-31 -- 2026-08-09)
+
+- `#40` CSRF token küldése fájlfeltöltésnél és kijelentkezésnél
+- `#41` catalog authority betöltése leltár-korrekció közben
+- `#42` UNAS készlet-snapshot szinkron és csomagtermékek kezelése
+- `#43` első teljes UNAS készlet-szinkron lefuttatása
+- `#44` UNAS variánsszintű készlet
+- `#45` készlet rendezése fizikailag törölt UNAS rendelésnél
+- `#46` UNAS Key használata biztonságos rendelés-frissítéshez
+- `#47` célzott UNAS készlet-helyreállítás publikálása
+- `#48` eltávolított UNAS rendelési sorok auditja
+- `#49`, `#50`, `#51` UNAS készlet-snapshot backfill és az Aquavital 250
+  snapshot javítása
+
+Migrációk: `20260731110000_add_unas_package_products_and_stock_snapshot`,
+`20260731140000_add_unas_variant_inventory`,
+`20260731200000_add_unas_order_deletion_reconciliation`,
+`20260809130000_add_unas_order_line_removal_audit`, valamint három
+backfill/korrekciós migráció (`20260809170000`, `20260809193000`,
+`20260809213000`).
+
+Új runbook: [RUNBOOK-UNAS-DELETED-ORDER-RECOVERY.md](./RUNBOOK-UNAS-DELETED-ORDER-RECOVERY.md).
+
+### Mobil alkalmazás (2026-08-09 -- 2026-08-15)
+
+- `#52` bejelentkezési folyamat
+- `#53` webshop rendelések kezelése
+- eszköz-képernyők (lista, részletek, új eszköz, QR-olvasó) a
+  szerviz-eszköz körrel együtt
+
+`[KITÖLTENDŐ]` Hol tart a mobil kiadása (store, belső terjesztés,
+staging) -- a commitokból nem derül ki. Kapcsolódó dokumentum:
+[HETZNER-MOBILE-STAGING.md](./HETZNER-MOBILE-STAGING.md).
+
+### POS és beszerzés (2026-08-09)
+
+- `#54` POS kedvezmények (soronkénti és rendelés-szintű), beszerzési
+  validáció. Migráció: `20260809220000_add_pos_discounts`
+- `#55` beszállítók szűrése ország szerint
+
+### Foxpost elszámolás (2026-08-10 -- 2026-08-16)
+
+- `#56` Foxpost Gmail-alapú elszámolás automatizálása. Migráció:
+  `20260809234000_add_foxpost_gmail_settlements`
+- `#57` kézi elszámolás-jóváhagyás javítása. Migrációk:
+  `20260815100000_add_foxpost_manual_line_approval`,
+  `20260816175300_fix_foxpost_manual_approval_index_name`
+
+Dokumentum: [FOXPOST-GMAIL-SETTLEMENTS.md](./FOXPOST-GMAIL-SETTLEMENTS.md).
+Felület: `/penzugy/foxpost`.
+
+### Szerviz eszközkezelés (2026-08-15)
+
+- `#58` eszközkezelés: `Asset` törzs, hierarchia, QR-token generálás és
+  olvasás, események. Migráció: `20260815143000_add_service_asset_management`
+- `#59` bővítés: dokumentum-csatolás, QR-csere, beszállítói tulajdon.
+  Migráció: `20260815193000_enhance_service_assets`
+
+Dokumentum: [SERVICE-ASSET-MANAGEMENT.md](./SERVICE-ASSET-MANAGEMENT.md).
+Felület: `/szerviz/eszkozok`.
+
+### Személyes feladattábla és gépi ingest (2026-08-16 -- 2026-08-17)
+
+- `#60` személyes feladattábla a `/feladataim` oldalon. Migráció:
+  `20260816175344_add_personal_tasks`
+- `#61` szűkített jogkörű gépi ingest feladatokhoz, service tokennel.
+  Migráció: `20260816190000_add_service_tokens`. Döntés:
+  [ADR-0015](../adr/0015-service-token-machine-ingest.md)
+- `#67` a service-token CLI production alakjának dokumentálása
+
+Dokumentum: [TASKS.md](./TASKS.md).
+
+### Repository-higiénia (2026-08-17)
+
+- `#63` commitolt build output eltávolítása és megelőzése
+- `#64` a teljes forrásfa formázása
+- `#65` formázatlan commitot visszautasító pre-commit hook
+- `#66` a megosztott `Textarea` komponens bevezetése az utolsó öt helyen
+- `#68` annak kimondása, hogy az elromlott ellenőrzések a saját címkéjük
+  ellenkezőjét csinálták
+
+### Termék-vonalkódok (2026-08-17)
+
+- `#69` a `ProductBarcode` írási útja: a termék-részletező oldalon
+  variánsonként rögzíthető több kód, közülük egy elsődleges, plusz egy
+  egyszeri CLI a SKU mezőben álló kódok átemelésére. A commit üzenete
+  szerint az importáló nem írja a `sku` mezőt, kétszeri futtatás nem hoz
+  létre semmit másodszor, és egyetlen hibás sor sem állítja meg a futást.
+
+Dokumentum: [PRODUCT-BARCODES.md](./PRODUCT-BARCODES.md).
+
+**Élesbe kerülés:** a `#69` az operátor jelzése szerint 2026-08-17-én
+délelőtt lett beolvasztva, és 18:07-kor került a production image-be. Ez
+az egyetlen pont, ahol az élesbe kerülés ideje ismert; ez az információ
+nem a repositoryból származik.
+
+`[KITÖLTENDŐ]` A `#40`--`#68` élesbe kerülésének ideje.
 
 ## UNAS Product Synchronization (M2.1, elkészült)
 
@@ -321,6 +455,13 @@ Migráció:
 
 ## Next steps
 
+**Folyamatban (nincs a `main` ágban):** a Munkalap v0 első szelete --
+adatmodell, számozás (`PARTNER-ALEGYSÉG-ÉV-SORSZÁM`, a sorszám a
+lezáráskor kerül kiosztásra) és a lezárt lap verziózása, az aláírással a
+verzióhoz kötve. Külön ágon áll, PR-t még nem kapott. Specifikáció:
+`agents/murena/spec-munkalap-v0.md` (a fejlesztői ágens munkakönyvtárában,
+nem ebben a repositoryban).
+
 Következő projektkészlet-munkacsomag: a foglalás felhasználása/felszabadítása
 a Szerviz és Projekt modulból, projektlezárási szabályokkal és külön
 készletmozgással. További irányok: a NAV
@@ -348,8 +489,18 @@ pnpm --filter @acropora/api test:brands:integration
 pnpm --filter @acropora/api test:bootstrap
 pnpm --filter @acropora/api test:smoke
 pnpm --filter @acropora/api test:unas:connection
+pnpm --filter @acropora/api test:foxpost
+pnpm --filter @acropora/api test:assets
 pnpm --filter @acropora/web test
 pnpm build
+```
+
+Egyszeri parancssori eszközök:
+
+```bash
+pnpm --filter @acropora/api service-token
+pnpm --filter @acropora/api barcode-import
+pnpm --filter @acropora/api unas:probe
 ```
 
 ## Local URLs
@@ -361,6 +512,11 @@ pnpm build
 - POS: http://localhost:3000/pos
 - Termékek: http://localhost:3000/products
 - Vevők: http://localhost:3000/vevok
+- Feladataim: http://localhost:3000/feladataim
+- Szerviz: http://localhost:3000/szerviz
+- Szerviz eszközök: http://localhost:3000/szerviz/eszkozok
+- Új eszköz: http://localhost:3000/szerviz/eszkozok/uj
+- Foxpost elszámolás: http://localhost:3000/penzugy/foxpost
 - Beszerzés: http://localhost:3000/beszerzes
 - Új EU-s/belföldi beszerzési számla: http://localhost:3000/beszerzes/uj
 - NAV számla lekérés: http://localhost:3000/beszerzes/nav-szamlak
@@ -394,6 +550,16 @@ pnpm build
 - A projektkészlet bevételezéskori foglalása elkészült, de a foglalás
   felhasználása, részleges felszabadítása és projektlezáráskor történő
   rendezése a későbbi Szerviz/Projekt workflow része.
+- **A szerviz-eszköz modul tesztjeit egyetlen automatizmus sem futtatja.**
+  A `apps/api` `test` szkriptje nem hivatkozik a
+  `service-assets/qr-svg.spec.js` és a
+  `service-assets/service-assets.service.spec.js` fájlokra; azok csak a
+  külön `test:assets` szkriptben szerepelnek, amit a CI workflow nem hív
+  meg. A tesztek léteznek, de nem adnak fedezetet. Ez önálló hibajegy,
+  nem ennek a dokumentumnak a lábjegyzete.
+- A `#40`--`#69` körben beolvasztott funkciók éles működéséről a
+  repository nem tartalmaz bizonyítékot (nincs release tag, nincs
+  changelog), ezért ebből a dokumentumból sem olvasható ki.
 
 ## Important constraints
 
