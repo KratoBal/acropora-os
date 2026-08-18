@@ -41,6 +41,12 @@ export const PERMISSIONS = {
   /// szűk körnek jár, mint a SETTINGS_MANAGE/USERS_MANAGE (lásd
   /// ROLE_PERMISSIONS lent: csak OWNER/ADMIN, még a MANAGER sem).
   INVENTORY_RECONCILIATION_REPAIR: "inventory.reconciliation.repair",
+  /// Lezárt munkalap módosítása (új verzió készítése). Szándékosan KÜLÖN a
+  /// SERVICE_MANAGE-től: munkalapot írni és egy már kiadott, esetleg aláírt
+  /// munkalapot átírni nem ugyanaz a jogkör - az utóbbi számlát alapozó
+  /// dokumentumot érint. Ezért a SERVICE szerepkör NEM kapja meg (lásd
+  /// ROLE_PERMISSIONS lent).
+  SERVICE_WORKSHEET_AMEND: "service.worksheet.amend",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -70,7 +76,8 @@ export const ROLE_PERMISSIONS: Readonly<
     (permission) =>
       permission !== PERMISSIONS.SETTINGS_MANAGE &&
       permission !== PERMISSIONS.USERS_MANAGE &&
-      permission !== PERMISSIONS.INVENTORY_RECONCILIATION_REPAIR,
+      permission !== PERMISSIONS.INVENTORY_RECONCILIATION_REPAIR &&
+      permission !== PERMISSIONS.SERVICE_WORKSHEET_AMEND,
   ),
   SALES: [
     PERMISSIONS.DASHBOARD_VIEW,

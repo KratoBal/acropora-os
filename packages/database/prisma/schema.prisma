@@ -325,6 +325,23 @@ enum AssetDocumentType {
   OTHER
 }
 
+/// Egy munkalap-verzió állapota. A verzió a DRAFT állapotban szerkeszthető,
+/// a lezárás után soha többé: onnantól a módosítás új verziót hoz létre. Az
+/// AWAITING_SIGNATURE tehát nem "félkész", hanem lezárt, csak még aláíratlan
+/// dokumentum.
+enum WorksheetVersionStatus {
+  DRAFT
+  AWAITING_SIGNATURE
+  SIGNED
+  REJECTED
+}
+
+/// Az ügyfél döntése egy adott munkalap-verzióról.
+enum WorksheetSignatureDecision {
+  ACCEPTED
+  REJECTED
+}
+
 enum ExternalSystem {
   UNAS
   SZAMLAZZ_HU
@@ -476,6 +493,10 @@ model User {
   assignedTasks              Task[]                        @relation("TaskAssignee")
   createdTasks               Task[]                        @relation("TaskCreatedBy")
   closedTasks                Task[]                        @relation("TaskClosedBy")
+  createdWorksheets          Worksheet[]                   @relation("WorksheetCreatedBy")
+  createdWorksheetVersions   WorksheetVersion[]            @relation("WorksheetVersionCreatedBy")
+  closedWorksheetVersions    WorksheetVersion[]            @relation("WorksheetVersionClosedBy")
+  worksheetSignatures        WorksheetVersionSignature[]   @relation("WorksheetSignedBy")
 
   @@index([role, isActive])
 }
@@ -1374,6 +1395,12 @@ model Customer {
   type                  CustomerType
   displayName           String
   companyName           String?
+  /// A munkalap-számozás partner-tagja (pl. `FANK`). Azért egyedi, mert a
+  /// szám ránézésre kell hogy megmondja, melyik partnerről van szó: két
+  /// azonos rövidítés esetén a `FANK-BIO-2026-001` már nem azonosít. Amíg
+  /// nincs kitöltve, ehhez a vevőhöz munkalap nem zárható le - a hiányzó
+  /// tagtól kétféle alakú szám keletkezne.
+  worksheetPartnerCode  String?      @unique @db.VarChar(8)
   taxNumber             String?
   email                 String?
   phone                 String?
@@ -1384,13 +1411,15 @@ model Customer {
   createdAt             DateTime     @default(now())
   updatedAt             DateTime     @updatedAt
 
-  addresses   CustomerAddress[]
-  salesOrders SalesOrder[]
-  aquariums   Aquarium[]
-  serviceJobs ServiceJob[]
-  invoices    Invoice[]
-  projects    Project[]
-  assets      Asset[]
+  addresses            CustomerAddress[]
+  salesOrders          SalesOrder[]
+  aquariums            Aquarium[]
+  serviceJobs          ServiceJob[]
+  invoices             Invoice[]
+  projects             Project[]
+  assets               Asset[]
+  worksheetDepartments WorksheetDepartment[]
+  worksheets           Worksheet[]
 
   @@index([displayName])
   @@index([email])
@@ -2023,6 +2052,7 @@ model Asset {
   events          AssetEvent[]
   serviceJobs     ServiceJobAsset[]
   documents       AssetDocument[]
+  worksheetLines  WorksheetLine[]
 
   @@index([customerId, status])
   @@index([supplierId, status])
@@ -2088,6 +2118,190 @@ model ServiceJobAsset {
 
   @@unique([serviceJobId, assetId])
   @@index([assetId, createdAt])
+}
+
+/// A partner egy alegysége (pl. a Fánk „PP Üzemeltetés" vagy „Biodóm"
+/// egysége). Ez EGY fogalom, nem kettő: ugyanaz a sor adja a munkalap-szám
+/// középső tagját (`BIO`) és a lapon megjelenő szöveget (`Biodóm`) is
+/// (Balázs döntése, megerősítve 2026-08-18 00:56, Discord). A kód
+/// partneren belül egyedi, mert a
+/// számláló partner + alegység + év hármasonként fut: azonos kód ugyanabban
+/// az évben két sorozatot mosna össze.
+model WorksheetDepartment {
+  id         String   @id @default(cuid())
+  customerId String
+  code       String   @db.VarChar(3)
+  name       String
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  worksheets Worksheet[]
+
+  @@unique([customerId, code])
+  @@index([customerId, isActive])
+}
+
+/// A munkalap-sorszám számlálója partner + részleg + év hármasonként.
+///
+/// Szándékosan tábla és nem PostgreSQL szekvencia: a `nextval` a
+/// tranzakció visszagörgetésekor sem adja vissza a kiosztott értéket, tehát
+/// hézagot hagy. A munkalapnál a hiánytalanság könyvelési követelmény, ezért
+/// a számláló ugyanabban a tranzakcióban nő, mint amelyikben a lezárás
+/// megtörténik: ha a lezárás elhasal, a sorszám sem kerül elhasználásra. A
+/// párhuzamos lezárást a sor szintű zár sorosítja (`ON CONFLICT DO UPDATE`).
+model WorksheetNumberSequence {
+  id             String   @id @default(cuid())
+  partnerCode    String   @db.VarChar(8)
+  departmentCode String   @db.VarChar(3)
+  year           Int
+  lastValue      Int      @default(0)
+  updatedAt      DateTime @updatedAt
+
+  @@unique([partnerCode, departmentCode, year])
+}
+
+/// A munkalap azonossága: ez az, amire a szám vonatkozik. A tartalom nem itt
+/// van, hanem a verziókban - egy munkalapnak legalább egy verziója van, és a
+/// lezárt verziók soha többé nem változnak.
+///
+/// A `number` szándékosan `null`, amíg a lap piszkozat: a sorszám a
+/// LEZÁRÁSKOR kerül kiosztásra. Ha a létrehozáskor osztanánk, minden
+/// eldobott piszkozat kilyukasztaná a sorozatot, és a hiányzó sorszámot
+/// utólag senki nem tudná megmagyarázni a könyvelésnek.
+///
+/// A vevő és a részleg a lezárás után nem módosítható, mert mindkettő a
+/// kiosztott szám része: cseréjük a számot érvénytelenítené, a szám pedig
+/// verziók között sem változik.
+model Worksheet {
+  id           String  @id @default(cuid())
+  /// Teljes, emberi olvasású szám (`FANK-BIO-2026-001`) - csak lezárt lapnál.
+  number       String? @unique
+  /// A sorozat éve és a sorszám nyers értéke, hogy a hiánytalanság
+  /// ellenőrzéséhez ne kelljen szöveget visszafejteni.
+  numberYear   Int?
+  sequence     Int?
+  customerId   String
+  departmentId String
+  createdById  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customer   Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  department WorksheetDepartment @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  createdBy  User?               @relation("WorksheetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  versions   WorksheetVersion[]
+
+  @@index([customerId, createdAt])
+  @@index([departmentId])
+  @@index([numberYear, sequence])
+}
+
+/// Egy munkalap egy változata, teljes tartalommal. A módosítás nem írja át a
+/// lezárt lapot, hanem új verziót hoz létre; a korábbi verzió változatlanul
+/// megmarad, megnyithatóan és nyomtathatóan. A szám nem változik, a verzió
+/// külön tag: `FANK-BIO-2026-001/2`.
+///
+/// A `changeReason` az 1. verziónál `null`, minden továbbinál kötelező - a
+/// napló üres indoklással nem ér semmit. Az, hogy MIT változott, nem külön
+/// táblában áll: mindkét verzió teljes és megváltoztathatatlan, tehát a
+/// mezőnkénti eltérés belőlük bármikor pontosan előállítható (lásd
+/// `apps/api/src/worksheets/worksheet-diff.ts`). Egy másolt diff ezzel
+/// szemben el tudna térni attól, amit naplóz.
+model WorksheetVersion {
+  id          String                 @id @default(cuid())
+  worksheetId String
+  version     Int
+  status      WorksheetVersionStatus @default(DRAFT)
+
+  /// Munka tárgya, ma szabad szöveg.
+  subject     String
+  /// Az alegység neve ABBAN a pillanatban, amikor ez a verzió íródott. Nem
+  /// külön szerkeszthető mező: a `Worksheet.department` sorból másolódik.
+  /// Azért másolat, mert az alegység átnevezése különben visszamenőleg
+  /// átírná a már lezárt (és esetleg aláírt) lapokon látható szöveget.
+  unitName    String?
+  description String?
+
+  issueDate       DateTime? @db.Date
+  fulfillmentDate DateTime? @db.Date
+  dueDate         DateTime? @db.Date
+
+  /// ISO 4217 pénznemkód.
+  currency    String  @default("HUF") @db.VarChar(3)
+  /// A sorokból számolt összegek, a kliens által küldött érték nélkül.
+  netAmount   Decimal @default(0) @db.Decimal(19, 4)
+  vatAmount   Decimal @default(0) @db.Decimal(19, 4)
+  grossAmount Decimal @default(0) @db.Decimal(19, 4)
+
+  changeReason String?
+  createdById  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  closedAt     DateTime?
+  closedById   String?
+
+  worksheet Worksheet                  @relation(fields: [worksheetId], references: [id], onDelete: Cascade)
+  createdBy User?                      @relation("WorksheetVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  closedBy  User?                      @relation("WorksheetVersionClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  lines     WorksheetLine[]
+  signature WorksheetVersionSignature?
+
+  @@unique([worksheetId, version])
+  @@index([status, closedAt])
+}
+
+/// Munkalap-tétel. A `detail` a valódi dokumentum kiegészítő sora, ami ma
+/// kézzel beírt gépazonosító; ha az eszköz nyilvántartott, az `assetId`
+/// köti hozzá. Az eszköz `Restrict`, nem `SetNull`: egy lezárt verzió
+/// tartalma nem változhat meg attól, hogy máshol törölnek egy sort.
+model WorksheetLine {
+  id                 String  @id @default(cuid())
+  worksheetVersionId String
+  position           Int
+  description        String
+  detail             String?
+  assetId            String?
+  quantity           Decimal @db.Decimal(19, 6)
+  /// Mértékegység (db, óra) - soronként változik, ma szabad szöveg.
+  unit               String
+  unitNet            Decimal @db.Decimal(19, 4)
+  vatRatePercent     Decimal @db.Decimal(5, 2)
+  netAmount          Decimal @db.Decimal(19, 4)
+  vatAmount          Decimal @db.Decimal(19, 4)
+  grossAmount        Decimal @db.Decimal(19, 4)
+
+  worksheetVersion WorksheetVersion @relation(fields: [worksheetVersionId], references: [id], onDelete: Cascade)
+  asset            Asset?           @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@unique([worksheetVersionId, position])
+  @@index([assetId])
+}
+
+/// Az aláírás a VERZIÓHOZ tartozik, nem a munkalaphoz. Ha egy már aláírt lap
+/// módosul, a régi aláírás az előző verziót igazolja, és az újra nem
+/// érvényes: az új verzió állapota "aláírásra vár". Enélkül előállna az az
+/// eset, hogy egy aláírás olyan dokumentumot igazol, ami már nem létezik.
+///
+/// Ez a v0 minimális, belső változata: a döntést egy belépett felhasználó
+/// rögzíti. Az e-mailes link, a külsős belépés, a megnyitás-nyom és a
+/// küldéskori dokumentum-hash NEM része ennek a szeletnek.
+model WorksheetVersionSignature {
+  id                 String                     @id @default(cuid())
+  worksheetVersionId String                     @unique
+  decision           WorksheetSignatureDecision
+  /// Az aláíró neve, ahogy aláírta - nem a fiók megjelenített neve.
+  signerName         String
+  signedByUserId     String?
+  signedAt           DateTime                   @default(now())
+  note               String?
+
+  worksheetVersion WorksheetVersion @relation(fields: [worksheetVersionId], references: [id], onDelete: Cascade)
+  signedBy         User?            @relation("WorksheetSignedBy", fields: [signedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([signedByUserId, signedAt])
 }
 
 model AquariumMeasurement {

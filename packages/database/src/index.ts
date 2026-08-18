@@ -54,6 +54,14 @@ export type {
   UserRole,
   Warehouse,
   WarehouseLocation,
+  Worksheet,
+  WorksheetDepartment,
+  WorksheetLine,
+  WorksheetNumberSequence,
+  WorksheetSignatureDecision,
+  WorksheetVersion,
+  WorksheetVersionSignature,
+  WorksheetVersionStatus,
 } from "@prisma/client";
 
 export { prisma } from "./database.js";
