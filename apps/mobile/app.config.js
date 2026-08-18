@@ -77,6 +77,13 @@ module.exports = ({ config }) => {
       "expo-secure-store",
       "expo-notifications",
       [
+        "expo-local-authentication",
+        {
+          faceIDPermission:
+            "Az Acropora OS a Face ID-vel ellenőrzi, hogy te vagy a készülék tulajdonosa, mielőtt a munkalapok és ügyféladatok láthatóvá válnak.",
+        },
+      ],
+      [
         "expo-camera",
         {
           cameraPermission:

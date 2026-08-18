@@ -19,6 +19,8 @@
     "src/lib/auth/types.ts",
     "src/lib/auth/auth-reducer.ts",
     "src/lib/auth/auth-reducer.spec.ts",
+    "src/lib/auth/biometric-outcome.ts",
+    "src/lib/auth/biometric-outcome.spec.ts",
     "src/lib/auth/foreground-watcher.ts",
     "src/lib/auth/foreground-watcher.spec.ts",
     "src/lib/auth/lock-policy.ts",
