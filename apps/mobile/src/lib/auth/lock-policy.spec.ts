@@ -96,13 +96,19 @@ describe("parseLockThresholdSeconds", () => {
     assert.equal(parseLockThresholdSeconds("120"), 120_000);
   });
 
-  it("refuses a value that is not a positive number", () => {
-    assert.throws(() => parseLockThresholdSeconds("kétperc"), /Invalid/);
-    assert.throws(() => parseLockThresholdSeconds("0"), /Invalid/);
-    assert.throws(() => parseLockThresholdSeconds("-30"), /Invalid/);
-  });
+  describe("an unusable value falls back to the default, and never throws", () => {
+    // Throwing here would run at import time, before any screen exists:
+    // the app would die on launch over a mistyped tuning knob. The
+    // fallback is also always the safe direction - the owner's interval,
+    // never a longer one.
+    it("falls back on a value that is not a positive number", () => {
+      assert.equal(parseLockThresholdSeconds("kétperc"), 900_000);
+      assert.equal(parseLockThresholdSeconds("0"), 900_000);
+      assert.equal(parseLockThresholdSeconds("-30"), 900_000);
+    });
 
-  it("refuses a threshold longer than a day", () => {
-    assert.throws(() => parseLockThresholdSeconds("90000"), /maximum/);
+    it("falls back on a threshold longer than a day", () => {
+      assert.equal(parseLockThresholdSeconds("90000"), 900_000);
+    });
   });
 });

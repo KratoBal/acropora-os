@@ -48,10 +48,19 @@ export interface ForegroundLockInput {
 /**
  * Reads the threshold from an environment string, in seconds.
  *
- * Falls back to the default when unset. Refuses a value that is not a
- * positive, finite number of seconds within the accepted range: a typo in
- * an env file must not silently widen the window in which a found phone
- * hands over customer names, addresses and prices.
+ * Anything unusable - unset, not a number, zero or negative, or longer
+ * than the accepted maximum - falls back to the default. It deliberately
+ * does NOT throw, unlike `parseApiUrl` next to it in config/env.ts, and
+ * the difference is not an inconsistency: an app with no API URL cannot
+ * do anything at all, while an app with an unreadable threshold has a
+ * perfectly good one to use. Refusing to start over a mistyped tuning
+ * knob would take the whole app down in a basement, where there is
+ * nothing the person holding it can do about it.
+ *
+ * The fallback is also the safe direction. Every rejected value resolves
+ * to the owner's chosen interval, never to a longer one, so a typo cannot
+ * widen the window in which a found phone hands over customer names,
+ * addresses and prices.
  */
 export function parseLockThresholdSeconds(value: string | undefined): number {
   if (value === undefined || value.trim() === "") {
@@ -60,16 +69,12 @@ export function parseLockThresholdSeconds(value: string | undefined): number {
 
   const seconds = Number(value);
   if (!Number.isFinite(seconds) || seconds <= 0) {
-    throw new Error(
-      `Invalid EXPO_PUBLIC_LOCK_THRESHOLD_SECONDS "${value}". Expected a positive number of seconds.`,
-    );
+    return DEFAULT_FOREGROUND_LOCK_THRESHOLD_MS;
   }
 
   const ms = Math.round(seconds * 1000);
   if (ms > MAX_THRESHOLD_MS) {
-    throw new Error(
-      `EXPO_PUBLIC_LOCK_THRESHOLD_SECONDS "${value}" is longer than the 24 hour maximum.`,
-    );
+    return DEFAULT_FOREGROUND_LOCK_THRESHOLD_MS;
   }
 
   return ms;
