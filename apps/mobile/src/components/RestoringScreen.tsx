@@ -17,9 +17,18 @@ import { SafeAreaView } from "react-native-safe-area-context";
 export function RestoringScreen({
   networkError,
   onRetry,
+  configProblems,
 }: {
   networkError: boolean;
   onRetry: () => void;
+  /**
+   * What is wrong with the app's configuration, if anything. Takes
+   * precedence over everything else on this screen: with no usable server
+   * address there is nothing to restore, nothing to retry, and no point
+   * showing a spinner. Before this existed the app simply died on launch
+   * with no message at all.
+   */
+  configProblems?: string[];
 }) {
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -27,7 +36,22 @@ export function RestoringScreen({
         <Text style={styles.eyebrow}>ACROPORA OS</Text>
         <Text style={styles.title}>Terepi rendszer</Text>
 
-        {networkError ? (
+        {configProblems && configProblems.length > 0 ? (
+          <View style={styles.statusBlock}>
+            <Text style={styles.errorText}>
+              Az alkalmazás beállítása hiányos, ezért nem tud elindulni.
+            </Text>
+            {configProblems.map((problem) => (
+              <Text key={problem} style={styles.problemText}>
+                {problem}
+              </Text>
+            ))}
+            <Text style={styles.statusText}>
+              Ezt az alkalmazás beállításában kell javítani, újraindítással nem
+              múlik el. Szólj a fejlesztőnek, és mondd meg neki a fenti sort.
+            </Text>
+          </View>
+        ) : networkError ? (
           <View style={styles.statusBlock}>
             <Text style={styles.errorText}>
               Nem sikerült kapcsolódni a szerverhez a munkamenet ellenőrzéséhez.
@@ -90,6 +114,12 @@ const styles = StyleSheet.create({
   errorText: {
     color: "#ff9f92",
     fontSize: 14,
+    textAlign: "center",
+  },
+  problemText: {
+    color: "#ffd0ca",
+    fontSize: 13,
+    lineHeight: 19,
     textAlign: "center",
   },
   button: {

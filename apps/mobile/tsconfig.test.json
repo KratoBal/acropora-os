@@ -14,6 +14,8 @@
     "rootDir": "./src"
   },
   "include": [
+    "src/config/env.ts",
+    "src/config/env.spec.ts",
     "src/lib/auth/types.ts",
     "src/lib/auth/auth-reducer.ts",
     "src/lib/auth/auth-reducer.spec.ts",
