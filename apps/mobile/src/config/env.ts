@@ -1,3 +1,5 @@
+import { parseLockThresholdSeconds } from "@/lib/auth/lock-policy";
+
 type AppEnvironment = "development" | "preview" | "production";
 
 function parseAppEnvironment(value: string | undefined): AppEnvironment {
@@ -41,4 +43,13 @@ function parseApiUrl(value: string | undefined): string {
 export const env = Object.freeze({
   appEnvironment: parseAppEnvironment(process.env.EXPO_PUBLIC_APP_ENV),
   apiUrl: parseApiUrl(process.env.EXPO_PUBLIC_API_URL),
+  /**
+   * How long the app may sit in the background before coming back to the
+   * front has to pass the biometric gate again. Configuration rather than
+   * a constant, so changing the owner's mind about the number is not a
+   * code change.
+   */
+  foregroundLockThresholdMs: parseLockThresholdSeconds(
+    process.env.EXPO_PUBLIC_LOCK_THRESHOLD_SECONDS,
+  ),
 });
