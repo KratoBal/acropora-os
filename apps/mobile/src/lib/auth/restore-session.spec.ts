@@ -112,4 +112,88 @@ describe("restoreSession", () => {
     assert.deepEqual(outcome, { type: "network-error" });
     assert.equal(cleared, false);
   });
+
+  describe("biometric gate", () => {
+    const validSession: StoredSession = {
+      token: "valid-token",
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    };
+
+    it("does not send the token anywhere until the owner is confirmed", async () => {
+      const order: string[] = [];
+      const outcome = await restoreSession({
+        getSession: async () => validSession,
+        clearSession: async () => undefined,
+        unlock: async () => {
+          order.push("unlock");
+          return "unlocked";
+        },
+        getCurrentUser: async () => {
+          order.push("getCurrentUser");
+          return testUser;
+        },
+      });
+      assert.deepEqual(order, ["unlock", "getCurrentUser"]);
+      assert.equal(outcome.type, "authenticated");
+    });
+
+    it("a rejected unlock locks the app without calling the server or discarding the session", async () => {
+      let cleared = false;
+      let getCurrentUserCalled = false;
+      const outcome = await restoreSession({
+        getSession: async () => validSession,
+        clearSession: async () => {
+          cleared = true;
+        },
+        unlock: async () => "rejected",
+        getCurrentUser: async () => {
+          getCurrentUserCalled = true;
+          return testUser;
+        },
+      });
+      assert.deepEqual(outcome, { type: "locked" });
+      assert.equal(getCurrentUserCalled, false);
+      // A cancelled prompt is not evidence that the session went bad.
+      assert.equal(cleared, false);
+    });
+
+    it("restores as before on a device that has no biometrics to offer", async () => {
+      const outcome = await restoreSession({
+        getSession: async () => validSession,
+        clearSession: async () => {
+          throw new Error("must not clear a valid session");
+        },
+        unlock: async () => "unavailable",
+        getCurrentUser: async () => testUser,
+      });
+      assert.equal(outcome.type, "authenticated");
+    });
+
+    it("never prompts for an already-expired session", async () => {
+      let unlockCalled = false;
+      const outcome = await restoreSession({
+        getSession: async () => ({
+          token: "stale-token",
+          expiresAt: new Date(Date.now() - 60_000).toISOString(),
+        }),
+        clearSession: async () => undefined,
+        unlock: async () => {
+          unlockCalled = true;
+          return "unlocked";
+        },
+        getCurrentUser: async () => testUser,
+      });
+      assert.deepEqual(outcome, { type: "unauthenticated" });
+      assert.equal(unlockCalled, false);
+    });
+
+    it("behaves exactly as before when no gate is wired up", async () => {
+      const outcome = await restoreSession({
+        getSession: async () => validSession,
+        clearSession: async () => undefined,
+        getCurrentUser: async () => testUser,
+      });
+      assert.equal(outcome.type, "authenticated");
+    });
+  });
 });

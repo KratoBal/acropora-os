@@ -112,4 +112,30 @@ describe("authReducer", () => {
     const state = authReducer(signingOut, { type: "SIGN_OUT_DONE" });
     assert.deepEqual(state, { ...initialAuthState, status: "unauthenticated" });
   });
+
+  it("RESTORE_LOCKED is its own state, not a logged-out one", () => {
+    const state = authReducer(initialAuthState, { type: "RESTORE_LOCKED" });
+    assert.equal(state.status, "locked");
+    assert.notEqual(state.status, "unauthenticated");
+    assert.equal(state.user, null);
+    assert.equal(state.signInError, null);
+  });
+
+  it("RESTORE_RETRY from locked goes back to restoring, so the prompt runs again", () => {
+    const locked = authReducer(initialAuthState, { type: "RESTORE_LOCKED" });
+    const state = authReducer(locked, { type: "RESTORE_RETRY" });
+    assert.equal(state.status, "restoring");
+  });
+
+  it("signing in with the password from a locked state lands authenticated", () => {
+    const locked = authReducer(initialAuthState, { type: "RESTORE_LOCKED" });
+    const signingIn = authReducer(locked, { type: "SIGN_IN_START" });
+    const state = authReducer(signingIn, {
+      type: "SIGN_IN_SUCCESS",
+      user: testUser,
+      expiresAt: "2026-08-10T00:00:00.000Z",
+    });
+    assert.equal(state.status, "authenticated");
+    assert.deepEqual(state.user, testUser);
+  });
 });

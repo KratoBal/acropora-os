@@ -2,6 +2,13 @@ import type { AuthenticatedUser } from "./types";
 
 export type AuthStatus =
   | "restoring"
+  /**
+   * A usable session is on disk, but the device did not confirm the
+   * owner. Distinct from `unauthenticated` on purpose: there is still
+   * something to unlock, so the UI can offer another attempt instead of
+   * only a password form.
+   */
+  | "locked"
   | "unauthenticated"
   | "authenticated"
   | "signingIn"
@@ -38,6 +45,7 @@ export type AuthAction =
       expiresAt: string;
     }
   | { type: "RESTORE_NETWORK_ERROR" }
+  | { type: "RESTORE_LOCKED" }
   | { type: "SIGN_IN_START" }
   | { type: "SIGN_IN_SUCCESS"; user: AuthenticatedUser; expiresAt: string }
   | { type: "SIGN_IN_ERROR"; message: string }
@@ -60,6 +68,11 @@ export function authReducer(state: AuthState, action: AuthAction): AuthState {
       };
     case "RESTORE_NETWORK_ERROR":
       return { ...state, status: "restoring", restoreNetworkError: true };
+    case "RESTORE_LOCKED":
+      // Nothing about the stored session changes here - only that this
+      // launch has not been unlocked yet. `RESTORE_RETRY` runs the whole
+      // restore again, prompt included.
+      return { ...initialAuthState, status: "locked" };
     case "SIGN_IN_START":
       return { ...state, status: "signingIn", signInError: null };
     case "SIGN_IN_SUCCESS":
