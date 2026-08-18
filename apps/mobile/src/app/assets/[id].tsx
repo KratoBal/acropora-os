@@ -129,6 +129,21 @@ export default function AssetDetailScreen() {
               <Info label="Megjegyzés" value={query.data.notes} />
             </Section>
 
+            {capabilities?.assetsManage ? (
+              <Section title="Szerkesztés">
+                <AssetLink
+                  label="Eszközadatok módosítása"
+                  meta="Státusz, gyártó, sorozatszám, megjegyzés"
+                  onPress={() =>
+                    router.push({
+                      pathname: "/assets/edit/[id]",
+                      params: { id: query.data.id },
+                    })
+                  }
+                />
+              </Section>
+            ) : null}
+
             <Section title="QR-címke · 30 × 30 mm">
               <AssetLink
                 label="Nyomtatás"

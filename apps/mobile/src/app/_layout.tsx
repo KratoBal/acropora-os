@@ -105,6 +105,10 @@ function RootNavigator() {
       />
       <Stack.Screen name="assets/[id]" options={{ title: "Eszköz adatlap" }} />
       <Stack.Screen
+        name="assets/edit/[id]"
+        options={{ title: "Eszköz szerkesztése" }}
+      />
+      <Stack.Screen
         name="assets/scan/[token]"
         options={{ title: "QR-azonosítás" }}
       />
