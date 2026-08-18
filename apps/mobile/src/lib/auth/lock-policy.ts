@@ -6,15 +6,21 @@
  * `restoreSession`, which always asks. This decides the other case - the
  * app was already running and the person brought it back to the front.
  *
- * The rule the owner settled on: a short trip out of the app is normal
- * field behaviour (an incoming call, a photo from the gallery, a
- * notification), so it should not cost a Face ID prompt. A phone left on
- * a table for longer should. The line between the two is a threshold,
- * and it is configuration, not a constant baked into the code.
+ * The rule the owner settled on: a trip out of the app is normal field
+ * behaviour (an incoming call, a photo from the gallery, a notification,
+ * a job that takes a while), so it should not cost a Face ID prompt. A
+ * phone left alone for longer should. The line between the two is a
+ * threshold, and it is configuration, not a constant baked into the code.
  */
 
-/** Two minutes, per the owner's decision on 2026-08-18. */
-export const DEFAULT_FOREGROUND_LOCK_THRESHOLD_MS = 120_000;
+/**
+ * Fifteen minutes, per the owner's decision on 2026-08-18. One value for
+ * every device: a phone with no biometrics falls back to typing a
+ * password, and typing one in a basement with muddy hands is a different
+ * price from glancing at the screen - but the owner knows the site, and
+ * chose to pay that price at the same interval either way.
+ */
+export const DEFAULT_FOREGROUND_LOCK_THRESHOLD_MS = 900_000;
 
 /**
  * Upper bound on a threshold we are willing to honour: 24 hours. Anything

@@ -87,13 +87,13 @@ describe("decideForegroundLock", () => {
 });
 
 describe("parseLockThresholdSeconds", () => {
-  it("defaults to two minutes when nothing is configured", () => {
-    assert.equal(parseLockThresholdSeconds(undefined), 120_000);
-    assert.equal(parseLockThresholdSeconds("   "), 120_000);
+  it("defaults to fifteen minutes when nothing is configured", () => {
+    assert.equal(parseLockThresholdSeconds(undefined), 900_000);
+    assert.equal(parseLockThresholdSeconds("   "), 900_000);
   });
 
   it("reads a configured value in seconds", () => {
-    assert.equal(parseLockThresholdSeconds("900"), 900_000);
+    assert.equal(parseLockThresholdSeconds("120"), 120_000);
   });
 
   it("refuses a value that is not a positive number", () => {
