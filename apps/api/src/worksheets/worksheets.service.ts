@@ -14,6 +14,7 @@ import type {
   CreateWorksheetDepartmentDto,
   CreateWorksheetDto,
   CreateWorksheetLineDto,
+  SetWorksheetAssigneesDto,
   SetWorksheetPartnerCodeDto,
   SignWorksheetVersionDto,
   UpdateWorksheetDraftDto,
@@ -22,6 +23,7 @@ import type {
   WorksheetLineDto,
   WorksheetListQueryDto,
 } from "./dto/worksheet.dto.js";
+import { normalizeAssigneeIds } from "./worksheet-assignment.js";
 import {
   normalizeWorksheetContent,
   normalizeWorksheetLine,
@@ -113,6 +115,36 @@ export class WorksheetsService {
       }
       throw error;
     }
+  }
+
+  assignableUsers() {
+    return this.repository.assignableUsers();
+  }
+
+  /**
+   * A lap felelőseinek beállítása.
+   *
+   * Lezárt lapon is megengedett, és ez szándékos: a kiosztás nem a
+   * dokumentum tartalma, hanem munkaszervezés. Egy tévesen kiosztott lapot a
+   * lezárás pillanatában sem szabad javíthatatlanul otthagyni, és a lezárt
+   * verzió szövegéhez ez akkor sem nyúl hozzá.
+   */
+  async setAssignees(
+    id: string,
+    input: SetWorksheetAssigneesDto,
+    actorUserId: string,
+  ): Promise<WorksheetDetail> {
+    await this.requireWorksheet(id);
+    const userIds = normalizeAssigneeIds(input.userIds);
+    await this.requireAssignableUsers(userIds);
+
+    const updated = await this.repository.setAssignees({
+      worksheetId: id,
+      userIds,
+      actorUserId,
+    });
+    if (!updated) throw new NotFoundException("A munkalap nem található.");
+    return this.detail(id);
   }
 
   async create(
@@ -378,6 +410,22 @@ export class WorksheetsService {
     const worksheet = await this.repository.detail(id);
     if (!worksheet) throw new NotFoundException("A munkalap nem található.");
     return worksheet;
+  }
+
+  /**
+   * A hiányzó és a nem jogosult kolléga ugyanazt a választ kapja, mert a
+   * hívó számára ugyanaz a teendő: mást kell választani. A kettő
+   * szétválasztása annyit árulna el, hogy egy adott azonosító létezik-e.
+   */
+  private async requireAssignableUsers(userIds: readonly string[]) {
+    if (userIds.length === 0) return;
+    const assignable = await this.repository.assignableUserIds(userIds);
+    const rejected = userIds.filter((userId) => !assignable.has(userId));
+    if (rejected.length > 0) {
+      throw new BadRequestException(
+        "A felelősnek jelölt kolléga nem található, vagy a szerepköre nem engedi a munkalap szerkesztését.",
+      );
+    }
   }
 
   private async requireCustomer(customerId: string) {

@@ -1,3 +1,5 @@
+import type { UserRole } from "./auth.js";
+
 export type WorksheetVersionStatus =
   "DRAFT" | "AWAITING_SIGNATURE" | "SIGNED" | "REJECTED";
 
@@ -73,6 +75,42 @@ export interface WorksheetDepartmentListResponse {
 export interface CreateWorksheetDepartmentInput {
   code: string;
   name: string;
+}
+
+/**
+ * A munkalap felelőse: aki a munkát végzi. Nem azonos azzal, aki a lapot
+ * felvette (`createdByName`) - az iroda nyit lapot a szerelőnek.
+ */
+export interface WorksheetAssignee {
+  userId: string;
+  /** A felületre szánt név: a becenév, ha van (lásd `personDisplayName`). */
+  name: string;
+  assignedAt: string;
+}
+
+/**
+ * Aki felelősnek választható. A lista szűkebb, mint a felhasználók listája:
+ * csak aktív kolléga kerülhet rá, és csak az, akinek a szerepköre engedi a
+ * munkalap írását - felelőst rendelni valakihez, aki utána nem tudja
+ * szerkeszteni a lapot, néma zsákutca.
+ */
+export interface WorksheetAssignableUser {
+  id: string;
+  name: string;
+  role: UserRole;
+}
+
+export interface WorksheetAssignableUserListResponse {
+  items: WorksheetAssignableUser[];
+}
+
+/**
+ * A felelősök teljes listája, nem egy hozzáadás: a beküldött lista a lap
+ * felelősei, a hiányzók lekerülnek. Üres lista megengedett - egy tévesen
+ * kiosztott lapot vissza kell tudni venni.
+ */
+export interface SetWorksheetAssigneesInput {
+  userIds: string[];
 }
 
 export interface WorksheetLineDetail {
@@ -151,6 +189,11 @@ export interface WorksheetDetail {
   customer: WorksheetCustomerSummary;
   department: WorksheetDepartmentSummary;
   createdByName: string | null;
+  /**
+   * A lap felelősei. A munkalap azonosságához tartozik, nem a verzióhoz:
+   * lezárt lapon is javítható, és nem jelenik meg a verzió-eltérésben.
+   */
+  assignees: WorksheetAssignee[];
   createdAt: string;
   updatedAt: string;
   /** A legmagasabb sorszámú verzió: ez a lap mai állapota. */
@@ -170,6 +213,8 @@ export interface WorksheetListItem {
   version: number;
   versionCount: number;
   grossAmount: string;
+  /** A felelősök neve, ahogy a listán megjelenik. Üres, ha még nincs kiosztva. */
+  assigneeNames: string[];
   updatedAt: string;
 }
 

@@ -19,6 +19,7 @@ import {
   CreateWorksheetDepartmentDto,
   CreateWorksheetDto,
   CreateWorksheetLineDto,
+  SetWorksheetAssigneesDto,
   SetWorksheetPartnerCodeDto,
   SignWorksheetVersionDto,
   UpdateWorksheetDraftDto,
@@ -64,6 +65,20 @@ export class WorksheetsController {
     @Body() input: SetWorksheetPartnerCodeDto,
   ) {
     return this.service.setPartnerCode(customerId, input);
+  }
+
+  /**
+   * A felelősnek választható kollégák. A `:id` útvonal ELŐTT kell állnia,
+   * különben a Nest ezt is munkalap-azonosítónak olvasná.
+   *
+   * `SERVICE_VIEW` és nem `USERS_MANAGE`: a kiosztáshoz látni kell a
+   * neveket, a felhasználó-kezeléshez viszont semmi köze - a szerelőnek nem
+   * kell admin jog ahhoz, hogy lássa, ki dolgozik vele egy lapon.
+   */
+  @Get("assignable-users")
+  @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
+  assignableUsers() {
+    return this.service.assignableUsers();
   }
 
   @Get(":id")
@@ -124,6 +139,20 @@ export class WorksheetsController {
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
   removeLine(@Param("id") id: string, @Param("lineId") lineId: string) {
     return this.service.removeLine(id, lineId);
+  }
+
+  /**
+   * A lap felelősei, teljes listaként. `PUT`, mert a beküldött névsor a lap
+   * felelőseinek teljes állapota, nem egy hozzáadás.
+   */
+  @Put(":id/assignees")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  setAssignees(
+    @Param("id") id: string,
+    @Body() input: SetWorksheetAssigneesDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.setAssignees(id, input, user.id);
   }
 
   @Post(":id/close")
