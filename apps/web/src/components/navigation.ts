@@ -108,6 +108,12 @@ export const businessNavigation: AppNavigationItem[] = [
 
 export const serviceNavigation: AppNavigationItem[] = [
   {
+    href: "/szerviz/munkalapok",
+    label: "Munkalapok",
+    icon: "clipboard",
+    permission: PERMISSIONS.SERVICE_VIEW,
+  },
+  {
     href: "/szerviz/eszkozok",
     label: "Eszköznyilvántartás",
     icon: "box",
