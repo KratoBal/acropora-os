@@ -12,7 +12,11 @@ import type {
   CreateWorksheetDepartmentDto,
   WorksheetListQueryDto,
 } from "./dto/worksheet.dto.js";
-import type { NormalizedWorksheetContent } from "./worksheet-content.js";
+import { sumWorksheetAmounts } from "./worksheet-amounts.js";
+import type {
+  NormalizedWorksheetContent,
+  NormalizedWorksheetLine,
+} from "./worksheet-content.js";
 import {
   buildWorksheetNumber,
   worksheetNumberIssue,
@@ -24,6 +28,7 @@ import {
   worksheetDetailInclude,
   worksheetSummaryInclude,
   type WorksheetDetailRow,
+  type WorksheetLineWriteResult,
 } from "./worksheets.types.js";
 
 export type WorksheetCloseFailure =
@@ -479,6 +484,186 @@ export class WorksheetsRepository extends Repository {
    * írással. Ugyanabban a tranzakcióban fut, mint a lezárás: ha a lezárás
    * elhasal, a sorszám sem vész el, tehát a sorozat hiánytalan marad.
    */
+  /**
+   * Egy sor hozzáadása a piszkozathoz, a lap többi sorának érintése nélkül.
+   *
+   * Ez az egyetlen ok, amiért ez a metódus létezik: a teljes tartalmat
+   * cserélő mentés két szerelő mellett garantáltan adatot veszít - a második
+   * mentés az első összes sorát törli. Nem versenyhelyzet, hanem biztos
+   * következmény, mert egy lapnak több felelőse lehet.
+   *
+   * A sorszámot a szerver adja, a tranzakción belül. Ha a kliens küldené,
+   * két egyszerre rögzítő telefon ugyanazt a számot kérné, és az egyedi
+   * megszorítás egyiküket eldobná.
+   */
+  async addLine(input: {
+    versionId: string;
+    lineId: string;
+    line: NormalizedWorksheetLine;
+  }): Promise<WorksheetLineWriteResult> {
+    return this.database.$transaction(async (transaction) => {
+      const claimable = await this.draftLines(transaction, input.versionId);
+      if (!claimable) return { outcome: "version-gone" };
+
+      // Ugyanaz az azonosító már bent van: a telefon újraküldött egy sort,
+      // amit a szerver az első alkalommal felvett. Ilyenkor nem hiba
+      // történt, csak nincs mit tenni.
+      if (claimable.lines.some((line) => line.id === input.lineId)) {
+        return { outcome: "ok", alreadyPresent: true };
+      }
+
+      const position =
+        claimable.lines.reduce((max, line) => Math.max(max, line.position), 0) +
+        1;
+
+      await transaction.worksheetLine.create({
+        data: {
+          id: input.lineId,
+          worksheetVersionId: input.versionId,
+          position,
+          description: input.line.description,
+          detail: input.line.detail,
+          assetId: input.line.assetId,
+          quantity: input.line.quantity,
+          unit: input.line.unit,
+          unitNet: input.line.unitNet,
+          vatRatePercent: input.line.vatRatePercent,
+          netAmount: input.line.netAmount,
+          vatAmount: input.line.vatAmount,
+          grossAmount: input.line.grossAmount,
+        },
+      });
+
+      await this.refreshTotals(transaction, input.versionId);
+      return { outcome: "ok", alreadyPresent: false };
+    });
+  }
+
+  /** Egy sor teljes tartalmának cseréje. A sorszám nem változik: a sorrend
+   * a lapé, nem a szerkesztésé. */
+  async updateLine(input: {
+    versionId: string;
+    lineId: string;
+    line: NormalizedWorksheetLine;
+  }): Promise<WorksheetLineWriteResult> {
+    return this.database.$transaction(async (transaction) => {
+      const claimable = await this.draftLines(transaction, input.versionId);
+      if (!claimable) return { outcome: "version-gone" };
+      if (!claimable.lines.some((line) => line.id === input.lineId)) {
+        return { outcome: "line-gone" };
+      }
+
+      await transaction.worksheetLine.update({
+        where: { id: input.lineId },
+        data: {
+          description: input.line.description,
+          detail: input.line.detail,
+          assetId: input.line.assetId,
+          quantity: input.line.quantity,
+          unit: input.line.unit,
+          unitNet: input.line.unitNet,
+          vatRatePercent: input.line.vatRatePercent,
+          netAmount: input.line.netAmount,
+          vatAmount: input.line.vatAmount,
+          grossAmount: input.line.grossAmount,
+        },
+      });
+
+      await this.refreshTotals(transaction, input.versionId);
+      return { outcome: "ok", alreadyPresent: false };
+    });
+  }
+
+  /**
+   * Egy sor törlése, a maradék újraszámozásával.
+   *
+   * Az újraszámozás nem kozmetika: a sorszám a kinyomtatott lapon látszik,
+   * és egy lyuk a számozásban az ügyfélnek úgy néz ki, mintha eltűnt volna
+   * egy tétel.
+   *
+   * Hiányzó sor esetén nem hibázik: a törlés újraküldése ugyanoda vezet,
+   * mint az első - a sor nincs ott.
+   */
+  async removeLine(input: {
+    versionId: string;
+    lineId: string;
+  }): Promise<WorksheetLineWriteResult> {
+    return this.database.$transaction(async (transaction) => {
+      const claimable = await this.draftLines(transaction, input.versionId);
+      if (!claimable) return { outcome: "version-gone" };
+      if (!claimable.lines.some((line) => line.id === input.lineId)) {
+        return { outcome: "ok", alreadyPresent: true };
+      }
+
+      await transaction.worksheetLine.delete({ where: { id: input.lineId } });
+
+      const remaining = claimable.lines
+        .filter((line) => line.id !== input.lineId)
+        .sort((a, b) => a.position - b.position);
+      // Ideiglenes negatív sorszámokon át, mert a (verzió, sorszám) páros
+      // egyedi: közvetlenül lefelé tolva a második sor beleütközne az
+      // elsőbe, mielőtt az elmozdulna.
+      for (const [index, line] of remaining.entries()) {
+        if (line.position !== index + 1) {
+          await transaction.worksheetLine.update({
+            where: { id: line.id },
+            data: { position: -(index + 1) },
+          });
+        }
+      }
+      for (const [index, line] of remaining.entries()) {
+        if (line.position !== index + 1) {
+          await transaction.worksheetLine.update({
+            where: { id: line.id },
+            data: { position: index + 1 },
+          });
+        }
+      }
+
+      await this.refreshTotals(transaction, input.versionId);
+      return { outcome: "ok", alreadyPresent: false };
+    });
+  }
+
+  /** A piszkozat sorai, zárolható állapotban. `null`, ha a verzió eltűnt
+   * vagy már nem piszkozat - azt a hívó konfliktusnak fordítja. */
+  private async draftLines(
+    transaction: TransactionClient,
+    versionId: string,
+  ): Promise<{ lines: { id: string; position: number }[] } | null> {
+    const version = await transaction.worksheetVersion.findFirst({
+      where: { id: versionId, status: "DRAFT" },
+      select: {
+        lines: {
+          select: { id: true, position: true },
+          orderBy: { position: "asc" },
+        },
+      },
+    });
+    return version ?? null;
+  }
+
+  /** A lap összegei a sorokból jönnek, nem a kliensből. Minden sor-művelet
+   * után újra kell számolni, különben a fejléc és a tételek elválnak. */
+  private async refreshTotals(
+    transaction: TransactionClient,
+    versionId: string,
+  ): Promise<void> {
+    const lines = await transaction.worksheetLine.findMany({
+      where: { worksheetVersionId: versionId },
+      select: { netAmount: true, vatAmount: true, grossAmount: true },
+    });
+    const totals = sumWorksheetAmounts(lines);
+    await transaction.worksheetVersion.update({
+      where: { id: versionId },
+      data: {
+        netAmount: totals.netAmount,
+        vatAmount: totals.vatAmount,
+        grossAmount: totals.grossAmount,
+      },
+    });
+  }
+
   private async allocateSequence(
     transaction: TransactionClient,
     partnerCode: string,

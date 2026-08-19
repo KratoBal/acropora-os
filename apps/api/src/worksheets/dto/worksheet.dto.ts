@@ -47,6 +47,29 @@ export class WorksheetLineDto {
   @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(100) vatRatePercent!: number;
 }
 
+/**
+ * Egy sor önmagában, a lap többi tartalma nélkül.
+ *
+ * Az `id`-t a KLIENS adhatja meg, és ez nem kényelmi lehetőség: a helyszíni
+ * rögzítés sorba áll, és egy megszakadt küldést a telefon újraküld. Szerver
+ * oldali azonosító mellett az újraküldés második sort hozna létre - a
+ * szerelő pedig azt látná, hogy mindent kétszer rögzített. Ugyanaz a
+ * megfontolás, mint a Task modell `source` + `sourceRef` párosánál.
+ */
+export class CreateWorksheetLineDto extends WorksheetLineDto {
+  @Matches(/^[A-Za-z0-9_-]{8,64}$/, {
+    message:
+      "A sor azonosítója 8-64 karakter lehet, betű, szám, kötőjel és aláhúzás.",
+  })
+  @IsOptional()
+  id?: string;
+}
+
+/** Egy sor teljes tartalma. A sorok kicsik és önállóak, ezért a módosítás
+ * egészben cseréli a sort - így nem kell találgatni, melyik mezőt szánták
+ * változatlannak és melyiket üresnek. */
+export class UpdateWorksheetLineDto extends WorksheetLineDto {}
+
 export class WorksheetContentDto {
   @IsString() @MinLength(1) @MaxLength(500) subject!: string;
   // Az alegység NEM része a beküldött tartalomnak: a munkalap alegységéből

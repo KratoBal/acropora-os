@@ -5,7 +5,10 @@ import {
   sumWorksheetAmounts,
   type WorksheetAmounts,
 } from "./worksheet-amounts.js";
-import type { WorksheetContentDto } from "./dto/worksheet.dto.js";
+import type {
+  WorksheetContentDto,
+  WorksheetLineDto,
+} from "./dto/worksheet.dto.js";
 
 export interface NormalizedWorksheetLine {
   position: number;
@@ -57,27 +60,40 @@ export function toDateOnly(value: string | null | undefined): Date | null {
  * bemenetben: egy számlát alapozó dokumentumon nem a böngésző dönti el,
  * mennyi a nettó.
  */
-export function normalizeWorksheetContent(
-  input: WorksheetContentDto,
-): NormalizedWorksheetContent {
-  const lines = input.lines.map((line, index) => {
-    const amounts = computeWorksheetLineAmounts({
+/**
+ * Egy sor normalizálása a lap többi tartalma nélkül, a sor-szintű
+ * végpontokhoz.
+ *
+ * A sorszám itt szándékosan hiányzik: azt a tárolóréteg osztja ki a
+ * tranzakción belül. Ha a kliens küldené, két egyszerre rögzítő telefon
+ * ugyanazt a számot kérné, és az egyedi megszorítás egyiküket eldobná.
+ */
+export function normalizeWorksheetLine(
+  line: WorksheetLineDto,
+): Omit<NormalizedWorksheetLine, "position"> {
+  return {
+    description: line.description.trim(),
+    detail: optionalText(line.detail),
+    assetId: line.assetId?.trim() || null,
+    quantity: new Prisma.Decimal(line.quantity),
+    unit: line.unit.trim(),
+    unitNet: new Prisma.Decimal(line.unitNet),
+    vatRatePercent: new Prisma.Decimal(line.vatRatePercent),
+    ...computeWorksheetLineAmounts({
       quantity: line.quantity,
       unitNet: line.unitNet,
       vatRatePercent: line.vatRatePercent,
-    });
-    return {
-      position: index + 1,
-      description: line.description.trim(),
-      detail: optionalText(line.detail),
-      assetId: line.assetId?.trim() || null,
-      quantity: new Prisma.Decimal(line.quantity),
-      unit: line.unit.trim(),
-      unitNet: new Prisma.Decimal(line.unitNet),
-      vatRatePercent: new Prisma.Decimal(line.vatRatePercent),
-      ...amounts,
-    };
-  });
+    }),
+  };
+}
+
+export function normalizeWorksheetContent(
+  input: WorksheetContentDto,
+): NormalizedWorksheetContent {
+  const lines = input.lines.map((line, index) => ({
+    position: index + 1,
+    ...normalizeWorksheetLine(line),
+  }));
 
   return {
     subject: input.subject.trim(),
