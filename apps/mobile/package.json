@@ -49,7 +49,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "doctor": "expo-doctor",
-    "test": "tsc -p tsconfig.test.json && node --test test-dist/config/*.spec.js test-dist/lib/assets/*.spec.js test-dist/lib/auth/*.spec.js test-dist/lib/api/*.spec.js test-dist/lib/orders/*.spec.js"
+    "test": "tsc -p tsconfig.test.json && specs=$(find test-dist -name '*.spec.js' ! -name '*.smoke.spec.js' ! -name '*.integration.spec.js') && { [ -n \"$specs\" ] || { echo 'Nem talaltam unit spec fajlt - nem jelentek sikert.' >&2; exit 1; }; } && node --test $specs"
   },
   "private": true
 }
