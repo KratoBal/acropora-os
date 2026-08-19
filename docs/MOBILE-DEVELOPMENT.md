@@ -12,7 +12,8 @@ infrastructure, not field-service domain screens yet:
 - development, preview and production application variants;
 - TanStack Query for server state;
 - SecureStore-backed bearer token storage;
-- SQLite/WAL offline queue foundation;
+- an SQLite/WAL offline queue table definition, not yet wired to anything
+  (see [Offline boundary](#offline-boundary));
 - network and push-notification native dependencies;
 - an API health diagnostic screen;
 - EAS development/preview/production profiles.
@@ -265,9 +266,15 @@ other secret) belong in the EAS environment configuration
 
 ## Offline boundary
 
-SQLite is initialized with WAL support and a durable `sync_queue` table. Domain
-work will add task-specific tables and an idempotent sync protocol. The rules
-for that protocol are:
+`src/lib/offline/database.ts` defines an initializer that opens SQLite with WAL
+and creates a durable `sync_queue` table — but **nothing calls it**, so the
+database does not exist at runtime today. Every request goes straight to the
+server, and `@react-native-community/netinfo` is a dependency that no source
+file imports, so the client cannot currently tell whether it is offline at all.
+Treat the table shape as a starting point, not as a working layer.
+
+Domain work will add task-specific tables and an idempotent sync protocol. The
+rules for that protocol are:
 
 - server IDs plus client-generated operation IDs;
 - explicit pending/syncing/failed/conflict states;
@@ -279,16 +286,84 @@ for that protocol are:
 
 ## Push notification boundary
 
-`expo-notifications` is installed, but registration is intentionally not
-started automatically. Before enabling it:
+`expo-notifications` is installed as a dependency and as a config plugin, but
+no source file imports it: there is no token request, no handler, nothing.
+Registration is intentionally not started automatically.
+
+### Standing requirement
+
+**Every mobile work item from now on includes the push permission request in
+the first-launch flow**, the same way the biometric gate does. This is a
+condition on new work, not a task of its own.
+
+### Notifications the product needs
+
+Two, both tied to the worksheet:
+
+1. **On assignment**, to the responsible colleague: "you have a new worksheet".
+2. **On closing**, to the owner.
+
+Neither can be built yet: the `Worksheet` model has `createdById` but **no
+responsible/assignee field**, so "assign it to someone" is a missing feature
+rather than a missing screen. The order is: field and migration, an endpoint to
+assign, the web UI to create a worksheet and assign it (no component under
+`apps/web` reads worksheets today), and only then is there anything to notify
+about.
+
+### Delivery route: our own server, direct to APNs
+
+This is decided, and it is not the only possible route, so it is written down:
+the server holds the APNs key and talks to Apple directly. It does **not** go
+through Expo's push service, and the credentials are **not** uploaded to EAS.
+
+The client-side consequence is easy to get wrong and fails silently: the app
+must request the **native device token**, not an Expo push token. The two calls
+have similar names, the tokens are not interchangeable, and sending an Expo
+token to Apple does not raise an error — it simply never arrives.
+
+`acropora-api` reads five environment variables, all Coolify **secrets**:
+
+| Variable                  | Value                                                                                |
+| ------------------------- | ------------------------------------------------------------------------------------ |
+| `APNS_KEY_ID`             | from the key filename, `AuthKey_XXXXXXXXXX.p8`                                       |
+| `APNS_TEAM_ID`            | `9B88PTQUQY` (matches `submit.production.ios.appleTeamId` in `apps/mobile/eas.json`) |
+| `APNS_BUNDLE_ID`          | `hu.acropora.os` (the production variant in `apps/mobile/app.config.js`)             |
+| `APNS_PRIVATE_KEY_BASE64` | the `.p8` contents, base64 encoded because it is multi-line                          |
+| `APNS_ENVIRONMENT`        | `production`                                                                         |
+
+Two consequences of those values that cost time if discovered late:
+
+- **TestFlight builds use the production APNs endpoint**, not the sandbox. The
+  sandbox only serves apps installed from a development build. With
+  `APNS_ENVIRONMENT=production`, push cannot be tested on a development build
+  at all — the first working test needs a TestFlight build.
+- **A push token belongs to one bundle ID.** `hu.acropora.os.dev` and
+  `hu.acropora.os.preview` produce a different set of tokens. Whatever stores
+  device tokens should record the bundle alongside the platform; otherwise a
+  token from a development build is indistinguishable from a production one and
+  the send disappears quietly.
+
+### Before enabling it
 
 1. initialize the real EAS project ID;
-2. configure APNs and FCM credentials in EAS;
-3. add a server endpoint that binds a push token to an authenticated user and
-   device;
-4. store token rotation and revocation;
-5. test on real devices;
-6. implement notification preferences and permission-denied behavior.
+2. add a server endpoint that binds a device token to an authenticated user,
+   device and bundle;
+3. store token rotation and revocation;
+4. test on real devices, through TestFlight;
+5. implement notification preferences and permission-denied behavior.
+
+### Open question: when to ask
+
+iOS asks for notification permission **once**. After a refusal it never asks
+again, and only Settings can reverse it, so the timing of the request is itself
+a product decision — which is why a dismissible screen of our own usually comes
+first.
+
+The unresolved part is the order relative to the biometric gate, which sits on
+the same startup path. Two system dialogs in the first minute means the second
+one gets dismissed more often, and the gate is the urgent one. Asking at the
+first _meaningful_ moment rather than at first launch is one answer; it has not
+been decided.
 
 ## Checks
 
