@@ -69,6 +69,15 @@ export class UnasOrderDeletionReconciliationRepository {
   /// The UNAS Key is resolved in the SAME statement via a correlated
   /// subquery against ExternalReference, so the caller never needs a
   /// second per-row query just to find out what to check.
+  ///
+  /// Why `now() AT TIME ZONE 'utc'` and not plain `now()`: the lease and
+  /// due-at columns are `timestamp without time zone` holding UTC (that is
+  /// what Prisma writes), while bare `now()` is a `timestamptz` rendered in
+  /// the *server's* time zone. On a database that is not running UTC the
+  /// comparison reads the two sides off different clocks: a lease with
+  /// hours left looks expired, and a second worker starts checking an order
+  /// the first one is still working on. Same defect as in
+  /// unas-stock-sync-outbox.repository.ts, same fix.
   async claimBatch(params: {
     batchSize: number;
     leaseSeconds: number;
@@ -84,11 +93,11 @@ export class UnasOrderDeletionReconciliationRepository {
           AND "status" NOT IN ('CANCELLED', 'COMPLETED')
           AND (
             "unasExistenceCheckLeaseExpiresAt" IS NULL
-            OR "unasExistenceCheckLeaseExpiresAt" < now()
+            OR "unasExistenceCheckLeaseExpiresAt" < (now() AT TIME ZONE 'utc')
           )
           AND (
             "unasExistenceCheckDueAt" IS NULL
-            OR "unasExistenceCheckDueAt" <= now()
+            OR "unasExistenceCheckDueAt" <= (now() AT TIME ZONE 'utc')
           )
         ORDER BY "unasExistenceCheckDueAt" ASC NULLS FIRST
         LIMIT ${params.batchSize}
@@ -96,7 +105,7 @@ export class UnasOrderDeletionReconciliationRepository {
       )
       UPDATE "SalesOrder" AS o
       SET
-        "unasExistenceCheckLeaseExpiresAt" = now() + make_interval(secs => ${params.leaseSeconds}),
+        "unasExistenceCheckLeaseExpiresAt" = (now() AT TIME ZONE 'utc') + make_interval(secs => ${params.leaseSeconds}),
         "unasExistenceCheckClaimedBy" = ${params.workerId},
         "unasExistenceCheckAttempts" = o."unasExistenceCheckAttempts" + 1
       FROM claimable AS c

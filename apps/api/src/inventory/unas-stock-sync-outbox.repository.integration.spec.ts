@@ -251,5 +251,92 @@ describe(
         newerSnapshotAt.toISOString(),
       );
     });
+
+    /// The lease comparison used to read its two sides off different
+    /// clocks: the columns are `timestamp without time zone` holding UTC,
+    /// while bare `now()` is rendered in the SERVER's time zone. This test
+    /// forces that time zone to something other than UTC for the duration
+    /// of one transaction, which is the only way to make the difference
+    /// observable - on a UTC database the broken and the fixed query behave
+    /// identically, which is exactly why CI never caught it.
+    ///
+    /// `SET LOCAL` inside an interactive transaction is what makes this
+    /// deterministic: the setting applies to that one connection until the
+    /// transaction ends, so the claim below cannot be answered by a pooled
+    /// connection that never saw it.
+    it("keeps a live lease safe on a database that is not running UTC", async () => {
+      const leaseSeconds = 60;
+      const stillAlive = await prisma.unasStockSyncOutbox.create({
+        data: {
+          variantId: variantIds[4]!,
+          warehouseId,
+          sku: "budapest-alive-sku",
+          targetOnHand: "1",
+          idempotencyKey: `integration-tz-alive-${Date.now()}`,
+          sourceProcess: "POS_SALE",
+          sourceRecordId: "integration-test-tz-alive",
+          status: "PROCESSING",
+          attempts: 1,
+          claimedBy: "still-working-worker",
+          leaseExpiresAt: new Date(Date.now() + leaseSeconds * 1000),
+        },
+      });
+      const pending = await prisma.unasStockSyncOutbox.create({
+        data: {
+          variantId: variantIds[5]!,
+          warehouseId,
+          sku: "budapest-pending-sku",
+          targetOnHand: "2",
+          idempotencyKey: `integration-tz-pending-${Date.now()}`,
+          sourceProcess: "POS_SALE",
+          sourceRecordId: "integration-test-tz-pending",
+        },
+      });
+
+      const claimedAt = Date.now();
+      await prisma.$transaction(async (transaction) => {
+        await transaction.$executeRawUnsafe(
+          "SET LOCAL TIME ZONE 'Europe/Budapest'",
+        );
+        const scoped = new UnasStockSyncOutboxRepository(
+          transaction as unknown as ConstructorParameters<
+            typeof UnasStockSyncOutboxRepository
+          >[0],
+        );
+
+        const claimed = await scoped.claimBatch({
+          batchSize: 50,
+          leaseSeconds,
+          workerId: "another-worker",
+        });
+
+        // The read side: a lease with a full minute left is not expired,
+        // whatever time zone the server is set to.
+        assert.ok(
+          !claimed.some((row) => row.id === stillAlive.id),
+          "a row still within its lease window must not be reclaimed on a non-UTC server",
+        );
+        assert.ok(
+          claimed.some((row) => row.id === pending.id),
+          "a due PENDING row must still be claimed on a non-UTC server",
+        );
+      });
+
+      // The write side: the lease this claim just handed out has to land in
+      // the column as UTC too. Stored in local time it would sit two hours
+      // in the future, and the row would stay unrecoverable for that long
+      // after a crash.
+      const claimedRow = await prisma.unasStockSyncOutbox.findUniqueOrThrow({
+        where: { id: pending.id },
+      });
+      const driftMs = Math.abs(
+        (claimedRow.leaseExpiresAt?.getTime() ?? 0) -
+          (claimedAt + leaseSeconds * 1000),
+      );
+      assert.ok(
+        driftMs < 60_000,
+        `the new lease must be stored in UTC (drift was ${Math.round(driftMs / 1000)}s)`,
+      );
+    });
   },
 );

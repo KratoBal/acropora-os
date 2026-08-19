@@ -121,6 +121,17 @@ export class UnasStockSyncOutboxRepository extends Repository {
   /// `setStock` call (including its own internal HTTP retries); too short
   /// risks two workers processing the same row while a slow-but-alive
   /// worker still holds it, too long delays recovery from a real crash.
+  ///
+  /// Why `now() AT TIME ZONE 'utc'` and not plain `now()`: every timestamp
+  /// column here is `timestamp without time zone`, and Prisma writes UTC
+  /// into it. Bare `now()` is a `timestamptz` that Postgres renders in the
+  /// *server's* time zone before comparing, so on a database running
+  /// anything but UTC the two sides are read off different clocks. On a
+  /// `Europe/Budapest` server a lease with two hours left reads as expired
+  /// and a row a live worker is still processing gets reclaimed by a
+  /// second one - which publishes the same stock value to UNAS twice. The
+  /// expression above pins both sides to UTC regardless of how the server
+  /// happens to be configured.
   async claimBatch(params: {
     batchSize: number;
     leaseSeconds: number;
@@ -143,8 +154,8 @@ export class UnasStockSyncOutboxRepository extends Repository {
       WITH claimable AS (
         SELECT "id" FROM "UnasStockSyncOutbox"
         WHERE (
-          ("status" IN ('PENDING', 'FAILED') AND "nextAttemptAt" <= now())
-          OR ("status" = 'PROCESSING' AND "leaseExpiresAt" IS NOT NULL AND "leaseExpiresAt" < now())
+          ("status" IN ('PENDING', 'FAILED') AND "nextAttemptAt" <= (now() AT TIME ZONE 'utc'))
+          OR ("status" = 'PROCESSING' AND "leaseExpiresAt" IS NOT NULL AND "leaseExpiresAt" < (now() AT TIME ZONE 'utc'))
         )
         ORDER BY "sequence" ASC
         LIMIT ${params.batchSize}
@@ -154,9 +165,9 @@ export class UnasStockSyncOutboxRepository extends Repository {
       SET
         "status" = 'PROCESSING',
         "attempts" = o."attempts" + 1,
-        "leaseExpiresAt" = now() + make_interval(secs => ${params.leaseSeconds}),
+        "leaseExpiresAt" = (now() AT TIME ZONE 'utc') + make_interval(secs => ${params.leaseSeconds}),
         "claimedBy" = ${params.workerId},
-        "updatedAt" = now()
+        "updatedAt" = (now() AT TIME ZONE 'utc')
       FROM claimable AS c
       WHERE o."id" = c."id"
       RETURNING
@@ -193,8 +204,8 @@ export class UnasStockSyncOutboxRepository extends Repository {
             'UNAS_ORDER_DELETED'
           )
           AND (
-            ("status" IN ('PENDING', 'FAILED') AND "nextAttemptAt" <= now())
-            OR ("status" = 'PROCESSING' AND "leaseExpiresAt" IS NOT NULL AND "leaseExpiresAt" < now())
+            ("status" IN ('PENDING', 'FAILED') AND "nextAttemptAt" <= (now() AT TIME ZONE 'utc'))
+            OR ("status" = 'PROCESSING' AND "leaseExpiresAt" IS NOT NULL AND "leaseExpiresAt" < (now() AT TIME ZONE 'utc'))
           )
         ORDER BY "sequence" ASC
         LIMIT ${params.batchSize}
@@ -204,9 +215,9 @@ export class UnasStockSyncOutboxRepository extends Repository {
       SET
         "status" = 'PROCESSING',
         "attempts" = o."attempts" + 1,
-        "leaseExpiresAt" = now() + make_interval(secs => ${params.leaseSeconds}),
+        "leaseExpiresAt" = (now() AT TIME ZONE 'utc') + make_interval(secs => ${params.leaseSeconds}),
         "claimedBy" = ${params.workerId},
-        "updatedAt" = now()
+        "updatedAt" = (now() AT TIME ZONE 'utc')
       FROM claimable AS c
       WHERE o."id" = c."id"
       RETURNING
