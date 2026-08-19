@@ -1,6 +1,8 @@
 import type { Prisma } from "@acropora/database";
 import {
   formatWorksheetVersionLabel,
+  personDisplayName,
+  type WorksheetAssignee,
   type WorksheetDetail,
   type WorksheetListItem,
   type WorksheetSignatureDetail,
@@ -20,7 +22,29 @@ export const worksheetVersionInclude = {
   signature: { include: { signedBy: { select: { displayName: true } } } },
 } satisfies Prisma.WorksheetVersionInclude;
 
+/**
+ * A felelősök sorrendje a kiosztás sorrendje, azonos időbélyegnél az
+ * azonosító dönt. Determinált sorrend nélkül ugyanaz a lap két lekérdezésen
+ * más sorrendben adná vissza ugyanazokat a neveket.
+ */
+const assigneeOrderBy = [
+  { assignedAt: "asc" as const },
+  { userId: "asc" as const },
+];
+
+export const worksheetAssigneeInclude = {
+  assignees: {
+    select: {
+      userId: true,
+      assignedAt: true,
+      user: { select: { displayName: true, nickname: true } },
+    },
+    orderBy: assigneeOrderBy,
+  },
+} satisfies Prisma.WorksheetInclude;
+
 export const worksheetDetailInclude = {
+  ...worksheetAssigneeInclude,
   customer: {
     select: {
       id: true,
@@ -40,6 +64,7 @@ export const worksheetDetailInclude = {
 } satisfies Prisma.WorksheetInclude;
 
 export const worksheetSummaryInclude = {
+  ...worksheetAssigneeInclude,
   customer: { select: { displayName: true } },
   department: { select: { code: true } },
   versions: {
@@ -64,6 +89,21 @@ export type WorksheetSummaryRow = Prisma.WorksheetGetPayload<{
 }>;
 
 export type WorksheetVersionRow = WorksheetDetailRow["versions"][number];
+
+type WorksheetAssigneeRow = WorksheetDetailRow["assignees"][number];
+
+/**
+ * A felelős a felületen a becenevén szerepel, nem a hivatalos nevén: a
+ * kiosztás belső munkaszervezés, nem dokumentum-tartalom. A dokumentumra
+ * kerülő nevek (aláírás) továbbra is a teljes nevet használják.
+ */
+function toAssignee(row: WorksheetAssigneeRow): WorksheetAssignee {
+  return {
+    userId: row.userId,
+    name: personDisplayName(row.user),
+    assignedAt: row.assignedAt.toISOString(),
+  };
+}
 
 /** A `@db.Date` oszlop UTC éjfélként jön vissza; a dokumentumon dátum van, nem időpont. */
 function toDateOnly(value: Date | null): string | null {
@@ -164,6 +204,7 @@ export function toWorksheetDetail(row: WorksheetDetailRow): WorksheetDetail {
       isActive: row.department.isActive,
     },
     createdByName: row.createdBy?.displayName ?? null,
+    assignees: row.assignees.map(toAssignee),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     currentVersion: toVersionDetail(current, row.number),
@@ -189,6 +230,9 @@ export function toWorksheetListItem(
     version: current.version,
     versionCount: row._count.versions,
     grossAmount: current.grossAmount.toString(),
+    assigneeNames: row.assignees.map((assignee) =>
+      personDisplayName(assignee.user),
+    ),
     updatedAt: row.updatedAt.toISOString(),
   };
 }

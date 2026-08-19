@@ -2,10 +2,12 @@ import { randomUUID } from "node:crypto";
 
 import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
-import type {
-  WorksheetDepartmentListResponse,
-  WorksheetDepartmentSummary,
-  WorksheetListResponse,
+import {
+  personDisplayName,
+  type WorksheetAssignableUserListResponse,
+  type WorksheetDepartmentListResponse,
+  type WorksheetDepartmentSummary,
+  type WorksheetListResponse,
 } from "@acropora/types";
 
 import type {
@@ -13,6 +15,7 @@ import type {
   WorksheetListQueryDto,
 } from "./dto/worksheet.dto.js";
 import { sumWorksheetAmounts } from "./worksheet-amounts.js";
+import { WORKSHEET_ASSIGNABLE_ROLES } from "./worksheet-assignment.js";
 import type {
   NormalizedWorksheetContent,
   NormalizedWorksheetLine,
@@ -150,6 +153,85 @@ export class WorksheetsRepository extends Repository {
     });
   }
 
+  /**
+   * Akiket felelősnek fel lehet ajánlani. A rendezés a MEGJELENÍTETT néven
+   * fut, nem a hivatalos néven: a lista a becenevet mutatja, tehát az
+   * adatbázis-oldali `displayName` szerinti sorrend a felületen
+   * rendezetlennek látszana.
+   */
+  async assignableUsers(): Promise<WorksheetAssignableUserListResponse> {
+    const rows = await this.database.user.findMany({
+      where: { isActive: true, role: { in: [...WORKSHEET_ASSIGNABLE_ROLES] } },
+      select: { id: true, displayName: true, nickname: true, role: true },
+    });
+    const items = rows
+      .map((row) => ({
+        id: row.id,
+        name: personDisplayName(row),
+        role: row.role,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, "hu"));
+    return { items };
+  }
+
+  /** A megadottak közül azok, akik ma tényleg kioszthatók. */
+  async assignableUserIds(ids: readonly string[]): Promise<Set<string>> {
+    if (ids.length === 0) return new Set();
+    const rows = await this.database.user.findMany({
+      where: {
+        id: { in: [...ids] },
+        isActive: true,
+        role: { in: [...WORKSHEET_ASSIGNABLE_ROLES] },
+      },
+      select: { id: true },
+    });
+    return new Set(rows.map((row) => row.id));
+  }
+
+  /**
+   * A lap felelőseinek beállítása. A beküldött lista a teljes névsor: aki
+   * nincs rajta, lekerül.
+   *
+   * A már fent lévő sorokhoz NEM nyúlunk (`skipDuplicates`), és ez nem
+   * takarékosság: az `assignedAt` az egyetlen jel arról, ki KERÜLT ÚJONNAN a
+   * lapra. Ha minden mentés újraírná az összes sort, az értesítés ("új
+   * munkalapod van") minden szerkesztésnél mindenkinek újra kimenne.
+   */
+  async setAssignees(input: {
+    worksheetId: string;
+    userIds: readonly string[];
+    actorUserId: string;
+  }): Promise<boolean> {
+    return this.database.$transaction(async (transaction) => {
+      const worksheet = await transaction.worksheet.findUnique({
+        where: { id: input.worksheetId },
+        select: { id: true },
+      });
+      if (!worksheet) return false;
+
+      await transaction.worksheetAssignee.deleteMany({
+        where: {
+          worksheetId: input.worksheetId,
+          ...(input.userIds.length > 0
+            ? { userId: { notIn: [...input.userIds] } }
+            : {}),
+        },
+      });
+
+      if (input.userIds.length > 0) {
+        await transaction.worksheetAssignee.createMany({
+          data: input.userIds.map((userId) => ({
+            worksheetId: input.worksheetId,
+            userId,
+            assignedById: input.actorUserId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+      return true;
+    });
+  }
+
   async existingAssetIds(ids: readonly string[]): Promise<Set<string>> {
     if (ids.length === 0) return new Set();
     const rows = await this.database.asset.findMany({
@@ -163,6 +245,9 @@ export class WorksheetsRepository extends Repository {
     const where: Prisma.WorksheetWhereInput = {
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.departmentId ? { departmentId: query.departmentId } : {}),
+      ...(query.assigneeId
+        ? { assignees: { some: { userId: query.assigneeId } } }
+        : {}),
       ...(query.search
         ? {
             OR: [

@@ -77,6 +77,7 @@ function worksheetRow(
       isActive: true,
     },
     createdBy: { displayName: "Teszt Elek" },
+    assignees: [],
     versions: [versionRow()],
     ...overrides,
   } as WorksheetDetailRow;
