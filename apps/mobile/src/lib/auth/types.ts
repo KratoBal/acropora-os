@@ -15,6 +15,9 @@ export interface AuthenticatedUser {
   id: string;
   email: string;
   displayName: string;
+  /** What the team calls them; see person-name.ts. Absent on older
+   * servers, which is why the display helper falls back. */
+  nickname?: string | null;
   role: UserRole;
   avatarUrl?: string | null;
 }

@@ -44,6 +44,7 @@ export function UserEditorPage({ userId }: { userId?: string }) {
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [nickname, setNickname] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] =
     useState<(typeof ROLE_OPTIONS)[number]["value"]>("VIEWER");
@@ -64,6 +65,7 @@ export function UserEditorPage({ userId }: { userId?: string }) {
       setUser(next);
       setFirstName(next.firstName);
       setLastName(next.lastName);
+      setNickname(next.nickname ?? "");
       setEmail(next.email);
       setRole(next.role);
     } catch (cause) {
@@ -105,6 +107,7 @@ export function UserEditorPage({ userId }: { userId?: string }) {
           await usersApi.update(token, user.id, {
             firstName,
             lastName,
+            nickname,
             email,
             role,
             expectedUpdatedAt: user.updatedAt,
@@ -218,6 +221,14 @@ export function UserEditorPage({ userId }: { userId?: string }) {
                 aria-label="Keresztnév"
                 value={firstName}
                 onChange={(event) => setFirstName(event.target.value)}
+              />
+            </FormField>
+            <FormField label="Becenév">
+              <Input
+                aria-label="Becenév"
+                value={nickname}
+                placeholder="Ahogy a csapatban szólítjuk"
+                onChange={(event) => setNickname(event.target.value)}
               />
             </FormField>
             <FormField label="E-mail cím">

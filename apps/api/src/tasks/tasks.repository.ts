@@ -22,12 +22,14 @@ import type {
 export const TASK_LIST_LIMIT = 200;
 
 type TaskWithPeople = Task & {
-  assignee: Pick<User, "id" | "displayName">;
-  createdBy: Pick<User, "id" | "displayName"> | null;
-  closedBy: Pick<User, "id" | "displayName"> | null;
+  assignee: Pick<User, "id" | "displayName" | "nickname">;
+  createdBy: Pick<User, "id" | "displayName" | "nickname"> | null;
+  closedBy: Pick<User, "id" | "displayName" | "nickname"> | null;
 };
 
-const personSelect = { select: { id: true, displayName: true } } as const;
+const personSelect = {
+  select: { id: true, displayName: true, nickname: true },
+} as const;
 
 const taskInclude = {
   assignee: personSelect,
@@ -82,7 +84,7 @@ export class TasksRepository extends Repository {
   async assigneeOptions(): Promise<TaskPersonSummary[]> {
     const users = await this.database.user.findMany({
       where: { isActive: true },
-      select: { id: true, displayName: true },
+      select: { id: true, displayName: true, nickname: true },
       orderBy: [{ displayName: "asc" }, { id: "asc" }],
     });
     return users;
@@ -91,7 +93,7 @@ export class TasksRepository extends Repository {
   activeUser(id: string) {
     return this.database.user.findFirst({
       where: { id, isActive: true },
-      select: { id: true, displayName: true },
+      select: { id: true, displayName: true, nickname: true },
     });
   }
 

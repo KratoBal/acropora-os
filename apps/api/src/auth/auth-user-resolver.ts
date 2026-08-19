@@ -127,6 +127,7 @@ export class AuthUserResolver {
     id: string;
     email: string;
     displayName: string;
+    nickname?: string | null;
     role: AuthenticatedUser["role"];
     avatarUrl: string | null;
   }): AuthenticatedUser {
@@ -134,6 +135,7 @@ export class AuthUserResolver {
       id: user.id,
       email: user.email,
       displayName: user.displayName,
+      nickname: user.nickname ?? null,
       role: user.role,
       avatarUrl: user.avatarUrl,
     };

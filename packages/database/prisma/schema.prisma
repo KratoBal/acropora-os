@@ -460,7 +460,12 @@ enum InvoiceSyncStatus {
 model User {
   id                String    @id @default(cuid())
   email             String    @unique
+  /// A hivatalos, teljes név. Dokumentumon (munkalap, aláírás) ez szerepel,
+  /// akkor is, ha a felületek a becenevet mutatják.
   displayName       String
+  /// Ahogy a kollégát a csapatban szólítják. A felületek ezt írják ki a
+  /// teljes név helyett, ha ki van töltve. Nem egyedi, és nem azonosító.
+  nickname          String?
   firstName         String    @default("")
   lastName          String    @default("")
   passwordHash      String?

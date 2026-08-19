@@ -4,7 +4,11 @@ export interface UserSummary {
   id: string;
   firstName: string;
   lastName: string;
+  /** The official, full name. Documents use this one. */
   displayName: string;
+  /** What the team calls them. Interfaces show this instead of
+   * `displayName` when it is set; see `personDisplayName`. */
+  nickname?: string | null;
   email: string;
   role: UserRole;
   isActive: boolean;
@@ -41,6 +45,8 @@ export interface CreateUserInput {
 export interface UpdateUserInput {
   firstName?: string;
   lastName?: string;
+  /** Empty string clears it, absent leaves it alone. */
+  nickname?: string | null;
   email?: string;
   role?: UserRole;
   expectedUpdatedAt: string;

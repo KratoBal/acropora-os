@@ -27,6 +27,8 @@
     "src/lib/auth/lock-policy.spec.ts",
     "src/lib/auth/resume-session.ts",
     "src/lib/auth/resume-session.spec.ts",
+    "src/lib/auth/person-name.ts",
+    "src/lib/auth/person-name.spec.ts",
     "src/lib/auth/restore-session.ts",
     "src/lib/auth/restore-session.spec.ts",
     "src/lib/auth/sign-in.ts",

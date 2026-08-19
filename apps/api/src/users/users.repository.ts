@@ -123,6 +123,11 @@ export class UsersRepository extends Repository {
             firstName,
             lastName,
             displayName: displayNameOf(firstName, lastName),
+            // An empty string clears it, which is why this checks for
+            // undefined rather than for truthiness.
+            ...(input.nickname === undefined
+              ? {}
+              : { nickname: input.nickname.trim() || null }),
             ...(email ? { email } : {}),
             ...(input.role ? { role: input.role } : {}),
           },
@@ -211,6 +216,7 @@ export class UsersRepository extends Repository {
       firstName: user.firstName,
       lastName: user.lastName,
       displayName: user.displayName,
+      nickname: user.nickname,
       email: user.email,
       role: user.role,
       isActive: user.isActive,

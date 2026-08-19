@@ -6,7 +6,10 @@ export type TaskStatusFilter = TaskStatus | "ALL";
 
 export interface TaskPersonSummary {
   id: string;
+  /** The official, full name. */
   displayName: string;
+  /** What the team calls them; see `personDisplayName`. */
+  nickname?: string | null;
 }
 
 export interface TaskSummary {

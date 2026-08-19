@@ -4,6 +4,7 @@ import { Avatar, Badge, Button, Card, Icon } from "@acropora/ui";
 import { useState } from "react";
 
 import { useAuth } from "./auth-provider";
+import { personDisplayName } from "@acropora/types";
 
 export function UserMenu() {
   const { logout, session } = useAuth();
@@ -22,13 +23,13 @@ export function UserMenu() {
         onClick={() => setOpen((value) => !value)}
       >
         <Avatar
-          name={user.displayName}
+          name={personDisplayName(user)}
           src={user.avatarUrl ?? undefined}
           size="sm"
         />
         <span className="hidden sm:block">
           <span className="block text-xs font-semibold text-slate-800">
-            {user.displayName}
+            {personDisplayName(user)}
           </span>
           <span className="block text-[10px] text-slate-400">{user.role}</span>
         </span>
@@ -42,10 +43,13 @@ export function UserMenu() {
       {open ? (
         <Card className="absolute right-0 top-12 z-50 w-72 p-3 shadow-xl">
           <div className="flex items-start gap-3 border-b border-slate-100 px-1 pb-3">
-            <Avatar name={user.displayName} src={user.avatarUrl ?? undefined} />
+            <Avatar
+              name={personDisplayName(user)}
+              src={user.avatarUrl ?? undefined}
+            />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-slate-900">
-                {user.displayName}
+                {personDisplayName(user)}
               </p>
               <p className="truncate text-xs text-slate-500">{user.email}</p>
               <Badge className="mt-2" variant="info">

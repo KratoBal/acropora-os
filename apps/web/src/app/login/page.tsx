@@ -6,6 +6,7 @@ import { type FormEvent, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { DEVELOPMENT_USERS } from "@/lib/auth/development-auth";
+import { personDisplayName } from "@acropora/types";
 
 // Matches the check every adapter already makes server- and client-side
 // (see DevelopmentAuthAdapter, ProductionAuthAdapter, AuthProvider) — the
@@ -133,7 +134,7 @@ export default function LoginPage() {
                 >
                   {DEVELOPMENT_USERS.map((user) => (
                     <option key={user.email} value={user.email}>
-                      {user.displayName} · {user.role}
+                      {personDisplayName(user)} · {user.role}
                     </option>
                   ))}
                 </Select>
