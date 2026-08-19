@@ -1,3 +1,4 @@
+import type { LockReason } from "./restore-session";
 import type { AuthenticatedUser } from "./types";
 
 export type AuthStatus =
@@ -26,6 +27,10 @@ export interface AuthState {
   restoreNetworkError: boolean;
   /** Generic, non-revealing message for the last failed sign-in attempt. */
   signInError: string | null;
+  /** Why the gate is shut, when `status === "locked"`. Drives what the
+   * locked screen may offer: another attempt is only worth a button on a
+   * device that has something to attempt. */
+  lockReason: LockReason | null;
 }
 
 export const initialAuthState: AuthState = {
@@ -34,6 +39,7 @@ export const initialAuthState: AuthState = {
   expiresAt: null,
   restoreNetworkError: false,
   signInError: null,
+  lockReason: null,
 };
 
 export type AuthAction =
@@ -45,7 +51,10 @@ export type AuthAction =
       expiresAt: string;
     }
   | { type: "RESTORE_NETWORK_ERROR" }
-  | { type: "RESTORE_LOCKED" }
+  /** `reason` is absent when the gate simply closed and nobody has been
+   * asked yet - coming back to the foreground after a long absence. It is
+   * present when an attempt ran and did not open it. */
+  | { type: "SESSION_LOCKED"; reason?: LockReason }
   | { type: "SIGN_IN_START" }
   | { type: "SIGN_IN_SUCCESS"; user: AuthenticatedUser; expiresAt: string }
   | { type: "SIGN_IN_ERROR"; message: string }
@@ -65,14 +74,24 @@ export function authReducer(state: AuthState, action: AuthAction): AuthState {
         expiresAt: action.expiresAt,
         restoreNetworkError: false,
         signInError: null,
+        lockReason: null,
       };
     case "RESTORE_NETWORK_ERROR":
       return { ...state, status: "restoring", restoreNetworkError: true };
-    case "RESTORE_LOCKED":
-      // Nothing about the stored session changes here - only that this
-      // launch has not been unlocked yet. `RESTORE_RETRY` runs the whole
-      // restore again, prompt included.
-      return { ...initialAuthState, status: "locked" };
+    case "SESSION_LOCKED":
+      // Nothing about the stored session changes here - only that it has
+      // not been unlocked yet. The user is deliberately kept: when the
+      // gate closes on a running app, remembering who is locked out is
+      // what lets the way back in skip the server (see
+      // resume-session.ts), and the screen can greet them by name instead
+      // of showing an anonymous wall.
+      return {
+        ...state,
+        status: "locked",
+        lockReason: action.reason ?? null,
+        restoreNetworkError: false,
+        signInError: null,
+      };
     case "SIGN_IN_START":
       return { ...state, status: "signingIn", signInError: null };
     case "SIGN_IN_SUCCESS":
@@ -82,6 +101,7 @@ export function authReducer(state: AuthState, action: AuthAction): AuthState {
         expiresAt: action.expiresAt,
         restoreNetworkError: false,
         signInError: null,
+        lockReason: null,
       };
     case "SIGN_IN_ERROR":
       return {
