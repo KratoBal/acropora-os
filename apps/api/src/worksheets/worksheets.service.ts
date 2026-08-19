@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import {
   BadRequestException,
   ConflictException,
@@ -11,15 +13,20 @@ import type {
   AmendWorksheetDto,
   CreateWorksheetDepartmentDto,
   CreateWorksheetDto,
+  CreateWorksheetLineDto,
   SetWorksheetPartnerCodeDto,
   SignWorksheetVersionDto,
   UpdateWorksheetDraftDto,
+  UpdateWorksheetLineDto,
   WorksheetContentDto,
+  WorksheetLineDto,
   WorksheetListQueryDto,
 } from "./dto/worksheet.dto.js";
 import {
   normalizeWorksheetContent,
+  normalizeWorksheetLine,
   type NormalizedWorksheetContent,
+  type NormalizedWorksheetLine,
 } from "./worksheet-content.js";
 import { diffWorksheetVersions } from "./worksheet-diff.js";
 import {
@@ -30,6 +37,7 @@ import {
   WorksheetsRepository,
   type WorksheetCloseFailure,
 } from "./worksheets.repository.js";
+import type { WorksheetLineWriteResult } from "./worksheets.types.js";
 import {
   toComparableVersion,
   toWorksheetDetail,
@@ -256,6 +264,104 @@ export class WorksheetsService {
         toComparableVersion(current),
       ),
     };
+  }
+
+  /**
+   * Egy sor hozzáadása a piszkozathoz.
+   *
+   * A teljes tartalmat cserélő mentés mellé azért kell ez, mert egy lapnak
+   * több felelőse lehet: két szerelő közül a második mentése az első összes
+   * sorát törölné. Sor-szintű művelettel mindenki a saját sorát írja, és
+   * nincs mit felülírni.
+   */
+  async addLine(
+    id: string,
+    input: CreateWorksheetLineDto,
+  ): Promise<WorksheetDetail> {
+    const versionId = await this.requireDraftVersionId(id);
+    const line = this.normalizeLine(input);
+    await this.requireLineAsset(line);
+
+    const result = await this.repository.addLine({
+      versionId,
+      lineId: input.id ?? randomUUID(),
+      line,
+    });
+    this.assertLineWritten(result);
+    return this.detail(id);
+  }
+
+  async updateLine(
+    id: string,
+    lineId: string,
+    input: UpdateWorksheetLineDto,
+  ): Promise<WorksheetDetail> {
+    const versionId = await this.requireDraftVersionId(id);
+    const line = this.normalizeLine(input);
+    await this.requireLineAsset(line);
+
+    const result = await this.repository.updateLine({
+      versionId,
+      lineId,
+      line,
+    });
+    this.assertLineWritten(result);
+    return this.detail(id);
+  }
+
+  async removeLine(id: string, lineId: string): Promise<WorksheetDetail> {
+    const versionId = await this.requireDraftVersionId(id);
+    const result = await this.repository.removeLine({ versionId, lineId });
+    this.assertLineWritten(result);
+    return this.detail(id);
+  }
+
+  /**
+   * A sorszám a tárolórétegtől jön, a tranzakción belül - itt csak
+   * helykitöltő. Két egyszerre rögzítő telefon különben ugyanazt a számot
+   * kérné, és az egyedi megszorítás egyiküket eldobná.
+   */
+  private normalizeLine(input: WorksheetLineDto): NormalizedWorksheetLine {
+    return { position: 0, ...normalizeWorksheetLine(input) };
+  }
+
+  /** Ugyanaz az eszköz-ellenőrzés, mint a teljes tartalomnál, egy sorra. */
+  private async requireLineAsset(line: NormalizedWorksheetLine) {
+    if (!line.assetId) return;
+    const existing = await this.repository.existingAssetIds([line.assetId]);
+    if (!existing.has(line.assetId)) {
+      throw new BadRequestException(
+        "A tételen hivatkozott eszköz nem található.",
+      );
+    }
+  }
+
+  private async requireDraftVersionId(id: string): Promise<string> {
+    const worksheet = await this.requireWorksheet(id);
+    const current = worksheet.versions[0];
+    if (!current) throw new NotFoundException("A munkalap nem található.");
+    if (current.status !== "DRAFT") {
+      throw new ConflictException(
+        "A lezárt munkalap nem szerkeszthető. Módosításhoz új verziót kell készíteni, indoklással.",
+      );
+    }
+    return current.id;
+  }
+
+  /**
+   * Az `alreadyPresent` NEM hiba, ezért nincs is ága: a telefon újraküldött
+   * egy műveletet, ami már megtörtént, és a lap attól ugyanabban az
+   * állapotban van, mint amit a hívó kért.
+   */
+  private assertLineWritten(result: WorksheetLineWriteResult): void {
+    if (result.outcome === "version-gone") {
+      throw new ConflictException(
+        "A munkalapot időközben lezárták, ezért a tétel nem menthető.",
+      );
+    }
+    if (result.outcome === "line-gone") {
+      throw new NotFoundException("A munkalapon nincs ilyen tétel.");
+    }
   }
 
   private normalize(input: WorksheetContentDto): NormalizedWorksheetContent {

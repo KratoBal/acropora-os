@@ -220,3 +220,17 @@ export function toComparableVersion(
     })),
   };
 }
+
+/**
+ * Egy sor-művelet kimenete.
+ *
+ * A három kimenetet azért kell szétválasztani, mert MÁS a helyes válasz
+ * rájuk: a hiányzó verzió és a hiányzó sor hibát érdemel, az `alreadyPresent`
+ * viszont nem - az egy újraküldött művelet, ami már megtörtént. A helyszíni
+ * rögzítés sorba áll és újraküld, tehát ez nem ritka eset, hanem a normál
+ * működés része.
+ */
+export type WorksheetLineWriteResult =
+  | { outcome: "ok"; alreadyPresent: boolean }
+  | { outcome: "version-gone" }
+  | { outcome: "line-gone" };

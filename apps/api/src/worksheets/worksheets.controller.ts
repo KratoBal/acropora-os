@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -17,9 +18,11 @@ import {
   AmendWorksheetDto,
   CreateWorksheetDepartmentDto,
   CreateWorksheetDto,
+  CreateWorksheetLineDto,
   SetWorksheetPartnerCodeDto,
   SignWorksheetVersionDto,
   UpdateWorksheetDraftDto,
+  UpdateWorksheetLineDto,
   WorksheetListQueryDto,
 } from "./dto/worksheet.dto.js";
 import { WorksheetsService } from "./worksheets.service.js";
@@ -91,6 +94,36 @@ export class WorksheetsController {
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
   updateDraft(@Param("id") id: string, @Body() input: UpdateWorksheetDraftDto) {
     return this.service.updateDraft(id, input);
+  }
+
+  /**
+   * Sor-szintű műveletek a piszkozaton.
+   *
+   * A teljes tartalmat cserélő `PATCH :id` megmarad a webes felvitelhez, ahol
+   * egy ember szerkeszt. A helyszínen viszont egy lapnak több felelőse lehet,
+   * és ott a teljes csere garantáltan törölné a másik szerelő sorait - nem
+   * versenyhelyzetként, hanem minden mentésnél.
+   */
+  @Post(":id/lines")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  addLine(@Param("id") id: string, @Body() input: CreateWorksheetLineDto) {
+    return this.service.addLine(id, input);
+  }
+
+  @Patch(":id/lines/:lineId")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  updateLine(
+    @Param("id") id: string,
+    @Param("lineId") lineId: string,
+    @Body() input: UpdateWorksheetLineDto,
+  ) {
+    return this.service.updateLine(id, lineId, input);
+  }
+
+  @Delete(":id/lines/:lineId")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  removeLine(@Param("id") id: string, @Param("lineId") lineId: string) {
+    return this.service.removeLine(id, lineId);
   }
 
   @Post(":id/close")
