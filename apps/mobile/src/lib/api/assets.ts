@@ -1,10 +1,24 @@
 import { apiRequest } from "./client";
 
-export type AssetKind =
-  "SYSTEM" | "EQUIPMENT" | "COMPONENT" | "SENSOR" | "OTHER";
-export type AssetStatus = "ACTIVE" | "OUT_OF_SERVICE" | "IN_REPAIR" | "RETIRED";
-export type AssetCriticality = "LOW" | "NORMAL" | "HIGH" | "CRITICAL";
-export type AssetOwnerType = "CUSTOMER" | "SUPPLIER";
+// Declared in lib/assets/asset-fields.ts so the logic that reasons about
+// them does not have to import this module, which reaches SecureStore and
+// the network. Re-exported below because callers already import them from
+// the API layer.
+import type {
+  AssetCriticality,
+  AssetKind,
+  AssetOwnerType,
+  AssetStatus,
+  UpdateAssetInput,
+} from "@/lib/assets/asset-fields";
+
+export type {
+  AssetCriticality,
+  AssetKind,
+  AssetOwnerType,
+  AssetStatus,
+  UpdateAssetInput,
+};
 
 export interface AssetHierarchyItem {
   id: string;
@@ -123,6 +137,13 @@ export function listAssetOwners() {
 export function createAsset(input: CreateAssetInput) {
   return apiRequest<AssetDetail>("/service/assets", {
     method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateAsset(id: string, input: UpdateAssetInput) {
+  return apiRequest<AssetDetail>(`/service/assets/${encodeURIComponent(id)}`, {
+    method: "PATCH",
     body: JSON.stringify(input),
   });
 }

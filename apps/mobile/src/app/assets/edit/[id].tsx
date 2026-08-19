@@ -1,0 +1,385 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
+import { useState } from "react";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+
+import { getAsset, updateAsset } from "@/lib/api/assets";
+import type { AssetCriticality, AssetStatus } from "@/lib/api/assets";
+import {
+  assetEditFormFrom,
+  buildAssetPatch,
+  hasAssetChanges,
+  type AssetEditForm,
+} from "@/lib/assets/asset-edit";
+import { useAuth } from "@/lib/auth/AuthProvider";
+import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
+
+const STATUS_OPTIONS: { value: AssetStatus; label: string }[] = [
+  { value: "ACTIVE", label: "Üzemel" },
+  { value: "OUT_OF_SERVICE", label: "Nem üzemel" },
+  { value: "IN_REPAIR", label: "Javítás alatt" },
+  { value: "RETIRED", label: "Kivonva" },
+];
+
+const CRITICALITY_OPTIONS: { value: AssetCriticality; label: string }[] = [
+  { value: "LOW", label: "Alacsony" },
+  { value: "NORMAL", label: "Normál" },
+  { value: "HIGH", label: "Magas" },
+  { value: "CRITICAL", label: "Kritikus" },
+];
+
+const TEXT_FIELDS: {
+  key: keyof AssetEditForm & string;
+  label: string;
+  multiline?: boolean;
+}[] = [
+  { key: "manufacturer", label: "Gyártó" },
+  { key: "model", label: "Modell" },
+  { key: "serialNumber", label: "Sorozatszám" },
+  { key: "inventoryNumber", label: "Leltári szám" },
+  { key: "description", label: "Leírás", multiline: true },
+  { key: "notes", label: "Megjegyzés", multiline: true },
+];
+
+export default function AssetEditScreen() {
+  const params = useLocalSearchParams<{ id: string | string[] }>();
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const { status, user } = useAuth();
+  const capabilities = user ? getServiceCapabilities(user.role) : null;
+
+  const query = useQuery({
+    queryKey: ["service-asset", id],
+    queryFn: () => getAsset(id!),
+    enabled: status === "authenticated" && Boolean(id),
+  });
+
+  const [form, setForm] = useState<AssetEditForm | null>(null);
+  const [loadedFrom, setLoadedFrom] = useState<string | null>(null);
+
+  // Fills the form when the asset arrives, and again when a reload brings
+  // back a different version - after a conflict, say. Adjusting during
+  // render rather than in an effect is deliberate: an effect would let one
+  // frame paint with the previous asset's values in the fields.
+  //
+  // Keyed on `updatedAt`, so once the form is filled, editing owns it. A
+  // background refetch that returns the same version will not wipe out
+  // what somebody is halfway through typing.
+  if (query.data && loadedFrom !== query.data.updatedAt) {
+    setLoadedFrom(query.data.updatedAt);
+    setForm(assetEditFormFrom(query.data));
+  }
+
+  const save = useMutation({
+    mutationFn: () => {
+      if (!query.data || !form)
+        throw new Error("A szerkesztés nem áll készen.");
+      return updateAsset(query.data.id, buildAssetPatch(query.data, form));
+    },
+    onSuccess: async (updated) => {
+      queryClient.setQueryData(["service-asset", updated.id], updated);
+      await queryClient.invalidateQueries({ queryKey: ["service-assets"] });
+      router.back();
+    },
+  });
+
+  if (status !== "authenticated") return <Redirect href="/login" />;
+  if (capabilities && !capabilities.assetsManage) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Ehhez nincs jogosultságod</Text>
+          <Text style={styles.cardText}>
+            Az eszközadatok módosítását a szerver külön ellenőrzi, és a te
+            szerepköröd erre nem jogosult.
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (query.isPending || !form) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.card}>
+          <ActivityIndicator color="#52d6c7" />
+          <Text style={styles.cardText}>Eszköz betöltése…</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (query.isError || !query.data) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Nem sikerült betölteni</Text>
+          <Text style={styles.cardText}>
+            {query.error instanceof Error
+              ? query.error.message
+              : "Ismeretlen hiba."}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => void query.refetch()}
+            style={styles.primaryButton}
+          >
+            <Text style={styles.primaryButtonText}>Újrapróbálás</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const asset = query.data;
+  const changed = hasAssetChanges(asset, form);
+  const conflict = isConflict(save.error);
+
+  return (
+    <SafeAreaView style={styles.safeArea} edges={["bottom", "left", "right"]}>
+      <ScrollView contentContainerStyle={styles.container}>
+        <View style={styles.hero}>
+          <Text style={styles.assetNumber}>{asset.assetNumber}</Text>
+          <Text style={styles.assetName}>{asset.name}</Text>
+        </View>
+
+        {save.isError ? (
+          <View style={conflict ? styles.conflictCard : styles.errorCard}>
+            <Text style={styles.errorTitle}>
+              {conflict
+                ? "Valaki más közben módosította"
+                : "A mentés nem sikerült"}
+            </Text>
+            <Text style={styles.errorText}>
+              {conflict
+                ? "A módosításodat nem mentettük el, hogy ne írja felül a másik változtatást. Töltsd be újra az eszközt, nézd meg mi változott, és írd be újra, amit kell."
+                : save.error instanceof Error
+                  ? save.error.message
+                  : "Ismeretlen hiba."}
+            </Text>
+            {conflict ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  save.reset();
+                  void query.refetch();
+                }}
+                style={styles.primaryButton}
+              >
+                <Text style={styles.primaryButtonText}>Újratöltés</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+
+        <Choice
+          label="Státusz"
+          options={STATUS_OPTIONS}
+          value={form.status}
+          onChange={(value) => setForm({ ...form, status: value })}
+        />
+        <Choice
+          label="Kritikusság"
+          options={CRITICALITY_OPTIONS}
+          value={form.criticality}
+          onChange={(value) => setForm({ ...form, criticality: value })}
+        />
+
+        {TEXT_FIELDS.map((field) => (
+          <View key={field.key} style={styles.field}>
+            <Text style={styles.label}>{field.label}</Text>
+            <TextInput
+              accessibilityLabel={field.label}
+              value={form[field.key]}
+              onChangeText={(value) => setForm({ ...form, [field.key]: value })}
+              multiline={field.multiline}
+              style={[styles.input, field.multiline && styles.inputMultiline]}
+              placeholderTextColor="#5c7e92"
+              placeholder="Nincs megadva"
+              editable={!save.isPending}
+            />
+          </View>
+        ))}
+
+        <Text style={styles.hint}>
+          A partner, a helyszín és a szülőeszköz módosítása a webes felületen
+          történik.
+        </Text>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Módosítások mentése"
+          accessibilityState={{ disabled: !changed || save.isPending }}
+          disabled={!changed || save.isPending}
+          onPress={() => save.mutate()}
+          style={({ pressed }) => [
+            styles.primaryButton,
+            styles.saveButton,
+            (!changed || save.isPending) && styles.buttonDisabled,
+            pressed && styles.pressed,
+          ]}
+        >
+          {save.isPending ? (
+            <ActivityIndicator color="#ffffff" />
+          ) : (
+            <Text style={styles.primaryButtonText}>Mentés</Text>
+          )}
+        </Pressable>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+/**
+ * HTTP 409 from the server means the asset changed under us. It is worth
+ * telling apart from every other failure: the edit is not lost by
+ * accident, it was refused on purpose, and the way out is to reload
+ * rather than to try the same save again.
+ */
+function isConflict(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    (error as { status?: unknown }).status === 409
+  );
+}
+
+function Choice<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: { value: T; label: string }[];
+  value: T;
+  onChange(value: T): void;
+}) {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label}>{label}</Text>
+      <View style={styles.choices}>
+        {options.map((option) => {
+          const selected = option.value === value;
+          return (
+            <Pressable
+              key={option.value}
+              accessibilityRole="radio"
+              accessibilityLabel={`${label}: ${option.label}`}
+              accessibilityState={{ selected }}
+              onPress={() => onChange(option.value)}
+              style={({ pressed }) => [
+                styles.choice,
+                selected && styles.choiceSelected,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.choiceText,
+                  selected && styles.choiceTextSelected,
+                ]}
+              >
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: "#071827" },
+  container: { gap: 16, padding: 20, paddingBottom: 40 },
+  hero: { gap: 4 },
+  assetNumber: {
+    color: "#52d6c7",
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+  },
+  assetName: { color: "#f4fbff", fontSize: 22, fontWeight: "900" },
+  field: { gap: 8 },
+  label: { color: "#9ab8ca", fontSize: 13, fontWeight: "700" },
+  input: {
+    backgroundColor: "#0b263d",
+    borderColor: "#164668",
+    borderRadius: 12,
+    borderWidth: 1,
+    color: "#f4fbff",
+    fontSize: 15,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  inputMultiline: { minHeight: 84, textAlignVertical: "top" },
+  choices: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  choice: {
+    backgroundColor: "#0b263d",
+    borderColor: "#164668",
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  choiceSelected: { backgroundColor: "#166a7a", borderColor: "#52d6c7" },
+  choiceText: { color: "#a9c4d1", fontSize: 13, fontWeight: "700" },
+  choiceTextSelected: { color: "#ffffff" },
+  hint: { color: "#6f93a8", fontSize: 12, lineHeight: 18 },
+  primaryButton: {
+    alignItems: "center",
+    backgroundColor: "#177b74",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+  },
+  saveButton: { marginTop: 4 },
+  primaryButtonText: { color: "#ffffff", fontSize: 15, fontWeight: "800" },
+  buttonDisabled: { opacity: 0.45 },
+  pressed: { opacity: 0.75 },
+  card: {
+    alignItems: "center",
+    backgroundColor: "#0d2b40",
+    borderColor: "#1c4963",
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 12,
+    margin: 24,
+    padding: 24,
+  },
+  cardTitle: { color: "#f4fbff", fontSize: 17, fontWeight: "800" },
+  cardText: {
+    color: "#a9c4d1",
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: "center",
+  },
+  errorCard: {
+    backgroundColor: "#3b2b2d",
+    borderRadius: 14,
+    gap: 10,
+    padding: 16,
+  },
+  conflictCard: {
+    backgroundColor: "#3a3324",
+    borderColor: "#7a6321",
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 10,
+    padding: 16,
+  },
+  errorTitle: { color: "#ffd0ca", fontSize: 15, fontWeight: "800" },
+  errorText: { color: "#dbaea9", fontSize: 13, lineHeight: 20 },
+});
