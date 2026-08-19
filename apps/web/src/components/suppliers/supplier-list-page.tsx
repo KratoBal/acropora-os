@@ -84,6 +84,18 @@ export function SupplierListPage() {
     next.set("page", "1");
     router.replace(`${pathname}?${next}`);
   };
+
+  /**
+   * Paging has to bypass `filter`: that helper ends by resetting the page
+   * to 1 (correct for a filter change - page 4 of a different filter
+   * usually does not exist), so paging through it sent every click back to
+   * the first page and nothing past the first page was reachable at all.
+   */
+  const goToPage = (page: number) => {
+    const next = new URLSearchParams(params.toString());
+    next.set("page", String(page));
+    router.replace(`${pathname}?${next}`);
+  };
   if (!canView)
     return (
       <Alert
@@ -219,7 +231,7 @@ export function SupplierListPage() {
             <Button
               variant="secondary"
               disabled={data.pagination.page <= 1}
-              onClick={() => filter("page", String(data.pagination.page - 1))}
+              onClick={() => goToPage(data.pagination.page - 1)}
             >
               Előző
             </Button>
@@ -229,7 +241,7 @@ export function SupplierListPage() {
             <Button
               variant="secondary"
               disabled={data.pagination.page >= data.pagination.totalPages}
-              onClick={() => filter("page", String(data.pagination.page + 1))}
+              onClick={() => goToPage(data.pagination.page + 1)}
             >
               Következő
             </Button>
