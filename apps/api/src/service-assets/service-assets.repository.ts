@@ -748,6 +748,11 @@ export class ServiceAssetsRepository extends Repository {
       model: row.model ?? undefined,
       serialNumber: row.serialNumber ?? undefined,
       nextServiceAt: row.nextServiceAt?.toISOString(),
+      // A listában is kimegy, nem csak az adatlapon: a helyszíni katalógus
+      // enélkül nem tudja feloldani a beolvasott kódot. Nem jár extra
+      // adatbázis-költséggel - a lekérdezés `include`-ot használ, tehát a
+      // mező már benne van a betöltött sorban.
+      qrToken: row.qrToken,
       childCount: row._count.childAssets,
       updatedAt: row.updatedAt.toISOString(),
     };
@@ -759,7 +764,6 @@ export class ServiceAssetsRepository extends Repository {
   ): AssetDetail {
     return {
       ...this.toListItem(row),
-      qrToken: row.qrToken,
       category: row.category ?? undefined,
       inventoryNumber: row.inventoryNumber ?? undefined,
       description: row.description ?? undefined,

@@ -78,6 +78,23 @@ export interface AssetListItem extends AssetHierarchyItem {
   model?: string;
   serialNumber?: string;
   nextServiceAt?: string;
+  /**
+   * A QR-matricán lévő azonosító.
+   *
+   * A listán is szerepel, nem csak az adatlapon, mert a helyszíni munkához
+   * a telefon előre letölti az eszközöket, és térerő nélkül a beolvasott
+   * kódot ebből kell feloldania. Adatlapról építeni a katalógust eszközönként
+   * egy hívást jelentene.
+   *
+   * Nem ad új hozzáférést: a lista, az adatlap és a `scan` végpont MIND
+   * ugyanazt a jogosultságot kéri (`SERVICE_VIEW`), tehát aki listázni tud,
+   * az ma is megnyit bármelyik eszközt és beolvas bármelyik tokent.
+   *
+   * EZ MEGFORDUL, ha a beolvasás valaha bejelentkezés nélkül is működne
+   * (például ügyfélnek szánt oldalon): akkor a token bemutatóra szóló
+   * kulccsá válik, és nem szabad listában kiadni.
+   */
+  qrToken: string;
   childCount: number;
   updatedAt: string;
 }
@@ -105,7 +122,6 @@ export interface AssetEventSummary {
 }
 
 export interface AssetDetail extends AssetListItem {
-  qrToken: string;
   category?: string;
   inventoryNumber?: string;
   description?: string;

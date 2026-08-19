@@ -29,12 +29,16 @@ export interface AssetListItem extends AssetHierarchyItem {
   model?: string;
   serialNumber?: string;
   nextServiceAt?: string;
+  /**
+   * A QR-matricán lévő azonosító. A listán is megjön, mert a helyszíni
+   * katalógus enélkül nem tudja feloldani a beolvasott kódot térerő nélkül.
+   */
+  qrToken: string;
   childCount: number;
   updatedAt: string;
 }
 
 export interface AssetDetail extends AssetListItem {
-  qrToken: string;
   category?: string;
   inventoryNumber?: string;
   description?: string;
