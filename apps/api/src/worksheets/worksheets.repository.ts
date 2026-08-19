@@ -749,6 +749,14 @@ export class WorksheetsRepository extends Repository {
     });
   }
 
+  /**
+   * Az `updatedAt` itt is `(NOW() AT TIME ZONE 'utc')`, nem csupasz `NOW()`:
+   * az oszlop időzóna nélküli, és a Prisma UTC-t ír bele, a csupasz `NOW()`
+   * viszont a SZERVER időzónájában áll elő. Ezen az egy helyen csak
+   * könyvelési időbélyeg múlik rajta (logika nem olvassa), de a két alak
+   * együttélése az, amiből egy következő olvasó azt hinné, hogy a csupasz
+   * `NOW()` itt rendben van.
+   */
   private async allocateSequence(
     transaction: TransactionClient,
     partnerCode: string,
@@ -759,11 +767,11 @@ export class WorksheetsRepository extends Repository {
       Prisma.sql`
         INSERT INTO "WorksheetNumberSequence"
           ("id", "partnerCode", "departmentCode", "year", "lastValue", "updatedAt")
-        VALUES (${randomUUID()}, ${partnerCode}, ${departmentCode}, ${year}, 1, NOW())
+        VALUES (${randomUUID()}, ${partnerCode}, ${departmentCode}, ${year}, 1, (NOW() AT TIME ZONE 'utc'))
         ON CONFLICT ("partnerCode", "departmentCode", "year")
         DO UPDATE SET
           "lastValue" = "WorksheetNumberSequence"."lastValue" + 1,
-          "updatedAt" = NOW()
+          "updatedAt" = (NOW() AT TIME ZONE 'utc')
         RETURNING "lastValue"
       `,
     );
