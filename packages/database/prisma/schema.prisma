@@ -499,6 +499,8 @@ model User {
   createdTasks               Task[]                        @relation("TaskCreatedBy")
   closedTasks                Task[]                        @relation("TaskClosedBy")
   createdWorksheets          Worksheet[]                   @relation("WorksheetCreatedBy")
+  assignedWorksheets         WorksheetAssignee[]           @relation("WorksheetAssignee")
+  worksheetAssignmentsMade   WorksheetAssignee[]           @relation("WorksheetAssignedBy")
   createdWorksheetVersions   WorksheetVersion[]            @relation("WorksheetVersionCreatedBy")
   closedWorksheetVersions    WorksheetVersion[]            @relation("WorksheetVersionClosedBy")
   worksheetSignatures        WorksheetVersionSignature[]   @relation("WorksheetSignedBy")
@@ -2198,10 +2200,40 @@ model Worksheet {
   department WorksheetDepartment @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   createdBy  User?               @relation("WorksheetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   versions   WorksheetVersion[]
+  assignees  WorksheetAssignee[]
 
   @@index([customerId, createdAt])
   @@index([departmentId])
   @@index([numberYear, sequence])
+}
+
+/// Ki dolgozik a munkalapon. Kapcsolótábla és nem `assigneeId` mező, mert
+/// egy lapnak TÖBB felelőse lehet (Balázs döntése, 2026-08-19 11:16) - egy
+/// mezőt utólag több-értékűvé alakítani migráció és kódátírás, most még nem az.
+///
+/// A hozzárendelés a munkalap AZONOSSÁGÁHOZ tartozik, nem a verzióhoz. Aki a
+/// lapon dolgozik, az nem a dokumentum tartalma: ha a verzióra kerülne, egy
+/// aláírt lap módosításakor a verzió-eltérésben jelenne meg (pedig nem a
+/// dokumentum változott), és a lezárt verzión soha többé nem lehetne
+/// hozzárendelést javítani.
+///
+/// A `createdBy` ettől külön marad: aki a lapot felvette, és aki a munkát
+/// végzi, tipikusan nem ugyanaz - az iroda nyit lapot a szerelőnek.
+model WorksheetAssignee {
+  worksheetId  String
+  userId       String
+  assignedAt   DateTime @default(now())
+  assignedById String?
+
+  worksheet  Worksheet @relation(fields: [worksheetId], references: [id], onDelete: Cascade)
+  user       User      @relation("WorksheetAssignee", fields: [userId], references: [id], onDelete: Cascade)
+  assignedBy User?     @relation("WorksheetAssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  /// A páros maga az azonosság, ezért nincs külön `id`: egy pótkulcs mellett
+  /// ugyanaz az ember kétszer is felkerülhetne ugyanarra a lapra.
+  @@id([worksheetId, userId])
+  /// A szerelő saját lapjainak listája ezen az indexen fut.
+  @@index([userId, assignedAt])
 }
 
 /// Egy munkalap egy változata, teljes tartalommal. A módosítás nem írja át a

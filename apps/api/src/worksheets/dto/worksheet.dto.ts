@@ -31,6 +31,8 @@ export class WorksheetListQueryDto {
   @IsString() @IsOptional() search?: string;
   @IsString() @IsOptional() customerId?: string;
   @IsString() @IsOptional() departmentId?: string;
+  /** A szerelő saját lapjai: erre a szűrőre épül a "nekem kiosztva" lista. */
+  @IsString() @IsOptional() assigneeId?: string;
   // Állapot szerinti szűrés szándékosan nincs: az állapot a LEGUTOLSÓ
   // verzióé, a `some: { status }` alakú Prisma-szűrő viszont bármelyik
   // korábbi verzióra is illeszkedne, és csendben mást jelentene, mint amit
@@ -112,6 +114,21 @@ export class CreateWorksheetDepartmentDto {
   })
   code!: string;
   @IsString() @MinLength(2) @MaxLength(200) name!: string;
+}
+
+/**
+ * A lap felelőseinek teljes listája.
+ *
+ * A mező kötelező, alapértelmezett üres lista nélkül: egy elgépelt vagy
+ * kimaradt mezőnek nem szabad csendben leszedni mindenkit a lapról. Üres
+ * listát küldeni viszont szabad - az kimondott szándék.
+ */
+export class SetWorksheetAssigneesDto {
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @MinLength(1, { each: true })
+  userIds!: string[];
 }
 
 export class SetWorksheetPartnerCodeDto {

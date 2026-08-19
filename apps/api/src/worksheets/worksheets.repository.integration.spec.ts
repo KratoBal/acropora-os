@@ -32,6 +32,8 @@ describe(
     const year = worksheetYear(new Date());
 
     let actorUserId: string;
+    let technicianUserId: string;
+    let viewerUserId: string;
     let customerId: string;
     let bioDepartmentId: string;
     let ppuDepartmentId: string;
@@ -49,6 +51,30 @@ describe(
         },
       });
       actorUserId = user.id;
+
+      // A felelős-kiosztáshoz két további kolléga kell: egy szerelő, aki
+      // írhat munkalapot, és egy néző, aki csak látja. A kettő közötti
+      // különbség az, amit a kiosztás szabálya őriz.
+      const technician = await prisma.user.create({
+        data: {
+          email: `worksheets-technician-${suffix}@${TEST_EMAIL_DOMAIN}`,
+          displayName: "Szerelő Sándor",
+          nickname: "Szerelő Sanyi",
+          role: "SERVICE",
+          isActive: true,
+        },
+      });
+      technicianUserId = technician.id;
+
+      const viewer = await prisma.user.create({
+        data: {
+          email: `worksheets-viewer-${suffix}@${TEST_EMAIL_DOMAIN}`,
+          displayName: "Néző Nóra",
+          role: "VIEWER",
+          isActive: true,
+        },
+      });
+      viewerUserId = viewer.id;
 
       const customer = await prisma.customer.create({
         data: {
@@ -395,6 +421,96 @@ describe(
         where: { worksheetId: id },
       });
       assert.equal(versionCount, 1);
+    });
+
+    // A felelős a lap AZONOSSÁGÁHOZ tartozik, és a névsor újramentése nem
+    // eseményt, hanem állapotot ír. Amit ez bizonyít: a már fent lévő
+    // kolléga `assignedAt`-je nem íródik újra - ez az egyetlen jel arról, ki
+    // került ÚJONNAN a lapra, és erre épül majd az értesítés.
+    it("keeps the original assignment time when the list is saved again", async () => {
+      const id = await createDraft(bioDepartmentId);
+
+      await repository.setAssignees({
+        worksheetId: id,
+        userIds: [technicianUserId, viewerUserId],
+        actorUserId,
+      });
+      const first = await prisma.worksheetAssignee.findUniqueOrThrow({
+        where: {
+          worksheetId_userId: { worksheetId: id, userId: technicianUserId },
+        },
+        select: { assignedAt: true, assignedById: true },
+      });
+      assert.equal(first.assignedById, actorUserId);
+
+      await repository.setAssignees({
+        worksheetId: id,
+        userIds: [technicianUserId, actorUserId],
+        actorUserId,
+      });
+
+      const rows = await prisma.worksheetAssignee.findMany({
+        where: { worksheetId: id },
+        orderBy: { userId: "asc" },
+        select: { userId: true, assignedAt: true },
+      });
+      assert.deepEqual(
+        rows.map((row) => row.userId).sort(),
+        [actorUserId, technicianUserId].sort(),
+      );
+
+      const kept = rows.find((row) => row.userId === technicianUserId);
+      assert.equal(kept?.assignedAt.getTime(), first.assignedAt.getTime());
+    });
+
+    it("takes everyone off the worksheet when the list arrives empty", async () => {
+      const id = await createDraft(bioDepartmentId);
+      await repository.setAssignees({
+        worksheetId: id,
+        userIds: [technicianUserId],
+        actorUserId,
+      });
+      await repository.setAssignees({
+        worksheetId: id,
+        userIds: [],
+        actorUserId,
+      });
+
+      const remaining = await prisma.worksheetAssignee.count({
+        where: { worksheetId: id },
+      });
+      assert.equal(remaining, 0);
+    });
+
+    it("offers only colleagues whose role may edit the worksheet", async () => {
+      const { items } = await repository.assignableUsers();
+      const ids = new Set(items.map((item) => item.id));
+      assert.ok(ids.has(technicianUserId));
+      // A VIEWER látja a lapot, de nem ír rá, tehát felelősnek sem való.
+      assert.equal(ids.has(viewerUserId), false);
+    });
+
+    it("lists the worksheets assigned to one person", async () => {
+      const mine = await createDraft(bioDepartmentId);
+      const other = await createDraft(bioDepartmentId);
+      await repository.setAssignees({
+        worksheetId: mine,
+        userIds: [technicianUserId],
+        actorUserId,
+      });
+
+      const response = await repository.list({
+        page: 1,
+        pageSize: 100,
+        assigneeId: technicianUserId,
+      });
+      const ids = response.items.map((item) => item.id);
+      assert.ok(ids.includes(mine));
+      assert.equal(ids.includes(other), false);
+      assert.deepEqual(
+        response.items.find((item) => item.id === mine)?.assigneeNames,
+        ["Szerelő Sanyi"],
+      );
     });
   },
 );
