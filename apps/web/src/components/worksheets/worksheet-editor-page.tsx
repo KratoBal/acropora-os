@@ -70,6 +70,19 @@ function content(
   };
 }
 
+/** The customer list endpoint refuses anything above 100 per page
+ * (`customer.dto.ts`: `@Max(100)`), so this is the ceiling, not a preference.
+ * Raising it here alone would not widen the picker, it would make the request
+ * invalid and leave the picker empty. */
+const CUSTOMER_PAGE_SIZE = 100;
+
+/** Safety stop for the loop below, so a runaway pagination response cannot keep
+ * the editor fetching forever. At the page size above this covers 2000
+ * customers, well past what the shop has. Past that the picker truncates again
+ * -- the same failure this fix is about -- so the loop says so out loud instead
+ * of quietly dropping the tail. */
+const CUSTOMER_PAGE_LIMIT = 20;
+
 export interface WorksheetEditorPageProps {
   /** Megadva a lap piszkozatát szerkeszti, enélkül újat vesz fel. */
   worksheetId?: string;
@@ -99,14 +112,39 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
   useEffect(() => {
     if (!canManage || worksheetId) return;
     const controller = new AbortController();
-    const query = new URLSearchParams({ page: "1", pageSize: "100" });
-    customersApi
-      .list(token, query, controller.signal)
-      .then((response) => setCustomers(response.items))
-      .catch((cause: unknown) => {
-        if (!(cause instanceof DOMException && cause.name === "AbortError"))
-          setError("A vevőlista nem tölthető be.");
-      });
+    /** The picker needs every customer, but the endpoint hands out one page at
+     * a time, so walk the pages instead of asking for a single big one. Asking
+     * for one page of 100 was the defect: customer 101 onwards never reached
+     * the dropdown, and nothing failed -- the list simply ended mid-alphabet. */
+    const loadCustomers = async () => {
+      const collected: CustomerSummary[] = [];
+      let page = 1;
+      let totalPages = 1;
+      while (page <= totalPages && page <= CUSTOMER_PAGE_LIMIT) {
+        const query = new URLSearchParams({
+          page: String(page),
+          pageSize: String(CUSTOMER_PAGE_SIZE),
+        });
+        const response = await customersApi.list(
+          token,
+          query,
+          controller.signal,
+        );
+        collected.push(...response.items);
+        totalPages = response.pagination.totalPages;
+        page += 1;
+      }
+      setCustomers(collected);
+      if (totalPages > CUSTOMER_PAGE_LIMIT) {
+        setError(
+          `A vevőlista hosszabb, mint amit a választó egyszerre kezelni tud, ezért csak az első ${CUSTOMER_PAGE_LIMIT * CUSTOMER_PAGE_SIZE} vevő választható. Szólj a fejlesztőnek.`,
+        );
+      }
+    };
+    loadCustomers().catch((cause: unknown) => {
+      if (!(cause instanceof DOMException && cause.name === "AbortError"))
+        setError("A vevőlista nem tölthető be.");
+    });
     return () => controller.abort();
   }, [canManage, token, worksheetId]);
 
