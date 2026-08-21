@@ -89,6 +89,11 @@ describe("the service partner's mirror customer", () => {
 
     assert.equal(calls.length, 2);
     assert.equal(calls[0]?.action, "create");
+    // The number is the one field that travels everywhere the row goes: an
+    // invoice, an export, a spreadsheet somebody opens next year. It says what
+    // the row is, so that whoever meets it there does not have to ask.
+    const created = calls[0]?.args.data as { customerNumber: string };
+    assert.match(created.customerNumber, /^PARTNER-/);
     assert.deepEqual(calls[1], {
       table: "supplier",
       action: "update",

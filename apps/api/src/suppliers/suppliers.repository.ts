@@ -117,7 +117,11 @@ export async function syncWorksheetMirror(
   }
   const mirror = await tx.customer.create({
     data: {
-      customerNumber: generateCode("VEVO"),
+      // `PARTNER`, not `VEVO`: this row will turn up on an invoice or in an
+      // export one day, in front of somebody who never heard of mirrors, and
+      // the number is the one field that travels everywhere the row goes. It
+      // costs a word here and saves that person the question.
+      customerNumber: generateCode("PARTNER"),
       type: "COMPANY",
       ...carried,
     },
