@@ -76,6 +76,17 @@ describe("SupplierListPage paging", () => {
     api.sync.mockReset().mockResolvedValue({});
   });
 
+  /** The Partners menu holds service partners too, not only suppliers, so the
+   * button that starts a new record must not name one of the two kinds. The
+   * editor screen carries the same label and is asserted in its own spec. */
+  it("offers a neutral label for a new record", async () => {
+    render(<SupplierListPage />);
+    await screen.findByText("Aqua Kereskedés Kft.");
+
+    expect(screen.getByRole("button", { name: "Új felvitele" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Új beszállító" })).toBeNull();
+  });
+
   it("moves to the next page instead of returning to the first", async () => {
     render(<SupplierListPage />);
     await screen.findByText("Aqua Kereskedés Kft.");

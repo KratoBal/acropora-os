@@ -112,7 +112,7 @@ export function SupplierListPage() {
         actions={
           canManage ? (
             <Link href="/partnerek/uj">
-              <Button>Új beszállító</Button>
+              <Button>Új felvitele</Button>
             </Link>
           ) : undefined
         }
