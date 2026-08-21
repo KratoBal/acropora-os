@@ -112,10 +112,11 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
   useEffect(() => {
     if (!canManage || worksheetId) return;
     const controller = new AbortController();
-    /** The picker needs every customer, but the endpoint hands out one page at
-     * a time, so walk the pages instead of asking for a single big one. Asking
-     * for one page of 100 was the defect: customer 101 onwards never reached
-     * the dropdown, and nothing failed -- the list simply ended mid-alphabet. */
+    /** The picker needs every customer it is allowed to offer, but the endpoint
+     * hands out one page at a time, so walk the pages instead of asking for a
+     * single big one. Asking for one page of 100 was the defect: customer 101
+     * onwards never reached the dropdown, and nothing failed -- the list simply
+     * ended mid-alphabet. */
     const loadCustomers = async () => {
       const collected: CustomerSummary[] = [];
       let page = 1;
@@ -124,6 +125,14 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
         const query = new URLSearchParams({
           page: String(page),
           pageSize: String(CUSTOMER_PAGE_SIZE),
+          /** Webshop customers never get a worksheet (owner's decision,
+           * 2026-08-21), so they are excluded here rather than hidden later.
+           * MANUAL means "has no UNAS external reference" -- the origin is
+           * derived, not a stored column, and the endpoint resolves it for us
+           * (`customers.repository.ts`, the `source` branch). The exclusion is
+           * deliberately NOT overridable: a webshop customer that becomes a
+           * partner is entered by hand as a new record instead. */
+          source: "MANUAL",
         });
         const response = await customersApi.list(
           token,

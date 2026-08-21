@@ -96,6 +96,36 @@ describe("WorksheetEditorPage partner picker", () => {
     expect(requested).toEqual(["1", "2"]);
   });
 
+  /** Webshop customers never get a worksheet, so the picker must ask for the
+   * manually recorded ones only.
+   *
+   * The known positive is the point of this test: asserting only that a
+   * webshop customer is missing would also pass on an empty dropdown, which is
+   * the failure this whole change is about. So it checks that a manual
+   * customer IS offered, and that the request carried the filter.
+   *
+   * What it deliberately does NOT claim: that the endpoint really leaves
+   * webshop customers out. That is decided in the database from the UNAS
+   * external reference (`customers.repository.ts`, the `source` branch), and a
+   * mocked client cannot prove it -- only an integration run against a real
+   * database can. */
+  it("asks for manually recorded customers and offers them", async () => {
+    customers.list.mockResolvedValue({
+      items: [customer(7, "Belföldi Kft.")],
+      pagination: { page: 1, pageSize: 100, totalItems: 1, totalPages: 1 },
+    });
+
+    render(<WorksheetEditorPage />);
+
+    expect(
+      await screen.findByRole("option", { name: "Belföldi Kft." }),
+    ).toBeTruthy();
+    const sources = customers.list.mock.calls.map((call) =>
+      (call[1] as URLSearchParams).get("source"),
+    );
+    expect(sources).toEqual(["MANUAL"]);
+  });
+
   /** Truncation is what made the defect invisible, so if the safety stop is
    * ever reached the picker has to say it out loud. */
   it("says the list was cut short instead of silently dropping the tail", async () => {
