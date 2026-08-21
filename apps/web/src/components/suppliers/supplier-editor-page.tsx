@@ -41,6 +41,10 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
   const [country, setCountry] = useState("HU");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  /** A new record starts as a supplier, the same way the column defaults, so
+   * that recording a supplier stays a matter of typing the name. */
+  const [isSupplier, setIsSupplier] = useState(true);
+  const [isService, setIsService] = useState(false);
   const [iban, setIban] = useState("");
   const [swiftCode, setSwiftCode] = useState("");
   const [bankAccountNumber, setBankAccountNumber] = useState("");
@@ -73,6 +77,8 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
         setCountry(next.country);
         setEmail(next.email ?? "");
         setPhone(next.phone ?? "");
+        setIsSupplier(next.isSupplier);
+        setIsService(next.isService);
         setIban(next.iban ?? "");
         setSwiftCode(next.swiftCode ?? "");
         setBankAccountNumber(next.bankAccountNumber ?? "");
@@ -147,6 +153,8 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
     setError(null);
     const payload = {
       name: name.trim(),
+      isSupplier,
+      isService,
       taxNumber: taxNumber.trim() || undefined,
       country: country.trim().toUpperCase(),
       email: email.trim() || undefined,
@@ -335,6 +343,24 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
               />
             </FormField>
           </div>
+          <div className="mt-4 flex flex-wrap gap-4">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={isSupplier}
+                onChange={(event) => setIsSupplier(event.target.checked)}
+              />
+              Beszállító
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={isService}
+                onChange={(event) => setIsService(event.target.checked)}
+              />
+              Szerviz
+            </label>
+          </div>
           {supplier ? (
             <div className="mt-4">
               <Badge variant={supplier.isActive ? "success" : "neutral"}>
@@ -343,45 +369,54 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
             </div>
           ) : null}
         </Card>
-        <Card className="p-6">
-          <h2 className="font-semibold">Bankszámla</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            {isEu
-              ? "EU-n belüli beszállítónál nemzetközi átutaláshoz IBAN és SWIFT/BIC szükséges."
-              : "Belföldi beszállítónál a hazai formátumú bankszámlaszám."}
-          </p>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            {isEu ? (
-              <>
-                <FormField label="IBAN">
+        {/* Bank details are what we need in order to PAY a partner, so they
+            belong to the supplier side. A service partner has none of this,
+            and showing the block anyway would read as data somebody forgot to
+            fill in. Nothing here was ever required, so hiding it takes no
+            validation away. */}
+        {isSupplier ? (
+          <Card className="p-6">
+            <h2 className="font-semibold">Bankszámla</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              {isEu
+                ? "EU-n belüli beszállítónál nemzetközi átutaláshoz IBAN és SWIFT/BIC szükséges."
+                : "Belföldi beszállítónál a hazai formátumú bankszámlaszám."}
+            </p>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              {isEu ? (
+                <>
+                  <FormField label="IBAN">
+                    <Input
+                      aria-label="IBAN"
+                      value={iban}
+                      onChange={(event) => setIban(event.target.value)}
+                      placeholder="DE89 3704 0044 0532 0130 00"
+                    />
+                  </FormField>
+                  <FormField label="SWIFT / BIC kód">
+                    <Input
+                      aria-label="SWIFT / BIC kód"
+                      value={swiftCode}
+                      onChange={(event) => setSwiftCode(event.target.value)}
+                      placeholder="pl. COBADEFFXXX"
+                    />
+                  </FormField>
+                </>
+              ) : (
+                <FormField label="Bankszámlaszám">
                   <Input
-                    aria-label="IBAN"
-                    value={iban}
-                    onChange={(event) => setIban(event.target.value)}
-                    placeholder="DE89 3704 0044 0532 0130 00"
+                    aria-label="Bankszámlaszám"
+                    value={bankAccountNumber}
+                    onChange={(event) =>
+                      setBankAccountNumber(event.target.value)
+                    }
+                    placeholder="12345678-12345678-12345678"
                   />
                 </FormField>
-                <FormField label="SWIFT / BIC kód">
-                  <Input
-                    aria-label="SWIFT / BIC kód"
-                    value={swiftCode}
-                    onChange={(event) => setSwiftCode(event.target.value)}
-                    placeholder="pl. COBADEFFXXX"
-                  />
-                </FormField>
-              </>
-            ) : (
-              <FormField label="Bankszámlaszám">
-                <Input
-                  aria-label="Bankszámlaszám"
-                  value={bankAccountNumber}
-                  onChange={(event) => setBankAccountNumber(event.target.value)}
-                  placeholder="12345678-12345678-12345678"
-                />
-              </FormField>
-            )}
-          </div>
-        </Card>
+              )}
+            </div>
+          </Card>
+        ) : null}
         <Card className="p-6">
           <h2 className="font-semibold">Cím</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
@@ -450,7 +485,10 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
               ? "Mentés…"
               : supplier
                 ? "Változások mentése"
-                : "Beszállító létrehozása"}
+                : // Not "Beszállító létrehozása": the checkboxes above decide
+                  // what is being created, and the button must not contradict
+                  // them when someone records a service partner.
+                  "Partner létrehozása"}
           </Button>
         </div>
       </form>

@@ -119,6 +119,8 @@ const supplier: SupplierSummary = {
   id: "supplier-1",
   code: "SUP-0001",
   name: "Teszt Beszállító Kft.",
+  isSupplier: true,
+  isService: false,
   taxNumber: "12345678-2-42",
   country: "HU",
   isActive: true,

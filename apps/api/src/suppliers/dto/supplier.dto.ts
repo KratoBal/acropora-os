@@ -1,5 +1,6 @@
 import { Type } from "class-transformer";
 import {
+  IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
@@ -11,6 +12,11 @@ import {
 
 export class CreateSupplierDto {
   @IsString() @MinLength(1) name!: string;
+  /** Left out means "as the column defaults": supplier yes, service no. The
+   * purchase invoice screen creates suppliers without knowing about partner
+   * kinds, and it must keep working unchanged. */
+  @IsBoolean() @IsOptional() isSupplier?: boolean;
+  @IsBoolean() @IsOptional() isService?: boolean;
   @IsString() @IsOptional() taxNumber?: string;
   @IsString() @IsOptional() country?: string;
   @IsString() @IsOptional() email?: string;
@@ -29,6 +35,8 @@ export class CreateSupplierDto {
 
 export class UpdateSupplierDto {
   @IsString() @MinLength(1) @IsOptional() name?: string;
+  @IsBoolean() @IsOptional() isSupplier?: boolean;
+  @IsBoolean() @IsOptional() isService?: boolean;
   @IsString() @IsOptional() taxNumber?: string | null;
   @IsString() @IsOptional() country?: string;
   @IsString() @IsOptional() email?: string | null;
