@@ -16,6 +16,8 @@ function toSummary(supplier: Supplier): SupplierSummary {
     id: supplier.id,
     code: supplier.code,
     name: supplier.name,
+    isSupplier: supplier.isSupplier,
+    isService: supplier.isService,
     taxNumber: supplier.taxNumber ?? undefined,
     country: supplier.country,
     email: supplier.email ?? undefined,
@@ -107,6 +109,11 @@ export class SuppliersRepository extends Repository {
           data: {
             code,
             name: input.name.trim(),
+            // Omitted stays omitted, so the column default decides. Writing
+            // `?? true` here would look equivalent and would not be: it would
+            // move the decision out of the schema and into every caller.
+            isSupplier: input.isSupplier,
+            isService: input.isService,
             taxNumber: input.taxNumber?.trim() || undefined,
             country: (input.country ?? "HU").trim().toUpperCase(),
             email: input.email?.trim() || undefined,
@@ -153,6 +160,8 @@ export class SuppliersRepository extends Repository {
           where: { id, updatedAt: new Date(input.expectedUpdatedAt) },
           data: {
             name: input.name?.trim(),
+            isSupplier: input.isSupplier,
+            isService: input.isService,
             taxNumber:
               input.taxNumber === null ? null : input.taxNumber?.trim(),
             country: input.country?.trim().toUpperCase(),

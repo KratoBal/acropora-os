@@ -834,6 +834,19 @@ model Supplier {
   country            String   @default("HU") @db.VarChar(2)
   email              String?
   phone              String?
+  /// What kind of partner this is. The two are independent, because one
+  /// company can be both: we order from it AND we do service work for it.
+  ///
+  /// `isSupplier` defaults to true so that every row recorded before this
+  /// column existed keeps the meaning it was entered with -- the Partners menu
+  /// held suppliers only until now -- and so that the purchase invoice screen,
+  /// which creates a supplier without knowing about partner kinds, keeps
+  /// working unchanged.
+  isSupplier         Boolean  @default(true)
+  /// A service partner is one we write worksheets and quotes for. Off by
+  /// default: an existing row was never recorded as one, and guessing would
+  /// put companies in front of the service staff that nobody put there.
+  isService          Boolean  @default(false)
   /// EU-s (nem "HU") beszállítónál a nemzetközi bankszámlaszám.
   iban               String?
   /// EU-s (nem "HU") beszállítónál a bank SWIFT/BIC kódja.
