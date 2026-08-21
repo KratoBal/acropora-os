@@ -5,6 +5,7 @@ import { Prisma, Repository, prisma } from "@acropora/database";
 import {
   personDisplayName,
   type WorksheetAssignableUserListResponse,
+  type WorksheetSelectablePartnerListResponse,
   type WorksheetDepartmentListResponse,
   type WorksheetDepartmentSummary,
   type WorksheetListResponse,
@@ -151,6 +152,44 @@ export class WorksheetsRepository extends Repository {
       where: { id },
       select: { id: true, customerId: true, code: true, isActive: true },
     });
+  }
+
+  /**
+   * Four conditions, and the middle two are the point.
+   *
+   * A partner with no code could be picked, worked on, and then refuse to
+   * close -- the number cannot be built without its first segment. The
+   * technician would be standing in front of the customer when that came out,
+   * and it is not something they can fix. So the pressure sits here, on the
+   * list, where the gap is visible to whoever can close it.
+   *
+   * A partner with no mirror row has no worksheets to belong to. It cannot
+   * happen for a service partner saved through the partner screen, which
+   * creates the row, but a list that assumes its own invariants is how a
+   * missing row turns into a crash instead of an absence.
+   */
+  static selectablePartnerWhere(): Prisma.SupplierWhereInput {
+    return {
+      isService: true,
+      isActive: true,
+      worksheetPartnerCode: { not: null },
+      customerId: { not: null },
+    };
+  }
+
+  async selectablePartners(): Promise<WorksheetSelectablePartnerListResponse> {
+    const rows = await this.database.supplier.findMany({
+      where: WorksheetsRepository.selectablePartnerWhere(),
+      select: { name: true, worksheetPartnerCode: true, customerId: true },
+    });
+    const items = rows
+      .map((row) => ({
+        customerId: row.customerId!,
+        name: row.name,
+        partnerCode: row.worksheetPartnerCode!,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, "hu"));
+    return { items };
   }
 
   /**

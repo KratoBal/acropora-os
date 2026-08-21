@@ -5,6 +5,7 @@ import type {
   SignWorksheetVersionInput,
   UpdateWorksheetDraftInput,
   WorksheetAssignableUserListResponse,
+  WorksheetSelectablePartnerListResponse,
   WorksheetDepartmentListResponse,
   WorksheetDepartmentSummary,
   WorksheetDetail,
@@ -27,6 +28,13 @@ export const worksheetsApi = {
   },
   detail(token: string, id: string, signal?: AbortSignal) {
     return apiRequest<WorksheetDetail>(worksheetPath(id), token, { signal });
+  },
+  selectablePartners(token: string, signal?: AbortSignal) {
+    return apiRequest<WorksheetSelectablePartnerListResponse>(
+      `${base}/selectable-partners`,
+      token,
+      { signal },
+    );
   },
   assignableUsers(token: string, signal?: AbortSignal) {
     return apiRequest<WorksheetAssignableUserListResponse>(
