@@ -31,10 +31,10 @@ export function SupplierListPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState(params.get("search") ?? "");
   const canView = Boolean(
-    session && hasPermission(session.user, PERMISSIONS.PURCHASING_VIEW),
+    session && hasPermission(session.user, PERMISSIONS.PARTNERS_VIEW),
   );
   const canManage = Boolean(
-    session && hasPermission(session.user, PERMISSIONS.PURCHASING_MANAGE),
+    session && hasPermission(session.user, PERMISSIONS.PARTNERS_MANAGE),
   );
   const token = session?.token ?? "";
   const query = useMemo(() => {
@@ -101,7 +101,7 @@ export function SupplierListPage() {
       <Alert
         variant="danger"
         title="Nincs hozzáférésed a partnerkezeléshez"
-        description="purchasing.view jogosultság szükséges."
+        description="partners.view jogosultság szükséges."
       />
     );
   return (

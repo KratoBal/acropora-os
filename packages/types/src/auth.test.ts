@@ -37,6 +37,35 @@ describe("role permission mapping", () => {
     );
   });
 
+  it("lets the service role see partners without editing them", () => {
+    assert.ok(ROLE_PERMISSIONS.SERVICE.includes(PERMISSIONS.PARTNERS_VIEW));
+    assert.ok(!ROLE_PERMISSIONS.SERVICE.includes(PERMISSIONS.PARTNERS_MANAGE));
+  });
+
+  /**
+   * Partner access used to hang off the purchasing permissions, and the
+   * supplier endpoints were moved onto the new pair. Anyone who could reach
+   * partners before must still reach them, otherwise the split quietly takes
+   * away access that nobody decided to take away -- and the only symptom would
+   * be a colleague locked out of a screen they used yesterday.
+   */
+  it("takes partner access away from nobody who had it", () => {
+    for (const [role, permissions] of Object.entries(ROLE_PERMISSIONS)) {
+      if (permissions.includes(PERMISSIONS.PURCHASING_VIEW)) {
+        assert.ok(
+          permissions.includes(PERMISSIONS.PARTNERS_VIEW),
+          `${role} could see partners before and cannot now`,
+        );
+      }
+      if (permissions.includes(PERMISSIONS.PURCHASING_MANAGE)) {
+        assert.ok(
+          permissions.includes(PERMISSIONS.PARTNERS_MANAGE),
+          `${role} could edit partners before and cannot now`,
+        );
+      }
+    }
+  });
+
   it("keeps warehouse permissions scoped to warehouse work", () => {
     assert.ok(
       ROLE_PERMISSIONS.WAREHOUSE.includes(PERMISSIONS.INVENTORY_MANAGE),

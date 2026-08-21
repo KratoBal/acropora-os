@@ -41,6 +41,16 @@ const FULL_ACCESS: WebshopCapabilities = {
  *
  * This is a presentation gate only. Every API endpoint still enforces the
  * canonical server-side permission before returning or changing data.
+ *
+ * The mirror is only as good as the names. `partnersView` and `partnersManage`
+ * had no counterpart on the server at all until `partners.view` and
+ * `partners.manage` were introduced: the two sides claimed to agree while
+ * naming different things, and nothing here would have said so.
+ *
+ * `navView` and `navManage` are still in that state. They are named after the
+ * tax authority, not after any server permission, and the closest server-side
+ * pair is `finance.view` / `finance.manage`. Left alone on purpose rather than
+ * renamed in passing, because that touches screens this change does not.
  */
 const ROLE_CAPABILITIES: Readonly<Record<UserRole, WebshopCapabilities>> = {
   OWNER: FULL_ACCESS,
@@ -84,7 +94,11 @@ const ROLE_CAPABILITIES: Readonly<Record<UserRole, WebshopCapabilities>> = {
     productsManage: false,
     navView: false,
     navManage: false,
-    partnersView: false,
+    /** Service partners are the technician's working context, so the list is
+     * visible from the phone. Editing is not: the owner's decision was "let
+     * the service staff just see it for now" (2026-08-21), which the server
+     * enforces by granting SERVICE `partners.view` and not `partners.manage`. */
+    partnersView: true,
     partnersManage: false,
   },
   VIEWER: {
