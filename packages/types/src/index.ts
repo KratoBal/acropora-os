@@ -367,6 +367,7 @@ export type {
   WorksheetLineInput,
   WorksheetListItem,
   WorksheetListResponse,
+  WorksheetChainLink,
   WorksheetSelectablePartner,
   WorksheetSelectablePartnerListResponse,
   WorksheetNumberParts,

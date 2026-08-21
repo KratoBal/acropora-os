@@ -200,6 +200,12 @@ export interface WorksheetVersionDetail extends WorksheetVersionSummary {
   lines: WorksheetLineDetail[];
 }
 
+/** Egy szem a folytatás-láncban. A szám `null`, amíg az a lap piszkozat. */
+export interface WorksheetChainLink {
+  id: string;
+  number: string | null;
+}
+
 export interface WorksheetDetail {
   id: string;
   number: string | null;
@@ -215,6 +221,16 @@ export interface WorksheetDetail {
   assignees: WorksheetAssignee[];
   createdAt: string;
   updatedAt: string;
+  /**
+   * A lap, aminek ez a folytatása, és amit ebből folytattak.
+   *
+   * Egy aláírt munkalap végleges: a munka folytatása új lap. Mindkét irány
+   * szerepel, mert egy lánc, aminek csak az egyik vége ismeri a másikat, a
+   * másik végéről nézve nem lánc: aki a régi lapot nyitja meg, ugyanúgy tudni
+   * akarja, hol folytatódott.
+   */
+  continues: WorksheetChainLink | null;
+  continuedBy: WorksheetChainLink[];
   /** A legmagasabb sorszámú verzió: ez a lap mai állapota. */
   currentVersion: WorksheetVersionDetail;
   /** Minden verzió, a legújabbtól visszafelé. A lezártak változatlanok. */

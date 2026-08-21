@@ -15,6 +15,7 @@ import type {
   CreateWorksheetDepartmentDto,
   WorksheetListQueryDto,
 } from "./dto/worksheet.dto.js";
+import { amendRefusal } from "./worksheet-amendment.js";
 import { sumWorksheetAmounts } from "./worksheet-amounts.js";
 import { WORKSHEET_ASSIGNABLE_ROLES } from "./worksheet-assignment.js";
 import type {
@@ -579,15 +580,8 @@ export class WorksheetsRepository extends Repository {
 
         const current = worksheet.versions[0];
         if (!current) return { ok: false, reason: "NOT_FOUND" } as const;
-        if (current.status === "DRAFT")
-          return { ok: false, reason: "NOT_CLOSED" } as const;
-        // A signed sheet is final. Until now the only refusal was DRAFT, so a
-        // signed version could be amended into a new one -- the signature
-        // would sit on a version nobody reads any more, while the document it
-        // was given for had quietly changed underneath it. The continuation is
-        // a NEW sheet instead.
-        if (current.status === "SIGNED")
-          return { ok: false, reason: "SIGNED" } as const;
+        const refusal = amendRefusal(current.status);
+        if (refusal) return { ok: false, reason: refusal } as const;
 
         const version = current.version + 1;
         const created = await transaction.worksheetVersion.create({

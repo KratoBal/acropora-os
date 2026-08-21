@@ -125,6 +125,24 @@ export class WorksheetsService {
     return this.repository.selectablePartners();
   }
 
+  async continueFrom(id: string, actorUserId: string) {
+    const result = await this.repository.continueFrom({
+      worksheetId: id,
+      actorUserId,
+    });
+    if (!result.ok) {
+      if (result.reason === "NOT_FOUND")
+        throw new NotFoundException("A munkalap nem található.");
+      // Only a signed sheet is final, so only a signed sheet needs a
+      // continuation; on anything else the existing draft or a new version is
+      // the right move, and the message says which.
+      throw new ConflictException(
+        "Csak aláírt munkalapot lehet új lapon folytatni. Ez a lap még nincs aláírva: szerkeszd a piszkozatot, vagy adj ki új verziót.",
+      );
+    }
+    return this.detail(result.id);
+  }
+
   /**
    * A lap felelőseinek beállítása.
    *
@@ -231,6 +249,12 @@ export class WorksheetsService {
     if (!result.ok) {
       if (result.reason === "NOT_FOUND")
         throw new NotFoundException("A munkalap nem található.");
+      // The message has to say what to do instead. "Nem módosítható" leaves
+      // somebody holding a finished job and no way to record it.
+      if (result.reason === "SIGNED")
+        throw new ConflictException(
+          "Az aláírt munkalap végleges, nem módosítható. A munka folytatása új munkalap, ami erre hivatkozik: nyisd meg a lapot, és válaszd a folytatást.",
+        );
       if (result.reason === "NOT_CLOSED")
         throw new ConflictException(
           "A munkalap még piszkozat: szerkeszd a meglévő verziót, új verzió csak lezárt lapból készül.",
