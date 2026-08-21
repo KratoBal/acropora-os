@@ -227,7 +227,7 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={supplier ? supplier.name : "Új beszállító"}
+        title={supplier ? supplier.name : "Új felvitele"}
         description="Törzsadatok, bankszámla és kapcsolattartó a beszerzési számlák rögzítéséhez."
         actions={
           <Link href="/partnerek">
