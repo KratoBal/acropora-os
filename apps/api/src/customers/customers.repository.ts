@@ -72,6 +72,18 @@ export class CustomersRepository extends Repository {
       ? await this.loadUnasCustomerIds()
       : null;
     const where: Prisma.CustomerWhereInput = {
+      /**
+       * A service partner carries its worksheets on a customer row of its own
+       * (see `Supplier.customerId`). That row is a detail of the partner, not
+       * somebody who bought something, so it has no place on a list of buyers
+       * -- and a colleague who found it there would reasonably think we had
+       * created a duplicate.
+       *
+       * Expressed as a relation filter rather than an id set, unlike the UNAS
+       * origin below: this one IS a real relation, so the database does the
+       * work and nothing has to be loaded into memory first.
+       */
+      partner: null,
       ...(query.status === "ALL"
         ? {}
         : { isActive: query.status === "ACTIVE" }),

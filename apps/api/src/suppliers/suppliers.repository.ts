@@ -38,6 +38,55 @@ function toSummary(supplier: Supplier): SupplierSummary {
   };
 }
 
+/**
+ * A worksheet belongs to a customer in three places -- the sheet, the unit and
+ * the number's first segment -- so a service partner is given a customer row of
+ * its own to carry them. The row is the partner's, not a buyer's: it is created
+ * here rather than typed in, so a partner is still recorded once, by hand, in
+ * one place, and the customer list leaves these rows out.
+ *
+ * Kept in step on every save, because the name is what a colleague reads on the
+ * worksheet: a partner renamed on the partner screen and left alone here would
+ * put the old name on every sheet written afterwards.
+ */
+export async function syncWorksheetMirror(
+  tx: Prisma.TransactionClient,
+  supplier: {
+    id: string;
+    name: string;
+    isService: boolean;
+    customerId: string | null;
+  },
+) {
+  if (!supplier.isService) {
+    // Un-ticking "Szerviz" does not drop the row: worksheets may already point
+    // at it, and `onDelete: Restrict` would refuse anyway. It stays, unlisted,
+    // and is reused if the partner becomes a service partner again.
+    return supplier.customerId;
+  }
+  if (supplier.customerId) {
+    await tx.customer.update({
+      where: { id: supplier.customerId },
+      data: { displayName: supplier.name, companyName: supplier.name },
+    });
+    return supplier.customerId;
+  }
+  const mirror = await tx.customer.create({
+    data: {
+      customerNumber: generateCode("VEVO"),
+      type: "COMPANY",
+      displayName: supplier.name,
+      companyName: supplier.name,
+    },
+    select: { id: true },
+  });
+  await tx.supplier.update({
+    where: { id: supplier.id },
+    data: { customerId: mirror.id },
+  });
+  return mirror.id;
+}
+
 @Injectable()
 export class SuppliersRepository extends Repository {
   constructor() {
@@ -132,6 +181,12 @@ export class SuppliersRepository extends Repository {
             addressLine2: input.addressLine2?.trim() || undefined,
           },
         });
+        await syncWorksheetMirror(tx, {
+          id: supplier.id,
+          name: supplier.name,
+          isService: supplier.isService,
+          customerId: supplier.customerId,
+        });
         await tx.domainEvent.create({
           data: {
             id: randomUUID(),
@@ -198,6 +253,11 @@ export class SuppliersRepository extends Repository {
           },
         });
         if (changed.count !== 1) throw new Error("STALE_UPDATE");
+        const saved = await tx.supplier.findUniqueOrThrow({
+          where: { id },
+          select: { id: true, name: true, isService: true, customerId: true },
+        });
+        await syncWorksheetMirror(tx, saved);
         await tx.domainEvent.create({
           data: {
             id: randomUUID(),

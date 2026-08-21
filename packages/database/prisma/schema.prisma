@@ -847,6 +847,20 @@ model Supplier {
   /// default: an existing row was never recorded as one, and guessing would
   /// put companies in front of the service staff that nobody put there.
   isService          Boolean  @default(false)
+  /// The customer row that carries this partner's worksheets.
+  ///
+  /// A worksheet hangs off a customer in three places -- the sheet, the unit
+  /// (`WorksheetDepartment.customerId`) and the number's first segment
+  /// (`Customer.worksheetPartnerCode`) -- so letting a worksheet belong to a
+  /// supplier directly would mean two polymorphic relations, two constraints
+  /// Prisma cannot express, and a partner code that has to be unique ACROSS
+  /// two tables. The mirror row keeps all of that untouched.
+  ///
+  /// It is a detail of the partner, not a buyer: the customer list leaves
+  /// mirror rows out, and the partner screen is where the data is edited. It
+  /// is created and kept in step by the system, so a partner is still
+  /// recorded once, by hand, in one place.
+  customerId         String?  @unique
   /// EU-s (nem "HU") beszállítónál a nemzetközi bankszámlaszám.
   iban               String?
   /// EU-s (nem "HU") beszállítónál a bank SWIFT/BIC kódja.
@@ -872,6 +886,9 @@ model Supplier {
   preferredByExtensions ProductExtension[]
   invoices              Invoice[]
   assets                Asset[]
+  /// `Restrict`, not `SetNull`: dropping the customer row would leave the
+  /// partner's worksheets orphaned while the partner still looks intact.
+  customer              Customer?          @relation("PartnerWorksheetMirror", fields: [customerId], references: [id], onDelete: Restrict)
 
   @@index([country, isActive])
 }
@@ -1440,6 +1457,9 @@ model Customer {
   assets               Asset[]
   worksheetDepartments WorksheetDepartment[]
   worksheets           Worksheet[]
+  /// Set when this row is a service partner's mirror rather than a buyer.
+  /// The customer list uses its absence to tell the two apart.
+  partner              Supplier?             @relation("PartnerWorksheetMirror")
 
   @@index([displayName])
   @@index([email])
