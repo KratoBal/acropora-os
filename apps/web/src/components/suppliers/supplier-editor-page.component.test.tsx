@@ -74,6 +74,47 @@ describe("SupplierEditorPage", () => {
   });
 
   /**
+   * The code is the worksheet number's first segment, so it belongs to a
+   * partner we write worksheets for and to no other. Asked for only after
+   * "Szerviz" is ticked, and NOT required even then: ticking a box should not
+   * turn into "invent an abbreviation right now". The picker leaves partners
+   * without a code out instead, so the gap costs nothing until a sheet is
+   * wanted.
+   */
+  it("asks for the partner code only once the partner is a service partner", () => {
+    render(<SupplierEditorPage />);
+    expect(screen.queryByLabelText("Partnerkód")).toBeNull();
+
+    fireEvent.click(screen.getByLabelText("Szerviz"));
+
+    expect(screen.getByLabelText("Partnerkód")).toBeTruthy();
+  });
+
+  /** Two codes differing only in case would look identical on paper, and the
+   * column is unique, so the screen settles the case rather than letting the
+   * server reject what looked fine to the person typing it. */
+  it("keeps the code in the shape the number needs", async () => {
+    suppliers.create.mockResolvedValue({ id: "supplier-9" });
+
+    render(<SupplierEditorPage />);
+    fireEvent.change(screen.getByLabelText("Név"), {
+      target: { value: "Fankó Kft." },
+    });
+    fireEvent.click(screen.getByLabelText("Szerviz"));
+    fireEvent.change(screen.getByLabelText("Partnerkód"), {
+      target: { value: "fank" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Partner létrehozása" }),
+    );
+
+    await waitFor(() => expect(suppliers.create).toHaveBeenCalled());
+    expect(suppliers.create.mock.calls.at(0)?.[1]?.worksheetPartnerCode).toBe(
+      "FANK",
+    );
+  });
+
+  /**
    * Bank details are what we need in order to pay a partner, so a service-only
    * partner has none of them. The IBAN field is asserted as ABSENT and the
    * name field as PRESENT in the same test: without the second half this would

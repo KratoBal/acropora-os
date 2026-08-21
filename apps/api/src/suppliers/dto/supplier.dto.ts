@@ -5,10 +5,17 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Matches,
   Max,
   Min,
   MinLength,
 } from "class-validator";
+
+/** The worksheet number's first segment. Uppercase so that two codes differing
+ * only in case cannot both exist -- on paper they would look identical. */
+export const PARTNER_CODE = /^[A-Z0-9]{4}$/;
+export const PARTNER_CODE_MESSAGE =
+  "A partnerkód pontosan négy karakter, nagybetűkből vagy számjegyekből (például FANK).";
 
 export class CreateSupplierDto {
   @IsString() @MinLength(1) name!: string;
@@ -17,6 +24,12 @@ export class CreateSupplierDto {
    * kinds, and it must keep working unchanged. */
   @IsBoolean() @IsOptional() isSupplier?: boolean;
   @IsBoolean() @IsOptional() isService?: boolean;
+  /** Exactly four characters. Digits are allowed alongside letters: an
+   * abbreviation like `H2O1` is entirely plausible in this trade, and the rule
+   * that matters for the number's shape is the length, not the alphabet. */
+  @Matches(PARTNER_CODE, { message: PARTNER_CODE_MESSAGE })
+  @IsOptional()
+  worksheetPartnerCode?: string;
   @IsString() @IsOptional() taxNumber?: string;
   @IsString() @IsOptional() country?: string;
   @IsString() @IsOptional() email?: string;
@@ -37,6 +50,12 @@ export class UpdateSupplierDto {
   @IsString() @MinLength(1) @IsOptional() name?: string;
   @IsBoolean() @IsOptional() isSupplier?: boolean;
   @IsBoolean() @IsOptional() isService?: boolean;
+  /** `null` clears it. An empty string would be a fifth kind of nothing next
+   * to null, undefined and an absent field, and the column is unique -- two
+   * partners "without a code" stored as "" would collide. */
+  @Matches(PARTNER_CODE, { message: PARTNER_CODE_MESSAGE })
+  @IsOptional()
+  worksheetPartnerCode?: string | null;
   @IsString() @IsOptional() taxNumber?: string | null;
   @IsString() @IsOptional() country?: string;
   @IsString() @IsOptional() email?: string | null;

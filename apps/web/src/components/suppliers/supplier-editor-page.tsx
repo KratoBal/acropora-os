@@ -45,6 +45,7 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
    * that recording a supplier stays a matter of typing the name. */
   const [isSupplier, setIsSupplier] = useState(true);
   const [isService, setIsService] = useState(false);
+  const [worksheetPartnerCode, setWorksheetPartnerCode] = useState("");
   const [iban, setIban] = useState("");
   const [swiftCode, setSwiftCode] = useState("");
   const [bankAccountNumber, setBankAccountNumber] = useState("");
@@ -79,6 +80,7 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
         setPhone(next.phone ?? "");
         setIsSupplier(next.isSupplier);
         setIsService(next.isService);
+        setWorksheetPartnerCode(next.worksheetPartnerCode ?? "");
         setIban(next.iban ?? "");
         setSwiftCode(next.swiftCode ?? "");
         setBankAccountNumber(next.bankAccountNumber ?? "");
@@ -155,6 +157,9 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
       name: name.trim(),
       isSupplier,
       isService,
+      // Empty stays empty rather than becoming "": the column is unique, so
+      // two partners "without a code" would collide on the empty string.
+      worksheetPartnerCode: worksheetPartnerCode.trim() || undefined,
       taxNumber: taxNumber.trim() || undefined,
       country: country.trim().toUpperCase(),
       email: email.trim() || undefined,
@@ -177,6 +182,7 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
         setSupplier(
           await suppliersApi.update(token, supplier.id, {
             ...payload,
+            worksheetPartnerCode: payload.worksheetPartnerCode ?? null,
             taxNumber: payload.taxNumber ?? null,
             email: payload.email ?? null,
             phone: payload.phone ?? null,
@@ -361,6 +367,30 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
               Szerviz
             </label>
           </div>
+          {/* Only shown for a service partner: it is the worksheet number's
+              first segment, and a partner we only buy from never gets a
+              worksheet. Not required, on purpose -- ticking "Szerviz" should
+              not turn into "invent an abbreviation right now". The worksheet
+              picker leaves partners without a code out instead, so the gap
+              costs nothing until somebody wants a sheet. */}
+          {isService ? (
+            <div className="mt-4 sm:w-1/2">
+              <FormField
+                label="Partnerkód"
+                description="A munkalapszám első tagja, pontosan négy karakter (például FANK). Munkalap csak akkor írható a partnernek, ha ez ki van töltve."
+              >
+                <Input
+                  aria-label="Partnerkód"
+                  value={worksheetPartnerCode}
+                  maxLength={4}
+                  onChange={(event) =>
+                    setWorksheetPartnerCode(event.target.value.toUpperCase())
+                  }
+                  placeholder="FANK"
+                />
+              </FormField>
+            </div>
+          ) : null}
           {supplier ? (
             <div className="mt-4">
               <Badge variant={supplier.isActive ? "success" : "neutral"}>

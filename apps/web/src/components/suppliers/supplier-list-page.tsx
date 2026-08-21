@@ -189,8 +189,23 @@ export function SupplierListPage() {
                       className="cursor-pointer border-b last:border-0 hover:bg-slate-50"
                       onClick={() => router.push(`/partnerek/${item.id}`)}
                     >
+                      {/* The four-character code, not the internal
+                          `SZALL-20260731-204153-07DA` identifier: this column
+                          is read by people, and it is the one that appears on
+                          the worksheet number.
+
+                          A service partner without one is marked rather than
+                          left blank. It cannot be offered on a worksheet until
+                          it has a code, so the gap is a task somebody has to
+                          finish, and a blank cell says nothing about that. A
+                          partner we only buy from needs no code at all. */}
                       <td className="p-3 font-mono text-xs text-slate-600">
-                        {item.code}
+                        {item.worksheetPartnerCode ??
+                          (item.isService ? (
+                            <Badge variant="warning">Nincs kód</Badge>
+                          ) : (
+                            "—"
+                          ))}
                       </td>
                       <td className="font-semibold text-slate-900">
                         <span className="flex flex-wrap items-center gap-2">
