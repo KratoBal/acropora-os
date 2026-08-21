@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -50,5 +50,43 @@ describe("SupplierEditorPage", () => {
 
     expect(screen.getByText("Új felvitele")).toBeTruthy();
     expect(screen.queryByText("Új beszállító")).toBeNull();
+  });
+
+  /** A new record is a supplier unless someone says otherwise, the same way
+   * the column defaults. Anything else would make recording a supplier -- the
+   * common case, and the only case until now -- take an extra click. */
+  it("starts a new partner as a supplier and sends both kinds", async () => {
+    suppliers.create.mockResolvedValue({ id: "supplier-9" });
+
+    render(<SupplierEditorPage />);
+    fireEvent.change(screen.getByLabelText("Név"), {
+      target: { value: "Szerviz Bt." },
+    });
+    fireEvent.click(screen.getByLabelText("Szerviz"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Partner létrehozása" }),
+    );
+
+    await waitFor(() => expect(suppliers.create).toHaveBeenCalled());
+    const payload = suppliers.create.mock.calls.at(0)?.[1];
+    expect(payload?.isSupplier).toBe(true);
+    expect(payload?.isService).toBe(true);
+  });
+
+  /**
+   * Bank details are what we need in order to pay a partner, so a service-only
+   * partner has none of them. The IBAN field is asserted as ABSENT and the
+   * name field as PRESENT in the same test: without the second half this would
+   * also pass on a screen that failed to render at all, which is the way an
+   * empty result disguises itself as a correct one.
+   */
+  it("hides the bank block for a partner we do not buy from", () => {
+    render(<SupplierEditorPage />);
+    expect(screen.getByLabelText("Bankszámlaszám")).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText("Beszállító"));
+
+    expect(screen.queryByLabelText("Bankszámlaszám")).toBeNull();
+    expect(screen.getByLabelText("Név")).toBeTruthy();
   });
 });

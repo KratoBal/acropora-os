@@ -2,6 +2,11 @@ export interface SupplierSummary {
   id: string;
   code: string;
   name: string;
+  /** We order from this partner, and purchase invoices belong to it. */
+  isSupplier: boolean;
+  /** We write worksheets and quotes for this partner. Independent of the flag
+   * above: one company can be both, and the Partners menu holds both kinds. */
+  isService: boolean;
   taxNumber?: string;
   /** ISO 3166-1 alpha-2 országkód; "HU"-tól eltérő érték jelöli az EU-n belüli beszállítót. */
   country: string;
@@ -37,6 +42,11 @@ export interface SupplierListResponse {
 
 export interface CreateSupplierInput {
   name: string;
+  /** Both default the way the database does (supplier yes, service no) when
+   * omitted, so a caller that predates partner kinds -- the purchase invoice
+   * screen -- keeps creating suppliers without knowing about them. */
+  isSupplier?: boolean;
+  isService?: boolean;
   taxNumber?: string;
   country?: string;
   email?: string;
@@ -55,6 +65,8 @@ export interface CreateSupplierInput {
 
 export interface UpdateSupplierInput {
   name?: string;
+  isSupplier?: boolean;
+  isService?: boolean;
   taxNumber?: string | null;
   country?: string;
   email?: string | null;

@@ -52,6 +52,8 @@ function response(page: number): SupplierListResponse {
         id: "supplier-1",
         code: "BESZ-1",
         name: "Aqua Kereskedés Kft.",
+        isSupplier: true,
+        isService: false,
         country: "HU",
         isActive: true,
         createdAt: "2026-08-19T10:00:00.000Z",
