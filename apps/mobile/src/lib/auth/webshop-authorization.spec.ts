@@ -32,6 +32,18 @@ describe("getWebshopCapabilities", () => {
     assert.equal(capabilities.ordersView, false);
   });
 
+  /**
+   * Service partners are the technician's working context, so the phone shows
+   * the list. Editing stays off: the server grants SERVICE `partners.view` and
+   * not `partners.manage`, and this gate has to agree with it -- the two sides
+   * are kept in step by hand, and nothing else reports a disagreement.
+   */
+  it("lets the service role see partners without editing them", () => {
+    const capabilities = getWebshopCapabilities("SERVICE");
+    assert.equal(capabilities.partnersView, true);
+    assert.equal(capabilities.partnersManage, false);
+  });
+
   it("keeps viewer access read-only", () => {
     const capabilities = getWebshopCapabilities("VIEWER");
     assert.equal(capabilities.workspace, true);

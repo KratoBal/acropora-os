@@ -23,19 +23,19 @@ export class SuppliersController {
   constructor(private readonly service: SuppliersService) {}
 
   @Get()
-  @RequirePermissions(PERMISSIONS.PURCHASING_VIEW)
+  @RequirePermissions(PERMISSIONS.PARTNERS_VIEW)
   list(@Query() query: SupplierListQueryDto) {
     return this.service.list(query);
   }
 
   @Get(":id")
-  @RequirePermissions(PERMISSIONS.PURCHASING_VIEW)
+  @RequirePermissions(PERMISSIONS.PARTNERS_VIEW)
   detail(@Param("id") id: string) {
     return this.service.detail(id);
   }
 
   @Post()
-  @RequirePermissions(PERMISSIONS.PURCHASING_MANAGE)
+  @RequirePermissions(PERMISSIONS.PARTNERS_MANAGE)
   create(
     @Body() input: CreateSupplierDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -44,7 +44,7 @@ export class SuppliersController {
   }
 
   @Patch(":id")
-  @RequirePermissions(PERMISSIONS.PURCHASING_MANAGE)
+  @RequirePermissions(PERMISSIONS.PARTNERS_MANAGE)
   update(
     @Param("id") id: string,
     @Body() input: UpdateSupplierDto,

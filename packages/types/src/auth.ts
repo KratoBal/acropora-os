@@ -23,6 +23,16 @@ export const PERMISSIONS = {
   INVENTORY_MANAGE: "inventory.manage",
   PURCHASING_VIEW: "purchasing.view",
   PURCHASING_MANAGE: "purchasing.manage",
+  /// A Partnerek menüpont: beszállítók és szerviz partnerek. Szándékosan
+  /// KÜLÖN a beszerzési jogtól, mert a partner már nem csak beszerzési
+  /// fogalom: szerviz partnernek munkalap és ajánlat is készül, a beszerzés
+  /// pedig egy szervizesnek nem tartozik rá. Amíg a kettő egy jog volt, a
+  /// SERVICE szerepkör a partnereket sem tudta listázni.
+  PARTNERS_VIEW: "partners.view",
+  /// A látás és az írás azért két jog, mert a bővítés iránya ismert: a
+  /// szervizesek "egyelőre csak lássák" (Balázs döntése, 2026-08-21). Egy
+  /// későbbi engedés így szerepkör-kiosztás lesz, nem újabb jog bevezetése.
+  PARTNERS_MANAGE: "partners.manage",
   FINANCE_VIEW: "finance.view",
   FINANCE_MANAGE: "finance.manage",
   SERVICE_VIEW: "service.view",
@@ -61,6 +71,7 @@ const VIEW_PERMISSIONS: readonly Permission[] = [
   PERMISSIONS.CUSTOMERS_VIEW,
   PERMISSIONS.INVENTORY_VIEW,
   PERMISSIONS.PURCHASING_VIEW,
+  PERMISSIONS.PARTNERS_VIEW,
   PERMISSIONS.FINANCE_VIEW,
   PERMISSIONS.SERVICE_VIEW,
   PERMISSIONS.AQUARIUMS_VIEW,
@@ -99,12 +110,18 @@ export const ROLE_PERMISSIONS: Readonly<
     PERMISSIONS.INVENTORY_MANAGE,
     PERMISSIONS.PURCHASING_VIEW,
     PERMISSIONS.PURCHASING_MANAGE,
+    PERMISSIONS.PARTNERS_VIEW,
+    PERMISSIONS.PARTNERS_MANAGE,
   ],
   SERVICE: [
     PERMISSIONS.DASHBOARD_VIEW,
     PERMISSIONS.TASKS_VIEW,
     PERMISSIONS.PRODUCTS_VIEW,
     PERMISSIONS.CUSTOMERS_VIEW,
+    /// Csak nézni. A szerviz partner a szervizesnek munkakörnyezet, de a
+    /// törzsadatát nem ő gondozza (Balázs döntése, 2026-08-21: "a
+    /// szervizesek csak lássák egyelőre"), ezért PARTNERS_MANAGE nincs.
+    PERMISSIONS.PARTNERS_VIEW,
     PERMISSIONS.SERVICE_VIEW,
     PERMISSIONS.SERVICE_MANAGE,
     PERMISSIONS.AQUARIUMS_VIEW,

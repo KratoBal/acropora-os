@@ -56,7 +56,7 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
     null,
   );
   const canManage = Boolean(
-    session && hasPermission(session.user, PERMISSIONS.PURCHASING_MANAGE),
+    session && hasPermission(session.user, PERMISSIONS.PARTNERS_MANAGE),
   );
   const token = session?.token ?? "";
   const isEu = country.trim().toUpperCase() !== "HU";
@@ -126,8 +126,8 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
     return (
       <Alert
         variant="danger"
-        title="Nincs jogosultságod beszállító rögzítéséhez"
-        description="A beszállítók kezeléséhez purchasing.manage szükséges."
+        title="Nincs jogosultságod partner rögzítéséhez"
+        description="A partnerek kezeléséhez partners.manage szükséges."
       />
     );
   if (loading)
