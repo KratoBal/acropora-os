@@ -154,6 +154,19 @@ export function SupplierListPage() {
                 <option value="INACTIVE">Inaktív</option>
                 <option value="ALL">Mind</option>
               </Select>
+              {/* "Mind" is the absence of the parameter rather than a third
+                  value: a partner can be both kinds at once, so SUPPLIER and
+                  SERVICE are not a partition and an "ALL" value would suggest
+                  they are. */}
+              <Select
+                aria-label="Partner típusa"
+                value={params.get("kind") ?? ""}
+                onChange={(event) => filter("kind", event.target.value)}
+              >
+                <option value="">Mind</option>
+                <option value="SUPPLIER">Beszállító</option>
+                <option value="SERVICE">Szerviz</option>
+              </Select>
             </div>
           </Card>
           {data.items.length ? (
@@ -180,7 +193,22 @@ export function SupplierListPage() {
                         {item.code}
                       </td>
                       <td className="font-semibold text-slate-900">
-                        {item.name}
+                        <span className="flex flex-wrap items-center gap-2">
+                          {/* The name keeps an element of its own: next to the
+                              labels a bare text node would merge with them, and
+                              a search for the name alone would stop matching. */}
+                          <span>{item.name}</span>
+                          {/* Both can show at once, because a partner can be
+                              both, and that is the case worth seeing at a
+                              glance. A partner that is neither shows no label
+                              rather than a made-up one. */}
+                          {item.isSupplier ? (
+                            <Badge variant="info">Beszállító</Badge>
+                          ) : null}
+                          {item.isService ? (
+                            <Badge variant="warning">Szerviz</Badge>
+                          ) : null}
+                        </span>
                         {item.taxNumber ? (
                           <div className="text-xs font-normal text-slate-500">
                             {item.taxNumber}

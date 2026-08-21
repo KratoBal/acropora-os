@@ -59,6 +59,10 @@ export class SupplierListQueryDto {
   @Type(() => Number) @IsInt() @Min(1) @Max(100) @IsOptional() pageSize = 25;
   @IsString() @IsOptional() search?: string;
   @IsIn(["DOMESTIC", "EU"]) @IsOptional() countryScope?: "DOMESTIC" | "EU";
+  /** Which kind of partner to list. Left out means both, which is what the
+   * screen calls "Mind". Resolved in the database rather than by filtering an
+   * already-paged result, so the page count stays truthful. */
+  @IsIn(["SUPPLIER", "SERVICE"]) @IsOptional() kind?: "SUPPLIER" | "SERVICE";
   @IsIn(["ACTIVE", "INACTIVE", "ALL"]) @IsOptional() status:
     "ACTIVE" | "INACTIVE" | "ALL" = "ACTIVE";
 }

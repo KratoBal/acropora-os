@@ -107,8 +107,8 @@ export function CustomerListPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Vevők"
-        description="A UNAS webshopból szinkronizált és az általunk rögzített partnerek."
+        title="Webshop vásárló"
+        description="A UNAS webshopból szinkronizált és a kézzel rögzített vásárlók. A beszállítók és a szerviz partnerek a Partnerek menüpontban vannak."
         actions={
           canManage ? (
             <Link href="/vevok/uj">

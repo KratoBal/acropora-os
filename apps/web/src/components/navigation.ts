@@ -45,7 +45,7 @@ export const businessNavigation: AppNavigationItem[] = [
   },
   {
     href: "/vevok",
-    label: "Vevők",
+    label: "Webshop vásárló",
     icon: "users",
     permission: PERMISSIONS.CUSTOMERS_VIEW,
   },

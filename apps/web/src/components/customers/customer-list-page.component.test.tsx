@@ -79,6 +79,15 @@ describe("CustomerListPage paging", () => {
     api.sync.mockReset().mockResolvedValue({});
   });
 
+  /** These are webshop buyers; the partners we work for are a different screen
+   * now. The menu label carries the same name and is asserted in its own spec:
+   * renaming one and leaving the other is the half-finished state. */
+  it("calls the screen what it holds", async () => {
+    render(<CustomerListPage />);
+
+    expect(await screen.findByText("Webshop vásárló")).toBeTruthy();
+  });
+
   it("moves to the next page instead of returning to the first", async () => {
     render(<CustomerListPage />);
     await screen.findByText("Fővárosi Állat- És Növénykert");
