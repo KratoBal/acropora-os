@@ -15,6 +15,7 @@ const worksheets = vi.hoisted(() => ({
   createDepartment: vi.fn(),
   create: vi.fn(),
   updateDraft: vi.fn(),
+  detail: vi.fn(),
 }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
@@ -73,6 +74,44 @@ describe("WorksheetEditorPage partner picker", () => {
     auth.session = session;
     customers.list.mockReset();
     worksheets.departments.mockReset().mockResolvedValue({ items: [] });
+    worksheets.detail.mockReset();
+  });
+
+  /** An existing worksheet showed "Válassz partnert" where its partner's name
+   * belongs. The partner is not in the customer list because that list is not
+   * loaded at all while editing, so the disabled Select had no option matching
+   * the assigned id and fell back to the placeholder.
+   *
+   * The name is asserted rather than the absence of the placeholder: the old
+   * code rendered the placeholder AND no name, so only checking for a missing
+   * option would have passed on a screen that shows nothing. The call count is
+   * asserted too, because loading every customer to display one name would be
+   * the other way to make this pass, and a worse one. */
+  it("shows the partner of an existing worksheet without loading the customer list", async () => {
+    worksheets.detail.mockResolvedValue({
+      id: "ws-1",
+      customer: {
+        id: "customer-42",
+        customerNumber: "V-0042",
+        displayName: "Fankó Kft.",
+        worksheetPartnerCode: "FANK",
+      },
+      department: { id: "dep-1", code: "BIO", name: "Bio", isActive: true },
+      currentVersion: {
+        subject: "Szivattyú csere",
+        description: null,
+        issueDate: null,
+        fulfillmentDate: null,
+        dueDate: null,
+        lines: [],
+      },
+    });
+
+    render(<WorksheetEditorPage worksheetId="ws-1" />);
+
+    const selected = await screen.findByRole("option", { name: "Fankó Kft." });
+    expect((selected as HTMLOptionElement).selected).toBe(true);
+    expect(customers.list).not.toHaveBeenCalled();
   });
 
   /** The reported defect: the picker asked for a single page of 100 and the

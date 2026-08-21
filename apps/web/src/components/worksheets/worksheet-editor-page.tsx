@@ -16,6 +16,7 @@ import {
   PERMISSIONS,
   type CustomerSummary,
   type WorksheetContentInput,
+  type WorksheetCustomerSummary,
   type WorksheetDepartmentSummary,
 } from "@acropora/types";
 import Link from "next/link";
@@ -97,6 +98,15 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
   );
 
   const [customers, setCustomers] = useState<CustomerSummary[]>([]);
+  /** The partner of a worksheet that already exists. It comes from the
+   * worksheet itself rather than from the customer list, because the list is
+   * deliberately not loaded while editing: the field is read-only there, so
+   * fetching every customer to display one name would be pages of requests for
+   * nothing. Without this the disabled Select had no option matching the
+   * assigned id and fell back to the placeholder, so an existing worksheet
+   * looked like it had no partner at all. */
+  const [assignedCustomer, setAssignedCustomer] =
+    useState<WorksheetCustomerSummary | null>(null);
   const [departments, setDepartments] = useState<WorksheetDepartmentSummary[]>(
     [],
   );
@@ -180,6 +190,7 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
       .then((detail) => {
         const current = detail.currentVersion;
         setCustomerId(detail.customer.id);
+        setAssignedCustomer(detail.customer);
         setDepartmentId(detail.department.id);
         setHeader({
           subject: current.subject,
@@ -271,6 +282,13 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
       </div>
     );
 
+  /** One partner on an existing worksheet, every selectable partner on a new
+   * one. The two never mix: the field cannot be changed once the worksheet
+   * exists, because the number was built from this partner. */
+  const partnerOptions: { id: string; displayName: string }[] = assignedCustomer
+    ? [assignedCustomer]
+    : customers;
+
   const canSubmit =
     Boolean(header.subject.trim()) &&
     (Boolean(worksheetId) || (Boolean(customerId) && Boolean(departmentId)));
@@ -313,7 +331,7 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
             }}
           >
             <option value="">Válassz partnert</option>
-            {customers.map((customer) => (
+            {partnerOptions.map((customer) => (
               <option key={customer.id} value={customer.id}>
                 {customer.displayName}
               </option>
