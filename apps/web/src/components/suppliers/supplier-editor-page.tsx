@@ -14,6 +14,7 @@ import {
   hasPermission,
   PERMISSIONS,
   type SupplierSummary,
+  type WorksheetDepartmentSummary,
   type ViesVatLookupResult,
 } from "@acropora/types";
 import Link from "next/link";
@@ -46,6 +47,9 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
   const [isSupplier, setIsSupplier] = useState(true);
   const [isService, setIsService] = useState(false);
   const [worksheetPartnerCode, setWorksheetPartnerCode] = useState("");
+  const [units, setUnits] = useState<WorksheetDepartmentSummary[]>([]);
+  const [newUnit, setNewUnit] = useState({ code: "", name: "" });
+  const [unitError, setUnitError] = useState<string | null>(null);
   const [iban, setIban] = useState("");
   const [swiftCode, setSwiftCode] = useState("");
   const [bankAccountNumber, setBankAccountNumber] = useState("");
@@ -81,6 +85,10 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
         setIsSupplier(next.isSupplier);
         setIsService(next.isService);
         setWorksheetPartnerCode(next.worksheetPartnerCode ?? "");
+        void suppliersApi
+          .units(token, next.id)
+          .then((response) => setUnits(response.items))
+          .catch(() => setUnitError("Az alegységek nem tölthetők be."));
         setIban(next.iban ?? "");
         setSwiftCode(next.swiftCode ?? "");
         setBankAccountNumber(next.bankAccountNumber ?? "");
@@ -217,6 +225,28 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
       }
     } finally {
       setBusy(false);
+    }
+  };
+
+  /** A unit is added on its own, not with the partner's other fields: it is a
+   * separate record, and folding it into the save would mean a half-typed unit
+   * could block a name change that has nothing to do with it. */
+  const addUnit = async () => {
+    if (!supplier) return;
+    setUnitError(null);
+    try {
+      const created = await suppliersApi.createUnit(token, supplier.id, {
+        code: newUnit.code.trim().toUpperCase(),
+        name: newUnit.name.trim(),
+      });
+      setUnits((current) => [...current, created]);
+      setNewUnit({ code: "", name: "" });
+    } catch (cause) {
+      setUnitError(
+        cause instanceof Error
+          ? cause.message
+          : "Az alegység felvitele nem sikerült.",
+      );
     }
   };
 
@@ -404,6 +434,81 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
             and showing the block anyway would read as data somebody forgot to
             fill in. Nothing here was ever required, so hiding it takes no
             validation away. */}
+        {/* Only for a partner that already exists: a unit hangs off the
+            partner, and until the partner is saved there is nothing to hang it
+            on. Only for a service partner, because a unit gives the worksheet
+            number its middle segment, and a partner we only buy from never
+            gets a worksheet. */}
+        {supplier && isService ? (
+          <Card className="p-6">
+            <h2 className="font-semibold">Alegységek</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Az alegység kódja a munkalapszám középső tagja (például a BIO a
+              FANK-BIO-2026-001 számban).
+            </p>
+            {unitError ? (
+              <Alert variant="danger" title="Hiba" description={unitError} />
+            ) : null}
+            {units.length ? (
+              <ul className="mt-4 space-y-1 text-sm">
+                {units.map((unit) => (
+                  <li key={unit.id} className="flex items-center gap-2">
+                    <span className="font-mono text-xs text-slate-600">
+                      {unit.code}
+                    </span>
+                    {/* The name keeps an element of its own: beside the code a
+                        bare text node merges with it, and a search for the
+                        name alone stops matching. */}
+                    <span>{unit.name}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-4 text-sm text-slate-500">
+                Ehhez a partnerhez még nincs alegység.
+              </p>
+            )}
+            <div className="mt-4 grid gap-4 sm:grid-cols-[8rem_1fr_auto]">
+              <FormField label="Kód">
+                <Input
+                  aria-label="Alegység kódja"
+                  value={newUnit.code}
+                  maxLength={3}
+                  onChange={(event) =>
+                    setNewUnit((current) => ({
+                      ...current,
+                      code: event.target.value.toUpperCase(),
+                    }))
+                  }
+                  placeholder="BIO"
+                />
+              </FormField>
+              <FormField label="Megnevezés">
+                <Input
+                  aria-label="Alegység neve"
+                  value={newUnit.name}
+                  onChange={(event) =>
+                    setNewUnit((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
+                  }
+                  placeholder="Biológiai labor"
+                />
+              </FormField>
+              <div className="flex items-end">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={!newUnit.code.trim() || !newUnit.name.trim()}
+                  onClick={() => void addUnit()}
+                >
+                  Hozzáadás
+                </Button>
+              </div>
+            </div>
+          </Card>
+        ) : null}
         {isSupplier ? (
           <Card className="p-6">
             <h2 className="font-semibold">Bankszámla</h2>
