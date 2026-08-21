@@ -84,6 +84,7 @@ function worksheetRow(
     numberYear: null,
     sequence: null,
     customerId: "customer-1",
+    continuesWorksheetId: null,
     departmentId: "department-1",
     createdById: "user-1",
     createdAt: CREATED_AT,

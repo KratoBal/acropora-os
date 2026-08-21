@@ -2241,6 +2241,18 @@ model Worksheet {
   customerId   String
   departmentId String
   createdById  String?
+  /// A lap, aminek ez a folytatása.
+  ///
+  /// Egy aláírt munkalap végleges: nem készül róla új verzió, a munka
+  /// folytatása ÚJ lap. Az új lap a SAJÁT sorszámát kapja ugyanabból a
+  /// sorozatból, mert két külön dokumentum, amit külön írnak alá, nem
+  /// osztozhat egy számon.
+  ///
+  /// NEM egyedi, tehát egy lapnak több folytatása is lehet. Az egyediség
+  /// tiltaná azt az esetet, amikor egy aláírt lap után két külön munka
+  /// következik, és arra nincs döntés -- egy megkötés, ami valódi esetet zár
+  /// ki, drágább, mint egy lánc, ami elágazhat.
+  continuesWorksheetId String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2250,10 +2262,18 @@ model Worksheet {
   createdBy  User?               @relation("WorksheetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   versions   WorksheetVersion[]
   assignees  WorksheetAssignee[]
+  /// `Restrict`: a folytatás a régi lapra hivatkozik mint előzményre, és egy
+  /// lánc, aminek eltűnt az egyik vége, könyvelésnél használhatatlan.
+  continues     Worksheet?  @relation("WorksheetContinuation", fields: [continuesWorksheetId], references: [id], onDelete: Restrict)
+  /// Amit ebből a lapból folytattak. A visszahivatkozás azért kell, mert a
+  /// RÉGI lapon is látszania kell, hogy van folytatása -- egy lánc, aminek
+  /// csak az egyik vége ismeri a másikat, nem lánc.
+  continuedBy   Worksheet[] @relation("WorksheetContinuation")
 
   @@index([customerId, createdAt])
   @@index([departmentId])
   @@index([numberYear, sequence])
+  @@index([continuesWorksheetId])
 }
 
 /// Ki dolgozik a munkalapon. Kapcsolótábla és nem `assigneeId` mező, mert
