@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { SupplierListResponse, Session } from "@acropora/types";
 import { useSyncExternalStore } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -87,6 +93,51 @@ describe("SupplierListPage paging", () => {
 
     expect(screen.getByRole("button", { name: "Új felvitele" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Új beszállító" })).toBeNull();
+  });
+
+  /** The list holds two kinds now, and which one a row is has to be readable
+   * without opening it. Both labels are asserted on one row that carries both,
+   * because that is the case a single-label design would get wrong. */
+  it("labels each partner with the kinds it actually is", async () => {
+    api.list.mockResolvedValue({
+      items: [
+        {
+          ...response(1).items[0]!,
+          name: "Kettős Kft.",
+          isSupplier: true,
+          isService: true,
+        },
+      ],
+      pagination: { page: 1, pageSize: 25, totalItems: 1, totalPages: 1 },
+    });
+
+    render(<SupplierListPage />);
+    await screen.findByText("Kettős Kft.");
+
+    // Scoped to the row on purpose: the filter above the table offers the same
+    // two words as options, so an unscoped search would pass on the filter
+    // alone and say nothing about the row.
+    const row = within(screen.getByRole("row", { name: /Kettős Kft\./ }));
+    expect(row.getByText("Beszállító")).toBeTruthy();
+    expect(row.getByText("Szerviz")).toBeTruthy();
+  });
+
+  /** The filter has to reach the endpoint, because filtering an already-paged
+   * result would leave the page count describing a different list than the one
+   * on screen. */
+  it("asks the endpoint for one kind instead of narrowing the page", async () => {
+    render(<SupplierListPage />);
+    await screen.findByText("Aqua Kereskedés Kft.");
+
+    fireEvent.change(screen.getByLabelText("Partner típusa"), {
+      target: { value: "SERVICE" },
+    });
+
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
+    const target = String(navigation.replace.mock.calls.at(-1)?.[0]);
+    const sent = new URLSearchParams(target.split("?")[1]);
+    expect(sent.get("kind")).toBe("SERVICE");
+    expect(sent.get("page")).toBe("1");
   });
 
   it("moves to the next page instead of returning to the first", async () => {
