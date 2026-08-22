@@ -301,15 +301,6 @@ describe(
       await repository.close(id, actorUserId, new Date());
       const numberAfterClose = (await numberOf(id)).number;
 
-      await repository.sign({
-        worksheetId: id,
-        decision: "ACCEPTED",
-        signerName: "Kovács Béla",
-        note: null,
-        actorUserId,
-        now: new Date(),
-      });
-
       const amended = await repository.amend({
         worksheetId: id,
         content: content({
@@ -342,12 +333,13 @@ describe(
       const first = versions[0]!;
       const second = versions[1]!;
 
-      // Az első verzió tartalma és aláírása változatlan: az aláírás ahhoz a
-      // szöveghez tartozik, amit aláírtak.
-      assert.equal(first.status, "SIGNED");
+      // A lezárt verzió tartalma változatlan marad: az új verzió MELLÉ kerül,
+      // nem a régi helyére. A lap itt lezárt, de még aláíratlan - aláírás után
+      // ez az út már nem járható, arról a következő eset szól.
+      assert.equal(first.status, "AWAITING_SIGNATURE");
       assert.equal(first.subject, "Kompresszorok bevizsgálása");
       assert.equal(first.lines[0]?.quantity.toString(), "2");
-      assert.equal(first.signature?.signerName, "Kovács Béla");
+      assert.equal(first.signature, null);
 
       // Az új verzió aláíratlan piszkozat, kötelező indoklással.
       assert.equal(second.status, "DRAFT");
@@ -359,9 +351,18 @@ describe(
       assert.equal(second.lines[0]?.quantity.toString(), "3");
     });
 
-    it("puts a re-closed version back into awaiting signature, not into signed", async () => {
+    /**
+     * Az aláírt lap végleges: sem szerkesztéssel, sem új verzióval nem
+     * módosítható. Korábban itt az állt, hogy egy aláírt lapból KÉSZÜLHET új
+     * verzió - a kód azóta a mai szabályt valósítja meg, a teszt viszont a
+     * régit írta le, és ezt a CI fogta meg, nem a helyi futás.
+     *
+     * A folytatás ÚJ munkalap, ami erre hivatkozik; azt a `continueFrom` fedi.
+     */
+    it("refuses a new version once the worksheet has been signed", async () => {
       const id = await createDraft(bioDepartmentId);
       await repository.close(id, actorUserId, new Date());
+      const numberAfterClose = (await numberOf(id)).number;
       await repository.sign({
         worksheetId: id,
         decision: "ACCEPTED",
@@ -370,23 +371,25 @@ describe(
         actorUserId,
         now: new Date(),
       });
-      await repository.amend({
+
+      const amended = await repository.amend({
         worksheetId: id,
         content: content({ subject: "Javított tárgy" }),
         changeReason: "Elírás javítása.",
         actorUserId,
       });
-      await repository.close(id, actorUserId, new Date());
+      assert.deepEqual(amended, { ok: false, reason: "SIGNED" });
 
+      // A visszautasítás nem hagyhat maga után nyomot: se új verzió, se
+      // megbolygatott szám. Egy elutasítás, ami közben írt is, rosszabb, mint
+      // ha átengedte volna.
       const versions = await prisma.worksheetVersion.findMany({
         where: { worksheetId: id },
         orderBy: { version: "asc" },
         select: { version: true, status: true },
       });
-      assert.deepEqual(versions, [
-        { version: 1, status: "SIGNED" },
-        { version: 2, status: "AWAITING_SIGNATURE" },
-      ]);
+      assert.deepEqual(versions, [{ version: 1, status: "SIGNED" }]);
+      assert.equal((await numberOf(id)).number, numberAfterClose);
     });
 
     it("refuses a new version while the worksheet is still a draft", async () => {
