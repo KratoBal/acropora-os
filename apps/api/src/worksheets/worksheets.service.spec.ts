@@ -253,7 +253,26 @@ describe("WorksheetsService", () => {
       service.create(contentDto(), "user-1"),
       (error: unknown) =>
         error instanceof BadRequestException &&
-        error.message.includes("részleg"),
+        error.message.includes("alegység"),
+    );
+  });
+
+  /**
+   * The id is the partner's mirror customer row, and every path that reaches
+   * here started from a partner: the partner page, or the worksheet's partner
+   * picker. Telling the reader the customer was not found names a record they
+   * never chose.
+   */
+  it("names the partner, not the customer, when the record is missing", async () => {
+    const service = new WorksheetsService(
+      repository({ customer: async () => null }),
+    );
+    await assert.rejects(
+      service.create(contentDto(), "user-1"),
+      (error: unknown) =>
+        error instanceof NotFoundException &&
+        error.message.includes("partner") &&
+        !/vev[őo]/i.test(error.message),
     );
   });
 
