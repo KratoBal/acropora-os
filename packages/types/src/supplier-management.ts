@@ -7,6 +7,10 @@ export interface SupplierSummary {
   /** We write worksheets and quotes for this partner. Independent of the flag
    * above: one company can be both, and the Partners menu holds both kinds. */
   isService: boolean;
+  /** The worksheet number's first segment (`FANK` in `FANK-BIO-2026-001`).
+   * Four characters. Absent until somebody fills it in: a service partner
+   * without one is offered by nothing that would need it. */
+  worksheetPartnerCode?: string;
   taxNumber?: string;
   /** ISO 3166-1 alpha-2 országkód; "HU"-tól eltérő érték jelöli az EU-n belüli beszállítót. */
   country: string;
@@ -47,6 +51,7 @@ export interface CreateSupplierInput {
    * screen -- keeps creating suppliers without knowing about them. */
   isSupplier?: boolean;
   isService?: boolean;
+  worksheetPartnerCode?: string;
   taxNumber?: string;
   country?: string;
   email?: string;
@@ -67,6 +72,7 @@ export interface UpdateSupplierInput {
   name?: string;
   isSupplier?: boolean;
   isService?: boolean;
+  worksheetPartnerCode?: string | null;
   taxNumber?: string | null;
   country?: string;
   email?: string | null;

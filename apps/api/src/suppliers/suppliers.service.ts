@@ -44,6 +44,16 @@ export class SuppliersService {
   }
 
   private map(error: unknown): never {
+    // The holder's name travels in the error so the message can say it. "Ez a
+    // kód foglalt" sends the person hunting through a list; naming the partner
+    // ends the question there and then.
+    if (
+      error instanceof Error &&
+      error.message.startsWith("PARTNER_CODE_TAKEN:")
+    )
+      throw new ConflictException(
+        `Ezt a partnerkódot már használja: ${error.message.slice("PARTNER_CODE_TAKEN:".length)}. Válassz másikat.`,
+      );
     if (error instanceof Error && error.message === "STALE_UPDATE")
       throw new ConflictException(
         "A beszállítót másik felhasználó módosította. Frissítsd az oldalt.",

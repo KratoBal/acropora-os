@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { syncWorksheetMirror } from "./suppliers.repository.js";
+import {
+  assertPartnerCodeFree,
+  syncWorksheetMirror,
+} from "./suppliers.repository.js";
 
 interface Call {
   table: string;
@@ -42,7 +45,7 @@ describe("the service partner's mirror customer", () => {
    * partner screen, the mirror left alone, and every worksheet written
    * afterwards carrying the old name. Nothing errors, so nothing reports it.
    */
-  it("carries a renamed partner's name over to the mirror", async () => {
+  it("carries a renamed partner's name and code over to the mirror", async () => {
     const calls: Call[] = [];
 
     await syncWorksheetMirror(stubTransaction(calls), {
@@ -50,6 +53,7 @@ describe("the service partner's mirror customer", () => {
       name: "Új Név Kft.",
       isService: true,
       customerId: "customer-7",
+      worksheetPartnerCode: "UJNV",
     });
 
     assert.deepEqual(calls, [
@@ -58,7 +62,13 @@ describe("the service partner's mirror customer", () => {
         action: "update",
         args: {
           where: { id: "customer-7" },
-          data: { displayName: "Új Név Kft.", companyName: "Új Név Kft." },
+          data: {
+            displayName: "Új Név Kft.",
+            companyName: "Új Név Kft.",
+            // The worksheet number is built from this copy, so a code left
+            // behind here would number new sheets after the old abbreviation.
+            worksheetPartnerCode: "UJNV",
+          },
         },
       },
     ]);
@@ -112,6 +122,44 @@ describe("the service partner's mirror customer", () => {
 
     assert.deepEqual(calls, []);
     assert.equal(kept, "customer-7");
+  });
+
+  /**
+   * A code taken by ANOTHER customer has to be caught here, not by the
+   * database. It is the mirror that makes this possible at all: the partner's
+   * code is copied onto a customer row where the same column is already
+   * unique, so a check that only looked at the partner table would pass and
+   * then fail on the write, with a message naming a constraint.
+   */
+  it("refuses a code another customer already holds, and names them", async () => {
+    const tx = {
+      supplier: { findFirst: async () => null },
+      customer: { findFirst: async () => ({ displayName: "Fankó Kft." }) },
+    } as never;
+
+    await assert.rejects(
+      () => assertPartnerCodeFree(tx, "FANK", "supplier-1"),
+      /PARTNER_CODE_TAKEN:Fankó Kft\./,
+    );
+  });
+
+  /** Saving a partner without changing its code must not trip over its own
+   * row: the check excludes the partner being saved, on both sides. */
+  it("lets a partner keep the code it already holds", async () => {
+    const seen: string[] = [];
+    const tx = {
+      supplier: {
+        findFirst: async (args: { where: Record<string, unknown> }) => {
+          seen.push(JSON.stringify(args.where.NOT));
+          return null;
+        },
+      },
+      customer: { findFirst: async () => null },
+    } as never;
+
+    await assertPartnerCodeFree(tx, "FANK", "supplier-1");
+
+    assert.deepEqual(seen, ['{"id":"supplier-1"}']);
   });
 
   /** A partner that was never a service partner gets no row at all: the point

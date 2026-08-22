@@ -122,6 +122,46 @@ describe("SupplierListPage paging", () => {
     expect(row.getByText("Szerviz")).toBeTruthy();
   });
 
+  /**
+   * A service partner cannot be given a worksheet until it has a code, so the
+   * gap is a task somebody has to finish. A blank cell says nothing about
+   * that, and the person looking at the list is the one who can fix it.
+   *
+   * The pair matters: the row WITH a code must show the code, or "always show
+   * the warning" would pass this too.
+   */
+  it("marks the service partner whose code is still missing", async () => {
+    api.list.mockResolvedValue({
+      items: [
+        {
+          ...response(1).items[0]!,
+          id: "supplier-a",
+          name: "Kódos Kft.",
+          isService: true,
+          worksheetPartnerCode: "KODO",
+        },
+        {
+          ...response(1).items[0]!,
+          id: "supplier-b",
+          name: "Kódtalan Kft.",
+          isService: true,
+          worksheetPartnerCode: undefined,
+        },
+      ],
+      pagination: { page: 1, pageSize: 25, totalItems: 2, totalPages: 1 },
+    });
+
+    render(<SupplierListPage />);
+    await screen.findByText("Kódtalan Kft.");
+
+    const withCode = within(screen.getByRole("row", { name: /Kódos Kft\./ }));
+    expect(withCode.getByText("KODO")).toBeTruthy();
+    expect(withCode.queryByText("Nincs kód")).toBeNull();
+
+    const without = within(screen.getByRole("row", { name: /Kódtalan Kft\./ }));
+    expect(without.getByText("Nincs kód")).toBeTruthy();
+  });
+
   /** The filter has to reach the endpoint, because filtering an already-paged
    * result would leave the page count describing a different list than the one
    * on screen. */

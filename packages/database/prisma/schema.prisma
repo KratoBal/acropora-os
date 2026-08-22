@@ -847,6 +847,22 @@ model Supplier {
   /// default: an existing row was never recorded as one, and guessing would
   /// put companies in front of the service staff that nobody put there.
   isService          Boolean  @default(false)
+  /// The partner's abbreviation, and the worksheet number's first segment
+  /// (`FANK` in `FANK-BIO-2026-001`). Four characters, because the number has
+  /// to say at a glance whose sheet it is, and a segment of varying length
+  /// makes two numbers hard to compare.
+  ///
+  /// Narrower than the customer side's `VarChar(8)` on purpose: that column
+  /// already holds data and is not being narrowed, but a new column with room
+  /// to spare would make "four characters" a habit rather than a rule, and the
+  /// first five-character code would quietly change the shape of every number
+  /// written afterwards.
+  ///
+  /// Null until someone fills it in. A partner can be marked as a service
+  /// partner without one -- ticking a box should not turn into a decision at
+  /// the wrong moment -- and the worksheet picker leaves those partners out
+  /// instead, so nobody can start a sheet that cannot be closed.
+  worksheetPartnerCode String? @unique @db.VarChar(4)
   /// The customer row that carries this partner's worksheets.
   ///
   /// A worksheet hangs off a customer in three places -- the sheet, the unit
