@@ -18,6 +18,7 @@ function toSummary(supplier: Supplier): SupplierSummary {
     name: supplier.name,
     isSupplier: supplier.isSupplier,
     isService: supplier.isService,
+    worksheetPartnerCode: supplier.worksheetPartnerCode ?? undefined,
     taxNumber: supplier.taxNumber ?? undefined,
     country: supplier.country,
     email: supplier.email ?? undefined,
@@ -36,6 +37,101 @@ function toSummary(supplier: Supplier): SupplierSummary {
     createdAt: supplier.createdAt.toISOString(),
     updatedAt: supplier.updatedAt.toISOString(),
   };
+}
+
+/**
+ * The code has to be free on BOTH sides, and the reason is the mirror: the
+ * partner's code is copied onto its customer row, where the same column is
+ * already unique. Checking only the partner table would let a save pass
+ * validation and then fail at the database with a message naming a constraint
+ * instead of a company.
+ *
+ * The error names the holder on purpose. "Ez a kód foglalt" sends the person
+ * hunting through a list; naming it ends the question.
+ */
+export async function assertPartnerCodeFree(
+  tx: Prisma.TransactionClient,
+  code: string,
+  supplierId: string | null,
+) {
+  const partner = await tx.supplier.findFirst({
+    where: {
+      worksheetPartnerCode: code,
+      ...(supplierId ? { NOT: { id: supplierId } } : {}),
+    },
+    select: { name: true },
+  });
+  if (partner) throw new Error(`PARTNER_CODE_TAKEN:${partner.name}`);
+
+  const customer = await tx.customer.findFirst({
+    where: {
+      worksheetPartnerCode: code,
+      ...(supplierId ? { partner: { isNot: { id: supplierId } } } : {}),
+    },
+    select: { displayName: true },
+  });
+  if (customer) throw new Error(`PARTNER_CODE_TAKEN:${customer.displayName}`);
+}
+
+/**
+ * A worksheet belongs to a customer in three places -- the sheet, the unit and
+ * the number's first segment -- so a service partner is given a customer row of
+ * its own to carry them. The row is the partner's, not a buyer's: it is created
+ * here rather than typed in, so a partner is still recorded once, by hand, in
+ * one place, and the customer list leaves these rows out.
+ *
+ * Kept in step on every save, because the name and the code are what a
+ * colleague reads on the worksheet: a partner renamed on the partner screen and
+ * left alone here would put the old name on every sheet written afterwards.
+ */
+export async function syncWorksheetMirror(
+  tx: Prisma.TransactionClient,
+  supplier: {
+    id: string;
+    name: string;
+    isService: boolean;
+    customerId: string | null;
+    worksheetPartnerCode?: string | null;
+  },
+) {
+  if (!supplier.isService) {
+    // Un-ticking "Szerviz" does not drop the row: worksheets may already point
+    // at it, and `onDelete: Restrict` would refuse anyway. It stays, unlisted,
+    // and is reused if the partner becomes a service partner again.
+    return supplier.customerId;
+  }
+  // The code travels with the name: the worksheet number is built from the
+  // customer row's copy, so a code left behind here would number new sheets
+  // after the partner's old abbreviation.
+  const carried = {
+    displayName: supplier.name,
+    companyName: supplier.name,
+    worksheetPartnerCode: supplier.worksheetPartnerCode ?? null,
+  };
+  if (supplier.customerId) {
+    await tx.customer.update({
+      where: { id: supplier.customerId },
+      data: carried,
+    });
+    return supplier.customerId;
+  }
+  const mirror = await tx.customer.create({
+    data: {
+      // `PARTNER`, not `VEVO`: this row will turn up on an invoice or in an
+      // export one day, in front of somebody who never heard of mirrors, and
+      // the number is the one field that travels everywhere the row goes. It
+      // costs a word here and saves that person the question.
+      customerNumber: generateCode("PARTNER"),
+      type: "COMPANY",
+      ...carried,
+    },
+    select: { id: true },
+  });
+  await tx.supplier.update({
+    where: { id: supplier.id },
+    data: { customerId: mirror.id },
+  });
+  return mirror.id;
 }
 
 @Injectable()
@@ -107,6 +203,8 @@ export class SuppliersRepository extends Repository {
     const code = generateCode("SZALL");
     return prisma.$transaction(
       async (tx) => {
+        if (input.worksheetPartnerCode)
+          await assertPartnerCodeFree(tx, input.worksheetPartnerCode, null);
         const supplier = await tx.supplier.create({
           data: {
             code,
@@ -116,6 +214,7 @@ export class SuppliersRepository extends Repository {
             // move the decision out of the schema and into every caller.
             isSupplier: input.isSupplier,
             isService: input.isService,
+            worksheetPartnerCode: input.worksheetPartnerCode,
             taxNumber: input.taxNumber?.trim() || undefined,
             country: (input.country ?? "HU").trim().toUpperCase(),
             email: input.email?.trim() || undefined,
@@ -131,6 +230,13 @@ export class SuppliersRepository extends Repository {
             addressLine1: input.addressLine1?.trim() || undefined,
             addressLine2: input.addressLine2?.trim() || undefined,
           },
+        });
+        await syncWorksheetMirror(tx, {
+          id: supplier.id,
+          name: supplier.name,
+          isService: supplier.isService,
+          customerId: supplier.customerId,
+          worksheetPartnerCode: supplier.worksheetPartnerCode,
         });
         await tx.domainEvent.create({
           data: {
@@ -158,12 +264,15 @@ export class SuppliersRepository extends Repository {
     return prisma.$transaction(
       async (tx) => {
         const existing = await tx.supplier.findUniqueOrThrow({ where: { id } });
+        if (input.worksheetPartnerCode)
+          await assertPartnerCodeFree(tx, input.worksheetPartnerCode, id);
         const changed = await tx.supplier.updateMany({
           where: { id, updatedAt: new Date(input.expectedUpdatedAt) },
           data: {
             name: input.name?.trim(),
             isSupplier: input.isSupplier,
             isService: input.isService,
+            worksheetPartnerCode: input.worksheetPartnerCode,
             taxNumber:
               input.taxNumber === null ? null : input.taxNumber?.trim(),
             country: input.country?.trim().toUpperCase(),
@@ -198,6 +307,17 @@ export class SuppliersRepository extends Repository {
           },
         });
         if (changed.count !== 1) throw new Error("STALE_UPDATE");
+        const saved = await tx.supplier.findUniqueOrThrow({
+          where: { id },
+          select: {
+            id: true,
+            name: true,
+            isService: true,
+            customerId: true,
+            worksheetPartnerCode: true,
+          },
+        });
+        await syncWorksheetMirror(tx, saved);
         await tx.domainEvent.create({
           data: {
             id: randomUUID(),
