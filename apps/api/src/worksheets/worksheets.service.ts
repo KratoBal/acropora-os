@@ -92,7 +92,7 @@ export class WorksheetsService {
         error.code === "P2002"
       ) {
         throw new ConflictException(
-          "Ehhez a partnerhez már tartozik ilyen kódú részleg.",
+          "Ehhez a partnerhez már tartozik ilyen kódú alegység.",
         );
       }
       throw error;
@@ -466,11 +466,11 @@ export class WorksheetsService {
     const department = await this.repository.department(departmentId);
     if (!department || department.customerId !== customerId) {
       throw new BadRequestException(
-        "A megadott részleg nem ehhez a partnerhez tartozik.",
+        "A megadott alegység nem ehhez a partnerhez tartozik.",
       );
     }
     if (!department.isActive) {
-      throw new BadRequestException("A megadott részleg már nem aktív.");
+      throw new BadRequestException("A megadott alegység már nem aktív.");
     }
     return department;
   }

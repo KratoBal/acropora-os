@@ -35,9 +35,13 @@ export type WorksheetNumberIssue =
 
 /**
  * A hiányzó tag nem javítható a szám kiadásakor: ha egy partnernek nincs
- * rövidítése vagy nincs részleg-kódja, kétféle alakú szám keletkezne, és a
+ * rövidítése vagy nincs alegység-kódja, kétféle alakú szám keletkezne, és a
  * sorozat onnantól se nem rendezhető, se nem ellenőrizhető. Ezért a lezárás
  * inkább elakad.
+ *
+ * A séma neve `WorksheetDepartment`, a képernyőké viszont "alegység", és ezek
+ * a mondatok a képernyőre mennek. A kód továbbra is `department` marad: a két
+ * szó ugyanaz a fogalom, csak más olvasónak.
  */
 export const WORKSHEET_NUMBER_ISSUE_MESSAGES: Record<
   WorksheetNumberIssue,
@@ -48,9 +52,9 @@ export const WORKSHEET_NUMBER_ISSUE_MESSAGES: Record<
   PARTNER_CODE_INVALID:
     "A partner munkalap-rövidítése érvénytelen: betűvel kezdődő, 2-8 karakteres nagybetűs kód lehet (pl. FANK).",
   DEPARTMENT_CODE_MISSING:
-    "A munkalaphoz nincs részleg rendelve, ezért nem zárható le. A részleg-kód a szám kötelező tagja.",
+    "A munkalaphoz nincs alegység rendelve, ezért nem zárható le. Az alegység kódja a szám kötelező tagja.",
   DEPARTMENT_CODE_INVALID:
-    "A részleg kódja érvénytelen: legfeljebb három nagybetű lehet (pl. BIO).",
+    "Az alegység kódja érvénytelen: legfeljebb három nagybetű lehet (pl. BIO).",
 };
 
 export function worksheetNumberIssue(input: {

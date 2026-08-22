@@ -253,7 +253,7 @@ describe("WorksheetsService", () => {
       service.create(contentDto(), "user-1"),
       (error: unknown) =>
         error instanceof BadRequestException &&
-        error.message.includes("részleg"),
+        error.message.includes("alegység"),
     );
   });
 

@@ -110,7 +110,7 @@ export class SignWorksheetVersionDto {
 
 export class CreateWorksheetDepartmentDto {
   @Matches(/^[A-Za-z]{1,3}$/, {
-    message: "A részleg kódja legfeljebb három betű lehet (pl. BIO).",
+    message: "Az alegység kódja legfeljebb három betű lehet (pl. BIO).",
   })
   code!: string;
   @IsString() @MinLength(2) @MaxLength(200) name!: string;
