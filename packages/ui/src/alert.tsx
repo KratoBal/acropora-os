@@ -31,8 +31,15 @@ export function Alert({
     >
       <div>
         <p className="text-sm font-semibold">{title}</p>
+        {/*
+          `whitespace-pre-line` so a description that arrives as several lines
+          stays several lines. A validation failure lists one complaint per
+          line, and HTML would otherwise collapse them into one paragraph.
+        */}
         {description ? (
-          <p className="mt-0.5 text-sm opacity-75">{description}</p>
+          <p className="mt-0.5 whitespace-pre-line text-sm opacity-75">
+            {description}
+          </p>
         ) : null}
       </div>
       {action}
