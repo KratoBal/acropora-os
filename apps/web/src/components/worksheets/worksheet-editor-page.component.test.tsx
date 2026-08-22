@@ -1,9 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import type {
-  CustomerListResponse,
-  CustomerSummary,
-  Session,
-} from "@acropora/types";
+import { render, screen } from "@testing-library/react";
+import type { Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { WorksheetEditorPage } from "./worksheet-editor-page";
@@ -16,6 +12,7 @@ const worksheets = vi.hoisted(() => ({
   create: vi.fn(),
   updateDraft: vi.fn(),
   detail: vi.fn(),
+  selectablePartners: vi.fn(),
 }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
@@ -39,55 +36,69 @@ const session: Session = {
   },
 };
 
-function customer(index: number, displayName: string): CustomerSummary {
-  return {
-    id: `customer-${index}`,
-    customerNumber: `V-${String(index).padStart(4, "0")}`,
-    partnerCode: `V-${String(index).padStart(4, "0")}`,
-    source: "MANUAL",
-    type: "COMPANY",
-    displayName,
-    isActive: true,
-    address: null,
-    createdAt: "2026-01-01T00:00:00.000Z",
-    updatedAt: "2026-01-01T00:00:00.000Z",
-  };
-}
-
-/** A full page of 100, the most the endpoint hands out at once. */
-function fullPage(page: number, totalPages: number): CustomerListResponse {
-  return {
-    items: Array.from({ length: 100 }, (_, index) =>
-      customer(page * 100 + index, `Alfa Kft. ${page * 100 + index}`),
-    ),
-    pagination: {
-      page,
-      pageSize: 100,
-      totalItems: totalPages * 100,
-      totalPages,
-    },
-  };
-}
-
 describe("WorksheetEditorPage partner picker", () => {
   beforeEach(() => {
     auth.session = session;
     customers.list.mockReset();
     worksheets.departments.mockReset().mockResolvedValue({ items: [] });
     worksheets.detail.mockReset();
+    worksheets.selectablePartners.mockReset().mockResolvedValue({ items: [] });
   });
 
-  /** An existing worksheet showed "Válassz partnert" where its partner's name
-   * belongs. The partner is not in the customer list because that list is not
-   * loaded at all while editing, so the disabled Select had no option matching
-   * the assigned id and fell back to the placeholder.
+  /**
+   * A worksheet is written for a service partner, not for somebody who bought
+   * something in the webshop. The picker therefore reads the partner list.
+   *
+   * The customer endpoint is asserted as untouched in the same test: reading
+   * both would also put the right names on screen, and would quietly bring
+   * back the buyers this change exists to keep out.
+   */
+  it("offers service partners and leaves the buyers alone", async () => {
+    worksheets.selectablePartners.mockResolvedValue({
+      items: [
+        { customerId: "customer-42", name: "Fankó Kft.", partnerCode: "FANK" },
+      ],
+    });
+
+    render(<WorksheetEditorPage />);
+
+    expect(
+      await screen.findByRole("option", { name: "FANK - Fankó Kft." }),
+    ).toBeTruthy();
+    expect(customers.list).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The option's value is the id the worksheet stores, not the partner's own.
+   * The two are different rows, and picking the wrong one would put the sheet
+   * on a record that carries no worksheets -- it would fail on save, far from
+   * the line that chose it.
+   */
+  it("carries the id the worksheet is stored against", async () => {
+    worksheets.selectablePartners.mockResolvedValue({
+      items: [
+        { customerId: "customer-42", name: "Fankó Kft.", partnerCode: "FANK" },
+      ],
+    });
+
+    render(<WorksheetEditorPage />);
+    const option = (await screen.findByRole("option", {
+      name: "FANK - Fankó Kft.",
+    })) as HTMLOptionElement;
+
+    expect(option.value).toBe("customer-42");
+  });
+
+  /**
+   * An existing worksheet showed "Válassz partnert" where its partner's name
+   * belongs, because the list is not loaded at all while editing and the
+   * disabled Select had no option matching the assigned id.
    *
    * The name is asserted rather than the absence of the placeholder: the old
    * code rendered the placeholder AND no name, so only checking for a missing
-   * option would have passed on a screen that shows nothing. The call count is
-   * asserted too, because loading every customer to display one name would be
-   * the other way to make this pass, and a worse one. */
-  it("shows the partner of an existing worksheet without loading the customer list", async () => {
+   * option would have passed on a screen that shows nothing.
+   */
+  it("shows the partner of an existing worksheet without loading any list", async () => {
     worksheets.detail.mockResolvedValue({
       id: "ws-1",
       customer: {
@@ -111,72 +122,7 @@ describe("WorksheetEditorPage partner picker", () => {
 
     const selected = await screen.findByRole("option", { name: "Fankó Kft." });
     expect((selected as HTMLOptionElement).selected).toBe(true);
+    expect(worksheets.selectablePartners).not.toHaveBeenCalled();
     expect(customers.list).not.toHaveBeenCalled();
-  });
-
-  /** The reported defect: the picker asked for a single page of 100 and the
-   * dropdown ended mid-alphabet. Nothing failed, so the missing customers
-   * looked like customers that do not exist. */
-  it("offers a customer that falls past the first page instead of ending mid-alphabet", async () => {
-    customers.list.mockResolvedValueOnce(fullPage(1, 2)).mockResolvedValueOnce({
-      items: [customer(999, "Zebra Kft.")],
-      pagination: { page: 2, pageSize: 100, totalItems: 101, totalPages: 2 },
-    });
-
-    render(<WorksheetEditorPage />);
-
-    expect(
-      await screen.findByRole("option", { name: "Zebra Kft." }),
-    ).toBeTruthy();
-    expect(customers.list).toHaveBeenCalledTimes(2);
-    const requested = customers.list.mock.calls.map((call) =>
-      String((call[1] as URLSearchParams).get("page")),
-    );
-    expect(requested).toEqual(["1", "2"]);
-  });
-
-  /** Webshop customers never get a worksheet, so the picker must ask for the
-   * manually recorded ones only.
-   *
-   * The known positive is the point of this test: asserting only that a
-   * webshop customer is missing would also pass on an empty dropdown, which is
-   * the failure this whole change is about. So it checks that a manual
-   * customer IS offered, and that the request carried the filter.
-   *
-   * What it deliberately does NOT claim: that the endpoint really leaves
-   * webshop customers out. That is decided in the database from the UNAS
-   * external reference (`customers.repository.ts`, the `source` branch), and a
-   * mocked client cannot prove it -- only an integration run against a real
-   * database can. */
-  it("asks for manually recorded customers and offers them", async () => {
-    customers.list.mockResolvedValue({
-      items: [customer(7, "Belföldi Kft.")],
-      pagination: { page: 1, pageSize: 100, totalItems: 1, totalPages: 1 },
-    });
-
-    render(<WorksheetEditorPage />);
-
-    expect(
-      await screen.findByRole("option", { name: "Belföldi Kft." }),
-    ).toBeTruthy();
-    const sources = customers.list.mock.calls.map((call) =>
-      (call[1] as URLSearchParams).get("source"),
-    );
-    expect(sources).toEqual(["MANUAL"]);
-  });
-
-  /** Truncation is what made the defect invisible, so if the safety stop is
-   * ever reached the picker has to say it out loud. */
-  it("says the list was cut short instead of silently dropping the tail", async () => {
-    customers.list.mockImplementation((_token, query: URLSearchParams) =>
-      Promise.resolve(fullPage(Number(query.get("page")), 50)),
-    );
-
-    render(<WorksheetEditorPage />);
-
-    expect(
-      await screen.findByText(/csak az első 2000 vevő választható/),
-    ).toBeTruthy();
-    await waitFor(() => expect(customers.list).toHaveBeenCalledTimes(20));
   });
 });

@@ -14,9 +14,9 @@ import {
 import {
   hasPermission,
   PERMISSIONS,
-  type CustomerSummary,
   type WorksheetContentInput,
   type WorksheetCustomerSummary,
+  type WorksheetSelectablePartner,
   type WorksheetDepartmentSummary,
 } from "@acropora/types";
 import Link from "next/link";
@@ -24,7 +24,6 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
-import { customersApi } from "@/lib/api/customers";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import {
   emptyLine,
@@ -71,19 +70,6 @@ function content(
   };
 }
 
-/** The customer list endpoint refuses anything above 100 per page
- * (`customer.dto.ts`: `@Max(100)`), so this is the ceiling, not a preference.
- * Raising it here alone would not widen the picker, it would make the request
- * invalid and leave the picker empty. */
-const CUSTOMER_PAGE_SIZE = 100;
-
-/** Safety stop for the loop below, so a runaway pagination response cannot keep
- * the editor fetching forever. At the page size above this covers 2000
- * customers, well past what the shop has. Past that the picker truncates again
- * -- the same failure this fix is about -- so the loop says so out loud instead
- * of quietly dropping the tail. */
-const CUSTOMER_PAGE_LIMIT = 20;
-
 export interface WorksheetEditorPageProps {
   /** Megadva a lap piszkozatát szerkeszti, enélkül újat vesz fel. */
   worksheetId?: string;
@@ -97,7 +83,7 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
     session && hasPermission(session.user, PERMISSIONS.SERVICE_MANAGE),
   );
 
-  const [customers, setCustomers] = useState<CustomerSummary[]>([]);
+  const [partners, setPartners] = useState<WorksheetSelectablePartner[]>([]);
   /** The partner of a worksheet that already exists. It comes from the
    * worksheet itself rather than from the customer list, because the list is
    * deliberately not loaded while editing: the field is read-only there, so
@@ -122,48 +108,21 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
   useEffect(() => {
     if (!canManage || worksheetId) return;
     const controller = new AbortController();
-    /** The picker needs every customer it is allowed to offer, but the endpoint
-     * hands out one page at a time, so walk the pages instead of asking for a
-     * single big one. Asking for one page of 100 was the defect: customer 101
-     * onwards never reached the dropdown, and nothing failed -- the list simply
-     * ended mid-alphabet. */
-    const loadCustomers = async () => {
-      const collected: CustomerSummary[] = [];
-      let page = 1;
-      let totalPages = 1;
-      while (page <= totalPages && page <= CUSTOMER_PAGE_LIMIT) {
-        const query = new URLSearchParams({
-          page: String(page),
-          pageSize: String(CUSTOMER_PAGE_SIZE),
-          /** Webshop customers never get a worksheet (owner's decision,
-           * 2026-08-21), so they are excluded here rather than hidden later.
-           * MANUAL means "has no UNAS external reference" -- the origin is
-           * derived, not a stored column, and the endpoint resolves it for us
-           * (`customers.repository.ts`, the `source` branch). The exclusion is
-           * deliberately NOT overridable: a webshop customer that becomes a
-           * partner is entered by hand as a new record instead. */
-          source: "MANUAL",
-        });
-        const response = await customersApi.list(
-          token,
-          query,
-          controller.signal,
-        );
-        collected.push(...response.items);
-        totalPages = response.pagination.totalPages;
-        page += 1;
-      }
-      setCustomers(collected);
-      if (totalPages > CUSTOMER_PAGE_LIMIT) {
-        setError(
-          `A vevőlista hosszabb, mint amit a választó egyszerre kezelni tud, ezért csak az első ${CUSTOMER_PAGE_LIMIT * CUSTOMER_PAGE_SIZE} vevő választható. Szólj a fejlesztőnek.`,
-        );
-      }
-    };
-    loadCustomers().catch((cause: unknown) => {
-      if (!(cause instanceof DOMException && cause.name === "AbortError"))
-        setError("A vevőlista nem tölthető be.");
-    });
+    /** The picker reads the service partners, not the buyers: a worksheet is
+     * written for a partner, and a webshop customer never gets one.
+     *
+     * The endpoint hands back the whole list rather than pages of it, and the
+     * list it hands back is already narrowed to partners a sheet can actually
+     * be finished for -- one that has no partner code could be picked, worked
+     * on, and then refuse to close. What each entry carries is the id the
+     * worksheet stores, so everything below this line is unchanged. */
+    worksheetsApi
+      .selectablePartners(token, controller.signal)
+      .then((response) => setPartners(response.items))
+      .catch((cause: unknown) => {
+        if (!(cause instanceof DOMException && cause.name === "AbortError"))
+          setError("A partnerlista nem tölthető be.");
+      });
     return () => controller.abort();
   }, [canManage, token, worksheetId]);
 
@@ -296,7 +255,10 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
    * exists, because the number was built from this partner. */
   const partnerOptions: { id: string; displayName: string }[] = assignedCustomer
     ? [assignedCustomer]
-    : customers;
+    : partners.map((partner) => ({
+        id: partner.customerId,
+        displayName: `${partner.partnerCode} - ${partner.name}`,
+      }));
 
   const canSubmit =
     Boolean(header.subject.trim()) &&

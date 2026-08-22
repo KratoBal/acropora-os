@@ -367,6 +367,8 @@ export type {
   WorksheetLineInput,
   WorksheetListItem,
   WorksheetListResponse,
+  WorksheetSelectablePartner,
+  WorksheetSelectablePartnerListResponse,
   WorksheetNumberParts,
   WorksheetSignatureDecision,
   WorksheetSignatureDetail,

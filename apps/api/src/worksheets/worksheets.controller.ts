@@ -75,6 +75,19 @@ export class WorksheetsController {
    * neveket, a felhasználó-kezeléshez viszont semmi köze - a szerelőnek nem
    * kell admin jog ahhoz, hogy lássa, ki dolgozik vele egy lapon.
    */
+  /**
+   * The partners a worksheet may be written for. Before `:id`, like the list
+   * above, or Nest would read the path as a worksheet identifier.
+   *
+   * `SERVICE_VIEW` rather than `PARTNERS_VIEW`: this is the worksheet screen
+   * asking whom it may write for, not the partner register being browsed.
+   */
+  @Get("selectable-partners")
+  @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
+  selectablePartners() {
+    return this.service.selectablePartners();
+  }
+
   @Get("assignable-users")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
   assignableUsers() {

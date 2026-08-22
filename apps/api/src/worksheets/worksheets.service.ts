@@ -121,6 +121,10 @@ export class WorksheetsService {
     return this.repository.assignableUsers();
   }
 
+  selectablePartners() {
+    return this.repository.selectablePartners();
+  }
+
   /**
    * A lap felelőseinek beállítása.
    *

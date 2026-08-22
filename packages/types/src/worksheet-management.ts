@@ -94,6 +94,25 @@ export interface WorksheetAssignee {
  * munkalap írását - felelőst rendelni valakihez, aki utána nem tudja
  * szerkeszteni a lapot, néma zsákutca.
  */
+/**
+ * A partner a munkalap választójában. A `customerId` az az azonosító, amit a
+ * munkalap ténylegesen tárol: a szerviz partner munkalapjait egy saját vevő-sor
+ * hordozza (lásd `Supplier.customerId`), és a lap, az alegység meg a szám is
+ * arra épül. A választó tehát partnert MUTAT és vevő-azonosítót KÜLD.
+ */
+export interface WorksheetSelectablePartner {
+  /** A munkalapé, nem a partneré: ezt küldi a felvitel. */
+  customerId: string;
+  name: string;
+  /** A munkalapszám első tagja. Kód nélküli partner ide nem kerül be, mert a
+   * nélküle megnyitott lapot nem lehetne lezárni. */
+  partnerCode: string;
+}
+
+export interface WorksheetSelectablePartnerListResponse {
+  items: WorksheetSelectablePartner[];
+}
+
 export interface WorksheetAssignableUser {
   id: string;
   name: string;
