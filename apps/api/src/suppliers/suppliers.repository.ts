@@ -2,9 +2,15 @@ import { randomUUID } from "node:crypto";
 
 import { Injectable } from "@nestjs/common";
 import { Prisma, prisma, Repository, type Supplier } from "@acropora/database";
-import type { SupplierListResponse, SupplierSummary } from "@acropora/types";
+import type {
+  SupplierListResponse,
+  SupplierSummary,
+  WorksheetDepartmentListResponse,
+  WorksheetDepartmentSummary,
+} from "@acropora/types";
 
 import { generateCode } from "../common/code-generator.util.js";
+import type { CreateWorksheetDepartmentDto } from "../worksheets/dto/worksheet.dto.js";
 import type {
   CreateSupplierDto,
   SupplierListQueryDto,
@@ -192,6 +198,57 @@ export class SuppliersRepository extends Repository {
         totalPages: Math.ceil(totalItems / query.pageSize),
       },
     };
+  }
+
+  /**
+   * A partner alegységei. Az alegység a munkalapon a szám középső tagját adja,
+   * és a sémában a VEVŐHÖZ tartozik -- egy szerviz partner alegységei tehát a
+   * tükör-során lógnak.
+   *
+   * A tükör azonosítója NEM kerül ki a kliensnek: a partner belső részlete, és
+   * ha a felület ismerné, akkor előbb-utóbb használná is olyasmire, amiről itt
+   * senki nem tud. A partner azonosítójával kérdez, a feloldás itt történik.
+   *
+   * Tükör nélküli partnernek üres a listája, nem hibás. Egy tisztán beszállító
+   * partnernek nincs és nem is lehet alegysége, és ez nem hibaállapot.
+   */
+  async units(supplierId: string): Promise<WorksheetDepartmentListResponse> {
+    const supplier = await prisma.supplier.findUnique({
+      where: { id: supplierId },
+      select: { customerId: true },
+    });
+    if (!supplier?.customerId) return { items: [] };
+    const items = await prisma.worksheetDepartment.findMany({
+      where: { customerId: supplier.customerId },
+      select: { id: true, code: true, name: true, isActive: true },
+      orderBy: { code: "asc" },
+    });
+    return { items };
+  }
+
+  /**
+   * Új alegység a partnerhez. A tükör hiánya itt NEM üres válasz, hanem
+   * elutasítás: aki alegységet visz fel, azt várja, hogy az meg is maradjon,
+   * és egy csendben elnyelt mentés rosszabb, mint egy mondat arról, mi
+   * hiányzik.
+   */
+  async createUnit(
+    supplierId: string,
+    input: CreateWorksheetDepartmentDto,
+  ): Promise<WorksheetDepartmentSummary | null> {
+    const supplier = await prisma.supplier.findUnique({
+      where: { id: supplierId },
+      select: { customerId: true },
+    });
+    if (!supplier?.customerId) return null;
+    return prisma.worksheetDepartment.create({
+      data: {
+        customerId: supplier.customerId,
+        code: input.code.trim().toUpperCase(),
+        name: input.name.trim(),
+      },
+      select: { id: true, code: true, name: true, isActive: true },
+    });
   }
 
   async detail(id: string): Promise<SupplierSummary | null> {

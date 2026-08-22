@@ -1,4 +1,7 @@
 import type {
+  CreateWorksheetDepartmentInput,
+  WorksheetDepartmentListResponse,
+  WorksheetDepartmentSummary,
   CreateSupplierInput,
   SupplierListResponse,
   SupplierSummary,
@@ -26,6 +29,20 @@ export const suppliersApi = {
     return apiRequest<SupplierListResponse>(`/suppliers?${params}`, token, {
       signal,
     });
+  },
+  units(token: string, id: string, signal?: AbortSignal) {
+    return apiRequest<WorksheetDepartmentListResponse>(
+      `/suppliers/${encodeURIComponent(id)}/units`,
+      token,
+      { signal },
+    );
+  },
+  createUnit(token: string, id: string, input: CreateWorksheetDepartmentInput) {
+    return apiRequest<WorksheetDepartmentSummary>(
+      `/suppliers/${encodeURIComponent(id)}/units`,
+      token,
+      { method: "POST", body: JSON.stringify(input) },
+    );
   },
   detail(token: string, id: string, signal?: AbortSignal) {
     return apiRequest<SupplierSummary>(

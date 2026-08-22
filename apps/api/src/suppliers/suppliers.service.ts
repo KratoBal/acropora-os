@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -6,6 +7,7 @@ import {
 import { Prisma } from "@acropora/database";
 
 import { SuppliersRepository } from "./suppliers.repository.js";
+import type { CreateWorksheetDepartmentDto } from "../worksheets/dto/worksheet.dto.js";
 import type {
   CreateSupplierDto,
   SupplierListQueryDto,
@@ -24,6 +26,21 @@ export class SuppliersService {
     const supplier = await this.repository.detail(id);
     if (!supplier) throw new NotFoundException("A beszállító nem található.");
     return supplier;
+  }
+
+  async units(id: string) {
+    await this.detail(id);
+    return this.repository.units(id);
+  }
+
+  async createUnit(id: string, input: CreateWorksheetDepartmentDto) {
+    await this.detail(id);
+    const created = await this.repository.createUnit(id, input);
+    if (!created)
+      throw new BadRequestException(
+        "Alegységet csak szerviz partnerhez lehet felvinni. Pipáld be a Szerviz jelölést, mentsd el, és utána próbáld újra.",
+      );
+    return created;
   }
 
   async create(input: CreateSupplierDto, actorId: string) {

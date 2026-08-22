@@ -9,6 +9,8 @@ const suppliers = vi.hoisted(() => ({
   detail: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
+  units: vi.fn(),
+  createUnit: vi.fn(),
 }));
 const postalCode = vi.hoisted(() => ({ lookup: vi.fn() }));
 const viesVat = vi.hoisted(() => ({ lookup: vi.fn() }));
@@ -39,6 +41,8 @@ describe("SupplierEditorPage", () => {
     auth.session = session;
     suppliers.detail.mockReset();
     suppliers.create.mockReset();
+    suppliers.units.mockReset().mockResolvedValue({ items: [] });
+    suppliers.createUnit.mockReset();
   });
 
   /** The Partners menu no longer holds suppliers only, so the screen must not
@@ -112,6 +116,45 @@ describe("SupplierEditorPage", () => {
     expect(suppliers.create.mock.calls.at(0)?.[1]?.worksheetPartnerCode).toBe(
       "FANK",
     );
+  });
+
+  /**
+   * A unit hangs off a partner, so until the partner is saved there is nothing
+   * to hang it on. Ticking "Szerviz" on a new record must not offer it either:
+   * the card would take input that has nowhere to go.
+   */
+  it("does not offer units on a partner that does not exist yet", () => {
+    render(<SupplierEditorPage />);
+    fireEvent.click(screen.getByLabelText("Szerviz"));
+
+    expect(screen.queryByLabelText("Alegység kódja")).toBeNull();
+  });
+
+  /**
+   * The other half, and the one that would be missed: on a saved service
+   * partner the units are listed AND a new one can be added. Asserting only
+   * the absence above would pass on a screen where this card never renders.
+   */
+  it("lists the units of a saved service partner and offers a new one", async () => {
+    suppliers.detail.mockResolvedValue({
+      id: "supplier-1",
+      code: "SZALL-1",
+      name: "Fankó Kft.",
+      isSupplier: false,
+      isService: true,
+      country: "HU",
+      isActive: true,
+      createdAt: "2026-08-19T10:00:00.000Z",
+      updatedAt: "2026-08-19T10:00:00.000Z",
+    });
+    suppliers.units.mockResolvedValue({
+      items: [{ id: "unit-1", code: "BIO", name: "Bio labor", isActive: true }],
+    });
+
+    render(<SupplierEditorPage supplierId="supplier-1" />);
+
+    expect(await screen.findByText("Bio labor")).toBeTruthy();
+    expect(screen.getByLabelText("Alegység kódja")).toBeTruthy();
   });
 
   /**
