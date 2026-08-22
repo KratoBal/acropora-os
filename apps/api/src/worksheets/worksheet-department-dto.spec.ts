@@ -42,7 +42,7 @@ describe("create worksheet department input", () => {
     const messages = messagesFor({ code: "BIOD", name: "Biodóm" });
 
     assert.deepEqual(messages, [
-      "A részleg kódja legfeljebb három betű lehet (pl. BIO).",
+      "Az alegység kódja legfeljebb három betű lehet (pl. BIO).",
     ]);
   });
 });
