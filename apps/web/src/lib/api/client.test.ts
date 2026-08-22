@@ -80,6 +80,80 @@ describe("apiRequest", () => {
     expect(init.headers).toHaveProperty("X-CSRF-Token", "csrf-token-value");
   });
 
+  it("labels a JSON string body as JSON, so the API does not receive an empty body", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true }),
+    });
+
+    await apiRequest("/suppliers/abc/units", "dev_abc123", {
+      method: "POST",
+      body: JSON.stringify({ code: "BIO", name: "Biodóm" }),
+    });
+
+    const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0] as [string, RequestInit];
+    expect(init.headers).toHaveProperty("Content-Type", "application/json");
+  });
+
+  it("leaves a FormData body unlabelled, so the browser can write its own boundary", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true }),
+    });
+
+    const body = new FormData();
+    body.append("type", "INVOICE");
+
+    await apiRequest("/service/assets/abc/documents", "dev_abc123", {
+      method: "POST",
+      body,
+    });
+
+    const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0] as [string, RequestInit];
+    expect(init.headers).not.toHaveProperty("Content-Type");
+  });
+
+  it("keeps an explicit Content-Type from the caller", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true }),
+    });
+
+    await apiRequest("/imports/csv", "dev_abc123", {
+      method: "POST",
+      body: "a;b;c",
+      headers: { "Content-Type": "text/csv" },
+    });
+
+    const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock
+      .calls[0] as [string, RequestInit];
+    expect(init.headers).toHaveProperty("Content-Type", "text/csv");
+  });
+
+  it("puts each validation message on its own line instead of running them together", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: async () => ({
+        message: [
+          "A részleg kódja legfeljebb három betű lehet (pl. BIO).",
+          "Az alegység nevét meg kell adni.",
+        ],
+      }),
+    });
+
+    await expect(
+      apiRequest("/suppliers/abc/units", "dev_abc123", {
+        method: "POST",
+        body: "{}",
+      }),
+    ).rejects.toThrow(
+      "A részleg kódja legfeljebb három betű lehet (pl. BIO).\nAz alegység nevét meg kell adni.",
+    );
+  });
+
   it("sends no CSRF header on a mutating request when there is no CSRF cookie (development mode)", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
