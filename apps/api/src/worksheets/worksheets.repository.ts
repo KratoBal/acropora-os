@@ -15,6 +15,7 @@ import type {
   CreateWorksheetDepartmentDto,
   WorksheetListQueryDto,
 } from "./dto/worksheet.dto.js";
+import { amendRefusal } from "./worksheet-amendment.js";
 import { sumWorksheetAmounts } from "./worksheet-amounts.js";
 import { WORKSHEET_ASSIGNABLE_ROLES } from "./worksheet-assignment.js";
 import type {
@@ -43,7 +44,10 @@ export type WorksheetCloseResult =
 
 export type WorksheetAmendResult =
   | { ok: true; version: number }
-  | { ok: false; reason: "NOT_FOUND" | "NOT_CLOSED" | "CONCURRENT_VERSION" };
+  | {
+      ok: false;
+      reason: "NOT_FOUND" | "NOT_CLOSED" | "SIGNED" | "CONCURRENT_VERSION";
+    };
 
 export type WorksheetSignResult =
   { ok: true } | { ok: false; reason: "NOT_FOUND" | "NOT_AWAITING_SIGNATURE" };
@@ -495,6 +499,63 @@ export class WorksheetsRepository extends Repository {
    * Lezárt lap módosítása: ÚJ verzió, a korábbi érintetlenül marad. A szám
    * nem változik, tehát itt sorszámot nem osztunk.
    */
+  /**
+   * The continuation of a signed sheet: a NEW worksheet for the same partner
+   * and unit, pointing back at the one it continues.
+   *
+   * A draft, not a closed sheet, because the work has not been done yet. It
+   * takes its own number when it is closed, from the same series -- two
+   * documents signed separately must not share one number.
+   */
+  async continueFrom(input: {
+    worksheetId: string;
+    actorUserId: string;
+  }): Promise<
+    { ok: true; id: string } | { ok: false; reason: "NOT_FOUND" | "NOT_SIGNED" }
+  > {
+    return await this.database.$transaction(async (transaction) => {
+      const source = await transaction.worksheet.findUnique({
+        where: { id: input.worksheetId },
+        select: {
+          id: true,
+          customerId: true,
+          departmentId: true,
+          versions: {
+            orderBy: { version: "desc" },
+            take: 1,
+            select: { status: true, subject: true },
+          },
+        },
+      });
+      if (!source) return { ok: false, reason: "NOT_FOUND" } as const;
+      const current = source.versions[0];
+      // Only a signed sheet is final, so only a signed sheet needs a
+      // continuation. On anything else the existing draft or a new version is
+      // the right move, and offering this instead would fork a document that
+      // nobody has committed to yet.
+      if (!current || current.status !== "SIGNED")
+        return { ok: false, reason: "NOT_SIGNED" } as const;
+
+      const created = await transaction.worksheet.create({
+        data: {
+          customerId: source.customerId,
+          departmentId: source.departmentId,
+          createdById: input.actorUserId,
+          continuesWorksheetId: source.id,
+          versions: {
+            create: {
+              version: 1,
+              status: "DRAFT",
+              subject: current.subject,
+            },
+          },
+        },
+        select: { id: true },
+      });
+      return { ok: true, id: created.id } as const;
+    });
+  }
+
   async amend(input: {
     worksheetId: string;
     content: NormalizedWorksheetContent;
@@ -519,8 +580,8 @@ export class WorksheetsRepository extends Repository {
 
         const current = worksheet.versions[0];
         if (!current) return { ok: false, reason: "NOT_FOUND" } as const;
-        if (current.status === "DRAFT")
-          return { ok: false, reason: "NOT_CLOSED" } as const;
+        const refusal = amendRefusal(current.status);
+        if (refusal) return { ok: false, reason: refusal } as const;
 
         const version = current.version + 1;
         const created = await transaction.worksheetVersion.create({

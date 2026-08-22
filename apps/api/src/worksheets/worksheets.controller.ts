@@ -168,6 +168,20 @@ export class WorksheetsController {
     return this.service.setAssignees(id, input, user.id);
   }
 
+  /**
+   * A signed sheet is final, so the work continues on a NEW sheet that points
+   * back at it. `SERVICE_MANAGE`, not the amendment permission: this creates a
+   * document rather than rewriting one that was already handed over.
+   */
+  @Post(":id/continue")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  continueFrom(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.continueFrom(id, user.id);
+  }
+
   @Post(":id/close")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
   close(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {

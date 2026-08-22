@@ -91,6 +91,11 @@ export const worksheetsApi = {
       method: "POST",
     });
   },
+  continueFrom(token: string, id: string) {
+    return apiRequest<WorksheetDetail>(`${worksheetPath(id)}/continue`, token, {
+      method: "POST",
+    });
+  },
   sign(token: string, id: string, input: SignWorksheetVersionInput) {
     return apiRequest<WorksheetDetail>(worksheetPath(id, "/sign"), token, {
       method: "POST",

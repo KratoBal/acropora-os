@@ -19,6 +19,7 @@ import {
   type WorksheetSignatureDecision,
 } from "@acropora/types";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -35,6 +36,7 @@ import {
 
 export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
   const { session } = useAuth();
+  const router = useRouter();
   const token = session?.token ?? "";
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_VIEW),
@@ -122,6 +124,7 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
 
   const current = worksheet.currentVersion;
   const isDraft = current.status === "DRAFT";
+  const isSigned = current.status === "SIGNED";
 
   return (
     <div className="space-y-6">
@@ -149,11 +152,66 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
                 Lezárás
               </Button>
             ) : null}
+            {/* A signed sheet is final: the way onward is a new sheet, not a
+                new version of this one. The button stands where the edit
+                button would be, because that is where somebody looks when
+                they want to carry on. */}
+            {canManage && isSigned ? (
+              <Button
+                disabled={busy}
+                onClick={() =>
+                  void run(async () => {
+                    const created = await worksheetsApi.continueFrom(
+                      token,
+                      worksheet.id,
+                    );
+                    router.push(
+                      `/szerviz/munkalapok/${created.id}/szerkesztes`,
+                    );
+                    return created;
+                  })
+                }
+              >
+                Folytatás új munkalapon
+              </Button>
+            ) : null}
           </div>
         }
       />
       {error ? (
         <Alert variant="danger" title="Hiba" description={error} />
+      ) : null}
+
+      {/* Both ends of the chain, and the one pointing FORWARD is the reason
+          this exists: whoever opens the old sheet has to be able to find where
+          the work went, not just the other way round. */}
+      {worksheet.continues ? (
+        <Alert
+          variant="info"
+          title="Ez a lap egy korábbi munkalap folytatása"
+          description={
+            worksheet.continues.number ?? "A korábbi lap még piszkozat."
+          }
+          action={
+            <Link href={`/szerviz/munkalapok/${worksheet.continues.id}`}>
+              <Button variant="secondary">Előzmény megnyitása</Button>
+            </Link>
+          }
+        />
+      ) : null}
+      {worksheet.continuedBy.length ? (
+        <Alert
+          variant="info"
+          title="Ennek a lapnak van folytatása"
+          description={worksheet.continuedBy
+            .map((link) => link.number ?? "piszkozat")
+            .join(", ")}
+          action={
+            <Link href={`/szerviz/munkalapok/${worksheet.continuedBy[0]!.id}`}>
+              <Button variant="secondary">Folytatás megnyitása</Button>
+            </Link>
+          }
+        />
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">

@@ -57,6 +57,14 @@ export const worksheetDetailInclude = {
     select: { id: true, code: true, name: true, isActive: true },
   },
   createdBy: { select: { displayName: true } },
+  /** Both ends of the chain. A link only one side knows about is no use to
+   * whoever finds the other side first -- and on a signed sheet the only way
+   * onward IS the continuation, so the sheet has to name it. */
+  continues: { select: { id: true, number: true } },
+  continuedBy: {
+    select: { id: true, number: true },
+    orderBy: { createdAt: "asc" as const },
+  },
   versions: {
     include: worksheetVersionInclude,
     orderBy: { version: "desc" as const },
@@ -207,6 +215,8 @@ export function toWorksheetDetail(row: WorksheetDetailRow): WorksheetDetail {
     assignees: row.assignees.map(toAssignee),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    continues: row.continues ?? null,
+    continuedBy: row.continuedBy,
     currentVersion: toVersionDetail(current, row.number),
     versions: row.versions.map((version) =>
       toVersionSummary(version, row.number),
