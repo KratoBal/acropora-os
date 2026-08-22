@@ -125,4 +125,59 @@ describe("WorksheetEditorPage partner picker", () => {
     expect(worksheets.selectablePartners).not.toHaveBeenCalled();
     expect(customers.list).not.toHaveBeenCalled();
   });
+
+  /**
+   * An empty dropdown reads as a broken screen. It is a rule instead: a
+   * partner without the "Szerviz" tick or without an abbreviation is left out
+   * on purpose, because a sheet written for one would refuse to close later.
+   * The picker says so, and names the page that holds the missing field.
+   */
+  it("says why the picker is empty, and where the missing field is", async () => {
+    worksheets.selectablePartners.mockResolvedValue({ items: [] });
+
+    render(<WorksheetEditorPage />);
+
+    expect(
+      await screen.findByRole("option", {
+        name: "Nincs választható szerviz partner",
+      }),
+    ).toBeTruthy();
+    expect(screen.getByText(/partner adatlapján/)).toBeTruthy();
+  });
+
+  it("keeps the ordinary placeholder when there is something to pick", async () => {
+    worksheets.selectablePartners.mockResolvedValue({
+      items: [
+        { customerId: "customer-42", name: "Fankó Kft.", partnerCode: "FANK" },
+      ],
+    });
+
+    render(<WorksheetEditorPage />);
+
+    expect(
+      await screen.findByRole("option", { name: "Válassz partnert" }),
+    ).toBeTruthy();
+    expect(screen.queryByText(/partner adatlapján/)).toBeNull();
+  });
+
+  /**
+   * A list that never arrived is not an empty list. Saying "there is no
+   * service partner" after a failed request would send somebody to fill in a
+   * field that is already filled in.
+   */
+  it("does not blame the data when the list could not be loaded", async () => {
+    worksheets.selectablePartners.mockRejectedValue(new Error("network"));
+
+    render(<WorksheetEditorPage />);
+
+    expect(
+      await screen.findByText("A partnerlista nem tölthető be."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/partner adatlapján/)).toBeNull();
+    expect(
+      screen.queryByRole("option", {
+        name: "Nincs választható szerviz partner",
+      }),
+    ).toBeNull();
+  });
 });
