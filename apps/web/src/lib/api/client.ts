@@ -45,6 +45,24 @@ export function apiAuthHeaders(
   };
 }
 
+/**
+ * A JSON body needs the header to go with it. Without it `fetch` labels a
+ * string body `text/plain`, the API's JSON parser leaves it alone, and the
+ * request arrives with an empty body — so every field fails validation at
+ * once, exactly as if the form had been submitted blank. The header belongs
+ * here rather than in each caller: leaving it out is a silent mistake that
+ * only surfaces on screen, in front of whoever was filling the form.
+ *
+ * A non-string body is left alone. `FormData` (the asset document upload)
+ * carries a boundary the browser writes itself, and a hand-written header
+ * would break that upload.
+ */
+function jsonContentType(
+  body: BodyInit | null | undefined,
+): Record<string, string> {
+  return typeof body === "string" ? { "Content-Type": "application/json" } : {};
+}
+
 export async function apiRequest<T>(
   path: string,
   token: string,
@@ -57,6 +75,7 @@ export async function apiRequest<T>(
       ...init,
       headers: {
         Accept: "application/json",
+        ...jsonContentType(init?.body),
         // With a production (cookie-based) session there is no
         // client-readable token — the browser sends the httpOnly session
         // cookie automatically instead. Only attach a Bearer header when
@@ -86,8 +105,11 @@ export async function apiRequest<T>(
       const payload = (await response.json()) as {
         message?: string | string[];
       };
+      // One line per complaint. Joined with a space, a failed form comes back
+      // as a single run-on sentence: three validator messages behind the
+      // first one, with nothing to say where one ends and the next begins.
       serverMessage = Array.isArray(payload.message)
-        ? payload.message.join(" ")
+        ? payload.message.join("\n")
         : payload.message;
     } catch {
       serverMessage = undefined;

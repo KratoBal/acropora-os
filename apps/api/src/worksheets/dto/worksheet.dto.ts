@@ -113,7 +113,18 @@ export class CreateWorksheetDepartmentDto {
     message: "Az alegység kódja legfeljebb három betű lehet (pl. BIO).",
   })
   code!: string;
-  @IsString() @MinLength(2) @MaxLength(200) name!: string;
+  /**
+   * Every rule spells out its own message. The default validator text is
+   * English, and this form is filled in by shop staff: "name must be a string"
+   * tells them nothing about what to type, and it arrives next to a Hungarian
+   * sentence, which reads like a broken screen rather than a correction.
+   */
+  @IsString({ message: "Az alegység nevét meg kell adni." })
+  @MinLength(2, { message: "Az alegység neve legalább két karakter legyen." })
+  @MaxLength(200, {
+    message: "Az alegység neve legfeljebb 200 karakter lehet.",
+  })
+  name!: string;
 }
 
 /**

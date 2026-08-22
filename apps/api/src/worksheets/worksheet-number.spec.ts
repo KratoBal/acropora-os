@@ -97,6 +97,22 @@ describe("worksheet number", () => {
     }
   });
 
+  it("never sends the reader to the customer page, where the field cannot be edited", () => {
+    for (const message of Object.values(WORKSHEET_NUMBER_ISSUE_MESSAGES)) {
+      assert.ok(
+        !/vev[őo]/i.test(message),
+        `a message still names the customer: ${message}`,
+      );
+    }
+  });
+
+  it("sends the reader to the partner page for a missing abbreviation", () => {
+    assert.match(
+      WORKSHEET_NUMBER_ISSUE_MESSAGES.PARTNER_CODE_MISSING,
+      /partner adatlapján/,
+    );
+  });
+
   it("rejects a sequence that was never allocated", () => {
     assert.throws(() =>
       buildWorksheetNumber({

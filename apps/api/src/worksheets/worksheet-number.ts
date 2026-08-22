@@ -39,6 +39,10 @@ export type WorksheetNumberIssue =
  * sorozat onnantól se nem rendezhető, se nem ellenőrizhető. Ezért a lezárás
  * inkább elakad.
  *
+ * A rövidítést ma a PARTNER adatlapján viszik fel, és a tükör vevő-sorra onnan
+ * másolódik. Egy vevő adatlapra küldő mondat tehát oda küldene, ahol nincs is
+ * mit felvinni: a mező azon a képernyőn nem szerkeszthető.
+ *
  * A séma neve `WorksheetDepartment`, a képernyőké viszont "alegység", és ezek
  * a mondatok a képernyőre mennek. A kód továbbra is `department` marad: a két
  * szó ugyanaz a fogalom, csak más olvasónak.
@@ -48,7 +52,7 @@ export const WORKSHEET_NUMBER_ISSUE_MESSAGES: Record<
   string
 > = {
   PARTNER_CODE_MISSING:
-    "A partnerhez nincs munkalap-rövidítés felvive, ezért a munkalap nem zárható le. Vidd fel a partner rövidítését (pl. FANK) a vevő adatlapján.",
+    "A partnerhez nincs munkalap-rövidítés felvive, ezért a munkalap nem zárható le. Vidd fel a partner rövidítését (pl. FANK) a partner adatlapján.",
   PARTNER_CODE_INVALID:
     "A partner munkalap-rövidítése érvénytelen: betűvel kezdődő, 2-8 karakteres nagybetűs kód lehet (pl. FANK).",
   DEPARTMENT_CODE_MISSING:

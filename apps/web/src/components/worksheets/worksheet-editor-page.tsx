@@ -84,6 +84,11 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
   );
 
   const [partners, setPartners] = useState<WorksheetSelectablePartner[]>([]);
+  /** Whether the partner list has come back at all. An empty picker means two
+   * different things before and after the answer arrives, and only one of them
+   * is worth explaining: an empty list is a rule, a list that never arrived is
+   * a broken connection, and that already has its own message. */
+  const [partnersLoaded, setPartnersLoaded] = useState(false);
   /** The partner of a worksheet that already exists. It comes from the
    * worksheet itself rather than from the customer list, because the list is
    * deliberately not loaded while editing: the field is read-only there, so
@@ -118,10 +123,14 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
      * worksheet stores, so everything below this line is unchanged. */
     worksheetsApi
       .selectablePartners(token, controller.signal)
-      .then((response) => setPartners(response.items))
+      .then((response) => {
+        setPartners(response.items);
+        setPartnersLoaded(true);
+      })
       .catch((cause: unknown) => {
-        if (!(cause instanceof DOMException && cause.name === "AbortError"))
-          setError("A partnerlista nem tölthető be.");
+        if (cause instanceof DOMException && cause.name === "AbortError")
+          return;
+        setError("A partnerlista nem tölthető be.");
       });
     return () => controller.abort();
   }, [canManage, token, worksheetId]);
@@ -260,6 +269,14 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
         displayName: `${partner.partnerCode} - ${partner.name}`,
       }));
 
+  /** The picker is narrowed on purpose: a partner with no abbreviation could be
+   * picked and worked on, and would then refuse to close, in front of the
+   * technician rather than the person who can fix it. That rule is invisible
+   * from here, though - an empty dropdown looks like a broken screen, so it
+   * says out loud why it is empty and where the missing field lives. */
+  const noSelectablePartners =
+    !worksheetId && partnersLoaded && partnerOptions.length === 0;
+
   const canSubmit =
     Boolean(header.subject.trim()) &&
     (Boolean(worksheetId) || (Boolean(customerId) && Boolean(departmentId)));
@@ -291,7 +308,14 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
       ) : null}
 
       <Card className="grid gap-4 p-4 md:grid-cols-2">
-        <FormField label="Partner">
+        <FormField
+          label="Partner"
+          description={
+            noSelectablePartners
+              ? "Csak az a partner választható, akinél be van pipálva a Szerviz, és van munkalap-rövidítése. A rövidítést a partner adatlapján lehet felvinni."
+              : undefined
+          }
+        >
           <Select
             aria-label="Partner"
             value={customerId}
@@ -301,7 +325,11 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
               setDepartmentId("");
             }}
           >
-            <option value="">Válassz partnert</option>
+            <option value="">
+              {noSelectablePartners
+                ? "Nincs választható szerviz partner"
+                : "Válassz partnert"}
+            </option>
             {partnerOptions.map((customer) => (
               <option key={customer.id} value={customer.id}>
                 {customer.displayName}
