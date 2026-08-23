@@ -1,8 +1,18 @@
-import { Body, Controller, Post } from "@nestjs/common";
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Logger,
+  Post,
+} from "@nestjs/common";
 import type { AuthenticatedUser } from "@acropora/types";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { DeviceTokenRepository } from "./device-token.repository.js";
+import {
+  DEVICE_TOKEN_SHAPE_MESSAGE,
+  isNativeDeviceToken,
+} from "./device-token.rules.js";
 import { RegisterDeviceTokenDto } from "./dto/device-token.dto.js";
 
 /**
@@ -13,9 +23,19 @@ import { RegisterDeviceTokenDto } from "./dto/device-token.dto.js";
  * grant. The owner is taken from the session and never from the body - a
  * client that could name the user could subscribe a colleague's phone to its
  * own notifications.
+ *
+ * Both outcomes are written to the log, because a TestFlight round is read
+ * from there. A refused registration and an app that was never opened look
+ * identical otherwise, and telling them apart is worth a build.
+ *
+ * THE TOKEN ITSELF IS NEVER LOGGED. It is a credential for reaching
+ * somebody's phone, and the log is read by more people than the device table
+ * is - the same rule the assignment event follows.
  */
 @Controller("notifications/device-tokens")
 export class DeviceTokenController {
+  private readonly logger = new Logger(DeviceTokenController.name);
+
   constructor(private readonly repository: DeviceTokenRepository) {}
 
   @Post()
@@ -23,12 +43,28 @@ export class DeviceTokenController {
     @Body() input: RegisterDeviceTokenDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    await this.repository.register({
+    const bundleId = input.bundleId.trim();
+
+    if (!isNativeDeviceToken(input.token)) {
+      this.logger.warn(
+        `Eszköz-token elutasítva, nem natív alak: felhasználó ${user.id}, alkalmazás ${bundleId}, hossz ${input.token.length}.`,
+      );
+      throw new BadRequestException(DEVICE_TOKEN_SHAPE_MESSAGE);
+    }
+
+    const { firstTime } = await this.repository.register({
       userId: user.id,
       token: input.token.toLowerCase(),
-      bundleId: input.bundleId.trim(),
+      bundleId,
       platform: input.platform ?? "IOS",
     });
+
+    this.logger.log(
+      `Eszköz-token regisztrálva: felhasználó ${user.id}, alkalmazás ${bundleId}, ${
+        firstTime ? "új eszköz" : "ismert eszköz"
+      }.`,
+    );
+
     return { ok: true };
   }
 }
