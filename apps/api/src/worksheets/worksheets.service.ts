@@ -5,6 +5,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 import type { WorksheetDetail, WorksheetVersionDiff } from "@acropora/types";
@@ -23,6 +24,7 @@ import type {
   WorksheetLineDto,
   WorksheetListQueryDto,
 } from "./dto/worksheet.dto.js";
+import { NotificationsService } from "../notifications/notifications.service.js";
 import { normalizeAssigneeIds } from "./worksheet-assignment.js";
 import {
   normalizeWorksheetContent,
@@ -64,7 +66,16 @@ function closeFailure(reason: WorksheetCloseFailure) {
 
 @Injectable()
 export class WorksheetsService {
-  constructor(private readonly repository: WorksheetsRepository) {}
+  /**
+   * The notifier is optional so that every existing unit test - and any caller
+   * that has no interest in phones - can build this service with the
+   * repository alone. A worksheet is not worth less when nobody is notified,
+   * and the assignment must not depend on it.
+   */
+  constructor(
+    private readonly repository: WorksheetsRepository,
+    @Optional() private readonly notifications?: NotificationsService,
+  ) {}
 
   list(query: WorksheetListQueryDto) {
     return this.repository.list(query);
@@ -165,8 +176,22 @@ export class WorksheetsService {
       userIds,
       actorUserId,
     });
-    if (!updated) throw new NotFoundException("A munkalap nem található.");
-    return this.detail(id);
+    if (!updated.ok) throw new NotFoundException("A munkalap nem található.");
+
+    const detail = await this.detail(id);
+
+    // Only the colleagues who were not already on the sheet, and only after it
+    // is stored. Sending to everyone on every save would buzz a technician
+    // each time the office corrects a line; sending before the write would
+    // announce an assignment that might not survive it.
+    if (updated.added.length > 0)
+      this.notifications?.notifyWorksheetAssignment({
+        worksheetId: id,
+        subject: detail.currentVersion.subject,
+        userIds: updated.added,
+      });
+
+    return detail;
   }
 
   async create(

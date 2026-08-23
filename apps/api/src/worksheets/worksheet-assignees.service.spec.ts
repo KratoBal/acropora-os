@@ -85,7 +85,7 @@ function repository(
   return {
     detail: async () => worksheetRow(),
     assignableUserIds: async (ids: readonly string[]) => new Set(ids),
-    setAssignees: async () => true,
+    setAssignees: async () => ({ ok: true, added: [] }),
     ...overrides,
   } as unknown as WorksheetsRepository;
 }
@@ -98,7 +98,7 @@ describe("WorksheetsService assignees", () => {
         assignableUserIds: async () => new Set(["user-2"]),
         setAssignees: async () => {
           written = true;
-          return true;
+          return { ok: true, added: [] };
         },
       }),
     );
@@ -124,7 +124,7 @@ describe("WorksheetsService assignees", () => {
       repository({
         setAssignees: async (input: { userIds: readonly string[] }) => {
           received = input.userIds;
-          return true;
+          return { ok: true, added: [] };
         },
       }),
     );
@@ -146,7 +146,7 @@ describe("WorksheetsService assignees", () => {
         },
         setAssignees: async (input: { userIds: readonly string[] }) => {
           received = input.userIds;
-          return true;
+          return { ok: true, added: [] };
         },
       }),
     );
@@ -211,5 +211,57 @@ describe("WorksheetsService assignees", () => {
         assignedAt: ASSIGNED_AT.toISOString(),
       },
     ]);
+  });
+
+  /**
+   * Only the colleagues who were not already responsible. Saving the same
+   * sheet again, or adding a second name, must not buzz the phone of somebody
+   * who has been on it all along - the office corrects a line far more often
+   * than it hands work over.
+   */
+  it("notifies the colleagues who are new to the sheet, and only them", async () => {
+    const notified: Array<{ userIds: readonly string[]; subject: string }> = [];
+    const service = new WorksheetsService(
+      repository({
+        setAssignees: async () => ({ ok: true, added: ["user-3"] }),
+      }),
+      {
+        notifyWorksheetAssignment: (notice: {
+          userIds: readonly string[];
+          subject: string;
+        }) => {
+          notified.push(notice);
+        },
+      } as never,
+    );
+
+    await service.setAssignees(
+      "worksheet-1",
+      { userIds: ["user-2", "user-3"] },
+      "user-1",
+    );
+
+    assert.equal(notified.length, 1);
+    assert.deepEqual(notified[0]?.userIds, ["user-3"]);
+  });
+
+  it("stays quiet when the same people are saved again", async () => {
+    let notified = 0;
+    const service = new WorksheetsService(
+      repository({ setAssignees: async () => ({ ok: true, added: [] }) }),
+      {
+        notifyWorksheetAssignment: () => {
+          notified += 1;
+        },
+      } as never,
+    );
+
+    await service.setAssignees(
+      "worksheet-1",
+      { userIds: ["user-2"] },
+      "user-1",
+    );
+
+    assert.equal(notified, 0);
   });
 });
