@@ -18,6 +18,7 @@ import {
   businessNavigation,
   isNavigationGroup,
   isNavigationItemActive,
+  navigationItems,
   primaryNavigation,
   secondaryNavigation,
   settingsNavigation,
@@ -86,6 +87,20 @@ function NavigationGroup({
   );
 }
 
+/**
+ * Every destination in the menu, so that an entry can tell whether a more
+ * specific one owns the path being read. Without the whole set,
+ * `/beszerzes/nav-szamlak` would light up purchasing as well as the NAV
+ * invoices, right next to each other in the same group.
+ */
+const ALL_NAVIGATION_ITEMS = navigationItems([
+  ...primaryNavigation,
+  ...businessNavigation,
+  ...secondaryNavigation,
+  ...unasSettingsNavigation,
+  ...settingsNavigation,
+]);
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { session } = useAuth();
@@ -93,15 +108,15 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const canAccess = (item: AppNavigationItem) =>
     Boolean(session && hasPermission(session.user, item.permission));
+  const isActive = (item: AppNavigationItem) =>
+    isNavigationItemActive(pathname, item, ALL_NAVIGATION_ITEMS);
   const visibleUnasNavigation = unasSettingsNavigation.filter(canAccess);
   const visibleSettingsNavigation = settingsNavigation.filter(canAccess);
   const settingsActive = [
     ...visibleUnasNavigation,
     ...visibleSettingsNavigation,
-  ].some((item) => isNavigationItemActive(pathname, item));
-  const unasActive = visibleUnasNavigation.some((item) =>
-    isNavigationItemActive(pathname, item),
-  );
+  ].some((item) => isActive(item));
+  const unasActive = visibleUnasNavigation.some((item) => isActive(item));
 
   const renderItem = (item: AppNavigationItem, nested = false) => (
     <NavItem
@@ -109,7 +124,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       href={item.href}
       label={item.label}
       icon={<Icon name={item.icon} />}
-      active={isNavigationItemActive(pathname, item)}
+      active={isActive(item)}
       className={nested ? "h-8 text-[13px]" : undefined}
       onClick={() => setMobileNavigationOpen(false)}
     />
@@ -133,9 +148,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         key={entry.label}
         label={entry.label}
         icon={<Icon name={entry.icon} />}
-        active={visibleChildren.some((item) =>
-          isNavigationItemActive(pathname, item),
-        )}
+        active={visibleChildren.some((item) => isActive(item))}
       >
         <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-2">
           {visibleChildren.map((item) => renderItem(item, true))}
@@ -153,7 +166,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             href={item.href}
             label={item.label}
             icon={<Icon name={item.icon} />}
-            active={isNavigationItemActive(pathname, item)}
+            active={isActive(item)}
             badge={
               item.href === "/feladataim" ? (
                 <Badge className="px-1.5" variant="neutral">
@@ -178,7 +191,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             href={item.href}
             label={item.label}
             icon={<Icon name={item.icon} />}
-            active={isNavigationItemActive(pathname, item)}
+            active={isActive(item)}
             onClick={() => setMobileNavigationOpen(false)}
           />
         ))}
@@ -198,7 +211,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     href={item.href}
                     label={item.label}
                     icon={<Icon name={item.icon} />}
-                    active={isNavigationItemActive(pathname, item)}
+                    active={isActive(item)}
                     onClick={() => setMobileNavigationOpen(false)}
                   />
                 ))}
@@ -217,7 +230,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                         href={item.href}
                         label={item.label}
                         icon={<Icon name={item.icon} />}
-                        active={isNavigationItemActive(pathname, item)}
+                        active={isActive(item)}
                         className="h-8 text-[13px]"
                         onClick={() => setMobileNavigationOpen(false)}
                       />
@@ -234,7 +247,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     href={item.href}
                     label={item.label}
                     icon={<Icon name={item.icon} />}
-                    active={isNavigationItemActive(pathname, item)}
+                    active={isActive(item)}
                     onClick={() => setMobileNavigationOpen(false)}
                   />
                 ))}
