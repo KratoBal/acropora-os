@@ -1,7 +1,7 @@
 import {
   IsIn,
   IsOptional,
-  Matches,
+  IsString,
   MaxLength,
   MinLength,
 } from "class-validator";
@@ -10,18 +10,18 @@ const PLATFORMS = ["IOS", "ANDROID"] as const;
 
 export class RegisterDeviceTokenDto {
   /**
-   * The raw APNs device token: 64 hexadecimal characters.
+   * The raw APNs device token.
    *
-   * The pattern is here to catch the one mistake that would otherwise only
-   * surface in production. Expo hands out a token of its own shaped like
-   * `ExponentPushToken[...]`, and a client asking for the wrong one would
-   * register happily and never receive anything. This refuses it at the door,
-   * and the message says which one to ask for.
+   * Only the coarse shape is checked here. The 64-hexadecimal rule lives in
+   * `device-token.rules.ts` and is applied by the controller, so that a
+   * refusal can be written to the log: `ValidationPipe` answers before the
+   * controller runs, and a rejection that leaves no trace is
+   * indistinguishable from an app that was never opened. That difference is
+   * what a TestFlight round is buying.
    */
-  @Matches(/^[0-9a-fA-F]{64}$/, {
-    message:
-      "Az eszköz-token 64 hexadecimális karakter lehet. A telefon a natív APNs tokent kérje, ne az Expo tokenjét.",
-  })
+  @IsString({ message: "Az eszköz-token megadása kötelező." })
+  @MinLength(1, { message: "Az eszköz-token megadása kötelező." })
+  @MaxLength(512, { message: "Az eszköz-token túl hosszú." })
   token!: string;
 
   /**

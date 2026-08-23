@@ -30,9 +30,20 @@ export class DeviceTokenRepository extends Repository {
    * does that; keying on the pair would leave the previous colleague still
    * subscribed to a phone in somebody else's pocket.
    */
-  register(input: DeviceTokenRegistration) {
+  async register(
+    input: DeviceTokenRegistration,
+  ): Promise<{ firstTime: boolean }> {
     const now = new Date();
-    return this.database.deviceToken.upsert({
+    // Looked up first so the caller can say whether this phone is new. The
+    // log line is what a TestFlight round is read from, and "a device
+    // registered" and "the same device registered again" answer different
+    // questions about the round.
+    const existing = await this.database.deviceToken.findUnique({
+      where: { token: input.token },
+      select: { id: true },
+    });
+
+    await this.database.deviceToken.upsert({
       where: { token: input.token },
       create: {
         userId: input.userId,
@@ -49,6 +60,8 @@ export class DeviceTokenRepository extends Repository {
       },
       select: { id: true },
     });
+
+    return { firstTime: existing === null };
   }
 
   /** Every device the given colleagues can be reached on. */
