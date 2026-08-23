@@ -157,4 +157,13 @@ export interface ProductListApiQuery {
   active?: boolean;
   categoryId?: string;
   brandId?: string;
+  /**
+   * Only products listed on this channel.
+   *
+   * Listed, not published: a `ChannelListing` row is written for every product
+   * the sync carries over, while `isPublished` is nobody's to write yet and is
+   * false on every row. Filtering on publication would return nothing at all,
+   * which is why the screen shows the channel's own status instead.
+   */
+  listedOn?: "UNAS";
 }
