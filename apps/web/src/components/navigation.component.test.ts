@@ -41,13 +41,31 @@ describe("navigation", () => {
     expect(labels.get("/partnerek")).toBe("Partnerek");
   });
 
-  it("puts the orders and the buyers under one Webshop heading", () => {
+  it("puts the orders, the buyers and the shop's products under one Webshop heading", () => {
     expect(
       group("Webshop").children.map((item) => [item.href, item.label]),
     ).toEqual([
       ["/webshop", "Megrendelések"],
       ["/vevok", "Webshop vásárlók"],
+      ["/webshop/termekek", "Webshop termékek"],
     ]);
+  });
+
+  /**
+   * Two entries, two catalogues. /products is the full internal one with the
+   * barcode editor; the webshop entry is the shop's own narrowed view. They
+   * are separate destinations and neither replaces the other.
+   */
+  it("keeps the full catalogue where it was", () => {
+    const labels = new Map(
+      navigationItems(businessNavigation).map((item) => [
+        item.href,
+        item.label,
+      ]),
+    );
+
+    expect(labels.get("/products")).toBe("Termékek");
+    expect(labels.get("/webshop/termekek")).toBe("Webshop termékek");
   });
 
   it("gathers purchasing, the NAV invoices and the Foxpost settlement under Pénzügy", () => {
@@ -112,29 +130,12 @@ describe("navigation", () => {
     });
 
     /**
-     * The webshop product list is added by a separate branch. The rule is
-     * asserted here on its own, so this branch already carries the behaviour
-     * the page will need, and does not wait on it.
+     * The two live under the same path, and the order list is the one that
+     * would have lit up by accident: /webshop/termekek starts with /webshop.
      */
-    it("will hand /webshop/termekek to the products entry once it exists", () => {
-      const products: AppNavigationItem = {
-        href: "/webshop/termekek",
-        label: "Webshop termékek",
-        icon: "package",
-        permission: item("/webshop").permission,
-      };
-      const withProducts = [...items, products];
-
-      expect(
-        isNavigationItemActive("/webshop/termekek", products, withProducts),
-      ).toBe(true);
-      expect(
-        isNavigationItemActive(
-          "/webshop/termekek",
-          item("/webshop"),
-          withProducts,
-        ),
-      ).toBe(false);
+    it("hands /webshop/termekek to the products entry, not to the order list", () => {
+      expect(active("/webshop/termekek", "/webshop/termekek")).toBe(true);
+      expect(active("/webshop/termekek", "/webshop")).toBe(false);
     });
   });
 

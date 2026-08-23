@@ -99,6 +99,14 @@ export const businessNavigation: AppNavigationEntry[] = [
         icon: "users",
         permission: PERMISSIONS.CUSTOMERS_VIEW,
       },
+      {
+        // The shop's own view of the catalogue. The full internal catalogue,
+        // with the barcode editor, stays at /products under "Termékek".
+        href: "/webshop/termekek",
+        label: "Webshop termékek",
+        icon: "package",
+        permission: PERMISSIONS.PRODUCTS_VIEW,
+      },
     ],
   },
   {
