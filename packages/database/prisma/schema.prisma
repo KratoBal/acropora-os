@@ -2656,6 +2656,10 @@ model UnasProductSyncRun {
   unchangedCount Int                      @default(0)
   conflictCount  Int                      @default(0)
   missingCount   Int                      @default(0)
+  /// Ahány terméket a futás kihagyott, mert a törzsadatát nem a UNAS gondozza.
+  /// A többi számláló mellett a helye: egy kihagyás, ami csak a válaszban
+  /// látszik, holnap már nem visszakereshető.
+  skippedCount   Int                      @default(0)
   errorCode      String?
   createdAt      DateTime                 @default(now())
   updatedAt      DateTime                 @updatedAt
