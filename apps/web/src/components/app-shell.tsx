@@ -16,12 +16,13 @@ import { useEffect, useState } from "react";
 
 import {
   businessNavigation,
+  isNavigationGroup,
   isNavigationItemActive,
   primaryNavigation,
   secondaryNavigation,
-  serviceNavigation,
   settingsNavigation,
   unasSettingsNavigation,
+  type AppNavigationEntry,
   type AppNavigationItem,
 } from "./navigation";
 import { useAuth } from "./auth/auth-provider";
@@ -101,10 +102,47 @@ export function AppShell({ children }: { children: ReactNode }) {
   const unasActive = visibleUnasNavigation.some((item) =>
     isNavigationItemActive(pathname, item),
   );
-  const visibleServiceNavigation = serviceNavigation.filter(canAccess);
-  const serviceActive = visibleServiceNavigation.some((item) =>
-    isNavigationItemActive(pathname, item),
+
+  const renderItem = (item: AppNavigationItem, nested = false) => (
+    <NavItem
+      key={item.href}
+      href={item.href}
+      label={item.label}
+      icon={<Icon name={item.icon} />}
+      active={isNavigationItemActive(pathname, item)}
+      className={nested ? "h-8 text-[13px]" : undefined}
+      onClick={() => setMobileNavigationOpen(false)}
+    />
   );
+
+  /**
+   * A heading is only drawn when at least one page under it may be seen, and
+   * it counts as active when one of those pages is the one open. Both are
+   * asked of the visible children rather than of the whole group: a page the
+   * reader cannot open should neither put a heading on screen nor light it up.
+   */
+  const renderEntry = (entry: AppNavigationEntry) => {
+    if (!isNavigationGroup(entry))
+      return canAccess(entry) ? renderItem(entry) : null;
+
+    const visibleChildren = entry.children.filter(canAccess);
+    if (visibleChildren.length === 0) return null;
+
+    return (
+      <NavigationGroup
+        key={entry.label}
+        label={entry.label}
+        icon={<Icon name={entry.icon} />}
+        active={visibleChildren.some((item) =>
+          isNavigationItemActive(pathname, item),
+        )}
+      >
+        <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-2">
+          {visibleChildren.map((item) => renderItem(item, true))}
+        </div>
+      </NavigationGroup>
+    );
+  };
 
   const navigation = (
     <>
@@ -131,39 +169,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <p className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
         Működés
       </p>
-      <div className="space-y-1">
-        {businessNavigation.filter(canAccess).map((item) => (
-          <NavItem
-            key={item.href}
-            href={item.href}
-            label={item.label}
-            icon={<Icon name={item.icon} />}
-            active={isNavigationItemActive(pathname, item)}
-            onClick={() => setMobileNavigationOpen(false)}
-          />
-        ))}
-        {visibleServiceNavigation.length > 0 ? (
-          <NavigationGroup
-            label="Szerviz"
-            icon={<Icon name="service" />}
-            active={serviceActive}
-          >
-            <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-2">
-              {visibleServiceNavigation.map((item) => (
-                <NavItem
-                  key={item.href}
-                  href={item.href}
-                  label={item.label}
-                  icon={<Icon name={item.icon} />}
-                  active={isNavigationItemActive(pathname, item)}
-                  className="h-8 text-[13px]"
-                  onClick={() => setMobileNavigationOpen(false)}
-                />
-              ))}
-            </div>
-          </NavigationGroup>
-        ) : null}
-      </div>
+      <div className="space-y-1">{businessNavigation.map(renderEntry)}</div>
 
       <div className="mt-6 space-y-1 border-t border-slate-200 pt-4">
         {secondaryNavigation.filter(canAccess).map((item) => (

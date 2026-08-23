@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import { businessNavigation } from "./navigation";
+import {
+  businessNavigation,
+  isNavigationGroup,
+  navigationItems,
+  type AppNavigationGroup,
+} from "./navigation";
+
+function group(label: string): AppNavigationGroup {
+  const found = businessNavigation.find(
+    (entry) => isNavigationGroup(entry) && entry.label === label,
+  );
+  if (!found || !isNavigationGroup(found))
+    throw new Error(`nincs "${label}" nevű menücsoport`);
+  return found;
+}
 
 describe("navigation", () => {
   /**
@@ -15,10 +29,58 @@ describe("navigation", () => {
    */
   it("calls the webshop buyers what they are, apart from the partners", () => {
     const labels = new Map(
-      businessNavigation.map((item) => [item.href, item.label]),
+      navigationItems(businessNavigation).map((item) => [
+        item.href,
+        item.label,
+      ]),
     );
 
-    expect(labels.get("/vevok")).toBe("Webshop vásárló");
+    expect(labels.get("/vevok")).toBe("Webshop vásárlók");
     expect(labels.get("/partnerek")).toBe("Partnerek");
+  });
+
+  it("puts the orders and the buyers under one Webshop heading", () => {
+    expect(
+      group("Webshop").children.map((item) => [item.href, item.label]),
+    ).toEqual([
+      ["/webshop", "Megrendelések"],
+      ["/vevok", "Webshop vásárlók"],
+    ]);
+  });
+
+  it("gathers purchasing, the NAV invoices and the Foxpost settlement under Pénzügy", () => {
+    expect(group("Pénzügy").children.map((item) => item.href)).toEqual([
+      "/beszerzes",
+      "/beszerzes/nav-szamlak",
+      "/penzugy/foxpost",
+    ]);
+  });
+
+  /**
+   * /penzugy is not a page of its own: the route falls through to the shared
+   * "modul előkészítve" placeholder. It was a menu entry before this heading
+   * existed; keeping it would put a heading and a link with the same name next
+   * to each other, one of which leads nowhere.
+   */
+  it("no longer offers the placeholder route as a destination", () => {
+    expect(
+      navigationItems(businessNavigation).map((item) => item.href),
+    ).not.toContain("/penzugy");
+  });
+
+  /**
+   * A heading carries no permission of its own, so anything that reads this
+   * list as "the pages" has to open the groups out first. The user editor's
+   * permission preview is the caller that would otherwise go quiet: it would
+   * simply stop listing the pages that moved under a heading.
+   */
+  it("opens groups out into their pages, each with a permission", () => {
+    const items = navigationItems(businessNavigation);
+
+    expect(items.map((item) => item.href)).toContain("/szerviz/munkalapok");
+    for (const item of items) {
+      expect(item.permission).toBeTruthy();
+      expect(item.href.startsWith("/")).toBe(true);
+    }
   });
 });
