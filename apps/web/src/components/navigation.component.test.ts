@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   businessNavigation,
   isNavigationGroup,
+  isNavigationItemActive,
   navigationItems,
   type AppNavigationGroup,
+  type AppNavigationItem,
 } from "./navigation";
 
 function group(label: string): AppNavigationGroup {
@@ -39,13 +41,31 @@ describe("navigation", () => {
     expect(labels.get("/partnerek")).toBe("Partnerek");
   });
 
-  it("puts the orders and the buyers under one Webshop heading", () => {
+  it("puts the orders, the buyers and the shop's products under one Webshop heading", () => {
     expect(
       group("Webshop").children.map((item) => [item.href, item.label]),
     ).toEqual([
       ["/webshop", "Megrendelések"],
       ["/vevok", "Webshop vásárlók"],
+      ["/webshop/termekek", "Webshop termékek"],
     ]);
+  });
+
+  /**
+   * Two entries, two catalogues. /products is the full internal one with the
+   * barcode editor; the webshop entry is the shop's own narrowed view. They
+   * are separate destinations and neither replaces the other.
+   */
+  it("keeps the full catalogue where it was", () => {
+    const labels = new Map(
+      navigationItems(businessNavigation).map((item) => [
+        item.href,
+        item.label,
+      ]),
+    );
+
+    expect(labels.get("/products")).toBe("Termékek");
+    expect(labels.get("/webshop/termekek")).toBe("Webshop termékek");
   });
 
   it("gathers purchasing, the NAV invoices and the Foxpost settlement under Pénzügy", () => {
@@ -74,6 +94,51 @@ describe("navigation", () => {
    * permission preview is the caller that would otherwise go quiet: it would
    * simply stop listing the pages that moved under a heading.
    */
+  /**
+   * Two entries can both sit above the same path. The specific one owns it,
+   * and the outer one has to stay dark - otherwise two entries in the same
+   * group look equally current, and the reader cannot tell which screen they
+   * are on.
+   *
+   * The pages under an entry still belong to it: a single purchase order is
+   * purchasing, and a single webshop order is the order list. That half is
+   * asserted too, because the obvious fix for the first half - marking the
+   * entry `exact` - would silently break it.
+   */
+  describe("active entry", () => {
+    const items = navigationItems(businessNavigation);
+    const item = (href: string): AppNavigationItem => {
+      const found = items.find((entry) => entry.href === href);
+      if (!found) throw new Error(`nincs "${href}" menüpont`);
+      return found;
+    };
+    const active = (pathname: string, href: string) =>
+      isNavigationItemActive(pathname, item(href), items);
+
+    it("gives a nested page to the entry that owns it, not to the one above", () => {
+      expect(active("/beszerzes/nav-szamlak", "/beszerzes/nav-szamlak")).toBe(
+        true,
+      );
+      expect(active("/beszerzes/nav-szamlak", "/beszerzes")).toBe(false);
+      expect(active("/beszerzes/nav-szamlak/42", "/beszerzes")).toBe(false);
+    });
+
+    it("keeps a detail page with its own list", () => {
+      expect(active("/beszerzes/uj", "/beszerzes")).toBe(true);
+      expect(active("/webshop/order-42", "/webshop")).toBe(true);
+      expect(active("/vevok/uj", "/vevok")).toBe(true);
+    });
+
+    /**
+     * The two live under the same path, and the order list is the one that
+     * would have lit up by accident: /webshop/termekek starts with /webshop.
+     */
+    it("hands /webshop/termekek to the products entry, not to the order list", () => {
+      expect(active("/webshop/termekek", "/webshop/termekek")).toBe(true);
+      expect(active("/webshop/termekek", "/webshop")).toBe(false);
+    });
+  });
+
   it("opens groups out into their pages, each with a permission", () => {
     const items = navigationItems(businessNavigation);
 

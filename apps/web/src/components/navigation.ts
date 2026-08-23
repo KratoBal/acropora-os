@@ -99,6 +99,14 @@ export const businessNavigation: AppNavigationEntry[] = [
         icon: "users",
         permission: PERMISSIONS.CUSTOMERS_VIEW,
       },
+      {
+        // The shop's own view of the catalogue. The full internal catalogue,
+        // with the barcode editor, stays at /products under "Termékek".
+        href: "/webshop/termekek",
+        label: "Webshop termékek",
+        icon: "package",
+        permission: PERMISSIONS.PRODUCTS_VIEW,
+      },
     ],
   },
   {
@@ -224,12 +232,31 @@ export const allSettingsNavigation: AppNavigationItem[] = [
   ...settingsNavigation,
 ];
 
+/**
+ * Whether this entry is the one the reader is on.
+ *
+ * A page below an entry's path counts as that entry: a single order is still
+ * "Megrendelések". But a path can sit below two entries at once, and then the
+ * more specific one owns it - `/beszerzes/nav-szamlak` is the NAV invoices,
+ * not purchasing, and `/webshop/termekek` is the webshop products, not the
+ * order list. Without `others` the outer entry lights up as well, and two
+ * headings in the same group look equally current.
+ *
+ * `exact` stays for the case the paths cannot express: an entry that owns its
+ * own page and nothing underneath it.
+ */
 export function isNavigationItemActive(
   pathname: string,
   item: AppNavigationItem,
+  others: AppNavigationItem[] = [],
 ) {
-  return (
-    pathname === item.href ||
-    (!item.exact && pathname.startsWith(`${item.href}/`))
+  if (pathname === item.href) return true;
+  if (item.exact) return false;
+  if (!pathname.startsWith(`${item.href}/`)) return false;
+
+  return !others.some(
+    (other) =>
+      other.href.length > item.href.length &&
+      (pathname === other.href || pathname.startsWith(`${other.href}/`)),
   );
 }

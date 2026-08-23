@@ -335,6 +335,42 @@ describe("ProductRepository", () => {
     assert.equal(result.items[0]?.stockOnHand, "6");
   });
 
+  /**
+   * The webshop list asks for the products carried on the channel, and that
+   * is what a listing row records. Publication is deliberately not part of
+   * the test: nothing writes `isPublished`, so it is false on every row, and
+   * a filter on it would answer with an empty shop. The screen shows the
+   * channel's own status instead, which the sync does keep up to date.
+   */
+  it("narrows the list to the products listed on a channel, by listing and not by publication", async () => {
+    const { database, calls } = createDatabase();
+    const repository = new ProductRepository(database);
+
+    await repository.list({ page: 1, pageSize: 20, listedOn: "UNAS" });
+
+    const findArgs = calls.find((call) => call.operation === "findMany")
+      ?.args as { where: Record<string, unknown> };
+    assert.deepEqual(findArgs.where.channelListings, {
+      some: { channel: "UNAS" },
+    });
+    assert.equal(
+      JSON.stringify(findArgs.where).includes("isPublished"),
+      false,
+      "publication must not be part of the filter",
+    );
+  });
+
+  it("leaves the list alone when no channel is asked for", async () => {
+    const { database, calls } = createDatabase();
+    const repository = new ProductRepository(database);
+
+    await repository.list({ page: 1, pageSize: 20 });
+
+    const findArgs = calls.find((call) => call.operation === "findMany")
+      ?.args as { where: Record<string, unknown> };
+    assert.equal(findArgs.where.channelListings, undefined);
+  });
+
   it("returns category, raw channel status and images in detail order", async () => {
     const { database } = createDatabase();
     const repository = new ProductRepository(database);

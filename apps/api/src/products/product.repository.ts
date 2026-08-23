@@ -206,6 +206,13 @@ export class ProductRepository extends Repository {
       ...(query.categoryId
         ? { categories: { some: { categoryId: query.categoryId } } }
         : {}),
+      // A listing row is the record that the product is carried on that
+      // channel. `isPublished` deliberately has no part in this: no writer
+      // sets it, so it is false on every row, and asking for published
+      // products would answer with an empty shop.
+      ...(query.listedOn
+        ? { channelListings: { some: { channel: query.listedOn } } }
+        : {}),
       ...(query.search
         ? {
             OR: [
