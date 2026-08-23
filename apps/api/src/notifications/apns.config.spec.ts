@@ -3,8 +3,10 @@ import { describe, it } from "node:test";
 
 import { readApnsConfig } from "./apns.config.js";
 
+const PEM = "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----";
+
 const complete = {
-  APNS_KEY: "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----",
+  APNS_PRIVATE_KEY_BASE64: PEM,
   APNS_KEY_ID: "KEY123",
   APNS_TEAM_ID: "TEAM123",
   APNS_ENVIRONMENT: "production",
@@ -43,7 +45,7 @@ describe("APNs configuration", () => {
     assert.equal(result.configured, false);
     if (result.configured) return;
     assert.deepEqual(result.missing, [
-      "APNS_KEY",
+      "APNS_PRIVATE_KEY_BASE64",
       "APNS_TEAM_ID",
       "APNS_ENVIRONMENT",
     ]);
@@ -59,7 +61,11 @@ describe("APNs configuration", () => {
 
     assert.equal(result.configured, false);
     if (result.configured) return;
-    assert.deepEqual(result.missing, ["APNS_ENVIRONMENT"]);
+    // Beállítva van, csak értelmezhetetlen: ez hiba, nem hiány. A kettő a
+    // naplóban is külön mondat, mert aki a Coolify felületén keresné a
+    // "hiányzó" változót, azt ott találná.
+    assert.deepEqual(result.missing, []);
+    assert.deepEqual(result.invalid, ["APNS_ENVIRONMENT"]);
   });
 
   /**
@@ -70,12 +76,68 @@ describe("APNs configuration", () => {
   it("puts a key's line breaks back when they arrive escaped", () => {
     const result = readApnsConfig({
       ...complete,
-      APNS_KEY: "-----BEGIN PRIVATE KEY-----\\nabc\\n-----END PRIVATE KEY-----",
+      APNS_PRIVATE_KEY_BASE64:
+        "-----BEGIN PRIVATE KEY-----\\nabc\\n-----END PRIVATE KEY-----",
     });
 
     assert.equal(result.configured, true);
     if (!result.configured) return;
     assert.equal(result.config.signingKey.includes("\\n"), false);
     assert.equal(result.config.signingKey.split("\n").length, 3);
+  });
+
+  /**
+   * A változó NEVE azt állítja, hogy base64; a tartalma a tény. A kettő ma
+   * este már egyszer eltért egymástól ugyanezen a beállításon, ezért a kód
+   * felismeri az alakot, nem feltételezi.
+   */
+  it("accepts the key base64-encoded, as the variable name suggests", () => {
+    const result = readApnsConfig({
+      ...complete,
+      APNS_PRIVATE_KEY_BASE64: Buffer.from(PEM).toString("base64"),
+    });
+
+    assert.equal(result.configured, true);
+    if (!result.configured) return;
+    assert.equal(result.config.signingKey, PEM);
+  });
+
+  it("accepts the same key as plain PEM, whatever the variable is called", () => {
+    const result = readApnsConfig(complete);
+
+    assert.equal(result.configured, true);
+    if (!result.configured) return;
+    assert.equal(result.config.signingKey, PEM);
+  });
+
+  /**
+   * Neither shape: refused by name, and NOT as a missing variable. A silent
+   * skip here would look like an unconfigured deployment while the value sits
+   * in the settings, which is exactly the evening we have just had.
+   */
+  it("names the key as invalid when it is neither PEM nor base64 PEM", () => {
+    const result = readApnsConfig({
+      ...complete,
+      APNS_PRIVATE_KEY_BASE64: "nem-kulcs",
+    });
+
+    assert.equal(result.configured, false);
+    if (result.configured) return;
+    assert.deepEqual(result.missing, []);
+    assert.deepEqual(result.invalid, ["APNS_PRIVATE_KEY_BASE64"]);
+  });
+
+  /** A titok soha nem kerül a hibaüzenetbe, akkor sem, ha értelmezhetetlen. */
+  it("never repeats the key back in its answer", () => {
+    const result = readApnsConfig({
+      ...complete,
+      APNS_PRIVATE_KEY_BASE64: "titkos-ertek-amit-nem-szabad-kiirni",
+    });
+
+    assert.equal(
+      JSON.stringify(result).includes("titkos-ertek"),
+      false,
+      "a kulcs értéke nem szerepelhet a válaszban",
+    );
   });
 });

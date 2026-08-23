@@ -28,46 +28,90 @@ export interface ApnsConfig {
 
 export type ApnsConfigResult =
   | { configured: true; config: ApnsConfig }
-  | { configured: false; missing: string[] };
+  | {
+      configured: false;
+      /** Beállítatlan változók, a nevükön, ahogy a Coolify felületén állnak. */
+      missing: string[];
+      /** Beállított, de értelmezhetetlen értékek. Ez már hiba, nem hiány. */
+      invalid: string[];
+    };
 
 const PRODUCTION_HOST = "api.push.apple.com";
 const SANDBOX_HOST = "api.sandbox.push.apple.com";
 
+const PEM_HEADER = "-----BEGIN";
+
 /**
- * The signing key arrives as one environment variable, and a PEM has line
- * breaks. Docker and Coolify both make those easy to lose, so a key pasted
- * with literal `\n` sequences is accepted and put back together rather than
+ * A PEM has line breaks, and both Docker and Coolify make those easy to lose.
+ * A key pasted with literal `\n` sequences is put back together rather than
  * failing later with an unreadable crypto error.
  */
-function normalizeKey(raw: string): string {
+function restoreLineBreaks(raw: string): string {
   return raw.includes("\\n") ? raw.replace(/\\n/g, "\n") : raw;
+}
+
+/**
+ * A kulcs alakját FELISMERJÜK, nem feltételezzük.
+ *
+ * A változó neve ma azt állítja, hogy base64 (`APNS_PRIVATE_KEY_BASE64`), de a
+ * név egy állítás, a tartalom a tény - és a kettő ma már egyszer eltért
+ * egymástól ugyanezen a beállításon. Ha a névre építenénk és valaki egyszer
+ * PEM-et illeszt be, a base64-dekódolás szemetet adna a crypto alá, és a hiba
+ * nem az lenne, hogy "rossz a beállítás", hanem egy értelmezhetetlen
+ * kriptográfiai üzenet.
+ *
+ * Ezért: ha PEM, akkor PEM. Ha nem, base64-ként dekódoljuk, és a dekódolt
+ * értéknek kell PEM-nek lennie. Ha az sem, az konfigurációs hiba, névvel.
+ *
+ * AZ ÉRTÉKET SEHOL NEM NAPLÓZZUK, és a hibaüzenetbe sem kerül bele.
+ */
+export function readSigningKey(raw: string): string | null {
+  const value = restoreLineBreaks(raw.trim());
+  if (value.startsWith(PEM_HEADER)) return value;
+
+  let decoded: string;
+  try {
+    decoded = Buffer.from(value, "base64").toString("utf8").trim();
+  } catch {
+    return null;
+  }
+
+  return decoded.startsWith(PEM_HEADER) ? decoded : null;
 }
 
 export function readApnsConfig(
   environment: NodeJS.ProcessEnv = process.env,
 ): ApnsConfigResult {
-  const signingKey = environment.APNS_KEY?.trim();
+  const rawKey = environment.APNS_PRIVATE_KEY_BASE64?.trim();
   const keyId = environment.APNS_KEY_ID?.trim();
   const teamId = environment.APNS_TEAM_ID?.trim();
   const apnsEnvironment = environment.APNS_ENVIRONMENT?.trim();
 
   const missing: string[] = [];
-  if (!signingKey) missing.push("APNS_KEY");
+  if (!rawKey) missing.push("APNS_PRIVATE_KEY_BASE64");
   if (!keyId) missing.push("APNS_KEY_ID");
   if (!teamId) missing.push("APNS_TEAM_ID");
   if (!apnsEnvironment) missing.push("APNS_ENVIRONMENT");
-  if (missing.length > 0) return { configured: false, missing };
+  if (missing.length > 0) return { configured: false, missing, invalid: [] };
 
   // Anything other than the two known words is a misconfiguration, not a
   // reason to pick a default: silently choosing production for a typo would
   // send real notifications from a staging deployment.
   if (apnsEnvironment !== "production" && apnsEnvironment !== "sandbox")
-    return { configured: false, missing: ["APNS_ENVIRONMENT"] };
+    return { configured: false, missing: [], invalid: ["APNS_ENVIRONMENT"] };
+
+  const signingKey = readSigningKey(rawKey!);
+  if (!signingKey)
+    return {
+      configured: false,
+      missing: [],
+      invalid: ["APNS_PRIVATE_KEY_BASE64"],
+    };
 
   return {
     configured: true,
     config: {
-      signingKey: normalizeKey(signingKey!),
+      signingKey,
       keyId: keyId!,
       teamId: teamId!,
       host: apnsEnvironment === "production" ? PRODUCTION_HOST : SANDBOX_HOST,
