@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -61,6 +62,23 @@ export class SuppliersController {
     @Body() input: CreateWorksheetDepartmentDto,
   ) {
     return this.service.createUnit(id, input);
+  }
+
+  /**
+   * Mi történne törléskor. A felület ezzel tudja megnevezni, MIT töröl, és
+   * megmondani, MELYIK ág fut - a két eset következménye különböző, tehát a
+   * megerősítő kérdés sem lehet ugyanaz.
+   */
+  @Get(":id/deletion-plan")
+  @RequirePermissions(PERMISSIONS.PARTNERS_MANAGE)
+  deletionPlan(@Param("id") id: string) {
+    return this.service.deletionPlan(id);
+  }
+
+  @Delete(":id")
+  @RequirePermissions(PERMISSIONS.PARTNERS_MANAGE)
+  remove(@Param("id") id: string) {
+    return this.service.remove(id);
   }
 
   @Patch(":id")

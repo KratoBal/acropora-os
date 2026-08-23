@@ -864,13 +864,13 @@ model BrandResolutionReview {
 }
 
 model Supplier {
-  id                   String   @id @default(cuid())
-  code                 String   @unique
+  id                   String    @id @default(cuid())
+  code                 String    @unique
   name                 String
   /// EU-s beszállítónál a közösségi adószám (pl. "DE123456789"), belföldinél a magyar adószám; opcionális.
   taxNumber            String?
   /// ISO 3166-1 alpha-2 országkód; a "HU"-tól eltérő érték jelöli az EU-n belüli beszerzést.
-  country              String   @default("HU") @db.VarChar(2)
+  country              String    @default("HU") @db.VarChar(2)
   email                String?
   phone                String?
   /// What kind of partner this is. The two are independent, because one
@@ -881,11 +881,11 @@ model Supplier {
   /// held suppliers only until now -- and so that the purchase invoice screen,
   /// which creates a supplier without knowing about partner kinds, keeps
   /// working unchanged.
-  isSupplier           Boolean  @default(true)
+  isSupplier           Boolean   @default(true)
   /// A service partner is one we write worksheets and quotes for. Off by
   /// default: an existing row was never recorded as one, and guessing would
   /// put companies in front of the service staff that nobody put there.
-  isService            Boolean  @default(false)
+  isService            Boolean   @default(false)
   /// The partner's abbreviation, and the worksheet number's first segment
   /// (`FANK` in `FANK-BIO-2026-001`). Four characters, because the number has
   /// to say at a glance whose sheet it is, and a segment of varying length
@@ -901,7 +901,7 @@ model Supplier {
   /// partner without one -- ticking a box should not turn into a decision at
   /// the wrong moment -- and the worksheet picker leaves those partners out
   /// instead, so nobody can start a sheet that cannot be closed.
-  worksheetPartnerCode String?  @unique @db.VarChar(4)
+  worksheetPartnerCode String?   @unique @db.VarChar(4)
   /// The customer row that carries this partner's worksheets.
   ///
   /// A worksheet hangs off a customer in three places -- the sheet, the unit
@@ -915,7 +915,7 @@ model Supplier {
   /// mirror rows out, and the partner screen is where the data is edited. It
   /// is created and kept in step by the system, so a partner is still
   /// recorded once, by hand, in one place.
-  customerId           String?  @unique
+  customerId           String?   @unique
   /// EU-s (nem "HU") beszállítónál a nemzetközi bankszámlaszám.
   iban                 String?
   /// EU-s (nem "HU") beszállítónál a bank SWIFT/BIC kódja.
@@ -931,9 +931,20 @@ model Supplier {
   city                 String?
   addressLine1         String?
   addressLine2         String?
-  isActive             Boolean  @default(true)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  isActive             Boolean   @default(true)
+  /// Amikor a partnert törölni akarták, de valami visszatartotta.
+  ///
+  /// NEM ugyanaz, mint az `isActive`. Egy inaktív partnert kivezettünk: nem
+  /// dolgozunk vele, de a törzsadata a miénk. Egy törölt partnert törölni
+  /// AKARTUNK, csak nem lehetett fizikailag, mert hivatkozik rá egy régi
+  /// bejegyzés, és annak a nevét ott kell hagyni. A kettő egy mezőbe vonva a
+  /// listákban nem lenne szétválasztható.
+  ///
+  /// A törölt partner eltűnik a választókból, de a régi számlán és
+  /// munkalapon látszik a neve.
+  deletedAt            DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   products              SupplierProduct[]
   purchaseOrders        PurchaseOrder[]
