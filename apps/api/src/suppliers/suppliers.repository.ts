@@ -11,6 +11,7 @@ import type {
 
 import { generateCode } from "../common/code-generator.util.js";
 import type { CreateWorksheetDepartmentDto } from "../worksheets/dto/worksheet.dto.js";
+import type { PartnerReferenceCounts } from "./partner-deletion.js";
 import type {
   CreateSupplierDto,
   SupplierListQueryDto,
@@ -148,6 +149,11 @@ export class SuppliersRepository extends Repository {
 
   async list(query: SupplierListQueryDto): Promise<SupplierListResponse> {
     const where: Prisma.SupplierWhereInput = {
+      // A törölt partner kikerül a listából, a "Mind" szűrő alól is: az a
+      // szűrő az aktív és az inaktív között választ, a törölt viszont nem
+      // ezen a tengelyen van. A neve továbbra is látszik a régi
+      // bejegyzéseken, ahol hivatkoznak rá.
+      deletedAt: null,
       ...(query.status === "ALL"
         ? {}
         : { isActive: query.status === "ACTIVE" }),
@@ -248,6 +254,124 @@ export class SuppliersRepository extends Repository {
         name: input.name.trim(),
       },
       select: { id: true, code: true, name: true, isActive: true },
+    });
+  }
+
+  /**
+   * Leszámolja, mi hivatkozik a partnerre, és mi tartozik hozzá.
+   *
+   * A tükör vevő-soron át futó hivatkozások ugyanennek a partnernek szólnak:
+   * a munkalapjai, az alegységei és a vevőként kiállított számlái mind ott
+   * ülnek. Ezért a számolás két helyről gyűjt, de EGY partnerről beszél.
+   *
+   * Minden fajta külön számol, mert a felhasználónak meg kell tudni mondani,
+   * MI tartja vissza a törlést - egy "van rá hivatkozás" válasszal nem tud
+   * mit kezdeni.
+   */
+  async referenceCounts(id: string): Promise<PartnerReferenceCounts> {
+    const supplier = await this.database.supplier.findUnique({
+      where: { id },
+      select: { customerId: true },
+    });
+    if (!supplier) return {};
+
+    const forSupplier = { supplierId: id };
+    const mirrorId = supplier.customerId;
+    const forMirror = mirrorId ? { customerId: mirrorId } : null;
+    const zero = async () => 0;
+
+    const [
+      supplierProducts,
+      preferredByExtensions,
+      purchaseOrders,
+      purchaseInvoices,
+      supplierInvoices,
+      supplierAssets,
+      mirrorAddresses,
+      salesOrders,
+      projects,
+      serviceJobs,
+      aquariums,
+      customerInvoices,
+      customerAssets,
+      worksheetDepartments,
+      worksheets,
+    ] = await Promise.all([
+      this.database.supplierProduct.count({ where: forSupplier }),
+      this.database.productExtension.count({
+        where: { preferredSupplierId: id },
+      }),
+      this.database.purchaseOrder.count({ where: forSupplier }),
+      this.database.purchaseInvoice.count({ where: forSupplier }),
+      this.database.invoice.count({ where: forSupplier }),
+      this.database.asset.count({ where: forSupplier }),
+      forMirror
+        ? this.database.customerAddress.count({ where: forMirror })
+        : zero(),
+      forMirror ? this.database.salesOrder.count({ where: forMirror }) : zero(),
+      forMirror ? this.database.project.count({ where: forMirror }) : zero(),
+      forMirror ? this.database.serviceJob.count({ where: forMirror }) : zero(),
+      forMirror ? this.database.aquarium.count({ where: forMirror }) : zero(),
+      forMirror ? this.database.invoice.count({ where: forMirror }) : zero(),
+      forMirror ? this.database.asset.count({ where: forMirror }) : zero(),
+      forMirror
+        ? this.database.worksheetDepartment.count({ where: forMirror })
+        : zero(),
+      forMirror ? this.database.worksheet.count({ where: forMirror }) : zero(),
+    ]);
+
+    return {
+      supplierProducts,
+      preferredByExtensions,
+      purchaseOrders,
+      purchaseInvoices,
+      supplierInvoices,
+      supplierAssets,
+      mirrorAddresses,
+      salesOrders,
+      projects,
+      serviceJobs,
+      aquariums,
+      customerInvoices,
+      customerAssets,
+      worksheetDepartments,
+      worksheets,
+    };
+  }
+
+  /**
+   * Fizikai törlés, a tükör vevő-sorral együtt.
+   *
+   * A sorrend kötött, és nem stílus: a partner sora mutat a tükörre
+   * (`onDelete: Restrict`), tehát amíg a partner megvan, a vevő-sor nem
+   * törölhető. Egy tranzakcióban megy, mert egy félig lefutott törlés árva
+   * tükör-sort hagyna a Vevők képernyőn, amit senki nem tudna hova tenni.
+   */
+  async remove(id: string): Promise<void> {
+    await this.database.$transaction(async (tx) => {
+      const supplier = await tx.supplier.findUnique({
+        where: { id },
+        select: { customerId: true },
+      });
+      if (!supplier) return;
+
+      await tx.supplier.delete({ where: { id } });
+      if (supplier.customerId)
+        await tx.customer.delete({ where: { id: supplier.customerId } });
+    });
+  }
+
+  /**
+   * A sor marad, törölt jelöléssel.
+   *
+   * A tükör vevő-sorhoz NEM nyúlunk: a régi munkalapok azon keresztül tartják
+   * a partner nevét, és ha azt elvennénk, a lapokon üresen maradna a hely -
+   * pontosan az, amit a törölt jelölés elkerülni hivatott.
+   */
+  async markDeleted(id: string): Promise<void> {
+    await this.database.supplier.update({
+      where: { id },
+      data: { deletedAt: new Date(), isActive: false },
     });
   }
 

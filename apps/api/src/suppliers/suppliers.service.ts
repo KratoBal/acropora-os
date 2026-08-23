@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 
+import { planPartnerDeletion } from "./partner-deletion.js";
 import { SuppliersRepository } from "./suppliers.repository.js";
 import type { CreateWorksheetDepartmentDto } from "../worksheets/dto/worksheet.dto.js";
 import type {
@@ -26,6 +27,34 @@ export class SuppliersService {
     const supplier = await this.repository.detail(id);
     if (!supplier) throw new NotFoundException("A beszállító nem található.");
     return supplier;
+  }
+
+  /**
+   * Mi történne, ha most törölnénk. A felület ezt kérdezi meg, MIELŐTT
+   * megerősítést kér.
+   *
+   * A kérdés nem lehet ugyanaz a két esetben: az egyik egy sort töröl
+   * véglegesen, a másik meghagyja, hogy a régi bejegyzéseken maradjon a név.
+   * A felhasználónak azt kell megerősítenie, ami történni fog.
+   */
+  async deletionPlan(id: string) {
+    await this.detail(id);
+    return planPartnerDeletion(await this.repository.referenceCounts(id));
+  }
+
+  /**
+   * Törlés. A terv dönt, nem a hívó: a felület nem mondhatja meg, hogy
+   * fizikailag töröljön, mert a kettő között nem ízlés, hanem adat dönt, és
+   * a képernyő adata elavulhat, amíg a megerősítő kérdés kint van.
+   */
+  async remove(id: string) {
+    await this.detail(id);
+    const plan = planPartnerDeletion(await this.repository.referenceCounts(id));
+
+    if (plan.action === "delete") await this.repository.remove(id);
+    else await this.repository.markDeleted(id);
+
+    return plan;
   }
 
   async units(id: string) {

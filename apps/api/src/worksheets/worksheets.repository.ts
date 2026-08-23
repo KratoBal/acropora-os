@@ -176,6 +176,9 @@ export class WorksheetsRepository extends Repository {
     return {
       isService: true,
       isActive: true,
+      // Törölt partnerre új lapot nyitni azt jelentené, hogy a törlés nem
+      // történt meg. A régi lapjain a neve továbbra is ott van.
+      deletedAt: null,
       worksheetPartnerCode: { not: null },
       customerId: { not: null },
     };
