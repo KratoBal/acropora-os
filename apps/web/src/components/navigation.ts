@@ -9,6 +9,47 @@ export interface AppNavigationItem {
   exact?: boolean;
 }
 
+/**
+ * A menu heading that opens to reveal its own pages.
+ *
+ * A group carries no `href` on purpose: its heading opens and closes the
+ * group, and a heading that both navigated and toggled would do one of the
+ * two by accident on every click. Everything reachable is a child.
+ *
+ * Permission lives on the children, not here. A group is shown when at least
+ * one of its children is, which keeps the rule in one place: if somebody may
+ * not see any page under a heading, the heading is not there either.
+ */
+export interface AppNavigationGroup {
+  label: string;
+  icon: IconName;
+  children: AppNavigationItem[];
+}
+
+export type AppNavigationEntry = AppNavigationItem | AppNavigationGroup;
+
+export function isNavigationGroup(
+  entry: AppNavigationEntry,
+): entry is AppNavigationGroup {
+  return "children" in entry;
+}
+
+/**
+ * Every page in a list, with the groups opened out.
+ *
+ * Anything that asks "which pages are there" wants this rather than the raw
+ * list: a group is a heading, it has no `href` and no permission of its own,
+ * so counting it as a page would leave the pages underneath it uncounted. The
+ * user editor's permission preview is the one that would have gone quiet.
+ */
+export function navigationItems(
+  entries: AppNavigationEntry[],
+): AppNavigationItem[] {
+  return entries.flatMap((entry) =>
+    isNavigationGroup(entry) ? entry.children : [entry],
+  );
+}
+
 export const primaryNavigation: AppNavigationItem[] = [
   {
     href: "/",
@@ -21,88 +62,6 @@ export const primaryNavigation: AppNavigationItem[] = [
     label: "Feladataim",
     icon: "clipboard",
     permission: PERMISSIONS.TASKS_VIEW,
-  },
-];
-
-export const businessNavigation: AppNavigationItem[] = [
-  {
-    href: "/webshop",
-    label: "Webshop",
-    icon: "store",
-    permission: PERMISSIONS.ORDERS_VIEW,
-  },
-  {
-    href: "/pos",
-    label: "POS",
-    icon: "credit-card",
-    permission: PERMISSIONS.ORDERS_VIEW,
-  },
-  {
-    href: "/products",
-    label: "Termékek",
-    icon: "package",
-    permission: PERMISSIONS.PRODUCTS_VIEW,
-  },
-  {
-    href: "/vevok",
-    label: "Webshop vásárló",
-    icon: "users",
-    permission: PERMISSIONS.CUSTOMERS_VIEW,
-  },
-  {
-    href: "/raktar",
-    label: "Raktár",
-    icon: "warehouse",
-    permission: PERMISSIONS.INVENTORY_VIEW,
-  },
-  {
-    href: "/keszlet-egyeztetes",
-    label: "Készlet-egyeztetés",
-    icon: "box",
-    permission: PERMISSIONS.INVENTORY_VIEW,
-  },
-  {
-    href: "/beszerzes",
-    label: "Beszerzés",
-    icon: "cart",
-    permission: PERMISSIONS.PURCHASING_VIEW,
-  },
-  {
-    href: "/partnerek",
-    label: "Partnerek",
-    icon: "truck",
-    permission: PERMISSIONS.PURCHASING_VIEW,
-  },
-  {
-    href: "/beszerzes/nav-szamlak",
-    label: "NAV számla lekérés",
-    icon: "download",
-    permission: PERMISSIONS.PURCHASING_VIEW,
-  },
-  {
-    href: "/penzugy",
-    label: "Pénzügy",
-    icon: "finance",
-    permission: PERMISSIONS.FINANCE_VIEW,
-    exact: true,
-  },
-  {
-    href: "/penzugy/foxpost",
-    label: "Foxpost elszámolás",
-    icon: "download",
-    permission: PERMISSIONS.FINANCE_VIEW,
-  },
-  {
-    href: "/akvariumok",
-    label: "Akváriumok",
-    icon: "aquarium",
-    permission: PERMISSIONS.AQUARIUMS_VIEW,
-  },
-  {
-    href: "/icp",
-    label: "ICP",
-    icon: "briefcase",
-    permission: PERMISSIONS.ICP_VIEW,
   },
 ];
 
@@ -119,6 +78,99 @@ export const serviceNavigation: AppNavigationItem[] = [
     icon: "box",
     permission: PERMISSIONS.SERVICE_VIEW,
   },
+];
+
+export const businessNavigation: AppNavigationEntry[] = [
+  {
+    label: "Webshop",
+    icon: "store",
+    children: [
+      {
+        // The page behind /webshop is the order list, and that is what it is
+        // called here. "Webshop" is the heading above it now.
+        href: "/webshop",
+        label: "Megrendelések",
+        icon: "cart",
+        permission: PERMISSIONS.ORDERS_VIEW,
+      },
+      {
+        href: "/vevok",
+        label: "Webshop vásárlók",
+        icon: "users",
+        permission: PERMISSIONS.CUSTOMERS_VIEW,
+      },
+    ],
+  },
+  {
+    href: "/pos",
+    label: "POS",
+    icon: "credit-card",
+    permission: PERMISSIONS.ORDERS_VIEW,
+  },
+  {
+    href: "/products",
+    label: "Termékek",
+    icon: "package",
+    permission: PERMISSIONS.PRODUCTS_VIEW,
+  },
+  {
+    href: "/raktar",
+    label: "Raktár",
+    icon: "warehouse",
+    permission: PERMISSIONS.INVENTORY_VIEW,
+  },
+  {
+    href: "/keszlet-egyeztetes",
+    label: "Készlet-egyeztetés",
+    icon: "box",
+    permission: PERMISSIONS.INVENTORY_VIEW,
+  },
+  {
+    href: "/partnerek",
+    label: "Partnerek",
+    icon: "truck",
+    permission: PERMISSIONS.PURCHASING_VIEW,
+  },
+  {
+    label: "Pénzügy",
+    icon: "finance",
+    children: [
+      {
+        href: "/beszerzes",
+        label: "Beszerzés",
+        icon: "cart",
+        permission: PERMISSIONS.PURCHASING_VIEW,
+      },
+      {
+        href: "/beszerzes/nav-szamlak",
+        label: "NAV számla lekérés",
+        icon: "download",
+        permission: PERMISSIONS.PURCHASING_VIEW,
+      },
+      {
+        href: "/penzugy/foxpost",
+        label: "Foxpost elszámolás",
+        icon: "download",
+        permission: PERMISSIONS.FINANCE_VIEW,
+      },
+    ],
+  },
+  {
+    href: "/akvariumok",
+    label: "Akváriumok",
+    icon: "aquarium",
+    permission: PERMISSIONS.AQUARIUMS_VIEW,
+  },
+  {
+    href: "/icp",
+    label: "ICP",
+    icon: "briefcase",
+    permission: PERMISSIONS.ICP_VIEW,
+  },
+  // Service was already a group on screen, wired by hand in the shell. It is
+  // listed here now so every group in this menu comes from one place; the
+  // rendering does not care which of them is which.
+  { label: "Szerviz", icon: "service", children: serviceNavigation },
 ];
 
 export const unasSettingsNavigation: AppNavigationItem[] = [
