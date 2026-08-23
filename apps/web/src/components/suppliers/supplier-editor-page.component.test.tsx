@@ -16,7 +16,13 @@ const postalCode = vi.hoisted(() => ({ lookup: vi.fn() }));
 const viesVat = vi.hoisted(() => ({ lookup: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
-vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
+// The whole module is mocked, so every hook the tree reaches for has to be
+// present here - `usePathname` included, even though the "vissza" target now
+// comes from the navigation context and falls back to the list.
+vi.mock("next/navigation", () => ({
+  useRouter: () => navigation,
+  usePathname: () => "/partnerek/1",
+}));
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session }),
 }));

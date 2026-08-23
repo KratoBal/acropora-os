@@ -21,6 +21,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
+import { useReturnTo } from "@/components/navigation-history";
 import { PartnerDeleteButton } from "./partner-delete-button";
 import {
   COUNTRY_OPTIONS,
@@ -65,6 +66,7 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
   const [viesResult, setViesResult] = useState<ViesVatLookupResult | null>(
     null,
   );
+  const backToList = useReturnTo("/partnerek");
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.PARTNERS_MANAGE),
   );
@@ -275,8 +277,16 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
         title={supplier ? supplier.name : "Új felvitele"}
         description="Törzsadatok, bankszámla és kapcsolattartó a beszerzési számlák rögzítéséhez."
         actions={
-          <Link href="/partnerek">
-            <Button variant="secondary">Vissza a listához</Button>
+          /*
+            Oda vissza, ahonnan a kolléga jött - egy partner adatlapjára a
+            munkalap felől is be lehet lépni, és onnan a partner-lista nem
+            "vissza", hanem egy harmadik hely. Ha nincs honnan jönni
+            (közvetlen cím, újratöltés), a lista a tartalék, ahogy eddig.
+          */
+          <Link href={backToList.href}>
+            <Button variant="secondary">
+              {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
+            </Button>
           </Link>
         }
       />
@@ -292,7 +302,7 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
           token={token}
           partnerId={supplier.id}
           partnerName={supplier.name}
-          onDeleted={() => router.push("/partnerek")}
+          onDeleted={backToList.goBack}
         />
       ) : null}
       <form className="space-y-6" onSubmit={submit}>
