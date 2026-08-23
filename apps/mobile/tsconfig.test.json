@@ -16,6 +16,10 @@
   "include": [
     "src/config/env.ts",
     "src/config/env.spec.ts",
+    "src/config/env-inlining.spec.ts",
+    "src/config/test-inventory.spec.ts",
+    "src/lib/notifications/push-registration.ts",
+    "src/lib/notifications/push-registration.spec.ts",
     "src/lib/auth/types.ts",
     "src/lib/auth/auth-reducer.ts",
     "src/lib/auth/auth-reducer.spec.ts",
