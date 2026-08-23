@@ -5,8 +5,14 @@ import { readApnsConfig } from "./apns.config.js";
 
 const PEM = "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----";
 
+/**
+ * Az alapeset BASE64, mert az élesben ez van: Balázs lemérte a futó
+ * konténerben, és az érték nem `-----BEGIN` kezdetű. A tesztek főárama tehát
+ * azt az utat járja, amit a rendszer valóban használ - a PEM-ág külön esetként
+ * marad, védelemnek egy jövőbeli változás ellen.
+ */
 const complete = {
-  APNS_PRIVATE_KEY_BASE64: PEM,
+  APNS_PRIVATE_KEY_BASE64: Buffer.from(PEM).toString("base64"),
   APNS_KEY_ID: "KEY123",
   APNS_TEAM_ID: "TEAM123",
   APNS_ENVIRONMENT: "production",
@@ -91,11 +97,8 @@ describe("APNs configuration", () => {
    * este már egyszer eltért egymástól ugyanezen a beállításon, ezért a kód
    * felismeri az alakot, nem feltételezi.
    */
-  it("accepts the key base64-encoded, as the variable name suggests", () => {
-    const result = readApnsConfig({
-      ...complete,
-      APNS_PRIVATE_KEY_BASE64: Buffer.from(PEM).toString("base64"),
-    });
+  it("decodes the base64 key the live deployment actually carries", () => {
+    const result = readApnsConfig(complete);
 
     assert.equal(result.configured, true);
     if (!result.configured) return;
@@ -103,11 +106,33 @@ describe("APNs configuration", () => {
   });
 
   it("accepts the same key as plain PEM, whatever the variable is called", () => {
-    const result = readApnsConfig(complete);
+    const result = readApnsConfig({
+      ...complete,
+      APNS_PRIVATE_KEY_BASE64: PEM,
+    });
 
     assert.equal(result.configured, true);
     if (!result.configured) return;
     assert.equal(result.config.signingKey, PEM);
+  });
+
+  /**
+   * A csendes hiba helye: base64, ami nem PEM-et rejt. Ha ez a crypto rétegig
+   * jutna, egy értelmezhetetlen kriptográfiai üzenet állítaná meg a küldést,
+   * és nem mondaná meg, hogy a beállítás a baj.
+   */
+  it("refuses base64 that does not decode to a PEM, by name", () => {
+    const result = readApnsConfig({
+      ...complete,
+      APNS_PRIVATE_KEY_BASE64: Buffer.from("nem kulcs, csak szoveg").toString(
+        "base64",
+      ),
+    });
+
+    assert.equal(result.configured, false);
+    if (result.configured) return;
+    assert.deepEqual(result.missing, []);
+    assert.deepEqual(result.invalid, ["APNS_PRIVATE_KEY_BASE64"]);
   });
 
   /**
