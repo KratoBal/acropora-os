@@ -9,6 +9,8 @@ export interface DeviceTokenRegistration {
 }
 
 export interface DeviceTokenRecipient {
+  /** Whose phone this is. The notification log names people, never tokens. */
+  userId: string;
   token: string;
   bundleId: string;
 }
@@ -56,7 +58,7 @@ export class DeviceTokenRepository extends Repository {
     if (userIds.length === 0) return [];
     return this.database.deviceToken.findMany({
       where: { userId: { in: [...userIds] } },
-      select: { token: true, bundleId: true },
+      select: { userId: true, token: true, bundleId: true },
     });
   }
 

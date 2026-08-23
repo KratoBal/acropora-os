@@ -4,6 +4,10 @@ import { describe, it } from "node:test";
 import type { ApnsMessage, ApnsResult } from "./apns.client.js";
 import type { ApnsSender } from "./apns.sender.js";
 import type { DeviceTokenRepository } from "./device-token.repository.js";
+import type {
+  NotificationLogRepository,
+  NotificationOutcome,
+} from "./notification-log.repository.js";
 import { NotificationsService } from "./notifications.service.js";
 
 function sender(
@@ -21,8 +25,18 @@ function sender(
   return { sender: value, sent };
 }
 
+function log() {
+  const written: NotificationOutcome[] = [];
+  const value = {
+    recordWorksheetAssignment: async (outcome: NotificationOutcome) => {
+      written.push(outcome);
+    },
+  } as unknown as NotificationLogRepository;
+  return { log: value, written };
+}
+
 function tokens(
-  rows: Array<{ token: string; bundleId: string }>,
+  rows: Array<{ userId: string; token: string; bundleId: string }>,
   onRetire?: (token: string) => void,
 ) {
   return {
@@ -45,10 +59,19 @@ describe("worksheet assignment notifications", () => {
     const { sender: apns, sent } = sender();
     const service = new NotificationsService(
       tokens([
-        { token: "aa".repeat(32), bundleId: "hu.acropora.os" },
-        { token: "bb".repeat(32), bundleId: "hu.acropora.os.dev" },
+        {
+          userId: "user-2",
+          token: "aa".repeat(32),
+          bundleId: "hu.acropora.os",
+        },
+        {
+          userId: "user-2",
+          token: "bb".repeat(32),
+          bundleId: "hu.acropora.os.dev",
+        },
       ]),
       apns,
+      log().log,
     );
 
     const summary = await service.deliverWorksheetAssignment(notice);
@@ -79,10 +102,17 @@ describe("worksheet assignment notifications", () => {
     }));
     const service = new NotificationsService(
       tokens(
-        [{ token: "cc".repeat(32), bundleId: "hu.acropora.os" }],
+        [
+          {
+            userId: "user-2",
+            token: "cc".repeat(32),
+            bundleId: "hu.acropora.os",
+          },
+        ],
         (token) => retired.push(token),
       ),
       apns,
+      log().log,
     );
 
     const summary = await service.deliverWorksheetAssignment(notice);
@@ -105,10 +135,17 @@ describe("worksheet assignment notifications", () => {
     }));
     const service = new NotificationsService(
       tokens(
-        [{ token: "dd".repeat(32), bundleId: "hu.acropora.os" }],
+        [
+          {
+            userId: "user-2",
+            token: "dd".repeat(32),
+            bundleId: "hu.acropora.os",
+          },
+        ],
         (token) => retired.push(token),
       ),
       apns,
+      log().log,
     );
 
     const summary = await service.deliverWorksheetAssignment(notice);
@@ -120,8 +157,15 @@ describe("worksheet assignment notifications", () => {
   it("does nothing at all when this deployment cannot send", async () => {
     const { sender: apns, sent } = sender(() => ({ ok: true }), false);
     const service = new NotificationsService(
-      tokens([{ token: "ee".repeat(32), bundleId: "hu.acropora.os" }]),
+      tokens([
+        {
+          userId: "user-2",
+          token: "ee".repeat(32),
+          bundleId: "hu.acropora.os",
+        },
+      ]),
       apns,
+      log().log,
     );
 
     const summary = await service.deliverWorksheetAssignment(notice);
@@ -132,10 +176,63 @@ describe("worksheet assignment notifications", () => {
 
   it("stays quiet when nobody was added", async () => {
     const { sender: apns, sent } = sender();
-    const service = new NotificationsService(tokens([]), apns);
+    const service = new NotificationsService(tokens([]), apns, log().log);
 
     await service.deliverWorksheetAssignment({ ...notice, userIds: [] });
 
     assert.deepEqual(sent, []);
+  });
+
+  /**
+   * A log line answers the question while somebody is watching the process.
+   * This is for the question asked a day later - "was the technician told?" -
+   * which a rotated log file cannot answer.
+   *
+   * The colleague is named, the device never is: a token is a credential for
+   * reaching somebody's phone, and an event row is read by more people than
+   * the device table is.
+   */
+  it("writes down who was reached and who was not, naming people and not devices", async () => {
+    const written = log();
+    const { sender: apns } = sender((message) =>
+      message.bundleId === "hu.acropora.os"
+        ? { ok: true }
+        : { ok: false, retired: true, reason: "BadDeviceToken" },
+    );
+    const service = new NotificationsService(
+      tokens([
+        {
+          userId: "user-2",
+          token: "aa".repeat(32),
+          bundleId: "hu.acropora.os",
+        },
+        {
+          userId: "user-3",
+          token: "bb".repeat(32),
+          bundleId: "hu.acropora.os.dev",
+        },
+      ]),
+      apns,
+      written.log,
+    );
+
+    await service.deliverWorksheetAssignment(notice);
+
+    assert.equal(written.written.length, 1);
+    const outcome = written.written[0]!;
+    assert.equal(outcome.worksheetId, "worksheet-1");
+    assert.deepEqual(
+      outcome.attempts.map((attempt) => [attempt.userId, attempt.delivered]),
+      [
+        ["user-2", true],
+        ["user-3", false],
+      ],
+    );
+    assert.equal(outcome.attempts[1]?.reason, "BadDeviceToken");
+    assert.equal(
+      JSON.stringify(outcome).includes("aa".repeat(32)),
+      false,
+      "a device token must never reach the event log",
+    );
   });
 });

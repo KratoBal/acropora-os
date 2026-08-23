@@ -3,6 +3,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import type { ApnsMessage } from "./apns.client.js";
 import { ApnsSender } from "./apns.sender.js";
 import { DeviceTokenRepository } from "./device-token.repository.js";
+import { NotificationLogRepository } from "./notification-log.repository.js";
 
 export interface WorksheetAssignmentNotice {
   worksheetId: string;
@@ -34,6 +35,7 @@ export class NotificationsService {
   constructor(
     private readonly deviceTokens: DeviceTokenRepository,
     private readonly sender: ApnsSender,
+    private readonly log: NotificationLogRepository,
   ) {}
 
   /**
@@ -78,18 +80,32 @@ export class NotificationsService {
         const result = await this.sender.send(message(recipient));
         if (!result.ok && result.retired)
           await this.deviceTokens.retire(recipient.token);
-        return result;
+        return { recipient, result };
       }),
     );
 
     const summary = results.reduce(
-      (totals, result) => ({
+      (totals, { result }) => ({
         sent: totals.sent + (result.ok ? 1 : 0),
         retired: totals.retired + (!result.ok && result.retired ? 1 : 0),
         failed: totals.failed + (!result.ok && !result.retired ? 1 : 0),
       }),
       empty,
     );
+
+    // Written down whether it went well or not. A log line answers the
+    // question while somebody is watching; this answers it tomorrow, when
+    // somebody asks whether the technician was told at all.
+    await this.log.recordWorksheetAssignment({
+      worksheetId: notice.worksheetId,
+      attempts: results.map(({ recipient, result }) => ({
+        userId: recipient.userId,
+        delivered: result.ok,
+        ...(result.ok
+          ? {}
+          : { reason: result.reason, retired: result.retired }),
+      })),
+    });
 
     if (summary.failed > 0)
       this.logger.warn(
