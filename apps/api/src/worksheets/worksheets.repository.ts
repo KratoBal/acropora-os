@@ -240,17 +240,32 @@ export class WorksheetsRepository extends Repository {
    * lapra. Ha minden mentés újraírná az összes sort, az értesítés ("új
    * munkalapod van") minden szerkesztésnél mindenkinek újra kimenne.
    */
+  /**
+   * Reports who is NEWLY on the sheet, not merely who is on it.
+   *
+   * The caller notifies people, and the difference decides whether a
+   * technician's phone stays quiet: saving the same sheet twice, or adding a
+   * second colleague, must not buzz everyone who was already responsible. The
+   * comparison is made inside the transaction, against the rows that were
+   * there before this write.
+   */
   async setAssignees(input: {
     worksheetId: string;
     userIds: readonly string[];
     actorUserId: string;
-  }): Promise<boolean> {
+  }): Promise<{ ok: boolean; added: string[] }> {
     return this.database.$transaction(async (transaction) => {
       const worksheet = await transaction.worksheet.findUnique({
         where: { id: input.worksheetId },
         select: { id: true },
       });
-      if (!worksheet) return false;
+      if (!worksheet) return { ok: false, added: [] };
+
+      const before = await transaction.worksheetAssignee.findMany({
+        where: { worksheetId: input.worksheetId },
+        select: { userId: true },
+      });
+      const alreadyAssigned = new Set(before.map((row) => row.userId));
 
       await transaction.worksheetAssignee.deleteMany({
         where: {
@@ -271,7 +286,11 @@ export class WorksheetsRepository extends Repository {
           skipDuplicates: true,
         });
       }
-      return true;
+
+      return {
+        ok: true,
+        added: input.userIds.filter((userId) => !alreadyAssigned.has(userId)),
+      };
     });
   }
 
