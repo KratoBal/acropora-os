@@ -153,6 +153,24 @@ describe("AppShell business navigation groups", () => {
   });
 
   /**
+   * Two entries in one group both sat above /beszerzes/nav-szamlak, and both
+   * lit up: purchasing and the NAV invoices, one under the other, equally
+   * current. The nested page belongs to the entry that owns it.
+   */
+  it("marks only the entry that owns the page, not the one above it", () => {
+    navigation.pathname = "/beszerzes/nav-szamlak";
+
+    render(<AppShell>Oldaltartalom</AppShell>);
+
+    expect(
+      screen.getByRole("link", { name: "NAV számla lekérés" }),
+    ).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Beszerzés" })).not.toHaveAttribute(
+      "aria-current",
+    );
+  });
+
+  /**
    * The heading disappears with its pages, and narrows to the ones that are
    * left. A technician may see the webshop buyers but not the orders, and may
    * see nothing at all under Pénzügy: the first heading stays with one page
