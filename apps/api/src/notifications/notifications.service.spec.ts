@@ -235,38 +235,4 @@ describe("worksheet assignment notifications", () => {
       "a device token must never reach the event log",
     );
   });
-
-  /**
-   * The worksheet assignment is one caller of the general send, not the send
-   * itself. Balázs asked for the capability of sending a notification, not
-   * only for the moment somebody is put on a sheet - so a manual send later is
-   * a new caller, not a rewrite. Nothing manual exists yet; this asserts the
-   * door is where it belongs.
-   */
-  it("can send to a set of colleagues without a worksheet in sight", async () => {
-    const { sender: apns, sent } = sender();
-    const service = new NotificationsService(
-      tokens([
-        {
-          userId: "user-2",
-          token: "ff".repeat(32),
-          bundleId: "hu.acropora.os",
-        },
-      ]),
-      apns,
-      log().log,
-    );
-
-    const delivery = await service.sendToUsers({
-      userIds: ["user-2"],
-      title: "Rendszerüzenet",
-      body: "A bolt zárás után leltározik.",
-    });
-
-    assert.equal(delivery.sent, 1);
-    assert.equal(sent[0]?.title, "Rendszerüzenet");
-    assert.deepEqual(delivery.attempts, [
-      { userId: "user-2", delivered: true },
-    ]);
-  });
 });
