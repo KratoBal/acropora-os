@@ -32,9 +32,19 @@ export class ApnsSender implements ApnsSending {
 
     const result = readApnsConfig();
     if (!result.configured) {
-      this.logger.log(
-        `Push értesítés kikapcsolva, hiányzó beállítás: ${result.missing.join(", ")}`,
-      );
+      // A hiány és a hibás érték KÉT KÜLÖN mondat. Egy beállítatlan rendszer
+      // rendben van (fejlesztői gépen nincs kulcs); egy beállított, de
+      // értelmezhetetlen érték viszont hiba, és mást kell tenni vele. Ha a
+      // kettő ugyanúgy nézne ki a naplóban, a Coolify felületén hiába
+      // keresné bárki a "hiányzó" változót, ami ott van.
+      if (result.missing.length > 0)
+        this.logger.log(
+          `Push értesítés kikapcsolva, hiányzó beállítás: ${result.missing.join(", ")}`,
+        );
+      if (result.invalid.length > 0)
+        this.logger.error(
+          `Push értesítés kikapcsolva, értelmezhetetlen beállítás: ${result.invalid.join(", ")}`,
+        );
       return null;
     }
     this.client = new ApnsClient(result.config);
