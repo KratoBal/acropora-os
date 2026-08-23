@@ -111,5 +111,28 @@ export function readEnvironment(source: EnvSource): EnvOutcome {
  * The app's own configuration, read once. Never throws - check `ok`
  * before reading `config`. `src/app/_layout.tsx` does exactly that, and
  * shows the problems instead of the app when there are any.
+ *
+ * EVERY VARIABLE IS NAMED HERE, ONE BY ONE, AND THAT IS A REQUIREMENT, NOT A
+ * STYLE. `EXPO_PUBLIC_*` values do not arrive at run time in a release build:
+ * `babel-preset-expo` replaces each `process.env.EXPO_PUBLIC_X` with its
+ * value while compiling, and its plugin only recognises that exact shape -
+ * a member expression whose object is `process.env` (see
+ * `babel-preset-expo/build/plugins/inline-env-vars.js`). Handing the whole
+ * object over as `readEnvironment(process.env)` matches nothing, so nothing
+ * is substituted, and in the finished binary every field is `undefined`.
+ *
+ * That is what happened: a TestFlight build stopped on launch with "Hiányzik
+ * az EXPO_PUBLIC_API_URL", while the value was correctly set in EAS all
+ * along. Under Metro there IS a real process environment, so the same code
+ * works in development and only fails once shipped - twice now.
+ *
+ * The function keeps its parameter on purpose: a test hands it a broken
+ * configuration without touching the process environment. Only the CALL is
+ * spelled out.
  */
-export const environment = readEnvironment(process.env);
+export const environment = readEnvironment({
+  EXPO_PUBLIC_APP_ENV: process.env.EXPO_PUBLIC_APP_ENV,
+  EXPO_PUBLIC_API_URL: process.env.EXPO_PUBLIC_API_URL,
+  EXPO_PUBLIC_LOCK_THRESHOLD_SECONDS:
+    process.env.EXPO_PUBLIC_LOCK_THRESHOLD_SECONDS,
+});
