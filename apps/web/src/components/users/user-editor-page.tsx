@@ -15,6 +15,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
+import { useReturnTo } from "@/components/navigation-history";
 import {
   allSettingsNavigation,
   businessNavigation,
@@ -41,6 +42,7 @@ const allNavigationItems = navigationItems([
 export function UserEditorPage({ userId }: { userId?: string }) {
   const { session } = useAuth();
   const router = useRouter();
+  const backToList = useReturnTo("/admin/users");
   const [user, setUser] = useState<UserDetail | null>(null);
   const [loading, setLoading] = useState(Boolean(userId));
   const [busy, setBusy] = useState(false);
@@ -197,8 +199,10 @@ export function UserEditorPage({ userId }: { userId?: string }) {
         title={user ? `${user.lastName} ${user.firstName}` : "Új felhasználó"}
         description="Név, e-mail, jelszó és szerepkör alapú jogosultságok."
         actions={
-          <Link href="/admin/users">
-            <Button variant="secondary">Vissza a listához</Button>
+          <Link href={backToList.href}>
+            <Button variant="secondary">
+              {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
+            </Button>
           </Link>
         }
       />

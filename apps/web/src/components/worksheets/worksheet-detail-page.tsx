@@ -23,6 +23,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { useReturnTo } from "@/components/navigation-history";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { WorksheetAssigneeEditor } from "./worksheet-assignee-editor";
 import {
@@ -37,6 +38,7 @@ import {
 export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
   const { session } = useAuth();
   const router = useRouter();
+  const backToList = useReturnTo("/szerviz/munkalapok");
   const token = session?.token ?? "";
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_VIEW),
@@ -134,8 +136,10 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
         description={current.subject}
         actions={
           <div className="flex gap-2">
-            <Link href="/szerviz/munkalapok">
-              <Button variant="secondary">Vissza a listához</Button>
+            <Link href={backToList.href}>
+              <Button variant="secondary">
+                {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
+              </Button>
             </Link>
             {canManage && isDraft ? (
               <Link href={`/szerviz/munkalapok/${worksheet.id}/szerkesztes`}>

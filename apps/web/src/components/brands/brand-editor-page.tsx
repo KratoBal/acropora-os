@@ -16,6 +16,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
+import { useReturnTo } from "@/components/navigation-history";
 import { ApiError } from "@/lib/api/client";
 import { brandsApi } from "@/lib/api/brands";
 
@@ -23,6 +24,7 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
   const { session } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const backToList = useReturnTo("/admin/brands");
   const [brand, setBrand] = useState<BrandDetail | null>(null);
   const [loading, setLoading] = useState(Boolean(brandId));
   const [busy, setBusy] = useState(false);
@@ -166,8 +168,10 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
         title={brand ? brand.name : "Új márka"}
         description="Kanonikus identitás, megjelenés, aliasok és forráskapcsolatok."
         actions={
-          <Link href="/admin/brands">
-            <Button variant="secondary">Vissza a listához</Button>
+          <Link href={backToList.href}>
+            <Button variant="secondary">
+              {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
+            </Button>
           </Link>
         }
       />

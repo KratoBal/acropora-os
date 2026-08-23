@@ -16,10 +16,10 @@ import {
   type UnasOrderDetail,
   type UnasOrderStockPublishSummary,
 } from "@acropora/types";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { useReturnTo } from "@/components/navigation-history";
 import { unasOrdersApi } from "@/lib/api/unas-orders";
 
 function formatHuf(value: string): string {
@@ -75,7 +75,7 @@ const INVOICE_SYNC_STATUS_BADGE_VARIANT: Record<
 
 export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
   const { session } = useAuth();
-  const router = useRouter();
+  const backToList = useReturnTo("/webshop");
   const token = session?.token ?? "";
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.ORDERS_VIEW),
@@ -175,8 +175,8 @@ export function WebshopOrderDetailPage({ orderId }: { orderId: string }) {
                 {refreshing ? "Frissítés…" : "Rendelés frissítése"}
               </Button>
             ) : null}
-            <Button variant="secondary" onClick={() => router.push("/webshop")}>
-              Vissza a listához
+            <Button variant="secondary" onClick={backToList.goBack}>
+              {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
             </Button>
           </div>
         }

@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
+import { useReturnTo } from "@/components/navigation-history";
 import { customersApi } from "@/lib/api/customers";
 import { navTaxpayerApi } from "@/lib/api/nav-taxpayer";
 import { postalCodeApi } from "@/lib/api/postal-code";
@@ -138,6 +139,7 @@ function AddressFields({
 }
 
 export function CustomerEditorPage() {
+  const backToList = useReturnTo("/vevok");
   const { session } = useAuth();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -281,7 +283,7 @@ export function CustomerEditorPage() {
             : []),
         ],
       });
-      router.push("/vevok");
+      backToList.goBack();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "A vevő nem menthető.");
     } finally {
@@ -295,8 +297,10 @@ export function CustomerEditorPage() {
         title="Új vevő"
         description="Kézzel rögzített partner felvétele. A UNAS webshopból érkező vevők automatikusan szinkronizálódnak."
         actions={
-          <Link href="/vevok">
-            <Button variant="secondary">Vissza a listához</Button>
+          <Link href={backToList.href}>
+            <Button variant="secondary">
+              {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
+            </Button>
           </Link>
         }
       />

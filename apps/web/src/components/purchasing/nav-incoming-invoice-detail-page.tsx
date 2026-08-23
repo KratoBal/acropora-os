@@ -18,6 +18,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { useReturnTo } from "@/components/navigation-history";
 import { navIncomingInvoicesApi } from "@/lib/api/nav-incoming-invoices";
 
 function formatAmount(value: string | undefined, currency: string): string {
@@ -32,6 +33,7 @@ export function NavIncomingInvoiceDetailPage({
 }) {
   const { session } = useAuth();
   const router = useRouter();
+  const backToList = useReturnTo("/beszerzes/nav-szamlak");
   const token = session?.token ?? "";
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.PURCHASING_VIEW),
@@ -76,11 +78,8 @@ export function NavIncomingInvoiceDetailPage({
         title={detail ? detail.navInvoiceNumber : "NAV számla"}
         description="A NAV Online Számla rendszerből letöltött belföldi bejövő számla"
         actions={
-          <Button
-            variant="secondary"
-            onClick={() => router.push("/beszerzes/nav-szamlak")}
-          >
-            Vissza a listához
+          <Button variant="secondary" onClick={backToList.goBack}>
+            {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
           </Button>
         }
       />
