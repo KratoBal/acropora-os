@@ -1,4 +1,5 @@
 import type {
+  PartnerDeletionPlan,
   CreateWorksheetDepartmentInput,
   WorksheetDepartmentListResponse,
   WorksheetDepartmentSummary,
@@ -42,6 +43,23 @@ export const suppliersApi = {
       `/suppliers/${encodeURIComponent(id)}/units`,
       token,
       { method: "POST", body: JSON.stringify(input) },
+    );
+  },
+  /**
+   * Mi történne törléskor. Külön hívás a törlés előtt, hogy a megerősítő
+   * kérdés meg tudja nevezni, mit töröl, és melyik ág fut.
+   */
+  deletionPlan(token: string, id: string) {
+    return apiRequest<PartnerDeletionPlan>(
+      `/suppliers/${encodeURIComponent(id)}/deletion-plan`,
+      token,
+    );
+  },
+  remove(token: string, id: string) {
+    return apiRequest<PartnerDeletionPlan>(
+      `/suppliers/${encodeURIComponent(id)}`,
+      token,
+      { method: "DELETE" },
     );
   },
   detail(token: string, id: string, signal?: AbortSignal) {
