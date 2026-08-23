@@ -85,7 +85,7 @@ describe("CustomerListPage paging", () => {
   it("calls the screen what it holds", async () => {
     render(<CustomerListPage />);
 
-    expect(await screen.findByText("Webshop vásárló")).toBeTruthy();
+    expect(await screen.findByText("Webshop vásárlók")).toBeTruthy();
   });
 
   it("moves to the next page instead of returning to the first", async () => {

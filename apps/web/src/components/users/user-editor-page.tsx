@@ -18,6 +18,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import {
   allSettingsNavigation,
   businessNavigation,
+  navigationItems,
   primaryNavigation,
   secondaryNavigation,
   serviceNavigation,
@@ -26,13 +27,16 @@ import { ApiError } from "@/lib/api/client";
 import { usersApi } from "@/lib/api/users";
 import { ROLE_LABELS, ROLE_OPTIONS } from "./role-labels";
 
-const allNavigationItems = [
+// Opened out, because this list answers "which pages can this role reach".
+// A group heading is not a page, and the pages under it are what the reader
+// is looking for.
+const allNavigationItems = navigationItems([
   ...primaryNavigation,
   ...businessNavigation,
   ...serviceNavigation,
   ...secondaryNavigation,
   ...allSettingsNavigation,
-];
+]);
 
 export function UserEditorPage({ userId }: { userId?: string }) {
   const { session } = useAuth();

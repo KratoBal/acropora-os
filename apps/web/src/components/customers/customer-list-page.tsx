@@ -107,7 +107,7 @@ export function CustomerListPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Webshop vásárló"
+        title="Webshop vásárlók"
         description="A UNAS webshopból szinkronizált és a kézzel rögzített vásárlók. A beszállítók és a szerviz partnerek a Partnerek menüpontban vannak."
         actions={
           canManage ? (
