@@ -131,6 +131,8 @@ export type {
 export type {
   CreateSupplierInput,
   SupplierListResponse,
+  PartnerDeletionPlan,
+  PartnerReferenceSummary,
   SupplierSummary,
   UpdateSupplierInput,
 } from "./supplier-management.js";

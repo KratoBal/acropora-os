@@ -21,6 +21,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
+import { PartnerDeleteButton } from "./partner-delete-button";
 import {
   COUNTRY_OPTIONS,
   inferCountryFromTaxNumber,
@@ -284,6 +285,14 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
           variant="danger"
           title="A művelet nem sikerült"
           description={error}
+        />
+      ) : null}
+      {supplier && canManage ? (
+        <PartnerDeleteButton
+          token={token}
+          partnerId={supplier.id}
+          partnerName={supplier.name}
+          onDeleted={() => router.push("/partnerek")}
         />
       ) : null}
       <form className="space-y-6" onSubmit={submit}>

@@ -89,3 +89,20 @@ export interface UpdateSupplierInput {
   addressLine2?: string | null;
   expectedUpdatedAt: string;
 }
+
+/** Egy fajta bejegyzés, ami a partnerhez kapcsolódik, a felhasználó nyelvén. */
+export interface PartnerReferenceSummary {
+  label: string;
+  count: number;
+}
+
+/**
+ * Mi történne, ha most törölnénk a partnert.
+ *
+ * A két ág következménye különböző, ezért a megerősítő kérdés sem lehet
+ * ugyanaz: az egyik véglegesen töröl egy sort, a másik meghagyja, hogy a régi
+ * bejegyzéseken maradjon a partner neve.
+ */
+export type PartnerDeletionPlan =
+  | { action: "delete"; alsoRemoved: PartnerReferenceSummary[] }
+  | { action: "mark-deleted"; blockedBy: PartnerReferenceSummary[] };
