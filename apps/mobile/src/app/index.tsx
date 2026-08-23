@@ -14,6 +14,7 @@ import { OrderListCard } from "@/components/orders/OrderListCard";
 import { listUnasOrders } from "@/lib/api/orders";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { personDisplayName } from "@/lib/auth/person-name";
+import { usePushRegistration } from "@/lib/notifications/usePushRegistration";
 import {
   getServiceCapabilities,
   getWebshopCapabilities,
@@ -32,6 +33,10 @@ interface ModuleCardProps {
 export default function HomeScreen() {
   const router = useRouter();
   const { status, user, signOut } = useAuth();
+  // Once the session exists, and never before: registering a device is only
+  // meaningful for a known colleague, and the server takes the owner from the
+  // session.
+  usePushRegistration(status === "authenticated");
   const capabilities = user ? getWebshopCapabilities(user.role) : null;
   const serviceCapabilities = user ? getServiceCapabilities(user.role) : null;
   const orders = useQuery({
