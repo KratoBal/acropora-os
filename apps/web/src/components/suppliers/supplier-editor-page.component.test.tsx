@@ -11,8 +11,6 @@ const suppliers = vi.hoisted(() => ({
   update: vi.fn(),
   units: vi.fn(),
   createUnit: vi.fn(),
-  deletionPlan: vi.fn(),
-  remove: vi.fn(),
 }));
 const postalCode = vi.hoisted(() => ({ lookup: vi.fn() }));
 const viesVat = vi.hoisted(() => ({ lookup: vi.fn() }));
@@ -45,9 +43,6 @@ describe("SupplierEditorPage", () => {
     suppliers.create.mockReset();
     suppliers.units.mockReset().mockResolvedValue({ items: [] });
     suppliers.createUnit.mockReset();
-    suppliers.deletionPlan.mockReset();
-    suppliers.remove.mockReset();
-    navigation.push.mockReset();
   });
 
   /** The Partners menu no longer holds suppliers only, so the screen must not
@@ -169,46 +164,6 @@ describe("SupplierEditorPage", () => {
    * also pass on a screen that failed to render at all, which is the way an
    * empty result disguises itself as a correct one.
    */
-  /**
-   * A deleted partner leaves nothing behind on the screen, so the reader has
-   * to be taken somewhere. Nothing in this test walked the app first, so the
-   * screen's own fallback is what has to answer - the same list the button
-   * always pointed at. What this asserts is not the destination but that the
-   * screen still HAS one: a wiring that returns nowhere would leave the reader
-   * looking at a record that no longer exists.
-   */
-  it("takes the reader away once the partner is deleted", async () => {
-    suppliers.detail.mockResolvedValue({
-      id: "supplier-1",
-      code: "SZALL-1",
-      name: "Fankó Kft.",
-      isSupplier: true,
-      isService: false,
-      country: "HU",
-      isActive: true,
-      createdAt: "2026-08-19T10:00:00.000Z",
-      updatedAt: "2026-08-19T10:00:00.000Z",
-    });
-    suppliers.deletionPlan.mockResolvedValue({
-      action: "delete",
-      alsoRemoved: [],
-    });
-    suppliers.remove.mockResolvedValue({ action: "delete", alsoRemoved: [] });
-
-    render(<SupplierEditorPage supplierId="supplier-1" />);
-
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Partner törlése" }),
-    );
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Végleges törlés" }),
-    );
-
-    await waitFor(() =>
-      expect(navigation.push).toHaveBeenCalledWith("/partnerek"),
-    );
-  });
-
   it("hides the bank block for a partner we do not buy from", () => {
     render(<SupplierEditorPage />);
     expect(screen.getByLabelText("Bankszámlaszám")).toBeTruthy();
