@@ -345,6 +345,7 @@ enum WorksheetSignatureDecision {
 enum ExternalSystem {
   UNAS
   SZAMLAZZ_HU
+  MEDUSA
   OTHER
 }
 
