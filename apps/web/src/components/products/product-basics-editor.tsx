@@ -143,9 +143,16 @@ export function ProductBasicsEditor({
             disabled={busy}
           />
         </FormField>
+        {/*
+          A felirat szándékosan "elsődleges", nem "kategória": egy termék TÖBB
+          kategóriához is tartozhat, és a lista szűrője MINDEGYIK alatt megtalálja
+          (mérve: a szűrő a kapcsolat-táblára megy, nem a skalárra). Ez a mező
+          csak azt mondja meg, melyik az elsődleges.
+        */}
         <FormField
           label="Elsődleges kategória"
           htmlFor="product-primary-category"
+          description="A termék több kategóriához is tartozhat; ez azt állítja be, melyik az elsődleges."
         >
           <Select
             id="product-primary-category"
