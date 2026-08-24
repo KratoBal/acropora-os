@@ -43,10 +43,37 @@ Amit a művelet tesz:
 - feloldatlan (`null`) authority esetén ugyanaz a fail-closed válasz jön, mint
   az írásnál: `PRODUCT_CATALOG_AUTHORITY_UNRESOLVED`.
 
-Az átvétel után a `name` és a `description` az első Acropora OS tulajdonú
-mezők: a termék-szinkron termékszinten kihagyja a rekordot, és a kihagyást a
-`UnasProductSyncRun.skippedCount` mezőben számolja. Készlet és árazás NEM
-része az átvételnek, azok külön domainek.
+### Mely mezők tartoznak az átvett termékhez
+
+Az átvétel után a `name`, a `description` **és a kategória** az Acropora OS
+tulajdona: a termék-szinkron termékszinten kihagyja a rekordot, és a kihagyást a
+`UnasProductSyncRun.skippedCount` mezőben számolja.
+
+A kategória külön említést érdemel, mert a szinkron MÁS ÚTON írja, mint a nevet
+és a leírást. A név és a leírás magával a termék-sorral megy be; a kategória
+utána, két további írásban: a `ProductCategory` kapcsolatok `source: "UNAS"`
+szűrővel törlődnek és újra létrejönnek, majd a `Product.categoryId` külön
+`update` hívásban áll be. Három írás, egy gazda. Mind a három ugyanabban a
+ciklusban van, a kihagyás-őrző UTÁN, ezért egy átvett terméknél egyik sem fut le.
+Külön mechanizmus tehát nem kellett hozzá, de a védettséget külön teszt méri,
+mert a három írás bármelyike elcsúszhatna a másik kettőtől.
+
+**A tükör-könyvelési mezők a szinkron tulajdonában MARADNAK**, átvétel után is:
+`mirrorSource`, `mirrorState`, `sourceCreatedAt`, `sourceUpdatedAt`,
+`lastSyncedAt`, `missingSince`, `rawSourceHash`. Ezek nem a termékről szólnak,
+hanem magáról a tükörről: ha ezeket is átvennénk, a tükör többé nem tudná leírni
+a saját állapotát.
+
+Készlet és árazás NEM része az átvételnek, azok külön domainek.
+
+### Védett és szerkeszthető: nem ugyanaz
+
+Egy átvett termék neve, leírása és kategóriája **védett a felülírástól**, és a
+generikus `PATCH /products/:id` végponton **szerkeszthető is** (a
+`primaryCategoryId` a DTO része). A WEBES FELÜLETEN viszont ma egyik sem
+szerkeszthető: a termékoldal a nevet, a leírást és a kategóriát megjeleníti, de
+szerkesztőt egyikhez sem kínál. A felület egyetlen termék-írást ismer, magát az
+átvételt. A helyi mezőszerkesztő külön kör lesz.
 
 VISSZAADÁS NINCS, és ez döntés, nem hiány. A visszaadás nem az ellenkező
 irányú kapcsoló: a UNAS a következő szinkronnál felülírná azt a nevet és

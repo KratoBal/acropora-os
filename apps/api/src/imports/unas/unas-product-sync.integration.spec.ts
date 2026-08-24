@@ -17,7 +17,12 @@ const enabled = process.env.RUN_DB_INTEGRATION === "1";
 
 const product = (
   sku: string,
-  overrides: { externalId?: string; name?: string; description?: string } = {},
+  overrides: {
+    externalId?: string;
+    name?: string;
+    description?: string;
+    primaryCategoryExternalId?: string;
+  } = {},
 ): UnasApiProduct => ({
   externalId: overrides.externalId ?? "159850145",
   sku,
@@ -56,7 +61,7 @@ const product = (
   productUrl: "https://example.test/integration-pump",
   sefUrl: "integration-pump",
   manufacturerUrl: null,
-  primaryCategoryExternalId: "10",
+  primaryCategoryExternalId: overrides.primaryCategoryExternalId ?? "10",
   alternativeCategoryExternalIds: [],
   images: [
     {
@@ -86,6 +91,18 @@ const category: UnasApiCategory = {
   sourceCreatedAt: "2026-07-20T08:00:00.000Z",
   sourceUpdatedAt: "2026-07-20T09:00:00.000Z",
   rawPayload: { Id: "10", Name: "Integration pumps" },
+};
+
+/** A second live category, so a product can be moved from one to another. */
+const otherCategory: UnasApiCategory = {
+  externalId: "20",
+  name: "Integration skimmers",
+  state: "live",
+  parentExternalId: null,
+  sortOrder: 2,
+  sourceCreatedAt: "2026-07-20T08:00:00.000Z",
+  sourceUpdatedAt: "2026-07-20T09:00:00.000Z",
+  rawPayload: { Id: "20", Name: "Integration skimmers" },
 };
 
 const deletedParentCategory: UnasApiCategory = {
@@ -494,5 +511,117 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
     });
     assert.equal(run.skippedCount, 1);
     assert.equal(run.updatedCount, 1);
+  });
+
+  /**
+   * The category follows the same owner as the name and the description.
+   *
+   * It is worth its own test because the sync writes it by a DIFFERENT route:
+   * the name and the description go in with the product row itself, while the
+   * category is written afterwards, in two more statements - the `ProductCategory`
+   * links are deleted and recreated, and `Product.categoryId` is set separately.
+   * Three writes, one owner: if the skip only covered the first one, a taken-over
+   * product would keep its name and quietly lose its category.
+   *
+   * Falsifiable the same way as the previous test: both products travel in one
+   * batch and one run, and BOTH halves are asserted. A sync that stopped writing
+   * categories altogether would pass a test that only looked at the taken-over
+   * product.
+   */
+  it("leaves the category of a taken-over product alone, and moves the other one", async () => {
+    await cleanup();
+    deletedProducts = [];
+    categoryPage = [category, otherCategory];
+
+    liveProducts = [
+      product("CATEGORY-OURS", { externalId: "900011" }),
+      product("CATEGORY-THEIRS", { externalId: "900012" }),
+    ];
+    const created = await service.runIncremental(
+      "integration-token",
+      new Date("2026-07-22T10:00:00.000Z"),
+      100,
+    );
+    assert.equal(created.counts.CREATE, 2);
+
+    const skimmers = await prisma.category.findFirstOrThrow({
+      where: { name: "Integration skimmers" },
+      select: { id: true },
+    });
+    const pumps = await prisma.category.findFirstOrThrow({
+      where: { name: "Integration pumps" },
+      select: { id: true },
+    });
+
+    const ours = await prisma.productVariant.findUniqueOrThrow({
+      where: { sku: "CATEGORY-OURS" },
+      select: { productId: true },
+    });
+    await new ProductRepository().takeCatalogAuthority(ours.productId);
+
+    // Somebody re-files the product on our side. UNAS knows nothing about it
+    // and keeps sending the category it has always sent.
+    await prisma.product.update({
+      where: { id: ours.productId },
+      data: { categoryId: skimmers.id, name: "Kézzel átsorolva" },
+    });
+
+    liveProducts = [
+      product("CATEGORY-OURS", {
+        externalId: "900011",
+        name: "UNAS visszasorolná",
+        primaryCategoryExternalId: "10",
+      }),
+      product("CATEGORY-THEIRS", {
+        externalId: "900012",
+        name: "UNAS átsorolja",
+        primaryCategoryExternalId: "20",
+      }),
+    ];
+
+    const second = await service.runIncremental(
+      "integration-token",
+      new Date("2026-07-22T11:00:00.000Z"),
+      100,
+    );
+    // The category is asserted BEFORE the counters, deliberately: this test is
+    // named after the category, and a counter assertion that trips first would
+    // report the wrong thing about the wrong subject.
+    const kept = await prisma.product.findUniqueOrThrow({
+      where: { id: ours.productId },
+      select: { categoryId: true, name: true },
+    });
+    assert.equal(kept.categoryId, skimmers.id);
+    assert.equal(kept.name, "Kézzel átsorolva");
+
+    assert.equal(second.counts.UPDATE, 1);
+    assert.equal(second.skippedCount, 1);
+
+    // The UNAS-side link rows are written by their own statements, so they are
+    // asserted separately: the taken-over product must still carry the category
+    // it was filed under here, and not the one UNAS keeps sending.
+    const keptLinks = await prisma.productCategory.findMany({
+      where: { productId: ours.productId },
+      select: { categoryId: true, isPrimary: true },
+    });
+    assert.equal(keptLinks.length, 1);
+    assert.equal(keptLinks[0]?.categoryId, pumps.id);
+
+    const moved = await prisma.productVariant.findUniqueOrThrow({
+      where: { sku: "CATEGORY-THEIRS" },
+      select: {
+        product: { select: { id: true, categoryId: true, name: true } },
+      },
+    });
+    assert.equal(moved.product.categoryId, skimmers.id);
+    assert.equal(moved.product.name, "UNAS átsorolja");
+
+    const movedLinks = await prisma.productCategory.findMany({
+      where: { productId: moved.product.id },
+      select: { categoryId: true, isPrimary: true },
+    });
+    assert.equal(movedLinks.length, 1);
+    assert.equal(movedLinks[0]?.categoryId, skimmers.id);
+    assert.equal(movedLinks[0]?.isPrimary, true);
   });
 });
