@@ -31,8 +31,11 @@ export type ProjectionOutcome =
   | { action: "stopped"; reason: ProjectionStopReason; details: string };
 
 export type ProjectionStopReason =
-  /** A külső azonosító csak PUHÁN TÖRÖLT terméke(ke)n ül. */
-  | "only-deleted"
+  /**
+   * A külső azonosító csak PUHÁN TÖRÖLT terméke(ke)n ül: MEGSZAKADT AZONOSSÁGI
+   * LÁNC. Lásd az indoklást a `project` törzsében.
+   */
+  | "broken-identity-chain"
   /** Több ÉLŐ termék viseli ugyanazt a külső azonosítót. */
   | "ambiguous"
   /** A terméknek nincs cikkszáma, tehát nincs mit változatként átvinni. */
@@ -113,23 +116,36 @@ export class MedusaProductProjectionService {
     }
 
     /**
-     * Csak törölt találat. Létrehozni TILOS: akkor két termék viselné ugyanazt
-     * a külső azonosítót, és ezt a Medusa nem akadályozza meg, mert a mezőn
-     * nincs egyedi index. Visszaállítani nem lehet: az admin API-n nincs ilyen
-     * művelet, a `restoreProducts` csak a törlés kompenzációjaként létezik.
+     * Csak törölt találat: MEGÁLLUNK, és jelentjük.
      *
-     * Marad a megállás. Ez a legszigorúbb a három lehetséges válasz közül, és
-     * szándékosan az: ez a visszavonható. Ha a döntés más lesz, egy elágazás
-     * cseréje. A mai stage-en egyébként nulla puhán törölt termék van, tehát
-     * ez az ág ma nem is érhető el.
+     * Balázs döntése, 2026-08-24, szó szerint: „Törölt Medusa rekord plusz
+     * nincs élő találat esetén a projection álljon meg ennél a terméknél és
+     * jelentse az identity conflictot. Nem hozunk létre újat automatikusan.
+     * Nem próbálunk restore-t. Nem skipeljük csendben. Az ok: ez nem ownership
+     * konfliktus, hanem MEGSZAKADT AZONOSSÁGI LÁNC."
+     *
+     * A különbség nem szószépítés. Egy tulajdon-konfliktusnál KÉT JOGOS IGÉNY
+     * áll szemben, és dönteni kell közöttük. Itt a láncnak az egyik VÉGE
+     * hiányzik: tudjuk, melyik a mi termékünk, és tudjuk, hogy az azonosítója
+     * egy eltemetett soron ül, de azt nem tudjuk, mi történt közben. Bármelyik
+     * automatikus válasz találgatás lenne.
+     *
+     * A másik két út egyébként sem járható: létrehozni tilos, mert akkor két
+     * termék viselné ugyanazt a külső azonosítót, és ezt a Medusa nem
+     * akadályozza meg (nincs egyedi index a mezőn); visszaállítani pedig nem
+     * lehet, mert az admin API-n NINCS ilyen művelet.
      */
     if (deleted.length > 0)
       return {
         action: "stopped",
-        reason: "only-deleted",
-        details: `${product.id}: az azonosító csak törölt terméke(ke)n áll: ${deleted
-          .map((row) => row.id)
-          .join(", ")}`,
+        reason: "broken-identity-chain",
+        details:
+          `Megszakadt azonossági lánc. Acropora OS termék: ${product.id} ` +
+          `(ez egyben a Medusának küldött külső azonosító is). ` +
+          `Odaát csak TÖRÖLT termék viseli ezt az azonosítót: ` +
+          `${deleted.map((row) => row.id).join(", ")}. ` +
+          `Nem hoztunk létre újat és nem állítottunk vissza semmit: ` +
+          `ember döntése, hogy a törölt sor sorsa mi legyen.`,
       };
 
     const created = await this.medusa.create({

@@ -187,10 +187,15 @@ describe("MedusaProductProjectionService", () => {
   });
 
   /**
-   * Csak törölt találat: létrehozni tilos (két termék viselné ugyanazt az
-   * azonosítót), visszaállítani nem lehet (nincs ilyen végpont). Marad a
-   * megállás, és ez a legszigorúbb a három lehetséges válasz közül - azért ez,
-   * mert ez a visszavonható.
+   * Csak törölt találat: MEGSZAKADT AZONOSSÁGI LÁNC, Balázs döntése szerint
+   * megállás és jelentés.
+   *
+   * A jelentés tartalmát is állítjuk, nem csak a tényt: egy „identity
+   * conflict" önmagában nem mondja meg, MELYIK terméket kell megnézni. Benne
+   * kell lennie az OS-termék azonosítójának és a törölt Medusa-sornak.
+   *
+   * A mai stage-adaton ez az ág NEM érhető el (nulla puhán törölt termék),
+   * tehát ez a teszt szándékosan konstruált állapotot vizsgál.
    */
   it("stops when the external id only sits on deleted products", async () => {
     const { service, calls } = fakes({
@@ -203,11 +208,27 @@ describe("MedusaProductProjectionService", () => {
     assert.equal(outcome.action, "stopped");
     assert.equal(
       outcome.action === "stopped" ? outcome.reason : null,
-      "only-deleted",
+      "broken-identity-chain",
     );
+    const details = outcome.action === "stopped" ? outcome.details : "";
+    assert.match(
+      details,
+      /prod-os-1/,
+      "az OS-termék azonosítója szerepeljen benne",
+    );
+    assert.match(
+      details,
+      /prod_torolt/,
+      "a törölt Medusa-sor is szerepeljen benne",
+    );
+    assert.match(details, /TÖRÖLT/, "mondja ki, hogy a találat törölt");
     assert.ok(
       !calls.includes("create"),
       "törölt találat mellé nem hozunk létre",
+    );
+    assert.ok(
+      !calls.includes("link"),
+      "megszakadt láncnál leképezést sem írunk",
     );
   });
 
