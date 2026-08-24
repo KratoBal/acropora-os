@@ -20,6 +20,11 @@ import {
   unasVariantLabel,
   unasVariantSku,
 } from "../../common/unas-variant.util.js";
+import {
+  describeSkipped,
+  partitionByUnasAuthority,
+  type SkippedProduct,
+} from "./unas-write-policy.js";
 
 const json = (value: unknown) =>
   JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -454,23 +459,34 @@ export class UnasProductSyncRepository extends Repository {
         if (diffs.some((diff) => diff.action === "CONFLICT"))
           throw new Error("UNAS_PRODUCT_IDENTITY_CONFLICT");
 
+        /**
+         * Egy idegen termék a listában KIMARAD, nem állítja meg a köteget.
+         *
+         * Eddig egyetlen olyan sor, aminek a törzsadatát már mi gondozzuk,
+         * eldobta az EGÉSZ szinkront: a bolt aznap nem kapott árukészletet
+         * egy termék miatt. Egy termék kihagyása a termék baja; a köteg
+         * eldobása mindenkié.
+         *
+         * A kihagyás nem néma: számoljuk és kiírjuk, azonosítóval.
+         */
         const existingProductIds = diffs.flatMap((diff) =>
           diff.action === "CREATE" ? [] : [diff.productId!],
         );
+        const skippedProductIds = new Set<string>();
+        const skipped: SkippedProduct[] = [];
         if (existingProductIds.length > 0) {
           const managedProducts = await transaction.product.findMany({
             where: { id: { in: existingProductIds } },
             select: { id: true, origin: true, catalogAuthority: true },
           });
-          if (
-            managedProducts.length !== new Set(existingProductIds).size ||
-            managedProducts.some(
-              (product) =>
-                product.origin !== "UNAS" ||
-                product.catalogAuthority !== "UNAS",
-            )
-          )
-            throw new Error("UNAS_PRODUCT_AUTHORITY_CONFLICT");
+          const partition = partitionByUnasAuthority(
+            existingProductIds,
+            managedProducts,
+          );
+          for (const entry of partition.skipped) {
+            skipped.push(entry);
+            skippedProductIds.add(entry.productId);
+          }
         }
 
         // Materialize every UNAS category locally, including ones with
@@ -542,6 +558,9 @@ export class UnasProductSyncRepository extends Repository {
 
         const counts = { CREATE: 0, UPDATE: 0, UNCHANGED: 0, CONFLICT: 0 };
         for (const diff of diffs) {
+          // A kihagyott termék a számlálókba sem kerül bele: nem az történt
+          // vele, hogy változatlan maradt, hanem hogy hozzá sem nyúltunk.
+          if (diff.productId && skippedProductIds.has(diff.productId)) continue;
           counts[diff.action] += 1;
           const sourceUpdatedAt = diff.product.sourceUpdatedAt
             ? new Date(diff.product.sourceUpdatedAt)
@@ -813,17 +832,24 @@ export class UnasProductSyncRepository extends Repository {
             where: { id: { in: missingProductIds } },
             select: { id: true, origin: true, catalogAuthority: true },
           });
-          if (
-            managedMissingProducts.length !== missingProductIds.length ||
-            managedMissingProducts.some(
-              (product) =>
-                product.origin !== "UNAS" ||
-                product.catalogAuthority !== "UNAS",
-            )
-          )
-            throw new Error("UNAS_PRODUCT_AUTHORITY_CONFLICT");
+          /**
+           * A MÁSODIK fék, ugyanazzal a hibával, egy másik ágon.
+           *
+           * Ha csak a termék-ágat javítottuk volna, egy vegyes köteg
+           * továbbra is elhasalna ITT - és a "vegyes köteg nem áll meg"
+           * teszt zöld lehetne úgy, hogy a készlet-ág közben törik.
+           */
+          const missingPartition = partitionByUnasAuthority(
+            missingProductIds,
+            managedMissingProducts,
+          );
+          for (const entry of missingPartition.skipped) {
+            skipped.push(entry);
+            skippedProductIds.add(entry.productId);
+          }
 
           for (const reference of missingReferences.values()) {
+            if (skippedProductIds.has(reference.entityId)) continue;
             const result = await transaction.product.updateMany({
               where: {
                 id: reference.entityId,
@@ -938,14 +964,23 @@ export class UnasProductSyncRepository extends Repository {
             unchangedCount: counts.UNCHANGED,
             conflictCount: counts.CONFLICT,
             missingCount,
+            skippedCount: skipped.length,
           },
         });
+
+        // A kihagyás nem néma: a számon kívül a termékek azonosítója is
+        // kimegy, mert egy szám önmagában nem mondja meg, MELYIK maradt ki.
+        if (skipped.length > 0)
+          console.warn(
+            `[UnasProductSync] ${skipped.length} termék kimaradt (run ${runId}). ${describeSkipped(skipped)}`,
+          );
         return {
           runId,
           status: "APPLIED",
           productsSeen: diffs.length,
           counts,
           missingCount,
+          skippedCount: skipped.length,
           windowStart: windowStart?.toISOString() ?? null,
           windowEnd: windowEnd.toISOString(),
         };

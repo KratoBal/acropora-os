@@ -6,6 +6,13 @@ export interface UnasProductSyncSummary {
   productsSeen: number;
   counts: Record<UnasProductSyncAction, number>;
   missingCount: number;
+  /**
+   * Hány terméket hagyott ki a szinkron, mert a törzsadatát nem ő gondozza.
+   *
+   * Számként is látszik, nem csak a naplóban: egy kihagyás, amit senki nem
+   * lát, pontosan úgy néz ki, mintha a termék nem is lett volna a listában.
+   */
+  skippedCount: number;
   windowStart: string | null;
   windowEnd: string;
 }
