@@ -4,13 +4,17 @@ import { prisma } from "@acropora/database";
 
 import { SessionRepository } from "./session.repository.js";
 import { hashSessionToken } from "./session-token.util.js";
+import { integrationDatabaseGate } from "../common/integration-database.js";
 
 // Exercises SessionRepository against a real database, matching the
 // established RUN_DB_INTEGRATION convention used elsewhere (e.g.
 // auth-user-resolver.integration.spec.ts) — this is exactly the piece that
 // replaced the old in-memory `Map<string, Session>`, so it is the one that
 // most needs proving against a real Postgres instance rather than a mock.
-const runIntegration = process.env.RUN_DB_INTEGRATION === "1";
+// This suite writes and deletes rows, so it runs only against a database named
+// for testing; see integrationDatabaseGate.
+const gate = integrationDatabaseGate(process.env);
+const runIntegration = gate.mode !== "skip";
 
 describe("SessionRepository integration", { skip: !runIntegration }, () => {
   const suffix = Date.now();
@@ -18,6 +22,7 @@ describe("SessionRepository integration", { skip: !runIntegration }, () => {
   let userId: string;
 
   before(async () => {
+    if (gate.mode === "refuse") throw new Error(gate.reason);
     const user = await prisma.user.create({
       data: {
         email,

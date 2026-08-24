@@ -12,8 +12,12 @@ import { UnasProductCanonicalizer } from "./unas-product-canonicalizer.js";
 import { UnasProductSyncDiffEngine } from "./unas-product-sync-diff.engine.js";
 import { UnasProductSyncRepository } from "./unas-product-sync.repository.js";
 import { UnasProductSyncService } from "./unas-product-sync.service.js";
+import { integrationDatabaseGate } from "../../common/integration-database.js";
 
-const enabled = process.env.RUN_DB_INTEGRATION === "1";
+// This suite writes and deletes rows, so it runs only against a database named
+// for testing; see integrationDatabaseGate.
+const gate = integrationDatabaseGate(process.env);
+const enabled = gate.mode !== "skip";
 
 const product = (
   sku: string,
@@ -168,6 +172,7 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
   );
 
   before(async () => {
+    if (gate.mode === "refuse") throw new Error(gate.reason);
     await cleanup();
   });
 

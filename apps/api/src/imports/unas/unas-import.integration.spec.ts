@@ -10,8 +10,12 @@ import { UnasImportService } from "./unas-import.service.js";
 import { UnasImportValidator } from "./unas-import.validator.js";
 import { UnasXlsxParser } from "./unas-xlsx.parser.js";
 import { BrandResolutionEngine } from "./brand-resolution/brand-resolution.engine.js";
+import { integrationDatabaseGate } from "../../common/integration-database.js";
 
-const enabled = process.env.RUN_DB_INTEGRATION === "1";
+// This suite writes and deletes rows, so it runs only against a database named
+// for testing; see integrationDatabaseGate.
+const gate = integrationDatabaseGate(process.env);
+const enabled = gate.mode !== "skip";
 
 async function fixture() {
   const source = new ExcelJS.Workbook();
@@ -35,6 +39,7 @@ describe("UNAS database integration", { skip: !enabled }, () => {
   );
 
   before(async () => {
+    if (gate.mode === "refuse") throw new Error(gate.reason);
     await prisma.catalogImportBatch.deleteMany();
   });
 

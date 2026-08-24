@@ -4,8 +4,12 @@ import { prisma } from "@acropora/database";
 import type { UnasApiOrder } from "@acropora/types";
 
 import { UnasOrderSyncRepository } from "./unas-order-sync.repository.js";
+import { integrationDatabaseGate } from "../../common/integration-database.js";
 
-const runIntegration = process.env.RUN_DB_INTEGRATION === "1";
+// This suite writes and deletes rows, so it runs only against a database named
+// for testing; see integrationDatabaseGate.
+const gate = integrationDatabaseGate(process.env);
+const runIntegration = gate.mode !== "skip";
 
 /// The checkpoint-3 unit tests in unas-order-sync.repository.spec.ts prove
 /// the DELTA MATH is correct against a FakeDb - but FakeDb's `$executeRaw`
@@ -113,6 +117,7 @@ describe(
     }
 
     before(async () => {
+      if (gate.mode === "refuse") throw new Error(gate.reason);
       const warehouse = await prisma.warehouse.create({
         data: { code: `LOCK-TEST-${Date.now()}`, name: "Lock test warehouse" },
       });

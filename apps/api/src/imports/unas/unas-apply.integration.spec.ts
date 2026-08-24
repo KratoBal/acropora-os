@@ -12,8 +12,12 @@ import { UnasImportRepository } from "./unas-import.repository.js";
 import { UnasImportService } from "./unas-import.service.js";
 import { UnasImportValidator } from "./unas-import.validator.js";
 import { UnasXlsxParser } from "./unas-xlsx.parser.js";
+import { integrationDatabaseGate } from "../../common/integration-database.js";
 
-const enabled = process.env.RUN_DB_INTEGRATION === "1";
+// This suite writes and deletes rows, so it runs only against a database named
+// for testing; see integrationDatabaseGate.
+const gate = integrationDatabaseGate(process.env);
+const enabled = gate.mode !== "skip";
 
 async function catalogFixture(options: {
   categoryName: string;
@@ -78,7 +82,10 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
   const applyRepository = new UnasApplyRepository();
   const applyService = new UnasApplyService(applyRepository);
 
-  before(cleanup);
+  before(async () => {
+    if (gate.mode === "refuse") throw new Error(gate.reason);
+    await cleanup();
+  });
   after(async () => {
     await cleanup();
     await prisma.$disconnect();

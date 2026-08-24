@@ -5,13 +5,17 @@ import { prisma } from "@acropora/database";
 
 import { AuthUserResolver } from "./auth-user-resolver.js";
 import { hashPassword } from "../users/password.util.js";
+import { integrationDatabaseGate } from "../common/integration-database.js";
 
 // Exercises AuthUserResolver.resolveByEmailAndPassword against a real
 // database, matching the established RUN_DB_INTEGRATION convention used
 // elsewhere (e.g. unas-connection.repository.integration.spec.ts) rather
 // than mocking `@acropora/database`'s module-level `prisma` singleton,
 // which this resolver imports directly (not via constructor injection).
-const runIntegration = process.env.RUN_DB_INTEGRATION === "1";
+// This suite writes and deletes rows, so it runs only against a database named
+// for testing; see integrationDatabaseGate.
+const gate = integrationDatabaseGate(process.env);
+const runIntegration = gate.mode !== "skip";
 
 describe(
   "AuthUserResolver.resolveByEmailAndPassword integration",
@@ -26,6 +30,7 @@ describe(
     const createdIds: string[] = [];
 
     before(async () => {
+      if (gate.mode === "refuse") throw new Error(gate.reason);
       const [active, inactive, noPassword] = await Promise.all([
         prisma.user.create({
           data: {
