@@ -4,6 +4,7 @@ import { prisma } from "@acropora/database";
 
 import {
   HttpMedusaAdminClient,
+  MedusaConfigurationError,
   medusaAdminConfigFromEnv,
 } from "./medusa-admin.client.js";
 import { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
@@ -47,13 +48,41 @@ export async function runProjectionCli(
     return 1;
   }
 
-  const service = new MedusaProductProjectionService(
-    new MedusaProductLinkRepository(),
-    new HttpMedusaAdminClient(medusaAdminConfigFromEnv(process.env)),
-  );
+  /**
+   * A `--forget-link` CSAK a leképezés sorát törli, a terméket sem itt, sem
+   * odaát nem érinti. A harmadik bizonyításhoz kell (az elveszett leképezés
+   * helyreállítása), és azért van a parancsban, hogy ne kelljen kézzel írt
+   * DELETE utasítást adni valakinek egy éles adatbázisra. A vetítés
+   * újrafuttatása vissza is állítja.
+   */
+  const forgetOnly = productIds.includes("--forget-link");
+  const targets = productIds.filter((value) => value !== "--forget-link");
+
+  if (!targets.length) {
+    out.stderr("Adj meg legalább egy termékazonosítót vagy sku: alakot.\n");
+    return 1;
+  }
+
+  let service: MedusaProductProjectionService | null = null;
+  if (!forgetOnly) {
+    try {
+      service = new MedusaProductProjectionService(
+        new MedusaProductLinkRepository(),
+        new HttpMedusaAdminClient(medusaAdminConfigFromEnv(process.env)),
+      );
+    } catch (error) {
+      // Egy sor, ember számára. A hiányzó beállítás nem programhiba, hanem a
+      // futtatás első lépése, amit el lehet felejteni.
+      if (error instanceof MedusaConfigurationError) {
+        out.stderr(`${error.message}\n`);
+        return 1;
+      }
+      throw error;
+    }
+  }
 
   let failed = 0;
-  for (const argument of productIds) {
+  for (const argument of targets) {
     const productId = argument.startsWith("sku:")
       ? await resolveBySku(argument.slice(4))
       : argument;
@@ -99,7 +128,21 @@ export async function runProjectionCli(
       continue;
     }
 
-    const outcome = await service.project(
+    if (forgetOnly) {
+      const removed = await prisma.externalReference.deleteMany({
+        where: {
+          system: "MEDUSA",
+          entityType: "Product",
+          entityId: product.id,
+        },
+      });
+      out.stdout(
+        `${product.id}: leképezés törölve (${removed.count} sor). A termék érintetlen.\n`,
+      );
+      continue;
+    }
+
+    const outcome = await service!.project(
       {
         id: product.id,
         name: product.name,
