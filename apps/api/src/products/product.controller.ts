@@ -53,4 +53,20 @@ export class ProductController {
   archiveProduct(@Param("id") id: string) {
     return this.products.archiveProduct(id);
   }
+
+  /**
+   * Egyirányú útvonal, szándékosan: a cél a névben áll, nem a törzsben.
+   *
+   * Egy `{ authority: "..." }` törzs azt sugallná, hogy a visszaút is
+   * választható, pedig nincs eldöntve, mi történjen ilyenkor a közben
+   * elkészült helyi szerkesztésekkel.
+   */
+  @Post(":id/catalog-authority/acropora")
+  @RequirePermissions(PERMISSIONS.PRODUCTS_CATALOG_AUTHORITY_TRANSFER)
+  takeCatalogAuthority(
+    @Param("id") id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.products.takeCatalogAuthority(id, user.id);
+  }
 }

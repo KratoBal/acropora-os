@@ -17,9 +17,41 @@ A `Product.catalogAuthority` az aktuális Product Master:
 - `UNAS`: a generikus Product API nem módosíthatja és nem archiválhatja;
 - `ACROPORA`: a generikus Product API által kezelhető.
 
-Az eredet és az authority külön mező, mert egy későbbi, ellenőrzött
-helyi–UNAS összekapcsoláskor az authority változhat, miközben a történeti
-eredet megmarad. Ilyen átmeneti folyamat ebben a PR-ban még nincs.
+Az eredet és az authority külön mező, mert egy ellenőrzött átvételkor az
+authority változhat, miközben a történeti eredet megmarad: egy átvett termék
+`origin` mezője továbbra is `UNAS`, tehát a származása visszakereshető marad.
+
+## A törzsadat átvétele (UNAS → ACROPORA)
+
+Az átvétel EGY IRÁNYBA működik, és külön végponton, nem az update DTO-n
+keresztül:
+
+    POST /products/:id/catalog-authority/acropora
+
+Jogosultság: `products.catalog-authority.transfer`, szándékosan KÜLÖN a
+`products.manage` jogtól, és a ROLE_PERMISSIONS szerint csak OWNER és ADMIN
+kapja meg. Az indok nem a ritkaság: az átvétel után a webshop-szinkron többé
+nem ír a terméken, tehát egy UNAS oldali javítás CSENDBEN nem érkezik meg.
+
+Amit a művelet tesz:
+
+- a váltás egyetlen feltételes írás (`catalogAuthority: "UNAS"` a where
+  ágban), tehát két párhuzamos átvételből pontosan az egyik ír;
+- valódi váltáskor `product.catalog-authority.transferred` DomainEvent
+  keletkezik, a művelet végzőjével; megismételt hívásnál NEM keletkezik újabb
+  esemény, mert a napló ugyanazt az egy döntést nem mondhatja el kétszer;
+- feloldatlan (`null`) authority esetén ugyanaz a fail-closed válasz jön, mint
+  az írásnál: `PRODUCT_CATALOG_AUTHORITY_UNRESOLVED`.
+
+Az átvétel után a `name` és a `description` az első Acropora OS tulajdonú
+mezők: a termék-szinkron termékszinten kihagyja a rekordot, és a kihagyást a
+`UnasProductSyncRun.skippedCount` mezőben számolja. Készlet és árazás NEM
+része az átvételnek, azok külön domainek.
+
+VISSZAADÁS NINCS, és ez döntés, nem hiány. A visszaadás nem az ellenkező
+irányú kapcsoló: a UNAS a következő szinkronnál felülírná azt a nevet és
+leírást, amit közben nálunk szerkesztettek. Amíg nincs eldöntve, mi történjen
+ezekkel a szerkesztésekkel, a művelet nem létezik.
 
 A `Product` tartalmazza a közös nevet, leírást, terméktípust, brandet és
 kategóriát, a `ProductVariant` az SKU-val azonosított értékesíthető és
@@ -69,6 +101,10 @@ Minden végpont hitelesítést igényel.
 | `POST`   | `/products`     | `products.manage` | Product létrehozása        |
 | `PATCH`  | `/products/:id` | `products.manage` | részleges módosítás        |
 | `DELETE` | `/products/:id` | `products.manage` | soft archive               |
+
+| Metódus | Útvonal                                    | Jogosultság                           | Művelet                       |
+| ------- | ------------------------------------------ | ------------------------------------- | ----------------------------- |
+| `POST`  | `/products/:id/catalog-authority/acropora` | `products.catalog-authority.transfer` | törzsadat átvétele a UNAS-tól |
 
 UNAS authority rekordra a `PATCH` és `DELETE` végpont
 `409 PRODUCT_MANAGED_BY_UNAS` választ ad.

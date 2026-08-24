@@ -30,6 +30,33 @@ export class ProductService {
     return this.products.archive(id);
   }
 
+  /**
+   * A törzsadat gazdájának átvétele: UNAS -> ACROPORA, egy irányban.
+   *
+   * Ez az a pont, ahol a webshop-szinkron leáll a terméken. Nem "beállítás",
+   * hanem döntés: az átvétel után egy UNAS oldali javítás NEM érkezik meg
+   * ide, és ezt a felhasználónak a művelet előtt kell tudnia.
+   *
+   * Visszafelé NINCS út ebben a körben, és ez szándékos. Egy visszaadás
+   * ugyanis nem az ellenkező irányú kapcsoló: a UNAS a következő szinkronnál
+   * felülírná a nevet és a leírást, amit itt közben megszerkesztettek. Amíg
+   * nincs eldöntve, mi történjen az így elvesző szerkesztésekkel, a
+   * visszaadás nem létezik.
+   *
+   * Feloldatlan (null) authority esetén ugyanaz a fail-closed válasz jön,
+   * mint az írásnál: nem tudjuk, kié a termék, tehát nem adjuk oda.
+   */
+  async takeCatalogAuthority(id: string, actorUserId?: string) {
+    const product = await this.requireProduct(id);
+    if (product.catalogAuthority === null)
+      throw new ConflictException("PRODUCT_CATALOG_AUTHORITY_UNRESOLVED");
+    const { product: updated } = await this.products.takeCatalogAuthority(
+      id,
+      actorUserId,
+    );
+    return updated;
+  }
+
   getProduct(id: string) {
     return this.requireProduct(id);
   }

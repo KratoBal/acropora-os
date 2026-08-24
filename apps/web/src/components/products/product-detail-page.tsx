@@ -24,6 +24,7 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { FilterXSS, type IFilterXSSOptions } from "xss";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { ProductAuthorityCard } from "@/components/products/product-authority-card";
 import { productApi } from "@/lib/api/products";
 import { BarcodeEditor } from "./barcode-editor";
 
@@ -622,6 +623,15 @@ export function ProductDetailPage({ productId }: { productId: string }) {
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.PRODUCTS_MANAGE),
   );
+  // Külön jog, nem a PRODUCTS_MANAGE: aki napi terméktörzset gondoz, annak a
+  // gazdaváltáshoz nem kell jogosultsága (lásd packages/types auth.ts).
+  const canTransferAuthority = Boolean(
+    session &&
+    hasPermission(
+      session.user,
+      PERMISSIONS.PRODUCTS_CATALOG_AUTHORITY_TRANSFER,
+    ),
+  );
   // Matches the same fallback used throughout the rest of the app: in
   // production the session is an httpOnly cookie and `token` is always
   // undefined (see ProductionAuthAdapter) - apiRequest already relies on
@@ -733,6 +743,12 @@ export function ProductDetailPage({ productId }: { productId: string }) {
 
       <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
         <div className="space-y-6">
+          <ProductAuthorityCard
+            token={token}
+            product={product}
+            canTransfer={canTransferAuthority}
+            onTransferred={setProduct}
+          />
           {product.unasMirror ? (
             <Card className="border-teal-200">
               <CardHeader className="bg-teal-50/70">
