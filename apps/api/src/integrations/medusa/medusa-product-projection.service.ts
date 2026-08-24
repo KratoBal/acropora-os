@@ -39,7 +39,12 @@ export type ProjectionStopReason =
   /** Több ÉLŐ termék viseli ugyanazt a külső azonosítót. */
   | "ambiguous"
   /** A terméknek nincs cikkszáma, tehát nincs mit változatként átvinni. */
-  | "no-sku";
+  | "no-sku"
+  /**
+   * A keresés kimerítette a limitet, tehát lehet több találat is. Csonkolt
+   * halmazon nem döntünk: az élők száma ilyenkor nem megbízható.
+   */
+  | "lookup-truncated";
 
 /**
  * Az egyetlen opció, amit a Medusa megkövetel.
@@ -91,8 +96,24 @@ export class MedusaProductProjectionService {
      * futásnál új terméket szülne.
      */
     const found = await this.medusa.findByExternalId(product.id);
-    const live = found.filter((row) => !row.deleted_at);
-    const deleted = found.filter((row) => row.deleted_at);
+
+    /**
+     * Csonkolt válaszon NEM döntünk. A lista nem rendez, tehát egy kimerített
+     * limit nem „az elsőket" adja vissza, hanem tetszőleges részhalmazt - és
+     * abból az élők száma bármi lehet. Ez a megállás olcsóbb, mint egy
+     * magabiztos rossz ág.
+     */
+    if (found.truncated)
+      return {
+        action: "stopped",
+        reason: "lookup-truncated",
+        details:
+          `${product.id}: a keresés kimerítette a limitet (${found.rows.length} sor), ` +
+          `tehát lehet több találat is. Csonkolt halmazon nem döntünk.`,
+      };
+
+    const live = found.rows.filter((row) => !row.deleted_at);
+    const deleted = found.rows.filter((row) => row.deleted_at);
 
     /**
      * A SZÁMLÁLÁS AZ ÉLŐKRE MEGY, nem a nyers sorokra. Egy törölt és egy élő

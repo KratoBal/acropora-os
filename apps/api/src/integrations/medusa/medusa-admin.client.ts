@@ -29,6 +29,19 @@ export interface MedusaProductInput {
   variants: { title: string; sku: string; options: Record<string, string> }[];
 }
 
+export interface MedusaLookupResult {
+  rows: MedusaProductRow[];
+  /** Igaz, ha a válasz kimerítette a limitet, tehát lehet több is. */
+  truncated: boolean;
+}
+
+/**
+ * Tág, de véges. A helyes állapot nulla vagy egy találat; ennél több már
+ * rendellenes, és ötven bőven elég ahhoz, hogy a rendellenesség ALAKJA is
+ * látszódjon, mielőtt megállunk.
+ */
+export const EXTERNAL_ID_LOOKUP_LIMIT = 50;
+
 export interface MedusaAdminClient {
   /**
    * Keresés külső azonosítóra, a TÖRÖLTEKKEL együtt.
@@ -39,11 +52,17 @@ export interface MedusaAdminClient {
    * másodikat ugyanazzal az azonosítóval - és ezt a Medusa nem akadályozza meg,
    * mert az `external_id` mezőn nincs egyedi index.
    *
-   * A `limit` KETTŐ, és a hívó a VISSZAKAPOTT SOROKAT számolja, nem a válasz
-   * darabszám-mezőjét: az admin lista két ága közül az egyik becslést tesz
-   * ugyanabba a mezőbe.
+   * A hívó a VISSZAKAPOTT SOROKAT számolja, nem a válasz darabszám-mezőjét: az
+   * admin lista két ága közül az egyik BECSLÉST tesz ugyanabba a mezőbe.
+   *
+   * A `truncated` azért van, mert a lista NEM RENDEZ alapértelmezésben. Egy
+   * szűk limit tehát nem "az első kettőt" adná vissza, hanem TETSZŐLEGES
+   * kettőt, és a döntés egy csonkolt halmazon születne: három találatból (két
+   * élő, egy törölt) visszajöhetne egy élő és egy törölt, amiből a hívó azt
+   * olvasná ki, hogy pontosan egy élő van. Ezért a limit tág, és ha a válasz
+   * kimeríti, azt KÜLÖN jelezzük - a néma csonkolás ugyanaz a hiba másképp.
    */
-  findByExternalId(externalId: string): Promise<MedusaProductRow[]>;
+  findByExternalId(externalId: string): Promise<MedusaLookupResult>;
   create(input: MedusaProductInput): Promise<MedusaProductRow>;
   update(
     id: string,
@@ -71,7 +90,11 @@ export function medusaAdminConfigFromEnv(
 }
 
 export class HttpMedusaAdminClient implements MedusaAdminClient {
-  constructor(private readonly config: MedusaAdminConfig) {}
+  /** A `fetch` azért paraméter, hogy a kérés ALAKJA mérhető legyen. */
+  constructor(
+    private readonly config: MedusaAdminConfig,
+    private readonly fetchImpl: typeof fetch = fetch,
+  ) {}
 
   private headers(): Record<string, string> {
     // A kulcs a Basic séma FELHASZNÁLÓNEVE, jelszó nélkül, ezért a záró
@@ -84,7 +107,7 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
   }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await fetch(`${this.config.baseUrl}${path}`, {
+    const response = await this.fetchImpl(`${this.config.baseUrl}${path}`, {
       ...init,
       headers: { ...this.headers(), ...(init?.headers ?? {}) },
     });
@@ -99,17 +122,18 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
     return (await response.json()) as T;
   }
 
-  async findByExternalId(externalId: string): Promise<MedusaProductRow[]> {
+  async findByExternalId(externalId: string): Promise<MedusaLookupResult> {
     const params = new URLSearchParams({
       external_id: externalId,
       with_deleted: "true",
       fields: "id,deleted_at,external_id",
-      limit: "2",
+      limit: String(EXTERNAL_ID_LOOKUP_LIMIT),
     });
     const body = await this.request<{ products: MedusaProductRow[] }>(
       `/admin/products?${params.toString()}`,
     );
-    return body.products ?? [];
+    const rows = body.products ?? [];
+    return { rows, truncated: rows.length >= EXTERNAL_ID_LOOKUP_LIMIT };
   }
 
   async create(input: MedusaProductInput): Promise<MedusaProductRow> {
