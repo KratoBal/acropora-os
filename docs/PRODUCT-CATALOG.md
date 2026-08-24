@@ -66,6 +66,37 @@ a saját állapotát.
 
 Készlet és árazás NEM része az átvételnek, azok külön domainek.
 
+### A szerver oldali írási határ
+
+A `PATCH /products/:id` út teljes egészében mérve, és a határ NEM a képernyőn
+van:
+
+| Réteg                          | Mit tesz                                                                                                                               |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `ValidationPipe` (main.ts)     | `whitelist` és `forbidNonWhitelisted`, tehát egy ismeretlen mező már a kontroller előtt 400-at kap                                     |
+| `UpdateProductDto`             | hat mezőt ismer: `name`, `description`, `productType`, `brandId`, `primaryCategoryId` és a deprecated `categoryId`                     |
+| `ProductController`            | `products.manage` jogosultság                                                                                                          |
+| `ProductService.updateProduct` | `assertLocallyManaged`: `UNAS` gazdánál `409 PRODUCT_MANAGED_BY_UNAS`, feloldatlan gazdánál `409 PRODUCT_CATALOG_AUTHORITY_UNRESOLVED` |
+| `ProductRepository.update`     | NÉV SZERINT sorolja fel, mit ír, tehát ismeretlen mező akkor sem íródna, ha idáig eljutna                                              |
+
+A tükör-könyvelési mezők (`mirrorSource`, `mirrorState`, `sourceCreatedAt`,
+`sourceUpdatedAt`, `lastSyncedAt`, `missingSince`, `rawSourceHash`) ezen az úton
+tehát KÉT független okból nem írhatók: a kapu visszautasítja őket, és a tároló
+réteg nem is ismeri őket. A `product-write-gate.integration.spec.ts` mind a
+kettőt méri, adatbázisból visszaolvasva, nem státuszkódból.
+
+### A kategória két reprezentációja a szerkesztésnél
+
+A `Product.categoryId` skalár és a `ProductCategory` kapcsolatok EGYETÉRTENEK
+abban, melyik az elsődleges: a szerkesztés egy tranzakcióban billenti át az
+`isPrimary` jelzőt és írja a skalárt, `source: "MANUAL"` jelöléssel. Mérve.
+
+Amit viszont tudni kell: **az előző elsődleges kapcsolat nem tűnik el**, csak
+elveszti az elsődleges jelzőt. Egy átsorolt termék tehát megtartja a korábbi
+kategóriáját másodlagos kapcsolatként, és a termékoldal ma minden kapcsolatot
+megjelenít. Ez nem inkonzisztencia a két reprezentáció között, hanem egy
+felhalmozódás, amivel a szerkesztő felületnek kezdenie kell valamit.
+
 ### Védett és szerkeszthető: nem ugyanaz
 
 Egy átvett termék neve, leírása és kategóriája **védett a felülírástól**, és a
