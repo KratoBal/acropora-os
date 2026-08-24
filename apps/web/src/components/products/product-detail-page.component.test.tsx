@@ -10,7 +10,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProductDetailPage } from "./product-detail-page";
 
-const api = vi.hoisted(() => ({ detail: vi.fn(), updateExtension: vi.fn() }));
+const api = vi.hoisted(() => ({
+  detail: vi.fn(),
+  updateExtension: vi.fn(),
+  update: vi.fn(),
+  categoryOptions: vi.fn(),
+}));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 const navigation = vi.hoisted(() => ({
   push: vi.fn(),
@@ -207,6 +212,7 @@ describe("ProductDetailPage mirror ownership", () => {
     };
     api.detail.mockResolvedValue(detail);
     api.updateExtension.mockResolvedValue(detail.variants[0]!.extension);
+    api.categoryOptions.mockResolvedValue([]);
   });
 
   it("separates the read-only UNAS mirror from Acropora extension data", async () => {
@@ -224,6 +230,33 @@ describe("ProductDetailPage mirror ownership", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Acropora Product Extension")).toBeInTheDocument();
     expect(screen.getByText("Csak belső adat")).toBeInTheDocument();
+  });
+
+  /**
+   * A szerkesztő megjelenése a TULAJDONJOGON múlik, nem a jogosultságon. Mind a
+   * két felét állítjuk: egy webshop-gazdájú terméken nem jelenhet meg, egy
+   * átvetten meg kell jelennie. Csak az elsőt nézve egy olyan felület is
+   * átmenne, ami sehol nem kínál szerkesztést; csak a másodikat nézve egy
+   * olyan, ami mindenhol.
+   */
+  it("nem kínál szerkesztőt a webshop által gondozott terméken", async () => {
+    render(<ProductDetailPage productId="product-1" />);
+
+    expect(await screen.findByText("UNAS-termék")).toBeInTheDocument();
+    expect(screen.queryByText("Alapadatok szerkesztése")).toBeNull();
+  });
+
+  it("az átvett terméken megjeleníti a három mező szerkesztőjét", async () => {
+    api.detail.mockResolvedValue(localDetail);
+
+    render(<ProductDetailPage productId="product-1" />);
+
+    expect(
+      await screen.findByText("Alapadatok szerkesztése"),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Név")).toBeInTheDocument();
+    expect(screen.getByLabelText("Leírás")).toBeInTheDocument();
+    expect(screen.getByLabelText("Elsődleges kategória")).toBeInTheDocument();
   });
 
   it("a helyi terméket külön Acropora OS badge-dzsel jelöli", async () => {

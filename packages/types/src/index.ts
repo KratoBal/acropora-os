@@ -317,6 +317,7 @@ export type {
   ProductCatalogAuthority,
   UnasProductMirrorDetail,
   ProductListResponse,
+  ProductUpdateInput,
   ProductType,
   ProductVariantSummary,
 } from "./product-catalog.js";
