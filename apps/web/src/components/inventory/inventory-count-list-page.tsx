@@ -137,7 +137,7 @@ export function InventoryCountListPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Raktár"
+        title="Leltár"
         description="Készletleltárak indítása, nyomon követése és korrekciója."
         actions={
           canManage ? (

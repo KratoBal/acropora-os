@@ -82,6 +82,12 @@ export const serviceNavigation: AppNavigationItem[] = [
 
 export const businessNavigation: AppNavigationEntry[] = [
   {
+    href: "/pos",
+    label: "POS",
+    icon: "credit-card",
+    permission: PERMISSIONS.ORDERS_VIEW,
+  },
+  {
     label: "Webshop",
     icon: "store",
     children: [
@@ -110,28 +116,10 @@ export const businessNavigation: AppNavigationEntry[] = [
     ],
   },
   {
-    href: "/pos",
-    label: "POS",
-    icon: "credit-card",
-    permission: PERMISSIONS.ORDERS_VIEW,
-  },
-  {
     href: "/products",
     label: "Termékek",
     icon: "package",
     permission: PERMISSIONS.PRODUCTS_VIEW,
-  },
-  {
-    href: "/raktar",
-    label: "Raktár",
-    icon: "warehouse",
-    permission: PERMISSIONS.INVENTORY_VIEW,
-  },
-  {
-    href: "/keszlet-egyeztetes",
-    label: "Készlet-egyeztetés",
-    icon: "box",
-    permission: PERMISSIONS.INVENTORY_VIEW,
   },
   {
     href: "/partnerek",
@@ -160,6 +148,21 @@ export const businessNavigation: AppNavigationEntry[] = [
         label: "Foxpost elszámolás",
         icon: "download",
         permission: PERMISSIONS.FINANCE_VIEW,
+      },
+      {
+        // Ide KÖLTÖZÖTT a korábbi felső szintű "Raktár", és a lap tartalma
+        // szerint kapta a nevét: készletleltárak indítása és korrekciója. Az
+        // útvonal nem változott, csak a menüben elfoglalt helye és a felirata.
+        href: "/raktar",
+        label: "Leltár",
+        icon: "warehouse",
+        permission: PERMISSIONS.INVENTORY_VIEW,
+      },
+      {
+        href: "/keszlet-egyeztetes",
+        label: "Készlet-egyeztetés",
+        icon: "box",
+        permission: PERMISSIONS.INVENTORY_VIEW,
       },
     ],
   },

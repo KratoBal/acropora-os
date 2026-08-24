@@ -5,6 +5,10 @@ import {
   isNavigationGroup,
   isNavigationItemActive,
   navigationItems,
+  primaryNavigation,
+  secondaryNavigation,
+  settingsNavigation,
+  unasSettingsNavigation,
   type AppNavigationGroup,
   type AppNavigationItem,
 } from "./navigation";
@@ -68,12 +72,76 @@ describe("navigation", () => {
     expect(labels.get("/webshop/termekek")).toBe("Webshop termékek");
   });
 
-  it("gathers purchasing, the NAV invoices and the Foxpost settlement under Pénzügy", () => {
+  /**
+   * A Pénzügy csoport tartalma SZÁNDÉKOSAN változott: a leltár és a
+   * készlet-egyeztetés a felső szintről KÖLTÖZÖTT ide.
+   *
+   * A régi állítás három gyereket rögzített (beszerzés, NAV számlák, Foxpost),
+   * és a költözéskor jogosan bukott el. Az új ötöt rögzít, a beköltözőkkel a
+   * végén, tehát a meglévő három sorrendje nem mozdult.
+   */
+  it("gathers purchasing, the NAV invoices, the Foxpost settlement and the two stock pages under Pénzügy", () => {
     expect(group("Pénzügy").children.map((item) => item.href)).toEqual([
       "/beszerzes",
       "/beszerzes/nav-szamlak",
       "/penzugy/foxpost",
+      "/raktar",
+      "/keszlet-egyeztetes",
     ]);
+  });
+
+  /**
+   * A Működés blokk FELSŐ SZINTŰ sorrendjét eddig semmi nem állította.
+   *
+   * Ez nem elméleti hiány volt: a POS és a Webshop helycseréje enélkül
+   * méretlen maradt volna, és a változás után sem lett volna semmi, ami az új
+   * sorrendet tartja - bármelyik későbbi szerkesztés csendben visszafordíthatta
+   * volna. A csoportok a fejlécük nevén szerepelnek, mert a menüben is az
+   * látszik.
+   */
+  it("keeps the operations block in the order it is meant to be read", () => {
+    expect(
+      businessNavigation.map((entry) =>
+        isNavigationGroup(entry) ? entry.label : entry.label,
+      ),
+    ).toEqual([
+      "POS",
+      "Webshop",
+      "Termékek",
+      "Partnerek",
+      "Pénzügy",
+      "Akváriumok",
+      "ICP",
+      "Szerviz",
+    ]);
+  });
+
+  /**
+   * Egy oldal pontosan EGYSZER szerepelhet a menüben.
+   *
+   * E nélkül a "költözés" és a "másolás" megkülönböztethetetlen: aki a leltárt
+   * beteszi a Pénzügy alá, de fentről elfelejti kivenni, két helyen kapja meg
+   * ugyanazt az oldalt, és a csoport tartalmát állító teszt ettől még zöld
+   * marad. A számot nem soroljuk fel: az útvonalakat számoljuk, és a duplikátum
+   * NEVÉT írjuk ki, mert egy szám önmagában nem mondja meg, melyik.
+   */
+  it("shows every page in exactly one place", () => {
+    const hrefs = [
+      ...primaryNavigation,
+      ...navigationItems(businessNavigation),
+      ...secondaryNavigation,
+      ...settingsNavigation,
+      ...unasSettingsNavigation,
+    ].map((item) => item.href);
+
+    const seen = new Set<string>();
+    const duplicates = hrefs.filter((href) => {
+      if (seen.has(href)) return true;
+      seen.add(href);
+      return false;
+    });
+
+    expect(duplicates).toEqual([]);
   });
 
   /**
