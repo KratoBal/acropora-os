@@ -15,10 +15,10 @@ import {
   PERMISSIONS,
   type PurchaseInvoiceDetail,
 } from "@acropora/types";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { useReturnTo } from "@/components/navigation-history";
 import { purchasingApi } from "@/lib/api/purchasing";
 
 function formatMoney(value: string, currency: string): string {
@@ -31,7 +31,7 @@ export function PurchaseInvoiceDetailPage({
   invoiceId: string;
 }) {
   const { session } = useAuth();
-  const router = useRouter();
+  const backToList = useReturnTo("/beszerzes");
   const token = session?.token ?? "";
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.PURCHASING_VIEW),
@@ -74,8 +74,8 @@ export function PurchaseInvoiceDetailPage({
         title={detail ? detail.documentNumber : "Beszerzési számla"}
         description="Beérkezett beszállítói számla részletei"
         actions={
-          <Button variant="secondary" onClick={() => router.push("/beszerzes")}>
-            Vissza a listához
+          <Button variant="secondary" onClick={backToList.goBack}>
+            {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
           </Button>
         }
       />

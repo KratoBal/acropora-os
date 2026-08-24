@@ -16,10 +16,10 @@ import {
   type PosPaymentMethod,
   type PosSaleDetail,
 } from "@acropora/types";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { useReturnTo } from "@/components/navigation-history";
 import { posApi } from "@/lib/api/pos";
 
 const PAYMENT_METHOD_LABEL: Record<PosPaymentMethod, string> = {
@@ -34,7 +34,7 @@ function formatHuf(value: string): string {
 
 export function PosSaleDetailPage({ saleId }: { saleId: string }) {
   const { session } = useAuth();
-  const router = useRouter();
+  const backTo = useReturnTo("/pos");
   const token = session?.token ?? "";
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.ORDERS_VIEW),
@@ -77,8 +77,8 @@ export function PosSaleDetailPage({ saleId }: { saleId: string }) {
         title={detail ? detail.orderNumber : "Eladás"}
         description="POS eladás részletei"
         actions={
-          <Button variant="secondary" onClick={() => router.push("/pos")}>
-            Vissza a pénztárhoz
+          <Button variant="secondary" onClick={backTo.goBack}>
+            {backTo.fromWithinApp ? "Vissza" : "Vissza a pénztárhoz"}
           </Button>
         }
       />

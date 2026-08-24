@@ -24,6 +24,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { useReturnTo } from "@/components/navigation-history";
 import { assetsApi } from "@/lib/api/assets";
 import {
   assetCriticalityLabel,
@@ -49,6 +50,7 @@ const documentTypeLabel: Record<AssetDocumentType, string> = {
 };
 
 export function AssetDetailPage({ assetId }: { assetId: string }) {
+  const backToList = useReturnTo("/szerviz/eszkozok");
   const { session } = useAuth();
   const token = session?.token ?? "";
   const canView = Boolean(
@@ -257,8 +259,10 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                 <Button>Eszköz módosítása</Button>
               </Link>
             ) : null}
-            <Link href="/szerviz/eszkozok">
-              <Button variant="secondary">Vissza a listához</Button>
+            <Link href={backToList.href}>
+              <Button variant="secondary">
+                {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
+              </Button>
             </Link>
           </div>
         }

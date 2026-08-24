@@ -25,6 +25,7 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { useReturnTo } from "@/components/navigation-history";
 import { assetsApi } from "@/lib/api/assets";
 import {
   assetCriticalityLabel,
@@ -41,6 +42,7 @@ const ownerKey = (type: AssetOwnerType, id: string) => `${type}:${id}`;
 export function AssetEditorPage({ assetId }: { assetId?: string }) {
   const { session } = useAuth();
   const router = useRouter();
+  const backToList = useReturnTo("/szerviz/eszkozok");
   const token = session?.token ?? "";
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_MANAGE),
@@ -246,8 +248,10 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
         title={assetId ? "Eszköz módosítása" : "Új eszköz"}
         description="Önálló berendezés vagy egy meglévő rendszer részegységének rögzítése."
         actions={
-          <Link href="/szerviz/eszkozok">
-            <Button variant="secondary">Vissza a listához</Button>
+          <Link href={backToList.href}>
+            <Button variant="secondary">
+              {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
+            </Button>
           </Link>
         }
       />

@@ -16,10 +16,10 @@ import {
   type InventoryCountDetail,
   type InventoryCountStatus,
 } from "@acropora/types";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { useReturnTo } from "@/components/navigation-history";
 import { inventoryApi } from "@/lib/api/inventory";
 
 const STATUS_LABEL: Record<InventoryCountStatus, string> = {
@@ -39,7 +39,7 @@ const STATUS_BADGE: Record<
 
 export function InventoryCountDetailPage({ countId }: { countId: string }) {
   const { session } = useAuth();
-  const router = useRouter();
+  const backToList = useReturnTo("/raktar");
   const token = session?.token ?? "";
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.INVENTORY_VIEW),
@@ -206,8 +206,8 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
         title={detail ? detail.countNumber : "Leltár"}
         description={detail ? `Raktár: ${detail.warehouseName}` : undefined}
         actions={
-          <Button variant="secondary" onClick={() => router.push("/raktar")}>
-            Vissza a listához
+          <Button variant="secondary" onClick={backToList.goBack}>
+            {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
           </Button>
         }
       />
