@@ -31,6 +31,7 @@ const product: ProjectableProduct = {
 function fakes(options: {
   link?: { productId: string; medusaProductId: string } | null;
   found?: MedusaProductRow[];
+  truncated?: boolean;
 }) {
   const calls: string[] = [];
   const linked: { productId: string; medusaProductId: string }[] = [];
@@ -50,7 +51,10 @@ function fakes(options: {
   const medusa = {
     findByExternalId: async () => {
       calls.push("search");
-      return options.found ?? [];
+      return {
+        rows: options.found ?? [],
+        truncated: options.truncated ?? false,
+      };
     },
     create: async () => {
       calls.push("create");
@@ -229,6 +233,34 @@ describe("MedusaProductProjectionService", () => {
     assert.ok(
       !calls.includes("link"),
       "megszakadt láncnál leképezést sem írunk",
+    );
+  });
+
+  /**
+   * Csonkolt válaszon nem döntünk. A lista nem rendez, tehát egy kimerített
+   * limit tetszőleges részhalmazt ad, és abból az élők száma bármi lehet: két
+   * élő és egy törölt találatból visszajöhetne egy élő meg egy törölt, amiből
+   * a szolgáltatás azt olvasná ki, hogy pontosan egy élő van, és rákötné a
+   * leképezést a rossz termékre.
+   */
+  it("refuses to decide on a truncated lookup", async () => {
+    const { service, calls } = fakes({
+      link: null,
+      found: [{ id: "prod_elo", deleted_at: null }],
+      truncated: true,
+    });
+
+    const outcome = await service.project(product, now);
+
+    assert.equal(outcome.action, "stopped");
+    assert.equal(
+      outcome.action === "stopped" ? outcome.reason : null,
+      "lookup-truncated",
+    );
+    assert.ok(!calls.includes("create"));
+    assert.ok(
+      !calls.includes("link"),
+      "csonkolt halmaznál leképezést sem írunk",
     );
   });
 
