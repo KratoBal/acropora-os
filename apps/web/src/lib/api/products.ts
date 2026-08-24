@@ -37,6 +37,19 @@ export const productApi = {
       token,
     );
   },
+  /**
+   * Takes the master data of a webshop product over to Acropora OS. One
+   * direction only, and the direction is in the path rather than in a body:
+   * there is no decided answer yet for what should happen to local edits if
+   * the product were ever handed back.
+   */
+  takeCatalogAuthority(token: string, id: string) {
+    return apiRequest<ProductDetail>(
+      `/products/${encodeURIComponent(id)}/catalog-authority/acropora`,
+      token,
+      { method: "POST" },
+    );
+  },
   updateExtension(
     token: string,
     variantId: string,

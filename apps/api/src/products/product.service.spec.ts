@@ -28,6 +28,13 @@ function repositoryWith(
         calls.push("archive");
         return { id: "archived" };
       },
+      takeCatalogAuthority: async () => {
+        calls.push("takeCatalogAuthority");
+        return {
+          product: { id: product?.id, catalogAuthority: "ACROPORA" },
+          changed: true,
+        };
+      },
     } as unknown as ProductRepository,
   };
 }
@@ -83,6 +90,61 @@ describe("ProductService", () => {
     await assert.rejects(
       service.archiveProduct("product-1"),
       ConflictException,
+    );
+    assert.deepEqual(calls, []);
+  });
+
+  /**
+   * The transfer is allowed exactly where the generic write is NOT: an
+   * UNAS-managed product is the only thing worth taking over. Asserting only
+   * that it succeeds on an ACROPORA product would pass on a service that
+   * refuses the case the feature exists for.
+   */
+  it("takes authority from a product the webshop manages", async () => {
+    const { repository, calls } = repositoryWith({
+      id: "product-1",
+      catalogAuthority: "UNAS",
+      unasMirror: { source: "UNAS" },
+    });
+    const service = new ProductService(repository);
+
+    const result = await service.takeCatalogAuthority("product-1", "user-1");
+
+    assert.deepEqual(calls, ["takeCatalogAuthority"]);
+    assert.equal(
+      (result as { catalogAuthority: string }).catalogAuthority,
+      "ACROPORA",
+    );
+  });
+
+  /**
+   * Unresolved authority means we do not know who owns the row. Handing it
+   * over on a guess is the one outcome that cannot be undone by a later
+   * sync, so it fails closed here exactly as the generic write does.
+   */
+  it("refuses to hand over a product whose owner is unknown", async () => {
+    const { repository, calls } = repositoryWith({
+      id: "product-1",
+      catalogAuthority: null,
+    });
+    const service = new ProductService(repository);
+
+    await assert.rejects(
+      service.takeCatalogAuthority("product-1", "user-1"),
+      (error) =>
+        error instanceof ConflictException &&
+        error.message === "PRODUCT_CATALOG_AUTHORITY_UNRESOLVED",
+    );
+    assert.deepEqual(calls, []);
+  });
+
+  it("throws for a missing product before touching the repository", async () => {
+    const { repository, calls } = repositoryWith(null);
+    const service = new ProductService(repository);
+
+    await assert.rejects(
+      () => service.takeCatalogAuthority("missing", "user-1"),
+      NotFoundException,
     );
     assert.deepEqual(calls, []);
   });

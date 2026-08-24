@@ -5,6 +5,8 @@ import { ConflictException } from "@nestjs/common";
 import { prisma } from "@acropora/database";
 import type { UnasApiCategory, UnasApiProduct } from "@acropora/types";
 
+import { ProductRepository } from "../../products/product.repository.js";
+
 import type { UnasApiClient } from "./unas-api.client.js";
 import { UnasProductCanonicalizer } from "./unas-product-canonicalizer.js";
 import { UnasProductSyncDiffEngine } from "./unas-product-sync-diff.engine.js";
@@ -13,15 +15,18 @@ import { UnasProductSyncService } from "./unas-product-sync.service.js";
 
 const enabled = process.env.RUN_DB_INTEGRATION === "1";
 
-const product = (sku: string): UnasApiProduct => ({
-  externalId: "159850145",
+const product = (
+  sku: string,
+  overrides: { externalId?: string; name?: string; description?: string } = {},
+): UnasApiProduct => ({
+  externalId: overrides.externalId ?? "159850145",
   sku,
-  name: "Integration Reef Pump",
+  name: overrides.name ?? "Integration Reef Pump",
   state: "live",
   externalStatus: "1",
   sourceCreatedAt: "2026-07-20T08:00:00.000Z",
   sourceUpdatedAt: "2026-07-20T09:00:00.000Z",
-  descriptionShort: "Integration fixture",
+  descriptionShort: overrides.description ?? "Integration fixture",
   descriptionLong: null,
   descriptionShortIsHtml: false,
   descriptionLongIsHtml: null,
@@ -69,7 +74,7 @@ const product = (sku: string): UnasApiProduct => ({
     keywords: null,
     robots: null,
   },
-  rawPayload: { Id: "159850145", Sku: sku },
+  rawPayload: { Id: overrides.externalId ?? "159850145", Sku: sku },
 });
 
 const category: UnasApiCategory = {
@@ -370,5 +375,124 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
       ConflictException,
     );
     await repository.markFailed(runId, "INTEGRATION_TEST_CLEANUP");
+  });
+
+  /**
+   * The first controlled authority handover, measured end to end.
+   *
+   * The proof has to be capable of failing, so both products travel in the
+   * SAME batch and the same sync run: one still owned by the webshop, one
+   * taken over by us. If the skip stopped working, the taken-over product's
+   * name and description would come back overwritten and this test would go
+   * red. If the skip were too broad, the webshop-owned product would stop
+   * updating and the UPDATE count would drop - which is why both halves are
+   * asserted, not just the one the feature is named after.
+   *
+   * `name` and `description` are the fields under test because they are the
+   * first ones whose ownership moves to Acropora OS. Stock and pricing are
+   * deliberately untouched here: they are separate domains, and this batch
+   * carries no stock rows at all.
+   */
+  it("keeps the webshop out of a product we took over, in a mixed batch", async () => {
+    await cleanup();
+    deletedProducts = [];
+    categoryPage = [category];
+
+    const ours = () =>
+      product("AUTHORITY-OURS", {
+        externalId: "900001",
+        name: "Acropora névvel",
+        description: "Acropora leírással",
+      });
+    const theirs = () =>
+      product("AUTHORITY-THEIRS", {
+        externalId: "900002",
+        name: "UNAS névvel",
+        description: "UNAS leírással",
+      });
+
+    liveProducts = [ours(), theirs()];
+    const created = await service.runIncremental(
+      "integration-token",
+      new Date("2026-07-21T10:00:00.000Z"),
+      100,
+    );
+    assert.equal(created.counts.CREATE, 2);
+    assert.equal(created.skippedCount, 0);
+
+    // The handover goes through the same operation the screen calls, so this
+    // measures the shipped path and not a hand-written UPDATE.
+    const takenOver = await prisma.productVariant.findUniqueOrThrow({
+      where: { sku: "AUTHORITY-OURS" },
+      select: { productId: true },
+    });
+    const transfer = await new ProductRepository().takeCatalogAuthority(
+      takenOver.productId,
+      undefined,
+    );
+    assert.equal(transfer.changed, true);
+    assert.equal(transfer.product.catalogAuthority, "ACROPORA");
+
+    // Somebody edits the name and the description on OUR side. Nothing in
+    // the sync knows about this; the webshop keeps sending its own values.
+    await prisma.product.update({
+      where: { id: takenOver.productId },
+      data: {
+        name: "Kézzel javított név",
+        description: "Kézzel javított leírás",
+      },
+    });
+
+    liveProducts = [
+      product("AUTHORITY-OURS", {
+        externalId: "900001",
+        name: "UNAS felülírná",
+        description: "UNAS leírása felülírná",
+      }),
+      product("AUTHORITY-THEIRS", {
+        externalId: "900002",
+        name: "UNAS új neve",
+        description: "UNAS új leírása",
+      }),
+    ];
+
+    const second = await service.runIncremental(
+      "integration-token",
+      new Date("2026-07-21T11:00:00.000Z"),
+      100,
+    );
+
+    // One product was written, one was left alone, and the run says so.
+    assert.equal(second.counts.UPDATE, 1);
+    assert.equal(second.skippedCount, 1);
+
+    const kept = await prisma.product.findUniqueOrThrow({
+      where: { id: takenOver.productId },
+      select: { name: true, description: true, catalogAuthority: true },
+    });
+    assert.equal(kept.name, "Kézzel javított név");
+    assert.equal(kept.description, "Kézzel javított leírás");
+    assert.equal(kept.catalogAuthority, "ACROPORA");
+
+    const stillTheirs = await prisma.productVariant.findUniqueOrThrow({
+      where: { sku: "AUTHORITY-THEIRS" },
+      select: {
+        product: {
+          select: { name: true, description: true, catalogAuthority: true },
+        },
+      },
+    });
+    assert.equal(stillTheirs.product.name, "UNAS új neve");
+    assert.equal(stillTheirs.product.description, "UNAS új leírása");
+    assert.equal(stillTheirs.product.catalogAuthority, "UNAS");
+
+    // The run row carries the same number, so the evidence survives the
+    // process that produced it.
+    const run = await prisma.unasProductSyncRun.findUniqueOrThrow({
+      where: { id: second.runId },
+      select: { skippedCount: true, updatedCount: true },
+    });
+    assert.equal(run.skippedCount, 1);
+    assert.equal(run.updatedCount, 1);
   });
 });

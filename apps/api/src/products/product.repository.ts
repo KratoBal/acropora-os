@@ -77,6 +77,7 @@ interface ProductTransaction {
     create(args: unknown): Promise<ProductWithRelations>;
     findUnique(args: unknown): Promise<ProductWithRelations | null>;
     update(args: unknown): Promise<ProductWithRelations>;
+    updateMany(args: unknown): Promise<{ count: number }>;
   };
   productCategory: {
     updateMany(args: unknown): Promise<unknown>;
@@ -317,6 +318,59 @@ export class ProductRepository extends Repository {
       include: productInclude,
     });
     return toProductDetail(product);
+  }
+
+  /**
+   * Átveszi a termék törzsadat-gazdaságát a UNAS-tól.
+   *
+   * A váltás FELTÉTELES egyetlen `updateMany` hívásban, és ez nem stílus: két
+   * párhuzamos átvétel közül így pontosan az egyik ír, a másik nulla sort
+   * érint. Ha előbb olvasnánk és utána írnánk, mindkettő azt hinné, hogy ő
+   * váltott, és két esemény kerülne a naplóba ugyanarról az egy váltásról.
+   *
+   * A visszatérés `changed` mezője azt mondja meg, hogy TÖRTÉNT-E a váltás,
+   * nem azt, hogy sikerült-e a hívás. Egy megismételt átvétel nem hiba: a
+   * termék attól még a miénk. Esemény viszont csak a VALÓDI váltáskor
+   * keletkezik, különben a napló ugyanazt az egy döntést többször mondaná el.
+   */
+  async takeCatalogAuthority(
+    id: string,
+    actorUserId?: string,
+  ): Promise<{ product: ProductDetail; changed: boolean }> {
+    return this.productDatabase.$transaction(
+      async (transaction) => {
+        const result = await transaction.product.updateMany({
+          where: { id, catalogAuthority: "UNAS" },
+          data: { catalogAuthority: "ACROPORA" },
+        });
+
+        if (result.count > 0)
+          await transaction.domainEvent.create({
+            data: {
+              id: randomUUID(),
+              eventType: "product.catalog-authority.transferred",
+              aggregateType: "Product",
+              aggregateId: id,
+              actorUserId,
+              occurredAt: new Date(),
+              schemaVersion: 1,
+              payload: {
+                from: "UNAS",
+                to: "ACROPORA",
+              } satisfies Prisma.JsonObject,
+            },
+          });
+
+        const product = await transaction.product.findUnique({
+          where: { id },
+          include: productInclude,
+        });
+
+        if (!product) throw new Error("Az átvett termék nem található.");
+        return { product: toProductDetail(product), changed: result.count > 0 };
+      },
+      { isolationLevel: "Serializable" },
+    );
   }
 
   async listCategoryOptions(): Promise<CatalogOption[]> {

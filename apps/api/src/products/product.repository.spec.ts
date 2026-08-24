@@ -171,7 +171,13 @@ const product = {
   },
 } as unknown as ProductWithRelations;
 
-function createDatabase() {
+/**
+ * `authorityUpdateCount` is how many rows the conditional authority update
+ * touches. It is a parameter and not a constant because the two outcomes are
+ * different behaviours, not different data: one row means this call performed
+ * the transfer, zero means somebody (or something) got there first.
+ */
+function createDatabase({ authorityUpdateCount = 1 } = {}) {
   const calls: Array<{ operation: string; args: unknown }> = [];
   const transaction = {
     product: {
@@ -186,6 +192,10 @@ function createDatabase() {
       update: async (args: unknown) => {
         calls.push({ operation: "transactionUpdate", args });
         return product;
+      },
+      updateMany: async (args: unknown) => {
+        calls.push({ operation: "productUpdateMany", args });
+        return { count: authorityUpdateCount };
       },
     },
     productCategory: {
@@ -281,6 +291,60 @@ describe("ProductRepository", () => {
     assert.equal(createArgs.data.createdById, "user-1");
     assert.equal(createArgs.data.categoryId, "category-1");
     assert.equal(createArgs.data.categories.create.isPrimary, true);
+  });
+
+  /**
+   * The transfer is the moment the webshop sync stops writing this product,
+   * so what matters is that the write is CONDITIONAL: it only touches a row
+   * that is still UNAS-owned. Without the condition two parallel transfers
+   * would both believe they did it, and the log would carry the same single
+   * decision twice.
+   */
+  it("takes authority only from a row the webshop still owns", async () => {
+    const { database, calls } = createDatabase();
+    const repository = new ProductRepository(database);
+
+    const result = await repository.takeCatalogAuthority("product-1", "user-1");
+
+    assert.equal(result.changed, true);
+    assert.deepEqual(
+      calls.map((call) => call.operation),
+      ["productUpdateMany", "event", "transactionFind"],
+    );
+    const updateArgs = calls[0]?.args as {
+      where: { id: string; catalogAuthority: string };
+      data: { catalogAuthority: string };
+    };
+    assert.equal(updateArgs.where.catalogAuthority, "UNAS");
+    assert.equal(updateArgs.data.catalogAuthority, "ACROPORA");
+    const eventArgs = calls[1]?.args as {
+      data: { eventType: string; actorUserId: string; payload: unknown };
+    };
+    assert.equal(
+      eventArgs.data.eventType,
+      "product.catalog-authority.transferred",
+    );
+    assert.equal(eventArgs.data.actorUserId, "user-1");
+    assert.deepEqual(eventArgs.data.payload, { from: "UNAS", to: "ACROPORA" });
+  });
+
+  /**
+   * The other half, and the one a single test would miss: repeating the
+   * transfer is not an error - the product is ours either way - but it must
+   * not write a second event. A log that reports one decision twice is worse
+   * than no log, because it invents a history nobody lived.
+   */
+  it("writes no event when the product was already ours", async () => {
+    const { database, calls } = createDatabase({ authorityUpdateCount: 0 });
+    const repository = new ProductRepository(database);
+
+    const result = await repository.takeCatalogAuthority("product-1", "user-1");
+
+    assert.equal(result.changed, false);
+    assert.deepEqual(
+      calls.map((call) => call.operation),
+      ["productUpdateMany", "transactionFind"],
+    );
   });
 
   it("replaces the application-level primary category", async () => {

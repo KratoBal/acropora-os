@@ -57,6 +57,14 @@ export const PERMISSIONS = {
   /// dokumentumot érint. Ezért a SERVICE szerepkör NEM kapja meg (lásd
   /// ROLE_PERMISSIONS lent).
   SERVICE_WORKSHEET_AMEND: "service.worksheet.amend",
+  /// A termék törzsadat-gazdájának átvétele a UNAS-tól (UNAS -> ACROPORA).
+  /// Szándékosan KÜLÖN a PRODUCTS_MANAGE-től, és nem azért, mert ritkán
+  /// használt: az átvétel után a webshop-szinkron TÖBBÉ NEM ír a terméken,
+  /// tehát egy UNAS oldali javítás némán nem érkezik meg. Aki napi
+  /// terméktörzset gondoz, annak ehhez nem kell jog; ez ugyanolyan szűk
+  /// körnek szól, mint az INVENTORY_RECONCILIATION_REPAIR (lásd
+  /// ROLE_PERMISSIONS lent: csak OWNER/ADMIN, még a MANAGER sem).
+  PRODUCTS_CATALOG_AUTHORITY_TRANSFER: "products.catalog-authority.transfer",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -88,7 +96,8 @@ export const ROLE_PERMISSIONS: Readonly<
       permission !== PERMISSIONS.SETTINGS_MANAGE &&
       permission !== PERMISSIONS.USERS_MANAGE &&
       permission !== PERMISSIONS.INVENTORY_RECONCILIATION_REPAIR &&
-      permission !== PERMISSIONS.SERVICE_WORKSHEET_AMEND,
+      permission !== PERMISSIONS.SERVICE_WORKSHEET_AMEND &&
+      permission !== PERMISSIONS.PRODUCTS_CATALOG_AUTHORITY_TRANSFER,
   ),
   SALES: [
     PERMISSIONS.DASHBOARD_VIEW,
