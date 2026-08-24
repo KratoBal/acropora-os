@@ -1,0 +1,16 @@
+-- Az Acropora OS és a Medusa közötti azonosság HELYE.
+--
+-- Az `ExternalReference` modell már ma is ezt a célt szolgálja (ma 52 helyen a
+-- UNAS-hoz), és két egyedi kulcsot visel MINDKÉT irányba:
+--   [system, entityType, externalId] és [system, entityType, entityId].
+-- Vagyis rendszerenként egy OS-termékhez pontosan egy külső azonosító
+-- tartozhat, és egy külső azonosítóhoz pontosan egy OS-termék.
+--
+-- Ami hiányzott, az kizárólag a felsorolás értéke. Az `OTHER` használata NEM
+-- megoldás lett volna, hanem összemosás: attól kezdve nem lehetne megmondani,
+-- mi a Medusa és mi minden más.
+--
+-- ALTER TYPE ... ADD VALUE Postgres-ben csak akkor futtatható biztonságosan
+-- ugyanabban a tranzakcióban, mint ami hozzáadja, ha az új értéket a migráció
+-- nem használja fel DML-ben is - itt nem használja.
+ALTER TYPE "ExternalSystem" ADD VALUE 'MEDUSA';
