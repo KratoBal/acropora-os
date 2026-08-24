@@ -3,8 +3,12 @@ import { after, before, describe, it } from "node:test";
 import { prisma } from "@acropora/database";
 
 import { UnasConnectionRepository } from "./unas-connection.repository.js";
+import { integrationDatabaseGate } from "../../common/integration-database.js";
 
-const runIntegration = process.env.RUN_DB_INTEGRATION === "1";
+// This suite writes and deletes rows, so it runs only against a database named
+// for testing; see integrationDatabaseGate.
+const gate = integrationDatabaseGate(process.env);
+const runIntegration = gate.mode !== "skip";
 
 describe(
   "UnasConnectionRepository integration",
@@ -14,6 +18,7 @@ describe(
     let actorId = "";
 
     before(async () => {
+      if (gate.mode === "refuse") throw new Error(gate.reason);
       const actor = await prisma.user.create({
         data: {
           email: `unas-connection-${Date.now()}@example.invalid`,

@@ -7,6 +7,7 @@ import { AuthService } from "./auth.service.js";
 import { AuthUserResolver } from "./auth-user-resolver.js";
 import { SessionRepository } from "./session.repository.js";
 import { hashPassword } from "../users/password.util.js";
+import { integrationDatabaseGate } from "../common/integration-database.js";
 
 // Same RUN_DB_INTEGRATION convention as auth-user-resolver.integration.spec.ts
 // and session.repository.integration.spec.ts. This file proves the
@@ -15,7 +16,10 @@ import { hashPassword } from "../users/password.util.js";
 // resolvable, invalidatable and correctly rejected-when-expired from a
 // completely different AuthService instance backed only by the shared
 // database.
-const runIntegration = process.env.RUN_DB_INTEGRATION === "1";
+// This suite writes and deletes rows, so it runs only against a database named
+// for testing; see integrationDatabaseGate.
+const gate = integrationDatabaseGate(process.env);
+const runIntegration = gate.mode !== "skip";
 
 describe(
   "AuthService integration (real Postgres, no in-memory session store)",
@@ -31,6 +35,7 @@ describe(
     }
 
     before(async () => {
+      if (gate.mode === "refuse") throw new Error(gate.reason);
       const user = await prisma.user.create({
         data: {
           email,

@@ -7,8 +7,24 @@ import { AuthUserResolver } from "../auth/auth-user-resolver.js";
 import { SessionRepository } from "../auth/session.repository.js";
 import { BrandsRepository } from "./brands.repository.js";
 import { BrandImportAssistantService } from "./brand-import-assistant.service.js";
+import { integrationDatabaseGate } from "../common/integration-database.js";
 
 const enabled = process.env.RUN_BRAND_INTEGRATION === "1";
+
+/**
+ * Ez a suite SAJÁT kapcsolóval indul (`pnpm test:brands:integration`), és nem
+ * állít RUN_DB_INTEGRATION értéket. Ami hiányzott belőle, az a szabály másik
+ * fele: hogy az adatbázisnak teszt-adatbázisnak kell lennie. A kapcsolót ezért
+ * a kapu bemenetébe tükrözzük, így a NÉV-ellenőrzés lefut anélkül, hogy
+ * megváltozna, mikor van kihagyva ez a suite.
+ *
+ * Sorokat ez is létrehoz és töröl; hogy máshogy kapcsolják be, sosem volt ok
+ * arra, hogy kevésbé legyen óvatos azzal, HOL fut.
+ */
+const gate = integrationDatabaseGate({
+  ...process.env,
+  RUN_DB_INTEGRATION: enabled ? "1" : undefined,
+});
 const repository = new BrandsRepository();
 const assistant = new BrandImportAssistantService();
 const actorId = "brand-test-owner";
@@ -58,6 +74,7 @@ async function cleanup() {
 
 describe("Brand database integration", { skip: !enabled }, () => {
   before(async () => {
+    if (gate.mode === "refuse") throw new Error(gate.reason);
     await cleanup();
     await prisma.user.create({
       data: {

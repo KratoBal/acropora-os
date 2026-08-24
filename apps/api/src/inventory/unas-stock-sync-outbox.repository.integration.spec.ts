@@ -3,8 +3,12 @@ import { after, before, describe, it } from "node:test";
 import { Prisma, prisma } from "@acropora/database";
 
 import { UnasStockSyncOutboxRepository } from "./unas-stock-sync-outbox.repository.js";
+import { integrationDatabaseGate } from "../common/integration-database.js";
 
-const runIntegration = process.env.RUN_DB_INTEGRATION === "1";
+// This suite writes and deletes rows, so it runs only against a database named
+// for testing; see integrationDatabaseGate.
+const gate = integrationDatabaseGate(process.env);
+const runIntegration = gate.mode !== "skip";
 
 /// These two guarantees are, by construction, not verifiable against an
 /// in-memory fake - they depend on real Postgres row-locking semantics
@@ -25,6 +29,7 @@ describe(
     let variantIds: string[] = [];
 
     before(async () => {
+      if (gate.mode === "refuse") throw new Error(gate.reason);
       const warehouse = await prisma.warehouse.create({
         data: {
           code: `TEST-${Date.now()}`,
