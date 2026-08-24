@@ -134,7 +134,18 @@ export function ProductBasicsEditor({
             disabled={busy}
           />
         </FormField>
-        <FormField label="Leírás" htmlFor="product-description">
+        {/*
+          A szöveg nem azt mondja meg, hogy HTML van benne, hanem hogy MI TÖRTÉNIK,
+          ha a jelölőket kitörli valaki. A különbség itt nagyobb, mint máshol: ezt a
+          terméket a webshop szinkronja kihagyja, tehát az eredeti szöveget SEMMI
+          nem hozza vissza. Egy UNAS-gazdájú terméknél a következő szinkron
+          helyrerakná; itt nincs ilyen háló.
+        */}
+        <FormField
+          label="Leírás"
+          htmlFor="product-description"
+          description="A leírás formázást tartalmazhat. Ha a jelölőket kitörli, a formázás elveszik, és a szinkron nem hozza vissza: ezt a terméket már mi gondozzuk."
+        >
           <Textarea
             id="product-description"
             rows={6}
