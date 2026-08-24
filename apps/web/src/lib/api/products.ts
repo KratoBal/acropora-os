@@ -8,6 +8,7 @@ import type {
   ProductExtensionUpdateInput,
   ProductListApiQuery,
   ProductListResponse,
+  ProductUpdateInput,
 } from "@acropora/types";
 
 import { apiRequest } from "./client";
@@ -88,6 +89,18 @@ export const productApi = {
       `/product-barcodes/${encodeURIComponent(variantId)}/${encodeURIComponent(barcodeId)}`,
       token,
       { method: "DELETE" },
+    );
+  },
+  /**
+   * A termék üzleti mezőinek módosítása. A szerver csak akkor engedi, ha a
+   * törzsadat gazdája az Acropora OS; UNAS-gazdájú terméknél 409-cel válaszol.
+   * A tiltás nem itt van, hanem a szolgáltatásban.
+   */
+  update(token: string, id: string, input: ProductUpdateInput) {
+    return apiRequest<ProductDetail>(
+      `/products/${encodeURIComponent(id)}`,
+      token,
+      { method: "PATCH", body: JSON.stringify(input) },
     );
   },
   categoryOptions(token: string) {

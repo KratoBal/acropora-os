@@ -97,14 +97,29 @@ kategóriáját másodlagos kapcsolatként, és a termékoldal ma minden kapcsol
 megjelenít. Ez nem inkonzisztencia a két reprezentáció között, hanem egy
 felhalmozódás, amivel a szerkesztő felületnek kezdenie kell valamit.
 
-### Védett és szerkeszthető: nem ugyanaz
+### A helyi mezőszerkesztő
 
 Egy átvett termék neve, leírása és kategóriája **védett a felülírástól**, és a
-generikus `PATCH /products/:id` végponton **szerkeszthető is** (a
-`primaryCategoryId` a DTO része). A WEBES FELÜLETEN viszont ma egyik sem
-szerkeszthető: a termékoldal a nevet, a leírást és a kategóriát megjeleníti, de
-szerkesztőt egyikhez sem kínál. A felület egyetlen termék-írást ismer, magát az
-átvételt. A helyi mezőszerkesztő külön kör lesz.
+`PATCH /products/:id` végponton **szerkeszthető is**. A termékoldalon egyetlen
+űrlap kezeli mind a hármat (`ProductBasicsEditor`), és három feltétel kell
+hozzá:
+
+- a termék törzsadat-gazdája `ACROPORA` (ezért a szerkesztő UNAS-gazdájú
+  terméken meg sem jelenik);
+- a felhasználónak `products.manage` joga van;
+- a szerver engedi. **A felület nem őrzi a szabályt, csak követi**: a tiltás a
+  `ProductService`-ben áll, és egy megkerült képernyő ott is elhasalna.
+
+**Miért `products.manage`, és miért nem külön jog:** az átvételnek azért van
+saját, szűkebb joga, mert egyirányú és NÉMA következménye van (utána egy UNAS
+oldali javítás nem érkezik meg, és erről senki nem kap értesítést). Egy név
+átírása nem ilyen: visszaírható, és a következő olvasó látja, mi áll ott. A
+határ nem a mező értéke, hanem a művelet visszafordíthatósága.
+
+**Mentés után a képernyő VISSZAOLVASSA a terméket**, és azt mutatja, nem a
+begépelt értéket és nem is a mentés válaszát. Az utóbbi még abból a
+tranzakcióból származik, ami írt; a visszaolvasott az, amit a szerver bárki
+másnak is kiadna.
 
 VISSZAADÁS NINCS, és ez döntés, nem hiány. A visszaadás nem az ellenkező
 irányú kapcsoló: a UNAS a következő szinkronnál felülírná azt a nevet és

@@ -25,6 +25,7 @@ import { FilterXSS, type IFilterXSSOptions } from "xss";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { ProductAuthorityCard } from "@/components/products/product-authority-card";
+import { ProductBasicsEditor } from "@/components/products/product-basics-editor";
 import { productApi } from "@/lib/api/products";
 import { BarcodeEditor } from "./barcode-editor";
 
@@ -749,6 +750,19 @@ export function ProductDetailPage({ productId }: { productId: string }) {
             canTransfer={canTransferAuthority}
             onTransferred={setProduct}
           />
+          {/*
+            A szerkesztő csak az Acropora OS tulajdonában lévő terméken jelenik
+            meg. Ez KÉNYELEM, nem védelem: a tiltás a szolgáltatásban áll, és
+            egy UNAS-gazdájú termék módosítása ott is elhasalna.
+          */}
+          {product.catalogAuthority === "ACROPORA" ? (
+            <ProductBasicsEditor
+              token={token}
+              product={product}
+              canManage={canManage}
+              onSaved={setProduct}
+            />
+          ) : null}
           {product.unasMirror ? (
             <Card className="border-teal-200">
               <CardHeader className="bg-teal-50/70">

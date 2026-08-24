@@ -126,6 +126,20 @@ export interface ProductListItem {
   stockOnHand: string | null;
 }
 
+/**
+ * A termék üzleti mezői, amiket az Acropora OS felől szerkeszteni lehet.
+ *
+ * Csak az a három mező szerepel benne, aminek a tulajdonjoga átkerült:
+ * `name`, `description`, `primaryCategoryId`. A tükör-könyvelési mezők
+ * szándékosan hiányoznak, mert azok a szinkron tulajdonában maradnak, és a
+ * szerver ezen az úton nem is írná őket.
+ */
+export interface ProductUpdateInput {
+  name?: string;
+  description?: string | null;
+  primaryCategoryId?: string | null;
+}
+
 export interface ProductListResponse {
   items: ProductListItem[];
   pagination: {
