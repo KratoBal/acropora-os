@@ -19,7 +19,22 @@ import { MedusaProductProjectionService } from "./medusa-product-projection.serv
  *
  * Használat:
  *   pnpm --filter @acropora/api medusa:project <termékazonosító> [további...]
+ *   pnpm --filter @acropora/api medusa:project sku:TESZT0001 [további...]
+ *
+ * A `sku:` előtag azért van, mert ember cikkszámot ismer, nem belső
+ * azonosítót. Előtag nélkül a paraméter termékazonosító. NEM találgatunk a két
+ * alak között: egy „melyik lehet ez" heurisztika pont akkor tévedne, amikor egy
+ * cikkszám véletlenül azonosítónak látszik.
  */
+/** Cikkszámból termékazonosító. `null`, ha nincs ilyen aktív változat. */
+async function resolveBySku(sku: string): Promise<string | null> {
+  const variant = await prisma.productVariant.findUnique({
+    where: { sku },
+    select: { productId: true, isActive: true },
+  });
+  return variant?.isActive ? variant.productId : null;
+}
+
 export async function runProjectionCli(
   productIds: string[],
   out: { stdout(value: string): void; stderr(value: string): void } = {
@@ -38,7 +53,17 @@ export async function runProjectionCli(
   );
 
   let failed = 0;
-  for (const productId of productIds) {
+  for (const argument of productIds) {
+    const productId = argument.startsWith("sku:")
+      ? await resolveBySku(argument.slice(4))
+      : argument;
+
+    if (!productId) {
+      out.stderr(`${argument}: nincs ilyen cikkszámú aktív változat\n`);
+      failed += 1;
+      continue;
+    }
+
     const product = await prisma.product.findUnique({
       where: { id: productId },
       select: {
@@ -56,7 +81,7 @@ export async function runProjectionCli(
     });
 
     if (!product) {
-      out.stderr(`${productId}: nincs ilyen termék\n`);
+      out.stderr(`${argument}: nincs ilyen termék (${productId})\n`);
       failed += 1;
       continue;
     }
