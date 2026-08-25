@@ -181,6 +181,12 @@ export class MedusaProductProjectionService {
           title: product.name,
           sku: product.primarySku,
           options: { [DEFAULT_OPTION_TITLE]: DEFAULT_OPTION_VALUE },
+          /**
+           * ÜRESEN, és ez állítás, nem mulasztás: nem viszünk át árat. A
+           * mező azért van itt, mert a Medusa megköveteli; a tartalma azért
+           * üres, mert az árazás nem ennek a körnek a dolga.
+           */
+          prices: [],
         },
       ],
     });
