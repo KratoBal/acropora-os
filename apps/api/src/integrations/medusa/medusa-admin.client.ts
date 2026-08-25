@@ -120,16 +120,65 @@ export class MedusaAdminHttpError extends Error {
   }
 }
 
+/**
+ * A CÍM, és CSAK a cím.
+ *
+ * A cím nem titok: nincs tárolva, nem is kell tárolni, és a környezetből jön.
+ * A kulcs viszont a hitelesítő adat szolgáltatójától érkezik, tárolóból vagy
+ * tartalékból.
+ *
+ * Ez a két dolog korábban EGY függvényben állt, és abból egy mért hiba lett: a
+ * hívó felülírta ugyan az `apiKey` mezőt a tárolt kulccsal, de a függvény
+ * MEGKÖVETELTE a környezeti kulcsot, tehát annak az ÉRTÉKE sosem használódott
+ * fel, a MEGLÉTE viszont feltétel volt. Ép tárolt kulcs mellett, környezeti
+ * kulcs nélkül a próba emiatt „nincs beállítva" állapotot adott: hamis
+ * állapotot, nem hibát.
+ */
+export function medusaAdminBaseUrlFromEnv(
+  env: Record<string, string | undefined>,
+): string {
+  const baseUrl = env.MEDUSA_ADMIN_URL;
+  if (!baseUrl)
+    throw new MedusaConfigurationError("MEDUSA_ADMIN_URL nincs beállítva.");
+  return baseUrl.replace(/\/+$/, "");
+}
+
+/**
+ * A teljes beállítás a környezetből, cím ÉS kulcs.
+ *
+ * Ezt ma már csak a parancssori vetítés használja, ami a következő körben áll
+ * át a hitelesítő adat szolgáltatójára. Addig marad, mert ott a környezeti
+ * kulcs valóban használatban van, nem csak megkövetelve.
+ */
 export function medusaAdminConfigFromEnv(
   env: Record<string, string | undefined>,
 ): MedusaAdminConfig {
-  const baseUrl = env.MEDUSA_ADMIN_URL;
   const apiKey = env.MEDUSA_ADMIN_API_KEY;
-  if (!baseUrl)
-    throw new MedusaConfigurationError("MEDUSA_ADMIN_URL nincs beállítva.");
+  const baseUrl = medusaAdminBaseUrlFromEnv(env);
   if (!apiKey)
     throw new MedusaConfigurationError("MEDUSA_ADMIN_API_KEY nincs beállítva.");
-  return { baseUrl: baseUrl.replace(/\/+$/, ""), apiKey };
+  return { baseUrl, apiKey };
+}
+
+/**
+ * A KLIENS, ahogy futásidőben készül: a cím a környezetből, a kulcs a hívótól.
+ *
+ * Azért külön, exportált függvény, és nem egy névtelen alapértelmezés a
+ * szolgáltatás konstruktorában, mert MÉRHETŐNEK kell lennie. Egy teszt, ami a
+ * saját hamis gyárát adja át, pontosan ezt az utat NEM méri: zöld marad akkor
+ * is, ha itt bárki visszacsempész egy környezeti kulcs-olvasást. Ez nem
+ * feltevés, hanem mért tapasztalat: az első változatom így volt zöld két olyan
+ * rontás mellett is, aminek pirosnak kellett volna lennie.
+ */
+export function medusaClientFromEnvironment(
+  apiKey: string,
+  env: Record<string, string | undefined> = process.env,
+  fetchImpl?: typeof fetch,
+): MedusaAdminClient {
+  return new HttpMedusaAdminClient(
+    { baseUrl: medusaAdminBaseUrlFromEnv(env), apiKey },
+    fetchImpl,
+  );
 }
 
 export class HttpMedusaAdminClient implements MedusaAdminClient {
