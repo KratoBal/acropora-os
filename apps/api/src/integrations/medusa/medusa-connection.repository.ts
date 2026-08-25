@@ -9,10 +9,15 @@ import {
   type MedusaCredentialEnvelope,
 } from "./medusa-connection.types.js";
 
+type CooldownOperation = "test" | "credential";
+
 /**
- * A Medusa admin kulcs tárolása. Az UNAS kapcsolat-repository mintája, a
- * kör határához igazítva: ami itt van, az a HELY. A kapcsolat tesztelése és a
- * hozzá tartozó várakoztatás a következő körben épül meg, amikor a modul is.
+ * A Medusa admin kulcs tárolása, az UNAS kapcsolat-repository mintájára.
+ *
+ * A visszatartás (`claimCooldown`) ebben a körben került ide, a beállító
+ * felülettel együtt: a teszt-gomb és a kulcs-csere is korlátozva van. Ez nem
+ * csak védelem a másik oldal felé, hanem az, ami a tábla két utolsó mezőjét
+ * ÍRT mezővé teszi.
  */
 @Injectable()
 export class MedusaConnectionRepository {
@@ -20,6 +25,63 @@ export class MedusaConnectionRepository {
     return prisma.medusaConnectionSetting.findUnique({
       where: { id: MEDUSA_CONNECTION_ID },
     });
+  }
+
+  /**
+   * VISSZATARTÁS, egyetlen lekérdezésben.
+   *
+   * A feltétel és az írás ugyanabban az utasításban van, ezért két egyszerre
+   * érkező kérés közül pontosan az egyik nyer: a másik nulla sort kap vissza. Ha
+   * előbb olvasnánk és utána írnánk, a kettő között mindkettő átmenne.
+   *
+   * A két művelet külön mezőt és külön határidőt kap. A teszt olcsó és
+   * ártalmatlan, ezért rövidebb (harminc másodperc); a kulcs-csere ritka és
+   * súlyos, ezért hosszabb (hatvan). Ez az UNAS és a NAV mintája, változatlanul.
+   *
+   * A `credentialAttemptedAt` ezzel válik ÍRT mezővé. Enélkül ott állna a
+   * táblában és a felületen anélkül, hogy bármi töltené, és pontosan azt
+   * állítanánk elő magunknál, amit a Medusa `last_used_at` mezőjénél leletként
+   * neveztünk meg.
+   */
+  async claimCooldown(
+    operation: CooldownOperation,
+  ): Promise<MedusaConnectionSettingRecord | null> {
+    const query =
+      operation === "test"
+        ? Prisma.sql`
+            UPDATE "MedusaConnectionSetting"
+            SET "testAttemptedAt" = CURRENT_TIMESTAMP,
+                "updatedAt" = CURRENT_TIMESTAMP
+            WHERE "id" = ${MEDUSA_CONNECTION_ID}
+              AND (
+                "testAttemptedAt" IS NULL
+                OR "testAttemptedAt" <= CURRENT_TIMESTAMP - INTERVAL '30 seconds'
+              )
+            RETURNING *
+          `
+        : Prisma.sql`
+            UPDATE "MedusaConnectionSetting"
+            SET "credentialAttemptedAt" = CURRENT_TIMESTAMP,
+                "updatedAt" = CURRENT_TIMESTAMP
+            WHERE "id" = ${MEDUSA_CONNECTION_ID}
+              AND (
+                "credentialAttemptedAt" IS NULL
+                OR "credentialAttemptedAt" <= CURRENT_TIMESTAMP - INTERVAL '60 seconds'
+              )
+            RETURNING *
+          `;
+    const rows = await prisma.$queryRaw<MedusaConnectionSettingRecord[]>(query);
+    if (rows[0]) return rows[0];
+    /**
+     * Nulla sor KÉT dolgot jelenthet, és a kettő nem ugyanaz: vagy a
+     * visszatartás fogta meg a kérést, vagy nincs is beállítás-sor. A második
+     * hiba, tehát nem szabad „várj egy kicsit" válasznak látszania.
+     */
+    if (!(await this.getSetting()))
+      throw new MedusaConnectionError(
+        "MEDUSA_CONNECTION_CONFIGURATION_MISSING",
+      );
+    return null;
   }
 
   /**

@@ -6,6 +6,7 @@ import {
   type MedusaAdminClient,
 } from "./medusa-admin.client.js";
 import { MedusaConnectionService } from "./medusa-connection.service.js";
+import { MedusaCredentialCryptoService } from "./medusa-credential-crypto.service.js";
 import type { MedusaConnectionRepository } from "./medusa-connection.repository.js";
 import {
   MedusaConnectionError,
@@ -66,7 +67,12 @@ function service(options: {
 
   return {
     recorded,
-    service: new MedusaConnectionService(repository, credentials, () => client),
+    service: new MedusaConnectionService(
+      repository,
+      credentials,
+      new MedusaCredentialCryptoService(),
+      () => client,
+    ),
   };
 }
 

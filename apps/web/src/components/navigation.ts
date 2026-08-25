@@ -223,6 +223,14 @@ export const settingsNavigation: AppNavigationItem[] = [
     permission: PERMISSIONS.SETTINGS_MANAGE,
   },
   {
+    // A webshop-motor admin kulcsa. A NAV mellett a helye, mert mind a kettő
+    // külső rendszer hitelesítő adata, és ugyanaz a jog kezeli.
+    href: "/admin/integrations/medusa/connection",
+    label: "Medusa kapcsolat",
+    icon: "store",
+    permission: PERMISSIONS.SETTINGS_MANAGE,
+  },
+  {
     href: "/admin/users",
     label: "Felhasználók",
     icon: "shield",

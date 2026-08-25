@@ -10,10 +10,13 @@ import {
 import { MedusaConnectionRepository } from "./medusa-connection.repository.js";
 import {
   MedusaConnectionError,
+  type MedusaConnectionSettingRecord,
   type MedusaIntegrationState,
   type MedusaStoredState,
 } from "./medusa-connection.types.js";
+import { MedusaCredentialCryptoService } from "./medusa-credential-crypto.service.js";
 import { MedusaCredentialProvider } from "./medusa-credential.provider.js";
+import type { MedusaConnectionView } from "@acropora/types";
 
 /**
  * A Medusa kapcsolat ÁLLAPOTA, egy ártalmatlan olvasó kéréssel megmérve.
@@ -35,6 +38,7 @@ export class MedusaConnectionService {
   constructor(
     private readonly repository: MedusaConnectionRepository,
     private readonly credentials: MedusaCredentialProvider,
+    private readonly crypto: MedusaCredentialCryptoService,
     /**
      * `@Optional()`, mert a Nest különben INJEKTÁLNI próbálná: egy függvény-típusra
      * nincs szolgáltatója, és az alkalmazás a teljes függőségi gráf építésekor
@@ -149,6 +153,92 @@ export class MedusaConnectionService {
             : "A Medusa nem érhető el.",
       };
     }
+  }
+
+  /**
+   * Amit a FELÜLET kaphat. A kulcs nincs benne, és nem is lehet: `masked` van,
+   * érték nincs. Az állapot ugyanaz, amit a modul ad, nem egy felület-specifikus
+   * másolat: ha itt új nevet adnánk, ugyanannak a dolognak két neve lenne.
+   */
+  async getView(): Promise<MedusaConnectionView> {
+    const setting = await this.repository.getSetting();
+    const state = await this.inspectStoredState();
+    return this.viewOf(setting, state);
+  }
+
+  /**
+   * Kulcs beállítása vagy cseréje.
+   *
+   * A visszatartás ELŐBB fut, mint a titkosítás: egy elgépelt kulcs újbóli
+   * beírása így nem terheli sem a másik oldalt, sem a saját tárolónkat. A
+   * mentés után a próba is lefut, hogy a felhasználó ne a következő
+   * művelet közben tudja meg, hogy amit beírt, nem használható.
+   */
+  async replaceCredential(
+    apiKey: string,
+    actorUserId: string,
+    now: Date,
+  ): Promise<MedusaConnectionView> {
+    const claimed = await this.repository.claimCooldown("credential");
+    if (!claimed) throw new MedusaConnectionError("MEDUSA_CONNECTION_COOLDOWN");
+
+    const revision = claimed.credentialRevision + 1;
+    const envelope = this.crypto.encrypt(apiKey.trim(), revision);
+    await this.repository.replaceCredential({
+      envelope,
+      revision,
+      actorUserId,
+      updatedAt: now,
+    });
+
+    const state = await this.probeAndRecord(now);
+    return this.viewOf(await this.repository.getSetting(), state);
+  }
+
+  async disable(actorUserId: string, now: Date): Promise<MedusaConnectionView> {
+    const setting = await this.repository.disable(actorUserId, now);
+    return this.viewOf(setting, { kind: "not-configured" });
+  }
+
+  /** A tárolt kulcs kipróbálása a felületről, visszatartással. */
+  async testStoredCredential(now: Date): Promise<MedusaConnectionView> {
+    const claimed = await this.repository.claimCooldown("test");
+    if (!claimed) throw new MedusaConnectionError("MEDUSA_CONNECTION_COOLDOWN");
+
+    const state = await this.probeAndRecord(now);
+    return this.viewOf(await this.repository.getSetting(), state);
+  }
+
+  /**
+   * A nézet összeállítása. Egyetlen helyen, mert a maszkolás olyan szabály,
+   * aminek nem szabad két változatban léteznie.
+   */
+  private viewOf(
+    setting: MedusaConnectionSettingRecord | null,
+    state: MedusaIntegrationState,
+  ): MedusaConnectionView {
+    const configured = setting?.credentialMode === "DATABASE";
+    return {
+      configured,
+      masked: configured ? "••••••••" : null,
+      modifiedAt: setting?.credentialUpdatedAt?.toISOString() ?? null,
+      state: {
+        kind: state.kind,
+        source: state.kind === "ready" ? state.source : null,
+        detail:
+          state.kind === "auth-or-permission-failure" ||
+          state.kind === "unreachable"
+            ? state.detail
+            : null,
+        status:
+          state.kind === "auth-or-permission-failure" ? state.status : null,
+      },
+      verification: {
+        status: setting?.verificationStatus ?? "NEVER",
+        checkedAt: setting?.lastVerifiedAt?.toISOString() ?? null,
+        code: setting?.lastVerificationCode ?? null,
+      },
+    };
   }
 
   /** A próba eredményének rögzítése, hogy a felület is lássa. */
