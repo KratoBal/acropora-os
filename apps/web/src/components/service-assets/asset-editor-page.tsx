@@ -80,10 +80,27 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
   useEffect(() => {
     if (!canManage) return;
     const controller = new AbortController();
-    Promise.all([
-      assetsApi.owners(token, controller.signal),
-      assetId ? assetsApi.detail(token, assetId, controller.signal) : null,
-    ])
+    /**
+     * A SORREND itt állítás, nem stílus: előbb az eszköz, utána a lista.
+     *
+     * A tulajdonos-lista mostantól a szerviz-jelölt partnereké, tehát egy
+     * MEGLÉVŐ eszköz tulajdonosa hiányozhat belőle (webshopos vevő vagy nem
+     * szerviz-jelölt partner). A szerkesztő ezért megmondja a szervernek, kit
+     * kell mindenképp visszaadnia. Enélkül a kötelező mező üresen állna, és a
+     * mentés vagy elakadna, vagy csendben más tulajdonost írna oda.
+     */
+    (assetId
+      ? assetsApi.detail(token, assetId, controller.signal)
+      : Promise.resolve(null)
+    )
+      .then(async (asset) => {
+        const ownerResult = await assetsApi.owners(
+          token,
+          controller.signal,
+          asset ? { type: asset.owner.type, id: asset.owner.id } : null,
+        );
+        return [ownerResult, asset] as const;
+      })
       .then(([ownerResult, asset]) => {
         setOwners(ownerResult.items);
         if (!asset) return;
@@ -286,6 +303,9 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
                   >
                     {item.type === "CUSTOMER" ? "Vevő" : "Partner"} ·{" "}
                     {item.displayName} ({item.code})
+                    {item.outsideServiceScope
+                      ? " · jelenlegi tulajdonos, nem szerviz partner"
+                      : ""}
                   </option>
                 ))}
               </Select>

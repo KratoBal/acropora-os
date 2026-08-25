@@ -80,6 +80,14 @@ export interface AssetOwnerOption {
   displayName: string;
   isActive: boolean;
   addresses: { id: string; name?: string; formatted: string }[];
+  /**
+   * Igaz, ha ez a tulajdonos ma NEM választható új eszközhöz (nem szerviz-jelölt
+   * partner vagy webshopos vevő), és csak azért jött vissza, mert egy MÁR
+   * rögzített eszközön rajta van. A telefonon új eszköz felvételekor nem
+   * fordulhat elő; a mező azért van itt, hogy a lista egy alakú maradjon a
+   * weben és a mobilon.
+   */
+  outsideServiceScope?: boolean;
 }
 
 export interface AssetQrCode {
