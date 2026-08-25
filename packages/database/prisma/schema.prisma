@@ -487,6 +487,7 @@ model User {
   unasCredentialsUpdated     UnasConnectionSetting[]       @relation("UnasCredentialUpdatedBy")
   navCredentialsUpdated      NavConnectionSetting[]        @relation("NavCredentialUpdatedBy")
   szamlazzCredentialsUpdated SzamlazzConnectionSetting[]   @relation("SzamlazzCredentialUpdatedBy")
+  medusaCredentialsUpdated   MedusaConnectionSetting[]     @relation("MedusaCredentialUpdatedBy")
   stockReconciliationRepairs StockReconciliationRepair[]
   createdProducts            Product[]                     @relation("ProductCreatedBy")
   createdProjects            Project[]                     @relation("ProjectCreatedBy")
@@ -2638,6 +2639,52 @@ model SzamlazzConnectionSetting {
   updatedAt                 DateTime                   @updatedAt
 
   credentialUpdatedBy User? @relation("SzamlazzCredentialUpdatedBy", fields: [credentialUpdatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([credentialUpdatedByUserId])
+}
+
+enum MedusaCredentialMode {
+  ENV_FALLBACK
+  DATABASE
+  DISABLED
+}
+
+enum MedusaVerificationStatus {
+  NEVER
+  SUCCESS
+  FAILED
+  INDETERMINATE
+}
+
+/// Medusa admin kapcsolatbeállítás. Ugyanaz a szerkezet, mint az UNAS és a NAV
+/// kapcsolatánál: a titkos admin kulcs verziózott AES-GCM borítékban él, és nem
+/// olvasható vissza sem a böngészőbe, sem naplóba.
+///
+/// Két dolgot érdemes tudni róla, és mind a kettő MÉRT tény a Medusa 2.19.0
+/// oldalán, nem feltevés. Az egyik: a titkos kulcs ott TELJES JOGÚ, mert
+/// jogkör-választás nincs, tehát ami itt áll, az a kereskedelmi rendszer teljes
+/// admin felületét nyitja. A másik: lejárat mint mező nincs, csak késleltetett
+/// visszavonás, tehát a kulcs magától soha nem évül el; a csere szándékos
+/// művelet, és a `credentialRevision` az, ami a cseréket megkülönbözteti.
+model MedusaConnectionSetting {
+  id                        String                   @id
+  credentialMode            MedusaCredentialMode     @default(ENV_FALLBACK)
+  encryptedApiKey           Bytes?
+  encryptionIv              Bytes?
+  authenticationTag         Bytes?
+  keyVersion                String?
+  credentialRevision        Int                      @default(0)
+  credentialUpdatedAt       DateTime?
+  credentialUpdatedByUserId String?
+  verificationStatus        MedusaVerificationStatus @default(NEVER)
+  lastVerifiedAt            DateTime?
+  lastVerificationCode      String?
+  credentialAttemptedAt     DateTime?
+  testAttemptedAt           DateTime?
+  createdAt                 DateTime                 @default(now())
+  updatedAt                 DateTime                 @updatedAt
+
+  credentialUpdatedBy User? @relation("MedusaCredentialUpdatedBy", fields: [credentialUpdatedByUserId], references: [id], onDelete: SetNull)
 
   @@index([credentialUpdatedByUserId])
 }
