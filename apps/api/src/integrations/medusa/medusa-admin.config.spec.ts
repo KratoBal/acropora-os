@@ -4,7 +4,6 @@ import { describe, it } from "node:test";
 import {
   MedusaConfigurationError,
   medusaAdminBaseUrlFromEnv,
-  medusaAdminConfigFromEnv,
   medusaClientFromEnvironment,
 } from "./medusa-admin.client.js";
 import { MedusaConnectionService } from "./medusa-connection.service.js";
@@ -203,26 +202,6 @@ describe("Medusa cím és kulcs", () => {
     assert.equal(
       medusaAdminBaseUrlFromEnv({ MEDUSA_ADMIN_URL: "https://pelda.invalid/" }),
       "https://pelda.invalid",
-    );
-  });
-
-  /**
-   * A teljes beállítás-olvasó megmarad a parancssori vetítésnek, ahol a
-   * környezeti kulcs valóban használatban van. Ott a hiánya joggal hiba.
-   */
-  it("keeps requiring both for the command line path", () => {
-    assert.throws(
-      () => medusaAdminConfigFromEnv({ MEDUSA_ADMIN_URL: "https://x.invalid" }),
-      (error: unknown) =>
-        error instanceof MedusaConfigurationError &&
-        /MEDUSA_ADMIN_API_KEY/.test(error.message),
-    );
-    assert.deepEqual(
-      medusaAdminConfigFromEnv({
-        MEDUSA_ADMIN_URL: "https://x.invalid",
-        MEDUSA_ADMIN_API_KEY: "sk_a",
-      }),
-      { baseUrl: "https://x.invalid", apiKey: "sk_a" },
     );
   });
 

@@ -7,9 +7,10 @@
  * ha valaki Bearer-ként küldi, saját 401-es üzenetben mondja meg, hogy ez rossz
  * (`authenticate-middleware.js`). Ezért Basic megy, és ezért nem Bearer.
  *
- * A kulcs KIZÁRÓLAG környezeti változóból jön. Sem alapértelmezése, sem
- * tartaléka nincs: hiányzó kulcsnál a kliens el sem indul. Egy alapértelmezett
- * kulcs itt csendben rossz környezetbe írna.
+ * A KULCSOT A HÍVÓ ADJA, a kliens sehonnan nem olvassa: se környezetből, se
+ * alapértelmezésből. Egy alapértelmezett kulcs itt csendben rossz környezetbe
+ * írna, egy környezeti olvasás pedig visszahozná azt, amit a hitelesítő adat
+ * szolgáltatója épp kivált. A CÍM viszont a környezetből jön, mert az nem titok.
  */
 
 export interface MedusaProductRow {
@@ -141,23 +142,6 @@ export function medusaAdminBaseUrlFromEnv(
   if (!baseUrl)
     throw new MedusaConfigurationError("MEDUSA_ADMIN_URL nincs beállítva.");
   return baseUrl.replace(/\/+$/, "");
-}
-
-/**
- * A teljes beállítás a környezetből, cím ÉS kulcs.
- *
- * Ezt ma már csak a parancssori vetítés használja, ami a következő körben áll
- * át a hitelesítő adat szolgáltatójára. Addig marad, mert ott a környezeti
- * kulcs valóban használatban van, nem csak megkövetelve.
- */
-export function medusaAdminConfigFromEnv(
-  env: Record<string, string | undefined>,
-): MedusaAdminConfig {
-  const apiKey = env.MEDUSA_ADMIN_API_KEY;
-  const baseUrl = medusaAdminBaseUrlFromEnv(env);
-  if (!apiKey)
-    throw new MedusaConfigurationError("MEDUSA_ADMIN_API_KEY nincs beállítva.");
-  return { baseUrl, apiKey };
 }
 
 /**
