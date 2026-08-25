@@ -247,9 +247,16 @@ describe("a vetítés hitelesítő adata", () => {
  * tartalék-sorban, tehát a puszta név ott is előfordul, ahol semmit nem
  * olvasunk. Ezért az OLVASÁS alakját keressük, nem a nevet.
  *
- * KÉT KIVÉTEL SZÁNDÉKOS, és nem lelet:
- * - a hitelesítő-szolgáltató tartalék-ága: az MAGA a tartalék;
- * - a kombinált olvasó DEFINÍCIÓJA a kliensben: ott a függvény törzse áll.
+ * EGY KIVÉTEL SZÁNDÉKOS, és nem lelet: a hitelesítő-szolgáltató tartalék-ága,
+ * mert az MAGA a tartalék.
+ *
+ * A KOMBINÁLT ALAKNAK VISZONT MÁR SEHOL NEM SZABAD TALÁLATOT ADNIA: a függvény
+ * megszűnt, tehát az engedélyezett halmaza ÜRES. Egy üres halmaz és egy elromlott
+ * keresés viszont ugyanúgy néz ki, ezért a nulla találat CSAK a két kontrollal
+ * együtt jelent valamit: a fájl-oldali (a lista nem üres, és benne van a parancs
+ * fájlja) és az alak-oldali (a minta, ami mindkét alakot tartalmazza, találatot
+ * ad). Bármelyik hiányában a zöld nem azt mondaná, hogy nincs olvasás, hanem
+ * azt, hogy nem néztük meg.
  */
 const SECRET_ENV_READ =
   /(?:process\s*\.\s*)?env(?:ironment)?\s*(?:\.\s*MEDUSA_ADMIN_API_KEY|\[\s*["'`]MEDUSA_ADMIN_API_KEY)/;
@@ -257,11 +264,9 @@ const COMBINED_READER_CALL = /medusaAdminConfigFromEnv\s*\(/;
 
 const ALLOWED_DIRECT = new Set([
   "src/integrations/medusa/medusa-credential.provider.ts",
-  "src/integrations/medusa/medusa-admin.client.ts",
 ]);
-const ALLOWED_COMBINED = new Set([
-  "src/integrations/medusa/medusa-admin.client.ts",
-]);
+/** ÜRES, és ez az állítás: a kombinált olvasó sehol nem hívható, mert nincs. */
+const ALLOWED_COMBINED = new Set<string>();
 const PROJECTION_CLI = "src/integrations/medusa/medusa-projection.cli.ts";
 
 async function medusaSources(): Promise<string[]> {
@@ -334,5 +339,41 @@ describe("a titok környezeti olvasása a vetítés útján", () => {
     // És kimondva a lényeg: a vetítés parancsa egyik alakot sem használja.
     assert.equal(direct.includes(PROJECTION_CLI), false);
     assert.equal(combined.includes(PROJECTION_CLI), false);
+  });
+
+  /**
+   * AZ ENGEDÉLY IS ELAVUL, és az elavult engedély csendben marad zöld: a szűrő
+   * csak azt nézi, mi VAN a listán kívül, azt nem, hogy amit engedélyeztünk, még
+   * mindig olvas-e. Egy ilyen sor fél év múlva azt állítaná egy olvasónak, hogy
+   * ott env-olvasás van, holott már nincs. A kombinált olvasó törlésekor pontosan
+   * ez történt volna, ezért ez az állítás nem óvatosság, hanem mért eset.
+   *
+   * EZ EGY NAP JOGGAL PIROSRA VÁLT, és akkor sem törölni kell. Amikor valaki a
+   * tartalék utat (`ENV_FALLBACK`) ténylegesen kivezeti, a hitelesítő-szolgáltató
+   * sem olvas többé env-titkot, és ez a sor pirosat ad. Az a piros NEM hiba,
+   * hanem üzenet: a LISTÁT kell szűkíteni, nem a tesztet kivenni. A törlés a
+   * legkézenfekvőbb reakció, és pont azt a féket venné el, ami szólt.
+   */
+  it("keeps no permission for a file that no longer reads the secret", async () => {
+    const stale = [...ALLOWED_DIRECT].filter(
+      (file) => !SECRET_ENV_READ.test(readFileSync(file, "utf8")),
+    );
+    const staleCombined = [...ALLOWED_COMBINED].filter(
+      (file) => !COMBINED_READER_CALL.test(readFileSync(file, "utf8")),
+    );
+
+    assert.deepEqual(
+      stale,
+      [],
+      "Ezek a fájlok engedélyt kaptak a közvetlen olvasásra, de már nem " +
+        "olvasnak: " +
+        stale.join(", "),
+    );
+    assert.deepEqual(
+      staleCombined,
+      [],
+      "Ezek a fájlok engedélyt kaptak a kombinált olvasóra, de már nem hívják: " +
+        staleCombined.join(", "),
+    );
   });
 });
