@@ -20,8 +20,14 @@ import {
   type AssetKind,
   type AssetOwnerOption,
 } from "@/lib/api/assets";
+import DateTimePicker, {
+  type DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
+
 import {
   buildAssetCreatePayload,
+  dateFromInput,
+  dateInputValue,
   type AssetCreateField,
 } from "@/lib/assets/asset-create";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -53,6 +59,7 @@ export default function NewAssetScreen() {
   const [serialNumber, setSerialNumber] = useState("");
   const [installedAt, setInstalledAt] = useState("");
   const [interval, setInterval] = useState("");
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
   /**
    * A hiba MEZŐSTÜL. A `field` azt mondja meg, hol kell megmutatni; `null`
    * annyit tesz, hogy a szervertől jött, tehát nem köthető egy mezőhöz.
@@ -206,12 +213,51 @@ export default function NewAssetScreen() {
               value={serialNumber}
               onChangeText={setSerialNumber}
             />
-            <Field
-              label="Telepítés dátuma"
-              placeholder="2026-08-25"
-              value={installedAt}
-              onChangeText={setInstalledAt}
-            />
+            {/*
+              A RENDSZER SAJÁT DÁTUMVÁLASZTÓJA (Balázs döntése, 2026-08-25).
+              A mező mögött ugyanaz az `ÉÉÉÉ-HH-NN` szöveg marad, amit a kérés
+              is visz: a választó nem új adatfajtát hoz, csak megbízhatóbb
+              bevitelt.
+            */}
+            <View style={styles.field}>
+              <Text style={styles.label}>Telepítés dátuma</Text>
+              <Pressable
+                onPress={() => setDatePickerOpen(true)}
+                style={styles.input}
+              >
+                <Text
+                  style={installedAt ? styles.dateValue : styles.datePrompt}
+                >
+                  {installedAt || "Válassz dátumot"}
+                </Text>
+              </Pressable>
+              {installedAt ? (
+                <Pressable onPress={() => setInstalledAt("")}>
+                  <Text style={styles.clearDate}>Dátum törlése</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            {datePickerOpen ? (
+              <DateTimePicker
+                value={dateFromInput(installedAt)}
+                mode="date"
+                onChange={(event: DateTimePickerEvent, picked?: Date) => {
+                  /**
+                   * Androidon a választó magától bezárul, iOS-en a felhasználó
+                   * görgeti. A `dismissed` ág külön van: ott NEM írjuk felül a
+                   * mezőt, mert a kilépés nem választás.
+                   */
+                  if (Platform.OS !== "ios") setDatePickerOpen(false);
+                  if (event.type === "dismissed" || !picked) return;
+                  setInstalledAt(dateInputValue(picked));
+                }}
+              />
+            ) : null}
+            {datePickerOpen && Platform.OS === "ios" ? (
+              <Pressable onPress={() => setDatePickerOpen(false)}>
+                <Text style={styles.clearDate}>Kész</Text>
+              </Pressable>
+            ) : null}
             <FieldError error={error} field="installedAt" />
             <Field
               label="Karbantartási intervallum (nap)"
@@ -272,7 +318,6 @@ function Field(props: {
   value: string;
   onChangeText(value: string): void;
   keyboardType?: "default" | "number-pad";
-  placeholder?: string;
 }) {
   return (
     <View style={styles.field}>
@@ -281,7 +326,6 @@ function Field(props: {
         value={props.value}
         onChangeText={props.onChangeText}
         keyboardType={props.keyboardType}
-        placeholder={props.placeholder}
         placeholderTextColor="#668798"
         style={styles.input}
       />
@@ -293,6 +337,9 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#071827" },
   flex: { flex: 1 },
   fieldError: { color: "#fecaca", fontSize: 12, fontWeight: "700" },
+  dateValue: { color: "#f4fbff" },
+  datePrompt: { color: "#668798" },
+  clearDate: { color: "#52d6c7", fontSize: 12, fontWeight: "800" },
   container: { padding: 18, paddingBottom: 48, gap: 16 },
   eyebrow: {
     color: "#52d6c7",

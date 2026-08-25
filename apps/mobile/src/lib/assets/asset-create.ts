@@ -103,6 +103,34 @@ export function normalizeAssetDate(
 }
 
 /**
+ * A DÁTUMVÁLASZTÓ ÉS A MEZŐ KÖZÖTTI ÁTVÁLTÁS, mind a két irányban.
+ *
+ * A választó `Date` objektummal dolgozik, a mező és a kérés `ÉÉÉÉ-HH-NN`
+ * szöveggel. A csapda a `toISOString()`: az UTC-ben ír, tehát egy budapesti
+ * éjfélkor kezdődő nap NÁLUNK az ELŐZŐ nap 22 órája, és a felhasználó egy
+ * nappal korábbi dátumot kapna vissza, mint amit kiválasztott. Ezért a helyi
+ * év/hónap/nap hármast olvassuk ki, nem az UTC-alakot.
+ */
+export function dateInputValue(date: Date): string {
+  return `${pad(date.getFullYear(), 4)}-${pad(date.getMonth() + 1, 2)}-${pad(
+    date.getDate(),
+    2,
+  )}`;
+}
+
+/**
+ * A választó kezdőértéke. DÉLBEN áll, nem éjfélkor: az óraátállítás napján egy
+ * éjfél előre-hátra ugorhat, és abból megint egy nappal odébb csúszó dátum lesz.
+ * Ha a mező üres vagy értelmezhetetlen, a mai nap az ajánlat.
+ */
+export function dateFromInput(value: string, today: Date = new Date()): Date {
+  const normalized = normalizeAssetDate(value);
+  if (!normalized.ok || !normalized.value) return today;
+  const [year, month, day] = normalized.value.split("-").map(Number);
+  return new Date(year!, month! - 1, day!, 12, 0, 0, 0);
+}
+
+/**
  * Amit a képernyő elküld, vagy az EGYETLEN ok, amiért nem küldi el.
  *
  * Nincs olyan ág, ami némán tér vissza: minden elutasítás megnevezi a mezőt és

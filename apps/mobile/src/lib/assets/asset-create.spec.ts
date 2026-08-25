@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 
 import {
   buildAssetCreatePayload,
+  dateFromInput,
+  dateInputValue,
   normalizeAssetDate,
   type AssetCreateForm,
 } from "./asset-create";
@@ -138,5 +140,42 @@ describe("buildAssetCreatePayload", () => {
 
     assert.equal(result.ok, true);
     if (result.ok) assert.equal(result.payload.serviceIntervalDays, 90);
+  });
+});
+
+describe("a dátumválasztó és a mező közötti átváltás", () => {
+  /**
+   * A CSAPDA, amiért ezek a függvények léteznek: a `toISOString()` UTC-ben ír,
+   * és egy budapesti éjfél UTC-ben az ELŐZŐ nap 22 órája. Aki így alakítaná át
+   * a választó értékét, annak a felhasználó egy nappal korábbi dátumot kapna
+   * vissza, mint amit kiválasztott -- és a hiba pont éjfél körül NEM látszana.
+   */
+  it("keeps the day the user picked, not the UTC one", () => {
+    // A nap KÉT SZÉLE, szándékosan: bármilyen nem nulla eltolás mellett az
+    // egyik a másik napra csúszna át UTC-ben, tehát ez a pár időzónától
+    // FÜGGETLENÜL pirosra vált egy `toISOString()`-re épülő változatnál.
+    assert.equal(
+      dateInputValue(new Date(2026, 7, 25, 0, 0, 0, 0)),
+      "2026-08-25",
+    );
+    assert.equal(
+      dateInputValue(new Date(2026, 7, 25, 23, 59, 59, 999)),
+      "2026-08-25",
+    );
+  });
+
+  it("opens the picker on the day the field already holds", () => {
+    const picked = dateFromInput("2026.08.25");
+
+    assert.equal(dateInputValue(picked), "2026-08-25");
+    // DÉLBEN áll, nem éjfélkor: az óraátállítás napján egy éjfél elcsúszhat.
+    assert.equal(picked.getHours(), 12);
+  });
+
+  it("offers today when the field is empty or unreadable", () => {
+    const today = new Date(2026, 7, 25, 9, 30, 0, 0);
+
+    assert.equal(dateFromInput("", today), today);
+    assert.equal(dateFromInput("tegnap", today), today);
   });
 });

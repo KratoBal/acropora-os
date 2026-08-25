@@ -100,6 +100,11 @@ module.exports = ({ config }) => {
           imageWidth: 96,
         },
       ],
+      /**
+       * A rendszer saját dátumválasztója. NATÍV modul, tehát csak új buildben
+       * jelenik meg: egy éteren át küldött frissítés nem hozza magával.
+       */
+      "@react-native-community/datetimepicker",
     ],
     experiments: {
       typedRoutes: true,
