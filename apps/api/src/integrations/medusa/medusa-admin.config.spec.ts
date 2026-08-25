@@ -11,7 +11,7 @@ import { MedusaConnectionService } from "./medusa-connection.service.js";
 import { MedusaCredentialCryptoService } from "./medusa-credential-crypto.service.js";
 import type { MedusaAdminClient } from "./medusa-admin.client.js";
 import type { MedusaConnectionRepository } from "./medusa-connection.repository.js";
-import type { MedusaCredentialProvider } from "./medusa-credential.provider.js";
+import { MedusaCredentialProvider } from "./medusa-credential.provider.js";
 import {
   MedusaConnectionError,
   type MedusaConnectionSettingRecord,
@@ -33,6 +33,14 @@ function harness(options: {
   environmentKey?: string;
   validate?: () => void;
   mode?: MedusaConnectionSettingRecord["credentialMode"];
+  /**
+   * A VALÓDI hitelesítő-szolgáltatót adjuk a próbának, hamis `validate` és
+   * hamis `resolve` nélkül. A negatív állításnál pont ez a lényeg: egy
+   * hamisított `validate`-tel a hibakód és az állapot közötti LEKÉPEZÉST
+   * mérnénk (azt a `medusa-connection.service.spec.ts` már méri), nem azt az
+   * utat, amin a hiányzó kulcs valóban „nincs beállítva" állapottá válik.
+   */
+  realCredentials?: boolean;
 }) {
   const seenKeys: string[] = [];
 
@@ -47,14 +55,18 @@ function harness(options: {
     recordVerification: async () => setting,
   } as unknown as MedusaConnectionRepository;
 
-  const credentials = {
-    validateRecord: options.validate ?? (() => undefined),
-    resolve: async () => ({
-      apiKey: STORED,
-      source: "database" as const,
-      revision: "db:1",
-    }),
-  } as unknown as MedusaCredentialProvider;
+  const crypto = new MedusaCredentialCryptoService();
+
+  const credentials = options.realCredentials
+    ? new MedusaCredentialProvider(repository, crypto)
+    : ({
+        validateRecord: options.validate ?? (() => undefined),
+        resolve: async () => ({
+          apiKey: STORED,
+          source: "database" as const,
+          revision: "db:1",
+        }),
+      } as unknown as MedusaCredentialProvider);
 
   /**
    * A VALÓDI gyárat hívjuk, csak hamis `fetch`-csel. Az első változatom itt egy
@@ -106,7 +118,7 @@ function harness(options: {
     service: new MedusaConnectionService(
       repository,
       credentials,
-      new MedusaCredentialCryptoService(),
+      crypto,
       factory,
     ),
   };
@@ -125,6 +137,37 @@ describe("Medusa cím és kulcs", () => {
         kind: "ready",
         source: "database",
       });
+    } finally {
+      restore();
+    }
+  });
+
+  /**
+   * A PÁR MÁSIK FELE, szándékosan a pozitív mellett, hogy a kettő egymás alatt
+   * legyen olvasható.
+   *
+   * A fenti állítás azt bizonyítja, hogy a tárolt kulcs MŰKÖDIK. Ez azt, hogy a
+   * kulcs HIÁNYA TOVÁBBRA IS LÁTSZIK. Egy pozitív eset önmagában akkor is zöld
+   * maradna, ha a kód mindenre „ready" állapotot mondana, és pont ez a másik
+   * irány: reggel a hamis „nincs beállítva" volt a hiba egy ép kulcsra, most azt
+   * kell őrizni, hogy a hiányból ne legyen hamis „ready".
+   *
+   * Az indulási állapot a NINCS TÁROLT KULCS: `ENV_FALLBACK` mód, és mellé
+   * környezeti kulcs sincs. FALSZIFIKÁCIÓ: ha ez az ág „ready"-t adna, ennek az
+   * egy állításnak pirosra kell váltania, a többi ötnek zölden kell maradnia.
+   */
+  it("stays not-configured with neither a stored key nor an environment key", async () => {
+    const { service, seenKeys, restore } = harness({
+      mode: "ENV_FALLBACK",
+      realCredentials: true,
+    });
+
+    try {
+      const state = await service.probe();
+      assert.equal(state.kind, "not-configured");
+      assert.notEqual(state.kind, "ready");
+      /** És kifelé nem is indult kérés: nem volt mivel. */
+      assert.deepEqual(seenKeys, []);
     } finally {
       restore();
     }
