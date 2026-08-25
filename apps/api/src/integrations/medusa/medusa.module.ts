@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 
+import { MedusaConnectionController } from "./medusa-connection.controller.js";
 import { MedusaConnectionRepository } from "./medusa-connection.repository.js";
 import { MedusaConnectionService } from "./medusa-connection.service.js";
 import { MedusaConnectionStartupValidator } from "./medusa-connection-startup.validator.js";
@@ -19,6 +20,7 @@ import { MedusaCredentialProvider } from "./medusa-credential.provider.js";
  * változik.
  */
 @Module({
+  controllers: [MedusaConnectionController],
   providers: [
     MedusaConnectionRepository,
     MedusaCredentialCryptoService,

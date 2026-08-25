@@ -251,6 +251,14 @@ export type {
   NavTaxpayerLookupResult,
 } from "./integrations/nav-taxpayer.js";
 export type {
+  MedusaConnectionCredentialInput,
+  MedusaConnectionStateView,
+  MedusaConnectionVerificationStatus,
+  MedusaConnectionView,
+  MedusaCredentialSource,
+  MedusaIntegrationStateKind,
+} from "./integrations/medusa-connection.js";
+export type {
   NavConnectionCredentialInput,
   NavConnectionVerificationStatus,
   NavConnectionView,

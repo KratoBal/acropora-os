@@ -34,6 +34,13 @@ export const MEDUSA_CONNECTION_ERROR_CODES = [
   "MEDUSA_CREDENTIAL_DECRYPT_FAILED",
   "MEDUSA_CREDENTIAL_INPUT_INVALID",
   /**
+   * A visszatartás fogta meg a kérést: túl gyakran érkezett. Nem hiba a szó
+   * szoros értelmében, de KÜLÖN kód, mert a teendő más: várni kell, nem
+   * javítani. Egy általános hibába olvasztva a felhasználó a kulcsot kezdené
+   * cserélni, holott az ép.
+   */
+  "MEDUSA_CONNECTION_COOLDOWN",
+  /**
    * A HÍVÁS oldali bukás, EGYETLEN néven a `401`-re és a `403`-ra.
    *
    * A kódban ma megkülönböztethető a kettő, és mégis közös nevet kapnak. Az ok
