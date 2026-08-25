@@ -1,5 +1,22 @@
 import type { Prisma } from "@acropora/database";
 
+/**
+ * KI VÁLASZTHATÓ ÚJ ESZKÖZ TULAJDONOSÁNAK.
+ *
+ * Csak az aktív, SZERVIZ-jelölt partner. A lista korábban minden aktív vevőt és
+ * minden aktív partnert visszaadott, tehát a webshopos vevők is felkerültek a
+ * szerviz eszköz-űrlap első mezőjébe, ahol nincs mit keresniük (Balázs
+ * bejelentése, 2026-08-25).
+ *
+ * Külön konstans, és nem a lekérdezésbe írt objektum, mert így MÉRHETŐ: egy
+ * teszt, ami a tárolót hívja, adatbázist kívánna; ez a feltétel viszont
+ * önmagában is állítható, és pont ez az a sor, amit el lehet rontani.
+ */
+export const SERVICE_OWNER_WHERE = {
+  isActive: true,
+  isService: true,
+} as const;
+
 export const assetSummaryInclude = {
   customer: true,
   supplier: true,

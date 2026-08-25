@@ -11,6 +11,7 @@ import type {
   AssetListItem,
   AssetListResponse,
   AssetOwnerListResponse,
+  AssetOwnerType,
 } from "@acropora/types";
 
 import { generateCode } from "../common/code-generator.util.js";
@@ -20,6 +21,7 @@ import type {
   UpdateAssetDto,
 } from "./dto/asset.dto.js";
 import {
+  SERVICE_OWNER_WHERE,
   assetDetailInclude,
   assetSummaryInclude,
   type AssetDetailRow,
@@ -159,33 +161,24 @@ export class ServiceAssetsRepository extends Repository {
     };
   }
 
-  async owners(): Promise<AssetOwnerListResponse> {
-    const [customers, suppliers] = await Promise.all([
-      prisma.customer.findMany({
-        where: { isActive: true },
-        include: {
-          addresses: { orderBy: [{ isDefault: "desc" }, { id: "asc" }] },
-        },
-        orderBy: [{ displayName: "asc" }, { id: "asc" }],
-      }),
-      prisma.supplier.findMany({
-        where: { isActive: true },
-        orderBy: [{ name: "asc" }, { id: "asc" }],
-      }),
-    ]);
+  /**
+   * KI VÁLASZTHATÓ AZ ESZKÖZ TULAJDONOSÁNAK.
+   *
+   * A lista a SZERVIZ-jelölt partnereké. A `keep` az az egy tulajdonos, aki már
+   * rá van írva egy MEGLÉVŐ eszközre: azt akkor is visszaadjuk, ha ma nem lenne
+   * választható, mert a szerkesztő képernyő különben üres mezőt mutatna a
+   * helyén, és a mentés vagy elakadna, vagy csendben más tulajdonost írna oda.
+   * A sor megjelölve jön (`outsideServiceScope`), tehát a felület meg tudja
+   * mutatni, hogy ez örökölt érték, nem ajánlat.
+   */
+  async owners(
+    keep?: { type: AssetOwnerType; id: string } | null,
+  ): Promise<AssetOwnerListResponse> {
+    const suppliers = await prisma.supplier.findMany({
+      where: SERVICE_OWNER_WHERE,
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+    });
     const items: AssetOwnerListResponse["items"] = [
-      ...customers.map((customer) => ({
-        type: "CUSTOMER" as const,
-        id: customer.id,
-        code: customer.customerNumber,
-        displayName: customer.displayName,
-        isActive: customer.isActive,
-        addresses: customer.addresses.map((address) => ({
-          id: address.id,
-          name: address.name ?? undefined,
-          formatted: `${address.postalCode} ${address.city}, ${address.line1}${address.line2 ? `, ${address.line2}` : ""}`,
-        })),
-      })),
       ...suppliers.map((supplier) => {
         const formatted = [
           [supplier.postalCode, supplier.city].filter(Boolean).join(" "),
@@ -207,10 +200,77 @@ export class ServiceAssetsRepository extends Repository {
           addresses: [],
         };
       }),
-    ].sort((left, right) =>
-      left.displayName.localeCompare(right.displayName, "hu"),
-    );
-    return { items };
+    ];
+
+    const inherited =
+      keep &&
+      !items.some((item) => item.type === keep.type && item.id === keep.id)
+        ? await this.ownerOutsideScope(keep)
+        : null;
+
+    return {
+      items: [...items, ...(inherited ? [inherited] : [])].sort((left, right) =>
+        left.displayName.localeCompare(right.displayName, "hu"),
+      ),
+    };
+  }
+
+  /**
+   * Egy KONKRÉT tulajdonos, a szűrés megkerülésével, megjelölve.
+   *
+   * Az aktivitást sem nézi: egy inaktívvá tett partner is maradhat egy régi
+   * eszközön, és az sem indok arra, hogy a szerkesztő elvegye.
+   */
+  private async ownerOutsideScope(keep: {
+    type: AssetOwnerType;
+    id: string;
+  }): Promise<AssetOwnerListResponse["items"][number] | null> {
+    if (keep.type === "SUPPLIER") {
+      const supplier = await prisma.supplier.findUnique({
+        where: { id: keep.id },
+      });
+      if (!supplier) return null;
+      const formatted = [
+        [supplier.postalCode, supplier.city].filter(Boolean).join(" "),
+        supplier.addressLine1,
+        supplier.addressLine2,
+      ]
+        .filter(Boolean)
+        .join(", ");
+      return {
+        type: "SUPPLIER",
+        id: supplier.id,
+        code: supplier.code,
+        displayName: supplier.name,
+        isActive: supplier.isActive,
+        address: formatted
+          ? { id: `supplier:${supplier.id}`, formatted }
+          : undefined,
+        addresses: [],
+        outsideServiceScope: true,
+      };
+    }
+
+    const customer = await prisma.customer.findUnique({
+      where: { id: keep.id },
+      include: {
+        addresses: { orderBy: [{ isDefault: "desc" }, { id: "asc" }] },
+      },
+    });
+    if (!customer) return null;
+    return {
+      type: "CUSTOMER",
+      id: customer.id,
+      code: customer.customerNumber,
+      displayName: customer.displayName,
+      isActive: customer.isActive,
+      addresses: customer.addresses.map((address) => ({
+        id: address.id,
+        name: address.name ?? undefined,
+        formatted: `${address.postalCode} ${address.city}, ${address.line1}${address.line2 ? `, ${address.line2}` : ""}`,
+      })),
+      outsideServiceScope: true,
+    };
   }
 
   async detail(id: string): Promise<AssetDetail | null> {

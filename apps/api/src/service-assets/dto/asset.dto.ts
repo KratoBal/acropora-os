@@ -48,6 +48,20 @@ export class AssetListQueryDto {
   @IsISO8601() @IsOptional() dueBefore?: string;
 }
 
+/**
+ * A tulajdonos-választó lekérdezése.
+ *
+ * A két mező EGYÜTT jelent valamit: egy MÁR RÖGZÍTETT eszköz tulajdonosa, akit a
+ * lista akkor is tartalmazzon, ha ma nem lenne választható. A szerkesztő
+ * képernyő küldi, az új felvétel nem.
+ */
+export class AssetOwnersQueryDto {
+  @IsIn(ASSET_OWNER_TYPES)
+  @IsOptional()
+  ownerType?: (typeof ASSET_OWNER_TYPES)[number];
+  @IsString() @IsOptional() ownerId?: string;
+}
+
 export class CreateAssetDto {
   @IsIn(ASSET_OWNER_TYPES) ownerType!: (typeof ASSET_OWNER_TYPES)[number];
   @IsString() @MinLength(1) ownerId!: string;

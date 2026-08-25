@@ -4,6 +4,7 @@ import type {
   AssetDocumentSummary,
   AssetDocumentType,
   AssetOwnerListResponse,
+  AssetOwnerType,
   AssetQrCode,
   CreateAssetInput,
   UpdateAssetInput,
@@ -17,10 +18,27 @@ export const assetsApi = {
       signal,
     });
   },
-  owners(token: string, signal?: AbortSignal) {
-    return apiRequest<AssetOwnerListResponse>("/service/assets/owners", token, {
-      signal,
-    });
+  /**
+   * A választható tulajdonosok: a szerviz-jelölt partnerek.
+   *
+   * A `keep` egy MÁR RÖGZÍTETT eszköz tulajdonosa. Aki szerkeszt, annak akkor is
+   * látnia kell a saját tulajdonosát, ha az ma nem lenne választható -- különben
+   * a kötelező mező üresen állna, és a mentés vagy elakadna, vagy más
+   * tulajdonost írna a helyére.
+   */
+  owners(
+    token: string,
+    signal?: AbortSignal,
+    keep?: { type: AssetOwnerType; id: string } | null,
+  ) {
+    const query = keep
+      ? `?${new URLSearchParams({ ownerType: keep.type, ownerId: keep.id })}`
+      : "";
+    return apiRequest<AssetOwnerListResponse>(
+      `/service/assets/owners${query}`,
+      token,
+      { signal },
+    );
   },
   detail(token: string, id: string, signal?: AbortSignal) {
     return apiRequest<AssetDetail>(

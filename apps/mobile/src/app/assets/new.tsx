@@ -3,6 +3,8 @@ import { Redirect, useRouter } from "expo-router";
 import { type ReactNode, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,6 +20,10 @@ import {
   type AssetKind,
   type AssetOwnerOption,
 } from "@/lib/api/assets";
+import {
+  buildAssetCreatePayload,
+  type AssetCreateField,
+} from "@/lib/assets/asset-create";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 
@@ -47,7 +53,18 @@ export default function NewAssetScreen() {
   const [serialNumber, setSerialNumber] = useState("");
   const [installedAt, setInstalledAt] = useState("");
   const [interval, setInterval] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  /**
+   * A hiba MEZŐSTÜL. A `field` azt mondja meg, hol kell megmutatni; `null`
+   * annyit tesz, hogy a szervertől jött, tehát nem köthető egy mezőhöz.
+   *
+   * Ez a mért hiba javítása (2026-08-25): eddig egyetlen hibasáv volt, a
+   * képernyő TETEJÉN, a mentés gomb pedig az űrlap alján. Aki a gombot
+   * megnyomta, semmit nem látott, és a gomb NÉMÁNAK tűnt.
+   */
+  const [error, setError] = useState<{
+    field: AssetCreateField | null;
+    message: string;
+  } | null>(null);
 
   const filteredOwners = useMemo(() => {
     const needle = ownerSearch.trim().toLocaleLowerCase("hu");
@@ -67,9 +84,11 @@ export default function NewAssetScreen() {
     onSuccess: (created) =>
       router.replace({ pathname: "/assets/[id]", params: { id: created.id } }),
     onError: (cause) =>
-      setError(
-        cause instanceof Error ? cause.message : "Az eszköz nem menthető.",
-      ),
+      setError({
+        field: null,
+        message:
+          cause instanceof Error ? cause.message : "Az eszköz nem menthető.",
+      }),
   });
 
   if (status !== "authenticated" || !user) return <Redirect href="/login" />;
@@ -77,126 +96,166 @@ export default function NewAssetScreen() {
 
   const submit = () => {
     setError(null);
-    if (!owner || !name.trim()) {
-      setError("A partner és az eszköz neve kötelező.");
-      return;
-    }
-    const serviceIntervalDays = interval
-      ? Number.parseInt(interval, 10)
-      : undefined;
-    if (
-      serviceIntervalDays !== undefined &&
-      (!Number.isInteger(serviceIntervalDays) || serviceIntervalDays < 1)
-    ) {
-      setError("Az intervallum legalább 1 nap legyen.");
-      return;
-    }
-    mutation.mutate({
-      ownerType: owner.type,
-      ownerId: owner.id,
+    /**
+     * A döntés a `lib/assets/asset-create.ts`-ben van, mert ott MÉRHETŐ: ebben
+     * a fájlban nincs, ami tesztelné. A dátumot ugyanott normalizáljuk, mert a
+     * kézzel írt magyar alak (`2026.08.25`) a szerver ISO-ellenőrzésén elbukott.
+     */
+    const result = buildAssetCreatePayload({
+      owner: owner ? { type: owner.type, id: owner.id } : null,
+      name,
       kind,
-      name: name.trim(),
-      manufacturer: manufacturer.trim() || undefined,
-      model: model.trim() || undefined,
-      serialNumber: serialNumber.trim() || undefined,
-      installedAt: installedAt ? `${installedAt}T00:00:00.000Z` : undefined,
-      serviceIntervalDays,
+      manufacturer,
+      model,
+      serialNumber,
+      installedAt,
+      interval,
     });
+
+    if (!result.ok) {
+      setError({ field: result.field, message: result.message });
+      return;
+    }
+
+    mutation.mutate(result.payload);
   };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["bottom", "left", "right"]}>
-      <ScrollView
-        contentContainerStyle={styles.container}
-        keyboardShouldPersistTaps="handled"
+      {/*
+        A BILLENTYŰZET NE TAKARJA EL, AMIBE ÍRNAK. A bejelentés szó szerint az
+        volt, hogy a Sorozatszám és az alatta lévő mezők „már nem látszanak, ha
+        írni akarok bele". Az appban eddig egyetlen képernyő kezelte ezt, a
+        bejelentkezés; itt hiányzott, és a görgetett tartalom alsó térköze
+        (48 pont) a billentyűzet magasságához képest semmi.
+      */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.flex}
       >
-        <Text style={styles.eyebrow}>ESZKÖZNYILVÁNTARTÁS</Text>
-        <Text style={styles.title}>Új eszköz</Text>
-        <Text style={styles.subtitle}>
-          Mentés után az adatlapról azonnal nyomtatható a 30×30 mm-es QR-címke.
-        </Text>
-
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-
-        <Section title="Tulajdonos">
-          <TextInput
-            value={ownerSearch}
-            onChangeText={setOwnerSearch}
-            placeholder="Vevő vagy partner keresése"
-            placeholderTextColor="#668798"
-            style={styles.input}
-          />
-          {ownersQuery.isPending ? <ActivityIndicator color="#52d6c7" /> : null}
-          {filteredOwners.map((item) => {
-            const selected = owner?.type === item.type && owner.id === item.id;
-            return (
-              <Pressable
-                key={`${item.type}:${item.id}`}
-                onPress={() => setOwner(item)}
-                style={[styles.ownerRow, selected && styles.ownerSelected]}
-              >
-                <Text style={styles.ownerName}>{item.displayName}</Text>
-                <Text style={styles.ownerMeta}>
-                  {item.type === "CUSTOMER" ? "Vevő" : "Partner"} · {item.code}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </Section>
-
-        <Section title="Eszközadatok">
-          <Field label="Eszköz neve *" value={name} onChangeText={setName} />
-          <Text style={styles.label}>Típus</Text>
-          <View style={styles.kindGrid}>
-            {kinds.map((item) => (
-              <Pressable
-                key={item.value}
-                onPress={() => setKind(item.value)}
-                style={[
-                  styles.kindButton,
-                  kind === item.value && styles.kindSelected,
-                ]}
-              >
-                <Text style={styles.kindText}>{item.label}</Text>
-              </Pressable>
-            ))}
-          </View>
-          <Field
-            label="Gyártó"
-            value={manufacturer}
-            onChangeText={setManufacturer}
-          />
-          <Field label="Modell" value={model} onChangeText={setModel} />
-          <Field
-            label="Sorozatszám"
-            value={serialNumber}
-            onChangeText={setSerialNumber}
-          />
-          <Field
-            label="Telepítés dátuma (ÉÉÉÉ-HH-NN)"
-            value={installedAt}
-            onChangeText={setInstalledAt}
-          />
-          <Field
-            label="Karbantartási intervallum (nap)"
-            value={interval}
-            onChangeText={setInterval}
-            keyboardType="number-pad"
-          />
-        </Section>
-
-        <Pressable
-          disabled={mutation.isPending}
-          onPress={submit}
-          style={[styles.saveButton, mutation.isPending && styles.disabled]}
+        <ScrollView
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
         >
-          <Text style={styles.saveText}>
-            {mutation.isPending ? "Mentés…" : "Eszköz létrehozása"}
+          <Text style={styles.eyebrow}>ESZKÖZNYILVÁNTARTÁS</Text>
+          <Text style={styles.title}>Új eszköz</Text>
+          <Text style={styles.subtitle}>
+            Mentés után az adatlapról azonnal nyomtatható a 30×30 mm-es
+            QR-címke.
           </Text>
-        </Pressable>
-      </ScrollView>
+
+          <Section title="Partner">
+            <TextInput
+              value={ownerSearch}
+              onChangeText={setOwnerSearch}
+              placeholder="Szerviz partner keresése"
+              placeholderTextColor="#668798"
+              style={styles.input}
+            />
+            <FieldError error={error} field="owner" />
+            {ownersQuery.isPending ? (
+              <ActivityIndicator color="#52d6c7" />
+            ) : null}
+            {filteredOwners.map((item) => {
+              const selected =
+                owner?.type === item.type && owner.id === item.id;
+              return (
+                <Pressable
+                  key={`${item.type}:${item.id}`}
+                  onPress={() => setOwner(item)}
+                  style={[styles.ownerRow, selected && styles.ownerSelected]}
+                >
+                  <Text style={styles.ownerName}>{item.displayName}</Text>
+                  <Text style={styles.ownerMeta}>
+                    {item.type === "CUSTOMER" ? "Vevő" : "Partner"} ·{" "}
+                    {item.code}
+                    {item.outsideServiceScope ? " · nem szerviz partner" : ""}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </Section>
+
+          <Section title="Eszközadatok">
+            <Field label="Eszköz neve *" value={name} onChangeText={setName} />
+            <FieldError error={error} field="name" />
+            <Text style={styles.label}>Típus</Text>
+            <View style={styles.kindGrid}>
+              {kinds.map((item) => (
+                <Pressable
+                  key={item.value}
+                  onPress={() => setKind(item.value)}
+                  style={[
+                    styles.kindButton,
+                    kind === item.value && styles.kindSelected,
+                  ]}
+                >
+                  <Text style={styles.kindText}>{item.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Field
+              label="Gyártó"
+              value={manufacturer}
+              onChangeText={setManufacturer}
+            />
+            <Field label="Modell" value={model} onChangeText={setModel} />
+            <Field
+              label="Sorozatszám"
+              value={serialNumber}
+              onChangeText={setSerialNumber}
+            />
+            <Field
+              label="Telepítés dátuma"
+              placeholder="2026-08-25"
+              value={installedAt}
+              onChangeText={setInstalledAt}
+            />
+            <FieldError error={error} field="installedAt" />
+            <Field
+              label="Karbantartási intervallum (nap)"
+              value={interval}
+              onChangeText={setInterval}
+              keyboardType="number-pad"
+            />
+            <FieldError error={error} field="interval" />
+          </Section>
+
+          {/*
+          A HIBA A GOMB MELLETT IS. Ahol megnyomták, ott kell látszania: a
+          mezőnél megjelenő üzenet a képernyő tetején lehet, a gomb viszont az
+          alján van. Ez a két hely együtt zárja ki azt az állapotot, amiből a
+          bejelentés született: „ha megnyomom a mentés gombot, nem történik
+          semmi".
+        */}
+          {error ? <Text style={styles.error}>{error.message}</Text> : null}
+
+          <Pressable
+            disabled={mutation.isPending}
+            onPress={submit}
+            style={[styles.saveButton, mutation.isPending && styles.disabled]}
+          >
+            <Text style={styles.saveText}>
+              {mutation.isPending ? "Mentés…" : "Eszköz létrehozása"}
+            </Text>
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
+}
+
+/** A mezőhöz tartozó hibaüzenet, ott, ahol a hiba keletkezett. */
+function FieldError({
+  error,
+  field,
+}: {
+  error: { field: AssetCreateField | null; message: string } | null;
+  field: AssetCreateField;
+}) {
+  if (!error || error.field !== field) return null;
+  return <Text style={styles.fieldError}>{error.message}</Text>;
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -213,6 +272,7 @@ function Field(props: {
   value: string;
   onChangeText(value: string): void;
   keyboardType?: "default" | "number-pad";
+  placeholder?: string;
 }) {
   return (
     <View style={styles.field}>
@@ -221,6 +281,7 @@ function Field(props: {
         value={props.value}
         onChangeText={props.onChangeText}
         keyboardType={props.keyboardType}
+        placeholder={props.placeholder}
         placeholderTextColor="#668798"
         style={styles.input}
       />
@@ -230,6 +291,8 @@ function Field(props: {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#071827" },
+  flex: { flex: 1 },
+  fieldError: { color: "#fecaca", fontSize: 12, fontWeight: "700" },
   container: { padding: 18, paddingBottom: 48, gap: 16 },
   eyebrow: {
     color: "#52d6c7",

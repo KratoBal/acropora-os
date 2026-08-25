@@ -36,6 +36,13 @@ export interface AssetOwnerOption extends AssetOwnerSummary {
   isActive: boolean;
   address?: AssetAddressSummary;
   addresses: AssetAddressSummary[];
+  /**
+   * Igaz, ha ez a tulajdonos MA NEM választható új eszközhöz: nem szerviz-jelölt
+   * partner, vagy webshopos vevő. Az ilyen sor csak azért van a listában, mert
+   * egy MÁR RÖGZÍTETT eszköz tulajdonosa, és a szerkesztő nem veheti el azt, amit
+   * nem ő tett oda. A felület megjelöli, a hívó nem kínálja fel újnak.
+   */
+  outsideServiceScope?: boolean;
 }
 
 export interface AssetOwnerListResponse {

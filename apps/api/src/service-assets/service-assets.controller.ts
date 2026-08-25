@@ -21,6 +21,7 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import {
   AssetListQueryDto,
+  AssetOwnersQueryDto,
   CreateAssetDto,
   UpdateAssetDto,
   UploadAssetDocumentDto,
@@ -39,8 +40,8 @@ export class ServiceAssetsController {
 
   @Get("owners")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  owners() {
-    return this.service.owners();
+  owners(@Query() query: AssetOwnersQueryDto) {
+    return this.service.owners(query);
   }
 
   @Get("scan/:qrToken")

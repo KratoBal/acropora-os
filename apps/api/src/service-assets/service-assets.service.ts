@@ -9,6 +9,7 @@ import type { AssetQrCode } from "@acropora/types";
 
 import type {
   AssetListQueryDto,
+  AssetOwnersQueryDto,
   CreateAssetDto,
   UpdateAssetDto,
 } from "./dto/asset.dto.js";
@@ -23,8 +24,22 @@ export class ServiceAssetsService {
     return this.repository.list(query);
   }
 
-  owners() {
-    return this.repository.owners();
+  /**
+   * A tulajdonos-választó listája. A `ownerType`/`ownerId` páros egy MEGLÉVŐ
+   * eszköz tulajdonosát nevezi meg, akit a lista akkor is tartalmazzon, ha ma
+   * nem lenne választható. Fél páros értelmezhetetlen, ezért az hiba: csendben
+   * elhagyva pont azt a sort ejtenénk ki, amiért a hívás történt.
+   */
+  owners(query: AssetOwnersQueryDto = {}) {
+    if ((query.ownerType === undefined) !== (query.ownerId === undefined))
+      throw new BadRequestException(
+        "A megtartandó tulajdonos típusa és azonosítója csak együtt adható meg.",
+      );
+    return this.repository.owners(
+      query.ownerType && query.ownerId
+        ? { type: query.ownerType, id: query.ownerId }
+        : null,
+    );
   }
 
   async detail(id: string) {

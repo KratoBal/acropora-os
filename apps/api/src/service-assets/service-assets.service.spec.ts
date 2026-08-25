@@ -6,6 +6,7 @@ import type { AssetDetail } from "@acropora/types";
 
 import type { ServiceAssetsRepository } from "./service-assets.repository.js";
 import { ServiceAssetsService } from "./service-assets.service.js";
+import { SERVICE_OWNER_WHERE } from "./service-assets.types.js";
 
 const asset = {
   id: "asset-1",
@@ -141,4 +142,69 @@ test("generates an app deep link QR without exposing database ids", async () => 
     if (previous === undefined) delete process.env.ASSET_QR_BASE_URL;
     else process.env.ASSET_QR_BASE_URL = previous;
   }
+});
+
+/**
+ * A TULAJDONOS-VÁLASZTÓ, és amiért ez a három állítás létezik.
+ *
+ * A lista korábban MINDEN aktív vevőt és MINDEN aktív partnert visszaadott,
+ * tehát az új eszköz űrlap első mezőjében a webshopos vevők jelentek meg
+ * (Balázs bejelentése, 2026-08-25). A szűrés maga a tárolóban van, ezért a
+ * feltétel külön konstans: adatbázis nélkül is állítható, és pont ez az a sor,
+ * amit el lehet rontani.
+ */
+test("asks for service partners only, and says so in one place", () => {
+  assert.deepEqual(SERVICE_OWNER_WHERE, { isActive: true, isService: true });
+});
+
+test("keeps the owner an existing asset already has", async () => {
+  let asked: unknown = "nem hívták meg";
+  const service = new ServiceAssetsService(
+    repository({
+      owners: async (keep: unknown) => {
+        asked = keep;
+        return { items: [] };
+      },
+    }),
+  );
+
+  await service.owners({ ownerType: "CUSTOMER", ownerId: "customer-9" });
+
+  assert.deepEqual(asked, { type: "CUSTOMER", id: "customer-9" });
+});
+
+test("passes nothing to keep when the caller is creating a new asset", async () => {
+  let asked: unknown = "nem hívták meg";
+  const service = new ServiceAssetsService(
+    repository({
+      owners: async (keep: unknown) => {
+        asked = keep;
+        return { items: [] };
+      },
+    }),
+  );
+
+  await service.owners();
+
+  assert.equal(asked, null);
+});
+
+/**
+ * A FÉL PÁROS nem értelmezhető, és csendben elhagyva pont azt a sort ejtenénk
+ * ki, amiért a hívás történt: a szerkesztő üres mezőt látna a tulajdonos
+ * helyén, és nem tudná meg, miért.
+ */
+test("refuses half of an owner reference instead of ignoring it", () => {
+  const service = new ServiceAssetsService(repository());
+
+  // A visszautasítás AZONNAL történik, még a tároló hívása előtt: nem
+  // elutasított ígéret, hanem dobott hiba.
+  assert.throws(
+    () => service.owners({ ownerType: "CUSTOMER" }),
+    BadRequestException,
+  );
+  assert.throws(
+    () => service.owners({ ownerId: "customer-9" }),
+    BadRequestException,
+  );
 });
