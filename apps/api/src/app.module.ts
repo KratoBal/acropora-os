@@ -11,6 +11,7 @@ import { CustomersModule } from "./customers/customers.module.js";
 import { UnasCustomerSyncModule } from "./customers/unas-customer-sync/unas-customer-sync.module.js";
 import { HealthModule } from "./health/health.module.js";
 import { UnasImportModule } from "./imports/unas/unas-import.module.js";
+import { AiUserContextModule } from "./integrations/ai/ai-user-context.module.js";
 import { MedusaModule } from "./integrations/medusa/medusa.module.js";
 import { NavOnlineInvoiceModule } from "./integrations/nav/nav-online-invoice.module.js";
 import { PostalCodeModule } from "./integrations/postal-code/postal-code.module.js";
@@ -38,6 +39,7 @@ import { WorksheetsModule } from "./worksheets/worksheets.module.js";
     UnasOrderSyncModule,
     CustomersModule,
     UnasCustomerSyncModule,
+    AiUserContextModule,
     MedusaModule,
     NavOnlineInvoiceModule,
     PostalCodeModule,
