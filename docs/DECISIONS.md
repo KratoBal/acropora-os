@@ -95,10 +95,12 @@ döntés nem vonatkozik rá (lásd a milestone-terv C) pontja).
 **Dátum:** 2026-08-25
 
 **Döntés:** melyik Acropora OS termék melyik Medusa termék, azt az
-`ExternalReference` táblában tartjuk nyilván, `MEDUSA` rendszerrel. Nem új
-szerkezet: ugyanaz, ami a UNAS-nál már ötven helyen használatban van, és
-két irányban egyedi kulccsal (`[system, entityType, externalId]` és
-`[system, entityType, entityId]`). Csak a felsorolás értéke hiányzott, és
+`ExternalReference` táblában tartjuk nyilván, `MEDUSA` rendszerrel. **Nem új
+szerkezet:** a leképezés a UNAS-nál is ezen áll, és a tábla két irányban
+egyedi kulcsot visel (`[system, entityType, externalId]` és
+`[system, entityType, entityId]`), tehát rendszerenként egy termékhez egy
+külső azonosító tartozhat, és egy külső azonosítóhoz egy termék. Csak a
+felsorolás értéke hiányzott, és
 az `OTHER` használata nem megoldás lett volna, hanem összemosás: attól
 kezdve nem lehetne megmondani, mi a Medusa és mi minden más.
 
