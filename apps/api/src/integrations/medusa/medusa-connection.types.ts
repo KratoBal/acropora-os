@@ -23,11 +23,6 @@ export type MedusaVerificationStatus = StoredMedusaVerificationStatus | "STALE";
 
 export const MEDUSA_VERIFICATION_STALE_MS = 24 * 60 * 60 * 1000;
 
-/**
- * Ebben a körben CSAK a tárolás hibakódjai állnak itt. A hívás állapotai (a
- * hitelesítési vagy jogosultsági bukás közös állapota, a degradált integráció)
- * a következő körben kerülnek ide, amikor a modul is megépül.
- */
 export const MEDUSA_CONNECTION_ERROR_CODES = [
   "MEDUSA_CONNECTION_CONFIGURATION_MISSING",
   "MEDUSA_CONNECTION_NOT_CONFIGURED",
@@ -38,6 +33,24 @@ export const MEDUSA_CONNECTION_ERROR_CODES = [
   "MEDUSA_CREDENTIAL_ENVELOPE_INVALID",
   "MEDUSA_CREDENTIAL_DECRYPT_FAILED",
   "MEDUSA_CREDENTIAL_INPUT_INVALID",
+  /**
+   * A HÍVÁS oldali bukás, EGYETLEN néven a `401`-re és a `403`-ra.
+   *
+   * A kódban ma megkülönböztethető a kettő, és mégis közös nevet kapnak. Az ok
+   * nem kényelem: a megkülönböztethetőség **nem a kód tulajdonsága**, hanem két
+   * rajtunk kívül álló beállítás mai állapota, és egyik változásáról sem
+   * értesülnénk.
+   *
+   * A `403` ma csak a Medusa jogosultság-ellenőrzőjéből jöhet, de az egy
+   * kapcsoló mögött van, és a Medusa ELŐTT álló fordított proxy is adhatna
+   * ilyet (ma csak tömörítés és https átirányítás áll rajta). A `401` pedig
+   * egyetlen helyről jön, de ÖT ok áll mögötte, és az ötödik nem a kulcsról
+   * szól: az api-key modul kivételét a Medusa elkapja, tehát egy ottani
+   * adatbázishiba is `401`-ként érkezik hozzánk, miközben a kulcs ép.
+   *
+   * Ezért: egyik hibakód sem jelentheti automatikusan, hogy „rossz a kulcs".
+   */
+  "MEDUSA_AUTH_OR_PERMISSION_FAILURE",
 ] as const;
 
 export type MedusaConnectionErrorCode =
@@ -83,6 +96,53 @@ export interface MedusaCredentialEnvelope {
   authenticationTag: Buffer;
   keyVersion: string;
 }
+
+/**
+ * A NÉGY ÁLLAPOT, egy típusban.
+ *
+ * Azért egy típus és nem négy logikai mező, mert a négy eset KIZÁRJA egymást, és
+ * a legdrágább hiba pontosan az lenne, ha kettő egyszerre látszana igaznak. A
+ * második eset a legfontosabb: egy sérült boríték NEM ugyanaz, mint hogy még
+ * nincs beállítva, és ha egybefolynának, a hibás állapot csendben úgy nézne ki,
+ * mint egy friss telepítés.
+ */
+export type MedusaIntegrationState =
+  /** Van használható hitelesítő adat. A `source` mondja meg, melyik úton. */
+  | { kind: "ready"; source: "database" | "env" }
+  /** Nincs beállítva. Az API ELINDUL, csak a Medusa nem megy. */
+  | { kind: "not-configured" }
+  /**
+   * Van tárolt adat, de nem fejthető vissza. Ez konfigurációs és integritási
+   * HIBA, tehát hangosnak kell lennie: nem szabad „még nincs beállítva"
+   * állapotnak látszania.
+   */
+  | { kind: "credential-corrupt"; code: MedusaConnectionErrorCode }
+  /** A Medusa futás közben nem érhető el. Degradált integráció. */
+  | { kind: "unreachable"; detail: string }
+  /**
+   * A Medusa válaszolt, de elutasított. Degradált integráció, és a `status`
+   * megmarad, mert az INFORMÁCIÓ, csak nem bizonyíték.
+   */
+  | {
+      kind: "auth-or-permission-failure";
+      status: number;
+      detail: string;
+    };
+
+/**
+ * Amit a TÁROLT adatból el lehet dönteni, hálózat nélkül.
+ *
+ * Ez nem kényelmi szűkítés: a típus mondja ki, hogy az induláskori vizsgálat
+ * SOHA nem ad elérhetetlenséget vagy hitelesítési bukást, mert azokhoz hívni
+ * kellene a másik oldalt. Ha valaki egyszer mégis hálózatot tenne bele, ez a
+ * típus pirosra vált.
+ */
+export type MedusaStoredState = Extract<
+  MedusaIntegrationState,
+  | { kind: "ready" }
+  | { kind: "not-configured" }
+  | { kind: "credential-corrupt" }
+>;
 
 export interface MedusaConnectionSettingRecord {
   id: string;

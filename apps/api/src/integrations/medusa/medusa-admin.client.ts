@@ -81,6 +81,12 @@ export interface MedusaAdminClient {
    * kimeríti, azt KÜLÖN jelezzük - a néma csonkolás ugyanaz a hiba másképp.
    */
   findByExternalId(externalId: string): Promise<MedusaLookupResult>;
+  /**
+   * A LEGKEVESEBB, ami még bizonyít valamit: egyetlen olvasó kérés, `limit=1`,
+   * írás nulla. Nem a tartalma számít, hanem hogy jön-e válasz és milyen: ha
+   * jön, a hálózat áll és a hitelesítés eldőlt.
+   */
+  probe(): Promise<void>;
   create(input: MedusaProductInput): Promise<MedusaProductRow>;
   update(
     id: string,
@@ -94,6 +100,25 @@ export interface MedusaAdminConfig {
 }
 
 export class MedusaConfigurationError extends Error {}
+
+/**
+ * A Medusa NEM kétszázas válasza, a státusszal EGYÜTT.
+ *
+ * Eddig sima `Error` volt, az üzenetbe írt kóddal. Azért lett saját típusa,
+ * mert a hívó oldalnak a SZÁM kell, nem a szöveg: a `401` és a `403` két külön
+ * dolgot jelent, és egy üzenet-illesztés pontosan akkor romlana el, amikor a
+ * legfontosabb lenne. Az üzenet formátuma változatlan, mert az a parancssori
+ * kimeneten már látszik.
+ */
+export class MedusaAdminHttpError extends Error {
+  constructor(
+    readonly status: number,
+    readonly body: string,
+  ) {
+    super(`MEDUSA_ADMIN_HTTP_${status}: ${body}`);
+    this.name = "MedusaAdminHttpError";
+  }
+}
 
 export function medusaAdminConfigFromEnv(
   env: Record<string, string | undefined>,
@@ -133,9 +158,7 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       // A törzs hasznos: a Medusa a hibát magyarázza (például hiányzó opció).
       // A fejléceket NEM naplózzuk, mert azok viszik a kulcsot.
       const body = await response.text();
-      throw new Error(
-        `MEDUSA_ADMIN_HTTP_${response.status}: ${body.slice(0, 500)}`,
-      );
+      throw new MedusaAdminHttpError(response.status, body.slice(0, 500));
     }
     return (await response.json()) as T;
   }
@@ -152,6 +175,12 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
     );
     const rows = body.products ?? [];
     return { rows, truncated: rows.length >= EXTERNAL_ID_LOOKUP_LIMIT };
+  }
+
+  async probe(): Promise<void> {
+    await this.request<{ products: MedusaProductRow[] }>(
+      "/admin/products?limit=1",
+    );
   }
 
   async create(input: MedusaProductInput): Promise<MedusaProductRow> {
