@@ -26,7 +26,25 @@ export interface MedusaProductInput {
   external_id: string;
   handle?: string;
   options: { title: string; values: string[] }[];
-  variants: { title: string; sku: string; options: Record<string, string> }[];
+  variants: {
+    title: string;
+    sku: string;
+    options: Record<string, string>;
+    /**
+     * A Medusa termék-létrehozó végpontja MEGKÖVETELI ezt a mezőt: nélküle
+     * `Invalid request: Field 'variants, 0, prices' is required` jön, HTTP
+     * 400-zal (mérve a stage-en, 2026-08-25).
+     *
+     * A típusa szándékosan az ÜRES TÖMB, nem egy ár-lista. Az Acropora
+     * OS-ben nincs önálló eladási ár, csak a webshop árának tükre, és az
+     * árazás ebből a körből KI VAN VÉVE. Az üres tömb kielégíti a cél oldali
+     * követelményt anélkül, hogy olyat állítanánk, amink nincs.
+     *
+     * Ha az ár egyszer bekerül a hatókörbe, ez a típus pirosra vált, és ez a
+     * szándék: az ár alakját akkor MÉRNI kell a Medusán, nem kitalálni.
+     */
+    prices: [];
+  }[];
 }
 
 export interface MedusaLookupResult {

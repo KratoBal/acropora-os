@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import type {
   MedusaAdminClient,
+  MedusaProductInput,
   MedusaProductRow,
 } from "./medusa-admin.client.js";
 import type { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
@@ -35,6 +36,12 @@ function fakes(options: {
 }) {
   const calls: string[] = [];
   const linked: { productId: string; medusaProductId: string }[] = [];
+  /**
+   * A create BEMENETE, nem csak az, hogy meghívtuk. A hívás-sorrend eddig is
+   * mérve volt, a küldött alak viszont nem, és pont az bukott el élesben: a
+   * Medusa a változat ár-tömbjét megköveteli, mi meg nem küldtük.
+   */
+  const createdWith: MedusaProductInput[] = [];
 
   const links = {
     findByProductId: async () => {
@@ -56,8 +63,9 @@ function fakes(options: {
         truncated: options.truncated ?? false,
       };
     },
-    create: async () => {
+    create: async (input: MedusaProductInput) => {
       calls.push("create");
+      createdWith.push(input);
       return { id: "prod_uj", deleted_at: null };
     },
     update: async () => {
@@ -72,6 +80,7 @@ function fakes(options: {
   return {
     calls,
     linked,
+    createdWith,
     service: new MedusaProductProjectionService(links, medusa),
   };
 }
@@ -90,6 +99,41 @@ describe("MedusaProductProjectionService", () => {
     assert.deepEqual(linked, [
       { productId: "prod-os-1", medusaProductId: "prod_uj" },
     ]);
+  });
+
+  /**
+   * A KÜLDÖTT ALAK, karakterre.
+   *
+   * Ez az állítás egy éles bukásból született: a Medusa 400-zal utasította el
+   * a létrehozást, mert a változat `prices` mezője kötelező, és mi nem
+   * küldtük. A hiba hangos volt, de a mező HIÁNYÁT semmi nem tartotta: a
+   * hívás-sorrend zöld maradt, a kliens tesztje pedig a keresést méri.
+   *
+   * Az `prices: []` itt nem formaság, hanem a kör állítása: a mező azért van
+   * ott, mert a cél oldal megköveteli, és azért ÜRES, mert nem viszünk át
+   * árat. Ha valaki egyszer beleír egy összeget, ennek a sornak kell pirosra
+   * váltania, nem egy éles futásnak.
+   */
+  it("sends the shape the create endpoint requires, with no price in it", async () => {
+    const { service, createdWith } = fakes({ link: null, found: [] });
+
+    await service.project(product, now);
+
+    assert.equal(createdWith.length, 1);
+    assert.deepEqual(createdWith[0], {
+      title: "Reef Pump",
+      description: "Leírás",
+      external_id: "prod-os-1",
+      options: [{ title: "Kivitel", values: ["Alap"] }],
+      variants: [
+        {
+          title: "Reef Pump",
+          sku: "PUMP-1",
+          options: { Kivitel: "Alap" },
+          prices: [],
+        },
+      ],
+    });
   });
 
   /**
