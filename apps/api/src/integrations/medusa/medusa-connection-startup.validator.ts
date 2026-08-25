@@ -39,16 +39,30 @@ export class MedusaConnectionStartupValidator implements OnModuleInit {
 
     if (state.kind === "credential-corrupt") {
       /**
-       * Hangosan, és az indulást megállítva. A kód a naplóba is bekerül, mert
-       * ebből derül ki, MELYIK lépés bukott: hiányzó mesterkulcs, rossz
-       * kulcsverzió vagy sérült boríték.
+       * HANGOSAN, de az indulást NEM megállítva.
+       *
+       * Ez korábban dobott, az UNAS mintájára, és a hatókör mérve az volt, hogy
+       * az EGÉSZ API nem indul el: bejelentkezés, POS, UNAS-szinkron, NAV,
+       * munkalapok. Vagyis a legkevésbé kritikus integrációnk hibája állította
+       * volna le a legkritikusabbakat, miközben a Medusa-vetítés kézzel indul.
+       *
+       * A blokkolás értéke abból jött, hogy a sérült adat ne maradjon
+       * észrevétlen. Azt viszont már az integráció ÁLLAPOTA megoldja: a
+       * `credential-corrupt` külön eset, a felület megjeleníti, és minden
+       * Medusa-művelet visszautasít. A blokkolás tehát nem az egyetlen hangos
+       * jelzés többé, az ára viszont változatlanul az egész bolt volt.
+       *
+       * Amit ez a döntés NEM lazít: sérült adat mellett nincs visszaesés a
+       * környezeti változóra. Az a tiltás független attól, hogy megállunk-e.
        */
       this.logger.error(
         `A tárolt Medusa hitelesítő adat nem használható (${state.code}). ` +
-          "Ez konfigurációs és integritási hiba: az API nem indul el, hogy ne " +
-          "kérésenként derüljön ki.",
+          "Ez konfigurációs és integritási hiba. Az API elindul, de a Medusa " +
+          "integráció sérült állapotban marad, és minden Medusa-művelet " +
+          "visszautasít, amíg a hitelesítő adatot nem javítják a Beállítások " +
+          "oldalon. A rendszer NEM esik vissza a környezeti változóra.",
       );
-      throw new Error(state.code);
+      return;
     }
 
     this.logger.log(
