@@ -1,11 +1,10 @@
 import { Injectable, Logger, Optional } from "@nestjs/common";
 
 import {
-  HttpMedusaAdminClient,
   MedusaAdminHttpError,
   type MedusaAdminClient,
   MedusaConfigurationError,
-  medusaAdminConfigFromEnv,
+  medusaClientFromEnvironment,
 } from "./medusa-admin.client.js";
 import { MedusaConnectionRepository } from "./medusa-connection.repository.js";
 import {
@@ -45,13 +44,9 @@ export class MedusaConnectionService {
      * hasalna el. Ezt a bootstrap teszt fogta meg, még a beküldés előtt.
      */
     @Optional()
-    private readonly clientFactory: (apiKey: string) => MedusaAdminClient = (
-      apiKey,
-    ) =>
-      new HttpMedusaAdminClient({
-        ...medusaAdminConfigFromEnv(process.env),
-        apiKey,
-      }),
+    private readonly clientFactory: (
+      apiKey: string,
+    ) => MedusaAdminClient = medusaClientFromEnvironment,
   ) {}
 
   /**
