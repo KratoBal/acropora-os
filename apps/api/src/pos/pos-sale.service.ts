@@ -11,7 +11,7 @@ import type {
   PosSaleResult,
 } from "@acropora/types";
 
-import { generateCode } from "../common/code-generator.util.js";
+import { withUniqueCode } from "../common/unique-code.util.js";
 import type { PosSaleListQueryDto } from "./dto/pos-sale-list-query.dto.js";
 import {
   PosSaleRepository,
@@ -169,7 +169,6 @@ export class PosSaleService {
       });
     }
 
-    const orderNumber = generateCode("POS");
     const orderDiscountPercent = new Prisma.Decimal(discountPercent);
     const orderDiscountFactor = new Prisma.Decimal(1).minus(
       orderDiscountPercent.dividedBy(100),
@@ -178,18 +177,37 @@ export class PosSaleService {
     totalTax = totalTax.times(orderDiscountFactor);
     totalGross = totalGross.times(orderDiscountFactor);
 
-    const { detail, stockWarnings } = await this.sales.createSale({
-      orderNumber,
-      warehouseId,
-      actorUserId,
-      paymentMethod: input.paymentMethod,
-      customerId: input.customerId ?? null,
-      discountPercent: orderDiscountPercent.isZero()
-        ? null
-        : orderDiscountPercent,
-      lines: preparedLines,
-      totals: { totalNet, totalTax, totalGross },
-    });
+    // AZ ELADAS SZAMA MOSTANTOL AZ UJRAPROBALT LEZARON BELUL KESZUL. A
+    // POS a legnagyobb forgalmu csalad: itt a legvalószinubb, hogy ket eladas
+    // ugyanabba a masodpercbe esik es ugyanazt a negyjegyu veget huzza. Eddig a
+    // szam a hivas ELOTT keletkezett, tehat egy utkozes csak hibaval vegzodhetett,
+    // es az eladonak kellett ujraprobalnia, a vevo elott. Egy mentes-szintu
+    // ujraprobalas sem segitett volna rajta: ugyanazt a szamot vitte volna be
+    // otször.
+    //
+    // ES AMIERT NEM A MASIK MEGOLDAST VALASZTOTTUK (a szam kivezeteset a
+    // repositoryba, a tranzakcio tulajdonosahoz): az megvaltoztatta volna a
+    // `createSale` bemenetet, es elvette volna az EGYETLEN modot, ahogy egy hivo
+    // ugyanazt az idempotencia-kulcsot meg egyszer be tudja mutatni -- azzal
+    // egyutt a rá allo tesztet is. Ez a burkolat ugyanazt a hibat javitja
+    // szerzodes-valtozas nelkul: minden kiserlet friss szammal indul, es a
+    // mentes a sajat, teljes tranzakciojat futtatja ujra.
+    const { detail, stockWarnings } = await withUniqueCode(
+      { prefix: "POS", field: "orderNumber" },
+      (orderNumber) =>
+        this.sales.createSale({
+          orderNumber,
+          warehouseId,
+          actorUserId,
+          paymentMethod: input.paymentMethod,
+          customerId: input.customerId ?? null,
+          discountPercent: orderDiscountPercent.isZero()
+            ? null
+            : orderDiscountPercent,
+          lines: preparedLines,
+          totals: { totalNet, totalTax, totalGross },
+        }),
+    );
 
     // A SalesOrder és a készletmozgás EGYETLEN tranzakcióban jön létre a
     // repository-ban (postInventoryMovement hívással) - sikeres eladás
