@@ -23,6 +23,7 @@ import type {
 import {
   SERVICE_OWNER_WHERE,
   assetDetailInclude,
+  assetOwnerScopeWhere,
   assetSummaryInclude,
   type AssetDetailRow,
   type AssetSummaryRow,
@@ -100,6 +101,7 @@ export class ServiceAssetsRepository extends Repository {
 
   async list(query: AssetListQueryDto): Promise<AssetListResponse> {
     const where: Prisma.AssetWhereInput = {
+      ...assetOwnerScopeWhere(query.ownerScope),
       ...(query.status === "ALL" ? {} : { status: query.status }),
       ...(query.kind ? { kind: query.kind } : {}),
       ...(query.ownerType === "CUSTOMER" && query.ownerId
