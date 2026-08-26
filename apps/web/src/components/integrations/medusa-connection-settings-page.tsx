@@ -54,6 +54,24 @@ const STATE_VARIANT: Record<
   "auth-or-permission-failure": "warning",
 };
 
+/**
+ * AMIT AZ ELLENŐRZÉS UTÁN KIÍRUNK, A TÉNYLEGES EREDMÉNYBŐL.
+ *
+ * A mért hiba (2026-08-26): a felület a HTTP hívás sikerét jelentette be
+ * ellenőrzésként. A végpont viszont akkor is 200-zal tér vissza, ha a próba
+ * elbukott -- az eredmény az állapotban van, nem a státuszkódban. Így a
+ * „Kapcsolat ellenőrizve" mondat megjelenhetett egy „A Medusa nem érhető el"
+ * jelvény mellett, ugyanazon a képernyőn.
+ *
+ * Ezért a mondat innentől az ÁLLAPOTBÓL származik, és csak a `ready` ág
+ * állítja, hogy az ellenőrzés sikerült.
+ */
+function verificationNotice(view: MedusaConnectionView): string {
+  return view.state.kind === "ready"
+    ? "A kapcsolat ellenőrizve: a Medusa válaszolt."
+    : "Az ellenőrzés lefutott, de nem sikerült. Az eredmény az állapotnál látszik.";
+}
+
 function friendlyMessage(cause: unknown): string {
   if (cause instanceof ApiError) {
     if (cause.message.includes("MEDUSA_CONNECTION_COOLDOWN"))
@@ -119,10 +137,13 @@ export function MedusaConnectionSettingsPage() {
     setError(null);
     setNotice(null);
     try {
-      setView(await medusaConnectionApi.replaceCredential(token, { apiKey }));
+      const saved = await medusaConnectionApi.replaceCredential(token, {
+        apiKey,
+      });
+      setView(saved);
       // A beírt érték azonnal eltűnik: nincs miért a memóriában maradnia.
       setApiKey("");
-      setNotice("A kulcs elmentve, és a kapcsolat ellenőrizve.");
+      setNotice(`A kulcs elmentve. ${verificationNotice(saved)}`);
     } catch (cause) {
       setError(friendlyMessage(cause));
     } finally {
@@ -136,8 +157,9 @@ export function MedusaConnectionSettingsPage() {
     setError(null);
     setNotice(null);
     try {
-      setView(await medusaConnectionApi.test(token));
-      setNotice("A kapcsolat ellenőrizve.");
+      const tested = await medusaConnectionApi.test(token);
+      setView(tested);
+      setNotice(verificationNotice(tested));
     } catch (cause) {
       setError(friendlyMessage(cause));
     } finally {
@@ -192,16 +214,25 @@ export function MedusaConnectionSettingsPage() {
                   <dd>{new Date(view.modifiedAt).toLocaleString("hu-HU")}</dd>
                 </div>
               ) : null}
-              {view.verification.checkedAt ? (
-                <div className="flex justify-between gap-4">
-                  <dt className="text-muted-foreground">Utolsó ellenőrzés</dt>
-                  <dd>
-                    {new Date(view.verification.checkedAt).toLocaleString(
-                      "hu-HU",
-                    )}
-                  </dd>
-                </div>
-              ) : null}
+              {/*
+                EZ A SOR MINDIG LÁTSZIK, akkor is, ha még nem volt ellenőrzés.
+                A fenti jelvény a TÁROLT kulcs épségéről szól, és a lap
+                betöltésekor hálózat nélkül készül -- vagyis a „Működik" felirat
+                nem jelenti azt, hogy bárki megkérdezte volna a Medusát. Amíg ez
+                a sor elrejtőzött, a két dolog egybeolvadt, és pontosan az a
+                félrevezetés állt elő, amit a Medusa `last_used_at` mezőjénél
+                leletként neveztünk meg.
+              */}
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">Utolsó ellenőrzés</dt>
+                <dd>
+                  {view.verification.checkedAt
+                    ? new Date(view.verification.checkedAt).toLocaleString(
+                        "hu-HU",
+                      )
+                    : "még nem volt ellenőrizve"}
+                </dd>
+              </div>
             </dl>
 
             {/*

@@ -174,4 +174,57 @@ describe("Medusa kapcsolat beállító lap", () => {
 
     expect(await screen.findByText("A művelet nem sikerült.")).toBeTruthy();
   });
+
+  /**
+   * A MÉRT HIBA (2026-08-26): a lap a HTTP hívás sikerét jelentette be
+   * ellenőrzésként. A végpont viszont akkor is 200-zal tér vissza, ha a próba
+   * elbukott, mert az eredmény az állapotban van, nem a státuszkódban. Így a
+   * „Kapcsolat ellenőrizve" mondat megjelenhetett egy „A Medusa nem érhető el"
+   * jelvény mellett, ugyanazon a képernyőn.
+   */
+  it("does not call a failed probe a verified connection", async () => {
+    api.test.mockResolvedValue(view("unreachable", "database"));
+
+    render(<MedusaConnectionSettingsPage />);
+    await screen.findByText("••••••••");
+
+    fireEvent.click(screen.getByText("Kapcsolat ellenőrzése"));
+
+    expect(
+      await screen.findByText(
+        "Az ellenőrzés lefutott, de nem sikerült. Az eredmény az állapotnál látszik.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("A kapcsolat ellenőrizve: a Medusa válaszolt."),
+    ).toBeNull();
+  });
+
+  it("says the connection answered when it actually answered", async () => {
+    api.test.mockResolvedValue(view("ready", "database"));
+
+    render(<MedusaConnectionSettingsPage />);
+    await screen.findByText("••••••••");
+
+    fireEvent.click(screen.getByText("Kapcsolat ellenőrzése"));
+
+    expect(
+      await screen.findByText("A kapcsolat ellenőrizve: a Medusa válaszolt."),
+    ).toBeTruthy();
+  });
+
+  /**
+   * A JELVÉNY A TÁROLT KULCS ÉPSÉGÉRŐL SZÓL, és a lap betöltésekor hálózat
+   * nélkül készül: a „Működik" felirat nem jelenti azt, hogy bárki megkérdezte
+   * volna a Medusát. Amíg az „Utolsó ellenőrzés" sor elrejtőzött, ha nem volt
+   * még ellenőrzés, a két dolog egybeolvadt a képernyőn.
+   */
+  it("says the connection was never checked instead of hiding the row", async () => {
+    api.get.mockResolvedValue(view("ready", "database"));
+
+    render(<MedusaConnectionSettingsPage />);
+
+    expect(await screen.findByText("Utolsó ellenőrzés")).toBeTruthy();
+    expect(screen.getByText("még nem volt ellenőrizve")).toBeTruthy();
+  });
 });

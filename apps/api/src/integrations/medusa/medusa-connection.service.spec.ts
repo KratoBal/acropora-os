@@ -38,7 +38,11 @@ function service(options: {
   apiKey?: string;
   probe?: () => Promise<void>;
 }) {
-  const recorded: { status: string; code: string | null }[] = [];
+  const recorded: {
+    status: string;
+    code: string | null;
+    checkedAt: Date;
+  }[] = [];
 
   const repository = {
     getSetting: async () =>
@@ -46,8 +50,13 @@ function service(options: {
     recordVerification: async (input: {
       status: string;
       code: string | null;
+      checkedAt: Date;
     }) => {
-      recorded.push({ status: input.status, code: input.code });
+      recorded.push({
+        status: input.status,
+        code: input.code,
+        checkedAt: input.checkedAt,
+      });
       return setting("DATABASE");
     },
   } as unknown as MedusaConnectionRepository;
@@ -216,10 +225,89 @@ describe("MedusaConnectionService állapotai", () => {
       },
     });
 
-    await subject.probeAndRecord(new Date("2026-08-25T12:00:00.000Z"));
+    const checkedAt = new Date("2026-08-25T12:00:00.000Z");
+    await subject.probeAndRecord(checkedAt);
 
     assert.deepEqual(recorded, [
-      { status: "FAILED", code: "MEDUSA_AUTH_OR_PERMISSION_FAILURE" },
+      {
+        status: "FAILED",
+        code: "MEDUSA_AUTH_OR_PERMISSION_FAILURE",
+        checkedAt,
+      },
     ]);
+  });
+
+  /**
+   * A SIKERES ÁG, AMIT EDDIG SEMMI NEM ŐRZÖTT.
+   *
+   * A `probeAndRecord` egyetlen állítása a bukó ágra szólt. A sikeres ág
+   * ugyanúgy ÍR, csak azt senki nem mérte -- és a 2026-08-26-i lelet éppen
+   * arról szólt, hogy a tárolt `verificationStatus` `NEVER` maradt. A mérés
+   * szerint a persistálás jó; ez a három állítás azért van itt, hogy ha
+   * valaha kiesne, ne egy éles adatbázisból derüljön ki.
+   */
+  it("writes SUCCESS after a probe the Medusa answered", async () => {
+    const { service: subject, recorded } = service({});
+
+    const checkedAt = new Date("2026-08-26T15:40:00.000Z");
+    await subject.probeAndRecord(checkedAt);
+
+    assert.deepEqual(recorded, [{ status: "SUCCESS", code: null, checkedAt }]);
+  });
+
+  it("writes the moment of the check, not a default", async () => {
+    const { service: subject, recorded } = service({});
+
+    const checkedAt = new Date("2026-08-26T15:41:00.000Z");
+    await subject.probeAndRecord(checkedAt);
+
+    // A `lastVerifiedAt` a HÍVÁS idejéből jön, nem a repository órájából: így
+    // a mérés és a feljegyzett időpont nem csúszhat el egymástól.
+    assert.equal(recorded[0]?.checkedAt.toISOString(), checkedAt.toISOString());
+  });
+
+  it("leaves no failure code behind after a later success", async () => {
+    let reject = true;
+    const { service: subject, recorded } = service({
+      probe: async () => {
+        if (reject) throw new MedusaAdminHttpError(403, "{}");
+      },
+    });
+
+    await subject.probeAndRecord(new Date("2026-08-26T15:42:00.000Z"));
+    reject = false;
+    await subject.probeAndRecord(new Date("2026-08-26T15:43:00.000Z"));
+
+    // A sikeres ág `null`-t ír a kódmezőbe. Enélkül a felületen egy régi
+    // hibakód maradna egy sikeres ellenőrzés mellett.
+    assert.equal(recorded[1]?.status, "SUCCESS");
+    assert.equal(recorded[1]?.code, null);
+  });
+
+  /**
+   * A NEM-RÖGZÍTŐ ÁG, SZÁNDÉKKÉNT KIMONDVA.
+   *
+   * A „nincs beállítva" állapot nem ír semmit, és ez helyes: nem történt
+   * ellenőrzés, tehát `FAILED`-et írni olyan mérést állítana, ami el sem jutott
+   * a másik oldalig. Eddig ez sehol nem volt kimondva, csak úgy volt -- és egy
+   * ki nem mondott döntés a következő olvasónak véletlennek látszik.
+   *
+   * Ez az ág EGYÚTTAL nem is tud sikeresnek látszani a felületen: ugyanez az
+   * állapot a „Nincs beállítva" jelvényt adja.
+   */
+  it("records nothing when there was nothing to verify", async () => {
+    const { service: subject, recorded } = service({
+      record: setting("ENV_FALLBACK"),
+      validate: () => {
+        throw new MedusaConnectionError("MEDUSA_CONNECTION_NOT_CONFIGURED");
+      },
+    });
+
+    const state = await subject.probeAndRecord(
+      new Date("2026-08-26T15:44:00.000Z"),
+    );
+
+    assert.equal(state.kind, "not-configured");
+    assert.deepEqual(recorded, []);
   });
 });
