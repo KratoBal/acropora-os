@@ -8,6 +8,7 @@ import {
   LABEL_LENGTH_MM,
   LABEL_NUMBER_FONT_MM,
   LABEL_PADDING_MM,
+  LABEL_ROUNDING_ALLOWANCE_MM,
   QR_MIN_MODULE_MM,
   QR_MODULES_ACROSS,
   labelAssetNumber,
@@ -72,14 +73,17 @@ describe("a lap a szalaghoz igazodik", () => {
 });
 
 describe("a QR mérete levezetés, nem beállítás", () => {
-  it("gives the code the whole band, minus the margins", () => {
+  it("gives the code the whole band, minus the margins and the slack", () => {
     const layout = labelLayout();
 
-    assert.equal(layout.qrSizeMm, LABEL_BAND_MM - 2 * LABEL_PADDING_MM);
+    assert.equal(
+      layout.qrSizeMm,
+      LABEL_BAND_MM - 2 * LABEL_PADDING_MM - LABEL_ROUNDING_ALLOWANCE_MM,
+    );
     assert.equal(layout.moduleMm, layout.qrSizeMm / QR_MODULES_ACROSS);
   });
 
-  it("spends the length exactly once", () => {
+  it("accounts for the whole length, and leaves the slack it planned", () => {
     const layout = labelLayout();
     const used =
       2 * LABEL_PADDING_MM +
@@ -87,13 +91,53 @@ describe("a QR mérete levezetés, nem beállítás", () => {
       LABEL_GAP_MM +
       layout.textWidthMm;
 
-    // Ha ez elcsúszik, a felirat vagy kilóg a szalagról, vagy helyet hagy
-    // üresen -- és egyik sem hibaüzenet, hanem egy rosszul kinéző címke.
+    // A lap minden milliméterének helye van: ami nincs felhasználva, az a
+    // tartalék. Ha ez elcsúszik, a felirat vagy kilóg a szalagról, vagy helyet
+    // hagy üresen -- és egyik sem hibaüzenet, hanem egy rosszul kinéző címke.
     assert.ok(
-      Math.abs(used - LABEL_LENGTH_MM) < 1e-9,
+      Math.abs(used + layout.widthSlackMm - LABEL_LENGTH_MM) < 1e-9,
       `a lap hossza ${LABEL_LENGTH_MM} mm, a felhasznált ${used} mm`,
     );
     assert.ok(layout.textWidthMm > 0, "a feliratnak maradnia kell helye");
+  });
+
+  /**
+   * A MÉRT HIBA, AMIT EZ ŐRIZ (2026-08-26 este). A kinyomtatott PDF KÉT oldalas
+   * lett, a második teljesen üres, és a nyomtató alkalmazása nem fogadta el.
+   * Mindkét oldal 48 x 24 mm volt, tehát a lapméret jó volt: a tartalom volt
+   * PONTOSAN akkora, mint a lap, mindkét irányban, nulla tartalékkal.
+   *
+   * Az elrendezés képpontban számol, és a 21 mm nem egész számú képpont. Egy
+   * felfelé kerekítés így új oldalt nyitott.
+   *
+   * EZ AZ ÁLLÍTÁS SZÁNDÉKOSAN NEM SZÁMRA SZÓL. Egy „a QR 20,7 mm" alakú teszt a
+   * következő méretváltoztatásnál újra nullára futna, és megint zöld lenne.
+   */
+  it("leaves room for a rounding up, in both directions", () => {
+    const layout = labelLayout();
+
+    assert.ok(
+      layout.heightSlackMm > 0,
+      `a magasságban nem maradt tartalék: ${layout.heightSlackMm} mm`,
+    );
+    assert.ok(
+      layout.widthSlackMm > 0,
+      `a hosszban nem maradt tartalék: ${layout.widthSlackMm} mm`,
+    );
+  });
+
+  it("sizes that room by the mechanism, not by taste", () => {
+    // A CSS képpont a formátum szerint 1/96 hüvelyk. Ennyi a legnagyobb ár,
+    // amit egy felfelé kerekítés kérhet, tehát ennyi a tartalék mértéke is.
+    assert.equal(LABEL_ROUNDING_ALLOWANCE_MM, 25.4 / 96);
+
+    const layout = labelLayout();
+    assert.ok(
+      Math.abs(layout.heightSlackMm - LABEL_ROUNDING_ALLOWANCE_MM) < 1e-9,
+    );
+    assert.ok(
+      Math.abs(layout.widthSlackMm - LABEL_ROUNDING_ALLOWANCE_MM) < 1e-9,
+    );
   });
 
   /**
@@ -130,7 +174,7 @@ describe("a QR mérete levezetés, nem beállítás", () => {
     assert.doesNotMatch(source, /const LABEL_QR_SIZE_MM/);
     assert.match(
       source,
-      /const qrSizeMm = LABEL_BAND_MM - 2 \* LABEL_PADDING_MM;/,
+      /const qrSizeMm =\s*LABEL_BAND_MM - 2 \* LABEL_PADDING_MM - LABEL_ROUNDING_ALLOWANCE_MM;/,
     );
   });
 });
