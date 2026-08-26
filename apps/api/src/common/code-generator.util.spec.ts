@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it, mock } from "node:test";
 
-import { generateCode } from "./code-generator.util.js";
+import { generateCode, randomCodeSuffix } from "./code-generator.util.js";
 
 /**
  * AMIERT EZ A FAJL LETEZIK.
@@ -77,6 +77,44 @@ describe("generateCode", () => {
     // Ugyanez a pillanat Budapesten 13:38:56. Ha valaha a helyi ido lesz az
     // alap, ez a sor mondja meg, hogy a valtozas SZANDEKOS volt.
     assert.doesNotMatch(code, /^ESZK-20260826-133856-/);
+  });
+
+  /**
+   * AZ UTKOZES, DETERMINISZTIKUSAN ELOALLITVA.
+   *
+   * Ket bizonylat akkor kap AZONOS szamot, ha ugyanabban a masodpercben keszul
+   * ES ugyanazt a negyjegyu veget huzza. A veletlenre varni nem teszt, hanem egy
+   * 65 536-bol egy esely, ezert a veg vezerelheto -- es igy az utkozes NEM
+   * ritka esemeny, hanem egy sor.
+   *
+   * EZ AZ ALLITAS MA MEG NEM JAVIT SEMMIT. Azt rogziti, hogy az utkozes
+   * LEHETSEGES es reprodukalhato: enelkul barmilyen kesobbi javitast csak
+   * hinni lehetne, merni nem.
+   */
+  it("mints two identical codes when the second and the tail both repeat", () => {
+    const fixedTail = () => "AB12";
+
+    const first = generateCode("ESZK", fixedTail);
+    const second = generateCode("ESZK", fixedTail);
+
+    assert.equal(first, second);
+    assert.equal(first, "ESZK-20260826-113856-AB12");
+  });
+
+  it("still differs when only the tail differs", () => {
+    // A kontroll: az elozo allitas nem azert zold, mert a generator MINDIG
+    // ugyanazt adja. Azonos masodperc, MAS veg -> mas kod.
+    const first = generateCode("ESZK", () => "AB12");
+    const second = generateCode("ESZK", () => "99F0");
+
+    assert.notEqual(first, second);
+  });
+
+  it("uses the real random tail when nobody passes one", () => {
+    // A varrat NEM valtoztatja meg a mai viselkedest: hivo nelkul ugyanaz a
+    // negy hexa karakter jon, mint eddig.
+    assert.match(generateCode("ESZK"), /-[0-9A-F]{4}$/);
+    assert.match(randomCodeSuffix(), /^[0-9A-F]{4}$/);
   });
 
   it("uses the same clock for every document family", () => {
