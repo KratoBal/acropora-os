@@ -1,5 +1,16 @@
-import { Body, Controller, Param, ParseUUIDPipe, Post } from "@nestjs/common";
-import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Param,
+  ParseUUIDPipe,
+  Post,
+} from "@nestjs/common";
+import {
+  AI_RATINGS_BY_AXIS,
+  PERMISSIONS,
+  type AuthenticatedUser,
+} from "@acropora/types";
 
 import { CurrentUser } from "../../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../../auth/decorators/require-permissions.decorator.js";
@@ -46,8 +57,26 @@ export class AiChatController {
     @Body() body: AiChatRatingDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
+    /**
+     * The value has to belong to the axis it was sent on.
+     *
+     * The DTO can only check that the value is one of the eight; whether it
+     * is legal on THIS axis needs both fields at once, which a field-level
+     * rule cannot see. Refusing here rather than one hop later means the
+     * person who pressed the button gets a sentence about their request
+     * instead of a database constraint violation.
+     */
+    const allowed = AI_RATINGS_BY_AXIS[body.axis] as readonly string[];
+
+    if (!allowed.includes(body.rating)) {
+      throw new BadRequestException(
+        `A(z) "${body.rating}" értékelés nem a(z) "${body.axis}" tengelyre való. Ezen a tengelyen ezek érvényesek: ${allowed.join(", ")}.`,
+      );
+    }
+
     return this.service.rate({
       messageId,
+      axis: body.axis,
       rating: body.rating,
       ratedBy: user.id,
     });

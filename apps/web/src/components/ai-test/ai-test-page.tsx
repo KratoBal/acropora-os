@@ -10,10 +10,10 @@ import {
   Textarea,
 } from "@acropora/ui";
 import {
-  AI_ANSWER_RATINGS,
+  AI_ACCURACY_RATINGS,
   hasPermission,
   PERMISSIONS,
-  type AiAnswerRating,
+  type AiAccuracyRating,
 } from "@acropora/types";
 import { useState } from "react";
 
@@ -40,7 +40,7 @@ import { aiChatApi, type AiChatReply } from "@/lib/api/ai-chat";
  * szolgáltatásban, és egy ötödik gomb, amit csak itt vennénk fel, a
  * gombnyomás pillanatában bukna el.
  */
-const RATING_LABELS: Record<AiAnswerRating, string> = {
+const ACCURACY_LABELS: Record<AiAccuracyRating, string> = {
   correct: "Helyes",
   inaccurate: "Pontatlan",
   dangerous: "Veszélyes",
@@ -51,9 +51,9 @@ interface Exchange {
   question: string;
   reply: AiChatReply;
   /** Amit a szerver ELTAROLT, nem amire a felhasználó kattintott. */
-  rating: AiAnswerRating | null;
+  rating: AiAccuracyRating | null;
   /** Amíg a mentés fut, ez látszik kiválasztottként. */
-  ratingPending: AiAnswerRating | null;
+  ratingPending: AiAccuracyRating | null;
   ratingError: string | null;
 }
 
@@ -135,7 +135,7 @@ export function AiTestPage() {
    * kiválasztottnak látszik, de a tárolt érték csak a válasz után változik -
    * hiba esetén a felület visszaáll oda, ahol a szerver szerint áll.
    */
-  const rate = async (index: number, rating: AiAnswerRating) => {
+  const rate = async (index: number, rating: AiAccuracyRating) => {
     const exchange = exchanges[index];
     const messageId = exchange?.reply.messageId;
     if (!exchange || !messageId || exchange.ratingPending) return;
@@ -150,7 +150,11 @@ export function AiTestPage() {
     update({ ratingPending: rating, ratingError: null });
 
     try {
-      const result = await aiChatApi.rate(token, messageId, rating);
+      /**
+       * A szakmai tengely. A nyelvezet-tengely gombsora kulon kerul be; a
+       * tengelyt itt is KI KELL mondani, mert az API nem talalgat.
+       */
+      const result = await aiChatApi.rate(token, messageId, "accuracy", rating);
 
       if (result.errorCode) {
         update({
@@ -160,8 +164,21 @@ export function AiTestPage() {
         return;
       }
 
+      /*
+        Amit a szerver visszaadott, csak akkor fogadjuk el, ha a SZAKMAI
+        tengely erteke. Nem tipus-trukk: ha valaha egy nyelvezet-ertek jonne
+        vissza erre a hivasra, az azt jelentene, hogy a ket tengely
+        osszekeveredett valahol a lancban - es akkor a kepernyon NE latszodjek
+        ugy, mintha rendben lenne.
+      */
+      const storedIsOnThisAxis = (
+        AI_ACCURACY_RATINGS as readonly string[]
+      ).includes(result.rating ?? "");
+
       update({
-        rating: result.rating ?? rating,
+        rating: storedIsOnThisAxis
+          ? (result.rating as AiAccuracyRating)
+          : rating,
         ratingPending: null,
         ratingError: null,
       });
@@ -300,7 +317,7 @@ export function AiTestPage() {
 
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm text-muted-foreground">Értékelés:</span>
-              {AI_ANSWER_RATINGS.map((rating) => (
+              {AI_ACCURACY_RATINGS.map((rating) => (
                 <Button
                   key={rating}
                   variant={
@@ -317,11 +334,11 @@ export function AiTestPage() {
                   }
                   onClick={() => void rate(index, rating)}
                 >
-                  {RATING_LABELS[rating]}
+                  {ACCURACY_LABELS[rating]}
                 </Button>
               ))}
               {exchange.rating ? (
-                <Badge>Elmentve: {RATING_LABELS[exchange.rating]}</Badge>
+                <Badge>Elmentve: {ACCURACY_LABELS[exchange.rating]}</Badge>
               ) : null}
               {exchange.ratingPending ? (
                 <span className="text-sm text-muted-foreground">Mentés...</span>

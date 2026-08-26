@@ -1,4 +1,8 @@
-import type { AiAnswerRating, AiAnswerRatingResult } from "@acropora/types";
+import type {
+  AiAnswerRating,
+  AiAnswerRatingResult,
+  AiRatingAxis,
+} from "@acropora/types";
 
 import { apiRequest } from "./client";
 
@@ -36,7 +40,12 @@ export const aiChatApi = {
   },
 
   /**
-   * Sends a judgement about one answer.
+   * Sends a judgement about one answer, on one axis.
+   *
+   * The axis is a required parameter rather than a defaulted one, all the way
+   * up from the database: a call that forgot it would file a judgement about
+   * wording as a judgement about facts, and afterwards nothing could tell
+   * them apart.
    *
    * The author is not a parameter: the API takes it from the session. A page
    * that could name the rater would be a page that could rate as somebody
@@ -45,6 +54,7 @@ export const aiChatApi = {
   rate(
     token: string,
     messageId: string,
+    axis: AiRatingAxis,
     rating: AiAnswerRating,
     signal?: AbortSignal,
   ) {
@@ -53,7 +63,7 @@ export const aiChatApi = {
       token,
       {
         method: "POST",
-        body: JSON.stringify({ rating }),
+        body: JSON.stringify({ axis, rating }),
         signal,
       },
     );

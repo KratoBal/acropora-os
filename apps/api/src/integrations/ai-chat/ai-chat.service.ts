@@ -1,6 +1,10 @@
 import { Inject, Injectable, Optional } from "@nestjs/common";
 
-import type { AiAnswerRating, AiAnswerRatingResult } from "@acropora/types";
+import type {
+  AiAnswerRating,
+  AiAnswerRatingResult,
+  AiRatingAxis,
+} from "@acropora/types";
 
 import {
   AI_CHAT_ENVIRONMENT,
@@ -155,6 +159,7 @@ export class AiChatService {
    */
   async rate(input: {
     messageId: string;
+    axis: AiRatingAxis;
     rating: AiAnswerRating;
     ratedBy: string;
   }): Promise<AiAnswerRatingResult> {
@@ -176,6 +181,7 @@ export class AiChatService {
             "content-type": "application/json",
           },
           body: JSON.stringify({
+            axis: input.axis,
             rating: input.rating,
             ratedBy: input.ratedBy,
           }),
@@ -203,6 +209,7 @@ export class AiChatService {
     }
 
     return {
+      axis: (body.axis as AiRatingAxis | undefined) ?? null,
       rating: (body.rating as AiAnswerRating | undefined) ?? null,
       ratedAt: typeof body.ratedAt === "string" ? body.ratedAt : null,
       errorCode: null,
@@ -211,6 +218,7 @@ export class AiChatService {
 
   private ratingFailure(errorCode: string): AiAnswerRatingResult {
     return {
+      axis: null,
       rating: null,
       ratedAt: null,
       errorCode,

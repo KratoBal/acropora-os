@@ -174,6 +174,7 @@ describe("AiChatService.rate", () => {
 
   const stored = {
     messageId: MESSAGE_ID,
+    axis: "accuracy",
     rating: "inaccurate",
     ratedBy: "user_7",
     ratedAt: "2026-08-26T20:00:00.000Z",
@@ -185,6 +186,7 @@ describe("AiChatService.rate", () => {
 
     const result = await service.rate({
       messageId: MESSAGE_ID,
+      axis: "accuracy",
       rating: "inaccurate",
       ratedBy: "user_7",
     });
@@ -201,6 +203,7 @@ describe("AiChatService.rate", () => {
     );
     assert.equal(JSON.stringify(result).includes(TOKEN), false);
     assert.deepEqual(result, {
+      axis: "accuracy",
       rating: "inaccurate",
       ratedAt: "2026-08-26T20:00:00.000Z",
       errorCode: null,
@@ -215,11 +218,13 @@ describe("AiChatService.rate", () => {
 
     await service.rate({
       messageId: MESSAGE_ID,
+      axis: "accuracy",
       rating: "correct",
       ratedBy: "user_9",
     });
 
     assert.deepEqual(JSON.parse(calls[0]?.init.body as string), {
+      axis: "accuracy",
       rating: "correct",
       ratedBy: "user_9",
     });
@@ -231,11 +236,13 @@ describe("AiChatService.rate", () => {
 
     const result = await service.rate({
       messageId: MESSAGE_ID,
+      axis: "accuracy",
       rating: "correct",
       ratedBy: "user_7",
     });
 
     assert.deepEqual(result, {
+      axis: null,
       rating: null,
       ratedAt: null,
       errorCode: "ai_not_configured",
@@ -253,11 +260,13 @@ describe("AiChatService.rate", () => {
 
     const result = await service.rate({
       messageId: MESSAGE_ID,
+      axis: "accuracy",
       rating: "correct",
       ratedBy: "user_7",
     });
 
     assert.deepEqual(result, {
+      axis: null,
       rating: null,
       ratedAt: null,
       errorCode: "answer not found",
@@ -274,11 +283,13 @@ describe("AiChatService.rate", () => {
 
     const result = await service.rate({
       messageId: MESSAGE_ID,
+      axis: "accuracy",
       rating: "correct",
       ratedBy: "user_7",
     });
 
     assert.deepEqual(result, {
+      axis: null,
       rating: null,
       ratedAt: null,
       errorCode: "ai_gateway_timeout",

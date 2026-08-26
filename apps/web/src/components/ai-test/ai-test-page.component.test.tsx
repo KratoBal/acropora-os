@@ -77,9 +77,12 @@ describe("AiTestPage értékelés", () => {
     fireEvent.click(screen.getByRole("button", { name: "Pontatlan" }));
 
     await waitFor(() => {
+      // A tengely is resze a hivasnak, es nem alapertelmezes: az API nem
+      // talalgat, tehat a feluletnek ki kell mondania, melyikrol van szo.
       expect(api.rate).toHaveBeenCalledWith(
         "token-1",
         "b2c4d6e8-0a1b-4c3d-8e5f-9a7b6c5d4e3f",
+        "accuracy",
         "inaccurate",
       );
     });
@@ -90,6 +93,7 @@ describe("AiTestPage értékelés", () => {
     // A néma kudarc a rosszabbik eset: a gomb kiválasztottnak látszana, és a
     // mérésből csendben hiányozna egy sor.
     api.rate.mockResolvedValueOnce({
+      axis: null,
       rating: null,
       ratedAt: null,
       errorCode: "answer not found",
@@ -144,5 +148,28 @@ describe("AiTestPage értékelés", () => {
       ).toBe(true);
     }
     expect(api.rate).not.toHaveBeenCalled();
+  });
+
+  it("nem fogadja el a masik tengely erteket valaszkent", async () => {
+    /*
+      Ha egy nyelvezet-ertek erkezne vissza egy szakmai hivasra, az azt
+      jelentene, hogy a ket tengely osszekeveredett valahol a lancban. A
+      kepernyon ilyenkor NE latszodjek ugy, mintha rendben lenne: a felulet
+      azt mutatja, amit a felhasznalo valasztott, nem a hibas valaszt.
+    */
+    api.rate.mockResolvedValueOnce({
+      axis: "language",
+      rating: "natural",
+      ratedAt: "2026-08-26T20:00:00.000Z",
+      errorCode: null,
+    });
+
+    render(<AiTestPage />);
+    await ask();
+
+    fireEvent.click(screen.getByRole("button", { name: "Helyes" }));
+
+    expect(await screen.findByText("Elmentve: Helyes")).toBeTruthy();
+    expect(screen.queryByText("Elmentve: natural")).toBeNull();
   });
 });
