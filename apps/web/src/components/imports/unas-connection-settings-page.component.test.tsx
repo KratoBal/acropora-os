@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { Session, UnasConnectionView } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -94,10 +100,6 @@ describe("UnasConnectionSettingsPage", () => {
   });
 
   it("disables the connection after confirmation", async () => {
-    vi.stubGlobal(
-      "confirm",
-      vi.fn(() => true),
-    );
     api.disable.mockResolvedValue(notConfiguredView);
     render(<UnasConnectionSettingsPage />);
     await screen.findByText("Beállítva");
@@ -106,20 +108,36 @@ describe("UnasConnectionSettingsPage", () => {
       screen.getByRole("button", { name: "Kapcsolat letiltása" }),
     );
 
+    /**
+     * A kérdés a SAJÁT ablakunkban jelenik meg, és megnevezi, mi áll le, meg
+     * hogy honnan lehet visszakapcsolni. A böngésző `confirm` ablakát ez a
+     * teszt korábban egy globális csonkkal helyettesítette -- abból nem
+     * látszott, hogy a kérdés mond-e egyáltalán valamit.
+     */
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent(/szinkron is leáll/);
+    expect(dialog).toHaveTextContent(/új API-kulcs/);
+    expect(api.disable).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Kapcsolat letiltása" }),
+    );
+
     await screen.findByText("Nincs beállítva");
     expect(api.disable).toHaveBeenCalledWith("token-OWNER");
   });
 
   it("does not disable the connection if the confirmation is declined", async () => {
-    vi.stubGlobal(
-      "confirm",
-      vi.fn(() => false),
-    );
     render(<UnasConnectionSettingsPage />);
     await screen.findByText("Beállítva");
 
     fireEvent.click(
       screen.getByRole("button", { name: "Kapcsolat letiltása" }),
+    );
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Mégsem",
+      }),
     );
 
     expect(api.disable).not.toHaveBeenCalled();
