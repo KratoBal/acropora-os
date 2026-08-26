@@ -10,6 +10,7 @@ import {
   LABEL_PADDING_MM,
   QR_MIN_MODULE_MM,
   QR_MODULES_ACROSS,
+  labelAssetNumber,
   labelLayout,
   labelPageSize,
   mmToPoints,
@@ -233,13 +234,79 @@ describe("az eszközszám kifér a felirat sávjába", () => {
 
   it("fits on one line, with room for a font that is not Helvetica", () => {
     const { textWidthMm } = labelLayout();
-    const needed = widthEm(SAMPLE) * LABEL_NUMBER_FONT_MM;
+    // A CÍMKÉRE A RÖVIDÍTETT ALAK KERÜL, tehát azt kell mérni. A teljes szám
+    // 72 mm-es címkét kért; ez a sor őrzi, hogy a rövidebb címke a rövidebb
+    // szöveghez tartozik, és nem attól lett rövidebb, hogy valaki lejjebb vette
+    // a betűméretet.
+    // ÉS A LEGSZÉLESEBB LEHETSÉGES AZONOSÍTÓRA, nem a mintára: a véletlen rész
+    // hexa, az `A`-tól `D`-ig tartó betűk pedig szélesebbek a számjegyeknél. Egy
+    // mintával mérve a címke csak azoknál az eszközöknél lógna ki, amelyek
+    // véletlenül csupa betűs véget kaptak.
+    const widest = labelAssetNumber("ESZK-20260826-000000-AAAA");
+    assert.equal(widest.length, labelAssetNumber(SAMPLE).length);
+    const needed = widthEm(widest) * LABEL_NUMBER_FONT_MM;
 
     assert.ok(
       needed * 1.1 <= textWidthMm,
       `a szám ${needed.toFixed(1)} mm-t kér ${LABEL_NUMBER_FONT_MM} mm-es betűvel, ` +
         `a sáv ${textWidthMm} mm -- 10 százalék ráhagyással nem fér ki`,
     );
+  });
+
+  it("would not fit if the whole number were printed", () => {
+    const { textWidthMm } = labelLayout();
+    const whole = widthEm(SAMPLE) * LABEL_NUMBER_FONT_MM;
+
+    // A KONTROLL a rövidítéshez: ez a címke a TELJES számnak már nem elég. Ha
+    // valaha zöld lesz, akkor vagy a címke nőtt meg, vagy a betű zsugorodott --
+    // és mindkettő olyan változás, amit észre kell venni.
+    assert.ok(whole > textWidthMm);
+  });
+});
+
+/**
+ * A RÖVIDÍTÉS MÉRTÉKE NEM ÍZLÉS, HANEM EGYEDISÉG.
+ *
+ * A négyjegyű véletlen rész önmagában 65 536 értéket vehet fel, ami 302
+ * eszköznél már 50 százalék eséllyel ad két egyforma címkét. Az időponttal
+ * együtt a tér 86 400-szor nagyobb. Ezért két blokk kerül a címkére, nem egy.
+ */
+describe("labelAssetNumber", () => {
+  const SAMPLE = "ESZK-20260826-133525-AB12";
+
+  it("keeps the two blocks that carry the identity", () => {
+    assert.equal(labelAssetNumber(SAMPLE), "133525-AB12");
+  });
+
+  it("keeps the time block, not only the random one", () => {
+    // EZ A TESZT AZ EGYEDISÉGRŐL SZÓL. Ha valaha csak az utolsó blokk maradna,
+    // ez pirosra vált -- és pont az a változás, ami 302 eszköznél ütközik.
+    assert.match(labelAssetNumber(SAMPLE), /^\d{6}-/);
+    assert.ok(labelAssetNumber(SAMPLE).length > 4);
+  });
+
+  it("stays a suffix of the full number, so search still finds it", () => {
+    // Az eszközkereső `contains` illesztést használ (service-assets
+    // repository). Ez CSAK akkor működik, ha a rövid alak a teljes szám
+    // összefüggő részlete. Ha valaha átrendezné a blokkokat, a visszakeresés
+    // némán szűnne meg.
+    assert.ok(SAMPLE.endsWith(labelAssetNumber(SAMPLE)));
+  });
+
+  it("separates two assets born in the same second", () => {
+    const first = labelAssetNumber("ESZK-20260826-133525-AB12");
+    const second = labelAssetNumber("ESZK-20260826-133525-99F0");
+
+    // A maradék eset, amit ez NEM fed le, és ami tudatosan vállalt: két eszköz
+    // KÜLÖNBÖZŐ NAPON, ugyanabban a másodpercben, ugyanazzal a véletlen véggel.
+    assert.notEqual(first, second);
+  });
+
+  it("leaves an unexpected shape alone", () => {
+    // Rossz azonosító rosszabb, mint egy hosszú címke.
+    assert.equal(labelAssetNumber("ESZK-123"), "ESZK-123");
+    assert.equal(labelAssetNumber("BARMI"), "BARMI");
+    assert.equal(labelAssetNumber(""), "");
   });
 });
 
@@ -254,6 +321,9 @@ describe("a képernyő ugyanabból a levezetésből dolgozik", () => {
     assert.match(source, /labelHtml/);
     assert.match(source, /labelPageSize\(\)/);
     assert.match(source, /labelLayout\(\)/);
+    // A képernyő a RÖVIDÍTETT alakot írja ki. Ha valaha visszaírná a teljes
+    // számot, a címke kilógna a szalagról, és ezt semmi más nem jelezné.
+    assert.match(source, /labelAssetNumber\(assetNumber\)/);
   });
 
   it("never writes the millimetres into the style by hand", () => {

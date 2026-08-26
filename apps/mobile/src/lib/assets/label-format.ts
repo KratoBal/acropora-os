@@ -34,13 +34,20 @@ export const LABEL_BAND_MM = 24;
  * BEMENET 2: a lap HOSSZA, a szalag irányában, milliméterben.
  *
  * A szalag folytonos, tehát ezt nem a nyomtató korlátozza, hanem az, hogy mi
- * fér ki olvashatóan. A mai érték az eszközszám hosszából jön: a szám 25
- * karakter (`ESZK-ÉÉÉÉHHNN-ÓÓPPMM-XXXX`, lásd `apps/api/src/common/
- * code-generator.util.ts`), és ez a hossz engedi kiírni egy sorban, olvasható
- * betűmérettel. Ha rövidebb címke kell, a betűméret vagy a kiírt szám rövidül
- * -- ez üzleti döntés, nem geometria.
+ * fér ki olvashatóan. Az érték a CÍMKÉRE KERÜLŐ, rövidített azonosító hosszából
+ * jön (lásd `labelAssetNumber`): 11 karakter, ami 3 mm-es betűvel egy sorban
+ * kifér, tartalékkal. A teljes, 25 karakteres eszközszám 72 mm-t kért volna.
+ *
+ * A méret a LEGSZÉLESEBB lehetséges azonosítóra áll, nem egy mintára: a
+ * véletlen rész hexa, és az `A`-tól `D`-ig tartó betűk szélesebbek a
+ * számjegyeknél. Egy mintával mérve a címke azoknál az eszközöknél lógna ki,
+ * amelyek véletlenül csupa betűs véget kaptak -- vagyis ritkán és
+ * kiszámíthatatlanul.
+ *
+ * Balázs döntése (2026-08-26): a címkén elég a szám vége. A rövidítés MÉRTÉKÉT
+ * viszont nem az ízlés szabja meg, hanem az egyediség -- lásd `labelAssetNumber`.
  */
-export const LABEL_LENGTH_MM = 72;
+export const LABEL_LENGTH_MM = 48;
 
 /** BEMENET 3: belső margó minden oldalon. */
 export const LABEL_PADDING_MM = 1.5;
@@ -110,6 +117,46 @@ export function labelLayout(): LabelLayout {
     textWidthMm,
     moduleMm: qrSizeMm / QR_MODULES_ACROSS,
   };
+}
+
+/**
+ * A CÍMKÉN RÖVIDÍTETT AZONOSÍTÓ ÁLL, NEM A TELJES ESZKÖZSZÁM.
+ *
+ * EZ ITT KELETKEZIK. Ha valaki egy kinyomtatott címkét keres vissza, a
+ * rövidített alakot fogja beírni, és tudnia kell, hogy az nem a teljes szám.
+ *
+ * A TELJES SZÁM ALAKJA (`apps/api/src/common/code-generator.util.ts`):
+ * `ESZK-20260815-113856-3906`, vagyis előtag, dátum, időpont és egy négyjegyű
+ * véletlen rész. A címkére az UTOLSÓ KÉT BLOKK kerül: `113856-3906`.
+ *
+ * MIÉRT KETTŐ, ÉS MIÉRT NEM CSAK AZ UTOLSÓ. A négyjegyű rész 16 bit véletlen
+ * (a `randomUUID` eleje, mérve: 200 ezer húzásból 62 428 különböző érték a
+ * 65 536-ból, vagyis egyenletes). Ennyiből 302 eszköznél már 50 százalék az
+ * esély, hogy két eszköz UGYANAZT a címkét kapja. Az időponttal együtt a tér
+ * 86 400-szor nagyobb, és ugyanez az esély tízezer eszköznél is 1 százalék
+ * alatt marad. A dátum blokk elhagyása tehát olcsó, az időponté nem.
+ *
+ * AMIT EZ NEM AD: garanciát. Egyediséget csak a TELJES számra köt az adatbázis
+ * (`assetNumber @unique`). A maradék eset az, ha két eszköz KÜLÖNBÖZŐ NAPON,
+ * ugyanabban a másodpercben, ugyanazzal a véletlen véggel születik.
+ *
+ * ÉS AMIÉRT A VISSZAKERESÉS MŰKÖDIK: a rövidített alak a teljes szám VÉGE,
+ * vagyis összefüggő részlete. Az eszközkereső `contains` illesztést használ
+ * (`service-assets.repository.ts`), tehát a címkéről beírt `113856-3906`
+ * megtalálja a teljes számot, minden további változtatás nélkül.
+ *
+ * FIGYELEM, AMI NEM LÁTSZIK RAJTA: az időpont UTC, mert a szerver
+ * `toISOString()` alapján állítja elő. A címkén álló `113856` tehát nyáron
+ * 13:38:56 budapesti időnek felel meg. Ez azonosítónak jó, órának nem.
+ */
+export function labelAssetNumber(assetNumber: string): string {
+  const blocks = assetNumber.split("-");
+
+  // Ismeretlen alak: NEM rövidítünk. Rossz azonosító rosszabb, mint egy hosszú
+  // címke, és a rövidítés csak akkor nyer bármit, ha van mit elhagyni.
+  if (blocks.length < 3) return assetNumber;
+
+  return blocks.slice(-2).join("-");
 }
 
 /**
