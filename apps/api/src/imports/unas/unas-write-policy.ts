@@ -21,10 +21,31 @@ export interface ProductOwnership {
 /**
  * A mezők, amiket a termék-szinkron ír egy UNAS-tulajdonú terméken.
  *
- * Ez a lista LEÍRÁS és MÉRCE egyszerre: a szinkron írás-halmaza ma pontosan
- * ennyi, és ha valaki bővíti anélkül, hogy ide felvenné, a policy-teszt
- * megmondja. Az ár szándékosan nincs köztük - az külön terület, és a
- * `ProductVariant` modellen ma egyetlen ár-mező sincs.
+ * **Ez a lista LEÍRÁS. Nem őr, és ma semmit nem akadályoz meg.** Korábban az
+ * állt itt, hogy mérce is egyben, és hogy ha valaki bővíti a szinkron
+ * írás-halmazát anélkül, hogy ide felvenné, a policy-teszt megmondja. Ez nem
+ * volt igaz, és 2026-08-27-én mérés cáfolta:
+ *
+ * - a szinkron közvetlenül ír (`transaction.product.update`), és ezt a listát
+ *   nem nézi meg;
+ * - a lista és az `isUnasWritableField` egyetlen hívója a saját tesztje;
+ * - a teszt pedig egy MÁSIK, kézzel írt mezőlistát hasonlít ehhez, tehát
+ *   önmagát ellenőrzi.
+ *
+ * Vagyis ha holnap valaki új mezőt kezd írni a szinkronban, sem ez a lista nem
+ * változik, sem a teszt nem pirosodik ki. **Ezt kimondani azért fontosabb,
+ * mint elhallgatni, mert a veszély nem a kódban van, hanem abban, hogy valaki
+ * erre a bekezdésre hivatkozva dönt: "nyugodtan bővíthetjük, a teszt úgyis
+ * megfogja."**
+ *
+ * Ami a lista MA is ér: leírja, mit ír a szinkron, és ez a leírás ma pontos.
+ * Aki a mezőtulajdont akarja megérteni, innen indul.
+ *
+ * A valódi őrzés - hogy a szinkron írása ténylegesen ezen a listán menjen át -
+ * külön munka, és a mezőtulajdon-körbe tartozik. Kártya: a386f828.
+ *
+ * Az ár szándékosan nincs a listán: az külön terület, és a `ProductVariant`
+ * modellen ma egyetlen ár-mező sincs.
  */
 export const UNAS_WRITABLE_PRODUCT_FIELDS = [
   "name",
