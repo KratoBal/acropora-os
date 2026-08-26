@@ -12,6 +12,7 @@ import type {
 } from "@acropora/types";
 
 import { generateCode } from "../../common/code-generator.util.js";
+import { retryOnTakenCode } from "../../common/unique-code.util.js";
 
 const ACTIVE_SYNC_KEY = "UNAS_CUSTOMERS";
 const EXTERNAL_ENTITY_TYPE = "Customer";
@@ -203,165 +204,189 @@ export class UnasCustomerSyncRepository extends Repository {
   /// eltérése esetén frissül a törzsadat és a BILLING/SHIPPING cím (az OTHER
   /// típusú, kézzel felvitt címek érintetlenek maradnak); egyezés esetén
   /// nincs írás.
+  ///
+  /// AZ UJ VEVO SZAMA IDEBENT KESZUL, es ezert all a hivas a burkolatban: egy
+  /// ismeretlen UNAS-vevohoz `generateCode("VEVO")` huz szamot, es ket olyan
+  /// mentes, amely ugyanabban a masodpercben ugyanazt a veget huzza, ma az
+  /// egesz kort elbuktatja. A burkolat nem kap kodot kivulrol: az EGESZ
+  /// tranzakciot futtatja ujra, es a huzas magatol ujra megtortenik, minden
+  /// erintett vevore kulon.
+  ///
+  /// AMI AZ UJRAFUTTATAST BIZTONSAGOSSA TESZI, ES AMIERT NEM KELETKEZIK
+  /// DUPLIKATUM: az elbukott kiserlet semmit nem hagy maga utan. A futas sora
+  /// visszagorgetve ujra RUNNING allapotu, tehat a bevezeto ellenorzes a
+  /// masodik kiserletben is atmegy, es a mar ismert UNAS-azonositokat ugyanaz
+  /// az `externalReference` keresés talalja meg, mint elsore. A "letrehoz vagy
+  /// frissit" dontes tehat minden kiserletben ugyanugy dol el.
+  ///
+  /// AMIBE KERUL: egy ujrafuttatas a TELJES koteget ujra vegigviszi. Ez igy
+  /// helyes, mert a tranzakcio mindent vagy semmit: az elbukott kiserlet utan
+  /// nincs felig alkalmazott kotegunk, es az alternativa az, hogy egyetlen
+  /// vevoszam-utkozes miatt az egesz kor elvesz.
   async apply(
     runId: string,
     customers: readonly UnasApiCustomer[],
     windowStart: Date | null,
     windowEnd: Date,
   ): Promise<UnasCustomerSyncApplyResult> {
-    return prisma.$transaction(
-      async (tx) => {
-        const run = await tx.unasCustomerSyncRun.findUniqueOrThrow({
-          where: { id: runId },
-        });
-        if (run.status !== "RUNNING")
-          throw new Error(`INVALID_CUSTOMER_SYNC_RUN_STATE:${run.status}`);
-
-        let createdCount = 0;
-        let updatedCount = 0;
-        let unchangedCount = 0;
-
-        for (const customer of customers) {
-          const canonical = toCanonical(customer);
-          const canonicalHash = JSON.stringify(canonical);
-          const reference = await tx.externalReference.findUnique({
-            where: {
-              system_entityType_externalId: {
-                system: "UNAS",
-                entityType: EXTERNAL_ENTITY_TYPE,
-                externalId: customer.externalId,
-              },
-            },
+    return retryOnTakenCode({ field: "customerNumber" }, () =>
+      prisma.$transaction(
+        async (tx) => {
+          const run = await tx.unasCustomerSyncRun.findUniqueOrThrow({
+            where: { id: runId },
           });
+          if (run.status !== "RUNNING")
+            throw new Error(`INVALID_CUSTOMER_SYNC_RUN_STATE:${run.status}`);
 
-          if (!reference) {
-            const created = await tx.customer.create({
+          let createdCount = 0;
+          let updatedCount = 0;
+          let unchangedCount = 0;
+
+          for (const customer of customers) {
+            const canonical = toCanonical(customer);
+            const canonicalHash = JSON.stringify(canonical);
+            const reference = await tx.externalReference.findUnique({
+              where: {
+                system_entityType_externalId: {
+                  system: "UNAS",
+                  entityType: EXTERNAL_ENTITY_TYPE,
+                  externalId: customer.externalId,
+                },
+              },
+            });
+
+            if (!reference) {
+              const created = await tx.customer.create({
+                data: {
+                  customerNumber: generateCode("VEVO"),
+                  type: canonical.type,
+                  displayName: canonical.displayName,
+                  email: canonical.email,
+                  phone: canonical.phone,
+                  addresses: {
+                    create: [canonical.billing, canonical.shipping]
+                      .filter((address): address is AddressInput =>
+                        Boolean(address),
+                      )
+                      .map((address, index) => ({
+                        type: address.type,
+                        name: address.name,
+                        country: address.country,
+                        postalCode: address.postalCode,
+                        city: address.city,
+                        line1: address.line1,
+                        isDefault: index === 0,
+                      })),
+                  },
+                },
+              });
+              await tx.externalReference.create({
+                data: {
+                  system: "UNAS",
+                  entityType: EXTERNAL_ENTITY_TYPE,
+                  entityId: created.id,
+                  externalId: customer.externalId,
+                  metadata: json({ hash: canonicalHash }),
+                  lastSyncedAt: windowEnd,
+                },
+              });
+              createdCount += 1;
+              continue;
+            }
+
+            const previousHash = (
+              reference.metadata as { hash?: string } | null
+            )?.hash;
+            if (previousHash === canonicalHash) {
+              await tx.externalReference.update({
+                where: { id: reference.id },
+                data: { lastSyncedAt: windowEnd },
+              });
+              unchangedCount += 1;
+              continue;
+            }
+
+            await tx.customer.update({
+              where: { id: reference.entityId },
               data: {
-                customerNumber: generateCode("VEVO"),
                 type: canonical.type,
                 displayName: canonical.displayName,
                 email: canonical.email,
                 phone: canonical.phone,
-                addresses: {
-                  create: [canonical.billing, canonical.shipping]
-                    .filter((address): address is AddressInput =>
-                      Boolean(address),
-                    )
-                    .map((address, index) => ({
-                      type: address.type,
-                      name: address.name,
-                      country: address.country,
-                      postalCode: address.postalCode,
-                      city: address.city,
-                      line1: address.line1,
-                      isDefault: index === 0,
-                    })),
-                },
               },
             });
-            await tx.externalReference.create({
+            await tx.customerAddress.deleteMany({
+              where: {
+                customerId: reference.entityId,
+                type: { in: ["BILLING", "SHIPPING"] },
+              },
+            });
+            const addresses = [canonical.billing, canonical.shipping].filter(
+              (address): address is AddressInput => Boolean(address),
+            );
+            if (addresses.length > 0)
+              await tx.customerAddress.createMany({
+                data: addresses.map((address, index) => ({
+                  customerId: reference.entityId,
+                  type: address.type,
+                  name: address.name,
+                  country: address.country,
+                  postalCode: address.postalCode,
+                  city: address.city,
+                  line1: address.line1,
+                  isDefault: index === 0,
+                })),
+              });
+            await tx.externalReference.update({
+              where: { id: reference.id },
               data: {
-                system: "UNAS",
-                entityType: EXTERNAL_ENTITY_TYPE,
-                entityId: created.id,
-                externalId: customer.externalId,
                 metadata: json({ hash: canonicalHash }),
                 lastSyncedAt: windowEnd,
               },
             });
-            createdCount += 1;
-            continue;
+            updatedCount += 1;
           }
 
-          const previousHash = (reference.metadata as { hash?: string } | null)
-            ?.hash;
-          if (previousHash === canonicalHash) {
-            await tx.externalReference.update({
-              where: { id: reference.id },
-              data: { lastSyncedAt: windowEnd },
-            });
-            unchangedCount += 1;
-            continue;
-          }
-
-          await tx.customer.update({
-            where: { id: reference.entityId },
-            data: {
-              type: canonical.type,
-              displayName: canonical.displayName,
-              email: canonical.email,
-              phone: canonical.phone,
-            },
-          });
-          await tx.customerAddress.deleteMany({
+          await tx.integrationCursor.upsert({
             where: {
-              customerId: reference.entityId,
-              type: { in: ["BILLING", "SHIPPING"] },
+              provider_stream: { provider: "UNAS", stream: "CUSTOMERS" },
             },
+            create: {
+              provider: "UNAS",
+              stream: "CUSTOMERS",
+              lastSuccessfulWindowEnd: windowEnd,
+            },
+            update: { lastSuccessfulWindowEnd: windowEnd },
           });
-          const addresses = [canonical.billing, canonical.shipping].filter(
-            (address): address is AddressInput => Boolean(address),
-          );
-          if (addresses.length > 0)
-            await tx.customerAddress.createMany({
-              data: addresses.map((address, index) => ({
-                customerId: reference.entityId,
-                type: address.type,
-                name: address.name,
-                country: address.country,
-                postalCode: address.postalCode,
-                city: address.city,
-                line1: address.line1,
-                isDefault: index === 0,
-              })),
-            });
-          await tx.externalReference.update({
-            where: { id: reference.id },
+          await tx.unasCustomerSyncRun.update({
+            where: { id: runId },
             data: {
-              metadata: json({ hash: canonicalHash }),
-              lastSyncedAt: windowEnd,
+              activeKey: null,
+              status: "APPLIED",
+              completedAt: new Date(),
+              customersSeen: customers.length,
+              createdCount,
+              updatedCount,
+              unchangedCount,
             },
           });
-          updatedCount += 1;
-        }
 
-        await tx.integrationCursor.upsert({
-          where: { provider_stream: { provider: "UNAS", stream: "CUSTOMERS" } },
-          create: {
-            provider: "UNAS",
-            stream: "CUSTOMERS",
-            lastSuccessfulWindowEnd: windowEnd,
-          },
-          update: { lastSuccessfulWindowEnd: windowEnd },
-        });
-        await tx.unasCustomerSyncRun.update({
-          where: { id: runId },
-          data: {
-            activeKey: null,
-            status: "APPLIED",
-            completedAt: new Date(),
+          return {
+            runId,
+            status: "APPLIED" as const,
             customersSeen: customers.length,
             createdCount,
             updatedCount,
             unchangedCount,
-          },
-        });
-
-        return {
-          runId,
-          status: "APPLIED" as const,
-          customersSeen: customers.length,
-          createdCount,
-          updatedCount,
-          unchangedCount,
-          windowStart: windowStart?.toISOString() ?? null,
-          windowEnd: windowEnd.toISOString(),
-        };
-      },
-      {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        timeout: 60_000,
-      },
+            windowStart: windowStart?.toISOString() ?? null,
+            windowEnd: windowEnd.toISOString(),
+          };
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          timeout: 60_000,
+        },
+      ),
     );
   }
 }

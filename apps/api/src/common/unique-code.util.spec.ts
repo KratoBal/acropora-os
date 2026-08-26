@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it, mock } from "node:test";
 
-import { withUniqueCode } from "./unique-code.util.js";
+import { generateCode } from "./code-generator.util.js";
+import { retryOnTakenCode, withUniqueCode } from "./unique-code.util.js";
 
 /**
  * AMIT EZ A FAJL ORIZ.
@@ -220,6 +221,149 @@ describe("withUniqueCode", () => {
     await assert.rejects(() =>
       withUniqueCode(
         { prefix: "ESZK", field: "assetNumber", maxAttempts: 0 },
+        async () => null,
+      ),
+    );
+  });
+});
+
+/**
+ * A TESTVER-ESZKOZ, ES AMIERT KULON ALL.
+ *
+ * Harom helyen a kodot nem a burkolat adja, hanem a tranzakcio MELYEN levo
+ * segedfuggveny huzza (a tukor vevoszamat a `syncWorksheetMirror`, a
+ * keszlet-mozgas szamat a `postInventoryMovement` hivas). Ott nincs mit
+ * atadni: elég a teljes irast ujra lefuttatni, mert MINDEN huzas azon belul
+ * tortenik.
+ *
+ * Ezert a lenyegi allitas itt nem az, hogy "ujra fut", hanem hogy az
+ * ujrafuttatas MAS kodot allit elo. Ha ez nem igaz, a burkolat nem javit
+ * semmit, csak otször veszit ugyanazzal.
+ */
+describe("retryOnTakenCode", () => {
+  before(() => {
+    mock.timers.enable({
+      apis: ["Date"],
+      now: Date.UTC(2026, 7, 26, 11, 38, 56, 0),
+    });
+  });
+  after(() => {
+    mock.timers.reset();
+  });
+
+  it("mints a NEW code inside the write on the retry", async () => {
+    const minted: string[] = [];
+    const tail = tails("AB12", "99F0");
+    let calls = 0;
+
+    // Ez a closure azt utanozza, amit a harom valodi hely csinal: a kodot
+    // idebent huzza, nem kivulrol kapja.
+    const result = await retryOnTakenCode(
+      { field: "customerNumber" },
+      async () => {
+        calls += 1;
+        minted.push(generateCode("PARTNER", tail));
+        if (calls === 1) throw duplicate("customerNumber");
+        return "kesz";
+      },
+    );
+
+    assert.equal(result, "kesz");
+    assert.equal(minted.length, 2);
+    assert.notEqual(minted[0], minted[1]);
+    assert.equal(minted[1], "PARTNER-20260826-113856-99F0");
+  });
+
+  /**
+   * A FALSZIFIKACIO. Ugyanez a burkolat NELKUL: egyetlen probalkozas, es a
+   * hiba a hivo fele megy -- pontosan a mai viselkedes. Enelkul az elozo
+   * allitas akkor is zold lenne, ha a burkolat semmit nem csinalna.
+   */
+  it("without the wrapper the same write fails on the first collision", async () => {
+    let calls = 0;
+    const error = duplicate("customerNumber");
+    const write = async () => {
+      calls += 1;
+      throw error;
+    };
+
+    await assert.rejects(write, (thrown) => thrown === error);
+    assert.equal(calls, 1);
+  });
+
+  it("runs the write once when nothing collides", async () => {
+    let calls = 0;
+
+    await retryOnTakenCode({ field: "movementNumber" }, async () => {
+      calls += 1;
+      return null;
+    });
+
+    assert.equal(calls, 1);
+  });
+
+  /**
+   * AMIT AT KELL ENGEDNIE. A POS eladasnal ugyanabban a tranzakcioban van egy
+   * MASIK egyedisegi megkotes is, az idempotencia-kulcs. Az nem kodutkozes:
+   * ugyanazt a kerest jelenti masodszor, es a mai valasz (a hivo hibat kap)
+   * a helyes. Ha ezt a burkolat ujraprobalna, a dupla-submit vedelme szunne
+   * meg.
+   */
+  it("lets the idempotency-key violation through on the first attempt", async () => {
+    let calls = 0;
+    const error = duplicate("idempotencyKey");
+
+    await assert.rejects(
+      () =>
+        retryOnTakenCode({ field: "movementNumber" }, async () => {
+          calls += 1;
+          throw error;
+        }),
+      (thrown) => thrown === error,
+    );
+
+    assert.equal(calls, 1);
+  });
+
+  it("gives up after the stated number of attempts, with the original error", async () => {
+    let calls = 0;
+    const error = duplicate("customerNumber");
+
+    await assert.rejects(
+      () =>
+        retryOnTakenCode(
+          { field: "customerNumber", maxAttempts: 3 },
+          async () => {
+            calls += 1;
+            throw error;
+          },
+        ),
+      (thrown) => thrown === error,
+    );
+
+    assert.equal(calls, 3);
+  });
+
+  it("does not retry an ordinary failure", async () => {
+    let calls = 0;
+    const error = new Error("a halozat elszallt");
+
+    await assert.rejects(
+      () =>
+        retryOnTakenCode({ field: "customerNumber" }, async () => {
+          calls += 1;
+          throw error;
+        }),
+      (thrown) => thrown === error,
+    );
+
+    assert.equal(calls, 1);
+  });
+
+  it("refuses a nonsense attempt count instead of looping forever", async () => {
+    await assert.rejects(() =>
+      retryOnTakenCode(
+        { field: "customerNumber", maxAttempts: 0 },
         async () => null,
       ),
     );

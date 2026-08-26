@@ -10,7 +10,10 @@ import type {
 } from "@acropora/types";
 
 import { generateCode } from "../common/code-generator.util.js";
-import { withUniqueCode } from "../common/unique-code.util.js";
+import {
+  retryOnTakenCode,
+  withUniqueCode,
+} from "../common/unique-code.util.js";
 import type { CreateWorksheetDepartmentDto } from "../worksheets/dto/worksheet.dto.js";
 import type { PartnerReferenceCounts } from "./partner-deletion.js";
 import type {
@@ -452,87 +455,113 @@ export class SuppliersRepository extends Repository {
     );
   }
 
+  /**
+   * A MODOSITAS IS KIADHAT EGY KODOT, es ez a leheto legkevesbe latszik rajta:
+   * ha a partner MOST valik szervizesse, a `syncWorksheetMirror` idelent
+   * letrehozza a tukor vevo-sort, es ahhoz vevoszamot huz. Ket ilyen mentes
+   * ugyanabban a masodpercben ugyanazt a veget huzhatja.
+   *
+   * A BURKOLAT ITT NEM AD ATT KODOT, es ez a kulonbseg a `create`-hez kepest: a
+   * vevoszamot a segedfuggveny huzza idelent, tehat elég az EGESZ tranzakciot
+   * ujra lefuttatni, es a huzas magatol ujra megtortenik.
+   *
+   * ES AMI AZ UJRAFUTTATAST BIZTONSAGOSSA TESZI: az elbukott kiserlet semmit
+   * nem hagy maga utan (a Postgres visszagorgeti), tehat a `expectedUpdatedAt`
+   * ellenorzes a masodik kiserletben ugyanazt a sort talalja, ugyanazzal az
+   * idobelyeggel. A STALE_UPDATE tehat nem az ujraprobalastol keletkezik.
+   *
+   * MENNYIT ER: keveset, es ezt jobb kimondani. A tukor-sor csak egy ritka
+   * esemenynel keletkezik, es azon belul is 65 536-bol egy eset az utkozes. A
+   * javitas azert kerult ide, mert a testver-eszkoz a masik ket helyhez ugyis
+   * elkeszult, nem azert, mert onmagaban megerte volna.
+   */
   update(
     id: string,
     input: UpdateSupplierDto,
     actorId: string,
   ): Promise<SupplierSummary> {
-    return prisma.$transaction(
-      async (tx) => {
-        const existing = await tx.supplier.findUniqueOrThrow({ where: { id } });
-        if (input.worksheetPartnerCode)
-          await assertPartnerCodeFree(tx, input.worksheetPartnerCode, id);
-        const changed = await tx.supplier.updateMany({
-          where: { id, updatedAt: new Date(input.expectedUpdatedAt) },
-          data: {
-            name: input.name?.trim(),
-            isSupplier: input.isSupplier,
-            isService: input.isService,
-            worksheetPartnerCode: input.worksheetPartnerCode,
-            taxNumber:
-              input.taxNumber === null ? null : input.taxNumber?.trim(),
-            country: input.country?.trim().toUpperCase(),
-            email: input.email === null ? null : input.email?.trim(),
-            phone: input.phone === null ? null : input.phone?.trim(),
-            iban: input.iban === null ? null : input.iban?.trim(),
-            swiftCode:
-              input.swiftCode === null ? null : input.swiftCode?.trim(),
-            bankAccountNumber:
-              input.bankAccountNumber === null
-                ? null
-                : input.bankAccountNumber?.trim(),
-            contactPersonName:
-              input.contactPersonName === null
-                ? null
-                : input.contactPersonName?.trim(),
-            contactPersonPhone:
-              input.contactPersonPhone === null
-                ? null
-                : input.contactPersonPhone?.trim(),
-            contactPersonEmail:
-              input.contactPersonEmail === null
-                ? null
-                : input.contactPersonEmail?.trim(),
-            postalCode:
-              input.postalCode === null ? null : input.postalCode?.trim(),
-            city: input.city === null ? null : input.city?.trim(),
-            addressLine1:
-              input.addressLine1 === null ? null : input.addressLine1?.trim(),
-            addressLine2:
-              input.addressLine2 === null ? null : input.addressLine2?.trim(),
-          },
-        });
-        if (changed.count !== 1) throw new Error("STALE_UPDATE");
-        const saved = await tx.supplier.findUniqueOrThrow({
-          where: { id },
-          select: {
-            id: true,
-            name: true,
-            isService: true,
-            customerId: true,
-            worksheetPartnerCode: true,
-          },
-        });
-        await syncWorksheetMirror(tx, saved);
-        await tx.domainEvent.create({
-          data: {
-            id: randomUUID(),
-            eventType: "supplier.updated",
-            aggregateType: "Supplier",
-            aggregateId: id,
-            actorUserId: actorId,
-            payload: {
-              previousName: existing.name,
-              name: input.name ?? existing.name,
+    return retryOnTakenCode({ field: "customerNumber" }, () =>
+      prisma.$transaction(
+        async (tx) => {
+          const existing = await tx.supplier.findUniqueOrThrow({
+            where: { id },
+          });
+          if (input.worksheetPartnerCode)
+            await assertPartnerCodeFree(tx, input.worksheetPartnerCode, id);
+          const changed = await tx.supplier.updateMany({
+            where: { id, updatedAt: new Date(input.expectedUpdatedAt) },
+            data: {
+              name: input.name?.trim(),
+              isSupplier: input.isSupplier,
+              isService: input.isService,
+              worksheetPartnerCode: input.worksheetPartnerCode,
+              taxNumber:
+                input.taxNumber === null ? null : input.taxNumber?.trim(),
+              country: input.country?.trim().toUpperCase(),
+              email: input.email === null ? null : input.email?.trim(),
+              phone: input.phone === null ? null : input.phone?.trim(),
+              iban: input.iban === null ? null : input.iban?.trim(),
+              swiftCode:
+                input.swiftCode === null ? null : input.swiftCode?.trim(),
+              bankAccountNumber:
+                input.bankAccountNumber === null
+                  ? null
+                  : input.bankAccountNumber?.trim(),
+              contactPersonName:
+                input.contactPersonName === null
+                  ? null
+                  : input.contactPersonName?.trim(),
+              contactPersonPhone:
+                input.contactPersonPhone === null
+                  ? null
+                  : input.contactPersonPhone?.trim(),
+              contactPersonEmail:
+                input.contactPersonEmail === null
+                  ? null
+                  : input.contactPersonEmail?.trim(),
+              postalCode:
+                input.postalCode === null ? null : input.postalCode?.trim(),
+              city: input.city === null ? null : input.city?.trim(),
+              addressLine1:
+                input.addressLine1 === null ? null : input.addressLine1?.trim(),
+              addressLine2:
+                input.addressLine2 === null ? null : input.addressLine2?.trim(),
             },
-            occurredAt: new Date(),
-            schemaVersion: 1,
-          },
-        });
-        const supplier = await tx.supplier.findUniqueOrThrow({ where: { id } });
-        return toSummary(supplier);
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+          });
+          if (changed.count !== 1) throw new Error("STALE_UPDATE");
+          const saved = await tx.supplier.findUniqueOrThrow({
+            where: { id },
+            select: {
+              id: true,
+              name: true,
+              isService: true,
+              customerId: true,
+              worksheetPartnerCode: true,
+            },
+          });
+          await syncWorksheetMirror(tx, saved);
+          await tx.domainEvent.create({
+            data: {
+              id: randomUUID(),
+              eventType: "supplier.updated",
+              aggregateType: "Supplier",
+              aggregateId: id,
+              actorUserId: actorId,
+              payload: {
+                previousName: existing.name,
+                name: input.name ?? existing.name,
+              },
+              occurredAt: new Date(),
+              schemaVersion: 1,
+            },
+          });
+          const supplier = await tx.supplier.findUniqueOrThrow({
+            where: { id },
+          });
+          return toSummary(supplier);
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      ),
     );
   }
 }
