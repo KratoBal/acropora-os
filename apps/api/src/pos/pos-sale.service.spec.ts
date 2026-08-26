@@ -36,12 +36,69 @@ function variant(
   };
 }
 
+/// A repository VALASZA, ahogy egy sikeres mentes utan kinez. Kulon fuggveny,
+/// mert nemcsak az alapertelmezett hamis repository hasznalja: az utkozest
+/// jatszo tesztek is ezt adjak vissza a masodik kiserletnel.
+function fakeSaleResult(
+  params: CreatePosSaleParams,
+  variants: Map<string, PosSaleVariantInfo>,
+): CreatePosSaleResult {
+  const stockWarnings: PosSaleStockWarning[] = [];
+  for (const line of params.lines) {
+    const info = variants.get(line.variantId);
+    const resultingQty = (info?.currentQty ?? new Prisma.Decimal(0)).minus(
+      line.quantity,
+    );
+    if (resultingQty.isNegative()) {
+      stockWarnings.push({
+        sku: line.sku,
+        productName: line.productName,
+        resultingQty: resultingQty.toString(),
+      });
+    }
+  }
+
+  return {
+    detail: {
+      id: "sale-1",
+      orderNumber: params.orderNumber,
+      status: "COMPLETED",
+      paymentMethod: params.paymentMethod,
+      customerName: null,
+      soldByName: null,
+      currency: "HUF",
+      totalNet: params.totals.totalNet.toString(),
+      totalTax: params.totals.totalTax.toString(),
+      totalGross: params.totals.totalGross.toString(),
+      discountPercent: params.discountPercent?.toString() ?? null,
+      createdAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+      lines: params.lines.map((line, index) => ({
+        id: `line-${index}`,
+        variantId: line.variantId,
+        sku: line.sku,
+        productName: line.productName,
+        quantity: line.quantity.toString(),
+        unit: line.unit,
+        unitNet: line.unitNet.toString(),
+        taxRate: line.taxRate.toString(),
+        lineGross: line.lineGross.toString(),
+        discountPercent: line.discountPercent?.toString() ?? null,
+        syncStatus: "PENDING" as const,
+        syncError: null,
+      })),
+    },
+    stockWarnings,
+  };
+}
+
 function buildService(options: {
   variants: Map<string, PosSaleVariantInfo>;
   warehouseId?: string;
   createSale?: (params: CreatePosSaleParams) => Promise<CreatePosSaleResult>;
 }) {
   let capturedCreateSaleParams: CreatePosSaleParams | undefined;
+  let currentStockCallCount = 0;
   // No UnasApiClient/UnasAuthService dependency anymore - PosSaleService no
   // longer talks to UNAS synchronously at all (see pos-sale.service.ts
   // constructor comment). The default fake createSale below stands in for
@@ -52,67 +109,24 @@ function buildService(options: {
   // (still a simplification vs. the real lock-serialized writer, but
   // sufficient to prove the service no longer computes warnings itself).
   const repository = {
-    currentStock: async () => ({
-      warehouseId: options.warehouseId ?? "warehouse-1",
-      variants: options.variants,
-    }),
+    currentStock: async () => {
+      currentStockCallCount += 1;
+      return {
+        warehouseId: options.warehouseId ?? "warehouse-1",
+        variants: options.variants,
+      };
+    },
     createSale: async (params: CreatePosSaleParams) => {
       capturedCreateSaleParams = params;
       if (options.createSale) return options.createSale(params);
-
-      const stockWarnings: PosSaleStockWarning[] = [];
-      for (const line of params.lines) {
-        const info = options.variants.get(line.variantId);
-        const resultingQty = (info?.currentQty ?? new Prisma.Decimal(0)).minus(
-          line.quantity,
-        );
-        if (resultingQty.isNegative()) {
-          stockWarnings.push({
-            sku: line.sku,
-            productName: line.productName,
-            resultingQty: resultingQty.toString(),
-          });
-        }
-      }
-
-      return {
-        detail: {
-          id: "sale-1",
-          orderNumber: params.orderNumber,
-          status: "COMPLETED",
-          paymentMethod: params.paymentMethod,
-          customerName: null,
-          soldByName: null,
-          currency: "HUF",
-          totalNet: params.totals.totalNet.toString(),
-          totalTax: params.totals.totalTax.toString(),
-          totalGross: params.totals.totalGross.toString(),
-          discountPercent: params.discountPercent?.toString() ?? null,
-          createdAt: new Date().toISOString(),
-          completedAt: new Date().toISOString(),
-          lines: params.lines.map((line, index) => ({
-            id: `line-${index}`,
-            variantId: line.variantId,
-            sku: line.sku,
-            productName: line.productName,
-            quantity: line.quantity.toString(),
-            unit: line.unit,
-            unitNet: line.unitNet.toString(),
-            taxRate: line.taxRate.toString(),
-            lineGross: line.lineGross.toString(),
-            discountPercent: line.discountPercent?.toString() ?? null,
-            syncStatus: "PENDING" as const,
-            syncError: null,
-          })),
-        },
-        stockWarnings,
-      };
+      return fakeSaleResult(params, options.variants);
     },
   } as unknown as PosSaleRepository;
   const service = new PosSaleService(repository);
   return {
     service,
     getCapturedCreateSaleParams: () => capturedCreateSaleParams,
+    getCurrentStockCallCount: () => currentStockCallCount,
   };
 }
 
@@ -342,5 +356,102 @@ describe("PosSaleService.createSale", () => {
     });
 
     await assert.rejects(() => service.createSale(baseInput(), "user-1"));
+  });
+  /**
+   * AZ ELADAS SZAMANAK UTKOZESE. A POS a legnagyobb forgalmu csalad: ket
+   * eladas eshet ugyanabba a masodpercbe, es huzhatja ugyanazt a negyjegyu
+   * veget. Ma a masodik hibaval vegzodik, es az eladonak kell ujraprobalnia,
+   * a vevo elott.
+   */
+  it("mints a new order number when the first one is already taken", async () => {
+    const seen: string[] = [];
+    const { service } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+      createSale: async (params) => {
+        seen.push(params.orderNumber);
+        if (seen.length === 1)
+          throw { code: "P2002", meta: { target: ["orderNumber"] } };
+        return fakeSaleResult(params, new Map([["variant-1", variant()]]));
+      },
+    });
+
+    const result = await service.createSale(baseInput(), "user-1");
+
+    assert.equal(seen.length, 2);
+    // A masodik kiserlet MAS szamot visz be. Ha a szam a lezaron kivul
+    // keletkezne, itt ketszer ugyanaz allna.
+    assert.notEqual(seen[0], seen[1]);
+    assert.equal(result.detail.orderNumber, seen[1]);
+  });
+
+  /**
+   * AMI A LEZAR MERETET ORZI. Az ujraprobalas csak a MENTEST ismetli meg. Az
+   * arazas, a keszlet-lekerdezes es az ellenorzesek folotte valtozatlanul
+   * egyszer futnak.
+   */
+  it("repeats only the write, not the pricing above it", async () => {
+    const seen: string[] = [];
+    const { service, getCurrentStockCallCount } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+      createSale: async (params) => {
+        seen.push(params.orderNumber);
+        if (seen.length <= 2)
+          throw { code: "P2002", meta: { target: ["orderNumber"] } };
+        return fakeSaleResult(params, new Map([["variant-1", variant()]]));
+      },
+    });
+
+    await service.createSale(baseInput(), "user-1");
+
+    assert.equal(seen.length, 3);
+    assert.equal(getCurrentStockCallCount(), 1);
+  });
+
+  /**
+   * AMIT SZANDEKOSAN ATENGED. A keszlet-mozgas szama a repository sajat
+   * tranzakciojaban keletkezik, es az ottani burkolat dolga. Ez a reteg nem
+   * huz hozza ujra eladas-szamot: az egy dragabb ujrafuttatas lenne ugyanarra
+   * a hibara.
+   */
+  it("does not retry a movement-number violation at this layer", async () => {
+    let calls = 0;
+    const error = { code: "P2002", meta: { target: ["movementNumber"] } };
+    const { service } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+      createSale: async () => {
+        calls += 1;
+        throw error;
+      },
+    });
+
+    await assert.rejects(
+      () => service.createSale(baseInput(), "user-1"),
+      (thrown) => thrown === error,
+    );
+
+    assert.equal(calls, 1);
+  });
+
+  /**
+   * A HATAR. Az otodik kiserlet utan az eredeti adatbazis-hiba megy tovabb,
+   * valtozatlanul - vagyis a legrosszabb eset pontosan a mai viselkedes.
+   */
+  it("gives the original error back when every attempt loses", async () => {
+    let calls = 0;
+    const error = { code: "P2002", meta: { target: ["orderNumber"] } };
+    const { service } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+      createSale: async () => {
+        calls += 1;
+        throw error;
+      },
+    });
+
+    await assert.rejects(
+      () => service.createSale(baseInput(), "user-1"),
+      (thrown) => thrown === error,
+    );
+
+    assert.equal(calls, 5);
   });
 });

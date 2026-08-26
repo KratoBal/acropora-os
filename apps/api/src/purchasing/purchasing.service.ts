@@ -14,7 +14,7 @@ import type {
   PurchaseProductSearchResult,
 } from "@acropora/types";
 
-import { generateCode } from "../common/code-generator.util.js";
+import { withUniqueCode } from "../common/unique-code.util.js";
 import { MnbExchangeRateService } from "../integrations/mnb/mnb-exchange-rate.service.js";
 import { SuppliersRepository } from "../suppliers/suppliers.repository.js";
 import type { CreatePurchaseInvoiceDto } from "./dto/create-purchase-invoice.dto.js";
@@ -205,7 +205,6 @@ export class PurchasingService {
       }
     }
 
-    const documentNumber = generateCode("BESZ");
     const preparedLines: CreatePurchaseInvoiceLine[] = [];
     for (const line of input.lines) {
       if (!Number.isFinite(line.actualQuantity) || line.actualQuantity < 0)
@@ -383,24 +382,45 @@ export class PurchasingService {
     }
 
     const now = new Date();
-    const detail = await this.invoices.create({
-      documentNumber,
-      supplierInvoiceNumber: input.supplierInvoiceNumber.trim(),
-      source: input.source,
-      supplierId: input.supplierId,
-      warehouseId,
-      currency,
-      exchangeRate,
-      invoiceDate,
-      dueDate: input.dueDate ? new Date(input.dueDate) : null,
-      isPaid: input.isPaid ?? false,
-      paidAt: input.isPaid ? new Date(input.paidAt ?? now.toISOString()) : null,
-      vatRate,
-      note: input.note?.trim() || null,
-      navIncomingInvoiceId: input.navIncomingInvoiceId,
-      actorUserId,
-      lines: preparedLines,
-    });
+    // A BIZONYLATSZAM MOSTANTOL A MENTES KORE KERUL, ES CSAK ARRA. A szam eddig
+    // jóval feljebb keletkezett, a validacio elott, es ha ket bevetelezes
+    // ugyanabban a masodpercben ugyanazt a negyjegyu veget huzta, a masodik
+    // hibaval vegzodott. A lezar a leheto legkisebb: a fenti ellenorzesek es
+    // olvasasok valtozatlanul EGYSZER futnak, csak a mentes ismetlodik, friss
+    // szammal.
+    //
+    // A KESZLET-MOZGAS SZAMA ITT NEM KULON HUZAS: a mentes a bizonylatszambol
+    // szarmaztatja (`BESZMOZG-...`), tehat egy ujrahuzas mind a kettot
+    // megujitja.
+    //
+    // AMIT SZANDEKOSAN ATENGED: a (szallito, szallitoi szamlaszam) parra allo
+    // egyedisegi hiba. Az ennek a folyamatnak a DUPLA-BEKULDES elleni vedelme,
+    // nem kodutkozes, es a mai valasza a helyes. A burkolat csak a
+    // `documentNumber` oszlopra van felirva.
+    const detail = await withUniqueCode(
+      { prefix: "BESZ", field: "documentNumber" },
+      (documentNumber) =>
+        this.invoices.create({
+          documentNumber,
+          supplierInvoiceNumber: input.supplierInvoiceNumber.trim(),
+          source: input.source,
+          supplierId: input.supplierId,
+          warehouseId,
+          currency,
+          exchangeRate,
+          invoiceDate,
+          dueDate: input.dueDate ? new Date(input.dueDate) : null,
+          isPaid: input.isPaid ?? false,
+          paidAt: input.isPaid
+            ? new Date(input.paidAt ?? now.toISOString())
+            : null,
+          vatRate,
+          note: input.note?.trim() || null,
+          navIncomingInvoiceId: input.navIncomingInvoiceId,
+          actorUserId,
+          lines: preparedLines,
+        }),
+    );
 
     const linkedLineCount = preparedLines.filter(
       (line) => line.variantId || line.createLocalProduct,
