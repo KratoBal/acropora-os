@@ -159,21 +159,14 @@ Consequences, both deliberate:
 | a missing key is still visible as `not-configured`                 | `medusa-admin.config.spec.ts`                |
 | the secret is not read from the environment on the projection path | `medusa-projection.cli.spec.ts` (structural) |
 
-**A claim with an expiry condition, not a date.** Two Medusa integration specs
-(`medusa-connection.repository.integration.spec.ts`,
-`medusa-product-link.integration.spec.ts`) were written but named in no runner
-list, so they ran nowhere.
+**The claim above expired on its own terms, and this is what replaced it.** Both
+Medusa integration specs once existed while being named in no runner list, so
+they ran nowhere; the note recording that carried a one-command condition rather
+than a date, and said which result would retire it. The condition was run on
+2026-08-26 and returned the retiring value, so the note is gone.
 
-The condition is checkable in one command, and it is the condition — not this
-paragraph — that decides:
-
-```bash
-grep -c 'medusa-connection.repository.integration.spec.js' apps/api/package.json
-```
-
-- **`0`** — the specs still run nowhere, and "the Medusa integration tests are
-  green" is an assumption rather than a statement.
-- **`1`** — they run with the rest, and this paragraph no longer applies.
-
-A date here would read just as confidently a month from now, and by then it could
-be false. A condition cannot: it answers for itself.
+What guards it now is not prose. `integration-spec-inventory.spec.ts` compares
+the integration specs on disk against the ones any script actually runs, and
+fails in both directions: a spec missing from the list, and a list entry for a
+spec that no longer exists. It carries its own control, asserting first that it
+found both lists — without that, the comparison would pass over empty sets.
