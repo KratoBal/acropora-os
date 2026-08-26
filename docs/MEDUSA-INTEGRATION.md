@@ -31,6 +31,33 @@ the provider refuses instead of quietly using a different key. That is asserted 
 The address (`MEDUSA_ADMIN_URL`) always comes from the environment and is not a
 secret.
 
+### The master key that makes the stored credential readable
+
+Encrypting and decrypting the database credential needs two environment values,
+and the API cannot use the stored key without them:
+
+| Variable                               | What it is                         |
+| -------------------------------------- | ---------------------------------- |
+| `MEDUSA_CREDENTIAL_ACTIVE_KEY_VERSION` | which master key version is in use |
+| `MEDUSA_CREDENTIAL_MASTER_KEY_V<n>`    | the master key for that version    |
+
+The master key is **32 bytes, base64-encoded**, and the encoding is checked by
+round-trip rather than by shape alone, so a truncated or re-wrapped value is
+refused instead of producing a key that is almost right. It is **versioned**: the
+version travels with the envelope, so an old envelope cannot be opened with a new
+key by accident.
+
+Two properties are worth stating plainly because they are easy to assume wrong:
+
+- **It is not the Medusa admin API key.** One protects the other; they rotate on
+  different occasions and for different reasons.
+- **If it is lost, the stored credential cannot be recovered.** There is no second
+  copy and no recovery path — the operational answer is to set a new master key
+  and enter the Medusa secret again through the Settings page.
+
+The exact values belong in the deployment's secret store, never in this repository
+and never in a shell command.
+
 ## Target state
 
 Normal operation: **`database`**.
@@ -59,15 +86,35 @@ that is the one irreversible action in the sequence.
 
 ## Revoke behaviour
 
-**Not measured yet.** The Medusa source shows no cache on the authentication path
-(every request lists keys from the database), which suggests a revoke takes effect
-immediately — but _suggests_ is not _measured_, and this page does not record
-inferences as facts.
+**The rotation was performed on 2026-08-26, and one half of the measurement was
+made while the other was not. Both halves are stated here, because the difference
+is the whole point.**
 
-What will be recorded here after the live rotation: whether the refusal was
-immediate or delayed, and if delayed, how long it took.
+What was measured:
 
-That measurement only counts with its control. A `401` proves nothing on its own
+- the old Medusa secret key was revoked;
+- after the revoke, a projection using the new, database-stored credential still
+  succeeded (`updated -> prod_01M0Z9TAYE7KV7YM3YHMR9YGF3`).
+
+What was **not** measured:
+
+- a direct HTTP request carrying the revoked old key. The plaintext of the old key
+  was no longer available, so the call could not be made.
+
+So the refusal of a revoked key has still not been observed. What the round does
+establish is that the system no longer depends on the old key: the work continues
+on the new credential after the revoke. That is strong indirect evidence, and it
+is not the same claim — a system can keep working on a new key while an old one
+remains just as usable as before.
+
+**Do not promote this to "revoke propagation proven."** The evidence supports
+"the new credential carries the traffic", not "the old credential is refused".
+The direct measurement (runbook step 5.2, with its 5.1 control) remains open, and
+the next rotation can close it by keeping the outgoing key readable until step 5.2
+has run.
+
+When it is finally made, that measurement only counts with its control. A `401`
+proves nothing on its own
 — a mistyped address or a malformed basic-auth header produces exactly the same
 answer, and from outside the two are indistinguishable. So the runbook measures
 the **new** key first on the same path: once that returns `200`, the shape of the
