@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { AI_CHAT_BASE_URL_ENV, AI_CHAT_TOKEN_ENV } from "./ai-chat.config.js";
-import { AiChatStartupValidator } from "./ai-chat-startup.validator.js";
+import {
+  AiChatStartupValidator,
+  isWrappedInQuotes,
+} from "./ai-chat-startup.validator.js";
 
 /**
  * A naplo-sorokat olvassuk vissza, nem azt, hogy "lefutott".
@@ -163,5 +166,68 @@ describe("AiChatStartupValidator hasonlo nevu valtozok", () => {
     );
 
     assert.equal(mentioned.length, 3);
+  });
+});
+
+describe("AiChatStartupValidator gyanus ertek", () => {
+  it("szol, ha az ertek idezojelek koze van zarva", () => {
+    /**
+     * A mai eset TESTVERE, amit murena vett eszre: a valtozo ott van, a
+     * helyes neven, de idezojelekkel egyutt mentettek el. A beallitas-olvaso
+     * jelenlevonek latja, es a hivas 401-gyel bukik - MAS kepernyo, mint az
+     * ai_not_configured, tehat aki a mai eset alapjan keres, a hianyzo
+     * beallitast fogja nezni, es az rendben lesz.
+     */
+    const lines = capture({
+      [AI_CHAT_BASE_URL_ENV]: BASE_URL,
+      [AI_CHAT_TOKEN_ENV]: `"${TOKEN}"`,
+    });
+
+    assert.equal(lines.length, 1);
+    assert.match(lines[0]!, /ACROPORA_AI_ACCESS_TOKEN/);
+    assert.match(lines[0]!, /401/);
+  });
+
+  it("a gyanus ertekbol SEM ir ki semmit, meg reszletet sem", () => {
+    // Egy "igy kezdodik" reszlet is a titok darabja.
+    const lines = capture({
+      [AI_CHAT_BASE_URL_ENV]: BASE_URL,
+      [AI_CHAT_TOKEN_ENV]: `"${TOKEN}"`,
+    });
+
+    assert.equal(lines.join("\n").includes(TOKEN), false);
+    assert.equal(lines.join("\n").includes(TOKEN.slice(0, 6)), false);
+  });
+
+  it("hallgat, ha mindketto rendes erteket hordoz", () => {
+    assert.deepEqual(
+      capture({
+        [AI_CHAT_BASE_URL_ENV]: BASE_URL,
+        [AI_CHAT_TOKEN_ENV]: TOKEN,
+      }),
+      [],
+    );
+  });
+});
+
+describe("isWrappedInQuotes", () => {
+  it("csak az AZONOS idezojel-parra mond igazat", () => {
+    assert.equal(isWrappedInQuotes('"abc"'), true);
+    assert.equal(isWrappedInQuotes("'abc'"), true);
+  });
+
+  it("nem ad hamis riasztast arra, ami csak vegzodik idezojelre", () => {
+    /**
+     * Szandekosan szuk: egy or, ami hamis riasztast ad, elobb-utobb
+     * kikapcsolodik, es akkor rosszabb helyen vagyunk, mint ha meg sem
+     * irtuk volna.
+     */
+    for (const value of ['abc"', '"abc', "a", "", 'x"y', "'abc\""]) {
+      assert.equal(
+        isWrappedInQuotes(value),
+        false,
+        `hamis riasztas: ${JSON.stringify(value)}`,
+      );
+    }
   });
 });

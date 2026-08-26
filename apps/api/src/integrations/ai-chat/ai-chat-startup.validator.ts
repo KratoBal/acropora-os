@@ -56,7 +56,10 @@ export class AiChatStartupValidator implements OnModuleInit {
     const baseUrl = this.environment[AI_CHAT_BASE_URL_ENV]?.trim();
     const token = this.environment[AI_CHAT_TOKEN_ENV]?.trim();
 
-    if (baseUrl && token) return;
+    if (baseUrl && token) {
+      this.warnAboutSuspiciousValues({ baseUrl, token });
+      return;
+    }
 
     const missing = [
       baseUrl ? null : AI_CHAT_BASE_URL_ENV,
@@ -102,6 +105,43 @@ export class AiChatStartupValidator implements OnModuleInit {
    * Csak NEVEK kerulnek ki, ertek soha, es legfeljebb harom - egy hosszu
    * lista mar nem segit, csak zajt visz a naploba.
    */
+  /**
+   * A masik hiba, amit ez a valaszto NEM latna: a valtozo ott van, a HELYES
+   * neven, de az ERTEKE hasznalhatatlan.
+   *
+   * A tipikus alak az, hogy a beallitas idezojelekkel EGYUTT lett elmentve.
+   * A beallitas-olvaso trimmel, tehat a szokoz nem gond, de egy idezojelek
+   * koze zart erteket JELENLEVONEK lat -- es akkor a hivas nem
+   * ai_not_configured-del bukik, hanem 401-gyel. **Ez masik kepernyo, es epp
+   * ezert dragabb**: aki a mai eset alapjan keres, a hianyzo beallitast fogja
+   * nezni, es az rendben lesz.
+   *
+   * Murena vette eszre, a mai eset visszaolvasasabol.
+   *
+   * Csak JELEZ, nem allitja meg az indulast, es nem is utasitja el az
+   * erteket: egy valodi ertek elvben kezdodhet idezojellel, es egy or, ami
+   * hamis riasztast ad, elobb-utobb kikapcsolodik. A NEV megy a naploba, az
+   * ertek soha - meg reszletben sem, mert egy 'igy kezdodik' reszlet is a
+   * titok darabja.
+   */
+  private warnAboutSuspiciousValues(values: {
+    baseUrl: string;
+    token: string;
+  }): void {
+    const quoted = [
+      isWrappedInQuotes(values.baseUrl) ? AI_CHAT_BASE_URL_ENV : null,
+      isWrappedInQuotes(values.token) ? AI_CHAT_TOKEN_ENV : null,
+    ].filter((name): name is string => name !== null);
+
+    if (!quoted.length) return;
+
+    this.logger.warn(
+      `Az AI beallitas megvan, de gyanus alaku: ${quoted.join(" es ")} erteke idezojelek koze van zarva. ` +
+        "Ha a beallitast idezojelekkel egyutt mentettek el, a hivas nem " +
+        "ai_not_configured hibat ad, hanem 401-et - mas kepernyo, mas ok.",
+    );
+  }
+
   private lookalikesFor(missingName: string): string[] {
     const suffix = missingName.split("_").slice(-2).join("_");
 
@@ -117,4 +157,20 @@ export class AiChatStartupValidator implements OnModuleInit {
       .sort()
       .slice(0, 3);
   }
+}
+
+/**
+ * Idezojelek koze van-e zarva az ertek?
+ *
+ * Szandekosan szuk: csak akkor mond igazat, ha az ertek UGYANAZZAL az
+ * idezojellel kezdodik es vegzodik, es legalabb ket karakter. Egy valodi
+ * ertek, ami veletlenul idezojelre vegzodik, igy nem ad hamis riasztast.
+ */
+export function isWrappedInQuotes(value: string): boolean {
+  if (value.length < 2) return false;
+
+  const first = value[0];
+  const last = value[value.length - 1];
+
+  return (first === '"' || first === "'") && first === last;
 }
