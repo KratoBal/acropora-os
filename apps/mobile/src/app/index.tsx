@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { OrderListCard } from "@/components/orders/OrderListCard";
 import { listUnasOrders } from "@/lib/api/orders";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import type { UserRole } from "@/lib/auth/types";
 import { personDisplayName } from "@/lib/auth/person-name";
 import { usePushRegistration } from "@/lib/notifications/usePushRegistration";
 import {
@@ -20,6 +21,23 @@ import {
   getWebshopCapabilities,
   userRoleLabel,
 } from "@/lib/auth/webshop-authorization";
+
+/**
+ * KIK LÁTJÁK a NAV csempét. MÉRT lista, nem ízlés: pontosan azok a szerepkörök,
+ * amelyeknek a törölt `navView` kulcs `true` volt (a `main` ág állapotából
+ * kiolvasva, 2026-08-26). A SALES és a SERVICE nem látta, és ezen a
+ * változtatás nem módosít.
+ *
+ * Azért lista, és nem jogosultság-kulcs, mert a csempe ma nem nyit meg semmit:
+ * nincs mögötte hívás, aminek a jogát tükrözhetné.
+ */
+const NAV_TILE_ROLES: UserRole[] = [
+  "OWNER",
+  "ADMIN",
+  "MANAGER",
+  "WAREHOUSE",
+  "VIEWER",
+];
 
 interface ModuleCardProps {
   code: string;
@@ -128,11 +146,25 @@ export default function HomeScreen() {
                 available={capabilities.productsView}
                 enabled={false}
               />
+              {/*
+                A LÁTHATÓSÁG ITT NEM JOGOSULTSÁG, és ezért áll szerepkör-listán,
+                nem tükör-kulcson. A NAV a szerveren nem EGY jog: a kapcsolat
+                beállítása `settings.manage`, az adószám-lekérdezés
+                `customers.manage`, a bejövő számlák `purchasing.view`. A tükör
+                korábbi `navView` kulcsa egy MODULT nevezett meg, tehát nem volt
+                mit tükröznie, és el is tűnt (2026-08-26).
+
+                Amíg a képernyő nem létezik, ez a csempe csak annyit mond, hogy
+                ez a modul következik -- és pontosan annak látszik, akinek eddig
+                is. Amikor megépül, a hívásához tartozó kulcs dönt majd róla (a
+                bejövő számlákhoz `purchasingView`), és akkor a listának itt nem
+                lesz többé dolga.
+              */}
               <ModuleCard
                 code="NAV"
                 title="NAV-szinkron"
                 description="Bejövő számlák és párosítások"
-                available={capabilities.navView}
+                available={NAV_TILE_ROLES.includes(user.role)}
                 enabled={false}
               />
               <ModuleCard
