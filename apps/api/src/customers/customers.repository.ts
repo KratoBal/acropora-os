@@ -9,7 +9,7 @@ import type {
   CustomerSummary,
 } from "@acropora/types";
 
-import { generateCode } from "../common/code-generator.util.js";
+import { withUniqueCode } from "../common/unique-code.util.js";
 import type {
   CreateCustomerDto,
   CustomerListQueryDto,
@@ -158,43 +158,58 @@ export class CustomersRepository extends Repository {
     return this.toDetail(customer, reference?.externalId ?? null);
   }
 
+  /**
+   * A VEVOSZAM UTKOZESE UJRAPROBALKOZAST KAP, NEM HIBAUZENETET.
+   *
+   * Ket vevo akkor kap azonos szamot, ha ugyanabban a masodpercben keszul es a
+   * generator ugyanazt a negyjegyu veget huzza. Ritka, de a kimenetel eddig
+   * HIBA volt, amit a felhasznalonak kellett ujraprobalnia -- holott a kovetkezo
+   * huzas mas kodot ad.
+   *
+   * A burkolat CSAK a tranzakciot ismetli meg, uj kodddal. Az ismetles nem
+   * mehet a tranzakcion BELUL: Postgres az elso elbukott utasitas utan
+   * megszakitja, tehat ott mar nincs mit menteni.
+   */
   create(input: CreateCustomerDto, actorId: string): Promise<CustomerDetail> {
-    const customerNumber = generateCode("VEVO");
-    return prisma.$transaction(
-      async (tx) => {
-        const customer = await tx.customer.create({
-          data: {
-            customerNumber,
-            type: input.type,
-            displayName: input.displayName.trim(),
-            companyName: input.companyName?.trim(),
-            taxNumber: input.taxNumber?.trim(),
-            email: input.email?.trim(),
-            phone: input.phone?.trim(),
-            marketingEmailConsent: input.marketingEmailConsent ?? false,
-            marketingSmsConsent: input.marketingSmsConsent ?? false,
-            addresses: {
-              create: input.addresses.map((address) => ({
-                type: address.type,
-                name: address.name?.trim(),
-                country: address.country ?? "HU",
-                postalCode: address.postalCode.trim(),
-                city: address.city.trim(),
-                line1: address.line1.trim(),
-                line2: address.line2?.trim(),
-                isDefault: address.isDefault ?? false,
-              })),
-            },
+    return withUniqueCode(
+      { prefix: "VEVO", field: "customerNumber" },
+      (customerNumber) =>
+        prisma.$transaction(
+          async (tx) => {
+            const customer = await tx.customer.create({
+              data: {
+                customerNumber,
+                type: input.type,
+                displayName: input.displayName.trim(),
+                companyName: input.companyName?.trim(),
+                taxNumber: input.taxNumber?.trim(),
+                email: input.email?.trim(),
+                phone: input.phone?.trim(),
+                marketingEmailConsent: input.marketingEmailConsent ?? false,
+                marketingSmsConsent: input.marketingSmsConsent ?? false,
+                addresses: {
+                  create: input.addresses.map((address) => ({
+                    type: address.type,
+                    name: address.name?.trim(),
+                    country: address.country ?? "HU",
+                    postalCode: address.postalCode.trim(),
+                    city: address.city.trim(),
+                    line1: address.line1.trim(),
+                    line2: address.line2?.trim(),
+                    isDefault: address.isDefault ?? false,
+                  })),
+                },
+              },
+              include,
+            });
+            await this.event(tx, "customer.created", customer.id, actorId, {
+              customerNumber: customer.customerNumber,
+              customerType: customer.type,
+            });
+            return this.toDetail(customer, null);
           },
-          include,
-        });
-        await this.event(tx, "customer.created", customer.id, actorId, {
-          customerNumber: customer.customerNumber,
-          customerType: customer.type,
-        });
-        return this.toDetail(customer, null);
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        ),
     );
   }
 
