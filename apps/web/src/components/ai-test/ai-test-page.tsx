@@ -9,7 +9,12 @@ import {
   PageHeader,
   Textarea,
 } from "@acropora/ui";
-import { hasPermission, PERMISSIONS } from "@acropora/types";
+import {
+  AI_ANSWER_RATINGS,
+  hasPermission,
+  PERMISSIONS,
+  type AiAnswerRating,
+} from "@acropora/types";
 import { useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
@@ -27,20 +32,29 @@ import { aiChatApi, type AiChatReply } from "@/lib/api/ai-chat";
  * biztosítja, nem ez az oldal.
  */
 
-/** Az értékelés négy állapota, Balázs specifikációja szerint. */
-const RATINGS = [
-  { key: "correct", label: "Helyes" },
-  { key: "inaccurate", label: "Pontatlan" },
-  { key: "dangerous", label: "Veszélyes" },
-  { key: "no-data", label: "Nincs adat" },
-] as const;
-
-type RatingKey = (typeof RATINGS)[number]["key"];
+/**
+ * Az értékelés négy állapota, Balázs specifikációja szerint.
+ *
+ * A kulcsok a megosztott listából jönnek, a magyar felirat marad itt. Az ok
+ * nem takarékosság: ugyanez a négy kulcs egy adatbázis-megszorítás is az AI
+ * szolgáltatásban, és egy ötödik gomb, amit csak itt vennénk fel, a
+ * gombnyomás pillanatában bukna el.
+ */
+const RATING_LABELS: Record<AiAnswerRating, string> = {
+  correct: "Helyes",
+  inaccurate: "Pontatlan",
+  dangerous: "Veszélyes",
+  "no-data": "Nincs adat",
+};
 
 interface Exchange {
   question: string;
   reply: AiChatReply;
-  rating: RatingKey | null;
+  /** Amit a szerver ELTAROLT, nem amire a felhasználó kattintott. */
+  rating: AiAnswerRating | null;
+  /** Amíg a mentés fut, ez látszik kiválasztottként. */
+  ratingPending: AiAnswerRating | null;
+  ratingError: string | null;
 }
 
 const MODE_LABELS: Record<string, string> = {
@@ -90,7 +104,13 @@ export function AiTestPage() {
 
       setExchanges((previous) => [
         ...previous,
-        { question: message, reply, rating: null },
+        {
+          question: message,
+          reply,
+          rating: null,
+          ratingPending: null,
+          ratingError: null,
+        },
       ]);
       if (reply.conversationId) setConversationId(reply.conversationId);
       setQuestion("");
@@ -105,12 +125,55 @@ export function AiTestPage() {
     }
   };
 
-  const rate = (index: number, rating: RatingKey) => {
-    setExchanges((previous) =>
-      previous.map((exchange, position) =>
-        position === index ? { ...exchange, rating } : exchange,
-      ),
-    );
+  /**
+   * Az értékelés a szerverre megy, és csak akkor számít megadottnak, ha OTT
+   * eltárolódott.
+   *
+   * Ez a különbség nem elméleti: a felület korábban csak a saját állapotában
+   * jegyezte meg, tehát egy oldalfrissítés elvitte. Ami eltűnik egy lap
+   * bezárásakor, az nem mérés. Amíg a mentés fut, a megnyomott gomb
+   * kiválasztottnak látszik, de a tárolt érték csak a válasz után változik -
+   * hiba esetén a felület visszaáll oda, ahol a szerver szerint áll.
+   */
+  const rate = async (index: number, rating: AiAnswerRating) => {
+    const exchange = exchanges[index];
+    const messageId = exchange?.reply.messageId;
+    if (!exchange || !messageId || exchange.ratingPending) return;
+
+    const update = (patch: Partial<Exchange>) =>
+      setExchanges((previous) =>
+        previous.map((item, position) =>
+          position === index ? { ...item, ...patch } : item,
+        ),
+      );
+
+    update({ ratingPending: rating, ratingError: null });
+
+    try {
+      const result = await aiChatApi.rate(token, messageId, rating);
+
+      if (result.errorCode) {
+        update({
+          ratingPending: null,
+          ratingError: `Az AI szolgáltatás elutasította: ${result.errorCode}`,
+        });
+        return;
+      }
+
+      update({
+        rating: result.rating ?? rating,
+        ratingPending: null,
+        ratingError: null,
+      });
+    } catch (cause) {
+      update({
+        ratingPending: null,
+        ratingError:
+          cause instanceof Error
+            ? cause.message
+            : "Az értékelés nem jutott el a szerverig.",
+      });
+    }
   };
 
   return (
@@ -237,23 +300,38 @@ export function AiTestPage() {
 
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm text-muted-foreground">Értékelés:</span>
-              {RATINGS.map((rating) => (
+              {AI_ANSWER_RATINGS.map((rating) => (
                 <Button
-                  key={rating.key}
+                  key={rating}
                   variant={
-                    exchange.rating === rating.key ? "primary" : "secondary"
+                    (exchange.ratingPending ?? exchange.rating) === rating
+                      ? "primary"
+                      : "secondary"
                   }
-                  onClick={() => rate(index, rating.key)}
+                  /*
+                    Hibás válaszra nincs mit értékelni: ilyenkor nincs
+                    üzenet-azonosító sem, amire az értékelés hivatkozhatna.
+                  */
+                  disabled={
+                    !exchange.reply.messageId || exchange.ratingPending !== null
+                  }
+                  onClick={() => void rate(index, rating)}
                 >
-                  {rating.label}
+                  {RATING_LABELS[rating]}
                 </Button>
               ))}
               {exchange.rating ? (
-                <Badge>
-                  {RATINGS.find((r) => r.key === exchange.rating)?.label}
-                </Badge>
+                <Badge>Elmentve: {RATING_LABELS[exchange.rating]}</Badge>
+              ) : null}
+              {exchange.ratingPending ? (
+                <span className="text-sm text-muted-foreground">Mentés...</span>
               ) : null}
             </div>
+            {exchange.ratingError ? (
+              <Alert variant="danger" title="Az értékelés nem mentődött el">
+                {exchange.ratingError}
+              </Alert>
+            ) : null}
           </div>
         </Card>
       ))}

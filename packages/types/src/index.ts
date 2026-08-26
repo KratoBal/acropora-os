@@ -288,6 +288,11 @@ export type {
   FoxpostSettlementSummary,
   FoxpostSyncSummary,
 } from "./integrations/foxpost-settlement.js";
+export { AI_ANSWER_RATINGS } from "./integrations/ai-chat.js";
+export type {
+  AiAnswerRating,
+  AiAnswerRatingResult,
+} from "./integrations/ai-chat.js";
 export type { PostalCodeLookupResult } from "./integrations/postal-code.js";
 export type { ViesVatLookupResult } from "./integrations/vies-vat.js";
 export type {

@@ -1,3 +1,5 @@
+import type { AiAnswerRating, AiAnswerRatingResult } from "@acropora/types";
+
 import { apiRequest } from "./client";
 
 /**
@@ -8,6 +10,8 @@ import { apiRequest } from "./client";
  */
 export interface AiChatReply {
   conversationId: string | null;
+  /** Which answer a judgement is written against. Null when the call failed. */
+  messageId: string | null;
   answer: string | null;
   model: string | null;
   customerContextStatus: string | null;
@@ -29,5 +33,29 @@ export const aiChatApi = {
       body: JSON.stringify(body),
       signal,
     });
+  },
+
+  /**
+   * Sends a judgement about one answer.
+   *
+   * The author is not a parameter: the API takes it from the session. A page
+   * that could name the rater would be a page that could rate as somebody
+   * else.
+   */
+  rate(
+    token: string,
+    messageId: string,
+    rating: AiAnswerRating,
+    signal?: AbortSignal,
+  ) {
+    return apiRequest<AiAnswerRatingResult>(
+      `/integrations/ai-chat/messages/${messageId}/rating`,
+      token,
+      {
+        method: "POST",
+        body: JSON.stringify({ rating }),
+        signal,
+      },
+    );
   },
 };
