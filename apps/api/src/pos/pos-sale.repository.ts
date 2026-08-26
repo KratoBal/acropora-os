@@ -17,6 +17,7 @@ import {
   type WarehouseLookupDatabase,
 } from "../common/warehouse.util.js";
 import { parseUnasPackageComponents } from "../common/unas-package-product.util.js";
+import { retryOnTakenCode } from "../common/unique-code.util.js";
 import type { PosSaleListQueryDto } from "./dto/pos-sale-list-query.dto.js";
 import {
   toPosSaleDetail,
@@ -322,12 +323,31 @@ export class PosSaleRepository extends Repository {
     return `POS_SALE:${orderNumber}`;
   }
 
+  /// A KESZLET-MOZGAS SZAMA IDEBENT KESZUL, es a POS a legnagyobb forgalmu
+  /// csalad: itt a legvalószinubb, hogy ket bizonylat ugyanabba a masodpercbe
+  /// esik es ugyanazt a negyjegyu veget huzza. Ma az eladas ilyenkor hibaval
+  /// vegzodik, es az eladonak kell ujraprobalnia, a vevo elott.
+  ///
+  /// A BURKOLAT AZ EGESZ TRANZAKCIOT FUTTATJA UJRA, es nem kap kodot kivulrol:
+  /// a `generateCode("ELAD")` a lezaron belul all, tehat a masodik kiserlet mas
+  /// veget huz. Ez az `orderNumber`-re NEM vonatkozik -- azt ma a szolgaltatas
+  /// allitja elo es adja at, tehat egy ujrafuttatas ugyanazt latja.
+  ///
+  /// AMIT SZANDEKOSAN ATENGED: az idempotencia-kulcs egyedisegi hibaja. Az nem
+  /// kodutkozes, hanem ugyanaz a keres masodszor, es a mai valasz a helyes. A
+  /// burkolat csak a `movementNumber` oszlopra van felirva, minden mas egyedisegi
+  /// hiba az elso kiserletben, valtozatlanul megy tovabb a hivo fele.
   async createSale(params: CreatePosSaleParams): Promise<CreatePosSaleResult> {
     const now = new Date();
-    const stockWarnings: PosSaleStockWarning[] = [];
 
-    const created = await this.saleDatabase.$transaction(
-      async (transaction) => {
+    const created = await retryOnTakenCode({ field: "movementNumber" }, () =>
+      this.saleDatabase.$transaction(async (transaction) => {
+        // A figyelmeztetesek listaja a lezaron BELUL szuletik, es onnan jon ki.
+        // Kivul allva egy ujrafuttatas az elbukott kiserlet sorait is
+        // megtartana, es a vevo ket ugyanolyan figyelmeztetest latna egy
+        // eladasrol. A tranzakcio maga visszagorgetheto, egy metoduson kivuli
+        // tomb nem.
+        const stockWarnings: PosSaleStockWarning[] = [];
         const order = await transaction.salesOrder.create({
           data: {
             orderNumber: params.orderNumber,
@@ -443,11 +463,14 @@ export class PosSaleRepository extends Repository {
           });
         }
 
-        return order;
-      },
+        return { order, stockWarnings };
+      }),
     );
 
-    return { detail: toPosSaleDetail(created), stockWarnings };
+    return {
+      detail: toPosSaleDetail(created.order),
+      stockWarnings: created.stockWarnings,
+    };
   }
 
   async list(query: PosSaleListQueryDto): Promise<PosSaleListResponse> {
