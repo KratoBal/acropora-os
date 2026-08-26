@@ -41,6 +41,7 @@
     "src/lib/auth/sign-out.spec.ts",
     "src/lib/auth/webshop-authorization.ts",
     "src/lib/auth/webshop-authorization.spec.ts",
+    "src/lib/auth/nav-tile-roles.spec.ts",
     "src/lib/app-version.ts",
     "src/lib/app-version.spec.ts",
     "src/lib/assets/scan-failure.ts",
