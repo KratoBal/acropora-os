@@ -10,7 +10,19 @@ export interface DependencyHealth {
 }
 
 export interface HealthResponse {
-  application: DependencyHealth & { version: string };
+  /**
+   * A FUTO KIADAS AZONOSSAGA.
+   *
+   * A `version` egy kezzel irt karakterlanc, ami minden kiadasnal ugyanaz marad
+   * (`0.1.0`), tehat arra a kerdesre, hogy MELYIK kod fut a szerveren, nem
+   * valaszol. A `commit` igen: a kepbe beegetett kiadas-azonosito.
+   *
+   * `null`, ha nincs beallitva vagy nem ep a formaja -- es ez SZANDEKOS: a
+   * hianyzo adat ne latszon adatnak. Aki ezt olvassa, a `null`-t ugy kell
+   * ertelmezze, hogy a kiadas azonossaga NEM ellenorizheto, nem ugy, hogy
+   * barmelyik kiadas megfelel.
+   */
+  application: DependencyHealth & { version: string; commit: string | null };
   database: DependencyHealth;
   redis: DependencyHealth;
   uptime: number;
