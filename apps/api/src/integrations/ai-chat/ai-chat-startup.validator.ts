@@ -63,17 +63,58 @@ export class AiChatStartupValidator implements OnModuleInit {
       token ? null : AI_CHAT_TOKEN_ENV,
     ].filter((name): name is string => name !== null);
 
+    const lookalikes = missing.flatMap((name) => this.lookalikesFor(name));
+
     /**
      * A hianyzo valtozok NEVE megy a naploba, az ERTEKUK soha.
      *
      * A cim nem titok, a token az - es egy naplosor, ami "a token X helyett Y"
      * alakban segitene, pontosan azt a titkot vinne ki, amit ez az egesz
-     * reteg ovni hivatott.
+     * reteg ovni hivatott. Egy valtozo NEVE viszont nem titok, es epp az a
+     * fajta adat, amit 2026-08-27 hajnalban valakinek latnia kellett volna.
      */
+    const hint = lookalikes.length
+      ? ` A kornyezetben viszont ott van ${lookalikes.join(", ")} - ha a nevet masoltad at egy masik rendszerbol, valoszinuleg ez tortent.`
+      : "";
+
     this.logger.warn(
-      `Az AI teszt-felulet nem tud hivni: hianyzik ${missing.join(" es ")}. ` +
-        "A ketto egyutt kell; amig barmelyik ures, a felulet " +
+      `Az AI teszt-felulet nem tud hivni: hianyzik ${missing.join(" es ")}.` +
+        hint +
+        " A ketto egyutt kell; amig barmelyik ures, a felulet " +
         "ai_not_configured hibat ad. Minden mas funkcio mukodik.",
     );
+  }
+
+  /**
+   * Van-e a kornyezetben olyan valtozo, ami UGYANARRA VEGZODIK, mint a
+   * hianyzo?
+   *
+   * A 2026-08-27 hajnali eset pontos alakja nem az volt, hogy az ertek
+   * hianyzott: MAS NEVEN allt. Az AI oldali API_ACCESS_TOKEN nevet masoltak
+   * at oda, ahol ACROPORA_AI_ACCESS_TOKEN a helyes. A "hianyzik
+   * ACROPORA_AI_ACCESS_TOKEN" sor ilyenkor IGAZ, es a kereso ember fejeben
+   * megis az a kovetkezo mondat, hogy "dehogy hianyzik, felvettem".
+   *
+   * Az utolso ket nevszakasz alapjan keresunk (ACCESS_TOKEN, BASE_URL), mert
+   * az elgepeles es a rossz masolas mindig az ELOTAGOT rontja el: a szerep
+   * nevet, amit az ember ismer, jol irja le.
+   *
+   * Csak NEVEK kerulnek ki, ertek soha, es legfeljebb harom - egy hosszu
+   * lista mar nem segit, csak zajt visz a naploba.
+   */
+  private lookalikesFor(missingName: string): string[] {
+    const suffix = missingName.split("_").slice(-2).join("_");
+
+    if (!suffix.includes("_")) return [];
+
+    return Object.keys(this.environment)
+      .filter(
+        (name) =>
+          name !== missingName &&
+          name.endsWith(`_${suffix}`) &&
+          (this.environment[name]?.trim() ?? "") !== "",
+      )
+      .sort()
+      .slice(0, 3);
   }
 }
