@@ -13,16 +13,14 @@ describe("getWebshopCapabilities", () => {
     assert.equal(capabilities.ordersManage, true);
     assert.equal(capabilities.purchasingManage, true);
     assert.equal(capabilities.productsManage, true);
-    assert.equal(capabilities.navManage, true);
     assert.equal(capabilities.partnersManage, true);
   });
 
-  it("keeps warehouse users read-only for orders but lets them manage purchasing and NAV", () => {
+  it("keeps warehouse users read-only for orders but lets them manage purchasing", () => {
     const capabilities = getWebshopCapabilities("WAREHOUSE");
     assert.equal(capabilities.ordersView, true);
     assert.equal(capabilities.ordersManage, false);
     assert.equal(capabilities.purchasingManage, true);
-    assert.equal(capabilities.navManage, true);
     assert.equal(capabilities.partnersManage, true);
   });
 

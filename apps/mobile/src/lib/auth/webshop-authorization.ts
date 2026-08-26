@@ -8,8 +8,6 @@ export interface WebshopCapabilities {
   purchasingManage: boolean;
   productsView: boolean;
   productsManage: boolean;
-  navView: boolean;
-  navManage: boolean;
   partnersView: boolean;
   partnersManage: boolean;
 }
@@ -28,8 +26,6 @@ const FULL_ACCESS: WebshopCapabilities = {
   purchasingManage: true,
   productsView: true,
   productsManage: true,
-  navView: true,
-  navManage: true,
   partnersView: true,
   partnersManage: true,
 };
@@ -47,10 +43,17 @@ const FULL_ACCESS: WebshopCapabilities = {
  * `partners.manage` were introduced: the two sides claimed to agree while
  * naming different things, and nothing here would have said so.
  *
- * `navView` and `navManage` are still in that state. They are named after the
- * tax authority, not after any server permission, and the closest server-side
- * pair is `finance.view` / `finance.manage`. Left alone on purpose rather than
- * renamed in passing, because that touches screens this change does not.
+ * `navView` and `navManage` used to sit here in that same state, and they are
+ * gone (2026-08-26). They were named after a MODULE (the tax authority), while
+ * the server grants rights per OPERATION: setting up the NAV connection needs
+ * `settings.manage`, the taxpayer lookup needs `customers.manage`, and the
+ * incoming invoices -- the thing the tile actually promised -- need
+ * `purchasing.view`. One client-side name could not mirror three server
+ * permissions, so renaming it would only have looked like a fix. When the
+ * screen is built, it will use the key belonging to the call it makes.
+ *
+ * Every key that remains has a server-side counterpart, and that is asserted:
+ * see `apps/api/src/auth/mobile-capability-mirror.spec.ts`.
  */
 const ROLE_CAPABILITIES: Readonly<Record<UserRole, WebshopCapabilities>> = {
   OWNER: FULL_ACCESS,
@@ -66,8 +69,6 @@ const ROLE_CAPABILITIES: Readonly<Record<UserRole, WebshopCapabilities>> = {
     purchasingManage: false,
     productsView: true,
     productsManage: false,
-    navView: false,
-    navManage: false,
     partnersView: false,
     partnersManage: false,
   },
@@ -79,8 +80,6 @@ const ROLE_CAPABILITIES: Readonly<Record<UserRole, WebshopCapabilities>> = {
     purchasingManage: true,
     productsView: true,
     productsManage: false,
-    navView: true,
-    navManage: true,
     partnersView: true,
     partnersManage: true,
   },
@@ -92,8 +91,6 @@ const ROLE_CAPABILITIES: Readonly<Record<UserRole, WebshopCapabilities>> = {
     purchasingManage: false,
     productsView: true,
     productsManage: false,
-    navView: false,
-    navManage: false,
     /** Service partners are the technician's working context, so the list is
      * visible from the phone. Editing is not: the owner's decision was "let
      * the service staff just see it for now" (2026-08-21), which the server
@@ -109,8 +106,6 @@ const ROLE_CAPABILITIES: Readonly<Record<UserRole, WebshopCapabilities>> = {
     purchasingManage: false,
     productsView: true,
     productsManage: false,
-    navView: true,
-    navManage: false,
     partnersView: true,
     partnersManage: false,
   },
