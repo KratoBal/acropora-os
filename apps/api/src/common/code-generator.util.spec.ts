@@ -49,19 +49,26 @@ describe("generateCode", () => {
   });
 
   /**
-   * A NYITOTT KERDES, KIMONDVA.
+   * A DONTES, KIMONDVA: MARAD AZ UTC. (2026-08-26)
    *
-   * Az idopont-blokk UTC-ben all, mert a kod `toISOString()`-bol keszul. A
-   * cimkere az UTOLSO KET blokk kerul, tehat a szerelo `113856`-ot lat egy
-   * olyan eszkozon, amit budapesti fali ora szerint 13 ora 38 perckor vettek
-   * fel. Ket ora elteres, pont a munkaido kozepen.
+   * A kerdes ugy merult fel, hogy az idopont-blokk UTC-ben all, mert a kod
+   * `toISOString()`-bol keszul. A cimkere az UTOLSO KET blokk kerul, tehat a
+   * szerelo `113856`-ot lat egy olyan eszkozon, amit budapesti fali ora szerint
+   * 13 ora 38 perckor vettek fel.
    *
-   * A helyi idore allas AZONBAN NEM nyilvanvaloan jobb: a helyi ido evente
-   * egyszer ISMETLODIK (oraatallitas), tehat ket, egy oraval elteroen keletkezo
-   * bizonylat ugyanazt a blokkot kaphatna, es a mar kiadott sorok UTC-ben
-   * maradnanak, jelolo nelkul. Ez a teszt ezert a MAI alapot rogziti, es nem
-   * dontest fogalmaz meg: ha a dontes megszuletik, ez a sor valt pirosra, es
-   * pontosan ott all majd, ahol a valtozas tortent.
+   * A dontes megis az UTC maradasa lett, HAROM MERT INDOKKAL:
+   * 1. AZONOSITOROL van szo, nem orarol, es a helyi ido evente egyszer
+   *    ISMETLODIK (oraatallitas) -- vagyis pont abban bukna meg, amiert letezik.
+   * 2. A MAR KIADOTT sorok UTC-ben maradnanak, tehat ugyanaz a mezo ket
+   *    kulonbozo dolgot jelentene, jeloles nelkul.
+   * 3. A cimke szovege a teljes azonosito SZO SZERINTI vege, es erre epul a
+   *    `contains` illesztesu kereses. Egy atszamolt ido NEMAN szuntetne meg a
+   *    visszakereseset; erre kulon teszt all a mobil oldalon.
+   *
+   * Ha a szerelonek olvashato idopont kell a cimken, az KULON mezokent fer ra,
+   * es akkor a ket dolog nem keveredik. Ez a sor tehat nem nyitott kerdest
+   * jelol, hanem egy meghozott dontest orzi: ha valaki megis atallitja az
+   * idoalapot, itt valt pirosra, es itt talalja meg az indokot is.
    */
   it("stamps the moment in UTC, not in the local wall clock", () => {
     const code = generateCode("ESZK");
