@@ -11,6 +11,7 @@ import type {
 } from "@acropora/types";
 
 import { generateCode } from "../common/code-generator.util.js";
+import { withUniqueCode } from "../common/unique-code.util.js";
 import {
   isDuplicateMovementIdempotencyKeyError,
   lockVariantWarehouse,
@@ -230,20 +231,30 @@ export class InventoryCountRepository extends Repository {
       variant.product.unasSnapshot?.reportedStock ??
       new Prisma.Decimal(0);
 
-    const created = await this.countDatabase.inventoryCount.create({
-      data: {
-        countNumber: generateCode("LELTAR"),
-        warehouseId: warehouse.id,
-        startedById: actorUserId,
-        lines: {
-          create: variants.map((variant) => ({
-            variantId: variant.id,
-            expectedQty: expectedQtyFor(variant),
-          })),
-        },
-      },
-      include: detailInclude,
-    });
+    /**
+     * A LELTARSZAM UTKOZESE UJRAPROBALKOZAST KAP. Ket leltar akkor kap azonos
+     * szamot, ha ugyanabban a masodpercben indul es a generator ugyanazt a
+     * negyjegyu veget huzza. A burkolat CSAK ezt az egy irast ismetli meg, uj
+     * kodddal; az elotte allo olvasas es szamitas kivul marad.
+     */
+    const created = await withUniqueCode(
+      { prefix: "LELTAR", field: "countNumber" },
+      (countNumber) =>
+        this.countDatabase.inventoryCount.create({
+          data: {
+            countNumber,
+            warehouseId: warehouse.id,
+            startedById: actorUserId,
+            lines: {
+              create: variants.map((variant) => ({
+                variantId: variant.id,
+                expectedQty: expectedQtyFor(variant),
+              })),
+            },
+          },
+          include: detailInclude,
+        }),
+    );
     return toInventoryCountDetail(created);
   }
 
@@ -366,7 +377,9 @@ export class InventoryCountRepository extends Repository {
           // showing as untracked (—) even after being physically counted.
           const existingStockItems = await transaction.stockItem.findMany({
             where: {
-              variantId: { in: inventoryLines.map((line) => line.variantId) },
+              variantId: {
+                in: inventoryLines.map((line) => line.variantId),
+              },
               warehouseId,
               locationId: null,
               lotId: null,
