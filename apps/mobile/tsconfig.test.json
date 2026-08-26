@@ -48,6 +48,8 @@
     "src/lib/assets/asset-edit.spec.ts",
     "src/lib/assets/asset-create.ts",
     "src/lib/assets/asset-create.spec.ts",
+    "src/lib/partners/partner-presentation.ts",
+    "src/lib/partners/partner-presentation.spec.ts",
     "src/lib/api/request-auth.ts",
     "src/lib/api/request-auth.spec.ts",
     "src/lib/orders/presentation.ts",
