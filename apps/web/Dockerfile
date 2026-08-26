@@ -68,6 +68,13 @@ ARG API_URL
 ENV API_URL=${API_URL}
 RUN test -n "$API_URL"
 
+# The rewrite proxy's timeout is read from next.config.ts, so it is baked in
+# here too. Setting it on a running container does nothing, silently - which is
+# why it is a build argument and not a runtime variable. Left unset, the value
+# in src/lib/proxy-timeout.ts applies.
+ARG NEXT_PROXY_TIMEOUT_MS
+ENV NEXT_PROXY_TIMEOUT_MS=${NEXT_PROXY_TIMEOUT_MS}
+
 RUN --mount=type=cache,id=acropora-web-turbo-cache,target=/app/.turbo \
     pnpm turbo run build
 

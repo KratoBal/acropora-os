@@ -23,6 +23,7 @@ export default defineConfig({
       "src/components/brands/brand-import-assistant-page.test.tsx",
       "src/lib/api/**/*.test.ts",
       "src/lib/auth/production-auth.test.ts",
+      "src/lib/proxy-timeout.test.ts",
       "src/lib/navigation/**/*.test.ts",
     ],
     setupFiles: ["./src/test/setup.ts"],
