@@ -89,6 +89,19 @@ jobs:
 
       - name: Database integration tests
         id: db_integration_tests
+        # DELIBERATE, AND LOAD-BEARING - the job does NOT stay green on a
+        # failure here. "Fail the job if the database integration tests failed"
+        # further down re-reads this step's own outcome and exits 1.
+        #
+        # The tolerance exists so the steps BETWEEN the two can run: the release
+        # evidence recorder writes FAILURE just as much as SUCCESS, and stopping
+        # here would leave no trace of exactly the run that most needs one. It
+        # also lets the second command in this step matter, which an immediate
+        # stop on the first would not.
+        #
+        # This comment is here because a hundred lines separate the two steps,
+        # and reading only this one leads to the opposite conclusion - which is
+        # what happened on 2026-08-26 before anyone read the outcome data.
         continue-on-error: true
         run: |
           pnpm --filter @acropora/api test:integration
