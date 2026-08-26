@@ -76,6 +76,26 @@ export const LABEL_NAME_FONT_MM = 2.2;
 export const QR_MODULES_ACROSS = 45;
 
 /**
+ * KEREKÍTÉSI TARTALÉK: EGY CSS KÉPPONT, MILLIMÉTERBEN.
+ *
+ * A mért hiba (2026-08-26 este): a kinyomtatott PDF KÉT oldalas lett, a második
+ * teljesen üres, és a nyomtató alkalmazása nem fogadta el. Mindkét oldal 48 x 24
+ * mm volt, tehát a lapméret rendben van; a baj az, hogy a tartalom PONTOSAN
+ * annyi volt, mint a lap, mindkét irányban, nulla tartalékkal.
+ *
+ * Egy nyomtatási elrendezés viszont nem milliméterben számol, hanem képpontban.
+ * A CSS képpont a formátum szerint 1/96 hüvelyk, és a 21 mm-es QR ezen 79,3701
+ * képpont -- NEM egész szám. Ha az elrendezés felfelé kerekíti egész képpontra,
+ * a tartalom 0,63 képponttal magasabb lesz a lapnál, és a nyomtatás ÚJ OLDALT
+ * nyit. Az új oldal üres, mert a túllógás maga üres.
+ *
+ * Ezért a levezetés egy CSS képpontnyi helyet meghagy mindkét irányban: ennyi az
+ * a legnagyobb ár, amit egy felfelé kerekítés kérhet. Ez nem varázsszám, hanem
+ * maga a mechanizmus mértéke.
+ */
+export const LABEL_ROUNDING_ALLOWANCE_MM = 25.4 / 96;
+
+/**
  * A MODUL ALSÓ HATÁRA, milliméterben. IRODALMI ÉRTÉK, NEM A MI MÉRÉSÜNK.
  *
  * Telefonkamerás beolvasásnál a szokásos alsó határ 0,3 mm körül van. Ez nem
@@ -93,6 +113,10 @@ export type LabelLayout = {
   qrSizeMm: number;
   /** A feliratsáv szélessége a kód mellett, mm. */
   textWidthMm: number;
+  /** Ami a lap MAGASSÁGÁBÓL üresen marad. Kerekítési tartalék, nem dísz. */
+  heightSlackMm: number;
+  /** Ami a lap HOSSZÁBÓL üresen marad. */
+  widthSlackMm: number;
   /** Egy QR-modul oldalhossza, mm. Ez az egyetlen szám, ami a beolvashatóságról szól. */
   moduleMm: number;
 };
@@ -106,9 +130,19 @@ export type LabelLayout = {
  * pontosan abból, amiből a modul-méret származik.
  */
 export function labelLayout(): LabelLayout {
-  const qrSizeMm = LABEL_BAND_MM - 2 * LABEL_PADDING_MM;
+  /**
+   * A TARTALÉK MINDKÉT IRÁNYBAN LEJÖN, és nem utólagos korrekcióként, hanem a
+   * levezetés részeként. Ha a lapból utólag vonnánk le, két szám mondaná meg
+   * ugyanazt, és az egyikük elcsúszása néma lenne.
+   */
+  const qrSizeMm =
+    LABEL_BAND_MM - 2 * LABEL_PADDING_MM - LABEL_ROUNDING_ALLOWANCE_MM;
   const textWidthMm =
-    LABEL_LENGTH_MM - 2 * LABEL_PADDING_MM - qrSizeMm - LABEL_GAP_MM;
+    LABEL_LENGTH_MM -
+    2 * LABEL_PADDING_MM -
+    qrSizeMm -
+    LABEL_GAP_MM -
+    LABEL_ROUNDING_ALLOWANCE_MM;
 
   return {
     pageWidthMm: LABEL_LENGTH_MM,
@@ -116,6 +150,10 @@ export function labelLayout(): LabelLayout {
     qrSizeMm,
     textWidthMm,
     moduleMm: qrSizeMm / QR_MODULES_ACROSS,
+    heightSlackMm: LABEL_BAND_MM - 2 * LABEL_PADDING_MM - qrSizeMm,
+    widthSlackMm:
+      LABEL_LENGTH_MM -
+      (2 * LABEL_PADDING_MM + qrSizeMm + LABEL_GAP_MM + textWidthMm),
   };
 }
 
