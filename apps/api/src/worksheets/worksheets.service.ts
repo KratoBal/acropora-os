@@ -297,6 +297,25 @@ export class WorksheetsService {
     actorUserId: string,
     now: Date = new Date(),
   ): Promise<WorksheetDetail> {
+    /**
+     * AZ ELUTASÍTÁS OKA KÖTELEZŐ (Balázs döntése, 2026-08-26).
+     *
+     * Indok nélkül a visszautasítás annyit mond, hogy „nem", és sem a lapon
+     * dolgozó szerelő, sem a hibajegy kezelője nem tudja, mit kell javítani.
+     *
+     * A szabály ITT áll, és nem a DTO dekorátorain, mert KÉT mezőt köt össze: a
+     * döntést és az indokot. A dekorátoros alak megtévesztő lett volna -- két
+     * `ValidateIf` ugyanazon a mezőn nem összeadódik, hanem felülírja egymást,
+     * és az indok nélküli elutasítás csendben átment volna.
+     *
+     * A levágott hosszt nézzük, mert a csupa szóközből álló indok pontosan
+     * annyit mond, mint a hiányzó.
+     */
+    if (input.decision === "REJECTED" && (input.note?.trim().length ?? 0) < 3)
+      throw new BadRequestException(
+        "Az elutasítás okát meg kell adni, legalább három karakterrel: enélkül nem derül ki, mit kell javítani.",
+      );
+
     const result = await this.repository.sign({
       worksheetId: id,
       decision: input.decision,
