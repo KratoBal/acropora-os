@@ -11,6 +11,7 @@ export interface AlertProps extends HTMLAttributes<HTMLDivElement> {
 
 export function Alert({
   action,
+  children,
   className,
   description,
   title,
@@ -40,6 +41,19 @@ export function Alert({
           <p className="mt-0.5 whitespace-pre-line text-sm opacity-75">
             {description}
           </p>
+        ) : null}
+        {/*
+          Children are rendered, not dropped.
+
+          They used to fall into `...props` and be overwritten by this div's
+          own children, so an alert written as `<Alert title="...">text</Alert>`
+          displayed the heading and silently swallowed the message. Nothing
+          about it looked wrong on the screen: there was an alert, in the right
+          colour, saying half of what it was meant to say. `description` stays
+          the plain-text route; this is for a message that carries markup.
+        */}
+        {children ? (
+          <div className="mt-0.5 text-sm opacity-75">{children}</div>
         ) : null}
       </div>
       {action}
