@@ -118,6 +118,40 @@ Create the following non-secret variables in all three EAS environments:
 | preview         | `preview`             | HTTPS staging API                   |
 | production      | `production`          | HTTPS production API                |
 
+### Where those values actually live
+
+The table above says what to create. This one says what is set today, and --
+more importantly -- **where the value lives**. None of these URLs exist in the
+repository: they are stored on the EAS side, per environment. Someone looking
+for the preview API address in the source tree will not find it, and may
+conclude it was never configured.
+
+| EAS environment | Build profile | `EXPO_PUBLIC_API_URL`             | Where the value lives    |
+| --------------- | ------------- | --------------------------------- | ------------------------ |
+| development     | `development` | not set                           | -                        |
+| preview         | `preview`     | `https://api-staging.acropora.hu` | EAS environment variable |
+| production      | `production`  | `https://api.acropora.hu`         | EAS environment variable |
+
+Read the current values back with:
+
+```bash
+cd apps/mobile
+npx eas-cli@22 env:list preview      # or: development, production
+```
+
+Two things this table is not. It is not a source of truth -- the EAS side is,
+and this page can go stale the moment someone changes a variable there. And an
+empty cell means _measured as unset_, not _safe to ignore_: an EAS build in the
+`development` environment has no API address at all, so the app stops at its own
+configuration check on the device rather than silently calling the wrong host.
+
+**Measured 2026-08-26, and worth keeping visible:** the `preview` environment
+pointed at the **production** API (`https://api.acropora.hu`) until that day.
+A preview build handed to a tester would have written to live data. The address
+was changed to staging before any preview build went out; the finding is recorded
+here because the failure was invisible from the repository -- exactly the reason
+this section exists.
+
 The build profiles set `APP_VARIANT` themselves. This produces separately
 installable bundle identifiers:
 
