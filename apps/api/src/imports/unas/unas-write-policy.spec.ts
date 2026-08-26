@@ -100,8 +100,18 @@ describe("UNAS write policy", () => {
   });
 
   /**
-   * A mezőlista LEÍRÁS és MÉRCE: ha a szinkron írás-halmaza bővül anélkül,
-   * hogy ide felvennék, ez a lista hazudik arról, mit csinál a rendszer.
+   * Amit ez a blokk valóban állít, és amit NEM.
+   *
+   * Állítja: a lista belső alakja rendben van, és tartalmazza azokat a
+   * mezőket, amikről tudjuk, hogy a szinkron ma írja őket.
+   *
+   * NEM állítja - és korábban a szöveg úgy hangzott, mintha igen -, hogy a
+   * lista együtt mozog a szinkronnal. A lenti mezőnevek kézzel vannak ideírva,
+   * tehát ez az összevetés két kézzel írt lista között történik. Ha a szinkron
+   * holnap egy új mezőt kezd írni, ez a teszt zöld marad.
+   *
+   * A valódi őrzéshez a szinkron írásának kellene ezen a listán átmennie.
+   * Kártya: a386f828.
    */
   describe("a mezőszintű szabály kódban áll", () => {
     it("tartalmazza, amit a szinkron ma ír", () => {

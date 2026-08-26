@@ -150,6 +150,56 @@ describe("withUniqueCode", () => {
     assert.equal(calls, 1);
   });
 
+  /**
+   * TOBB OSZLOP, EGY IRAS. A szallito letrehozasa a szallito sajat kodjat ES a
+   * tukor vevo-sor szamat is kiadja, egy tranzakcioban -- tehat a tranzakcio
+   * BARMELYIKEN elbukhat. Ujraprobalaskor MINDKET kod ujra keletkezik, mert
+   * mindketto a lezaron BELUL kesziil: ket fuggetlen ujrahuzas, nem ugyanaz a
+   * kiseerlet megismetelve.
+   */
+  it("retries when any of the named columns is the one that collided", async () => {
+    let calls = 0;
+
+    const result = await withUniqueCode(
+      {
+        prefix: "SZALL",
+        field: ["code", "customerNumber"],
+        randomSuffix: tails("AB12", "99F0"),
+      },
+      async () => {
+        calls += 1;
+        // Nem a szallito kodja utkozott, hanem a TUKOR vevoszama.
+        if (calls === 1) throw duplicate("customerNumber");
+        return "kesz";
+      },
+    );
+
+    assert.equal(result, "kesz");
+    assert.equal(calls, 2);
+  });
+
+  it("still leaves an unnamed column alone when a list is given", async () => {
+    let calls = 0;
+    const error = duplicate("email");
+
+    // A lista NEM azt jelenti, hogy barmely egyedisegi hiba ujraprobalhato: egy
+    // mar hasznalt email-cim otszori ismetlese ugyanazt az uzleti hibat adna,
+    // csak kesobb.
+    await assert.rejects(
+      () =>
+        withUniqueCode(
+          { prefix: "SZALL", field: ["code", "customerNumber"] },
+          async () => {
+            calls += 1;
+            throw error;
+          },
+        ),
+      (thrown) => thrown === error,
+    );
+
+    assert.equal(calls, 1);
+  });
+
   it("does not retry an ordinary failure", async () => {
     let calls = 0;
     const error = new Error("a halozat elszallt");
