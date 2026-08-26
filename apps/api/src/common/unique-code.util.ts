@@ -38,9 +38,23 @@ import { isPrismaUniqueConstraintViolation } from "./prisma-error.util.js";
 export type UniqueCodeOptions = {
   /// The document family's prefix, e.g. "ESZK".
   prefix: string;
-  /// The column the code is written to, e.g. "assetNumber". A `P2002` on any
-  /// other column is not this helper's business.
-  field: string;
+  /// The column, or columns, a retry is worth trying for. Usually one, e.g.
+  /// "assetNumber". A `P2002` on any other column is not this helper's
+  /// business.
+  ///
+  /// SEVERAL COLUMNS WHEN ONE WRITE MINTS SEVERAL CODES. Creating a supplier
+  /// writes the supplier's own code AND a mirrored customer row with a customer
+  /// number, both unique, in one transaction - so the transaction can lose on
+  /// either. Retrying is right for both, and for the same reason it is right at
+  /// all: EVERY code in there is minted inside the retried closure, so a second
+  /// attempt draws fresh values for all of them. It is two independent redraws,
+  /// not the same write hopefully going through this time.
+  ///
+  /// The list stays explicit on purpose. There is no "retry any unique
+  /// violation" shape, because a business collision - an e-mail address already
+  /// in use - would then be retried five times and surface the same error later
+  /// than it should.
+  field: string | readonly string[];
   /// How many codes to try before giving up. Beyond this the original database
   /// error is rethrown unchanged - deliberately today's behaviour, so the worst
   /// case after this change is no worse than the worst case before it.
@@ -71,9 +85,10 @@ export async function withUniqueCode<T>(
     try {
       return await persist(code);
     } catch (error) {
-      const isTakenCode = isPrismaUniqueConstraintViolation(
-        error,
-        options.field,
+      const fields =
+        typeof options.field === "string" ? [options.field] : options.field;
+      const isTakenCode = fields.some((field) =>
+        isPrismaUniqueConstraintViolation(error, field),
       );
       if (!isTakenCode || attempt >= maxAttempts) throw error;
     }

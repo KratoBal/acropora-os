@@ -10,6 +10,7 @@ import type {
 } from "@acropora/types";
 
 import { generateCode } from "../common/code-generator.util.js";
+import { withUniqueCode } from "../common/unique-code.util.js";
 import type { CreateWorksheetDepartmentDto } from "../worksheets/dto/worksheet.dto.js";
 import type { PartnerReferenceCounts } from "./partner-deletion.js";
 import type {
@@ -380,60 +381,74 @@ export class SuppliersRepository extends Repository {
     return supplier ? toSummary(supplier) : null;
   }
 
+  /**
+   * A SZALLITO LETREHOZASA KET KODOT AD KI EGY TRANZAKCIOBAN, es a tranzakcio
+   * BARMELYIKEN elbukhat: a szallito sajat kodjan, es a tukor vevo-sor szaman,
+   * amit a `syncWorksheetMirror` allit elo idelent.
+   *
+   * Ezert szerepel mind a ketto a listan. Ujraprobalaskor MINDKETTO ujra
+   * keletkezik -- a szallitoe a burkolattol, a tukore a segedfuggvenyen belul --,
+   * tehat ket fuggetlen ujrahuzas tortenik, nem ugyanaz a kiserlet megismetelve.
+   */
   create(input: CreateSupplierDto, actorId: string): Promise<SupplierSummary> {
-    const code = generateCode("SZALL");
-    return prisma.$transaction(
-      async (tx) => {
-        if (input.worksheetPartnerCode)
-          await assertPartnerCodeFree(tx, input.worksheetPartnerCode, null);
-        const supplier = await tx.supplier.create({
-          data: {
-            code,
-            name: input.name.trim(),
-            // Omitted stays omitted, so the column default decides. Writing
-            // `?? true` here would look equivalent and would not be: it would
-            // move the decision out of the schema and into every caller.
-            isSupplier: input.isSupplier,
-            isService: input.isService,
-            worksheetPartnerCode: input.worksheetPartnerCode,
-            taxNumber: input.taxNumber?.trim() || undefined,
-            country: (input.country ?? "HU").trim().toUpperCase(),
-            email: input.email?.trim() || undefined,
-            phone: input.phone?.trim() || undefined,
-            iban: input.iban?.trim() || undefined,
-            swiftCode: input.swiftCode?.trim() || undefined,
-            bankAccountNumber: input.bankAccountNumber?.trim() || undefined,
-            contactPersonName: input.contactPersonName?.trim() || undefined,
-            contactPersonPhone: input.contactPersonPhone?.trim() || undefined,
-            contactPersonEmail: input.contactPersonEmail?.trim() || undefined,
-            postalCode: input.postalCode?.trim() || undefined,
-            city: input.city?.trim() || undefined,
-            addressLine1: input.addressLine1?.trim() || undefined,
-            addressLine2: input.addressLine2?.trim() || undefined,
+    return withUniqueCode(
+      { prefix: "SZALL", field: ["code", "customerNumber"] },
+      (code) =>
+        prisma.$transaction(
+          async (tx) => {
+            if (input.worksheetPartnerCode)
+              await assertPartnerCodeFree(tx, input.worksheetPartnerCode, null);
+            const supplier = await tx.supplier.create({
+              data: {
+                code,
+                name: input.name.trim(),
+                // Omitted stays omitted, so the column default decides. Writing
+                // `?? true` here would look equivalent and would not be: it would
+                // move the decision out of the schema and into every caller.
+                isSupplier: input.isSupplier,
+                isService: input.isService,
+                worksheetPartnerCode: input.worksheetPartnerCode,
+                taxNumber: input.taxNumber?.trim() || undefined,
+                country: (input.country ?? "HU").trim().toUpperCase(),
+                email: input.email?.trim() || undefined,
+                phone: input.phone?.trim() || undefined,
+                iban: input.iban?.trim() || undefined,
+                swiftCode: input.swiftCode?.trim() || undefined,
+                bankAccountNumber: input.bankAccountNumber?.trim() || undefined,
+                contactPersonName: input.contactPersonName?.trim() || undefined,
+                contactPersonPhone:
+                  input.contactPersonPhone?.trim() || undefined,
+                contactPersonEmail:
+                  input.contactPersonEmail?.trim() || undefined,
+                postalCode: input.postalCode?.trim() || undefined,
+                city: input.city?.trim() || undefined,
+                addressLine1: input.addressLine1?.trim() || undefined,
+                addressLine2: input.addressLine2?.trim() || undefined,
+              },
+            });
+            await syncWorksheetMirror(tx, {
+              id: supplier.id,
+              name: supplier.name,
+              isService: supplier.isService,
+              customerId: supplier.customerId,
+              worksheetPartnerCode: supplier.worksheetPartnerCode,
+            });
+            await tx.domainEvent.create({
+              data: {
+                id: randomUUID(),
+                eventType: "supplier.created",
+                aggregateType: "Supplier",
+                aggregateId: supplier.id,
+                actorUserId: actorId,
+                payload: { code: supplier.code, name: supplier.name },
+                occurredAt: new Date(),
+                schemaVersion: 1,
+              },
+            });
+            return toSummary(supplier);
           },
-        });
-        await syncWorksheetMirror(tx, {
-          id: supplier.id,
-          name: supplier.name,
-          isService: supplier.isService,
-          customerId: supplier.customerId,
-          worksheetPartnerCode: supplier.worksheetPartnerCode,
-        });
-        await tx.domainEvent.create({
-          data: {
-            id: randomUUID(),
-            eventType: "supplier.created",
-            aggregateType: "Supplier",
-            aggregateId: supplier.id,
-            actorUserId: actorId,
-            payload: { code: supplier.code, name: supplier.name },
-            occurredAt: new Date(),
-            schemaVersion: 1,
-          },
-        });
-        return toSummary(supplier);
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        ),
     );
   }
 
