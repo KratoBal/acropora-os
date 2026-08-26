@@ -15,8 +15,11 @@ import type { ReactNode } from "react";
 
 import { getAsset, getAssetQr } from "@/lib/api/assets";
 import {
-  LABEL_QR_SIZE_MM,
-  LABEL_SIZE_MM,
+  LABEL_GAP_MM,
+  LABEL_NAME_FONT_MM,
+  LABEL_NUMBER_FONT_MM,
+  LABEL_PADDING_MM,
+  labelLayout,
   labelPageSize,
 } from "@/lib/assets/label-format";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -298,15 +301,30 @@ function escapeHtml(value: string) {
  * a nyomtatási hívás ne mondhasson két különböző számot: ez a hiba csak
  * nyomtatásban derülne ki, és akkor sem mondaná meg magáról, hogy méret-eltérés.
  */
+/**
+ * A CÍMKE FEKVŐ, ÉS A FELIRAT A KÓD MELLETT VAN, NEM ALATTA.
+ *
+ * A szalag 24 mm széles és folytonos: a magasság kötött, a hossz szabad. Ha a
+ * felirat a kód ALÁ kerülne, a szövegsáv abból a magasságból venne el, amiből a
+ * modul-méret származik -- vagyis pont a beolvashatóságból. Mellette viszont a
+ * kód megkapja a teljes magasságot, és a szöveg a szabad irányba nő.
+ *
+ * MINDEN MÉRET A LEVEZETÉSBŐL JÖN (`labelLayout()`). Kézzel beírt milliméter itt
+ * nincs, mert a stílus és a nyomtatási hívás akkor válna szét, és a különbség
+ * csak a kinyomtatott szalagon derülne ki.
+ */
 function labelHtml(svg: string, assetNumber: string, name: string) {
+  const { pageWidthMm, pageHeightMm, qrSizeMm, textWidthMm } = labelLayout();
+
   return `<!doctype html><html><head><meta name="viewport" content="width=device-width"><style>
-    @page { size: ${LABEL_SIZE_MM}mm ${LABEL_SIZE_MM}mm; margin: 0; }
-    html, body { width: ${LABEL_SIZE_MM}mm; height: ${LABEL_SIZE_MM}mm; margin: 0; padding: 0; overflow: hidden; }
-    body { box-sizing: border-box; padding: 1.2mm; font-family: -apple-system, Arial, sans-serif; text-align: center; color: #000; }
-    svg { display: block; width: ${LABEL_QR_SIZE_MM}mm; height: ${LABEL_QR_SIZE_MM}mm; margin: 0 auto; }
-    .number { margin-top: .4mm; font-size: 2.2mm; font-weight: 800; line-height: 1; }
-    .name { margin-top: .3mm; font-size: 1.6mm; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  </style></head><body>${svg}<div class="number">${escapeHtml(assetNumber)}</div><div class="name">${escapeHtml(name)}</div></body></html>`;
+    @page { size: ${pageWidthMm}mm ${pageHeightMm}mm; margin: 0; }
+    html, body { width: ${pageWidthMm}mm; height: ${pageHeightMm}mm; margin: 0; padding: 0; overflow: hidden; }
+    body { box-sizing: border-box; padding: ${LABEL_PADDING_MM}mm; font-family: -apple-system, Arial, sans-serif; color: #000; display: flex; align-items: center; gap: ${LABEL_GAP_MM}mm; }
+    svg { display: block; flex: none; width: ${qrSizeMm}mm; height: ${qrSizeMm}mm; }
+    .text { flex: none; width: ${textWidthMm}mm; overflow: hidden; }
+    .number { font-size: ${LABEL_NUMBER_FONT_MM}mm; font-weight: 800; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .name { margin-top: ${LABEL_GAP_MM}mm; font-size: ${LABEL_NAME_FONT_MM}mm; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  </style></head><body>${svg}<div class="text"><div class="number">${escapeHtml(assetNumber)}</div><div class="name">${escapeHtml(name)}</div></div></body></html>`;
 }
 
 const styles = StyleSheet.create({
