@@ -200,8 +200,21 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
       variant.product.unasSnapshot?.reportedStock?.toString(),
       "7.5",
     );
+    /**
+     * CSAK A SAJÁT KÉT FOLYAMA, nem az egész tábla.
+     *
+     * A kurzor-tábla KÖZÖS: ugyanide ír a rendelés-szinkron is (`ORDERS`).
+     * Amíg a szűrő csak a szolgáltatóra szólt, ez az állítás a MÁSIK suite
+     * nyomát is beleszámolta, és attól bukott el -- nem a mért viselkedéstől.
+     *
+     * Miért nem látszott soha: a CI mindig FRISS adatbázison indul, ahol nincs
+     * idegen sor. Csak az bukik bele, aki helyben, ismételten futtat, tehát
+     * pontosan az, aki épp fejleszt. (Mérve 2026-08-26: a suite első futása
+     * zöld, a második három bukást adott, és a különbség egyetlen `ORDERS` sor
+     * volt az előző futásból.)
+     */
     const cursors = await prisma.integrationCursor.findMany({
-      where: { provider: "UNAS" },
+      where: { provider: "UNAS", stream: { in: ["PRODUCTS", "STOCKS"] } },
       select: { stream: true, lastSuccessfulWindowEnd: true },
       orderBy: { stream: "asc" },
     });
