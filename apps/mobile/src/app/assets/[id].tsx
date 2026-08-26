@@ -14,6 +14,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import type { ReactNode } from "react";
 
 import { getAsset, getAssetQr } from "@/lib/api/assets";
+import {
+  LABEL_QR_SIZE_MM,
+  LABEL_SIZE_MM,
+  labelPageSize,
+} from "@/lib/assets/label-format";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 
@@ -50,7 +55,16 @@ export default function AssetDetailScreen() {
     const qr = await getAssetQr(query.data.id);
     const html = labelHtml(qr.svg, query.data.assetNumber, query.data.name);
     if (share) {
-      const { uri } = await Print.printToFileAsync({ html });
+      /**
+       * A LAP-MÉRET A HÍVÁSBÓL JÖN, nem a stílusból. Az `expo-print` iOS oldalon
+       * a `PrintOptions.toPageSize()` a Letter méretből indul, és csak a
+       * `width`/`height` értéket veszi figyelembe; a `@page` CSS-t ez az út nem
+       * olvassa. Enélkül teljes lapra készül a PDF, egy apró címkével a sarkában.
+       */
+      const { uri } = await Print.printToFileAsync({
+        html,
+        ...labelPageSize(),
+      });
       if (await Sharing.isAvailableAsync())
         await Sharing.shareAsync(uri, {
           mimeType: "application/pdf",
@@ -59,7 +73,7 @@ export default function AssetDetailScreen() {
         });
       return;
     }
-    await Print.printAsync({ html });
+    await Print.printAsync({ html, ...labelPageSize() });
   };
 
   if (status !== "authenticated" || !user) return <Redirect href="/login" />;
@@ -279,12 +293,17 @@ function escapeHtml(value: string) {
   );
 }
 
+/**
+ * A címke tartalma. A MÉRETEK a `label-format` modulból jönnek, hogy a stílus és
+ * a nyomtatási hívás ne mondhasson két különböző számot: ez a hiba csak
+ * nyomtatásban derülne ki, és akkor sem mondaná meg magáról, hogy méret-eltérés.
+ */
 function labelHtml(svg: string, assetNumber: string, name: string) {
   return `<!doctype html><html><head><meta name="viewport" content="width=device-width"><style>
-    @page { size: 30mm 30mm; margin: 0; }
-    html, body { width: 30mm; height: 30mm; margin: 0; padding: 0; overflow: hidden; }
+    @page { size: ${LABEL_SIZE_MM}mm ${LABEL_SIZE_MM}mm; margin: 0; }
+    html, body { width: ${LABEL_SIZE_MM}mm; height: ${LABEL_SIZE_MM}mm; margin: 0; padding: 0; overflow: hidden; }
     body { box-sizing: border-box; padding: 1.2mm; font-family: -apple-system, Arial, sans-serif; text-align: center; color: #000; }
-    svg { display: block; width: 23mm; height: 23mm; margin: 0 auto; }
+    svg { display: block; width: ${LABEL_QR_SIZE_MM}mm; height: ${LABEL_QR_SIZE_MM}mm; margin: 0 auto; }
     .number { margin-top: .4mm; font-size: 2.2mm; font-weight: 800; line-height: 1; }
     .name { margin-top: .3mm; font-size: 1.6mm; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   </style></head><body>${svg}<div class="number">${escapeHtml(assetNumber)}</div><div class="name">${escapeHtml(name)}</div></body></html>`;
