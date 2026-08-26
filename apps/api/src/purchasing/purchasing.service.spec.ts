@@ -35,9 +35,14 @@ function buildService(options: {
   supplierExists?: boolean;
   supplierCountry?: string;
   getRateForDate?: MnbExchangeRateService["getRateForDate"];
+  /// Hany mentesi kiserlet bukjon el "ez a bizonylatszam mar foglalt" hibaval,
+  /// mielott atmegy. Enelkul az utkozes 65 536-bol egy eselyre varna.
+  takenDocumentNumbers?: number;
 }) {
   let capturedCreateParams: CreatePurchaseInvoiceParams | undefined;
   let mnbCallCount = 0;
+  let currentStockCallCount = 0;
+  const seenDocumentNumbers: string[] = [];
   // No UnasApiClient/UnasAuthService dependency anymore - PurchasingService
   // no longer talks to UNAS synchronously at all (see purchasing.service.ts
   // constructor comment); the fake repository below stands in for
@@ -45,12 +50,19 @@ function buildService(options: {
   // the shared postInventoryMovement primitive instead of a manual
   // stockMovement/stockItem/UNAS-push loop.
   const invoices = {
-    currentStock: async () => ({
-      warehouseId: options.warehouseId ?? "warehouse-1",
-      variants: options.variants,
-    }),
+    currentStock: async () => {
+      currentStockCallCount += 1;
+      return {
+        warehouseId: options.warehouseId ?? "warehouse-1",
+        variants: options.variants,
+      };
+    },
     create: async (params: CreatePurchaseInvoiceParams) => {
       capturedCreateParams = params;
+      seenDocumentNumbers.push(params.documentNumber);
+      if (seenDocumentNumbers.length <= (options.takenDocumentNumbers ?? 0))
+        // Amit az adatbazis adna vissza, ha ezt a szamot mar kiadtuk volna.
+        throw { code: "P2002", meta: { target: ["documentNumber"] } };
       return {
         id: "invoice-1",
         documentNumber: params.documentNumber,
@@ -141,6 +153,8 @@ function buildService(options: {
     service,
     getCapturedCreateParams: () => capturedCreateParams,
     getMnbCallCount: () => mnbCallCount,
+    getSeenDocumentNumbers: () => [...seenDocumentNumbers],
+    getCurrentStockCallCount: () => currentStockCallCount,
   };
 }
 
@@ -571,5 +585,65 @@ describe("PurchasingService.createInvoice", () => {
         "user-1",
       ),
     );
+  });
+  /**
+   * A BIZONYLATSZAM UTKOZESE. Ket bevetelezes ugyanabban a masodpercben
+   * ugyanazt a negyjegyu veget huzhatja. Ma a masodik hibaval vegzodik, es a
+   * kollegának kell ujraprobalnia - holott a kovetkezo huzas mas veletlent ad.
+   */
+  it("mints a new document number when the first one is already taken", async () => {
+    const { service, getSeenDocumentNumbers } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+      takenDocumentNumbers: 1,
+    });
+
+    const result = await service.createInvoice(baseInput(), "user-1");
+
+    const seen = getSeenDocumentNumbers();
+    assert.equal(seen.length, 2);
+    // A masodik kiserlet MAS szamot visz. Ha a szam a lezaron kivul keletkezne,
+    // itt ketszer ugyanaz allna, es a mentes otször veszitene ugyanazzal.
+    assert.notEqual(seen[0], seen[1]);
+    assert.equal(result.detail.documentNumber, seen[1]);
+  });
+
+  /**
+   * AMI A LEZAR MERETET ORZI. Az ujraprobalas CSAK a mentest ismetli meg. A
+   * folotte allo ellenorzesek es olvasasok (koztuk a keszlet-lekerdezes)
+   * valtozatlanul egyszer futnak - kulonben egy ritka utkozes csendben
+   * megduplazna a bevetelezes teljes munkajat.
+   */
+  it("repeats only the write, not the validation above it", async () => {
+    const { service, getCurrentStockCallCount, getSeenDocumentNumbers } =
+      buildService({
+        variants: new Map([["variant-1", variant()]]),
+        takenDocumentNumbers: 2,
+      });
+
+    await service.createInvoice(baseInput(), "user-1");
+
+    assert.equal(getSeenDocumentNumbers().length, 3);
+    assert.equal(getCurrentStockCallCount(), 1);
+  });
+
+  /**
+   * A HATAR. Az otodik kiserlet utan az eredeti adatbazis-hiba megy tovabb,
+   * valtozatlanul - vagyis a legrosszabb eset pontosan a mai viselkedes.
+   */
+  it("gives the original error back when every attempt loses", async () => {
+    const { service, getSeenDocumentNumbers } = buildService({
+      variants: new Map([["variant-1", variant()]]),
+      takenDocumentNumbers: 99,
+    });
+
+    await assert.rejects(
+      () => service.createInvoice(baseInput(), "user-1"),
+      (error: unknown) =>
+        (error as { code?: string }).code === "P2002" &&
+        (error as { meta?: { target?: string[] } }).meta?.target?.[0] ===
+          "documentNumber",
+    );
+
+    assert.equal(getSeenDocumentNumbers().length, 5);
   });
 });
