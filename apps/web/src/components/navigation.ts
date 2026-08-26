@@ -202,6 +202,15 @@ export const unasSettingsNavigation: AppNavigationItem[] = [
 
 export const secondaryNavigation: AppNavigationItem[] = [
   {
+    // Belső próbafelület, nem üzemi oldal: ezért NEM az operatív blokkban van,
+    // hanem itt. A jogosultságot minden szerepkör megkapja (Balázs döntése,
+    // 2026-08-26), a szűkítés a felhasználói jogosultságok rendezésekor jön.
+    href: "/ai-teszt",
+    label: "AI teszt",
+    icon: "activity",
+    permission: PERMISSIONS.AI_TEST_VIEW,
+  },
+  {
     href: "/admin/brands",
     label: "Márkák",
     icon: "package",
