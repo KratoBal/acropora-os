@@ -65,8 +65,14 @@ immediately — but _suggests_ is not _measured_, and this page does not record
 inferences as facts.
 
 What will be recorded here after the live rotation: whether the refusal was
-immediate or delayed, and if delayed, how long it took. The runbook's step 7
-produces that measurement.
+immediate or delayed, and if delayed, how long it took.
+
+That measurement only counts with its control. A `401` proves nothing on its own
+— a mistyped address or a malformed basic-auth header produces exactly the same
+answer, and from outside the two are indistinguishable. So the runbook measures
+the **new** key first on the same path: once that returns `200`, the shape of the
+call is proven, and the old key's `401` is about the key rather than about the
+question.
 
 ## Permission enforcement — a compatibility constraint
 

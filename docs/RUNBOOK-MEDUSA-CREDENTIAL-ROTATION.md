@@ -135,20 +135,30 @@ végállapota a DB-only.
 
 ## 5. A régi kulcs elutasításának ellenőrzése
 
-A hívás ártalmatlan (egyetlen olvasás, `limit=1`), és a kulcs **nem** kerül sem
-parancssorba, sem héj-előzménybe: `curl` konfigurációs fájlból olvassa.
+**KÉT mérés, ebben a sorrendben, és az első NEM hagyható ki.** Egy `401`
+önmagában nem bizonyítja, hogy a kulcs vissza van vonva: ugyanezt kapjuk akkor
+is, ha a hívás ALAKJA rossz (elgépelt cím, rossz végpont, elrontott basic-auth
+forma). A két eset kívülről megkülönböztethetetlen, és a második egy hamis
+megnyugvás: azt hinnénk, hogy a revoke hatott, holott csak rosszul kérdeztünk.
 
-A fájl elkészítése (a kulcsot szerkesztőbe illesztve, nem parancssorban gépelve):
+Ezért előbb az ÚJ kulccsal mérünk, ugyanazon az úton, ugyanabban a formában. Ha
+az `200`-at ad, akkor a hívás alakja bizonyítottan jó, és onnantól a régi kulcs
+`401`-e a KULCSRÓL szól, nem a kérdésről.
+
+A hívás ártalmatlan (egyetlen olvasás, `limit=1`), és a kulcs **nem** kerül sem
+parancssorba, sem héj-előzménybe: a `curl` konfigurációs fájlból olvassa.
+
+### 5.1 Kontroll az ÚJ kulccsal (előbb)
 
 ```bash
-install -m 600 /dev/null /tmp/medusa-old-key.conf
+install -m 600 /dev/null /tmp/medusa-key.conf
 ```
 
-Ezután nyisd meg szerkesztővel a `/tmp/medusa-old-key.conf` fájlt, és írd bele:
+Nyisd meg szerkesztővel a `/tmp/medusa-key.conf` fájlt, és írd bele:
 
 ```
 url = "<MEDUSA_URL>/admin/products?limit=1"
-user = "<REGI_KULCS>:"
+user = "<UJ_KULCS>:"
 silent
 output = "/dev/null"
 write-out = "%{http_code}\n"
@@ -157,7 +167,20 @@ write-out = "%{http_code}\n"
 A mérés:
 
 ```bash
-curl --config /tmp/medusa-old-key.conf
+curl --config /tmp/medusa-key.conf
+```
+
+**Amit látni kell:** `200`.
+**Ami cáfol:** bármi más. Ilyenkor **a mérés nem folytatható**: nem a régi kulcs
+állapotát mérnénk, hanem a saját hívásunk hibáját. Előbb a cím és a forma
+javítandó, és csak utána jön az 5.2.
+
+### 5.2 A régi kulcs (csak az 5.1 után)
+
+Ugyanabban a fájlban cseréld ki a `user` sort a RÉGI kulcsra, és futtasd újra:
+
+```bash
+curl --config /tmp/medusa-key.conf
 ```
 
 **Amit látni kell:** `401` (vagy `403`).
@@ -165,16 +188,22 @@ curl --config /tmp/medusa-old-key.conf
 találgass: jegyezd fel az időpontot, ismételd meg a mérést öt és tizenöt perc
 múlva, és a jelentésbe a mért időzítés kerüljön.
 
-A fájl törlése azonnal, a mérés után:
+### 5.3 A fájl törlése
 
 ```bash
-shred -u /tmp/medusa-old-key.conf
+shred -u /tmp/medusa-key.conf
 ```
 
-Ugyanez a fájl-alak használható az **új** kulccsal is, ha a Medusa oldali
-termékszámot akarod ellenőrizni ugyanazon az úton — csak a `user` sor változik.
+**Ez akkor is fusson le, ha a mérés félbeszakad** — hiba, megszakítás, vagy mert
+közbejött valami. A fájlban egy éles kulcs áll: vagy az, amit épp visszavonunk,
+vagy az, amit épp élesbe állítottunk. Ha bizonytalan vagy benne, megvan-e még,
+egyetlen parancs eldönti:
 
----
+```bash
+ls -l /tmp/medusa-key.conf
+```
+
+Ha a fájl létezik, töröld a fenti `shred` paranccsal.
 
 ## 6. Végállapot-ellenőrzés
 
@@ -183,7 +212,8 @@ termékszámot akarod ellenőrizni ugyanazon az úton — csak a `user` sor vál
 | credential source            | Beállítások oldal             | `database`        |
 | integration state            | Beállítások oldal             | működő állapot    |
 | env-kulcs a futó folyamatban | az 1. pont parancsa           | `NINCS BEALLITVA` |
-| régi kulcs                   | az 5. pont parancsa           | `401` vagy `403`  |
+| új kulcs (kontroll)          | az 5.1 parancsa               | `200`             |
+| régi kulcs                   | az 5.2 parancsa               | `401` vagy `403`  |
 | új kulcs                     | vetítés a 2. pont parancsával | zöld              |
 
 Ha az env-kulcs valamilyen rollback okból bent marad, azt **dokumentálni kell**:
