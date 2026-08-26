@@ -219,3 +219,64 @@ Ha a fájl létezik, töröld a fenti `shred` paranccsal.
 Ha az env-kulcs valamilyen rollback okból bent marad, azt **dokumentálni kell**:
 hogy jelen van, hogy nem aktív, és hogy mikor vehető ki. Határidő nélküli néma
 fallback nem maradhat.
+
+---
+
+## Melléklet: a 2026-08-26-i stage kör mért eredménye
+
+Ez a szakasz **nem** eljárás, hanem jegyzőkönyv: mi történt ténylegesen, és mi
+NEM. A fenti lépések változatlanul érvényesek a következő cserére.
+
+### Hitelesítő adat, végállapot
+
+| Amit megnéztünk                               | Mért érték |
+| --------------------------------------------- | ---------- |
+| credential source normál működésben           | `database` |
+| `credentialMode`                              | `DATABASE` |
+| `credentialRevision`                          | `1`        |
+| titkosított credential az adatbázisban        | jelen van  |
+| `MEDUSA_ADMIN_API_KEY` a futó API folyamatban | **NINCS**  |
+| a vetítés által kiírt kulcs-forrás            | `db:1`     |
+
+Vagyis az env-oldali admin kulcs a normál stage működéshez **nem szükséges**.
+
+### Vetítés: három állítás, három mérés
+
+```
+created  -> prod_01M0Z9TAYE7KV7YM3YHMR9YGF3
+updated  -> prod_01M0Z9TAYE7KV7YM3YHMR9YGF3
+relinked -> prod_01M0Z9TAYE7KV7YM3YHMR9YGF3
+```
+
+1. **Létrehozás a DB-ben tárolt kulcsból működik** (`created`).
+2. **Az újrafuttatás nem duplikál**: ugyanaz a Medusa termék frissül (`updated`).
+3. **A mapping elvesztése után ugyanaz a termék linkelődik vissza**
+   (`relinked`) — a mapping-sor törlése egy sort érintett, a Medusa termék
+   érintetlen maradt.
+
+### Visszavonás: amit mértünk, és amit nem
+
+- A régi Medusa kulcs **visszavonása megtörtént**.
+- A visszavonás UTÁN az új, adatbázisban tárolt hitelesítő adattal a vetítés
+  **továbbra is sikeres volt**.
+- A visszavont régi kulccsal **NEM futott közvetlen HTTP kérés**, mert a régi
+  kulcs nyílt szövege már nem állt rendelkezésre.
+
+**Ezért az 5.2 lépés ebben a körben KIMARADT**, és a 6. pont táblázatának „régi
+kulcs" sora ehhez a körhöz **nem mért érték**. A visszavont kulcs elutasítását
+továbbra sem figyeltük meg.
+
+Amit a kör bizonyít: a rendszer már az új hitelesítő adaton dolgozik. Amit nem:
+hogy a régi kulcs elutasításra kerül. A kettő nem ugyanaz, és az elsőt nem
+szabad a másodiknak nevezni.
+
+**A következő cserénél ez egy döntéssel lezárható:** a kimenő kulcs nyílt
+szövege maradjon olvasható addig, amíg az 5.1 kontroll és az 5.2 mérés le nem
+futott, és csak utána semmisüljön meg.
+
+### Titok-higiénia
+
+A kör alatt sehol nem került elő admin secret, master key, `Authorization`
+fejléc, visszafejtett hitelesítő adat, sem olyan héj-parancs, ami titkot
+tartalmazott volna. A modell változatlan: a titok **egyszer** kerül be a
+Beállítások felületen, és utána nem olvasható vissza.
