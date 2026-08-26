@@ -122,9 +122,17 @@ export interface AssetListResponse {
   };
 }
 
+/**
+ * A SZERELŐ LISTÁJA: a szerviz-partnerek eszközei.
+ *
+ * Az `ownerScope` EXPLICIT, mert ugyanezt a végpontot használja a webes
+ * nyilvántartás is, ahol a teljesség az érték. A szűrés a szerveren történik:
+ * egy már lapozott halmazt itt szűrni annyi lenne, hogy a lapszám a kihagyott
+ * sorokat is számolja.
+ */
 export function listAssets(page = 1, pageSize = 50) {
   return apiRequest<AssetListResponse>(
-    `/service/assets?page=${page}&pageSize=${pageSize}&status=ACTIVE`,
+    `/service/assets?page=${page}&pageSize=${pageSize}&status=ACTIVE&ownerScope=SERVICE_PARTNER`,
   );
 }
 

@@ -6,7 +6,10 @@ import type { AssetDetail } from "@acropora/types";
 
 import type { ServiceAssetsRepository } from "./service-assets.repository.js";
 import { ServiceAssetsService } from "./service-assets.service.js";
-import { SERVICE_OWNER_WHERE } from "./service-assets.types.js";
+import {
+  SERVICE_OWNER_WHERE,
+  assetOwnerScopeWhere,
+} from "./service-assets.types.js";
 
 const asset = {
   id: "asset-1",
@@ -207,4 +210,36 @@ test("refuses half of an owner reference instead of ignoring it", () => {
     () => service.owners({ ownerId: "customer-9" }),
     BadRequestException,
   );
+});
+
+/**
+ * A TULAJDONOS FAJTÁJA SZERINTI SZŰKÍTÉS, és amiért KÉT állítás tartozik hozzá.
+ *
+ * A telefonon a szerelő listája a szerviz-partnerek eszközeié; a webes
+ * nyilvántartásé viszont MINDEN eszköz, mert ott a teljesség az érték.
+ * Ugyanaz a végpont szolgálja ki a kettőt, tehát a szűrés csak akkor lehet
+ * helyes, ha KÉRNI kell -- és az a fontosabbik állítás, hogy kérés nélkül nem
+ * történik semmi. Egy teszt, ami csak az új viselkedést méri, nem védi meg
+ * azt, amit nem akartunk megváltoztatni.
+ */
+test("narrows to service partners only when the caller asks for it", () => {
+  assert.deepEqual(assetOwnerScopeWhere("SERVICE_PARTNER"), {
+    supplier: { is: { isActive: true, isService: true } },
+  });
+});
+
+test("leaves the list untouched when no scope is given", () => {
+  // A WEBES ALAPÉRTELMEZÉS. Üres feltétel: se vevő-tulajdonosú, se nem
+  // szerviz-jelölt partneré nem esik ki.
+  assert.deepEqual(assetOwnerScopeWhere(undefined), {});
+});
+
+/**
+ * ÉS UGYANAZ A FELTÉTEL, mint a tulajdonos-választón. Ha a kettő elválna, a
+ * szerelő olyan eszközt látna, aminek a gazdáját már nem lehetne kiválasztani
+ * -- vagy fordítva, és egyik irányban sem szólna semmi.
+ */
+test("uses the same condition as the owner picker", () => {
+  const scoped = assetOwnerScopeWhere("SERVICE_PARTNER");
+  assert.deepEqual(scoped.supplier, { is: { ...SERVICE_OWNER_WHERE } });
 });

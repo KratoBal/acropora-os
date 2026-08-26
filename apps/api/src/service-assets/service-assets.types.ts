@@ -17,6 +17,31 @@ export const SERVICE_OWNER_WHERE = {
   isService: true,
 } as const;
 
+/**
+ * UGYANAZ A FELTÉTEL, A MÁSODIK HASZNÁLATI HELYÉN.
+ *
+ * A fenti szabály eddig egy helyen élt: azon a listán, amiből új eszközhöz
+ * tulajdonost lehet választani. Az ESZKÖZ-LISTA nem használta, tehát a telefonon
+ * a szerelő a webshopos vevők eszközeit is látta. Ugyanaz a bejelentés
+ * (2026-08-25), ugyanaz a fogalom, csak a másik oldalon.
+ *
+ * A szűrő EXPLICIT, és nem alapértelmezés: ugyanezt a végpontot használja a
+ * webes nyilvántartás is, ahol a TELJESSÉG az érték, és egy csendben szűkített
+ * lista pontosan az a hibaosztály, amit sehol nem akarunk -- nem hibásnak
+ * látszó lista, hanem rossz sorokat tartalmazó. A hívó mondja meg, mit kér.
+ *
+ * A `supplier: { is: ... }` alak a vevő-tulajdonosú eszközt is kizárja, mert
+ * annak nincs partnere. Ez szándékos: a szerelő listája a szerviz-partnerek
+ * eszközeié.
+ */
+export function assetOwnerScopeWhere(
+  scope: "SERVICE_PARTNER" | undefined,
+): Prisma.AssetWhereInput {
+  return scope === "SERVICE_PARTNER"
+    ? { supplier: { is: { ...SERVICE_OWNER_WHERE } } }
+    : {};
+}
+
 export const assetSummaryInclude = {
   customer: true,
   supplier: true,

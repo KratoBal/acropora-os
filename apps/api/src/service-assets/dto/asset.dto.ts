@@ -40,6 +40,17 @@ export class AssetListQueryDto {
   @IsOptional()
   ownerType?: (typeof ASSET_OWNER_TYPES)[number];
   @IsString() @IsOptional() ownerId?: string;
+  /**
+   * A tulajdonos FAJTÁJA szerinti szűkítés, egyetlen értékkel: csak azok az
+   * eszközök, amiknek a gazdája aktív, SZERVIZ-jelölt partner. Ugyanaz a
+   * feltétel, mint a tulajdonos-választón (`SERVICE_OWNER_WHERE`), a második
+   * használati helyén.
+   *
+   * KÜLÖN mező, és nem az `ownerType` kiterjesztése: az egy KONKRÉT tulajdonost
+   * nevez meg az `ownerId`-vel együtt, ez pedig egy halmazt. Elhagyva a lista
+   * változatlan marad -- a webes nyilvántartásnak a teljesség az értéke.
+   */
+  @IsIn(["SERVICE_PARTNER"]) @IsOptional() ownerScope?: "SERVICE_PARTNER";
   @IsString() @IsOptional() aquariumId?: string;
   @IsString() @IsOptional() parentAssetId?: string;
   @IsIn([...ASSET_STATUSES, "ALL"]) @IsOptional() status:
