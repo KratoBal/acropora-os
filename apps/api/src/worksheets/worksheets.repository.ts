@@ -9,6 +9,7 @@ import {
   type WorksheetDepartmentListResponse,
   type WorksheetDepartmentSummary,
   type WorksheetListResponse,
+  type WorksheetVersionStatus,
 } from "@acropora/types";
 
 import type {
@@ -306,8 +307,57 @@ export class WorksheetsRepository extends Repository {
     return new Set(rows.map((row) => row.id));
   }
 
+  /**
+   * AZOK A LAPOK, AMIKNEK A LEGUTOLSÓ VERZIÓJA ILYEN ÁLLAPOTBAN VAN.
+   *
+   * Ez az a lekérdezés, ami miatt az állapot-szűrő eddig nem létezett. A
+   * kézenfekvő Prisma-alak (`versions: { some: { status } }`) BÁRMELYIK
+   * korábbi verzióra illeszkedne: egy háromszor átírt lap, ami ma aláírt,
+   * továbbra is feljönne „piszkozat" szűrőre, mert az ELSŐ verziója az volt.
+   * A lista nem látszana hibásnak, csak rossz sorokat tartalmazna.
+   *
+   * A `DISTINCT ON` a PostgreSQL egyetlen olyan eszköze, ami soronként a
+   * legutolsó verziót adja vissza egy menetben. A rendezés (`version DESC`)
+   * nem díszítés: a `DISTINCT ON` AZT a sort tartja meg, amelyik a rendezés
+   * szerint az első.
+   *
+   * Miért azonosító-halmaz, és nem nyers lapozás: így a lapozás és a darabszám
+   * UGYANABBÓL a `where` feltételből származik, mint eddig. Egy szűrő, ami a
+   * sorokat jól válogatja, de a darabszámot a szűretlen halmazból adja,
+   * ugyanaz a néma hiba, csak a másik végén.
+   *
+   * ÁRA, kimondva: a lista mérete a KIVÁLASZTOTT ÁLLAPOTÚ lapok számával nő,
+   * mert azok azonosítói mennek bele a következő lekérdezésbe. Néhány ezer
+   * lapig ez nem mérhető; ha egyszer tízezres nagyságrend lesz, a helye egy
+   * karbantartott oszlop a `Worksheet` soron, és akkor ez a metódus tűnik el.
+   */
+  private async worksheetIdsByLatestStatus(
+    status: WorksheetVersionStatus,
+  ): Promise<string[]> {
+    const rows = await this.database.$queryRaw<{ worksheetId: string }[]>`
+      SELECT "worksheetId"
+      FROM (
+        SELECT DISTINCT ON ("worksheetId") "worksheetId", "status"
+        FROM "WorksheetVersion"
+        ORDER BY "worksheetId", "version" DESC
+      ) AS latest
+      WHERE latest."status" = ${status}::"WorksheetVersionStatus"
+    `;
+    return rows.map((row) => row.worksheetId);
+  }
+
   async list(query: WorksheetListQueryDto): Promise<WorksheetListResponse> {
+    /**
+     * A szűrt azonosító-halmaz ELŐBB áll elő, mint a `where`, mert a `where`-be
+     * kerül bele. Üres halmaz esetén az `in: []` üres listát ad -- ez helyes:
+     * nincs olyan lap, aminek a legutolsó verziója ilyen állapotú.
+     */
+    const latestStatusIds = query.status
+      ? await this.worksheetIdsByLatestStatus(query.status)
+      : null;
+
     const where: Prisma.WorksheetWhereInput = {
+      ...(latestStatusIds ? { id: { in: latestStatusIds } } : {}),
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.departmentId ? { departmentId: query.departmentId } : {}),
       ...(query.assigneeId

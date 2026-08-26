@@ -33,10 +33,26 @@ export class WorksheetListQueryDto {
   @IsString() @IsOptional() departmentId?: string;
   /** A szerelő saját lapjai: erre a szűrőre épül a "nekem kiosztva" lista. */
   @IsString() @IsOptional() assigneeId?: string;
-  // Állapot szerinti szűrés szándékosan nincs: az állapot a LEGUTOLSÓ
-  // verzióé, a `some: { status }` alakú Prisma-szűrő viszont bármelyik
-  // korábbi verzióra is illeszkedne, és csendben mást jelentene, mint amit
-  // a felületen ígér. Amíg nincs rá helyes (nyers) lekérdezés, nincs szűrő.
+  /**
+   * ÁLLAPOT SZERINTI SZŰRÉS, a LEGUTOLSÓ verzió állapotára.
+   *
+   * Sokáig szándékosan nem volt ilyen szűrő, és az indok most is érvényes: a
+   * kézenfekvő `some: { status }` alakú Prisma-feltétel BÁRMELYIK korábbi
+   * verzióra illeszkedne, tehát egy háromszor átírt, ma már aláírt lap
+   * továbbra is feljönne „piszkozat" szűrőre. Nem hibásnak látszó lista lenne,
+   * hanem rossz sorokat tartalmazó.
+   *
+   * A szűrő azért létezhet mostantól, mert a tároló a legutolsó verziót
+   * `DISTINCT ON`-nal választja ki (lásd `worksheetIdsByLatestStatus`).
+   *
+   * A NEVEK ITT A SZERVER MAI ÁLLAPOTAI, nem a felületé. A munka menete szerinti
+   * elnevezés (Új, Folyamatban, Elkészült, Lezárva) még nem dőlt el, és amíg a
+   * vitatott (alá nem írt) lap sorsa nyitott, a leképezés sem rögzíthető: egy
+   * név, amit most írnánk ide, holnap mást jelentene, mint amit ígér.
+   */
+  @IsIn(WORKSHEET_VERSION_STATUSES)
+  @IsOptional()
+  status?: (typeof WORKSHEET_VERSION_STATUSES)[number];
 }
 
 export class WorksheetLineDto {
