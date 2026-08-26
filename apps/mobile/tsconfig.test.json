@@ -46,6 +46,8 @@
     "src/lib/assets/asset-fields.ts",
     "src/lib/assets/asset-edit.ts",
     "src/lib/assets/asset-edit.spec.ts",
+    "src/lib/assets/label-format.ts",
+    "src/lib/assets/label-format.spec.ts",
     "src/lib/assets/asset-create.ts",
     "src/lib/assets/asset-create.spec.ts",
     "src/lib/partners/partner-presentation.ts",
