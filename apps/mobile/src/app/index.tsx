@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
+import Constants from "expo-constants";
 import { Redirect, useRouter } from "expo-router";
+import * as Updates from "expo-updates";
 import {
   ActivityIndicator,
   Pressable,
@@ -11,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { OrderListCard } from "@/components/orders/OrderListCard";
+import { runningVersionLine } from "@/lib/app-version";
 import { listUnasOrders } from "@/lib/api/orders";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import type { UserRole } from "@/lib/auth/types";
@@ -31,6 +34,26 @@ import {
  * Azért lista, és nem jogosultság-kulcs, mert a csempe ma nem nyit meg semmit:
  * nincs mögötte hívás, aminek a jogát tükrözhetné.
  */
+/**
+ * MELYIK BUILD FUT, ÉS MIÉRT PONT EBBŐL A MEZŐBŐL.
+ *
+ * A `Constants.platform.ios.buildNumber` a beépített `Info.plist` értéke, és a
+ * csomag saját dokumentációja mondja ki, hogy ez „soha nem változik egy adott
+ * natív binárisnál", szemben az `expoConfig.ios.buildNumber` mezővel, amit egy
+ * éteren érkezett frissítés FELÜLÍRHAT.
+ *
+ * Vagyis a két mező pont akkor térne el, amikor a felirat a legfontosabb: egy
+ * letöltött frissítés alatt a manifest szerinti szám már a frissítésé lenne, a
+ * bináris viszont a régi. Az a felirat nem hazudna, csak mást jelölne, mint amit
+ * az olvasója hisz -- ezért a NATÍV érték kerül a képernyőre.
+ */
+function nativeBuildNumber(): string | null {
+  const ios = Constants.platform?.ios?.buildNumber;
+  if (ios) return ios;
+  const android = Constants.platform?.android?.versionCode;
+  return android == null ? null : String(android);
+}
+
 const NAV_TILE_ROLES: UserRole[] = [
   "OWNER",
   "ADMIN",
@@ -263,6 +286,20 @@ export default function HomeScreen() {
             )}
           </Pressable>
         </View>
+
+        {/*
+          MELYIK KÓD FUT ÉPPEN. Egy sor, a lap alján, és nem kényelmi funkció:
+          2026-08-26 este egy kört vitt el, hogy nem lehetett eldönteni, egy
+          éteren küldött javítás megérkezett-e a készülékre.
+        */}
+        <Text style={styles.versionLine}>
+          {runningVersionLine({
+            buildNumber: nativeBuildNumber(),
+            isEmbeddedLaunch: Updates.isEmbeddedLaunch,
+            updateId: Updates.updateId,
+            updateCreatedAt: Updates.createdAt,
+          })}
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -457,4 +494,10 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   pressed: { opacity: 0.7 },
+  versionLine: {
+    color: "#4d6b7e",
+    fontSize: 11,
+    marginTop: 14,
+    textAlign: "center",
+  },
 });
