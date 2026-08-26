@@ -65,9 +65,38 @@ export type UniqueCodeOptions = {
 
 const DEFAULT_MAX_ATTEMPTS = 5;
 
-export async function withUniqueCode<T>(
-  options: UniqueCodeOptions,
-  persist: (code: string) => Promise<T>,
+/// The same retry, for the writes that mint their code THEMSELVES, deeper down.
+///
+/// WHY A SECOND ENTRY POINT RATHER THAN ONE. `withUniqueCode` hands the code
+/// in, because at those sites nobody else would draw it. At these sites the
+/// code is already drawn inside the write - `syncWorksheetMirror` mints the
+/// mirror's customer number, `postInventoryMovement` is handed a freshly minted
+/// movement number - and a code handed in from out here would either be unused
+/// or would have to be threaded through several layers that have no business
+/// knowing about it. Running the write again is enough: every one of those
+/// draws happens inside `persist`, so a second attempt redraws all of them.
+///
+/// WHAT `persist` MUST BE, and this is the load-bearing part: one complete,
+/// self-contained write - its own `$transaction` if it needs one. It must NOT
+/// be a fragment of somebody else's transaction. PostgreSQL marks a transaction
+/// unusable after its first failed statement, so a retry INSIDE one cannot
+/// succeed: it would spend the attempts, log as if we had tried, and hand the
+/// caller the same error later than before. The rule that follows is checkable
+/// rather than a matter of taste: a function that takes a
+/// `Prisma.TransactionClient` runs in somebody else's transaction, so it never
+/// gets this wrapper - the caller that OPENED the transaction does.
+export type TakenCodeRetryOptions = {
+  /// The column, or columns, a retry is worth trying for - same meaning, and
+  /// same deliberate explicitness, as `UniqueCodeOptions.field`.
+  field: string | readonly string[];
+  /// How many attempts before the original database error is rethrown
+  /// unchanged.
+  maxAttempts?: number;
+};
+
+export async function retryOnTakenCode<T>(
+  options: TakenCodeRetryOptions,
+  persist: () => Promise<T>,
 ): Promise<T> {
   const maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
   if (!Number.isInteger(maxAttempts) || maxAttempts < 1)
@@ -78,12 +107,8 @@ export async function withUniqueCode<T>(
   let attempt = 0;
   for (;;) {
     attempt += 1;
-    const code = generateCode(
-      options.prefix,
-      options.randomSuffix ?? randomCodeSuffix,
-    );
     try {
-      return await persist(code);
+      return await persist();
     } catch (error) {
       const fields =
         typeof options.field === "string" ? [options.field] : options.field;
@@ -93,4 +118,20 @@ export async function withUniqueCode<T>(
       if (!isTakenCode || attempt >= maxAttempts) throw error;
     }
   }
+}
+
+export async function withUniqueCode<T>(
+  options: UniqueCodeOptions,
+  persist: (code: string) => Promise<T>,
+): Promise<T> {
+  // The minting sits INSIDE the retried closure on purpose: that is the whole
+  // reason a second attempt is worth anything. A code drawn out here would be
+  // reused by every attempt and would lose to the same row five times.
+  return retryOnTakenCode(
+    { field: options.field, maxAttempts: options.maxAttempts },
+    () =>
+      persist(
+        generateCode(options.prefix, options.randomSuffix ?? randomCodeSuffix),
+      ),
+  );
 }
