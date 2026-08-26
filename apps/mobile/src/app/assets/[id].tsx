@@ -19,6 +19,7 @@ import {
   LABEL_NAME_FONT_MM,
   LABEL_NUMBER_FONT_MM,
   LABEL_PADDING_MM,
+  labelAssetNumber,
   labelLayout,
   labelPageSize,
 } from "@/lib/assets/label-format";
@@ -316,6 +317,11 @@ function escapeHtml(value: string) {
 function labelHtml(svg: string, assetNumber: string, name: string) {
   const { pageWidthMm, pageHeightMm, qrSizeMm, textWidthMm } = labelLayout();
 
+  // A CÍMKÉRE A RÖVIDÍTETT AZONOSÍTÓ KERÜL, nem a teljes eszközszám. A teljes
+  // szám a QR-ben lévő hivatkozásban van; a felirat az emberi visszakeresést
+  // szolgálja, és a rövid alak a teljes szám vége, tehát kereséssel megtalálja.
+  const number = labelAssetNumber(assetNumber);
+
   return `<!doctype html><html><head><meta name="viewport" content="width=device-width"><style>
     @page { size: ${pageWidthMm}mm ${pageHeightMm}mm; margin: 0; }
     html, body { width: ${pageWidthMm}mm; height: ${pageHeightMm}mm; margin: 0; padding: 0; overflow: hidden; }
@@ -324,7 +330,7 @@ function labelHtml(svg: string, assetNumber: string, name: string) {
     .text { flex: none; width: ${textWidthMm}mm; overflow: hidden; }
     .number { font-size: ${LABEL_NUMBER_FONT_MM}mm; font-weight: 800; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .name { margin-top: ${LABEL_GAP_MM}mm; font-size: ${LABEL_NAME_FONT_MM}mm; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  </style></head><body>${svg}<div class="text"><div class="number">${escapeHtml(assetNumber)}</div><div class="name">${escapeHtml(name)}</div></div></body></html>`;
+  </style></head><body>${svg}<div class="text"><div class="number">${escapeHtml(number)}</div><div class="name">${escapeHtml(name)}</div></div></body></html>`;
 }
 
 const styles = StyleSheet.create({
