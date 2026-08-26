@@ -104,8 +104,28 @@ export class AmendWorksheetDto extends WorksheetContentDto {
 export class SignWorksheetVersionDto {
   @IsIn(WORKSHEET_SIGNATURE_DECISIONS)
   decision!: (typeof WORKSHEET_SIGNATURE_DECISIONS)[number];
-  @IsString() @MinLength(2) @MaxLength(200) signerName!: string;
-  @IsString() @MaxLength(1000) @IsOptional() note?: string | null;
+  @IsString({ message: "Az aláíró nevét meg kell adni." })
+  @MinLength(2, { message: "Az aláíró neve legalább két karakter legyen." })
+  @MaxLength(200, {
+    message: "Az aláíró neve legfeljebb 200 karakter lehet.",
+  })
+  signerName!: string;
+  /**
+   * Elfogadásnál megjegyzés, elutasításnál INDOK -- és akkor kötelező.
+   *
+   * A kötelezőséget a szolgáltatás mondja ki, nem ez a dekorátor-sor, mert a
+   * szabály KÉT mezőt köt össze (a döntést és az indokot). Kipróbáltam
+   * dekorátorral is: két `ValidateIf` ugyanazon a mezőn nem összeadódik, hanem
+   * az utolsó felülírja az elsőt, tehát az elutasítás indok nélkül CSENDBEN
+   * átment volna. Egy szabály, ami így néz ki, mintha érvényben lenne, rosszabb,
+   * mint a hiánya.
+   */
+  @IsString({ message: "A megjegyzés csak szöveg lehet." })
+  @MaxLength(1000, {
+    message: "A megjegyzés legfeljebb 1000 karakter lehet.",
+  })
+  @IsOptional()
+  note?: string | null;
 }
 
 export class CreateWorksheetDepartmentDto {

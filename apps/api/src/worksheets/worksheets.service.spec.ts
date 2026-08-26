@@ -342,6 +342,92 @@ describe("WorksheetsService", () => {
     );
   });
 
+  /**
+   * AZ ELUTASÍTÁS OKA KÖTELEZŐ (Balázs döntése, 2026-08-26), ÉS A SZERVEREN AZ.
+   *
+   * Indok nélkül a visszautasítás annyit mond, hogy „nem", és sem a lapon
+   * dolgozó szerelő, sem a hibajegy kezelője nem tudja, mit kell javítani. A
+   * felületen kötelezővé tett mező nem elég: a végpont a felületet megkerülve is
+   * hívható, és akkor a lapon egy néma elutasítás állna.
+   *
+   * A tároló hívása is állítás: az elutasításnak EL SEM KELL JUTNIA odáig.
+   */
+  it("refuses a rejection with no reason, before it reaches the store", async () => {
+    let signCalled = false;
+    const service = new WorksheetsService(
+      repository({
+        sign: async () => {
+          signCalled = true;
+          return { ok: true };
+        },
+      }),
+    );
+
+    await assert.rejects(
+      service.sign(
+        "worksheet-1",
+        { decision: "REJECTED", signerName: "Kovács Béla" },
+        "user-1",
+      ),
+      BadRequestException,
+    );
+    assert.equal(signCalled, false);
+  });
+
+  it("treats a reason of only whitespace as no reason", async () => {
+    const service = new WorksheetsService(repository());
+
+    await assert.rejects(
+      service.sign(
+        "worksheet-1",
+        { decision: "REJECTED", signerName: "Kovács Béla", note: "   " },
+        "user-1",
+      ),
+      BadRequestException,
+    );
+  });
+
+  it("lets a rejection through once it says why", async () => {
+    let received: { note?: string | null } | null = null;
+    const service = new WorksheetsService(
+      repository({
+        sign: async (input: { note?: string | null }) => {
+          received = input;
+          return { ok: true };
+        },
+      }),
+    );
+
+    await service.sign(
+      "worksheet-1",
+      {
+        decision: "REJECTED",
+        signerName: "Kovács Béla",
+        note: "A 3. sor mennyisége nem egyezik a leszállítottal.",
+      },
+      "user-1",
+    );
+
+    assert.equal(
+      (received as { note?: string | null } | null)?.note,
+      "A 3. sor mennyisége nem egyezik a leszállítottal.",
+    );
+  });
+
+  /**
+   * AZ ELFOGADÁS ÚTJA VÁLTOZATLAN. Ha az indok ott is kötelezővé válna, a
+   * szabály nem szigorúbb lenne, hanem MÁS, és a partner az aláírásnál akadna el.
+   */
+  it("leaves acceptance without a note exactly as it was", async () => {
+    const service = new WorksheetsService(repository());
+
+    await service.sign(
+      "worksheet-1",
+      { decision: "ACCEPTED", signerName: "Kovács Béla" },
+      "user-1",
+    );
+  });
+
   it("reports a missing worksheet as not found", async () => {
     const service = new WorksheetsService(
       repository({ detail: async () => null }),
