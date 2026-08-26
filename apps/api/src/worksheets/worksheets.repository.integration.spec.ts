@@ -515,5 +515,88 @@ describe(
         ["Szerelő Sanyi"],
       );
     });
+
+    /**
+     * AZ ÁLLAPOT A LEGUTOLSÓ VERZIÓÉ, ÉS EZT CSAK ADATBÁZISON LEHET BIZONYÍTANI.
+     *
+     * A lap három verziót jár be: piszkozat, majd lezárás után aláírásra váró,
+     * majd egy javított piszkozat. A kézenfekvő Prisma-feltétel
+     * (`versions: { some: { status } }`) MINDHÁROM állapotra hozná ezt az egy
+     * lapot, hiszen mindegyik előfordult a történetében. A szűrő attól helyes,
+     * hogy csak a LEGUTOLSÓ számít.
+     */
+    it("filters on the status of the latest version, not on any earlier one", async () => {
+      const id = await createDraft(bioDepartmentId);
+      await repository.close(id, actorUserId, new Date());
+
+      // A lap most aláírásra vár. Piszkozatra NEM szabad feljönnie, pedig az
+      // első verziója az volt.
+      const awaiting = await repository.list({
+        page: 1,
+        pageSize: 100,
+        status: "AWAITING_SIGNATURE",
+      });
+      assert.equal(
+        awaiting.items.some((item) => item.id === id),
+        true,
+      );
+
+      const draftsWhileAwaiting = await repository.list({
+        page: 1,
+        pageSize: 100,
+        status: "DRAFT",
+      });
+      assert.equal(
+        draftsWhileAwaiting.items.some((item) => item.id === id),
+        false,
+        "a korábbi piszkozat-verzió nem hozhatja fel a lapot",
+      );
+
+      // Javítás után a legutolsó verzió megint piszkozat: a lap átkerül.
+      await repository.amend({
+        worksheetId: id,
+        content: content({ subject: "Javított tárgy" }),
+        changeReason: "Az ügyfél kérte a javítást.",
+        actorUserId,
+      });
+
+      const draftsAfterAmend = await repository.list({
+        page: 1,
+        pageSize: 100,
+        status: "DRAFT",
+      });
+      assert.equal(
+        draftsAfterAmend.items.some((item) => item.id === id),
+        true,
+      );
+
+      const awaitingAfterAmend = await repository.list({
+        page: 1,
+        pageSize: 100,
+        status: "AWAITING_SIGNATURE",
+      });
+      assert.equal(
+        awaitingAfterAmend.items.some((item) => item.id === id),
+        false,
+        "a lezárt korábbi verzió nem tarthatja bent a lapot",
+      );
+    });
+
+    /**
+     * A DARABSZÁM UGYANABBÓL A FELTÉTELBŐL SZÁRMAZZON, mint a sorok. Egy szűrő,
+     * ami a sorokat jól válogatja, de a darabszámot a szűretlen halmazból adja,
+     * ugyanaz a néma hiba a másik végén: a lapozó több oldalt ígérne, mint
+     * amennyi van, és az utolsó oldal üresen jönne vissza.
+     */
+    it("counts what it lists", async () => {
+      const drafts = await repository.list({
+        page: 1,
+        pageSize: 100,
+        status: "DRAFT",
+      });
+
+      assert.equal(drafts.pagination.totalItems, drafts.items.length);
+      assert.equal(drafts.pagination.totalPages, 1);
+    });
   },
 );
