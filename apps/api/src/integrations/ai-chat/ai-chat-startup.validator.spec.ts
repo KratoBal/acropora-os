@@ -96,3 +96,72 @@ describe("AiChatStartupValidator", () => {
     assert.doesNotThrow(() => capture({}));
   });
 });
+
+describe("AiChatStartupValidator hasonlo nevu valtozok", () => {
+  it("megnevezi azt a valtozot, ami UGYANARRA VEGZODIK, mint a hianyzo", () => {
+    /**
+     * A 2026-08-27 hajnali eset pontos alakja. Az ertek nem hianyzott: az AI
+     * oldali API_ACCESS_TOKEN nevet masoltak at oda, ahol
+     * ACROPORA_AI_ACCESS_TOKEN a helyes. A puszta "hianyzik" sor ilyenkor
+     * IGAZ, es megis azt valtja ki, hogy "dehogy hianyzik, felvettem".
+     */
+    const lines = capture({
+      [AI_CHAT_BASE_URL_ENV]: BASE_URL,
+      API_ACCESS_TOKEN: TOKEN,
+    });
+
+    assert.equal(lines.length, 1);
+    assert.match(lines[0]!, /ACROPORA_AI_ACCESS_TOKEN/);
+    assert.match(lines[0]!, /API_ACCESS_TOKEN/);
+  });
+
+  it("SOHA nem irja ki a hasonlo nevu valtozo ERTEKET sem", () => {
+    // A nev nem titok, az ertek az. Itt van mit kiszivarogtatni: a
+    // hasonlo nevu valtozo epp a valos tokent tartalmazza.
+    const lines = capture({
+      [AI_CHAT_BASE_URL_ENV]: BASE_URL,
+      API_ACCESS_TOKEN: TOKEN,
+    });
+
+    assert.equal(lines.join("\n").includes(TOKEN), false);
+  });
+
+  it("nem emlit olyat, ami URES, mert az nem magyarazna semmit", () => {
+    const lines = capture({
+      [AI_CHAT_BASE_URL_ENV]: BASE_URL,
+      API_ACCESS_TOKEN: "   ",
+    });
+
+    assert.equal(lines.length, 1);
+    assert.doesNotMatch(lines[0]!, /API_ACCESS_TOKEN/);
+  });
+
+  it("nem talal ki hasonlosagot ott, ahol nincs", () => {
+    const lines = capture({
+      [AI_CHAT_BASE_URL_ENV]: BASE_URL,
+      DATABASE_URL: "postgres://x",
+      REDIS_URL: "redis://y",
+    });
+
+    assert.equal(lines.length, 1);
+    assert.doesNotMatch(lines[0]!, /DATABASE_URL/);
+    assert.doesNotMatch(lines[0]!, /REDIS_URL/);
+  });
+
+  it("legfeljebb harmat sorol fel, mert egy hosszu lista mar zaj", () => {
+    const lines = capture({
+      [AI_CHAT_BASE_URL_ENV]: BASE_URL,
+      A_ACCESS_TOKEN: "1",
+      B_ACCESS_TOKEN: "2",
+      C_ACCESS_TOKEN: "3",
+      D_ACCESS_TOKEN: "4",
+      E_ACCESS_TOKEN: "5",
+    });
+
+    const mentioned = ["A", "B", "C", "D", "E"].filter((prefix) =>
+      lines[0]!.includes(`${prefix}_ACCESS_TOKEN`),
+    );
+
+    assert.equal(mentioned.length, 3);
+  });
+});
