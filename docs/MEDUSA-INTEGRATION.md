@@ -112,7 +112,21 @@ Consequences, both deliberate:
 | a missing key is still visible as `not-configured`                 | `medusa-admin.config.spec.ts`                |
 | the secret is not read from the environment on the projection path | `medusa-projection.cli.spec.ts` (structural) |
 
-Two Medusa integration specs (`medusa-connection.repository.integration.spec.ts`,
-`medusa-product-link.integration.spec.ts`) exist but are **not** in the
-`test:integration` file list, so they run nowhere today. Until that is fixed,
-"the Medusa integration tests are green" is an assumption rather than a statement.
+**A claim with an expiry condition, not a date.** Two Medusa integration specs
+(`medusa-connection.repository.integration.spec.ts`,
+`medusa-product-link.integration.spec.ts`) were written but named in no runner
+list, so they ran nowhere.
+
+The condition is checkable in one command, and it is the condition — not this
+paragraph — that decides:
+
+```bash
+grep -c 'medusa-connection.repository.integration.spec.js' apps/api/package.json
+```
+
+- **`0`** — the specs still run nowhere, and "the Medusa integration tests are
+  green" is an assumption rather than a statement.
+- **`1`** — they run with the rest, and this paragraph no longer applies.
+
+A date here would read just as confidently a month from now, and by then it could
+be false. A condition cannot: it answers for itself.
