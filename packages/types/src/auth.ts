@@ -65,6 +65,13 @@ export const PERMISSIONS = {
   /// körnek szól, mint az INVENTORY_RECONCILIATION_REPAIR (lásd
   /// ROLE_PERMISSIONS lent: csak OWNER/ADMIN, még a MANAGER sem).
   PRODUCTS_CATALOG_AUTHORITY_TRANSFER: "products.catalog-authority.transfer",
+  /// A belső AI teszt-felület. Minden szerepkör megkapja, mert Balázs döntése
+  /// szó szerint az volt, hogy "most kapja meg mindenki" (2026-08-26), és a
+  /// szűkítés feltételét is ő mondta ki: amikor a felhasználói jogosultságokat
+  /// rendezzük. Ezért NINCS a MANAGER tiltólistáján, és ezért szerepel a
+  /// tételes szerepkör-listákon is - anélkül a SALES, WAREHOUSE, SERVICE és
+  /// VIEWER nem kapná meg, és a "mindenki" csendben háromra szűkülne.
+  AI_TEST_VIEW: "ai-test.view",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -72,6 +79,7 @@ export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 const ALL_PERMISSIONS = Object.freeze(Object.values(PERMISSIONS));
 
 const VIEW_PERMISSIONS: readonly Permission[] = [
+  PERMISSIONS.AI_TEST_VIEW,
   PERMISSIONS.DASHBOARD_VIEW,
   PERMISSIONS.TASKS_VIEW,
   PERMISSIONS.ORDERS_VIEW,
@@ -100,6 +108,7 @@ export const ROLE_PERMISSIONS: Readonly<
       permission !== PERMISSIONS.PRODUCTS_CATALOG_AUTHORITY_TRANSFER,
   ),
   SALES: [
+    PERMISSIONS.AI_TEST_VIEW,
     PERMISSIONS.DASHBOARD_VIEW,
     PERMISSIONS.TASKS_VIEW,
     PERMISSIONS.ORDERS_VIEW,
@@ -111,6 +120,7 @@ export const ROLE_PERMISSIONS: Readonly<
     PERMISSIONS.FINANCE_VIEW,
   ],
   WAREHOUSE: [
+    PERMISSIONS.AI_TEST_VIEW,
     PERMISSIONS.DASHBOARD_VIEW,
     PERMISSIONS.TASKS_VIEW,
     PERMISSIONS.ORDERS_VIEW,
@@ -123,6 +133,7 @@ export const ROLE_PERMISSIONS: Readonly<
     PERMISSIONS.PARTNERS_MANAGE,
   ],
   SERVICE: [
+    PERMISSIONS.AI_TEST_VIEW,
     PERMISSIONS.DASHBOARD_VIEW,
     PERMISSIONS.TASKS_VIEW,
     PERMISSIONS.PRODUCTS_VIEW,

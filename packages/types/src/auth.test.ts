@@ -114,3 +114,28 @@ describe("permission helpers", () => {
     );
   });
 });
+
+describe("AI_TEST_VIEW", () => {
+  it("is held by every role, because that is what was asked for", () => {
+    /**
+     * "Most kapja meg mindenki" (Balázs, 2026-08-26), és ez NEM ugyanaz, mint
+     * nem tenni semmit.
+     *
+     * A MANAGER az összes jogot megkapja egy tiltólista kivételével, tehát egy
+     * új kulcs magától az OWNER, ADMIN és MANAGER kezébe kerül - a többi
+     * szerepkör tételes listát kap. Ha csak az alapértelmezésre hagyatkoznánk,
+     * a "mindenki" csendben háromra szűkülne, és senki nem venné észre, mert
+     * a menüpont ott is látszana, ahol nézzük.
+     *
+     * A szűkítés feltételét is ő mondta ki: amikor a felhasználói
+     * jogosultságokat rendezzük. Addig ez a sor őrzi a döntést.
+     */
+    for (const role of USER_ROLES) {
+      assert.equal(
+        hasPermission(role, PERMISSIONS.AI_TEST_VIEW),
+        true,
+        `${role} nem kapta meg az AI teszt-felület jogát`,
+      );
+    }
+  });
+});
