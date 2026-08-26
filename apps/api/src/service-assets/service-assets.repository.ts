@@ -14,7 +14,7 @@ import type {
   AssetOwnerType,
 } from "@acropora/types";
 
-import { generateCode } from "../common/code-generator.util.js";
+import { withUniqueCode } from "../common/unique-code.util.js";
 import type {
   AssetListQueryDto,
   CreateAssetDto,
@@ -395,69 +395,84 @@ export class ServiceAssetsRepository extends Repository {
     input: CreateAssetDto,
     actorUserId: string,
   ): Promise<AssetDetail> {
-    const id = await prisma.$transaction(
-      async (tx) => {
-        const row = await tx.asset.create({
-          data: {
-            assetNumber: generateCode("ESZK"),
-            customerId: input.ownerType === "CUSTOMER" ? input.ownerId : null,
-            supplierId: input.ownerType === "SUPPLIER" ? input.ownerId : null,
-            customerAddressId:
-              input.ownerType === "CUSTOMER" ? input.customerAddressId : null,
-            aquariumId:
-              input.ownerType === "CUSTOMER" ? input.aquariumId : null,
-            parentAssetId: input.parentAssetId,
-            productVariantId: input.productVariantId,
-            kind: input.kind,
-            status: input.status,
-            criticality: input.criticality,
-            name: input.name.trim(),
-            category: optionalText(input.category),
-            manufacturer: optionalText(input.manufacturer),
-            model: optionalText(input.model),
-            serialNumber: optionalText(input.serialNumber),
-            inventoryNumber: optionalText(input.inventoryNumber),
-            description: optionalText(input.description),
-            installedAt: optionalDate(input.installedAt),
-            purchasedAt: optionalDate(input.purchasedAt),
-            warrantyExpiresAt: optionalDate(input.warrantyExpiresAt),
-            serviceIntervalDays: input.serviceIntervalDays,
-            lastServicedAt: optionalDate(input.lastServicedAt),
-            nextServiceAt:
-              optionalDate(input.nextServiceAt) ??
-              (input.serviceIntervalDays
-                ? addDays(
-                    optionalDate(input.lastServicedAt) ??
-                      optionalDate(input.installedAt) ??
-                      new Date(),
-                    input.serviceIntervalDays,
-                  )
-                : undefined),
-            notes: optionalText(input.notes),
-            archivedAt: input.status === "RETIRED" ? new Date() : undefined,
-            createdById: actorUserId,
-            updatedById: actorUserId,
+    /**
+     * AZ ESZKOZSZAM UTKOZESE UJRAPROBALKOZAST KAP. Ket eszkoz akkor kap azonos
+     * szamot, ha ugyanabban a masodpercben keszul es a generator ugyanazt a
+     * negyjegyu veget huzza. A burkolat CSAK a tranzakciot ismetli meg, UJ
+     * kodddal; a tranzakcion BELUL nem lehet ujraprobalni, mert Postgres az
+     * elso elbukott utasitas utan megszakitja.
+     */
+    const id = await withUniqueCode(
+      { prefix: "ESZK", field: "assetNumber" },
+      (assetNumber) =>
+        prisma.$transaction(
+          async (tx) => {
+            const row = await tx.asset.create({
+              data: {
+                assetNumber,
+                customerId:
+                  input.ownerType === "CUSTOMER" ? input.ownerId : null,
+                supplierId:
+                  input.ownerType === "SUPPLIER" ? input.ownerId : null,
+                customerAddressId:
+                  input.ownerType === "CUSTOMER"
+                    ? input.customerAddressId
+                    : null,
+                aquariumId:
+                  input.ownerType === "CUSTOMER" ? input.aquariumId : null,
+                parentAssetId: input.parentAssetId,
+                productVariantId: input.productVariantId,
+                kind: input.kind,
+                status: input.status,
+                criticality: input.criticality,
+                name: input.name.trim(),
+                category: optionalText(input.category),
+                manufacturer: optionalText(input.manufacturer),
+                model: optionalText(input.model),
+                serialNumber: optionalText(input.serialNumber),
+                inventoryNumber: optionalText(input.inventoryNumber),
+                description: optionalText(input.description),
+                installedAt: optionalDate(input.installedAt),
+                purchasedAt: optionalDate(input.purchasedAt),
+                warrantyExpiresAt: optionalDate(input.warrantyExpiresAt),
+                serviceIntervalDays: input.serviceIntervalDays,
+                lastServicedAt: optionalDate(input.lastServicedAt),
+                nextServiceAt:
+                  optionalDate(input.nextServiceAt) ??
+                  (input.serviceIntervalDays
+                    ? addDays(
+                        optionalDate(input.lastServicedAt) ??
+                          optionalDate(input.installedAt) ??
+                          new Date(),
+                        input.serviceIntervalDays,
+                      )
+                    : undefined),
+                notes: optionalText(input.notes),
+                archivedAt: input.status === "RETIRED" ? new Date() : undefined,
+                createdById: actorUserId,
+                updatedById: actorUserId,
+              },
+              include: assetDetailInclude,
+            });
+            await tx.assetEvent.create({
+              data: {
+                id: randomUUID(),
+                assetId: row.id,
+                type: "CREATED",
+                actorUserId,
+                payload: jsonPayload({
+                  assetNumber: row.assetNumber,
+                  customerId: row.customerId,
+                  supplierId: row.supplierId,
+                  parentAssetId: row.parentAssetId,
+                  status: row.status,
+                }),
+              },
+            });
+            return row.id;
           },
-          include: assetDetailInclude,
-        });
-        await tx.assetEvent.create({
-          data: {
-            id: randomUUID(),
-            assetId: row.id,
-            type: "CREATED",
-            actorUserId,
-            payload: jsonPayload({
-              assetNumber: row.assetNumber,
-              customerId: row.customerId,
-              supplierId: row.supplierId,
-              parentAssetId: row.parentAssetId,
-              status: row.status,
-            }),
-          },
-        });
-        return row.id;
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        ),
     );
     const detail = await this.detail(id);
     if (!detail) throw new Error("ASSET_CREATE_READBACK_FAILED");
