@@ -138,9 +138,10 @@ export default function HomeScreen() {
               <ModuleCard
                 code="PA"
                 title="Partnerek"
-                description="Beszállítók és kapcsolattartók"
+                description="Szerviz partnerek és kapcsolattartók"
                 available={capabilities.partnersView}
-                enabled={false}
+                enabled
+                onPress={() => router.push("/partners")}
               />
             </View>
 
