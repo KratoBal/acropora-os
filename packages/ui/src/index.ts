@@ -5,6 +5,8 @@ export type { BadgeProps } from "./badge";
 export { Button } from "./button";
 export type { ButtonProps } from "./button";
 export { Card, CardContent, CardHeader } from "./card";
+export { ConfirmDialog } from "./confirm-dialog";
+export type { ConfirmDialogProps } from "./confirm-dialog";
 export { EmptyState } from "./empty-state";
 export type { EmptyStateProps } from "./empty-state";
 export { Input } from "./input";

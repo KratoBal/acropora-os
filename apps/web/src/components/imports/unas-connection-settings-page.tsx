@@ -7,6 +7,7 @@ import {
   Card,
   CardContent,
   CardHeader,
+  ConfirmDialog,
   FormField,
   Input,
   PageHeader,
@@ -101,6 +102,7 @@ export function UnasConnectionSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [disabling, setDisabling] = useState(false);
+  const [confirmDisable, setConfirmDisable] = useState(false);
 
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SETTINGS_MANAGE),
@@ -177,12 +179,7 @@ export function UnasConnectionSettingsPage() {
 
   const handleDisable = async () => {
     if (disabling) return;
-    if (
-      !window.confirm(
-        "Biztosan letiltod az UNAS-kapcsolatot? Ezután a manuális és ütemezett szinkron sem fog működni, amíg új kulcsot nem mentesz.",
-      )
-    )
-      return;
+    setConfirmDisable(false);
     setDisabling(true);
     setError(null);
     setNotice(null);
@@ -288,7 +285,7 @@ export function UnasConnectionSettingsPage() {
               <Button
                 variant="danger"
                 disabled={!view.configured || disabling}
-                onClick={() => void handleDisable()}
+                onClick={() => setConfirmDisable(true)}
               >
                 {disabling ? "Letiltás…" : "Kapcsolat letiltása"}
               </Button>
@@ -332,6 +329,17 @@ export function UnasConnectionSettingsPage() {
           </form>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={confirmDisable}
+        title="Letiltod az UNAS-kapcsolatot?"
+        consequence="A manuális és az ütemezett szinkron is leáll: rendelés, készlet és termékadat nem jön át, amíg a kapcsolat le van tiltva."
+        recovery="Visszakapcsolható, de csak új API-kulcs mentésével: a mostani kulcs a letiltással törlődik."
+        confirmLabel="Kapcsolat letiltása"
+        busy={disabling}
+        onConfirm={() => void handleDisable()}
+        onCancel={() => setConfirmDisable(false)}
+      />
     </div>
   );
 }

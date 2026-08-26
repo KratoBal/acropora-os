@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   Card,
+  ConfirmDialog,
   FormField,
   Input,
   PageHeader,
@@ -32,6 +33,14 @@ import {
   assetKindLabel,
   assetStatusLabel,
 } from "./asset-labels";
+
+/**
+ * A KÉT MEGERŐSÍTENDŐ MŰVELET ezen az oldalon. Az `id` a dokumentumé; a
+ * QR-cserénél nincs mit azonosítani, mert az az eszköz egyetlen matricája.
+ */
+type PendingConfirm =
+  | { kind: "rotate-qr" }
+  | { kind: "delete-document"; documentId: string; fileName: string };
 
 const inputDate = (value?: string) => (value ? value.slice(0, 10) : "");
 const isoDate = (value: string) => (value ? `${value}T00:00:00.000Z` : null);
@@ -66,6 +75,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<PendingConfirm | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [documentType, setDocumentType] =
@@ -141,12 +151,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
 
   const rotateQr = async () => {
     if (!asset || busy) return;
-    if (
-      !window.confirm(
-        "A korábbi QR-matrica azonnal érvénytelenné válik. Biztosan lecseréled?",
-      )
-    )
-      return;
+    setPending(null);
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -226,12 +231,8 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
   };
 
   const deleteDocument = async (documentId: string) => {
-    if (
-      !asset ||
-      busy ||
-      !window.confirm("Biztosan törlöd ezt a dokumentumot?")
-    )
-      return;
+    if (!asset || busy) return;
+    setPending(null);
     setBusy(true);
     try {
       await assetsApi.deleteDocument(token, asset.id, documentId);
@@ -428,7 +429,13 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                               size="sm"
                               variant="secondary"
                               disabled={busy}
-                              onClick={() => void deleteDocument(item.id)}
+                              onClick={() =>
+                                setPending({
+                                  kind: "delete-document",
+                                  documentId: item.id,
+                                  fileName: item.fileName,
+                                })
+                              }
                             >
                               Törlés
                             </Button>
@@ -524,7 +531,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                         <Button
                           variant="secondary"
                           disabled={busy}
-                          onClick={() => void rotateQr()}
+                          onClick={() => setPending({ kind: "rotate-qr" })}
                         >
                           QR-kód lecserélése
                         </Button>
@@ -585,6 +592,40 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
           </div>
         </>
       ) : null}
+
+      {/*
+        A KÉT MEGERŐSÍTÉS. Mindkettő megnevezi, MI VÉSZ EL és HONNAN szerezhető
+        vissza. A dokumentum törlésének szövege eddig annyi volt, hogy „biztosan
+        törlöd ezt a dokumentumot?" -- pedig ez a művelet visszafordíthatatlan,
+        és a fájl a szerverről is eltűnik.
+      */}
+      <ConfirmDialog
+        open={pending?.kind === "rotate-qr"}
+        title="Lecseréled az eszköz QR-kódját?"
+        consequence="A korábbi matricán lévő kód azonnal érvénytelen lesz: a régi matricát beolvasva az alkalmazás nem találja meg az eszközt."
+        recovery="A régi kód nem állítható vissza. Az új kódot ki kell nyomtatni, és a régi matricát le kell cserélni az eszközön."
+        confirmLabel="QR-kód cseréje"
+        busy={busy}
+        onConfirm={() => void rotateQr()}
+        onCancel={() => setPending(null)}
+      />
+      <ConfirmDialog
+        open={pending?.kind === "delete-document"}
+        title={
+          pending?.kind === "delete-document"
+            ? `Törlöd ezt a dokumentumot: ${pending.fileName}?`
+            : "Törlöd ezt a dokumentumot?"
+        }
+        consequence="A fájl lekerül az eszköz adatlapjáról, és a tárolóból is törlődik."
+        recovery="Nem vonható vissza: ha újra kell, fel kell tölteni egy másolatot."
+        confirmLabel="Végleges törlés"
+        busy={busy}
+        onConfirm={() => {
+          if (pending?.kind === "delete-document")
+            void deleteDocument(pending.documentId);
+        }}
+        onCancel={() => setPending(null)}
+      />
     </div>
   );
 }

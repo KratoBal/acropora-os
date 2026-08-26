@@ -171,10 +171,6 @@ describe("Brand management UI", () => {
     );
   });
   it("adds and removes aliases", async () => {
-    vi.stubGlobal(
-      "confirm",
-      vi.fn(() => true),
-    );
     render(<BrandEditorPage brandId="b1" />);
     await screen.findByText("Oase GmbH");
     fireEvent.change(screen.getByLabelText("Új alias"), {
@@ -182,7 +178,16 @@ describe("Brand management UI", () => {
     });
     fireEvent.click(screen.getByText("Alias hozzáadása"));
     await waitFor(() => expect(api.addAlias).toHaveBeenCalled());
+
     fireEvent.click(screen.getByText("Eltávolítás"));
+
+    // A kérdés megmondja, MI VÉSZ EL: a következő import már nem ismeri fel
+    // ezen a néven a márkát. Enélkül az „Eltávolítás" ártalmatlannak látszik.
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent(/import ismeretlen márkaként/);
+    expect(api.removeAlias).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText("Alias eltávolítása"));
     await waitFor(() =>
       expect(api.removeAlias).toHaveBeenCalledWith("token", "b1", "a1"),
     );

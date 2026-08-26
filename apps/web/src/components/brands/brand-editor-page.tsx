@@ -4,6 +4,7 @@ import {
   Badge,
   Button,
   Card,
+  ConfirmDialog,
   FormField,
   Input,
   PageHeader,
@@ -30,6 +31,10 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmArchive, setConfirmArchive] = useState(false);
+  const [pendingAlias, setPendingAlias] = useState<{
+    id: string;
+    alias: string;
+  } | null>(null);
   const [name, setName] = useState(searchParams.get("name") ?? "");
   const [description, setDescription] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
@@ -281,21 +286,9 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => {
-                      if (
-                        window.confirm(`Törlöd ezt az aliast: ${item.alias}?`)
-                      )
-                        void brandsApi
-                          .removeAlias(token, brand.id, item.id)
-                          .then(setBrand)
-                          .catch((cause) =>
-                            setError(
-                              cause instanceof Error
-                                ? cause.message
-                                : "Az alias nem törölhető.",
-                            ),
-                          );
-                    }}
+                    onClick={() =>
+                      setPendingAlias({ id: item.id, alias: item.alias })
+                    }
                   >
                     Eltávolítás
                   </Button>
@@ -372,6 +365,40 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
           </Card>
         </div>
       ) : null}
+
+      {/*
+        Az alias eltávolítása nem látszik súlyosnak, de a következménye
+        pontosan megnevezhető: a jövőbeli import nem ismeri fel többé ezen a
+        néven a márkát. A szöveg ezt mondja meg, nem azt, hogy „biztos vagy
+        benne".
+      */}
+      <ConfirmDialog
+        open={pendingAlias !== null}
+        title={
+          pendingAlias
+            ? `Eltávolítod ezt az aliast: ${pendingAlias.alias}?`
+            : "Eltávolítod ezt az aliast?"
+        }
+        consequence="A behozott adatokban ez a névalak többé nem kapcsolódik ehhez a márkához: a következő import ismeretlen márkaként hozza fel."
+        recovery="Ugyanez az alias később kézzel újra felvehető ezen az oldalon."
+        confirmLabel="Alias eltávolítása"
+        onConfirm={() => {
+          if (!brand || !pendingAlias) return;
+          const aliasId = pendingAlias.id;
+          setPendingAlias(null);
+          void brandsApi
+            .removeAlias(token, brand.id, aliasId)
+            .then(setBrand)
+            .catch((cause) =>
+              setError(
+                cause instanceof Error
+                  ? cause.message
+                  : "Az alias nem törölhető.",
+              ),
+            );
+        }}
+        onCancel={() => setPendingAlias(null)}
+      />
     </div>
   );
 }

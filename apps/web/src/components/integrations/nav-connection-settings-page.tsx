@@ -7,6 +7,7 @@ import {
   Card,
   CardContent,
   CardHeader,
+  ConfirmDialog,
   FormField,
   Input,
   PageHeader,
@@ -109,6 +110,7 @@ export function NavConnectionSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [disabling, setDisabling] = useState(false);
+  const [confirmDisable, setConfirmDisable] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -195,12 +197,7 @@ export function NavConnectionSettingsPage() {
 
   const handleDisable = async () => {
     if (disabling) return;
-    if (
-      !window.confirm(
-        "Biztosan letiltod a NAV kapcsolatot? Ezután a NAV adószám-lekérdezés és a bejövő számlák manuális vagy automatikus szinkronja sem működik.",
-      )
-    )
-      return;
+    setConfirmDisable(false);
     setDisabling(true);
     setError(null);
     setNotice(null);
@@ -306,7 +303,7 @@ export function NavConnectionSettingsPage() {
               <Button
                 variant="danger"
                 disabled={!view.configured || disabling}
-                onClick={() => void handleDisable()}
+                onClick={() => setConfirmDisable(true)}
               >
                 {disabling ? "Letiltás…" : "Kapcsolat letiltása"}
               </Button>
@@ -449,6 +446,17 @@ export function NavConnectionSettingsPage() {
           </form>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={confirmDisable}
+        title="Letiltod a NAV kapcsolatot?"
+        consequence="Leáll az adószám-lekérdezés és a bejövő számlák szinkronja is: új NAV-számla nem érkezik be, amíg a kapcsolat le van tiltva."
+        recovery="Visszakapcsolható, de csak a NAV technikai felhasználó adatainak újbóli megadásával: a mostani adatok a letiltással törlődnek."
+        confirmLabel="Kapcsolat letiltása"
+        busy={disabling}
+        onConfirm={() => void handleDisable()}
+        onCancel={() => setConfirmDisable(false)}
+      />
     </div>
   );
 }

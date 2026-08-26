@@ -58,7 +58,14 @@ export function PartnerDeleteButton({
     }
   };
 
-  const confirm = async () => {
+  /**
+   * A NEVE NEM `confirm`, és ez nem szőrszálhasogatás: a böngészőben a
+   * `confirm` egy globális függvény, ami kérdez. Ez viszont már NEM kérdez,
+   * hanem TÖRÖL -- egy ugyanolyan nevű helyi függvény pont a legrosszabb helyen
+   * mosná össze a kettőt, és a „hol kérdezünk még a böngésző ablakával"
+   * keresést is elrontja.
+   */
+  const runDeletion = async () => {
     setBusy(true);
     setError(null);
     try {
@@ -121,7 +128,11 @@ export function PartnerDeleteButton({
       )}
 
       <div className="flex gap-2">
-        <Button variant="danger" onClick={() => void confirm()} disabled={busy}>
+        <Button
+          variant="danger"
+          onClick={() => void runDeletion()}
+          disabled={busy}
+        >
           {physical ? "Végleges törlés" : "Töröltre jelölés"}
         </Button>
         <Button
