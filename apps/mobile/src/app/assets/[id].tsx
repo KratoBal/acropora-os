@@ -24,6 +24,7 @@ import {
   labelLayout,
   labelPageSize,
 } from "@/lib/assets/label-format";
+import { assetPlacementDetail } from "@/lib/assets/asset-placement";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import { OfflineNoticeCard } from "@/components/offline/OfflineNoticeCard";
@@ -170,7 +171,20 @@ export default function AssetDetailScreen() {
                 value={cachedSummary.owner.displayName}
               />
               <Info label="Partnerkód" value={cachedSummary.owner.code} />
-              <Info label="Helyszín" value={cachedSummary.address?.formatted} />
+              {/*
+                A MENTETT LISTASOR IS HORDOZZA AZ ALEGYSÉGET, tehát a hiányos,
+                offline lapon is meg tudjuk mondani, hol áll az eszköz. A
+                korábban mentett másolatokban is ott van: a másolat a szerver
+                nyers válaszát tárolja, nem a típus szerinti szűkítést.
+              */}
+              <Info
+                label="Alegység"
+                value={assetPlacementDetail({
+                  ownerType: cachedSummary.owner.type,
+                  unit: cachedSummary.unit,
+                  address: cachedSummary.address,
+                })}
+              />
               <Info label="Akvárium" value={cachedSummary.aquarium?.name} />
             </Section>
 
@@ -210,7 +224,21 @@ export default function AssetDetailScreen() {
             <Section title="Elhelyezés">
               <Info label="Tulajdonos" value={asset.owner.displayName} />
               <Info label="Partnerkód" value={asset.owner.code} />
-              <Info label="Helyszín" value={asset.address?.formatted} />
+              {/*
+                AZ ALEGYSÉG A VÁLASZTOTT HELY, a cím a VISSZAESÉS. Partner
+                tulajdonosnál a cím MINDIG a partner saját postai címe, tehát
+                alegység nélkül nem válasz arra, hol áll az eszköz -- és a kettő
+                ugyanúgy néz ki. A megkülönböztetés az `asset-placement.ts`
+                modulban áll, ugyanazokkal a szavakkal, mint a weben.
+              */}
+              <Info
+                label="Alegység"
+                value={assetPlacementDetail({
+                  ownerType: asset.owner.type,
+                  unit: asset.unit,
+                  address: asset.address,
+                })}
+              />
               <Info label="Akvárium" value={asset.aquarium?.name} />
             </Section>
 

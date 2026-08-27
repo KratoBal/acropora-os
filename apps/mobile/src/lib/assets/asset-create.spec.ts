@@ -21,6 +21,7 @@ import {
 
 const form: AssetCreateForm = {
   owner: { type: "SUPPLIER", id: "supplier-1" },
+  unitId: "",
   name: "  Fóka felnyomó szivattyú  ",
   kind: "EQUIPMENT",
   manufacturer: " Eheim ",
@@ -177,5 +178,49 @@ describe("a dátumválasztó és a mező közötti átváltás", () => {
 
     assert.equal(dateFromInput("", today), today);
     assert.equal(dateFromInput("tegnap", today), today);
+  });
+});
+
+describe("buildAssetCreatePayload es az alegyseg", () => {
+  /**
+   * AZ ALEGYSÉG A HELYSZÍN: melyik medencénél, melyik gépházban áll az eszköz.
+   * Balázs kérése (2026-08-27): amit a webes űrlap már tud, azt a telefonnak is
+   * tudnia kell új eszköz felvitelekor.
+   */
+  it("sends the chosen unit for a service partner", () => {
+    const result = buildAssetCreatePayload({ ...form, unitId: "unit-7" });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.ok ? result.payload.departmentId : undefined, "unit-7");
+  });
+
+  it("leaves it out when nothing was chosen", () => {
+    const result = buildAssetCreatePayload(form);
+
+    assert.equal(result.ok, true);
+    assert.equal(result.ok ? "departmentId" in result.payload : true, false);
+  });
+
+  /**
+   * VEVŐ TULAJDONOSNÁL NEM MEGY KI, akkor sem, ha a mezőben maradt egy korábbi
+   * választás. A szerver ilyenkor elutasítaná a mentést -- vevőnél a cím a
+   * pontosítás --, és a hiba az űrlap kitöltése UTÁN jelenne meg. A tulajdonos
+   * típusa dönt, nem az, hogy van-e érték a mezőben.
+   */
+  it("never sends a unit for a customer owner", () => {
+    const result = buildAssetCreatePayload({
+      ...form,
+      owner: { type: "CUSTOMER", id: "customer-1" },
+      unitId: "unit-7",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.ok ? "departmentId" in result.payload : true, false);
+  });
+
+  it("treats a blank unit as no unit", () => {
+    const result = buildAssetCreatePayload({ ...form, unitId: "   " });
+
+    assert.equal(result.ok ? "departmentId" in result.payload : true, false);
   });
 });

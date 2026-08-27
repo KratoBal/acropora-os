@@ -28,6 +28,21 @@ export interface AssetHierarchyItem {
   status: AssetStatus;
 }
 
+/**
+ * A PARTNER ALEGYSÉGE, ahol az eszköz áll. Csak szerviz partner tulajdonosnál
+ * van értéke; vevőnél a cím a pontosítás.
+ *
+ * A `path` a gyökértől eddig az egységig tartó nevek sora, és a szerver adja --
+ * nem itt épül. A kód és a név csak TESTVÉREK között egyedi, tehát a puszta név
+ * két távoli ágra ugyanazt a sort adná.
+ */
+export interface AssetUnit {
+  id: string;
+  code: string;
+  name: string;
+  path: string[];
+}
+
 export interface AssetListItem extends AssetHierarchyItem {
   criticality: AssetCriticality;
   owner: {
@@ -37,6 +52,7 @@ export interface AssetListItem extends AssetHierarchyItem {
     displayName: string;
   };
   address?: { id: string; name?: string; formatted: string };
+  unit?: AssetUnit;
   aquarium?: { id: string; aquariumNumber: string; name: string };
   parent?: AssetHierarchyItem;
   manufacturer?: string;
@@ -102,6 +118,11 @@ export interface CreateAssetInput {
   ownerType: AssetOwnerType;
   ownerId: string;
   customerAddressId?: string;
+  /**
+   * A partner alegysége. Csak `SUPPLIER` tulajdonosnál küldhető: vevőnél a
+   * szerver el is utasítja, mert ott a cím a pontosítás.
+   */
+  departmentId?: string;
   parentAssetId?: string;
   kind: AssetKind;
   name: string;
