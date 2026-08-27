@@ -158,8 +158,18 @@ export class WorksheetsService {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2002"
       ) {
+        // AZ ADATBÁZIS EGYEDI INDEXE AZ UTOLSÓ FÉK, és a fentiek után ritkán
+        // fut: a kód-ellenőrzések előbb kapják el az ütközést. Nem SOHA
+        // viszont, mert két párhuzamos írás között ez marad az egyetlen.
+        //
+        // A mondat második fele korábban azt indokolta, hogy a szám
+        // egyértelműen azonosítsa a partnert. Az indoklás a #182 óta NEM
+        // ÁLL: a szám nem hordozza a rövidítést. A tiltás viszont áll, ezért
+        // az indoklás ment ki, nem az ág. Egy ritkán futó ág hibás üzenete a
+        // legrosszabb fajta: épp akkor vezet félre, amikor valaki először
+        // találkozik vele.
         throw new ConflictException(
-          "Ez a rövidítés már egy másik partnerhez tartozik. A munkalap-számnak egyértelműen kell azonosítania a partnert.",
+          "Ez a rövidítés már egy másik partnerhez tartozik. Válassz másikat.",
         );
       }
       throw error;
