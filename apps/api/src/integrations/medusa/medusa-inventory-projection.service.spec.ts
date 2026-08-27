@@ -407,7 +407,7 @@ describe("Medusa készlet-vetítés", () => {
    *
    * Ezért kapjuk el a hibát a hívás HELYÉN, nem a feloldó belsejében.
    *
-   * MINEK KELL PIROSÍTANIA: ha valaki az elkapást bevinni a `resolveLocation`
+   * MINEK KELL PIROSÍTANIA: ha valaki az elkapást beviszi a `resolveLocation`
    * belsejébe, és onnan `{ error }` értéket ad vissza.
    */
   it("a készlethely pillanatnyi hibája után a KÖVETKEZŐ termék már átmegy", async () => {
