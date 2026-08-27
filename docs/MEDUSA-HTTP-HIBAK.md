@@ -1,9 +1,11 @@
 # A Medusa HTTP-hibák megnevezése és a titok-felület
 
-**Állapot:** terv. Kód ebből a körből NEM készült, mert a megnevezés
-viselkedést változtat. Ami készült: a jelen lap és egy tesztfájl, ami azt a két
-állítást rögzíti, aminek a megnevezés UTÁN is igaznak kell lennie
-(`apps/api/src/integrations/medusa/medusa-product-projection.http-failure.spec.ts`).
+**Állapot:** megvan, mindkét fele. A lap először tervként készült; a döntés
+2026-08-27-én megszületett (acrobot), és a kód ugyanabban a körben elkészült.
+A terv szövege azért maradt itt, mert a MIÉRT nem avul el a kóddal.
+
+**A döntés, szó szerint:** mind a négy hívásnál megnevezzük, EGY körben, nem
+kettőben; és a megállás-szövegből a törzs kikerül, a státusz marad.
 
 ## 1. A kiindulás
 
@@ -90,12 +92,33 @@ lapon áll, méréssel, nem a tesztben.
 A második sor mondja meg, miért kell a kontroll: nélküle a tesztek akkor is
 zöldek lennének, ha a mért hívás el sem indul.
 
-## 6. Ami nyitva marad, és kinek
+## 6. A konvenció, ahogy megvalósult
 
-- **Hol nevezzük meg**: mind a négy termék-vetítési hívásnál, vagy csak az
-  írásoknál? A lap javaslata: mind a négynél, mert az olvasó hibája ugyanúgy
-  megállás, csak ma névtelen.
-- **A készlet-vetítés meglévő `medusa-write-failed` szövegéből ki kell venni a
-  törzset.** Ez viselkedés-változtatás, tehát a döntés része.
-- A `describeError` mai alakja (`error.message`) ezzel nem marad tartható: a
-  HTTP-hibánál a **státuszt** kell adnia, nem az üzenetet.
+**Egy függvény, egy szabály:** `describeMedusaFailure` (a kliens modulban, a
+hibaosztály mellett). HTTP-hibánál a STÁTUSZT adja vissza, mást nem. Nem HTTP
+eredetű hibánál az üzenet megmarad - az a szöveg a futtatókörnyezetből jön
+(időtúllépés, névfeloldás), nem a Medusa válaszából, tehát nem visszhangozhat
+semmit, amit mi küldtünk.
+
+**Két megállási ok, nem négy.** A termék-vetítés `medusa-read-failed` és
+`medusa-write-failed` okot ad, a hívás KINDJE szerint, nem hívásonként. A
+különbség, ami a jelentést olvasó első kérdése: egy olvasás bukásánál BIZTOSAN
+nem változott semmi odaát, egy írásénál nem tudjuk. A készlet-vetítés már így
+nevezte a két írását; ez a kör csak kiterjesztette a konvenciót.
+
+**Az írás bukásánál a leképezést sem írjuk.** Egy leképezés azt állítaná, hogy
+a termék odaát a mi azonosítónkon áll - épp az, ami bizonytalan.
+
+**Mérve, hogy a szabály EGY helyen áll:** ha a leíró megint az `error.message`
+értékből épül, öt teszt vált pirosra KÉT vetítésben. Ha egy elkapási hely
+kimarad, csak az az egy, ami megnevezi.
+
+## 7. Ami nyitva marad, és kinek
+
+A fenti három nyitott pont MIND lezárult, a döntéssel együtt. Ami tovább él:
+
+- A készlet-vetítés három OLVASÓ hívása (161, 202, 221) továbbra is védtelen.
+  A mostani kör a termék-vetítést és a titok-felületet rendezte; ugyanez a
+  konvenció ráhúzható, de az külön változtatás.
+- Az `updateInventoryLevel` / `createInventoryLevel` ág megnevezése már megvolt,
+  csak a szövege vitte a törzset - az most rendben van.

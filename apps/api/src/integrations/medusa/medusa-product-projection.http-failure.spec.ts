@@ -195,6 +195,37 @@ describe("a vetítés egy elbukott Medusa-hívás után", () => {
   }
 
   /**
+   * HARMADIK ÁLLÍTÁS: a megállás szövege a STÁTUSZT viszi, a TÖRZSET nem.
+   *
+   * Ez a `#192` kör másik fele, és nem stílus kérdése. A
+   * `MedusaAdminHttpError` üzenete a válasz törzsének első 500 karakterét is
+   * viszi - hibakeresésnél az a hasznos -, a megállás-szöveg viszont a
+   * jelentésbe és a parancssori kimenetre kerül, ahol nem tudjuk, ki olvassa.
+   * Azt pedig NEM tudjuk, a Medusa melyik hibaválasza mit visszhangoz.
+   *
+   * MINEK KELL PIROSÍTANIA: ha valaki a hibaleírást megint az `error.message`
+   * értékből veszi, vagy egy új elkapási helyen kihagyja a közös leírót.
+   */
+  for (const point of FAILURE_POINTS) {
+    it(`a(z) ${point} megállás-szövege státuszt mond, törzset nem`, async () => {
+      const { service } = fakesFailingAt(point, { link: LINK_FOR[point] });
+
+      const result = await settle(service.project(product, now));
+
+      assert.ok(
+        !result.threw,
+        "a megnevezés után nem kivétel jön, hanem megállás",
+      );
+      assert.ok(result.outcome.action === "stopped");
+      assert.match(result.outcome.details, /HTTP 500/);
+      assert.ok(
+        !result.outcome.details.includes("MEDUSA_TEST_FAILURE_BODY"),
+        `a válasz törzse bekerült a megállás-szövegbe: ${result.outcome.details}`,
+      );
+    });
+  }
+
+  /**
    * MÁSODIK ÁLLÍTÁS: egy elbukott ÍRÁS nem hagy maga után leképezést.
    *
    * Ez a súlyosabb a kettő közül. A leképezés azt állítja, hogy a mi

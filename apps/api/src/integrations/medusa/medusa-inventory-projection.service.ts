@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 
 import {
+  describeMedusaFailure,
   STOCK_LOCATION_LOOKUP_LIMIT,
   type MedusaAdminClient,
   type MedusaInventoryLevelRow,
@@ -467,9 +468,16 @@ function describeSkus(variants: MedusaVariantRow[]): string {
     .join(", ")}.`;
 }
 
-function describeError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
+/**
+ * A megállás-szöveg hibaleírása. EGY helyre mutat, szándékosan.
+ *
+ * Eddig az `error.message` ment ki, ami HTTP-hibánál a Medusa válaszának első
+ * 500 karakterét is viszi. Ez a jelentésbe és a parancssori kimenetre kerül,
+ * és onnantól nem tudjuk, ki olvassa - a brief pedig kimondja, hogy a titok
+ * plaintext értéke hibakimenetben sem jelenhet meg. Mostantól a STÁTUSZ megy
+ * ki, a törzs nem.
+ */
+const describeError = describeMedusaFailure;
 
 /** Csak a teszteknek, hogy a szint alakja egy helyen legyen leírva. */
 export type { MedusaInventoryLevelRow };

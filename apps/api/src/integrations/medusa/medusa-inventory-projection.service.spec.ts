@@ -3,10 +3,11 @@ import { describe, it } from "node:test";
 
 import { Prisma } from "@acropora/database";
 
-import type {
-  MedusaAdminClient,
-  MedusaStockLocationRow,
-  MedusaVariantRow,
+import {
+  MedusaAdminHttpError,
+  type MedusaAdminClient,
+  type MedusaStockLocationRow,
+  type MedusaVariantRow,
 } from "./medusa-admin.client.js";
 import type { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
 import {
@@ -80,6 +81,16 @@ function variantWith(options: {
   };
 }
 
+/**
+ * A hamis hiba VALODI `MedusaAdminHttpError`, nem sima `Error`.
+ *
+ * Ez nem kozmetika: a megállás-szöveg hibaleírója pontosan a HTTP-hiba esetén
+ * dob el mindent a státuszon kívül. Egy sima `Error`-ral a titok-állítás
+ * ÜRESEN lenne zöld - a leíró a másik ágra menne, és sosem mérnénk meg azt,
+ * amiről a teszt beszél.
+ */
+const MEDUSA_BODY = '{"message":"MEDUSA_TEST_FAILURE_BODY"}';
+
 function fakes(options: {
   link?: { productId: string; medusaProductId: string } | null;
   locations?: MedusaStockLocationRow[];
@@ -125,7 +136,7 @@ function fakes(options: {
     ) {
       calls.push(`backorder:${variantId}:${allowBackorder}`);
       if (options.failOn === "backorder")
-        throw new Error("MEDUSA_ADMIN_HTTP_400: nem sikerult");
+        throw new MedusaAdminHttpError(400, MEDUSA_BODY);
       const variant = findVariant(variantId);
       if (variant) variant.allow_backorder = allowBackorder;
     },
@@ -136,7 +147,7 @@ function fakes(options: {
     ) {
       calls.push(`create-level:${inventoryItemId}:${locationId}:${quantity}`);
       if (options.failOn === "level")
-        throw new Error("MEDUSA_ADMIN_HTTP_400: nem sikerult");
+        throw new MedusaAdminHttpError(400, MEDUSA_BODY);
       const inventory = inventoryById(inventoryItemId);
       inventory?.location_levels?.push({
         location_id: locationId,
@@ -150,7 +161,7 @@ function fakes(options: {
     ) {
       calls.push(`update-level:${inventoryItemId}:${locationId}:${quantity}`);
       if (options.failOn === "level")
-        throw new Error("MEDUSA_ADMIN_HTTP_400: nem sikerult");
+        throw new MedusaAdminHttpError(400, MEDUSA_BODY);
       const level = inventoryById(inventoryItemId)?.location_levels?.find(
         (row) => row.location_id === locationId,
       );
@@ -349,6 +360,23 @@ describe("Medusa készlet-vetítés", () => {
     assert.equal(outcome.action, "stopped");
     assert.ok(outcome.action === "stopped");
     assert.equal(outcome.reason, "medusa-write-failed");
+    /**
+     * ÉS A SZÖVEG A STÁTUSZT MONDJA, A TÖRZSET NEM.
+     *
+     * Ez volt a `#192` kör másik fele. A `MedusaAdminHttpError` üzenete a
+     * válasz törzsének első 500 karakterét is viszi, és ez a szöveg eddig
+     * változtatás nélkül került a megállás-szövegbe, onnan a jelentésbe és a
+     * parancssori kimenetre. Azt nem tudjuk, a Medusa melyik hibaválasza mit
+     * visszhangoz, a brief pedig a hibakimenetre is kiterjed.
+     *
+     * MINEK KELL PIROSÍTANIA: ha a hibaleírás megint az `error.message`
+     * értékből épül.
+     */
+    assert.match(outcome.details, /HTTP 400/);
+    assert.ok(
+      !outcome.details.includes("MEDUSA_TEST_FAILURE_BODY"),
+      `a válasz törzse bekerült a megállás-szövegbe: ${outcome.details}`,
+    );
   });
 
   /** A 12. teszt: részleges hiba, majd újrafuttatás - konvergál. */

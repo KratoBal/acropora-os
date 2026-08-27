@@ -308,6 +308,32 @@ export class MedusaConfigurationError extends Error {}
  * legfontosabb lenne. Az üzenet formátuma változatlan, mert az a parancssori
  * kimeneten már látszik.
  */
+/**
+ * EGY MEDUSA-HIBA, AHOGY A JELENTÉSBE KERÜLHET: a STÁTUSZ igen, a TÖRZS nem.
+ *
+ * A `MedusaAdminHttpError` üzenete a válasz törzsének első 500 karakterét is
+ * viszi, mert a hibakeresésnél az a hasznos. A megállás-szöveg viszont a
+ * jelentésbe és a parancssori kimenetre kerül, és onnantól nem tudjuk, ki
+ * olvassa. Mérve: azt NEM tudjuk, hogy a Medusa melyik hibaválasza mit
+ * visszhangoz, és a brief szerint a titok plaintext értéke hibakimenetben sem
+ * jelenhet meg. Egy mért eset (401) `{"message":"Unauthorized"}` volt, tehát
+ * ártalmatlan - de ezt csak UTÓLAG lehetett megtudni, és épp ez a baj vele.
+ *
+ * Ezért minden megnevezett Medusa-hiba EZEN a függvényen megy át. Ha valaki
+ * egy új helyen kapja el a hibát, ne kelljen újra végiggondolnia: a szabály
+ * egy helyen áll.
+ *
+ * A NEM HTTP eredetű hibánál az üzenet MEGMARAD, és ez nem következetlenség:
+ * az a szöveg a futtatókörnyezetből jön (időtúllépés, névfeloldás), nem a
+ * Medusa válaszából, tehát nem visszhangozhat semmit, amit mi küldtünk.
+ */
+export function describeMedusaFailure(error: unknown): string {
+  if (error instanceof MedusaAdminHttpError)
+    return `a Medusa HTTP ${error.status} választ adott`;
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
 export class MedusaAdminHttpError extends Error {
   constructor(
     readonly status: number,
