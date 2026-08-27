@@ -36,6 +36,9 @@ function stubTransaction(world: World, written: Written[]) {
           ? (world.mirrorOf ?? null)
           : (world.codeHolder ?? null),
     },
+    // A kód-visszavonulás ellenőrzése (#185) ugyanebben a törzsben fut: üres
+    // előzmény, mert ezek a próbák nem arról szólnak.
+    worksheetNumberSequence: { findFirst: async () => null },
   } as never;
 }
 
