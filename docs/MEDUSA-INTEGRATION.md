@@ -235,6 +235,43 @@ Pricing and inventory are not part of this projection. The variant price array
 is sent empty because the create endpoint requires the field, not because we
 have a price to state.
 
+### What has NOT been proven, and why it does not look like a gap
+
+**Everything above is asserted by tests. None of it has been run against a live
+system.** The runtime stage proof was written and then left out - a decision by
+the owner of the round, not a technical obstacle. The script exists; nobody ran
+it end to end.
+
+This paragraph is here because the absence would otherwise be invisible. Every
+other claim on this page names the file that would go red, and after enough of
+those a reader stops asking which ones were measured on a running system. **An
+unmarked claim borrows credibility from the ones beside it.**
+
+**The Store API side, measured rather than assumed** (2026-08-27): a plain
+`GET /store/products` against the stage commerce host answers `400` with
+`"Publishable API key required in the request header: x-publishable-api-key"`.
+The publishable key carries the sales-channel scope, and we do not have one. So
+the storefront half cannot be measured directly today, and **no storefront was
+built for the proof.**
+
+#### The five things the tests cannot settle
+
+Each of these can only fail on a live system. The tests assert what we send;
+none of them observes what the other side did with it.
+
+| #   | What would falsify the rule                                                       | Why a test cannot catch it                                                                        |
+| --- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| 1   | the product stays `draft` while the flag is true and the product is active        | the tests assert the decision and the call; they do not observe the product afterwards            |
+| 2   | it becomes `published` but the channel list stays empty                           | both travel in one request in OUR code; whether the target applies both is the target's behaviour |
+| 3   | a second run leaves TWO channel links                                             | the replace semantics is read from the installed source, not observed on a running instance       |
+| 4   | with the flag false the product is still reachable from the Store API             | the storefront intersection is read from middleware source; we have never asked the Store API     |
+| 5   | the report names `Acropora Webshop` while the product sits on a different channel | the name comes from our own lookup; only the target can contradict it                             |
+
+**Three of the five (2, 3, 4) rest on claims read from the installed Medusa
+2.19.0 source.** That is a stronger footing than a guess and a weaker one than
+an observation: the source says what the code does, not what this deployment
+does with our data.
+
 ## Where the assertions live
 
 | Claim                                                              | Where it is asserted                         |
@@ -249,6 +286,7 @@ have a price to state.
 | a missing channel id stops before any call goes out                | `medusa-product-projection.service.spec.ts`  |
 | a non-existent channel id stops on first use, once                 | `medusa-product-projection.service.spec.ts`  |
 | the report names the state, the channel and the reason             | `medusa-projection.cli.spec.ts`              |
+| **nothing on this page has been observed on a running system**     | **no file - see "What has NOT been proven"** |
 
 **A claim with an expiry condition, not a date.** Two Medusa integration specs
 (`medusa-connection.repository.integration.spec.ts`,
