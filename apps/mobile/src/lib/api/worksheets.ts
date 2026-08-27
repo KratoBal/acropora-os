@@ -186,7 +186,7 @@ export interface WorksheetSelectablePartner {
 
 export function listSelectableWorksheetPartners() {
   return apiRequest<{ items: WorksheetSelectablePartner[] }>(
-    "/worksheets/selectable-partners",
+    "/service/worksheets/selectable-partners",
   );
 }
 
@@ -206,9 +206,11 @@ export function listWorksheets({
   if (assigneeId) query.set("assigneeId", assigneeId);
   if (customerId) query.set("customerId", customerId);
   if (status) query.set("status", status);
-  return apiRequest<WorksheetListResponse>(`/worksheets?${query}`);
+  return apiRequest<WorksheetListResponse>(`/service/worksheets?${query}`);
 }
 
 export function getWorksheet(id: string) {
-  return apiRequest<WorksheetDetail>(`/worksheets/${encodeURIComponent(id)}`);
+  return apiRequest<WorksheetDetail>(
+    `/service/worksheets/${encodeURIComponent(id)}`,
+  );
 }
