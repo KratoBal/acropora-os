@@ -10,6 +10,9 @@ import {
 
 const asset: EditableAsset = {
   updatedAt: "2026-08-18T20:00:00.000Z",
+  // Szerviz partner eszkoze, helyszin nelkul: igy az alegyseg-ag LEFUT a
+  // meglevo eseteknel is, es lathato, hogy valtozas nelkul nem kuld semmit.
+  ownerType: "SUPPLIER",
   status: "ACTIVE",
   criticality: "NORMAL",
   manufacturer: "Eheim",
@@ -128,5 +131,56 @@ describe("hasAssetChanges", () => {
   it("is true as soon as one field differs", () => {
     const form = { ...assetEditFormFrom(asset), notes: "" };
     assert.equal(hasAssetChanges(asset, form), true);
+  });
+});
+
+describe("buildAssetPatch es az alegyseg", () => {
+  const partnerAsset: EditableAsset = {
+    ...asset,
+    ownerType: "SUPPLIER",
+    unit: { id: "unit-1" },
+  };
+
+  /**
+   * A FELVITELI URLAP UGYANAZNAP MEGKAPTA A HELYSZIN-VALASZTOT. Egy mezo, amit
+   * felvinni lehet, de javitani nem, egy elgepeles utan zsakutca: a szerelo a
+   * terepen nem tud mit kezdeni magaval.
+   */
+  it("sends the new unit when the technician picks another one", () => {
+    const form = { ...assetEditFormFrom(partnerAsset), unitId: "unit-2" };
+    assert.equal(buildAssetPatch(partnerAsset, form).departmentId, "unit-2");
+  });
+
+  it("stays silent when the unit did not change", () => {
+    const patch = buildAssetPatch(
+      partnerAsset,
+      assetEditFormFrom(partnerAsset),
+    );
+    assert.equal("departmentId" in patch, false);
+  });
+
+  /**
+   * AZ URESRE TORLES TORLES: a szerver a `null` erteket ugy veszi, hogy a
+   * kotes megszunik. A mezo ELHAGYASA ellenben azt jelenti, hogy ne nyulj
+   * hozza -- a ketto nem ugyanaz, es a kulonbseg itt keletkezik.
+   */
+  it("clears the unit with null, not by leaving the field out", () => {
+    const form = { ...assetEditFormFrom(partnerAsset), unitId: "" };
+    assert.equal(buildAssetPatch(partnerAsset, form).departmentId, null);
+  });
+
+  /**
+   * VEVO TULAJDONOSNAL SOSEM MEGY KI, akkor sem, ha a formban maradt ertek: a
+   * szerver elutasitana, es a hiba a mentes pillanataban jelenne meg.
+   */
+  it("never sends a unit for a customer-owned asset", () => {
+    const customerAsset: EditableAsset = { ...asset, ownerType: "CUSTOMER" };
+    const form = { ...assetEditFormFrom(customerAsset), unitId: "unit-2" };
+    assert.equal("departmentId" in buildAssetPatch(customerAsset, form), false);
+  });
+
+  it("counts a unit change as a change worth saving", () => {
+    const form = { ...assetEditFormFrom(partnerAsset), unitId: "unit-2" };
+    assert.equal(hasAssetChanges(partnerAsset, form), true);
   });
 });

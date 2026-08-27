@@ -20,6 +20,8 @@ import {
   type AssetKind,
   type AssetOwnerOption,
 } from "@/lib/api/assets";
+import { listPartnerUnits } from "@/lib/api/partners";
+import { selectableUnitOptions } from "@/lib/partners/site-tree";
 import DateTimePicker, {
   type DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
@@ -52,6 +54,7 @@ export default function NewAssetScreen() {
   });
   const [ownerSearch, setOwnerSearch] = useState("");
   const [owner, setOwner] = useState<AssetOwnerOption | null>(null);
+  const [unitId, setUnitId] = useState("");
   const [name, setName] = useState("");
   const [kind, setKind] = useState<AssetKind>("EQUIPMENT");
   const [manufacturer, setManufacturer] = useState("");
@@ -72,6 +75,27 @@ export default function NewAssetScreen() {
     field: AssetCreateField | null;
     message: string;
   } | null>(null);
+
+  /*
+   * A PARTNER HELYSZÍNEI. Csak szerviz partnernél van mit betölteni: vevő
+   * tulajdonosnál a cím a pontosítás, és a szerver az alegységet ott el is
+   * utasítja. A lista ugyanarról a végpontról jön, amit a partner képernyője
+   * és a webes eszköz-űrlap is használ (`partners.view`, ami a szerelőnek is
+   * megvan).
+   */
+  const unitsQuery = useQuery({
+    queryKey: ["partner-units", owner?.id],
+    queryFn: () => listPartnerUnits(owner!.id),
+    enabled:
+      status === "authenticated" &&
+      Boolean(capabilities?.assetsManage) &&
+      owner?.type === "SUPPLIER",
+  });
+
+  const units = useMemo(
+    () => selectableUnitOptions(unitsQuery.data?.items ?? []),
+    [unitsQuery.data],
+  );
 
   const filteredOwners = useMemo(() => {
     const needle = ownerSearch.trim().toLocaleLowerCase("hu");
@@ -110,6 +134,7 @@ export default function NewAssetScreen() {
      */
     const result = buildAssetCreatePayload({
       owner: owner ? { type: owner.type, id: owner.id } : null,
+      unitId,
       name,
       kind,
       manufacturer,
@@ -170,7 +195,13 @@ export default function NewAssetScreen() {
               return (
                 <Pressable
                   key={`${item.type}:${item.id}`}
-                  onPress={() => setOwner(item)}
+                  onPress={() => {
+                    setOwner(item);
+                    // A helyszín a partnerhez tartozik: partnerváltásnál a
+                    // korábbi választás egy MÁSIK partner fájából való lenne, és
+                    // a szerver azt el is utasítaná a mentés végén.
+                    setUnitId("");
+                  }}
                   style={[styles.ownerRow, selected && styles.ownerSelected]}
                 >
                   <Text style={styles.ownerName}>{item.displayName}</Text>
@@ -183,6 +214,58 @@ export default function NewAssetScreen() {
               );
             })}
           </Section>
+
+          {/*
+            A HELYSZÍN CSAK SZERVIZ PARTNERNÉL JELENIK MEG. Vevő tulajdonosnál
+            nem választható: ott a cím a pontosítás, és a szerver az alegységet
+            el is utasítja. Egy mező, amit ki lehet tölteni, de a mentés
+            visszadob, rosszabb, mint a hiányzó mező.
+          */}
+          {owner?.type === "SUPPLIER" ? (
+            <Section title="Helyszín">
+              <Text style={styles.hint}>
+                Melyik egységnél áll az eszköz. Elhagyható, de a szerelő ebből
+                találja meg a helyszínen.
+              </Text>
+              {unitsQuery.isPending ? (
+                <ActivityIndicator color="#52d6c7" />
+              ) : null}
+              {unitsQuery.isError ? (
+                <Text style={styles.unitError}>
+                  A partner helyszínei nem tölthetők be. Az eszköz helyszín
+                  nélkül is menthető.
+                </Text>
+              ) : null}
+              {!unitsQuery.isPending &&
+              !unitsQuery.isError &&
+              units.options.length === 0 ? (
+                <Text style={styles.hint}>
+                  Ehhez a partnerhez még nincs felvéve helyszín.
+                </Text>
+              ) : null}
+              {units.options.map((option) => {
+                const selected = unitId === option.id;
+                return (
+                  <Pressable
+                    key={option.id}
+                    onPress={() => setUnitId(selected ? "" : option.id)}
+                    style={[styles.ownerRow, selected && styles.ownerSelected]}
+                  >
+                    <Text style={styles.ownerName}>{option.label}</Text>
+                  </Pressable>
+                );
+              })}
+              {/*
+                A KIHAGYÁS NEM NÉMA. Aki tudja, hogy annak a partnernek hat
+                helyszíne van, és négyet lát, a listát hiszi hibásnak.
+              */}
+              {units.hiddenCount > 0 ? (
+                <Text style={styles.hint}>
+                  {units.hiddenCount} kivezetett helyszín nem választható.
+                </Text>
+              ) : null}
+            </Section>
+          ) : null}
 
           <Section title="Eszközadatok">
             <Field label="Eszköz neve *" value={name} onChangeText={setName} />
@@ -383,6 +466,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#0a2335",
   },
   ownerSelected: { borderColor: "#52d6c7", backgroundColor: "#12443f" },
+  hint: { color: "#789cad", fontSize: 12, lineHeight: 17 },
+  unitError: { color: "#ffb4ab", fontSize: 12, lineHeight: 17 },
   ownerName: { color: "#f4fbff", fontWeight: "800" },
   ownerMeta: { color: "#789cad", fontSize: 11, marginTop: 2 },
   kindGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },

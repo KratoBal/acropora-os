@@ -17,6 +17,12 @@ import type { AssetKind, AssetOwnerType } from "./asset-fields";
 
 export interface AssetCreateForm {
   owner: { type: AssetOwnerType; id: string } | null;
+  /**
+   * A partner alegysége, ahol az eszköz áll. Üres, amíg nincs kiválasztva, és
+   * SZERVIZ PARTNER tulajdonosnál értelmes csak: vevőnél a szerver el is
+   * utasítaná, mert ott a cím a pontosítás.
+   */
+  unitId: string;
   name: string;
   kind: AssetKind;
   manufacturer: string;
@@ -31,6 +37,8 @@ export interface AssetCreateForm {
 export interface AssetCreatePayload {
   ownerType: AssetOwnerType;
   ownerId: string;
+  /** Csak szerviz partner tulajdonosnál kerül bele, lásd `buildAssetCreatePayload`. */
+  departmentId?: string;
   kind: AssetKind;
   name: string;
   manufacturer?: string;
@@ -182,6 +190,19 @@ export function buildAssetCreatePayload(
     payload: {
       ownerType: form.owner.type,
       ownerId: form.owner.id,
+      /**
+       * AZ ALEGYSÉG CSAK SZERVIZ PARTNERNÉL MEGY KI.
+       *
+       * Vevő tulajdonosnál a szerver elutasítaná, és a hiba a mentés
+       * pillanatában jelenne meg, azután, hogy a szerelő mindent kitöltött. A
+       * választó ilyenkor meg sem jelenik a képernyőn, de a mező a formban
+       * ottmaradhat egy korábbi választásból: a tulajdonos váltása nem törli
+       * automatikusan azt, amit a felhasználó egyszer már beírt. Ezért itt a
+       * TULAJDONOS TÍPUSA dönt, nem az, hogy van-e érték.
+       */
+      ...(form.owner.type === "SUPPLIER" && form.unitId.trim()
+        ? { departmentId: form.unitId.trim() }
+        : {}),
       kind: form.kind,
       name,
       manufacturer: form.manufacturer.trim() || undefined,

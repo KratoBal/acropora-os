@@ -70,3 +70,29 @@ export function getServicePartner(id: string) {
     `/suppliers/${encodeURIComponent(id)}`,
   );
 }
+
+/**
+ * A PARTNER HELYSZÍNEI (alegységei), laposan.
+ *
+ * Ugyanaz a fa, amit a partner képernyőjén „Alegységek" néven szerkesztenek, és
+ * ugyanaz a végpont, amit a webes eszköz-űrlap is hív. `partners.view` jogot
+ * kér, amit a SERVICE szerepkör megkap -- a szerkesztéshez való `partners.manage`
+ * nem kell hozzá, és nincs is meg neki.
+ *
+ * A választó-listát a `lib/partners/site-tree.ts` építi ebből: a fa a `parentId`
+ * mezőből áll össze, és a teljes út kell, mert a kód csak testvérek között
+ * egyedi.
+ */
+export interface PartnerUnit {
+  id: string;
+  parentId: string | null;
+  code: string;
+  name: string;
+  isActive: boolean;
+}
+
+export function listPartnerUnits(partnerId: string) {
+  return apiRequest<{ items: PartnerUnit[] }>(
+    `/suppliers/${encodeURIComponent(partnerId)}/units`,
+  );
+}

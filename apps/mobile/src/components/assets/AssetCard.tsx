@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { AssetListItem } from "@/lib/api/assets";
+import { assetPlacementLine } from "@/lib/assets/asset-placement";
 
 const STATUS_LABELS: Record<AssetListItem["status"], string> = {
   ACTIVE: "Aktív",
@@ -29,9 +30,20 @@ export function AssetCard({
       </View>
       <Text style={styles.name}>{asset.name}</Text>
       <Text style={styles.customer}>{asset.owner.displayName}</Text>
-      {asset.address ? (
-        <Text style={styles.meta}>{asset.address.formatted}</Text>
-      ) : null}
+      {/*
+        HOL ÁLL, ÉS MIKOR NEM VÁLASZTÁS EREDMÉNYE, AMIT LÁTUNK. Szerviz
+        partnernél a cím mindig a partner saját postai címe: alegység nélkül
+        tehát nem válasz arra, hogy hol áll az eszköz. A sorban ez látszik a
+        legkevésbé, mert minden hely ugyanúgy néz ki -- ezért a hiányt a
+        felirat mondja ki (`asset-placement.ts`).
+      */}
+      <Text style={styles.meta}>
+        {assetPlacementLine({
+          ownerType: asset.owner.type,
+          unit: asset.unit,
+          address: asset.address,
+        })}
+      </Text>
       {asset.parent ? (
         <Text style={styles.meta}>Része: {asset.parent.name}</Text>
       ) : asset.childCount > 0 ? (
