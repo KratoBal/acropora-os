@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import {
   assertPartnerCodeNeverNumbered,
   assertPartnerCodeUnlocked,
-} from "./suppliers.repository.js";
+} from "./partner-code-numbers.js";
 
 /**
  * A stub that answers for `WorksheetNumberSequence` and records what it was

@@ -12,6 +12,10 @@ import {
   type WorksheetVersionStatus,
 } from "@acropora/types";
 
+import {
+  assertPartnerCodeNeverNumbered,
+  assertPartnerCodeUnlocked,
+} from "../suppliers/partner-code-numbers.js";
 import type {
   CreateWorksheetDepartmentDto,
   WorksheetListQueryDto,
@@ -114,16 +118,41 @@ export class WorksheetsRepository extends Repository {
     });
   }
 
+  /**
+   * A MÁSODIK ÍRÁSI ÚT UGYANARRA AZ OSZLOPRA, ezért itt is állnak a
+   * rövidítés-szabályok, nem csak a partner képernyő mentési ágában. A partner
+   * oldalán a `Supplier` sor íródik és a tükör követi; itt közvetlenül a
+   * vevő-sor. Ha a tiltás csak az egyik úton áll, akkor nem szabály, hanem
+   * kényelmetlenség: ezen a végponton (`PUT customers/:customerId/partner-code`)
+   * pontosan az történne meg, amit ott megakadályozunk.
+   *
+   * Tranzakcióban, mert az ellenőrzés és az írás csak együtt ér valamit: két
+   * párhuzamos hívás között a kiolvasott állapot elavul.
+   */
   async setPartnerCode(customerId: string, partnerCode: string) {
-    return this.database.customer.update({
-      where: { id: customerId },
-      data: { worksheetPartnerCode: partnerCode },
-      select: {
-        id: true,
-        customerNumber: true,
-        displayName: true,
-        worksheetPartnerCode: true,
-      },
+    return this.database.$transaction(async (transaction) => {
+      const existing = await transaction.customer.findUniqueOrThrow({
+        where: { id: customerId },
+        select: { worksheetPartnerCode: true },
+      });
+      if (existing.worksheetPartnerCode !== partnerCode) {
+        if (existing.worksheetPartnerCode)
+          await assertPartnerCodeUnlocked(
+            transaction,
+            existing.worksheetPartnerCode,
+          );
+        await assertPartnerCodeNeverNumbered(transaction, partnerCode);
+      }
+      return transaction.customer.update({
+        where: { id: customerId },
+        data: { worksheetPartnerCode: partnerCode },
+        select: {
+          id: true,
+          customerNumber: true,
+          displayName: true,
+          worksheetPartnerCode: true,
+        },
+      });
     });
   }
 
