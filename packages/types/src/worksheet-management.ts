@@ -63,6 +63,14 @@ export interface WorksheetCustomerSummary {
  */
 export interface WorksheetDepartmentSummary {
   id: string;
+  /**
+   * A FA SZULOJE, `null` a legfelso szinten.
+   *
+   * A helyszinek tobb szinten allhatnak (Fank > Biodom > Nagy fokamedence), es
+   * a lista LAPOSAN jon vissza: a fat a hivo epiti fel ebbol a mezobol. Igy egy
+   * uj szint nem valtoztat vegpontot, es a lista egyetlen kereskedesbol jon.
+   */
+  parentId: string | null;
   code: string;
   name: string;
   isActive: boolean;

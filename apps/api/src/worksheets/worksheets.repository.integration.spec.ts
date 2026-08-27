@@ -125,9 +125,16 @@ describe(
         await prisma.worksheet.deleteMany({
           where: { customerId: { in: customerIds } },
         });
-        await prisma.worksheetDepartment.deleteMany({
-          where: { customerId: { in: customerIds } },
-        });
+        // A HELYSZINEK FAT ALKOTNAK, ES A SZULORE `Restrict` all, tehat egy
+        // egyetlen deleteMany a SORRENDTOL fuggoen elhasalhat: ha a szulo sora
+        // elobb kerul sorra, mint a gyerekeje, a megkotes megallitja. Ezert
+        // levelrol gyoker fele haladunk, amig fogy a fa.
+        for (;;) {
+          const removed = await prisma.worksheetDepartment.deleteMany({
+            where: { customerId: { in: customerIds }, children: { none: {} } },
+          });
+          if (removed.count === 0) break;
+        }
         await prisma.customer.deleteMany({
           where: { id: { in: customerIds } },
         });
@@ -169,6 +176,98 @@ describe(
       });
       return row;
     }
+
+    /**
+     * A HELYSZINEK FAT ALKOTNAK, es a fa ket szabalya ADATBAZIS-SZINTU:
+     * mockkal egyik sem bizonyithato, mert mindketto index.
+     *
+     * Az elso a testver-szabaly. A masodik az, ami CSENDBEN elveszett volna a
+     * fa bevezetesekor: a Postgresben a NULL nem egyenlo onmagaval, tehat a
+     * (customerId, parentId, code) megkotes a LEGFELSO szinten nem er semmit
+     * -- pont azon a szinten, ahol ma az OSSZES sor all. Ezt egy reszleges
+     * egyedi index tartja meg (WHERE "parentId" IS NULL), amit a Prisma sema
+     * nem tud kifejezni, ezert a migracioban all nyers SQL-kent.
+     */
+    describe("a helyszin-fa megkotesei", () => {
+      it("refuses two roots with the same code under one partner", async () => {
+        await repository.createDepartment(customerId, {
+          code: "ROT",
+          name: "Gyoker",
+        });
+
+        await assert.rejects(() =>
+          repository.createDepartment(customerId, {
+            code: "ROT",
+            name: "Masik gyoker",
+          }),
+        );
+      });
+
+      it("refuses two siblings with the same code, and allows it under another branch", async () => {
+        const left = await repository.createDepartment(customerId, {
+          code: "LFT",
+          name: "Bal ag",
+        });
+        const right = await repository.createDepartment(customerId, {
+          code: "RGT",
+          name: "Jobb ag",
+        });
+
+        await repository.createDepartment(customerId, {
+          parentId: left.id,
+          code: "MED",
+          name: "Medence",
+        });
+
+        // Ugyanaz a kod, ugyanaz a szulo: nem mehet.
+        await assert.rejects(() =>
+          repository.createDepartment(customerId, {
+            parentId: left.id,
+            code: "MED",
+            name: "Masik medence",
+          }),
+        );
+
+        // Ugyanaz a kod, MASIK ag alatt: mehet, es ez a fa lenyege.
+        const other = await repository.createDepartment(customerId, {
+          parentId: right.id,
+          code: "MED",
+          name: "Medence a masik agon",
+        });
+        assert.equal(other.parentId, right.id);
+      });
+
+      /**
+       * A SZULO TULAJDONOSA. Az idegen kulcs csak azt nezi, hogy a sor
+       * letezik-e; hogy KIE, azt nem. Egy masik partner helyszine ala
+       * akasztott alegyseg a munkalapszamot vinne rossz helyre, es a
+       * feluleten nem is latszana, mert az a sajat fajat mutatja.
+       */
+      it("refuses a parent that belongs to another partner", async () => {
+        const stranger = await prisma.customer.create({
+          data: {
+            customerNumber: `${TEST_CUSTOMER_PREFIX}STRANGER-${suffix}`,
+            type: "COMPANY",
+            displayName: "Idegen partner",
+          },
+          select: { id: true },
+        });
+        const strangerRoot = await repository.createDepartment(stranger.id, {
+          code: "STR",
+          name: "Idegen helyszin",
+        });
+
+        await assert.rejects(
+          () =>
+            repository.createDepartment(customerId, {
+              parentId: strangerRoot.id,
+              code: "SUB",
+              name: "Alegyseg",
+            }),
+          /WORKSHEET_DEPARTMENT_PARENT_NOT_FOUND/,
+        );
+      });
+    });
 
     it("leaves a draft without a number", async () => {
       const id = await createDraft(bioDepartmentId);

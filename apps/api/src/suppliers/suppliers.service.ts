@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 
+import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
 import { planPartnerDeletion } from "./partner-deletion.js";
 import { SuppliersRepository } from "./suppliers.repository.js";
 import type { CreateWorksheetDepartmentDto } from "../worksheets/dto/worksheet.dto.js";
@@ -62,14 +63,42 @@ export class SuppliersService {
     return this.repository.units(id);
   }
 
+  /**
+   * A HIBAKAT ITT IS LE KELL FORDITANI, nem csak a partner mentesenel.
+   *
+   * A `create` minden dobast a `map()` metoduson enged at, a `createUnit` korul
+   * viszont eddig NEM volt semmi: egy mar hasznalt alegyseg-kod nyers Prisma
+   * hibakent ment ki, tehat a kollega egy szerver-hibat latott ott, ahol egy
+   * mondat kellett volna. A helyszin-fa ezt gyakoribba teszi, mert tobb helyen
+   * lehet kodot utkoztetni.
+   *
+   * A KOD ITT KEZZEL BEVITT, tehat ujraprobalasnak nincs helye: egy foglalt
+   * kodot otször ujrahuzni ugyanazt az uzleti hibat adna, csak kesobb.
+   */
   async createUnit(id: string, input: CreateWorksheetDepartmentDto) {
     await this.detail(id);
-    const created = await this.repository.createUnit(id, input);
-    if (!created)
-      throw new BadRequestException(
-        "Alegységet csak szerviz partnerhez lehet felvinni. Pipáld be a Szerviz jelölést, mentsd el, és utána próbáld újra.",
-      );
-    return created;
+    try {
+      const created = await this.repository.createUnit(id, input);
+      if (!created)
+        throw new BadRequestException(
+          "Alegységet csak szerviz partnerhez lehet felvinni. Pipáld be a Szerviz jelölést, mentsd el, és utána próbáld újra.",
+        );
+      return created;
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      if (
+        error instanceof Error &&
+        error.message === "WORKSHEET_DEPARTMENT_PARENT_NOT_FOUND"
+      )
+        throw new BadRequestException(
+          "A megadott szülő helyszín nem ehhez a partnerhez tartozik. Frissítsd az oldalt, és válaszd ki újra.",
+        );
+      if (isPrismaUniqueConstraintViolation(error, "code"))
+        throw new ConflictException(
+          "Ezt a kódot ezen a szinten már használja egy helyszín. Válassz másikat.",
+        );
+      throw error;
+    }
   }
 
   async create(input: CreateSupplierDto, actorId: string) {

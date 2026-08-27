@@ -145,6 +145,18 @@ export class SignWorksheetVersionDto {
 }
 
 export class CreateWorksheetDepartmentDto {
+  /**
+   * A SZULO HELYSZIN, ha van. Hianyzo ertek = a fa legfelso szintje.
+   *
+   * A szulo ellenorzese NEM itt tortenik: hogy a megadott azonosito UGYANAHHOZ
+   * a partnerhez tartozik-e, csak az adatbazis tudja megmondani, es a
+   * repository meg is kerdezi. Egy masik partner helyszine ala akasztott
+   * alegyseg a munkalapszamot vinne rossz helyre.
+   */
+  @IsOptional()
+  @IsString({ message: "A szülő helyszín azonosítója hibás." })
+  parentId?: string;
+
   @Matches(/^[A-Za-z]{1,3}$/, {
     message: "Az alegység kódja legfeljebb három betű lehet (pl. BIO).",
   })

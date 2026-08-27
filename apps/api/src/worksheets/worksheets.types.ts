@@ -54,7 +54,13 @@ export const worksheetDetailInclude = {
     },
   },
   department: {
-    select: { id: true, code: true, name: true, isActive: true },
+    select: {
+      id: true,
+      parentId: true,
+      code: true,
+      name: true,
+      isActive: true,
+    },
   },
   createdBy: { select: { displayName: true } },
   /** Both ends of the chain. A link only one side knows about is no use to
@@ -207,6 +213,7 @@ export function toWorksheetDetail(row: WorksheetDetailRow): WorksheetDetail {
     },
     department: {
       id: row.department.id,
+      parentId: row.department.parentId,
       code: row.department.code,
       name: row.department.name,
       isActive: row.department.isActive,
