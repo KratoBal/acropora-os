@@ -51,6 +51,8 @@ const session: Session = {
     email: "balazs@acropora.local",
     displayName: "Balázs",
     role: "OWNER",
+    customerId: null,
+    supplierId: null,
   },
 };
 

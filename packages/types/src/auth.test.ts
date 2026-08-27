@@ -5,6 +5,7 @@ import {
   hasAllPermissions,
   hasAnyPermission,
   hasPermission,
+  partnerMembership,
   PERMISSIONS,
   ROLE_PERMISSIONS,
   USER_ROLES,
@@ -137,5 +138,78 @@ describe("AI_TEST_VIEW", () => {
         `${role} nem kapta meg az AI teszt-felület jogát`,
       );
     }
+  });
+});
+
+/**
+ * Minden teszthez oda van irva, MI PIROSITANA. Enelkul egy zold sor csak annyit
+ * mond, hogy a kod lefutott -- nem azt, hogy megfog valamit. Ahol a hiba iranya
+ * szamit, az is ki van irva: a "szeles" irany az, ami tobb sort engedne at.
+ */
+describe("partnerMembership", () => {
+  it("a sajat kollegank egyik partnerhez sem tartozik", () => {
+    // PIROSIT: ha a fuggveny egy hianyzo azonositot partner-hovatartozasnak
+    // olvasna, vagy ha a ket NULL-t ketertelmunek nezne.
+    assert.deepEqual(
+      partnerMembership({ customerId: null, supplierId: null }),
+      { kind: "internal" },
+    );
+  });
+
+  it("a vevo-oldali fiok a vevo azonositojat viszi tovabb", () => {
+    // PIROSIT: ha az azonosito elveszne az uton, vagy ha a masik oszlopot
+    // olvasna. Az azonositora azert allitunk, es nem csak a kind-ra, mert a
+    // szuro EZT az erteket fogja hasznalni.
+    assert.deepEqual(
+      partnerMembership({ customerId: "cus_1", supplierId: null }),
+      { kind: "customer", customerId: "cus_1" },
+    );
+  });
+
+  it("a partner-oldali fiok a partner azonositojat viszi tovabb", () => {
+    // PIROSIT: ha a supplier ag atesne az internal agra. Ez a SZELES irany:
+    // egy partner-fiok igy a mi kollegankent viselkedne.
+    assert.deepEqual(
+      partnerMembership({ customerId: null, supplierId: "sup_1" }),
+      { kind: "supplier", supplierId: "sup_1" },
+    );
+  });
+
+  it("mindket oszlop kitoltve: ketertelmu, es NEM valaszt egyet sem", () => {
+    // PIROSIT: ha a fuggveny csendben valasztana az egyiket, vagy ha
+    // internal-ra esne. Az adatbazis CHECK constraintje ezt az allapotot
+    // tiltja, tehat ide jutni annyit tesz, hogy a megszoritas nincs meg vagy
+    // az ertek nem az adatbazisbol jott -- es ilyenkor a legrosszabb valasz
+    // az internal, mert egy torott sorbol a legszelesebb hozzaferest csinalna.
+    assert.deepEqual(
+      partnerMembership({ customerId: "cus_1", supplierId: "sup_1" }),
+      { kind: "ambiguous" },
+    );
+  });
+
+  it("az ures azonosito NEM olvasodik hianynak", () => {
+    // PIROSIT: ha a fuggveny igazsagertek szerint dontene (`if (id)`), mert
+    // akkor az ures sztring hianynak latszana, a hianyzo hovatartozas pedig a
+    // mi kollegankat jelenti -- vagyis a legszelesebb hozzaferest. Jelenletre
+    // vizsgalva olyan hovatartozas lesz belole, amire egy partner sem
+    // illeszkedik, tehat a szuro semmit nem ad vissza. Mindket olvasat teved
+    // az ertekrol; csak az egyik teved a BIZTONSAGOS iranyba.
+    assert.deepEqual(partnerMembership({ customerId: "", supplierId: null }), {
+      kind: "customer",
+      customerId: "",
+    });
+  });
+
+  it("a hianyzo mezo (undefined) hianynak szamit", () => {
+    // PIROSIT: ha egy JSON-hataron atjott, mezo nelkuli objektum kivetelt
+    // dobna, vagy ha a ket hianyzo mezot ketertelmunek nezne. A tipus nem
+    // engedi az undefined-et, a futasido viszont talalkozhat vele.
+    assert.deepEqual(
+      partnerMembership({
+        customerId: undefined,
+        supplierId: undefined,
+      } as unknown as { customerId: string | null; supplierId: string | null }),
+      { kind: "internal" },
+    );
   });
 });

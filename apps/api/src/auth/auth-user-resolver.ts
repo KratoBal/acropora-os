@@ -123,6 +123,16 @@ export class AuthUserResolver {
     return this.toAuthenticatedUser(user);
   }
 
+  /**
+   * The partner columns are REQUIRED in the parameter type, not optional.
+   *
+   * Every caller here hands over a row read straight from the database, so
+   * they are always present in practice - but an optional parameter would let
+   * a future caller pass a narrower `select` that leaves them out, and the
+   * result would silently be an account belonging to nobody, which is what an
+   * internal colleague looks like. The compiler is the only thing that can
+   * catch that before it ships.
+   */
   private toAuthenticatedUser(user: {
     id: string;
     email: string;
@@ -130,6 +140,8 @@ export class AuthUserResolver {
     nickname?: string | null;
     role: AuthenticatedUser["role"];
     avatarUrl: string | null;
+    customerId: string | null;
+    supplierId: string | null;
   }): AuthenticatedUser {
     return {
       id: user.id,
@@ -138,6 +150,8 @@ export class AuthUserResolver {
       nickname: user.nickname ?? null,
       role: user.role,
       avatarUrl: user.avatarUrl,
+      customerId: user.customerId,
+      supplierId: user.supplierId,
     };
   }
 

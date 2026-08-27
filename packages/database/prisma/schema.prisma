@@ -474,6 +474,18 @@ model User {
   role              UserRole
   isActive          Boolean   @default(true)
   avatarUrl         String?
+  /// MELYIK PARTNER NEVEBEN lep be ez a fiok. Sajat kollegan mindketto NULL.
+  ///
+  /// A ketto kozul LEGFELJEBB az egyik lehet kitoltve (adatbazis CHECK
+  /// constraint: `User_at_most_one_partner_check`). Nem "pontosan egy", mint
+  /// az `Asset` tulajdonosanal: ott minden eszkoznek van gazdaja, itt viszont
+  /// a sajat kollegank egyikhez sem tartozik, es epp az a tobbseg.
+  ///
+  /// A ketto EGYUTT ertelmezhetetlen lenne: a szures ilyenkor nem tudna,
+  /// melyik partner soraira szukitsen, es barmelyik valasztas idegen adatot
+  /// engedne at. Ezert a tiltas adatbazis-szinten all, nem csak a kodban.
+  customerId        String?
+  supplierId        String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -507,8 +519,18 @@ model User {
   closedWorksheetVersions    WorksheetVersion[]            @relation("WorksheetVersionClosedBy")
   worksheetSignatures        WorksheetVersionSignature[]   @relation("WorksheetSignedBy")
   deviceTokens               DeviceToken[]
+  /// A torles SZANDEKOSAN Restrict, nem SetNull. SetNull mellett egy partner
+  /// torlese a fiokot csendben "sajat kollegava" tenne (mindket mezo NULL),
+  /// vagyis egy takaritasi muvelet TAGITANA a hozzaferest. Restrict mellett a
+  /// torles hangosan elakad, es ember dont a fiok sorsarol.
+  customer                   Customer?                     @relation("CustomerPortalUser", fields: [customerId], references: [id], onDelete: Restrict)
+  supplier                   Supplier?                     @relation("SupplierPortalUser", fields: [supplierId], references: [id], onDelete: Restrict)
 
   @@index([role, isActive])
+  /// A Restrict ellenorzese MINDEN partner-torlesnel lefut, es index nelkul
+  /// vegigolvasna a User tablat.
+  @@index([customerId])
+  @@index([supplierId])
 }
 
 /// Egy telefon, ami push értesítést tud fogadni, és a kolléga, akié.
@@ -979,6 +1001,8 @@ model Supplier {
   /// `Restrict`, not `SetNull`: dropping the customer row would leave the
   /// partner's worksheets orphaned while the partner still looks intact.
   customer              Customer?          @relation("PartnerWorksheetMirror", fields: [customerId], references: [id], onDelete: Restrict)
+  /// A fiokok, amik ENNEK a partnernek a neveben lepnek be. Nem a mi kollegaink.
+  portalUsers           User[]             @relation("SupplierPortalUser")
 
   @@index([country, isActive])
 }
@@ -1617,6 +1641,8 @@ model Customer {
   /// Set when this row is a service partner's mirror rather than a buyer.
   /// The customer list uses its absence to tell the two apart.
   partner              Supplier?             @relation("PartnerWorksheetMirror")
+  /// A fiokok, amik ENNEK a vevonek a neveben lepnek be. Nem a mi kollegaink.
+  portalUsers          User[]                @relation("CustomerPortalUser")
 
   @@index([displayName])
   @@index([email])

@@ -41,6 +41,8 @@ const ownerSession: Session = {
     email: "owner@acropora.local",
     displayName: "Acropora Tulajdonos",
     role: "OWNER",
+    customerId: null,
+    supplierId: null,
   },
 };
 
@@ -56,6 +58,8 @@ const cookieSession: Session = {
     email: "owner@acropora.local",
     displayName: "Acropora Tulajdonos",
     role: "OWNER",
+    customerId: null,
+    supplierId: null,
   },
 };
 

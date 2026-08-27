@@ -208,6 +208,8 @@ describe("ProductDetailPage mirror ownership", () => {
         email: "owner@acropora.local",
         displayName: "Owner",
         role: "OWNER",
+        customerId: null,
+        supplierId: null,
       },
     };
     api.detail.mockResolvedValue(detail);
