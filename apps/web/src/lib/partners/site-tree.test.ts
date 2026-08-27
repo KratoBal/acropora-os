@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { WorksheetDepartmentSummary } from "@acropora/types";
 
-import { buildSiteTree, siteCodePath } from "./site-tree";
+import { buildSiteTree } from "./site-tree";
 
 function unit(
   id: string,
@@ -63,22 +63,5 @@ describe("buildSiteTree", () => {
 
     // Egyik sem tunhet el; a sorrend itt mar nem allitas, csak a teljesseg az.
     expect(rows.map((row) => row.unit.id).sort()).toEqual(["1", "2"]);
-  });
-});
-
-describe("siteCodePath", () => {
-  it("reads the path from the root down to the unit", () => {
-    const rows = buildSiteTree([
-      unit("1", "BIO"),
-      unit("2", "FNM", "1"),
-      unit("3", "MED", "2"),
-    ]);
-
-    expect(siteCodePath(rows, "3")).toBe("BIO-FNM-MED");
-    expect(siteCodePath(rows, "1")).toBe("BIO");
-  });
-
-  it("gives an empty path for a unit that is not in the tree", () => {
-    expect(siteCodePath(buildSiteTree([]), "nincs")).toBe("");
   });
 });

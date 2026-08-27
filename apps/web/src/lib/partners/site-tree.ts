@@ -60,28 +60,3 @@ export function buildSiteTree(
 
   return rows;
 }
-
-/**
- * A teljes kod, ahogy az emberek mondjak: `BIO-FNM`.
- *
- * A partner rovidítese NINCS benne: az a partner adatlapjan all, es a
- * munkalapszam alakjarol szolo dontes meg nyitott. Ez a fuggveny csak a
- * helyszin utjat adja, es nem allit semmit a bizonylatszamrol.
- */
-export function siteCodePath(
-  rows: readonly SiteTreeRow[],
-  unitId: string,
-): string {
-  const index = rows.findIndex((row) => row.unit.id === unitId);
-  if (index < 0) return "";
-
-  const path = [rows[index]!.unit.code];
-  let depth = rows[index]!.depth;
-  for (let cursor = index - 1; cursor >= 0 && depth > 0; cursor -= 1) {
-    if (rows[cursor]!.depth === depth - 1) {
-      path.unshift(rows[cursor]!.unit.code);
-      depth -= 1;
-    }
-  }
-  return path.join("-");
-}
