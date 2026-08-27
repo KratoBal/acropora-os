@@ -231,3 +231,47 @@ describe("isWrappedInQuotes", () => {
     }
   });
 });
+
+describe("AiChatStartupValidator hiany ES gyanus alak egyszerre", () => {
+  it("mindkettorol szol EGY inditasnal, nem ket korben", () => {
+    /**
+     * Murena talalta meg: az alak-ellenorzes elsore csak akkor futott, ha
+     * MINDKET valtozo jelen volt. Ha az egyik hianyzik es a masik
+     * idezojelek koze van zarva, akkor a kollega potolja a hianyzot,
+     * ujraindit, es CSAK AKKOR kapja meg a masodik figyelmeztetest - ket kor
+     * egy helyett, pontosan az a lassitas, ami ellen ez a valaszto keszult.
+     */
+    const lines = capture({
+      [AI_CHAT_TOKEN_ENV]: `"${TOKEN}"`,
+    });
+
+    assert.equal(lines.length, 2, "mindket problemarol szolnia kell");
+
+    const together = lines.join("\n");
+
+    // a hianyzo cim
+    assert.match(together, /hianyzik ACROPORA_AI_BASE_URL/);
+    // ES a gyanus alaku token, ugyanabban a futasban
+    assert.match(together, /ACROPORA_AI_ACCESS_TOKEN erteke idezojelek/);
+    // az ertek tovabbra sem szivarog
+    assert.equal(together.includes(TOKEN), false);
+  });
+
+  it("a csupasz nevu valtozot is megnevezi hasonlokent", () => {
+    // Aki egy elotag nelkuli ACCESS_TOKEN valtozot masol be, ugyanabba a
+    // hibaba fut, es a valaszto korabban hallgatott volna rola.
+    const lines = capture({
+      [AI_CHAT_BASE_URL_ENV]: BASE_URL,
+      ACCESS_TOKEN: TOKEN,
+    });
+
+    assert.equal(lines.length, 1);
+    /*
+      A puszta /ACCESS_TOKEN/ minta NEM eleg: az illeszkedne a hianyzo
+      ACROPORA_AI_ACCESS_TOKEN nevere is, tehat akkor is zold maradna, ha a
+      csupasz nevet nem talalja meg. A hasonlo-nev mondatra kell allitani.
+    */
+    assert.match(lines[0]!, /ott van ACCESS_TOKEN/);
+    assert.equal(lines[0]!.includes(TOKEN), false);
+  });
+});
