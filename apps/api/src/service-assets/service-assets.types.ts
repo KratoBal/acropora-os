@@ -46,6 +46,7 @@ export const assetSummaryInclude = {
   customer: true,
   supplier: true,
   customerAddress: true,
+  department: { select: { id: true, code: true, name: true } },
   aquarium: true,
   parentAsset: true,
   _count: { select: { childAssets: true } },

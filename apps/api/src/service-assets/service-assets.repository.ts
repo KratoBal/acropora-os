@@ -299,57 +299,81 @@ export class ServiceAssetsRepository extends Repository {
     ownerType: "CUSTOMER" | "SUPPLIER";
     ownerId: string;
     customerAddressId?: string | null;
+    departmentId?: string | null;
     aquariumId?: string | null;
     parentAssetId?: string | null;
     productVariantId?: string | null;
   }) {
-    const [customer, supplier, address, aquarium, parent, productVariant] =
-      await Promise.all([
-        input.ownerType === "CUSTOMER"
-          ? prisma.customer.findUnique({
-              where: { id: input.ownerId },
-              select: { id: true, isActive: true },
-            })
-          : null,
-        input.ownerType === "SUPPLIER"
-          ? prisma.supplier.findUnique({
-              where: { id: input.ownerId },
-              select: { id: true, isActive: true },
-            })
-          : null,
-        input.customerAddressId
-          ? prisma.customerAddress.findUnique({
-              where: { id: input.customerAddressId },
-              select: { id: true, customerId: true },
-            })
-          : null,
-        input.aquariumId
-          ? prisma.aquarium.findUnique({
-              where: { id: input.aquariumId },
-              select: { id: true, customerId: true, isActive: true },
-            })
-          : null,
-        input.parentAssetId
-          ? prisma.asset.findUnique({
-              where: { id: input.parentAssetId },
-              select: {
-                id: true,
-                customerId: true,
-                supplierId: true,
-                customerAddressId: true,
-                aquariumId: true,
-                status: true,
-              },
-            })
-          : null,
-        input.productVariantId
-          ? prisma.productVariant.findUnique({
-              where: { id: input.productVariantId },
-              select: { id: true, isActive: true },
-            })
-          : null,
-      ]);
-    return { customer, supplier, address, aquarium, parent, productVariant };
+    const [
+      customer,
+      supplier,
+      address,
+      department,
+      aquarium,
+      parent,
+      productVariant,
+    ] = await Promise.all([
+      input.ownerType === "CUSTOMER"
+        ? prisma.customer.findUnique({
+            where: { id: input.ownerId },
+            select: { id: true, isActive: true },
+          })
+        : null,
+      input.ownerType === "SUPPLIER"
+        ? prisma.supplier.findUnique({
+            where: { id: input.ownerId },
+            // `customerId` a TÜKÖR vevő-sor: az alegységek azon lógnak, nem
+            // magán a szállítón.
+            select: { id: true, isActive: true, customerId: true },
+          })
+        : null,
+      input.customerAddressId
+        ? prisma.customerAddress.findUnique({
+            where: { id: input.customerAddressId },
+            select: { id: true, customerId: true },
+          })
+        : null,
+      input.departmentId
+        ? prisma.worksheetDepartment.findUnique({
+            where: { id: input.departmentId },
+            select: { id: true, customerId: true, isActive: true },
+          })
+        : null,
+      input.aquariumId
+        ? prisma.aquarium.findUnique({
+            where: { id: input.aquariumId },
+            select: { id: true, customerId: true, isActive: true },
+          })
+        : null,
+      input.parentAssetId
+        ? prisma.asset.findUnique({
+            where: { id: input.parentAssetId },
+            select: {
+              id: true,
+              customerId: true,
+              supplierId: true,
+              customerAddressId: true,
+              aquariumId: true,
+              status: true,
+            },
+          })
+        : null,
+      input.productVariantId
+        ? prisma.productVariant.findUnique({
+            where: { id: input.productVariantId },
+            select: { id: true, isActive: true },
+          })
+        : null,
+    ]);
+    return {
+      customer,
+      supplier,
+      address,
+      department,
+      aquarium,
+      parent,
+      productVariant,
+    };
   }
 
   async basic(id: string) {
@@ -432,6 +456,10 @@ export class ServiceAssetsRepository extends Repository {
                     : null,
                 aquariumId:
                   input.ownerType === "CUSTOMER" ? input.aquariumId : null,
+                // Az alegyseg a masik iranyban all: SZERVIZ PARTNER eszkozehez
+                // tartozik, vevoehez nem. A ket mezo nem ugyanaz a fogalom.
+                departmentId:
+                  input.ownerType === "SUPPLIER" ? input.departmentId : null,
                 parentAssetId: input.parentAssetId,
                 productVariantId: input.productVariantId,
                 kind: input.kind,
@@ -550,6 +578,10 @@ export class ServiceAssetsRepository extends Repository {
           customerAddressId:
             input.ownerType === "SUPPLIER" ? null : input.customerAddressId,
           aquariumId: input.ownerType === "SUPPLIER" ? null : input.aquariumId,
+          // Vevo tulajdonosra valtaskor az alegyseg TORLODIK, ahogy a cim is
+          // torlodik szallitora valtaskor: a ket mezo egymast zarja ki.
+          departmentId:
+            input.ownerType === "CUSTOMER" ? null : input.departmentId,
           parentAssetId: input.parentAssetId,
           productVariantId: input.productVariantId,
           kind: input.kind,
@@ -825,6 +857,17 @@ export class ServiceAssetsRepository extends Repository {
       address:
         addressSummary(row.customerAddress) ??
         supplierAddressSummary(row.supplier),
+      // AZ ALEGYSEG A PONTOS HELY, a fenti `address` pedig a visszaeses:
+      // partner-tulajdonosnal az a partner postai cime. A kettot a felulet
+      // egyutt olvassa -- ha `unit` van, az a valasztott hely; ha nincs, az
+      // `address` latszik, jelolve, hogy nem valasztas eredmenye.
+      unit: row.department
+        ? {
+            id: row.department.id,
+            code: row.department.code,
+            name: row.department.name,
+          }
+        : undefined,
       aquarium: row.aquarium
         ? {
             id: row.aquarium.id,

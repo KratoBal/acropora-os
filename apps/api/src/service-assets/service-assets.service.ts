@@ -7,6 +7,10 @@ import {
 import { Prisma } from "@acropora/database";
 import type { AssetQrCode } from "@acropora/types";
 
+import {
+  ASSET_DEPARTMENT_REFUSAL_MESSAGES,
+  assetDepartmentRefusal,
+} from "./asset-department.js";
 import type {
   AssetListQueryDto,
   AssetOwnersQueryDto,
@@ -188,6 +192,7 @@ export class ServiceAssetsService {
     ownerType: "CUSTOMER" | "SUPPLIER";
     ownerId: string;
     customerAddressId?: string | null;
+    departmentId?: string | null;
     aquariumId?: string | null;
     parentAssetId?: string | null;
     productVariantId?: string | null;
@@ -212,6 +217,20 @@ export class ServiceAssetsService {
     if (context.address && context.address.customerId !== input.ownerId)
       throw new BadRequestException(
         "A kiválasztott cím nem ehhez a partnerhez tartozik.",
+      );
+    // AZ ALEGYSÉG a partner „Alegységek" fájának egy csomópontja, és a döntés
+    // külön függvényben áll, hogy egységteszt tudja mérni -- lásd
+    // asset-department.ts. A `requested` az undefined és a null között tesz
+    // különbséget: a mező elhagyása nem törlés.
+    const departmentRefusal = assetDepartmentRefusal({
+      ownerType: input.ownerType,
+      mirrorCustomerId: context.supplier?.customerId ?? null,
+      department: context.department,
+      requested: Boolean(input.departmentId),
+    });
+    if (departmentRefusal)
+      throw new BadRequestException(
+        ASSET_DEPARTMENT_REFUSAL_MESSAGES[departmentRefusal],
       );
     if (input.aquariumId && !context.aquarium)
       throw new BadRequestException("A kiválasztott akvárium nem található.");

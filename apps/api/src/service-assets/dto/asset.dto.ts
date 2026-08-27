@@ -77,6 +77,9 @@ export class CreateAssetDto {
   @IsIn(ASSET_OWNER_TYPES) ownerType!: (typeof ASSET_OWNER_TYPES)[number];
   @IsString() @MinLength(1) ownerId!: string;
   @IsString() @IsOptional() customerAddressId?: string;
+  /** A partner ALEGYSÉGE (a partner képernyőn ez a neve). Csak szerviz partner
+   * tulajdonosnál értelmes; vevőnél a `customerAddressId` a pontosítás. */
+  @IsString() @IsOptional() departmentId?: string;
   @IsString() @IsOptional() aquariumId?: string;
   @IsString() @IsOptional() parentAssetId?: string;
   @IsString() @IsOptional() productVariantId?: string;
@@ -112,6 +115,8 @@ export class UpdateAssetDto {
   ownerType?: (typeof ASSET_OWNER_TYPES)[number];
   @IsString() @MinLength(1) @IsOptional() ownerId?: string;
   @IsString() @IsOptional() customerAddressId?: string | null;
+  /** `null` törli a kötést, a mező elhagyása érintetlenül hagyja. */
+  @IsString() @IsOptional() departmentId?: string | null;
   @IsString() @IsOptional() aquariumId?: string | null;
   @IsString() @IsOptional() parentAssetId?: string | null;
   @IsString() @IsOptional() productVariantId?: string | null;
