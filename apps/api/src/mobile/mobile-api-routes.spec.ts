@@ -35,6 +35,27 @@ import { describe, it } from "node:test";
  * Ha egy `apiRequest` hívásból nem olvasható ki az útvonal, az BUKÁS, nem néma
  * kihagyás -- különben az őrző pont azon az új alakon vakulna meg, amit
  * őriznie kellene.
+ *
+ * ---
+ *
+ * AMIT EZ AZ ŐRZŐ FELTÉTELEZ, ÉS AKI ÁTALAKÍTJA A KLIENSEKET, ANNAK EZ SZÓL:
+ *
+ * Az útvonal LITERÁLBÓL áll a hívás helyén. Ha egy kliens áttér arra, hogy az
+ * előtagot egy konstansban tartja és onnan építkezik -- ahogy a WEBES kliens
+ * ma is teszi (`const base = "/service/worksheets"`, plusz egy path-helper) --,
+ * akkor ez a spec az ELSŐ állításán bukik el, MINDEN érintett híváson, holott
+ * a kód helyes.
+ *
+ * MÉRVE 2026-08-27: a webes `lib/api` mappán lefuttatva ez a logika tizenhárom
+ * ilyen hívást talált (hét konstansból, hat helperből épülőt), és mind a
+ * tizenhárom helyes volt.
+ *
+ * EZ SZÁNDÉKOS: a hangos bukás jobb, mint a néma kihagyás, mert az utóbbi
+ * csendben szűkítené a vizsgált halmazt. De EBBŐL KÖVETKEZIK EGY KÖTELEZETTSÉG:
+ * a konstans-előtagra való átállást és ennek a specnek az átalakítását
+ * UGYANABBAN A VÁLTOZÁSBAN kell elvégezni. Külön lépésben a javítás után az
+ * őrző hamisan pirosodna, és a következő ember azt hinné, hogy ő rontott el
+ * valamit.
  */
 
 const MOBILE_API_DIR = "../mobile/src/lib/api";
