@@ -13,6 +13,7 @@ import { HealthModule } from "./health/health.module.js";
 import { UnasImportModule } from "./imports/unas/unas-import.module.js";
 import { AiChatModule } from "./integrations/ai-chat/ai-chat.module.js";
 import { AiUserContextModule } from "./integrations/ai/ai-user-context.module.js";
+import { AiProductSearchModule } from "./integrations/ai-product-search/ai-product-search.module.js";
 import { MedusaModule } from "./integrations/medusa/medusa.module.js";
 import { NavOnlineInvoiceModule } from "./integrations/nav/nav-online-invoice.module.js";
 import { PostalCodeModule } from "./integrations/postal-code/postal-code.module.js";
@@ -41,6 +42,7 @@ import { WorksheetsModule } from "./worksheets/worksheets.module.js";
     CustomersModule,
     UnasCustomerSyncModule,
     AiUserContextModule,
+    AiProductSearchModule,
     AiChatModule,
     MedusaModule,
     NavOnlineInvoiceModule,
