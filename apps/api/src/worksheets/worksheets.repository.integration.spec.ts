@@ -8,6 +8,7 @@ import type { WorksheetContentDto } from "./dto/worksheet.dto.js";
 import { normalizeWorksheetContent } from "./worksheet-content.js";
 import { worksheetYear } from "./worksheet-number.js";
 import { WorksheetsRepository } from "./worksheets.repository.js";
+import { toWorksheetDetail } from "./worksheets.types.js";
 
 // A számozás két ígérete adatbázis-szintű, és mockkal nem bizonyítható:
 // (1) a sorszám a LEZÁRÁSKOR keletkezik, tehát az eldobott piszkozat nem
@@ -123,6 +124,13 @@ describe(
           });
         }
         await prisma.worksheet.deleteMany({
+          where: { customerId: { in: customerIds } },
+        });
+        // AZ ESZKÖZÖK A MUNKALAPOK UTÁN, DE A HELYSZÍNEK ÉS A VEVŐ ELŐTT: az
+        // `Asset.customerId` és az `Asset.departmentId` is `Restrict`, tehát
+        // egy bent maradt eszköz a vevő törlését állítaná meg, és a suite a
+        // következő futáson a takarítatlan maradékon indulna.
+        await prisma.asset.deleteMany({
           where: { customerId: { in: customerIds } },
         });
         // A HELYSZINEK FAT ALKOTNAK, ES A SZULORE `Restrict` all, tehat egy
@@ -728,6 +736,94 @@ describe(
 
       assert.equal(drafts.pagination.totalItems, drafts.items.length);
       assert.equal(drafts.pagination.totalPages, 1);
+    });
+
+    /**
+     * AZ ÜGYFÉL SAJÁT KÓDJA ÉLŐ HIVATKOZÁS, ÉS EZT CSAK ADATBÁZISON LEHET
+     * BIZONYÍTANI.
+     *
+     * Balázs döntése (2026-08-27): a kód a funkciót azonosítja, nem a darabot,
+     * tehát nem változik -- ezért nem másoljuk a sorra, hanem olvasáskor
+     * hivatkozunk rá. A döntésnek van egy következménye, ami csak akkor
+     * derülne ki, amikor először megtörténik: ha valaki JAVÍT egy elgépelt
+     * kódot, a javítás a MÁR ALÁÍRT lapon is megjelenik. Ez a teszt épp azt
+     * rögzíti, mert ha egyszer valaki pillanatképre váltana, itt kell
+     * elbuknia, nem élesben.
+     *
+     * A lap szándékosan aláírt állapotban van: az aláírt lap a legerősebb
+     * eset, mert azt egyébként semmi nem írhatja át.
+     */
+    it("reads the customer's own code from the asset, even on a signed sheet", async () => {
+      const asset = await prisma.asset.create({
+        data: {
+          customerId,
+          assetNumber: `ESZK-WS-INT-${suffix}`,
+          name: "Cápasuli kompresszor",
+          inventoryNumber: "LT-4711",
+        },
+      });
+
+      const worksheetId = await repository.createDraft({
+        customerId,
+        departmentId: bioDepartmentId,
+        content: content({
+          lines: [
+            {
+              description: "Kompresszor bevizsgálás",
+              assetId: asset.id,
+              quantity: 2,
+              unit: "óra",
+              unitNet: 15000,
+              vatRatePercent: 27,
+            },
+          ],
+        } as Partial<WorksheetContentDto>),
+        actorUserId,
+      });
+      await repository.close(worksheetId, actorUserId, new Date());
+      const signed = await repository.sign({
+        worksheetId,
+        decision: "ACCEPTED",
+        signerName: "Gondnok Gábor",
+        note: null,
+        actorUserId,
+        now: new Date(),
+      });
+      assert.equal(signed.ok, true);
+
+      const beforeRow = await repository.detail(worksheetId);
+      assert.ok(beforeRow);
+      const before = toWorksheetDetail(beforeRow);
+      assert.equal(before.currentVersion.status, "SIGNED");
+      assert.equal(before.currentVersion.lines[0]?.inventoryNumber, "LT-4711");
+
+      // A JAVÍTÁS AZ ESZKÖZÖN TÖRTÉNIK, a lapot senki nem nyitja meg.
+      await prisma.asset.update({
+        where: { id: asset.id },
+        data: { inventoryNumber: "LT-4712" },
+      });
+
+      const afterRow = await repository.detail(worksheetId);
+      assert.ok(afterRow);
+      const after = toWorksheetDetail(afterRow);
+      assert.equal(
+        after.currentVersion.lines[0]?.inventoryNumber,
+        "LT-4712",
+        "élő hivatkozás: a javított kód az aláírt lapon is meglátszik",
+      );
+
+      // ÉS AMI NEM MOZDUL: az eszközszám és az alegység neve. Az előbbi azért,
+      // mert sosem változik, az utóbbi azért, mert MÁSOLAT a verzió saját
+      // oszlopában. A kettő különbsége a mező változékonysága, nem a lap
+      // állapota, és ez a sor azt a határvonalat őrzi.
+      assert.equal(
+        after.currentVersion.lines[0]?.assetNumber,
+        before.currentVersion.lines[0]?.assetNumber,
+      );
+      assert.equal(
+        after.currentVersion.unitName,
+        before.currentVersion.unitName,
+      );
     });
   },
 );

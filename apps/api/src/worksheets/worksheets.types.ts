@@ -14,7 +14,14 @@ import type { ComparableWorksheetVersion } from "./worksheet-diff.js";
 
 export const worksheetVersionInclude = {
   lines: {
-    include: { asset: { select: { assetNumber: true } } },
+    // Az ügyfél saját kódja (`inventoryNumber`) ÉLŐ HIVATKOZÁS, akárcsak az
+    // eszközszám: a soron nincs másolata, olvasáskor jön az eszközről. A
+    // döntés indoka az, hogy ez a kód a funkciót azonosítja, nem a darabot,
+    // tehát nem változik. Ha mégis (elgépelés javítása), a javítás a már
+    // aláírt lapokon is megjelenik.
+    include: {
+      asset: { select: { assetNumber: true, inventoryNumber: true } },
+    },
     orderBy: { position: "asc" as const },
   },
   createdBy: { select: { displayName: true } },
@@ -178,6 +185,7 @@ export function toVersionDetail(
       detail: line.detail,
       assetId: line.assetId,
       assetNumber: line.asset?.assetNumber ?? null,
+      inventoryNumber: line.asset?.inventoryNumber ?? null,
       quantity: line.quantity.toString(),
       unit: line.unit,
       unitNet: line.unitNet.toString(),
@@ -272,6 +280,15 @@ export function toComparableVersion(
       position: line.position,
       description: line.description,
       detail: line.detail,
+      /**
+       * AZ ÜGYFÉL SAJÁT KÓDJA SZÁNDÉKOSAN NINCS ITT.
+       *
+       * Az összehasonlítás ugyanannak a lapnak két verziója között fut, és
+       * mindkét oldal ÉLŐ hivatkozással olvassa ugyanazt az eszközt. Ha a sor
+       * ugyanarra az eszközre mutat, a két kód azonos; ha másikra, azt már az
+       * `assetNumber` eltérése jelenti. Felvéve tehát ugyanazt a változást
+       * jelentené be másodszor, más néven.
+       */
       assetNumber: line.asset?.assetNumber ?? null,
       quantity: line.quantity.toString(),
       unit: line.unit,

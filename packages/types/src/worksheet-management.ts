@@ -175,6 +175,20 @@ export interface WorksheetLineDetail {
   detail: string | null;
   assetId: string | null;
   assetNumber: string | null;
+  /**
+   * AZ ÜGYFÉL SAJÁT ESZKÖZKÓDJA, ÉLŐ HIVATKOZÁSSAL.
+   *
+   * Nem másolat a soron: olvasáskor jön az eszközről, ugyanúgy, mint az
+   * `assetNumber`. A kód a funkciót azonosítja, nem a darabot, tehát nem
+   * változik; ahol viszont mégis (elgépelés javítása), ott a javítás
+   * visszamenőleg a már aláírt lapokon is megjelenik. Ez tudatos: ugyanaz a
+   * funkció mindenhol ugyanazzal a kóddal látszik.
+   *
+   * A verzió `unitName` mezője ezzel szemben MÁSOLAT saját oszlopban, mert az
+   * alegység neve változik. A határvonal a mező változékonysága, nem az, hogy
+   * a lap le van-e zárva.
+   */
+  inventoryNumber: string | null;
   quantity: string;
   unit: string;
   unitNet: string;
