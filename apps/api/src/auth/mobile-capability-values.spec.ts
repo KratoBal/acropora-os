@@ -21,8 +21,8 @@ import type { UserRole } from "@acropora/types";
  * elrejt valamit, amit a felhasználó használhatna, és arról senki nem kap
  * hibaüzenetet.
  *
- * MÉRVE 2026-08-27: ma NINCS ilyen eltérés, 7 szerep és 70 összevetett pár
- * mellett. Ez a fájl tehát nem javít semmit, hanem megőrzi ezt az állapotot.
+ * MÉRVE 2026-08-27: ma NINCS ilyen eltérés, 7 szerep és 84 összevetett pár
+ * mellett (a szám a munkalap két kulcsával nőtt 70-ről). Ez a fájl tehát nem javít semmit, hanem megőrzi ezt az állapotot.
  *
  * MIÉRT NEM A FÁJL SZÖVEGÉT NÉZI. A webshop-oldali táblát még ki lehetne
  * olvasni mintával, de a szolgáltatás-oldali képességeket egy FÜGGVÉNY számolja
@@ -46,6 +46,10 @@ const SERVER_PAIR: Record<string, string | null> = {
   partnersManage: PERMISSIONS.PARTNERS_MANAGE,
   assetsView: PERMISSIONS.SERVICE_VIEW,
   assetsManage: PERMISSIONS.SERVICE_MANAGE,
+  // Ugyanaz a két szerver-jog, mint az eszközöké: a szerviz modult a szerver
+  // egyetlen jogosultság-párral védi, a telefonon viszont két csempe áll rajta.
+  worksheetsView: PERMISSIONS.SERVICE_VIEW,
+  worksheetsManage: PERMISSIONS.SERVICE_MANAGE,
 };
 
 interface Mirror {
@@ -114,9 +118,9 @@ describe("a mobil tükör ÉRTÉKEI", () => {
   it("minden szerepre ugyanazt mondja, mint a szerver", async () => {
     const rows = comparisons(await loadMirror());
 
-    // ÜRES SÖPRÉS NE LÁTSZÓDJON ZÖLDNEK. Hét szerep és tíz jog-hordozó kulcs
-    // hetven párt ad; ha ennél sokkal kevesebb jön ki, a betöltés vagy a
-    // megfeleltetés romlott el, nem a tükör lett hibátlan.
+    // ÜRES SÖPRÉS NE LÁTSZÓDJON ZÖLDNEK. Hét szerep és tizenkét jog-hordozó
+    // kulcs nyolcvannégy párt ad; ha ennél sokkal kevesebb jön ki, a betöltés
+    // vagy a megfeleltetés romlott el, nem a tükör lett hibátlan.
     assert.ok(
       rows.length >= 60,
       `Csak ${rows.length} párt tudtam összevetni. Ez a mérés hibája, nem a tüköré.`,
