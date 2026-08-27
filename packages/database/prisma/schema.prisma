@@ -2132,6 +2132,26 @@ model Asset {
   customerId          String?
   supplierId          String?
   customerAddressId   String?
+  /// A PARTNER ALEGYSÉGE, ahol az eszköz ténylegesen áll (a Fánk „Biodóm"
+  /// egysége). Csak szerviz partner tulajdonosnál értelmes: a vevő-oldali
+  /// finomítás a `customerAddressId`, és a kettő nem ugyanaz a fogalom.
+  ///
+  /// UGYANAZ A SOR, AMI A MUNKALAPSZÁM ELSŐ TAGJÁT ADJA. A partner képernyőn
+  /// „Alegységek" néven áll, a munkalap ugyanerre a táblára hivatkozik
+  /// `departmentId` néven, és a szám első tagja ennek a sornak a kódja. Ezért
+  /// a mező neve is ez: egy harmadik szó ugyanarra a dologra pontosan azt a
+  /// zavart szülné, ami miatt ez a mező készül (2026-08-27: az eszköz-felvitel
+  /// helyszín-mezője üresen állt, mert két fogalmat hívtunk egy néven).
+  ///
+  /// BÁRMELYIK CSOMÓPONTHOZ köthető, nem csak levélhez -- ugyanaz a szabály,
+  /// mint a munkalapnál. Így egy új alcsomópont felvétele nem árvítja el az
+  /// ott lógó eszközöket: nem mozdul semmi.
+  ///
+  /// `Restrict`, nem `SetNull`: egy alegység törlése nem veheti el csendben
+  /// egy eszköz helyét. A szomszédos `customerAddressId` azért `SetNull`, mert
+  /// a cím a vevő adatlapjáról bármikor eltűnhet; alegység törlésére ma nincs
+  /// is út, és ha lesz, előbb a rajta lógó eszközöket kell elmozdítani.
+  departmentId        String?
   aquariumId          String?
   parentAssetId       String?
   productVariantId    String?
@@ -2158,15 +2178,16 @@ model Asset {
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
-  customer        Customer?         @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  supplier        Supplier?         @relation(fields: [supplierId], references: [id], onDelete: Restrict)
-  customerAddress CustomerAddress?  @relation(fields: [customerAddressId], references: [id], onDelete: SetNull)
-  aquarium        Aquarium?         @relation(fields: [aquariumId], references: [id], onDelete: SetNull)
-  parentAsset     Asset?            @relation("AssetHierarchy", fields: [parentAssetId], references: [id], onDelete: SetNull)
-  childAssets     Asset[]           @relation("AssetHierarchy")
-  productVariant  ProductVariant?   @relation(fields: [productVariantId], references: [id], onDelete: SetNull)
-  createdBy       User?             @relation("AssetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy       User?             @relation("AssetUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  customer        Customer?            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  supplier        Supplier?            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  customerAddress CustomerAddress?     @relation(fields: [customerAddressId], references: [id], onDelete: SetNull)
+  department      WorksheetDepartment? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  aquarium        Aquarium?            @relation(fields: [aquariumId], references: [id], onDelete: SetNull)
+  parentAsset     Asset?               @relation("AssetHierarchy", fields: [parentAssetId], references: [id], onDelete: SetNull)
+  childAssets     Asset[]              @relation("AssetHierarchy")
+  productVariant  ProductVariant?      @relation(fields: [productVariantId], references: [id], onDelete: SetNull)
+  createdBy       User?                @relation("AssetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy       User?                @relation("AssetUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   events          AssetEvent[]
   serviceJobs     ServiceJobAsset[]
   documents       AssetDocument[]
@@ -2175,6 +2196,7 @@ model Asset {
   @@index([customerId, status])
   @@index([supplierId, status])
   @@index([customerAddressId])
+  @@index([departmentId])
   @@index([aquariumId])
   @@index([parentAssetId])
   @@index([productVariantId])
@@ -2265,6 +2287,7 @@ model WorksheetDepartment {
   parent     WorksheetDepartment?  @relation("WorksheetDepartmentTree", fields: [parentId], references: [id], onDelete: Restrict)
   children   WorksheetDepartment[] @relation("WorksheetDepartmentTree")
   worksheets Worksheet[]
+  assets     Asset[]
 
   /// TESTVEREK KOZOTT EGYEDI A KOD. Ket kulonbozo ag alatt ugyanaz a kod
   /// (`BIO`) megengedett es termeszetes, egy szulon belul viszont nem.
