@@ -149,6 +149,92 @@ Consequences, both deliberate:
   by a `401` would, in the failure mode above, replace a healthy key while the real
   fault stays where it is.
 
+## Publication and sales channel
+
+What decides whether a product is buyable on the storefront, and what the OS
+sends to make it so. Measured from the installed Medusa 2.19.0, not from
+documentation.
+
+### Product mastership
+
+| `catalogAuthority` | In this round                                                                                                                                                |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `UNAS`             | **not a projection target.** The catalogue is maintained on the other side; copying it here would put the same data in a second place where nobody tends it. |
+| `ACROPORA`         | may be projected.                                                                                                                                            |
+| `null`             | fail-closed. Unresolved ownership is not a reason to proceed.                                                                                                |
+
+### What the storefront actually looks at
+
+The store routes apply **two** filters, and a product needs both:
+
+- `applyDefaultFilters({ status: ProductStatus.PUBLISHED })` — `draft`,
+  `proposed` and `rejected` never appear;
+- `filterByValidSalesChannels()` plus the `product_sales_channel` link filter —
+  the product must be linked to the sales channel the request carries.
+
+Either one missing and the product is not returned. **This is why the two gates
+move together**: a change that flipped one and not the other would look, from
+outside, exactly like a successful change.
+
+### The rule
+
+A product is storefront-buyable when **all four** hold:
+
+1. `catalogAuthority = ACROPORA`;
+2. the product is active;
+3. it has at least one active variant;
+4. `webshopSellable` is true.
+
+Then: **`published` + linked to the storefront channel.** Otherwise: **`draft` +
+detached.** The reason names the EARLIEST unmet condition, not the last one — a
+message that names the last one walks the reader through their own mistakes one
+at a time.
+
+**`webshopSellable` is a new, Acropora-owned business field, and it defaults to
+false.** The obvious existing candidate, `ChannelListing.isPublished`, is the
+wrong one: it mirrors what UNAS publishes, only the sync writes it, and
+`CatalogChannel` has exactly one value (`UNAS`). It answers a question we were
+not asking.
+
+### The sales channel
+
+The storefront channel is configured **per environment**, by id, in
+`MEDUSA_STOREFRONT_SALES_CHANNEL_ID`. Not by name: a name can be changed, and a
+name-based lookup would one day quietly stop matching. The id is not a secret.
+
+**Per environment is the point.** A stage channel id does not exist in
+production. If the setting is carried across, Medusa rejects it — which is the
+good outcome: it becomes invalid rather than almost right.
+
+Two refusals, both deliberate:
+
+- **id missing** → the projection stops before sending anything. Omitting the
+  field would leave the links while the status moved; sending an empty list is a
+  detach nobody could tell apart from a deliberate one a week later. Both quiet
+  options are worse than the error.
+- **id does not exist on the target** → stops on first use, once.
+
+**The channel name is printed in the report, not asserted.** A name check would
+fail on a legitimate rename, and a check whose failure is a legitimate change
+gets switched off — after which its place stands empty while everyone believes
+something guards it. Printing cannot misfire: it claims nothing, it shows what
+was written to. It is also the only thing that catches an id that exists but
+belongs to someone else's shop, because that call succeeds and every test stays
+green.
+
+### Idempotency comes from the target, not from our code
+
+The 2.19.0 update workflow treats `sales_channels` as a **replace**: absent
+means "leave the links alone", a list means "delete the current links, create
+these". Resending the same list therefore cannot duplicate a link, and the empty
+list is the detach. Status and channel travel in one request.
+
+### Not in this round
+
+Pricing and inventory are not part of this projection. The variant price array
+is sent empty because the create endpoint requires the field, not because we
+have a price to state.
+
 ## Where the assertions live
 
 | Claim                                                              | Where it is asserted                         |
@@ -158,6 +244,11 @@ Consequences, both deliberate:
 | projection works from the stored key with no env key               | `medusa-projection.cli.spec.ts`              |
 | a missing key is still visible as `not-configured`                 | `medusa-admin.config.spec.ts`                |
 | the secret is not read from the environment on the projection path | `medusa-projection.cli.spec.ts` (structural) |
+| the publication rule, every branch                                 | `medusa-publication.policy.spec.ts`          |
+| the service APPLIES the rule, and sends both gates in one request  | `medusa-product-projection.service.spec.ts`  |
+| a missing channel id stops before any call goes out                | `medusa-product-projection.service.spec.ts`  |
+| a non-existent channel id stops on first use, once                 | `medusa-product-projection.service.spec.ts`  |
+| the report names the state, the channel and the reason             | `medusa-projection.cli.spec.ts`              |
 
 **A claim with an expiry condition, not a date.** Two Medusa integration specs
 (`medusa-connection.repository.integration.spec.ts`,
