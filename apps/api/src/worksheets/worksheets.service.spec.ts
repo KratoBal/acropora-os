@@ -477,6 +477,41 @@ describe("WorksheetsService", () => {
     );
   });
 
+  /**
+   * AZ UTOLSÓ FÉK ÜZENETE. Ez az ág az adatbázis egyedi indexére felel, és a
+   * kód-ellenőrzések után ritkán fut -- de nem soha, mert két párhuzamos írás
+   * között ez marad az egyetlen. Épp ezért kell igazat mondania: aki ide eljut,
+   * először találkozik vele, és nincs kihez fordulnia.
+   *
+   * AMIT AZ ÁLLÍTÁS RÖGZÍT, ÉS AMIÉRT KÉT FELE VAN: hogy a tiltás megmaradt, és
+   * hogy a hozzá tartozó INDOKLÁS eltűnt. Az indoklás („a munkalap-számnak
+   * egyértelműen kell azonosítania a partnert") a #182 óta hamis: a szám nem
+   * hordozza a rövidítést. A hiányt külön kell állítani, mert egy mondat, amiből
+   * kivettünk egy tagmondatot, a maradékra nézve ugyanúgy zöld.
+   *
+   * Ebben az üzenetben nincs behelyettesített próbaadat, tehát a ma reggeli
+   * csapda (a bábu neve fedi az állított szót) itt fel sem merül.
+   */
+  it("keeps the database backstop honest about what it refuses", async () => {
+    const service = new WorksheetsService(
+      repository({
+        setPartnerCode: async () => {
+          throw new Prisma.PrismaClientKnownRequestError("duplicate", {
+            code: "P2002",
+            clientVersion: "6.19.3",
+          });
+        },
+      }),
+    );
+    await assert.rejects(
+      service.setPartnerCode("customer-1", { partnerCode: "FANK" }),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        error.message.includes("Válassz másikat") &&
+        !error.message.includes("azonosítania"),
+    );
+  });
+
   /** Az elutasítás önmagában zsákutca lenne: a hívó azt hinné, hogy hibázott.
    * Az üzenetnek meg kell mondania, hol tartozik a kód. */
   it("sends the caller to the partner screen for a mirror row", async () => {
