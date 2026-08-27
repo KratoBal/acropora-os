@@ -4,6 +4,7 @@ import { glob } from "node:fs/promises";
 import { describe, it } from "node:test";
 
 import {
+  describePublication,
   MEDUSA_PROJECTION_FALLBACK_NOTICE,
   medusaClientForProjection,
   runProjectionCli,
@@ -374,6 +375,50 @@ describe("a titok környezeti olvasása a vetítés útján", () => {
       [],
       "Ezek a fájlok engedélyt kaptak a kombinált olvasóra, de már nem hívják: " +
         staleCombined.join(", "),
+    );
+  });
+});
+
+describe("describePublication", () => {
+  it("megmondja az állapotot, a csatornát és az okot", () => {
+    assert.equal(
+      describePublication({
+        status: "published",
+        salesChannel: "attach",
+        reason: "értékesíthető a webshopban",
+        salesChannelName: "Acropora Webshop",
+      }),
+      "[published, csatornán: Acropora Webshop] (értékesíthető a webshopban)",
+    );
+  });
+
+  it("lekötésnél NEM ír csatornanevet, mert nincs mire hivatkozni", () => {
+    /**
+     * A név ilyenkor félrevezető lenne: azt sugallná, hogy a termék ahhoz a
+     * csatornához tartozik, holott épp lekötöttük róla.
+     */
+    assert.equal(
+      describePublication({
+        status: "draft",
+        salesChannel: "detach",
+        reason: "a termék inaktív",
+        salesChannelName: "Acropora Webshop",
+      }),
+      "[draft, lekötve] (a termék inaktív)",
+    );
+  });
+
+  it("a csatorna NEVÉT írja ki, tehát egy rossz azonosító a jelentésben látszik", () => {
+    // Ez az egyetlen hely, ahol egy létező, de NEM a miénk csatorna kiderül.
+    // Ellenőrzés nem fogja meg, mert az azonosító létezik.
+    assert.match(
+      describePublication({
+        status: "published",
+        salesChannel: "attach",
+        reason: "értékesíthető a webshopban",
+        salesChannelName: "Valaki más boltja",
+      }),
+      /csatornán: Valaki más boltja/,
     );
   });
 });

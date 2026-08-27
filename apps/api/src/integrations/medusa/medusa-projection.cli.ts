@@ -12,7 +12,10 @@ import { MedusaConnectionError } from "./medusa-connection.types.js";
 import { MedusaCredentialCryptoService } from "./medusa-credential-crypto.service.js";
 import { MedusaCredentialProvider } from "./medusa-credential.provider.js";
 import { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
-import { MedusaProductProjectionService } from "./medusa-product-projection.service.js";
+import {
+  MedusaProductProjectionService,
+  type ProjectionPublicationReport,
+} from "./medusa-product-projection.service.js";
 import { storefrontSalesChannelId } from "./medusa-sales-channel.config.js";
 
 /**
@@ -64,6 +67,29 @@ export const MEDUSA_PROJECTION_FALLBACK_NOTICE =
  * pontosan ezt az utat NEM mérné, és zöld maradna akkor is, ha ide bárki
  * visszacsempész egy környezeti kulcs-olvasást.
  */
+/**
+ * A publikációs rész a jelentés sorában.
+ *
+ * Külön, exportált függvény, és nem a parancs törzsébe írt néhány sor: egy
+ * jelentés-szöveg, ami csak egy adatbázissal és egy hálózattal mérhető, nem
+ * mérhető. A brief 11. tesztje pont ezt a szöveget követeli meg.
+ *
+ * Egy "updated" sor önmagában nem mondja meg, mi lett a termékkel: attól még
+ * lehet draft és lekötve. A csatorna NEVE azért van benne, mert egy rossz, de
+ * létező azonosítót ez mutat meg - és nem egy ellenőrzés, ami egy jogos
+ * átnevezésre is pirosodna.
+ */
+export function describePublication(
+  publication: ProjectionPublicationReport,
+): string {
+  const channel =
+    publication.salesChannel === "attach"
+      ? `csatornán: ${publication.salesChannelName}`
+      : "lekötve";
+
+  return `[${publication.status}, ${channel}] (${publication.reason})`;
+}
+
 export async function medusaClientForProjection(
   credentials: MedusaCredentialProvider,
   out: { stdout(value: string): void; stderr(value: string): void },
@@ -260,7 +286,8 @@ export async function runProjectionCli(
       continue;
     }
     out.stdout(
-      `${productId}: ${outcome.action} -> ${outcome.medusaProductId}\n`,
+      `${productId}: ${outcome.action} -> ${outcome.medusaProductId} ` +
+        `${describePublication(outcome.publication)}\n`,
     );
   }
 
