@@ -76,9 +76,11 @@ type TransactionClient = Prisma.TransactionClient;
  *
  * KÜLÖN FÜGGVÉNY, NEM A METÓDUS TÖRZSE, és ennek a teszt az oka: a metódus a
  * `$transaction` mögött ül, tehát a HÍVÁS meglétét egységteszt nem tudná
- * őrizni. Így viszont az őrző pontosan arra vált pirosra, amitől félünk -- ha
- * valaki kiveszi az ellenőrzést, a teszt megbukik, nem csak akkor, ha az
- * ellenőrző függvény maga romlik el.
+ * őrizni, és EGY ŐRZŐ, AMI NEM TUD LEFUTNI, NEM ŐRZŐ. Így viszont az őrző
+ * pontosan arra vált pirosra, amitől félünk -- ha valaki kiveszi az
+ * ellenőrzést, a teszt megbukik, nem csak akkor, ha az ellenőrző függvény maga
+ * romlik el. Ha ezt a függvényt valaha visszaolvasztanád a metódusba, ezzel a
+ * mondattal együtt veszne el a garancia.
  */
 export async function writePartnerCode(
   transaction: TransactionClient,
