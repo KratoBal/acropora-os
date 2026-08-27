@@ -123,6 +123,37 @@ describe("AiProductSearchService projekció", () => {
     );
   });
 
+  it("a leírás TISZTÍTVA hagyja el a szolgáltatást, nem nyersen", async () => {
+    /**
+     * Ez a teszt nem a tisztító függvényről szól - annak sajátja van -, hanem
+     * arról, hogy a vetítés HÍVJA is. A drágább hibaosztály ebben a projektben
+     * eddig mindig ez volt: a darab megvan, négy teszt állít róla, és az az
+     * útvonal, ami használná, kihagyja. Zöld unit teszt és be nem kötött kód
+     * tökéletesen megfér egymás mellett.
+     *
+     * A bemenet szándékosan olyan leírás, amit az UNAS SIMA SZÖVEGNEK jelöl:
+     * a mért katalógusban 774 termék ilyen. A jelzőt itt nem is adjuk át.
+     */
+    const service = serviceWith([
+      row({
+        unasSnapshot: {
+          descriptionShort: "Els&odblac; sor<br>M&aacute;sodik sor",
+          descriptionLong: "<p>Hossz&uacute; leírás.</p>",
+          parameters: null,
+          netPrice: null,
+          grossPrice: null,
+          currency: null,
+          reportedStock: null,
+        },
+      }),
+    ]);
+
+    const result = await service.search({ query: "x" });
+
+    assert.equal(result.hits[0]!.descriptionShort, "Első sor\nMásodik sor");
+    assert.equal(result.hits[0]!.descriptionLong, "Hosszú leírás.");
+  });
+
   it("SEMMIT nem ad vissza, ami nincs a projekcióban", async () => {
     /**
      * A ProductExtension egy relációnyira van a terméktől, és beszerzési árat

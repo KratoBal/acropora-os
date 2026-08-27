@@ -8,6 +8,7 @@ import {
   AiProductSearchRepository,
   type ProductSearchRow,
 } from "./ai-product-search.repository.js";
+import { plainText } from "./ai-product-search.text.js";
 import type {
   AiProductSearchHit,
   AiProductSearchResult,
@@ -69,8 +70,16 @@ export class AiProductSearchService {
       name: row.name,
       brand: row.brand?.name ?? null,
       categories: row.categories.map((entry) => entry.category.name),
-      descriptionShort: snapshot?.descriptionShort ?? null,
-      descriptionLong: snapshot?.descriptionLong ?? null,
+      /**
+       * Cleaned here rather than passed through, because this is the first
+       * place the description leaves our side. What travels from here is
+       * treated as spoken aloud, and until now that included the markup:
+       * measured on the live catalogue, 774 products carry literal tags
+       * while claiming to be plain text. `plainText` looks at the content
+       * instead of at that claim - see its own file for why.
+       */
+      descriptionShort: plainText(snapshot?.descriptionShort),
+      descriptionLong: plainText(snapshot?.descriptionLong),
       parameters: snapshot?.parameters ?? null,
       variants: row.variants.map((variant) => ({
         sku: variant.sku,
