@@ -84,6 +84,21 @@ export interface AssetUnitSummary {
 export interface AssetListItem extends AssetHierarchyItem {
   criticality: AssetCriticality;
   owner: AssetOwnerSummary;
+  /**
+   * MIKOR VÁLASZTÁS EZ, ÉS MIKOR VISSZAESÉS -- a szabály itt áll, hogy egy
+   * későbbi felület ne fejtse vissza magának, és ne mossa össze a kettőt:
+   *
+   * - `owner.type === "CUSTOMER"`: a vevő KIVÁLASZTOTT címe. Ha nincs
+   *   kiválasztva, a mező hiányzik.
+   * - `owner.type === "SUPPLIER"`: MINDIG a partner saját postai címe, mert
+   *   szállító-tulajdonoshoz vevői cím nem rendelhető. Ilyenkor tehát ez
+   *   VISSZAESÉS, nem választás -- a választott hely a `unit`, és ha az
+   *   hiányzik, a felület jelölje meg, hogy nincs pontosítva.
+   *
+   * Külön mező helyett azért elég ez a szabály, mert a két eset már ma
+   * megkülönböztethető: szállító-tulajdonosnál a `customerAddressId` mindig
+   * `null`, tehát ami itt látszik, csak a partner címe lehet.
+   */
   address?: AssetAddressSummary;
   /**
    * A PARTNER ALEGYSÉGE, ahol az eszköz áll. Csak szerviz partner
