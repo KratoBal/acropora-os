@@ -35,6 +35,8 @@ const session: Session = {
     displayName: "Szerelő Sándor",
     nickname: "Sanyi",
     role: "SERVICE",
+    customerId: null,
+    supplierId: null,
   },
 };
 

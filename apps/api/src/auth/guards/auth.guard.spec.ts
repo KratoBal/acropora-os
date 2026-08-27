@@ -18,6 +18,8 @@ const testUser: AuthenticatedUser = {
   email: "owner@acropora.local",
   displayName: "Teszt Felhasználó",
   role: "OWNER",
+  customerId: null,
+  supplierId: null,
 };
 
 function createContext(request: {

@@ -43,6 +43,8 @@ describe("UnasConnectionController authorization", () => {
         email: "admin@example.invalid",
         displayName: "Admin",
         role: "ADMIN",
+        customerId: null,
+        supplierId: null,
       },
     );
     assert.deepEqual(calls, [{ apiKey: "candidate-secret", actor: "admin-1" }]);
@@ -62,6 +64,8 @@ describe("UnasConnectionController authorization", () => {
             email: "admin@example.invalid",
             displayName: "Admin",
             role: "ADMIN",
+            customerId: null,
+            supplierId: null,
           },
         ),
       (error: unknown) =>
@@ -79,6 +83,8 @@ describe("UnasConnectionController authorization", () => {
             email: "admin@example.invalid",
             displayName: "Admin",
             role: "ADMIN",
+            customerId: null,
+            supplierId: null,
           },
         ),
       (error: unknown) =>

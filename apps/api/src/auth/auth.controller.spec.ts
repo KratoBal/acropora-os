@@ -17,6 +17,8 @@ const testUser: AuthenticatedUser = {
   email: "owner@acropora.hu",
   displayName: "Teszt Owner",
   role: "OWNER",
+  customerId: null,
+  supplierId: null,
 };
 
 function fakeSession(token: string): Session {

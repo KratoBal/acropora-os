@@ -38,6 +38,8 @@ const user: AuthenticatedUser = {
   email: "admin@acropora.local",
   displayName: "Admin",
   role: "ADMIN",
+  customerId: null,
+  supplierId: null,
 };
 
 describe("ProductController", () => {

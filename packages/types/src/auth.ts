@@ -159,6 +159,74 @@ export interface AuthenticatedUser {
   nickname?: string | null;
   role: UserRole;
   avatarUrl?: string | null;
+  /**
+   * Which customer this account acts on behalf of, or `null` for our own
+   * colleagues.
+   *
+   * REQUIRED, NOT OPTIONAL, and that is the point of the field. An optional
+   * one would default to `undefined` at every construction site that forgot
+   * it, and `undefined` reads as "no partner" - which is exactly the value
+   * that means "an internal colleague who may see everything". A forgotten
+   * field would therefore widen access silently. Required, the compiler
+   * lists every place that builds an authenticated user and makes each one
+   * state the membership out loud.
+   */
+  customerId: string | null;
+  /** Which service partner this account acts on behalf of. See `customerId`. */
+  supplierId: string | null;
+}
+
+/**
+ * Who an authenticated account belongs to.
+ *
+ * A discriminated value rather than the two raw columns, because the reader
+ * always wants the same thing: one partner, or none. The "both are set" state
+ * is unrepresentable here, so no caller has to decide what it would mean.
+ */
+export type PartnerMembership =
+  | { kind: "internal" }
+  | { kind: "customer"; customerId: string }
+  | { kind: "supplier"; supplierId: string }
+  /**
+   * Both columns are filled. The database forbids this
+   * (`User_at_most_one_partner_check`), so reaching it means the constraint
+   * is gone or the value never came from the database. NOT collapsed into
+   * `internal`: that would turn a broken row into the widest possible access.
+   */
+  | { kind: "ambiguous" };
+
+/**
+ * Reads the membership off an authenticated user.
+ *
+ * This is NOT the authorisation filter - it answers "who is this account",
+ * not "what may it see". The filter is a separate step and lives in the
+ * repository layer; keeping the two apart is what lets this one be tested
+ * without a database.
+ */
+export function partnerMembership(
+  user: Pick<AuthenticatedUser, "customerId" | "supplierId">,
+): PartnerMembership {
+  /**
+   * PRESENCE, not truthiness, and the difference points one way only.
+   *
+   * An empty string cannot name a partner - the foreign key would refuse it -
+   * but the type allows one, and `if (user.customerId)` would read it as
+   * absent, i.e. as one of our own colleagues, i.e. as the widest access
+   * there is. Treated as present it becomes a membership that matches no
+   * partner, so a filter built from it returns nothing. Both readings are
+   * wrong about the value; only one of them is wrong in the safe direction.
+   *
+   * `undefined` is normalised to `null` first: the declared type does not
+   * allow it, but a value crossing a JSON boundary or arriving from
+   * untyped code can still carry it, and absent really does mean absent.
+   */
+  const customerId = user.customerId ?? null;
+  const supplierId = user.supplierId ?? null;
+
+  if (customerId !== null && supplierId !== null) return { kind: "ambiguous" };
+  if (customerId !== null) return { kind: "customer", customerId };
+  if (supplierId !== null) return { kind: "supplier", supplierId };
+  return { kind: "internal" };
 }
 
 export interface Session {
