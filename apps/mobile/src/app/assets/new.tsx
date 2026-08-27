@@ -60,6 +60,7 @@ export default function NewAssetScreen() {
   const [manufacturer, setManufacturer] = useState("");
   const [model, setModel] = useState("");
   const [serialNumber, setSerialNumber] = useState("");
+  const [inventoryNumber, setInventoryNumber] = useState("");
   const [installedAt, setInstalledAt] = useState("");
   const [interval, setInterval] = useState("");
   const [datePickerOpen, setDatePickerOpen] = useState(false);
@@ -140,6 +141,7 @@ export default function NewAssetScreen() {
       manufacturer,
       model,
       serialNumber,
+      inventoryNumber,
       installedAt,
       interval,
     });
@@ -295,6 +297,17 @@ export default function NewAssetScreen() {
               label="Sorozatszám"
               value={serialNumber}
               onChangeText={setSerialNumber}
+            />
+            {/*
+              A PARTNER SAJÁT AZONOSÍTÓJA. A gépen gyakran ez a matrica van
+              rajta, és a szerelő akkor látja, amikor előtte áll. A mező eddig
+              csak a szerkesztő képernyőn volt meg, tehát utólag, az irodából
+              lehetett pótolni -- egy külön kör telefonálással.
+            */}
+            <Field
+              label="Leltári szám"
+              value={inventoryNumber}
+              onChangeText={setInventoryNumber}
             />
             {/*
               A RENDSZER SAJÁT DÁTUMVÁLASZTÓJA (Balázs döntése, 2026-08-25).

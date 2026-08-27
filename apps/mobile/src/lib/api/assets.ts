@@ -129,6 +129,12 @@ export interface CreateAssetInput {
   manufacturer?: string;
   model?: string;
   serialNumber?: string;
+  /**
+   * A partner SAJÁT azonosítója az eszközön (leltári szám). Nem a miénk: a
+   * gépen gyakran ez a matrica van rajta, és a helyszínen ezt olvassa le a
+   * szerelő. A szerver felvitelkor is fogadja.
+   */
+  inventoryNumber?: string;
   installedAt?: string;
   serviceIntervalDays?: number;
 }
