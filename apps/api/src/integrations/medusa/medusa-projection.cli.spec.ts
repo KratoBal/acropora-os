@@ -380,45 +380,74 @@ describe("a titok környezeti olvasása a vetítés útján", () => {
 });
 
 describe("describePublication", () => {
-  it("megmondja az állapotot, a csatornát és az okot", () => {
-    assert.equal(
-      describePublication({
-        status: "published",
-        salesChannel: "attach",
-        reason: "értékesíthető a webshopban",
-        salesChannelName: "Acropora Webshop",
-      }),
-      "[published, csatornán: Acropora Webshop] (értékesíthető a webshopban)",
-    );
+  /**
+   * A brief falszifikálási kikötése négy állítást kér, és mind a négy külön
+   * tesztet kapott: a published döntésnél látszik a megfelelő indok, a
+   * draftnál is, a csatorna NEVE látszik, és az AZONOSÍTÓ önmagában nem
+   * helyettesíti a nevet.
+   */
+  it("published döntésnél az állapot, a művelet és az INDOK is látszik", () => {
+    const lines = describePublication({
+      status: "published",
+      salesChannel: "attach",
+      reason: "értékesíthető a webshopban",
+      salesChannelName: "Acropora Webshop",
+    });
+
+    assert.match(lines, /publication: published/);
+    assert.match(lines, /sales channel: attached -> Acropora Webshop/);
+    assert.match(lines, /reason: értékesíthető a webshopban/);
   });
 
-  it("lekötésnél NEM ír csatornanevet, mert nincs mire hivatkozni", () => {
+  it("draft döntésnél ugyanaz a három sor, a saját indokával", () => {
+    const lines = describePublication({
+      status: "draft",
+      salesChannel: "detach",
+      reason: "nincs webshopos értékesítésre jelölve",
+      salesChannelName: "Acropora Webshop",
+    });
+
+    assert.match(lines, /publication: draft/);
+    assert.match(lines, /sales channel: detached -> Acropora Webshop/);
+    assert.match(lines, /reason: nincs webshopos értékesítésre jelölve/);
+  });
+
+  it("a csatorna NEVE lekötésnél is látszik", () => {
     /**
-     * A név ilyenkor félrevezető lenne: azt sugallná, hogy a termék ahhoz a
-     * csatornához tartozik, holott épp lekötöttük róla.
+     * Az első változatom itt elhagyta a nevet, azzal, hogy odatartozást
+     * sugallna. Gyengébb érv annál, amit elveszít: a lekötés ugyanolyan
+     * művelet egy csatornán, mint a hozzákötés, és aki egy MÁSIK bolt
+     * csatornájáról köt le egy terméket, annak ugyanúgy látnia kell, melyikről.
      */
-    assert.equal(
+    assert.match(
       describePublication({
         status: "draft",
         salesChannel: "detach",
         reason: "a termék inaktív",
-        salesChannelName: "Acropora Webshop",
+        salesChannelName: "Valaki más boltja",
       }),
-      "[draft, lekötve] (a termék inaktív)",
+      /detached -> Valaki más boltja/,
     );
   });
 
-  it("a csatorna NEVÉT írja ki, tehát egy rossz azonosító a jelentésben látszik", () => {
-    // Ez az egyetlen hely, ahol egy létező, de NEM a miénk csatorna kiderül.
-    // Ellenőrzés nem fogja meg, mert az azonosító létezik.
-    assert.match(
-      describePublication({
-        status: "published",
-        salesChannel: "attach",
-        reason: "értékesíthető a webshopban",
-        salesChannelName: "Valaki más boltja",
-      }),
-      /csatornán: Valaki más boltja/,
+  it("az AZONOSÍTÓ önmagában nem helyettesíti a nevet", () => {
+    /**
+     * A brief kikötése, és ez az egyetlen hely, ahol egy LÉTEZŐ, de nem a
+     * miénk csatorna kiderülhet: a hívás sikerül, a tesztek zöldek, és csak
+     * az olvasható név mondja meg, hogy nem oda írtunk, ahova hittük.
+     */
+    const lines = describePublication({
+      status: "published",
+      salesChannel: "attach",
+      reason: "értékesíthető a webshopban",
+      salesChannelName: "Valaki más boltja",
+    });
+
+    assert.match(lines, /Valaki más boltja/);
+    assert.doesNotMatch(
+      lines,
+      /^sales channel: attached -> sc_/m,
+      "azonosító nem állhat a név helyén",
     );
   });
 });

@@ -82,12 +82,24 @@ export const MEDUSA_PROJECTION_FALLBACK_NOTICE =
 export function describePublication(
   publication: ProjectionPublicationReport,
 ): string {
-  const channel =
-    publication.salesChannel === "attach"
-      ? `csatornán: ${publication.salesChannelName}`
-      : "lekötve";
+  /**
+   * A NÉV a LEKÖTÉSNÉL IS kiíródik, és ezt a brief javította ki rajtam.
+   *
+   * Az első változatom a lekötésnél elhagyta, azzal az indokkal, hogy a név
+   * odatartozást sugallna. Ez gyengébb érv annál, amit cserébe elveszít: a
+   * névre pontosan azért van szükség, hogy egy ROSSZ, de létező csatorna
+   * azonosító kiderüljön - és a lekötés ugyanolyan művelet egy csatornán,
+   * mint a hozzákötés. Aki egy másik bolt csatornájáról köt le egy terméket,
+   * annak ugyanúgy látnia kell, melyikről.
+   */
+  const action =
+    publication.salesChannel === "attach" ? "attached" : "detached";
 
-  return `[${publication.status}, ${channel}] (${publication.reason})`;
+  return [
+    `publication: ${publication.status}`,
+    `sales channel: ${action} -> ${publication.salesChannelName}`,
+    `reason: ${publication.reason}`,
+  ].join("\n      ");
 }
 
 export async function medusaClientForProjection(
@@ -286,8 +298,8 @@ export async function runProjectionCli(
       continue;
     }
     out.stdout(
-      `${productId}: ${outcome.action} -> ${outcome.medusaProductId} ` +
-        `${describePublication(outcome.publication)}\n`,
+      `${productId}: ${outcome.action} -> ${outcome.medusaProductId}\n` +
+        `      ${describePublication(outcome.publication)}\n`,
     );
   }
 
