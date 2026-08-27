@@ -15,6 +15,11 @@ import {
   withUniqueCode,
 } from "../common/unique-code.util.js";
 import type { CreateWorksheetDepartmentDto } from "../worksheets/dto/worksheet.dto.js";
+import { partnerCodeChange } from "./partner-code-change.js";
+import {
+  assertPartnerCodeNeverNumbered,
+  assertPartnerCodeUnlocked,
+} from "./partner-code-numbers.js";
 import type { PartnerReferenceCounts } from "./partner-deletion.js";
 import type {
   CreateSupplierDto,
@@ -439,8 +444,13 @@ export class SuppliersRepository extends Repository {
       (code) =>
         prisma.$transaction(
           async (tx) => {
-            if (input.worksheetPartnerCode)
+            if (input.worksheetPartnerCode) {
               await assertPartnerCodeFree(tx, input.worksheetPartnerCode, null);
+              await assertPartnerCodeNeverNumbered(
+                tx,
+                input.worksheetPartnerCode,
+              );
+            }
             const supplier = await tx.supplier.create({
               data: {
                 code,
@@ -528,6 +538,27 @@ export class SuppliersRepository extends Repository {
           });
           if (input.worksheetPartnerCode)
             await assertPartnerCodeFree(tx, input.worksheetPartnerCode, id);
+          // The order matters: what the code IS LEAVING is checked before what
+          // it is arriving at. A partner trying to swap a spent code for a
+          // fresh one should be told that the old one is locked, not that the
+          // new one is fine.
+          const change = partnerCodeChange(
+            existing.worksheetPartnerCode,
+            input.worksheetPartnerCode,
+          );
+          if (
+            (change === "changed" || change === "cleared") &&
+            existing.worksheetPartnerCode
+          )
+            await assertPartnerCodeUnlocked(tx, existing.worksheetPartnerCode);
+          if (
+            (change === "changed" || change === "set") &&
+            input.worksheetPartnerCode
+          )
+            await assertPartnerCodeNeverNumbered(
+              tx,
+              input.worksheetPartnerCode,
+            );
           const changed = await tx.supplier.updateMany({
             where: { id, updatedAt: new Date(input.expectedUpdatedAt) },
             data: {

@@ -129,6 +129,20 @@ export class SuppliersService {
       throw new ConflictException(
         `Ezt a partnerkódot már használja: ${error.message.slice("PARTNER_CODE_TAKEN:".length)}. Válassz másikat.`,
       );
+    // No name in these two, and that is not an omission: the code may have
+    // been used by a partner that no longer holds it, or by one that was
+    // deleted. What ends the question is what the code DID, not who had it.
+    if (
+      error instanceof Error &&
+      error.message === "PARTNER_CODE_USED_IN_NUMBERS"
+    )
+      throw new ConflictException(
+        "Ezt a partnerkódot korábban már munkalapszám viselte, ezért nem adható ki újra. Válassz másikat.",
+      );
+    if (error instanceof Error && error.message === "PARTNER_CODE_LOCKED")
+      throw new ConflictException(
+        "Ehhez a partnerkódhoz már készült munkalapszám, ezért a kód nem módosítható és nem törölhető.",
+      );
     if (error instanceof Error && error.message === "STALE_UPDATE")
       throw new ConflictException(
         "A beszállítót másik felhasználó módosította. Frissítsd az oldalt.",
