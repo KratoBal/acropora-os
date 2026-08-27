@@ -435,4 +435,64 @@ describe("WorksheetsService", () => {
     );
     await assert.rejects(service.detail("worksheet-9"), NotFoundException);
   });
+
+  /**
+   * A HÁROM ÜZENET AZ, AMI A HÍVÓHOZ ELJUT, tehát azt kell állítani, nem a
+   * dobott hibát. A megkülönböztetés nem stílus: ennek a hibaosztálynak MAGA a
+   * félrevezetés a lényege, mert a mai (javítás előtti) alakban egy vevő nevét
+   * kapja az, aki egy szállító kódjába ütközött. Egy üzenet, ami csak a nevet
+   * mondja, ugyanoda küldené a keresőt: rossz listába.
+   */
+  it("names the customer that holds the code", async () => {
+    const service = new WorksheetsService(
+      repository({
+        setPartnerCode: async () => {
+          throw new Error("PARTNER_CODE_TAKEN_BY_CUSTOMER:Fankó Kft.");
+        },
+      }),
+    );
+    await assert.rejects(
+      service.setPartnerCode("customer-1", { partnerCode: "FANK" }),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        error.message.includes("vevő") &&
+        error.message.includes("Fankó Kft."),
+    );
+  });
+
+  it("names the supplier that holds the code, and says it is a supplier", async () => {
+    const service = new WorksheetsService(
+      repository({
+        setPartnerCode: async () => {
+          throw new Error("PARTNER_CODE_TAKEN_BY_SUPPLIER:Kék Bolygó Kft.");
+        },
+      }),
+    );
+    await assert.rejects(
+      service.setPartnerCode("customer-1", { partnerCode: "FANK" }),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        error.message.includes("szállító") &&
+        error.message.includes("Kék Bolygó Kft."),
+    );
+  });
+
+  /** Az elutasítás önmagában zsákutca lenne: a hívó azt hinné, hogy hibázott.
+   * Az üzenetnek meg kell mondania, hol tartozik a kód. */
+  it("sends the caller to the partner screen for a mirror row", async () => {
+    const service = new WorksheetsService(
+      repository({
+        setPartnerCode: async () => {
+          throw new Error("PARTNER_CODE_MIRROR_ROW:Fankó Kft.");
+        },
+      }),
+    );
+    await assert.rejects(
+      service.setPartnerCode("customer-1", { partnerCode: "FANK" }),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        error.message.includes("Fankó Kft.") &&
+        error.message.includes("partner adatlapján"),
+    );
+  });
 });

@@ -90,6 +90,55 @@ export async function assertPartnerCodeFree(
 }
 
 /**
+ * The same question asked from the CUSTOMER side, for the endpoint that writes
+ * the code straight onto a customer row (`PUT customers/:id/partner-code`).
+ *
+ * It is a separate function rather than a parameter on the one above, because
+ * what has to be EXCLUDED is different, not just named differently. There the
+ * row being saved is a supplier; here it is a customer, and the supplier that
+ * may legitimately carry the same code is the one whose mirror this customer IS
+ * (`Supplier.customerId`), not one identified by id.
+ *
+ * WHY THE COMPARISON IS IN JAVASCRIPT AND NOT IN THE `where`: the case this
+ * exists for is a supplier with `customerId = null`, and a negated filter on a
+ * nullable column is exactly where SQL's three-valued logic quietly drops rows
+ * -- `NOT (customerId = 'x')` is NULL, not true, when the column is NULL. Both
+ * columns are unique, so each lookup returns at most one row; comparing that row
+ * costs nothing and does not depend on how a negation is translated.
+ *
+ * THE ERROR NAMES THE HOLDER **AND THE SIDE**, and the side is not decoration.
+ * The failure this whole check exists to prevent is a message that points at
+ * the wrong field: today a collision here surfaces later, on the supplier's
+ * next save, naming a CUSTOMER for a code the supplier has held all along. An
+ * error that says only "taken by X" would reproduce that confusion one step
+ * earlier -- the person would go looking for X on the wrong screen.
+ */
+export async function assertPartnerCodeFreeForCustomer(
+  tx: Prisma.TransactionClient,
+  code: string,
+  customerId: string,
+) {
+  const customer = await tx.customer.findFirst({
+    where: { worksheetPartnerCode: code },
+    select: { id: true, displayName: true },
+  });
+  if (customer && customer.id !== customerId)
+    throw new Error(`PARTNER_CODE_TAKEN_BY_CUSTOMER:${customer.displayName}`);
+
+  const partner = await tx.supplier.findFirst({
+    where: { worksheetPartnerCode: code },
+    select: { name: true, customerId: true },
+  });
+  // The `customerId` comparison only spares a MIRROR row, and the one caller
+  // refuses mirror rows before it ever gets here. It stays because this
+  // function answers "is the code free for this customer", and a second caller
+  // writing a mirror's code (`syncWorksheetMirror` is the obvious candidate)
+  // would need exactly this exclusion to be correct.
+  if (partner && partner.customerId !== customerId)
+    throw new Error(`PARTNER_CODE_TAKEN_BY_SUPPLIER:${partner.name}`);
+}
+
+/**
  * A worksheet belongs to a customer in three places -- the sheet, the unit and
  * the abbreviation the close path requires -- so a service partner is given a
  * customer row of its own to carry them. The row is the partner's, not a buyer's: it is created

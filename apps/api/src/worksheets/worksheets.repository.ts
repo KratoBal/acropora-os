@@ -16,6 +16,7 @@ import {
   assertPartnerCodeNeverNumbered,
   assertPartnerCodeUnlocked,
 } from "../suppliers/partner-code-numbers.js";
+import { assertPartnerCodeFreeForCustomer } from "../suppliers/suppliers.repository.js";
 import type {
   CreateWorksheetDepartmentDto,
   WorksheetListQueryDto,
@@ -58,6 +59,88 @@ export type WorksheetSignResult =
   { ok: true } | { ok: false; reason: "NOT_FOUND" | "NOT_AWAITING_SIGNATURE" };
 
 type TransactionClient = Prisma.TransactionClient;
+
+/**
+ * A NEGYEDIK ÍRÁSI ÚT UGYANARRA AZ OSZLOPRA, és eddig egyedül ez nem
+ * ellenőrzött semmit. A partner képernyő két útja (létrehozás, szerkesztés)
+ * mindkét táblát megnézi; itt az adatbázis egyedi indexe volt az egyetlen fék,
+ * az pedig csak a VEVŐ oldalt fogja meg.
+ *
+ * AMI ÍGY ÁTMENT (mérve 2026-08-27, main @ e8580d5): olyan kód, amit egy TÜKÖR
+ * NÉLKÜLI szállító-sor visel. Kód tükör nélkül akkor létezik, ha a partner nem
+ * szerviz partner, de van kódja -- a webes űrlap ezt nem engedi, közvetlen
+ * API-hívás igen. Ilyenkor sem az index, sem más nem szólt, és a hiba KÉSŐBB
+ * jött elő, rossz helyen: a szállító következő mentése bukott el egy olyan
+ * üzenettel, ami a VEVŐ nevét mondta arra a kódra, amit a szállító régóta
+ * visel.
+ *
+ * KÜLÖN FÜGGVÉNY, NEM A METÓDUS TÖRZSE, és ennek a teszt az oka: a metódus a
+ * `$transaction` mögött ül, tehát a HÍVÁS meglétét egységteszt nem tudná
+ * őrizni, és EGY ŐRZŐ, AMI NEM TUD LEFUTNI, NEM ŐRZŐ. Így viszont az őrző
+ * pontosan arra vált pirosra, amitől félünk -- ha valaki kiveszi az
+ * ellenőrzést, a teszt megbukik, nem csak akkor, ha az ellenőrző függvény maga
+ * romlik el. Ha ezt a függvényt valaha visszaolvasztanád a metódusba, ezzel a
+ * mondattal együtt veszne el a garancia.
+ */
+export async function writePartnerCode(
+  transaction: TransactionClient,
+  customerId: string,
+  partnerCode: string,
+) {
+  // A TÜKÖR-SORT NEM LEHET INNEN ÍRNI, és ez nem óvatosság, hanem tulajdonjog:
+  // a tükör vevő-sor kódja SZÁRMAZTATOTT érték, a forrása a szállító sora, és a
+  // `syncWorksheetMirror` minden mentésnél visszaírja. Egy származtatott érték
+  // közvetlen írása nem csak elveszik: a visszaírásig HAT is, és mérve a
+  // munkalapszám ebből a kódból épülne, tehát a közbenső ablakban rossz számot
+  // adhat. Ezért elutasítás, nem "majd úgyis felülíródik".
+  //
+  // Az üzenet megmondja, HOL kell beállítani. Enélkül a hívó azt hiszi, hogy ő
+  // hibázott, pedig csak rossz ajtón kopogott.
+  //
+  // ELSŐKÉNT fut, a kód vizsgálata előtt: egy tükör-sort akkor sem innen kell
+  // írni, ha a kód történetesen szabad lenne.
+  const mirrorOf = await transaction.supplier.findFirst({
+    where: { customerId },
+    select: { name: true },
+  });
+  if (mirrorOf) throw new Error(`PARTNER_CODE_MIRROR_ROW:${mirrorOf.name}`);
+
+  // A HÁROM ELLENŐRZÉS SORRENDJE SZÁMÍT: előbb az, amit a kód ELHAGY, aztán az,
+  // amibe ÉRKEZIK. Aki egy elhasznált kódot akar frissre cserélni, azt kapja
+  // válaszul, hogy a RÉGI zárolt, nem azt, hogy az új szabad.
+  //
+  // Mind a három csak akkor fut, ha a kód tényleg változik: aki a saját, már
+  // számot adott kódját tartja meg, annak egy telefonszám-javítás miatt nem
+  // szabad elakadnia.
+  const existing = await transaction.customer.findUniqueOrThrow({
+    where: { id: customerId },
+    select: { worksheetPartnerCode: true },
+  });
+  if (existing.worksheetPartnerCode !== partnerCode) {
+    if (existing.worksheetPartnerCode)
+      await assertPartnerCodeUnlocked(
+        transaction,
+        existing.worksheetPartnerCode,
+      );
+    await assertPartnerCodeFreeForCustomer(
+      transaction,
+      partnerCode,
+      customerId,
+    );
+    await assertPartnerCodeNeverNumbered(transaction, partnerCode);
+  }
+
+  return transaction.customer.update({
+    where: { id: customerId },
+    data: { worksheetPartnerCode: partnerCode },
+    select: {
+      id: true,
+      customerNumber: true,
+      displayName: true,
+      worksheetPartnerCode: true,
+    },
+  });
+}
 
 /**
  * Az alegység neve nem a beküldött tartalomból jön, hanem a munkalap
@@ -119,41 +202,14 @@ export class WorksheetsRepository extends Repository {
   }
 
   /**
-   * A MÁSODIK ÍRÁSI ÚT UGYANARRA AZ OSZLOPRA, ezért itt is állnak a
-   * rövidítés-szabályok, nem csak a partner képernyő mentési ágában. A partner
-   * oldalán a `Supplier` sor íródik és a tükör követi; itt közvetlenül a
-   * vevő-sor. Ha a tiltás csak az egyik úton áll, akkor nem szabály, hanem
-   * kényelmetlenség: ezen a végponton (`PUT customers/:customerId/partner-code`)
-   * pontosan az történne meg, amit ott megakadályozunk.
-   *
    * Tranzakcióban, mert az ellenőrzés és az írás csak együtt ér valamit: két
-   * párhuzamos hívás között a kiolvasott állapot elavul.
+   * párhuzamos hívás között a kiolvasott állapot elavul. Maga a döntés a
+   * `writePartnerCode` függvényben áll, hogy tesztelhető legyen -- lásd ott.
    */
   async setPartnerCode(customerId: string, partnerCode: string) {
-    return this.database.$transaction(async (transaction) => {
-      const existing = await transaction.customer.findUniqueOrThrow({
-        where: { id: customerId },
-        select: { worksheetPartnerCode: true },
-      });
-      if (existing.worksheetPartnerCode !== partnerCode) {
-        if (existing.worksheetPartnerCode)
-          await assertPartnerCodeUnlocked(
-            transaction,
-            existing.worksheetPartnerCode,
-          );
-        await assertPartnerCodeNeverNumbered(transaction, partnerCode);
-      }
-      return transaction.customer.update({
-        where: { id: customerId },
-        data: { worksheetPartnerCode: partnerCode },
-        select: {
-          id: true,
-          customerNumber: true,
-          displayName: true,
-          worksheetPartnerCode: true,
-        },
-      });
-    });
+    return this.database.$transaction((transaction) =>
+      writePartnerCode(transaction, customerId, partnerCode),
+    );
   }
 
   async departments(
