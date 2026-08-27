@@ -188,7 +188,7 @@ export function AssetListPage() {
             <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
               <tr>
                 <th className="p-3">Eszköz</th>
-                <th>Partner / helyszín</th>
+                <th>Partner / hely</th>
                 <th>Hierarchia</th>
                 <th>Műszaki azonosító</th>
                 <th>Státusz</th>
@@ -210,8 +210,20 @@ export function AssetListPage() {
                   </td>
                   <td>
                     <div className="font-medium">{asset.owner.displayName}</div>
+                    {/* AZ ALEGYSEG A VALASZTOTT HELY, a cim a VISSZAESES.
+                        Partner-tulajdonosnal a cim mindig a partner sajat
+                        postai cime, tehat alegyseg nelkul ez nem valasztas
+                        eredmenye -- es a listaban ez latszik a legkevesbe, mert
+                        egy sorban minden helynek ugyanugy nez ki. Ezert all itt
+                        is a jeloles, nem csak az adatlapon. */}
                     <div className="text-xs text-slate-500">
-                      {asset.address?.formatted ?? "Nincs pontosított helyszín"}
+                      {asset.unit
+                        ? `${asset.unit.name} (${asset.unit.code})`
+                        : asset.owner.type === "SUPPLIER"
+                          ? asset.address?.formatted
+                            ? `Nincs pontosítva. ${asset.address.formatted}`
+                            : "Nincs pontosítva."
+                          : (asset.address?.formatted ?? "Nincs pontosítva.")}
                     </div>
                   </td>
                   <td>
