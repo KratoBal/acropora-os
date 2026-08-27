@@ -218,7 +218,7 @@ export function AssetListPage() {
                         is a jeloles, nem csak az adatlapon. */}
                     <div className="text-xs text-slate-500">
                       {asset.unit
-                        ? `${asset.unit.name} (${asset.unit.code})`
+                        ? `${asset.unit.path.join(" / ")} (${asset.unit.code})`
                         : asset.owner.type === "SUPPLIER"
                           ? asset.address?.formatted
                             ? `Nincs pontosítva. ${asset.address.formatted}`
