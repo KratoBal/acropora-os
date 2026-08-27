@@ -97,8 +97,19 @@ function fakes(options: {
   variants?: MedusaVariantRow[];
   variantsTruncated?: boolean;
   failOn?: "backorder" | "level";
+  /**
+   * OLVASÓ hívás bukása. Külön kapcsoló az írásoktól, mert a két eset MÁST
+   * jelent: olvasásnál biztosan nem változott semmi odaát.
+   *
+   * A `locationsFailUntil` szándékosan SZÁMLÁLÓ, nem logikai kapcsoló: az
+   * egyetlen dolog, amit a gyorsítótár-kérdésről mérni lehet, az az, hogy a
+   * MÁSODIK hívás már sikerül-e.
+   */
+  failReadOn?: "locations" | "variants";
+  locationsFailUntil?: number;
 }) {
   const calls: string[] = [];
+  let locationCallCount = 0;
   const variants = options.variants ?? [variantWith({ levels: [] })];
   const locations = options.locations ?? [LOCATION];
 
@@ -120,10 +131,19 @@ function fakes(options: {
   const medusa = {
     async listStockLocationsForSalesChannel(salesChannelId: string) {
       calls.push(`locations:${salesChannelId}`);
+      locationCallCount += 1;
+      if (
+        options.failReadOn === "locations" &&
+        locationCallCount <=
+          (options.locationsFailUntil ?? Number.MAX_SAFE_INTEGER)
+      )
+        throw new MedusaAdminHttpError(503, MEDUSA_BODY);
       return locations;
     },
     async listProductVariants(productId: string) {
       calls.push(`variants:${productId}`);
+      if (options.failReadOn === "variants")
+        throw new MedusaAdminHttpError(503, MEDUSA_BODY);
       return {
         rows: variants,
         truncated: options.variantsTruncated ?? false,
@@ -350,6 +370,62 @@ describe("Medusa készlet-vetítés", () => {
 
     assert.equal(levelsOf(variants).length, 1);
     assert.equal(levelsOf(variants)[0]?.location_id, "sloc_1");
+  });
+
+  /**
+   * OLVASÓ HÍVÁS BUKÁSA: megnevezett megállás, nem nyers kivétel.
+   *
+   * MINEK KELL PIROSÍTANIA: ha az elkapás kikerül (a kivétel kiszáll), vagy ha
+   * a bukás után bármit írunk.
+   */
+  for (const point of ["locations", "variants"] as const) {
+    it(`a(z) ${point} olvasás bukása megnevezett megállás, írás nélkül`, async () => {
+      const { service, calls } = fakes({ failReadOn: point });
+
+      const outcome = await service.project(stock("5"));
+
+      assert.ok(outcome.action === "stopped");
+      assert.equal(outcome.reason, "medusa-read-failed");
+      assert.match(outcome.details, /HTTP 503/);
+      assert.ok(
+        !outcome.details.includes("MEDUSA_TEST_FAILURE_BODY"),
+        `a válasz törzse bekerült a megállás-szövegbe: ${outcome.details}`,
+      );
+      assert.ok(!calls.some((entry) => entry.includes("level")));
+      assert.ok(!calls.some((entry) => entry.startsWith("backorder:")));
+    });
+  }
+
+  /**
+   * ÉS A PILLANATNYI HIBA NEM MÉRGEZI MEG AZ EGÉSZ FUTÁST.
+   *
+   * A készlethely a folyamat élettartamára MEG VAN JEGYEZVE, mert több termék
+   * ugyanazt a helyet használja. Ha a HTTP-hiba `{ error }` verdiktként
+   * kerülne a gyorsítótárba, egy másodpercnyi hálózati hiba MINDEN további
+   * terméket megállítana - és a jelentésből az jönne ki, hogy a csatornához
+   * nem tartozik hely, ami nem igaz.
+   *
+   * Ezért kapjuk el a hibát a hívás HELYÉN, nem a feloldó belsejében.
+   *
+   * MINEK KELL PIROSÍTANIA: ha valaki az elkapást bevinni a `resolveLocation`
+   * belsejébe, és onnan `{ error }` értéket ad vissza.
+   */
+  it("a készlethely pillanatnyi hibája után a KÖVETKEZŐ termék már átmegy", async () => {
+    const { service } = fakes({
+      failReadOn: "locations",
+      locationsFailUntil: 1,
+    });
+
+    const first = await service.project(stock("5"));
+    const second = await service.project(stock("5"));
+
+    assert.ok(first.action === "stopped");
+    assert.equal(first.reason, "medusa-read-failed");
+    assert.notEqual(
+      second.action,
+      "stopped",
+      `a második futásnak át kellett volna mennie, ehelyett: ${JSON.stringify(second)}`,
+    );
   });
 
   /** A 11. teszt. */
