@@ -76,8 +76,43 @@ export interface VariantStock {
   sku: string;
   onHand: Prisma.Decimal;
   reserved: Prisma.Decimal;
-  /** Igaz, ha nincs készletsor. Nem hiba: nulla, és a jelentés kimondja. */
+  /**
+   * Igaz, ha nincs HELY ÉS TÉTEL NÉLKÜLI készletsor a fő raktárban.
+   *
+   * Nem hiba: nulla, és a jelentés kimondja. De azt is kimondja, hogy MIT
+   * néztünk - lásd `describeMissingStockRow`.
+   */
   missingRow: boolean;
+}
+
+/**
+ * Amit a hiányzó készletsorról MONDHATUNK, és nem több.
+ *
+ * Az első változatom azt írta ki, hogy „nincs készletsor a fő raktárban".
+ * **Nem ezt néztük meg.** A lekérdezés a hely és tétel NÉLKÜLI sort keresi
+ * (`locationId: null, lotId: null`), pontosan úgy, ahogy az UNAS-út és a POS
+ * kereső - egy változatnak tehát lehet készlete egy polcon vagy egy tételen,
+ * és az üzenet mégis azt állítaná, hogy a raktárban nincs semmije.
+ *
+ * A szűkítés maga SZÁNDÉKOS és marad: a mai gyakorlat sem összegez a változat
+ * összes során, és egy másik olvasás itt csendben egy MÁSIK készletfogalmat
+ * vezetne be. Amin változtatni kell, az nem a lekérdezés, hanem az, hogy a
+ * mondat ne állítson többet nála.
+ *
+ * Külön, exportált függvény, hogy a mondat MÉRHETŐ legyen: egy jelentés-szöveg
+ * a parancs törzsében csak adatbázissal nézhető meg, és pont az ilyen mondatok
+ * szoktak túlélni egy lekérdezés-változást.
+ */
+export function describeMissingStockRow(
+  sku: string,
+  warehouseName: string,
+): string {
+  return (
+    `${sku}: nincs hely és tétel nélküli készletsor a(z) ${warehouseName} ` +
+    `raktárban, tehát az értékesíthető készlet nulla. A hellyel vagy tétellel ` +
+    `nyilvántartott sorokat ez a vetítés NEM olvassa és nem összegzi - ` +
+    `ugyanúgy, ahogy az UNAS-kiküldés sem.`
+  );
 }
 
 /**
@@ -248,10 +283,7 @@ export async function runInventoryCli(
 
     for (const stock of resolved) {
       if (stock.missingRow)
-        out.stdout(
-          `${stock.sku}: nincs készletsor a(z) ${warehouse.name} raktárban, ` +
-            `tehát az értékesíthető készlet nulla.\n`,
-        );
+        out.stdout(`${describeMissingStockRow(stock.sku, warehouse.name)}\n`);
 
       const outcome = await service.project(stock);
       if (outcome.action === "stopped") {

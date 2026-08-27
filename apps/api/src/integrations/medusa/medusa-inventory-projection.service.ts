@@ -1,10 +1,11 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 
-import type {
-  MedusaAdminClient,
-  MedusaInventoryLevelRow,
-  MedusaVariantRow,
+import {
+  STOCK_LOCATION_LOOKUP_LIMIT,
+  type MedusaAdminClient,
+  type MedusaInventoryLevelRow,
+  type MedusaVariantRow,
 } from "./medusa-admin.client.js";
 import type { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
 import {
@@ -176,8 +177,9 @@ export class MedusaInventoryProjectionService {
     else
       this.resolvedLocation = {
         error:
-          `a(z) ${this.storefrontSalesChannelId} csatornához ${locations.length} ` +
-          `készlethely tartozik: ${locations
+          `a(z) ${this.storefrontSalesChannelId} csatornához ` +
+          `${locations.length >= STOCK_LOCATION_LOOKUP_LIMIT ? "legalább " : ""}` +
+          `${locations.length} készlethely tartozik: ${locations
             .map((row) => `${row.id} (${row.name})`)
             .join(", ")}. Melyik hely készlete a webshopé, az üzleti döntés, ` +
           `nem a kódé. Nem írtunk semmit.`,

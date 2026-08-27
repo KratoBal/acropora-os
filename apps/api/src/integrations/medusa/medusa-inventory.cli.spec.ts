@@ -6,6 +6,7 @@ import { Prisma } from "@acropora/database";
 import type { InventoryProjectionReport } from "./medusa-inventory-projection.service.js";
 import {
   describeInventory,
+  describeMissingStockRow,
   resolveTargets,
   type InventoryCliDatabase,
 } from "./medusa-inventory.cli.js";
@@ -139,6 +140,24 @@ describe("Készlet-parancs: kit vetítünk", () => {
     assert.ok(Array.isArray(resolved));
     assert.equal(resolved[0]!.onHand.toString(), "0");
     assert.equal(resolved[0]!.missingRow, true);
+  });
+
+  /**
+   * AZ ÜZENET NEM ÁLLÍTHAT TÖBBET, MINT A LEKÉRDEZÉS.
+   *
+   * Az első változatom azt írta, hogy „nincs készletsor a fő raktárban". Nem
+   * ezt néztük meg: a lekérdezés a hely és tétel NÉLKÜLI sort keresi. Egy
+   * változatnak lehet készlete egy polcon, és az üzenet mégis azt állítaná,
+   * hogy a raktárban nincs semmije.
+   */
+  it("a hiányzó sor üzenete megnevezi, MIT néztünk meg", () => {
+    const text = describeMissingStockRow("teszt0001", "Fő raktár");
+    assert.match(text, /hely és tétel nélküli készletsor/);
+    assert.match(text, /NEM olvassa és nem összegzi/);
+    assert.ok(
+      !/^teszt0001: nincs készletsor a/.test(text),
+      "a szűkítés nélküli mondat többet állítana a lekérdezésnél",
+    );
   });
 
   it("nincs ilyen cikkszám: hibaüzenet, nem üres siker", async () => {
