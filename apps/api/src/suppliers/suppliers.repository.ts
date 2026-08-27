@@ -228,10 +228,20 @@ export class SuppliersRepository extends Repository {
       select: { customerId: true },
     });
     if (!supplier?.customerId) return { items: [] };
+    // LAPOSAN jon vissza, a fat a hivo epiti fel a parentId mezobol. Egy
+    // rekurziv lekerdezes itt tobbet vinne, mint amennyit er: egy partner
+    // helyszinei elférnek egy koteg­ben, es igy egy uj szint nem valtoztat
+    // vegpontot.
     const items = await prisma.worksheetDepartment.findMany({
       where: { customerId: supplier.customerId },
-      select: { id: true, code: true, name: true, isActive: true },
-      orderBy: { code: "asc" },
+      select: {
+        id: true,
+        parentId: true,
+        code: true,
+        name: true,
+        isActive: true,
+      },
+      orderBy: [{ parentId: "asc" }, { code: "asc" }],
     });
     return { items };
   }
@@ -251,13 +261,43 @@ export class SuppliersRepository extends Repository {
       select: { customerId: true },
     });
     if (!supplier?.customerId) return null;
+
+    /**
+     * A SZULO UGYANAHHOZ A PARTNERHEZ TARTOZZON.
+     *
+     * Enelkul egy letezo, de MASIK partnerhez tartozo azonosito atmenne: az
+     * idegen kulcs csak azt nezi, hogy a sor letezik-e, a tulajdonost nem. Az
+     * igy keletkezo helyszin a masik partner faja alatt fugne, es a
+     * munkalapszamot vinne rossz helyre -- csendben, mert a felulet a sajat
+     * fajat mutatja, es abban nem is latszana.
+     *
+     * A "nem talaltam" es a "masé" ugyanaz a valasz: mindketto ismeretlen
+     * szulo a hivo szemszogebol, es a kulonbseg kimondasa mas partner adatarol
+     * arulna el valamit.
+     */
+    const parentId = input.parentId?.trim() || null;
+    if (parentId) {
+      const parent = await prisma.worksheetDepartment.findFirst({
+        where: { id: parentId, customerId: supplier.customerId },
+        select: { id: true },
+      });
+      if (!parent) throw new Error("WORKSHEET_DEPARTMENT_PARENT_NOT_FOUND");
+    }
+
     return prisma.worksheetDepartment.create({
       data: {
         customerId: supplier.customerId,
+        parentId,
         code: input.code.trim().toUpperCase(),
         name: input.name.trim(),
       },
-      select: { id: true, code: true, name: true, isActive: true },
+      select: {
+        id: true,
+        parentId: true,
+        code: true,
+        name: true,
+        isActive: true,
+      },
     });
   }
 

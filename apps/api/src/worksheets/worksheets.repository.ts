@@ -130,25 +130,58 @@ export class WorksheetsRepository extends Repository {
   async departments(
     customerId: string,
   ): Promise<WorksheetDepartmentListResponse> {
+    // Laposan, a fat a hivo epiti a parentId mezobol -- ugyanaz az alak, mint a
+    // partner menu oldalan (SuppliersRepository.units).
     const items = await this.database.worksheetDepartment.findMany({
       where: { customerId },
-      select: { id: true, code: true, name: true, isActive: true },
-      orderBy: { code: "asc" },
+      select: {
+        id: true,
+        parentId: true,
+        code: true,
+        name: true,
+        isActive: true,
+      },
+      orderBy: [{ parentId: "asc" }, { code: "asc" }],
     });
     return { items };
   }
 
+  /**
+   * A MASODIK AJTO UGYANARRA A TABLARA. A partner menu oldalan
+   * `SuppliersRepository.createUnit` ir ide, innen pedig a munkalap-kepernyo.
+   * A ket ut szandekosan kulon all (ott partner-, itt vevo-azonositobol
+   * indul), de amit ENGEDNEK, annak egyeznie kell -- kulonben az egyik ajton
+   * be lehet vinni olyat, amit a masik tilt.
+   */
   async createDepartment(
     customerId: string,
     input: CreateWorksheetDepartmentDto,
   ): Promise<WorksheetDepartmentSummary> {
+    // A szulo ugyanahhoz a vevohoz tartozzon: az idegen kulcs csak a letezest
+    // nezi, a tulajdonost nem.
+    const parentId = input.parentId?.trim() || null;
+    if (parentId) {
+      const parent = await this.database.worksheetDepartment.findFirst({
+        where: { id: parentId, customerId },
+        select: { id: true },
+      });
+      if (!parent) throw new Error("WORKSHEET_DEPARTMENT_PARENT_NOT_FOUND");
+    }
+
     return this.database.worksheetDepartment.create({
       data: {
         customerId,
+        parentId,
         code: input.code.trim().toUpperCase(),
         name: input.name.trim(),
       },
-      select: { id: true, code: true, name: true, isActive: true },
+      select: {
+        id: true,
+        parentId: true,
+        code: true,
+        name: true,
+        isActive: true,
+      },
     });
   }
 

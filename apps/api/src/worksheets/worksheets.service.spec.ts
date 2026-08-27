@@ -99,6 +99,7 @@ function worksheetRow(
     },
     department: {
       id: "department-1",
+      parentId: null,
       code: "BIO",
       name: "Biodóm",
       isActive: true,
