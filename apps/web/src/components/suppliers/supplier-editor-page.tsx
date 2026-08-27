@@ -203,12 +203,29 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
       addressLine1: addressLine1.trim() || undefined,
       addressLine2: addressLine2.trim() || undefined,
     };
+    // A KÓD CSAK AKKOR MEGY EL, HA VÁLTOZOTT, és ez nem takarékosság.
+    //
+    // Egy változatlan mező visszaküldése azt jelenti, hogy MINDEN jövőbeli
+    // szigorítás a mező szabályán egyszerre kiterjed a partner ÖSSZES TÖBBI
+    // mezőjének szerkesztésére is: a kérés a validáción bukik el, mielőtt
+    // bármit elérne, és a szerkesztő nem érti, mert ő a kódhoz nem is nyúlt.
+    // Ez nem elméleti: a négy karakteres szabály bevezetésekor (#183) pontosan
+    // ez fenyegetett, és csak azért nem történt meg, mert élesben nulla ilyen
+    // sor volt. A következő szigorítás nem biztos, hogy ilyen szerencsés.
+    //
+    // A kihagyott mező a szervernek "változatlan" jelentésű (a DTO-ban
+    // opcionális), az üresre törölt viszont `null`, tehát a törlés továbbra is
+    // működik.
+    const storedCode = supplier?.worksheetPartnerCode ?? null;
+    const nextCode = worksheetPartnerCode.trim() || null;
+    const codeChanged = nextCode !== storedCode;
+
     try {
       if (supplier) {
         setSupplier(
           await suppliersApi.update(token, supplier.id, {
             ...payload,
-            worksheetPartnerCode: payload.worksheetPartnerCode ?? null,
+            worksheetPartnerCode: codeChanged ? nextCode : undefined,
             taxNumber: payload.taxNumber ?? null,
             email: payload.email ?? null,
             phone: payload.phone ?? null,
