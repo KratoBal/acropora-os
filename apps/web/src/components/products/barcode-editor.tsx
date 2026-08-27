@@ -1,6 +1,6 @@
 "use client";
 
-import { Alert, Badge, Button, Input } from "@acropora/ui";
+import { Alert, Badge, Button, ConfirmDialog, Input } from "@acropora/ui";
 import type { ProductBarcodeSummary } from "@acropora/types";
 import { useState } from "react";
 
@@ -30,6 +30,28 @@ export function BarcodeEditor({
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * MELYIK VONALKODOT TOROLNENK. A gomb eddig AZONNAL torolt: egy elgepelt
+   * koppintas veglegesen elvitt egy vonalkodot, es a felhasznalo csak akkor
+   * vette eszre, amikor a beolvasas mar nem talalt semmit. A vonalkod nem
+   * allithato vissza, csak ujra felvinni lehet -- ha valaki tudja meg, mi volt.
+   */
+  const [pendingDelete, setPendingDelete] =
+    useState<ProductBarcodeSummary | null>(null);
+
+  const removePending = async () => {
+    if (!pendingDelete) return;
+    const barcode = pendingDelete;
+    setPendingDelete(null);
+    await run(async () => {
+      const result = await productApi.removeBarcode(
+        token,
+        variantId,
+        barcode.id,
+      );
+      return result.items;
+    });
+  };
 
   const run = async (action: () => Promise<ProductBarcodeSummary[]>) => {
     setBusy(true);
@@ -98,16 +120,7 @@ export function BarcodeEditor({
                   variant="ghost"
                   disabled={busy}
                   className="ml-auto text-rose-600"
-                  onClick={() =>
-                    void run(async () => {
-                      const result = await productApi.removeBarcode(
-                        token,
-                        variantId,
-                        barcode.id,
-                      );
-                      return result.items;
-                    })
-                  }
+                  onClick={() => setPendingDelete(barcode)}
                 >
                   Törlés
                 </Button>
@@ -148,6 +161,25 @@ export function BarcodeEditor({
           </Button>
         </form>
       ) : null}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title={
+          pendingDelete
+            ? `Törlöd ezt a vonalkódot: ${pendingDelete.code}?`
+            : "Törlöd ezt a vonalkódot?"
+        }
+        consequence={
+          pendingDelete?.isPrimary
+            ? "Ez az ELSŐDLEGES vonalkód: a törlés után a beolvasása nem találja meg ezt a változatot, és a nyomtatott címkéken lévő kód sem fog működni."
+            : "A törlés után a beolvasása nem találja meg ezt a változatot."
+        }
+        recovery="Nem vonható vissza. Újra felvinni csak akkor lehet, ha a kód megvan valahol -- a terméken vagy egy korábbi címkén."
+        confirmLabel="Végleges törlés"
+        busy={busy}
+        onConfirm={() => void removePending()}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

@@ -65,3 +65,94 @@ describe("megerősítő kérdések", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+/**
+ * A MASIK IRANY: MINDEN TORLO HIVASNAK LEGYEN KERDESE.
+ *
+ * A fenti allitas azt tiltja, hogy a bongeszo ablakat hasznaljuk. Amit NEM
+ * allit: hogy egy torles egyaltalan kerdez-e. Mert nem allitotta, ket hivasi
+ * hely evekig kerdes nelkul torolt (a vonalkod veglegesen, azonnal), es a hiany
+ * csak akkor derult ki, amikor valaki OSSZESZAMOLTA a torlo utakat. Egy
+ * lefedettsegi hianyt nem szabad szamolasra bizni.
+ *
+ * A TORLO METODUSOK LISTAJA NEM KEZZEL TARTOTT: a kliens-fajlokbol olvassuk ki,
+ * azon az alapon, hogy a metodus torzse `method: "DELETE"` kerest kuld. Egy
+ * holnap irt uj torlo vegpont igy MAGATOL bekerul a merésbe -- egy kezzel
+ * tartott lista pont akkor maradna el, amikor a legjobban kellene.
+ */
+const CONFIRM_COMPONENT = /ConfirmDialog/;
+
+/**
+ * AKI SAJAT KERDEST HASZNAL, ES MIERT SZABAD NEKI.
+ *
+ * A partner-torles kerdese ket agra KULONBOZO szoveget mond (fizikai torles
+ * vagy toroltre jeloles), es a tervet a SZERVERTOL keri le, mert a kepernyo
+ * adata elavulhat, amig a kerdes kint van. A kozos komponens ezt a kettot ma
+ * nem tudja; egy "egysegesites" tehat nem javitas lenne, hanem vesztes.
+ */
+const OWN_QUESTION: Record<string, string> = {
+  "src/components/suppliers/partner-delete-button.tsx":
+    "Sajat, ketagú kerdes, a szervertol lekert tervvel.",
+};
+
+/** A torlo kliens-metodusok neve, a lib/api fajlokbol kiolvasva. */
+async function destructiveMethods(): Promise<string[]> {
+  const names = new Set<string>();
+  for await (const entry of glob("src/lib/api/*.ts")) {
+    if (/\.(test|spec)\.ts$/.test(entry)) continue;
+    const source = readFileSync(entry, "utf8");
+    const starts = [...source.matchAll(/\n {2}(\w+)\s*\(/g)];
+    starts.forEach((match, index) => {
+      const from = match.index ?? 0;
+      const to = starts[index + 1]?.index ?? source.length;
+      if (/method:\s*"DELETE"/.test(source.slice(from, to)))
+        names.add(match[1]!);
+    });
+  }
+  return [...names].sort();
+}
+
+describe("torlo hivasok es a kerdes", () => {
+  /**
+   * A KONTROLL. Ha a kiolvasas elromlik, nulla torlo metodust talalna, es a
+   * lefedettsegi allitas ures halmazon menne vegig -- zolden.
+   */
+  it("finds the delete methods in the api clients", async () => {
+    const methods = await destructiveMethods();
+
+    expect(methods.length).toBeGreaterThanOrEqual(5);
+    expect(methods).toContain("removeBarcode");
+    expect(methods).toContain("remove");
+  });
+
+  it("asks before every delete a screen can start", async () => {
+    const methods = await destructiveMethods();
+    const calls = new RegExp(`\\.(?:${methods.join("|")})\\s*\\(`);
+    const files = await sourceFiles();
+
+    const offenders = files.filter((file) => {
+      if (!file.startsWith("src/components/")) return false;
+      const source = readFileSync(file, "utf8");
+      if (!calls.test(source)) return false;
+      if (CONFIRM_COMPONENT.test(source)) return false;
+      return !(file in OWN_QUESTION);
+    });
+
+    expect(offenders).toEqual([]);
+  });
+
+  /**
+   * A FALSZIFIKACIO: egy szandekosan kerdes nelkuli torles alaku forras
+   * ILLESZKEDJEN a mintara. E nelkul a fenti ures lista azt is jelenthetne,
+   * hogy a kereses nem talal semmit.
+   */
+  it("would notice a delete without a question", async () => {
+    const methods = await destructiveMethods();
+    const calls = new RegExp(`\\.(?:${methods.join("|")})\\s*\\(`);
+
+    expect(
+      calls.test("await productApi.removeBarcode(token, id, other);"),
+    ).toBe(true);
+    expect(calls.test("await productApi.list(token);")).toBe(false);
+  });
+});
