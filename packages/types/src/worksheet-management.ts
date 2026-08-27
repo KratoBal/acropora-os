@@ -6,9 +6,13 @@ export type WorksheetVersionStatus =
 export type WorksheetSignatureDecision = "ACCEPTED" | "REJECTED";
 
 /**
- * A partner rövidítése a munkalap-számban (`FANK`). Betűvel kezdődik, mert a
- * szám első tagjának ránézésre partnernek kell látszania, és 2-8 karakter,
- * hogy a szám olvasható maradjon.
+ * A partner rövidítése (`FANK`). A SZÁMBAN MÁR NINCS BENNE (lásd
+ * `formatWorksheetNumber`), de a lezárás továbbra is megköveteli: a rövidítés
+ * egyediségi kulcs két táblán, és a pótlása egyszeri lépés, amit egy már
+ * megírt lap visszamenőleg tesz kétértelművé.
+ *
+ * Betűvel kezdődik és 2-8 karakter: emberi jelölés, a listákban és a
+ * keresésben partnernek kell látszania.
  */
 export const WORKSHEET_PARTNER_CODE_PATTERN = /^[A-Z][A-Z0-9]{1,7}$/;
 
@@ -53,7 +57,7 @@ export function formatWorksheetNumber(parts: WorksheetNumberParts): string {
 }
 
 /**
- * A verzió a számhoz kötött külön tag, nem új szám: `FANK-BIO-2026-001/2`.
+ * A verzió a számhoz kötött külön tag, nem új szám: `BIO-2026-001/2`.
  * Az első verzió a szám maga, per-jel nélkül.
  */
 export function formatWorksheetVersionLabel(
@@ -73,7 +77,7 @@ export interface WorksheetCustomerSummary {
 }
 
 /**
- * A partner alegysége: ugyanaz az entitás adja a szám középső tagját
+ * A partner alegysége: ugyanaz az entitás adja a szám első tagját
  * (`code`) és a lapon megjelenő szöveget (`name`). Nem két fogalom.
  */
 export interface WorksheetDepartmentSummary {
@@ -134,8 +138,9 @@ export interface WorksheetSelectablePartner {
   /** A munkalapé, nem a partneré: ezt küldi a felvitel. */
   customerId: string;
   name: string;
-  /** A munkalapszám első tagja. Kód nélküli partner ide nem kerül be, mert a
-   * nélküle megnyitott lapot nem lehetne lezárni. */
+  /** A partner rövidítése, a választóban megjelenítve. A számban már nincs
+   * benne, de kód nélküli partner ide nem kerül be: a nélküle megnyitott lapot
+   * nem lehetne lezárni. */
   partnerCode: string;
 }
 
@@ -200,7 +205,7 @@ export interface WorksheetSignatureDetail {
 export interface WorksheetVersionSummary {
   id: string;
   version: number;
-  /** `FANK-BIO-2026-001/2`, illetve `null` amíg a lap piszkozat. */
+  /** `BIO-2026-001/2`, illetve `null` amíg a lap piszkozat. */
   label: string | null;
   status: WorksheetVersionStatus;
   changeReason: string | null;

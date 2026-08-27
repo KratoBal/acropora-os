@@ -442,8 +442,8 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
               Szerviz
             </label>
           </div>
-          {/* Only shown for a service partner: it is the worksheet number's
-              first segment, and a partner we only buy from never gets a
+          {/* Only shown for a service partner: closing a worksheet requires the
+              abbreviation, and a partner we only buy from never gets a
               worksheet. Not required, on purpose -- ticking "Szerviz" should
               not turn into "invent an abbreviation right now". The worksheet
               picker leaves partners without a code out instead, so the gap
@@ -452,7 +452,7 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
             <div className="mt-4 sm:w-1/2">
               <FormField
                 label="Partnerkód"
-                description="A munkalapszám első tagja, pontosan négy karakter (például FANK). Munkalap csak akkor írható a partnernek, ha ez ki van töltve."
+                description="A partner rövidítése, pontosan négy karakter (például FANK). Munkalap csak akkor írható a partnernek, ha ez ki van töltve."
               >
                 <Input
                   aria-label="Partnerkód"
@@ -482,14 +482,14 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
         {/* Only for a partner that already exists: a unit hangs off the
             partner, and until the partner is saved there is nothing to hang it
             on. Only for a service partner, because a unit gives the worksheet
-            number its middle segment, and a partner we only buy from never
+            number its first segment, and a partner we only buy from never
             gets a worksheet. */}
         {supplier && isService ? (
           <Card className="p-6">
             <h2 className="font-semibold">Alegységek</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Az alegység kódja a munkalapszám középső tagja (például a BIO a
-              FANK-BIO-2026-001 számban).
+              Az alegység kódja a munkalapszám első tagja (például a BIO a
+              BIO-2026-001 számban).
             </p>
             {unitError ? (
               <Alert variant="danger" title="Hiba" description={unitError} />

@@ -22,7 +22,8 @@ export interface ServicePartnerListItem {
   name: string;
   isService: boolean;
   isSupplier: boolean;
-  /** A munkalapszám első szakasza (`FANK`). Hiányozhat, amíg senki nem tölti ki. */
+  /** A partner rövidítése (`FANK`). A munkalapszámban már nincs benne, de a
+   * lezárás megköveteli. Hiányozhat, amíg senki nem tölti ki. */
   worksheetPartnerCode?: string;
   phone?: string;
   email?: string;

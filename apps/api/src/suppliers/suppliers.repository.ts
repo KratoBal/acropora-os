@@ -86,8 +86,8 @@ export async function assertPartnerCodeFree(
 
 /**
  * A worksheet belongs to a customer in three places -- the sheet, the unit and
- * the number's first segment -- so a service partner is given a customer row of
- * its own to carry them. The row is the partner's, not a buyer's: it is created
+ * the abbreviation the close path requires -- so a service partner is given a
+ * customer row of its own to carry them. The row is the partner's, not a buyer's: it is created
  * here rather than typed in, so a partner is still recorded once, by hand, in
  * one place, and the customer list leaves these rows out.
  *
@@ -211,7 +211,7 @@ export class SuppliersRepository extends Repository {
   }
 
   /**
-   * A partner alegységei. Az alegység a munkalapon a szám középső tagját adja,
+   * A partner alegységei. Az alegység a munkalapon a szám első tagját adja,
    * és a sémában a VEVŐHÖZ tartozik -- egy szerviz partner alegységei tehát a
    * tükör-során lógnak.
    *
