@@ -92,7 +92,7 @@ export class WorksheetContentDto {
   @IsString() @MinLength(1) @MaxLength(500) subject!: string;
   // Az alegység NEM része a beküldött tartalomnak: a munkalap alegységéből
   // másolódik a verzióra. Egy külön szerkeszthető szövegmező mellett a szám
-  // középső tagja és a lapon látható egység elcsúszhatna egymástól, pedig
+  // első tagja és a lapon látható egység elcsúszhatna egymástól, pedig
   // ez egy fogalom.
   @IsString() @MaxLength(4000) @IsOptional() description?: string | null;
   @IsISO8601() @IsOptional() issueDate?: string | null;
@@ -145,6 +145,18 @@ export class SignWorksheetVersionDto {
 }
 
 export class CreateWorksheetDepartmentDto {
+  /**
+   * A SZULO HELYSZIN, ha van. Hianyzo ertek = a fa legfelso szintje.
+   *
+   * A szulo ellenorzese NEM itt tortenik: hogy a megadott azonosito UGYANAHHOZ
+   * a partnerhez tartozik-e, csak az adatbazis tudja megmondani, es a
+   * repository meg is kerdezi. Egy masik partner helyszine ala akasztott
+   * alegyseg a munkalapszamot vinne rossz helyre.
+   */
+  @IsOptional()
+  @IsString({ message: "A szülő helyszín azonosítója hibás." })
+  parentId?: string;
+
   @Matches(/^[A-Za-z]{1,3}$/, {
     message: "Az alegység kódja legfeljebb három betű lehet (pl. BIO).",
   })

@@ -306,7 +306,21 @@ FROM node:${NODE_VERSION}-alpine AS runner
 # defense-in-depth rather than a fix for a known bug — cheap to include,
 # and removes a whole class of "container won't stop cleanly" issues if a
 # future dependency ever forks a child process.
-RUN apk add --no-cache libc6-compat openssl tini \
+#
+# UGYANAZ A GYORSITOTAR-CSAPDA, MINT A WEB KEPENEL, csak itt eddig nem latszott.
+# Ez a kep azert maradt zold 2026-08-27-en, mert az `openssl` telepitese friss
+# libcrypto3/libssl3 csomagot huz be -- de csak akkor, ha ez a RUN tenylegesen
+# lefut. Gyorsitotar-talalat eseten ugyanaz a regi konyvtar marad benne, mint a
+# webnel, es a verzio nem a kodtol fugg, hanem a talalattol. A verziozatlan
+# `apk add` mindig "ami eppen aktualis" jelentesu, tehat minden ilyen sor a
+# build idejetol fugg; a kepbe viszont csak EBBEN a szakaszban telepitett
+# csomagok kerulnek bele, ezert all az ellenszer itt.
+#
+# A reszletes indoklas (miert nem verzio-rogzites) az apps/web/Dockerfile-ban
+# all, ugyanennel a lepesnel.
+ARG OS_PATCH_EPOCH=local
+RUN echo "OS patch epoch: ${OS_PATCH_EPOCH}" \
+  && apk add --no-cache libc6-compat openssl tini \
   && addgroup -g 1001 -S nodejs \
   && adduser -S -u 1001 -G nodejs nestjs
 

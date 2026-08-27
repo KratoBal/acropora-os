@@ -339,7 +339,7 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
         </FormField>
         <FormField
           label="Alegység"
-          description="A munkalapszám középső tagja is ebből lesz."
+          description="A munkalapszám első tagja is ebből lesz."
         >
           <Select
             aria-label="Alegység"

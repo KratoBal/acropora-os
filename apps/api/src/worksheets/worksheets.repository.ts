@@ -12,6 +12,10 @@ import {
   type WorksheetVersionStatus,
 } from "@acropora/types";
 
+import {
+  assertPartnerCodeNeverNumbered,
+  assertPartnerCodeUnlocked,
+} from "../suppliers/partner-code-numbers.js";
 import type {
   CreateWorksheetDepartmentDto,
   WorksheetListQueryDto,
@@ -58,7 +62,7 @@ type TransactionClient = Prisma.TransactionClient;
 /**
  * Az alegység neve nem a beküldött tartalomból jön, hanem a munkalap
  * alegységéből, a kiírás pillanatában. Így a lapon látható egység és a szám
- * középső tagja ugyanaz a sor, egy későbbi átnevezés viszont nem írja át
+ * első tagja ugyanaz a sor, egy későbbi átnevezés viszont nem írja át
  * visszamenőleg a már lezárt verziót.
  */
 function versionContentData(
@@ -114,41 +118,99 @@ export class WorksheetsRepository extends Repository {
     });
   }
 
+  /**
+   * A MÁSODIK ÍRÁSI ÚT UGYANARRA AZ OSZLOPRA, ezért itt is állnak a
+   * rövidítés-szabályok, nem csak a partner képernyő mentési ágában. A partner
+   * oldalán a `Supplier` sor íródik és a tükör követi; itt közvetlenül a
+   * vevő-sor. Ha a tiltás csak az egyik úton áll, akkor nem szabály, hanem
+   * kényelmetlenség: ezen a végponton (`PUT customers/:customerId/partner-code`)
+   * pontosan az történne meg, amit ott megakadályozunk.
+   *
+   * Tranzakcióban, mert az ellenőrzés és az írás csak együtt ér valamit: két
+   * párhuzamos hívás között a kiolvasott állapot elavul.
+   */
   async setPartnerCode(customerId: string, partnerCode: string) {
-    return this.database.customer.update({
-      where: { id: customerId },
-      data: { worksheetPartnerCode: partnerCode },
-      select: {
-        id: true,
-        customerNumber: true,
-        displayName: true,
-        worksheetPartnerCode: true,
-      },
+    return this.database.$transaction(async (transaction) => {
+      const existing = await transaction.customer.findUniqueOrThrow({
+        where: { id: customerId },
+        select: { worksheetPartnerCode: true },
+      });
+      if (existing.worksheetPartnerCode !== partnerCode) {
+        if (existing.worksheetPartnerCode)
+          await assertPartnerCodeUnlocked(
+            transaction,
+            existing.worksheetPartnerCode,
+          );
+        await assertPartnerCodeNeverNumbered(transaction, partnerCode);
+      }
+      return transaction.customer.update({
+        where: { id: customerId },
+        data: { worksheetPartnerCode: partnerCode },
+        select: {
+          id: true,
+          customerNumber: true,
+          displayName: true,
+          worksheetPartnerCode: true,
+        },
+      });
     });
   }
 
   async departments(
     customerId: string,
   ): Promise<WorksheetDepartmentListResponse> {
+    // Laposan, a fat a hivo epiti a parentId mezobol -- ugyanaz az alak, mint a
+    // partner menu oldalan (SuppliersRepository.units).
     const items = await this.database.worksheetDepartment.findMany({
       where: { customerId },
-      select: { id: true, code: true, name: true, isActive: true },
-      orderBy: { code: "asc" },
+      select: {
+        id: true,
+        parentId: true,
+        code: true,
+        name: true,
+        isActive: true,
+      },
+      orderBy: [{ parentId: "asc" }, { code: "asc" }],
     });
     return { items };
   }
 
+  /**
+   * A MASODIK AJTO UGYANARRA A TABLARA. A partner menu oldalan
+   * `SuppliersRepository.createUnit` ir ide, innen pedig a munkalap-kepernyo.
+   * A ket ut szandekosan kulon all (ott partner-, itt vevo-azonositobol
+   * indul), de amit ENGEDNEK, annak egyeznie kell -- kulonben az egyik ajton
+   * be lehet vinni olyat, amit a masik tilt.
+   */
   async createDepartment(
     customerId: string,
     input: CreateWorksheetDepartmentDto,
   ): Promise<WorksheetDepartmentSummary> {
+    // A szulo ugyanahhoz a vevohoz tartozzon: az idegen kulcs csak a letezest
+    // nezi, a tulajdonost nem.
+    const parentId = input.parentId?.trim() || null;
+    if (parentId) {
+      const parent = await this.database.worksheetDepartment.findFirst({
+        where: { id: parentId, customerId },
+        select: { id: true },
+      });
+      if (!parent) throw new Error("WORKSHEET_DEPARTMENT_PARENT_NOT_FOUND");
+    }
+
     return this.database.worksheetDepartment.create({
       data: {
         customerId,
+        parentId,
         code: input.code.trim().toUpperCase(),
         name: input.name.trim(),
       },
-      select: { id: true, code: true, name: true, isActive: true },
+      select: {
+        id: true,
+        parentId: true,
+        code: true,
+        name: true,
+        isActive: true,
+      },
     });
   }
 
@@ -163,10 +225,25 @@ export class WorksheetsRepository extends Repository {
    * Four conditions, and the middle two are the point.
    *
    * A partner with no code could be picked, worked on, and then refuse to
-   * close -- the number cannot be built without its first segment. The
-   * technician would be standing in front of the customer when that came out,
-   * and it is not something they can fix. So the pressure sits here, on the
-   * list, where the gap is visible to whoever can close it.
+   * close: the close path still requires the abbreviation, even though the
+   * number stopped carrying it. The technician would be standing in front of
+   * the customer when that came out, and it is not something they can fix. So
+   * the pressure sits here, on the list, where the gap is visible to whoever
+   * can close it.
+   *
+   * Why it is still required once the number does not contain it: the
+   * abbreviation is a uniqueness key across two tables, and filling it in
+   * later is a one-off step. A key supplied after the fact is not the same as
+   * a field filled in later -- by then a worksheet may already point at the
+   * partner, and "which partner carries this abbreviation" turns ambiguous in
+   * retrospect. The condition is an ORDER rather than a restriction: the
+   * partner is finished first, then it can have sheets.
+   *
+   * This is the FIRST of two gates on the same condition. The second sits in
+   * the close path and catches what got here by another route -- old data, a
+   * manual edit, a later import that does not write through this picker. They
+   * are not copies of each other, and neither should be removed as a
+   * duplicate.
    *
    * A partner with no mirror row has no worksheets to belong to. It cannot
    * happen for a service partner saved through the partner screen, which
@@ -523,6 +600,28 @@ export class WorksheetsRepository extends Repository {
 
       const partnerCode = worksheet.customer.worksheetPartnerCode;
       const departmentCode = worksheet.department.code;
+      /**
+       * MÁSODIK KAPU UGYANARRA A FELTÉTELRE, ÉS NEM FELESLEGES ISMÉTLÉS.
+       *
+       * Az ELSŐ kapu a választó szűrője (`selectablePartnerWhere`): rövidítés
+       * nélküli partnerhez el sem lehet INDÍTANI lapot, tehát az a lap
+       * LÉTREJÖTTÉT akadályozza meg. Ez itt azt fogja meg, ami MÁS ÚTON jutott
+       * idáig: a szűrő előttről maradt régi adat, kézi beavatkozás az
+       * adatbázisban, vagy egy későbbi import, ami nem a választón keresztül
+       * ír. Két kapu ugyanarra akkor indokolt, ha a második más úton érkező
+       * esetet fog meg -- itt ez áll fenn, tehát egyiket sem szabad
+       * "duplikáció" címén kivenni.
+       *
+       * ÉS AMIÉRT A RÖVIDÍTÉS AKKOR IS FELTÉTEL, AMIKOR MÁR NEM TAGJA A
+       * SZÁMNAK: egyediségi kulcs két táblán (`Supplier.worksheetPartnerCode`
+       * és a tükör vevő-sor ugyanilyen oszlopa), a pótlása pedig egyszeri
+       * lépés. Egy kulcs, amit később kell pótolni, nem ugyanaz, mint egy
+       * mező, amit később kell kitölteni: a pótlás pillanatában már létezhet
+       * a partnerre hivatkozó lap, és onnantól a "melyik partner viseli ezt a
+       * rövidítést" kérdés visszamenőleg kétértelmű. A feltétel tehát nem
+       * korlátozás, hanem SORREND: előbb legyen kész a partner, aztán legyen
+       * lapja.
+       */
       if (!worksheet.number) {
         const issue = worksheetNumberIssue({ partnerCode, departmentCode });
         if (issue) return { ok: false, reason: issue } as const;
@@ -541,12 +640,7 @@ export class WorksheetsRepository extends Repository {
 
       if (!worksheet.number && partnerCode) {
         const year = worksheetYear(now);
-        const sequence = await this.allocateSequence(
-          transaction,
-          partnerCode,
-          departmentCode,
-          year,
-        );
+        const sequence = await this.allocateSequence(transaction, year);
         const allocated = buildWorksheetNumber({
           partnerCode,
           departmentCode,
@@ -922,6 +1016,19 @@ export class WorksheetsRepository extends Repository {
   }
 
   /**
+   * EGY SZÁMLÁLÓ ÉVENKÉNT, az egész cégre -- nem partner/részleg/év hármasonként.
+   *
+   * A szám 2026-08-27 óta nem hordozza a partner rövidítését, tehát az
+   * egyediségét a SOROZAT adja, nem a kód megválasztása. Partnerenkénti
+   * számlálóval két különböző partner azonos kódú egysége ugyanabban az évben
+   * ugyanazt a számot kapná, és a második lap LEZÁRÁSA hasalna el a
+   * `Worksheet.number` egyediségén -- a felhasználó előtt.
+   *
+   * AMI VÁLTOZATLAN: a sorszám a LEZÁRÁSKOR keletkezik és ugyanabban a
+   * tranzakcióban nő, tehát az eldobott piszkozat nem használ el számot, és a
+   * sorozat hézagmentes marad. A hiánytalanság EGY sorozatra vonatkozik, és
+   * mostantól az az egy sorozat a cég éves sorozata.
+   *
    * Az `updatedAt` itt is `(NOW() AT TIME ZONE 'utc')`, nem csupasz `NOW()`:
    * az oszlop időzóna nélküli, és a Prisma UTC-t ír bele, a csupasz `NOW()`
    * viszont a SZERVER időzónájában áll elő. Ezen az egy helyen csak
@@ -931,18 +1038,16 @@ export class WorksheetsRepository extends Repository {
    */
   private async allocateSequence(
     transaction: TransactionClient,
-    partnerCode: string,
-    departmentCode: string,
     year: number,
   ): Promise<number> {
     const rows = await transaction.$queryRaw<Array<{ lastValue: number }>>(
       Prisma.sql`
-        INSERT INTO "WorksheetNumberSequence"
-          ("id", "partnerCode", "departmentCode", "year", "lastValue", "updatedAt")
-        VALUES (${randomUUID()}, ${partnerCode}, ${departmentCode}, ${year}, 1, (NOW() AT TIME ZONE 'utc'))
-        ON CONFLICT ("partnerCode", "departmentCode", "year")
+        INSERT INTO "WorksheetYearSequence"
+          ("id", "year", "lastValue", "updatedAt")
+        VALUES (${randomUUID()}, ${year}, 1, (NOW() AT TIME ZONE 'utc'))
+        ON CONFLICT ("year")
         DO UPDATE SET
-          "lastValue" = "WorksheetNumberSequence"."lastValue" + 1,
+          "lastValue" = "WorksheetYearSequence"."lastValue" + 1,
           "updatedAt" = (NOW() AT TIME ZONE 'utc')
         RETURNING "lastValue"
       `,

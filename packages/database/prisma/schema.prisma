@@ -888,16 +888,23 @@ model Supplier {
   /// default: an existing row was never recorded as one, and guessing would
   /// put companies in front of the service staff that nobody put there.
   isService            Boolean   @default(false)
-  /// The partner's abbreviation, and the worksheet number's first segment
-  /// (`FANK` in `FANK-BIO-2026-001`). Four characters, because the number has
-  /// to say at a glance whose sheet it is, and a segment of varying length
-  /// makes two numbers hard to compare.
+  /// The partner's abbreviation (`FANK`). It used to be the worksheet number's
+  /// first segment; since 2026-08-27 the number does not carry it, and the
+  /// sheet's title is what names the partner.
+  ///
+  /// It is still required before a sheet can be closed, because it is a
+  /// uniqueness key across two tables and supplying it later is a one-off
+  /// step: by then a worksheet may already point at the partner, and "which
+  /// partner carries this abbreviation" turns ambiguous in retrospect.
+  ///
+  /// Four characters, so that the abbreviation reads the same everywhere it is
+  /// shown -- a code of varying length makes two partners hard to compare in a
+  /// list.
   ///
   /// Narrower than the customer side's `VarChar(8)` on purpose: that column
   /// already holds data and is not being narrowed, but a new column with room
   /// to spare would make "four characters" a habit rather than a rule, and the
-  /// first five-character code would quietly change the shape of every number
-  /// written afterwards.
+  /// first five-character code would arrive without anyone deciding it.
   ///
   /// Null until someone fills it in. A partner can be marked as a service
   /// partner without one -- ticking a box should not turn into a decision at
@@ -907,8 +914,9 @@ model Supplier {
   /// The customer row that carries this partner's worksheets.
   ///
   /// A worksheet hangs off a customer in three places -- the sheet, the unit
-  /// (`WorksheetDepartment.customerId`) and the number's first segment
-  /// (`Customer.worksheetPartnerCode`) -- so letting a worksheet belong to a
+  /// (`WorksheetDepartment.customerId`) and the abbreviation the close path
+  /// requires (`Customer.worksheetPartnerCode`) -- so letting a worksheet
+  /// belong to a
   /// supplier directly would mean two polymorphic relations, two constraints
   /// Prisma cannot express, and a partner code that has to be unique ACROSS
   /// two tables. The mirror row keeps all of that untouched.
@@ -1500,11 +1508,13 @@ model Customer {
   type                  CustomerType
   displayName           String
   companyName           String?
-  /// A munkalap-számozás partner-tagja (pl. `FANK`). Azért egyedi, mert a
-  /// szám ránézésre kell hogy megmondja, melyik partnerről van szó: két
-  /// azonos rövidítés esetén a `FANK-BIO-2026-001` már nem azonosít. Amíg
-  /// nincs kitöltve, ehhez a vevőhöz munkalap nem zárható le - a hiányzó
-  /// tagtól kétféle alakú szám keletkezne.
+  /// A partner rövidítése (pl. `FANK`), a szerviz partner tükör-során. A
+  /// munkalap-szám 2026-08-27 óta NEM hordozza, a lezárás viszont továbbra is
+  /// megköveteli: a rövidítés egyediségi kulcs két táblán (itt és a
+  /// `Supplier` során), és a pótlása egyszeri lépés. Ha a pótlás pillanatában
+  /// már létezik a partnerre hivatkozó lap, a "melyik partner viselte ezt a
+  /// rövidítést" kérdés visszamenőleg válik kétértelművé. Amíg nincs
+  /// kitöltve, ehhez a vevőhöz munkalap nem zárható le.
   worksheetPartnerCode  String?      @unique @db.VarChar(8)
   taxNumber             String?
   email                 String?
@@ -2230,30 +2240,71 @@ model ServiceJobAsset {
 
 /// A partner egy alegysége (pl. a Fánk „PP Üzemeltetés" vagy „Biodóm"
 /// egysége). Ez EGY fogalom, nem kettő: ugyanaz a sor adja a munkalap-szám
-/// középső tagját (`BIO`) és a lapon megjelenő szöveget (`Biodóm`) is
-/// (Balázs döntése, megerősítve 2026-08-18 00:56, Discord). A kód
-/// partneren belül egyedi, mert a
-/// számláló partner + alegység + év hármasonként fut: azonos kód ugyanabban
-/// az évben két sorozatot mosna össze.
+/// első tagját (`BIO`) és a lapon megjelenő szöveget (`Biodóm`) is
+/// (Balázs döntése, megerősítve 2026-08-18 00:56, Discord).
+///
+/// A kód PARTNEREN BELÜL egyedi, és ez azóta is így van, hogy a számláló
+/// évenként egy sorozatot visz az egész cégre (`WorksheetYearSequence`):
+/// a partneren belüli egyediség attól kell, hogy a partner lapjain a `BIO`
+/// egyetlen egységet jelentsen. A SZÁM egyediségét viszont nem ez adja, hanem
+/// a sorozat - két partner `BIO` egysége nyugodtan létezhet egyszerre.
 model WorksheetDepartment {
   id         String   @id @default(cuid())
   customerId String
+  /// A FA SZULOJE. `null` a legfelso szinten, ami ma az EGYETLEN szint: a
+  /// meglevo sorok mind ilyenek maradnak, tehat a lapos lista a fa elso
+  /// szintje lesz, adatvesztes es atszamozas nelkul.
+  parentId   String?
   code       String   @db.VarChar(3)
   name       String
   isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  customer   Customer              @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  parent     WorksheetDepartment?  @relation("WorksheetDepartmentTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children   WorksheetDepartment[] @relation("WorksheetDepartmentTree")
   worksheets Worksheet[]
 
-  @@unique([customerId, code])
+  /// TESTVEREK KOZOTT EGYEDI A KOD. Ket kulonbozo ag alatt ugyanaz a kod
+  /// (`BIO`) megengedett es termeszetes, egy szulon belul viszont nem.
+  ///
+  /// EZ A MEGKOTES A LEGFELSO SZINTRE NEM ER: a Postgresben a NULL nem egyenlo
+  /// onmagaval, tehat ket gyoker-sor azonos koddal ATMENNE rajta. A mai
+  /// garanciat ezert egy RESZLEGES egyedi index tartja meg
+  /// (`WorksheetDepartment_customer_root_code_key`, `WHERE "parentId" IS
+  /// NULL`), amit a Prisma sema nem tud kifejezni, ezert a migracioban all
+  /// nyers SQL-kent. A ketto egyutt adja azt, amit eddig egy megkotes adott.
+  @@unique([customerId, parentId, code])
   @@index([customerId, isActive])
+  @@index([parentId])
 }
 
 /// A munkalap-sorszám számlálója partner + részleg + év hármasonként.
 ///
 /// Szándékosan tábla és nem PostgreSQL szekvencia: a `nextval` a
+/// A MUNKALAPSZÁM SOROZATA: EGY SZÁMLÁLÓ ÉVENKÉNT, az egész cégre.
+///
+/// A szám 2026-08-27 óta nem hordozza a partner rövidítését (a lap címe már
+/// azonosítja), tehát az egyediséget nem a kód megválasztása adja, hanem MAGA
+/// A SOROZAT. Ha a számláló partnerenként futna tovább, két különböző partner
+/// azonos kódú egysége ugyanabban az évben ugyanazt a számot kapná, és a
+/// második lap LEZÁRÁSA hasalna el a `Worksheet.number` egyediségén.
+///
+/// KÜLÖN TÁBLA, ÉS NEM A RÉGI KÉT KÓDMEZŐJE NULLÁZHATÓVÁ TÉVE. Az a kézenfekvő
+/// alak ugyanaz a csapda lenne, mint a helyszín-fánál: a Postgresben a NULL nem
+/// egyenlő önmagával, tehát a `@@unique` a globális soron NEM érne semmit, és
+/// két párhuzamos lezárás két számláló-sort hozna létre ugyanarra az évre.
+///
+/// A régi `WorksheetNumberSequence` érintetlen marad: a benne álló kurzorok a
+/// RÉGI, partneres sorozatokat írják le, és azok visszakereshetők maradnak.
+model WorksheetYearSequence {
+  id        String   @id @default(cuid())
+  year      Int      @unique
+  lastValue Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
+
 /// tranzakció visszagörgetésekor sem adja vissza a kiosztott értéket, tehát
 /// hézagot hagy. A munkalapnál a hiánytalanság könyvelési követelmény, ezért
 /// a számláló ugyanabban a tranzakcióban nő, mint amelyikben a lezárás
@@ -2279,12 +2330,14 @@ model WorksheetNumberSequence {
 /// eldobott piszkozat kilyukasztaná a sorozatot, és a hiányzó sorszámot
 /// utólag senki nem tudná megmagyarázni a könyvelésnek.
 ///
-/// A vevő és a részleg a lezárás után nem módosítható, mert mindkettő a
-/// kiosztott szám része: cseréjük a számot érvénytelenítené, a szám pedig
-/// verziók között sem változik.
+/// A vevő és a részleg a lezárás után nem módosítható. A RÉSZLEG azért, mert
+/// a kiosztott szám első tagja, tehát cseréje a számot érvénytelenítené, a
+/// szám pedig verziók között sem változik. A VEVŐ azért, mert a lap kiléte
+/// hozzá van kötve: a szám 2026-08-27 óta nem hordozza, de egy lezárt lapot
+/// másik partnerre átírni nem javítás, hanem egy másik lap.
 model Worksheet {
   id                   String  @id @default(cuid())
-  /// Teljes, emberi olvasású szám (`FANK-BIO-2026-001`) - csak lezárt lapnál.
+  /// Teljes, emberi olvasású szám (`BIO-2026-001`) - csak lezárt lapnál.
   number               String? @unique
   /// A sorozat éve és a sorszám nyers értéke, hogy a hiánytalanság
   /// ellenőrzéséhez ne kelljen szöveget visszafejteni.
@@ -2360,7 +2413,7 @@ model WorksheetAssignee {
 /// Egy munkalap egy változata, teljes tartalommal. A módosítás nem írja át a
 /// lezárt lapot, hanem új verziót hoz létre; a korábbi verzió változatlanul
 /// megmarad, megnyithatóan és nyomtathatóan. A szám nem változik, a verzió
-/// külön tag: `FANK-BIO-2026-001/2`.
+/// külön tag: `BIO-2026-001/2`.
 ///
 /// A `changeReason` az 1. verziónál `null`, minden továbbinál kötelező - a
 /// napló üres indoklással nem ér semmit. Az, hogy MIT változott, nem külön

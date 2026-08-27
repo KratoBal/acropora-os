@@ -125,9 +125,16 @@ describe(
         await prisma.worksheet.deleteMany({
           where: { customerId: { in: customerIds } },
         });
-        await prisma.worksheetDepartment.deleteMany({
-          where: { customerId: { in: customerIds } },
-        });
+        // A HELYSZINEK FAT ALKOTNAK, ES A SZULORE `Restrict` all, tehat egy
+        // egyetlen deleteMany a SORRENDTOL fuggoen elhasalhat: ha a szulo sora
+        // elobb kerul sorra, mint a gyerekeje, a megkotes megallitja. Ezert
+        // levelrol gyoker fele haladunk, amig fogy a fa.
+        for (;;) {
+          const removed = await prisma.worksheetDepartment.deleteMany({
+            where: { customerId: { in: customerIds }, children: { none: {} } },
+          });
+          if (removed.count === 0) break;
+        }
         await prisma.customer.deleteMany({
           where: { id: { in: customerIds } },
         });
@@ -170,6 +177,98 @@ describe(
       return row;
     }
 
+    /**
+     * A HELYSZINEK FAT ALKOTNAK, es a fa ket szabalya ADATBAZIS-SZINTU:
+     * mockkal egyik sem bizonyithato, mert mindketto index.
+     *
+     * Az elso a testver-szabaly. A masodik az, ami CSENDBEN elveszett volna a
+     * fa bevezetesekor: a Postgresben a NULL nem egyenlo onmagaval, tehat a
+     * (customerId, parentId, code) megkotes a LEGFELSO szinten nem er semmit
+     * -- pont azon a szinten, ahol ma az OSSZES sor all. Ezt egy reszleges
+     * egyedi index tartja meg (WHERE "parentId" IS NULL), amit a Prisma sema
+     * nem tud kifejezni, ezert a migracioban all nyers SQL-kent.
+     */
+    describe("a helyszin-fa megkotesei", () => {
+      it("refuses two roots with the same code under one partner", async () => {
+        await repository.createDepartment(customerId, {
+          code: "ROT",
+          name: "Gyoker",
+        });
+
+        await assert.rejects(() =>
+          repository.createDepartment(customerId, {
+            code: "ROT",
+            name: "Masik gyoker",
+          }),
+        );
+      });
+
+      it("refuses two siblings with the same code, and allows it under another branch", async () => {
+        const left = await repository.createDepartment(customerId, {
+          code: "LFT",
+          name: "Bal ag",
+        });
+        const right = await repository.createDepartment(customerId, {
+          code: "RGT",
+          name: "Jobb ag",
+        });
+
+        await repository.createDepartment(customerId, {
+          parentId: left.id,
+          code: "MED",
+          name: "Medence",
+        });
+
+        // Ugyanaz a kod, ugyanaz a szulo: nem mehet.
+        await assert.rejects(() =>
+          repository.createDepartment(customerId, {
+            parentId: left.id,
+            code: "MED",
+            name: "Masik medence",
+          }),
+        );
+
+        // Ugyanaz a kod, MASIK ag alatt: mehet, es ez a fa lenyege.
+        const other = await repository.createDepartment(customerId, {
+          parentId: right.id,
+          code: "MED",
+          name: "Medence a masik agon",
+        });
+        assert.equal(other.parentId, right.id);
+      });
+
+      /**
+       * A SZULO TULAJDONOSA. Az idegen kulcs csak azt nezi, hogy a sor
+       * letezik-e; hogy KIE, azt nem. Egy masik partner helyszine ala
+       * akasztott alegyseg a munkalapszamot vinne rossz helyre, es a
+       * feluleten nem is latszana, mert az a sajat fajat mutatja.
+       */
+      it("refuses a parent that belongs to another partner", async () => {
+        const stranger = await prisma.customer.create({
+          data: {
+            customerNumber: `${TEST_CUSTOMER_PREFIX}STRANGER-${suffix}`,
+            type: "COMPANY",
+            displayName: "Idegen partner",
+          },
+          select: { id: true },
+        });
+        const strangerRoot = await repository.createDepartment(stranger.id, {
+          code: "STR",
+          name: "Idegen helyszin",
+        });
+
+        await assert.rejects(
+          () =>
+            repository.createDepartment(customerId, {
+              parentId: strangerRoot.id,
+              code: "SUB",
+              name: "Alegyseg",
+            }),
+          /WORKSHEET_DEPARTMENT_PARENT_NOT_FOUND/,
+        );
+      });
+    });
+
     it("leaves a draft without a number", async () => {
       const id = await createDraft(bioDepartmentId);
       const row = await numberOf(id);
@@ -184,8 +283,13 @@ describe(
       assert.deepEqual(result, { ok: true });
 
       const row = await numberOf(id);
-      assert.equal(row.number, `${partnerCode}-BIO-${year}-001`);
-      assert.equal(row.sequence, 1);
+
+      // A SORSZÁM MÁR NEM ABSZOLÚT. A számláló évenként EGY, az egész cégre,
+      // tehát nem indul újra minden futásnál: az alak mérhető, a konkrét
+      // érték nem. Egy `-001`-re kötött állítás a MÁSODIK futáson bukna el,
+      // és nem a kód miatt.
+      assert.match(row.number ?? "", new RegExp(`^BIO-${year}-\\d{3,}$`));
+      assert.ok((row.sequence ?? 0) >= 1);
 
       const version = await prisma.worksheetVersion.findFirstOrThrow({
         where: { worksheetId: id },
@@ -196,25 +300,52 @@ describe(
     });
 
     it("does not spend a sequence number on a draft that is never closed", async () => {
-      // A korábbi teszt piszkozata (szám nélkül) nem foglalhatta le a 002-t.
+      // A HIÁNYTALANSÁG ÁLLÍTÁSA RELATÍV, nem abszolút: az eldobott piszkozat
+      // nem használhat el sorszámot, tehát a KÖVETKEZŐ lezárás pontosan
+      // EGGYEL nagyobb számot kap az előzőnél. Ez akkor is igaz, ha a
+      // sorozat egy korábbi futásból már előrébb jár.
+      const before = await createDraft(bioDepartmentId);
+      await repository.close(before, actorUserId, new Date());
+      const previous = (await numberOf(before)).sequence ?? 0;
+
       const abandoned = await createDraft(bioDepartmentId);
       const closed = await createDraft(bioDepartmentId);
       await repository.close(closed, actorUserId, new Date());
 
       assert.equal((await numberOf(abandoned)).number, null);
-      assert.equal(
-        (await numberOf(closed)).number,
-        `${partnerCode}-BIO-${year}-002`,
-      );
+      assert.equal((await numberOf(closed)).sequence, previous + 1);
     });
 
-    it("runs a separate counter per partner, department and year", async () => {
-      const id = await createDraft(ppuDepartmentId);
-      await repository.close(id, actorUserId, new Date());
-      assert.equal(
-        (await numberOf(id)).number,
-        `${partnerCode}-PPU-${year}-001`,
-      );
+    /**
+     * EZ AZ ÁLLÍTÁS ÚJRA LETT FOGALMAZVA, NEM JAVÍTVA (2026-08-27).
+     *
+     * Korábban azt mérte, hogy a számláló partner/részleg/év hármasonként
+     * KÜLÖN fut. Az a szerkezet megszűnt: a szám nem hordozza a partner
+     * rövidítését, tehát az egyediségét a SOROZAT adja, és egy számláló fut
+     * évenként, az egész cégre. A régi állítás tehát nem hibás lett, hanem
+     * TÁRGYTALAN -- egy megváltozott szabály alatt "javítva" a RÉGI szabályt
+     * fagyasztotta volna vissza.
+     *
+     * Amit helyette mér, és ami az új szerkezetben a lényeg: két KÜLÖNBÖZŐ
+     * egység lapja NEM kap azonos sorszámot. Ez az a hiba, ami a partneres
+     * számlálóval a lezáráskor jelentkezett volna, a felhasználó előtt.
+     */
+    it("runs ONE counter for the whole year, across units", async () => {
+      const first = await createDraft(ppuDepartmentId);
+      await repository.close(first, actorUserId, new Date());
+      const second = await createDraft(bioDepartmentId);
+      await repository.close(second, actorUserId, new Date());
+
+      const firstNumber = (await numberOf(first)).number;
+      const secondNumber = (await numberOf(second)).number;
+
+      // Más egység, más sorszám -- a sorozat közös.
+      assert.match(firstNumber ?? "", new RegExp(`^PPU-${year}-\\d{3,}$`));
+      assert.match(secondNumber ?? "", new RegExp(`^BIO-${year}-\\d{3,}$`));
+
+      const sequenceOf = (value: string | null) =>
+        Number(value?.split("-").at(-1));
+      assert.notEqual(sequenceOf(firstNumber), sequenceOf(secondNumber));
     });
 
     it("copies the sub-unit name onto the version and keeps it after a rename", async () => {
@@ -229,7 +360,7 @@ describe(
       assert.equal(closed.unitName, "Biodóm");
 
       // Az alegység átnevezése nem írhatja át visszamenőleg azt, ami egy
-      // lezárt lapon áll: a szám középső tagja és a lapon látható szöveg
+      // lezárt lapon áll: a szám első tagja és a lapon látható szöveg
       // ugyanabból a sorból jön, de a lezárt verzió a saját pillanatát őrzi.
       await prisma.worksheetDepartment.update({
         where: { id: bioDepartmentId },

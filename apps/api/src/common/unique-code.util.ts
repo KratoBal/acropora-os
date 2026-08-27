@@ -1,4 +1,8 @@
-import { generateCode, randomCodeSuffix } from "./code-generator.util.js";
+import {
+  generateCode,
+  randomCodeSuffix,
+  type CodeStamp,
+} from "./code-generator.util.js";
 import { isPrismaUniqueConstraintViolation } from "./prisma-error.util.js";
 
 /// Mints a document code and retries the WRITE if that exact code was already
@@ -61,6 +65,12 @@ export type UniqueCodeOptions = {
   maxAttempts?: number;
   /// Test seam only. See `generateCode`.
   randomSuffix?: () => string;
+  /// MELYIK ORA SZERINT ALLJON A BELYEG. Alapertelmezes: `utc`, vagyis a mai,
+  /// valtozatlan alak -- minden csalad ezt hasznalja, kiveve ahol egy EMBER
+  /// olvassa le a szamot. Ma egyetlen ilyen van, az eszkozszam: az kerul
+  /// cimkere. A tobbi (BESZ, POS) kulso rendszerbe is kimegy, es azok alakjat
+  /// ez a kor SZANDEKOSAN nem valtoztatja.
+  stamp?: CodeStamp;
 };
 
 const DEFAULT_MAX_ATTEMPTS = 5;
@@ -131,7 +141,11 @@ export async function withUniqueCode<T>(
     { field: options.field, maxAttempts: options.maxAttempts },
     () =>
       persist(
-        generateCode(options.prefix, options.randomSuffix ?? randomCodeSuffix),
+        generateCode(
+          options.prefix,
+          options.randomSuffix ?? randomCodeSuffix,
+          options.stamp,
+        ),
       ),
   );
 }

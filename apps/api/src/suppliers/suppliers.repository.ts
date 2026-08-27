@@ -15,6 +15,11 @@ import {
   withUniqueCode,
 } from "../common/unique-code.util.js";
 import type { CreateWorksheetDepartmentDto } from "../worksheets/dto/worksheet.dto.js";
+import { partnerCodeChange } from "./partner-code-change.js";
+import {
+  assertPartnerCodeNeverNumbered,
+  assertPartnerCodeUnlocked,
+} from "./partner-code-numbers.js";
 import type { PartnerReferenceCounts } from "./partner-deletion.js";
 import type {
   CreateSupplierDto,
@@ -86,8 +91,8 @@ export async function assertPartnerCodeFree(
 
 /**
  * A worksheet belongs to a customer in three places -- the sheet, the unit and
- * the number's first segment -- so a service partner is given a customer row of
- * its own to carry them. The row is the partner's, not a buyer's: it is created
+ * the abbreviation the close path requires -- so a service partner is given a
+ * customer row of its own to carry them. The row is the partner's, not a buyer's: it is created
  * here rather than typed in, so a partner is still recorded once, by hand, in
  * one place, and the customer list leaves these rows out.
  *
@@ -211,7 +216,7 @@ export class SuppliersRepository extends Repository {
   }
 
   /**
-   * A partner alegységei. Az alegység a munkalapon a szám középső tagját adja,
+   * A partner alegységei. Az alegység a munkalapon a szám első tagját adja,
    * és a sémában a VEVŐHÖZ tartozik -- egy szerviz partner alegységei tehát a
    * tükör-során lógnak.
    *
@@ -228,10 +233,20 @@ export class SuppliersRepository extends Repository {
       select: { customerId: true },
     });
     if (!supplier?.customerId) return { items: [] };
+    // LAPOSAN jon vissza, a fat a hivo epiti fel a parentId mezobol. Egy
+    // rekurziv lekerdezes itt tobbet vinne, mint amennyit er: egy partner
+    // helyszinei elférnek egy koteg­ben, es igy egy uj szint nem valtoztat
+    // vegpontot.
     const items = await prisma.worksheetDepartment.findMany({
       where: { customerId: supplier.customerId },
-      select: { id: true, code: true, name: true, isActive: true },
-      orderBy: { code: "asc" },
+      select: {
+        id: true,
+        parentId: true,
+        code: true,
+        name: true,
+        isActive: true,
+      },
+      orderBy: [{ parentId: "asc" }, { code: "asc" }],
     });
     return { items };
   }
@@ -251,13 +266,43 @@ export class SuppliersRepository extends Repository {
       select: { customerId: true },
     });
     if (!supplier?.customerId) return null;
+
+    /**
+     * A SZULO UGYANAHHOZ A PARTNERHEZ TARTOZZON.
+     *
+     * Enelkul egy letezo, de MASIK partnerhez tartozo azonosito atmenne: az
+     * idegen kulcs csak azt nezi, hogy a sor letezik-e, a tulajdonost nem. Az
+     * igy keletkezo helyszin a masik partner faja alatt fugne, es a
+     * munkalapszamot vinne rossz helyre -- csendben, mert a felulet a sajat
+     * fajat mutatja, es abban nem is latszana.
+     *
+     * A "nem talaltam" es a "masé" ugyanaz a valasz: mindketto ismeretlen
+     * szulo a hivo szemszogebol, es a kulonbseg kimondasa mas partner adatarol
+     * arulna el valamit.
+     */
+    const parentId = input.parentId?.trim() || null;
+    if (parentId) {
+      const parent = await prisma.worksheetDepartment.findFirst({
+        where: { id: parentId, customerId: supplier.customerId },
+        select: { id: true },
+      });
+      if (!parent) throw new Error("WORKSHEET_DEPARTMENT_PARENT_NOT_FOUND");
+    }
+
     return prisma.worksheetDepartment.create({
       data: {
         customerId: supplier.customerId,
+        parentId,
         code: input.code.trim().toUpperCase(),
         name: input.name.trim(),
       },
-      select: { id: true, code: true, name: true, isActive: true },
+      select: {
+        id: true,
+        parentId: true,
+        code: true,
+        name: true,
+        isActive: true,
+      },
     });
   }
 
@@ -399,8 +444,13 @@ export class SuppliersRepository extends Repository {
       (code) =>
         prisma.$transaction(
           async (tx) => {
-            if (input.worksheetPartnerCode)
+            if (input.worksheetPartnerCode) {
               await assertPartnerCodeFree(tx, input.worksheetPartnerCode, null);
+              await assertPartnerCodeNeverNumbered(
+                tx,
+                input.worksheetPartnerCode,
+              );
+            }
             const supplier = await tx.supplier.create({
               data: {
                 code,
@@ -488,6 +538,27 @@ export class SuppliersRepository extends Repository {
           });
           if (input.worksheetPartnerCode)
             await assertPartnerCodeFree(tx, input.worksheetPartnerCode, id);
+          // The order matters: what the code IS LEAVING is checked before what
+          // it is arriving at. A partner trying to swap a spent code for a
+          // fresh one should be told that the old one is locked, not that the
+          // new one is fine.
+          const change = partnerCodeChange(
+            existing.worksheetPartnerCode,
+            input.worksheetPartnerCode,
+          );
+          if (
+            (change === "changed" || change === "cleared") &&
+            existing.worksheetPartnerCode
+          )
+            await assertPartnerCodeUnlocked(tx, existing.worksheetPartnerCode);
+          if (
+            (change === "changed" || change === "set") &&
+            input.worksheetPartnerCode
+          )
+            await assertPartnerCodeNeverNumbered(
+              tx,
+              input.worksheetPartnerCode,
+            );
           const changed = await tx.supplier.updateMany({
             where: { id, updatedAt: new Date(input.expectedUpdatedAt) },
             data: {

@@ -116,6 +116,19 @@ export class WorksheetsService {
     try {
       return await this.repository.setPartnerCode(customerId, partnerCode);
     } catch (error) {
+      // Ugyanaz a két szabály, mint a partner képernyőn, ugyanazokkal a
+      // mondatokkal: ez a végpont ugyanazt az oszlopot írja.
+      if (
+        error instanceof Error &&
+        error.message === "PARTNER_CODE_USED_IN_NUMBERS"
+      )
+        throw new ConflictException(
+          "Ezt a partnerkódot korábban már munkalapszám viselte, ezért nem adható ki újra. Válassz másikat.",
+        );
+      if (error instanceof Error && error.message === "PARTNER_CODE_LOCKED")
+        throw new ConflictException(
+          "Ehhez a partnerkódhoz már készült munkalapszám, ezért a kód nem módosítható és nem törölhető.",
+        );
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2002"
