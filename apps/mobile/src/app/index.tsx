@@ -148,6 +148,14 @@ export default function HomeScreen() {
                 onPress={() => router.push("/assets")}
               />
               <ModuleCard
+                code="MU"
+                title="Munkalapok"
+                description="Kiosztott lapok, tételek és felelősök"
+                available={serviceCapabilities.worksheetsView}
+                enabled
+                onPress={() => router.push("/worksheets")}
+              />
+              <ModuleCard
                 code="RE"
                 title="Rendelések"
                 description="UNAS rendelések, státuszok és tételek"

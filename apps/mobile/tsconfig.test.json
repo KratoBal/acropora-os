@@ -55,6 +55,8 @@
     "src/lib/assets/asset-create.spec.ts",
     "src/lib/partners/partner-presentation.ts",
     "src/lib/partners/partner-presentation.spec.ts",
+    "src/lib/worksheets/worksheet-presentation.ts",
+    "src/lib/worksheets/worksheet-presentation.spec.ts",
     "src/lib/api/request-auth.ts",
     "src/lib/api/request-auth.spec.ts",
     "src/lib/orders/presentation.ts",

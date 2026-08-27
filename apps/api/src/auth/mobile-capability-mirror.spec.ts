@@ -43,6 +43,10 @@ const SERVER_PAIR: Record<string, string | null> = {
   partnersManage: PERMISSIONS.PARTNERS_MANAGE,
   assetsView: PERMISSIONS.SERVICE_VIEW,
   assetsManage: PERMISSIONS.SERVICE_MANAGE,
+  // Ugyanaz a két szerver-jog, mint az eszközöké: a szerviz modult a szerver
+  // egyetlen jogosultság-párral védi, a telefonon viszont két csempe áll rajta.
+  worksheetsView: PERMISSIONS.SERVICE_VIEW,
+  worksheetsManage: PERMISSIONS.SERVICE_MANAGE,
 };
 
 /** A két képesség-interfész kulcsai, a fájl szövegéből. */
