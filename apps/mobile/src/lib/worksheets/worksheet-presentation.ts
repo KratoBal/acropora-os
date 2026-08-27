@@ -218,3 +218,55 @@ export function worksheetLineSummary(
     .filter(Boolean)
     .join(" · ");
 }
+
+/**
+ * AZ ÁLLAPOT-SZŰRŐ VÁLASZTHATÓ ÉRTÉKEI, sorrendben.
+ *
+ * A „Mind" ELSŐ, és nem véletlenül: a szűrő alaphelyzete az, hogy nem szűr.
+ * A sorrend a munka menetét követi (piszkozat, aláírásra vár, aláírva,
+ * elutasítva), mert a szerelő ebben a sorrendben gondol rájuk.
+ *
+ * A NEVEK A SZERVER MAI ÁLLAPOTAI, ugyanazokkal a szavakkal, mint a weben. A
+ * munka menete szerinti elnevezés (Új, Folyamatban, Elkészült, Lezárva) még nem
+ * dőlt el, és amíg nem, addig egy saját szóhasználat a telefonon csak annyit
+ * érne el, hogy az iroda és a helyszín mást mond ugyanarra a lapra.
+ */
+export const WORKSHEET_STATUS_FILTERS: readonly {
+  value: WorksheetStatus | null;
+  label: string;
+}[] = [
+  { value: null, label: "Mind" },
+  { value: "DRAFT", label: worksheetStatusLabel.DRAFT },
+  {
+    value: "AWAITING_SIGNATURE",
+    label: worksheetStatusLabel.AWAITING_SIGNATURE,
+  },
+  { value: "SIGNED", label: worksheetStatusLabel.SIGNED },
+  { value: "REJECTED", label: worksheetStatusLabel.REJECTED },
+];
+
+/**
+ * MIT MUTAT ÉPPEN A LISTA -- egy mondatban, a szűrők fölött.
+ *
+ * HÁROM SZŰRŐ VAN (saját lapok, partner, állapot), és mindegyik SZŰKÍT. Ha
+ * mindhárom állását külön kell leolvasni három vezérlőről, akkor egy üres lista
+ * elől a szerelő nem tudja megmondani, hogy nincs ilyen lap, vagy csak túl
+ * szűkre állította magának. Ezért a lista maga mondja meg, MELYIK halmazt
+ * mutatja -- ugyanaz a szabály, ami miatt a „Csak az enyém" kapcsoló is kiírja
+ * az állását.
+ */
+export function worksheetFilterSummary(input: {
+  mineOnly: boolean;
+  partnerName?: string | null;
+  status?: WorksheetStatus | null;
+  search?: string;
+}): string {
+  const parts: string[] = [];
+  parts.push(input.mineOnly ? "Rád kiosztva" : "Minden munkalap");
+  const partner = input.partnerName?.trim();
+  if (partner) parts.push(partner);
+  if (input.status) parts.push(worksheetStatusLabel[input.status]);
+  const search = input.search?.trim();
+  if (search) parts.push(`„${search}" keresésre`);
+  return parts.join(" · ");
+}

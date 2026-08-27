@@ -148,6 +148,41 @@ export interface WorksheetListParams {
    * beleszámolja.
    */
   assigneeId?: string;
+  /**
+   * A PARTNER szűrője. A `customerId` a munkalapé, nem a partneré: a szerviz
+   * partner lapjait egy saját vevő-sor hordozza, és a választó ezt a
+   * azonosítót adja vissza.
+   */
+  customerId?: string;
+  /**
+   * ÁLLAPOT SZERINTI SZŰRÉS, a LEGUTOLSÓ verzió állapotára.
+   *
+   * A szerver ezt `DISTINCT ON`-nal oldja meg, tehát egy háromszor átírt, ma
+   * már aláírt lap NEM jön fel „piszkozat" szűrőre. A telefonon ugyanez a
+   * szabály áll, mert ugyanaz a végpont felel.
+   */
+  status?: WorksheetVersionStatus;
+}
+
+/**
+ * AKIRE MUNKALAPOT LEHET ÍRNI, tehát akire szűrni is érdemes.
+ *
+ * Ugyanaz a végpont, amit a webes felvitel használ, és `service.view` jogot
+ * kér -- a szerelőnek megvan. A lista SZŰKEBB, mint a partnerek listája: aki
+ * nincs szerviz jelöléssel vagy nincs rövidítése, az ide nem kerül be, mert a
+ * lapját nem lehetne lezárni.
+ */
+export interface WorksheetSelectablePartner {
+  /** A munkalapé, nem a partneré: a szűrő ezt küldi. */
+  customerId: string;
+  name: string;
+  partnerCode: string;
+}
+
+export function listSelectableWorksheetPartners() {
+  return apiRequest<{ items: WorksheetSelectablePartner[] }>(
+    "/worksheets/selectable-partners",
+  );
 }
 
 export function listWorksheets({
@@ -155,6 +190,8 @@ export function listWorksheets({
   pageSize = 25,
   search = "",
   assigneeId,
+  customerId,
+  status,
 }: WorksheetListParams = {}) {
   const query = new URLSearchParams({
     page: String(page),
@@ -162,6 +199,8 @@ export function listWorksheets({
   });
   if (search.trim()) query.set("search", search.trim());
   if (assigneeId) query.set("assigneeId", assigneeId);
+  if (customerId) query.set("customerId", customerId);
+  if (status) query.set("status", status);
   return apiRequest<WorksheetListResponse>(`/worksheets?${query}`);
 }
 

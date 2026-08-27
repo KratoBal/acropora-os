@@ -11,7 +11,9 @@ import {
   worksheetLineSummary,
   worksheetListSubtitle,
   worksheetStatusLabel,
+  worksheetFilterSummary,
   worksheetVersionNote,
+  WORKSHEET_STATUS_FILTERS,
 } from "./worksheet-presentation";
 import type {
   WorksheetDetailLike,
@@ -239,5 +241,66 @@ describe("worksheetDetailRows", () => {
       label: "Helyszín",
       value: "Biodóm (új név) · BIO",
     });
+  });
+});
+
+describe("WORKSHEET_STATUS_FILTERS", () => {
+  it("offers every status the server knows, with Mind first", () => {
+    assert.deepEqual(
+      WORKSHEET_STATUS_FILTERS.map((filter) => filter.value),
+      [null, "DRAFT", "AWAITING_SIGNATURE", "SIGNED", "REJECTED"],
+    );
+  });
+
+  /**
+   * UGYANAZOK A SZAVAK, mint a listán és a weben. Ha a szűrő „Piszkozat"-ot
+   * mond, és a sor „Vázlat"-ot, a szerelő két állapotot lát ott, ahol egy van.
+   */
+  it("labels them exactly as the rows do", () => {
+    for (const filter of WORKSHEET_STATUS_FILTERS)
+      if (filter.value)
+        assert.equal(filter.label, worksheetStatusLabel[filter.value]);
+  });
+});
+
+describe("worksheetFilterSummary", () => {
+  /**
+   * HÁROM SZŰRŐ MIND SZŰKÍT, és egy üres lista elől a szerelőnek tudnia kell,
+   * hogy nincs ilyen lap, vagy csak túl szűkre állította magának.
+   */
+  it("names the whole set, not just one filter", () => {
+    assert.equal(
+      worksheetFilterSummary({
+        mineOnly: true,
+        partnerName: "Fánk Kft.",
+        status: "AWAITING_SIGNATURE",
+      }),
+      "Rád kiosztva · Fánk Kft. · Aláírásra vár",
+    );
+  });
+
+  it("says so when nothing is narrowed", () => {
+    assert.equal(
+      worksheetFilterSummary({ mineOnly: false }),
+      "Minden munkalap",
+    );
+  });
+
+  it("carries the search text too, because that narrows as well", () => {
+    assert.match(
+      worksheetFilterSummary({ mineOnly: false, search: "  szivattyú " }),
+      /szivattyú/,
+    );
+  });
+
+  it("ignores a blank partner name and a blank search", () => {
+    assert.equal(
+      worksheetFilterSummary({
+        mineOnly: false,
+        partnerName: "   ",
+        search: "  ",
+      }),
+      "Minden munkalap",
+    );
   });
 });
