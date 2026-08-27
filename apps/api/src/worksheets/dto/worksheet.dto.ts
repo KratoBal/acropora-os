@@ -108,6 +108,19 @@ export class WorksheetContentDto {
 export class CreateWorksheetDto extends WorksheetContentDto {
   @IsString() @MinLength(1) customerId!: string;
   @IsString() @MinLength(1) departmentId!: string;
+  /**
+   * A felelősök MÁR A FELVITELKOR, opcionálisan.
+   *
+   * Ugyanaz a szabály, mint a `SetWorksheetAssigneesDto` esetén: a beküldött
+   * lista a lap TELJES felelős-listája. Felvitelkor ez a kettő egybeesik, de a
+   * mező itt is listát vesz át, nem egyetlen azonosítót -- egy laphoz több
+   * szerelő is tartozhat, és a felvitelkori „csak egyet lehet" később
+   * kivehetetlen szűkítés lenne.
+   */
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  assigneeIds?: string[];
 }
 
 export class UpdateWorksheetDraftDto extends WorksheetContentDto {}

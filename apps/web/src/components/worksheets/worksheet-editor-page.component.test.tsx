@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,6 +14,7 @@ const worksheets = vi.hoisted(() => ({
   updateDraft: vi.fn(),
   detail: vi.fn(),
   selectablePartners: vi.fn(),
+  assignableUsers: vi.fn(),
 }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
@@ -43,6 +45,8 @@ describe("WorksheetEditorPage partner picker", () => {
     worksheets.departments.mockReset().mockResolvedValue({ items: [] });
     worksheets.detail.mockReset();
     worksheets.selectablePartners.mockReset().mockResolvedValue({ items: [] });
+    worksheets.assignableUsers.mockReset().mockResolvedValue({ items: [] });
+    worksheets.create.mockReset().mockResolvedValue({ id: "worksheet-1" });
   });
 
   /**
@@ -179,5 +183,98 @@ describe("WorksheetEditorPage partner picker", () => {
         name: "Nincs választható szerviz partner",
       }),
     ).toBeNull();
+  });
+});
+
+describe("WorksheetEditorPage assignees", () => {
+  beforeEach(() => {
+    auth.session = session;
+    customers.list.mockReset();
+    worksheets.departments.mockReset().mockResolvedValue({
+      items: [
+        {
+          id: "department-1",
+          parentId: null,
+          code: "BIO",
+          name: "Biodóm",
+          isActive: true,
+        },
+      ],
+    });
+    worksheets.detail.mockReset();
+    worksheets.selectablePartners.mockReset().mockResolvedValue({
+      items: [
+        { customerId: "customer-42", name: "Fankó Kft.", partnerCode: "FANK" },
+      ],
+    });
+    worksheets.assignableUsers.mockReset().mockResolvedValue({
+      items: [{ id: "user-sanyi", name: "Sanyi", role: "SERVICE" }],
+    });
+    worksheets.create.mockReset().mockResolvedValue({ id: "worksheet-1" });
+  });
+
+  /**
+   * AZ IRODA NYIT LAPOT A SZERELŐNEK: a kiosztás a felvitel pillanatában
+   * ismert. Külön lépésre bízva a felvivő azt hiszi, kiadta a munkát, közben a
+   * lap senki listáján nem jelenik meg.
+   */
+  it("sends the chosen colleagues with the sheet, in one call", async () => {
+    const user = userEvent.setup();
+    render(<WorksheetEditorPage />);
+
+    await user.selectOptions(
+      await screen.findByLabelText("Partner"),
+      "customer-42",
+    );
+    await user.selectOptions(
+      await screen.findByLabelText("Alegység"),
+      "department-1",
+    );
+    await user.type(screen.getByLabelText("Tárgy"), "Havi karbantartás");
+    await user.click(await screen.findByLabelText("Sanyi"));
+    await user.click(screen.getByRole("button", { name: "Mentés" }));
+
+    expect(worksheets.create).toHaveBeenCalledTimes(1);
+    expect(worksheets.create.mock.calls[0]?.[1]?.assigneeIds).toEqual([
+      "user-sanyi",
+    ]);
+  });
+
+  /**
+   * A KIOSZTÁS ELHAGYHATÓ. Egy lapot fel kell tudni vinni akkor is, ha még nem
+   * dőlt el, ki megy ki -- a felelős a lap adatlapján később is megadható.
+   */
+  it("creates an unassigned sheet without complaining", async () => {
+    const user = userEvent.setup();
+    render(<WorksheetEditorPage />);
+
+    await user.selectOptions(
+      await screen.findByLabelText("Partner"),
+      "customer-42",
+    );
+    await user.selectOptions(
+      await screen.findByLabelText("Alegység"),
+      "department-1",
+    );
+    await user.type(screen.getByLabelText("Tárgy"), "Havi karbantartás");
+    await user.click(screen.getByRole("button", { name: "Mentés" }));
+
+    expect(worksheets.create.mock.calls[0]?.[1]?.assigneeIds).toEqual([]);
+  });
+
+  /**
+   * ÜRES DOBOZ HELYETT MONDAT. Egy üres lista a "Felelősök" felirat alatt úgy
+   * néz ki, mintha a betöltés akadt volna el, és a felvivő megvárná.
+   */
+  it("says out loud when there is nobody to assign", async () => {
+    worksheets.assignableUsers.mockResolvedValue({ items: [] });
+
+    render(<WorksheetEditorPage />);
+
+    expect(
+      await screen.findByText(
+        "Nincs olyan kolléga, akire a lap kiosztható lenne.",
+      ),
+    ).toBeTruthy();
   });
 });

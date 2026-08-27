@@ -26,6 +26,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import {
+  toggleAssignee,
+  useAssignableUsers,
+  WorksheetAssigneePicker,
+} from "./worksheet-assignee-picker";
+import {
   emptyLine,
   toLineInput,
   WorksheetLineEditor,
@@ -106,9 +111,19 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
   const [header, setHeader] = useState<HeaderDraft>(emptyHeader);
   const [lines, setLines] = useState<WorksheetLineDraft[]>([emptyLine()]);
   const [newDepartment, setNewDepartment] = useState({ code: "", name: "" });
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(Boolean(worksheetId));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /*
+   * A FELELŐSÖK CSAK A FELVITELNÉL kerülnek ide. Egy meglévő lapon a kiosztást a
+   * részletek oldal szerkeszti: az a lap AZONOSSÁGÁHOZ tartozik, nem a
+   * piszkozat tartalmához, amit ez az űrlap cserél.
+   */
+  const { candidates, error: candidatesError } = useAssignableUsers(
+    token,
+    canManage && !worksheetId,
+  );
 
   useEffect(() => {
     if (!canManage || worksheetId) return;
@@ -232,6 +247,7 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
             ...body,
             customerId,
             departmentId,
+            assigneeIds,
           });
       router.push(`/szerviz/munkalapok/${saved.id}`);
     } catch (cause) {
@@ -390,6 +406,28 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
               Alegység felvitele
             </Button>
           </div>
+        ) : null}
+        {!worksheetId ? (
+          <FormField
+            label="Felelősök"
+            className="md:col-span-2"
+            description="Elhagyható: a kiosztás a lap adatlapján később is elvégezhető."
+          >
+            <div className="space-y-1">
+              <WorksheetAssigneePicker
+                candidates={candidates}
+                selected={assigneeIds}
+                onToggle={(userId) =>
+                  setAssigneeIds((current) => toggleAssignee(current, userId))
+                }
+              />
+              {candidatesError ? (
+                <p className="text-xs font-medium text-rose-600">
+                  {candidatesError}
+                </p>
+              ) : null}
+            </div>
+          </FormField>
         ) : null}
         <FormField label="Tárgy" className="md:col-span-2">
           <Input

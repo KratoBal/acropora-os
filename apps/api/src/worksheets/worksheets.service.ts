@@ -242,6 +242,20 @@ export class WorksheetsService {
     return detail;
   }
 
+  /**
+   * A FELELŐSÖK MÁR ITT KIOSZTHATÓK, és ez nem kényelmi rövidítés.
+   *
+   * Az iroda nyit lapot a szerelőnek: a kiosztás abban a pillanatban ismert,
+   * amikor a lap megszületik. Külön lépésre bízva a felvivő azt hiszi, kiadta a
+   * munkát, közben a lap senki listáján nem jelenik meg -- és erről semmi nem
+   * szól, mert a kiosztatlan lap nem hibás állapot.
+   *
+   * EGY TRANZAKCIÓBAN ÍRÓDIK a lappal. Külön hívásként a második fele
+   * elbukhatna (hálózat, jogosultság, elgépelt azonosító), és pont az a
+   * kiosztatlan lap keletkezne, amit el akarunk kerülni. A kollégák
+   * ellenőrzése ezért a létrehozás ELŐTT fut: egy ismeretlen azonosító így nem
+   * hoz létre semmit, ahelyett hogy egy már meglévő lapot hagyna félkészen.
+   */
   async create(
     input: CreateWorksheetDto,
     actorUserId: string,
@@ -250,14 +264,29 @@ export class WorksheetsService {
     await this.requireDepartment(input.departmentId, input.customerId);
     const content = this.normalize(input);
     await this.requireAssets(content);
+    const assigneeIds = normalizeAssigneeIds(input.assigneeIds ?? []);
+    await this.requireAssignableUsers(assigneeIds);
 
     const id = await this.repository.createDraft({
       customerId: input.customerId,
       departmentId: input.departmentId,
       content,
       actorUserId,
+      assigneeIds,
     });
-    return this.detail(id);
+    const detail = await this.detail(id);
+
+    // Ugyanaz a sorrend, mint a `setAssignees` esetén: értesítés csak azután,
+    // hogy a lap tárolva van. Felvitelkor minden felelős új, tehát a lista
+    // maga a különbség.
+    if (assigneeIds.length > 0)
+      this.notifications?.notifyWorksheetAssignment({
+        worksheetId: id,
+        subject: detail.currentVersion.subject,
+        userIds: assigneeIds,
+      });
+
+    return detail;
   }
 
   async updateDraft(

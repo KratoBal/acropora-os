@@ -310,6 +310,16 @@ export interface WorksheetContentInput {
 export interface CreateWorksheetInput extends WorksheetContentInput {
   customerId: string;
   departmentId: string;
+  /**
+   * A lap felelősei, MÁR A FELVITELKOR.
+   *
+   * Elhagyható: a kiosztás a részletek oldalon később is elvégezhető, és egy
+   * lapot attól még fel kell tudni vinni, hogy még nem dőlt el, ki megy ki.
+   * Ha viszont meg van adva, a felvitellel EGY tranzakcióban íródik: egy
+   * létrejött, de kiosztatlanul maradt lap némán elveszne a szerelő listájáról,
+   * és a felvivő azt hinné, kiosztotta.
+   */
+  assigneeIds?: string[];
 }
 
 export type UpdateWorksheetDraftInput = WorksheetContentInput;
