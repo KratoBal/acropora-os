@@ -1,6 +1,14 @@
 import { apiRequest } from "./client";
 
 /**
+ * A végpont előtagja EGY HELYEN. Ez a fájl korábban 3-szer írta le ugyanezt, és
+ * 2026-08-27-én a munkalap-kliens pontosan ezért tudott HÁROM helyen egyszerre
+ * rossz előtaggal hívni: a szerkezet megengedte, hogy egy helyen javuljon és a
+ * másik kettőben ne. Egy konstansnál ez a hiba nem tud részlegesen megtörténni.
+ */
+const BASE = "/service/worksheets";
+
+/**
  * MUNKALAPOK, OLVASÁSRA.
  *
  * A telefonon a munkalap MUNKAUTASÍTÁS: a szerelő azt nézi meg, mit kell
@@ -186,7 +194,7 @@ export interface WorksheetSelectablePartner {
 
 export function listSelectableWorksheetPartners() {
   return apiRequest<{ items: WorksheetSelectablePartner[] }>(
-    "/service/worksheets/selectable-partners",
+    `${BASE}/selectable-partners`,
   );
 }
 
@@ -206,11 +214,9 @@ export function listWorksheets({
   if (assigneeId) query.set("assigneeId", assigneeId);
   if (customerId) query.set("customerId", customerId);
   if (status) query.set("status", status);
-  return apiRequest<WorksheetListResponse>(`/service/worksheets?${query}`);
+  return apiRequest<WorksheetListResponse>(`${BASE}?${query}`);
 }
 
 export function getWorksheet(id: string) {
-  return apiRequest<WorksheetDetail>(
-    `/service/worksheets/${encodeURIComponent(id)}`,
-  );
+  return apiRequest<WorksheetDetail>(`${BASE}/${encodeURIComponent(id)}`);
 }

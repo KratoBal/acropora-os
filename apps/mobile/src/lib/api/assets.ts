@@ -12,6 +12,14 @@ import type {
   UpdateAssetInput,
 } from "@/lib/assets/asset-fields";
 
+/**
+ * A végpont előtagja EGY HELYEN. Ez a fájl korábban 7-szer írta le ugyanezt, és
+ * 2026-08-27-én a munkalap-kliens pontosan ezért tudott HÁROM helyen egyszerre
+ * rossz előtaggal hívni: a szerkezet megengedte, hogy egy helyen javuljon és a
+ * másik kettőben ne. Egy konstansnál ez a hiba nem tud részlegesen megtörténni.
+ */
+const BASE = "/service/assets";
+
 export type {
   AssetCriticality,
   AssetKind,
@@ -176,39 +184,35 @@ export function listAssets(page = 1, pageSize = 50, search = "") {
     ownerScope: "SERVICE_PARTNER",
   });
   if (search.trim()) query.set("search", search.trim());
-  return apiRequest<AssetListResponse>(`/service/assets?${query}`);
+  return apiRequest<AssetListResponse>(`${BASE}?${query}`);
 }
 
 export function getAsset(id: string) {
-  return apiRequest<AssetDetail>(`/service/assets/${encodeURIComponent(id)}`);
+  return apiRequest<AssetDetail>(`${BASE}/${encodeURIComponent(id)}`);
 }
 
 export function scanAsset(qrToken: string) {
-  return apiRequest<AssetDetail>(
-    `/service/assets/scan/${encodeURIComponent(qrToken)}`,
-  );
+  return apiRequest<AssetDetail>(`${BASE}/scan/${encodeURIComponent(qrToken)}`);
 }
 
 export function listAssetOwners() {
-  return apiRequest<{ items: AssetOwnerOption[] }>("/service/assets/owners");
+  return apiRequest<{ items: AssetOwnerOption[] }>(`${BASE}/owners`);
 }
 
 export function createAsset(input: CreateAssetInput) {
-  return apiRequest<AssetDetail>("/service/assets", {
+  return apiRequest<AssetDetail>(BASE, {
     method: "POST",
     body: JSON.stringify(input),
   });
 }
 
 export function updateAsset(id: string, input: UpdateAssetInput) {
-  return apiRequest<AssetDetail>(`/service/assets/${encodeURIComponent(id)}`, {
+  return apiRequest<AssetDetail>(`${BASE}/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify(input),
   });
 }
 
 export function getAssetQr(id: string) {
-  return apiRequest<AssetQrCode>(
-    `/service/assets/${encodeURIComponent(id)}/qr`,
-  );
+  return apiRequest<AssetQrCode>(`${BASE}/${encodeURIComponent(id)}/qr`);
 }
