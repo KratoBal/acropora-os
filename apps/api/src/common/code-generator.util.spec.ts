@@ -125,3 +125,62 @@ describe("generateCode", () => {
       assert.match(generateCode(prefix), /-20260826-113856-[0-9A-F]{4}$/);
   });
 });
+
+/**
+ * A CIMKERE KERULO SZAM HELYI IDO SZERINT ALL, ES A VALTAS JELOLVE VAN.
+ *
+ * A belyeg eddig UTC volt, tehat nyaron ket oraval a magyar fali ora mogott
+ * jart, es este 22:00 utan a DATUM is egy nappal korabbi napot mutatott. A
+ * cimkerol egy EMBER olvassa le -- neki ez rossz ora es rossz nap.
+ *
+ * A mar kiadott szamok visszamenoleg NEM valtoznak, tehat a sorozatban van egy
+ * pont, ahol a belyeg jelentese megvaltozik. Jeloles nelkul ugyanaz a mezo ket
+ * dolgot jelentene, kivulrol megkulonboztethetetlenul -- es az ROSSZABB, mint
+ * az egysegesen rossz ertek, mert azt legalabb at lehet szamolni.
+ */
+describe("a cimkere kerulo belyeg", () => {
+  it("keeps the block structure the label and the search depend on", () => {
+    const code = generateCode("ESZK", () => "AB12", "local-marked");
+
+    // Negy blokk, ugyanaz az elvalaszto: a mobil szetvagas, a `contains`
+    // kereses es a rendezes valtozatlanul mukodik.
+    assert.match(code, /^ESZK-\d{8}-\d{6}h-[0-9A-F]{4}$/);
+    assert.equal(code.split("-").length, 4);
+  });
+
+  /**
+   * A LENYEGI ALLITAS: a ket alak UGYANARRA a pillanatra MAS idot mutat, es a
+   * kulonbseg a zona eltolasa. Enelkul a teszt akkor is zold lenne, ha a
+   * `local-marked` csak egy `h`-t ragasztana az UTC ertekhez.
+   */
+  it("shows the Budapest wall clock, not UTC", () => {
+    const utc = generateCode("ESZK", () => "AB12");
+    const local = generateCode("ESZK", () => "AB12", "local-marked");
+
+    const stamp = (code: string) => code.slice(5, 5 + 15).replace("-", "");
+    const asMinutes = (value: string) =>
+      Number(value.slice(8, 10)) * 60 + Number(value.slice(10, 12));
+
+    const difference =
+      (asMinutes(stamp(local)) - asMinutes(stamp(utc)) + 1440) % 1440;
+
+    // Europe/Budapest: telen 60, nyaron 120 perc. A teszt nem koti le, melyik
+    // van eppen -- azt koti le, hogy NEM nulla, es hogy a ketto kozul az egyik.
+    assert.ok(
+      difference === 60 || difference === 120,
+      `a ket belyeg kulonbsege ${difference} perc`,
+    );
+  });
+
+  it("leaves every other family on UTC", () => {
+    // Az alapertelmezes valtozatlan: aki nem ker mast, azt kapja, amit eddig.
+    assert.match(
+      generateCode("BESZ", () => "AB12"),
+      /^BESZ-\d{8}-\d{6}-AB12$/,
+    );
+    assert.match(
+      generateCode("POS", () => "AB12"),
+      /^POS-\d{8}-\d{6}-AB12$/,
+    );
+  });
+});

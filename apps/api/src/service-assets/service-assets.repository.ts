@@ -403,7 +403,19 @@ export class ServiceAssetsRepository extends Repository {
      * elso elbukott utasitas utan megszakitja.
      */
     const id = await withUniqueCode(
-      { prefix: "ESZK", field: "assetNumber" },
+      /**
+       * AZ EGYETLEN HELY, AHOL A BELYEG HELYI IDO SZERINT ALL.
+       *
+       * Az eszkozszam kerul CIMKERE, es ott egy ember olvassa le. A tobbi
+       * csalad belyege UTC marad -- a beszerzesi bizonylatszam es a POS
+       * rendelesszam kulso rendszerbe is kimegy, es azok alakjat ez a kor
+       * szandekosan nem valtoztatja.
+       *
+       * A `h` a valtas jelolese: a mar kiadott szamok visszamenoleg nem
+       * valtoznak, tehat jeloles nelkul ugyanaz a mezo ket dolgot jelentene,
+       * kivulrol megkulonboztethetetlenul.
+       */
+      { prefix: "ESZK", field: "assetNumber", stamp: "local-marked" },
       (assetNumber) =>
         prisma.$transaction(
           async (tx) => {

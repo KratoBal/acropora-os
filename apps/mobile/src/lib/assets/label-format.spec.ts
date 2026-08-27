@@ -316,7 +316,14 @@ function widthEm(text: string): number {
 }
 
 describe("az eszközszám kifér a felirat sávjába", () => {
-  const SAMPLE = "ESZK-20260826-133525-AB12";
+  /**
+   * A MINTA MOSTANTÓL A JELÖLT ALAK, mert az kerül az ÚJ címkékre: az
+   * eszközszám bélyege helyi idő szerint áll, és az időpont-blokk végén egy
+   * `h` jelöli a váltást (l. `code-generator.util.ts`). A régi, jelöletlen
+   * eszközök száma változatlan marad, tehát a szélesebb, ÚJ alakra kell
+   * méretezni -- ha az kifér, a régi is.
+   */
+  const SAMPLE = "ESZK-20260826-133525h-AB12";
 
   it("measures the number the server actually generates", () => {
     const source = readFileSync(
@@ -324,12 +331,12 @@ describe("az eszközszám kifér a felirat sávjába", () => {
       "utf8",
     );
 
-    // A minta alakja onnan jön, ahol a szám készül: előtag, 15 karakteres
-    // időbélyeg, négy hexa karakter. Ha ez a szerkezet változik, a hossz is,
-    // és akkor ezt a mérést újra kell futtatni.
-    assert.match(source, /\.slice\(0, 15\)/);
+    // A minta alakja onnan jön, ahol a szám készül: előtag, dátum, időpont a
+    // jelöléssel, és négy hexa karakter. Ha ez a szerkezet változik, a hossz
+    // is, és akkor ezt a mérést újra kell futtatni.
     assert.match(source, /randomUUID\(\)\.slice\(0, 4\)/);
-    assert.equal(SAMPLE.length, 25);
+    assert.match(source, /return `\$\{date\}-\$\{time\}h`;/);
+    assert.equal(SAMPLE.length, 26);
   });
 
   it("fits on one line, with room for a font that is not Helvetica", () => {
@@ -342,7 +349,7 @@ describe("az eszközszám kifér a felirat sávjába", () => {
     // hexa, az `A`-tól `D`-ig tartó betűk pedig szélesebbek a számjegyeknél. Egy
     // mintával mérve a címke csak azoknál az eszközöknél lógna ki, amelyek
     // véletlenül csupa betűs véget kaptak.
-    const widest = labelAssetNumber("ESZK-20260826-000000-AAAA");
+    const widest = labelAssetNumber("ESZK-20260826-000000h-AAAA");
     assert.equal(widest.length, labelAssetNumber(SAMPLE).length);
     const needed = widthEm(widest) * LABEL_NUMBER_FONT_MM;
 
@@ -372,17 +379,29 @@ describe("az eszközszám kifér a felirat sávjába", () => {
  * együtt a tér 86 400-szor nagyobb. Ezért két blokk kerül a címkére, nem egy.
  */
 describe("labelAssetNumber", () => {
-  const SAMPLE = "ESZK-20260826-133525-AB12";
+  const SAMPLE = "ESZK-20260826-133525h-AB12";
 
   it("keeps the two blocks that carry the identity", () => {
-    assert.equal(labelAssetNumber(SAMPLE), "133525-AB12");
+    // A JELÖLÉS IS A CÍMKÉRE KERÜL, és ez a lényege: a `h` az utolsó előtti
+    // blokk végén áll, tehát azon az ábrán van, amit az ember leolvas. A
+    // dátum-blokkba tett jelölő pontosan neki lenne láthatatlan.
+    assert.equal(labelAssetNumber(SAMPLE), "133525h-AB12");
   });
 
   it("keeps the time block, not only the random one", () => {
     // EZ A TESZT AZ EGYEDISÉGRŐL SZÓL. Ha valaha csak az utolsó blokk maradna,
     // ez pirosra vált -- és pont az a változás, ami 302 eszköznél ütközik.
-    assert.match(labelAssetNumber(SAMPLE), /^\d{6}-/);
+    assert.match(labelAssetNumber(SAMPLE), /^\d{6}h?-/);
     assert.ok(labelAssetNumber(SAMPLE).length > 4);
+  });
+
+  /**
+   * A RÉGI, JELÖLETLEN SZÁMOK VÁLTOZATLANUL MŰKÖDNEK. Visszamenőleg semmi nem
+   * íródik át, tehát a címke-rövidítésnek mindkét alakot vinnie kell -- és a
+   * két alak KÜLÖNBÖZIK, ami épp a jelölés célja.
+   */
+  it("still shortens a number minted before the marking", () => {
+    assert.equal(labelAssetNumber("ESZK-20260826-133525-AB12"), "133525-AB12");
   });
 
   it("stays a suffix of the full number, so search still finds it", () => {
