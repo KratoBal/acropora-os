@@ -452,7 +452,7 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
             <div className="mt-4 sm:w-1/2">
               <FormField
                 label="Partnerkód"
-                description="A partner rövidítése, pontosan négy karakter (például FANK). Munkalap csak akkor írható a partnernek, ha ez ki van töltve."
+                description="A partner rövidítése, pontosan négy karakter, betűvel kezdve (például FANK). Munkalap csak akkor írható a partnernek, ha ez ki van töltve."
               >
                 <Input
                   aria-label="Partnerkód"
