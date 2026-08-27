@@ -239,7 +239,11 @@ export class MedusaInventoryProjectionService {
         reason: "variant-not-found",
         details:
           `${stock.osProductId}: a Medusa terméken (${link.medusaProductId}) ` +
-          `nincs ${stock.sku} cikkszámú változat. ${describeSkus(variants)}`,
+          `nincs ${stock.sku} cikkszámú ÉLŐ változat. ${describeSkus(variants)} ` +
+          `A puhán törölt változatokat ez a keresés NEM látja, és a Medusa ` +
+          `cikkszám-indexe RÉSZLEGES (deleted_at IS NULL), tehát a cikkszám ` +
+          `ülhet egy eltemetett változaton is. A "nincs ilyen" és az "el van ` +
+          `temetve" innen nem különböztethető meg.`,
       };
     if (matching.length > 1)
       return {

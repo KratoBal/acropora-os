@@ -557,6 +557,17 @@ describe("Medusa készlet-vetítés: fail-closed kapuk", () => {
     assert.ok(outcome.action === "stopped");
     assert.equal(outcome.reason, "variant-not-found");
     assert.match(outcome.details, /masik/);
+    /**
+     * AZ ÜZENET NEM ÁLLÍTHAT TÖBBET, MINT AMIT LÁTTUNK.
+     *
+     * A keresés csak az ÉLŐ változatokat hozza, a Medusa cikkszám-indexe
+     * viszont RÉSZLEGES (`deleted_at IS NULL`), tehát a cikkszám ülhet egy
+     * eltemetett változaton. Egy „nincs ilyen cikkszámú változat" mondat a
+     * meglévők felsorolásával azt sugallná, hogy a cikkszám sosem létezett -
+     * és pontosan ezen a különbségen futott már el egy kör a flottában.
+     */
+    assert.match(outcome.details, /ÉLŐ változat/);
+    assert.match(outcome.details, /el van\s+temetve/);
   });
 
   it("két azonos cikkszámú változat: azonossági kérdés, megállunk", async () => {
