@@ -1,5 +1,13 @@
 import { apiRequest } from "./client";
 
+/**
+ * A végpont előtagja EGY HELYEN. Ez a fájl korábban 2-szer írta le ugyanezt, és
+ * 2026-08-27-én a munkalap-kliens pontosan ezért tudott HÁROM helyen egyszerre
+ * rossz előtaggal hívni: a szerkezet megengedte, hogy egy helyen javuljon és a
+ * másik kettőben ne. Egy konstansnál ez a hiba nem tud részlegesen megtörténni.
+ */
+const BASE = "/notifications/device-tokens";
+
 export interface DeviceTokenRegistration {
   token: string;
   bundleId: string;
@@ -15,7 +23,7 @@ export interface DeviceTokenRegistration {
 export async function registerDeviceToken(
   input: DeviceTokenRegistration,
 ): Promise<void> {
-  await apiRequest<{ ok: true }>("/notifications/device-tokens", {
+  await apiRequest<{ ok: true }>(BASE, {
     method: "POST",
     body: JSON.stringify({ ...input, platform: "IOS" }),
   });
@@ -30,8 +38,8 @@ export async function registerDeviceToken(
  * sem lehet MAS keszuleket lekapcsolni.
  */
 export async function forgetDeviceToken(token: string): Promise<void> {
-  await apiRequest<{ ok: true; removed: number }>(
-    "/notifications/device-tokens",
-    { method: "DELETE", body: JSON.stringify({ token }) },
-  );
+  await apiRequest<{ ok: true; removed: number }>(BASE, {
+    method: "DELETE",
+    body: JSON.stringify({ token }),
+  });
 }

@@ -38,24 +38,23 @@ import { describe, it } from "node:test";
  *
  * ---
  *
- * AMIT EZ AZ ŐRZŐ FELTÉTELEZ, ÉS AKI ÁTALAKÍTJA A KLIENSEKET, ANNAK EZ SZÓL:
+ * AMIT EZ AZ ŐRZŐ FEL TUD OLDANI, ÉS AMIT NEM:
  *
- * Az útvonal LITERÁLBÓL áll a hívás helyén. Ha egy kliens áttér arra, hogy az
- * előtagot egy konstansban tartja és onnan építkezik -- ahogy a WEBES kliens
- * ma is teszi (`const base = "/service/worksheets"`, plusz egy path-helper) --,
- * akkor ez a spec az ELSŐ állításán bukik el, MINDEN érintett híváson, holott
- * a kód helyes.
+ * Az útvonal jöhet LITERÁLBÓL a hívás helyén, vagy a fájl saját, string értékű
+ * `const` deklarációjából -- akár csupasz azonosítóként (`apiRequest(BASE, …)`),
+ * akár behelyettesítve (`` `${BASE}/owners` ``). A kliensek 2026-08-27 óta ezt a
+ * második alakot használják: az előtag fájlonként EGY helyen áll.
  *
- * MÉRVE 2026-08-27: a webes `lib/api` mappán lefuttatva ez a logika tizenhárom
- * ilyen hívást talált (hét konstansból, hat helperből épülőt), és mind a
- * tizenhárom helyes volt.
+ * AMIT NEM LÁT: a MÁSIK fájlból importált konstanst és a path-helper függvényt.
+ * Ilyenkor nem hallgat, hanem BUKIK -- lásd fent. A webes kliens ma helpert is
+ * használ, ezért egy webre kiterjesztés előbb a helper-feloldást kívánná meg;
+ * mérve 2026-08-27, a webes mappán ez a logika tizenhárom ilyen hívást talál.
  *
- * EZ SZÁNDÉKOS: a hangos bukás jobb, mint a néma kihagyás, mert az utóbbi
- * csendben szűkítené a vizsgált halmazt. De EBBŐL KÖVETKEZIK EGY KÖTELEZETTSÉG:
- * a konstans-előtagra való átállást és ennek a specnek az átalakítását
- * UGYANABBAN A VÁLTOZÁSBAN kell elvégezni. Külön lépésben a javítás után az
- * őrző hamisan pirosodna, és a következő ember azt hinné, hogy ő rontott el
- * valamit.
+ * A KÖTELEZETTSÉG, AMI EBBŐL KÖVETKEZIK, és amiért ez a bekezdés itt áll: ha a
+ * kliensek alakja megint változik, ezt a specet UGYANABBAN A VÁLTOZÁSBAN kell
+ * átalakítani. Külön lépésben az őrző hamisan pirosodna, és a következő ember
+ * azt hinné, hogy ő rontott el valamit. (Ez a bekezdés maga is így készült: az
+ * átállás és ez az átalakítás egy ágon ment.)
  */
 
 const MOBILE_API_DIR = "../mobile/src/lib/api";
@@ -86,26 +85,46 @@ function toPattern(path: string): string {
     .join("/");
 }
 
+/** A fájl saját, string értékű `const` deklarációi: `const BASE = "/service/assets";`. */
+function constantsOf(source: string): Map<string, string> {
+  const constants = new Map<string, string>();
+  for (const match of source.matchAll(
+    /^const\s+([A-Za-z_$][\w$]*)\s*=\s*(["'])((?:\\.|(?!\2)[^\\])*)\2\s*;/gm,
+  ))
+    constants.set(match[1]!, match[3]!);
+  return constants;
+}
+
 function mobileCalls(): MobileCall[] {
   const calls: MobileCall[] = [];
   for (const file of readdirSync(MOBILE_API_DIR).sort()) {
     if (!file.endsWith(".ts") || file.endsWith(".spec.ts")) continue;
     if (NOT_A_CLIENT.has(file)) continue;
     const source = readFileSync(join(MOBILE_API_DIR, file), "utf8");
+    const constants = constantsOf(source);
     // A hívás lehet többsoros: a generikus paraméter és a nyitó zárójel után
     // az útvonal a következő nem üres jel.
     for (const match of source.matchAll(/apiRequest\s*(?:<[^>]*>)?\s*\(\s*/g)) {
       const rest = source.slice(match.index + match[0].length);
       const literal = /^(["'`])((?:\\.|(?!\1)[^\\])*)\1/.exec(rest);
+      // A csupasz azonosító alak: `apiRequest(BASE, { method: "POST" })`.
+      const bare = /^([A-Za-z_$][\w$]*)\s*[,)]/.exec(rest);
+      const raw = literal
+        ? literal[2]!
+        : bare && constants.has(bare[1]!)
+          ? constants.get(bare[1]!)!
+          : null;
       assert.ok(
-        literal,
-        `${file}: egy apiRequest hívásból nem olvasható ki az útvonal. Az őrző nem hagyhatja ki némán -- vagy az alak új, vagy a hívás nem literálból építi az utat.`,
+        raw !== null,
+        `${file}: egy apiRequest hívásból nem olvasható ki az útvonal. Az őrző nem hagyhatja ki némán -- vagy az alak új, vagy a hívás olyan konstansból épít, amit ez a fájl nem deklarál (például importáltból vagy helperből).`,
       );
-      calls.push({
-        file,
-        raw: literal[2]!,
-        pattern: toPattern(literal[2]!),
-      });
+      // A fájlon belüli konstansok behelyettesítése; ami marad, azt a toPattern
+      // teszi `:param` alakúvá.
+      const resolved = raw.replace(
+        /\$\{([A-Za-z_$][\w$]*)\}/g,
+        (whole, name: string) => constants.get(name) ?? whole,
+      );
+      calls.push({ file, raw, pattern: toPattern(resolved) });
     }
   }
   return calls;
@@ -163,8 +182,12 @@ describe("a telefon csak létező szerver-végpontot hív", () => {
   it("every mobile path has a server route", () => {
     const patterns = serverPatterns();
     const missing = mobileCalls().filter((call) => !patterns.has(call.pattern));
+    // A NYERS ALAK ÉS A FELOLDOTT MINTA IS KELL. A nyers megmondja, MELYIK SORT
+    // kell megnyitni; a feloldott azt, MI LETT belőle -- és egy konstansból épülő
+    // hívásnál a kettő nem ugyanaz. Csak a nyerssel a hibaüzenet `${BASE}/owners`
+    // lenne, amiből nem derül ki, mi a rossz előtag.
     assert.deepEqual(
-      missing.map((call) => `${call.file}: ${call.raw}`),
+      missing.map((call) => `${call.file}: ${call.raw}  ->  ${call.pattern}`),
       [],
       "a telefon olyan címet hív, ami a szerveren nem létezik",
     );

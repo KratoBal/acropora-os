@@ -1,5 +1,13 @@
 import { apiRequest } from "./client";
 
+/**
+ * A végpont előtagja EGY HELYEN. Ez a fájl korábban 2-szer írta le ugyanezt, és
+ * 2026-08-27-én a munkalap-kliens pontosan ezért tudott HÁROM helyen egyszerre
+ * rossz előtaggal hívni: a szerkezet megengedte, hogy egy helyen javuljon és a
+ * másik kettőben ne. Egy konstansnál ez a hiba nem tud részlegesen megtörténni.
+ */
+const BASE = "/integrations/unas/orders";
+
 /** App-local mirror of packages/types/src/integrations/unas-order-sync.ts. */
 export interface UnasOrderListItem {
   id: string;
@@ -74,12 +82,10 @@ export interface UnasOrderDetail {
 
 export function listUnasOrders(page = 1, pageSize = 20) {
   return apiRequest<UnasOrderListResponse>(
-    `/integrations/unas/orders?page=${page}&pageSize=${pageSize}`,
+    `${BASE}?page=${page}&pageSize=${pageSize}`,
   );
 }
 
 export function getUnasOrder(id: string) {
-  return apiRequest<UnasOrderDetail>(
-    `/integrations/unas/orders/${encodeURIComponent(id)}`,
-  );
+  return apiRequest<UnasOrderDetail>(`${BASE}/${encodeURIComponent(id)}`);
 }

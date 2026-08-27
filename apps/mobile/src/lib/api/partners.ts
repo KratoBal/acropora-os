@@ -1,6 +1,14 @@
 import { apiRequest } from "./client";
 
 /**
+ * A végpont előtagja EGY HELYEN. Ez a fájl korábban 3-szer írta le ugyanezt, és
+ * 2026-08-27-én a munkalap-kliens pontosan ezért tudott HÁROM helyen egyszerre
+ * rossz előtaggal hívni: a szerkezet megengedte, hogy egy helyen javuljon és a
+ * másik kettőben ne. Egy konstansnál ez a hiba nem tud részlegesen megtörténni.
+ */
+const BASE = "/suppliers";
+
+/**
  * SZERVIZ PARTNEREK, OLVASÁSRA.
  *
  * A telefonon a partner MUNKAKÖRNYEZET: a szerelő azt nézi meg, kihez megy és
@@ -62,12 +70,12 @@ export function listServicePartners(page = 1, pageSize = 25, search = "") {
     status: "ACTIVE",
   });
   if (search.trim()) query.set("search", search.trim());
-  return apiRequest<ServicePartnerListResponse>(`/suppliers?${query}`);
+  return apiRequest<ServicePartnerListResponse>(`${BASE}?${query}`);
 }
 
 export function getServicePartner(id: string) {
   return apiRequest<ServicePartnerListItem>(
-    `/suppliers/${encodeURIComponent(id)}`,
+    `${BASE}/${encodeURIComponent(id)}`,
   );
 }
 
@@ -93,6 +101,6 @@ export interface PartnerUnit {
 
 export function listPartnerUnits(partnerId: string) {
   return apiRequest<{ items: PartnerUnit[] }>(
-    `/suppliers/${encodeURIComponent(partnerId)}/units`,
+    `${BASE}/${encodeURIComponent(partnerId)}/units`,
   );
 }
