@@ -55,6 +55,8 @@
     "src/lib/assets/asset-create.spec.ts",
     "src/lib/assets/asset-placement.ts",
     "src/lib/assets/asset-placement.spec.ts",
+    "src/lib/assets/asset-search.ts",
+    "src/lib/assets/asset-search.spec.ts",
     "src/lib/partners/partner-presentation.ts",
     "src/lib/partners/partner-presentation.spec.ts",
     "src/lib/partners/site-tree.ts",
