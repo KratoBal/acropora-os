@@ -43,6 +43,7 @@ describe("SupplierEditorPage", () => {
     auth.session = session;
     suppliers.detail.mockReset();
     suppliers.create.mockReset();
+    suppliers.update.mockReset();
     suppliers.units.mockReset().mockResolvedValue({ items: [] });
     suppliers.createUnit.mockReset();
     suppliers.deletionPlan.mockReset();
@@ -120,6 +121,81 @@ describe("SupplierEditorPage", () => {
     await waitFor(() => expect(suppliers.create).toHaveBeenCalled());
     expect(suppliers.create.mock.calls.at(0)?.[1]?.worksheetPartnerCode).toBe(
       "FANK",
+    );
+  });
+
+  /**
+   * AMIT EZ A PÁR ŐRIZ, ÉS AMI A KÉPERNYŐN SOHA NEM LÁTSZIK: egy változatlan
+   * kód visszaküldése minden JÖVŐBELI szigorítást kiterjesztene a partner
+   * összes többi mezőjének szerkesztésére. A kérés a validáción bukna el, és
+   * aki csak a telefonszámot javította, nem értené, miért.
+   *
+   * Ez nem elméleti. A négy karakteres szabály bevezetésekor pontosan ez
+   * fenyegetett, és csak azért nem történt meg, mert élesben nulla ilyen sor
+   * volt. A képernyő addig működik, amíg nincs szigorítás, tehát egy későbbi
+   * refaktor gond nélkül visszatehetné a feltétel nélküli küldést -- ez a két
+   * állítás az, ami akkor pirosra vált.
+   *
+   * KETTŐ kell belőle, mert a kihagyás önmagában lehetne elrontott küldés is:
+   * az egyik azt állítja, hogy a VÁLTOZATLAN kód nem megy el, a másik, hogy a
+   * MEGVÁLTOZTATOTT igen.
+   */
+  it("leaves an unchanged partner code out of the update", async () => {
+    suppliers.detail.mockResolvedValue({
+      id: "supplier-1",
+      code: "SZALL-1",
+      name: "Fankó Kft.",
+      isSupplier: false,
+      isService: true,
+      worksheetPartnerCode: "FANK",
+      country: "HU",
+      isActive: true,
+      createdAt: "2026-08-19T10:00:00.000Z",
+      updatedAt: "2026-08-19T10:00:00.000Z",
+    });
+    suppliers.update.mockResolvedValue({ id: "supplier-1" });
+
+    render(<SupplierEditorPage supplierId="supplier-1" />);
+    fireEvent.change(await screen.findByLabelText("Név"), {
+      target: { value: "Fankó és Társa Kft." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Változások mentése" }));
+
+    await waitFor(() => expect(suppliers.update).toHaveBeenCalled());
+    // A SOROSÍTOTT alakot nézzük, mert a szerverhez az jut el: a
+    // `JSON.stringify` az `undefined` értékű kulcsot kihagyja, tehát a memóriában
+    // meglévő kulcs a dróton már nincs ott. Az objektumon állítani azt jelentené,
+    // hogy egy megvalósítási részletet állítunk a tényleges kérés helyett.
+    const sent = suppliers.update.mock.calls.at(0)?.[2];
+    expect(sent?.name).toBe("Fankó és Társa Kft.");
+    const wire = JSON.parse(JSON.stringify(sent ?? {}));
+    expect("worksheetPartnerCode" in wire).toBe(false);
+  });
+
+  it("sends the partner code once it actually changes", async () => {
+    suppliers.detail.mockResolvedValue({
+      id: "supplier-1",
+      code: "SZALL-1",
+      name: "Fankó Kft.",
+      isSupplier: false,
+      isService: true,
+      worksheetPartnerCode: "FANK",
+      country: "HU",
+      isActive: true,
+      createdAt: "2026-08-19T10:00:00.000Z",
+      updatedAt: "2026-08-19T10:00:00.000Z",
+    });
+    suppliers.update.mockResolvedValue({ id: "supplier-1" });
+
+    render(<SupplierEditorPage supplierId="supplier-1" />);
+    fireEvent.change(await screen.findByLabelText("Partnerkód"), {
+      target: { value: "BIOD" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Változások mentése" }));
+
+    await waitFor(() => expect(suppliers.update).toHaveBeenCalled());
+    expect(suppliers.update.mock.calls.at(0)?.[2]?.worksheetPartnerCode).toBe(
+      "BIOD",
     );
   });
 
