@@ -8,7 +8,7 @@
     "build": "nest build",
     "start": "node dist/main.js",
     "lint": "tsc --noEmit",
-    "test": "tsc -p tsconfig.test.json && specs=$(find test-dist -name '*.spec.js' ! -name '*.smoke.spec.js' ! -name '*.integration.spec.js') && { [ -n \"$specs\" ] || { echo 'Nem talaltam unit spec fajlt - nem jelentek sikert.' >&2; exit 1; }; } && node --test $specs",
+    "test": "rm -rf test-dist && tsc -p tsconfig.test.json && specs=$(find test-dist -name '*.spec.js' ! -name '*.smoke.spec.js' ! -name '*.integration.spec.js') && { [ -n \"$specs\" ] || { echo 'Nem talaltam unit spec fajlt - nem jelentek sikert.' >&2; exit 1; }; } && node --test $specs",
     "test:assets": "tsc -p tsconfig.test.json && node --test test-dist/service-assets/qr-svg.spec.js test-dist/service-assets/service-assets.service.spec.js",
     "test:bootstrap": "tsc -p tsconfig.test.json && node --test test-dist/app.bootstrap.spec.js",
     "test:smoke": "tsc -p tsconfig.test.json && node --test test-dist/health/health.smoke.spec.js",
@@ -22,7 +22,7 @@
     "barcode-import": "tsc -p tsconfig.json && node --env-file=../../.env dist/products/barcode-import.cli.js",
     "unas:probe": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-readonly-probe.cli.js",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist test-dist"
   },
   "dependencies": {
     "@acropora/database": "workspace:*",
