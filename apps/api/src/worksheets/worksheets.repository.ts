@@ -85,6 +85,24 @@ export async function writePartnerCode(
   customerId: string,
   partnerCode: string,
 ) {
+  // A TÜKÖR-SORT NEM LEHET INNEN ÍRNI, és ez nem óvatosság, hanem tulajdonjog:
+  // a tükör vevő-sor kódja SZÁRMAZTATOTT érték, a forrása a szállító sora, és a
+  // `syncWorksheetMirror` minden mentésnél visszaírja. Egy származtatott érték
+  // közvetlen írása nem csak elveszik: a visszaírásig HAT is, és mérve a
+  // munkalapszám ebből a kódból épülne, tehát a közbenső ablakban rossz számot
+  // adhat. Ezért elutasítás, nem "majd úgyis felülíródik".
+  //
+  // Az üzenet megmondja, HOL kell beállítani. Enélkül a hívó azt hiszi, hogy ő
+  // hibázott, pedig csak rossz ajtón kopogott.
+  //
+  // ELSŐKÉNT fut, a kód vizsgálata előtt: egy tükör-sort akkor sem innen kell
+  // írni, ha a kód történetesen szabad lenne.
+  const mirrorOf = await transaction.supplier.findFirst({
+    where: { customerId },
+    select: { name: true },
+  });
+  if (mirrorOf) throw new Error(`PARTNER_CODE_MIRROR_ROW:${mirrorOf.name}`);
+
   // A HÁROM ELLENŐRZÉS SORRENDJE SZÁMÍT: előbb az, amit a kód ELHAGY, aztán az,
   // amibe ÉRKEZIK. Aki egy elhasznált kódot akar frissre cserélni, azt kapja
   // válaszul, hogy a RÉGI zárolt, nem azt, hogy az új szabad.
@@ -109,6 +127,7 @@ export async function writePartnerCode(
     );
     await assertPartnerCodeNeverNumbered(transaction, partnerCode);
   }
+
   return transaction.customer.update({
     where: { id: customerId },
     data: { worksheetPartnerCode: partnerCode },

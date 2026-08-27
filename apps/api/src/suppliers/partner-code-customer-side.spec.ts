@@ -55,7 +55,7 @@ describe("the partner code, checked from the customer side", () => {
           "FANK",
           "customer-7",
         ),
-      /PARTNER_CODE_TAKEN:Csak Beszállító Kft\./,
+      /PARTNER_CODE_TAKEN_BY_SUPPLIER:Csak Beszállító Kft\./,
     );
   });
 
@@ -70,7 +70,7 @@ describe("the partner code, checked from the customer side", () => {
           "FANK",
           "customer-7",
         ),
-      /PARTNER_CODE_TAKEN:Fankó Kft\./,
+      /PARTNER_CODE_TAKEN_BY_CUSTOMER:Fankó Kft\./,
     );
   });
 

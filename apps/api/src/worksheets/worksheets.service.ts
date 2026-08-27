@@ -129,14 +129,30 @@ export class WorksheetsService {
         throw new ConflictException(
           "Ehhez a partnerkódhoz már készült munkalapszám, ezért a kód nem módosítható és nem törölhető.",
         );
-      // A név az üzenetben utazik, ugyanúgy, mint a partner képernyőn: "ez a
-      // kód foglalt" végigkerestetné a listát azzal, aki épp beírta.
-      if (
-        error instanceof Error &&
-        error.message.startsWith("PARTNER_CODE_TAKEN:")
-      )
+      // A név ÉS AZ OLDAL is utazik az üzenetben. "Ez a kód foglalt"
+      // végigkerestetné a listát azzal, aki épp beírta; a puszta név pedig a
+      // rossz képernyőre küldené, mert a partnerek és a vevők külön listák.
+      const named = (prefix: string) =>
+        error instanceof Error && error.message.startsWith(prefix)
+          ? error.message.slice(prefix.length)
+          : null;
+
+      const takenByCustomer = named("PARTNER_CODE_TAKEN_BY_CUSTOMER:");
+      if (takenByCustomer)
         throw new ConflictException(
-          `Ezt a partnerkódot már használja: ${error.message.slice("PARTNER_CODE_TAKEN:".length)}. Válassz másikat.`,
+          `Ezt a partnerkódot már viseli egy vevő: ${takenByCustomer}. Válassz másikat.`,
+        );
+
+      const takenBySupplier = named("PARTNER_CODE_TAKEN_BY_SUPPLIER:");
+      if (takenBySupplier)
+        throw new ConflictException(
+          `Ezt a partnerkódot már viseli egy szállító partner: ${takenBySupplier}. Válassz másikat.`,
+        );
+
+      const mirrorOf = named("PARTNER_CODE_MIRROR_ROW:");
+      if (mirrorOf)
+        throw new ConflictException(
+          `Ez a sor egy szerviz partner munkalapjait hordozza (${mirrorOf}), a kódja onnan származik. Állítsd be a partner adatlapján, a Partnerek menüben.`,
         );
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&

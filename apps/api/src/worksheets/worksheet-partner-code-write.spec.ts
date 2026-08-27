@@ -8,15 +8,19 @@ interface Written {
   data: unknown;
 }
 
+interface World {
+  /** The partner whose mirror this customer row is, if it is one. */
+  mirrorOf?: { name: string } | null;
+  /** The supplier that already holds the code, if any. */
+  codeHolder?: { name: string; customerId: string | null } | null;
+}
+
 /**
- * A stub transaction. `supplier.findFirst` answers with a partner that holds
- * the code and has NO mirror row -- the case the customer-side unique index
- * cannot see, because no customer row carries that code at all.
+ * A stub transaction. The two supplier lookups are told apart by what they
+ * filter on, because the order of the checks is part of what is asserted here:
+ * a mirror row is refused before the code is even looked at.
  */
-function stubTransaction(
-  partner: { name: string; customerId: string | null } | null,
-  written: Written[],
-) {
+function stubTransaction(world: World, written: Written[]) {
   return {
     customer: {
       findUniqueOrThrow: async () => ({ worksheetPartnerCode: null }),
@@ -26,7 +30,12 @@ function stubTransaction(
         return {};
       },
     },
-    supplier: { findFirst: async () => partner },
+    supplier: {
+      findFirst: async (args: { where: Record<string, unknown> }) =>
+        "customerId" in args.where
+          ? (world.mirrorOf ?? null)
+          : (world.codeHolder ?? null),
+    },
   } as never;
 }
 
@@ -49,13 +58,13 @@ describe("writing the partner code from the worksheet side", () => {
       () =>
         writePartnerCode(
           stubTransaction(
-            { name: "Csak Beszállító Kft.", customerId: null },
+            { codeHolder: { name: "Csak Beszállító Kft.", customerId: null } },
             written,
           ),
           "customer-7",
           "FANK",
         ),
-      /PARTNER_CODE_TAKEN:Csak Beszállító Kft\./,
+      /PARTNER_CODE_TAKEN_BY_SUPPLIER:Csak Beszállító Kft\./,
     );
 
     // And nothing was written. A check that throws after the update would read
@@ -63,14 +72,33 @@ describe("writing the partner code from the worksheet side", () => {
     assert.deepEqual(written, []);
   });
 
+  /**
+   * THE SECOND NEGATIVE CONTROL, for the other hole: the mirror row. Its code
+   * is a derived value -- the supplier's row is the source, and
+   * `syncWorksheetMirror` writes it back on every save. Setting it here does not
+   * merely get lost later: until the write-back it is the value the worksheet
+   * number would be built from, so it can hand out a wrong number first.
+   */
+  it("refuses to write onto a mirror row, and says where the code belongs", async () => {
+    const written: Written[] = [];
+
+    await assert.rejects(
+      () =>
+        writePartnerCode(
+          stubTransaction({ mirrorOf: { name: "Fankó Kft." } }, written),
+          "customer-7",
+          "FANK",
+        ),
+      /PARTNER_CODE_MIRROR_ROW:Fankó Kft\./,
+    );
+
+    assert.deepEqual(written, []);
+  });
+
   it("writes the code when nobody else carries it", async () => {
     const written: Written[] = [];
 
-    await writePartnerCode(
-      stubTransaction(null, written),
-      "customer-7",
-      "FANK",
-    );
+    await writePartnerCode(stubTransaction({}, written), "customer-7", "FANK");
 
     assert.deepEqual(written, [
       {

@@ -106,9 +106,12 @@ export async function assertPartnerCodeFree(
  * columns are unique, so each lookup returns at most one row; comparing that row
  * costs nothing and does not depend on how a negation is translated.
  *
- * The error carries the holder's name, the same as the supplier-side check: a
- * fourth write path that says only "this code is taken" would send the person
- * hunting through a list the other three spare them.
+ * THE ERROR NAMES THE HOLDER **AND THE SIDE**, and the side is not decoration.
+ * The failure this whole check exists to prevent is a message that points at
+ * the wrong field: today a collision here surfaces later, on the supplier's
+ * next save, naming a CUSTOMER for a code the supplier has held all along. An
+ * error that says only "taken by X" would reproduce that confusion one step
+ * earlier -- the person would go looking for X on the wrong screen.
  */
 export async function assertPartnerCodeFreeForCustomer(
   tx: Prisma.TransactionClient,
@@ -120,14 +123,19 @@ export async function assertPartnerCodeFreeForCustomer(
     select: { id: true, displayName: true },
   });
   if (customer && customer.id !== customerId)
-    throw new Error(`PARTNER_CODE_TAKEN:${customer.displayName}`);
+    throw new Error(`PARTNER_CODE_TAKEN_BY_CUSTOMER:${customer.displayName}`);
 
   const partner = await tx.supplier.findFirst({
     where: { worksheetPartnerCode: code },
     select: { name: true, customerId: true },
   });
+  // The `customerId` comparison only spares a MIRROR row, and the one caller
+  // refuses mirror rows before it ever gets here. It stays because this
+  // function answers "is the code free for this customer", and a second caller
+  // writing a mirror's code (`syncWorksheetMirror` is the obvious candidate)
+  // would need exactly this exclusion to be correct.
   if (partner && partner.customerId !== customerId)
-    throw new Error(`PARTNER_CODE_TAKEN:${partner.name}`);
+    throw new Error(`PARTNER_CODE_TAKEN_BY_SUPPLIER:${partner.name}`);
 }
 
 /**
