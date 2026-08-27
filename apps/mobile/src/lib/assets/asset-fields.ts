@@ -24,6 +24,11 @@ export type AssetOwnerType = "CUSTOMER" | "SUPPLIER";
  */
 export interface UpdateAssetInput {
   expectedUpdatedAt: string;
+  /**
+   * A partner alegysége. `null` törli a kötést, a mező elhagyása érintetlenül
+   * hagyja -- ugyanaz a hármas jelentés, mint a szöveges mezőknél.
+   */
+  departmentId?: string | null;
   status?: AssetStatus;
   criticality?: AssetCriticality;
   manufacturer?: string | null;

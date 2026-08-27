@@ -11,6 +11,18 @@ import type {
  */
 export interface EditableAsset {
   updatedAt: string;
+  /**
+   * A tulajdonos típusa: az alegység csak szerviz partnernél értelmes.
+   *
+   * KÖTELEZŐ MEZŐ, és ez szándékos. Az API `AssetDetail` alakja `owner.type`
+   * néven hordozza, tehát ha ez elhagyható lenne, a képernyő simán átadhatná a
+   * szerver válaszát -- `ownerType` nélkül, `undefined` értékkel --, és az
+   * alegység-ág SOHA nem futna le. Nem hibázna: csendben nem csinálna semmit.
+   * Kötelezőként a fordító kényszeríti ki a leképezést a hívás helyén.
+   */
+  ownerType: "CUSTOMER" | "SUPPLIER";
+  /** A partner alegysége, ahol az eszköz áll. Hiányzik, ha nincs megadva. */
+  unit?: { id: string };
   status: AssetStatus;
   criticality: AssetCriticality;
   manufacturer?: string;
@@ -30,11 +42,28 @@ export interface EditableAsset {
  * equipment is correcting what they can see on it - a serial number, a
  * model, what state it is in, and what they noticed.
  *
+ * AZ ALEGYSÉG (`unitId`) 2026-08-27 ÓTA BENNE VAN, pedig elhelyezés-adat. Nem
+ * a fenti szabály alóli kivétel, hanem a szabály INDOKA szerint tartozik ide:
+ * a választó egyetlen partner rövid helyszín-fája, nem hosszú lista, és épp az
+ * az adat, amit a helyszínen álló szerelő tud a legjobban -- melyik gépháznál,
+ * melyik medencénél áll a gép. A tulajdonos, a cím és a szülő továbbra is
+ * kimarad, változatlan indokkal.
+ *
+ * A MÁSIK FELE, amiért mégis ide kellett: a felviteli űrlap ugyanaznap megkapta
+ * a helyszín-választót. Egy mező, amit felvinni lehet, de javítani nem, egy
+ * elgépelés után zsákutca -- a szerelő a terepen nem tud mit kezdeni magával.
+ *
  * Dates are left out as well, and not for lack of interest: a date picker
  * is a new native dependency, and adding one is a decision of its own.
  * The web keeps them until then.
  */
 export interface AssetEditForm {
+  /**
+   * A partner alegysége. Üres szöveg annyit tesz: nincs megadva -- és mivel a
+   * szerver a `null` értéket törlésnek veszi, egy kiürített választás
+   * ténylegesen leszedi az eszközről a helyszínt.
+   */
+  unitId: string;
   status: AssetStatus;
   criticality: AssetCriticality;
   manufacturer: string;
@@ -57,6 +86,7 @@ const TEXT_FIELDS = [
 /** Fills the form from what the server last said about the asset. */
 export function assetEditFormFrom(asset: EditableAsset): AssetEditForm {
   return {
+    unitId: asset.unit?.id ?? "",
     status: asset.status,
     criticality: asset.criticality,
     manufacturer: asset.manufacturer ?? "",
@@ -101,6 +131,19 @@ export function buildAssetPatch(
   for (const field of TEXT_FIELDS) {
     const value = textPatchValue(form[field], asset[field]);
     if (value !== undefined) patch[field] = value;
+  }
+
+  /**
+   * AZ ALEGYSÉG CSAK SZERVIZ PARTNER ESZKÖZÉN KÜLDHETŐ. Vevő tulajdonosnál a
+   * szerver elutasítaná (ott a cím a pontosítás), és a hiba a mentés
+   * pillanatában jelenne meg. A képernyő ilyenkor meg sem mutatja a választót,
+   * de a formban ottmaradhat egy korábbi érték -- a TULAJDONOS TÍPUSA dönt,
+   * nem az, hogy van-e érték.
+   */
+  if (asset.ownerType === "SUPPLIER") {
+    const chosen = form.unitId.trim();
+    const current = asset.unit?.id ?? "";
+    if (chosen !== current) patch.departmentId = chosen === "" ? null : chosen;
   }
 
   return patch;
