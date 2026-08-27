@@ -13,10 +13,19 @@ import {
 
 /** The partner's abbreviation. The worksheet number no longer carries it, but
  * closing a sheet still requires it. Uppercase so that two codes differing
- * only in case cannot both exist -- on paper they would look identical. */
-export const PARTNER_CODE = /^[A-Z0-9]{4}$/;
+ * only in case cannot both exist -- on paper they would look identical.
+ *
+ * The length is this screen's rule; the leading letter is the close path's, and
+ * it is repeated here on purpose. `WORKSHEET_PARTNER_CODE_PATTERN` is what the
+ * close checks, and it refuses a code starting with a digit. Accepting `1234`
+ * here saved a partner that the picker then offered -- the picker only asks
+ * whether a code exists -- and the sheet refused to close, in front of the
+ * customer, with an error nobody standing there could fix. The two are kept in
+ * step by `partner-code-pattern.spec.ts`, which fails if this one ever accepts
+ * something the close path's rule rejects. */
+export const PARTNER_CODE = /^[A-Z][A-Z0-9]{3}$/;
 export const PARTNER_CODE_MESSAGE =
-  "A partnerkód pontosan négy karakter, nagybetűkből vagy számjegyekből (például FANK).";
+  "A partnerkód pontosan négy karakter, betűvel kezdődik, utána nagybetű vagy számjegy állhat (például FANK).";
 
 export class CreateSupplierDto {
   @IsString() @MinLength(1) name!: string;
@@ -25,10 +34,11 @@ export class CreateSupplierDto {
    * kinds, and it must keep working unchanged. */
   @IsBoolean() @IsOptional() isSupplier?: boolean;
   @IsBoolean() @IsOptional() isService?: boolean;
-  /** Exactly four characters. Digits are allowed alongside letters: an
-   * abbreviation like `H2O1` is entirely plausible in this trade, and what
-   * matters is that every code is the same length in a list, not which
-   * characters it is made of. */
+  /** Exactly four characters, the first a letter. Digits are allowed after it:
+   * an abbreviation like `H2O1` is entirely plausible in this trade, and what
+   * matters is that every code is the same length in a list. A leading digit is
+   * refused because the close path refuses it, and this is the gate that can
+   * still say so before anything is saved. */
   @Matches(PARTNER_CODE, { message: PARTNER_CODE_MESSAGE })
   @IsOptional()
   worksheetPartnerCode?: string;
