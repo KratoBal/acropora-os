@@ -202,3 +202,41 @@ describe("AssetListPage paging", () => {
     expect(lastTarget().get("status")).toBe("RETIRED");
   });
 });
+
+describe("AssetListPage es az ugyfel sajat kodja", () => {
+  beforeEach(() => {
+    auth.session = session;
+    navigation.params = new URLSearchParams();
+    navigation.replace.mockReset();
+    api.list.mockReset();
+  });
+
+  /**
+   * A KERESES EDDIG IS NEZTE, A SOR VISZONT NEM MUTATTA. Az ugyfel felolvassa a
+   * sajat kodjat, a talalat feljon, es semmi nem arulja el, MIRE illeszkedett --
+   * a felhasznalo ilyenkor ugyanazt kerdezi meg megegyszer.
+   */
+  it("shows the customer's own code on the row when there is one", async () => {
+    const withCode = response(1);
+    withCode.items[0]!.inventoryNumber = "LT-4711";
+    api.list.mockResolvedValue(withCode);
+
+    render(<AssetListPage />);
+
+    expect(await screen.findByText("LT-4711")).toBeTruthy();
+    expect(screen.getByText(/Leltári szám/)).toBeTruthy();
+  });
+
+  /**
+   * ES AMI NINCS, AZ NEM LESZ URES FELIRAT: egy "Leltári szám:" cimke ertek
+   * nelkul azt allitana, hogy tudunk rola valamit.
+   */
+  it("writes no label at all when the asset has no such code", async () => {
+    api.list.mockResolvedValue(response(1));
+
+    render(<AssetListPage />);
+
+    expect(await screen.findByText("ESZ-0001")).toBeTruthy();
+    expect(screen.queryByText(/Leltári szám/)).toBeNull();
+  });
+});

@@ -932,6 +932,13 @@ export class ServiceAssetsRepository extends Repository {
       // adatbázis-költséggel - a lekérdezés `include`-ot használ, tehát a
       // mező már benne van a betöltött sorban.
       qrToken: row.qrToken,
+      /**
+       * AZ ÜGYFÉL SAJÁT KÓDJA A LISTASORON is, nem csak az adatlapon: a keresés
+       * eddig is nézte, a sor viszont nem mutatta, tehát a találatról nem
+       * látszott, MIRE illeszkedett. Nem jár extra adatbázis-költséggel, a mező
+       * már benne van a betöltött sorban.
+       */
+      inventoryNumber: row.inventoryNumber ?? undefined,
       childCount: row._count.childAssets,
       updatedAt: row.updatedAt.toISOString(),
     };
@@ -945,7 +952,6 @@ export class ServiceAssetsRepository extends Repository {
     return {
       ...this.toListItem(row, paths),
       category: row.category ?? undefined,
-      inventoryNumber: row.inventoryNumber ?? undefined,
       description: row.description ?? undefined,
       installedAt: row.installedAt?.toISOString(),
       purchasedAt: row.purchasedAt?.toISOString(),

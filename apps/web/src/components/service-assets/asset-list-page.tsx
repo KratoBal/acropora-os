@@ -207,6 +207,20 @@ export function AssetListPage() {
                     <div className="mt-0.5 font-mono text-xs text-slate-500">
                       {asset.assetNumber}
                     </div>
+                    {/* AZ UGYFEL SAJAT KODJA, csak ha VAN. A kereses eddig is
+                        nezte, a sor viszont nem mutatta: az ugyfel felolvasta a
+                        sajat kodjat, a talalat feljott, es semmi nem arulta el,
+                        MIRE illeszkedett. A felirat azert kell melle, hogy ne
+                        legyen osszekeverheto a mi eszkozszamunkkal -- az all
+                        folotte, ugyanabban a betutipusban. */}
+                    {asset.inventoryNumber ? (
+                      <div className="mt-0.5 text-xs text-slate-500">
+                        Leltári szám:{" "}
+                        <span className="font-mono">
+                          {asset.inventoryNumber}
+                        </span>
+                      </div>
+                    ) : null}
                   </td>
                   <td>
                     <div className="font-medium">{asset.owner.displayName}</div>

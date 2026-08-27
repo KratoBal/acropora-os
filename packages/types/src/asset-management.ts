@@ -124,6 +124,15 @@ export interface AssetListItem extends AssetHierarchyItem {
   manufacturer?: string;
   model?: string;
   serialNumber?: string;
+  /**
+   * AZ ÜGYFÉL SAJÁT ESZKÖZKÓDJA, a listasoron is.
+   *
+   * A keresés eddig is nézte, a sor viszont nem mutatta: az ügyfél felolvasta a
+   * saját kódját, a találat feljött, és semmi nem árulta el, MIRE illeszkedett.
+   * Egy találat, ami nem mutatja meg, mire talált, ugyanazt kérdezteti meg
+   * másodszor.
+   */
+  inventoryNumber?: string;
   nextServiceAt?: string;
   /**
    * A QR-matricán lévő azonosító.
@@ -170,7 +179,6 @@ export interface AssetEventSummary {
 
 export interface AssetDetail extends AssetListItem {
   category?: string;
-  inventoryNumber?: string;
   description?: string;
   installedAt?: string;
   purchasedAt?: string;
