@@ -228,3 +228,39 @@ tehát az új sorozat 1-ről indulhat, és a régi lapok számát nem kell átí
 (`001`, `007`, `013`). A könyvelési hiánytalanság sértetlen, mert az egy
 sorozatra vonatkozik, és az hézagmentes – de ember szemmel ez ugrálásnak
 látszik, és a szervizes látni fogja.
+
+## ADR-010 – A szervizpartner helyszínei fát alkotnak, és a gyökér védelme külön indexen áll
+
+**Dátum:** 2026-08-27
+
+**Döntés (tulajdonosi, 2026-08-25):** a szervizpartner helyszínei **több
+szinten** állhatnak – Fank, azon belül Biodóm, azon belül Nagy főkamedence –,
+nem két rögzített szinten. A kód három karakter, a teljes alak `FANK-BIO-FNM`.
+
+**AMI NEM MELLÉKTERMÉK, HANEM A FA LÉNYEGE:** két **különböző ág** alatt
+ugyanaz a kód megengedett. A Fank alatti `BIO` és a Korallszirt alatti `BIO`
+egyszerre létezhet; **egy szülőn belül** viszont két testvér nem viselheti
+ugyanazt a kódot. Ez a szabály az, amiért a megkötés `(customerId, parentId,
+code)`, és nem `(customerId, code)`.
+
+**ÉS EZÉRT KELLETT EGY MÁSODIK, RÉSZLEGES INDEX.** A hármas megkötés a
+**legfelső szinten nem ér semmit**: a PostgreSQL-ben a `NULL` nem egyenlő
+önmagával, tehát két gyökér-sor azonos kóddal átmenne rajta – és a bevezetés
+pillanatában **minden sor gyökér-szintű volt**. A korábbi garancia tehát
+csendben elveszett volna. Ezt a `WorksheetDepartment_customer_root_code_key`
+részleges egyedi index tartja meg (`WHERE "parentId" IS NULL`), amit a Prisma
+séma nem tud kifejezni, ezért a migrációban áll nyers SQL-ként.
+
+**A kettő EGYÜTT adja azt, amit korábban egy megkötés adott.** Aki a két indexet
+eggyé akarja egyszerűsíteni, ezt a bekezdést keresse meg előbb: az
+egyszerűsítés a gyökér-szintet védtelenül hagyja, és a hiány nem hibaüzenetben
+jelentkezik, hanem két azonos nevű helyszínben.
+
+**Mérve, nem levezetve** (2026-08-27, külön, üres adatbázison, minden
+migrációval): két gyökér azonos kóddal elutasítva, két testvér azonos kóddal
+elutasítva, ugyanaz a kód más ág alatt átmegy. Ugyanez a három eset azóta az
+integrációs specben áll, tehát a CI tartja.
+
+**Egy következmény, amit érdemes tudni:** a szülőre `Restrict` áll, tehát egy
+`deleteMany` a fa fölött a sorrendtől függően elhasalhat. A takarítás ezért
+levélről gyökér felé halad.
