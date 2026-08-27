@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { WorksheetDepartmentSummary } from "@acropora/types";
 
-import { buildSiteTree } from "./site-tree";
+import { buildSiteOptions, buildSiteTree } from "./site-tree";
 
 function unit(
   id: string,
@@ -63,5 +63,58 @@ describe("buildSiteTree", () => {
 
     // Egyik sem tunhet el; a sorrend itt mar nem allitas, csak a teljesseg az.
     expect(rows.map((row) => row.unit.id).sort()).toEqual(["1", "2"]);
+  });
+});
+
+function named(
+  id: string,
+  parentId: string | null,
+  code: string,
+  name: string,
+): WorksheetDepartmentSummary {
+  return { id, parentId, code, name, isActive: true };
+}
+
+describe("buildSiteOptions", () => {
+  /**
+   * AZ EGYEDISEG CSAK TESTVEREK KOZOTT ALL FENN, tehat ket tavoli ag alatt
+   * ugyanaz a nev ES ugyanaz a kod megengedett. Egy lapos valaszto-listaban a
+   * puszta nev ilyenkor megkulonboztethetetlen -- az UT viszont nem.
+   *
+   * Ez az allitas azert a legfontosabb itt, mert a hiba, amit megelozne, NEM
+   * latszik: a felhasznalo kivalaszt egy sort, es egy masik ag alatti egyseget
+   * kap. Semmi nem hibazik.
+   */
+  it("tells two same-named units apart by their path", () => {
+    const options = buildSiteOptions([
+      named("root-a", null, "FNK", "Fankó"),
+      named("root-b", null, "KOR", "Korallszirt"),
+      named("child-a", "root-a", "BIO", "Biodóm"),
+      named("child-b", "root-b", "BIO", "Biodóm"),
+    ]);
+
+    const labels = options.map((option) => option.label);
+    expect(labels).toContain("Fankó / Biodóm (BIO)");
+    expect(labels).toContain("Korallszirt / Biodóm (BIO)");
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it("keeps a root unit's label to its own name", () => {
+    const options = buildSiteOptions([named("root-a", null, "FNK", "Fankó")]);
+
+    expect(options).toEqual([
+      { id: "root-a", label: "Fankó (FNK)", isActive: true },
+    ]);
+  });
+
+  /** Hianyzo szulo eseten sem tunhet el a sor: rovidebb utat kap, de latszik. */
+  it("keeps a unit whose parent is missing from the list", () => {
+    const options = buildSiteOptions([
+      named("child", "ismeretlen", "BIO", "Biodóm"),
+    ]);
+
+    expect(options).toEqual([
+      { id: "child", label: "Biodóm (BIO)", isActive: true },
+    ]);
   });
 });

@@ -191,6 +191,8 @@ export interface CreateAssetInput {
   ownerType: AssetOwnerType;
   ownerId: string;
   customerAddressId?: string;
+  /** A partner ALEGYSÉGE. Csak szerviz partner tulajdonosnál. */
+  departmentId?: string;
   aquariumId?: string;
   parentAssetId?: string;
   productVariantId?: string;
@@ -217,6 +219,8 @@ export interface UpdateAssetInput {
   ownerType?: AssetOwnerType;
   ownerId?: string;
   customerAddressId?: string | null;
+  /** `null` törli a kötést, a mező elhagyása érintetlenül hagyja. */
+  departmentId?: string | null;
   aquariumId?: string | null;
   parentAssetId?: string | null;
   productVariantId?: string | null;
