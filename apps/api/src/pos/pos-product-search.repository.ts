@@ -6,6 +6,7 @@ import {
   ensureMainWarehouse,
   type WarehouseLookupDatabase,
 } from "../common/warehouse.util.js";
+import { availableToSell } from "../inventory/available-to-sell.js";
 
 const SEARCH_RESULT_LIMIT = 20;
 
@@ -114,10 +115,7 @@ export class PosProductSearchRepository extends Repository {
       select: { variantId: true, onHand: true, reserved: true },
     });
     const availableByVariant = new Map(
-      stockItems.map((item) => [
-        item.variantId,
-        item.onHand.minus(item.reserved ?? new Prisma.Decimal(0)),
-      ]),
+      stockItems.map((item) => [item.variantId, availableToSell(item)]),
     );
 
     return variants.map((variant) => {

@@ -20,6 +20,7 @@ import {
   type InventoryMovementDatabase,
 } from "../common/inventory-movement-writer.js";
 import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
+import { availableToSell } from "../inventory/available-to-sell.js";
 import {
   ensureMainWarehouse,
   type WarehouseLookupDatabase,
@@ -620,7 +621,10 @@ export class PurchaseInvoiceRepository extends Repository {
                         ),
                       },
                       data: {
-                        targetOnHand: stockItem.onHand.minus(resultingReserved),
+                        targetOnHand: availableToSell({
+                          onHand: stockItem.onHand,
+                          reserved: resultingReserved,
+                        }),
                       },
                     });
                   }

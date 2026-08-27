@@ -9,6 +9,7 @@ import {
 import type { UnasApiErrorCode } from "../imports/unas/unas-api.client.js";
 import { UnasAuthService } from "../imports/unas/unas-auth.service.js";
 import { parseStoredUnasVariantValues } from "../common/unas-variant.util.js";
+import { availableToSell } from "./available-to-sell.js";
 import {
   UnasStockSyncOutboxRepository,
   type ClaimedUnasStockSyncOutboxRow,
@@ -378,7 +379,7 @@ export class UnasStockSyncOutboxService {
       select: { onHand: true, reserved: true },
     });
     const quantityToPublish = currentStock
-      ? currentStock.onHand.minus(currentStock.reserved)
+      ? availableToSell(currentStock)
       : row.targetOnHand;
 
     try {

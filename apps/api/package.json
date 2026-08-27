@@ -19,6 +19,7 @@
     "test:foxpost": "tsc -p tsconfig.test.json && node --test test-dist/integrations/foxpost/foxpost-settlement.parser.spec.js test-dist/integrations/foxpost/foxpost-monthly-report.xlsx.spec.js test-dist/integrations/foxpost/foxpost-gmail.client.spec.js test-dist/integrations/foxpost/foxpost-settlement.scheduler.spec.js test-dist/integrations/foxpost/foxpost-settlement.controller.spec.js test-dist/integrations/foxpost/foxpost-settlement.service.spec.js",
     "service-token": "tsc -p tsconfig.json && node --env-file=../../.env dist/tasks/service-token.cli.js",
     "medusa:project": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-projection.cli.js",
+    "medusa:inventory": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-inventory.cli.js",
     "barcode-import": "tsc -p tsconfig.json && node --env-file=../../.env dist/products/barcode-import.cli.js",
     "unas:probe": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-readonly-probe.cli.js",
     "typecheck": "tsc --noEmit",
