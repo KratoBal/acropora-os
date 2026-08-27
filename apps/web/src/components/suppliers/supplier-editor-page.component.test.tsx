@@ -83,8 +83,8 @@ describe("SupplierEditorPage", () => {
   });
 
   /**
-   * The code is the worksheet number's first segment, so it belongs to a
-   * partner we write worksheets for and to no other. Asked for only after
+   * Closing a worksheet requires the code, so it belongs to a partner we write
+   * worksheets for and to no other. Asked for only after
    * "Szerviz" is ticked, and NOT required even then: ticking a box should not
    * turn into "invent an abbreviation right now". The picker leaves partners
    * without a code out instead, so the gap costs nothing until a sheet is

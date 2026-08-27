@@ -54,8 +54,9 @@ export class WorksheetsController {
   }
 
   /**
-   * A partner-rövidítés a munkalap-szám első tagja, ezért itt él és nem a
-   * vevő-modulban: a mező kizárólag a számozás miatt létezik. Ha egyszer a
+   * A partner-rövidítés itt él és nem a vevő-modulban: a mező kizárólag a
+   * munkalap miatt létezik. A számnak 2026-08-27 óta nem tagja, de a lezárás
+   * megköveteli, tehát a munkalap-modul az, ami elromlik nélküle. Ha egyszer a
    * vevő adatlapján is szerkeszthető lesz, oda költözik.
    */
   @Put("customers/:customerId/partner-code")

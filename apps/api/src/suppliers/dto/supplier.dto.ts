@@ -11,7 +11,8 @@ import {
   MinLength,
 } from "class-validator";
 
-/** The worksheet number's first segment. Uppercase so that two codes differing
+/** The partner's abbreviation. The worksheet number no longer carries it, but
+ * closing a sheet still requires it. Uppercase so that two codes differing
  * only in case cannot both exist -- on paper they would look identical. */
 export const PARTNER_CODE = /^[A-Z0-9]{4}$/;
 export const PARTNER_CODE_MESSAGE =
@@ -25,8 +26,9 @@ export class CreateSupplierDto {
   @IsBoolean() @IsOptional() isSupplier?: boolean;
   @IsBoolean() @IsOptional() isService?: boolean;
   /** Exactly four characters. Digits are allowed alongside letters: an
-   * abbreviation like `H2O1` is entirely plausible in this trade, and the rule
-   * that matters for the number's shape is the length, not the alphabet. */
+   * abbreviation like `H2O1` is entirely plausible in this trade, and what
+   * matters is that every code is the same length in a list, not which
+   * characters it is made of. */
   @Matches(PARTNER_CODE, { message: PARTNER_CODE_MESSAGE })
   @IsOptional()
   worksheetPartnerCode?: string;

@@ -360,7 +360,7 @@ describe(
       assert.equal(closed.unitName, "Biodóm");
 
       // Az alegység átnevezése nem írhatja át visszamenőleg azt, ami egy
-      // lezárt lapon áll: a szám középső tagja és a lapon látható szöveg
+      // lezárt lapon áll: a szám első tagja és a lapon látható szöveg
       // ugyanabból a sorból jön, de a lezárt verzió a saját pillanatát őrzi.
       await prisma.worksheetDepartment.update({
         where: { id: bioDepartmentId },

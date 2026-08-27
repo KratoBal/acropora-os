@@ -58,7 +58,7 @@ type TransactionClient = Prisma.TransactionClient;
 /**
  * Az alegység neve nem a beküldött tartalomból jön, hanem a munkalap
  * alegységéből, a kiírás pillanatában. Így a lapon látható egység és a szám
- * középső tagja ugyanaz a sor, egy későbbi átnevezés viszont nem írja át
+ * első tagja ugyanaz a sor, egy későbbi átnevezés viszont nem írja át
  * visszamenőleg a már lezárt verziót.
  */
 function versionContentData(
@@ -196,10 +196,25 @@ export class WorksheetsRepository extends Repository {
    * Four conditions, and the middle two are the point.
    *
    * A partner with no code could be picked, worked on, and then refuse to
-   * close -- the number cannot be built without its first segment. The
-   * technician would be standing in front of the customer when that came out,
-   * and it is not something they can fix. So the pressure sits here, on the
-   * list, where the gap is visible to whoever can close it.
+   * close: the close path still requires the abbreviation, even though the
+   * number stopped carrying it. The technician would be standing in front of
+   * the customer when that came out, and it is not something they can fix. So
+   * the pressure sits here, on the list, where the gap is visible to whoever
+   * can close it.
+   *
+   * Why it is still required once the number does not contain it: the
+   * abbreviation is a uniqueness key across two tables, and filling it in
+   * later is a one-off step. A key supplied after the fact is not the same as
+   * a field filled in later -- by then a worksheet may already point at the
+   * partner, and "which partner carries this abbreviation" turns ambiguous in
+   * retrospect. The condition is an ORDER rather than a restriction: the
+   * partner is finished first, then it can have sheets.
+   *
+   * This is the FIRST of two gates on the same condition. The second sits in
+   * the close path and catches what got here by another route -- old data, a
+   * manual edit, a later import that does not write through this picker. They
+   * are not copies of each other, and neither should be removed as a
+   * duplicate.
    *
    * A partner with no mirror row has no worksheets to belong to. It cannot
    * happen for a service partner saved through the partner screen, which
@@ -556,6 +571,28 @@ export class WorksheetsRepository extends Repository {
 
       const partnerCode = worksheet.customer.worksheetPartnerCode;
       const departmentCode = worksheet.department.code;
+      /**
+       * MÁSODIK KAPU UGYANARRA A FELTÉTELRE, ÉS NEM FELESLEGES ISMÉTLÉS.
+       *
+       * Az ELSŐ kapu a választó szűrője (`selectablePartnerWhere`): rövidítés
+       * nélküli partnerhez el sem lehet INDÍTANI lapot, tehát az a lap
+       * LÉTREJÖTTÉT akadályozza meg. Ez itt azt fogja meg, ami MÁS ÚTON jutott
+       * idáig: a szűrő előttről maradt régi adat, kézi beavatkozás az
+       * adatbázisban, vagy egy későbbi import, ami nem a választón keresztül
+       * ír. Két kapu ugyanarra akkor indokolt, ha a második más úton érkező
+       * esetet fog meg -- itt ez áll fenn, tehát egyiket sem szabad
+       * "duplikáció" címén kivenni.
+       *
+       * ÉS AMIÉRT A RÖVIDÍTÉS AKKOR IS FELTÉTEL, AMIKOR MÁR NEM TAGJA A
+       * SZÁMNAK: egyediségi kulcs két táblán (`Supplier.worksheetPartnerCode`
+       * és a tükör vevő-sor ugyanilyen oszlopa), a pótlása pedig egyszeri
+       * lépés. Egy kulcs, amit később kell pótolni, nem ugyanaz, mint egy
+       * mező, amit később kell kitölteni: a pótlás pillanatában már létezhet
+       * a partnerre hivatkozó lap, és onnantól a "melyik partner viseli ezt a
+       * rövidítést" kérdés visszamenőleg kétértelmű. A feltétel tehát nem
+       * korlátozás, hanem SORREND: előbb legyen kész a partner, aztán legyen
+       * lapja.
+       */
       if (!worksheet.number) {
         const issue = worksheetNumberIssue({ partnerCode, departmentCode });
         if (issue) return { ok: false, reason: issue } as const;

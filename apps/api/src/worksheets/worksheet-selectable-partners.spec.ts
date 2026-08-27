@@ -15,8 +15,11 @@ describe("the partners a worksheet may be written for", () => {
    *   row alive. Offering it for a new sheet would mean the deletion never
    *   happened; the name still shows on the sheets it already has.
    * - no partner code: the sheet could be opened and then refuse to close,
-   *   because the number cannot be built without its first segment. The
-   *   technician would find that out in front of the customer.
+   *   because the close path requires the abbreviation even though the number
+   *   no longer carries it. The technician would find that out in front of the
+   *   customer. This filter is the first of two gates on that condition; the
+   *   second sits in the close path, for sheets that got there by another
+   *   route.
    * - no mirror customer row: nothing for the sheet to belong to.
    *
    * Asserted as the whole object rather than key by key: a condition silently

@@ -888,16 +888,23 @@ model Supplier {
   /// default: an existing row was never recorded as one, and guessing would
   /// put companies in front of the service staff that nobody put there.
   isService            Boolean   @default(false)
-  /// The partner's abbreviation, and the worksheet number's first segment
-  /// (`FANK` in `FANK-BIO-2026-001`). Four characters, because the number has
-  /// to say at a glance whose sheet it is, and a segment of varying length
-  /// makes two numbers hard to compare.
+  /// The partner's abbreviation (`FANK`). It used to be the worksheet number's
+  /// first segment; since 2026-08-27 the number does not carry it, and the
+  /// sheet's title is what names the partner.
+  ///
+  /// It is still required before a sheet can be closed, because it is a
+  /// uniqueness key across two tables and supplying it later is a one-off
+  /// step: by then a worksheet may already point at the partner, and "which
+  /// partner carries this abbreviation" turns ambiguous in retrospect.
+  ///
+  /// Four characters, so that the abbreviation reads the same everywhere it is
+  /// shown -- a code of varying length makes two partners hard to compare in a
+  /// list.
   ///
   /// Narrower than the customer side's `VarChar(8)` on purpose: that column
   /// already holds data and is not being narrowed, but a new column with room
   /// to spare would make "four characters" a habit rather than a rule, and the
-  /// first five-character code would quietly change the shape of every number
-  /// written afterwards.
+  /// first five-character code would arrive without anyone deciding it.
   ///
   /// Null until someone fills it in. A partner can be marked as a service
   /// partner without one -- ticking a box should not turn into a decision at
@@ -907,8 +914,9 @@ model Supplier {
   /// The customer row that carries this partner's worksheets.
   ///
   /// A worksheet hangs off a customer in three places -- the sheet, the unit
-  /// (`WorksheetDepartment.customerId`) and the number's first segment
-  /// (`Customer.worksheetPartnerCode`) -- so letting a worksheet belong to a
+  /// (`WorksheetDepartment.customerId`) and the abbreviation the close path
+  /// requires (`Customer.worksheetPartnerCode`) -- so letting a worksheet
+  /// belong to a
   /// supplier directly would mean two polymorphic relations, two constraints
   /// Prisma cannot express, and a partner code that has to be unique ACROSS
   /// two tables. The mirror row keeps all of that untouched.
@@ -1500,11 +1508,13 @@ model Customer {
   type                  CustomerType
   displayName           String
   companyName           String?
-  /// A munkalap-számozás partner-tagja (pl. `FANK`). Azért egyedi, mert a
-  /// szám ránézésre kell hogy megmondja, melyik partnerről van szó: két
-  /// azonos rövidítés esetén a `FANK-BIO-2026-001` már nem azonosít. Amíg
-  /// nincs kitöltve, ehhez a vevőhöz munkalap nem zárható le - a hiányzó
-  /// tagtól kétféle alakú szám keletkezne.
+  /// A partner rövidítése (pl. `FANK`), a szerviz partner tükör-során. A
+  /// munkalap-szám 2026-08-27 óta NEM hordozza, a lezárás viszont továbbra is
+  /// megköveteli: a rövidítés egyediségi kulcs két táblán (itt és a
+  /// `Supplier` során), és a pótlása egyszeri lépés. Ha a pótlás pillanatában
+  /// már létezik a partnerre hivatkozó lap, a "melyik partner viselte ezt a
+  /// rövidítést" kérdés visszamenőleg válik kétértelművé. Amíg nincs
+  /// kitöltve, ehhez a vevőhöz munkalap nem zárható le.
   worksheetPartnerCode  String?      @unique @db.VarChar(8)
   taxNumber             String?
   email                 String?
@@ -2230,11 +2240,14 @@ model ServiceJobAsset {
 
 /// A partner egy alegysége (pl. a Fánk „PP Üzemeltetés" vagy „Biodóm"
 /// egysége). Ez EGY fogalom, nem kettő: ugyanaz a sor adja a munkalap-szám
-/// középső tagját (`BIO`) és a lapon megjelenő szöveget (`Biodóm`) is
-/// (Balázs döntése, megerősítve 2026-08-18 00:56, Discord). A kód
-/// partneren belül egyedi, mert a
-/// számláló partner + alegység + év hármasonként fut: azonos kód ugyanabban
-/// az évben két sorozatot mosna össze.
+/// első tagját (`BIO`) és a lapon megjelenő szöveget (`Biodóm`) is
+/// (Balázs döntése, megerősítve 2026-08-18 00:56, Discord).
+///
+/// A kód PARTNEREN BELÜL egyedi, és ez azóta is így van, hogy a számláló
+/// évenként egy sorozatot visz az egész cégre (`WorksheetYearSequence`):
+/// a partneren belüli egyediség attól kell, hogy a partner lapjain a `BIO`
+/// egyetlen egységet jelentsen. A SZÁM egyediségét viszont nem ez adja, hanem
+/// a sorozat - két partner `BIO` egysége nyugodtan létezhet egyszerre.
 model WorksheetDepartment {
   id         String   @id @default(cuid())
   customerId String
@@ -2317,12 +2330,14 @@ model WorksheetNumberSequence {
 /// eldobott piszkozat kilyukasztaná a sorozatot, és a hiányzó sorszámot
 /// utólag senki nem tudná megmagyarázni a könyvelésnek.
 ///
-/// A vevő és a részleg a lezárás után nem módosítható, mert mindkettő a
-/// kiosztott szám része: cseréjük a számot érvénytelenítené, a szám pedig
-/// verziók között sem változik.
+/// A vevő és a részleg a lezárás után nem módosítható. A RÉSZLEG azért, mert
+/// a kiosztott szám első tagja, tehát cseréje a számot érvénytelenítené, a
+/// szám pedig verziók között sem változik. A VEVŐ azért, mert a lap kiléte
+/// hozzá van kötve: a szám 2026-08-27 óta nem hordozza, de egy lezárt lapot
+/// másik partnerre átírni nem javítás, hanem egy másik lap.
 model Worksheet {
   id                   String  @id @default(cuid())
-  /// Teljes, emberi olvasású szám (`FANK-BIO-2026-001`) - csak lezárt lapnál.
+  /// Teljes, emberi olvasású szám (`BIO-2026-001`) - csak lezárt lapnál.
   number               String? @unique
   /// A sorozat éve és a sorszám nyers értéke, hogy a hiánytalanság
   /// ellenőrzéséhez ne kelljen szöveget visszafejteni.
@@ -2398,7 +2413,7 @@ model WorksheetAssignee {
 /// Egy munkalap egy változata, teljes tartalommal. A módosítás nem írja át a
 /// lezárt lapot, hanem új verziót hoz létre; a korábbi verzió változatlanul
 /// megmarad, megnyithatóan és nyomtathatóan. A szám nem változik, a verzió
-/// külön tag: `FANK-BIO-2026-001/2`.
+/// külön tag: `BIO-2026-001/2`.
 ///
 /// A `changeReason` az 1. verziónál `null`, minden továbbinál kötelező - a
 /// napló üres indoklással nem ér semmit. Az, hogy MIT változott, nem külön
