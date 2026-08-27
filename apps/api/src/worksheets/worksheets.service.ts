@@ -129,6 +129,15 @@ export class WorksheetsService {
         throw new ConflictException(
           "Ehhez a partnerkódhoz már készült munkalapszám, ezért a kód nem módosítható és nem törölhető.",
         );
+      // A név az üzenetben utazik, ugyanúgy, mint a partner képernyőn: "ez a
+      // kód foglalt" végigkerestetné a listát azzal, aki épp beírta.
+      if (
+        error instanceof Error &&
+        error.message.startsWith("PARTNER_CODE_TAKEN:")
+      )
+        throw new ConflictException(
+          `Ezt a partnerkódot már használja: ${error.message.slice("PARTNER_CODE_TAKEN:".length)}. Válassz másikat.`,
+        );
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2002"

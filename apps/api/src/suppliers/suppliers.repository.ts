@@ -90,6 +90,47 @@ export async function assertPartnerCodeFree(
 }
 
 /**
+ * The same question asked from the CUSTOMER side, for the endpoint that writes
+ * the code straight onto a customer row (`PUT customers/:id/partner-code`).
+ *
+ * It is a separate function rather than a parameter on the one above, because
+ * what has to be EXCLUDED is different, not just named differently. There the
+ * row being saved is a supplier; here it is a customer, and the supplier that
+ * may legitimately carry the same code is the one whose mirror this customer IS
+ * (`Supplier.customerId`), not one identified by id.
+ *
+ * WHY THE COMPARISON IS IN JAVASCRIPT AND NOT IN THE `where`: the case this
+ * exists for is a supplier with `customerId = null`, and a negated filter on a
+ * nullable column is exactly where SQL's three-valued logic quietly drops rows
+ * -- `NOT (customerId = 'x')` is NULL, not true, when the column is NULL. Both
+ * columns are unique, so each lookup returns at most one row; comparing that row
+ * costs nothing and does not depend on how a negation is translated.
+ *
+ * The error carries the holder's name, the same as the supplier-side check: a
+ * fourth write path that says only "this code is taken" would send the person
+ * hunting through a list the other three spare them.
+ */
+export async function assertPartnerCodeFreeForCustomer(
+  tx: Prisma.TransactionClient,
+  code: string,
+  customerId: string,
+) {
+  const customer = await tx.customer.findFirst({
+    where: { worksheetPartnerCode: code },
+    select: { id: true, displayName: true },
+  });
+  if (customer && customer.id !== customerId)
+    throw new Error(`PARTNER_CODE_TAKEN:${customer.displayName}`);
+
+  const partner = await tx.supplier.findFirst({
+    where: { worksheetPartnerCode: code },
+    select: { name: true, customerId: true },
+  });
+  if (partner && partner.customerId !== customerId)
+    throw new Error(`PARTNER_CODE_TAKEN:${partner.name}`);
+}
+
+/**
  * A worksheet belongs to a customer in three places -- the sheet, the unit and
  * the abbreviation the close path requires -- so a service partner is given a
  * customer row of its own to carry them. The row is the partner's, not a buyer's: it is created
