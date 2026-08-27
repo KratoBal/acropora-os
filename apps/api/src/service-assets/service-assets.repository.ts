@@ -22,7 +22,7 @@ import type {
   UpdateAssetDto,
 } from "./dto/asset.dto.js";
 import {
-  SERVICE_OWNER_WHERE,
+  SERVICE_OWNER_PICKABLE_WHERE,
   assetDetailInclude,
   assetOwnerScopeWhere,
   assetSummaryInclude,
@@ -179,7 +179,7 @@ export class ServiceAssetsRepository extends Repository {
     keep?: { type: AssetOwnerType; id: string } | null,
   ): Promise<AssetOwnerListResponse> {
     const suppliers = await prisma.supplier.findMany({
-      where: SERVICE_OWNER_WHERE,
+      where: SERVICE_OWNER_PICKABLE_WHERE,
       orderBy: [{ name: "asc" }, { id: "asc" }],
     });
     const items: AssetOwnerListResponse["items"] = [
