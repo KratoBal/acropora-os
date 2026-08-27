@@ -317,7 +317,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                       label="Alegység"
                       value={
                         asset.unit
-                          ? asset.unit.name
+                          ? `${asset.unit.path.join(" / ")} (${asset.unit.code})`
                           : asset.address?.formatted
                             ? `Nincs pontosítva. A partner címe látszik helyette: ${asset.address.formatted}`
                             : "Nincs pontosítva."

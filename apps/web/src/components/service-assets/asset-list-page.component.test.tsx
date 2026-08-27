@@ -79,6 +79,7 @@ function partnerResponse(unit?: {
   id: string;
   code: string;
   name: string;
+  path: string[];
 }): AssetListResponse {
   const base = response(1);
   return {
@@ -116,12 +117,19 @@ describe("AssetListPage location cell", () => {
    */
   it("shows the unit for a partner-owned asset", async () => {
     api.list.mockResolvedValue(
-      partnerResponse({ id: "unit-1", code: "BIO", name: "Biodóm" }),
+      partnerResponse({
+        id: "unit-1",
+        code: "BIO",
+        name: "Biodóm",
+        path: ["Fankó", "Biodóm"],
+      }),
     );
 
     render(<AssetListPage />);
 
-    expect(await screen.findByText("Biodóm (BIO)")).toBeTruthy();
+    // A TELJES UT latszik, nem a level neve: ket tavoli ag „Biodóm (BIO)"
+    // egysege kulonben ugyanazt a kepet adna.
+    expect(await screen.findByText("Fankó / Biodóm (BIO)")).toBeTruthy();
     expect(screen.queryByText(/Nincs pontosítva/)).toBeNull();
   });
 
