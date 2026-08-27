@@ -24,6 +24,20 @@
  * That table sits next to the product and holds purchase price and preferred
  * supplier. Whatever enters this projection must be treated as spoken aloud,
  * and those two must never be.
+ *
+ * **A second absence, recorded here because until now nothing recorded it.**
+ * `UnasProductSnapshot` - the table this projection reads from - carries three
+ * URL columns: `productUrl` and `sefUrl` (our own shop page) and
+ * `manufacturerUrl` (the maker's site). None of them travels, and that is not
+ * an oversight to be tidied up later: what the model receives it may repeat,
+ * and whether this assistant hands out a link at all is an open business rule
+ * rather than a field mapping.
+ *
+ * `productUrl` in particular is the obvious next addition - a surface will
+ * want to link to the product - so the absence needs a sentence rather than
+ * silence. **Adding any of the three is a decision against that rule, not a
+ * widening of the projection.** A test holds the current state, so the
+ * conversation happens before the field does.
  */
 export interface AiProductSearchHit {
   productId: string;
