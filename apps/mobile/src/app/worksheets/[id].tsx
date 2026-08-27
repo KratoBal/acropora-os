@@ -136,6 +136,17 @@ export default function WorksheetDetailScreen() {
                   {line.assetNumber ? (
                     <Text style={styles.muted}>{line.assetNumber}</Text>
                   ) : null}
+                  {/*
+                    AZ UGYFEL SAJAT KODJA, csak ha van, es FELIRATTAL. A felette
+                    allo eszkozszam a MIENK, ez pedig az ugyfele: ket csupasz kod
+                    egymas alatt pont azt a keveredest hozna, ami ellen a mezo
+                    kulon nevet kapott.
+                  */}
+                  {line.inventoryNumber ? (
+                    <Text style={styles.muted}>
+                      Leltári szám: {line.inventoryNumber}
+                    </Text>
+                  ) : null}
                   <Text style={styles.lineSummary}>
                     {worksheetLineSummary(line, current.currency)}
                   </Text>

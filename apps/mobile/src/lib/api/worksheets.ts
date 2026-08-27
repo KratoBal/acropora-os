@@ -63,6 +63,11 @@ export interface WorksheetLineDetail {
   detail: string | null;
   assetId: string | null;
   assetNumber: string | null;
+  /**
+   * Az ugyfel sajat eszkozkodja, elo hivatkozassal: a szerver olvasaskor huzza
+   * az eszkozrol, a soron nincs masolata.
+   */
+  inventoryNumber: string | null;
   quantity: string;
   unit: string;
   unitNet: string;
