@@ -145,3 +145,66 @@ describe("device token registration", () => {
     }
   });
 });
+
+describe("device token removal", () => {
+  function forgetting(removed: number) {
+    const calls: Array<{ userId: string; token: string }> = [];
+    const value = {
+      forget: async (input: { userId: string; token: string }) => {
+        calls.push(input);
+        return removed;
+      },
+    } as unknown as DeviceTokenRepository;
+    return { repository: value, calls };
+  }
+
+  /**
+   * A GAZDA A MUNKAMENETBOL JON, sosem a torzsbol. A token onmagaban is
+   * azonosit egy sort, tehat token-alapu torlesnel barki, aki egy masik telefon
+   * tokenjet ismeri, le tudna kapcsolni azt a keszuleket az ertesitesekrol.
+   */
+  it("scopes the removal to the signed-in colleague, not just the token", async () => {
+    const { repository: store, calls } = forgetting(1);
+    const controller = new DeviceTokenController(store);
+    captureLog(controller);
+
+    await controller.forget({ token: nativeToken }, user);
+
+    assert.deepEqual(calls, [
+      { userId: "user-2", token: nativeToken.toLowerCase() },
+    ]);
+  });
+
+  /**
+   * A TOKEN SOSEM KERUL NAPLOBA -- ugyanaz a szabaly, mint a regisztracional: a
+   * naplot tobben olvassak, mint az eszkoz-tablat.
+   */
+  it("says what happened without writing the token anywhere", async () => {
+    const { repository: store } = forgetting(1);
+    const controller = new DeviceTokenController(store);
+    const lines = captureLog(controller);
+
+    await controller.forget({ token: nativeToken }, user);
+
+    assert.equal(lines.length, 1);
+    assert.equal(lines[0]?.level, "log");
+    assert.ok(!lines[0]!.message.includes(nativeToken.toLowerCase()));
+    assert.match(lines[0]!.message, /nem kap értesítést/);
+  });
+
+  /**
+   * A NULLA TALALAT NEM HIBA, de nem is siker-uzenet: az a valasz, hogy ehhez a
+   * kollegahoz nem tartozott ilyen eszkoz. A hivo ettol meg nyugodtan
+   * kikapcsoltnak tekintheti magat -- a sor nincs ott.
+   */
+  it("reports how many devices it actually took off", async () => {
+    const { repository: store } = forgetting(0);
+    const controller = new DeviceTokenController(store);
+    const lines = captureLog(controller);
+
+    const result = await controller.forget({ token: nativeToken }, user);
+
+    assert.deepEqual(result, { ok: true, removed: 0 });
+    assert.match(lines[0]!.message, /nem tartozott/);
+  });
+});

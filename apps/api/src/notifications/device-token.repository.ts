@@ -76,6 +76,25 @@ export class DeviceTokenRepository extends Repository {
   }
 
   /**
+   * A KOLLEGA KIKAPCSOLTA AZ ERTESITEST EZEN A TELEFONON.
+   *
+   * A felhasznaloval EGYUTT szur, nem csak a tokenre, es ez a lenyeg: a token
+   * onmagaban is azonosit egy sort, tehat token-alapu torles eseten barki, aki
+   * egy masik telefon tokenjet ismeri, le tudna venni azt a keszuleket az
+   * ertesitesekrol. A gazda a munkamenetbol jon, sosem a torzsbol -- ugyanaz a
+   * szabaly, amit a regisztracio kovet.
+   *
+   * A visszaadott darabszam mondja meg, tortent-e valami: nulla annyit tesz,
+   * hogy ez a token nem ehhez a kollegahoz tartozik (vagy mar nincs is meg).
+   */
+  async forget(input: { userId: string; token: string }): Promise<number> {
+    const { count } = await this.database.deviceToken.deleteMany({
+      where: { token: input.token, userId: input.userId },
+    });
+    return count;
+  }
+
+  /**
    * Apple said this device is gone. Keeping it would mean sending into
    * nothing on every assignment from here on, and the failure would look like
    * a delivery problem rather than a device that no longer exists.
