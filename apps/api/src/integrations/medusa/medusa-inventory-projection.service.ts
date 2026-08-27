@@ -80,6 +80,15 @@ export type InventoryProjectionStopReason =
    * esetben sem írunk semmit.
    */
   | "stock-location-not-resolved"
+  /**
+   * A változat-keresés kimerítette a limitet, tehát lehet több változat is.
+   *
+   * Csonkolt halmazon nem döntünk, ugyanazzal az indokkal, mint a
+   * termék-keresésnél: a lista nem rendez, tehát a hiányzó egyezésből NEM
+   * következik, hogy nincs ilyen cikkszámú változat - csak az, hogy ebben a
+   * részhalmazban nem volt.
+   */
+  | "variant-lookup-truncated"
   /** A Medusa terméken nincs ilyen cikkszámú változat. */
   | "variant-not-found"
   /** Több változat viseli ugyanazt a cikkszámot ugyanazon a terméken. */
@@ -207,9 +216,21 @@ export class MedusaInventoryProjectionService {
         details: `${stock.osProductId}: ${location.error}`,
       };
 
-    const variants = await this.medusa.listProductVariants(
-      link.medusaProductId,
-    );
+    const found = await this.medusa.listProductVariants(link.medusaProductId);
+
+    if (found.truncated)
+      return {
+        action: "stopped",
+        reason: "variant-lookup-truncated",
+        details:
+          `${stock.osProductId}: a változat-keresés kimerítette a limitet ` +
+          `(${found.rows.length} sor) a ${link.medusaProductId} terméken, ` +
+          `tehát lehet több változat is. Csonkolt halmazon nem döntünk: a ` +
+          `"pontosan egy egyezés" ellenőrzés itt hamis nemleges választ adna. ` +
+          `Nem írtunk semmit.`,
+      };
+
+    const variants = found.rows;
     const matching = variants.filter((row) => row.sku === stock.sku);
 
     if (matching.length === 0)

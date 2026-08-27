@@ -84,6 +84,7 @@ function fakes(options: {
   link?: { productId: string; medusaProductId: string } | null;
   locations?: MedusaStockLocationRow[];
   variants?: MedusaVariantRow[];
+  variantsTruncated?: boolean;
   failOn?: "backorder" | "level";
 }) {
   const calls: string[] = [];
@@ -100,7 +101,10 @@ function fakes(options: {
     },
     async listProductVariants(productId: string) {
       calls.push(`variants:${productId}`);
-      return variants;
+      return {
+        rows: variants,
+        truncated: options.variantsTruncated ?? false,
+      };
     },
     async updateVariantBackorder(
       productId: string,
@@ -520,6 +524,28 @@ describe("Medusa készlet-vetítés: fail-closed kapuk", () => {
 
     assert.ok(outcome.action === "stopped");
     assert.equal(outcome.reason, "inventory-not-managed");
+  });
+
+  /**
+   * UGYANAZ AZ ÓVATOSSÁG, mint a termék-keresésnél, és ugyanazért.
+   *
+   * A csonkolt válasz nem „az első ötven": a lista nem rendez, tehát
+   * tetszőleges ötven. A „pontosan egy egyezés" ellenőrzés ilyenkor egy
+   * részhalmazon futna, és a hiányzó egyezésből azt olvasnánk ki, hogy nincs
+   * ilyen cikkszámú változat - vagyis egy HAMIS NEMLEGES választ kapnánk,
+   * magabiztosan.
+   */
+  it("csonkolt változat-keresés: megállunk, nem döntünk részhalmazon", async () => {
+    const { service, calls } = fakes({ variantsTruncated: true });
+    const outcome = await service.project(stock("5"));
+
+    assert.ok(outcome.action === "stopped");
+    assert.equal(outcome.reason, "variant-lookup-truncated");
+    assert.ok(
+      !calls.some((entry) => entry.includes("level")),
+      "csonkolt halmazon nem írunk készletet",
+    );
+    assert.ok(!calls.some((entry) => entry.startsWith("backorder:")));
   });
 
   it("nincs ilyen cikkszámú változat: megnevezzük, mi van helyette", async () => {

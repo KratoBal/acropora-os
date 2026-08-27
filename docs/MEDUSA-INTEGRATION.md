@@ -395,6 +395,13 @@ Medusa maintains itself; we read it through
 is a **copy** made at creation, and identity on a renameable field is what the
 brief forbids.
 
+**A truncated variant list is not an answer either.** The variant lookup reports
+whether it exhausted its limit, and the run stops if it did — the same guard the
+product lookup already carries, and for the same reason: the list does not sort,
+so a truncated response is an arbitrary subset rather than the first N. An
+"exactly one match" check running on a subset would answer "no variant with that
+SKU" with full confidence.
+
 **A missing field is not an empty list.** If the response does not carry
 `inventory_items` (or the nested `location_levels`), the run stops and says so.
 Reading absence as "there is no link" would send the projection down the wrong
@@ -486,6 +493,7 @@ guess and a weaker one than an observation.
 | a partial failure is not a success, and a retry converges          | `medusa-inventory-projection.service.spec.ts` |
 | not exactly one stock location on the channel stops the run        | `medusa-inventory-projection.service.spec.ts` |
 | a missing chain field is not read as an empty list                 | `medusa-inventory-projection.service.spec.ts` |
+| a truncated variant list stops instead of answering "not found"    | `medusa-inventory-projection.service.spec.ts` |
 | inventory never writes product status or sales channel             | `medusa-inventory-projection.service.spec.ts` |
 | a non-ACROPORA product is not projected                            | `medusa-inventory.cli.spec.ts`                |
 | the inventory report names quantity, location, clamp and backorder | `medusa-inventory.cli.spec.ts`                |

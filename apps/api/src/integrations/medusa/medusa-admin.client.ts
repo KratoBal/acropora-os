@@ -95,7 +95,16 @@ export const EXTERNAL_ID_LOOKUP_LIMIT = 50;
  */
 export const STOCK_LOCATION_LOOKUP_LIMIT = 50;
 
-/** Egy termék változatainak felső határa. A vetített termékeknek ma egy van. */
+/**
+ * Egy termék változatainak felső határa.
+ *
+ * A vetített termékeknek ma egy változatuk van, tehát ötven bőven elég - DE a
+ * kimerített limitet akkor is jelezzük, ugyanúgy, ahogy a termék-keresésnél. A
+ * lista nem rendez alapértelmezésben, tehát egy csonkolt válasz nem „az első
+ * ötvenet" adja vissza, hanem TETSZŐLEGES ötvenet: a „pontosan egy egyezés"
+ * ellenőrzés ilyenkor egy részhalmazon futna, és a hiányzó egyezésből azt
+ * olvasnánk ki, hogy nincs ilyen cikkszámú változat.
+ */
 export const VARIANT_LOOKUP_LIMIT = 50;
 
 /**
@@ -185,7 +194,7 @@ export interface MedusaAdminClient {
    * út létezik, de a cikkszám az inventory itemen MÁSOLAT: a brief 6. pontja
    * kifejezetten tiltja az átnevezhető mezőt azonosságként.
    */
-  listProductVariants(productId: string): Promise<MedusaVariantRow[]>;
+  listProductVariants(productId: string): Promise<MedusaVariantLookupResult>;
   /** Új készletszint egy helyen. A szint hiánya nem hiba, hanem első futás. */
   createInventoryLevel(
     inventoryItemId: string,
@@ -244,6 +253,13 @@ export interface MedusaInventoryLevelRow {
  * üres tömb: az üres lista azt ÁLLÍTANÁ, hogy nincs kapcsolat, holott csak nem
  * kérdeztünk jól. A hívó a kettőt külön kezeli, és a hiányra megáll.
  */
+/** Változat-keresés eredménye, a csonkolás jelzésével EGYÜTT. */
+export interface MedusaVariantLookupResult {
+  rows: MedusaVariantRow[];
+  /** Igaz, ha a válasz kimerítette a limitet, tehát lehet több változat is. */
+  truncated: boolean;
+}
+
 export interface MedusaVariantRow {
   id: string;
   sku: string | null;
@@ -435,7 +451,9 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
     return body.stock_locations ?? [];
   }
 
-  async listProductVariants(productId: string): Promise<MedusaVariantRow[]> {
+  async listProductVariants(
+    productId: string,
+  ): Promise<MedusaVariantLookupResult> {
     const params = new URLSearchParams({
       fields: VARIANT_INVENTORY_FIELDS,
       limit: String(VARIANT_LOOKUP_LIMIT),
@@ -443,7 +461,8 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
     const body = await this.request<{ variants: MedusaVariantRow[] }>(
       `/admin/products/${encodeURIComponent(productId)}/variants?${params.toString()}`,
     );
-    return body.variants ?? [];
+    const rows = body.variants ?? [];
+    return { rows, truncated: rows.length >= VARIANT_LOOKUP_LIMIT };
   }
 
   async createInventoryLevel(
