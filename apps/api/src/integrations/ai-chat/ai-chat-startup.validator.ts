@@ -56,10 +56,20 @@ export class AiChatStartupValidator implements OnModuleInit {
     const baseUrl = this.environment[AI_CHAT_BASE_URL_ENV]?.trim();
     const token = this.environment[AI_CHAT_TOKEN_ENV]?.trim();
 
-    if (baseUrl && token) {
-      this.warnAboutSuspiciousValues({ baseUrl, token });
-      return;
-    }
+    /**
+     * Az alak-ellenorzes arra fut, ami JELEN VAN - fuggetlenul attol, hogy a
+     * masik hianyzik-e.
+     *
+     * Elsore csak akkor futott, ha MINDKETTO megvolt, es murena talalta meg,
+     * mi a baj vele: ha az egyik hianyzik ES a masik idezojelek koze van
+     * zarva, akkor az idezojelrol egy szo sem esik. A kollega potolja a
+     * hianyzot, ujraindit, es CSAK AKKOR kapja meg a masodik figyelmeztetest
+     * - ket kor egy helyett, pontosan az a lassitas, ami ellen ez az egesz
+     * valaszto keszult.
+     */
+    this.warnAboutSuspiciousValues({ baseUrl, token });
+
+    if (baseUrl && token) return;
 
     const missing = [
       baseUrl ? null : AI_CHAT_BASE_URL_ENV,
@@ -125,12 +135,16 @@ export class AiChatStartupValidator implements OnModuleInit {
    * titok darabja.
    */
   private warnAboutSuspiciousValues(values: {
-    baseUrl: string;
-    token: string;
+    baseUrl: string | undefined;
+    token: string | undefined;
   }): void {
     const quoted = [
-      isWrappedInQuotes(values.baseUrl) ? AI_CHAT_BASE_URL_ENV : null,
-      isWrappedInQuotes(values.token) ? AI_CHAT_TOKEN_ENV : null,
+      values.baseUrl && isWrappedInQuotes(values.baseUrl)
+        ? AI_CHAT_BASE_URL_ENV
+        : null,
+      values.token && isWrappedInQuotes(values.token)
+        ? AI_CHAT_TOKEN_ENV
+        : null,
     ].filter((name): name is string => name !== null);
 
     if (!quoted.length) return;
@@ -151,7 +165,13 @@ export class AiChatStartupValidator implements OnModuleInit {
       .filter(
         (name) =>
           name !== missingName &&
-          name.endsWith(`_${suffix}`) &&
+          /*
+            Az elotagos alak a motivalo eset (mas rendszerbol atmasolt nev),
+            de a CSUPASZ nev is illeszkedjen: aki egy 'ACCESS_TOKEN' nevu
+            valtozot masol be, ugyanabba a hibaba fut, es a valaszto
+            kulonben hallgatna. Murena vette eszre.
+          */
+          (name.endsWith(`_${suffix}`) || name === suffix) &&
           (this.environment[name]?.trim() ?? "") !== "",
       )
       .sort()
