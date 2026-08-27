@@ -4,7 +4,10 @@ import { after, before, describe, it } from "node:test";
 import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
-import { assertPartnerCodeFree } from "./suppliers.repository.js";
+import {
+  assertPartnerCodeFree,
+  assertPartnerCodeFreeForCustomer,
+} from "./suppliers.repository.js";
 
 /**
  * AMIT EZ A SUITE ŐRIZ, ÉS AMIÉRT NEM MAKETTEL: a makett azt állítja, mit KÉR a
@@ -49,6 +52,7 @@ describe(
     const plainCustomerCode = `P${short}`;
     const mirrorlessCode = `M${short}`;
     let mirrorlessSupplierId: string;
+    let plainCustomerId: string;
 
     before(async () => {
       if (gate.mode === "refuse") throw new Error(gate.reason);
@@ -56,7 +60,7 @@ describe(
 
       // Egy SIMA vevő: kódja van, szállító NEM mutat rá. Ez az a sor, amit a
       // reláció-tagadás elejtene, ha a Prisma nem tenné hozzá az IS NULL ágat.
-      await prisma.customer.create({
+      const plainCustomer = await prisma.customer.create({
         data: {
           customerNumber: `${PREFIX}VEVO-${suffix}`,
           type: "COMPANY",
@@ -64,6 +68,7 @@ describe(
           worksheetPartnerCode: plainCustomerCode,
         },
       });
+      plainCustomerId = plainCustomer.id;
 
       // Egy TÜKÖR NÉLKÜLI szállító: kódja van, `customerId` NULL. Ez az a sor,
       // amit a skalár-tagadás elejt.
@@ -97,6 +102,34 @@ describe(
             assertPartnerCodeFree(tx, plainCustomerCode, mirrorlessSupplierId),
           ),
         new RegExp(`PARTNER_CODE_TAKEN:${PREFIX}Sima Vevő Kft\\.`),
+      );
+    });
+
+    /**
+     * A VEVŐ-OLDALI ELLENŐRZÉS, ugyanezen az adaton. Ez az az eset, amiért az
+     * összehasonlítás JavaScriptben van: a kódot egy TÜKÖR NÉLKÜLI szállító
+     * viseli, tehát `customerId IS NULL`, és a vevő-oldali egyedi index sem
+     * fogja meg, mert vevő-soron az a kód nem szerepel.
+     *
+     * NEGATÍV KONTROLL, és pont ez a lényege: vidd vissza az összehasonlítást a
+     * `where` feltételbe (`NOT: { customerId }`), és ennek a tesztnek pirosra
+     * kell váltania -- a skalár-tagadás elejti a NULL sort, tehát az ellenőrzés
+     * ÁTENGEDNÉ a kódot. Ha nem vált pirosra, a spec nem azt méri, amit hiszünk
+     * róla.
+     */
+    it("refuses a code a mirrorless supplier holds, from the customer side", async () => {
+      await assert.rejects(
+        () =>
+          prisma.$transaction((tx) =>
+            assertPartnerCodeFreeForCustomer(
+              tx,
+              mirrorlessCode,
+              plainCustomerId,
+            ),
+          ),
+        new RegExp(
+          `PARTNER_CODE_TAKEN_BY_SUPPLIER:${PREFIX}Tükör Nélküli Kft\\.`,
+        ),
       );
     });
 
