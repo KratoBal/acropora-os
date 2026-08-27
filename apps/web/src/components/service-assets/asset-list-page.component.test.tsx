@@ -75,6 +75,69 @@ function lastTarget() {
   return new URLSearchParams(target.split("?")[1]);
 }
 
+function partnerResponse(unit?: {
+  id: string;
+  code: string;
+  name: string;
+}): AssetListResponse {
+  const base = response(1);
+  return {
+    ...base,
+    items: [
+      {
+        ...base.items[0]!,
+        owner: {
+          type: "SUPPLIER",
+          id: "supplier-1",
+          code: "SZALL-1",
+          displayName: "Fankó Kft.",
+        },
+        address: {
+          id: "supplier:supplier-1",
+          formatted: "1146 Budapest, Állatkerti krt. 6-12.",
+        },
+        unit,
+      },
+    ],
+  };
+}
+
+describe("AssetListPage location cell", () => {
+  beforeEach(() => {
+    auth.session = session;
+    api.list.mockReset();
+  });
+
+  /**
+   * AMIT EZ AZ ALLITAS OR IZ: hogy a listaban a VALASZTOTT hely latszik, nem a
+   * visszaeses. Ha a cella a cimet irna ki (ahogy a javitas elott tette),
+   * ugyanaz a sor keletkezne egy pontositott es egy nem pontositott eszkozre --
+   * es a kettot kivulrol semmi nem kulonboztetne meg.
+   */
+  it("shows the unit for a partner-owned asset", async () => {
+    api.list.mockResolvedValue(
+      partnerResponse({ id: "unit-1", code: "BIO", name: "Biodóm" }),
+    );
+
+    render(<AssetListPage />);
+
+    expect(await screen.findByText("Biodóm (BIO)")).toBeTruthy();
+    expect(screen.queryByText(/Nincs pontosítva/)).toBeNull();
+  });
+
+  /** A masik fele: alegyseg nelkul a cim latszik, DE megjelolve, hogy ez nem
+   * valasztas eredmenye. Enelkul a ket eset egyforma lenne. */
+  it("marks the partner address as a fallback when no unit is set", async () => {
+    api.list.mockResolvedValue(partnerResponse(undefined));
+
+    render(<AssetListPage />);
+
+    expect(
+      await screen.findByText(/Nincs pontosítva\. 1146 Budapest/),
+    ).toBeTruthy();
+  });
+});
+
 describe("AssetListPage paging", () => {
   beforeEach(() => {
     auth.session = session;

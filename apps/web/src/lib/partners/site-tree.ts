@@ -60,3 +60,48 @@ export function buildSiteTree(
 
   return rows;
 }
+
+export interface SiteOption {
+  id: string;
+  /** A TELJES ÚT, nem csak a levél neve. */
+  label: string;
+  isActive: boolean;
+}
+
+/**
+ * A FA VÁLASZTÓ-LISTÁVÁ, TELJES ÚTTAL.
+ *
+ * AMIÉRT AZ ÚT KELL, ÉS NEM ELÉG A BEHÚZÁS: a kód és a név csak TESTVÉREK
+ * között egyedi. Két távoli ág alatt ugyanaz a `BIO` és ugyanaz a „Biodóm"
+ * megengedett és természetes. Egy lapos `<select>`-ben a behúzás ezt nem oldja
+ * meg: a szóközök összeolvadhatnak, és két azonos nevű sor megkülönböztethetetlen
+ * lenne. Az út viszont a fa szabálya szerint egyedi.
+ *
+ * A kód a végén áll, zárójelben: az a munkalapszám első tagja, tehát azt keresi
+ * az, aki egy számot lát maga előtt.
+ */
+export function buildSiteOptions(
+  units: readonly WorksheetDepartmentSummary[],
+): SiteOption[] {
+  const byId = new Map(units.map((unit) => [unit.id, unit]));
+
+  const pathOf = (unit: WorksheetDepartmentSummary): string[] => {
+    const names: string[] = [unit.name];
+    const seen = new Set<string>([unit.id]);
+    let current = unit.parentId ? byId.get(unit.parentId) : undefined;
+    // A hianyzo szulo (szures, felig betoltott valasz) es a kor is megall:
+    // inkabb rovidebb ut, mint vegtelen ciklus vagy eltunt sor.
+    while (current && !seen.has(current.id)) {
+      seen.add(current.id);
+      names.unshift(current.name);
+      current = current.parentId ? byId.get(current.parentId) : undefined;
+    }
+    return names;
+  };
+
+  return buildSiteTree(units).map(({ unit }) => ({
+    id: unit.id,
+    label: `${pathOf(unit).join(" / ")} (${unit.code})`,
+    isActive: unit.isActive,
+  }));
+}

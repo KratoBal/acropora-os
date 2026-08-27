@@ -306,7 +306,26 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                 <dl className="mt-6 grid gap-x-8 gap-y-5 sm:grid-cols-2">
                   <Data label="Tulajdonos" value={asset.owner.displayName} />
                   <Data label="Partnerkód" value={asset.owner.code} />
-                  <Data label="Helyszín" value={asset.address?.formatted} />
+                  {/* AZ ALEGYSEG A VALASZTOTT HELY, A CIM A VISSZAESES.
+                      Partner-tulajdonosnal a cim MINDIG a partner sajat postai
+                      cime (vevoi cim oda nem rendelheto), tehat ha nincs
+                      alegyseg, ez nem valasztas eredmenye. A jeloles ezert
+                      mondja ki: kulonben egy nem pontositott eszkoz pontosan
+                      ugy nez ki, mint egy pontositott. */}
+                  {asset.owner.type === "SUPPLIER" ? (
+                    <Data
+                      label="Alegység"
+                      value={
+                        asset.unit
+                          ? asset.unit.name
+                          : asset.address?.formatted
+                            ? `Nincs pontosítva. A partner címe látszik helyette: ${asset.address.formatted}`
+                            : "Nincs pontosítva."
+                      }
+                    />
+                  ) : (
+                    <Data label="Vevő címe" value={asset.address?.formatted} />
+                  )}
                   <Data label="Akvárium" value={asset.aquarium?.name} />
                   <Data label="Gyártó" value={asset.manufacturer} />
                   <Data label="Modell" value={asset.model} />
