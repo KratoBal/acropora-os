@@ -283,8 +283,13 @@ describe(
       assert.deepEqual(result, { ok: true });
 
       const row = await numberOf(id);
-      assert.equal(row.number, `${partnerCode}-BIO-${year}-001`);
-      assert.equal(row.sequence, 1);
+
+      // A SORSZÁM MÁR NEM ABSZOLÚT. A számláló évenként EGY, az egész cégre,
+      // tehát nem indul újra minden futásnál: az alak mérhető, a konkrét
+      // érték nem. Egy `-001`-re kötött állítás a MÁSODIK futáson bukna el,
+      // és nem a kód miatt.
+      assert.match(row.number ?? "", new RegExp(`^BIO-${year}-\\d{3,}$`));
+      assert.ok((row.sequence ?? 0) >= 1);
 
       const version = await prisma.worksheetVersion.findFirstOrThrow({
         where: { worksheetId: id },
@@ -295,25 +300,52 @@ describe(
     });
 
     it("does not spend a sequence number on a draft that is never closed", async () => {
-      // A korábbi teszt piszkozata (szám nélkül) nem foglalhatta le a 002-t.
+      // A HIÁNYTALANSÁG ÁLLÍTÁSA RELATÍV, nem abszolút: az eldobott piszkozat
+      // nem használhat el sorszámot, tehát a KÖVETKEZŐ lezárás pontosan
+      // EGGYEL nagyobb számot kap az előzőnél. Ez akkor is igaz, ha a
+      // sorozat egy korábbi futásból már előrébb jár.
+      const before = await createDraft(bioDepartmentId);
+      await repository.close(before, actorUserId, new Date());
+      const previous = (await numberOf(before)).sequence ?? 0;
+
       const abandoned = await createDraft(bioDepartmentId);
       const closed = await createDraft(bioDepartmentId);
       await repository.close(closed, actorUserId, new Date());
 
       assert.equal((await numberOf(abandoned)).number, null);
-      assert.equal(
-        (await numberOf(closed)).number,
-        `${partnerCode}-BIO-${year}-002`,
-      );
+      assert.equal((await numberOf(closed)).sequence, previous + 1);
     });
 
-    it("runs a separate counter per partner, department and year", async () => {
-      const id = await createDraft(ppuDepartmentId);
-      await repository.close(id, actorUserId, new Date());
-      assert.equal(
-        (await numberOf(id)).number,
-        `${partnerCode}-PPU-${year}-001`,
-      );
+    /**
+     * EZ AZ ÁLLÍTÁS ÚJRA LETT FOGALMAZVA, NEM JAVÍTVA (2026-08-27).
+     *
+     * Korábban azt mérte, hogy a számláló partner/részleg/év hármasonként
+     * KÜLÖN fut. Az a szerkezet megszűnt: a szám nem hordozza a partner
+     * rövidítését, tehát az egyediségét a SOROZAT adja, és egy számláló fut
+     * évenként, az egész cégre. A régi állítás tehát nem hibás lett, hanem
+     * TÁRGYTALAN -- egy megváltozott szabály alatt "javítva" a RÉGI szabályt
+     * fagyasztotta volna vissza.
+     *
+     * Amit helyette mér, és ami az új szerkezetben a lényeg: két KÜLÖNBÖZŐ
+     * egység lapja NEM kap azonos sorszámot. Ez az a hiba, ami a partneres
+     * számlálóval a lezáráskor jelentkezett volna, a felhasználó előtt.
+     */
+    it("runs ONE counter for the whole year, across units", async () => {
+      const first = await createDraft(ppuDepartmentId);
+      await repository.close(first, actorUserId, new Date());
+      const second = await createDraft(bioDepartmentId);
+      await repository.close(second, actorUserId, new Date());
+
+      const firstNumber = (await numberOf(first)).number;
+      const secondNumber = (await numberOf(second)).number;
+
+      // Más egység, más sorszám -- a sorozat közös.
+      assert.match(firstNumber ?? "", new RegExp(`^PPU-${year}-\\d{3,}$`));
+      assert.match(secondNumber ?? "", new RegExp(`^BIO-${year}-\\d{3,}$`));
+
+      const sequenceOf = (value: string | null) =>
+        Number(value?.split("-").at(-1));
+      assert.notEqual(sequenceOf(firstNumber), sequenceOf(secondNumber));
     });
 
     it("copies the sub-unit name onto the version and keeps it after a rename", async () => {

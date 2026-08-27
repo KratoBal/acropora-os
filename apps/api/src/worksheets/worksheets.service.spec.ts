@@ -186,7 +186,7 @@ describe("WorksheetsService", () => {
       repository({
         detail: async () =>
           worksheetRow({
-            number: "FANK-BIO-2026-001",
+            number: "BIO-2026-001",
             numberYear: 2026,
             sequence: 1,
             versions: [
@@ -301,7 +301,7 @@ describe("WorksheetsService", () => {
       repository({
         detail: async () =>
           worksheetRow({
-            number: "FANK-BIO-2026-001",
+            number: "BIO-2026-001",
             numberYear: 2026,
             sequence: 1,
             versions: [

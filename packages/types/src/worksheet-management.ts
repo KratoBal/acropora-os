@@ -32,9 +32,24 @@ export interface WorksheetNumberParts {
   sequence: number;
 }
 
+/**
+ * A SZÁM NEM HORDOZZA A PARTNER RÖVIDÍTÉSÉT (2026-08-25, tulajdonosi döntés):
+ * a lap CÍME már azonosítja a partnert, tehát a számban ismétlés lenne.
+ *
+ * AMIT EZ AZ EGYEDISÉGRŐL JELENT: az egységek kódja csak PARTNEREN BELÜL
+ * egyedi, tehát a szám egyediségét nem a kód adja, hanem a SOROZAT -- egy
+ * számláló évenként, az egész cégre (`WorksheetYearSequence`). Ha a számláló
+ * partnerenként futna, két partner `BIO` egysége ugyanabban az évben ugyanazt
+ * a számot kapná.
+ *
+ * A KORÁBBI LAPOK SZÁMA VÁLTOZATLAN, tehát a sorozatban van egy pont, ahol az
+ * alak megváltozik. Itt NEM kell jelölés, mint az eszközszámnál: a partner tag
+ * ELTŰNÉSE maga a jel. Aki régi lapot keres, a régi alakot fogja látni, és a
+ * két alak nem tud ütközni.
+ */
 export function formatWorksheetNumber(parts: WorksheetNumberParts): string {
-  const { partnerCode, departmentCode, year, sequence } = parts;
-  return `${partnerCode}-${departmentCode}-${year}-${formatWorksheetSequence(sequence)}`;
+  const { departmentCode, year, sequence } = parts;
+  return `${departmentCode}-${year}-${formatWorksheetSequence(sequence)}`;
 }
 
 /**
