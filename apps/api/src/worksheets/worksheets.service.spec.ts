@@ -130,6 +130,7 @@ function repository(
       isActive: true,
     }),
     existingAssetIds: async () => new Set<string>(),
+    assignableUserIds: async (ids: readonly string[]) => new Set(ids),
     createDraft: async () => "worksheet-1",
     replaceDraftContent: async () => true,
     close: async () => ({ ok: true }),
@@ -529,5 +530,116 @@ describe("WorksheetsService", () => {
         error.message.includes("Fankó Kft.") &&
         error.message.includes("partner adatlapján"),
     );
+  });
+});
+
+describe("WorksheetsService.create és a felelősök", () => {
+  /**
+   * AZ IRODA NYIT LAPOT A SZERELŐNEK, tehát a kiosztás abban a pillanatban
+   * ismert, amikor a lap megszületik. Külön lépésre bízva a felvivő azt hiszi,
+   * kiadta a munkát, közben a lap senki listáján nem jelenik meg -- és erről
+   * semmi nem szól, mert a kiosztatlan lap nem hibás állapot.
+   */
+  it("writes the assignees together with the draft", async () => {
+    let received: unknown = null;
+    const service = new WorksheetsService(
+      repository({
+        createDraft: async (input: unknown) => {
+          received = input;
+          return "worksheet-1";
+        },
+      }),
+    );
+
+    await service.create(
+      { ...contentDto(), assigneeIds: ["user-7", "user-8"] },
+      "user-1",
+    );
+
+    assert.deepEqual((received as { assigneeIds?: string[] }).assigneeIds, [
+      "user-7",
+      "user-8",
+    ]);
+  });
+
+  it("still creates a sheet nobody is assigned to yet", async () => {
+    let received: unknown = null;
+    const service = new WorksheetsService(
+      repository({
+        createDraft: async (input: unknown) => {
+          received = input;
+          return "worksheet-1";
+        },
+      }),
+    );
+
+    await service.create(contentDto(), "user-1");
+
+    assert.deepEqual((received as { assigneeIds?: string[] }).assigneeIds, []);
+  });
+
+  /**
+   * AZ ELLENŐRZÉS A LÉTREHOZÁS ELŐTT FUT. Fordított sorrendben egy elgépelt
+   * azonosító már meglévő lapot hagyna félkészen -- és a felvivő a hibaüzenetből
+   * nem tudná, hogy a lap közben létrejött.
+   */
+  it("refuses an unknown colleague before anything is written", async () => {
+    let created = false;
+    const service = new WorksheetsService(
+      repository({
+        assignableUserIds: async () => new Set<string>(),
+        createDraft: async () => {
+          created = true;
+          return "worksheet-1";
+        },
+      }),
+    );
+
+    await assert.rejects(
+      service.create(
+        { ...contentDto(), assigneeIds: ["nem-letezik"] },
+        "user-1",
+      ),
+      BadRequestException,
+    );
+    assert.equal(created, false);
+  });
+
+  /**
+   * AZ ÉRTESÍTÉS A TÁROLÁS UTÁN MEGY KI, ugyanabban a sorrendben, mint a
+   * későbbi kiosztásnál: egy értesítés olyan lapról, ami végül nem jött létre,
+   * a szerelőt küldené el hiába.
+   */
+  it("tells the assigned colleagues, once the sheet exists", async () => {
+    const notified: Array<{ worksheetId: string; userIds: string[] }> = [];
+    const service = new WorksheetsService(repository(), {
+      notifyWorksheetAssignment: (input: {
+        worksheetId: string;
+        userIds: string[];
+      }) => {
+        notified.push(input);
+      },
+    } as never);
+
+    await service.create(
+      { ...contentDto(), assigneeIds: ["user-7"] },
+      "user-1",
+    );
+
+    assert.equal(notified.length, 1);
+    assert.deepEqual(notified[0]?.userIds, ["user-7"]);
+  });
+
+  it("stays quiet when nobody was assigned", async () => {
+    let calls = 0;
+    const service = new WorksheetsService(repository(), {
+      notifyWorksheetAssignment: () => {
+        calls += 1;
+      },
+    } as never);
+
+    await service.create(contentDto(), "user-1");
+
+    assert.equal(calls, 0);
   });
 });

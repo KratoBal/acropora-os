@@ -551,6 +551,8 @@ export class WorksheetsRepository extends Repository {
     departmentId: string;
     content: NormalizedWorksheetContent;
     actorUserId: string;
+    /** A lap felelősei, a lappal EGY tranzakcióban. Üres lista megengedett. */
+    assigneeIds?: readonly string[];
   }): Promise<string> {
     return this.database.$transaction(async (transaction) => {
       const department =
@@ -578,6 +580,19 @@ export class WorksheetsRepository extends Repository {
       const versionId = worksheet.versions[0]?.id;
       if (!versionId) throw new Error("WORKSHEET_VERSION_NOT_CREATED");
       await this.writeLines(transaction, versionId, input.content);
+
+      // A felelősök ugyanabban a tranzakcióban: egy létrejött, de
+      // kiosztatlanul maradt lap némán eltűnne a szerelő listájáról.
+      if (input.assigneeIds && input.assigneeIds.length > 0)
+        await transaction.worksheetAssignee.createMany({
+          data: input.assigneeIds.map((userId) => ({
+            worksheetId: worksheet.id,
+            userId,
+            assignedById: input.actorUserId,
+          })),
+          skipDuplicates: true,
+        });
+
       return worksheet.id;
     });
   }

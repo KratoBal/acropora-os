@@ -1,14 +1,15 @@
 "use client";
 
 import { Button, Card } from "@acropora/ui";
-import type {
-  WorksheetAssignableUser,
-  WorksheetAssignee,
-  WorksheetDetail,
-} from "@acropora/types";
+import type { WorksheetAssignee, WorksheetDetail } from "@acropora/types";
 import { useEffect, useState } from "react";
 
 import { worksheetsApi } from "@/lib/api/worksheets";
+import {
+  toggleAssignee,
+  useAssignableUsers,
+  WorksheetAssigneePicker,
+} from "./worksheet-assignee-picker";
 
 export interface WorksheetAssigneeEditorProps {
   worksheetId: string;
@@ -34,7 +35,10 @@ export function WorksheetAssigneeEditor({
   canManage,
   onSaved,
 }: WorksheetAssigneeEditorProps) {
-  const [candidates, setCandidates] = useState<WorksheetAssignableUser[]>([]);
+  const { candidates, error: candidatesError } = useAssignableUsers(
+    token,
+    canManage,
+  );
   const [selected, setSelected] = useState<string[]>(
     assignees.map((assignee) => assignee.userId),
   );
@@ -45,25 +49,8 @@ export function WorksheetAssigneeEditor({
     setSelected(assignees.map((assignee) => assignee.userId));
   }, [assignees]);
 
-  useEffect(() => {
-    if (!canManage) return;
-    const controller = new AbortController();
-    worksheetsApi
-      .assignableUsers(token, controller.signal)
-      .then((response) => setCandidates(response.items))
-      .catch((cause: unknown) => {
-        if (!(cause instanceof DOMException && cause.name === "AbortError"))
-          setError("A kollégák listája nem tölthető be.");
-      });
-    return () => controller.abort();
-  }, [canManage, token]);
-
   const toggle = (userId: string) => {
-    setSelected((current) =>
-      current.includes(userId)
-        ? current.filter((id) => id !== userId)
-        : [...current, userId],
-    );
+    setSelected((current) => toggleAssignee(current, userId));
   };
 
   const save = async () => {
@@ -108,23 +95,15 @@ export function WorksheetAssigneeEditor({
 
       {canManage ? (
         <>
-          <div className="space-y-1">
-            {candidates.map((candidate) => (
-              <label
-                key={candidate.id}
-                className="flex items-center gap-2 text-sm"
-              >
-                <input
-                  type="checkbox"
-                  checked={selected.includes(candidate.id)}
-                  onChange={() => toggle(candidate.id)}
-                />
-                {candidate.name}
-              </label>
-            ))}
-          </div>
-          {error ? (
-            <p className="text-xs font-medium text-rose-600">{error}</p>
+          <WorksheetAssigneePicker
+            candidates={candidates}
+            selected={selected}
+            onToggle={toggle}
+          />
+          {(error ?? candidatesError) ? (
+            <p className="text-xs font-medium text-rose-600">
+              {error ?? candidatesError}
+            </p>
           ) : null}
           <Button
             type="button"
