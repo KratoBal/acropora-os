@@ -81,6 +81,13 @@ export interface WorksheetDepartmentListResponse {
 }
 
 export interface CreateWorksheetDepartmentInput {
+  /**
+   * A szulo helyszin, ha van. Hianyzo ertek = a fa legfelso szintje.
+   *
+   * SZANDEKOSAN NEM KOTELEZO: a mezo bevezetese elott keszult urlapok
+   * valtozatlanul atmennek, es a mai lapos lista a fa elso szintje marad.
+   */
+  parentId?: string;
   code: string;
   name: string;
 }

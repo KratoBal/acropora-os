@@ -163,6 +163,83 @@ describe("SupplierEditorPage", () => {
   });
 
   /**
+   * A HELYSZINEK FAT ALKOTNAK, es a kepernyon EGY szinttel lejjebb is fel kell
+   * tudni vinni ujat. A tulajdonos dontese (2026-08-25): tobb szint, nem ketto.
+   *
+   * AMIT EZ A TESZT ALLIT, es amit egy "megjelenik a lista" allitas NEM fogna
+   * meg: hogy a kivalasztott szulo EL IS JUT a szerverig. Egy fa-nezet, ami
+   * szepen behuz, de gyokerre menti az uj sort, pontosan ugy nez ki, mint a
+   * helyes -- amig valaki meg nem nezi az adatot.
+   */
+  it("adds the new site under the selected parent", async () => {
+    suppliers.detail.mockResolvedValue({
+      id: "supplier-1",
+      code: "SZALL-1",
+      name: "Fankó Kft.",
+      isSupplier: false,
+      isService: true,
+      country: "HU",
+      isActive: true,
+      createdAt: "2026-08-19T10:00:00.000Z",
+      updatedAt: "2026-08-19T10:00:00.000Z",
+    });
+    suppliers.units.mockResolvedValue({
+      items: [
+        {
+          id: "unit-1",
+          parentId: null,
+          code: "BIO",
+          name: "Biodóm",
+          isActive: true,
+        },
+        {
+          id: "unit-2",
+          parentId: "unit-1",
+          code: "FNM",
+          name: "Nagy főkamedence",
+          isActive: true,
+        },
+      ],
+    });
+    suppliers.createUnit.mockResolvedValue({
+      id: "unit-3",
+      parentId: "unit-1",
+      code: "ALG",
+      name: "Algásító",
+      isActive: true,
+    });
+
+    render(<SupplierEditorPage supplierId="supplier-1" />);
+
+    // Mindket szint latszik: a gyerek nem tunhet el attol, hogy melyebben van.
+    expect(await screen.findByText("Biodóm")).toBeTruthy();
+    expect(screen.getByText("Nagy főkamedence")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Szülő helyszín"), {
+      target: { value: "unit-1" },
+    });
+    fireEvent.change(screen.getByLabelText("Alegység kódja"), {
+      target: { value: "alg" },
+    });
+    fireEvent.change(screen.getByLabelText("Alegység neve"), {
+      target: { value: "Algásító" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Hozzáadás" }));
+
+    await waitFor(() => {
+      expect(suppliers.createUnit).toHaveBeenCalledWith(
+        "token-1",
+        "supplier-1",
+        {
+          parentId: "unit-1",
+          code: "ALG",
+          name: "Algásító",
+        },
+      );
+    });
+  });
+
+  /**
    * Bank details are what we need in order to pay a partner, so a service-only
    * partner has none of them. The IBAN field is asserted as ABSENT and the
    * name field as PRESENT in the same test: without the second half this would
