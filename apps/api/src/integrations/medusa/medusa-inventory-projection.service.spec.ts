@@ -55,10 +55,14 @@ function variantWith(options: {
    * beszél, pontosan úgy néz ki, mint egy jó teszt.
    */
   chainMissing?: boolean;
+  /** Puhán törölt változat. A keresés MOST MÁR ezeket is visszahozza. */
+  deletedAt?: string;
+  id?: string;
 }): MedusaVariantRow {
   const base: MedusaVariantRow = {
-    id: "variant_1",
+    id: options.id ?? "variant_1",
     sku: options.sku ?? "teszt0001",
+    deleted_at: options.deletedAt ?? null,
     allow_backorder: options.allowBackorder ?? false,
     manage_inventory: options.manageInventory ?? true,
   };
@@ -630,16 +634,106 @@ describe("Medusa készlet-vetítés: fail-closed kapuk", () => {
     assert.equal(outcome.reason, "variant-not-found");
     assert.match(outcome.details, /masik/);
     /**
-     * AZ ÜZENET NEM ÁLLÍTHAT TÖBBET, MINT AMIT LÁTTUNK.
+     * AZ ÜZENET NEM ÁLLÍTHAT TÖBBET, MINT AMIT LÁTTUNK - DE MOST MÁR TÖBBET
+     * LÁTUNK.
      *
-     * A keresés csak az ÉLŐ változatokat hozza, a Medusa cikkszám-indexe
-     * viszont RÉSZLEGES (`deleted_at IS NULL`), tehát a cikkszám ülhet egy
-     * eltemetett változaton. Egy „nincs ilyen cikkszámú változat" mondat a
-     * meglévők felsorolásával azt sugallná, hogy a cikkszám sosem létezett -
-     * és pontosan ezen a különbségen futott már el egy kör a flottában.
+     * Amíg a keresés csak az élőket hozta, ennek a mondatnak ki kellett
+     * mondania a saját vakfoltját: a cikkszám ülhet egy eltemetett változaton,
+     * és a „nincs ilyen" meg az „el van temetve" innen nem különböztethető
+     * meg. A keresés MOST MÁR `with_deleted` értékkel megy, tehát a vakfolt
+     * megszűnt, és a régi mondat mostantól KEVESEBBET állítana a valóságnál.
+     *
+     * Ezért fordul meg az állítás: a szövegnek a TELJES halmazra kell
+     * szólnia. Az eltemetett találat külön ágra megy
+     * (`variant-identity-chain-broken`), tehát ide már csak az az eset jut,
+     * ahol tényleg egyetlen változat sem viseli a cikkszámot.
      */
-    assert.match(outcome.details, /ÉLŐ változat/);
-    assert.match(outcome.details, /el van\s+temetve/);
+    assert.match(outcome.details, /sem élő, sem eltemetett/);
+    assert.match(outcome.details, /with_deleted/);
+  });
+
+  /**
+   * MEGSZAKADT AZONOSSÁGI LÁNC A VÁLTOZATON.
+   *
+   * Balázs döntése (2026-08-27): a termékeknél már meghozott szabály a
+   * változatokra IS kiterjed. Nem hozunk létre újat, nem állítunk vissza,
+   * megállunk és jelentünk.
+   *
+   * MINEK KELL PIROSÍTANIA: ha valaki az eltemetett találatot „nincs ilyen"
+   * esetnek veszi (és így egy későbbi kör létrehozna egy második változatot
+   * ugyanazzal a cikkszámmal), vagy ha a megállás ellenére bármit írunk.
+   */
+  it("a cikkszám egy eltemetett változaton ül: megszakadt lánc, megállunk", async () => {
+    const { service, calls } = fakes({
+      variants: [
+        variantWith({ id: "variant_masik", sku: "masik", levels: [] }),
+        variantWith({
+          id: "variant_eltemetett",
+          sku: "teszt0001",
+          deletedAt: "2026-08-20T10:00:00.000Z",
+          levels: [],
+        }),
+      ],
+    });
+
+    const outcome = await service.project(stock("5"));
+
+    assert.ok(outcome.action === "stopped");
+    assert.equal(outcome.reason, "variant-identity-chain-broken");
+    assert.match(outcome.details, /variant_eltemetett/);
+    /**
+     * Az indok KI VAN MONDVA a szövegben, és ez nem díszítés: a korlát ÜZLETI,
+     * nem technikai. A cikkszám indexe részleges, tehát a Medusa megengedné az
+     * újra kiosztást - egy későbbi olvasó enélkül azt hinné, hogy a megállás a
+     * cél oldal kényszere, és egy index-változtatásnál feloldottnak venné.
+     */
+    assert.match(outcome.details, /üzleti döntés/);
+    assert.ok(
+      !calls.some((entry) => entry.includes("level")),
+      "megszakadt láncnál készletet nem írunk",
+    );
+    assert.ok(!calls.some((entry) => entry.startsWith("backorder:")));
+  });
+
+  /**
+   * EGY ÉLŐ ÉS EGY ELTEMETETT, UGYANAZZAL A CIKKSZÁMMAL.
+   *
+   * Ez a `with_deleted` bekapcsolásának a REGRESSZIÓJA, és előre meg volt
+   * nevezve: amíg a keresés csak az élőket hozta, ez az eset egyszerű volt.
+   * Ha a két halmazt együtt számolnánk, „több egyezés" lenne belőle, és a
+   * vetítés megállna egy hétköznapi, egyértelmű helyzetben.
+   *
+   * MINEK KELL PIROSÍTANIA: ha az élő/eltemetett szétválasztás kikerül, vagy
+   * ha az egyezés-számlálás a teljes halmazon fut.
+   */
+  it("egy élő és egy eltemetett ugyanazzal a cikkszámmal: az élő számít", async () => {
+    const { service, calls } = fakes({
+      variants: [
+        variantWith({
+          id: "variant_eltemetett",
+          sku: "teszt0001",
+          deletedAt: "2026-08-20T10:00:00.000Z",
+          levels: [],
+        }),
+        variantWith({ id: "variant_1", sku: "teszt0001", levels: [] }),
+      ],
+    });
+
+    const outcome = await service.project(stock("5"));
+
+    assert.notEqual(
+      outcome.action,
+      "stopped",
+      `az élő változatra kellett volna vetíteni, ehelyett: ${JSON.stringify(outcome)}`,
+    );
+    /**
+     * ÉS A VETÍTÉS AZ ÉLŐ VÁLTOZATRA MENT, nem csak „nem állt meg". A kettő
+     * nem ugyanaz: egy rossz szétválasztás az eltemetettre is írhatna, és az
+     * kívülről ugyanúgy sikernek látszana.
+     */
+    assert.ok(outcome.action !== "stopped");
+    assert.equal(outcome.report.variantId, "variant_1");
+    assert.ok(calls.some((entry) => entry.includes("level")));
   });
 
   it("két azonos cikkszámú változat: azonossági kérdés, megállunk", async () => {

@@ -79,3 +79,43 @@ describe("HttpMedusaAdminClient.findByExternalId", () => {
     assert.equal(result.truncated, true);
   });
 });
+
+/**
+ * A VÁLTOZAT-KERESÉS KÉRÉSE, ugyanazzal az indokkal, mint a termék-keresésé.
+ *
+ * A törlés puha, és az alapértelmezett szűrő kizárja a törölteket. Enélkül egy
+ * eltemetett változat cikkszáma láthatatlan, a hívó pedig a „nincs ilyen" és
+ * az „el van temetve" esetet nem tudja szétválasztani - holott a kettő MÁS
+ * teendő, és Balázs döntése óta az egyikük megállás.
+ *
+ * Ezt a szolgáltatás tesztje nem foghatja meg: ott a sorok már készen
+ * érkeznek, és egy hamisítvány örömmel visszaad törölt sorokat akkor is, ha a
+ * valódi kérés sosem kérte őket.
+ */
+describe("HttpMedusaAdminClient.listProductVariants", () => {
+  it("a törölteket is kéri, és a törlés bélyegét is lekéri", async () => {
+    const urls: string[] = [];
+    const fetchImpl = (async (url: string) => {
+      urls.push(String(url));
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ variants: [] }),
+      };
+    }) as unknown as typeof fetch;
+    const client = new HttpMedusaAdminClient(
+      { baseUrl: "http://medusa.teszt", apiKey: "kulcs" },
+      fetchImpl,
+    );
+
+    await client.listProductVariants("prod_1");
+
+    assert.match(urls[0]!, /with_deleted=true/);
+    /**
+     * A `fields` nélkül a bélyeg nem jönne meg, és a hívó minden sort élőnek
+     * látna - vagyis a `with_deleted` önmagában CSENDBEN rosszabb lenne a
+     * mainál: több sort hozna, és mind élőnek látszana.
+     */
+    assert.match(urls[0]!, /deleted_at/);
+  });
+});

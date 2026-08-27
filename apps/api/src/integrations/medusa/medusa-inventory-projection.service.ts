@@ -90,8 +90,24 @@ export type InventoryProjectionStopReason =
    * részhalmazban nem volt.
    */
   | "variant-lookup-truncated"
-  /** A Medusa terméken nincs ilyen cikkszámú változat. */
+  /** A Medusa terméken nincs ilyen cikkszámú változat, sem élő, sem eltemetett. */
   | "variant-not-found"
+  /**
+   * A cikkszám egy PUHÁN TÖRÖLT változaton ül, és élő találat nincs.
+   *
+   * Ez MEGSZAKADT AZONOSSÁGI LÁNC, nem hiányzó változat, és Balázs döntése
+   * (2026-08-27) szerint ugyanaz a szabály áll rá, mint a termékeknél: nem
+   * hozunk létre újat, nem állítunk vissza, megállunk és jelentünk.
+   *
+   * AMIÉRT EZT KI KELL MONDANI, ÉS NEM KÖVETKEZIK A TERMÉK-SZABÁLYBÓL: ott a
+   * korlát TECHNIKAI volt - az `external_id` mezőn nincs egyedi index, tehát
+   * két élő termék viselhetné ugyanazt az azonosítót. Itt a cikkszám indexe
+   * RÉSZLEGES (`deleted_at IS NULL`), tehát a Medusa MEGENGEDNÉ az újra
+   * kiosztást, és a létrehozás nem futna hibára. A megállás tehát ÜZLETI
+   * döntés, nem technikai kényszer - és egy későbbi index-változtatás NEM
+   * oldja fel magától.
+   */
+  | "variant-identity-chain-broken"
   /** Több változat viseli ugyanazt a cikkszámot ugyanazon a terméken. */
   | "ambiguous-variant"
   /** A változat nem készletkezelt, tehát nincs mit vetíteni rá. */
@@ -232,8 +248,33 @@ export class MedusaInventoryProjectionService {
           `Nem írtunk semmit.`,
       };
 
-    const variants = found.rows;
+    /**
+     * ÉLŐ ÉS ELTEMETETT KÜLÖN, mert a keresés MOST MÁR mindkettőt hozza.
+     *
+     * A szétválasztás nem kényelem: a cikkszám indexe RÉSZLEGES, tehát
+     * ugyanaz a cikkszám egyszerre ülhet egy élő és egy eltemetett változaton.
+     * Egy halmazban számolva ez „több egyezés" lenne, holott a helyzet
+     * hétköznapi és egyértelmű: az élő számít, az eltemetett történelem.
+     */
+    const variants = found.rows.filter((row) => !row.deleted_at);
+    const buried = found.rows.filter((row) => row.deleted_at);
     const matching = variants.filter((row) => row.sku === stock.sku);
+    const buriedMatching = buried.filter((row) => row.sku === stock.sku);
+
+    if (matching.length === 0 && buriedMatching.length > 0)
+      return {
+        action: "stopped",
+        reason: "variant-identity-chain-broken",
+        details:
+          `${stock.osProductId}: a ${stock.sku} cikkszám a Medusa terméken ` +
+          `(${link.medusaProductId}) egy PUHÁN TÖRÖLT változaton ül ` +
+          `(${buriedMatching.map((row) => row.id).join(", ")}), és élő ` +
+          `változat nem viseli. Ez megszakadt azonossági lánc: nem hozunk ` +
+          `létre újat, nem állítunk vissza, és nem is hagyjuk ki csendben. ` +
+          `Készletet NEM írtunk. A Medusa cikkszám-indexe RÉSZLEGES, tehát az ` +
+          `újra kiosztást MEGENGEDNÉ - hogy nem tesszük, az üzleti döntés, ` +
+          `nem technikai korlát.`,
+      };
 
     if (matching.length === 0)
       return {
@@ -241,11 +282,10 @@ export class MedusaInventoryProjectionService {
         reason: "variant-not-found",
         details:
           `${stock.osProductId}: a Medusa terméken (${link.medusaProductId}) ` +
-          `nincs ${stock.sku} cikkszámú ÉLŐ változat. ${describeSkus(variants)} ` +
-          `A puhán törölt változatokat ez a keresés NEM látja, és a Medusa ` +
-          `cikkszám-indexe RÉSZLEGES (deleted_at IS NULL), tehát a cikkszám ` +
-          `ülhet egy eltemetett változaton is. A "nincs ilyen" és az "el van ` +
-          `temetve" innen nem különböztethető meg.`,
+          `nincs ${stock.sku} cikkszámú változat, sem élő, sem eltemetett. ` +
+          `${describeSkus(variants)} A keresés a törölteket IS kérte ` +
+          `(with_deleted), tehát ez a mondat a TELJES halmazra szól, nem csak ` +
+          `az élőkre.`,
       };
     if (matching.length > 1)
       return {
