@@ -7,6 +7,7 @@ import type { AssetDetail } from "@acropora/types";
 import type { ServiceAssetsRepository } from "./service-assets.repository.js";
 import { ServiceAssetsService } from "./service-assets.service.js";
 import {
+  SERVICE_OWNER_PICKABLE_WHERE,
   SERVICE_OWNER_WHERE,
   assetOwnerScopeWhere,
 } from "./service-assets.types.js";
@@ -158,6 +159,31 @@ test("generates an app deep link QR without exposing database ids", async () => 
  */
 test("asks for service partners only, and says so in one place", () => {
   assert.deepEqual(SERVICE_OWNER_WHERE, { isActive: true, isService: true });
+});
+
+/**
+ * A VÁLASZTÓ SZŰKEBB, MINT A LISTA HATÓKÖRE, ÉS EZ A KÜLÖNBSÉG A LÉNYEG.
+ *
+ * A törölt partnerhez ÚJ eszközt nem rendelhetünk (a tulajdonos kérése,
+ * 2026-08-21: a törölt partner ne jelenjen meg a választókban). A nála ÁLLÓ
+ * eszközök viszont fizikailag ott vannak, tehát a szerelő listájáról nem
+ * tűnhetnek el -- ha a két szabály egy konstansba kerülne, az egyik oldalon
+ * mindig rossz lenne, és némán.
+ */
+test("offers no deleted partner, but keeps their assets on the list", () => {
+  assert.deepEqual(SERVICE_OWNER_PICKABLE_WHERE, {
+    isActive: true,
+    isService: true,
+    deletedAt: null,
+  });
+
+  const scope = assetOwnerScopeWhere("SERVICE_PARTNER");
+  assert.deepEqual(scope.supplier, { is: { ...SERVICE_OWNER_WHERE } });
+  assert.equal(
+    "deletedAt" in (scope.supplier as { is: Record<string, unknown> }).is,
+    false,
+    "A lista hatóköre NEM kaphatja meg a törölt-szűrőt: az eszköz ott áll.",
+  );
 });
 
 test("keeps the owner an existing asset already has", async () => {

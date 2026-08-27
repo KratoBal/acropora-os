@@ -18,6 +18,30 @@ export const SERVICE_OWNER_WHERE = {
 } as const;
 
 /**
+ * AKI ÚJ ESZKÖZ TULAJDONOSÁNAK VÁLASZTHATÓ -- SZŰKEBB, MINT A FENTI, ÉS EZ A
+ * KÜLÖNBSÉG SZÁNDÉKOS.
+ *
+ * A törölt partnert töröltnek AKARTUK: nem lehetett fizikailag törölni, mert egy
+ * régi bejegyzés hivatkozik rá, de a választókban nem lehet ott (a tulajdonos
+ * kérése, 2026-08-21). Új eszközt tehát nem rendelhetünk hozzá.
+ *
+ * A LISTA HATÓKÖRE (`assetOwnerScopeWhere`) VISZONT NEM KAPJA MEG EZT. Egy
+ * törölt partnernél álló eszköz FIZIKAILAG OTT VAN, és a szerelő listájáról
+ * eltüntetni pont az a hibaosztály, amit ez a fájl máshol is kerül: nem hibásnak
+ * látszó lista, hanem hiányos. A kettő tehát KÉT szabály, nem egy -- ezért áll
+ * két konstansban.
+ *
+ * MA A VISELKEDÉS UGYANEZ LENNE E SOR NÉLKÜL IS, mert a törlés az `isActive`
+ * mezőt is hamisra állítja. Ez viszont ESIK, nem ki van mondva: ha valaha
+ * keletkezik újraaktiváló út (ma nincs), a törölt partner szó nélkül
+ * visszakerülne a választóba.
+ */
+export const SERVICE_OWNER_PICKABLE_WHERE = {
+  ...SERVICE_OWNER_WHERE,
+  deletedAt: null,
+} as const;
+
+/**
  * UGYANAZ A FELTÉTEL, A MÁSODIK HASZNÁLATI HELYÉN.
  *
  * A fenti szabály eddig egy helyen élt: azon a listán, amiből új eszközhöz
