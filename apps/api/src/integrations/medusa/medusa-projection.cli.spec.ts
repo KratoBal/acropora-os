@@ -4,6 +4,7 @@ import { glob } from "node:fs/promises";
 import { describe, it } from "node:test";
 
 import {
+  describeSkuLookupFailure,
   describePublication,
   MEDUSA_PROJECTION_FALLBACK_NOTICE,
   medusaClientForProjection,
@@ -448,6 +449,38 @@ describe("describePublication", () => {
       lines,
       /^sales channel: attached -> sc_/m,
       "azonosító nem állhat a név helyén",
+    );
+  });
+});
+
+/**
+ * KÉT ÁLLAPOT, KÉT TEENDŐ, KÉT MONDAT.
+ *
+ * A régi üzenet („nincs ilyen cikkszámú aktív változat") IGAZ volt, de két
+ * különböző állapotot fedett, és a teendő nem ugyanaz. A lekérdezés mindkettőt
+ * megmérte - csak eldobtuk a különbséget, mielőtt kiírtuk volna.
+ */
+describe("A cikkszám-keresés két sikertelen esete", () => {
+  it("a nem létező cikkszám egyszerű mondatot kap", () => {
+    const text = describeSkuLookupFailure("teszt0001", "no-such-sku");
+    assert.match(text, /nincs ilyen cikkszámú változat/);
+    assert.ok(
+      !text.includes("INAKTÍV"),
+      "a nem létező cikkszámnál nincs mit aktiválni",
+    );
+  });
+
+  it("az inaktív változat a MÁSIK teendőt nevezi meg", () => {
+    const text = describeSkuLookupFailure("teszt0001", "variant-inactive");
+    assert.match(text, /INAKTÍV/);
+    assert.match(text, /A cikkszám tehát jó/);
+    assert.match(text, /aktiválása/);
+  });
+
+  it("a két mondat különbözik, különben a szétválasztás semmit nem ér", () => {
+    assert.notEqual(
+      describeSkuLookupFailure("x", "no-such-sku"),
+      describeSkuLookupFailure("x", "variant-inactive"),
     );
   });
 });

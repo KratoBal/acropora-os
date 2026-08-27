@@ -377,16 +377,86 @@ describe("MedusaProductProjectionService", () => {
     const { service, calls } = fakes({ link: null, found: [] });
 
     const outcome = await service.project(
-      { ...product, primarySku: null },
+      {
+        ...product,
+        primarySku: null,
+        /**
+         * A VALÓSÁGOS eset: cikkszám akkor hiányzik, ha nincs aktív változat.
+         * A `sku` oszlop nem nullázható, tehát a másik kombináció (aktív
+         * változat, cikkszám nélkül) csak hívó-hibából állhat elő - annak
+         * saját tesztje van.
+         */
+        publication: { ...product.publication, activeVariantCount: 0 },
+      },
       now,
     );
 
     assert.equal(outcome.action, "stopped");
-    assert.equal(
-      outcome.action === "stopped" ? outcome.reason : null,
-      "no-sku",
-    );
+    assert.ok(outcome.action === "stopped");
+    assert.equal(outcome.reason, "no-sku");
     assert.deepEqual(calls, [], "cikkszám nélkül semmit nem kérdezünk odaát");
+
+    /**
+     * AZ ÜZENET NEM ÁLLÍTHAT TÖBBET, MINT AMIT A SZOLGÁLTATÁS TUD.
+     *
+     * Régen azt írta, hogy „a terméknek nincs cikkszáma". Ezt innen nem lehet
+     * tudni: a `sku` oszlop nem nullázható, tehát a terméknek LEHET cikkszáma,
+     * csak nem olyan változaton, amit a hívó átvinne. A pontos okot az tudja,
+     * aki a lekérdezést futtatta - lásd `describeNoProjectableSku`.
+     */
+    assert.ok(
+      !/nincs cikkszáma$/.test(outcome.details),
+      "ilyen állapot az adatmodell szerint elő sem állhat: a sku oszlop nem nullázható",
+    );
+    assert.match(outcome.details, /nincs AKTÍV változata/);
+    assert.match(outcome.details, /változat aktiválása/);
+  });
+});
+
+describe("a hiányzó cikkszám MELYIK esete", () => {
+  /**
+   * A KÉT ESET KÜLÖN, mert a teendő is más.
+   *
+   * A cikkszám oszlop nem nullázható, tehát a hiányzó elsődleges cikkszám nem
+   * jelenthet cikkszám-hiányt. Vagy nincs aktív változat (a termék állapota),
+   * vagy a hívó ellentmondó bemenetet adott (a hívó hibája). A régi, egyetlen
+   * mondat mindkettőt „a terméknek nincs cikkszáma" néven fedte, és egyik
+   * esetben sem mutatott a teendőre.
+   */
+  it("nincs aktív változat: a termék állapotát nevezi meg", async () => {
+    const { service } = fakes({});
+    const outcome = await service.project(
+      {
+        ...product,
+        primarySku: null,
+        publication: { ...product.publication, activeVariantCount: 0 },
+      },
+      now,
+    );
+
+    assert.ok(outcome.action === "stopped");
+    assert.match(outcome.details, /nincs AKTÍV változata/);
+    assert.match(outcome.details, /NEM cikkszám-hiány/);
+  });
+
+  it("van aktív változat, de nincs cikkszám: a HÍVÓT nevezi meg", async () => {
+    const { service } = fakes({});
+    const outcome = await service.project(
+      {
+        ...product,
+        primarySku: null,
+        publication: { ...product.publication, activeVariantCount: 2 },
+      },
+      now,
+    );
+
+    assert.ok(outcome.action === "stopped");
+    assert.match(outcome.details, /ellentmondó bemenet/);
+    assert.match(outcome.details, /2 aktív/);
+    assert.ok(
+      !outcome.details.includes("nincs AKTÍV változata"),
+      "ez nem a termék állapota, és a mondat sem állíthatja annak",
+    );
   });
 });
 

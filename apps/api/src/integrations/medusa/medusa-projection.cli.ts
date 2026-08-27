@@ -148,13 +148,40 @@ function describeCredentialFailure(error: MedusaConnectionError): string {
   return `A tárolt Medusa hitelesítő adat nem használható (${error.code}).`;
 }
 
-/** Cikkszámból termékazonosító. `null`, ha nincs ilyen aktív változat. */
-async function resolveBySku(sku: string): Promise<string | null> {
+/**
+ * Cikkszámból termékazonosító - és a KÉT SIKERTELEN ESET KÜLÖN.
+ *
+ * Eddig mindkettő `null` volt, és egyetlen mondatot kapott: „nincs ilyen
+ * cikkszámú aktív változat". A mondat IGAZ volt, de KÉT különböző állapotot
+ * fedett, és a teendő nem ugyanaz: ha nincs ilyen cikkszám, elgépelés vagy
+ * rossz termék; ha van, de inaktív, akkor a cikkszám jó és aktiválni kell.
+ *
+ * A lekérdezés nem változik (`findUnique` a cikkszámra, ami egyedi oszlop) -
+ * csak nem dobjuk el azt, amit már úgyis megmértünk.
+ */
+type SkuLookup =
+  | { found: true; productId: string }
+  | { found: false; reason: "no-such-sku" | "variant-inactive" };
+
+async function resolveBySku(sku: string): Promise<SkuLookup> {
   const variant = await prisma.productVariant.findUnique({
     where: { sku },
     select: { productId: true, isActive: true },
   });
-  return variant?.isActive ? variant.productId : null;
+  if (!variant) return { found: false, reason: "no-such-sku" };
+  if (!variant.isActive) return { found: false, reason: "variant-inactive" };
+  return { found: true, productId: variant.productId };
+}
+
+/** Melyik sikertelen eset áll fenn, embernek. Exportált, hogy mérhető legyen. */
+export function describeSkuLookupFailure(
+  sku: string,
+  reason: "no-such-sku" | "variant-inactive",
+): string {
+  return reason === "no-such-sku"
+    ? `sku:${sku}: nincs ilyen cikkszámú változat`
+    : `sku:${sku}: van ilyen cikkszámú változat, de INAKTÍV. A cikkszám tehát ` +
+        `jó; a teendő a változat aktiválása, nem másik cikkszám keresése.`;
 }
 
 export async function runProjectionCli(
@@ -214,15 +241,18 @@ export async function runProjectionCli(
 
   let failed = 0;
   for (const argument of targets) {
-    const productId = argument.startsWith("sku:")
-      ? await resolveBySku(argument.slice(4))
-      : argument;
-
-    if (!productId) {
-      out.stderr(`${argument}: nincs ilyen cikkszámú aktív változat\n`);
-      failed += 1;
-      continue;
-    }
+    let productId: string;
+    if (argument.startsWith("sku:")) {
+      const lookup = await resolveBySku(argument.slice(4));
+      if (!lookup.found) {
+        out.stderr(
+          `${describeSkuLookupFailure(argument.slice(4), lookup.reason)}\n`,
+        );
+        failed += 1;
+        continue;
+      }
+      productId = lookup.productId;
+    } else productId = argument;
 
     const product = await prisma.product.findUnique({
       where: { id: productId },

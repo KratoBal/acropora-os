@@ -24,6 +24,15 @@ export interface ProjectableProduct {
   id: string;
   name: string;
   description: string | null;
+  /**
+   * A vetítendő változat cikkszáma, vagy `null`, ha nincs.
+   *
+   * A HÍVÓ SZERZŐDÉSE, és ki van írva, mert az adatbázisban a `sku` oszlop NEM
+   * nullázható (`sku String @unique`). Vagyis a `null` itt sosem azt jelenti,
+   * hogy „van változat, de nincs cikkszáma" - azt jelenti, hogy a hívó nem
+   * TALÁLT olyan változatot, amit átvinne. A parancssori felület az AKTÍV
+   * változatok közül veszi az elsőt.
+   */
   primarySku: string | null;
   /**
    * A publikációs döntés BEMENETE, nem a döntés.
@@ -80,7 +89,16 @@ export type ProjectionStopReason =
   | "broken-identity-chain"
   /** Több ÉLŐ termék viseli ugyanazt a külső azonosítót. */
   | "ambiguous"
-  /** A terméknek nincs cikkszáma, tehát nincs mit változatként átvinni. */
+  /**
+   * A hívó nem adott átvihető cikkszámot, tehát nincs mit változatként
+   * átvinni.
+   *
+   * A NEVE SZÁNDÉKOSAN NEM „nincs cikkszáma": a `sku` oszlop nem nullázható,
+   * tehát a termékNEK lehet cikkszáma - csak nem olyan változaton, amit a
+   * hívó átvinne. A pontos okot az tudja, aki a lekérdezést futtatta; a
+   * szolgáltatás csak azt tudja, hogy nem kapott értéket, és csak ezt is
+   * állítja.
+   */
   | "no-sku"
   /**
    * A keresés kimerítette a limitet, tehát lehet több találat is. Csonkolt
@@ -107,6 +125,37 @@ export type ProjectionStopReason =
    * később és sokkal drágábban mondaná el ugyanezt.
    */
   | "sales-channel-not-found";
+
+/**
+ * MIÉRT nincs átvihető cikkszám - és a szolgáltatás EZT MEG TUDJA MONDANI.
+ *
+ * Az első változatom azt írta, hogy „a terméknek nincs cikkszáma". Ezt innen
+ * nem lehet tudni, és ráadásul NEM IGAZ: az adatbázisban a `sku` oszlop nem
+ * nullázható (`sku String @unique`), tehát a termékNEK lehet cikkszáma. A
+ * mondat egy olyan állapotot nevezett meg, ami elő sem állhat, és a teendőre is
+ * rosszul mutatott: cikkszámot kerestetett, ahelyett hogy változatot
+ * aktiváltatna.
+ *
+ * A PONTOS OK VISZONT ITT VAN, plumbing nélkül: az `activeVariantCount` már
+ * megérkezik a publikációs bemenetben, ugyanabból a lekérdezésből. A két mező
+ * együtt eldönti, melyik eset áll fenn - és a MÁSODIK eset (aktív változat van,
+ * cikkszám mégsem jött) a hívó szerződésszegése, amit szintén meg kell
+ * nevezni, nem elhallgatni.
+ */
+function describeMissingSku(product: ProjectableProduct): string {
+  if (product.publication.activeVariantCount === 0)
+    return (
+      `${product.id}: nincs AKTÍV változata, ezért nincs átvihető cikkszám. ` +
+      `Ez NEM cikkszám-hiány: a mező nem nullázható, tehát a terméknek lehet ` +
+      `inaktív változata cikkszámmal. A teendő egy változat aktiválása.`
+    );
+
+  return (
+    `${product.id}: a hívó ${product.publication.activeVariantCount} aktív ` +
+    `változatot jelzett, elsődleges cikkszámot mégsem adott. Ez ellentmondó ` +
+    `bemenet, nem termék-állapot: a hívót kell megnézni.`
+  );
+}
 
 /**
  * Az egyetlen opció, amit a Medusa megkövetel.
@@ -153,7 +202,7 @@ export class MedusaProductProjectionService {
       return {
         action: "stopped",
         reason: "no-sku",
-        details: `${product.id}: a terméknek nincs cikkszáma`,
+        details: describeMissingSku(product),
       };
 
     if (!this.storefrontSalesChannelId)
