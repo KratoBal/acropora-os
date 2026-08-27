@@ -16,11 +16,30 @@
  * szolgáltatója épp kivált. A CÍM viszont a környezetből jön, mert az nem titok.
  */
 
-export interface MedusaProductRow {
+/**
+ * Egy termék-sor ABBAN AZ ALAKBAN, AHOGY A KERESÉS KÉRI - se többet, se
+ * kevesebbet.
+ *
+ * A `findByExternalId` `fields` paramétere pontosan hármat kér:
+ * `id,deleted_at,external_id`. A Medusa a nem kért mezőt nem hibával, hanem
+ * `undefined` értékkel adja vissza, tehát egy tágabb típus itt CSENDES ígéret:
+ * egy későbbi olvasó jogosan hinné, hogy hozzáfér a címhez, és `undefined`-ot
+ * kapna - fordítási hiba nélkül, futás közben.
+ *
+ * Ezért a keresés eredménye ezt a szűk alakot viseli, a `MedusaProductRow`
+ * pedig azoké a válaszoké marad, amelyek a TELJES terméket hozzák vissza
+ * (`create`, `update`, `probe` - ott nincs `fields` szűkítés). Ha a keresés
+ * egyszer több mezőt kér, ez a típus és a `fields` sor EGYÜTT változik.
+ */
+export interface MedusaProductLookupRow {
   id: string;
   /** `null`, ha a termék él; időbélyeg, ha puhán törölték. */
   deleted_at: string | null;
   external_id?: string | null;
+}
+
+/** A teljes termék-válasz, `fields` szűkítés nélküli hívásokból. */
+export interface MedusaProductRow extends MedusaProductLookupRow {
   title?: string;
 }
 
@@ -73,7 +92,7 @@ export interface MedusaSalesChannelRow {
 }
 
 export interface MedusaLookupResult {
-  rows: MedusaProductRow[];
+  rows: MedusaProductLookupRow[];
   /** Igaz, ha a válasz kimerítette a limitet, tehát lehet több is. */
   truncated: boolean;
 }
@@ -381,7 +400,7 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       fields: "id,deleted_at,external_id",
       limit: String(EXTERNAL_ID_LOOKUP_LIMIT),
     });
-    const body = await this.request<{ products: MedusaProductRow[] }>(
+    const body = await this.request<{ products: MedusaProductLookupRow[] }>(
       `/admin/products?${params.toString()}`,
     );
     const rows = body.products ?? [];
