@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 
 /**
- * A TELEFON ÁLTAL HÍVOTT CÍM LÉTEZZEN A SZERVEREN.
+ * A KLIENSEK ÁLTAL HÍVOTT CÍM LÉTEZZEN A SZERVEREN (telefon ÉS webes felület).
  *
  * MÉRVE 2026-08-27, éles hibából: a mobil munkalap-képernyő teljesen
  * használhatatlan volt, mert a kliens `/worksheets` alá hívott, a controller
@@ -45,10 +45,16 @@ import { describe, it } from "node:test";
  * akár behelyettesítve (`` `${BASE}/owners` ``). A kliensek 2026-08-27 óta ezt a
  * második alakot használják: az előtag fájlonként EGY helyen áll.
  *
- * AMIT NEM LÁT: a MÁSIK fájlból importált konstanst és a path-helper függvényt.
- * Ilyenkor nem hallgat, hanem BUKIK -- lásd fent. A webes kliens ma helpert is
- * használ, ezért egy webre kiterjesztés előbb a helper-feloldást kívánná meg;
- * mérve 2026-08-27, a webes mappán ez a logika tizenhárom ilyen hívást talál.
+ * A path-helpert is feloldja, ha az EGYETLEN `return` template literálból áll -- ez a
+ * webes kliens alakja (`worksheetPath(id, "/close")`), és a template literálon BELÜL
+ * álló helper-hívást (`` `${worksheetPath(id)}/continue` ``) ugyanúgy kezeli.
+ *
+ * AMIT NEM LÁT: a MÁSIK fájlból importált konstanst, és az olyan helpert, aminek a
+ * törzse nem egyetlen `return`. Ilyenkor nem hallgat, hanem BUKIK -- lásd fent.
+ *
+ * A WEBES KLIENST 2026-08-27 ÓTA NÉZI. A kiterjesztés előtt tizenhárom hívást nem
+ * tudott kiolvasni (hét konstansból, hat helperből épült), és mind a tizenhárom HELYES
+ * volt; a feloldás nélkül tehát tizenhárom hamis pirosat adott volna.
  *
  * A KÖTELEZETTSÉG, AMI EBBŐL KÖVETKEZIK, és amiért ez a bekezdés itt áll: ha a
  * kliensek alakja megint változik, ezt a specet UGYANABBAN A VÁLTOZÁSBAN kell
@@ -58,12 +64,13 @@ import { describe, it } from "node:test";
  */
 
 const MOBILE_API_DIR = "../mobile/src/lib/api";
+const WEB_API_DIR = "../web/src/lib/api";
 const API_SRC = "src";
 
 /** A kliens maga és a hitelesítés nem hív végpontot, csak becsomagolja. */
 const NOT_A_CLIENT = new Set(["client.ts", "request-auth.ts"]);
 
-interface MobileCall {
+interface ClientCall {
   file: string;
   raw: string;
   pattern: string;
@@ -75,14 +82,86 @@ interface MobileCall {
  * mobil `${id}` ugyanazt jelenti, csak máshogy írják.
  */
 function toPattern(path: string): string {
+  const PLACEHOLDER = "\u0000";
   return path
     .replace(/\?.*$/, "")
-    .replace(/\$\{[^}]*\}/g, ":param")
+    .replace(/\$\{[^}]*\}/g, PLACEHOLDER)
     .replace(/^\/+/, "")
     .replace(/\/+$/, "")
     .split("/")
-    .map((segment) => (segment.startsWith(":") ? ":param" : segment))
+    .map((segment) => {
+      // KÜLÖN SZEGMENS a behelyettesítés -> paraméter. Ha viszont TAPAD egy
+      // szöveghez (`owners${query}`), akkor a szegmens azonosítható része az
+      // `owners`, a maradék pedig lekérdező rész vagy toldalék.
+      //
+      // AMIT EZ NEM FOG MEG, és ezért áll itt kiírva: ha valaki egy VALÓDI
+      // útvonal-részt ragaszt egy szegmenshez (`/tasks/${kind}sort`), az őrző
+      // a `tasks/sort` mintát látja, és ha az véletlenül létezik a szerveren,
+      // átengedi. A repóban ma nincs ilyen alak; ha lesz, ez a sor a helye.
+      if (segment === PLACEHOLDER) return ":param";
+      const withoutPlaceholders = segment.split(PLACEHOLDER).join("");
+      return withoutPlaceholders.startsWith(":")
+        ? ":param"
+        : withoutPlaceholders;
+    })
+    .filter((segment) => segment.length > 0)
     .join("/");
+}
+
+/**
+ * Egyetlen `return` template literálból álló útvonal-helper, a paraméterei nevével és
+ * alapértékeivel. A WEBES kliens ezt az alakot használja:
+ *
+ *     function worksheetPath(id: string, suffix = "") {
+ *       return `${base}/${encodeURIComponent(id)}${suffix}`;
+ *     }
+ *
+ * SZÁNDÉKOSAN SZŰK: csak az egy-`return` alakot ismeri fel. Egy összetettebb helper nem
+ * "ismeretlen, hagyjuk" lesz, hanem BUKÁS a hívás helyén -- ugyanaz a hangos irány, mint a
+ * fel nem oldható konstansnál.
+ */
+interface PathHelper {
+  params: { name: string; fallback: string | null }[];
+  template: string;
+}
+
+function helpersOf(source: string): Map<string, PathHelper> {
+  const helpers = new Map<string, PathHelper>();
+  for (const match of source.matchAll(
+    /function\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)\s*\{\s*return\s+`([^`]*)`;\s*\}/g,
+  )) {
+    const params = match[2]!
+      .split(",")
+      .map((raw) => raw.trim())
+      .filter(Boolean)
+      .map((raw) => {
+        const [left, right] = raw.split("=").map((part) => part.trim());
+        const name = left!.split(":")[0]!.trim();
+        const literal = right ? /^(["'`])(.*)\1$/.exec(right) : null;
+        return { name, fallback: literal ? literal[2]! : null };
+      });
+    helpers.set(match[1]!, { params, template: match[3]! });
+  }
+  return helpers;
+}
+
+/** A hívás argumentumai, vesszőnként, a LEGFELSŐ szinten -- a zárójelekbe nem lépünk be. */
+function splitArguments(raw: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const character of raw) {
+    if (character === "," && depth === 0) {
+      parts.push(current.trim());
+      current = "";
+      continue;
+    }
+    if ("([{".includes(character)) depth += 1;
+    if (")]}".includes(character)) depth -= 1;
+    current += character;
+  }
+  if (current.trim()) parts.push(current.trim());
+  return parts;
 }
 
 /** A fájl saját, string értékű `const` deklarációi: `const BASE = "/service/assets";`. */
@@ -95,13 +174,15 @@ function constantsOf(source: string): Map<string, string> {
   return constants;
 }
 
-function mobileCalls(): MobileCall[] {
-  const calls: MobileCall[] = [];
-  for (const file of readdirSync(MOBILE_API_DIR).sort()) {
+function clientCalls(directory: string, label: string): ClientCall[] {
+  const calls: ClientCall[] = [];
+  for (const file of readdirSync(directory).sort()) {
     if (!file.endsWith(".ts") || file.endsWith(".spec.ts")) continue;
-    if (NOT_A_CLIENT.has(file)) continue;
-    const source = readFileSync(join(MOBILE_API_DIR, file), "utf8");
+    if (file.endsWith(".test.ts") || NOT_A_CLIENT.has(file)) continue;
+    const source = readFileSync(join(directory, file), "utf8");
     const constants = constantsOf(source);
+    const helpers = helpersOf(source);
+    const where = `${label}/${file}`;
     // A hívás lehet többsoros: a generikus paraméter és a nyitó zárójel után
     // az útvonal a következő nem üres jel.
     for (const match of source.matchAll(/apiRequest\s*(?:<[^>]*>)?\s*\(\s*/g)) {
@@ -109,14 +190,28 @@ function mobileCalls(): MobileCall[] {
       const literal = /^(["'`])((?:\\.|(?!\1)[^\\])*)\1/.exec(rest);
       // A csupasz azonosító alak: `apiRequest(BASE, { method: "POST" })`.
       const bare = /^([A-Za-z_$][\w$]*)\s*[,)]/.exec(rest);
-      const raw = literal
-        ? literal[2]!
-        : bare && constants.has(bare[1]!)
-          ? constants.get(bare[1]!)!
-          : null;
+      // A helper-hívás alak: `apiRequest(worksheetPath(id, "/close"), token)`.
+      const call = /^([A-Za-z_$][\w$]*)\s*\(/.exec(rest);
+      const helper = call && helpers.get(call[1]!);
+      let raw: string | null = null;
+      if (literal) raw = literal[2]!;
+      else if (bare && constants.has(bare[1]!)) raw = constants.get(bare[1]!)!;
+      else if (helper) {
+        const inner = rest.slice(call![0].length);
+        raw = expandHelper(helper, inner.slice(0, matchingParenthesis(inner)));
+      }
+      // A helper a template literálon BELÜL is állhat: `${worksheetPath(id)}/continue`.
+      if (raw !== null)
+        raw = raw.replace(
+          /\$\{([A-Za-z_$][\w$]*)\(([^)]*)\)\}/g,
+          (whole, name: string, args: string) => {
+            const nested = helpers.get(name);
+            return nested ? expandHelper(nested, args) : whole;
+          },
+        );
       assert.ok(
         raw !== null,
-        `${file}: egy apiRequest hívásból nem olvasható ki az útvonal. Az őrző nem hagyhatja ki némán -- vagy az alak új, vagy a hívás olyan konstansból épít, amit ez a fájl nem deklarál (például importáltból vagy helperből).`,
+        `${where}: egy apiRequest hívásból nem olvasható ki az útvonal. Az őrző nem hagyhatja ki némán -- az alak új, vagy a hívás olyan konstansból vagy helperből épít, amit ez a fájl nem deklarál (importált, vagy a helper nem egyetlen return template literál).`,
       );
       // A fájlon belüli konstansok behelyettesítése; ami marad, azt a toPattern
       // teszi `:param` alakúvá.
@@ -124,10 +219,50 @@ function mobileCalls(): MobileCall[] {
         /\$\{([A-Za-z_$][\w$]*)\}/g,
         (whole, name: string) => constants.get(name) ?? whole,
       );
-      calls.push({ file, raw, pattern: toPattern(resolved) });
+      calls.push({ file: where, raw, pattern: toPattern(resolved) });
     }
   }
   return calls;
+}
+
+/** A KÉT kliens együtt: a telefoné és a webes felületé. */
+function allCalls(): ClientCall[] {
+  return [
+    ...clientCalls(MOBILE_API_DIR, "mobil"),
+    ...clientCalls(WEB_API_DIR, "web"),
+  ];
+}
+
+/** A helper template literálja, a hívás argumentumaival behelyettesítve. */
+function expandHelper(helper: PathHelper, rawArguments: string): string {
+  const args = splitArguments(rawArguments);
+  return helper.template.replace(
+    /\$\{([A-Za-z_$][\w$]*)\}/g,
+    (whole, name: string) => {
+      const index = helper.params.findIndex(
+        (parameter) => parameter.name === name,
+      );
+      if (index === -1) return whole;
+      const given = args[index];
+      if (given === undefined) return helper.params[index]!.fallback ?? whole;
+      const asLiteral = /^(["'`])(.*)\1$/.exec(given);
+      return asLiteral ? asLiteral[2]! : ":param";
+    },
+  );
+}
+
+/** A nyitó zárójel UTÁNI szövegben a hozzá tartozó záró zárójel indexe. */
+function matchingParenthesis(afterOpening: string): number {
+  let depth = 0;
+  for (let index = 0; index < afterOpening.length; index += 1) {
+    const character = afterOpening[index]!;
+    if (character === "(") depth += 1;
+    else if (character === ")") {
+      if (depth === 0) return index;
+      depth -= 1;
+    }
+  }
+  return afterOpening.length;
 }
 
 function serverPatterns(): Set<string> {
@@ -163,7 +298,7 @@ describe("a telefon csak létező szerver-végpontot hív", () => {
    * zölden hallgatna arról, hogy nem nézett meg semmit.
    */
   it("reads both sides", () => {
-    const calls = mobileCalls();
+    const calls = allCalls();
     const patterns = serverPatterns();
     assert.ok(calls.length >= 10, `kevés mobil hívás: ${calls.length}`);
     assert.ok(patterns.size >= 50, `kevés szerver-útvonal: ${patterns.size}`);
@@ -177,11 +312,19 @@ describe("a telefon csak létező szerver-végpontot hív", () => {
       calls.some((call) => call.pattern === "service/assets"),
       "a service/assets nincs a mobil hívások közt",
     );
+    // ÉS MIND A KÉT KLIENSBŐL jöjjön hívás. Enélkül az egyik mappa elnevezése
+    // elromolhatna, a teszt pedig a másik találataival zölden maradna -- épp az
+    // a néma szűkülés, ami ellen ez az őrző készült.
+    for (const label of ["mobil/", "web/"])
+      assert.ok(
+        calls.some((call) => call.file.startsWith(label)),
+        `a(z) ${label} kliensből egyetlen hívás sem olvasódott ki`,
+      );
   });
 
   it("every mobile path has a server route", () => {
     const patterns = serverPatterns();
-    const missing = mobileCalls().filter((call) => !patterns.has(call.pattern));
+    const missing = allCalls().filter((call) => !patterns.has(call.pattern));
     // A NYERS ALAK ÉS A FELOLDOTT MINTA IS KELL. A nyers megmondja, MELYIK SORT
     // kell megnyitni; a feloldott azt, MI LETT belőle -- és egy konstansból épülő
     // hívásnál a kettő nem ugyanaz. Csak a nyerssel a hibaüzenet `${BASE}/owners`
