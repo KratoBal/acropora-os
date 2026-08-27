@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Logger,
   Post,
 } from "@nestjs/common";
@@ -13,7 +14,10 @@ import {
   DEVICE_TOKEN_SHAPE_MESSAGE,
   isNativeDeviceToken,
 } from "./device-token.rules.js";
-import { RegisterDeviceTokenDto } from "./dto/device-token.dto.js";
+import {
+  ForgetDeviceTokenDto,
+  RegisterDeviceTokenDto,
+} from "./dto/device-token.dto.js";
 
 /**
  * Where a phone says "this is me, notify me here".
@@ -66,5 +70,41 @@ export class DeviceTokenController {
     );
 
     return { ok: true };
+  }
+
+  /**
+   * A TELEFON KIKAPCSOLJA MAGAROL AZ ERTESITEST.
+   *
+   * A sor TENYLEGESEN torlodik, nem egy jelolot allitunk: amig a token a
+   * tablaban van, a kuldo oda is kuld, tehat egy "kikapcsolva" jelolo mellett
+   * az ertesites tovabb erkezne. Egy kapcsolo, ami hazudik, rosszabb, mint a
+   * hianyzo kapcsolo.
+   *
+   * A gazda a munkamenetbol jon: a torles a felhasznalojara szurve fut, tehat
+   * egy ismert token birtokaban sem lehet MAS keszuleket lekapcsolni.
+   *
+   * A DELETE torzsben kapja a tokent, nem az utvonalban: a token hitelesito
+   * adat, az utvonal viszont bekerul a hozzaferesi naplokba -- ugyanaz a
+   * szabaly, amiert ez a vezerlo sosem naplozza magat a tokent.
+   */
+  @Delete()
+  async forget(
+    @Body() input: ForgetDeviceTokenDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const removed = await this.repository.forget({
+      userId: user.id,
+      token: input.token.toLowerCase(),
+    });
+
+    this.logger.log(
+      `Eszköz-token leszedve: felhasználó ${user.id}, ${
+        removed > 0
+          ? "a készülék többé nem kap értesítést"
+          : "ehhez a kollégához nem tartozott ilyen eszköz"
+      }.`,
+    );
+
+    return { ok: true, removed };
   }
 }

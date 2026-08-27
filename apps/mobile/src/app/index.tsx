@@ -18,6 +18,8 @@ import { listUnasOrders } from "@/lib/api/orders";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import type { UserRole } from "@/lib/auth/types";
 import { personDisplayName } from "@/lib/auth/person-name";
+import { shouldRegisterPush } from "@/lib/notifications/push-preference";
+import { usePushPreference } from "@/lib/notifications/usePushPreference";
 import { usePushRegistration } from "@/lib/notifications/usePushRegistration";
 import {
   getServiceCapabilities,
@@ -74,10 +76,24 @@ interface ModuleCardProps {
 export default function HomeScreen() {
   const router = useRouter();
   const { status, user, signOut } = useAuth();
-  // Once the session exists, and never before: registering a device is only
-  // meaningful for a known colleague, and the server takes the owner from the
-  // session.
-  usePushRegistration(status === "authenticated");
+  /*
+   * Once the session exists, and never before: registering a device is only
+   * meaningful for a known colleague, and the server takes the owner from the
+   * session.
+   *
+   * ÉS A KAPCSOLÓ ÁLLÁSA IS SZÁMÍT. Amíg a beállítás töltődik, nem
+   * regisztrálunk: a beállítatlan és a még be nem töltött állapot ugyanúgy
+   * `null`, és a kettőt összemosva egy kikapcsolt készülék a következő
+   * indításnál csendben visszakapcsolná magát.
+   */
+  const push = usePushPreference();
+  usePushRegistration(
+    !push.loading &&
+      shouldRegisterPush({
+        authenticated: status === "authenticated",
+        preference: push.preference,
+      }),
+  );
   const capabilities = user ? getWebshopCapabilities(user.role) : null;
   const serviceCapabilities = user ? getServiceCapabilities(user.role) : null;
   const orders = useQuery({
@@ -272,10 +288,24 @@ export default function HomeScreen() {
         )}
 
         <View style={styles.accountCard}>
-          <View style={styles.accountText}>
+          {/*
+            A NEVEDRE KOPPINTVA NYÍLNAK A BEÁLLÍTÁSOK. A gazda kérése szerint
+            innen érhető el, és itt is van a helye: ez az egyetlen hely a
+            nyitólapon, ami rólad szól, nem a munkáról.
+          */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Beállítások megnyitása"
+            onPress={() => router.push("/settings")}
+            style={({ pressed }) => [
+              styles.accountText,
+              pressed && styles.pressed,
+            ]}
+          >
             <Text style={styles.accountName}>{personDisplayName(user)}</Text>
             <Text style={styles.accountEmail}>{user.email}</Text>
-          </View>
+            <Text style={styles.accountHint}>Beállítások ›</Text>
+          </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Kijelentkezés"
@@ -487,6 +517,12 @@ const styles = StyleSheet.create({
   accountText: { flex: 1, gap: 3 },
   accountName: { color: "#d9edf7", fontSize: 14, fontWeight: "700" },
   accountEmail: { color: "#6f93a8", fontSize: 12 },
+  accountHint: {
+    color: "#52d6c7",
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 4,
+  },
   signOutButton: {
     borderColor: "#5c2b28",
     borderRadius: 10,

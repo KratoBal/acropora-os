@@ -97,6 +97,7 @@ function RootNavigator() {
         name="orders/[id]"
         options={{ title: "Rendelés részletei" }}
       />
+      <Stack.Screen name="settings" options={{ title: "Beállítások" }} />
       <Stack.Screen name="worksheets/index" options={{ title: "Munkalapok" }} />
       <Stack.Screen name="worksheets/[id]" options={{ title: "Munkalap" }} />
       <Stack.Screen name="assets/index" options={{ title: "Eszközök" }} />
