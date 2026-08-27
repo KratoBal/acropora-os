@@ -34,7 +34,8 @@
     "production": {
       "ios": {
         "appleTeamId": "9B88PTQUQY",
-        "ascAppId": "6802569809"
+        "ascAppId": "6802569809",
+        "bundleIdentifier": "hu.acropora.os"
       }
     }
   }
