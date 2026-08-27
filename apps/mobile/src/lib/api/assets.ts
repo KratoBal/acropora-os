@@ -151,10 +151,21 @@ export interface AssetListResponse {
  * egy már lapozott halmazt itt szűrni annyi lenne, hogy a lapszám a kihagyott
  * sorokat is számolja.
  */
-export function listAssets(page = 1, pageSize = 50) {
-  return apiRequest<AssetListResponse>(
-    `/service/assets?page=${page}&pageSize=${pageSize}&status=ACTIVE&ownerScope=SERVICE_PARTNER`,
-  );
+/**
+ * A KERESÉS A SZERVEREN FUT, és ugyanazt a hat mezőt nézi, amit a webes lista
+ * (eszközszám, név, gyártó, modell, sorozatszám, leltári szám) plusz a
+ * tulajdonos nevét. A telefonon szűrni egy már lapozott halmazt annyi lenne,
+ * hogy ötven sorból hármat mutatunk, miközben a darabszám a többit is számolja.
+ */
+export function listAssets(page = 1, pageSize = 50, search = "") {
+  const query = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+    status: "ACTIVE",
+    ownerScope: "SERVICE_PARTNER",
+  });
+  if (search.trim()) query.set("search", search.trim());
+  return apiRequest<AssetListResponse>(`/service/assets?${query}`);
 }
 
 export function getAsset(id: string) {
