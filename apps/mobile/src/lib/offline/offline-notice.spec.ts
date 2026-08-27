@@ -1,0 +1,181 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+
+import {
+  describeCacheAge,
+  describeOfflineDetailNotice,
+  describeOfflineNotice,
+  isCacheStale,
+  STALE_AFTER_HOURS,
+} from "./offline-notice";
+
+/**
+ * A NÉMA MÁSOLAT A TÉT.
+ *
+ * Egy offline lista pontosan úgy néz ki, mint egy online: ugyanazok a sorok,
+ * ugyanaz az elrendezés. Ha semmi nem mondja ki, hogy mentett másolat, akkor a
+ * szerelő azt hiszi, a mai állapotot látja -- és a tévedéséről nem kap jelet.
+ * Ezek a tesztek arra állnak, hogy a kimondás MEGTÖRTÉNIK, és hogy online,
+ * friss adat mellett viszont NEM foglal helyet.
+ *
+ * Az idő itt bemenet: minden eset rögzített `now` értékkel mér, tehát a
+ * korhatárok nem a futtatás pillanatától függenek.
+ */
+
+const now = new Date("2026-08-27T12:00:00.000Z");
+const anHourAgo = "2026-08-27T11:10:00.000Z";
+const yesterday = "2026-08-26T08:00:00.000Z";
+
+describe("describeCacheAge", () => {
+  it("says it never happened when there is no copy", () => {
+    assert.equal(describeCacheAge(null, now), "még soha");
+  });
+
+  it("keeps the last hour vague on purpose", () => {
+    assert.equal(describeCacheAge(anHourAgo, now), "az imént");
+  });
+
+  it("counts in hours inside a day", () => {
+    assert.equal(describeCacheAge("2026-08-27T09:00:00.000Z", now), "3 órája");
+  });
+
+  it("counts in days beyond that", () => {
+    assert.equal(describeCacheAge("2026-08-23T12:00:00.000Z", now), "4 napja");
+  });
+
+  /**
+   * ELÁLLÍTOTT KÉSZÜLÉKÓRA. A jövőbeli bélyeg nem hiba, amit jelenteni kell, de
+   * negatív órákat sem írhatunk ki. Az "az imént" a legkevesebbet állító válasz.
+   */
+  it("does not print a negative age when the clock is ahead", () => {
+    assert.equal(describeCacheAge("2026-08-28T12:00:00.000Z", now), "az imént");
+  });
+
+  it("says the age is unknown rather than NaN for an unreadable stamp", () => {
+    assert.equal(describeCacheAge("tegnap", now), "ismeretlen ideje");
+  });
+});
+
+describe("isCacheStale", () => {
+  it("treats a missing copy as stale, because there is nothing to work from", () => {
+    assert.equal(isCacheStale(null, now), true);
+  });
+
+  it("holds the line exactly at the limit", () => {
+    const exactly = new Date(
+      now.getTime() - STALE_AFTER_HOURS * 60 * 60 * 1000,
+    ).toISOString();
+    assert.equal(isCacheStale(exactly, now), true);
+
+    const justInside = new Date(
+      now.getTime() - (STALE_AFTER_HOURS * 60 - 1) * 60 * 1000,
+    ).toISOString();
+    assert.equal(isCacheStale(justInside, now), false);
+  });
+});
+
+describe("describeOfflineNotice", () => {
+  it("stays out of the way when the phone is online and the copy is fresh", () => {
+    assert.equal(
+      describeOfflineNotice({
+        online: true,
+        syncedAt: anHourAgo,
+        itemCount: 12,
+        now,
+      }),
+      null,
+    );
+  });
+
+  it("says out loud that the list is a saved copy, and how old it is", () => {
+    const notice = describeOfflineNotice({
+      online: false,
+      syncedAt: yesterday,
+      itemCount: 12,
+      now,
+    });
+
+    assert.equal(notice?.tone, "offline");
+    assert.equal(notice?.title, "Nincs kapcsolat: mentett másolatot látsz");
+    // 28 óra: a nap fölött már napokban mérünk, tehát "1 napja". A megírt
+    // várakozásom eredetileg "28 órája" volt -- a teszt fogta meg, nem én.
+    assert.match(notice!.message, /1 napja/);
+  });
+
+  /**
+   * A ROSSZABB ESET: nincs kapcsolat ÉS nincs mentett másolat. Ilyenkor a
+   * képernyő üres, és az üres lista magától azt állítaná, hogy nincs eszköz.
+   */
+  it("distinguishes an empty phone from an empty registry", () => {
+    const notice = describeOfflineNotice({
+      online: false,
+      syncedAt: null,
+      itemCount: 0,
+      now,
+    });
+
+    assert.equal(notice?.tone, "empty");
+    assert.match(notice!.title, /nincs mentett másolat/);
+  });
+
+  /**
+   * Online, régi másolat mellett a sáv NEM a képernyőn látható adatról szól --
+   * az a szerverről jött --, hanem arról, hogy a készülék nincs felkészítve a
+   * következő térerő nélküli munkára.
+   */
+  it("warns while there is still signal to fix it", () => {
+    const notice = describeOfflineNotice({
+      online: true,
+      syncedAt: "2026-08-20T12:00:00.000Z",
+      itemCount: 12,
+      now,
+    });
+
+    assert.equal(notice?.tone, "stale");
+    assert.match(notice!.message, /7 napja/);
+  });
+});
+
+describe("describeOfflineDetailNotice", () => {
+  it("says nothing while the sheet comes from the server", () => {
+    assert.equal(
+      describeOfflineDetailNotice({
+        online: true,
+        hasFullCopy: false,
+        syncedAt: yesterday,
+        now,
+      }),
+      null,
+    );
+  });
+
+  it("marks a full saved sheet as saved", () => {
+    const notice = describeOfflineDetailNotice({
+      online: false,
+      hasFullCopy: true,
+      syncedAt: anHourAgo,
+      now,
+    });
+
+    assert.equal(notice?.tone, "offline");
+    assert.match(notice!.title, /mentett adatlap/);
+  });
+
+  /**
+   * A LISTÁBÓL ÖSSZERAKOTT LAP HIÁNYOS, és a hiányzó mezők a repó szabálya
+   * szerint nem üres sorként, hanem sehogy nem jelennek meg. A hiányukról tehát
+   * semmi nem szólna: ez a sáv az egyetlen jel.
+   */
+  it("says which fields are missing because of the missing signal", () => {
+    const notice = describeOfflineDetailNotice({
+      online: false,
+      hasFullCopy: false,
+      syncedAt: yesterday,
+      now,
+    });
+
+    assert.equal(notice?.tone, "stale");
+    assert.match(notice!.title, /hiányos adatlap/);
+    assert.match(notice!.message, /csak térerővel látszik/);
+  });
+});

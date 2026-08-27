@@ -9,9 +9,15 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useEffect } from "react";
+
 import { scanAsset } from "@/lib/api/assets";
 import { describeScanFailure } from "@/lib/assets/scan-failure";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import {
+  readCachedAssetByToken,
+  rememberAssetDetail,
+} from "@/lib/offline/asset-cache";
 
 export default function AssetScanScreen() {
   const params = useLocalSearchParams<{ token: string | string[] }>();
@@ -23,6 +29,28 @@ export default function AssetScanScreen() {
     enabled: status === "authenticated" && Boolean(token),
     retry: false,
   });
+
+  /*
+   * A MATRICA FELOLDÁSA TÉRERŐ NÉLKÜL.
+   *
+   * A készüléken tárolt másolat a `qrToken` mezőt is tartalmazza -- a szerver
+   * pontosan ezért küldi a listán is --, tehát a beolvasott kódról offline is
+   * meg tudjuk mondani, melyik eszköz az. A keresés CSAK akkor indul, ha a
+   * szerverhez fordulás elhasalt: amíg van válasz, az a friss.
+   */
+  const cached = useQuery({
+    queryKey: ["offline-scan", token],
+    queryFn: () => readCachedAssetByToken(token!),
+    enabled: query.isError && Boolean(token),
+  });
+
+  // Amit a matricáról nyitottak meg, az legyen meg a következő alkalomra is.
+  useEffect(() => {
+    if (!query.data) return;
+    void rememberAssetDetail(query.data);
+  }, [query.data]);
+
+  const cachedId = cached.data?.detail?.id ?? cached.data?.summary?.id ?? null;
 
   if (status !== "authenticated")
     return token ? (
@@ -37,12 +65,23 @@ export default function AssetScanScreen() {
       />
     );
 
+  /*
+   * A MENTETT PÉLDÁNYRA UGRUNK. Az adatlap maga mondja ki, hogy mentett
+   * másolatot mutat, és azt is, ha csak a listasor van meg -- itt tehát nem
+   * kell külön üzenet, csak a feloldás.
+   */
+  if (cachedId)
+    return (
+      <Redirect href={{ pathname: "/assets/[id]", params: { id: cachedId } }} />
+    );
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.card}>
-        {query.isError ? (
+        {query.isError && !cached.isPending ? (
           <ScanFailureCard
             error={query.error}
+            searchedOfflineCopy={cached.isSuccess}
             onRetry={() => void query.refetch()}
           />
         ) : (
@@ -66,12 +105,14 @@ export default function AssetScanScreen() {
  */
 function ScanFailureCard({
   error,
+  searchedOfflineCopy,
   onRetry,
 }: {
   error: unknown;
+  searchedOfflineCopy: boolean;
   onRetry(): void;
 }) {
-  const failure = describeScanFailure(error);
+  const failure = describeScanFailure(error, { searchedOfflineCopy });
   return (
     <>
       <Text style={styles.title}>{failure.title}</Text>
