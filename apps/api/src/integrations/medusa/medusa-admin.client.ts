@@ -26,6 +26,22 @@ export interface MedusaProductInput {
   description?: string | null;
   external_id: string;
   handle?: string;
+  /**
+   * A publikációs állapot. A telepített 2.19.0 validátora szerint a
+   * létrehozásnál `draft` az alapértelmezés, tehát a mező elhagyása NEM
+   * semleges: draftot jelent.
+   */
+  status?: "draft" | "proposed" | "published" | "rejected";
+  /**
+   * A storefront csatorna-kapcsolatok, és a mező CSERE, nem hozzáadás.
+   *
+   * Mérve a telepített 2.19.0 termék-frissítő folyamatából: ha a mező
+   * hiányzik a törzsből, a meglévő linkeket nem bántja; ha ott van, a
+   * meglévőket TÖRLI és a kapott listát hozza létre. Ebből következik, hogy
+   * ugyanannak a listának az újraküldése nem hoz létre duplikátumot, és hogy
+   * az ÜRES lista a lekötés.
+   */
+  sales_channels?: { id: string }[];
   options: { title: string; values: string[] }[];
   variants: {
     title: string;
@@ -46,6 +62,11 @@ export interface MedusaProductInput {
      */
     prices: [];
   }[];
+}
+
+export interface MedusaSalesChannelRow {
+  id: string;
+  name: string;
 }
 
 export interface MedusaLookupResult {
@@ -88,6 +109,17 @@ export interface MedusaAdminClient {
    * jön, a hálózat áll és a hitelesítés eldőlt.
    */
   probe(): Promise<void>;
+  /**
+   * Egy sales channel, azonosító szerint.
+   *
+   * A NEVET is visszaadja, és a hívó KIÍRJA, nem állítja: egy rossz, de
+   * létező azonosító így a jelentésben látszik meg. Egy név-egyezés
+   * ellenőrzése azért nincs, mert annak a bukása egy JOGOS átnevezés lenne,
+   * és egy ellenőrzés, ami jogos változásra pirosodik, előbb-utóbb
+   * kikapcsolódik - onnantól pedig a helye üresen marad, miközben mindenki
+   * azt hiszi, hogy őrzi valami.
+   */
+  findSalesChannel(id: string): Promise<MedusaSalesChannelRow | null>;
   create(input: MedusaProductInput): Promise<MedusaProductRow>;
   update(
     id: string,
@@ -208,6 +240,24 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
     );
     const rows = body.products ?? [];
     return { rows, truncated: rows.length >= EXTERNAL_ID_LOOKUP_LIMIT };
+  }
+
+  async findSalesChannel(id: string): Promise<MedusaSalesChannelRow | null> {
+    try {
+      const body = await this.request<{ sales_channel: MedusaSalesChannelRow }>(
+        `/admin/sales-channels/${encodeURIComponent(id)}`,
+      );
+      return body.sales_channel ?? null;
+    } catch (error) {
+      /**
+       * A NEM LÉTEZŐ azonosító nem kivétel, hanem válasz: `null`. Minden más
+       * hiba tovább száll, mert az MÁS kérdés - egy hálózati hiba vagy egy
+       * lejárt kulcs nem azt jelenti, hogy a csatorna nincs.
+       */
+      if (error instanceof MedusaAdminHttpError && error.status === 404)
+        return null;
+      throw error;
+    }
   }
 
   async probe(): Promise<void> {

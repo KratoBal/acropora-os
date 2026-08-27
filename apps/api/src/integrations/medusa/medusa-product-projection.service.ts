@@ -3,8 +3,15 @@ import { Injectable } from "@nestjs/common";
 import type {
   MedusaAdminClient,
   MedusaProductRow,
+  MedusaSalesChannelRow,
 } from "./medusa-admin.client.js";
 import { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
+import {
+  decidePublication,
+  PUBLICATION_REASON_TEXT,
+  type ProductPublicationState,
+  type PublicationDecision,
+} from "./medusa-publication.policy.js";
 
 /**
  * Egy termék vetítése az Acropora OS-ből a Medusába.
@@ -18,17 +25,52 @@ export interface ProjectableProduct {
   name: string;
   description: string | null;
   primarySku: string | null;
+  /**
+   * A publikációs döntés BEMENETE, nem a döntés.
+   *
+   * Szándékosan az állapot utazik és nem a kész döntés: így a szabályt a
+   * szolgáltatás alkalmazza, és a hívó nem tudja kihagyni. Egy parancssori
+   * felület, ami maga döntene, egy nap másképp döntene.
+   */
+  publication: ProductPublicationState;
 }
 
 export type ProjectionOutcome =
   /** Nem volt odaát, létrehoztuk, és rögzítettük a leképezést. */
-  | { action: "created"; medusaProductId: string }
+  | {
+      action: "created";
+      medusaProductId: string;
+      publication: ProjectionPublicationReport;
+    }
   /** Volt leképezés, a meglévő terméket módosítottuk. */
-  | { action: "updated"; medusaProductId: string }
+  | {
+      action: "updated";
+      medusaProductId: string;
+      publication: ProjectionPublicationReport;
+    }
   /** Nem volt leképezés, de a külső azonosító megtalálta az ÉLŐ terméket. */
-  | { action: "relinked"; medusaProductId: string }
+  | {
+      action: "relinked";
+      medusaProductId: string;
+      publication: ProjectionPublicationReport;
+    }
   /** Nem lehet folytatni, és megmondjuk, miért. */
   | { action: "stopped"; reason: ProjectionStopReason; details: string };
+
+/** Amit a jelentés a publikációs oldalról kiír. */
+export interface ProjectionPublicationReport {
+  status: PublicationDecision["status"];
+  salesChannel: PublicationDecision["salesChannel"];
+  reason: string;
+  /**
+   * Melyik csatornára írtunk, és mi a NEVE.
+   *
+   * Kiírjuk, nem állítjuk. Egy rossz, de létező azonosítót az vesz észre, aki
+   * a jelentést olvassa - és nem egy ellenőrzés, ami egy jogos átnevezésre is
+   * pirosodna.
+   */
+  salesChannelName: string;
+}
 
 export type ProjectionStopReason =
   /**
@@ -44,7 +86,27 @@ export type ProjectionStopReason =
    * A keresés kimerítette a limitet, tehát lehet több találat is. Csonkolt
    * halmazon nem döntünk: az élők száma ilyenkor nem megbízható.
    */
-  | "lookup-truncated";
+  | "lookup-truncated"
+  /**
+   * Nincs beállítva a storefront csatorna azonosítója.
+   *
+   * MEGÁLLUNK, és nem "óvatoskodunk". A csatorna-kötésnek három alakja van, és
+   * kettő közülük kívülről egyformán néz ki: ha a mezőt elhagynánk, a linkek
+   * érintetlenül maradnának, miközben a status átáll - félkész állapot. Ha
+   * üres listát küldenénk, az egy LEKÖTÉS, amit egy hét múlva senki nem tud
+   * megkülönböztetni egy szándékos döntéstől. Mindkét óvatos alak rosszabb a
+   * hibánál.
+   */
+  | "sales-channel-not-configured"
+  /**
+   * A beállított csatorna azonosítója nem létezik a cél oldalon.
+   *
+   * Ez az az eset, amit egy környezetből a másikba átörökölt beállítás
+   * okoz. Az ELSŐ használatkor derül ki, egyszer, nem minden hívásnál - és
+   * ez a jó pillanat: egy termék, ami nem jelenik meg a boltban, sokkal
+   * később és sokkal drágábban mondaná el ugyanezt.
+   */
+  | "sales-channel-not-found";
 
 /**
  * Az egyetlen opció, amit a Medusa megkövetel.
@@ -62,7 +124,26 @@ export class MedusaProductProjectionService {
   constructor(
     private readonly links: MedusaProductLinkRepository,
     private readonly medusa: MedusaAdminClient,
+    /**
+     * A storefront csatorna azonosítója, vagy `null`, ha nincs beállítva.
+     *
+     * Konstruktor-paraméter és nem futásidejű környezet-olvasás, hogy a
+     * "hiányzó beállításnál megállunk" tulajdonság hálózat nélkül mérhető
+     * legyen.
+     */
+    private readonly storefrontSalesChannelId: string | null,
   ) {}
+
+  /** Az első használatkor kérdezzük le, utána a folyamat élettartamára tartjuk. */
+  private resolvedChannel: MedusaSalesChannelRow | null | undefined;
+
+  private async resolveSalesChannel(): Promise<MedusaSalesChannelRow | null> {
+    if (this.resolvedChannel !== undefined) return this.resolvedChannel;
+    this.resolvedChannel = await this.medusa.findSalesChannel(
+      this.storefrontSalesChannelId!,
+    );
+    return this.resolvedChannel;
+  }
 
   async project(
     product: ProjectableProduct,
@@ -75,17 +156,74 @@ export class MedusaProductProjectionService {
         details: `${product.id}: a terméknek nincs cikkszáma`,
       };
 
+    if (!this.storefrontSalesChannelId)
+      return {
+        action: "stopped",
+        reason: "sales-channel-not-configured",
+        details:
+          `${product.id}: nincs beállítva a storefront csatorna azonosítója. ` +
+          `Nem küldtünk semmit: sem státuszt, sem csatorna-műveletet. ` +
+          `A csatorna elhagyása félkész állapotot hagyna, az üres lista pedig ` +
+          `lekötésnek látszana, és egyik sem különböztethető meg utólag egy ` +
+          `szándékos döntéstől.`,
+      };
+
+    /**
+     * A csatorna LÉTEZÉSE egyszer, az első használatkor.
+     *
+     * Nem minden hívásnál: az azonosító nem változik futás közben. Az első
+     * használat viszont a legkorábbi pillanat, amikor egy átörökölt vagy
+     * elgépelt beállítás kiderülhet.
+     */
+    const channel = await this.resolveSalesChannel();
+    if (!channel)
+      return {
+        action: "stopped",
+        reason: "sales-channel-not-found",
+        details:
+          `${product.id}: a beállított storefront csatorna ` +
+          `(${this.storefrontSalesChannelId}) nem létezik a cél oldalon. ` +
+          `A csatorna azonosítója KÖRNYEZETENKÉNTI érték: a stage azonosítója ` +
+          `az élesen nem létezik. Nem küldtünk semmit.`,
+      };
+
+    const publication = decidePublication(product.publication);
+    /**
+     * Amit a jelentés kiír. A brief 11. tesztje ezt követeli: a felület
+     * mondja meg, publikáció és csatorna szinten MIT változtatott. Egy
+     * "kész" sor önmagában nem mondja meg, mi lett a termékkel.
+     */
+    const report: ProjectionPublicationReport = {
+      status: publication.status,
+      salesChannel: publication.salesChannel,
+      reason: PUBLICATION_REASON_TEXT[publication.reason],
+      salesChannelName: channel.name,
+    };
+    const salesChannels =
+      publication.salesChannel === "attach"
+        ? [{ id: this.storefrontSalesChannelId }]
+        : [];
+
     const existingLink = await this.links.findByProductId(product.id);
     if (existingLink) {
+      /**
+       * A státusz és a csatorna EGY kérésben megy, és ez nem tömörítés.
+       * Két kérésben lenne egy pillanat, amikor az egyik már átállt, a másik
+       * még nem - és a storefront a KETTŐ metszetét nézi, tehát a félkész
+       * állapot pont úgy néz ki, mint egy sikeres váltás.
+       */
       await this.medusa.update(existingLink.medusaProductId, {
         title: product.name,
         description: product.description,
         external_id: product.id,
+        status: publication.status,
+        sales_channels: salesChannels,
       });
       await this.links.link(product.id, existingLink.medusaProductId, now);
       return {
         action: "updated",
         medusaProductId: existingLink.medusaProductId,
+        publication: report,
       };
     }
 
@@ -133,7 +271,7 @@ export class MedusaProductProjectionService {
     if (live.length === 1) {
       const medusaProductId = live[0]!.id;
       await this.links.link(product.id, medusaProductId, now);
-      return { action: "relinked", medusaProductId };
+      return { action: "relinked", medusaProductId, publication: report };
     }
 
     /**
@@ -173,6 +311,8 @@ export class MedusaProductProjectionService {
       title: product.name,
       description: product.description,
       external_id: product.id,
+      status: publication.status,
+      sales_channels: salesChannels,
       options: [
         { title: DEFAULT_OPTION_TITLE, values: [DEFAULT_OPTION_VALUE] },
       ],
@@ -191,7 +331,11 @@ export class MedusaProductProjectionService {
       ],
     });
     await this.links.link(product.id, created.id, now);
-    return { action: "created", medusaProductId: created.id };
+    return {
+      action: "created",
+      medusaProductId: created.id,
+      publication: report,
+    };
   }
 }
 

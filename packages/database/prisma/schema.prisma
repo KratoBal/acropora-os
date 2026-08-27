@@ -575,6 +575,12 @@ model Product {
   /// @deprecated Compatibility pointer. ProductCategory is the category source of truth.
   categoryId       String?
   isActive         Boolean                  @default(true)
+  /// Acropora-tulajdonu UZLETI dontes: a termek a SAJAT webshopunkban
+  /// ertekesitheto-e. NEM a UNAS publikacios allapotanak tukre - azt a
+  /// ChannelListing.isPublished hordozza, es azt a szinkron irja.
+  /// Alapertelmezese HAMIS: egy termek soha ne valjon ertekesithetove
+  /// azzal, hogy letrejott.
+  webshopSellable  Boolean                  @default(false)
   archivedAt       DateTime?
   origin           ProductOrigin?
   catalogAuthority ProductCatalogAuthority?
@@ -605,6 +611,7 @@ model Product {
   @@index([createdById])
   @@index([type, isActive])
   @@index([origin, catalogAuthority])
+  @@index([catalogAuthority, isActive, webshopSellable])
   @@index([mirrorSource, mirrorState])
   @@index([missingSince])
 }

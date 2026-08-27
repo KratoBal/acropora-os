@@ -13,6 +13,7 @@ import { MedusaCredentialCryptoService } from "./medusa-credential-crypto.servic
 import { MedusaCredentialProvider } from "./medusa-credential.provider.js";
 import { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
 import { MedusaProductProjectionService } from "./medusa-product-projection.service.js";
+import { storefrontSalesChannelId } from "./medusa-sales-channel.config.js";
 
 /**
  * KÉZZEL indított vetítés, termékazonosítónként.
@@ -126,6 +127,7 @@ export async function runProjectionCli(
   },
   /** A hitelesítő adat útja. Paraméter, hogy adatbázis nélkül is mérhető legyen. */
   credentials: MedusaCredentialProvider = storedCredentialProvider(),
+  env: Record<string, string | undefined> = process.env,
 ): Promise<number> {
   if (!productIds.length) {
     out.stderr("Adj meg legalább egy termékazonosítót.\n");
@@ -153,6 +155,7 @@ export async function runProjectionCli(
       service = new MedusaProductProjectionService(
         new MedusaProductLinkRepository(),
         await medusaClientForProjection(credentials, out),
+        storefrontSalesChannelId(env),
       );
     } catch (error) {
       /**
@@ -190,10 +193,11 @@ export async function runProjectionCli(
         name: true,
         description: true,
         catalogAuthority: true,
+        isActive: true,
+        webshopSellable: true,
         variants: {
           where: { isActive: true },
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-          take: 1,
           select: { sku: true },
         },
       },
@@ -238,6 +242,12 @@ export async function runProjectionCli(
         name: product.name,
         description: product.description,
         primarySku: product.variants[0]?.sku ?? null,
+        publication: {
+          catalogAuthority: product.catalogAuthority,
+          isActive: product.isActive,
+          webshopSellable: product.webshopSellable,
+          activeVariantCount: product.variants.length,
+        },
       },
       new Date(),
     );

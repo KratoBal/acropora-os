@@ -27,12 +27,27 @@ const product: ProjectableProduct = {
   name: "Reef Pump",
   description: "Leírás",
   primarySku: "PUMP-1",
+  /**
+   * Alapból ÉRTÉKESÍTHETŐ állapot, hogy a meglévő tesztek arról szóljanak,
+   * amiről eddig: az azonossági láncról. A publikációs viselkedést külön
+   * tesztek mérik, saját bemenettel.
+   */
+  publication: {
+    catalogAuthority: "ACROPORA",
+    isActive: true,
+    webshopSellable: true,
+    activeVariantCount: 1,
+  },
 };
+
+/** A stage csatornája; a tesztekben csak annyi számít, hogy VAN érték. */
+const SALES_CHANNEL = "sc_test_channel";
 
 function fakes(options: {
   link?: { productId: string; medusaProductId: string } | null;
   found?: MedusaProductRow[];
   truncated?: boolean;
+  channelMissing?: boolean;
 }) {
   const calls: string[] = [];
   const linked: { productId: string; medusaProductId: string }[] = [];
@@ -42,6 +57,11 @@ function fakes(options: {
    * Medusa a változat ár-tömbjét megköveteli, mi meg nem küldtük.
    */
   const createdWith: MedusaProductInput[] = [];
+  /**
+   * Az update BEMENETE, ugyanabból az okból, amiért a create-é: a publikációs
+   * kör állítása az, hogy MIT küldünk, nem az, hogy hívunk-e.
+   */
+  const updatedWith: Partial<MedusaProductInput>[] = [];
 
   const links = {
     findByProductId: async () => {
@@ -68,8 +88,13 @@ function fakes(options: {
       createdWith.push(input);
       return { id: "prod_uj", deleted_at: null };
     },
-    update: async () => {
+    findSalesChannel: async (id: string) => {
+      calls.push("findSalesChannel");
+      return options.channelMissing ? null : { id, name: "Acropora Webshop" };
+    },
+    update: async (_id: string, input: Partial<MedusaProductInput>) => {
       calls.push("update");
+      updatedWith.push(input);
       return {
         id: options.link?.medusaProductId ?? "prod_x",
         deleted_at: null,
@@ -81,7 +106,10 @@ function fakes(options: {
     calls,
     linked,
     createdWith,
-    service: new MedusaProductProjectionService(links, medusa),
+    updatedWith,
+    links,
+    medusa,
+    service: new MedusaProductProjectionService(links, medusa, SALES_CHANNEL),
   };
 }
 
@@ -94,8 +122,20 @@ describe("MedusaProductProjectionService", () => {
     assert.deepEqual(outcome, {
       action: "created",
       medusaProductId: "prod_uj",
+      publication: {
+        status: "published",
+        salesChannel: "attach",
+        reason: "értékesíthető a webshopban",
+        salesChannelName: "Acropora Webshop",
+      },
     });
-    assert.deepEqual(calls, ["findLink", "search", "create", "link"]);
+    assert.deepEqual(calls, [
+      "findSalesChannel",
+      "findLink",
+      "search",
+      "create",
+      "link",
+    ]);
     assert.deepEqual(linked, [
       { productId: "prod-os-1", medusaProductId: "prod_uj" },
     ]);
@@ -124,6 +164,13 @@ describe("MedusaProductProjectionService", () => {
       title: "Reef Pump",
       description: "Leírás",
       external_id: "prod-os-1",
+      /**
+       * A publikációs mezők a LÉTREHOZÁSNÁL is mennek, és ez nem díszítés: a
+       * telepített 2.19.0 validátora szerint a `status` alapértelmezése
+       * `draft`, tehát a mező elhagyása nem semleges, hanem draftot jelent.
+       */
+      status: "published",
+      sales_channels: [{ id: SALES_CHANNEL }],
       options: [{ title: "Kivitel", values: ["Alap"] }],
       variants: [
         {
@@ -150,8 +197,14 @@ describe("MedusaProductProjectionService", () => {
     assert.deepEqual(outcome, {
       action: "updated",
       medusaProductId: "prod_megvan",
+      publication: {
+        status: "published",
+        salesChannel: "attach",
+        reason: "értékesíthető a webshopban",
+        salesChannelName: "Acropora Webshop",
+      },
     });
-    assert.deepEqual(calls, ["findLink", "update", "link"]);
+    assert.deepEqual(calls, ["findSalesChannel", "findLink", "update", "link"]);
     assert.ok(
       !calls.includes("create"),
       "meglévő leképezésnél nem hozunk létre",
@@ -176,6 +229,12 @@ describe("MedusaProductProjectionService", () => {
     assert.deepEqual(outcome, {
       action: "relinked",
       medusaProductId: "prod_elo",
+      publication: {
+        status: "published",
+        salesChannel: "attach",
+        reason: "értékesíthető a webshopban",
+        salesChannelName: "Acropora Webshop",
+      },
     });
     assert.ok(!calls.includes("create"));
     assert.deepEqual(linked, [
@@ -201,6 +260,12 @@ describe("MedusaProductProjectionService", () => {
     assert.deepEqual(await service.project(product, now), {
       action: "relinked",
       medusaProductId: "prod_elo",
+      publication: {
+        status: "published",
+        salesChannel: "attach",
+        reason: "értékesíthető a webshopban",
+        salesChannelName: "Acropora Webshop",
+      },
     });
   });
 
@@ -322,5 +387,136 @@ describe("MedusaProductProjectionService", () => {
       "no-sku",
     );
     assert.deepEqual(calls, [], "cikkszám nélkül semmit nem kérdezünk odaát");
+  });
+});
+
+describe("a publikáció és a csatorna a vetítésben", () => {
+  const sellableProduct = (
+    overrides: Partial<ProjectableProduct["publication"]> = {},
+  ): ProjectableProduct => ({
+    ...product,
+    publication: { ...product.publication, ...overrides },
+  });
+
+  it("értékesíthető terméket published állapotban és a csatornához kötve hoz létre", async () => {
+    const { service, createdWith } = fakes({ link: null, found: [] });
+
+    const outcome = await service.project(sellableProduct(), now);
+
+    assert.equal(outcome.action, "created");
+    assert.equal(createdWith.at(-1)?.status, "published");
+    assert.deepEqual(createdWith.at(-1)?.sales_channels, [
+      { id: SALES_CHANNEL },
+    ]);
+  });
+
+  it("nem értékesíthető terméknél draft ÉS üres csatorna-lista megy egy kérésben", async () => {
+    /**
+     * Az üres lista a LEKÖTÉS: a telepített 2.19.0 frissítő folyamata a
+     * mezőt cseréként kezeli, tehát a meglévő linkeket törli és a kapott
+     * (üres) listát hozza létre.
+     */
+    const { service, updatedWith } = fakes({
+      link: { productId: product.id, medusaProductId: "prod_medusa_1" },
+      found: [],
+    });
+
+    await service.project(sellableProduct({ webshopSellable: false }), now);
+
+    assert.equal(updatedWith.at(-1)?.status, "draft");
+    assert.deepEqual(updatedWith.at(-1)?.sales_channels, []);
+  });
+
+  it("a második futás ugyanazt küldi, mint az első", async () => {
+    // A brief 5. tesztje: nincs duplikált csatorna-kapcsolat. A cél oldali
+    // csere-szemantika miatt ez abból következik, hogy ugyanazt küldjük.
+    const first = fakes({
+      link: { productId: product.id, medusaProductId: "prod_medusa_1" },
+      found: [],
+    });
+    await first.service.project(sellableProduct(), now);
+    await first.service.project(sellableProduct(), now);
+
+    assert.equal(first.updatedWith.length, 2);
+    assert.deepEqual(first.updatedWith[0], first.updatedWith[1]);
+  });
+
+  it("a jelentés megmondja, mit állított be és miért", async () => {
+    // A brief 11. tesztje. Egy "kész" sor önmagában nem mondja meg, mi lett
+    // a termékkel.
+    const { service } = fakes({ link: null, found: [] });
+
+    const outcome = await service.project(
+      sellableProduct({ isActive: false }),
+      now,
+    );
+
+    assert.equal(outcome.action, "created");
+    if (outcome.action !== "created") return;
+    assert.equal(outcome.publication.status, "draft");
+    assert.equal(outcome.publication.salesChannel, "detach");
+    assert.equal(outcome.publication.reason, "a termék inaktív");
+  });
+
+  it("HANGOSAN megáll, ha a csatorna azonosítója nincs beállítva", async () => {
+    /**
+     * A legfontosabb teszt ebben a csoportban, és nem a leglátványosabb.
+     *
+     * A csendes alternatívák mindegyike rosszabb: a mező elhagyása félkész
+     * állapotot hagyna (a status átáll, a link marad), az üres lista pedig
+     * lekötésnek látszana, amit utólag senki nem tud megkülönböztetni egy
+     * szándékos döntéstől. Ezért NEM küldünk semmit.
+     */
+    const { links, medusa, calls } = fakes({
+      link: { productId: product.id, medusaProductId: "prod_medusa_1" },
+      found: [],
+    });
+    const service = new MedusaProductProjectionService(links, medusa, null);
+
+    const outcome = await service.project(sellableProduct(), now);
+
+    assert.equal(outcome.action, "stopped");
+    if (outcome.action !== "stopped") return;
+    assert.equal(outcome.reason, "sales-channel-not-configured");
+    assert.equal(calls.length, 0, "egyetlen hívás sem mehetett ki");
+  });
+  it("HANGOSAN megáll, ha a beállított csatorna NEM LÉTEZIK a cél oldalon", async () => {
+    /**
+     * Ez az az eset, amit egy környezetből a másikba átörökölt beállítás
+     * okoz: a stage azonosítója az élesen nem létezik. Az ELSŐ használatkor
+     * derül ki, egyszer - és ez a legkorábbi pillanat, amikor egyáltalán
+     * kiderülhet. Egy termék, ami nem jelenik meg a boltban, sokkal később és
+     * sokkal drágábban mondaná el ugyanezt.
+     */
+    const { service, calls } = fakes({
+      link: { productId: product.id, medusaProductId: "prod_medusa_1" },
+      found: [],
+      channelMissing: true,
+    });
+
+    const outcome = await service.project(product, now);
+
+    assert.equal(outcome.action, "stopped");
+    if (outcome.action !== "stopped") return;
+    assert.equal(outcome.reason, "sales-channel-not-found");
+    assert.deepEqual(
+      calls,
+      ["findSalesChannel"],
+      "a lekérdezésen kívül semmi nem mehetett ki",
+    );
+  });
+
+  it("a csatornát EGYSZER kérdezi le, akárhány terméknél", async () => {
+    // Az azonosító nem változik futás közben. Egy hívás terméknként olyan
+    // költség lenne, amiért cserébe semmit nem tudnánk meg.
+    const { service, calls } = fakes({
+      link: { productId: product.id, medusaProductId: "prod_medusa_1" },
+      found: [],
+    });
+
+    await service.project(product, now);
+    await service.project(product, now);
+
+    assert.equal(calls.filter((call) => call === "findSalesChannel").length, 1);
   });
 });
