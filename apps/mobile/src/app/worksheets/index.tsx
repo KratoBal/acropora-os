@@ -13,16 +13,23 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { listWorksheets } from "@/lib/api/worksheets";
+import {
+  listSelectableWorksheetPartners,
+  listWorksheets,
+  type WorksheetSelectablePartner,
+  type WorksheetVersionStatus,
+} from "@/lib/api/worksheets";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import {
   formatWorksheetAmount,
   worksheetAssigneeLine,
+  worksheetFilterSummary,
   worksheetLabelOrDraft,
   worksheetListSubtitle,
   worksheetStatusLabel,
   worksheetVersionNote,
+  WORKSHEET_STATUS_FILTERS,
 } from "@/lib/worksheets/worksheet-presentation";
 
 const PAGE_SIZE = 25;
@@ -50,12 +57,45 @@ export default function WorksheetsScreen() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [mineOnly, setMineOnly] = useState(user?.role === "SERVICE");
+  const [partner, setPartner] = useState<WorksheetSelectablePartner | null>(
+    null,
+  );
+  const [partnerPickerOpen, setPartnerPickerOpen] = useState(false);
+  const [statusFilter, setStatusFilter] =
+    useState<WorksheetVersionStatus | null>(null);
+
+  /*
+   * A PARTNEREK CSAK AKKOR TÖLTŐDNEK BE, AMIKOR A VÁLASZTÓ KINYÍLIK. A lista a
+   * lapokra írható partnereké (szerviz jelölés és rövidítés kell hozzá), és
+   * ugyanarról a végpontról jön, mint a webes felvitel választója.
+   */
+  const partners = useQuery({
+    queryKey: ["worksheet-selectable-partners"],
+    queryFn: listSelectableWorksheetPartners,
+    enabled: partnerPickerOpen && status === "authenticated",
+  });
 
   const assigneeId = mineOnly ? user?.id : undefined;
   const worksheets = useQuery({
-    queryKey: ["worksheets", { page, search, assigneeId }],
+    queryKey: [
+      "worksheets",
+      {
+        page,
+        search,
+        assigneeId,
+        customerId: partner?.customerId,
+        statusFilter,
+      },
+    ],
     queryFn: () =>
-      listWorksheets({ page, pageSize: PAGE_SIZE, search, assigneeId }),
+      listWorksheets({
+        page,
+        pageSize: PAGE_SIZE,
+        search,
+        assigneeId,
+        customerId: partner?.customerId,
+        status: statusFilter ?? undefined,
+      }),
     enabled: Boolean(
       capabilities?.worksheetsView && status === "authenticated",
     ),
@@ -129,6 +169,111 @@ export default function WorksheetsScreen() {
           </Text>
         </Pressable>
 
+        {/*
+          PARTNER SZERINT. A választó csak akkor tölt be listát, amikor kinyílik:
+          a szerelőnek a lapjai kellenek, nem a partnertörzs, és a legtöbb
+          megnyitásnál hozzá sem nyúl.
+        */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            partner
+              ? `Partner szűrő: ${partner.name}. Koppints a módosításhoz.`
+              : "Partner szűrő: mind. Koppints a választáshoz."
+          }
+          onPress={() => setPartnerPickerOpen((open) => !open)}
+          style={({ pressed }) => [
+            styles.filterToggle,
+            partner && styles.filterToggleOn,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Text style={[styles.filterText, partner && styles.filterTextOn]}>
+            {partner ? `Partner: ${partner.name}` : "Partner: mind"}
+          </Text>
+        </Pressable>
+
+        {partnerPickerOpen ? (
+          <View style={styles.partnerList}>
+            {partners.isPending ? <ActivityIndicator color="#52d6c7" /> : null}
+            {partners.isError ? (
+              <Text style={styles.error}>
+                A partnerek listája nem tölthető be.
+              </Text>
+            ) : null}
+            <Pressable
+              onPress={() => {
+                setPartner(null);
+                setPartnerPickerOpen(false);
+                setPage(1);
+              }}
+              style={({ pressed }) => [
+                styles.partnerRow,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.partnerName}>Mind</Text>
+            </Pressable>
+            {(partners.data?.items ?? []).map((item) => (
+              <Pressable
+                key={item.customerId}
+                onPress={() => {
+                  setPartner(item);
+                  setPartnerPickerOpen(false);
+                  // Új szűrő = első oldal, különben egy szűkebb halmaz
+                  // harmadik oldalán állnánk, ami üresen jönne vissza.
+                  setPage(1);
+                }}
+                style={({ pressed }) => [
+                  styles.partnerRow,
+                  partner?.customerId === item.customerId &&
+                    styles.partnerRowOn,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.partnerName}>{item.name}</Text>
+                <Text style={styles.partnerMeta}>{item.partnerCode}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+
+        {/*
+          ÁLLAPOT SZERINT. A szerver a LEGUTOLSÓ verzió állapotára szűr, tehát
+          egy háromszor átírt, ma már aláírt lap nem jön fel „piszkozat"
+          szűrőre.
+        */}
+        <View style={styles.statusFilters}>
+          {WORKSHEET_STATUS_FILTERS.map((filter) => {
+            const active = statusFilter === filter.value;
+            return (
+              <Pressable
+                key={filter.label}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                onPress={() => {
+                  setStatusFilter(filter.value);
+                  setPage(1);
+                }}
+                style={({ pressed }) => [
+                  styles.statusFilter,
+                  active && styles.statusFilterOn,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.statusFilterText,
+                    active && styles.statusFilterTextOn,
+                  ]}
+                >
+                  {filter.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
         <TextInput
           value={search}
           onChangeText={(value) => {
@@ -139,6 +284,21 @@ export default function WorksheetsScreen() {
           placeholderTextColor="#668798"
           style={styles.input}
         />
+
+        {/*
+          MIT MUTAT ÉPPEN A LISTA. Három szűrő mind szűkít, és egy üres lista
+          előtt a szerelőnek tudnia kell, hogy nincs ilyen lap, vagy csak túl
+          szűkre állította magának. A mondat a `worksheet-presentation.ts`
+          modulban áll, mert ott mérhető.
+        */}
+        <Text style={styles.filterSummary}>
+          {worksheetFilterSummary({
+            mineOnly,
+            partnerName: partner?.name,
+            status: statusFilter,
+            search,
+          })}
+        </Text>
 
         {worksheets.isPending ? <ActivityIndicator color="#52d6c7" /> : null}
 
@@ -151,12 +311,16 @@ export default function WorksheetsScreen() {
         ) : null}
 
         {!worksheets.isPending && !worksheets.isError && items.length === 0 ? (
+          /*
+           * AZ ÜRES LISTA OKA. Négy szűrő közül bármelyik szűkíthet (saját
+           * lapok, partner, állapot, keresés), és a „Még nincs munkalap"
+           * mondat mindegyik mellett HAMIS lenne: van lap, csak nem ilyen. A
+           * fölötte álló összefoglaló megmondja, mire szűkítettünk.
+           */
           <Text style={styles.empty}>
-            {search.trim()
-              ? "Erre a keresésre nincs munkalap."
-              : mineOnly
-                ? "Nincs rád kiosztott munkalap."
-                : "Még nincs munkalap."}
+            {mineOnly || partner || statusFilter || search.trim()
+              ? "Erre a szűrésre nincs munkalap."
+              : "Még nincs munkalap."}
           </Text>
         ) : null}
 
@@ -259,6 +423,31 @@ const styles = StyleSheet.create({
   },
   filterToggleOn: { backgroundColor: "#123f3b", borderColor: "#1f6b62" },
   filterText: { color: "#91afbe", fontSize: 12, fontWeight: "800" },
+  partnerList: {
+    backgroundColor: "#071f31",
+    borderColor: "#28536a",
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 2,
+    padding: 6,
+  },
+  partnerRow: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 9 },
+  partnerRowOn: { backgroundColor: "#123f3b" },
+  partnerName: { color: "#f4fbff", fontSize: 14 },
+  partnerMeta: { color: "#789cad", fontSize: 11, marginTop: 2 },
+  statusFilters: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  statusFilter: {
+    backgroundColor: "#0d2b40",
+    borderColor: "#1c4963",
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+  },
+  statusFilterOn: { backgroundColor: "#123f3b", borderColor: "#1f6b62" },
+  statusFilterText: { color: "#91afbe", fontSize: 11, fontWeight: "800" },
+  statusFilterTextOn: { color: "#6de0ce" },
+  filterSummary: { color: "#6f93a8", fontSize: 12 },
   filterTextOn: { color: "#6de0ce" },
   input: {
     color: "#f4fbff",
