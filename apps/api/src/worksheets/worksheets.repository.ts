@@ -574,12 +574,7 @@ export class WorksheetsRepository extends Repository {
 
       if (!worksheet.number && partnerCode) {
         const year = worksheetYear(now);
-        const sequence = await this.allocateSequence(
-          transaction,
-          partnerCode,
-          departmentCode,
-          year,
-        );
+        const sequence = await this.allocateSequence(transaction, year);
         const allocated = buildWorksheetNumber({
           partnerCode,
           departmentCode,
@@ -955,6 +950,19 @@ export class WorksheetsRepository extends Repository {
   }
 
   /**
+   * EGY SZÁMLÁLÓ ÉVENKÉNT, az egész cégre -- nem partner/részleg/év hármasonként.
+   *
+   * A szám 2026-08-27 óta nem hordozza a partner rövidítését, tehát az
+   * egyediségét a SOROZAT adja, nem a kód megválasztása. Partnerenkénti
+   * számlálóval két különböző partner azonos kódú egysége ugyanabban az évben
+   * ugyanazt a számot kapná, és a második lap LEZÁRÁSA hasalna el a
+   * `Worksheet.number` egyediségén -- a felhasználó előtt.
+   *
+   * AMI VÁLTOZATLAN: a sorszám a LEZÁRÁSKOR keletkezik és ugyanabban a
+   * tranzakcióban nő, tehát az eldobott piszkozat nem használ el számot, és a
+   * sorozat hézagmentes marad. A hiánytalanság EGY sorozatra vonatkozik, és
+   * mostantól az az egy sorozat a cég éves sorozata.
+   *
    * Az `updatedAt` itt is `(NOW() AT TIME ZONE 'utc')`, nem csupasz `NOW()`:
    * az oszlop időzóna nélküli, és a Prisma UTC-t ír bele, a csupasz `NOW()`
    * viszont a SZERVER időzónájában áll elő. Ezen az egy helyen csak
@@ -964,18 +972,16 @@ export class WorksheetsRepository extends Repository {
    */
   private async allocateSequence(
     transaction: TransactionClient,
-    partnerCode: string,
-    departmentCode: string,
     year: number,
   ): Promise<number> {
     const rows = await transaction.$queryRaw<Array<{ lastValue: number }>>(
       Prisma.sql`
-        INSERT INTO "WorksheetNumberSequence"
-          ("id", "partnerCode", "departmentCode", "year", "lastValue", "updatedAt")
-        VALUES (${randomUUID()}, ${partnerCode}, ${departmentCode}, ${year}, 1, (NOW() AT TIME ZONE 'utc'))
-        ON CONFLICT ("partnerCode", "departmentCode", "year")
+        INSERT INTO "WorksheetYearSequence"
+          ("id", "year", "lastValue", "updatedAt")
+        VALUES (${randomUUID()}, ${year}, 1, (NOW() AT TIME ZONE 'utc'))
+        ON CONFLICT ("year")
         DO UPDATE SET
-          "lastValue" = "WorksheetNumberSequence"."lastValue" + 1,
+          "lastValue" = "WorksheetYearSequence"."lastValue" + 1,
           "updatedAt" = (NOW() AT TIME ZONE 'utc')
         RETURNING "lastValue"
       `,

@@ -2270,6 +2270,28 @@ model WorksheetDepartment {
 /// A munkalap-sorszám számlálója partner + részleg + év hármasonként.
 ///
 /// Szándékosan tábla és nem PostgreSQL szekvencia: a `nextval` a
+/// A MUNKALAPSZÁM SOROZATA: EGY SZÁMLÁLÓ ÉVENKÉNT, az egész cégre.
+///
+/// A szám 2026-08-27 óta nem hordozza a partner rövidítését (a lap címe már
+/// azonosítja), tehát az egyediséget nem a kód megválasztása adja, hanem MAGA
+/// A SOROZAT. Ha a számláló partnerenként futna tovább, két különböző partner
+/// azonos kódú egysége ugyanabban az évben ugyanazt a számot kapná, és a
+/// második lap LEZÁRÁSA hasalna el a `Worksheet.number` egyediségén.
+///
+/// KÜLÖN TÁBLA, ÉS NEM A RÉGI KÉT KÓDMEZŐJE NULLÁZHATÓVÁ TÉVE. Az a kézenfekvő
+/// alak ugyanaz a csapda lenne, mint a helyszín-fánál: a Postgresben a NULL nem
+/// egyenlő önmagával, tehát a `@@unique` a globális soron NEM érne semmit, és
+/// két párhuzamos lezárás két számláló-sort hozna létre ugyanarra az évre.
+///
+/// A régi `WorksheetNumberSequence` érintetlen marad: a benne álló kurzorok a
+/// RÉGI, partneres sorozatokat írják le, és azok visszakereshetők maradnak.
+model WorksheetYearSequence {
+  id        String   @id @default(cuid())
+  year      Int      @unique
+  lastValue Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
+
 /// tranzakció visszagörgetésekor sem adja vissza a kiosztott értéket, tehát
 /// hézagot hagy. A munkalapnál a hiánytalanság könyvelési követelmény, ezért
 /// a számláló ugyanabban a tranzakcióban nő, mint amelyikben a lezárás
