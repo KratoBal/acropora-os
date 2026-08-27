@@ -151,3 +151,80 @@ a `create` bemenetének alakját sokáig semmi nem tartotta (a szolgáltatás
 tesztje a hívás-sorrendet mérte, a kliensé a keresést), és a hiány élesben
 derült ki, egy 400-as elutasításban. Azóta két védvonal tartja: a típusban
 az üres tuple, és egy állítás a teljes payloadra.
+
+## ADR-008 – A címkére kerülő eszközszám bélyege helyi idő szerint áll, jelöléssel
+
+**Dátum:** 2026-08-27
+
+**A hiba, amit javít:** a dokumentum-kódok bélyege a `toISOString()` értékéből
+készül, ami UTC. Nyáron ez két órával a magyar fali óra mögött jár, és este
+22:00 után **a dátum is elcsúszik**: egy helyi idő szerint augusztus 28-án
+00:30-kor kiadott eszközszámban `20260827` áll. Mérve: a bélyeget **senki nem
+fejti vissza dátummá** – a címke a szám utolsó két blokkját mutatja, a keresés
+`contains` illesztés, a rendezés a létrehozás mezője szerint megy –, tehát az
+átállás semmilyen számítást nem tör el. Egy **ember** viszont leolvassa a
+szalagról, és neki rossz óra, néha rossz nap.
+
+**Döntés:** az eszközszám bélyege Europe/Budapest szerint áll, és az időpont
+blokkja egy záró kisbetűs `h`-t kap: `ESZK-20260827-035000h-3906`.
+
+**Miért kell jelölés:** a már kiadott számok visszamenőleg nem változnak, tehát
+a sorozatban van egy pont, ahol a bélyeg jelentése megváltozik. Jelölés nélkül
+ugyanaz a mező két dolgot jelentene, kívülről megkülönböztethetetlenül – ami
+**rosszabb, mint az egységesen rossz érték**, mert azt legalább át lehet
+számolni.
+
+**Miért az időpont blokk végén:** a címkére a szám utolsó két blokkja kerül, így
+egy dátum-blokkba tett jelölő pontosan annak lenne láthatatlan, akinek szól. És
+miért kisbetű: a szám vége csupa nagybetűs hexa, tehát a kisbetű az egyetlen
+karakter a kódban, ami nem illik a mintába – magyarázat nélkül elüt.
+
+**A hatókör egyetlen hely, és teszt tartja ott:** minden más család bélyege UTC
+marad. A beszerzési bizonylatszám és a POS rendelésszám **külső rendszerbe is
+kimegy** (NAV, UNAS, szamlazz.hu), és azok alakjának megváltoztatása nem ennek a
+körnek a dolga. A hatókör egyetlen sorral tágítható úgy, hogy semmilyen más
+teszt nem bukna el – ezért őrzi `stamp-scope.spec.ts`.
+
+**Sorrend:** ez a változás a QR-geometria **mögött** áll, egyirányú függéssel. A
+jelölt szám egy karakterrel hosszabb, és a régi címke feliratsávjába a spec 10
+százalékos tartalékával nem fér bele (23,62 mm kellene, 22,50 van); a
+19,05 mm-es QR mellett a sáv 24,19 mm, és kifér. Fordítva nem áll: a
+QR-változtatásnak saját indoka van (a modul legyen egész számú nyomtatási pont
+minden 60-nal osztható felbontáson).
+
+## ADR-009 – A munkalapszám globális éves sorozat, partner tag nélkül
+
+**Dátum:** 2026-08-27
+
+**Döntés:** a munkalapszámból a partner tagja kimarad, mert a lap címe már
+azonosítja a partnert (tulajdonosi döntés, 2026-08-25). Az alak
+`BIO-2026-001`, és **az egyediséget a sorozat adja**: egy számláló évenként, az
+egész cégre.
+
+**Amit ez a döntés helyett kizár:** a partner tag elhagyása önmagában ütköző
+számokat állítana elő. A számláló ma `(partnerCode, departmentCode, year)`
+hármasonként fut, tehát két különböző partner azonos kódú egysége ugyanabban az
+évben mindkettő `BIO-2026-001` számot kapná, és a `Worksheet.number` egyediségi
+megkötése miatt a második lap **lezárása hasalna el, a felhasználó előtt**. Az
+egység kódja ma csak partneren belül egyedi, és a `BIO` tipikus név.
+
+**A két elvetett alak:** a teljes helyszín-út a számban (`BIO-FNM-2026-001`)
+nem old meg semmit, mert két partner útja is lehet azonos – csak ritkábbá és
+kiszámíthatatlanabbá teszi az ütközést. A globálisan egyedi egység-kód
+visszavonná a helyszín-fa egyik tulajdonságát (két különböző ág alatt ugyanaz a
+kód megengedett), anélkül hogy megcáfolná.
+
+**A számláló ÚJ tábla, nem a régi átalakítása.** Kézenfekvő lenne a két
+kódmezőt nullázhatóvá tenni és a globális sort azzal jelölni, hogy mindkettő
+`NULL` – és ez ugyanaz a csapda, mint a helyszín-fánál: a Postgresben a NULL nem
+egyenlő önmagával, tehát a `@@unique` a globális soron nem érne semmit, és két
+párhuzamos lezárás két számláló-sort hozna létre ugyanarra az évre.
+
+**A váltás pontja magától látszik**, ezért itt nem kell jelölés: a partner tag
+eltűnése maga a jel. A régi és az új szám **nem tud ütközni** (más karakterlánc),
+tehát az új sorozat 1-ről indulhat, és a régi lapok számát nem kell átírni.
+
+**Az ára, amit vállalunk:** egy egység saját lapjai nem lesznek egymás utániak
+(`001`, `007`, `013`). A könyvelési hiánytalanság sértetlen, mert az egy
+sorozatra vonatkozik, és az hézagmentes – de ember szemmel ez ugrálásnak
+látszik, és a szervizes látni fogja.
