@@ -94,6 +94,18 @@ function fakes(options: {
   const findVariant = (variantId: string) =>
     variants.find((row) => row.id === variantId);
 
+  /**
+   * A hamis kliens is AZONOSÍTÓ szerint keres, nem index szerint. Enélkül a
+   * teszt akkor is zöld maradna, ha a szolgáltatás a rossz bejegyzésből
+   * olvasna: a hamis oldal ugyanazt a hibát követné el, és a kettő kioltaná
+   * egymást.
+   */
+  const inventoryById = (inventoryItemId: string) =>
+    variants
+      .flatMap((row) => row.inventory_items ?? [])
+      .map((entry) => entry.inventory)
+      .find((inventory) => inventory?.id === inventoryItemId);
+
   const medusa = {
     async listStockLocationsForSalesChannel(salesChannelId: string) {
       calls.push(`locations:${salesChannelId}`);
@@ -125,7 +137,7 @@ function fakes(options: {
       calls.push(`create-level:${inventoryItemId}:${locationId}:${quantity}`);
       if (options.failOn === "level")
         throw new Error("MEDUSA_ADMIN_HTTP_400: nem sikerult");
-      const inventory = variants[0]?.inventory_items?.[0]?.inventory;
+      const inventory = inventoryById(inventoryItemId);
       inventory?.location_levels?.push({
         location_id: locationId,
         stocked_quantity: quantity,
@@ -139,10 +151,9 @@ function fakes(options: {
       calls.push(`update-level:${inventoryItemId}:${locationId}:${quantity}`);
       if (options.failOn === "level")
         throw new Error("MEDUSA_ADMIN_HTTP_400: nem sikerult");
-      const level =
-        variants[0]?.inventory_items?.[0]?.inventory?.location_levels?.find(
-          (row) => row.location_id === locationId,
-        );
+      const level = inventoryById(inventoryItemId)?.location_levels?.find(
+        (row) => row.location_id === locationId,
+      );
       /**
        * A MÉRT viselkedés: a frissítés NEM hoz létre hiányzó szintet, hanem
        * `Item ... is not stocked at location ...` hibát dob.
@@ -514,6 +525,67 @@ describe("Medusa készlet-vetítés: fail-closed kapuk", () => {
 
     assert.ok(outcome.action === "stopped");
     assert.equal(outcome.reason, "no-inventory-item");
+  });
+
+  /**
+   * EGY SZINTTEL LEJJEBB, UGYANAZ A KÜLÖNBSÉG.
+   *
+   * A kapcsolat-lista NEM ÜRES, de egyetlen bejegyzés sem hozza az `inventory`
+   * objektumot. A kapcsolat tehát LÉTEZIK - különben nem lenne bejegyzés -,
+   * csak a kiterjesztés nem jött meg. „Nincs inventory item" néven jelentve
+   * egy MEGLÉVŐ láncról állítanánk, hogy nincs, és a teendő is más lenne: ott
+   * a változaton kellene javítani, itt a lekérdezésen.
+   */
+  it("kapcsolat van, de kiterjesztés nincs: lánc-hiány, NEM hiányzó item", async () => {
+    const { service, calls } = fakes({
+      variants: [variantWith({ inventoryItems: [{}, {}] })],
+    });
+    const outcome = await service.project(stock("5"));
+
+    assert.ok(outcome.action === "stopped");
+    assert.equal(
+      outcome.reason,
+      "inventory-chain-missing",
+      "üres kapcsolat-listánál ez 'no-inventory-item' lenne, és az MÁS teendő",
+    );
+    assert.match(outcome.details, /EGYIKHEZ SEM/);
+    assert.ok(!calls.some((entry) => entry.includes("level")));
+  });
+
+  /**
+   * A SZINTEK ÉS AZ AZONOSÍTÓ UGYANARRÓL A BEJEGYZÉSRŐL.
+   *
+   * Az első bejegyzés nem hoz azonosítót, a második igen. Ha a szinteket a
+   * nyers lista NULLADIK eleméből olvasnánk, a szint nem látszana, és a
+   * készlet létrehozását indítanánk egy olyan itemre, aminek már van szintje.
+   */
+  it("a szintek arról az itemről jönnek, amelyik az azonosítót adta", async () => {
+    const { service, calls } = fakes({
+      variants: [
+        variantWith({
+          inventoryItems: [
+            {},
+            {
+              inventory: {
+                id: "iitem_valodi",
+                location_levels: [
+                  { location_id: "sloc_1", stocked_quantity: 1 },
+                ],
+              },
+            },
+          ],
+        }),
+      ],
+    });
+    const outcome = await service.project(stock("5"));
+
+    assert.ok(outcome.action !== "stopped");
+    assert.equal(outcome.report.inventoryItemId, "iitem_valodi");
+    assert.ok(
+      calls.includes("update-level:iitem_valodi:sloc_1:5"),
+      "a nulladik bejegyzésből olvasva a meglévő szint nem látszana, és létrehozást indítanánk rá",
+    );
+    assert.ok(!calls.some((entry) => entry.startsWith("create-level:")));
   });
 
   it("nem készletkezelt változat: saját ok, saját teendő", async () => {

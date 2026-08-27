@@ -285,11 +285,31 @@ export class MedusaInventoryProjectionService {
           `kapcsolat, hanem hogy másképp kell kérdezni. Nem írtunk semmit.`,
       };
 
-    const inventoryIds = variant.inventory_items
-      .map((entry) => entry.inventory?.id)
-      .filter((value): value is string => Boolean(value));
+    /**
+     * AZ ÜRES LISTA ÉS A HIÁNYZÓ KITERJESZTÉS KÉT KÜLÖN VÁLASZ, EGY SZINTTEL
+     * LEJJEBB IS.
+     *
+     * Az `inventory_items` mező meglétét fent már megnéztük. De egy NEM ÜRES
+     * lista, amiben egyetlen bejegyzés sem hozza az `inventory` objektumot,
+     * ugyanaz az eset egy szinttel lejjebb: a kapcsolat LÉTEZIK (különben nem
+     * lenne bejegyzés), csak a kiterjesztés nem jött meg. Ha ezt „nincs
+     * inventory item" néven jelentenénk, egy MEGLÉVŐ láncról állítanánk, hogy
+     * nincs - és a teendő is más lenne: ott a változaton kellene javítani,
+     * itt a lekérdezésen.
+     */
+    const chain = variant.inventory_items.filter((entry) => entry.inventory);
+    if (variant.inventory_items.length > 0 && chain.length === 0)
+      return {
+        action: "stopped",
+        reason: "inventory-chain-missing",
+        details:
+          `${stock.osProductId}: a ${variant.id} változathoz ` +
+          `${variant.inventory_items.length} kapcsolat tartozik, de a válasz ` +
+          `EGYIKHEZ SEM hozta az inventory objektumot. A kapcsolat tehát ` +
+          `létezik, csak nem kérdeztünk jól. Nem írtunk semmit.`,
+      };
 
-    if (inventoryIds.length === 0)
+    if (chain.length === 0)
       return {
         action: "stopped",
         reason: "no-inventory-item",
@@ -297,18 +317,31 @@ export class MedusaInventoryProjectionService {
           `${stock.osProductId}: a ${variant.id} változathoz nem tartozik ` +
           `inventory item. Nem írtunk semmit.`,
       };
-    if (inventoryIds.length > 1)
+    if (chain.length > 1)
       return {
         action: "stopped",
         reason: "ambiguous-inventory-item",
         details:
-          `${stock.osProductId}: a ${variant.id} változathoz ${inventoryIds.length} ` +
-          `inventory item tartozik (${inventoryIds.join(", ")}). Ez azonossági ` +
-          `kérdés, nem a vetítés dolga eldönteni.`,
+          `${stock.osProductId}: a ${variant.id} változathoz ${chain.length} ` +
+          `inventory item tartozik (${chain
+            .map((entry) => entry.inventory?.id ?? "(azonosító nélkül)")
+            .join(
+              ", ",
+            )}). Ez azonossági kérdés, nem a vetítés dolga eldönteni.`,
       };
 
-    const inventoryItemId = inventoryIds[0]!;
-    const levels = variant.inventory_items[0]?.inventory?.location_levels;
+    /**
+     * A SZINTEK ABBÓL A BEJEGYZÉSBŐL JÖNNEK, AMELYIK AZ AZONOSÍTÓT IS ADTA.
+     *
+     * Az első változatom az azonosítót egy SZŰRT listából vette, a szinteket
+     * viszont a nyers lista NULLADIK eleméből - két különböző bejegyzés, ha az
+     * első nem hozott azonosítót. Egy ilyen eltérésnél a szinteket a rossz
+     * itemről olvastuk volna, és a készlet a rossz helyre ment volna. Most a
+     * kettő ugyanaz az objektum, tehát az eltérés nem lehetséges.
+     */
+    const inventory = chain[0]!.inventory!;
+    const inventoryItemId = inventory.id;
+    const levels = inventory.location_levels;
     if (levels === undefined)
       return {
         action: "stopped",
