@@ -5,6 +5,14 @@ export interface SignOutDeps {
    * user-scoped query result from the React Query cache so nothing from
    * the signed-out user's session survives into the next login. */
   clearUserScopedQueries(): void;
+  /**
+   * Wired to the offline asset cache in the real app. Partner equipment data
+   * sits in a local SQLite copy so the technician can work without signal, and
+   * a phone changes hands: that copy must not outlive the session it was
+   * gathered in. Clearing it is a local operation, so it runs even when the
+   * logout request never reached the server.
+   */
+  forgetOfflineData(): Promise<void>;
 }
 
 /**
@@ -18,7 +26,9 @@ export interface SignOutDeps {
  *    session row may briefly outlive that until it hits its own 8h TTL
  *    or a future explicit revocation — see docs/MOBILE-DEVELOPMENT.md;
  * 3. clear every user-scoped query from the cache so a subsequent login
- *    (as the same or a different user) never sees stale data.
+ *    (as the same or a different user) never sees stale data;
+ * 4. drop the offline copy of the partner equipment from the device, for the
+ *    same reason and with the same unconditionality.
  */
 export async function signOut(deps: SignOutDeps): Promise<void> {
   try {
@@ -29,5 +39,6 @@ export async function signOut(deps: SignOutDeps): Promise<void> {
   } finally {
     await deps.clearSession();
     deps.clearUserScopedQueries();
+    await deps.forgetOfflineData();
   }
 }

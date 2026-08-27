@@ -300,12 +300,37 @@ other secret) belong in the EAS environment configuration
 
 ## Offline boundary
 
-`src/lib/offline/database.ts` defines an initializer that opens SQLite with WAL
-and creates a durable `sync_queue` table — but **nothing calls it**, so the
-database does not exist at runtime today. Every request goes straight to the
-server, and `@react-native-community/netinfo` is a dependency that no source
-file imports, so the client cannot currently tell whether it is offline at all.
-Treat the table shape as a starting point, not as a working layer.
+**Reading works offline; writing does not.** The line runs between the two, and
+it is deliberate — see ADR-011 in `docs/DECISIONS.md`.
+
+### What works without signal (the field asset catalogue)
+
+`src/lib/offline/` holds the copy the technician works from:
+
+- `database.ts` — SQLite/WAL, with `cached_assets` (every row the asset list
+  returned) and `cached_asset_details` (the full sheet, only for assets someone
+  opened while online), plus the untouched `sync_queue` table for future writes.
+- `asset-cache.ts` — reads and writes that copy, resolves a scanned `qrToken`
+  against it, and drops everything on sign-out. A failed save never breaks a
+  screen that is working online.
+- `asset-sync.ts` — walks **every** page of the asset list, not just the fifty
+  rows the screen shows, so a scanned sticker resolves for assets far down the
+  list. The page ceiling is explicit and reported (`truncated`), because a
+  silently cut copy looks exactly like a complete one.
+- `connectivity.ts` — `@react-native-community/netinfo`, wrapped in
+  `useIsOnline()`. It never holds back a request: the saved copy is used only
+  when the call actually failed, because the connectivity flag can be wrong.
+- `offline-notice.ts` — what the screen says about the copy. A saved copy is
+  never silent: the banner names its age, and says when the sheet is partial
+  (list row only) so missing fields are not read as empty ones.
+
+Server-only actions are hidden on a saved copy rather than left to fail: label
+printing and editing need the API.
+
+### What still does not work offline
+
+Writing. Creating or editing an asset, closing or signing a worksheet — none of
+it is queued locally. `sync_queue` remains a table nobody calls.
 
 Domain work will add task-specific tables and an idempotent sync protocol. The
 rules for that protocol are:

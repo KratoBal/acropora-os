@@ -264,3 +264,52 @@ integrációs specben áll, tehát a CI tartja.
 **Egy következmény, amit érdemes tudni:** a szülőre `Restrict` áll, tehát egy
 `deleteMany` a fa fölött a sorrendtől függően elhasalhat. A takarítás ezért
 levélről gyökér felé halad.
+
+## ADR-011 – A telefon offline OLVAS, de nem ír, és a mentett másolat sosem néma
+
+**Dátum:** 2026-08-27
+
+**Döntés:** a mobil alkalmazás helyszíni eszközkatalógusa térerő nélkül is
+működik OLVASÁSRA (lista, adatlap, QR-feloldás), az ÍRÁS viszont továbbra sem
+sorolódik helyben. A `sync_queue` tábla marad, de nem hív senki.
+
+**Miért nem szimmetrikus a kettő.** Az olvasás offline másolata legrosszabb
+esetben elavult adatot mutat, és ezt ki lehet írni a képernyőre. Az offline
+írásnál a hiba nem látszik: két kolléga ugyanazt a lapot módosítja, és az
+ütközés csak a szinkronnál derül ki, amikor már mindketten továbbmentek. A
+`docs/MOBILE-DEVELOPMENT.md` protokoll-szabályai (idempotencia, ütközés-kezelés,
+soha nem aláírunk offline) pont ezért állnak ott: az írás külön munka, saját
+bizonyítási kötelezettséggel.
+
+**Mit tárolunk a készüléken.** Két külön táblát, és a különbségük a felületen is
+látszik:
+
+- `cached_assets`: minden aktív, szerviz partnerhez tartozó eszköz listasora. A
+  lista MINDEN oldalát lehúzzuk, nem csak az első ötvenet, mert a szerelő azt a
+  matricát olvassa be, amelyik előtte van.
+- `cached_asset_details`: a teljes adatlap, de csak arról, amit valaki már
+  megnyitott térerővel. Eszközönként egy hívás egy nagyobb partnernél percekig
+  tartana, és a lista megnyitását tenné használhatatlanná.
+
+Ezért a mentett adatlap KÉTFÉLE lehet, és a sáv kimondja, melyik: a listából
+összerakott lap hiányos (leírás, beszerelés dátuma, garancia, részegységek), és
+mivel a hiányzó mezők a repó szabálya szerint nem üres sorként, hanem sehogy nem
+jelennek meg, a hiányukról semmi más nem szólna.
+
+**A mentett másolat sosem néma.** Egy offline lista pontosan úgy néz ki, mint egy
+online. Ha nem mondjuk ki, a szerelő a tegnapi adat alapján dönt, és nem tudja,
+hogy döntött. A sáv a kor mellett azt is jelzi, ha a másolat régi, MÉG térerő
+mellett -- akkor van értelme frissíteni, nem a helyszínen.
+
+**A készülék offline jelzése nem dönt.** A `netinfo` tévedhet, ezért a lekérdezés
+mindig elindul, és a mentett másolat csak akkor kerül elő, ha a hívás tényleg
+elhasalt. Egy rosszul jelentő jelzés így legfeljebb egy fölösleges sávot ír ki,
+nem tart vissza egy működő lekérdezést.
+
+**Kijelentkezéskor a másolat törlődik.** Partner-eszközök adatai ülnek a
+készüléken, a telefon pedig gazdát cserélhet. A törlés helyi művelet, tehát
+akkor is lefut, ha maga a kijelentkezés hívása nem ért el a szerverhez.
+
+**Ami nyitva marad:** a felső korlát (ma húsz oldal, ezer eszköz) becslés, nem
+mérés. Ha egy telepítés ezt túllépi, a felület kiírja, hány eszköz maradt ki --
+és akkor lesz adatunk arról, mekkora korlát kell.

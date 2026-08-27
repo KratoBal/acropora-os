@@ -22,6 +22,8 @@ import { subscribeToAppState } from "./app-state";
 import { authReducer, initialAuthState, type AuthState } from "./auth-reducer";
 import { unlockWithBiometrics } from "./biometric-unlock";
 import { watchForegroundLock } from "./foreground-watcher";
+import { forgetOfflineAssets } from "@/lib/offline/asset-cache";
+
 import { restoreSession } from "./restore-session";
 import { resumeSession } from "./resume-session";
 import { signIn as signInFlow, type SignInOutcome } from "./sign-in";
@@ -198,6 +200,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearUserScopedQueries: () => {
         queryClient.clear();
       },
+      forgetOfflineData: forgetOfflineAssets,
     });
     dispatch({ type: "SIGN_OUT_DONE" });
   }, [queryClient]);
