@@ -1,6 +1,9 @@
 /**
- * A Medusa admin API vékony kliense, csak ahhoz a háromhoz, amit az első kör
- * használ: keresés külső azonosítóra, termék létrehozása, termék módosítása.
+ * A Medusa admin API vékony kliense, csak ahhoz, amit a vetítés használ:
+ * keresés külső azonosítóra, termék létrehozása és módosítása, illetve a
+ * készlet-vetítés négy művelete (készlethely a csatorna felől, a termék
+ * változatai a készlet-lánccal, készletszint létrehozása és beállítása, a
+ * változat rendelhetősége).
  *
  * A HITELESÍTÉS ALAKJA MÉRT, NEM TALÁLT: a titkos API kulcsot a Medusa
  * kifejezetten HTTP Basic fejlécben várja (`Authorization: Basic <kulcs>`), és
@@ -82,6 +85,50 @@ export interface MedusaLookupResult {
  */
 export const EXTERNAL_ID_LOOKUP_LIMIT = 50;
 
+/**
+ * A csatornához tartozó készlethelyek lekérdezésének felső határa.
+ *
+ * A helyes állapot PONTOSAN EGY, és a hívó fail-closed. A limit mégis tág,
+ * mert a „több" eset megállás, és a megálláshoz látni akarjuk, HÁNY hely van
+ * és melyek - egy szűk limit itt azt sugallná, hogy kevesebb van, mint
+ * amennyi valójában.
+ */
+export const STOCK_LOCATION_LOOKUP_LIMIT = 50;
+
+/**
+ * Egy termék változatainak felső határa.
+ *
+ * A vetített termékeknek ma egy változatuk van, tehát ötven bőven elég - DE a
+ * kimerített limitet akkor is jelezzük, ugyanúgy, ahogy a termék-keresésnél. A
+ * lista nem rendez alapértelmezésben, tehát egy csonkolt válasz nem „az első
+ * ötvenet" adja vissza, hanem TETSZŐLEGES ötvenet: a „pontosan egy egyezés"
+ * ellenőrzés ilyenkor egy részhalmazon futna, és a hiányzó egyezésből azt
+ * olvasnánk ki, hogy nincs ilyen cikkszámú változat.
+ */
+export const VARIANT_LOOKUP_LIMIT = 50;
+
+/**
+ * A változat mezői, a készlet-lánccal EGYÜTT.
+ *
+ * A `inventory_items.inventory.location_levels` út a telepített 2.19.0
+ * forrásában használt alak (a kosár és a rendelés folyamatai pontosan ezt
+ * kérik le), tehát nem találgatás. AMIT VISZONT NEM TUDUNK INNEN MÉRNI: hogy
+ * az admin HTTP réteg `fields` paramétere ugyanezt a kiterjesztést átengedi-e.
+ * Ezért a hívó a HIÁNYZÓ mezőt NEM üres listaként olvassa, hanem megáll rajta:
+ * az üres lista azt állítaná, hogy nincs kapcsolat, holott csak nem kérdeztünk
+ * jól.
+ */
+export const VARIANT_INVENTORY_FIELDS = [
+  "id",
+  "sku",
+  "allow_backorder",
+  "manage_inventory",
+  "inventory_items.inventory.id",
+  "inventory_items.inventory.location_levels.location_id",
+  "inventory_items.inventory.location_levels.stocked_quantity",
+  "inventory_items.inventory.location_levels.reserved_quantity",
+].join(",");
+
 export interface MedusaAdminClient {
   /**
    * Keresés külső azonosítóra, a TÖRÖLTEKKEL együtt.
@@ -125,6 +172,105 @@ export interface MedusaAdminClient {
     id: string,
     input: Omit<MedusaProductInput, "options" | "variants">,
   ): Promise<MedusaProductRow>;
+  /**
+   * A csatornához tartozó készlethelyek - MINDEN FUTÁSKOR, azonosító
+   * beégetése nélkül.
+   *
+   * A `sales_channel_id` NEVESÍTETT szűrő az admin stock-location
+   * validátorában (mérve a telepített 2.19.0 forrásából), tehát ez nem
+   * találgatás. A hívó fail-closed: ha nem PONTOSAN EGY hely jön vissza, a
+   * futás megáll és nem ír semmit. A nulla azt jelenti, hogy rossz csatornát
+   * néztünk; a több pedig üzleti döntés, amit nem a kód hoz meg.
+   */
+  listStockLocationsForSalesChannel(
+    salesChannelId: string,
+  ): Promise<MedusaStockLocationRow[]>;
+  /**
+   * Egy termék változatai, a készlet-lánccal együtt, EGY kérésben.
+   *
+   * A lánc (`inventory_items.inventory.location_levels`) azért utazik együtt a
+   * változattal, mert az AZONOSSÁGOT a Medusa saját kapcsolata hordozza, nem
+   * egy átnevezhető mező. A cikkszámra szűrő `GET /admin/inventory-items?sku=`
+   * út létezik, de a cikkszám az inventory itemen MÁSOLAT: a brief 6. pontja
+   * kifejezetten tiltja az átnevezhető mezőt azonosságként.
+   */
+  listProductVariants(productId: string): Promise<MedusaVariantLookupResult>;
+  /** Új készletszint egy helyen. A szint hiánya nem hiba, hanem első futás. */
+  createInventoryLevel(
+    inventoryItemId: string,
+    locationId: string,
+    stockedQuantity: number,
+  ): Promise<void>;
+  /**
+   * Meglévő készletszint ABSZOLÚT beállítása.
+   *
+   * Nem delta: a telepített 2.19.0 `updateInventoryLevels` a kapott értéket
+   * BEÁLLÍTJA. Ebből következik az idempotencia - és ebből következik az is,
+   * hogy az idempotencia nem a mi kódunk érdeme, hanem a cél oldal
+   * tulajdonsága.
+   *
+   * A HIÁNYZÓ SZINTET NEM HOZZA LÉTRE: az `ensureInventoryLevels` ilyenkor
+   * `Item ... is not stocked at location ...` hibát dob (mérve). Ezért van
+   * külön létrehozó hívás, és ezért nézzük meg előbb, van-e szint.
+   */
+  updateInventoryLevel(
+    inventoryItemId: string,
+    locationId: string,
+    stockedQuantity: number,
+  ): Promise<void>;
+  /** A változat rendelhetőségének beállítása. Lásd `PROJECTED_ALLOW_BACKORDER`. */
+  updateVariantBackorder(
+    productId: string,
+    variantId: string,
+    allowBackorder: boolean,
+  ): Promise<void>;
+}
+
+/**
+ * Egy készlethely, ahogy az admin lista visszaadja.
+ *
+ * A NEVET is kérjük, és a jelentés kiírja. A készlethely azonosítója sehol
+ * nincs beégetve: minden futás az ÉRTÉKESÍTÉSI CSATORNA felől kérdezi vissza -
+ * lásd `listStockLocationsForSalesChannel`.
+ */
+export interface MedusaStockLocationRow {
+  id: string;
+  name: string;
+}
+
+/** Egy készletszint, `(inventory_item_id, location_id)` páronként. */
+export interface MedusaInventoryLevelRow {
+  location_id: string;
+  stocked_quantity: number;
+  reserved_quantity?: number;
+}
+
+/**
+ * Egy változat, a hozzá tartozó inventory item LÁNCÁVAL együtt.
+ *
+ * A `inventory_items` és a beágyazott `location_levels` mező **hiányozhat**, és
+ * a hiány NEM ugyanaz, mint az üres lista. Ezért `?` és nem alapértelmezett
+ * üres tömb: az üres lista azt ÁLLÍTANÁ, hogy nincs kapcsolat, holott csak nem
+ * kérdeztünk jól. A hívó a kettőt külön kezeli, és a hiányra megáll.
+ */
+/** Változat-keresés eredménye, a csonkolás jelzésével EGYÜTT. */
+export interface MedusaVariantLookupResult {
+  rows: MedusaVariantRow[];
+  /** Igaz, ha a válasz kimerítette a limitet, tehát lehet több változat is. */
+  truncated: boolean;
+}
+
+export interface MedusaVariantRow {
+  id: string;
+  sku: string | null;
+  allow_backorder?: boolean;
+  manage_inventory?: boolean;
+  inventory_items?: {
+    inventory?: {
+      id: string;
+      location_levels?: MedusaInventoryLevelRow[];
+    };
+  }[];
 }
 
 export interface MedusaAdminConfig {
@@ -283,5 +429,86 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       { method: "POST", body: JSON.stringify(input) },
     );
     return body.product;
+  }
+
+  async listStockLocationsForSalesChannel(
+    salesChannelId: string,
+  ): Promise<MedusaStockLocationRow[]> {
+    /**
+     * A `fields` azért van kiírva, mert a `name` BENNE VAN ugyan az admin
+     * stock-location alapmezőiben, de az alapértelmezés egy lista, ami
+     * változhat - a szűkítés viszont egy hívásnyi adatot spórol, és
+     * kimondja, mire van szükségünk.
+     */
+    const params = new URLSearchParams({
+      sales_channel_id: salesChannelId,
+      fields: "id,name",
+      limit: String(STOCK_LOCATION_LOOKUP_LIMIT),
+    });
+    const body = await this.request<{
+      stock_locations: MedusaStockLocationRow[];
+    }>(`/admin/stock-locations?${params.toString()}`);
+    return body.stock_locations ?? [];
+  }
+
+  async listProductVariants(
+    productId: string,
+  ): Promise<MedusaVariantLookupResult> {
+    const params = new URLSearchParams({
+      fields: VARIANT_INVENTORY_FIELDS,
+      limit: String(VARIANT_LOOKUP_LIMIT),
+    });
+    const body = await this.request<{ variants: MedusaVariantRow[] }>(
+      `/admin/products/${encodeURIComponent(productId)}/variants?${params.toString()}`,
+    );
+    const rows = body.variants ?? [];
+    return { rows, truncated: rows.length >= VARIANT_LOOKUP_LIMIT };
+  }
+
+  async createInventoryLevel(
+    inventoryItemId: string,
+    locationId: string,
+    stockedQuantity: number,
+  ): Promise<void> {
+    await this.request<unknown>(
+      `/admin/inventory-items/${encodeURIComponent(inventoryItemId)}/location-levels`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          location_id: locationId,
+          stocked_quantity: stockedQuantity,
+        }),
+      },
+    );
+  }
+
+  async updateInventoryLevel(
+    inventoryItemId: string,
+    locationId: string,
+    stockedQuantity: number,
+  ): Promise<void> {
+    await this.request<unknown>(
+      `/admin/inventory-items/${encodeURIComponent(inventoryItemId)}` +
+        `/location-levels/${encodeURIComponent(locationId)}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ stocked_quantity: stockedQuantity }),
+      },
+    );
+  }
+
+  async updateVariantBackorder(
+    productId: string,
+    variantId: string,
+    allowBackorder: boolean,
+  ): Promise<void> {
+    await this.request<unknown>(
+      `/admin/products/${encodeURIComponent(productId)}` +
+        `/variants/${encodeURIComponent(variantId)}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ allow_backorder: allowBackorder }),
+      },
+    );
   }
 }

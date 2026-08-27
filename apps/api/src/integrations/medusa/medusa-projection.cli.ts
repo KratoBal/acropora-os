@@ -122,7 +122,7 @@ export async function medusaClientForProjection(
 }
 
 /** Amit a parancs használ, ha a hívó nem ad mást: a tárolt kulcs útja. */
-function storedCredentialProvider(): MedusaCredentialProvider {
+export function storedCredentialProvider(): MedusaCredentialProvider {
   return new MedusaCredentialProvider(
     new MedusaConnectionRepository(),
     new MedusaCredentialCryptoService(),
@@ -134,7 +134,9 @@ function storedCredentialProvider(): MedusaCredentialProvider {
  * első lépése, amit el lehet felejteni; a sérült adat viszont igen, és a kettő
  * NEM látszhat ugyanannak.
  */
-function describeCredentialFailure(error: MedusaConnectionError): string {
+export function describeCredentialFailure(
+  error: MedusaConnectionError,
+): string {
   if (
     error.code === "MEDUSA_CONNECTION_NOT_CONFIGURED" ||
     error.code === "MEDUSA_CONNECTION_CONFIGURATION_MISSING"

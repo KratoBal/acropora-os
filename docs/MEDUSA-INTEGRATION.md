@@ -231,9 +231,14 @@ list is the detach. Status and channel travel in one request.
 
 ### Not in this round
 
-Pricing and inventory are not part of this projection. The variant price array
-is sent empty because the create endpoint requires the field, not because we
-have a price to state.
+Pricing is not part of this projection. The variant price array is sent empty
+because the create endpoint requires the field, not because we have a price to
+state.
+
+**Inventory was added in a later round** (2026-08-27) as a _separate_ command
+and a separate policy module — see "Inventory projection" below. The separation
+is the point: zero stock does not draft a product, and the inventory projection
+touches no sales channel.
 
 ### What has NOT been proven, and why it does not look like a gap
 
@@ -272,21 +277,227 @@ none of them observes what the other side did with it.
 an observation: the source says what the code does, not what this deployment
 does with our data.
 
+## Inventory projection
+
+`Acropora OS = inventory source of truth`, `Medusa = storefront projection`.
+There is no write-back, and none is planned. The command is separate from the
+product projection on purpose: publication and inventory are separate
+responsibilities, and a single command would eventually let one bleed into the
+other — not because anybody decided so, but because they would sit in one place.
+
+```bash
+cd /home/marveen/marveen/agents/nautilus/acropora-os
+pnpm --filter @acropora/api medusa:inventory sku:teszt0001
+```
+
+### The quantity formula, and the fifth copy that was not written
+
+The number we send is `onHand - reserved`, taken from the main warehouse row
+with **no location and no lot** — the same row the UNAS sync and the POS search
+read. Reading anything else here would introduce a second stock concept under
+the same name.
+
+The formula was measured (2026-08-27) as written out **four separate times**:
+the UNAS outbox, the POS product search, the reconciliation target, and the
+purchase-invoice reservation. There was no shared function. This round created
+one, `apps/api/src/inventory/available-to-sell.ts`, and moved all four onto it.
+
+Four copies are not bad because they are four. They are bad because **when one
+of them moves, nothing says so**: the others keep compiling and keep running,
+and the drift only shows up in the shop, weeks later. That is checkable now —
+breaking the shared function turns five spec files red across three domains.
+
+### Negative stock, and what the clamp is and is not
+
+`medusaQuantity = max(0, floor(availableToSell))`.
+
+**The clamp is a constraint, not a design choice.** The Medusa admin validator
+declares `stocked_quantity: z.number().min(0)` in four places; a negative value
+would be refused with a 400. We could not send one if we wanted to.
+
+**The clamp is not in the shared formula, and that is deliberate.** UNAS receives
+the signed value today — the owner switched the stock display off there because
+the recorded quantities have drifted, and until the stock count that is the
+intended state. Putting the clamp in the shared function would silently revoke
+that, and the rule would no longer be visible where it applies.
+
+**The floor is measured behaviour, not a business rule.** Medusa's own
+availability computation applies `Math.floor`, so 2.7 would sell as 2 anyway.
+The report says when a fraction was dropped, otherwise it would claim more than
+the shop will sell. The report also says when a negative was clamped, otherwise
+`0` would read as an empty warehouse rather than as minus two.
+
+### Backorder: the default is the opposite of the decision
+
+The owner's rule (2026-08-27 16:02): positive stock shows "Raktáron", **zero
+shows "Rendelhető"**.
+
+The mechanism is `ProductVariant.allow_backorder`. Measured on the installed
+2.19.0: when true, the cart's inventory check is skipped entirely; when false,
+`confirmInventory` runs and a shortfall raises `INSUFFICIENT_INVENTORY`. **Its
+default is `false`.**
+
+So the wanted behaviour does not arise on its own. A projection that set only
+the quantity would leave the shop doing the opposite of what was decided — not
+with an error, but by simply refusing the sale. The projection therefore sets
+the flag explicitly on every variant it projects, and one test goes red if the
+mechanism is missing rather than if the intention is missing.
+
+This is not a preorder feature. No new field, no new flow: an existing boolean
+on the target side is given a value.
+
+### Two reservation concepts, stacked
+
+The OS `reserved` field is written by the project reservation flow — it is not a
+separate ledger. On the Medusa side `available_quantity` is **computed**
+(`stocked - reserved`), only `stocked_quantity` is writable, and its
+`reserved_quantity` comes from Medusa's own cart reservations.
+
+So sending `onHand - reserved` as `stocked_quantity` means **a Medusa cart
+reservation is subtracted a second time**, on top of the OS reservation already
+subtracted. This is a consequence, not a bug, and there is no shape that avoids
+it: `stocked` is the only writable field. The choice is not "subtract twice or
+not", it is "what should the shop start from" — and the right starting point is
+what the OS already reports to a webshop today. The report prints the Medusa-side
+reserved quantity when the response carries it, so anyone comparing the two
+numbers can see the stacking.
+
+### The stock location is resolved at run time, from the sales channel
+
+No location id is stored or hard-coded. Every run asks
+`GET /admin/stock-locations?sales_channel_id=<channel>` — a named filter in the
+admin validator — and the run is **fail-closed in both directions**:
+
+| What comes back      | What happens                                                                               |
+| -------------------- | ------------------------------------------------------------------------------------------ |
+| exactly one location | that is the target; the projection writes there                                            |
+| zero                 | stop, write nothing — either the wrong channel, or no location is linked to it             |
+| more than one        | stop, write nothing — which location's stock belongs to the webshop is a business decision |
+
+A configured location id would bring back the same trouble the per-environment
+channel id already taught us, only quietly: writing stock to the wrong location
+is a perfectly valid operation as far as Medusa is concerned. Asking the channel
+every run also means a changed environment is reported by the run itself rather
+than by an out-of-date page.
+
+### Inventory identity
+
+```
+OS product --(ExternalReference MEDUSA/Product)--> Medusa product
+Medusa product --> variant (matched on SKU) --> inventory item (Medusa's own link)
+inventory item --(inventory level, per location)--> stock location
+```
+
+No new mapping was introduced. The variant-to-inventory-item link is the one
+Medusa maintains itself; we read it through
+`inventory_items.inventory.location_levels` on the variant. The
+`GET /admin/inventory-items?sku=` route exists, but the SKU on an inventory item
+is a **copy** made at creation, and identity on a renameable field is what the
+brief forbids.
+
+**A truncated variant list is not an answer either.** The variant lookup reports
+whether it exhausted its limit, and the run stops if it did — the same guard the
+product lookup already carries, and for the same reason: the list does not sort,
+so a truncated response is an arbitrary subset rather than the first N. An
+"exactly one match" check running on a subset would answer "no variant with that
+SKU" with full confidence.
+
+**A missing field is not an empty list.** If the response does not carry
+`inventory_items` (or the nested `location_levels`), the run stops and says so.
+Reading absence as "there is no link" would send the projection down the wrong
+branch in silence. This matters because one thing here is **not measured**: that
+the admin HTTP layer passes that field expansion through. The path is the one the
+installed 2.19.0 cart and order flows use internally; whether the `fields` query
+parameter accepts it is only decidable on a live system. If it does not, the
+first run stops with `inventory-chain-missing` — loudly, having written nothing.
+
+### Idempotency comes from the target, again
+
+`updateInventoryLevels` **sets** the received `stocked_quantity` and resolves the
+level on the `(inventory_item_id, location_id)` pair. Absolute, not delta.
+Re-sending the same value leaves the same state and creates no second level, and
+`5 → 3 → 0` simply takes the value sent.
+
+Two consequences worth stating rather than enjoying quietly:
+
+- The brief's stop condition ("if only delta updates are possible, stop") **does
+  not apply**.
+- The idempotency is therefore **not our code's merit**. If someone rewrites the
+  call into a "more efficient" delta operation, idempotency would be lost
+  silently. That is why "absolute set replaced by delta" is on the falsification
+  list, and it turns three tests red.
+
+**The update does not create a missing level.** Measured: `ensureInventoryLevels`
+raises `Item ... is not stocked at location ...`. So the projection looks first
+and creates the level when it is absent — which is the normal state of a first
+run, not an error.
+
+### Failure model
+
+Three or four calls are needed, so **atomicity is not claimed**. Every call's
+result is inspected separately and the first failure stops the rest.
+
+**The backorder flag is written before the quantity, and the order is not a
+matter of taste.** Of the three half-states the worst is quantity-set,
+flag-unset: a zero-stock product then cannot be bought although it is supposed
+to be orderable — and it fails quietly, because the shop works, it just refuses
+the sale. In the order used, the surviving half-state is flag-set,
+quantity-stale: visible, fixable, and it blocks nothing. The stop message names
+which of the two happened.
+
+Two concurrent projections of the same SKU would write the same absolute value
+if they read the same OS state; if they did not, **the last write wins** — which
+is the correct behaviour for a projection, since the OS is the source of truth
+and the next run carries the fresh value anyway. There is no read-modify-write
+cycle here, only a write, so **no lock and no outbox were built**.
+
+### What has NOT been proven here
+
+**Nothing in this section has been run against a live system.** The runtime stage
+proof was left out by the owner's decision (2026-08-27 17:34, in answer to a
+direct question: "nem kerem"), and with it the stage stock-location measurement
+("akkor nem aktualis") — which is precisely why the location is resolved at run
+time instead of being written down here.
+
+Four things only a live run can settle:
+
+| #   | What would falsify the rule                                          | Why a test cannot catch it                                                      |
+| --- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| 1   | the `fields` expansion does not return `inventory_items` over HTTP   | read from the installed source's internal queries, never asked of the admin API |
+| 2   | the shop still refuses a zero-stock sale with `allow_backorder` true | the tests assert the call; they do not observe a checkout                       |
+| 3   | the channel has a location, but not the one the webshop sells from   | our own lookup produces the name; only the target can contradict it             |
+| 4   | a fractional quantity is rejected rather than floored                | the validator has no `.int()`, but only a live call proves the acceptance       |
+
+Items 1, 2 and 4 rest on the installed 2.19.0 source: a stronger footing than a
+guess and a weaker one than an observation.
+
 ## Where the assertions live
 
-| Claim                                                              | Where it is asserted                         |
-| ------------------------------------------------------------------ | -------------------------------------------- |
-| the four integration states stay distinct                          | `medusa-connection.service.spec.ts`          |
-| no fallback when the stored credential is corrupt                  | `medusa-credential.provider.spec.ts`         |
-| projection works from the stored key with no env key               | `medusa-projection.cli.spec.ts`              |
-| a missing key is still visible as `not-configured`                 | `medusa-admin.config.spec.ts`                |
-| the secret is not read from the environment on the projection path | `medusa-projection.cli.spec.ts` (structural) |
-| the publication rule, every branch                                 | `medusa-publication.policy.spec.ts`          |
-| the service APPLIES the rule, and sends both gates in one request  | `medusa-product-projection.service.spec.ts`  |
-| a missing channel id stops before any call goes out                | `medusa-product-projection.service.spec.ts`  |
-| a non-existent channel id stops on first use, once                 | `medusa-product-projection.service.spec.ts`  |
-| the report names the state, the channel and the reason             | `medusa-projection.cli.spec.ts`              |
-| **nothing on this page has been observed on a running system**     | **no file - see "What has NOT been proven"** |
+| Claim                                                              | Where it is asserted                          |
+| ------------------------------------------------------------------ | --------------------------------------------- |
+| the four integration states stay distinct                          | `medusa-connection.service.spec.ts`           |
+| no fallback when the stored credential is corrupt                  | `medusa-credential.provider.spec.ts`          |
+| projection works from the stored key with no env key               | `medusa-projection.cli.spec.ts`               |
+| a missing key is still visible as `not-configured`                 | `medusa-admin.config.spec.ts`                 |
+| the secret is not read from the environment on the projection path | `medusa-projection.cli.spec.ts` (structural)  |
+| the publication rule, every branch                                 | `medusa-publication.policy.spec.ts`           |
+| the service APPLIES the rule, and sends both gates in one request  | `medusa-product-projection.service.spec.ts`   |
+| a missing channel id stops before any call goes out                | `medusa-product-projection.service.spec.ts`   |
+| a non-existent channel id stops on first use, once                 | `medusa-product-projection.service.spec.ts`   |
+| the report names the state, the channel and the reason             | `medusa-projection.cli.spec.ts`               |
+| the quantity formula, in one place for all five callers            | `available-to-sell.spec.ts`                   |
+| the clamp, the floor, and that neither hides the other             | `medusa-inventory.policy.spec.ts`             |
+| the projection SETS `allow_backorder`, flag before quantity        | `medusa-inventory-projection.service.spec.ts` |
+| absolute desired state on both increase and decrease               | `medusa-inventory-projection.service.spec.ts` |
+| a repeat run does not drift and creates no second level            | `medusa-inventory-projection.service.spec.ts` |
+| a partial failure is not a success, and a retry converges          | `medusa-inventory-projection.service.spec.ts` |
+| not exactly one stock location on the channel stops the run        | `medusa-inventory-projection.service.spec.ts` |
+| a missing chain field is not read as an empty list                 | `medusa-inventory-projection.service.spec.ts` |
+| a truncated variant list stops instead of answering "not found"    | `medusa-inventory-projection.service.spec.ts` |
+| inventory never writes product status or sales channel             | `medusa-inventory-projection.service.spec.ts` |
+| a non-ACROPORA product is not projected                            | `medusa-inventory.cli.spec.ts`                |
+| the inventory report names quantity, location, clamp and backorder | `medusa-inventory.cli.spec.ts`                |
+| **nothing on this page has been observed on a running system**     | **no file - see "What has NOT been proven"**  |
 
 **A claim with an expiry condition, not a date.** Two Medusa integration specs
 (`medusa-connection.repository.integration.spec.ts`,

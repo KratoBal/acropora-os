@@ -5,6 +5,7 @@ import {
   classifyLedgerMovements,
   type LedgerMovement,
 } from "../common/stock-ledger.util.js";
+import { availableToSell } from "./available-to-sell.js";
 import { computeReconciliationStatus } from "./stock-reconciliation-status.util.js";
 import type {
   OutboxDiagnosis,
@@ -345,7 +346,7 @@ export class StockReconciliationRepository extends Repository {
 
       const outboxDiagnosis = this.diagnoseOutbox(
         outboxByPair.get(pairKey) ?? [],
-        item.onHand.minus(item.reserved ?? new Prisma.Decimal(0)),
+        availableToSell(item),
       );
 
       const localVsLedgerDelta =
