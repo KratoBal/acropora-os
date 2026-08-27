@@ -7,6 +7,7 @@ import {
   Card,
   CardContent,
   CardHeader,
+  ConfirmDialog,
   FormField,
   Input,
   PageHeader,
@@ -91,6 +92,7 @@ export function MedusaConnectionSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [disabling, setDisabling] = useState(false);
+  const [confirmDisable, setConfirmDisable] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -169,6 +171,7 @@ export function MedusaConnectionSettingsPage() {
 
   const handleDisable = async () => {
     if (disabling) return;
+    setConfirmDisable(false);
     setDisabling(true);
     setError(null);
     setNotice(null);
@@ -275,7 +278,7 @@ export function MedusaConnectionSettingsPage() {
               <Button
                 variant="ghost"
                 disabled={disabling || !view.configured}
-                onClick={() => void handleDisable()}
+                onClick={() => setConfirmDisable(true)}
               >
                 {disabling ? "Letiltás..." : "Kapcsolat letiltása"}
               </Button>
@@ -322,6 +325,23 @@ export function MedusaConnectionSettingsPage() {
           </form>
         </CardContent>
       </Card>
+
+      {/*
+        UGYANAZ A KERDES, MINT AZ UNAS ES A NAV KAPCSOLATNAL. A kulcs torlese
+        itt sem "beallitas": a tarolt kulcs SOHA nem olvashato vissza, tehat a
+        visszakapcsolas csak ujbóli megadassal megy -- es ezt a kerdesnek ki
+        kell mondania, nem a felhasznalonak kitalalnia.
+      */}
+      <ConfirmDialog
+        open={confirmDisable}
+        title="Letiltod a Medusa kapcsolatot?"
+        consequence="A tárolt admin kulcs törlődik, és a Medusa felé menő hívások leállnak: amíg a kapcsolat le van tiltva, a webshop-motor nem kap tőlünk adatot."
+        recovery="Visszakapcsolható, de csak az admin kulcs újbóli megadásával: a mostani kulcs a letiltással véglegesen törlődik, visszaolvasni nem lehet."
+        confirmLabel="Kapcsolat letiltása"
+        busy={disabling}
+        onConfirm={() => void handleDisable()}
+        onCancel={() => setConfirmDisable(false)}
+      />
     </div>
   );
 }
