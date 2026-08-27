@@ -58,6 +58,12 @@ export interface AssetListItem extends AssetHierarchyItem {
   manufacturer?: string;
   model?: string;
   serialNumber?: string;
+  /**
+   * Az ugyfel sajat eszkozkodja. A LISTAN is megjon, mert a kereses nezi: egy
+   * talalat, ami nem mutatja meg, mire illeszkedett, ugyanazt kerdezteti meg
+   * masodszor.
+   */
+  inventoryNumber?: string;
   nextServiceAt?: string;
   /**
    * A QR-matricán lévő azonosító. A listán is megjön, mert a helyszíni
@@ -70,7 +76,6 @@ export interface AssetListItem extends AssetHierarchyItem {
 
 export interface AssetDetail extends AssetListItem {
   category?: string;
-  inventoryNumber?: string;
   description?: string;
   installedAt?: string;
   warrantyExpiresAt?: string;

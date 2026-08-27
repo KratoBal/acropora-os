@@ -49,6 +49,14 @@ export function AssetCard({
       ) : asset.childCount > 0 ? (
         <Text style={styles.meta}>{asset.childCount} részegység</Text>
       ) : null}
+      {/*
+        AZ UGYFEL SAJAT KODJA, csak ha van, es FELIRATTAL. A kereses nezi, tehat
+        a talalatnak meg kell mutatnia, mire illeszkedett -- a felirat pedig
+        azert kell, hogy a sorban ne legyen osszekeverheto a mi eszkozszamunkkal.
+      */}
+      {asset.inventoryNumber ? (
+        <Text style={styles.meta}>Leltári szám: {asset.inventoryNumber}</Text>
+      ) : null}
       {asset.manufacturer || asset.model || asset.serialNumber ? (
         <Text style={styles.technical}>
           {[asset.manufacturer, asset.model, asset.serialNumber]
