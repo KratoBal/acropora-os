@@ -28,6 +28,8 @@ export interface AssetCreateForm {
   manufacturer: string;
   model: string;
   serialNumber: string;
+  /** A partner saját azonosítója az eszközön (leltári szám). Üres is lehet. */
+  inventoryNumber: string;
   /** Amit a felhasználó beírt vagy a választóból kapott. Üres is lehet. */
   installedAt: string;
   /** Karbantartási intervallum napban, szövegként. Üres is lehet. */
@@ -44,6 +46,7 @@ export interface AssetCreatePayload {
   manufacturer?: string;
   model?: string;
   serialNumber?: string;
+  inventoryNumber?: string;
   installedAt?: string;
   serviceIntervalDays?: number;
 }
@@ -208,6 +211,13 @@ export function buildAssetCreatePayload(
       manufacturer: form.manufacturer.trim() || undefined,
       model: form.model.trim() || undefined,
       serialNumber: form.serialNumber.trim() || undefined,
+      /**
+       * A LELTÁRI SZÁM A PARTNERÉ, nem a miénk, és pont ezért kell a
+       * felvitelkor: a gépen az ő matricája van rajta, és a szerelő akkor
+       * látja, amikor előtte áll. Utólag, az irodából ez már egy külön kör
+       * telefonálás -- a mező eddig csak a szerkesztő képernyőn létezett.
+       */
+      inventoryNumber: form.inventoryNumber.trim() || undefined,
       /**
        * A nap KEZDETE, UTC-ben. A telepítés dátuma nap-pontosságú adat: az
        * időpont-rész nem mérés, hanem a formátum ára, ezért nulla.

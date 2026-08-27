@@ -27,6 +27,7 @@ const form: AssetCreateForm = {
   manufacturer: " Eheim ",
   model: "",
   serialNumber: " SN-1 ",
+  inventoryNumber: "",
   installedAt: "",
   interval: "",
 };
@@ -222,5 +223,47 @@ describe("buildAssetCreatePayload es az alegyseg", () => {
     const result = buildAssetCreatePayload({ ...form, unitId: "   " });
 
     assert.equal(result.ok ? "departmentId" in result.payload : true, false);
+  });
+});
+
+describe("buildAssetCreatePayload es a leltari szam", () => {
+  /**
+   * A LELTÁRI SZÁM A PARTNERÉ, nem a miénk. A gépen az ő matricája van rajta, és
+   * a szerelő akkor látja, amikor előtte áll -- utólag, az irodából ez már egy
+   * külön kör telefonálás. A mező eddig csak a SZERKESZTŐ képernyőn létezett,
+   * pedig a szerver felvitelkor is fogadja.
+   */
+  it("records the partner's own number while the sticker is in hand", () => {
+    const result = buildAssetCreatePayload({
+      ...form,
+      inventoryNumber: "  LT-4711 ",
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(
+      result.ok ? result.payload.inventoryNumber : undefined,
+      "LT-4711",
+    );
+  });
+
+  it("leaves it out when the machine carries no such sticker", () => {
+    const result = buildAssetCreatePayload(form);
+
+    assert.equal(
+      result.ok ? result.payload.inventoryNumber : "not-undefined",
+      undefined,
+    );
+  });
+
+  it("treats whitespace as no number at all", () => {
+    const result = buildAssetCreatePayload({
+      ...form,
+      inventoryNumber: "   ",
+    });
+
+    assert.equal(
+      result.ok ? result.payload.inventoryNumber : "not-undefined",
+      undefined,
+    );
   });
 });
