@@ -79,6 +79,16 @@ export interface AssetUnitSummary {
   id: string;
   code: string;
   name: string;
+  /**
+   * A TELJES ÚT a gyökértől eddig az egységig, a nevekkel, sorrendben (az
+   * utolsó elem maga az egység neve).
+   *
+   * AMIÉRT NEM ELÉG A `name`: a kód és a név csak TESTVÉREK között egyedi, tehát
+   * két távoli ág alatt ugyanaz a „Biodóm (BIO)" megengedett. Egy listában a
+   * puszta név ilyenkor két különböző egységre ugyanazt a képet adja, és semmi
+   * nem jelzi az olvasónak, hogy van miben tévedni.
+   */
+  path: string[];
 }
 
 export interface AssetListItem extends AssetHierarchyItem {

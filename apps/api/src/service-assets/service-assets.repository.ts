@@ -15,6 +15,7 @@ import type {
 } from "@acropora/types";
 
 import { withUniqueCode } from "../common/unique-code.util.js";
+import { buildUnitPaths } from "./unit-path.js";
 import type {
   AssetListQueryDto,
   CreateAssetDto,
@@ -152,8 +153,9 @@ export class ServiceAssetsRepository extends Repository {
       }),
       prisma.asset.count({ where }),
     ]);
+    const paths = await this.unitPaths(rows);
     return {
-      items: rows.map((row) => this.toListItem(row)),
+      items: rows.map((row) => this.toListItem(row, paths)),
       pagination: {
         page: query.page,
         pageSize: query.pageSize,
@@ -281,7 +283,11 @@ export class ServiceAssetsRepository extends Repository {
       include: assetDetailInclude,
     });
     return row
-      ? this.toDetail(row, await this.ancestors(row.parentAssetId))
+      ? this.toDetail(
+          row,
+          await this.ancestors(row.parentAssetId),
+          await this.unitPaths([row]),
+        )
       : null;
   }
 
@@ -291,7 +297,11 @@ export class ServiceAssetsRepository extends Repository {
       include: assetDetailInclude,
     });
     return row
-      ? this.toDetail(row, await this.ancestors(row.parentAssetId))
+      ? this.toDetail(
+          row,
+          await this.ancestors(row.parentAssetId),
+          await this.unitPaths([row]),
+        )
       : null;
   }
 
@@ -832,7 +842,40 @@ export class ServiceAssetsRepository extends Repository {
     return ancestors;
   }
 
-  private toListItem(row: AssetSummaryRow): AssetListItem {
+  /**
+   * AZ ALEGYSÉGEK TELJES ÚTJA, EGY KÖTEGBEN.
+   *
+   * Egy lekérdezés, nem soronként egy: az érintett partnerek ÖSSZES egységét
+   * behúzzuk, és az utakat abból építjük. Egy partner egységei elférnek egy
+   * kötegben (ugyanez az indok áll a partner képernyő lapos lekérdezésénél is),
+   * és így egy száz soros lista sem lesz száz lekérdezés.
+   *
+   * Rekurzív SQL helyett azért ez: a fának NINCS mélység-korlátja, tehát egy
+   * rögzített mélységű `include` csendben levágná a mély utakat -- pontosan azt
+   * a hibát, ami ellen az egész mező készül.
+   */
+  private async unitPaths(
+    rows: readonly AssetSummaryRow[],
+  ): Promise<Map<string, string[]>> {
+    const customerIds = [
+      ...new Set(
+        rows
+          .map((row) => row.department?.customerId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    if (customerIds.length === 0) return new Map();
+    const units = await prisma.worksheetDepartment.findMany({
+      where: { customerId: { in: customerIds } },
+      select: { id: true, name: true, parentId: true },
+    });
+    return buildUnitPaths(units);
+  }
+
+  private toListItem(
+    row: AssetSummaryRow,
+    paths: Map<string, string[]>,
+  ): AssetListItem {
     const owner = row.customer
       ? {
           type: "CUSTOMER" as const,
@@ -866,6 +909,10 @@ export class ServiceAssetsRepository extends Repository {
             id: row.department.id,
             code: row.department.code,
             name: row.department.name,
+            // A `paths` KÖTELEZŐ paraméter, nem opcionális: ha elmaradna, a
+            // fordító mutatja meg, hol -- egy néma visszaesés a levél nevére
+            // pont az a hiba lenne, amit ez a mező megszüntet.
+            path: paths.get(row.department.id) ?? [row.department.name],
           }
         : undefined,
       aquarium: row.aquarium
@@ -893,9 +940,10 @@ export class ServiceAssetsRepository extends Repository {
   private toDetail(
     row: AssetDetailRow,
     ancestors: AssetHierarchyItem[],
+    paths: Map<string, string[]>,
   ): AssetDetail {
     return {
-      ...this.toListItem(row),
+      ...this.toListItem(row, paths),
       category: row.category ?? undefined,
       inventoryNumber: row.inventoryNumber ?? undefined,
       description: row.description ?? undefined,
