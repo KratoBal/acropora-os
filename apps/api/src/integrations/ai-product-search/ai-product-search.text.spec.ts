@@ -60,6 +60,29 @@ describe("the description a model is allowed to read", () => {
     assert.equal(plainText("&nemletezo; szo"), "&nemletezo; szo");
   });
 
+  it("keeps a label and its value on one line, and never glues them", () => {
+    /**
+     * The live shape, measured: the animal descriptions are two-cell rows
+     * where the label carries its own colon. A space between cells keeps the
+     * pair readable; a line break would cut it in half.
+     *
+     * The second case is the one that does not occur in today's catalogue -
+     * sixteen sampled descriptions, not one without whitespace between the
+     * cells - and is asserted anyway, because the day it appears is not a
+     * day anybody will be looking.
+     */
+    assert.equal(
+      plainText(
+        "<table><tr><td><b>Tartása:</b></td> <td>közepesen nehéz</td></tr></table>",
+      ),
+      "Tartása: közepesen nehéz",
+    );
+    assert.equal(
+      plainText("<tr><td>Magyar neve:</td><td>Leopárd gömbhal</td></tr>"),
+      "Magyar neve: Leopárd gömbhal",
+    );
+  });
+
   it("collapses runs of whitespace but keeps paragraph breaks", () => {
     assert.equal(plainText("<p>Elso</p>\n\n\n<p>Masodik</p>"), "Elso\nMasodik");
     assert.equal(plainText("sok     szokoz"), "sok szokoz");

@@ -41,6 +41,22 @@ const BLOCK_BOUNDARY =
   /<\s*\/?\s*(br|p|div|li|tr|h[1-6]|ul|ol|table)\b[^>]*>/gi;
 
 /**
+ * Table cells, which become a SPACE rather than a line break.
+ *
+ * The live catalogue's animal descriptions are label-value tables: one row
+ * holds "Tudomanyos nev:" and its value in two cells, and the label already
+ * carries its own colon. A space keeps the pair on one line, which is how it
+ * reads for a person and how it stays connected for a search; a line break
+ * would cut every pair in half for no gain.
+ *
+ * Measured on polip's 2026-08-27 sample of sixteen short descriptions: not
+ * one of them writes `</td><td>` without whitespace, so this rule changes
+ * nothing about today's catalogue. It is here for the row that eventually
+ * does, and it is one regex now rather than a bug report later.
+ */
+const CELL_BOUNDARY = /<\s*\/?\s*(td|th)\b[^>]*>/gi;
+
+/**
  * Anything else that looks like a tag.
  *
  * Deliberately requires a letter after the bracket, so arithmetic survives:
@@ -138,7 +154,8 @@ export function plainText(value: string | null | undefined): string | null {
   if (value === null || value === undefined) return null;
 
   const withBreaks = value.replace(BLOCK_BOUNDARY, "\n");
-  const withoutTags = withBreaks.replace(TAG, "");
+  const withCells = withBreaks.replace(CELL_BOUNDARY, " ");
+  const withoutTags = withCells.replace(TAG, "");
   const decoded = decodeEntities(withoutTags);
 
   const collapsed = decoded
