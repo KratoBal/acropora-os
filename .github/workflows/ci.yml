@@ -194,10 +194,23 @@ jobs:
           # image via the Dockerfile's RELEASE_COMMIT_SHA build ARG (see
           # that file) - so this CI job also exercises the build-time
           # well-formedness check added there, using a real, valid SHA.
+          # OS_PATCH_EPOCH: a run's own identity, so the runner stage's package
+          # layer is rebuilt on every scan instead of being replayed from the
+          # GitHub Actions cache. Measured on 2026-08-27: the same commit
+          # (8ea11c7) scanned green in run 33050897056 and red in run
+          # 33050893144, a minute apart, because one of them ran the apk step
+          # and the other got it CACHED with the older libssl3 still inside.
+          # The scan asks a question about NOW; a replayed layer answers about
+          # whenever the cache was written. See apps/web/Dockerfile for why the
+          # fix is not a pinned package version.
           - app: api
-            build_args: RELEASE_COMMIT_SHA=${{ github.sha }}
+            build_args: |
+              RELEASE_COMMIT_SHA=${{ github.sha }}
+              OS_PATCH_EPOCH=${{ github.run_id }}-${{ github.run_attempt }}
           - app: web
-            build_args: API_URL=http://127.0.0.1:3001
+            build_args: |
+              API_URL=http://127.0.0.1:3001
+              OS_PATCH_EPOCH=${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:
       - name: Checkout

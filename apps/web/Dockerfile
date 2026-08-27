@@ -96,7 +96,33 @@ FROM node:${NODE_VERSION}-alpine AS runner
 # es MIERT emeltunk, es a valtozas nem hoz be mast a kepbe. Az `openssl`
 # csomagot szandekosan NEM tesszuk fel: a webnek a parancssori eszkozre nincs
 # szuksege, csak a konyvtarakra.
-RUN apk add --no-cache --upgrade libcrypto3 libssl3 \
+#
+# AMIERT EZ A LEPES NEM MEHET A RETEG-GYORSITOTARBOL (merve 2026-08-27):
+# ugyanaz a commit (8ea11c7) egy percen belul KET futasban KET eredmenyt adott.
+# A zold futasban ez a RUN tenylegesen lefutott es 3.5.8-r0 verziot huzott; a
+# piros futasban CACHED volt, tehat a retegben bent maradt a 3.5.7-r0, es a
+# vizsgalo ket HIGH talalatot jelentett. Az `--upgrade` azt jelenti, hogy "vedd
+# a legfrissebbet A BUILD PILLANATABAN", a gyorsitotar viszont pontosan azt a
+# pillanatot fagyasztja be: a zold igy nem a kep tulajdonsaga, hanem aze, hogy
+# eltalalta-e a gyorsitotarat.
+#
+# Az `OS_PATCH_EPOCH` ezt oldja fel. A RUN parancs kifejtett szovege a reteg
+# gyorsitotar-kulcsanak resze, tehat az ertek valtozasa ujraepiti a reteget --
+# ezert kell KIIRNI, nem eleg deklaralni. A CI futasonkent uj erteket ad
+# (lasd .github/workflows/ci.yml), tehat a vizsgalat mindig azt a csomag-
+# halmazt latja, amit a build MOST oldana fel. Helyben, argumentum nelkul az
+# alapertelmezett ertek all, es a gyorsitotar dolgozik, ahogy eddig.
+#
+# AMIT SZANDEKOSAN NEM TESZUNK: nem rogzitunk pontos verziot. Az Alpine
+# csomag-indexe agankent a legfrissebb verziot hordozza, tehat egy rogzitett
+# `libssl3=3.5.8-r0` a kovetkezo upstream kiadaskor MINDEN agon elhasal
+# ("unable to select packages"), nem csak ott, ahol szamit. A determinizmus
+# raadasul nem is stabilizalna a verdiktet: egy uj CVE a rogzitett verzio ellen
+# ugyanugy pirosra valt, kodvaltozas nelkul. A vizsgalat ideje szerinti kerdest
+# tesz fel, tehat a frissesseg a helyes valasztas ezen az egy retegen.
+ARG OS_PATCH_EPOCH=local
+RUN echo "OS patch epoch: ${OS_PATCH_EPOCH}" \
+  && apk add --no-cache --upgrade libcrypto3 libssl3 \
   && apk add --no-cache libc6-compat tini \
   && addgroup -g 1001 -S nodejs \
   && adduser -S -u 1001 -G nodejs nextjs
