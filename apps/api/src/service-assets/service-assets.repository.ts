@@ -857,6 +857,17 @@ export class ServiceAssetsRepository extends Repository {
       address:
         addressSummary(row.customerAddress) ??
         supplierAddressSummary(row.supplier),
+      // AZ ALEGYSEG A PONTOS HELY, a fenti `address` pedig a visszaeses:
+      // partner-tulajdonosnal az a partner postai cime. A kettot a felulet
+      // egyutt olvassa -- ha `unit` van, az a valasztott hely; ha nincs, az
+      // `address` latszik, jelolve, hogy nem valasztas eredmenye.
+      unit: row.department
+        ? {
+            id: row.department.id,
+            code: row.department.code,
+            name: row.department.name,
+          }
+        : undefined,
       aquarium: row.aquarium
         ? {
             id: row.aquarium.id,

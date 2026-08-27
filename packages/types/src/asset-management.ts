@@ -75,10 +75,25 @@ export interface AssetProductSummary {
   name: string;
 }
 
+export interface AssetUnitSummary {
+  id: string;
+  code: string;
+  name: string;
+}
+
 export interface AssetListItem extends AssetHierarchyItem {
   criticality: AssetCriticality;
   owner: AssetOwnerSummary;
   address?: AssetAddressSummary;
+  /**
+   * A PARTNER ALEGYSÉGE, ahol az eszköz áll. Csak szerviz partner
+   * tulajdonosnál van értéke; vevőnél az `address` a pontosítás.
+   *
+   * A listán is kimegy, nem csak az adatlapon: enélkül a felület nem tudná
+   * kiírni, hol áll az eszköz, anélkül hogy eszközönként külön hívást
+   * indítana.
+   */
+  unit?: AssetUnitSummary;
   aquarium?: AssetAquariumSummary;
   parent?: AssetHierarchyItem;
   manufacturer?: string;
