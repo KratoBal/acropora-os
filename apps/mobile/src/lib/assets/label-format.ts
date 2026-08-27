@@ -76,6 +76,21 @@ export const LABEL_NAME_FONT_MM = 2.2;
 export const QR_MODULES_ACROSS = 45;
 
 /**
+ * A NYOMTATÓ PONTRÁCSA, MILLIMÉTERBEN: 1/60 HÜVELYK.
+ *
+ * NEM a mi választásunk, hanem a felbontásoké. Egy szalagnyomtató 180, 300 vagy
+ * 360 dpi-vel ír, és 1/60 hüvelyk MINDHÁROMON egész számú pont (3, 5, illetve
+ * 6). Ez az a legnagyobb közös lépés, amivel a modul-háló akkor is pontosan a
+ * pontrácsra ül, ha a készülék felbontását nem ismerjük -- és a PT-P710BT
+ * esetében nem ismerjük: a gyártói lapból nem sikerült igazolni.
+ *
+ * AMIT EZ NEM AD: nem garantál beolvashatóságot. A modul MÉRETE dönt arról
+ * (lásd `QR_MIN_MODULE_MM`), a rács csak arról, hogy a modulok EGYFORMÁK
+ * legyenek. A kettő külön kérdés, és mindkettő az első nyomtatáson mérhető.
+ */
+export const MODULE_GRID_MM = 25.4 / 60;
+
+/**
  * KEREKÍTÉSI TARTALÉK: EGY CSS KÉPPONT, MILLIMÉTERBEN.
  *
  * A mért hiba (2026-08-26 este): a kinyomtatott PDF KÉT oldalas lett, a második
@@ -135,8 +150,35 @@ export function labelLayout(): LabelLayout {
    * levezetés részeként. Ha a lapból utólag vonnánk le, két szám mondaná meg
    * ugyanazt, és az egyikük elcsúszása néma lenne.
    */
-  const qrSizeMm =
+  const availableMm =
     LABEL_BAND_MM - 2 * LABEL_PADDING_MM - LABEL_ROUNDING_ALLOWANCE_MM;
+
+  /**
+   * A MODUL A NYOMTATÓ PONTRÁCSÁRA ÜL, ÉS EZ A LEGNAGYOBB, AMI BELEFÉR.
+   *
+   * A rendelkezésre álló magasságot NEM osztjuk szét maradék nélkül: az abból
+   * jövő modul (0,4608 mm) egyik szóba jövő felbontáson sem egész számú pont
+   * (180 dpi-n 3,27, 300-on 5,44, 360-on 6,53), tehát a raszterizálás egyes
+   * modulokat 3, másokat 4 pont szélesre kerekít. A szimbólum ettől nem lesz
+   * olvashatatlan, de a modul-rács egyenetlen lesz -- és a beolvasás pont a
+   * rossz pillanatban romlik el.
+   *
+   * Ezért a modul a `MODULE_GRID_MM` egész számú többszöröse, és abból a
+   * legnagyobb, ami még belefér. A rács azért 1/60 hüvelyk, mert az MINDEN
+   * 60-nal osztható felbontáson egész pont: 180-on 3, 300-on 5, 360-on 6 --
+   * vagyis a döntéshez NEM kell tudnunk a nyomtató felbontását, amit a gyártói
+   * lapból nem sikerült igazolni.
+   */
+  const gridSteps = Math.floor(
+    availableMm / QR_MODULES_ACROSS / MODULE_GRID_MM,
+  );
+  if (gridSteps < 1)
+    throw new Error(
+      `A szalag nem elég széles egy modulnyi rácshoz: ${availableMm} mm.`,
+    );
+  const moduleMm = gridSteps * MODULE_GRID_MM;
+  const qrSizeMm = moduleMm * QR_MODULES_ACROSS;
+
   const textWidthMm =
     LABEL_LENGTH_MM -
     2 * LABEL_PADDING_MM -
@@ -149,7 +191,7 @@ export function labelLayout(): LabelLayout {
     pageHeightMm: LABEL_BAND_MM,
     qrSizeMm,
     textWidthMm,
-    moduleMm: qrSizeMm / QR_MODULES_ACROSS,
+    moduleMm,
     heightSlackMm: LABEL_BAND_MM - 2 * LABEL_PADDING_MM - qrSizeMm,
     widthSlackMm:
       LABEL_LENGTH_MM -

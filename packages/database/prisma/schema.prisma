@@ -2238,17 +2238,33 @@ model ServiceJobAsset {
 model WorksheetDepartment {
   id         String   @id @default(cuid())
   customerId String
+  /// A FA SZULOJE. `null` a legfelso szinten, ami ma az EGYETLEN szint: a
+  /// meglevo sorok mind ilyenek maradnak, tehat a lapos lista a fa elso
+  /// szintje lesz, adatvesztes es atszamozas nelkul.
+  parentId   String?
   code       String   @db.VarChar(3)
   name       String
   isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  customer   Customer              @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  parent     WorksheetDepartment?  @relation("WorksheetDepartmentTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children   WorksheetDepartment[] @relation("WorksheetDepartmentTree")
   worksheets Worksheet[]
 
-  @@unique([customerId, code])
+  /// TESTVEREK KOZOTT EGYEDI A KOD. Ket kulonbozo ag alatt ugyanaz a kod
+  /// (`BIO`) megengedett es termeszetes, egy szulon belul viszont nem.
+  ///
+  /// EZ A MEGKOTES A LEGFELSO SZINTRE NEM ER: a Postgresben a NULL nem egyenlo
+  /// onmagaval, tehat ket gyoker-sor azonos koddal ATMENNE rajta. A mai
+  /// garanciat ezert egy RESZLEGES egyedi index tartja meg
+  /// (`WorksheetDepartment_customer_root_code_key`, `WHERE "parentId" IS
+  /// NULL`), amit a Prisma sema nem tud kifejezni, ezert a migracioban all
+  /// nyers SQL-kent. A ketto egyutt adja azt, amit eddig egy megkotes adott.
+  @@unique([customerId, parentId, code])
   @@index([customerId, isActive])
+  @@index([parentId])
 }
 
 /// A munkalap-sorszám számlálója partner + részleg + év hármasonként.

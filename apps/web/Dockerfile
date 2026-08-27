@@ -84,7 +84,20 @@ RUN --mount=type=cache,id=acropora-web-turbo-cache,target=/app/.turbo \
 FROM node:${NODE_VERSION}-alpine AS runner
 # tini: correct PID-1 signal forwarding and zombie reaping (see
 # apps/api/Dockerfile for the fuller rationale — applies here too).
-RUN apk add --no-cache libc6-compat tini \
+# libcrypto3/libssl3: az ALAPKEP konyvtarai, nem a mi fuggosegunk. A CI
+# vizsgaloja 2026-08-27-en KET javithato HIGH talalatot jelentett rajuk
+# (CVE-2026-14456, telepitve 3.5.7-r0, javitva 3.5.8-r0), es ettol a web kepe
+# elbukott -- MIKOZBEN a kod nem valtozott. Az API kepe ugyanazon a fejen zold
+# maradt, mert az `openssl`-t is telepiti, tehat friss csomagot huz be; a web
+# futtato retegeben openssl nincs, igy ott az alapkep regi konyvtarai maradtak.
+#
+# CELZOTT frissites, nem alapkep-emeles es nem uj csomag: pontosan az a ket
+# konyvtar all itt, amelyikre a talalat szol. Igy a kovetkezo olvaso latja, MIT
+# es MIERT emeltunk, es a valtozas nem hoz be mast a kepbe. Az `openssl`
+# csomagot szandekosan NEM tesszuk fel: a webnek a parancssori eszkozre nincs
+# szuksege, csak a konyvtarakra.
+RUN apk add --no-cache --upgrade libcrypto3 libssl3 \
+  && apk add --no-cache libc6-compat tini \
   && addgroup -g 1001 -S nodejs \
   && adduser -S -u 1001 -G nodejs nextjs
 
