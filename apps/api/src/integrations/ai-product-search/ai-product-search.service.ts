@@ -8,7 +8,7 @@ import {
   AiProductSearchRepository,
   type ProductSearchRow,
 } from "./ai-product-search.repository.js";
-import { plainText } from "./ai-product-search.text.js";
+import { chooseDescription } from "./ai-product-search.document.js";
 import type {
   AiProductSearchHit,
   AiProductSearchResult,
@@ -60,6 +60,7 @@ export class AiProductSearchService {
    */
   private project(row: ProductSearchRow): AiProductSearchHit {
     const snapshot = row.unasSnapshot;
+    const chosen = chooseDescription(row);
     const net = toNumber(snapshot?.netPrice);
     const gross = toNumber(snapshot?.grossPrice);
     const reported = toNumber(snapshot?.reportedStock);
@@ -78,8 +79,15 @@ export class AiProductSearchService {
        * while claiming to be plain text. `plainText` looks at the content
        * instead of at that claim - see its own file for why.
        */
-      descriptionShort: plainText(snapshot?.descriptionShort),
-      descriptionLong: plainText(snapshot?.descriptionLong),
+      descriptionShort: chosen.short,
+      descriptionLong: chosen.long,
+      /**
+       * MELYIK LEIRAST HASZNALTUK. A ket forras kozott a tulajdonjog dont, es
+       * ha a valasz nem mondja meg, melyiket olvasta, egy tarolt itelet
+       * utolag ertelmezhetetlen: "a leiras rossz volt" mast jelent, ha a
+       * boltbol jott, es mast, ha valaki itt szerkesztette.
+       */
+      descriptionSource: chosen.source,
       parameters: snapshot?.parameters ?? null,
       variants: row.variants.map((variant) => ({
         sku: variant.sku,

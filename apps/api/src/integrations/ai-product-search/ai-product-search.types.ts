@@ -49,6 +49,12 @@ export interface AiProductSearchHit {
   descriptionShort: string | null;
   descriptionLong: string | null;
   /** Raw UNAS parameter block, as stored. Shape is the source's, not ours. */
+  /**
+   * MELYIK LEIRAS-FORRAST hasznalta ez a talalat: a sajatunkat vagy a
+   * tukrozottet. Kimondva, mert enelkul egy helyi szerkesztes hatasa
+   * lathatatlan, es egy tarolt itelet nem olvashato vissza.
+   */
+  descriptionSource: "acropora" | "unas";
   parameters: unknown;
   variants: Array<{ sku: string; name: string | null }>;
   /**
