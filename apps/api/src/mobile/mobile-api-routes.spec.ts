@@ -28,8 +28,9 @@ import { describe, it } from "node:test";
  *   argumentumában áll, és a kiolvasása külön elemzést kívánna. Ha valaki
  *   `POST`-tal hív egy csak `GET`-re létező címet, azt ez nem fogja meg.
  * - A LEKÉRDEZŐ RÉSZT (`?...`) levágja: az nem az útvonal része.
- * - CSAK a `lib/api` mappa kliens-fájljait nézi. Ha valaki a képernyőn
- *   közvetlenül hív `fetch`-et, az ezen kívül esik.
+ * - A közvetlen `fetch` hívást nem nézi. Ez az őrző az `apiRequest`-en át menő
+ *   forgalmat méri; aki megkerüli, azt nem látja. (Mérve 2026-08-28: ma a
+ *   mobilban nincs ilyen hívás.)
  *
  * Amit viszont NEM tesz: nem hallgat el egy fájlt, amit nem tudott elemezni.
  * Ha egy `apiRequest` hívásból nem olvasható ki az útvonal, az BUKÁS, nem néma
@@ -57,11 +58,28 @@ import { describe, it } from "node:test";
  * átállás és ez az átalakítás egy ágon ment.)
  */
 
-const MOBILE_API_DIR = "../mobile/src/lib/api";
+/**
+ * A TELJES mobil forrás, nem egyetlen mappa.
+ *
+ * MÉRVE 2026-08-28: az első alak csak a `lib/api` mappát olvasta, egy szintet.
+ * A `lib/auth/api.ts` közvetlenül mellette áll, ugyanazt az `apiRequest`-et
+ * hívja, és négy helyen írja ki az `/auth` előtagot -- vagyis pont abban az
+ * alakban, ami az előző esti éles hibát okozta. Két szándékos rontás döntötte
+ * el, hogy tényleg kívül esett: a `worksheets.ts` előtagját elrontva az őrző
+ * PIROS lett, a `lib/auth/api.ts` útvonalát elrontva ZÖLD MARADT.
+ *
+ * A mappa-alapú hatókör ezért nem szűkítés volt, hanem vakfolt: nem a kód
+ * alakjából következett, hanem abból, hogy hova tettük a fájlt.
+ */
+const MOBILE_SRC = "../mobile/src";
 const API_SRC = "src";
 
-/** A kliens maga és a hitelesítés nem hív végpontot, csak becsomagolja. */
-const NOT_A_CLIENT = new Set(["client.ts", "request-auth.ts"]);
+/**
+ * Az `apiRequest` maga és a hitelesítő fejléce nem hív végpontot, csak
+ * becsomagolja. ÚTVONALLAL, nem fájlnévvel: rekurzív bejárásban egy puszta
+ * `client.ts` név egy jövőbeli, MÁSIK mappában lévő klienst is némán kihagyna.
+ */
+const NOT_A_CLIENT = new Set(["lib/api/client.ts", "lib/api/request-auth.ts"]);
 
 interface MobileCall {
   file: string;
@@ -95,12 +113,34 @@ function constantsOf(source: string): Map<string, string> {
   return constants;
 }
 
+/** Minden forrásfájl a mobilban, a gyökérhez képesti úttal. */
+function mobileSourceFiles(): string[] {
+  const files: string[] = [];
+  const walk = (dir: string, prefix: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )) {
+      const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        if (entry.name === "node_modules") continue;
+        walk(join(dir, entry.name), relative);
+        continue;
+      }
+      if (!/\.tsx?$/.test(entry.name)) continue;
+      if (/\.spec\.tsx?$/.test(entry.name)) continue;
+      if (NOT_A_CLIENT.has(relative)) continue;
+      files.push(relative);
+    }
+  };
+  walk(MOBILE_SRC, "");
+  return files;
+}
+
 function mobileCalls(): MobileCall[] {
   const calls: MobileCall[] = [];
-  for (const file of readdirSync(MOBILE_API_DIR).sort()) {
-    if (!file.endsWith(".ts") || file.endsWith(".spec.ts")) continue;
-    if (NOT_A_CLIENT.has(file)) continue;
-    const source = readFileSync(join(MOBILE_API_DIR, file), "utf8");
+  for (const file of mobileSourceFiles()) {
+    const source = readFileSync(join(MOBILE_SRC, file), "utf8");
+    if (!source.includes("apiRequest")) continue;
     const constants = constantsOf(source);
     // A hívás lehet többsoros: a generikus paraméter és a nyitó zárójel után
     // az útvonal a következő nem üres jel.
