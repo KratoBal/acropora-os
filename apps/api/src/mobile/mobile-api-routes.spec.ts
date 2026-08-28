@@ -28,8 +28,10 @@ import { describe, it } from "node:test";
  *   argumentumában áll, és a kiolvasása külön elemzést kívánna. Ha valaki
  *   `POST`-tal hív egy csak `GET`-re létező címet, azt ez nem fogja meg.
  * - A LEKÉRDEZŐ RÉSZT (`?...`) levágja: az nem az útvonal része.
- * - CSAK a `lib/api` mappa kliens-fájljait nézi. Ha valaki a képernyőn
- *   közvetlenül hív `fetch`-et, az ezen kívül esik.
+ * - A TELEFONNÁL a teljes forrást nézi, a WEBNÉL egyelőre csak a `lib/api`
+ *   mappát. A különbség mért, és az indoka a `WEB` halmaz mellett áll.
+ * - A közvetlen `fetch` hívást nem nézi: ez az őrző az `apiRequest`-en át menő
+ *   forgalmat méri. (Mérve 2026-08-28: a mobilban ma nincs ilyen hívás.)
  *
  * Amit viszont NEM tesz: nem hallgat el egy fájlt, amit nem tudott elemezni.
  * Ha egy `apiRequest` hívásból nem olvasható ki az útvonal, az BUKÁS, nem néma
@@ -63,12 +65,58 @@ import { describe, it } from "node:test";
  * átállás és ez az átalakítás egy ágon ment.)
  */
 
-const MOBILE_API_DIR = "../mobile/src/lib/api";
-const WEB_API_DIR = "../web/src/lib/api";
 const API_SRC = "src";
 
-/** A kliens maga és a hitelesítés nem hív végpontot, csak becsomagolja. */
-const NOT_A_CLIENT = new Set(["client.ts", "request-auth.ts"]);
+/**
+ * Egy kliens-halmaz: honnan olvassunk, és meddig.
+ *
+ * A `recursive` mező azért van kiírva halmazonként, és nem globálisan, mert a
+ * két oldal MÁS állapotban van, és a különbségnek látszania kell.
+ */
+interface ClientSet {
+  root: string;
+  label: string;
+  recursive: boolean;
+  /** A gyökérhez képesti utak, amik az `apiRequest`-et becsomagolják, nem hívják. */
+  wrappers: ReadonlySet<string>;
+}
+
+/**
+ * A TELEFON: a teljes forrás, nem egyetlen mappa.
+ *
+ * MÉRVE 2026-08-28: az előző alak csak a `lib/api` mappát olvasta, egy szintet.
+ * A `lib/auth/api.ts` közvetlenül mellette áll, ugyanazt az `apiRequest`-et
+ * hívja, és négy helyen írta ki az `/auth` előtagot -- vagyis pont abban az
+ * alakban, ami a 2026-08-27-i éles hibát okozta. KÉT SZÁNDÉKOS RONTÁS döntötte
+ * el, hogy tényleg kívül esett: a `worksheets.ts` előtagját elrontva az őrző
+ * PIROS lett, a `lib/auth/api.ts` útvonalát elrontva ZÖLD MARADT.
+ *
+ * A mappa-alapú hatókör tehát nem szűkítés volt, hanem vakfolt: nem a kód
+ * alakjából következett, hanem abból, hova tettük a fájlt.
+ */
+const MOBILE: ClientSet = {
+  root: "../mobile/src",
+  label: "mobil",
+  recursive: true,
+  wrappers: new Set(["lib/api/client.ts", "lib/api/request-auth.ts"]),
+};
+
+/**
+ * A WEB: EGYELŐRE egy mappa, és ez MÉRT döntés, nem feledékenység.
+ *
+ * A weben az `apiRequest`-et a `lib/api` mappán KÍVÜL ma egyetlen fájl sem
+ * hívja (mérve 2026-08-28, a komment-maszk bevezetése után): öt fájl EMLÍTI
+ * kommentben, de nem hívja. A rekurzív alak tehát ma zöld maradna -- a
+ * kiterjesztés mégis külön lépés, mert a web `client.ts`-e `/api` előtagot tesz
+ * minden útvonal elé, és azt az összevetésnek le kell vágnia. E nélkül minden
+ * webes útvonal nem-illeszkedőként jönne vissza.
+ */
+const WEB: ClientSet = {
+  root: "../web/src/lib/api",
+  label: "web",
+  recursive: false,
+  wrappers: new Set(["client.ts", "request-auth.ts"]),
+};
 
 interface ClientCall {
   file: string;
@@ -332,23 +380,48 @@ export function callsInSource(source: string, where: string): ClientCall[] {
   return calls;
 }
 
-function clientCalls(directory: string, label: string): ClientCall[] {
+/**
+ * A halmaz forrásfájljai, a gyökérhez képesti úttal.
+ *
+ * A kizárás ÚTVONALRA megy, nem fájlnévre: rekurzív bejárásban egy puszta
+ * `client.ts` név egy jövőbeli, MÁSIK mappában lévő klienst is némán kihagyna,
+ * és épp azt, amit az új hatókör miatt nézni kellene.
+ */
+function sourceFiles(set: ClientSet): string[] {
+  const files: string[] = [];
+  const walk = (dir: string, prefix: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )) {
+      const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        if (!set.recursive || entry.name === "node_modules") continue;
+        walk(join(dir, entry.name), relative);
+        continue;
+      }
+      if (!/\.tsx?$/.test(entry.name)) continue;
+      if (/\.(spec|test)\.tsx?$/.test(entry.name)) continue;
+      if (set.wrappers.has(relative)) continue;
+      files.push(relative);
+    }
+  };
+  walk(set.root, "");
+  return files;
+}
+
+function clientCalls(set: ClientSet): ClientCall[] {
   const calls: ClientCall[] = [];
-  for (const file of readdirSync(directory).sort()) {
-    if (!file.endsWith(".ts") || file.endsWith(".spec.ts")) continue;
-    if (file.endsWith(".test.ts") || NOT_A_CLIENT.has(file)) continue;
-    const source = readFileSync(join(directory, file), "utf8");
-    calls.push(...callsInSource(source, `${label}/${file}`));
+  for (const file of sourceFiles(set)) {
+    const source = readFileSync(join(set.root, file), "utf8");
+    if (!source.includes("apiRequest")) continue;
+    calls.push(...callsInSource(source, `${set.label}/${file}`));
   }
   return calls;
 }
 
 /** A KÉT kliens együtt: a telefoné és a webes felületé. */
 function allCalls(): ClientCall[] {
-  return [
-    ...clientCalls(MOBILE_API_DIR, "mobil"),
-    ...clientCalls(WEB_API_DIR, "web"),
-  ];
+  return [...clientCalls(MOBILE), ...clientCalls(WEB)];
 }
 
 /** A helper template literálja, a hívás argumentumaival behelyettesítve. */
