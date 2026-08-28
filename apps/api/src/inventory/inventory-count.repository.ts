@@ -10,7 +10,6 @@ import type {
   InventoryCountListResponse,
 } from "@acropora/types";
 
-import { generateCode } from "../common/code-generator.util.js";
 import { withUniqueCode } from "../common/unique-code.util.js";
 import {
   isDuplicateMovementIdempotencyKeyError,

@@ -10,7 +10,6 @@ import {
 } from "@acropora/ui";
 import { hasPermission, PERMISSIONS } from "@acropora/types";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useReturnTo } from "@/components/navigation-history";
@@ -141,7 +140,6 @@ function AddressFields({
 export function CustomerEditorPage() {
   const backToList = useReturnTo("/vevok");
   const { session } = useAuth();
-  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [type, setType] = useState<"PERSON" | "COMPANY">("PERSON");

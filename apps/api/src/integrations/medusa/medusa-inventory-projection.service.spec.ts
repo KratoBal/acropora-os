@@ -154,7 +154,7 @@ function fakes(options: {
       };
     },
     async updateVariantBackorder(
-      productId: string,
+      _productId: string,
       variantId: string,
       allowBackorder: boolean,
     ) {

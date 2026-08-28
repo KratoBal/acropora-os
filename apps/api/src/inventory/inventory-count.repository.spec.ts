@@ -497,7 +497,7 @@ describe("InventoryCountRepository.applyCorrection", () => {
     // Force a failure partway through by breaking stockMovementLine.create.
     const originalCreate = db.stockMovementLine.create;
     let calls = 0;
-    db.stockMovementLine.create = async (args: any) => {
+    db.stockMovementLine.create = async (_args: any) => {
       calls += 1;
       throw new Error("simulated failure");
     };
