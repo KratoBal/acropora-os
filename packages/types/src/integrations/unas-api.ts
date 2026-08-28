@@ -57,7 +57,19 @@ export interface UnasApiProduct {
   maximumOrderQuantity: string | null;
   lowStockThreshold: string | null;
   orderQuantityStep: string | null;
+  /**
+   * The shop's claim, renamed on the way in.
+   *
+   * It arrives as `StockStatus.Empty` - a STATE - and is carried under a name
+   * that reads as a RULE. Same family as the two HTML flags: the field name
+   * sounds like something we measured, and it is something the source said.
+   * `null` means the source said nothing, which is not the same as "no".
+   */
   backorderAllowed: boolean | null;
+  /**
+   * The shop's claim, from `StockStatus.Variant`. Nothing reads it today.
+   * "Enabled" sounds like a setting of ours; it is not.
+   */
   variantStockEnabled: boolean | null;
   reportedStock: string | null;
   /** Main-warehouse stock rows for every UNAS variant combination. Empty
