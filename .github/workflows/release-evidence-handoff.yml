@@ -148,6 +148,10 @@ jobs:
         id: postgres_version
         if: always()
         run: |
+          # `pipefail` for the same reason as in ci.yml, and the same danger:
+          # without it a failing `psql` leaves the version empty and this step
+          # stays GREEN, so the failure is read two steps later in the recorder.
+          set -euo pipefail
           version=$(PGPASSWORD=acropora psql -h localhost -U acropora -d acropora_release_evidence_check -tAc "SHOW server_version;" | xargs)
           echo "server version reported by the running container: $version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
