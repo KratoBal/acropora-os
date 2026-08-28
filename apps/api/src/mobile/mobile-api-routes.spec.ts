@@ -3,6 +3,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 
+import { maskCommentsAndStrings } from "../testing/source-mask.js";
+
 /**
  * A KLIENSEK ÁLTAL HÍVOTT CÍM LÉTEZZEN A SZERVEREN (telefon ÉS webes felület).
  *
@@ -220,110 +222,6 @@ function constantsOf(source: string): Map<string, string> {
   ))
     constants.set(match[1]!, match[3]!);
   return constants;
-}
-
-/**
- * A forrás úgy, hogy a KOMMENTEK és a SZTRING-TARTALMAK ki vannak fehérítve,
- * de a hossz és minden pozíció VÁLTOZATLAN.
- *
- * MIÉRT KELL, és miért mérésből: az őrző nyers forráson keres, tehát egy
- * dokumentációs komment, ami leírja a hívás alakját, pontosan úgy néz ki neki,
- * mint egy hívás. Mérve 2026-08-28 a webes forráson: a
- * `lib/auth/production-auth.ts` NULLA valódi hívást tartalmaz, mégis megbuktatta
- * az őrzőt, mert egy doc-komment leírja, hogy `apiRequest()`. Az őrző ilyenkor a
- * saját szabálya szerint hangosan elhal -- ami helyes szabály, csak egy mondatra
- * alkalmazza.
- *
- * A MOBIL OLDAL MA CSAK A FOGALMAZÁSON MÚLIK: ott egyetlen komment sem írja le
- * az `apiRequest(` alakot (mérve ugyanaznap), tehát zöld. Egy holnap beírt
- * mondat pirosra vinné, jogos kód mellett -- és egy őrző, ami jogos kódra
- * pirosodik, az, amit valaki előbb-utóbb kikapcsol.
- *
- * MIÉRT MASZK, ÉS NEM TÖRLÉS: a keresés a maszkon fut, a KIOLVASÁS viszont az
- * EREDETI forráson, ugyanazon a pozíción. Ezért kell a hosszt megőrizni. Törléssel
- * minden ezt követő eltolás elcsúszna.
- *
- * MIÉRT A SZTRINGEK IS: egy hibaüzenet, ami leírja az `apiRequest(` alakot,
- * ugyanolyan hamis találat, mint a komment. A sztringeket viszont CSAK a
- * kereséshez fehérítjük ki -- az útvonal maga is sztring, és azt az eredetiből
- * olvassuk.
- *
- * A template `${...}` KIFEJEZÉSE KÓD MARAD, nem maszkolódik: ott állhat valódi
- * hívás, és egy elrejtett hívás a NEM-nézés irányába tévedne, ami a csendes
- * irány.
- */
-export function maskCommentsAndStrings(source: string): string {
-  const out = source.split("");
-  const blank = (index: number): void => {
-    if (out[index] !== "\n") out[index] = " ";
-  };
-  /** A template literálok, amikbe `${` kifejezésen át visszatérünk. */
-  const templates: number[] = [];
-  let index = 0;
-  while (index < source.length) {
-    const char = source[index]!;
-    const next = source[index + 1];
-
-    if (char === "/" && next === "/") {
-      while (index < source.length && source[index] !== "\n") blank(index++);
-      continue;
-    }
-    if (char === "/" && next === "*") {
-      blank(index++);
-      blank(index++);
-      while (
-        index < source.length &&
-        !(source[index] === "*" && source[index + 1] === "/")
-      )
-        blank(index++);
-      if (index < source.length) {
-        blank(index++);
-        blank(index++);
-      }
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      index += 1;
-      while (index < source.length && source[index] !== char) {
-        if (source[index] === "\\") blank(index++);
-        if (index < source.length) blank(index++);
-      }
-      index += 1;
-      continue;
-    }
-    if (char === "`") {
-      templates.push(index);
-      index += 1;
-      while (index < source.length) {
-        if (source[index] === "\\") {
-          blank(index++);
-          if (index < source.length) blank(index++);
-          continue;
-        }
-        if (source[index] === "`") {
-          index += 1;
-          templates.pop();
-          break;
-        }
-        // A `${` KÓD, tehát nem fehérítjük ki: átugorjuk a záró `}`-ig, és
-        // közben a benne álló hívások láthatók maradnak.
-        if (source[index] === "$" && source[index + 1] === "{") {
-          index += 2;
-          let depth = 1;
-          while (index < source.length && depth > 0) {
-            if (source[index] === "{") depth += 1;
-            else if (source[index] === "}") depth -= 1;
-            index += 1;
-          }
-          continue;
-        }
-        blank(index++);
-      }
-      continue;
-    }
-    index += 1;
-  }
-  return out.join("");
 }
 
 /**
