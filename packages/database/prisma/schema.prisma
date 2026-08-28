@@ -2835,6 +2835,16 @@ model UnasProductSyncRun {
   /// A többi számláló mellett a helye: egy kihagyás, ami csak a válaszban
   /// látszik, holnap már nem visszakereshető.
   skippedCount   Int                      @default(0)
+  /// A kihagyottak közül ahánynál a FORRÁS IS VÁLTOZOTT ugyanabban a futásban.
+  ///
+  /// Ez a szám a jelzés, nem a `skippedCount`. A kihagyás maga ÁLLANDÓ: minden
+  /// futás ugyanazokat a termékeket hagyja ki, tehát a számuk futásról futásra
+  /// ugyanaz, és egy szám, ami sosem változik, nem jelzés, hanem alapzaj.
+  ///
+  /// EZ viszont esemény: azt mondja meg, hogy egy átvett termék szövege a
+  /// boltban megváltozott, és mi nem vettük át. A legtöbb futáson nulla, és
+  /// pontosan akkor nem az, amikor egy termék elkezd elavulni nálunk.
+  skippedSourceChangedCount Int           @default(0)
   errorCode      String?
   createdAt      DateTime                 @default(now())
   updatedAt      DateTime                 @updatedAt

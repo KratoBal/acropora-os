@@ -39,6 +39,8 @@ const run: UnasProductSyncRun = {
   unchangedCount: 7,
   conflictCount: 0,
   missingCount: 1,
+  skippedCount: 0,
+  skippedSourceChangedCount: 0,
   errorCode: null,
 };
 

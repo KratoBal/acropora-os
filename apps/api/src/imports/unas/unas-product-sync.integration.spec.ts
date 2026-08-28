@@ -525,10 +525,101 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
     // process that produced it.
     const run = await prisma.unasProductSyncRun.findUniqueOrThrow({
       where: { id: second.runId },
-      select: { skippedCount: true, updatedCount: true },
+      select: {
+        skippedCount: true,
+        skippedSourceChangedCount: true,
+        updatedCount: true,
+      },
     });
     assert.equal(run.skippedCount, 1);
     assert.equal(run.updatedCount, 1);
+
+    /**
+     * A KIHAGYÁS ÖNMAGÁBAN NEM MOND SEMMIT, EZ A SZÁM IGEN.
+     *
+     * Itt a webshop MEGVÁLTOZTATTA a mi termékünk nevét és leírását, és a
+     * változás nem jött át. Ez az elavulás pillanata, és ez az egyetlen szám,
+     * ami erről tud: a `skippedCount` ugyanennyi lenne akkor is, ha a boltban
+     * hozzá sem nyúltak volna.
+     */
+    assert.equal(second.skippedSourceChangedCount, 1);
+    assert.equal(run.skippedSourceChangedCount, 1);
+  });
+
+  /**
+   * A KÉT KIHAGYÁS-FAJTA SZÉTVÁLASZTÁSA, MINDKÉT IRÁNYBÓL.
+   *
+   * Egy szám, ami minden futásnál ugyanaz, nem jelzés, hanem alapzaj. A
+   * `skippedCount` pontosan ilyen: az átvett termék MINDEN futásból kimarad,
+   * akkor is, ha a boltban hozzá sem nyúltak.
+   *
+   * Ez a teszt ezért ugyanazon az egy termékan méri mind a két esetet: előbb
+   * változatlan forrással (a kihagyás állandó, az esemény nulla), utána
+   * megváltoztatott forrással (a kihagyás ugyanannyi, az esemény egy). Ha
+   * valaki egyszer összevonja a két számot, ez a sor pirosodik.
+   */
+  it("separates a skip that changed nothing from a skip that lost a change", async () => {
+    await cleanup();
+    deletedProducts = [];
+    categoryPage = [category];
+
+    const ours = () =>
+      product("DRIFT-OURS", {
+        externalId: "910001",
+        name: "Eredeti név",
+        description: "Eredeti leírás",
+      });
+
+    liveProducts = [ours()];
+    await service.runIncremental(
+      "integration-token",
+      new Date("2026-07-22T10:00:00.000Z"),
+      100,
+    );
+
+    const taken = await prisma.productVariant.findUniqueOrThrow({
+      where: { sku: "DRIFT-OURS" },
+      select: { productId: true },
+    });
+    await new ProductRepository().takeCatalogAuthority(
+      taken.productId,
+      undefined,
+    );
+
+    // ELSŐ eset: a bolt NEM nyúlt hozzá. Kihagyjuk, de nincs mit elmulasztani.
+    liveProducts = [ours()];
+    const quiet = await service.runIncremental(
+      "integration-token",
+      new Date("2026-07-22T11:00:00.000Z"),
+      100,
+    );
+    assert.equal(quiet.skippedCount, 1);
+    assert.equal(quiet.skippedSourceChangedCount, 0);
+
+    // MÁSODIK eset: ugyanaz a termék, ugyanaz a kihagyás - de a boltban
+    // átírták. A `skippedCount` nem mozdul, az esemény-szám igen.
+    liveProducts = [
+      product("DRIFT-OURS", {
+        externalId: "910001",
+        name: "A boltban átírt név",
+        description: "A boltban átírt leírás",
+      }),
+    ];
+    const drifted = await service.runIncremental(
+      "integration-token",
+      new Date("2026-07-22T12:00:00.000Z"),
+      100,
+    );
+    assert.equal(drifted.skippedCount, quiet.skippedCount);
+    assert.equal(drifted.skippedSourceChangedCount, 1);
+
+    // És a futás sora is ezt hordozza, nem csak a válasz.
+    const row = await prisma.unasProductSyncRun.findUniqueOrThrow({
+      where: { id: drifted.runId },
+      select: { skippedCount: true, skippedSourceChangedCount: true },
+    });
+    assert.equal(row.skippedCount, 1);
+    assert.equal(row.skippedSourceChangedCount, 1);
   });
 
   /**
