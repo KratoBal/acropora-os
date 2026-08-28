@@ -51,7 +51,6 @@ pnpm dev:mobile
 | `pnpm mobile:doctor`                     | Expo projektkonzisztencia ellenőrzése   |
 | `pnpm mobile:lint`                       | Mobil statikus ellenőrzés               |
 | `pnpm mobile:typecheck`                  | Mobil TypeScript-ellenőrzés             |
-| `pnpm lint`                              | Workspace statikus ellenőrzések         |
 | `pnpm typecheck`                         | Workspace TypeScript-ellenőrzés         |
 | `pnpm test`                              | Unit- és alap workspace tesztek         |
 | `pnpm build`                             | Production build a teljes workspace-re  |

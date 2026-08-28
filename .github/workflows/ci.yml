@@ -71,13 +71,31 @@ jobs:
       - name: Seed development reference data
         run: pnpm prisma:seed
 
+      # `pnpm lint` is gone, and not only from this file. In all six
+      # workspace packages `lint` was `tsc --noEmit` - the very command
+      # `pnpm typecheck` runs - so the job did the work twice, and the two
+      # names promised two checks while one happened. Mobile's ESLint is the
+      # only real linter in the repository and it is NOT reachable that way:
+      # `pnpm-workspace.yaml` excludes `apps/mobile` from the workspace, so
+      # `turbo run lint` never included it. `pnpm mobile:lint` below is how it
+      # runs, and how it always ran.
       - name: Static verification
         run: |
-          pnpm lint
           pnpm typecheck
           pnpm mobile:lint
           pnpm mobile:typecheck
           pnpm mobile:test
+
+      # CONTRIBUTING.md calls `pnpm format:check` the authoritative formatting
+      # check, and until now nothing ran it: the pre-commit hook is a local
+      # signal that `--no-verify` skips and that only exists where somebody
+      # ran the install. This is the gate the document already described.
+      - name: Formatting
+        run: |
+          pnpm format:check || {
+            echo "::error::Formatting does not match. Fix it locally with: pnpm format" >&2
+            exit 1
+          }
 
       - name: Unit and workspace tests
         run: pnpm test

@@ -7,7 +7,6 @@
     "dev": "node --env-file=../../.env ./node_modules/@nestjs/cli/bin/nest.js start --watch",
     "build": "nest build",
     "start": "node dist/main.js",
-    "lint": "tsc --noEmit",
     "test": "rm -rf test-dist && tsc -p tsconfig.test.json && specs=$(find test-dist -name '*.spec.js' ! -name '*.smoke.spec.js' ! -name '*.integration.spec.js') && { [ -n \"$specs\" ] || { echo 'Nem talaltam unit spec fajlt - nem jelentek sikert.' >&2; exit 1; }; } && node --test $specs",
     "test:assets": "tsc -p tsconfig.test.json && node --test test-dist/service-assets/qr-svg.spec.js test-dist/service-assets/service-assets.service.spec.js",
     "test:bootstrap": "tsc -p tsconfig.test.json && node --test test-dist/app.bootstrap.spec.js",

@@ -8,7 +8,6 @@
   ],
   "scripts": {
     "build": "node validate-json.mjs",
-    "lint": "node validate-json.mjs",
     "typecheck": "node validate-json.mjs",
     "clean": "rm -rf dist"
   },
