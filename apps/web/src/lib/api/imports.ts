@@ -9,6 +9,7 @@ import type {
 } from "@acropora/types";
 
 import { ApiError, apiAuthHeaders, apiRequest } from "./client";
+import { API_PREFIX } from "./api-prefix";
 
 const MAX_XLSX_SIZE = 25 * 1024 * 1024;
 
@@ -27,7 +28,7 @@ function uploadDryRun(
 ): Promise<UnasImportReport> {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
-    request.open("POST", "/api/imports/unas/catalog/dry-run");
+    request.open("POST", `${API_PREFIX}/imports/unas/catalog/dry-run`);
     request.setRequestHeader("Accept", "application/json");
     for (const [name, value] of Object.entries(apiAuthHeaders(token, "POST"))) {
       request.setRequestHeader(name, value);

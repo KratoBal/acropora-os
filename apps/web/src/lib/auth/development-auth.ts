@@ -1,4 +1,5 @@
 import type { AuthenticatedUser, Session } from "@acropora/types";
+import { API_PREFIX } from "../api/api-prefix";
 
 const SESSION_STORAGE_KEY = "acropora.development-session";
 export const DEVELOPMENT_USERS: readonly AuthenticatedUser[] = [
@@ -50,7 +51,7 @@ export class DevelopmentAuthAdapter implements AuthAdapter {
         window.localStorage.removeItem(SESSION_STORAGE_KEY);
         return null;
       }
-      const response = await fetch("/api/auth/me", {
+      const response = await fetch(`${API_PREFIX}/auth/me`, {
         headers: { Authorization: `Bearer ${session.token ?? ""}` },
       });
       if (!response.ok) {
@@ -71,7 +72,7 @@ export class DevelopmentAuthAdapter implements AuthAdapter {
       );
     }
 
-    const response = await fetch("/api/auth/login", {
+    const response = await fetch(`${API_PREFIX}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
@@ -84,7 +85,7 @@ export class DevelopmentAuthAdapter implements AuthAdapter {
   }
 
   async logout(_session: Session): Promise<void> {
-    await fetch("/api/auth/logout", {
+    await fetch(`${API_PREFIX}/auth/logout`, {
       method: "POST",
       headers: { Authorization: `Bearer ${_session.token ?? ""}` },
     }).catch(() => undefined);

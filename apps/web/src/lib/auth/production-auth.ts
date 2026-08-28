@@ -2,6 +2,7 @@ import type { AuthenticatedUser, Session } from "@acropora/types";
 
 import { apiAuthHeaders } from "../api/client";
 import type { AuthAdapter } from "./development-auth";
+import { API_PREFIX } from "../api/api-prefix";
 
 /**
  * Production counterpart to DevelopmentAuthAdapter. The session itself
@@ -23,7 +24,7 @@ export class ProductionAuthAdapter implements AuthAdapter {
   async restoreSession(): Promise<Session | null> {
     let response: Response;
     try {
-      response = await fetch("/api/auth/me", {
+      response = await fetch(`${API_PREFIX}/auth/me`, {
         headers: { Accept: "application/json" },
       });
     } catch {
@@ -41,7 +42,7 @@ export class ProductionAuthAdapter implements AuthAdapter {
 
     let response: Response;
     try {
-      response = await fetch("/api/auth/login/password", {
+      response = await fetch(`${API_PREFIX}/auth/login/password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -62,7 +63,7 @@ export class ProductionAuthAdapter implements AuthAdapter {
   }
 
   async logout(_session: Session): Promise<void> {
-    await fetch("/api/auth/logout", {
+    await fetch(`${API_PREFIX}/auth/logout`, {
       method: "POST",
       headers: apiAuthHeaders("", "POST"),
     }).catch(() => undefined);
