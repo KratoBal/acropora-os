@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { AI_CHAT_BASE_URL_ENV, AI_CHAT_TOKEN_ENV } from "./ai-chat.config.js";
-import { AiChatStartupValidator } from "./ai-chat-startup.validator.js";
+import {
+  AiChatStartupValidator,
+  isWrappedInQuotes,
+} from "./ai-chat-startup.validator.js";
 
 /**
  * A naplo-sorokat olvassuk vissza, nem azt, hogy "lefutott".
@@ -94,5 +97,181 @@ describe("AiChatStartupValidator", () => {
     // nem tud hivni. Egy valaszto, ami emiatt megfogja az indulast, nagyobb
     // kart okoz, mint amit megelozne.
     assert.doesNotThrow(() => capture({}));
+  });
+});
+
+describe("AiChatStartupValidator hasonlo nevu valtozok", () => {
+  it("megnevezi azt a valtozot, ami UGYANARRA VEGZODIK, mint a hianyzo", () => {
+    /**
+     * A 2026-08-27 hajnali eset pontos alakja. Az ertek nem hianyzott: az AI
+     * oldali API_ACCESS_TOKEN nevet masoltak at oda, ahol
+     * ACROPORA_AI_ACCESS_TOKEN a helyes. A puszta "hianyzik" sor ilyenkor
+     * IGAZ, es megis azt valtja ki, hogy "dehogy hianyzik, felvettem".
+     */
+    const lines = capture({
+      [AI_CHAT_BASE_URL_ENV]: BASE_URL,
+      API_ACCESS_TOKEN: TOKEN,
+    });
+
+    assert.equal(lines.length, 1);
+    assert.match(lines[0]!, /ACROPORA_AI_ACCESS_TOKEN/);
+    assert.match(lines[0]!, /API_ACCESS_TOKEN/);
+  });
+
+  it("SOHA nem irja ki a hasonlo nevu valtozo ERTEKET sem", () => {
+    // A nev nem titok, az ertek az. Itt van mit kiszivarogtatni: a
+    // hasonlo nevu valtozo epp a valos tokent tartalmazza.
+    const lines = capture({
+      [AI_CHAT_BASE_URL_ENV]: BASE_URL,
+      API_ACCESS_TOKEN: TOKEN,
+    });
+
+    assert.equal(lines.join("\n").includes(TOKEN), false);
+  });
+
+  it("nem emlit olyat, ami URES, mert az nem magyarazna semmit", () => {
+    const lines = capture({
+      [AI_CHAT_BASE_URL_ENV]: BASE_URL,
+      API_ACCESS_TOKEN: "   ",
+    });
+
+    assert.equal(lines.length, 1);
+    assert.doesNotMatch(lines[0]!, /API_ACCESS_TOKEN/);
+  });
+
+  it("nem talal ki hasonlosagot ott, ahol nincs", () => {
+    const lines = capture({
+      [AI_CHAT_BASE_URL_ENV]: BASE_URL,
+      DATABASE_URL: "postgres://x",
+      REDIS_URL: "redis://y",
+    });
+
+    assert.equal(lines.length, 1);
+    assert.doesNotMatch(lines[0]!, /DATABASE_URL/);
+    assert.doesNotMatch(lines[0]!, /REDIS_URL/);
+  });
+
+  it("legfeljebb harmat sorol fel, mert egy hosszu lista mar zaj", () => {
+    const lines = capture({
+      [AI_CHAT_BASE_URL_ENV]: BASE_URL,
+      A_ACCESS_TOKEN: "1",
+      B_ACCESS_TOKEN: "2",
+      C_ACCESS_TOKEN: "3",
+      D_ACCESS_TOKEN: "4",
+      E_ACCESS_TOKEN: "5",
+    });
+
+    const mentioned = ["A", "B", "C", "D", "E"].filter((prefix) =>
+      lines[0]!.includes(`${prefix}_ACCESS_TOKEN`),
+    );
+
+    assert.equal(mentioned.length, 3);
+  });
+});
+
+describe("AiChatStartupValidator gyanus ertek", () => {
+  it("szol, ha az ertek idezojelek koze van zarva", () => {
+    /**
+     * A mai eset TESTVERE, amit murena vett eszre: a valtozo ott van, a
+     * helyes neven, de idezojelekkel egyutt mentettek el. A beallitas-olvaso
+     * jelenlevonek latja, es a hivas 401-gyel bukik - MAS kepernyo, mint az
+     * ai_not_configured, tehat aki a mai eset alapjan keres, a hianyzo
+     * beallitast fogja nezni, es az rendben lesz.
+     */
+    const lines = capture({
+      [AI_CHAT_BASE_URL_ENV]: BASE_URL,
+      [AI_CHAT_TOKEN_ENV]: `"${TOKEN}"`,
+    });
+
+    assert.equal(lines.length, 1);
+    assert.match(lines[0]!, /ACROPORA_AI_ACCESS_TOKEN/);
+    assert.match(lines[0]!, /401/);
+  });
+
+  it("a gyanus ertekbol SEM ir ki semmit, meg reszletet sem", () => {
+    // Egy "igy kezdodik" reszlet is a titok darabja.
+    const lines = capture({
+      [AI_CHAT_BASE_URL_ENV]: BASE_URL,
+      [AI_CHAT_TOKEN_ENV]: `"${TOKEN}"`,
+    });
+
+    assert.equal(lines.join("\n").includes(TOKEN), false);
+    assert.equal(lines.join("\n").includes(TOKEN.slice(0, 6)), false);
+  });
+
+  it("hallgat, ha mindketto rendes erteket hordoz", () => {
+    assert.deepEqual(
+      capture({
+        [AI_CHAT_BASE_URL_ENV]: BASE_URL,
+        [AI_CHAT_TOKEN_ENV]: TOKEN,
+      }),
+      [],
+    );
+  });
+});
+
+describe("isWrappedInQuotes", () => {
+  it("csak az AZONOS idezojel-parra mond igazat", () => {
+    assert.equal(isWrappedInQuotes('"abc"'), true);
+    assert.equal(isWrappedInQuotes("'abc'"), true);
+  });
+
+  it("nem ad hamis riasztast arra, ami csak vegzodik idezojelre", () => {
+    /**
+     * Szandekosan szuk: egy or, ami hamis riasztast ad, elobb-utobb
+     * kikapcsolodik, es akkor rosszabb helyen vagyunk, mint ha meg sem
+     * irtuk volna.
+     */
+    for (const value of ['abc"', '"abc', "a", "", 'x"y', "'abc\""]) {
+      assert.equal(
+        isWrappedInQuotes(value),
+        false,
+        `hamis riasztas: ${JSON.stringify(value)}`,
+      );
+    }
+  });
+});
+
+describe("AiChatStartupValidator hiany ES gyanus alak egyszerre", () => {
+  it("mindkettorol szol EGY inditasnal, nem ket korben", () => {
+    /**
+     * Murena talalta meg: az alak-ellenorzes elsore csak akkor futott, ha
+     * MINDKET valtozo jelen volt. Ha az egyik hianyzik es a masik
+     * idezojelek koze van zarva, akkor a kollega potolja a hianyzot,
+     * ujraindit, es CSAK AKKOR kapja meg a masodik figyelmeztetest - ket kor
+     * egy helyett, pontosan az a lassitas, ami ellen ez a valaszto keszult.
+     */
+    const lines = capture({
+      [AI_CHAT_TOKEN_ENV]: `"${TOKEN}"`,
+    });
+
+    assert.equal(lines.length, 2, "mindket problemarol szolnia kell");
+
+    const together = lines.join("\n");
+
+    // a hianyzo cim
+    assert.match(together, /hianyzik ACROPORA_AI_BASE_URL/);
+    // ES a gyanus alaku token, ugyanabban a futasban
+    assert.match(together, /ACROPORA_AI_ACCESS_TOKEN erteke idezojelek/);
+    // az ertek tovabbra sem szivarog
+    assert.equal(together.includes(TOKEN), false);
+  });
+
+  it("a csupasz nevu valtozot is megnevezi hasonlokent", () => {
+    // Aki egy elotag nelkuli ACCESS_TOKEN valtozot masol be, ugyanabba a
+    // hibaba fut, es a valaszto korabban hallgatott volna rola.
+    const lines = capture({
+      [AI_CHAT_BASE_URL_ENV]: BASE_URL,
+      ACCESS_TOKEN: TOKEN,
+    });
+
+    assert.equal(lines.length, 1);
+    /*
+      A puszta /ACCESS_TOKEN/ minta NEM eleg: az illeszkedne a hianyzo
+      ACROPORA_AI_ACCESS_TOKEN nevere is, tehat akkor is zold maradna, ha a
+      csupasz nevet nem talalja meg. A hasonlo-nev mondatra kell allitani.
+    */
+    assert.match(lines[0]!, /ott van ACCESS_TOKEN/);
+    assert.equal(lines[0]!.includes(TOKEN), false);
   });
 });
