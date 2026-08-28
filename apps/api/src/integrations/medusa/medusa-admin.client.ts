@@ -140,6 +140,7 @@ export const VARIANT_LOOKUP_LIMIT = 50;
 export const VARIANT_INVENTORY_FIELDS = [
   "id",
   "sku",
+  "deleted_at",
   "allow_backorder",
   "manage_inventory",
   "inventory_items.inventory.id",
@@ -282,6 +283,16 @@ export interface MedusaVariantLookupResult {
 export interface MedusaVariantRow {
   id: string;
   sku: string | null;
+  /**
+   * `null`, ha a változat él; időbélyeg, ha puhán törölték.
+   *
+   * A keresés `with_deleted` értékkel megy, tehát ez a mező MINDIG megérkezik,
+   * és a hívónak SZÉT KELL VÁLASZTANIA az élőt az eltemetettől. A Medusa
+   * cikkszám-indexe RÉSZLEGES (`deleted_at IS NULL`), tehát ugyanaz a cikkszám
+   * egyszerre ülhet egy élő és egy eltemetett változaton - a kettőt egy
+   * halmazban számolni téves „több egyezés" választ adna.
+   */
+  deleted_at: string | null;
   allow_backorder?: boolean;
   manage_inventory?: boolean;
   inventory_items?: {
@@ -473,7 +484,15 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
   async listProductVariants(
     productId: string,
   ): Promise<MedusaVariantLookupResult> {
+    /**
+     * A `with_deleted` NEM finomság, ugyanazzal az indokkal, mint a
+     * termék-keresésnél: a törlés puha, és az alapértelmezett szűrő kizárja a
+     * törölteket. Enélkül egy eltemetett változat cikkszáma láthatatlan, a
+     * hívó pedig a „nincs ilyen" és az „el van temetve" esetet nem tudja
+     * megkülönböztetni - holott a kettő MÁS teendő.
+     */
     const params = new URLSearchParams({
+      with_deleted: "true",
       fields: VARIANT_INVENTORY_FIELDS,
       limit: String(VARIANT_LOOKUP_LIMIT),
     });
