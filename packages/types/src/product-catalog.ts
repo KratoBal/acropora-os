@@ -138,6 +138,15 @@ export interface ProductUpdateInput {
   name?: string;
   description?: string | null;
   primaryCategoryId?: string | null;
+  /**
+   * A SAJÁT webshopunkban megvásárolható-e. A felületen "Vásárolható".
+   *
+   * NEM azonos az `isActive` mezővel: az az archiválásról szól (a kereshetőség
+   * fele), ez a megvehetőségről. A kettő alapértelmezése is ellentétes --
+   * `isActive` igaz, ez hamis --, ezért egy új terméknél az egyik igen, a másik
+   * nem. Ha valaha egy nevet kapnak, az a két fogalmat mossa össze.
+   */
+  webshopSellable?: boolean;
 }
 
 export interface ProductListResponse {
@@ -152,6 +161,16 @@ export interface ProductListResponse {
 
 export interface ProductDetail extends ProductListItem {
   description: string | null;
+  /**
+   * A SAJÁT webshopunkban megvásárolható-e; a felületen "Vásárolható".
+   *
+   * A RÉSZLETES nézeten áll, nem a listán, és ez döntés: a lista ma az
+   * `isActive`-ot mutatja "Aktív / Archivált" néven, és a kettő ellentétes
+   * alapértelmezésű (`isActive` igaz, ez hamis). Egy listaoszlop, ami egy új
+   * terméknél azonnal "nem"-et mutat, ott is magyarázatot kívánna, ahol a
+   * kérdést fel sem tették.
+   */
+  webshopSellable: boolean;
   categories: ProductCategorySummary[];
   variants: ProductVariantSummary[];
   images: ProductImageSummary[];

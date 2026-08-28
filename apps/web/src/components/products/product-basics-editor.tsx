@@ -15,7 +15,8 @@ import { type FormEvent, useEffect, useState } from "react";
 import { productApi } from "@/lib/api/products";
 
 /**
- * A termék három üzleti mezőjének szerkesztője: név, leírás, kategória.
+ * A termék négy üzleti mezőjének szerkesztője: név, leírás, kategória és
+ * vásárolhatóság.
  *
  * A három egy űrlapon van, és ez döntés volt: a tulajdonjoguk EGYSZERRE került
  * át a webshoptól, tehát ugyanaz a szabály vonatkozik rájuk. Külön szerkesztők
@@ -42,6 +43,9 @@ export function ProductBasicsEditor({
   const [description, setDescription] = useState(product.description ?? "");
   const [primaryCategoryId, setPrimaryCategoryId] = useState(
     product.primaryCategory?.id ?? "",
+  );
+  const [webshopSellable, setWebshopSellable] = useState(
+    product.webshopSellable,
   );
   const [categories, setCategories] = useState<CatalogOption[]>([]);
   const [busy, setBusy] = useState(false);
@@ -74,6 +78,7 @@ export function ProductBasicsEditor({
         name,
         description: description.trim() ? description : null,
         primaryCategoryId: primaryCategoryId || null,
+        webshopSellable,
       });
 
       /**
@@ -84,7 +89,7 @@ export function ProductBasicsEditor({
        */
       onSaved(await productApi.detail(token, product.id));
       setNotice(
-        "A név, a leírás és a kategória a szerverről visszaolvasva látszik.",
+        "A név, a leírás, a kategória és a vásárolhatóság a szerverről visszaolvasva látszik.",
       );
     } catch (cause) {
       setError(
@@ -178,6 +183,22 @@ export function ProductBasicsEditor({
               </option>
             ))}
           </Select>
+        </FormField>
+        <FormField
+          label="Vásárolható"
+          htmlFor="product-webshop-sellable"
+          description="A termék megvehető-e a saját webshopunkban. Nem azonos az Aktív állapottal: az az archiválásról szól."
+        >
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              id="product-webshop-sellable"
+              type="checkbox"
+              checked={webshopSellable}
+              onChange={(event) => setWebshopSellable(event.target.checked)}
+              disabled={busy}
+            />
+            Vásárolható a webshopban
+          </label>
         </FormField>
         <Button type="submit" disabled={busy}>
           {busy ? "Mentés…" : "Mentés"}
