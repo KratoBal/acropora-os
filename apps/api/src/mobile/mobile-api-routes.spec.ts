@@ -174,18 +174,125 @@ function constantsOf(source: string): Map<string, string> {
   return constants;
 }
 
-function clientCalls(directory: string, label: string): ClientCall[] {
+/**
+ * A forrás úgy, hogy a KOMMENTEK és a SZTRING-TARTALMAK ki vannak fehérítve,
+ * de a hossz és minden pozíció VÁLTOZATLAN.
+ *
+ * MIÉRT KELL, és miért mérésből: az őrző nyers forráson keres, tehát egy
+ * dokumentációs komment, ami leírja a hívás alakját, pontosan úgy néz ki neki,
+ * mint egy hívás. Mérve 2026-08-28 a webes forráson: a
+ * `lib/auth/production-auth.ts` NULLA valódi hívást tartalmaz, mégis megbuktatta
+ * az őrzőt, mert egy doc-komment leírja, hogy `apiRequest()`. Az őrző ilyenkor a
+ * saját szabálya szerint hangosan elhal -- ami helyes szabály, csak egy mondatra
+ * alkalmazza.
+ *
+ * A MOBIL OLDAL MA CSAK A FOGALMAZÁSON MÚLIK: ott egyetlen komment sem írja le
+ * az `apiRequest(` alakot (mérve ugyanaznap), tehát zöld. Egy holnap beírt
+ * mondat pirosra vinné, jogos kód mellett -- és egy őrző, ami jogos kódra
+ * pirosodik, az, amit valaki előbb-utóbb kikapcsol.
+ *
+ * MIÉRT MASZK, ÉS NEM TÖRLÉS: a keresés a maszkon fut, a KIOLVASÁS viszont az
+ * EREDETI forráson, ugyanazon a pozíción. Ezért kell a hosszt megőrizni. Törléssel
+ * minden ezt követő eltolás elcsúszna.
+ *
+ * MIÉRT A SZTRINGEK IS: egy hibaüzenet, ami leírja az `apiRequest(` alakot,
+ * ugyanolyan hamis találat, mint a komment. A sztringeket viszont CSAK a
+ * kereséshez fehérítjük ki -- az útvonal maga is sztring, és azt az eredetiből
+ * olvassuk.
+ *
+ * A template `${...}` KIFEJEZÉSE KÓD MARAD, nem maszkolódik: ott állhat valódi
+ * hívás, és egy elrejtett hívás a NEM-nézés irányába tévedne, ami a csendes
+ * irány.
+ */
+export function maskCommentsAndStrings(source: string): string {
+  const out = source.split("");
+  const blank = (index: number): void => {
+    if (out[index] !== "\n") out[index] = " ";
+  };
+  /** A template literálok, amikbe `${` kifejezésen át visszatérünk. */
+  const templates: number[] = [];
+  let index = 0;
+  while (index < source.length) {
+    const char = source[index]!;
+    const next = source[index + 1];
+
+    if (char === "/" && next === "/") {
+      while (index < source.length && source[index] !== "\n") blank(index++);
+      continue;
+    }
+    if (char === "/" && next === "*") {
+      blank(index++);
+      blank(index++);
+      while (
+        index < source.length &&
+        !(source[index] === "*" && source[index + 1] === "/")
+      )
+        blank(index++);
+      if (index < source.length) {
+        blank(index++);
+        blank(index++);
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      index += 1;
+      while (index < source.length && source[index] !== char) {
+        if (source[index] === "\\") blank(index++);
+        if (index < source.length) blank(index++);
+      }
+      index += 1;
+      continue;
+    }
+    if (char === "`") {
+      templates.push(index);
+      index += 1;
+      while (index < source.length) {
+        if (source[index] === "\\") {
+          blank(index++);
+          if (index < source.length) blank(index++);
+          continue;
+        }
+        if (source[index] === "`") {
+          index += 1;
+          templates.pop();
+          break;
+        }
+        // A `${` KÓD, tehát nem fehérítjük ki: átugorjuk a záró `}`-ig, és
+        // közben a benne álló hívások láthatók maradnak.
+        if (source[index] === "$" && source[index + 1] === "{") {
+          index += 2;
+          let depth = 1;
+          while (index < source.length && depth > 0) {
+            if (source[index] === "{") depth += 1;
+            else if (source[index] === "}") depth -= 1;
+            index += 1;
+          }
+          continue;
+        }
+        blank(index++);
+      }
+      continue;
+    }
+    index += 1;
+  }
+  return out.join("");
+}
+
+/**
+ * Egy forrásfájl `apiRequest` hívásai. Kifejtve, hogy fájl nélkül is mérhető
+ * legyen: a komment- és sztring-szűrés MŰKÖDÉSÉT csak így lehet bizonyítani,
+ * nem csak a meglétét állítani.
+ */
+export function callsInSource(source: string, where: string): ClientCall[] {
   const calls: ClientCall[] = [];
-  for (const file of readdirSync(directory).sort()) {
-    if (!file.endsWith(".ts") || file.endsWith(".spec.ts")) continue;
-    if (file.endsWith(".test.ts") || NOT_A_CLIENT.has(file)) continue;
-    const source = readFileSync(join(directory, file), "utf8");
-    const constants = constantsOf(source);
-    const helpers = helpersOf(source);
-    const where = `${label}/${file}`;
+  const constants = constantsOf(source);
+  const helpers = helpersOf(source);
+  // A KERESÉS a maszkon fut, a KIOLVASÁS az eredetin, azonos pozíción.
+  const masked = maskCommentsAndStrings(source);
+  {
     // A hívás lehet többsoros: a generikus paraméter és a nyitó zárójel után
     // az útvonal a következő nem üres jel.
-    for (const match of source.matchAll(/apiRequest\s*(?:<[^>]*>)?\s*\(\s*/g)) {
+    for (const match of masked.matchAll(/apiRequest\s*(?:<[^>]*>)?\s*\(\s*/g)) {
       const rest = source.slice(match.index + match[0].length);
       const literal = /^(["'`])((?:\\.|(?!\1)[^\\])*)\1/.exec(rest);
       // A csupasz azonosító alak: `apiRequest(BASE, { method: "POST" })`.
@@ -221,6 +328,17 @@ function clientCalls(directory: string, label: string): ClientCall[] {
       );
       calls.push({ file: where, raw, pattern: toPattern(resolved) });
     }
+  }
+  return calls;
+}
+
+function clientCalls(directory: string, label: string): ClientCall[] {
+  const calls: ClientCall[] = [];
+  for (const file of readdirSync(directory).sort()) {
+    if (!file.endsWith(".ts") || file.endsWith(".spec.ts")) continue;
+    if (file.endsWith(".test.ts") || NOT_A_CLIENT.has(file)) continue;
+    const source = readFileSync(join(directory, file), "utf8");
+    calls.push(...callsInSource(source, `${label}/${file}`));
   }
   return calls;
 }
@@ -334,5 +452,98 @@ describe("a telefon csak létező szerver-végpontot hív", () => {
       [],
       "a telefon olyan címet hív, ami a szerveren nem létezik",
     );
+  });
+});
+
+/**
+ * AZ OLVASÓ MŰKÖDÉSE, NEM A MEGLÉTE.
+ *
+ * Egy komment-szűrés, amit csak a valódi forráson futtatunk, arról szól, hogy a
+ * MAI kód nem tartalmaz olyan mondatot, ami megzavarná -- nem arról, hogy a
+ * szűrés működik. A kettő különbsége akkor derülne ki, amikor valaki beír egy
+ * ilyen mondatot, és a kapu jogos kódra pirosodik ki.
+ *
+ * Ezért itt a szűrés a SAJÁT bemenetén van megmérve, és minden esethez oda van
+ * írva, MI PIROSÍTANÁ.
+ */
+describe("a komment és a sztring nem hívás", () => {
+  it("a doc-komment említése nem számít hívásnak", () => {
+    // PIROSÍT: ha az olvasó nyers forráson keresne. Pontosan ez buktatta meg a
+    // webes mérést 2026-08-28-án: a production-auth.ts NULLA valódi hívást
+    // tartalmaz, mégis elhalt rajta az őrző.
+    const source = [
+      "/**",
+      " * this path (apiRequest() already treats a missing token as absent)",
+      " */",
+      "export const nothing = 1;",
+    ].join("\n");
+    assert.deepEqual(callsInSource(source, "fixture.ts"), []);
+  });
+
+  it("a sor végi komment említése sem", () => {
+    // PIROSÍT: ha a szűrés csak a `/* */` alakot ismerné.
+    const source =
+      'export const x = 1; // apiRequest("/service/assets") itt csak szó\n';
+    assert.deepEqual(callsInSource(source, "fixture.ts"), []);
+  });
+
+  it("a sztringben álló említés sem", () => {
+    // PIROSÍT: ha csak a kommentek lennének kiszűrve. Egy hibaüzenet, ami leírja
+    // a hívás alakját, ugyanolyan hamis találat, mint egy komment.
+    const source =
+      'throw new Error("hívd inkább az apiRequest(\\"/health\\") alakot");\n';
+    assert.deepEqual(callsInSource(source, "fixture.ts"), []);
+  });
+
+  it("a komment mellett álló VALÓDI hívást viszont megtalálja", () => {
+    // EZ A FONTOSABB IRÁNY. Az előző három azt bizonyítja, hogy nem lát
+    // többet; ez azt, hogy nem lát KEVESEBBET. Egy szűrés, ami a valódi hívást
+    // is elnyelné, csendben vakká tenné az őrzőt -- és zöld maradna.
+    const source = [
+      "// apiRequest(BASE) -- csak egy említés",
+      'const BASE = "/service/assets";',
+      "export async function list() {",
+      "  return apiRequest(BASE);",
+      "}",
+    ].join("\n");
+    const calls = callsInSource(source, "fixture.ts");
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]!.pattern, "service/assets");
+  });
+
+  it("a template `${...}` kifejezésében álló hívás KÓD marad", () => {
+    // PIROSÍT: ha a template literál teljes törzsét kifehéríteném. Az a
+    // NEM-NÉZÉS irányába tévedne, ami a csendes irány: egy valódi hívás tűnne
+    // el, és az őrző zöld maradna.
+    const source = [
+      'const BASE = "/service/assets";',
+      "export const weird = `${apiRequest(BASE)}`;",
+    ].join("\n");
+    const calls = callsInSource(source, "fixture.ts");
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]!.pattern, "service/assets");
+  });
+
+  it("a maszk megőrzi a hosszt és a sorokat", () => {
+    // PIROSÍT: ha a szűrés törölne a kifehérítés helyett. A kiolvasás az
+    // EREDETI forráson megy, ugyanazon a pozíción -- egy rövidebb maszk minden
+    // ezt követő eltolást elcsúsztatna, és a hiba néma lenne: rossz szeletet
+    // olvasnánk ki, nem hibaüzenetet kapnánk.
+    const source = '// apiRequest("/a")\nconst x = "/b";\n';
+    const masked = maskCommentsAndStrings(source);
+    assert.equal(masked.length, source.length);
+    assert.equal(
+      masked.split("\n").length,
+      source.split("\n").length,
+      "a sortörések nem tűnhetnek el",
+    );
+  });
+
+  it("az olvashatatlan útvonal továbbra is HANGOSAN bukik", () => {
+    // PIROSÍT: ha a maszkolás mellékhatásaként az őrző elkezdene némán
+    // kihagyni. A "nem hallgatunk el egy hívást, amit nem tudtunk elemezni"
+    // szabály a szűrés bevezetésével nem veszhet el.
+    const source = "export const a = apiRequest(importedPath);\n";
+    assert.throws(() => callsInSource(source, "fixture.ts"));
   });
 });
