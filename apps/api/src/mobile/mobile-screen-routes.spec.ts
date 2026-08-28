@@ -30,13 +30,23 @@ import { maskCommentsAndStrings } from "../testing/source-mask.js";
  * Egy hiányzó képernyő azonnal feltűnik; egy ELÉRHETETLEN képernyő csak akkor,
  * ha valaki keresi.
  *
- * AMIT EZ AZ ŐRZŐ SZÁNDÉKOSAN NEM ÁLLÍT, és ez mérésen alapul, nem ízlésen:
- * nem követeli meg, hogy MINDEN képernyő-fájlhoz legyen `Stack.Screen`
- * bejegyzés. A telefonban ma a `partners/index` és a `partners/[id]` bejegyzés
- * NÉLKÜL működik (mérve ugyanaznap): az útvonalakat a fájlrendszer adja, a
- * bejegyzés csak a fejléc-beállítást. Egy ilyen szabály tehát MA IS kipirulna,
- * jogos kódon -- és egy őrző, ami jogos kódra pirosodik, az, amit valaki
- * előbb-utóbb kikapcsol.
+ * AMIT EZ AZ ŐRZŐ SZÁNDÉKOSAN NEM ÁLLÍT: nem követeli meg, hogy MINDEN
+ * képernyő-fájlhoz legyen `Stack.Screen` bejegyzés. A MECHANIZMUS változatlan
+ * és mért: az útvonalakat a fájlrendszer adja, a bejegyzés csak a
+ * fejléc-beállítást viszi, tehát a képernyő bejegyzés nélkül is elérhető.
+ *
+ * AZ INDOK VISZONT MEGVÁLTOZOTT, ÉS EZT KI KELL MONDANI. Eddig itt az állt,
+ * hogy egy ilyen szabály MA IS kipirulna jogos kódon, és erre a `partners`
+ * két képernyője volt a bizonyíték: bejegyzés nélkül működtek. 2026-08-28-án
+ * megkapták a bejegyzésüket (a fejlécükben az útvonal állt egy magyar felület
+ * fölött), tehát az az egyetlen ellenpélda ELFOGYOTT: ma mind a tizenöt
+ * útvonal-fájlhoz tartozik bejegyzés.
+ *
+ * EBBŐL NEM KÖVETKEZIK MAGÁTÓL, hogy a szabályt be kell vezetni -- az döntés,
+ * és annak az ára, hogy minden új képernyő kötelezően bejegyzést kér. Csak
+ * annyi következik, hogy a régi indok („jogos kódra pirulna") már NEM igaz.
+ * Aki a szabályt fontolgatja, ezt a bekezdést mérje újra, ne ezt a mondatot
+ * idézze.
  *
  * EBBŐL KÖVETKEZIK EGY MEGLEPŐ, DE HELYES VISELKEDÉS: ha valaki kiveszi a
  * beállítások `Stack.Screen` sorát, ez az őrző ZÖLD MARAD. Nem mulasztás: a
