@@ -79,8 +79,16 @@ interface ClientSet {
   root: string;
   label: string;
   recursive: boolean;
-  /** A gyökérhez képesti utak, amik az `apiRequest`-et becsomagolják, nem hívják. */
+  /** A gyökérhez képesti utak, amik a hívást BECSOMAGOLJÁK, nem hívják. */
   wrappers: ReadonlySet<string>;
+  /**
+   * Amit a kliens MINDEN útvonal elé tesz, és ami NEM a szerver útvonalának
+   * része. A weben ez az `/api`: a `client.ts` így épít
+   * (`fetch(\`/api${path}\`)`), miközben a hívók `/service/assets` alakot adnak
+   * át. E nélkül MINDEN webes hívás nem-illeszkedőként jönne vissza, és az úgy
+   * nézne ki, mintha az egész web rossz lenne.
+   */
+  apiPrefix?: string;
 }
 
 /**
@@ -114,10 +122,11 @@ const MOBILE: ClientSet = {
  * webes útvonal nem-illeszkedőként jönne vissza.
  */
 const WEB: ClientSet = {
-  root: "../web/src/lib/api",
+  root: "../web/src",
   label: "web",
-  recursive: false,
-  wrappers: new Set(["client.ts", "request-auth.ts"]),
+  recursive: true,
+  wrappers: new Set(["lib/api/client.ts", "lib/api/request-auth.ts"]),
+  apiPrefix: "/api",
 };
 
 interface ClientCall {
@@ -229,16 +238,42 @@ function constantsOf(source: string): Map<string, string> {
  * legyen: a komment- és sztring-szűrés MŰKÖDÉSÉT csak így lehet bizonyítani,
  * nem csak a meglétét állítani.
  */
-export function callsInSource(source: string, where: string): ClientCall[] {
+/**
+ * A KÉT CSATORNA, amin a kliens a szerverhez beszél.
+ *
+ * MÉRVE 2026-08-28: az őrző eddig CSAK az `apiRequest`-en át menő forgalmat
+ * mérte, és emiatt HÁROM valódi szerver-útvonal átment minden összevetésen --
+ * a foxpost letöltés, az inventory sablon és az eszköz-dokumentum. Mindhárom a
+ * MÁR NÉZETT mappában áll: a vak folt tehát nem a MAPPA volt, hanem a CSATORNA.
+ * Mind a három bináris letöltés, és SZÁNDÉKOSAN kerüli a JSON-t váró wrappert.
+ *
+ * A `fetch` mintája nem fogja meg a `refetch(`-et és a `.fetch(` alakot: a
+ * megelőző jel nem lehet pont vagy szó-karakter.
+ */
+const CHANNELS: readonly RegExp[] = [
+  /apiRequest\s*(?:<[^>]*>)?\s*\(\s*/g,
+  /(?<![.\w])fetch\s*\(\s*/g,
+];
+
+/** Külső címre menő hívás: nem a mi szerverünk, tehát nem is a mi dolgunk. */
+function isAbsoluteUrl(value: string): boolean {
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(value);
+}
+
+export function callsInSource(
+  source: string,
+  where: string,
+  apiPrefix = "",
+): ClientCall[] {
   const calls: ClientCall[] = [];
   const constants = constantsOf(source);
   const helpers = helpersOf(source);
   // A KERESÉS a maszkon fut, a KIOLVASÁS az eredetin, azonos pozíción.
   const masked = maskCommentsAndStrings(source);
-  {
+  for (const channel of CHANNELS) {
     // A hívás lehet többsoros: a generikus paraméter és a nyitó zárójel után
     // az útvonal a következő nem üres jel.
-    for (const match of masked.matchAll(/apiRequest\s*(?:<[^>]*>)?\s*\(\s*/g)) {
+    for (const match of masked.matchAll(channel)) {
       const rest = source.slice(match.index + match[0].length);
       const literal = /^(["'`])((?:\\.|(?!\1)[^\\])*)\1/.exec(rest);
       // A csupasz azonosító alak: `apiRequest(BASE, { method: "POST" })`.
@@ -264,14 +299,25 @@ export function callsInSource(source: string, where: string): ClientCall[] {
         );
       assert.ok(
         raw !== null,
-        `${where}: egy apiRequest hívásból nem olvasható ki az útvonal. Az őrző nem hagyhatja ki némán -- az alak új, vagy a hívás olyan konstansból vagy helperből épít, amit ez a fájl nem deklarál (importált, vagy a helper nem egyetlen return template literál).`,
+        `${where}: egy hívásból nem olvasható ki az útvonal. Az őrző nem hagyhatja ki némán -- az alak új, vagy a hívás olyan konstansból vagy helperből épít, amit ez a fájl nem deklarál (importált, vagy a helper nem egyetlen return template literál).`,
       );
+      /**
+       * KÜLSŐ CÍM: átugorjuk, és ez NEM kivétel, hanem a hatókör kimondása. A
+       * `fetch` más hosztra is mehet, és egy „létezzen a szerverünkön" állítás
+       * egy `https://…` címre tévesen pirulna. Mérve 2026-08-28: ma egyetlen
+       * ilyen sincs -- de a szabálynak előre kell tudnia róla, és ez a döntés
+       * STATIKUSAN eldönthető, nem ítélet kérdése.
+       */
+      if (isAbsoluteUrl(raw)) continue;
       // A fájlon belüli konstansok behelyettesítése; ami marad, azt a toPattern
       // teszi `:param` alakúvá.
-      const resolved = raw.replace(
+      let resolved = raw.replace(
         /\$\{([A-Za-z_$][\w$]*)\}/g,
         (whole, name: string) => constants.get(name) ?? whole,
       );
+      // A kliens saját előtagja NEM a szerver útvonalának része.
+      if (apiPrefix && resolved.startsWith(apiPrefix))
+        resolved = resolved.slice(apiPrefix.length);
       calls.push({ file: where, raw, pattern: toPattern(resolved) });
     }
   }
@@ -311,8 +357,10 @@ function clientCalls(set: ClientSet): ClientCall[] {
   const calls: ClientCall[] = [];
   for (const file of sourceFiles(set)) {
     const source = readFileSync(join(set.root, file), "utf8");
-    if (!source.includes("apiRequest")) continue;
-    calls.push(...callsInSource(source, `${set.label}/${file}`));
+    if (!source.includes("apiRequest") && !source.includes("fetch")) continue;
+    calls.push(
+      ...callsInSource(source, `${set.label}/${file}`, set.apiPrefix ?? ""),
+    );
   }
   return calls;
 }
@@ -516,5 +564,53 @@ describe("a komment és a sztring nem hívás", () => {
     // szabály a szűrés bevezetésével nem veszhet el.
     const source = "export const a = apiRequest(importedPath);\n";
     assert.throws(() => callsInSource(source, "fixture.ts"));
+  });
+});
+
+describe("a fetch csatorna is mérve van", () => {
+  it("a nyers fetch hívást megtalálja, és a kliens előtagját levágja", () => {
+    // EZ AZ A TESZT, AMI NÉLKÜL A CSATORNA BEVEZETÉSE BIZONYÍTATLAN LENNE.
+    // Mérve 2026-08-28: a fetch mintát a lefordított tesztből teljesen kivéve
+    // a suite 9/9 zölden maradt. Az ok szerkezeti: a lefedettség-állítás
+    // KEVESEBB hívásra fut, és a kevesebb assert nem tud pirosítani. Egy őrző
+    // zöldje tehát a KÓD állapotát mutatja, nem azt, hogy az őrző odanéz-e.
+    const source = [
+      "export async function download() {",
+      '  return fetch("/api/service/assets");',
+      "}",
+    ].join("\n");
+    const calls = callsInSource(source, "fixture.ts", "/api");
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]!.pattern, "service/assets");
+  });
+
+  it("az előtag levágása a paramétertől függ, nem beégetett", () => {
+    // PIROSÍT: ha valaki az `/api` előtagot a függvénybe égetné. Akkor ez a
+    // hívás is `service/assets` alakot adna, holott előtag nélkül hívtuk --
+    // és a mobil oldalon, ahol nincs előtag, egy `/api` kezdetű valódi út
+    // csendben elveszítené az első szegmensét.
+    const source = 'export const a = fetch("/api/service/assets");\n';
+    const calls = callsInSource(source, "fixture.ts");
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]!.pattern, "api/service/assets");
+  });
+
+  it("a refetch és a .fetch NEM hívás", () => {
+    // PIROSÍT: ha a negatív lookbehind kiesne a mintából. Nem csendben
+    // pirosítana: mindkét alak útvonal nélkül áll, tehát a "nem olvasható ki
+    // az útvonal" ág HANGOSAN dobna. Ez a jó irány, de a tesztnek ki kell
+    // mondania, hogy ezek szándékosan nem hívások.
+    const source = [
+      "export function a() { refetch(); }",
+      "export function b() { client.fetch(); }",
+    ].join("\n");
+    assert.deepEqual(callsInSource(source, "fixture.ts"), []);
+  });
+
+  it("a külső címre menő hívás nem a mi útvonalunk", () => {
+    // A hatókör kimondása, nem kivétel: a `fetch` más hosztra is mehet, és egy
+    // "létezzen a szerverünkön" állítás egy abszolút címre tévesen pirulna.
+    const source = 'export const a = fetch("https://example.test/v1/ping");\n';
+    assert.deepEqual(callsInSource(source, "fixture.ts"), []);
   });
 });
