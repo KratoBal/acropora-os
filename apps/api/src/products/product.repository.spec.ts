@@ -214,6 +214,12 @@ function createDatabase({ authorityUpdateCount = 1 } = {}) {
         return {};
       },
     },
+    aiProductSearchDocument: {
+      upsert: async (args: unknown) => {
+        calls.push({ operation: "searchDocumentUpsert", args });
+        return {};
+      },
+    },
   };
   const database: ProductDatabase = {
     product: {
@@ -265,9 +271,17 @@ describe("ProductRepository", () => {
       "user-1",
     );
 
+    /**
+     * A KERESESI DOKUMENTUM UGYANEBBEN A TRANZAKCIOBAN KESZUL.
+     *
+     * A ket utolso muvelet nem diszites a sorban: a `transactionFind` az iro
+     * olvasasa, a `searchDocumentUpsert` maga az iras - mindketto a
+     * tranzakcio-kliensen, nem a kapcsolaton. Ha valaki kesobb kiviszi a
+     * tranzakciobol, ez a sor pirosodik.
+     */
     assert.deepEqual(
       calls.map((call) => call.operation),
-      ["create", "event"],
+      ["create", "event", "transactionFind", "searchDocumentUpsert"],
     );
     assert.equal(
       (
@@ -358,6 +372,10 @@ describe("ProductRepository", () => {
         "transactionUpdate",
         "categoryUpdateMany",
         "categoryUpsert",
+        // A dokumentum a KATEGORIA-IRAS UTAN keszul, kulonben a facets sav
+        // az elozo kategoriat vinne tovabb.
+        "transactionFind",
+        "searchDocumentUpsert",
         "transactionFind",
       ],
     );
@@ -458,10 +476,22 @@ describe("ProductRepository", () => {
     const repository = new ProductRepository(database);
     await repository.archive("product-1");
 
-    const updateArgs = calls.find((call) => call.operation === "update")
-      ?.args as { data: { isActive: boolean; archivedAt: Date } };
+    const updateArgs = calls.find(
+      (call) => call.operation === "transactionUpdate",
+    )?.args as { data: { isActive: boolean; archivedAt: Date } };
     assert.equal(updateArgs.data.isActive, false);
     assert.ok(updateArgs.data.archivedAt instanceof Date);
+
+    /**
+     * AZ `isActive` A KERESHETOSEG EGYIK FELE, ezert a levetel ugyanabban a
+     * tranzakcioban irja at a dokumentumot is. Enelkul az egyensuly-ellenorzes
+     * ket szama MINDEN archivalas utan elterne, es az az ellenorzes, ami a
+     * nema hibat keresi, maga valna zajossa.
+     */
+    assert.deepEqual(
+      calls.map((call) => call.operation),
+      ["transactionUpdate", "transactionFind", "searchDocumentUpsert"],
+    );
   });
 
   it("returns hierarchical category and ordered brand options", async () => {

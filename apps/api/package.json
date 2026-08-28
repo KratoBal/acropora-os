@@ -20,6 +20,7 @@
     "service-token": "tsc -p tsconfig.json && node --env-file=../../.env dist/tasks/service-token.cli.js",
     "medusa:project": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-projection.cli.js",
     "medusa:inventory": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-inventory.cli.js",
+    "ai-search:rebuild": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/ai-product-search/ai-product-search.cli.js",
     "barcode-import": "tsc -p tsconfig.json && node --env-file=../../.env dist/products/barcode-import.cli.js",
     "unas:probe": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-readonly-probe.cli.js",
     "typecheck": "tsc --noEmit",

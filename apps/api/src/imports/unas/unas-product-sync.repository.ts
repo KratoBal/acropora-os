@@ -20,6 +20,7 @@ import {
   unasVariantLabel,
   unasVariantSku,
 } from "../../common/unas-variant.util.js";
+import { writeSearchDocument } from "../../integrations/ai-product-search/ai-product-search.writer.js";
 import {
   describeSkipped,
   partitionByUnasAuthority,
@@ -788,6 +789,7 @@ export class UnasProductSyncRepository extends Repository {
               occurredAt: windowEnd,
             },
           });
+          await writeSearchDocument(transaction, product.id);
         }
 
         let missingCount = 0;
@@ -876,6 +878,7 @@ export class UnasProductSyncRepository extends Repository {
                 occurredAt: windowEnd,
               },
             });
+            await writeSearchDocument(transaction, reference.entityId);
           }
         }
 
