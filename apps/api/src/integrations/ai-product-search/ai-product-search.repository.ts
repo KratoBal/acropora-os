@@ -33,6 +33,10 @@ export interface ProductSearchRow {
     grossPrice: unknown;
     currency: string | null;
     reportedStock: unknown;
+    /** When the reported quantity was last synced - its own time, not the row's. */
+    reportedStockSyncedAt: Date | null;
+    /** When the snapshot row was last written; the price's time. */
+    updatedAt: Date;
   } | null;
 }
 
@@ -116,6 +120,8 @@ export class AiProductSearchRepository extends Repository {
           grossPrice: true,
           currency: true,
           reportedStock: true,
+          reportedStockSyncedAt: true,
+          updatedAt: true,
         },
       },
     };
