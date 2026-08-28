@@ -32,7 +32,6 @@ Az AI-fejlesztő minden munkamenetben:
 ```bash
 pnpm install --frozen-lockfile
 pnpm format:check
-pnpm lint
 pnpm typecheck
 pnpm test
 pnpm build

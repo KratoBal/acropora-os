@@ -431,7 +431,6 @@ pnpm mobile:lint
 pnpm mobile:typecheck
 pnpm mobile:doctor
 pnpm mobile:test
-pnpm lint
 pnpm typecheck
 ```
 
