@@ -30,10 +30,12 @@ import { maskCommentsAndStrings } from "../testing/source-mask.js";
  *   argumentumában áll, és a kiolvasása külön elemzést kívánna. Ha valaki
  *   `POST`-tal hív egy csak `GET`-re létező címet, azt ez nem fogja meg.
  * - A LEKÉRDEZŐ RÉSZT (`?...`) levágja: az nem az útvonal része.
- * - A TELEFONNÁL a teljes forrást nézi, a WEBNÉL egyelőre csak a `lib/api`
- *   mappát. A különbség mért, és az indoka a `WEB` halmaz mellett áll.
- * - A közvetlen `fetch` hívást nem nézi: ez az őrző az `apiRequest`-en át menő
- *   forgalmat méri. (Mérve 2026-08-28: a mobilban ma nincs ilyen hívás.)
+ * - A KLIENS SAJÁT WRAPPERÉT (`lib/api/client.ts`, `lib/api/request-auth.ts`)
+ *   kihagyja: az nem hív, hanem becsomagol, és az útvonala függvény-paraméter.
+ * - A MÁS HOSZTRA menő hívást kihagyja. Egy `fetch` mehet külső címre, és egy
+ *   "létezzen a szerverünkön" állítás egy `https://…` címre tévesen pirulna. A
+ *   kizárás a sémából statikusan eldönthető, nem ítélet kérdése. (Mérve
+ *   2026-08-28: ma egyetlen ilyen hívás sincs.)
  *
  * Amit viszont NEM tesz: nem hallgat el egy fájlt, amit nem tudott elemezni.
  * Ha egy `apiRequest` hívásból nem olvasható ki az útvonal, az BUKÁS, nem néma
@@ -112,14 +114,18 @@ const MOBILE: ClientSet = {
 };
 
 /**
- * A WEB: EGYELŐRE egy mappa, és ez MÉRT döntés, nem feledékenység.
+ * A WEB: a teljes forrás, `/api` előtaggal.
  *
- * A weben az `apiRequest`-et a `lib/api` mappán KÍVÜL ma egyetlen fájl sem
- * hívja (mérve 2026-08-28, a komment-maszk bevezetése után): öt fájl EMLÍTI
- * kommentben, de nem hívja. A rekurzív alak tehát ma zöld maradna -- a
- * kiterjesztés mégis külön lépés, mert a web `client.ts`-e `/api` előtagot tesz
- * minden útvonal elé, és azt az összevetésnek le kell vágnia. E nélkül minden
- * webes útvonal nem-illeszkedőként jönne vissza.
+ * A KETTŐ EGY LÉPÉS VOLT, nem kettő. A mappa kiszélesítése önmagában nem lett
+ * volna elég: a hat auth-hívás a `lib/api` mappán KÍVÜL áll, viszont a három
+ * bináris letöltés (foxpost riport, leltár-sablon, eszköz-dokumentum) MÁR
+ * BENT VOLT a nézett mappában, és mégsem látszott -- mert nem az `apiRequest`
+ * wrapperen át hívnak. A vakfolt tehát nem a MAPPA volt, hanem a CSATORNA.
+ *
+ * Az `apiPrefix` pedig mindkettőnek előfeltétele: a web `client.ts`-e `/api`
+ * előtagot tesz minden útvonal elé, és azt az összevetésnek le kell vágnia. E
+ * nélkül MINDEN webes hívás nem-illeszkedőként jönne vissza, és úgy nézne ki,
+ * mintha az egész webes kliens rossz lenne.
  */
 const WEB: ClientSet = {
   root: "../web/src",
@@ -428,6 +434,28 @@ function serverPatterns(): Set<string> {
   return patterns;
 }
 
+/**
+ * A HIVATKOZOTT, DE NEM LÉTEZŐ ÚTVONALAK -- az őrző tényleges állítása.
+ *
+ * KÜLÖN FÜGGVÉNY, ÉS EZ NEM STÍLUS. Amíg a szűrés az `it` törzsében állt, az
+ * állítás CSAK a mai kódon volt mérve: azt bizonyította, hogy ma nincs hibás
+ * cím, nem azt, hogy egy hibás címet MEGTALÁLNA. A kettő különbsége akkor derül
+ * ki, amikor tényleg elromlik valami -- vagyis a legrosszabbkor.
+ *
+ * A NYERS ALAK ÉS A FELOLDOTT MINTA IS KELL a jelentésbe. A nyers megmondja,
+ * MELYIK SORT kell megnyitni; a feloldott azt, MI LETT belőle -- és egy
+ * konstansból épülő hívásnál a kettő nem ugyanaz. Csak a nyerssel a hibaüzenet
+ * `${BASE}/owners` lenne, amiből nem derül ki, mi a rossz előtag.
+ */
+export function missingRoutes(
+  calls: readonly ClientCall[],
+  patterns: ReadonlySet<string>,
+): string[] {
+  return calls
+    .filter((call) => !patterns.has(call.pattern))
+    .map((call) => `${call.file}: ${call.raw}  ->  ${call.pattern}`);
+}
+
 describe("a telefon csak létező szerver-végpontot hív", () => {
   /**
    * A KONTROLL: mind a két oldalról tényleg jön adat, és a mennyiség
@@ -457,17 +485,30 @@ describe("a telefon csak létező szerver-végpontot hív", () => {
         calls.some((call) => call.file.startsWith(label)),
         `a(z) ${label} kliensből egyetlen hívás sem olvasódott ki`,
       );
+    // ÉS MIND A KÉT CSATORNÁBÓL. Ez a három útvonal KIZÁRÓLAG közvetlen
+    // `fetch`-en át hívódik (bináris letöltések, amik szándékosan kerülik a
+    // JSON-t váró wrappert), tehát ha a `fetch` csatorna elnémul, itt tűnnek el
+    // először.
+    //
+    // AMIÉRT KELL: a lefedettség-állítás zöldje MONOTON abban, hány hívást
+    // ismerünk fel -- kevesebb felismert hívás kevesebb assert. Mérve
+    // 2026-08-28: a `fetch` mintát a CHANNELS listából kivéve az egész suite
+    // zölden maradt. Egy őrző, ami abbahagyja a nézést, nem hangosabb lesz,
+    // hanem csendesebb, és ezt csak egy NEVESÍTETT elvárás fogja meg.
+    for (const pattern of [
+      "integrations/foxpost/reports/:param/:param/download",
+      "inventory/counts/:param/template.xlsx",
+      "service/assets/:param/documents/:param",
+    ])
+      assert.ok(
+        calls.some((call) => call.pattern === pattern),
+        `a(z) ${pattern} útvonal nem olvasódott ki: a közvetlen fetch csatorna nem mér`,
+      );
   });
 
   it("every mobile path has a server route", () => {
-    const patterns = serverPatterns();
-    const missing = allCalls().filter((call) => !patterns.has(call.pattern));
-    // A NYERS ALAK ÉS A FELOLDOTT MINTA IS KELL. A nyers megmondja, MELYIK SORT
-    // kell megnyitni; a feloldott azt, MI LETT belőle -- és egy konstansból épülő
-    // hívásnál a kettő nem ugyanaz. Csak a nyerssel a hibaüzenet `${BASE}/owners`
-    // lenne, amiből nem derül ki, mi a rossz előtag.
     assert.deepEqual(
-      missing.map((call) => `${call.file}: ${call.raw}  ->  ${call.pattern}`),
+      missingRoutes(allCalls(), serverPatterns()),
       [],
       "a telefon olyan címet hív, ami a szerveren nem létezik",
     );
@@ -612,5 +653,69 @@ describe("a fetch csatorna is mérve van", () => {
     // "létezzen a szerverünkön" állítás egy abszolút címre tévesen pirulna.
     const source = 'export const a = fetch("https://example.test/v1/ping");\n';
     assert.deepEqual(callsInSource(source, "fixture.ts"), []);
+  });
+});
+
+/**
+ * AZ ÁLLÍTÁS MŰKÖDÉSE, NEM A MEGLÉTE.
+ *
+ * A fenti `every mobile path has a server route` zöldje azt mondja, hogy MA
+ * nincs hibás cím. Azt NEM mondja, hogy egy hibás címet megtalálna: ha az
+ * összevetés elromlana (üres mintahalmaz, mindenre igazat adó `has`, elnyelt
+ * találat), pontosan ugyanúgy zöld maradna. Ezért itt a `missingRoutes` a SAJÁT
+ * bemenetén van megmérve, mesterséges adaton.
+ */
+describe("a nem létező útvonalra mutató hívás pirosít", () => {
+  const patterns = new Set(["service/assets", "worksheets/:param"]);
+
+  it("a hiányzó útvonalat JELENTI", () => {
+    // PIROSÍT: ha az összevetés bármikor üres listát adna vissza. Ez az egyetlen
+    // teszt, ami az őrző TULAJDONKÉPPENI állítását méri: hogy a hiányt észreveszi.
+    const missing = missingRoutes(
+      [
+        {
+          file: "web/lib/api/x.ts",
+          raw: "/api/nincs-ilyen",
+          pattern: "nincs-ilyen",
+        },
+      ],
+      patterns,
+    );
+    assert.equal(missing.length, 1);
+  });
+
+  it("a jelentésben a NYERS alak és a feloldott minta is benne van", () => {
+    // PIROSÍT: ha valaki a hibaüzenetet a mintára egyszerűsítené. A nyers alak
+    // mondja meg, MELYIK SORT kell megnyitni; egy konstansból épülő hívásnál a
+    // kettő nem ugyanaz, és a minta önmagában nem vezet vissza a forráshoz.
+    const missing = missingRoutes(
+      [{ file: "web/lib/api/x.ts", raw: "${BASE}/owners", pattern: "owners" }],
+      patterns,
+    );
+    assert.match(missing[0]!, /web\/lib\/api\/x\.ts/);
+    assert.match(missing[0]!, /\$\{BASE\}\/owners/);
+    assert.match(missing[0]!, /owners$/);
+  });
+
+  it("a létező útvonalat NEM jelenti", () => {
+    // PIROSÍT: ha az összevetés mindent hiányzónak látna (például mert a minták
+    // más alakban állnak elő, mint a hívások). Az ilyen őrző jogos kódra pirul,
+    // és fél éven belül valaki kikapcsolja.
+    const missing = missingRoutes(
+      [
+        {
+          file: "web/lib/api/x.ts",
+          raw: "/api/service/assets",
+          pattern: "service/assets",
+        },
+        {
+          file: "mobil/y.ts",
+          raw: "/worksheets/${id}",
+          pattern: "worksheets/:param",
+        },
+      ],
+      patterns,
+    );
+    assert.deepEqual(missing, []);
   });
 });
