@@ -3,7 +3,6 @@ import { createHash } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 import type {
-  BrandResolutionResult,
   UnasApplySummary,
   UnasImportReport,
   UnasProductImportRow,

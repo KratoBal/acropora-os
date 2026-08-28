@@ -81,18 +81,13 @@ export function PurchaseInvoiceListPage() {
     }, 350);
     return () => window.clearTimeout(timer);
   }, [params, pathname, router, search]);
-  const filter = (key: string, value: string) => {
-    const next = new URLSearchParams(params.toString());
-    value ? next.set(key, value) : next.delete(key);
-    next.set("page", "1");
-    router.replace(`${pathname}?${next}`);
-  };
-
   /**
-   * Paging has to bypass `filter`: that helper ends by resetting the page
-   * to 1 (correct for a filter change - page 4 of a different filter
-   * usually does not exist), so paging through it sent every click back to
-   * the first page and nothing past the first page was reachable at all.
+   * Paging must NOT reset the page number, and that is the whole reason this
+   * writes the query string itself instead of going through a shared helper.
+   * The search box above resets `page` to 1 on purpose - page 4 of a different
+   * search usually does not exist - but doing the same on a paging click sent
+   * every click back to the first page, and nothing past the first page was
+   * reachable at all.
    */
   const goToPage = (page: number) => {
     const next = new URLSearchParams(params.toString());
