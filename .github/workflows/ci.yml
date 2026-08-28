@@ -108,6 +108,13 @@ jobs:
         id: postgres_version
         if: always()
         run: |
+          # Without `pipefail` the exit status of this assignment is `xargs`'s,
+          # which succeeds on empty input - so a psql failure would leave
+          # `version` empty and this step GREEN. The job would still fail, two
+          # steps later, where record-release-evidence rejects the empty value
+          # by name. That is late enough that the reader has to walk back to a
+          # green step to find the real cause.
+          set -euo pipefail
           version=$(PGPASSWORD=acropora psql -h localhost -U acropora -d acropora_ci -tAc "SHOW server_version;" | xargs)
           echo "server version reported by the running container: $version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
