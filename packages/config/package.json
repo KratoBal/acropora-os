@@ -3,11 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "files": [
-    "*.json"
+    "*.json",
+    "validate-json.mjs"
   ],
   "scripts": {
-    "build": "node -e \"JSON.parse(require('node:fs').readFileSync('base.json', 'utf8'))\"",
-    "typecheck": "node -e \"JSON.parse(require('node:fs').readFileSync('base.json', 'utf8'))\"",
+    "build": "node validate-json.mjs",
+    "typecheck": "node validate-json.mjs",
     "clean": "rm -rf dist"
   },
   "devDependencies": {
