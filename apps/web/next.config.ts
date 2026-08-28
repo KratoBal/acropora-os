@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 
+import { API_PREFIX } from "./src/lib/api/api-prefix";
 import { proxyTimeoutMs } from "./src/lib/proxy-timeout";
 
 const apiUrl = process.env.API_URL?.replace(/\/$/, "");
@@ -29,7 +30,11 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
-        source: "/api/:path*",
+        // A BONGESZO ELOTAGJA EGY HELYEN. Ez a szabaly az, ami a szonak
+        // jelentest ad: enelkul a kliensek /api elotagja semmire nem mutatna.
+        // Ezert ugyanabbol a konstansbol epul, mint a hivo oldal -- egy
+        // atnevezes igy nem tud felig sikerulni.
+        source: `${API_PREFIX}/:path*`,
         destination: `${apiUrl}/:path*`,
       },
     ];
