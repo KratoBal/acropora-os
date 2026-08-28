@@ -12,13 +12,14 @@
 
 ```bash
 pnpm format:check
-pnpm lint
 pnpm typecheck
 pnpm test
 pnpm build
 ```
 
-A `pnpm install` beállítja a `core.hooksPath` értékét a repository `.githooks` mappájára, így egy pre-commit hook visszautasítja a formázatlan fájlokat tartalmazó commitot. Ez gyors helyi jelzés, nem maga a szabály: kihagyható (`git commit --no-verify`), és csak azon a gépen létezik, ahol lefutott a telepítés. A mérvadó ellenőrzés a `pnpm format:check`.
+A `pnpm install` beállítja a `core.hooksPath` értékét a repository `.githooks` mappájára, így egy pre-commit hook visszautasítja a formázatlan fájlokat tartalmazó commitot. Ez gyors helyi jelzés, nem maga a szabály: kihagyható (`git commit --no-verify`), és csak azon a gépen létezik, ahol lefutott a telepítés. A mérvadó ellenőrzés a `pnpm format:check`, és **ezt a CI is futtatja** (korábban nem futtatta senki).
+
+**A `pnpm lint` megszűnt, és ezt érdemes tudni:** mind a hat munkaterület-csomagban a `lint` szkript `tsc --noEmit` volt, vagyis betű szerint ugyanaz, amit a `pnpm typecheck` futtat. Két név, egy ellenőrzés. A repository egyetlen valódi lintere a mobil alkalmazás ESLint-je, az viszont **nem is volt elérhető** ezen az úton: a `pnpm-workspace.yaml` kizárja az `apps/mobile` mappát a munkaterületből, tehát a `turbo run lint` sosem futtatta. **A típusellenőrzés a `pnpm typecheck`, a mobil linter a `pnpm mobile:lint`** - és mostantól nincs olyan parancs, ami mindkettőt ígéri és egyiket sem adja.
 
 Adatbázist érintő API-változásnál külön futtasd az érintett opt-in integrációs tesztet. A teljes Nest dependency graph ellenőrzése: `pnpm --filter @acropora/api test:bootstrap`. Élő PostgreSQL és Redis mellett a health smoke: `pnpm --filter @acropora/api test:smoke`.
 

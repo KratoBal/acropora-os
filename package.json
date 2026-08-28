@@ -15,7 +15,6 @@
     "dev": "turbo run dev --filter=@acropora/web --filter=@acropora/api",
     "dev:mobile": "npm --prefix apps/mobile run dev",
     "dev:mobile:go": "npm --prefix apps/mobile run start:go",
-    "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "format": "prettier --write .",
