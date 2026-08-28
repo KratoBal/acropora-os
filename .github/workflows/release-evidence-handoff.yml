@@ -156,10 +156,15 @@ jobs:
           echo "server version reported by the running container: $version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Fail the job if the re-run integration suite failed
+      # This step does NOT fail the job, and its name used to say it did.
+      # It cannot: the FAILURE evidence row below still has to be written
+      # first, which is the whole reason the test step carries
+      # `continue-on-error`. The job is failed at the very end, by
+      # "Fail the workflow if the integration suite failed".
+      - name: Say why the evidence below will record FAILURE
         if: steps.integration_tests.outcome != 'success'
         run: |
-          echo "Integration suite failed on re-run for commit ${{ github.sha }} - refusing to write any evidence (see the two mutually-exclusive recording steps below for the FAILURE row, which still gets written for auditability)." >&2
+          echo "Integration suite failed on re-run for commit ${{ github.sha }} - refusing to write SUCCESS evidence. The FAILURE row below still gets written, for auditability, and the job fails at the end." >&2
 
       # --- From here on, PRODUCTION_RELEASE_EVIDENCE_DATABASE_URL is the
       # ONLY production-scoped secret this workflow touches, and it is
