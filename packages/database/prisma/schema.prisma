@@ -605,6 +605,7 @@ model Product {
   sourceRelations ProductRelation[]    @relation("ProductRelationSource")
   targetRelations ProductRelation[]    @relation("ProductRelationTarget")
   unasSnapshot    UnasProductSnapshot?
+  aiSearchDocument AiProductSearchDocument?
 
   @@index([brandId])
   @@index([categoryId])
@@ -1033,6 +1034,49 @@ model WarehouseLocation {
   defaultForExtensions ProductExtension[]
 
   @@unique([warehouseId, code])
+}
+
+/// The AI product search INDEX - not a copy of the answer.
+///
+/// The description the model reads is built on the LIVE path when the answer is
+/// assembled; this table exists only so a product can be FOUND. A stale row
+/// therefore delays discovery, it never produces a wrong fact.
+///
+/// `searchVector` is a GENERATED ALWAYS column over the four weight bands and
+/// is declared Unsupported here on purpose: Prisma has no generated-column
+/// type, and the field must never be writable from the client.
+model AiProductSearchDocument {
+  id               String  @id @default(cuid())
+  productId        String  @unique
+  /// A weight: the product name.
+  title            String  @default("")
+  /// A weight: the article numbers.
+  skus             String  @default("")
+  /// B weight: brand and category names.
+  facets           String  @default("")
+  /// B weight - and the reason is not its length: for 1178 products the short
+  /// description is the ONLY text that exists.
+  descriptionShort String  @default("")
+  /// C weight.
+  descriptionLong  String  @default("")
+  /// D weight.
+  parameters       String  @default("")
+  /// A deleted product keeps its row and loses this flag. "We used to sell
+  /// this, and have not since X" is knowledge worth keeping.
+  isSearchable     Boolean @default(true)
+  /// Which recipe built it. A full rebuild leaves a mixed-version table behind
+  /// while it runs, and the answer says so out loud.
+  documentVersion  Int     @default(1)
+  updatedAt        DateTime @updatedAt
+
+  searchVector Unsupported("tsvector")? @default(dbgenerated())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([documentVersion])
+  /// Trigram index for typo tolerance, on the NAME only. Declared here so a
+  /// later `migrate dev` does not read it as drift and propose dropping it.
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 /// UNAS-owned product fields mirrored for read-only operational use.
