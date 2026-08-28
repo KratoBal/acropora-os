@@ -842,3 +842,128 @@ describe("az importált előtag-konstans", () => {
     assert.equal(calls[0]!.pattern, "service/assets/:param");
   });
 });
+
+/**
+ * A FORRÁSBAN KIÍRT útvonal-előtagok, hívási helyenként.
+ *
+ * SAJÁT OLVASÓ, ÉS EZ MÉRÉSBŐL KÖVETKEZIK, nem kényelemből: a `callsInSource`
+ * FELOLDJA a fájl konstansait, tehát az `apiRequest(BASE, …)` alakból is a
+ * konstans ÉRTÉKÉT adja vissza. Erre a kérdésre az a válasz hamis lenne -- a
+ * `notifications.ts` két helyen hívja ugyanazt a konstanst, ami HELYES
+ * szerkezet, és a feloldott alakon nézve mégis kétszer kiírt előtagnak
+ * látszott. (Mérve 2026-08-28: a szabály első alakja pontosan ezen a fájlon
+ * pirult ki, jogos kódon.)
+ *
+ * Itt tehát az számít, amit a FORRÁS ír le, nem az, amire feloldódik.
+ */
+export function writtenPrefixes(source: string, where: string): string[] {
+  const masked = maskCommentsAndStrings(source);
+  const prefixes: string[] = [];
+  for (const match of masked.matchAll(/apiRequest\s*(?:<[^>]*>)?\s*\(\s*/g)) {
+    const at = match.index + match[0].length;
+    const literal = literalPathAt(source, at);
+    if (!literal || !literal.startsWith("/")) continue;
+    const segment = literal.slice(1).split(/[/?#]/)[0] ?? "";
+    if (segment.length > 0) prefixes.push(`${where}: /${segment}`);
+  }
+  return prefixes;
+}
+
+/** A megadott pozíción álló string- vagy template-literál törzse, vagy `null`. */
+function literalPathAt(source: string, at: number): string | null {
+  const match = /^(["'`])((?:\\.|(?!\1)[^\\])*)\1/.exec(source.slice(at));
+  return match ? match[2]! : null;
+}
+
+/** Amit egy fájl KÉTSZER ír ki. Két külön fájl ugyanaz a szegmens NEM ez. */
+export function repeatedPrefixes(prefixes: readonly string[]): string[] {
+  const counts = new Map<string, number>();
+  for (const prefix of prefixes)
+    counts.set(prefix, (counts.get(prefix) ?? 0) + 1);
+  return [...counts.entries()]
+    .filter(([, count]) => count > 1)
+    .map(([prefix, count]) => `${prefix} (${count}x)`)
+    .sort();
+}
+
+/**
+ * AZ ELŐTAG EGY HELYEN ÁLLJON -- a 2026-08-27-i éles hiba OKA, nem a tünete.
+ *
+ * A tünet (a telefon nem létező címet hívott) ellen a fenti összevetés véd. Az
+ * OK viszont SZERKEZETI volt, és azt a másik állítás nem fogja meg: ha valaki
+ * ugyanazt az előtagot háromszor írja le HELYESEN, minden zöld marad -- és a
+ * következő átnevezésnél megint kettő javul a háromból. Pontosan ez történt: a
+ * `worksheets.ts` háromszor írta ki, és mind a három egyszerre volt rossz.
+ *
+ * A FÁJL A HATÓKÖR, nem a repó: két külön modul külön is javul, egy globális
+ * szabály itt jogos kódra pirulna.
+ *
+ * A HATÁR SZÁNDÉKOSAN A MOBIL OLDAL. A webes kliens ma ugyanezt az alakot
+ * használja (a `lib/auth` alatt három hívás írja ki az `/api` előtagot), tehát
+ * ez a szabály ott AZONNAL kipirulna jogos kódon. Az külön kártya.
+ */
+describe("a mobil kliensek egy helyen tartják az előtagot", () => {
+  it("egy fájlon belül nem áll ugyanaz az előtag kétszer kiírva", () => {
+    const found: string[] = [];
+    for (const file of sourceFiles(MOBILE)) {
+      const source = readFileSync(join(MOBILE.root, file), "utf8");
+      if (!source.includes("apiRequest")) continue;
+      found.push(
+        ...repeatedPrefixes(writtenPrefixes(source, `${MOBILE.label}/${file}`)),
+      );
+    }
+    assert.deepEqual(
+      found.sort(),
+      [],
+      "egy mobil kliens ugyanazt az előtagot többször írja ki: tedd fájlonként EGY konstansba, különben a következő átnevezés megint részlegesen sikerül",
+    );
+  });
+
+  it("a konstansból épülő hívás NEM kiírt előtag", () => {
+    // EZ A LEGFONTOSABB IRÁNY, és mérésből került ide: a szabály első alakja a
+    // feloldott útvonalat nézte, és a `notifications.ts` HELYES szerkezetére
+    // pirult ki. Egy őrző, ami a jó megoldást bünteti, rosszabb a hiányzónál.
+    const source = [
+      'const BASE = "/notifications/device-tokens";',
+      "export const a = () => apiRequest(BASE, { method: `POST` });",
+      "export const b = () => apiRequest(BASE, { method: `DELETE` });",
+      "export const c = () => apiRequest(`${BASE}/x`);",
+    ].join("\n");
+    assert.deepEqual(writtenPrefixes(source, "f.ts"), []);
+  });
+
+  it("a MÁSODIK kiírás viszont jelentkezik", () => {
+    // AZ ÁLLÍTÁST MAGÁT MÉRI. A fenti éles állítás zöldje csak annyit mond,
+    // hogy MA nincs ismétlés; azt nem, hogy egy ismétlést megtalálna.
+    const source = [
+      'export const a = () => apiRequest("/worksheets?page=1");',
+      "export const b = () => apiRequest(`/worksheets/selectable`);",
+    ].join("\n");
+    assert.deepEqual(repeatedPrefixes(writtenPrefixes(source, "w.ts")), [
+      "w.ts: /worksheets (2x)",
+    ]);
+  });
+
+  it("az egyszer hívott útvonal NEM ismétlés", () => {
+    // PIROSÍT: ha a szabály minden kiírt literált tiltana. A `health.ts` egy
+    // hívást tesz, és egy egyszer használt konstans zaj lenne, nem szerkezet.
+    const source = 'export const a = () => apiRequest("/health");';
+    assert.deepEqual(repeatedPrefixes(writtenPrefixes(source, "h.ts")), []);
+  });
+
+  it("két KÜLÖN fájl ugyanazzal a szegmenssel nem ismétlés", () => {
+    const a = writtenPrefixes('apiRequest("/service/x");', "a.ts");
+    const b = writtenPrefixes('apiRequest("/service/y");', "b.ts");
+    assert.deepEqual(repeatedPrefixes([...a, ...b]), []);
+  });
+
+  it("a kommentben álló hívás nem számít", () => {
+    // PIROSÍT: ha az olvasó nyers forráson keresne. Ugyanaz a szabály, ami a
+    // fenti összevetést is védi -- a maszk itt sem hagyható el.
+    const source = [
+      '// apiRequest("/worksheets/a")',
+      'export const a = () => apiRequest("/worksheets/b");',
+    ].join("\n");
+    assert.deepEqual(repeatedPrefixes(writtenPrefixes(source, "c.ts")), []);
+  });
+});
