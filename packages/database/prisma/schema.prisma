@@ -745,6 +745,12 @@ model ChannelListing {
   seoDescription   String?
   seoKeywords      String?
   seoRobots        String?
+  /// A UNAS-pillanatkép azonos nevű mezőjéből írjuk, `?? false` alapértékkel.
+  /// EZ AZ A HELY, AHOL EGY KÜLÖNBSÉG ELVÉSZ: a pillanatképben a NULL azt
+  /// jelenti, hogy a forrás nem nyilatkozott, itt viszont abból `false` lesz,
+  /// és onnantól megkülönböztethetetlen attól, hogy a bolt kifejezetten nemet
+  /// mondott. A szűkebb irány, tehát védhető -- de aki erre a mezőre `if`-et
+  /// ír, tudja meg, hogy a `false` két különböző dolgot takar.
   backorderAllowed Boolean        @default(false)
   sourceCreatedAt  DateTime?
   sourceUpdatedAt  DateTime?
@@ -1113,7 +1119,21 @@ model UnasProductSnapshot {
   initialOrderQuantity           Decimal?  @db.Decimal(19, 6)
   maximumOrderQuantity           Decimal?  @db.Decimal(19, 6)
   orderQuantityStep              Decimal?  @db.Decimal(19, 6)
+  /// A FORRÁS ÁLLÍTÁSA, ÉS RÁADÁSUL ÁTNEVEZVE. A UNAS `StockStatus.Empty`
+  /// mezőjéből jön, tehát ott ÁLLAPOT ("üres"), itt SZABÁLY ("hátralékos
+  /// rendelés engedélyezett"). A fordítás sehol nincs leírva, és ez a komment
+  /// az egyetlen hely, ahol a kettő találkozik.
+  ///
+  /// Nem mérés: nem azt mondja meg, mi történik egy nulla készletű rendelésnél,
+  /// hanem azt, amit a bolt magáról állít. Mérve 2026-08-28: a mezőt a
+  /// `ChannelListing.backorderAllowed` oszlopba írjuk tovább `?? false`
+  /// alapértékkel, tehát ott a "nem nyilatkozott" és a "nem" megkülönböztet-
+  /// hetetlenné válik. Itt még nem: a NULL azt jelenti, hogy a forrás hallgatott.
   backorderAllowed               Boolean?
+  /// Szintén a forrás állítása, a `StockStatus.Variant` mezőből. A neve
+  /// beállítást sugall ("enabled"), a forrásé állapotot -- és senki nem olvassa
+  /// ma: tárolt állítás, amire még nem épül döntés. Ha valaha épülni fog, előbb
+  /// mérni kell, mint a HTML-jelzőknél.
   variantStockEnabled            Boolean?
   lowStockThreshold              Decimal?  @db.Decimal(19, 6)
   reportedStock                  Decimal?  @db.Decimal(19, 6)

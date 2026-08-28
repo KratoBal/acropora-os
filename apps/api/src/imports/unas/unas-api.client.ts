@@ -565,6 +565,10 @@ export function parseUnasProductResponse(xml: string): UnasApiProduct[] {
         maximumOrderQuantity: decimal(value(product, "MaximumQty")),
         lowStockThreshold: decimal(value(product, "AlertQty")),
         orderQuantityStep: decimal(value(product, "UnitStep")),
+        // THE RENAME HAPPENS HERE, and it is the only place it is visible:
+        // `StockStatus.Empty` is what the source calls it, `backorderAllowed`
+        // is what we call it. A state becomes a rule in one assignment, and
+        // every reader downstream sees only the second name.
         backorderAllowed: stockStatus
           ? flag(value(stockStatus, "Empty"))
           : null,
