@@ -101,18 +101,34 @@ export class AiProductSearchService {
       price:
         net === null && gross === null
           ? null
-          : { net, gross, currency: snapshot?.currency ?? null },
+          : {
+              net,
+              gross,
+              currency: snapshot?.currency ?? null,
+              source: "unas" as const,
+              at: snapshot?.updatedAt?.toISOString() ?? null,
+            },
       /**
        * Today only the UNAS-reported quantity is available here, and the
        * projection SAYS so rather than presenting it as ours. The POS answers
        * "which number counts" in a fixed order - our own stock first, then
        * this one - and when that order is wired in, only the `source` field
        * changes, not the shape.
+       *
+       * THE TIME IS THE SNAPSHOT'S OWN STOCK TIME, not the row's. Those are
+       * two different moments: a sync can rewrite the row while the reported
+       * quantity stays as old as it was, and `reportedStockSyncedAt` exists
+       * precisely because the schema already made that distinction. Reading
+       * `lastSyncedAt` here would quietly report the newer of the two.
        */
       stock:
         reported === null
           ? null
-          : { quantity: reported, source: "unas" as const },
+          : {
+              quantity: reported,
+              source: "unas" as const,
+              at: snapshot?.reportedStockSyncedAt?.toISOString() ?? null,
+            },
       lastSyncedAt: row.lastSyncedAt?.toISOString() ?? null,
       mirrorState: row.mirrorState,
       missingSince: row.missingSince?.toISOString() ?? null,

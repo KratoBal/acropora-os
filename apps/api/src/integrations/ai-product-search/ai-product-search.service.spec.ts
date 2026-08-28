@@ -27,6 +27,8 @@ const row = (overrides: Partial<ProductSearchRow> = {}): ProductSearchRow => ({
     grossPrice: "12700",
     currency: "HUF",
     reportedStock: "4",
+    reportedStockSyncedAt: new Date("2026-08-27T05:30:00.000Z"),
+    updatedAt: new Date("2026-08-27T06:00:00.000Z"),
   },
   ...overrides,
 });
@@ -52,8 +54,14 @@ describe("AiProductSearchService projekció", () => {
       net: 10000,
       gross: 12700,
       currency: "HUF",
+      source: "unas",
+      at: "2026-08-27T06:00:00.000Z",
     });
-    assert.deepEqual(hit.stock, { quantity: 4, source: "unas" });
+    assert.deepEqual(hit.stock, {
+      quantity: 4,
+      source: "unas",
+      at: "2026-08-27T05:30:00.000Z",
+    });
 
     // és a szöveges mezőkben nincs ott az ár
     assert.equal(hit.descriptionShort?.includes("12700"), false);
@@ -73,6 +81,8 @@ describe("AiProductSearchService projekció", () => {
           grossPrice: null,
           currency: null,
           reportedStock: null,
+          reportedStockSyncedAt: new Date("2026-08-27T05:30:00.000Z"),
+          updatedAt: new Date("2026-08-27T06:00:00.000Z"),
         },
       }),
     ]).search({ query: "x" });
@@ -146,6 +156,8 @@ describe("AiProductSearchService projekció", () => {
           grossPrice: null,
           currency: null,
           reportedStock: null,
+          reportedStockSyncedAt: new Date("2026-08-27T05:30:00.000Z"),
+          updatedAt: new Date("2026-08-27T06:00:00.000Z"),
         },
       }),
     ]);
@@ -181,5 +193,69 @@ describe("AiProductSearchService projekció", () => {
       "stock",
       "variants",
     ]);
+  });
+});
+
+/**
+ * A price and a stock quantity are two claims of different ages, and the
+ * projection has to say which is which.
+ *
+ * WHY THIS IS NOT PEDANTRY: before this, the row carried one `lastSyncedAt`
+ * for everything on it. A sync rewrites the snapshot row whenever ANY field
+ * moves, while `reportedStockSyncedAt` only moves when the quantity is
+ * actually re-read - so a row can be minutes old while the quantity on it is
+ * days old. Reporting the row's time for the quantity would round that
+ * difference away silently, and the answer would sound fresher than it is.
+ */
+describe("az ár és a készlet kora", () => {
+  it("az ár idejét a pillanatkép sorából veszi, a készletét a saját oszlopából", async () => {
+    const result = await serviceWith([
+      row({
+        unasSnapshot: {
+          descriptionShort: "Rövid.",
+          descriptionLong: "Hosszú.",
+          parameters: null,
+          netPrice: "10000",
+          grossPrice: "12700",
+          currency: "HUF",
+          reportedStock: "4",
+          reportedStockSyncedAt: new Date("2026-08-20T09:00:00.000Z"),
+          updatedAt: new Date("2026-08-27T06:00:00.000Z"),
+        },
+      }),
+    ]).search({ query: "balling" });
+    const hit = result.hits[0]!;
+
+    assert.equal(hit.price?.at, "2026-08-27T06:00:00.000Z");
+    assert.equal(hit.price?.source, "unas");
+
+    assert.equal(hit.stock?.at, "2026-08-20T09:00:00.000Z");
+    assert.equal(hit.stock?.source, "unas");
+
+    assert.notEqual(
+      hit.stock?.at,
+      hit.price?.at,
+      "a két időpont külön oszlopból jön, tehát nem eshet egybe csak azért, mert egy soron ülnek",
+    );
+  });
+
+  it("nullát mond, ha egy forrás nem hoz időpontot, és nem tippel helyette", async () => {
+    const result = await serviceWith([
+      row({
+        unasSnapshot: {
+          descriptionShort: "Rövid.",
+          descriptionLong: null,
+          parameters: null,
+          netPrice: null,
+          grossPrice: null,
+          currency: null,
+          reportedStock: "4",
+          reportedStockSyncedAt: null,
+          updatedAt: new Date("2026-08-27T06:00:00.000Z"),
+        },
+      }),
+    ]).search({ query: "balling" });
+
+    assert.equal(result.hits[0]!.stock?.at, null);
   });
 });

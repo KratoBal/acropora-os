@@ -60,11 +60,25 @@ export interface AiProductSearchHit {
   /**
    * Structured, never folded into the text. Null when the snapshot carries
    * no price at all - which is a different statement from "it is free".
+   *
+   * SOURCE AND TIME TRAVEL WITH THE VALUE, and not because it is tidier. The
+   * row already carries `lastSyncedAt`, and until now that one field stood for
+   * everything on the row. It stops being enough the moment the stock comes
+   * from somewhere else than the snapshot: a three-day-old price and a
+   * two-minute-old stock would both report the same age, and the reader has no
+   * way to tell which number the timestamp belongs to.
+   *
+   * `source` is a single value today. It is written out anyway, so that the
+   * day a second price source appears, the shape does not change - only the
+   * value does.
    */
   price: {
     net: number | null;
     gross: number | null;
     currency: string | null;
+    source: "unas";
+    /** When this price was last written by the sync. */
+    at: string | null;
   } | null;
   /**
    * Which number this is matters as much as the number itself, so the source
@@ -75,6 +89,13 @@ export interface AiProductSearchHit {
   stock: {
     quantity: number | null;
     source: "acropora" | "unas" | "unknown";
+    /**
+     * When this quantity was last true, per its own source - NOT when the row
+     * was written. The snapshot already keeps these apart
+     * (`reportedStockSyncedAt` is its own column), and the projection now
+     * carries that distinction instead of flattening it.
+     */
+    at: string | null;
   } | null;
   /** When this product was last written by the sync. */
   lastSyncedAt: string | null;

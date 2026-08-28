@@ -69,6 +69,8 @@ const row = (overrides: Partial<ProductSearchRow> = {}): ProductSearchRow => ({
     grossPrice: "12700",
     currency: "HUF",
     reportedStock: "4",
+    reportedStockSyncedAt: new Date("2026-08-27T05:30:00.000Z"),
+    updatedAt: new Date("2026-08-27T06:00:00.000Z"),
   },
   ...overrides,
 });
@@ -99,6 +101,8 @@ describe("URL a modell elé kerülő szövegben", () => {
           grossPrice: "12700",
           currency: "HUF",
           reportedStock: "4",
+          reportedStockSyncedAt: new Date("2026-08-27T05:30:00.000Z"),
+          updatedAt: new Date("2026-08-27T06:00:00.000Z"),
         },
       }),
     );
@@ -149,6 +153,8 @@ describe("URL a modell elé kerülő szövegben", () => {
           grossPrice: null,
           currency: null,
           reportedStock: null,
+          reportedStockSyncedAt: new Date("2026-08-27T05:30:00.000Z"),
+          updatedAt: new Date("2026-08-27T06:00:00.000Z"),
         },
       }),
     );
