@@ -1,9 +1,10 @@
 import { Injectable } from "@nestjs/common";
 
-import type {
-  MedusaAdminClient,
-  MedusaProductRow,
-  MedusaSalesChannelRow,
+import {
+  describeMedusaFailure,
+  type MedusaAdminClient,
+  type MedusaProductRow,
+  type MedusaSalesChannelRow,
 } from "./medusa-admin.client.js";
 import { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
 import {
@@ -124,7 +125,24 @@ export type ProjectionStopReason =
    * ez a jó pillanat: egy termék, ami nem jelenik meg a boltban, sokkal
    * később és sokkal drágábban mondaná el ugyanezt.
    */
-  | "sales-channel-not-found";
+  | "sales-channel-not-found"
+  /**
+   * EGY OLVASÓ Medusa-hívás elhasalt.
+   *
+   * Külön áll az írástól, és ez a legfontosabb különbség a kettő között: egy
+   * olvasás bukásánál BIZTOSAN nem változott semmi odaát, egy írásénál nem
+   * tudjuk. A jelentést olvasónak ez a legelső kérdése, tehát a NÉV mondja
+   * meg, ne a szöveg.
+   */
+  | "medusa-read-failed"
+  /**
+   * EGY ÍRÓ Medusa-hívás elhasalt.
+   *
+   * A hívás elindult, tehát a cél oldali állapotot NEM tudjuk. Ilyenkor a
+   * leképezést sem írjuk: egy leképezés azt állítaná, hogy a termék odaát a
+   * mi azonosítónkon áll, holott épp ez az, ami bizonytalan.
+   */
+  | "medusa-write-failed";
 
 /**
  * MIÉRT nincs átvihető cikkszám - és a szolgáltatás EZT MEG TUDJA MONDANI.
@@ -224,7 +242,18 @@ export class MedusaProductProjectionService {
      * használat viszont a legkorábbi pillanat, amikor egy átörökölt vagy
      * elgépelt beállítás kiderülhet.
      */
-    const channel = await this.resolveSalesChannel();
+    let channel: MedusaSalesChannelRow | null;
+    try {
+      channel = await this.resolveSalesChannel();
+    } catch (error) {
+      return {
+        action: "stopped",
+        reason: "medusa-read-failed",
+        details:
+          `${product.id}: a storefront csatorna lekérdezése elhasalt ` +
+          `(${describeMedusaFailure(error)}). Nem írtunk semmit.`,
+      };
+    }
     if (!channel)
       return {
         action: "stopped",
@@ -261,13 +290,25 @@ export class MedusaProductProjectionService {
        * még nem - és a storefront a KETTŐ metszetét nézi, tehát a félkész
        * állapot pont úgy néz ki, mint egy sikeres váltás.
        */
-      await this.medusa.update(existingLink.medusaProductId, {
-        title: product.name,
-        description: product.description,
-        external_id: product.id,
-        status: publication.status,
-        sales_channels: salesChannels,
-      });
+      try {
+        await this.medusa.update(existingLink.medusaProductId, {
+          title: product.name,
+          description: product.description,
+          external_id: product.id,
+          status: publication.status,
+          sales_channels: salesChannels,
+        });
+      } catch (error) {
+        return {
+          action: "stopped",
+          reason: "medusa-write-failed",
+          details:
+            `${product.id}: a meglévő Medusa-termék ` +
+            `(${existingLink.medusaProductId}) módosítása elhasalt ` +
+            `(${describeMedusaFailure(error)}). A cél oldali állapot ` +
+            `BIZONYTALAN, ezért a leképezést sem frissítettük.`,
+        };
+      }
       await this.links.link(product.id, existingLink.medusaProductId, now);
       return {
         action: "updated",
@@ -282,7 +323,20 @@ export class MedusaProductProjectionService {
      * odaát a mi külső azonosítónk - különben egy elveszett leképezés minden
      * futásnál új terméket szülne.
      */
-    const found = await this.medusa.findByExternalId(product.id);
+    let found: Awaited<ReturnType<MedusaAdminClient["findByExternalId"]>>;
+    try {
+      found = await this.medusa.findByExternalId(product.id);
+    } catch (error) {
+      return {
+        action: "stopped",
+        reason: "medusa-read-failed",
+        details:
+          `${product.id}: a külső azonosítós keresés elhasalt ` +
+          `(${describeMedusaFailure(error)}). Nem írtunk semmit, és nem is ` +
+          `hoztunk létre terméket: egy sikertelen keresésből NEM következik, ` +
+          `hogy a termék nincs odaát.`,
+      };
+    }
 
     /**
      * Csonkolt válaszon NEM döntünk. A lista nem rendez, tehát egy kimerített
@@ -356,29 +410,43 @@ export class MedusaProductProjectionService {
           `ember döntése, hogy a törölt sor sorsa mi legyen.`,
       };
 
-    const created = await this.medusa.create({
-      title: product.name,
-      description: product.description,
-      external_id: product.id,
-      status: publication.status,
-      sales_channels: salesChannels,
-      options: [
-        { title: DEFAULT_OPTION_TITLE, values: [DEFAULT_OPTION_VALUE] },
-      ],
-      variants: [
-        {
-          title: product.name,
-          sku: product.primarySku,
-          options: { [DEFAULT_OPTION_TITLE]: DEFAULT_OPTION_VALUE },
-          /**
-           * ÜRESEN, és ez állítás, nem mulasztás: nem viszünk át árat. A
-           * mező azért van itt, mert a Medusa megköveteli; a tartalma azért
-           * üres, mert az árazás nem ennek a körnek a dolga.
-           */
-          prices: [],
-        },
-      ],
-    });
+    let created: MedusaProductRow;
+    try {
+      created = await this.medusa.create({
+        title: product.name,
+        description: product.description,
+        external_id: product.id,
+        status: publication.status,
+        sales_channels: salesChannels,
+        options: [
+          { title: DEFAULT_OPTION_TITLE, values: [DEFAULT_OPTION_VALUE] },
+        ],
+        variants: [
+          {
+            title: product.name,
+            sku: product.primarySku,
+            options: { [DEFAULT_OPTION_TITLE]: DEFAULT_OPTION_VALUE },
+            /**
+             * ÜRESEN, és ez állítás, nem mulasztás: nem viszünk át árat. A
+             * mező azért van itt, mert a Medusa megköveteli; a tartalma azért
+             * üres, mert az árazás nem ennek a körnek a dolga.
+             */
+            prices: [],
+          },
+        ],
+      });
+    } catch (error) {
+      return {
+        action: "stopped",
+        reason: "medusa-write-failed",
+        details:
+          `${product.id}: a termék létrehozása elhasalt ` +
+          `(${describeMedusaFailure(error)}). A cél oldali állapot ` +
+          `BIZONYTALAN: a létrehozás elindult, tehát lehet, hogy a ` +
+          `termék megszületett. Leképezést NEM írtunk, így a ` +
+          `következő futás újra megkeresi a külső azonosítót.`,
+      };
+    }
     await this.links.link(product.id, created.id, now);
     return {
       action: "created",

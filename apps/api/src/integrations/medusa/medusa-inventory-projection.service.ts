@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 
 import {
+  describeMedusaFailure,
   STOCK_LOCATION_LOOKUP_LIMIT,
   type MedusaAdminClient,
   type MedusaInventoryLevelRow,
@@ -110,6 +111,14 @@ export type InventoryProjectionStopReason =
   | "variant-identity-chain-broken"
   /** Több változat viseli ugyanazt a cikkszámot ugyanazon a terméken. */
   | "ambiguous-variant"
+  /**
+   * EGY OLVASÓ Medusa-hívás elhasalt.
+   *
+   * Ugyanaz a név, mint a termék-vetítésben, és ugyanazért: egy olvasás
+   * bukásánál BIZTOSAN nem változott semmi odaát. Az írás bukásának külön
+   * neve van (`medusa-write-failed`), mert ott ezt NEM tudjuk.
+   */
+  | "medusa-read-failed"
   /** A változat nem készletkezelt, tehát nincs mit vetíteni rá. */
   | "inventory-not-managed"
   /**
@@ -226,7 +235,31 @@ export class MedusaInventoryProjectionService {
           `készlet-vetítés terméket nem hoz létre: az külön felelősség.`,
       };
 
-    const location = await this.resolveLocation();
+    let location: { id: string; name: string } | { error: string };
+    try {
+      location = await this.resolveLocation();
+    } catch (error) {
+      /**
+       * A HIBÁT ITT KAPJUK EL, NEM A `resolveLocation` BELSEJÉBEN, és ez a
+       * különbség a futás egészét érinti.
+       *
+       * A `resolveLocation` a válaszát MEGJEGYZI a folyamat élettartamára,
+       * mert több termék ugyanazt a helyet használja. Ha a HTTP-hibából odabent
+       * `{ error }` verdikt lenne, azt is megjegyeznénk - és egy pillanatnyi
+       * hálózati hiba az EGÉSZ futást megmérgezné: minden további termék
+       * ugyanazt a megállást kapná, holott a második hívás már sikerülne.
+       *
+       * Kívülről elkapva a gyorsítótár érintetlen marad, tehát a következő
+       * termék újra megkérdezi.
+       */
+      return {
+        action: "stopped",
+        reason: "medusa-read-failed",
+        details:
+          `${stock.osProductId}: a készlethely lekérdezése elhasalt ` +
+          `(${describeMedusaFailure(error)}). Nem írtunk semmit.`,
+      };
+    }
     if ("error" in location)
       return {
         action: "stopped",
@@ -234,7 +267,20 @@ export class MedusaInventoryProjectionService {
         details: `${stock.osProductId}: ${location.error}`,
       };
 
-    const found = await this.medusa.listProductVariants(link.medusaProductId);
+    let found: Awaited<ReturnType<MedusaAdminClient["listProductVariants"]>>;
+    try {
+      found = await this.medusa.listProductVariants(link.medusaProductId);
+    } catch (error) {
+      return {
+        action: "stopped",
+        reason: "medusa-read-failed",
+        details:
+          `${stock.osProductId}: a változat-keresés elhasalt a ` +
+          `${link.medusaProductId} terméken (${describeMedusaFailure(error)}). ` +
+          `Nem írtunk semmit, és nem is döntöttünk: egy sikertelen keresésből ` +
+          `NEM következik, hogy a cikkszám nincs odaát.`,
+      };
+    }
 
     if (found.truncated)
       return {
@@ -507,9 +553,16 @@ function describeSkus(variants: MedusaVariantRow[]): string {
     .join(", ")}.`;
 }
 
-function describeError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
+/**
+ * A megállás-szöveg hibaleírása. EGY helyre mutat, szándékosan.
+ *
+ * Eddig az `error.message` ment ki, ami HTTP-hibánál a Medusa válaszának első
+ * 500 karakterét is viszi. Ez a jelentésbe és a parancssori kimenetre kerül,
+ * és onnantól nem tudjuk, ki olvassa - a brief pedig kimondja, hogy a titok
+ * plaintext értéke hibakimenetben sem jelenhet meg. Mostantól a STÁTUSZ megy
+ * ki, a törzs nem.
+ */
+const describeError = describeMedusaFailure;
 
 /** Csak a teszteknek, hogy a szint alakja egy helyen legyen leírva. */
 export type { MedusaInventoryLevelRow };
