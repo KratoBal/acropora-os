@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 
 import { maskCommentsAndStrings } from "../testing/source-mask.js";
@@ -233,7 +233,7 @@ function splitArguments(raw: string): string[] {
 function constantsOf(source: string): Map<string, string> {
   const constants = new Map<string, string>();
   for (const match of source.matchAll(
-    /^const\s+([A-Za-z_$][\w$]*)\s*=\s*(["'])((?:\\.|(?!\2)[^\\])*)\2\s*;/gm,
+    /^(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*=\s*(["'])((?:\\.|(?!\2)[^\\])*)\2\s*;/gm,
   ))
     constants.set(match[1]!, match[3]!);
   return constants;
@@ -270,9 +270,14 @@ export function callsInSource(
   source: string,
   where: string,
   apiPrefix = "",
+  imported: ReadonlyMap<string, string> = new Map(),
 ): ClientCall[] {
   const calls: ClientCall[] = [];
-  const constants = constantsOf(source);
+  // A MÁSIK FÁJLBÓL HOZOTT konstansok ADATKÉNT érkeznek, nem fájlként. Ez a
+  // függvény szándékosan nem nyúl a lemezhez: csak így mérhető a saját
+  // bemenetén. Az import feloldása a hívó dolga, ahol a fájl útja amúgy is
+  // megvan.
+  const constants = new Map([...imported, ...constantsOf(source)]);
   const helpers = helpersOf(source);
   // A KERESÉS a maszkon fut, a KIOLVASÁS az eredetin, azonos pozíción.
   const masked = maskCommentsAndStrings(source);
@@ -321,6 +326,26 @@ export function callsInSource(
         /\$\{([A-Za-z_$][\w$]*)\}/g,
         (whole, name: string) => constants.get(name) ?? whole,
       );
+      /**
+       * A VEZETŐ BEHELYETTESÍTÉS FELOLDATLANSÁGA KÜLÖN HIBA, és nem az, hogy a
+       * cím nem létezik.
+       *
+       * MÉRVE 2026-08-28: amikor a webes hívások `/api` literálja konstansra
+       * cserélődött, a nyers alak `${API_PREFIX}/auth/me` lett. A behelyettesítés
+       * feloldatlanul maradt, a `toPattern` `:param` alakúvá tette, és hat
+       * LÉTEZŐ útvonal jött vissza „a szerveren nem létezik" üzenettel. A jelzés
+       * nem hamis volt, hanem ROSSZ IRÁNYBA mutatott: aki látta, útvonalat
+       * keresett volna, nem konfigurációt.
+       *
+       * A megkülönböztető jel a POZÍCIÓ: minden valódi útvonal `/` jellel
+       * kezdődik, tehát ami az elejéről marad feloldatlanul, az előtag, nem
+       * paraméter. A `${encodeURIComponent(id)}` alak a szegmens BELSEJÉBEN áll,
+       * és érintetlen marad.
+       */
+      assert.ok(
+        resolved.startsWith("/"),
+        `${where}: egy hívás vezető konstansa nem oldható fel (${raw}). Ez NEM azt jelenti, hogy a cím nem létezik: az őrző nem tudta kiolvasni az előtagot. Ha másik fájlból importált konstansról van szó, a hívó adja át a feloldásához.`,
+      );
       // A kliens saját előtagja NEM a szerver útvonalának része.
       if (apiPrefix && resolved.startsWith(apiPrefix))
         resolved = resolved.slice(apiPrefix.length);
@@ -359,13 +384,59 @@ function sourceFiles(set: ClientSet): string[] {
   return files;
 }
 
+/**
+ * A fájl SAJÁT importjaiból hozott string-konstansok.
+ *
+ * MIÉRT KELL: a `/api` előtag 2026-08-28 óta egy megosztott konstansban áll a
+ * webes kliensben, tehát a hívások `${API_PREFIX}/auth/me` alakban írják. A
+ * fájlon belüli feloldás ezt nem éri el, és a feloldatlan előtagból `:param`
+ * lenne -- vagyis LÉTEZŐ útvonalak jönnének vissza nem létezőként.
+ *
+ * SZÁNDÉKOSAN SZŰK: csak a fájl saját, RELATÍV importjait követi, egy szintet,
+ * és csak string értékű `const`-okat vesz át. Egy nem létező vagy nem
+ * olvasható modul nem hiba itt -- ha a konstans tényleg kell, a hívás helyén
+ * fog hangosan elbukni, ott, ahol az üzenet is értelmes.
+ */
+function importedConstants(set: ClientSet, file: string): Map<string, string> {
+  const source = readFileSync(join(set.root, file), "utf8");
+  const directory = dirname(file);
+  const constants = new Map<string, string>();
+  for (const match of source.matchAll(
+    /^import\s*\{([^}]*)\}\s*from\s*"(\.[^"]*)"/gm,
+  )) {
+    const names = match[1]!
+      .split(",")
+      .map((name) => name.replace(/^\s*type\s+/, "").trim())
+      .filter(Boolean);
+    if (names.length === 0) continue;
+    const target = join(set.root, directory, `${match[2]!}.ts`);
+    let moduleSource: string;
+    try {
+      moduleSource = readFileSync(target, "utf8");
+    } catch {
+      continue;
+    }
+    const exported = constantsOf(moduleSource);
+    for (const name of names) {
+      const value = exported.get(name);
+      if (value !== undefined) constants.set(name, value);
+    }
+  }
+  return constants;
+}
+
 function clientCalls(set: ClientSet): ClientCall[] {
   const calls: ClientCall[] = [];
   for (const file of sourceFiles(set)) {
     const source = readFileSync(join(set.root, file), "utf8");
     if (!source.includes("apiRequest") && !source.includes("fetch")) continue;
     calls.push(
-      ...callsInSource(source, `${set.label}/${file}`, set.apiPrefix ?? ""),
+      ...callsInSource(
+        source,
+        `${set.label}/${file}`,
+        set.apiPrefix ?? "",
+        importedConstants(set, file),
+      ),
     );
   }
   return calls;
@@ -717,5 +788,57 @@ describe("a nem létező útvonalra mutató hívás pirosít", () => {
       patterns,
     );
     assert.deepEqual(missing, []);
+  });
+});
+
+/**
+ * A MÁSIK FÁJLBÓL HOZOTT ELŐTAG.
+ *
+ * MÉRVE 2026-08-28, két ág egyesítésén: a webes kliens `/api` literálja
+ * megosztott konstansba került, és a két változás KÜLÖN FÁJLOKBAN állt -- nulla
+ * közös fájl, mégis két bukó teszt. Ez az a fajta kölcsönhatás, amit a szokásos
+ * ellenőrzés (van-e közös fájl) zöldnek mutat.
+ */
+describe("az importált előtag-konstans", () => {
+  const source = [
+    'import { API_PREFIX } from "./api-prefix";',
+    "",
+    "export const me = () => fetch(`${API_PREFIX}/auth/me`);",
+  ].join("\n");
+
+  it("feloldva a szerver útvonalára vezet", () => {
+    // PIROSÍT: ha a hívó nem adná át a másik fájl konstansait. Akkor az előtag
+    // feloldatlan marad, és a hívás úgy jönne vissza, mintha nem létezne.
+    const calls = callsInSource(
+      source,
+      "web/lib/auth/x.ts",
+      "/api",
+      new Map([["API_PREFIX", "/api"]]),
+    );
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]!.pattern, "auth/me");
+  });
+
+  it("feloldatlanul HANGOSAN bukik, és NEM hiányzó útvonalat állít", () => {
+    // EZ A LÉNYEG. Feloldás nélkül a `toPattern` `:param` alakot csinálna
+    // belőle, és a lefedettségi állítás azt mondaná, hogy a cím nem létezik --
+    // LÉTEZŐ útvonalra. A jelzés nem hamis lenne, hanem ROSSZ IRÁNYBA mutatna:
+    // aki látja, útvonalat keresne, nem konfigurációt.
+    assert.throws(
+      () => callsInSource(source, "web/lib/auth/x.ts", "/api"),
+      /vezető konstansa nem oldható fel/,
+    );
+  });
+
+  it("a szegmensen BELÜLI behelyettesítés továbbra is paraméter", () => {
+    // PIROSÍT: ha a szabály minden feloldatlan behelyettesítésre bukna. A
+    // `${encodeURIComponent(id)}` alak valódi paraméter, és a megkülönböztető
+    // jel a POZÍCIÓ: az útvonal `/` jellel kezdődik, tehát az eleje nem hiányzik.
+    const calls = callsInSource(
+      "export const one = () => fetch(`/service/assets/${encodeURIComponent(id)}`);",
+      "web/x.ts",
+      "",
+    );
+    assert.equal(calls[0]!.pattern, "service/assets/:param");
   });
 });
