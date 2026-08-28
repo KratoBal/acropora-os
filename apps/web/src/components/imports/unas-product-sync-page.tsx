@@ -240,6 +240,9 @@ export function UnasProductSyncPage() {
                     <th>Új</th>
                     <th>Frissített</th>
                     <th>Hiányzó</th>
+                    <th title="A kihagyottak közül ahánynál a boltban is változott a termék, tehát a változás nem jött át. A legtöbb futáson nulla.">
+                      Elavult
+                    </th>
                     <th>Hiba</th>
                   </tr>
                 </thead>
@@ -263,6 +266,20 @@ export function UnasProductSyncPage() {
                       <td>{run.createdCount}</td>
                       <td>{run.updatedCount}</td>
                       <td>{run.missingCount}</td>
+                      {/*
+                        A nulla halvany, a nem-nulla kiemelt. Ez a szam a legtobb
+                        futason nulla, es epp attol jelzes, hogy amikor nem az,
+                        az egy sorbol kiugrik.
+                      */}
+                      <td
+                        className={
+                          run.skippedSourceChangedCount > 0
+                            ? "font-semibold text-amber-700"
+                            : "text-slate-400"
+                        }
+                      >
+                        {run.skippedSourceChangedCount}
+                      </td>
                       <td className="max-w-64 font-mono text-xs text-rose-700">
                         {run.errorCode ?? "—"}
                       </td>

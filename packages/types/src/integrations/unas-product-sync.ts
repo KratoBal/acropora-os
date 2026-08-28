@@ -13,6 +13,13 @@ export interface UnasProductSyncSummary {
    * lát, pontosan úgy néz ki, mintha a termék nem is lett volna a listában.
    */
   skippedCount: number;
+  /**
+   * A kihagyottak közül ahánynál a forrás is változott ugyanabban a futásban.
+   *
+   * A `skippedCount` állandó: ugyanazokat a termékeket számolja minden futásnál.
+   * Ez viszont esemény, és a legtöbb futáson nulla.
+   */
+  skippedSourceChangedCount: number;
   windowStart: string | null;
   windowEnd: string;
 }
@@ -35,5 +42,16 @@ export interface UnasProductSyncRun {
   unchangedCount: number;
   conflictCount: number;
   missingCount: number;
+  /** Ahány terméket a futás kihagyott, mert a törzsadatát nem a UNAS gondozza. */
+  skippedCount: number;
+  /**
+   * A kihagyottak közül ahánynál a FORRÁS IS VÁLTOZOTT ugyanabban a futásban.
+   *
+   * Ez a szám a jelzés, nem a `skippedCount`. A kihagyás maga állandó: minden
+   * futás ugyanazokat a termékeket hagyja ki, tehát a számuk nem mozdul, és egy
+   * szám, ami sosem változik, nem jelzés, hanem alapzaj. Ez viszont esemény: egy
+   * átvett termék szövege megváltozott a boltban, és nem jött át.
+   */
+  skippedSourceChangedCount: number;
   errorCode: string | null;
 }
