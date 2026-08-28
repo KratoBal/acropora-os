@@ -6,7 +6,11 @@ import {
   AI_CHAT_TOKEN_ENV,
   aiChatConfig,
 } from "./ai-chat.config.js";
-import { AiChatService, PRODUCT_CONTEXT_NOTE } from "./ai-chat.service.js";
+import {
+  AiChatService,
+  PRODUCT_CONTEXT_NOTE,
+  productContextSentence,
+} from "./ai-chat.service.js";
 
 const TOKEN = "ai-access-token-that-must-never-leak";
 
@@ -155,5 +159,61 @@ describe("AiChatService", () => {
 
     assert.equal(reply.errorCode, "ai_bad_response");
     assert.equal(reply.answer, null);
+  });
+});
+
+/**
+ * A judgement about an answer is only interpretable if the judge can see what
+ * the answer was built from. Until the catalogue was wired in, that was one
+ * sentence and it was always true. Now it depends, and the field has to depend
+ * with it.
+ */
+describe("a termékkontextus mondata", () => {
+  it("a régi mondatot BETŰRE megtartja arra az állapotra, amire igaz", () => {
+    /**
+     * Ez a teszt nem a szöveget védi, hanem a döntést: nem lecseréltük Balázs
+     * mondatát, hanem feltételt tettünk elé. Ha valaha átfogalmazódik, azt
+     * döntésként kell meghozni, nem egy ág mellékhatásaként.
+     */
+    assert.equal(
+      productContextSentence({ state: "not_configured" }),
+      PRODUCT_CONTEXT_NOTE,
+    );
+    assert.equal(productContextSentence(undefined), PRODUCT_CONTEXT_NOTE);
+    assert.equal(productContextSentence("hibás alak"), PRODUCT_CONTEXT_NOTE);
+  });
+
+  it("a találatot a darabszámmal és a leírás forrásával mondja el", () => {
+    const sentence = productContextSentence({
+      state: "hits",
+      hitCount: 3,
+      descriptionSources: ["acropora", "unas"],
+    });
+
+    assert.match(sentence, /3 termék adata/);
+    assert.match(sentence, /katalógusunkból/);
+    assert.match(sentence, /acropora, unas/);
+  });
+
+  it("az üres találatot és a kimaradást KÜLÖN mondja, mert két különböző állítás", () => {
+    const empty = productContextSentence({ state: "empty" });
+    const outage = productContextSentence({ state: "unavailable" });
+
+    assert.notEqual(empty, outage);
+    assert.match(empty, /nem találtunk/i);
+    assert.match(empty, /nem üzemzavar/i);
+    assert.match(outage, /üzemzavar/i);
+    assert.equal(
+      outage.includes("nem találtunk"),
+      false,
+      "egy kimaradás nem mondhatja azt, hogy nincs ilyen termékünk",
+    );
+  });
+
+  it("hiányos jelentésnél nem talál ki számot", () => {
+    const sentence = productContextSentence({ state: "hits" });
+
+    assert.match(sentence, /termékadat alapján készült/);
+    assert.equal(/\d/.test(sentence), false);
   });
 });
