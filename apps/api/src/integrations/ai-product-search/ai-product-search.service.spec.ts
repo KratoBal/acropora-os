@@ -11,6 +11,8 @@ import { AiProductSearchService } from "./ai-product-search.service.js";
 const row = (overrides: Partial<ProductSearchRow> = {}): ProductSearchRow => ({
   id: "prod_1",
   name: "Fauna Marin Balling Light",
+  catalogAuthority: "UNAS",
+  description: null,
   mirrorState: "ACTIVE",
   missingSince: null,
   lastSyncedAt: new Date("2026-08-27T06:00:00.000Z"),
@@ -167,6 +169,7 @@ describe("AiProductSearchService projekció", () => {
       "categories",
       "descriptionLong",
       "descriptionShort",
+      "descriptionSource",
       "lastSyncedAt",
       "mirrorState",
       "missingSince",

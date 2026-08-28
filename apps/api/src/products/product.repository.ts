@@ -8,6 +8,7 @@ import type {
   ProductListResponse,
 } from "@acropora/types";
 
+import { writeSearchDocument } from "../integrations/ai-product-search/ai-product-search.writer.js";
 import type { CreateProductDto } from "./dto/create-product.dto.js";
 import type { ProductListQueryDto } from "./dto/product-list-query.dto.js";
 import type { UpdateProductDto } from "./dto/update-product.dto.js";
@@ -85,6 +86,15 @@ interface ProductTransaction {
   };
   domainEvent: {
     create(args: unknown): Promise<unknown>;
+  };
+  /**
+   * A keresési dokumentum írója ezt az egy táblát használja a hívó
+   * tranzakciójából. Azért van kiírva ebben a szűk felületben is, mert a
+   * dokumentumnak ugyanabban a tranzakcióban kell készülnie, mint a
+   * terméknek - lásd `writeSearchDocument`.
+   */
+  aiProductSearchDocument: {
+    upsert(args: unknown): Promise<unknown>;
   };
 }
 
@@ -177,6 +187,8 @@ export class ProductRepository extends Repository {
             } satisfies Prisma.JsonObject,
           },
         });
+
+        await writeSearchDocument(transaction, product.id);
 
         return toProductDetail(product);
       },
@@ -299,6 +311,8 @@ export class ProductRepository extends Repository {
           }
         }
 
+        await writeSearchDocument(transaction, id);
+
         const product = await transaction.product.findUnique({
           where: { id },
           include: productInclude,
@@ -311,13 +325,26 @@ export class ProductRepository extends Repository {
     );
   }
 
+  /**
+   * A LEVÉTEL TRANZAKCIÓBAN FUT, ÉS EZ NEM ÓVATOSSÁG.
+   *
+   * Az `isActive` az egyik olyan mező, amit a keresési dokumentum
+   * `isSearchable` jelzője ÁTVESZ, és amit az egyensúly-ellenőrzés a másik
+   * oldalon számol. Ha a levétel a termékre lefutna, a dokumentumra pedig nem,
+   * a két szám minden egyes archiválás után eltérne - vagyis az az ellenőrzés,
+   * ami a néma hibát keresi, maga válna zajossá, és két hét múlva senki nem
+   * nézné meg. A két írásnak együtt kell megtörténnie vagy sehogy.
+   */
   async archive(id: string): Promise<ProductDetail> {
-    const product = await this.productDatabase.product.update({
-      where: { id },
-      data: { isActive: false, archivedAt: new Date() },
-      include: productInclude,
+    return this.productDatabase.$transaction(async (transaction) => {
+      const product = await transaction.product.update({
+        where: { id },
+        data: { isActive: false, archivedAt: new Date() },
+        include: productInclude,
+      });
+      await writeSearchDocument(transaction, id);
+      return toProductDetail(product);
     });
-    return toProductDetail(product);
   }
 
   /**
