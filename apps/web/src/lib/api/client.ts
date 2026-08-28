@@ -1,3 +1,5 @@
+import { API_PREFIX } from "./api-prefix";
+
 const CSRF_COOKIE_NAME = "acropora_csrf";
 const CSRF_HEADER_NAME = "X-CSRF-Token";
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -71,7 +73,7 @@ export async function apiRequest<T>(
   let response: Response;
   try {
     const method = (init?.method ?? "GET").toUpperCase();
-    response = await fetch(`/api${path}`, {
+    response = await fetch(`${API_PREFIX}${path}`, {
       ...init,
       headers: {
         Accept: "application/json",

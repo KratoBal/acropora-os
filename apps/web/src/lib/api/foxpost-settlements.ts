@@ -9,6 +9,7 @@ import type {
 } from "@acropora/types";
 
 import { apiAuthHeaders, ApiError, apiRequest } from "./client";
+import { API_PREFIX } from "./api-prefix";
 
 export interface FoxpostSettlementListQuery {
   page?: number;
@@ -33,7 +34,7 @@ async function downloadReport(
   report: FoxpostMonthlyReportSummary,
 ): Promise<void> {
   const response = await fetch(
-    `/api/integrations/foxpost/reports/${report.year}/${report.month}/download`,
+    `${API_PREFIX}/integrations/foxpost/reports/${report.year}/${report.month}/download`,
     { headers: apiAuthHeaders(token) },
   );
   if (!response.ok) {
