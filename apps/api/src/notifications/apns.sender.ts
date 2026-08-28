@@ -20,6 +20,22 @@ export interface ApnsSending {
   configured(): boolean;
 }
 
+/**
+ * A BEKÖTÉS AZONOSÍTÓJA, mert egy interfész futásidőben nem létezik, tehát
+ * önmagában nem lehet Nest-token.
+ *
+ * MÉRVE 2026-08-28: ez az interfész eddig meg volt fogalmazva, de a repóban
+ * összesen KÉT előfordulása volt, a deklaráció és az `implements` záradék --
+ * semmi nem függött tőle, a szolgáltatás a KONKRÉT osztályt kapta. Az
+ * absztrakció így nem tartott semmit: a küldő út választása nem is látszott
+ * döntésnek, mert nem volt hol meghozni.
+ *
+ * Ez a token nem dönt el semmit arról, hogy lesz-e valaha második küldő út.
+ * Annyit tesz, hogy ha lesz, akkor a választás EGY megnevezett helyen történik,
+ * és nem egy konstruktor-paraméter típusának csendes átírásával.
+ */
+export const APNS_SENDING = Symbol("ApnsSending");
+
 @Injectable()
 export class ApnsSender implements ApnsSending {
   private readonly logger = new Logger(ApnsSender.name);

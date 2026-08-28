@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { ApnsMessage, ApnsResult } from "./apns.client.js";
-import type { ApnsSender } from "./apns.sender.js";
+import type { ApnsSending } from "./apns.sender.js";
 import type { DeviceTokenRepository } from "./device-token.repository.js";
 import type {
   NotificationLogRepository,
@@ -21,7 +21,7 @@ function sender(
       sent.push(message);
       return answer(message);
     },
-  } as unknown as ApnsSender;
+  } as unknown as ApnsSending;
   return { sender: value, sent };
 }
 

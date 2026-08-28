@@ -1,3 +1,6 @@
+import { Platform } from "react-native";
+
+import { devicePlatform } from "../notifications/push-platform";
 import { apiRequest } from "./client";
 
 /**
@@ -25,7 +28,14 @@ export async function registerDeviceToken(
 ): Promise<void> {
   await apiRequest<{ ok: true }>(BASE, {
     method: "POST",
-    body: JSON.stringify({ ...input, platform: "IOS" }),
+    // A PLATFORM A FUTÓKÖRNYEZETBŐL, nem beégetve. A leképezés a
+    // `notifications/push-platform.ts` fájlban áll, mert ez a modul a
+    // `client.ts` fájlon át Expo futásidejű kódot húz be, tehát ide teszt nem
+    // ér el -- a döntés viszont mérhető kell legyen.
+    body: JSON.stringify({
+      ...input,
+      platform: devicePlatform(Platform.OS),
+    }),
   });
 }
 
