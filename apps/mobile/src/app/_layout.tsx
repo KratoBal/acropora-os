@@ -115,6 +115,11 @@ function RootNavigator() {
         name="assets/scan/[token]"
         options={{ title: "QR-azonosítás" }}
       />
+      <Stack.Screen name="partners/index" options={{ title: "Partnerek" }} />
+      <Stack.Screen
+        name="partners/[id]"
+        options={{ title: "Partner adatlap" }}
+      />
     </Stack>
   );
 }
