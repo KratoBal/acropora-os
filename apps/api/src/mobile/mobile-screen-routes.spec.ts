@@ -251,6 +251,21 @@ describe("a telefon képernyői a helyükön vannak", () => {
  * HA CSOPORT-MAPPA (`(tabs)`) KERÜL A FÁBA, ez az őrző kipirul, mert a csoport
  * neve nem része az útvonalnak. Az nem hamis riasztás lesz, hanem ennek a
  * specnek a dolga: ugyanabban a változásban kell átalakítani.
+ *
+ * ---
+ *
+ * ÉS A LEGFONTOSABB, AMIT EBBŐL NEM SZABAD KIOLVASNI: attól, hogy ez az állítás
+ * zöld, a mobil útvonalak NINCSENEK tipizáltan kapuzva. Ez az őrző a navigációs
+ * CÉLT méri -- azt, hogy van-e hozzá képernyő-fájl --, a PARAMÉTEREKET és a
+ * lekérdező rész alakját nem. Egy `params: { id }` helyett írt `params: { ID }`
+ * ugyanúgy átmegy rajta, mint egy hiányzó kötelező paraméter.
+ *
+ * A tipizált útvonalak (`experiments.typedRoutes`) TÖBBET tudnának, és a
+ * kapcsoló be is van kapcsolva -- de nem kapuznak, mert a generált típusok
+ * nincsenek verziókezelésben. Az `apps/mobile/app.config.js` fájlban, a
+ * kapcsoló mellett ott áll, hogy miért, és hogy melyik EGYETLEN tény nyitja fel
+ * ezt az utat. Ez a spec a szűkebb részt fedi le, ma, mérhetően; nem a
+ * tipizálás helyett áll, hanem addig is.
  */
 describe("a telefon minden navigációs célja létező útvonalra mutat", () => {
   it("nincs olyan cél, amihez ne lenne útvonal-fájl", () => {
