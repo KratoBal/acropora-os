@@ -1,6 +1,6 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 
-import { ApnsSender } from "./apns.sender.js";
+import { APNS_SENDING, type ApnsSending } from "./apns.sender.js";
 import { DeviceTokenRepository } from "./device-token.repository.js";
 import { NotificationLogRepository } from "./notification-log.repository.js";
 
@@ -33,7 +33,7 @@ export class NotificationsService {
 
   constructor(
     private readonly deviceTokens: DeviceTokenRepository,
-    private readonly sender: ApnsSender,
+    @Inject(APNS_SENDING) private readonly sender: ApnsSending,
     private readonly log: NotificationLogRepository,
   ) {}
 
