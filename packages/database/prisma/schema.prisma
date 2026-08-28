@@ -1094,7 +1094,15 @@ model UnasProductSnapshot {
   priceDisplay                   String?
   descriptionShort               String?
   descriptionLong                String?
+  /// The claim UNAS makes about its own content, NOT our measurement of it.
+  /// Do not branch on it: measured 2026-08-28 over 1893 products, the TRUE
+  /// value is reliable (zero false positives), but of the 884 short
+  /// descriptions it calls plain text, 774 do hold tags. NULL means the
+  /// response carried no description block. Read the text instead:
+  /// `plainText` in ai-product-search.text.ts.
   descriptionShortIsHtml         Boolean?
+  /// Same claim, same caveat, milder numbers: 47 of the 106 long descriptions
+  /// it calls plain text do hold tags. The TRUE value is reliable here too.
   descriptionLongIsHtml          Boolean?
   productUrl                     String?
   sefUrl                         String?

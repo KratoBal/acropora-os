@@ -8,6 +8,36 @@ export interface UnasApiProduct {
   sourceUpdatedAt: string | null;
   descriptionShort: string | null;
   descriptionLong: string | null;
+  /**
+   * WHAT UNAS CLAIMS ABOUT ITS OWN TEXT, AND WHY THAT IS NOT THE TEST.
+   *
+   * These two are copied from `Description.ShortIsHtml` / `LongIsHtml` exactly
+   * as the source sends them. They are not a measurement of the content, and a
+   * cleaner that trusts them is wrong in one direction, silently.
+   *
+   * Measured 2026-08-28 over the 1893 product export:
+   *
+   * | field | flag says HTML | flag says plain, text holds tags |
+   * |-------|----------------|----------------------------------|
+   * | short | 505, all true  | 774 of 884 (87.6%)               |
+   * | long  | 242, all true  | 47 of 106 (44.3%)                |
+   *
+   * The error is ONE-DIRECTIONAL: there is not a single case, on either field,
+   * where the flag claims HTML over text that holds no tags. So a TRUE value
+   * can be trusted; a FALSE value on the short description carries almost no
+   * information.
+   *
+   * `null` means the response carried no description block at all - never that
+   * the source was undecided.
+   *
+   * The date is part of the claim: these are counts over one export, not a
+   * property of the source. If somebody measures again and gets something else,
+   * the catalogue changed - re-measure, and move the date with the numbers.
+   *
+   * To find out whether a text holds markup, look at the text: `plainText` in
+   * `ai-product-search.text.ts` does exactly that, and its own header records
+   * why.
+   */
   descriptionShortIsHtml: boolean | null;
   descriptionLongIsHtml: boolean | null;
   unit: string | null;
