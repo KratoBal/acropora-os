@@ -23,8 +23,12 @@
  * A TÍPUSOK ITT SAJÁT, SZERKEZETI MÁSOLATOK, nem a `lib/api/worksheets`
  * modulból jönnek, és ez nem hanyagság.
  *
- * A teszt-fordítás (`tsconfig.test.json`) egy kézzel karbantartott listán megy,
- * és NEM ismeri az `@/` útvonal-rövidítést. Ha ez a fájl az API-modul típusait
+ * A teszt-fordítás (`tsconfig.test.json`) NEM ismeri az `@/` útvonal-rövidítést,
+ * és a fájl maga megmondja, miért nem érdemes egy `paths` sorral "megjavítani".
+ * (Itt korábban az is állt, hogy a fordítás kézzel karbantartott listán megy: az
+ * a #207 óta NEM igaz, a lista helyén minta áll. A rövidítés hiánya viszont
+ * változatlanul áll, és az alábbi következmény ezen múlik, nem a listán.)
+ * Ha ez a fájl az API-modul típusait
  * importálná, a fordítás behúzná a `client.ts` fájlt is, azon keresztül az Expo
  * futásidejű modulokat -- és ez a spec nem fordulna le. A `partner-presentation.ts`
  * ugyanezért tart saját `PartnerLike` alakot.

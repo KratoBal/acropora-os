@@ -1,5 +1,18 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
+  // NE VEGYÉL FEL IDE `baseUrl` + `paths` BEJEGYZÉST az `@/` alias miatt.
+  // MÉRVE 2026-08-28, mindhárom lépés: a `paths` a fordítást megjavítja, de a
+  // `tsc` a KIBOCSÁTOTT specifikátort NEM írja át, tehát a lefordított kódban
+  // `require("@/lib/app-version")` marad, és a futás hasal el rajta. Ma ez azért
+  // nem látszik, mert egy spec sem használ `@/` alakot: a bejegyzés hozzáadása
+  // után a készlet 296/296 ZÖLD MARAD. Vagyis a kapu nem szól, a PR beolvad, és
+  // a csapda az első aliast használó embernél sül el -- akkor sem konfigurációs
+  // hibaként, hanem futásidejű `Cannot find module` sorként, ami hiányzó
+  // csomagnak látszik. A mai, fordításidejű `TS2307` ehhez képest JOBB.
+  // A specek relatív testvér-utat használnak (`./app-version`), tehát ma nincs
+  // mit feloldani. Ha egyszer tényleg kell az alias, az futásidejű feloldást
+  // kíván (Node `imports` mező, loader, vagy kibocsátás-átíró lépés), nem ezt a
+  // két sort.
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022"],
