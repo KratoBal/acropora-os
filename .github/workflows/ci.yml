@@ -85,6 +85,33 @@ jobs:
           pnpm mobile:lint
           pnpm mobile:typecheck
           pnpm mobile:test
+          # The web export is the one mobile gate that reads the bundler's own
+          # resolution: #254 fixed a build that failed on `.wasm` while every
+          # check stayed green, because nothing here ever ran an export. It can
+          # fail - measured on b4229a5: with `apps/mobile/metro.config.js` in
+          # place `expo export --platform web` exits 0, and with that file set
+          # aside the same command on the same head exits 1 with
+          # "Unable to resolve module ./wa-sqlite/wa-sqlite.wasm".
+          #
+          # WHAT IT DOES NOT PROVE: that the web app WORKS. This only proves the
+          # bundle is produced and the asset is emitted. Whether SQLite actually
+          # starts in a browser from the exported file is a different measurement
+          # and is not guarded here.
+          #
+          # Cost, measured on the runner over four runs of this branch: the
+          # whole step took 67s, 79s, 81s and 84s, against a 30-33s baseline
+          # over the last ten main runs. So this line costs roughly 35-55s,
+          # typically nearer the top of that range. Two earlier estimates were
+          # both too low - ~32s from a developer machine, then ~35-45s from the
+          # first two runs - so treat 55s as the working figure, not 35s.
+          # (Metro also caches in the system temp dir, so a "cold" run that only
+          # clears node_modules/.cache reports ~4s; that is never the CI number.
+          # Runners are always cold.)
+          #
+          # Do NOT read this off the job total: on the run above the job came out
+          # at 247s against a 248s baseline, because four unrelated steps happened
+          # to be 27s faster. The step-level number is the honest one.
+          pnpm mobile:export:web
 
       # CONTRIBUTING.md calls `pnpm format:check` the authoritative formatting
       # check, and until now nothing ran it: the pre-commit hook is a local
