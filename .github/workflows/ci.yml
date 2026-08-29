@@ -85,6 +85,23 @@ jobs:
           pnpm mobile:lint
           pnpm mobile:typecheck
           pnpm mobile:test
+          # The web export is the one mobile gate that reads the bundler's own
+          # resolution: #254 fixed a build that failed on `.wasm` while every
+          # check stayed green, because nothing here ever ran an export. It can
+          # fail - measured on b4229a5: with `apps/mobile/metro.config.js` in
+          # place `expo export --platform web` exits 0, and with that file set
+          # aside the same command on the same head exits 1 with
+          # "Unable to resolve module ./wa-sqlite/wa-sqlite.wasm".
+          #
+          # WHAT IT DOES NOT PROVE: that the web app WORKS. This only proves the
+          # bundle is produced and the asset is emitted. Whether SQLite actually
+          # starts in a browser from the exported file is a different measurement
+          # and is not guarded here.
+          #
+          # Cost: ~32s cold on a developer machine (Metro also caches in the
+          # system temp dir, so a "cold" run that leaves /tmp/metro-cache alone
+          # reports ~4s and is not the CI number). CI runners are always cold.
+          pnpm mobile:export:web
 
       # CONTRIBUTING.md calls `pnpm format:check` the authoritative formatting
       # check, and until now nothing ran it: the pre-commit hook is a local
