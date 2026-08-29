@@ -41,3 +41,44 @@ describe("order formatting", () => {
     assert.equal(formatDateTime("not-a-date"), "—");
   });
 });
+
+/**
+ * A címketábla két védelme, és hogy MIÉRT KETTŐ.
+ *
+ * A típus fordítási időben véd: a `CANCELLED` és a `COMPLETED` ág tartalék nélkül
+ * olvas ki egy kulcsot, és a `Record<string, string>` alatt ez csendben
+ * `undefined`-ot adhatott volna. A `labelFor`-ág futásidőben véd: a státusz a
+ * szerver adata, tehát megjelenhet olyan kód, amit ez a tábla nem ismer.
+ *
+ * A második teszt azért van itt, mert a típusjavítás után a `?? order.status`
+ * feleslegesnek LÁTSZIK. Nem az -- és aki kiveszi, ezen a teszten fog elhasalni.
+ */
+describe("a státuszcímke két védelme", () => {
+  it("ismert státuszra a magyar címkét adja, tartalék nélkül is", () => {
+    const cancelled = orderStatusPresentation({
+      status: "CANCELLED",
+      unasStatusLabel: null,
+      unasDeletedAt: null,
+    });
+    const completed = orderStatusPresentation({
+      status: "COMPLETED",
+      unasStatusLabel: null,
+      unasDeletedAt: null,
+    });
+
+    assert.equal(cancelled.label, "Törölve");
+    assert.equal(completed.label, "Lezárva");
+  });
+
+  it("ISMERETLEN státuszra a nyers kódot mutatja, nem üres mezőt", () => {
+    const presentation = orderStatusPresentation({
+      status: "AWAITING_PAYMENT",
+      unasStatusLabel: null,
+      unasDeletedAt: null,
+    });
+
+    assert.equal(presentation.label, "AWAITING_PAYMENT");
+    assert.notEqual(presentation.label, "");
+    assert.equal(presentation.tone, "neutral");
+  });
+});
