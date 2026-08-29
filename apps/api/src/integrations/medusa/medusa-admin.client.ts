@@ -127,6 +127,16 @@ export const STOCK_LOCATION_LOOKUP_LIMIT = 50;
 export const VARIANT_LOOKUP_LIMIT = 50;
 
 /**
+ * Az ár-beállítási szabályok felső határa.
+ *
+ * A tábla természeténél fogva kicsi: pénznemenként és régiónként egy sor. A
+ * limit mégis ki van írva, mert a hívó a HUF sort KERESI benne, és egy néma
+ * csonkolás azt adná vissza, hogy nincs ilyen - vagyis megállást okozna ott,
+ * ahol minden rendben van.
+ */
+export const PRICE_PREFERENCE_LOOKUP_LIMIT = 100;
+
+/**
  * A változat mezői, a készlet-lánccal EGYÜTT.
  *
  * A `inventory_items.inventory.location_levels` út a telepített 2.19.0
@@ -137,6 +147,17 @@ export const VARIANT_LOOKUP_LIMIT = 50;
  * az üres lista azt állítaná, hogy nincs kapcsolat, holott csak nem kérdeztünk
  * jól.
  */
+/**
+ * Amit az ár-lekérdezés kér, és semmi többet.
+ *
+ * A `*prices` alak a reláció összes skalár mezőjét hozza (`id`,
+ * `currency_code`, `amount`) - mérve a telepített 2.19.0 admin
+ * `query-config.js` alapértelmezéseiből, ahol ugyanez az alak szerepel.
+ */
+export const VARIANT_PRICE_FIELDS = ["id", "sku", "deleted_at", "*prices"].join(
+  ",",
+);
+
 export const VARIANT_INVENTORY_FIELDS = [
   "id",
   "sku",
@@ -244,6 +265,90 @@ export interface MedusaAdminClient {
     variantId: string,
     allowBackorder: boolean,
   ): Promise<void>;
+  /**
+   * Egy termék változatai az ÁRAIKKAL, az ár AZONOSÍTÓJÁVAL együtt.
+   *
+   * KÜLÖN HÍVÁS a `listProductVariants` mellett, és nem annak bővítése. A
+   * készlet-lekérdezés `fields` listája mérve ki van írva, és a két kör MÁS
+   * mezőket kér: egy közös, tágabb lista mindkét hívást megdrágítaná, és
+   * elmosná, melyik kör mire támaszkodik.
+   *
+   * AZ `id` MEZŐ A LÉNYEG, nem az összeg. A Medusa ár-frissítése TELJES CSERE:
+   * az `id` nélkül küldött sor minden futáson TÖRÖL egy régit és LÉTREHOZ egy
+   * újat, miközben a darabszám változatlan marad. Az azonosság tehát csak úgy
+   * tartható, ha visszaolvassuk a meglévő sor azonosítóját.
+   */
+  listVariantPrices(productId: string): Promise<MedusaVariantPriceLookupResult>;
+  /**
+   * A bolt ár-értelmezési beállításai.
+   *
+   * AZÉRT OLVASSUK, MERT A HELYESSÉGÜNK EZEN ÁLL. Az Acropora OS BRUTTÓ árat
+   * tárol, és az összeget változatlanul küldjük. Ez akkor és csak akkor
+   * helyes, ha a bolt a forint árat adóval növeltnek veszi. Ez nem a mi
+   * kódunkban lakik, tehát nem is feltételezhetjük: egy átállított
+   * `is_tax_inclusive` a mi árunkat NÉMÁN nettóvá minősítené, és a vevő
+   * többet fizetne.
+   */
+  listPricePreferences(): Promise<MedusaPricePreferenceRow[]>;
+  /**
+   * A változat árainak beállítása, ABSZOLÚT alakban.
+   *
+   * A lista a price set TELJES kívánt tartalma, nem hozzáfűzés: amit nem
+   * küldünk, azt a Medusa TÖRLI (`updatePriceSets_`, `pricesToDelete`). Ezért
+   * a hívónak minden megtartandó sort bele kell tennie, a saját `id`
+   * értékével.
+   */
+  setVariantPrices(
+    productId: string,
+    variantId: string,
+    prices: MedusaPriceInput[],
+  ): Promise<void>;
+}
+
+/** Egy ár-sor, ahogy az admin válasz hozza. */
+export interface MedusaPriceRow {
+  id: string;
+  currency_code: string;
+  amount: number;
+}
+
+/** Egy változat az áraival. */
+export interface MedusaVariantPriceRow {
+  id: string;
+  sku: string | null;
+  deleted_at: string | null;
+  /**
+   * A `?` szándékos, ugyanazzal az indokkal, mint a készlet-láncnál: a
+   * HIÁNYZÓ mező nem ugyanaz, mint az üres lista. Az üres lista azt állítaná,
+   * hogy nincs ára, a hiány viszont azt jelentené, hogy nem kérdeztünk jól.
+   */
+  prices?: MedusaPriceRow[];
+}
+
+export interface MedusaVariantPriceLookupResult {
+  rows: MedusaVariantPriceRow[];
+  truncated: boolean;
+}
+
+/** Egy ár-beállítási szabály, pénznemre vagy régióra. */
+export interface MedusaPricePreferenceRow {
+  id: string;
+  attribute: string;
+  value: string | null;
+  is_tax_inclusive: boolean;
+}
+
+/**
+ * Amit egy ár-sorból küldünk.
+ *
+ * Az `id` OPCIONÁLIS, és a hiánya JELENTÉSSEL BÍR: azt kéri, hogy a Medusa
+ * hozzon létre új sort. Meglévő sornál KÖTELEZŐ kitölteni, különben a régi
+ * törlődik és új születik a helyére.
+ */
+export interface MedusaPriceInput {
+  id?: string;
+  currency_code: string;
+  amount: number;
 }
 
 /**
@@ -573,6 +678,49 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
         method: "POST",
         body: JSON.stringify({ allow_backorder: allowBackorder }),
       },
+    );
+  }
+
+  async listVariantPrices(
+    productId: string,
+  ): Promise<MedusaVariantPriceLookupResult> {
+    /**
+     * A `with_deleted` itt is bent van, ugyanazzal az indokkal, mint a
+     * készlet-lekérdezésnél: a cikkszám-index RÉSZLEGES, tehát ugyanaz a
+     * cikkszám ülhet egy élő és egy eltemetett változaton is, és a hívónak
+     * szét kell tudnia választani a kettőt.
+     */
+    const params = new URLSearchParams({
+      with_deleted: "true",
+      fields: VARIANT_PRICE_FIELDS,
+      limit: String(VARIANT_LOOKUP_LIMIT),
+    });
+    const body = await this.request<{ variants: MedusaVariantPriceRow[] }>(
+      `/admin/products/${encodeURIComponent(productId)}/variants?${params.toString()}`,
+    );
+    const rows = body.variants ?? [];
+    return { rows, truncated: rows.length >= VARIANT_LOOKUP_LIMIT };
+  }
+
+  async listPricePreferences(): Promise<MedusaPricePreferenceRow[]> {
+    const params = new URLSearchParams({
+      limit: String(PRICE_PREFERENCE_LOOKUP_LIMIT),
+    });
+    const body = await this.request<{
+      price_preferences: MedusaPricePreferenceRow[];
+    }>(`/admin/price-preferences?${params.toString()}`);
+    return body.price_preferences ?? [];
+  }
+
+  async setVariantPrices(
+    productId: string,
+    variantId: string,
+    prices: MedusaPriceInput[],
+  ): Promise<void> {
+    await this.request<unknown>(
+      `/admin/products/${encodeURIComponent(productId)}` +
+        `/variants/${encodeURIComponent(variantId)}`,
+      { method: "POST", body: JSON.stringify({ prices }) },
     );
   }
 }
