@@ -98,9 +98,17 @@ jobs:
           # starts in a browser from the exported file is a different measurement
           # and is not guarded here.
           #
-          # Cost: ~32s cold on a developer machine (Metro also caches in the
-          # system temp dir, so a "cold" run that leaves /tmp/metro-cache alone
-          # reports ~4s and is not the CI number). CI runners are always cold.
+          # Cost, measured on this runner: the whole step went from 33s to 67s
+          # on the push run and 79s on the pull_request run, against a 30-33s
+          # baseline over the last ten main runs. So this line costs ~35-45s.
+          # A developer machine reports ~32s cold, which turned out to be the
+          # optimistic end, not an upper bound. (Metro also caches in the system
+          # temp dir, so a "cold" run that only clears node_modules/.cache
+          # reports ~4s; that is never the CI number. Runners are always cold.)
+          #
+          # Do NOT read this off the job total: on the run above the job came out
+          # at 247s against a 248s baseline, because four unrelated steps happened
+          # to be 27s faster. The step-level number is the honest one.
           pnpm mobile:export:web
 
       # CONTRIBUTING.md calls `pnpm format:check` the authoritative formatting
