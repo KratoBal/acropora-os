@@ -72,6 +72,24 @@ const DATE_SEPARATORS = /[.\-/\s]+/;
  * magától átfordítaná március 2-ára, és a felhasználó egy másik dátumot kapna
  * vissza, mint amit beírt -- csendben.
  */
+/**
+ * A dátum három részből áll, és ezt a FORDÍTÓ IS LÁSSA.
+ *
+ * Egy `parts.length !== 3` vizsgálat futásidőben tökéletes, de a típusát nem
+ * szűkíti: utána a `parts[0]` a fordító szerint továbbra is lehet `undefined`,
+ * és `noUncheckedIndexedAccess` mellett minden ilyen olvasás hibát ad. Az őrző
+ * ugyanazt a feltételt mondja ki, csak a típusban is - a viselkedés betű
+ * szerint azonos.
+ *
+ * MIÉRT NEM ELNÉMÍTÁSSAL. A kapcsoló kikapcsolása a mobil spec-konfigban
+ * (kártya `090c574d`) pontosan emiatt a tizenegy találat miatt történt, és a
+ * feloldási feltétele ez a javítás volt. Egy `eslint-disable`-szerű elnémítás
+ * ugyanezt a tizenegyet elrejtette volna, és a következő, VALÓDI találatot is.
+ */
+function isThreeParts(parts: string[]): parts is [string, string, string] {
+  return parts.length === 3;
+}
+
 export function normalizeAssetDate(
   value: string,
 ): { ok: true; value: string } | { ok: false; message: string } {
@@ -79,13 +97,20 @@ export function normalizeAssetDate(
   if (!trimmed) return { ok: true, value: "" };
 
   const parts = trimmed.split(DATE_SEPARATORS).filter(Boolean);
-  if (parts.length !== 3)
+  if (!isThreeParts(parts))
     return {
       ok: false,
       message: "A dátum éééé-hh-nn alakban kell (például 2026-08-25).",
     };
 
-  const [year, month, day] = parts.map((part) => Number.parseInt(part, 10));
+  // Indexelve, nem destrukturálva: a `map` eredménye `number[]`, amiből a
+  // fordító szerint minden elem lehet `undefined` - a fenti hosszellenőrzést
+  // nem tudja levezetni. A `parts` viszont az őrző után HÁRMAS, tehát ez a
+  // három indexelés a fordító számára is biztonságos, és a viselkedés
+  // változatlan.
+  const year = Number.parseInt(parts[0], 10);
+  const month = Number.parseInt(parts[1], 10);
+  const day = Number.parseInt(parts[2], 10);
   if (
     !Number.isInteger(year) ||
     !Number.isInteger(month) ||
