@@ -8,6 +8,8 @@ const owner: AuthenticatedUser = {
   email: "owner@acropora.hu",
   displayName: "Tulajdonos",
   role: "OWNER",
+  customerId: null,
+  supplierId: null,
 };
 
 const originalFetch = globalThis.fetch;
