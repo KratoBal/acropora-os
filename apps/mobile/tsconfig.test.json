@@ -13,7 +13,34 @@
   // mit feloldani. Ha egyszer tényleg kell az alias, az futásidejű feloldást
   // kíván (Node `imports` mező, loader, vagy kibocsátás-átíró lépés), nem ezt a
   // két sort.
+  "extends": "../../packages/config/base.json",
   "compilerOptions": {
+    // KIKAPCSOLVA, ES A FELOLDASI FELTETEL NEM DATUM, HANEM EGY KARTYA.
+    //
+    // Kartya: `ee6090fe`. A dontes, ami idevezetett: `090c574d`.
+    //
+    // A kozos base bekapcsolja a `noUncheckedIndexedAccess`-t. A mobil
+    // spec-halmazan ez ma TIZENEGY talalatot ad, MIND az
+    // `src/lib/assets/asset-create.ts` fajlban, es mind ugyanaz a minta: a
+    // `parts.length !== 3` ellenorzes a destrukturalas ELOTT all, tehat
+    // futasidoben a harom elem letezik, csak a fordito nem tudja levezetni.
+    // (Masodik vedelemkent ott a `Number.isInteger`, ami `undefined`-ra
+    // `false`.) Amint az a tizenegy javitva van, EZT A SORT KI KELL VENNI.
+    //
+    // ES AMIERT EPP EZ A KAPCSOLO MENT KI A HAROM KOZUL, nem lustasagbol: egy
+    // ellenorizetlen indexeles SPEC fajlban futaskor dob, tehat a teszt PIROS
+    // lesz -- a hiba hangos. Ugyanez a hiany a termeleskodban CSENDES, es ott
+    // lett belole ures cimke a rendeleslistan (`presentation.ts`, #251). Ket
+    // helyen ugyanaz a kapcsolo, ket teljesen kulonbozo kockazat.
+    //
+    // A masik ketto, amit a base MOSTANTOL ide is behoz, viszont marad, mert
+    // azok csendes hibat fognak meg: az `isolatedModules` (egy rossz alaku
+    // type-only import itt lefordulna, es a KIBOCSATOTT commonjs kodban
+    // maradna egy `require`, ami futaskor hasal el), es a
+    // `forceConsistentCasingInFileNames` (a Mac fajlrendszere nem
+    // kulonbozteti meg a kis- es nagybetut, tehat egy hibas import ott
+    // lefordul, es a Linuxos CI-ben bukik).
+    "noUncheckedIndexedAccess": false,
     "target": "ES2022",
     "lib": ["ES2022"],
     "module": "commonjs",
