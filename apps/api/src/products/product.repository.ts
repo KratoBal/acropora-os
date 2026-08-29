@@ -281,6 +281,7 @@ export class ProductRepository extends Repository {
             description: input.description,
             type: input.productType,
             brandId: input.brandId,
+            webshopSellable: input.webshopSellable,
             ...(primaryWasProvided ? { categoryId: primaryCategoryId } : {}),
           },
           include: productInclude,
