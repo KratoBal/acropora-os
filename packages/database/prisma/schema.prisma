@@ -646,6 +646,29 @@ model ProductVariant {
   name                      String?
   unit                      String    @default("db")
   vatRate                   Decimal?  @db.Decimal(5, 2)
+  /// Az ACROPORA-tulajdonu termek sajat, BRUTTO eladasi ara. Balazs dontese,
+  /// 2026-08-29 19:31, Discord, szo szerint: "Vegyuk fel a brutto arat."
+  ///
+  /// HAROM HASONLO NEVU MEZO VAN A SEMABAN, ES MIND MAST JELENT:
+  /// - ez a mezo: a MI arunk, brutto, eladasi;
+  /// - `UnasProductSnapshot.grossPrice` es `.saleGrossPrice`: a UNAS TUKRE,
+  ///   vagyis amit a webshop allit magarol; a `sale` elotag ott AKCIOS arat
+  ///   jelent, nem eladasit;
+  /// - `ProductExtension.lastPurchaseNetPrice`: BESZERZESI ar, netto.
+  ///
+  /// A `sellingPriceCurrency` mezovel EGYUTT ervenyes: vagy mindketto ures,
+  /// vagy egyik sem. Ezt adatbazis-szintu CHECK feltetel tartja, mert a
+  /// felallapot (osszeg penznem nelkul) nema hiba lenne: a szam onmagaban
+  /// helyesnek latszik.
+  sellingGrossPrice         Decimal?  @db.Decimal(19, 4)
+  /// Az eladasi ar penzneme, ISO 4217 harombetus kod. Ebben a korben KIZAROLAG
+  /// `HUF` megengedett, es a vetites minden mast elutasit.
+  ///
+  /// AZERT VAN KULON OSZLOP, ES NEM A MEZONEVBE SUTVE: enelkul a tarolt szam
+  /// nem mondja meg magarol, mi o, es a "rossz penznem" eset nem is lenne
+  /// merheto. A brief 12. pontja epp ezt keri falszifikaciokent, es egy olyan
+  /// teszt, ami nem tud elbukni, nem kapu.
+  sellingPriceCurrency      String?   @db.VarChar(3)
   manufacturerPartNumber    String?
   secondaryUnit             String?
   secondaryUnitFactor       Decimal?  @db.Decimal(19, 6)
