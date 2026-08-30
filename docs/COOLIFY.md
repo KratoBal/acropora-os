@@ -69,6 +69,43 @@ only covers where each group of variables goes.
   has a comment marking where that plumbing would go; none exist yet, so
   there's nothing to configure today.
 
+### `RELEASE_COMMIT_SHA` — how the running image reports its own commit
+
+`GET /health` returns a `commit` field so a deploy can be identified without
+guessing. It is empty unless this one variable is set:
+
+| Variable             | Value              | Kind                      |
+| -------------------- | ------------------ | ------------------------- |
+| `RELEASE_COMMIT_SHA` | `${SOURCE_COMMIT}` | runtime, **not** a secret |
+
+`SOURCE_COMMIT` is substituted by Coolify at deploy time with the full
+40-character commit the deploy was built from. **No Docker build argument is
+needed.** `apps/api/Dockerfile` also accepts `RELEASE_COMMIT_SHA` as a build
+arg and bakes it in as a default `ENV`, but a runtime variable overrides that,
+so the runtime route is the simpler one and the only one configured here.
+
+Measured on the staging stack on 2026-08-29, because none of this is obvious
+from the outside:
+
+- **Both `${SOURCE_COMMIT}` and `$SOURCE_COMMIT` work** — the substitution is
+  shell-shaped, not template-shaped.
+- **An unknown name resolves to EMPTY, not to the literal text.** A typo here
+  therefore leaves no visible trace in the container's environment: nothing
+  says `${SOMETHING}`, there is simply no value. Do not expect a mistake to
+  announce itself.
+- The empty case is nevertheless the **safe** direction:
+  `currentReleaseCommitSha()` treats an empty value exactly like an unset one
+  and returns `null`, so `/health` reports "not configured" rather than
+  validating a release against a wrong hash.
+
+**Never type a commit here by hand.** A stale 40-character hash is worse than
+no value at all: `null` means "cannot be verified", while a wrong hash means
+"verified" — against the wrong release. Only a value the platform substitutes
+per deploy is acceptable.
+
+**Scope:** this is configured on **staging**. Production deploys are a
+separate stack and are not covered by this section.
+
 ---
 
 ## Health checks
