@@ -289,6 +289,40 @@ describe(
       );
     });
 
+    /**
+     * ÁTFEDŐ RÉSZFÁK: az egyik azonosító részfája RÉSZE a másikénak.
+     *
+     * A várt eredmény a BŐVEBB részfa, változatlanul: a szűrő nem szűkülhet
+     * (metszetté), és a bővebb ág sorai sem eshetnek ki. A gyökér és a saját
+     * gyereke együtt megadva ugyanazt kell adja, mint a gyökér egyedül.
+     *
+     * A DUPLÁZÓDÁS EZEN A SZINTEN NEM MÉRHETŐ, és ezt ki kell mondani: az
+     * átfedő részfák ugyanazt az azonosítót kétszer is beírhatnák a szűrőbe, de
+     * egy `IN` lista ismételt eleme nem ad kétszer sort. A válasz tehát a
+     * duplázódásról semmit nem árul el -- amit ez a teszt véd, az a SZŰKÜLÉS.
+     */
+    it("keeps the wider subtree when one id is inside another", async () => {
+      const both = await repository.list(
+        query({ departmentIds: [rootId, childId] }),
+        INTERNAL,
+      );
+      const rootOnly = await repository.list(
+        query({ departmentIds: [rootId] }),
+        INTERNAL,
+      );
+
+      assert.deepEqual(both.items.map((item) => item.assetNumber).sort(), [
+        `${PREFIX}-CHILD`,
+        `${PREFIX}-GRAND`,
+        `${PREFIX}-ROOT`,
+        `${PREFIX}-SIB`,
+      ]);
+      assert.deepEqual(
+        both.items.map((item) => item.assetNumber).sort(),
+        rootOnly.items.map((item) => item.assetNumber).sort(),
+      );
+    });
+
     /** A két mező EGYÜTT is megadható, és a szűrő az uniójuk. */
     it("unions the singular field with the plural one", async () => {
       const result = await repository.list(
