@@ -28,23 +28,31 @@
  */
 
 /**
- * Az ismert értékek. HÁROM MÉRT, EGY BIZONYTALAN, és a különbséget ki kell írni,
- * mert egy listában minden elem egyformán magabiztosnak látszik:
+ * Az ismert értékek. MIND A NÉGY MÉRVE, DE NEM UGYANONNAN, és a különbséget ki
+ * kell írni, mert egy listában minden elem egyformán magabiztosnak látszik --
+ * három a repóból ellenőrizhető bármikor, a negyedik egy futó példányról átvett
+ * mérés, ami magától elavul:
  *
  *   production   MÉRVE: mindkét `Dockerfile` ezt süti be, és a CI egy helyen
  *                ugyanezt adja át.
  *   development  MÉRVE: a kódban szerepel.
  *   test         a teszt-futtatás bevett értéke.
- *   staging      NEM MÉRT ÁLLAPOT. Egy 2026-08-29-i mérés (acrobot) szerint a
- *                staging példány ezzel az értékkel futott, DE a staging azóta
- *                átköltözött és újratelepült, tehát a mérés nem a mai állapotról
- *                szól. A health végpontja nem adja vissza a környezetet, tehát
- *                kívülről nem dönthető el.
+ *   staging      MÉRVE A FUTÓ PÉLDÁNYON, 2026-08-31: a `printenv NODE_ENV` az
+ *                `acropora-stage-api` konténerben `staging` értéket ad (a
+ *                tulajdonos mérése a Coolify termináljában). Ez a sor két napig
+ *                bizonytalanként állt itt, mert a korábbi mérés a staging
+ *                átköltözése ELŐTTRŐL való volt; most a mai állapotról szól.
  *
- * MIÉRT MARAD BENT A `staging` ADDIG IS: egy TÖBBLET ismert érték soha nem állít
- * meg semmit, csak egy elírást enged át, ami történetesen pont ezt a szót adja.
- * A kivétele viszont MEGÁLLÍTANÁ azt a példányt, ahol az érték tényleg ez -- és
- * az a kár aszimmetrikus. Ezért a bizonytalanság a bennhagyás irányába dönt.
+ * A `staging` MÉRÉSE KÍVÜLRŐL NEM ISMÉTELHETŐ, és ezt a sort ezért hagyjuk itt:
+ * a health végpont nem adja vissza a környezetet, az adatbázis-portok zártak, és
+ * az auth végpont próbálgatása művelet lenne, nem mérés. A fenti érték tehát
+ * ÁTVETT mérés, egy képernyőről, és a következő újratelepítés után újra kérdés.
+ *
+ * ÉS AKKOR IS BENT MARADNA, HA A MÉRÉS NEM JÖTT VOLNA MEG: egy TÖBBLET ismert
+ * érték soha nem állít meg semmit, csak egy elírást enged át, ami történetesen
+ * pont ezt a szót adja. A kivétele viszont MEGÁLLÍTANÁ azt a példányt, ahol az
+ * érték tényleg ez -- és az a kár aszimmetrikus. A bizonytalanság tehát a
+ * bennhagyás irányába dönt, és a mérés ezt megerősítette, nem kiváltotta.
  *
  * ÉS A KIVÉTELE NEM INGYENES, HA VALAHA SZÓBA JÖN: nem csak a mai környezetekről
  * szól, hanem arról is, hogy ezt az értéket a JÖVŐBEN se lehessen beállítani

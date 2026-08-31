@@ -24,13 +24,32 @@
  * 1. NEM ÁLTALÁNOS. A `NODE_ENV` pont azért veszélyes, mert minden sablonban
  *    ott van, és minden környezeti fájl másolásakor utazik. Egy erre az egy
  *    célra elnevezett változót nem másol be senki véletlenül.
- * 2. ALAPÉRTELMEZÉSBEN TILT. A hiányzó érték NEM engedély. Egy éles példány
- *    beállításai közt nincs oka szerepelni, tehát ott a zár magától zárva van.
+ * 2. ALAPÉRTELMEZÉSBEN TILT. A hiányzó érték NEM engedély, tehát ahol a változó
+ *    nincs beállítva, ott a zár magától zárva van.
+ *
+ * A MÁSODIK PONT HATÓKÖRE SZŰKEBB, MINT AHOGY ELŐSZÖR LEÍRTAM, ÉS EZ MÉRÉSI
+ * HIBA VOLT, NEM FOGALMAZÁSI. Azt írtam ide, hogy „egyik `Dockerfile` sem
+ * állítja be, tehát az éles képen külön lépés nélkül zárva van". A
+ * `Dockerfile`-okra ez igaz és ma is áll. De az állítás a KÉPRŐL szól, nem a
+ * FUTÓ PÉLDÁNYRÓL: a Coolify a recepten KÍVÜL is ad át környezeti változókat, és
+ * a termelési beállítások közt az `acropora-api` alkalmazáson az `AUTH_PROVIDER`
+ * SZEREPEL, kétszer (acrobot mérése, 2026-08-31). Az értéke onnan nem
+ * olvasható ki, azt a konténerben kell megnézni.
+ *
+ * AMIÉRT EZT IDE ÍRJUK, ÉS NEM CSAK JAVÍTJUK: a `Dockerfile`-ok átnézése NEM
+ * TUDOTT VOLNA Coolify-változót találni. A nulla találat tehát a kérdés
+ * tulajdonsága volt, nem a világé -- és pont ettől látszott ténynek. Aki
+ * legközelebb azt akarja tudni, hogy egy változó be van-e állítva egy futó
+ * példányon, a PÉLDÁNYT mérje (`printenv`), ne a receptet.
+ *
+ * MA EBBŐL NINCS KÁR, és ezt is ki kell mondani, hogy ne tűnjön nagyobbnak: az
+ * élesen `NODE_ENV=production`, amit ez a függvény szintén néz, tehát ott az
+ * ajtó két okból is zárva van. A lelet a FELTEVÉSRŐL szól, nem a mai állapotról.
  *
  * A HIÁNYZÓ ÉRTÉK TILT, ÉS EZ SZÁNDÉKOSAN MÁS, MINT A `NODE_ENV`-NÉL. Ott a
  * beállítatlan érték megengedett, mert a CI és a helyi futás úgy megy, tehát a
  * szigorítás működő környezeteket állítana meg. Itt fordítva: a beállítatlan
- * érték az ÉLES példány állapota, tehát épp azt kell megfognia. A helyi
+ * érték az ÉLES példány várt állapota, tehát épp azt kell megfognia. A helyi
  * fejlesztést ez nem érinti, mert a `.env.example` már tartalmazza a sort.
  */
 
