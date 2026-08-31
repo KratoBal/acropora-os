@@ -3260,6 +3260,28 @@ model ProductDatasheet {
   /// sincs meghatarozva. Egy stringben a "nem tudjuk a fajt" es a "tudjuk" eset
   /// egyforman nezne ki. A `species IS NULL` itt ONMAGABAN jelentes: genus-szintu
   /// azonositas.
+  ///
+  /// ES AMI EBBOL A KITOLTESRE KOVETKEZIK -- HAROM SZABALY, ES NEM STILUS:
+  ///
+  /// 1. A `genus` MINDIG legyen kitoltve. Ez az egyetlen mezo, ami ket adatlapot
+  ///    ossze tud kotni; enelkul ket azonos faju termek gepileg nem talal
+  ///    egymasra. A `String?` NEM azt jelenti, hogy elhagyhato -- azt jelenti,
+  ///    hogy a sor letrejohet elotte.
+  /// 2. A `species` CSAK akkor, ha a faj tenylegesen meghatarozott. Ahol nem,
+  ///    ott maradjon NULL: az a fentebb kimondott JELENTES, nem hianyos kitoltes.
+  /// 3. A `genus` irasmodja legyen egyseges (kis/nagybetu, szokoz). ERRE MA
+  ///    SEMMI NEM UGYEL: nincs egyedisegi megkotes es nincs normalizalo a
+  ///    kodban (merve 2026-08-31). Amig nincs, ez emberi fegyelmen mulik.
+  ///
+  /// MIERT ITT ALL, ES MIERT NEM CSAK EGY TERVEZESI LAPON: ha kesobb faj-szintu
+  /// entitas (`Species`) kerul a termek foles, a meglevo adatlapokat CSOPORTOSITANI
+  /// kell. Ahol a `genus` egyseges, az gepi (`GROUP BY genus, species`). Ahol
+  /// hianyzik vagy elteroen irt, ott EMBER dont, adatlaponkent.
+  ///
+  /// ES EGY FIGYELMEZTETES ANNAK, AKI AZT A CSOPORTOSITAST MEGIRJA: ket
+  /// `species IS NULL` sor NEM vonhato ossze -- sem egy konkret fajjal, sem
+  /// egymassal. Ket "Acropora, faj ismeretlen" nem ugyanaz a faj; csak annyit
+  /// tudunk, hogy mindketto Acropora.
   genus           String?
   species         String?
   kereskedelmiNev String?
