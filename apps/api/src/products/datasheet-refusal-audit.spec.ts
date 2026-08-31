@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  ALL_VALUE_COLUMNS,
   DATASHEET_FIELD_COLUMNS,
   describeRefusalConflicts,
   findRefusalConflicts,
@@ -133,6 +134,25 @@ describe("findRefusalConflicts", () => {
   it("maps every field to at least one column", () => {
     for (const [field, columns] of Object.entries(DATASHEET_FIELD_COLUMNS))
       assert.ok(columns.length > 0, `${field} egyetlen oszlopra sem mutat`);
+  });
+
+  /**
+   * A VAK FOLT, AMIT MÉRÉSSEL TALÁLTAM MEG. A fenti teszt megfogja, ha egy MEZŐ
+   * hiányzik a térképről, de NEM fogja meg, ha egy OSZLOP marad ki egy meglévő
+   * mező listájából: kipróbáltam, az `originScope` eltávolítása az `ORIGIN`
+   * sorából nulla tesztet vitt pirosra. Ez a teszt a MÁSIK irányból néz, és
+   * ezért fogja meg.
+   */
+  it("leaves no value column unwatched", () => {
+    const watched = new Set(Object.values(DATASHEET_FIELD_COLUMNS).flat());
+
+    const orphans = ALL_VALUE_COLUMNS.filter((column) => !watched.has(column));
+
+    assert.deepEqual(
+      orphans,
+      [],
+      `ezeket az oszlopokat egyetlen mező sem őrzi: ${orphans.join(", ")}`,
+    );
   });
 });
 

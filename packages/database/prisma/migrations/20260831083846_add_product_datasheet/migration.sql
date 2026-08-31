@@ -26,7 +26,7 @@ CREATE TYPE "Aggression" AS ENUM ('BEKES', 'TERULETVEDO', 'RAGADOZO', 'CSALANOZ'
 CREATE TYPE "RefusalReason" AS ENUM ('NINCS_FORRAS', 'DONTESRE_VAR');
 
 -- CreateEnum
-CREATE TYPE "DatasheetField" AS ENUM ('MAGYAR_NEV', 'ANGOL_NEV', 'CSALAD_TAXON', 'ELOHELY', 'AKVARIUM_MERET', 'MAX_MERET', 'KULLEME', 'TARTASA', 'VISELKEDESE', 'AJANLOTT_ELESEG', 'ERZEKENYSEG', 'TARSITHATOSAG', 'ERDEKESSEG', 'SCIENTIFIC_NAME', 'CARE_DIFFICULTY', 'REEF_SAFE', 'FEEDING_TYPE', 'ORIGIN', 'ORIGIN_SCOPE', 'AGGRESSION', 'SOCIAL_KEEPING', 'AMIT_O_VESZELYEZTET', 'AMI_OT_VESZELYEZTETI');
+CREATE TYPE "DatasheetField" AS ENUM ('MAGYAR_NEV', 'ANGOL_NEV', 'CSALAD_TAXON', 'ELOHELY', 'AKVARIUM_MERET', 'MAX_MERET', 'KULLEME', 'TARTASA', 'VISELKEDESE', 'AJANLOTT_ELESEG', 'ERZEKENYSEG', 'TARSITHATOSAG', 'ERDEKESSEG', 'SCIENTIFIC_NAME', 'CARE_DIFFICULTY', 'REEF_SAFE', 'FEEDING_TYPE', 'ORIGIN', 'AGGRESSION', 'SOCIAL_KEEPING', 'AMIT_O_VESZELYEZTET', 'AMI_OT_VESZELYEZTETI');
 
 -- CreateTable
 CREATE TABLE "ProductDatasheet" (
@@ -101,12 +101,12 @@ ALTER TABLE "ProductDatasheetFieldRefusal" ADD CONSTRAINT "ProductDatasheetField
 --
 -- A `indok TEXT NOT NULL` az URES STRINGET ATENGEDNE, es akkor visszakapnank
 -- pontosan azt, amit a dontes megszuntet: egy "megtagadva" jelolot indoklas
--- nelkul. A NOT NULL tehat NEM eleg, kell mellé egy CHECK.
+-- nelkul. A NOT NULL tehat NEM eleg, kell melle egy CHECK.
 --
 -- Azert adatbazis szinten, es nem a kodban: az adat tobb uton keletkezik
 -- (migracio, import, javito szkript, kezi javitas), es egy alkalmazas-oldali
 -- ellenorzes csak a sajat utjat orzi. A LEGELSO toltes eppen a migracion at jon,
--- vagyis azon a csatornan, amit az alkalmazas-orzo nem lat.
+-- vagyis azon a csatornan, amit egy iras-oldali orzo nem lat.
 --
 -- Prisma-sema nem tud CHECK feltetelt kifejezni, ezert all itt nyers SQL
 -- alakban, UGYANABBAN a migracioban, mint az oszlop.

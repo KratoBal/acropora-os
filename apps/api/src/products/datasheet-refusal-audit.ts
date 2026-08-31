@@ -66,6 +66,65 @@ export interface DatasheetValueColumns {
 }
 
 /**
+ * MINDEN ÉRTÉK-OSZLOP, EGY HELYEN FELSOROLVA.
+ *
+ * Ez a lista a térkép ELLENPÁRJA, és egy MÉRT vak folt miatt van itt. A
+ * `Record<DatasheetField, …>` megfogja, ha egy MEZŐ hiányzik a térképről - de
+ * NEM fogja meg, ha egy OSZLOP marad ki egy meglévő mező listájából. Kipróbáltam:
+ * az `originScope` eltávolítása az `ORIGIN` sorából NULLA tesztet vitt pirosra,
+ * és onnantól egy kitöltött scope mellett álló megtagadás láthatatlan lett volna.
+ *
+ * A `satisfies` a fordítóra bízza a teljességet: ha valaki új oszlopot vesz fel a
+ * `DatasheetValueColumns` felületre, és ide nem, az alatta álló típus-állítás NEM
+ * FORDUL LE.
+ */
+export const ALL_VALUE_COLUMNS = [
+  "magyarNev",
+  "angolNev",
+  "csaladTaxon",
+  "elohelySzoveg",
+  "akvariumMeretSzoveg",
+  "maxMeretSzoveg",
+  "kulleme",
+  "tartasa",
+  "viselkedese",
+  "ajanlottEleseg",
+  "erzekenyseg",
+  "tarsithatosag",
+  "erdekesseg",
+  "minLiter",
+  "literPerEgyed",
+  "meretKategoria",
+  "meretMin",
+  "meretMax",
+  "meretDimenzio",
+  "genus",
+  "species",
+  "kereskedelmiNev",
+  "careDifficulty",
+  "reefSafe",
+  "socialKeeping",
+  "originScope",
+  "feedingType",
+  "aggression",
+  "origin",
+  "amitOVeszelyeztet",
+  "amiOtVeszelyezteti",
+] as const satisfies readonly (keyof DatasheetValueColumns)[];
+
+/**
+ * A fordító mondja meg, ha a fenti lista hiányos. Ha marad olyan oszlop a
+ * `DatasheetValueColumns` felületen, ami nincs a listában, ez a sor pirosra vált.
+ */
+const _minden_oszlop_felsorolva: Exclude<
+  keyof DatasheetValueColumns,
+  (typeof ALL_VALUE_COLUMNS)[number]
+> extends never
+  ? true
+  : never = true;
+void _minden_oszlop_felsorolva;
+
+/**
  * MELYIK MEZŐT MELYIK OSZLOP(OK) HORDOZZÁK.
  *
  * `Record<DatasheetField, …>`, és ez szándékos: ha valaki új értéket vesz fel a
@@ -98,8 +157,12 @@ export const DATASHEET_FIELD_COLUMNS: Record<DatasheetField, DatasheetColumns> =
     CARE_DIFFICULTY: ["careDifficulty"],
     REEF_SAFE: ["reefSafe"],
     FEEDING_TYPE: ["feedingType"],
-    ORIGIN: ["origin"],
-    ORIGIN_SCOPE: ["originScope"],
+    /**
+     * A scope az origin MINOSITOJE, nem onallo teny: regio nelkul nincs mit
+     * minositenie. Ezert egy kulcs alatt all a ketto, ugyanugy, ahogy a
+     * meretDimenzio a MAX_MERET alatt.
+     */
+    ORIGIN: ["origin", "originScope"],
     AGGRESSION: ["aggression"],
     SOCIAL_KEEPING: ["socialKeeping"],
     AMIT_O_VESZELYEZTET: ["amitOVeszelyeztet"],

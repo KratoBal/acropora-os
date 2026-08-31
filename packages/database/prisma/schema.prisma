@@ -3276,7 +3276,7 @@ model ProductDatasheet {
   /// Tobberteku facettak. Az URES TOMB itt "nincs ertek", NEM "megneztuk es semmi":
   /// Postgres alatt a lista alapertelmezese ures tomb, tehat oszlop-szinten nem
   /// kulonboztetheto meg a "nincs allapot"-tol. A kulonbseget MINDENHOL a
-  /// megtagadas-tabla adja, igy a szabaly mind a 22 mezore azonos.
+  /// megtagadas-tabla adja, igy a szabaly mind a 22 kulcsra azonos.
   feedingType FeedingType[]
   /// A BEKES ONALLO ERTEK. Ha a mezo csak akkor kapna erteket, amikor az allat
   /// agressziv, a hianya ket dolgot jelentene: "bekes" es "nem tudjuk".
@@ -3391,8 +3391,18 @@ enum RefusalReason {
   DONTESRE_VAR
 }
 
-/// A megtagadhato mezok kulcsai. HUSZONKETTO, nem huszonegy: a tarsithatosag
-/// KET mezore bomlik, es mindkettot kulon lehet megtagadni.
+/// A megtagadhato mezok kulcsai: HUSZONKETTO.
+///
+/// A tizenharom eredeti mezo, a nyolc uj, ES a tarsithatosag KET fele -- mert az
+/// KET KULONBOZO KERDES ("mit tesz o a tarsaival" es "mi fenyegeti ot"), es
+/// harom tetel mindkettorol mond valamit.
+///
+/// A SZABALY, AMI ELDONTI, MI KAP SAJAT KULCSOT: a MINOSITO oszlop NEM kap.
+/// A meretDimenzio a MAX_MERET resze, nem onallo mezo -- egy dimenzio onmagaban,
+/// szam nelkul, nem allitas. Ugyanezert az originScope az ORIGIN resze: a scope
+/// azt mondja meg, milyen szinten ervenyes a regio, tehat regio nelkul nincs
+/// mit minositenie. Kulon kulcsot adni neki azt engedne meg, hogy valaki a
+/// scope-ot megtagadja, mikozben a regio all -- ket allapot egy tenyre.
 enum DatasheetField {
   MAGYAR_NEV
   ANGOL_NEV
@@ -3412,7 +3422,6 @@ enum DatasheetField {
   REEF_SAFE
   FEEDING_TYPE
   ORIGIN
-  ORIGIN_SCOPE
   AGGRESSION
   SOCIAL_KEEPING
   AMIT_O_VESZELYEZTET
