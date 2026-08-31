@@ -7,7 +7,7 @@
     "dev": "next dev --port 3000",
     "build": "next build",
     "start": "next start --port 3000",
-    "test": "tsc -p tsconfig.test.json && node --test test-dist/lib/products/list-state.test.js && vitest run",
+    "test": "pnpm --filter \"@acropora/web^...\" build && tsc -p tsconfig.test.json && node --test test-dist/lib/products/list-state.test.js && vitest run",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf .next"
   },
