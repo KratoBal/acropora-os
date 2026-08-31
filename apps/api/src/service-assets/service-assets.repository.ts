@@ -1,3 +1,5 @@
+import { collectUnitSubtreeIds } from "./unit-subtree.js";
+
 import { createHash, randomUUID } from "node:crypto";
 
 import { Injectable } from "@nestjs/common";
@@ -100,7 +102,33 @@ export class ServiceAssetsRepository extends Repository {
     super(prisma);
   }
 
+  /**
+   * AZ ALEGYSÉG SZERINTI SZŰRÉS EGY ELŐZETES LEKÉRDEZÉST IGÉNYEL, és ezért áll
+   * a `where` fölött: a fa mélysége nem korlátos, a Prisma pedig rekurzív
+   * lekérdezést nem tud kifejezni. A részfát ezért két lépésben állítjuk elő --
+   * egy köteg sor, majd egy tiszta bejárás (`collectUnitSubtreeIds`).
+   */
+  private async unitSubtreeIds(departmentId: string): Promise<string[]> {
+    const department = await prisma.worksheetDepartment.findUnique({
+      where: { id: departmentId },
+      select: { customerId: true },
+    });
+    // NEM LÉTEZŐ ALEGYSÉG: a saját azonosítójára szűkítünk, ami egyetlen
+    // eszközre sem illeszkedik. A csábító alternatíva (nincs szűrő) a TELJES
+    // listát adná vissza egy elgépelt azonosítóra, hibaüzenet nélkül.
+    if (!department) return [departmentId];
+
+    const units = await prisma.worksheetDepartment.findMany({
+      where: { customerId: department.customerId },
+      select: { id: true, name: true, parentId: true },
+    });
+    return collectUnitSubtreeIds(units, departmentId);
+  }
+
   async list(query: AssetListQueryDto): Promise<AssetListResponse> {
+    const departmentIds = query.departmentId
+      ? await this.unitSubtreeIds(query.departmentId)
+      : null;
     const where: Prisma.AssetWhereInput = {
       ...assetOwnerScopeWhere(query.ownerScope),
       ...(query.status === "ALL" ? {} : { status: query.status }),
@@ -110,6 +138,7 @@ export class ServiceAssetsRepository extends Repository {
         : query.ownerType === "SUPPLIER" && query.ownerId
           ? { supplierId: query.ownerId }
           : {}),
+      ...(departmentIds ? { departmentId: { in: departmentIds } } : {}),
       ...(query.aquariumId ? { aquariumId: query.aquariumId } : {}),
       ...(query.parentAssetId ? { parentAssetId: query.parentAssetId } : {}),
       ...(query.dueBefore
