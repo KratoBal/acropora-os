@@ -195,6 +195,17 @@ export interface AssetDetail extends AssetListItem {
   createdAt: string;
 }
 
+/**
+ * AMI VISSZATARTJA A TORLEST, TETELESEN. Harom kulon szamlalo, nem egy logikai
+ * ertek: a hivo igy meg tudja mondani, MI tartja vissza, es mindharom agra kulon
+ * allitas irhato.
+ */
+export interface AssetDeletionBlockers {
+  serviceJobs: number;
+  worksheetLines: number;
+  childAssets: number;
+}
+
 export interface AssetListResponse {
   items: AssetListItem[];
   pagination: {

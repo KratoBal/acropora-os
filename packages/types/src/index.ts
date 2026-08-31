@@ -85,6 +85,7 @@ export type {
   AssetCriticality,
   AssetCustomerSummary,
   AssetDetail,
+  AssetDeletionBlockers,
   AssetDocumentSummary,
   AssetDocumentType,
   AssetEventSummary,

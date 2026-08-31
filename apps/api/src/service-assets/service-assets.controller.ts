@@ -140,6 +140,17 @@ export class ServiceAssetsController {
     });
   }
 
+  /**
+   * A TORLES SAJAT VEGPONT, es SAJAT jog alatt all, nem a SERVICE_MANAGE alatt:
+   * eszkozt felvinni a napi szerviz-munka, egy eszkozt megszuntetni viszont
+   * visszafordithatatlan. A `SERVICE_ASSET_DELETE` jogot a MANAGER sem kapja meg.
+   */
+  @Delete(":id")
+  @RequirePermissions(PERMISSIONS.SERVICE_ASSET_DELETE)
+  remove(@Param("id") id: string) {
+    return this.service.remove(id);
+  }
+
   @Delete(":id/documents/:documentId")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
   async deleteDocument(
