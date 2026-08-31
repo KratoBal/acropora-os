@@ -628,6 +628,7 @@ model Product {
   targetRelations ProductRelation[]    @relation("ProductRelationTarget")
   unasSnapshot    UnasProductSnapshot?
   aiSearchDocument AiProductSearchDocument?
+  datasheet       ProductDatasheet?
 
   @@index([brandId])
   @@index([categoryId])
@@ -3199,4 +3200,230 @@ model ServiceToken {
   lastUsedAt DateTime?
   revokedAt  DateTime?
   createdAt  DateTime  @default(now())
+}
+
+/// A strukturalt termek-adatlap, TERMEK szinten.
+///
+/// Miert nem valtozat szinten: merve (nautilus, 2026-08-31) egy faj a boltban
+/// tobb meretben is allhat, de EGY adatlapja van. Valtozat szinten ugyanaz a
+/// szoveg tobbszor allna, es a peldanyok elcsuszhatnanak egymastol.
+///
+/// MINDEN MEZONEK HAROM ALLAPOTA VAN, NEM KETTO:
+///   1. van ertek                 -> az oszlop NEM NULL
+///   2. hatralek (meg nem nezte)  -> az oszlop NULL, es NINCS ProductDatasheetFieldRefusal sor
+///   3. megtagadas (megneztuk, es felelosseggel nem irhato ra semmi)
+///                                -> az oszlop NULL, es VAN sor, INDOKKAL
+///
+/// A 2. es a 3. eddig egyforman nezett ki, es pontosan ezt szunteti meg Balazs
+/// dontese (2026-08-31 09:43). A megkulonboztetes NEM ezen a tablan all, hanem a
+/// megtagadas-tablan: itt minden ertek-oszlop egyszeruen nullazhato.
+model ProductDatasheet {
+  id        String   @id @default(cuid())
+  productId String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// A 13 eredeti mezo. A SZOVEG MARAD, a facetta MELLE jon, nem helyette:
+  /// egy kulcsszo-kereso a "NEM konnyu" alaku mondatbol "konnyu"-t hozna ki.
+  magyarNev           String?
+  angolNev            String?
+  /// Ma SZOVEG, nem hivatkozas. A taxon-szotar nem letezik, es egy ures
+  /// szotarra mutato idegen kulcs MINDEN beszurast elutasitana. Relaciora akkor
+  /// valt, ha a taxon-szotar elkeszul es fel van toltve.
+  csaladTaxon         String?
+  elohelySzoveg       String?
+  akvariumMeretSzoveg String?
+  maxMeretSzoveg      String?
+  kulleme             String?
+  tartasa             String?
+  viselkedese         String?
+  ajanlottEleseg      String?
+  erzekenyseg         String?
+  tarsithatosag       String?
+  erdekesseg          String?
+
+  /// Az ajanlott akvarium merete KET kulonbozo dolgot hordozott egy cellaban:
+  /// minimum terfogatot es nepsuruseget. A ketto NEM valthato at egymasba, amig
+  /// nem tudjuk, hany peldanyrol van szo. Negybol legalabb egy MINDIG ures lesz,
+  /// es az itt NEM hiany, hanem "erre a tetelre nem ez a fajta adat vonatkozik".
+  minLiter       Decimal?        @db.Decimal(10, 2)
+  literPerEgyed  Decimal?        @db.Decimal(10, 2)
+  meretKategoria MeretKategoria?
+
+  /// A maximalis meretnel a szam mellé kell, hogy MIT mertek: a 25 cm
+  /// karfesztavolsag es a 25 cm testhossz ugyanaz a szam, de mas allat.
+  meretMin      Decimal?       @db.Decimal(10, 2)
+  meretMax      Decimal?       @db.Decimal(10, 2)
+  meretDimenzio MeretDimenzio?
+
+  /// Harom oszlop, mert negy alak nem egyszeru binomialis, es ket tetelnel a FAJ
+  /// sincs meghatarozva. Egy stringben a "nem tudjuk a fajt" es a "tudjuk" eset
+  /// egyforman nezne ki. A `species IS NULL` itt ONMAGABAN jelentes: genus-szintu
+  /// azonositas.
+  genus           String?
+  species         String?
+  kereskedelmiNev String?
+
+  careDifficulty CareDifficulty?
+  /// NEM logikai. Ot eset all az adatban (igen, nem, felteteles, allitas nelkuli,
+  /// nem faj-szintu), es egy Boolean mind az otot kettore lapitana.
+  reefSafe       ReefSafe?
+  socialKeeping  SocialKeeping?
+  /// A scope nelkul az origin akkor is hazudik, ha kitoltjuk, es akkor is, ha nem:
+  /// harom cella jelolve van, megis tartalmaz regiot, csak genus-szinten.
+  originScope    OriginScope?
+
+  /// Tobberteku facettak. Az URES TOMB itt "nincs ertek", NEM "megneztuk es semmi":
+  /// Postgres alatt a lista alapertelmezese ures tomb, tehat oszlop-szinten nem
+  /// kulonboztetheto meg a "nincs allapot"-tol. A kulonbseget MINDENHOL a
+  /// megtagadas-tabla adja, igy a szabaly mind a 22 kulcsra azonos.
+  feedingType FeedingType[]
+  /// A BEKES ONALLO ERTEK. Ha a mezo csak akkor kapna erteket, amikor az allat
+  /// agressziv, a hianya ket dolgot jelentene: "bekes" es "nem tudjuk".
+  aggression  Aggression[]
+  /// SZOVEG, nem felsorolas, es ez DONTES, nem hianyzo meres. A cellak HAROM
+  /// kulonbozo foldrajzi felbontason beszelnek, egy sik felsorolasban a
+  /// Karib-tenger es az Indo-csendes-oceani egy szinten allna. A legfelso szintre
+  /// normalizalva viszont egyetlen ertek fedne le a kinalat 59 szazalekat, tehat
+  /// alig szurne. Hivatkozassa akkor valik, ha valaki felveszi a regio-fat.
+  origin      String[]
+
+  /// A tarsithatosag KET kulon kerdes, es harom tetel MINDKETTOROL mond valamit,
+  /// tehat nem kizaro bontas. Ma szoveg: a relacio celja (a tarsithato fajok
+  /// szotara) nem letezik. Relaciora akkor valt, ha a szotar elkeszul.
+  amitOVeszelyeztet String?
+  amiOtVeszelyezteti String?
+
+  product  Product                        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  refusals ProductDatasheetFieldRefusal[]
+}
+
+/// EGY MEGTAGADOTT MEZO, INDOKKAL. A sor LETEZESE a megtagadas-allapot.
+///
+/// Ez a tabla teszi az indokot SZERKEZETILEG kotelezove, nem konvenciova: a
+/// megtagadas nem allithato be sor nelkul, a sorban pedig az `indok` nem
+/// nullazhato ES nem lehet ures (adatbazis-szintu CHECK, mert a NOT NULL az ures
+/// stringet atengedne).
+///
+/// Egy indok nelkuli "megtagadva" ugyanolyan hasznalhatatlan, mint az ures cella
+/// volt -- csak magabiztosabban nez ki.
+model ProductDatasheetFieldRefusal {
+  id          String         @id @default(cuid())
+  datasheetId String
+  /// ENUM, NEM szoveg. Egy elgepelt mezonev olyan sort hozna letre, amit soha
+  /// senki nem talal meg: a mezo "hatralek" maradna, mikozben a tabla azt
+  /// allitana, hogy megneztuk.
+  mezo        DatasheetField
+  indok       String
+  /// A megtagadasnak KET oka van, es MAS a feloldasuk: a forrashianyt kutatas
+  /// oldja fel, a dontesre varot ember. Egy kozos allapotbol nem derul ki, kinek
+  /// a dolga.
+  oka         RefusalReason
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  datasheet ProductDatasheet @relation(fields: [datasheetId], references: [id], onDelete: Cascade)
+
+  @@unique([datasheetId, mezo])
+  @@index([oka])
+}
+
+enum MeretKategoria {
+  NANO
+  NORMAL
+}
+
+enum MeretDimenzio {
+  TESTHOSSZ
+  KARFESZTAVOLSAG
+  HEJMERET
+  TELJES_KITERJEDES
+}
+
+enum CareDifficulty {
+  KONNYU
+  KOZEPES
+  HALADO
+}
+
+enum ReefSafe {
+  IGEN
+  NEM
+  FELTETELES
+  ALLITAS_NELKULI
+  NEM_FAJ_SZINTU
+}
+
+enum SocialKeeping {
+  EGYEDUL
+  PARBAN
+  CSOPORTBAN
+  TOBB_PELDANY_TARTHATO
+}
+
+enum OriginScope {
+  FAJ
+  GENUS
+  CSALAD
+}
+
+enum FeedingType {
+  SZURO_PLANKTON
+  ALGAEVO
+  HUSEVO
+  MINDENEVO
+  TORMELEKEVO
+  FOTOSZINTETIZALO
+  TISZTOGATO
+}
+
+enum Aggression {
+  BEKES
+  TERULETVEDO
+  RAGADOZO
+  CSALANOZ
+  FAJTARSSAL_AGRESSZIV
+  FELTETELES
+}
+
+enum RefusalReason {
+  NINCS_FORRAS
+  DONTESRE_VAR
+}
+
+/// A megtagadhato mezok kulcsai: HUSZONKETTO.
+///
+/// A tizenharom eredeti mezo, a nyolc uj, ES a tarsithatosag KET fele -- mert az
+/// KET KULONBOZO KERDES ("mit tesz o a tarsaival" es "mi fenyegeti ot"), es
+/// harom tetel mindkettorol mond valamit.
+///
+/// A SZABALY, AMI ELDONTI, MI KAP SAJAT KULCSOT: a MINOSITO oszlop NEM kap.
+/// A meretDimenzio a MAX_MERET resze, nem onallo mezo -- egy dimenzio onmagaban,
+/// szam nelkul, nem allitas. Ugyanezert az originScope az ORIGIN resze: a scope
+/// azt mondja meg, milyen szinten ervenyes a regio, tehat regio nelkul nincs
+/// mit minositenie. Kulon kulcsot adni neki azt engedne meg, hogy valaki a
+/// scope-ot megtagadja, mikozben a regio all -- ket allapot egy tenyre.
+enum DatasheetField {
+  MAGYAR_NEV
+  ANGOL_NEV
+  CSALAD_TAXON
+  ELOHELY
+  AKVARIUM_MERET
+  MAX_MERET
+  KULLEME
+  TARTASA
+  VISELKEDESE
+  AJANLOTT_ELESEG
+  ERZEKENYSEG
+  TARSITHATOSAG
+  ERDEKESSEG
+  SCIENTIFIC_NAME
+  CARE_DIFFICULTY
+  REEF_SAFE
+  FEEDING_TYPE
+  ORIGIN
+  AGGRESSION
+  SOCIAL_KEEPING
+  AMIT_O_VESZELYEZTET
+  AMI_OT_VESZELYEZTETI
 }
