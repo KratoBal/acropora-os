@@ -27,6 +27,19 @@ export interface ConfirmDialogProps {
   busy?: boolean;
   onConfirm(): void;
   onCancel(): void;
+  /**
+   * EGY RITKÁBB, SÚLYOSABB KIÚT, a gombok ALATT.
+   *
+   * Nem díszítés: van, ahol két művelet közül az egyik a fő út, a másik a
+   * ritkább és a visszafordíthatatlan (az eszköznél a kivezetés és a törlés).
+   * Két egymás melletti gomb VÁLASZTÁSSÁ tenné, ami nem az -- a kettő nem
+   * egyenrangú. Egy lépéssel beljebb téve az ember már elolvasta, mit jelent a
+   * fő út, és csak akkor megy tovább, ha az nem elég neki.
+   *
+   * A saját megerősítését az hozza, aki ide teszi: ez a slot csak a kiutat
+   * mutatja meg, nem hajtja végre.
+   */
+  children?: React.ReactNode;
 }
 
 /**
@@ -52,6 +65,7 @@ export function ConfirmDialog({
   busy = false,
   onConfirm,
   onCancel,
+  children,
 }: ConfirmDialogProps) {
   /**
    * ESC = mégsem. A kilépés a biztonságos irányba visz, és a billentyűzetes
@@ -98,6 +112,7 @@ export function ConfirmDialog({
             Mégsem
           </Button>
         </div>
+        {children ? <div className="pt-1">{children}</div> : null}
       </div>
     </div>
   );

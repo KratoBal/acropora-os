@@ -40,6 +40,8 @@ import {
  */
 type PendingConfirm =
   | { kind: "rotate-qr" }
+  | { kind: "retire" }
+  | { kind: "delete-asset" }
   | { kind: "delete-document"; documentId: string; fileName: string };
 
 const inputDate = (value?: string) => (value ? value.slice(0, 10) : "");
@@ -68,6 +70,14 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_MANAGE),
   );
+  /**
+   * AKINEK NINCS TORLESI JOGA, ANNAK A HIVATKOZAS SEM JELENIK MEG -- nem
+   * letiltva, hanem sehogy. Egy letiltott gomb azt mondja, hogy "ezt lehetne,
+   * csak neked nem", es olyan kerdest szul, amire a felulet nem tud valaszolni.
+   */
+  const canDelete = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.SERVICE_ASSET_DELETE),
+  );
   const [asset, setAsset] = useState<AssetDetail | null>(null);
   const [qr, setQr] = useState<AssetQrCode | null>(null);
   const [status, setStatus] = useState<AssetStatus>("ACTIVE");
@@ -76,6 +86,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<PendingConfirm | null>(null);
+  const [deleted, setDeleted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [documentType, setDocumentType] =
@@ -143,6 +154,59 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "A módosítás nem menthető.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * KIVEZETES: a statuszt allitja `RETIRED`-re, semmi mast. A sor megmarad, a
+   * tortenete is -- ezert ez a FO UT, es ezert allithato vissza.
+   */
+  const retire = async () => {
+    if (!asset || busy) return;
+    setPending(null);
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const updated = await assetsApi.update(token, asset.id, {
+        status: "RETIRED",
+        expectedUpdatedAt: asset.updatedAt,
+      });
+      setAsset(updated);
+      setStatus("RETIRED");
+      setNotice(
+        "Az eszköz kivezetve. Az aktív listákban nem jelenik meg, de megmaradt, és bármikor visszaállítható itt, az állapot mezőben.",
+      );
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "A kivezetés nem menthető.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * VEGLEGES TORLES. A szerver hibauzenetet SZO SZERINT adjuk tovabb: az
+   * megnevezi, MI tartja vissza (hany hibajegy, munkalapsor, alarendelt
+   * eszkoz). Egy "az eszkoz nem torolheto" mondat ugyanannyit mondana, mint a
+   * semmi -- a felhasznalo nem tudna, hol nezzen utana.
+   */
+  const removeAsset = async () => {
+    if (!asset || busy) return;
+    setPending(null);
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await assetsApi.remove(token, asset.id);
+      setDeleted(true);
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Az eszköz nem törölhető.",
       );
     } finally {
       setBusy(false);
@@ -612,6 +676,44 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
         </>
       ) : null}
 
+      {deleted ? (
+        <Card className="p-4">
+          <p className="text-sm">
+            Az eszköz törölve. Visszatérés az{" "}
+            <a className="underline" href="/szerviz/eszkozok">
+              eszközlistához
+            </a>
+            .
+          </p>
+        </Card>
+      ) : null}
+      {canManage && asset && !deleted ? (
+        <Card className="p-4">
+          {/*
+            EGY GOMB, ES AZ A KIVEZETES. Aki egy eszkozt "el akar tuntetni", az
+            az esetek nagy reszeben KIVEZETNI akar -- a torles a ritkabb es a
+            visszafordithatatlan. Ket egymas melletti gomb VALASZTASSA tenne,
+            ami nem az: a ketto nem egyenrangu, es a felulet ne allitsa, hogy az.
+            A torles ezert egy lepessel bentebb all, a megerosito ablakban.
+          */}
+          <h2 className="text-base font-medium">Eszköz kivezetése</h2>
+          <p className="mt-1 text-sm">
+            A kivezetett eszköz megmarad a nyilvántartásban a teljes
+            történetével együtt, csak az aktív listákból kerül ki.
+          </p>
+          <Button
+            className="mt-3"
+            variant="secondary"
+            disabled={busy || asset.status === "RETIRED"}
+            onClick={() => setPending({ kind: "retire" })}
+          >
+            {asset.status === "RETIRED"
+              ? "Már kivezetett"
+              : "Eszköz kivezetése"}
+          </Button>
+        </Card>
+      ) : null}
+
       {/*
         A KÉT MEGERŐSÍTÉS. Mindkettő megnevezi, MI VÉSZ EL és HONNAN szerezhető
         vissza. A dokumentum törlésének szövege eddig annyi volt, hogy „biztosan
@@ -626,6 +728,44 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
         confirmLabel="QR-kód cseréje"
         busy={busy}
         onConfirm={() => void rotateQr()}
+        onCancel={() => setPending(null)}
+      />
+      {/*
+        A VISSZAFORDITHATOSAG ITT NEM DISZITES, HANEM A DONTES ERTELME.
+        Balazs azert tette a kivezetest fo utta, mert MEGORZI az adatot. Ha a
+        felhasznalo veglegesnek hiszi, akkor epp a TORLES fele mozdul -- vagyis
+        egy kimondatlan visszafordithatosag PONT AZ ELLENKEZOJET eri el annak,
+        amit a dontes akart. Ezert all a `recovery` szovegben, hogy visszavonhato
+        ES hogy HOL.
+      */}
+      <ConfirmDialog
+        open={pending?.kind === "retire"}
+        title="Kivezeted ezt az eszközt?"
+        consequence="Az eszköz kikerül az aktív listákból, és új munkához nem lesz felajánlva. Az adatlapja, az eseménynaplója és a dokumentumai megmaradnak."
+        recovery="Visszavonható: az állapot bármikor visszaállítható aktívra ezen az adatlapon, az állapot mezőben."
+        confirmLabel="Kivezetés"
+        busy={busy}
+        onConfirm={() => void retire()}
+        onCancel={() => setPending(null)}
+      >
+        {canDelete ? (
+          <button
+            type="button"
+            className="text-sm underline"
+            onClick={() => setPending({ kind: "delete-asset" })}
+          >
+            Ez az eszköz téves felvitel? Végleges törlés.
+          </button>
+        ) : null}
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={pending?.kind === "delete-asset"}
+        title="Véglegesen törlöd ezt az eszközt?"
+        consequence="Az eszköz, az eseménynaplója és a hozzá feltöltött dokumentumok megszűnnek."
+        recovery="Nem vonható vissza. Ha az eszköz létezett és dolgoztak rajta, a kivezetés a helyes lépés."
+        confirmLabel="Végleges törlés"
+        busy={busy}
+        onConfirm={() => void removeAsset()}
         onCancel={() => setPending(null)}
       />
       <ConfirmDialog

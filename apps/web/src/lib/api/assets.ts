@@ -66,6 +66,19 @@ export const assetsApi = {
       },
     );
   },
+  /**
+   * VEGLEGES TORLES. Kulon jog all rajta (`SERVICE_ASSET_DELETE`), es a szerver
+   * megtagadja, ha az eszkozhoz hibajegy, munkalapsor vagy alarendelt eszkoz
+   * tartozik -- a valasz MEGNEVEZI, melyik. A hivo ezt a szoveget adja tovabb,
+   * nem forditja altalanosra.
+   */
+  remove(token: string, id: string) {
+    return apiRequest<{ ok: true }>(
+      `/service/assets/${encodeURIComponent(id)}`,
+      token,
+      { method: "DELETE" },
+    );
+  },
   qr(token: string, id: string, signal?: AbortSignal) {
     return apiRequest<AssetQrCode>(
       `/service/assets/${encodeURIComponent(id)}/qr`,
