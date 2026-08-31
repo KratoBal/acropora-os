@@ -132,3 +132,71 @@ export function unitPathLabel(unit: {
   const path = unit.path?.filter((part) => part.trim()) ?? [];
   return path.length > 0 ? path.join(" / ") : unit.name;
 }
+
+/**
+ * A HELYSZÍN LÉPCSŐS VÁLASZTÓJA: EGY SZINT EGY SOR.
+ *
+ * A teljes utas lista (`selectableUnitOptions`) egy dolgot old meg jól: két
+ * azonos nevű helyszín megkülönböztetését. Amit NEM old meg, az a telefon
+ * képernyője: egy háromszintű partnernél minden sor a teljes utat viszi, a
+ * lista hosszú, és a választás közben nem látszik, hol tart az ember.
+ *
+ * A lépcsős alak ugyanabból az adatból dolgozik, csak SZINTENKÉNT: először a
+ * gyökerek, a választás után annak a gyerekei, és így tovább. Ami a képernyőn
+ * marad, az minden szinten néhány testvér, nem a teljes fa.
+ *
+ * A VISSZAADOTT LÁNC MINDIG A KIVÁLASZTOTT ÁGAT KÖVETI, és pontosan EGGYEL
+ * hosszabb, mint a kiválasztott csomópont mélysége -- az utolsó szint az, ahol
+ * még nincs választás. Ha a kiválasztott csomópontnak nincs gyereke, az utolsó
+ * szint ÜRES listával áll: a hívó ebből tudja, hogy a lánc véget ért, és nem
+ * kell további sort rajzolnia.
+ *
+ * A KIVEZETETT (`isActive: false`) HELYSZÍN NEM VÁLASZTHATÓ, de ha ÉPP AZ van
+ * kiválasztva egy meglévő eszközön, a lánc akkor is felépül rajta keresztül --
+ * különben a szerkesztő képernyő némán elveszítené a beállított helyszínt, és a
+ * mentés átírná valami másra. Ezért a szűrés a VÁLASZTHATÓSÁGRA vonatkozik, nem
+ * a láncra.
+ */
+export interface UnitLevel {
+  /** Ezen a szinten felkínálható testvérek, kód szerint rendezve. */
+  options: UnitOption[];
+  /** Amit ezen a szinten már kiválasztottak, vagy `null`, ha még semmit. */
+  selectedId: string | null;
+}
+
+export function unitLevels(
+  units: readonly PartnerUnitLike[],
+  selectedId: string | null,
+): UnitLevel[] {
+  const byId = new Map(units.map((unit) => [unit.id, unit]));
+  const childrenOf = (parentId: string | null) =>
+    units
+      .filter((unit) => unit.parentId === parentId)
+      .sort((left, right) => left.code.localeCompare(right.code, "hu"))
+      .map((unit) => ({
+        id: unit.id,
+        label: `${unit.name} (${unit.code})`,
+        isActive: unit.isActive,
+      }));
+
+  // A KIVALASZTOTT CSOMOPONTTOL FELFELE epitjuk az utat, mert a sor csak a
+  // szulojere hivatkozik. A `seen` a kort fogja meg: hibas adatnal e nelkul ez
+  // vegtelen ciklus lenne, es a keperyon egy kimerevedett urlap latszana.
+  const path: string[] = [];
+  const seen = new Set<string>();
+  let cursor = selectedId ? byId.get(selectedId) : undefined;
+  while (cursor && !seen.has(cursor.id)) {
+    seen.add(cursor.id);
+    path.unshift(cursor.id);
+    cursor = cursor.parentId ? byId.get(cursor.parentId) : undefined;
+  }
+
+  const levels: UnitLevel[] = [];
+  let parentId: string | null = null;
+  for (const stepId of path) {
+    levels.push({ options: childrenOf(parentId), selectedId: stepId });
+    parentId = stepId;
+  }
+  levels.push({ options: childrenOf(parentId), selectedId: null });
+  return levels;
+}
