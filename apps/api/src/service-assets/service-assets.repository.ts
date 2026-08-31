@@ -15,6 +15,7 @@ import { Prisma, Repository, prisma } from "@acropora/database";
 import type {
   AssetAddressSummary,
   AssetDetail,
+  AssetDeletionBlockers,
   AssetDocumentSummary,
   AssetEventSummary,
   AssetHierarchyItem,
@@ -501,6 +502,31 @@ export class ServiceAssetsRepository extends Repository {
           scope,
         )
       : null;
+  }
+
+  /**
+   * A HAROM SZAMLALO, EGY KORBEN. Kulon lekerdezes mindharomra, mert a
+   * `assetDeletionRefusal` kulon ertekeket var -- lasd ott, miert nem egy
+   * osszevont logikai ertek.
+   */
+  async deletionBlockers(assetId: string): Promise<AssetDeletionBlockers> {
+    const [serviceJobs, worksheetLines, childAssets] = await Promise.all([
+      prisma.serviceJobAsset.count({ where: { assetId } }),
+      prisma.worksheetLine.count({ where: { assetId } }),
+      prisma.asset.count({ where: { parentAssetId: assetId } }),
+    ]);
+    return { serviceJobs, worksheetLines, childAssets };
+  }
+
+  /**
+   * A TORLES SAJAT VEGPONTON ALL, NEM EGY LISTA VAGY FRISSITES
+   * MELLEKHATASAKENT. Az esemenyek es a dokumentumok kaszkadban mennek vele (a
+   * sema igy all); a hibajegy- es munkalap-kapcsolat `Restrict`, tehat az
+   * adatbazis maga is megtagadna -- de egy nyers adatbazis-hiba nem mondja meg,
+   * MELYIK feltetel miatt, es epp az a kerdes erdekli a felhasznalot.
+   */
+  async remove(id: string): Promise<void> {
+    await prisma.asset.delete({ where: { id } });
   }
 
   async validationContext(input: {
