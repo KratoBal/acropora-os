@@ -137,6 +137,8 @@ describe("Brand database integration", { skip: !enabled }, () => {
           email: "missing-user@acropora.invalid",
           displayName: "Missing User",
           role: "VIEWER",
+          customerId: null,
+          supplierId: null,
         }),
       UnauthorizedException,
     );

@@ -46,3 +46,41 @@ describe("create worksheet department input", () => {
     ]);
   });
 });
+
+/**
+ * A SZULO A FA MIATT KERULT BE, ES SZANDEKOSAN NEM KOTELEZO: a hianya azt
+ * jelenti, hogy a helyszin a legfelso szintre kerul. Ez ma az EGYETLEN szint,
+ * tehat a regi urlap valtozatlanul atmegy -- egy meglevo kliens nem tor el
+ * attol, hogy a mezo letezik.
+ *
+ * AMIT EZ A FAJL NEM TUD MEGALLAPITANI, es ezert nem is allitja: hogy a
+ * megadott azonosito UGYANAHHOZ a partnerhez tartozik-e. Azt csak az
+ * adatbazis tudja, es a repository meg is kerdezi -- egy masik partner
+ * helyszine ala akasztott alegyseg a munkalapszamot vinne rossz helyre.
+ */
+describe("create worksheet department input, parent", () => {
+  it("accepts the form without a parent - that is the top level", () => {
+    assert.deepEqual(messagesFor({ code: "BIO", name: "Biodóm" }), []);
+  });
+
+  it("accepts a parent id beside the code", () => {
+    assert.deepEqual(
+      messagesFor({
+        parentId: "clx0000000000000000000000",
+        code: "FNM",
+        name: "Nagy főkamedence",
+      }),
+      [],
+    );
+  });
+
+  it("refuses a parent id that is not text", () => {
+    const messages = messagesFor({
+      parentId: 42,
+      code: "FNM",
+      name: "Nagy főkamedence",
+    });
+
+    assert.deepEqual(messages, ["A szülő helyszín azonosítója hibás."]);
+  });
+});

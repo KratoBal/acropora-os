@@ -6,6 +6,7 @@ import type {
 } from "@acropora/types";
 
 import { ApiError, apiAuthHeaders, apiRequest } from "./client";
+import { API_PREFIX } from "./api-prefix";
 
 export interface InventoryCountListQuery {
   page?: number;
@@ -30,7 +31,7 @@ function uploadCounts(
     const request = new XMLHttpRequest();
     request.open(
       "POST",
-      `/api/inventory/counts/${encodeURIComponent(id)}/upload`,
+      `${API_PREFIX}/inventory/counts/${encodeURIComponent(id)}/upload`,
     );
     request.setRequestHeader("Accept", "application/json");
     for (const [name, value] of Object.entries(apiAuthHeaders(token, "POST"))) {
@@ -73,7 +74,7 @@ async function downloadTemplate(
   filename: string,
 ): Promise<void> {
   const response = await fetch(
-    `/api/inventory/counts/${encodeURIComponent(id)}/template.xlsx`,
+    `${API_PREFIX}/inventory/counts/${encodeURIComponent(id)}/template.xlsx`,
     { headers: apiAuthHeaders(token) },
   );
   if (!response.ok) {

@@ -27,6 +27,8 @@ const ownerSession: Session = {
     email: "owner@acropora.local",
     displayName: "Acropora Tulajdonos",
     role: "OWNER",
+    customerId: null,
+    supplierId: null,
   },
 };
 
@@ -67,6 +69,7 @@ const reefSalt: ProductListResponse["items"][number] = {
     backorderAllowed: false,
   },
   grossPrice: "12700",
+  priceSource: "unas" as const,
   saleGrossPrice: null,
   stockOnHand: "6",
 };

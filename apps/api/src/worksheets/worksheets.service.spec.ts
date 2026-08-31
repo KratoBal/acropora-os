@@ -99,6 +99,7 @@ function worksheetRow(
     },
     department: {
       id: "department-1",
+      parentId: null,
       code: "BIO",
       name: "Biodóm",
       isActive: true,
@@ -129,6 +130,7 @@ function repository(
       isActive: true,
     }),
     existingAssetIds: async () => new Set<string>(),
+    assignableUserIds: async (ids: readonly string[]) => new Set(ids),
     createDraft: async () => "worksheet-1",
     replaceDraftContent: async () => true,
     close: async () => ({ ok: true }),
@@ -185,7 +187,7 @@ describe("WorksheetsService", () => {
       repository({
         detail: async () =>
           worksheetRow({
-            number: "FANK-BIO-2026-001",
+            number: "BIO-2026-001",
             numberYear: 2026,
             sequence: 1,
             versions: [
@@ -292,7 +294,10 @@ describe("WorksheetsService", () => {
 
   it("has nothing to compare on the first version", async () => {
     const service = new WorksheetsService(repository());
-    await assert.rejects(service.diff("worksheet-1", 1), BadRequestException);
+    await assert.rejects(
+      service.diff("worksheet-1", 1, { kind: "internal" }),
+      BadRequestException,
+    );
   });
 
   it("answers who changed what and why between two versions", async () => {
@@ -300,7 +305,7 @@ describe("WorksheetsService", () => {
       repository({
         detail: async () =>
           worksheetRow({
-            number: "FANK-BIO-2026-001",
+            number: "BIO-2026-001",
             numberYear: 2026,
             sequence: 1,
             versions: [
@@ -331,7 +336,7 @@ describe("WorksheetsService", () => {
       }),
     );
 
-    const diff = await service.diff("worksheet-1", 2);
+    const diff = await service.diff("worksheet-1", 2, { kind: "internal" });
     assert.equal(diff.fromVersion, 1);
     assert.equal(diff.toVersion, 2);
     assert.equal(diff.changedByName, "Nagy Anna");
@@ -432,6 +437,215 @@ describe("WorksheetsService", () => {
     const service = new WorksheetsService(
       repository({ detail: async () => null }),
     );
-    await assert.rejects(service.detail("worksheet-9"), NotFoundException);
+    await assert.rejects(
+      service.detail("worksheet-9", { kind: "internal" }),
+      NotFoundException,
+    );
+  });
+
+  /**
+   * A HÁROM ÜZENET AZ, AMI A HÍVÓHOZ ELJUT, tehát azt kell állítani, nem a
+   * dobott hibát. A megkülönböztetés nem stílus: ennek a hibaosztálynak MAGA a
+   * félrevezetés a lényege, mert a mai (javítás előtti) alakban egy vevő nevét
+   * kapja az, aki egy szállító kódjába ütközött. Egy üzenet, ami csak a nevet
+   * mondja, ugyanoda küldené a keresőt: rossz listába.
+   */
+  it("names the customer that holds the code", async () => {
+    const service = new WorksheetsService(
+      repository({
+        setPartnerCode: async () => {
+          throw new Error("PARTNER_CODE_TAKEN_BY_CUSTOMER:Fankó Kft.");
+        },
+      }),
+    );
+    await assert.rejects(
+      service.setPartnerCode("customer-1", { partnerCode: "FANK" }),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        error.message.includes("vevő") &&
+        error.message.includes("Fankó Kft."),
+    );
+  });
+
+  it("names the supplier that holds the code, and says it is a supplier", async () => {
+    const service = new WorksheetsService(
+      repository({
+        setPartnerCode: async () => {
+          throw new Error("PARTNER_CODE_TAKEN_BY_SUPPLIER:Kék Bolygó Kft.");
+        },
+      }),
+    );
+    await assert.rejects(
+      service.setPartnerCode("customer-1", { partnerCode: "FANK" }),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        error.message.includes("szállító") &&
+        error.message.includes("Kék Bolygó Kft."),
+    );
+  });
+
+  /**
+   * AZ UTOLSÓ FÉK ÜZENETE. Ez az ág az adatbázis egyedi indexére felel, és a
+   * kód-ellenőrzések után ritkán fut -- de nem soha, mert két párhuzamos írás
+   * között ez marad az egyetlen. Épp ezért kell igazat mondania: aki ide eljut,
+   * először találkozik vele, és nincs kihez fordulnia.
+   *
+   * AMIT AZ ÁLLÍTÁS RÖGZÍT, ÉS AMIÉRT KÉT FELE VAN: hogy a tiltás megmaradt, és
+   * hogy a hozzá tartozó INDOKLÁS eltűnt. Az indoklás („a munkalap-számnak
+   * egyértelműen kell azonosítania a partnert") a #182 óta hamis: a szám nem
+   * hordozza a rövidítést. A hiányt külön kell állítani, mert egy mondat, amiből
+   * kivettünk egy tagmondatot, a maradékra nézve ugyanúgy zöld.
+   *
+   * Ebben az üzenetben nincs behelyettesített próbaadat, tehát a ma reggeli
+   * csapda (a bábu neve fedi az állított szót) itt fel sem merül.
+   */
+  it("keeps the database backstop honest about what it refuses", async () => {
+    const service = new WorksheetsService(
+      repository({
+        setPartnerCode: async () => {
+          throw new Prisma.PrismaClientKnownRequestError("duplicate", {
+            code: "P2002",
+            clientVersion: "6.19.3",
+          });
+        },
+      }),
+    );
+    await assert.rejects(
+      service.setPartnerCode("customer-1", { partnerCode: "FANK" }),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        error.message.includes("Válassz másikat") &&
+        !error.message.includes("azonosítania"),
+    );
+  });
+
+  /** Az elutasítás önmagában zsákutca lenne: a hívó azt hinné, hogy hibázott.
+   * Az üzenetnek meg kell mondania, hol tartozik a kód. */
+  it("sends the caller to the partner screen for a mirror row", async () => {
+    const service = new WorksheetsService(
+      repository({
+        setPartnerCode: async () => {
+          throw new Error("PARTNER_CODE_MIRROR_ROW:Fankó Kft.");
+        },
+      }),
+    );
+    await assert.rejects(
+      service.setPartnerCode("customer-1", { partnerCode: "FANK" }),
+      (error: unknown) =>
+        error instanceof ConflictException &&
+        error.message.includes("Fankó Kft.") &&
+        error.message.includes("partner adatlapján"),
+    );
+  });
+});
+
+describe("WorksheetsService.create és a felelősök", () => {
+  /**
+   * AZ IRODA NYIT LAPOT A SZERELŐNEK, tehát a kiosztás abban a pillanatban
+   * ismert, amikor a lap megszületik. Külön lépésre bízva a felvivő azt hiszi,
+   * kiadta a munkát, közben a lap senki listáján nem jelenik meg -- és erről
+   * semmi nem szól, mert a kiosztatlan lap nem hibás állapot.
+   */
+  it("writes the assignees together with the draft", async () => {
+    let received: unknown = null;
+    const service = new WorksheetsService(
+      repository({
+        createDraft: async (input: unknown) => {
+          received = input;
+          return "worksheet-1";
+        },
+      }),
+    );
+
+    await service.create(
+      { ...contentDto(), assigneeIds: ["user-7", "user-8"] },
+      "user-1",
+    );
+
+    assert.deepEqual((received as { assigneeIds?: string[] }).assigneeIds, [
+      "user-7",
+      "user-8",
+    ]);
+  });
+
+  it("still creates a sheet nobody is assigned to yet", async () => {
+    let received: unknown = null;
+    const service = new WorksheetsService(
+      repository({
+        createDraft: async (input: unknown) => {
+          received = input;
+          return "worksheet-1";
+        },
+      }),
+    );
+
+    await service.create(contentDto(), "user-1");
+
+    assert.deepEqual((received as { assigneeIds?: string[] }).assigneeIds, []);
+  });
+
+  /**
+   * AZ ELLENŐRZÉS A LÉTREHOZÁS ELŐTT FUT. Fordított sorrendben egy elgépelt
+   * azonosító már meglévő lapot hagyna félkészen -- és a felvivő a hibaüzenetből
+   * nem tudná, hogy a lap közben létrejött.
+   */
+  it("refuses an unknown colleague before anything is written", async () => {
+    let created = false;
+    const service = new WorksheetsService(
+      repository({
+        assignableUserIds: async () => new Set<string>(),
+        createDraft: async () => {
+          created = true;
+          return "worksheet-1";
+        },
+      }),
+    );
+
+    await assert.rejects(
+      service.create(
+        { ...contentDto(), assigneeIds: ["nem-letezik"] },
+        "user-1",
+      ),
+      BadRequestException,
+    );
+    assert.equal(created, false);
+  });
+
+  /**
+   * AZ ÉRTESÍTÉS A TÁROLÁS UTÁN MEGY KI, ugyanabban a sorrendben, mint a
+   * későbbi kiosztásnál: egy értesítés olyan lapról, ami végül nem jött létre,
+   * a szerelőt küldené el hiába.
+   */
+  it("tells the assigned colleagues, once the sheet exists", async () => {
+    const notified: Array<{ worksheetId: string; userIds: string[] }> = [];
+    const service = new WorksheetsService(repository(), {
+      notifyWorksheetAssignment: (input: {
+        worksheetId: string;
+        userIds: string[];
+      }) => {
+        notified.push(input);
+      },
+    } as never);
+
+    await service.create(
+      { ...contentDto(), assigneeIds: ["user-7"] },
+      "user-1",
+    );
+
+    assert.equal(notified.length, 1);
+    assert.deepEqual(notified[0]?.userIds, ["user-7"]);
+  });
+
+  it("stays quiet when nobody was assigned", async () => {
+    let calls = 0;
+    const service = new WorksheetsService(repository(), {
+      notifyWorksheetAssignment: () => {
+        calls += 1;
+      },
+    } as never);
+
+    await service.create(contentDto(), "user-1");
+
+    assert.equal(calls, 0);
   });
 });

@@ -27,6 +27,8 @@ const session = (role: Session["user"]["role"]): Session => ({
     email: "balazs@acropora.local",
     displayName: "Balázs",
     role,
+    customerId: null,
+    supplierId: null,
   },
 });
 

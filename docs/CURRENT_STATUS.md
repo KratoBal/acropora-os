@@ -481,7 +481,6 @@ pnpm infra:up
 pnpm prisma:generate
 pnpm prisma:migrate
 pnpm prisma:seed
-pnpm lint
 pnpm typecheck
 pnpm test
 pnpm --filter @acropora/api test:integration

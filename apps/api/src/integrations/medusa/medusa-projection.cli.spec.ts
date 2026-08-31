@@ -4,6 +4,8 @@ import { glob } from "node:fs/promises";
 import { describe, it } from "node:test";
 
 import {
+  describeSkuLookupFailure,
+  describePublication,
   MEDUSA_PROJECTION_FALLBACK_NOTICE,
   medusaClientForProjection,
   runProjectionCli,
@@ -374,6 +376,111 @@ describe("a titok környezeti olvasása a vetítés útján", () => {
       [],
       "Ezek a fájlok engedélyt kaptak a kombinált olvasóra, de már nem hívják: " +
         staleCombined.join(", "),
+    );
+  });
+});
+
+describe("describePublication", () => {
+  /**
+   * A brief falszifikálási kikötése négy állítást kér, és mind a négy külön
+   * tesztet kapott: a published döntésnél látszik a megfelelő indok, a
+   * draftnál is, a csatorna NEVE látszik, és az AZONOSÍTÓ önmagában nem
+   * helyettesíti a nevet.
+   */
+  it("published döntésnél az állapot, a művelet és az INDOK is látszik", () => {
+    const lines = describePublication({
+      status: "published",
+      salesChannel: "attach",
+      reason: "értékesíthető a webshopban",
+      salesChannelName: "Acropora Webshop",
+    });
+
+    assert.match(lines, /publication: published/);
+    assert.match(lines, /sales channel: attached -> Acropora Webshop/);
+    assert.match(lines, /reason: értékesíthető a webshopban/);
+  });
+
+  it("draft döntésnél ugyanaz a három sor, a saját indokával", () => {
+    const lines = describePublication({
+      status: "draft",
+      salesChannel: "detach",
+      reason: "nincs webshopos értékesítésre jelölve",
+      salesChannelName: "Acropora Webshop",
+    });
+
+    assert.match(lines, /publication: draft/);
+    assert.match(lines, /sales channel: detached -> Acropora Webshop/);
+    assert.match(lines, /reason: nincs webshopos értékesítésre jelölve/);
+  });
+
+  it("a csatorna NEVE lekötésnél is látszik", () => {
+    /**
+     * Az első változatom itt elhagyta a nevet, azzal, hogy odatartozást
+     * sugallna. Gyengébb érv annál, amit elveszít: a lekötés ugyanolyan
+     * művelet egy csatornán, mint a hozzákötés, és aki egy MÁSIK bolt
+     * csatornájáról köt le egy terméket, annak ugyanúgy látnia kell, melyikről.
+     */
+    assert.match(
+      describePublication({
+        status: "draft",
+        salesChannel: "detach",
+        reason: "a termék inaktív",
+        salesChannelName: "Valaki más boltja",
+      }),
+      /detached -> Valaki más boltja/,
+    );
+  });
+
+  it("az AZONOSÍTÓ önmagában nem helyettesíti a nevet", () => {
+    /**
+     * A brief kikötése, és ez az egyetlen hely, ahol egy LÉTEZŐ, de nem a
+     * miénk csatorna kiderülhet: a hívás sikerül, a tesztek zöldek, és csak
+     * az olvasható név mondja meg, hogy nem oda írtunk, ahova hittük.
+     */
+    const lines = describePublication({
+      status: "published",
+      salesChannel: "attach",
+      reason: "értékesíthető a webshopban",
+      salesChannelName: "Valaki más boltja",
+    });
+
+    assert.match(lines, /Valaki más boltja/);
+    assert.doesNotMatch(
+      lines,
+      /^sales channel: attached -> sc_/m,
+      "azonosító nem állhat a név helyén",
+    );
+  });
+});
+
+/**
+ * KÉT ÁLLAPOT, KÉT TEENDŐ, KÉT MONDAT.
+ *
+ * A régi üzenet („nincs ilyen cikkszámú aktív változat") IGAZ volt, de két
+ * különböző állapotot fedett, és a teendő nem ugyanaz. A lekérdezés mindkettőt
+ * megmérte - csak eldobtuk a különbséget, mielőtt kiírtuk volna.
+ */
+describe("A cikkszám-keresés két sikertelen esete", () => {
+  it("a nem létező cikkszám egyszerű mondatot kap", () => {
+    const text = describeSkuLookupFailure("teszt0001", "no-such-sku");
+    assert.match(text, /nincs ilyen cikkszámú változat/);
+    assert.ok(
+      !text.includes("INAKTÍV"),
+      "a nem létező cikkszámnál nincs mit aktiválni",
+    );
+  });
+
+  it("az inaktív változat a MÁSIK teendőt nevezi meg", () => {
+    const text = describeSkuLookupFailure("teszt0001", "variant-inactive");
+    assert.match(text, /INAKTÍV/);
+    assert.match(text, /A cikkszám tehát jó/);
+    assert.match(text, /aktiválása/);
+  });
+
+  it("a két mondat különbözik, különben a szétválasztás semmit nem ér", () => {
+    assert.notEqual(
+      describeSkuLookupFailure("x", "no-such-sku"),
+      describeSkuLookupFailure("x", "variant-inactive"),
     );
   });
 });

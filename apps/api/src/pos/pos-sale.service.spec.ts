@@ -11,9 +11,20 @@ import type {
 } from "./pos-sale.repository.js";
 import { PosSaleService } from "./pos-sale.service.js";
 
-function variant(
-  overrides: Partial<PosSaleVariantInfo> = {},
-): PosSaleVariantInfo {
+/**
+ * A TESZT SAJAT MENNYISEGE, ES MIERT NEM A TIPUSBOL JON.
+ *
+ * A `currentQty` 2026-08-31-ig a PosSaleVariantInfo mezoje volt, es a
+ * termeleskodban SENKI nem olvasta: az egyetlen olvasojat a 819c833 vette ki
+ * 2026-07-29-en, amikor a tranzakcio elotti becslest lecsereltek a zar alatt
+ * szamitott ertekre. A mezo torolve lett; a hamis repository viszont tovabbra
+ * is szimulalni akarja, MIT jelentene vissza az igazi, ezert sajat fixturaban
+ * tartja a mennyiseget. Igy a teszt szandeka valtozatlan, es a termeleskod nem
+ * hordoz olyan mezot, amit csak tesztek olvasnak.
+ */
+type TestVariantInfo = PosSaleVariantInfo & { currentQty: Prisma.Decimal };
+
+function variant(overrides: Partial<TestVariantInfo> = {}): TestVariantInfo {
   return {
     variantId: "variant-1",
     sku: "REEF-SALT-01",
@@ -41,7 +52,7 @@ function variant(
 /// jatszo tesztek is ezt adjak vissza a masodik kiserletnel.
 function fakeSaleResult(
   params: CreatePosSaleParams,
-  variants: Map<string, PosSaleVariantInfo>,
+  variants: Map<string, TestVariantInfo>,
 ): CreatePosSaleResult {
   const stockWarnings: PosSaleStockWarning[] = [];
   for (const line of params.lines) {
@@ -93,7 +104,7 @@ function fakeSaleResult(
 }
 
 function buildService(options: {
-  variants: Map<string, PosSaleVariantInfo>;
+  variants: Map<string, TestVariantInfo>;
   warehouseId?: string;
   createSale?: (params: CreatePosSaleParams) => Promise<CreatePosSaleResult>;
 }) {

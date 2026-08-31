@@ -107,6 +107,41 @@ module.exports = ({ config }) => {
       "@react-native-community/datetimepicker",
     ],
     experiments: {
+      /**
+       * TYPED ROUTES ARE ON, AND THEY GATE NOTHING IN CI. Measured 2026-08-28.
+       *
+       * The route types are generated into `.expo/types`, and that directory
+       * is git-ignored (.gitignore:7). A clean CI checkout therefore has no
+       * route types to check against: `pnpm mobile:typecheck` walks past an
+       * `href` pointing at a screen that does not exist, without a word.
+       *
+       * Nor is there a command that would produce them. Expo's CLI has no
+       * dedicated generator - the types fall out of `expo start` or
+       * `expo export` - and `expo export --platform web` dies after 5.7
+       * seconds on an unrelated dependency (`wa-sqlite.wasm`, from
+       * expo-sqlite's web worker), producing no types at all.
+       *
+       * THE FLAG STAYS ON, because it is what produces the types at all - an
+       * editor pointed at a running dev server gets them. But what it gives
+       * depends on someone having RUN that server: in this checkout the
+       * `.expo/types` directory does not exist at all (measured, together with
+       * `git ls-files apps/mobile/.expo`, which is empty). What the flag must
+       * not do is look like a gate to whoever reads this file next.
+       *
+       * The gate that does run lives in
+       * `apps/api/src/mobile/mobile-screen-routes.spec.ts`, on the API side,
+       * where CI compiles and runs it anyway. It is NARROWER on purpose: it
+       * asserts that every navigation target matches a route file on disk, not
+       * that the parameters or the query shape are right.
+       *
+       * WHEN THIS BECOMES A REAL GATE: the day `expo export` runs to
+       * completion. That is a fact anyone can check with one command, not a
+       * date and not a person to wait for. Committing the generated types is
+       * the other option and it is deliberately NOT taken: a stale generated
+       * type file does not stay quiet, it says something WRONG - rejecting a
+       * route that exists, or accepting one that is gone - and nothing signals
+       * that it expired.
+       */
       typedRoutes: true,
       reactCompiler: true,
     },

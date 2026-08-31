@@ -65,4 +65,34 @@ describe("getServiceCapabilities", () => {
     assert.equal(getServiceCapabilities("WAREHOUSE").workspace, false);
     assert.equal(getServiceCapabilities("SALES").assetsView, false);
   });
+
+  /**
+   * A MUNKALAP KULCSAI UGYANAZT A KÉT SZERVER-JOGOT TÜKRÖZIK, mint az eszközé
+   * (`service.view`, `service.manage`), tehát szerepenként EGYÜTT KELL
+   * MOZOGNIUK. Ha egyszer elválnak, az itt derül ki, nem a helyszínen: egy
+   * csempe, amit a szerver minden hívásnál elutasít, hibaüzenet-gyár.
+   */
+  it("moves the worksheet keys with the asset keys, role by role", () => {
+    for (const role of [
+      "OWNER",
+      "ADMIN",
+      "MANAGER",
+      "SALES",
+      "WAREHOUSE",
+      "SERVICE",
+      "VIEWER",
+    ] as const) {
+      const capabilities = getServiceCapabilities(role);
+      assert.equal(
+        capabilities.worksheetsView,
+        capabilities.assetsView,
+        `${role}: a munkalap és az eszköz olvasása ugyanaz a szerver-jog.`,
+      );
+      assert.equal(
+        capabilities.worksheetsManage,
+        capabilities.assetsManage,
+        `${role}: a munkalap és az eszköz írása ugyanaz a szerver-jog.`,
+      );
+    }
+  });
 });

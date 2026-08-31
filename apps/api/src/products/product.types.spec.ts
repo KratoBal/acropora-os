@@ -91,3 +91,78 @@ describe("toProductListItem", () => {
     assert.equal(item.stockOnHand, null);
   });
 });
+
+describe("which price the list is showing", () => {
+  const withSnapshot = (grossPrice: string) =>
+    ({
+      grossPrice: new Prisma.Decimal(grossPrice),
+      saleGrossPrice: null,
+      isPackageProduct: false,
+    }) as unknown as ProductWithRelations["unasSnapshot"];
+
+  it("says the mirror is still maintained while the shop owns the product", () => {
+    const item = toProductListItem(
+      baseProduct({
+        catalogAuthority: "UNAS",
+        unasSnapshot: withSnapshot("4990"),
+      }),
+    );
+
+    assert.equal(item.priceSource, "unas");
+    assert.equal(item.grossPrice, "4990");
+  });
+
+  /**
+   * THE ONE THE FIELD EXISTS FOR. After a takeover the import stops writing the
+   * snapshot, so this column shows the last price the shop had - and the number
+   * alone cannot say so.
+   */
+  it("says the mirror is FROZEN once the product is ours", () => {
+    const item = toProductListItem(
+      baseProduct({
+        catalogAuthority: "ACROPORA",
+        unasSnapshot: withSnapshot("4990"),
+      }),
+    );
+
+    assert.equal(item.priceSource, "unas_frozen");
+  });
+
+  it("does not change the number it labels", () => {
+    // The value is deliberately untouched: showing our own price instead would
+    // decide on the business's behalf what a colleague sees on a live screen.
+    const taken = baseProduct({
+      catalogAuthority: "ACROPORA",
+      unasSnapshot: withSnapshot("4990"),
+    });
+    const theirs = baseProduct({
+      catalogAuthority: "UNAS",
+      unasSnapshot: withSnapshot("4990"),
+    });
+
+    assert.equal(
+      toProductListItem(taken).grossPrice,
+      toProductListItem(theirs).grossPrice,
+    );
+  });
+
+  it("says there is no source at all for a purely local product", () => {
+    const item = toProductListItem(
+      baseProduct({ catalogAuthority: "ACROPORA", unasSnapshot: null }),
+    );
+
+    assert.equal(item.priceSource, "none");
+    assert.equal(item.grossPrice, null);
+  });
+
+  it("treats an unset authority as the shop's, like every other read", () => {
+    const item = toProductListItem(
+      baseProduct({
+        catalogAuthority: null,
+        unasSnapshot: withSnapshot("4990"),
+      }),
+    );
+
+    assert.equal(item.priceSource, "unas");
+  });
+});

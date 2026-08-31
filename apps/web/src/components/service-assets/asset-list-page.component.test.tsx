@@ -42,6 +42,8 @@ const session: Session = {
     email: "balazs@acropora.local",
     displayName: "Balázs",
     role: "OWNER",
+    customerId: null,
+    supplierId: null,
   },
 };
 
@@ -74,6 +76,77 @@ function lastTarget() {
   const target = String(navigation.replace.mock.calls.at(-1)?.[0]);
   return new URLSearchParams(target.split("?")[1]);
 }
+
+function partnerResponse(unit?: {
+  id: string;
+  code: string;
+  name: string;
+  path: string[];
+}): AssetListResponse {
+  const base = response(1);
+  return {
+    ...base,
+    items: [
+      {
+        ...base.items[0]!,
+        owner: {
+          type: "SUPPLIER",
+          id: "supplier-1",
+          code: "SZALL-1",
+          displayName: "Fankó Kft.",
+        },
+        address: {
+          id: "supplier:supplier-1",
+          formatted: "1146 Budapest, Állatkerti krt. 6-12.",
+        },
+        unit,
+      },
+    ],
+  };
+}
+
+describe("AssetListPage location cell", () => {
+  beforeEach(() => {
+    auth.session = session;
+    api.list.mockReset();
+  });
+
+  /**
+   * AMIT EZ AZ ALLITAS OR IZ: hogy a listaban a VALASZTOTT hely latszik, nem a
+   * visszaeses. Ha a cella a cimet irna ki (ahogy a javitas elott tette),
+   * ugyanaz a sor keletkezne egy pontositott es egy nem pontositott eszkozre --
+   * es a kettot kivulrol semmi nem kulonboztetne meg.
+   */
+  it("shows the unit for a partner-owned asset", async () => {
+    api.list.mockResolvedValue(
+      partnerResponse({
+        id: "unit-1",
+        code: "BIO",
+        name: "Biodóm",
+        path: ["Fankó", "Biodóm"],
+      }),
+    );
+
+    render(<AssetListPage />);
+
+    // A TELJES UT latszik, nem a level neve: ket tavoli ag „Biodóm (BIO)"
+    // egysege kulonben ugyanazt a kepet adna.
+    expect(await screen.findByText("Fankó / Biodóm (BIO)")).toBeTruthy();
+    expect(screen.queryByText(/Nincs pontosítva/)).toBeNull();
+  });
+
+  /** A masik fele: alegyseg nelkul a cim latszik, DE megjelolve, hogy ez nem
+   * valasztas eredmenye. Enelkul a ket eset egyforma lenne. */
+  it("marks the partner address as a fallback when no unit is set", async () => {
+    api.list.mockResolvedValue(partnerResponse(undefined));
+
+    render(<AssetListPage />);
+
+    expect(
+      await screen.findByText(/Nincs pontosítva\. 1146 Budapest/),
+    ).toBeTruthy();
+  });
+});
 
 describe("AssetListPage paging", () => {
   beforeEach(() => {
@@ -129,5 +202,43 @@ describe("AssetListPage paging", () => {
     await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
     expect(lastTarget().get("page")).toBe("1");
     expect(lastTarget().get("status")).toBe("RETIRED");
+  });
+});
+
+describe("AssetListPage es az ugyfel sajat kodja", () => {
+  beforeEach(() => {
+    auth.session = session;
+    navigation.params = new URLSearchParams();
+    navigation.replace.mockReset();
+    api.list.mockReset();
+  });
+
+  /**
+   * A KERESES EDDIG IS NEZTE, A SOR VISZONT NEM MUTATTA. Az ugyfel felolvassa a
+   * sajat kodjat, a talalat feljon, es semmi nem arulja el, MIRE illeszkedett --
+   * a felhasznalo ilyenkor ugyanazt kerdezi meg megegyszer.
+   */
+  it("shows the customer's own code on the row when there is one", async () => {
+    const withCode = response(1);
+    withCode.items[0]!.inventoryNumber = "LT-4711";
+    api.list.mockResolvedValue(withCode);
+
+    render(<AssetListPage />);
+
+    expect(await screen.findByText("LT-4711")).toBeTruthy();
+    expect(screen.getByText(/Leltári szám/)).toBeTruthy();
+  });
+
+  /**
+   * ES AMI NINCS, AZ NEM LESZ URES FELIRAT: egy "Leltári szám:" cimke ertek
+   * nelkul azt allitana, hogy tudunk rola valamit.
+   */
+  it("writes no label at all when the asset has no such code", async () => {
+    api.list.mockResolvedValue(response(1));
+
+    render(<AssetListPage />);
+
+    expect(await screen.findByText("ESZ-0001")).toBeTruthy();
+    expect(screen.queryByText(/Leltári szám/)).toBeNull();
   });
 });

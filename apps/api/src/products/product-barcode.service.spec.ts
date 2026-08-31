@@ -19,7 +19,7 @@ const repository = (overrides: Record<string, unknown> = {}) =>
       code: "5901234123457",
       isPrimary: true,
     }),
-    add: async (variantId: string, code: string, isPrimary?: boolean) => ({
+    add: async (_variantId: string, code: string, isPrimary?: boolean) => ({
       id: "barcode-new",
       code,
       isPrimary: isPrimary ?? true,

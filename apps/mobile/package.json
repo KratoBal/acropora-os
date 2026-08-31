@@ -47,10 +47,11 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "export:web": "expo export --platform web",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "doctor": "expo-doctor",
-    "test": "tsc -p tsconfig.test.json && specs=$(find test-dist -name '*.spec.js' ! -name '*.smoke.spec.js' ! -name '*.integration.spec.js') && { [ -n \"$specs\" ] || { echo 'Nem talaltam unit spec fajlt - nem jelentek sikert.' >&2; exit 1; }; } && node --test $specs"
+    "test": "rm -rf test-dist && tsc -p tsconfig.test.json && specs=$(find test-dist -name '*.spec.js' ! -name '*.smoke.spec.js' ! -name '*.integration.spec.js') && { [ -n \"$specs\" ] || { echo 'Nem talaltam unit spec fajlt - nem jelentek sikert.' >&2; exit 1; }; } && node --test $specs"
   },
   "private": true
 }

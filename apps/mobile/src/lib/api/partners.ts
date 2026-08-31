@@ -1,6 +1,14 @@
 import { apiRequest } from "./client";
 
 /**
+ * A végpont előtagja EGY HELYEN. Ez a fájl korábban 3-szer írta le ugyanezt, és
+ * 2026-08-27-én a munkalap-kliens pontosan ezért tudott HÁROM helyen egyszerre
+ * rossz előtaggal hívni: a szerkezet megengedte, hogy egy helyen javuljon és a
+ * másik kettőben ne. Egy konstansnál ez a hiba nem tud részlegesen megtörténni.
+ */
+const BASE = "/suppliers";
+
+/**
  * SZERVIZ PARTNEREK, OLVASÁSRA.
  *
  * A telefonon a partner MUNKAKÖRNYEZET: a szerelő azt nézi meg, kihez megy és
@@ -22,7 +30,8 @@ export interface ServicePartnerListItem {
   name: string;
   isService: boolean;
   isSupplier: boolean;
-  /** A munkalapszám első szakasza (`FANK`). Hiányozhat, amíg senki nem tölti ki. */
+  /** A partner rövidítése (`FANK`). A munkalapszámban már nincs benne, de a
+   * lezárás megköveteli. Hiányozhat, amíg senki nem tölti ki. */
   worksheetPartnerCode?: string;
   phone?: string;
   email?: string;
@@ -61,11 +70,37 @@ export function listServicePartners(page = 1, pageSize = 25, search = "") {
     status: "ACTIVE",
   });
   if (search.trim()) query.set("search", search.trim());
-  return apiRequest<ServicePartnerListResponse>(`/suppliers?${query}`);
+  return apiRequest<ServicePartnerListResponse>(`${BASE}?${query}`);
 }
 
 export function getServicePartner(id: string) {
   return apiRequest<ServicePartnerListItem>(
-    `/suppliers/${encodeURIComponent(id)}`,
+    `${BASE}/${encodeURIComponent(id)}`,
+  );
+}
+
+/**
+ * A PARTNER HELYSZÍNEI (alegységei), laposan.
+ *
+ * Ugyanaz a fa, amit a partner képernyőjén „Alegységek" néven szerkesztenek, és
+ * ugyanaz a végpont, amit a webes eszköz-űrlap is hív. `partners.view` jogot
+ * kér, amit a SERVICE szerepkör megkap -- a szerkesztéshez való `partners.manage`
+ * nem kell hozzá, és nincs is meg neki.
+ *
+ * A választó-listát a `lib/partners/site-tree.ts` építi ebből: a fa a `parentId`
+ * mezőből áll össze, és a teljes út kell, mert a kód csak testvérek között
+ * egyedi.
+ */
+export interface PartnerUnit {
+  id: string;
+  parentId: string | null;
+  code: string;
+  name: string;
+  isActive: boolean;
+}
+
+export function listPartnerUnits(partnerId: string) {
+  return apiRequest<{ items: PartnerUnit[] }>(
+    `${BASE}/${encodeURIComponent(partnerId)}/units`,
   );
 }

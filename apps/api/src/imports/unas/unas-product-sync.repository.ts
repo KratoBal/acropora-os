@@ -20,6 +20,7 @@ import {
   unasVariantLabel,
   unasVariantSku,
 } from "../../common/unas-variant.util.js";
+import { writeSearchDocument } from "../../integrations/ai-product-search/ai-product-search.writer.js";
 import {
   describeSkipped,
   partitionByUnasAuthority,
@@ -358,6 +359,8 @@ export class UnasProductSyncRepository extends Repository {
         unchangedCount: true,
         conflictCount: true,
         missingCount: true,
+        skippedCount: true,
+        skippedSourceChangedCount: true,
         errorCode: true,
       },
     });
@@ -383,6 +386,8 @@ export class UnasProductSyncRepository extends Repository {
         unchangedCount: true,
         conflictCount: true,
         missingCount: true,
+        skippedCount: true,
+        skippedSourceChangedCount: true,
         errorCode: true,
       },
     });
@@ -557,10 +562,31 @@ export class UnasProductSyncRepository extends Repository {
         }
 
         const counts = { CREATE: 0, UPDATE: 0, UNCHANGED: 0, CONFLICT: 0 };
+        /**
+         * A KIHAGYÁS ÁLLANDÓ, EZ VISZONT ESEMÉNY.
+         *
+         * A `skipped.length` minden futásnál ugyanazokat a termékeket számolja,
+         * tehát a száma futásról futásra ugyanaz - egy szám, ami sosem
+         * változik, nem jelzés, hanem alapzaj.
+         *
+         * Ez a számláló azt méri, hogy a kihagyottak közül hánynál változott
+         * meg a FORRÁS is ugyanabban a futásban: vagyis a boltban átírtak egy
+         * terméket, amit mi vettünk át, és a változás nem jött át. A legtöbb
+         * futáson nulla, és pontosan akkor nem az, amikor egy termék elkezd
+         * elavulni nálunk.
+         *
+         * Az adat itt már a kezünkben van: a kihagyás a különbség-ciklus
+         * elején történik, ahol a `diff.action` értéke ismert. Nem kell hozzá
+         * új lekérdezés.
+         */
+        let skippedSourceChanged = 0;
         for (const diff of diffs) {
           // A kihagyott termék a számlálókba sem kerül bele: nem az történt
           // vele, hogy változatlan maradt, hanem hogy hozzá sem nyúltunk.
-          if (diff.productId && skippedProductIds.has(diff.productId)) continue;
+          if (diff.productId && skippedProductIds.has(diff.productId)) {
+            if (diff.action !== "UNCHANGED") skippedSourceChanged += 1;
+            continue;
+          }
           counts[diff.action] += 1;
           const sourceUpdatedAt = diff.product.sourceUpdatedAt
             ? new Date(diff.product.sourceUpdatedAt)
@@ -788,6 +814,7 @@ export class UnasProductSyncRepository extends Repository {
               occurredAt: windowEnd,
             },
           });
+          await writeSearchDocument(transaction, product.id);
         }
 
         let missingCount = 0;
@@ -876,6 +903,7 @@ export class UnasProductSyncRepository extends Repository {
                 occurredAt: windowEnd,
               },
             });
+            await writeSearchDocument(transaction, reference.entityId);
           }
         }
 
@@ -965,6 +993,7 @@ export class UnasProductSyncRepository extends Repository {
             conflictCount: counts.CONFLICT,
             missingCount,
             skippedCount: skipped.length,
+            skippedSourceChangedCount: skippedSourceChanged,
           },
         });
 
@@ -972,7 +1001,9 @@ export class UnasProductSyncRepository extends Repository {
         // kimegy, mert egy szám önmagában nem mondja meg, MELYIK maradt ki.
         if (skipped.length > 0)
           console.warn(
-            `[UnasProductSync] ${skipped.length} termék kimaradt (run ${runId}). ${describeSkipped(skipped)}`,
+            `[UnasProductSync] ${skipped.length} termék kimaradt, ebből ` +
+              `${skippedSourceChanged} olyan, aminél a forrás is változott ` +
+              `(run ${runId}). ${describeSkipped(skipped)}`,
           );
         return {
           runId,
@@ -981,6 +1012,7 @@ export class UnasProductSyncRepository extends Repository {
           counts,
           missingCount,
           skippedCount: skipped.length,
+          skippedSourceChangedCount: skippedSourceChanged,
           windowStart: windowStart?.toISOString() ?? null,
           windowEnd: windowEnd.toISOString(),
         };

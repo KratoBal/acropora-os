@@ -114,6 +114,7 @@ const product = {
           isPrimary: true,
         },
       ],
+      supplierProducts: [],
       extension: {
         id: "extension-1",
         variantId: "variant-1",
@@ -214,6 +215,12 @@ function createDatabase({ authorityUpdateCount = 1 } = {}) {
         return {};
       },
     },
+    aiProductSearchDocument: {
+      upsert: async (args: unknown) => {
+        calls.push({ operation: "searchDocumentUpsert", args });
+        return {};
+      },
+    },
   };
   const database: ProductDatabase = {
     product: {
@@ -265,9 +272,17 @@ describe("ProductRepository", () => {
       "user-1",
     );
 
+    /**
+     * A KERESESI DOKUMENTUM UGYANEBBEN A TRANZAKCIOBAN KESZUL.
+     *
+     * A ket utolso muvelet nem diszites a sorban: a `transactionFind` az iro
+     * olvasasa, a `searchDocumentUpsert` maga az iras - mindketto a
+     * tranzakcio-kliensen, nem a kapcsolaton. Ha valaki kesobb kiviszi a
+     * tranzakciobol, ez a sor pirosodik.
+     */
     assert.deepEqual(
       calls.map((call) => call.operation),
-      ["create", "event"],
+      ["create", "event", "transactionFind", "searchDocumentUpsert"],
     );
     assert.equal(
       (
@@ -358,9 +373,50 @@ describe("ProductRepository", () => {
         "transactionUpdate",
         "categoryUpdateMany",
         "categoryUpsert",
+        // A dokumentum a KATEGORIA-IRAS UTAN keszul, kulonben a facets sav
+        // az elozo kategoriat vinne tovabb.
+        "transactionFind",
+        "searchDocumentUpsert",
         "transactionFind",
       ],
     );
+  });
+
+  /**
+   * A VASAROLHATOSAG ELJUT A TERMEK SORAIG.
+   *
+   * A `webshopSellable` a fában eddig HAT helyen szerepelt, MIND OLVASASKENT
+   * (medusa-projekcio, publikacios szabaly, cli, tesztek) -- semmi nem tudta
+   * igazra allitani. A hianyzo lepes NEM a mezo volt, hanem az iras: a
+   * modosito ut TETELES mezolistat ir, es ez nem volt kozte. Ez az allitas azt
+   * a listat orzi: ha valaki kiveszi a sort, a kapcsolo tovabbra is LATSZIK a
+   * feluleten, es a mentes is sikerul -- csak nem tortenik semmi.
+   */
+  it("carries the purchasable flag into the product row", async () => {
+    const { database, calls } = createDatabase();
+    const repository = new ProductRepository(database);
+    await repository.update("product-1", { webshopSellable: true });
+
+    const updateArgs = calls.find(
+      (call) => call.operation === "transactionUpdate",
+    )?.args as { data: { webshopSellable?: boolean } };
+    assert.equal(updateArgs.data.webshopSellable, true);
+  });
+
+  /**
+   * ES A HAMIS UGYANIGY ELJUT. Kulon allitas, mert egy `if (input.x)` alaku
+   * iras a bekapcsolast atengedne, a KIkapcsolast pedig csendben elnyelne --
+   * es akkor egy vasarolhato termeket nem lehetne visszavenni a webshopbol.
+   */
+  it("carries a cleared purchasable flag too, not just a set one", async () => {
+    const { database, calls } = createDatabase();
+    const repository = new ProductRepository(database);
+    await repository.update("product-1", { webshopSellable: false });
+
+    const updateArgs = calls.find(
+      (call) => call.operation === "transactionUpdate",
+    )?.args as { data: { webshopSellable?: boolean } };
+    assert.equal(updateArgs.data.webshopSellable, false);
   });
 
   it("applies pagination and catalog filters", async () => {
@@ -458,10 +514,22 @@ describe("ProductRepository", () => {
     const repository = new ProductRepository(database);
     await repository.archive("product-1");
 
-    const updateArgs = calls.find((call) => call.operation === "update")
-      ?.args as { data: { isActive: boolean; archivedAt: Date } };
+    const updateArgs = calls.find(
+      (call) => call.operation === "transactionUpdate",
+    )?.args as { data: { isActive: boolean; archivedAt: Date } };
     assert.equal(updateArgs.data.isActive, false);
     assert.ok(updateArgs.data.archivedAt instanceof Date);
+
+    /**
+     * AZ `isActive` A KERESHETOSEG EGYIK FELE, ezert a levetel ugyanabban a
+     * tranzakcioban irja at a dokumentumot is. Enelkul az egyensuly-ellenorzes
+     * ket szama MINDEN archivalas utan elterne, es az az ellenorzes, ami a
+     * nema hibat keresi, maga valna zajossa.
+     */
+    assert.deepEqual(
+      calls.map((call) => call.operation),
+      ["transactionUpdate", "transactionFind", "searchDocumentUpsert"],
+    );
   });
 
   it("returns hierarchical category and ordered brand options", async () => {

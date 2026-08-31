@@ -4,12 +4,20 @@ import test from "node:test";
 import { BadRequestException } from "@nestjs/common";
 import type { AssetDetail } from "@acropora/types";
 
+import type { PartnerScope } from "../auth/partner-scope.util.js";
 import type { ServiceAssetsRepository } from "./service-assets.repository.js";
 import { ServiceAssetsService } from "./service-assets.service.js";
 import {
+  SERVICE_OWNER_PICKABLE_WHERE,
   SERVICE_OWNER_WHERE,
   assetOwnerScopeWhere,
 } from "./service-assets.types.js";
+
+/**
+ * BELSOS HATOKOR, KIIRVA. Ezek az allitasok a `keep` paros KEZELESET merik, nem
+ * a jogosultsagot -- azt kulon suite meri, adatbazison.
+ */
+const INTERNAL: PartnerScope = { kind: "internal" };
 
 const asset = {
   id: "asset-1",
@@ -133,6 +141,7 @@ test("generates an app deep link QR without exposing database ids", async () => 
   try {
     const result = await new ServiceAssetsService(repository()).qrCode(
       "asset-1",
+      { kind: "internal" },
     );
     assert.equal(
       result.value,
@@ -160,6 +169,31 @@ test("asks for service partners only, and says so in one place", () => {
   assert.deepEqual(SERVICE_OWNER_WHERE, { isActive: true, isService: true });
 });
 
+/**
+ * A VÁLASZTÓ SZŰKEBB, MINT A LISTA HATÓKÖRE, ÉS EZ A KÜLÖNBSÉG A LÉNYEG.
+ *
+ * A törölt partnerhez ÚJ eszközt nem rendelhetünk (a tulajdonos kérése,
+ * 2026-08-21: a törölt partner ne jelenjen meg a választókban). A nála ÁLLÓ
+ * eszközök viszont fizikailag ott vannak, tehát a szerelő listájáról nem
+ * tűnhetnek el -- ha a két szabály egy konstansba kerülne, az egyik oldalon
+ * mindig rossz lenne, és némán.
+ */
+test("offers no deleted partner, but keeps their assets on the list", () => {
+  assert.deepEqual(SERVICE_OWNER_PICKABLE_WHERE, {
+    isActive: true,
+    isService: true,
+    deletedAt: null,
+  });
+
+  const scope = assetOwnerScopeWhere("SERVICE_PARTNER");
+  assert.deepEqual(scope.supplier, { is: { ...SERVICE_OWNER_WHERE } });
+  assert.equal(
+    "deletedAt" in (scope.supplier as { is: Record<string, unknown> }).is,
+    false,
+    "A lista hatóköre NEM kaphatja meg a törölt-szűrőt: az eszköz ott áll.",
+  );
+});
+
 test("keeps the owner an existing asset already has", async () => {
   let asked: unknown = "nem hívták meg";
   const service = new ServiceAssetsService(
@@ -171,7 +205,10 @@ test("keeps the owner an existing asset already has", async () => {
     }),
   );
 
-  await service.owners({ ownerType: "CUSTOMER", ownerId: "customer-9" });
+  await service.owners(
+    { ownerType: "CUSTOMER", ownerId: "customer-9" },
+    INTERNAL,
+  );
 
   assert.deepEqual(asked, { type: "CUSTOMER", id: "customer-9" });
 });
@@ -187,7 +224,7 @@ test("passes nothing to keep when the caller is creating a new asset", async () 
     }),
   );
 
-  await service.owners();
+  await service.owners({}, INTERNAL);
 
   assert.equal(asked, null);
 });
@@ -203,11 +240,11 @@ test("refuses half of an owner reference instead of ignoring it", () => {
   // A visszautasítás AZONNAL történik, még a tároló hívása előtt: nem
   // elutasított ígéret, hanem dobott hiba.
   assert.throws(
-    () => service.owners({ ownerType: "CUSTOMER" }),
+    () => service.owners({ ownerType: "CUSTOMER" }, INTERNAL),
     BadRequestException,
   );
   assert.throws(
-    () => service.owners({ ownerId: "customer-9" }),
+    () => service.owners({ ownerId: "customer-9" }, INTERNAL),
     BadRequestException,
   );
 });

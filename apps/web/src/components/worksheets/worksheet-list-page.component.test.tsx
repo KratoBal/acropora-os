@@ -43,6 +43,8 @@ const session: Session = {
     displayName: "Szerelő Sándor",
     nickname: "Sanyi",
     role: "SERVICE",
+    customerId: null,
+    supplierId: null,
   },
 };
 
@@ -53,6 +55,10 @@ function response(
     items: [
       {
         id: "worksheet-1",
+        // SZÁNDÉKOSAN a RÉGI alakú szám, a partner tagjával. 2026-08-27 óta az
+        // új lapok `BIO-2026-001` alakot kapnak, a korábbiak száma viszont
+        // változatlan marad, tehát a listának mindkettőt ki kell írnia. Aki
+        // innen másol mintát, ne ezt vegye az új alaknak.
         number: "FANK-BIO-2026-001",
         label: "FANK-BIO-2026-001",
         customerName: "Fővárosi Állat- És Növénykert",

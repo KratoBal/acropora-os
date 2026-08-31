@@ -1,3 +1,5 @@
+import type { PartnerScope } from "../auth/partner-scope.util.js";
+import { assetDeletionRefusal } from "./asset-deletion.js";
 import {
   BadRequestException,
   ConflictException,
@@ -7,6 +9,10 @@ import {
 import { Prisma } from "@acropora/database";
 import type { AssetQrCode } from "@acropora/types";
 
+import {
+  ASSET_DEPARTMENT_REFUSAL_MESSAGES,
+  assetDepartmentRefusal,
+} from "./asset-department.js";
 import type {
   AssetListQueryDto,
   AssetOwnersQueryDto,
@@ -20,8 +26,8 @@ import { ServiceAssetsRepository } from "./service-assets.repository.js";
 export class ServiceAssetsService {
   constructor(private readonly repository: ServiceAssetsRepository) {}
 
-  list(query: AssetListQueryDto) {
-    return this.repository.list(query);
+  list(query: AssetListQueryDto, scope: PartnerScope) {
+    return this.repository.list(query, scope);
   }
 
   /**
@@ -30,7 +36,7 @@ export class ServiceAssetsService {
    * nem lenne választható. Fél páros értelmezhetetlen, ezért az hiba: csendben
    * elhagyva pont azt a sort ejtenénk ki, amiért a hívás történt.
    */
-  owners(query: AssetOwnersQueryDto = {}) {
+  owners(query: AssetOwnersQueryDto = {}, scope: PartnerScope) {
     if ((query.ownerType === undefined) !== (query.ownerId === undefined))
       throw new BadRequestException(
         "A megtartandó tulajdonos típusa és azonosítója csak együtt adható meg.",
@@ -39,17 +45,35 @@ export class ServiceAssetsService {
       query.ownerType && query.ownerId
         ? { type: query.ownerType, id: query.ownerId }
         : null,
+      scope,
     );
   }
 
-  async detail(id: string) {
-    const asset = await this.repository.detail(id);
+  async detail(id: string, scope: PartnerScope) {
+    const asset = await this.repository.detail(id, scope);
     if (!asset) throw new NotFoundException("Az eszköz nem található.");
     return asset;
   }
 
-  async scan(qrToken: string) {
-    const asset = await this.repository.detailByQrToken(qrToken);
+  /**
+   * A TORLES BELSOS UT, ES A HATOKOR SZANDEKOSAN NEM SZUKIT ITT. A vegpont a
+   * `SERVICE_ASSET_DELETE` jog alatt all, amit partner-oldali fiok nem kap meg;
+   * a letezes-ellenorzes ezert a `detail` BELSOS agan megy, ugyanabbol az okbol,
+   * mint a tobbi irasi uton: itt a kerdes az, hogy LETEZIK-e a sor, nem az, hogy
+   * LATHATJA-e a kero. A ketto osszemosasa ot irasi utat szukitett volna
+   * csendben (lasd a `partner-scope.util.ts` jegyzetet).
+   */
+  async remove(id: string) {
+    await this.detail(id, { kind: "internal" });
+    const blockers = await this.repository.deletionBlockers(id);
+    const refusal = assetDeletionRefusal(blockers);
+    if (refusal) throw new ConflictException(refusal);
+    await this.repository.remove(id);
+    return { ok: true as const };
+  }
+
+  async scan(qrToken: string, scope: PartnerScope) {
+    const asset = await this.repository.detailByQrToken(qrToken, scope);
     if (!asset)
       throw new NotFoundException(
         "A QR-kódhoz nem tartozik érvényes eszközazonosító.",
@@ -125,7 +149,11 @@ export class ServiceAssetsService {
   }
 
   async rotateQr(id: string, actorUserId: string) {
-    await this.detail(id);
+    await this.detail(id, {
+      // BELSOS UT: a vegpont SERVICE_MANAGE jog alatt all (QR-forgatas,
+      // dokumentum-feltoltes), amit partner-oldali felhasznalo nem kap meg.
+      kind: "internal",
+    });
     try {
       return await this.repository.rotateQr(id, actorUserId);
     } catch (error) {
@@ -133,8 +161,8 @@ export class ServiceAssetsService {
     }
   }
 
-  async qrCode(id: string): Promise<AssetQrCode> {
-    const asset = await this.detail(id);
+  async qrCode(id: string, scope: PartnerScope): Promise<AssetQrCode> {
+    const asset = await this.detail(id, scope);
     const base = (
       process.env.ASSET_QR_BASE_URL?.trim() || "acropora-os://assets/scan"
     ).replace(/\/+$/, "");
@@ -154,7 +182,11 @@ export class ServiceAssetsService {
     file: Express.Multer.File,
     actorUserId: string,
   ) {
-    await this.detail(id);
+    await this.detail(id, {
+      // BELSOS UT: a vegpont SERVICE_MANAGE jog alatt all (QR-forgatas,
+      // dokumentum-feltoltes), amit partner-oldali felhasznalo nem kap meg.
+      kind: "internal",
+    });
     if (
       file.mimetype !== "application/pdf" ||
       !file.buffer.subarray(0, 5).equals(Buffer.from("%PDF-"))
@@ -173,8 +205,8 @@ export class ServiceAssetsService {
     });
   }
 
-  async document(id: string, documentId: string) {
-    const document = await this.repository.document(id, documentId);
+  async document(id: string, documentId: string, scope: PartnerScope) {
+    const document = await this.repository.document(id, documentId, scope);
     if (!document) throw new NotFoundException("A dokumentum nem található.");
     return document;
   }
@@ -188,6 +220,7 @@ export class ServiceAssetsService {
     ownerType: "CUSTOMER" | "SUPPLIER";
     ownerId: string;
     customerAddressId?: string | null;
+    departmentId?: string | null;
     aquariumId?: string | null;
     parentAssetId?: string | null;
     productVariantId?: string | null;
@@ -212,6 +245,20 @@ export class ServiceAssetsService {
     if (context.address && context.address.customerId !== input.ownerId)
       throw new BadRequestException(
         "A kiválasztott cím nem ehhez a partnerhez tartozik.",
+      );
+    // AZ ALEGYSÉG a partner „Alegységek" fájának egy csomópontja, és a döntés
+    // külön függvényben áll, hogy egységteszt tudja mérni -- lásd
+    // asset-department.ts. A `requested` az undefined és a null között tesz
+    // különbséget: a mező elhagyása nem törlés.
+    const departmentRefusal = assetDepartmentRefusal({
+      ownerType: input.ownerType,
+      mirrorCustomerId: context.supplier?.customerId ?? null,
+      department: context.department,
+      requested: Boolean(input.departmentId),
+    });
+    if (departmentRefusal)
+      throw new BadRequestException(
+        ASSET_DEPARTMENT_REFUSAL_MESSAGES[departmentRefusal],
       );
     if (input.aquariumId && !context.aquarium)
       throw new BadRequestException("A kiválasztott akvárium nem található.");

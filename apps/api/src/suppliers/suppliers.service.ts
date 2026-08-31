@@ -1,3 +1,4 @@
+import type { PartnerScope } from "../auth/partner-scope.util.js";
 import {
   BadRequestException,
   ConflictException,
@@ -6,6 +7,7 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 
+import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
 import { planPartnerDeletion } from "./partner-deletion.js";
 import { SuppliersRepository } from "./suppliers.repository.js";
 import type { CreateWorksheetDepartmentDto } from "../worksheets/dto/worksheet.dto.js";
@@ -19,14 +21,25 @@ import type {
 export class SuppliersService {
   constructor(private readonly repository: SuppliersRepository) {}
 
-  list(query: SupplierListQueryDto) {
-    return this.repository.list(query);
+  list(query: SupplierListQueryDto, scope: PartnerScope) {
+    return this.repository.list(query, scope);
   }
 
-  async detail(id: string) {
-    const supplier = await this.repository.detail(id);
+  async detail(id: string, scope: PartnerScope) {
+    const supplier = await this.repository.detail(id, scope);
     if (!supplier) throw new NotFoundException("A beszállító nem található.");
     return supplier;
+  }
+
+  /**
+   * Letezes-ellenorzes az irasi utak elejen. Lasd a repository `exists`
+   * jegyzetet: itt a kerdes az, hogy LETEZIK-e a sor, nem az, hogy LATJA-e a
+   * kero -- az utobbit a PARTNERS_MANAGE jog dontotte el korabban.
+   */
+  private async assertExists(id: string) {
+    if (!(await this.repository.exists(id))) {
+      throw new NotFoundException("A beszállító nem található.");
+    }
   }
 
   /**
@@ -38,7 +51,7 @@ export class SuppliersService {
    * A felhasználónak azt kell megerősítenie, ami történni fog.
    */
   async deletionPlan(id: string) {
-    await this.detail(id);
+    await this.assertExists(id);
     return planPartnerDeletion(await this.repository.referenceCounts(id));
   }
 
@@ -48,7 +61,7 @@ export class SuppliersService {
    * a képernyő adata elavulhat, amíg a megerősítő kérdés kint van.
    */
   async remove(id: string) {
-    await this.detail(id);
+    await this.assertExists(id);
     const plan = planPartnerDeletion(await this.repository.referenceCounts(id));
 
     if (plan.action === "delete") await this.repository.remove(id);
@@ -57,19 +70,47 @@ export class SuppliersService {
     return plan;
   }
 
-  async units(id: string) {
-    await this.detail(id);
-    return this.repository.units(id);
+  async units(id: string, scope: PartnerScope) {
+    await this.assertExists(id);
+    return this.repository.units(id, scope);
   }
 
+  /**
+   * A HIBAKAT ITT IS LE KELL FORDITANI, nem csak a partner mentesenel.
+   *
+   * A `create` minden dobast a `map()` metoduson enged at, a `createUnit` korul
+   * viszont eddig NEM volt semmi: egy mar hasznalt alegyseg-kod nyers Prisma
+   * hibakent ment ki, tehat a kollega egy szerver-hibat latott ott, ahol egy
+   * mondat kellett volna. A helyszin-fa ezt gyakoribba teszi, mert tobb helyen
+   * lehet kodot utkoztetni.
+   *
+   * A KOD ITT KEZZEL BEVITT, tehat ujraprobalasnak nincs helye: egy foglalt
+   * kodot otször ujrahuzni ugyanazt az uzleti hibat adna, csak kesobb.
+   */
   async createUnit(id: string, input: CreateWorksheetDepartmentDto) {
-    await this.detail(id);
-    const created = await this.repository.createUnit(id, input);
-    if (!created)
-      throw new BadRequestException(
-        "Alegységet csak szerviz partnerhez lehet felvinni. Pipáld be a Szerviz jelölést, mentsd el, és utána próbáld újra.",
-      );
-    return created;
+    await this.assertExists(id);
+    try {
+      const created = await this.repository.createUnit(id, input);
+      if (!created)
+        throw new BadRequestException(
+          "Alegységet csak szerviz partnerhez lehet felvinni. Pipáld be a Szerviz jelölést, mentsd el, és utána próbáld újra.",
+        );
+      return created;
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      if (
+        error instanceof Error &&
+        error.message === "WORKSHEET_DEPARTMENT_PARENT_NOT_FOUND"
+      )
+        throw new BadRequestException(
+          "A megadott szülő helyszín nem ehhez a partnerhez tartozik. Frissítsd az oldalt, és válaszd ki újra.",
+        );
+      if (isPrismaUniqueConstraintViolation(error, "code"))
+        throw new ConflictException(
+          "Ezt a kódot ezen a szinten már használja egy helyszín. Válassz másikat.",
+        );
+      throw error;
+    }
   }
 
   async create(input: CreateSupplierDto, actorId: string) {
@@ -81,7 +122,7 @@ export class SuppliersService {
   }
 
   async update(id: string, input: UpdateSupplierDto, actorId: string) {
-    await this.detail(id);
+    await this.assertExists(id);
     try {
       return await this.repository.update(id, input, actorId);
     } catch (error) {
@@ -99,6 +140,20 @@ export class SuppliersService {
     )
       throw new ConflictException(
         `Ezt a partnerkódot már használja: ${error.message.slice("PARTNER_CODE_TAKEN:".length)}. Válassz másikat.`,
+      );
+    // No name in these two, and that is not an omission: the code may have
+    // been used by a partner that no longer holds it, or by one that was
+    // deleted. What ends the question is what the code DID, not who had it.
+    if (
+      error instanceof Error &&
+      error.message === "PARTNER_CODE_USED_IN_NUMBERS"
+    )
+      throw new ConflictException(
+        "Ezt a partnerkódot korábban már munkalapszám viselte, ezért nem adható ki újra. Válassz másikat.",
+      );
+    if (error instanceof Error && error.message === "PARTNER_CODE_LOCKED")
+      throw new ConflictException(
+        "Ehhez a partnerkódhoz már készült munkalapszám, ezért a kód nem módosítható és nem törölhető.",
       );
     if (error instanceof Error && error.message === "STALE_UPDATE")
       throw new ConflictException(

@@ -27,6 +27,8 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useReturnTo } from "@/components/navigation-history";
 import { assetsApi } from "@/lib/api/assets";
+import { suppliersApi } from "@/lib/api/suppliers";
+import { buildSiteOptions, type SiteOption } from "@/lib/partners/site-tree";
 import {
   assetCriticalityLabel,
   assetKindLabel,
@@ -48,6 +50,8 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
     session && hasPermission(session.user, PERMISSIONS.SERVICE_MANAGE),
   );
   const [owners, setOwners] = useState<AssetOwnerOption[]>([]);
+  const [units, setUnits] = useState<SiteOption[]>([]);
+  const [departmentId, setDepartmentId] = useState("");
   const [parentAssets, setParentAssets] = useState<AssetListItem[]>([]);
   const [selectedOwner, setSelectedOwner] = useState("");
   const [customerAddressId, setCustomerAddressId] = useState("");
@@ -108,6 +112,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
         setCustomerAddressId(
           asset.owner.type === "CUSTOMER" ? (asset.address?.id ?? "") : "",
         );
+        setDepartmentId(asset.unit?.id ?? "");
         setParentAssetId(asset.parent?.id ?? "");
         setKind(asset.kind);
         setStatus(asset.status);
@@ -137,6 +142,27 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
       .finally(() => setLoadingOptions(false));
     return () => controller.abort();
   }, [assetId, canManage, token]);
+
+  // AZ ALEGYSEGEK a partner sajat kepernyojerol mar ismert vegponton jonnek: ez
+  // ugyanaz a fa, amit ott „Alegysegek" neven szerkesztenek. Vevo tulajdonosnal
+  // nincs mit betolteni -- ott a cim a pontositas.
+  useEffect(() => {
+    setUnits([]);
+    if (!owner || owner.type !== "SUPPLIER") return;
+    const controller = new AbortController();
+    void suppliersApi
+      .units(token, owner.id, controller.signal)
+      .then((result) => setUnits(buildSiteOptions(result.items)))
+      .catch((cause) => {
+        if (!(cause instanceof DOMException && cause.name === "AbortError"))
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "A partner alegységei nem tölthetők be.",
+          );
+      });
+    return () => controller.abort();
+  }, [owner, token]);
 
   useEffect(() => {
     setParentAssets([]);
@@ -209,6 +235,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             ownerType: owner.type,
             ownerId: owner.id,
             customerAddressId: customerAddressId || null,
+            departmentId: departmentId || null,
             parentAssetId: parentAssetId || null,
             kind,
             status,
@@ -231,6 +258,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             ownerType: owner.type,
             ownerId: owner.id,
             customerAddressId: customerAddressId || undefined,
+            departmentId: departmentId || undefined,
             parentAssetId: parentAssetId || undefined,
             kind,
             status,
@@ -310,9 +338,14 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
                 ))}
               </Select>
             </FormField>
-            <FormField label="Helyszín / partnercím">
+            {/* KET KULON MEZO, KET KULON FOGALOM, es a cimkek is ezt mondjak.
+                2026-08-27-ig mindkettot „helyszin" nevre hallgatta valami, es
+                pont ebbol lett az elso hiba: az eszkoz-felvitelen a mezo minden
+                partnernel ures volt, mert a partner-oldalnak nem is volt
+                forrasa. A vevo cimet valaszt, a partner ALEGYSEGET. */}
+            <FormField label="Vevő címe">
               <Select
-                aria-label="Helyszín"
+                aria-label="Vevő címe"
                 value={customerAddressId}
                 disabled={!owner || owner.type !== "CUSTOMER"}
                 onChange={(event) => setCustomerAddressId(event.target.value)}
@@ -322,6 +355,28 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
                   <option key={address.id} value={address.id}>
                     {address.name ? `${address.name} – ` : ""}
                     {address.formatted}
+                  </option>
+                ))}
+              </Select>
+            </FormField>
+            <FormField
+              label="Alegység"
+              description="A partner alegysége, ahol az eszköz áll. Ugyanaz a lista, amit a partner adatlapján Alegységek néven szerkesztesz."
+            >
+              <Select
+                aria-label="Alegység"
+                value={departmentId}
+                // Tulajdonos nelkul nincs mit felajanlani: az eszkoznek
+                // PONTOSAN egy tulajdonosa van (adatbazis-megkotes), es az
+                // alegysegek ahhoz a partnerhez tartoznak.
+                disabled={!owner || owner.type !== "SUPPLIER"}
+                onChange={(event) => setDepartmentId(event.target.value)}
+              >
+                <option value="">Nincs pontosítva</option>
+                {units.map((unit) => (
+                  <option key={unit.id} value={unit.id}>
+                    {unit.label}
+                    {unit.isActive ? "" : " · archivált"}
                   </option>
                 ))}
               </Select>

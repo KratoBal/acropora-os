@@ -9,6 +9,7 @@ import {
   LABEL_NUMBER_FONT_MM,
   LABEL_PADDING_MM,
   LABEL_ROUNDING_ALLOWANCE_MM,
+  MODULE_GRID_MM,
   QR_MIN_MODULE_MM,
   QR_MODULES_ACROSS,
   labelAssetNumber,
@@ -73,14 +74,58 @@ describe("a lap a szalaghoz igazodik", () => {
 });
 
 describe("a QR mérete levezetés, nem beállítás", () => {
-  it("gives the code the whole band, minus the margins and the slack", () => {
+  it("gives the code the largest size that sits on the printer grid", () => {
     const layout = labelLayout();
+    const availableMm =
+      LABEL_BAND_MM - 2 * LABEL_PADDING_MM - LABEL_ROUNDING_ALLOWANCE_MM;
 
-    assert.equal(
-      layout.qrSizeMm,
-      LABEL_BAND_MM - 2 * LABEL_PADDING_MM - LABEL_ROUNDING_ALLOWANCE_MM,
-    );
+    // A KÓD MÁR NEM KAPJA MEG A TELJES SÁVOT, és ez szándékos: a maradék
+    // nélküli osztás olyan modult adott, ami egyik felbontáson sem volt egész
+    // pont. Amit a méretből feladunk, azt a modul-háló egyenletességéért
+    // kapjuk vissza.
+    assert.ok(layout.qrSizeMm <= availableMm);
     assert.equal(layout.moduleMm, layout.qrSizeMm / QR_MODULES_ACROSS);
+
+    // A modul a rács egész számú többszöröse, és a KÖVETKEZŐ lépés már nem
+    // férne bele -- vagyis tényleg a legnagyobb, nem csak egy biztonságos.
+    const steps = layout.moduleMm / MODULE_GRID_MM;
+    assert.equal(steps, Math.round(steps));
+    assert.ok((steps + 1) * MODULE_GRID_MM * QR_MODULES_ACROSS > availableMm);
+  });
+
+  /**
+   * A LÉNYEGI ÁLLÍTÁS, ÉS EZÉRT VAN AZ EGÉSZ VÁLTOZTATÁS: a modul EGÉSZ SZÁMÚ
+   * nyomtatási pont mindhárom szóba jövő felbontáson. A régi levezetés
+   * 3,27 / 5,44 / 6,53 pontot adott, tehát a raszterizálás egyes modulokat
+   * szélesebbre kerekített a szomszédjuknál.
+   *
+   * Ez azért erős, mert NEM KELL TUDNUNK a nyomtató felbontását -- a gyártói
+   * lapból nem is sikerült igazolni.
+   */
+  it("is a whole number of printer dots at 180, 300 and 360 dpi", () => {
+    const { moduleMm } = labelLayout();
+
+    for (const dpi of [180, 300, 360]) {
+      const dots = moduleMm / (25.4 / dpi);
+
+      // A TŰRÉS A LEBEGŐPONTOSSÁGÉ, NEM A GEOMETRIÁÉ. Az 1/60 hüvelyk 300
+      // dpi-n PONTOSAN 5 pont; a kettes számrendszerben viszont
+      // 4,999999999999999 jön ki. A határ ezért szűk: nagyságrendekkel
+      // kisebb, mint a legkisebb valódi eltérés, ami egyáltalán számítana.
+      assert.ok(
+        Math.abs(dots - Math.round(dots)) < 1e-9,
+        `${dpi} dpi-n a modul ${dots} pont, tehát nem egész`,
+      );
+    }
+  });
+
+  /**
+   * ÉS AMIT A RÁCS NEM AD MEG. Az egyenletes modul-háló nem beolvashatóság: azt
+   * a modul MÉRETE dönti el. A kettő külön kérdés, és ez a sor őrzi, hogy a
+   * kisebb kód se essen az irodalmi küszöb alá.
+   */
+  it("stays above the module size a phone camera can read", () => {
+    assert.ok(labelLayout().moduleMm >= QR_MIN_MODULE_MM);
   });
 
   it("accounts for the whole length, and leaves the slack it planned", () => {
@@ -132,11 +177,21 @@ describe("a QR mérete levezetés, nem beállítás", () => {
     assert.equal(LABEL_ROUNDING_ALLOWANCE_MM, 25.4 / 96);
 
     const layout = labelLayout();
-    assert.ok(
-      Math.abs(layout.heightSlackMm - LABEL_ROUNDING_ALLOWANCE_MM) < 1e-9,
-    );
+
+    // A HOSSZ irányában a tartalék változatlanul PONTOSAN ennyi: ott a felirat
+    // tölti ki a maradékot, tehát egy képpontnyi hely a teljes ráhagyás.
     assert.ok(
       Math.abs(layout.widthSlackMm - LABEL_ROUNDING_ALLOWANCE_MM) < 1e-9,
+    );
+
+    // A MAGASSÁG irányában viszont már TÖBB marad, és ez nem elcsúszás: a
+    // modul a nyomtató rácsára ül, tehát a sávból annyi marad ki, amennyi egy
+    // újabb rács-lépéshez már kevés. A tartalék tehát legalább a kerekítésé,
+    // de kevesebb, mint egy teljes modulnyi lépés.
+    assert.ok(layout.heightSlackMm >= LABEL_ROUNDING_ALLOWANCE_MM);
+    assert.ok(
+      layout.heightSlackMm <
+        LABEL_ROUNDING_ALLOWANCE_MM + MODULE_GRID_MM * QR_MODULES_ACROSS,
     );
   });
 
@@ -172,10 +227,11 @@ describe("a QR mérete levezetés, nem beállítás", () => {
     // aminek az elcsúszása néma volt. A TILTÁS A DEKLARÁCIÓRA szól, nem a névre:
     // a modul fejlécében a régi név említése a történet, nem a hiba.
     assert.doesNotMatch(source, /const LABEL_QR_SIZE_MM/);
-    assert.match(
-      source,
-      /const qrSizeMm =\s*LABEL_BAND_MM - 2 \* LABEL_PADDING_MM - LABEL_ROUNDING_ALLOWANCE_MM;/,
-    );
+    // A méret továbbra is SZÁMOLT: a modul a rácsból jön, a kód mérete pedig a
+    // modulból. Ha valaha újra egy szabadon állítható szám kerül ide, ez a sor
+    // vált pirosra.
+    assert.match(source, /const moduleMm = gridSteps \* MODULE_GRID_MM;/);
+    assert.match(source, /const qrSizeMm = moduleMm \* QR_MODULES_ACROSS;/);
   });
 });
 
@@ -260,7 +316,14 @@ function widthEm(text: string): number {
 }
 
 describe("az eszközszám kifér a felirat sávjába", () => {
-  const SAMPLE = "ESZK-20260826-133525-AB12";
+  /**
+   * A MINTA MOSTANTÓL A JELÖLT ALAK, mert az kerül az ÚJ címkékre: az
+   * eszközszám bélyege helyi idő szerint áll, és az időpont-blokk végén egy
+   * `h` jelöli a váltást (l. `code-generator.util.ts`). A régi, jelöletlen
+   * eszközök száma változatlan marad, tehát a szélesebb, ÚJ alakra kell
+   * méretezni -- ha az kifér, a régi is.
+   */
+  const SAMPLE = "ESZK-20260826-133525h-AB12";
 
   it("measures the number the server actually generates", () => {
     const source = readFileSync(
@@ -268,12 +331,12 @@ describe("az eszközszám kifér a felirat sávjába", () => {
       "utf8",
     );
 
-    // A minta alakja onnan jön, ahol a szám készül: előtag, 15 karakteres
-    // időbélyeg, négy hexa karakter. Ha ez a szerkezet változik, a hossz is,
-    // és akkor ezt a mérést újra kell futtatni.
-    assert.match(source, /\.slice\(0, 15\)/);
+    // A minta alakja onnan jön, ahol a szám készül: előtag, dátum, időpont a
+    // jelöléssel, és négy hexa karakter. Ha ez a szerkezet változik, a hossz
+    // is, és akkor ezt a mérést újra kell futtatni.
     assert.match(source, /randomUUID\(\)\.slice\(0, 4\)/);
-    assert.equal(SAMPLE.length, 25);
+    assert.match(source, /return `\$\{date\}-\$\{time\}h`;/);
+    assert.equal(SAMPLE.length, 26);
   });
 
   it("fits on one line, with room for a font that is not Helvetica", () => {
@@ -286,7 +349,7 @@ describe("az eszközszám kifér a felirat sávjába", () => {
     // hexa, az `A`-tól `D`-ig tartó betűk pedig szélesebbek a számjegyeknél. Egy
     // mintával mérve a címke csak azoknál az eszközöknél lógna ki, amelyek
     // véletlenül csupa betűs véget kaptak.
-    const widest = labelAssetNumber("ESZK-20260826-000000-AAAA");
+    const widest = labelAssetNumber("ESZK-20260826-000000h-AAAA");
     assert.equal(widest.length, labelAssetNumber(SAMPLE).length);
     const needed = widthEm(widest) * LABEL_NUMBER_FONT_MM;
 
@@ -316,17 +379,29 @@ describe("az eszközszám kifér a felirat sávjába", () => {
  * együtt a tér 86 400-szor nagyobb. Ezért két blokk kerül a címkére, nem egy.
  */
 describe("labelAssetNumber", () => {
-  const SAMPLE = "ESZK-20260826-133525-AB12";
+  const SAMPLE = "ESZK-20260826-133525h-AB12";
 
   it("keeps the two blocks that carry the identity", () => {
-    assert.equal(labelAssetNumber(SAMPLE), "133525-AB12");
+    // A JELÖLÉS IS A CÍMKÉRE KERÜL, és ez a lényege: a `h` az utolsó előtti
+    // blokk végén áll, tehát azon az ábrán van, amit az ember leolvas. A
+    // dátum-blokkba tett jelölő pontosan neki lenne láthatatlan.
+    assert.equal(labelAssetNumber(SAMPLE), "133525h-AB12");
   });
 
   it("keeps the time block, not only the random one", () => {
     // EZ A TESZT AZ EGYEDISÉGRŐL SZÓL. Ha valaha csak az utolsó blokk maradna,
     // ez pirosra vált -- és pont az a változás, ami 302 eszköznél ütközik.
-    assert.match(labelAssetNumber(SAMPLE), /^\d{6}-/);
+    assert.match(labelAssetNumber(SAMPLE), /^\d{6}h?-/);
     assert.ok(labelAssetNumber(SAMPLE).length > 4);
+  });
+
+  /**
+   * A RÉGI, JELÖLETLEN SZÁMOK VÁLTOZATLANUL MŰKÖDNEK. Visszamenőleg semmi nem
+   * íródik át, tehát a címke-rövidítésnek mindkét alakot vinnie kell -- és a
+   * két alak KÜLÖNBÖZIK, ami épp a jelölés célja.
+   */
+  it("still shortens a number minted before the marking", () => {
+    assert.equal(labelAssetNumber("ESZK-20260826-133525-AB12"), "133525-AB12");
   });
 
   it("stays a suffix of the full number, so search still finds it", () => {

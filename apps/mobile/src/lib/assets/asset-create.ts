@@ -17,11 +17,19 @@ import type { AssetKind, AssetOwnerType } from "./asset-fields";
 
 export interface AssetCreateForm {
   owner: { type: AssetOwnerType; id: string } | null;
+  /**
+   * A partner alegysége, ahol az eszköz áll. Üres, amíg nincs kiválasztva, és
+   * SZERVIZ PARTNER tulajdonosnál értelmes csak: vevőnél a szerver el is
+   * utasítaná, mert ott a cím a pontosítás.
+   */
+  unitId: string;
   name: string;
   kind: AssetKind;
   manufacturer: string;
   model: string;
   serialNumber: string;
+  /** A partner saját azonosítója az eszközön (leltári szám). Üres is lehet. */
+  inventoryNumber: string;
   /** Amit a felhasználó beírt vagy a választóból kapott. Üres is lehet. */
   installedAt: string;
   /** Karbantartási intervallum napban, szövegként. Üres is lehet. */
@@ -31,11 +39,14 @@ export interface AssetCreateForm {
 export interface AssetCreatePayload {
   ownerType: AssetOwnerType;
   ownerId: string;
+  /** Csak szerviz partner tulajdonosnál kerül bele, lásd `buildAssetCreatePayload`. */
+  departmentId?: string;
   kind: AssetKind;
   name: string;
   manufacturer?: string;
   model?: string;
   serialNumber?: string;
+  inventoryNumber?: string;
   installedAt?: string;
   serviceIntervalDays?: number;
 }
@@ -61,6 +72,24 @@ const DATE_SEPARATORS = /[.\-/\s]+/;
  * magától átfordítaná március 2-ára, és a felhasználó egy másik dátumot kapna
  * vissza, mint amit beírt -- csendben.
  */
+/**
+ * A dátum három részből áll, és ezt a FORDÍTÓ IS LÁSSA.
+ *
+ * Egy `parts.length !== 3` vizsgálat futásidőben tökéletes, de a típusát nem
+ * szűkíti: utána a `parts[0]` a fordító szerint továbbra is lehet `undefined`,
+ * és `noUncheckedIndexedAccess` mellett minden ilyen olvasás hibát ad. Az őrző
+ * ugyanazt a feltételt mondja ki, csak a típusban is - a viselkedés betű
+ * szerint azonos.
+ *
+ * MIÉRT NEM ELNÉMÍTÁSSAL. A kapcsoló kikapcsolása a mobil spec-konfigban
+ * (kártya `090c574d`) pontosan emiatt a tizenegy találat miatt történt, és a
+ * feloldási feltétele ez a javítás volt. Egy `eslint-disable`-szerű elnémítás
+ * ugyanezt a tizenegyet elrejtette volna, és a következő, VALÓDI találatot is.
+ */
+function isThreeParts(parts: string[]): parts is [string, string, string] {
+  return parts.length === 3;
+}
+
 export function normalizeAssetDate(
   value: string,
 ): { ok: true; value: string } | { ok: false; message: string } {
@@ -68,13 +97,20 @@ export function normalizeAssetDate(
   if (!trimmed) return { ok: true, value: "" };
 
   const parts = trimmed.split(DATE_SEPARATORS).filter(Boolean);
-  if (parts.length !== 3)
+  if (!isThreeParts(parts))
     return {
       ok: false,
       message: "A dátum éééé-hh-nn alakban kell (például 2026-08-25).",
     };
 
-  const [year, month, day] = parts.map((part) => Number.parseInt(part, 10));
+  // Indexelve, nem destrukturálva: a `map` eredménye `number[]`, amiből a
+  // fordító szerint minden elem lehet `undefined` - a fenti hosszellenőrzést
+  // nem tudja levezetni. A `parts` viszont az őrző után HÁRMAS, tehát ez a
+  // három indexelés a fordító számára is biztonságos, és a viselkedés
+  // változatlan.
+  const year = Number.parseInt(parts[0], 10);
+  const month = Number.parseInt(parts[1], 10);
+  const day = Number.parseInt(parts[2], 10);
   if (
     !Number.isInteger(year) ||
     !Number.isInteger(month) ||
@@ -182,11 +218,31 @@ export function buildAssetCreatePayload(
     payload: {
       ownerType: form.owner.type,
       ownerId: form.owner.id,
+      /**
+       * AZ ALEGYSÉG CSAK SZERVIZ PARTNERNÉL MEGY KI.
+       *
+       * Vevő tulajdonosnál a szerver elutasítaná, és a hiba a mentés
+       * pillanatában jelenne meg, azután, hogy a szerelő mindent kitöltött. A
+       * választó ilyenkor meg sem jelenik a képernyőn, de a mező a formban
+       * ottmaradhat egy korábbi választásból: a tulajdonos váltása nem törli
+       * automatikusan azt, amit a felhasználó egyszer már beírt. Ezért itt a
+       * TULAJDONOS TÍPUSA dönt, nem az, hogy van-e érték.
+       */
+      ...(form.owner.type === "SUPPLIER" && form.unitId.trim()
+        ? { departmentId: form.unitId.trim() }
+        : {}),
       kind: form.kind,
       name,
       manufacturer: form.manufacturer.trim() || undefined,
       model: form.model.trim() || undefined,
       serialNumber: form.serialNumber.trim() || undefined,
+      /**
+       * A LELTÁRI SZÁM A PARTNERÉ, nem a miénk, és pont ezért kell a
+       * felvitelkor: a gépen az ő matricája van rajta, és a szerelő akkor
+       * látja, amikor előtte áll. Utólag, az irodából ez már egy külön kör
+       * telefonálás -- a mező eddig csak a szerkesztő képernyőn létezett.
+       */
+      inventoryNumber: form.inventoryNumber.trim() || undefined,
       /**
        * A nap KEZDETE, UTC-ben. A telepítés dátuma nap-pontosságú adat: az
        * időpont-rész nem mérés, hanem a formátum ára, ezért nulla.

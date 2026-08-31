@@ -19,7 +19,7 @@ import {
 } from "@acropora/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useReturnTo } from "@/components/navigation-history";
 import { PartnerDeleteButton } from "./partner-delete-button";
@@ -30,6 +30,7 @@ import {
 import { ApiError } from "@/lib/api/client";
 import { postalCodeApi } from "@/lib/api/postal-code";
 import { suppliersApi } from "@/lib/api/suppliers";
+import { buildSiteTree } from "@/lib/partners/site-tree";
 import { viesVatApi } from "@/lib/api/vies-vat";
 
 export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
@@ -50,7 +51,11 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
   const [isService, setIsService] = useState(false);
   const [worksheetPartnerCode, setWorksheetPartnerCode] = useState("");
   const [units, setUnits] = useState<WorksheetDepartmentSummary[]>([]);
-  const [newUnit, setNewUnit] = useState({ code: "", name: "" });
+  const [newUnit, setNewUnit] = useState({
+    parentId: "",
+    code: "",
+    name: "",
+  });
   const [unitError, setUnitError] = useState<string | null>(null);
   const [iban, setIban] = useState("");
   const [swiftCode, setSwiftCode] = useState("");
@@ -141,6 +146,16 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [postalCode, isEu, token]);
 
+  // A fa felepitese a lapos listabol. Memoizalva, mert minden ujrarajzolasnal
+  // ket helyen kell (a lista es a szulo-valaszto), es ugyanazt a sorrendet kell
+  // adnia mindkettonek.
+  //
+  // ES AMIERT ITT ALL, NEM LEJJEBB A HASZNALATA MELLETT: alatta ket korai
+  // visszateres van (jogosultsag, toltes). Egy hook azok ALATT feltetelesen
+  // futna, es a React a kovetkezo rajzolasnal mas hook-sorrendet latna --
+  // ezt a hibat a komponens-teszt ures kepernyokent mutatta, nem uzenetkent.
+  const unitRows = useMemo(() => buildSiteTree(units), [units]);
+
   if (!canManage)
     return (
       <Alert
@@ -188,12 +203,29 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
       addressLine1: addressLine1.trim() || undefined,
       addressLine2: addressLine2.trim() || undefined,
     };
+    // A KÓD CSAK AKKOR MEGY EL, HA VÁLTOZOTT, és ez nem takarékosság.
+    //
+    // Egy változatlan mező visszaküldése azt jelenti, hogy MINDEN jövőbeli
+    // szigorítás a mező szabályán egyszerre kiterjed a partner ÖSSZES TÖBBI
+    // mezőjének szerkesztésére is: a kérés a validáción bukik el, mielőtt
+    // bármit elérne, és a szerkesztő nem érti, mert ő a kódhoz nem is nyúlt.
+    // Ez nem elméleti: a négy karakteres szabály bevezetésekor (#183) pontosan
+    // ez fenyegetett, és csak azért nem történt meg, mert élesben nulla ilyen
+    // sor volt. A következő szigorítás nem biztos, hogy ilyen szerencsés.
+    //
+    // A kihagyott mező a szervernek "változatlan" jelentésű (a DTO-ban
+    // opcionális), az üresre törölt viszont `null`, tehát a törlés továbbra is
+    // működik.
+    const storedCode = supplier?.worksheetPartnerCode ?? null;
+    const nextCode = worksheetPartnerCode.trim() || null;
+    const codeChanged = nextCode !== storedCode;
+
     try {
       if (supplier) {
         setSupplier(
           await suppliersApi.update(token, supplier.id, {
             ...payload,
-            worksheetPartnerCode: payload.worksheetPartnerCode ?? null,
+            worksheetPartnerCode: codeChanged ? nextCode : undefined,
             taxNumber: payload.taxNumber ?? null,
             email: payload.email ?? null,
             phone: payload.phone ?? null,
@@ -239,11 +271,22 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
     setUnitError(null);
     try {
       const created = await suppliersApi.createUnit(token, supplier.id, {
+        // Ures ertek = a fa legfelso szintje. A mezot NEM kuldjuk ki uresen:
+        // a szerver a hianyt jelenti gyokernek, egy ures szoveg viszont
+        // ismeretlen szulonek latszana.
+        ...(newUnit.parentId ? { parentId: newUnit.parentId } : {}),
         code: newUnit.code.trim().toUpperCase(),
         name: newUnit.name.trim(),
       });
       setUnits((current) => [...current, created]);
-      setNewUnit({ code: "", name: "" });
+      // A SZULO BENT MARAD, a kod es a nev urul: egy fat rendszerint egymas
+      // utan tolt fel valaki ugyanazon a szinten, es a legyakoribb muvelet ne
+      // keryen ujra ugyanazt a valasztast.
+      setNewUnit((current) => ({
+        parentId: current.parentId,
+        code: "",
+        name: "",
+      }));
     } catch (cause) {
       setUnitError(
         cause instanceof Error
@@ -416,8 +459,8 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
               Szerviz
             </label>
           </div>
-          {/* Only shown for a service partner: it is the worksheet number's
-              first segment, and a partner we only buy from never gets a
+          {/* Only shown for a service partner: closing a worksheet requires the
+              abbreviation, and a partner we only buy from never gets a
               worksheet. Not required, on purpose -- ticking "Szerviz" should
               not turn into "invent an abbreviation right now". The worksheet
               picker leaves partners without a code out instead, so the gap
@@ -426,7 +469,7 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
             <div className="mt-4 sm:w-1/2">
               <FormField
                 label="Partnerkód"
-                description="A munkalapszám első tagja, pontosan négy karakter (például FANK). Munkalap csak akkor írható a partnernek, ha ez ki van töltve."
+                description="A partner rövidítése, pontosan négy karakter, betűvel kezdve (például FANK). Munkalap csak akkor írható a partnernek, ha ez ki van töltve."
               >
                 <Input
                   aria-label="Partnerkód"
@@ -456,22 +499,29 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
         {/* Only for a partner that already exists: a unit hangs off the
             partner, and until the partner is saved there is nothing to hang it
             on. Only for a service partner, because a unit gives the worksheet
-            number its middle segment, and a partner we only buy from never
+            number its first segment, and a partner we only buy from never
             gets a worksheet. */}
         {supplier && isService ? (
           <Card className="p-6">
             <h2 className="font-semibold">Alegységek</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Az alegység kódja a munkalapszám középső tagja (például a BIO a
-              FANK-BIO-2026-001 számban).
+              Az alegység kódja a munkalapszám első tagja (például a BIO a
+              BIO-2026-001 számban).
             </p>
             {unitError ? (
               <Alert variant="danger" title="Hiba" description={unitError} />
             ) : null}
-            {units.length ? (
+            {unitRows.length ? (
               <ul className="mt-4 space-y-1 text-sm">
-                {units.map((unit) => (
-                  <li key={unit.id} className="flex items-center gap-2">
+                {unitRows.map(({ unit, depth }) => (
+                  <li
+                    key={unit.id}
+                    className="flex items-center gap-2"
+                    // A behuzas a MELYSEGET mutatja. Stilus helyett szamolt
+                    // ertek, mert a fa tetszoleges melysegu lehet, es egy
+                    // elore megirt osztalylista a negyedik szinten elfogyna.
+                    style={{ paddingLeft: `${depth * 1.25}rem` }}
+                  >
                     <span className="font-mono text-xs text-slate-600">
                       {unit.code}
                     </span>
@@ -487,7 +537,30 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
                 Ehhez a partnerhez még nincs alegység.
               </p>
             )}
-            <div className="mt-4 grid gap-4 sm:grid-cols-[8rem_1fr_auto]">
+            <div className="mt-4 grid gap-4 sm:grid-cols-[12rem_8rem_1fr_auto]">
+              <FormField label="Hova kerül">
+                {/* A gyoker az ELSO es alapertelmezett valasztas: a mai
+                    helyszinek mind ilyenek, es egy uj partnernel is ez a
+                    gyakori eset. */}
+                <select
+                  aria-label="Szülő helyszín"
+                  className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+                  value={newUnit.parentId}
+                  onChange={(event) =>
+                    setNewUnit((current) => ({
+                      ...current,
+                      parentId: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="">Legfelső szint</option>
+                  {unitRows.map(({ unit, depth }) => (
+                    <option key={unit.id} value={unit.id}>
+                      {`${"\u00a0".repeat(depth * 2)}${unit.code} - ${unit.name}`}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
               <FormField label="Kód">
                 <Input
                   aria-label="Alegység kódja"

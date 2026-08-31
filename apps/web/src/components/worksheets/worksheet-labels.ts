@@ -42,6 +42,18 @@ export function formatAmount(value: string, currency = "HUF"): string {
   return `${new Intl.NumberFormat("hu-HU").format(amount)} ${currency}`;
 }
 
+/**
+ * A PENZNEM ROVID JELE, egy helyen.
+ *
+ * A `formatAmount` mar tudja, hogy a HUF magyarul "Ft" -- ez a fuggveny
+ * ugyanabbol a tudasbol adja a JELET, hogy a szerkeszto mezo melle is ki
+ * lehessen irni anelkul, hogy a "HUF -> Ft" megfeleltetes MASODSZOR is le
+ * lenne irva valahol. Ket helyen allo megfeleltetes elcsuszasa nema.
+ */
+export function currencySuffix(currency = "HUF"): string {
+  return currency === "HUF" ? "Ft" : currency;
+}
+
 export function formatDate(value: string | null): string {
   if (!value) return "—";
   return value.slice(0, 10);

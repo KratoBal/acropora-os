@@ -307,9 +307,17 @@ export function AiTestPage() {
                   Termék- és tudáskontextus
                 </dt>
                 {/*
-                  Balázs saját mondata, szó szerint. Nem üres mező: egy üres
-                  mező azt üzenné, hogy nincs mit jelenteni, holott az van, hogy
-                  a katalógus nincs bekötve.
+                  A mondatot a szerver állítja elő abból, amit az AI jelentett
+                  a kereséséről -- és a "nincs termékkontextus" ágon Balázs
+                  saját mondata áll, szó szerint. Nem üres mező: egy üres mező
+                  azt üzenné, hogy nincs mit jelenteni, holott az van, hogy a
+                  válasz mögött mi állt.
+
+                  A négy állapot NÉGY marad. A "rákerestünk és nem találtunk" a
+                  kínálatunkról szóló állítás, a "nem futott le a keresés" a
+                  rendszerünkről -- és ez az a képernyő, ahol ember dönti el,
+                  jó volt-e a válasz. Ha a kettő itt egybeesne, a
+                  megkülönböztetés pont ott veszne el, ahol olvassák.
                 */}
                 <dd>{exchange.reply.productContext}</dd>
               </div>

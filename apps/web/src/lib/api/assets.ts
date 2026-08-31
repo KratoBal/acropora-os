@@ -11,6 +11,7 @@ import type {
 } from "@acropora/types";
 
 import { apiAuthHeaders, apiRequest } from "./client";
+import { API_PREFIX } from "./api-prefix";
 
 export const assetsApi = {
   list(token: string, query: URLSearchParams, signal?: AbortSignal) {
@@ -65,6 +66,19 @@ export const assetsApi = {
       },
     );
   },
+  /**
+   * VEGLEGES TORLES. Kulon jog all rajta (`SERVICE_ASSET_DELETE`), es a szerver
+   * megtagadja, ha az eszkozhoz hibajegy, munkalapsor vagy alarendelt eszkoz
+   * tartozik -- a valasz MEGNEVEZI, melyik. A hivo ezt a szoveget adja tovabb,
+   * nem forditja altalanosra.
+   */
+  remove(token: string, id: string) {
+    return apiRequest<{ ok: true }>(
+      `/service/assets/${encodeURIComponent(id)}`,
+      token,
+      { method: "DELETE" },
+    );
+  },
   qr(token: string, id: string, signal?: AbortSignal) {
     return apiRequest<AssetQrCode>(
       `/service/assets/${encodeURIComponent(id)}/qr`,
@@ -96,7 +110,7 @@ export const assetsApi = {
   },
   async downloadDocument(token: string, id: string, documentId: string) {
     const response = await fetch(
-      `/api/service/assets/${encodeURIComponent(id)}/documents/${encodeURIComponent(documentId)}`,
+      `${API_PREFIX}/service/assets/${encodeURIComponent(id)}/documents/${encodeURIComponent(documentId)}`,
       { credentials: "same-origin", headers: apiAuthHeaders(token) },
     );
     if (!response.ok) throw new Error("A dokumentum nem tölthető le.");

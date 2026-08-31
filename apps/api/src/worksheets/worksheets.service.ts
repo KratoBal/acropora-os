@@ -1,3 +1,7 @@
+import {
+  rowBelongsToScope,
+  type PartnerScope,
+} from "../auth/partner-scope.util.js";
 import { randomUUID } from "node:crypto";
 
 import {
@@ -77,15 +81,37 @@ export class WorksheetsService {
     @Optional() private readonly notifications?: NotificationsService,
   ) {}
 
-  list(query: WorksheetListQueryDto) {
-    return this.repository.list(query);
+  list(query: WorksheetListQueryDto, scope: PartnerScope) {
+    return this.repository.list(query, scope);
   }
 
-  async detail(id: string): Promise<WorksheetDetail> {
-    return toWorksheetDetail(await this.requireWorksheet(id));
+  /**
+   * A FRISSEN IRT LAP VISSZAADASA, BELSOS HATOKORREL -- es azert kulon nev,
+   * mert tiz irasi metodus vegen all ugyanez.
+   *
+   * Mindegyik SERVICE_MANAGE jog alatt fut, amit partner-oldali felhasznalo nem
+   * kap meg, es mindegyik a SAJAT, epp irt lapjat adja vissza. A hatokort ki
+   * kell mondani (a parameter kotelezo), de tiz azonos komment helyett egy nev
+   * hordozza: aki ezt olvassa, egy helyen latja, MIERT nem szukitunk.
+   *
+   * HA VALAHA IRASI VEGPONT KERUL PARTNER-JOG ALA, ez az egy fuggveny a hely,
+   * ahol at kell gondolni -- nem tiz hivasi hely.
+   */
+  private detailAfterWrite(id: string): Promise<WorksheetDetail> {
+    return this.detail(id, { kind: "internal" });
   }
 
-  async departments(customerId: string) {
+  async detail(id: string, scope: PartnerScope): Promise<WorksheetDetail> {
+    return toWorksheetDetail(await this.requireWorksheet(id, scope));
+  }
+
+  async departments(customerId: string, scope: PartnerScope) {
+    // AZ UTVONALBAN ALLO PARTNER EGYEZZEN A KEROEVEL. Itt nincs betoltott sor,
+    // amin ellenorizni lehetne: maga az utvonal-parameter a tulajdonos. A nem
+    // egyezo keres 404, nem 403 -- ugyanabbol az okbol, mint mashol.
+    if (!rowBelongsToScope({ customerId }, scope)) {
+      throw new NotFoundException("A partner nem található.");
+    }
     await this.requireCustomer(customerId);
     return this.repository.departments(customerId);
   }
@@ -116,24 +142,72 @@ export class WorksheetsService {
     try {
       return await this.repository.setPartnerCode(customerId, partnerCode);
     } catch (error) {
+      // Ugyanaz a két szabály, mint a partner képernyőn, ugyanazokkal a
+      // mondatokkal: ez a végpont ugyanazt az oszlopot írja.
+      if (
+        error instanceof Error &&
+        error.message === "PARTNER_CODE_USED_IN_NUMBERS"
+      )
+        throw new ConflictException(
+          "Ezt a partnerkódot korábban már munkalapszám viselte, ezért nem adható ki újra. Válassz másikat.",
+        );
+      if (error instanceof Error && error.message === "PARTNER_CODE_LOCKED")
+        throw new ConflictException(
+          "Ehhez a partnerkódhoz már készült munkalapszám, ezért a kód nem módosítható és nem törölhető.",
+        );
+      // A név ÉS AZ OLDAL is utazik az üzenetben. "Ez a kód foglalt"
+      // végigkerestetné a listát azzal, aki épp beírta; a puszta név pedig a
+      // rossz képernyőre küldené, mert a partnerek és a vevők külön listák.
+      const named = (prefix: string) =>
+        error instanceof Error && error.message.startsWith(prefix)
+          ? error.message.slice(prefix.length)
+          : null;
+
+      const takenByCustomer = named("PARTNER_CODE_TAKEN_BY_CUSTOMER:");
+      if (takenByCustomer)
+        throw new ConflictException(
+          `Ezt a partnerkódot már viseli egy vevő: ${takenByCustomer}. Válassz másikat.`,
+        );
+
+      const takenBySupplier = named("PARTNER_CODE_TAKEN_BY_SUPPLIER:");
+      if (takenBySupplier)
+        throw new ConflictException(
+          `Ezt a partnerkódot már viseli egy szállító partner: ${takenBySupplier}. Válassz másikat.`,
+        );
+
+      const mirrorOf = named("PARTNER_CODE_MIRROR_ROW:");
+      if (mirrorOf)
+        throw new ConflictException(
+          `Ez a sor egy szerviz partner munkalapjait hordozza (${mirrorOf}), a kódja onnan származik. Állítsd be a partner adatlapján, a Partnerek menüben.`,
+        );
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2002"
       ) {
+        // AZ ADATBÁZIS EGYEDI INDEXE AZ UTOLSÓ FÉK, és a fentiek után ritkán
+        // fut: a kód-ellenőrzések előbb kapják el az ütközést. Nem SOHA
+        // viszont, mert két párhuzamos írás között ez marad az egyetlen.
+        //
+        // A mondat második fele korábban azt indokolta, hogy a szám
+        // egyértelműen azonosítsa a partnert. Az indoklás a #182 óta NEM
+        // ÁLL: a szám nem hordozza a rövidítést. A tiltás viszont áll, ezért
+        // az indoklás ment ki, nem az ág. Egy ritkán futó ág hibás üzenete a
+        // legrosszabb fajta: épp akkor vezet félre, amikor valaki először
+        // találkozik vele.
         throw new ConflictException(
-          "Ez a rövidítés már egy másik partnerhez tartozik. A munkalap-számnak egyértelműen kell azonosítania a partnert.",
+          "Ez a rövidítés már egy másik partnerhez tartozik. Válassz másikat.",
         );
       }
       throw error;
     }
   }
 
-  assignableUsers() {
-    return this.repository.assignableUsers();
+  assignableUsers(scope: PartnerScope) {
+    return this.repository.assignableUsers(scope);
   }
 
-  selectablePartners() {
-    return this.repository.selectablePartners();
+  selectablePartners(scope: PartnerScope) {
+    return this.repository.selectablePartners(scope);
   }
 
   async continueFrom(id: string, actorUserId: string) {
@@ -151,7 +225,7 @@ export class WorksheetsService {
         "Csak aláírt munkalapot lehet új lapon folytatni. Ez a lap még nincs aláírva: szerkeszd a piszkozatot, vagy adj ki új verziót.",
       );
     }
-    return this.detail(result.id);
+    return this.detailAfterWrite(result.id);
   }
 
   /**
@@ -167,7 +241,13 @@ export class WorksheetsService {
     input: SetWorksheetAssigneesDto,
     actorUserId: string,
   ): Promise<WorksheetDetail> {
-    await this.requireWorksheet(id);
+    await this.requireWorksheet(id, {
+      // BELSOS UT: a vegpont SERVICE_MANAGE jog alatt all, amit partner-oldali
+      // felhasznalo nem kap meg, es a metodus a TELJES sort hasznalja, nem csak
+      // a letezeset. A hatokort azert irjuk ki, mert a kotelezo parameter a
+      // dontest a hivo helyre hozza: itt nem szukitunk, es ez latszik.
+      kind: "internal",
+    });
     const userIds = normalizeAssigneeIds(input.userIds);
     await this.requireAssignableUsers(userIds);
 
@@ -178,7 +258,7 @@ export class WorksheetsService {
     });
     if (!updated.ok) throw new NotFoundException("A munkalap nem található.");
 
-    const detail = await this.detail(id);
+    const detail = await this.detailAfterWrite(id);
 
     // Only the colleagues who were not already on the sheet, and only after it
     // is stored. Sending to everyone on every save would buzz a technician
@@ -194,6 +274,20 @@ export class WorksheetsService {
     return detail;
   }
 
+  /**
+   * A FELELŐSÖK MÁR ITT KIOSZTHATÓK, és ez nem kényelmi rövidítés.
+   *
+   * Az iroda nyit lapot a szerelőnek: a kiosztás abban a pillanatban ismert,
+   * amikor a lap megszületik. Külön lépésre bízva a felvivő azt hiszi, kiadta a
+   * munkát, közben a lap senki listáján nem jelenik meg -- és erről semmi nem
+   * szól, mert a kiosztatlan lap nem hibás állapot.
+   *
+   * EGY TRANZAKCIÓBAN ÍRÓDIK a lappal. Külön hívásként a második fele
+   * elbukhatna (hálózat, jogosultság, elgépelt azonosító), és pont az a
+   * kiosztatlan lap keletkezne, amit el akarunk kerülni. A kollégák
+   * ellenőrzése ezért a létrehozás ELŐTT fut: egy ismeretlen azonosító így nem
+   * hoz létre semmit, ahelyett hogy egy már meglévő lapot hagyna félkészen.
+   */
   async create(
     input: CreateWorksheetDto,
     actorUserId: string,
@@ -202,21 +296,42 @@ export class WorksheetsService {
     await this.requireDepartment(input.departmentId, input.customerId);
     const content = this.normalize(input);
     await this.requireAssets(content);
+    const assigneeIds = normalizeAssigneeIds(input.assigneeIds ?? []);
+    await this.requireAssignableUsers(assigneeIds);
 
     const id = await this.repository.createDraft({
       customerId: input.customerId,
       departmentId: input.departmentId,
       content,
       actorUserId,
+      assigneeIds,
     });
-    return this.detail(id);
+    const detail = await this.detailAfterWrite(id);
+
+    // Ugyanaz a sorrend, mint a `setAssignees` esetén: értesítés csak azután,
+    // hogy a lap tárolva van. Felvitelkor minden felelős új, tehát a lista
+    // maga a különbség.
+    if (assigneeIds.length > 0)
+      this.notifications?.notifyWorksheetAssignment({
+        worksheetId: id,
+        subject: detail.currentVersion.subject,
+        userIds: assigneeIds,
+      });
+
+    return detail;
   }
 
   async updateDraft(
     id: string,
     input: UpdateWorksheetDraftDto,
   ): Promise<WorksheetDetail> {
-    const worksheet = await this.requireWorksheet(id);
+    const worksheet = await this.requireWorksheet(id, {
+      // BELSOS UT: a vegpont SERVICE_MANAGE jog alatt all, amit partner-oldali
+      // felhasznalo nem kap meg, es a metodus a TELJES sort hasznalja, nem csak
+      // a letezeset. A hatokort azert irjuk ki, mert a kotelezo parameter a
+      // dontest a hivo helyre hozza: itt nem szukitunk, es ez latszik.
+      kind: "internal",
+    });
     const current = worksheet.versions[0];
     if (!current) throw new NotFoundException("A munkalap nem található.");
     if (current.status !== "DRAFT") {
@@ -237,7 +352,7 @@ export class WorksheetsService {
         "A munkalapot időközben lezárták, ezért a piszkozat nem menthető.",
       );
     }
-    return this.detail(id);
+    return this.detailAfterWrite(id);
   }
 
   async close(
@@ -247,7 +362,7 @@ export class WorksheetsService {
   ): Promise<WorksheetDetail> {
     const result = await this.repository.close(id, actorUserId, now);
     if (!result.ok) throw closeFailure(result.reason);
-    return this.detail(id);
+    return this.detailAfterWrite(id);
   }
 
   async amend(
@@ -288,7 +403,7 @@ export class WorksheetsService {
         "Időközben új verzió készült a munkalapról. Nyisd meg újra, és arra add ki a módosítást.",
       );
     }
-    return this.detail(id);
+    return this.detailAfterWrite(id);
   }
 
   async sign(
@@ -331,15 +446,19 @@ export class WorksheetsService {
         "Ez a verzió nem írható alá: vagy még piszkozat, vagy már megszületett róla a döntés.",
       );
     }
-    return this.detail(id);
+    return this.detailAfterWrite(id);
   }
 
   /**
    * Egy verzió és az előzője közötti mezőnkénti eltérés. Nem tárolt napló,
    * hanem a két megváltoztathatatlan verzióból számolt tény.
    */
-  async diff(id: string, version: number): Promise<WorksheetVersionDiff> {
-    const worksheet = await this.requireWorksheet(id);
+  async diff(
+    id: string,
+    version: number,
+    scope: PartnerScope,
+  ): Promise<WorksheetVersionDiff> {
+    const worksheet = await this.requireWorksheet(id, scope);
     const current = worksheet.versions.find(
       (candidate) => candidate.version === version,
     );
@@ -392,7 +511,7 @@ export class WorksheetsService {
       line,
     });
     this.assertLineWritten(result);
-    return this.detail(id);
+    return this.detailAfterWrite(id);
   }
 
   async updateLine(
@@ -410,14 +529,14 @@ export class WorksheetsService {
       line,
     });
     this.assertLineWritten(result);
-    return this.detail(id);
+    return this.detailAfterWrite(id);
   }
 
   async removeLine(id: string, lineId: string): Promise<WorksheetDetail> {
     const versionId = await this.requireDraftVersionId(id);
     const result = await this.repository.removeLine({ versionId, lineId });
     this.assertLineWritten(result);
-    return this.detail(id);
+    return this.detailAfterWrite(id);
   }
 
   /**
@@ -441,7 +560,13 @@ export class WorksheetsService {
   }
 
   private async requireDraftVersionId(id: string): Promise<string> {
-    const worksheet = await this.requireWorksheet(id);
+    const worksheet = await this.requireWorksheet(id, {
+      // BELSOS UT: a vegpont SERVICE_MANAGE jog alatt all, amit partner-oldali
+      // felhasznalo nem kap meg, es a metodus a TELJES sort hasznalja, nem csak
+      // a letezeset. A hatokort azert irjuk ki, mert a kotelezo parameter a
+      // dontest a hivo helyre hozza: itt nem szukitunk, es ez latszik.
+      kind: "internal",
+    });
     const current = worksheet.versions[0];
     if (!current) throw new NotFoundException("A munkalap nem található.");
     if (current.status !== "DRAFT") {
@@ -478,8 +603,11 @@ export class WorksheetsService {
     }
   }
 
-  private async requireWorksheet(id: string): Promise<WorksheetDetailRow> {
-    const worksheet = await this.repository.detail(id);
+  private async requireWorksheet(
+    id: string,
+    scope: PartnerScope,
+  ): Promise<WorksheetDetailRow> {
+    const worksheet = await this.repository.detail(id, scope);
     if (!worksheet) throw new NotFoundException("A munkalap nem található.");
     return worksheet;
   }

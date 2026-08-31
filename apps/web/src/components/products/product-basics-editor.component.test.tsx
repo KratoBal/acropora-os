@@ -43,6 +43,7 @@ const product = (overrides: Partial<ProductDetail> = {}): ProductDetail =>
     catalogAuthority: "ACROPORA",
     origin: "UNAS",
     primaryCategory: { id: "cat-1", name: "Szivattyúk" },
+    webshopSellable: false,
     categories: [],
     variants: [],
     images: [],
@@ -64,7 +65,7 @@ describe("ProductBasicsEditor", () => {
    * A három mező egy űrlapon megy be, egy mentéssel. Külön-külön ellenőrizve a
    * teszt egy olyan szerkesztővel is átmenne, ami hármat kér és egyet küld.
    */
-  it("sends all three fields in one save", async () => {
+  it("sends all four fields in one save", async () => {
     api.update.mockResolvedValue(product());
     api.detail.mockResolvedValue(
       product({ name: "Új név", description: "Új leírás" }),
@@ -99,6 +100,7 @@ describe("ProductBasicsEditor", () => {
         name: "Új név",
         description: "Új leírás",
         primaryCategoryId: "cat-2",
+        webshopSellable: false,
       }),
     );
   });
@@ -108,6 +110,60 @@ describe("ProductBasicsEditor", () => {
    * ami a saját mezőit hagyja a képernyőn, ugyanígy nézne ki, és pontosan
    * akkor tévedne, amikor a szerver mást mentett, mint amit küldtünk.
    */
+  /**
+   * A VÁSÁROLHATÓ JELÖLŐNÉGYZET ÁLLÁSA ELMEGY A SZERVERRE.
+   *
+   * Ez a mező az ELSŐ írási út a `webshopSellable`-höz: eddig hat helyen
+   * szerepelt a fában, mind olvasásként, tehát semmi nem tudta igazra
+   * állítani. Ha ez az állítás elesik, a kapcsoló megint csak látszik.
+   */
+  it("sends the purchasable box the way the user left it", async () => {
+    api.update.mockResolvedValue(product());
+    api.detail.mockResolvedValue(product({ webshopSellable: true }));
+    render(
+      <ProductBasicsEditor
+        token="token-1"
+        product={product()}
+        canManage
+        onSaved={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText("Vásárolható a webshopban"));
+    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
+
+    await waitFor(() =>
+      expect(api.update).toHaveBeenCalledWith(
+        "token-1",
+        "product-1",
+        expect.objectContaining({ webshopSellable: true }),
+      ),
+    );
+  });
+
+  /**
+   * A JELÖLŐNÉGYZET A TERMÉK ÁLLAPOTÁBÓL INDUL, nem üresen.
+   *
+   * Enélkül egy már vásárolható termék szerkesztője üres négyzetet mutatna, és
+   * az első mentés VISSZAKAPCSOLNÁ a terméket -- csendben, mert a felhasználó
+   * ahhoz a mezőhöz hozzá sem nyúlt.
+   */
+  it("starts from the product's own state, not from unchecked", () => {
+    render(
+      <ProductBasicsEditor
+        token="token-1"
+        product={product({ webshopSellable: true })}
+        canManage
+        onSaved={() => {}}
+      />,
+    );
+
+    expect(
+      (screen.getByLabelText("Vásárolható a webshopban") as HTMLInputElement)
+        .checked,
+    ).toBe(true);
+  });
+
   it("shows what the server gives back, not what was typed", async () => {
     api.update.mockResolvedValue(product());
     const reread = product({ name: "A szerver szerinti név" });

@@ -39,6 +39,8 @@ const ownerSession: Session = {
     email: "owner@acropora.local",
     displayName: "Owner",
     role: "OWNER",
+    customerId: null,
+    supplierId: null,
   },
 };
 

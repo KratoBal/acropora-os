@@ -32,8 +32,29 @@ function errorName(error: unknown): string | undefined {
   return typeof name === "string" ? name : undefined;
 }
 
-export function describeScanFailure(error: unknown): ScanFailure {
+export interface ScanFailureContext {
+  /**
+   * Megnéztük-e a készüléken tárolt helyszíni másolatot is, és nem találtuk
+   * benne a kódot. Enélkül a "nincs kapcsolat" üzenet azt sugallja, hogy térerő
+   * mellett minden rendben lenne -- pedig ez az eszköz a mentett listán sincs
+   * rajta, tehát vagy új, vagy nem szinkronizált még erre a készülékre.
+   */
+  searchedOfflineCopy?: boolean;
+}
+
+export function describeScanFailure(
+  error: unknown,
+  context: ScanFailureContext = {},
+): ScanFailure {
   if (errorName(error) === "ApiNetworkError") {
+    if (context.searchedOfflineCopy)
+      return {
+        title: "Nincs kapcsolat, és nincs mentve ez az eszköz",
+        message:
+          "A szervert nem érjük el, a készüléken mentett listán pedig nincs rajta ez a kód. Térerőnél próbáld újra: ha az eszköz létezik, onnantól offline is megvan.",
+        canRetry: true,
+      };
+
     return {
       title: "Nincs kapcsolat a szerverrel",
       message:

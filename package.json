@@ -15,7 +15,6 @@
     "dev": "turbo run dev --filter=@acropora/web --filter=@acropora/api",
     "dev:mobile": "npm --prefix apps/mobile run dev",
     "dev:mobile:go": "npm --prefix apps/mobile run start:go",
-    "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "format": "prettier --write .",
@@ -34,7 +33,8 @@
     "mobile:doctor": "npm --prefix apps/mobile run doctor",
     "mobile:lint": "npm --prefix apps/mobile run lint",
     "mobile:typecheck": "npm --prefix apps/mobile run typecheck",
-    "mobile:test": "npm --prefix apps/mobile run test"
+    "mobile:test": "npm --prefix apps/mobile run test",
+    "mobile:export:web": "npm --prefix apps/mobile run export:web"
   },
   "devDependencies": {
     "prettier": "^3.9.5",

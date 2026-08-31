@@ -1,13 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { AssetListItem } from "@/lib/api/assets";
-
-const STATUS_LABELS: Record<AssetListItem["status"], string> = {
-  ACTIVE: "Aktív",
-  OUT_OF_SERVICE: "Nem üzemel",
-  IN_REPAIR: "Javítás alatt",
-  RETIRED: "Kivezetett",
-};
+import { assetPlacementLine } from "@/lib/assets/asset-placement";
+import { ASSET_STATUS_LABELS } from "@/lib/assets/asset-status";
 
 export function AssetCard({
   asset,
@@ -25,17 +20,36 @@ export function AssetCard({
     >
       <View style={styles.topline}>
         <Text style={styles.number}>{asset.assetNumber}</Text>
-        <Text style={styles.status}>{STATUS_LABELS[asset.status]}</Text>
+        <Text style={styles.status}>{ASSET_STATUS_LABELS[asset.status]}</Text>
       </View>
       <Text style={styles.name}>{asset.name}</Text>
       <Text style={styles.customer}>{asset.owner.displayName}</Text>
-      {asset.address ? (
-        <Text style={styles.meta}>{asset.address.formatted}</Text>
-      ) : null}
+      {/*
+        HOL ÁLL, ÉS MIKOR NEM VÁLASZTÁS EREDMÉNYE, AMIT LÁTUNK. Szerviz
+        partnernél a cím mindig a partner saját postai címe: alegység nélkül
+        tehát nem válasz arra, hogy hol áll az eszköz. A sorban ez látszik a
+        legkevésbé, mert minden hely ugyanúgy néz ki -- ezért a hiányt a
+        felirat mondja ki (`asset-placement.ts`).
+      */}
+      <Text style={styles.meta}>
+        {assetPlacementLine({
+          ownerType: asset.owner.type,
+          unit: asset.unit,
+          address: asset.address,
+        })}
+      </Text>
       {asset.parent ? (
         <Text style={styles.meta}>Része: {asset.parent.name}</Text>
       ) : asset.childCount > 0 ? (
         <Text style={styles.meta}>{asset.childCount} részegység</Text>
+      ) : null}
+      {/*
+        AZ UGYFEL SAJAT KODJA, csak ha van, es FELIRATTAL. A kereses nezi, tehat
+        a talalatnak meg kell mutatnia, mire illeszkedett -- a felirat pedig
+        azert kell, hogy a sorban ne legyen osszekeverheto a mi eszkozszamunkkal.
+      */}
+      {asset.inventoryNumber ? (
+        <Text style={styles.meta}>Leltári szám: {asset.inventoryNumber}</Text>
       ) : null}
       {asset.manufacturer || asset.model || asset.serialNumber ? (
         <Text style={styles.technical}>

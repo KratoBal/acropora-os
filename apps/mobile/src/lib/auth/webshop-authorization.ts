@@ -16,6 +16,18 @@ export interface ServiceCapabilities {
   workspace: boolean;
   assetsView: boolean;
   assetsManage: boolean;
+  /**
+   * A MUNKALAP UGYANAZT A KÉT SZERVER-JOGOT KAPJA, MINT AZ ESZKÖZ
+   * (`service.view` és `service.manage`), mégis saját kulcsot kap itt.
+   *
+   * A szerveren a szerviz modul EGY jogosultság-pár, a telefonon viszont két
+   * külön csempe, és a csempe kapujának azt kell megneveznie, amit MEGNYIT. Egy
+   * `assetsView` névre kötött munkalap-csempe akkor is működne, de a következő
+   * olvasó nem tudná eldönteni, szándék volt-e vagy elírás -- és ha a szerver
+   * egyszer szétválasztja a két modult, a változás egyetlen helyen, itt landol.
+   */
+  worksheetsView: boolean;
+  worksheetsManage: boolean;
 }
 
 const FULL_ACCESS: WebshopCapabilities = {
@@ -122,14 +134,17 @@ export function getServiceCapabilities(role: UserRole): ServiceCapabilities {
     role === "MANAGER" ||
     role === "SERVICE" ||
     role === "VIEWER";
+  const canManage =
+    role === "OWNER" ||
+    role === "ADMIN" ||
+    role === "MANAGER" ||
+    role === "SERVICE";
   return {
     workspace: canView,
     assetsView: canView,
-    assetsManage:
-      role === "OWNER" ||
-      role === "ADMIN" ||
-      role === "MANAGER" ||
-      role === "SERVICE",
+    assetsManage: canManage,
+    worksheetsView: canView,
+    worksheetsManage: canManage,
   };
 }
 

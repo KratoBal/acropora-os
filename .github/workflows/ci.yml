@@ -71,13 +71,58 @@ jobs:
       - name: Seed development reference data
         run: pnpm prisma:seed
 
+      # `pnpm lint` is gone, and not only from this file. In all six
+      # workspace packages `lint` was `tsc --noEmit` - the very command
+      # `pnpm typecheck` runs - so the job did the work twice, and the two
+      # names promised two checks while one happened. Mobile's ESLint is the
+      # only real linter in the repository and it is NOT reachable that way:
+      # `pnpm-workspace.yaml` excludes `apps/mobile` from the workspace, so
+      # `turbo run lint` never included it. `pnpm mobile:lint` below is how it
+      # runs, and how it always ran.
       - name: Static verification
         run: |
-          pnpm lint
           pnpm typecheck
           pnpm mobile:lint
           pnpm mobile:typecheck
           pnpm mobile:test
+          # The web export is the one mobile gate that reads the bundler's own
+          # resolution: #254 fixed a build that failed on `.wasm` while every
+          # check stayed green, because nothing here ever ran an export. It can
+          # fail - measured on b4229a5: with `apps/mobile/metro.config.js` in
+          # place `expo export --platform web` exits 0, and with that file set
+          # aside the same command on the same head exits 1 with
+          # "Unable to resolve module ./wa-sqlite/wa-sqlite.wasm".
+          #
+          # WHAT IT DOES NOT PROVE: that the web app WORKS. This only proves the
+          # bundle is produced and the asset is emitted. Whether SQLite actually
+          # starts in a browser from the exported file is a different measurement
+          # and is not guarded here.
+          #
+          # Cost, measured on the runner over four runs of this branch: the
+          # whole step took 67s, 79s, 81s and 84s, against a 30-33s baseline
+          # over the last ten main runs. So this line costs roughly 35-55s,
+          # typically nearer the top of that range. Two earlier estimates were
+          # both too low - ~32s from a developer machine, then ~35-45s from the
+          # first two runs - so treat 55s as the working figure, not 35s.
+          # (Metro also caches in the system temp dir, so a "cold" run that only
+          # clears node_modules/.cache reports ~4s; that is never the CI number.
+          # Runners are always cold.)
+          #
+          # Do NOT read this off the job total: on the run above the job came out
+          # at 247s against a 248s baseline, because four unrelated steps happened
+          # to be 27s faster. The step-level number is the honest one.
+          pnpm mobile:export:web
+
+      # CONTRIBUTING.md calls `pnpm format:check` the authoritative formatting
+      # check, and until now nothing ran it: the pre-commit hook is a local
+      # signal that `--no-verify` skips and that only exists where somebody
+      # ran the install. This is the gate the document already described.
+      - name: Formatting
+        run: |
+          pnpm format:check || {
+            echo "::error::Formatting does not match. Fix it locally with: pnpm format" >&2
+            exit 1
+          }
 
       - name: Unit and workspace tests
         run: pnpm test
@@ -89,6 +134,19 @@ jobs:
 
       - name: Database integration tests
         id: db_integration_tests
+        # DELIBERATE, AND LOAD-BEARING - the job does NOT stay green on a
+        # failure here. "Fail the job if the database integration tests failed"
+        # further down re-reads this step's own outcome and exits 1.
+        #
+        # The tolerance exists so the steps BETWEEN the two can run: the release
+        # evidence recorder writes FAILURE just as much as SUCCESS, and stopping
+        # here would leave no trace of exactly the run that most needs one. It
+        # also lets the second command in this step matter, which an immediate
+        # stop on the first would not.
+        #
+        # This comment is here because a hundred lines separate the two steps,
+        # and reading only this one leads to the opposite conclusion - which is
+        # what happened on 2026-08-26 before anyone read the outcome data.
         continue-on-error: true
         run: |
           pnpm --filter @acropora/api test:integration
@@ -108,6 +166,13 @@ jobs:
         id: postgres_version
         if: always()
         run: |
+          # Without `pipefail` the exit status of this assignment is `xargs`'s,
+          # which succeeds on empty input - so a psql failure would leave
+          # `version` empty and this step GREEN. The job would still fail, two
+          # steps later, where record-release-evidence rejects the empty value
+          # by name. That is late enough that the reader has to walk back to a
+          # green step to find the real cause.
+          set -euo pipefail
           version=$(PGPASSWORD=acropora psql -h localhost -U acropora -d acropora_ci -tAc "SHOW server_version;" | xargs)
           echo "server version reported by the running container: $version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -194,10 +259,23 @@ jobs:
           # image via the Dockerfile's RELEASE_COMMIT_SHA build ARG (see
           # that file) - so this CI job also exercises the build-time
           # well-formedness check added there, using a real, valid SHA.
+          # OS_PATCH_EPOCH: a run's own identity, so the runner stage's package
+          # layer is rebuilt on every scan instead of being replayed from the
+          # GitHub Actions cache. Measured on 2026-08-27: the same commit
+          # (8ea11c7) scanned green in run 33050897056 and red in run
+          # 33050893144, a minute apart, because one of them ran the apk step
+          # and the other got it CACHED with the older libssl3 still inside.
+          # The scan asks a question about NOW; a replayed layer answers about
+          # whenever the cache was written. See apps/web/Dockerfile for why the
+          # fix is not a pinned package version.
           - app: api
-            build_args: RELEASE_COMMIT_SHA=${{ github.sha }}
+            build_args: |
+              RELEASE_COMMIT_SHA=${{ github.sha }}
+              OS_PATCH_EPOCH=${{ github.run_id }}-${{ github.run_attempt }}
           - app: web
-            build_args: API_URL=http://127.0.0.1:3001
+            build_args: |
+              API_URL=http://127.0.0.1:3001
+              OS_PATCH_EPOCH=${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:
       - name: Checkout

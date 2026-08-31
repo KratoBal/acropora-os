@@ -25,6 +25,10 @@ const session = (): Session => ({
     email: "balazs@acropora.local",
     displayName: "Balázs",
     role: "OWNER",
+    // A fo agon (#286 ota) a munkatars hatokore is a session resze: belsos
+    // kerohoz mindketto null. A fixtura ezt koveti, nem talal ki erteket.
+    customerId: null,
+    supplierId: null,
   },
 });
 

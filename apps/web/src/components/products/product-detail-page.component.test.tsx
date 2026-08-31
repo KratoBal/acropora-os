@@ -38,6 +38,7 @@ const detail: ProductDetail = {
   origin: "UNAS",
   catalogAuthority: "UNAS",
   isActive: true,
+  webshopSellable: false,
   archivedAt: null,
   brand: { id: "brand-1", name: "Acme" },
   primaryCategory: {
@@ -50,6 +51,7 @@ const detail: ProductDetail = {
   thumbnail: null,
   unasListing: null,
   grossPrice: null,
+  priceSource: "unas" as const,
   saleGrossPrice: null,
   stockOnHand: null,
   description: "Tengeri só",
@@ -208,6 +210,8 @@ describe("ProductDetailPage mirror ownership", () => {
         email: "owner@acropora.local",
         displayName: "Owner",
         role: "OWNER",
+        customerId: null,
+        supplierId: null,
       },
     };
     api.detail.mockResolvedValue(detail);

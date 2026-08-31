@@ -1,3 +1,4 @@
+import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import {
   Body,
   BadRequestException,
@@ -34,32 +35,46 @@ export class ServiceAssetsController {
 
   @Get()
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  list(@Query() query: AssetListQueryDto) {
-    return this.service.list(query);
+  list(
+    @Query() query: AssetListQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.list(query, partnerScopeOf(user));
   }
 
   @Get("owners")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  owners(@Query() query: AssetOwnersQueryDto) {
-    return this.service.owners(query);
+  owners(
+    @Query() query: AssetOwnersQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.owners(query, partnerScopeOf(user));
   }
 
+  /**
+   * A TULAJDONOST SZANDEKOSAN NEM ELLENORIZZUK (spec 4.1): a token maga a
+   * kulcs. A hatokor MEGIS atmegy, mert a dokumentum-tipus szabalya nem a
+   * tulajdonosrol szol -- lasd a tarolo `detailByQrToken` jegyzetet.
+   */
   @Get("scan/:qrToken")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  scan(@Param("qrToken") qrToken: string) {
-    return this.service.scan(qrToken);
+  scan(
+    @Param("qrToken") qrToken: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.scan(qrToken, partnerScopeOf(user));
   }
 
   @Get(":id/qr")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  qrCode(@Param("id") id: string) {
-    return this.service.qrCode(id);
+  qrCode(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.qrCode(id, partnerScopeOf(user));
   }
 
   @Get(":id")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  detail(@Param("id") id: string) {
-    return this.service.detail(id);
+  detail(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.detail(id, partnerScopeOf(user));
   }
 
   @Post()
@@ -111,13 +126,29 @@ export class ServiceAssetsController {
   async downloadDocument(
     @Param("id") id: string,
     @Param("documentId") documentId: string,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    const document = await this.service.document(id, documentId);
+    const document = await this.service.document(
+      id,
+      documentId,
+      partnerScopeOf(user),
+    );
     return new StreamableFile(document.content, {
       type: document.contentType,
       length: document.content.length,
       disposition: `attachment; filename*=UTF-8''${encodeURIComponent(document.fileName)}`,
     });
+  }
+
+  /**
+   * A TORLES SAJAT VEGPONT, es SAJAT jog alatt all, nem a SERVICE_MANAGE alatt:
+   * eszkozt felvinni a napi szerviz-munka, egy eszkozt megszuntetni viszont
+   * visszafordithatatlan. A `SERVICE_ASSET_DELETE` jogot a MANAGER sem kapja meg.
+   */
+  @Delete(":id")
+  @RequirePermissions(PERMISSIONS.SERVICE_ASSET_DELETE)
+  remove(@Param("id") id: string) {
+    return this.service.remove(id);
   }
 
   @Delete(":id/documents/:documentId")

@@ -9,12 +9,22 @@ import type {
   WorksheetDepartmentSummary,
 } from "@acropora/types";
 
+import {
+  rowIsScopeOwner,
+  scopeOwnWhereForAndBranch,
+  type PartnerScope,
+} from "../auth/partner-scope.util.js";
 import { generateCode } from "../common/code-generator.util.js";
 import {
   retryOnTakenCode,
   withUniqueCode,
 } from "../common/unique-code.util.js";
 import type { CreateWorksheetDepartmentDto } from "../worksheets/dto/worksheet.dto.js";
+import { partnerCodeChange } from "./partner-code-change.js";
+import {
+  assertPartnerCodeNeverNumbered,
+  assertPartnerCodeUnlocked,
+} from "./partner-code-numbers.js";
 import type { PartnerReferenceCounts } from "./partner-deletion.js";
 import type {
   CreateSupplierDto,
@@ -85,9 +95,58 @@ export async function assertPartnerCodeFree(
 }
 
 /**
+ * The same question asked from the CUSTOMER side, for the endpoint that writes
+ * the code straight onto a customer row (`PUT customers/:id/partner-code`).
+ *
+ * It is a separate function rather than a parameter on the one above, because
+ * what has to be EXCLUDED is different, not just named differently. There the
+ * row being saved is a supplier; here it is a customer, and the supplier that
+ * may legitimately carry the same code is the one whose mirror this customer IS
+ * (`Supplier.customerId`), not one identified by id.
+ *
+ * WHY THE COMPARISON IS IN JAVASCRIPT AND NOT IN THE `where`: the case this
+ * exists for is a supplier with `customerId = null`, and a negated filter on a
+ * nullable column is exactly where SQL's three-valued logic quietly drops rows
+ * -- `NOT (customerId = 'x')` is NULL, not true, when the column is NULL. Both
+ * columns are unique, so each lookup returns at most one row; comparing that row
+ * costs nothing and does not depend on how a negation is translated.
+ *
+ * THE ERROR NAMES THE HOLDER **AND THE SIDE**, and the side is not decoration.
+ * The failure this whole check exists to prevent is a message that points at
+ * the wrong field: today a collision here surfaces later, on the supplier's
+ * next save, naming a CUSTOMER for a code the supplier has held all along. An
+ * error that says only "taken by X" would reproduce that confusion one step
+ * earlier -- the person would go looking for X on the wrong screen.
+ */
+export async function assertPartnerCodeFreeForCustomer(
+  tx: Prisma.TransactionClient,
+  code: string,
+  customerId: string,
+) {
+  const customer = await tx.customer.findFirst({
+    where: { worksheetPartnerCode: code },
+    select: { id: true, displayName: true },
+  });
+  if (customer && customer.id !== customerId)
+    throw new Error(`PARTNER_CODE_TAKEN_BY_CUSTOMER:${customer.displayName}`);
+
+  const partner = await tx.supplier.findFirst({
+    where: { worksheetPartnerCode: code },
+    select: { name: true, customerId: true },
+  });
+  // The `customerId` comparison only spares a MIRROR row, and the one caller
+  // refuses mirror rows before it ever gets here. It stays because this
+  // function answers "is the code free for this customer", and a second caller
+  // writing a mirror's code (`syncWorksheetMirror` is the obvious candidate)
+  // would need exactly this exclusion to be correct.
+  if (partner && partner.customerId !== customerId)
+    throw new Error(`PARTNER_CODE_TAKEN_BY_SUPPLIER:${partner.name}`);
+}
+
+/**
  * A worksheet belongs to a customer in three places -- the sheet, the unit and
- * the number's first segment -- so a service partner is given a customer row of
- * its own to carry them. The row is the partner's, not a buyer's: it is created
+ * the abbreviation the close path requires -- so a service partner is given a
+ * customer row of its own to carry them. The row is the partner's, not a buyer's: it is created
  * here rather than typed in, so a partner is still recorded once, by hand, in
  * one place, and the customer list leaves these rows out.
  *
@@ -151,8 +210,11 @@ export class SuppliersRepository extends Repository {
     super(prisma);
   }
 
-  async list(query: SupplierListQueryDto): Promise<SupplierListResponse> {
-    const where: Prisma.SupplierWhereInput = {
+  async list(
+    query: SupplierListQueryDto,
+    scope: PartnerScope,
+  ): Promise<SupplierListResponse> {
+    const userWhere: Prisma.SupplierWhereInput = {
       // A törölt partner kikerül a listából, a "Mind" szűrő alól is: az a
       // szűrő az aktív és az inaktív között választ, a törölt viszont nem
       // ezen a tengelyen van. A neve továbbra is látszik a régi
@@ -190,6 +252,12 @@ export class SuppliersRepository extends Repository {
           }
         : {}),
     };
+
+    // A JOGOSULTSAGI SZURO `AND` AGKENT, SOHA NEM KULCSKENT -- a fenti objektum
+    // felhasznaloi szurot spreadel es felso szintu `OR`-t is tartalmaz.
+    const where: Prisma.SupplierWhereInput = {
+      AND: [scopeOwnWhereForAndBranch(scope, "supplier"), userWhere],
+    };
     const [suppliers, totalItems] = await Promise.all([
       prisma.supplier.findMany({
         where,
@@ -211,7 +279,7 @@ export class SuppliersRepository extends Repository {
   }
 
   /**
-   * A partner alegységei. Az alegység a munkalapon a szám középső tagját adja,
+   * A partner alegységei. Az alegység a munkalapon a szám első tagját adja,
    * és a sémában a VEVŐHÖZ tartozik -- egy szerviz partner alegységei tehát a
    * tükör-során lógnak.
    *
@@ -222,16 +290,34 @@ export class SuppliersRepository extends Repository {
    * Tükör nélküli partnernek üres a listája, nem hibás. Egy tisztán beszállító
    * partnernek nincs és nem is lehet alegysége, és ez nem hibaállapot.
    */
-  async units(supplierId: string): Promise<WorksheetDepartmentListResponse> {
+  async units(
+    supplierId: string,
+    scope: PartnerScope,
+  ): Promise<WorksheetDepartmentListResponse> {
+    // AZ UTVONALBAN ALLO PARTNER EGYEZZEN A KEROEVEL. Itt nincs betoltott sor,
+    // amin ellenorizni lehetne: maga az utvonal-parameter a tulajdonos.
+    if (!rowIsScopeOwner({ id: supplierId }, scope, "supplier")) {
+      return { items: [] };
+    }
     const supplier = await prisma.supplier.findUnique({
       where: { id: supplierId },
       select: { customerId: true },
     });
     if (!supplier?.customerId) return { items: [] };
+    // LAPOSAN jon vissza, a fat a hivo epiti fel a parentId mezobol. Egy
+    // rekurziv lekerdezes itt tobbet vinne, mint amennyit er: egy partner
+    // helyszinei elférnek egy koteg­ben, es igy egy uj szint nem valtoztat
+    // vegpontot.
     const items = await prisma.worksheetDepartment.findMany({
       where: { customerId: supplier.customerId },
-      select: { id: true, code: true, name: true, isActive: true },
-      orderBy: { code: "asc" },
+      select: {
+        id: true,
+        parentId: true,
+        code: true,
+        name: true,
+        isActive: true,
+      },
+      orderBy: [{ parentId: "asc" }, { code: "asc" }],
     });
     return { items };
   }
@@ -251,13 +337,43 @@ export class SuppliersRepository extends Repository {
       select: { customerId: true },
     });
     if (!supplier?.customerId) return null;
+
+    /**
+     * A SZULO UGYANAHHOZ A PARTNERHEZ TARTOZZON.
+     *
+     * Enelkul egy letezo, de MASIK partnerhez tartozo azonosito atmenne: az
+     * idegen kulcs csak azt nezi, hogy a sor letezik-e, a tulajdonost nem. Az
+     * igy keletkezo helyszin a masik partner faja alatt fugne, es a
+     * munkalapszamot vinne rossz helyre -- csendben, mert a felulet a sajat
+     * fajat mutatja, es abban nem is latszana.
+     *
+     * A "nem talaltam" es a "masé" ugyanaz a valasz: mindketto ismeretlen
+     * szulo a hivo szemszogebol, es a kulonbseg kimondasa mas partner adatarol
+     * arulna el valamit.
+     */
+    const parentId = input.parentId?.trim() || null;
+    if (parentId) {
+      const parent = await prisma.worksheetDepartment.findFirst({
+        where: { id: parentId, customerId: supplier.customerId },
+        select: { id: true },
+      });
+      if (!parent) throw new Error("WORKSHEET_DEPARTMENT_PARENT_NOT_FOUND");
+    }
+
     return prisma.worksheetDepartment.create({
       data: {
         customerId: supplier.customerId,
+        parentId,
         code: input.code.trim().toUpperCase(),
         name: input.name.trim(),
       },
-      select: { id: true, code: true, name: true, isActive: true },
+      select: {
+        id: true,
+        parentId: true,
+        code: true,
+        name: true,
+        isActive: true,
+      },
     });
   }
 
@@ -379,9 +495,39 @@ export class SuppliersRepository extends Repository {
     });
   }
 
-  async detail(id: string): Promise<SupplierSummary | null> {
+  /**
+   * A KOTELEZO `scope` NEM KENYELMETLENSEG, HANEM A MECHANIZMUS MAGA. Ha
+   * elhagyhato lenne, egy elfelejtett hivasi hely CSENDBEN szuretlen maradna --
+   * es egy elem-lekeresnel az idegen adat EGYETLEN hivasra megy ki, amit senki
+   * nem vesz eszre, amig valaki ki nem probalja. A kotelezo parameterrel a
+   * FORDITO sorolja fel az osszes hivasi helyet.
+   *
+   * Az ellenorzes a BETOLTOTT soron all, nem a `where`-ben, es ez szandekos: igy
+   * egy helyen latszik, mit engedunk at. A nem egyezo sor `null`, tehat a hivo
+   * 404-et ad -- NEM 403-at, mert a 403 elarulna, hogy a sor letezik.
+   */
+  async detail(
+    id: string,
+    scope: PartnerScope,
+  ): Promise<SupplierSummary | null> {
     const supplier = await prisma.supplier.findUnique({ where: { id } });
-    return supplier ? toSummary(supplier) : null;
+    if (!supplier) return null;
+    if (!rowIsScopeOwner(supplier, scope, "supplier")) return null;
+    return toSummary(supplier);
+  }
+
+  /**
+   * LETEZES-ELLENORZES IRASI UT ELOTT, HATOKOR NELKUL -- es a kulonbseg
+   * szandekos. Az irasi vegpontok PARTNERS_MANAGE jog alatt allnak, amit
+   * partner-oldali felhasznalo nem kap meg; a szukites ott nem ad tobb vedelmet,
+   * viszont OSSZEMOSNA ket kerdest: "latja-e ezt a sort" es "letezik-e ez a sor".
+   */
+  async exists(id: string): Promise<boolean> {
+    const row = await prisma.supplier.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    return row !== null;
   }
 
   /**
@@ -399,8 +545,13 @@ export class SuppliersRepository extends Repository {
       (code) =>
         prisma.$transaction(
           async (tx) => {
-            if (input.worksheetPartnerCode)
+            if (input.worksheetPartnerCode) {
               await assertPartnerCodeFree(tx, input.worksheetPartnerCode, null);
+              await assertPartnerCodeNeverNumbered(
+                tx,
+                input.worksheetPartnerCode,
+              );
+            }
             const supplier = await tx.supplier.create({
               data: {
                 code,
@@ -488,6 +639,27 @@ export class SuppliersRepository extends Repository {
           });
           if (input.worksheetPartnerCode)
             await assertPartnerCodeFree(tx, input.worksheetPartnerCode, id);
+          // The order matters: what the code IS LEAVING is checked before what
+          // it is arriving at. A partner trying to swap a spent code for a
+          // fresh one should be told that the old one is locked, not that the
+          // new one is fine.
+          const change = partnerCodeChange(
+            existing.worksheetPartnerCode,
+            input.worksheetPartnerCode,
+          );
+          if (
+            (change === "changed" || change === "cleared") &&
+            existing.worksheetPartnerCode
+          )
+            await assertPartnerCodeUnlocked(tx, existing.worksheetPartnerCode);
+          if (
+            (change === "changed" || change === "set") &&
+            input.worksheetPartnerCode
+          )
+            await assertPartnerCodeNeverNumbered(
+              tx,
+              input.worksheetPartnerCode,
+            );
           const changed = await tx.supplier.updateMany({
             where: { id, updatedAt: new Date(input.expectedUpdatedAt) },
             data: {

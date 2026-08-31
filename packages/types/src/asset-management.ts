@@ -75,15 +75,64 @@ export interface AssetProductSummary {
   name: string;
 }
 
+export interface AssetUnitSummary {
+  id: string;
+  code: string;
+  name: string;
+  /**
+   * A TELJES ÚT a gyökértől eddig az egységig, a nevekkel, sorrendben (az
+   * utolsó elem maga az egység neve).
+   *
+   * AMIÉRT NEM ELÉG A `name`: a kód és a név csak TESTVÉREK között egyedi, tehát
+   * két távoli ág alatt ugyanaz a „Biodóm (BIO)" megengedett. Egy listában a
+   * puszta név ilyenkor két különböző egységre ugyanazt a képet adja, és semmi
+   * nem jelzi az olvasónak, hogy van miben tévedni.
+   */
+  path: string[];
+}
+
 export interface AssetListItem extends AssetHierarchyItem {
   criticality: AssetCriticality;
   owner: AssetOwnerSummary;
+  /**
+   * MIKOR VÁLASZTÁS EZ, ÉS MIKOR VISSZAESÉS -- a szabály itt áll, hogy egy
+   * későbbi felület ne fejtse vissza magának, és ne mossa össze a kettőt:
+   *
+   * - `owner.type === "CUSTOMER"`: a vevő KIVÁLASZTOTT címe. Ha nincs
+   *   kiválasztva, a mező hiányzik.
+   * - `owner.type === "SUPPLIER"`: MINDIG a partner saját postai címe, mert
+   *   szállító-tulajdonoshoz vevői cím nem rendelhető. Ilyenkor tehát ez
+   *   VISSZAESÉS, nem választás -- a választott hely a `unit`, és ha az
+   *   hiányzik, a felület jelölje meg, hogy nincs pontosítva.
+   *
+   * Külön mező helyett azért elég ez a szabály, mert a két eset már ma
+   * megkülönböztethető: szállító-tulajdonosnál a `customerAddressId` mindig
+   * `null`, tehát ami itt látszik, csak a partner címe lehet.
+   */
   address?: AssetAddressSummary;
+  /**
+   * A PARTNER ALEGYSÉGE, ahol az eszköz áll. Csak szerviz partner
+   * tulajdonosnál van értéke; vevőnél az `address` a pontosítás.
+   *
+   * A listán is kimegy, nem csak az adatlapon: enélkül a felület nem tudná
+   * kiírni, hol áll az eszköz, anélkül hogy eszközönként külön hívást
+   * indítana.
+   */
+  unit?: AssetUnitSummary;
   aquarium?: AssetAquariumSummary;
   parent?: AssetHierarchyItem;
   manufacturer?: string;
   model?: string;
   serialNumber?: string;
+  /**
+   * AZ ÜGYFÉL SAJÁT ESZKÖZKÓDJA, a listasoron is.
+   *
+   * A keresés eddig is nézte, a sor viszont nem mutatta: az ügyfél felolvasta a
+   * saját kódját, a találat feljött, és semmi nem árulta el, MIRE illeszkedett.
+   * Egy találat, ami nem mutatja meg, mire talált, ugyanazt kérdezteti meg
+   * másodszor.
+   */
+  inventoryNumber?: string;
   nextServiceAt?: string;
   /**
    * A QR-matricán lévő azonosító.
@@ -130,7 +179,6 @@ export interface AssetEventSummary {
 
 export interface AssetDetail extends AssetListItem {
   category?: string;
-  inventoryNumber?: string;
   description?: string;
   installedAt?: string;
   purchasedAt?: string;
@@ -147,6 +195,17 @@ export interface AssetDetail extends AssetListItem {
   createdAt: string;
 }
 
+/**
+ * AMI VISSZATARTJA A TORLEST, TETELESEN. Harom kulon szamlalo, nem egy logikai
+ * ertek: a hivo igy meg tudja mondani, MI tartja vissza, es mindharom agra kulon
+ * allitas irhato.
+ */
+export interface AssetDeletionBlockers {
+  serviceJobs: number;
+  worksheetLines: number;
+  childAssets: number;
+}
+
 export interface AssetListResponse {
   items: AssetListItem[];
   pagination: {
@@ -161,6 +220,8 @@ export interface CreateAssetInput {
   ownerType: AssetOwnerType;
   ownerId: string;
   customerAddressId?: string;
+  /** A partner ALEGYSÉGE. Csak szerviz partner tulajdonosnál. */
+  departmentId?: string;
   aquariumId?: string;
   parentAssetId?: string;
   productVariantId?: string;
@@ -187,6 +248,8 @@ export interface UpdateAssetInput {
   ownerType?: AssetOwnerType;
   ownerId?: string;
   customerAddressId?: string | null;
+  /** `null` törli a kötést, a mező elhagyása érintetlenül hagyja. */
+  departmentId?: string | null;
   aquariumId?: string | null;
   parentAssetId?: string | null;
   productVariantId?: string | null;

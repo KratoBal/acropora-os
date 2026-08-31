@@ -1,3 +1,9 @@
+import {
+  rowBelongsToScope,
+  scopeOwnWhereForAndBranch,
+  scopeWhereForAndBranch,
+  type PartnerScope,
+} from "../auth/partner-scope.util.js";
 import { randomUUID } from "node:crypto";
 
 import { Injectable } from "@nestjs/common";
@@ -12,6 +18,11 @@ import {
   type WorksheetVersionStatus,
 } from "@acropora/types";
 
+import {
+  assertPartnerCodeNeverNumbered,
+  assertPartnerCodeUnlocked,
+} from "../suppliers/partner-code-numbers.js";
+import { assertPartnerCodeFreeForCustomer } from "../suppliers/suppliers.repository.js";
 import type {
   CreateWorksheetDepartmentDto,
   WorksheetListQueryDto,
@@ -56,9 +67,91 @@ export type WorksheetSignResult =
 type TransactionClient = Prisma.TransactionClient;
 
 /**
+ * A NEGYEDIK ÍRÁSI ÚT UGYANARRA AZ OSZLOPRA, és eddig egyedül ez nem
+ * ellenőrzött semmit. A partner képernyő két útja (létrehozás, szerkesztés)
+ * mindkét táblát megnézi; itt az adatbázis egyedi indexe volt az egyetlen fék,
+ * az pedig csak a VEVŐ oldalt fogja meg.
+ *
+ * AMI ÍGY ÁTMENT (mérve 2026-08-27, main @ e8580d5): olyan kód, amit egy TÜKÖR
+ * NÉLKÜLI szállító-sor visel. Kód tükör nélkül akkor létezik, ha a partner nem
+ * szerviz partner, de van kódja -- a webes űrlap ezt nem engedi, közvetlen
+ * API-hívás igen. Ilyenkor sem az index, sem más nem szólt, és a hiba KÉSŐBB
+ * jött elő, rossz helyen: a szállító következő mentése bukott el egy olyan
+ * üzenettel, ami a VEVŐ nevét mondta arra a kódra, amit a szállító régóta
+ * visel.
+ *
+ * KÜLÖN FÜGGVÉNY, NEM A METÓDUS TÖRZSE, és ennek a teszt az oka: a metódus a
+ * `$transaction` mögött ül, tehát a HÍVÁS meglétét egységteszt nem tudná
+ * őrizni, és EGY ŐRZŐ, AMI NEM TUD LEFUTNI, NEM ŐRZŐ. Így viszont az őrző
+ * pontosan arra vált pirosra, amitől félünk -- ha valaki kiveszi az
+ * ellenőrzést, a teszt megbukik, nem csak akkor, ha az ellenőrző függvény maga
+ * romlik el. Ha ezt a függvényt valaha visszaolvasztanád a metódusba, ezzel a
+ * mondattal együtt veszne el a garancia.
+ */
+export async function writePartnerCode(
+  transaction: TransactionClient,
+  customerId: string,
+  partnerCode: string,
+) {
+  // A TÜKÖR-SORT NEM LEHET INNEN ÍRNI, és ez nem óvatosság, hanem tulajdonjog:
+  // a tükör vevő-sor kódja SZÁRMAZTATOTT érték, a forrása a szállító sora, és a
+  // `syncWorksheetMirror` minden mentésnél visszaírja. Egy származtatott érték
+  // közvetlen írása nem csak elveszik: a visszaírásig HAT is, és mérve a
+  // munkalapszám ebből a kódból épülne, tehát a közbenső ablakban rossz számot
+  // adhat. Ezért elutasítás, nem "majd úgyis felülíródik".
+  //
+  // Az üzenet megmondja, HOL kell beállítani. Enélkül a hívó azt hiszi, hogy ő
+  // hibázott, pedig csak rossz ajtón kopogott.
+  //
+  // ELSŐKÉNT fut, a kód vizsgálata előtt: egy tükör-sort akkor sem innen kell
+  // írni, ha a kód történetesen szabad lenne.
+  const mirrorOf = await transaction.supplier.findFirst({
+    where: { customerId },
+    select: { name: true },
+  });
+  if (mirrorOf) throw new Error(`PARTNER_CODE_MIRROR_ROW:${mirrorOf.name}`);
+
+  // A HÁROM ELLENŐRZÉS SORRENDJE SZÁMÍT: előbb az, amit a kód ELHAGY, aztán az,
+  // amibe ÉRKEZIK. Aki egy elhasznált kódot akar frissre cserélni, azt kapja
+  // válaszul, hogy a RÉGI zárolt, nem azt, hogy az új szabad.
+  //
+  // Mind a három csak akkor fut, ha a kód tényleg változik: aki a saját, már
+  // számot adott kódját tartja meg, annak egy telefonszám-javítás miatt nem
+  // szabad elakadnia.
+  const existing = await transaction.customer.findUniqueOrThrow({
+    where: { id: customerId },
+    select: { worksheetPartnerCode: true },
+  });
+  if (existing.worksheetPartnerCode !== partnerCode) {
+    if (existing.worksheetPartnerCode)
+      await assertPartnerCodeUnlocked(
+        transaction,
+        existing.worksheetPartnerCode,
+      );
+    await assertPartnerCodeFreeForCustomer(
+      transaction,
+      partnerCode,
+      customerId,
+    );
+    await assertPartnerCodeNeverNumbered(transaction, partnerCode);
+  }
+
+  return transaction.customer.update({
+    where: { id: customerId },
+    data: { worksheetPartnerCode: partnerCode },
+    select: {
+      id: true,
+      customerNumber: true,
+      displayName: true,
+      worksheetPartnerCode: true,
+    },
+  });
+}
+
+/**
  * Az alegység neve nem a beküldött tartalomból jön, hanem a munkalap
  * alegységéből, a kiírás pillanatában. Így a lapon látható egység és a szám
- * középső tagja ugyanaz a sor, egy későbbi átnevezés viszont nem írja át
+ * első tagja ugyanaz a sor, egy későbbi átnevezés viszont nem írja át
  * visszamenőleg a már lezárt verziót.
  */
 function versionContentData(
@@ -114,41 +207,72 @@ export class WorksheetsRepository extends Repository {
     });
   }
 
+  /**
+   * Tranzakcióban, mert az ellenőrzés és az írás csak együtt ér valamit: két
+   * párhuzamos hívás között a kiolvasott állapot elavul. Maga a döntés a
+   * `writePartnerCode` függvényben áll, hogy tesztelhető legyen -- lásd ott.
+   */
   async setPartnerCode(customerId: string, partnerCode: string) {
-    return this.database.customer.update({
-      where: { id: customerId },
-      data: { worksheetPartnerCode: partnerCode },
-      select: {
-        id: true,
-        customerNumber: true,
-        displayName: true,
-        worksheetPartnerCode: true,
-      },
-    });
+    return this.database.$transaction((transaction) =>
+      writePartnerCode(transaction, customerId, partnerCode),
+    );
   }
 
   async departments(
     customerId: string,
   ): Promise<WorksheetDepartmentListResponse> {
+    // Laposan, a fat a hivo epiti a parentId mezobol -- ugyanaz az alak, mint a
+    // partner menu oldalan (SuppliersRepository.units).
     const items = await this.database.worksheetDepartment.findMany({
       where: { customerId },
-      select: { id: true, code: true, name: true, isActive: true },
-      orderBy: { code: "asc" },
+      select: {
+        id: true,
+        parentId: true,
+        code: true,
+        name: true,
+        isActive: true,
+      },
+      orderBy: [{ parentId: "asc" }, { code: "asc" }],
     });
     return { items };
   }
 
+  /**
+   * A MASODIK AJTO UGYANARRA A TABLARA. A partner menu oldalan
+   * `SuppliersRepository.createUnit` ir ide, innen pedig a munkalap-kepernyo.
+   * A ket ut szandekosan kulon all (ott partner-, itt vevo-azonositobol
+   * indul), de amit ENGEDNEK, annak egyeznie kell -- kulonben az egyik ajton
+   * be lehet vinni olyat, amit a masik tilt.
+   */
   async createDepartment(
     customerId: string,
     input: CreateWorksheetDepartmentDto,
   ): Promise<WorksheetDepartmentSummary> {
+    // A szulo ugyanahhoz a vevohoz tartozzon: az idegen kulcs csak a letezest
+    // nezi, a tulajdonost nem.
+    const parentId = input.parentId?.trim() || null;
+    if (parentId) {
+      const parent = await this.database.worksheetDepartment.findFirst({
+        where: { id: parentId, customerId },
+        select: { id: true },
+      });
+      if (!parent) throw new Error("WORKSHEET_DEPARTMENT_PARENT_NOT_FOUND");
+    }
+
     return this.database.worksheetDepartment.create({
       data: {
         customerId,
+        parentId,
         code: input.code.trim().toUpperCase(),
         name: input.name.trim(),
       },
-      select: { id: true, code: true, name: true, isActive: true },
+      select: {
+        id: true,
+        parentId: true,
+        code: true,
+        name: true,
+        isActive: true,
+      },
     });
   }
 
@@ -163,10 +287,25 @@ export class WorksheetsRepository extends Repository {
    * Four conditions, and the middle two are the point.
    *
    * A partner with no code could be picked, worked on, and then refuse to
-   * close -- the number cannot be built without its first segment. The
-   * technician would be standing in front of the customer when that came out,
-   * and it is not something they can fix. So the pressure sits here, on the
-   * list, where the gap is visible to whoever can close it.
+   * close: the close path still requires the abbreviation, even though the
+   * number stopped carrying it. The technician would be standing in front of
+   * the customer when that came out, and it is not something they can fix. So
+   * the pressure sits here, on the list, where the gap is visible to whoever
+   * can close it.
+   *
+   * Why it is still required once the number does not contain it: the
+   * abbreviation is a uniqueness key across two tables, and filling it in
+   * later is a one-off step. A key supplied after the fact is not the same as
+   * a field filled in later -- by then a worksheet may already point at the
+   * partner, and "which partner carries this abbreviation" turns ambiguous in
+   * retrospect. The condition is an ORDER rather than a restriction: the
+   * partner is finished first, then it can have sheets.
+   *
+   * This is the FIRST of two gates on the same condition. The second sits in
+   * the close path and catches what got here by another route -- old data, a
+   * manual edit, a later import that does not write through this picker. They
+   * are not copies of each other, and neither should be removed as a
+   * duplicate.
    *
    * A partner with no mirror row has no worksheets to belong to. It cannot
    * happen for a service partner saved through the partner screen, which
@@ -185,9 +324,30 @@ export class WorksheetsRepository extends Repository {
     };
   }
 
-  async selectablePartners(): Promise<WorksheetSelectablePartnerListResponse> {
+  /**
+   * A VALASZTO IS SZUKUL A KEROVEL, es ez nem uj dontes, hanem a meglevo
+   * alkalmazasa: a partner-oldali kero nem lathatja MAS partner nevet.
+   *
+   * A spec (C) csoportja azert hagyta szuretlenul a valasztokat, mert BELSOS
+   * keroket felteteleztek -- az erv nem hamis, csak a HATOKORE mas, es 2026-08-31
+   * merve kiderult, hogy partner-oldali kero is eleri (a `VIEWER` szerep viszi a
+   * `SERVICE_VIEW` jogot).
+   *
+   * URES LISTA HELYETT SZURT LISTA. Egy valaszto azert letezik, hogy a
+   * hasznaloja ki tudjon valasztani valamit, amit szabad neki; egy ures lista
+   * ott, ahol egy elem jogos, nem szigorubb, hanem ELROMLOTT felulet -- es a
+   * kovetkezo ember a hibas felulet miatt veszi ki a szurot.
+   */
+  async selectablePartners(
+    scope: PartnerScope,
+  ): Promise<WorksheetSelectablePartnerListResponse> {
     const rows = await this.database.supplier.findMany({
-      where: WorksheetsRepository.selectablePartnerWhere(),
+      where: {
+        AND: [
+          scopeOwnWhereForAndBranch(scope, "supplier"),
+          WorksheetsRepository.selectablePartnerWhere(),
+        ],
+      },
       select: { name: true, worksheetPartnerCode: true, customerId: true },
     });
     const items = rows
@@ -206,7 +366,22 @@ export class WorksheetsRepository extends Repository {
    * adatbázis-oldali `displayName` szerinti sorrend a felületen
    * rendezetlennek látszana.
    */
-  async assignableUsers(): Promise<WorksheetAssignableUserListResponse> {
+  /**
+   * A PARTNER-OLDALI KERO ITT URES LISTAT KAP, es ez a harom valaszto kozul
+   * kifejezetten MASKEPP dol el, mint a masik ketto.
+   *
+   * A masik kettonel a szures azert szurt lista, mert van olyan sor, ami a
+   * keroe. Itt NINCS: a lista a MI kollegaink neve ES beosztasa, ami szemelyes
+   * adat, es nem a partnerre tartozik. Hogy egy partner-oldali fiok
+   * oszthat-e egyaltalan munkat -- es ha igen, kinek --, az ma nincs eldontve;
+   * amig nincs, az ures lista a helyes atmenet, mert a ket irany kara
+   * aszimmetrikus: egy hianyzo valaszto panaszt szul, egy kereetlen viszont
+   * szemelyes adatot ad ki.
+   */
+  async assignableUsers(
+    scope: PartnerScope,
+  ): Promise<WorksheetAssignableUserListResponse> {
+    if (scope.kind !== "internal") return { items: [] };
     const rows = await this.database.user.findMany({
       where: { isActive: true, role: { in: [...WORKSHEET_ASSIGNABLE_ROLES] } },
       select: { id: true, displayName: true, nickname: true, role: true },
@@ -346,7 +521,10 @@ export class WorksheetsRepository extends Repository {
     return rows.map((row) => row.worksheetId);
   }
 
-  async list(query: WorksheetListQueryDto): Promise<WorksheetListResponse> {
+  async list(
+    query: WorksheetListQueryDto,
+    scope: PartnerScope,
+  ): Promise<WorksheetListResponse> {
     /**
      * A szűrt azonosító-halmaz ELŐBB áll elő, mint a `where`, mert a `where`-be
      * kerül bele. Üres halmaz esetén az `in: []` üres listát ad -- ez helyes:
@@ -356,7 +534,7 @@ export class WorksheetsRepository extends Repository {
       ? await this.worksheetIdsByLatestStatus(query.status)
       : null;
 
-    const where: Prisma.WorksheetWhereInput = {
+    const userWhere: Prisma.WorksheetWhereInput = {
       ...(latestStatusIds ? { id: { in: latestStatusIds } } : {}),
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.departmentId ? { departmentId: query.departmentId } : {}),
@@ -384,6 +562,12 @@ export class WorksheetsRepository extends Repository {
         : {}),
     };
 
+    // A JOGOSULTSAGI SZURO `AND` AGKENT, SOHA NEM KULCSKENT -- a fenti objektum
+    // felhasznaloi szurot spreadel es felso szintu `OR`-t is tartalmaz.
+    const where: Prisma.WorksheetWhereInput = {
+      AND: [scopeWhereForAndBranch(scope), userWhere],
+    };
+
     const [rows, totalItems] = await Promise.all([
       this.database.worksheet.findMany({
         where,
@@ -406,7 +590,24 @@ export class WorksheetsRepository extends Repository {
     };
   }
 
-  detail(id: string): Promise<WorksheetDetailRow | null> {
+  /**
+   * A KOTELEZO `scope` a mechanizmus maga: egy elem-lekeresnel az elfelejtett
+   * ellenorzes NEMA -- az idegen adat EGYETLEN hivasra megy ki. A kotelezo
+   * parameterrel a FORDITO sorolja fel a hivasi helyeket.
+   *
+   * Az ellenorzes a BETOLTOTT soron all: a nem egyezo sor `null`, tehat a hivo
+   * 404-et ad, NEM 403-at -- a 403 elarulna, hogy a sor letezik.
+   */
+  async detail(
+    id: string,
+    scope: PartnerScope,
+  ): Promise<WorksheetDetailRow | null> {
+    const row = await this.detailRow(id);
+    if (!row) return null;
+    return rowBelongsToScope(row, scope) ? row : null;
+  }
+
+  private detailRow(id: string): Promise<WorksheetDetailRow | null> {
     return this.database.worksheet.findUnique({
       where: { id },
       include: worksheetDetailInclude,
@@ -418,6 +619,8 @@ export class WorksheetsRepository extends Repository {
     departmentId: string;
     content: NormalizedWorksheetContent;
     actorUserId: string;
+    /** A lap felelősei, a lappal EGY tranzakcióban. Üres lista megengedett. */
+    assigneeIds?: readonly string[];
   }): Promise<string> {
     return this.database.$transaction(async (transaction) => {
       const department =
@@ -445,6 +648,19 @@ export class WorksheetsRepository extends Repository {
       const versionId = worksheet.versions[0]?.id;
       if (!versionId) throw new Error("WORKSHEET_VERSION_NOT_CREATED");
       await this.writeLines(transaction, versionId, input.content);
+
+      // A felelősök ugyanabban a tranzakcióban: egy létrejött, de
+      // kiosztatlanul maradt lap némán eltűnne a szerelő listájáról.
+      if (input.assigneeIds && input.assigneeIds.length > 0)
+        await transaction.worksheetAssignee.createMany({
+          data: input.assigneeIds.map((userId) => ({
+            worksheetId: worksheet.id,
+            userId,
+            assignedById: input.actorUserId,
+          })),
+          skipDuplicates: true,
+        });
+
       return worksheet.id;
     });
   }
@@ -523,6 +739,28 @@ export class WorksheetsRepository extends Repository {
 
       const partnerCode = worksheet.customer.worksheetPartnerCode;
       const departmentCode = worksheet.department.code;
+      /**
+       * MÁSODIK KAPU UGYANARRA A FELTÉTELRE, ÉS NEM FELESLEGES ISMÉTLÉS.
+       *
+       * Az ELSŐ kapu a választó szűrője (`selectablePartnerWhere`): rövidítés
+       * nélküli partnerhez el sem lehet INDÍTANI lapot, tehát az a lap
+       * LÉTREJÖTTÉT akadályozza meg. Ez itt azt fogja meg, ami MÁS ÚTON jutott
+       * idáig: a szűrő előttről maradt régi adat, kézi beavatkozás az
+       * adatbázisban, vagy egy későbbi import, ami nem a választón keresztül
+       * ír. Két kapu ugyanarra akkor indokolt, ha a második más úton érkező
+       * esetet fog meg -- itt ez áll fenn, tehát egyiket sem szabad
+       * "duplikáció" címén kivenni.
+       *
+       * ÉS AMIÉRT A RÖVIDÍTÉS AKKOR IS FELTÉTEL, AMIKOR MÁR NEM TAGJA A
+       * SZÁMNAK: egyediségi kulcs két táblán (`Supplier.worksheetPartnerCode`
+       * és a tükör vevő-sor ugyanilyen oszlopa), a pótlása pedig egyszeri
+       * lépés. Egy kulcs, amit később kell pótolni, nem ugyanaz, mint egy
+       * mező, amit később kell kitölteni: a pótlás pillanatában már létezhet
+       * a partnerre hivatkozó lap, és onnantól a "melyik partner viseli ezt a
+       * rövidítést" kérdés visszamenőleg kétértelmű. A feltétel tehát nem
+       * korlátozás, hanem SORREND: előbb legyen kész a partner, aztán legyen
+       * lapja.
+       */
       if (!worksheet.number) {
         const issue = worksheetNumberIssue({ partnerCode, departmentCode });
         if (issue) return { ok: false, reason: issue } as const;
@@ -541,12 +779,7 @@ export class WorksheetsRepository extends Repository {
 
       if (!worksheet.number && partnerCode) {
         const year = worksheetYear(now);
-        const sequence = await this.allocateSequence(
-          transaction,
-          partnerCode,
-          departmentCode,
-          year,
-        );
+        const sequence = await this.allocateSequence(transaction, year);
         const allocated = buildWorksheetNumber({
           partnerCode,
           departmentCode,
@@ -922,6 +1155,19 @@ export class WorksheetsRepository extends Repository {
   }
 
   /**
+   * EGY SZÁMLÁLÓ ÉVENKÉNT, az egész cégre -- nem partner/részleg/év hármasonként.
+   *
+   * A szám 2026-08-27 óta nem hordozza a partner rövidítését, tehát az
+   * egyediségét a SOROZAT adja, nem a kód megválasztása. Partnerenkénti
+   * számlálóval két különböző partner azonos kódú egysége ugyanabban az évben
+   * ugyanazt a számot kapná, és a második lap LEZÁRÁSA hasalna el a
+   * `Worksheet.number` egyediségén -- a felhasználó előtt.
+   *
+   * AMI VÁLTOZATLAN: a sorszám a LEZÁRÁSKOR keletkezik és ugyanabban a
+   * tranzakcióban nő, tehát az eldobott piszkozat nem használ el számot, és a
+   * sorozat hézagmentes marad. A hiánytalanság EGY sorozatra vonatkozik, és
+   * mostantól az az egy sorozat a cég éves sorozata.
+   *
    * Az `updatedAt` itt is `(NOW() AT TIME ZONE 'utc')`, nem csupasz `NOW()`:
    * az oszlop időzóna nélküli, és a Prisma UTC-t ír bele, a csupasz `NOW()`
    * viszont a SZERVER időzónájában áll elő. Ezen az egy helyen csak
@@ -931,18 +1177,16 @@ export class WorksheetsRepository extends Repository {
    */
   private async allocateSequence(
     transaction: TransactionClient,
-    partnerCode: string,
-    departmentCode: string,
     year: number,
   ): Promise<number> {
     const rows = await transaction.$queryRaw<Array<{ lastValue: number }>>(
       Prisma.sql`
-        INSERT INTO "WorksheetNumberSequence"
-          ("id", "partnerCode", "departmentCode", "year", "lastValue", "updatedAt")
-        VALUES (${randomUUID()}, ${partnerCode}, ${departmentCode}, ${year}, 1, (NOW() AT TIME ZONE 'utc'))
-        ON CONFLICT ("partnerCode", "departmentCode", "year")
+        INSERT INTO "WorksheetYearSequence"
+          ("id", "year", "lastValue", "updatedAt")
+        VALUES (${randomUUID()}, ${year}, 1, (NOW() AT TIME ZONE 'utc'))
+        ON CONFLICT ("year")
         DO UPDATE SET
-          "lastValue" = "WorksheetNumberSequence"."lastValue" + 1,
+          "lastValue" = "WorksheetYearSequence"."lastValue" + 1,
           "updatedAt" = (NOW() AT TIME ZONE 'utc')
         RETURNING "lastValue"
       `,

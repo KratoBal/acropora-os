@@ -45,3 +45,27 @@ describe("describeScanFailure", () => {
     }
   });
 });
+
+describe("describeScanFailure a helyszíni másolattal", () => {
+  /**
+   * A HARMADIK ESET, amit a helyszíni másolat hozott: nincs térerő, ÉS a kód a
+   * készülékre mentett listán sincs rajta. A sima "nincs kapcsolat" üzenet itt
+   * azt sugallná, hogy térerővel minden rendben lenne -- pedig ez az eszköz vagy
+   * új, vagy még nem került le erre a telefonra. A különbség az, hogy a szerelő
+   * megvárja-e a térerőt, vagy szól az irodának.
+   */
+  it("says when the saved copy was searched too and did not have it", () => {
+    const failure = describeScanFailure(new FakeNetworkError(), {
+      searchedOfflineCopy: true,
+    });
+
+    assert.match(failure.title, /nincs mentve ez az eszköz/);
+    assert.equal(failure.canRetry, true);
+  });
+
+  it("keeps the plain wording when the copy was not searched", () => {
+    const failure = describeScanFailure(new FakeNetworkError());
+
+    assert.equal(failure.title, "Nincs kapcsolat a szerverrel");
+  });
+});

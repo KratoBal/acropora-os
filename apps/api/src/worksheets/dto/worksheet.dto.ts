@@ -92,7 +92,7 @@ export class WorksheetContentDto {
   @IsString() @MinLength(1) @MaxLength(500) subject!: string;
   // Az alegység NEM része a beküldött tartalomnak: a munkalap alegységéből
   // másolódik a verzióra. Egy külön szerkeszthető szövegmező mellett a szám
-  // középső tagja és a lapon látható egység elcsúszhatna egymástól, pedig
+  // első tagja és a lapon látható egység elcsúszhatna egymástól, pedig
   // ez egy fogalom.
   @IsString() @MaxLength(4000) @IsOptional() description?: string | null;
   @IsISO8601() @IsOptional() issueDate?: string | null;
@@ -108,6 +108,19 @@ export class WorksheetContentDto {
 export class CreateWorksheetDto extends WorksheetContentDto {
   @IsString() @MinLength(1) customerId!: string;
   @IsString() @MinLength(1) departmentId!: string;
+  /**
+   * A felelősök MÁR A FELVITELKOR, opcionálisan.
+   *
+   * Ugyanaz a szabály, mint a `SetWorksheetAssigneesDto` esetén: a beküldött
+   * lista a lap TELJES felelős-listája. Felvitelkor ez a kettő egybeesik, de a
+   * mező itt is listát vesz át, nem egyetlen azonosítót -- egy laphoz több
+   * szerelő is tartozhat, és a felvitelkori „csak egyet lehet" később
+   * kivehetetlen szűkítés lenne.
+   */
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  assigneeIds?: string[];
 }
 
 export class UpdateWorksheetDraftDto extends WorksheetContentDto {}
@@ -145,6 +158,18 @@ export class SignWorksheetVersionDto {
 }
 
 export class CreateWorksheetDepartmentDto {
+  /**
+   * A SZULO HELYSZIN, ha van. Hianyzo ertek = a fa legfelso szintje.
+   *
+   * A szulo ellenorzese NEM itt tortenik: hogy a megadott azonosito UGYANAHHOZ
+   * a partnerhez tartozik-e, csak az adatbazis tudja megmondani, es a
+   * repository meg is kerdezi. Egy masik partner helyszine ala akasztott
+   * alegyseg a munkalapszamot vinne rossz helyre.
+   */
+  @IsOptional()
+  @IsString({ message: "A szülő helyszín azonosítója hibás." })
+  parentId?: string;
+
   @Matches(/^[A-Za-z]{1,3}$/, {
     message: "Az alegység kódja legfeljebb három betű lehet (pl. BIO).",
   })

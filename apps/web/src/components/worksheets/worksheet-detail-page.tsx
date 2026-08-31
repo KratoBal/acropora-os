@@ -299,6 +299,16 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
                       {line.assetNumber}
                     </div>
                   ) : null}
+                  {/* AZ UGYFEL SAJAT KODJA, csak ha van, es FELIRATTAL. A
+                      felette allo eszkozszam a MIENK, ez pedig az ugyfele:
+                      ket csupasz kod egymas alatt pont azt a keveredest
+                      hozna, ami ellen a mezo kulon nevet kapott. */}
+                  {line.inventoryNumber ? (
+                    <div className="text-xs text-slate-500">
+                      Leltári szám:{" "}
+                      <span className="font-mono">{line.inventoryNumber}</span>
+                    </div>
+                  ) : null}
                 </td>
                 <td className="text-right tabular-nums">{line.quantity}</td>
                 <td>{line.unit}</td>

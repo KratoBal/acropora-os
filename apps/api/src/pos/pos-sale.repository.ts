@@ -16,6 +16,7 @@ import {
   ensureMainWarehouse,
   type WarehouseLookupDatabase,
 } from "../common/warehouse.util.js";
+import { isUnasMasteredVariant } from "../products/catalog-authority.js";
 import { parseUnasPackageComponents } from "../common/unas-package-product.util.js";
 import { retryOnTakenCode } from "../common/unique-code.util.js";
 import type { PosSaleListQueryDto } from "./dto/pos-sale-list-query.dto.js";
@@ -45,8 +46,6 @@ export interface PosSaleVariantInfo {
   unit: string;
   /** VAT rate percentage, e.g. "27". Null when neither the variant nor the UNAS snapshot has one. */
   vatRate: Prisma.Decimal | null;
-  /** Best known current quantity: local StockItem, falling back to the UNAS reported stock, then 0. */
-  currentQty: Prisma.Decimal;
   /** A helyi termék készletmozgása nem kerülhet az UNAS outboxba. */
   syncToUnas: boolean;
   stockComponents: PosSaleStockComponent[];
@@ -237,19 +236,6 @@ export class PosSaleRepository extends Repository {
     const componentVariantBySku = new Map(
       componentVariants.map((variant) => [variant.sku, variant]),
     );
-    const stockItems = await this.saleDatabase.stockItem.findMany({
-      where: {
-        warehouseId: warehouse.id,
-        locationId: null,
-        lotId: null,
-        variantId: { in: variantIds },
-      },
-      select: { variantId: true, onHand: true },
-    });
-    const onHandByVariant = new Map(
-      stockItems.map((item) => [item.variantId, item.onHand]),
-    );
-
     const result = new Map<string, PosSaleVariantInfo>();
     for (const variant of variants) {
       const snapshot = variant.product.unasSnapshot;
@@ -261,7 +247,7 @@ export class PosSaleRepository extends Repository {
             const resolved = componentVariantBySku.get(component.sku);
             if (
               !resolved ||
-              resolved.product.catalogAuthority !== "UNAS" ||
+              !isUnasMasteredVariant(resolved) ||
               resolved.product.unasSnapshot?.isPackageProduct
             )
               return [];
@@ -283,7 +269,7 @@ export class PosSaleRepository extends Repository {
               productName: variant.name ?? variant.product.name,
               unit: variant.unit,
               quantityPerSale: new Prisma.Decimal(1),
-              syncToUnas: variant.product.catalogAuthority === "UNAS",
+              syncToUnas: isUnasMasteredVariant(variant),
             },
           ];
       result.set(variant.id, {
@@ -292,12 +278,7 @@ export class PosSaleRepository extends Repository {
         productName: variant.name ?? variant.product.name,
         unit: variant.unit,
         vatRate: variant.vatRate ?? snapshot?.vatRate ?? null,
-        currentQty:
-          onHandByVariant.get(variant.id) ??
-          variant.unasReportedStock ??
-          snapshot?.reportedStock ??
-          new Prisma.Decimal(0),
-        syncToUnas: variant.product.catalogAuthority === "UNAS",
+        syncToUnas: isUnasMasteredVariant(variant),
         stockComponents:
           snapshot?.isPackageProduct &&
           stockComponents.length !== packageComponents.length

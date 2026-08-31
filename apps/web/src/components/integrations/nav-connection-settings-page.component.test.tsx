@@ -30,6 +30,8 @@ const session = (role: "OWNER" | "VIEWER"): Session => ({
     email: `${role.toLowerCase()}@acropora.local`,
     displayName: role,
     role,
+    customerId: null,
+    supplierId: null,
   },
 });
 

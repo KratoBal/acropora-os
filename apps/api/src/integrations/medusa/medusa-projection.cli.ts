@@ -12,7 +12,11 @@ import { MedusaConnectionError } from "./medusa-connection.types.js";
 import { MedusaCredentialCryptoService } from "./medusa-credential-crypto.service.js";
 import { MedusaCredentialProvider } from "./medusa-credential.provider.js";
 import { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
-import { MedusaProductProjectionService } from "./medusa-product-projection.service.js";
+import {
+  MedusaProductProjectionService,
+  type ProjectionPublicationReport,
+} from "./medusa-product-projection.service.js";
+import { storefrontSalesChannelId } from "./medusa-sales-channel.config.js";
 
 /**
  * KÉZZEL indított vetítés, termékazonosítónként.
@@ -63,6 +67,41 @@ export const MEDUSA_PROJECTION_FALLBACK_NOTICE =
  * pontosan ezt az utat NEM mérné, és zöld maradna akkor is, ha ide bárki
  * visszacsempész egy környezeti kulcs-olvasást.
  */
+/**
+ * A publikációs rész a jelentés sorában.
+ *
+ * Külön, exportált függvény, és nem a parancs törzsébe írt néhány sor: egy
+ * jelentés-szöveg, ami csak egy adatbázissal és egy hálózattal mérhető, nem
+ * mérhető. A brief 11. tesztje pont ezt a szöveget követeli meg.
+ *
+ * Egy "updated" sor önmagában nem mondja meg, mi lett a termékkel: attól még
+ * lehet draft és lekötve. A csatorna NEVE azért van benne, mert egy rossz, de
+ * létező azonosítót ez mutat meg - és nem egy ellenőrzés, ami egy jogos
+ * átnevezésre is pirosodna.
+ */
+export function describePublication(
+  publication: ProjectionPublicationReport,
+): string {
+  /**
+   * A NÉV a LEKÖTÉSNÉL IS kiíródik, és ezt a brief javította ki rajtam.
+   *
+   * Az első változatom a lekötésnél elhagyta, azzal az indokkal, hogy a név
+   * odatartozást sugallna. Ez gyengébb érv annál, amit cserébe elveszít: a
+   * névre pontosan azért van szükség, hogy egy ROSSZ, de létező csatorna
+   * azonosító kiderüljön - és a lekötés ugyanolyan művelet egy csatornán,
+   * mint a hozzákötés. Aki egy másik bolt csatornájáról köt le egy terméket,
+   * annak ugyanúgy látnia kell, melyikről.
+   */
+  const action =
+    publication.salesChannel === "attach" ? "attached" : "detached";
+
+  return [
+    `publication: ${publication.status}`,
+    `sales channel: ${action} -> ${publication.salesChannelName}`,
+    `reason: ${publication.reason}`,
+  ].join("\n      ");
+}
+
 export async function medusaClientForProjection(
   credentials: MedusaCredentialProvider,
   out: { stdout(value: string): void; stderr(value: string): void },
@@ -83,7 +122,7 @@ export async function medusaClientForProjection(
 }
 
 /** Amit a parancs használ, ha a hívó nem ad mást: a tárolt kulcs útja. */
-function storedCredentialProvider(): MedusaCredentialProvider {
+export function storedCredentialProvider(): MedusaCredentialProvider {
   return new MedusaCredentialProvider(
     new MedusaConnectionRepository(),
     new MedusaCredentialCryptoService(),
@@ -95,7 +134,9 @@ function storedCredentialProvider(): MedusaCredentialProvider {
  * első lépése, amit el lehet felejteni; a sérült adat viszont igen, és a kettő
  * NEM látszhat ugyanannak.
  */
-function describeCredentialFailure(error: MedusaConnectionError): string {
+export function describeCredentialFailure(
+  error: MedusaConnectionError,
+): string {
   if (
     error.code === "MEDUSA_CONNECTION_NOT_CONFIGURED" ||
     error.code === "MEDUSA_CONNECTION_CONFIGURATION_MISSING"
@@ -109,13 +150,40 @@ function describeCredentialFailure(error: MedusaConnectionError): string {
   return `A tárolt Medusa hitelesítő adat nem használható (${error.code}).`;
 }
 
-/** Cikkszámból termékazonosító. `null`, ha nincs ilyen aktív változat. */
-async function resolveBySku(sku: string): Promise<string | null> {
+/**
+ * Cikkszámból termékazonosító - és a KÉT SIKERTELEN ESET KÜLÖN.
+ *
+ * Eddig mindkettő `null` volt, és egyetlen mondatot kapott: „nincs ilyen
+ * cikkszámú aktív változat". A mondat IGAZ volt, de KÉT különböző állapotot
+ * fedett, és a teendő nem ugyanaz: ha nincs ilyen cikkszám, elgépelés vagy
+ * rossz termék; ha van, de inaktív, akkor a cikkszám jó és aktiválni kell.
+ *
+ * A lekérdezés nem változik (`findUnique` a cikkszámra, ami egyedi oszlop) -
+ * csak nem dobjuk el azt, amit már úgyis megmértünk.
+ */
+type SkuLookup =
+  | { found: true; productId: string }
+  | { found: false; reason: "no-such-sku" | "variant-inactive" };
+
+async function resolveBySku(sku: string): Promise<SkuLookup> {
   const variant = await prisma.productVariant.findUnique({
     where: { sku },
     select: { productId: true, isActive: true },
   });
-  return variant?.isActive ? variant.productId : null;
+  if (!variant) return { found: false, reason: "no-such-sku" };
+  if (!variant.isActive) return { found: false, reason: "variant-inactive" };
+  return { found: true, productId: variant.productId };
+}
+
+/** Melyik sikertelen eset áll fenn, embernek. Exportált, hogy mérhető legyen. */
+export function describeSkuLookupFailure(
+  sku: string,
+  reason: "no-such-sku" | "variant-inactive",
+): string {
+  return reason === "no-such-sku"
+    ? `sku:${sku}: nincs ilyen cikkszámú változat`
+    : `sku:${sku}: van ilyen cikkszámú változat, de INAKTÍV. A cikkszám tehát ` +
+        `jó; a teendő a változat aktiválása, nem másik cikkszám keresése.`;
 }
 
 export async function runProjectionCli(
@@ -126,6 +194,7 @@ export async function runProjectionCli(
   },
   /** A hitelesítő adat útja. Paraméter, hogy adatbázis nélkül is mérhető legyen. */
   credentials: MedusaCredentialProvider = storedCredentialProvider(),
+  env: Record<string, string | undefined> = process.env,
 ): Promise<number> {
   if (!productIds.length) {
     out.stderr("Adj meg legalább egy termékazonosítót.\n");
@@ -153,6 +222,7 @@ export async function runProjectionCli(
       service = new MedusaProductProjectionService(
         new MedusaProductLinkRepository(),
         await medusaClientForProjection(credentials, out),
+        storefrontSalesChannelId(env),
       );
     } catch (error) {
       /**
@@ -173,15 +243,18 @@ export async function runProjectionCli(
 
   let failed = 0;
   for (const argument of targets) {
-    const productId = argument.startsWith("sku:")
-      ? await resolveBySku(argument.slice(4))
-      : argument;
-
-    if (!productId) {
-      out.stderr(`${argument}: nincs ilyen cikkszámú aktív változat\n`);
-      failed += 1;
-      continue;
-    }
+    let productId: string;
+    if (argument.startsWith("sku:")) {
+      const lookup = await resolveBySku(argument.slice(4));
+      if (!lookup.found) {
+        out.stderr(
+          `${describeSkuLookupFailure(argument.slice(4), lookup.reason)}\n`,
+        );
+        failed += 1;
+        continue;
+      }
+      productId = lookup.productId;
+    } else productId = argument;
 
     const product = await prisma.product.findUnique({
       where: { id: productId },
@@ -190,10 +263,11 @@ export async function runProjectionCli(
         name: true,
         description: true,
         catalogAuthority: true,
+        isActive: true,
+        webshopSellable: true,
         variants: {
           where: { isActive: true },
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-          take: 1,
           select: { sku: true },
         },
       },
@@ -238,6 +312,12 @@ export async function runProjectionCli(
         name: product.name,
         description: product.description,
         primarySku: product.variants[0]?.sku ?? null,
+        publication: {
+          catalogAuthority: product.catalogAuthority,
+          isActive: product.isActive,
+          webshopSellable: product.webshopSellable,
+          activeVariantCount: product.variants.length,
+        },
       },
       new Date(),
     );
@@ -250,7 +330,8 @@ export async function runProjectionCli(
       continue;
     }
     out.stdout(
-      `${productId}: ${outcome.action} -> ${outcome.medusaProductId}\n`,
+      `${productId}: ${outcome.action} -> ${outcome.medusaProductId}\n` +
+        `      ${describePublication(outcome.publication)}\n`,
     );
   }
 

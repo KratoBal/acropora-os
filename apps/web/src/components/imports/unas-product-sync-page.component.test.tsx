@@ -22,6 +22,8 @@ const session = (role: "OWNER" | "VIEWER"): Session => ({
     email: `${role.toLowerCase()}@acropora.local`,
     displayName: role,
     role,
+    customerId: null,
+    supplierId: null,
   },
 });
 
@@ -39,6 +41,8 @@ const run: UnasProductSyncRun = {
   unchangedCount: 7,
   conflictCount: 0,
   missingCount: 1,
+  skippedCount: 0,
+  skippedSourceChangedCount: 0,
   errorCode: null,
 };
 
@@ -68,6 +72,54 @@ describe("UnasProductSyncPage", () => {
       20,
       expect.anything(),
     );
+  });
+
+  /**
+   * AZ OSZLOP AZERT VAN, HOGY EGY FUTASON KIUGORJON.
+   *
+   * A tobbi teszt nullaval fut, es a nulla ugyanugy megjelenik - egy nulla
+   * tehat nem bizonyitja, hogy az oszlop letezik. Ez a ketto egyutt igen:
+   * nulla eseten halvany, nem nulla eseten kiemelt, es a KETTO KOZOTTI
+   * KULONBSEG az, amit a valtozas iger.
+   *
+   * Falszifikalhato: ha valaki az oszlopot kiveszi a tablazatbol, vagy a
+   * kiemelest allandora allitja, ez a teszt pirosodik, es semmi mas.
+   */
+  it("shows the drift count, and highlights it only when it is not zero", async () => {
+    api.listRuns.mockResolvedValue([
+      {
+        ...run,
+        id: "run-quiet",
+        skippedCount: 3,
+        skippedSourceChangedCount: 0,
+      },
+      {
+        ...run,
+        id: "run-drift",
+        skippedCount: 3,
+        skippedSourceChangedCount: 2,
+      },
+    ]);
+
+    render(<UnasProductSyncPage />);
+
+    const quiet = (await screen.findByText("run-quiet")).closest("tr");
+    const drifted = (await screen.findByText("run-drift")).closest("tr");
+    expect(quiet).not.toBeNull();
+    expect(drifted).not.toBeNull();
+
+    const cellOf = (row: HTMLElement) =>
+      Array.from(row.querySelectorAll("td")).at(-2);
+
+    const quietCell = cellOf(quiet as HTMLElement);
+    const driftedCell = cellOf(drifted as HTMLElement);
+
+    expect(quietCell).toHaveTextContent("0");
+    expect(driftedCell).toHaveTextContent("2");
+
+    // A kiemeles nem dekoracio: ez valasztja el az alapzajt az esemenytol.
+    expect(driftedCell?.className).toContain("font-semibold");
+    expect(quietCell?.className).not.toContain("font-semibold");
   });
 
   it("starts a manual sync and refreshes the history", async () => {

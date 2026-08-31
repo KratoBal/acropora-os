@@ -1,11 +1,27 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
+  // NE VEGYÉL FEL IDE `baseUrl` + `paths` BEJEGYZÉST az `@/` alias miatt.
+  // MÉRVE 2026-08-28, mindhárom lépés: a `paths` a fordítást megjavítja, de a
+  // `tsc` a KIBOCSÁTOTT specifikátort NEM írja át, tehát a lefordított kódban
+  // `require("@/lib/app-version")` marad, és a futás hasal el rajta. Ma ez azért
+  // nem látszik, mert egy spec sem használ `@/` alakot: a bejegyzés hozzáadása
+  // után a készlet 296/296 ZÖLD MARAD. Vagyis a kapu nem szól, a PR beolvad, és
+  // a csapda az első aliast használó embernél sül el -- akkor sem konfigurációs
+  // hibaként, hanem futásidejű `Cannot find module` sorként, ami hiányzó
+  // csomagnak látszik. A mai, fordításidejű `TS2307` ehhez képest JOBB.
+  // A specek relatív testvér-utat használnak (`./app-version`), tehát ma nincs
+  // mit feloldani. Ha egyszer tényleg kell az alias, az futásidejű feloldást
+  // kíván (Node `imports` mező, loader, vagy kibocsátás-átíró lépés), nem ezt a
+  // két sort.
+  "extends": "../../packages/config/base.json",
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022"],
     "module": "commonjs",
     "ignoreDeprecations": "6.0",
     "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
@@ -13,50 +29,5 @@
     "outDir": "./test-dist",
     "rootDir": "./src"
   },
-  "include": [
-    "src/config/env.ts",
-    "src/config/env.spec.ts",
-    "src/config/env-inlining.spec.ts",
-    "src/config/test-inventory.spec.ts",
-    "src/lib/notifications/push-registration.ts",
-    "src/lib/notifications/push-registration.spec.ts",
-    "src/lib/auth/types.ts",
-    "src/lib/auth/auth-reducer.ts",
-    "src/lib/auth/auth-reducer.spec.ts",
-    "src/lib/auth/biometric-outcome.ts",
-    "src/lib/auth/biometric-outcome.spec.ts",
-    "src/lib/auth/foreground-watcher.ts",
-    "src/lib/auth/foreground-watcher.spec.ts",
-    "src/lib/auth/lock-policy.ts",
-    "src/lib/auth/lock-policy.spec.ts",
-    "src/lib/auth/resume-session.ts",
-    "src/lib/auth/resume-session.spec.ts",
-    "src/lib/auth/person-name.ts",
-    "src/lib/auth/person-name.spec.ts",
-    "src/lib/auth/restore-session.ts",
-    "src/lib/auth/restore-session.spec.ts",
-    "src/lib/auth/sign-in.ts",
-    "src/lib/auth/sign-in.spec.ts",
-    "src/lib/auth/sign-out.ts",
-    "src/lib/auth/sign-out.spec.ts",
-    "src/lib/auth/webshop-authorization.ts",
-    "src/lib/auth/webshop-authorization.spec.ts",
-    "src/lib/app-version.ts",
-    "src/lib/app-version.spec.ts",
-    "src/lib/assets/scan-failure.ts",
-    "src/lib/assets/scan-failure.spec.ts",
-    "src/lib/assets/asset-fields.ts",
-    "src/lib/assets/asset-edit.ts",
-    "src/lib/assets/asset-edit.spec.ts",
-    "src/lib/assets/label-format.ts",
-    "src/lib/assets/label-format.spec.ts",
-    "src/lib/assets/asset-create.ts",
-    "src/lib/assets/asset-create.spec.ts",
-    "src/lib/partners/partner-presentation.ts",
-    "src/lib/partners/partner-presentation.spec.ts",
-    "src/lib/api/request-auth.ts",
-    "src/lib/api/request-auth.spec.ts",
-    "src/lib/orders/presentation.ts",
-    "src/lib/orders/presentation.spec.ts"
-  ]
+  "include": ["src/**/*.spec.ts"]
 }

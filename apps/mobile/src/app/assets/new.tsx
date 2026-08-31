@@ -20,6 +20,8 @@ import {
   type AssetKind,
   type AssetOwnerOption,
 } from "@/lib/api/assets";
+import { listPartnerUnits } from "@/lib/api/partners";
+import { selectableUnitOptions, unitLevels } from "@/lib/partners/site-tree";
 import DateTimePicker, {
   type DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
@@ -30,6 +32,7 @@ import {
   dateInputValue,
   type AssetCreateField,
 } from "@/lib/assets/asset-create";
+import { filterOwners } from "@/lib/assets/owner-search";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 
@@ -51,12 +54,15 @@ export default function NewAssetScreen() {
     enabled: status === "authenticated" && Boolean(capabilities?.assetsManage),
   });
   const [ownerSearch, setOwnerSearch] = useState("");
+  const [ownerPickerOpen, setOwnerPickerOpen] = useState(false);
   const [owner, setOwner] = useState<AssetOwnerOption | null>(null);
+  const [unitId, setUnitId] = useState("");
   const [name, setName] = useState("");
   const [kind, setKind] = useState<AssetKind>("EQUIPMENT");
   const [manufacturer, setManufacturer] = useState("");
   const [model, setModel] = useState("");
   const [serialNumber, setSerialNumber] = useState("");
+  const [inventoryNumber, setInventoryNumber] = useState("");
   const [installedAt, setInstalledAt] = useState("");
   const [interval, setInterval] = useState("");
   const [datePickerOpen, setDatePickerOpen] = useState(false);
@@ -73,18 +79,31 @@ export default function NewAssetScreen() {
     message: string;
   } | null>(null);
 
-  const filteredOwners = useMemo(() => {
-    const needle = ownerSearch.trim().toLocaleLowerCase("hu");
-    return (ownersQuery.data?.items ?? [])
-      .filter((item) =>
-        !needle
-          ? true
-          : `${item.displayName} ${item.code}`
-              .toLocaleLowerCase("hu")
-              .includes(needle),
-      )
-      .slice(0, 20);
-  }, [ownerSearch, ownersQuery.data]);
+  /*
+   * A PARTNER HELYSZÍNEI. Csak szerviz partnernél van mit betölteni: vevő
+   * tulajdonosnál a cím a pontosítás, és a szerver az alegységet ott el is
+   * utasítja. A lista ugyanarról a végpontról jön, amit a partner képernyője
+   * és a webes eszköz-űrlap is használ (`partners.view`, ami a szerelőnek is
+   * megvan).
+   */
+  const unitsQuery = useQuery({
+    queryKey: ["partner-units", owner?.id],
+    queryFn: () => listPartnerUnits(owner!.id),
+    enabled:
+      status === "authenticated" &&
+      Boolean(capabilities?.assetsManage) &&
+      owner?.type === "SUPPLIER",
+  });
+
+  const units = useMemo(
+    () => selectableUnitOptions(unitsQuery.data?.items ?? []),
+    [unitsQuery.data],
+  );
+
+  const filteredOwners = useMemo(
+    () => filterOwners(ownersQuery.data?.items ?? [], ownerSearch),
+    [ownerSearch, ownersQuery.data],
+  );
 
   const mutation = useMutation({
     mutationFn: createAsset,
@@ -110,11 +129,13 @@ export default function NewAssetScreen() {
      */
     const result = buildAssetCreatePayload({
       owner: owner ? { type: owner.type, id: owner.id } : null,
+      unitId,
       name,
       kind,
       manufacturer,
       model,
       serialNumber,
+      inventoryNumber,
       installedAt,
       interval,
     });
@@ -153,36 +174,158 @@ export default function NewAssetScreen() {
           </Text>
 
           <Section title="Partner">
-            <TextInput
-              value={ownerSearch}
-              onChangeText={setOwnerSearch}
-              placeholder="Szerviz partner keresése"
-              placeholderTextColor="#668798"
-              style={styles.input}
-            />
+            {/*
+              LEGORDULO, NEM MINDIG NYITOTT LISTA. A partnerek szama nem
+              korlatos, es egy allandoan kinyitott lista a telefonon lenyomja a
+              tobbi mezot a kepernyo alja ala -- a felviteli urlapon a partner
+              EGY dontes, nem bongeszes. Ugyanaz az alak, mint a munkalap-lista
+              partner-szurojenel (`app/worksheets/index.tsx`).
+
+              A VALASZTAS UTAN BECSUKODIK: enelkul a lista tovabbra is eltakarna
+              a tobbi mezot, es semmi nem jelezne, hogy a valasztas megtortent.
+            */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                owner
+                  ? `Partner: ${owner.displayName}. Koppints a módosításhoz.`
+                  : "Partner választása."
+              }
+              onPress={() => setOwnerPickerOpen((open) => !open)}
+              style={[styles.ownerRow, owner && styles.ownerSelected]}
+            >
+              <Text style={styles.ownerName}>
+                {owner ? owner.displayName : "Válassz partnert"}
+              </Text>
+              <Text style={styles.ownerMeta}>
+                {owner
+                  ? `${owner.type === "CUSTOMER" ? "Vevő" : "Partner"} · ${owner.code}`
+                  : "Koppints a listához"}
+              </Text>
+            </Pressable>
             <FieldError error={error} field="owner" />
-            {ownersQuery.isPending ? (
-              <ActivityIndicator color="#52d6c7" />
-            ) : null}
-            {filteredOwners.map((item) => {
-              const selected =
-                owner?.type === item.type && owner.id === item.id;
-              return (
-                <Pressable
-                  key={`${item.type}:${item.id}`}
-                  onPress={() => setOwner(item)}
-                  style={[styles.ownerRow, selected && styles.ownerSelected]}
-                >
-                  <Text style={styles.ownerName}>{item.displayName}</Text>
-                  <Text style={styles.ownerMeta}>
-                    {item.type === "CUSTOMER" ? "Vevő" : "Partner"} ·{" "}
-                    {item.code}
-                    {item.outsideServiceScope ? " · nem szerviz partner" : ""}
-                  </Text>
-                </Pressable>
-              );
-            })}
+            {!ownerPickerOpen ? null : (
+              <>
+                <TextInput
+                  value={ownerSearch}
+                  onChangeText={setOwnerSearch}
+                  placeholder="Szerviz partner keresése"
+                  placeholderTextColor="#668798"
+                  style={styles.input}
+                />
+                {ownersQuery.isPending ? (
+                  <ActivityIndicator color="#52d6c7" />
+                ) : null}
+                {filteredOwners.map((item) => {
+                  const selected =
+                    owner?.type === item.type && owner.id === item.id;
+                  return (
+                    <Pressable
+                      key={`${item.type}:${item.id}`}
+                      onPress={() => {
+                        setOwner(item);
+                        // A helyszín a partnerhez tartozik: partnerváltásnál a
+                        // korábbi választás egy MÁSIK partner fájából való lenne, és
+                        // a szerver azt el is utasítaná a mentés végén.
+                        setUnitId("");
+                        setOwnerPickerOpen(false);
+                      }}
+                      style={[
+                        styles.ownerRow,
+                        selected && styles.ownerSelected,
+                      ]}
+                    >
+                      <Text style={styles.ownerName}>{item.displayName}</Text>
+                      <Text style={styles.ownerMeta}>
+                        {item.type === "CUSTOMER" ? "Vevő" : "Partner"} ·{" "}
+                        {item.code}
+                        {item.outsideServiceScope
+                          ? " · nem szerviz partner"
+                          : ""}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </>
+            )}
           </Section>
+
+          {/*
+            A HELYSZÍN CSAK SZERVIZ PARTNERNÉL JELENIK MEG. Vevő tulajdonosnál
+            nem választható: ott a cím a pontosítás, és a szerver az alegységet
+            el is utasítja. Egy mező, amit ki lehet tölteni, de a mentés
+            visszadob, rosszabb, mint a hiányzó mező.
+          */}
+          {owner?.type === "SUPPLIER" ? (
+            <Section title="Helyszín">
+              <Text style={styles.hint}>
+                Melyik egységnél áll az eszköz. Elhagyható, de a szerelő ebből
+                találja meg a helyszínen.
+              </Text>
+              {unitsQuery.isPending ? (
+                <ActivityIndicator color="#52d6c7" />
+              ) : null}
+              {unitsQuery.isError ? (
+                <Text style={styles.unitError}>
+                  A partner helyszínei nem tölthetők be. Az eszköz helyszín
+                  nélkül is menthető.
+                </Text>
+              ) : null}
+              {!unitsQuery.isPending &&
+              !unitsQuery.isError &&
+              units.options.length === 0 ? (
+                <Text style={styles.hint}>
+                  Ehhez a partnerhez még nincs felvéve helyszín.
+                </Text>
+              ) : null}
+              {/*
+                LEPCSOS VALASZTO: egy szint egy sor. A teljes utas lista a
+                telefonon hosszu, es valasztas kozben nem latszik, hol tart az
+                ember -- itt minden szinten csak nehany testver all.
+
+                A KIVEZETETT HELYSZIN LATSZIK, DE NEM VALASZTHATO. Ha egy meglevo
+                eszkoz epp ilyenen all, a lanc akkor is felepul rajta: kulonben a
+                beallitott helyszin nemán eltunne. Uj eszkoznel ez nem all elo,
+                de a ket urlap ugyanazt a szabalyt kovesse.
+              */}
+              {unitLevels(unitsQuery.data?.items ?? [], unitId || null).map(
+                (level, depth) =>
+                  level.options.length === 0 ? null : (
+                    <View key={`szint-${depth}`} style={styles.unitLevel}>
+                      {level.options.map((option) => {
+                        const selected = level.selectedId === option.id;
+                        return (
+                          <Pressable
+                            key={option.id}
+                            disabled={!option.isActive && !selected}
+                            onPress={() => setUnitId(selected ? "" : option.id)}
+                            style={[
+                              styles.ownerRow,
+                              selected && styles.ownerSelected,
+                              !option.isActive && !selected && styles.unitOff,
+                            ]}
+                          >
+                            <Text style={styles.ownerName}>
+                              {option.label}
+                              {option.isActive ? "" : " (kivezetett)"}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ),
+              )}
+              {/*
+                A KIHAGYÁS NEM NÉMA. Aki tudja, hogy annak a partnernek hat
+                helyszíne van, és négyet lát, a listát hiszi hibásnak.
+              */}
+              {units.hiddenCount > 0 ? (
+                <Text style={styles.hint}>
+                  {units.hiddenCount} kivezetett helyszín nem választható.
+                </Text>
+              ) : null}
+            </Section>
+          ) : null}
 
           <Section title="Eszközadatok">
             <Field label="Eszköz neve *" value={name} onChangeText={setName} />
@@ -212,6 +355,17 @@ export default function NewAssetScreen() {
               label="Sorozatszám"
               value={serialNumber}
               onChangeText={setSerialNumber}
+            />
+            {/*
+              A PARTNER SAJÁT AZONOSÍTÓJA. A gépen gyakran ez a matrica van
+              rajta, és a szerelő akkor látja, amikor előtte áll. A mező eddig
+              csak a szerkesztő képernyőn volt meg, tehát utólag, az irodából
+              lehetett pótolni -- egy külön kör telefonálással.
+            */}
+            <Field
+              label="Leltári szám"
+              value={inventoryNumber}
+              onChangeText={setInventoryNumber}
             />
             {/*
               A RENDSZER SAJÁT DÁTUMVÁLASZTÓJA (Balázs döntése, 2026-08-25).
@@ -383,6 +537,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#0a2335",
   },
   ownerSelected: { borderColor: "#52d6c7", backgroundColor: "#12443f" },
+  // Egy szint egy sor: a szintek kozotti tavolsag mutatja, hogy lejjebb leptunk.
+  unitLevel: { gap: 6, marginBottom: 8 },
+  unitOff: { opacity: 0.5 },
+  hint: { color: "#789cad", fontSize: 12, lineHeight: 17 },
+  unitError: { color: "#ffb4ab", fontSize: 12, lineHeight: 17 },
   ownerName: { color: "#f4fbff", fontWeight: "800" },
   ownerMeta: { color: "#789cad", fontSize: 11, marginTop: 2 },
   kindGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },

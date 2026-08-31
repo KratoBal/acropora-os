@@ -198,7 +198,7 @@ describe("WorksheetsService assignees", () => {
       }),
     );
 
-    const detail = await service.detail("worksheet-1");
+    const detail = await service.detail("worksheet-1", { kind: "internal" });
     assert.deepEqual(detail.assignees, [
       {
         userId: "user-2",

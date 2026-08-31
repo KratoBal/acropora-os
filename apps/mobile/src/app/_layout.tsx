@@ -97,6 +97,9 @@ function RootNavigator() {
         name="orders/[id]"
         options={{ title: "Rendelés részletei" }}
       />
+      <Stack.Screen name="settings" options={{ title: "Beállítások" }} />
+      <Stack.Screen name="worksheets/index" options={{ title: "Munkalapok" }} />
+      <Stack.Screen name="worksheets/[id]" options={{ title: "Munkalap" }} />
       <Stack.Screen name="assets/index" options={{ title: "Eszközök" }} />
       <Stack.Screen name="assets/new" options={{ title: "Új eszköz" }} />
       <Stack.Screen
@@ -111,6 +114,11 @@ function RootNavigator() {
       <Stack.Screen
         name="assets/scan/[token]"
         options={{ title: "QR-azonosítás" }}
+      />
+      <Stack.Screen name="partners/index" options={{ title: "Partnerek" }} />
+      <Stack.Screen
+        name="partners/[id]"
+        options={{ title: "Partner adatlap" }}
       />
     </Stack>
   );

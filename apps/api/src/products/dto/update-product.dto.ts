@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsIn,
   IsOptional,
   IsString,
@@ -36,4 +37,16 @@ export class UpdateProductDto {
   @IsOptional()
   @IsString()
   categoryId?: string | null;
+
+  /**
+   * A SAJÁT webshopunkban megvásárolható-e; a felületen "Vásárolható".
+   *
+   * NEM a UNAS publikációs állapotának tükre -- azt a `ChannelListing`
+   * hordozza, és azt a szinkron írja. Ez Acropora-tulajdonú üzleti döntés,
+   * és ez az ELSŐ út, amin igazra lehet állítani: eddig a mező hat helyen
+   * szerepelt a fában, mind olvasásként.
+   */
+  @IsOptional()
+  @IsBoolean()
+  webshopSellable?: boolean;
 }

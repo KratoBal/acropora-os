@@ -11,9 +11,11 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useEffect } from "react";
 import type { ReactNode } from "react";
 
 import { getAsset, getAssetQr } from "@/lib/api/assets";
+import { ASSET_STATUS_LABELS } from "@/lib/assets/asset-status";
 import {
   LABEL_GAP_MM,
   LABEL_NAME_FONT_MM,
@@ -23,15 +25,16 @@ import {
   labelLayout,
   labelPageSize,
 } from "@/lib/assets/label-format";
+import { assetPlacementDetail } from "@/lib/assets/asset-placement";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
-
-const STATUS_LABELS = {
-  ACTIVE: "Aktív",
-  OUT_OF_SERVICE: "Nem üzemel",
-  IN_REPAIR: "Javítás alatt",
-  RETIRED: "Kivezetett",
-} as const;
+import { OfflineNoticeCard } from "@/components/offline/OfflineNoticeCard";
+import {
+  readCachedAsset,
+  rememberAssetDetail,
+} from "@/lib/offline/asset-cache";
+import { useIsOnline } from "@/lib/offline/connectivity";
+import { describeOfflineDetailNotice } from "@/lib/offline/offline-notice";
 
 const KIND_LABELS = {
   SYSTEM: "Rendszer",
@@ -47,12 +50,28 @@ export default function AssetDetailScreen() {
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const { status, user } = useAuth();
   const capabilities = user ? getServiceCapabilities(user.role) : null;
+  const online = useIsOnline();
   const query = useQuery({
     queryKey: ["service-asset", id],
     queryFn: () => getAsset(id!),
     enabled:
       status === "authenticated" && Boolean(id && capabilities?.assetsView),
   });
+
+  const cached = useQuery({
+    queryKey: ["offline-asset", id],
+    queryFn: () => readCachedAsset(id!),
+    enabled:
+      status === "authenticated" && Boolean(id && capabilities?.assetsView),
+  });
+
+  // Amit térerővel megnyitottak, az offline is TELJES lap marad. Enélkül a
+  // készüléken csak a listasor lenne meg, és a leírás, a beszerelés dátuma meg
+  // a részegységek felsorolása a helyszínen hiányozna.
+  useEffect(() => {
+    if (!query.data) return;
+    void rememberAssetDetail(query.data);
+  }, [query.data]);
 
   const printLabel = async (share: boolean) => {
     if (!query.data) return;
@@ -83,11 +102,32 @@ export default function AssetDetailScreen() {
   if (status !== "authenticated" || !user) return <Redirect href="/login" />;
   if (!capabilities?.assetsView) return <Redirect href="/" />;
 
+  /*
+   * A MENTETT LAP CSAK AKKOR KERÜL ELŐ, HA A SZERVER NEM VÁLASZOLT, és akkor is
+   * két különböző dolog lehet: a térerővel megnyitott TELJES lap, vagy csak az
+   * a sor, ami a listán átjött. A kettő nem ugyanaz, és a sáv kimondja, melyik.
+   */
+  const cachedDetail = cached.data?.detail ?? null;
+  const cachedSummary = cached.data?.summary ?? null;
+  const asset = query.data ?? cachedDetail;
+  const fromCache = !query.data && Boolean(cachedDetail ?? cachedSummary);
+  const notice = fromCache
+    ? describeOfflineDetailNotice({
+        online: online && !query.isError,
+        hasFullCopy: Boolean(cachedDetail),
+        syncedAt: cached.data?.syncedAt ?? null,
+        now: new Date(),
+      })
+    : null;
+
   return (
     <SafeAreaView style={styles.safeArea} edges={["bottom", "left", "right"]}>
       <ScrollView contentContainerStyle={styles.container}>
-        {query.isPending ? <ActivityIndicator color="#52d6c7" /> : null}
-        {query.isError ? (
+        {notice ? <OfflineNoticeCard notice={notice} /> : null}
+        {query.isPending && !fromCache ? (
+          <ActivityIndicator color="#52d6c7" />
+        ) : null}
+        {query.isError && !fromCache ? (
           <MessageCard
             title="Az eszköz nem tölthető be"
             message={
@@ -98,56 +138,141 @@ export default function AssetDetailScreen() {
             onRetry={() => void query.refetch()}
           />
         ) : null}
-        {query.data ? (
+        {/*
+          CSAK A LISTASOR VAN MEG. Ilyenkor a teljes adatlapot nem lehet
+          összerakni -- a részegységek felsorolása, a leírás és a dátumok nem
+          jöttek át a listán --, és a hiányzó mezőket a repó szabálya szerint
+          nem üres sorként mutatjuk. A sáv fölötte mondja ki, miért hiányoznak.
+        */}
+        {!asset && cachedSummary ? (
           <>
             <View style={styles.hero}>
-              <Text style={styles.number}>{query.data.assetNumber}</Text>
-              <Text style={styles.title}>{query.data.name}</Text>
+              <Text style={styles.number}>{cachedSummary.assetNumber}</Text>
+              <Text style={styles.title}>{cachedSummary.name}</Text>
               <View style={styles.badges}>
-                <Text style={styles.badge}>{KIND_LABELS[query.data.kind]}</Text>
                 <Text style={styles.badge}>
-                  {STATUS_LABELS[query.data.status]}
+                  {KIND_LABELS[cachedSummary.kind]}
+                </Text>
+                <Text style={styles.badge}>
+                  {ASSET_STATUS_LABELS[cachedSummary.status]}
                 </Text>
               </View>
             </View>
 
             <Section title="Elhelyezés">
-              <Info label="Tulajdonos" value={query.data.owner.displayName} />
-              <Info label="Partnerkód" value={query.data.owner.code} />
-              <Info label="Helyszín" value={query.data.address?.formatted} />
-              <Info label="Akvárium" value={query.data.aquarium?.name} />
+              <Info
+                label="Tulajdonos"
+                value={cachedSummary.owner.displayName}
+              />
+              <Info label="Partnerkód" value={cachedSummary.owner.code} />
+              {/*
+                A MENTETT LISTASOR IS HORDOZZA AZ ALEGYSÉGET, tehát a hiányos,
+                offline lapon is meg tudjuk mondani, hol áll az eszköz. A
+                korábban mentett másolatokban is ott van: a másolat a szerver
+                nyers válaszát tárolja, nem a típus szerinti szűkítést.
+              */}
+              <Info
+                label="Alegység"
+                value={assetPlacementDetail({
+                  ownerType: cachedSummary.owner.type,
+                  unit: cachedSummary.unit,
+                  address: cachedSummary.address,
+                })}
+              />
+              <Info label="Akvárium" value={cachedSummary.aquarium?.name} />
+            </Section>
+
+            <Section title="Azonosítás">
+              <Info label="Gyártó" value={cachedSummary.manufacturer} />
+              <Info label="Modell" value={cachedSummary.model} />
+              <Info label="Sorozatszám" value={cachedSummary.serialNumber} />
+            </Section>
+
+            <Section title="Karbantartás">
+              <Info
+                label="Következő szerviz"
+                value={formatDate(cachedSummary.nextServiceAt)}
+              />
+              <Info
+                label="Részegység"
+                value={
+                  cachedSummary.childCount > 0
+                    ? `${cachedSummary.childCount} darab, a felsorolásuk csak térerővel`
+                    : undefined
+                }
+              />
+            </Section>
+          </>
+        ) : null}
+        {asset ? (
+          <>
+            <View style={styles.hero}>
+              <Text style={styles.number}>{asset.assetNumber}</Text>
+              <Text style={styles.title}>{asset.name}</Text>
+              <View style={styles.badges}>
+                <Text style={styles.badge}>{KIND_LABELS[asset.kind]}</Text>
+                <Text style={styles.badge}>
+                  {ASSET_STATUS_LABELS[asset.status]}
+                </Text>
+              </View>
+            </View>
+
+            <Section title="Elhelyezés">
+              <Info label="Tulajdonos" value={asset.owner.displayName} />
+              <Info label="Partnerkód" value={asset.owner.code} />
+              {/*
+                AZ ALEGYSÉG A VÁLASZTOTT HELY, a cím a VISSZAESÉS. Partner
+                tulajdonosnál a cím MINDIG a partner saját postai címe, tehát
+                alegység nélkül nem válasz arra, hol áll az eszköz -- és a kettő
+                ugyanúgy néz ki. A megkülönböztetés az `asset-placement.ts`
+                modulban áll, ugyanazokkal a szavakkal, mint a weben.
+              */}
+              <Info
+                label="Alegység"
+                value={assetPlacementDetail({
+                  ownerType: asset.owner.type,
+                  unit: asset.unit,
+                  address: asset.address,
+                })}
+              />
+              <Info label="Akvárium" value={asset.aquarium?.name} />
             </Section>
 
             <Section title="Műszaki adatok">
-              <Info label="Gyártó" value={query.data.manufacturer} />
-              <Info label="Modell" value={query.data.model} />
-              <Info label="Sorozatszám" value={query.data.serialNumber} />
-              <Info label="Leltári szám" value={query.data.inventoryNumber} />
-              <Info label="Termék" value={query.data.product?.name} />
-              <Info label="Leírás" value={query.data.description} />
+              <Info label="Gyártó" value={asset.manufacturer} />
+              <Info label="Modell" value={asset.model} />
+              <Info label="Sorozatszám" value={asset.serialNumber} />
+              <Info label="Leltári szám" value={asset.inventoryNumber} />
+              <Info label="Termék" value={asset.product?.name} />
+              <Info label="Leírás" value={asset.description} />
             </Section>
 
             <Section title="Karbantartás">
               <Info
                 label="Következő karbantartás"
-                value={formatDate(query.data.nextServiceAt)}
+                value={formatDate(asset.nextServiceAt)}
               />
               <Info
                 label="Utolsó karbantartás"
-                value={formatDate(query.data.lastServicedAt)}
+                value={formatDate(asset.lastServicedAt)}
               />
               <Info
                 label="Intervallum"
                 value={
-                  query.data.serviceIntervalDays
-                    ? `${query.data.serviceIntervalDays} nap`
+                  asset.serviceIntervalDays
+                    ? `${asset.serviceIntervalDays} nap`
                     : undefined
                 }
               />
-              <Info label="Megjegyzés" value={query.data.notes} />
+              <Info label="Megjegyzés" value={asset.notes} />
             </Section>
 
-            {capabilities?.assetsManage ? (
+            {/*
+              A SZERKESZTÉS ÉS A CÍMKENYOMTATÁS SZERVERT KÍVÁN, tehát mentett
+              lapon nem jelenik meg. A gomb, ami offline nem csinál semmit,
+              rosszabb, mint a hiányzó gomb: a szerelő azt hiszi, elmentette.
+            */}
+            {capabilities?.assetsManage && !fromCache ? (
               <Section title="Szerkesztés">
                 <AssetLink
                   label="Eszközadatok módosítása"
@@ -155,29 +280,31 @@ export default function AssetDetailScreen() {
                   onPress={() =>
                     router.push({
                       pathname: "/assets/edit/[id]",
-                      params: { id: query.data.id },
+                      params: { id: asset.id },
                     })
                   }
                 />
               </Section>
             ) : null}
 
-            <Section title="QR-címke · 30 × 30 mm">
-              <AssetLink
-                label="Nyomtatás"
-                meta="Rendszer nyomtatási párbeszédablak"
-                onPress={() => void printLabel(false)}
-              />
-              <AssetLink
-                label="PDF megosztása"
-                meta="Megnyitás a címkenyomtató alkalmazásában"
-                onPress={() => void printLabel(true)}
-              />
-            </Section>
+            {!fromCache ? (
+              <Section title="QR-címke · 30 × 30 mm">
+                <AssetLink
+                  label="Nyomtatás"
+                  meta="Rendszer nyomtatási párbeszédablak"
+                  onPress={() => void printLabel(false)}
+                />
+                <AssetLink
+                  label="PDF megosztása"
+                  meta="Megnyitás a címkenyomtató alkalmazásában"
+                  onPress={() => void printLabel(true)}
+                />
+              </Section>
+            ) : null}
 
-            {query.data.ancestors.length > 0 ? (
+            {asset.ancestors.length > 0 ? (
               <Section title="Rendszerútvonal">
-                {query.data.ancestors.map((ancestor) => (
+                {asset.ancestors.map((ancestor) => (
                   <AssetLink
                     key={ancestor.id}
                     label={ancestor.name}
@@ -193,9 +320,9 @@ export default function AssetDetailScreen() {
               </Section>
             ) : null}
 
-            {query.data.children.length > 0 ? (
+            {asset.children.length > 0 ? (
               <Section title="Részegységek">
-                {query.data.children.map((child) => (
+                {asset.children.map((child) => (
                   <AssetLink
                     key={child.id}
                     label={child.name}

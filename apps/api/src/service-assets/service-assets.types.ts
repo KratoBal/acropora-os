@@ -18,6 +18,30 @@ export const SERVICE_OWNER_WHERE = {
 } as const;
 
 /**
+ * AKI ÚJ ESZKÖZ TULAJDONOSÁNAK VÁLASZTHATÓ -- SZŰKEBB, MINT A FENTI, ÉS EZ A
+ * KÜLÖNBSÉG SZÁNDÉKOS.
+ *
+ * A törölt partnert töröltnek AKARTUK: nem lehetett fizikailag törölni, mert egy
+ * régi bejegyzés hivatkozik rá, de a választókban nem lehet ott (a tulajdonos
+ * kérése, 2026-08-21). Új eszközt tehát nem rendelhetünk hozzá.
+ *
+ * A LISTA HATÓKÖRE (`assetOwnerScopeWhere`) VISZONT NEM KAPJA MEG EZT. Egy
+ * törölt partnernél álló eszköz FIZIKAILAG OTT VAN, és a szerelő listájáról
+ * eltüntetni pont az a hibaosztály, amit ez a fájl máshol is kerül: nem hibásnak
+ * látszó lista, hanem hiányos. A kettő tehát KÉT szabály, nem egy -- ezért áll
+ * két konstansban.
+ *
+ * MA A VISELKEDÉS UGYANEZ LENNE E SOR NÉLKÜL IS, mert a törlés az `isActive`
+ * mezőt is hamisra állítja. Ez viszont ESIK, nem ki van mondva: ha valaha
+ * keletkezik újraaktiváló út (ma nincs), a törölt partner szó nélkül
+ * visszakerülne a választóba.
+ */
+export const SERVICE_OWNER_PICKABLE_WHERE = {
+  ...SERVICE_OWNER_WHERE,
+  deletedAt: null,
+} as const;
+
+/**
  * UGYANAZ A FELTÉTEL, A MÁSODIK HASZNÁLATI HELYÉN.
  *
  * A fenti szabály eddig egy helyen élt: azon a listán, amiből új eszközhöz
@@ -46,10 +70,42 @@ export const assetSummaryInclude = {
   customer: true,
   supplier: true,
   customerAddress: true,
+  department: {
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      parentId: true,
+      customerId: true,
+    },
+  },
   aquarium: true,
   parentAsset: true,
   _count: { select: { childAssets: true } },
 } satisfies Prisma.AssetInclude;
+
+/**
+ * AMI EGY DOKUMENTUM OSSZEFOGLALOJAHOZ KELL, ES AMI NEM.
+ *
+ * A `content` SZANDEKOSAN HIANYZIK, es ezert kell nevesitett lista, nem
+ * `include`: a bajtok legfeljebb 10 MB-osak, es egyetlen olyan ut sincs, ahol
+ * az osszefoglalo hasznalna oket. Egy `include` minden skalar mezot visszahoz,
+ * tehat csendben behuzna a teljes fajlt is.
+ *
+ * A LISTA AZERT ALL EGY HELYEN, mert ket ut olvassa (az adatlap dokumentum-
+ * listaja es a feltoltes visszaolvasasa), es a ketto kulon romlana el. Amikor
+ * a tartalom kesobb kulon taroloba kerul, ez az egy hely valtozik.
+ */
+export const assetDocumentSummarySelect = {
+  id: true,
+  type: true,
+  fileName: true,
+  contentType: true,
+  sizeBytes: true,
+  sha256: true,
+  createdAt: true,
+  uploadedBy: { select: { id: true, displayName: true } },
+} satisfies Prisma.AssetDocumentSelect;
 
 export const assetDetailInclude = {
   ...assetSummaryInclude,
@@ -61,16 +117,7 @@ export const assetDetailInclude = {
     take: 100,
   },
   documents: {
-    select: {
-      id: true,
-      type: true,
-      fileName: true,
-      contentType: true,
-      sizeBytes: true,
-      sha256: true,
-      createdAt: true,
-      uploadedBy: { select: { id: true, displayName: true } },
-    },
+    select: assetDocumentSummarySelect,
     orderBy: { createdAt: "desc" as const },
   },
 } satisfies Prisma.AssetInclude;

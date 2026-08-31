@@ -1,25 +1,32 @@
 import "reflect-metadata";
 
-import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 
 import { AppModule } from "./app.module.js";
+import { configureApp } from "./app.configuration.js";
+import { assertKnownNodeEnv } from "./common/node-env.guard.js";
 
+/**
+ * The entry point, and deliberately nothing else.
+ *
+ * Everything it configures lives in `app.configuration.ts`, because importing
+ * this file starts a server: a test that wanted to check the configuration
+ * would have booted the API as a side effect of the import. Keeping the entry
+ * point down to "build, configure, listen" is what makes the configuration
+ * reachable from a test at all.
+ */
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  app.enableCors({ origin: process.env.WEB_URL ?? "http://localhost:3000" });
-  app.useGlobalPipes(
-    new ValidationPipe({
-      transform: true,
-      whitelist: true,
-      forbidNonWhitelisted: true,
-    }),
-  );
+  /**
+   * A LEGELSO lepes, meg a Nest felhuzasa elott. Ha a NODE_ENV elirt, akkor
+   * innentol minden kovetkezo dontes a "nem production" agra esik -- harom
+   * indulasi ellenorzes kimarad, a session-suti elveszti a secure jelzot, es a
+   * fejlesztoi bejelentkezes megnyilik. Csendben. Ezert all itt es nem lejjebb.
+   */
+  assertKnownNodeEnv();
 
-  // Let Nest forward SIGTERM/SIGINT into onModuleDestroy/beforeApplicationShutdown
-  // hooks (Prisma disconnect, in-flight scheduler timers, etc.) instead of the
-  // process being hard-killed mid-request during a Coolify rolling restart.
-  app.enableShutdownHooks();
+  const app = await NestFactory.create(AppModule);
+
+  configureApp(app);
 
   const port = Number(process.env.PORT ?? 3001);
   await app.listen(port);

@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 
 import {
   MedusaAdminHttpError,
@@ -27,8 +27,6 @@ import type { MedusaConnectionView } from "@acropora/types";
  */
 @Injectable()
 export class MedusaConnectionService {
-  private readonly logger = new Logger(MedusaConnectionService.name);
-
   /**
    * A kliens GYÁRA azért paraméter, hogy a négy állapot mérhető legyen hálózat
    * nélkül. Ugyanaz az indok, amiért a `fetch` is paraméter a kliensben: egy

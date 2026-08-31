@@ -62,6 +62,8 @@ const ownerSession: Session = {
     email: "owner@acropora.local",
     displayName: "Acropora Tulajdonos",
     role: "OWNER",
+    customerId: null,
+    supplierId: null,
   },
 };
 
@@ -77,6 +79,8 @@ const cookieSession: Session = {
     email: "owner@acropora.local",
     displayName: "Acropora Tulajdonos",
     role: "OWNER",
+    customerId: null,
+    supplierId: null,
   },
 };
 
@@ -115,6 +119,7 @@ const populatedResponse: ProductListResponse = {
         backorderAllowed: false,
       },
       grossPrice: "24900",
+      priceSource: "unas" as const,
       saleGrossPrice: "19900",
       stockOnHand: "12",
     },

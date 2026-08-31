@@ -1,3 +1,4 @@
+import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import {
   Body,
   Controller,
@@ -34,14 +35,20 @@ export class WorksheetsController {
 
   @Get()
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  list(@Query() query: WorksheetListQueryDto) {
-    return this.service.list(query);
+  list(
+    @Query() query: WorksheetListQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.list(query, partnerScopeOf(user));
   }
 
   @Get("customers/:customerId/departments")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  departments(@Param("customerId") customerId: string) {
-    return this.service.departments(customerId);
+  departments(
+    @Param("customerId") customerId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.departments(customerId, partnerScopeOf(user));
   }
 
   @Post("customers/:customerId/departments")
@@ -54,8 +61,9 @@ export class WorksheetsController {
   }
 
   /**
-   * A partner-rövidítés a munkalap-szám első tagja, ezért itt él és nem a
-   * vevő-modulban: a mező kizárólag a számozás miatt létezik. Ha egyszer a
+   * A partner-rövidítés itt él és nem a vevő-modulban: a mező kizárólag a
+   * munkalap miatt létezik. A számnak 2026-08-27 óta nem tagja, de a lezárás
+   * megköveteli, tehát a munkalap-modul az, ami elromlik nélküle. Ha egyszer a
    * vevő adatlapján is szerkeszthető lesz, oda költözik.
    */
   @Put("customers/:customerId/partner-code")
@@ -84,20 +92,20 @@ export class WorksheetsController {
    */
   @Get("selectable-partners")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  selectablePartners() {
-    return this.service.selectablePartners();
+  selectablePartners(@CurrentUser() user: AuthenticatedUser) {
+    return this.service.selectablePartners(partnerScopeOf(user));
   }
 
   @Get("assignable-users")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  assignableUsers() {
-    return this.service.assignableUsers();
+  assignableUsers(@CurrentUser() user: AuthenticatedUser) {
+    return this.service.assignableUsers(partnerScopeOf(user));
   }
 
   @Get(":id")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  detail(@Param("id") id: string) {
-    return this.service.detail(id);
+  detail(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.detail(id, partnerScopeOf(user));
   }
 
   @Get(":id/versions/:version/diff")
@@ -105,8 +113,9 @@ export class WorksheetsController {
   diff(
     @Param("id") id: string,
     @Param("version", ParseIntPipe) version: number,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.diff(id, version);
+    return this.service.diff(id, version, partnerScopeOf(user));
   }
 
   @Post()

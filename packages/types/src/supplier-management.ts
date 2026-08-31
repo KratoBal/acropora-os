@@ -7,9 +7,10 @@ export interface SupplierSummary {
   /** We write worksheets and quotes for this partner. Independent of the flag
    * above: one company can be both, and the Partners menu holds both kinds. */
   isService: boolean;
-  /** The worksheet number's first segment (`FANK` in `FANK-BIO-2026-001`).
-   * Four characters. Absent until somebody fills it in: a service partner
-   * without one is offered by nothing that would need it. */
+  /** The partner's abbreviation (`FANK`). The worksheet number no longer
+   * carries it, but closing a sheet still requires it: it is a uniqueness key
+   * across two tables. Four characters. Absent until somebody fills it in: a
+   * service partner without one is offered by nothing that would need it. */
   worksheetPartnerCode?: string;
   taxNumber?: string;
   /** ISO 3166-1 alpha-2 országkód; "HU"-tól eltérő érték jelöli az EU-n belüli beszállítót. */

@@ -1,30 +1,44 @@
 import type { AuthenticatedUser, Session } from "@acropora/types";
+import { API_PREFIX } from "../api/api-prefix";
 
 const SESSION_STORAGE_KEY = "acropora.development-session";
+/**
+ * Mind a négy fejlesztői azonosság a MI kollégánk, tehát egyik sem tartozik
+ * partnerhez. A két `null` ki van írva, és nem elhagyva: a mező kötelező, épp
+ * azért, hogy ez a döntés minden felhasználót építő helyen látszódjon.
+ */
 export const DEVELOPMENT_USERS: readonly AuthenticatedUser[] = [
   {
     id: "dev-owner",
     email: "owner@acropora.local",
     displayName: "Acropora Tulajdonos",
     role: "OWNER",
+    customerId: null,
+    supplierId: null,
   },
   {
     id: "dev-admin",
     email: "admin@acropora.local",
     displayName: "Acropora Admin",
     role: "ADMIN",
+    customerId: null,
+    supplierId: null,
   },
   {
     id: "dev-warehouse",
     email: "warehouse@acropora.local",
     displayName: "Raktári Felhasználó",
     role: "WAREHOUSE",
+    customerId: null,
+    supplierId: null,
   },
   {
     id: "dev-service",
     email: "service@acropora.local",
     displayName: "Szerviz Felhasználó",
     role: "SERVICE",
+    customerId: null,
+    supplierId: null,
   },
 ];
 
@@ -50,7 +64,7 @@ export class DevelopmentAuthAdapter implements AuthAdapter {
         window.localStorage.removeItem(SESSION_STORAGE_KEY);
         return null;
       }
-      const response = await fetch("/api/auth/me", {
+      const response = await fetch(`${API_PREFIX}/auth/me`, {
         headers: { Authorization: `Bearer ${session.token ?? ""}` },
       });
       if (!response.ok) {
@@ -71,7 +85,7 @@ export class DevelopmentAuthAdapter implements AuthAdapter {
       );
     }
 
-    const response = await fetch("/api/auth/login", {
+    const response = await fetch(`${API_PREFIX}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
@@ -84,7 +98,7 @@ export class DevelopmentAuthAdapter implements AuthAdapter {
   }
 
   async logout(_session: Session): Promise<void> {
-    await fetch("/api/auth/logout", {
+    await fetch(`${API_PREFIX}/auth/logout`, {
       method: "POST",
       headers: { Authorization: `Bearer ${_session.token ?? ""}` },
     }).catch(() => undefined);

@@ -9,7 +9,17 @@ import {
 } from "./worksheet-number.js";
 
 describe("worksheet number", () => {
-  it("formats the agreed four-part number", () => {
+  /**
+   * A SZÁM HÁROM TAGÚ, nem négy: a partner rövidítése 2026-08-27 óta NEM
+   * szerepel benne (a lap címe már azonosítja). Az egyediséget innentől a
+   * SOROZAT adja -- egy számláló évenként, az egész cégre --, nem az, hogy
+   * valaki jól választ egység-kódot.
+   *
+   * A `partnerCode` a bemenetben MARAD, mert a lezárás továbbra is megköveteli
+   * (l. lentebb: rövidítés nélküli partnerhez nem zárható le lap). Csak a
+   * SZÁMBÓL került ki.
+   */
+  it("formats the agreed three-part number", () => {
     assert.equal(
       buildWorksheetNumber({
         partnerCode: "FANK",
@@ -17,7 +27,7 @@ describe("worksheet number", () => {
         year: 2026,
         sequence: 1,
       }).number,
-      "FANK-BIO-2026-001",
+      "BIO-2026-001",
     );
   });
 
@@ -34,8 +44,8 @@ describe("worksheet number", () => {
       year: 2026,
       sequence: 1000,
     });
-    assert.equal(last.number, "FANK-BIO-2026-999");
-    assert.equal(next.number, "FANK-BIO-2026-1000");
+    assert.equal(last.number, "BIO-2026-999");
+    assert.equal(next.number, "BIO-2026-1000");
   });
 
   it("keeps growing past four digits as well", () => {
@@ -49,7 +59,7 @@ describe("worksheet number", () => {
         year: 2026,
         sequence: 10000,
       }).number,
-      "FANK-BIO-2026-10000",
+      "BIO-2026-10000",
     );
   });
 

@@ -6,9 +6,13 @@ export type WorksheetVersionStatus =
 export type WorksheetSignatureDecision = "ACCEPTED" | "REJECTED";
 
 /**
- * A partner rövidítése a munkalap-számban (`FANK`). Betűvel kezdődik, mert a
- * szám első tagjának ránézésre partnernek kell látszania, és 2-8 karakter,
- * hogy a szám olvasható maradjon.
+ * A partner rövidítése (`FANK`). A SZÁMBAN MÁR NINCS BENNE (lásd
+ * `formatWorksheetNumber`), de a lezárás továbbra is megköveteli: a rövidítés
+ * egyediségi kulcs két táblán, és a pótlása egyszeri lépés, amit egy már
+ * megírt lap visszamenőleg tesz kétértelművé.
+ *
+ * Betűvel kezdődik és 2-8 karakter: emberi jelölés, a listákban és a
+ * keresésben partnernek kell látszania.
  */
 export const WORKSHEET_PARTNER_CODE_PATTERN = /^[A-Z][A-Z0-9]{1,7}$/;
 
@@ -32,13 +36,28 @@ export interface WorksheetNumberParts {
   sequence: number;
 }
 
+/**
+ * A SZÁM NEM HORDOZZA A PARTNER RÖVIDÍTÉSÉT (2026-08-25, tulajdonosi döntés):
+ * a lap CÍME már azonosítja a partnert, tehát a számban ismétlés lenne.
+ *
+ * AMIT EZ AZ EGYEDISÉGRŐL JELENT: az egységek kódja csak PARTNEREN BELÜL
+ * egyedi, tehát a szám egyediségét nem a kód adja, hanem a SOROZAT -- egy
+ * számláló évenként, az egész cégre (`WorksheetYearSequence`). Ha a számláló
+ * partnerenként futna, két partner `BIO` egysége ugyanabban az évben ugyanazt
+ * a számot kapná.
+ *
+ * A KORÁBBI LAPOK SZÁMA VÁLTOZATLAN, tehát a sorozatban van egy pont, ahol az
+ * alak megváltozik. Itt NEM kell jelölés, mint az eszközszámnál: a partner tag
+ * ELTŰNÉSE maga a jel. Aki régi lapot keres, a régi alakot fogja látni, és a
+ * két alak nem tud ütközni.
+ */
 export function formatWorksheetNumber(parts: WorksheetNumberParts): string {
-  const { partnerCode, departmentCode, year, sequence } = parts;
-  return `${partnerCode}-${departmentCode}-${year}-${formatWorksheetSequence(sequence)}`;
+  const { departmentCode, year, sequence } = parts;
+  return `${departmentCode}-${year}-${formatWorksheetSequence(sequence)}`;
 }
 
 /**
- * A verzió a számhoz kötött külön tag, nem új szám: `FANK-BIO-2026-001/2`.
+ * A verzió a számhoz kötött külön tag, nem új szám: `BIO-2026-001/2`.
  * Az első verzió a szám maga, per-jel nélkül.
  */
 export function formatWorksheetVersionLabel(
@@ -58,11 +77,19 @@ export interface WorksheetCustomerSummary {
 }
 
 /**
- * A partner alegysége: ugyanaz az entitás adja a szám középső tagját
+ * A partner alegysége: ugyanaz az entitás adja a szám első tagját
  * (`code`) és a lapon megjelenő szöveget (`name`). Nem két fogalom.
  */
 export interface WorksheetDepartmentSummary {
   id: string;
+  /**
+   * A FA SZULOJE, `null` a legfelso szinten.
+   *
+   * A helyszinek tobb szinten allhatnak (Fank > Biodom > Nagy fokamedence), es
+   * a lista LAPOSAN jon vissza: a fat a hivo epiti fel ebbol a mezobol. Igy egy
+   * uj szint nem valtoztat vegpontot, es a lista egyetlen kereskedesbol jon.
+   */
+  parentId: string | null;
   code: string;
   name: string;
   isActive: boolean;
@@ -73,6 +100,13 @@ export interface WorksheetDepartmentListResponse {
 }
 
 export interface CreateWorksheetDepartmentInput {
+  /**
+   * A szulo helyszin, ha van. Hianyzo ertek = a fa legfelso szintje.
+   *
+   * SZANDEKOSAN NEM KOTELEZO: a mezo bevezetese elott keszult urlapok
+   * valtozatlanul atmennek, es a mai lapos lista a fa elso szintje marad.
+   */
+  parentId?: string;
   code: string;
   name: string;
 }
@@ -104,8 +138,9 @@ export interface WorksheetSelectablePartner {
   /** A munkalapé, nem a partneré: ezt küldi a felvitel. */
   customerId: string;
   name: string;
-  /** A munkalapszám első tagja. Kód nélküli partner ide nem kerül be, mert a
-   * nélküle megnyitott lapot nem lehetne lezárni. */
+  /** A partner rövidítése, a választóban megjelenítve. A számban már nincs
+   * benne, de kód nélküli partner ide nem kerül be: a nélküle megnyitott lapot
+   * nem lehetne lezárni. */
   partnerCode: string;
 }
 
@@ -140,6 +175,20 @@ export interface WorksheetLineDetail {
   detail: string | null;
   assetId: string | null;
   assetNumber: string | null;
+  /**
+   * AZ ÜGYFÉL SAJÁT ESZKÖZKÓDJA, ÉLŐ HIVATKOZÁSSAL.
+   *
+   * Nem másolat a soron: olvasáskor jön az eszközről, ugyanúgy, mint az
+   * `assetNumber`. A kód a funkciót azonosítja, nem a darabot, tehát nem
+   * változik; ahol viszont mégis (elgépelés javítása), ott a javítás
+   * visszamenőleg a már aláírt lapokon is megjelenik. Ez tudatos: ugyanaz a
+   * funkció mindenhol ugyanazzal a kóddal látszik.
+   *
+   * A verzió `unitName` mezője ezzel szemben MÁSOLAT saját oszlopban, mert az
+   * alegység neve változik. A határvonal a mező változékonysága, nem az, hogy
+   * a lap le van-e zárva.
+   */
+  inventoryNumber: string | null;
   quantity: string;
   unit: string;
   unitNet: string;
@@ -170,7 +219,7 @@ export interface WorksheetSignatureDetail {
 export interface WorksheetVersionSummary {
   id: string;
   version: number;
-  /** `FANK-BIO-2026-001/2`, illetve `null` amíg a lap piszkozat. */
+  /** `BIO-2026-001/2`, illetve `null` amíg a lap piszkozat. */
   label: string | null;
   status: WorksheetVersionStatus;
   changeReason: string | null;
@@ -275,6 +324,16 @@ export interface WorksheetContentInput {
 export interface CreateWorksheetInput extends WorksheetContentInput {
   customerId: string;
   departmentId: string;
+  /**
+   * A lap felelősei, MÁR A FELVITELKOR.
+   *
+   * Elhagyható: a kiosztás a részletek oldalon később is elvégezhető, és egy
+   * lapot attól még fel kell tudni vinni, hogy még nem dőlt el, ki megy ki.
+   * Ha viszont meg van adva, a felvitellel EGY tranzakcióban íródik: egy
+   * létrejött, de kiosztatlanul maradt lap némán elveszne a szerelő listájáról,
+   * és a felvivő azt hinné, kiosztotta.
+   */
+  assigneeIds?: string[];
 }
 
 export type UpdateWorksheetDraftInput = WorksheetContentInput;

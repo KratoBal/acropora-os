@@ -15,7 +15,6 @@
   },
   "scripts": {
     "build": "prisma generate && tsc -p tsconfig.json",
-    "lint": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:validate": "prisma validate",
     "prisma:validate": "prisma validate",

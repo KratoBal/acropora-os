@@ -1,4 +1,4 @@
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
   IsIn,
   IsInt,
@@ -32,6 +32,23 @@ export const ASSET_DOCUMENT_TYPES = [
   "OTHER",
 ] as const;
 
+/**
+ * A query sztring nem hordoz tömböt: egy érték sztringként, több érték tömbként
+ * vagy egyetlen vesszős sztringként érkezik. Mindhármat ugyanarra hozzuk.
+ *
+ * Az üres darabokat eldobjuk, de az ÜRES EREDMÉNYT `undefined`-re visszük, nem
+ * üres tömbre: egy `?departmentIds=` alak így „nem szűrünk" marad, és nem
+ * változik némán „egyetlen sort sem adunk vissza" jelentésűvé.
+ */
+export function toIdList(value: unknown): string[] | undefined {
+  const raw = Array.isArray(value) ? value : [value];
+  const ids = raw
+    .flatMap((item) => (typeof item === "string" ? item.split(",") : []))
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+  return ids.length > 0 ? ids : undefined;
+}
+
 export class AssetListQueryDto {
   @Type(() => Number) @IsInt() @Min(1) @IsOptional() page = 1;
   @Type(() => Number) @IsInt() @Min(10) @Max(100) @IsOptional() pageSize = 25;
@@ -51,6 +68,32 @@ export class AssetListQueryDto {
    * változatlan marad -- a webes nyilvántartásnak a teljesség az értéke.
    */
   @IsIn(["SERVICE_PARTNER"]) @IsOptional() ownerScope?: "SERVICE_PARTNER";
+  /**
+   * A PARTNER ALEGYSÉGE, ÉS A SZŰRÉS A RÉSZFÁRA SZÓL, nem csak a megnevezett
+   * csomópontra: a „Biodóm" alatti medencéken lógó eszközök is benne vannak.
+   * Az indok a `unit-subtree.ts` jegyzetében áll -- röviden: az eszköz bármelyik
+   * csomóponthoz köthető, tehát a pontos egyezés csendben hiányos listát adna.
+   */
+  @IsString() @IsOptional() departmentId?: string;
+  /**
+   * TÖBB ALEGYSÉG, ÉS A VÁLASZ A RÉSZFÁIK UNIÓJA.
+   *
+   * MIÉRT KELL A TÖBBES ALAK: a tulajdonos döntése szerint egy emberhez EGY VAGY
+   * TÖBB fa-csomópont rendelhető, és ő azt és mindent alatta lát. Egy csomópont
+   * tehát nem elég hatókörnek.
+   *
+   * KÜLÖN MEZŐ, ÉS NEM A `departmentId` KITERJESZTÉSE: a singularis név egy
+   * értéket ígér, és a két mező együtt is megadható -- a szűrő az összes megadott
+   * azonosító részfáinak az uniója. Így a meglévő hívások betűre változatlanok.
+   *
+   * Ismételt paraméterként (`?departmentIds=a&departmentIds=b`) és vesszővel
+   * elválasztva is megadható: a query sztringben nincs tömb-típus, és egy
+   * felület mindkét alakot természetesnek találja.
+   */
+  @Transform(({ value }) => toIdList(value))
+  @IsString({ each: true })
+  @IsOptional()
+  departmentIds?: string[];
   @IsString() @IsOptional() aquariumId?: string;
   @IsString() @IsOptional() parentAssetId?: string;
   @IsIn([...ASSET_STATUSES, "ALL"]) @IsOptional() status:
@@ -77,6 +120,9 @@ export class CreateAssetDto {
   @IsIn(ASSET_OWNER_TYPES) ownerType!: (typeof ASSET_OWNER_TYPES)[number];
   @IsString() @MinLength(1) ownerId!: string;
   @IsString() @IsOptional() customerAddressId?: string;
+  /** A partner ALEGYSÉGE (a partner képernyőn ez a neve). Csak szerviz partner
+   * tulajdonosnál értelmes; vevőnél a `customerAddressId` a pontosítás. */
+  @IsString() @IsOptional() departmentId?: string;
   @IsString() @IsOptional() aquariumId?: string;
   @IsString() @IsOptional() parentAssetId?: string;
   @IsString() @IsOptional() productVariantId?: string;
@@ -112,6 +158,8 @@ export class UpdateAssetDto {
   ownerType?: (typeof ASSET_OWNER_TYPES)[number];
   @IsString() @MinLength(1) @IsOptional() ownerId?: string;
   @IsString() @IsOptional() customerAddressId?: string | null;
+  /** `null` törli a kötést, a mező elhagyása érintetlenül hagyja. */
+  @IsString() @IsOptional() departmentId?: string | null;
   @IsString() @IsOptional() aquariumId?: string | null;
   @IsString() @IsOptional() parentAssetId?: string | null;
   @IsString() @IsOptional() productVariantId?: string | null;

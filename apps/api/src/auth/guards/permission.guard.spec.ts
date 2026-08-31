@@ -12,6 +12,8 @@ const warehouseUser: AuthenticatedUser = {
   email: "warehouse@acropora.local",
   displayName: "Raktári Tesztelő",
   role: "WAREHOUSE",
+  customerId: null,
+  supplierId: null,
 };
 
 function createContext(user?: AuthenticatedUser): ExecutionContext {

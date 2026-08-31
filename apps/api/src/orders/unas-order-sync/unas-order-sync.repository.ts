@@ -21,6 +21,7 @@ import {
   type InventoryMovementLineInput,
   type InventoryMovementSourceProcess,
 } from "../../common/inventory-movement-writer.js";
+import { isUnasMasteredVariant } from "../../products/catalog-authority.js";
 import { isPrismaErrorCode } from "../../common/prisma-error.util.js";
 import { sumOrderBookedOut } from "../../common/stock-ledger.util.js";
 import { retryOnSerializationConflict } from "../../common/transaction-retry.util.js";
@@ -641,7 +642,7 @@ async function buildLineInputs(
       stockTargets = packageComponents.flatMap((component) => {
         const resolved = componentBySku.get(component.sku);
         return resolved &&
-          resolved.product.catalogAuthority === "UNAS" &&
+          isUnasMasteredVariant(resolved) &&
           !resolved.product.unasSnapshot?.isPackageProduct
           ? [
               {
@@ -1699,7 +1700,7 @@ export class UnasOrderSyncRepository extends Repository {
           sku: variant.sku,
           unit: variant.unit,
           syncToUnas:
-            variant.product.catalogAuthority === "UNAS" &&
+            isUnasMasteredVariant(variant) &&
             !variant.product.unasSnapshot?.isPackageProduct,
         },
       ]),

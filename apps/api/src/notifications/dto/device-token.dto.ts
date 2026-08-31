@@ -39,3 +39,17 @@ export class RegisterDeviceTokenDto {
   @IsIn(PLATFORMS, { message: "Ismeretlen eszköz-típus." })
   platform?: (typeof PLATFORMS)[number];
 }
+
+/**
+ * A telefon kikapcsolja magarol az ertesitest.
+ *
+ * A token a TORZSBEN erkezik, nem az utvonalban, es ez nem stilus: a token
+ * hitelesito adat egy valaki telefonjahoz, az utvonal viszont bekerul a
+ * hozzaferesi naplokba. Ugyanaz a szabaly, amiert a vezerlo sem naplozza.
+ */
+export class ForgetDeviceTokenDto {
+  @IsString({ message: "Az eszköz-token megadása kötelező." })
+  @MinLength(1, { message: "Az eszköz-token megadása kötelező." })
+  @MaxLength(512, { message: "Az eszköz-token túl hosszú." })
+  token!: string;
+}

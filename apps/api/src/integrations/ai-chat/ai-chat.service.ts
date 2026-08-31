@@ -34,9 +34,18 @@ export interface AiChatReply {
   /** `anonymous` or `resolved`, straight from the AI service. */
   customerContextStatus: string | null;
   /**
-   * Always this sentence for now, and it is Balazs's own wording. The AI has
-   * no catalogue behind it, so the surface says so on every answer rather than
-   * leaving a blank field that reads as "nothing to report".
+   * What the answer actually had in front of it, in one sentence.
+   *
+   * IT USED TO BE THE SAME SENTENCE EVERY TIME - Balazs's own wording, said on
+   * every answer so that the field never read as "nothing to report". That
+   * sentence is still here and still said, word for word, but only on the
+   * branch where it is TRUE: when the AI had no catalogue.
+   *
+   * The change is not a rewrite, it is a condition put in front of an existing
+   * sentence. The moment the catalogue was wired into the AI service, an
+   * unconditional "no product context" became false for every answer built on
+   * product data - and it would have gone on being displayed, confidently, on
+   * the one screen where a human decides whether an answer was good.
    */
   productContext: string;
   /** Measured here, around the whole call, not reported by the AI. */
@@ -50,6 +59,59 @@ export interface AiChatReply {
 
 export const PRODUCT_CONTEXT_NOTE =
   "Nincs termékkontextus, általános modellismeret alapján adott válasz.";
+
+/**
+ * The AI's own report about the search behind this answer.
+ *
+ * Read defensively: the shape belongs to the AI service, and a field that
+ * arrives in an unexpected form must not turn a served answer into an error.
+ * Anything unreadable falls back to the sentence above, which is the honest
+ * thing to say when we cannot tell what the model saw.
+ */
+interface ProductContextReport {
+  state?: unknown;
+  hitCount?: unknown;
+  descriptionSources?: unknown;
+}
+
+/**
+ * One sentence for the surface, from what the AI reported.
+ *
+ * THE FOUR STATES STAY FOUR. "We looked and found nothing" is a claim about
+ * our range, "the search could not run" is a claim about our systems, and the
+ * AI service keeps them apart on purpose. Collapsing them here would undo that
+ * at the last step - on the one screen where a human reads it.
+ */
+export function productContextSentence(report: unknown): string {
+  const seen = (
+    typeof report === "object" && report !== null ? report : {}
+  ) as ProductContextReport;
+
+  if (seen.state === "hits") {
+    const count = typeof seen.hitCount === "number" ? seen.hitCount : null;
+    const sources = Array.isArray(seen.descriptionSources)
+      ? seen.descriptionSources.filter(
+          (source): source is string => typeof source === "string",
+        )
+      : [];
+
+    const products = count === null ? "termékadat" : `${count} termék adata`;
+    const from =
+      sources.length > 0 ? ` Leírás forrása: ${sources.join(", ")}.` : "";
+
+    return `A válasz ${products} alapján készült, a katalógusunkból.${from}`;
+  }
+
+  if (seen.state === "empty") {
+    return "A katalógusban rákerestünk, és nem találtunk rá terméket. Ez a keresés eredménye, nem üzemzavar.";
+  }
+
+  if (seen.state === "unavailable") {
+    return "A termékkeresés nem futott le ehhez a válaszhoz (üzemzavar), tehát a modell nem látta a katalógust.";
+  }
+
+  return PRODUCT_CONTEXT_NOTE;
+}
 
 interface FetchLike {
   (input: string, init?: RequestInit): Promise<Response>;
@@ -135,7 +197,7 @@ export class AiChatService {
         typeof body.customerContextStatus === "string"
           ? body.customerContextStatus
           : null,
-      productContext: PRODUCT_CONTEXT_NOTE,
+      productContext: productContextSentence(body.productContext),
       elapsedMs,
       errorCode: null,
       providerWaitedMs: null,
