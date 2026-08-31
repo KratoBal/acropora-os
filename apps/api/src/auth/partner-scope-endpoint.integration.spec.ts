@@ -812,6 +812,21 @@ describe(
        * hatokorrel MIND A KETTO reszfajat behozza. Enelkul a partner-kor akkor is
        * zold lenne, ha a tobb-erteku alak egyaltalan nem mukodne -- es akkor nem
        * a hatokort mernenk, hanem egy elromlott parametert.
+       *
+       * AMIT EZ A TESZT NEM VED, ES EZT KI KELL IRNI, KULONBEN FEL IGAZSAG LESZ
+       * BELOLE (murena masodik olvasata, 2026-08-31, a bejaras ismereteben):
+       * a fenti ket alegyseg LAPOS GYOKER -- nincs szuloje es nincs gyereke.
+       * Emiatt ez az allitas AKKOR IS ZOLD MARADNA, ha valaki a reszfa-bejarast
+       * visszaegyszerusitene EGY partner soraira: a rontott alak a GYOKERET
+       * akkor is visszaadja, ha a masik partner sorai be sem toltodtek, tehat az
+       * azonosito bekerul az `IN` listaba es az eszkoz illeszkedik.
+       *
+       * A kulonbseg CSAK melyebb fanal latszik, es azt MAS suite meri
+       * (`service-assets/unit-subtree.integration.spec.ts`, harom szintu ag plusz
+       * masodik partner; ott ugyanaz a rontas harom allitast dont meg). A ketto
+       * tehat MAST ved: ez itt a HATOKORT a legtagabb szuronel, az ott a
+       * BEJARAST tobb partneren at. Aki erre a tesztre hivatkozva mondana, hogy
+       * "a tobb-erteku alak le van fedve", tul sokat allitana.
        */
       it("két partner alegységét kérve is CSAK a sajátja jön be", async () => {
         const both = [unitOfSupplierA, unitOfSupplierB];
