@@ -102,6 +102,33 @@ export function describeFillState(state: FillState): string {
     `${state.total} adatlap, ebből ${state.groupable} csoportosítható géppel.`,
   ];
 
+  /**
+   * A MÉRŐ KIMONDJA MAGÁRÓL, MIKOR NEM TUD ELBUKNI.
+   *
+   * Egy nulla eredmény kétféle: vagy tényleg rendben van minden, vagy a mérés
+   * nem látott semmit. A kettő a kimeneten EGYFORMÁN nézne ki, és a második
+   * esetben a zöld sor arról szólna, hogy nincs mit mérni — nem arról, hogy jó.
+   *
+   * Ezért az üres eset SAJÁT mondatot kap, és a tiszta eset is megnevezi, hol
+   * áll a bizonyíték arra, hogy ez a mérő egyáltalán KÉPES találni: nem ebben a
+   * futásban, hanem a specjében, ahol szándékos hibák pirosra viszik.
+   */
+  if (state.total === 0)
+    lines.push(
+      `EGYETLEN ADATLAP SEM VOLT: ez a futás a kitöltöttségről SEMMIT nem ` +
+        `mond. Nem azt jelenti, hogy rendben van — azt, hogy nincs mit mérni.`,
+    );
+  else if (
+    state.missingGenus.length === 0 &&
+    state.inconsistentGenus.length === 0
+  )
+    lines.push(
+      `Ebben a futásban nincs találat. Hogy ez a mérő KÉPES találni, azt nem ez ` +
+        `a futás bizonyítja, hanem a datasheet-fill-state.spec.ts: ott ` +
+        `szándékos hibák (levágott írásmód, hiányzónak vett genus) pirosra ` +
+        `viszik. Egy nulla önmagában a kérdés tulajdonsága is lehet.`,
+    );
+
   if (state.missingGenus.length > 0)
     lines.push(
       `${state.missingGenus.length} adatlapon NINCS genus, ezek csoportosítása ` +

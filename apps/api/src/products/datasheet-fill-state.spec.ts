@@ -133,3 +133,34 @@ describe("the fill-state command", () => {
     assert.match(lines.join(""), /nem \nx?tudjuk|nem tudjuk/);
   });
 });
+
+describe("what the measure says about itself", () => {
+  /**
+   * AZ ÜRES ESET NEM „RENDBEN VAN". Egy nulla adatlapos futás a kitöltöttségről
+   * semmit nem mond, és ha ugyanúgy néz ki, mint egy tiszta eredmény, akkor a
+   * zöld sor arról szól, hogy nincs mit mérni.
+   */
+  it("says out loud that an empty run proves nothing", () => {
+    const text = describeFillState(measureFillState([]));
+    assert.match(text, /EGYETLEN ADATLAP SEM VOLT/);
+    assert.match(text, /nincs mit mérni/);
+  });
+
+  /**
+   * ÉS A TISZTA ESET MEGNEVEZI, HOL A BIZONYÍTÉK. Enélkül a nulla találat úgy
+   * nézne ki, mintha ez a futás igazolta volna a mérőt — pedig azt a spec
+   * igazolja, ahol szándékos hibák pirosra viszik.
+   */
+  it("names where the evidence lives when it finds nothing", () => {
+    const text = describeFillState(
+      measureFillState([sheet("a", "Acropora", "millepora")]),
+    );
+    assert.match(text, /nem ez a futás bizonyítja/);
+    assert.match(text, /spec/);
+  });
+
+  it("does not add the self-statement when it actually found something", () => {
+    const text = describeFillState(measureFillState([sheet("a", null, null)]));
+    assert.doesNotMatch(text, /nem ez a futás bizonyítja/);
+  });
+});
