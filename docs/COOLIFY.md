@@ -103,8 +103,20 @@ no value at all: `null` means "cannot be verified", while a wrong hash means
 "verified" — against the wrong release. Only a value the platform substitutes
 per deploy is acceptable.
 
-**Scope:** this is configured on **staging**. Production deploys are a
-separate stack and are not covered by this section.
+**Scope:** this is configured on **staging**. Production deploys are a separate
+stack, and as of **2026-08-31 it is not configured there either**: production
+`/health` answers `"commit": null`, which is exactly what an unset variable looks
+like. Nothing in this repository can close that -- the Dockerfile accepts the
+build arg, CI passes it and verifies it is baked in (checkpoint 8), and the code
+reads the runtime variable. The one missing step is the variable on the
+production application.
+
+**And the test for it is NOT that the field stops being null.** A non-null value
+only proves that _something_ was set. The measure is that the returned hash
+**equals the commit the running image was built from** -- otherwise a release can
+be "verified" against the wrong code. From inside the repository that equality
+cannot be checked for production at all; it needs the deploy's own commit, which
+lives in Coolify.
 
 ---
 
