@@ -40,8 +40,31 @@ import { AuthUserResolver } from "./auth-user-resolver.js";
  * valaszig egyben all, es nem csak a kozepetol.
  *
  * A MERCE, AMIRE MEGIRTUK: a suite akkor er valamit, ha ELBUKIK attol, hogy a
- * hatokor-szuro kikerul a tarolo retegbol. Kalibralva 2026-08-31, a szamok a
- * commit uzenetben allnak.
+ * hatokor-szuro kikerul a tarolo retegbol. Kalibralva 2026-08-31; a SZAMOK a
+ * commit uzenetekben allnak, nem itt, mert egy szam a suite meretehez kotott es
+ * a kovetkezo teszttel elavul. Ami ide valo, az a szabaly, ami nem avul el:
+ *
+ * EGY NULLA EREDMENYU KALIBRACIO MELLE ODA KELL IRNI, MELYIK OLVASAT.
+ * Jeloletlenul ugyanugy nez ki egy vak orzo es egy helyes nulla, es a kovetkezo
+ * olvaso vagy folosleges munkat vegez, vagy elmegy mellette. Negy olvasat van,
+ * es mas a teendo:
+ *
+ *   1. A PROBA nem erte el azt, amit a teszt figyel -> a probat kell atirni.
+ *   2. A TESZT vak arra, amit elrontottunk        -> a tesztet kell atirni.
+ *   3. A rontas olyat vett el, amit SZANDEKOSAN nem allitunk (peldaul a `scan`
+ *      tulajdonos-ellenorzese, amit a spec 4.1 kifejezetten elvet)
+ *                                                 -> a kodon nincs teendo, de
+ *      a nullat VARTKENT kell jelolni.
+ *   4. A rontas NEM VALTOZTATOTT SEMMIT: a ket alak szemantikailag azonos.
+ *      Ilyen az a kalibracio, amelyik az alegyseg-szurot a felhasznaloi
+ *      objektumbol a jogosultsagi `AND` tomb melle teszi -- a Prisma a tomb
+ *      elemeit osszeANDeli, tehat a lekerdezes beture ugyanaz. A sor ott
+ *      FELREVEZETO, nem hibas. -> nincs teendo, es NEM SZABAD tesztet irni ra:
+ *      az stilust merne, nem viselkedest.
+ *
+ * A 3. es a 4. kulon all, mert konnyu osszemosni oket: a harmadiknal a
+ * VISELKEDES megvaltozik, csak nem allitunk rola semmit; a negyediknel a
+ * viselkedes VALTOZATLAN.
  *
  * MELYIK ELLENORZES MIT LAT -- ez a bekezdes azert all itt, hogy a kovetkezo
  * olvaso NE nezze duplikacionak a kettot, es ne vegye ki az egyiket. Merve,
