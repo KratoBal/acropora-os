@@ -48,10 +48,18 @@ export class ServiceAssetsController {
     return this.service.owners(query);
   }
 
+  /**
+   * A TULAJDONOST SZANDEKOSAN NEM ELLENORIZZUK (spec 4.1): a token maga a
+   * kulcs. A hatokor MEGIS atmegy, mert a dokumentum-tipus szabalya nem a
+   * tulajdonosrol szol -- lasd a tarolo `detailByQrToken` jegyzetet.
+   */
   @Get("scan/:qrToken")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  scan(@Param("qrToken") qrToken: string) {
-    return this.service.scan(qrToken);
+  scan(
+    @Param("qrToken") qrToken: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.scan(qrToken, partnerScopeOf(user));
   }
 
   @Get(":id/qr")

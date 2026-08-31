@@ -37,6 +37,42 @@ import {
   type AssetSummaryRow,
 } from "./service-assets.types.js";
 
+/**
+ * LATHATJA-E A KERO EZT AZ ESEMENYT.
+ *
+ * A dokumentum-esemenyek payloadja NEVEN NEVEZI a dokumentumot
+ * (`documentType`, `fileName`), tehat az esemenynaplo ugyanazt hordozza, amit a
+ * dokumentum-lista mar nem ad ki. Egy korlat, ami csak az utak egy reszen all,
+ * nem korlat: a szamla letezese, a neve es a feltoltes ideje itt ugyanugy
+ * kimenne.
+ *
+ * A NEM FELISMERHETO PAYLOAD PARTNERNEL REJTVE MARAD, es ez dontes. Egy regi
+ * vagy hianyos esemenysor eseten nem tudjuk, MELYIK tipusrol szol; az
+ * atengedese pont annal a sornal adna hozzaferest, amirol a legkevesebbet
+ * tudjuk. Belsos keronel minden latszik, tehat a naplo teljessege nem vesz el.
+ */
+export function scopeMaySeeAssetEvent(
+  event: { type: string; payload: unknown },
+  scope: PartnerScope,
+): boolean {
+  if (scope.kind === "internal") return true;
+  if (event.type !== "DOCUMENT_UPLOADED" && event.type !== "DOCUMENT_DELETED")
+    return true;
+  const payload = event.payload;
+  const documentType =
+    payload && typeof payload === "object" && !Array.isArray(payload)
+      ? (payload as Record<string, unknown>).documentType
+      : undefined;
+  if (
+    documentType !== "INVOICE" &&
+    documentType !== "WARRANTY" &&
+    documentType !== "MANUAL" &&
+    documentType !== "OTHER"
+  )
+    return false;
+  return scopeMaySeeDocumentType(documentType, scope);
+}
+
 function optionalText(value: string | null | undefined) {
   if (value === undefined) return undefined;
   if (value === null) return null;
@@ -315,10 +351,23 @@ export class ServiceAssetsRepository extends Repository {
       row,
       await this.ancestors(row.parentAssetId),
       await this.unitPaths([row]),
+      scope,
     );
   }
 
-  async detailByQrToken(qrToken: string): Promise<AssetDetail | null> {
+  /**
+   * A TULAJDONOS KERDESE ITT SZANDEKOSAN NINCS ELLENORIZVE (spec 4.1): a
+   * `qrToken` 128 bites veletlen uuid, tehat a birtoklasa maga a felhatalmazas
+   * az ESZKOZRE. A DOKUMENTUM-TIPUS kerdese viszont ettol fuggetlen, es ezert
+   * kell ide is a hatokor: a partner a sajat eszkoze tokenjet jogosan ismeri,
+   * tehat enelkul ezen az uton hozzajutna ahhoz a szamlahoz, amit az adatlapon
+   * es a letoltesen mar nem kap meg. Egy korlat, ami csak az utak egy reszen
+   * all, nem korlat.
+   */
+  async detailByQrToken(
+    qrToken: string,
+    scope: PartnerScope,
+  ): Promise<AssetDetail | null> {
     const row = await prisma.asset.findUnique({
       where: { qrToken },
       include: assetDetailInclude,
@@ -328,6 +377,7 @@ export class ServiceAssetsRepository extends Repository {
           row,
           await this.ancestors(row.parentAssetId),
           await this.unitPaths([row]),
+          scope,
         )
       : null;
   }
@@ -1018,10 +1068,24 @@ export class ServiceAssetsRepository extends Repository {
     };
   }
 
+  /**
+   * A `scope` KOTELEZO, es ez a mechanizmus maga. Az adatlap BEHUZZA a
+   * dokumentumokat, tehat itt dol el, mit lat beloluk a kero -- egy opcionalis
+   * parameter minden elfelejtett hivasi helyen "belsos"-nek latszana, vagyis a
+   * felejtes TAGITANA a hozzaferest. Kotelezokent a fordito sorolja fel a
+   * hivasi helyeket.
+   *
+   * A TULAJDONOS-EGYEZTETES ONMAGABAN NEM ELEG, es a hianya nem elmeleti volt:
+   * a szamla-szabaly 2026-08-31-ig CSAK a letoltesi uton allt (murena masodik
+   * olvasata nevezte meg), tehat a partner a sajat eszkozenek adatlapjan
+   * megkapta a szamla letezeset, a fajlnevet, a meretet, a lenyomatot es a
+   * feltolto kollega nevet, mikozben a letoltes ugyanarra 404-et adott.
+   */
   private toDetail(
     row: AssetDetailRow,
     ancestors: AssetHierarchyItem[],
     paths: Map<string, string[]>,
+    scope: PartnerScope,
   ): AssetDetail {
     return {
       ...this.toListItem(row, paths),
@@ -1043,21 +1107,23 @@ export class ServiceAssetsRepository extends Repository {
         : undefined,
       ancestors,
       children: row.childAssets.map(hierarchyItem),
-      events: row.events.map((event): AssetEventSummary => ({
-        id: event.id,
-        type: event.type,
-        actor: event.actorUser
-          ? {
-              id: event.actorUser.id,
-              displayName: event.actorUser.displayName,
-            }
-          : undefined,
-        payload: event.payload as Record<string, unknown>,
-        occurredAt: event.occurredAt.toISOString(),
-      })),
-      documents: row.documents.map((document) =>
-        this.toDocumentSummary(document),
-      ),
+      events: row.events
+        .filter((event) => scopeMaySeeAssetEvent(event, scope))
+        .map((event): AssetEventSummary => ({
+          id: event.id,
+          type: event.type,
+          actor: event.actorUser
+            ? {
+                id: event.actorUser.id,
+                displayName: event.actorUser.displayName,
+              }
+            : undefined,
+          payload: event.payload as Record<string, unknown>,
+          occurredAt: event.occurredAt.toISOString(),
+        })),
+      documents: row.documents
+        .filter((document) => scopeMaySeeDocumentType(document.type, scope))
+        .map((document) => this.toDocumentSummary(document)),
       createdAt: row.createdAt.toISOString(),
     };
   }

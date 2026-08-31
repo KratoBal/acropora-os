@@ -53,8 +53,8 @@ export class ServiceAssetsService {
     return asset;
   }
 
-  async scan(qrToken: string) {
-    const asset = await this.repository.detailByQrToken(qrToken);
+  async scan(qrToken: string, scope: PartnerScope) {
+    const asset = await this.repository.detailByQrToken(qrToken, scope);
     if (!asset)
       throw new NotFoundException(
         "A QR-kódhoz nem tartozik érvényes eszközazonosító.",

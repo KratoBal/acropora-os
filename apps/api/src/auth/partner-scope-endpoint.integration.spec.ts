@@ -6,7 +6,10 @@ import { prisma } from "@acropora/database";
 import type { AuthenticatedUser } from "@acropora/types";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
-import { AssetListQueryDto } from "../service-assets/dto/asset.dto.js";
+import {
+  AssetListQueryDto,
+  UploadAssetDocumentDto,
+} from "../service-assets/dto/asset.dto.js";
 import { ServiceAssetsController } from "../service-assets/service-assets.controller.js";
 import { ServiceAssetsRepository } from "../service-assets/service-assets.repository.js";
 import { ServiceAssetsService } from "../service-assets/service-assets.service.js";
@@ -56,6 +59,19 @@ const TEST_CUSTOMER_PREFIX = "PS-INT-";
 const TEST_SUPPLIER_PREFIX = "PS-INT-SUP-";
 const TEST_ASSET_PREFIX = "PS-INT-ASSET-";
 
+/** A feltoltes valodi PDF-et var: a szolgaltatas a `%PDF-` fejlecet ellenorzi. */
+function pdf(fileName: string): Express.Multer.File {
+  const buffer = Buffer.from("%PDF-1.4 teszt");
+  return {
+    fieldname: "file",
+    originalname: fileName,
+    encoding: "7bit",
+    mimetype: "application/pdf",
+    size: buffer.length,
+    buffer,
+  } as Express.Multer.File;
+}
+
 describe(
   "Partner-hatokoru vegpontok integracio",
   { skip: gate.mode === "skip" },
@@ -84,9 +100,13 @@ describe(
     let assetA: string;
     let assetB: string;
     let assetSupplierA: string;
+    let qrTokenA: string;
     let qrTokenB: string;
     let unitOfSupplierA: string;
     let unitOfSupplierB: string;
+    let invoiceOfA: string;
+    let warrantyOfA: string;
+    let invoiceFileNameOfA: string;
 
     /** A kérő ugyanúgy áll elő, ahogy egy valódi munkamenetben: a User sorból. */
     let asCustomerA: AuthenticatedUser;
@@ -284,7 +304,40 @@ describe(
       assetA = aA.id;
       assetB = aB.id;
       assetSupplierA = aSup.id;
+      qrTokenA = aA.qrToken;
       qrTokenB = aB.qrToken;
+
+      /**
+       * KET DOKUMENTUM A SAJAT ESZKOZON, ES A TIPUSUK A LENYEG. A tulajdonos
+       * egyeztetese ONMAGABAN nem eleg: Balazs dontese szerint a partner a
+       * SAJAT eszkozen sem lathat szamlat. A garancia a kontroll -- enelkul a
+       * "nem latod a szamlat" allitas ugy is igaz lenne, ha egyetlen dokumentum
+       * sem menne ki, es a szures tul szeles voltat semmi nem mutatna.
+       *
+       * A FELTOLTES A VALODI VEGPONTON MEGY, nem `prisma.assetDocument.create`
+       * hivason. Nem kenyelmi kulonbseg: az eles ut ESEMENYT is ir
+       * (`DOCUMENT_UPLOADED`), aminek a payloadjaban ott all a fajlnev es a
+       * tipus -- es az esemenynaplo szinten az adatlapon megy ki. Egy kezzel
+       * beszurt sor mellett ez a masodik hordozo nem letezne, tehat a teszt
+       * pont azt nem latna, amit vedeni akar.
+       */
+      invoiceFileNameOfA = `${shared}-szamla.pdf`;
+      const [invoice, warranty] = await Promise.all([
+        assets.uploadDocument(
+          assetA,
+          Object.assign(new UploadAssetDocumentDto(), { type: "INVOICE" }),
+          pdf(invoiceFileNameOfA),
+          asInternal,
+        ),
+        assets.uploadDocument(
+          assetA,
+          Object.assign(new UploadAssetDocumentDto(), { type: "WARRANTY" }),
+          pdf(`${shared}-garancia.pdf`),
+          asInternal,
+        ),
+      ]);
+      invoiceOfA = invoice.id;
+      warrantyOfA = warranty.id;
     });
 
     after(async () => {
@@ -501,6 +554,121 @@ describe(
           NotFoundException,
         );
         assert.equal((await assets.detail(assetA, asCustomerA)).id, assetA);
+      });
+    });
+
+    /**
+     * A DOKUMENTUM-TIPUS SZABALYA MINDKET UTON, NEM CSAK A LETOLTESIN.
+     *
+     * Murena masodik olvasata (2026-08-31) nevezte meg a rest, es a merese
+     * szerkezeti volt: a `scopeMaySeeDocumentType` EGYETLEN eles hivasi helyen
+     * allt, a letoltesben. Az adatlap viszont behuzza a dokumentumokat, es
+     * valtozatlanul kepezi le oket -- vagyis a partner megkapta a SZAMLA
+     * letezeset, a fajlnevet, a meretet, a lenyomatot es a feltolto KOLLEGA
+     * nevet, mikozben a letoltes ugyanarra 404-et adott.
+     *
+     * UGYANAZ AZ ALAK, AMIT A SPEC 4.1 MAR LEIR eggyel kintebb: egy elem-szintu
+     * korlat hatastalan, ha egy MASIK valasz hordozza azt, amit vedeni akart.
+     * Ott a lista vitte a `qrToken`-t, itt az adatlap viszi a szamla adatait.
+     */
+    describe("A számla a partner elől mindkét úton rejtve marad", () => {
+      /** A kontroll: a belsős kérőnél MINDKÉT dokumentum kimegy. */
+      it("kontroll: a belsős kérő a számlát is látja az adatlapon", async () => {
+        const detail = await assets.detail(assetA, asInternal);
+        assert.deepEqual(
+          detail.documents.map((document) => document.id).sort(),
+          [invoiceOfA, warrantyOfA].sort(),
+        );
+      });
+
+      it("a partner a saját eszközén NEM kapja meg a számlát, a garanciát igen", async () => {
+        const detail = await assets.detail(assetA, asCustomerA);
+        assert.deepEqual(
+          detail.documents.map((document) => document.id),
+          [warrantyOfA],
+        );
+      });
+
+      /**
+       * A SOR AZONOSITOJA NEM AZ EGESZ VALASZ. A szivargas itt nem kulon
+       * sorkent all, hanem metaadatkent (fajlnev, lenyomat, feltolto neve),
+       * ezert a teljes valaszban keresunk.
+       */
+      it("a számla fájlneve SEHOL nem jelenik meg a partner válaszában", async () => {
+        const detail = await assets.detail(assetA, asCustomerA);
+        assert.ok(
+          invoiceFileNameOfA.length > 0,
+          "a mércéhez kell egy valódi fájlnév",
+        );
+        assert.equal(
+          JSON.stringify(detail).includes(invoiceFileNameOfA),
+          false,
+        );
+      });
+
+      /**
+       * A `scan` VEGPONT UGYANEZT A VALASZT ADJA VISSZA, es a spec 4.1 szerint
+       * SZANDEKOSAN nem ellenoriz tulajdonost: a token maga a kulcs. A
+       * TULAJDONOS kerdese ettol el van dontve, a DOKUMENTUM-TIPUSE viszont nem
+       * -- a partner a sajat eszkoze tokenjet jogosan ismeri, tehat ezen az uton
+       * ugyanugy hozzajutna a szamlahoz.
+       */
+      it("a scan végpont sem adja ki a számlát partner-hatókörű kérőnek", async () => {
+        const scanned = await assets.scan(qrTokenA, asCustomerA);
+        assert.deepEqual(
+          scanned.documents.map((document) => document.id),
+          [warrantyOfA],
+        );
+
+        const internalScan = await assets.scan(qrTokenA, asInternal);
+        assert.deepEqual(
+          internalScan.documents.map((document) => document.id).sort(),
+          [invoiceOfA, warrantyOfA].sort(),
+        );
+      });
+
+      /**
+       * A NEGYEDIK HORDOZO: AZ ESEMENYNAPLO. A feltoltes `DOCUMENT_UPLOADED`
+       * esemenyt ir, aminek a payloadjaban ott all a `documentType` es a
+       * `fileName`. A dokumentum-lista szurese utan is ez MARADT az egyetlen
+       * hely, ahol a szamla neve kiment a partnerhez -- merve, mielott a szures
+       * bekerult volna.
+       *
+       * A GARANCIA ESEMENYE A KONTROLL: a szures nem az esemenynaplot veszi el,
+       * csak azt a sort, ami olyan dokumentumrol szol, amit a kero ugysem lat.
+       */
+      it("a számla feltöltési eseménye sem megy ki, a garanciáé igen", async () => {
+        const forPartner = await assets.detail(assetA, asCustomerA);
+        const documentEvents = forPartner.events.filter(
+          (event) => event.type === "DOCUMENT_UPLOADED",
+        );
+        assert.deepEqual(
+          documentEvents.map((event) => event.payload.documentType),
+          ["WARRANTY"],
+        );
+
+        const forInternal = await assets.detail(assetA, asInternal);
+        assert.deepEqual(
+          forInternal.events
+            .filter((event) => event.type === "DOCUMENT_UPLOADED")
+            .map((event) => event.payload.documentType)
+            .sort(),
+          ["INVOICE", "WARRANTY"],
+        );
+      });
+
+      /** A letoltesi ut, ami eddig is helyes volt: a merce mindket iranyban all. */
+      it("a letöltés a garanciát adja, a számlára 404-et", async () => {
+        await assert.rejects(
+          () => assets.downloadDocument(assetA, invoiceOfA, asCustomerA),
+          NotFoundException,
+        );
+        const file = await assets.downloadDocument(
+          assetA,
+          warrantyOfA,
+          asCustomerA,
+        );
+        assert.ok(file);
       });
     });
 
