@@ -57,6 +57,51 @@ export function chooseDescription(
 }
 
 /**
+ * WHERE THE PARAMETERS COME FROM, AND WHY AN EMPTY BAND IS AN ANSWER.
+ *
+ * The parameters band was built from `unasSnapshot.parameters` for every
+ * product, with no branch on ownership - three lines below a description that
+ * has had that branch all along. For a product we have taken over, the snapshot
+ * is FROZEN: the import no longer writes it, and what it holds is whatever the
+ * shop said on the day we took the product. Feeding that into search as current
+ * truth is the wrong direction, and it is the case the brief names.
+ *
+ * ACROPORA-owned therefore reads NOTHING here, and that is deliberate: there is
+ * no Acropora-side parameter source to read. Measured 2026-08-31: 84 models in
+ * the schema, none named Attribute or Parameter; `ProductExtension` holds
+ * purchasing and stock data, not catalogue parameters; `ProductDatasheet` is
+ * structured but has no write path, so it is empty everywhere.
+ *
+ * AND THE EMPTY MUST NOT BE SILENT, which is the whole point of the source. An
+ * unmarked empty band says "this product has no parameters". The source says
+ * "we have not built the place they would come from yet". A reader acts
+ * differently on those two, and only one of them is true.
+ */
+export type AiParameterSource = "unas" | "none";
+
+export interface ChosenParameters {
+  source: AiParameterSource;
+  /** The raw payload for a caller that shows it; null when there is no source. */
+  value: unknown;
+  /** The searchable text; empty when there is no source. */
+  words: string;
+}
+
+export function chooseParameters(
+  product: Pick<DescribableProduct, "catalogAuthority"> & {
+    unasSnapshot: { parameters?: unknown } | null;
+  },
+): ChosenParameters {
+  if (product.catalogAuthority === "ACROPORA") {
+    return { source: "none", value: null, words: "" };
+  }
+
+  const value = product.unasSnapshot?.parameters ?? null;
+
+  return { source: "unas", value, words: parameterWords(value) };
+}
+
+/**
  * The recipe that builds one search document.
  *
  * It travels with the row in `documentVersion`, so a rebuild in progress is
@@ -178,6 +223,7 @@ export function collectArticleNumbers(
 
 export function buildDocument(product: DocumentSourceProduct): BuiltDocument {
   const chosen = chooseDescription(product);
+  const parameters = chooseParameters(product);
 
   return {
     productId: product.id,
@@ -191,7 +237,7 @@ export function buildDocument(product: DocumentSourceProduct): BuiltDocument {
       .join(" "),
     descriptionShort: chosen.short ?? "",
     descriptionLong: chosen.long ?? "",
-    parameters: parameterWords(product.unasSnapshot?.parameters),
+    parameters: parameters.words,
     /**
      * The row survives a product going away; only this flag drops.
      *

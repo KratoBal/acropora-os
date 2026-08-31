@@ -8,7 +8,10 @@ import {
   AiProductSearchRepository,
   type ProductSearchRow,
 } from "./ai-product-search.repository.js";
-import { chooseDescription } from "./ai-product-search.document.js";
+import {
+  chooseDescription,
+  chooseParameters,
+} from "./ai-product-search.document.js";
 import type {
   AiProductSearchHit,
   AiProductSearchResult,
@@ -61,6 +64,7 @@ export class AiProductSearchService {
   private project(row: ProductSearchRow): AiProductSearchHit {
     const snapshot = row.unasSnapshot;
     const chosen = chooseDescription(row);
+    const parameters = chooseParameters(row);
     const net = toNumber(snapshot?.netPrice);
     const gross = toNumber(snapshot?.grossPrice);
     const reported = toNumber(snapshot?.reportedStock);
@@ -88,7 +92,16 @@ export class AiProductSearchService {
        * boltbol jott, es mast, ha valaki itt szerkesztette.
        */
       descriptionSource: chosen.source,
-      parameters: snapshot?.parameters ?? null,
+      parameters: parameters.value,
+      /**
+       * HONNAN JONNEK A PARAMETEREK -- ES MIERT NEM ELEG, HOGY URESEK.
+       *
+       * ACROPORA-ra atvett terméknel a valasz "none": nem azert nincs
+       * parameter, mert a termeknek nincsenek, hanem mert a sajat oldalon MA
+       * NINCS forras, amibol epulhetne. A ket allitasbol mas kovetkezik, es
+       * jeloles nelkul a hivo a rosszabbikat hiszi el a termekrol.
+       */
+      parametersSource: parameters.source,
       variants: row.variants.map((variant) => ({
         sku: variant.sku,
         name: variant.name,
