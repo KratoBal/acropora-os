@@ -69,6 +69,7 @@ const reefSalt: ProductListResponse["items"][number] = {
     backorderAllowed: false,
   },
   grossPrice: "12700",
+  priceSource: "unas" as const,
   saleGrossPrice: null,
   stockOnHand: "6",
 };

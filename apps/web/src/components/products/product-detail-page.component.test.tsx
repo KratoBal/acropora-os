@@ -51,6 +51,7 @@ const detail: ProductDetail = {
   thumbnail: null,
   unasListing: null,
   grossPrice: null,
+  priceSource: "unas" as const,
   saleGrossPrice: null,
   stockOnHand: null,
   description: "Tengeri só",

@@ -115,10 +115,29 @@ export interface ProductListItem {
   primarySku: string | null;
   thumbnail: ProductImageSummary | null;
   unasListing: ProductChannelListingSummary | null;
-  /** UNAS-mirrored list gross price; null for purely local (non-webshop) products. */
+  /**
+   * UNAS-mirrored list gross price. Null for a purely local product, which has
+   * no snapshot at all.
+   *
+   * IT IS ALSO NON-NULL FOR A PRODUCT WE HAVE TAKEN OVER, and there the mirror
+   * is FROZEN: the import stopped writing it at the takeover. Read `priceSource`
+   * before quoting this number.
+   */
   grossPrice: string | null;
   /** UNAS-mirrored sale gross price; null when there's no active discount. */
   saleGrossPrice: string | null;
+  /**
+   * WHERE THE TWO PRICES ABOVE CAME FROM.
+   *
+   * "unas" -- the mirror, still maintained by the import.
+   * "unas_frozen" -- the mirror, frozen since the authority takeover. The number
+   *   is the last one the shop had, not one of ours.
+   * "none" -- no snapshot at all, so both prices are null.
+   *
+   * The detail screen names the same value `unasMirror.grossPrice`; the list has
+   * no such name, so it carries the source instead.
+   */
+  priceSource: "unas" | "unas_frozen" | "none";
   /** Summed StockItem.onHand across warehouses and all active variants; null
    *  means no StockItem row exists yet (never counted/sold), which is
    *  distinct from a confirmed 0 in stock - see the stock-reconciliation
