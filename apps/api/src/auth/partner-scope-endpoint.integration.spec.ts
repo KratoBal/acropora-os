@@ -794,6 +794,53 @@ describe(
       });
 
       /**
+       * A LEGTAGABB FELHASZNALOI SZURO, ES EZ MAS ALLITAS, MINT A TOBBI.
+       *
+       * A tobb-erteku alak (`departmentIds`, #278 ota) TAGITJA a szurot: ha a
+       * kero KET azonositot ad meg, es az egyik IDEGEN partnere, akkor az idegen
+       * reszfa azonositoi is BEKERULNEK az `IN` listaba. Merve murena oldalan: az
+       * idegen azonosito NEM esik ki "nem letezo"-kent -- a bejaras megtalalja,
+       * betolti a masik partner alegyseg-sorait is, es a TELJES idegen reszfat
+       * beteszi.
+       *
+       * Vagyis ez a teszt nem azt meri, hogy a bovites nem rontott el semmit,
+       * hanem hogy a jogosultsagi feltetel AKKOR IS hat, amikor a felhasznaloi
+       * szuro SZANDEKOSAN tagabb a hatokornel. Ez a legrosszabb eset, amit egy
+       * kero eloallithat, es epp ezert ezt kell merni.
+       *
+       * A BELSOS KONTROLL AZ ALLITAS MASIK FELE: ugyanaz a ket ertek belsos
+       * hatokorrel MIND A KETTO reszfajat behozza. Enelkul a partner-kor akkor is
+       * zold lenne, ha a tobb-erteku alak egyaltalan nem mukodne -- es akkor nem
+       * a hatokort mernenk, hanem egy elromlott parametert.
+       */
+      it("két partner alegységét kérve is CSAK a sajátja jön be", async () => {
+        const both = [unitOfSupplierA, unitOfSupplierB];
+
+        const forInternal = await assets.list(
+          assetQuery({ departmentIds: both }),
+          asInternal,
+        );
+        assert.deepEqual(
+          forInternal.items.map((item) => item.id).sort(),
+          [assetSupplierA, assetSupplierB].sort(),
+          "kontroll: belsős kérőnél MINDKÉT részfa bejön",
+        );
+
+        const forSupplier = await assets.list(
+          assetQuery({ departmentIds: both }),
+          asSupplierA,
+        );
+        assert.deepEqual(
+          forSupplier.items.map((item) => item.id),
+          [assetSupplierA],
+        );
+        assert.equal(
+          JSON.stringify(forSupplier).includes(assetSupplierB),
+          false,
+        );
+      });
+
+      /**
        * AZ ALEGYSEG-SZURO ES A KERESES EGYUTT SZUKIT, NEM VAGYLAGOSAN.
        *
        * Ez nem a hatokorrol szol, hanem az alegyseg-szuro sajat helyerol: ha a
