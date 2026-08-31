@@ -21,6 +21,14 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { buildSiteOptions } from "@/lib/partners/site-tree";
+import { suppliersApi } from "@/lib/api/suppliers";
+import {
+  readUnitFilter,
+  toggleUnitFilter,
+  writeUnitFilter,
+} from "@/lib/partners/unit-filter";
+
 import { useAuth } from "@/components/auth/auth-provider";
 import { assetsApi } from "@/lib/api/assets";
 import { assetKindLabel, assetStatusLabel } from "./asset-labels";
@@ -89,6 +97,35 @@ export function AssetListPage() {
     }, 350);
     return () => window.clearTimeout(timer);
   }, [params, pathname, router, search]);
+  /**
+   * A VALASZTO CSAK SZERVIZ-PARTNER TULAJDONOSNAL JELENIK MEG, es ez nem
+   * egyszerusites: az alegysegek a PARTNEREN at erhetok el (`/suppliers/:id/units`,
+   * a partner tukor-vevojen lognak), globalis alegyseg-lista NINCS. Az eszkoz-lista
+   * viszont tobb tulajdonos eszkozeit mutatja, tehat tulajdonos nelkul a valaszto
+   * nem tudna mit felkinalni. Merve 2026-08-31.
+   */
+  const ownerId = params.get("ownerId") ?? "";
+  const unitsOwnerId = params.get("ownerType") === "SUPPLIER" ? ownerId : "";
+  const [units, setUnits] = useState<
+    Awaited<ReturnType<typeof suppliersApi.units>>["items"]
+  >([]);
+  useEffect(() => {
+    if (!canView || !unitsOwnerId) {
+      setUnits([]);
+      return;
+    }
+    const controller = new AbortController();
+    void suppliersApi
+      .units(token, unitsOwnerId, controller.signal)
+      .then((response) => setUnits(response.items))
+      // A HELYSZINEK HIANYA NEM TORI EL A LISTAT: a tobbi szuro mukodik
+      // tovabb, es a valaszto egyszeruen nem kinal semmit.
+      .catch(() => setUnits([]));
+    return () => controller.abort();
+  }, [canView, token, unitsOwnerId]);
+  const selectedUnits = useMemo(() => readUnitFilter(params), [params]);
+  const unitOptions = useMemo(() => buildSiteOptions(units), [units]);
+
   const filter = (key: string, value: string) => {
     const next = new URLSearchParams(params.toString());
     value ? next.set(key, value) : next.delete(key);
@@ -175,6 +212,46 @@ export function AssetListPage() {
             <option value="ALL">Minden státusz</option>
           </Select>
         </div>
+        {unitsOwnerId && unitOptions.length > 0 ? (
+          <div className="mt-3 space-y-2">
+            <p className="text-sm font-medium">Helyszínek</p>
+            <div className="flex flex-wrap gap-2">
+              {unitOptions.map((option) => {
+                const on = selectedUnits.includes(option.id);
+                return (
+                  <label
+                    key={option.id}
+                    className="flex items-center gap-2 rounded border px-2 py-1 text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      onChange={() =>
+                        router.replace(
+                          `${pathname}?${writeUnitFilter(
+                            params,
+                            toggleUnitFilter(selectedUnits, option.id),
+                          )}`,
+                        )
+                      }
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+            {selectedUnits.length > 0 ? (
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  router.replace(`${pathname}?${writeUnitFilter(params, [])}`)
+                }
+              >
+                Helyszín-szűrés törlése
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
       </Card>
       {loading && !data ? (
         <div className="space-y-3" aria-label="Eszközök betöltése">
