@@ -60,16 +60,38 @@ function createFakeSessionRepository(): SessionRepository & {
   } as unknown as SessionRepository & { readonly size: number };
 }
 
+/**
+ * A FEJLESZTOI BEJELENTKEZES KET FUGGETLEN ZARON AT MEGY (lasd
+ * `development-login.guard.ts`), es a masodik az `AUTH_PROVIDER` valtozon all.
+ * Ezek a tesztek azt merik, ami a zarak MOGOTT van, ezert kimondottan
+ * beallitjak a nyitott allapotot -- nem elrejtik a zarat, hanem elore
+ * megnevezik. Magat a zarat a sajat spec-fajlja es az alabbi ket teszt meri.
+ */
+async function withDevelopmentAuthProvider<T>(
+  run: () => Promise<T>,
+): Promise<T> {
+  const previous = process.env.AUTH_PROVIDER;
+  process.env.AUTH_PROVIDER = "development";
+  try {
+    return await run();
+  } finally {
+    if (previous === undefined) delete process.env.AUTH_PROVIDER;
+    else process.env.AUTH_PROVIDER = previous;
+  }
+}
+
 describe("AuthService user resolution", () => {
   it("stores the resolved internal User.id in a development session", async () => {
     const resolver = {
       resolveDevelopmentIdentity: async () => internalOwner,
       resolveById: async () => internalOwner,
     } as unknown as AuthUserResolver;
-    const session = await new AuthService(
-      resolver,
-      createFakeSessionRepository(),
-    ).loginWithDevelopmentUser(internalOwner.email);
+    const session = await withDevelopmentAuthProvider(() =>
+      new AuthService(
+        resolver,
+        createFakeSessionRepository(),
+      ).loginWithDevelopmentUser(internalOwner.email),
+    );
     assert.equal(session.user.id, "internal-owner-id");
     assert.notEqual(session.user.id, "dev-owner");
     assert.equal(session.token?.startsWith("dev_"), true);
@@ -83,7 +105,9 @@ describe("AuthService user resolution", () => {
       },
     } as unknown as AuthUserResolver;
     const service = new AuthService(resolver, createFakeSessionRepository());
-    const session = await service.loginWithDevelopmentUser(internalOwner.email);
+    const session = await withDevelopmentAuthProvider(() =>
+      service.loginWithDevelopmentUser(internalOwner.email),
+    );
     await assert.rejects(
       () => service.resolveToken(session.token!),
       UnauthorizedException,
@@ -135,7 +159,7 @@ describe("AuthService user resolution", () => {
   });
 
   it("keeps development login disabled in production", async () => {
-    const previous = process.env.NODE_ENV;
+    const previousNodeEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = "production";
     let resolverCalled = false;
     const resolver = {
@@ -146,18 +170,67 @@ describe("AuthService user resolution", () => {
       resolveById: async () => internalOwner,
     } as unknown as AuthUserResolver;
     try {
+      // A PROVIDER ITT SZANDEKOSAN NYITVA VAN. Enelkul a teszt akkor is zold
+      // lenne, ha a `NODE_ENV` agat kivennenk a kodbol -- a masodik zar
+      // ugyanis magatol megtagadna. Azt kell merni, amit a neve allit.
+      await withDevelopmentAuthProvider(async () => {
+        await assert.rejects(
+          () =>
+            new AuthService(
+              resolver,
+              createFakeSessionRepository(),
+            ).loginWithDevelopmentUser(internalOwner.email),
+          ForbiddenException,
+        );
+      });
+      assert.equal(resolverCalled, false);
+    } finally {
+      if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
+  /**
+   * A MASODIK ZAR, AZON A BEMENETEN, AMIT AZ ELSO ATENGED.
+   *
+   * A `node-env.guard.ts` az ISMERETLEN erteket fogja meg; a `development`
+   * ISMERT, tehat egy eles peldanyon beallitva az az orzo elengedi. Itt az
+   * dol el, hogy ettol a bejelentkezes MEGIS nem mukodik.
+   *
+   * ES NEM A HIBAUZENETET MERI, HANEM AZT, HOGY NEM TORTENT SEMMI: nincs
+   * munkamenet, es a resolver meg sem lett hivva -- ez utobbi azert szamit,
+   * mert a `resolveDevelopmentIdentity` LETRE IS HOZNA a felhasznalot
+   * `OWNER` szerepkorrel, ha eljutna odaig.
+   */
+  it("refuses the development login when NODE_ENV is development but no auth provider is set", async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousProvider = process.env.AUTH_PROVIDER;
+    process.env.NODE_ENV = "development";
+    delete process.env.AUTH_PROVIDER;
+    let resolverCalled = false;
+    const resolver = {
+      resolveDevelopmentIdentity: async () => {
+        resolverCalled = true;
+        return internalOwner;
+      },
+      resolveById: async () => internalOwner,
+    } as unknown as AuthUserResolver;
+    const sessions = createFakeSessionRepository();
+    try {
       await assert.rejects(
         () =>
-          new AuthService(
-            resolver,
-            createFakeSessionRepository(),
-          ).loginWithDevelopmentUser(internalOwner.email),
+          new AuthService(resolver, sessions).loginWithDevelopmentUser(
+            internalOwner.email,
+          ),
         ForbiddenException,
       );
       assert.equal(resolverCalled, false);
+      assert.equal(sessions.size, 0);
     } finally {
-      if (previous === undefined) delete process.env.NODE_ENV;
-      else process.env.NODE_ENV = previous;
+      if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previousNodeEnv;
+      if (previousProvider === undefined) delete process.env.AUTH_PROVIDER;
+      else process.env.AUTH_PROVIDER = previousProvider;
     }
   });
 
