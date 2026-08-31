@@ -187,6 +187,7 @@ describe("AiProductSearchService projekció", () => {
       "missingSince",
       "name",
       "parameters",
+      "parametersSource",
       "price",
       "productId",
       "sku",

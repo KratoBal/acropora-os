@@ -6,6 +6,7 @@ import {
   chooseDescription,
   AI_PRODUCT_SEARCH_DOCUMENT_VERSION,
   type DocumentSourceProduct,
+  chooseParameters,
 } from "./ai-product-search.document.js";
 
 function sourceProduct(
@@ -266,5 +267,87 @@ describe("every article number lands in the same searchable band", () => {
     );
 
     assert.equal(document.skus, "A-1");
+  });
+});
+
+describe("which parameters the document carries, and why an empty band is an answer", () => {
+  it("reads the mirror while the shop still owns the product", () => {
+    const document = buildDocument(
+      sourceProduct({
+        catalogAuthority: "UNAS",
+        unasSnapshot: {
+          descriptionShort: "x",
+          descriptionLong: null,
+          parameters: { Kiszereles: "5 liter" },
+        },
+      }),
+    );
+
+    assert.ok(document.parameters.includes("5 liter"));
+  });
+
+  /**
+   * THE ONE THAT CHANGES BEHAVIOUR. After a takeover the snapshot is frozen,
+   * and feeding it into search presents the shop's last word as current truth.
+   */
+  it("reads NOTHING from the frozen mirror once the product is ours", () => {
+    const document = buildDocument(
+      sourceProduct({
+        catalogAuthority: "ACROPORA",
+        unasSnapshot: {
+          descriptionShort: "x",
+          descriptionLong: null,
+          parameters: { Kiszereles: "5 liter" },
+        },
+      }),
+    );
+
+    assert.equal(document.parameters, "");
+  });
+
+  it("says WHY it is empty, which is not the same as having none", () => {
+    // "none" means we have not built the place they would come from. Without
+    // it, an empty band reads as "this product has no parameters", and a
+    // reader would act on a claim about the product that is not true.
+    const ours = chooseParameters({
+      catalogAuthority: "ACROPORA",
+      unasSnapshot: { parameters: { Kiszereles: "5 liter" } },
+    });
+
+    assert.equal(ours.source, "none");
+    assert.equal(ours.value, null);
+    assert.equal(ours.words, "");
+
+    const theirs = chooseParameters({
+      catalogAuthority: "UNAS",
+      unasSnapshot: { parameters: { Kiszereles: "5 liter" } },
+    });
+
+    assert.equal(theirs.source, "unas");
+    assert.notEqual(theirs.value, null);
+  });
+
+  it("reports the mirror as the source even when the mirror is empty", () => {
+    // A UNAS product with no parameters is a fact about the product. An
+    // ACROPORA one with none is a fact about us. The source keeps them apart.
+    const chosen = chooseParameters({
+      catalogAuthority: "UNAS",
+      unasSnapshot: { parameters: null },
+    });
+
+    assert.equal(chosen.source, "unas");
+    assert.equal(chosen.words, "");
+  });
+
+  it("treats an unset authority like the shop's, not like ours", () => {
+    // Null authority is neither, and the safe reading is the one that keeps
+    // showing what we have: dropping data on an unset flag would lose it.
+    const chosen = chooseParameters({
+      catalogAuthority: null,
+      unasSnapshot: { parameters: { Kiszereles: "5 liter" } },
+    });
+
+    assert.equal(chosen.source, "unas");
+    assert.ok(chosen.words.includes("5 liter"));
   });
 });

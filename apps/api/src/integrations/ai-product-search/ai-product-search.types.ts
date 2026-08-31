@@ -56,6 +56,17 @@ export interface AiProductSearchHit {
    */
   descriptionSource: "acropora" | "unas";
   parameters: unknown;
+  /**
+   * HONNAN JON A PARAMETER-BLOKK, es miert nem eleg, hogy ures.
+   *
+   * "unas" -- a tukorbol; ACROPORA-ra atvett terméknel ez befagyott, es epp
+   * ezert nem hasznaljuk. "none" -- nincs forrasunk, amibol epulhetne.
+   *
+   * A "none" NEM azt jelenti, hogy a termeknek nincsenek parameterei. Azt
+   * jelenti, hogy a sajat oldalon MA NINCS hely, ahol allnanak. Jeloles nelkul
+   * a hivo a rosszabbik allitast hiszi el, es az nem igaz.
+   */
+  parametersSource: "unas" | "none";
   variants: Array<{ sku: string; name: string | null }>;
   /**
    * Structured, never folded into the text. Null when the snapshot carries
