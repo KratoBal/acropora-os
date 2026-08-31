@@ -1,5 +1,6 @@
 import {
   rowBelongsToScope,
+  scopeOwnWhereForAndBranch,
   scopeWhereForAndBranch,
   type PartnerScope,
 } from "../auth/partner-scope.util.js";
@@ -323,9 +324,30 @@ export class WorksheetsRepository extends Repository {
     };
   }
 
-  async selectablePartners(): Promise<WorksheetSelectablePartnerListResponse> {
+  /**
+   * A VALASZTO IS SZUKUL A KEROVEL, es ez nem uj dontes, hanem a meglevo
+   * alkalmazasa: a partner-oldali kero nem lathatja MAS partner nevet.
+   *
+   * A spec (C) csoportja azert hagyta szuretlenul a valasztokat, mert BELSOS
+   * keroket felteteleztek -- az erv nem hamis, csak a HATOKORE mas, es 2026-08-31
+   * merve kiderult, hogy partner-oldali kero is eleri (a `VIEWER` szerep viszi a
+   * `SERVICE_VIEW` jogot).
+   *
+   * URES LISTA HELYETT SZURT LISTA. Egy valaszto azert letezik, hogy a
+   * hasznaloja ki tudjon valasztani valamit, amit szabad neki; egy ures lista
+   * ott, ahol egy elem jogos, nem szigorubb, hanem ELROMLOTT felulet -- es a
+   * kovetkezo ember a hibas felulet miatt veszi ki a szurot.
+   */
+  async selectablePartners(
+    scope: PartnerScope,
+  ): Promise<WorksheetSelectablePartnerListResponse> {
     const rows = await this.database.supplier.findMany({
-      where: WorksheetsRepository.selectablePartnerWhere(),
+      where: {
+        AND: [
+          scopeOwnWhereForAndBranch(scope, "supplier"),
+          WorksheetsRepository.selectablePartnerWhere(),
+        ],
+      },
       select: { name: true, worksheetPartnerCode: true, customerId: true },
     });
     const items = rows
@@ -344,7 +366,22 @@ export class WorksheetsRepository extends Repository {
    * adatbázis-oldali `displayName` szerinti sorrend a felületen
    * rendezetlennek látszana.
    */
-  async assignableUsers(): Promise<WorksheetAssignableUserListResponse> {
+  /**
+   * A PARTNER-OLDALI KERO ITT URES LISTAT KAP, es ez a harom valaszto kozul
+   * kifejezetten MASKEPP dol el, mint a masik ketto.
+   *
+   * A masik kettonel a szures azert szurt lista, mert van olyan sor, ami a
+   * keroe. Itt NINCS: a lista a MI kollegaink neve ES beosztasa, ami szemelyes
+   * adat, es nem a partnerre tartozik. Hogy egy partner-oldali fiok
+   * oszthat-e egyaltalan munkat -- es ha igen, kinek --, az ma nincs eldontve;
+   * amig nincs, az ures lista a helyes atmenet, mert a ket irany kara
+   * aszimmetrikus: egy hianyzo valaszto panaszt szul, egy kereetlen viszont
+   * szemelyes adatot ad ki.
+   */
+  async assignableUsers(
+    scope: PartnerScope,
+  ): Promise<WorksheetAssignableUserListResponse> {
+    if (scope.kind !== "internal") return { items: [] };
     const rows = await this.database.user.findMany({
       where: { isActive: true, role: { in: [...WORKSHEET_ASSIGNABLE_ROLES] } },
       select: { id: true, displayName: true, nickname: true, role: true },

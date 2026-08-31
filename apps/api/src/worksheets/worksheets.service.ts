@@ -202,12 +202,12 @@ export class WorksheetsService {
     }
   }
 
-  assignableUsers() {
-    return this.repository.assignableUsers();
+  assignableUsers(scope: PartnerScope) {
+    return this.repository.assignableUsers(scope);
   }
 
-  selectablePartners() {
-    return this.repository.selectablePartners();
+  selectablePartners(scope: PartnerScope) {
+    return this.repository.selectablePartners(scope);
   }
 
   async continueFrom(id: string, actorUserId: string) {
