@@ -1,6 +1,7 @@
 import { Inject, Injectable, Optional } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 
+import { isUnasMasteredVariant } from "../../products/catalog-authority.js";
 import { sumOrderBookedOut } from "../../common/stock-ledger.util.js";
 import { parseUnasPackageComponents } from "../../common/unas-package-product.util.js";
 import type { UnasOrderAuditRiskFlag } from "./unas-order-stock-audit.types.js";
@@ -196,7 +197,7 @@ export class UnasOrderStockAuditRepository extends Repository {
       componentVariants
         .filter(
           (variant) =>
-            variant.product.catalogAuthority === "UNAS" &&
+            isUnasMasteredVariant(variant) &&
             !variant.product.unasSnapshot?.isPackageProduct,
         )
         .map((variant) => [variant.sku, variant]),

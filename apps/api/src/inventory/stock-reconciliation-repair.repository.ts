@@ -1,6 +1,8 @@
 import { Inject, Injectable, Optional } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 
+import { isUnasMasteredVariant } from "../products/catalog-authority.js";
+
 import {
   enqueueStockSyncOutboxEntry,
   lockVariantWarehouse,
@@ -329,20 +331,19 @@ export class StockReconciliationRepairRepository extends Repository {
         data: { onHand: ledgerExpectedOnHand },
       });
 
-      const outbox =
-        stockItem.variant.product.catalogAuthority === "UNAS"
-          ? await enqueueStockSyncOutboxEntry(transaction, {
-              variantId: params.variantId,
-              warehouseId: params.warehouseId,
-              sku: stockItem.variant.sku,
-              targetOnHand: ledgerExpectedOnHand.minus(
-                stockItem.reserved ?? new Prisma.Decimal(0),
-              ),
-              idempotencyKey: `${params.idempotencyKey}:outbox`,
-              sourceProcess: "RECONCILIATION",
-              sourceRecordId: params.idempotencyKey,
-            })
-          : null;
+      const outbox = isUnasMasteredVariant(stockItem.variant)
+        ? await enqueueStockSyncOutboxEntry(transaction, {
+            variantId: params.variantId,
+            warehouseId: params.warehouseId,
+            sku: stockItem.variant.sku,
+            targetOnHand: ledgerExpectedOnHand.minus(
+              stockItem.reserved ?? new Prisma.Decimal(0),
+            ),
+            idempotencyKey: `${params.idempotencyKey}:outbox`,
+            sourceProcess: "RECONCILIATION",
+            sourceRecordId: params.idempotencyKey,
+          })
+        : null;
 
       return transaction.stockReconciliationRepair.create({
         data: {
@@ -414,7 +415,7 @@ export class StockReconciliationRepairRepository extends Repository {
 
       const rejectionCode = evaluateRepublishPreconditions({
         hasUnasLink:
-          stockItem.variant.product.catalogAuthority === "UNAS" &&
+          isUnasMasteredVariant(stockItem.variant) &&
           stockItem.variant.product.unasSnapshot !== null,
         localOnHand: stockItem.onHand,
         expectedCurrentOnHand: params.expectedCurrentOnHand,
