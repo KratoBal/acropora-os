@@ -84,6 +84,29 @@ export const assetSummaryInclude = {
   _count: { select: { childAssets: true } },
 } satisfies Prisma.AssetInclude;
 
+/**
+ * AMI EGY DOKUMENTUM OSSZEFOGLALOJAHOZ KELL, ES AMI NEM.
+ *
+ * A `content` SZANDEKOSAN HIANYZIK, es ezert kell nevesitett lista, nem
+ * `include`: a bajtok legfeljebb 10 MB-osak, es egyetlen olyan ut sincs, ahol
+ * az osszefoglalo hasznalna oket. Egy `include` minden skalar mezot visszahoz,
+ * tehat csendben behuzna a teljes fajlt is.
+ *
+ * A LISTA AZERT ALL EGY HELYEN, mert ket ut olvassa (az adatlap dokumentum-
+ * listaja es a feltoltes visszaolvasasa), es a ketto kulon romlana el. Amikor
+ * a tartalom kesobb kulon taroloba kerul, ez az egy hely valtozik.
+ */
+export const assetDocumentSummarySelect = {
+  id: true,
+  type: true,
+  fileName: true,
+  contentType: true,
+  sizeBytes: true,
+  sha256: true,
+  createdAt: true,
+  uploadedBy: { select: { id: true, displayName: true } },
+} satisfies Prisma.AssetDocumentSelect;
+
 export const assetDetailInclude = {
   ...assetSummaryInclude,
   productVariant: { include: { product: true } },
@@ -94,16 +117,7 @@ export const assetDetailInclude = {
     take: 100,
   },
   documents: {
-    select: {
-      id: true,
-      type: true,
-      fileName: true,
-      contentType: true,
-      sizeBytes: true,
-      sha256: true,
-      createdAt: true,
-      uploadedBy: { select: { id: true, displayName: true } },
-    },
+    select: assetDocumentSummarySelect,
     orderBy: { createdAt: "desc" as const },
   },
 } satisfies Prisma.AssetInclude;

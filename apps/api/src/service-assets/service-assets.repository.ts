@@ -35,6 +35,7 @@ import type {
 import {
   SERVICE_OWNER_PICKABLE_WHERE,
   assetDetailInclude,
+  assetDocumentSummarySelect,
   assetOwnerScopeWhere,
   assetSummaryInclude,
   type AssetDetailRow,
@@ -1041,9 +1042,16 @@ export class ServiceAssetsRepository extends Repository {
         },
       });
     });
+    /**
+     * A VISSZAOLVASAS NEM HOZZA VISSZA A FRISSEN BEIRT BAJTOKAT.
+     *
+     * Az `include` minden skalar mezot ad, tehat a legfeljebb 10 MB-os
+     * `content` is visszajonne az adatbazisbol egy osszefoglalohoz, ami nem
+     * hasznalja. A nevesitett lista ugyanaz, amit az adatlap hasznal.
+     */
     const document = await prisma.assetDocument.findUniqueOrThrow({
       where: { id },
-      include: { uploadedBy: true },
+      select: assetDocumentSummarySelect,
     });
     return this.toDocumentSummary(document);
   }
