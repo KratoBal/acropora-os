@@ -20,7 +20,19 @@ import { describe, it } from "node:test";
  *    "vagy" agga valna.
  *
  * Mindket hiba NEMA. A valasz szabalyos marad, csak tobb sort tartalmaz, mint
- * amirol barki tud -- ezert nem eleg egy futasideju teszt, ami a mai adaton zold.
+ * amirol barki tud.
+ *
+ * ES AMIT EZ A TESZT LAT, AMIT A FUTASIDEJU NEM (merve 2026-08-31, a
+ * `partner-scope-endpoint.integration.spec.ts` kalibraciojaval). A futasideju
+ * suite a kulcs-felulirast MEGFOGJA, de csak azokon a hivasokon, amik
+ * felhasznaloi szurot is visznek: a szuro spreadkent PONTOSAN ket allitast
+ * dont meg, es mind a ketto ilyen hivas. Ez a teszt ezzel szemben MINDEN
+ * hivasi helyet nezi, akkor is, ha ma nincs ra olyan teszteset, ami a hibat
+ * eloidezne.
+ *
+ * A KETTO TEHAT NEM DUPLIKACIO, hanem ket kulonbozo hatokor. Ha valaki az
+ * egyiket folosleges masolatnak nezi es kiveszi, egy uj `where`-epito hely
+ * orizetlenul marad.
  */
 
 const FILES = [

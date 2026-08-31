@@ -39,9 +39,25 @@ import { AuthUserResolver } from "./auth-user-resolver.js";
  * valaszig egyben all, es nem csak a kozepetol.
  *
  * A MERCE, AMIRE MEGIRTUK: a suite akkor er valamit, ha ELBUKIK attol, hogy a
- * hatokor-szuro kikerul a tarolo retegbol. Kalibralva 2026-08-31, lasd a
- * commit uzenetet -- a szuro nelkul 9 allitas pirosra valt, visszatéve mind
- * zold.
+ * hatokor-szuro kikerul a tarolo retegbol. Kalibralva 2026-08-31, a szamok a
+ * commit uzenetben allnak.
+ *
+ * MELYIK ELLENORZES MIT LAT -- ez a bekezdes azert all itt, hogy a kovetkezo
+ * olvaso NE nezze duplikacionak a kettot, es ne vegye ki az egyiket. Merve,
+ * ugyanazon a napon, ugyanazzal a kalibracioval:
+ *
+ *   - EZ A SUITE a VISELKEDEST latja: a hatokor teljes hianyat (a szuro
+ *     kivetele piros lesz) es a kulcs-felulirast IS -- de a masodikat CSAK
+ *     azokon a hivasokon, amik felhasznaloi szurot is visznek (`ownerId`,
+ *     `customerId`). Merve: a szuro `AND` ag helyett spreadkent PONTOSAN ket
+ *     allitast dont meg, mindketto ilyen hivas. A tobbi zold marad.
+ *   - A `partner-scope-and-branch.spec.ts` a FORRAST latja: minden hivasi
+ *     helyen, fuggetlenul attol, hogy van-e ra olyan hivas, ami a hibat
+ *     eloidezne.
+ *
+ * Vagyis a ketto MAS hatokoru, nem ugyanaz ketszer. Egy uj `where`-epito hely,
+ * amire ma nincs felhasznaloi szurot vivo teszteset, itt NEM bukna el, ott
+ * igen.
  *
  * A KERESES ES A FELHASZNALOI SZURO SZANDEKOSAN SZEREPEL a hivasokban. Ez a
  * ket alak az, amitol a hatokor csendben hatastalanna valhat: a felso szintu
