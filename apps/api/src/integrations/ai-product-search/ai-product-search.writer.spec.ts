@@ -38,7 +38,14 @@ const product = {
   description: null,
   brand: null,
   categories: [],
-  variants: [{ sku: "REEF-SALT-01" }],
+  variants: [
+    {
+      sku: "REEF-SALT-01",
+      manufacturerPartNumber: null,
+      barcodes: [],
+      supplierProducts: [],
+    },
+  ],
   unasSnapshot: {
     descriptionShort: "Tengeri só",
     descriptionLong: null,

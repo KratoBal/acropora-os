@@ -72,7 +72,19 @@ export interface DocumentSourceProduct extends DescribableProduct {
   mirrorState: string | null;
   brand: { name: string } | null;
   categories: Array<{ category: { name: string } }>;
-  variants: Array<{ sku: string }>;
+  /**
+   * Every article number a person might type. They live on the VARIANT, and
+   * they are not interchangeable: our own SKU, the maker's part number, the
+   * barcode on the box, and what each supplier calls the same thing on their
+   * own invoice. A customer service call quotes whichever one the caller is
+   * holding.
+   */
+  variants: Array<{
+    sku: string;
+    manufacturerPartNumber: string | null;
+    barcodes: Array<{ code: string }>;
+    supplierProducts: Array<{ supplierSku: string }>;
+  }>;
   unasSnapshot:
     (DescribableProduct["unasSnapshot"] & { parameters: unknown }) | null;
 }
@@ -124,13 +136,53 @@ function parameterWords(value: unknown): string {
   return seen.join(" ").slice(0, 20000);
 }
 
+/**
+ * EVERY ARTICLE NUMBER IN ONE A-WEIGHT BAND, AND WHY THEY BELONG TOGETHER.
+ *
+ * The four kinds answer the same question - "which product is this?" - and a
+ * caller quotes whichever one is in front of them: the barcode on the box, the
+ * number on the maker's datasheet, the line on a supplier invoice, or our own
+ * SKU. Splitting them across weights would rank one holder of the same fact
+ * above another for no reason anyone could state.
+ *
+ * DEDUPLICATED, and not for tidiness: the same string legitimately appears as
+ * both a supplier SKU and our own, and a repeat raises that product's rank for
+ * a term without any new information. Order follows the variants, so a rebuild
+ * of an unchanged product produces the same text.
+ *
+ * NOTHING HERE IS AUTHORITY-SENSITIVE. These are our own columns, written by
+ * our own paths, and they say nothing about the UNAS snapshot - which is why
+ * they are the identifiers that CAN be added today.
+ */
+export function collectArticleNumbers(
+  variants: DocumentSourceProduct["variants"],
+): string {
+  const seen = new Set<string>();
+
+  for (const variant of variants) {
+    const candidates = [
+      variant.sku,
+      variant.manufacturerPartNumber,
+      ...variant.barcodes.map((barcode) => barcode.code),
+      ...variant.supplierProducts.map((entry) => entry.supplierSku),
+    ];
+
+    for (const candidate of candidates) {
+      const value = candidate?.trim();
+      if (value) seen.add(value);
+    }
+  }
+
+  return [...seen].join(" ");
+}
+
 export function buildDocument(product: DocumentSourceProduct): BuiltDocument {
   const chosen = chooseDescription(product);
 
   return {
     productId: product.id,
     title: product.name,
-    skus: product.variants.map((variant) => variant.sku).join(" "),
+    skus: collectArticleNumbers(product.variants),
     facets: [
       product.brand?.name ?? "",
       ...product.categories.map((entry) => entry.category.name),

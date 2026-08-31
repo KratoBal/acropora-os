@@ -28,7 +28,15 @@ export const AI_SEARCH_DOCUMENT_SELECT = {
   description: true,
   brand: { select: { name: true } },
   categories: { select: { category: { select: { name: true } } } },
-  variants: { select: { sku: true }, where: { isActive: true } },
+  variants: {
+    select: {
+      sku: true,
+      manufacturerPartNumber: true,
+      barcodes: { select: { code: true } },
+      supplierProducts: { select: { supplierSku: true } },
+    },
+    where: { isActive: true },
+  },
   unasSnapshot: {
     select: {
       descriptionShort: true,

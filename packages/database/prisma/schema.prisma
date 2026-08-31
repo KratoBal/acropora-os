@@ -1104,7 +1104,13 @@ model AiProductSearchDocument {
   productId        String  @unique
   /// A weight: the product name.
   title            String  @default("")
-  /// A weight: the article numbers.
+  /// A weight: every article number a person might type, in one band - our own
+  /// SKU, the maker's part number, the barcode on the box, and what each
+  /// supplier calls the same thing. They answer the same question ("which
+  /// product is this?"), so ranking one holder of that fact above another
+  /// would need a reason nobody can state. Deduplicated: the same string
+  /// legitimately appears twice, and a repeat would raise the rank without
+  /// adding information.
   skus             String  @default("")
   /// B weight: brand and category names.
   facets           String  @default("")
