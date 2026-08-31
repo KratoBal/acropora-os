@@ -28,6 +28,21 @@ import { hashPassword } from "../users/password.util.js";
  * huszonhat allitasat: azt meri, ami CSAK itt merheto -- hogy a kapu
  * egyaltalan lefut, es hogy a hatokor a teljes keresi uton at is all.
  *
+ * A RES VALODI, ES EZ KET MERES, NEM EGY (acrobot kikotese, 2026-08-31). Egy uj
+ * suite-tol keves azt allitani, hogy O eszreveszi a hibat; azt kell megmutatni,
+ * hogy RAJTA KIVUL SENKI. A hasznalt romlas-proba a `AuthGuard`-ban ul, es
+ * hihetobb, mint egy kitalalt hiba: a guard "rendbe teszi" a felhasznalot, es
+ * kozben elejti a partner-kotest (`customerId` es `supplierId` nullara). Ettol
+ * MINDEN kero belsosnek latszik.
+ *
+ *   1. lepes -- a romlassal a MEGLEVO halmazok VEGIG ZOLDEK: 1448 egysegteszt es
+ *      56 kontroller-szintu integracios teszt, koztuk a guard SAJAT spec-je
+ *      (`auth.guard.spec.ts`) is. Az a fajl a guard vezerlesi agait allitja, nem
+ *      azt, MIT AD TOVABB -- ezert megy at rajta.
+ *   2. lepes -- ugyanarra a romlasra ez a suite 5-bol 3 allitast megdont.
+ *
+ * Az elso lepes a fontosabb, es azt szoktuk kihagyni.
+ *
  * A JELSZAVAS BEJELENTKEZES SZANDEKOSAN A VALODI UT. A `mobile/login/password`
  * vegpont Bearer tokent ad vissza a torzsben, tehat nem kell sutis kliens; a
  * hitelesites viszont ugyanaz a kod, mint eleseben.
