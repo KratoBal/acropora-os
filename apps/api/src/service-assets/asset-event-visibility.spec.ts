@@ -29,6 +29,64 @@ describe("scopeMaySeeAssetEvent", () => {
       scopeMaySeeAssetEvent({ type: "QR_ROTATED", payload: null }, partner),
       true,
     );
+    // A ma tenylegesen irt payloadok a masik hat tipuson.
+    assert.equal(
+      scopeMaySeeAssetEvent(
+        { type: "STATUS_CHANGED", payload: { from: "ACTIVE", to: "RETIRED" } },
+        partner,
+      ),
+      true,
+    );
+    assert.equal(
+      scopeMaySeeAssetEvent(
+        { type: "UPDATED", payload: { fields: ["name"] } },
+        partner,
+      ),
+      true,
+    );
+  });
+
+  /**
+   * A KONTROLL A KILENCEDIK TIPUSRA, es ez az egyetlen allitas, ami MA
+   * kulonbseget tesz a ket lehetseges szabaly kozott.
+   *
+   * Ha a szures az esemeny TIPUSARA lenne kotve (egy lista a mai ket
+   * dokumentum-esemenyrol), akkor egy KESOBB felvett tipus, ami fajlnevet ir a
+   * payloadba, csendben atmenne rajta -- es senki nem tudna, hogy ide vissza
+   * kellett volna jonnie. A szabaly ezert a payload ALAKJARA szol.
+   *
+   * Ez a teszt tehat nem a mai viselkedest irja le, hanem azt a napot vedi,
+   * amikor valaki uj esemenyt vezet be. Murena vetette fel, 2026-08-31.
+   */
+  it("egy ISMERETLEN típusú esemény is a szabály alá esik, ha dokumentumot nevez meg", () => {
+    const future = {
+      type: "DOCUMENT_ARCHIVED",
+      payload: { documentId: "d1", fileName: "szamla.pdf" },
+    };
+    assert.equal(scopeMaySeeAssetEvent(future, partner), false);
+    assert.equal(scopeMaySeeAssetEvent(future, internal), true);
+
+    // Es ha a tipust IS hordozza, a tablazat donti el, nem a tipus neve.
+    assert.equal(
+      scopeMaySeeAssetEvent(
+        {
+          type: "DOCUMENT_ARCHIVED",
+          payload: { documentType: "WARRANTY", fileName: "garancia.pdf" },
+        },
+        partner,
+      ),
+      true,
+    );
+    assert.equal(
+      scopeMaySeeAssetEvent(
+        {
+          type: "DOCUMENT_ARCHIVED",
+          payload: { documentType: "INVOICE", fileName: "szamla.pdf" },
+        },
+        partner,
+      ),
+      false,
+    );
   });
 
   /**

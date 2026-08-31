@@ -123,6 +123,10 @@ describe(
     let invoiceOfA: string;
     let warrantyOfA: string;
     let invoiceFileNameOfA: string;
+    /** Kulon eszkoz a torles-esemenyekhez, hogy a tobbi allitas ne mozduljon. */
+    let assetForDeletes: string;
+    let deletedInvoiceFileName: string;
+    let deletedWarrantyFileName: string;
 
     /** A kérő ugyanúgy áll elő, ahogy egy valódi munkamenetben: a User sorból. */
     let asCustomerA: AuthenticatedUser;
@@ -354,6 +358,57 @@ describe(
       ]);
       invoiceOfA = invoice.id;
       warrantyOfA = warranty.id;
+
+      /**
+       * A TORLES-ESEMENY KULON ESZKOZON all, hogy a fenti allitasok ne
+       * mozduljanak: a feltoltes esemenye a torles UTAN is megmarad, tehat
+       * ugyanazon az eszkozon a feltoltes-lista is bovulne.
+       *
+       * A TORLES KEMENY (`assetDocument.delete`), tehat mire barki visszaolvassa
+       * az esemenyt, a dokumentum-sor MAR NINCS MEG. Egy `documentId` alapu
+       * visszakeresesre epulo szuro itt nem talalna semmit -- es pont a torolt
+       * szamlanal nyilna ki. Ezt az agat csak igy lehet lemerni: torolt
+       * dokumentummal, nem letezovel.
+       */
+      const forDeletes = await prisma.asset.create({
+        data: {
+          assetNumber: `${TEST_ASSET_PREFIX}${suffix}-D`,
+          // A NEVE NEM TUDJA KIHAGYNI A LISTAKAT, es ezt lemertem: az eszkoz-
+          // kereses a `customer.displayName` mezore is illeszkedik, tehat a
+          // vevo A minden eszkoze feljon a kozos kulcsszora, barhogy hivjak.
+          // Ezert a lista-allitasok SOROLJAK FEL ezt a sort is, ahelyett hogy
+          // egy allapot-trukkel rejtenenk el.
+          name: `${shared} eszköz A törléshez`,
+          customerId: customerA,
+        },
+      });
+      assetForDeletes = forDeletes.id;
+      deletedInvoiceFileName = `${shared}-torolt-szamla.pdf`;
+      deletedWarrantyFileName = `${shared}-torolt-garancia.pdf`;
+      const [toDeleteInvoice, toDeleteWarranty] = await Promise.all([
+        assets.uploadDocument(
+          assetForDeletes,
+          Object.assign(new UploadAssetDocumentDto(), { type: "INVOICE" }),
+          pdf(deletedInvoiceFileName),
+          asInternal,
+        ),
+        assets.uploadDocument(
+          assetForDeletes,
+          Object.assign(new UploadAssetDocumentDto(), { type: "WARRANTY" }),
+          pdf(deletedWarrantyFileName),
+          asInternal,
+        ),
+      ]);
+      await assets.deleteDocument(
+        assetForDeletes,
+        toDeleteInvoice.id,
+        asInternal,
+      );
+      await assets.deleteDocument(
+        assetForDeletes,
+        toDeleteWarranty.id,
+        asInternal,
+      );
     });
 
     after(async () => {
@@ -423,7 +478,7 @@ describe(
       );
       assert.deepEqual(
         list.items.map((item) => item.id).sort(),
-        [assetA, assetB, assetSupplierA].sort(),
+        [assetA, assetB, assetSupplierA, assetForDeletes].sort(),
       );
 
       const partners = await suppliers.list(
@@ -506,8 +561,8 @@ describe(
           asCustomerA,
         );
         assert.deepEqual(
-          forA.items.map((item) => item.id),
-          [assetA],
+          forA.items.map((item) => item.id).sort(),
+          [assetA, assetForDeletes].sort(),
         );
 
         const forB = await assets.list(
@@ -667,6 +722,42 @@ describe(
         assert.deepEqual(
           forInternal.events
             .filter((event) => event.type === "DOCUMENT_UPLOADED")
+            .map((event) => event.payload.documentType)
+            .sort(),
+          ["INVOICE", "WARRANTY"],
+        );
+      });
+
+      /**
+       * A TORLES ESEMENYE UGYANUGY HORDOZZA A FAJLNEVET, es ez az az ag, ahol a
+       * dokumentum-sor mar NEM letezik. Murena vetette fel 2026-08-31: ha a
+       * szures visszakeresesre epulne, itt nem talalna semmit, es a szuro pont
+       * a torolt szamlanal nyilna ki.
+       *
+       * A TOROLT GARANCIA A KONTROLL: a szures nem a torles-esemenyeket veszi
+       * el, csak azt, amelyik olyan dokumentumrol szol, amit a kero ugysem lat.
+       */
+      it("a törölt számla eseménye sem megy ki, a törölt garanciáé igen", async () => {
+        const forPartner = await assets.detail(assetForDeletes, asCustomerA);
+        assert.deepEqual(
+          forPartner.events
+            .filter((event) => event.type === "DOCUMENT_DELETED")
+            .map((event) => event.payload.documentType),
+          ["WARRANTY"],
+        );
+        assert.equal(
+          JSON.stringify(forPartner).includes(deletedInvoiceFileName),
+          false,
+        );
+        assert.equal(
+          JSON.stringify(forPartner).includes(deletedWarrantyFileName),
+          true,
+        );
+
+        const forInternal = await assets.detail(assetForDeletes, asInternal);
+        assert.deepEqual(
+          forInternal.events
+            .filter((event) => event.type === "DOCUMENT_DELETED")
             .map((event) => event.payload.documentType)
             .sort(),
           ["INVOICE", "WARRANTY"],

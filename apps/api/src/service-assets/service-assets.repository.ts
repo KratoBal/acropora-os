@@ -41,36 +41,69 @@ import {
  * LATHATJA-E A KERO EZT AZ ESEMENYT.
  *
  * A dokumentum-esemenyek payloadja NEVEN NEVEZI a dokumentumot
- * (`documentType`, `fileName`), tehat az esemenynaplo ugyanazt hordozza, amit a
- * dokumentum-lista mar nem ad ki. Egy korlat, ami csak az utak egy reszen all,
- * nem korlat: a szamla letezese, a neve es a feltoltes ideje itt ugyanugy
- * kimenne.
+ * (`documentType`, `documentId`, `fileName`), tehat az esemenynaplo ugyanazt
+ * hordozza, amit a dokumentum-lista mar nem ad ki. Egy korlat, ami csak az utak
+ * egy reszen all, nem korlat: a szamla letezese, a neve es az idopontja itt
+ * ugyanugy kimenne.
  *
- * A NEM FELISMERHETO PAYLOAD PARTNERNEL REJTVE MARAD, es ez dontes. Egy regi
- * vagy hianyos esemenysor eseten nem tudjuk, MELYIK tipusrol szol; az
- * atengedese pont annal a sornal adna hozzaferest, amirol a legkevesebbet
- * tudjuk. Belsos keronel minden latszik, tehat a naplo teljessege nem vesz el.
+ * A SZABALY A TIPUSRA ES A PAYLOAD ALAKJARA IS SZOL, es a ketto UNIOJA dont
+ * (murena vetette fel, 2026-08-31). Egy tipus-lista onmagaban olyan kapu, ami
+ * CSENDBEN elavul: aki holnap felvesz egy uj esemenytipust, ami fajlnevet ir a
+ * payloadba, nem fogja tudni, hogy ide vissza kell jonnie. A payload alakja
+ * onmagaban viszont az URES payloadu `DOCUMENT_UPLOADED`-et engedne at. Egyik
+ * sem eleg egyedul, ezert all itt mind a ketto.
+ *
+ * MA A KETTO UGYANAZT ADJA: a nyolc `AssetEventType` kozul pontosan a
+ * `DOCUMENT_UPLOADED` es a `DOCUMENT_DELETED` ir dokumentum-mezot (merve
+ * ugyanaznap, a `assetEvent.create` hivasokon). A kulonbseg tehat nem a mai
+ * viselkedesben all, hanem a kilencedik tipusnal -- es epp ezert van ra
+ * kontroll-teszt, ami MA is el tud bukni.
+ *
+ * A FEL NEM ISMERT DOKUMENTUM-TIPUS PARTNERNEL REJTVE MARAD. Ha a payload
+ * dokumentumot nevez meg, de a tipusa hianyzik vagy ismeretlen, nem tudjuk,
+ * mirol szol; az atengedese pont annal a sornal adna hozzaferest, amirol a
+ * legkevesebbet tudjuk. Belsos keronel minden latszik, tehat a naplo
+ * teljessege nem vesz el.
+ *
+ * A DONTES A PAYLOADBOL SZULETIK, SOHA NEM VISSZAKERESESBOL. A torles KEMENY
+ * (`tx.assetDocument.delete`), tehat a `DOCUMENT_DELETED` esemeny olvasasakor a
+ * dokumentum-sor MAR NINCS MEG: egy `documentId` alapu visszakereses semmit nem
+ * talalna, es a szuro pont a torolt szamlanal nyilna ki. A payload maga
+ * hordozza a tipust, tehat van biztonsagos forras.
  */
+const DOCUMENT_PAYLOAD_KEYS = ["documentType", "documentId", "fileName"];
+/**
+ * A TIPUS-LISTA MEGMARAD A PAYLOAD-SZABALY MELLETT, es a ketto UNIOJA dont.
+ *
+ * A csere (csak payload-alak) egy meglevo garanciat vett volna el, es ezt a
+ * sajat kontroll-teszt fogta meg: egy `DOCUMENT_UPLOADED`, aminek URES vagy
+ * serult a payloadja, dokumentumot nevez meg a TIPUSAVAL, de egyetlen
+ * dokumentum-mezot sem hordoz -- a puszta payload-szabaly atengedte volna.
+ * Vagyis a tipus-lista nem elavult otlet, csak onmagaban nem eleg.
+ */
+const DOCUMENT_EVENT_TYPES = ["DOCUMENT_UPLOADED", "DOCUMENT_DELETED"];
+const DOCUMENT_TYPES = ["INVOICE", "WARRANTY", "MANUAL", "OTHER"] as const;
+
 export function scopeMaySeeAssetEvent(
   event: { type: string; payload: unknown },
   scope: PartnerScope,
 ): boolean {
   if (scope.kind === "internal") return true;
-  if (event.type !== "DOCUMENT_UPLOADED" && event.type !== "DOCUMENT_DELETED")
-    return true;
+
   const payload = event.payload;
-  const documentType =
+  const fields =
     payload && typeof payload === "object" && !Array.isArray(payload)
-      ? (payload as Record<string, unknown>).documentType
-      : undefined;
-  if (
-    documentType !== "INVOICE" &&
-    documentType !== "WARRANTY" &&
-    documentType !== "MANUAL" &&
-    documentType !== "OTHER"
-  )
-    return false;
-  return scopeMaySeeDocumentType(documentType, scope);
+      ? (payload as Record<string, unknown>)
+      : {};
+  const namesADocument =
+    DOCUMENT_EVENT_TYPES.includes(event.type) ||
+    DOCUMENT_PAYLOAD_KEYS.some((key) => key in fields);
+  if (!namesADocument) return true;
+
+  const documentType = fields.documentType;
+  const known = DOCUMENT_TYPES.find((type) => type === documentType);
+  if (!known) return false;
+  return scopeMaySeeDocumentType(known, scope);
 }
 
 function optionalText(value: string | null | undefined) {
