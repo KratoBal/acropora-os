@@ -55,10 +55,18 @@ import {
  * sem eleg egyedul, ezert all itt mind a ketto.
  *
  * MA A KETTO UGYANAZT ADJA: a nyolc `AssetEventType` kozul pontosan a
- * `DOCUMENT_UPLOADED` es a `DOCUMENT_DELETED` ir dokumentum-mezot (merve
- * ugyanaznap, a `assetEvent.create` hivasokon). A kulonbseg tehat nem a mai
- * viselkedesben all, hanem a kilencedik tipusnal -- es epp ezert van ra
- * kontroll-teszt, ami MA is el tud bukni.
+ * `DOCUMENT_UPLOADED` es a `DOCUMENT_DELETED` ir dokumentum-mezot. A kulonbseg
+ * tehat nem a mai viselkedesben all, hanem a kilencedik tipusnal -- es epp
+ * ezert van ra kontroll-teszt, ami MA is el tud bukni.
+ *
+ * ES A MERES MODJA IDE TARTOZIK, MERT AZ ELSO VALTOZATA SZUK VOLT: a
+ * `assetEvent.create` hivasokra keresni NEM eleg. A frissitesi ut nem a hivas
+ * helyen epiti a payloadot, hanem egy `events` tombbe gyujti, es `createMany`
+ * irja ki `payload: event.payload` alakban -- egy indirekcio, ami mogott negy
+ * tovabbi esemeny all. A helyes meres a TABLARA szol (`assetEvent.` minden
+ * elofordulasa): ot irasi hely, mind ebben a fajlban, es mind a nyolc tipus
+ * elofordul. Aki ezt a szabalyt valaha ujrameri, a tablara keressen, ne a
+ * hivas nevere.
  *
  * A FEL NEM ISMERT DOKUMENTUM-TIPUS PARTNERNEL REJTVE MARAD. Ha a payload
  * dokumentumot nevez meg, de a tipusa hianyzik vagy ismeretlen, nem tudjuk,
