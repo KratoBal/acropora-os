@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   buildUnitOptions,
   selectableUnitOptions,
+  unitLevels,
   unitPathLabel,
   type PartnerUnitLike,
 } from "./site-tree";
@@ -135,5 +136,127 @@ describe("selectableUnitOptions", () => {
   it("counts what it left out, so the screen can say so", () => {
     assert.equal(selectableUnitOptions(units).hiddenCount, 1);
     assert.equal(selectableUnitOptions([]).hiddenCount, 0);
+  });
+});
+
+/**
+ * A LEPCSOS VALASZTO. A `selectableUnitOptions` a teljes utas listat meri; ez a
+ * blokk azt, hogy SZINTENKENT mit kell mutatni.
+ */
+describe("unitLevels", () => {
+  const tree: PartnerUnitLike[] = [
+    { id: "bio", parentId: null, code: "BIO", name: "Biodóm", isActive: true },
+    { id: "ppu", parentId: null, code: "APU", name: "PP üzem", isActive: true },
+    {
+      id: "foka",
+      parentId: "bio",
+      code: "FOK",
+      name: "Fókamedence",
+      isActive: true,
+    },
+    {
+      id: "capa",
+      parentId: "bio",
+      code: "CAP",
+      name: "Cápasziget",
+      isActive: true,
+    },
+    {
+      id: "szuro",
+      parentId: "foka",
+      code: "SZU",
+      name: "Szűrőgépház",
+      isActive: true,
+    },
+  ];
+
+  it("választás nélkül CSAK a gyökerek állnak, egy szinten", () => {
+    const levels = unitLevels(tree, null);
+    assert.equal(levels.length, 1);
+    assert.deepEqual(
+      levels[0]?.options.map((option) => option.id),
+      ["ppu", "bio"],
+    );
+    assert.equal(levels[0]?.selectedId, null);
+  });
+
+  /**
+   * A LANC EGGYEL HOSSZABB A MELYSEGNEL: az utolso szint az, ahol meg nincs
+   * valasztas. Enelkul a felhasznalo nem tudna lejjebb lepni.
+   */
+  it("a kiválasztott ág mentén szintenként bomlik ki", () => {
+    const levels = unitLevels(tree, "foka");
+    assert.equal(levels.length, 3);
+    assert.equal(levels[0]?.selectedId, "bio");
+    assert.deepEqual(
+      levels[1]?.options.map((option) => option.id),
+      ["capa", "foka"],
+    );
+    assert.equal(levels[1]?.selectedId, "foka");
+    assert.deepEqual(
+      levels[2]?.options.map((option) => option.id),
+      ["szuro"],
+    );
+    assert.equal(levels[2]?.selectedId, null);
+  });
+
+  /** A levelnel az utolso szint URES: a hivo ebbol tudja, hogy nincs tovabb. */
+  it("levélen az utolsó szint üres, nem hiányzik", () => {
+    const levels = unitLevels(tree, "szuro");
+    assert.equal(levels.length, 4);
+    assert.deepEqual(levels[3], { options: [], selectedId: null });
+  });
+
+  /**
+   * A KOR NEM ELMELETI VEDELEM. Hibas adatnal a felfele bejaras vegtelen ciklus
+   * lenne, es a keperyon egy kimerevedett urlap latszana -- olyan hiba, amit
+   * senki nem kotne az adathoz.
+   *
+   * ES EGY KORLAT, AMIT KI KELL IRNI: EZ AZ ALLITAS NEM TUD PIROSRA VALNI.
+   * Merve 2026-08-31: a `seen` halmazt kivéve a hivas nem rossz eredmenyt ad,
+   * hanem VISSZA SEM TER -- egy hatvan masodperces idokorlat olte meg, miutan a
+   * fuggveny elindult. Vagyis a vedelem eltavolitasa a suite-ot MEGAKASZTJA, nem
+   * megbuktatja, es egy akadt teszt a CI-ben rosszabb, mint egy piros.
+   *
+   * A vedelem ettol helyes, de a KALIBRACIOJA ezen az egy allitason nem all: ami
+   * bizonyithato, az annyi, hogy a fuggveny korbe hivatkozo adaton is VISSZATER
+   * es korlatos lancot ad. Aki ezt a sort atirja, tudja meg, hogy nem egy piros
+   * teszt fogja megvedeni.
+   */
+  it("körbe hivatkozó adaton MEGÁLL", () => {
+    const cyclic: PartnerUnitLike[] = [
+      { id: "a", parentId: "b", code: "A", name: "A", isActive: true },
+      { id: "b", parentId: "a", code: "B", name: "B", isActive: true },
+    ];
+    const levels = unitLevels(cyclic, "a");
+    assert.ok(levels.length <= 3);
+  });
+
+  /**
+   * A KIVEZETETT HELYSZIN NEM VALASZTHATO, DE A LANC ATMEGY RAJTA. Enelkul egy
+   * meglevo eszkoz szerkesztojen a beallitott helyszin NEMAN eltunne, es a
+   * mentes atirna valami masra.
+   */
+  it("kivezetett helyszínen is felépül a lánc, csak nem választható", () => {
+    const retired: PartnerUnitLike[] = [
+      {
+        id: "bio",
+        parentId: null,
+        code: "BIO",
+        name: "Biodóm",
+        isActive: false,
+      },
+      {
+        id: "foka",
+        parentId: "bio",
+        code: "FOK",
+        name: "Fóka",
+        isActive: true,
+      },
+    ];
+    const levels = unitLevels(retired, "foka");
+    assert.equal(levels.length, 3);
+    assert.equal(levels[0]?.selectedId, "bio");
+    assert.equal(levels[0]?.options[0]?.isActive, false);
   });
 });
