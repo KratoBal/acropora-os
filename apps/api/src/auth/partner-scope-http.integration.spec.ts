@@ -71,6 +71,8 @@ describe(
     let tokenA: string;
     let tokenB: string;
     let tokenInternal: string;
+    /** Olyan szerep, ami NEM viszi a `SERVICE_VIEW` jogot -- a dekorator merceje. */
+    let tokenWithoutServiceView: string;
 
     async function login(email: string): Promise<string> {
       const response = await fetch(`${base}/auth/mobile/login/password`, {
@@ -145,6 +147,21 @@ describe(
             passwordUpdatedAt: new Date(),
           },
         }),
+        /**
+         * SAJAT KOLLEGA, DE OLYAN SZEREPPEL, AMI NEM VISZI A `SERVICE_VIEW`
+         * JOGOT. A partner-kotes itt NULL, tehat a hatokor belsos -- amit merunk,
+         * az NEM a hatokor, hanem a jogosultsagi dekorator.
+         */
+        prisma.user.create({
+          data: {
+            email: `sales-${suffix}@${TEST_EMAIL_DOMAIN}`,
+            displayName: "HTTP Értékesítő kolléga",
+            role: "SALES",
+            isActive: true,
+            passwordHash,
+            passwordUpdatedAt: new Date(),
+          },
+        }),
       ]);
 
       const [aA, aB] = await Promise.all([
@@ -178,6 +195,9 @@ describe(
       tokenA = await login(`a-${suffix}@${TEST_EMAIL_DOMAIN}`);
       tokenB = await login(`b-${suffix}@${TEST_EMAIL_DOMAIN}`);
       tokenInternal = await login(`internal-${suffix}@${TEST_EMAIL_DOMAIN}`);
+      tokenWithoutServiceView = await login(
+        `sales-${suffix}@${TEST_EMAIL_DOMAIN}`,
+      );
     });
 
     after(async () => {
@@ -215,6 +235,23 @@ describe(
     it("token nélkül a végpont 401-et ad", async () => {
       const response = await get("/service/assets");
       assert.equal(response.status, 401);
+    });
+
+    /**
+     * A JOGOSULTSAGI DEKORATOR, ES EZ MASIK TENGELY, MINT A HATOKOR.
+     *
+     * Merve 2026-08-31, mielott ez az allitas megszuletett: a
+     * `@RequirePermissions(SERVICE_VIEW)` levetele a lista-vegpontrol NULLA
+     * tesztet vitt pirosra -- sem az 1448 egysegteszt, sem a 30 kontroller-szintu
+     * allitas, sem ez a suite nem vette eszre, mert MINDEN korabbi kero
+     * rendelkezik ezzel a joggal. A res tehat a sajat suite-omban is ott volt.
+     *
+     * A kero SAJAT kollega (partner-kotes nelkul), tehat a hatokor belsos: ha ez
+     * az allitas elbukik, az CSAK a dekoratorrol szolhat, semmi masrol.
+     */
+    it("SERVICE_VIEW jog nélküli kolléga 403-at kap", async () => {
+      const response = await get("/service/assets", tokenWithoutServiceView);
+      assert.equal(response.status, 403);
     });
 
     it("a belsős kérő MINDKÉT eszközt megkapja", async () => {
