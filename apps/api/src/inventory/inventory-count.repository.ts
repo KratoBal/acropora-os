@@ -17,6 +17,7 @@ import {
   postInventoryMovement,
   type InventoryMovementDatabase,
 } from "../common/inventory-movement-writer.js";
+import { isUnasMasteredVariant } from "../products/catalog-authority.js";
 import { setStockItemQuantity } from "../common/stock-item-writer.js";
 import {
   ensureMainWarehouse,
@@ -459,7 +460,7 @@ export class InventoryCountRepository extends Repository {
                     unit: line.variant.unit,
                     quantityDelta: line.countedQty!.minus(line.expectedQty),
                     syncToUnas:
-                      line.variant.product.catalogAuthority === "UNAS" &&
+                      isUnasMasteredVariant(line.variant) &&
                       !line.variant.product.unasSnapshot?.isPackageProduct,
                   })),
                 });

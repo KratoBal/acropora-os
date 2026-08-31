@@ -16,6 +16,7 @@ import {
   ensureMainWarehouse,
   type WarehouseLookupDatabase,
 } from "../common/warehouse.util.js";
+import { isUnasMasteredVariant } from "../products/catalog-authority.js";
 import { parseUnasPackageComponents } from "../common/unas-package-product.util.js";
 import { retryOnTakenCode } from "../common/unique-code.util.js";
 import type { PosSaleListQueryDto } from "./dto/pos-sale-list-query.dto.js";
@@ -261,7 +262,7 @@ export class PosSaleRepository extends Repository {
             const resolved = componentVariantBySku.get(component.sku);
             if (
               !resolved ||
-              resolved.product.catalogAuthority !== "UNAS" ||
+              !isUnasMasteredVariant(resolved) ||
               resolved.product.unasSnapshot?.isPackageProduct
             )
               return [];
@@ -283,7 +284,7 @@ export class PosSaleRepository extends Repository {
               productName: variant.name ?? variant.product.name,
               unit: variant.unit,
               quantityPerSale: new Prisma.Decimal(1),
-              syncToUnas: variant.product.catalogAuthority === "UNAS",
+              syncToUnas: isUnasMasteredVariant(variant),
             },
           ];
       result.set(variant.id, {
@@ -297,7 +298,7 @@ export class PosSaleRepository extends Repository {
           variant.unasReportedStock ??
           snapshot?.reportedStock ??
           new Prisma.Decimal(0),
-        syncToUnas: variant.product.catalogAuthority === "UNAS",
+        syncToUnas: isUnasMasteredVariant(variant),
         stockComponents:
           snapshot?.isPackageProduct &&
           stockComponents.length !== packageComponents.length
