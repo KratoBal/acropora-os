@@ -22,11 +22,55 @@ import type {
 const ACTIVE_SYNC_KEY = "FOXPOST_GMAIL_SETTLEMENTS";
 const STALE_RUN_AFTER_MS = 20 * 60_000;
 
-const summaryInclude = {
+/**
+ * AMI EGY ELSZAMOLAS OSSZEFOGLALOJAHOZ KELL, ES AMI NEM.
+ *
+ * AZ `xlsxContent` ES A `pdfContent` SZANDEKOSAN HIANYZIK, es ezert kell
+ * nevesitett lista `include` helyett: az `include` MINDEN skalar mezot
+ * visszaad, tehat a forrasfajlok bajtjait is. A lista alapertelmezett
+ * lapmerete 25 (`foxpost-settlement-list-query.dto.ts`), vagyis egy lapozas
+ * OTVEN bajt-tombot olvasott be az adatbazisbol, amibol az osszefoglalo
+ * egyet sem hasznal.
+ *
+ * A KET LETOLTESI UT ERINTETLEN: a `storedSource` es a `downloadReport`
+ * kifejezett `select`-tel keri a bajtokat, mert OTT kellenek. A hiba csak
+ * ott volt, ahol nem.
+ *
+ * A TELJESSEGET A FORDITO ORZI, nem egy kulon teszt: a sor tipusa ebbol a
+ * listabol szarmazik (`GetPayload`), tehat egy kimaradt mezo nem futasidoben
+ * derul ki, hanem a `toSummary` nem fordul le.
+ */
+const settlementSummarySelect = {
+  id: true,
+  settlementCode: true,
+  partnerCode: true,
+  status: true,
+  errorCode: true,
+  invoiceNumber: true,
+  invoiceIssueDate: true,
+  periodStart: true,
+  periodEnd: true,
+  currency: true,
+  collectedAmount: true,
+  invoiceGrossAmount: true,
+  transferredAmount: true,
+  gmailSubject: true,
+  gmailInternalDate: true,
+  processedAt: true,
+  createdAt: true,
   lines: { select: { status: true } },
 } as const;
 
-const detailInclude = {
+/**
+ * Az adatlap ugyanezt kivanja, plusz a forras AZONOSITOIT es a FAJLNEVEKET
+ * (nem a tartalmat), es a sorokat teljes alakban.
+ */
+const settlementDetailSelect = {
+  ...settlementSummarySelect,
+  gmailMessageId: true,
+  gmailFrom: true,
+  xlsxFileName: true,
+  pdfFileName: true,
   lines: {
     orderBy: { sourceRowNumber: "asc" },
     include: {
@@ -36,10 +80,10 @@ const detailInclude = {
 } as const;
 
 type SettlementSummaryRow = Prisma.FoxpostSettlementGetPayload<{
-  include: typeof summaryInclude;
+  select: typeof settlementSummarySelect;
 }>;
 type SettlementDetailRow = Prisma.FoxpostSettlementGetPayload<{
-  include: typeof detailInclude;
+  select: typeof settlementDetailSelect;
 }>;
 
 function toSummary(row: SettlementSummaryRow): FoxpostSettlementSummary {
@@ -419,7 +463,7 @@ export class FoxpostSettlementRepository extends Repository {
     const [rows, totalItems] = await Promise.all([
       prisma.foxpostSettlement.findMany({
         where,
-        include: summaryInclude,
+        select: settlementSummarySelect,
         orderBy: [
           { invoiceIssueDate: { sort: "desc", nulls: "last" } },
           { createdAt: "desc" },
@@ -443,7 +487,7 @@ export class FoxpostSettlementRepository extends Repository {
   async detail(id: string): Promise<FoxpostSettlementDetail> {
     const row = await prisma.foxpostSettlement.findUnique({
       where: { id },
-      include: detailInclude,
+      select: settlementDetailSelect,
     });
     if (!row) throw new NotFoundException("FOXPOST_SETTLEMENT_NOT_FOUND");
     return toDetail(row);
@@ -633,7 +677,24 @@ export class FoxpostSettlementRepository extends Repository {
   }
 
   async listReports(): Promise<FoxpostMonthlyReportSummary[]> {
+    /**
+     * A `content` SZANDEKOSAN HIANYZIK: az osszefoglalo nem hasznalja, a tabla
+     * viszont HAVONTA no, tehat a lista terhelese magatol nagyobb lenne minden
+     * honappal. A letoltes (`downloadReport`) kifejezetten keri a bajtokat.
+     */
     const reports = await prisma.foxpostMonthlyReport.findMany({
+      select: {
+        id: true,
+        year: true,
+        month: true,
+        filename: true,
+        settlementCount: true,
+        invoiceCount: true,
+        collectedAmount: true,
+        invoiceGrossAmount: true,
+        transferredAmount: true,
+        generatedAt: true,
+      },
       orderBy: [{ year: "desc" }, { month: "desc" }],
     });
     return Promise.all(
