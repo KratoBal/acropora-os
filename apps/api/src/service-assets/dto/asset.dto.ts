@@ -51,6 +51,13 @@ export class AssetListQueryDto {
    * változatlan marad -- a webes nyilvántartásnak a teljesség az értéke.
    */
   @IsIn(["SERVICE_PARTNER"]) @IsOptional() ownerScope?: "SERVICE_PARTNER";
+  /**
+   * A PARTNER ALEGYSÉGE, ÉS A SZŰRÉS A RÉSZFÁRA SZÓL, nem csak a megnevezett
+   * csomópontra: a „Biodóm" alatti medencéken lógó eszközök is benne vannak.
+   * Az indok a `unit-subtree.ts` jegyzetében áll -- röviden: az eszköz bármelyik
+   * csomóponthoz köthető, tehát a pontos egyezés csendben hiányos listát adna.
+   */
+  @IsString() @IsOptional() departmentId?: string;
   @IsString() @IsOptional() aquariumId?: string;
   @IsString() @IsOptional() parentAssetId?: string;
   @IsIn([...ASSET_STATUSES, "ALL"]) @IsOptional() status:

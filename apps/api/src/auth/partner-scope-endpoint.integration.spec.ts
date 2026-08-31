@@ -120,6 +120,10 @@ describe(
     let qrTokenB: string;
     let unitOfSupplierA: string;
     let unitOfSupplierB: string;
+    let assetSupplierAOther: string;
+    let assetSupplierB: string;
+    /** Csak a masodik partner-A eszkoz nevere illeszkedik. */
+    const otherOnly = `MASODIK${Date.now() % 1_000_000}`;
     let invoiceOfA: string;
     let warrantyOfA: string;
     let invoiceFileNameOfA: string;
@@ -324,6 +328,45 @@ describe(
       assetA = aA.id;
       assetB = aB.id;
       assetSupplierA = aSup.id;
+
+      /**
+       * AZ ALEGYSEG SZERINTI SZURES A HATOKOR MELLE KERULT (murena PR 270), es
+       * ket kerdest nyit, amire eddig egyik oldal tesztje sem valaszolt:
+       *
+       * 1. Egy partner IDEGEN alegyseg azonositojaval sem lathat idegen sort. A
+       *    `departmentId` felhasznalo altal kuldott parameter, ugyanugy, mint az
+       *    `ownerId` -- es ugyanugy kell viselkednie.
+       * 2. Az alegyseg-szuro a keresessel EGYUTT szukit, nem vagylagosan. Ha a
+       *    feltetel a kereses `OR` tombjebe kerulne, a reszfa sorai a keresestol
+       *    FUGGETLENUL feljonnenek.
+       *
+       * Ehhez kell: a partner A eszkoze egy alegysegben, egy MASIK eszkoze
+       * alegyseg nelkul (a metszet mereséhez), es a partner B-nek is egy eszkoze
+       * a sajat alegysegeben (az idegen azonosito mereséhez).
+       */
+      await prisma.asset.update({
+        where: { id: assetSupplierA },
+        data: { departmentId: unitOfSupplierA },
+      });
+      const [supplierAExtra, supplierBAsset] = await Promise.all([
+        prisma.asset.create({
+          data: {
+            assetNumber: `${TEST_ASSET_PREFIX}${suffix}-SO`,
+            name: `${shared} eszköz partner A második ${otherOnly}`,
+            supplierId: supplierA,
+          },
+        }),
+        prisma.asset.create({
+          data: {
+            assetNumber: `${TEST_ASSET_PREFIX}${suffix}-SB`,
+            name: `${shared} eszköz partner B`,
+            supplierId: supplierB,
+            departmentId: unitOfSupplierB,
+          },
+        }),
+      ]);
+      assetSupplierAOther = supplierAExtra.id;
+      assetSupplierB = supplierBAsset.id;
       qrTokenA = aA.qrToken;
       qrTokenB = aB.qrToken;
 
@@ -478,7 +521,14 @@ describe(
       );
       assert.deepEqual(
         list.items.map((item) => item.id).sort(),
-        [assetA, assetB, assetSupplierA, assetForDeletes].sort(),
+        [
+          assetA,
+          assetB,
+          assetSupplierA,
+          assetForDeletes,
+          assetSupplierAOther,
+          assetSupplierB,
+        ].sort(),
       );
 
       const partners = await suppliers.list(
@@ -602,6 +652,65 @@ describe(
       });
 
       /**
+       * AZ ALEGYSEG AZONOSITOJA UGYANOLYAN FELHASZNALOI PARAMETER, MINT AZ
+       * `ownerId`, tehat ugyanaz a kerdes all ra: kikapcsolhatja-e vele a kero a
+       * sajat szureset. Nem -- a jogosultsagi feltetel kulon `AND` agban all, az
+       * alegyseg-szuro pedig a felhasznaloi objektumban.
+       *
+       * A MERCE: a hatokor-szuro kivetelevel ez a teszt PIROS lesz, mert akkor a
+       * partner B alegysegeben allo eszkoz feljonne.
+       */
+      it("idegen alegység azonosítójával sem jön fel idegen eszköz", async () => {
+        const forSupplier = await assets.list(
+          assetQuery({ departmentId: unitOfSupplierB }),
+          asSupplierA,
+        );
+        assert.deepEqual(forSupplier.items, []);
+        assert.equal(forSupplier.pagination.totalItems, 0);
+      });
+
+      /**
+       * AZ ALEGYSEG-SZURO ES A KERESES EGYUTT SZUKIT, NEM VAGYLAGOSAN.
+       *
+       * Ez nem a hatokorrol szol, hanem az alegyseg-szuro sajat helyerol: ha a
+       * feltetel a kereses `OR` tombjebe kerulne, a reszfa sorai a keresestol
+       * FUGGETLENUL feljonnenek. Merve 2026-08-31, a beolvasztas utan: az `OR`-ba
+       * tolt sor mellett SEMMI nem valt pirosra, sem itt, sem a
+       * `unit-subtree.spec.ts`-ben -- az a spec tiszta fuggvenyt mer egy memoriabeli
+       * listan, es a lekerdezest nem latja. Ez a teszt azt a rest zarja.
+       *
+       * A kereses SZANDEKOSAN a MASIK eszkozre illeszkedik: az alegysegben allo
+       * sor igy csak akkor jonne fel, ha a ket feltetel vagylagos lenne.
+       */
+      it("az alegység-szűrő a kereséssel EGYÜTT szűkít, nem vagylagosan", async () => {
+        const inUnit = await assets.list(
+          assetQuery({ departmentId: unitOfSupplierA }),
+          asSupplierA,
+        );
+        assert.deepEqual(
+          inUnit.items.map((item) => item.id),
+          [assetSupplierA],
+          "kontroll: az alegység önmagában megtalálja a saját eszközét",
+        );
+
+        const bySearchOnly = await assets.list(
+          assetQuery({ search: otherOnly }),
+          asSupplierA,
+        );
+        assert.deepEqual(
+          bySearchOnly.items.map((item) => item.id),
+          [assetSupplierAOther],
+          "kontroll: a keresés önmagában a MÁSIK eszközt találja meg",
+        );
+
+        const both = await assets.list(
+          assetQuery({ departmentId: unitOfSupplierA, search: otherOnly }),
+          asSupplierA,
+        );
+        assert.deepEqual(both.items, []);
+      });
+
+      /**
        * A KET PARTNER-AG NEM LAT AT EGYMASHOZ. Az eszkoz ket oszlopon kotodhet,
        * es egy vevo-hatokoru kero nem lathat szerviz-partner eszkozt attol, hogy
        * a masik oszlopban all egy azonosito.
@@ -612,8 +721,8 @@ describe(
           asSupplierA,
         );
         assert.deepEqual(
-          forSupplier.items.map((item) => item.id),
-          [assetSupplierA],
+          forSupplier.items.map((item) => item.id).sort(),
+          [assetSupplierA, assetSupplierAOther].sort(),
         );
       });
     });

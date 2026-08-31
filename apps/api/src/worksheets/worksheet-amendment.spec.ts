@@ -20,12 +20,28 @@ describe("whether a worksheet version may be amended", () => {
   });
 
   /**
-   * The two that stay amendable, asserted rather than left implied. A rule
+   * The one that stays amendable, asserted rather than left implied. A rule
    * that only ever refuses would pass a test suite that never checks what it
    * lets through, and then nobody could amend anything.
    */
-  it("lets a closed sheet be amended, signed or refused by the customer", () => {
+  it("lets a closed but unsigned sheet be amended", () => {
     assert.equal(amendRefusal("AWAITING_SIGNATURE"), null);
+  });
+
+  /**
+   * REJECTED HAS ITS OWN TEST BECAUSE IT IS THE ONE STATE WHERE TWO READINGS
+   * OF THE SAME RULE DISAGREE, and grouping it with AWAITING_SIGNATURE hid
+   * that: it reads as one obvious case with two obvious members.
+   *
+   * The rule branches on the status name. The other reading - "the boundary is
+   * the signature" - would refuse here, because a rejection DOES write a
+   * signature row (`decision: "REJECTED"`, same transaction as the status
+   * change; see WorksheetsRepository.sign).
+   *
+   * So this assertion is not a detail of the enum. It records which reading is
+   * in force, and a change of mind has to come here and say so.
+   */
+  it("lets a rejected sheet be amended, even though a rejection is signed", () => {
     assert.equal(amendRefusal("REJECTED"), null);
   });
 });

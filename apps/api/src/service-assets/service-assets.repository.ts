@@ -4,6 +4,7 @@ import {
   scopeWhereForAndBranch,
   type PartnerScope,
 } from "../auth/partner-scope.util.js";
+import { collectUnitSubtreeIds } from "./unit-subtree.js";
 
 import { createHash, randomUUID } from "node:crypto";
 
@@ -176,10 +177,36 @@ export class ServiceAssetsRepository extends Repository {
     super(prisma);
   }
 
+  /**
+   * AZ ALEGYSÉG SZERINTI SZŰRÉS EGY ELŐZETES LEKÉRDEZÉST IGÉNYEL, és ezért áll
+   * a `where` fölött: a fa mélysége nem korlátos, a Prisma pedig rekurzív
+   * lekérdezést nem tud kifejezni. A részfát ezért két lépésben állítjuk elő --
+   * egy köteg sor, majd egy tiszta bejárás (`collectUnitSubtreeIds`).
+   */
+  private async unitSubtreeIds(departmentId: string): Promise<string[]> {
+    const department = await prisma.worksheetDepartment.findUnique({
+      where: { id: departmentId },
+      select: { customerId: true },
+    });
+    // NEM LÉTEZŐ ALEGYSÉG: a saját azonosítójára szűkítünk, ami egyetlen
+    // eszközre sem illeszkedik. A csábító alternatíva (nincs szűrő) a TELJES
+    // listát adná vissza egy elgépelt azonosítóra, hibaüzenet nélkül.
+    if (!department) return [departmentId];
+
+    const units = await prisma.worksheetDepartment.findMany({
+      where: { customerId: department.customerId },
+      select: { id: true, name: true, parentId: true },
+    });
+    return collectUnitSubtreeIds(units, departmentId);
+  }
+
   async list(
     query: AssetListQueryDto,
     scope: PartnerScope,
   ): Promise<AssetListResponse> {
+    const departmentIds = query.departmentId
+      ? await this.unitSubtreeIds(query.departmentId)
+      : null;
     // A JOGOSULTSAGI SZURO `AND` AGKENT, SOHA NEM KULCSKENT -- lasd a
     // scopeWhereForAndBranch jegyzetet. Az alabbi objektum a FELHASZNALOI
     // szurot `customerId` / `supplierId` KULCSON spreadeli, es felso szintu
@@ -194,6 +221,7 @@ export class ServiceAssetsRepository extends Repository {
         : query.ownerType === "SUPPLIER" && query.ownerId
           ? { supplierId: query.ownerId }
           : {}),
+      ...(departmentIds ? { departmentId: { in: departmentIds } } : {}),
       ...(query.aquariumId ? { aquariumId: query.aquariumId } : {}),
       ...(query.parentAssetId ? { parentAssetId: query.parentAssetId } : {}),
       ...(query.dueBefore
