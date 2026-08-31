@@ -625,7 +625,10 @@ describe(
     });
 
     it("offers only colleagues whose role may edit the worksheet", async () => {
-      const { items } = await repository.assignableUsers();
+      // BELSOS hatokor, kiirva: ez az allitas a SZEREP szerinti szurest meri,
+      // nem a partner-hatokort. Azt kulon suite meri
+      // (`auth/partner-scope-endpoint.integration.spec.ts`).
+      const { items } = await repository.assignableUsers({ kind: "internal" });
       const ids = new Set(items.map((item) => item.id));
       assert.ok(ids.has(technicianUserId));
       // A VIEWER látja a lapot, de nem ír rá, tehát felelősnek sem való.

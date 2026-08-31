@@ -8,6 +8,7 @@ import type { AuthenticatedUser } from "@acropora/types";
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import {
   AssetListQueryDto,
+  AssetOwnersQueryDto,
   UploadAssetDocumentDto,
 } from "../service-assets/dto/asset.dto.js";
 import { ServiceAssetsController } from "../service-assets/service-assets.controller.js";
@@ -39,8 +40,31 @@ import { AuthUserResolver } from "./auth-user-resolver.js";
  * valaszig egyben all, es nem csak a kozepetol.
  *
  * A MERCE, AMIRE MEGIRTUK: a suite akkor er valamit, ha ELBUKIK attol, hogy a
- * hatokor-szuro kikerul a tarolo retegbol. Kalibralva 2026-08-31, a szamok a
- * commit uzenetben allnak.
+ * hatokor-szuro kikerul a tarolo retegbol. Kalibralva 2026-08-31; a SZAMOK a
+ * commit uzenetekben allnak, nem itt, mert egy szam a suite meretehez kotott es
+ * a kovetkezo teszttel elavul. Ami ide valo, az a szabaly, ami nem avul el:
+ *
+ * EGY NULLA EREDMENYU KALIBRACIO MELLE ODA KELL IRNI, MELYIK OLVASAT.
+ * Jeloletlenul ugyanugy nez ki egy vak orzo es egy helyes nulla, es a kovetkezo
+ * olvaso vagy folosleges munkat vegez, vagy elmegy mellette. Negy olvasat van,
+ * es mas a teendo:
+ *
+ *   1. A PROBA nem erte el azt, amit a teszt figyel -> a probat kell atirni.
+ *   2. A TESZT vak arra, amit elrontottunk        -> a tesztet kell atirni.
+ *   3. A rontas olyat vett el, amit SZANDEKOSAN nem allitunk (peldaul a `scan`
+ *      tulajdonos-ellenorzese, amit a spec 4.1 kifejezetten elvet)
+ *                                                 -> a kodon nincs teendo, de
+ *      a nullat VARTKENT kell jelolni.
+ *   4. A rontas NEM VALTOZTATOTT SEMMIT: a ket alak szemantikailag azonos.
+ *      Ilyen az a kalibracio, amelyik az alegyseg-szurot a felhasznaloi
+ *      objektumbol a jogosultsagi `AND` tomb melle teszi -- a Prisma a tomb
+ *      elemeit osszeANDeli, tehat a lekerdezes beture ugyanaz. A sor ott
+ *      FELREVEZETO, nem hibas. -> nincs teendo, es NEM SZABAD tesztet irni ra:
+ *      az stilust merne, nem viselkedest.
+ *
+ * A 3. es a 4. kulon all, mert konnyu osszemosni oket: a harmadiknal a
+ * VISELKEDES megvaltozik, csak nem allitunk rola semmit; a negyediknel a
+ * viselkedes VALTOZATLAN.
  *
  * MELYIK ELLENORZES MIT LAT -- ez a bekezdes azert all itt, hogy a kovetkezo
  * olvaso NE nezze duplikacionak a kettot, es ne vegye ki az egyiket. Merve,
@@ -122,6 +146,13 @@ describe(
     let unitOfSupplierB: string;
     let assetSupplierAOther: string;
     let assetSupplierB: string;
+    /**
+     * TOROLT PARTNER, KIZAROLAG A `keep` AG KONTROLLJAHOZ. A valaszto-listaba
+     * nem fer bele (torolt es inaktiv), tehat ha megis megjelenik, az CSAK a
+     * `keep` agon at tortenhetett -- enelkul a "nem latja" allitas ugy is igaz
+     * lenne, hogy a `keep` ag egyaltalan nem mukodik.
+     */
+    let retiredSupplier: string;
     /** Csak a masodik partner-A eszkoz nevere illeszkedik. */
     const otherOnly = `MASODIK${Date.now() % 1_000_000}`;
     let invoiceOfA: string;
@@ -171,6 +202,9 @@ describe(
             code: `${TEST_SUPPLIER_PREFIX}${suffix}-A`,
             name: `${shared} Partner A`,
             isService: true,
+            // A valaszto-lista megkoveteli, kulonben mindenkinek ures, es a
+            // teszt nem tudna elbukni.
+            worksheetPartnerCode: `A${suffix.slice(-3)}`,
           },
         }),
         prisma.supplier.create({
@@ -178,11 +212,23 @@ describe(
             code: `${TEST_SUPPLIER_PREFIX}${suffix}-B`,
             name: `${shared} Partner B`,
             isService: true,
+            worksheetPartnerCode: `B${suffix.slice(-3)}`,
           },
         }),
       ]);
       supplierA = supA.id;
       supplierB = supB.id;
+
+      const retired = await prisma.supplier.create({
+        data: {
+          code: `${TEST_SUPPLIER_PREFIX}${suffix}-R`,
+          name: `PS-INT-torolt-${suffix}`,
+          isService: false,
+          isActive: false,
+          deletedAt: new Date(),
+        },
+      });
+      retiredSupplier = retired.id;
 
       /**
        * A PARTNER ALEGYSEGEI A TUKOR-VEVON keresztul erhetok el
@@ -963,6 +1009,140 @@ describe(
           asCustomerA,
         );
         assert.ok(file);
+      });
+    });
+
+    /**
+     * A HAROM VALASZTO. Ezek eddig SEMMILYEN hatokort nem vettek, es a `VIEWER`
+     * szerep viszi a `SERVICE_VIEW` jogot, tehat partner-oldali fiok is eleri
+     * oket. Merve 2026-08-31: a partner megkapta az IDEGEN partner nevet, es a
+     * MI kollegaink nevet es beosztasat.
+     *
+     * A spec (C) csoportja azert hagyta szuretlenul a valasztokat, mert BELSOS
+     * keroket felteteleztek. Az erv nem hamis, csak a HATOKORE mas -- es egy
+     * erv, aminek megvaltozik a hatokore, nem dontés tobbe, hanem elavult
+     * indoklas.
+     *
+     * MINDEN ALLITAS MELLETT OTT A BELSOS KONTROLL. Enelkul a szuro akkor is
+     * zold lenne, ha mindenkitol mindent elvenne -- es egy ures valaszto nem
+     * szigorubb felulet, hanem elromlott.
+     */
+    describe("A három választó szűkül a kérővel", () => {
+      it("GET service/assets/owners: a szállító a sajátját látja, a vevő egyet sem", async () => {
+        const forInternal = await assets.owners(
+          new AssetOwnersQueryDto(),
+          asInternal,
+        );
+        const internalIds = forInternal.items.map((item) => item.id);
+        assert.ok(
+          internalIds.includes(supplierA) && internalIds.includes(supplierB),
+          "kontroll: a belsős kérő MINDKÉT partnert látja",
+        );
+
+        const forSupplier = await assets.owners(
+          new AssetOwnersQueryDto(),
+          asSupplierA,
+        );
+        assert.deepEqual(
+          forSupplier.items.map((item) => item.id),
+          [supplierA],
+        );
+
+        // A vevo-hatokoru kero szamara egyetlen szerviz partner sem a sajatja.
+        const forCustomer = await assets.owners(
+          new AssetOwnersQueryDto(),
+          asCustomerA,
+        );
+        assert.deepEqual(forCustomer.items, []);
+      });
+
+      /**
+       * A `keep` AG A MASODIK UT, ES SZANDEKOSAN MEGKERULI A SZURESt: egy MAR
+       * ROGZITETT eszkoz tulajdonosa a szerkesztoben akkor is latszodjon, ha ma
+       * nem valaszthato. Belsos keronel helyes; partner-oldalinal a
+       * legszelesebb kaput nyitna. Merve a javitas elott: egy TOROLT, inaktiv,
+       * nem is szerviz-jelolt partner neve, kodja es teljes postai cime jott
+       * vissza egy tetszoleges azonositora.
+       */
+      it("GET service/assets/owners: a keep-ág sem ad ki idegen partnert", async () => {
+        const keep = (id: string) =>
+          Object.assign(new AssetOwnersQueryDto(), {
+            ownerType: "SUPPLIER" as const,
+            ownerId: id,
+          });
+
+        const forInternal = await assets.owners(
+          keep(retiredSupplier),
+          asInternal,
+        );
+        assert.ok(
+          forInternal.items.some((item) => item.id === retiredSupplier),
+          "kontroll: a keep-ág belsős kérőnél BEHOZZA a törölt partnert",
+        );
+
+        const forSupplier = await assets.owners(
+          keep(retiredSupplier),
+          asSupplierA,
+        );
+        assert.equal(
+          forSupplier.items.some((item) => item.id === retiredSupplier),
+          false,
+        );
+
+        // A masik, MA IS valaszthato partner sem jon be a keep-agon.
+        const foreign = await assets.owners(keep(supplierB), asSupplierA);
+        assert.equal(
+          foreign.items.some((item) => item.id === supplierB),
+          false,
+        );
+      });
+
+      it("GET worksheets/selectable-partners: mindenki csak a sajátját látja", async () => {
+        const forInternal = await worksheets.selectablePartners(asInternal);
+        const internalNames = forInternal.items.map((item) => item.name);
+        assert.ok(
+          internalNames.includes(`${shared} Partner A`) &&
+            internalNames.includes(`${shared} Partner B`),
+          "kontroll: a belsős kérő MINDKÉT partnert látja",
+        );
+
+        const forSupplier = await worksheets.selectablePartners(asSupplierA);
+        assert.deepEqual(
+          forSupplier.items.map((item) => item.name),
+          [`${shared} Partner A`],
+        );
+        assert.equal(
+          JSON.stringify(forSupplier).includes(`${shared} Partner B`),
+          false,
+        );
+      });
+
+      /**
+       * EZ A HARMADIK MAS TENGELY, ES EZERT VAN KULON ALLITASA.
+       *
+       * A masik ket valasztonal a kerdes az, hogy latja-e a kero az IDEGEN
+       * PARTNERT. Itt nem partner-adat megy ki, hanem a MI kollegaink neve ES
+       * beosztasa -- szemelyes adat, ami nem a partnerre tartozik. A "nem latja
+       * az idegen partnert" allitas ezt NEM fedne le.
+       *
+       * Hogy egy partner-oldali fiok oszthat-e egyaltalan munkat, ma nincs
+       * eldontve; amig nincs, az ures lista a helyes atmenet.
+       */
+      it("GET worksheets/assignable-users: a partner egyetlen kollégánk nevét sem kapja meg", async () => {
+        const forInternal = await worksheets.assignableUsers(asInternal);
+        assert.ok(
+          forInternal.items.some((item) => item.name === "Belsős kolléga"),
+          "kontroll: a belsős kérő megkapja a kiosztható kollégákat",
+        );
+
+        for (const caller of [asCustomerA, asSupplierA]) {
+          const forPartner = await worksheets.assignableUsers(caller);
+          assert.deepEqual(forPartner.items, []);
+          assert.equal(
+            JSON.stringify(forPartner).includes("Belsős kolléga"),
+            false,
+          );
+        }
       });
     });
 
