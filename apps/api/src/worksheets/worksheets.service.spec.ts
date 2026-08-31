@@ -294,7 +294,10 @@ describe("WorksheetsService", () => {
 
   it("has nothing to compare on the first version", async () => {
     const service = new WorksheetsService(repository());
-    await assert.rejects(service.diff("worksheet-1", 1), BadRequestException);
+    await assert.rejects(
+      service.diff("worksheet-1", 1, { kind: "internal" }),
+      BadRequestException,
+    );
   });
 
   it("answers who changed what and why between two versions", async () => {
@@ -333,7 +336,7 @@ describe("WorksheetsService", () => {
       }),
     );
 
-    const diff = await service.diff("worksheet-1", 2);
+    const diff = await service.diff("worksheet-1", 2, { kind: "internal" });
     assert.equal(diff.fromVersion, 1);
     assert.equal(diff.toVersion, 2);
     assert.equal(diff.changedByName, "Nagy Anna");
@@ -434,7 +437,10 @@ describe("WorksheetsService", () => {
     const service = new WorksheetsService(
       repository({ detail: async () => null }),
     );
-    await assert.rejects(service.detail("worksheet-9"), NotFoundException);
+    await assert.rejects(
+      service.detail("worksheet-9", { kind: "internal" }),
+      NotFoundException,
+    );
   });
 
   /**

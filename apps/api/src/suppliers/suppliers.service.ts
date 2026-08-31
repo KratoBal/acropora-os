@@ -1,3 +1,4 @@
+import type { PartnerScope } from "../auth/partner-scope.util.js";
 import {
   BadRequestException,
   ConflictException,
@@ -20,14 +21,25 @@ import type {
 export class SuppliersService {
   constructor(private readonly repository: SuppliersRepository) {}
 
-  list(query: SupplierListQueryDto) {
-    return this.repository.list(query);
+  list(query: SupplierListQueryDto, scope: PartnerScope) {
+    return this.repository.list(query, scope);
   }
 
-  async detail(id: string) {
-    const supplier = await this.repository.detail(id);
+  async detail(id: string, scope: PartnerScope) {
+    const supplier = await this.repository.detail(id, scope);
     if (!supplier) throw new NotFoundException("A beszállító nem található.");
     return supplier;
+  }
+
+  /**
+   * Letezes-ellenorzes az irasi utak elejen. Lasd a repository `exists`
+   * jegyzetet: itt a kerdes az, hogy LETEZIK-e a sor, nem az, hogy LATJA-e a
+   * kero -- az utobbit a PARTNERS_MANAGE jog dontotte el korabban.
+   */
+  private async assertExists(id: string) {
+    if (!(await this.repository.exists(id))) {
+      throw new NotFoundException("A beszállító nem található.");
+    }
   }
 
   /**
@@ -39,7 +51,7 @@ export class SuppliersService {
    * A felhasználónak azt kell megerősítenie, ami történni fog.
    */
   async deletionPlan(id: string) {
-    await this.detail(id);
+    await this.assertExists(id);
     return planPartnerDeletion(await this.repository.referenceCounts(id));
   }
 
@@ -49,7 +61,7 @@ export class SuppliersService {
    * a képernyő adata elavulhat, amíg a megerősítő kérdés kint van.
    */
   async remove(id: string) {
-    await this.detail(id);
+    await this.assertExists(id);
     const plan = planPartnerDeletion(await this.repository.referenceCounts(id));
 
     if (plan.action === "delete") await this.repository.remove(id);
@@ -58,9 +70,9 @@ export class SuppliersService {
     return plan;
   }
 
-  async units(id: string) {
-    await this.detail(id);
-    return this.repository.units(id);
+  async units(id: string, scope: PartnerScope) {
+    await this.assertExists(id);
+    return this.repository.units(id, scope);
   }
 
   /**
@@ -76,7 +88,7 @@ export class SuppliersService {
    * kodot otször ujrahuzni ugyanazt az uzleti hibat adna, csak kesobb.
    */
   async createUnit(id: string, input: CreateWorksheetDepartmentDto) {
-    await this.detail(id);
+    await this.assertExists(id);
     try {
       const created = await this.repository.createUnit(id, input);
       if (!created)
@@ -110,7 +122,7 @@ export class SuppliersService {
   }
 
   async update(id: string, input: UpdateSupplierDto, actorId: string) {
-    await this.detail(id);
+    await this.assertExists(id);
     try {
       return await this.repository.update(id, input, actorId);
     } catch (error) {

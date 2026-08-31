@@ -1,3 +1,8 @@
+import {
+  rowBelongsToScope,
+  scopeWhereForAndBranch,
+  type PartnerScope,
+} from "../auth/partner-scope.util.js";
 import { randomUUID } from "node:crypto";
 
 import { Injectable } from "@nestjs/common";
@@ -479,7 +484,10 @@ export class WorksheetsRepository extends Repository {
     return rows.map((row) => row.worksheetId);
   }
 
-  async list(query: WorksheetListQueryDto): Promise<WorksheetListResponse> {
+  async list(
+    query: WorksheetListQueryDto,
+    scope: PartnerScope,
+  ): Promise<WorksheetListResponse> {
     /**
      * A szűrt azonosító-halmaz ELŐBB áll elő, mint a `where`, mert a `where`-be
      * kerül bele. Üres halmaz esetén az `in: []` üres listát ad -- ez helyes:
@@ -489,7 +497,7 @@ export class WorksheetsRepository extends Repository {
       ? await this.worksheetIdsByLatestStatus(query.status)
       : null;
 
-    const where: Prisma.WorksheetWhereInput = {
+    const userWhere: Prisma.WorksheetWhereInput = {
       ...(latestStatusIds ? { id: { in: latestStatusIds } } : {}),
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.departmentId ? { departmentId: query.departmentId } : {}),
@@ -517,6 +525,12 @@ export class WorksheetsRepository extends Repository {
         : {}),
     };
 
+    // A JOGOSULTSAGI SZURO `AND` AGKENT, SOHA NEM KULCSKENT -- a fenti objektum
+    // felhasznaloi szurot spreadel es felso szintu `OR`-t is tartalmaz.
+    const where: Prisma.WorksheetWhereInput = {
+      AND: [scopeWhereForAndBranch(scope), userWhere],
+    };
+
     const [rows, totalItems] = await Promise.all([
       this.database.worksheet.findMany({
         where,
@@ -539,7 +553,24 @@ export class WorksheetsRepository extends Repository {
     };
   }
 
-  detail(id: string): Promise<WorksheetDetailRow | null> {
+  /**
+   * A KOTELEZO `scope` a mechanizmus maga: egy elem-lekeresnel az elfelejtett
+   * ellenorzes NEMA -- az idegen adat EGYETLEN hivasra megy ki. A kotelezo
+   * parameterrel a FORDITO sorolja fel a hivasi helyeket.
+   *
+   * Az ellenorzes a BETOLTOTT soron all: a nem egyezo sor `null`, tehat a hivo
+   * 404-et ad, NEM 403-at -- a 403 elarulna, hogy a sor letezik.
+   */
+  async detail(
+    id: string,
+    scope: PartnerScope,
+  ): Promise<WorksheetDetailRow | null> {
+    const row = await this.detailRow(id);
+    if (!row) return null;
+    return rowBelongsToScope(row, scope) ? row : null;
+  }
+
+  private detailRow(id: string): Promise<WorksheetDetailRow | null> {
     return this.database.worksheet.findUnique({
       where: { id },
       include: worksheetDetailInclude,

@@ -1,3 +1,11 @@
+import {
+  rowBelongsToScope,
+  scopeMaySeeDocumentType,
+  scopeWhereForAndBranch,
+  type PartnerScope,
+} from "../auth/partner-scope.util.js";
+import { collectUnitSubtreeIds } from "./unit-subtree.js";
+
 import { createHash, randomUUID } from "node:crypto";
 
 import { Injectable } from "@nestjs/common";
@@ -29,6 +37,112 @@ import {
   type AssetDetailRow,
   type AssetSummaryRow,
 } from "./service-assets.types.js";
+
+/**
+ * LATHATJA-E A KERO EZT AZ ESEMENYT.
+ *
+ * A dokumentum-esemenyek payloadja NEVEN NEVEZI a dokumentumot
+ * (`documentType`, `documentId`, `fileName`), tehat az esemenynaplo ugyanazt
+ * hordozza, amit a dokumentum-lista mar nem ad ki. Egy korlat, ami csak az utak
+ * egy reszen all, nem korlat: a szamla letezese, a neve es az idopontja itt
+ * ugyanugy kimenne.
+ *
+ * A SZABALY A TIPUSRA ES A PAYLOAD ALAKJARA IS SZOL, es a ketto UNIOJA dont
+ * (murena vetette fel, 2026-08-31). Egy tipus-lista onmagaban olyan kapu, ami
+ * CSENDBEN elavul: aki holnap felvesz egy uj esemenytipust, ami fajlnevet ir a
+ * payloadba, nem fogja tudni, hogy ide vissza kell jonnie. A payload alakja
+ * onmagaban viszont az URES payloadu `DOCUMENT_UPLOADED`-et engedne at. Egyik
+ * sem eleg egyedul, ezert all itt mind a ketto.
+ *
+ * MA A KETTO UGYANAZT ADJA: a nyolc `AssetEventType` kozul pontosan a
+ * `DOCUMENT_UPLOADED` es a `DOCUMENT_DELETED` ir dokumentum-mezot. A kulonbseg
+ * tehat nem a mai viselkedesben all, hanem a kilencedik tipusnal -- es epp
+ * ezert van ra kontroll-teszt, ami MA is el tud bukni.
+ *
+ * ES A MERES MODJA IDE TARTOZIK, MERT AZ ELSO VALTOZATA SZUK VOLT: a
+ * `assetEvent.create` hivasokra keresni NEM eleg. A frissitesi ut nem a hivas
+ * helyen epiti a payloadot, hanem egy `events` tombbe gyujti, es `createMany`
+ * irja ki `payload: event.payload` alakban -- egy indirekcio, ami mogott negy
+ * tovabbi esemeny all. A helyes meres a TABLARA szol (`assetEvent.` minden
+ * elofordulasa): ot irasi hely, mind ebben a fajlban, es mind a nyolc tipus
+ * elofordul. Aki ezt a szabalyt valaha ujrameri, a tablara keressen, ne a
+ * hivas nevere.
+ *
+ * A FEL NEM ISMERT DOKUMENTUM-TIPUS PARTNERNEL REJTVE MARAD. Ha a payload
+ * dokumentumot nevez meg, de a tipusa hianyzik vagy ismeretlen, nem tudjuk,
+ * mirol szol; az atengedese pont annal a sornal adna hozzaferest, amirol a
+ * legkevesebbet tudjuk. Belsos keronel minden latszik, tehat a naplo
+ * teljessege nem vesz el.
+ *
+ * A DONTES A PAYLOADBOL SZULETIK, SOHA NEM VISSZAKERESESBOL. A torles KEMENY
+ * (`tx.assetDocument.delete`), tehat a `DOCUMENT_DELETED` esemeny olvasasakor a
+ * dokumentum-sor MAR NINCS MEG: egy `documentId` alapu visszakereses semmit nem
+ * talalna, es a szuro pont a torolt szamlanal nyilna ki. A payload maga
+ * hordozza a tipust, tehat van biztonsagos forras.
+ */
+const DOCUMENT_PAYLOAD_KEYS = ["documentType", "documentId", "fileName"];
+/**
+ * A KULCS-VIZSGALAT MELY, NEM SEKELY, ES EZ MERESEN MULT.
+ *
+ * Murena javasolta, hogy egy komment jelolje: a szabaly LAPOS payloadot var. A
+ * premisszat lemertem, es nem all: a `PLACEMENT_CHANGED` MA IS beagyaz
+ * (`payload.from.customerId`, `payload.to.customerId`). Dokumentum-mezot ugyan
+ * nem tesz melyre, tehat a mai viselkedes helyes -- de egy "ELVART: lapos
+ * payload" komment mar a leirasa pillanataban hamis lenne, es a kovetkezo
+ * olvaso vagy elavultnak nezne, vagy hibanak.
+ *
+ * Ezert nem komment lett belole, hanem mely bejaras. Egy komment nem orzo; ha
+ * valaki holnap `payload.document.fileName` alakban ir, a sekely vizsgalat
+ * CSENDBEN atengedne, a mely nem.
+ *
+ * A MELYSEG-KORLAT ZARVA BUKIK: egy ennel melyebb payload nem a mi irasunk,
+ * tehat nem allitunk rola semmit, es a partner nem latja.
+ */
+const MAX_PAYLOAD_DEPTH = 8;
+
+function payloadNamesADocument(value: unknown, depth = 0): boolean {
+  if (depth > MAX_PAYLOAD_DEPTH) return true;
+  if (Array.isArray(value))
+    return value.some((item) => payloadNamesADocument(item, depth + 1));
+  if (!value || typeof value !== "object") return false;
+  const fields = value as Record<string, unknown>;
+  if (DOCUMENT_PAYLOAD_KEYS.some((key) => key in fields)) return true;
+  return Object.values(fields).some((item) =>
+    payloadNamesADocument(item, depth + 1),
+  );
+}
+/**
+ * A TIPUS-LISTA MEGMARAD A PAYLOAD-SZABALY MELLETT, es a ketto UNIOJA dont.
+ *
+ * A csere (csak payload-alak) egy meglevo garanciat vett volna el, es ezt a
+ * sajat kontroll-teszt fogta meg: egy `DOCUMENT_UPLOADED`, aminek URES vagy
+ * serult a payloadja, dokumentumot nevez meg a TIPUSAVAL, de egyetlen
+ * dokumentum-mezot sem hordoz -- a puszta payload-szabaly atengedte volna.
+ * Vagyis a tipus-lista nem elavult otlet, csak onmagaban nem eleg.
+ */
+const DOCUMENT_EVENT_TYPES = ["DOCUMENT_UPLOADED", "DOCUMENT_DELETED"];
+const DOCUMENT_TYPES = ["INVOICE", "WARRANTY", "MANUAL", "OTHER"] as const;
+
+export function scopeMaySeeAssetEvent(
+  event: { type: string; payload: unknown },
+  scope: PartnerScope,
+): boolean {
+  if (scope.kind === "internal") return true;
+
+  const payload = event.payload;
+  const fields =
+    payload && typeof payload === "object" && !Array.isArray(payload)
+      ? (payload as Record<string, unknown>)
+      : {};
+  const namesADocument =
+    DOCUMENT_EVENT_TYPES.includes(event.type) || payloadNamesADocument(payload);
+  if (!namesADocument) return true;
+
+  const documentType = fields.documentType;
+  const known = DOCUMENT_TYPES.find((type) => type === documentType);
+  if (!known) return false;
+  return scopeMaySeeDocumentType(known, scope);
+}
 
 function optionalText(value: string | null | undefined) {
   if (value === undefined) return undefined;
@@ -100,8 +214,42 @@ export class ServiceAssetsRepository extends Repository {
     super(prisma);
   }
 
-  async list(query: AssetListQueryDto): Promise<AssetListResponse> {
-    const where: Prisma.AssetWhereInput = {
+  /**
+   * AZ ALEGYSÉG SZERINTI SZŰRÉS EGY ELŐZETES LEKÉRDEZÉST IGÉNYEL, és ezért áll
+   * a `where` fölött: a fa mélysége nem korlátos, a Prisma pedig rekurzív
+   * lekérdezést nem tud kifejezni. A részfát ezért két lépésben állítjuk elő --
+   * egy köteg sor, majd egy tiszta bejárás (`collectUnitSubtreeIds`).
+   */
+  private async unitSubtreeIds(departmentId: string): Promise<string[]> {
+    const department = await prisma.worksheetDepartment.findUnique({
+      where: { id: departmentId },
+      select: { customerId: true },
+    });
+    // NEM LÉTEZŐ ALEGYSÉG: a saját azonosítójára szűkítünk, ami egyetlen
+    // eszközre sem illeszkedik. A csábító alternatíva (nincs szűrő) a TELJES
+    // listát adná vissza egy elgépelt azonosítóra, hibaüzenet nélkül.
+    if (!department) return [departmentId];
+
+    const units = await prisma.worksheetDepartment.findMany({
+      where: { customerId: department.customerId },
+      select: { id: true, name: true, parentId: true },
+    });
+    return collectUnitSubtreeIds(units, departmentId);
+  }
+
+  async list(
+    query: AssetListQueryDto,
+    scope: PartnerScope,
+  ): Promise<AssetListResponse> {
+    const departmentIds = query.departmentId
+      ? await this.unitSubtreeIds(query.departmentId)
+      : null;
+    // A JOGOSULTSAGI SZURO `AND` AGKENT, SOHA NEM KULCSKENT -- lasd a
+    // scopeWhereForAndBranch jegyzetet. Az alabbi objektum a FELHASZNALOI
+    // szurot `customerId` / `supplierId` KULCSON spreadeli, es felso szintu
+    // `OR`-t is tartalmaz (kereses); barmelyik hatastalanitana a jogosultsagot,
+    // ha egy szintre kerulne vele.
+    const userWhere: Prisma.AssetWhereInput = {
       ...assetOwnerScopeWhere(query.ownerScope),
       ...(query.status === "ALL" ? {} : { status: query.status }),
       ...(query.kind ? { kind: query.kind } : {}),
@@ -110,6 +258,7 @@ export class ServiceAssetsRepository extends Repository {
         : query.ownerType === "SUPPLIER" && query.ownerId
           ? { supplierId: query.ownerId }
           : {}),
+      ...(departmentIds ? { departmentId: { in: departmentIds } } : {}),
       ...(query.aquariumId ? { aquariumId: query.aquariumId } : {}),
       ...(query.parentAssetId ? { parentAssetId: query.parentAssetId } : {}),
       ...(query.dueBefore
@@ -142,6 +291,9 @@ export class ServiceAssetsRepository extends Repository {
             ],
           }
         : {}),
+    };
+    const where: Prisma.AssetWhereInput = {
+      AND: [scopeWhereForAndBranch(scope), userWhere],
     };
     const [rows, totalItems] = await Promise.all([
       prisma.asset.findMany({
@@ -277,21 +429,43 @@ export class ServiceAssetsRepository extends Repository {
     };
   }
 
-  async detail(id: string): Promise<AssetDetail | null> {
+  /**
+   * A KOTELEZO `scope` a mechanizmus maga (lasd a partner-scope.util.ts
+   * jegyzetet): elem-lekeresnel az elfelejtett ellenorzes NEMA. Az ellenorzes a
+   * BETOLTOTT soron all, es a nem egyezo sor `null` -- tehat 404, nem 403.
+   *
+   * AZ ESZKOZ KET OLDALON KOTODHET (`customerId` VAGY `supplierId`), es a
+   * `rowBelongsToScope` pont ezt kezeli: egy vevo-hatokoru kero nem lat
+   * szerviz-partner eszkozt attol, hogy a masik oszlopban all az azonosito.
+   */
+  async detail(id: string, scope: PartnerScope): Promise<AssetDetail | null> {
     const row = await prisma.asset.findUnique({
       where: { id },
       include: assetDetailInclude,
     });
-    return row
-      ? this.toDetail(
-          row,
-          await this.ancestors(row.parentAssetId),
-          await this.unitPaths([row]),
-        )
-      : null;
+    if (!row) return null;
+    if (!rowBelongsToScope(row, scope)) return null;
+    return this.toDetail(
+      row,
+      await this.ancestors(row.parentAssetId),
+      await this.unitPaths([row]),
+      scope,
+    );
   }
 
-  async detailByQrToken(qrToken: string): Promise<AssetDetail | null> {
+  /**
+   * A TULAJDONOS KERDESE ITT SZANDEKOSAN NINCS ELLENORIZVE (spec 4.1): a
+   * `qrToken` 128 bites veletlen uuid, tehat a birtoklasa maga a felhatalmazas
+   * az ESZKOZRE. A DOKUMENTUM-TIPUS kerdese viszont ettol fuggetlen, es ezert
+   * kell ide is a hatokor: a partner a sajat eszkoze tokenjet jogosan ismeri,
+   * tehat enelkul ezen az uton hozzajutna ahhoz a szamlahoz, amit az adatlapon
+   * es a letoltesen mar nem kap meg. Egy korlat, ami csak az utak egy reszen
+   * all, nem korlat.
+   */
+  async detailByQrToken(
+    qrToken: string,
+    scope: PartnerScope,
+  ): Promise<AssetDetail | null> {
     const row = await prisma.asset.findUnique({
       where: { qrToken },
       include: assetDetailInclude,
@@ -301,6 +475,7 @@ export class ServiceAssetsRepository extends Repository {
           row,
           await this.ancestors(row.parentAssetId),
           await this.unitPaths([row]),
+          scope,
         )
       : null;
   }
@@ -524,7 +699,12 @@ export class ServiceAssetsRepository extends Repository {
           { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
         ),
     );
-    const detail = await this.detail(id);
+    const detail = await this.detail(id, {
+      // BELSOS UT: irasi muvelet vegen a SAJAT, epp irt sort adjuk vissza. A
+      // hivo vegpont SERVICE_MANAGE jog alatt all. A hatokort a kotelezo
+      // parameter miatt ki KELL mondani, es ez helyes: itt nem szukitunk.
+      kind: "internal",
+    });
     if (!detail) throw new Error("ASSET_CREATE_READBACK_FAILED");
     return detail;
   }
@@ -707,7 +887,12 @@ export class ServiceAssetsRepository extends Repository {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
-    const detail = await this.detail(updatedId);
+    const detail = await this.detail(updatedId, {
+      // BELSOS UT: irasi muvelet vegen a SAJAT, epp irt sort adjuk vissza. A
+      // hivo vegpont SERVICE_MANAGE jog alatt all. A hatokort a kotelezo
+      // parameter miatt ki KELL mondani, es ez helyes: itt nem szukitunk.
+      kind: "internal",
+    });
     if (!detail) throw new Error("ASSET_UPDATE_READBACK_FAILED");
     return detail;
   }
@@ -733,7 +918,12 @@ export class ServiceAssetsRepository extends Repository {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
-    const detail = await this.detail(updatedId);
+    const detail = await this.detail(updatedId, {
+      // BELSOS UT: irasi muvelet vegen a SAJAT, epp irt sort adjuk vissza. A
+      // hivo vegpont SERVICE_MANAGE jog alatt all. A hatokort a kotelezo
+      // parameter miatt ki KELL mondani, es ez helyes: itt nem szukitunk.
+      kind: "internal",
+    });
     if (!detail) throw new Error("ASSET_QR_READBACK_FAILED");
     return detail;
   }
@@ -782,11 +972,43 @@ export class ServiceAssetsRepository extends Repository {
     return this.toDocumentSummary(document);
   }
 
-  async document(assetId: string, documentId: string) {
-    return prisma.assetDocument.findFirst({
+  /**
+   * A DOKUMENTUMNAL KET ELLENORZES KELL, NEM EGY, es a masodik a tipuson all.
+   *
+   * 1. AZ ESZKOZ a keroe -- ugyanaz a szabaly, mint a tobbi elem-lekeresnel.
+   * 2. A DOKUMENTUM TIPUSA engedett-e partner szamara. A tulajdonos-egyeztetes
+   *    ONMAGABAN nem eleg: egy sajat eszkozhoz tartozo SZAMLA sem megy ki.
+   *
+   * A tipus-tablazat forrasa KULON van jelolve, mert nem mind ugyanonnan jon:
+   *    INVOICE   nem     BALAZS DONTESE, szo szerint: "szamlat nem"
+   *    WARRANTY  igen    a mi olvasatunk
+   *    MANUAL    igen    a mi olvasatunk
+   *    OTHER     nem     a mi olvasatunk -- es az indok NEM az, hogy alapertek
+   *                      (a semaban nincs alapertelmezese), hanem hogy az OTHER
+   *                      DEFINICIO SZERINT az, amit nem soroltak be, tehat a
+   *                      tartalmarol nincs allitasunk. Ha kiderul, hogy kell
+   *                      belole valami a partnernek, az EGY KERDES lesz, nem egy
+   *                      csendes szivargas.
+   */
+  async document(assetId: string, documentId: string, scope: PartnerScope) {
+    const row = await prisma.assetDocument.findFirst({
       where: { id: documentId, assetId },
-      select: { fileName: true, contentType: true, content: true },
+      select: {
+        fileName: true,
+        contentType: true,
+        content: true,
+        type: true,
+        asset: { select: { customerId: true, supplierId: true } },
+      },
     });
+    if (!row) return null;
+    if (!rowBelongsToScope(row.asset, scope)) return null;
+    if (!scopeMaySeeDocumentType(row.type, scope)) return null;
+    return {
+      fileName: row.fileName,
+      contentType: row.contentType,
+      content: row.content,
+    };
   }
 
   async deleteDocument(
@@ -944,10 +1166,24 @@ export class ServiceAssetsRepository extends Repository {
     };
   }
 
+  /**
+   * A `scope` KOTELEZO, es ez a mechanizmus maga. Az adatlap BEHUZZA a
+   * dokumentumokat, tehat itt dol el, mit lat beloluk a kero -- egy opcionalis
+   * parameter minden elfelejtett hivasi helyen "belsos"-nek latszana, vagyis a
+   * felejtes TAGITANA a hozzaferest. Kotelezokent a fordito sorolja fel a
+   * hivasi helyeket.
+   *
+   * A TULAJDONOS-EGYEZTETES ONMAGABAN NEM ELEG, es a hianya nem elmeleti volt:
+   * a szamla-szabaly 2026-08-31-ig CSAK a letoltesi uton allt (murena masodik
+   * olvasata nevezte meg), tehat a partner a sajat eszkozenek adatlapjan
+   * megkapta a szamla letezeset, a fajlnevet, a meretet, a lenyomatot es a
+   * feltolto kollega nevet, mikozben a letoltes ugyanarra 404-et adott.
+   */
   private toDetail(
     row: AssetDetailRow,
     ancestors: AssetHierarchyItem[],
     paths: Map<string, string[]>,
+    scope: PartnerScope,
   ): AssetDetail {
     return {
       ...this.toListItem(row, paths),
@@ -969,21 +1205,23 @@ export class ServiceAssetsRepository extends Repository {
         : undefined,
       ancestors,
       children: row.childAssets.map(hierarchyItem),
-      events: row.events.map((event): AssetEventSummary => ({
-        id: event.id,
-        type: event.type,
-        actor: event.actorUser
-          ? {
-              id: event.actorUser.id,
-              displayName: event.actorUser.displayName,
-            }
-          : undefined,
-        payload: event.payload as Record<string, unknown>,
-        occurredAt: event.occurredAt.toISOString(),
-      })),
-      documents: row.documents.map((document) =>
-        this.toDocumentSummary(document),
-      ),
+      events: row.events
+        .filter((event) => scopeMaySeeAssetEvent(event, scope))
+        .map((event): AssetEventSummary => ({
+          id: event.id,
+          type: event.type,
+          actor: event.actorUser
+            ? {
+                id: event.actorUser.id,
+                displayName: event.actorUser.displayName,
+              }
+            : undefined,
+          payload: event.payload as Record<string, unknown>,
+          occurredAt: event.occurredAt.toISOString(),
+        })),
+      documents: row.documents
+        .filter((document) => scopeMaySeeDocumentType(document.type, scope))
+        .map((document) => this.toDocumentSummary(document)),
       createdAt: row.createdAt.toISOString(),
     };
   }

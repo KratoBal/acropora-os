@@ -1,3 +1,4 @@
+import type { PartnerScope } from "../auth/partner-scope.util.js";
 import {
   BadRequestException,
   ConflictException,
@@ -24,8 +25,8 @@ import { ServiceAssetsRepository } from "./service-assets.repository.js";
 export class ServiceAssetsService {
   constructor(private readonly repository: ServiceAssetsRepository) {}
 
-  list(query: AssetListQueryDto) {
-    return this.repository.list(query);
+  list(query: AssetListQueryDto, scope: PartnerScope) {
+    return this.repository.list(query, scope);
   }
 
   /**
@@ -46,14 +47,14 @@ export class ServiceAssetsService {
     );
   }
 
-  async detail(id: string) {
-    const asset = await this.repository.detail(id);
+  async detail(id: string, scope: PartnerScope) {
+    const asset = await this.repository.detail(id, scope);
     if (!asset) throw new NotFoundException("Az eszköz nem található.");
     return asset;
   }
 
-  async scan(qrToken: string) {
-    const asset = await this.repository.detailByQrToken(qrToken);
+  async scan(qrToken: string, scope: PartnerScope) {
+    const asset = await this.repository.detailByQrToken(qrToken, scope);
     if (!asset)
       throw new NotFoundException(
         "A QR-kódhoz nem tartozik érvényes eszközazonosító.",
@@ -129,7 +130,11 @@ export class ServiceAssetsService {
   }
 
   async rotateQr(id: string, actorUserId: string) {
-    await this.detail(id);
+    await this.detail(id, {
+      // BELSOS UT: a vegpont SERVICE_MANAGE jog alatt all (QR-forgatas,
+      // dokumentum-feltoltes), amit partner-oldali felhasznalo nem kap meg.
+      kind: "internal",
+    });
     try {
       return await this.repository.rotateQr(id, actorUserId);
     } catch (error) {
@@ -137,8 +142,8 @@ export class ServiceAssetsService {
     }
   }
 
-  async qrCode(id: string): Promise<AssetQrCode> {
-    const asset = await this.detail(id);
+  async qrCode(id: string, scope: PartnerScope): Promise<AssetQrCode> {
+    const asset = await this.detail(id, scope);
     const base = (
       process.env.ASSET_QR_BASE_URL?.trim() || "acropora-os://assets/scan"
     ).replace(/\/+$/, "");
@@ -158,7 +163,11 @@ export class ServiceAssetsService {
     file: Express.Multer.File,
     actorUserId: string,
   ) {
-    await this.detail(id);
+    await this.detail(id, {
+      // BELSOS UT: a vegpont SERVICE_MANAGE jog alatt all (QR-forgatas,
+      // dokumentum-feltoltes), amit partner-oldali felhasznalo nem kap meg.
+      kind: "internal",
+    });
     if (
       file.mimetype !== "application/pdf" ||
       !file.buffer.subarray(0, 5).equals(Buffer.from("%PDF-"))
@@ -177,8 +186,8 @@ export class ServiceAssetsService {
     });
   }
 
-  async document(id: string, documentId: string) {
-    const document = await this.repository.document(id, documentId);
+  async document(id: string, documentId: string, scope: PartnerScope) {
+    const document = await this.repository.document(id, documentId, scope);
     if (!document) throw new NotFoundException("A dokumentum nem található.");
     return document;
   }
