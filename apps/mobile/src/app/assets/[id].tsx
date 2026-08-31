@@ -15,6 +15,7 @@ import { useEffect } from "react";
 import type { ReactNode } from "react";
 
 import { getAsset, getAssetQr } from "@/lib/api/assets";
+import { ASSET_STATUS_LABELS } from "@/lib/assets/asset-status";
 import {
   LABEL_GAP_MM,
   LABEL_NAME_FONT_MM,
@@ -34,13 +35,6 @@ import {
 } from "@/lib/offline/asset-cache";
 import { useIsOnline } from "@/lib/offline/connectivity";
 import { describeOfflineDetailNotice } from "@/lib/offline/offline-notice";
-
-const STATUS_LABELS = {
-  ACTIVE: "Aktív",
-  OUT_OF_SERVICE: "Nem üzemel",
-  IN_REPAIR: "Javítás alatt",
-  RETIRED: "Kivezetett",
-} as const;
 
 const KIND_LABELS = {
   SYSTEM: "Rendszer",
@@ -160,7 +154,7 @@ export default function AssetDetailScreen() {
                   {KIND_LABELS[cachedSummary.kind]}
                 </Text>
                 <Text style={styles.badge}>
-                  {STATUS_LABELS[cachedSummary.status]}
+                  {ASSET_STATUS_LABELS[cachedSummary.status]}
                 </Text>
               </View>
             </View>
@@ -217,7 +211,9 @@ export default function AssetDetailScreen() {
               <Text style={styles.title}>{asset.name}</Text>
               <View style={styles.badges}>
                 <Text style={styles.badge}>{KIND_LABELS[asset.kind]}</Text>
-                <Text style={styles.badge}>{STATUS_LABELS[asset.status]}</Text>
+                <Text style={styles.badge}>
+                  {ASSET_STATUS_LABELS[asset.status]}
+                </Text>
               </View>
             </View>
 
