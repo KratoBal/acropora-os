@@ -49,6 +49,8 @@ let rootId = "";
 let childId = "";
 let grandChildId = "";
 let siblingId = "";
+let otherCustomerId = "";
+let otherRootId = "";
 
 function query(over: Partial<AssetListQueryDto>): AssetListQueryDto {
   // A DTO-ból jöjjenek az alapértékek (page, pageSize, status), ne az
@@ -90,20 +92,29 @@ async function removeLeftovers() {
   });
 }
 
-async function unit(name: string, code: string, parentId: string | null) {
+async function unit(
+  name: string,
+  code: string,
+  parentId: string | null,
+  owner = customerId,
+) {
   const row = await prisma.worksheetDepartment.create({
-    data: { customerId, code, name, parentId },
+    data: { customerId: owner, code, name, parentId },
     select: { id: true },
   });
   return row.id;
 }
 
-async function asset(suffix: string, departmentId: string | null) {
+async function asset(
+  suffix: string,
+  departmentId: string | null,
+  owner = customerId,
+) {
   await prisma.asset.create({
     data: {
       assetNumber: `${PREFIX}-${suffix}`,
       name: `${PREFIX} ${suffix}`,
-      customerId,
+      customerId: owner,
       departmentId,
     },
   });
@@ -139,6 +150,25 @@ describe(
       await asset("GRAND", grandChildId);
       await asset("SIB", siblingId);
       await asset("NONE", null);
+
+      // MÁSODIK PARTNER: az uniónak partnereken ÁT is helyesen kell működnie.
+      const other = await prisma.customer.create({
+        data: {
+          customerNumber: `${PREFIX}002`,
+          type: "COMPANY",
+          displayName: `${PREFIX} Másik Partner`,
+        },
+        select: { id: true },
+      });
+      otherCustomerId = other.id;
+      otherRootId = await unit("Korallszirt", "KOR", null, otherCustomerId);
+      const otherChildId = await unit(
+        "Biodóm",
+        "BIO",
+        otherRootId,
+        otherCustomerId,
+      );
+      await asset("OTHER", otherChildId, otherCustomerId);
     });
 
     after(async () => {
@@ -203,6 +233,72 @@ describe(
         INTERNAL,
       );
       assert.equal(control.items.length, 4);
+    });
+
+    /**
+     * KÉT KÜLÖNBÖZŐ PARTNER EGY-EGY ALEGYSÉGE, EGY KÉRÉSBEN.
+     *
+     * EZ A HATÁRESET AZ EGYÉRTÉKŰ ALAKNÁL NEM TUDOTT ELŐÁLLNI, a többes hozza
+     * be: a bejárás korábban EGY partner sorait töltötte be, tehát egy másik
+     * partner részfája hiányosan állt volna elő. És a hiba NEM üres listaként
+     * jelentkezne, hanem KEVESEBB SORKÉNT, ami sokkal kevésbé feltűnő.
+     */
+    it("takes the union across two different partners", async () => {
+      const result = await repository.list(
+        query({ departmentIds: [childId, otherRootId] }),
+        INTERNAL,
+      );
+      assert.deepEqual(result.items.map((item) => item.assetNumber).sort(), [
+        `${PREFIX}-CHILD`,
+        `${PREFIX}-GRAND`,
+        `${PREFIX}-OTHER`,
+      ]);
+    });
+
+    /**
+     * EGY NEM LÉTEZŐ AZONOSÍTÓ NEM RONTJA EL A TÖBBIT, ÉS NEM IS TŰNIK EL.
+     *
+     * A nem létező ág a saját azonosítójára szűkül, tehát nulla sort hoz; az
+     * unió a többit adja. A KONTROLL a második állítás: ugyanaz a hívás a nem
+     * létező azonosító NÉLKÜL ugyanezt adja. Enélkül a teszt akkor is zöld
+     * lenne, ha a nem létező ág csendben az EGÉSZ szűrőt kikapcsolná.
+     */
+    it("lets an unknown id contribute nothing without spoiling the others", async () => {
+      const withUnknown = await repository.list(
+        query({
+          departmentIds: [
+            siblingId,
+            "00000000-0000-4000-8000-0000000000ff",
+            otherRootId,
+          ],
+        }),
+        INTERNAL,
+      );
+      assert.deepEqual(
+        withUnknown.items.map((item) => item.assetNumber).sort(),
+        [`${PREFIX}-OTHER`, `${PREFIX}-SIB`],
+      );
+
+      const withoutUnknown = await repository.list(
+        query({ departmentIds: [siblingId, otherRootId] }),
+        INTERNAL,
+      );
+      assert.deepEqual(
+        withUnknown.items.map((item) => item.assetNumber).sort(),
+        withoutUnknown.items.map((item) => item.assetNumber).sort(),
+      );
+    });
+
+    /** A két mező EGYÜTT is megadható, és a szűrő az uniójuk. */
+    it("unions the singular field with the plural one", async () => {
+      const result = await repository.list(
+        query({ departmentId: siblingId, departmentIds: [otherRootId] }),
+        INTERNAL,
+      );
+      assert.deepEqual(result.items.map((item) => item.assetNumber).sort(), [
+        `${PREFIX}-OTHER`,
+        `${PREFIX}-SIB`,
+      ]);
     });
   },
 );
