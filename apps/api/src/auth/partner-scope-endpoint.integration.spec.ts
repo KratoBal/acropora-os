@@ -794,6 +794,68 @@ describe(
       });
 
       /**
+       * A LEGTAGABB FELHASZNALOI SZURO, ES EZ MAS ALLITAS, MINT A TOBBI.
+       *
+       * A tobb-erteku alak (`departmentIds`, #278 ota) TAGITJA a szurot: ha a
+       * kero KET azonositot ad meg, es az egyik IDEGEN partnere, akkor az idegen
+       * reszfa azonositoi is BEKERULNEK az `IN` listaba. Merve murena oldalan: az
+       * idegen azonosito NEM esik ki "nem letezo"-kent -- a bejaras megtalalja,
+       * betolti a masik partner alegyseg-sorait is, es a TELJES idegen reszfat
+       * beteszi.
+       *
+       * Vagyis ez a teszt nem azt meri, hogy a bovites nem rontott el semmit,
+       * hanem hogy a jogosultsagi feltetel AKKOR IS hat, amikor a felhasznaloi
+       * szuro SZANDEKOSAN tagabb a hatokornel. Ez a legrosszabb eset, amit egy
+       * kero eloallithat, es epp ezert ezt kell merni.
+       *
+       * A BELSOS KONTROLL AZ ALLITAS MASIK FELE: ugyanaz a ket ertek belsos
+       * hatokorrel MIND A KETTO reszfajat behozza. Enelkul a partner-kor akkor is
+       * zold lenne, ha a tobb-erteku alak egyaltalan nem mukodne -- es akkor nem
+       * a hatokort mernenk, hanem egy elromlott parametert.
+       *
+       * AMIT EZ A TESZT NEM VED, ES EZT KI KELL IRNI, KULONBEN FEL IGAZSAG LESZ
+       * BELOLE (murena masodik olvasata, 2026-08-31, a bejaras ismereteben):
+       * a fenti ket alegyseg LAPOS GYOKER -- nincs szuloje es nincs gyereke.
+       * Emiatt ez az allitas AKKOR IS ZOLD MARADNA, ha valaki a reszfa-bejarast
+       * visszaegyszerusitene EGY partner soraira: a rontott alak a GYOKERET
+       * akkor is visszaadja, ha a masik partner sorai be sem toltodtek, tehat az
+       * azonosito bekerul az `IN` listaba es az eszkoz illeszkedik.
+       *
+       * A kulonbseg CSAK melyebb fanal latszik, es azt MAS suite meri
+       * (`service-assets/unit-subtree.integration.spec.ts`, harom szintu ag plusz
+       * masodik partner; ott ugyanaz a rontas harom allitast dont meg). A ketto
+       * tehat MAST ved: ez itt a HATOKORT a legtagabb szuronel, az ott a
+       * BEJARAST tobb partneren at. Aki erre a tesztre hivatkozva mondana, hogy
+       * "a tobb-erteku alak le van fedve", tul sokat allitana.
+       */
+      it("két partner alegységét kérve is CSAK a sajátja jön be", async () => {
+        const both = [unitOfSupplierA, unitOfSupplierB];
+
+        const forInternal = await assets.list(
+          assetQuery({ departmentIds: both }),
+          asInternal,
+        );
+        assert.deepEqual(
+          forInternal.items.map((item) => item.id).sort(),
+          [assetSupplierA, assetSupplierB].sort(),
+          "kontroll: belsős kérőnél MINDKÉT részfa bejön",
+        );
+
+        const forSupplier = await assets.list(
+          assetQuery({ departmentIds: both }),
+          asSupplierA,
+        );
+        assert.deepEqual(
+          forSupplier.items.map((item) => item.id),
+          [assetSupplierA],
+        );
+        assert.equal(
+          JSON.stringify(forSupplier).includes(assetSupplierB),
+          false,
+        );
+      });
+
+      /**
        * AZ ALEGYSEG-SZURO ES A KERESES EGYUTT SZUKIT, NEM VAGYLAGOSAN.
        *
        * Ez nem a hatokorrol szol, hanem az alegyseg-szuro sajat helyerol: ha a
