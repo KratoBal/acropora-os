@@ -28,10 +28,28 @@
  */
 
 /**
- * Az ismert értékek, MÉRVE, nem kitalálva:
- * a két `Dockerfile` `production` értéket süt be, a CI egy helyen ugyanezt adja
- * át, a kódban egy `development` szerepel, a staging pedig `staging` értékkel
- * fut (acrobot mérése, 2026-08-29).
+ * Az ismert értékek. HÁROM MÉRT, EGY BIZONYTALAN, és a különbséget ki kell írni,
+ * mert egy listában minden elem egyformán magabiztosnak látszik:
+ *
+ *   production   MÉRVE: mindkét `Dockerfile` ezt süti be, és a CI egy helyen
+ *                ugyanezt adja át.
+ *   development  MÉRVE: a kódban szerepel.
+ *   test         a teszt-futtatás bevett értéke.
+ *   staging      NEM MÉRT ÁLLAPOT. Egy 2026-08-29-i mérés (acrobot) szerint a
+ *                staging példány ezzel az értékkel futott, DE a staging azóta
+ *                átköltözött és újratelepült, tehát a mérés nem a mai állapotról
+ *                szól. A health végpontja nem adja vissza a környezetet, tehát
+ *                kívülről nem dönthető el.
+ *
+ * MIÉRT MARAD BENT A `staging` ADDIG IS: egy TÖBBLET ismert érték soha nem állít
+ * meg semmit, csak egy elírást enged át, ami történetesen pont ezt a szót adja.
+ * A kivétele viszont MEGÁLLÍTANÁ azt a példányt, ahol az érték tényleg ez -- és
+ * az a kár aszimmetrikus. Ezért a bizonytalanság a bennhagyás irányába dönt.
+ *
+ * ÉS A KIVÉTELE NEM INGYENES, HA VALAHA SZÓBA JÖN: nem csak a mai környezetekről
+ * szól, hanem arról is, hogy ezt az értéket a JÖVŐBEN se lehessen beállítani
+ * indulási hiba nélkül. Az „szigorúbb lesz, és nem állít meg semmit" csak a
+ * ma futó példányokra igaz.
  */
 export const KNOWN_NODE_ENVS = [
   "production",
