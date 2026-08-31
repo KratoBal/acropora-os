@@ -62,6 +62,37 @@ function packageComponents(
   });
 }
 
+/**
+ * WHICH PRICE THE LIST SHOWS, AND WHY THE VALUE DOES NOT CHANGE HERE.
+ *
+ * The list price has one source and only one: the UNAS snapshot. That is fine
+ * while the shop owns the product - the import keeps writing it. After an
+ * authority takeover the import stops, so the same column goes on showing the
+ * last price the shop had, and nothing on the row says which of the two it is.
+ *
+ * The product DETAIL screen already solves this by NAME: the same value appears
+ * there under `unasMirror.grossPrice`, and a reader cannot mistake it for ours.
+ * The list has no such name, so it gets the source as a field. This is the
+ * existing habit carried through, not a new one.
+ *
+ * THE NUMBER IS DELIBERATELY UNCHANGED. We do have a price of our own
+ * (`ProductVariant.sellingGrossPrice`, which the Medusa projection uses), and
+ * showing it here instead would decide, on the business's behalf, what a
+ * colleague sees on a screen they use today. That is a decision for the owner,
+ * not a side effect of adding a label. What is forbidden is the SILENCE, not
+ * the value.
+ */
+export type ProductListPriceSource = "unas" | "unas_frozen" | "none";
+
+export function listPriceSource(product: {
+  catalogAuthority: string | null;
+  unasSnapshot: { grossPrice: unknown } | null;
+}): ProductListPriceSource {
+  if (!product.unasSnapshot) return "none";
+
+  return product.catalogAuthority === "ACROPORA" ? "unas_frozen" : "unas";
+}
+
 export function toProductListItem(
   product: ProductWithRelations,
 ): ProductListItem {
@@ -98,6 +129,7 @@ export function toProductListItem(
     unasListing: unasListing ? channelSummary(unasListing) : null,
     grossPrice: product.unasSnapshot?.grossPrice?.toString() ?? null,
     saleGrossPrice: product.unasSnapshot?.saleGrossPrice?.toString() ?? null,
+    priceSource: listPriceSource(product),
     stockOnHand:
       !product.unasSnapshot?.isPackageProduct && stockItems.length > 0
         ? stockItems

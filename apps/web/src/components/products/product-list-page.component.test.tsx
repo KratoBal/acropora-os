@@ -119,6 +119,7 @@ const populatedResponse: ProductListResponse = {
         backorderAllowed: false,
       },
       grossPrice: "24900",
+      priceSource: "unas" as const,
       saleGrossPrice: "19900",
       stockOnHand: "12",
     },
