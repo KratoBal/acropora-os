@@ -1,12 +1,14 @@
 import {
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
 import type { AuthenticatedUser, Session } from "@acropora/types";
 
 import { DEVELOPMENT_USERS } from "./development-users.js";
+import { developmentLoginRefusal } from "./development-login.guard.js";
 import { AuthUserResolver } from "./auth-user-resolver.js";
 import { SessionRepository } from "./session.repository.js";
 import { generateSessionToken } from "./session-token.util.js";
@@ -15,15 +17,32 @@ const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly users: AuthUserResolver,
     private readonly sessions: SessionRepository,
   ) {}
 
+  /**
+   * KÉT FÜGGETLEN ZÁR VÉDI, ÉS EZ NEM ÓVATOSSÁG. Ez a metódus a jelszó
+   * ismerete nélkül ad munkamenetet, és a `resolveDevelopmentIdentity`
+   * LÉTRE IS HOZZA a hiányzó felhasználót, `OWNER` szerepkörrel. Ha éles
+   * példányon fut le, nem csak belépés történik: keletkezik egy tulajdonosi
+   * fiók az éles adatbázisban.
+   *
+   * A két feltétel külön változón áll (`AUTH_PROVIDER` és `NODE_ENV`) --
+   * lásd a `development-login.guard.ts` jegyzetét arról, miért nem elég egy.
+   */
   async loginWithDevelopmentUser(email: string): Promise<Session> {
-    if (process.env.NODE_ENV === "production") {
+    const refusal = developmentLoginRefusal();
+    if (refusal) {
+      // AZ OK A NAPLÓBA, A VÁLASZBA CSAK ANNYI, HOGY NINCS ENGEDÉLYEZVE: a
+      // hívó nincs hitelesítve, és a pontos ok megmondaná neki, melyik
+      // beállítást kell megszereznie.
+      this.logger.warn(`A development login megtagadva: ${refusal}.`);
       throw new ForbiddenException(
-        "A development login production környezetben nem használható.",
+        "A development login ezen a példányon nincs engedélyezve.",
       );
     }
 
