@@ -226,6 +226,7 @@ export default function AssetEditScreen() {
           options={STATUS_OPTIONS}
           value={form.status}
           onChange={(value) => setForm({ ...form, status: value })}
+          collapsible
         />
         <Choice
           label="Kritikusság"
@@ -359,22 +360,51 @@ function isConflict(error: unknown): boolean {
   );
 }
 
+/**
+ * A `collapsible` NEM DISZITES: a statusz OT ertekű, es a csempek a telefonon
+ * ket sorba tordelnek, tehat a mezo annyi helyet foglal, mint harom masik.
+ * Legorduloként egy sor, es a MOSTANI ertek olvashato rajta.
+ *
+ * A KRITIKUSSAG CSEMPE MARAD, es ez SZANDEKOS kulonbseg: harom rovid ertek egy
+ * sorba fer, es ott a legordulo egy folosleges koppintas. Ha megis egysegesnek
+ * kell lennie, egyetlen szo atallitja -- ezert all propkent, nem masolt kodkent.
+ */
 function Choice<T extends string>({
   label,
   options,
   value,
   onChange,
+  collapsible = false,
 }: {
   label: string;
   options: { value: T; label: string }[];
   value: T;
   onChange(value: T): void;
+  collapsible?: boolean;
 }) {
+  const [open, setOpen] = useState(false);
+  const current = options.find((option) => option.value === value);
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
+      {collapsible ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${label}: ${current?.label ?? "nincs kiválasztva"}. Koppints a módosításhoz.`}
+          onPress={() => setOpen((value) => !value)}
+          style={({ pressed }) => [
+            styles.choice,
+            styles.choiceSelected,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Text style={[styles.choiceText, styles.choiceTextSelected]}>
+            {current?.label ?? "Válassz"}
+          </Text>
+        </Pressable>
+      ) : null}
       <View style={styles.choices}>
-        {options.map((option) => {
+        {(collapsible && !open ? [] : options).map((option) => {
           const selected = option.value === value;
           return (
             <Pressable
@@ -382,7 +412,10 @@ function Choice<T extends string>({
               accessibilityRole="radio"
               accessibilityLabel={`${label}: ${option.label}`}
               accessibilityState={{ selected }}
-              onPress={() => onChange(option.value)}
+              onPress={() => {
+                onChange(option.value);
+                setOpen(false);
+              }}
               style={({ pressed }) => [
                 styles.choice,
                 selected && styles.choiceSelected,

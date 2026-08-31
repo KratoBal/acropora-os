@@ -53,6 +53,7 @@ export default function NewAssetScreen() {
     enabled: status === "authenticated" && Boolean(capabilities?.assetsManage),
   });
   const [ownerSearch, setOwnerSearch] = useState("");
+  const [ownerPickerOpen, setOwnerPickerOpen] = useState(false);
   const [owner, setOwner] = useState<AssetOwnerOption | null>(null);
   const [unitId, setUnitId] = useState("");
   const [name, setName] = useState("");
@@ -180,41 +181,80 @@ export default function NewAssetScreen() {
           </Text>
 
           <Section title="Partner">
-            <TextInput
-              value={ownerSearch}
-              onChangeText={setOwnerSearch}
-              placeholder="Szerviz partner keresése"
-              placeholderTextColor="#668798"
-              style={styles.input}
-            />
+            {/*
+              LEGORDULO, NEM MINDIG NYITOTT LISTA. A partnerek szama nem
+              korlatos, es egy allandoan kinyitott lista a telefonon lenyomja a
+              tobbi mezot a kepernyo alja ala -- a felviteli urlapon a partner
+              EGY dontes, nem bongeszes. Ugyanaz az alak, mint a munkalap-lista
+              partner-szurojenel (`app/worksheets/index.tsx`).
+
+              A VALASZTAS UTAN BECSUKODIK: enelkul a lista tovabbra is eltakarna
+              a tobbi mezot, es semmi nem jelezne, hogy a valasztas megtortent.
+            */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                owner
+                  ? `Partner: ${owner.displayName}. Koppints a módosításhoz.`
+                  : "Partner választása."
+              }
+              onPress={() => setOwnerPickerOpen((open) => !open)}
+              style={[styles.ownerRow, owner && styles.ownerSelected]}
+            >
+              <Text style={styles.ownerName}>
+                {owner ? owner.displayName : "Válassz partnert"}
+              </Text>
+              <Text style={styles.ownerMeta}>
+                {owner
+                  ? `${owner.type === "CUSTOMER" ? "Vevő" : "Partner"} · ${owner.code}`
+                  : "Koppints a listához"}
+              </Text>
+            </Pressable>
             <FieldError error={error} field="owner" />
-            {ownersQuery.isPending ? (
-              <ActivityIndicator color="#52d6c7" />
-            ) : null}
-            {filteredOwners.map((item) => {
-              const selected =
-                owner?.type === item.type && owner.id === item.id;
-              return (
-                <Pressable
-                  key={`${item.type}:${item.id}`}
-                  onPress={() => {
-                    setOwner(item);
-                    // A helyszín a partnerhez tartozik: partnerváltásnál a
-                    // korábbi választás egy MÁSIK partner fájából való lenne, és
-                    // a szerver azt el is utasítaná a mentés végén.
-                    setUnitId("");
-                  }}
-                  style={[styles.ownerRow, selected && styles.ownerSelected]}
-                >
-                  <Text style={styles.ownerName}>{item.displayName}</Text>
-                  <Text style={styles.ownerMeta}>
-                    {item.type === "CUSTOMER" ? "Vevő" : "Partner"} ·{" "}
-                    {item.code}
-                    {item.outsideServiceScope ? " · nem szerviz partner" : ""}
-                  </Text>
-                </Pressable>
-              );
-            })}
+            {!ownerPickerOpen ? null : (
+              <>
+                <TextInput
+                  value={ownerSearch}
+                  onChangeText={setOwnerSearch}
+                  placeholder="Szerviz partner keresése"
+                  placeholderTextColor="#668798"
+                  style={styles.input}
+                />
+                {ownersQuery.isPending ? (
+                  <ActivityIndicator color="#52d6c7" />
+                ) : null}
+                {filteredOwners.map((item) => {
+                  const selected =
+                    owner?.type === item.type && owner.id === item.id;
+                  return (
+                    <Pressable
+                      key={`${item.type}:${item.id}`}
+                      onPress={() => {
+                        setOwner(item);
+                        // A helyszín a partnerhez tartozik: partnerváltásnál a
+                        // korábbi választás egy MÁSIK partner fájából való lenne, és
+                        // a szerver azt el is utasítaná a mentés végén.
+                        setUnitId("");
+                        setOwnerPickerOpen(false);
+                      }}
+                      style={[
+                        styles.ownerRow,
+                        selected && styles.ownerSelected,
+                      ]}
+                    >
+                      <Text style={styles.ownerName}>{item.displayName}</Text>
+                      <Text style={styles.ownerMeta}>
+                        {item.type === "CUSTOMER" ? "Vevő" : "Partner"} ·{" "}
+                        {item.code}
+                        {item.outsideServiceScope
+                          ? " · nem szerviz partner"
+                          : ""}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </>
+            )}
           </Section>
 
           {/*
