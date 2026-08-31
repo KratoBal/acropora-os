@@ -4,6 +4,7 @@ import test from "node:test";
 import { BadRequestException } from "@nestjs/common";
 import type { AssetDetail } from "@acropora/types";
 
+import type { PartnerScope } from "../auth/partner-scope.util.js";
 import type { ServiceAssetsRepository } from "./service-assets.repository.js";
 import { ServiceAssetsService } from "./service-assets.service.js";
 import {
@@ -11,6 +12,12 @@ import {
   SERVICE_OWNER_WHERE,
   assetOwnerScopeWhere,
 } from "./service-assets.types.js";
+
+/**
+ * BELSOS HATOKOR, KIIRVA. Ezek az allitasok a `keep` paros KEZELESET merik, nem
+ * a jogosultsagot -- azt kulon suite meri, adatbazison.
+ */
+const INTERNAL: PartnerScope = { kind: "internal" };
 
 const asset = {
   id: "asset-1",
@@ -198,7 +205,10 @@ test("keeps the owner an existing asset already has", async () => {
     }),
   );
 
-  await service.owners({ ownerType: "CUSTOMER", ownerId: "customer-9" });
+  await service.owners(
+    { ownerType: "CUSTOMER", ownerId: "customer-9" },
+    INTERNAL,
+  );
 
   assert.deepEqual(asked, { type: "CUSTOMER", id: "customer-9" });
 });
@@ -214,7 +224,7 @@ test("passes nothing to keep when the caller is creating a new asset", async () 
     }),
   );
 
-  await service.owners();
+  await service.owners({}, INTERNAL);
 
   assert.equal(asked, null);
 });
@@ -230,11 +240,11 @@ test("refuses half of an owner reference instead of ignoring it", () => {
   // A visszautasítás AZONNAL történik, még a tároló hívása előtt: nem
   // elutasított ígéret, hanem dobott hiba.
   assert.throws(
-    () => service.owners({ ownerType: "CUSTOMER" }),
+    () => service.owners({ ownerType: "CUSTOMER" }, INTERNAL),
     BadRequestException,
   );
   assert.throws(
-    () => service.owners({ ownerId: "customer-9" }),
+    () => service.owners({ ownerId: "customer-9" }, INTERNAL),
     BadRequestException,
   );
 });
