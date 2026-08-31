@@ -191,7 +191,30 @@ permission dekorátorok változatlanul maradhatnak.
 - `dev_` vagy `web_dev_` token elfogadása;
 - HTTPS és biztonságos (`secure`, `httpOnly`) cookie nélkül élesíteni.
 
-A development login `NODE_ENV=production` környezetben kifejezetten le van
-tiltva. A production login (`/auth/login/password`) bármely környezetben
+A development logint **két, egymástól független feltétel** védi, és mindkettőnek
+teljesülnie kell:
+
+1. `AUTH_PROVIDER` értéke pontosan `development`. **A hiányzó érték tilt** —
+   éles telepítésen ez a változó nem szerepel, tehát ott a kapu magától zárva
+   van.
+2. `NODE_ENV` értéke nem `production`.
+
+**Miért kettő, és miért nem ugyanazon a változón.** A `node-env.guard.ts` az
+_ismeretlen_ `NODE_ENV` értéken állítja meg az API indulását, a `development`
+viszont **ismert** érték: ha az kerül egy éles példányra (elgépelésből vagy egy
+másolt környezeti fájlból), azt az őrző elengedi. Két zár, ami ugyanarra az egy
+értékre támaszkodik, nem két zár. Az `AUTH_PROVIDER` azért alkalmas második
+jelnek, mert erre az egy célra van elnevezve: nem utazik együtt a szokásos
+környezeti sablonokkal.
+
+**Mi a tét.** A development login jelszó ismerete nélkül ad munkamenetet, és a
+`resolveDevelopmentIdentity` **létre is hozza** a hiányzó felhasználót `OWNER`
+szerepkörrel. Éles példányon tehát nem csak belépés történne: keletkezne egy
+tulajdonosi fiók az éles adatbázisban.
+
+A megtagadás **oka a szerver naplójába kerül, nem a válaszba**: a hívó nincs
+hitelesítve, és a pontos ok megmondaná neki, melyik beállítást kell megszereznie.
+
+A production login (`/auth/login/password`) bármely környezetben
 elérhető — nincs erre a szimmetrikus, "csak developmentben tiltott"
 korlátozás, mert maga az endpoint eleve valódi jelszó-ellenőrzést végez.
