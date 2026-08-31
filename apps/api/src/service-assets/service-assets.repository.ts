@@ -1,3 +1,9 @@
+import {
+  rowBelongsToScope,
+  scopeMaySeeDocumentType,
+  type PartnerScope,
+} from "../auth/partner-scope.util.js";
+
 import { createHash, randomUUID } from "node:crypto";
 
 import { Injectable } from "@nestjs/common";
@@ -277,18 +283,27 @@ export class ServiceAssetsRepository extends Repository {
     };
   }
 
-  async detail(id: string): Promise<AssetDetail | null> {
+  /**
+   * A KOTELEZO `scope` a mechanizmus maga (lasd a partner-scope.util.ts
+   * jegyzetet): elem-lekeresnel az elfelejtett ellenorzes NEMA. Az ellenorzes a
+   * BETOLTOTT soron all, es a nem egyezo sor `null` -- tehat 404, nem 403.
+   *
+   * AZ ESZKOZ KET OLDALON KOTODHET (`customerId` VAGY `supplierId`), es a
+   * `rowBelongsToScope` pont ezt kezeli: egy vevo-hatokoru kero nem lat
+   * szerviz-partner eszkozt attol, hogy a masik oszlopban all az azonosito.
+   */
+  async detail(id: string, scope: PartnerScope): Promise<AssetDetail | null> {
     const row = await prisma.asset.findUnique({
       where: { id },
       include: assetDetailInclude,
     });
-    return row
-      ? this.toDetail(
-          row,
-          await this.ancestors(row.parentAssetId),
-          await this.unitPaths([row]),
-        )
-      : null;
+    if (!row) return null;
+    if (!rowBelongsToScope(row, scope)) return null;
+    return this.toDetail(
+      row,
+      await this.ancestors(row.parentAssetId),
+      await this.unitPaths([row]),
+    );
   }
 
   async detailByQrToken(qrToken: string): Promise<AssetDetail | null> {
@@ -524,7 +539,12 @@ export class ServiceAssetsRepository extends Repository {
           { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
         ),
     );
-    const detail = await this.detail(id);
+    const detail = await this.detail(id, {
+      // BELSOS UT: irasi muvelet vegen a SAJAT, epp irt sort adjuk vissza. A
+      // hivo vegpont SERVICE_MANAGE jog alatt all. A hatokort a kotelezo
+      // parameter miatt ki KELL mondani, es ez helyes: itt nem szukitunk.
+      kind: "internal",
+    });
     if (!detail) throw new Error("ASSET_CREATE_READBACK_FAILED");
     return detail;
   }
@@ -707,7 +727,12 @@ export class ServiceAssetsRepository extends Repository {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
-    const detail = await this.detail(updatedId);
+    const detail = await this.detail(updatedId, {
+      // BELSOS UT: irasi muvelet vegen a SAJAT, epp irt sort adjuk vissza. A
+      // hivo vegpont SERVICE_MANAGE jog alatt all. A hatokort a kotelezo
+      // parameter miatt ki KELL mondani, es ez helyes: itt nem szukitunk.
+      kind: "internal",
+    });
     if (!detail) throw new Error("ASSET_UPDATE_READBACK_FAILED");
     return detail;
   }
@@ -733,7 +758,12 @@ export class ServiceAssetsRepository extends Repository {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
-    const detail = await this.detail(updatedId);
+    const detail = await this.detail(updatedId, {
+      // BELSOS UT: irasi muvelet vegen a SAJAT, epp irt sort adjuk vissza. A
+      // hivo vegpont SERVICE_MANAGE jog alatt all. A hatokort a kotelezo
+      // parameter miatt ki KELL mondani, es ez helyes: itt nem szukitunk.
+      kind: "internal",
+    });
     if (!detail) throw new Error("ASSET_QR_READBACK_FAILED");
     return detail;
   }
@@ -782,11 +812,43 @@ export class ServiceAssetsRepository extends Repository {
     return this.toDocumentSummary(document);
   }
 
-  async document(assetId: string, documentId: string) {
-    return prisma.assetDocument.findFirst({
+  /**
+   * A DOKUMENTUMNAL KET ELLENORZES KELL, NEM EGY, es a masodik a tipuson all.
+   *
+   * 1. AZ ESZKOZ a keroe -- ugyanaz a szabaly, mint a tobbi elem-lekeresnel.
+   * 2. A DOKUMENTUM TIPUSA engedett-e partner szamara. A tulajdonos-egyeztetes
+   *    ONMAGABAN nem eleg: egy sajat eszkozhoz tartozo SZAMLA sem megy ki.
+   *
+   * A tipus-tablazat forrasa KULON van jelolve, mert nem mind ugyanonnan jon:
+   *    INVOICE   nem     BALAZS DONTESE, szo szerint: "szamlat nem"
+   *    WARRANTY  igen    a mi olvasatunk
+   *    MANUAL    igen    a mi olvasatunk
+   *    OTHER     nem     a mi olvasatunk -- es az indok NEM az, hogy alapertek
+   *                      (a semaban nincs alapertelmezese), hanem hogy az OTHER
+   *                      DEFINICIO SZERINT az, amit nem soroltak be, tehat a
+   *                      tartalmarol nincs allitasunk. Ha kiderul, hogy kell
+   *                      belole valami a partnernek, az EGY KERDES lesz, nem egy
+   *                      csendes szivargas.
+   */
+  async document(assetId: string, documentId: string, scope: PartnerScope) {
+    const row = await prisma.assetDocument.findFirst({
       where: { id: documentId, assetId },
-      select: { fileName: true, contentType: true, content: true },
+      select: {
+        fileName: true,
+        contentType: true,
+        content: true,
+        type: true,
+        asset: { select: { customerId: true, supplierId: true } },
+      },
     });
+    if (!row) return null;
+    if (!rowBelongsToScope(row.asset, scope)) return null;
+    if (!scopeMaySeeDocumentType(row.type, scope)) return null;
+    return {
+      fileName: row.fileName,
+      contentType: row.contentType,
+      content: row.content,
+    };
   }
 
   async deleteDocument(

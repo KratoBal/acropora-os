@@ -1,3 +1,4 @@
+import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import {
   Body,
   BadRequestException,
@@ -52,14 +53,14 @@ export class ServiceAssetsController {
 
   @Get(":id/qr")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  qrCode(@Param("id") id: string) {
-    return this.service.qrCode(id);
+  qrCode(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.qrCode(id, partnerScopeOf(user));
   }
 
   @Get(":id")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  detail(@Param("id") id: string) {
-    return this.service.detail(id);
+  detail(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.detail(id, partnerScopeOf(user));
   }
 
   @Post()
@@ -111,8 +112,13 @@ export class ServiceAssetsController {
   async downloadDocument(
     @Param("id") id: string,
     @Param("documentId") documentId: string,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    const document = await this.service.document(id, documentId);
+    const document = await this.service.document(
+      id,
+      documentId,
+      partnerScopeOf(user),
+    );
     return new StreamableFile(document.content, {
       type: document.contentType,
       length: document.content.length,

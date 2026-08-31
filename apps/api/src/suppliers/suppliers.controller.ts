@@ -1,3 +1,4 @@
+import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import {
   Body,
   Controller,
@@ -32,8 +33,8 @@ export class SuppliersController {
 
   @Get(":id")
   @RequirePermissions(PERMISSIONS.PARTNERS_VIEW)
-  detail(@Param("id") id: string) {
-    return this.service.detail(id);
+  detail(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.detail(id, partnerScopeOf(user));
   }
 
   @Post()

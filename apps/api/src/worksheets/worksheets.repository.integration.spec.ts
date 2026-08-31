@@ -791,7 +791,9 @@ describe(
       });
       assert.equal(signed.ok, true);
 
-      const beforeRow = await repository.detail(worksheetId);
+      const beforeRow = await repository.detail(worksheetId, {
+        kind: "internal",
+      });
       assert.ok(beforeRow);
       const before = toWorksheetDetail(beforeRow);
       assert.equal(before.currentVersion.status, "SIGNED");
@@ -803,7 +805,9 @@ describe(
         data: { inventoryNumber: "LT-4712" },
       });
 
-      const afterRow = await repository.detail(worksheetId);
+      const afterRow = await repository.detail(worksheetId, {
+        kind: "internal",
+      });
       assert.ok(afterRow);
       const after = toWorksheetDetail(afterRow);
       assert.equal(

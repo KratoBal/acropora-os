@@ -116,7 +116,14 @@ export class PurchasingService {
         "Legalább egy tétel szükséges a számlához.",
       );
 
-    const supplier = await this.suppliers.detail(input.supplierId);
+    // BELSOS UT, ES EZT KI KELL MONDANI. A beszerzesi szamla rogzitese
+    // PURCHASING_MANAGE jog alatt all, amit partner-oldali felhasznalo nem kap
+    // meg; a szallito adatai (orszag) itt a szamla helyessegehez kellenek, nem
+    // partner-nezetkent. A hatokort AZERT irjuk ki, mert a kotelezo parameter
+    // pont ezt a dontest hozza a hivo helyre: itt nem szukitunk, es ez latszik.
+    const supplier = await this.suppliers.detail(input.supplierId, {
+      kind: "internal",
+    });
     if (!supplier) throw new NotFoundException("A beszállító nem található.");
     const supplierCountry = supplier.country.trim().toUpperCase();
     if (input.source === "EU" && (!supplierCountry || supplierCountry === "HU"))
