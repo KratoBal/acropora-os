@@ -641,11 +641,14 @@ describe(
         actorUserId,
       });
 
-      const response = await repository.list({
-        page: 1,
-        pageSize: 100,
-        assigneeId: technicianUserId,
-      });
+      const response = await repository.list(
+        {
+          page: 1,
+          pageSize: 100,
+          assigneeId: technicianUserId,
+        },
+        { kind: "internal" },
+      );
       const ids = response.items.map((item) => item.id);
       assert.ok(ids.includes(mine));
       assert.equal(ids.includes(other), false);
@@ -670,21 +673,27 @@ describe(
 
       // A lap most aláírásra vár. Piszkozatra NEM szabad feljönnie, pedig az
       // első verziója az volt.
-      const awaiting = await repository.list({
-        page: 1,
-        pageSize: 100,
-        status: "AWAITING_SIGNATURE",
-      });
+      const awaiting = await repository.list(
+        {
+          page: 1,
+          pageSize: 100,
+          status: "AWAITING_SIGNATURE",
+        },
+        { kind: "internal" },
+      );
       assert.equal(
         awaiting.items.some((item) => item.id === id),
         true,
       );
 
-      const draftsWhileAwaiting = await repository.list({
-        page: 1,
-        pageSize: 100,
-        status: "DRAFT",
-      });
+      const draftsWhileAwaiting = await repository.list(
+        {
+          page: 1,
+          pageSize: 100,
+          status: "DRAFT",
+        },
+        { kind: "internal" },
+      );
       assert.equal(
         draftsWhileAwaiting.items.some((item) => item.id === id),
         false,
@@ -699,21 +708,27 @@ describe(
         actorUserId,
       });
 
-      const draftsAfterAmend = await repository.list({
-        page: 1,
-        pageSize: 100,
-        status: "DRAFT",
-      });
+      const draftsAfterAmend = await repository.list(
+        {
+          page: 1,
+          pageSize: 100,
+          status: "DRAFT",
+        },
+        { kind: "internal" },
+      );
       assert.equal(
         draftsAfterAmend.items.some((item) => item.id === id),
         true,
       );
 
-      const awaitingAfterAmend = await repository.list({
-        page: 1,
-        pageSize: 100,
-        status: "AWAITING_SIGNATURE",
-      });
+      const awaitingAfterAmend = await repository.list(
+        {
+          page: 1,
+          pageSize: 100,
+          status: "AWAITING_SIGNATURE",
+        },
+        { kind: "internal" },
+      );
       assert.equal(
         awaitingAfterAmend.items.some((item) => item.id === id),
         false,
@@ -728,11 +743,14 @@ describe(
      * amennyi van, és az utolsó oldal üresen jönne vissza.
      */
     it("counts what it lists", async () => {
-      const drafts = await repository.list({
-        page: 1,
-        pageSize: 100,
-        status: "DRAFT",
-      });
+      const drafts = await repository.list(
+        {
+          page: 1,
+          pageSize: 100,
+          status: "DRAFT",
+        },
+        { kind: "internal" },
+      );
 
       assert.equal(drafts.pagination.totalItems, drafts.items.length);
       assert.equal(drafts.pagination.totalPages, 1);

@@ -25,8 +25,8 @@ import { ServiceAssetsRepository } from "./service-assets.repository.js";
 export class ServiceAssetsService {
   constructor(private readonly repository: ServiceAssetsRepository) {}
 
-  list(query: AssetListQueryDto) {
-    return this.repository.list(query);
+  list(query: AssetListQueryDto, scope: PartnerScope) {
+    return this.repository.list(query, scope);
   }
 
   /**

@@ -1,6 +1,7 @@
 import {
   rowBelongsToScope,
   scopeMaySeeDocumentType,
+  scopeWhereForAndBranch,
   type PartnerScope,
 } from "../auth/partner-scope.util.js";
 
@@ -106,8 +107,16 @@ export class ServiceAssetsRepository extends Repository {
     super(prisma);
   }
 
-  async list(query: AssetListQueryDto): Promise<AssetListResponse> {
-    const where: Prisma.AssetWhereInput = {
+  async list(
+    query: AssetListQueryDto,
+    scope: PartnerScope,
+  ): Promise<AssetListResponse> {
+    // A JOGOSULTSAGI SZURO `AND` AGKENT, SOHA NEM KULCSKENT -- lasd a
+    // scopeWhereForAndBranch jegyzetet. Az alabbi objektum a FELHASZNALOI
+    // szurot `customerId` / `supplierId` KULCSON spreadeli, es felso szintu
+    // `OR`-t is tartalmaz (kereses); barmelyik hatastalanitana a jogosultsagot,
+    // ha egy szintre kerulne vele.
+    const userWhere: Prisma.AssetWhereInput = {
       ...assetOwnerScopeWhere(query.ownerScope),
       ...(query.status === "ALL" ? {} : { status: query.status }),
       ...(query.kind ? { kind: query.kind } : {}),
@@ -148,6 +157,9 @@ export class ServiceAssetsRepository extends Repository {
             ],
           }
         : {}),
+    };
+    const where: Prisma.AssetWhereInput = {
+      AND: [scopeWhereForAndBranch(scope), userWhere],
     };
     const [rows, totalItems] = await Promise.all([
       prisma.asset.findMany({

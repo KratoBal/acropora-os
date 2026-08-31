@@ -118,3 +118,62 @@ export function scopeMaySeeDocumentType(
   if (scope.kind === "internal") return true;
   return type === "WARRANTY" || type === "MANUAL";
 }
+
+/**
+ * A HATOKOR MINT LEKERDEZESI FELTETEL -- ES A NEV AZT IS MEGMONDJA, HOVA VALO.
+ *
+ * `AND` AGKENT KELL BEKOTNI, SOHA NEM KULCSKENT, es ez nem stilus:
+ *
+ * 1. A meglevo `where` objektumok literal-spreadekbol allnak, es a FELHASZNALOI
+ *    szuro (`ownerType` + `ownerId`) UGYANAZT a kulcsot hasznalja
+ *    (`customerId` / `supplierId`). Egy objektum-literalban az azonos kulcs
+ *    UTOLSO elofordulasa nyer -- vagyis a kesobb spreadelt felhasznaloi szuro
+ *    FELULIRNA a jogosultsagit, es a hivo egy idegen `ownerId` parameterrel
+ *    kikapcsolhatna a sajat szureset, hibauzenet nelkul.
+ * 2. A lista-lekerdezesekben FELSO SZINTU `OR` is all (kereses). Egy `OR`
+ *    ugyanazon a szinten a jogosultsagi feltetellel azt jelenti, hogy a talalat
+ *    az OR barmelyik agatol atmegy -- tehat a jogosultsag "vagy" agga valik.
+ *
+ * Beagyazott `AND` csomopontban egyik sem tortenhet meg.
+ *
+ * Merve 2026-08-29 (nautilus, a 30e27f3d kartyan): 41 repository fajlbol 40
+ * epit `where` zaradekot, 13 spread-el felteteles felhasznaloi szurot a FELSO
+ * szintu `where`-be (46 ilyen spread), es 15 hasznal felso szintu `OR`-t.
+ */
+export function scopeWhereForAndBranch(scope: PartnerScope): {
+  customerId?: string;
+  supplierId?: string;
+} {
+  switch (scope.kind) {
+    case "internal":
+      return {};
+    case "customer":
+      return { customerId: scope.customerId };
+    case "supplier":
+      return { supplierId: scope.supplierId };
+  }
+}
+
+/**
+ * UGYANEZ, DE A PARTNER SAJAT TABLAJARA, ahol a sor MAGA a partner (`Supplier`,
+ * `Customer`), tehat az `id` a merce, nem egy hivatkozo oszlop.
+ *
+ * A KERESZT-ESET (vevo-hatokor a szallitok tablajan, vagy forditva) EXPLICIT
+ * URES HALMAZT ad, nem `{}`-t. Ez szandekos: a `{}` azt jelentene, hogy nincs
+ * szures, tehat a vevo a TELJES szallito-listat kapna. Az `id: { in: [] }`
+ * ellenben egyertelmuen ures eredmenyt ad, es a kodban is latszik, hogy ez
+ * dontes volt, nem elmaradt ag.
+ */
+export function scopeOwnWhereForAndBranch(
+  scope: PartnerScope,
+  ownerKind: "customer" | "supplier",
+): { id?: string | { in: string[] } } {
+  if (scope.kind === "internal") return {};
+  if (scope.kind === "customer" && ownerKind === "customer") {
+    return { id: scope.customerId };
+  }
+  if (scope.kind === "supplier" && ownerKind === "supplier") {
+    return { id: scope.supplierId };
+  }
+  return { id: { in: [] } };
+}

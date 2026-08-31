@@ -21,8 +21,8 @@ import type {
 export class SuppliersService {
   constructor(private readonly repository: SuppliersRepository) {}
 
-  list(query: SupplierListQueryDto) {
-    return this.repository.list(query);
+  list(query: SupplierListQueryDto, scope: PartnerScope) {
+    return this.repository.list(query, scope);
   }
 
   async detail(id: string, scope: PartnerScope) {
@@ -70,9 +70,9 @@ export class SuppliersService {
     return plan;
   }
 
-  async units(id: string) {
+  async units(id: string, scope: PartnerScope) {
     await this.assertExists(id);
-    return this.repository.units(id);
+    return this.repository.units(id, scope);
   }
 
   /**

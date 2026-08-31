@@ -8,6 +8,7 @@ import {
   rowBelongsToScope,
   rowIsScopeOwner,
   scopeMaySeeDocumentType,
+  scopeWhereForAndBranch,
 } from "./partner-scope.util.js";
 
 const user = (over: Partial<AuthenticatedUser>): AuthenticatedUser =>
@@ -162,5 +163,39 @@ describe("scopeMaySeeDocumentType", () => {
   /** Az OTHER definíció szerint az, amit nem soroltak be: nincs róla állításunk. */
   it("az OTHER alapból NEM látható", () => {
     assert.equal(scopeMaySeeDocumentType("OTHER", partner), false);
+  });
+});
+
+describe("scopeWhereForAndBranch", () => {
+  it("belsős kérőnél üres feltétel: nem szűkít semmit", () => {
+    assert.deepEqual(scopeWhereForAndBranch({ kind: "internal" }), {});
+  });
+
+  it("vevőnél a customerId, szállítónál a supplierId kerül bele", () => {
+    assert.deepEqual(
+      scopeWhereForAndBranch({ kind: "customer", customerId: "c1" }),
+      {
+        customerId: "c1",
+      },
+    );
+    assert.deepEqual(
+      scopeWhereForAndBranch({ kind: "supplier", supplierId: "s1" }),
+      {
+        supplierId: "s1",
+      },
+    );
+  });
+
+  /**
+   * A visszaadott objektum CSAK a hatokort tartalmazza. Ha valaha tobbet adna
+   * vissza, egy AND-agban az is feltetelle valna, amit senki nem kert.
+   */
+  it("csak a hatókört adja vissza, semmi mást", () => {
+    assert.deepEqual(
+      Object.keys(
+        scopeWhereForAndBranch({ kind: "customer", customerId: "c1" }),
+      ),
+      ["customerId"],
+    );
   });
 });

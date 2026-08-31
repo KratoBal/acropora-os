@@ -81,8 +81,8 @@ export class WorksheetsService {
     @Optional() private readonly notifications?: NotificationsService,
   ) {}
 
-  list(query: WorksheetListQueryDto) {
-    return this.repository.list(query);
+  list(query: WorksheetListQueryDto, scope: PartnerScope) {
+    return this.repository.list(query, scope);
   }
 
   /**

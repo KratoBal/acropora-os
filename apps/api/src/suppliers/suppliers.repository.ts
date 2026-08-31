@@ -11,6 +11,7 @@ import type {
 
 import {
   rowIsScopeOwner,
+  scopeOwnWhereForAndBranch,
   type PartnerScope,
 } from "../auth/partner-scope.util.js";
 import { generateCode } from "../common/code-generator.util.js";
@@ -209,8 +210,11 @@ export class SuppliersRepository extends Repository {
     super(prisma);
   }
 
-  async list(query: SupplierListQueryDto): Promise<SupplierListResponse> {
-    const where: Prisma.SupplierWhereInput = {
+  async list(
+    query: SupplierListQueryDto,
+    scope: PartnerScope,
+  ): Promise<SupplierListResponse> {
+    const userWhere: Prisma.SupplierWhereInput = {
       // A törölt partner kikerül a listából, a "Mind" szűrő alól is: az a
       // szűrő az aktív és az inaktív között választ, a törölt viszont nem
       // ezen a tengelyen van. A neve továbbra is látszik a régi
@@ -248,6 +252,12 @@ export class SuppliersRepository extends Repository {
           }
         : {}),
     };
+
+    // A JOGOSULTSAGI SZURO `AND` AGKENT, SOHA NEM KULCSKENT -- a fenti objektum
+    // felhasznaloi szurot spreadel es felso szintu `OR`-t is tartalmaz.
+    const where: Prisma.SupplierWhereInput = {
+      AND: [scopeOwnWhereForAndBranch(scope, "supplier"), userWhere],
+    };
     const [suppliers, totalItems] = await Promise.all([
       prisma.supplier.findMany({
         where,
@@ -280,7 +290,15 @@ export class SuppliersRepository extends Repository {
    * Tükör nélküli partnernek üres a listája, nem hibás. Egy tisztán beszállító
    * partnernek nincs és nem is lehet alegysége, és ez nem hibaállapot.
    */
-  async units(supplierId: string): Promise<WorksheetDepartmentListResponse> {
+  async units(
+    supplierId: string,
+    scope: PartnerScope,
+  ): Promise<WorksheetDepartmentListResponse> {
+    // AZ UTVONALBAN ALLO PARTNER EGYEZZEN A KEROEVEL. Itt nincs betoltott sor,
+    // amin ellenorizni lehetne: maga az utvonal-parameter a tulajdonos.
+    if (!rowIsScopeOwner({ id: supplierId }, scope, "supplier")) {
+      return { items: [] };
+    }
     const supplier = await prisma.supplier.findUnique({
       where: { id: supplierId },
       select: { customerId: true },

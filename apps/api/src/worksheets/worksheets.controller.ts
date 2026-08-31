@@ -35,8 +35,11 @@ export class WorksheetsController {
 
   @Get()
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  list(@Query() query: WorksheetListQueryDto) {
-    return this.service.list(query);
+  list(
+    @Query() query: WorksheetListQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.list(query, partnerScopeOf(user));
   }
 
   @Get("customers/:customerId/departments")
