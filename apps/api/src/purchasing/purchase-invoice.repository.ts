@@ -70,8 +70,6 @@ export interface PurchaseInvoiceVariantInfo {
   sku: string;
   productName: string;
   unit: string;
-  /** Best known current quantity: local StockItem, falling back to 0. */
-  currentQty: Prisma.Decimal;
   catalogAuthority: "UNAS" | "ACROPORA" | null;
   isPackageProduct: boolean;
 }
@@ -240,19 +238,6 @@ export class PurchaseInvoiceRepository extends Repository {
         },
       },
     });
-    const stockItems = await this.invoiceDatabase.stockItem.findMany({
-      where: {
-        warehouseId: warehouse.id,
-        locationId: null,
-        lotId: null,
-        variantId: { in: variantIds },
-      },
-      select: { variantId: true, onHand: true },
-    });
-    const onHandByVariant = new Map(
-      stockItems.map((item) => [item.variantId, item.onHand]),
-    );
-
     const result = new Map<string, PurchaseInvoiceVariantInfo>();
     for (const variant of variants) {
       result.set(variant.id, {
@@ -263,16 +248,6 @@ export class PurchaseInvoiceRepository extends Repository {
         catalogAuthority: variant.product.catalogAuthority,
         isPackageProduct:
           variant.product.unasSnapshot?.isPackageProduct ?? false,
-        // A helyi StockItem ledger csak leltár-korrekció vagy POS eladás
-        // után kap sort egy variantra; addig az egyetlen ismert "jelenlegi
-        // mennyiség" a UNAS reported stock snapshot - enélkül az első
-        // beszerzés a UNAS-ba a valós készlet helyett csak a bevételezett
-        // mennyiséget írná ki, felülírva a régit (lásd inventory-count.repository.ts
-        // ugyanerre a mintára).
-        currentQty:
-          onHandByVariant.get(variant.id) ??
-          variant.product.unasSnapshot?.reportedStock ??
-          new Prisma.Decimal(0),
       });
     }
     return { warehouseId: warehouse.id, variants: result };
