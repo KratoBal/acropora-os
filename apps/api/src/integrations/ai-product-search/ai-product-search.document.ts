@@ -63,7 +63,7 @@ export function chooseDescription(
  * visible rather than guessed at: rows carrying the old number have not been
  * rebuilt yet. Change this when the bands below change, and not otherwise.
  */
-export const AI_PRODUCT_SEARCH_DOCUMENT_VERSION = 1;
+export const AI_PRODUCT_SEARCH_DOCUMENT_VERSION = 2;
 
 export interface DocumentSourceProduct extends DescribableProduct {
   id: string;
