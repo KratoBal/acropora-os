@@ -35,7 +35,7 @@ export class ServiceAssetsService {
    * nem lenne választható. Fél páros értelmezhetetlen, ezért az hiba: csendben
    * elhagyva pont azt a sort ejtenénk ki, amiért a hívás történt.
    */
-  owners(query: AssetOwnersQueryDto = {}) {
+  owners(query: AssetOwnersQueryDto = {}, scope: PartnerScope) {
     if ((query.ownerType === undefined) !== (query.ownerId === undefined))
       throw new BadRequestException(
         "A megtartandó tulajdonos típusa és azonosítója csak együtt adható meg.",
@@ -44,6 +44,7 @@ export class ServiceAssetsService {
       query.ownerType && query.ownerId
         ? { type: query.ownerType, id: query.ownerId }
         : null,
+      scope,
     );
   }
 

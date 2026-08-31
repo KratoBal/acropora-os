@@ -1,6 +1,8 @@
 import {
   rowBelongsToScope,
+  rowIsScopeOwner,
   scopeMaySeeDocumentType,
+  scopeOwnWhereForAndBranch,
   scopeWhereForAndBranch,
   type PartnerScope,
 } from "../auth/partner-scope.util.js";
@@ -327,11 +329,31 @@ export class ServiceAssetsRepository extends Repository {
    * A sor megjelölve jön (`outsideServiceScope`), tehát a felület meg tudja
    * mutatni, hogy ez örökölt érték, nem ajánlat.
    */
+  /**
+   * A TULAJDONOS-VALASZTO IS SZUKUL A KEROVEL, es KET UTON, nem egyen.
+   *
+   * A lista maga a nyilvanvalo ut. A masik a `keep` ag, ami SZANDEKOSAN
+   * megkeruli a szurest, hogy egy MAR ROGZITETT eszkoz tulajdonosa a
+   * szerkesztoben akkor is latszodjon, ha ma nem lenne valaszthato. Ez belsos
+   * keronel helyes, partner-oldalinal viszont pont a legszelesebb kaput nyitna:
+   * merve 2026-08-31, egy TOROLT, inaktiv, nem is szerviz-jelolt partner neve,
+   * kodja es TELJES postai cime jott vissza egy tetszoleges azonositora.
+   *
+   * Ezert a `keep` ag is a hatokorhoz kotott. Ugyanaz az alak, mint a
+   * dokumentum-szabalynal: egy lista-szures semmit nem er, ha mellette egy
+   * elem-lekeres ugyanazt kiadja.
+   */
   async owners(
-    keep?: { type: AssetOwnerType; id: string } | null,
+    keep: { type: AssetOwnerType; id: string } | null,
+    scope: PartnerScope,
   ): Promise<AssetOwnerListResponse> {
     const suppliers = await prisma.supplier.findMany({
-      where: SERVICE_OWNER_PICKABLE_WHERE,
+      where: {
+        AND: [
+          scopeOwnWhereForAndBranch(scope, "supplier"),
+          SERVICE_OWNER_PICKABLE_WHERE,
+        ],
+      },
       orderBy: [{ name: "asc" }, { id: "asc" }],
     });
     const items: AssetOwnerListResponse["items"] = [
@@ -360,6 +382,7 @@ export class ServiceAssetsRepository extends Repository {
 
     const inherited =
       keep &&
+      rowIsScopeOwner({ id: keep.id }, scope, "supplier") &&
       !items.some((item) => item.type === keep.type && item.id === keep.id)
         ? await this.ownerOutsideScope(keep)
         : null;

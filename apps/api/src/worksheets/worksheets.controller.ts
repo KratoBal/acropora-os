@@ -92,14 +92,14 @@ export class WorksheetsController {
    */
   @Get("selectable-partners")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  selectablePartners() {
-    return this.service.selectablePartners();
+  selectablePartners(@CurrentUser() user: AuthenticatedUser) {
+    return this.service.selectablePartners(partnerScopeOf(user));
   }
 
   @Get("assignable-users")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  assignableUsers() {
-    return this.service.assignableUsers();
+  assignableUsers(@CurrentUser() user: AuthenticatedUser) {
+    return this.service.assignableUsers(partnerScopeOf(user));
   }
 
   @Get(":id")

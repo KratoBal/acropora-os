@@ -44,8 +44,11 @@ export class ServiceAssetsController {
 
   @Get("owners")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  owners(@Query() query: AssetOwnersQueryDto) {
-    return this.service.owners(query);
+  owners(
+    @Query() query: AssetOwnersQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.owners(query, partnerScopeOf(user));
   }
 
   /**
