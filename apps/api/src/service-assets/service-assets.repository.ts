@@ -74,6 +74,36 @@ import {
  */
 const DOCUMENT_PAYLOAD_KEYS = ["documentType", "documentId", "fileName"];
 /**
+ * A KULCS-VIZSGALAT MELY, NEM SEKELY, ES EZ MERESEN MULT.
+ *
+ * Murena javasolta, hogy egy komment jelolje: a szabaly LAPOS payloadot var. A
+ * premisszat lemertem, es nem all: a `PLACEMENT_CHANGED` MA IS beagyaz
+ * (`payload.from.customerId`, `payload.to.customerId`). Dokumentum-mezot ugyan
+ * nem tesz melyre, tehat a mai viselkedes helyes -- de egy "ELVART: lapos
+ * payload" komment mar a leirasa pillanataban hamis lenne, es a kovetkezo
+ * olvaso vagy elavultnak nezne, vagy hibanak.
+ *
+ * Ezert nem komment lett belole, hanem mely bejaras. Egy komment nem orzo; ha
+ * valaki holnap `payload.document.fileName` alakban ir, a sekely vizsgalat
+ * CSENDBEN atengedne, a mely nem.
+ *
+ * A MELYSEG-KORLAT ZARVA BUKIK: egy ennel melyebb payload nem a mi irasunk,
+ * tehat nem allitunk rola semmit, es a partner nem latja.
+ */
+const MAX_PAYLOAD_DEPTH = 8;
+
+function payloadNamesADocument(value: unknown, depth = 0): boolean {
+  if (depth > MAX_PAYLOAD_DEPTH) return true;
+  if (Array.isArray(value))
+    return value.some((item) => payloadNamesADocument(item, depth + 1));
+  if (!value || typeof value !== "object") return false;
+  const fields = value as Record<string, unknown>;
+  if (DOCUMENT_PAYLOAD_KEYS.some((key) => key in fields)) return true;
+  return Object.values(fields).some((item) =>
+    payloadNamesADocument(item, depth + 1),
+  );
+}
+/**
  * A TIPUS-LISTA MEGMARAD A PAYLOAD-SZABALY MELLETT, es a ketto UNIOJA dont.
  *
  * A csere (csak payload-alak) egy meglevo garanciat vett volna el, es ezt a
@@ -97,8 +127,7 @@ export function scopeMaySeeAssetEvent(
       ? (payload as Record<string, unknown>)
       : {};
   const namesADocument =
-    DOCUMENT_EVENT_TYPES.includes(event.type) ||
-    DOCUMENT_PAYLOAD_KEYS.some((key) => key in fields);
+    DOCUMENT_EVENT_TYPES.includes(event.type) || payloadNamesADocument(payload);
   if (!namesADocument) return true;
 
   const documentType = fields.documentType;

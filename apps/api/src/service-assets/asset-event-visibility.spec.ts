@@ -47,6 +47,49 @@ describe("scopeMaySeeAssetEvent", () => {
   });
 
   /**
+   * A BEAGYAZOTT DOKUMENTUM-MEZO, ES AMIERT NEM KOMMENT ALL A HELYEN.
+   *
+   * A javaslat az volt, hogy egy komment jelolje: a szabaly LAPOS payloadot
+   * var. A premissza nem all -- a `PLACEMENT_CHANGED` MA IS beagyaz `from` es
+   * `to` objektumot --, tehat az a komment mar a leirasakor hamis lenne. A
+   * vizsgalat ezert MELY, es ez a teszt az, ami sekelyre visszaallitva PIROS.
+   */
+  it("a BEÁGYAZOTT dokumentum-mező is a szabály alá esik", () => {
+    const nested = {
+      type: "DOCUMENT_ARCHIVED",
+      payload: { document: { fileName: "szamla.pdf" } },
+    };
+    assert.equal(scopeMaySeeAssetEvent(nested, partner), false);
+    assert.equal(scopeMaySeeAssetEvent(nested, internal), true);
+
+    // Tombben is, mert egy esemeny tobb dokumentumrol is szolhat.
+    assert.equal(
+      scopeMaySeeAssetEvent(
+        { type: "BATCH", payload: { items: [{ documentId: "d1" }] } },
+        partner,
+      ),
+      false,
+    );
+
+    // ES A KONTROLL A MASIK IRANYBA: a ma VALODI beagyazott payload, a
+    // `PLACEMENT_CHANGED` alakja, tovabbra is latszik. A mely bejaras nem
+    // "minden beagyazott payloadot elrejt", hanem a dokumentum-mezot keresi.
+    assert.equal(
+      scopeMaySeeAssetEvent(
+        {
+          type: "PLACEMENT_CHANGED",
+          payload: {
+            from: { customerId: "c1", supplierId: null, aquariumId: null },
+            to: { customerId: "c2", supplierId: null, aquariumId: null },
+          },
+        },
+        partner,
+      ),
+      true,
+    );
+  });
+
+  /**
    * A KONTROLL A KILENCEDIK TIPUSRA, es ez az egyetlen allitas, ami MA
    * kulonbseget tesz a ket lehetseges szabaly kozott.
    *
