@@ -1,3 +1,9 @@
+import type {
+  AiAnswerRating,
+  AiAnswerRatingResult,
+  AiRatingAxis,
+} from "@acropora/types";
+
 import { apiRequest } from "./client";
 
 /**
@@ -8,6 +14,8 @@ import { apiRequest } from "./client";
  */
 export interface AiChatReply {
   conversationId: string | null;
+  /** Which answer a judgement is written against. Null when the call failed. */
+  messageId: string | null;
   answer: string | null;
   model: string | null;
   customerContextStatus: string | null;
@@ -51,5 +59,35 @@ export const aiChatApi = {
       // új kérdés), az azonnal érvényes. Enélkül a fenti korlát él.
       signal: signal ?? AbortSignal.timeout(AI_CHAT_CLIENT_TIMEOUT_MS),
     });
+  },
+
+  /**
+   * Sends a judgement about one answer, on one axis.
+   *
+   * The axis is a required parameter rather than a defaulted one, all the way
+   * up from the database: a call that forgot it would file a judgement about
+   * wording as a judgement about facts, and afterwards nothing could tell
+   * them apart.
+   *
+   * The author is not a parameter: the API takes it from the session. A page
+   * that could name the rater would be a page that could rate as somebody
+   * else.
+   */
+  rate(
+    token: string,
+    messageId: string,
+    axis: AiRatingAxis,
+    rating: AiAnswerRating,
+    signal?: AbortSignal,
+  ) {
+    return apiRequest<AiAnswerRatingResult>(
+      `/integrations/ai-chat/messages/${messageId}/rating`,
+      token,
+      {
+        method: "POST",
+        body: JSON.stringify({ axis, rating }),
+        signal,
+      },
+    );
   },
 };

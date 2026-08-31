@@ -50,6 +50,17 @@ export function aiChatConfig(
 export const AI_CHAT_TIMEOUT_MS = 47_000;
 
 /**
+ * How long this layer waits for a rating to be stored.
+ *
+ * Deliberately far shorter than the chat wait, because it is a different kind
+ * of call: no model is involved, only a row. Inheriting the 47 second wait
+ * would mean a person who pressed a button watching a spinner for the better
+ * part of a minute before being told the AI is unreachable - a wait sized for
+ * something that is not happening here.
+ */
+export const AI_CHAT_RATING_TIMEOUT_MS = 8_000;
+
+/**
  * Injection tokens for the two things a test needs to vary.
  *
  * Nest resolves constructor parameters by their emitted type, and both

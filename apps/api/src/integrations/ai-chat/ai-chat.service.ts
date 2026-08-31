@@ -1,8 +1,15 @@
 import { Inject, Injectable, Optional } from "@nestjs/common";
 
+import type {
+  AiAnswerRating,
+  AiAnswerRatingResult,
+  AiRatingAxis,
+} from "@acropora/types";
+
 import {
   AI_CHAT_ENVIRONMENT,
   AI_CHAT_FETCH,
+  AI_CHAT_RATING_TIMEOUT_MS,
   AI_CHAT_TIMEOUT_MS,
   aiChatConfig,
   type AiChatConfig,
@@ -17,6 +24,11 @@ import {
  */
 export interface AiChatReply {
   conversationId: string | null;
+  /**
+   * The id of the stored answer, which is what a judgement is written
+   * against. Null when the call failed and there is nothing to judge.
+   */
+  messageId: string | null;
   answer: string | null;
   model: string | null;
   /** `anonymous` or `resolved`, straight from the AI service. */
@@ -178,6 +190,7 @@ export class AiChatService {
     return {
       conversationId:
         typeof body.conversationId === "string" ? body.conversationId : null,
+      messageId: typeof body.messageId === "string" ? body.messageId : null,
       answer: typeof body.answer === "string" ? body.answer : null,
       model: typeof body.model === "string" ? body.model : null,
       customerContextStatus:
@@ -192,6 +205,88 @@ export class AiChatService {
     };
   }
 
+  /**
+   * Sends one judgement about one answer to the AI service.
+   *
+   * `ratedBy` is not in the request body of this method by accident: the
+   * controller takes it from the proven session, never from what the browser
+   * sent. This layer exists to be the place where a claim becomes a fact, and
+   * a rating whose author is supplied by its own caller would be worth as
+   * little as a customer id supplied the same way.
+   *
+   * Failures are reported rather than thrown, the same way `ask` reports
+   * them. A judgement that did not reach the AI has to be visible on the
+   * screen: the alternative is a button that looks like it worked, and a
+   * measurement quietly missing a row.
+   */
+  async rate(input: {
+    messageId: string;
+    axis: AiRatingAxis;
+    rating: AiAnswerRating;
+    ratedBy: string;
+  }): Promise<AiAnswerRatingResult> {
+    const config: AiChatConfig | null = aiChatConfig(this.environment);
+
+    if (!config) {
+      return this.ratingFailure("ai_not_configured");
+    }
+
+    let response: Response;
+
+    try {
+      response = await this.fetchImpl(
+        `${config.baseUrl}/v1/messages/${input.messageId}/rating`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${config.token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            axis: input.axis,
+            rating: input.rating,
+            ratedBy: input.ratedBy,
+          }),
+          signal: AbortSignal.timeout(AI_CHAT_RATING_TIMEOUT_MS),
+        },
+      );
+    } catch (error) {
+      // As in `ask`: the error object can carry the request, and the request
+      // carries the token, so only the name of the failure travels.
+      const name = (error as Error)?.name ?? "unknown";
+      return this.ratingFailure(
+        name === "TimeoutError" ? "ai_gateway_timeout" : "ai_unreachable",
+      );
+    }
+
+    const body = (await response.json().catch(() => null)) as Record<
+      string,
+      unknown
+    > | null;
+
+    if (!response.ok || !body) {
+      return this.ratingFailure(
+        typeof body?.error === "string" ? body.error : "ai_bad_response",
+      );
+    }
+
+    return {
+      axis: (body.axis as AiRatingAxis | undefined) ?? null,
+      rating: (body.rating as AiAnswerRating | undefined) ?? null,
+      ratedAt: typeof body.ratedAt === "string" ? body.ratedAt : null,
+      errorCode: null,
+    };
+  }
+
+  private ratingFailure(errorCode: string): AiAnswerRatingResult {
+    return {
+      axis: null,
+      rating: null,
+      ratedAt: null,
+      errorCode,
+    };
+  }
+
   private failure(
     errorCode: string,
     elapsedMs: number,
@@ -199,6 +294,7 @@ export class AiChatService {
   ): AiChatReply {
     return {
       conversationId: null,
+      messageId: null,
       answer: null,
       model: null,
       customerContextStatus: null,

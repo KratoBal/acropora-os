@@ -303,6 +303,19 @@ export type {
   FoxpostSettlementSummary,
   FoxpostSyncSummary,
 } from "./integrations/foxpost-settlement.js";
+export {
+  AI_ACCURACY_RATINGS,
+  AI_LANGUAGE_RATINGS,
+  AI_RATING_AXES,
+  AI_RATINGS_BY_AXIS,
+} from "./integrations/ai-chat.js";
+export type {
+  AiAccuracyRating,
+  AiAnswerRating,
+  AiAnswerRatingResult,
+  AiLanguageRating,
+  AiRatingAxis,
+} from "./integrations/ai-chat.js";
 export type { PostalCodeLookupResult } from "./integrations/postal-code.js";
 export type { ViesVatLookupResult } from "./integrations/vies-vat.js";
 export type {

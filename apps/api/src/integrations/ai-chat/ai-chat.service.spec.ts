@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 
 import {
   AI_CHAT_BASE_URL_ENV,
+  AI_CHAT_RATING_TIMEOUT_MS,
+  AI_CHAT_TIMEOUT_MS,
   AI_CHAT_TOKEN_ENV,
   aiChatConfig,
 } from "./ai-chat.config.js";
@@ -159,6 +161,152 @@ describe("AiChatService", () => {
 
     assert.equal(reply.errorCode, "ai_bad_response");
     assert.equal(reply.answer, null);
+  });
+});
+
+/**
+ * Sending a judgement on to the AI service.
+ *
+ * The chat tests above prove the token leaves from here and never comes back.
+ * These prove the same for the second call, and one thing more that only this
+ * hop can be responsible for: the name on a judgement comes from the session,
+ * so the service is given it rather than reading it from anything a browser
+ * could have written.
+ */
+describe("AiChatService.rate", () => {
+  const MESSAGE_ID = "b2c4d6e8-0a1b-4c3d-8e5f-9a7b6c5d4e3f";
+
+  const stored = {
+    messageId: MESSAGE_ID,
+    axis: "accuracy",
+    rating: "inaccurate",
+    ratedBy: "user_7",
+    ratedAt: "2026-08-26T20:00:00.000Z",
+  };
+
+  it("addresses the answer, carries the token, and returns neither", async () => {
+    const { impl, calls } = recordingFetch(() => json(stored));
+    const service = new AiChatService(environment, impl);
+
+    const result = await service.rate({
+      messageId: MESSAGE_ID,
+      axis: "accuracy",
+      rating: "inaccurate",
+      ratedBy: "user_7",
+    });
+
+    const call = calls[0];
+    assert.ok(call, "a hivasnak meg kellett tortennie");
+    assert.equal(
+      call.url,
+      `https://ai-stage.example/v1/messages/${MESSAGE_ID}/rating`,
+    );
+    assert.equal(
+      (call.init.headers as Record<string, string>).authorization,
+      `Bearer ${TOKEN}`,
+    );
+    assert.equal(JSON.stringify(result).includes(TOKEN), false);
+    assert.deepEqual(result, {
+      axis: "accuracy",
+      rating: "inaccurate",
+      ratedAt: "2026-08-26T20:00:00.000Z",
+      errorCode: null,
+    });
+  });
+
+  it("sends the author it was given, not one the browser could choose", async () => {
+    // The controller passes the session user. What this asserts is that the
+    // service does not invent, default or read one from anywhere else.
+    const { impl, calls } = recordingFetch(() => json(stored));
+    const service = new AiChatService(environment, impl);
+
+    await service.rate({
+      messageId: MESSAGE_ID,
+      axis: "accuracy",
+      rating: "correct",
+      ratedBy: "user_9",
+    });
+
+    assert.deepEqual(JSON.parse(calls[0]?.init.body as string), {
+      axis: "accuracy",
+      rating: "correct",
+      ratedBy: "user_9",
+    });
+  });
+
+  it("says so when the AI is not configured, and never calls out", async () => {
+    const { impl, calls } = recordingFetch(() => json(stored));
+    const service = new AiChatService({}, impl);
+
+    const result = await service.rate({
+      messageId: MESSAGE_ID,
+      axis: "accuracy",
+      rating: "correct",
+      ratedBy: "user_7",
+    });
+
+    assert.deepEqual(result, {
+      axis: null,
+      rating: null,
+      ratedAt: null,
+      errorCode: "ai_not_configured",
+    });
+    assert.equal(calls.length, 0);
+  });
+
+  it("passes the AI's own refusal through instead of a generic failure", async () => {
+    // A 404 here means the answer is not ours to judge, and the surface can
+    // say something true about that. "Something went wrong" cannot.
+    const { impl } = recordingFetch(() =>
+      json({ error: "answer not found" }, 404),
+    );
+    const service = new AiChatService(environment, impl);
+
+    const result = await service.rate({
+      messageId: MESSAGE_ID,
+      axis: "accuracy",
+      rating: "correct",
+      ratedBy: "user_7",
+    });
+
+    assert.deepEqual(result, {
+      axis: null,
+      rating: null,
+      ratedAt: null,
+      errorCode: "answer not found",
+    });
+  });
+
+  it("reports a timeout as one, and reports nothing else about it", async () => {
+    const { impl } = recordingFetch(() => {
+      const error = new Error("The operation was aborted");
+      error.name = "TimeoutError";
+      throw error;
+    });
+    const service = new AiChatService(environment, impl);
+
+    const result = await service.rate({
+      messageId: MESSAGE_ID,
+      axis: "accuracy",
+      rating: "correct",
+      ratedBy: "user_7",
+    });
+
+    assert.deepEqual(result, {
+      axis: null,
+      rating: null,
+      ratedAt: null,
+      errorCode: "ai_gateway_timeout",
+    });
+  });
+
+  it("does not wait a model-sized minute for a row to be written", async () => {
+    /**
+     * A rating is not a model call, and the wait says so. Inheriting the chat
+     * timeout would leave somebody who pressed a button watching a spinner
+     * for the better part of a minute before being told the AI is down.
+     */
+    assert.ok(AI_CHAT_RATING_TIMEOUT_MS < AI_CHAT_TIMEOUT_MS / 4);
   });
 });
 
