@@ -222,29 +222,56 @@ export class ServiceAssetsRepository extends Repository {
    * lekérdezést nem tud kifejezni. A részfát ezért két lépésben állítjuk elő --
    * egy köteg sor, majd egy tiszta bejárás (`collectUnitSubtreeIds`).
    */
-  private async unitSubtreeIds(departmentId: string): Promise<string[]> {
-    const department = await prisma.worksheetDepartment.findUnique({
-      where: { id: departmentId },
-      select: { customerId: true },
+  private async unitSubtreeIds(
+    departmentIds: readonly string[],
+  ): Promise<string[]> {
+    const found = await prisma.worksheetDepartment.findMany({
+      where: { id: { in: [...departmentIds] } },
+      select: { id: true, customerId: true },
     });
-    // NEM LÉTEZŐ ALEGYSÉG: a saját azonosítójára szűkítünk, ami egyetlen
-    // eszközre sem illeszkedik. A csábító alternatíva (nincs szűrő) a TELJES
-    // listát adná vissza egy elgépelt azonosítóra, hibaüzenet nélkül.
-    if (!department) return [departmentId];
+    const customerIdOf = new Map(found.map((row) => [row.id, row.customerId]));
 
-    const units = await prisma.worksheetDepartment.findMany({
-      where: { customerId: department.customerId },
-      select: { id: true, name: true, parentId: true },
-    });
-    return collectUnitSubtreeIds(units, departmentId);
+    // A BEJÁRÁS AZ ÖSSZES ÉRINTETT PARTNER SORAIT KAPJA, NEM CSAK EGYÉT. Egy
+    // értéknél ez nem tudott előállni, a többes alak hozza be: ha a megadott
+    // azonosítók KÜLÖNBÖZŐ partnerekhez tartoznak, egyetlen partner sorai
+    // hiányos részfát adnának -- és az nem üres listaként jelentkezne, hanem
+    // KEVESEBB SORKÉNT, ami sokkal kevésbé feltűnő.
+    const customerIds = [...new Set(customerIdOf.values())];
+    const units = customerIds.length
+      ? await prisma.worksheetDepartment.findMany({
+          where: { customerId: { in: customerIds } },
+          select: { id: true, name: true, parentId: true },
+        })
+      : [];
+
+    // NEM LÉTEZŐ ALEGYSÉG: a saját azonosítójára szűkül, ami egyetlen eszközre
+    // sem illeszkedik. Unióban ez azt jelenti, hogy a nem létező ág nulla sort
+    // hoz, és a TÖBBIT nem rontja el -- de nem is tűnik el csendben. A csábító
+    // alternatíva (nincs szűrő) egy elgépelt azonosítóra a TELJES listát adná
+    // vissza, hibaüzenet nélkül.
+    const ids = new Set<string>();
+    for (const departmentId of departmentIds) {
+      if (!customerIdOf.has(departmentId)) {
+        ids.add(departmentId);
+        continue;
+      }
+      for (const id of collectUnitSubtreeIds(units, departmentId)) ids.add(id);
+    }
+    return [...ids];
   }
 
   async list(
     query: AssetListQueryDto,
     scope: PartnerScope,
   ): Promise<AssetListResponse> {
-    const departmentIds = query.departmentId
-      ? await this.unitSubtreeIds(query.departmentId)
+    // A KÉT MEZŐ EGYÜTT IS MEGADHATÓ, és a szűrő az uniójuk. A singularis alak
+    // marad, hogy a meglévő hívások betűre változatlanok legyenek.
+    const requestedUnitIds = [
+      ...(query.departmentId ? [query.departmentId] : []),
+      ...(query.departmentIds ?? []),
+    ];
+    const departmentIds = requestedUnitIds.length
+      ? await this.unitSubtreeIds(requestedUnitIds)
       : null;
     // A JOGOSULTSAGI SZURO `AND` AGKENT, SOHA NEM KULCSKENT -- lasd a
     // scopeWhereForAndBranch jegyzetet. Az alabbi objektum a FELHASZNALOI

@@ -1,4 +1,4 @@
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
   IsIn,
   IsInt,
@@ -32,6 +32,23 @@ export const ASSET_DOCUMENT_TYPES = [
   "OTHER",
 ] as const;
 
+/**
+ * A query sztring nem hordoz tömböt: egy érték sztringként, több érték tömbként
+ * vagy egyetlen vesszős sztringként érkezik. Mindhármat ugyanarra hozzuk.
+ *
+ * Az üres darabokat eldobjuk, de az ÜRES EREDMÉNYT `undefined`-re visszük, nem
+ * üres tömbre: egy `?departmentIds=` alak így „nem szűrünk" marad, és nem
+ * változik némán „egyetlen sort sem adunk vissza" jelentésűvé.
+ */
+export function toIdList(value: unknown): string[] | undefined {
+  const raw = Array.isArray(value) ? value : [value];
+  const ids = raw
+    .flatMap((item) => (typeof item === "string" ? item.split(",") : []))
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+  return ids.length > 0 ? ids : undefined;
+}
+
 export class AssetListQueryDto {
   @Type(() => Number) @IsInt() @Min(1) @IsOptional() page = 1;
   @Type(() => Number) @IsInt() @Min(10) @Max(100) @IsOptional() pageSize = 25;
@@ -58,6 +75,25 @@ export class AssetListQueryDto {
    * csomóponthoz köthető, tehát a pontos egyezés csendben hiányos listát adna.
    */
   @IsString() @IsOptional() departmentId?: string;
+  /**
+   * TÖBB ALEGYSÉG, ÉS A VÁLASZ A RÉSZFÁIK UNIÓJA.
+   *
+   * MIÉRT KELL A TÖBBES ALAK: a tulajdonos döntése szerint egy emberhez EGY VAGY
+   * TÖBB fa-csomópont rendelhető, és ő azt és mindent alatta lát. Egy csomópont
+   * tehát nem elég hatókörnek.
+   *
+   * KÜLÖN MEZŐ, ÉS NEM A `departmentId` KITERJESZTÉSE: a singularis név egy
+   * értéket ígér, és a két mező együtt is megadható -- a szűrő az összes megadott
+   * azonosító részfáinak az uniója. Így a meglévő hívások betűre változatlanok.
+   *
+   * Ismételt paraméterként (`?departmentIds=a&departmentIds=b`) és vesszővel
+   * elválasztva is megadható: a query sztringben nincs tömb-típus, és egy
+   * felület mindkét alakot természetesnek találja.
+   */
+  @Transform(({ value }) => toIdList(value))
+  @IsString({ each: true })
+  @IsOptional()
+  departmentIds?: string[];
   @IsString() @IsOptional() aquariumId?: string;
   @IsString() @IsOptional() parentAssetId?: string;
   @IsIn([...ASSET_STATUSES, "ALL"]) @IsOptional() status:
