@@ -73,6 +73,15 @@ describe(
     let tokenInternal: string;
     /** Olyan szerep, ami NEM viszi a `SERVICE_VIEW` jogot -- a dekorator merceje. */
     let tokenWithoutServiceView: string;
+    /**
+     * MANAGER: MINDEN MAS SZEMPONTBOL JOGOSULT, es PONTOSAN a torles joga
+     * hianyzik neki. Ez nem kenyelmi valasztas -- egy olyan keroval, aki amugy
+     * sem jutna el a vegpontig, a 403-at nem a dekorator adna, es azt hinnenk,
+     * hogy igen. (Ugyanaz a csapda, amit ma delutan a webes valasztonal talaltam
+     * meg: az allitas atment, mert egy MASIK feltetel is hamissa tette az agat.)
+     */
+    let tokenManager: string;
+    let deletableAsset: string;
 
     async function login(email: string): Promise<string> {
       const response = await fetch(`${base}/auth/mobile/login/password`, {
@@ -154,6 +163,16 @@ describe(
          */
         prisma.user.create({
           data: {
+            email: `manager-${suffix}@${TEST_EMAIL_DOMAIN}`,
+            displayName: "HTTP Vezető kolléga",
+            role: "MANAGER",
+            isActive: true,
+            passwordHash,
+            passwordUpdatedAt: new Date(),
+          },
+        }),
+        prisma.user.create({
+          data: {
             email: `sales-${suffix}@${TEST_EMAIL_DOMAIN}`,
             displayName: "HTTP Értékesítő kolléga",
             role: "SALES",
@@ -184,6 +203,20 @@ describe(
       assetB = aB.id;
       qrTokenB = aB.qrToken;
 
+      /**
+       * KULON ESZKOZ A TORLES-PROBAHOZ: a masik kettore allitasok epulnek, es
+       * egy sikeres torles kihuzna a talajt aluluk.
+       */
+      deletableAsset = (
+        await prisma.asset.create({
+          data: {
+            assetNumber: `${TEST_ASSET_PREFIX}${suffix}-D`,
+            name: `HTTP eszköz törléshez ${suffix}`,
+            customerId: customerA.id,
+          },
+        })
+      ).id;
+
       app = await NestFactory.create(AppModule, { logger: false });
       // UGYANAZ A KONFIGURACIO, MINT ELESBEN. Enelkul a validacios pipe nem
       // futna, es a suite pont azt hagyna ki, amiert keszult.
@@ -195,6 +228,7 @@ describe(
       tokenA = await login(`a-${suffix}@${TEST_EMAIL_DOMAIN}`);
       tokenB = await login(`b-${suffix}@${TEST_EMAIL_DOMAIN}`);
       tokenInternal = await login(`internal-${suffix}@${TEST_EMAIL_DOMAIN}`);
+      tokenManager = await login(`manager-${suffix}@${TEST_EMAIL_DOMAIN}`);
       tokenWithoutServiceView = await login(
         `sales-${suffix}@${TEST_EMAIL_DOMAIN}`,
       );
@@ -252,6 +286,44 @@ describe(
     it("SERVICE_VIEW jog nélküli kolléga 403-at kap", async () => {
       const response = await get("/service/assets", tokenWithoutServiceView);
       assert.equal(response.status, 403);
+    });
+
+    /**
+     * A TORLES JOGA FUTASIDOBEN, ES EZ A LEGDRAGABB VEGPONT.
+     *
+     * A `SERVICE_ASSET_DELETE` MA UJ jog, es ma dontottunk ugy, hogy NEM
+     * tagitjuk, amig Balazs nem valaszol. Egy szukitett jog, amit futasidoben
+     * senki nem probal ki, ugyanolyan allitas, mint egy zold szam meres nelkul
+     * -- es itt a tevedes ara egy VISSZAFORDITHATATLAN torles.
+     *
+     * A `route-permission-coverage.spec.ts` SZERKEZETILEG orzi, hogy minden
+     * utvonalon ALL dekorator; azt viszont nem tudja megmondani, hogy a HELYES
+     * jogot nevezi-e meg, es hogy a kapu tenylegesen zar-e. Ez a ket allitas
+     * arrol szol.
+     */
+    it("SERVICE_ASSET_DELETE nélkül a törlés 403, a joggal 200", async () => {
+      const forbidden = await fetch(
+        `${base}/service/assets/${deletableAsset}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${tokenManager}` },
+        },
+      );
+      assert.equal(forbidden.status, 403);
+      assert.ok(
+        await prisma.asset.findUnique({ where: { id: deletableAsset } }),
+        "az őrző akkor őrző, ha nem történt semmi",
+      );
+
+      const allowed = await fetch(`${base}/service/assets/${deletableAsset}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${tokenInternal}` },
+      });
+      assert.equal(allowed.status, 200);
+      assert.equal(
+        await prisma.asset.findUnique({ where: { id: deletableAsset } }),
+        null,
+      );
     });
 
     it("a belsős kérő MINDKÉT eszközt megkapja", async () => {
