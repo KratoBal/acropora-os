@@ -9,6 +9,11 @@ import type {
   WorksheetDepartmentSummary,
 } from "@acropora/types";
 
+import {
+  rowIsScopeOwner,
+  scopeOwnWhereForAndBranch,
+  type PartnerScope,
+} from "../auth/partner-scope.util.js";
 import { generateCode } from "../common/code-generator.util.js";
 import {
   retryOnTakenCode,
@@ -205,8 +210,11 @@ export class SuppliersRepository extends Repository {
     super(prisma);
   }
 
-  async list(query: SupplierListQueryDto): Promise<SupplierListResponse> {
-    const where: Prisma.SupplierWhereInput = {
+  async list(
+    query: SupplierListQueryDto,
+    scope: PartnerScope,
+  ): Promise<SupplierListResponse> {
+    const userWhere: Prisma.SupplierWhereInput = {
       // A törölt partner kikerül a listából, a "Mind" szűrő alól is: az a
       // szűrő az aktív és az inaktív között választ, a törölt viszont nem
       // ezen a tengelyen van. A neve továbbra is látszik a régi
@@ -244,6 +252,12 @@ export class SuppliersRepository extends Repository {
           }
         : {}),
     };
+
+    // A JOGOSULTSAGI SZURO `AND` AGKENT, SOHA NEM KULCSKENT -- a fenti objektum
+    // felhasznaloi szurot spreadel es felso szintu `OR`-t is tartalmaz.
+    const where: Prisma.SupplierWhereInput = {
+      AND: [scopeOwnWhereForAndBranch(scope, "supplier"), userWhere],
+    };
     const [suppliers, totalItems] = await Promise.all([
       prisma.supplier.findMany({
         where,
@@ -276,7 +290,15 @@ export class SuppliersRepository extends Repository {
    * Tükör nélküli partnernek üres a listája, nem hibás. Egy tisztán beszállító
    * partnernek nincs és nem is lehet alegysége, és ez nem hibaállapot.
    */
-  async units(supplierId: string): Promise<WorksheetDepartmentListResponse> {
+  async units(
+    supplierId: string,
+    scope: PartnerScope,
+  ): Promise<WorksheetDepartmentListResponse> {
+    // AZ UTVONALBAN ALLO PARTNER EGYEZZEN A KEROEVEL. Itt nincs betoltott sor,
+    // amin ellenorizni lehetne: maga az utvonal-parameter a tulajdonos.
+    if (!rowIsScopeOwner({ id: supplierId }, scope, "supplier")) {
+      return { items: [] };
+    }
     const supplier = await prisma.supplier.findUnique({
       where: { id: supplierId },
       select: { customerId: true },
@@ -473,9 +495,39 @@ export class SuppliersRepository extends Repository {
     });
   }
 
-  async detail(id: string): Promise<SupplierSummary | null> {
+  /**
+   * A KOTELEZO `scope` NEM KENYELMETLENSEG, HANEM A MECHANIZMUS MAGA. Ha
+   * elhagyhato lenne, egy elfelejtett hivasi hely CSENDBEN szuretlen maradna --
+   * es egy elem-lekeresnel az idegen adat EGYETLEN hivasra megy ki, amit senki
+   * nem vesz eszre, amig valaki ki nem probalja. A kotelezo parameterrel a
+   * FORDITO sorolja fel az osszes hivasi helyet.
+   *
+   * Az ellenorzes a BETOLTOTT soron all, nem a `where`-ben, es ez szandekos: igy
+   * egy helyen latszik, mit engedunk at. A nem egyezo sor `null`, tehat a hivo
+   * 404-et ad -- NEM 403-at, mert a 403 elarulna, hogy a sor letezik.
+   */
+  async detail(
+    id: string,
+    scope: PartnerScope,
+  ): Promise<SupplierSummary | null> {
     const supplier = await prisma.supplier.findUnique({ where: { id } });
-    return supplier ? toSummary(supplier) : null;
+    if (!supplier) return null;
+    if (!rowIsScopeOwner(supplier, scope, "supplier")) return null;
+    return toSummary(supplier);
+  }
+
+  /**
+   * LETEZES-ELLENORZES IRASI UT ELOTT, HATOKOR NELKUL -- es a kulonbseg
+   * szandekos. Az irasi vegpontok PARTNERS_MANAGE jog alatt allnak, amit
+   * partner-oldali felhasznalo nem kap meg; a szukites ott nem ad tobb vedelmet,
+   * viszont OSSZEMOSNA ket kerdest: "latja-e ezt a sort" es "letezik-e ez a sor".
+   */
+  async exists(id: string): Promise<boolean> {
+    const row = await prisma.supplier.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    return row !== null;
   }
 
   /**

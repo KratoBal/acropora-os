@@ -8,9 +8,21 @@ import { after, before, describe, it } from "node:test";
 
 import { prisma } from "@acropora/database";
 
+import type { PartnerScope } from "../auth/partner-scope.util.js";
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { AssetListQueryDto } from "./dto/asset.dto.js";
 import { ServiceAssetsRepository } from "./service-assets.repository.js";
+
+/**
+ * BELSOS HATOKOR, KIIRVA. A `list()` kotelezo `scope` parametert kapott (a
+ * partner-hatokoru hozzaferes miatt), es epp ezert kellett minden hivasi
+ * helynek MEGMONDANIA, kinek a neveben kerdez -- a fordito sorolta fel oket, ez
+ * a spec is koztuk volt. Itt a valasz belsos: a suite az alegyseg-szurot meri,
+ * nem a jogosultsagot, es egy szukitett hatokor elfedne a mert viselkedest. A
+ * partner-oldalt kulon suite meri
+ * (`auth/partner-scope-endpoint.integration.spec.ts`).
+ */
+const INTERNAL: PartnerScope = { kind: "internal" };
 
 /**
  * AZ ALEGYSÉG SZERINTI SZŰRÉS, ADATBÁZISON.
@@ -135,7 +147,10 @@ describe(
     });
 
     it("returns the unit's own assets and every level beneath it", async () => {
-      const result = await repository.list(query({ departmentId: childId }));
+      const result = await repository.list(
+        query({ departmentId: childId }),
+        INTERNAL,
+      );
       assert.deepEqual(result.items.map((item) => item.assetNumber).sort(), [
         `${PREFIX}-CHILD`,
         `${PREFIX}-GRAND`,
@@ -143,7 +158,10 @@ describe(
     });
 
     it("does not reach into a sibling branch", async () => {
-      const result = await repository.list(query({ departmentId: siblingId }));
+      const result = await repository.list(
+        query({ departmentId: siblingId }),
+        INTERNAL,
+      );
       assert.deepEqual(
         result.items.map((item) => item.assetNumber),
         [`${PREFIX}-SIB`],
@@ -151,7 +169,10 @@ describe(
     });
 
     it("takes the whole tree from the root, but not the unplaced asset", async () => {
-      const result = await repository.list(query({ departmentId: rootId }));
+      const result = await repository.list(
+        query({ departmentId: rootId }),
+        INTERNAL,
+      );
       assert.deepEqual(result.items.map((item) => item.assetNumber).sort(), [
         `${PREFIX}-CHILD`,
         `${PREFIX}-GRAND`,
@@ -172,11 +193,15 @@ describe(
     it("filters to nothing for a unit id that does not exist", async () => {
       const missing = await repository.list(
         query({ departmentId: "00000000-0000-4000-8000-000000000000" }),
+        INTERNAL,
       );
       assert.equal(missing.items.length, 0);
       assert.equal(missing.pagination.totalItems, 0);
 
-      const control = await repository.list(query({ departmentId: rootId }));
+      const control = await repository.list(
+        query({ departmentId: rootId }),
+        INTERNAL,
+      );
       assert.equal(control.items.length, 4);
     });
   },

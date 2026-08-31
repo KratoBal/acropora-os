@@ -134,6 +134,7 @@ test("generates an app deep link QR without exposing database ids", async () => 
   try {
     const result = await new ServiceAssetsService(repository()).qrCode(
       "asset-1",
+      { kind: "internal" },
     );
     assert.equal(
       result.value,

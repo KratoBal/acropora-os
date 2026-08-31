@@ -1,3 +1,4 @@
+import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import {
   Body,
   Controller,
@@ -34,14 +35,20 @@ export class WorksheetsController {
 
   @Get()
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  list(@Query() query: WorksheetListQueryDto) {
-    return this.service.list(query);
+  list(
+    @Query() query: WorksheetListQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.list(query, partnerScopeOf(user));
   }
 
   @Get("customers/:customerId/departments")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  departments(@Param("customerId") customerId: string) {
-    return this.service.departments(customerId);
+  departments(
+    @Param("customerId") customerId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.departments(customerId, partnerScopeOf(user));
   }
 
   @Post("customers/:customerId/departments")
@@ -97,8 +104,8 @@ export class WorksheetsController {
 
   @Get(":id")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  detail(@Param("id") id: string) {
-    return this.service.detail(id);
+  detail(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.detail(id, partnerScopeOf(user));
   }
 
   @Get(":id/versions/:version/diff")
@@ -106,8 +113,9 @@ export class WorksheetsController {
   diff(
     @Param("id") id: string,
     @Param("version", ParseIntPipe) version: number,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.diff(id, version);
+    return this.service.diff(id, version, partnerScopeOf(user));
   }
 
   @Post()

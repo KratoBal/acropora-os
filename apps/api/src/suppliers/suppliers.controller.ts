@@ -1,3 +1,4 @@
+import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import {
   Body,
   Controller,
@@ -26,14 +27,17 @@ export class SuppliersController {
 
   @Get()
   @RequirePermissions(PERMISSIONS.PARTNERS_VIEW)
-  list(@Query() query: SupplierListQueryDto) {
-    return this.service.list(query);
+  list(
+    @Query() query: SupplierListQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.list(query, partnerScopeOf(user));
   }
 
   @Get(":id")
   @RequirePermissions(PERMISSIONS.PARTNERS_VIEW)
-  detail(@Param("id") id: string) {
-    return this.service.detail(id);
+  detail(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.detail(id, partnerScopeOf(user));
   }
 
   @Post()
@@ -51,8 +55,8 @@ export class SuppliersController {
    */
   @Get(":id/units")
   @RequirePermissions(PERMISSIONS.PARTNERS_VIEW)
-  units(@Param("id") id: string) {
-    return this.service.units(id);
+  units(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.units(id, partnerScopeOf(user));
   }
 
   @Post(":id/units")
