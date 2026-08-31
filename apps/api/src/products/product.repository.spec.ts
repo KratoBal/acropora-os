@@ -114,6 +114,7 @@ const product = {
           isPrimary: true,
         },
       ],
+      supplierProducts: [],
       extension: {
         id: "extension-1",
         variantId: "variant-1",

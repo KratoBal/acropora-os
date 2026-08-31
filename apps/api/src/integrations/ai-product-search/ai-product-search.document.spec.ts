@@ -20,7 +20,14 @@ function sourceProduct(
     description: null,
     brand: { name: "Aqua Medic" },
     categories: [{ category: { name: "Tengeri akvarisztika" } }],
-    variants: [{ sku: "REEF-SALT-01" }],
+    variants: [
+      {
+        sku: "REEF-SALT-01",
+        manufacturerPartNumber: null,
+        barcodes: [],
+        supplierProducts: [],
+      },
+    ],
     unasSnapshot: {
       descriptionShort: "Tengeri só",
       descriptionLong: "<p>Hosszabb leírás</p>",
@@ -160,5 +167,104 @@ describe("the search document a product is turned into", () => {
       buildDocument(sourceProduct({ mirrorState: "CONFLICT" })).isSearchable,
       true,
     );
+  });
+});
+
+describe("every article number lands in the same searchable band", () => {
+  const variant = (overrides: Record<string, unknown> = {}) => ({
+    sku: "REEF-SALT-01",
+    manufacturerPartNumber: null,
+    barcodes: [],
+    supplierProducts: [],
+    ...overrides,
+  });
+
+  it("carries the maker's part number, the barcode and the supplier's own code", () => {
+    const document = buildDocument(
+      sourceProduct({
+        variants: [
+          variant({
+            manufacturerPartNumber: "AM-12345",
+            barcodes: [{ code: "5999881234567" }],
+            supplierProducts: [{ supplierSku: "SUP-99" }],
+          }),
+        ],
+      }),
+    );
+
+    for (const value of [
+      "REEF-SALT-01",
+      "AM-12345",
+      "5999881234567",
+      "SUP-99",
+    ]) {
+      assert.ok(
+        document.skus.split(" ").includes(value),
+        `${value} is missing from "${document.skus}"`,
+      );
+    }
+  });
+
+  it("collects them across every active variant", () => {
+    const document = buildDocument(
+      sourceProduct({
+        variants: [
+          variant({ sku: "A-1", barcodes: [{ code: "111" }] }),
+          variant({ sku: "B-2", barcodes: [{ code: "222" }] }),
+        ],
+      }),
+    );
+
+    assert.equal(document.skus, "A-1 111 B-2 222");
+  });
+
+  /**
+   * The same string is legitimately both our SKU and a supplier's, and a
+   * repeat would raise the product's rank for that term without adding
+   * anything. This is the assertion, not tidiness.
+   */
+  it("says each number once, however many places hold it", () => {
+    const document = buildDocument(
+      sourceProduct({
+        variants: [
+          variant({
+            sku: "SAME",
+            manufacturerPartNumber: "SAME",
+            barcodes: [{ code: "SAME" }],
+            supplierProducts: [{ supplierSku: "SAME" }],
+          }),
+        ],
+      }),
+    );
+
+    assert.equal(document.skus, "SAME");
+  });
+
+  it("drops empty and whitespace-only values instead of padding the band", () => {
+    const document = buildDocument(
+      sourceProduct({
+        variants: [
+          variant({
+            sku: "A-1",
+            manufacturerPartNumber: "   ",
+            barcodes: [{ code: "" }],
+          }),
+        ],
+      }),
+    );
+
+    assert.equal(document.skus, "A-1");
+  });
+
+  it("trims, so the same number written with a space is not stored twice", () => {
+    const document = buildDocument(
+      sourceProduct({
+        variants: [
+          variant({ sku: "A-1", supplierProducts: [{ supplierSku: " A-1 " }] }),
+        ],
+      }),
+    );
+
+    assert.equal(document.skus, "A-1");
   });
 });
