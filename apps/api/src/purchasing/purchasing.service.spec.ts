@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { Prisma } from "@acropora/database";
 
 import type { CreatePurchaseInvoiceDto } from "./dto/create-purchase-invoice.dto.js";
 import type { MnbExchangeRateService } from "../integrations/mnb/mnb-exchange-rate.service.js";
@@ -22,7 +21,6 @@ function variant(
     sku: "REEF-SALT-01",
     productName: "Reef Salt",
     unit: "db",
-    currentQty: new Prisma.Decimal("10"),
     catalogAuthority: "UNAS",
     isPackageProduct: false,
     ...overrides,
