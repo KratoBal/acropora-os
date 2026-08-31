@@ -32,6 +32,7 @@ import {
   dateInputValue,
   type AssetCreateField,
 } from "@/lib/assets/asset-create";
+import { filterOwners } from "@/lib/assets/owner-search";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 
@@ -99,18 +100,10 @@ export default function NewAssetScreen() {
     [unitsQuery.data],
   );
 
-  const filteredOwners = useMemo(() => {
-    const needle = ownerSearch.trim().toLocaleLowerCase("hu");
-    return (ownersQuery.data?.items ?? [])
-      .filter((item) =>
-        !needle
-          ? true
-          : `${item.displayName} ${item.code}`
-              .toLocaleLowerCase("hu")
-              .includes(needle),
-      )
-      .slice(0, 20);
-  }, [ownerSearch, ownersQuery.data]);
+  const filteredOwners = useMemo(
+    () => filterOwners(ownersQuery.data?.items ?? [], ownerSearch),
+    [ownerSearch, ownersQuery.data],
+  );
 
   const mutation = useMutation({
     mutationFn: createAsset,
