@@ -57,6 +57,16 @@ export const PERMISSIONS = {
   /// dokumentumot érint. Ezért a SERVICE szerepkör NEM kapja meg (lásd
   /// ROLE_PERMISSIONS lent).
   SERVICE_WORKSHEET_AMEND: "service.worksheet.amend",
+  /// Eszköz VÉGLEGES törlése a saját adatlapjáról. Szándékosan KÜLÖN a
+  /// SERVICE_MANAGE-től: eszközt felvinni és szerkeszteni a napi szerviz-munka,
+  /// egy eszközt megszüntetni viszont visszafordíthatatlan, és a hozzá tartozó
+  /// esemény- és dokumentum-történet is vele megy (kaszkád). Ezért ugyanolyan
+  /// szűk körnek jár, mint a SETTINGS_MANAGE és a SERVICE_WORKSHEET_AMEND
+  /// (lásd ROLE_PERMISSIONS lent: a MANAGER sem kapja meg).
+  ///
+  /// A KIVEZETÉS NEM EZ: egy használatból kivont eszköz `RETIRED` állapotba
+  /// kerül, és megmarad. Ez a jog a téves felvitel visszavonására való.
+  SERVICE_ASSET_DELETE: "service.asset.delete",
   /// A termék törzsadat-gazdájának átvétele a UNAS-tól (UNAS -> ACROPORA).
   /// Szándékosan KÜLÖN a PRODUCTS_MANAGE-től, és nem azért, mert ritkán
   /// használt: az átvétel után a webshop-szinkron TÖBBÉ NEM ír a terméken,
@@ -105,6 +115,7 @@ export const ROLE_PERMISSIONS: Readonly<
       permission !== PERMISSIONS.USERS_MANAGE &&
       permission !== PERMISSIONS.INVENTORY_RECONCILIATION_REPAIR &&
       permission !== PERMISSIONS.SERVICE_WORKSHEET_AMEND &&
+      permission !== PERMISSIONS.SERVICE_ASSET_DELETE &&
       permission !== PERMISSIONS.PRODUCTS_CATALOG_AUTHORITY_TRANSFER,
   ),
   SALES: [

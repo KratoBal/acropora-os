@@ -1,4 +1,5 @@
 import type { PartnerScope } from "../auth/partner-scope.util.js";
+import { assetDeletionRefusal } from "./asset-deletion.js";
 import {
   BadRequestException,
   ConflictException,
@@ -52,6 +53,23 @@ export class ServiceAssetsService {
     const asset = await this.repository.detail(id, scope);
     if (!asset) throw new NotFoundException("Az eszköz nem található.");
     return asset;
+  }
+
+  /**
+   * A TORLES BELSOS UT, ES A HATOKOR SZANDEKOSAN NEM SZUKIT ITT. A vegpont a
+   * `SERVICE_ASSET_DELETE` jog alatt all, amit partner-oldali fiok nem kap meg;
+   * a letezes-ellenorzes ezert a `detail` BELSOS agan megy, ugyanabbol az okbol,
+   * mint a tobbi irasi uton: itt a kerdes az, hogy LETEZIK-e a sor, nem az, hogy
+   * LATHATJA-e a kero. A ketto osszemosasa ot irasi utat szukitett volna
+   * csendben (lasd a `partner-scope.util.ts` jegyzetet).
+   */
+  async remove(id: string) {
+    await this.detail(id, { kind: "internal" });
+    const blockers = await this.repository.deletionBlockers(id);
+    const refusal = assetDeletionRefusal(blockers);
+    if (refusal) throw new ConflictException(refusal);
+    await this.repository.remove(id);
+    return { ok: true as const };
   }
 
   async scan(qrToken: string, scope: PartnerScope) {
