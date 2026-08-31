@@ -17,7 +17,6 @@ import {
   updateAsset,
   type AssetCriticality,
   type AssetDetail,
-  type AssetStatus,
 } from "@/lib/api/assets";
 import { listPartnerUnits } from "@/lib/api/partners";
 import {
@@ -27,16 +26,10 @@ import {
   type AssetEditForm,
   type EditableAsset,
 } from "@/lib/assets/asset-edit";
+import { ASSET_STATUS_OPTIONS } from "@/lib/assets/asset-status";
 import { unitLevels } from "@/lib/partners/site-tree";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
-
-const STATUS_OPTIONS: { value: AssetStatus; label: string }[] = [
-  { value: "ACTIVE", label: "Üzemel" },
-  { value: "OUT_OF_SERVICE", label: "Nem üzemel" },
-  { value: "IN_REPAIR", label: "Javítás alatt" },
-  { value: "RETIRED", label: "Kivonva" },
-];
 
 const CRITICALITY_OPTIONS: { value: AssetCriticality; label: string }[] = [
   { value: "LOW", label: "Alacsony" },
@@ -223,7 +216,7 @@ export default function AssetEditScreen() {
 
         <Choice
           label="Státusz"
-          options={STATUS_OPTIONS}
+          options={ASSET_STATUS_OPTIONS}
           value={form.status}
           onChange={(value) => setForm({ ...form, status: value })}
           collapsible

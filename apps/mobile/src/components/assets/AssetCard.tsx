@@ -2,13 +2,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { AssetListItem } from "@/lib/api/assets";
 import { assetPlacementLine } from "@/lib/assets/asset-placement";
-
-const STATUS_LABELS: Record<AssetListItem["status"], string> = {
-  ACTIVE: "Aktív",
-  OUT_OF_SERVICE: "Nem üzemel",
-  IN_REPAIR: "Javítás alatt",
-  RETIRED: "Kivezetett",
-};
+import { ASSET_STATUS_LABELS } from "@/lib/assets/asset-status";
 
 export function AssetCard({
   asset,
@@ -26,7 +20,7 @@ export function AssetCard({
     >
       <View style={styles.topline}>
         <Text style={styles.number}>{asset.assetNumber}</Text>
-        <Text style={styles.status}>{STATUS_LABELS[asset.status]}</Text>
+        <Text style={styles.status}>{ASSET_STATUS_LABELS[asset.status]}</Text>
       </View>
       <Text style={styles.name}>{asset.name}</Text>
       <Text style={styles.customer}>{asset.owner.displayName}</Text>
