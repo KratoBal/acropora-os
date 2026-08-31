@@ -17,10 +17,11 @@ import type { DatasheetField } from "@acropora/database";
  *
  * AMIT EZ A MODUL NEM CSINÁL, ÉS AMIT KÖNNYŰ FÉLREÉRTENI: a CI-ben lefutó
  * egység- vagy integrációs teszt azt bizonyítja, hogy a DETEKTOR MŰKÖDIK - nem
- * azt, hogy egy adatbázis tiszta. A CI adatbázisa frissen migrált és üres, tehát
- * ott az audit mindig zöld lenne, függetlenül attól, hogy jó-e. Ahhoz, hogy egy
- * VALÓDI adatbázisról mondjunk valamit, ezt a függvényt AZ ELLEN a adatbázis
- * ellen kell lefuttatni.
+ * azt, hogy egy adatbázis tiszta. **A CI adatbázisa frissen migrált és üres**,
+ * tehát ott az audit MINDIG zöld, függetlenül attól, mi áll a stagingen vagy az
+ * élesen. Ahhoz, hogy egy VALÓDI adatbázisról mondjunk valamit, ezt a függvényt
+ * AZ ELLEN az adatbázis ellen kell lefuttatni - ezért tiszta függvény, és ezért
+ * nem köti magához a hívás helyét.
  */
 
 /** Egy mezőhöz tartozó összes oszlop. Több oszlop is hordozhat egy mezőt. */

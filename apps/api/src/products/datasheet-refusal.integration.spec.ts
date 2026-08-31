@@ -19,10 +19,12 @@ const runIntegration = gate.mode !== "skip";
  * 2. hogy az AUDIT megtalálja az ellentmondó párt (kitöltött mező + megtagadás)
  *    egy VALÓDI táblán, nem csak egy kézzel összerakott tömbön.
  *
- * Amit NEM bizonyít: hogy bármelyik éles vagy staging adatbázis tiszta. Ez a
- * suite egy üres, frissen migrált adatbázison fut, tehát ott az audit magától
- * zöld. Egy valódi adatbázisról csak az mond valamit, ha az auditot AZ ELLEN
- * futtatja valaki.
+ * Amit NEM bizonyít: hogy bármelyik éles vagy staging adatbázis tiszta.
+ *
+ * **A CI ADATBÁZISA FRISSEN MIGRÁLT ÉS ÜRES**, tehát ez a suite ott magától
+ * zöld: egy zöld CI-futás azt igazolja, hogy a megszorítás és a detektor
+ * MŰKÖDIK, nem azt, hogy az adat rendben van. Egy valódi adatbázisról csak az
+ * mond valamit, ha az auditot AZ ELLEN futtatja valaki.
  */
 
 const PREFIX = `datasheet-${Date.now()}`;

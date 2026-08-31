@@ -12,9 +12,13 @@ import {
  * A DETEKTOR, hálózat és adatbázis nélkül.
  *
  * Amit ez bizonyít: hogy az audit MEGTALÁLJA az ellentmondó párt. Amit NEM
- * bizonyít: hogy bármelyik adatbázis tiszta - ahhoz az auditot AZ ELLEN az
- * adatbázis ellen kell futtatni. A kettőt könnyű összekeverni, mert mindkettő
- * zölden néz ki.
+ * bizonyít: hogy bármelyik adatbázis tiszta.
+ *
+ * **EZ A ZÖLD A DETEKTORRÓL SZÓL, NEM AZ ADATRÓL.** A CI adatbázisa frissen
+ * migrált és üres, tehát egy CI-futás akkor is zöld lenne, ha a stagingen vagy
+ * az élesen minden adatlap ellentmondó. Ahhoz, hogy egy VALÓDI adatbázisról
+ * mondjunk valamit, az auditot AZ ELLEN az adatbázis ellen kell lefuttatni.
+ * A kettőt könnyű összekeverni, mert mindkettő zölden néz ki.
  */
 
 const sheet = (over: Partial<AuditableDatasheet> = {}): AuditableDatasheet => ({
