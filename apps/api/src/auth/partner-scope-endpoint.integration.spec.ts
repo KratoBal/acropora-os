@@ -131,6 +131,10 @@ describe(
     let assetForDeletes: string;
     let deletedInvoiceFileName: string;
     let deletedWarrantyFileName: string;
+    /** A MASIK partner eszkozen, a letoltes tulajdonos-agahoz. */
+    let warrantyOfB: string;
+    let departmentOfA: string;
+    let departmentOfB: string;
 
     /** A kérő ugyanúgy áll elő, ahogy egy valódi munkamenetben: a User sorból. */
     let asCustomerA: AuthenticatedUser;
@@ -279,6 +283,9 @@ describe(
         }),
       ]);
 
+      departmentOfA = departmentA.id;
+      departmentOfB = departmentB.id;
+
       const [sheetA, sheetB] = await Promise.all([
         prisma.worksheet.create({
           data: {
@@ -401,6 +408,20 @@ describe(
       ]);
       invoiceOfA = invoice.id;
       warrantyOfA = warranty.id;
+
+      /**
+       * DOKUMENTUM A MASIK PARTNER ESZKOZEN. A letoltesi uton KET ellenorzes
+       * all: a tulajdonos es a dokumentum tipusa. A tipus-agat a szamla meri, a
+       * TULAJDONOS-agat eddig SEMMI: a letoltes-teszt a sajat eszkozt hasznalta,
+       * tehat a tulajdonos-ellenorzes kikapcsolva is zold maradt.
+       */
+      const warrantyB = await assets.uploadDocument(
+        assetB,
+        Object.assign(new UploadAssetDocumentDto(), { type: "WARRANTY" }),
+        pdf(`${shared}-garancia-B.pdf`),
+        asInternal,
+      );
+      warrantyOfB = warrantyB.id;
 
       /**
        * A TORLES-ESEMENY KULON ESZKOZON all, hogy a fenti allitasok ne
@@ -599,6 +620,63 @@ describe(
       it("az idegen lap NEM tölthető be, és 404-et ad", async () => {
         await assert.rejects(
           () => worksheets.detail(worksheetB, asCustomerA),
+          NotFoundException,
+        );
+      });
+    });
+
+    /**
+     * KET ELLENORZES, AMIT A SAJAT KALIBRACIOM NEM ERINTETT.
+     *
+     * A PR-torzsem ugy fogalmazott, hogy "a negy elem-szintu tulajdonos-
+     * ellenorzes" -- ami keszen hangzik, de a forrasban HAT hivasi hely van
+     * (`rowBelongsToScope` es `rowIsScopeOwner` egyutt). A kimaradt ketto: az
+     * alegyseg-lista utvonal-parametere es a dokumentum-letoltes tulajdonos-aga.
+     * Merve 2026-08-31: mind a kettot kikapcsolva a suite 24/24 ZOLD maradt,
+     * tehat egyik sem volt lefedve.
+     *
+     * A tanulsag nem a ket tesztrol szol, hanem a mondatrol, ami ele allt: egy
+     * kalibracios felsorolas MODSZERT allit, es ugyanugy lehet szukebb, mint
+     * amit sugall. (murena fogalmazta meg altalanosan, ugyanaznap.)
+     */
+    describe("A két ellenőrzés, amit a kalibráció addig nem érintett", () => {
+      /**
+       * Itt nincs betoltott sor: maga az utvonal-parameter a tulajdonos, es a
+       * nem egyezo keres 404, nem 403.
+       */
+      it("idegen partner alegység-listája 404, a sajátja megjön", async () => {
+        const own = await worksheets.departments(customerA, asCustomerA);
+        assert.deepEqual(
+          own.items.map((item) => item.id),
+          [departmentOfA],
+          "kontroll: a saját alegység-lista megjön",
+        );
+        assert.ok(
+          departmentOfB.length > 0,
+          "a mércéhez kell egy idegen alegység",
+        );
+
+        await assert.rejects(
+          () => worksheets.departments(customerB, asCustomerA),
+          NotFoundException,
+        );
+      });
+
+      /**
+       * A LETOLTESEN KET FELTETEL ALL, es eddig csak az egyiket mertuk. A szamla
+       * a TIPUS agat probalja ki, ez a teszt a TULAJDONOS agat: egy GARANCIA,
+       * tehat tipusra engedett dokumentum, a MASIK partner eszkozen.
+       */
+      it("idegen eszköz dokumentuma akkor sem tölthető le, ha a típusa engedett", async () => {
+        const own = await assets.downloadDocument(
+          assetA,
+          warrantyOfA,
+          asCustomerA,
+        );
+        assert.ok(own, "kontroll: a saját garancia letölthető");
+
+        await assert.rejects(
+          () => assets.downloadDocument(assetB, warrantyOfB, asCustomerA),
           NotFoundException,
         );
       });
