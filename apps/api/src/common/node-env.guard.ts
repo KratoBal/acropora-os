@@ -55,6 +55,10 @@ export class UnknownNodeEnvError extends Error {}
 export function describeNodeEnvProblem(
   value: string | undefined,
 ): string | null {
+  // A BEÁLLÍTATLAN ÉRTÉK SZÁNDÉKOSAN ÉRVÉNYES, EZT NE "JAVÍTSD KI". A CI a
+  // NODE_ENV értékét egyetlen helyen állítja, egyébként nem, és a helyi futás
+  // is beállítás nélkül megy: egy őrző, ami ezeket megállítaná, működő
+  // környezeteket törne el. Az üres string ugyanez, csak más alakban.
   if (value === undefined) return null;
 
   const trimmed = value.trim();
