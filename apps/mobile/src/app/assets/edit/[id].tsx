@@ -27,7 +27,7 @@ import {
   type AssetEditForm,
   type EditableAsset,
 } from "@/lib/assets/asset-edit";
-import { selectableUnitOptions } from "@/lib/partners/site-tree";
+import { unitLevels } from "@/lib/partners/site-tree";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 
@@ -257,30 +257,45 @@ export default function AssetEditScreen() {
             >
               <Text style={styles.unitText}>Nincs megadva</Text>
             </Pressable>
-            {selectableUnitOptions(unitsQuery.data?.items ?? []).options.map(
-              (option) => (
-                <Pressable
-                  key={option.id}
-                  onPress={() => setForm({ ...form, unitId: option.id })}
-                  style={[
-                    styles.unitRow,
-                    form.unitId === option.id && styles.unitRowOn,
-                  ]}
-                >
-                  <Text style={styles.unitText}>{option.label}</Text>
-                </Pressable>
-              ),
+            {/*
+              LEPCSOS VALASZTO, ugyanaz a szabaly, mint a felviteli urlapon.
+              ITT SZAMIT IGAZAN a kivezetett helyszin kezelese: ha a szerkesztett
+              eszkoz epp ilyenen all, a lanc atmegy rajta, es a sor VALASZTVA
+              latszik -- kulonben a beallitott helyszin nemán eltunne, es a
+              mentes atirna valami masra.
+            */}
+            {unitLevels(unitsQuery.data?.items ?? [], form.unitId || null).map(
+              (level, depth) =>
+                level.options.length === 0 ? null : (
+                  <View key={`szint-${depth}`} style={styles.unitLevel}>
+                    {level.options.map((option) => {
+                      const selected = level.selectedId === option.id;
+                      return (
+                        <Pressable
+                          key={option.id}
+                          disabled={!option.isActive && !selected}
+                          onPress={() =>
+                            setForm({
+                              ...form,
+                              unitId: selected ? "" : option.id,
+                            })
+                          }
+                          style={[
+                            styles.unitRow,
+                            selected && styles.unitRowOn,
+                            !option.isActive && !selected && styles.unitOff,
+                          ]}
+                        >
+                          <Text style={styles.unitText}>
+                            {option.label}
+                            {option.isActive ? "" : " (kivezetett)"}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ),
             )}
-            {selectableUnitOptions(unitsQuery.data?.items ?? []).hiddenCount >
-            0 ? (
-              <Text style={styles.cardText}>
-                {
-                  selectableUnitOptions(unitsQuery.data?.items ?? [])
-                    .hiddenCount
-                }{" "}
-                kivezetett helyszín nem választható.
-              </Text>
-            ) : null}
           </View>
         ) : null}
 
@@ -410,6 +425,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
+  unitLevel: { gap: 6, marginBottom: 8 },
+  unitOff: { opacity: 0.5 },
   unitRowOn: { backgroundColor: "#123f3b", borderColor: "#1f6b62" },
   unitText: { color: "#f4fbff", fontSize: 14 },
   label: { color: "#9ab8ca", fontSize: 13, fontWeight: "700" },

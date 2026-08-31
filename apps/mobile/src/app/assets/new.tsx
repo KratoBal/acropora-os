@@ -21,7 +21,7 @@ import {
   type AssetOwnerOption,
 } from "@/lib/api/assets";
 import { listPartnerUnits } from "@/lib/api/partners";
-import { selectableUnitOptions } from "@/lib/partners/site-tree";
+import { selectableUnitOptions, unitLevels } from "@/lib/partners/site-tree";
 import DateTimePicker, {
   type DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
@@ -245,18 +245,43 @@ export default function NewAssetScreen() {
                   Ehhez a partnerhez még nincs felvéve helyszín.
                 </Text>
               ) : null}
-              {units.options.map((option) => {
-                const selected = unitId === option.id;
-                return (
-                  <Pressable
-                    key={option.id}
-                    onPress={() => setUnitId(selected ? "" : option.id)}
-                    style={[styles.ownerRow, selected && styles.ownerSelected]}
-                  >
-                    <Text style={styles.ownerName}>{option.label}</Text>
-                  </Pressable>
-                );
-              })}
+              {/*
+                LEPCSOS VALASZTO: egy szint egy sor. A teljes utas lista a
+                telefonon hosszu, es valasztas kozben nem latszik, hol tart az
+                ember -- itt minden szinten csak nehany testver all.
+
+                A KIVEZETETT HELYSZIN LATSZIK, DE NEM VALASZTHATO. Ha egy meglevo
+                eszkoz epp ilyenen all, a lanc akkor is felepul rajta: kulonben a
+                beallitott helyszin nemán eltunne. Uj eszkoznel ez nem all elo,
+                de a ket urlap ugyanazt a szabalyt kovesse.
+              */}
+              {unitLevels(unitsQuery.data?.items ?? [], unitId || null).map(
+                (level, depth) =>
+                  level.options.length === 0 ? null : (
+                    <View key={`szint-${depth}`} style={styles.unitLevel}>
+                      {level.options.map((option) => {
+                        const selected = level.selectedId === option.id;
+                        return (
+                          <Pressable
+                            key={option.id}
+                            disabled={!option.isActive && !selected}
+                            onPress={() => setUnitId(selected ? "" : option.id)}
+                            style={[
+                              styles.ownerRow,
+                              selected && styles.ownerSelected,
+                              !option.isActive && !selected && styles.unitOff,
+                            ]}
+                          >
+                            <Text style={styles.ownerName}>
+                              {option.label}
+                              {option.isActive ? "" : " (kivezetett)"}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ),
+              )}
               {/*
                 A KIHAGYÁS NEM NÉMA. Aki tudja, hogy annak a partnernek hat
                 helyszíne van, és négyet lát, a listát hiszi hibásnak.
@@ -479,6 +504,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#0a2335",
   },
   ownerSelected: { borderColor: "#52d6c7", backgroundColor: "#12443f" },
+  // Egy szint egy sor: a szintek kozotti tavolsag mutatja, hogy lejjebb leptunk.
+  unitLevel: { gap: 6, marginBottom: 8 },
+  unitOff: { opacity: 0.5 },
   hint: { color: "#789cad", fontSize: 12, lineHeight: 17 },
   unitError: { color: "#ffb4ab", fontSize: 12, lineHeight: 17 },
   ownerName: { color: "#f4fbff", fontWeight: "800" },
