@@ -117,6 +117,67 @@ export function canMove(from: ContentState, to: ContentState): boolean {
   return TRANSITIONS[from].includes(to);
 }
 
+/**
+ * EGY ÜTEMEZETT TÉTEL NEM NÁLUNK VÁR, HANEM MÁR A FACEBOOKON ÁLL.
+ *
+ * Ez a modell legveszélyesebb pontja, és nem a mi táblánkon látszik. Ha valaki
+ * a felületen elvet egy `SCHEDULED` tételt, a mi oldalunk „elvetve" állapotot
+ * mutat -- a Facebook viszont a megadott napon KI FOGJA TENNI. A tábla
+ * megnyugtat, a poszt megjelenik a vevő előtt, jóváhagyás nélkül.
+ *
+ * UGYANEZ ÁLL A SAJÁT SZABÁLYUNKRA: a 25. napi törlés nem nálunk állapotváltás,
+ * hanem törlés a Facebookon. Ha a kettő elválik, a „piszkozat gyújtózsinórral"
+ * épp a gyújtózsinórt veszti el.
+ *
+ * EZÉRT NEM `boolean` A VÁLASZ, HANEM EGY ELÁGAZÓ TÍPUS. A hívó nem tudja
+ * „csak átírni az állapotot": a `needs-external` ágat kezelnie KELL, különben
+ * a fordító szól. Egy megjegyzés ugyanezt csak kérné.
+ */
+export type ExternalWork = {
+  /** Mit kell a külső felületen elvégezni, MIELŐTT az állapot átíródik. */
+  action: "cancel-scheduled-post";
+  /** Ember által olvasható indok, ami a naplóba és a hibaüzenetbe is mehet. */
+  reason: string;
+};
+
+export type PlannedTransition =
+  | { kind: "refused"; from: ContentState; to: ContentState }
+  | { kind: "internal"; to: ContentState }
+  | { kind: "needs-external"; to: ContentState; external: ExternalWork };
+
+/**
+ * MIT KÍVÁN EGY ÁTMENET, az engedélyezettségén felül.
+ *
+ * A `SCHEDULED`-ból KIFELÉ vezető minden út külső munkával jár, kivéve a
+ * `SENT`-et: az nem a mi lépésünk, hanem annak a TUDOMÁSULVÉTELE, hogy a poszt
+ * kiment. Oda nincs mit visszavonni.
+ *
+ * AMIT EZ A FÜGGVÉNY NEM CSINÁL, ÉS SZÁNDÉKOSAN: nem hajtja végre a külső
+ * munkát. Az írás a Facebook felé külön döntés, és Balázs mai szabálya alatt
+ * áll. Ez a típus csak annyit mond ki, hogy egy állapot-átírás ÖNMAGÁBAN nem
+ * elegendő -- és épp ez az az állítás, ami ma sehol nem szerepelt.
+ */
+export function planTransition(
+  from: ContentState,
+  to: ContentState,
+): PlannedTransition {
+  if (!canMove(from, to)) return { kind: "refused", from, to };
+
+  if (from === "SCHEDULED" && to !== "SENT") {
+    return {
+      kind: "needs-external",
+      to,
+      external: {
+        action: "cancel-scheduled-post",
+        reason:
+          "A poszt ütemezve áll a Facebookon: az ütemezést ott vissza kell vonni, különben a megadott napon kimegy, akkor is, ha nálunk már nem ebben az állapotban van.",
+      },
+    };
+  }
+
+  return { kind: "internal", to };
+}
+
 export function allowedMoves(from: ContentState): readonly ContentState[] {
   return TRANSITIONS[from];
 }

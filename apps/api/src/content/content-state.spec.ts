@@ -5,6 +5,7 @@ import {
   allowedMoves,
   canMove,
   contentBlockers,
+  planTransition,
   type ContentState,
 } from "./content-state.js";
 
@@ -181,5 +182,60 @@ describe("how a piece of content may move", () => {
    */
   it("restarts a discarded piece as a draft, not further along", () => {
     assert.deepEqual(allowedMoves("DISCARDED"), ["DRAFTING"]);
+  });
+});
+
+describe("what a transition costs outside our own table", () => {
+  /**
+   * EZ A MODELL LEGVESZÉLYESEBB PONTJA, és nem a mi táblánkon látszik: egy
+   * ütemezett tétel MÁR A FACEBOOKON áll. Ha valaki elveti nálunk, a tábla
+   * „elvetve"-t mutat, a poszt pedig a megadott napon kimegy a vevő elé.
+   */
+  it("says that leaving SCHEDULED needs work outside our table", () => {
+    const planned = planTransition("SCHEDULED", "DISCARDED");
+
+    assert.equal(planned.kind, "needs-external");
+    if (planned.kind !== "needs-external") return;
+    assert.equal(planned.external.action, "cancel-scheduled-post");
+  });
+
+  it("says the same for pulling a scheduled piece back into the queue", () => {
+    assert.equal(
+      planTransition("SCHEDULED", "READY_TO_SEND").kind,
+      "needs-external",
+    );
+  });
+
+  /**
+   * A `SENT` A KIVÉTEL, és nem feledékenységből: az nem a mi lépésünk, hanem
+   * annak a TUDOMÁSULVÉTELE, hogy a poszt kiment. Oda nincs mit visszavonni.
+   *
+   * Ez a bemenet az, ami a szabályt MÉRHETŐVÉ teszi: ha a modell egyszerűen
+   * minden `SCHEDULED`-ból kifelé vezető utat külsőnek mondana, ez az állítás
+   * pirosodna.
+   */
+  it("needs nothing external when a scheduled post simply went out", () => {
+    assert.equal(planTransition("SCHEDULED", "SENT").kind, "internal");
+  });
+
+  it("needs nothing external anywhere else", () => {
+    assert.equal(
+      planTransition("DRAFTING", "AWAITING_REVIEW").kind,
+      "internal",
+    );
+    assert.equal(
+      planTransition("AWAITING_APPROVAL", "READY_TO_SEND").kind,
+      "internal",
+    );
+  });
+
+  /**
+   * A TILTOTT ÁTMENET NEM „külső munkát kíván", hanem VISSZAUTASÍTOTT. A kettő
+   * összemosása azt sugallná, hogy elég elvégezni valamit a Facebookon, és
+   * utána mehet -- holott a kapu nem ott van.
+   */
+  it("refuses a forbidden move instead of pricing it", () => {
+    assert.equal(planTransition("SENT", "DISCARDED").kind, "refused");
+    assert.equal(planTransition("DRAFTING", "READY_TO_SEND").kind, "refused");
   });
 });
