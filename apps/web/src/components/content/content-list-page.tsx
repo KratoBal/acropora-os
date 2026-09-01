@@ -287,8 +287,13 @@ function StaleSummary({ items }: { items: ContentListItem[] | null }) {
 function ContentRow({ item }: { item: ContentListItem }) {
   const image = contentImageLabel(item);
   const age = contentAgeLabel(item.updatedAt);
+  // TELEFONON A SOR ALAKJÁT NE A CÍM HOSSZA DÖNTSE EL. Amíg a kártya maga
+  // tördelt, a jelvények hol a cím mellett maradnak, hol leválnak: három
+  // próbasoron háromféle alak jött ki, szándék nélkül. Ezért keskeny
+  // képernyőn a cím és a jelvény-sor MINDIG egymás alatt áll, sm mérettől
+  // pedig a mai egysoros alak jön vissza.
   return (
-    <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
+    <Card className="flex flex-col items-stretch gap-2 p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
       <div className="min-w-0">
         <p className="truncate font-medium">{item.title}</p>
         <p className="text-sm text-muted-foreground">
@@ -296,7 +301,12 @@ function ContentRow({ item }: { item: ContentListItem }) {
           {CONTENT_WAITS_ON_LABELS[item.state]}
         </p>
       </div>
-      <div className="flex items-center gap-2">
+      {/*
+        A JELVÉNY-SOR MAGA IS TÖRDELHET. A dátum csak néha van ott, tehát a
+        sor hossza soronként más; wrap nélkül a harmadik jelvény keskeny
+        képernyőn kicsordulna.
+      */}
+      <div className="flex flex-wrap items-center gap-2">
         {/*
           A KOR-CÍMKE MINDEN SORON. A szekció létezése kiemeli a csoportot, az
           egymáshoz képesti sürgősséget viszont csak ez mutatja meg: e nélkül a

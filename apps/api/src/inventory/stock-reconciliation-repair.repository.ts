@@ -77,7 +77,15 @@ interface RepairRow {
 // type back to InventoryMovementDatabase's own bare `{id, onHand}`
 // StockItemRow instead of the richer shape this file actually needs).
 // Each nested property is instead spelled out once, explicitly, below.
-interface RepairTransaction extends Pick<
+/// Exported so a test double can NAME the contract it stands in for.
+///
+/// This is the seam: the repository hands the transaction object to
+/// enqueueStockSyncOutboxEntry and lockVariantWarehouse, so what the double
+/// must satisfy is THIS type, not the outer database interface. A double that
+/// receives it as `unknown` compiles even when it is missing a method those
+/// helpers call, and fails only at run time - measured 2026-09-01, when one
+/// added method left the type check green and turned 74 tests red.
+export interface RepairTransaction extends Pick<
   InventoryMovementDatabase,
   "$executeRaw" | "stockMovement"
 > {
