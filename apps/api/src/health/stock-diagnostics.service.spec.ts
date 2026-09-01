@@ -6,10 +6,7 @@ import path from "node:path";
 
 import type { StockReconciliationService } from "../inventory/stock-reconciliation.service.js";
 import type { UnasOrderStockAuditService } from "../orders/unas-order-sync/unas-order-stock-audit.service.js";
-import {
-  StockDiagnosticsRepository,
-  type StockDiagnosticsDatabase,
-} from "./stock-diagnostics.repository.js";
+import { StockDiagnosticsRepository } from "./stock-diagnostics.repository.js";
 import { StockDiagnosticsService } from "./stock-diagnostics.service.js";
 
 const BASE_RECONCILIATION_SUMMARY = {
@@ -60,6 +57,29 @@ function realMigrationNames(): string[] {
   return readdirSync(migrationsDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name);
+}
+
+/// The row shape both release-evidence fixtures use.
+///
+/// `status` is part of it because the real query FILTERS on it. While the
+/// fixture had no such field, the double could not tell a SUCCESS row from
+/// any other, and the "only a demonstrated SUCCESS counts" rule was never
+/// exercised here - the filter lived in production and nowhere in the test.
+interface ReleaseEvidenceFixtureRow {
+  id: string;
+  status: string;
+  commitSha: string;
+  workflowRunId: string;
+  repository: string;
+  workflowName: string;
+  jobName: string;
+  triggerEvent: string;
+  environment: string;
+  databaseEngine: string;
+  databaseEngineVersion: string;
+  testSuite: string;
+  createdAt: Date;
+  completedAt: Date;
 }
 
 class FakeDiagnosticsDb {
@@ -122,32 +142,14 @@ class FakeDiagnosticsDb {
     findMany: async () => this.snapshotRows,
   };
 
-  releaseEvidenceRow: {
-    id: string;
-    commitSha: string;
-    workflowRunId: string;
-    repository: string;
-    workflowName: string;
-    jobName: string;
-    triggerEvent: string;
-    environment: string;
-    databaseEngine: string;
-    databaseEngineVersion: string;
-    testSuite: string;
-    createdAt: Date;
-    completedAt: Date;
-  } | null = null;
+  releaseEvidenceRow: ReleaseEvidenceFixtureRow | null = null;
 
   // Checkpoint 9: a second, independent fixture for the contradicting-
   // FAILURE lookup (findContradictingFailureForWorkflowRun) - kept
   // separate from releaseEvidenceRow so a test can set up a SUCCESS row
   // and a contradicting FAILURE row for the SAME workflowRunId without
   // the two overwriting each other.
-  contradictingFailureRow: {
-    id: string;
-    status: string;
-    createdAt: Date;
-  } | null = null;
+  contradictingFailureRow: ReleaseEvidenceFixtureRow | null = null;
 
   releaseEvidence = {
     findFirst: async (args: {
@@ -167,8 +169,14 @@ class FakeDiagnosticsDb {
           ? this.contradictingFailureRow
           : null;
       }
+      /// Honours `status` too, the way the real query does. It did not
+      /// before, so a test could not tell "found a SUCCESS row" from "found
+      /// any row" - the filter existed in production and nowhere in the
+      /// double.
       return this.releaseEvidenceRow &&
-        this.releaseEvidenceRow.commitSha === args.where.commitSha
+        this.releaseEvidenceRow.commitSha === args.where.commitSha &&
+        (args.where.status === undefined ||
+          this.releaseEvidenceRow.status === args.where.status)
         ? this.releaseEvidenceRow
         : null;
     },
@@ -190,10 +198,15 @@ function authenticEvidenceFixture(overrides: {
   databaseEngineVersion?: string;
   workflowRunId?: string;
   testSuite?: string;
-}) {
+  status?: string;
+}): ReleaseEvidenceFixtureRow {
   const now = new Date();
   return {
     id: "evidence-fixture",
+    /// SUCCESS unless a test says otherwise: this builder exists for the
+    /// genuinely demonstrated case, and a test that wants another status
+    /// overrides it deliberately.
+    status: overrides.status ?? "SUCCESS",
     commitSha: overrides.commitSha,
     workflowRunId: overrides.workflowRunId ?? "12345",
     repository: overrides.repository ?? "KratoBal/acropora-os",
@@ -218,9 +231,10 @@ function buildService(
     auditSummary?: typeof BASE_AUDIT_SUMMARY;
   },
 ) {
-  const repository = new StockDiagnosticsRepository(
-    db as unknown as StockDiagnosticsDatabase,
-  );
+  /// No cast: the double is checked against the contract it stands in for.
+  /// It could not be, while `$queryRaw` was generic - and with the cast in
+  /// place, renaming ANY method on this double compiled silently.
+  const repository = new StockDiagnosticsRepository(db);
   const reconciliation = {
     summarize: async () =>
       options?.reconciliationSummary ?? BASE_RECONCILIATION_SUMMARY,
@@ -623,11 +637,15 @@ describe("StockDiagnosticsService.activationReadiness", () => {
           commitSha: "1111111111111111111111111111111111111111",
           workflowRunId: "run-42",
         });
-        db.contradictingFailureRow = {
-          id: "evidence-failure-42",
+        /// Built from the same fixture as the SUCCESS row, overriding only
+        /// what this test is about. It used to be a three-field stub, which
+        /// no real query could have returned - the double was answering with
+        /// a shape the database cannot produce.
+        db.contradictingFailureRow = authenticEvidenceFixture({
+          commitSha: "1111111111111111111111111111111111111111",
+          workflowRunId: "run-42",
           status: "FAILURE",
-          createdAt: new Date(),
-        };
+        });
         const service = buildService(db);
         const result = await service.activationReadiness();
         assert.equal(result.concurrencyTestEvidence, "NOT_DEMONSTRATED");

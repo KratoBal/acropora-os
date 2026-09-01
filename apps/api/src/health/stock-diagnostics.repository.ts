@@ -11,10 +11,21 @@ import type { RequiredTableCheck } from "./stock-diagnostics.types.js";
 /// writes, and needs a few tables neither of those interfaces exposes, e.g.
 /// SalesOrder just for a reachability probe).
 export interface StockDiagnosticsDatabase {
-  $queryRaw<T = unknown>(
+  /// Deliberately NOT generic, and the cost of that is one cast below.
+  ///
+  /// A generic signature cannot be satisfied by a test double: a fake cannot
+  /// return "whatever T the caller asked for", so every double of this
+  /// interface had to be cast into place with `as unknown as` - which
+  /// switched off checking for EVERY method on the object, not just this one.
+  /// Measured 2026-09-01: renaming a method in the double left the type check
+  /// completely silent.
+  ///
+  /// Concrete here, cast at the single call site that needs a shape. That
+  /// trades a whole unchecked object for one visible, local assertion.
+  $queryRaw(
     query: TemplateStringsArray,
     ...values: unknown[]
-  ): Promise<T>;
+  ): Promise<unknown>;
   stockItem: { count(args?: unknown): Promise<number> };
   stockMovement: { count(args?: unknown): Promise<number> };
   salesOrder: { count(args?: unknown): Promise<number> };
@@ -188,11 +199,13 @@ export class StockDiagnosticsRepository {
     }
 
     try {
-      const rows = await this.database.$queryRaw<
-        Array<{ migration_name: string }>
-      >`
+      /// The one place the raw result's shape matters. The assertion is
+      /// local and visible on purpose: see the interface's own comment for
+      /// why the alternative - a generic signature - costs more than it
+      /// saves.
+      const rows = (await this.database.$queryRaw`
         SELECT migration_name FROM "_prisma_migrations" WHERE finished_at IS NOT NULL
-      `;
+      `) as Array<{ migration_name: string }>;
       return {
         checked: true,
         expected,
