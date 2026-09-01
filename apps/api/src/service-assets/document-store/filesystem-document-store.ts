@@ -89,10 +89,24 @@ export class FilesystemDocumentStore implements DocumentStore {
   }
 
   /**
-   * A BEÁLLÍTOTTSÁG, EBBEN A LÉPÉSBEN MÉG CSAK A KÖNYVTÁRRÓL. A jelölő fájl
-   * vizsgálata a végrehajtási sorrend 3. lépése, és szándékosan nincs itt: e
-   * nélkül a `describe()` egy nem csatolt, de véletlenül létező könyvtárat is
-   * késznek mondana. Amit MOST megmond: a könyvtár ott van-e és írható-e.
+   * A TÁROLÓ AKKOR ÉS CSAK AKKOR BEÁLLÍTOTT, HA A JELÖLŐ OTT VAN ÉS A KÖNYVTÁR
+   * ÍRHATÓ.
+   *
+   * A JELÖLŐT AZ ALKALMAZÁS SOHA NEM HOZZA LÉTRE, és ez a szakasz lényege. Ha
+   * létrehozná, akkor egy NEM csatolt könyvtárban is létrejönne (a csatolási
+   * pont üres könyvtára ugyanolyan írható, mint a csatolt kötet), és a védelem
+   * MINDIG zöld lenne. Egy ellenőrzés, ami nem tud elbukni, díszlet: úgy néz
+   * ki, mintha mérnénk, közben a fájlok a hoszt lemezére mennek, és a következő
+   * újraindítás elviszi őket.
+   *
+   * A jelölőt a telepítés teszi le, a csatolt köteten belül. Ez a
+   * végrehajtási sorrend 8. lépése, és más keze kell hozzá.
+   *
+   * A HÁROM ÁLLAPOT NEM UGYANAZ A HIBA: a hiányzó jelölő azt jelenti, hogy
+   * senki nem csatolta a kötetet (`not-configured`, telepítési kérdés); az
+   * írhatatlan vagy nem könyvtár gyökér azt, hogy ott VAN valami, de nem
+   * használható (`broken`, jogosultsági kérdés). A kettőt más ember oldja fel,
+   * ezért nem szabad egy közös „nem működik" alá vonni őket.
    */
   async describe(): Promise<DocumentStoreStatus> {
     let entry;
@@ -115,6 +129,18 @@ export class FilesystemDocumentStore implements DocumentStore {
       };
     }
 
+    try {
+      await access(path.join(this.root, MARKER_FILE), constants.F_OK);
+    } catch {
+      return {
+        state: "not-configured",
+        reason: `A jelölő fájl hiányzik, tehát a kötet nincs csatolva: ${path.join(this.root, MARKER_FILE)}`,
+      };
+    }
+
+    // AZ ÍRHATÓSÁG A JELÖLŐ UTÁN JÖN, és a sorrend számít: egy csatolt, de
+    // írásvédett kötet MÁS hiba, mint egy nem csatolt könyvtár, és ha az
+    // írhatóságot néznénk előbb, a nem csatolt eset is `broken`-nek látszana.
     try {
       await access(this.root, constants.W_OK);
     } catch {
@@ -159,6 +185,13 @@ export class FilesystemDocumentStore implements DocumentStore {
     return target;
   }
 }
+
+/**
+ * A JELÖLŐ FÁJL NEVE. Pontos névvel szerepel a telepítési lépésben is: ha a
+ * kettő eltér, a tároló minden indulásnál `not-configured`, és a hiba a
+ * legrosszabb helyen derül ki, a felhasználó első feltöltésénél.
+ */
+export const MARKER_FILE = ".acropora-document-store";
 
 function isMissingFile(error: unknown): boolean {
   return (

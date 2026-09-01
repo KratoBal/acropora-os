@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
 
-import { FilesystemDocumentStore } from "./filesystem-document-store.js";
+import {
+  FilesystemDocumentStore,
+  MARKER_FILE,
+} from "./filesystem-document-store.js";
 
 describe("the filesystem document store", () => {
   let root: string;
@@ -154,28 +157,82 @@ describe("the filesystem document store", () => {
     assert.deepEqual((await store.describe()).state, "broken");
   });
 
-  it("says ready for a directory it can write", async () => {
+  /**
+   * A HIÁNYZÓ JELÖLŐ `not-configured`, NEM `ready`. Ez a szakasz lényege: egy
+   * írható könyvtár önmagában nem bizonyítja, hogy a kötet csatolva van, mert
+   * a csatolási pont ÜRES könyvtára ugyanolyan írható.
+   *
+   * A bemenet olyan, ahol minden MÁS feltétel igaz: a könyvtár létezik és
+   * írható, csak a jelölő hiányzik.
+   */
+  it("says not-configured when the marker file is missing", async () => {
+    const unmarked = await mkdtemp(path.join(tmpdir(), "document-store-bare-"));
+    try {
+      const store = new FilesystemDocumentStore(unmarked);
+
+      assert.deepEqual((await store.describe()).state, "not-configured");
+    } finally {
+      await rm(unmarked, { recursive: true, force: true });
+    }
+  });
+
+  it("says ready for a marked directory it can write", async () => {
     const store = new FilesystemDocumentStore(root);
+    await writeFile(path.join(root, MARKER_FILE), "");
 
     assert.deepEqual(await store.describe(), { state: "ready" });
   });
 
   /**
-   * AZ ÍRÁSVÉDETT KÖNYVTÁR `broken`, NEM `not-configured`: a könyvtár ott van,
-   * csak nem használható. A kettő KÉT különböző hiba, és más oldja fel őket
-   * (csatolás kontra jogosultság).
+   * AZ ALKALMAZÁS SOHA NEM HOZZA LÉTRE A JELÖLŐT, és ezt írás UTÁN kell mérni,
+   * mert épp az írási út a kísértés: ott már úgyis van `mkdir`.
+   *
+   * Ha a `put` letenné a jelölőt, akkor egy nem csatolt könyvtár az ELSŐ
+   * feltöltés után késznek mondaná magát, és a `describe()` soha többé nem
+   * tudna elbukni. A védelem néma módon szűnne meg: a bajt nem a hibás
+   * állapot, hanem a következő újraindítás mutatná meg, amikor a fájlok
+   * eltűnnek a hoszt lemezéről.
+   */
+  it("never creates the marker itself, not even while writing", async () => {
+    const unmarked = await mkdtemp(
+      path.join(tmpdir(), "document-store-write-"),
+    );
+    try {
+      const store = new FilesystemDocumentStore(unmarked);
+      await store.put(
+        { assetId: "asset-1", documentId: "doc-1" },
+        Uint8Array.from([1]),
+      );
+
+      assert.deepEqual(await readdir(unmarked), ["assets"]);
+      assert.deepEqual((await store.describe()).state, "not-configured");
+    } finally {
+      await rm(unmarked, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * AZ ÍRÁSVÉDETT, DE CSATOLT KÖTET `broken`, NEM `not-configured`: ott VAN a
+   * jelölő, tehát a csatolás megtörtént, csak a jogosultság rossz. A kettőt más
+   * ember oldja fel (telepítés kontra jogosultság), ezért nem szabad egy közös
+   * „nem működik" alá vonni őket.
+   *
+   * A BEMENET OLYAN, AHOL MINDEN MÁS FELTÉTEL IGAZ: a jelölő ott van, és csak
+   * az írhatóság hiányzik. Jelölő nélkül ez a teszt egy MÁSIK okból is zöld
+   * lenne, és akkor a neve mást ígérne, mint amit mér.
    *
    * ROOT ALATT KIHAGYVA: a `root` felhasználó az írásvédett könyvtárba is ír,
    * tehát ott ez az állítás nem tudna elbukni. Egy mérés, ami nem tud elbukni,
    * díszlet, és rosszabb a semminél.
    */
-  it("says broken when the root exists but is not writable", async (t) => {
+  it("says broken when the marked root is not writable", async (t) => {
     if (typeof process.getuid === "function" && process.getuid() === 0) {
       t.skip("root alatt az írásvédettség nem mérhető");
       return;
     }
 
     const readOnly = await mkdtemp(path.join(tmpdir(), "document-store-ro-"));
+    await writeFile(path.join(readOnly, MARKER_FILE), "");
     await chmod(readOnly, 0o500);
     try {
       const store = new FilesystemDocumentStore(readOnly);
