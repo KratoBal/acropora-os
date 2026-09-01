@@ -109,7 +109,7 @@ class FakeDb {
       const ids: string[] = args.where.variantId.in;
       return this.stockItems
         .filter((item) => ids.includes(item.variantId))
-        .map((item) => ({ variantId: item.variantId }));
+        .map((item) => ({ variantId: item.variantId, onHand: item.onHand }));
     },
     findFirst: async (args: any) => {
       const item = this.stockItems.find(
