@@ -90,6 +90,21 @@ const listInclude = {
 /// If a `select` is ever added to one of those calls, this type must be
 /// narrowed in the same change - a deliberate step, unlike today's silent
 /// mismatch.
+/// The select that produces exactly `ExternalReferenceRow`, named once so the
+/// four call sites cannot drift from the type or from each other.
+///
+/// It exists because unifying the two declarations (#330) only fixed half the
+/// problem: the type stopped disagreeing with itself, and still asked Prisma
+/// for all ten columns while promising five. The half that was fixed is what
+/// made the other half hard to see.
+export const EXTERNAL_REFERENCE_ROW_SELECT = {
+  id: true,
+  entityId: true,
+  externalId: true,
+  externalKey: true,
+  metadata: true,
+} as const;
+
 export interface ExternalReferenceRow {
   id: string;
   entityId: string;
@@ -960,6 +975,7 @@ export class UnasOrderSyncRepository extends Repository {
             externalId: order.id,
           },
         },
+        select: EXTERNAL_REFERENCE_ROW_SELECT,
       });
       if (byId) return byId;
     }
@@ -972,6 +988,7 @@ export class UnasOrderSyncRepository extends Repository {
           externalId: order.key,
         },
       },
+      select: EXTERNAL_REFERENCE_ROW_SELECT,
     });
     if (!byLegacyKey) return null;
 
@@ -1230,6 +1247,7 @@ export class UnasOrderSyncRepository extends Repository {
           entityId: orderId,
         },
       },
+      select: EXTERNAL_REFERENCE_ROW_SELECT,
     });
     // getOrder's targeted lookup accepts Key, not the stable Id. Never fall
     // back to externalId: after the Id/Key split that would turn a missing
@@ -1905,6 +1923,7 @@ export class UnasOrderSyncRepository extends Repository {
           entityId: id,
         },
       },
+      select: EXTERNAL_REFERENCE_ROW_SELECT,
     });
     return toUnasOrderDetail(
       order,
