@@ -3,8 +3,10 @@ import { assetDeletionRefusal } from "./asset-deletion.js";
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 import type { AssetQrCode } from "@acropora/types";
@@ -19,12 +21,18 @@ import type {
   CreateAssetDto,
   UpdateAssetDto,
 } from "./dto/asset.dto.js";
+import type { DocumentStore } from "./document-store/document-store.js";
+import { DOCUMENT_STORE } from "./document-store/document-store.provider.js";
+import { assertStorageKeyMatches } from "./document-store/document-storage-key.js";
 import { createAssetQrSvg } from "./qr-svg.js";
 import { ServiceAssetsRepository } from "./service-assets.repository.js";
 
 @Injectable()
 export class ServiceAssetsService {
-  constructor(private readonly repository: ServiceAssetsRepository) {}
+  constructor(
+    private readonly repository: ServiceAssetsRepository,
+    @Inject(DOCUMENT_STORE) private readonly documentStore: DocumentStore,
+  ) {}
 
   list(query: AssetListQueryDto, scope: PartnerScope) {
     return this.repository.list(query, scope);
@@ -209,6 +217,50 @@ export class ServiceAssetsService {
     const document = await this.repository.document(id, documentId, scope);
     if (!document) throw new NotFoundException("A dokumentum nem található.");
     return document;
+  }
+
+  /**
+   * A LETÖLTÉS BÁJTJAI, BÁRMELYIK FORRÁSBÓL.
+   *
+   * A `storageKey` dönt, nem a `content` hiánya: a tábla megkötése szerint
+   * pontosan az egyik áll, tehát a `storageKey` megléte önmagában elég, és a
+   * hívónak nem kell két mezőt összevetnie.
+   *
+   * A RÉGI SOROK VÁLTOZATLANUL MENNEK, migráció nélkül: nekik nincs
+   * `storageKey`-ük, és a bájtok ott állnak, ahol eddig.
+   *
+   * A HIÁNYZÓ FÁJL ÉRTELMES HIBÁT AD, NEM ÜRES LETÖLTÉST. Egy nulla bájtos
+   * válasz sikeresnek látszik: a böngésző elmenti, a felhasználó megnyitja, és
+   * ő veszi észre a bajt, nem mi. Az 503 azt is kimondja, hogy a hiba a mi
+   * oldalunkon van, nem az övén, tehát az újrapróbálás értelmes.
+   */
+  async documentBytes(id: string, documentId: string, scope: PartnerScope) {
+    const document = await this.document(id, documentId, scope);
+
+    if (document.storageKey === null) {
+      if (document.content === null) {
+        // A tábla CHECK megkötése ezt kizárja; a TÍPUS viszont nem, és egy
+        // néma `null` üres letöltéssé válna. Ha ez az ág mégis lefut, az a
+        // megkötés megkerülését jelenti, és azt jelenteni kell, nem elfedni.
+        throw new ServiceUnavailableException(
+          "A dokumentumnak nincs tartalma egyik forrásban sem.",
+        );
+      }
+      return { ...document, bytes: document.content };
+    }
+
+    assertStorageKeyMatches(document.storageKey, {
+      assetId: id,
+      documentId,
+    });
+
+    const bytes = await this.documentStore.get({ assetId: id, documentId });
+    if (bytes === null) {
+      throw new ServiceUnavailableException(
+        "A dokumentum tartalma a tárolóban nem érhető el.",
+      );
+    }
+    return { ...document, bytes };
   }
 
   async deleteDocument(id: string, documentId: string, actorUserId: string) {

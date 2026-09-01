@@ -1,4 +1,5 @@
 import "reflect-metadata";
+import { InMemoryDocumentStore } from "./document-store/in-memory-document-store.js";
 
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
@@ -50,7 +51,10 @@ const INTERNAL_USER = {
 describe("Eszköz törlése", { skip: gate.mode === "skip" }, () => {
   const suffix = `${Date.now() % 1_000_000}`;
   const assets = new ServiceAssetsController(
-    new ServiceAssetsService(new ServiceAssetsRepository()),
+    new ServiceAssetsService(
+      new ServiceAssetsRepository(),
+      new InMemoryDocumentStore(),
+    ),
   );
 
   let free: string;

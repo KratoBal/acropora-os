@@ -1081,6 +1081,7 @@ export class ServiceAssetsRepository extends Repository {
         fileName: true,
         contentType: true,
         content: true,
+        storageKey: true,
         type: true,
         asset: { select: { customerId: true, supplierId: true } },
       },
@@ -1092,6 +1093,7 @@ export class ServiceAssetsRepository extends Repository {
       fileName: row.fileName,
       contentType: row.contentType,
       content: row.content,
+      storageKey: row.storageKey,
     };
   }
 

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { InMemoryDocumentStore } from "./document-store/in-memory-document-store.js";
 import test from "node:test";
 
 import { BadRequestException } from "@nestjs/common";
@@ -92,6 +93,7 @@ test("rejects a parent asset owned by a different customer", async () => {
         productVariant: null,
       }),
     }),
+    new InMemoryDocumentStore(),
   );
   await assert.rejects(
     () =>
@@ -119,6 +121,7 @@ test("rejects a cyclic parent update before writing", async () => {
         return asset;
       },
     }),
+    new InMemoryDocumentStore(),
   );
   await assert.rejects(
     () =>
@@ -139,10 +142,10 @@ test("generates an app deep link QR without exposing database ids", async () => 
   const previous = process.env.ASSET_QR_BASE_URL;
   process.env.ASSET_QR_BASE_URL = "acropora-os://assets/scan";
   try {
-    const result = await new ServiceAssetsService(repository()).qrCode(
-      "asset-1",
-      { kind: "internal" },
-    );
+    const result = await new ServiceAssetsService(
+      repository(),
+      new InMemoryDocumentStore(),
+    ).qrCode("asset-1", { kind: "internal" });
     assert.equal(
       result.value,
       "acropora-os://assets/scan/550e8400-e29b-41d4-a716-446655440000",
@@ -203,6 +206,7 @@ test("keeps the owner an existing asset already has", async () => {
         return { items: [] };
       },
     }),
+    new InMemoryDocumentStore(),
   );
 
   await service.owners(
@@ -222,6 +226,7 @@ test("passes nothing to keep when the caller is creating a new asset", async () 
         return { items: [] };
       },
     }),
+    new InMemoryDocumentStore(),
   );
 
   await service.owners({}, INTERNAL);
@@ -235,7 +240,10 @@ test("passes nothing to keep when the caller is creating a new asset", async () 
  * helyén, és nem tudná meg, miért.
  */
 test("refuses half of an owner reference instead of ignoring it", () => {
-  const service = new ServiceAssetsService(repository());
+  const service = new ServiceAssetsService(
+    repository(),
+    new InMemoryDocumentStore(),
+  );
 
   // A visszautasítás AZONNAL történik, még a tároló hívása előtt: nem
   // elutasított ígéret, hanem dobott hiba.
