@@ -108,6 +108,7 @@ export type {
   ContentChannel,
   ContentListItem,
   ContentListResponse,
+  ContentMoveOption,
   ContentState,
   ContentViewerRole,
 } from "./content-management.js";

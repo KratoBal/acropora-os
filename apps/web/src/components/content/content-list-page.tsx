@@ -28,6 +28,7 @@ import {
   oldestAge,
   oldestFirst,
 } from "./content-labels";
+import { ContentRowActions } from "./content-row-actions";
 
 const ROLES: ContentViewerRole[] = ["approver", "reviewer", "author", "sender"];
 
@@ -95,6 +96,13 @@ export function ContentListPage() {
     return () => controller.abort();
   }, [load]);
 
+  // EGY SIKERES LÉPÉS UTÁN ÚJRA KELL KÉRDEZNI, mert a tétel állapota
+  // megváltozott, és ezzel az is, mit lehet belőle lépni. A régi sor
+  // gombjai olyan lépéseket kínálnának, amiket a szerver már elutasít.
+  const reload = useCallback(() => {
+    void load();
+  }, [load]);
+
   if (!canView) {
     return (
       <Alert
@@ -149,6 +157,7 @@ export function ContentListPage() {
           title="Képre vár"
           items={waitingForImage && oldestFirst(waitingForImage)}
           empty="Semmi nem vár képre."
+          onDone={reload}
         />
       )}
 
@@ -178,6 +187,7 @@ export function ContentListPage() {
           title={CONTENT_ROLE_LABELS[role]}
           items={items}
           empty="Ebben a nézetben most nincs tétel."
+          onDone={reload}
         />
       )}
     </div>
@@ -203,10 +213,12 @@ function ContentSection({
   title,
   items,
   empty,
+  onDone,
 }: {
   title: string;
   items: ContentListItem[] | null;
   empty: string;
+  onDone: () => void;
 }) {
   // NEM TUDJUK: a hibaüzenet már ott áll fölötte, és egy üres szekció csak
   // ellentmondana neki.
@@ -225,7 +237,7 @@ function ContentSection({
       ) : (
         <div className="space-y-2">
           {items.map((item) => (
-            <ContentRow key={item.id} item={item} />
+            <ContentRow key={item.id} item={item} onDone={onDone} />
           ))}
         </div>
       )}
@@ -284,7 +296,13 @@ function StaleSummary({ items }: { items: ContentListItem[] | null }) {
   );
 }
 
-function ContentRow({ item }: { item: ContentListItem }) {
+function ContentRow({
+  item,
+  onDone,
+}: {
+  item: ContentListItem;
+  onDone: () => void;
+}) {
   const image = contentImageLabel(item);
   const age = contentAgeLabel(item.updatedAt);
   // TELEFONON A SOR ALAKJÁT NE A CÍM HOSSZA DÖNTSE EL. Amíg a kártya maga
@@ -327,6 +345,12 @@ function ContentRow({ item }: { item: ContentListItem }) {
           </Badge>
         ) : null}
       </div>
+      {/*
+        A CSELEKVÉS A JELVÉNYEK UTÁN, KÜLÖN CSOPORTBAN. Keskeny képernyőn ez a
+        harmadik sor, széles képernyőn a sor jobb vége -- ugyanaz a tördelési
+        szabály, mint a jelvényeknél, tehát a sor alakja nem a tartalomtól függ.
+      */}
+      <ContentRowActions item={item} onDone={onDone} />
     </Card>
   );
 }

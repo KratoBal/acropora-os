@@ -13,6 +13,7 @@ function serviceWith(
   overrides: Partial<{
     moveState: ContentRepository["moveState"];
     detail: ContentRepository["detail"];
+    list: ContentRepository["list"];
   }> = {},
 ) {
   const calls: unknown[] = [];
@@ -24,6 +25,7 @@ function serviceWith(
     detail: (async () => ({
       id: "c1",
     })) as unknown as ContentRepository["detail"],
+    list: (async () => []) as unknown as ContentRepository["list"],
     ...overrides,
   } as unknown as ContentRepository;
   return { service: new ContentService(repository), calls };
@@ -37,6 +39,7 @@ describe("moving a piece of content", () => {
       id: "c1",
       from: "AWAITING_APPROVAL",
       to: "READY_TO_SEND",
+      actorCanApprove: true,
     });
 
     assert.equal(calls.length, 1);
@@ -50,7 +53,13 @@ describe("moving a piece of content", () => {
     const { service, calls } = serviceWith();
 
     await assert.rejects(
-      () => service.move({ id: "c1", from: "DRAFTING", to: "READY_TO_SEND" }),
+      () =>
+        service.move({
+          id: "c1",
+          from: "DRAFTING",
+          to: "READY_TO_SEND",
+          actorCanApprove: false,
+        }),
       /nem megengedett/,
     );
     assert.equal(calls.length, 0);
@@ -74,6 +83,7 @@ describe("moving a piece of content", () => {
           from: "SCHEDULED",
           to: "DISCARDED",
           discardReason: "meggondoltuk",
+          actorCanApprove: false,
         }),
       /ütemezve áll a Facebookon/,
     );
@@ -88,7 +98,12 @@ describe("moving a piece of content", () => {
   it("still records that a scheduled post went out", async () => {
     const { service, calls } = serviceWith();
 
-    await service.move({ id: "c1", from: "SCHEDULED", to: "SENT" });
+    await service.move({
+      id: "c1",
+      from: "SCHEDULED",
+      to: "SENT",
+      actorCanApprove: false,
+    });
 
     assert.equal(calls.length, 1);
   });
@@ -102,7 +117,13 @@ describe("moving a piece of content", () => {
     const { service, calls } = serviceWith();
 
     await assert.rejects(
-      () => service.move({ id: "c1", from: "DRAFTING", to: "DISCARDED" }),
+      () =>
+        service.move({
+          id: "c1",
+          from: "DRAFTING",
+          to: "DISCARDED",
+          actorCanApprove: false,
+        }),
       /oka kötelező/,
     );
     assert.equal(calls.length, 0);
@@ -118,6 +139,7 @@ describe("moving a piece of content", () => {
           from: "DRAFTING",
           to: "DISCARDED",
           discardReason: "   ",
+          actorCanApprove: false,
         }),
       /oka kötelező/,
     );
@@ -140,6 +162,7 @@ describe("moving a piece of content", () => {
           id: "c1",
           from: "AWAITING_APPROVAL",
           to: "READY_TO_SEND",
+          actorCanApprove: true,
         }),
       /időközben más állapotba került/,
     );
@@ -150,13 +173,160 @@ describe("moving a piece of content", () => {
    * nincs mihez mérnie a 25 napot, és az ütemezett poszt határidő nélkül állna
    * -- vagyis a semmittevés megint kitenné a posztot.
    */
+  /**
+   * ===================================================================
+   * A JÓVÁHAGYÁSI KAPU. Ez a négy állítás azt méri, ami korábban SEHOL nem volt
+   * mérve, és ezért csendben nyitva állt.
+   * ===================================================================
+   *
+   * A RÉS, AMIT BEZÁRNAK: a jog korábban kizárólag a végpont választásán múlt
+   * (`/move` `content.manage`, `/approve-move` `content.approve`), miközben
+   * MINDKETTŐ ezt az egy metódust hívta, és a célállapot bármi lehetett. Egy
+   * `content.manage` jogú szerkesztő tehát a `/move` úton kiadhatta a
+   * jóváhagyást is.
+   */
+  it("refuses an approving step from a caller who cannot approve, and writes nothing", async () => {
+    const { service, calls } = serviceWith();
+
+    await assert.rejects(
+      () =>
+        service.move({
+          id: "c1",
+          from: "AWAITING_APPROVAL",
+          to: "READY_TO_SEND",
+          actorCanApprove: false,
+        }),
+      /jóváhagyói jog/,
+    );
+    // AZ ŐRZŐT NEM AZ BIZONYÍTJA, HOGY SZÓL, HANEM HOGY NEM TÖRTÉNT SEMMI.
+    assert.equal(calls.length, 0);
+  });
+
+  /**
+   * AZ ELUTASÍTÁS IS JÓVÁHAGYÓI DÖNTÉS, és ez a lépés SAJÁT döntés volt, nem
+   * levezetés: az indoka a `content-state.ts` `requiresApproval` fejlécében áll.
+   *
+   * Röviden: az `AWAITING_APPROVAL` a jóváhagyóra vár, tehát aki nem ő, annak
+   * nincs dolga a tétellel. Ha a visszaküldés `content.manage` joggal menne, egy
+   * szerkesztő KIVEHETNÉ a saját tételét a jóváhagyói sorból -- nem küldené ki,
+   * de a jóváhagyó soha nem látná, és ez a fajta hiba néma.
+   */
+  it("treats sending it back for revision as an approving step too", async () => {
+    const { service, calls } = serviceWith();
+
+    await assert.rejects(
+      () =>
+        service.move({
+          id: "c1",
+          from: "AWAITING_APPROVAL",
+          to: "AWAITING_REVISION",
+          actorCanApprove: false,
+        }),
+      /jóváhagyói jog/,
+    );
+    assert.equal(calls.length, 0);
+  });
+
+  /**
+   * A BEMENET ITT SZÁNDÉKOSAN TELJES: az elvetés oka KI VAN TÖLTVE.
+   *
+   * Ok nélkül ez az állítás akkor is piros lenne, ha a jogot senki nem
+   * ellenőrizné -- csak épp egy MÁSIK hibaüzenettel, és a teszt neve hazudna.
+   * Egy állítás kalibrációjához olyan bemenet kell, ahol minden EGYÉB feltétel
+   * teljesül, és csak az áll fenn, amit mérni akarunk.
+   */
+  it("refuses even a well-formed discard from an approval-waiting state", async () => {
+    const { service, calls } = serviceWith();
+
+    await assert.rejects(
+      () =>
+        service.move({
+          id: "c1",
+          from: "AWAITING_APPROVAL",
+          to: "DISCARDED",
+          discardReason: "a kampány elmarad",
+          actorCanApprove: false,
+        }),
+      /jóváhagyói jog/,
+    );
+    assert.equal(calls.length, 0);
+  });
+
+  /**
+   * ÉS A MÁSIK IRÁNY, KÜLÖNBEN A JAVÍTÁS TÚL SOKAT ZÁRNA BE: ugyanaz a lépés
+   * jóváhagyói joggal ÁTMEGY. E nélkül az állítás nélkül a három fenti zöld
+   * maradna akkor is, ha a kapu MINDENKIT elutasít.
+   */
+  it("lets an approver send it back for revision", async () => {
+    const { service, calls } = serviceWith();
+
+    await service.move({
+      id: "c1",
+      from: "AWAITING_APPROVAL",
+      to: "AWAITING_REVISION",
+      actorCanApprove: true,
+    });
+
+    assert.equal(calls.length, 1);
+  });
+
   it("anchors the fuse when a piece is scheduled", async () => {
     const { service, calls } = serviceWith();
 
-    await service.move({ id: "c1", from: "READY_TO_SEND", to: "SCHEDULED" });
+    await service.move({
+      id: "c1",
+      from: "READY_TO_SEND",
+      to: "SCHEDULED",
+      actorCanApprove: false,
+    });
 
     const call = calls[0] as { scheduleAnchoredAt?: Date; scheduledFor?: Date };
     assert.ok(call.scheduleAnchoredAt instanceof Date);
     assert.ok(call.scheduledFor instanceof Date);
+  });
+});
+
+describe("what the list hands to the screen", () => {
+  /**
+   * A SOR MAGA MONDJA MEG, MIT LEHET BELŐLE LÉPNI.
+   *
+   * E nélkül a felületnek le kellene másolnia az átmenetek tábláját, és akkor
+   * ugyanaz a szabály két helyen állna. A második egy nap csendben elavulna --
+   * és a különbség egy olyan gombban jelenne meg, ami elutasításba fut.
+   */
+  it("puts the possible steps on every row", async () => {
+    const { service } = serviceWith({
+      list: (async () => [
+        { id: "c1", state: "AWAITING_APPROVAL" },
+        { id: "c2", state: "SENT" },
+      ]) as unknown as ContentRepository["list"],
+    });
+
+    const rows = await service.waitingForMe("approver", "user-1");
+
+    // A JÓVÁHAGYÁSRA VÁRÓ SORNAK VAN LÉPÉSE, ÉS MIND JÓVÁHAGYÓI.
+    assert.ok(rows[0]!.moves.length > 0);
+    assert.ok(rows[0]!.moves.every((move) => move.requiresApproval));
+
+    // A KIKÜLDÖTTNEK EGY SINCS. Ez a két állítás EGYÜTT mér: ha a mező mindig
+    // üres lenne, az első pirosodna; ha mindig tele, a második.
+    assert.deepEqual(rows[1]!.moves, []);
+  });
+
+  /**
+   * A KÉPRE VÁRÓ LISTA UGYANÚGY KAPJA MEG. Külön végpont, külön hívás -- és egy
+   * kimaradt sor pont ott venné el a cselekvést, ahol a leghosszabb ideje áll
+   * valami.
+   */
+  it("puts them on the image queue too", async () => {
+    const { service } = serviceWith({
+      list: (async () => [
+        { id: "c1", state: "AWAITING_APPROVAL" },
+      ]) as unknown as ContentRepository["list"],
+    });
+
+    const rows = await service.waitingForImage();
+
+    assert.ok(rows[0]!.moves.length > 0);
   });
 });

@@ -577,6 +577,25 @@ describe("a telefon csak létező szerver-végpontot hív", () => {
       );
   });
 
+  /**
+   * AMIT EZ AZ ŐRZŐ NEM LÁT, ÉS EZÉRT NEM SZABAD TÖBBET VÁRNI TŐLE.
+   *
+   * Csak a STATIKUS alakot olvassa: azt, ami a hívás helyén szövegként ott áll.
+   * Ha valaki a TELJES útvonalat egyetlen változóba teszi (`apiRequest(url, …)`),
+   * ez a teszt nem hibát jelez, hanem SEMMIT nem lát -- a hívás egyszerűen nem
+   * kerül be a mért halmazba, és a `reads both sides` darabszáma is csak akkor
+   * szólna, ha egyszerre sok ilyen keletkezne.
+   *
+   * MÉRVE 2026-09-01: a tartalom-lista kliense `/content/${id}/${path}` alakban
+   * hívott, ahol a MÁSODIK behelyettesítés maga az útvonal-szegmens volt. Ez
+   * még épp elég összerakott maradt ahhoz, hogy feltűnjön (`content/:param/:param`
+   * mintát keresett, ilyen szerver-útvonal pedig nincs) -- de ha ugyanaz a cím
+   * egy `const url = ...` mögé került volna, ez a teszt zölden hallgat.
+   *
+   * A HATÁR TEHÁT NEM AZ, HOGY MIT UTASÍT EL, HANEM HOGY MIT VESZ ÉSZRE. Aki ezt
+   * a tesztet a kliens-oldali útvonalak teljes lefedéseként olvassa, többet hisz
+   * róla, mint amit tud.
+   */
   it("every mobile path has a server route", () => {
     assert.deepEqual(
       missingRoutes(allCalls(), serverPatterns()),

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -13,7 +14,9 @@ import {
 } from "./content-filter.js";
 import {
   contentBlockers,
+  moveOptions,
   planTransition,
+  requiresApproval,
   type ContentState,
 } from "./content-state.js";
 import { scheduleStanding, scheduleTargetFor } from "./content-schedule.js";
@@ -32,17 +35,34 @@ export class ContentService {
   constructor(private readonly repository: ContentRepository) {}
 
   /**
+   * MINDEN SORHOZ ODAKERÜL, MIT LEHET BELŐLE LÉPNI.
+   *
+   * MIÉRT ITT, ÉS MIÉRT NEM A FELÜLETEN: az átmenetek zárt listája, a jóváhagyói
+   * jog és a külső munka mind a szerver tudása, tiszta függvényekben mérve. Ha a
+   * felület számolná ki ugyanezt, ugyanaz a szabály két helyen állna, és a
+   * második egy nap csendben elavulna -- épp a kapunál.
+   *
+   * A SORRENDET NEM ÍRJA ÁT: a lista rendezése a lekérdezésé marad, ez csak
+   * hozzátesz egy mezőt.
+   */
+  private withMoves<T extends { state: ContentState }>(items: T[]) {
+    return items.map((item) => ({ ...item, moves: moveOptions(item.state) }));
+  }
+
+  /**
    * AMI RÁM VÁR. Ez a lista alapértelmezett nézete, és Balázs kérésének szó
    * szerinti fordítása: „minden felkerul ami rank var".
    */
-  waitingForMe(role: ContentViewerRole, userId: string) {
+  async waitingForMe(role: ContentViewerRole, userId: string) {
     const filter = waitingFor(role);
-    return this.repository.list({
-      state: { in: filter.states },
-      ...(filter.ownOnly
-        ? { OR: [{ authorId: userId }, { reviewerId: userId }] }
-        : {}),
-    });
+    return this.withMoves(
+      await this.repository.list({
+        state: { in: filter.states },
+        ...(filter.ownOnly
+          ? { OR: [{ authorId: userId }, { reviewerId: userId }] }
+          : {}),
+      }),
+    );
   }
 
   /**
@@ -50,12 +70,14 @@ export class ContentService {
    * szövegtől független feltétel -- ma NÉGY kész szövegű poszt áll pontosan itt,
    * 2026-08-18 óta (a szám és a határa a `content-state.ts` fejlécében).
    */
-  waitingForImage() {
-    return this.repository.list({
-      imageRequired: true,
-      imageAttachedAt: null,
-      state: { in: STATES_THAT_CAN_WAIT_FOR_IMAGE },
-    });
+  async waitingForImage() {
+    return this.withMoves(
+      await this.repository.list({
+        imageRequired: true,
+        imageAttachedAt: null,
+        state: { in: STATES_THAT_CAN_WAIT_FOR_IMAGE },
+      }),
+    );
   }
 
   /**
@@ -64,8 +86,10 @@ export class ContentService {
    * A dátum nélküli tételek NEM szerepelnek benne, és ez szándékos: egy naptár,
    * ami a dátum nélkülieket is mutatja, nem naptár, hanem lista.
    */
-  calendar(from: Date, to: Date) {
-    return this.repository.list({ plannedFor: { gte: from, lte: to } });
+  async calendar(from: Date, to: Date) {
+    return this.withMoves(
+      await this.repository.list({ plannedFor: { gte: from, lte: to } }),
+    );
   }
 
   async detail(id: string) {
@@ -90,30 +114,62 @@ export class ContentService {
           )
         : null;
 
-    return { ...item, blockers, schedule };
+    // A RÉSZLET IS MEGKAPJA A LÉPÉSEKET, ugyanabból a forrásból, mint a lista.
+    // Ha csak a lista kapná meg, egy részletről nyíló cselekvés megint a
+    // felület találgatásán állna.
+    return { ...item, blockers, schedule, moves: moveOptions(item.state) };
   }
 
   /**
-   * ÁLLAPOTVÁLTÁS, HÁROM KAPUVAL.
+   * ÁLLAPOTVÁLTÁS, NÉGY KAPUVAL.
    *
    * 1. Az átmenet engedélyezett-e (`planTransition`).
-   * 2. Kíván-e KÜLSŐ munkát -- ilyenkor NEM írunk, hanem visszautasítunk. A
+   * 2. Van-e hozzá JOGA a hívónak (`requiresApproval`).
+   * 3. Kíván-e KÜLSŐ munkát -- ilyenkor NEM írunk, hanem visszautasítunk. A
    *    Facebook-oldali visszavonás külön döntés, és amíg nincs megépítve, egy
    *    állapot-átírás azt hazudná, hogy a poszt nem megy ki.
-   * 3. A tétel abban az állapotban van-e, amiben a hívó hitte (feltételes
+   * 4. A tétel abban az állapotban van-e, amiben a hívó hitte (feltételes
    *    írás a repository-ban).
+   *
+   * A MÁSODIK KAPU ITT ÁLL, ÉS NEM A VÉGPONTON, ÉS EZ A LÉNYEGE.
+   *
+   * Korábban a jóváhagyási kapu KIZÁRÓLAG abból állt, hogy két végpont van: a
+   * `/move` `content.manage` jogot kért, az `/approve-move` `content.approve`-ot.
+   * Csakhogy mindkettő EZT a metódust hívta, ugyanazzal a törzzsel, és a `to`
+   * mező mind a kilenc állapotot elfogadta. Vagyis a kaput a HÍVÓ választotta ki
+   * azzal, hogy melyik URL-re küldött -- egy `content.manage` jogú szerkesztő a
+   * `/move` végponton át kiadhatta a jóváhagyást is. A kapu nem volt kapu.
+   *
+   * A végpont-szintű jog MEGMARAD (a keret olcsóbban utasít el, mint mi), de a
+   * döntő ellenőrzés itt van, ahol a CÉLÁLLAPOT is ismert. Egy jövendő harmadik
+   * végpont így nem tudja megkerülni: aki ezt a metódust hívja, annak meg kell
+   * mondania, hogy a hívó jóváhagyhat-e.
+   *
+   * AZ `actorCanApprove` KÖTELEZŐ MEZŐ, nem opcionális. Egy alapértelmezett
+   * érték itt azt jelentené, hogy egy új hívó CSENDBEN elfelejtheti -- így
+   * viszont a fordító szól, mielőtt bárki futtatná.
    */
   async move(input: {
     id: string;
     from: ContentState;
     to: ContentState;
     discardReason?: string;
+    actorCanApprove: boolean;
   }) {
     const planned = planTransition(input.from, input.to);
 
     if (planned.kind === "refused") {
       throw new BadRequestException(
         `Ez a lépés nem megengedett: ${input.from} -> ${input.to}.`,
+      );
+    }
+
+    // A JOG A KÜLSŐ MUNKA ELŐTT DŐL EL. Akinek nincs joga a lépéshez, annak a
+    // Facebook-oldali teendőről sem kell értesülnie: az már a lépés HOGYANJA,
+    // és ő odáig nem jut el.
+    if (requiresApproval(input.from) && !input.actorCanApprove) {
+      throw new ForbiddenException(
+        "Ehhez a lépéshez jóváhagyói jog kell (content.approve).",
       );
     }
 
