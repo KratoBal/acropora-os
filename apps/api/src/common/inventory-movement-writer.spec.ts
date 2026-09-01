@@ -4,6 +4,7 @@ import { Prisma } from "@acropora/database";
 
 import {
   buildOutboxIdempotencyKey,
+  OUTBOX_BASELINE_UNKNOWN_NOTE,
   isDuplicateMovementIdempotencyKeyError,
   postInventoryMovement,
   type InventoryMovementDatabase,
@@ -129,12 +130,44 @@ function createFakeDatabase() {
       },
     },
     unasStockSyncOutbox: {
+      async findFirst(args) {
+        const { where } = args as {
+          where: {
+            variantId: string;
+            warehouseId: string;
+            resolutionNote: string;
+            status: string;
+          };
+        };
+        return (
+          outbox.find(
+            (row) =>
+              row.variantId === where.variantId &&
+              row.warehouseId === where.warehouseId &&
+              row.resolutionNote === where.resolutionNote &&
+              row.status === where.status,
+          ) ?? null
+        );
+      },
+      async update(args) {
+        const { where, data } = args as {
+          where: { id: string };
+          data: { status: string; resolutionNote: string };
+        };
+        const row = outbox.find((candidate) => candidate.id === where.id);
+        if (row) {
+          row.status = data.status;
+          row.resolutionNote = data.resolutionNote;
+        }
+        return {};
+      },
       async updateMany(args) {
         const { where, data } = args as {
           where: {
             variantId: string;
             warehouseId: string;
             status: { in: string[] };
+            resolutionNote?: { not: string };
           };
           data: {
             status: string;
@@ -144,10 +177,17 @@ function createFakeDatabase() {
         };
         let count = 0;
         for (const row of outbox) {
+          /// The fake has to model the `resolutionNote: { not: ... }` filter,
+          /// otherwise the superseding tests would pass against a double that
+          /// is more permissive than the database.
+          const noteExcluded =
+            where.resolutionNote !== undefined &&
+            row.resolutionNote === where.resolutionNote.not;
           if (
             row.variantId === where.variantId &&
             row.warehouseId === where.warehouseId &&
-            where.status.in.includes(row.status)
+            where.status.in.includes(row.status) &&
+            !noteExcluded
           ) {
             row.status = data.status;
             row.resolutionNote = data.resolutionNote;
@@ -226,6 +266,140 @@ describe("postInventoryMovement", () => {
       buildOutboxIdempotencyKey("POS_SALE:ORDER-1", "variant-1"),
     );
     assert.deepEqual(fake.lockedKeys, ["variant-1:warehouse-1"]);
+  });
+
+  /// The two directions of the baseline guard. The first alone would pass for
+  /// an implementation that dead-letters EVERY outbox row; the second alone
+  /// would pass for one that never dead-letters anything. Only together do
+  /// they say the guard fires on the right population.
+  it("dead-letters the outbox row when there was no StockItem row to start from", async () => {
+    const fake = createFakeDatabase();
+
+    await postInventoryMovement(fake.database, {
+      idempotencyKey: "PURCHASE_INVOICE:INV-9",
+      movementNumber: "BESZ-9",
+      type: "PURCHASE_RECEIPT",
+      warehouseId: "warehouse-1",
+      referenceType: "PurchaseInvoice",
+      referenceId: "invoice-9",
+      sourceProcess: "PURCHASE_INVOICE",
+      lines: [
+        {
+          variantId: "variant-9",
+          sku: "SKU-9",
+          unit: "db",
+          quantityDelta: new Prisma.Decimal(5),
+          syncToUnas: true,
+        },
+      ],
+    });
+
+    assert.equal(fake.outbox.length, 1);
+    assert.equal(fake.outbox[0]?.status, "DEAD_LETTER");
+    assert.equal(
+      fake.outbox[0]?.resolutionNote,
+      OUTBOX_BASELINE_UNKNOWN_NOTE,
+      "the note must come from the exported constant, not a copy",
+    );
+
+    /// The row is still written with the quantity we would have published,
+    /// and the local StockItem still records what arrived. Nothing is
+    /// swallowed - a human reconciling this needs both numbers.
+    assert.equal(fake.outbox[0]?.targetOnHand.toString(), "5");
+    assert.equal(fake.stockItems.length, 1);
+    assert.equal(fake.stockItems[0]?.onHand.toString(), "5");
+  });
+
+  it("leaves the outbox row publishable when a StockItem row already existed", async () => {
+    const fake = createFakeDatabase();
+    fake.stockItems.push({
+      id: "stock-9",
+      variantId: "variant-9",
+      warehouseId: "warehouse-1",
+      onHand: new Prisma.Decimal(40),
+      reserved: new Prisma.Decimal(0),
+    });
+
+    await postInventoryMovement(fake.database, {
+      idempotencyKey: "PURCHASE_INVOICE:INV-10",
+      movementNumber: "BESZ-10",
+      type: "PURCHASE_RECEIPT",
+      warehouseId: "warehouse-1",
+      referenceType: "PurchaseInvoice",
+      referenceId: "invoice-10",
+      sourceProcess: "PURCHASE_INVOICE",
+      lines: [
+        {
+          variantId: "variant-9",
+          sku: "SKU-9",
+          unit: "db",
+          quantityDelta: new Prisma.Decimal(5),
+          syncToUnas: true,
+        },
+      ],
+    });
+
+    assert.equal(fake.outbox.length, 1);
+    assert.notEqual(fake.outbox[0]?.status, "DEAD_LETTER");
+    assert.equal(fake.outbox[0]?.resolutionNote, null);
+    /// 40 + 5, published as an absolute the way it always was.
+    assert.equal(fake.outbox[0]?.targetOnHand.toString(), "45");
+  });
+
+  /// The hole the superseding test exposed, now guarded. Without the
+  /// `resolutionNote` exclusion the first row would be rewritten to
+  /// SUCCEEDED and the warning would vanish; without the unresolved-baseline
+  /// lookup the second row would go out PENDING and publish an absolute
+  /// built on the same invented zero. Each half fails a different assertion
+  /// below.
+  it("keeps the baseline warning alive across a later movement on the same variant", async () => {
+    const fake = createFakeDatabase();
+
+    await postInventoryMovement(fake.database, {
+      idempotencyKey: "PURCHASE_INVOICE:INV-11",
+      movementNumber: "BESZ-11",
+      type: "PURCHASE_RECEIPT",
+      warehouseId: "warehouse-1",
+      referenceType: "PurchaseInvoice",
+      referenceId: "invoice-11",
+      sourceProcess: "PURCHASE_INVOICE",
+      lines: [
+        {
+          variantId: "variant-11",
+          sku: "SKU-11",
+          unit: "db",
+          quantityDelta: new Prisma.Decimal(5),
+          syncToUnas: true,
+        },
+      ],
+    });
+
+    /// A StockItem row exists now, so a naive second movement would look
+    /// perfectly ordinary.
+    await postInventoryMovement(fake.database, {
+      idempotencyKey: "POS_SALE:ORDER-11",
+      movementNumber: "ELAD-11",
+      type: "SALE",
+      warehouseId: "warehouse-1",
+      referenceType: "SalesOrder",
+      referenceId: "order-11",
+      sourceProcess: "POS_SALE",
+      lines: [
+        {
+          variantId: "variant-11",
+          sku: "SKU-11",
+          unit: "db",
+          quantityDelta: new Prisma.Decimal(-1),
+          syncToUnas: true,
+        },
+      ],
+    });
+
+    assert.equal(fake.outbox.length, 2);
+    assert.equal(fake.outbox[0]?.status, "DEAD_LETTER");
+    assert.equal(fake.outbox[0]?.resolutionNote, OUTBOX_BASELINE_UNKNOWN_NOTE);
+    assert.equal(fake.outbox[1]?.status, "DEAD_LETTER");
+    assert.equal(fake.outbox[1]?.resolutionNote, OUTBOX_BASELINE_UNKNOWN_NOTE);
   });
 
   it("applies a positive delta on top of an existing StockItem (purchase receipt style)", async () => {
@@ -340,6 +514,18 @@ describe("postInventoryMovement", () => {
 
   it("supersedes an older still-open outbox row for the same variant/warehouse instead of leaving two live rows", async () => {
     const fake = createFakeDatabase();
+    /// The subject of this test is superseding, not the baseline guard. It
+    /// used to start from an empty warehouse, which now takes the
+    /// baseline-unknown path and leaves the first row DEAD_LETTER - a state
+    /// this test deliberately does not supersede. Seeding a StockItem row
+    /// keeps the test measuring what its name says.
+    fake.stockItems.push({
+      id: "stock-item-3",
+      variantId: "variant-3",
+      warehouseId: "warehouse-1",
+      onHand: new Prisma.Decimal(10),
+      reserved: new Prisma.Decimal(0),
+    });
 
     await postInventoryMovement(fake.database, {
       idempotencyKey: "POS_SALE:ORDER-3",
@@ -387,7 +573,8 @@ describe("postInventoryMovement", () => {
     assert.equal(fake.outbox[0]?.status, "SUCCEEDED");
     assert.match(fake.outbox[0]?.resolutionNote ?? "", /^superseded_by:/);
     assert.equal(fake.outbox[1]?.status, "PENDING");
-    assert.equal(fake.outbox[1]?.targetOnHand.toString(), "-2");
+    /// 10 - 1 - 1, on top of the seeded baseline.
+    assert.equal(fake.outbox[1]?.targetOnHand.toString(), "8");
   });
 
   it("throws when called with zero lines rather than silently posting an empty movement", async () => {

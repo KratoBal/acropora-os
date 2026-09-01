@@ -75,6 +75,14 @@ export type InventoryMovementType =
   | "SCRAP"
   | "OPENING_BALANCE";
 
+/// Written to `resolutionNote` when a row is closed without an UNAS call
+/// because the local baseline was unknown at the time of the movement.
+///
+/// Exported so the assertion and the row carry the SAME string: a literal
+/// repeated in a test proves the test agrees with itself, not with the code.
+export const OUTBOX_BASELINE_UNKNOWN_NOTE =
+  "baseline_unknown_no_stock_item_row";
+
 const OUTBOX_SUPERSEDABLE_STATUSES = [
   "PENDING",
   "FAILED",
@@ -167,6 +175,8 @@ export interface InventoryMovementDatabase {
   unasStockSyncOutbox: {
     updateMany(args: unknown): Promise<{ count: number }>;
     create(args: unknown): Promise<{ id: string }>;
+    update(args: unknown): Promise<unknown>;
+    findFirst(args: unknown): Promise<{ id: string } | null>;
   };
 }
 
@@ -230,11 +240,18 @@ export async function enqueueStockSyncOutboxEntry(
     sourceRecordId: string;
   },
 ): Promise<{ id: string }> {
+  /// A baseline-unknown row is deliberately NOT superseded, even though
+  /// DEAD_LETTER is otherwise a supersedable status. Superseding rewrites the
+  /// row to SUCCEEDED with a `superseded_by:` note, which would erase the one
+  /// marker saying that this variant's stock was never reconciled with UNAS -
+  /// and the newer row would publish an absolute built on the same invented
+  /// zero. The signal has to outlive the movement that raised it.
   await database.unasStockSyncOutbox.updateMany({
     where: {
       variantId: params.variantId,
       warehouseId: params.warehouseId,
       status: { in: [...OUTBOX_SUPERSEDABLE_STATUSES] },
+      resolutionNote: { not: OUTBOX_BASELINE_UNKNOWN_NOTE },
     },
     data: {
       status: "SUCCEEDED",
@@ -361,12 +378,64 @@ export async function postInventoryMovement(
       wentNegative: resultingOnHand.isNegative(),
     });
 
+    /// A BASELINE WE NEVER KNEW MUST NOT BE PUBLISHED AS AN ABSOLUTE.
+    ///
+    /// `currentOnHand` falls back to zero when no whole-warehouse StockItem
+    /// row exists yet. For the local ledger that is correct: we are recording
+    /// what physically arrived. For UNAS it is not, because what goes out
+    /// below is an ABSOLUTE quantity, not the delta. A UNAS-managed variant
+    /// that the shop lists with 40 in stock, and that has no StockItem row
+    /// here yet, would be set to the received quantity alone - the first
+    /// receipt of 5 pieces would erase 35 from a live shop, with no error
+    /// anywhere.
+    ///
+    /// The card that started this described the first RECEIPT, but the
+    /// condition guarded here is deliberately wider: it is "no baseline",
+    /// not "receiving". A POS sale against a variant with no StockItem row
+    /// publishes a negative absolute from the same invented zero, and
+    /// narrowing the guard to receipts would leave that path destructive.
+    /// `syncToUnas` is true precisely for the UNAS-authority variants (see
+    /// PurchasingService: `catalogAuthority === "UNAS"`), so the two
+    /// conditions meet on the population that can actually be damaged.
+    ///
+    /// We still enqueue, and still supersede any earlier open row, so the
+    /// queue's behaviour stays uniform and the attempt is auditable - then
+    /// close the new row as DEAD_LETTER. That status is deliberate: the two
+    /// existing no-call closures (superseded, package product) use
+    /// SUCCEEDED because the desired end state is or will be satisfied by
+    /// something else. Here it is NOT satisfied: UNAS keeps a number we
+    /// never verified and the two sides have diverged. DEAD_LETTER says a
+    /// human must reconcile, and the stock diagnostics treat any such row as
+    /// DEGRADED - which is the honest signal.
+    ///
+    /// WHAT THIS DOES NOT FIX, stated rather than glossed over: the earlier
+    /// rows this call supersedes are marked SUCCEEDED with a
+    /// `superseded_by:` note pointing at an idempotency key whose row then
+    /// dead-letters. The chain stays followable, but "SUCCEEDED" on those
+    /// rows still does not mean anything was published. Seeding the baseline
+    /// from UNAS would remove the case entirely; that needs a read of the
+    /// live shop and is a separate decision.
     if (line.syncToUnas) {
+      /// Not just "no row now": an unresolved baseline-unknown row from an
+      /// EARLIER movement means the local quantity itself was built on the
+      /// invented zero, so every later absolute derived from it is wrong the
+      /// same way. The guard stays on until a human clears that row.
+      const unresolvedBaseline = await database.unasStockSyncOutbox.findFirst({
+        where: {
+          variantId: line.variantId,
+          warehouseId: input.warehouseId,
+          resolutionNote: OUTBOX_BASELINE_UNKNOWN_NOTE,
+          status: "DEAD_LETTER",
+        },
+        select: { id: true },
+      });
+      const baselineUnknown = !existingStockItem || unresolvedBaseline !== null;
+
       // Close out any still-open earlier publish target for this exact
       // (variant, warehouse) before inserting the new one, so the worker
       // never sees two competing PENDING/FAILED/DEAD_LETTER rows for the
       // same key. Local catalog products deliberately skip this block.
-      await enqueueStockSyncOutboxEntry(database, {
+      const enqueued = await enqueueStockSyncOutboxEntry(database, {
         variantId: line.variantId,
         warehouseId: input.warehouseId,
         sku: line.sku,
@@ -380,6 +449,18 @@ export async function postInventoryMovement(
         sourceProcess: input.sourceProcess,
         sourceRecordId: input.referenceId,
       });
+
+      if (baselineUnknown) {
+        await database.unasStockSyncOutbox.update({
+          where: { id: enqueued.id },
+          data: {
+            status: "DEAD_LETTER",
+            leaseExpiresAt: null,
+            resolutionNote: OUTBOX_BASELINE_UNKNOWN_NOTE,
+            processedAt: new Date(),
+          },
+        });
+      }
     }
   }
 
