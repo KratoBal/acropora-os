@@ -3,6 +3,10 @@ import { describe, it } from "node:test";
 import { Prisma } from "@acropora/database";
 
 import {
+  createOutboxDouble,
+  type OutboxDoubleRow,
+} from "../testing/unas-stock-sync-outbox.double.js";
+import {
   buildOutboxIdempotencyKey,
   OUTBOX_BASELINE_UNKNOWN_NOTE,
   isDuplicateMovementIdempotencyKeyError,
@@ -23,18 +27,6 @@ interface FakeStockItem {
   reserved?: Prisma.Decimal;
 }
 
-interface FakeOutboxRow {
-  id: string;
-  variantId: string;
-  warehouseId: string;
-  status: string;
-  idempotencyKey: string;
-  targetOnHand: Prisma.Decimal;
-  resolutionNote: string | null;
-  sourceProcess: string;
-  sourceRecordId: string;
-}
-
 /// Minimal in-memory double for InventoryMovementDatabase. Good enough to
 /// exercise postInventoryMovement's own logic (idempotency, delta
 /// application, outbox supersede-on-create) without a real Postgres - the
@@ -45,7 +37,7 @@ function createFakeDatabase() {
   const movements: FakeStockMovement[] = [];
   const movementLines: unknown[] = [];
   const stockItems: FakeStockItem[] = [];
-  const outbox: FakeOutboxRow[] = [];
+  const outbox: OutboxDoubleRow[] = [];
   const lockedKeys: string[] = [];
   let idCounter = 0;
   const nextId = (prefix: string) => `${prefix}-${++idCounter}`;
@@ -129,102 +121,7 @@ function createFakeDatabase() {
         return {};
       },
     },
-    unasStockSyncOutbox: {
-      async findFirst(args) {
-        const { where } = args as {
-          where: {
-            variantId: string;
-            warehouseId: string;
-            resolutionNote: string;
-            status: string;
-          };
-        };
-        return (
-          outbox.find(
-            (row) =>
-              row.variantId === where.variantId &&
-              row.warehouseId === where.warehouseId &&
-              row.resolutionNote === where.resolutionNote &&
-              row.status === where.status,
-          ) ?? null
-        );
-      },
-      async update(args) {
-        const { where, data } = args as {
-          where: { id: string };
-          data: { status: string; resolutionNote: string };
-        };
-        const row = outbox.find((candidate) => candidate.id === where.id);
-        if (row) {
-          row.status = data.status;
-          row.resolutionNote = data.resolutionNote;
-        }
-        return {};
-      },
-      async updateMany(args) {
-        const { where, data } = args as {
-          where: {
-            variantId: string;
-            warehouseId: string;
-            status: { in: string[] };
-            resolutionNote?: { not: string };
-          };
-          data: {
-            status: string;
-            resolutionNote: string;
-            processedAt: Date;
-          };
-        };
-        let count = 0;
-        for (const row of outbox) {
-          /// The fake has to model the `resolutionNote: { not: ... }` filter,
-          /// otherwise the superseding tests would pass against a double that
-          /// is more permissive than the database.
-          const noteExcluded =
-            where.resolutionNote !== undefined &&
-            row.resolutionNote === where.resolutionNote.not;
-          if (
-            row.variantId === where.variantId &&
-            row.warehouseId === where.warehouseId &&
-            where.status.in.includes(row.status) &&
-            !noteExcluded
-          ) {
-            row.status = data.status;
-            row.resolutionNote = data.resolutionNote;
-            count += 1;
-          }
-        }
-        return { count };
-      },
-      async create(args) {
-        const data = (
-          args as {
-            data: {
-              variantId: string;
-              warehouseId: string;
-              sku: string;
-              targetOnHand: Prisma.Decimal;
-              idempotencyKey: string;
-              sourceProcess: string;
-              sourceRecordId: string;
-            };
-          }
-        ).data;
-        const id = nextId("outbox");
-        outbox.push({
-          id,
-          variantId: data.variantId,
-          warehouseId: data.warehouseId,
-          status: "PENDING",
-          idempotencyKey: data.idempotencyKey,
-          targetOnHand: data.targetOnHand,
-          resolutionNote: null,
-          sourceProcess: data.sourceProcess,
-          sourceRecordId: data.sourceRecordId,
-        });
-        return { id };
-      },
-    },
+    unasStockSyncOutbox: createOutboxDouble(outbox, nextId),
   };
 
   return { database, movements, movementLines, stockItems, outbox, lockedKeys };
