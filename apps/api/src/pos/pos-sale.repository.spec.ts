@@ -22,7 +22,7 @@ function nextId(prefix: string): string {
 /// double proves ordering and idempotency at the application level but not
 /// genuine cross-statement Postgres rollback - that's covered at the shared
 /// primitive level by inventory-movement-writer.spec.ts.
-class FakeDb {
+class FakeDb implements PosSaleDatabase {
   warehouseId = "wh-1";
   orders: Array<{ id: string; orderNumber: string }> = [];
   stockItems: Array<{ id: string; variantId: string; onHand: Prisma.Decimal }> =
