@@ -66,6 +66,19 @@ export class ContentRepository {
    * felhasználó azt hiszi, az ő döntése áll. A feltételes írás nulla sort
    * módosít, és a hívó ebből tudja, hogy közben történt valami.
    */
+  /**
+   * A LÉPÉS ÉS A HOZZÁ TARTOZÓ FELVETÉS EGY TRANZAKCIÓBAN MEGY.
+   *
+   * MIÉRT NEM KÉT HÍVÁS: mindkét sorrend hagy egy rossz állapotot. Ha előbb a
+   * hozzászólás születik meg és az állapotváltás bukik (mert a tétel közben
+   * elmozdult), egy árva felvetés marad egy olyan tételen, ami már máshol jár.
+   * Ha előbb az állapot vált és a hozzászólás bukik, a tétel javításra vár --
+   * indok nélkül, vagyis pontosan abban az állapotban, amit ez a mező meg akar
+   * szüntetni.
+   *
+   * A FELTÉTELES ÍRÁS A TRANZAKCIÓN BELÜL IS FELTÉTELES: ha nulla sort módosít,
+   * a hozzászólás létre sem jön, mert ezt az ágat előbb ellenőrizzük.
+   */
   async moveState(input: {
     id: string;
     from: ContentState;
@@ -73,23 +86,39 @@ export class ContentRepository {
     discardReason?: string | null;
     scheduleAnchoredAt?: Date | null;
     scheduledFor?: Date | null;
+    /** A lépéshez tartozó felvetés, hozzászólásként. Csak együtt születik meg. */
+    note?: { authorId: string; body: string };
   }): Promise<boolean> {
-    const result = await prisma.contentItem.updateMany({
-      where: { id: input.id, state: input.from },
-      data: {
-        state: input.to,
-        ...(input.discardReason === undefined
-          ? {}
-          : { discardReason: input.discardReason }),
-        ...(input.scheduleAnchoredAt === undefined
-          ? {}
-          : { scheduleAnchoredAt: input.scheduleAnchoredAt }),
-        ...(input.scheduledFor === undefined
-          ? {}
-          : { scheduledFor: input.scheduledFor }),
-      },
+    return prisma.$transaction(async (tx) => {
+      const result = await tx.contentItem.updateMany({
+        where: { id: input.id, state: input.from },
+        data: {
+          state: input.to,
+          ...(input.discardReason === undefined
+            ? {}
+            : { discardReason: input.discardReason }),
+          ...(input.scheduleAnchoredAt === undefined
+            ? {}
+            : { scheduleAnchoredAt: input.scheduleAnchoredAt }),
+          ...(input.scheduledFor === undefined
+            ? {}
+            : { scheduledFor: input.scheduledFor }),
+        },
+      });
+
+      if (result.count !== 1) return false;
+
+      if (input.note)
+        await tx.contentComment.create({
+          data: {
+            contentId: input.id,
+            authorId: input.note.authorId,
+            body: input.note.body,
+          },
+        });
+
+      return true;
     });
-    return result.count === 1;
   }
 
   addComment(input: { contentId: string; authorId: string; body: string }) {

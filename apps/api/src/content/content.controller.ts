@@ -118,6 +118,7 @@ export class ContentController {
       id,
       ...input,
       actorCanApprove: hasPermission(user, PERMISSIONS.CONTENT_APPROVE),
+      actorUserId: user.id,
     });
   }
 
@@ -149,6 +150,7 @@ export class ContentController {
       id,
       ...input,
       actorCanApprove: hasPermission(user, PERMISSIONS.CONTENT_APPROVE),
+      actorUserId: user.id,
     });
   }
 

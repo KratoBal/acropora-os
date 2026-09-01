@@ -62,8 +62,12 @@ export function ContentRowActions({
   const { session } = useAuth();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [discarding, setDiscarding] = useState(false);
-  const [discardReason, setDiscardReason] = useState("");
+  // MELYIK LÉPÉS KÉR SZÖVEGET, AZT A SZERVER MONDJA MEG (`move.note`), nem egy
+  // állapotnév itt. Korábban `move.to === "DISCARDED"` állt ezen a helyen: egy
+  // szabály-másolat a felületen, pontosan az a fajta, amit ebből a fájlból
+  // szándékosan kivettünk.
+  const [asking, setAsking] = useState<ContentMoveOption | null>(null);
+  const [noteText, setNoteText] = useState("");
   const [commenting, setCommenting] = useState(false);
   const [comment, setComment] = useState("");
 
@@ -83,7 +87,7 @@ export function ContentRowActions({
     (move) => canManage && (!move.requiresApproval || canApprove),
   );
 
-  async function run(move: ContentMoveOption, reason?: string) {
+  async function run(move: ContentMoveOption, note?: string) {
     setPending(true);
     setError(null);
     try {
@@ -91,10 +95,12 @@ export function ContentRowActions({
         from: item.state,
         to: move.to,
         requiresApproval: move.requiresApproval,
-        ...(reason ? { discardReason: reason } : {}),
+        // A MEZŐ NEVÉT IS A SZERVER ADJA. Így ha holnap egy harmadik lépés is
+        // szöveget kíván, itt semmit nem kell átírni.
+        ...(note && move.note ? { [move.note.field]: note } : {}),
       });
-      setDiscarding(false);
-      setDiscardReason("");
+      setAsking(null);
+      setNoteText("");
       onDone();
     } catch (cause) {
       setError(
@@ -139,10 +145,10 @@ export function ContentRowActions({
             move={move}
             pending={pending}
             onClick={() => {
-              // AZ ELVETÉS OKOT KÍVÁN, tehát nem indul azonnal: előbb megnyílik
-              // a mező. A `discardReason` kötelezőségét a szerver őrzi, ez
-              // csak annyit tesz, hogy nem futunk bele szándékosan.
-              if (move.to === "DISCARDED") setDiscarding(true);
+              // AMELYIK LÉPÉS SZÖVEGET KÍVÁN, AZ NEM INDUL AZONNAL: előbb
+              // megnyílik a mező. A kötelezőséget a szerver őrzi; ez csak annyit
+              // tesz, hogy nem futunk bele szándékosan egy elutasításba.
+              if (move.note) setAsking(move);
               else void run(move);
             }}
           />
@@ -159,38 +165,33 @@ export function ContentRowActions({
         </Button>
       </div>
 
-      {discarding ? (
+      {asking ? (
         <div className="flex w-full flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:w-72">
           <Textarea
-            aria-label="Az elvetés oka"
-            placeholder="Miért vetjük el?"
-            value={discardReason}
-            onChange={(event) => setDiscardReason(event.target.value)}
+            aria-label={asking.note!.label}
+            placeholder={asking.note!.label}
+            value={noteText}
+            onChange={(event) => setNoteText(event.target.value)}
           />
           <div className="flex gap-2">
             <Button
-              variant="danger"
+              variant={asking.to === "DISCARDED" ? "danger" : "primary"}
               size="sm"
-              // OK NÉLKÜL EL SEM INDUL. A szerver ugyanezt megtagadná, de akkor
-              // a hiányzó mező szerver-hibaként jelenne meg, és a felhasználó
-              // egy elrontott lépést látna egy hiányzó mező helyett.
-              disabled={pending || !discardReason.trim()}
-              onClick={() => {
-                const move = offered.find(
-                  (option) => option.to === "DISCARDED",
-                );
-                if (move) void run(move, discardReason.trim());
-              }}
+              // SZÖVEG NÉLKÜL EL SEM INDUL. A szerver ugyanezt megtagadná, de
+              // akkor a hiányzó mező szerver-hibaként jelenne meg, és a
+              // felhasználó egy elrontott lépést látna egy üres mező helyett.
+              disabled={pending || !noteText.trim()}
+              onClick={() => void run(asking, noteText.trim())}
             >
-              Elvetem
+              {contentMoveLabel(asking.to)}
             </Button>
             <Button
               variant="ghost"
               size="sm"
               disabled={pending}
               onClick={() => {
-                setDiscarding(false);
-                setDiscardReason("");
+                setAsking(null);
+                setNoteText("");
               }}
             >
               Mégsem

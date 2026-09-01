@@ -74,6 +74,7 @@ export const contentApi = {
       to: ContentState;
       requiresApproval: boolean;
       discardReason?: string;
+      revisionNote?: string;
     },
   ) {
     const { requiresApproval, ...body } = input;

@@ -188,7 +188,9 @@ export class ContentService {
     from: ContentState;
     to: ContentState;
     discardReason?: string;
+    revisionNote?: string;
     actorCanApprove: boolean;
+    actorUserId: string;
   }) {
     const planned = planTransition(input.from, input.to);
 
@@ -218,6 +220,27 @@ export class ContentService {
       throw new BadRequestException("Az elvetés oka kötelező.");
     }
 
+    // ÉS A VISSZAKÜLDÉS FELVETÉSE UGYANÚGY KÖTELEZŐ.
+    //
+    // A fenti mondat betűre áll erre a lépésre is, csak eddig nem alkalmaztuk:
+    // egy javításra visszaadott tétel a szerzőnél áll, és ha nem derül ki,
+    // MIT kell javítani, a szerző vagy találgat, vagy visszakérdez -- és a
+    // lektor addigra már mással foglalkozik.
+    //
+    // MIÉRT KÖTELEZŐ, ÉS NEM CSAK LEHETSÉGES: ha választható lenne, pont a
+    // sietős körökben maradna el, vagyis pont akkor, amikor a legtöbbet
+    // számítana. Ugyanaz a döntés, mint az elvetésnél.
+    //
+    // ÉS MIÉRT HOZZÁSZÓLÁS, NEM ÚJ MEZŐ: így a felvetés ott áll, ahol a válasz
+    // is lesz, és nem keletkezik második hely, ahol ugyanaz a szöveg állhat.
+    // Egy tétel, aminek két helyen van „miért javítsam" szövege, egy nap két
+    // különbözőt fog mondani.
+    if (input.to === "AWAITING_REVISION" && !input.revisionNote?.trim()) {
+      throw new BadRequestException(
+        "A visszaküldéshez írd meg, mit kell javítani.",
+      );
+    }
+
     const moved = await this.repository.moveState({
       id: input.id,
       from: input.from,
@@ -229,6 +252,17 @@ export class ContentService {
         ? {
             scheduleAnchoredAt: new Date(),
             scheduledFor: scheduleTargetFor(new Date()),
+          }
+        : {}),
+      // A FELVETÉS A LÉPÉSSEL EGYÜTT SZÜLETIK MEG, egy tranzakcióban. Külön
+      // hívásként mindkét sorrend hagyna egy rossz állapotot: vagy árva
+      // hozzászólás egy elmozdult tételen, vagy indok nélküli visszaküldés.
+      ...(input.to === "AWAITING_REVISION" && input.revisionNote?.trim()
+        ? {
+            note: {
+              authorId: input.actorUserId,
+              body: input.revisionNote.trim(),
+            },
           }
         : {}),
     });

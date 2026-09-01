@@ -268,6 +268,15 @@ export interface ContentMoveOption {
    * dőlne el, minden képernyő maga találná ki, melyik a kézenfekvő lépés.
    */
   primary: boolean;
+  /**
+   * HA NEM `null`, EZ A LÉPÉS SZÖVEGET KÍVÁN, és a felület azt kéri be előbb.
+   *
+   * MIÉRT INNEN JÖN: enélkül a képernyőnek állapotnevekre kellene hivatkoznia
+   * (`ha ez elvetés, kérj okot`), és azzal visszakerülne oda egy szabály-másolat,
+   * amit ebből a fájlból épp kivettünk. A mező NEVE is itt áll, mert a kérés
+   * törzsében ugyanazon a néven megy vissza.
+   */
+  note: { field: "discardReason" | "revisionNote"; label: string } | null;
 }
 
 /**
@@ -320,6 +329,32 @@ const PROGRESS_ORDER: Record<ContentState, number> = {
   SENT: 7,
 };
 
+/**
+ * MELYIK LÉPÉS KÍVÁN SZÖVEGET, ÉS MILYEN NÉVEN.
+ *
+ * KETTŐ VAN, ÉS UGYANAZ AZ INDOKUK: mindkettő VISSZATART egy tételt, és aki
+ * mellette áll, annak tudnia kell, MIÉRT. „Ok nélkül az elvetve annyit mond,
+ * hogy valaki egyszer nemet mondott -- de nem azt, hogy miért, és a következő
+ * ember ugyanazt a tételt kezdi újra." Ez a mondat betűre áll a visszaküldésre
+ * is, csak sokáig nem alkalmaztuk rá.
+ *
+ * A MEZŐNÉV AZÉRT VAN ITT, mert a felület ebből tudja, minek nevezze a kérés
+ * törzsében -- anélkül, hogy neki magának kellene tudnia, melyik állapot melyik
+ * mezőt kívánja.
+ */
+const NOTE_REQUIRED_FOR: Partial<
+  Record<
+    ContentState,
+    { field: "discardReason" | "revisionNote"; label: string }
+  >
+> = {
+  DISCARDED: { field: "discardReason", label: "Miért vetjük el?" },
+  AWAITING_REVISION: {
+    field: "revisionNote",
+    label: "Mit kell javítani?",
+  },
+};
+
 export function moveOptions(from: ContentState): readonly ContentMoveOption[] {
   const approvalNeeded = requiresApproval(from);
   const steps = allowedMoves(from).map((to) => {
@@ -329,6 +364,7 @@ export function moveOptions(from: ContentState): readonly ContentMoveOption[] {
       requiresApproval: approvalNeeded,
       blockedByExternalWork:
         planned.kind === "needs-external" ? planned.external.reason : null,
+      note: NOTE_REQUIRED_FOR[to] ?? null,
     };
   });
 
