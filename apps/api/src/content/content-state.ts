@@ -244,3 +244,49 @@ export function allowedMoves(from: ContentState): readonly ContentState[] {
 export function requiresApproval(from: ContentState): boolean {
   return WAITS_ON[from] === "approver";
 }
+
+/**
+ * EGY LÉPÉS, AHOGY A FELÜLET LÁTJA.
+ *
+ * Mind a három mező a szerver TUDÁSA, nem a felület találgatása: hova lehet
+ * lépni, kell-e hozzá jóváhagyói jog, és van-e olyan külső teendő, ami miatt ma
+ * nem hajtható végre.
+ */
+export interface ContentMoveOption {
+  to: ContentState;
+  /** Jóváhagyói jogot kíván-e (`content.approve`). */
+  requiresApproval: boolean;
+  /**
+   * Ha nem `null`, a lépés ma NEM hajtható végre, és ez az indok -- emberi
+   * alakban, mert a felület ezt mutatja meg, mielőtt bárki rákattint.
+   */
+  blockedByExternalWork: string | null;
+}
+
+/**
+ * MI A LEHETSÉGES LÉPÉS EGY ÁLLAPOTBÓL, MINDENNEL EGYÜTT, AMIT A HÍVÓNAK TUDNIA
+ * KELL.
+ *
+ * MIÉRT NEM ELÉG AZ `allowedMoves`: az csak a célállapotok neveit adja, és a
+ * felület ebből három dolgot NEM tudna meg -- hogy melyik lépéshez kell
+ * jóváhagyói jog, hogy melyik fut külső munkába, és hogy mit írjon ki róla. A
+ * hiányzó tudást ma a felületnek kellene pótolnia, vagyis lemásolnia; ez a
+ * függvény azért van, hogy ne kelljen.
+ *
+ * AMI EBBŐL A LEGFONTOSABB, ÉS NEM SZÉPSÉGKÉRDÉS: a `blockedByExternalWork`
+ * miatt a felület egy `SCHEDULED` tételnél ELŐRE megmondhatja, hogy a lépés ma
+ * nem megy. Enélkül felkínálna egy gombot, a szerver elutasítaná, és a
+ * felhasználó azt tanulná meg, hogy a gombok néha nem működnek.
+ */
+export function moveOptions(from: ContentState): readonly ContentMoveOption[] {
+  const approvalNeeded = requiresApproval(from);
+  return allowedMoves(from).map((to) => {
+    const planned = planTransition(from, to);
+    return {
+      to,
+      requiresApproval: approvalNeeded,
+      blockedByExternalWork:
+        planned.kind === "needs-external" ? planned.external.reason : null,
+    };
+  });
+}

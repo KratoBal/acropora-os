@@ -5,7 +5,9 @@ import {
   allowedMoves,
   canMove,
   contentBlockers,
+  moveOptions,
   planTransition,
+  requiresApproval,
   type ContentState,
 } from "./content-state.js";
 
@@ -237,5 +239,95 @@ describe("what a transition costs outside our own table", () => {
   it("refuses a forbidden move instead of pricing it", () => {
     assert.equal(planTransition("SENT", "DISCARDED").kind, "refused");
     assert.equal(planTransition("DRAFTING", "READY_TO_SEND").kind, "refused");
+  });
+});
+
+describe("which step needs the approver's hand", () => {
+  /**
+   * A SZABÁLY EGY ÁLLAPOTRA VONATKOZIK, ÉS EZ AZ ÁLLÍTÁS AZT MÉRI, HOGY NEM
+   * TÖBBRE. Ha `requiresApproval` egy nap szélesebbre nyílna (mondjuk minden
+   * `READY_TO_SEND`-ből kifelé vezető útra), ez pirosodik -- és épp az a baj
+   * jönne elő, amit a javítás el akart kerülni: túl sokat zárni be.
+   */
+  it("asks for it only where the item waits on the approver", () => {
+    assert.equal(requiresApproval("AWAITING_APPROVAL"), true);
+    for (const state of ALL_STATES) {
+      if (state === "AWAITING_APPROVAL") continue;
+      assert.equal(
+        requiresApproval(state),
+        false,
+        `${state} ne kívánjon jóváhagyói jogot`,
+      );
+    }
+  });
+
+  /**
+   * MINDEN KIVEZETŐ ÚT, NEM CSAK A KIKÜLDÉSRE BOCSÁTÁS. A visszaküldés és az
+   * elvetés ugyanúgy a jóváhagyó döntése: az az állapot RÁ vár.
+   */
+  it("marks every way out of an approval-waiting item", () => {
+    const options = moveOptions("AWAITING_APPROVAL");
+
+    assert.ok(options.length > 0, "legyen mit lépni");
+    for (const option of options) {
+      assert.equal(
+        option.requiresApproval,
+        true,
+        `${option.to} jóváhagyói lépés legyen`,
+      );
+    }
+  });
+
+  it("leaves the ordinary steps alone", () => {
+    for (const option of moveOptions("DRAFTING")) {
+      assert.equal(option.requiresApproval, false);
+    }
+  });
+});
+
+describe("what the list tells the screen about a step", () => {
+  /**
+   * A FELÜLET ELŐRE MEGTUDJA, HOGY EGY LÉPÉS MA NEM MEGY. Enélkül felkínálna
+   * egy gombot, a szerver elutasítaná, és a felhasználó azt tanulná meg, hogy a
+   * gombok néha nem működnek.
+   */
+  it("says which step runs into work outside our table", () => {
+    const options = moveOptions("SCHEDULED");
+    const back = options.find((option) => option.to === "READY_TO_SEND");
+    const discard = options.find((option) => option.to === "DISCARDED");
+
+    assert.ok(back?.blockedByExternalWork?.includes("Facebookon"));
+    assert.ok(discard?.blockedByExternalWork?.includes("Facebookon"));
+  });
+
+  /**
+   * ÉS A MÁSIK IRÁNY, KÜLÖNBEN AZ ELŐZŐ ÁLLÍTÁS ATTÓL IS ZÖLD LENNE, HA MINDEN
+   * LÉPÉST BLOKKOLTNAK MONDANÁNK: a kiküldés tudomásulvétele `SCHEDULED`-ból is
+   * szabad út, mert ott nincs mit visszavonni.
+   */
+  it("leaves the one scheduled step that has nothing to undo", () => {
+    const sent = moveOptions("SCHEDULED").find(
+      (option) => option.to === "SENT",
+    );
+
+    assert.equal(sent?.blockedByExternalWork, null);
+  });
+
+  it("offers nothing at all once a piece went out", () => {
+    assert.deepEqual(moveOptions("SENT"), []);
+  });
+
+  /**
+   * A LISTA UGYANAZ, MINT AMIT AZ `allowedMoves` MOND. Két forrás egy nap
+   * szétcsúszna, és a felület a rosszabbikat látná.
+   */
+  it("names the same targets the closed list does", () => {
+    for (const state of ALL_STATES) {
+      assert.deepEqual(
+        moveOptions(state).map((option) => option.to),
+        [...allowedMoves(state)],
+        `${state} lépései egyezzenek`,
+      );
+    }
   });
 });

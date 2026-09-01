@@ -14,6 +14,7 @@ import {
 } from "./content-filter.js";
 import {
   contentBlockers,
+  moveOptions,
   planTransition,
   requiresApproval,
   type ContentState,
@@ -34,17 +35,34 @@ export class ContentService {
   constructor(private readonly repository: ContentRepository) {}
 
   /**
+   * MINDEN SORHOZ ODAKERÜL, MIT LEHET BELŐLE LÉPNI.
+   *
+   * MIÉRT ITT, ÉS MIÉRT NEM A FELÜLETEN: az átmenetek zárt listája, a jóváhagyói
+   * jog és a külső munka mind a szerver tudása, tiszta függvényekben mérve. Ha a
+   * felület számolná ki ugyanezt, ugyanaz a szabály két helyen állna, és a
+   * második egy nap csendben elavulna -- épp a kapunál.
+   *
+   * A SORRENDET NEM ÍRJA ÁT: a lista rendezése a lekérdezésé marad, ez csak
+   * hozzátesz egy mezőt.
+   */
+  private withMoves<T extends { state: ContentState }>(items: T[]) {
+    return items.map((item) => ({ ...item, moves: moveOptions(item.state) }));
+  }
+
+  /**
    * AMI RÁM VÁR. Ez a lista alapértelmezett nézete, és Balázs kérésének szó
    * szerinti fordítása: „minden felkerul ami rank var".
    */
-  waitingForMe(role: ContentViewerRole, userId: string) {
+  async waitingForMe(role: ContentViewerRole, userId: string) {
     const filter = waitingFor(role);
-    return this.repository.list({
-      state: { in: filter.states },
-      ...(filter.ownOnly
-        ? { OR: [{ authorId: userId }, { reviewerId: userId }] }
-        : {}),
-    });
+    return this.withMoves(
+      await this.repository.list({
+        state: { in: filter.states },
+        ...(filter.ownOnly
+          ? { OR: [{ authorId: userId }, { reviewerId: userId }] }
+          : {}),
+      }),
+    );
   }
 
   /**
@@ -52,12 +70,14 @@ export class ContentService {
    * szövegtől független feltétel -- ma NÉGY kész szövegű poszt áll pontosan itt,
    * 2026-08-18 óta (a szám és a határa a `content-state.ts` fejlécében).
    */
-  waitingForImage() {
-    return this.repository.list({
-      imageRequired: true,
-      imageAttachedAt: null,
-      state: { in: STATES_THAT_CAN_WAIT_FOR_IMAGE },
-    });
+  async waitingForImage() {
+    return this.withMoves(
+      await this.repository.list({
+        imageRequired: true,
+        imageAttachedAt: null,
+        state: { in: STATES_THAT_CAN_WAIT_FOR_IMAGE },
+      }),
+    );
   }
 
   /**
@@ -66,8 +86,10 @@ export class ContentService {
    * A dátum nélküli tételek NEM szerepelnek benne, és ez szándékos: egy naptár,
    * ami a dátum nélkülieket is mutatja, nem naptár, hanem lista.
    */
-  calendar(from: Date, to: Date) {
-    return this.repository.list({ plannedFor: { gte: from, lte: to } });
+  async calendar(from: Date, to: Date) {
+    return this.withMoves(
+      await this.repository.list({ plannedFor: { gte: from, lte: to } }),
+    );
   }
 
   async detail(id: string) {
@@ -92,7 +114,10 @@ export class ContentService {
           )
         : null;
 
-    return { ...item, blockers, schedule };
+    // A RÉSZLET IS MEGKAPJA A LÉPÉSEKET, ugyanabból a forrásból, mint a lista.
+    // Ha csak a lista kapná meg, egy részletről nyíló cselekvés megint a
+    // felület találgatásán állna.
+    return { ...item, blockers, schedule, moves: moveOptions(item.state) };
   }
 
   /**

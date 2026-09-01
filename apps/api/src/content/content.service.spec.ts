@@ -13,6 +13,7 @@ function serviceWith(
   overrides: Partial<{
     moveState: ContentRepository["moveState"];
     detail: ContentRepository["detail"];
+    list: ContentRepository["list"];
   }> = {},
 ) {
   const calls: unknown[] = [];
@@ -24,6 +25,7 @@ function serviceWith(
     detail: (async () => ({
       id: "c1",
     })) as unknown as ContentRepository["detail"],
+    list: (async () => []) as unknown as ContentRepository["list"],
     ...overrides,
   } as unknown as ContentRepository;
   return { service: new ContentService(repository), calls };
@@ -281,5 +283,50 @@ describe("moving a piece of content", () => {
     const call = calls[0] as { scheduleAnchoredAt?: Date; scheduledFor?: Date };
     assert.ok(call.scheduleAnchoredAt instanceof Date);
     assert.ok(call.scheduledFor instanceof Date);
+  });
+});
+
+describe("what the list hands to the screen", () => {
+  /**
+   * A SOR MAGA MONDJA MEG, MIT LEHET BELŐLE LÉPNI.
+   *
+   * E nélkül a felületnek le kellene másolnia az átmenetek tábláját, és akkor
+   * ugyanaz a szabály két helyen állna. A második egy nap csendben elavulna --
+   * és a különbség egy olyan gombban jelenne meg, ami elutasításba fut.
+   */
+  it("puts the possible steps on every row", async () => {
+    const { service } = serviceWith({
+      list: (async () => [
+        { id: "c1", state: "AWAITING_APPROVAL" },
+        { id: "c2", state: "SENT" },
+      ]) as unknown as ContentRepository["list"],
+    });
+
+    const rows = await service.waitingForMe("approver", "user-1");
+
+    // A JÓVÁHAGYÁSRA VÁRÓ SORNAK VAN LÉPÉSE, ÉS MIND JÓVÁHAGYÓI.
+    assert.ok(rows[0]!.moves.length > 0);
+    assert.ok(rows[0]!.moves.every((move) => move.requiresApproval));
+
+    // A KIKÜLDÖTTNEK EGY SINCS. Ez a két állítás EGYÜTT mér: ha a mező mindig
+    // üres lenne, az első pirosodna; ha mindig tele, a második.
+    assert.deepEqual(rows[1]!.moves, []);
+  });
+
+  /**
+   * A KÉPRE VÁRÓ LISTA UGYANÚGY KAPJA MEG. Külön végpont, külön hívás -- és egy
+   * kimaradt sor pont ott venné el a cselekvést, ahol a leghosszabb ideje áll
+   * valami.
+   */
+  it("puts them on the image queue too", async () => {
+    const { service } = serviceWith({
+      list: (async () => [
+        { id: "c1", state: "AWAITING_APPROVAL" },
+      ]) as unknown as ContentRepository["list"],
+    });
+
+    const rows = await service.waitingForImage();
+
+    assert.ok(rows[0]!.moves.length > 0);
   });
 });
