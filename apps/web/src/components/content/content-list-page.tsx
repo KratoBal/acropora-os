@@ -23,7 +23,10 @@ import {
   CONTENT_ROLE_LABELS,
   CONTENT_STATE_LABELS,
   CONTENT_WAITS_ON_LABELS,
+  contentAgeLabel,
   contentImageLabel,
+  oldestAge,
+  oldestFirst,
 } from "./content-labels";
 
 const ROLES: ContentViewerRole[] = ["approver", "reviewer", "author", "sender"];
@@ -108,8 +111,41 @@ export function ContentListPage() {
         description="Ami rád vár, és ami képre vár."
       />
 
-      <label className="block space-y-1">
-        <span className="text-sm font-medium">Kinek a szemével</span>
+      {/*
+        AZ ÖSSZEGZŐ CSÍK LEGFELÜL, A SZEREP-VÁLASZTÓ ELŐTT IS.
+        Aki megnyitja az oldalt, ne előbb egy választót értelmezzen, és csak
+        görgetés után tudja meg, hogy hat tétel áll hetek óta. A darabszám
+        önmagában kevés: a legrégebbi KORA az, ami megmondja, sürgős-e.
+      */}
+      <StaleSummary items={waitingForImage ?? []} />
+
+      {/*
+        A KÉPRE VÁRÓ LISTA ELÖL ÁLL, a szerep szerinti sor ELŐTT.
+        Nem esztétika: a képre váró tételek HETEK óta állnak, a jóváhagyási sor
+        pedig rutin. Ha a szerep szerinti lista hosszú lesz (és lesz), a régóta
+        álló tételek a görgetési vonal alá kerülnének -- vagyis pont az válna
+        láthatatlanná, amiért a felület készül.
+
+        És soha nem függ a szerep-választótól: a kép Lucára vár, akárki írta a
+        szöveget.
+      */}
+      {loading ? (
+        <Skeleton className="h-32" />
+      ) : (
+        <ContentSection
+          title="Képre vár"
+          items={oldestFirst(waitingForImage ?? [])}
+          empty="Semmi nem vár képre."
+        />
+      )}
+
+      {/*
+        A SZEREP-VÁLASZTÓ LEJJEBB ÉS KISEBB SÚLLYAL. Kell, mert a lektoroknak és
+        a küldőknek ez a belépési pontjuk -- de nem az első dolog, amit egy
+        jóváhagyónak látnia kell.
+      */}
+      <label className="block space-y-1 border-t border-slate-200 pt-4">
+        <span className="text-sm text-slate-500">Kinek a szemével</span>
         <Select
           value={role}
           onChange={(event) => setRole(event.target.value as ContentViewerRole)}
@@ -133,24 +169,11 @@ export function ContentListPage() {
       {loading ? (
         <Skeleton className="h-32" />
       ) : (
-        <>
-          <ContentSection
-            title={CONTENT_ROLE_LABELS[role]}
-            items={items ?? []}
-            empty="Ebben a nézetben most nincs tétel."
-          />
-          {/*
-            A KÉPRE VÁRÓ LISTA KÜLÖN ÁLL, MINDIG. Nem a szerep-választótól függ:
-            a kép Lucára vár, akárki írta a szöveget, és ma ez az a hat tétel,
-            ami hetek óta mozdulatlan. Ha a szerep-szűrő elrejthetné, pontosan
-            az veszne el, amiért a lista készült.
-          */}
-          <ContentSection
-            title="Képre vár"
-            items={waitingForImage ?? []}
-            empty="Semmi nem vár képre."
-          />
-        </>
+        <ContentSection
+          title={CONTENT_ROLE_LABELS[role]}
+          items={items ?? []}
+          empty="Ebben a nézetben most nincs tétel."
+        />
       )}
     </div>
   );
@@ -186,8 +209,35 @@ function ContentSection({
   );
 }
 
+/**
+ * AZ ÖSSZEGZŐ CSÍK: hány tétel vár képre, és mióta áll a legrégebbi.
+ *
+ * ÜRES LISTÁRA NEM JELENIK MEG. Egy „0 tétel vár képre" csík minden nap ott
+ * állna, és pár nap alatt megtanítaná az olvasót, hogy ne nézzen oda -- pont
+ * akkorra, amikor először mondana valamit.
+ */
+function StaleSummary({ items }: { items: ContentListItem[] }) {
+  const oldest = oldestAge(items);
+  if (items.length === 0 || !oldest) return null;
+
+  return (
+    <Card className="flex items-center justify-between gap-3 p-4">
+      <div>
+        <p className="font-medium">Képre vár</p>
+        <p className="text-sm text-muted-foreground">
+          a legrégebbi: {oldest.text}
+        </p>
+      </div>
+      <Badge variant={oldest.stale ? "warning" : "neutral"}>
+        {items.length}
+      </Badge>
+    </Card>
+  );
+}
+
 function ContentRow({ item }: { item: ContentListItem }) {
   const image = contentImageLabel(item);
+  const age = contentAgeLabel(item.updatedAt);
   return (
     <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
       <div className="min-w-0">
@@ -198,6 +248,12 @@ function ContentRow({ item }: { item: ContentListItem }) {
         </p>
       </div>
       <div className="flex items-center gap-2">
+        {/*
+          A KOR-CÍMKE MINDEN SORON. A szekció létezése kiemeli a csoportot, az
+          egymáshoz képesti sürgősséget viszont csak ez mutatja meg: e nélkül a
+          hét hete álló és a két napja készült tétel egyformán néz ki.
+        */}
+        <Badge variant={age.stale ? "warning" : "neutral"}>{age.text}</Badge>
         <Badge variant={image.waiting ? "warning" : "neutral"}>
           {image.text}
         </Badge>

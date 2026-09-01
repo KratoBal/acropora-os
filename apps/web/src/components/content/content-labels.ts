@@ -62,3 +62,72 @@ export function contentImageLabel(item: {
   if (item.imageAttachedAt) return { text: "kép megvan", waiting: false };
   return { text: "képre vár", waiting: true };
 }
+
+/**
+ * MENNYI IDEJE ÁLL EGY TÉTEL, EMBERI ALAKBAN.
+ *
+ * MIÉRT KELL KÜLÖN CÍMKE, ÉS MIÉRT NEM ELÉG A SZEKCIÓ: ma a hét hete álló és a
+ * két napja készült tétel EGYFORMA jelvénnyel áll egymás mellett. A szekció
+ * LÉTEZÉSE kiemeli a hat tételt, az egymáshoz képesti sürgősségük viszont nem
+ * látszik -- azt megint soronként kell kiolvasni, pontosan az, amit el akartunk
+ * kerülni.
+ *
+ * A HATÁR HÉT NAP, ÉS EZ DÖNTÉS: egy heti kör alatt minden tétel megkap egy
+ * pillantást, tehát ami annál régebben áll, az KIMARADT valamiből. Nem
+ * mérésből jön, hanem a munka ritmusából, és ezért mondom ki: ha kiderül, hogy
+ * a kör nem heti, ez a szám az első, amit át kell írni.
+ */
+export const CONTENT_STALE_DAYS = 7;
+
+export function contentAgeLabel(
+  updatedAt: string,
+  now: Date = new Date(),
+): { text: string; stale: boolean; days: number } {
+  const days = Math.floor(
+    (now.getTime() - new Date(updatedAt).getTime()) / (24 * 60 * 60 * 1000),
+  );
+
+  // A JÖVŐBELI DÁTUM NEM HIBA, HANEM ÓRAELTÉRÉS. Egy „-2 napja" felirat a
+  // felületen bizalmat visz el; a „ma" mindkét irányban helyes válasz arra,
+  // amit a felhasználó lát.
+  if (days <= 0) return { text: "ma", stale: false, days: 0 };
+  if (days === 1) return { text: "1 napja", stale: false, days };
+  if (days < 7) return { text: `${days} napja`, stale: false, days };
+
+  const weeks = Math.floor(days / 7);
+  return {
+    text: weeks === 1 ? "1 hete" : `${weeks} hete`,
+    stale: days >= CONTENT_STALE_DAYS,
+    days,
+  };
+}
+
+/**
+ * A LEGRÉGEBBI TÉTEL KORA EGY LISTÁBAN, az összegző csíkhoz.
+ *
+ * ÜRES LISTÁRA `null`, nem nulla: a „0 napja" azt állítaná, hogy van egy tétel,
+ * ami ma keletkezett -- holott nincs egy sem.
+ */
+export function oldestAge(
+  items: readonly { updatedAt: string }[],
+  now: Date = new Date(),
+): ReturnType<typeof contentAgeLabel> | null {
+  if (items.length === 0) return null;
+  return items
+    .map((item) => contentAgeLabel(item.updatedAt, now))
+    .reduce((oldest, current) =>
+      current.days > oldest.days ? current : oldest,
+    );
+}
+
+/**
+ * A LEGRÉGEBBI ELÖL. A képre váró listában ez a sorrend maga az információ: a
+ * hét hete álló tétel nem keveredhet a tegnapiak közé.
+ */
+export function oldestFirst<T extends { updatedAt: string }>(
+  items: readonly T[],
+): T[] {
+  return [...items].sort(
+    (a, b) => new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime(),
+  );
+}
