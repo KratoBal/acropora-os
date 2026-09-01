@@ -30,7 +30,31 @@ import {
 } from "./content-labels";
 import { ContentRowActions } from "./content-row-actions";
 
-const ROLES: ContentViewerRole[] = ["approver", "reviewer", "author", "sender"];
+/**
+ * A NÉZET NEM CSAK SZEREP LEHET, HANEM „AMI RÁM VÁR" IS.
+ *
+ * MIÉRT A VÁLASZTÓBAN, ÉS NEM KÜLÖN SZEKCIÓBAN: így egyetlen helyen dől el, mit
+ * néz a felhasználó, és LÁTSZIK, hogy szűrt listát lát -- egy kattintással
+ * bármelyik szerepre válthat. Egy külön, mindig ott álló „rám vár" doboz
+ * ugyanezt mutatná, de nem mondaná meg, hogy a többi tétel hova lett.
+ */
+type ContentView = "mine" | ContentViewerRole;
+
+const VIEWS: ContentView[] = [
+  "mine",
+  "approver",
+  "reviewer",
+  "author",
+  "sender",
+];
+
+const VIEW_LABELS: Record<ContentView, string> = {
+  mine: "ami rám vár",
+  approver: CONTENT_ROLE_LABELS.approver,
+  reviewer: CONTENT_ROLE_LABELS.reviewer,
+  author: CONTENT_ROLE_LABELS.author,
+  sender: CONTENT_ROLE_LABELS.sender,
+};
 
 /**
  * A TARTALOM-SOR LISTÁJA: ami RÁM vár.
@@ -47,8 +71,14 @@ const ROLES: ContentViewerRole[] = ["approver", "reviewer", "author", "sender"];
  */
 export function ContentListPage() {
   const { session } = useAuth();
-  const [role, setRole] = useState<ContentViewerRole>("approver");
+  // AZ ALAPÉRTELMEZETT NÉZET AZ, AMI RÁM VÁR. Balázs panasza szó szerint az volt,
+  // hogy nem látja, mi vár rá; egy szerep-választó, amit előbb be kell állítani,
+  // ezt a kérdést egy lépéssel odébb tolja.
+  const [view, setView] = useState<ContentView>("mine");
   const [items, setItems] = useState<ContentListItem[] | null>(null);
+  const [notCovered, setNotCovered] = useState<
+    { role: ContentViewerRole; reason: string }[]
+  >([]);
   const [waitingForImage, setWaitingForImage] = useState<
     ContentListItem[] | null
   >(null);
@@ -71,10 +101,16 @@ export function ContentListPage() {
         // listává mosná, és épp az a NÉGY poszt tűnne el benne, ami ma két hete
         // óta kizárólag fotóra vár.
         const [waiting, images] = await Promise.all([
-          contentApi.waiting(token, role, signal),
+          view === "mine"
+            ? contentApi.waitingOnMe(token, signal)
+            : contentApi.waiting(token, view, signal),
           contentApi.waitingForImage(token, signal),
         ]);
-        setItems(waiting);
+        // A KÉT VÁLASZ ALAKJA MÁS, ÉS SZÁNDÉKOSAN: a „rám vár" nézet megnevezi,
+        // mit NEM fed le. A szerep szerinti nem, mert ott a felhasználó maga
+        // választotta ki, mit néz.
+        setItems(Array.isArray(waiting) ? waiting : waiting.items);
+        setNotCovered(Array.isArray(waiting) ? [] : waiting.notCovered);
         setWaitingForImage(images);
       } catch (cause) {
         if (!(cause instanceof DOMException && cause.name === "AbortError"))
@@ -87,7 +123,7 @@ export function ContentListPage() {
         if (!signal?.aborted) setLoading(false);
       }
     },
-    [canView, role, token],
+    [canView, view, token],
   );
 
   useEffect(() => {
@@ -169,22 +205,34 @@ export function ContentListPage() {
       <label className="block space-y-1 border-t border-slate-200 pt-4">
         <span className="text-sm text-slate-500">Kinek a szemével</span>
         <Select
-          value={role}
-          onChange={(event) => setRole(event.target.value as ContentViewerRole)}
+          value={view}
+          onChange={(event) => setView(event.target.value as ContentView)}
         >
-          {ROLES.map((value) => (
+          {VIEWS.map((value) => (
             <option key={value} value={value}>
-              {CONTENT_ROLE_LABELS[value]}
+              {VIEW_LABELS[value]}
             </option>
           ))}
         </Select>
       </label>
 
+      {/*
+        AMIT EZ A NÉZET NEM FED LE, AZ ITT ÁLL, NEM ELHALLGATVA.
+        Egy „ami rám vár" lista, ami egy negyedét kihagyja és erről nem szól,
+        azt a hamis megnyugvást adja, hogy minden ott van. Aki nem tudja, hogy
+        hiányzik valami, a hiányzót nem létezőnek hiszi.
+      */}
+      {view === "mine" && notCovered.length > 0 ? (
+        <p className="text-xs text-slate-500">
+          {notCovered.map((entry) => entry.reason).join(" ")}
+        </p>
+      ) : null}
+
       {loading ? (
         <Skeleton className="h-32" />
       ) : (
         <ContentSection
-          title={CONTENT_ROLE_LABELS[role]}
+          title={VIEW_LABELS[view]}
           items={items}
           empty="Ebben a nézetben most nincs tétel."
           onDone={reload}

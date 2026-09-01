@@ -87,3 +87,17 @@ export interface ContentListItem {
 }
 
 export type ContentListResponse = ContentListItem[];
+
+/**
+ * A „MI VÁR RÁM" NÉZET VÁLASZA.
+ *
+ * NEM CSAK LISTA, ÉS EZ SZÁNDÉKOS: a `notCovered` megnevezi, mit NEM fed le ez a
+ * nézet. Ma a `sender` szerep nem vezethető le semmiből (nincs mező, nincs jog),
+ * és egy „mi vár rám" lista, ami erről hallgat, azt a hamis megnyugvást adná,
+ * hogy minden ott van. Aki nem tudja, hogy hiányzik valami, a hiányzót nem
+ * létezőnek hiszi.
+ */
+export interface ContentWaitingOnMeResponse {
+  items: ContentListItem[];
+  notCovered: { role: ContentViewerRole; reason: string }[];
+}
