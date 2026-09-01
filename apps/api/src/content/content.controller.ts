@@ -1,5 +1,9 @@
 import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
-import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
+import {
+  hasPermission,
+  PERMISSIONS,
+  type AuthenticatedUser,
+} from "@acropora/types";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
@@ -14,10 +18,16 @@ import {
 /**
  * A TARTALOM-SOR VÉGPONTJAI.
  *
- * A JOGOK HÁROM SZINTEN ÁLLNAK, és a `move` az egyetlen, ami nem egyetlen
- * jogot kér: a jóváhagyás és a kiküldésre bocsátás `content.approve`, minden
- * más lépés `content.manage`. A kettő szétválasztása a KAPU maga -- egy közös
- * jog azt jelentené, hogy aki írja, jóvá is hagyhatja.
+ * A JOGOK HÁROM SZINTEN ÁLLNAK: az olvasás `content.view`, a lépések
+ * `content.manage`, a jóváhagyói lépések pedig `content.approve` alatt.
+ *
+ * A KÉT VÉGPONT (`move` és `approve-move`) ÖNMAGÁBAN NEM KAPU, és ezt korábban
+ * ez a fejléc tévesen állította. Mindkettő ugyanazt a szolgáltatás-metódust
+ * hívja, tehát amíg a döntés a végpontválasztáson múlt, egy `content.manage`
+ * jogú hívó a `/move` úton kiadhatta a jóváhagyást is. A KAPU MA A
+ * SZOLGÁLTATÁSBAN VAN (`requiresApproval`), ott, ahol a célállapot is ismert;
+ * a két végpont attól hasznos, hogy a keret a jogtalan hívást olcsóbban
+ * elutasítja, mint mi -- de nem attól, hogy elválasztja a döntést.
  */
 @Controller("content")
 export class ContentController {
@@ -66,10 +76,14 @@ export class ContentController {
    * tételről, és a második írás csendben felülírná az elsőt. Így a hívó
    * kimondja, mit LÁTOTT, és ha közben elmozdult, hibát kap.
    *
-   * A JOG A CÉLÁLLAPOTTÓL FÜGG: a jóváhagyás és a kiküldésre bocsátás
-   * `content.approve`, minden más `content.manage`. Ezt a szolgáltatás nem
-   * tudja eldönteni, mert a jogot a keret ellenőrzi a hívás ELŐTT -- ezért két
-   * végpont van, nem egy.
+   * A JOG A CÉLÁLLAPOTTÓL FÜGG, ÉS EZT A SZOLGÁLTATÁS DÖNTI EL, NEM A VÉGPONT.
+   *
+   * Ez a mondat korábban az ellenkezőjét állította („ezért két végpont van, nem
+   * egy"), és abból egy valódi rés lett: ez a végpont `content.manage` jogot
+   * kér, a törzse viszont bármelyik célállapotot elfogadta, tehát a jóváhagyást
+   * is. A dekorátor tehát a BELÉPÉST szabályozza, a LÉPÉST a szolgáltatás
+   * (`requiresApproval`) -- aki jóváhagyói lépést kér jóváhagyói jog nélkül,
+   * `403`-at kap, akkor is, ha ezen az úton jött be.
    */
   @Post(":id/move")
   @RequirePermissions(PERMISSIONS.CONTENT_MANAGE)
@@ -78,23 +92,42 @@ export class ContentController {
     @Body() input: ContentMoveDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    void user;
-    return this.service.move({ id, ...input });
+    return this.service.move({
+      id,
+      ...input,
+      actorCanApprove: hasPermission(user, PERMISSIONS.CONTENT_APPROVE),
+    });
   }
 
   /**
    * A JÓVÁHAGYÓ LÉPÉSEK KÜLÖN VÉGPONTON, KÜLÖN JOG ALATT.
    *
-   * MIÉRT NEM EGY VÉGPONT EGY JOGGAL: a jogot a keret a hívás előtt
-   * ellenőrzi, a célállapotot viszont a törzs hordozza. Egy közös végpont vagy
-   * a szigorúbb jogot kérné mindenre (és akkor a szerző sem tudna vázlatot
-   * lektorálásra adni), vagy az enyhébbet (és akkor a jóváhagyási kapu eltűnne).
-   * A kettő szétválasztása a kapu maga.
+   * MIÉRT MARAD KÉT VÉGPONT, HA A DÖNTÉS ÚGYIS A SZOLGÁLTATÁSBAN VAN: mert a
+   * keret a jogtalan hívást a törzs futtatása ELŐTT utasítja el, és mert a
+   * kliens így a saját jogából tudja, melyik utat kell hívnia -- nem a szerver
+   * hibájából tanulja meg. A kapu viszont NEM ettől kapu: a végpontot a hívó
+   * választja, a célállapotot pedig a törzs hordozza, tehát az elválasztás
+   * önmagában csak addig véd, amíg a hívó jóhiszemű.
    */
   @Post(":id/approve-move")
   @RequirePermissions(PERMISSIONS.CONTENT_APPROVE)
-  approveMove(@Param("id") id: string, @Body() input: ContentMoveDto) {
-    return this.service.move({ id, ...input });
+  approveMove(
+    @Param("id") id: string,
+    @Body() input: ContentMoveDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    // A JOGOT ITT IS A FELHASZNÁLÓBÓL OLVASSUK, nem `true`-t adunk át.
+    //
+    // Egy beégetett `true` azt jelentené, hogy a szolgáltatás ellenőrzése ezen a
+    // végponton csak addig ér valamit, amíg a `@RequirePermissions` dekorátor a
+    // helyén van. Egy elgépelt vagy törölt dekorátor néma lyukat hagyna, és épp
+    // azt a kaput, amiért ez a végpont külön létezik. Így a két ellenőrzés
+    // FÜGGETLEN: mindkettőnek külön kell elromlania ahhoz, hogy baj legyen.
+    return this.service.move({
+      id,
+      ...input,
+      actorCanApprove: hasPermission(user, PERMISSIONS.CONTENT_APPROVE),
+    });
   }
 
   @Post(":id/comments")

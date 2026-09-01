@@ -210,3 +210,37 @@ export function planTransition(
 export function allowedMoves(from: ContentState): readonly ContentState[] {
   return TRANSITIONS[from];
 }
+
+/**
+ * MELYIK LÉPÉS KÍVÁN JÓVÁHAGYÓI JOGOT.
+ *
+ * A SZABÁLY EGY MONDAT: az `AWAITING_APPROVAL`-ból KIVEZETŐ minden út a
+ * jóváhagyó döntése, mert az az állapot kifejezetten RÁ vár (`WAITS_ON`).
+ * Ezért nem külön lista ez, hanem a fenti táblából számolt érték: egy második
+ * felsorolás egy nap csendben elavulna, és épp a kapunál.
+ *
+ * MIÉRT AZ ELUTASÍTÁS IS (`AWAITING_APPROVAL -> AWAITING_REVISION`), holott az
+ * nem enged ki semmit. Két érv állt szemben, és a döntést a MÉRHETŐ kockázat
+ * hozta meg, nem a szimmetria:
+ *
+ *   AMI MELLETTE SZÓL: az az állapot a jóváhagyóra vár, tehát aki nem ő, annak
+ *   nincs dolga a tétellel. Ha az elutasítás `content.manage` joggal menne, egy
+ *   szerkesztő KIVEHETNÉ a saját tételét a jóváhagyói sorból -- nem küldené ki,
+ *   de a jóváhagyó soha nem látná. Ez a fajta hiba NÉMA: nem történik semmi
+ *   rossz, csak nem történik meg a jóváhagyás.
+ *
+ *   AMI ELLENE SZÓL: az elutasítás visszatart, nem kienged, és Balázs szabálya
+ *   a KIMENETELRŐL szól („semmi nem mehet ki nélküle vagy Luca nélkül").
+ *
+ * A DÖNTÉS AZ ELSŐ MELLETT, mert a két tévedés ára nem egyforma. Ha fölöslegesen
+ * kötjük jóváhagyói joghoz, valaki kérni fog egy visszaküldést -- hangos,
+ * azonnal kiderül, egy sorral feloldható. Ha fölöslegesen engedjük el, a tétel
+ * csendben eltűnik a jóváhagyó listájáról, és senki nem keresi.
+ *
+ * AMI EZ ALÁ NEM TARTOZIK, ÉS SZÁNDÉKOSAN: a `READY_TO_SEND`-ből kifelé vezető
+ * utak (ütemezés, kiküldés). Azok a küldő lépései, a jóváhagyás UTÁN, és a
+ * kapu addigra már bezárult mögöttük.
+ */
+export function requiresApproval(from: ContentState): boolean {
+  return WAITS_ON[from] === "approver";
+}

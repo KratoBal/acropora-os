@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -14,6 +15,7 @@ import {
 import {
   contentBlockers,
   planTransition,
+  requiresApproval,
   type ContentState,
 } from "./content-state.js";
 import { scheduleStanding, scheduleTargetFor } from "./content-schedule.js";
@@ -94,26 +96,55 @@ export class ContentService {
   }
 
   /**
-   * ÁLLAPOTVÁLTÁS, HÁROM KAPUVAL.
+   * ÁLLAPOTVÁLTÁS, NÉGY KAPUVAL.
    *
    * 1. Az átmenet engedélyezett-e (`planTransition`).
-   * 2. Kíván-e KÜLSŐ munkát -- ilyenkor NEM írunk, hanem visszautasítunk. A
+   * 2. Van-e hozzá JOGA a hívónak (`requiresApproval`).
+   * 3. Kíván-e KÜLSŐ munkát -- ilyenkor NEM írunk, hanem visszautasítunk. A
    *    Facebook-oldali visszavonás külön döntés, és amíg nincs megépítve, egy
    *    állapot-átírás azt hazudná, hogy a poszt nem megy ki.
-   * 3. A tétel abban az állapotban van-e, amiben a hívó hitte (feltételes
+   * 4. A tétel abban az állapotban van-e, amiben a hívó hitte (feltételes
    *    írás a repository-ban).
+   *
+   * A MÁSODIK KAPU ITT ÁLL, ÉS NEM A VÉGPONTON, ÉS EZ A LÉNYEGE.
+   *
+   * Korábban a jóváhagyási kapu KIZÁRÓLAG abból állt, hogy két végpont van: a
+   * `/move` `content.manage` jogot kért, az `/approve-move` `content.approve`-ot.
+   * Csakhogy mindkettő EZT a metódust hívta, ugyanazzal a törzzsel, és a `to`
+   * mező mind a kilenc állapotot elfogadta. Vagyis a kaput a HÍVÓ választotta ki
+   * azzal, hogy melyik URL-re küldött -- egy `content.manage` jogú szerkesztő a
+   * `/move` végponton át kiadhatta a jóváhagyást is. A kapu nem volt kapu.
+   *
+   * A végpont-szintű jog MEGMARAD (a keret olcsóbban utasít el, mint mi), de a
+   * döntő ellenőrzés itt van, ahol a CÉLÁLLAPOT is ismert. Egy jövendő harmadik
+   * végpont így nem tudja megkerülni: aki ezt a metódust hívja, annak meg kell
+   * mondania, hogy a hívó jóváhagyhat-e.
+   *
+   * AZ `actorCanApprove` KÖTELEZŐ MEZŐ, nem opcionális. Egy alapértelmezett
+   * érték itt azt jelentené, hogy egy új hívó CSENDBEN elfelejtheti -- így
+   * viszont a fordító szól, mielőtt bárki futtatná.
    */
   async move(input: {
     id: string;
     from: ContentState;
     to: ContentState;
     discardReason?: string;
+    actorCanApprove: boolean;
   }) {
     const planned = planTransition(input.from, input.to);
 
     if (planned.kind === "refused") {
       throw new BadRequestException(
         `Ez a lépés nem megengedett: ${input.from} -> ${input.to}.`,
+      );
+    }
+
+    // A JOG A KÜLSŐ MUNKA ELŐTT DŐL EL. Akinek nincs joga a lépéshez, annak a
+    // Facebook-oldali teendőről sem kell értesülnie: az már a lépés HOGYANJA,
+    // és ő odáig nem jut el.
+    if (requiresApproval(input.from) && !input.actorCanApprove) {
+      throw new ForbiddenException(
+        "Ehhez a lépéshez jóváhagyói jog kell (content.approve).",
       );
     }
 
