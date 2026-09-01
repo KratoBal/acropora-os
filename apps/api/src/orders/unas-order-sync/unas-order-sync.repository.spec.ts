@@ -689,6 +689,61 @@ describe("UnasOrderSyncRepository.apply", () => {
     assert.equal(db.outbox[0]?.sku, "RF-BLUEM#UNASV#black");
   });
 
+  /// THE GATE THAT DECIDES WHETHER WE WRITE TO THE LIVE SHOP AT ALL.
+  ///
+  /// When a variant is in the ledger's `bookedOut` keys but no longer has a
+  /// catalog row, applyOrderStockDelta falls back to `syncToUnas: false` with
+  /// the comment "Missing catalog metadata is not safe to publish externally".
+  /// Measured on 2026-09-01: that branch ran in exactly one test, and NOTHING
+  /// asserted its effect - flipping the value to `true` left all 1624 API
+  /// tests green. A branch that executes is not a branch that is guarded.
+  ///
+  /// The assertion below is on the OUTBOX, not on the flag: what matters is
+  /// that nothing is queued for the shop, which is the observable consequence
+  /// a reader can check without knowing the flag exists.
+  it("queues no shop stock update for a variant whose catalog row has vanished", async () => {
+    const db = new FakeDb();
+    db.warehouses.push({
+      id: "wh-1",
+      name: "Fő raktár",
+      createdAt: new Date(0),
+    });
+    db.runs.push({ id: "run-1", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+    db.variants.push({ id: "variant-gone", sku: "GONE-1" });
+    db.stockItems.push({
+      id: "stock-gone",
+      variantId: "variant-gone",
+      warehouseId: "wh-1",
+      onHand: new Prisma.Decimal(10),
+    });
+
+    await repositoryWith(db).apply(
+      "run-1",
+      [baseOrder({ items: [{ ...baseOrder().items[0]!, sku: "GONE-1" }] })],
+      null,
+      new Date("2026-07-20T15:00:00.000Z"),
+    );
+
+    /// The catalog row disappears between two sightings - an unlink or a
+    /// delete on the UNAS side. The ledger still remembers what was booked.
+    db.variants.length = 0;
+    db.outbox.length = 0;
+    db.runs.push({ id: "run-2", status: "RUNNING", activeKey: "UNAS_ORDERS" });
+
+    await repositoryWith(db).apply(
+      "run-2",
+      [baseOrder({ items: [] })],
+      null,
+      new Date("2026-07-20T16:00:00.000Z"),
+    );
+
+    assert.equal(
+      db.outbox.length,
+      0,
+      "a variant we can no longer describe must not have its stock published to the shop",
+    );
+  });
+
   it("books a package sale against every component and never against the package SKU", async () => {
     const db = new FakeDb();
     db.warehouses.push({
