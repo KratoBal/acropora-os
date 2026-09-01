@@ -238,6 +238,28 @@ export class ServiceAssetsService {
       return this.repository.addDocument({ ...common, content: file.buffer });
     }
 
+    // A BEKAPCSOLAS MEG NEM JELENTI, HOGY HASZNALHATO, es ezt a feltoltesi
+    // utnak MAGANAK kell megneznie.
+    //
+    // A LEGVESZELYESEBB TELEPITESI HIBA: a DOCUMENT_STORE_ROOT be van allitva,
+    // de a kotet nincs csatolva vagy a jelolo fajl hianyzik. A konyvtar
+    // ilyenkor IRHATO (a csatolasi pont ures konyvtara is az), tehat az iras
+    // SIKERUL -- csak epp a konteneri retegre, es a kovetkezo ujratelepites
+    // elviszi. Semmi nem hibazna, es a hiba hetekkel kesobb, letoltesnel
+    // derulne ki.
+    //
+    // AMIT ILYENKOR TESZUNK: visszaesunk az adatbazisra, es NAPLOZUNK. Nem
+    // elutasitas, mert a rendszernek mennie kell, es az adatbazis-ut ep; nem
+    // is csendes, mert a naplo es az allapot-vegpont is kimondja. A ket rossz
+    // valasz kozul (megall / csendben elveszit) egyik sem kell.
+    const status = await this.documentStore.describe();
+    if (status.state !== "ready") {
+      this.logger.warn(
+        `A dokumentum-tarolo be van kapcsolva, de nem hasznalhato (${status.state}: ${status.reason}). A feltoltes az adatbazisba megy.`,
+      );
+      return this.repository.addDocument({ ...common, content: file.buffer });
+    }
+
     // A BAJTOK ELOSZOR A TAROLOBA MENNEK, ES CSAK AZUTAN A SOR.
     //
     // A ket lehetseges felig-kesz allapot NEM egyforma sulyu. Ha eloszor a sor

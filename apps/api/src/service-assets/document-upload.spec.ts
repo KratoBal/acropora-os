@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import { collectDocumentKeys } from "./document-store/document-store.js";
 import { describe, it } from "node:test";
 
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
+import { FilesystemDocumentStore } from "./document-store/filesystem-document-store.js";
 import { InMemoryDocumentStore } from "./document-store/in-memory-document-store.js";
 import { ServiceAssetsService } from "./service-assets.service.js";
 import type { ServiceAssetsRepository } from "./service-assets.repository.js";
@@ -175,6 +180,55 @@ describe("where an uploaded document's bytes go", () => {
     } finally {
       delete process.env.DOCUMENT_STORE_ROOT;
       delete process.env.DOCUMENT_STORE_LIMIT_BYTES;
+    }
+  });
+
+  /**
+   * A LEGVESZÉLYESEBB TELEPÍTÉSI HIBA: a változó beállítva, a jelölő fájl
+   * elfelejtve.
+   *
+   * A könyvtár ilyenkor ÍRHATÓ -- a csatolási pont üres könyvtára is az --,
+   * tehát az írás SIKERÜLNE, csak épp a konténer rétegére, és a következő
+   * újratelepítés elvinné. Semmi nem hibázna, és a baj hetekkel később,
+   * letöltésnél derülne ki.
+   *
+   * A VÁLASZ: visszaesés az adatbázisra. Nem elutasítás, mert a rendszernek
+   * mennie kell és az adatbázis-út ép; nem is csendes, mert a napló és az
+   * állapot-végpont is kimondja.
+   */
+  it("falls back to the database when the store is on but not usable", async () => {
+    const unmarked = await mkdtemp(
+      path.join(tmpdir(), "document-store-nomark-"),
+    );
+    process.env.DOCUMENT_STORE_ROOT = unmarked;
+    const store = new FilesystemDocumentStore(unmarked);
+    let written: { content: Buffer | null } | null = null;
+    const service = new ServiceAssetsService(
+      repositoryThat({
+        addDocument: (async (input: { content: Buffer | null }) => {
+          written = input;
+          return {} as never;
+        }) as ServiceAssetsRepository["addDocument"],
+      }),
+      store,
+    );
+
+    try {
+      await service.addDocument(ASSET, "INVOICE", upload(), "user-1");
+
+      assert.ok(written, "a sornak létre kell jönnie");
+      assert.ok(
+        (written as { content: Buffer | null }).content,
+        "a bájtoknak az adatbázisba kell menniük",
+      );
+      assert.deepEqual(
+        await collectDocumentKeys(store.list()),
+        [],
+        "a tárolóba semmi nem kerülhet, amíg nem használható",
+      );
+    } finally {
+      delete process.env.DOCUMENT_STORE_ROOT;
+      await rm(unmarked, { recursive: true, force: true });
     }
   });
 

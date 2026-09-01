@@ -12,13 +12,14 @@ pontosan úgy, mint eddig.
 
 ## 0. Amit előre tudni kell
 
-|                                     |                                          |
-| ----------------------------------- | ---------------------------------------- |
-| a kötet útvonala a konténeren belül | `/data/document-store`                   |
-| a jelölő fájl neve                  | `.acropora-document-store`               |
-| a konténer felhasználója            | `nestjs`, uid **1001**, csoport `nodejs` |
-| a kapcsoló változó                  | `DOCUMENT_STORE_ROOT`                    |
-| a keret változója (nem kötelező)    | `DOCUMENT_STORE_LIMIT_BYTES`             |
+|                                     |                                                      |
+| ----------------------------------- | ---------------------------------------------------- |
+| a Coolify alkalmazás                | `acropora-api`, azonosító `t9gxx94ecwekwruxngps5i6v` |
+| a kötet útvonala a konténeren belül | `/data/document-store`                               |
+| a jelölő fájl neve                  | `.acropora-document-store`                           |
+| a konténer felhasználója            | `nestjs`, uid **1001**, csoport `nodejs`             |
+| a kapcsoló változó                  | `DOCUMENT_STORE_ROOT`                                |
+| a keret változója (nem kötelező)    | `DOCUMENT_STORE_LIMIT_BYTES`                         |
 
 **A jelölő fájlt az alkalmazás SOHA nem hozza létre**, és ez nem hiányosság,
 hanem a védelem maga. Egy írható könyvtár önmagában nem bizonyítja, hogy a kötet
@@ -47,7 +48,18 @@ korábbi lépés hibája ártalmatlan.
 4. **A mentés lássa a kötetet.** Ez a blokkoló feltétel, és nem technikai
    formaság: amíg a kötet nincs a mentésben, egy lemezre írt fájl KIKERÜL a
    mentésből, és a munka késznek LÁTSZANA.
-5. **Csak ezután:** `DOCUMENT_STORE_ROOT=/data/document-store`, majd újraindítás.
+5. **Csak ezután:** `DOCUMENT_STORE_ROOT=/data/document-store` beállítása a
+   Coolify alkalmazás környezeti változói közt, **majd újratelepítés**.
+
+**Melyik lépés után kell újratelepítés, és melyik után nem:** az 1-4. lépés a
+kötetet és a tartalmát érinti, azokhoz nem kell — a futó alkalmazás akkor sem
+ír rá, mert a változó még nincs beállítva. **Egyedül az 5. lépés kíván
+újratelepítést**, mert a környezeti változót az alkalmazás induláskor olvassa.
+
+**Ha a 2-3. lépést az 5. UTÁN pótolják**, az szintén újratelepítést kíván?
+**Nem.** A jelölőt és a jogosultságot a `describe()` minden híváskor újra
+megnézi, tehát a pótlás azonnal érvényes. Amit viszont pótlás előtt feltöltöttek,
+az már az adatbázisba ment (lásd a következő szakaszt), és ott is marad.
 
 ---
 
@@ -83,6 +95,36 @@ A végpont **`broken` állapotnál is 200-zal felel**. Aki ezt hívja, épp azt 
 megtudni, mi az állapot; egy 503 ugyanazt az információt rejtené el, amiért a
 végpont készült.
 
+### (a2) Mi történik, ha a jelölő lemarad
+
+**Ez a legvalószínűbb hiba azon a napon**, mert a jelölő az egyetlen lépés, ami
+nem magától értetődő: a kötet létrejön, a jogosultság beáll, minden „kész"-nek
+látszik.
+
+**A feltöltés ilyenkor NEM hasal el, és nem is megy a rossz helyre.** Az írási út
+minden feltöltés előtt megkérdezi a tároló állapotát, és ha az nem `ready`,
+**visszaesik az adatbázisra** — oda, ahol ma is minden sor áll. A rendszer megy
+tovább, adat nem vész el.
+
+A hiba két helyen látszik:
+
+- az állapot-végpont `enabled: true` mellett `not-configured` állapotot ad,
+- a naplóban egy figyelmeztetés áll minden ilyen feltöltésnél, a `reason`
+  mezővel együtt (megnevezi a hiányzó jelölő teljes útvonalát).
+
+**Miért visszaesés, és miért nem elutasítás:** a rendszernek mennie kell, és az
+adatbázis-út ép. Egy elutasítás a felhasználót állítaná meg egy olyan hiba
+miatt, amit nem ő okozott és nem is tud megoldani. **És miért nem csendes:** a
+napló és a végpont is kimondja, tehát a telepítési hiba nem tűnik el — csak nem
+a felhasználó fizet érte.
+
+**Amit ez NEM old meg:** ha a jelölő ott van, de a kötet nincs csatolva (valaki
+a csatolás előtt tette le, és a mount elfedte), akkor a `describe()` a csatolt,
+ÜRES könyvtárat látja jelölő nélkül, tehát `not-configured` — a visszaesés
+ugyanúgy véd. De ha valaki a CSATOLT kötetre teszi le a jelölőt, majd a kötetet
+később leválasztják, a könyvtár a jelölő nélkül marad, és ugyanez az ág fut.
+**Egyik esetben sem megy fájl olyan helyre, ahonnan eltűnhet.**
+
 ### (b) Egy feltöltés, ami túléli az újraindítást
 
 Az állapot-végpont azt mondja meg, hogy a beállítás **jó**. Azt nem, hogy a
@@ -93,6 +135,12 @@ tartalmát.
 1. Tölts fel egy dokumentumot egy tetszőleges eszközhöz.
 2. Töltsd le: a bájtoknak vissza kell jönniük.
 3. **Indítsd újra a konténert**, és töltsd le újra.
+
+**Ez a mérés EL TUD BUKNI, és pontosan ez a lényege:** ha a kötet nincs a
+helyén, a fájl az újraindítás után nincs meg, és a letöltés hibát ad. Egy
+ellenőrzés, ami nem tud elbukni, díszlet — ezért nem elég az állapot-végpontot
+megnézni, aminek a `ready` válasza egy nem csatolt, de megjelölt könyvtárra is
+igaz lenne.
 
 Ha a harmadik lépés után is megjön a fájl, a kötet tartós. Ha a letöltés
 `503`-at ad („A dokumentum tartalma a tárolóban nem érhető el"), akkor a fájl
