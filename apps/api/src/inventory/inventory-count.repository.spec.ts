@@ -3,6 +3,11 @@ import { describe, it } from "node:test";
 import { Prisma } from "@acropora/database";
 
 import {
+  createOutboxDouble,
+  type OutboxDoubleRow,
+} from "../testing/unas-stock-sync-outbox.double.js";
+
+import {
   InventoryCountRepository,
   type InventoryCountDatabase,
 } from "./inventory-count.repository.js";
@@ -50,14 +55,7 @@ class FakeDb {
     [];
   movements: Array<{ id: string; idempotencyKey: string | null }> = [];
   movementLines: Array<{ variantId: string; quantity: Prisma.Decimal }> = [];
-  outbox: Array<{
-    id: string;
-    variantId: string;
-    warehouseId: string;
-    status: string;
-    idempotencyKey: string;
-    targetOnHand: Prisma.Decimal;
-  }> = [];
+  outbox: OutboxDoubleRow[] = [];
   count = {
     id: "count-1",
     countNumber: "LELTAR-1",
@@ -160,48 +158,7 @@ class FakeDb {
     },
   };
 
-  unasStockSyncOutbox = {
-    /// No prior baseline-unknown row in these fixtures: the movement writer
-    /// asks before every publish, and these tests are not about that guard.
-    findFirst: async () => null,
-    /// Closes a single row by id. The writer uses it to dead-letter a publish
-    /// whose baseline was never known; these fixtures start from an empty
-    /// warehouse, so their rows take that path.
-    update: async (args: any) => {
-      const row = this.outbox.find(
-        (candidate: any) => candidate.id === args.where.id,
-      );
-      if (row) {
-        row.status = args.data.status;
-      }
-      return {};
-    },
-    updateMany: async (args: any) => {
-      let count = 0;
-      for (const row of this.outbox) {
-        if (
-          row.variantId === args.where.variantId &&
-          row.warehouseId === args.where.warehouseId &&
-          args.where.status.in.includes(row.status)
-        ) {
-          row.status = args.data.status;
-          count += 1;
-        }
-      }
-      return { count };
-    },
-    create: async (args: any) => {
-      this.outbox.push({
-        id: nextId("outbox"),
-        variantId: args.data.variantId,
-        warehouseId: args.data.warehouseId,
-        status: "PENDING",
-        idempotencyKey: args.data.idempotencyKey,
-        targetOnHand: args.data.targetOnHand,
-      });
-      return {};
-    },
-  };
+  unasStockSyncOutbox = createOutboxDouble(this.outbox, nextId);
 
   async $executeRaw() {
     return 1;

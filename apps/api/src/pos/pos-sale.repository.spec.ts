@@ -3,6 +3,11 @@ import { describe, it } from "node:test";
 import { Prisma } from "@acropora/database";
 
 import {
+  createOutboxDouble,
+  type OutboxDoubleRow,
+} from "../testing/unas-stock-sync-outbox.double.js";
+
+import {
   PosSaleRepository,
   type CreatePosSaleLine,
   type CreatePosSaleParams,
@@ -30,14 +35,7 @@ class FakeDb implements PosSaleDatabase {
     [];
   movements: Array<{ id: string; idempotencyKey: string | null }> = [];
   movementLines: Array<{ variantId: string; quantity: Prisma.Decimal }> = [];
-  outbox: Array<{
-    id: string;
-    variantId: string;
-    warehouseId: string;
-    status: string;
-    idempotencyKey: string;
-    targetOnHand: Prisma.Decimal;
-  }> = [];
+  outbox: OutboxDoubleRow[] = [];
   lastSalesOrderFindManyArgs: any;
   lastSalesOrderCountArgs: any;
 
@@ -139,54 +137,7 @@ class FakeDb implements PosSaleDatabase {
     },
   };
 
-  unasStockSyncOutbox = {
-    /// No prior baseline-unknown row in these fixtures: the movement writer
-    /// asks before every publish, and these tests are not about that guard.
-    findFirst: async () => null,
-    /// Closes a single row by id. The writer uses it to dead-letter a publish
-    /// whose baseline was never known; these fixtures start from an empty
-    /// warehouse, so their rows take that path.
-    update: async (args: any) => {
-      const row = this.outbox.find(
-        (candidate: any) => candidate.id === args.where.id,
-      );
-      if (row) {
-        row.status = args.data.status;
-      }
-      return {};
-    },
-    updateMany: async (args: any) => {
-      let count = 0;
-      for (const row of this.outbox) {
-        if (
-          row.variantId === args.where.variantId &&
-          row.warehouseId === args.where.warehouseId &&
-          args.where.status.in.includes(row.status)
-        ) {
-          row.status = args.data.status;
-          count += 1;
-        }
-      }
-      return { count };
-    },
-    create: async (args: any) => {
-      /// Returns the created row's id, as the contract promises. It used to
-      /// return `{}`, and the movement writer USES that id - it is how a
-      /// publish whose baseline was never known gets dead-lettered - so the
-      /// double handed `undefined` to the next call. Measured 2026-09-01:
-      /// three of the four doubles with this method had the same omission.
-      const row = {
-        id: nextId("outbox"),
-        variantId: args.data.variantId,
-        warehouseId: args.data.warehouseId,
-        status: "PENDING",
-        idempotencyKey: args.data.idempotencyKey,
-        targetOnHand: args.data.targetOnHand,
-      };
-      this.outbox.push(row);
-      return { id: row.id };
-    },
-  };
+  unasStockSyncOutbox = createOutboxDouble(this.outbox, nextId);
 
   async $executeRaw() {
     return 1;
