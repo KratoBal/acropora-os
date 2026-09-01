@@ -294,6 +294,26 @@ export class ServiceAssetsService {
     }
   }
 
+  /**
+   * A TAROLO ALLAPOTA, KIFELE IS OLVASHATOAN.
+   *
+   * MIERT KELL KULON, ES MIERT NEM ELEG, HOGY A KOD TUDJA: a telepitesnek
+   * (kotet, jelolo fajl, jogosultsag) van egy pillanata, amikor el kell donteni,
+   * SIKERULT-E. Enelkul a valasz csak egy feltoltessel derulne ki, es egy
+   * sikertelen feltoltes mar a felhasznalo elott tortenik.
+   *
+   * A KET KERDES KULON ALL, ahogy a kodban is: `enabled` azt mondja meg,
+   * HASZNALJUK-e (a DOCUMENT_STORE_ROOT be van-e allitva), a `status` pedig
+   * azt, HASZNALHATO-e. A ketto kulonbozo hibat jelent, es mas ember oldja fel
+   * oket: az elso beallitas, a masodik kotet vagy jogosultsag.
+   */
+  async documentStoreStatus() {
+    return {
+      enabled: documentStoreEnabled(),
+      status: await this.documentStore.describe(),
+    };
+  }
+
   async document(id: string, documentId: string, scope: PartnerScope) {
     const document = await this.repository.document(id, documentId, scope);
     if (!document) throw new NotFoundException("A dokumentum nem található.");

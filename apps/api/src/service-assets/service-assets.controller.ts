@@ -42,6 +42,23 @@ export class ServiceAssetsController {
     return this.service.list(query, partnerScopeOf(user));
   }
 
+  /**
+   * A DOKUMENTUM-TAROLO ALLAPOTA, a telepites ellenorzesehez.
+   *
+   * A `SERVICE_MANAGE` jog alatt all, es NEM publikus: az utvonalat es a hiba
+   * okat mondja ki, ami a rendszer belso felepiteserol beszel. Egy nyilvanos
+   * valtozat ezt ingyen adna oda barkinek.
+   *
+   * A VALASZ MINDIG 200, meg `broken` allapotnal is. Ez szandekos: aki ezt
+   * hivja, epp azt akarja MEGTUDNI, mi az allapot -- egy 503 ugyanazt az
+   * informaciot rejtene el, amiert a vegpont keszult.
+   */
+  @Get("document-store")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  documentStoreStatus() {
+    return this.service.documentStoreStatus();
+  }
+
   @Get("owners")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
   owners(
