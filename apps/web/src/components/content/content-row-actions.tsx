@@ -36,6 +36,22 @@ import { contentMoveLabel } from "./content-labels";
  *   3. az elvetés OKA kötelező, ahogy a szerveren is. Ok nélkül a gomb nem
  *      indul el, tehát a mező hiánya nem szerver-hibaként jelenik meg.
  */
+/**
+ * A HALK VEZÉRLŐ ALAKJA, EGY HELYEN.
+ *
+ * MIÉRT NEM MARADHAT KÉT PÉLDÁNYBAN: picasso mérése szerint a soron egy kiemelt
+ * és három halk vezérlő álljon. A lépés-gombok a `MoveButton`-on mennek át, a
+ * hozzászólás NEM -- és emiatt a súlyozás azonnal el is csúszott: „egy kiemelt,
+ * kettő halk és egy közepes" lett belőle, pont az az egyenetlenség, ami ellen az
+ * egész javaslat készült.
+ *
+ * EZ UGYANAZ AZ ALAK, mint amikor két út vezet ugyanahhoz a megjelenítéshez: a
+ * változtatás az EGYIKEN fut végig, a másik csendben régi marad. A közös
+ * komponens itt nem járható út (a hozzászólás nem lépés, és egy nem-lépést
+ * beleerőltetni többe kerülne), a közös ÉRTÉK viszont igen.
+ */
+const QUIET_CONTROL = "px-1 underline underline-offset-2";
+
 export function ContentRowActions({
   item,
   onDone,
@@ -135,6 +151,7 @@ export function ContentRowActions({
         <Button
           variant="ghost"
           size="sm"
+          className={QUIET_CONTROL}
           disabled={pending}
           onClick={() => setCommenting((open) => !open)}
         >
@@ -256,9 +273,7 @@ function MoveButton({
         // szétcsúszna az elsőtől.
         variant={move.primary ? "primary" : "ghost"}
         size="sm"
-        className={
-          move.primary ? undefined : "px-1 underline underline-offset-2"
-        }
+        className={move.primary ? undefined : QUIET_CONTROL}
         disabled={pending || blocked !== null}
         title={blocked ?? undefined}
         onClick={onClick}

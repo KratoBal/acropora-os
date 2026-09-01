@@ -376,4 +376,35 @@ describe("which button stands out", () => {
     expect(highlighted.className).not.toContain("underline");
     expect(quiet.className).toContain("underline");
   });
+
+  /**
+   * ÉS A HOZZÁSZÓLÁS UGYANOLYAN HALK, MINT A TÖBBI MÁSODLAGOS VEZÉRLŐ.
+   *
+   * MÉRVE 2026-09-01, picasso találta meg a friss ágon: a lépés-gombok a
+   * `MoveButton`-on mennek át, a hozzászólás nem, ezért a halk alak csak az
+   * előbbiekre került rá. A soron így „egy kiemelt, kettő halk és egy közepes"
+   * állt -- pont az az egyenetlen súlyozás, ami ellen az egész javaslat készült.
+   *
+   * EZ AZ ÁLLÍTÁS AZÉRT KELL, mert a hiba SEMMILYEN meglévő tesztet nem
+   * buktatott: minden gomb ott volt, minden kattintás működött, csak a súlyuk
+   * volt más. Amit nem mérünk, azt a következő átrendezés újra elronthatja.
+   */
+  it("keeps the comment control as quiet as the secondary steps", () => {
+    render(
+      <ContentRowActions
+        item={item({ moves: [approvingStep, ordinaryStep] })}
+        onDone={() => {}}
+      />,
+    );
+
+    const secondary = screen.getByRole("button", { name: "lektorálásra vár" });
+    const comment = screen.getByRole("button", { name: "Hozzászólás" });
+
+    expect(comment.className).toContain("underline");
+    // ÉS UGYANAZ AZ ALAK, nem csak „szintén aláhúzott": ha a kettő egy nap
+    // eltérne, ez az állítás mondja meg, nem egy képernyőkép.
+    for (const shape of ["px-1", "underline-offset-2"])
+      expect(comment.className).toContain(shape);
+    expect(secondary.className).toContain("underline-offset-2");
+  });
 });
