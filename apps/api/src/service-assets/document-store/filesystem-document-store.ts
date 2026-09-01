@@ -3,6 +3,7 @@ import {
   access,
   mkdir,
   open,
+  readdir,
   readFile,
   rename,
   rm,
@@ -86,6 +87,53 @@ export class FilesystemDocumentStore implements DocumentStore {
       if (isMissingFile(error)) return false;
       throw error;
     }
+  }
+
+  /**
+   * A TÁROLÓBAN ÁLLÓ FÁJLOK, KÉT SZINT MÉLYEN BEJÁRVA.
+   *
+   * AZ ELRENDEZÉS `assets/<assetId>/<documentId>`, tehát a bejárás pontosan
+   * két szintet megy, nem rekurzívan: egy mélyebb fájl nem a mi
+   * elrendezésünkből származik, és ha csendben beleszámolnánk, egy idegen
+   * könyvtár tartalma „elárvult fájlnak" látszana.
+   *
+   * AZ IDEIGLENES FÁJLOKAT KIHAGYJA. Egy `.tmp` végű név egy FUTÓ írás
+   * közepe, nem elárvult fájl: ha beleszámolna, minden párhuzamos feltöltés
+   * hamis leletet gyártana, és három ilyen után senki nem nézné meg a listát.
+   *
+   * NEM CSATOLT VAGY HIÁNYZÓ GYÖKÉR ESETÉN ÜRES A VÁLASZ, nem kivétel: a
+   * beállítottság kérdését a `describe()` méri, és két helyen felelni rá annyit
+   * tenne, hogy a hívó két különböző választ kaphat ugyanarra.
+   */
+  async list(): Promise<DocumentKey[]> {
+    const assetsRoot = path.join(this.root, "assets");
+    let assetDirectories;
+    try {
+      assetDirectories = await readdir(assetsRoot, { withFileTypes: true });
+    } catch (error) {
+      if (isMissingFile(error)) return [];
+      throw error;
+    }
+
+    const keys: DocumentKey[] = [];
+    for (const assetDirectory of assetDirectories) {
+      if (!assetDirectory.isDirectory()) continue;
+      const documents = await readdir(
+        path.join(assetsRoot, assetDirectory.name),
+        {
+          withFileTypes: true,
+        },
+      );
+      for (const document of documents) {
+        if (!document.isFile()) continue;
+        if (document.name.endsWith(".tmp")) continue;
+        keys.push({
+          assetId: assetDirectory.name,
+          documentId: document.name,
+        });
+      }
+    }
+    return keys;
   }
 
   /**

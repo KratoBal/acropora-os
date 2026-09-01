@@ -135,6 +135,29 @@ describe("the in-memory document store", () => {
    * annak kimondása, hogy itt nincs mit beállítani: a jelölő fájlt és az
    * írhatóságot a fájlrendszeres változat vizsgálja, a 3. lépésben.
    */
+  it("lists what it holds, as keys rather than strings", async () => {
+    const store = new InMemoryDocumentStore();
+    await store.put({ assetId: "a", documentId: "1" }, Uint8Array.from([1]));
+    await store.put({ assetId: "b", documentId: "2" }, Uint8Array.from([2]));
+
+    const listed = await store.list();
+
+    assert.equal(listed.length, 2);
+    assert.deepEqual(
+      listed.map((key) => `${key.assetId}/${key.documentId}`).sort(),
+      ["a/1", "b/2"],
+    );
+  });
+
+  it("stops listing what was deleted", async () => {
+    const store = new InMemoryDocumentStore();
+    const key = { assetId: "a", documentId: "1" };
+    await store.put(key, Uint8Array.from([1]));
+    await store.delete(key);
+
+    assert.deepEqual(await store.list(), []);
+  });
+
   it("describes itself as ready, because there is nothing to configure", async () => {
     const store = new InMemoryDocumentStore();
 

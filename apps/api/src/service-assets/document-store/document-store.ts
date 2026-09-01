@@ -37,4 +37,19 @@ export interface DocumentStore {
   get(key: DocumentKey): Promise<Uint8Array | null>;
   delete(key: DocumentKey): Promise<boolean>;
   describe(): Promise<DocumentStoreStatus>;
+
+  /**
+   * AMI A TÁROLÓBAN ÁLL, a hívó kulcs-listája nélkül.
+   *
+   * MIÉRT KELL, HA MINDEN FÁJLNAK VAN SORA: azért, mert épp ez az, amit nem
+   * tudunk. A tábla `SUM("sizeBytes")` értéke és a tárolóban álló fájlok
+   * halmaza két KÜLÖN mérés, és ha eltérnek, az önmagában lelet -- vagy egy
+   * elárvult fájl (van fájl, nincs sor), vagy egy elveszett sor (van sor, nincs
+   * fájl). A kettő MÁS teendő, és a különbségük nélkül egyik sem látszik.
+   *
+   * A VISSZAADOTT ALAK A KULCS, NEM AZ ÚTVONAL: a hívónak a `DocumentKey`-jel
+   * kell összevetnie, és egy útvonalból visszafejteni a kulcsot ugyanaz a
+   * törékeny lépés lenne, amit a kétrészes kulcs épp elkerül.
+   */
+  list(): Promise<DocumentKey[]>;
 }

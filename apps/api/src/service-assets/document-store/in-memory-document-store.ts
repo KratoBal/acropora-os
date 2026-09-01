@@ -34,6 +34,13 @@ export class InMemoryDocumentStore implements DocumentStore {
     return this.documents.delete(serialiseKey(key));
   }
 
+  async list(): Promise<DocumentKey[]> {
+    return [...this.documents.keys()].map((serialised) => {
+      const [assetId, documentId] = JSON.parse(serialised) as [string, string];
+      return { assetId, documentId };
+    });
+  }
+
   /**
    * A memóriabeli tároló mindig kész: nincs jelölő fájl és nincs csatolás,
    * amit el lehetne rontani. Ez NEM azt jelenti, hogy a beállítottság kérdése

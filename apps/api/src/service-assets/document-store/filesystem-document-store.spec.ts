@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
-import { chmod, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -155,6 +162,62 @@ describe("the filesystem document store", () => {
     const store = new FilesystemDocumentStore(asFile);
 
     assert.deepEqual((await store.describe()).state, "broken");
+  });
+
+  /**
+   * A LISTA A TÁROLÓ FELŐL NÉZ, a hívó kulcsai nélkül. Ez az a mérés, amit a
+   * tábla összege NEM tud megadni: egy elárvult fájlról épp az a jellemző,
+   * hogy nincs sora.
+   */
+  it("lists the files it holds, two levels deep", async () => {
+    const listRoot = await mkdtemp(path.join(tmpdir(), "document-store-list-"));
+    try {
+      const store = new FilesystemDocumentStore(listRoot);
+      await store.put({ assetId: "a", documentId: "1" }, Uint8Array.from([1]));
+      await store.put({ assetId: "b", documentId: "2" }, Uint8Array.from([2]));
+
+      const listed = await store.list();
+
+      assert.deepEqual(
+        listed.map((key) => `${key.assetId}/${key.documentId}`).sort(),
+        ["a/1", "b/2"],
+      );
+    } finally {
+      await rm(listRoot, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * AZ IDEIGLENES FÁJL NEM ELÁRVULT FÁJL, hanem egy FUTÓ írás közepe. Ha a
+   * lista beleszámolná, minden párhuzamos feltöltés hamis leletet gyártana --
+   * és három ilyen után senki nem nézné meg a listát, pont akkor, amikor a
+   * valódi jön.
+   */
+  it("does not list a temporary file as if it were a document", async () => {
+    const listRoot = await mkdtemp(path.join(tmpdir(), "document-store-tmp-"));
+    try {
+      await mkdir(path.join(listRoot, "assets", "a"), { recursive: true });
+      await writeFile(path.join(listRoot, "assets", "a", "1"), "");
+      await writeFile(path.join(listRoot, "assets", "a", "1.abc.tmp"), "");
+      const store = new FilesystemDocumentStore(listRoot);
+
+      assert.deepEqual(await store.list(), [{ assetId: "a", documentId: "1" }]);
+    } finally {
+      await rm(listRoot, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * A NEM CSATOLT GYÖKÉR ÜRES LISTÁT AD, NEM KIVÉTELT. A beállítottság
+   * kérdését a `describe()` méri; ha ez is felelne rá, a hívó két különböző
+   * választ kaphatna ugyanarra.
+   */
+  it("lists nothing when the root is not there at all", async () => {
+    const store = new FilesystemDocumentStore(
+      path.join(root, "no-such-directory-either"),
+    );
+
+    assert.deepEqual(await store.list(), []);
   });
 
   /**
