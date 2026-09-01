@@ -117,7 +117,20 @@ export function ContentListPage() {
         görgetés után tudja meg, hogy hat tétel áll hetek óta. A darabszám
         önmagában kevés: a legrégebbi KORA az, ami megmondja, sürgős-e.
       */}
-      <StaleSummary items={waitingForImage ?? []} />
+      {/*
+        A HIBA LEGFELUL ALL, a szekciok elott. Az atrendezes utan a piros
+        uzenet lejjebb csuszott volna, mint ahol korabban volt -- egy hiba,
+        amit gorgetni kell, ugyanolyan lathatatlan, mint amelyik nincs is ott.
+      */}
+      {error ? (
+        <Alert
+          variant="danger"
+          title="A lista nem tölthető be"
+          description={error}
+        />
+      ) : null}
+
+      <StaleSummary items={waitingForImage} />
 
       {/*
         A KÉPRE VÁRÓ LISTA ELÖL ÁLL, a szerep szerinti sor ELŐTT.
@@ -134,7 +147,7 @@ export function ContentListPage() {
       ) : (
         <ContentSection
           title="Képre vár"
-          items={oldestFirst(waitingForImage ?? [])}
+          items={waitingForImage && oldestFirst(waitingForImage)}
           empty="Semmi nem vár képre."
         />
       )}
@@ -158,20 +171,12 @@ export function ContentListPage() {
         </Select>
       </label>
 
-      {error ? (
-        <Alert
-          variant="danger"
-          title="A lista nem tölthető be"
-          description={error}
-        />
-      ) : null}
-
       {loading ? (
         <Skeleton className="h-32" />
       ) : (
         <ContentSection
           title={CONTENT_ROLE_LABELS[role]}
-          items={items ?? []}
+          items={items}
           empty="Ebben a nézetben most nincs tétel."
         />
       )}
@@ -179,15 +184,34 @@ export function ContentListPage() {
   );
 }
 
+/**
+ * HÁROM ÁLLAPOT VAN, NEM KETTŐ: van adat, nincs adat, és NEM TUDJUK.
+ *
+ * A harmadikat eddig a másodikként mutattuk: hiba esetén a lekérdezés `null`-t
+ * hagyott, az üresre esett, és a felület azt állította, hogy „Semmi nem vár
+ * képre" -- holott a valóság az, hogy nem tudjuk, mi vár. **Egy hibát
+ * SIKERKÉNT jelenítettünk meg**: aki ránéz, megnyugszik és elmegy.
+ *
+ * Ez ugyanaz az alak, mint a mai többi leletünk: a nulla eredmény nem a világ
+ * tulajdonsága, hanem a kérdésé -- itt a lekérdezésé.
+ *
+ * A MINTA A REPÓBÓL JÖN, nem én találtam ki: az eszközlista ugyanígy csak akkor
+ * mutat üres-állapotot, ha a betöltés SIKERÜLT (`data ? <EmptyState/> : null`).
+ * A `null` bemenet itt ugyanazt jelenti.
+ */
 function ContentSection({
   title,
   items,
   empty,
 }: {
   title: string;
-  items: ContentListItem[];
+  items: ContentListItem[] | null;
   empty: string;
 }) {
+  // NEM TUDJUK: a hibaüzenet már ott áll fölötte, és egy üres szekció csak
+  // ellentmondana neki.
+  if (!items) return null;
+
   return (
     <section className="space-y-3">
       <h2 className="text-lg font-semibold">
@@ -216,9 +240,11 @@ function ContentSection({
  * állna, és pár nap alatt megtanítaná az olvasót, hogy ne nézzen oda -- pont
  * akkorra, amikor először mondana valamit.
  */
-function StaleSummary({ items }: { items: ContentListItem[] }) {
-  const oldest = oldestAge(items);
-  if (items.length === 0 || !oldest) return null;
+function StaleSummary({ items }: { items: ContentListItem[] | null }) {
+  // A `null` itt is NEM TUDJUK, nem nulla: hiba után a csík elmarad, és a
+  // hibaüzenet beszél helyette.
+  const oldest = items && oldestAge(items);
+  if (!items || items.length === 0 || !oldest) return null;
 
   return (
     <Card className="flex items-center justify-between gap-3 p-4">
