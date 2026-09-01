@@ -6,6 +6,7 @@ import {
   PosSaleRepository,
   type CreatePosSaleLine,
   type CreatePosSaleParams,
+  type PosSaleTransaction,
   type PosSaleDatabase,
 } from "./pos-sale.repository.js";
 
@@ -169,15 +170,21 @@ class FakeDb implements PosSaleDatabase {
       return { count };
     },
     create: async (args: any) => {
-      this.outbox.push({
+      /// Returns the created row's id, as the contract promises. It used to
+      /// return `{}`, and the movement writer USES that id - it is how a
+      /// publish whose baseline was never known gets dead-lettered - so the
+      /// double handed `undefined` to the next call. Measured 2026-09-01:
+      /// three of the four doubles with this method had the same omission.
+      const row = {
         id: nextId("outbox"),
         variantId: args.data.variantId,
         warehouseId: args.data.warehouseId,
         status: "PENDING",
         idempotencyKey: args.data.idempotencyKey,
         targetOnHand: args.data.targetOnHand,
-      });
-      return {};
+      };
+      this.outbox.push(row);
+      return { id: row.id };
     },
   };
 
@@ -192,7 +199,12 @@ class FakeDb implements PosSaleDatabase {
 
   productVariant = { findMany: async () => [] };
 
-  async $transaction<T>(operation: (transaction: any) => Promise<T>) {
+  /// Typed, not `any`: `this` is what reaches the movement writer, so the
+  /// compiler has to check it against the same contract the repository
+  /// promises it.
+  async $transaction<T>(
+    operation: (transaction: PosSaleTransaction) => Promise<T>,
+  ) {
     return operation(this);
   }
 }
