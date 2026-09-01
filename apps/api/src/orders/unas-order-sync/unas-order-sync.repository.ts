@@ -312,7 +312,12 @@ interface OrderStockMovementWithLines {
   lines: Array<{ variantId: string; quantity: Prisma.Decimal }>;
 }
 
-interface UnasOrderSyncTransaction
+/// Exported so a test double can NAME the contract it stands in for. This is
+/// the seam: the repository hands the transaction object to the movement
+/// writer's helpers, so what a double must satisfy is THIS type, not the
+/// outer database interface. Taken as `any`, a double compiles while missing
+/// a method those helpers call, and fails only at run time.
+export interface UnasOrderSyncTransaction
   extends WarehouseLookupDatabase, InventoryMovementDatabase {
   externalReference: {
     findUnique(args: unknown): Promise<ExternalReferenceRow | null>;

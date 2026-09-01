@@ -6,6 +6,7 @@ import type { UnasApiOrder } from "@acropora/types";
 import {
   UnasOrderSyncRepository,
   type UnasOrderSyncDatabase,
+  type UnasOrderSyncTransaction,
 } from "./unas-order-sync.repository.js";
 import type { SalesOrderWithRelations } from "./unas-order-sync.types.js";
 
@@ -69,7 +70,10 @@ class FakeDb {
     entityId: string;
     externalId: string;
     externalKey: string | null;
-    metadata: Record<string, unknown> | null;
+    /// `JsonValue`, not `Record<string, unknown>`: the contract stores it as
+    /// JSON, and the wider fixture type let values through here that the
+    /// database would reject.
+    metadata: Prisma.JsonValue;
   }> = [];
   movements: FakeMovement[] = [];
   invoices: Array<{
@@ -83,7 +87,12 @@ class FakeDb {
     externalUrl: string | null;
     syncStatus: string;
   }> = [];
-  runs: Array<Record<string, unknown>> = [];
+  /// `status` is required, not just "some record": the contract's
+  /// findUniqueOrThrow promises `{ status: string }`, and with an untyped
+  /// fixture a run without a status compiled fine and only broke at run time.
+  /// The index signature keeps the counters and whatever else `create`
+  /// spreads in, without loosening the one field the contract names.
+  runs: Array<{ id: string; status: string; [key: string]: unknown }> = [];
   cursor: Date | null = null;
   // Counts salesOrderLine.create/update calls - a direct, unambiguous
   // signal of whether syncLines() (the active-order line-resync path) ran,
@@ -200,32 +209,32 @@ class FakeDb {
   }
 
   externalReference = {
+    /// Returns the WHOLE row for both lookups, deliberately.
+    ///
+    /// `externalReference.findUnique` is declared TWICE with incompatible
+    /// shapes: UnasOrderSyncTransaction promises `{id, entityId, externalId,
+    /// externalKey}` and UnasOrderSyncDatabase promises `{metadata,
+    /// externalId, externalKey}`. One object cannot honestly return two
+    /// different projections, and until the seam was typed the double hid
+    /// that by returning a union behind an `any` parameter.
+    ///
+    /// A superset satisfies both, so the double now answers with everything
+    /// the row has. It is also closer to the truth: the projections are a
+    /// `select` optimisation in the real client, not a difference in what
+    /// exists.
     findUnique: async (args: any) => {
-      if (args.where.system_entityType_externalId) {
-        const key = args.where.system_entityType_externalId;
-        const found = this.externalReferences.find(
-          (reference) => reference.externalId === key.externalId,
-        );
-        return found
-          ? {
-              id: found.id,
-              entityId: found.entityId,
-              externalId: found.externalId,
-              externalKey: found.externalKey,
-            }
-          : null;
-      }
-      const key = args.where.system_entityType_entityId;
-      const found = this.externalReferences.find(
-        (reference) => reference.entityId === key.entityId,
-      );
-      return found
-        ? {
-            metadata: found.metadata,
-            externalId: found.externalId,
-            externalKey: found.externalKey,
-          }
-        : null;
+      const found = args.where.system_entityType_externalId
+        ? this.externalReferences.find(
+            (reference) =>
+              reference.externalId ===
+              args.where.system_entityType_externalId.externalId,
+          )
+        : this.externalReferences.find(
+            (reference) =>
+              reference.entityId ===
+              args.where.system_entityType_entityId.entityId,
+          );
+      return found ?? null;
     },
     findMany: async (args: any) => {
       const ids: string[] = args.where.entityId.in;
@@ -242,7 +251,7 @@ class FakeDb {
         entityId: args.data.entityId as string,
         externalId: args.data.externalId as string,
         externalKey: (args.data.externalKey as string | null) ?? null,
-        metadata: (args.data.metadata as Record<string, unknown>) ?? null,
+        metadata: (args.data.metadata as Prisma.JsonValue) ?? null,
       };
       this.externalReferences.push(row);
       return row;
@@ -252,7 +261,7 @@ class FakeDb {
         (reference) => reference.id === args.where.id,
       );
       if (row && args.data.metadata !== undefined)
-        row.metadata = args.data.metadata as Record<string, unknown>;
+        row.metadata = args.data.metadata as Prisma.JsonValue;
       if (row && args.data.externalId !== undefined)
         row.externalId = args.data.externalId as string;
       if (row && args.data.externalKey !== undefined)
@@ -487,7 +496,12 @@ class FakeDb {
       return { count };
     },
     create: async (args: any) => {
-      this.outbox.push({
+      /// Returns the created row's id, as the contract promises. It used to
+      /// return `{}`: the movement writer USES that id (it is how a publish
+      /// whose baseline was never known gets dead-lettered), so a double that
+      /// answers with nothing hands `undefined` to the next call. Nothing
+      /// checked it while the transaction seam was `any`.
+      const row = {
         id: nextId("outbox"),
         variantId: args.data.variantId,
         warehouseId: args.data.warehouseId,
@@ -497,8 +511,9 @@ class FakeDb {
         sourceProcess: args.data.sourceProcess,
         sourceRecordId: args.data.sourceRecordId,
         targetOnHand: args.data.targetOnHand,
-      });
-      return {};
+      };
+      this.outbox.push(row);
+      return { id: row.id };
     },
   };
 
@@ -542,7 +557,12 @@ class FakeDb {
     findMany: async () => this.products,
   };
 
-  async $transaction<T>(operation: (transaction: any) => Promise<T>) {
+  /// Typed, not `any`: `this` is what reaches the movement-writer helpers, so
+  /// the compiler has to check it against the same contract the repository
+  /// promises them.
+  async $transaction<T>(
+    operation: (transaction: UnasOrderSyncTransaction) => Promise<T>,
+  ) {
     return operation(this);
   }
 }
