@@ -46,6 +46,12 @@ export interface ContentMoveOption {
    * minden képernyő maga találná ki, melyik a kézenfekvő lépés.
    */
   primary: boolean;
+  /**
+   * HA NEM `null`, EZ A LÉPÉS SZÖVEGET KÍVÁN, és a felület azt kéri be előbb.
+   * A `field` az a név, amin a szöveg a kérés törzsében visszamegy -- így a
+   * képernyőnek nem kell tudnia, melyik állapot melyik mezőt kívánja.
+   */
+  note: { field: "discardReason" | "revisionNote"; label: string } | null;
 }
 
 /**

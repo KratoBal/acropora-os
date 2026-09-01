@@ -40,6 +40,7 @@ describe("moving a piece of content", () => {
       from: "AWAITING_APPROVAL",
       to: "READY_TO_SEND",
       actorCanApprove: true,
+      actorUserId: "user-1",
     });
 
     assert.equal(calls.length, 1);
@@ -59,6 +60,7 @@ describe("moving a piece of content", () => {
           from: "DRAFTING",
           to: "READY_TO_SEND",
           actorCanApprove: false,
+          actorUserId: "user-1",
         }),
       /nem megengedett/,
     );
@@ -84,6 +86,7 @@ describe("moving a piece of content", () => {
           to: "DISCARDED",
           discardReason: "meggondoltuk",
           actorCanApprove: false,
+          actorUserId: "user-1",
         }),
       /ütemezve áll a Facebookon/,
     );
@@ -103,6 +106,7 @@ describe("moving a piece of content", () => {
       from: "SCHEDULED",
       to: "SENT",
       actorCanApprove: false,
+      actorUserId: "user-1",
     });
 
     assert.equal(calls.length, 1);
@@ -123,6 +127,7 @@ describe("moving a piece of content", () => {
           from: "DRAFTING",
           to: "DISCARDED",
           actorCanApprove: false,
+          actorUserId: "user-1",
         }),
       /oka kötelező/,
     );
@@ -140,6 +145,7 @@ describe("moving a piece of content", () => {
           to: "DISCARDED",
           discardReason: "   ",
           actorCanApprove: false,
+          actorUserId: "user-1",
         }),
       /oka kötelező/,
     );
@@ -163,6 +169,7 @@ describe("moving a piece of content", () => {
           from: "AWAITING_APPROVAL",
           to: "READY_TO_SEND",
           actorCanApprove: true,
+          actorUserId: "user-1",
         }),
       /időközben más állapotba került/,
     );
@@ -195,6 +202,7 @@ describe("moving a piece of content", () => {
           from: "AWAITING_APPROVAL",
           to: "READY_TO_SEND",
           actorCanApprove: false,
+          actorUserId: "user-1",
         }),
       /jóváhagyói jog/,
     );
@@ -221,6 +229,7 @@ describe("moving a piece of content", () => {
           from: "AWAITING_APPROVAL",
           to: "AWAITING_REVISION",
           actorCanApprove: false,
+          actorUserId: "user-1",
         }),
       /jóváhagyói jog/,
     );
@@ -246,6 +255,7 @@ describe("moving a piece of content", () => {
           to: "DISCARDED",
           discardReason: "a kampány elmarad",
           actorCanApprove: false,
+          actorUserId: "user-1",
         }),
       /jóváhagyói jog/,
     );
@@ -264,7 +274,13 @@ describe("moving a piece of content", () => {
       id: "c1",
       from: "AWAITING_APPROVAL",
       to: "AWAITING_REVISION",
+      // A FELVETÉS ITT IS KÖTELEZŐ, és ez a bemenet azért változott: a
+      // visszaküldés indoka azóta minden útra érvényes, nem csak a lektoréra.
+      // A jóváhagyói visszaküldésnél a legfontosabb -- a szerző abból tudja meg,
+      // mit vár tőle az, aki nemet mondott.
+      revisionNote: "a záró bekezdés ígér valamit, amit nem tartunk",
       actorCanApprove: true,
+      actorUserId: "user-1",
     });
 
     assert.equal(calls.length, 1);
@@ -278,6 +294,7 @@ describe("moving a piece of content", () => {
       from: "READY_TO_SEND",
       to: "SCHEDULED",
       actorCanApprove: false,
+      actorUserId: "user-1",
     });
 
     const call = calls[0] as { scheduleAnchoredAt?: Date; scheduledFor?: Date };
@@ -328,6 +345,105 @@ describe("what the list hands to the screen", () => {
     const rows = await service.waitingForImage();
 
     assert.ok(rows[0]!.moves.length > 0);
+  });
+});
+
+describe("sending a piece back for revision", () => {
+  /**
+   * A FELVETÉS KÖTELEZŐ, UGYANÚGY, MINT AZ ELVETÉS OKA.
+   *
+   * A meglévő szabályunk szó szerint ez volt: „Ok nélkül az elvetve annyit mond,
+   * hogy valaki egyszer nemet mondott -- de nem azt, hogy MIÉRT, és a következő
+   * ember ugyanazt a tételt fogja újra elkezdeni." Ez betűre áll a
+   * visszaküldésre is: a szerzőnél álló tétel mellett ott kell lennie, mit kell
+   * javítani, különben a szerző vagy találgat, vagy visszakérdez.
+   *
+   * MIÉRT KÖTELEZŐ, ÉS NEM CSAK LEHETSÉGES: ha választható lenne, pont a sietős
+   * körökben maradna el -- vagyis pont akkor, amikor a legtöbbet számítana.
+   */
+  it("will not send it back without saying what to fix", async () => {
+    const { service, calls } = serviceWith();
+
+    await assert.rejects(
+      () =>
+        service.move({
+          id: "c1",
+          from: "AWAITING_REVIEW",
+          to: "AWAITING_REVISION",
+          actorCanApprove: false,
+          actorUserId: "user-1",
+        }),
+      /mit kell javítani/,
+    );
+    // AZ ŐRZŐT NEM AZ BIZONYÍTJA, HOGY SZÓL, HANEM HOGY NEM TÖRTÉNT SEMMI.
+    // Egy kötelező mező, ami szól, de közben léptet, rosszabb a semminél.
+    assert.equal(calls.length, 0);
+  });
+
+  it("does not accept whitespace as the note either", async () => {
+    const { service, calls } = serviceWith();
+
+    await assert.rejects(
+      () =>
+        service.move({
+          id: "c1",
+          from: "AWAITING_REVIEW",
+          to: "AWAITING_REVISION",
+          revisionNote: "   ",
+          actorCanApprove: false,
+          actorUserId: "user-1",
+        }),
+      /mit kell javítani/,
+    );
+    assert.equal(calls.length, 0);
+  });
+
+  /**
+   * ÉS A MÁSIK IRÁNY: felvetéssel a lépés ÁTMEGY, és a felvetés a lépéssel
+   * EGYÜTT megy le a tárolóba. E nélkül a fenti két állítás attól is zöld
+   * maradna, hogy a visszaküldés SOHA nem sikerül.
+   */
+  it("sends it back with the note, in the same call", async () => {
+    const { service, calls } = serviceWith();
+
+    await service.move({
+      id: "c1",
+      from: "AWAITING_REVIEW",
+      to: "AWAITING_REVISION",
+      revisionNote: "  a második bekezdés két állítást kever  ",
+      actorCanApprove: false,
+      actorUserId: "user-7",
+    });
+
+    assert.equal(calls.length, 1);
+    const call = calls[0] as {
+      note?: { authorId: string; body: string };
+    };
+    assert.deepEqual(call.note, {
+      authorId: "user-7",
+      // A KÖRÜLÖTTE ÁLLÓ SZÓKÖZ LEVÁGVA: ugyanaz a kezelés, mint az elvetés
+      // okánál, különben egy szóközökből álló felvetés átcsúszna.
+      body: "a második bekezdés két állítást kever",
+    });
+  });
+
+  /**
+   * ÉS A TÖBBI LÉPÉS NEM KÉR FELVETÉST. Enélkül a javítás túl sokat zárna be: a
+   * jóváhagyás, az ütemezés és a lektorálásra adás ugyanúgy megy tovább.
+   */
+  it("asks for nothing extra on the other steps", async () => {
+    const { service, calls } = serviceWith();
+
+    await service.move({
+      id: "c1",
+      from: "DRAFTING",
+      to: "AWAITING_REVIEW",
+      actorCanApprove: false,
+      actorUserId: "user-1",
+    });
+
+    assert.equal(calls.length, 1);
+    assert.equal((calls[0] as { note?: unknown }).note, undefined);
   });
 });
 

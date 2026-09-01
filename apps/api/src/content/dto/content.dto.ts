@@ -62,6 +62,16 @@ export class ContentMoveDto {
   @IsString()
   @MinLength(1)
   discardReason?: string;
+
+  /**
+   * A visszaküldés felvetése: mit kell javítani. A DTO-ban opcionális, mert csak
+   * ehhez az egy lépéshez tartozik -- a KÖTELEZŐSÉGÉT a szolgáltatás őrzi, ott,
+   * ahol a célállapot is ismert. Ugyanaz a felosztás, mint az elvetés okánál.
+   */
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  revisionNote?: string;
 }
 
 export class ContentCommentDto {

@@ -65,6 +65,7 @@ const approvingStep = {
   requiresApproval: true,
   blockedByExternalWork: null,
   primary: true,
+  note: null,
 };
 
 const ordinaryStep = {
@@ -72,6 +73,7 @@ const ordinaryStep = {
   requiresApproval: false,
   blockedByExternalWork: null,
   primary: false,
+  note: null,
 };
 
 beforeEach(() => {
@@ -181,6 +183,7 @@ describe("what the screen does with a list it did not write", () => {
               requiresApproval: false,
               blockedByExternalWork: null,
               primary: false,
+              note: null,
             },
           ] as unknown as ContentListItem["moves"],
         })}
@@ -213,6 +216,7 @@ describe("a step that cannot run today", () => {
               blockedByExternalWork:
                 "A poszt ütemezve áll a Facebookon: az ütemezést ott vissza kell vonni.",
               primary: false,
+              note: null,
             },
           ],
         })}
@@ -243,6 +247,10 @@ describe("discarding, which needs a reason", () => {
               requiresApproval: false,
               blockedByExternalWork: null,
               primary: false,
+              note: {
+                field: "discardReason" as const,
+                label: "Miért vetjük el?",
+              },
             },
           ],
         })}
@@ -252,15 +260,15 @@ describe("discarding, which needs a reason", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "elvetve" }));
 
-    const confirm = screen.getByRole("button", { name: "Elvetem" });
+    const confirm = screen.getAllByRole("button", { name: "elvetve" })[1]!;
     expect(confirm.hasAttribute("disabled")).toBe(true);
     // AZ ŐRZŐT NEM AZ BIZONYÍTJA, HOGY SZÓL, HANEM HOGY NEM TÖRTÉNT SEMMI.
     expect(api.move).not.toHaveBeenCalled();
 
-    fireEvent.change(screen.getByLabelText("Az elvetés oka"), {
+    fireEvent.change(screen.getByLabelText("Miért vetjük el?"), {
       target: { value: "a kampány elmarad" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Elvetem" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "elvetve" })[1]!);
 
     await waitFor(() => expect(api.move).toHaveBeenCalledTimes(1));
     expect(api.move.mock.calls[0]![2]).toMatchObject({
@@ -360,6 +368,7 @@ describe("which button stands out", () => {
               requiresApproval: true,
               blockedByExternalWork: null,
               primary: false,
+              note: null,
             },
             approvingStep,
           ],
@@ -406,5 +415,108 @@ describe("which button stands out", () => {
     for (const shape of ["px-1", "underline-offset-2"])
       expect(comment.className).toContain(shape);
     expect(secondary.className).toContain("underline-offset-2");
+  });
+});
+
+describe("a step that asks for text first", () => {
+  /**
+   * MELYIK LÉPÉS KÉR SZÖVEGET, AZT A SZERVER MONDJA MEG.
+   *
+   * Korábban itt egy állapotnév állt (`ha ez elvetés, kérj okot`), vagyis egy
+   * szabály-másolat a felületen. Ez az állítás azt méri, hogy a képernyő a
+   * KAPOTT `note` mezőt követi: a visszaküldés ugyanúgy mezőt nyit, pedig róla
+   * ez a fájl semmit nem tud.
+   */
+  it("opens the field for any step the server marked, not just discarding", () => {
+    render(
+      <ContentRowActions
+        item={item({
+          state: "AWAITING_REVIEW",
+          moves: [
+            {
+              to: "AWAITING_REVISION",
+              requiresApproval: false,
+              blockedByExternalWork: null,
+              primary: false,
+              note: {
+                field: "revisionNote" as const,
+                label: "Mit kell javítani?",
+              },
+            },
+          ],
+        })}
+        onDone={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "javításra vár" }));
+
+    // A KÉRDÉS SZÖVEGE IS A SZERVERTŐL JÖN, nem innen.
+    expect(screen.getByLabelText("Mit kell javítani?")).toBeTruthy();
+    // ÉS SZÖVEG NÉLKÜL NEM INDUL EL.
+    expect(api.move).not.toHaveBeenCalled();
+  });
+
+  /**
+   * ÉS A MEZŐ NEVE IS ONNAN JÖN. Ez a különbség számít: ha a felület találná ki,
+   * hogy a szöveg `discardReason` néven megy vissza, a visszaküldés csendben
+   * rossz mezőt küldene, és a szerver azt mondaná, hogy hiányzik a felvetés --
+   * miközben a felhasználó látja, hogy beírta.
+   */
+  it("sends the text under the name the server gave", async () => {
+    render(
+      <ContentRowActions
+        item={item({
+          state: "AWAITING_REVIEW",
+          moves: [
+            {
+              to: "AWAITING_REVISION",
+              requiresApproval: false,
+              blockedByExternalWork: null,
+              primary: false,
+              note: {
+                field: "revisionNote" as const,
+                label: "Mit kell javítani?",
+              },
+            },
+          ],
+        })}
+        onDone={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "javításra vár" }));
+    fireEvent.change(screen.getByLabelText("Mit kell javítani?"), {
+      target: { value: "a második bekezdés két állítást kever" },
+    });
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "javításra vár" })[1]!,
+    );
+
+    await waitFor(() => expect(api.move).toHaveBeenCalledTimes(1));
+    expect(api.move.mock.calls[0]![2]).toMatchObject({
+      to: "AWAITING_REVISION",
+      revisionNote: "a második bekezdés két állítást kever",
+    });
+    // ÉS NEM A MÁSIK MEZŐ NEVÉN. E nélkül az állítás attól is zöld lenne, hogy
+    // mindkettőt elküldjük.
+    expect(api.move.mock.calls[0]![2]).not.toHaveProperty("discardReason");
+  });
+
+  /**
+   * AMELYIK LÉPÉS NEM KÉR SZÖVEGET, AZ AZONNAL INDUL. Enélkül a javítás túl
+   * sokat zárna be: minden gomb egy mezőt nyitna, és a jóváhagyás is kérdezne.
+   */
+  it("still runs a plain step straight away", async () => {
+    render(
+      <ContentRowActions
+        item={item({ moves: [approvingStep] })}
+        onDone={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "kiküldésre kész" }));
+
+    await waitFor(() => expect(api.move).toHaveBeenCalledTimes(1));
   });
 });
