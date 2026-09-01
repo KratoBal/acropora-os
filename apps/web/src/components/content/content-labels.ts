@@ -72,10 +72,25 @@ export function contentImageLabel(item: {
  * látszik -- azt megint soronként kell kiolvasni, pontosan az, amit el akartunk
  * kerülni.
  *
- * A HATÁR HÉT NAP, ÉS EZ DÖNTÉS: egy heti kör alatt minden tétel megkap egy
- * pillantást, tehát ami annál régebben áll, az KIMARADT valamiből. Nem
- * mérésből jön, hanem a munka ritmusából, és ezért mondom ki: ha kiderül, hogy
- * a kör nem heti, ez a szám az első, amit át kell írni.
+ * A HATÁR HÉT NAP, ÉS EZ DÖNTÉS, NEM MÉRÉS. A legjobb indok, ami ma van rá:
+ * korall leírása szerint a SZÖVEG oldala órákban és napokban mérhető, a
+ * jóváhagyás, a kép és a kiküldés együttese viszont napokban és hetekben. A hét
+ * nap tehát a kettő HATÁRÁN áll -- ami ennél régebben mozdulatlan, az már nem a
+ * szöveg írásán múlik.
+ *
+ * MI CÁFOLNÁ, ÉS EZ A LÉNYEG, mert enélkül ez a szám örökre itt maradna:
+ *
+ * - Ha az első valódi hét adatai azt mutatják, hogy a tételek TÚLNYOMÓ
+ *   TÖBBSÉGE két-három nap alatt mozdul, akkor a hét nap TÚL KÉSŐI: mire a
+ *   címke megjelenik, a tétel már rég kilóg a sorból, és a jelzés nem
+ *   figyelmeztet, hanem utólag rögzít.
+ * - Ha viszont a jellemző várakozás magától is egy hét FÖLÖTT van, akkor a
+ *   címke MINDEN soron ott lesz -- és egy jelzés, ami mindenhol ott áll, nem
+ *   jelent semmit. Akkor nem a határ rossz, hanem a mérték: nem a régiséget
+ *   kell kiemelni, hanem a kiugróan régit.
+ *
+ * A LISTA MAGA FOGJA MEGMONDANI, melyik igaz. Elég egyszer ránézni, amikor már
+ * valódi adat van benne -- addig ez a szám a legjobb becslés, nem tény.
  */
 export const CONTENT_STALE_DAYS = 7;
 
