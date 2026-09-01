@@ -68,3 +68,9 @@ acropora-pre-m1.sql
 !**/*.example.csv
 !**/*.example.xls
 !**/*.example.xlsx
+
+# Editor scratch files. Six empty ones reached the repository root in a single
+# commit on 2026-07-26 and stayed tracked; nothing read them. The pattern is
+# anchored to the root because that is where the tool writes them, and an
+# unanchored `_tmp_*` would also swallow a deliberately named source file.
+/_tmp_*
