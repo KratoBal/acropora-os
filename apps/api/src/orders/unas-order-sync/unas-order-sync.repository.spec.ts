@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { Prisma } from "@acropora/database";
+
+import {
+  createOutboxDouble,
+  type OutboxDoubleRow,
+} from "../../testing/unas-stock-sync-outbox.double.js";
 import type { UnasApiOrder } from "@acropora/types";
 
 import {
@@ -483,69 +488,9 @@ class FakeDb implements UnasOrderSyncDatabase {
     },
   };
 
-  outbox: Array<{
-    id: string;
-    variantId: string;
-    warehouseId: string;
-    sku: string;
-    status: string;
-    idempotencyKey: string;
-    sourceProcess: string;
-    sourceRecordId: string;
-    targetOnHand: Prisma.Decimal;
-  }> = [];
+  outbox: OutboxDoubleRow[] = [];
 
-  unasStockSyncOutbox = {
-    /// No prior baseline-unknown row in these fixtures: the movement writer
-    /// asks before every publish, and these tests are not about that guard.
-    findFirst: async () => null,
-    /// Closes a single row by id. The writer uses it to dead-letter a publish
-    /// whose baseline was never known; these fixtures start from an empty
-    /// warehouse, so their rows take that path.
-    update: async (args: any) => {
-      const row = this.outbox.find(
-        (candidate: any) => candidate.id === args.where.id,
-      );
-      if (row) {
-        row.status = args.data.status;
-      }
-      return {};
-    },
-    updateMany: async (args: any) => {
-      let count = 0;
-      for (const row of this.outbox) {
-        if (
-          row.variantId === args.where.variantId &&
-          row.warehouseId === args.where.warehouseId &&
-          args.where.status.in.includes(row.status)
-        ) {
-          row.status = args.data.status;
-          count += 1;
-        }
-      }
-      return { count };
-    },
-    create: async (args: any) => {
-      /// Returns the created row's id, as the contract promises. It used to
-      /// return `{}`: the movement writer USES that id (it is how a publish
-      /// whose baseline was never known gets dead-lettered), so a double that
-      /// answers with nothing hands `undefined` to the next call. Nothing
-      /// checked it while the transaction seam was `any`.
-      const row = {
-        id: nextId("outbox"),
-        variantId: args.data.variantId,
-        warehouseId: args.data.warehouseId,
-        sku: args.data.sku,
-        status: "PENDING",
-        idempotencyKey: args.data.idempotencyKey,
-        sourceProcess: args.data.sourceProcess,
-        sourceRecordId: args.data.sourceRecordId,
-        targetOnHand: args.data.targetOnHand,
-      };
-      this.outbox.push(row);
-      return { id: row.id };
-    },
-  };
+  unasStockSyncOutbox = createOutboxDouble(this.outbox, nextId);
 
   async $executeRaw() {
     return 1;
