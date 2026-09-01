@@ -48,7 +48,22 @@ export const PERMISSIONS = {
   /// "content.manage" azt jelentené, hogy aki írja, jóvá is hagyhatja -- a
   /// kapu pedig pont az, hogy a kettő nem ugyanaz a kéz.
   CONTENT_MANAGE: "content.manage",
-  /// A második lépcső: jóváhagyás és kiküldésre bocsátás. Balázsé és Lucáé.
+  /// A második lépcső: jóváhagyás és kiküldésre bocsátás.
+  ///
+  /// EZ A JOG MA KÉT NEVESÍTETT EMBERHEZ TARTOZIK: Balázshoz és Lucához. Nem
+  /// vezetői szint, hanem két személy -- és ezt azért kell kiírni, mert a jog
+  /// NEVE túléli a mai helyzetet. Egy szerepkör-tábla, amiben csak annyi áll,
+  /// hogy a MANAGER nem kapja meg, egy év múlva önkényesnek látszik, és valaki
+  /// jó szándékkal hozzáadja.
+  ///
+  /// A DÖNTÉS: Balázs, 2026-09-01 14:28, Discord. Szó szerint ennyi áll a
+  /// kérésében a jóváhagyásról: „jova lehet hagyni mondjuk egy posztot ugy,
+  /// hogy elotte lektoralja az akire tartozik."
+  ///
+  /// A második fele -- hogy egyelőre semmi nem mehet ki nélküle vagy Luca
+  /// nélkül -- ugyanabból az üzenetből való, de a jegyzőkönyveinkben
+  /// ÖSSZEFOGLALVA szerepel, nem szó szerint. Így is írom ide: az első mondat
+  /// idézet, a második a mi olvasatunk arról, amit mondott.
   CONTENT_APPROVE: "content.approve",
   SETTINGS_MANAGE: "settings.manage",
   USERS_MANAGE: "users.manage",

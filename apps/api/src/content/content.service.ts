@@ -1,0 +1,162 @@
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+
+import { ContentRepository } from "./content.repository.js";
+import {
+  STATES_THAT_CAN_WAIT_FOR_IMAGE,
+  waitingFor,
+  type ContentViewerRole,
+} from "./content-filter.js";
+import {
+  contentBlockers,
+  planTransition,
+  type ContentState,
+} from "./content-state.js";
+import { scheduleStanding, scheduleTargetFor } from "./content-schedule.js";
+
+/**
+ * A TARTALOM-SOR SZOLGÁLTATÁSA.
+ *
+ * A DÖNTÉSEK TISZTA FÜGGVÉNYEKBEN ÁLLNAK (`content-state.ts`,
+ * `content-schedule.ts`, `content-filter.ts`), ez az osztály pedig beköti őket
+ * az adatbázisba. A szétválasztás nem stílus: a szabályok így mérhetők
+ * adatbázis nélkül, és a mérésük nem függ attól, hogy a Prisma épp mit ad
+ * vissza.
+ */
+@Injectable()
+export class ContentService {
+  constructor(private readonly repository: ContentRepository) {}
+
+  /**
+   * AMI RÁM VÁR. Ez a lista alapértelmezett nézete, és Balázs kérésének szó
+   * szerinti fordítása: „minden felkerul ami rank var".
+   */
+  waitingForMe(role: ContentViewerRole, userId: string) {
+    const filter = waitingFor(role);
+    return this.repository.list({
+      state: { in: filter.states },
+      ...(filter.ownOnly
+        ? { OR: [{ authorId: userId }, { reviewerId: userId }] }
+        : {}),
+    });
+  }
+
+  /**
+   * AMI KÉPRE VÁR. KÜLÖN lekérdezés, nem az állapotszűrő része, mert a kép a
+   * szövegtől független feltétel -- ma hat kész szövegű poszt áll pontosan itt.
+   */
+  waitingForImage() {
+    return this.repository.list({
+      imageRequired: true,
+      imageAttachedAt: null,
+      state: { in: STATES_THAT_CAN_WAIT_FOR_IMAGE },
+    });
+  }
+
+  /**
+   * A NAPTÁR NÉZET: a tervezett kiküldési dátum szerint, egy időszakra.
+   *
+   * A dátum nélküli tételek NEM szerepelnek benne, és ez szándékos: egy naptár,
+   * ami a dátum nélkülieket is mutatja, nem naptár, hanem lista.
+   */
+  calendar(from: Date, to: Date) {
+    return this.repository.list({ plannedFor: { gte: from, lte: to } });
+  }
+
+  async detail(id: string) {
+    const item = await this.repository.detail(id);
+    if (!item) throw new NotFoundException("A tartalom nem található.");
+
+    const blockers = contentBlockers({
+      state: item.state,
+      imageRequired: item.imageRequired,
+      imageAttached: item.imageAttachedAt !== null,
+    });
+
+    // AZ ÜTEMEZÉS ÁLLÁSA A TÉTELLEL EGYÜTT JÖN, mert a felület naptára két
+    // dátumot mutat: amikorra ütemezve van, és amikor a MI határidőnk lejár
+    // rajta. Egy „ütemezve" felirat a lejárat nélkül eseménytelennek látszana,
+    // holott ez az egyetlen állapotunk, amiben a semmittevésnek határideje van.
+    const schedule =
+      item.state === "SCHEDULED" && item.scheduleAnchoredAt
+        ? scheduleStanding(
+            { scheduleAnchoredAt: item.scheduleAnchoredAt },
+            new Date(),
+          )
+        : null;
+
+    return { ...item, blockers, schedule };
+  }
+
+  /**
+   * ÁLLAPOTVÁLTÁS, HÁROM KAPUVAL.
+   *
+   * 1. Az átmenet engedélyezett-e (`planTransition`).
+   * 2. Kíván-e KÜLSŐ munkát -- ilyenkor NEM írunk, hanem visszautasítunk. A
+   *    Facebook-oldali visszavonás külön döntés, és amíg nincs megépítve, egy
+   *    állapot-átírás azt hazudná, hogy a poszt nem megy ki.
+   * 3. A tétel abban az állapotban van-e, amiben a hívó hitte (feltételes
+   *    írás a repository-ban).
+   */
+  async move(input: {
+    id: string;
+    from: ContentState;
+    to: ContentState;
+    discardReason?: string;
+  }) {
+    const planned = planTransition(input.from, input.to);
+
+    if (planned.kind === "refused") {
+      throw new BadRequestException(
+        `Ez a lépés nem megengedett: ${input.from} -> ${input.to}.`,
+      );
+    }
+
+    if (planned.kind === "needs-external") {
+      throw new ConflictException(planned.external.reason);
+    }
+
+    // AZ ELVETÉS OKA KÖTELEZŐ. Ok nélkül az „elvetve" állapot annyit mond, hogy
+    // valaki egyszer nemet mondott -- de nem azt, hogy MIÉRT, és a következő
+    // ember ugyanazt a tételt fogja újra elkezdeni.
+    if (input.to === "DISCARDED" && !input.discardReason?.trim()) {
+      throw new BadRequestException("Az elvetés oka kötelező.");
+    }
+
+    const moved = await this.repository.moveState({
+      id: input.id,
+      from: input.from,
+      to: input.to,
+      ...(input.to === "DISCARDED"
+        ? { discardReason: input.discardReason?.trim() ?? null }
+        : {}),
+      ...(input.to === "SCHEDULED"
+        ? {
+            scheduleAnchoredAt: new Date(),
+            scheduledFor: scheduleTargetFor(new Date()),
+          }
+        : {}),
+    });
+
+    if (!moved) {
+      throw new ConflictException(
+        "A tartalom időközben más állapotba került. Töltsd újra, mielőtt döntesz.",
+      );
+    }
+
+    return { ok: true as const };
+  }
+
+  async comment(input: { contentId: string; authorId: string; body: string }) {
+    if (!input.body.trim())
+      throw new BadRequestException("Az üres hozzászólás nem menthető.");
+    await this.repository.detail(input.contentId).then((item) => {
+      if (!item) throw new NotFoundException("A tartalom nem található.");
+    });
+    return this.repository.addComment({ ...input, body: input.body.trim() });
+  }
+}
