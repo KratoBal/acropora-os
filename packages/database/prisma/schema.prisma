@@ -3455,3 +3455,117 @@ enum DatasheetField {
   AMIT_O_VESZELYEZTET
   AMI_OT_VESZELYEZTETI
 }
+
+/// A tartalom útja, kilenc állapottal. A részletes indoklás és az átmenetek
+/// zárt listája az `apps/api/src/content/content-state.ts` fájlban áll, ott
+/// mérve is van; itt csak a nevek.
+///
+/// A "KÉPRE VÁR" SZÁNDÉKOSAN NINCS KÖZTÜK. A kép nem a szöveg útjának egy
+/// szakasza, hanem tőle független feltétel: ma hat kész szövegű poszt vár
+/// kizárólag fotóra, és ha ez állapot lenne, azoknál elveszne, hogy a szövegük
+/// már jóváhagyott. A képet a `imageRequired` és az `imageAttachedAt` mezők
+/// írják le.
+enum ContentState {
+  IDEA
+  DRAFTING
+  AWAITING_REVIEW
+  AWAITING_REVISION
+  AWAITING_APPROVAL
+  READY_TO_SEND
+  SCHEDULED
+  SENT
+  DISCARDED
+}
+
+/// Hova készül a tartalom. A felület első köre CSAK azt kezeli, amit mi
+/// gyártunk (Balázs döntése, 2026-09-01 14:35): a Drive és a Facebook marad,
+/// ahol van, azokra hivatkozunk.
+enum ContentChannel {
+  FACEBOOK_POST
+  FACEBOOK_AD
+  ARTICLE
+  OTHER
+}
+
+/// Egy tartalom-tétel: poszt, hirdetésszöveg vagy cikk, a keletkezésétől a
+/// kiküldéséig.
+///
+/// MIÉRT KELL EGYÁLTALÁN: ma három hely tükrözi ugyanazt az állapotot (a
+/// kanban, egy kézzel karbantartott lap, és a kiküldés utólagos lekérdezése),
+/// és egyik sem frissül a másiktól. Ez a tábla nem NEGYEDIK hely: azzal a
+/// feltétellel készül, hogy átveszi a másik hármat.
+///
+/// A KIKÜLDÉS TÉNYE KÍVÜLRŐL ÉRKEZIK, és ez a legdrágább mai hiány, mert
+/// CSENDES: egy elavult lap pontosan úgy néz ki, mint egy friss. Az
+/// `externalPostId` és a `sentAt` ezért nem kézzel töltött mezők -- a flotta
+/// meglévő olvasó eszköze (`scripts/fb-insights.sh posts`) adja őket, ami
+/// `id`, `created_time`, `message` és `permalink_url` mezőket ad vissza.
+///
+/// AMI EBBŐL NEM KÖVETKEZIK: hogy a rendszer KI IS KÜLD. A flottában egyetlen
+/// ágensnek van Facebook publikálási joga (a `sec-fb` csoport egyetlen tagja),
+/// de Balázs szabálya 2026-09-01 14:28-ról az, hogy egyelőre semmi nem mehet ki
+/// nélküle vagy Luca nélkül. A jog megléte NEM engedély, és ezt a mező
+/// nevéből is látni kell: ami visszaérkezik, az egy MEGTÖRTÉNT kiküldés
+/// azonosítója, nem egy kiküldési parancs.
+model ContentItem {
+  id      String         @id @default(cuid())
+  title   String
+  body    String?
+  channel ContentChannel
+  state   ContentState   @default(IDEA)
+
+  /// A KÉP MINT FELTÉTEL, NEM ÁLLAPOT. A kettő független: egy vázlatnak is
+  /// lehet kész képe, és egy jóváhagyott szöveg is várhat fotóra.
+  imageRequired   Boolean   @default(false)
+  imageAttachedAt DateTime?
+
+  authorId   String?
+  reviewerId String?
+
+  /// A tervezett kiküldés napja, a naptár nézethez. Ez a SZÁNDÉK, nem az
+  /// ütemezés: az utóbbi a `scheduledFor`.
+  plannedFor DateTime?
+
+  /// AZ ÜTEMEZÉS HORGONYA: a létrehozás, VAGY az utolsó DÁTUM-mozdítás.
+  /// Szövegmódosítás nem írja át, és ez nem részletkérdés: a "piszkozat
+  /// gyújtózsinórral" szabály szerint a 25. napon figyelmeztetés megy, két
+  /// órával később a poszt törlődik, és a dátum mozdítása az EGYETLEN, ami
+  /// "foglalkozott vele"-nek számít. Ha a szerkesztés is átírná, egy
+  /// vesszőhiba javítása újraindítaná a határidőt.
+  scheduleAnchoredAt DateTime?
+  /// Mikorra van ütemezve. A feltöltés napja + 29 nap: a Graph API a +30-at
+  /// elutasítja, és a távoli vég szándékos -- a hallgatás így NEMET jelent.
+  scheduledFor       DateTime?
+
+  /// A MEGTÖRTÉNT kiküldés azonosítója a külső felületen, és a tény ideje.
+  /// Lekérdezésből jön, nem kézzel írjuk be.
+  externalPostId String?
+  externalUrl    String?
+  sentAt         DateTime?
+
+  /// Az elvetés oka KÖTELEZŐ, ha a tétel elvetett. Ezt az alkalmazás őrzi:
+  /// egy adatbázis-szintű megkötés itt az állapotgép egészét kívánná a
+  /// táblába, és a két hely külön romlana el.
+  discardReason String?
+
+  comments  ContentComment[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([state, plannedFor])
+  @@index([channel, state])
+}
+
+/// A beszélgetés a tételen belül, hogy a felvetésre ott lehessen válaszolni, ne
+/// egy külön csatornán. Balázs kérése szó szerint: "Valaszolni lehet a
+/// felvetesekre."
+model ContentComment {
+  id        String      @id @default(cuid())
+  contentId String
+  content   ContentItem @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  authorId  String?
+  body      String
+  createdAt DateTime    @default(now())
+
+  @@index([contentId, createdAt])
+}
