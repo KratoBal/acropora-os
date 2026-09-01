@@ -317,8 +317,7 @@ class FakeDb implements UnasOrderSyncDatabase {
         // repository.ts), but default to null (Prisma's own default for
         // an omitted nullable field) so this fake doesn't silently diverge
         // from real Prisma behavior if a future caller ever omits it.
-        unasInvoiceStatus:
-          args.data.unasInvoiceStatus ?? null,
+        unasInvoiceStatus: args.data.unasInvoiceStatus ?? null,
         unasDeletedAt: null,
         lines,
       };
