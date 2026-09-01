@@ -7,6 +7,7 @@ import {
   PurchaseInvoiceRepository,
   type CreatePurchaseInvoiceLine,
   type CreatePurchaseInvoiceParams,
+  type PurchaseInvoiceCreateTransaction,
   type PurchaseInvoiceDatabase,
 } from "./purchase-invoice.repository.js";
 
@@ -140,6 +141,10 @@ class FakeDb {
       const lineInputs: any[] = args.data.lines?.create ?? [];
       const lines = lineInputs.map((line: any) => ({
         id: line.id ?? nextId("invoice-line"),
+        /// The foreign key back to the invoice. A real Prisma row always
+        /// carries it, and the contract requires it; the fixture omitted it,
+        /// which is invisible for as long as nothing checks the shape.
+        purchaseInvoiceId: id,
         variantId: line.variantId ?? null,
         sourceDescription: line.sourceDescription ?? null,
         orderedQuantity: line.orderedQuantity,
@@ -176,6 +181,9 @@ class FakeDb {
         note: args.data.note ?? null,
         createdAt: now,
         updatedAt: now,
+        /// Who booked the invoice. Nullable in the schema, and the fixture
+        /// omitted it entirely - which the contract does not allow.
+        createdById: args.data.createdById ?? null,
         lines,
       };
       this.invoiceDetails.push(detail);
@@ -357,9 +365,11 @@ class FakeDb {
       /// return `{}`, and the movement writer USES that id - it is how a
       /// publish whose baseline was never known gets dead-lettered.
       ///
-      /// UNGUARDED, unlike the same fix in the other three doubles: the
-      /// transaction parameter above is still `any`, so nothing stops the
-      /// next edit from returning `{}` again. See that comment for why.
+      /// GUARDED since the transaction seam above was typed: putting `{}`
+      /// back is a compile error, measured. This comment previously said the
+      /// opposite, and it was true when written - a note that describes a
+      /// protection which has since changed is worse than no note, so it is
+      /// rewritten rather than left standing.
       const row = {
         id: nextId("outbox"),
         variantId: args.data.variantId,
@@ -389,17 +399,12 @@ class FakeDb {
 
   productVariant = { findMany: async () => [] };
 
-  /// STILL `any`, and that is a known gap, not an oversight.
-  ///
-  /// Typing this parameter is the right fix - it is what made the compiler
-  /// catch the missing `id` in the three other doubles. Here it cannot be
-  /// done yet: `purchaseInvoice.create` returns a projection, and satisfying
-  /// the contract needs the full Prisma-shaped row with its relations. That
-  /// is fixture work of a different size and belongs in its own change.
-  ///
-  /// Until then the `create` below is correct but UNGUARDED: nothing stops
-  /// the next edit from returning `{}` again.
-  async $transaction<T>(operation: (transaction: any) => Promise<T>) {
+  /// Typed, not `any`: `this` is what reaches the movement writer, so the
+  /// compiler has to check it against the same contract the repository
+  /// promises it.
+  async $transaction<T>(
+    operation: (transaction: PurchaseInvoiceCreateTransaction) => Promise<T>,
+  ) {
     return operation(this);
   }
 }
