@@ -224,11 +224,29 @@ docker run --rm --entrypoint node --env DATABASE_URL=<staging_url> acropora-api 
 | Postgres data directory                 | Postgres resource | Use Coolify's managed Postgres resource type for this rather than a hand-rolled volume where practical — it comes with built-in scheduled backups and simpler upgrade handling. |
 | Redis data directory (`appendonly yes`) | Redis resource    | Low priority today (cache/health-check only — see `docs/DEPLOYMENT.md` Section 6); becomes important if Redis is later used for session storage.                                |
 
-**Neither `web` nor `api` needs a persistent volume.** Both are stateless
-by design — `web` serves only its build output, `api` holds no local
-state outside the database and (currently) in-memory session storage,
-which is itself a documented limitation, not something a volume would
-fix (see the architecture review, Section 2A/2B).
+**`web` needs no persistent volume**, and `api` needs none **as long as the
+document store is switched off** — which is where it stands today. `web` serves
+only its build output; `api` holds no local state outside the database and
+(currently) in-memory session storage, which is itself a documented limitation,
+not something a volume would fix (see the architecture review, Section 2A/2B).
+
+> **This paragraph said "neither needs a volume" without a condition until the
+> document store landed, and the condition is the whole point.** `api` reads
+> `DOCUMENT_STORE_ROOT`: unset, it keeps every document's bytes in the database
+> exactly as before, and no volume is involved. Set, it writes files to that
+> path — and without a persistent volume behind it, those files live on the
+> container's own layer and are gone at the next redeploy.
+>
+> **Nothing warns about this at write time, and that is deliberate on the other
+> side:** the store treats a directory as configured only when a marker file is
+> present inside it, and the application NEVER creates that marker. A missing
+> marker answers `not-configured`, so an unmounted path cannot quietly pass for
+> a mounted one. The marker is placed by deployment, inside the volume — which
+> is exactly why it must not be created by anything else.
+>
+> **What this means for the checklist:** turning the document store on is one
+> variable plus one volume plus one marker file, and skipping either of the last
+> two is silent data loss rather than an error.
 
 Postgres and Redis must **not** be exposed on public ports — the local
 `docker-compose.yml` does this (`5432`/`6379` published to the host) for
