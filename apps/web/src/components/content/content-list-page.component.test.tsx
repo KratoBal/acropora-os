@@ -1,10 +1,11 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ContentListPage } from "./content-list-page";
 
 const api = vi.hoisted(() => ({
   waiting: vi.fn(),
+  waitingOnMe: vi.fn(),
   waitingForImage: vi.fn(),
 }));
 
@@ -44,6 +45,7 @@ const item = (overrides: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   api.waiting.mockReset().mockResolvedValue([]);
+  api.waitingOnMe.mockReset().mockResolvedValue({ items: [], notCovered: [] });
   api.waitingForImage.mockReset().mockResolvedValue([]);
 });
 
@@ -92,7 +94,11 @@ describe("what the content list says when the load fails", () => {
    * ugyanolyan láthatatlan, mint amelyik nincs is ott.
    */
   it("puts the error above the sections", async () => {
-    api.waiting.mockRejectedValue(new Error("hálózati hiba"));
+    // AZ ALAPERTELMEZETT NEZET MOST A "MI VAR RAM", tehat a hibat ott kell
+    // eloallitani. A regi alak a `waiting` hivast rontotta el, ami ebben a
+    // nezetben el sem indul -- egy teszt, ami a rossz utat rontja el, zolden
+    // hallgat arrol, amit merni akart.
+    api.waitingOnMe.mockRejectedValue(new Error("hálózati hiba"));
 
     const { container } = render(<ContentListPage />);
 
@@ -178,5 +184,67 @@ describe("what the summary strip shows", () => {
       expect(screen.getByText("Semmi nem vár képre.")).toBeTruthy(),
     );
     expect(screen.queryByText(/tétel vár/)).toBeNull();
+  });
+});
+
+describe("the view that opens by default", () => {
+  /**
+   * AMI RÁM VÁR, SZEREP-VÁLASZTÁS NÉLKÜL.
+   *
+   * Balázs panasza szó szerint az volt, hogy nem látja, mi vár rá. Egy
+   * szerep-választó, amit előbb be kell állítani, ezt a kérdést egy lépéssel
+   * odébb tolja -- és aki nem tudja, melyik szerepet keresse, üres listát lát.
+   */
+  it("asks what waits on me, not what waits on a role", async () => {
+    render(<ContentListPage />);
+
+    await waitFor(() => expect(api.waitingOnMe).toHaveBeenCalledTimes(1));
+    // ÉS A SZEREP SZERINTI HÍVÁS EL SEM INDUL. E nélkül az állítás attól is zöld
+    // lenne, hogy MINDKETTŐ lefut, és a felhasználó a rosszabbikat látja.
+    expect(api.waiting).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A SZŰRÉS LÁTHATÓ, ÉS EGY KATTINTÁSSAL LEVEHETŐ. Aki nem tudja, hogy szűrt
+   * listát néz, a hiányzó tételt nem létezőnek hiszi -- ezért a nézet ugyanabban
+   * a választóban áll, mint a szerepek, nem külön dobozban.
+   */
+  it("keeps every other view one click away", async () => {
+    render(<ContentListPage />);
+
+    await waitFor(() => expect(api.waitingOnMe).toHaveBeenCalled());
+
+    const select = screen.getByRole("combobox");
+    fireEvent.change(select, { target: { value: "approver" } });
+
+    await waitFor(() => expect(api.waiting).toHaveBeenCalledTimes(1));
+    expect(api.waiting.mock.calls[0]![1]).toBe("approver");
+  });
+
+  /**
+   * ÉS AMIT A NÉZET NEM FED LE, AZ KI VAN ÍRVA.
+   *
+   * Ez ugyanaz az elv, mint a dokumentum-tároló állapotánál: a válasz mondja
+   * meg, miről nem tud nyilatkozni. Egy „ami rám vár" lista, ami egy negyedét
+   * kihagyja és hallgat róla, hamis megnyugvást ad.
+   */
+  it("says on screen which quarter it cannot cover", async () => {
+    api.waitingOnMe.mockResolvedValue({
+      items: [],
+      notCovered: [
+        {
+          role: "sender",
+          reason: "A kiküldésre kész tételek nem szerepelnek ebben a nézetben.",
+        },
+      ],
+    });
+
+    render(<ContentListPage />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/kiküldésre kész tételek nem szerepelnek/),
+      ).toBeTruthy(),
+    );
   });
 });

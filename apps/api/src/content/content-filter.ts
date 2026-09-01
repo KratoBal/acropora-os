@@ -42,6 +42,72 @@ export function waitingFor(role: ContentViewerRole): WaitingForMeFilter {
 }
 
 /**
+ * MI VÁR RÁM, SZEREP-VÁLASZTÁS NÉLKÜL.
+ *
+ * A PANASZ, AMIBŐL EZ KÉSZÜL: a szerep-választóval ma NÉGY nézetet kell
+ * végignézni ahhoz, hogy valaki lássa, mi vár rá. Aki egyszerre szerző és
+ * jóváhagyó, két helyen keres -- Balázs mondata pedig épp az volt, hogy nem
+ * látja, mi vár rá.
+ *
+ * A HÁROM RÉSZ KÜLÖN SZŰKÜL, ÉS EZÉRT NEM EGY ÁLLAPOTLISTA: a szerzőnek és a
+ * lektornak a SAJÁT tételei várnak, a jóváhagyónak MINDEN jóváhagyásra váró,
+ * akárki írta. Egy közös állapot-halmaz ezt a különbséget elveszítené, és vagy
+ * mások vázlataival töltené meg a szerző listáját, vagy elrejtené a jóváhagyó
+ * elől azt, amit nem ő indított.
+ */
+export interface ContentViewerCapabilities {
+  userId: string;
+  /** Van-e `content.approve` joga. A jogot a hívó olvassa ki, nem ez a modul. */
+  canApprove: boolean;
+}
+
+export interface WaitingOnMeShard {
+  states: ContentState[];
+  /** Kire szűkül: a saját szerzőségre, a saját lektorságra, vagy senkire. */
+  scope: "own-author" | "own-reviewer" | "everyone";
+}
+
+export function waitingOnMe(
+  viewer: ContentViewerCapabilities,
+): WaitingOnMeShard[] {
+  const shards: WaitingOnMeShard[] = [
+    { states: STATES_BY_ROLE.author, scope: "own-author" },
+    { states: STATES_BY_ROLE.reviewer, scope: "own-reviewer" },
+  ];
+  // A JÓVÁHAGYÓI RÉSZ CSAK AKKOR KERÜL BE, HA VAN HOZZÁ JOG. Enélkül minden
+  // felhasználó listájában ott állna az összes jóváhagyásra váró tétel -- olyan
+  // sor, amivel nem tud mit kezdeni, és ami elfedné azt, ami tényleg rá vár.
+  if (viewer.canApprove)
+    shards.push({ states: STATES_BY_ROLE.approver, scope: "everyone" });
+  return shards;
+}
+
+/**
+ * AMIT EZ A NÉZET NEM TUD LEFEDNI, ÉS AMIÉRT KI KELL MONDANI.
+ *
+ * A `sender` szerep MA SEMMIBŐL NEM VEZETHETŐ LE: nincs sender mező a sémán, és
+ * nincs külön jog rá. A szerep-választóban létező név, nem a rendszer állapota.
+ *
+ * EZÉRT NEM EGYSZERŰEN KIMARAD, HANEM MEG VAN NEVEZVE. Egy nézet, ami „mi vár
+ * rám" néven fut és közben egy negyedét kihagyja, pontosan azt a hamis
+ * megnyugvást adja, amit a hibás listáknál kerülni akarunk: aki nem tudja, hogy
+ * hiányzik valami, a hiányzót nem létezőnek hiszi.
+ *
+ * A negyedik negyed sorsa külön döntés (kártya: c057b4db), és akkor esedékes,
+ * amikor a kiküldés ténylegesen működni fog -- nem egy nézet kedvéért.
+ */
+export const ROLES_THIS_VIEW_CANNOT_COVER: {
+  role: ContentViewerRole;
+  reason: string;
+}[] = [
+  {
+    role: "sender",
+    reason:
+      "A kiküldésre kész tételek nem szerepelnek ebben a nézetben: ma nincs olyan mező vagy jog, amiből kiderülne, ki a kiküldő. Ezt a szerep-választóval lehet megnézni.",
+  },
+];
+
+/**
  * AMI SENKIRE NEM VÁR, DE MÉGSEM KÉSZ: a képre váró tételek.
  *
  * Ez KÜLÖN lekérdezés, és nem az állapotszűrő része, mert a kép független a

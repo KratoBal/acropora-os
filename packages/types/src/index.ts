@@ -111,6 +111,7 @@ export type {
   ContentMoveOption,
   ContentState,
   ContentViewerRole,
+  ContentWaitingOnMeResponse,
 } from "./content-management.js";
 export type {
   CreateCustomerAddressInput,

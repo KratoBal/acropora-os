@@ -2,6 +2,7 @@ import type {
   ContentListResponse,
   ContentState,
   ContentViewerRole,
+  ContentWaitingOnMeResponse,
 } from "@acropora/types";
 
 import { apiRequest } from "./client";
@@ -18,6 +19,21 @@ export const contentApi = {
   waiting(token: string, role: ContentViewerRole, signal?: AbortSignal) {
     return apiRequest<ContentListResponse>(
       `/content/waiting?role=${role}`,
+      token,
+      { signal },
+    );
+  },
+
+  /**
+   * MI VÁR RÁM, SZEREP-VÁLASZTÁS NÉLKÜL.
+   *
+   * A SZEREP NEM MEGY ÁT, ÉS EZ A LÉNYEG: a szerver a bejelentkezett
+   * felhasználóból és a jogaiból számolja ki, mi vár rá. A `waiting` hívással
+   * szemben itt nincs mit választani, és ezért nem is lehet rosszul választani.
+   */
+  waitingOnMe(token: string, signal?: AbortSignal) {
+    return apiRequest<ContentWaitingOnMeResponse>(
+      "/content/waiting-on-me",
       token,
       { signal },
     );

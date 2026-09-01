@@ -8,8 +8,10 @@ import {
 
 import { ContentRepository } from "./content.repository.js";
 import {
+  ROLES_THIS_VIEW_CANNOT_COVER,
   STATES_THAT_CAN_WAIT_FOR_IMAGE,
   waitingFor,
+  waitingOnMe,
   type ContentViewerRole,
 } from "./content-filter.js";
 import {
@@ -63,6 +65,38 @@ export class ContentService {
           : {}),
       }),
     );
+  }
+
+  /**
+   * MI VÁR RÁM, SZEREP-VÁLASZTÁS NÉLKÜL.
+   *
+   * A HÁROM RÉSZ EGY LEKÉRDEZÉSBE MEGY, `OR`-ral, nem három hívásba: így a
+   * rendezés a teljes halmazon érvényes. Három külön lista összefűzése azt
+   * jelentené, hogy a legrégebbi tétel a második lista tetején állna, és a
+   * sorrend -- ami ebben a nézetben a sürgősséget hordozza -- hazudna.
+   *
+   * A VÁLASZ MEGNEVEZI, MIT NEM FED LE. Ez nem óvatoskodás: a `sender` szerep ma
+   * semmiből nem vezethető le, és egy „mi vár rám" nézet, ami erről hallgat,
+   * pontosan azt a hamis megnyugvást adja, amit kerülni akarunk. Ugyanaz az elv,
+   * mint a dokumentum-tároló állapotánál: a válasz mondja meg, miről nem tud
+   * nyilatkozni.
+   */
+  async waitingOnMe(viewer: { userId: string; canApprove: boolean }) {
+    const shards = waitingOnMe(viewer);
+    const items = await this.repository.list({
+      OR: shards.map((shard) => ({
+        state: { in: shard.states },
+        ...(shard.scope === "own-author" ? { authorId: viewer.userId } : {}),
+        ...(shard.scope === "own-reviewer"
+          ? { reviewerId: viewer.userId }
+          : {}),
+      })),
+    });
+
+    return {
+      items: this.withMoves(items),
+      notCovered: ROLES_THIS_VIEW_CANNOT_COVER,
+    };
   }
 
   /**

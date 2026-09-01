@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  ROLES_THIS_VIEW_CANNOT_COVER,
   STATES_THAT_CAN_WAIT_FOR_IMAGE,
   waitingFor,
+  waitingOnMe,
 } from "./content-filter.js";
 
 describe("what the default list shows", () => {
@@ -63,5 +65,65 @@ describe("which pieces can still be waiting for an image", () => {
    */
   it("still counts a scheduled piece, because ours may be the incomplete one", () => {
     assert.equal(STATES_THAT_CAN_WAIT_FOR_IMAGE.includes("SCHEDULED"), true);
+  });
+});
+
+describe("what waits on me, without picking a role", () => {
+  /**
+   * A SAJÁT MUNKA MINDIG BENNE VAN, a jog kérdésétől függetlenül: bárki lehet
+   * szerző vagy lektor egy tételen, ahhoz nem kell külön jogosultság.
+   */
+  it("always covers my own drafts and reviews", () => {
+    const shards = waitingOnMe({ userId: "u1", canApprove: false });
+
+    assert.deepEqual(
+      shards.map((shard) => shard.scope),
+      ["own-author", "own-reviewer"],
+    );
+  });
+
+  /**
+   * A JÓVÁHAGYÓI RÉSZ CSAK JOGGAL KERÜL BE. E nélkül minden felhasználó
+   * listájában ott állna az összes jóváhagyásra váró tétel: olyan sorok,
+   * amikkel nem tud mit kezdeni, és amik elfednék azt, ami tényleg rá vár.
+   */
+  it("adds the approval queue only for someone who can approve", () => {
+    const withRight = waitingOnMe({ userId: "u1", canApprove: true });
+    const without = waitingOnMe({ userId: "u1", canApprove: false });
+
+    assert.equal(withRight.length, 3);
+    assert.equal(without.length, 2);
+    assert.deepEqual(withRight[2], {
+      states: ["AWAITING_APPROVAL"],
+      scope: "everyone",
+    });
+  });
+
+  /**
+   * ÉS A JÓVÁHAGYÓI RÉSZ NEM SZŰKÜL SAJÁT TÉTELEKRE, a másik kettő igen. Ez a
+   * különbség az egész nézet lényege: a jóváhagyóra MINDEN rá váró tétel vár,
+   * akárki írta, a szerzőre viszont csak a sajátja.
+   */
+  it("narrows my own work but not the approval queue", () => {
+    const shards = waitingOnMe({ userId: "u1", canApprove: true });
+
+    assert.deepEqual(
+      shards.map((shard) => shard.scope),
+      ["own-author", "own-reviewer", "everyone"],
+    );
+  });
+
+  /**
+   * AMIT A NÉZET NEM FED LE, AZ MEG VAN NEVEZVE, NEM HALLGATVA.
+   *
+   * Egy „mi vár rám" nézet, ami egy negyedét kihagyja és erről nem szól,
+   * pontosan azt a hamis megnyugvást adja, amit kerülni akarunk: aki nem tudja,
+   * hogy hiányzik valami, a hiányzót nem létezőnek hiszi.
+   */
+  it("names the quarter it cannot cover, with a reason", () => {
+    assert.equal(ROLES_THIS_VIEW_CANNOT_COVER.length, 1);
+    assert.equal(ROLES_THIS_VIEW_CANNOT_COVER[0]!.role, "sender");
+    // AZ INDOK NEM DÍSZ: abból tudja meg az olvasó, HOL nézze meg helyette.
+    assert.match(ROLES_THIS_VIEW_CANNOT_COVER[0]!.reason, /szerep-választóval/);
   });
 });

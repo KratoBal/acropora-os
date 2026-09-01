@@ -47,6 +47,28 @@ export class ContentController {
   }
 
   /**
+   * MI VÁR RÁM, SZEREP-VÁLASZTÁS NÉLKÜL.
+   *
+   * MIÉRT KÜLÖN VÉGPONT, ÉS NEM A `waiting` EGYIK SZEREPE: a `waiting` egy
+   * SZEREP szemével kérdez, ez pedig a felhasználóéval. A kettő más bemenetet
+   * vesz (ott a szerep, itt a jog és az azonosító) és más alakot ad vissza (ott
+   * lista, itt lista PLUSZ az, amit a nézet nem fed le). Egy közös végpont a két
+   * választ egy alakba kényszerítené, és a különbség pont abban tűnne el, ami
+   * ebben a nézetben a legfontosabb.
+   *
+   * A JOGOT ITT OLVASSUK KI, nem a szolgáltatásban: a szűrő tiszta függvény
+   * marad, mérhetően, adatbázis és keret nélkül.
+   */
+  @Get("waiting-on-me")
+  @RequirePermissions(PERMISSIONS.CONTENT_VIEW)
+  waitingOnMe(@CurrentUser() user: AuthenticatedUser) {
+    return this.service.waitingOnMe({
+      userId: user.id,
+      canApprove: hasPermission(user, PERMISSIONS.CONTENT_APPROVE),
+    });
+  }
+
+  /**
    * AMI KÉPRE VÁR. Külön végpont, nem a `waiting` egyik szűrője: a kép a
    * szövegtől független feltétel, és ma NÉGY kész szövegű poszt áll pontosan
    * itt, 2026-08-18 óta (a szám és a határa a `content-state.ts` fejlécében).

@@ -330,3 +330,87 @@ describe("what the list hands to the screen", () => {
     assert.ok(rows[0]!.moves.length > 0);
   });
 });
+
+describe("the one view that answers what waits on me", () => {
+  /**
+   * A HÁROM RÉSZ EGY LEKÉRDEZÉSBE MEGY, `OR`-ral. Három külön hívás
+   * összefűzésénél a rendezés csak a részeken belül lenne igaz, és a
+   * legrégebbi tétel a második lista tetején állna -- ebben a nézetben pedig a
+   * sorrend hordozza a sürgősséget.
+   */
+  it("asks for all three parts at once, and narrows only my own work", async () => {
+    let where: unknown;
+    const { service } = serviceWith({
+      list: (async (input: unknown) => {
+        where = input;
+        return [];
+      }) as unknown as ContentRepository["list"],
+    });
+
+    await service.waitingOnMe({ userId: "user-1", canApprove: true });
+
+    const clauses = (where as { OR: Record<string, unknown>[] }).OR;
+    assert.equal(clauses.length, 3);
+    assert.equal(clauses[0]!.authorId, "user-1");
+    assert.equal(clauses[1]!.reviewerId, "user-1");
+    // A JÓVÁHAGYÓI RÉSZ NEM SZŰKÜL SENKIRE: se szerző, se lektor szerint.
+    assert.equal(clauses[2]!.authorId, undefined);
+    assert.equal(clauses[2]!.reviewerId, undefined);
+  });
+
+  /**
+   * ÉS JOG NÉLKÜL A HARMADIK RÉSZ EL SEM INDUL. E nélkül az előző állítás attól
+   * is zöld maradna, hogy a jóváhagyói rész MINDIG bekerül.
+   */
+  it("leaves the approval part out when the caller cannot approve", async () => {
+    let where: unknown;
+    const { service } = serviceWith({
+      list: (async (input: unknown) => {
+        where = input;
+        return [];
+      }) as unknown as ContentRepository["list"],
+    });
+
+    await service.waitingOnMe({ userId: "user-1", canApprove: false });
+
+    assert.equal((where as { OR: unknown[] }).OR.length, 2);
+  });
+
+  /**
+   * A VÁLASZ MEGNEVEZI, MIT NEM FED LE. Ugyanaz az elv, mint a
+   * dokumentum-tároló állapotánál: a válasz mondja meg, miről nem tud
+   * nyilatkozni -- különben a hiányzó negyed nem létezőnek látszik.
+   */
+  it("says out loud which quarter it does not cover", async () => {
+    const { service } = serviceWith();
+
+    const reported = await service.waitingOnMe({
+      userId: "user-1",
+      canApprove: true,
+    });
+
+    assert.deepEqual(
+      reported.notCovered.map((entry) => entry.role),
+      ["sender"],
+    );
+  });
+
+  /**
+   * ÉS A SOROK ITT IS MEGKAPJÁK A LÉPÉSEIKET. Egy nézet, ami megmondja, mi vár
+   * rám, de nem enged lépni, épp a felénél áll meg.
+   */
+  it("hands the same steps to this view as to the others", async () => {
+    const { service } = serviceWith({
+      list: (async () => [
+        { id: "c1", state: "AWAITING_APPROVAL" },
+      ]) as unknown as ContentRepository["list"],
+    });
+
+    const reported = await service.waitingOnMe({
+      userId: "user-1",
+      canApprove: true,
+    });
+
+    assert.ok(reported.items[0]!.moves.length > 0);
+  });
+});
