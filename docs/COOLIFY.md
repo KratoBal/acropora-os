@@ -272,3 +272,29 @@ configuration for either resource.
   isn't just "redeploy the old image."
 - **`web` rollback** is always just a redeploy of the previous image — it
   holds no state, so there's no equivalent complication.
+
+## Which machine deploys itself, measured 2026-09-01
+
+Two Coolify instances, and they do NOT behave the same. Measured from both APIs at 14:52 and
+again at 15:10.
+
+- **coolify.acropora.hu is production.** `api.acropora.hu`, `app.acropora.hu` and
+  `commerce.acropora.hu` are **manual only**: a merge to `main` deploys nothing here, someone
+  triggers it. That is deliberate.
+- **coolify2.acropora.hu is staging**, and it is a **different machine**. The `*-staging`
+  entries that used to sit on the production instance were deleted on 2026-09-01, after
+  measuring that no running application referenced them.
+- **Staging did not redeploy itself.** A merge landed on `main` at 15:05:20; at 15:10:01 the
+  staging API still served the previous commit and its container age kept climbing. The
+  push-to-deploy path is not working there yet, whatever the UI says.
+- **Traffic reaches staging through Caddy, not through the Coolify proxy.** Both staging
+  hostnames answer with `via: 1.1 Caddy`; production carries no such header. This is why the
+  Coolify proxy being stopped on that machine took nothing down: it is not in the path. Before
+  making the two machines match, find out what else sits behind that Caddy, because the live
+  AI agent runs on the same machine.
+
+**Why this paragraph exists.** On 2026-09-01 the same three facts were asked three times in one
+afternoon, and all three had been written down the evening before. A document nobody opens is
+not an answer. `scripts/infra-allapot.sh` in the Acrobot repo prints the live state of both
+machines together with these deploy modes, so the state and its meaning arrive in one output
+and cannot drift apart in the reader's head.
