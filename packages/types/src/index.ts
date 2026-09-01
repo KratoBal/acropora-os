@@ -105,6 +105,13 @@ export type {
   UpdateAssetInput,
 } from "./asset-management.js";
 export type {
+  ContentChannel,
+  ContentListItem,
+  ContentListResponse,
+  ContentState,
+  ContentViewerRole,
+} from "./content-management.js";
+export type {
   CreateCustomerAddressInput,
   CreateCustomerInput,
   CustomerAddress,

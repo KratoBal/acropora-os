@@ -60,10 +60,14 @@ export const PERMISSIONS = {
   /// kérésében a jóváhagyásról: „jova lehet hagyni mondjuk egy posztot ugy,
   /// hogy elotte lektoralja az akire tartozik."
   ///
-  /// A második fele -- hogy egyelőre semmi nem mehet ki nélküle vagy Luca
-  /// nélkül -- ugyanabból az üzenetből való, de a jegyzőkönyveinkben
-  /// ÖSSZEFOGLALVA szerepel, nem szó szerint. Így is írom ide: az első mondat
-  /// idézet, a második a mi olvasatunk arról, amit mondott.
+  /// A kiadásról ugyanabban az üzenetben ez áll, szintén szó szerint:
+  /// „egyelore ne menjen ki semmi amig en vagy Luca nem latja."
+  ///
+  /// MINDKÉT MONDAT IDÉZET. Ez a megjegyzés 2026-09-01 15:42-ig úgy állt, hogy
+  /// a második a mi összefoglalásunk -- akkor még nem volt meg a szó szerinti
+  /// alakja, és inkább jelöltem összefoglalásnak, mint hogy idézőjelbe tegyek
+  /// valamit, ami nem az ő szava. Egy hamis idézet rosszabb, mint egy hiányzó:
+  /// egy év múlva pont az idézőjel lenne a bizonyíték.
   CONTENT_APPROVE: "content.approve",
   SETTINGS_MANAGE: "settings.manage",
   USERS_MANAGE: "users.manage",

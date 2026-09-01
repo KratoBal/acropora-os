@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 
 import {
   businessNavigation,
+  contentNavigation,
   isNavigationGroup,
   isNavigationItemActive,
   navigationItems,
@@ -96,6 +97,7 @@ function NavigationGroup({
 const ALL_NAVIGATION_ITEMS = navigationItems([
   ...primaryNavigation,
   ...businessNavigation,
+  ...contentNavigation,
   ...secondaryNavigation,
   ...unasSettingsNavigation,
   ...settingsNavigation,
@@ -183,6 +185,31 @@ export function AppShell({ children }: { children: ReactNode }) {
         Működés
       </p>
       <div className="space-y-1">{businessNavigation.map(renderEntry)}</div>
+
+      {/*
+        A TARTALOM SAJÁT CSOPORT. Az „Működés" alá húzva egy hetedik sor lenne
+        a többi közt; a panasz viszont pont az volt, hogy nem látszik, mi vár
+        kire. Egy külön fejléc alatt egyetlen sor is megtalálható.
+      */}
+      {contentNavigation.filter(canAccess).length > 0 ? (
+        <>
+          <p className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+            Tartalom
+          </p>
+          <div className="space-y-1">
+            {contentNavigation.filter(canAccess).map((item) => (
+              <NavItem
+                key={item.href}
+                href={item.href}
+                label={item.label}
+                icon={<Icon name={item.icon} />}
+                active={isActive(item)}
+                onClick={() => setMobileNavigationOpen(false)}
+              />
+            ))}
+          </div>
+        </>
+      ) : null}
 
       <div className="mt-6 space-y-1 border-t border-slate-200 pt-4">
         {secondaryNavigation.filter(canAccess).map((item) => (
