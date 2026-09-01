@@ -87,9 +87,22 @@ describe("ProductBasicsEditor", () => {
     fireEvent.change(screen.getByLabelText("Leírás"), {
       target: { value: "Új leírás" },
     });
-    await waitFor(() =>
-      expect(screen.getByLabelText("Elsődleges kategória")).toBeTruthy(),
-    );
+    /**
+     * AZ OPCIÓRA VÁRUNK, NEM A MEZŐRE, és ez a különbség tette billegővé ezt a
+     * tesztet 2026-09-01-ig.
+     *
+     * A „Elsődleges kategória" MEZŐ a kategóriák betöltésétől FÜGGETLENÜL ott
+     * van: a `FormField` mindig renderel, és a select üresen is létezik. Egy rá
+     * váró `waitFor` tehát AZONNAL teljesül -- nem tud elbukni, tehát nem is
+     * véd. A `cat-2` OPCIÓ viszont csak az aszinkron betöltés után jelenik meg.
+     *
+     * MI TÖRTÉNT NÉLKÜLE: ha a `fireEvent.change` a betöltés ELŐTT futott, a
+     * nem létező opcióra a select értéke nem állt be, és a mentés
+     * `primaryCategoryId: null`-t küldött `cat-2` helyett. Ugyanaz a kód, két
+     * kimenetel, gépsebesség szerint. MÉRVE: függőben hagyott
+     * `categoryOptions` ígérettel a teszt pontosan ezzel a különbséggel bukik.
+     */
+    await screen.findByRole("option", { name: "Lehabzók" });
     fireEvent.change(screen.getByLabelText("Elsődleges kategória"), {
       target: { value: "cat-2" },
     });
