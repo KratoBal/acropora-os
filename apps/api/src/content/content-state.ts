@@ -261,6 +261,13 @@ export interface ContentMoveOption {
    * alakban, mert a felület ezt mutatja meg, mielőtt bárki rákattint.
    */
   blockedByExternalWork: string | null;
+  /**
+   * EZ AZ A LÉPÉS, AMI A FOLYAMATBAN ELŐRE VISZ. Állapotonként legfeljebb egy.
+   *
+   * A felület ezt emeli ki, a többit halkítja. A rangsor nem a felületé: ha ott
+   * dőlne el, minden képernyő maga találná ki, melyik a kézenfekvő lépés.
+   */
+  primary: boolean;
 }
 
 /**
@@ -278,9 +285,44 @@ export interface ContentMoveOption {
  * nem megy. Enélkül felkínálna egy gombot, a szerver elutasítaná, és a
  * felhasználó azt tanulná meg, hogy a gombok néha nem működnek.
  */
+/**
+ * A FOLYAMAT SORRENDJE, KIZÁRÓLAG AZÉRT, HOGY MEGMONDHASSUK, MELYIK LÉPÉS VISZ
+ * ELŐRE.
+ *
+ * MIÉRT KELL EGYÁLTALÁN: az átmenetek táblája ÉLEKET ír le, nem irányt. Abból,
+ * hogy `AWAITING_APPROVAL`-ból a `READY_TO_SEND` és az `AWAITING_REVISION` is
+ * megengedett, nem következik, melyik a kézenfekvő -- pedig egy soron, ahol
+ * három gomb áll egymás mellett, valamelyiknek ki kell emelkednie.
+ *
+ * MIÉRT NEM AZ `allowedMoves` SORRENDJÉBŐL: kézenfekvő lenne az első elemet
+ * venni, és HAMIS lenne. A táblában két állapotnál (`AWAITING_REVIEW`,
+ * `AWAITING_APPROVAL`) épp a VISSZAKÜLDÉS áll elöl. Egy ilyen feltevés némán
+ * rossz gombot emelne ki, és semmi nem szólna róla.
+ *
+ * MI EZ A SZÁM, ÉS MI NEM: a folyamatban elfoglalt hely, semmi más. Az
+ * `AWAITING_REVISION` azért áll a lektorálás ELŐTT, mert egy javításra
+ * visszaadott tétel újra lektorálásra megy. A `DISCARDED` kívül áll a soron: az
+ * elvetés soha nem „előre".
+ *
+ * A KÉT TÁBLA SZÉTCSÚSZHAT, ÉS EZT MÉRJÜK: a spec állítja, hogy minden
+ * állapotnak LEGFELJEBB egy elsődleges lépése van, és hogy ahol van elérhető
+ * előrelépés, ott van is egy.
+ */
+const PROGRESS_ORDER: Record<ContentState, number> = {
+  DISCARDED: -1,
+  IDEA: 0,
+  DRAFTING: 1,
+  AWAITING_REVISION: 2,
+  AWAITING_REVIEW: 3,
+  AWAITING_APPROVAL: 4,
+  READY_TO_SEND: 5,
+  SCHEDULED: 6,
+  SENT: 7,
+};
+
 export function moveOptions(from: ContentState): readonly ContentMoveOption[] {
   const approvalNeeded = requiresApproval(from);
-  return allowedMoves(from).map((to) => {
+  const steps = allowedMoves(from).map((to) => {
     const planned = planTransition(from, to);
     return {
       to,
@@ -289,4 +331,21 @@ export function moveOptions(from: ContentState): readonly ContentMoveOption[] {
         planned.kind === "needs-external" ? planned.external.reason : null,
     };
   });
+
+  // AZ ELSŐDLEGES A LEGKÖZELEBBI ELŐRELÉPÉS, nem a legtávolabbi. A
+  // `READY_TO_SEND`-ből a `SENT` áll a legmesszebb, de a kézenfekvő következő
+  // lépés az ütemezés -- a kiküldés tudomásulvétele nem az, amit egy ember
+  // ilyenkor tenni akar.
+  //
+  // ÉS EGY BLOKKOLT LÉPÉS SOHA NEM ELSŐDLEGES: egy kiemelt gomb, amit nem lehet
+  // megnyomni, rosszabb, mint ha semmi nem lenne kiemelve.
+  const here = PROGRESS_ORDER[from];
+  const forward = steps
+    .filter(
+      (step) =>
+        step.blockedByExternalWork === null && PROGRESS_ORDER[step.to] > here,
+    )
+    .sort((a, b) => PROGRESS_ORDER[a.to] - PROGRESS_ORDER[b.to])[0];
+
+  return steps.map((step) => ({ ...step, primary: step === forward }));
 }

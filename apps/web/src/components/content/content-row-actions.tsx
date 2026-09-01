@@ -143,7 +143,7 @@ export function ContentRowActions({
       </div>
 
       {discarding ? (
-        <div className="flex w-full flex-col gap-2 sm:w-72">
+        <div className="flex w-full flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:w-72">
           <Textarea
             aria-label="Az elvetés oka"
             placeholder="Miért vetjük el?"
@@ -183,7 +183,7 @@ export function ContentRowActions({
       ) : null}
 
       {commenting ? (
-        <div className="flex w-full flex-col gap-2 sm:w-72">
+        <div className="flex w-full flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:w-72">
           <Textarea
             aria-label="Hozzászólás"
             placeholder="Mit kell tudni erről a tételről?"
@@ -244,8 +244,21 @@ function MoveButton({
   return (
     <span className="flex flex-col gap-1">
       <Button
-        variant={move.to === "DISCARDED" ? "ghost" : "secondary"}
+        // EGY KIEMELT LÉPÉS SORONKÉNT, A TÖBBI HALKÍTVA.
+        //
+        // MIÉRT NEM MIND A NÉGY EGYFORMA: egy jóváhagyásra váró soron három
+        // lépés-gomb áll a hozzászólás mellett, és picasso lemérte, hogy négy
+        // egyforma gomb 390 pixelen két sorba törik -- ráadásul semmi nem
+        // mondja meg, mit akar tőlem a rendszer.
+        //
+        // MELYIK A KIEMELT, AZT A SZERVER DÖNTI EL (`primary`). Ha itt dőlne
+        // el, minden képernyő maga találná ki, és a második találgatás egy nap
+        // szétcsúszna az elsőtől.
+        variant={move.primary ? "primary" : "ghost"}
         size="sm"
+        className={
+          move.primary ? undefined : "px-1 underline underline-offset-2"
+        }
         disabled={pending || blocked !== null}
         title={blocked ?? undefined}
         onClick={onClick}

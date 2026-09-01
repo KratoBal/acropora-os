@@ -331,3 +331,104 @@ describe("what the list tells the screen about a step", () => {
     }
   });
 });
+
+describe("which step the screen should put first", () => {
+  /**
+   * ÁLLAPOTONKÉNT LEGFELJEBB EGY. Ez a `PROGRESS_ORDER` és a `TRANSITIONS`
+   * közötti szétcsúszást méri: ha a sorrend egy nap úgy változna, hogy két
+   * célállapot azonos helyre kerül, itt derül ki, nem egy képernyőn.
+   */
+  it("never marks two steps as the one to take", () => {
+    for (const state of ALL_STATES) {
+      const primaries = moveOptions(state).filter((option) => option.primary);
+      assert.ok(
+        primaries.length <= 1,
+        `${state}: ${primaries.length} elsődleges lépés`,
+      );
+    }
+  });
+
+  /**
+   * ÉS AHOL VAN ELÉRHETŐ ELŐRELÉPÉS, OTT VAN IS EGY. E nélkül az előző állítás
+   * attól is zöld maradna, hogy SOHA egyetlen lépés sem elsődleges -- vagyis a
+   * felületen semmi nem emelkedne ki, és senki nem tudná meg, miért.
+   */
+  it("names one wherever the piece can still move forward", () => {
+    for (const state of ALL_STATES) {
+      if (state === "SENT") continue;
+      const options = moveOptions(state);
+      assert.equal(
+        options.filter((option) => option.primary).length,
+        1,
+        `${state}: nincs elsődleges lépés`,
+      );
+    }
+  });
+
+  /**
+   * A KONKRÉT VÁLASZTÁSOK, NÉV SZERINT. Az első kettő azért áll itt, mert a
+   * kézenfekvő megoldás -- „legyen az `allowedMoves` első eleme" -- PONT EZEN A
+   * KÉT ÁLLAPOTON adna rossz választ: ott a visszaküldés áll elöl.
+   */
+  it("picks moving on, not sending back", () => {
+    const review = moveOptions("AWAITING_REVIEW").find(
+      (option) => option.primary,
+    );
+    const approval = moveOptions("AWAITING_APPROVAL").find(
+      (option) => option.primary,
+    );
+
+    assert.equal(review?.to, "AWAITING_APPROVAL");
+    assert.equal(approval?.to, "READY_TO_SEND");
+  });
+
+  /**
+   * A LEGKÖZELEBBI ELŐRELÉPÉS, NEM A LEGTÁVOLABBI. `READY_TO_SEND`-ből a `SENT`
+   * áll a sor végén, de amit egy ember ilyenkor tenni akar, az az ütemezés.
+   */
+  it("takes the next step, not the last one", () => {
+    const next = moveOptions("READY_TO_SEND").find((option) => option.primary);
+
+    assert.equal(next?.to, "SCHEDULED");
+  });
+
+  /**
+   * EGY BLOKKOLT LÉPÉS SOHA NEM ELSŐDLEGES. `SCHEDULED`-ból a visszavonás külső
+   * munkát kíván, tehát nem indítható -- egy kiemelt gomb, amit nem lehet
+   * megnyomni, rosszabb, mint ha semmi nem lenne kiemelve.
+   */
+  it("never highlights a step that cannot run today", () => {
+    for (const state of ALL_STATES) {
+      for (const option of moveOptions(state)) {
+        if (option.blockedByExternalWork === null) continue;
+        assert.equal(
+          option.primary,
+          false,
+          `${state} -> ${option.to} blokkolt, mégis elsődleges`,
+        );
+      }
+    }
+    // ÉS A KONTROLL: van egyáltalán blokkolt lépés, amin ez mérhető. E nélkül a
+    // fenti ciklus üresen is zöld lenne.
+    assert.ok(
+      moveOptions("SCHEDULED").some(
+        (option) => option.blockedByExternalWork !== null,
+      ),
+      "nincs blokkolt lépés, amin az állítás mérhető lenne",
+    );
+  });
+
+  /**
+   * AZ ELVETÉS SOHA NEM ELŐRE. A `DISCARDED` kívül áll a folyamat sorrendjén, és
+   * ez nem stílus: egy kiemelt „elvetve" gomb minden soron azt sugallná, hogy ez
+   * a kézenfekvő teendő.
+   */
+  it("never suggests discarding as the way forward", () => {
+    for (const state of ALL_STATES) {
+      const discard = moveOptions(state).find(
+        (option) => option.to === "DISCARDED",
+      );
+      if (discard) assert.equal(discard.primary, false, `${state}`);
+    }
+  });
+});

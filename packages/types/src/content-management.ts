@@ -40,6 +40,12 @@ export interface ContentMoveOption {
   to: ContentState;
   requiresApproval: boolean;
   blockedByExternalWork: string | null;
+  /**
+   * A FOLYAMATBAN ELŐRE VIVŐ LÉPÉS, állapotonként legfeljebb egy. A felület ezt
+   * emeli ki, a többit halkítja -- de a rangsort a szerver adja, különben
+   * minden képernyő maga találná ki, melyik a kézenfekvő lépés.
+   */
+  primary: boolean;
 }
 
 /**

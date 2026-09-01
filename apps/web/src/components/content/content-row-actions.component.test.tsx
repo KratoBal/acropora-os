@@ -64,12 +64,14 @@ const approvingStep = {
   to: "READY_TO_SEND" as const,
   requiresApproval: true,
   blockedByExternalWork: null,
+  primary: true,
 };
 
 const ordinaryStep = {
   to: "AWAITING_REVIEW" as const,
   requiresApproval: false,
   blockedByExternalWork: null,
+  primary: false,
 };
 
 beforeEach(() => {
@@ -178,6 +180,7 @@ describe("what the screen does with a list it did not write", () => {
               to: "AWAITING_LEGAL_CHECK",
               requiresApproval: false,
               blockedByExternalWork: null,
+              primary: false,
             },
           ] as unknown as ContentListItem["moves"],
         })}
@@ -209,6 +212,7 @@ describe("a step that cannot run today", () => {
               requiresApproval: false,
               blockedByExternalWork:
                 "A poszt ütemezve áll a Facebookon: az ütemezést ott vissza kell vonni.",
+              primary: false,
             },
           ],
         })}
@@ -238,6 +242,7 @@ describe("discarding, which needs a reason", () => {
               to: "DISCARDED",
               requiresApproval: false,
               blockedByExternalWork: null,
+              primary: false,
             },
           ],
         })}
@@ -333,5 +338,42 @@ describe("which endpoint a step goes to", () => {
       expect(screen.getByText(/időközben más állapotba került/)).toBeTruthy(),
     );
     expect(onDone).not.toHaveBeenCalled();
+  });
+});
+
+describe("which button stands out", () => {
+  /**
+   * EGY KIEMELT LÉPÉS SORONKÉNT, ÉS AZT A SZERVER VÁLASZTJA KI.
+   *
+   * A felület nem dönti el, melyik a kézenfekvő lépés: a `primary` mezőt kapja,
+   * és csak megjeleníti. Ez az állítás azt méri, hogy a KAPOTT rangsort követi,
+   * nem egy sajátot -- ezért adunk neki olyan sort, ahol nem az első elem az
+   * elsődleges.
+   */
+  it("follows the server's ranking instead of its own", () => {
+    render(
+      <ContentRowActions
+        item={item({
+          moves: [
+            {
+              to: "AWAITING_REVISION",
+              requiresApproval: true,
+              blockedByExternalWork: null,
+              primary: false,
+            },
+            approvingStep,
+          ],
+        })}
+        onDone={() => {}}
+      />,
+    );
+
+    const highlighted = screen.getByRole("button", { name: "kiküldésre kész" });
+    const quiet = screen.getByRole("button", { name: "javításra vár" });
+
+    // A KIEMELT GOMB NEM ALÁHÚZOTT SZÖVEG, a halkított igen. A két állítás
+    // EGYÜTT mér: ha minden gomb egyforma lenne, az egyik pirosodna.
+    expect(highlighted.className).not.toContain("underline");
+    expect(quiet.className).toContain("underline");
   });
 });
