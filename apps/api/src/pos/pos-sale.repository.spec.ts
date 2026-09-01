@@ -139,6 +139,21 @@ class FakeDb {
   };
 
   unasStockSyncOutbox = {
+    /// No prior baseline-unknown row in these fixtures: the movement writer
+    /// asks before every publish, and these tests are not about that guard.
+    findFirst: async () => null,
+    /// Closes a single row by id. The writer uses it to dead-letter a publish
+    /// whose baseline was never known; these fixtures start from an empty
+    /// warehouse, so their rows take that path.
+    update: async (args: any) => {
+      const row = this.outbox.find(
+        (candidate: any) => candidate.id === args.where.id,
+      );
+      if (row) {
+        row.status = args.data.status;
+      }
+      return {};
+    },
     updateMany: async (args: any) => {
       let count = 0;
       for (const row of this.outbox) {

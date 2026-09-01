@@ -99,6 +99,7 @@ interface RepairTransaction extends Pick<
     create(args: unknown): Promise<{ id: string }>;
     findFirst(args: unknown): Promise<{ id: string; status: string } | null>;
     findMany: StockReconciliationDatabase["unasStockSyncOutbox"]["findMany"];
+    update(args: unknown): Promise<unknown>;
   };
   stockReconciliationRepair: {
     create(args: unknown): Promise<RepairRow>;
