@@ -58,11 +58,34 @@ korábbi lépés hibája ártalmatlan.
    Ha ez a kötet csatolása ELŐTT történne, a fájl a konténer saját rétegére
    kerülne, és a csatolás elfedné — a tároló `not-configured` maradna, miközben
    a jelölő „ott van".
-4. **A mentés lássa a kötetet.** Ez a blokkoló feltétel, és nem technikai
+4. **A kötet bekerül a mentésbe.** Ez a blokkoló feltétel, és nem technikai
    formaság: amíg a kötet nincs a mentésben, egy lemezre írt fájl KIKERÜL a
    mentésből, és a munka késznek LÁTSZANA.
+
+   **NEM TÖRTÉNIK MEG MAGÁTÓL, és ez mérve van** (2026-09-01 15:00, acrobot):
+   a `fleet-backup.sh` a FLOTTA saját adatait viszi a NAS-ra, az acropora-os
+   Postgres napi kiírása pedig egy MÁSIK, hoszt oldali munka. **Egy új Docker
+   kötet egyikbe sem kerül bele magától.** Vagy hoszt oldali munka kell rá, vagy
+   a Coolify saját ütemezett feladata.
+
 5. **Csak ezután:** `DOCUMENT_STORE_ROOT=/data/document-store` beállítása a
    Coolify alkalmazás környezeti változói közt, **majd újratelepítés**.
+
+**A 4. és az 5. sorrendje nem kényelmi kérdés.** Fordítva egy olyan kötetre
+írnánk éles adatot, amiről nincs másolat -- és pontosan ez volt az eredeti
+blokkolás indoka. Amíg a 4. nincs kész, az 5. lépés az egyetlen, ami valóban
+tilos: minden más előtte ártalmatlan.
+
+**AZ ELLENŐRZŐ ABLAK, ÉS MIÉRT NEM MARAD NYITVA.** A jelölő fájl letételétől
+(3. lépés a fenti sorban) a 307 telepítéséig az állapot-végpont nem létezik,
+tehát a jelölő sikerét NEM lehet megnézni. Ez az ablak elfogadható, mert amíg a
+`DOCUMENT_STORE_ROOT` nincs beállítva, semmi nem ír a kötetre: az ablakban
+keletkező hiba nem okoz kárt, csak későn derül ki.
+
+**És vissza is menőleg zárul.** A 307 telepítése után a végpont már létezik, és
+akkor a jelölő sikere UTÓLAG ellenőrizhető: ha `not-configured`-ot ad, a jelölő
+nem sikerült. A javítás akkor sem kíván újratelepítést, mert a `describe()`
+minden híváskor újranézi.
 
 **Melyik lépés után kell újratelepítés, és melyik után nem:** az 1-4. lépés a
 kötetet és a tartalmát érinti, azokhoz nem kell — a futó alkalmazás akkor sem
@@ -194,6 +217,9 @@ időponttal áll; ami nem, az külön jelöléssel.**
 ### NINCS MÉRVE, ÉS EZÉRT NEM IS ÁLLÍTOM
 
 - **A jelölő fájl letétele** (3. lépés). A konténer nevére vár.
+- **A kötet mentése** (4. lépés). Erről 2026-09-01 15:00-kor annyi MÉRVE lett,
+  hogy NEM történik meg magától; hogy hogyan fog, az még nyitott, és Balázs
+  listáján áll külön tételként.
 - **A jogosultság** (2. lépés), és vele a `Mountpoint` értéke.
 - **A `DOCUMENT_STORE_ROOT` beállítása** (5. lépés), és minden, ami utána jön.
 - **A két ellenőrzés** a 2. szakaszból. Az elsőhöz (állapot-végpont) a 307
