@@ -3,7 +3,7 @@ import {
   access,
   mkdir,
   open,
-  readdir,
+  opendir,
   readFile,
   rename,
   rm,
@@ -105,35 +105,30 @@ export class FilesystemDocumentStore implements DocumentStore {
    * beállítottság kérdését a `describe()` méri, és két helyen felelni rá annyit
    * tenne, hogy a hívó két különböző választ kaphat ugyanarra.
    */
-  async list(): Promise<DocumentKey[]> {
+  async *list(): AsyncIterable<DocumentKey> {
     const assetsRoot = path.join(this.root, "assets");
     let assetDirectories;
     try {
-      assetDirectories = await readdir(assetsRoot, { withFileTypes: true });
+      // AZ `opendir` EGYESEVEL AD, a `readdir` egyben olvassa be az egesz
+      // konyvtarat. Sok ezer bejegyzesnel a masodik magat a merest teszi
+      // kockazatta -- epp azt, aminek a baj MEGTALALASA a dolga.
+      assetDirectories = await opendir(assetsRoot);
     } catch (error) {
-      if (isMissingFile(error)) return [];
+      if (isMissingFile(error)) return;
       throw error;
     }
 
-    const keys: DocumentKey[] = [];
-    for (const assetDirectory of assetDirectories) {
+    for await (const assetDirectory of assetDirectories) {
       if (!assetDirectory.isDirectory()) continue;
-      const documents = await readdir(
+      const documents = await opendir(
         path.join(assetsRoot, assetDirectory.name),
-        {
-          withFileTypes: true,
-        },
       );
-      for (const document of documents) {
+      for await (const document of documents) {
         if (!document.isFile()) continue;
         if (document.name.endsWith(".tmp")) continue;
-        keys.push({
-          assetId: assetDirectory.name,
-          documentId: document.name,
-        });
+        yield { assetId: assetDirectory.name, documentId: document.name };
       }
     }
-    return keys;
   }
 
   /**

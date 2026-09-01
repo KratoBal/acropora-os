@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { collectDocumentKeys } from "./document-store.js";
 import {
   chmod,
   mkdir,
@@ -176,7 +177,7 @@ describe("the filesystem document store", () => {
       await store.put({ assetId: "a", documentId: "1" }, Uint8Array.from([1]));
       await store.put({ assetId: "b", documentId: "2" }, Uint8Array.from([2]));
 
-      const listed = await store.list();
+      const listed = await collectDocumentKeys(store.list());
 
       assert.deepEqual(
         listed.map((key) => `${key.assetId}/${key.documentId}`).sort(),
@@ -201,7 +202,9 @@ describe("the filesystem document store", () => {
       await writeFile(path.join(listRoot, "assets", "a", "1.abc.tmp"), "");
       const store = new FilesystemDocumentStore(listRoot);
 
-      assert.deepEqual(await store.list(), [{ assetId: "a", documentId: "1" }]);
+      assert.deepEqual(await collectDocumentKeys(store.list()), [
+        { assetId: "a", documentId: "1" },
+      ]);
     } finally {
       await rm(listRoot, { recursive: true, force: true });
     }
@@ -217,7 +220,7 @@ describe("the filesystem document store", () => {
       path.join(root, "no-such-directory-either"),
     );
 
-    assert.deepEqual(await store.list(), []);
+    assert.deepEqual(await collectDocumentKeys(store.list()), []);
   });
 
   /**

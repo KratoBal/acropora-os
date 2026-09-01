@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { collectDocumentKeys } from "./document-store.js";
 import { describe, it } from "node:test";
 
 import { InMemoryDocumentStore } from "./in-memory-document-store.js";
@@ -140,7 +141,7 @@ describe("the in-memory document store", () => {
     await store.put({ assetId: "a", documentId: "1" }, Uint8Array.from([1]));
     await store.put({ assetId: "b", documentId: "2" }, Uint8Array.from([2]));
 
-    const listed = await store.list();
+    const listed = await collectDocumentKeys(store.list());
 
     assert.equal(listed.length, 2);
     assert.deepEqual(
@@ -155,7 +156,7 @@ describe("the in-memory document store", () => {
     await store.put(key, Uint8Array.from([1]));
     await store.delete(key);
 
-    assert.deepEqual(await store.list(), []);
+    assert.deepEqual(await collectDocumentKeys(store.list()), []);
   });
 
   it("describes itself as ready, because there is nothing to configure", async () => {

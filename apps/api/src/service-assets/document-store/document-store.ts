@@ -50,6 +50,30 @@ export interface DocumentStore {
    * A VISSZAADOTT ALAK A KULCS, NEM AZ ÚTVONAL: a hívónak a `DocumentKey`-jel
    * kell összevetnie, és egy útvonalból visszafejteni a kulcsot ugyanaz a
    * törékeny lépés lenne, amit a kétrészes kulcs épp elkerül.
+   *
+   * FOLYAM, NEM TÖMB, ÉS EZ NEM ELŐRELÁTÁS, HANEM A MÉRÉS VÉDELME: ha egyszer
+   * sok ezer fájl áll a köteten, egy mindent egyszerre visszaadó hívás magát az
+   * összevetést tenné kockázattá -- épp azt a mérést, aminek a baj MEGTALÁLÁSA
+   * a dolga. Egy mérőeszköz, ami elszáll a nagy bemeneten, akkor mond csődöt,
+   * amikor a legnagyobb szükség lenne rá.
+   *
+   * A hívó dönti el, gyűjt-e: a `collectDocumentKeys` segéd egybe szedi, és a
+   * neve kimondja, hogy mindent bent tart.
    */
-  list(): Promise<DocumentKey[]>;
+  list(): AsyncIterable<DocumentKey>;
+}
+
+/**
+ * A FOLYAM EGYBE SZEDVE, ha a hívónak tényleg az egész halmaz kell.
+ *
+ * KÜLÖN FÜGGVÉNY ÉS NEM ALAPÉRTELMEZÉS, mert a neve mondja meg, mi történik:
+ * ez a hívás MINDENT bent tart a memóriában. Aki ezt írja le, választott; aki
+ * egy tömböt visszaadó `list()`-et hívna, nem is tudná, hogy választott.
+ */
+export async function collectDocumentKeys(
+  keys: AsyncIterable<DocumentKey>,
+): Promise<DocumentKey[]> {
+  const collected: DocumentKey[] = [];
+  for await (const key of keys) collected.push(key);
+  return collected;
 }

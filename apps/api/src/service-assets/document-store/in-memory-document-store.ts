@@ -34,11 +34,11 @@ export class InMemoryDocumentStore implements DocumentStore {
     return this.documents.delete(serialiseKey(key));
   }
 
-  async list(): Promise<DocumentKey[]> {
-    return [...this.documents.keys()].map((serialised) => {
+  async *list(): AsyncIterable<DocumentKey> {
+    for (const serialised of [...this.documents.keys()]) {
       const [assetId, documentId] = JSON.parse(serialised) as [string, string];
-      return { assetId, documentId };
-    });
+      yield { assetId, documentId };
+    }
   }
 
   /**

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { collectDocumentKeys } from "./document-store/document-store.js";
 import { describe, it } from "node:test";
 
 import { InMemoryDocumentStore } from "./document-store/in-memory-document-store.js";
@@ -61,7 +62,7 @@ describe("where an uploaded document's bytes go", () => {
     const call = written as { content: Buffer | null; storageKey?: unknown };
     assert.ok(call.content);
     assert.equal(call.storageKey, undefined);
-    assert.deepEqual(await store.list(), []);
+    assert.deepEqual(await collectDocumentKeys(store.list()), []);
     t.diagnostic("a tárolóhoz hozzá sem nyúltunk");
   });
 
@@ -126,7 +127,7 @@ describe("where an uploaded document's bytes go", () => {
         /a sor beírása elhasalt/,
       );
       assert.deepEqual(
-        await store.list(),
+        await collectDocumentKeys(store.list()),
         [],
         "elárvult fájl nem maradhat a tárolóban",
       );
@@ -166,7 +167,11 @@ describe("where an uploaded document's bytes go", () => {
       );
 
       assert.equal(rowsWritten, 0, "sor nem keletkezhet");
-      assert.deepEqual(await store.list(), [], "fájl sem keletkezhet");
+      assert.deepEqual(
+        await collectDocumentKeys(store.list()),
+        [],
+        "fájl sem keletkezhet",
+      );
     } finally {
       delete process.env.DOCUMENT_STORE_ROOT;
       delete process.env.DOCUMENT_STORE_LIMIT_BYTES;

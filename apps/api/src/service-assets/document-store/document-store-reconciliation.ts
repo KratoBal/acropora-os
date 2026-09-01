@@ -26,7 +26,13 @@ import { storageKeyFor } from "./document-storage-key.js";
 export interface ReconciliationInput {
   /** A táblában álló, TÁROLÓRA hivatkozó sorok. A `content`-esek nem. */
   rowsWithStorageKey: readonly DocumentKey[];
-  /** Amit a tároló `list()` metódusa talált. */
+  /**
+   * Amit a tároló `list()` metódusa talált, egybe szedve.
+   *
+   * A `list()` folyamot ad, hogy egy nagy kötet ne a mérést vigye el; hogy a
+   * hívó egybe szedi-e, az az O DONTESE, es a `collectDocumentKeys` neve ki is
+   * mondja, hogy mindent bent tart.
+   */
   filesInStore: readonly DocumentKey[];
 }
 
