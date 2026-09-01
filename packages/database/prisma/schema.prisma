@@ -3501,11 +3501,23 @@ enum ContentChannel {
 /// meglévő olvasó eszköze (`scripts/fb-insights.sh posts`) adja őket, ami
 /// `id`, `created_time`, `message` és `permalink_url` mezőket ad vissza.
 ///
-/// FELTEVÉS, NEM MÉRÉS, 2026-09-01 óta: hogy a KÉZZEL kiküldött posztok is
-/// megjelennek abban a lekérdezésben, elvileg igen (a Page összes posztját
-/// kérdezi), de ezt még senki nem futtatta le. Amíg nem, ez a két mező egy
-/// levezetésre épül. Ha kiderül, hogy a kézi posztok nem látszanak, a töltésük
-/// más utat kíván, és akkor ezt a megjegyzést kell először átírni.
+/// MÉRVE 2026-09-01-én (barracuda, `measurement/2026-09-01-fb-posts-kikuldes-tenye.md`):
+/// a lekérdezés fut, és a KÉZZEL kiküldött posztok is megjelennek benne. A
+/// `sentAt` és az `externalPostId` töltése tehát nem feltevés többé.
+///
+/// AMI FELTEVÉS MARADT, ÉS EZÉRT NEM ÉPÜL RÁ SEMMI: az EREDET, vagyis hogy egy
+/// poszt tőlünk ment-e ki vagy kézzel. A huszonöt lekérdezett posztból kettő
+/// visel `application` mezőt, a többi huszonháromnál a mező nem szerepel -- de
+/// az a kettő egyben a két legfrissebb is, tehát nem zárható ki, hogy a Graph
+/// API a régebbieknél egyszerűen nem adja vissza a mezőt, származástól
+/// függetlenül. **Ez a modell semmilyen döntést nem alapoz az eredetre**, mert
+/// az egy még el nem dőlt kérdés lenne.
+///
+/// A BEHÚZÁSNAK VÉGIG KELL JÁRNIA A LAPOZÓT, és ez néma hiba forrása: a
+/// lekérdezés alapértelmezett limitje TÍZ. Aki „minden posztot" kér a kurzor
+/// követése nélkül, csendben az utolsó tízet kapja -- a hívás nem hibázik, csak
+/// keveset ad, és a hiányt semmi nem jelzi. Egy hiányzó `sentAt` pontosan úgy
+/// néz ki, mint egy ki nem küldött poszt.
 ///
 /// AMI EBBŐL NEM KÖVETKEZIK: hogy a rendszer KI IS KÜLD. A flottában egyetlen
 /// ágensnek van Facebook publikálási joga (a `sec-fb` csoport egyetlen tagja),
