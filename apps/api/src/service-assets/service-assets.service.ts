@@ -1,3 +1,5 @@
+import { createHash, randomUUID } from "node:crypto";
+
 import type { PartnerScope } from "../auth/partner-scope.util.js";
 import { assetDeletionRefusal } from "./asset-deletion.js";
 import {
@@ -5,6 +7,7 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
@@ -23,7 +26,12 @@ import type {
 } from "./dto/asset.dto.js";
 import type { DocumentStore } from "./document-store/document-store.js";
 import { DOCUMENT_STORE } from "./document-store/document-store.provider.js";
-import { assertStorageKeyMatches } from "./document-store/document-storage-key.js";
+import { decideQuota } from "./document-store/document-quota.js";
+import {
+  assertStorageKeyMatches,
+  storageKeyFor,
+} from "./document-store/document-storage-key.js";
+import { documentStoreEnabled } from "./document-store/document-store.provider.js";
 import { createAssetQrSvg } from "./qr-svg.js";
 import { ServiceAssetsRepository } from "./service-assets.repository.js";
 
@@ -33,6 +41,8 @@ export class ServiceAssetsService {
     private readonly repository: ServiceAssetsRepository,
     @Inject(DOCUMENT_STORE) private readonly documentStore: DocumentStore,
   ) {}
+
+  private readonly logger = new Logger(ServiceAssetsService.name);
 
   list(query: AssetListQueryDto, scope: PartnerScope) {
     return this.repository.list(query, scope);
@@ -204,13 +214,84 @@ export class ServiceAssetsService {
       .normalize("NFKC")
       .replace(/[\\/\u0000-\u001f\u007f]/g, "-")
       .slice(0, 180);
-    return this.repository.addDocument({
+
+    const documentId = randomUUID();
+    const sha256 = createHash("sha256").update(file.buffer).digest("hex");
+    const common = {
+      id: documentId,
       assetId: id,
       type,
       fileName: safeName || "dokumentum.pdf",
-      content: file.buffer,
+      sizeBytes: file.buffer.length,
+      sha256,
       actorUserId,
+    };
+
+    // A KERET A LEGELSO ELLENORZES, MEG AZ IRAS ELOTT. Egy elutasitas utan sem
+    // a tarolon, sem a tablaban nem keletkezhet semmi: az orzot nem az
+    // bizonyitja, hogy szol, hanem hogy nem tortent semmi.
+    await this.refuseIfOverQuota(file.buffer.length);
+
+    if (!documentStoreEnabled()) {
+      // A MAI UT, VALTOZATLANUL. A tarolo nincs bekapcsolva, tehat a bajtok az
+      // adatbazisba mennek, ugyanugy, mint eddig.
+      return this.repository.addDocument({ ...common, content: file.buffer });
+    }
+
+    // A BAJTOK ELOSZOR A TAROLOBA MENNEK, ES CSAK AZUTAN A SOR.
+    //
+    // A ket lehetseges felig-kesz allapot NEM egyforma sulyu. Ha eloszor a sor
+    // jonne letre es a tarolo bukna, egy ELVESZETT SOR maradna: a felhasznalo
+    // LATJA a dokumentumot a listaban, es a letoltesnel kap hibat. Igy viszont
+    // legfeljebb egy ELARVULT FAJL marad, amire senki nem hivatkozik -- szemet,
+    // nem adatvesztes. A ket allapot kozul a kevesbe latszot valasztjuk.
+    const key = { assetId: id, documentId };
+    await this.documentStore.put(key, file.buffer);
+    try {
+      return await this.repository.addDocument({
+        ...common,
+        content: null,
+        storageKey: storageKeyFor(key),
+      });
+    } catch (error) {
+      // A SOR NEM JOTT LETRE, TEHAT A FAJL SEM MARADHAT. A takaritas hibajat
+      // elnyeljuk: az eredeti hiba a fontosabb, azt nem szabad elfednie. Ha a
+      // takaritas is bukik, a fajl elarvultan marad, es az osszevetes
+      // megtalalja -- tehat nem veszik el, csak keson derul ki.
+      await this.documentStore.delete(key).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  /**
+   * A KERET ELLENORZESE, MIELOTT BARMI KELETKEZNE.
+   *
+   * A felhasznalt helyet a TABLABOL osszegezzuk, nem konyvtar-bejarasbol: a ket
+   * meres nem ugyanaz, es az elteresuk MAS kerdes (lasd a
+   * `document-store-reconciliation.ts` jegyzetet).
+   *
+   * BEALLITAS NELKUL NINCS KERET, es ez szandekos: egy kitalalt alapertelmezett
+   * hatar egy nap csendben elutasitana egy feltoltest, amirol senki nem dontott.
+   *
+   * A JELZES NEM ALLITJA MEG A FELTOLTEST, csak naploz. Az MINEKUNK szol, nem a
+   * feltoltonek: egy sikeres feltoltes utan riasztast kapni olyasmirol, amin a
+   * feltolto nem tud segiteni, csak zaj.
+   */
+  private async refuseIfOverQuota(incomingBytes: number): Promise<void> {
+    const limitBytes = Number(process.env.DOCUMENT_STORE_LIMIT_BYTES ?? 0);
+    if (!Number.isFinite(limitBytes) || limitBytes <= 0) return;
+
+    const decision = decideQuota({
+      usedBytes: await this.repository.documentBytesInUse(),
+      incomingBytes,
+      limitBytes,
     });
+    if (decision.state === "reject") {
+      throw new ConflictException(decision.reason);
+    }
+    if (decision.state === "warn" && decision.reason) {
+      this.logger.warn(decision.reason);
+    }
   }
 
   async document(id: string, documentId: string, scope: PartnerScope) {

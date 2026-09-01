@@ -8,7 +8,7 @@ import {
 } from "../auth/partner-scope.util.js";
 import { collectUnitSubtreeIds } from "./unit-subtree.js";
 
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
@@ -1005,15 +1005,43 @@ export class ServiceAssetsRepository extends Repository {
     return detail;
   }
 
+  /**
+   * A FELHASZNALT HELY, A TABLABOL OSSZEGEZVE.
+   *
+   * MINDEN SOR SZAMIT, nem csak a taroloban allok: a keret a fotok osszes
+   * helyet meri, es ma a legtobb sor bajtjai az adatbazisban vannak. Ha csak a
+   * `storageKey`-eseket osszegeznenk, a keret ma nullat mutatna, es a jelzes
+   * soha nem szolalna meg.
+   */
+  async documentBytesInUse(): Promise<number> {
+    const total = await prisma.assetDocument.aggregate({
+      _sum: { sizeBytes: true },
+    });
+    return total._sum.sizeBytes ?? 0;
+  }
+
+  /**
+   * A SOR MEGKAPJA A DOKUMENTUM AZONOSITOJAT ELORE, es ez nem stilus: a
+   * tarolo-kulcs ebbol az azonositobol all ossze, tehat a hivonak MEG A SOR
+   * LETREJOTTE ELOTT tudnia kell, hova irja a bajtokat. Ha az azonosito csak a
+   * beszurasnal keletkezne, a bajtokat csak UTANA lehetne kiirni -- es akkor
+   * egy tarolo-hiba mar egy LETEZO, tartalom nelkuli sort hagyna maga utan.
+   */
   async addDocument(input: {
+    id?: string;
     assetId: string;
     type: "INVOICE" | "WARRANTY" | "MANUAL" | "OTHER";
     fileName: string;
-    content: Buffer;
+    /** A bajtok az adatbazisban. Kizarolagos a `storageKey`-jel. */
+    content: Buffer | null;
+    /** A tarolo kulcsa. Kizarolagos a `content`-tel. */
+    storageKey?: string | null;
+    sizeBytes: number;
+    sha256: string;
     actorUserId: string;
   }): Promise<AssetDocumentSummary> {
-    const id = randomUUID();
-    const sha256 = createHash("sha256").update(input.content).digest("hex");
+    const id = input.id ?? randomUUID();
+    const sha256 = input.sha256;
     await prisma.$transaction(async (tx) => {
       await tx.assetDocument.create({
         data: {
@@ -1022,9 +1050,10 @@ export class ServiceAssetsRepository extends Repository {
           type: input.type,
           fileName: input.fileName,
           contentType: "application/pdf",
-          sizeBytes: input.content.length,
+          sizeBytes: input.sizeBytes,
           sha256,
-          content: Uint8Array.from(input.content),
+          content: input.content ? Uint8Array.from(input.content) : null,
+          storageKey: input.storageKey ?? null,
           uploadedById: input.actorUserId,
         },
       });

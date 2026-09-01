@@ -22,6 +22,21 @@ import { InMemoryDocumentStore } from "./in-memory-document-store.js";
  */
 export const DOCUMENT_STORE = Symbol("DOCUMENT_STORE");
 
+/**
+ * BE VAN-E KAPCSOLVA A TAROLO, mint kulon kerdes a `describe()`-tol.
+ *
+ * MIERT NEM ELEG A `describe()`: a memoriabeli tarolo `ready`-t ad, es ez helyes
+ * is -- nincs mit beallitani rajta. De IRNI bele eles uton ertelmetlen lenne: a
+ * kovetkezo indulas elvinne a bajtokat. A ket kerdes tehat kulonbozik: a
+ * `describe()` azt mondja meg, HASZNALHATO-e a tarolo, ez pedig azt, hogy
+ * HASZNALJUK-e egyaltalan.
+ */
+export function documentStoreEnabled(
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  return Boolean(env.DOCUMENT_STORE_ROOT?.trim());
+}
+
 export function createDocumentStore(
   env: NodeJS.ProcessEnv = process.env,
 ): DocumentStore {
