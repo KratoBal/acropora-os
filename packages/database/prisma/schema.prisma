@@ -617,18 +617,18 @@ model Product {
   createdAt        DateTime                 @default(now())
   updatedAt        DateTime                 @updatedAt
 
-  brand           Brand?               @relation(fields: [brandId], references: [id], onDelete: SetNull)
-  legacyCategory  Category?            @relation("LegacyProductCategory", fields: [categoryId], references: [id], onDelete: SetNull)
-  createdBy       User?                @relation("ProductCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  categories      ProductCategory[]
-  variants        ProductVariant[]
-  channelListings ChannelListing[]
-  images          ProductImage[]
-  sourceRelations ProductRelation[]    @relation("ProductRelationSource")
-  targetRelations ProductRelation[]    @relation("ProductRelationTarget")
-  unasSnapshot    UnasProductSnapshot?
+  brand            Brand?                   @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  legacyCategory   Category?                @relation("LegacyProductCategory", fields: [categoryId], references: [id], onDelete: SetNull)
+  createdBy        User?                    @relation("ProductCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  categories       ProductCategory[]
+  variants         ProductVariant[]
+  channelListings  ChannelListing[]
+  images           ProductImage[]
+  sourceRelations  ProductRelation[]        @relation("ProductRelationSource")
+  targetRelations  ProductRelation[]        @relation("ProductRelationTarget")
+  unasSnapshot     UnasProductSnapshot?
   aiSearchDocument AiProductSearchDocument?
-  datasheet       ProductDatasheet?
+  datasheet        ProductDatasheet?
 
   @@index([brandId])
   @@index([categoryId])
@@ -1100,10 +1100,10 @@ model WarehouseLocation {
 /// is declared Unsupported here on purpose: Prisma has no generated-column
 /// type, and the field must never be writable from the client.
 model AiProductSearchDocument {
-  id               String  @id @default(cuid())
-  productId        String  @unique
+  id               String   @id @default(cuid())
+  productId        String   @unique
   /// A weight: the product name.
-  title            String  @default("")
+  title            String   @default("")
   /// A weight: every article number a person might type, in one band - our own
   /// SKU, the maker's part number, the barcode on the box, and what each
   /// supplier calls the same thing. They answer the same question ("which
@@ -1111,22 +1111,22 @@ model AiProductSearchDocument {
   /// would need a reason nobody can state. Deduplicated: the same string
   /// legitimately appears twice, and a repeat would raise the rank without
   /// adding information.
-  skus             String  @default("")
+  skus             String   @default("")
   /// B weight: brand and category names.
-  facets           String  @default("")
+  facets           String   @default("")
   /// B weight - and the reason is not its length: for 1178 products the short
   /// description is the ONLY text that exists.
-  descriptionShort String  @default("")
+  descriptionShort String   @default("")
   /// C weight.
-  descriptionLong  String  @default("")
+  descriptionLong  String   @default("")
   /// D weight.
-  parameters       String  @default("")
+  parameters       String   @default("")
   /// A deleted product keeps its row and loses this flag. "We used to sell
   /// this, and have not since X" is knowledge worth keeping.
-  isSearchable     Boolean @default(true)
+  isSearchable     Boolean  @default(true)
   /// Which recipe built it. A full rebuild leaves a mixed-version table behind
   /// while it runs, and the answer says so out loud.
-  documentVersion  Int     @default(1)
+  documentVersion  Int      @default(1)
   updatedAt        DateTime @updatedAt
 
   searchVector Unsupported("tsvector")? @default(dbgenerated())
@@ -2343,6 +2343,16 @@ model Asset {
 /// Eszközhöz csatolt, jogosultsággal védett PDF. A tartalom első körben az
 /// adatbázisban marad, hogy külön object storage nélkül is konzisztensen
 /// menthető és backupolható legyen; később Paperless hivatkozásra migrálható.
+/// A tartalom KET HELYEN allhat, es PONTOSAN AZ EGYIKEN.
+///
+/// A `content` a mai, adatbazisban tarolt bajtok; a `storageKey` a kulso
+/// dokumentum-taroloban allo fajl kulcsa. A ket mezo kozul mindig pontosan az
+/// egyik nem null, es ezt adatbazis-szintu CHECK orzi, nem csak a kod: egy
+/// hattermunka, egy migracio vagy egy uj vegpont nem orokli az alkalmazas
+/// ellenorzeseit, a tabla megkotesét viszont igen.
+///
+/// A REGI SOROK ERINTETLENEK: content megvan, storageKey null, tehat a regi
+/// olvasasi ut valtozatlanul mukodik, migracio nelkul.
 model AssetDocument {
   id           String            @id @default(cuid())
   assetId      String
@@ -2351,7 +2361,8 @@ model AssetDocument {
   contentType  String            @default("application/pdf")
   sizeBytes    Int
   sha256       String            @db.VarChar(64)
-  content      Bytes
+  content      Bytes?
+  storageKey   String?
   uploadedById String?
   createdAt    DateTime          @default(now())
 
@@ -2901,24 +2912,24 @@ model MedusaConnectionSetting {
 }
 
 model UnasProductSyncRun {
-  id             String                   @id @default(cuid())
-  activeKey      String?                  @unique
-  kind           UnasProductSyncKind
-  status         UnasProductSyncRunStatus @default(PENDING)
-  windowStart    DateTime?
-  windowEnd      DateTime
-  startedAt      DateTime?
-  completedAt    DateTime?
-  productsSeen   Int                      @default(0)
-  createdCount   Int                      @default(0)
-  updatedCount   Int                      @default(0)
-  unchangedCount Int                      @default(0)
-  conflictCount  Int                      @default(0)
-  missingCount   Int                      @default(0)
+  id                        String                   @id @default(cuid())
+  activeKey                 String?                  @unique
+  kind                      UnasProductSyncKind
+  status                    UnasProductSyncRunStatus @default(PENDING)
+  windowStart               DateTime?
+  windowEnd                 DateTime
+  startedAt                 DateTime?
+  completedAt               DateTime?
+  productsSeen              Int                      @default(0)
+  createdCount              Int                      @default(0)
+  updatedCount              Int                      @default(0)
+  unchangedCount            Int                      @default(0)
+  conflictCount             Int                      @default(0)
+  missingCount              Int                      @default(0)
   /// Ahány terméket a futás kihagyott, mert a törzsadatát nem a UNAS gondozza.
   /// A többi számláló mellett a helye: egy kihagyás, ami csak a válaszban
   /// látszik, holnap már nem visszakereshető.
-  skippedCount   Int                      @default(0)
+  skippedCount              Int                      @default(0)
   /// A kihagyottak közül ahánynál a FORRÁS IS VÁLTOZOTT ugyanabban a futásban.
   ///
   /// Ez a szám a jelzés, nem a `skippedCount`. A kihagyás maga ÁLLANDÓ: minden
@@ -2928,10 +2939,10 @@ model UnasProductSyncRun {
   /// EZ viszont esemény: azt mondja meg, hogy egy átvett termék szövege a
   /// boltban megváltozott, és mi nem vettük át. A legtöbb futáson nulla, és
   /// pontosan akkor nem az, amikor egy termék elkezd elavulni nálunk.
-  skippedSourceChangedCount Int           @default(0)
-  errorCode      String?
-  createdAt      DateTime                 @default(now())
-  updatedAt      DateTime                 @updatedAt
+  skippedSourceChangedCount Int                      @default(0)
+  errorCode                 String?
+  createdAt                 DateTime                 @default(now())
+  updatedAt                 DateTime                 @updatedAt
 
   @@index([status, createdAt])
   @@index([kind, completedAt])
@@ -3319,7 +3330,7 @@ model ProductDatasheet {
   /// A tarsithatosag KET kulon kerdes, es harom tetel MINDKETTOROL mond valamit,
   /// tehat nem kizaro bontas. Ma szoveg: a relacio celja (a tarsithato fajok
   /// szotara) nem letezik. Relaciora akkor valt, ha a szotar elkeszul.
-  amitOVeszelyeztet String?
+  amitOVeszelyeztet  String?
   amiOtVeszelyezteti String?
 
   product  Product                        @relation(fields: [productId], references: [id], onDelete: Cascade)

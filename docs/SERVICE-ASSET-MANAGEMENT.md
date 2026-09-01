@@ -41,10 +41,30 @@ elhelyezés- és hierarchiaváltást, valamint a QR-token cseréjét. A
 eszközhöz tartozó teljes szerviztörténetet.
 
 Az `AssetDocument` jogosultsággal védett, legfeljebb 10 MB-os PDF-eket tárol:
-számlát, garanciajegyet, használati utasítást vagy egyéb dokumentumot. A fájl
-első körben a PostgreSQL-adatbázisban marad, SHA-256 lenyomattal és feltöltési
-audittal. Ez nem zárja ki a későbbi Paperless-ngx integrációt; akkor a rekord
-külső dokumentumazonosítóval és szinkronállapottal bővíthető.
+számlát, garanciajegyet, használati utasítást vagy egyéb dokumentumot, SHA-256
+lenyomattal és feltöltési audittal.
+
+**A bájtok két helyen állhatnak, és pontosan az egyiken.** A `content` oszlop a
+ma is használt, adatbázisban tárolt alak; a `storageKey` egy külső
+dokumentum-tárolóban álló fájlra mutat. Hogy pontosan az egyik áll, azt nem a
+kód őrzi, hanem a tábla: az `AssetDocument_exactly_one_content_source_check`
+megkötés. Egy háttérmunka, egy migráció vagy egy új végpont nem örökli az
+alkalmazás ellenőrzéseit, a tábláét viszont igen.
+
+**Ma minden sor az adatbázisban áll**, és a régiek ott is maradnak: az
+átköltöztetés külön, újraindítható munka, nem a bekapcsolás feltétele. A tároló
+bekapcsolása egyetlen környezeti változó (`DOCUMENT_STORE_ROOT`), plusz egy
+tartós kötet és egy jelölő fájl a köteten belül — lásd `docs/COOLIFY.md`,
+„Persistent volumes".
+
+**A letöltési út a `storageKey` alapján dönt**, nem a `content` hiányából. Ha a
+sor a tárolóra hivatkozik, de a fájl nincs meg, a válasz értelmes hiba, nem üres
+letöltés: egy nulla bájtos fájl sikeresnek látszik, és a hibát a felhasználó
+venné észre, nem mi.
+
+Ez nem zárja ki a későbbi Paperless-ngx integrációt; akkor a rekord külső
+dokumentumazonosítóval és szinkronállapottal bővíthető, és a `storageKey` már
+ma is az a mező, ahol egy ilyen hivatkozás állna.
 
 ## QR-folyamat
 

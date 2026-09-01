@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { InMemoryDocumentStore } from "../service-assets/document-store/in-memory-document-store.js";
 import { after, before, describe, it } from "node:test";
 
 import { NotFoundException } from "@nestjs/common";
@@ -125,7 +126,10 @@ describe(
       new WorksheetsService(new WorksheetsRepository()),
     );
     const assets = new ServiceAssetsController(
-      new ServiceAssetsService(new ServiceAssetsRepository()),
+      new ServiceAssetsService(
+        new ServiceAssetsRepository(),
+        new InMemoryDocumentStore(),
+      ),
     );
     const suppliers = new SuppliersController(
       new SuppliersService(new SuppliersRepository()),

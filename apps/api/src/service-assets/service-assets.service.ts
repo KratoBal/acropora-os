@@ -1,10 +1,15 @@
+import { createHash, randomUUID } from "node:crypto";
+
 import type { PartnerScope } from "../auth/partner-scope.util.js";
 import { assetDeletionRefusal } from "./asset-deletion.js";
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
+  Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 import type { AssetQrCode } from "@acropora/types";
@@ -19,12 +24,25 @@ import type {
   CreateAssetDto,
   UpdateAssetDto,
 } from "./dto/asset.dto.js";
+import type { DocumentStore } from "./document-store/document-store.js";
+import { DOCUMENT_STORE } from "./document-store/document-store.provider.js";
+import { decideQuota } from "./document-store/document-quota.js";
+import {
+  assertStorageKeyMatches,
+  storageKeyFor,
+} from "./document-store/document-storage-key.js";
+import { documentStoreEnabled } from "./document-store/document-store.provider.js";
 import { createAssetQrSvg } from "./qr-svg.js";
 import { ServiceAssetsRepository } from "./service-assets.repository.js";
 
 @Injectable()
 export class ServiceAssetsService {
-  constructor(private readonly repository: ServiceAssetsRepository) {}
+  constructor(
+    private readonly repository: ServiceAssetsRepository,
+    @Inject(DOCUMENT_STORE) private readonly documentStore: DocumentStore,
+  ) {}
+
+  private readonly logger = new Logger(ServiceAssetsService.name);
 
   list(query: AssetListQueryDto, scope: PartnerScope) {
     return this.repository.list(query, scope);
@@ -196,19 +214,176 @@ export class ServiceAssetsService {
       .normalize("NFKC")
       .replace(/[\\/\u0000-\u001f\u007f]/g, "-")
       .slice(0, 180);
-    return this.repository.addDocument({
+
+    const documentId = randomUUID();
+    const sha256 = createHash("sha256").update(file.buffer).digest("hex");
+    const common = {
+      id: documentId,
       assetId: id,
       type,
       fileName: safeName || "dokumentum.pdf",
-      content: file.buffer,
+      sizeBytes: file.buffer.length,
+      sha256,
       actorUserId,
+    };
+
+    // A KERET A LEGELSO ELLENORZES, MEG AZ IRAS ELOTT. Egy elutasitas utan sem
+    // a tarolon, sem a tablaban nem keletkezhet semmi: az orzot nem az
+    // bizonyitja, hogy szol, hanem hogy nem tortent semmi.
+    await this.refuseIfOverQuota(file.buffer.length);
+
+    if (!documentStoreEnabled()) {
+      // A MAI UT, VALTOZATLANUL. A tarolo nincs bekapcsolva, tehat a bajtok az
+      // adatbazisba mennek, ugyanugy, mint eddig.
+      return this.repository.addDocument({ ...common, content: file.buffer });
+    }
+
+    // A BEKAPCSOLAS MEG NEM JELENTI, HOGY HASZNALHATO, es ezt a feltoltesi
+    // utnak MAGANAK kell megneznie.
+    //
+    // A LEGVESZELYESEBB TELEPITESI HIBA: a DOCUMENT_STORE_ROOT be van allitva,
+    // de a kotet nincs csatolva vagy a jelolo fajl hianyzik. A konyvtar
+    // ilyenkor IRHATO (a csatolasi pont ures konyvtara is az), tehat az iras
+    // SIKERUL -- csak epp a konteneri retegre, es a kovetkezo ujratelepites
+    // elviszi. Semmi nem hibazna, es a hiba hetekkel kesobb, letoltesnel
+    // derulne ki.
+    //
+    // AMIT ILYENKOR TESZUNK: visszaesunk az adatbazisra, es NAPLOZUNK. Nem
+    // elutasitas, mert a rendszernek mennie kell, es az adatbazis-ut ep; nem
+    // is csendes, mert a naplo es az allapot-vegpont is kimondja. A ket rossz
+    // valasz kozul (megall / csendben elveszit) egyik sem kell.
+    const status = await this.documentStore.describe();
+    if (status.state !== "ready") {
+      this.logger.warn(
+        `A dokumentum-tarolo be van kapcsolva, de nem hasznalhato (${status.state}: ${status.reason}). A feltoltes az adatbazisba megy.`,
+      );
+      return this.repository.addDocument({ ...common, content: file.buffer });
+    }
+
+    // A BAJTOK ELOSZOR A TAROLOBA MENNEK, ES CSAK AZUTAN A SOR.
+    //
+    // A ket lehetseges felig-kesz allapot NEM egyforma sulyu. Ha eloszor a sor
+    // jonne letre es a tarolo bukna, egy ELVESZETT SOR maradna: a felhasznalo
+    // LATJA a dokumentumot a listaban, es a letoltesnel kap hibat. Igy viszont
+    // legfeljebb egy ELARVULT FAJL marad, amire senki nem hivatkozik -- szemet,
+    // nem adatvesztes. A ket allapot kozul a kevesbe latszot valasztjuk.
+    const key = { assetId: id, documentId };
+    await this.documentStore.put(key, file.buffer);
+    try {
+      return await this.repository.addDocument({
+        ...common,
+        content: null,
+        storageKey: storageKeyFor(key),
+      });
+    } catch (error) {
+      // A SOR NEM JOTT LETRE, TEHAT A FAJL SEM MARADHAT. A takaritas hibajat
+      // elnyeljuk: az eredeti hiba a fontosabb, azt nem szabad elfednie. Ha a
+      // takaritas is bukik, a fajl elarvultan marad, es az osszevetes
+      // megtalalja -- tehat nem veszik el, csak keson derul ki.
+      await this.documentStore.delete(key).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  /**
+   * A KERET ELLENORZESE, MIELOTT BARMI KELETKEZNE.
+   *
+   * A felhasznalt helyet a TABLABOL osszegezzuk, nem konyvtar-bejarasbol: a ket
+   * meres nem ugyanaz, es az elteresuk MAS kerdes (lasd a
+   * `document-store-reconciliation.ts` jegyzetet).
+   *
+   * BEALLITAS NELKUL NINCS KERET, es ez szandekos: egy kitalalt alapertelmezett
+   * hatar egy nap csendben elutasitana egy feltoltest, amirol senki nem dontott.
+   *
+   * A JELZES NEM ALLITJA MEG A FELTOLTEST, csak naploz. Az MINEKUNK szol, nem a
+   * feltoltonek: egy sikeres feltoltes utan riasztast kapni olyasmirol, amin a
+   * feltolto nem tud segiteni, csak zaj.
+   */
+  private async refuseIfOverQuota(incomingBytes: number): Promise<void> {
+    const limitBytes = Number(process.env.DOCUMENT_STORE_LIMIT_BYTES ?? 0);
+    if (!Number.isFinite(limitBytes) || limitBytes <= 0) return;
+
+    const decision = decideQuota({
+      usedBytes: await this.repository.documentBytesInUse(),
+      incomingBytes,
+      limitBytes,
     });
+    if (decision.state === "reject") {
+      throw new ConflictException(decision.reason);
+    }
+    if (decision.state === "warn" && decision.reason) {
+      this.logger.warn(decision.reason);
+    }
+  }
+
+  /**
+   * A TAROLO ALLAPOTA, KIFELE IS OLVASHATOAN.
+   *
+   * MIERT KELL KULON, ES MIERT NEM ELEG, HOGY A KOD TUDJA: a telepitesnek
+   * (kotet, jelolo fajl, jogosultsag) van egy pillanata, amikor el kell donteni,
+   * SIKERULT-E. Enelkul a valasz csak egy feltoltessel derulne ki, es egy
+   * sikertelen feltoltes mar a felhasznalo elott tortenik.
+   *
+   * A KET KERDES KULON ALL, ahogy a kodban is: `enabled` azt mondja meg,
+   * HASZNALJUK-e (a DOCUMENT_STORE_ROOT be van-e allitva), a `status` pedig
+   * azt, HASZNALHATO-e. A ketto kulonbozo hibat jelent, es mas ember oldja fel
+   * oket: az elso beallitas, a masodik kotet vagy jogosultsag.
+   */
+  async documentStoreStatus() {
+    return {
+      enabled: documentStoreEnabled(),
+      status: await this.documentStore.describe(),
+    };
   }
 
   async document(id: string, documentId: string, scope: PartnerScope) {
     const document = await this.repository.document(id, documentId, scope);
     if (!document) throw new NotFoundException("A dokumentum nem található.");
     return document;
+  }
+
+  /**
+   * A LETÖLTÉS BÁJTJAI, BÁRMELYIK FORRÁSBÓL.
+   *
+   * A `storageKey` dönt, nem a `content` hiánya: a tábla megkötése szerint
+   * pontosan az egyik áll, tehát a `storageKey` megléte önmagában elég, és a
+   * hívónak nem kell két mezőt összevetnie.
+   *
+   * A RÉGI SOROK VÁLTOZATLANUL MENNEK, migráció nélkül: nekik nincs
+   * `storageKey`-ük, és a bájtok ott állnak, ahol eddig.
+   *
+   * A HIÁNYZÓ FÁJL ÉRTELMES HIBÁT AD, NEM ÜRES LETÖLTÉST. Egy nulla bájtos
+   * válasz sikeresnek látszik: a böngésző elmenti, a felhasználó megnyitja, és
+   * ő veszi észre a bajt, nem mi. Az 503 azt is kimondja, hogy a hiba a mi
+   * oldalunkon van, nem az övén, tehát az újrapróbálás értelmes.
+   */
+  async documentBytes(id: string, documentId: string, scope: PartnerScope) {
+    const document = await this.document(id, documentId, scope);
+
+    if (document.storageKey === null) {
+      if (document.content === null) {
+        // A tábla CHECK megkötése ezt kizárja; a TÍPUS viszont nem, és egy
+        // néma `null` üres letöltéssé válna. Ha ez az ág mégis lefut, az a
+        // megkötés megkerülését jelenti, és azt jelenteni kell, nem elfedni.
+        throw new ServiceUnavailableException(
+          "A dokumentumnak nincs tartalma egyik forrásban sem.",
+        );
+      }
+      return { ...document, bytes: document.content };
+    }
+
+    assertStorageKeyMatches(document.storageKey, {
+      assetId: id,
+      documentId,
+    });
+
+    const bytes = await this.documentStore.get({ assetId: id, documentId });
+    if (bytes === null) {
+      throw new ServiceUnavailableException(
+        "A dokumentum tartalma a tárolóban nem érhető el.",
+      );
+    }
+    return { ...document, bytes };
   }
 
   async deleteDocument(id: string, documentId: string, actorUserId: string) {
