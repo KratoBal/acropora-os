@@ -7,6 +7,7 @@ import {
   PurchaseInvoiceRepository,
   type CreatePurchaseInvoiceLine,
   type CreatePurchaseInvoiceParams,
+  type PurchaseInvoiceCreateTransaction,
   type PurchaseInvoiceDatabase,
 } from "./purchase-invoice.repository.js";
 
@@ -140,6 +141,10 @@ class FakeDb {
       const lineInputs: any[] = args.data.lines?.create ?? [];
       const lines = lineInputs.map((line: any) => ({
         id: line.id ?? nextId("invoice-line"),
+        /// The foreign key back to the invoice. A real Prisma row always
+        /// carries it, and the contract requires it; the fixture omitted it,
+        /// which is invisible for as long as nothing checks the shape.
+        purchaseInvoiceId: id,
         variantId: line.variantId ?? null,
         sourceDescription: line.sourceDescription ?? null,
         orderedQuantity: line.orderedQuantity,
@@ -176,6 +181,9 @@ class FakeDb {
         note: args.data.note ?? null,
         createdAt: now,
         updatedAt: now,
+        /// Who booked the invoice. Nullable in the schema, and the fixture
+        /// omitted it entirely - which the contract does not allow.
+        createdById: args.data.createdById ?? null,
         lines,
       };
       this.invoiceDetails.push(detail);
@@ -353,15 +361,25 @@ class FakeDb {
       return { count };
     },
     create: async (args: any) => {
-      this.outbox.push({
+      /// Returns the created row's id, as the contract promises. It used to
+      /// return `{}`, and the movement writer USES that id - it is how a
+      /// publish whose baseline was never known gets dead-lettered.
+      ///
+      /// GUARDED since the transaction seam above was typed: putting `{}`
+      /// back is a compile error, measured. This comment previously said the
+      /// opposite, and it was true when written - a note that describes a
+      /// protection which has since changed is worse than no note, so it is
+      /// rewritten rather than left standing.
+      const row = {
         id: nextId("outbox"),
         variantId: args.data.variantId,
         warehouseId: args.data.warehouseId,
         status: "PENDING",
         idempotencyKey: args.data.idempotencyKey,
         targetOnHand: args.data.targetOnHand,
-      });
-      return {};
+      };
+      this.outbox.push(row);
+      return { id: row.id };
     },
   };
 
@@ -381,7 +399,12 @@ class FakeDb {
 
   productVariant = { findMany: async () => [] };
 
-  async $transaction<T>(operation: (transaction: any) => Promise<T>) {
+  /// Typed, not `any`: `this` is what reaches the movement writer, so the
+  /// compiler has to check it against the same contract the repository
+  /// promises it.
+  async $transaction<T>(
+    operation: (transaction: PurchaseInvoiceCreateTransaction) => Promise<T>,
+  ) {
     return operation(this);
   }
 }
@@ -704,9 +727,26 @@ describe("PurchaseInvoiceRepository.create", () => {
     assert.equal(db.movementLines[0]?.quantity.toString(), "8");
     assert.equal(db.stockItems.length, 1);
     assert.equal(db.stockItems[0]?.onHand.toString(), "8");
-    const liveOutboxRows = db.outbox.filter((row) => row.status === "PENDING");
-    assert.equal(liveOutboxRows.length, 1);
-    assert.equal(liveOutboxRows[0]?.targetOnHand.toString(), "8");
+    /// The row is written but NOT publishable, and that changed here for a
+    /// reason worth recording.
+    ///
+    /// This fixture has no StockItem for the variant, so the receipt starts
+    /// from a baseline nobody knew, and #306 dead-letters the publish rather
+    /// than setting the shop's stock to the received amount alone. The
+    /// assertion below used to expect a PENDING row, and it passed only
+    /// because this double's `create` returned `{}`: the writer then had no
+    /// id to close the row with, and the dead-lettering silently did nothing.
+    ///
+    /// So the broken double was hiding a guard that was already merged. With
+    /// the double honest, this test now covers #306 from the purchase side.
+    assert.equal(db.outbox.length, 1);
+    assert.equal(db.outbox[0]?.status, "DEAD_LETTER");
+    assert.equal(db.outbox[0]?.targetOnHand.toString(), "8");
+    assert.equal(
+      db.outbox.filter((row) => row.status === "PENDING").length,
+      0,
+      "a baseline nobody knew must not be published to the shop",
+    );
     // The second (later) line's price wins the last-purchase-price upsert.
     assert.equal(
       db.productExtensions.get("variant-1")?.lastPurchaseNetPrice.toString(),
