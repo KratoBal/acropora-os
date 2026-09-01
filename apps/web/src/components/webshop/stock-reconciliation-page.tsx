@@ -16,6 +16,7 @@ import {
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { StockItemReconciliationSection } from "./stock-item-reconciliation-section";
 import { unasOrdersApi } from "@/lib/api/unas-orders";
 
 export function StockReconciliationPage() {
@@ -69,7 +70,9 @@ export function StockReconciliationPage() {
 
       <Card>
         <CardHeader>
-          <h2 className="text-sm font-semibold text-slate-900">Eltérések</h2>
+          <h2 className="text-sm font-semibold text-slate-900">
+            Eltérések az UNAS-rendelések felől
+          </h2>
           <span className="text-xs text-slate-500">
             {report
               ? `${report.mismatches.length} eltérés / ${report.checkedCount} ellenőrzött termék`
@@ -121,6 +124,15 @@ export function StockReconciliationPage() {
           ) : null}
         </CardContent>
       </Card>
+
+      {/*
+        A MÁSODIK SZEKCIÓ AZÉRT ÁLL ITT, MERT KÉT ÖSSZEVETÉS VAN.
+        A fenti az UNAS-rendelések felől néz, ez a főkönyvvel is összeveti,
+        soronként. Mérve 2026-09-01: eddig csak a fenti látszott, és a javító
+        végpontok a MÁSIKHOZ tartoznak -- vagyis aki ide belépett, azt hihette,
+        hogy már látja azt, amit soha nem kértünk le.
+      */}
+      <StockItemReconciliationSection />
     </div>
   );
 }

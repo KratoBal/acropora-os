@@ -249,6 +249,12 @@ export type {
   UnasCustomerSyncSummary,
 } from "./integrations/unas-customer-sync.js";
 export type {
+  StockItemReconciliationPage,
+  StockItemReconciliationRow,
+  StockItemReconciliationStatus,
+  StockItemReconciliationSummary,
+} from "./inventory/stock-item-reconciliation.js";
+export type {
   StockReconciliationMismatch,
   StockReconciliationReport,
   UnasOrderDetail,
