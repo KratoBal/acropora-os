@@ -1,0 +1,212 @@
+/**
+ * A TARTALOM ÚTJA: kilenc állapot, és mindegyik mellett az, hogy KIRE VÁR.
+ *
+ * MIÉRT A „KIRE VÁR" A LÉNYEG, ÉS NEM AZ ÁLLAPOT NEVE: a panasz, amiből ez a
+ * felület készül, nem a jóváhagyásról szólt, hanem arról, hogy sem Balázs, sem
+ * Luca nem látja, mi vár rájuk. Egy állapot, ami nem mondja meg, kinek kell
+ * lépnie, ugyanaz a lista, ami ma három helyen áll és egyik sem frissül.
+ *
+ * A KÉP NEM ÁLLAPOT, HANEM FELTÉTEL, és ez a modell legfontosabb döntése.
+ * Ha a „képre vár" állapot lenne, a fotóra váró darabok ott állnának -- és
+ * ELVESZNE az az információ, hogy a szövegük már jóvá van hagyva. Egy
+ * állapotgép, ami két független feltételt egy tengelyre húz, mindig az egyiket
+ * felejti el. Az állapot a SZÖVEG útja; a kép külön feltétel, és a „mi vár
+ * Lucára képért" ezért szűrés, nem állapot.
+ *
+ * ===================================================================
+ * A SZÁM, AMI EZT A DÖNTÉST INDOKOLJA -- ÉS AMI KISEBB, MINT HITTÜK
+ * ===================================================================
+ *
+ * **NÉGY kész szövegű poszt vár fotóra, 2026-08-18 óta (kb. két hét).**
+ * Visszamérve 2026-09-01 16:20-kor, korall listájából. Ez a lap és a felület
+ * több kommentje eredetileg HATOT mondott: a hatos szám a délelőtti
+ * összefoglalóból jött, és egész délután ellenőrzés nélkül ismétlődött.
+ *
+ * A hatból kettő nem tartozik ide: **egy jogi döntésen áll** (volt-e pipa a
+ * hírlevélhez), nem fotón, **egynek pedig vázlata sincs** -- az Luca
+ * témadöntésére vár, tehát ötlet.
+ *
+ * **MI VÁLTOZIK EZZEL, ÉS MI NEM.** A modell NÉGY döntése áll a négyes számmal
+ * is, csak GYENGÉBB indokkal:
+ *
+ *   1. a kép feltétel, nem állapot
+ *   2. a képre váró lista KÜLÖN áll, és a szerep-szűrő nem rejtheti el
+ *   3. a szekció a lista TETEJÉN van
+ *   4. a kor-címke, és hogy a „régóta" szó csak akkor áll ott, ha igaz
+ *
+ * Négy tétel, két hete állva, ugyanaz a fajta baj, csak kisebb.
+ *
+ * **HOL A HATÁRUK, és ez a lényeg:** ha egyszer csak EGY tétel áll, és az is
+ * egy napja, akkor ezek a döntések felülvizsgálatot kívánnak -- a külön lista,
+ * a kiemelt hely és a figyelmeztető szín akkor többet ígér, mint amennyit a
+ * helyzet ér. A számot tehát nem azért írjuk ide, hogy igazoljon, hanem hogy a
+ * következő olvasó tudja, MIKOR nem igazol többé.
+ */
+export type ContentState =
+  | "IDEA"
+  | "DRAFTING"
+  | "AWAITING_REVIEW"
+  | "AWAITING_REVISION"
+  | "AWAITING_APPROVAL"
+  | "READY_TO_SEND"
+  | "SCHEDULED"
+  | "SENT"
+  | "DISCARDED";
+
+/**
+ * KI AZ, AKIRE EGY TÉTEL VÁR.
+ *
+ * A `nobody` nem ugyanaz, mint a „kész": az ötlet is senkire vár, és a kiküldött
+ * is. A különbséget az állapot mondja meg, ez a mező azt, hogy kell-e valakinek
+ * MOST lépnie.
+ */
+export type ContentWaitsOn =
+  | { on: "nobody" }
+  | { on: "author" }
+  | { on: "reviewer" }
+  | { on: "approver" }
+  | { on: "sender" }
+  | { on: "schedule" };
+
+export interface ContentItemState {
+  state: ContentState;
+  /** Kell-e kép ehhez a tételhez. A szövegtől FÜGGETLEN feltétel. */
+  imageRequired: boolean;
+  /** Megvan-e a kép. */
+  imageAttached: boolean;
+}
+
+/**
+ * MI HIÁNYZIK EGY TÉTELHEZ, AZ ÁLLAPOTÁN FELÜL.
+ *
+ * A kép külön szerepel, mert egy tétel egyszerre lehet jóváhagyott szövegű ÉS
+ * képre váró. A hívó ezt a két adatot EGYÜTT mutatja, nem összevonva.
+ */
+export interface ContentBlockers {
+  waitsOn: ContentWaitsOn;
+  /** Igaz, ha a kép hiányzik és kell. A szöveg állapotától független. */
+  waitsForImage: boolean;
+}
+
+const WAITS_ON: Record<ContentState, ContentWaitsOn["on"]> = {
+  IDEA: "nobody",
+  DRAFTING: "author",
+  AWAITING_REVIEW: "reviewer",
+  AWAITING_REVISION: "author",
+  AWAITING_APPROVAL: "approver",
+  READY_TO_SEND: "sender",
+  SCHEDULED: "schedule",
+  SENT: "nobody",
+  DISCARDED: "nobody",
+};
+
+export function contentBlockers(item: ContentItemState): ContentBlockers {
+  return {
+    waitsOn: { on: WAITS_ON[item.state] },
+    // A KÉP AKKOR IS HIÁNYOZHAT, HA A SZÖVEG KÉSZ, és akkor is megvan, ha a
+    // szöveg még vázlat. A két kérdés nem metszi egymást, és a lista mindkettőt
+    // mutatja.
+    waitsForImage: item.imageRequired && !item.imageAttached,
+  };
+}
+
+/**
+ * AZ ÁTMENETEK. Ami itt nincs felsorolva, az nem megengedett.
+ *
+ * MIÉRT ZÁRT LISTA, ÉS NEM SZABAD MOZGÁS: a jóváhagyás kapu, nem címke. Balázs
+ * szabálya szó szerint az, hogy egyelőre semmi nem mehet ki nélküle vagy Luca
+ * nélkül; egy szabadon állítható állapotmező ezt a kaput az első kényelmes
+ * pillanatban megkerülné.
+ *
+ * A VISSZAKÖR SZÁNDÉKOSAN ISMÉTELHETŐ: a lektorálás és a javítás között egy
+ * tétel akárhányszor oda-vissza mehet. A mai menet mérése szerint ez egy
+ * tételen háromszor is megtörténik, és egy egyirányú modell ezt hazugsággá
+ * tenné.
+ *
+ * AZ ELVETÉS BÁRHONNAN ELÉRHETŐ, kivéve a már kiküldöttet: amit egyszer láttak,
+ * azt nem lehet meg nem történtté tenni. Egy `SENT -> DISCARDED` átmenet épp azt
+ * az egy tényt törölné, amit a legdrágább volt visszaszerezni.
+ */
+const TRANSITIONS: Record<ContentState, readonly ContentState[]> = {
+  IDEA: ["DRAFTING", "DISCARDED"],
+  DRAFTING: ["AWAITING_REVIEW", "DISCARDED"],
+  AWAITING_REVIEW: ["AWAITING_REVISION", "AWAITING_APPROVAL", "DISCARDED"],
+  AWAITING_REVISION: ["AWAITING_REVIEW", "DISCARDED"],
+  AWAITING_APPROVAL: ["AWAITING_REVISION", "READY_TO_SEND", "DISCARDED"],
+  READY_TO_SEND: ["SCHEDULED", "SENT", "AWAITING_REVISION", "DISCARDED"],
+  // AZ ÜTEMEZÉS VISSZAVONHATÓ, amíg a poszt nem ment ki: a `SCHEDULED ->
+  // READY_TO_SEND` az az út, amin egy ütemezett tétel visszakerül a sorba,
+  // mielőtt a lejárata törölné.
+  SCHEDULED: ["SENT", "READY_TO_SEND", "DISCARDED"],
+  SENT: [],
+  DISCARDED: ["DRAFTING"],
+};
+
+export function canMove(from: ContentState, to: ContentState): boolean {
+  return TRANSITIONS[from].includes(to);
+}
+
+/**
+ * EGY ÜTEMEZETT TÉTEL NEM NÁLUNK VÁR, HANEM MÁR A FACEBOOKON ÁLL.
+ *
+ * Ez a modell legveszélyesebb pontja, és nem a mi táblánkon látszik. Ha valaki
+ * a felületen elvet egy `SCHEDULED` tételt, a mi oldalunk „elvetve" állapotot
+ * mutat -- a Facebook viszont a megadott napon KI FOGJA TENNI. A tábla
+ * megnyugtat, a poszt megjelenik a vevő előtt, jóváhagyás nélkül.
+ *
+ * UGYANEZ ÁLL A SAJÁT SZABÁLYUNKRA: a 25. napi törlés nem nálunk állapotváltás,
+ * hanem törlés a Facebookon. Ha a kettő elválik, a „piszkozat gyújtózsinórral"
+ * épp a gyújtózsinórt veszti el.
+ *
+ * EZÉRT NEM `boolean` A VÁLASZ, HANEM EGY ELÁGAZÓ TÍPUS. A hívó nem tudja
+ * „csak átírni az állapotot": a `needs-external` ágat kezelnie KELL, különben
+ * a fordító szól. Egy megjegyzés ugyanezt csak kérné.
+ */
+export type ExternalWork = {
+  /** Mit kell a külső felületen elvégezni, MIELŐTT az állapot átíródik. */
+  action: "cancel-scheduled-post";
+  /** Ember által olvasható indok, ami a naplóba és a hibaüzenetbe is mehet. */
+  reason: string;
+};
+
+export type PlannedTransition =
+  | { kind: "refused"; from: ContentState; to: ContentState }
+  | { kind: "internal"; to: ContentState }
+  | { kind: "needs-external"; to: ContentState; external: ExternalWork };
+
+/**
+ * MIT KÍVÁN EGY ÁTMENET, az engedélyezettségén felül.
+ *
+ * A `SCHEDULED`-ból KIFELÉ vezető minden út külső munkával jár, kivéve a
+ * `SENT`-et: az nem a mi lépésünk, hanem annak a TUDOMÁSULVÉTELE, hogy a poszt
+ * kiment. Oda nincs mit visszavonni.
+ *
+ * AMIT EZ A FÜGGVÉNY NEM CSINÁL, ÉS SZÁNDÉKOSAN: nem hajtja végre a külső
+ * munkát. Az írás a Facebook felé külön döntés, és Balázs mai szabálya alatt
+ * áll. Ez a típus csak annyit mond ki, hogy egy állapot-átírás ÖNMAGÁBAN nem
+ * elegendő -- és épp ez az az állítás, ami ma sehol nem szerepelt.
+ */
+export function planTransition(
+  from: ContentState,
+  to: ContentState,
+): PlannedTransition {
+  if (!canMove(from, to)) return { kind: "refused", from, to };
+
+  if (from === "SCHEDULED" && to !== "SENT") {
+    return {
+      kind: "needs-external",
+      to,
+      external: {
+        action: "cancel-scheduled-post",
+        reason:
+          "A poszt ütemezve áll a Facebookon: az ütemezést ott vissza kell vonni, különben a megadott napon kimegy, akkor is, ha nálunk már nem ebben az állapotban van.",
+      },
+    };
+  }
+
+  return { kind: "internal", to };
+}
+
+export function allowedMoves(from: ContentState): readonly ContentState[] {
+  return TRANSITIONS[from];
+}

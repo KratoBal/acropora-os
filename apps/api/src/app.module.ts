@@ -24,6 +24,7 @@ import { UnasOrderSyncModule } from "./orders/unas-order-sync/unas-order-sync.mo
 import { PosModule } from "./pos/pos.module.js";
 import { ProductModule } from "./products/product.module.js";
 import { PurchasingModule } from "./purchasing/purchasing.module.js";
+import { ContentModule } from "./content/content.module.js";
 import { ServiceAssetsModule } from "./service-assets/service-assets.module.js";
 import { SuppliersModule } from "./suppliers/suppliers.module.js";
 import { TasksModule } from "./tasks/tasks.module.js";
@@ -51,6 +52,7 @@ import { WorksheetsModule } from "./worksheets/worksheets.module.js";
     FoxpostSettlementModule,
     SuppliersModule,
     PurchasingModule,
+    ContentModule,
     ServiceAssetsModule,
     WorksheetsModule,
     TasksModule,

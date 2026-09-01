@@ -80,6 +80,22 @@ export const serviceNavigation: AppNavigationItem[] = [
   },
 ];
 
+/**
+ * A TARTALOM SAJÁT MENÜPONT, NEM EGY MEGLÉVŐ ALATT.
+ *
+ * A panasz, amiből készült, épp az volt, hogy a dolgok sok felületen
+ * keletkeznek, és nem látszik, mi vár kire. Egy almenü egy másik szakasz alatt
+ * ugyanazt csinálná: aki nem keresi, nem találja meg.
+ */
+export const contentNavigation: AppNavigationItem[] = [
+  {
+    href: "/tartalom",
+    label: "Tartalom",
+    icon: "clipboard",
+    permission: PERMISSIONS.CONTENT_VIEW,
+  },
+];
+
 export const businessNavigation: AppNavigationEntry[] = [
   {
     href: "/pos",

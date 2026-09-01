@@ -41,6 +41,34 @@ export const PERMISSIONS = {
   AQUARIUMS_MANAGE: "aquariums.manage",
   ICP_VIEW: "icp.view",
   ICP_MANAGE: "icp.manage",
+  CONTENT_VIEW: "content.view",
+  /// Tartalmat ÍRNI és lektorálni. A jóváhagyás NEM ez: az a
+  /// `CONTENT_APPROVE`, és szándékosan külön, mert Balázs szabálya szerint
+  /// egyelőre semmi nem mehet ki nélküle vagy Luca nélkül. Egy közös
+  /// "content.manage" azt jelentené, hogy aki írja, jóvá is hagyhatja -- a
+  /// kapu pedig pont az, hogy a kettő nem ugyanaz a kéz.
+  CONTENT_MANAGE: "content.manage",
+  /// A második lépcső: jóváhagyás és kiküldésre bocsátás.
+  ///
+  /// EZ A JOG MA KÉT NEVESÍTETT EMBERHEZ TARTOZIK: Balázshoz és Lucához. Nem
+  /// vezetői szint, hanem két személy -- és ezt azért kell kiírni, mert a jog
+  /// NEVE túléli a mai helyzetet. Egy szerepkör-tábla, amiben csak annyi áll,
+  /// hogy a MANAGER nem kapja meg, egy év múlva önkényesnek látszik, és valaki
+  /// jó szándékkal hozzáadja.
+  ///
+  /// A DÖNTÉS: Balázs, 2026-09-01 14:28, Discord. Szó szerint ennyi áll a
+  /// kérésében a jóváhagyásról: „jova lehet hagyni mondjuk egy posztot ugy,
+  /// hogy elotte lektoralja az akire tartozik."
+  ///
+  /// A kiadásról ugyanabban az üzenetben ez áll, szintén szó szerint:
+  /// „egyelore ne menjen ki semmi amig en vagy Luca nem latja."
+  ///
+  /// MINDKÉT MONDAT IDÉZET. Ez a megjegyzés 2026-09-01 15:42-ig úgy állt, hogy
+  /// a második a mi összefoglalásunk -- akkor még nem volt meg a szó szerinti
+  /// alakja, és inkább jelöltem összefoglalásnak, mint hogy idézőjelbe tegyek
+  /// valamit, ami nem az ő szava. Egy hamis idézet rosszabb, mint egy hiányzó:
+  /// egy év múlva pont az idézőjel lenne a bizonyíték.
+  CONTENT_APPROVE: "content.approve",
   SETTINGS_MANAGE: "settings.manage",
   USERS_MANAGE: "users.manage",
   /// Egyedi rekordokra korlátozott, auditált készlet-repair (checkpoint 6
@@ -102,6 +130,7 @@ const VIEW_PERMISSIONS: readonly Permission[] = [
   PERMISSIONS.SERVICE_VIEW,
   PERMISSIONS.AQUARIUMS_VIEW,
   PERMISSIONS.ICP_VIEW,
+  PERMISSIONS.CONTENT_VIEW,
 ];
 
 export const ROLE_PERMISSIONS: Readonly<
@@ -116,7 +145,12 @@ export const ROLE_PERMISSIONS: Readonly<
       permission !== PERMISSIONS.INVENTORY_RECONCILIATION_REPAIR &&
       permission !== PERMISSIONS.SERVICE_WORKSHEET_AMEND &&
       permission !== PERMISSIONS.SERVICE_ASSET_DELETE &&
-      permission !== PERMISSIONS.PRODUCTS_CATALOG_AUTHORITY_TRANSFER,
+      permission !== PERMISSIONS.PRODUCTS_CATALOG_AUTHORITY_TRANSFER &&
+      // A JOVAHAGYAS NEM VEZETOI JOG, HANEM KET NEVESITETT EMBERE. Balazs
+      // szabalya 2026-09-01 14:28-rol: egyelore semmi nem mehet ki nelkule vagy
+      // Luca nelkul. Egy MANAGER, aki tartalmat IR, sajat magat hagyna jova --
+      // es akkor a kapu nem kapu, hanem egy pipa a sajat munkajan.
+      permission !== PERMISSIONS.CONTENT_APPROVE,
   ),
   SALES: [
     PERMISSIONS.AI_TEST_VIEW,
