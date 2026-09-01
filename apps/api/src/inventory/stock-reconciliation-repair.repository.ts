@@ -420,6 +420,9 @@ export class StockReconciliationRepairRepository extends Repository {
           warehouseId: params.warehouseId,
           status: { in: ["PENDING", "PROCESSING"] },
         },
+        /// Matches the seam's declared row. The caller only asks whether one
+        /// exists, so this is the whole shape it can ever need.
+        select: { id: true, status: true },
       });
 
       const rejectionCode = evaluateRepublishPreconditions({
