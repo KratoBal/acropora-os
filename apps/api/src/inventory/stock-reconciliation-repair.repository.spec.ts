@@ -4,6 +4,7 @@ import { Prisma } from "@acropora/database";
 
 import {
   StockReconciliationRepairRepository,
+  type RepairTransaction,
   type StockReconciliationRepairDatabase,
 } from "./stock-reconciliation-repair.repository.js";
 
@@ -24,6 +25,9 @@ interface FakeStockItem {
   onHand: Prisma.Decimal;
   sku: string;
   catalogAuthority?: "UNAS" | "ACROPORA" | null;
+  /// Optional so existing fixtures stay unchanged; a package product is not
+  /// stock-managed, and until the seam was typed no fixture could say so.
+  isPackageProduct?: boolean;
 }
 
 interface FakeMovementLine {
@@ -57,7 +61,10 @@ interface FakeRepairRow {
   afterOnHand: Prisma.Decimal | null;
   ledgerExpectedOnHand: Prisma.Decimal | null;
   outboxId: string | null;
-  resultDetail: unknown;
+  /// `JsonValue`, not `unknown`: the contract stores it as JSON, and a double
+  /// that widens it to `unknown` lets a non-serialisable value through here
+  /// that the database would reject.
+  resultDetail: Prisma.JsonValue;
   createdAt: Date;
   completedAt: Date | null;
 }
@@ -138,6 +145,16 @@ class FakeDb {
     groupBy: async () => [],
   };
 
+  /// Added when the transaction seam was typed: RepairTransaction requires
+  /// `stockMovement` (it is Picked straight from InventoryMovementDatabase),
+  /// and the double did not have it at all. Nothing here calls it today - the
+  /// repair path writes lines, not movements - but leaving it out is what let
+  /// the double drift from the contract in the first place.
+  stockMovement = {
+    findFirst: async () => null,
+    create: async () => ({ id: nextId("movement") }),
+  };
+
   stockMovementLine = {
     create: async () => ({}),
     findMany: async (args: {
@@ -175,8 +192,16 @@ class FakeDb {
           productId: `p-${row.variantId}`,
           product: {
             catalogAuthority: row.catalogAuthority ?? "UNAS",
+            /// `isPackageProduct` was missing here until the transaction
+            /// seam was typed. A package product is deliberately not
+            /// stock-managed, so a double that never carries the flag can
+            /// never exercise that branch - the tests only ever saw the
+            /// stock-managed case, and nothing said so.
             unasSnapshot: this.hasUnasLinkByVariant.has(row.variantId)
-              ? { reportedStock: row.onHand }
+              ? {
+                  reportedStock: row.onHand,
+                  isPackageProduct: row.isPackageProduct ?? false,
+                }
               : null,
             variants: [{ id: row.variantId }],
           },
@@ -185,6 +210,20 @@ class FakeDb {
   };
 
   unasStockSyncOutbox = {
+    /// The method the movement writer calls to dead-letter a publish whose
+    /// baseline was never known. It was missing here on 2026-09-01 and the
+    /// type check stayed green: 74 tests failed at run time instead. Typing
+    /// the transaction seam is what makes its absence a compile error.
+    update: async (args: {
+      where: { id: string };
+      data: { status: string };
+    }) => {
+      const row = this.outboxRows.find(
+        (candidate) => candidate.id === args.where.id,
+      );
+      if (row) row.status = args.data.status;
+      return {};
+    },
     updateMany: async (args: {
       where: {
         variantId: string;
@@ -262,8 +301,11 @@ class FakeDb {
       this.repairRows.find((row) => row.id === args.where.id) ?? null,
   };
 
+  /// Typed, not `unknown`: `this` is what reaches the movement-writer
+  /// helpers, so the compiler has to check it against the same contract the
+  /// repository promises them.
   async $transaction<T>(
-    operation: (transaction: unknown) => Promise<T>,
+    operation: (transaction: RepairTransaction) => Promise<T>,
   ): Promise<T> {
     return operation(this);
   }
@@ -641,9 +683,15 @@ describe("StockReconciliationRepairRepository.applyRepublishLocalToUnas", () => 
     // reach UNAS directly even by mistake.
     const db = new FakeDb();
     const outboxMethods = Object.keys(db.unasStockSyncOutbox);
+    /// `update` joined this list on 2026-09-01, when the transaction seam was
+    /// typed and the compiler found the double was missing it. The list stays
+    /// exact on purpose: it is what makes a new method have to justify itself
+    /// here, and it did its job - this assertion is what forced the addition
+    /// to be explained rather than slipped in. Every entry is a Prisma-shaped
+    /// model method; none of them can reach UNAS.
     assert.deepEqual(
       outboxMethods.sort(),
-      ["create", "findFirst", "findMany", "updateMany"].sort(),
+      ["create", "findFirst", "findMany", "update", "updateMany"].sort(),
     );
   });
 });
