@@ -96,3 +96,33 @@ export function reconcileSent(input: {
     unmatched: input.posts.filter((post) => !pairedPostIds.has(post.id)),
   };
 }
+
+/**
+ * EZ AZ ÁLLAPOT ÁTMENETI, ÉS A KÖVETKEZŐ OLVASÓNAK TUDNIA KELL, MIÉRT.
+ *
+ * MA (2026-09-01, acrobot döntése): ennek a függvénynek NINCS hívója az API-ban,
+ * és szándékosan nincs. A behúzást a flotta végzi: barracuda futtatja a
+ * lekérdezést, összeveti ezzel a függvénnyel, és amit talál, jelenti. A
+ * kiküldöttnek jelölés utána EMBER döntése, a szokásos `move` úton.
+ *
+ * A VÉGÁLLAPOT MÁS, és hosszú távon az a helyes: az alkalmazás maga ismerje a
+ * saját integrációit, vagyis az API kérdezze le a posztokat, és ez a függvény
+ * ott kapjon hívót.
+ *
+ * AMI HIÁNYZIK HOZZÁ, ÉS AMÍG NINCS MEG, A VÉGÁLLAPOT NEM LÉPÉS, HANEM TERV:
+ * el kell dönteni, HOL LAKIK egy csak olvasó Facebook-token az API
+ * környezetében, és ki fér hozzá. Az külön döntés, és Balázs asztala.
+ *
+ * ÉS EGY HARMADIK ÚT, AMIT MEGVIZSGÁLTUNK ÉS ELVETETTÜNK: hogy az API kapjon
+ * egy végpontot, ami FOGADJA a flottától a lekérdezés eredményét. Azért esett
+ * ki, mert a `complete` zászlót a KÜLDŐ állítaná -- egy őrző, aminek a
+ * helyessége a hívó jóindulatán áll, nem védelem, hanem annak a látszata. És
+ * mert megfordítaná az irányt: ma minden adat az API-ból megy kifelé, és az
+ * első út, amin egy ágens ír az éles adatbázisba, nem egy tartalom-lista
+ * kedvéért nyílik meg.
+ *
+ * AMIT AZ ÁTMENETI ÁLLAPOT NEM OLD MEG, és ezt nem szépítjük: a kiküldés ténye
+ * továbbra sem jut vissza MAGÁTÓL. Csak gyorsabban és megbízhatóbban, mint ma
+ * -- a különbség az, hogy ma senki nem veti össze, mostantól pedig egy mért
+ * függvény teszi, és a hiányt valaki LÁTJA.
+ */
