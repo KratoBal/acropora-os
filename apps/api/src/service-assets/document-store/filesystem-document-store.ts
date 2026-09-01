@@ -101,6 +101,24 @@ export class FilesystemDocumentStore implements DocumentStore {
    * közepe, nem elárvult fájl: ha beleszámolna, minden párhuzamos feltöltés
    * hamis leletet gyártana, és három ilyen után senki nem nézné meg a listát.
    *
+   * ÉS EZ EGY KORLÁT, NEM CSAK EGY SZŰRŐ -- kiírva, mert javítani ma nem
+   * tudjuk. Egy `.tmp` fájl KÉT különböző dolog lehet:
+   *
+   * 1. egy futó írás közepe (ezt védi a kihagyás), és
+   * 2. egy MEGSZAKADT írásból ottmaradt törzs, ha a folyamat magát a `rename`
+   *    előtt ölték meg. A `put` hibaága takarít, tehát egy elhasalt HÍVÁS nem
+   *    hagy ilyet -- csak egy megölt vagy összeomlott FOLYAMAT.
+   *
+   * A második valódi szemét, helyet foglal, és ez a lista SOHA nem fogja
+   * jelenteni. **Aki egyszer helyhiányt keres, itt nem talál semmit, és ez a
+   * mondat mondja meg neki, hogy hol nem nézett meg semmi.**
+   *
+   * MIÉRT NINCS RÁ IDŐHATÁR: a kettőt csak az ÉLETKOR különbözteti meg, és ma
+   * nem tudnánk megmondani, mennyi a jó szám. Egy önkényes határ vagy futó
+   * írásokat jelentene leletként, vagy a szemetet hagyná láthatatlanul --
+   * mérés nélkül mindkettő találgatás. Ha kiderül, hogy ez tényleg foglal,
+   * akkor lesz mérésünk hozzá, és akkor lehet határt választani.
+   *
    * NEM CSATOLT VAGY HIÁNYZÓ GYÖKÉR ESETÉN ÜRES A VÁLASZ, nem kivétel: a
    * beállítottság kérdését a `describe()` méri, és két helyen felelni rá annyit
    * tenne, hogy a hívó két különböző választ kaphat ugyanarra.

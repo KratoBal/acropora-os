@@ -193,8 +193,13 @@ describe("the filesystem document store", () => {
    * lista beleszámolná, minden párhuzamos feltöltés hamis leletet gyártana --
    * és három ilyen után senki nem nézné meg a listát, pont akkor, amikor a
    * valódi jön.
+   *
+   * A TESZT NEVE A KORLÁTOT IS KIMONDJA, és ez szándékos: ugyanez a szűrő
+   * elrejt egy MEGSZAKADT írásból ottmaradt törzset is, ami valódi szemét. A
+   * kettőt csak az életkor különbözteti meg, és időhatárt mérés nélkül nem
+   * választunk. Lásd a `filesystem-document-store.ts` `list()` jegyzetét.
    */
-  it("does not list a temporary file as if it were a document", async () => {
+  it("skips a temporary file, and with it any left by a crashed write", async () => {
     const listRoot = await mkdtemp(path.join(tmpdir(), "document-store-tmp-"));
     try {
       await mkdir(path.join(listRoot, "assets", "a"), { recursive: true });
