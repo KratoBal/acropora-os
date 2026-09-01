@@ -330,8 +330,31 @@ export class ServiceAssetsService {
    * oket: az elso beallitas, a masodik kotet vagy jogosultsag.
    */
   async documentStoreStatus() {
+    // KIKAPCSOLT ALLAPOTBAN A VALASZ NEM A KOTETROL SZOL, ES EZT KI KELL MONDANI.
+    //
+    // MERVE 2026-09-01, egy eles telepites elott: a valasz ilyenkor
+    // `{ enabled: false, status: { state: "ready" } }` volt, mert a valtozo
+    // hianyaban a MEMORIABELI tarolo fut, annak pedig nincs mit beallitani, tehat
+    // feltetel nelkul `ready`-t ad. A `ready` szo IGAZ volt -- csak nem arrol,
+    // amirol az olvasoja hitte. A telepites ellenorzese majdnem ugy zarult, hogy
+    // "a kotet a helyen van es hasznalhato", holott a kotetet SEMMI nem nezte meg.
+    //
+    // A KETTO NEM UGYANAZ A KERDES: a `describe()` a FUTO tarolorol beszel, ez a
+    // vegpont viszont a TELEPITESROL. Amig nincs bekapcsolva, a kotetrol nincs
+    // mondanivalonk, es ezt allitani kell, nem elhallgatni.
+    if (!documentStoreEnabled()) {
+      return {
+        enabled: false,
+        status: {
+          state: "not-enabled" as const,
+          reason:
+            "A tárolót nem használjuk (a DOCUMENT_STORE_ROOT nincs beállítva), tehát a bájtok az adatbázisba mennek. A KÖTETRŐL ez a válasz semmit nem mond: a futó tároló a memóriabeli, amin nincs mit ellenőrizni. A kötet meglétét a hoszton kell megnézni.",
+        },
+      };
+    }
+
     return {
-      enabled: documentStoreEnabled(),
+      enabled: true,
       status: await this.documentStore.describe(),
     };
   }
