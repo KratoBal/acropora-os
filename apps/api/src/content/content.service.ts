@@ -47,7 +47,8 @@ export class ContentService {
 
   /**
    * AMI KÉPRE VÁR. KÜLÖN lekérdezés, nem az állapotszűrő része, mert a kép a
-   * szövegtől független feltétel -- ma hat kész szövegű poszt áll pontosan itt.
+   * szövegtől független feltétel -- ma NÉGY kész szövegű poszt áll pontosan itt,
+   * 2026-08-18 óta (a szám és a határa a `content-state.ts` fejlécében).
    */
   waitingForImage() {
     return this.repository.list({

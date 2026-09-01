@@ -67,7 +67,7 @@ export function ContentListPage() {
       try {
         // A KÉT LEKÉRDEZÉS KÜLÖN MEGY, mert két különböző kérdés: az egyik a
         // szöveg útja, a másik a képé. Egy összevont hívás a kettőt egy
-        // listává mosná, és épp az a hat poszt tűnne el benne, ami ma hetek
+        // listává mosná, és épp az a NÉGY poszt tűnne el benne, ami ma két hete
         // óta kizárólag fotóra vár.
         const [waiting, images] = await Promise.all([
           contentApi.waiting(token, role, signal),
@@ -114,7 +114,7 @@ export function ContentListPage() {
       {/*
         AZ ÖSSZEGZŐ CSÍK LEGFELÜL, A SZEREP-VÁLASZTÓ ELŐTT IS.
         Aki megnyitja az oldalt, ne előbb egy választót értelmezzen, és csak
-        görgetés után tudja meg, hogy hat tétel áll hetek óta. A darabszám
+        görgetés után tudja meg, hogy négy tétel áll két hete. A darabszám
         önmagában kevés: a legrégebbi KORA az, ami megmondja, sürgős-e.
       */}
       {/*

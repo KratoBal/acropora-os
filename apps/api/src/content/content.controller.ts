@@ -38,8 +38,8 @@ export class ContentController {
 
   /**
    * AMI KÉPRE VÁR. Külön végpont, nem a `waiting` egyik szűrője: a kép a
-   * szövegtől független feltétel, és ma hat kész szövegű poszt áll pontosan
-   * itt, hetek óta.
+   * szövegtől független feltétel, és ma NÉGY kész szövegű poszt áll pontosan
+   * itt, 2026-08-18 óta (a szám és a határa a `content-state.ts` fejlécében).
    */
   @Get("waiting-for-image")
   @RequirePermissions(PERMISSIONS.CONTENT_VIEW)

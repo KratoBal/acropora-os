@@ -21,8 +21,8 @@ export const contentApi = {
 
   /**
    * AMI KÉPRE VÁR. Külön hívás, nem a `waiting` egyik szűrője: a kép a
-   * szövegtől független feltétel, és ma hat kész szövegű poszt áll pontosan
-   * itt, hetek óta.
+   * szövegtől független feltétel, és ma NÉGY kész szövegű poszt áll pontosan
+   * itt, 2026-08-18 óta.
    */
   waitingForImage(token: string, signal?: AbortSignal) {
     return apiRequest<ContentListResponse>(

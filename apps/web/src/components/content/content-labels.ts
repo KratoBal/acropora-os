@@ -68,7 +68,7 @@ export function contentImageLabel(item: {
  *
  * MIÉRT KELL KÜLÖN CÍMKE, ÉS MIÉRT NEM ELÉG A SZEKCIÓ: ma a hét hete álló és a
  * két napja készült tétel EGYFORMA jelvénnyel áll egymás mellett. A szekció
- * LÉTEZÉSE kiemeli a hat tételt, az egymáshoz képesti sürgősségük viszont nem
+ * LÉTEZÉSE kiemeli a négy tételt, az egymáshoz képesti sürgősségük viszont nem
  * látszik -- azt megint soronként kell kiolvasni, pontosan az, amit el akartunk
  * kerülni.
  *

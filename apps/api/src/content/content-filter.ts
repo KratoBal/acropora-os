@@ -45,7 +45,8 @@ export function waitingFor(role: ContentViewerRole): WaitingForMeFilter {
  * AMI SENKIRE NEM VÁR, DE MÉGSEM KÉSZ: a képre váró tételek.
  *
  * Ez KÜLÖN lekérdezés, és nem az állapotszűrő része, mert a kép független a
- * szövegtől. Ma hat kész szövegű poszt áll pontosan itt, és a mai három
+ * szövegtől. Ma NÉGY kész szövegű poszt áll pontosan itt (lásd a
+ * `content-state.ts` fejlécét), és a mai három
  * nyilvántartásban egyikben sem látszik így.
  *
  * A `SENT` és a `DISCARDED` kimarad: egy kiküldött poszt képe már nem hiányzik,

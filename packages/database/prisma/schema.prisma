@@ -3461,7 +3461,7 @@ enum DatasheetField {
 /// mérve is van; itt csak a nevek.
 ///
 /// A "KÉPRE VÁR" SZÁNDÉKOSAN NINCS KÖZTÜK. A kép nem a szöveg útjának egy
-/// szakasza, hanem tőle független feltétel: ma hat kész szövegű poszt vár
+/// szakasza, hanem tőle független feltétel: ma NÉGY kész szövegű poszt vár
 /// kizárólag fotóra, és ha ez állapot lenne, azoknál elveszne, hogy a szövegük
 /// már jóváhagyott. A képet a `imageRequired` és az `imageAttachedAt` mezők
 /// írják le.

@@ -7,11 +7,40 @@
  * lépnie, ugyanaz a lista, ami ma három helyen áll és egyik sem frissül.
  *
  * A KÉP NEM ÁLLAPOT, HANEM FELTÉTEL, és ez a modell legfontosabb döntése.
- * Ma hat kész szövegű poszt vár kizárólag fotóra. Ha a „képre vár" állapot
- * lenne, azok ott állnának -- és ELVESZNE az az információ, hogy a szövegük már
- * jóvá van hagyva. Egy állapotgép, ami két független feltételt egy tengelyre
- * húz, mindig az egyiket felejti el. Az állapot a SZÖVEG útja; a kép külön
- * feltétel, és a „mi vár Lucára képért" ezért szűrés, nem állapot.
+ * Ha a „képre vár" állapot lenne, a fotóra váró darabok ott állnának -- és
+ * ELVESZNE az az információ, hogy a szövegük már jóvá van hagyva. Egy
+ * állapotgép, ami két független feltételt egy tengelyre húz, mindig az egyiket
+ * felejti el. Az állapot a SZÖVEG útja; a kép külön feltétel, és a „mi vár
+ * Lucára képért" ezért szűrés, nem állapot.
+ *
+ * ===================================================================
+ * A SZÁM, AMI EZT A DÖNTÉST INDOKOLJA -- ÉS AMI KISEBB, MINT HITTÜK
+ * ===================================================================
+ *
+ * **NÉGY kész szövegű poszt vár fotóra, 2026-08-18 óta (kb. két hét).**
+ * Visszamérve 2026-09-01 16:20-kor, korall listájából. Ez a lap és a felület
+ * több kommentje eredetileg HATOT mondott: a hatos szám a délelőtti
+ * összefoglalóból jött, és egész délután ellenőrzés nélkül ismétlődött.
+ *
+ * A hatból kettő nem tartozik ide: **egy jogi döntésen áll** (volt-e pipa a
+ * hírlevélhez), nem fotón, **egynek pedig vázlata sincs** -- az Luca
+ * témadöntésére vár, tehát ötlet.
+ *
+ * **MI VÁLTOZIK EZZEL, ÉS MI NEM.** A modell NÉGY döntése áll a négyes számmal
+ * is, csak GYENGÉBB indokkal:
+ *
+ *   1. a kép feltétel, nem állapot
+ *   2. a képre váró lista KÜLÖN áll, és a szerep-szűrő nem rejtheti el
+ *   3. a szekció a lista TETEJÉN van
+ *   4. a kor-címke, és hogy a „régóta" szó csak akkor áll ott, ha igaz
+ *
+ * Négy tétel, két hete állva, ugyanaz a fajta baj, csak kisebb.
+ *
+ * **HOL A HATÁRUK, és ez a lényeg:** ha egyszer csak EGY tétel áll, és az is
+ * egy napja, akkor ezek a döntések felülvizsgálatot kívánnak -- a külön lista,
+ * a kiemelt hely és a figyelmeztető szín akkor többet ígér, mint amennyit a
+ * helyzet ér. A számot tehát nem azért írjuk ide, hogy igazoljon, hanem hogy a
+ * következő olvasó tudja, MIKOR nem igazol többé.
  */
 export type ContentState =
   | "IDEA"
