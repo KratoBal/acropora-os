@@ -16,7 +16,11 @@ interface FakeOrderLine {
   sku: string;
   description: string;
   quantity: Prisma.Decimal;
-  syncStatus: string;
+  unit: string;
+  unitNet: Prisma.Decimal;
+  taxRate: Prisma.Decimal;
+  lineGross: Prisma.Decimal;
+  syncStatus: "PENDING" | "OK" | "FAILED";
   syncError: string | null;
   unasRemovedAt: Date | null;
 }
@@ -25,7 +29,15 @@ interface FakeOrder {
   id: string;
   orderNumber: string;
   status: string;
-  unasInvoiceStatus: string | null;
+  buyerName: string | null;
+  buyerEmail: string | null;
+  currency: string;
+  totalNet: Prisma.Decimal;
+  totalTax: Prisma.Decimal;
+  totalGross: Prisma.Decimal;
+  orderedAt: Date | null;
+  createdAt: Date;
+  unasInvoiceStatus: "NOT_BILLABLE" | "BILLABLE" | "BILLED" | null;
   unasDeletedAt: Date | null;
   lines: FakeOrderLine[];
 }
@@ -46,7 +58,7 @@ function nextId(prefix: string): string {
   return `${prefix}-${idCounter}`;
 }
 
-class FakeDb {
+class FakeDb implements UnasOrderSyncDatabase {
   warehouses: Array<{ id: string; name: string; createdAt: Date }> = [];
   variants: Array<{
     id: string;
@@ -85,7 +97,8 @@ class FakeDb {
     partnerTaxNumber: string | null;
     currency: string;
     externalUrl: string | null;
-    syncStatus: string;
+    syncStatus: "PENDING" | "RECEIVED" | "ERROR";
+    createdAt: Date;
   }> = [];
   /// `status` is required, not just "some record": the contract's
   /// findUniqueOrThrow promises `{ status: string }`, and with an untyped
@@ -279,6 +292,10 @@ class FakeDb {
           sku: line.sku,
           description: line.description,
           quantity: line.quantity,
+          unit: line.unit,
+          unitNet: line.unitNet,
+          taxRate: line.taxRate,
+          lineGross: line.lineGross,
           syncStatus: line.syncStatus,
           syncError: line.syncError,
           unasRemovedAt: null,
@@ -288,12 +305,20 @@ class FakeDb {
         id: nextId("order"),
         orderNumber: args.data.orderNumber as string,
         status: args.data.status as string,
+        buyerName: args.data.buyerName ?? null,
+        buyerEmail: args.data.buyerEmail ?? null,
+        currency: args.data.currency,
+        totalNet: args.data.totalNet,
+        totalTax: args.data.totalTax,
+        totalGross: args.data.totalGross,
+        orderedAt: args.data.orderedAt ?? null,
+        createdAt: new Date(),
         // Real createNewOrder() always passes this explicitly (see
         // repository.ts), but default to null (Prisma's own default for
         // an omitted nullable field) so this fake doesn't silently diverge
         // from real Prisma behavior if a future caller ever omits it.
         unasInvoiceStatus:
-          (args.data.unasInvoiceStatus as string | null | undefined) ?? null,
+          args.data.unasInvoiceStatus ?? null,
         unasDeletedAt: null,
         lines,
       };
@@ -309,8 +334,7 @@ class FakeDb {
       const order = this.orders.find((o) => o.id === args.where.id);
       if (!order) return null;
       return {
-        id: order.id,
-        status: order.status,
+        ...order,
         // Must mirror the real select in apply() (unasInvoiceStatus: true)
         // - omitting this previously made existing.unasInvoiceStatus
         // always `undefined` here even when the real column held `null`,
@@ -319,14 +343,16 @@ class FakeDb {
         // CANCELLED->CANCELLED resync regardless of any real change.
         unasInvoiceStatus: order.unasInvoiceStatus,
         unasDeletedAt: order.unasDeletedAt,
-        lines: order.lines.map((line) => ({
-          id: line.id,
-          sku: line.sku,
-          variantId: line.variantId,
-          quantity: line.quantity,
-          syncStatus: line.syncStatus,
-          unasRemovedAt: line.unasRemovedAt,
-        })),
+        lines: order.lines.map((line) => ({ ...line })),
+        invoices: this.invoices
+          .filter((invoice) => invoice.salesOrderId === order.id)
+          .map((invoice) => ({
+            id: invoice.id,
+            invoiceNumber: invoice.invoiceNumber,
+            externalUrl: invoice.externalUrl,
+            syncStatus: invoice.syncStatus,
+            createdAt: invoice.createdAt,
+          })),
       };
     },
     findMany: async () => [],
@@ -343,6 +369,10 @@ class FakeDb {
         sku: args.data.sku,
         description: args.data.description,
         quantity: args.data.quantity,
+        unit: args.data.unit,
+        unitNet: args.data.unitNet,
+        taxRate: args.data.taxRate,
+        lineGross: args.data.lineGross,
         syncStatus: args.data.syncStatus,
         syncError: args.data.syncError,
         unasRemovedAt: null,
@@ -383,7 +413,8 @@ class FakeDb {
         partnerTaxNumber: (args.data.partnerTaxNumber as string) ?? null,
         currency: args.data.currency as string,
         externalUrl: (args.data.externalUrl as string) ?? null,
-        syncStatus: args.data.syncStatus as string,
+        syncStatus: args.data.syncStatus,
+        createdAt: new Date(),
       };
       this.invoices.push(row);
       return row;
@@ -628,7 +659,7 @@ function baseOrder(overrides: Partial<UnasApiOrder> = {}): UnasApiOrder {
 }
 
 function repositoryWith(db: FakeDb) {
-  return new UnasOrderSyncRepository(db as unknown as UnasOrderSyncDatabase);
+  return new UnasOrderSyncRepository(db);
 }
 
 describe("UnasOrderSyncRepository.apply", () => {
@@ -2303,6 +2334,10 @@ describe("UnasOrderSyncRepository.refreshOrder", () => {
       variantId: "variant-ship",
       sku: "SHIP-REAL-SKU",
       quantity: new Prisma.Decimal(1),
+      unit: "db",
+      unitNet: new Prisma.Decimal(0),
+      taxRate: new Prisma.Decimal(0),
+      lineGross: new Prisma.Decimal(0),
       syncStatus: "OK",
       syncError: null,
       description: "Szállítási költség",
