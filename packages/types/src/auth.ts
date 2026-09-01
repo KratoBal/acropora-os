@@ -41,6 +41,15 @@ export const PERMISSIONS = {
   AQUARIUMS_MANAGE: "aquariums.manage",
   ICP_VIEW: "icp.view",
   ICP_MANAGE: "icp.manage",
+  CONTENT_VIEW: "content.view",
+  /// Tartalmat ÍRNI és lektorálni. A jóváhagyás NEM ez: az a
+  /// `CONTENT_APPROVE`, és szándékosan külön, mert Balázs szabálya szerint
+  /// egyelőre semmi nem mehet ki nélküle vagy Luca nélkül. Egy közös
+  /// "content.manage" azt jelentené, hogy aki írja, jóvá is hagyhatja -- a
+  /// kapu pedig pont az, hogy a kettő nem ugyanaz a kéz.
+  CONTENT_MANAGE: "content.manage",
+  /// A második lépcső: jóváhagyás és kiküldésre bocsátás. Balázsé és Lucáé.
+  CONTENT_APPROVE: "content.approve",
   SETTINGS_MANAGE: "settings.manage",
   USERS_MANAGE: "users.manage",
   /// Egyedi rekordokra korlátozott, auditált készlet-repair (checkpoint 6
@@ -102,6 +111,7 @@ const VIEW_PERMISSIONS: readonly Permission[] = [
   PERMISSIONS.SERVICE_VIEW,
   PERMISSIONS.AQUARIUMS_VIEW,
   PERMISSIONS.ICP_VIEW,
+  PERMISSIONS.CONTENT_VIEW,
 ];
 
 export const ROLE_PERMISSIONS: Readonly<
@@ -116,7 +126,12 @@ export const ROLE_PERMISSIONS: Readonly<
       permission !== PERMISSIONS.INVENTORY_RECONCILIATION_REPAIR &&
       permission !== PERMISSIONS.SERVICE_WORKSHEET_AMEND &&
       permission !== PERMISSIONS.SERVICE_ASSET_DELETE &&
-      permission !== PERMISSIONS.PRODUCTS_CATALOG_AUTHORITY_TRANSFER,
+      permission !== PERMISSIONS.PRODUCTS_CATALOG_AUTHORITY_TRANSFER &&
+      // A JOVAHAGYAS NEM VEZETOI JOG, HANEM KET NEVESITETT EMBERE. Balazs
+      // szabalya 2026-09-01 14:28-rol: egyelore semmi nem mehet ki nelkule vagy
+      // Luca nelkul. Egy MANAGER, aki tartalmat IR, sajat magat hagyna jova --
+      // es akkor a kapu nem kapu, hanem egy pipa a sajat munkajan.
+      permission !== PERMISSIONS.CONTENT_APPROVE,
   ),
   SALES: [
     PERMISSIONS.AI_TEST_VIEW,
