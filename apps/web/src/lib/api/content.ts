@@ -61,12 +61,25 @@ export const contentApi = {
     },
   ) {
     const { requiresApproval, ...body } = input;
-    const path = requiresApproval ? "approve-move" : "move";
-    return apiRequest<{ ok: true }>(
-      `/content/${encodeURIComponent(id)}/${path}`,
-      token,
-      { method: "POST", body: JSON.stringify(body) },
-    );
+    const init = { method: "POST", body: JSON.stringify(body) };
+
+    // A KÉT CÍM KÜLÖN VAN KIÍRVA, NEM EGY SABLONBÓL. Egy közös
+    // `/content/${id}/${path}` alak rövidebb, de az útvonal-őrző
+    // (`mobile-api-routes.spec.ts`) MINDKÉT behelyettesítést paraméterré
+    // fordítja, és `content/:param/:param`-ot keres a szerveren -- olyan
+    // útvonal pedig nincs. A piros jogos volt: abból a sorból az OLVASÓ sem
+    // tudta megmondani, melyik két végpontot hívjuk.
+    return requiresApproval
+      ? apiRequest<{ ok: true }>(
+          `/content/${encodeURIComponent(id)}/approve-move`,
+          token,
+          init,
+        )
+      : apiRequest<{ ok: true }>(
+          `/content/${encodeURIComponent(id)}/move`,
+          token,
+          init,
+        );
   },
 
   comment(token: string, id: string, body: string) {
