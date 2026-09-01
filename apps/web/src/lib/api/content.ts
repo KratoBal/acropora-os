@@ -1,4 +1,5 @@
 import type {
+  ContentDetail,
   ContentListResponse,
   ContentState,
   ContentViewerRole,
@@ -47,6 +48,22 @@ export const contentApi = {
   waitingForImage(token: string, signal?: AbortSignal) {
     return apiRequest<ContentListResponse>(
       "/content/waiting-for-image",
+      token,
+      { signal },
+    );
+  },
+
+  /**
+   * EGY TÉTEL RÉSZLETESEN: a szöveg és a beszélgetés.
+   *
+   * A LISTA SZÁNDÉKOSAN NEM HORDOZZA EZEKET, és ez a hívás a párja: ami egy
+   * sorból nem dönthető el, azt itt lehet elolvasni. Ugyanaz a `moves` mező jön
+   * vele, mint a listával, tehát a nézetnek sincs saját szabálya arról, mit
+   * lehet most lépni.
+   */
+  detail(token: string, id: string, signal?: AbortSignal) {
+    return apiRequest<ContentDetail>(
+      `/content/${encodeURIComponent(id)}`,
       token,
       { signal },
     );

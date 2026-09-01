@@ -95,6 +95,42 @@ export interface ContentListItem {
 export type ContentListResponse = ContentListItem[];
 
 /**
+ * EGY HOZZÁSZÓLÁS, AHOGY A DRÓTON ÁTJÖN.
+ *
+ * A `body` itt NEM hiányzik, ellentétben a listával: ez a beszélgetés maga, és
+ * ami nem látszik belőle, azt senki nem tudja megválaszolni.
+ */
+export interface ContentComment {
+  id: string;
+  authorId: string | null;
+  body: string;
+  createdAt: string;
+}
+
+/**
+ * EGY TÉTEL RÉSZLETESEN.
+ *
+ * MIÉRT KELL, HA A LISTA MÁR MINDENT MUTAT: mert nem mutat mindent, és
+ * szándékosan nem. A lista sosem hordozza a szöveget (`body`), és a
+ * hozzászólásokat sem -- csak azt, amiből egy sor eldönthető. A DÖNTÉS viszont
+ * nem sorból születik: aki jóváhagy, elolvassa, amit jóváhagy, és aki javít,
+ * elolvassa, mit kértek tőle.
+ *
+ * MÉRVE 2026-09-01: a felület egyik hívása sem kérte le ezt a végpontot, tehát a
+ * szöveg és a beszélgetés SEHOL nem látszott. A visszaküldés felvetése aznap
+ * délután került a tétel alá hozzászólásként, épp azért, hogy „ott álljon, ahol
+ * a válasz is lesz" -- és a szerző nem látta sehol.
+ */
+export interface ContentDetail extends ContentListItem {
+  body: string | null;
+  comments: ContentComment[];
+  blockers: {
+    waitsOn: { on: string };
+    waitsForImage: boolean;
+  };
+}
+
+/**
  * A „MI VÁR RÁM" NÉZET VÁLASZA.
  *
  * NEM CSAK LISTA, ÉS EZ SZÁNDÉKOS: a `notCovered` megnevezi, mit NEM fed le ez a

@@ -106,6 +106,8 @@ export type {
 } from "./asset-management.js";
 export type {
   ContentChannel,
+  ContentComment,
+  ContentDetail,
   ContentListItem,
   ContentListResponse,
   ContentMoveOption,

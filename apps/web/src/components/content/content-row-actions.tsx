@@ -11,6 +11,7 @@ import { useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { contentApi } from "@/lib/api/content";
+import { ContentDetailPanel } from "./content-detail-panel";
 import { contentMoveLabel } from "./content-labels";
 
 /**
@@ -70,6 +71,7 @@ export function ContentRowActions({
   const [noteText, setNoteText] = useState("");
   const [commenting, setCommenting] = useState(false);
   const [comment, setComment] = useState("");
+  const [reading, setReading] = useState(false);
 
   const token = session?.token ?? "";
   const canApprove = Boolean(
@@ -154,6 +156,20 @@ export function ContentRowActions({
           />
         ))}
 
+        {/*
+          A SZÖVEG ELOLVASÁSA ELŐBB ÁLL, MINT A HOZZÁSZÓLÁS, mert a sorrend a
+          menetet követi: aki dönt, előbb olvas. Halkított vezérlő mind a kettő,
+          ugyanabból a közös értékből.
+        */}
+        <Button
+          variant="ghost"
+          size="sm"
+          className={QUIET_CONTROL}
+          onClick={() => setReading((open) => !open)}
+        >
+          {reading ? "Bezárom" : "Elolvasom"}
+        </Button>
+
         <Button
           variant="ghost"
           size="sm"
@@ -230,6 +246,13 @@ export function ContentRowActions({
           </div>
         </div>
       ) : null}
+
+      {/*
+        A RÉSZLET CSAK AKKOR TÖLTŐDIK LE, HA VALAKI MEGNYITJA. Egy lista, ami
+        minden sorhoz lekéri a szöveget és a beszélgetést, tíz sornál tíz hívást
+        indít olyan adatért, amit senki nem néz meg.
+      */}
+      {reading ? <ContentDetailPanel id={item.id} /> : null}
 
       {error ? (
         <Alert
