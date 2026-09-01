@@ -12,14 +12,15 @@ pontosan úgy, mint eddig.
 
 ## 0. Amit előre tudni kell
 
-|                                     |                                                      |
-| ----------------------------------- | ---------------------------------------------------- |
-| a Coolify alkalmazás                | `acropora-api`, azonosító `t9gxx94ecwekwruxngps5i6v` |
-| a kötet útvonala a konténeren belül | `/data/document-store`                               |
-| a jelölő fájl neve                  | `.acropora-document-store`                           |
-| a konténer felhasználója            | `nestjs`, uid **1001**, csoport `nodejs`             |
-| a kapcsoló változó                  | `DOCUMENT_STORE_ROOT`                                |
-| a keret változója (nem kötelező)    | `DOCUMENT_STORE_LIMIT_BYTES`                         |
+|                                     |                                                        |
+| ----------------------------------- | ------------------------------------------------------ |
+| a Coolify alkalmazás                | `acropora-api`, azonosító `t9gxx94ecwekwruxngps5i6v`   |
+| a kötet neve (nevesített kötet)     | `t9gxx94ecwekwruxngps5i6v-acropora-api-document-store` |
+| a kötet útvonala a konténeren belül | `/data/document-store`                                 |
+| a jelölő fájl neve                  | `.acropora-document-store`                             |
+| a konténer felhasználója            | `nestjs`, uid **1001**, csoport `nodejs`               |
+| a kapcsoló változó                  | `DOCUMENT_STORE_ROOT`                                  |
+| a keret változója (nem kötelező)    | `DOCUMENT_STORE_LIMIT_BYTES`                           |
 
 **A jelölő fájlt az alkalmazás SOHA nem hozza létre**, és ez nem hiányosság,
 hanem a védelem maga. Egy írható könyvtár önmagában nem bizonyítja, hogy a kötet
@@ -38,8 +39,20 @@ korábbi lépés hibája ártalmatlan.
 1. **A kötet létrehozása és csatolása** a `/data/document-store` útvonalra.
    A `DOCUMENT_STORE_ROOT` ekkor még **nincs** beállítva.
 2. **Jogosultság:** a könyvtárnak írhatónak kell lennie az uid **1001**
-   (`nestjs`) számára. A legegyszerűbb alak a hoszton:
-   `chown -R 1001:1001 <a kötet hoszt oldali útvonala>`
+   (`nestjs`) számára. **Az útvonalat ne találd ki, kérdezd meg a Dockert:**
+
+   ```
+   docker volume inspect -f '{{ .Mountpoint }}' t9gxx94ecwekwruxngps5i6v-acropora-api-document-store
+   chown -R 1001:1001 <a fenti parancs kimenete>
+   ```
+
+   **Miért nem áll itt kész útvonal:** ez NEVESÍTETT kötet (a Coolify felületén
+   a `host_path` mező üres), tehát a hoszt oldali helyét a Docker adja meg. A
+   szokásos elrendezés `/var/lib/docker/volumes/<név>/_data`, de az a Docker
+   belső ügye, nem a miénk: egy ide beírt útvonal egy nap csendben elavulna, és
+   akkor a `chown` egy nem létező könyvtárra futna, sikeresnek látszó
+   eredménnyel.
+
 3. **A jelölő fájl letétele a köteten BELÜL:**
    `touch /data/document-store/.acropora-document-store`
    Ha ez a kötet csatolása ELŐTT történne, a fájl a konténer saját rétegére
@@ -164,15 +177,32 @@ ki kell venni**, mielőtt több feltöltés menne rá.
 
 ---
 
-## 4. Amit ez a lap NEM tud, és meg kell nézni
+## 4. Hol tart a valóság: mi van MÉRVE, és mi nem
 
-- **Nem tudom, hogy a kötet hoszt oldali útvonala mi lesz**, tehát a 2. lépés
-  `chown` parancsa útvonal nélkül áll. Azt a Coolify erőforrás-beállítása
-  mondja meg.
-- **Nem mértem a bekapcsolást**, mert nincs mit: a kötet nem létezik. Minden
-  fenti lépés a kód olvasott viselkedéséből következik, nem egy végigcsinált
-  telepítésből. **Az első valódi futás után ezt a lapot ki kell javítani** azzal,
-  ami eltért.
+Ez a szakasz a lap állapotát mondja meg, nem a tervét. **Ami mérve van, az
+időponttal áll; ami nem, az külön jelöléssel.**
+
+### MÉRVE
+
+| mit                         | mikor                           | mit adott                                                                                                                          |
+| --------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| a kötet felvétele           | 2026-09-01 **14:42**            | felvéve, nevesített kötet, `host_path` üres                                                                                        |
+| az api újratelepítése       | 2026-09-01 **14:44 - 14:45:52** | a konténer negyven másodperces, alkalmazás/adatbázis/Redis rendben, Coolify `running:healthy`                                      |
+| a kivitt commit             | ugyanaz a futás                 | `6d34aeb` -- **csak** az építési javítás, a 307 szándékosan nincs beolvasztva, hogy ez az újratelepítés ne vigye ki a migrációt is |
+| a konténeren belüli útvonal | ugyanaz a futás                 | `/data/document-store`, ahogy ez a lap írta -- nem kellett javítani                                                                |
+
+### NINCS MÉRVE, ÉS EZÉRT NEM IS ÁLLÍTOM
+
+- **A jelölő fájl letétele** (3. lépés). A konténer nevére vár.
+- **A jogosultság** (2. lépés), és vele a `Mountpoint` értéke.
+- **A `DOCUMENT_STORE_ROOT` beállítása** (5. lépés), és minden, ami utána jön.
+- **A két ellenőrzés** a 2. szakaszból. Az elsőhöz (állapot-végpont) a 307
+  beolvasztása is kell: az `origin/main` ma a `6d34aeb`-en áll, és azon a
+  végpont még nem létezik.
+
+**Az első valódi futás után ezt a szakaszt ki kell egészíteni** azzal, ami
+eltért -- és a fenti táblázat épp azért van itt, hogy legyen mihez mérni.
+
 - **Az elárvult fájlok mérése külön kártyán áll** (`9dcb16fa`), és létező
   tárolót vár. Az eszköz készen áll: a tábla `storageKey`-es sorai és a tároló
   `list()` eredménye a két bemenet.
