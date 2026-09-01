@@ -1,4 +1,8 @@
-import type { ContentListResponse, ContentViewerRole } from "@acropora/types";
+import type {
+  ContentListResponse,
+  ContentState,
+  ContentViewerRole,
+} from "@acropora/types";
 
 import { apiRequest } from "./client";
 
@@ -29,6 +33,47 @@ export const contentApi = {
       "/content/waiting-for-image",
       token,
       { signal },
+    );
+  },
+
+  /**
+   * EGY LÉPÉS. A `from` NEM felesleges: a hívó kimondja, MILYEN ÁLLAPOTBAN
+   * LÁTTA a tételt, amikor döntött, és ha közben elmozdult, hibát kap ahelyett,
+   * hogy csendben felülírná valaki más döntését.
+   *
+   * A VÉGPONTOT A SZERVER VÁLASZA DÖNTI EL, NEM EZ A FÁJL. A sorral együtt
+   * érkezik, hogy egy lépés jóváhagyói-e (`requiresApproval`); a hívó ezt adja
+   * tovább, és nem tart saját listát arról, mi számít annak. Ha holnap egy másik
+   * lépés válik jóváhagyóvá, itt semmit nem kell átírni.
+   *
+   * A JOG ATTÓL MÉG A SZERVERÉ: ez az elágazás a helyes URL-t választja ki, nem
+   * a jogot dönti el. Aki jóváhagyói lépést kér jóváhagyói jog nélkül, `403`-at
+   * kap akkor is, ha valahogy a másik úton jönne be.
+   */
+  move(
+    token: string,
+    id: string,
+    input: {
+      from: ContentState;
+      to: ContentState;
+      requiresApproval: boolean;
+      discardReason?: string;
+    },
+  ) {
+    const { requiresApproval, ...body } = input;
+    const path = requiresApproval ? "approve-move" : "move";
+    return apiRequest<{ ok: true }>(
+      `/content/${encodeURIComponent(id)}/${path}`,
+      token,
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  },
+
+  comment(token: string, id: string, body: string) {
+    return apiRequest<{ id: string }>(
+      `/content/${encodeURIComponent(id)}/comments`,
+      token,
+      { method: "POST", body: JSON.stringify({ body }) },
     );
   },
 };

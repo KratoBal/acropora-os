@@ -40,6 +40,25 @@ export const CONTENT_WAITS_ON_LABELS: Record<ContentState, string> = {
   DISCARDED: "senkire",
 };
 
+/**
+ * EGY LÉPÉS GOMBFELIRATA, ISMERETLEN CÉLÁLLAPOTRA IS.
+ *
+ * MIÉRT NEM ELÉG A FENTI TÁBLA INDEXELÉSE: az `Record<ContentState, string>`
+ * alak a FORDÍTÓ ígérete -- ha a típusba új állapot kerül, a build szól, és ez
+ * jó. A DRÓTON viszont attól még érkezhet olyan érték, amit ez a kód nem ismer:
+ * a szerver és a felület külön indul el, tehát egy frissebb API bármikor
+ * küldhet olyan lépést, aminek itt nincs neve.
+ *
+ * ILYENKOR A NYERS ÁLLAPOTNÉV JELENIK MEG. Nem szép, és szándékosan nem is
+ * próbáljuk széppé tenni: egy „ismeretlen lépés" felirat elrejtené, MELYIK
+ * lépésről van szó, egy `undefined` pedig üres gombot adna. A nyers név
+ * legalább megnevezi, mire kattint valaki -- és a hiba abban a pillanatban
+ * látszik, nem hetekkel később.
+ */
+export function contentMoveLabel(to: string): string {
+  return (CONTENT_STATE_LABELS as Record<string, string | undefined>)[to] ?? to;
+}
+
 export const CONTENT_ROLE_LABELS: Record<ContentViewerRole, string> = {
   author: "amit írok",
   reviewer: "amit lektorálok",
