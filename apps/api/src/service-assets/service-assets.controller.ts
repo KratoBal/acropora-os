@@ -10,6 +10,7 @@ import {
   Patch,
   Post,
   Query,
+  ServiceUnavailableException,
   StreamableFile,
   UploadedFile,
   UseInterceptors,
@@ -133,6 +134,22 @@ export class ServiceAssetsController {
       documentId,
       partnerScopeOf(user),
     );
+
+    // A `content` a sema szerint mostantol NULLAZHATO: a tartalom vagy itt all,
+    // vagy a kulso dokumentum-taroloban, es a tabla CHECK megkotese szerint
+    // PONTOSAN az egyiken. Ez az ag a mai, adatbazisban tarolt sorokat szolgalja
+    // ki valtozatlanul.
+    //
+    // A TAROLOS AG BEKOTESE KESOBBI LEPES. Amig nincs bekotve, egy
+    // `storageKey`-es sor letoltese ERTELMES hibat ad, nem ures fajlt: egy nulla
+    // bajtos letoltes ugy nez ki, mintha sikerult volna, es a hibat a
+    // felhasznalo veszi eszre, nem mi.
+    if (document.content === null) {
+      throw new ServiceUnavailableException(
+        "A dokumentum a kulso taroloban all, aminek a kiszolgalasa meg nincs bekotve.",
+      );
+    }
+
     return new StreamableFile(document.content, {
       type: document.contentType,
       length: document.content.length,
