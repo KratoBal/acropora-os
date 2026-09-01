@@ -74,11 +74,30 @@ const listInclude = {
   },
 } as const;
 
-interface ExternalReferenceRow {
+/// ONE row shape for both seams that read an ExternalReference.
+///
+/// It used to be declared twice with incompatible projections: the
+/// transaction seam promised `{id, entityId, externalId, externalKey}` and
+/// the database seam `{metadata, externalId, externalKey}`. Measured on
+/// 2026-09-01: NONE of the four `findUnique` call sites passes a `select`,
+/// so Prisma returns the whole row at every one of them. The two narrow
+/// types were not describing the query, only which fields that particular
+/// consumer happened to read - and a hand-narrowed type that nothing
+/// enforces drifts. It had already drifted: no single object can honestly
+/// answer two projections, so the test double returned a union behind an
+/// `any` parameter, and that `any` is what hid the conflict.
+///
+/// If a `select` is ever added to one of those calls, this type must be
+/// narrowed in the same change - a deliberate step, unlike today's silent
+/// mismatch.
+export interface ExternalReferenceRow {
   id: string;
   entityId: string;
   externalId: string;
   externalKey: string | null;
+  /// `JsonValue`, not `Record<string, unknown>`: the contract stores it as
+  /// JSON, and a wider type lets values through that the database rejects.
+  metadata: Prisma.JsonValue;
 }
 
 // Exported (along with LineInput, resolveEffectiveVariantId,
@@ -426,11 +445,7 @@ export interface UnasOrderSyncDatabase {
     ): Promise<Array<{ variantId: string; onHand: Prisma.Decimal }>>;
   };
   externalReference: {
-    findUnique(args: unknown): Promise<{
-      metadata: Prisma.JsonValue;
-      externalId: string;
-      externalKey: string | null;
-    } | null>;
+    findUnique(args: unknown): Promise<ExternalReferenceRow | null>;
     findMany(
       args: unknown,
     ): Promise<Array<{ entityId: string; metadata: Prisma.JsonValue }>>;

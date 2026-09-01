@@ -10,6 +10,7 @@ import type { UnasApiOrder } from "@acropora/types";
 
 import {
   UnasOrderSyncRepository,
+  type ExternalReferenceRow,
   type UnasOrderSyncDatabase,
   type UnasOrderSyncTransaction,
 } from "./unas-order-sync.repository.js";
@@ -82,16 +83,7 @@ class FakeDb implements UnasOrderSyncDatabase {
     onHand: Prisma.Decimal;
   }> = [];
   orders: FakeOrder[] = [];
-  externalReferences: Array<{
-    id: string;
-    entityId: string;
-    externalId: string;
-    externalKey: string | null;
-    /// `JsonValue`, not `Record<string, unknown>`: the contract stores it as
-    /// JSON, and the wider fixture type let values through here that the
-    /// database would reject.
-    metadata: Prisma.JsonValue;
-  }> = [];
+  externalReferences: ExternalReferenceRow[] = [];
   movements: FakeMovement[] = [];
   invoices: Array<{
     id: string;
@@ -227,30 +219,23 @@ class FakeDb implements UnasOrderSyncDatabase {
   }
 
   externalReference = {
-    /// Returns the WHOLE row for both lookups, deliberately.
-    ///
-    /// `externalReference.findUnique` is declared TWICE with incompatible
-    /// shapes: UnasOrderSyncTransaction promises `{id, entityId, externalId,
-    /// externalKey}` and UnasOrderSyncDatabase promises `{metadata,
-    /// externalId, externalKey}`. One object cannot honestly return two
-    /// different projections, and until the seam was typed the double hid
-    /// that by returning a union behind an `any` parameter.
-    ///
-    /// A superset satisfies both, so the double now answers with everything
-    /// the row has. It is also closer to the truth: the projections are a
-    /// `select` optimisation in the real client, not a difference in what
-    /// exists.
-    findUnique: async (args: any) => {
-      const found = args.where.system_entityType_externalId
+    /// Returns the whole row, because that is now the declared contract for
+    /// both seams - not a superset chosen to satisfy two disagreeing types.
+    findUnique: async (args: unknown) => {
+      const { where } = args as {
+        where: {
+          system_entityType_externalId?: { externalId: string };
+          system_entityType_entityId?: { entityId: string };
+        };
+      };
+      const byExternalId = where.system_entityType_externalId;
+      const found = byExternalId
         ? this.externalReferences.find(
-            (reference) =>
-              reference.externalId ===
-              args.where.system_entityType_externalId.externalId,
+            (reference) => reference.externalId === byExternalId.externalId,
           )
         : this.externalReferences.find(
             (reference) =>
-              reference.entityId ===
-              args.where.system_entityType_entityId.entityId,
+              reference.entityId === where.system_entityType_entityId?.entityId,
           );
       return found ?? null;
     },
@@ -3061,8 +3046,21 @@ describe("UnasOrderSyncRepository.findById", () => {
     const fakeDatabase = {
       salesOrder: { findUnique: async () => order },
       externalReference: {
-        findUnique: async () =>
-          order ? { metadata: referenceMetadata } : null,
+        /// The whole row, not just the one field findById reads. The seam
+        /// declares ExternalReferenceRow, and a fake that answers less is
+        /// only accepted here because the cast below silences the check -
+        /// which is exactly how the two projections drifted apart in the
+        /// first place.
+        findUnique: async (): Promise<ExternalReferenceRow | null> =>
+          order
+            ? {
+                id: "extref-1",
+                entityId: order.id,
+                externalId: "47679-738905",
+                externalKey: "47679-738905",
+                metadata: referenceMetadata as Prisma.JsonValue,
+              }
+            : null,
       },
     } as unknown as UnasOrderSyncDatabase;
     return new UnasOrderSyncRepository(fakeDatabase);
