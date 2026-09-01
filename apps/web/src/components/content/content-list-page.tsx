@@ -247,16 +247,39 @@ function StaleSummary({ items }: { items: ContentListItem[] | null }) {
   if (!items || items.length === 0 || !oldest) return null;
 
   return (
-    <Card className="flex items-center justify-between gap-3 p-4">
-      <div>
-        <p className="font-medium">Képre vár</p>
-        <p className="text-sm text-muted-foreground">
-          a legrégebbi: {oldest.text}
-        </p>
-      </div>
-      <Badge variant={oldest.stale ? "warning" : "neutral"}>
-        {items.length}
-      </Badge>
+    <Card className="flex items-center gap-3 p-4">
+      {/*
+        HORGONY BALRA, DE FELIRAT NÉLKÜLI SZÁM NÉLKÜL. A darabszám a
+        MONDATBAN áll: egy csupasz szám egy jelvényben lehet üzenetszám vagy
+        értesítés is, és csak a cím elolvasása után derül ki, hogy tételekről
+        van szó. A csík egyetlen dolga, hogy egy pillantás alatt mondjon
+        valamit -- ha ehhez három darabot kell összeolvasni, akkor nem csík,
+        hanem egy negyedik lista.
+      */}
+      <span
+        aria-hidden
+        className={
+          oldest.stale
+            ? "size-2.5 shrink-0 rounded-full bg-amber-500"
+            : "size-2.5 shrink-0 rounded-full bg-slate-300"
+        }
+      />
+      <p className="text-sm">
+        <strong className="font-semibold">{items.length} tétel</strong> vár
+        képre
+        {/*
+          A „RÉGÓTA" SZÓ CSAK AKKOR ÁLL OTT, HA IGAZ. Egy két napja készült
+          tételre kimondva a szó hamis állítás lenne, és pont attól a
+          figyelmeztető erejétől fosztaná meg, amiért picasso kiemeltetni
+          kérte. Ugyanaz a szabály, mint a többi jelzésnél a lapon: ami mindig
+          ott áll, az nem jelent semmit.
+        */}
+        {oldest.stale ? (
+          <strong className="font-semibold"> régóta</strong>
+        ) : null}
+        {" -- a legrégebbi "}
+        {oldest.text}
+      </p>
     </Card>
   );
 }

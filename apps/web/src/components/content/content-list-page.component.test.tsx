@@ -110,6 +110,12 @@ describe("what the content list says when the load fails", () => {
 });
 
 describe("what the summary strip shows", () => {
+  /**
+   * A SZÁM A MONDATBAN ÁLL, nem külön jelvényben. Egy csupasz szám lehet
+   * üzenetszám vagy értesítés is; csak a cím elolvasása után derülne ki, hogy
+   * tételekről van szó -- pont az ellenkezője annak, hogy egy pillantás alatt
+   * mondjon valamit.
+   */
   it("counts the pieces waiting for an image and names the oldest", async () => {
     const sevenWeeksAgo = new Date(
       Date.now() - 49 * 24 * 60 * 60 * 1000,
@@ -121,9 +127,44 @@ describe("what the summary strip shows", () => {
 
     render(<ContentListPage />);
 
-    await waitFor(() =>
-      expect(screen.getByText("a legrégebbi: 7 hete")).toBeTruthy(),
-    );
+    /**
+     * A CSÍKOT A SAJÁT MONDATÁN KERESZTÜL NÉZZÜK, nem a „7 hete" szövegre: az
+     * a sorok kor-címkéjében IS ott áll, és egy tág keresés két elemet talál.
+     * Az első futás pontosan ezt mondta meg -- a keresés volt tág, nem a
+     * felület hibás.
+     */
+    await waitFor(() => expect(screen.getByText(/a legrégebbi/)).toBeTruthy());
+    const strip = screen.getByText(/a legrégebbi/);
+    expect(strip.textContent).toContain("2 tétel");
+    expect(strip.textContent).toContain("7 hete");
+  });
+
+  /**
+   * A „RÉGÓTA" SZÓ CSAK AKKOR ÁLL OTT, HA IGAZ.
+   *
+   * Egy két napja készült tételre kimondva hamis állítás lenne, és pont attól a
+   * figyelmeztető erejétől fosztaná meg, amiért kiemelni kértük. Ugyanaz a
+   * szabály, mint a lap többi jelzésénél: ami mindig ott áll, az nem jelent
+   * semmit.
+   *
+   * A KÉT ESET EGYÜTT MÉR: külön-külön mindkettő igaz lehetne egy olyan
+   * kódra is, ami sosem (vagy mindig) írja ki a szót.
+   */
+  it("only says 'régóta' when something really is old", async () => {
+    api.waitingForImage.mockResolvedValue([item({ id: "friss" })]);
+    const { unmount } = render(<ContentListPage />);
+    await waitFor(() => expect(screen.getByText(/1 tétel/)).toBeTruthy());
+    expect(screen.queryByText(/régóta/)).toBeNull();
+    unmount();
+
+    const longAgo = new Date(
+      Date.now() - 49 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    api.waitingForImage.mockResolvedValue([
+      item({ id: "regi", updatedAt: longAgo }),
+    ]);
+    render(<ContentListPage />);
+    await waitFor(() => expect(screen.getByText(/régóta/)).toBeTruthy());
   });
 
   /**
@@ -136,6 +177,6 @@ describe("what the summary strip shows", () => {
     await waitFor(() =>
       expect(screen.getByText("Semmi nem vár képre.")).toBeTruthy(),
     );
-    expect(screen.queryByText(/a legrégebbi:/)).toBeNull();
+    expect(screen.queryByText(/tétel vár/)).toBeNull();
   });
 });
