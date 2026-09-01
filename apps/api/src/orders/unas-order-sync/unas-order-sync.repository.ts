@@ -1926,6 +1926,13 @@ export class UnasOrderSyncRepository extends Repository {
         entityType: "SalesOrder",
         entityId: { in: orderIds },
       },
+      /// Named so the query matches the seam's declared row. Without it the
+      /// type is narrower than what Prisma returns - which is the SAFE
+      /// direction (it hides fields that exist rather than promising fields
+      /// that do not), and that is exactly why it survives unnoticed. The
+      /// findUnique on this seam had the same shape and a second, conflicting
+      /// declaration next to it, and the pair is what caused real drift.
+      select: { entityId: true, metadata: true },
     });
     return new Map(
       references.map((reference) => [
