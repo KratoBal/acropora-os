@@ -29,6 +29,7 @@ import { ServiceAssetsModule } from "./service-assets/service-assets.module.js";
 import { SuppliersModule } from "./suppliers/suppliers.module.js";
 import { TasksModule } from "./tasks/tasks.module.js";
 import { UsersModule } from "./users/users.module.js";
+import { ServiceJobsModule } from "./service-jobs/service-jobs.module.js";
 import { WorksheetsModule } from "./worksheets/worksheets.module.js";
 
 @Module({
@@ -54,6 +55,7 @@ import { WorksheetsModule } from "./worksheets/worksheets.module.js";
     PurchasingModule,
     ContentModule,
     ServiceAssetsModule,
+    ServiceJobsModule,
     WorksheetsModule,
     TasksModule,
     UsersModule,
