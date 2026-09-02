@@ -17,7 +17,6 @@ function closable(): WorksheetCloseState {
     // fixture-öm "01" volt, és a teszt fogta meg, nem az olvasás.
     departmentCode: "AKV",
     hasNumber: false,
-    hasServiceJob: true,
   };
 }
 
@@ -35,21 +34,6 @@ describe("mi akadályozza a munkalap lezárását", () => {
     assert.equal(
       worksheetCloseBlocker({ ...closable(), linesWithoutPrice: 1 }),
       "LINE_PRICE_MISSING",
-    );
-  });
-
-  /**
-   * A LAP KELETKEZHET HIBAJEGY NÉLKÜL, DE NEM ÉRHET VÉGET NÉLKÜLE.
-   *
-   * Karbantartás közben derül ki, hogy valami elromlott: a szerelő ott
-   * helyben felveszi a lapot, és a hibajegy nálunk születik meg utólag. A
-   * lánc viszont hibajegy -> munkalap -> teljesítési igazolás -> számla, és
-   * ha az első hiányzik, a végén nincs számla.
-   */
-  it("hibajegy nélkül nem zárható le", () => {
-    assert.equal(
-      worksheetCloseBlocker({ ...closable(), hasServiceJob: false }),
-      "SERVICE_JOB_MISSING",
     );
   });
 

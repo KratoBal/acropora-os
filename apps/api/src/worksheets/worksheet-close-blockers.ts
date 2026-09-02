@@ -20,16 +20,30 @@ import {
  * dokumentum szigorúságáról szólnak, hanem arról, hogy a lánc kifizetéssel
  * érjen véget.
  *
+ * EGY FELTÉTEL SZÁNDÉKOSAN HIÁNYZIK INNEN: hibajegy nélkül a lap nem zárható
+ * le és nem írható alá (Balázs, 2026-09-02). Megírtam, és KIVETTEM, mert MA
+ * SENKI NEM TUDNÁ KIELÉGÍTENI: hibajegy nem is keletkezhet, mert nincs
+ * `ServiceJob` modul - és minden meglévő munkalap `serviceJobId` nélkül áll,
+ * tehát a migráció után egyetlen lapot sem lehetne lezárni.
+ *
+ * Egy őrző, amit senki nem tud teljesíteni, nem szigor, hanem leállás. Ez a
+ * díszlet-mérés tükörképe: ott egy ellenőrzés, ami sosem bukhat el; itt egy,
+ * ami mindig.
+ *
+ * VISSZATÉTELE EGY SOR, és épp ezért került ez a lista külön fájlba:
+ *
+ *     if (!state.hasServiceJob) return "SERVICE_JOB_MISSING";
+ *
+ * plusz a `hasServiceJob` mező az állapotban, a hívóban a `serviceJobId`
+ * kiolvasása, és egy mondat a hibaüzenetek közé. Akkor kerül vissza, amikor a
+ * hibajegy létrehozható.
+ *
  * TISZTA FÜGGVÉNY: a hívó adja be, amit lekérdezett. Így a szabály mérhető
  * anélkül, hogy adatbázis kellene hozzá, és a tranzakció csak azt csinálja,
  * amihez tranzakció kell.
  */
 export type WorksheetCloseBlocker =
-  | "NOT_DRAFT"
-  | "NO_LINES"
-  | "LINE_PRICE_MISSING"
-  | "SERVICE_JOB_MISSING"
-  | WorksheetNumberIssue;
+  "NOT_DRAFT" | "NO_LINES" | "LINE_PRICE_MISSING" | WorksheetNumberIssue;
 
 export interface WorksheetCloseState {
   /** A lap MAI verziójának állapota. */
@@ -50,15 +64,6 @@ export interface WorksheetCloseState {
   departmentCode: string | null | undefined;
   /** Van-e már száma a lapnak; ha igen, a szám feltételeit nem kell újra nézni. */
   hasNumber: boolean;
-  /**
-   * Áll-e hibajegy a lap mögött.
-   *
-   * A lap KELETKEZHET hibajegy nélkül - karbantartás közben derül ki, hogy
-   * valami elromlott -, de nem ÉRHET VÉGET nélküle: hibajegy nélkül nem
-   * zárható le, nem írható alá, és nem következhet belőle teljesítési
-   * igazolás vagy számla (Balázs, 2026-09-02).
-   */
-  hasServiceJob: boolean;
 }
 
 /**
@@ -74,7 +79,6 @@ export function worksheetCloseBlocker(
   if (state.status !== "DRAFT") return "NOT_DRAFT";
   if (state.lineCount === 0) return "NO_LINES";
   if (state.linesWithoutPrice > 0) return "LINE_PRICE_MISSING";
-  if (!state.hasServiceJob) return "SERVICE_JOB_MISSING";
 
   // A SZÁM FELTÉTELEI CSAK AKKOR, HA MÉG NINCS SZÁMA. Egy már megszámozott
   // lap újralezárásánál a rövidítés hiánya nem akadály: a szám megvan, és

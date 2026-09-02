@@ -773,7 +773,6 @@ export class WorksheetsRepository extends Repository {
         select: {
           id: true,
           number: true,
-          serviceJobId: true,
           customer: { select: { worksheetPartnerCode: true } },
           department: { select: { code: true } },
           versions: {
@@ -815,7 +814,6 @@ export class WorksheetsRepository extends Repository {
         partnerCode,
         departmentCode,
         hasNumber: Boolean(worksheet.number),
-        hasServiceJob: Boolean(worksheet.serviceJobId),
       });
       if (blocker) return { ok: false, reason: blocker } as const;
 

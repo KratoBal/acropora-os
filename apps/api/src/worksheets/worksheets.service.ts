@@ -63,10 +63,6 @@ function closeFailure(reason: WorksheetCloseFailure) {
     return new ConflictException("A munkalap már le van zárva.");
   if (reason === "NO_LINES")
     return new BadRequestException("Tétel nélküli munkalap nem zárható le.");
-  if (reason === "SERVICE_JOB_MISSING")
-    return new BadRequestException(
-      "A munkalap mögött nincs hibajegy. Lezárás előtt hozzá kell rendelni egyet.",
-    );
   if (reason === "LINE_PRICE_MISSING")
     return new BadRequestException(
       "Van olyan tétel, amin nincs ár. A lap lezárása előtt ezeket ki kell tölteni.",
