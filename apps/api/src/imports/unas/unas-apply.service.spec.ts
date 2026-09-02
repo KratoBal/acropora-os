@@ -119,6 +119,7 @@ describe("UNAS apply execution", () => {
     externalReferencesSynchronized: 2,
     domainEventsCreated: 2,
     unresolvedBrandAssociations: 0,
+    unresolvedRelationReferences: 0,
     appliedAt: "2026-07-19T00:00:00.000Z",
     appliedBy: "owner",
   };
