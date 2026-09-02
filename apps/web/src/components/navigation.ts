@@ -287,6 +287,23 @@ export const settingsNavigation: AppNavigationItem[] = [
     icon: "shield",
     entryId: "users",
   },
+  {
+    /**
+     * A SOR VEGEN, ES NEM A KET KULSO KOZE. A mai sorrend logikat kovet:
+     * altalanos, aztan a ket KULSO RENDSZER hitelesito adata (NAV, Medusa),
+     * vegul a felhasznalok. A matricakiadas egyik csoportba sem tartozik --
+     * nem kulso rendszer kulcsa es nem jogosultsag-kezeles, hanem sajat,
+     * uzemeltetesi tetel.
+     *
+     * A lathatosag a kozos forrasban all (`asset-labels`), `SETTINGS_MANAGE`
+     * alatt: a szervizes NEM latja. Balazs, 2026-09-02 21:00:53: "Nem kell
+     * hogy lassa".
+     */
+    href: "/beallitasok/matricak",
+    label: "QR-kód nyomtatás",
+    icon: "settings",
+    entryId: "asset-labels",
+  },
 ];
 
 export const allSettingsNavigation: AppNavigationItem[] = [

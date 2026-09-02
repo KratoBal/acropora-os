@@ -386,6 +386,10 @@ describe("navigation", () => {
     "/admin/integrations/nav": "settings.manage",
     "/admin/integrations/medusa/connection": "settings.manage",
     "/admin/users": "users.manage",
+    // A matricakiadas ugyanazt a jogot kapja, mint a tobbi Beallitasok-tetel,
+    // amit a szervizes nem lat. Balazs, 2026-09-02 21:00:53: "Nem kell hogy
+    // lassa".
+    "/beallitasok/matricak": "settings.manage",
   };
 
   it("reproduces, for every role, exactly what the hard-coded keys produced", () => {
