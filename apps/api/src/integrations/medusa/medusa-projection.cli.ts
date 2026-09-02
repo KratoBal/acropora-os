@@ -18,7 +18,10 @@ import { MedusaConnectionRepository } from "./medusa-connection.repository.js";
 import { MedusaConnectionError } from "./medusa-connection.types.js";
 import { MedusaCredentialCryptoService } from "./medusa-credential-crypto.service.js";
 import { MedusaCredentialProvider } from "./medusa-credential.provider.js";
-import { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
+import {
+  MEDUSA_PRODUCT_REFERENCE,
+  MedusaProductLinkRepository,
+} from "./medusa-product-link.repository.js";
 import {
   MedusaProductProjectionService,
   type ProjectionPublicationReport,
@@ -193,6 +196,30 @@ export function describeSkuLookupFailure(
         `jó; a teendő a változat aktiválása, nem másik cikkszám keresése.`;
 }
 
+/**
+ * A LEKEPEZES-TORLES MONDATA, ES MIERT KULON FUGGVENY.
+ *
+ * A parancs torzse a `prisma`-t modul-szintu importbol veszi, tehat ami ott
+ * all, azt csak eles adatbazissal lehetne megnezni. A tobbi leiro
+ * (`describeSkuLookupFailure`, `describePublication`) ugyanezert all kulon.
+ *
+ * ES A NULLA ESET KULON MONDAT, NEM CSAK MAS SZAM. A regi szoveg nulla sornal
+ * is azt allitotta, hogy "lekepezes torolve (0 sor)" -- kijelentette a torlest,
+ * holott nem volt mit torolni. Ket okbol allhat elo, es a masodik NEMA:
+ *
+ *   a termek eleve nem volt lekepezve  -> rendben, nincs teendo
+ *   a keresesi kulcs elcsuszott        -> a lekepezes OTT MARAD, es a mondat
+ *                                         megnyugtat
+ */
+export function describeForgottenLink(
+  productId: string,
+  removedRows: number,
+): string {
+  return removedRows > 0
+    ? `${productId}: leképezés törölve (${removedRows} sor). A termék érintetlen.`
+    : `${productId}: NEM volt leképezése, így nem is töröltünk semmit. A termék érintetlen.`;
+}
+
 export async function runProjectionCli(
   productIds: string[],
   out: { stdout(value: string): void; stderr(value: string): void } = {
@@ -303,14 +330,11 @@ export async function runProjectionCli(
     if (forgetOnly) {
       const removed = await prisma.externalReference.deleteMany({
         where: {
-          system: "MEDUSA",
-          entityType: "Product",
+          ...MEDUSA_PRODUCT_REFERENCE,
           entityId: product.id,
         },
       });
-      out.stdout(
-        `${product.id}: leképezés törölve (${removed.count} sor). A termék érintetlen.\n`,
-      );
+      out.stdout(`${describeForgottenLink(product.id, removed.count)}\n`);
       continue;
     }
 

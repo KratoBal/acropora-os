@@ -18,8 +18,25 @@ import { prisma } from "@acropora/database";
  * egyetlen író dolgozik egy terméken.
  */
 
-const SYSTEM = "MEDUSA" as const;
-const ENTITY_TYPE = "Product" as const;
+/**
+ * A TERMEK-LINK KERESESI KULCSA, EGY HELYEN -- ES EXPORTALVA.
+ *
+ * Ugyanaz a szerkezet, mint a kategoriaknal (`MEDUSA_CATEGORY_REFERENCE`), es
+ * ugyanabbol az okbol: a `system` a sema `ExternalSystem` ENUMJA, tehat egy
+ * elgepeles forditasi hiba, az `entityType` viszont szabad `String`, tehat NEM
+ * az.
+ *
+ * ES ITT A TEVEDES NEMA VOLNA. A vetites parancsanak torlo aga ugyanezt a ket
+ * mezot hasznalja, es ha elcsusznanak, a `deleteMany` NULLA sort erintene --
+ * a kimenet pedig azt irna, hogy "lekepezes torolve (0 sor)". Semmi nem
+ * hibazna, es a mondat megnyugtatna.
+ */
+export const MEDUSA_PRODUCT_REFERENCE = {
+  system: "MEDUSA",
+  entityType: "Product",
+} as const;
+
+const { system: SYSTEM, entityType: ENTITY_TYPE } = MEDUSA_PRODUCT_REFERENCE;
 
 export interface MedusaProductLink {
   /** Az Acropora OS termék azonosítója. */
