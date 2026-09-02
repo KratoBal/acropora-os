@@ -105,6 +105,17 @@ module.exports = ({ config }) => {
         {
           photosPermission:
             "Az Acropora OS a fényképeidhez fér hozzá, hogy a helyszínen készült képeket az eszköz adatlapjához csatolhasd.",
+          /**
+           * A KAMERA-SZÖVEG AZ ELSŐDLEGES ÚTHOZ TARTOZIK, nem egy ritka
+           * mellékesethez: a szerelő a helyszínen MOST készít képet, nem régit
+           * keres (Balázs, 2026-09-02).
+           *
+           * A szöveg hiánya nem elutasítást ad, hanem LEÁLLÍTJA az appot abban
+           * a pillanatban, amikor a kamera megnyílna - és ez fejlesztői
+           * futtatáson nem feltétlenül látszik.
+           */
+          cameraPermission:
+            "Az Acropora OS a kamerát használja, hogy a helyszínen készült fényképet azonnal az eszköz adatlapjához csatolhasd.",
         },
       ],
       [
