@@ -48,6 +48,10 @@ function detail(inventoryNumber: string | null): WorksheetDetail {
     number: "BIO-2026-001",
     numberYear: 2026,
     sequence: 1,
+    // ALAPBOL NINCS MOGOTTE JEGY, mert az a folyamat egyik rendes kiindulasa:
+    // a lap keletkezhet elobb, es a jegy utolag szuletik meg. Ami a masik
+    // allapotot meri, az a hivas helyen allitja be.
+    serviceJob: null,
     customer: {
       id: "customer-1",
       customerNumber: "VEVO-000001",
@@ -146,5 +150,44 @@ describe("WorksheetDetailPage és az ügyfél saját kódja a tételsoron", () =
 
     expect(await screen.findByText("ESZK-000123")).toBeTruthy();
     expect(screen.queryByText(/Leltári szám/)).toBeNull();
+  });
+
+  /**
+   * A LAP MEGMONDJA, MELYIK HIBAJEGY ALATT ALL, ES ODA IS VISZ.
+   *
+   * A kapcsolat a semaban hetek ota all, es a lezarasi feltetel is ismeri - a
+   * reszletlap viszont hallgatott rola. Ez nem hianyzo funkcio volt, hanem egy
+   * elmaradt osszekotes: mindket oldal helyes volt onmagaban.
+   */
+  it("names the service job behind the sheet, and links to it", async () => {
+    api.detail.mockResolvedValue({
+      ...detail(null),
+      serviceJob: { id: "job-7", jobNumber: "HJ-2026-007" },
+    });
+
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+
+    const link = await screen.findByRole("link", { name: "HJ-2026-007" });
+    expect(link.getAttribute("href")).toBe("/szerviz/hibajegyek/job-7");
+  });
+
+  /**
+   * ES A HIANY IS ALLITAS, NEM URES MEZO.
+   *
+   * A lap keletkezhet hibajegy nelkul, es az nem hianyzo ADAT, hanem a
+   * folyamat egyik rendes allapota. Egy gondolatjel - ahogy a tobbi ures
+   * mezonel - azt sugallna, hogy valamit nem toltottek ki.
+   *
+   * EZ AZ ALLITAS A SZUKITEST MERI: a `serviceJob` nelkuli agnak SAJAT szoveget
+   * kell adnia. Enelkul a keszlet csak azt nezne, hogy a jegy megjelenik, ha
+   * van - es akkor is zold maradna, ha a hianyt semmi nem mondana ki.
+   */
+  it("says the sheet has no service job instead of leaving a dash", async () => {
+    api.detail.mockResolvedValue(detail(null));
+
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+
+    expect(await screen.findByText("Nincs mögötte hibajegy")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /^HJ-/ })).toBeNull();
   });
 });

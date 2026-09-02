@@ -87,6 +87,10 @@ function worksheetRow(
     // lap keletkezhet hibajegy nélkül, és addig nincs átadva, amíg a szerelő
     // nem végzett. Ami ezt méri, az `overrides`-szal állítja be.
     serviceJobId: null,
+    // A BETOLTOTT JEGY IS `null` ALAPBOL, nem csak az azonosito. A ketto kulon
+    // mezo: az egyik a kapcsolat, a masik az, amit a reszletlap KIIR. Ha csak
+    // az azonosito allna itt, a lekepezes egy nem letezo sorra hivatkozna.
+    serviceJob: null,
     handedOverAt: null,
     handedOverById: null,
     customerId: "customer-1",
