@@ -28,6 +28,7 @@ import { worksheetsApi } from "@/lib/api/worksheets";
 import { WorksheetAssigneeEditor } from "./worksheet-assignee-editor";
 import {
   formatAmount,
+  MISSING_AMOUNT,
   formatDate,
   formatDateTime,
   worksheetLabelOrDraft,
@@ -316,7 +317,7 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
                   {formatAmount(line.unitNet, current.currency)}
                 </td>
                 <td className="text-right tabular-nums">
-                  {line.vatRatePercent}
+                  {line.vatRatePercent ?? MISSING_AMOUNT}
                 </td>
                 <td className="p-3 text-right tabular-nums">
                   {formatAmount(line.netAmount, current.currency)}

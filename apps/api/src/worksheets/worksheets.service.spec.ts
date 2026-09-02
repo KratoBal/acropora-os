@@ -83,6 +83,12 @@ function worksheetRow(
     number: null,
     numberYear: null,
     sequence: null,
+    // A HIBAJEGY ÉS AZ ÁTADÁS ALAPBÓL HIÁNYZIK, és ez a rendes kiindulás: a
+    // lap keletkezhet hibajegy nélkül, és addig nincs átadva, amíg a szerelő
+    // nem végzett. Ami ezt méri, az `overrides`-szal állítja be.
+    serviceJobId: null,
+    handedOverAt: null,
+    handedOverById: null,
     customerId: "customer-1",
     continuesWorksheetId: null,
     continues: null,

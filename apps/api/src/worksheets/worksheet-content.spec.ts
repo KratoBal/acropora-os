@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { WorksheetContentDto } from "./dto/worksheet.dto.js";
-import { normalizeWorksheetContent, toDateOnly } from "./worksheet-content.js";
+import {
+  normalizeWorksheetContent,
+  normalizeWorksheetLine,
+  toDateOnly,
+} from "./worksheet-content.js";
 
 function content(
   overrides: Partial<WorksheetContentDto> = {},
@@ -87,5 +91,80 @@ describe("worksheet content normalisation", () => {
     const normalized = normalizeWorksheetContent(content({ lines: [] }));
     assert.equal(normalized.lines.length, 0);
     assert.equal(normalized.totals.grossAmount.toString(), "0");
+  });
+});
+
+describe("az ár elhagyható, de a hiány nem nulla", () => {
+  const base = {
+    description: "Szivattyú tisztítás",
+    quantity: 2,
+    unit: "óra",
+  } as unknown as Parameters<typeof normalizeWorksheetLine>[0];
+
+  /**
+   * AZ EGÉSZ VÁLTOZTATÁS OKA EGY ÁLLÍTÁSBAN. Ha a hiányzó ár nullává válna,
+   * a lapon egy 0 forintos tétel állna, ami ÉRTÉKNEK látszik: aki ránéz, nem
+   * tudja megkülönböztetni az ingyenes munkától, és semmi nem szól, ha valaki
+   * elfelejtette kitölteni.
+   */
+  it("ár nélkül a sor összegei null-ok, nem nullák", () => {
+    const line = normalizeWorksheetLine(base);
+
+    assert.equal(line.unitNet, null);
+    assert.equal(line.vatRatePercent, null);
+    assert.equal(line.netAmount, null);
+    assert.equal(line.vatAmount, null);
+    assert.equal(line.grossAmount, null);
+  });
+
+  it("árral a sor összegei kiszámolódnak", () => {
+    const line = normalizeWorksheetLine({
+      ...base,
+      unitNet: 1000,
+      vatRatePercent: 27,
+    } as unknown as Parameters<typeof normalizeWorksheetLine>[0]);
+
+    assert.equal(line.unitNet?.toString(), "1000");
+    assert.equal(line.netAmount?.toString(), "2000");
+    assert.equal(line.vatAmount?.toString(), "540");
+  });
+
+  /**
+   * FÉL ÁRON NEM ÁLLHAT A SOR. Ha csak az egyik ármező érkezik, összeget nem
+   * lehet képezni belőle, tehát a sor ár nélkülinek számít - egy félig
+   * kitöltött ár csendben rossz összeget adna.
+   */
+  it("csak az egyik ármezővel is ár nélkülinek számít", () => {
+    const line = normalizeWorksheetLine({
+      ...base,
+      unitNet: 1000,
+    } as unknown as Parameters<typeof normalizeWorksheetLine>[0]);
+
+    assert.equal(line.unitNet, null);
+    assert.equal(line.netAmount, null);
+  });
+
+  /**
+   * A LAP ÖSSZEGE CSAK AZ ÁRAS SOROKBÓL JÖN, ÉS A SOR MEGTARTJA A HIÁNYT.
+   *
+   * AZ ELSŐ VÁLTOZATOM ITT CSAK AZ ÖSSZEGET NÉZTE, ÉS AZ NEM MÉRT SEMMIT: a
+   * nulla hozzáadása nem változtat az összegen, tehát a "nullaként számít
+   * bele" hiba mellett is 2000 jött volna ki. A kalibráció mutatta meg - a
+   * másik két állítás pirosodott, ez zöld maradt.
+   *
+   * Amit MÉR: hogy az összeg az áras sorból jön (ha a szűrő fordítva
+   * hibázna és mindent kizárna, ez nullát adna), ÉS hogy az ár nélküli sor
+   * `null`-lal marad a listában, nem nullával.
+   */
+  it("a lap összege az áras sorból jön, az ár nélküli sor null-lal marad", () => {
+    const content = normalizeWorksheetContent({
+      subject: "Havi karbantartás",
+      lines: [{ ...base, unitNet: 1000, vatRatePercent: 27 }, { ...base }],
+    } as unknown as Parameters<typeof normalizeWorksheetContent>[0]);
+
+    assert.equal(content.totals.netAmount.toString(), "2000");
+    assert.equal(content.lines.length, 2);
+    assert.equal(content.lines[0]!.netAmount?.toString(), "2000");
+    assert.equal(content.lines[1]!.netAmount, null);
   });
 });

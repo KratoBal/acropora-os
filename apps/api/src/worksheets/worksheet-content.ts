@@ -17,11 +17,16 @@ export interface NormalizedWorksheetLine {
   assetId: string | null;
   quantity: Prisma.Decimal;
   unit: string;
-  unitNet: Prisma.Decimal;
-  vatRatePercent: Prisma.Decimal;
-  netAmount: Prisma.Decimal;
-  vatAmount: Prisma.Decimal;
-  grossAmount: Prisma.Decimal;
+  /**
+   * Az ár és az összegek EGYÜTT vannak meg, vagy EGYÜTT hiányoznak - a
+   * `priceOf` fejléce mondja meg, miért nincs köztes állapot. A `null` a
+   * kitöltetlenség; a nulla egy elvégzett, ingyenes munka volna.
+   */
+  unitNet: Prisma.Decimal | null;
+  vatRatePercent: Prisma.Decimal | null;
+  netAmount: Prisma.Decimal | null;
+  vatAmount: Prisma.Decimal | null;
+  grossAmount: Prisma.Decimal | null;
 }
 
 export interface NormalizedWorksheetContent {
@@ -77,6 +82,61 @@ export function normalizeWorksheetLine(
     assetId: line.assetId?.trim() || null,
     quantity: new Prisma.Decimal(line.quantity),
     unit: line.unit.trim(),
+    ...priceOf(line),
+  };
+}
+
+/**
+ * AZ ÁR ÉS AZ ÖSSZEGEK EGYÜTT VANNAK MEG, VAGY EGYÜTT HIÁNYOZNAK.
+ *
+ * Nincs olyan állapot, hogy van egységár, de nincs összeg - az összeg abból
+ * számol. És nincs olyan sem, hogy fél áron áll a sor: ha az egységár vagy az
+ * áfakulcs bármelyike hiányzik, a másikból sem lehet összeget képezni, tehát
+ * a sor ÁR NÉLKÜLINEK számít.
+ *
+ * A HIÁNY `null`, NEM NULLA. A nulla egy elvégzett, ingyenes munka; a `null`
+ * az, hogy még nincs kitöltve. A kettő összemosása azt jelentené, hogy a
+ * lapra ránézve nem lehet megkülönböztetni őket - és semmi nem szólna, ha
+ * valaki elfelejti kitölteni.
+ */
+/**
+ * Van-e a soron ár, tehát számít-e bele a lap összegébe.
+ *
+ * Generikus, hogy a szűrt tömb megtartsa a sor TÖBBI mezőjét is: egy szűkebb
+ * paraméter-típussal a `filter` a három összeg-mezőre szűkítené az elemeket,
+ * és a hívó elveszítené a leírást meg a mennyiséget.
+ */
+function hasPrice<
+  T extends {
+    netAmount: Prisma.Decimal | null;
+    vatAmount: Prisma.Decimal | null;
+    grossAmount: Prisma.Decimal | null;
+  },
+>(
+  line: T,
+): line is T & {
+  netAmount: Prisma.Decimal;
+  vatAmount: Prisma.Decimal;
+  grossAmount: Prisma.Decimal;
+} {
+  return (
+    line.netAmount !== null &&
+    line.vatAmount !== null &&
+    line.grossAmount !== null
+  );
+}
+
+function priceOf(line: WorksheetLineDto) {
+  if (line.unitNet === undefined || line.vatRatePercent === undefined) {
+    return {
+      unitNet: null,
+      vatRatePercent: null,
+      netAmount: null,
+      vatAmount: null,
+      grossAmount: null,
+    };
+  }
+  return {
     unitNet: new Prisma.Decimal(line.unitNet),
     vatRatePercent: new Prisma.Decimal(line.vatRatePercent),
     ...computeWorksheetLineAmounts({
@@ -102,6 +162,10 @@ export function normalizeWorksheetContent(
     fulfillmentDate: toDateOnly(input.fulfillmentDate),
     dueDate: toDateOnly(input.dueDate),
     lines,
-    totals: sumWorksheetAmounts(lines),
+    // AZ ÁR NÉLKÜLI SOR KIMARAD AZ ÖSSZEGZÉSBŐL, nem nullaként számít bele.
+    // Egy nullával beszámított tétel azt állítaná, hogy az összeg KÉSZ, csak
+    // épp ennyi. Kihagyva az összeg annyit mond, amennyit tud - a hiányról a
+    // lezárás szól, ami ár nélküli sorral nem engedi tovább a lapot.
+    totals: sumWorksheetAmounts(lines.filter(hasPrice)),
   };
 }

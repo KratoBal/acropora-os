@@ -67,6 +67,7 @@ export type {
   Warehouse,
   WarehouseLocation,
   Worksheet,
+  ServiceJobStatus,
   WorksheetDepartment,
   WorksheetLine,
   WorksheetNumberSequence,

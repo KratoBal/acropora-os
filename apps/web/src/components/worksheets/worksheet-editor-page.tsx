@@ -197,8 +197,11 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
             detail: line.detail ?? "",
             quantity: line.quantity,
             unit: line.unit,
-            unitNet: line.unitNet,
-            vatRatePercent: line.vatRatePercent,
+            // A HIÁNYZÓ ÁR ÜRES MEZŐ AZ ŰRLAPON. A szerkesztőben az üres
+            // mező a "még nincs kitöltve" alakja, és a mentés ugyanígy
+            // küldi vissza - a nulla ott is értéknek látszana.
+            unitNet: line.unitNet ?? "",
+            vatRatePercent: line.vatRatePercent ?? "",
           })),
         );
       })

@@ -34,12 +34,12 @@ import type {
   NormalizedWorksheetContent,
   NormalizedWorksheetLine,
 } from "./worksheet-content.js";
+import { attachableWorksheetWhere } from "./attachable-worksheets.js";
 import {
-  buildWorksheetNumber,
-  worksheetNumberIssue,
-  worksheetYear,
-  type WorksheetNumberIssue,
-} from "./worksheet-number.js";
+  worksheetCloseBlocker,
+  type WorksheetCloseBlocker,
+} from "./worksheet-close-blockers.js";
+import { buildWorksheetNumber, worksheetYear } from "./worksheet-number.js";
 import {
   toWorksheetListItem,
   worksheetDetailInclude,
@@ -48,8 +48,13 @@ import {
   type WorksheetLineWriteResult,
 } from "./worksheets.types.js";
 
-export type WorksheetCloseFailure =
-  "NOT_FOUND" | "NOT_DRAFT" | "NO_LINES" | WorksheetNumberIssue;
+/**
+ * A lezárás kudarcai. A `NOT_FOUND` az egyetlen, ami NEM a feltétel-listából
+ * jön: azt a lekérdezés dönti el, nem a szabály. A többi egy forrásból
+ * származik (`worksheet-close-blockers.ts`), hogy egy új feltétel felvétele
+ * ott is, itt is egyetlen helyen jelenjen meg.
+ */
+export type WorksheetCloseFailure = "NOT_FOUND" | WorksheetCloseBlocker;
 
 export type WorksheetCloseResult =
   { ok: true } | { ok: false; reason: WorksheetCloseFailure };
@@ -428,6 +433,59 @@ export class WorksheetsRepository extends Repository {
    * comparison is made inside the transaction, against the rows that were
    * there before this write.
    */
+  /**
+   * A HIBAJEGY ALA CSATOLHATO MUNKALAPOK.
+   *
+   * A SZUKITES EGYETLEN FELTETELRE EPUL: nincs mogotte hibajegy. SEMMI MAS.
+   *
+   * Kezenfekvo volna a friss vagy nyitott lapokra szukiteni, es az pontosan a
+   * folyamat felet vagna el. A masodik ut lenyege, hogy a lap MAR REGEN
+   * elkeszulhetett - karbantartas kozben derult ki a hiba, a szerelo felvette
+   * a lapot, atadta, es a hibajegy csak HETEKKEL kesobb szuletik meg nalunk.
+   * Egy "csak a mai piszkozatok" valaszto mellett az a lap soha nem kerulne
+   * hibajegy ala, es a felhasznalo nem is ertene, miert nem talalja.
+   *
+   * Ezert nem szur allapotra, korra es atadottsagra. A LEZART lap is
+   * csatolhato: a lezaras a dokumentumrol szol, a csatolas a besorolasrol.
+   */
+  async attachableWorksheets(scope: PartnerScope) {
+    const rows = await this.database.worksheet.findMany({
+      // A JOGOSULTSAGI SZURO `AND` AGKENT, ahogy a lista is teszi: a
+      // felhasznaloi feltetel es a hatokor nem keveredhet egy szintre.
+      where: {
+        AND: [scopeWhereForAndBranch(scope), attachableWorksheetWhere()],
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+      select: {
+        id: true,
+        number: true,
+        createdAt: true,
+        handedOverAt: true,
+        customer: { select: { displayName: true } },
+        versions: {
+          orderBy: { version: "desc" },
+          take: 1,
+          select: { subject: true, status: true },
+        },
+      },
+    });
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        // A SZAM CSAK LEZART LAPNAL VAN MEG. A valaszto ettol nem hagyja ki:
+        // epp a meg szamozatlan, helyszinen felvett lap az, amiert ez a lista
+        // letezik.
+        number: row.number,
+        subject: row.versions[0]?.subject ?? "",
+        status: row.versions[0]?.status ?? null,
+        customerName: row.customer.displayName,
+        createdAt: row.createdAt.toISOString(),
+        handedOverAt: row.handedOverAt?.toISOString() ?? null,
+      })),
+    };
+  }
+
   async setAssignees(input: {
     worksheetId: string;
     userIds: readonly string[];
@@ -732,39 +790,32 @@ export class WorksheetsRepository extends Repository {
 
       const current = worksheet.versions[0];
       if (!current) return { ok: false, reason: "NOT_FOUND" } as const;
-      if (current.status !== "DRAFT")
-        return { ok: false, reason: "NOT_DRAFT" } as const;
-      if (current._count.lines === 0)
-        return { ok: false, reason: "NO_LINES" } as const;
+      /**
+       * A LEZÁRÁS FELTÉTELEI EGY HELYEN ÁLLNAK, nem itt egymás után.
+       *
+       * A lista NŐNI FOG: tudjuk, hogy jön a hibajegy-feltétel (hibajegy
+       * nélküli lap nem zárható le és nem írható alá). Egy beágyazott `if`
+       * mellett minden új feltétel ezt a tranzakciót írná át; így egy sor a
+       * `worksheet-close-blockers.ts` fájlban.
+       *
+       * A lekérdezés MARAD itt, mert tranzakció kell hozzá; a DÖNTÉS megy át,
+       * mert ahhoz nem.
+       */
+      const linesWithoutPrice = await transaction.worksheetLine.count({
+        where: { worksheetVersionId: current.id, unitNet: null },
+      });
 
       const partnerCode = worksheet.customer.worksheetPartnerCode;
       const departmentCode = worksheet.department.code;
-      /**
-       * MÁSODIK KAPU UGYANARRA A FELTÉTELRE, ÉS NEM FELESLEGES ISMÉTLÉS.
-       *
-       * Az ELSŐ kapu a választó szűrője (`selectablePartnerWhere`): rövidítés
-       * nélküli partnerhez el sem lehet INDÍTANI lapot, tehát az a lap
-       * LÉTREJÖTTÉT akadályozza meg. Ez itt azt fogja meg, ami MÁS ÚTON jutott
-       * idáig: a szűrő előttről maradt régi adat, kézi beavatkozás az
-       * adatbázisban, vagy egy későbbi import, ami nem a választón keresztül
-       * ír. Két kapu ugyanarra akkor indokolt, ha a második más úton érkező
-       * esetet fog meg -- itt ez áll fenn, tehát egyiket sem szabad
-       * "duplikáció" címén kivenni.
-       *
-       * ÉS AMIÉRT A RÖVIDÍTÉS AKKOR IS FELTÉTEL, AMIKOR MÁR NEM TAGJA A
-       * SZÁMNAK: egyediségi kulcs két táblán (`Supplier.worksheetPartnerCode`
-       * és a tükör vevő-sor ugyanilyen oszlopa), a pótlása pedig egyszeri
-       * lépés. Egy kulcs, amit később kell pótolni, nem ugyanaz, mint egy
-       * mező, amit később kell kitölteni: a pótlás pillanatában már létezhet
-       * a partnerre hivatkozó lap, és onnantól a "melyik partner viseli ezt a
-       * rövidítést" kérdés visszamenőleg kétértelmű. A feltétel tehát nem
-       * korlátozás, hanem SORREND: előbb legyen kész a partner, aztán legyen
-       * lapja.
-       */
-      if (!worksheet.number) {
-        const issue = worksheetNumberIssue({ partnerCode, departmentCode });
-        if (issue) return { ok: false, reason: issue } as const;
-      }
+      const blocker = worksheetCloseBlocker({
+        status: current.status,
+        lineCount: current._count.lines,
+        linesWithoutPrice,
+        partnerCode,
+        departmentCode,
+        hasNumber: Boolean(worksheet.number),
+      });
+      if (blocker) return { ok: false, reason: blocker } as const;
 
       const claimed = await transaction.worksheetVersion.updateMany({
         where: { id: current.id, status: "DRAFT" },
@@ -1143,7 +1194,24 @@ export class WorksheetsRepository extends Repository {
       where: { worksheetVersionId: versionId },
       select: { netAmount: true, vatAmount: true, grossAmount: true },
     });
-    const totals = sumWorksheetAmounts(lines);
+    // AZ ÁR NÉLKÜLI SOR KIMARAD AZ ÖSSZEGZÉSBŐL, nem nullaként számít bele.
+    //
+    // A különbség a lap alján látszik: egy nullával beszámított tétel azt
+    // állítaná, hogy az összeg KÉSZ, csak épp ennyi. Kihagyva az összeg
+    // annyit mond, amennyit tud - a hiányzó tételekről a lezárás szól, ami
+    // ár nélkül nem is engedi tovább a lapot.
+    const totals = sumWorksheetAmounts(
+      lines.filter(
+        (
+          line,
+        ): line is {
+          [K in keyof typeof line]: NonNullable<(typeof line)[K]>;
+        } =>
+          line.netAmount !== null &&
+          line.vatAmount !== null &&
+          line.grossAmount !== null,
+      ),
+    );
     await transaction.worksheetVersion.update({
       where: { id: versionId },
       data: {
