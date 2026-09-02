@@ -59,3 +59,32 @@ export interface AssetLabelBatchSummary {
    */
   freeCount: number;
 }
+
+/**
+ * A NYOMTATHATO LISTA, PONTOSAN ABBAN AZ ALAKBAN, AMIT MAR HASZNALUNK.
+ *
+ * NEM UJ FORMATUM: az elso, eles iv (2026-09-02, tiz kod) igy nezett ki, es a
+ * nyomtato oldal erre van beallitva. A szerkezetet MERTEM, nem emlekezetbol
+ * irtam: `exchange/qr-kodok-2026-09-02/qr-kodok-proba-10-rovid.csv`.
+ *
+ * HAROM RESZLET, AMI NEM SZEPSEGHIBA, HA ELVESZ:
+ *
+ *   BOM (`﻿`)   -- enelkul az Excel az ekezetes szoveget elrontja. Ma
+ *                       nincs ekezet a fajlban, de a fejlec vagy a felirat
+ *                       oszlop barmikor kaphat -- es akkor MAR keso.
+ *   CRLF sorvege     -- windowsos eszkoz nyitja meg. LF-fel a sorok
+ *                       osszecsuszhatnak.
+ *   PONTOSVESSZO     -- nem vesszo. Magyar podorendszerben az Excel a
+ *                       pontosvesszot varja oszlopvalasztonak; vesszovel az
+ *                       egesz sor EGY cellaba kerul.
+ *
+ * Mindharomra all allitas a tesztben. Egy kesobbi "takaritas" (ki hasznal ma
+ * BOM-ot?) enelkul csendben elvinne oket, es a hiba a NYOMTATASNAL derulne ki.
+ *
+ * A KET OSZLOP MA UGYANAZ (`kod;felirat`), es ez SZANDEKOS masolat: nem tudjuk,
+ * mire hasznalja a nyomtato oldal a masodikat, tehat nem vonjuk ossze eggyé.
+ */
+export function assetLabelCsv(codes: readonly string[]): string {
+  const sorok = ["kod;felirat", ...codes.map((code) => `${code};${code}`)];
+  return "﻿" + sorok.join("\r\n") + "\r\n";
+}
