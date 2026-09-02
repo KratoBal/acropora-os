@@ -61,8 +61,23 @@ export class WorksheetLineDto {
   @IsString() @IsOptional() assetId?: string | null;
   @IsNumber({ maxDecimalPlaces: 6 }) @Min(0) quantity!: number;
   @IsString() @MinLength(1) @MaxLength(20) unit!: string;
-  @IsNumber({ maxDecimalPlaces: 4 }) unitNet!: number;
-  @IsNumber({ maxDecimalPlaces: 2 }) @Min(0) @Max(100) vatRatePercent!: number;
+  /**
+   * AZ ÁR ELHAGYHATÓ, ÉS A HIÁNY NEM NULLA.
+   *
+   * A szerelő a helyszínen azt rögzíti, mit csinált és mennyit; az árat az
+   * iroda adja meg (Balázs döntése, 2026-09-02). Egy kötelező mező mellett a
+   * telefonnak találomra kellene értéket küldenie, és a kézenfekvő nulla a
+   * lapon ÉRTÉKKÉNT állna: aki ránéz, nem tudja megkülönböztetni az ingyenes
+   * munkától.
+   *
+   * A HIÁNY NEM MARAD ÉSZREVÉTLEN: ár nélküli tétellel a lap nem zárható le.
+   */
+  @IsNumber({ maxDecimalPlaces: 4 }) @IsOptional() unitNet?: number;
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
+  @IsOptional()
+  vatRatePercent?: number;
 }
 
 /**

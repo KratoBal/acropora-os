@@ -35,7 +35,17 @@ const forintFormat = new Intl.NumberFormat("hu-HU", {
  * itt, egyetlen helyen - és ha az érték nem értelmezhető, inkább kiírjuk
  * nyersen, mint hogy "NaN Ft" jelenjen meg a lapon.
  */
-export function formatAmount(value: string, currency = "HUF"): string {
+/**
+ * A HIÁNYZÓ ÁR JELE, egy helyen. Nem üres cella: az üres hely a táblázatban
+ * megkülönböztethetetlen egy elcsúszott oszloptól, és a nulla forint egy
+ * elvégzett, ingyenes munkát jelentene.
+ */
+export const MISSING_AMOUNT = "—";
+
+export function formatAmount(value: string | null, currency = "HUF"): string {
+  // A `null` NEM formázási hiba, hanem a rendszer egy állapota: a helyszínen
+  // rögzített tételen az árat az iroda adja meg később.
+  if (value === null) return MISSING_AMOUNT;
   const amount = Number(value);
   if (!Number.isFinite(amount)) return value;
   if (currency === "HUF") return forintFormat.format(amount);
