@@ -143,8 +143,41 @@ describe("a kategóriák leképezése a vetítésben", () => {
  *
  * A lista GEPI, nem kezzel karbantartott: pontosan egy holnap szuletett uj
  * fajl ellen ved, ami sajat literalt irna.
+ *
+ * === ES A MINTA A HASZNALAT MINDEN ALAKJAT NEZI, NEM CSAK EGYET ===
+ *
+ * Az elso valtozata `entityType:\s*"Category"` volt, tehat CSAK a kettospontos
+ * alakot latta. Murena merte vissza, ugyanabbol a munkakonyvtarbol, ket alakkal
+ * egy medusa fajlban: a kettospontos alak EGY pirosat adott, a modul-szintu
+ * `const X = "Category" as const` alak 11/11 ZOLDET. Es ez nem elmeleti volt --
+ * a `medusa-category-link.repository.ts` epp abban a formaban allt, es az orzo
+ * hallgatott rola.
+ *
+ * Ugyanaz a csapda, amit ez a repo mashol mar gyujt: a NEVEKRE (itt: egy
+ * szintaktikai alakra) kereses csak azt talalja meg, amit mar ismerunk. Ezert a
+ * minta most BARMELY `"Category"` string literalt nezi a kodban.
+ *
+ * === A KOMMENTEK KISZURESE NEM KENYELEM, HANEM A TAG MINTA ARA ===
+ *
+ * A `medusa-category-tree.ts` fejleceben a szerzodes le van irva, `"Category"`
+ * szoval egyutt. Az MAGYARAZAT, nem hasznalat. A regi, szuk minta ezen csak
+ * VELETLENUL nem akadt fenn: a komment `*` prefixe torte meg a `entityType:` es
+ * a literal kozotti whitespace-t. Szerencse volt, nem terv -- ezert a
+ * komment-sorok most kifejezetten kimaradnak.
  */
-const CATEGORY_ENTITY_TYPE_LITERAL = /entityType:\s*["'`]Category["'`]/;
+const CATEGORY_LITERAL = /["']Category["']/;
+
+/**
+ * A komment-sorok nelkul. HAROM alakot kell kiszurni, nem kettot: a blokk-komment
+ * folytatasat (`*`), a sor-kommentet (`//`) ES a NYITO sort (`/*`) -- az utobbi az
+ * egysoros JSDoc, ami `/`-rel kezdodik, tehat a `*` szuroje nem fogja.
+ */
+function codeOf(file: string): string {
+  return readFileSync(file, "utf8")
+    .split("\n")
+    .filter((line) => !/^\s*(\*|\/\/|\/\*)/.test(line))
+    .join("\n");
+}
 const POLICY_FILE = "src/integrations/medusa/medusa-category.policy.ts";
 const PROJECTION_CLI = "src/integrations/medusa/medusa-projection.cli.ts";
 
@@ -161,16 +194,48 @@ describe("a leképezés-sor keresési kulcsa", () => {
    * a teszt zolden azt allitana, hogy sehol nincs sajat literal -- holott azt
    * jelentene, hogy a kereses romlott el.
    */
-  it("finds the literal in a sample that has it", () => {
+  it("finds BOTH shapes in a sample that has them", () => {
+    // A kettospontos alak, amit a regi minta is latott.
+    assert.equal(CATEGORY_LITERAL.test('entityType: "Category",'), true);
+    // ES a modul-szintu konstans, amit NEM latott. Ez a lyuk, nev szerint.
     assert.equal(
-      CATEGORY_ENTITY_TYPE_LITERAL.test('entityType: "Category",'),
+      CATEGORY_LITERAL.test('const ENTITY_TYPE = "Category" as const;'),
       true,
     );
-    // Es a NAGYBETUS alak NEM ugyanaz: a ket irasmod kulonbsege a tet.
-    assert.equal(
-      CATEGORY_ENTITY_TYPE_LITERAL.test('entityType: "CATEGORY",'),
-      false,
-    );
+    // A NAGYBETUS alak tovabbra sem ugyanaz: a ket irasmod kulonbsege a tet.
+    assert.equal(CATEGORY_LITERAL.test('entityType: "CATEGORY",'), false);
+  });
+
+  /**
+   * A KOMMENT-SZURO KONTROLLJA. Enelkul a tagabb minta a szerzodest LEIRO
+   * fejlecekre is riasztana, es a kovetkezo ember azt hinne, hogy egy
+   * magyarazat is szabalysertes.
+   */
+  it("does not mistake a comment for a use", () => {
+    const sample = [
+      " * egy `ExternalReference` sort nalunk (`system: MEDUSA`, `entityType:",
+      ' *      "Category"`, `entityId`: a mi azonositonk)',
+      "/** A MI faank, a `Category` tablabol. */",
+      // ES EGY IDEZOJELES egysoros JSDoc. EZ az az eset, amiert a nyito
+      // komment-sor szurese letezik: a backtickes alakot a minta amugy sem
+      // latja, tehat ha csak az allna itt, a szuro nem tudna elbukni.
+      '/** a "Category" tabla neve */',
+      '// const ENTITY_TYPE = "Category";',
+      'const igazi = "Category";',
+    ].join("\n");
+
+    const kod = sample
+      .split("\n")
+      .filter((line) => !/^\s*(\*|\/\/|\/\*)/.test(line))
+      .join("\n");
+
+    assert.equal(CATEGORY_LITERAL.test(kod), true);
+    assert.equal(kod.includes("ExternalReference"), false);
+    assert.equal(kod.includes("const ENTITY_TYPE"), false);
+    assert.equal(kod.includes("A MI faank"), false);
+    // ES A BACKTICK NEM LITERAL-HATAROLO: a repo kommentjeiben az a TABLA nevet
+    // jeloli, nem egy TypeScript stringet.
+    assert.equal(CATEGORY_LITERAL.test("a `Category` tabla"), false);
   });
 
   it("reads the files it claims to read", async () => {
@@ -190,7 +255,7 @@ describe("a leképezés-sor keresési kulcsa", () => {
     const sources = await medusaSources();
 
     const sajatLiteral = sources.filter((file) =>
-      CATEGORY_ENTITY_TYPE_LITERAL.test(readFileSync(file, "utf8")),
+      CATEGORY_LITERAL.test(codeOf(file)),
     );
 
     assert.deepEqual(
