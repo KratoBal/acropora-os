@@ -8,6 +8,13 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   WAREHOUSE: "Raktár",
   SERVICE: "Szerviz",
   VIEWER: "Megtekintő",
+  /**
+   * GÉPI ÁGENS. Megjelenik a szerep-választóban, és ez szándékos: az ágens
+   * felhasználói fiókját EMBER hozza létre, tehát valahol ki kell tudnia
+   * választani. Egy rejtett szerep, amit csak adatbázisból lehet beállítani,
+   * ugyanaz a kézi lépés lenne, amit ezzel az egésszel megszüntetünk.
+   */
+  CONTENT_AGENT: "Tartalom-ágens (gépi)",
 };
 
 export const ROLE_OPTIONS = USER_ROLES.map((role) => ({

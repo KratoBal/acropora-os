@@ -14,6 +14,7 @@ const liveToken = {
   name: "Flotta",
   slug: "polip",
   tokenHash: "hash",
+  userId: null,
   dailyLimit: 200,
   lastUsedAt: null,
   revokedAt: null,

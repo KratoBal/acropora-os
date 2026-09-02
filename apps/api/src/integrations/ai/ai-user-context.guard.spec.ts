@@ -17,6 +17,7 @@ const dedicatedToken = {
   name: "Acropora AI",
   slug: "ai-user-context",
   tokenHash: "hash",
+  userId: null,
   dailyLimit: 200,
   lastUsedAt: null,
   revokedAt: null,

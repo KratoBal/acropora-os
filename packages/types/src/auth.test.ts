@@ -5,6 +5,8 @@ import {
   hasAllPermissions,
   hasAnyPermission,
   hasPermission,
+  HUMAN_ROLES,
+  MACHINE_ROLES,
   partnerMembership,
   PERMISSIONS,
   ROLE_PERMISSIONS,
@@ -130,8 +132,23 @@ describe("AI_TEST_VIEW", () => {
      *
      * A szűkítés feltételét is ő mondta ki: amikor a felhasználói
      * jogosultságokat rendezzük. Addig ez a sor őrzi a döntést.
+     *
+     * A GÉPI SZEREPEK KIVÉTELT KÉPEZNEK, és ez a kivétel a `MACHINE_ROLES`
+     * listában áll. Nem a döntés felülírása: a mondat a kollégákról szólt,
+     * gépi fiók akkor még nem létezett.
      */
-    for (const role of USER_ROLES) {
+    // A "MINDENKI" EMBERI SZEREPET JELENT, es ez most mar kiirva all
+    // (`MACHINE_ROLES`), nem ennek a ciklusnak a belsejeben. A dontes 2026-08-26-an
+    // szuletett, amikor gepi szerep meg nem letezett; egy agens-fiok, ami magatol
+    // kap egy feluletet, csendben tagabb lenne, mint amiert letrehoztuk.
+    //
+    // A DARABSZAM ALLITAS NEM DISZ: enelkul egy elszabadult `MACHINE_ROLES`
+    // kiuritene a ciklust, es az ures ciklus ZOLD. Igy viszont az a hiba is
+    // pirosit, ami eppen a merest kapcsolna ki.
+    assert.equal(HUMAN_ROLES.length, USER_ROLES.length - MACHINE_ROLES.length);
+    assert.ok(HUMAN_ROLES.length > 0);
+
+    for (const role of HUMAN_ROLES) {
       assert.equal(
         hasPermission(role, PERMISSIONS.AI_TEST_VIEW),
         true,
