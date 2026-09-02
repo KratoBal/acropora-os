@@ -5,6 +5,7 @@ import { prisma } from "@acropora/database";
 import {
   decideMedusaCategories,
   describeMissingCategoryMapping,
+  MEDUSA_CATEGORY_REFERENCE,
 } from "./medusa-category.policy.js";
 import { isKnownCatalogAuthority } from "./medusa-publication.policy.js";
 
@@ -334,8 +335,7 @@ export async function runProjectionCli(
       osCategoryIds.length
         ? await prisma.externalReference.findMany({
             where: {
-              system: "MEDUSA",
-              entityType: "Category",
+              ...MEDUSA_CATEGORY_REFERENCE,
               entityId: { in: osCategoryIds },
             },
             select: { entityId: true, externalId: true },

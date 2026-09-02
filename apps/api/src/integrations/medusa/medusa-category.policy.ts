@@ -21,6 +21,31 @@
  * mindket olvasat mellett ugyanaz: ha nincs mit kuldeni, a mezo ELMARAD.
  */
 
+/**
+ * A LEKEPEZES-SOR KERESESI KULCSA, EGY HELYEN.
+ *
+ * Ket mezobol all, es a KETTO NEM EGYFORMAN VEDETT. A `system` a sema
+ * `ExternalSystem` ENUMJA: aki mellenyul, forditasi hibat kap. Az `entityType`
+ * viszont szabad `String` -- ott semmi nem szol, ha ket iró ket irasmodot
+ * hasznal.
+ *
+ * ES A KEVEREDES NEM ELMELETI: a repoban MINDKET alak el. Merve az `origin/main`
+ * agon: `entityType: "Category"` tizszer, `entityType: "CATEGORY"` negyszer --
+ * es a ket alak KET KULONBOZO tablahoz tartozik. A nagybetus mind a negy a
+ * behozatali sorok `CatalogImportEntityType` ENUMJA (ott a fordito szol), az
+ * `ExternalReference` mind a tiz elofordulasa `"Category"`. Vagyis ma nincs
+ * keveredes -- de a ket irasmod ugyanabban a modulban all egymas mellett
+ * (`unas-import.service.ts` kontra `unas-apply.repository.ts`), tehat a
+ * masolashoz nem kell tevedni, csak a szomszed sorra nezni.
+ *
+ * A BETOLTES ES A VETITES A TABLA KET VEGE: az egyik ide IR, a masik innen
+ * OLVAS. Amig a kulcs egy helyen all, nem tudnak elcsuszni egymastol.
+ */
+export const MEDUSA_CATEGORY_REFERENCE = {
+  system: "MEDUSA",
+  entityType: "Category",
+} as const;
+
 /** Egy lekepezes-sor: a mi kategoriank, es a Medusa-oldali azonositoja. */
 export interface MedusaCategoryMapping {
   entityId: string;
