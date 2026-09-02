@@ -285,8 +285,18 @@ test("every tile the phone maps names an entry the source actually has", () => {
     tetel: hit[2]!,
   }));
 
-  // KONTROLL A KERESESRE: het csempe all a kepernyon. Ha a minta nem talal
-  // semmit, ket ures halmaz egyezne, es a sor zolden allitana, hogy rendben van.
+  // KONTROLL A KERESESRE, NEM DARABSZAM-ALLITAS. Ha a par-minta osszemegy, ez a
+  // sor all meg elsonek, es MEGNEVEZI az okot: a kereses romlott el, nem a
+  // kepernyo.
+  //
+  // MERVE, a par-mintat szandekosan elrontva: e korlat nelkul a teszt
+  // ATTOL LESZ piros, hogy a lenti MASODIK allitas het tetelt sorol fel, aminek
+  // "nincs csempeje". Igaz allitas, hamis diagnozis -- a csempek megvannak, csak
+  // a kereses nem latja oket. A korlat tehat nem a pirosat adja hozza, hanem a
+  // HELYES OKOT.
+  //
+  // A SZAM CSAK ITT ALL, AZ ALLITASBAN, SZANDEKOSAN. Kommentbe irva egy nyolcadik
+  // csempe felvetele utan csendben hazudna, mert a futas zold maradna.
   assert.ok(
     parok.length >= 7,
     `Csak ${parok.length} csempe-képzést találtam. Ez a keresés hibája, nem a képernyőé.`,
