@@ -25,7 +25,12 @@
     "@acropora/api#test": {
       "dependsOn": ["build", "^build"],
       "outputs": ["test-dist/**"],
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/mobile/src/**"]
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/mobile/src/**",
+        "$TURBO_ROOT$/apps/mobile/tsconfig.test.json",
+        "$TURBO_ROOT$/apps/web/src/**"
+      ]
     }
   }
 }
