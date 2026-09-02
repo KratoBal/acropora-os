@@ -5,6 +5,8 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 
+import type { ServiceJobDetail } from "@acropora/types";
+
 import type {
   CreateServiceJobDto,
   MoveServiceJobDto,
@@ -68,6 +70,59 @@ export class ServiceJobsService {
         customerName: row.customerName,
         worksheetCount: row.worksheetCount,
         createdAt: row.createdAt.toISOString(),
+      })),
+    };
+  }
+
+  /**
+   * A RÉSZLETLAP: A JEGY, ÉS AMI TÖRTÉNT VELE.
+   *
+   * HÁROM KÜLÖN LISTÁT AD VISSZA, nem egy összefésült sort. Ez a ház mintája
+   * (a munkalap részletlapja is így teszi), az összefésülés viszont NEM a
+   * kliensé: a `serviceJobTimeline` a közös csomagban áll, mert a web és a
+   * mobil külön fésülve két helyen tartaná ugyanazt a sorrend-szabályt.
+   *
+   * AZ IDŐPONTOK A NAPLÓBÓL JÖNNEK. A jegyen ott van `startedAt` és
+   * `completedAt` is, de azokat ma semmi nem írja, és ha ez a metódus írná
+   * őket, két írónk lenne egy tényre. Az elcsúszásuk néma hiba volna.
+   */
+  async detail(id: string): Promise<ServiceJobDetail> {
+    const row = await this.repository.detail(id);
+    if (row === null) throw new NotFoundException("A hibajegy nem található.");
+
+    return {
+      id: row.id,
+      jobNumber: row.jobNumber,
+      title: row.title,
+      description: row.description,
+      status: row.status,
+      partnerStatus: partnerVisibleStatus(row.status),
+      partnerStatusLabel: partnerStatusLabel(row.status),
+      customerName: row.customer?.displayName ?? null,
+      createdAt: row.createdAt.toISOString(),
+      // A tábla `readonly` tömböt ad (nem írható felül kívülről); a válasz
+      // sima tömb, ezért itt másolat készül róla.
+      allowedSteps: [...allowedServiceJobSteps(row.status)],
+      events: row.events.map((event) => ({
+        id: event.id,
+        fromStatus: event.fromStatus,
+        toStatus: event.toStatus,
+        note: event.note,
+        actorName: event.actor?.displayName ?? null,
+        createdAt: event.createdAt.toISOString(),
+      })),
+      worksheets: row.worksheets.map((worksheet) => ({
+        id: worksheet.id,
+        number: worksheet.number,
+        createdAt: worksheet.createdAt.toISOString(),
+        handedOverAt: worksheet.handedOverAt?.toISOString() ?? null,
+      })),
+      assets: row.assets.map((link) => ({
+        id: link.id,
+        assetId: link.assetId,
+        assetNumber: link.asset.assetNumber,
+        assetName: link.asset.name,
+        attachedAt: link.createdAt.toISOString(),
       })),
     };
   }

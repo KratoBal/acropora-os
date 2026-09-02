@@ -1,4 +1,5 @@
 import { type ServiceJobStatus } from "@acropora/database";
+import type { ServiceJobStatusValue } from "@acropora/types";
 
 /**
  * AMIT A PARTNER LÁT, ÉS AMIT MI BELÜL TARTUNK.
@@ -62,3 +63,32 @@ export function partnerVisibleStatus(
 export function partnerStatusLabel(status: ServiceJobStatus): string {
   return PARTNER_STATUS_LABELS[partnerVisibleStatus(status)];
 }
+
+/**
+ * A TÜKÖR ŐRZŐJE, ÉS EZÉRT ÁLL ITT, NEM A KÖZÖS CSOMAGBAN.
+ *
+ * A `@acropora/types` a kliensé is, tehát nem függhet a Prisma kliensétől: a
+ * nyolc állapot ott KÉZZEL ÍRT tükör. Egy tükör pedig elcsúszik - nem
+ * elfelejtésből, hanem mert a séma bővül, és a bővítés pillanatában semmi nem
+ * történik.
+ *
+ * Ez a két sor a szerveroldalon köti össze a kettőt, MINDKÉT IRÁNYBAN: az első
+ * akkor hasal el, ha a sémába kerül új állapot, ami a tükörben nincs; a
+ * második akkor, ha a tükörben van olyan, ami a sémából eltűnt. Futásidőben
+ * nem csinál semmit; a fordító veszi észre, és nem a felhasználó.
+ */
+const _SCHEMA_COVERS_MIRROR: Record<ServiceJobStatus, ServiceJobStatusValue> = {
+  NEW: "NEW",
+  TRIAGED: "TRIAGED",
+  SCHEDULED: "SCHEDULED",
+  IN_PROGRESS: "IN_PROGRESS",
+  WAITING_FOR_PARTS: "WAITING_FOR_PARTS",
+  WAITING_FOR_CUSTOMER: "WAITING_FOR_CUSTOMER",
+  COMPLETED: "COMPLETED",
+  CANCELLED: "CANCELLED",
+};
+
+const _MIRROR_COVERS_SCHEMA: Record<ServiceJobStatusValue, ServiceJobStatus> =
+  _SCHEMA_COVERS_MIRROR;
+
+void _MIRROR_COVERS_SCHEMA;

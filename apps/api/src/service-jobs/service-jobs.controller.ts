@@ -37,6 +37,19 @@ export class ServiceJobsController {
     return this.service.list(query);
   }
 
+  /**
+   * A RÉSZLETLAP `SERVICE_VIEW` ALATT ÁLL, nem `SERVICE_MANAGE` alatt: aki a
+   * listát látja, a jegyet is elolvashatja. A lépés az, ami kezelői jog.
+   *
+   * A `:id` útvonal a `@Get()` UTÁN áll, de a konkrét utak (ha lesznek) elé
+   * kell kerülniük, különben a `:id` elnyeli őket.
+   */
+  @Get(":id")
+  @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
+  detail(@Param("id") id: string) {
+    return this.service.detail(id);
+  }
+
   @Post()
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
   create(
