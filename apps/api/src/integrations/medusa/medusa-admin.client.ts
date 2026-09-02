@@ -129,17 +129,36 @@ export interface MedusaCategoryInput {
   name: string;
   external_id: string;
   parent_category_id?: string | null;
+  is_active: boolean;
 }
 
 /**
- * AZ AKTIV JELOLOT SZANDEKOSAN NEM KULDJUK.
+ * AZ AKTIV JELOLOT KI KELL KULDENI, ES EZ EGY MERESEN MULT.
  *
- * A szerzodes ismeri (`is_active`), de a teszt peldany STORE oldala csak aktiv
- * kategoriakat ad vissza, tehat onnan a mezo viselkedese nem merheto. Ha nem
- * kuldunk semmit, a Medusa alapertelmezese dont: ha az aktiv, jo; ha nem, a
- * kategoria nem latszik, es AZ HANGOS. Egy rosszul eltalalt mezonev viszont
- * csendben elhasalna. Amikor az elso eles futas megvolt, ez a jegyzet elavul,
- * es akkor kell atirni, nem elotte.
+ * Az elso valtozat szandekosan NEM kuldte: az ervelés az volt, hogy ha a
+ * Medusa alapertelmezese nem aktiv, az HANGOS hiba lesz, es majd megmutatja az
+ * elso futas. Ez az ervelés MEGDOLT, mert az alapertelmezest le lehet merni, es
+ * le is mertem: a modellben `is_active: model.boolean().default(false)`.
+ *
+ * Vagyis a jelolo nelkul mind a 219 kategoria INAKTIVAN keletkezne. Az nem
+ * "hangos hiba, amibol tanulunk", hanem egy futas, ami SIKERESNEK latszik es
+ * semmit nem szallit -- raadasul epp azt a futast pazarolna el, amire kulon
+ * engedelyt kell kerni.
+ *
+ * === AMIT VISZONT NEM TUDUNK, ES EZERT NEM SORONKENT DONTUNK ===
+ *
+ * A mi `Category` tablank nem hordoz lathatosagot (id, name, slug, parentId).
+ * A UNAS export IGEN, es le is mertem: 219-bol 211 megjelenik az oldalon, 8 nem
+ * (koztuk: Shop 'n the Shop, Édesvízi akvarisztika, Akváriumok, biOrb).
+ *
+ * Ezert a betoltes MINDEGYIKET aktivkent hozza letre, es ez tudatos: a cel a
+ * TESZT peldany, ott a nyolc rejtett kategoria senkinek nem jelenik meg, es a
+ * visszaallitasa nyolc sor. A forditott tevedes -- 219 lathatatlan kategoria --
+ * az egesz futast ertektelenne tenne.
+ *
+ * EZ A DONTES ERVENYTELEN, MIHELYT ELES KIRAKAT KERUL A MEDUSA ELE. Akkor a
+ * lathatosagot a sajat modellunkbe kell felvenni es soronkent szarmaztatni,
+ * nem itt egy konstanssal eldonteni.
  *
  * === A HANDLE, ES AMIERT A CIM-SZABALY NEM DISZ ===
  *

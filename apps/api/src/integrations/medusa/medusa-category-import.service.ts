@@ -186,6 +186,13 @@ export class MedusaCategoryImportService {
         name: teendo.title,
         external_id: teendo.ourId,
         parent_category_id: szulo,
+        /**
+         * MERVE: a Medusa `is_active` alapertelmezese `false`. Enelkul mind a
+         * 219 kategoria inaktivan keletkezne -- egy futas, ami sikeresnek
+         * latszik es semmit nem szallit. A reszletes indok es az
+         * ervenytelenitesi feltetel a `MedusaCategoryInput` mellett all.
+         */
+        is_active: true,
       });
       medusaAzonosito.set(teendo.ourId, created.id);
       /**

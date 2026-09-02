@@ -98,6 +98,14 @@ describe("a kategóriafa betöltése", () => {
     */
     assert.equal(letrehozva[0]!.parent_category_id, null);
     assert.equal(letrehozva[1]!.parent_category_id, "pcat_uj_1");
+    /*
+      AZ AKTIV JELOLO KIMEGY, ES IGAZ ERTEKKEL. A Medusa alapertelmezese
+      `false` (merve a modelljeben), tehat ha ez az allitas elhal, a betoltes
+      219 LATHATATLAN kategoriat hozna letre -- egy futas, ami sikeresnek
+      latszik es semmit nem szallit.
+    */
+    assert.equal(letrehozva[0]!.is_active, true);
+    assert.equal(letrehozva[1]!.is_active, true);
 
     assert.deepEqual(hivasok, [
       { fajta: "link", par: ["cat_gyoker", "pcat_uj_1"] },
