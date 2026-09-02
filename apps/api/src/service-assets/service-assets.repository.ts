@@ -308,6 +308,19 @@ export class ServiceAssetsRepository extends Repository {
           : {}),
       ...(departmentIds ? { departmentId: { in: departmentIds } } : {}),
       ...(query.aquariumId ? { aquariumId: query.aquariumId } : {}),
+      /**
+       * MATRICA SZERINTI SZUKITES. A `label: null` alak a Prisma egy-az-egyhez
+       * kapcsolatan azt jelenti, hogy NINCS kapcsolt sor -- ez teszi
+       * megtalalhatova a matrica nelkul felvitt eszkozoket.
+       *
+       * A `isNot: null` a masik irany. A ketto NEM ugyanaz, mint a
+       * `label: { code: ... }`: az mar egy KONKRET kodra szur.
+       */
+      ...(query.label === "without"
+        ? { label: null }
+        : query.label === "with"
+          ? { label: { isNot: null } }
+          : {}),
       ...(query.parentAssetId ? { parentAssetId: query.parentAssetId } : {}),
       ...(query.dueBefore
         ? { nextServiceAt: { lte: new Date(query.dueBefore) } }

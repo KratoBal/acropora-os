@@ -8,6 +8,7 @@ import { Prisma, prisma } from "@acropora/database";
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { AssetLabelUnavailableError } from "./service-assets.repository.js";
 import { ServiceAssetsRepository } from "./service-assets.repository.js";
+import { AssetListQueryDto } from "./dto/asset.dto.js";
 import type { CreateAssetDto } from "./dto/asset.dto.js";
 
 /**
@@ -247,6 +248,53 @@ describe(
         customerId: masik.id,
       });
       assert.equal(found, null, "más partner eszköze nem érhető el a kódról");
+    });
+
+    /**
+     * A MATRICA NELKUL FELVITT ESZKOZ MEGTALALHATO.
+     *
+     * Balazs dontese szerint a matrica a felvitelnel NEM kotelezo
+     * (2026-09-02 19:24). Ebbol kovetkezik, hogy keletkezik egy halmaz, amit
+     * valakinek vegig kell jarnia -- es egy szandekosan megengedett allapot
+     * CSENDBEN halmozodik, ha semmi nem tudja megkerdezni. Ez az allitas azt
+     * meri, hogy meg lehet.
+     */
+    it("a matrica nélkül felvitt eszköz lekérdezhető", async () => {
+      const matrica_nelkul = await repository.create(
+        createInput({ name: `${PREFIX} matrica nélkül` }),
+        actorUserId,
+      );
+
+      const nelkul = await repository.list(
+        Object.assign(new AssetListQueryDto(), {
+          label: "without" as const,
+          ownerId: customerId,
+          ownerType: "CUSTOMER" as const,
+          status: "ALL" as const,
+        }),
+        { kind: "internal" },
+      );
+      const nelkuliIdk = nelkul.items.map((item) => item.id);
+      assert.ok(
+        nelkuliIdk.includes(matrica_nelkul.id),
+        "a matrica nélküli eszköz benne van a 'without' listában",
+      );
+
+      // ISMERT POZITIV KONTROLL: ugyanaz a lekerdezes a MASIK iranyban megtalalja
+      // a matricasat. Enelkul egy szuro, ami MINDENT kiszur, ugyanugy zolden
+      // allna a fenti allitas mellett.
+      const vannak = await repository.list(
+        Object.assign(new AssetListQueryDto(), {
+          label: "with" as const,
+          ownerId: customerId,
+          ownerType: "CUSTOMER" as const,
+          status: "ALL" as const,
+        }),
+        { kind: "internal" },
+      );
+      const vanIdk = vannak.items.map((item) => item.id);
+      assert.ok(!vanIdk.includes(matrica_nelkul.id));
+      assert.ok(vanIdk.length > 0, "a 'with' lista nem lehet üres");
     });
 
     it("a kiadás idempotens, és megmondja, mi állt már ott", async () => {

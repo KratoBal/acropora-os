@@ -23,9 +23,9 @@ const ASSET_LABEL_CODE_PATTERN = /^[A-Za-z][0-9]{4}$/;
 /**
  * KÖTELEZŐ-E A MATRICA A FELVITELKOR. Egy helyen áll, itt és a szerveren.
  *
- * A kérdés Balázsnál van (acrobot tette fel 2026-09-02 este): kötelező legyen,
- * vagy lehessen utólag pótolni. A mai, megengedő érték az, ami SEMMIT nem zár
- * ki, amíg a válasz meg nem jön.
+ * Balázs döntése, 2026-09-02 19:24: matrica nélkül is rögzíthető, utólag
+ * hozzátehető. Az indok, amit elfogadott: ha kötelező lenne, egy szerelő,
+ * akinél elfogyott a matrica, nem tudna eszközt felvinni a helyszínen.
  */
 export const ASSET_LABEL_REQUIRED_ON_CREATE = false;
 

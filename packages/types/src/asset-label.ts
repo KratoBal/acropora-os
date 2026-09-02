@@ -66,9 +66,16 @@ export interface AssetLabelIssueResult {
  * kulon-kulon. A kerdes Balazsnal all (acrobot tette fel 2026-09-02 este):
  * kotelezo legyen-e, vagy lehessen utolag potolni.
  *
- * A MAI ERTEK A MEGENGEDO, es ez NEM dontes helyette: ez az az allapot, ami a
- * mai szerver-viselkedessel egyezik (a `labelCode` opcionalis a felvitelnel).
- * Amig a valasz meg nem jott, a megengedo ertek az, ami SEMMIT nem zar ki.
+ * A VALASZ MEGJOTT, ES A MEGENGEDO ERTEK MARAD. Balazs dontese, 2026-09-02
+ * 19:24, Discord (mobilalkalmazas szal), a ket felkinalt lehetoseg kozul a
+ * masodikra: matrica nelkul is rogzitheto, utolag hozzatehető. Az indok, amit
+ * elfogadott: ha kotelezo lenne, egy szerelo, akinel elfogyott a matrica, nem
+ * tudna eszkozt felvinni a helyszinen.
+ *
+ * AMI EBBOL KOVETKEZIK, ES AMI MIATT NEM ELEG A KAPCSOLO: keletkezni FOG egy
+ * halmaz matrica nelkuli eszkozokbol. Ezert all a lista-lekerdezesen a `label`
+ * szuro (`with` / `without`) -- egy szandekosan megengedett allapot csendben
+ * halmozodik, ha semmi nem tudja megkerdezni.
  */
 export const ASSET_LABEL_REQUIRED_ON_CREATE = false;
 
