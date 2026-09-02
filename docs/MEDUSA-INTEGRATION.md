@@ -235,6 +235,12 @@ Pricing is not part of this projection. The variant price array is sent empty
 because the create endpoint requires the field, not because we have a price to
 state.
 
+**That sentence is about the PRODUCT projection, and it is still exact.** A
+price projection was added later, in a round of its own (2026-08-29), as a
+separate command with its own policy module - the same separation inventory
+got. Where it stands is written under "Price projection" below; nothing about
+the product projection changed when it arrived.
+
 **Inventory was added in a later round** (2026-08-27) as a _separate_ command
 and a separate policy module — see "Inventory projection" below. The separation
 is the point: zero stock does not draft a product, and the inventory projection
@@ -276,6 +282,88 @@ none of them observes what the other side did with it.
 2.19.0 source.** That is a stronger footing than a guess and a weaker one than
 an observation: the source says what the code does, not what this deployment
 does with our data.
+
+## Price projection
+
+Added 2026-08-29 (`#265`). A separate command (`medusa:pricing`), a separate
+policy module, and a separate section here - for the same reason inventory has
+one: the rounds are independent, and a reader asking about one should not have
+to infer its state from the other.
+
+### The round in one sentence
+
+The OS stores the GROSS price (owner's decision, 2026-08-29) and the shop takes
+the forint amount as tax-inclusive, so **the amount travels unchanged**. There
+is no conversion, and none is needed.
+
+### What that correctness rests on, and why the code re-reads it
+
+The second half of that sentence is not in our code. It is a setting in the
+shop. If somebody flips `is_tax_inclusive` to false, our gross amount silently
+becomes a net one and the customer pays more. The projection therefore re-reads
+the setting before every run and stops when it is not what the correctness
+rests on (`tax-inclusive-not-set`).
+
+**Where the setting was read from, as recorded in the policy module:** the stage
+`price_preference` table, for the `huf` currency and the forint region. That is
+a claim written down in `medusa-pricing.policy.ts`; it names what was looked at
+and where, which is what makes it checkable later.
+
+### Identity is the price row's id, not the amount and not the count
+
+Medusa's price update is a full replace: it matches the incoming list against
+the existing one by `id`, DELETES what is missing, and CREATES what arrives
+without an id (`updatePriceSets_`). An amount sent without an id therefore
+deletes one row and creates another on every run - **while the count stays the
+same**. So the count cannot be the measure; the id is. The report prints it.
+
+### What is asserted, and by which file
+
+| Claim                                                                  | Where it is asserted                        |
+| ---------------------------------------------------------------------- | ------------------------------------------- |
+| a whole-forint gross amount goes over unchanged, at any size           | `medusa-pricing.policy.spec.ts`             |
+| the named refusals, and zero told apart from a fraction                | `medusa-pricing.policy.spec.ts`             |
+| the price is created when the variant has none                         | `medusa-pricing-projection.service.spec.ts` |
+| the SAME price id survives an amount change                            | `medusa-pricing-projection.service.spec.ts` |
+| an already matching amount writes nothing at all                       | `medusa-pricing-projection.service.spec.ts` |
+| up and then down comes back to the same amount                         | `medusa-pricing-projection.service.spec.ts` |
+| a write that reports success but changed nothing stops the run         | `medusa-pricing-projection.service.spec.ts` |
+| a shop that does not treat HUF as tax inclusive stops the run          | `medusa-pricing-projection.service.spec.ts` |
+| another currency's price is never deleted                              | `medusa-pricing-projection.service.spec.ts` |
+| two forint prices on one variant stop the run                          | `medusa-pricing-projection.service.spec.ts` |
+| a missing `prices` field is not read as an empty one                   | `medusa-pricing-projection.service.spec.ts` |
+| no Medusa link, and a SKU only on a soft-deleted variant, both stop    | `medusa-pricing-projection.service.spec.ts` |
+| a missing price is refused before the shop is touched                  | `medusa-pricing-projection.service.spec.ts` |
+| the command finds the variant by SKU and asks for the price fields     | `medusa-pricing.cli.spec.ts`                |
+| a UNAS-owned product is not projected, and an unknown owner is refused | `medusa-pricing.cli.spec.ts`                |
+| an unknown SKU is an error, not an empty success                       | `medusa-pricing.cli.spec.ts`                |
+| the report carries the required lines and the price id                 | `medusa-pricing.cli.spec.ts`                |
+
+Twenty-three assertions across the three files.
+
+### What has NOT been proven about the price
+
+**The price projection has never been run against a live system either.** No
+decision was recorded declining it, the way the inventory round has one; it
+simply has not happened. Nobody has observed a price arriving in the shop.
+
+**One thing here HAS been observed, and it is worth separating from the rest:**
+the `is_tax_inclusive` setting was read from the stage, as the policy module
+records. That is an observation about the shop's CONFIGURATION, not about our
+projection - no price of ours has travelled.
+
+Five things only a live run can settle:
+
+| #   | What would falsify the rule                                     | Why a test cannot catch it                                                                  |
+| --- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| 1   | a second run leaves a DIFFERENT price row id than the first     | the replace semantics is read from the installed source, not observed on a running instance |
+| 2   | the storefront shows the amount as net and adds tax on top      | the storefront was never asked; the Store API needs a publishable key we do not have        |
+| 3   | the shop rejects an amount our policy considers whole and valid | our policy refuses fractions before sending, so the target's own limits are untested        |
+| 4   | the re-read setting is not what the checkout actually applies   | we read a currency row; what the checkout does with it is the target's behaviour            |
+| 5   | the price in another currency does not survive our run          | the stopping is ours; the surviving is theirs, and only the shop can show it                |
+
+Item 2 is the same wall the product projection hit: without a publishable API
+key the customer-facing half cannot be measured at all today.
 
 ## Inventory projection
 
