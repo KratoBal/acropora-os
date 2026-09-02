@@ -16,6 +16,7 @@ export type AssetEventType =
   | "PARENT_CHANGED"
   | "STATUS_CHANGED"
   | "QR_ROTATED"
+  | "LABEL_ASSIGNED"
   | "DOCUMENT_UPLOADED"
   | "DOCUMENT_DELETED";
 
@@ -254,6 +255,16 @@ export interface CreateAssetInput {
   lastServicedAt?: string;
   nextServiceAt?: string;
   notes?: string;
+  /**
+   * AZ ELŐRE NYOMTATOTT MATRICA KÓDJA, ha a szerelő a helyszínen beolvasta.
+   *
+   * Nem generálunk újat: egy MÁR KIADOTT kódot kötünk az eszközhöz. Ha a kód
+   * nem létezik a készletben, vagy már máson áll, a felvitel ELUTASÍT -- nem
+   * hozza létre az eszközt matrica nélkül. Az ok a `42056ab0` kártyán áll: egy
+   * csendben eldobott kód után a szerelő abban a hitben megy tovább, hogy a
+   * matrica hozzá van rendelve.
+   */
+  labelCode?: string;
 }
 
 export interface UpdateAssetInput {

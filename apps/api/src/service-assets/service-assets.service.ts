@@ -13,6 +13,8 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 import type { AssetQrCode } from "@acropora/types";
+import { normalizeAssetLabelCode } from "@acropora/types";
+import { AssetLabelUnavailableError } from "./service-assets.repository.js";
 
 import {
   ASSET_DEPARTMENT_REFUSAL_MESSAGES,
@@ -117,6 +119,28 @@ export class ServiceAssetsService {
     } catch (error) {
       this.map(error);
     }
+  }
+
+  /**
+   * MATRICAK KIADASA A KESZLETBE. SERVICE_MANAGE jog alatt all.
+   *
+   * A valasz KULON mondja meg, mi jott letre es mi allt mar ott -- lasd a
+   * tarolo jegyzetet. A hivo ebbol latja, hogy egy ujranyomtatott iv masodik
+   * feltoltese nem hozott uj matricakat.
+   */
+  async issueLabels(codes: readonly string[]) {
+    if (codes.length === 0)
+      throw new BadRequestException("Legalább egy matricakódot meg kell adni.");
+    try {
+      return await this.repository.issueLabels(codes);
+    } catch (error) {
+      this.map(error);
+    }
+  }
+
+  /** A kiadott, de meg egyetlen eszkozhoz sem kotott matricak. */
+  async freeLabels(limit: number) {
+    return this.repository.listFreeLabels(limit);
   }
 
   async update(id: string, input: UpdateAssetDto, actorUserId: string) {
@@ -526,6 +550,28 @@ export class ServiceAssetsService {
   }
 
   private map(error: unknown): never {
+    /**
+     * A MATRICAKOD-UTKOZES 409, NEM 400.
+     *
+     * A keres alakja helyes volt: a kod egy betu es negy szam. Ami nem all,
+     * az a VILAG allapota -- a kod nincs a keszletben, vagy mar mason ul.
+     * Egy 400 azt mondana a hivonak, hogy javitsa ki, amit kuldott; itt nem
+     * a keresen kell javitani, hanem masik matricat kell olvasni.
+     *
+     * KIVETEL: az ALAK-hiba is ezen az osztalyon jon vissza (a tarolo mar a
+     * tranzakcio elott dob), es az VALOBAN a keres hibaja. Ezert valik ketfele
+     * itt, es nem a taroloban: a tarolo dolga megnevezni, MI nem all, a
+     * szolgaltatase eldonteni, KINEK szol a mondat.
+     */
+    if (error instanceof AssetLabelUnavailableError) {
+      if (normalizeAssetLabelCode(error.code) === null)
+        throw new BadRequestException(
+          "A matricakód alakja egy betű és négy szám (például V2196).",
+        );
+      throw new ConflictException(
+        "Ez a matricakód nem köthető: vagy nincs kiadva, vagy már másik eszközön áll. Olvass be másik matricát.",
+      );
+    }
     if (error instanceof Error && error.message === "ASSET_HIERARCHY_CYCLE")
       throw new BadRequestException(
         "Az eszközhierarchia nem tartalmazhat önmagába visszatérő kapcsolatot.",

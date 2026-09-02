@@ -134,6 +134,11 @@ export type {
   CreateAssetInput,
   UpdateAssetInput,
 } from "./asset-management.js";
+export type { AssetLabel, AssetLabelIssueResult } from "./asset-label.js";
+export {
+  ASSET_LABEL_CODE_STORED_PATTERN,
+  normalizeAssetLabelCode,
+} from "./asset-label.js";
 export type {
   ContentChannel,
   ContentComment,
