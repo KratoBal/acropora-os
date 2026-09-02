@@ -862,6 +862,43 @@ export class ServiceAssetsRepository extends Repository {
   }
 
   /**
+   * ESZKOZ KERESESE A MATRICAKODROL -- ES ITT A TULAJDON ELLENORIZVE VAN.
+   *
+   * EZ A LENYEGES KULONBSEG A `detailByQrToken`-HEZ KEPEST, es szandekos.
+   * Ott a tulajdon SZANDEKOSAN nincs nezve, mert a `qrToken` 128 bites veletlen
+   * uuid: a birtoklasa maga a felhatalmazas. A matricakod egy betu es negy
+   * szam, vagyis 260 ezer lehetoseg -- egy hitelesitett SERVICE_VIEW jogu
+   * PARTNER-felhasznalo vegig tudna probalni. Ha ez az ut orokolne a masik
+   * kivetelet, sorra kapna mas partnerek eszkozeit.
+   *
+   * A HATOKOR `AND` AGKENT ALL, nem kulcskent -- lasd a
+   * `scopeWhereForAndBranch` jegyzetet es a `partner-scope-and-branch.spec.ts`
+   * orzot, ami ezt a fajlt is nezi.
+   *
+   * A NEM LATHATO ESZKOZ ES A NEM LETEZO KOD UGYANAZT ADJA (`null`), es ez sem
+   * kenyelem: ha a ketto kulonbozne, a valaszokbol felterkepezheto lenne, mely
+   * kodok vannak kiadva es kihez tartoznak. A hivonak amugy is ugyanaz a
+   * teendoje mindket esetben.
+   */
+  async detailByLabelCode(
+    code: string,
+    scope: PartnerScope,
+  ): Promise<AssetDetail | null> {
+    const row = await prisma.asset.findFirst({
+      where: { AND: [{ label: { code } }, scopeWhereForAndBranch(scope)] },
+      include: assetDetailInclude,
+    });
+    return row
+      ? this.toDetail(
+          row,
+          await this.ancestors(row.parentAssetId),
+          await this.unitPaths([row]),
+          scope,
+        )
+      : null;
+  }
+
+  /**
    * MATRICAK KIADASA: a nyomtatott iv kodjai bekerulnek a keszletbe.
    *
    * IDEMPOTENS, ES EZ NEM KENYELEM. Egy ivet ujra lehet nyomtatni, es a kiado

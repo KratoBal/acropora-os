@@ -81,6 +81,23 @@ export class ServiceAssetsController {
     return this.service.freeLabels(query.limit ?? 100);
   }
 
+  /**
+   * ESZKOZ A BEOLVASOTT MATRICAKODROL.
+   *
+   * SERVICE_VIEW eleg, mint a `scan/:qrToken` vegpontnal -- DE ITT a tarolo
+   * TULAJDONT IS ELLENORIZ. A ket ut jogosultsagi szintje azonos, a
+   * lathatosaguk nem, es a kulonbseg oka a kod EROSSEGE: a qrToken 128 bites
+   * veletlen, a matricakod ot karakter.
+   */
+  @Get("scan-label/:code")
+  @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
+  scanLabel(
+    @Param("code") code: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.scanLabel(code, partnerScopeOf(user));
+  }
+
   /** Egy nyomtatott iv kodjainak felvitele a keszletbe. */
   @Post("labels")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
