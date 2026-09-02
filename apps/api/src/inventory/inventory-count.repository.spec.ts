@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { Prisma } from "@acropora/database";
+import type {
+  InventoryCountLineSyncStatus,
+  InventoryCountStatus,
+} from "@acropora/types";
 
 import {
   createOutboxDouble,
@@ -9,6 +13,7 @@ import {
 
 import {
   InventoryCountRepository,
+  type InventoryCountApplyTransaction,
   type InventoryCountDatabase,
 } from "./inventory-count.repository.js";
 
@@ -17,7 +22,9 @@ interface FakeLine {
   variantId: string;
   expectedQty: Prisma.Decimal;
   countedQty: Prisma.Decimal | null;
-  syncStatus: string;
+  /// The enum, not a bare string: the contract names it, and with `string` a
+  /// fixture could carry a sync status the code has no branch for.
+  syncStatus: InventoryCountLineSyncStatus;
   syncError: string | null;
   variant: {
     sku: string;
@@ -25,7 +32,11 @@ interface FakeLine {
     product: {
       name: string;
       catalogAuthority: "UNAS" | "ACROPORA" | null;
-      unasSnapshot?: { isPackageProduct: boolean } | null;
+      /// Required, not optional. The contract promises `{...} | null`, so a
+      /// fixture that simply omits it hands `undefined` to code that checks
+      /// for `null` - and `?? ` and `=== null` do not agree about those two.
+      /// A line with no UNAS link must say so with `null`.
+      unasSnapshot: { isPackageProduct: boolean } | null;
     };
   };
 }
@@ -60,7 +71,10 @@ class FakeDb {
     id: "count-1",
     countNumber: "LELTAR-1",
     warehouseId: this.warehouseId,
-    status: "UPLOADED",
+    /// Typed as the enum, not a bare string. With `string` a fixture could
+    /// carry a status the code has no branch for, and nothing would say so -
+    /// the contract names an enum precisely so that cannot happen.
+    status: "UPLOADED" as InventoryCountStatus,
     createdAt: new Date("2026-07-20T10:00:00.000Z"),
     uploadedAt: new Date("2026-07-20T10:05:00.000Z"),
     correctedAt: null as Date | null,
@@ -171,7 +185,12 @@ class FakeDb {
 
   productVariant = { findMany: async () => [] };
 
-  async $transaction<T>(operation: (transaction: any) => Promise<T>) {
+  /// Typed, not `any`: `this` is what reaches the movement writer, so the
+  /// compiler has to check it against the same contract the repository
+  /// promises it.
+  async $transaction<T>(
+    operation: (transaction: InventoryCountApplyTransaction) => Promise<T>,
+  ) {
     return operation(this);
   }
 }
@@ -193,7 +212,12 @@ describe("InventoryCountRepository.applyCorrection", () => {
       variant: {
         sku: "sku-1",
         unit: "db",
-        product: { name: "Reef Pump", catalogAuthority: "UNAS" },
+        product: {
+          name: "Reef Pump",
+          catalogAuthority: "UNAS",
+          /// `null`, not omitted: this line has no UNAS snapshot.
+          unasSnapshot: null,
+        },
       },
     });
 
@@ -261,7 +285,12 @@ describe("InventoryCountRepository.applyCorrection", () => {
       variant: {
         sku: "LOCAL-1",
         unit: "db",
-        product: { name: "Helyi termék", catalogAuthority: "ACROPORA" },
+        product: {
+          name: "Helyi termék",
+          catalogAuthority: "ACROPORA",
+          /// `null`, not omitted: this line has no UNAS snapshot.
+          unasSnapshot: null,
+        },
       },
     });
 
@@ -284,7 +313,12 @@ describe("InventoryCountRepository.applyCorrection", () => {
       variant: {
         sku: "sku-1",
         unit: "db",
-        product: { name: "Reef Pump", catalogAuthority: "UNAS" },
+        product: {
+          name: "Reef Pump",
+          catalogAuthority: "UNAS",
+          /// `null`, not omitted: this line has no UNAS snapshot.
+          unasSnapshot: null,
+        },
       },
     });
     const repository = repositoryWith(db);
@@ -324,6 +358,8 @@ describe("InventoryCountRepository.applyCorrection", () => {
         product: {
           name: "Aqua Illumination Prime hűtőventillátor",
           catalogAuthority: "UNAS",
+          /// `null`, not omitted: this line has no UNAS snapshot.
+          unasSnapshot: null,
         },
       },
     });
@@ -364,6 +400,8 @@ describe("InventoryCountRepository.applyCorrection", () => {
         product: {
           name: "Aqua Illumination Prime hűtőventillátor",
           catalogAuthority: "UNAS",
+          /// `null`, not omitted: this line has no UNAS snapshot.
+          unasSnapshot: null,
         },
       },
     });
@@ -393,7 +431,12 @@ describe("InventoryCountRepository.applyCorrection", () => {
       variant: {
         sku: "sku-1",
         unit: "db",
-        product: { name: "Reef Pump", catalogAuthority: "UNAS" },
+        product: {
+          name: "Reef Pump",
+          catalogAuthority: "UNAS",
+          /// `null`, not omitted: this line has no UNAS snapshot.
+          unasSnapshot: null,
+        },
       },
     });
 
@@ -419,7 +462,12 @@ describe("InventoryCountRepository.applyCorrection", () => {
         variant: {
           sku: "sku-1",
           unit: "db",
-          product: { name: "A", catalogAuthority: "UNAS" },
+          product: {
+            name: "A",
+            catalogAuthority: "UNAS",
+            /// `null`, not omitted: this line has no UNAS snapshot.
+            unasSnapshot: null,
+          },
         },
       },
       {
@@ -432,7 +480,12 @@ describe("InventoryCountRepository.applyCorrection", () => {
         variant: {
           sku: "sku-2",
           unit: "db",
-          product: { name: "B", catalogAuthority: "UNAS" },
+          product: {
+            name: "B",
+            catalogAuthority: "UNAS",
+            /// `null`, not omitted: this line has no UNAS snapshot.
+            unasSnapshot: null,
+          },
         },
       },
     );
@@ -463,7 +516,12 @@ describe("InventoryCountRepository.applyCorrection", () => {
       variant: {
         sku: "sku-1",
         unit: "db",
-        product: { name: "Reef Pump", catalogAuthority: "UNAS" },
+        product: {
+          name: "Reef Pump",
+          catalogAuthority: "UNAS",
+          /// `null`, not omitted: this line has no UNAS snapshot.
+          unasSnapshot: null,
+        },
       },
     });
     // Force a failure partway through by breaking stockMovementLine.create.

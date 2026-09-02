@@ -63,7 +63,12 @@ export interface InventoryCountApplyResultRow {
   failedCount: number;
 }
 
-interface InventoryCountApplyTransaction extends InventoryMovementDatabase {
+/// Exported so a test double can NAME the contract it stands in for. This is
+/// the seam: the repository hands the transaction object to the movement
+/// writer, so what a double must satisfy is THIS type. Taken as `any`, a
+/// double compiles while missing a method the writer calls, and fails only at
+/// run time.
+export interface InventoryCountApplyTransaction extends InventoryMovementDatabase {
   inventoryCountLine: {
     findMany(args: unknown): Promise<
       Array<{
