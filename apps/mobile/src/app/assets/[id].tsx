@@ -17,6 +17,7 @@ import type { ReactNode } from "react";
 
 import { getAsset, getAssetQr, uploadAssetDocuments } from "@/lib/api/assets";
 import { MAX_FILES_PER_UPLOAD } from "@/lib/api/asset-document-upload";
+import { photoPermissionDeniedNotice } from "@/lib/api/photo-permission-notice";
 import { toPickedImages } from "@/lib/api/picked-image";
 import { ASSET_STATUS_LABELS } from "@/lib/assets/asset-status";
 import {
@@ -80,43 +81,32 @@ export default function AssetDetailScreen() {
   const [uploadNotice, setUploadNotice] = useState<string | null>(null);
 
   /**
-   * FÉNYKÉP AZ ESZKÖZHÖZ, A HELYSZÍNRŐL.
+   * FÉNYKÉP AZ ESZKÖZHÖZ, A HELYSZÍNRŐL. KÉT BEMENET, EGY ÚT.
    *
-   * CSAK KÉP, NEM DOKUMENTUM. A telefon a szerelő kezében van, ott fénykép
-   * keletkezik; a számla és a garancialevél az irodából kerül fel, ahol a
-   * webes felület már tud fájlt fogadni.
+   * A FÉNYKÉPEZÉS AZ ELSŐDLEGES, A GALÉRIA A MÁSODIK, és ez nem esztétikai
+   * sorrend: a szerelő a helyszínen MOST készít képet, nem régit keres
+   * (Balázs, 2026-09-02). Aki a gombokat "kiegyensúlyozottabb" elrendezés
+   * kedvéért megcserélné, a napi munkát fordítaná meg.
    *
-   * A VÁLASZTÁS EREDMÉNYÉT NEM KÜLDJÜK EL VAKON. A szerver a bejelentett
-   * típust és a fájl első bájtjait együtt nézi, tehát egy formátum, amit nem
-   * ismerünk fel, biztos elutasítás lenne - azt inkább itt hagyjuk ki, és
-   * megnevezzük, minthogy a szerelő egy hálózati kör után lássa.
+   * A KÉT BEMENET UGYANABBA A SORBA KERÜL: ugyanaz a típus-felismerés, ugyanaz
+   * a feltöltés, ugyanazok az üzenetek. Két külön út két helyen romlana el.
+   *
+   * CSAK KÉP, NEM DOKUMENTUM. A számla és a garancialevél az irodából kerül
+   * fel, ahol a webes felület már tud fájlt fogadni.
    */
-  const pickAndUploadPhotos = async () => {
-    if (!query.data || uploading) return;
-    setUploadNotice(null);
-
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      setUploadNotice(
-        "A fényképek eléréséhez engedély kell. A telefon beállításaiban adható meg.",
-      );
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsMultipleSelection: true,
-      selectionLimit: MAX_FILES_PER_UPLOAD,
-    });
-    if (result.canceled) return;
-
-    const { files, skipped } = toPickedImages(result.assets);
+  const uploadPicked = async (assets: ImagePicker.ImagePickerAsset[]) => {
+    // A VÁLASZTÁS EREDMÉNYÉT NEM KÜLDJÜK EL VAKON. A szerver a bejelentett
+    // típust és a fájl első bájtjait együtt nézi, tehát egy formátum, amit nem
+    // ismerünk fel, biztos elutasítás lenne - azt inkább itt hagyjuk ki, és
+    // megnevezzük, minthogy a szerelő egy hálózati kör után lássa.
+    const { files, skipped } = toPickedImages(assets);
     if (files.length === 0) {
       setUploadNotice(
         "Egyik kiválasztott kép sem tölthető fel: csak JPEG és PNG megy.",
       );
       return;
     }
+    if (!query.data) return;
 
     setUploading(true);
     try {
@@ -125,7 +115,7 @@ export default function AssetDetailScreen() {
         files,
       });
       // A KIHAGYOTTAKAT AKKOR IS KIMONDJUK, HA A TÖBBI SIKERÜLT. Egy néma
-      // részleges siker azt a hitet hagyná, hogy mind a tíz kép fent van.
+      // részleges siker azt a hitet hagyná, hogy mind a kép fent van.
       setUploadNotice(
         skipped.length > 0
           ? `${created.length} kép feltöltve. Kimaradt: ${skipped.join(", ")}.`
@@ -141,6 +131,51 @@ export default function AssetDetailScreen() {
     } finally {
       setUploading(false);
     }
+  };
+
+  /**
+   * AZ ELSŐDLEGES ÚT: MOST KÉSZÜL A KÉP.
+   *
+   * A MEGTAGADOTT JOG NEM ZSÁKUTCA. Ha a szerelő nem ad kamera-hozzáférést (a
+   * telefon beállításaiban letiltva, vagy egyszer rányomott a "Ne engedd"
+   * gombra), akkor nem egy hibaüzenetet kap és semmi mást: az üzenet
+   * megmondja, hol állítható, ÉS ott marad a galéria mint járható út.
+   */
+  const takeAndUploadPhoto = async () => {
+    if (!query.data || uploading) return;
+    setUploadNotice(null);
+
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      setUploadNotice(photoPermissionDeniedNotice("camera"));
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["images"],
+    });
+    if (result.canceled) return;
+    await uploadPicked(result.assets);
+  };
+
+  /** A MÁSODIK ÚT: egy korábban készült kép a galériából. */
+  const pickAndUploadPhotos = async () => {
+    if (!query.data || uploading) return;
+    setUploadNotice(null);
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setUploadNotice(photoPermissionDeniedNotice("library"));
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsMultipleSelection: true,
+      selectionLimit: MAX_FILES_PER_UPLOAD,
+    });
+    if (result.canceled) return;
+    await uploadPicked(result.assets);
   };
 
   const printLabel = async (share: boolean) => {
@@ -367,9 +402,20 @@ export default function AssetDetailScreen() {
             */}
             {capabilities?.assetsManage && !fromCache ? (
               <Section title="Fényképek">
+                {/*
+                  A SORREND SZÁNDÉK, NEM ELRENDEZÉS. A fényképezés áll elöl,
+                  mert a szerelő a helyszínen MOST készít képet, nem régit
+                  keres. Aki megcserélné "kiegyensúlyozottabb" elrendezésért,
+                  a napi munkát fordítaná meg.
+                */}
                 <AssetLink
-                  label={uploading ? "Feltöltés…" : "Fénykép hozzáadása"}
-                  meta={`A galériából, egyszerre legfeljebb ${MAX_FILES_PER_UPLOAD}`}
+                  label={uploading ? "Feltöltés…" : "Fénykép készítése"}
+                  meta="A kamerával, itt és most"
+                  onPress={() => void takeAndUploadPhoto()}
+                />
+                <AssetLink
+                  label={uploading ? "Feltöltés…" : "Kép a galériából"}
+                  meta={`Korábban készült kép, egyszerre legfeljebb ${MAX_FILES_PER_UPLOAD}`}
                   onPress={() => void pickAndUploadPhotos()}
                 />
                 {uploadNotice ? (
