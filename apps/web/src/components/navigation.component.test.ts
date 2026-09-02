@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { hasPermission, type UserRole } from "@acropora/types";
 
 import {
   businessNavigation,
+  contentNavigation,
   isNavigationGroup,
   isNavigationItemActive,
   navigationItems,
@@ -12,6 +14,28 @@ import {
   type AppNavigationGroup,
   type AppNavigationItem,
 } from "./navigation";
+
+/**
+ * UGYANAZ A HAT LISTA, AMIT AZ APP-SHELL OSSZEFUZ, es ugyanaz a szuro,
+ * amit hasznal (`hasPermission(session.user, item.permission)`).
+ *
+ * Ha ez a fuggveny csak nehanyat nezne kozuluk, egy allitas arrol, hogy "a
+ * szervizes ezeket latja", SZUKEBB halmazt merne, mint amit a felhasznalo lat
+ * -- es epp a kimaradt listaban allo tobbletet nem venne eszre. A hatos
+ * felsorolas ezert masolat, nem valogatas.
+ */
+function visibleLabelsFor(role: UserRole): string[] {
+  return navigationItems([
+    ...primaryNavigation,
+    ...businessNavigation,
+    ...contentNavigation,
+    ...secondaryNavigation,
+    ...unasSettingsNavigation,
+    ...settingsNavigation,
+  ])
+    .filter((item) => hasPermission(role, item.permission))
+    .map((item) => item.label);
+}
 
 function group(label: string): AppNavigationGroup {
   const found = businessNavigation.find(
@@ -215,5 +239,78 @@ describe("navigation", () => {
       expect(item.permission).toBeTruthy();
       expect(item.href.startsWith("/")).toBe(true);
     }
+  });
+
+  /**
+   * A SZERVIZES MENUJE, BALAZS LISTAJA SZERINT (2026-09-02 08:39). A lista
+   * TELJES, nem minimum: "ezen kivul nem kell masnak latszania".
+   *
+   * AMIERT A TELJES HALMAZ ALL ITT, ES NEM AZ, HOGY "a hat tetel eltunt":
+   * egy hianyra iranyulo allitas akkor is zold, ha kozben MAS jelent meg. Egy
+   * uj menupont, ami `products.view` helyett `orders.view` jogot ker, egy
+   * "nem latja a Termekeket" allitasnak nem mond ellent -- ennek igen.
+   *
+   * MI PIROSIT: barmi, ami megjelenik a szervizesnek a listan kivul, es barmi,
+   * ami eltunik rola. A masodik iranyra kulon van szukseg: a jogok szukitese
+   * konnyen visz el tobbet a kelletenel, es a hianyt senki nem jelenti.
+   */
+  it("shows the service role exactly the menu the owner listed", () => {
+    // RENDEZVE, mert az allitas a HALMAZROL szol, nem a sorrendrol. A menu
+    // sorrendje valos tulajdonsag, de nem ez a szabaly, es egy artalmatlan
+    // atrendezes ugy pirositana, mintha valaki jogot mozditott volna.
+    expect([...visibleLabelsFor("SERVICE")].sort()).toEqual(
+      [
+        "Dashboard",
+        "Feladataim",
+        "Munkalapok",
+        "Eszköznyilvántartás",
+        "Partnerek",
+        // AZ EGYETLEN TETEL, AMI NINCS BALAZS LISTAJAN. Nem feledekenyseg: az
+        // akvarium a szerviz TARGYA, tehat lehet, hogy kell neki, es a kerdes
+        // nala van (2026-09-02). Amig nem valaszol, ez a sor marad -- es ha
+        // valaszol, EZ AZ EGY SOR valtozik, a `ROLE_PERMISSIONS.SERVICE`
+        // akvarium-jogaival egyutt.
+        "Akváriumok",
+      ].sort(),
+    );
+  });
+
+  /**
+   * NEVSZERINT A HAT TETEL, amit ez a kor elvett. Kulon allitas, mert a fenti
+   * egyenloseg egy sorban bukna el mindre, es a hibauzenetbol nem latszana,
+   * MELYIK jott vissza. Nautilus merese ezt a hatot nevezte meg 2026-09-02-an.
+   */
+  it("keeps the six measured extras away from the service role", () => {
+    const visible = visibleLabelsFor("SERVICE");
+
+    for (const label of [
+      "Webshop vásárlók",
+      "Webshop termékek",
+      "Termékek",
+      "Márkák",
+      "Szinkron",
+      "AI teszt",
+    ])
+      expect(visible).not.toContain(label);
+  });
+
+  /**
+   * A KONTROLL A SZUROHOZ. A ket fenti allitas hianyt mer, es egy hianyt egy
+   * elromlott szuro is eloallit: ha a `visibleLabelsFor` ures listat adna, mind
+   * a ketto zold maradna. Ez a sor bizonyitja, hogy a szuro MEG TUDJA TALALNI
+   * azt a hatot, amikor tenyleg latszik -- egy tulajdonosnak mind a hat ott van.
+   */
+  it("can see the six at all, so the absence above means something", () => {
+    const owner = visibleLabelsFor("OWNER");
+
+    for (const label of [
+      "Webshop vásárlók",
+      "Webshop termékek",
+      "Termékek",
+      "Márkák",
+      "Szinkron",
+      "AI teszt",
+    ])
+      expect(owner).toContain(label);
   });
 });

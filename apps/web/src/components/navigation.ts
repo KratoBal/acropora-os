@@ -138,10 +138,17 @@ export const businessNavigation: AppNavigationEntry[] = [
     permission: PERMISSIONS.PRODUCTS_VIEW,
   },
   {
+    // A JOG ITT KORABBAN `purchasing.view` VOLT, ES AZ ANOMALIA VOLT, nem
+    // szigor: az OLDAL `partners.view`-t ellenoriz, a szerver ugyanazt kovetel
+    // meg, es a SERVICE szerep AZT MEGKAPJA. Vagyis a szerelo a menuben nem
+    // latta, de a cim beirasaval megnyitotta, es MUKODOTT -- lathatatlan es
+    // nyitva. A csere egyetlen szerepet mozdit (merve: a SERVICE megkapja a
+    // menupontot, es senki nem veszti el), es a menut ahhoz igazitja, amit az
+    // oldal amugy is enged.
     href: "/partnerek",
     label: "Partnerek",
     icon: "truck",
-    permission: PERMISSIONS.PURCHASING_VIEW,
+    permission: PERMISSIONS.PARTNERS_VIEW,
   },
   {
     label: "Pénzügy",
