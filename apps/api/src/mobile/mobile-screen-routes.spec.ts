@@ -276,6 +276,27 @@ describe("a telefon képernyői a helyükön vannak", () => {
  * kapcsoló mellett ott áll, hogy miért, és hogy melyik EGYETLEN tény nyitja fel
  * ezt az utat. Ez a spec a szűkebb részt fedi le, ma, mérhetően; nem a
  * tipizálás helyett áll, hanem addig is.
+ *
+ * ---
+ *
+ * HOGY A KAPCSOLÓ NEM KAPUZ, AZ MÉRVE VAN, NEM KÖVETKEZTETVE (2026-09-01). Az
+ * előző bekezdés sokáig levezetés volt: a generált típus gitignore alatt van,
+ * tehát nem lehet ott. A levezetés helyes, de a mérés más állítás, ezért itt a
+ * rontás is, amivel bárki megismételheti:
+ *
+ *   egy VALÓDI hívásba beírt, nem létező útvonal
+ *     router.push("/nincs-ilyen-utvonal-sehol")   az apps/mobile alatt
+ *   `pnpm mobile:typecheck` -> KILÉPÉSI KÓD 0, tehát ÁTMEGY
+ *
+ * Ugyanaz a rontás EZEN a specen elbukik, és megnevezi a fájlt és az útvonalat
+ * is. Ez a két futás együtt mondja meg, mit fed le a szűkebb őrző és mit nem --
+ * külön-külön egyik sem.
+ *
+ * ÉS AMIÉRT EZ IDE VAN ÍRVA, NEM EGY KÁRTYÁRA: egy mércét nem az minősít, hogy
+ * zöld, hanem hogy tud-e pirosra váltani. A tipizált útvonalakról ma nem azt
+ * tudjuk, hogy gyengék, hanem azt, hogy NINCS OLYAN BEMENET, amitől elbuknának.
+ * Aki a kapcsolót látja a konfigban, védelemnek fogja hinni; ez a bekezdés az,
+ * ami ezt megállítja.
  */
 describe("a telefon minden navigációs célja létező útvonalra mutat", () => {
   it("nincs olyan cél, amihez ne lenne útvonal-fájl", () => {

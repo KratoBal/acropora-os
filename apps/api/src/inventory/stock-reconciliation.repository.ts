@@ -240,6 +240,23 @@ export class StockReconciliationRepository extends Repository {
           warehouseId: { in: warehouseIds },
         },
         orderBy: { sequence: "desc" },
+        /// Matches `OutboxRow`, which is eleven of the model's nineteen
+        /// columns. The same mismatch as the two inline cases in this branch,
+        /// only behind a name - which is exactly why the first sweep could not
+        /// see it.
+        select: {
+          id: true,
+          variantId: true,
+          warehouseId: true,
+          targetOnHand: true,
+          status: true,
+          resolutionNote: true,
+          leaseExpiresAt: true,
+          lastError: true,
+          processedAt: true,
+          updatedAt: true,
+          sequence: true,
+        },
       }),
     ]);
 

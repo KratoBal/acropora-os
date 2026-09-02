@@ -74,11 +74,45 @@ const listInclude = {
   },
 } as const;
 
-interface ExternalReferenceRow {
+/// ONE row shape for both seams that read an ExternalReference.
+///
+/// It used to be declared twice with incompatible projections: the
+/// transaction seam promised `{id, entityId, externalId, externalKey}` and
+/// the database seam `{metadata, externalId, externalKey}`. Measured on
+/// 2026-09-01: NONE of the four `findUnique` call sites passes a `select`,
+/// so Prisma returns the whole row at every one of them. The two narrow
+/// types were not describing the query, only which fields that particular
+/// consumer happened to read - and a hand-narrowed type that nothing
+/// enforces drifts. It had already drifted: no single object can honestly
+/// answer two projections, so the test double returned a union behind an
+/// `any` parameter, and that `any` is what hid the conflict.
+///
+/// If a `select` is ever added to one of those calls, this type must be
+/// narrowed in the same change - a deliberate step, unlike today's silent
+/// mismatch.
+/// The select that produces exactly `ExternalReferenceRow`, named once so the
+/// four call sites cannot drift from the type or from each other.
+///
+/// It exists because unifying the two declarations (#330) only fixed half the
+/// problem: the type stopped disagreeing with itself, and still asked Prisma
+/// for all ten columns while promising five. The half that was fixed is what
+/// made the other half hard to see.
+export const EXTERNAL_REFERENCE_ROW_SELECT = {
+  id: true,
+  entityId: true,
+  externalId: true,
+  externalKey: true,
+  metadata: true,
+} as const;
+
+export interface ExternalReferenceRow {
   id: string;
   entityId: string;
   externalId: string;
   externalKey: string | null;
+  /// `JsonValue`, not `Record<string, unknown>`: the contract stores it as
+  /// JSON, and a wider type lets values through that the database rejects.
+  metadata: Prisma.JsonValue;
 }
 
 // Exported (along with LineInput, resolveEffectiveVariantId,
@@ -426,11 +460,7 @@ export interface UnasOrderSyncDatabase {
     ): Promise<Array<{ variantId: string; onHand: Prisma.Decimal }>>;
   };
   externalReference: {
-    findUnique(args: unknown): Promise<{
-      metadata: Prisma.JsonValue;
-      externalId: string;
-      externalKey: string | null;
-    } | null>;
+    findUnique(args: unknown): Promise<ExternalReferenceRow | null>;
     findMany(
       args: unknown,
     ): Promise<Array<{ entityId: string; metadata: Prisma.JsonValue }>>;
@@ -945,6 +975,7 @@ export class UnasOrderSyncRepository extends Repository {
             externalId: order.id,
           },
         },
+        select: EXTERNAL_REFERENCE_ROW_SELECT,
       });
       if (byId) return byId;
     }
@@ -957,6 +988,7 @@ export class UnasOrderSyncRepository extends Repository {
           externalId: order.key,
         },
       },
+      select: EXTERNAL_REFERENCE_ROW_SELECT,
     });
     if (!byLegacyKey) return null;
 
@@ -1215,6 +1247,7 @@ export class UnasOrderSyncRepository extends Repository {
           entityId: orderId,
         },
       },
+      select: EXTERNAL_REFERENCE_ROW_SELECT,
     });
     // getOrder's targeted lookup accepts Key, not the stable Id. Never fall
     // back to externalId: after the Id/Key split that would turn a missing
@@ -1890,6 +1923,7 @@ export class UnasOrderSyncRepository extends Repository {
           entityId: id,
         },
       },
+      select: EXTERNAL_REFERENCE_ROW_SELECT,
     });
     return toUnasOrderDetail(
       order,
@@ -1911,6 +1945,13 @@ export class UnasOrderSyncRepository extends Repository {
         entityType: "SalesOrder",
         entityId: { in: orderIds },
       },
+      /// Named so the query matches the seam's declared row. Without it the
+      /// type is narrower than what Prisma returns - which is the SAFE
+      /// direction (it hides fields that exist rather than promising fields
+      /// that do not), and that is exactly why it survives unnoticed. The
+      /// findUnique on this seam had the same shape and a second, conflicting
+      /// declaration next to it, and the pair is what caused real drift.
+      select: { entityId: true, metadata: true },
     });
     return new Map(
       references.map((reference) => [
