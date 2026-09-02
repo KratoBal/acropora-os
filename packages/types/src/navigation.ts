@@ -131,11 +131,17 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
      *
      * A ket felulet NEM szimmetrikus: ELREJTENI egy csempet uj kiadas nelkul is
      * lehet, MEGMUTATNI viszont csak azt, amit a TELEPITETT alkalmazas mar
-     * ismer (murena felmerese, 2026-09-02; a fenti `id` doksija ugyanezt mondja
-     * a masik oldalrol: a telefon erre az azonositora kepezi le a sajat
-     * kepernyoit). A telefonon ma nincs hibajegy-kepernyo, tehat a `mobile`
-     * felvetele egy olyan csempet adna a szervizesnek, ami NEM NYILIK MEG - az
-     * pedig rosszabb, mint ha nem latna.
+     * ismer (murena felmerese, 2026-09-02).
+     *
+     * ES A #355 UTAN PONTOSABBAN TUDJUK, MI TORTENNE, ezert all itt ez a
+     * mondat a "nem nyilo csempe" helyett: a telefon KEZZEL IRT tablabol
+     * kepezi a csempe-kodjait a menutetelekre (`TILE_ENTRY`,
+     * `apps/mobile/src/lib/auth/tile-visibility.ts`), es abban ma NINCS
+     * `service-jobs`. Merve az aktualis fo agon: nulla talalat a mobil faban.
+     *
+     * Vagyis a `mobile` felvetele NEM torott csempet adna, hanem SEMMIT - egy
+     * deklaracio, ami telefon-csempet iger es nem csinal semmit, es errol senki
+     * nem tudna. Ez a rosszabb fajta: a torott csempe HANGOS, a nem letezo NEMA.
      *
      * MI NYITJA MEG: a hibajegy-kepernyo elkeszulte a mobil alkalmazasban.
      * Akkor ez a sor bovul, es a dontes kulon megy Balazs ele, hogy ne
