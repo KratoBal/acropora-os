@@ -61,6 +61,21 @@ export class AssetListQueryDto {
   ownerType?: (typeof ASSET_OWNER_TYPES)[number];
   @IsString() @IsOptional() ownerId?: string;
   /**
+   * MATRICA SZERINTI SZUKITES: `with` vagy `without`.
+   *
+   * MIERT VAN, HOLOTT MA NINCS HOZZA KEPERNYO. Balazs dontese szerint a
+   * matrica a felvitelnel NEM kotelezo (2026-09-02 19:24), es az indok az,
+   * hogy egy szerelo, akinel elfogyott a matrica, ne akadjon el a helyszinen.
+   * EBBOL VISZONT KOVETKEZIK, hogy keletkezni fog egy halmaz, amit valakinek
+   * vegig kell jarnia -- es egy szandekosan megengedett allapot CSENDBEN
+   * halmozodik, ha semmi nem tudja megkerdezni.
+   *
+   * Ez a szuro teszi MEGKERDEZHETOVE. Most nehany sor; kesobb egy kulon kor.
+   */
+  @IsIn(["with", "without"])
+  @IsOptional()
+  label?: "with" | "without";
+  /**
    * A tulajdonos FAJTÁJA szerinti szűkítés, egyetlen értékkel: csak azok az
    * eszközök, amiknek a gazdája aktív, SZERVIZ-jelölt partner. Ugyanaz a
    * feltétel, mint a tulajdonos-választón (`SERVICE_OWNER_WHERE`), a második

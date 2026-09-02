@@ -152,6 +152,16 @@ export interface CreateAssetInput {
    * szerelő. A szerver felvitelkor is fogadja.
    */
   inventoryNumber?: string;
+  /**
+   * AZ ELŐRE NYOMTATOTT MATRICA KÓDJA (egy betű és négy szám, pl. V2196).
+   *
+   * NEM UGYANAZ, MINT AZ `inventoryNumber`: az a PARTNERÉ, ez a MIÉNK. A
+   * szerelő a helyszínen a mi matricánkat ragasztja fel, és ezt a kódot köti
+   * az eszközhöz. A régi, generált QR-tokent NEM ez váltja ki: az továbbra is
+   * a beolvasás kulcsa marad (Balázs, 2026-09-02 16:27: „nem tedd vissza a
+   * régi qr-t, csak majd az újat").
+   */
+  labelCode?: string;
   installedAt?: string;
   serviceIntervalDays?: number;
 }

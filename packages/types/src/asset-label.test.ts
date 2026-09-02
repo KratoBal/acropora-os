@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 
 import {
   ASSET_LABEL_CODE_STORED_PATTERN,
+  ASSET_LABEL_REQUIRED_ON_CREATE,
+  assetLabelCreateProblem,
   normalizeAssetLabelCode,
 } from "./asset-label.js";
 
@@ -55,5 +57,40 @@ describe("matricakód normalizálása", () => {
       assert.ok(kod, `${nyers} érvényes bemenet`);
       assert.match(kod, ASSET_LABEL_CODE_STORED_PATTERN);
     }
+  });
+});
+
+describe("a matricakód a felvitelkor", () => {
+  it("a jó alakot átengedi", () => {
+    assert.equal(assetLabelCreateProblem("V2196"), null);
+    assert.equal(assetLabelCreateProblem(" v2196 "), null);
+  });
+
+  it("a rossz alakot megnevezi", () => {
+    assert.equal(assetLabelCreateProblem("ROSSZ"), "malformed");
+    assert.equal(assetLabelCreateProblem("V219"), "malformed");
+  });
+
+  /**
+   * A HIANY KET DOLGOT JELENTHET, ES A KULONBSEG EGYETLEN KAPCSOLON MULIK.
+   *
+   * Ez az állítás SZÁNDÉKOSAN a kapcsolóhoz köti magát, nem a mai értékhez: ha
+   * valaki megfordítja, ez a sor NEM pirosodik ki hamisan, viszont a
+   * viselkedés-váltás azonnal látszik rajta. Egy `assert.equal(..., null)`
+   * alak itt azt állítaná, hogy a mai érték az EGYETLEN helyes -- holott a
+   * kérdés Balázsnál áll, és a válasz bármelyik lehet.
+   */
+  it("az üres mező a kapcsoló szerint dől el", () => {
+    const vart = ASSET_LABEL_REQUIRED_ON_CREATE ? "missing" : null;
+    assert.equal(assetLabelCreateProblem(undefined), vart);
+    assert.equal(assetLabelCreateProblem(""), vart);
+    assert.equal(assetLabelCreateProblem("   "), vart);
+  });
+
+  it("a rossz alak akkor is rossz, ha a matrica nem kötelező", () => {
+    // A KET SZABALY FUGGETLEN: a "nem kotelezo" nem jelenti azt, hogy barmit
+    // el lehet gepelni. Ha ez a ketto osszecsuszna, egy elgepelt kod CSENDBEN
+    // ures matricakent menne at.
+    assert.equal(assetLabelCreateProblem("XX99"), "malformed");
   });
 });

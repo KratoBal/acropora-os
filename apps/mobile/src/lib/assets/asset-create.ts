@@ -1,4 +1,8 @@
 import type { AssetKind, AssetOwnerType } from "./asset-fields";
+import {
+  assetLabelCreateProblem,
+  normalizeAssetLabelCode,
+} from "./asset-label-mirror";
 
 /**
  * Az ÚJ ESZKÖZ űrlap logikája, a képernyőtől külön.
@@ -30,6 +34,14 @@ export interface AssetCreateForm {
   serialNumber: string;
   /** A partner saját azonosítója az eszközön (leltári szám). Üres is lehet. */
   inventoryNumber: string;
+  /**
+   * A MI előre nyomtatott matricánk kódja (egy betű és négy szám, pl. V2196).
+   *
+   * Beolvasva vagy begépelve. Hogy KÖTELEZŐ-e, azt nem itt döntjük el:
+   * `assetLabelCreateProblem` mondja meg, ugyanaz a függvény, amit a szerver is
+   * kérdez.
+   */
+  labelCode: string;
   /** Amit a felhasználó beírt vagy a választóból kapott. Üres is lehet. */
   installedAt: string;
   /** Karbantartási intervallum napban, szövegként. Üres is lehet. */
@@ -47,6 +59,8 @@ export interface AssetCreatePayload {
   model?: string;
   serialNumber?: string;
   inventoryNumber?: string;
+  /** A MI előre nyomtatott matricánk kódja, normalizálva (pl. `V2196`). */
+  labelCode?: string;
   installedAt?: string;
   serviceIntervalDays?: number;
 }
@@ -56,7 +70,8 @@ export type AssetCreateResult =
   /** A `field` azt mondja meg, MELYIK mezőnél kell a hibát megmutatni. */
   | { ok: false; field: AssetCreateField; message: string };
 
-export type AssetCreateField = "owner" | "name" | "installedAt" | "interval";
+export type AssetCreateField =
+  "owner" | "name" | "labelCode" | "installedAt" | "interval";
 
 const DATE_SEPARATORS = /[.\-/\s]+/;
 
@@ -195,6 +210,27 @@ export function buildAssetCreatePayload(
   if (!installed.ok)
     return { ok: false, field: "installedAt", message: installed.message };
 
+  /**
+   * A MATRICA-SZABALY UGYANABBOL A FUGGVENYBOL JON, MINT A SZERVERE.
+   *
+   * Ha a telefon sajat szabalyt vinne, a ketto elcsuszhatna, es a szerelo azt
+   * latna, hogy az urlap atengedi, a mentes meg elutasitja -- a helyszinen,
+   * miutan mindent kitoltott.
+   */
+  const labelProblem = assetLabelCreateProblem(form.labelCode);
+  if (labelProblem === "missing")
+    return {
+      ok: false,
+      field: "labelCode",
+      message: "Olvasd be vagy írd be a matrica kódját.",
+    };
+  if (labelProblem === "malformed")
+    return {
+      ok: false,
+      field: "labelCode",
+      message: "A matrica kódja egy betű és négy szám, például V2196.",
+    };
+
   const intervalText = form.interval.trim();
   let serviceIntervalDays: number | undefined;
   if (intervalText) {
@@ -243,6 +279,13 @@ export function buildAssetCreatePayload(
        * telefonálás -- a mező eddig csak a szerkesztő képernyőn létezett.
        */
       inventoryNumber: form.inventoryNumber.trim() || undefined,
+      /**
+       * A MATRICAKOD NORMALIZALVA MEGY KI, nem nyersen. A tabla csak nagybetut
+       * fogad (`AssetLabel_code_shape_check`), a leolvaso viszont adhat
+       * kisbetut -- a normalizalas ugyanaz a fuggveny, ami az alakot is
+       * ellenorizte, tehat a ketto nem tud elcsuszni.
+       */
+      labelCode: normalizeAssetLabelCode(form.labelCode) ?? undefined,
       /**
        * A nap KEZDETE, UTC-ben. A telepítés dátuma nap-pontosságú adat: az
        * időpont-rész nem mérés, hanem a formátum ára, ezért nulla.

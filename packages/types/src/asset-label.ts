@@ -57,3 +57,40 @@ export interface AssetLabelIssueResult {
    */
   alreadyIssued: string[];
 }
+
+/**
+ * KOTELEZO-E A MATRICA AZ ESZKOZ FELVITELEKOR.
+ *
+ * EGY HELYEN ALL, SZANDEKOSAN. Ha egyszer megfordul, EZ AZ EGY SOR valtozik --
+ * nem a szerver validacioja, nem a telefon urlapja, es nem a ket hibauzenet
+ * kulon-kulon. A kerdes Balazsnal all (acrobot tette fel 2026-09-02 este):
+ * kotelezo legyen-e, vagy lehessen utolag potolni.
+ *
+ * A VALASZ MEGJOTT, ES A MEGENGEDO ERTEK MARAD. Balazs dontese, 2026-09-02
+ * 19:24, Discord (mobilalkalmazas szal), a ket felkinalt lehetoseg kozul a
+ * masodikra: matrica nelkul is rogzitheto, utolag hozzatehető. Az indok, amit
+ * elfogadott: ha kotelezo lenne, egy szerelo, akinel elfogyott a matrica, nem
+ * tudna eszkozt felvinni a helyszinen.
+ *
+ * AMI EBBOL KOVETKEZIK, ES AMI MIATT NEM ELEG A KAPCSOLO: keletkezni FOG egy
+ * halmaz matrica nelkuli eszkozokbol. Ezert all a lista-lekerdezesen a `label`
+ * szuro (`with` / `without`) -- egy szandekosan megengedett allapot csendben
+ * halmozodik, ha semmi nem tudja megkerdezni.
+ */
+export const ASSET_LABEL_REQUIRED_ON_CREATE = false;
+
+/**
+ * MI A BAJ A FELVITELKOR MEGADOTT MATRICAKODDAL, vagy `null`, ha semmi.
+ *
+ * A KET SZABALY EGYUTT ALL ITT: hogy KELL-E, es hogy JO-E AZ ALAKJA. Ha kulon
+ * allnanak, a telefon es a szerver ket kulonbozo pillanatban vennek at a
+ * valtozast -- es a felhasznalo azt latna, hogy az urlap atengedi, a mentes meg
+ * elutasitja.
+ */
+export function assetLabelCreateProblem(
+  raw: string | undefined,
+): "missing" | "malformed" | null {
+  const trimmed = (raw ?? "").trim();
+  if (trimmed === "") return ASSET_LABEL_REQUIRED_ON_CREATE ? "missing" : null;
+  return normalizeAssetLabelCode(trimmed) === null ? "malformed" : null;
+}

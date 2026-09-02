@@ -13,7 +13,10 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
 import type { AssetQrCode } from "@acropora/types";
-import { normalizeAssetLabelCode } from "@acropora/types";
+import {
+  assetLabelCreateProblem,
+  normalizeAssetLabelCode,
+} from "@acropora/types";
 import { AssetLabelUnavailableError } from "./service-assets.repository.js";
 
 import {
@@ -106,6 +109,24 @@ export class ServiceAssetsService {
   }
 
   async create(input: CreateAssetDto, actorUserId: string) {
+    /**
+     * A MATRICA-SZABALY EGY HELYEN ALL, ES ITT KERDEZZUK MEG.
+     *
+     * A `assetLabelCreateProblem` mondja meg, hogy KELL-E matrica es hogy JO-E
+     * az alakja. Ugyanezt a fuggvenyt hasznalja a telefon urlapja is: ha a
+     * ketto kulon dontene, a felhasznalo azt latna, hogy az urlap atengedi, a
+     * mentes meg elutasitja.
+     */
+    const labelProblem = assetLabelCreateProblem(input.labelCode);
+    if (labelProblem === "missing")
+      throw new BadRequestException(
+        "A matricakód megadása kötelező az eszköz felvitelekor.",
+      );
+    if (labelProblem === "malformed")
+      throw new BadRequestException(
+        "A matricakód alakja egy betű és négy szám (például V2196).",
+      );
+
     await this.validateReferences({
       ownerType: input.ownerType,
       ownerId: input.ownerId,
