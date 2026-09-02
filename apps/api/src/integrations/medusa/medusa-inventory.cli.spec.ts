@@ -107,18 +107,22 @@ describe("Készlet-parancs: kit vetítünk", () => {
   });
 
   /** A brief 13. tesztje. */
-  it("UNAS-gazdájú terméket NEM vetít", async () => {
+  it("UNAS-gazdájú terméket IS vetít (keszlet-vetítés)", async () => {
     const { db, queries } = database({
       variants: [VARIANT],
       products: [{ id: "prod-os-1", catalogAuthority: "UNAS" }],
     });
     const resolved = await resolveTargets("sku:teszt0001", "wh_1", db);
 
-    assert.ok(!Array.isArray(resolved));
-    assert.match(resolved.error, /nem az Acropora OS/);
+    assert.ok(Array.isArray(resolved), "a UNAS gazda 2026-09-02 óta nem szűr");
+    /**
+     * A REGI ALLITAS ITT AZT MERTE, hogy a keszletet EL SEM OLVASSUK, mert a
+     * gazda kerdese elobb dol el. Ma pont a forditottja a bizonyitek: a gazda
+     * nem all utban, tehat a parancs eljut a keszletig.
+     */
     assert.ok(
-      !queries.some((entry) => entry.table === "stockItem"),
-      "a készletet el sem olvassuk: a gazda kérdése előbb dől el",
+      queries.some((entry) => entry.table === "stockItem"),
+      "a készletet MOST már el kell olvasni: a gazda nem szűr",
     );
   });
 

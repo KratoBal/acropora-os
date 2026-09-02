@@ -16,6 +16,31 @@
  * masik allapot csendben elsodrodna attol, amit hiszunk rola.
  */
 
+/**
+ * AZ ISMERT GAZDAK, EGY HELYEN.
+ *
+ * A gazda-feltetel NEGY ponton all: a harom vetito parancsban (termek, keszlet,
+ * ar) es magaban a publikacios szabalyban. 2026-09-02-ig mind a negy KULON irta
+ * le ugyanazt a feltetelt, es amikor a tulajdonos dontese megvaltoztatta
+ * (Balazs, 17:54: "Ami az unasban van az kell a medusaba is"), negy helyen
+ * kellett volna atvezetni -- negy kulon alkalom arra, hogy egy kimaradjon.
+ *
+ * A KIMARADAS PEDIG NEM EGYFORMA: ha egy parancs-szuro marad a regin, az
+ * HANGOS (nem tortenik semmi). Ha a szabaly marad a regin, az NEMA (minden
+ * atmegy, a futas sikert jelent, es a boltban semmi nem latszik).
+ *
+ * A `null` SZANDEKOSAN NEM ISMERT: a sema ket erteket ismer, es amirol nem
+ * tudjuk, honnan jott, azt visszatartjuk. Kiengedni csendes tevedes,
+ * visszatartani hangos.
+ */
+export const KNOWN_CATALOG_AUTHORITIES = ["ACROPORA", "UNAS"] as const;
+
+export function isKnownCatalogAuthority(authority: string | null): boolean {
+  return (KNOWN_CATALOG_AUTHORITIES as readonly string[]).includes(
+    authority ?? "",
+  );
+}
+
 /** Amit a dontes bemenetkent kap. Csak allapot, semmi mas. */
 export interface ProductPublicationState {
   /**
@@ -91,10 +116,7 @@ export function decidePublication(
     salesChannel: "detach",
   });
 
-  if (
-    state.catalogAuthority !== "ACROPORA" &&
-    state.catalogAuthority !== "UNAS"
-  )
+  if (!isKnownCatalogAuthority(state.catalogAuthority))
     return refuse("unknown-authority");
   if (!state.isActive) return refuse("product-inactive");
   if (state.activeVariantCount < 1) return refuse("no-active-variant");

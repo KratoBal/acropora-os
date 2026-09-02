@@ -76,15 +76,16 @@ describe("Ár-parancs: kit vetítünk", () => {
    * pillanatképben él. Ha ráfutnánk, a SAJÁT üres mezőnkből próbálnánk árat
    * vetíteni egy olyan termékre, aminek van ára - csak nem a miénk.
    */
-  it("UNAS-gazdájú terméket NEM vetít", async () => {
+  it("UNAS-gazdájú terméket IS vetít (ar-vetítés)", async () => {
     const resolved = await resolvePricingTargets(
       "sku:STAGEPROOF0002",
       db({ authority: "UNAS" }),
     );
 
-    assert.ok("error" in resolved);
-    if (!("error" in resolved)) return;
-    assert.match(resolved.error, /nem az Acropora OS/);
+    assert.ok(
+      !("error" in resolved),
+      "a UNAS gazda 2026-09-02 óta nem szűr az ár-vetítésben sem",
+    );
   });
 
   it("ismeretlen gazda ugyanúgy kizár (fail-closed)", async () => {

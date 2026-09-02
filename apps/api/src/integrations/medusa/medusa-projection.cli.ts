@@ -1,6 +1,7 @@
 import { pathToFileURL } from "node:url";
 
 import { prisma } from "@acropora/database";
+import { isKnownCatalogAuthority } from "./medusa-publication.policy.js";
 
 import {
   MedusaConfigurationError,
@@ -284,9 +285,9 @@ export async function runProjectionCli(
      * terméket átvinni annyi lenne, mint a webshop adatát egy harmadik helyre
      * másolni, ahol senki nem gondozza.
      */
-    if (product.catalogAuthority !== "ACROPORA") {
+    if (!isKnownCatalogAuthority(product.catalogAuthority)) {
       out.stderr(
-        `${productId}: a törzsadat gazdája nem az Acropora OS (${product.catalogAuthority ?? "ismeretlen"}), kihagyva\n`,
+        `${productId}: a törzsadat gazdája ismeretlen (${product.catalogAuthority ?? "nincs megadva"}), kihagyva\n`,
       );
       failed += 1;
       continue;
