@@ -13,7 +13,10 @@ import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
-import { CreateWorksheetDepartmentDto } from "../worksheets/dto/worksheet.dto.js";
+import {
+  CreateWorksheetDepartmentDto,
+  UpdateWorksheetDepartmentDto,
+} from "../worksheets/dto/worksheet.dto.js";
 import {
   CreateSupplierDto,
   SupplierListQueryDto,
@@ -66,6 +69,23 @@ export class SuppliersController {
     @Body() input: CreateWorksheetDepartmentDto,
   ) {
     return this.service.createUnit(id, input);
+  }
+
+  /**
+   * Egy meglévő alegység NEVE és ARCHIVÁLÁSA. A kód és a szülő nem szerkeszthető
+   * (Balázs döntése, 2026-09-02 20:29): „csak a nevet lehessen átírni menjen az
+   * archiválással".
+   *
+   * `PARTNERS_MANAGE`, ugyanaz a jog, mint a felvitelnél: a partner törzsadata.
+   */
+  @Patch(":id/units/:unitId")
+  @RequirePermissions(PERMISSIONS.PARTNERS_MANAGE)
+  updateUnit(
+    @Param("id") id: string,
+    @Param("unitId") unitId: string,
+    @Body() input: UpdateWorksheetDepartmentDto,
+  ) {
+    return this.service.updateUnit(id, unitId, input);
   }
 
   /**

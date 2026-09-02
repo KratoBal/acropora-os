@@ -19,7 +19,10 @@ import {
   retryOnTakenCode,
   withUniqueCode,
 } from "../common/unique-code.util.js";
-import type { CreateWorksheetDepartmentDto } from "../worksheets/dto/worksheet.dto.js";
+import type {
+  CreateWorksheetDepartmentDto,
+  UpdateWorksheetDepartmentDto,
+} from "../worksheets/dto/worksheet.dto.js";
 import { partnerCodeChange } from "./partner-code-change.js";
 import {
   assertPartnerCodeNeverNumbered,
@@ -366,6 +369,57 @@ export class SuppliersRepository extends Repository {
         parentId,
         code: input.code.trim().toUpperCase(),
         name: input.name.trim(),
+      },
+      select: {
+        id: true,
+        parentId: true,
+        code: true,
+        name: true,
+        isActive: true,
+      },
+    });
+  }
+
+  /**
+   * Egy MEGLEVO alegyseg neve es aktiv jelolese.
+   *
+   * A KOD ES A SZULO NEM SZEREPEL, es ez a tulajdonos dontese (Balazs,
+   * 2026-09-02 20:29): "csak a nevet lehessen atirni menjen az archivalassal".
+   *
+   * A HATOKOR-ELLENORZES UGYANAZ, MINT A FELVITELNEL, es ugyanabbol az okbol:
+   * az idegen kulcs csak azt nezi, hogy a sor letezik-e, a tulajdonost nem. Egy
+   * MASIK partner helyszinet atnevezni innen csendben menne, es a hivo a sajat
+   * fajat latva eszre sem venne. A "nincs ilyen" es a "mase" ezert UGYANAZ a
+   * valasz (`null`): a kulonbseg kimondasa mas partner adatarol arulna el
+   * valamit.
+   */
+  async updateUnit(
+    supplierId: string,
+    unitId: string,
+    input: UpdateWorksheetDepartmentDto,
+  ): Promise<WorksheetDepartmentSummary | null> {
+    const supplier = await prisma.supplier.findUnique({
+      where: { id: supplierId },
+      select: { customerId: true },
+    });
+    if (!supplier?.customerId) return null;
+
+    const unit = await prisma.worksheetDepartment.findFirst({
+      where: { id: unitId, customerId: supplier.customerId },
+      select: { id: true },
+    });
+    if (!unit) return null;
+
+    /**
+     * CSAK AZ ADOTT MEZOK MENNEK AT. Egy `data: input` alaku hivas azt is
+     * atengedne, amit a DTO egyszer majd felvesz -- itt viszont a KIHAGYAS a
+     * dontes tartalma, nem a mellekhatasa.
+     */
+    return prisma.worksheetDepartment.update({
+      where: { id: unit.id },
+      data: {
+        ...(input.name === undefined ? {} : { name: input.name.trim() }),
+        ...(input.isActive === undefined ? {} : { isActive: input.isActive }),
       },
       select: {
         id: true,

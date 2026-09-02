@@ -4,6 +4,7 @@ import {
   Badge,
   Button,
   Card,
+  ConfirmDialog,
   FormField,
   Input,
   PageHeader,
@@ -57,6 +58,19 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
     name: "",
   });
   const [unitError, setUnitError] = useState<string | null>(null);
+  /**
+   * MELYIK SORT SZERKESZTJUK, es mi all a mezoben.
+   *
+   * Soronkenti allapot, nem egy kozos "szerkesztes" jelolo: ket sort egyszerre
+   * atnevezni ugyis nem lehet, es egy kozos piszkozat-nev a MASIK sorra is
+   * ratapadna, amikor a felhasznalo atkattint.
+   */
+  const [editingUnitId, setEditingUnitId] = useState<string | null>(null);
+  const [unitDraftName, setUnitDraftName] = useState("");
+  /** Amelyik sor ARCHIVALASARA a megerosito kerdes vonatkozik. */
+  const [pendingArchive, setPendingArchive] =
+    useState<WorksheetDepartmentSummary | null>(null);
+  const [unitBusy, setUnitBusy] = useState(false);
   const [iban, setIban] = useState("");
   const [swiftCode, setSwiftCode] = useState("");
   const [bankAccountNumber, setBankAccountNumber] = useState("");
@@ -260,6 +274,39 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
       }
     } finally {
       setBusy(false);
+    }
+  };
+
+  /**
+   * A KET MUVELET EGY HELYEN, mert ugyanaz a vegpont es ugyanaz a
+   * hiba-kezeles. A kulonbseg csak a torzsben van, es a hivo mondja meg.
+   */
+  const applyUnitChange = async (
+    unitId: string,
+    input: { name?: string; isActive?: boolean },
+  ) => {
+    if (!supplier) return;
+    setUnitError(null);
+    setUnitBusy(true);
+    try {
+      const updated = await suppliersApi.updateUnit(
+        token,
+        supplier.id,
+        unitId,
+        input,
+      );
+      setUnits((current) =>
+        current.map((unit) => (unit.id === updated.id ? updated : unit)),
+      );
+      setEditingUnitId(null);
+    } catch (cause) {
+      setUnitError(
+        cause instanceof Error
+          ? cause.message
+          : "Az alegység módosítása nem sikerült.",
+      );
+    } finally {
+      setUnitBusy(false);
     }
   };
 
@@ -525,10 +572,85 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
                     <span className="font-mono text-xs text-slate-600">
                       {unit.code}
                     </span>
-                    {/* The name keeps an element of its own: beside the code a
-                        bare text node merges with it, and a search for the
-                        name alone stops matching. */}
-                    <span>{unit.name}</span>
+                    {editingUnitId === unit.id ? (
+                      <>
+                        <Input
+                          aria-label="Alegység új neve"
+                          value={unitDraftName}
+                          onChange={(event) =>
+                            setUnitDraftName(event.target.value)
+                          }
+                        />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          disabled={unitBusy || !unitDraftName.trim()}
+                          onClick={() =>
+                            void applyUnitChange(unit.id, {
+                              name: unitDraftName.trim(),
+                            })
+                          }
+                        >
+                          Mentés
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => setEditingUnitId(null)}
+                        >
+                          Mégsem
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        {/* The name keeps an element of its own: beside the code a
+                            bare text node merges with it, and a search for the
+                            name alone stops matching. */}
+                        <span>{unit.name}</span>
+                        {/* AZ ARCHIVALT SOR NEM TUNIK EL A LISTABOL. A partner
+                            adatlapja a TELJES fat mutatja: ha eltunne, a
+                            gyerekei szulo nelkul maradnanak a kepernyon, es a
+                            felhasznalo nem tudna visszaallitani sem. */}
+                        {unit.isActive ? null : (
+                          <span className="text-xs text-slate-500">
+                            · archivált
+                          </span>
+                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          aria-label={`${unit.name} átnevezése`}
+                          onClick={() => {
+                            setEditingUnitId(unit.id);
+                            setUnitDraftName(unit.name);
+                          }}
+                        >
+                          Átnevezés
+                        </Button>
+                        {unit.isActive ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            aria-label={`${unit.name} archiválása`}
+                            onClick={() => setPendingArchive(unit)}
+                          >
+                            Archiválás
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            aria-label={`${unit.name} visszaállítása`}
+                            disabled={unitBusy}
+                            onClick={() =>
+                              void applyUnitChange(unit.id, { isActive: true })
+                            }
+                          >
+                            Visszaállítás
+                          </Button>
+                        )}
+                      </>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -601,6 +723,36 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
             </div>
           </Card>
         ) : null}
+        {/*
+          AZ ARCHIVALAS MEGERositO KERDEST KAP, ES EZT KIMONDOTTAN IRJUK MEG.
+          A repo halója (`confirm-usage.component.test.ts`) a torlo-jellegu
+          hivasokat a `method: "DELETE"` alapjan ismeri fel; ez PATCH, tehat a
+          halo NEM kerdezne szamon, ha kimaradna. Az egyetlen, ami orzi, a
+          hozza tartozo allitas ebben a mappaban.
+
+          A kovetkezmeny nem "biztos vagy benne", hanem az, ami tenylegesen
+          megszunik: uj munkalapot nem lehet ra nyitni. A visszaut pedig
+          LETEZIK, es ki is van irva -- ez az a mezo, ami a fejlesztovel
+          feltéteti a kerdest, hogy van-e egyaltalan.
+        */}
+        <ConfirmDialog
+          open={pendingArchive !== null}
+          title={
+            pendingArchive
+              ? `Archiválod ezt az alegységet: ${pendingArchive.name}?`
+              : "Archiválod ezt az alegységet?"
+          }
+          consequence="Új munkalapot nem lehet rá nyitni, és a választókban nem jelenik meg. A már meglévő munkalapokon ott marad, ahol eddig is volt."
+          recovery="Ugyanitt visszaállítható: az archivált sor a listában marad, Visszaállítás gombbal."
+          confirmLabel="Alegység archiválása"
+          busy={unitBusy}
+          onConfirm={() => {
+            const unit = pendingArchive;
+            setPendingArchive(null);
+            if (unit) void applyUnitChange(unit.id, { isActive: false });
+          }}
+          onCancel={() => setPendingArchive(null)}
+        />
         {isSupplier ? (
           <Card className="p-6">
             <h2 className="font-semibold">Bankszámla</h2>

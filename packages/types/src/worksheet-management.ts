@@ -112,6 +112,35 @@ export interface CreateWorksheetDepartmentInput {
 }
 
 /**
+ * Egy MEGLEVO alegyseg szerkesztese.
+ *
+ * SZANDEKOSAN CSAK KET MEZO, es ez a tulajdonos dontese (Balazs, 2026-09-02
+ * 20:29, Discord): "csak a nevet lehessen atirni menjen az archivalassal".
+ *
+ * AMI KIMARAD, ES MIERT NEM FELEDEKENYSEG:
+ * - a `code` a MUNKALAPSZAM ELSO TAGJA (`formatWorksheetNumber`). A mar kiadott
+ *   szamok tarolva allnak a lapon, tehat egy kesobbi atiras NEM irna at oket --
+ *   de ugyanaz az egyseg attol kezdve mas elotagu lapokat adna, es egy partner
+ *   papirjain ket kod futna idoben.
+ * - a `parentId` (athelyezes) visszamenoleg irna at, hol allt egy eszkoz, es
+ *   elobb el kell donteni, mit mutassanak a regi munkalapok.
+ *
+ * Mindketto KULON kor, nem ennek a bovitese.
+ */
+export interface UpdateWorksheetDepartmentInput {
+  /** Az uj nev. Hianyzo ertek = a nev valtozatlan. */
+  name?: string;
+  /**
+   * Aktiv-e. `false` = archivalt.
+   *
+   * TORLES NINCS, ES NEM IS LESZ: a szulo- es a munkalap-relacion `Restrict`
+   * all, tehat egy hasznalatban levo helyszin torlese az adatbazisban is
+   * elhasalna. Az archivalas nem enyhebb valtozat, hanem az EGYETLEN alak.
+   */
+  isActive?: boolean;
+}
+
+/**
  * A munkalap felelőse: aki a munkát végzi. Nem azonos azzal, aki a lapot
  * felvette (`createdByName`) - az iroda nyit lapot a szerelőnek.
  */
