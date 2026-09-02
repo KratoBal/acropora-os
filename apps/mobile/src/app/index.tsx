@@ -17,6 +17,11 @@ import { runningVersionLine } from "@/lib/app-version";
 import { listUnasOrders } from "@/lib/api/orders";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import type { UserRole } from "@/lib/auth/types";
+import {
+  servedTileIds,
+  tileVisible as tileVisibleFor,
+  type TileCode,
+} from "@/lib/auth/tile-visibility";
 import { personDisplayName } from "@/lib/auth/person-name";
 import { shouldRegisterPush } from "@/lib/notifications/push-preference";
 import { usePushPreference } from "@/lib/notifications/usePushPreference";
@@ -96,6 +101,16 @@ export default function HomeScreen() {
   );
   const capabilities = user ? getWebshopCapabilities(user.role) : null;
   const serviceCapabilities = user ? getServiceCapabilities(user.role) : null;
+  const servedIds = servedTileIds(user);
+  /**
+   * A SZERVER DONT, ES CSAK HA HALLGAT, AKKOR A SAJAT TABLA.
+   *
+   * A `fallback` nem masodik velemeny: pontosan akkor jut szohoz, amikor a
+   * szerver egyaltalan nem kuldott menut. Amig kuld, az itteni tablak nem
+   * befolyasolnak semmit a kezdokepernyon.
+   */
+  const tileVisible = (code: TileCode, fallback: boolean) =>
+    tileVisibleFor(servedIds, code, fallback);
   const orders = useQuery({
     queryKey: ["unas-orders", { page: 1, pageSize: 5 }],
     queryFn: () => listUnasOrders(1, 5),
@@ -159,7 +174,7 @@ export default function HomeScreen() {
                 code="ES"
                 title="Eszközök"
                 description="Partnereszközök, QR-azonosítás és hierarchia"
-                available={serviceCapabilities.assetsView}
+                available={tileVisible("ES", serviceCapabilities.assetsView)}
                 enabled
                 onPress={() => router.push("/assets")}
               />
@@ -167,7 +182,10 @@ export default function HomeScreen() {
                 code="MU"
                 title="Munkalapok"
                 description="Kiosztott lapok, tételek és felelősök"
-                available={serviceCapabilities.worksheetsView}
+                available={tileVisible(
+                  "MU",
+                  serviceCapabilities.worksheetsView,
+                )}
                 enabled
                 onPress={() => router.push("/worksheets")}
               />
@@ -175,7 +193,7 @@ export default function HomeScreen() {
                 code="RE"
                 title="Rendelések"
                 description="UNAS rendelések, státuszok és tételek"
-                available={capabilities.ordersView}
+                available={tileVisible("RE", capabilities.ordersView)}
                 enabled
                 onPress={() => router.push("/orders")}
               />
@@ -183,14 +201,14 @@ export default function HomeScreen() {
                 code="BE"
                 title="Beszerzés"
                 description="Szállítói számlák és bevételezés"
-                available={capabilities.purchasingView}
+                available={tileVisible("BE", capabilities.purchasingView)}
                 enabled={false}
               />
               <ModuleCard
                 code="TE"
                 title="Termékek"
                 description="Terméktörzs és készletállapot"
-                available={capabilities.productsView}
+                available={tileVisible("TE", capabilities.productsView)}
                 enabled={false}
               />
               {/*
@@ -211,14 +229,17 @@ export default function HomeScreen() {
                 code="NAV"
                 title="NAV-szinkron"
                 description="Bejövő számlák és párosítások"
-                available={NAV_TILE_ROLES.includes(user.role)}
+                available={tileVisible(
+                  "NAV",
+                  NAV_TILE_ROLES.includes(user.role),
+                )}
                 enabled={false}
               />
               <ModuleCard
                 code="PA"
                 title="Partnerek"
                 description="Szerviz partnerek és kapcsolattartók"
-                available={capabilities.partnersView}
+                available={tileVisible("PA", capabilities.partnersView)}
                 enabled
                 onPress={() => router.push("/partners")}
               />

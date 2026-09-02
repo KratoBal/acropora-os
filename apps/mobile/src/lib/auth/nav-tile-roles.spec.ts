@@ -24,6 +24,21 @@ import { describe, it } from "node:test";
  *
  * (Ez a megfogalmazás Acrobot döntése, 2026-08-27, egy korábbi, gyengébb alak
  * helyett, amit én javasoltam.)
+ *
+ * ===================================================================
+ * AMI 2026-09-02-ÁN VÁLTOZOTT, ÉS AMI NEM
+ * ===================================================================
+ *
+ * A csempe láthatósága mostantól a SZERVER által kiadott menüből jön
+ * (`tileVisible`), és a `NAV_TILE_ROLES` felsorolás csak akkor jut szóhoz, ha a
+ * szerver egyáltalán nem küldött menüt (régebbi kiadás). A döntés tehát átkerült
+ * a közös forrásba, ahol a szerep-listás ág kötelező `retiredBy` mezőt visel: ott
+ * áll leírva, mi szünteti meg.
+ *
+ * EZ A FÁJL MÉGSEM VÁLT FÖLÖSLEGESSÉ, és pontosan egy okból: az `enabled` jelzőt
+ * CSAK ITT lehet látni. A szerver nem tudja, hogy a csempe megnyit-e valamit --
+ * az a telefon tulajdonsága. Az alábbi állítás tehát az egyetlen hely, ahol a
+ * `retiredBy` feltételének a BEKÖVETKEZÉSE észrevehető.
  */
 
 const HOME_SCREEN = "src/app/index.tsx";
@@ -48,7 +63,14 @@ describe("a NAV csempe láthatóságának forrása", () => {
     const tile = navTileBlock(homeScreen());
 
     assert.match(tile, /title="NAV-szinkron"/);
-    assert.match(tile, /available=\{NAV_TILE_ROLES\.includes\(user\.role\)\}/);
+    // A MINTA TORDELES-TURO. A prettier a hosszu sort tobbe tori, es egy
+    // egysoros minta ettol elveszti a talalatot -- a kimenete pedig ugyanaz
+    // lenne, mint egy VALODI elteresé: "nem talaltam". Merve 2026-09-02: a
+    // formazas utan elbukott, holott a kod helyes volt.
+    assert.match(
+      tile,
+      /available=\{\s*tileVisible\(\s*"NAV",\s*NAV_TILE_ROLES\.includes\(user\.role\),?\s*\)\s*\}/,
+    );
   });
 
   it("a csempe addig áll szerepkör-listán, amíg nem nyit meg semmit", () => {
@@ -57,10 +79,12 @@ describe("a NAV csempe láthatóságának forrása", () => {
     assert.match(
       tile,
       /enabled=\{false\}/,
-      "A NAV csempe már megnyit valamit, tehát a kézzel írt szerepkör-lista " +
-        "indoka elévült: a láthatóság mostantól a hívásához tartozó " +
-        "jogosultság-kulcsból jöjjön (a bejövő számlákhoz `purchasingView`), " +
-        "ne a `NAV_TILE_ROLES` felsorolásból.",
+      "A NAV csempe már megnyit valamit, tehát a szerep-listás ág indoka " +
+        "elévült. A döntés a KÖZÖS FORRÁSBAN lakik " +
+        "(`packages/types/src/navigation.ts`, a `nav-integration-mobile` tétel " +
+        "`retiredBy` mezője): a láthatóság mostantól a hívásához tartozó " +
+        "jogosultságból jöjjön, és ezzel a szerep-listás ág kiesik. Az itteni " +
+        "`NAV_TILE_ROLES` visszaesés is vele megy.",
     );
   });
 });

@@ -86,11 +86,24 @@ export class AuthController {
    * `Authorization: Bearer` header (see AuthGuard), which the CSRF
    * double-submit check in AuthGuard does not apply to in the first place.
    */
+  /**
+   * A MENU ITT IS UTAZIK, ES EZ A (2) LEPES RESE VOLT.
+   *
+   * Akkor azt irtam, hogy mindket kliens `/auth/me`-vel epiti fel a keretet.
+   * A webre igaz, es a telefon INDULASARA is igaz -- de a FRISS
+   * BEJELENTKEZESRE nem: a telefon akkor ebbol a valaszbol veszi a
+   * felhasznalot, es sosem hivja meg utana a `/auth/me`-t. A menu igy csak egy
+   * alkalmazas-ujrainditas utan erkezett volna meg.
+   *
+   * A ket belepesi pontnak UGYANAZT az alakot kell adnia, kulonben a telefonon
+   * ket kulonbozo allapot letezne ugyanarra a felhasznalora, es a kulonbseg
+   * csak bejelentkezes utan latszana.
+   */
   @Public()
   @Post("mobile/login/password")
   async loginMobileWithPassword(
     @Body() body: ProductionLoginDto,
-  ): Promise<{ token: string; expiresAt: string; user: AuthenticatedUser }> {
+  ): Promise<{ token: string; expiresAt: string; user: CurrentUserResponse }> {
     const session = await this.authService.loginWithPassword(
       body.email,
       body.password,
@@ -98,7 +111,10 @@ export class AuthController {
     return {
       token: session.token ?? "",
       expiresAt: session.expiresAt,
-      user: session.user,
+      user: {
+        ...session.user,
+        navigation: visibleNavigationFor(session.user.role),
+      },
     };
   }
 

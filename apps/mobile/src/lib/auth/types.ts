@@ -11,6 +11,22 @@
 export type UserRole =
   "OWNER" | "ADMIN" | "MANAGER" | "SALES" | "WAREHOUSE" | "SERVICE" | "VIEWER";
 
+/**
+ * Egy menutetel ugy, ahogy a szerver kiadja (`@acropora/types`
+ * NavigationEntryView). KEZZEL KARBANTARTOTT TUKOR, mint az egesz fajl: a
+ * mobil csomag SZANDEKOSAN nem fugg a munkater csomagjaitol (sajat npm
+ * lockfile, es a pnpm-workspace kizarja), tehat importalni nem lehet.
+ *
+ * A FELULET IS ATJON, nem csak az azonosito. Enelkul ez az app nem tudna
+ * megkulonboztetni a "nem ismerem ezt a tetelt" esetet (regebbi telepites,
+ * ujabb szerver) attol, hogy "ez a tetel a webre valo". Mindketto kihagyas, de
+ * az elso verzio-csuszas, a masodik normal mukodes.
+ */
+export interface NavigationEntryView {
+  id: string;
+  surfaces: ("web" | "mobile")[];
+}
+
 export interface AuthenticatedUser {
   id: string;
   email: string;
@@ -20,6 +36,16 @@ export interface AuthenticatedUser {
   nickname?: string | null;
   role: UserRole;
   avatarUrl?: string | null;
+  /**
+   * A menu, amit ez a felhasznalo lathat -- MAR SZURVE a szerveren.
+   *
+   * OPCIONALIS, es ez nem lustasag: egy regebbi szerver nem kuldi. Ha kotelezo
+   * lenne, egy ilyen szerver ellen az app egyetlen csempet sem rajzolna ki, es
+   * a felhasznalo egy ures kezdokepernyot latna hibauzenet nelkul. A hianyra a
+   * kezdokepernyo a sajat kepesseg-tablaira esik vissza -- atmenetileg, amig a
+   * (4) lepes azokat ki nem veszi.
+   */
+  navigation?: NavigationEntryView[];
 }
 
 /** Shape stored in SecureStore: the opaque Bearer token plus its own

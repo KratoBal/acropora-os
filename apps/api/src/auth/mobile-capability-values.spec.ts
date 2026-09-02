@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { describe, it } from "node:test";
+import { describe, it, test } from "node:test";
 
 import ts from "typescript";
 import {
+  NAVIGATION_ENTRIES,
   navigationIdsFor,
   PERMISSIONS,
   ROLE_PERMISSIONS,
@@ -276,4 +277,71 @@ describe("a mobil csempek es a kozos menu-forras", () => {
         eltero.join("; "),
     );
   });
+});
+
+/**
+ * A TELEFON CSEMPE-KEPZESE CSAK LETEZO MENUTETELEKRE MUTATHAT.
+ *
+ * A (3) lepes ota a kezdokepernyo csempeit a SZERVER altal kiadott menu donti
+ * el, a `TILE_ENTRY` kepzesen keresztul (`apps/mobile/src/app/index.tsx`). A
+ * kepzes kezzel irt, mert nem gepies -- es epp ezert tud elcsuszni.
+ *
+ * MI TORTENNE NELKULE: egy elgepelt vagy atnevezett azonosito SOHA nem lenne
+ * benne a kiadott listaban, tehat az a csempe MINDENKINEK eltunne. Nem hibazna
+ * semmi: a telefon egy tetelt keres, nem talalja, es kihagyja -- pontosan ugy,
+ * ahogy egy ismeretlen tetelnel HELYES viselkedni. A ket eset a kliens oldalan
+ * megkulonboztethetetlen, ezert kell ITT merni, ahol mind a ketto latszik.
+ *
+ * MIERT SZOVEGBOL: a mobil csomag nem huzhato be ide (sajat lockfile, a
+ * pnpm-workspace kizarja), tehat importalni nem lehet. A szomszed allitasok
+ * ugyanezt teszik a szerep-unioval es a kepesseg-tablakkal.
+ */
+const TILE_MAP = "../mobile/src/lib/auth/tile-visibility.ts";
+
+test("every tile the phone maps names an entry the source actually has", () => {
+  const source = readFileSync(TILE_MAP, "utf8");
+  const match = /const TILE_ENTRY = \{([\s\S]*?)\} as const;/.exec(source);
+  assert.ok(match, "Nem találtam a telefon TILE_ENTRY képzését.");
+
+  const parok = [...match![1]!.matchAll(/(\w+):\s*"([^"]+)"/g)].map((hit) => ({
+    csempe: hit[1]!,
+    tetel: hit[2]!,
+  }));
+
+  // KONTROLL A KERESESRE: het csempe all a kepernyon. Ha a minta nem talal
+  // semmit, ket ures halmaz egyezne, es a sor zolden allitana, hogy rendben van.
+  assert.ok(
+    parok.length >= 7,
+    `Csak ${parok.length} csempe-képzést találtam. Ez a keresés hibája, nem a képernyőé.`,
+  );
+
+  const ismertek = new Set(NAVIGATION_ENTRIES.map((entry) => entry.id));
+  const ismeretlenek = parok
+    .filter((par) => !ismertek.has(par.tetel))
+    .map((par) => `${par.csempe} -> ${par.tetel}`);
+
+  assert.deepEqual(
+    ismeretlenek,
+    [],
+    "Ezek a csempék olyan menütételre mutatnak, ami a közös forrásban nem " +
+      "létezik, tehát SOHA nem jelennének meg -- és a telefonon ez pontosan " +
+      "úgy néz ki, mint egy szabályos kihagyás: " +
+      ismeretlenek.join(", "),
+  );
+
+  // ES A MASIK IRANY: minden MOBIL feluletu tetelnek legyen csempeje. Enelkul a
+  // szerver kiadna valamit, amit a telefon sosem rajzol ki -- az a szakadas
+  // masik fele, es ugyanolyan nema.
+  const kepzettek = new Set(parok.map((par) => par.tetel));
+  const kirajzolatlanok = NAVIGATION_ENTRIES.filter(
+    (entry) => entry.surfaces.includes("mobile") && !kepzettek.has(entry.id),
+  ).map((entry) => entry.id);
+
+  assert.deepEqual(
+    kirajzolatlanok,
+    [],
+    "A közös forrás ezeket mobil tételként adja ki, de a telefonnak nincs rájuk " +
+      "csempéje: " +
+      kirajzolatlanok.join(", "),
+  );
 });
