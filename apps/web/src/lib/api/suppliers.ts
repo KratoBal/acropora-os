@@ -7,6 +7,7 @@ import type {
   SupplierListResponse,
   SupplierSummary,
   UpdateSupplierInput,
+  UpdateWorksheetDepartmentInput,
 } from "@acropora/types";
 import { apiRequest } from "./client";
 
@@ -43,6 +44,23 @@ export const suppliersApi = {
       `/suppliers/${encodeURIComponent(id)}/units`,
       token,
       { method: "POST", body: JSON.stringify(input) },
+    );
+  },
+  /**
+   * Egy meglévő alegység NEVE és ARCHIVÁLÁSA. A kód és a szülő nem megy át
+   * rajta: a szerver `forbidNonWhitelisted` beállítással fut, tehát egy ilyen
+   * mező 400-zal esne el, nem csendben hullana le.
+   */
+  updateUnit(
+    token: string,
+    id: string,
+    unitId: string,
+    input: UpdateWorksheetDepartmentInput,
+  ) {
+    return apiRequest<WorksheetDepartmentSummary>(
+      `/suppliers/${encodeURIComponent(id)}/units/${encodeURIComponent(unitId)}`,
+      token,
+      { method: "PATCH", body: JSON.stringify(input) },
     );
   },
   /**

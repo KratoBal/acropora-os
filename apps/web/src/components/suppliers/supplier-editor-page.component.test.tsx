@@ -11,6 +11,7 @@ const suppliers = vi.hoisted(() => ({
   update: vi.fn(),
   units: vi.fn(),
   createUnit: vi.fn(),
+  updateUnit: vi.fn(),
   deletionPlan: vi.fn(),
   remove: vi.fn(),
 }));
@@ -48,6 +49,7 @@ describe("SupplierEditorPage", () => {
     suppliers.update.mockReset();
     suppliers.units.mockReset().mockResolvedValue({ items: [] });
     suppliers.createUnit.mockReset();
+    suppliers.updateUnit.mockReset();
     suppliers.deletionPlan.mockReset();
     suppliers.remove.mockReset();
     navigation.push.mockReset();
@@ -372,5 +374,124 @@ describe("SupplierEditorPage", () => {
 
     expect(screen.queryByLabelText("Bankszámlaszám")).toBeNull();
     expect(screen.getByLabelText("Név")).toBeTruthy();
+  });
+});
+
+/*
+ * AZ ALEGYSEG ATNEVEZESE ES ARCHIVALASA.
+ *
+ * A hatokort a tulajdonos huzta meg (Balazs, 2026-09-02 20:29): "csak a nevet
+ * lehessen atirni menjen az archivalassal". A kod es az athelyezes KIVUL van,
+ * es azt a szerver oldali allitas orzi (partner-unit-editing.spec.ts) -- itt a
+ * FELULET viselkedese all.
+ */
+describe("SupplierEditorPage: unit editing", () => {
+  const serviceSupplier = {
+    id: "supplier-1",
+    code: "SZALL-1",
+    name: "Fankó Kft.",
+    isSupplier: false,
+    isService: true,
+    worksheetPartnerCode: "FANK",
+    country: "HU",
+    isActive: true,
+    createdAt: "2026-08-19T10:00:00.000Z",
+    updatedAt: "2026-08-19T10:00:00.000Z",
+  };
+  const biodom = {
+    id: "unit-bio",
+    parentId: null,
+    code: "BIO",
+    name: "Biodóm",
+    isActive: true,
+  };
+
+  beforeEach(() => {
+    auth.session = session;
+    suppliers.detail.mockReset().mockResolvedValue(serviceSupplier);
+    suppliers.update.mockReset();
+    suppliers.units.mockReset().mockResolvedValue({ items: [biodom] });
+    suppliers.createUnit.mockReset();
+    suppliers.updateUnit.mockReset();
+    suppliers.deletionPlan.mockReset();
+    suppliers.remove.mockReset();
+  });
+
+  it("sends only the new name when a unit is renamed", async () => {
+    suppliers.updateUnit.mockResolvedValue({ ...biodom, name: "Biodóm 2" });
+
+    render(<SupplierEditorPage supplierId="supplier-1" />);
+    fireEvent.click(await screen.findByLabelText("Biodóm átnevezése"));
+    fireEvent.change(screen.getByLabelText("Alegység új neve"), {
+      target: { value: "Biodóm 2" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
+
+    await waitFor(() => expect(suppliers.updateUnit).toHaveBeenCalledTimes(1));
+    expect(suppliers.updateUnit.mock.calls[0]?.[3]).toEqual({
+      name: "Biodóm 2",
+    });
+  });
+
+  /**
+   * EZ AZ AZ ALLITAS, AMI NELKUL SEMMI NEM ORIZNE A MEGEROSITEST.
+   *
+   * A repo halója (`confirm-usage.component.test.ts`) a torlo-jellegu
+   * hivasokat a `method: "DELETE"` alapjan ismeri fel. Az archivalas PATCH,
+   * tehat a halo hatokoren KIVUL esik: ha valaki kiveszi a kerdest, semmi mas
+   * nem valt pirosra.
+   */
+  it("asks before archiving, and sends nothing until the answer", async () => {
+    render(<SupplierEditorPage supplierId="supplier-1" />);
+    fireEvent.click(await screen.findByLabelText("Biodóm archiválása"));
+
+    expect(suppliers.updateUnit).not.toHaveBeenCalled();
+    expect(screen.getByText(/Archiválod ezt az alegységet/)).toBeTruthy();
+  });
+
+  it("archives only after the question is answered", async () => {
+    suppliers.updateUnit.mockResolvedValue({ ...biodom, isActive: false });
+
+    render(<SupplierEditorPage supplierId="supplier-1" />);
+    fireEvent.click(await screen.findByLabelText("Biodóm archiválása"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Alegység archiválása" }),
+    );
+
+    await waitFor(() => expect(suppliers.updateUnit).toHaveBeenCalledTimes(1));
+    expect(suppliers.updateUnit.mock.calls[0]?.[3]).toEqual({
+      isActive: false,
+    });
+  });
+
+  /**
+   * AZ ARCHIVALT SOR NEM TUNIK EL. A partner adatlapja a TELJES fat mutatja:
+   * ha eltunne, a gyerekei szulo nelkul maradnanak a kepernyon, es
+   * visszaallitani sem lehetne.
+   */
+  it("keeps an archived unit on the screen, marked and restorable", async () => {
+    suppliers.units.mockResolvedValue({
+      items: [{ ...biodom, isActive: false }],
+    });
+
+    render(<SupplierEditorPage supplierId="supplier-1" />);
+
+    expect(await screen.findByText(/archivált/)).toBeTruthy();
+    expect(screen.getByLabelText("Biodóm visszaállítása")).toBeTruthy();
+    expect(screen.queryByLabelText("Biodóm archiválása")).toBeNull();
+  });
+
+  /** A visszaallitas nem veszit el semmit, tehat nem kerdez -- csak kuld. */
+  it("restores without a question", async () => {
+    suppliers.units.mockResolvedValue({
+      items: [{ ...biodom, isActive: false }],
+    });
+    suppliers.updateUnit.mockResolvedValue(biodom);
+
+    render(<SupplierEditorPage supplierId="supplier-1" />);
+    fireEvent.click(await screen.findByLabelText("Biodóm visszaállítása"));
+
+    await waitFor(() => expect(suppliers.updateUnit).toHaveBeenCalledTimes(1));
+    expect(suppliers.updateUnit.mock.calls[0]?.[3]).toEqual({ isActive: true });
   });
 });
