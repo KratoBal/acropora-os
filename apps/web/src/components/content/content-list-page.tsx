@@ -15,11 +15,11 @@ import {
   type ContentListItem,
   type ContentViewerRole,
 } from "@acropora/types";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { contentApi } from "@/lib/api/content";
-import { ContentCreateForm } from "./content-create-form";
 import {
   CONTENT_ROLE_LABELS,
   CONTENT_STATE_LABELS,
@@ -99,7 +99,6 @@ export function ContentListPage() {
   const canCreate = Boolean(
     session && hasPermission(session.user, PERMISSIONS.CONTENT_MANAGE),
   );
-  const [creating, setCreating] = useState<"draft" | "idea" | null>(null);
   const token = session?.token ?? "";
 
   const load = useCallback(
@@ -164,63 +163,37 @@ export function ContentListPage() {
 
   return (
     <div className="space-y-6">
+      {/*
+        A FELVITEL KÜLÖN OLDALON ÁLL, ÉS EZ A LISTA ONNANTÓL LEKTORÁLÁSRA VALÓ
+        (Balázs döntése, 2026-09-02).
+
+        Korábban a két gomb és az űrlap ITT állt, a lista tetején - azért,
+        mert a panasz az volt, hogy a menü üres. Az a probléma megoldódott, a
+        nyers, stílus nélküli űrlap viszont ugyanazon a képernyőn más minőségi
+        szinten állt, mint a lap többi része.
+
+        A hivatkozás HALVÁNY, nem elsődleges gomb: aki ide jön, tipikusan
+        lektorál, nem felvisz.
+
+        A TÖRÉSPONT NEM ITT DŐL EL, hanem a `PageHeader`-ben: az `sm` alatt
+        oszlop, felette sor - tehát keskeny képernyőn a hivatkozás MINDIG a
+        cím alá kerül, a cím hosszától függetlenül. Ezt megmértük, nem
+        becsültük.
+      */}
       <PageHeader
         title="Tartalom"
         description="Ami rád vár, és ami képre vár."
+        actions={
+          canCreate ? (
+            <Link
+              href="/tartalom/uj"
+              className="text-sm font-medium text-teal-700 underline-offset-4 hover:underline"
+            >
+              Új tétel felvitele →
+            </Link>
+          ) : undefined
+        }
       />
-
-      {/*
-        A FELVETEL A LISTA TETEJEN, ES NEM EGY ALOLDALON. A panasz, amibol ez
-        keszult, az volt, hogy a menu ures -- aki megnyitja, ott es akkor
-        akarjon tudni beleirni, ne egy masodik kattintas utan.
-      */}
-      {canCreate && !creating ? (
-        <>
-          <button type="button" onClick={() => setCreating("draft")}>
-            Új tartalom felvétele
-          </button>
-          {/*
-            AZ ÖTLET KÜLÖN GOMB, ÉS NEM AZ ŰRLAP EGY KAPCSOLÓJA. Aki egy témát
-            jegyez fel, ne előbb egy űrlapot értelmezzen, amiben a mezők
-            többsége nem róla szól. A két lépésnek külön neve van a szerveren
-            is, és itt sem mosódik össze.
-          */}
-          <button type="button" onClick={() => setCreating("idea")}>
-            Ötlet feljegyzése
-          </button>
-        </>
-      ) : null}
-
-      {/*
-        A FELTETELBEN NINCS TOKEN, ES EZ A JAVITAS.
-        
-        Elobb `canCreate && creating && token` allt itt, es ELES munkamenetben
-        a token URES: suti-alapu bejelentkezesnel a bongeszo a httpOnly sutit
-        kuldi, es a kliens nem lat tokent. A `lib/api/client.ts` sajat
-        megjegyzese ki is mondja, es a `session.token` a tipusban opcionalis.
-        
-        Az eredmeny az volt, amit Balazs elesben latott: a gombok eltuntek
-        (mert a `creating` beallt), es a helyukon nem jelent meg semmi. Nem
-        hiba, nem uzenet -- csak ures hely.
-        
-        A token tovabbra is atmegy a formnak: az `apiRequest` az ures erteket
-        helyesen kezeli, es szandekosan NEM tesz Bearer fejlecet, ha nincs mit.
-      */}
-      {canCreate && creating ? (
-        <ContentCreateForm
-          token={token}
-          mode={creating}
-          onCancel={() => setCreating(null)}
-          onCreated={() => {
-            setCreating(null);
-            // UJRAKERDEZUNK: az uj tetel DRAFTING allapotban all es a
-            // letrehozojara var, tehat a "mi var ram" nezetben AZONNAL ott a
-            // helye. Ha nem toltenenk ujra, a felhasznalo pontosan azt latna,
-            // amire panaszkodott: beirta, es nincs sehol.
-            reload();
-          }}
-        />
-      ) : null}
 
       {/*
         AZ ÖSSZEGZŐ CSÍK LEGFELÜL, A SZEREP-VÁLASZTÓ ELŐTT IS.
