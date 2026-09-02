@@ -9,17 +9,17 @@ import {
   Sidebar,
   Topbar,
 } from "@acropora/ui";
-import { hasPermission } from "@acropora/types";
+import { isNavigationEntryVisible } from "@acropora/types";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 
 import {
+  allNavigationPages,
   businessNavigation,
   contentNavigation,
   isNavigationGroup,
   isNavigationItemActive,
-  navigationItems,
   primaryNavigation,
   secondaryNavigation,
   settingsNavigation,
@@ -94,14 +94,7 @@ function NavigationGroup({
  * `/beszerzes/nav-szamlak` would light up purchasing as well as the NAV
  * invoices, right next to each other in the same group.
  */
-const ALL_NAVIGATION_ITEMS = navigationItems([
-  ...primaryNavigation,
-  ...businessNavigation,
-  ...contentNavigation,
-  ...secondaryNavigation,
-  ...unasSettingsNavigation,
-  ...settingsNavigation,
-]);
+const ALL_NAVIGATION_ITEMS = allNavigationPages;
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -109,7 +102,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
 
   const canAccess = (item: AppNavigationItem) =>
-    Boolean(session && hasPermission(session.user, item.permission));
+    Boolean(
+      session && isNavigationEntryVisible(item.entryId, session.user.role),
+    );
   const isActive = (item: AppNavigationItem) =>
     isNavigationItemActive(pathname, item, ALL_NAVIGATION_ITEMS);
   const visibleUnasNavigation = unasSettingsNavigation.filter(canAccess);

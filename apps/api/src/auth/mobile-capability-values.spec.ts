@@ -3,7 +3,11 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import ts from "typescript";
-import { PERMISSIONS, ROLE_PERMISSIONS } from "@acropora/types";
+import {
+  navigationIdsFor,
+  PERMISSIONS,
+  ROLE_PERMISSIONS,
+} from "@acropora/types";
 import type { UserRole } from "@acropora/types";
 
 /**
@@ -166,5 +170,110 @@ describe("a mobil tükör ÉRTÉKEI", () => {
     assert.equal(divergent.length, 1);
     assert.equal(divergent[0]?.role, "SALES");
     assert.equal(divergent[0]?.key, "purchasingView");
+  });
+});
+
+/**
+ * A HALO A KOZOS FORRAS BEVEZETESEHEZ: A FORRAS UGYANAZT A HET CSEMPET ADJA,
+ * MINT A TELEFON MAI TABLAI. Hat csempe a kepesseg-tablakbol jon, a hetedik
+ * (NAV) a kepernyo sajat szerep-listajabol -- ezert all ket allitasban.
+ *
+ * A `@acropora/types` NAVIGATION_ENTRIES 2026-09-02 ota egy helyen irja le,
+ * mit lat egy szerep. A telefon MEG NEM olvassa: a sajat tablaibol dolgozik. Ez
+ * az allitas a ket oldalt veti ossze, es addig all itt, amig a telefon at nem
+ * all -- akkor a targya megszunik, mert nem lesz ket oldal.
+ *
+ * MIERT ITT: ugyanabbol az okbol, amiert a fajl tobbi allitasa. Csak innen
+ * latszik mind a ketto -- a szerver forrasa importtal, a telefon tukre pedig
+ * betoltve. Es a betoltot NEM irom ujra: a `loadMirror` mar itt all, es egy
+ * masodik, kicsit maskepp irt betolto elobb-utobb massal jonne ki.
+ *
+ * A KEPZES a csempek `code` ertekei es a forras azonositoi kozott KEZZEL irt,
+ * mert nem gepies -- ugyanaz az indok, mint a SERVER_PAIR tablanal fentebb.
+ */
+const TILE_ENTRY: Record<string, string> = {
+  assetsView: "service-assets",
+  worksheetsView: "worksheets",
+  ordersView: "webshop-orders",
+  purchasingView: "purchasing",
+  productsView: "products",
+  partnersView: "partners",
+};
+
+/**
+ * A NAV-CSEMPE NEM A KEPESSEG-TABLABAN AL, HANEM A KEPERNYO SAJAT
+ * SZEREP-LISTAJABAN (`NAV_TILE_ROLES` az `app/index.tsx`-ben), ezert a
+ * betoltott modul nem latja. A fajl SZOVEGEBOL olvassuk ki -- ugyanaz a modszer,
+ * amit a szomszed mirror-spec hasznal a szerep-uniora.
+ *
+ * ES EPP EZT A CSEMPET A LEGFONTOSABB ORIZNI: ez az EGYETLEN tetel, ami a
+ * kozos forrasban szerep-listas agon all, es a forras kommentje allitast tesz
+ * arrol, KIK azok. Ha valaki a telefonon atirja a listat, a forras csendben
+ * mast mondana.
+ */
+const NAV_TILE_SOURCE = "../mobile/src/app/index.tsx";
+
+function navTileRoles(): string[] {
+  const source = readFileSync(NAV_TILE_SOURCE, "utf8");
+  const match = /const NAV_TILE_ROLES[^=]*=\s*\[([\s\S]*?)\];/.exec(source);
+  assert.ok(match, "Nem találtam a NAV-csempe szerep-listáját.");
+  return [...match![1]!.matchAll(/"(\w+)"/g)].map((hit) => hit[1]!).sort();
+}
+
+describe("a mobil csempek es a kozos menu-forras", () => {
+  it("a NAV-csempe szerep-listája egyezik a forrás szerep-listás ágával", () => {
+    const telefonon = navTileRoles();
+
+    // KONTROLL A KERESESRE: ha a minta nem talal semmit, ket ures halmaz
+    // egyezne, es a sor zolden allitana, hogy minden rendben.
+    assert.ok(
+      telefonon.length >= 3,
+      `Csak ${telefonon.length} szerepet találtam a NAV-csempe listájában. Ez a keresés hibája.`,
+    );
+
+    const aForrasSzerint = (Object.keys(ROLE_PERMISSIONS) as UserRole[])
+      .filter((role) =>
+        navigationIdsFor(role, "mobile").includes("nav-integration-mobile"),
+      )
+      .sort();
+
+    assert.deepEqual(aForrasSzerint, telefonon);
+  });
+
+  it("ugyanazt a hat kepesseg-alapu csempet adjak minden szerepre", async () => {
+    const mirror = await loadMirror();
+    const eltero: string[] = [];
+    let osszevetes = 0;
+
+    for (const role of Object.keys(ROLE_PERMISSIONS) as UserRole[]) {
+      const forras = new Set(navigationIdsFor(role, "mobile"));
+      const webshop = mirror.getWebshopCapabilities(role);
+      const service = mirror.getServiceCapabilities(role);
+      const telefon: Record<string, boolean> = { ...webshop, ...service };
+
+      for (const [key, entryId] of Object.entries(TILE_ENTRY)) {
+        osszevetes += 1;
+        const aTelefonon = telefon[key] === true;
+        const aForrasban = forras.has(entryId);
+        if (aTelefonon !== aForrasban)
+          eltero.push(
+            `${role}.${key}: a telefon ${aTelefonon}, a forras ${aForrasban} (${entryId})`,
+          );
+      }
+    }
+
+    // KONTROLL: hat kulcs es het szerep negyvenket part ad. Egy elromlott
+    // betoltes vagy egy ures kepzes nulla osszevetest adna, ami zold.
+    assert.ok(
+      osszevetes >= 40,
+      `Csak ${osszevetes} párt tudtam összevetni. Ez a mérés hibája, nem a forrásé.`,
+    );
+    assert.deepEqual(
+      eltero,
+      [],
+      "A közös forrás mást mond a telefon csempéiről, mint a telefon mai " +
+        "táblái. A bevezetés ígérete az, hogy semmi nem változik: " +
+        eltero.join("; "),
+    );
   });
 });

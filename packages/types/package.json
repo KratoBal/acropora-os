@@ -11,7 +11,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "pnpm --filter \"@acropora/types^...\" build && tsc -p tsconfig.test.json && node --test test-dist/auth.test.js test-dist/person-name.test.js test-dist/domain-events.test.js test-dist/integrations/unas.test.js",
+    "test": "pnpm --filter \"@acropora/types^...\" build && rm -rf test-dist && tsc -p tsconfig.test.json && tests=$(find test-dist -name '*.test.js') && { [ -n \"$tests\" ] || { echo 'Nem talaltam teszt fajlt - nem jelentek sikert.' >&2; exit 1; }; } && node --test $tests",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "clean": "rm -rf dist"
   },

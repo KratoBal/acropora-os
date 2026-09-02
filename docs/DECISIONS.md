@@ -313,3 +313,135 @@ akkor is lefut, ha maga a kijelentkezés hívása nem ért el a szerverhez.
 **Ami nyitva marad:** a felső korlát (ma húsz oldal, ezer eszköz) becslés, nem
 mérés. Ha egy telepítés ezt túllépi, a felület kiírja, hány eszköz maradt ki --
 és akkor lesz adatunk arról, mekkora korlát kell.
+
+## ADR-012 – A menü egy közös forrásból származik, és a telefon a szerverről kapja
+
+**Dátum:** 2026-09-02
+
+**Döntés:** a menü szerkezete EGY forrásból származik, amit a webes felület és a
+szerver is olvas, a telefon pedig a szervertől kap meg a `GET /auth/me`
+válaszában. A jogosultság marad a kapu; a menü-adat csak elrejteni tud,
+engedélyezni nem.
+
+**A mérés, amiből következik (2026-09-02):** a menü ma két helyen áll, két külön
+névkészlettel. A weben 27 tétel egy kódba írt tömbben, tételenként egy
+jogosultsági kulccsal. A telefonon 7 csempe, három különböző módon kapuzva: öt
+tükrözött képesség-táblából (`assetsView` ott, `service.view` a szerveren), egy
+szerep-listából, és a "látszik-e" külön áll a "megnyitható-e" mezőtől. Ebből jött
+a korlát, amit ez az ADR old fel: a telefon menüjének megváltoztatása
+kódváltozás, tehát új bolti kiadás, míg a weben ugyanaz egy sor.
+
+### Miért a `GET /auth/me` bővítése, és nem külön végpont
+
+Mindkét kliens **már hívja**, pontosan akkor, amikor a keretet felépíti (a mobil
+induláskor, a web a munkamenet betöltésekor). Egy válaszban nincs részleges
+állapot. Egy testvérvégpont két új állapotot hozna létre, amelyek ma nem
+léteznek: mit rajzol a keret, amíg az a hívás tölt, és mit, ha hibázik.
+
+**Amit ez költ:** a `/auth/me` válasza nő. Ha a menü később nagyra nő, vagy saját
+gyorsítótár-élettartamot kap, a szétválasztás visszafelé kompatibilis lépés (új
+végpont, a mező egy ideig mindkettőben) – ezért nem zár be semmit.
+
+### AZ ÍGÉRET HATÁRA, SZÓ SZERINT
+
+**Elrejteni új kiadás nélkül lehet. Megmutatni csak azt lehet, amit a TELEPÍTETT
+alkalmazás már ismer: a képernyő a buildben van.** Egy új menüpont a telefonon
+továbbra is kiadást igényel.
+
+Ez a mondat azért áll itt szó szerint, mert enélkül a döntés "a menü a szerverről
+jön, tehát nincs több kiadás" alakban fog továbbutazni – és az fele igaz.
+
+Ebből következik a kliens szabálya: az **ismeretlen azonosítójú tételt hagyja ki**,
+ne próbálja kirajzolni. Egy újabb szerver így nem tör el egy régebbi alkalmazást;
+a verzió-csúszás normál állapot, nem kivétel.
+
+### Az új oldal alapértelmezése: LÁTSZIK
+
+Egy oldal, amit a kód már ismer, de a menü-adat még nem, **alapértelmezetten
+látszik annak, akinek a joga megvan.**
+
+**Az indok, és ezért áll itt, mert a fordítottja látszik biztonságosabbnak:** a
+túl tág láthatóság HANGOS – valaki szól, hogy lát valamit, amit nem kellene, és
+egy sorral javítható. A túl szűk NÉMA: egy kész funkció láthatatlan marad, és
+senki nem keresi, mert nem tud róla. A ritkább, de rejtve maradó hiba a drágább.
+
+Ebből következik a határ: **a jogosultság a kapu, az adat csak elrejteni tud.**
+Egy adatsor sosem adhat láthatóságot annak, akinek a joga hiányzik – különben a
+beállítás-felület jogosultság-osztóvá válna, és a kapu két helyre kerülne.
+
+### A NAV-csempe: szerep-listás ág marad, lejárati feltétellel
+
+**Mérve:** a csempe mai szerep-listája (OWNER, ADMIN, MANAGER, WAREHOUSE,
+VIEWER) **pontosan** azoké, akiknek `purchasing.view` joguk van – tehát egyetlen
+joggal kifejezhető, holott a kód kommentje három jogot nevez meg
+(`settings.manage` + `customers.manage` + `purchasing.view`; azok `all` alakban
+csak OWNER-t és ADMIN-t, `any` alakban SALES-t is adnának).
+
+**Döntés:** a forrás ismer egy szerep-listás ágat, és azon **egyetlen** tétel áll.
+
+**A két elvetett út, és miért – hogy fél év múlva ne kelljen újra megmérni:**
+
+- **`purchasing.view`-ra cserélni.** Ma betűre ugyanaz a viselkedés. A tévedése
+  később jön elő, és **néma**: ha valaki egyszer ad `purchasing.view` jogot a
+  SALES szerepnek, a csempe megjelenik nála, és senki nem fogja egy refaktorhoz
+  kötni. A két szabály ma egybeesik, de nem ugyanaz.
+- **`all` a három jogra**, ahogy a komment szándéka sugallja. Ez **azonnal**
+  elvenné a láthatóságot a MANAGER, a WAREHOUSE és a VIEWER szereptől, és ez is
+  néma: aki eddig látta, annak eltűnik, hibaüzenet nélkül.
+- A szerep-listás ág tévedése ezzel szemben **hangos**: ha rossz a lista, valaki
+  azonnal szól, és egy sorral javítható.
+
+**És a lejárat, mert egy kivétel feltétel nélkül örökre megmarad:** a
+szerep-listás ág `retiredBy` mezője **kötelező**, és megnevezi, mi szünteti meg –
+az a kimondott döntés, hogy a csempe joga `purchasing.view` legyen. Ma nincs
+értelme megkérdezni: a csempe nem nyitható meg (`enabled={false}`), és egy nem
+nyitható csempe láthatóságáról dönteni ugyanaz a hiba lenne, mint egy üres
+oldalhoz jogosultsági szabályt tervezni. Amikor a funkció épül, a szabály **bele**
+kerül, nem rá.
+
+**Jog-halmaz (bármelyik/mindegyik) szándékosan nincs.** Mérve: ma egyetlen tétel
+sem kéri – mind a 26 webes oldal és a 7 csempéből 6 pontosan egy jogon áll.
+Előrelátást nem építünk oda, ahol a mérés azt mondja, hogy senki nem kéri, és ez
+azért olcsó, mert a bővítés visszafelé kompatibilis: egy jogból bármikor lehet
+egyelemű halmaz úgy, hogy a régi alak értelmezése megmarad.
+
+### Amit ez a lépés menet közben lezárt
+
+A webes keret és a felhasználó-szerkesztő "mely oldalakat éri el ez a szerep"
+előnézete **két külön listát fűzött össze**, és el is csúsztak (mérve
+2026-09-02): az előnézet kihagyta a Tartalom oldalt, és duplán sorolta a két
+szerviz-menüpontot – 26 oldal helyett 27 tételt mutatott. Ez nem a telefonról
+szólt, hanem ugyanarról a hibafajtáról egy felületen belül. Az összefűzés
+mostantól egy helyen áll (`allNavigationPages`), tehát ez az elcsúszás nem
+"javítva lett", hanem nem tud előállni.
+
+### AZ ÁLLAPOT: MI ÁLL EBBŐL MA, ÉS MI A TERV
+
+Ez az ADR a **döntést** rögzíti, nem a kész állapotot. A bevezetés négy lépés,
+mindegyik külön PR, és a sorrend kötött: **előbb álljon az új állítás, csak
+utána essen ki a régi** – nem lehet olyan kör, amelyben semmi nem méri.
+
+1. **KÉSZ.** A forrás létrejött (`packages/types/src/navigation.ts`), a webes
+   felület onnan dolgozik, és két háló őrzi, hogy a viselkedés nem változott: a
+   webes menü minden szerepre azt adja, amit a korábbi, kódba írt kulcsok adtak,
+   a forrás mobil nézete pedig azt, amit a telefon mai táblái.
+2. **HÁTRAVAN.** A szerver kiadja a `GET /auth/me` válaszában, a kérőre már
+   szűrve, és egy állítás követeli meg, hogy a kiadott válasz egyezzen a szerver
+   saját jogosultság-táblájával.
+3. **HÁTRAVAN.** A telefon a kiadott válaszra áll át. Ebben a körben a mobil
+   táblái még megmaradnak, tehát két független forrás áll egyszerre, és
+   mindkettő mérve van.
+4. **HÁTRAVAN.** Csak ezután esik ki a mobil tábla és a hozzá tartozó két
+   ellenőrzés. Egy nyitott kérdés ide tartozik: a telefon szolgáltatás-oldali
+   képességeit egy **függvény** számolja, nem tábla, és ha a közös forrás csak a
+   menüt írja le, az a függvény nem szűnik meg. Ezt a 3. lépésnél kell eldönteni,
+   mérésből.
+
+**Amíg a 2. lépés nincs kész, a telefon menüje továbbra is kódváltozás** – vagyis
+a fenti ígéret ("elrejteni új kiadás nélkül lehet") a 2. és 3. lépéssel válik
+igazzá, nem ezzel.
+
+### Amit ez az ADR NEM dönt el
+
+A beállítás-felület és a felhasználónkénti felülbírálat. Mindkettő külön terv, és
+ez az ADR az előfeltételük, nem a helyettesítőjük.

@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { hasPermission, type UserRole } from "@acropora/types";
+import {
+  hasPermission,
+  isNavigationEntryVisible,
+  navigationEntry,
+  USER_ROLES,
+  type Permission,
+  type UserRole,
+} from "@acropora/types";
 
 import {
+  allNavigationPages,
   businessNavigation,
-  contentNavigation,
   isNavigationGroup,
   isNavigationItemActive,
   navigationItems,
@@ -24,16 +31,13 @@ import {
  * -- es epp a kimaradt listaban allo tobbletet nem venne eszre. A hatos
  * felsorolas ezert masolat, nem valogatas.
  */
+// A KERET SAJAT LISTAJA, nem egy ittani masolata: ha az osszefuzes elcsuszik,
+// ennek a fajlnak MINDEN allitasa vele csuszik, tehat a halo nem hazudik.
+const shellNavigationItems = () => allNavigationPages;
+
 function visibleLabelsFor(role: UserRole): string[] {
-  return navigationItems([
-    ...primaryNavigation,
-    ...businessNavigation,
-    ...contentNavigation,
-    ...secondaryNavigation,
-    ...unasSettingsNavigation,
-    ...settingsNavigation,
-  ])
-    .filter((item) => hasPermission(role, item.permission))
+  return allNavigationPages
+    .filter((item) => isNavigationEntryVisible(item.entryId, role))
     .map((item) => item.label);
 }
 
@@ -231,12 +235,16 @@ describe("navigation", () => {
     });
   });
 
-  it("opens groups out into their pages, each with a permission", () => {
+  it("opens groups out into their pages, each resolving in the shared source", () => {
     const items = navigationItems(businessNavigation);
 
     expect(items.map((item) => item.href)).toContain("/szerviz/munkalapok");
     for (const item of items) {
-      expect(item.permission).toBeTruthy();
+      // ERŐSEBB ALLITAS, MINT A KORABBI "van jogosultsagi kulcsa": egy elgepelt
+      // azonositora a keresés `undefined`-ot ad, es a menupont MINDENKI elol
+      // eltunne (az `isNavigationEntryVisible` ismeretlen azonositora hamisat
+      // ad). Ezt a hibat egy "truthy" ellenorzes nem fogta volna meg.
+      expect(navigationEntry(item.entryId)).toBeDefined();
       expect(item.href.startsWith("/")).toBe(true);
     }
   });
@@ -312,5 +320,88 @@ describe("navigation", () => {
       "AI teszt",
     ])
       expect(owner).toContain(label);
+  });
+
+  /**
+   * A HALO: A KOZOS FORRAS PONTOSAN A MAI VISELKEDEST ADJA, MINDEN SZEREPRE.
+   *
+   * Ez a tabla a menupontok jogosultsagi kulcsait tartalmazza UGY, AHOGY 2026-09-02-an
+   * a `navigation.ts`-ben alltak, kozvetlenul a kozos forras bevezetese elott.
+   * Merve, nem emlekezetbol: a fajlbol lettek kiolvasva.
+   *
+   * MIERT NEM KORKOROS: a varakozas itt LEIRT ADAT, nem a forrasbol szamolt
+   * ertek. Ha a forras barmelyik tetel szabalyat maskepp irja le, mint ahogy a
+   * jogosultsagi kulcs adta, ez a sor pirosodik -- barmelyik szerepnel.
+   *
+   * MIT NEM BIZONYIT: azt, hogy a mai viselkedes HELYES. Csak azt, hogy a
+   * bevezetes nem valtoztatta meg. Ez az (1) lepes teljes igerete.
+   */
+  const A_BEVEZETES_ELOTTI_JOGOK: Record<string, Permission> = {
+    "/": "dashboard.view",
+    "/feladataim": "tasks.view",
+    "/szerviz/munkalapok": "service.view",
+    "/szerviz/eszkozok": "service.view",
+    "/tartalom": "content.view",
+    "/pos": "orders.view",
+    "/webshop": "orders.view",
+    "/vevok": "customers.view",
+    "/webshop/termekek": "products.view",
+    "/products": "products.view",
+    "/partnerek": "partners.view",
+    "/beszerzes": "purchasing.view",
+    "/beszerzes/nav-szamlak": "purchasing.view",
+    "/penzugy/foxpost": "finance.view",
+    "/raktar": "inventory.view",
+    "/keszlet-egyeztetes": "inventory.view",
+    "/akvariumok": "aquariums.view",
+    "/icp": "icp.view",
+    "/admin/integrations/unas/connection": "settings.manage",
+    "/admin/integrations/unas": "products.view",
+    "/ai-teszt": "ai-test.view",
+    "/admin/brands": "products.view",
+    "/beallitasok": "settings.manage",
+    "/admin/integrations/nav": "settings.manage",
+    "/admin/integrations/medusa/connection": "settings.manage",
+    "/admin/users": "users.manage",
+  };
+
+  it("reproduces, for every role, exactly what the hard-coded keys produced", () => {
+    const items = shellNavigationItems();
+
+    // A KONTROLL: a tabla ES a menu ugyanarrol a huszonhat oldalrol szoljon. Egy
+    // uj menupont, amit senki nem vesz fel ide, kulonben CSENDBEN kimaradna az
+    // osszevetesbol, es a halo pont ott lenne lyukas, ahol uj a kod.
+    expect([...new Set(items.map((item) => item.href))].sort()).toEqual(
+      Object.keys(A_BEVEZETES_ELOTTI_JOGOK).sort(),
+    );
+
+    for (const role of USER_ROLES) {
+      const aForrasSzerint = items
+        .filter((item) => isNavigationEntryVisible(item.entryId, role))
+        .map((item) => item.href);
+      const aRegiKulcsokSzerint = items
+        .filter((item) =>
+          hasPermission(role, A_BEVEZETES_ELOTTI_JOGOK[item.href]!),
+        )
+        .map((item) => item.href);
+
+      expect([role, aForrasSzerint]).toEqual([role, aRegiKulcsokSzerint]);
+    }
+  });
+
+  /**
+   * A FELHASZNALO-SZERKESZTO ELONEZETE UGYANAZT A HAT LISTAT FUZI OSSZE, mint a
+   * keret. Merve 2026-09-02, a bevezetes ELOTT: nem ugyanazt tette, es harom
+   * ponton mondott mast -- kihagyta a Tartalom oldalt, es duplan sorolta a ket
+   * szerviz-menupontot (26 kontra 27 tetel).
+   *
+   * MI PIROSIT: ha a ket lista barmelyike valtozik a masik nelkul. Ezert all
+   * ITT, es nem a szerkeszto sajat tesztjeben: onnan csak az egyik oldal latszik.
+   */
+  it("previews the same pages the shell renders, with no duplicates", () => {
+    const hrefs = shellNavigationItems().map((item) => item.href);
+
+    expect(hrefs).toEqual([...new Set(hrefs)]);
+    expect(hrefs).toContain("/tartalom");
   });
 });
