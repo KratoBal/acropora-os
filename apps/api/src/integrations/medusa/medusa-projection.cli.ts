@@ -1,6 +1,11 @@
 import { pathToFileURL } from "node:url";
 
 import { prisma } from "@acropora/database";
+
+import {
+  decideMedusaCategories,
+  describeMissingCategoryMapping,
+} from "./medusa-category.policy.js";
 import { isKnownCatalogAuthority } from "./medusa-publication.policy.js";
 
 import {
@@ -271,6 +276,7 @@ export async function runProjectionCli(
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
           select: { sku: true },
         },
+        categories: { select: { categoryId: true } },
       },
     });
 
@@ -307,12 +313,47 @@ export async function runProjectionCli(
       continue;
     }
 
+    /**
+     * A MI KATEGORIAINK -> MEDUSA AZONOSITOK.
+     *
+     * Itt csak a LEKERDEZES all; maga a szabaly a `medusa-category.policy.ts`
+     * modulban, mert ez a fuggveny a `prisma`-t MODUL-SZINTU importbol veszi,
+     * tehat ami ide kerul, azt csak eles adatbazissal lehetne megmerni.
+     *
+     * A lekepezes-sorokat az irja, aki a kategoriakat a Medusaban LETREHOZZA
+     * (`ExternalReference`, `system: "MEDUSA"`): a Medusa-azonosito ott
+     * keletkezik, nem itt.
+     *
+     * A HAROM ESETBOL KETTO ITT VALIK SZET: a keres torzsere nezve a "nincs
+     * kategoriaja" es a "van, de meg nincs lekepezve" ugyanaz (egyik sem kuld
+     * mezot), de a masodik HIANY, ezert kiirodik.
+     */
+    const osCategoryIds = product.categories.map((row) => row.categoryId);
+    const categories = decideMedusaCategories(
+      osCategoryIds,
+      osCategoryIds.length
+        ? await prisma.externalReference.findMany({
+            where: {
+              system: "MEDUSA",
+              entityType: "Category",
+              entityId: { in: osCategoryIds },
+            },
+            select: { entityId: true, externalId: true },
+          })
+        : [],
+    );
+    if (categories.kind === "incomplete")
+      out.stderr(
+        `${describeMissingCategoryMapping(product.id, categories.missing)}\n`,
+      );
+
     const outcome = await service!.project(
       {
         id: product.id,
         name: product.name,
         description: product.description,
         primarySku: product.variants[0]?.sku ?? null,
+        medusaCategoryIds: categories.medusaCategoryIds,
         publication: {
           catalogAuthority: product.catalogAuthority,
           isActive: product.isActive,

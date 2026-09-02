@@ -45,6 +45,8 @@ const product: ProjectableProduct = {
   name: "Reef Pump",
   description: "Leírás",
   primarySku: "PUMP-1",
+  /** A fixtura NEM ad teljes kategoria-listat: a mezo igy nem kerul a torzsbe. */
+  medusaCategoryIds: null,
   publication: {
     catalogAuthority: "ACROPORA",
     isActive: true,

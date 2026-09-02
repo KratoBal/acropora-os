@@ -32,6 +32,8 @@ const product: ProjectableProduct = {
    * amiről eddig: az azonossági láncról. A publikációs viselkedést külön
    * tesztek mérik, saját bemenettel.
    */
+  /** A fixtura NEM ad teljes kategoria-listat: a mezo igy nem kerul a torzsbe. */
+  medusaCategoryIds: null,
   publication: {
     catalogAuthority: "ACROPORA",
     isActive: true,
@@ -505,6 +507,75 @@ describe("a publikáció és a csatorna a vetítésben", () => {
     assert.deepEqual(createdWith.at(-1)?.sales_channels, [
       { id: SALES_CHANNEL },
     ]);
+  });
+
+  /**
+   * A LEKEPEZETT AZONOSITOK ATMENNEK, es mind a KET iranyban: a letrehozas es a
+   * frissites ugyanabbol a szamitasbol dolgozik.
+   */
+  it("a leképezett kategóriákat átadja a létrehozásban", async () => {
+    const { service, createdWith } = fakes({ link: null, found: [] });
+
+    await service.project(
+      { ...sellableProduct(), medusaCategoryIds: ["pcat_1", "pcat_2"] },
+      now,
+    );
+
+    assert.deepEqual(createdWith.at(-1)?.categories, [
+      { id: "pcat_1" },
+      { id: "pcat_2" },
+    ]);
+  });
+
+  it("a leképezett kategóriákat átadja a frissítésben is", async () => {
+    const { service, updatedWith } = fakes({
+      link: { productId: product.id, medusaProductId: "prod_medusa_1" },
+      found: [],
+    });
+
+    await service.project(
+      { ...sellableProduct(), medusaCategoryIds: ["pcat_1"] },
+      now,
+    );
+
+    assert.deepEqual(updatedWith.at(-1)?.categories, [{ id: "pcat_1" }]);
+  });
+
+  /**
+   * EZ AZ AZ ALLITAS, AMI EGY CSENDES TORLEST ELOZ MEG.
+   *
+   * A mezo ELHAGYASA es az URES TOMB nem ugyanaz. A `sales_channels`-rol a
+   * telepitett 2.19.0 forrasabol MERTUK, hogy csere-szemantikaju: ott az ures
+   * lista a lekotes. A `categories`-ra ugyanez nincs elesben megmerve -- a
+   * termek-frissites csere-listaja nem tartalmazza --, es amig nincs, a
+   * szigorubb olvasat szerint jarunk el.
+   *
+   * Ha ez az allitas kiesne, es a mezo csere-szemantikaju lenne, egy vetites
+   * LEVENNE a termekrol a kategoriait. Nem hibauzenettel: a hivas sikerrel
+   * terne vissza, es a kirakatban esnenek ki a termekek a kategoriaikbol.
+   */
+  it("leképezés nélkül a kérés törzsében NINCS categories kulcs", async () => {
+    const { service, createdWith } = fakes({ link: null, found: [] });
+
+    await service.project(
+      { ...sellableProduct(), medusaCategoryIds: null },
+      now,
+    );
+
+    const torzs = createdWith.at(-1)!;
+    assert.ok(
+      !("categories" in torzs),
+      "üres tömb helyett a mezőnek EL kell maradnia",
+    );
+  });
+
+  /** Ugyanez ures listara: az sem lehet ures tomb a torzsben. */
+  it("üres listából sem lesz üres tömb", async () => {
+    const { service, createdWith } = fakes({ link: null, found: [] });
+
+    await service.project({ ...sellableProduct(), medusaCategoryIds: [] }, now);
+
+    assert.ok(!("categories" in createdWith.at(-1)!));
   });
 
   it("nem értékesíthető terméknél draft ÉS üres csatorna-lista megy egy kérésben", async () => {

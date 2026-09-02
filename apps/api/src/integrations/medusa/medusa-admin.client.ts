@@ -64,6 +64,23 @@ export interface MedusaProductInput {
    * az ÜRES lista a lekötés.
    */
   sales_channels?: { id: string }[];
+  /**
+   * A termek kategoriai, azonosito szerint.
+   *
+   * A MEZO ELHAGYASA ES AZ URES TOMB NEM UGYANAZ, es ez nem elmeleti
+   * kulonbseg. A `sales_channels`-rol a telepitett 2.19.0 forrasabol MERTUK,
+   * hogy csere-szemantikaju: az ures lista a lekotes. A `categories`-rol
+   * ugyanez NEM merheto ki ugyanonnan -- a termek-frissites csere-listaja
+   * (`relations: ["options", "options.values", "tags"]`) NEM tartalmazza,
+   * tehat mas uton kezelodik, es hogy melyiken, azt ez a lista nem mondja meg.
+   *
+   * AMIG EZ NINCS ELESBEN MEGMERVE, a hivo szabalya: ha nincs mit kuldeni, a
+   * mezot EL KELL HAGYNI, nem ures tombot kuldeni. Ha csere-szemantikaju, az
+   * ures tomb TOROLNE a termek besorolasat; ha nem az, a mezo elhagyasa
+   * ugyanolyan helyes. A ket vilag kozul csak az egyikben szamit, es ott
+   * SULYOSAN.
+   */
+  categories?: { id: string }[];
   options: { title: string; values: string[] }[];
   variants: {
     title: string;
