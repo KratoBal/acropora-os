@@ -11,10 +11,10 @@ import {
   Post,
   Query,
   StreamableFile,
-  UploadedFile,
+  UploadedFiles,
   UseInterceptors,
 } from "@nestjs/common";
-import { FileInterceptor } from "@nestjs/platform-express";
+import { FilesInterceptor } from "@nestjs/platform-express";
 import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 import { memoryStorage } from "multer";
 
@@ -28,6 +28,12 @@ import {
   UploadAssetDocumentDto,
 } from "./dto/asset.dto.js";
 import { ServiceAssetsService } from "./service-assets.service.js";
+
+/**
+ * Hány fájl mehet egy feltöltési kérésben. A fájlok a memóriában gyűlnek, így
+ * a legrosszabb eset ennek és a 10 megabájtos fájlméretnek a szorzata.
+ */
+export const MAX_DOCUMENTS_PER_UPLOAD = 10;
 
 @Controller("service/assets")
 export class ServiceAssetsController {
@@ -119,22 +125,64 @@ export class ServiceAssetsController {
     return this.service.rotateQr(id, user.id);
   }
 
+  /**
+   * TÖBB FÁJL EGY KÉRÉSBEN, UGYANAZON A MEZŐNÉVEN.
+   *
+   * A mezőnév szándékosan maradt `file`: a webes felület ma egyetlen fájlt
+   * küld ezen a néven, és egy átnevezés azt a hívót törte volna el, ami ma
+   * működik. A `FilesInterceptor` ugyanazt a nevet több példányban is
+   * elfogadja, tehát a régi hívó változatlanul megy, az új pedig többet küld.
+   *
+   * A DARABSZÁM KORLÁT NEM ÍZLÉS: a fájlok a memóriában gyűlnek
+   * (`memoryStorage`), tehát egy kérés legrosszabb esete a darabszám és a
+   * fájlméret szorzata. Tíz kép tíz megabájttal száz megabájt egyetlen
+   * kérésben - ez a felső határ, amit egy telefon egy körben feltölthet.
+   */
   @Post(":id/documents")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
   @UseInterceptors(
-    FileInterceptor("file", {
+    // EGGYEL TÖBBET ENGEDÜNK BE, MINT AMENNYIT ELFOGADUNK, és ez nem
+    // pongyolaság. A multer a saját korlátját a stream szintjén vágja el, és a
+    // hibáját semmi nem alakítja át: a hívó 500-at kapna, holott csak túl sok
+    // fájlt jelölt ki. Egy fájllal több beolvasása legfeljebb tíz megabájt, és
+    // cserébe a válasz megmondja, mi a baj és mi a határ.
+    FilesInterceptor("file", MAX_DOCUMENTS_PER_UPLOAD + 1, {
       storage: memoryStorage(),
-      limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+      limits: { fileSize: 10 * 1024 * 1024 },
     }),
   )
-  uploadDocument(
+  async uploadDocument(
     @Param("id") id: string,
     @Body() input: UploadAssetDocumentDto,
-    @UploadedFile() file: Express.Multer.File | undefined,
+    @UploadedFiles() files: Express.Multer.File[] | undefined,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    if (!file) throw new BadRequestException("A feltöltendő fájl kötelező.");
-    return this.service.addDocument(id, input.type, file, user.id);
+    if (!files?.length)
+      throw new BadRequestException("A feltöltendő fájl kötelező.");
+    if (files.length > MAX_DOCUMENTS_PER_UPLOAD)
+      throw new BadRequestException(
+        `Egyszerre legfeljebb ${MAX_DOCUMENTS_PER_UPLOAD} fájl tölthető fel.`,
+      );
+
+    // EGYESÉVEL, SORBAN, ÉS NEM PÁRHUZAMOSAN. A keret-ellenőrzés a már
+    // felhasznált helyet olvassa a táblából: párhuzamos írásoknál mindegyik
+    // ugyanazt a régi összeget látná, és együtt átvinnék a határon úgy, hogy
+    // külön-külön mindegyik belefért volna.
+    const created = [];
+    for (const file of files) {
+      created.push(
+        await this.service.addDocument(id, input.type, file, user.id),
+      );
+    }
+
+    // MINDIG LISTA, EGY FÁJLNÁL IS.
+    //
+    // Az első alak egy fájlnál objektumot adott vissza, többnél tömböt - és a
+    // fordító azonnal megfogta, egy hívóban, ami az `.id` mezőt olvasta. Jól
+    // tette: egy válasz, aminek a TÍPUSA a bemenettől függ, minden hívót arra
+    // kényszerít, hogy kitalálja, melyik ágon jár. A lista mindkét esetben
+    // ugyanaz a szerződés, és a hívó egy sorral igazodik hozzá.
+    return created;
   }
 
   @Get(":id/documents/:documentId")

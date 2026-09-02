@@ -346,3 +346,85 @@ describe("what the stored row says the file is", () => {
     assert.equal(written.length, 0);
   });
 });
+
+describe("more than one file in a single request", () => {
+  function capture() {
+    const written: Record<string, unknown>[] = [];
+    const service = new ServiceAssetsService(
+      repositoryThat({
+        addDocument: (async (input: Record<string, unknown>) => {
+          written.push(input);
+          return { id: `doc-${written.length}` } as never;
+        }) as unknown as ServiceAssetsRepository["addDocument"],
+      }),
+      new InMemoryDocumentStore(),
+    );
+    return { service, written };
+  }
+
+  /**
+   * MINDEN FÁJL KÜLÖN SORT KAP, ÉS MINDEGYIK A SAJÁT TARTALMÁT.
+   *
+   * A kézenfekvő hiba az volna, hogy a ciklus ugyanazt a puffert vagy ugyanazt
+   * a nevet írja mindegyikhez - a feltöltés akkor is "sikeres", és a hiba csak
+   * a letöltésnél derül ki, amikor mindhárom kép ugyanaz.
+   */
+  it("három fájlból három sor lesz, mindegyik a saját tartalmával", async () => {
+    delete process.env.DOCUMENT_STORE_ROOT;
+    const { service, written } = capture();
+
+    for (const [buffer, mimetype, name] of [
+      [PDF, "application/pdf", "szamla.pdf"],
+      [JPEG, "image/jpeg", "elso.jpg"],
+      [JPEG, "image/jpg", "masodik.jpg"],
+    ] as const) {
+      await service.addDocument(
+        ASSET,
+        "OTHER",
+        upload(buffer, mimetype, name),
+        "user-1",
+      );
+    }
+
+    assert.equal(written.length, 3);
+    assert.deepEqual(
+      written.map((row) => row.fileName),
+      ["szamla.pdf", "elso.jpg", "masodik.jpg"],
+    );
+    assert.deepEqual(
+      written.map((row) => row.contentType),
+      ["application/pdf", "image/jpeg", "image/jpeg"],
+    );
+  });
+
+  /**
+   * EGY ROSSZ FÁJL NEM VISZI MAGÁVAL A TÖBBIT, DE AMI ELŐTTE MENT, AZ MEGMARAD.
+   *
+   * A végpont egyesével, sorban ír, tehát egy elutasítás a sorban lévő
+   * következőket állítja meg - az addigiak viszont bent maradnak. Ez tudatos:
+   * a másik alak (mindent visszagörgetni) egyetlen rossz képért eldobná a
+   * szerelő kilenc jó fényképét, és a telefonon nincs mit újratölteni.
+   */
+  it("a hibás fájl megáll, az előtte lévők megmaradnak", async () => {
+    delete process.env.DOCUMENT_STORE_ROOT;
+    const { service, written } = capture();
+
+    await service.addDocument(
+      ASSET,
+      "OTHER",
+      upload(JPEG, "image/jpeg", "jo.jpg"),
+      "user-1",
+    );
+    await assert.rejects(() =>
+      service.addDocument(
+        ASSET,
+        "OTHER",
+        upload(PDF, "image/png", "alcazott.png"),
+        "user-1",
+      ),
+    );
+
+    assert.equal(written.length, 1);
+    assert.equal(written[0]!.fileName, "jo.jpg");
+  });
+});

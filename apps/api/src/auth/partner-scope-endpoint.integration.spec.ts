@@ -446,18 +446,18 @@ describe(
         assets.uploadDocument(
           assetA,
           Object.assign(new UploadAssetDocumentDto(), { type: "INVOICE" }),
-          pdf(invoiceFileNameOfA),
+          [pdf(invoiceFileNameOfA)],
           asInternal,
         ),
         assets.uploadDocument(
           assetA,
           Object.assign(new UploadAssetDocumentDto(), { type: "WARRANTY" }),
-          pdf(`${shared}-garancia.pdf`),
+          [pdf(`${shared}-garancia.pdf`)],
           asInternal,
         ),
       ]);
-      invoiceOfA = invoice.id;
-      warrantyOfA = warranty.id;
+      invoiceOfA = invoice[0]!.id;
+      warrantyOfA = warranty[0]!.id;
 
       /**
        * DOKUMENTUM A MASIK PARTNER ESZKOZEN. A letoltesi uton KET ellenorzes
@@ -468,10 +468,10 @@ describe(
       const warrantyB = await assets.uploadDocument(
         assetB,
         Object.assign(new UploadAssetDocumentDto(), { type: "WARRANTY" }),
-        pdf(`${shared}-garancia-B.pdf`),
+        [pdf(`${shared}-garancia-B.pdf`)],
         asInternal,
       );
-      warrantyOfB = warrantyB.id;
+      warrantyOfB = warrantyB[0]!.id;
 
       /**
        * A TORLES-ESEMENY KULON ESZKOZON all, hogy a fenti allitasok ne
@@ -503,24 +503,24 @@ describe(
         assets.uploadDocument(
           assetForDeletes,
           Object.assign(new UploadAssetDocumentDto(), { type: "INVOICE" }),
-          pdf(deletedInvoiceFileName),
+          [pdf(deletedInvoiceFileName)],
           asInternal,
         ),
         assets.uploadDocument(
           assetForDeletes,
           Object.assign(new UploadAssetDocumentDto(), { type: "WARRANTY" }),
-          pdf(deletedWarrantyFileName),
+          [pdf(deletedWarrantyFileName)],
           asInternal,
         ),
       ]);
       await assets.deleteDocument(
         assetForDeletes,
-        toDeleteInvoice.id,
+        toDeleteInvoice[0]!.id,
         asInternal,
       );
       await assets.deleteDocument(
         assetForDeletes,
-        toDeleteWarranty.id,
+        toDeleteWarranty[0]!.id,
         asInternal,
       );
     });
