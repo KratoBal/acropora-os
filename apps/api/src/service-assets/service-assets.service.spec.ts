@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { InMemoryDocumentStore } from "./document-store/in-memory-document-store.js";
 import test from "node:test";
 
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, ConflictException } from "@nestjs/common";
 import type { AssetDetail } from "@acropora/types";
 
 import type { PartnerScope } from "../auth/partner-scope.util.js";
+import { AssetLabelUnavailableError } from "./service-assets.repository.js";
 import type { ServiceAssetsRepository } from "./service-assets.repository.js";
 import { ServiceAssetsService } from "./service-assets.service.js";
 import {
@@ -106,6 +107,7 @@ test("rejects a parent asset owned by a different customer", async () => {
           name: "Szivattyú",
         },
         "user-1",
+        { kind: "internal" },
       ),
     BadRequestException,
   );
@@ -287,4 +289,80 @@ test("leaves the list untouched when no scope is given", () => {
 test("uses the same condition as the owner picker", () => {
   const scoped = assetOwnerScopeWhere("SERVICE_PARTNER");
   assert.deepEqual(scoped.supplier, { is: { ...SERVICE_OWNER_WHERE } });
+});
+
+/**
+ * A MATRICA-UZENET KET AGA, MINDKETTO ALLITASSAL.
+ *
+ * Balazs dontese (2026-09-02): "a sajat embereinknek mondjuk meg melyik eset
+ * all fenn". A partnernek marad az osszevont uzenet, mert nala a ket eset
+ * kulonvalasztasa felterkepezhetove tenne a kiadott keszletet.
+ *
+ * MIERT KELL MINDKET AGRA ALLITAS: ha csak a belsos agat merjuk, egy kesobbi
+ * "egysegesites" a BOVEBB uzenetet adna a partnernek is -- es az a valtozas
+ * MUKODONEK latszana, mert a hibauzenet tovabbra is megjelenik.
+ */
+test("a belsős felhasználó megtudja, melyik eset áll fenn", async () => {
+  const service = new ServiceAssetsService(
+    repository({
+      create: async () => {
+        throw new AssetLabelUnavailableError("V2196");
+      },
+    }),
+    new InMemoryDocumentStore(),
+  );
+  await assert.rejects(
+    () =>
+      service.create(
+        {
+          ownerType: "CUSTOMER",
+          ownerId: "customer-1",
+          kind: "COMPONENT",
+          name: "Szivattyú",
+          labelCode: "V2196",
+        },
+        "user-1",
+        { kind: "internal" },
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof ConflictException);
+      assert.match(String(error.message), /nincs kiadva/);
+      return true;
+    },
+  );
+});
+
+test("a partner az összevont üzenetet kapja", async () => {
+  const service = new ServiceAssetsService(
+    repository({
+      create: async () => {
+        throw new AssetLabelUnavailableError("V2196");
+      },
+    }),
+    new InMemoryDocumentStore(),
+  );
+  await assert.rejects(
+    () =>
+      service.create(
+        {
+          ownerType: "CUSTOMER",
+          ownerId: "customer-1",
+          kind: "COMPONENT",
+          name: "Szivattyú",
+          labelCode: "V2196",
+        },
+        "user-1",
+        { kind: "customer", customerId: "customer-1" },
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof ConflictException);
+      assert.equal(
+        /nincs kiadva/.test(String(error.message)),
+        false,
+        "a partner NEM tudhatja meg, hogy a kód ki van-e adva",
+      );
+      assert.match(String(error.message), /nem köthető/);
+      return true;
+    },
+  );
 });

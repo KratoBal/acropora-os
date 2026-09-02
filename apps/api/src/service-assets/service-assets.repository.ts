@@ -1037,6 +1037,64 @@ export class ServiceAssetsRepository extends Repository {
   }
 
   /**
+   * MAR KINYOMTATOTT KODOK BETOLTESE UJ TETELKENT.
+   *
+   * MIERT KULON A `issueBatch`-TOL: az UJ kodokat GENERAL, ez pedig MAR
+   * LETEZOKET vesz at -- olyanokat, amik fizikailag mar ki vannak nyomtatva. Az
+   * elso tetel eppen ilyen: a 2026-09-02-i tiz kod, amit Balazs mar kinyomtatott
+   * es hasznalni kezdett.
+   *
+   * MEGISMETELHETO, DUPLIKATUM NELKUL. Ha valaki ketszer futtatja, a masodik
+   * korben MAR LETEZO kodok nem jonnek letre ujra -- de a valasz KULON
+   * megmondja, melyik es hany. A csendes kihagyas itt rosszabb lenne, mint a
+   * hiba: a hivo azt hinne, hogy annyi uj matricat toltott be, amennyit kuldott.
+   *
+   * A TETEL AKKOR IS LETREJON, ha minden kod mar letezett -- es ez SZANDEKOS.
+   * A tetel a BETOLTES tenye, nem a kodoke; egy ures tetel a listan pontosan
+   * azt mondja, ami tortent: valaki ujra betoltotte ugyanazt.
+   */
+  async importBatch(rawCodes: readonly string[]): Promise<{
+    batchId: string;
+    imported: string[];
+    alreadyExisted: string[];
+  }> {
+    const codes: string[] = [];
+    for (const raw of rawCodes) {
+      const code = normalizeAssetLabelCode(raw);
+      if (code === null) throw new AssetLabelUnavailableError(raw);
+      if (!codes.includes(code)) codes.push(code);
+    }
+
+    const letezo = new Set(
+      (
+        await prisma.assetLabel.findMany({
+          where: { code: { in: codes } },
+          select: { code: true },
+        })
+      ).map((row) => row.code),
+    );
+    const ujak = codes.filter((code) => !letezo.has(code));
+
+    const batch = await prisma.$transaction(async (tx) => {
+      const created = await tx.assetLabelBatch.create({
+        data: { requestedCount: codes.length },
+        select: { id: true },
+      });
+      if (ujak.length > 0)
+        await tx.assetLabel.createMany({
+          data: ujak.map((code) => ({ code, batchId: created.id })),
+        });
+      return created;
+    });
+
+    return {
+      batchId: batch.id,
+      imported: ujak,
+      alreadyExisted: codes.filter((code) => letezo.has(code)),
+    };
+  }
+
+  /**
    * A KORABBI GENERALASOK, LEGFRISSEBB ELOL.
    *
    * A SZABAD DARABSZAM SZAMOLVA JON, nem tarolva: azok a sorok, ahol nincs
