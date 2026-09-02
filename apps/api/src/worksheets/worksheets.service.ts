@@ -244,6 +244,22 @@ export class WorksheetsService {
    * lezárás pillanatában sem szabad javíthatatlanul otthagyni, és a lezárt
    * verzió szövegéhez ez akkor sem nyúl hozzá.
    */
+  /**
+   * A hibajegy alá csatolható lapok.
+   *
+   * A HIBAJEGY OLDALÁRÓL CSATOLUNK, ÉS EZ TUDATOS VÁLASZTÁS. A másik alak (a
+   * lap oldaláról választani hibajegyet) SZÁNDÉKOSAN nincs megépítve: Balázs
+   * leírása szerint még a "lap előbb, hibajegy utána" úton is a FELELŐS az,
+   * aki a hibajegyet létrehozza, és ő ott áll, amikor a már meglévő lapot alá
+   * húzza. Egy felület, két eset.
+   *
+   * Ha egyszer mégis kell a lap felőli út, ez a lista változatlanul jó hozzá -
+   * csak a hívó lesz más. Ezért nem "hiányzó darab", hanem meg nem épített út.
+   */
+  async attachableWorksheets(scope: PartnerScope) {
+    return this.repository.attachableWorksheets(scope);
+  }
+
   async setAssignees(
     id: string,
     input: SetWorksheetAssigneesDto,

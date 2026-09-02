@@ -34,6 +34,7 @@ import type {
   NormalizedWorksheetContent,
   NormalizedWorksheetLine,
 } from "./worksheet-content.js";
+import { attachableWorksheetWhere } from "./attachable-worksheets.js";
 import {
   worksheetCloseBlocker,
   type WorksheetCloseBlocker,
@@ -432,6 +433,59 @@ export class WorksheetsRepository extends Repository {
    * comparison is made inside the transaction, against the rows that were
    * there before this write.
    */
+  /**
+   * A HIBAJEGY ALA CSATOLHATO MUNKALAPOK.
+   *
+   * A SZUKITES EGYETLEN FELTETELRE EPUL: nincs mogotte hibajegy. SEMMI MAS.
+   *
+   * Kezenfekvo volna a friss vagy nyitott lapokra szukiteni, es az pontosan a
+   * folyamat felet vagna el. A masodik ut lenyege, hogy a lap MAR REGEN
+   * elkeszulhetett - karbantartas kozben derult ki a hiba, a szerelo felvette
+   * a lapot, atadta, es a hibajegy csak HETEKKEL kesobb szuletik meg nalunk.
+   * Egy "csak a mai piszkozatok" valaszto mellett az a lap soha nem kerulne
+   * hibajegy ala, es a felhasznalo nem is ertene, miert nem talalja.
+   *
+   * Ezert nem szur allapotra, korra es atadottsagra. A LEZART lap is
+   * csatolhato: a lezaras a dokumentumrol szol, a csatolas a besorolasrol.
+   */
+  async attachableWorksheets(scope: PartnerScope) {
+    const rows = await this.database.worksheet.findMany({
+      // A JOGOSULTSAGI SZURO `AND` AGKENT, ahogy a lista is teszi: a
+      // felhasznaloi feltetel es a hatokor nem keveredhet egy szintre.
+      where: {
+        AND: [scopeWhereForAndBranch(scope), attachableWorksheetWhere()],
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+      select: {
+        id: true,
+        number: true,
+        createdAt: true,
+        handedOverAt: true,
+        customer: { select: { displayName: true } },
+        versions: {
+          orderBy: { version: "desc" },
+          take: 1,
+          select: { subject: true, status: true },
+        },
+      },
+    });
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        // A SZAM CSAK LEZART LAPNAL VAN MEG. A valaszto ettol nem hagyja ki:
+        // epp a meg szamozatlan, helyszinen felvett lap az, amiert ez a lista
+        // letezik.
+        number: row.number,
+        subject: row.versions[0]?.subject ?? "",
+        status: row.versions[0]?.status ?? null,
+        customerName: row.customer.displayName,
+        createdAt: row.createdAt.toISOString(),
+        handedOverAt: row.handedOverAt?.toISOString() ?? null,
+      })),
+    };
+  }
+
   async setAssignees(input: {
     worksheetId: string;
     userIds: readonly string[];

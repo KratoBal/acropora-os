@@ -96,6 +96,24 @@ export class WorksheetsController {
     return this.service.selectablePartners(partnerScopeOf(user));
   }
 
+  /**
+   * A HIBAJEGY ALÁ CSATOLHATÓ LAPOK.
+   *
+   * A FIX SZAKASZ A `:id` FÖLÖTT ÁLL, mint a többi választó - különben a Nest
+   * a nevet lap-azonosítónak olvasná.
+   *
+   * MA NINCS, AKI HÍVJA: hibajegy-modul nem létezik az API-ban (a `ServiceJob`
+   * tábla áll, de nulla `create` hívás és egyetlen kontroller sem hivatkozik
+   * rá). Ez a végpont ATTÓL nem korai: a hibajegy felülete pontosan ezt a
+   * listát fogja kérni, és a szűrés szabálya (mit szabad felkínálni) a
+   * munkalap-modul tudása, nem a hibajegyé.
+   */
+  @Get("attachable")
+  @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
+  attachableWorksheets(@CurrentUser() user: AuthenticatedUser) {
+    return this.service.attachableWorksheets(partnerScopeOf(user));
+  }
+
   @Get("assignable-users")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
   assignableUsers(@CurrentUser() user: AuthenticatedUser) {
