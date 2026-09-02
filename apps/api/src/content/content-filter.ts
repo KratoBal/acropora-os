@@ -17,6 +17,20 @@ export interface WaitingForMeFilter {
   states: ContentState[];
   /** Ha igaz, csak a saját tételek (szerző vagy lektor szerint). */
   ownOnly: boolean;
+  /**
+   * A LEKTOR SORABAN A GAZDATLAN TETELEK IS BENNE VANNAK.
+   *
+   * Balazs dontese, szo szerint: "B" (Discord, 2026-09-02 23:31), arra a
+   * kerdesre, hogy minden gepi tetelhez rendeljunk-e lektort, vagy a lektor
+   * nezete mutassa a lektor nelkulieket is. A masodik nyert: KOZOS SOR, amibol
+   * aki raer, elvisz egy tetelt.
+   *
+   * MIERT KULON MEZO ES NEM AZ `ownOnly` BOVITESE: az `ownOnly` KOZOS a szerzore
+   * es a lektorra. Ha a gazdatlan agat oda tennenk, a SZERZO listaja is
+   * megtelne mas gazdatlan teteleivel -- csendben, mert a szerzo allapotait
+   * (`DRAFTING`, `AWAITING_REVISION`) ugyanaz a szuro engedne at.
+   */
+  includeUnassignedReviews: boolean;
 }
 
 const STATES_BY_ROLE: Record<ContentViewerRole, ContentState[]> = {
@@ -38,6 +52,12 @@ export function waitingFor(role: ContentViewerRole): WaitingForMeFilter {
   return {
     states: STATES_BY_ROLE[role],
     ownOnly: role === "author" || role === "reviewer",
+    // CSAK A LEKTOR SORABAN. A szerep-valasztos nezetben a felhasznalo MAGA
+    // kerte a lektor-sort, tehat a gazdatlan tetel valaszt neki. A szerep
+    // nelkuli "mi var ram" nezet ettol valtozatlan marad: ott nincs mire
+    // kotni, mert lektor-JOG nem letezik (a jovahagyoi resz azert lehet
+    // "mindenki", mert azt a `content.approve` kapcsolja be).
+    includeUnassignedReviews: role === "reviewer",
   };
 }
 

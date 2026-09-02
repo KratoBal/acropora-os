@@ -43,6 +43,28 @@ describe("what the default list shows", () => {
     assert.equal(waitingFor("author").ownOnly, true);
     assert.equal(waitingFor("reviewer").ownOnly, true);
   });
+
+  /**
+   * A KOZOS SOR: a lektor sora a GAZDATLAN teteleket is tartalmazza.
+   *
+   * Balazs dontese, szo szerint: "B" (Discord, 2026-09-02 23:31). A gepi
+   * agensek beadta tetelnek nincs lektora, es nem is osztunk ki egyet
+   * mindegyikhez -- aki raer, elviszi.
+   */
+  it("puts the unassigned items into the reviewer's queue", () => {
+    assert.equal(waitingFor("reviewer").includeUnassignedReviews, true);
+  });
+
+  /**
+   * ES A TOBBI SZEREP SORA NEM LETT BOVEBB. Ez a fontosabb allitas: az
+   * `ownOnly` KOZOS a szerzore es a lektorra, tehat egy kozos agon vitt javitas
+   * CSENDBEN megtoltene a szerzo listajat mas gazdatlan teteleivel.
+   */
+  it("leaves every other role's queue exactly as it was", () => {
+    assert.equal(waitingFor("author").includeUnassignedReviews, false);
+    assert.equal(waitingFor("approver").includeUnassignedReviews, false);
+    assert.equal(waitingFor("sender").includeUnassignedReviews, false);
+  });
 });
 
 describe("which pieces can still be waiting for an image", () => {
