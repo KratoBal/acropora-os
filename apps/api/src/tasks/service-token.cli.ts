@@ -26,6 +26,11 @@ const processOutput: ServiceTokenCliOutput = {
  * The raw token is printed exactly once, here, and never stored - only its
  * SHA-256 hash reaches the database. If it is lost, mint a new one and
  * revoke the old; it cannot be recovered.
+ *
+ * `--user <e-mail>` binds the token to an existing account, and that binding
+ * is what the content-agent entrance requires: a token without one is refused
+ * there rather than falling back to some default author. Task ingest does not
+ * look at it, so the tokens minted before this option keep working unchanged.
  */
 export async function main(
   argv: readonly string[],
@@ -47,6 +52,7 @@ export async function main(
         slug: command.slug,
         rawToken,
         dailyLimit: command.dailyLimit,
+        userEmail: command.userEmail,
       });
       output.stdout(
         `${JSON.stringify({ ...created, token: rawToken }, null, 2)}\n`,

@@ -19,6 +19,9 @@ enum UserRole {
   WAREHOUSE
   SERVICE
   VIEWER
+
+  /// Gépi ágens, ami CSAK tartalmat visz be és olvas. Nem hagyhat jóvá.
+  CONTENT_AGENT
 }
 
 enum ProductType {
@@ -459,20 +462,22 @@ enum InvoiceSyncStatus {
 }
 
 model User {
-  id                String    @id @default(cuid())
-  email             String    @unique
+  id                String         @id @default(cuid())
+  /// A gépi tokenek, amik ennek a felhasználónak a nevében járnak el.
+  serviceTokens     ServiceToken[] @relation("ServiceTokenUser")
+  email             String         @unique
   /// A hivatalos, teljes név. Dokumentumon (munkalap, aláírás) ez szerepel,
   /// akkor is, ha a felületek a becenevet mutatják.
   displayName       String
   /// Ahogy a kollégát a csapatban szólítják. A felületek ezt írják ki a
   /// teljes név helyett, ha ki van töltve. Nem egyedi, és nem azonosító.
   nickname          String?
-  firstName         String    @default("")
-  lastName          String    @default("")
+  firstName         String         @default("")
+  lastName          String         @default("")
   passwordHash      String?
   passwordUpdatedAt DateTime?
   role              UserRole
-  isActive          Boolean   @default(true)
+  isActive          Boolean        @default(true)
   avatarUrl         String?
   /// MELYIK PARTNER NEVEBEN lep be ez a fiok. Sajat kollegan mindketto NULL.
   ///
@@ -486,8 +491,8 @@ model User {
   /// engedne at. Ezert a tiltas adatbazis-szinten all, nem csak a kodban.
   customerId        String?
   supplierId        String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
   sessions                   Session[]
   auditLogs                  AuditLog[]
@@ -3201,17 +3206,31 @@ model Task {
 /// konfigurációs: a token nem azért nem tud mást csinálni, mert nincs rá
 /// joga, hanem mert nincs másik végpont, amely elfogadná.
 model ServiceToken {
-  id         String    @id @default(cuid())
+  id        String @id @default(cuid())
   /// Emberi olvasásra szánt név, pl. "Flotta - polip".
-  name       String
+  name      String
   /// Névtér-előtag. A token által felvitt minden feladat sourceRef-je
   /// "<slug>:<hivatkozás>" alakban tárolódik, a szerver által összefűzve.
   /// Így két gépi hívó nem tud ütközni egymás egyedi indexén, és nem tud
   /// egymás nevében tételt felvinni.
-  slug       String    @unique
+  slug      String @unique
   /// A nyers token sosem kerül adatbázisba, kizárólag a SHA-256 lenyomata -
   /// ugyanaz az elv, mint a Session.tokenHash mezőnél.
-  tokenHash  String    @unique
+  tokenHash String @unique
+
+  /// Melyik felhasználó NEVÉBEN jár el ez a token.
+  ///
+  /// NULLÁZHATÓ, mert a már kiadott tokeneknek nincs ilyenjük, és egy hozzáadó
+  /// migráció nem találhat ki nekik egyet. AMI EBBŐL KÖVETKEZIK, ÉS AMIT AZ
+  /// ŐRZŐNEK TARTANIA KELL: egy felhasználó nélküli token NEM eshet vissza
+  /// semmilyen alapértelmezett fiókra, hanem el kell utasítani. Egy csendes
+  /// visszaesés itt azt jelentené, hogy egy régi token hirtelen valaki
+  /// nevében ír -- és a soron semmi nem mutatná, hogy nem ő volt.
+  ///
+  /// A `slug` NEM helyettesíti ezt: az a feladat-forrásokat névterezi, nem
+  /// a szerzőséget, és nincs mögötte felhasználói jogosultság.
+  userId     String?
+  user       User?     @relation("ServiceTokenUser", fields: [userId], references: [id], onDelete: SetNull)
   /// Napi felvitel-plafon, elszabadult ügynök-ciklus ellen.
   dailyLimit Int       @default(200)
   lastUsedAt DateTime?

@@ -19,6 +19,7 @@ const searchToken = {
   name: "Acropora AI product search",
   slug: "ai-product-search",
   tokenHash: "hash",
+  userId: null,
   dailyLimit: 200,
   lastUsedAt: null,
   revokedAt: null,

@@ -3,6 +3,19 @@ export interface CreateServiceTokenCommand {
   name: string;
   slug: string;
   dailyLimit: number;
+  /**
+   * MELYIK FELHASZNÁLÓ NEVÉBEN jár el a token, e-mail címmel megnevezve.
+   *
+   * `null`, ha nincs megadva, és ez nem hiányosság: felhasználó nélküli token
+   * továbbra is kiadható, mert a feladat-felvitel ilyeneket használ élesben. Az
+   * ilyen token viszont a tartalom-bejáratot NEM nyitja ki, mert azt az őrző
+   * elutasítja. Így a régi használati eset változatlan marad, és az új nem áll
+   * elő félig bekötve.
+   *
+   * E-MAIL, NEM AZONOSÍTÓ, mert a fiókot ember hozza létre egy felületen, és az
+   * e-mail címet látja. Egy cuid-ot ki kellene másolnia az adatbázisból.
+   */
+  userEmail: string | null;
 }
 
 export interface RevokeServiceTokenCommand {
@@ -52,14 +65,19 @@ export function parseServiceTokenCommand(
       throw new ServiceTokenCommandError(
         "A --daily-limit értéke pozitív egész szám kell legyen.",
       );
-    return { action: "create", name, slug, dailyLimit };
+    const userEmail = options.get("user")?.trim() ?? null;
+    if (options.has("user") && !userEmail)
+      throw new ServiceTokenCommandError(
+        "A --user kapcsolóhoz e-mail cím kell.",
+      );
+    return { action: "create", name, slug, dailyLimit, userEmail };
   }
 
   if (action === "revoke")
     return { action: "revoke", slug: requireOption(options, "slug") };
 
   throw new ServiceTokenCommandError(
-    "Használat: service-token create --slug <slug> --name <név> [--daily-limit <n>] | revoke --slug <slug> | list",
+    "Használat: service-token create --slug <slug> --name <név> [--user <e-mail>] [--daily-limit <n>] | revoke --slug <slug> | list",
   );
 }
 

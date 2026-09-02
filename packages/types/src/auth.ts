@@ -1,3 +1,16 @@
+/**
+ * A szerepek listája, KÉZZEL karbantartva, és a Prisma `UserRole` enumjának a
+ * párja.
+ *
+ * A KÉT LISTA EL TUD CSÚSZNI, ÉS CSAK AZ EGYIK IRÁNYBAN SZÓL VALAKI. Ha ebből
+ * kimarad egy érték, ami a Prismában megvan, itt semmi nem hibázik -- a
+ * `ROLE_PERMISSIONS` rekord csak azt kényszeríti ki, hogy MINDEN itteni
+ * szerephez legyen jogosultság-lista. Fordítva viszont hangos: egy itt felvett,
+ * de a Prismában hiányzó szerep az első adatbázis-íráskor elhasal.
+ *
+ * Ezért a sorrend egy új szerepnél: előbb a Prisma enum és a migráció, utána ez
+ * a lista.
+ */
 export const USER_ROLES = [
   "OWNER",
   "ADMIN",
@@ -6,9 +19,37 @@ export const USER_ROLES = [
   "WAREHOUSE",
   "SERVICE",
   "VIEWER",
+  "CONTENT_AGENT",
 ] as const;
 
 export type UserRole = (typeof USER_ROLES)[number];
+
+/**
+ * A GÉPI szerepek: ezek mögött nem ember ül, hanem egy ágens szolgáltatás-tokene.
+ *
+ * MIÉRT KELL EZ A LISTA, ÉS MIÉRT NEM ELÉG A NÉV: mert több szabályunk szól
+ * "minden szerepről", és azok EMBERI szerepekre születtek, amikor gépi még nem
+ * létezett. A legelső ilyen az `AI_TEST_VIEW`: Balázs 2026-08-26-i döntése
+ * szerint "most kapja meg mindenki". Az a mondat a kollégákra vonatkozott. Egy
+ * gépi fiók, ami magától kap egy felületet, csendben tágabb lenne, mint amiért
+ * létrehoztuk -- és a tágítást senki nem venné észre, mert egy teszt kérte.
+ *
+ * Ezért a "mindenki" mostantól KIÍRVA jelenti azt, hogy minden emberi szerep, a
+ * kivétel pedig itt áll, nem egy teszt belsejében.
+ */
+export const MACHINE_ROLES = [
+  "CONTENT_AGENT",
+] as const satisfies readonly UserRole[];
+
+export type MachineRole = (typeof MACHINE_ROLES)[number];
+
+export const isMachineRole = (role: UserRole): role is MachineRole =>
+  (MACHINE_ROLES as readonly UserRole[]).includes(role);
+
+/** A szerepek, amik mögött ember ül. */
+export const HUMAN_ROLES: readonly UserRole[] = USER_ROLES.filter(
+  (role) => !isMachineRole(role),
+);
 
 export const PERMISSIONS = {
   DASHBOARD_VIEW: "dashboard.view",
@@ -193,6 +234,26 @@ export const ROLE_PERMISSIONS: Readonly<
     PERMISSIONS.AQUARIUMS_MANAGE,
   ],
   VIEWER: VIEW_PERMISSIONS,
+
+  /**
+   * GÉPI ÁGENS, AMI CSAK TARTALMAT VISZ BE.
+   *
+   * A legszűkebb szerep, ami tartalmat tud létrehozni. A mérés, amiért létezik:
+   * előtte a legszűkebb ilyen szerep a MANAGER volt, ami a rendszer 32 jogából
+   * 25-öt ad -- köztük a rendelés, a pénzügy, a készlet és a vevők írását. Egy
+   * gépi fiók, amit ember nem használ, túl tág jogkörrel NÉMA kockázat: senki
+   * nem veszi észre, ha többet tesz a kelleténél.
+   *
+   * NINCS BENNE `CONTENT_APPROVE`, és ez a szerep egyetlen legfontosabb
+   * tulajdonsága: egy ágens nem hagyhatja jóvá a saját vázlatát. Ezt a határt a
+   * SZEREPNEK kell tartania, nem annak, hogy a hívó nem próbálja meg.
+   *
+   * A `CONTENT_VIEW` benne van, és ez tágabb, mint "a saját tételei": a
+   * tartalom-nézetek olvasását engedi, nem csak a sajátokét. A saját-szűrés a
+   * szerzői nézet tulajdonsága, nem a jogosultságé -- ezt itt kimondjuk, hogy
+   * ne látszódjon szűkebbnek, mint amilyen.
+   */
+  CONTENT_AGENT: [PERMISSIONS.CONTENT_VIEW, PERMISSIONS.CONTENT_MANAGE],
 };
 
 export interface AuthenticatedUser {

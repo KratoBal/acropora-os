@@ -22,8 +22,46 @@ describe("parseServiceTokenCommand", () => {
         slug: "polip",
         name: "Flotta - polip",
         dailyLimit: DEFAULT_DAILY_LIMIT,
+        userEmail: null,
       },
     ));
+
+  it("binds the token to an account when --user is given", () =>
+    assert.deepEqual(
+      parseServiceTokenCommand([
+        "create",
+        "--slug",
+        "murena",
+        "--name",
+        "Flotta - murena",
+        "--user",
+        "murena@agents.acropora.local",
+      ]),
+      {
+        action: "create",
+        slug: "murena",
+        name: "Flotta - murena",
+        dailyLimit: DEFAULT_DAILY_LIMIT,
+        userEmail: "murena@agents.acropora.local",
+      },
+    ));
+
+  it("rejects an empty --user rather than minting an unbound token", () => {
+    // Az ures ertek NEM ugyanaz, mint a hianyzo kapcsolo. Aki kiirta a
+    // `--user=` alakot, KOTNI akarta a tokent; ha ezt csendben elnyelnenk, egy
+    // olyan hitelesito keletkezne, amirol a kiado azt hiszi, hogy fiokhoz
+    // tartozik, es a tartalom-bejarat majd elutasitja -- masutt keresve a hibat.
+    assert.throws(
+      () =>
+        parseServiceTokenCommand([
+          "create",
+          "--slug=murena",
+          "--name=Flotta - murena",
+          "--user=",
+        ]),
+      ServiceTokenCommandError,
+    );
+  });
 
   it("accepts --key=value form", () =>
     assert.deepEqual(
@@ -38,6 +76,7 @@ describe("parseServiceTokenCommand", () => {
         slug: "korall",
         name: "Flotta - korall",
         dailyLimit: 25,
+        userEmail: null,
       },
     ));
 
