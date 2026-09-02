@@ -1,6 +1,7 @@
 import { pathToFileURL } from "node:url";
 
 import { prisma, type Prisma as PrismaTypes } from "@acropora/database";
+import { isKnownCatalogAuthority } from "./medusa-publication.policy.js";
 
 import { MedusaConfigurationError } from "./medusa-admin.client.js";
 import { MedusaConnectionError } from "./medusa-connection.types.js";
@@ -127,11 +128,13 @@ export async function resolvePricingTargets(
     where: { id: { in: [...new Set(variants.map((row) => row.productId))] } },
     select: { id: true, catalogAuthority: true },
   });
-  const foreign = products.filter((row) => row.catalogAuthority !== "ACROPORA");
+  const foreign = products.filter(
+    (row) => !isKnownCatalogAuthority(row.catalogAuthority),
+  );
   if (foreign.length)
     return {
       error:
-        `${argument}: a törzsadat gazdája nem az Acropora OS ` +
+        `${argument}: a törzsadat gazdája ismeretlen ` +
         `(${foreign
           .map((row) => `${row.id}=${row.catalogAuthority ?? "ismeretlen"}`)
           .join(", ")}), kihagyva. Az ára sem a miénk.`,
