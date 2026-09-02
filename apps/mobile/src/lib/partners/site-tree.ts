@@ -200,3 +200,89 @@ export function unitLevels(
   levels.push({ options: childrenOf(parentId), selectedId: null });
   return levels;
 }
+
+/**
+ * EGY SZINT LÁTSZIK EGYSZERRE. A már eldöntött szintek becsukva állnak, és
+ * alattuk pontosan EGY nyitott lista van.
+ *
+ * BALÁZS KÉRÉSE, ÉLES HASZNÁLATBÓL (2026-09-02 16:25, a `8e8bfd8a` kártyán),
+ * szó szerint: „kiválasztja a helyszínt, akkor csak az látszik amit
+ * kiválasztott és alatt feljön egy lista ami a kiválasztáshoz tartozik, ott is
+ * választ az is becsukódik és jön a következő".
+ *
+ * MI VOLT A BAJ AZZAL, AMI ELŐTTE ÁLLT: a képernyő MINDEN szintet egyszerre
+ * rajzolt ki, üres sávval elválasztva. Ettől három dolog egyszerre romlott el:
+ * nem látszott, melyik csoport melyik szint, nem látszott, mi alá tartozik a
+ * következő, és a lista lenyomta a többi mezőt a képernyő alja alá.
+ *
+ * MIÉRT TISZTA FÜGGVÉNY, ÉS NEM A KÉPERNYŐN ÁLL. Ez nem rajzolás, hanem
+ * DÖNTÉS: melyik szint van kész, melyiket kell kérdezni, és mi az út, ami
+ * eddig összeállt. A képernyőn ugyanez csak eszközön lenne mérhető; itt
+ * állításokkal mérhető, adatbázis és szimulátor nélkül.
+ *
+ * A FELOLDHATATLAN LÉPÉS ÚJRA KÉRDEZÉS LESZ, NEM KITALÁLT SZÖVEG. Ha egy szint
+ * kiválasztott azonosítója nincs a saját beállításai között, a szint NEM
+ * eldöntöttnek számít, hanem az lesz a nyitott lista. Így nem áll elő olyan út,
+ * amiben egy szakasz némán hiányzik vagy egy azonosító látszik névként.
+ * (`unitLevels` kimenetén ez nem tud előfordulni: ott a kiválasztott elem
+ * mindig a saját szülőjének gyermeke. A védelem attól van, hogy ez a függvény
+ * a TÍPUSÁRA szól, nem egyetlen hívóra.)
+ */
+export interface UnitPickerStep {
+  /** Hányadik szint, gyökértől nullától. A hívó ide tud visszanyitni. */
+  depth: number;
+  option: UnitOption;
+}
+
+export interface UnitPickerPlan {
+  /** A becsukott, már eldöntött szintek, gyökértől lefelé. */
+  steps: UnitPickerStep[];
+  /** A NYITOTT szint: itt kell listát mutatni. `null`, ha nincs több kérdés. */
+  open: { depth: number; options: UnitOption[] } | null;
+  /**
+   * A teljes út, emberi szemnek: `Fánk / Biodóm (BIO)`.
+   *
+   * AZÉRT A TELJES ÚT, ÉS NEM AZ UTOLSÓ NÉV: ugyanaz a név két különböző
+   * szinten is állhat (mérve Balázs képernyőképén: „Nagymedence" a legfelső és
+   * a legalsó szinten is, csak a zárójeles kód más). Egy önmagában álló név
+   * ilyenkor nem mondja meg, melyiket választották.
+   */
+  path: string;
+}
+
+export function unitPickerPlan(levels: readonly UnitLevel[]): UnitPickerPlan {
+  const steps: UnitPickerStep[] = [];
+  /**
+   * AZ UTAT EGY HELYEN SZAMOLJUK, ES EZ NEM STILUS.
+   *
+   * Elsore ket kulon `return` agban allt ugyanaz a kifejezes. A kalibracio
+   * megmutatta, hogy a masodik ag `unitLevels` kimeneten SOSEM fut le (az
+   * mindig ad egy zaro, eldontetlen szintet), tehat az ottani rontas NEM
+   * pirosodott ki -- vagyis a ket peldany egymastol fuggetlenul elromolhatott
+   * volna, es csak az egyiket meri barmi.
+   */
+  const path = () => steps.map((step) => step.option.label).join(" / ");
+
+  for (let depth = 0; depth < levels.length; depth += 1) {
+    const level = levels[depth]!;
+    const chosen =
+      level.selectedId === null
+        ? undefined
+        : level.options.find((option) => option.id === level.selectedId);
+
+    if (!chosen)
+      return {
+        steps,
+        open:
+          level.options.length > 0 ? { depth, options: level.options } : null,
+        path: path(),
+      };
+
+    steps.push({ depth, option: chosen });
+  }
+
+  // Minden szint eldőlt, és nincs több kérdés: a legmélyebb választásnak nincs
+  // gyermeke. Az `unitLevels` ilyenkor is ad egy utolsó, ÜRES szintet, tehát
+  // ide csak üres bemenettel jutunk el.
+  return { steps, open: null, path: path() };
+}

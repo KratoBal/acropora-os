@@ -6,6 +6,7 @@ import {
   selectableUnitOptions,
   unitLevels,
   unitPathLabel,
+  unitPickerPlan,
   type PartnerUnitLike,
 } from "./site-tree";
 
@@ -258,5 +259,105 @@ describe("unitLevels", () => {
     assert.equal(levels.length, 3);
     assert.equal(levels[0]?.selectedId, "bio");
     assert.equal(levels[0]?.options[0]?.isActive, false);
+  });
+});
+
+/**
+ * A LÉPCSŐS VÁLASZTÓ TERVE: egy szint látszik egyszerre.
+ *
+ * A fixtúra Balázs képernyőképét követi (2026-09-02), MERT A CSAPDA IS ONNAN
+ * VAN: a „Nagymedence" NÉV kétszer szerepel, a legfelső és a legalsó szinten,
+ * más kóddal. Egy név szerinti egyeztetés vagy egy „csak az utolsó nevet
+ * mutatjuk" megoldás ezen a fán CSENDBEN rossz utat adna.
+ */
+describe("unitPickerPlan", () => {
+  const FA: PartnerUnitLike[] = [
+    {
+      id: "cap",
+      parentId: null,
+      name: "Nagymedence",
+      code: "CAP",
+      isActive: true,
+    },
+    { id: "fank", parentId: null, name: "Fánk", code: "FNK", isActive: true },
+    {
+      id: "bio",
+      parentId: "fank",
+      name: "Biodóm",
+      code: "BIO",
+      isActive: true,
+    },
+    {
+      id: "fok",
+      parentId: "bio",
+      name: "Fókamedence",
+      code: "FOK",
+      isActive: true,
+    },
+    {
+      id: "nmd",
+      parentId: "bio",
+      name: "Nagymedence",
+      code: "NMD",
+      isActive: true,
+    },
+  ];
+
+  it("választás nélkül csak a gyökér-szint áll nyitva", () => {
+    const plan = unitPickerPlan(unitLevels(FA, null));
+    assert.deepEqual(plan.steps, []);
+    assert.equal(plan.open?.depth, 0);
+    assert.deepEqual(
+      plan.open?.options.map((option) => option.label),
+      ["Nagymedence (CAP)", "Fánk (FNK)"],
+    );
+    assert.equal(plan.path, "");
+  });
+
+  it("egy választás után az a szint becsukódik, és a következő nyílik", () => {
+    const plan = unitPickerPlan(unitLevels(FA, "fank"));
+    assert.deepEqual(
+      plan.steps.map((step) => [step.depth, step.option.label]),
+      [[0, "Fánk (FNK)"]],
+    );
+    assert.equal(plan.open?.depth, 1);
+    assert.deepEqual(
+      plan.open?.options.map((option) => option.label),
+      ["Biodóm (BIO)"],
+    );
+  });
+
+  it("a levélig lefúrva nincs több nyitott szint", () => {
+    const plan = unitPickerPlan(unitLevels(FA, "nmd"));
+    assert.deepEqual(
+      plan.steps.map((step) => step.option.label),
+      ["Fánk (FNK)", "Biodóm (BIO)", "Nagymedence (NMD)"],
+    );
+    assert.equal(plan.open, null);
+  });
+
+  it("az út a TELJES lánc, nem az utolsó név", () => {
+    // EZ A CSAPDA MAGA. A „Nagymedence" önmagában két különböző helyszínt
+    // jelenthet ezen a fán; csak a teljes út dönti el, melyiket.
+    const melyben = unitPickerPlan(unitLevels(FA, "nmd"));
+    const gyokerben = unitPickerPlan(unitLevels(FA, "cap"));
+    assert.equal(melyben.path, "Fánk (FNK) / Biodóm (BIO) / Nagymedence (NMD)");
+    assert.equal(gyokerben.path, "Nagymedence (CAP)");
+    assert.notEqual(melyben.path, gyokerben.path);
+  });
+
+  it("feloldhatatlan választásnál újra kérdez, nem talál ki utat", () => {
+    // ISMERT POZITÍV KONTROLL A FENTIEKHEZ: itt a bemenet szándékosan olyan,
+    // amit az `unitLevels` nem tud előállítani, mert a függvény a TÍPUSÁRA
+    // szól, nem egyetlen hívóra.
+    const plan = unitPickerPlan([
+      {
+        options: [{ id: "fank", label: "Fánk (FNK)", isActive: true }],
+        selectedId: "nincs-ilyen",
+      },
+    ]);
+    assert.deepEqual(plan.steps, []);
+    assert.equal(plan.open?.depth, 0);
+    assert.equal(plan.path, "");
   });
 });

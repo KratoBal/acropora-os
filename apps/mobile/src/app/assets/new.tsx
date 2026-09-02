@@ -21,7 +21,11 @@ import {
   type AssetOwnerOption,
 } from "@/lib/api/assets";
 import { listPartnerUnits } from "@/lib/api/partners";
-import { selectableUnitOptions, unitLevels } from "@/lib/partners/site-tree";
+import {
+  selectableUnitOptions,
+  unitLevels,
+  unitPickerPlan,
+} from "@/lib/partners/site-tree";
 import DateTimePicker, {
   type DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
@@ -292,11 +296,14 @@ export default function NewAssetScreen() {
               */}
               <CollapsedPicker
                 summary={
-                  // A TELJES UT, ahogy a `UnitOption.label` amugy is tartalmazza
-                  // ("Fánk / Biodóm (BIO)"). A becsukott sor igy megmondja, HOL
-                  // all az eszkoz -- enelkul a legordulo elrejtene a valasztast.
-                  units.options.find((option) => option.id === unitId)?.label ??
-                  "Nincs helyszín kiválasztva"
+                  // A TELJES UT, EGY FORRASBOL. Korabban ez a sor a
+                  // `selectableUnitOptions` cimkejebol jott, a lenti lepcso
+                  // viszont a `unitLevels`-ebol -- ket kulon szamitas ugyanarra
+                  // az utra. Mostantol mindketto a `unitPickerPlan` utjat
+                  // hasznalja, tehat nem tudnak elcsuszni egymastol.
+                  unitPickerPlan(
+                    unitLevels(unitsQuery.data?.items ?? [], unitId || null),
+                  ).path || "Nincs helyszín kiválasztva"
                 }
                 hint="Koppints a listához"
                 label="Helyszín választása"
@@ -313,23 +320,56 @@ export default function NewAssetScreen() {
                   kovetkezo szint a valasztott elem gyermekeibol all), tehat a
                   becsukas epp a lefuras kozben venne el a listat.
                 */}
-                {unitLevels(unitsQuery.data?.items ?? [], unitId || null).map(
-                  (level, depth) =>
-                    level.options.length === 0 ? null : (
-                      <View key={`szint-${depth}`} style={styles.unitLevel}>
-                        {level.options.map((option) => {
-                          const selected = level.selectedId === option.id;
-                          return (
+                {(() => {
+                  /*
+                    EGY SZINT LATSZIK EGYSZERRE. A dontest a `unitPickerPlan`
+                    hozza, nem ez a blokk: itt csak kirajzoljuk, amit az mond.
+                    Igy a viselkedes allitasokkal merheto, szimulator nelkul is.
+                  */
+                  const plan = unitPickerPlan(
+                    unitLevels(unitsQuery.data?.items ?? [], unitId || null),
+                  );
+                  return (
+                    <>
+                      {plan.steps.map((step) => (
+                        /*
+                          A BECSUKOTT SZINT VISSZANYITHATO. Enelkul egy rossz
+                          koppintas zsakutca lenne: a valasztott elem eltunik a
+                          listabol, es nincs mibol mast valasztani.
+
+                          A VISSZANYITAS a SZULOIG lep vissza, mert a szint
+                          listaja a szulo gyermekeibol all. A gyokeren ez az
+                          ures valasztas.
+                        */
+                        <Pressable
+                          key={`lepes-${step.depth}`}
+                          onPress={() =>
+                            setUnitId(
+                              step.depth === 0
+                                ? ""
+                                : (plan.steps[step.depth - 1]?.option.id ?? ""),
+                            )
+                          }
+                          style={[styles.ownerRow, styles.ownerSelected]}
+                        >
+                          <Text style={styles.ownerName}>
+                            {step.option.label}
+                          </Text>
+                          <Text style={styles.ownerMeta}>
+                            Koppints a módosításhoz
+                          </Text>
+                        </Pressable>
+                      ))}
+                      {plan.open === null ? null : (
+                        <View style={styles.unitLevel}>
+                          {plan.open.options.map((option) => (
                             <Pressable
                               key={option.id}
-                              disabled={!option.isActive && !selected}
-                              onPress={() =>
-                                setUnitId(selected ? "" : option.id)
-                              }
+                              disabled={!option.isActive}
+                              onPress={() => setUnitId(option.id)}
                               style={[
                                 styles.ownerRow,
-                                selected && styles.ownerSelected,
-                                !option.isActive && !selected && styles.unitOff,
+                                !option.isActive && styles.unitOff,
                               ]}
                             >
                               <Text style={styles.ownerName}>
@@ -337,11 +377,12 @@ export default function NewAssetScreen() {
                                 {option.isActive ? "" : " (kivezetett)"}
                               </Text>
                             </Pressable>
-                          );
-                        })}
-                      </View>
-                    ),
-                )}
+                          ))}
+                        </View>
+                      )}
+                    </>
+                  );
+                })()}
                 {/*
                   A KIHAGYÁS NEM NÉMA. Aki tudja, hogy annak a partnernek hat
                   helyszíne van, és négyet lát, a listát hiszi hibásnak.
