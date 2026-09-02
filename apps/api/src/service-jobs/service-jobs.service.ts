@@ -185,7 +185,8 @@ export class ServiceJobsService {
      * Egy kozos uzenet mindkettore ugyanaz a hiba lenne, mint a gondolatjel a
      * hiany helyen: elmondja, hogy valami nincs rendben, azt nem, hogy mit tegyen.
      *
-     * MIERT NEM MEHET PARTNER NELKULI JEGY ALA (Balazs dontese, 2026-09-02): a
+     * MIERT NEM MEHET PARTNER NELKULI JEGY ALA (acrobot dontese, 2026-09-02; a
+     * gazda ele MEG NEM jutott el, tehat NEM az o dontese): a
      * jegy CSENDBEN megkapna egy partner tulajdonat, esemeny nelkul -- epp abban
      * a rendszerben, ahol most epitjuk a naplot, hogy minden valtozasnak legyen
      * nyoma. A megengedo iranyban KET rossz allitas keletkezne egy muveletbol

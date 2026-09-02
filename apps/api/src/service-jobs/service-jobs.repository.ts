@@ -246,8 +246,9 @@ export class ServiceJobsRepository {
    *
    * A `customerId` NULLAZHATO a jegyen (a lape nem), es epp ez a kulonbseg
    * teszi a csatolast dontesse: partner nelkuli jegy ala nem mehet lap
-   * (Balazs dontese acroboton keresztul, 2026-09-02) -- kulonben a jegy
-   * CSENDBEN megkapna egy partner tulajdonat, esemeny nelkul.
+   * (acrobot dontese, 2026-09-02 -- NEM a gazdae: az a kerdes ma meg a sorban
+   * all) -- kulonben a jegy CSENDBEN megkapna egy partner tulajdonat, esemeny
+   * nelkul.
    */
   async jobAttachState(
     id: string,
