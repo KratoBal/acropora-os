@@ -2430,15 +2430,56 @@ model Asset {
 /// AZ AKTORT NEM ITT TÁROLJUK: a hozzárendelés `AssetEvent` sort ír
 /// (`LABEL_ASSIGNED`), ahol az `actorUserId` amúgy is áll. Egy külön mező itt
 /// ugyanazt mondaná el másodszor, és a kettő elcsúszhatna egymástól.
+/// EGY GENERALASI TETEL: amit egy gombnyomas eloallitott.
+///
+/// MIERT KELL SAJAT TABLA, ES NEM ELEG AZ `issuedAt` A MATRICAN. Balazs a
+/// KORABBI GENERALASOKAT akarja latni (mikor, hany kod, hany szabad meg) --
+/// ehhez a tetelnek ONALLO azonossaga kell. Ket, egy percen belul inditott
+/// generalas az `issuedAt` alapjan osszemosodna, es epp az a ket sor az, amibol
+/// egy veletlen dupla kattintas latszik.
+///
+/// A SZABAD DARABSZAM NINCS ITT TAROLVA, es ez dontes: azt a matricak
+/// allapotabol SZAMOLJUK (`assetId IS NULL`). Egy tarolt szamlalo minden
+/// eszkoz-felvitelnel karbantartast igenyelne, es a ket ertek elcsuszasa
+/// CSENDES lenne -- a lista tovabbra is szamot mutatna, csak rosszat.
+///
+/// AMIT EZ A TABLA NEM TUD, ES AMIT EGYSZER KERDEZNI FOGNAK: hogy egy tetelt
+/// KINYOMTATTAK-E. A nyomtatas tenyet ma sehol nem rogzitjuk -- se itt, se
+/// masutt. Ha egyszer az a kerdes johet, hogy "hany matrica van kinyomtatva es
+/// meg felhasznalatlan", arra ma NINCS forras, es ez nem szamitasi kerdes,
+/// hanem hianyzo adat.
+model AssetLabelBatch {
+  id             String       @id @default(cuid())
+  /// A generalas idopontja. A listan PERCRE pontosan latszik: enelkul egy
+  /// veletlen dupla generalas ugyanazon a napon ket egyforma sornak latszana.
+  createdAt      DateTime     @default(now())
+  /// Hany kodot KERTEK. A tenylegesen letrejottek szama a kapcsolt sorokbol
+  /// johet -- a ketto csak akkor terne el, ha a generalas felig futott volna le,
+  /// es azt a tranzakcio kizarja.
+  requestedCount Int
+  /// AZ AKTORT NEM TAROLJUK. Balazs harom dolgot kert a listara: mikor, hany
+  /// kod, hany szabad. A "ki generalta" nem szerepel kozottuk, es egy User
+  /// kapcsolat itt olyan mezot vinne be, amit senki nem kerdez -- viszont
+  /// karban KELLENE tartani (torolt felhasznalo, jogosultsag). Ha egyszer
+  /// kerdes lesz, akkor kerul be, indoklassal.
+  labels         AssetLabel[]
+
+  @@index([createdAt])
+}
+
 model AssetLabel {
-  id         String    @id @default(cuid())
+  id         String           @id @default(cuid())
+  /// Melyik generalasi tetelbol szuletett. NULLAZHATO: a mezo elott kiadott
+  /// kodoknak nincs tetelük, es egy migracio nem talalhat ki nekik egyet.
+  batchId    String?
+  batch      AssetLabelBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
   /// A matricán álló, emberi szemnek szánt azonosító (egy betű és négy szám,
   /// például V2196). Balázs döntése, 2026-09-02, a 42056ab0 kártyán.
-  code       String    @unique
+  code       String           @unique
   /// Mikor adtuk ki (nyomtattuk). A kiadás önmagában nem köti eszközhöz.
-  issuedAt   DateTime  @default(now())
+  issuedAt   DateTime         @default(now())
   /// NULL, amíg a matrica szabad. Egyedi: egy eszközön egy matrica.
-  assetId    String?   @unique
+  assetId    String?          @unique
   assignedAt DateTime?
 
   /// `SetNull`, nem `Cascade`: egy eszköz törlése nem semmisítheti meg a

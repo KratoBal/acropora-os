@@ -135,6 +135,12 @@ export type {
   UpdateAssetInput,
 } from "./asset-management.js";
 export type { AssetLabel, AssetLabelIssueResult } from "./asset-label.js";
+export type { AssetLabelBatchSummary } from "./asset-label-batch.js";
+export {
+  ASSET_LABEL_BATCH_MAX,
+  ASSET_LABEL_BATCH_MIN,
+  randomAssetLabelCode,
+} from "./asset-label-batch.js";
 export {
   ASSET_LABEL_CODE_STORED_PATTERN,
   ASSET_LABEL_REQUIRED_ON_CREATE,

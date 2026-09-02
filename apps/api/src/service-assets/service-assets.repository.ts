@@ -24,7 +24,7 @@ import type {
   AssetOwnerListResponse,
   AssetOwnerType,
 } from "@acropora/types";
-import { normalizeAssetLabelCode } from "@acropora/types";
+import { normalizeAssetLabelCode, randomAssetLabelCode } from "@acropora/types";
 
 import { withUniqueCode } from "../common/unique-code.util.js";
 import { buildUnitPaths } from "./unit-path.js";
@@ -138,6 +138,24 @@ const DOCUMENT_TYPES = ["INVOICE", "WARRANTY", "MANUAL", "OTHER"] as const;
  * nem is hasznos kulonbseg: mindket esetben ugyanaz a teendo, masik matricat
  * kell olvasni vagy szolni.
  */
+/**
+ * NEM SIKERULT ELEG UJ KODOT TALALNI.
+ *
+ * Nem "veletlen balszerencse": ez akkor all elo, ha a kod-ter (260 ezer)
+ * nagy resze elfogyott. A szam benne van az uzenetben, mert enelkul a hivo
+ * azt hinne, hogy a rendszer hibas -- holott a KESZLET fogyott el.
+ */
+export class AssetLabelPoolExhaustedError extends Error {
+  constructor(
+    readonly requested: number,
+    readonly found: number,
+  ) {
+    super(
+      `${requested} új matricakódot kértél, de csak ${found} szabadot találtam.`,
+    );
+  }
+}
+
 export class AssetLabelUnavailableError extends Error {
   constructor(readonly code: string) {
     super(`A(z) ${code} matricakód nem köthető ehhez az eszközhöz.`);
@@ -964,6 +982,89 @@ export class ServiceAssetsRepository extends Repository {
           normalized.indexOf(code) === index && existing.has(code),
       ),
     };
+  }
+
+  /**
+   * EGY GENERALASI TETEL: `count` darab UJ, meg nem letezo kod.
+   *
+   * A KODOKAT ITT GENERALJUK, nem a hivo adja -- ez a kulonbseg az
+   * `issueLabels`-hez kepest, ami egy MAR KINYOMTATOTT iv kodjait veszi at.
+   *
+   * AZ UTKOZES KEZELESE NEM UJRAPROBALKOZAS A TRANZAKCIOBAN. Eloszor
+   * osszegyujtjuk a jelolteket a MAR LETEZO kodok ellenében, es csak a kesz
+   * halmazt irjuk be. Egy tranzakcion BELULI ujrahuzas azert nem menne, mert a
+   * Postgres az elso elbukott utasitas utan az egesz tranzakciot
+   * hasznalhatatlanna teszi (lasd a `withUniqueCode` jegyzetet).
+   *
+   * A KISERLETEK SZAMA KORLATOS, ES EZ NEM ELMELETI. A kod-ter 26-szor 10000,
+   * vagyis 260 ezer. Ha egyszer a keszlet nagy resze elfogy, egy korlatlan
+   * ciklus NEM hibat adna, hanem VEGTELENUL futna -- a felhasznalo pedig egy
+   * poergo gombot latna. Inkabb hasaljon el, megnevezve az okot.
+   */
+  async issueBatch(count: number): Promise<{
+    batchId: string;
+    codes: string[];
+  }> {
+    const letezo = new Set(
+      (await prisma.assetLabel.findMany({ select: { code: true } })).map(
+        (row) => row.code,
+      ),
+    );
+    const ujak = new Set<string>();
+    const maxKiserlet = count * 50 + 1000;
+    let kiserlet = 0;
+    while (ujak.size < count) {
+      kiserlet += 1;
+      if (kiserlet > maxKiserlet)
+        throw new AssetLabelPoolExhaustedError(count, ujak.size);
+      const jelolt = randomAssetLabelCode();
+      if (letezo.has(jelolt) || ujak.has(jelolt)) continue;
+      ujak.add(jelolt);
+    }
+
+    const codes = [...ujak].sort();
+    const batch = await prisma.$transaction(async (tx) => {
+      const created = await tx.assetLabelBatch.create({
+        data: { requestedCount: count },
+        select: { id: true },
+      });
+      await tx.assetLabel.createMany({
+        data: codes.map((code) => ({ code, batchId: created.id })),
+      });
+      return created;
+    });
+    return { batchId: batch.id, codes };
+  }
+
+  /**
+   * A KORABBI GENERALASOK, LEGFRISSEBB ELOL.
+   *
+   * A SZABAD DARABSZAM SZAMOLVA JON, nem tarolva: azok a sorok, ahol nincs
+   * eszkoz. Egy tarolt szamlalo minden eszkoz-felvitelnel karbantartast
+   * igenyelne, es az elcsuszasa CSENDES lenne -- a lista tovabbra is szamot
+   * mutatna, csak rosszat.
+   */
+  async listLabelBatches(
+    limit: number,
+  ): Promise<
+    { id: string; createdAt: Date; count: number; freeCount: number }[]
+  > {
+    const rows = await prisma.assetLabelBatch.findMany({
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      select: {
+        id: true,
+        createdAt: true,
+        _count: { select: { labels: true } },
+        labels: { where: { assetId: null }, select: { id: true } },
+      },
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      createdAt: row.createdAt,
+      count: row._count.labels,
+      freeCount: row.labels.length,
+    }));
   }
 
   /**
