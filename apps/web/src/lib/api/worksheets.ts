@@ -5,6 +5,7 @@ import type {
   SignWorksheetVersionInput,
   UpdateWorksheetDraftInput,
   WorksheetAssignableUserListResponse,
+  WorksheetAttachableListResponse,
   WorksheetSelectablePartnerListResponse,
   WorksheetDepartmentListResponse,
   WorksheetDepartmentSummary,
@@ -28,6 +29,14 @@ export const worksheetsApi = {
   },
   detail(token: string, id: string, signal?: AbortSignal) {
     return apiRequest<WorksheetDetail>(worksheetPath(id), token, { signal });
+  },
+  /** A lapok, amik alatt meg nincs hibajegy. A hibajegy felulete keri. */
+  attachable(token: string, signal?: AbortSignal) {
+    return apiRequest<WorksheetAttachableListResponse>(
+      `${base}/attachable`,
+      token,
+      { signal },
+    );
   },
   selectablePartners(token: string, signal?: AbortSignal) {
     return apiRequest<WorksheetSelectablePartnerListResponse>(

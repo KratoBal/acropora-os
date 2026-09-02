@@ -448,6 +448,8 @@ export type {
   WorksheetCustomerSummary,
   WorksheetDepartmentListResponse,
   WorksheetDepartmentSummary,
+  WorksheetAttachableItem,
+  WorksheetAttachableListResponse,
   WorksheetDetail,
   WorksheetFieldChange,
   WorksheetLineDetail,

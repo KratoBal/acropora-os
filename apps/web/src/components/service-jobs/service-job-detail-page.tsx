@@ -5,6 +5,7 @@ import {
   Badge,
   Button,
   Card,
+  ConfirmDialog,
   EmptyState,
   PageHeader,
   Skeleton,
@@ -15,12 +16,14 @@ import {
   type ServiceJobDetail,
   type ServiceJobStatusValue,
   type ServiceJobTimelineEntry,
+  type WorksheetAttachableItem,
 } from "@acropora/types";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
+import { worksheetsApi } from "@/lib/api/worksheets";
 import { formatDateTime } from "@/components/worksheets/worksheet-labels";
 import {
   serviceJobStatusLabel,
@@ -65,6 +68,11 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [stepError, setStepError] = useState<string | null>(null);
   const [stepping, setStepping] = useState(false);
+  const [attachable, setAttachable] = useState<WorksheetAttachableItem[]>([]);
+  const [chosenSheet, setChosenSheet] = useState("");
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const [attaching, setAttaching] = useState(false);
+  const [sheetToDetach, setSheetToDetach] = useState<string | null>(null);
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_VIEW),
   );
@@ -101,6 +109,21 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
   }, [load]);
 
   /**
+   * A VALASZTO-LISTA KULON TOLTODIK, es a hibaja NEM allitja meg az oldalt: a
+   * jegy elolvasasahoz nincs szukseg ra. Ha nem jon meg, a csatolo doboz marad
+   * ures - a naplo, a lepesek es a lapok attol meg olvashatok.
+   */
+  useEffect(() => {
+    if (!canManage) return;
+    const controller = new AbortController();
+    worksheetsApi
+      .attachable(token, controller.signal)
+      .then((response) => setAttachable(response.items))
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [canManage, token]);
+
+  /**
    * A LÉPÉS UTÁN ÚJRATÖLTÜNK, nem a válaszból építünk.
    *
    * A `move` csak nyugtát ad. Ha a képernyőt abból raknánk össze, a napló új
@@ -118,6 +141,51 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
       );
     } finally {
       setStepping(false);
+    }
+  };
+
+  const detach = async (worksheetId: string) => {
+    setSheetToDetach(null);
+    setAttaching(true);
+    setAttachError(null);
+    try {
+      await serviceJobsApi.detachWorksheet(token, jobId, worksheetId);
+      // A LEVALASZTOTT LAP UJRA SZABAD, tehat a valaszto-listaba is
+      // visszakerul -- mindkettot ujra kell kerni.
+      const [, frissValaszto] = await Promise.all([
+        load(),
+        worksheetsApi.attachable(token),
+      ]);
+      setAttachable(frissValaszto.items);
+    } catch (cause) {
+      setAttachError(
+        cause instanceof Error ? cause.message : "A leválasztás nem sikerült.",
+      );
+    } finally {
+      setAttaching(false);
+    }
+  };
+
+  const attach = async () => {
+    if (!chosenSheet) return;
+    setAttaching(true);
+    setAttachError(null);
+    try {
+      await serviceJobsApi.attachWorksheet(token, jobId, chosenSheet);
+      setChosenSheet("");
+      // UJRATOLTUNK MINDKETTOT: a jegy naploja es a valaszto-lista is
+      // megvaltozott - a csatolt lap onnantol nem szabad.
+      const [, frissValaszto] = await Promise.all([
+        load(),
+        worksheetsApi.attachable(token),
+      ]);
+      setAttachable(frissValaszto.items);
+    } catch (cause) {
+      setAttachError(
+        cause instanceof Error ? cause.message : "A csatolás nem sikerült.",
+      );
+    } finally {
+      setAttaching(false);
     }
   };
 
@@ -273,6 +341,19 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                     ? `Átadva: ${formatDateTime(worksheet.handedOverAt)}`
                     : "Még nálunk van"}
                 </span>
+                {/* A VISSZAUT OTT ALL, AHOL A HIBA LATSZIK: a lap mellett,
+                    nem egy kulon felulet menujeben. Aki eszreveszi, hogy rossz
+                    lapot csatolt, ugyanabban a sorban tudja levenni. */}
+                {canManage ? (
+                  <button
+                    type="button"
+                    className="ml-2 text-xs text-slate-500 underline hover:text-teal-700"
+                    disabled={attaching}
+                    onClick={() => setSheetToDetach(worksheet.id)}
+                  >
+                    Leválasztás
+                  </button>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -281,7 +362,83 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
             Ehhez a jegyhez még nem tartozik munkalap.
           </p>
         )}
+
+        {/*
+          A CSATOLAS A JEGY OLDALAN VAN, mert a folyamat is innen nez ki igy: a
+          szerelo helyben felveszi a lapot, atadja, es a jegy NALUNK szuletik meg
+          utolag - a felelos akkor veszi hozza a mar meglevo lapot.
+
+          A VALASZTO CSAK A SZABAD LAPOKAT KINALJA (amik alatt nincs jegy), es
+          semmilyen allapot szerint nem szur: a lezart lap is csatolhato, mert a
+          lezaras a DOKUMENTUMROL szol, a csatolas a BESOROLASROL.
+        */}
+        {canManage ? (
+          <div className="space-y-2 border-t pt-3">
+            <label
+              className="block text-sm font-semibold"
+              htmlFor="csatolando-munkalap"
+            >
+              Meglévő munkalap csatolása
+            </label>
+            {attachError ? (
+              <Alert
+                variant="danger"
+                title="A csatolás nem ment"
+                description={attachError}
+              />
+            ) : null}
+            {attachable.length ? (
+              <div className="flex flex-wrap gap-2">
+                <select
+                  id="csatolando-munkalap"
+                  className="rounded border px-2 py-1 text-sm"
+                  value={chosenSheet}
+                  onChange={(event) => setChosenSheet(event.target.value)}
+                >
+                  <option value="">Válassz munkalapot</option>
+                  {attachable.map((sheet) => (
+                    <option key={sheet.id} value={sheet.id}>
+                      {sheet.number ?? "Piszkozat"} - {sheet.customerName} -{" "}
+                      {sheet.subject}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  variant="secondary"
+                  disabled={!chosenSheet || attaching}
+                  onClick={() => void attach()}
+                >
+                  Csatolás
+                </Button>
+              </div>
+            ) : (
+              /* A HIANY IS ALLITAS: egy eltunt valaszto ugy nezne ki, mint egy
+                 betoltesi hiba. */
+              <p className="text-sm text-slate-500">
+                Nincs olyan munkalap, ami még egyik hibajegyhez sem tartozik.
+              </p>
+            )}
+          </div>
+        ) : null}
       </Card>
+      {/*
+        A KERDES HAROM RESZE, ES A HARMADIK ITT NEM UDVARIASSAG: a levalasztas
+        VISSZAFORDITHATO, es ezt ki kell mondani. Egy kerdes, ami nem mondja
+        meg, van-e visszaut, ugyanugy megijeszt egy artalmatlan lepesnel, mint
+        egy veglegesnel -- es akkor a kovetkezo kerdest mar nem olvassa el senki.
+      */}
+      <ConfirmDialog
+        open={sheetToDetach !== null}
+        title="Leválasztod ezt a munkalapot a hibajegyről?"
+        consequence="A lap kikerül a jegy alól, és a jegy naplójából is eltűnik a sora."
+        recovery="Visszatehető: a lap újra szabaddá válik, és ugyanitt bármikor visszacsatolható."
+        confirmLabel="Leválasztás"
+        busy={attaching}
+        onConfirm={() => {
+          if (sheetToDetach !== null) void detach(sheetToDetach);
+        }}
+        onCancel={() => setSheetToDetach(null)}
+      />
     </div>
   );
 }

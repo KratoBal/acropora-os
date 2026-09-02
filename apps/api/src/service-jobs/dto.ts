@@ -63,3 +63,14 @@ export class MoveServiceJobDto {
 
   @IsString() @MaxLength(2000) @IsOptional() note?: string | null;
 }
+
+/**
+ * Egy meglevo munkalap a jegy ala.
+ *
+ * CSAK AZ AZONOSITO: a csatolas nem valtoztat semmit a lapon azon kivul, hogy
+ * melyik jegy alatt all. Barmi mas mezo itt azt sugallna, hogy a csatolas
+ * kozben a lapot is szerkesztjuk.
+ */
+export class AttachWorksheetDto {
+  @IsString() @MaxLength(64) worksheetId!: string;
+}
