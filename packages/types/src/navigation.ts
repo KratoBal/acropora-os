@@ -271,6 +271,28 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.USERS_MANAGE),
   },
+  {
+    /**
+     * MATRICAKODOK KIADASA ES NYOMTATASA.
+     *
+     * A SZERVIZES NEM LATJA. Balazs dontese, 2026-09-02 21:00:53, Discord
+     * (matricas szal), szo szerint: "Nem kell hogy lassa".
+     *
+     * A JOG EZERT `SETTINGS_MANAGE`, nem `SERVICE_MANAGE` -- ugyanaz, ami a
+     * tobbi Beallitasok-tetelt kapuzza, amit a szervizes nem lat (Altalanos,
+     * NAV, Medusa kapcsolat). Merve: mind a harom `SETTINGS_MANAGE` alatt all,
+     * es azt csak az OWNER es az ADMIN kapja meg (a MANAGER-t a
+     * ROLE_PERMISSIONS kifejezetten kiszuri).
+     *
+     * ES A VEGPONTOK UGYANEZT KAPJAK. Ha a menupont es a vegpont KULON jogon
+     * allna, a ketto szetcsuszna: vagy latszana a gomb annak, aki nem hivhatja
+     * meg, vagy hivhatna az, aki nem latja. Ez a mai napunk fo lelete volt --
+     * egy szabaly ket helyen, es csak az egyik helyen javul.
+     */
+    id: "asset-labels",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
+  },
   NAV_TILE,
 ];
 
