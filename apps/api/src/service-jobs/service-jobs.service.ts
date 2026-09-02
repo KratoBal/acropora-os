@@ -5,7 +5,11 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 
-import { serviceJobTimeline, type ServiceJobDetail } from "@acropora/types";
+import {
+  serviceJobTimeline,
+  type ServiceJobDetail,
+  type ServiceJobListResponse,
+} from "@acropora/types";
 
 import type {
   CreateServiceJobDto,
@@ -56,8 +60,13 @@ export class ServiceJobsService {
    * felé bármikor kimondhatunk. Ha csak az egyiket adnánk vissza, a hívó
    * kezdené el képezni a másikat - és a leképezés attól a pillanattól két
    * helyen állna.
+   *
+   * A VISSZATÉRÉSI TÍPUS KI VAN ÍRVA, és ez nem díszítés: a felület ugyanezt a
+   * típust importálja a közös csomagból. Kiírás nélkül a szerver alakja
+   * elmozdulhatna (egy átnevezett mező mindkét oldalon lefordul), és a
+   * képernyőn `undefined` jelenne meg, hibaüzenet nélkül.
    */
-  async list(query: ServiceJobListQueryDto) {
+  async list(query: ServiceJobListQueryDto): Promise<ServiceJobListResponse> {
     const rows = await this.repository.list(query.scope ?? "open");
     return {
       items: rows.map((row) => ({
