@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ContentCreatePage } from "./content-create-page";
 import { ContentListPage } from "./content-list-page";
 
 const api = vi.hoisted(() => ({
@@ -13,6 +14,9 @@ const api = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/api/content", () => ({ contentApi: api }));
+
+const router = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => router }));
 
 /**
  * A MUNKAMENET AZ ELES ALAKJABAN: NINCS BENNE TOKEN.
@@ -51,46 +55,63 @@ beforeEach(() => {
 
 describe("putting a piece in, as it happens in production", () => {
   /**
-   * EGY ALLITAS, ES A MEZOK LETEZESET MERI.
+   * A VÉDELEM, AMI ÁTKÖLTÖZÖTT, DE NEM VESZETT EL.
    *
-   * A hiba, amit Balazs elesben talalt: a felirat eltunt kattintasra, es utana
-   * nem volt hova irni. A felulet nem hibazott es nem is szolt -- egyszeruen
-   * nem jelent meg semmi.
+   * A hiba, amit Balázs élesben talált: a felirat eltűnt kattintásra, és utána
+   * nem volt hova írni. A felület nem hibázott és nem is szólt.
    *
-   * AMI ATENGEDTE: a felvitel feltetele tartalmazta a tokent is, es eles
-   * munkamenetben a token URES. A tipusellenorzes ezt nem lathatta (az ures
-   * sztring ervenyes sztring), es egyetlen teszt sem renderelte ezt az utat.
+   * AMI ÁTENGEDTE: a felvitel feltétele tartalmazta a tokent is, és éles
+   * munkamenetben a token ÜRES. A típusellenőrzés ezt nem láthatta (az üres
+   * sztring érvényes sztring).
+   *
+   * A felvitel azóta KÜLÖN OLDALON áll, tehát a régi alak (gomb, majd mezők
+   * ugyanazon a lapon) már nem létezik. A KÉRDÉS viszont változatlan: üres
+   * tokennel is látszanak-e a mezők. Ezért az állítás nem törlődött, hanem
+   * átkerült az új oldalra.
    */
-  it("shows the fields after the button is pressed, with no client token", async () => {
-    render(<ContentListPage />);
-
-    const gomb = await screen.findByRole("button", {
-      name: "Új tartalom felvétele",
-    });
-    fireEvent.click(gomb);
+  it("shows the fields with no client token", async () => {
+    render(<ContentCreatePage />);
 
     await waitFor(() => {
       expect(screen.getByLabelText("Cím")).toBeTruthy();
     });
+    expect(screen.getByLabelText("Csatorna")).toBeTruthy();
   });
 
   /**
-   * UGYANAZ A KERDES A MASODIK GOMBRA, ES KULON ALLITASKENT.
+   * UGYANAZ A KÉRDÉS AZ ÖTLET-MÓDRA, ÉS KÜLÖN ÁLLÍTÁSKÉNT.
    *
-   * Az otlet-urlap ugyanazon a felteteles agon all, tehat ha a token uressege
-   * elrejti az egyiket, elrejti a masikat is. Egy allitas a ket gombra egyben
-   * nem mondana meg, melyik torott -- ezert ketto.
+   * A két mód ugyanazon a feltételes ágon áll, tehát ha a token üressége
+   * elrejtené az egyiket, elrejtené a másikat is. Egy állítás a kettőre egyben
+   * nem mondaná meg, melyik törött.
    */
   it("shows the idea fields too, with no client token", async () => {
-    render(<ContentListPage />);
+    render(<ContentCreatePage />);
 
-    const gomb = await screen.findByRole("button", {
-      name: "Ötlet feljegyzése",
-    });
-    fireEvent.click(gomb);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Ötlet feljegyzése/ }),
+    );
 
     await waitFor(() => {
       expect(screen.getByLabelText("Cím")).toBeTruthy();
     });
+    // AZ ÖTLET KEVESEBBET KÉR: a szöveg-mező NINCS ott, nem csak rejtve van.
+    expect(screen.queryByLabelText("Szöveg")).toBeNull();
+  });
+
+  /**
+   * A LISTA MÁR NEM VISZ FEL, CSAK ÁTENGED.
+   *
+   * Ez az állítás azt védi, ami a döntés lényege volt: a lista lektorálásra
+   * való. Ha valaki visszatenné az űrlapot a lista tetejére, ez pirosodik.
+   */
+  it("the list only links to the form, it does not contain it", async () => {
+    render(<ContentListPage />);
+
+    const link = await screen.findByRole("link", {
+      name: /Új tétel felvitele/,
+    });
+    expect(link.getAttribute("href")).toBe("/tartalom/uj");
+    expect(screen.queryByLabelText("Cím")).toBeNull();
   });
 });
