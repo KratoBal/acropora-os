@@ -33,6 +33,7 @@ const CODE_B = "Z9002";
 const CODE_C = "Z9003";
 
 let customerId = "";
+let actorUserId = "";
 
 function createInput(over: Partial<CreateAssetDto> = {}): CreateAssetDto {
   return {
@@ -56,6 +57,9 @@ async function removeLeftovers() {
   });
   await prisma.customer.deleteMany({
     where: { customerNumber: { startsWith: PREFIX } },
+  });
+  await prisma.user.deleteMany({
+    where: { email: { startsWith: PREFIX.toLowerCase() } },
   });
 }
 
@@ -115,7 +119,7 @@ describe(
     });
 
     it("AssetLabel_assignment_pairing_check: a fél hozzárendelés nem áll meg", async () => {
-      const asset = await repository.create(createInput(), "");
+      const asset = await repository.create(createInput(), actorUserId);
       await assert.rejects(
         () =>
           prisma.$executeRawUnsafe(
@@ -142,7 +146,7 @@ describe(
     it("egy kód nem kerülhet két eszközre", async () => {
       const first = await repository.create(
         createInput({ labelCode: CODE_C }),
-        "",
+        actorUserId,
       );
       // POZITÍV KONTROLL: az elsőre TÉNYLEG rákerült. Enélkül a lenti elutasítás
       // attól is teljesülne, hogy a kód sosem volt lefoglalva.
@@ -154,7 +158,8 @@ describe(
       assert.ok(bound?.assignedAt);
 
       await assert.rejects(
-        () => repository.create(createInput({ labelCode: CODE_C }), ""),
+        () =>
+          repository.create(createInput({ labelCode: CODE_C }), actorUserId),
         AssetLabelUnavailableError,
       );
     });
@@ -173,7 +178,8 @@ describe(
         where: { assetNumber: { startsWith: "ESZK" }, customerId },
       });
       await assert.rejects(
-        () => repository.create(createInput({ labelCode: "Z9999" }), ""),
+        () =>
+          repository.create(createInput({ labelCode: "Z9999" }), actorUserId),
         AssetLabelUnavailableError,
       );
       const after = await prisma.asset.count({
