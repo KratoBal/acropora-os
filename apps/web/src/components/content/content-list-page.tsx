@@ -191,7 +191,22 @@ export function ContentListPage() {
         </>
       ) : null}
 
-      {canCreate && creating && token ? (
+      {/*
+        A FELTETELBEN NINCS TOKEN, ES EZ A JAVITAS.
+        
+        Elobb `canCreate && creating && token` allt itt, es ELES munkamenetben
+        a token URES: suti-alapu bejelentkezesnel a bongeszo a httpOnly sutit
+        kuldi, es a kliens nem lat tokent. A `lib/api/client.ts` sajat
+        megjegyzese ki is mondja, es a `session.token` a tipusban opcionalis.
+        
+        Az eredmeny az volt, amit Balazs elesben latott: a gombok eltuntek
+        (mert a `creating` beallt), es a helyukon nem jelent meg semmi. Nem
+        hiba, nem uzenet -- csak ures hely.
+        
+        A token tovabbra is atmegy a formnak: az `apiRequest` az ures erteket
+        helyesen kezeli, es szandekosan NEM tesz Bearer fejlecet, ha nincs mit.
+      */}
+      {canCreate && creating ? (
         <ContentCreateForm
           token={token}
           mode={creating}
