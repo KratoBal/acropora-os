@@ -53,6 +53,18 @@ export const serviceJobsApi = {
     });
   },
   /**
+   * PARTNER EGY MEG PARTNER NELKULI JEGYRE. A valasz nyugta, tehat a hivo
+   * ujratolt: a partner neve a fejlecben es a csatolo doboz megjelenese is
+   * ettol fugg.
+   */
+  setPartner(token: string, id: string, customerId: string) {
+    return apiRequest<{ ok: true }>(jobPath(id, "/partner"), token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ customerId }),
+    });
+  },
+  /**
    * A CSATOLAS VISSZAUTJA. Enelkul egy rossz valasztas a legordulobol orokre
    * ott hagyna a lapot a jegy alatt.
    */

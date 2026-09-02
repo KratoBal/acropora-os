@@ -25,6 +25,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { formatDateTime } from "@/components/worksheets/worksheet-labels";
+import { PartnerPicker } from "./partner-picker";
 import {
   serviceJobStatusLabel,
   serviceJobStatusVariant,
@@ -73,6 +74,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
   const [attachError, setAttachError] = useState<string | null>(null);
   const [attaching, setAttaching] = useState(false);
   const [sheetToDetach, setSheetToDetach] = useState<string | null>(null);
+  const [partnerError, setPartnerError] = useState<string | null>(null);
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_VIEW),
   );
@@ -141,6 +143,27 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
       );
     } finally {
       setStepping(false);
+    }
+  };
+
+  /**
+   * A PARTNER POTLASA -- A FELVITEL VISSZAUTJA.
+   *
+   * A felvitel nem koveteli meg a partnert; a csatolas viszont igen. Enelkul a
+   * gomb nelkul egy partner nelkul megnyitott jegy BENT RAGADNA: soha nem tudna
+   * lapot fogadni, es a feluleten nem lenne kiut.
+   */
+  const setPartner = async (customerId: string) => {
+    setPartnerError(null);
+    try {
+      await serviceJobsApi.setPartner(token, jobId, customerId);
+      await load();
+    } catch (cause) {
+      setPartnerError(
+        cause instanceof Error
+          ? cause.message
+          : "A partner beállítása nem sikerült.",
+      );
     }
   };
 
@@ -289,6 +312,34 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
               Ez a hibajegy lezárult, nincs több lépése.
             </p>
           )}
+        </Card>
+      ) : null}
+
+      {/*
+        A HIANY MELLE A KIUT. Egy partner nelkuli jegy ma nem tud lapot fogadni,
+        es enelkul a doboz nelkul ezt csak a csatolasnal tudna meg a felhasznalo
+        -- egy masik kepernyon, es kiut nelkul.
+      */}
+      {canManage && job.customerName === null ? (
+        <Card className="space-y-2 p-4">
+          <label className="block text-sm font-semibold" htmlFor="jegy-partner">
+            Partner beállítása
+          </label>
+          <p className="text-xs text-slate-500">
+            Ehhez a hibajegyhez még nincs partner, ezért munkalapot sem lehet
+            alá csatolni.
+          </p>
+          {partnerError ? (
+            <Alert
+              variant="danger"
+              title="Nem sikerült"
+              description={partnerError}
+            />
+          ) : null}
+          <PartnerPicker
+            id="jegy-partner"
+            onPick={(picked) => void setPartner(picked.id)}
+          />
         </Card>
       ) : null}
 

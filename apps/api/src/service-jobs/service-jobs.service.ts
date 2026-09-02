@@ -221,6 +221,55 @@ export class ServiceJobsService {
   }
 
   /**
+   * PARTNER EGY MEG PARTNER NELKULI JEGYRE.
+   *
+   * MIERT KELL: a felvitel nem koveteli meg a partnert (a jegy tipikusan egy
+   * mar meglevo lapbol szuletik, aminek van partnere), a CSATOLAS viszont
+   * igen. Enelkul az ut nelkul egy partner nelkul megnyitott jegy BENT RAGAD:
+   * soha nem tud lapot fogadni, es a feluleten nincs kiut. Ez rosszabb, mint a
+   * hiany, mert ELOALL es UTANA ALL.
+   *
+   * ES AMI EZ NEM: ATSOROLAS. Egy jegy, aminek MAR van partnere, ezen az uton
+   * nem valtoztathato meg, es ez KIMONDOTT dontes, nem mellekhatas:
+   *
+   *   - a partner megvaltoztatasa egy MAR CSATOLT lappal rendelkezo jegyen
+   *     azonnal eltérest csinalna a jegy es a lap partnere kozott -- pont azt a
+   *     rest nyitna ujra, amit a csatolas-ellenorzes bezart, csak egy masik
+   *     ajton;
+   *   - egy jegynek pedig csak akkor lehet lapja, ha VAN partnere (a csatolas
+   *     ezt koveteli), tehat a "partner megvaltoztatasa" gyakorlatilag mindig
+   *     olyan jegyet erint, ami mar dolgozik -- az pedig ATSOROLAS, ugyanazokkal
+   *     a nyitott kerdesekkel, mint a lap athelyezese masik jegy ala.
+   *
+   * A TILTAS TEHAT HANGOS: a felhasznalo megtudja, hogy amit akar, az mas
+   * muvelet. A megengedo irany NEMA lenne: ket partner egy jegyen, es senki
+   * nem keresi.
+   */
+  async setPartner(jobId: string, customerId: string) {
+    const job = await this.repository.jobAttachState(jobId);
+    if (job === null) throw new NotFoundException("A hibajegy nem található.");
+    if (job.customerId !== null)
+      throw new ConflictException(
+        "Ennek a hibajegynek már van partnere. A partner megváltoztatása átsorolás, arra ma nincs út.",
+      );
+
+    if (!(await this.repository.customerExists(customerId)))
+      throw new NotFoundException("A partner nem található.");
+
+    const updated = await this.repository.setPartner({
+      id: jobId,
+      customerId,
+    });
+    // A FELTETEL A `WHERE`-BEN IS OTT VOLT: ha kozben mas allitotta be, itt
+    // derul ki, es nem irjuk felul csendben.
+    if (!updated.ok)
+      throw new ConflictException(
+        "A hibajegy időközben partnert kapott. Töltsd újra, és nézd meg, mi történt.",
+      );
+    return { ok: true };
+  }
+
+  /**
    * A LAP LEVALASZTASA A JEGYROL -- A CSATOLAS VISSZAUTJA.
    *
    * MIERT KELL: a csatolas egy legordulobol valaszt, a lapokat pedig sokszor

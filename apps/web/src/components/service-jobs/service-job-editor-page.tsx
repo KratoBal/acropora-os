@@ -7,11 +7,11 @@ import {
   type CustomerSummary,
 } from "@acropora/types";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
-import { customersApi } from "@/lib/api/customers";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
+import { PartnerPicker } from "./partner-picker";
 
 /**
  * ÚJ HIBAJEGY, BELSŐ FELVITEL.
@@ -37,8 +37,6 @@ export function ServiceJobEditorPage() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [search, setSearch] = useState("");
-  const [matches, setMatches] = useState<CustomerSummary[]>([]);
   const [customer, setCustomer] = useState<CustomerSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -46,42 +44,6 @@ export function ServiceJobEditorPage() {
     session && hasPermission(session.user, PERMISSIONS.SERVICE_MANAGE),
   );
   const token = session?.token ?? "";
-
-  const find = useCallback(
-    async (text: string, signal?: AbortSignal) => {
-      if (text.trim().length < 2) {
-        setMatches([]);
-        return;
-      }
-      const query = new URLSearchParams({
-        search: text.trim(),
-        page: "1",
-        pageSize: "10",
-      });
-      try {
-        const response = await customersApi.list(token, query, signal);
-        setMatches(response.items);
-      } catch {
-        // A KERESÉS HIBÁJA NEM ÁLLÍTJA MEG A FELVITELT: a partner elhagyható,
-        // tehát a jegy enélkül is megnyitható.
-        setMatches([]);
-      }
-    },
-    [token],
-  );
-
-  useEffect(() => {
-    if (customer !== null) return;
-    const controller = new AbortController();
-    const timer = window.setTimeout(
-      () => void find(search, controller.signal),
-      300,
-    );
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [customer, find, search]);
 
   if (!canManage)
     return (
@@ -158,37 +120,14 @@ export function ServiceJobEditorPage() {
               <button
                 type="button"
                 className="text-xs text-slate-500 underline"
-                onClick={() => {
-                  setCustomer(null);
-                  setSearch("");
-                }}
+                onClick={() => setCustomer(null)}
               >
                 Másik partner
               </button>
             </div>
           ) : (
             <>
-              <Input
-                id="hibajegy-partner"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Kezdd el gépelni a partner nevét"
-              />
-              {matches.length ? (
-                <ul className="space-y-1 pt-1 text-sm">
-                  {matches.map((match) => (
-                    <li key={match.id}>
-                      <button
-                        type="button"
-                        className="underline hover:text-teal-700"
-                        onClick={() => setCustomer(match)}
-                      >
-                        {match.displayName}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
+              <PartnerPicker id="hibajegy-partner" onPick={setCustomer} />
               {/*
                 A HIÁNY IS ÁLLÍTÁS: a partner elhagyható, és ezt ki kell mondani,
                 különben a felhasználó keresni fog valamit, ami nem hiányzik.

@@ -242,6 +242,33 @@ export class ServiceJobsRepository {
   }
 
   /**
+   * A PARTNER BEALLITASA EGY MEG PARTNER NELKULI JEGYRE.
+   *
+   * A `customerId: null` FELTETEL A `WHERE`-BEN, nem elozetes olvasasban: ket
+   * egyszerre allito ember kozul a masodik nem irja felul csendben az elsot.
+   *
+   * ES AMI EZ NEM: ATSOROLAS. Egy jegy, aminek MAR van partnere, ezen az uton
+   * nem valtoztathato meg -- az mas muvelet, mas kerdesekkel (mi legyen a mar
+   * csatolt lapokkal, mit lat a regi partner), es azokra ma nincs dontes.
+   */
+  async setPartner(input: { id: string; customerId: string }) {
+    const updated = await this.database.serviceJob.updateMany({
+      where: { id: input.id, customerId: null },
+      data: { customerId: input.customerId },
+    });
+    return { ok: updated.count === 1 };
+  }
+
+  /** Letezik-e ez a vevo. A hibauzenet igy megnevezheti, MI a baj. */
+  async customerExists(id: string): Promise<boolean> {
+    const row = await this.database.customer.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    return row !== null;
+  }
+
+  /**
    * A JEGY LETEZESE ES PARTNERE, egy lekerdezesben.
    *
    * A `customerId` NULLAZHATO a jegyen (a lape nem), es epp ez a kulonbseg

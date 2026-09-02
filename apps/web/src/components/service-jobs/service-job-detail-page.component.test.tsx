@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   move: vi.fn(),
   attachWorksheet: vi.fn(),
   detachWorksheet: vi.fn(),
+  setPartner: vi.fn(),
 }));
 const sheets = vi.hoisted(() => ({ attachable: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
@@ -112,6 +113,7 @@ describe("ServiceJobDetailPage", () => {
     api.move.mockReset().mockResolvedValue({ ok: true });
     api.attachWorksheet.mockReset().mockResolvedValue({ ok: true });
     api.detachWorksheet.mockReset().mockResolvedValue({ ok: true });
+    api.setPartner.mockReset().mockResolvedValue({ ok: true });
     sheets.attachable.mockReset().mockResolvedValue({
       items: [
         {
@@ -246,6 +248,35 @@ describe("ServiceJobDetailPage", () => {
     expect(sheets.attachable).not.toHaveBeenCalled();
     // A VISSZAUT IS KEZELOI JOG: olvaso jognal a levalasztas gombja sem all ott.
     expect(screen.queryByRole("button", { name: "Leválasztás" })).toBeNull();
+  });
+
+  /**
+   * A HIÁNY MELLETT A KIÚT. A partner nélküli jegy ma nem tud lapot fogadni;
+   * enélkül a doboz nélkül ezt csak a csatolásnál tudná meg a felhasználó -
+   * egy másik képernyőn, és kiút nélkül.
+   */
+  it("partner nélküli jegyen felkínálja a partner beállítását", async () => {
+    api.detail.mockResolvedValue(detail({ customerName: null }));
+    render(<ServiceJobDetailPage jobId="job-1" />);
+
+    expect(await screen.findByText("Partner beállítása")).toBeTruthy();
+    expect(
+      screen.getByText(
+        /Ehhez a hibajegyhez még nincs partner, ezért munkalapot sem lehet/,
+      ),
+    ).toBeTruthy();
+  });
+
+  /**
+   * A SZŰKÍTÉST MÉRŐ ÁLLÍTÁS: akinek MÁR van partnere, annál a doboz NEM
+   * jelenik meg. A partner cseréje átsorolás, arra ma nincs út - egy megjelenő
+   * mező azt ígérné, hogy van.
+   */
+  it("partneres jegyen NEM kínálja fel a partner beállítását", async () => {
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    await screen.findByText("A hibajegy létrejött (Új).");
+
+    expect(screen.queryByText("Partner beállítása")).toBeNull();
   });
 
   /**
