@@ -297,6 +297,45 @@ describe(
       assert.ok(vanIdk.length > 0, "a 'with' lista nem lehet üres");
     });
 
+    /**
+     * A GENERALAS ES A LISTA, ADATBAZISON.
+     *
+     * Ket dolog merheto csak itt: hogy a generalt kodok TENYLEG uj, nem letezo
+     * kodok, es hogy a szabad darabszam SZAMOLVA jon -- vagyis csokken, amint
+     * egy kod eszkozhoz kerul.
+     */
+    it("a generálás új kódokat ad, és a lista számolja a szabadokat", async () => {
+      const elotte = await repository.listLabelBatches(50);
+      const batch = await repository.issueBatch(5);
+      assert.equal(batch.codes.length, 5);
+      assert.equal(new Set(batch.codes).size, 5, "a kódok nem ismétlődhetnek");
+
+      const utana = await repository.listLabelBatches(50);
+      assert.equal(
+        utana.length,
+        elotte.length + 1,
+        "pontosan egy új tétel keletkezett",
+      );
+      const ujTetel = utana.find((t) => t.id === batch.batchId);
+      assert.ok(ujTetel, "az új tétel szerepel a listában");
+      assert.equal(ujTetel.count, 5);
+      assert.equal(ujTetel.freeCount, 5, "friss tételben minden kód szabad");
+
+      // A SZAMOLAS AKKOR ER VALAMIT, HA MOZDUL. Egy tarolt szamlalo itt nem
+      // valtozna, es a lista tovabbra is otot mutatna -- csendben rosszul.
+      await repository.create(
+        createInput({ labelCode: batch.codes[0]! }),
+        actorUserId,
+      );
+      const harmadszor = await repository.listLabelBatches(50);
+      const frissitett = harmadszor.find((t) => t.id === batch.batchId);
+      assert.equal(frissitett?.count, 5, "a tétel mérete nem változik");
+      assert.equal(frissitett?.freeCount, 4, "a szabad darabszám csökken");
+
+      await prisma.assetLabel.deleteMany({ where: { batchId: batch.batchId } });
+      await prisma.assetLabelBatch.delete({ where: { id: batch.batchId } });
+    });
+
     it("a kiadás idempotens, és megmondja, mi állt már ott", async () => {
       const result = await repository.issueLabels([CODE_A, "Z9010"]);
       assert.deepEqual(result.alreadyIssued, [CODE_A]);

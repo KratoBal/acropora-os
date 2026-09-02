@@ -17,7 +17,10 @@ import {
   assetLabelCreateProblem,
   normalizeAssetLabelCode,
 } from "@acropora/types";
-import { AssetLabelUnavailableError } from "./service-assets.repository.js";
+import {
+  AssetLabelPoolExhaustedError,
+  AssetLabelUnavailableError,
+} from "./service-assets.repository.js";
 
 import {
   ASSET_DEPARTMENT_REFUSAL_MESSAGES,
@@ -179,6 +182,25 @@ export class ServiceAssetsService {
         "Ehhez a matricakódhoz nem tartozik elérhető eszköz.",
       );
     return asset;
+  }
+
+  /**
+   * UJ TETEL GENERALASA. A valasz a kodokat IS visszaadja, hogy a felulet
+   * azonnal letoltheto fajlt tudjon adni belole.
+   */
+  async issueBatch(count: number) {
+    try {
+      return await this.repository.issueBatch(count);
+    } catch (error) {
+      if (error instanceof AssetLabelPoolExhaustedError)
+        throw new ConflictException(error.message);
+      this.map(error);
+    }
+  }
+
+  /** A korabbi generalasok, legfrissebb elol. */
+  async labelBatches(limit: number) {
+    return this.repository.listLabelBatches(limit);
   }
 
   /** A kiadott, de meg egyetlen eszkozhoz sem kotott matricak. */

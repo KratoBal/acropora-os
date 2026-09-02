@@ -1,3 +1,4 @@
+import { ASSET_LABEL_BATCH_MAX, ASSET_LABEL_BATCH_MIN } from "@acropora/types";
 import { Transform, Type } from "class-transformer";
 import {
   ArrayMaxSize,
@@ -240,6 +241,31 @@ export class FreeAssetLabelsQueryDto {
   @IsInt()
   @Min(1)
   @Max(500)
+  @IsOptional()
+  limit?: number;
+}
+
+/**
+ * UJ MATRICA-TETEL GENERALASA.
+ *
+ * A felso hatar a kozos csomagbol jon, nem itt beirt szam: a felulet ES a
+ * szerver ugyanazt a korlatot kell mondja, kulonben a felhasznalo azt latja,
+ * hogy az urlap atengedi, a mentes meg elutasitja.
+ */
+export class IssueAssetLabelBatchDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(ASSET_LABEL_BATCH_MIN)
+  @Max(ASSET_LABEL_BATCH_MAX)
+  count!: number;
+}
+
+/** A korabbi generalasok listaja. */
+export class AssetLabelBatchQueryDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(200)
   @IsOptional()
   limit?: number;
 }

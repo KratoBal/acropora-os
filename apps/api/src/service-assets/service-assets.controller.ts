@@ -22,8 +22,10 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import {
   AssetListQueryDto,
+  AssetLabelBatchQueryDto,
   AssetOwnersQueryDto,
   FreeAssetLabelsQueryDto,
+  IssueAssetLabelBatchDto,
   IssueAssetLabelsDto,
   CreateAssetDto,
   UpdateAssetDto,
@@ -96,6 +98,26 @@ export class ServiceAssetsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.scanLabel(code, partnerScopeOf(user));
+  }
+
+  /**
+   * UJ MATRICA-TETEL GENERALASA. SERVICE_MANAGE.
+   *
+   * MUVELET, NEM LEKERDEZES: rekordot hoz letre, es a vegen KINYOMTATOTT
+   * matrica lesz belole a fizikai vilagban. Ket gombnyomas ket tetelt csinal --
+   * a lista percre pontos idopontja azert all ott, hogy ez AZONNAL latszodjon.
+   */
+  @Post("label-batches")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  issueLabelBatch(@Body() input: IssueAssetLabelBatchDto) {
+    return this.service.issueBatch(input.count);
+  }
+
+  /** A korabbi generalasok: mikor, hany kod, hany szabad meg. */
+  @Get("label-batches")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  labelBatches(@Query() query: AssetLabelBatchQueryDto) {
+    return this.service.labelBatches(query.limit ?? 50);
   }
 
   /** Egy nyomtatott iv kodjainak felvitele a keszletbe. */
