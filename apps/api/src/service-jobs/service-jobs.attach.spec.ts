@@ -17,11 +17,15 @@ function serviceWith(behaviour: {
   const calls: unknown[] = [];
   const repository: Pick<
     ServiceJobsRepository,
-    "statusOf" | "worksheetAttachState" | "attachWorksheet"
+    "statusOf" | "worksheetAttachState" | "attachWorksheet" | "detachWorksheet"
   > = {
     statusOf: async () => behaviour.jobStatus,
     worksheetAttachState: async () => behaviour.sheet,
     attachWorksheet: async (input) => {
+      calls.push(input);
+      return { ok: behaviour.attached ?? true };
+    },
+    detachWorksheet: async (input) => {
       calls.push(input);
       return { ok: behaviour.attached ?? true };
     },
@@ -127,6 +131,67 @@ describe("egy meglévő munkalap a hibajegy alá", () => {
     await assert.rejects(
       () => service.attachWorksheet("job-1", "worksheet-1"),
       /időközben/,
+    );
+  });
+});
+
+describe("a munkalap leválasztása a hibajegyről", () => {
+  it("az ehhez a jegyhez tartozó lapot leválasztja", async () => {
+    const { service, calls } = serviceWith({
+      jobStatus: "NEW",
+      sheet: { serviceJobId: "job-1" },
+    });
+
+    await service.detachWorksheet("job-1", "worksheet-1");
+
+    assert.deepEqual(calls, [
+      { serviceJobId: "job-1", worksheetId: "worksheet-1" },
+    ]);
+  });
+
+  /**
+   * A TILTOTT ESETEK, NÉV SZERINT.
+   *
+   * Egy készlet, ami csak a sikeres leválasztást nézi, akkor is zöld maradna,
+   * ha a szolgáltatás BÁRMELYIK lapot leválasztaná BÁRMELYIK jegyről - és az
+   * néma kár: egy másik jegy alól tűnne el egy munka.
+   */
+  it("MÁSIK jegy lapját nem választja le, és nem is ír", async () => {
+    const { service, calls } = serviceWith({
+      jobStatus: "NEW",
+      sheet: { serviceJobId: "masik-jegy" },
+    });
+
+    await assert.rejects(
+      () => service.detachWorksheet("job-1", "worksheet-1"),
+      /másik hibajegyhez/,
+    );
+    assert.equal(calls.length, 0);
+  });
+
+  it("jegy nélküli lapra külön mondatot ad, és nem ír", async () => {
+    const { service, calls } = serviceWith({
+      jobStatus: "NEW",
+      sheet: { serviceJobId: null },
+    });
+
+    await assert.rejects(
+      () => service.detachWorksheet("job-1", "worksheet-1"),
+      /nem tartozik hibajegyhez/,
+    );
+    assert.equal(calls.length, 0);
+  });
+
+  it("közben elmozdult lapnál ütközést jelez, nem sikert", async () => {
+    const { service } = serviceWith({
+      jobStatus: "NEW",
+      sheet: { serviceJobId: "job-1" },
+      attached: false,
+    });
+
+    await assert.rejects(
+      () => service.detachWorksheet("job-1", "worksheet-1"),
+      /időközben elmozdult/,
     );
   });
 });

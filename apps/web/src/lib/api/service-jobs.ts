@@ -34,6 +34,17 @@ export const serviceJobsApi = {
     });
   },
   /**
+   * A CSATOLAS VISSZAUTJA. Enelkul egy rossz valasztas a legordulobol orokre
+   * ott hagyna a lapot a jegy alatt.
+   */
+  detachWorksheet(token: string, id: string, worksheetId: string) {
+    return apiRequest<{ ok: true }>(
+      jobPath(id, `/worksheets/${encodeURIComponent(worksheetId)}`),
+      token,
+      { method: "DELETE" },
+    );
+  },
+  /**
    * A LÉPÉS VÁLASZA CSAK NYUGTA (`{ ok: true }`), nem a friss jegy.
    *
    * Ezért a hívó ÚJRATÖLT utána. Ha a nyugtából építenénk fel a képernyőt, a

@@ -190,6 +190,45 @@ export class ServiceJobsService {
   }
 
   /**
+   * A LAP LEVALASZTASA A JEGYROL -- A CSATOLAS VISSZAUTJA.
+   *
+   * MIERT KELL: a csatolas egy legordulobol valaszt, a lapokat pedig sokszor
+   * sorszam nelkul kell megkulonboztetni (a piszkozatnak nincs szama). Egy
+   * rossz valasztas enelkul OROKRE ott hagyna a lapot, es meg egy masik
+   * csatolassal sem lenne javithato -- azt a sajat utkozes-orzonk zarja ki.
+   *
+   * ES AMI EZ NEM: ATSOROLAS. Ez az allapot, ahova visszavisz (a lap jegy
+   * nelkul), a modellben amugy is letezik es rendes: a lap keletkezhet jegy
+   * nelkul. Az atsorolas ezzel szemben uj kerdeseket nyitna (mi legyen a regi
+   * jegy naplojaval, mit lat a partner), es azokra ma nincs dontes.
+   */
+  async detachWorksheet(jobId: string, worksheetId: string) {
+    const jobStatus = await this.repository.statusOf(jobId);
+    if (jobStatus === null)
+      throw new NotFoundException("A hibajegy nem található.");
+
+    const sheet = await this.repository.worksheetAttachState(worksheetId);
+    if (sheet === null)
+      throw new NotFoundException("A munkalap nem található.");
+    if (sheet.serviceJobId !== jobId)
+      throw new ConflictException(
+        sheet.serviceJobId === null
+          ? "Ez a munkalap nem tartozik hibajegyhez."
+          : "Ez a munkalap egy másik hibajegyhez tartozik.",
+      );
+
+    const detached = await this.repository.detachWorksheet({
+      serviceJobId: jobId,
+      worksheetId,
+    });
+    if (!detached.ok)
+      throw new ConflictException(
+        "A munkalap időközben elmozdult. Töltsd újra, és nézd meg, mi történt.",
+      );
+    return { ok: true };
+  }
+
+  /**
    * EGY LÉPÉS A JEGYEN, A TÁBLA SZERINT.
    *
    * A SZABÁLYT A TISZTA FÜGGVÉNY MONDJA MEG, nem ez a metódus: itt csak az

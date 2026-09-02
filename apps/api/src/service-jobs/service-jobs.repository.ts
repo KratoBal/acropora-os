@@ -206,6 +206,25 @@ export class ServiceJobsRepository {
     return { ok: attached.count === 1 };
   }
 
+  /**
+   * A LAP LEVALASZTASA A JEGYROL.
+   *
+   * A FELTETEL ITT IS A `WHERE`-BEN ALL: csak akkor ir, ha a lap EPP EHHEZ a
+   * jegyhez tartozik. Ket egyszerre dolgozo ember kozul a masodik igy nem
+   * valaszt le olyat, amit kozben mar athelyeztek vagy levalasztottak.
+   *
+   * ES AMI EZ NEM: atsorolas. A lap a jegy NELKULI allapotba kerul vissza, ami
+   * a modellben amugy is letezik es rendes -- a masik jegy ala helyezes mas
+   * muvelet, mas kerdesekkel, es azokra nincs dontes.
+   */
+  async detachWorksheet(input: { serviceJobId: string; worksheetId: string }) {
+    const detached = await this.database.worksheet.updateMany({
+      where: { id: input.worksheetId, serviceJobId: input.serviceJobId },
+      data: { serviceJobId: null },
+    });
+    return { ok: detached.count === 1 };
+  }
+
   /** Letezik-e a lap, es all-e mar jegy alatt. `null`, ha nincs ilyen lap. */
   async worksheetAttachState(
     id: string,

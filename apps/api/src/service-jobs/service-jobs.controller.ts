@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Query,
+} from "@nestjs/common";
 import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
@@ -70,6 +78,19 @@ export class ServiceJobsController {
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
   attachWorksheet(@Param("id") id: string, @Body() input: AttachWorksheetDto) {
     return this.service.attachWorksheet(id, input.worksheetId);
+  }
+
+  /**
+   * A LEVALASZTAS, mert a csatolas kulonben visszafordithatatlan lenne: egy
+   * legordulobol valasztunk, sorszam nelkuli lapok kozul is.
+   */
+  @Delete(":id/worksheets/:worksheetId")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  detachWorksheet(
+    @Param("id") id: string,
+    @Param("worksheetId") worksheetId: string,
+  ) {
+    return this.service.detachWorksheet(id, worksheetId);
   }
 
   /**

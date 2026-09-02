@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { ServiceJobDetail, Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -8,6 +14,7 @@ const api = vi.hoisted(() => ({
   detail: vi.fn(),
   move: vi.fn(),
   attachWorksheet: vi.fn(),
+  detachWorksheet: vi.fn(),
 }));
 const sheets = vi.hoisted(() => ({ attachable: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
@@ -104,6 +111,7 @@ describe("ServiceJobDetailPage", () => {
     api.detail.mockReset().mockResolvedValue(detail());
     api.move.mockReset().mockResolvedValue({ ok: true });
     api.attachWorksheet.mockReset().mockResolvedValue({ ok: true });
+    api.detachWorksheet.mockReset().mockResolvedValue({ ok: true });
     sheets.attachable.mockReset().mockResolvedValue({
       items: [
         {
@@ -197,6 +205,34 @@ describe("ServiceJobDetailPage", () => {
   });
 
   /**
+   * A VISSZAÚT, ÉS EZÉRT KÜLÖN ÁLLÍTÁS: a csatolás egy legördülőből választ,
+   * sorszám nélküli lapok közül is. Enélkül egy rossz választás örökre ott
+   * hagyná a lapot - a saját ütközés-őrzőnk még egy másik csatolással sem
+   * engedné javítani.
+   */
+  it("a csatolt lapot le lehet választani, és utána újratölt", async () => {
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    await screen.findByText("A hibajegy létrejött (Új).");
+    expect(api.detail).toHaveBeenCalledTimes(1);
+
+    // A TORLES-ALAKU MUVELET ELOTT KERDEZUNK, es a kerdes a sajat
+    // ConfirmDialog-unke: a bongeszo ablaka egy sorba zsufolna mindent.
+    fireEvent.click(screen.getByRole("button", { name: "Leválasztás" }));
+    expect(api.detachWorksheet).not.toHaveBeenCalled();
+
+    // A PARBESZEDEN BELUL keressuk a megerositest: a sor gombja ugyanigy hivjak,
+    // es egy index-alapu valasztas csendben a rossz gombra csuszna.
+    const kerdes = screen.getByRole("dialog");
+    fireEvent.click(
+      within(kerdes).getByRole("button", { name: "Leválasztás" }),
+    );
+
+    await waitFor(() => expect(api.detachWorksheet).toHaveBeenCalledTimes(1));
+    expect(api.detachWorksheet.mock.calls[0]?.[2]).toBe("worksheet-1");
+    await waitFor(() => expect(api.detail).toHaveBeenCalledTimes(2));
+  });
+
+  /**
    * A SZŰKÍTÉST MÉRŐ ÁLLÍTÁS: olvasó jognál nincs csatolás, és a választó
    * listát le sem kérjük. A második fele külön számít - egy rejtett doboz
    * mögött lekért lista fölösleges kérés, és azt semmi nem mondaná meg.
@@ -208,6 +244,8 @@ describe("ServiceJobDetailPage", () => {
 
     expect(screen.queryByText("Meglévő munkalap csatolása")).toBeNull();
     expect(sheets.attachable).not.toHaveBeenCalled();
+    // A VISSZAUT IS KEZELOI JOG: olvaso jognal a levalasztas gombja sem all ott.
+    expect(screen.queryByRole("button", { name: "Leválasztás" })).toBeNull();
   });
 
   /**
