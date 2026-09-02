@@ -48,6 +48,22 @@ export interface UnasApplySummary {
    * szamit, mert egy "szuntessuk meg a forrast" javitasnak nincs hol
    * megtortennie a mi kodunkban.
    *
+   * ES EGY HATAR, AMI A SZAM OLVASASAHOZ KELL (barracuda merese, 2026-09-03):
+   * a fenti 589 KET mezot fed (a hasonlo es a kiegeszito listajat). A kod
+   * viszont OT tovabbit is cikkszam-listakent olvas (`crosssale1..3`,
+   * `upsale1..2`), es abban a forras-exportban azok NEM termekhivatkozast
+   * tartalmaznak, hanem kapcsolokat ("Cart": "no" es tarsai).
+   *
+   * HA ILYEN ERTEK BEKERUL a `rawPayload`-ba azzal a kulccsal, ez a szamlalo
+   * OKET IS SZAMOLNI FOGJA -- egy "no" nevu cikkszamot sosem talalunk meg. A
+   * szam akkor nem 589 korul all, hanem sokkal feljebb, es a tobblet NEM
+   * adatvesztes, hanem zaj.
+   *
+   * EZT A KODBOL NEM LEHET ELDONTENI: attol fugg, van-e ilyen nevu oszlop a
+   * betoltott munkafuzetben. Az ELSO eles futas utan ezert erdemes megnezni,
+   * hogy a szam a 589-es nagysagrendben all-e. Ha sokkal nagyobb, a kovetkezo
+   * lepes a mezolista szukitese, nem a parositas.
+   *
    * EZ A SZAMLALO NEM JAVITJA A PAROSITAST, es szandekosan nem: hogy a
    * feloldas kis-nagybetu fuggetlen LEGYEN-E, az adatmodell-kerdes (ket termek
    * felvehet "ABC" es "abc" cikkszamot). Ez a mezo csak annyit valtoztat, hogy
