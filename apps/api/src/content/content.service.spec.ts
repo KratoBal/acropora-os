@@ -679,3 +679,80 @@ describe("an idea, and where it can be found", () => {
     assert.deepEqual(seen[0], { state: "IDEA" });
   });
 });
+
+/**
+ * A GEPI UT ALLAPOTA, ES AMI MELLETTE VALTOZATLAN MARAD.
+ *
+ * A masodik allitas a fontosabb: ha valaki a ket utat egyetlen fuggvenyre
+ * huzna ossze, az AGENS oldala helyesen mukodne, es kozben az EMBERI urlaptol
+ * csendben elvenne a piszkozat-fazist. Az elso allitas ezt nem venne eszre.
+ */
+describe("a machine-submitted item, and the human draft next to it", () => {
+  it("is born in AWAITING_REVIEW, because the machine is its own author", async () => {
+    const { service, calls } = serviceWith();
+
+    await service.createForReview({
+      title: "Gepi vazlat",
+      channel: "FACEBOOK_POST",
+      authorId: "agent-1",
+    });
+
+    assert.equal((calls[0] as { state: string }).state, "AWAITING_REVIEW");
+  });
+
+  it("leaves the human path in DRAFTING, unchanged", async () => {
+    const { service, calls } = serviceWith();
+
+    await service.create({
+      title: "Emberi vazlat",
+      channel: "ARTICLE",
+      authorId: "u1",
+    });
+
+    assert.equal((calls[0] as { state: string }).state, "DRAFTING");
+  });
+
+  it("keeps the author as the caller on both paths", async () => {
+    const { service, calls } = serviceWith();
+
+    await service.create({
+      title: "Emberi",
+      channel: "ARTICLE",
+      authorId: "u1",
+    });
+    await service.createForReview({
+      title: "Gepi",
+      channel: "ARTICLE",
+      authorId: "agent-1",
+    });
+
+    assert.equal((calls[0] as { authorId: string }).authorId, "u1");
+    assert.equal((calls[1] as { authorId: string }).authorId, "agent-1");
+  });
+
+  /**
+   * A HAROM BEJARAT HAROM KULON LEPES, ES EGYIK SEM ERHETO EL PARAMETERREL.
+   * Ugyanaz az allitas, mint az otletnel, kiterjesztve: ha barmelyik ket ut
+   * egyetlen fuggvennye olvadna, ez pirosra valt.
+   */
+  it("keeps all three entry points apart", async () => {
+    const { service, calls } = serviceWith();
+
+    await service.create({ title: "A", channel: "ARTICLE", authorId: "u1" });
+    await service.createIdea({
+      title: "B",
+      channel: "ARTICLE",
+      authorId: "u1",
+    });
+    await service.createForReview({
+      title: "C",
+      channel: "ARTICLE",
+      authorId: "a1",
+    });
+
+    assert.deepEqual(
+      calls.map((call) => (call as { state: string }).state),
+      ["DRAFTING", "IDEA", "AWAITING_REVIEW"],
+    );
+  });
+});

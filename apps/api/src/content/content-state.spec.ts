@@ -432,3 +432,43 @@ describe("which step the screen should put first", () => {
     }
   });
 });
+
+/**
+ * AHOL EGY TETEL KELETKEZHET, ONNAN TOVABB IS KELL TUDNI LEPNI.
+ *
+ * A LETREHOZAS NEM ATMENET: a tarolo kozvetlenul ir, tehat a `canMove` tablazat
+ * nem all utban egy kezdoallapotnak. Epp ezert a kezdoallapot MEGVALASZTASA a
+ * hivo felelossege, es semmi nem szol, ha olyat valaszt, amibol nincs kiut.
+ *
+ * HAROM BEJARAT LETEZIK, harom kulon nevesitett lepessel: az emberi urlap
+ * (`DRAFTING`), az otlet (`IDEA`) es a gepi beadas (`AWAITING_REVIEW`). Ez az
+ * allitas azt koti le, hogy egyikbol se lehessen zsakutca -- egy olyan tetel,
+ * ami letrejon, es utana semmit nem lehet vele csinalni.
+ *
+ * A `DISCARDED` NEM SZAMIT KIUTNAK ebben az allitasban: az elvetes mindenhonnan
+ * elerheto, tehat ha beleszamitana, minden allapot atmenne rajta, es a mercer
+ * nem tudna elbukni. Ami itt szamit, az a MUNKA folytatasa.
+ */
+describe("where an item may be born", () => {
+  const ENTRY_STATES: ContentState[] = ["DRAFTING", "IDEA", "AWAITING_REVIEW"];
+
+  it("lets the work continue from every entry state", () => {
+    for (const state of ENTRY_STATES) {
+      const forward = allowedMoves(state).filter((to) => to !== "DISCARDED");
+      assert.ok(
+        forward.length > 0,
+        `A ${state} kezdoallapotbol nincs tovabbi ut az elvetesen kivul.`,
+      );
+    }
+  });
+
+  /**
+   * ES A GEPI BEJARAT ALLAPOTA NEV SZERINT: a lektor mindket iranyba tud
+   * lepni, tovabb a jovahagyashoz es vissza javitasra. Ha barmelyik ut
+   * eltunne, a gepi tetel egy fel-folyamatban rekedne.
+   */
+  it("lets a machine-submitted item go forward and back", () => {
+    assert.equal(canMove("AWAITING_REVIEW", "AWAITING_APPROVAL"), true);
+    assert.equal(canMove("AWAITING_REVIEW", "AWAITING_REVISION"), true);
+  });
+});

@@ -357,6 +357,48 @@ export class ContentService {
     return this.beveszSorba(input, "IDEA");
   }
 
+  /**
+   * EGY GEPI AGENS ALTAL BEADOTT TETEL, ES EZ IS SAJAT NEVESITETT LEPES.
+   *
+   * MIERT NEM A `create` KAPOTT EGY ALLAPOT-PARAMETERT: ugyanaz a ket ok, ami a
+   * `createIdea`-nal all. Az allapotot a hivo nem valaszthatja meg -- egy
+   * `state` mezovel a jovahagyasi kapu az elso kenyelmes pillanatban
+   * megkerulheto lenne egy "mar kesz" ertekkel --, es a gepi beadas MAS DOLOG,
+   * nem egy ember vazlata.
+   *
+   * MIERT `AWAITING_REVIEW` ES NEM `DRAFTING`: a `DRAFTING` a SZERZOJERE var, a
+   * gepi uton pedig a szerzo maga a gep. A tetel ilyenkor az agens sajat
+   * listajaban all, es a szerkesztoseg kepernyoje ures marad -- pontosan az a
+   * panasz, amiert a bejarat keszult. Merve 2026-09-02 este: a bejarat HTTP
+   * 201-et adott, a tetel letrejott, es a gazda kepernyoje nullat mutatott.
+   * Helyesen.
+   *
+   * A LETREHOZAS NEM ATMENET, tehat a `canMove` tablazat nem all utban: a
+   * tarolo kozvetlenul ir. Ettol viszont a kezdoallapot MEGVALASZTASA a mi
+   * felelossegunk, es ezert all ra kulon allitas: az `AWAITING_REVIEW` a
+   * `TRANSITIONS` ismert kulcsa, ket kimeno uttal -- nem zsakutca.
+   *
+   * AMIT EZ NEM OLD MEG, ES KIMONDOM, MERT MERTEM (2026-09-02, f2be6a55):
+   * a `reviewerId` mezot ma SEMMI nem irja az egesz API-ban, a "mi var ram"
+   * nezetek lektor-resze pedig arra a mezore szur. Egy lektor NELKULI
+   * `AWAITING_REVIEW` tetel tehat egyik ilyen listaban sem jelenik meg. Ez az
+   * allapot ettol MEGIS helyesebb a `DRAFTING`-nal: az igazat mondja (a tetel
+   * lektoralasra var, nem a gep dolgozik rajta), es abban a pillanatban
+   * lathatova valik, amint a tetel lektort kap. A lathatosag hianya kulon
+   * hianyzo lepes, nem ennek a metodusnak a hibaja -- de nem is szabad
+   * elhallgatni, mert enelkul valaki megoldottnak hinne.
+   */
+  async createForReview(input: {
+    title: string;
+    channel: "FACEBOOK_POST" | "FACEBOOK_AD" | "ARTICLE" | "OTHER";
+    authorId: string;
+    body?: string;
+    imageRequired?: boolean;
+    plannedFor?: string;
+  }) {
+    return this.beveszSorba(input, "AWAITING_REVIEW");
+  }
+
   private async beveszSorba(
     input: {
       title: string;
@@ -366,7 +408,7 @@ export class ContentService {
       imageRequired?: boolean;
       plannedFor?: string;
     },
-    state: "DRAFTING" | "IDEA",
+    state: "DRAFTING" | "IDEA" | "AWAITING_REVIEW",
   ) {
     const title = input.title.trim();
     if (!title) throw new BadRequestException("A cim nem lehet ures.");
