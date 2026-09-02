@@ -342,8 +342,22 @@ export async function runProjectionCli(
           })
         : [],
     );
+    /**
+     * A HIANY SORA A STDOUT-RA MEGY, NEM A STDERR-RE, ES EZ NEM IZLES.
+     *
+     * Egy utemezett futast burkolo szkript gyakran a STDERR JELENLETET olvassa
+     * hibanak, akkor is, ha a kilepesi kod nulla. A hianyzo lekepezes viszont
+     * NEM bukas: a vetites lefut, a termek kimegy, csak kategoria nelkul -- es
+     * amig a betoltes nincs kesz, MINDEN kategoriaval rendelkezo termek ide
+     * esik. A stderr-en tehat egy tokeletesen egeszseges futas riasztasnak
+     * latszana, minden egyes alkalommal.
+     *
+     * A testverparancs ugyanezt csinalja a maga hianyzo-sor esetevel
+     * (`describeMissingStockRow`), es ugyanezert. A stderr ebben a parancsban
+     * a valodi bukasoke: azok mind novelik a `failed` szamlalot is.
+     */
     if (categories.kind === "incomplete")
-      out.stderr(
+      out.stdout(
         `${describeMissingCategoryMapping(product.id, categories.missing)}\n`,
       );
 
