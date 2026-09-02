@@ -78,7 +78,7 @@ export class ServiceAssetsController {
    * hasznalja: o a matricat olvassa be, nem listat bongesz.
    */
   @Get("labels/free")
-  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
   freeLabels(@Query() query: FreeAssetLabelsQueryDto) {
     return this.service.freeLabels(query.limit ?? 100);
   }
@@ -108,7 +108,7 @@ export class ServiceAssetsController {
    * a lista percre pontos idopontja azert all ott, hogy ez AZONNAL latszodjon.
    */
   @Post("label-batches")
-  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
   issueLabelBatch(@Body() input: IssueAssetLabelBatchDto) {
     return this.service.issueBatch(input.count);
   }
@@ -121,21 +121,21 @@ export class ServiceAssetsController {
    * a valasz megmondja, melyek voltak azok.
    */
   @Post("label-batches/import")
-  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
   importLabelBatch(@Body() input: IssueAssetLabelsDto) {
     return this.service.importBatch(input.codes);
   }
 
   /** A korabbi generalasok: mikor, hany kod, hany szabad meg. */
   @Get("label-batches")
-  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
   labelBatches(@Query() query: AssetLabelBatchQueryDto) {
     return this.service.labelBatches(query.limit ?? 50);
   }
 
   /** Egy nyomtatott iv kodjainak felvitele a keszletbe. */
   @Post("labels")
-  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
   issueLabels(@Body() input: IssueAssetLabelsDto) {
     return this.service.issueLabels(input.codes);
   }
