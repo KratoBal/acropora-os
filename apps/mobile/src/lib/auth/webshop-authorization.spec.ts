@@ -31,10 +31,32 @@ describe("getWebshopCapabilities", () => {
   });
 
   /**
+   * The products tile used to be `available` for this role while
+   * `enabled={false}` - visible and unreachable, which reads as a fault rather
+   * than as a boundary. The server took `products.view` away from SERVICE on
+   * 2026-09-02, so the tile is now simply not theirs.
+   */
+  it("hides products from the service role rather than showing a dead tile", () => {
+    const capabilities = getWebshopCapabilities("SERVICE");
+    assert.equal(capabilities.productsView, false);
+    assert.equal(capabilities.productsManage, false);
+  });
+
+  /**
    * Service partners are the technician's working context, so the phone shows
    * the list. Editing stays off: the server grants SERVICE `partners.view` and
-   * not `partners.manage`, and this gate has to agree with it -- the two sides
-   * are kept in step by hand, and nothing else reports a disagreement.
+   * not `partners.manage`, and this gate has to agree with it.
+   *
+   * "THE TWO SIDES ARE KEPT IN STEP BY HAND, AND NOTHING ELSE REPORTS A
+   * DISAGREEMENT" USED TO STAND HERE, AND IT WAS OUT OF DATE.
+   * `apps/api/src/auth/mobile-capability-values.spec.ts` has reported exactly
+   * that since 2026-08-27: it loads this module and compares all 84 role/key
+   * pairs against the server's own table.
+   *
+   * The stale sentence cost a round on 2026-09-02 - it was read as a
+   * measurement, and a second, weaker guard was written beside the one that
+   * already existed. A comment claiming nobody is watching is worth less than
+   * nothing once somebody is.
    */
   it("lets the service role see partners without editing them", () => {
     const capabilities = getWebshopCapabilities("SERVICE");

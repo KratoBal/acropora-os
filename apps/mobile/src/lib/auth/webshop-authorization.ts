@@ -101,7 +101,12 @@ const ROLE_CAPABILITIES: Readonly<Record<UserRole, WebshopCapabilities>> = {
     ordersManage: false,
     purchasingView: false,
     purchasingManage: false,
-    productsView: true,
+    /** The products tile showed but could not be opened (`enabled={false}`),
+     * which is worse than hiding it: the technician sees something is there
+     * and cannot reach it. It is off here rather than on the tile because the
+     * server took `products.view` away from SERVICE on 2026-09-02, and this
+     * mirror must not claim more than the server grants. */
+    productsView: false,
     productsManage: false,
     /** Service partners are the technician's working context, so the list is
      * visible from the phone. Editing is not: the owner's decision was "let

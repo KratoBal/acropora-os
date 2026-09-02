@@ -218,12 +218,33 @@ export const ROLE_PERMISSIONS: Readonly<
     PERMISSIONS.PARTNERS_VIEW,
     PERMISSIONS.PARTNERS_MANAGE,
   ],
+  /**
+   * A LISTA, AMIT BALÁZS ADOTT (2026-09-02 08:39), ÉS AMI TELJES, NEM MINIMUM:
+   * Dashboard, Feladataim, Partnerek (csak olvasás), Szerviz (a két
+   * menüpontjával, olvasás és írás). Szó szerint: "ezen kívül nem kell másnak
+   * látszania".
+   *
+   * EZÉRT ESETT KI HÁROM JOG: `products.view`, `customers.view`,
+   * `ai-test.view`. Nem a menüből tűntek el, hanem INNEN -- a menü, az oldal és
+   * a szerver ugyanarra a kulcsra néz, tehát a jog elvétele mind a hármat
+   * lezárja. Ha csak a menüpontot vettük volna ki, az oldal a cím beírásával
+   * továbbra is megnyílt volna, és a szerver kiszolgálta volna: láthatatlan,
+   * de nyitva. (Pontosan ez az állapot állt fenn fordítva a Partnereknél, lásd
+   * lentebb.)
+   *
+   * AZ `ai-test.view` ELVÉTELE NEM ÍRJA FELÜL A 2026-08-26-I DÖNTÉST, hanem az
+   * abban KIMONDOTT feltétel teljesülése. A döntés mellé maga Balázs tette oda,
+   * hogy a szűkítés "a felhasználói jogosultságok rendezésekor" jön -- ez a
+   * mondat a menüben és a tesztben is ott állt, és ez a kör az.
+   *
+   * AZ AKVÁRIUM SZÁNDÉKOSAN MARAD, `manage` joggal együtt. Nem szerepel Balázs
+   * listáján, de az akvárium a szerviz TÁRGYA, tehát lehet, hogy kell neki; a
+   * kérdés nála van, és amíg nem válaszol, ez a sor nem mozdul. Egy elvett jog
+   * itt olyan munkát állítana meg, amit ma végeznek.
+   */
   SERVICE: [
-    PERMISSIONS.AI_TEST_VIEW,
     PERMISSIONS.DASHBOARD_VIEW,
     PERMISSIONS.TASKS_VIEW,
-    PERMISSIONS.PRODUCTS_VIEW,
-    PERMISSIONS.CUSTOMERS_VIEW,
     /// Csak nézni. A szerviz partner a szervizesnek munkakörnyezet, de a
     /// törzsadatát nem ő gondozza (Balázs döntése, 2026-08-21: "a
     /// szervizesek csak lássák egyelőre"), ezért PARTNERS_MANAGE nincs.
