@@ -225,13 +225,36 @@ export class ServiceJobsRepository {
     return { ok: detached.count === 1 };
   }
 
-  /** Letezik-e a lap, es all-e mar jegy alatt. `null`, ha nincs ilyen lap. */
+  /**
+   * Letezik-e a lap, all-e mar jegy alatt, es KIE.
+   *
+   * A partner azert jon ide, mert a csatolas feltetele: a lap es a jegy
+   * ugyanahhoz a partnerhez tartozzon. Kulon lekerdezes nelkul, ugyanabbol a
+   * sorbol -- egy masodik korben a ket ertek mar ket kulonbozo pillanate lenne.
+   */
   async worksheetAttachState(
     id: string,
-  ): Promise<{ serviceJobId: string | null } | null> {
+  ): Promise<{ serviceJobId: string | null; customerId: string } | null> {
     return this.database.worksheet.findUnique({
       where: { id },
-      select: { serviceJobId: true },
+      select: { serviceJobId: true, customerId: true },
+    });
+  }
+
+  /**
+   * A JEGY LETEZESE ES PARTNERE, egy lekerdezesben.
+   *
+   * A `customerId` NULLAZHATO a jegyen (a lape nem), es epp ez a kulonbseg
+   * teszi a csatolast dontesse: partner nelkuli jegy ala nem mehet lap
+   * (Balazs dontese acroboton keresztul, 2026-09-02) -- kulonben a jegy
+   * CSENDBEN megkapna egy partner tulajdonat, esemeny nelkul.
+   */
+  async jobAttachState(
+    id: string,
+  ): Promise<{ customerId: string | null } | null> {
+    return this.database.serviceJob.findUnique({
+      where: { id },
+      select: { customerId: true },
     });
   }
 
