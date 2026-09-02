@@ -7,7 +7,11 @@ import {
   type CategoryImportReport,
   type MedusaCategoryImportService,
 } from "./medusa-category-import.service.js";
-import { runCategoryCli, type CliOutput } from "./medusa-category.cli.js";
+import {
+  describeVerification,
+  runCategoryCli,
+  type CliOutput,
+} from "./medusa-category.cli.js";
 import type { OurCategoryNode } from "./medusa-category-tree.js";
 
 const FA: OurCategoryNode[] = [
@@ -53,6 +57,12 @@ function szolgaltatasDupla(
         skipped: 0,
         conflicts: [],
         blockedByConflict: [],
+        verification: {
+          carryingOurId: 1,
+          activeAmongThem: 1,
+          mappingRowsHere: 1,
+          expected: 1,
+        },
         ...report,
       };
     },
@@ -68,6 +78,47 @@ function deps(service: MedusaCategoryImportService) {
     now: () => new Date("2026-09-02T22:00:00.000Z"),
   };
 }
+
+describe("az ellenőrzés kimondása", () => {
+  it("egyező számoknál kimondja, hogy egyeznek", () => {
+    const szoveg = describeVerification({
+      carryingOurId: 219,
+      activeAmongThem: 219,
+      mappingRowsHere: 219,
+      expected: 219,
+    });
+    assert.match(szoveg, /A három szám egyezik/);
+  });
+
+  it("az INAKTÍV katalógust megnevezi, nem csak a számot adja", () => {
+    /*
+      EZ A NEMA HIBA HANGOS ALAKJA. Ha a Medusa eldobja az aktiv jelolot,
+      minden mas szam helyes: 219 kategoria all a mi azonositonkkal, es 219
+      lekepezes-sor all nalunk. Egy nyers szamharmas mellett az olvasonak
+      TUDNIA kellene, hogy a masodik szamot a harmadikhoz kell merni.
+    */
+    const szoveg = describeVerification({
+      carryingOurId: 219,
+      activeAmongThem: 0,
+      mappingRowsHere: 219,
+      expected: 219,
+    });
+    assert.doesNotMatch(szoveg, /A három szám egyezik/);
+    assert.match(szoveg, /219 kategória INAKTÍV/);
+    assert.match(szoveg, /nem látszik/);
+  });
+
+  it("a hiányzó leképezés-sorokat is megnevezi", () => {
+    const szoveg = describeVerification({
+      carryingOurId: 219,
+      activeAmongThem: 219,
+      mappingRowsHere: 0,
+      expected: 219,
+    });
+    assert.match(szoveg, /csak 0 leképezés-sor/);
+    assert.match(szoveg, /kategória nélkül menne ki/);
+  });
+});
 
 describe("a kategória-parancs", () => {
   it("--apply NÉLKÜL csak tervez, és a betöltést MEG SEM HÍVJA", async () => {

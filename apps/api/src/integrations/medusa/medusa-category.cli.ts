@@ -64,6 +64,51 @@ export function describePlan(plan: {
   return sorok.join("\n") + "\n";
 }
 
+/**
+ * A HAROM SZAM, ES AMIT JELENTENEK -- NEM NYERSEN.
+ *
+ * Egy nyers szamharmas ugyanaz a problema, mint egy szokas: az olvasonak
+ * tudnia kell, mit hasonlitson mihez. Ezert a parancs KIMONDJA az iteletet, es
+ * csak az elteres eseten sorolja a reszleteket.
+ *
+ * A ket nema hiba, amit ez a harom szam megfog:
+ *   - a Medusa nem tarolta el az aktiv jelolot -> lathatatlan katalogus
+ *   - a lekepezes-sorok nem szulettek meg nalunk -> kategoria nelkuli vetites
+ * Egyikrol sem szol semmi mas.
+ */
+export function describeVerification(v: {
+  carryingOurId: number;
+  activeAmongThem: number;
+  mappingRowsHere: number;
+  expected: number;
+}): string {
+  const rendben =
+    v.carryingOurId === v.expected &&
+    v.activeAmongThem === v.expected &&
+    v.mappingRowsHere === v.expected;
+  const fej =
+    `Ellenőrzés (${v.expected} kategóriára): a Medusában ${v.carryingOurId} hordozza ` +
+    `a mi azonosítónkat, ebből ${v.activeAmongThem} aktív; nálunk ${v.mappingRowsHere} ` +
+    `leképezés-sor áll.\n`;
+  if (rendben) return fej + "A három szám egyezik.\n";
+  const bajok: string[] = [];
+  if (v.carryingOurId !== v.expected)
+    bajok.push(
+      `Hiányzik ${v.expected - v.carryingOurId} kategória a Medusából.`,
+    );
+  if (v.activeAmongThem !== v.carryingOurId)
+    bajok.push(
+      `${v.carryingOurId - v.activeAmongThem} kategória INAKTÍV: a Medusa nem ` +
+        `tárolta el az aktív jelölőt, tehát a katalógus nem látszik.`,
+    );
+  if (v.mappingRowsHere !== v.expected)
+    bajok.push(
+      `Nálunk csak ${v.mappingRowsHere} leképezés-sor áll: a vetítés ennyi ` +
+        `kategóriát találna meg, a többi termék kategória nélkül menne ki.`,
+    );
+  return fej + bajok.join("\n") + "\n";
+}
+
 export async function runCategoryCli(
   argv: readonly string[],
   out: CliOutput,
@@ -109,6 +154,7 @@ export async function runCategoryCli(
         `A szülőjük miatt kimaradt: ${report.blockedByConflict.length}`,
       ].join("\n") + "\n",
     );
+    out.stdout(describeVerification(report.verification));
     /**
      * AZ UTKOZES NEM NULLA KILEPESI KOD, ES EZ SZANDEKOS. A futas tobbi resze
      * SIKERULT, es azt nem szabad kudarcnak jelolni -- de az utkozes ember

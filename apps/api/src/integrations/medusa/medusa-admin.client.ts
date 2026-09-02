@@ -130,6 +130,13 @@ export interface MedusaCategoryRow {
   name: string;
   external_id: string | null;
   parent_category_id: string | null;
+  /**
+   * AZERT KERJUK LE, MERT AZ ELLENORZES ENELKUL NEM TUD ELBUKNI. A betoltes
+   * `is_active: true` erteket kuld, de hogy a Medusa el is TAROLTA-e, azt csak
+   * a visszaolvasott ertek mondja meg -- es ha nem tarolta, 219 lathatatlan
+   * kategoria all elo ugy, hogy minden mas szam helyes.
+   */
+  is_active: boolean;
 }
 
 /**
@@ -700,7 +707,7 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
 
   async listProductCategories(): Promise<MedusaCategoryListResult> {
     const params = new URLSearchParams({
-      fields: "id,name,external_id,parent_category_id",
+      fields: "id,name,external_id,parent_category_id,is_active",
       limit: String(CATEGORY_LIST_LIMIT),
     });
     const body = await this.request<{

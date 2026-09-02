@@ -75,6 +75,32 @@ export interface CategoryImportReport {
    * Nem hiba, hanem kovetkezmeny: egy ag nem vihetо at a gyokere nelkul.
    */
   blockedByConflict: string[];
+  /**
+   * AZ ELLENORZES, AMIT KULONBEN EMLEKEZETBOL KELLENE ELVEGEZNI.
+   *
+   * A futas utan a kezenfekvo mercek (hany kategoria all, jo-e a fa alakja,
+   * ketszeri futas utan is annyi-e) MIND ZOLDEK MARADNANAK ket nema hiba
+   * mellett is: ha a Medusa nem tarolta el az aktiv jelolot, es ha a
+   * lekepezes-sorok nem szulettek meg nalunk. Az elso lathatatlan katalogust
+   * ad, a masodik kategoria nelkuli termek-vetitest -- es EGYIKROL SEM SZOL
+   * semmi.
+   *
+   * Ezert a futas a sajat eredmenyet VISSZAOLVASSA, es a harom szamot egyutt
+   * adja. Nem szokas, hanem kimenet: aki a parancsot futtatja, latja oket,
+   * akkor is, ha nem tudta, hogy nezni kell.
+   */
+  verification: ImportVerification;
+}
+
+export interface ImportVerification {
+  /** Hany Medusa-kategoria hordozza a MI azonositonkat, a futas utan. */
+  carryingOurId: number;
+  /** Ebbol hany AKTIV. Ha nem egyezik, a katalogus lathatatlan. */
+  activeAmongThem: number;
+  /** Hany MEDUSA/Category lekepezes-sor all NALUNK. */
+  mappingRowsHere: number;
+  /** Hany kategoriat kellett volna atvinni osszesen. */
+  expected: number;
 }
 
 @Injectable()
@@ -140,7 +166,14 @@ export class MedusaCategoryImportService {
       skipped: terv.skip.length,
       conflicts: terv.conflict.map((c) => c.ourId),
       blockedByConflict: [],
+      verification: {
+        carryingOurId: 0,
+        activeAmongThem: 0,
+        mappingRowsHere: 0,
+        expected: rows.length,
+      },
     };
+    const sajatAzonositok = new Set(rows.map((sor) => sor.ourId));
 
     for (const par of terv.mapOnly) {
       await this.links.link(par.ourId, par.medusaId, now);
@@ -209,6 +242,23 @@ export class MedusaCategoryImportService {
       }
     }
 
+    /**
+     * A VISSZAOLVASAS EGY UJABB LEKERDEZES, ES EZ SZANDEKOS. A futas ELEJEN
+     * lekert lista a futas vegere elavult -- epp azokat nem tartalmazza, amiket
+     * mi hoztunk letre. Egy sajat konyveles (amit letrehoztunk, azt hozzaadjuk)
+     * ugyanazt a szamot adna, de nem MERNE semmit: azt allitana, hogy megtortent
+     * az, amit mi magunk kertunk.
+     */
+    const utana = await client.listProductCategories();
+    const mieink = utana.rows.filter(
+      (cat) => cat.external_id && sajatAzonositok.has(cat.external_id),
+    );
+    report.verification = {
+      carryingOurId: mieink.length,
+      activeAmongThem: mieink.filter((cat) => cat.is_active).length,
+      mappingRowsHere: (await this.links.all()).length,
+      expected: rows.length,
+    };
     return report;
   }
 
