@@ -8,6 +8,10 @@ import { ContentRowActions } from "./content-row-actions";
 const api = vi.hoisted(() => ({
   move: vi.fn(),
   comment: vi.fn(),
+  // A RESZLET-PANEL IS EZEN A KLIENSEN AT HIV. E nelkul a panel megnyitasa
+  // `detail is not a function` hibaba fut, es a teszt nem azt merne, amit a
+  // neve mond -- hanem azt, hogy hianyos a mock.
+  detail: vi.fn(),
 }));
 
 /**
@@ -80,6 +84,12 @@ beforeEach(() => {
   role = "OWNER";
   api.move.mockReset().mockResolvedValue({ ok: true });
   api.comment.mockReset().mockResolvedValue({ id: "comment-1" });
+  api.detail.mockReset().mockResolvedValue({
+    ...item(),
+    body: "a tétel szövege",
+    comments: [],
+    blockers: { waitsOn: { on: "approver" }, waitsForImage: false },
+  });
 });
 
 describe("who sees which step", () => {
@@ -518,5 +528,61 @@ describe("a step that asks for text first", () => {
     fireEvent.click(screen.getByRole("button", { name: "kiküldésre kész" }));
 
     await waitFor(() => expect(api.move).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe("what happens to an open detail panel when the piece moves", () => {
+  /**
+   * A PANEL BEZARUL EGY SIKERES LEPES UTAN.
+   *
+   * A panel a megnyitáskor tölt, és csak az azonosítóra figyel -- egy lépés után
+   * tehát a RÉGI állapotot mutatná: a régi lépés-listát, és a felvetés nélküli
+   * beszélgetést, holott a visszaküldés épp most írt bele egyet. Aki nyitva
+   * hagyja, egy elavult képből döntene a következőről.
+   *
+   * MÉRVE: picasso kérdése az „Elolvasom" gomb őrzőjéről hozta elő. A gomb maga
+   * szándékosan nem vár a futó lépésre (az olvasás nem ír) -- de a kérdés arra
+   * mutatott rá, hogy a panel TARTALMA avul el, nem a gomb.
+   */
+  it("closes the panel once a step went through", async () => {
+    render(
+      <ContentRowActions
+        item={item({ moves: [approvingStep] })}
+        onDone={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Elolvasom" }));
+    expect(screen.getByRole("button", { name: "Bezárom" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "kiküldésre kész" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Elolvasom" })).toBeTruthy(),
+    );
+  });
+
+  /**
+   * ÉS EGY ELBUKOTT LÉPÉS UTÁN NYITVA MARAD. E nélkül az előző állítás attól is
+   * zöld lenne, hogy a panel MINDEN kattintásra bezárul -- épp akkor véve el az
+   * olvasás lehetőségét, amikor a legtöbbet érne: a hiba után.
+   */
+  it("leaves it open when the step failed", async () => {
+    api.move.mockRejectedValue(new Error("a tétel időközben elmozdult"));
+
+    render(
+      <ContentRowActions
+        item={item({ moves: [approvingStep] })}
+        onDone={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Elolvasom" }));
+    fireEvent.click(screen.getByRole("button", { name: "kiküldésre kész" }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/időközben elmozdult/)).toBeTruthy(),
+    );
+    expect(screen.getByRole("button", { name: "Bezárom" })).toBeTruthy();
   });
 });

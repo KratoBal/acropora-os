@@ -23,12 +23,27 @@ function parseOptionalString(value: unknown): string | undefined {
 }
 
 /// Read-only admin diagnostics surface for the stock-reconciliation module.
-/// Every route here is a GET - no mutation exists yet (see
+/// Every route HERE is a GET, gated on INVENTORY_VIEW like every other
+/// read-only inventory endpoint in this codebase
+/// (unas-stock-sync-outbox.controller.ts, inventory-count.controller.ts).
+///
+/// THE MUTATION EXISTS NOW, and this comment said otherwise until 2026-09-01.
+/// It lives in stock-reconciliation-repair.controller.ts, under the SAME route
+/// prefix (`inventory/reconciliation`), behind a narrower permission
+/// (INVENTORY_RECONCILIATION_REPAIR, which MANAGER explicitly does not hold):
+/// `:stockItemId/repair-local` and `:stockItemId/republish-unas`.
+///
+/// The original deferral was DELIBERATE, not forgotten -- see
 /// docs/INVENTORY-CONSISTENCY.md's reconciliation section, "Biztonságos
-/// javítási terv", for why the mutating repair endpoint was deliberately
-/// deferred rather than half-built this checkpoint). Gated on
-/// INVENTORY_VIEW like every other read-only inventory endpoint in this
-/// codebase (unas-stock-sync-outbox.controller.ts, inventory-count.controller.ts).
+/// javítási terv", for why the repair endpoint was postponed rather than
+/// half-built at that checkpoint. Saying so matters: without it this reads
+/// like an oversight, and the next person re-litigates a decision that was
+/// already made on purpose.
+///
+/// WHY THIS PARAGRAPH WAS WRONG FOR A WHILE, and worth a line: the repair
+/// landed in a DIFFERENT file, so nothing forced this header to change with
+/// it. A description that outlives its subject is worse than none, because
+/// whoever reads it stops looking.
 @Controller("inventory/reconciliation")
 export class StockReconciliationController {
   constructor(private readonly service: StockReconciliationService) {}

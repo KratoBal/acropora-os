@@ -103,6 +103,18 @@ export function ContentRowActions({
       });
       setAsking(null);
       setNoteText("");
+      // A MEGNYITOTT RESZLET BEZARUL EGY SIKERES LEPES UTAN, es ez nem
+      // takaritas.
+      //
+      // A panel a megnyitaskor tolt, es csak az azonositora figyel -- egy lepes
+      // utan tehat a REGI allapotot mutatna tovabb: a regi lepes-listat, es a
+      // felvetes nelkuli beszelgetest, holott a visszakuldes epp most irt bele
+      // egyet. Aki nyitva hagyja, egy elavult kepbol dontene a kovetkezorol.
+      //
+      // MERVE: picasso kerdese az "Elolvasom" gomb orzojerol hozta elo. A gomb
+      // maga SZANDEKOSAN nem kap `disabled={pending}` erteket (lasd ott), de a
+      // kerdes rea mutatott, hogy a panel TARTALMA avul el, nem a gomb.
+      setReading(false);
       onDone();
     } catch (cause) {
       setError(
@@ -165,6 +177,12 @@ export function ContentRowActions({
           variant="ghost"
           size="sm"
           className={QUIET_CONTROL}
+          // AZ OLVASAS SZANDEKOSAN NEM VAR A FUTO LEPESRE, es ezert ter el a
+          // tobbi vezerlotol. A `disabled={pending}` azokon all, amelyek IRNAK:
+          // ket parhuzamos iras ugyanarra a tetelre valodi baj. Az olvasas nem
+          // ir semmit, es epp egy futo (vagy elbukott) lepes utan a leghasznosabb
+          // megnezni, mi all a tetelen. Egy orzo, ami csak a mintat koveti, itt
+          // elvenne valamit, amiert cserebe semmit nem ad.
           onClick={() => setReading((open) => !open)}
         >
           {reading ? "Bezárom" : "Elolvasom"}

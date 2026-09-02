@@ -3,6 +3,8 @@ import type {
   InventoryCountDetail,
   InventoryCountListResponse,
   InventoryCountUploadResult,
+  StockItemReconciliationPage,
+  StockItemReconciliationSummary,
 } from "@acropora/types";
 
 import { ApiError, apiAuthHeaders, apiRequest } from "./client";
@@ -132,6 +134,43 @@ export const inventoryApi = {
       `/inventory/counts/${encodeURIComponent(id)}/apply`,
       token,
       { method: "POST" },
+    );
+  },
+};
+
+/**
+ * A TÉTELES KÉSZLET-ÖSSZEVETÉS: soronként egy variáns és egy raktár.
+ *
+ * NEM UGYANAZ, MINT a `unasOrdersApi.checkStockReconciliation` -- az egy
+ * összefoglaló riport az UNAS-rendelések oldaláról, és ma azt mutatja a
+ * /keszlet-egyeztetes oldal. Ez a hívás a `inventory/reconciliation` modulé,
+ * és a javító végpontok EHHEZ tartoznak.
+ *
+ * Mérve 2026-09-01: a két összevetés ugyanazon a néven futott a fejekben, és
+ * emiatt úgy tűnt, hogy már látjuk azt, amit valójában soha nem kértünk le.
+ */
+export const stockItemReconciliationApi = {
+  page(
+    token: string,
+    query: { page?: number; pageSize?: number } = {},
+    signal?: AbortSignal,
+  ) {
+    const params = new URLSearchParams();
+    if (query.page) params.set("page", String(query.page));
+    if (query.pageSize) params.set("pageSize", String(query.pageSize));
+    const suffix = params.toString() ? `?${params.toString()}` : "";
+    return apiRequest<StockItemReconciliationPage>(
+      `/inventory/reconciliation${suffix}`,
+      token,
+      { signal },
+    );
+  },
+
+  summary(token: string, signal?: AbortSignal) {
+    return apiRequest<StockItemReconciliationSummary>(
+      "/inventory/reconciliation/summary",
+      token,
+      { signal },
     );
   },
 };
