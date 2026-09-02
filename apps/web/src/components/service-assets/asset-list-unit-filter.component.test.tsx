@@ -149,6 +149,33 @@ describe("AssetListPage helyszín-szűrő", () => {
     expect(screen.getByText("Biodóm / Fókamedence (FOK)")).toBeTruthy();
   });
 
+  /**
+   * A SZURO JELOL, DE NEM SZUR (acrobot dontese, 2026-09-02 21:13). Egy eszkoz
+   * allhat archivalt helyszinen, es a listat is akarhatja valaki epp arra
+   * szurni: a valasztas itt nem hoz letre semmit. A JELOLES viszont kell,
+   * kulonben a felhasznalo nem erti, miert nem ajanljuk ugyanezt a helyszint
+   * ott, ahol uj munka indul.
+   */
+  it("az archivált helyszínt felajánlja, de MEGJELÖLI", async () => {
+    suppliers.units.mockResolvedValue({
+      items: [
+        {
+          id: "unit-regi",
+          parentId: null,
+          code: "REG",
+          name: "Régi szárny",
+          isActive: false,
+        },
+      ],
+    });
+
+    await renderWith("ownerType=SUPPLIER&ownerId=supplier-1");
+
+    expect(
+      await screen.findByText("Régi szárny (REG) · archivált"),
+    ).toBeTruthy();
+  });
+
   it("a jelölőnégyzet a CÍMSORBA ír, és visszaállítja a lapozást", async () => {
     await renderWith("ownerType=SUPPLIER&ownerId=supplier-1&page=3");
     fireEvent.click(await screen.findByLabelText("Biodóm (BIO)"));

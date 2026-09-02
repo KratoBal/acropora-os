@@ -495,3 +495,83 @@ describe("SupplierEditorPage: unit editing", () => {
     expect(suppliers.updateUnit.mock.calls[0]?.[3]).toEqual({ isActive: true });
   });
 });
+
+/*
+ * MIT AJANL FEL A SZULO-VALASZTO, ES MIT MUTAT A LISTA.
+ *
+ * A ketto SZANDEKOSAN kulonbozik (acrobot dontese, 2026-09-02 21:13): a
+ * valaszto csak aktivat ajanl (kulonben egy uj, aktiv alegyseg csendben
+ * visszahozna egy archivalt agat a munkaba), a lista viszont a teljes fat
+ * mutatja, kulonben a meglevo gyerekek szulo nelkul maradnanak a kepernyon.
+ */
+describe("SupplierEditorPage: what the parent picker offers", () => {
+  const serviceSupplier = {
+    id: "supplier-1",
+    code: "SZALL-1",
+    name: "Fankó Kft.",
+    isSupplier: false,
+    isService: true,
+    worksheetPartnerCode: "FANK",
+    country: "HU",
+    isActive: true,
+    createdAt: "2026-08-19T10:00:00.000Z",
+    updatedAt: "2026-08-19T10:00:00.000Z",
+  };
+  const archived = {
+    id: "unit-regi",
+    parentId: null,
+    code: "REG",
+    name: "Régi szárny",
+    isActive: false,
+  };
+  const active = {
+    id: "unit-bio",
+    parentId: null,
+    code: "BIO",
+    name: "Biodóm",
+    isActive: true,
+  };
+
+  beforeEach(() => {
+    auth.session = session;
+    suppliers.detail.mockReset().mockResolvedValue(serviceSupplier);
+    suppliers.update.mockReset();
+    suppliers.units
+      .mockReset()
+      .mockResolvedValue({ items: [archived, active] });
+    suppliers.createUnit.mockReset();
+    suppliers.updateUnit.mockReset();
+    suppliers.deletionPlan.mockReset();
+    suppliers.remove.mockReset();
+  });
+
+  /**
+   * EZ AZ AZ ALLITAS, AMI A DONTEST ORZI. Ha valaki kiveszi a szurest, egy uj
+   * alegyseg archivalt ag ala kerulhet, es onnantol a munkalap-valasztoban
+   * megjelenik -- hibauzenet nelkul.
+   */
+  it("offers only active units as a parent", async () => {
+    render(<SupplierEditorPage supplierId="supplier-1" />);
+    const picker = await screen.findByLabelText("Szülő helyszín");
+
+    const offered = Array.from(
+      picker.querySelectorAll("option"),
+      (option) => option.textContent ?? "",
+    );
+    expect(offered.some((text) => text.includes("BIO"))).toBe(true);
+    expect(offered.some((text) => text.includes("REG"))).toBe(false);
+  });
+
+  /**
+   * A SZIGOR LEGVESZELYESEBB MELLEKHATASA, ES EZERT ALL KULON ALLITAS RAJTA:
+   * a szures NEM veszi el a MEGLEVOT. Egy archivalt helyszin tovabbra is
+   * lathato a fan -- kulonben a rajta allo gyerekek szulo nelkul maradnanak,
+   * es visszaallitani sem lehetne.
+   */
+  it("keeps the archived unit visible in the tree it filtered out of", async () => {
+    render(<SupplierEditorPage supplierId="supplier-1" />);
+
+    expect(await screen.findByText("Régi szárny")).toBeTruthy();
+    expect(screen.getByLabelText("Régi szárny visszaállítása")).toBeTruthy();
+  });
+});
