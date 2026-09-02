@@ -270,6 +270,44 @@ describe("WorksheetsService", () => {
   });
 
   /**
+   * EGY ARCHIVALT ALEGYSEGRE NEM LEHET UJ LAPOT NYITNI.
+   *
+   * AZ ORZO 2026-09-02-IG ELMELETI VOLT: az `isActive` mezot semmi nem tudta
+   * `false`-ra allitani, tehat ez az ag SOHA nem sult el. A partner-oldali
+   * archivalas (`PATCH /suppliers/:id/units/:unitId`) allitja elo eloszor azt
+   * az allapotot, amire ez a feltétel var -- ez az elso VALODI meres rola.
+   *
+   * ES A `createDraft` HIANYAT IS ALLITJUK, nem csak a kivetelt: egy elutasitas,
+   * ami kozben mar irt, ugyanolyan hiba, mint egy elmaradt elutasitas -- csak
+   * nehezebb eszrevenni, mert a hibauzenet ott all mellette.
+   */
+  it("refuses a new worksheet on an archived unit, before writing anything", async () => {
+    let drafted = 0;
+    const service = new WorksheetsService(
+      repository({
+        department: async () => ({
+          id: "department-1",
+          customerId: "customer-1",
+          code: "BIO",
+          isActive: false,
+        }),
+        createDraft: async () => {
+          drafted += 1;
+          return "worksheet-1";
+        },
+      }),
+    );
+
+    await assert.rejects(
+      service.create(contentDto(), "user-1"),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        error.message.includes("nem aktív"),
+    );
+    assert.equal(drafted, 0, "az elutasitas ELOTT nem szabad piszkozatot irni");
+  });
+
+  /**
    * The id is the partner's mirror customer row, and every path that reaches
    * here started from a partner: the partner page, or the worksheet's partner
    * picker. Telling the reader the customer was not found names a record they
