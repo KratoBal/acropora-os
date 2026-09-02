@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import * as ImagePicker from "expo-image-picker";
 import * as Print from "expo-print";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
@@ -11,10 +12,12 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
-import { getAsset, getAssetQr } from "@/lib/api/assets";
+import { getAsset, getAssetQr, uploadAssetDocuments } from "@/lib/api/assets";
+import { MAX_FILES_PER_UPLOAD } from "@/lib/api/asset-document-upload";
+import { toPickedImages } from "@/lib/api/picked-image";
 import { ASSET_STATUS_LABELS } from "@/lib/assets/asset-status";
 import {
   LABEL_GAP_MM,
@@ -72,6 +75,73 @@ export default function AssetDetailScreen() {
     if (!query.data) return;
     void rememberAssetDetail(query.data);
   }, [query.data]);
+
+  const [uploading, setUploading] = useState(false);
+  const [uploadNotice, setUploadNotice] = useState<string | null>(null);
+
+  /**
+   * FÉNYKÉP AZ ESZKÖZHÖZ, A HELYSZÍNRŐL.
+   *
+   * CSAK KÉP, NEM DOKUMENTUM. A telefon a szerelő kezében van, ott fénykép
+   * keletkezik; a számla és a garancialevél az irodából kerül fel, ahol a
+   * webes felület már tud fájlt fogadni.
+   *
+   * A VÁLASZTÁS EREDMÉNYÉT NEM KÜLDJÜK EL VAKON. A szerver a bejelentett
+   * típust és a fájl első bájtjait együtt nézi, tehát egy formátum, amit nem
+   * ismerünk fel, biztos elutasítás lenne - azt inkább itt hagyjuk ki, és
+   * megnevezzük, minthogy a szerelő egy hálózati kör után lássa.
+   */
+  const pickAndUploadPhotos = async () => {
+    if (!query.data || uploading) return;
+    setUploadNotice(null);
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setUploadNotice(
+        "A fényképek eléréséhez engedély kell. A telefon beállításaiban adható meg.",
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsMultipleSelection: true,
+      selectionLimit: MAX_FILES_PER_UPLOAD,
+    });
+    if (result.canceled) return;
+
+    const { files, skipped } = toPickedImages(result.assets);
+    if (files.length === 0) {
+      setUploadNotice(
+        "Egyik kiválasztott kép sem tölthető fel: csak JPEG és PNG megy.",
+      );
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const created = await uploadAssetDocuments(query.data.id, {
+        type: "OTHER",
+        files,
+      });
+      // A KIHAGYOTTAKAT AKKOR IS KIMONDJUK, HA A TÖBBI SIKERÜLT. Egy néma
+      // részleges siker azt a hitet hagyná, hogy mind a tíz kép fent van.
+      setUploadNotice(
+        skipped.length > 0
+          ? `${created.length} kép feltöltve. Kimaradt: ${skipped.join(", ")}.`
+          : `${created.length} kép feltöltve.`,
+      );
+      void query.refetch();
+    } catch (error) {
+      setUploadNotice(
+        error instanceof Error
+          ? error.message
+          : "A feltöltés nem sikerült. Próbáld újra.",
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const printLabel = async (share: boolean) => {
     if (!query.data) return;
@@ -284,6 +354,27 @@ export default function AssetDetailScreen() {
                     })
                   }
                 />
+              </Section>
+            ) : null}
+
+            {/*
+              A FELTÖLTÉS SZERVERT KÍVÁN, tehát mentett lapon nem jelenik meg,
+              ugyanabból az okból, amiért a szerkesztés sem: egy gomb, ami
+              offline nem csinál semmit, rosszabb a hiányzó gombnál.
+
+              A telefon ma offline OLVASNI tud, RÖGZÍTENI nem - a várakozó sor
+              táblája elkészült, de senki nem tölti fel.
+            */}
+            {capabilities?.assetsManage && !fromCache ? (
+              <Section title="Fényképek">
+                <AssetLink
+                  label={uploading ? "Feltöltés…" : "Fénykép hozzáadása"}
+                  meta={`A galériából, egyszerre legfeljebb ${MAX_FILES_PER_UPLOAD}`}
+                  onPress={() => void pickAndUploadPhotos()}
+                />
+                {uploadNotice ? (
+                  <Text style={styles.uploadNotice}>{uploadNotice}</Text>
+                ) : null}
               </Section>
             ) : null}
 
@@ -514,6 +605,13 @@ const styles = StyleSheet.create({
   chevron: { color: "#52d6c7", fontSize: 26 },
   pressed: { opacity: 0.68 },
   message: { color: "#a9c4d1", lineHeight: 20, marginTop: 8 },
+  uploadNotice: {
+    color: "#475569",
+    fontSize: 13,
+    lineHeight: 18,
+    paddingHorizontal: 4,
+    paddingTop: 8,
+  },
   retryButton: {
     alignSelf: "flex-start",
     backgroundColor: "#177b74",

@@ -92,6 +92,21 @@ module.exports = ({ config }) => {
           barcodeScannerEnabled: true,
         },
       ],
+      /**
+       * A GALÉRIA-HOZZÁFÉRÉS SZÖVEGE NÉLKÜL AZ iOS AZONNAL LEÁLLÍTJA AZ APPOT,
+       * amint a választó megnyílna - nem elutasítást ad, hanem összeomlást, és
+       * a hiba csak eszközön látszik, a fejlesztői futtatáson nem feltétlenül.
+       *
+       * A kamera-jogot NEM kérjük ide: a fénykép ma a galériából jön. Ha egyszer
+       * közvetlen fényképezés is kell, az külön jog és külön szöveg.
+       */
+      [
+        "expo-image-picker",
+        {
+          photosPermission:
+            "Az Acropora OS a fényképeidhez fér hozzá, hogy a helyszínen készült képeket az eszköz adatlapjához csatolhasd.",
+        },
+      ],
       [
         "expo-splash-screen",
         {
