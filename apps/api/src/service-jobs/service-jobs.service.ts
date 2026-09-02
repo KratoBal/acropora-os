@@ -162,9 +162,8 @@ export class ServiceJobsService {
    * van, annak nem az a kerdese, hogy "sikerult-e", hanem hogy HOL van.
    */
   async attachWorksheet(jobId: string, worksheetId: string) {
-    const jobStatus = await this.repository.statusOf(jobId);
-    if (jobStatus === null)
-      throw new NotFoundException("A hibajegy nem található.");
+    const job = await this.repository.jobAttachState(jobId);
+    if (job === null) throw new NotFoundException("A hibajegy nem található.");
 
     const sheet = await this.repository.worksheetAttachState(worksheetId);
     if (sheet === null)
@@ -174,6 +173,38 @@ export class ServiceJobsService {
         sheet.serviceJobId === jobId
           ? "Ez a munkalap már ehhez a hibajegyhez tartozik."
           : "Ez a munkalap már egy másik hibajegyhez tartozik.",
+      );
+
+    /*
+     * A PARTNERNEK EGYEZNIE KELL, ES A KET ELTERESRE KET KULONBOZO MONDAT JAR,
+     * mert a felhasznalonak KET KULONBOZO teendot adnak:
+     *
+     *   kulonbozo partner  -> a LAP a rossz: masikat kell valasztani
+     *   a jegynek nincs    -> a JEGY hianyos: eloszor a partneret kell beallitani
+     *
+     * Egy kozos uzenet mindkettore ugyanaz a hiba lenne, mint a gondolatjel a
+     * hiany helyen: elmondja, hogy valami nincs rendben, azt nem, hogy mit tegyen.
+     *
+     * MIERT NEM MEHET PARTNER NELKULI JEGY ALA (acrobot dontese, 2026-09-02; a
+     * gazda ele MEG NEM jutott el, tehat NEM az o dontese): a
+     * jegy CSENDBEN megkapna egy partner tulajdonat, esemeny nelkul -- epp abban
+     * a rendszerben, ahol most epitjuk a naplot, hogy minden valtozasnak legyen
+     * nyoma. A megengedo iranyban KET rossz allitas keletkezne egy muveletbol
+     * (rossz helyen a lap ES rossz partnernel a jegy), es egyik sem kerdezett.
+     *
+     * MI NYITNA MEG: ha a partner nelkuli jegy GYAKORINAK bizonyul elesben, es
+     * a plusz lepes zavaro. Akkor sem a csendes atvetel jonne, hanem egy
+     * KIMONDOTT alak: a csatolas felajanlja a jegy partnerenek beallitasat, es
+     * a felhasznalo megerositi. Ez ma nem donthetо el maskepp: nulla adatunk
+     * van rola, mert a modul meg nem all elesben.
+     */
+    if (job.customerId === null)
+      throw new BadRequestException(
+        "Ehhez a hibajegyhez még nincs partner. Először állítsd be a hibajegy partnerét.",
+      );
+    if (job.customerId !== sheet.customerId)
+      throw new BadRequestException(
+        "Ez a munkalap másik partnerhez tartozik, mint a hibajegy.",
       );
 
     const attached = await this.repository.attachWorksheet({
@@ -203,9 +234,12 @@ export class ServiceJobsService {
    * jegy naplojaval, mit lat a partner), es azokra ma nincs dontes.
    */
   async detachWorksheet(jobId: string, worksheetId: string) {
-    const jobStatus = await this.repository.statusOf(jobId);
-    if (jobStatus === null)
-      throw new NotFoundException("A hibajegy nem található.");
+    // A LEVALASZTAS NEM NEZI A PARTNERT, es ez nem feledekenyseg: a partner-
+    // egyezes a BEKERULES feltetele. Egy mar csatolt lapot levenni akkor is
+    // szabad kell hogy legyen, ha a partner idokozben elmozdult -- kulonben
+    // epp a hibas allapotot zarnank be.
+    const job = await this.repository.jobAttachState(jobId);
+    if (job === null) throw new NotFoundException("A hibajegy nem található.");
 
     const sheet = await this.repository.worksheetAttachState(worksheetId);
     if (sheet === null)
