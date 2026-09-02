@@ -2644,14 +2644,28 @@ model WorksheetLine {
   description        String
   detail             String?
   assetId            String?
-  quantity           Decimal @db.Decimal(19, 6)
+  quantity           Decimal  @db.Decimal(19, 6)
   /// Mértékegység (db, óra) - soronként változik, ma szabad szöveg.
   unit               String
-  unitNet            Decimal @db.Decimal(19, 4)
-  vatRatePercent     Decimal @db.Decimal(5, 2)
-  netAmount          Decimal @db.Decimal(19, 4)
-  vatAmount          Decimal @db.Decimal(19, 4)
-  grossAmount        Decimal @db.Decimal(19, 4)
+  /// AZ ÁR HIÁNYOZHAT, ÉS EZ SZÁNDÉKOS.
+  ///
+  /// A szerelő a helyszínen azt rögzíti, MIT csinált és MENNYIT; az árat az
+  /// iroda adja meg (Balázs döntése, 2026-09-02). Egy kötelező mező mellett a
+  /// telefonnak találomra kellene értéket küldenie - és a kézenfekvő nulla a
+  /// lapon ÉRTÉKKÉNT állna, nem hiányként: aki ránéz, nem tudja
+  /// megkülönböztetni az ingyenes munkától, és semmi nem szól, ha valaki
+  /// elfelejti kitölteni.
+  ///
+  /// A HIÁNY NEM MARAD ÉSZREVÉTLEN: ár nélküli tétellel a lap nem zárható le.
+  /// A feltétel ma a LEZÁRÁSHOZ tartozik, mert az átadás fogalma a
+  /// rendszerben még nem létezik - amikor megszületik, oda kerül át.
+  unitNet            Decimal? @db.Decimal(19, 4)
+  vatRatePercent     Decimal? @db.Decimal(5, 2)
+  /// Az összegek az egységárból számolnak, tehát nélküle nincs mit tárolni.
+  /// Nem nulla: a nulla összeg egy elvégzett, ingyenes munka, ami más.
+  netAmount          Decimal? @db.Decimal(19, 4)
+  vatAmount          Decimal? @db.Decimal(19, 4)
+  grossAmount        Decimal? @db.Decimal(19, 4)
 
   worksheetVersion WorksheetVersion @relation(fields: [worksheetVersionId], references: [id], onDelete: Cascade)
   asset            Asset?           @relation(fields: [assetId], references: [id], onDelete: Restrict)

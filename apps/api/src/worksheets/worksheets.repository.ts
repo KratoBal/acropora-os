@@ -49,7 +49,11 @@ import {
 } from "./worksheets.types.js";
 
 export type WorksheetCloseFailure =
-  "NOT_FOUND" | "NOT_DRAFT" | "NO_LINES" | WorksheetNumberIssue;
+  | "NOT_FOUND"
+  | "NOT_DRAFT"
+  | "NO_LINES"
+  | "LINE_PRICE_MISSING"
+  | WorksheetNumberIssue;
 
 export type WorksheetCloseResult =
   { ok: true } | { ok: false; reason: WorksheetCloseFailure };
@@ -737,6 +741,27 @@ export class WorksheetsRepository extends Repository {
       if (current._count.lines === 0)
         return { ok: false, reason: "NO_LINES" } as const;
 
+      /**
+       * ÁR NÉLKÜLI TÉTELLEL A LAP NEM ZÁRHATÓ LE.
+       *
+       * Ez a párja annak, hogy az ár elhagyható: a szerelő a helyszínen azt
+       * rögzíti, mit csinált és mennyit, az árat az iroda adja meg. A hiány
+       * tehát MEGENGEDETT állapot, de nem VÉGSŐ - itt derül ki, ha valaki
+       * elfelejtette kitölteni.
+       *
+       * MIÉRT A LEZÁRÁSHOZ TARTOZIK, ÉS NEM AZ ÁTADÁSHOZ: az átadás fogalma
+       * (a lap visszaadása a hibajegy felelősének) a rendszerben MA NEM
+       * LÉTEZIK - a munkalap és a hibajegy között nincs kapcsolat, tehát azt
+       * sem tudjuk, kinek kellene visszaadni. A feltétel a legkésőbbi ma
+       * létező ponton áll; amikor az átadás megszületik, ODA kerül át.
+       * Enélkül a következő olvasó azt hinné, hogy a lezárás volt a szándék.
+       */
+      const withoutPrice = await transaction.worksheetLine.count({
+        where: { worksheetVersionId: current.id, unitNet: null },
+      });
+      if (withoutPrice > 0)
+        return { ok: false, reason: "LINE_PRICE_MISSING" } as const;
+
       const partnerCode = worksheet.customer.worksheetPartnerCode;
       const departmentCode = worksheet.department.code;
       /**
@@ -1143,7 +1168,24 @@ export class WorksheetsRepository extends Repository {
       where: { worksheetVersionId: versionId },
       select: { netAmount: true, vatAmount: true, grossAmount: true },
     });
-    const totals = sumWorksheetAmounts(lines);
+    // AZ ÁR NÉLKÜLI SOR KIMARAD AZ ÖSSZEGZÉSBŐL, nem nullaként számít bele.
+    //
+    // A különbség a lap alján látszik: egy nullával beszámított tétel azt
+    // állítaná, hogy az összeg KÉSZ, csak épp ennyi. Kihagyva az összeg
+    // annyit mond, amennyit tud - a hiányzó tételekről a lezárás szól, ami
+    // ár nélkül nem is engedi tovább a lapot.
+    const totals = sumWorksheetAmounts(
+      lines.filter(
+        (
+          line,
+        ): line is {
+          [K in keyof typeof line]: NonNullable<(typeof line)[K]>;
+        } =>
+          line.netAmount !== null &&
+          line.vatAmount !== null &&
+          line.grossAmount !== null,
+      ),
+    );
     await transaction.worksheetVersion.update({
       where: { id: versionId },
       data: {

@@ -188,11 +188,15 @@ export function toVersionDetail(
       inventoryNumber: line.asset?.inventoryNumber ?? null,
       quantity: line.quantity.toString(),
       unit: line.unit,
-      unitNet: line.unitNet.toString(),
-      vatRatePercent: line.vatRatePercent.toString(),
-      netAmount: line.netAmount.toString(),
-      vatAmount: line.vatAmount.toString(),
-      grossAmount: line.grossAmount.toString(),
+      // A HIÁNYZÓ ÁR `null`-ként megy tovább, nem üres szövegként és nem
+      // nullaként. Az üres szöveg a felületen kiírható értéknek látszana, a
+      // nulla pedig ingyenes munkának - a `null` az egyetlen alak, amiről a
+      // hívó tudja, hogy még nincs kitöltve.
+      unitNet: line.unitNet?.toString() ?? null,
+      vatRatePercent: line.vatRatePercent?.toString() ?? null,
+      netAmount: line.netAmount?.toString() ?? null,
+      vatAmount: line.vatAmount?.toString() ?? null,
+      grossAmount: line.grossAmount?.toString() ?? null,
     })),
   };
 }
@@ -292,9 +296,9 @@ export function toComparableVersion(
       assetNumber: line.asset?.assetNumber ?? null,
       quantity: line.quantity.toString(),
       unit: line.unit,
-      unitNet: line.unitNet.toString(),
-      vatRatePercent: line.vatRatePercent.toString(),
-      netAmount: line.netAmount.toString(),
+      unitNet: line.unitNet?.toString() ?? null,
+      vatRatePercent: line.vatRatePercent?.toString() ?? null,
+      netAmount: line.netAmount?.toString() ?? null,
     })),
   };
 }

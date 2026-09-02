@@ -191,11 +191,23 @@ export interface WorksheetLineDetail {
   inventoryNumber: string | null;
   quantity: string;
   unit: string;
-  unitNet: string;
-  vatRatePercent: string;
-  netAmount: string;
-  vatAmount: string;
-  grossAmount: string;
+  /**
+   * AZ ÁR ÉS A BELŐLE SZÁMOLT ÖSSZEGEK HIÁNYOZHATNAK.
+   *
+   * A szerelő a helyszínen azt rögzíti, mit csinált és mennyit; az árat az
+   * iroda adja meg. A `null` itt NEM ugyanaz, mint a `"0"`: a nulla egy
+   * elvégzett, ingyenes munka, a `null` az, hogy még nincs kitöltve. A kettő
+   * összemosása azt a csendet hozná vissza, amit ez a megkülönböztetés
+   * elkerül - egy nulla forintos tétel a lapon ÉRTÉKNEK látszik.
+   *
+   * Ár nélküli tétellel a lap nem zárható le, tehát a hiány nem marad
+   * észrevétlen.
+   */
+  unitNet: string | null;
+  vatRatePercent: string | null;
+  netAmount: string | null;
+  vatAmount: string | null;
+  grossAmount: string | null;
 }
 
 export interface WorksheetLineInput {
@@ -204,8 +216,16 @@ export interface WorksheetLineInput {
   assetId?: string | null;
   quantity: number;
   unit: string;
-  unitNet: number;
-  vatRatePercent: number;
+  /**
+   * AZ ÁR ELHAGYHATÓ: a helyszínen rögzített tétel ár nélkül keletkezik, és az
+   * irodában egészül ki. A hiány a `undefined`, NEM a nulla - egy nulla
+   * forintos tétel a lapon értéknek látszik, nem hiánynak.
+   *
+   * Ár nélküli tétellel a lap nem zárható le, tehát a hiány nem marad
+   * észrevétlen.
+   */
+  unitNet?: number;
+  vatRatePercent?: number;
 }
 
 export interface WorksheetSignatureDetail {

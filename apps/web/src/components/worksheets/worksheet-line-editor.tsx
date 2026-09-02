@@ -33,14 +33,31 @@ export function emptyLine(): WorksheetLineDraft {
  * kapna hibát olyanra, amit épp javítani készül. A számmá alakítás egy
  * helyen, a beküldéskor történik.
  */
+/**
+ * AZ ÜRES ÁRMEZŐ NEM NULLA, HANEM HIÁNY - és ez a különbség egy `Number("")`
+ * hívásban veszne el.
+ *
+ * A `Number("")` értéke NULLA, nem `NaN`: egy üresen hagyott ármező csendben
+ * nulla forintos tétellé válna, ami a lapon ÉRTÉKNEK látszik, nem hiánynak.
+ * Aki ránéz, nem tudja megkülönböztetni az ingyenes munkától, és semmi nem
+ * szól, ha valaki elfelejtette kitölteni.
+ *
+ * A fordító ezt nem fogja meg: a `Number("")` érvényes szám.
+ */
+function optionalNumber(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  return Number(trimmed);
+}
+
 export function toLineInput(line: WorksheetLineDraft): WorksheetLineInput {
   return {
     description: line.description.trim(),
     detail: line.detail.trim() ? line.detail.trim() : null,
     quantity: Number(line.quantity),
     unit: line.unit.trim(),
-    unitNet: Number(line.unitNet),
-    vatRatePercent: Number(line.vatRatePercent),
+    unitNet: optionalNumber(line.unitNet),
+    vatRatePercent: optionalNumber(line.vatRatePercent),
   };
 }
 

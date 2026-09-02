@@ -12,9 +12,14 @@ export interface ComparableWorksheetLine {
   assetNumber: string | null;
   quantity: string;
   unit: string;
-  unitNet: string;
-  vatRatePercent: string;
-  netAmount: string;
+  /**
+   * Az ár hiányozhat: a helyszínen rögzített tétel ár nélkül keletkezik. Az
+   * összevetésben a `null` ÖNÁLLÓ érték, nem az üres szöveggel egyenlő - egy
+   * kitöltetlen és egy nullára állított ár közötti változás valódi változás.
+   */
+  unitNet: string | null;
+  vatRatePercent: string | null;
+  netAmount: string | null;
 }
 
 export interface ComparableWorksheetVersion {
