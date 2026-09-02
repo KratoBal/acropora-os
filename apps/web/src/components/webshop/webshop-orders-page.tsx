@@ -13,6 +13,7 @@ import {
 import {
   hasPermission,
   PERMISSIONS,
+  type UnasOrderDeletionReconciliationStatus,
   type UnasOrderListItem,
 } from "@acropora/types";
 import { useRouter } from "next/navigation";
@@ -58,6 +59,38 @@ function formatOrderDate(order: UnasOrderListItem): string {
   });
 }
 
+/**
+ * What the page can say about the deletion check, as one sentence.
+ *
+ * THREE STATES, NOT TWO. "Not running" and "could not ask" are different
+ * things, and collapsing them is the failure this endpoint exists to
+ * prevent: a page that cannot reach the status must not imply the check is
+ * off, and one that cannot reach it must not imply the check is on either.
+ *
+ * Pure on purpose - the wording is the part worth asserting, and a pure
+ * function can be calibrated without rendering anything.
+ */
+export type DeletionCheckState =
+  UnasOrderDeletionReconciliationStatus | "loading" | "unknown";
+
+export function deletionCheckSentence(
+  state: DeletionCheckState,
+): string | null {
+  if (state === "loading") return null;
+  if (state === "unknown")
+    return "Törölt rendelések ellenőrzése: az állapotát most nem sikerült lekérdezni.";
+  if (!state.enabled)
+    return "Törölt rendelések ellenőrzése: nem fut. Az UNAS-ban véglegesen törölt rendelést csak a kézi frissítés találja meg.";
+
+  // `enabled` with no interval is not a state the server produces, but the
+  // contract allows it, and a made-up number would be worse than a shorter
+  // sentence: it would read as measured.
+  if (state.intervalMs === null) return "Törölt rendelések ellenőrzése: fut.";
+
+  const minutes = Math.max(1, Math.round(state.intervalMs / 60_000));
+  return `Törölt rendelések ellenőrzése: ${minutes} percenként fut.`;
+}
+
 export function WebshopOrdersPage() {
   const { session } = useAuth();
   const router = useRouter();
@@ -74,6 +107,8 @@ export function WebshopOrdersPage() {
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [deletionCheck, setDeletionCheck] =
+    useState<DeletionCheckState>("loading");
 
   const loadOrders = useCallback(() => {
     if (!canView) return;
@@ -96,6 +131,17 @@ export function WebshopOrdersPage() {
     if (!canView) return;
     loadOrders();
   }, [canView, loadOrders]);
+
+  useEffect(() => {
+    if (!canView) return;
+    void unasOrdersApi
+      .deletionReconciliationStatus(token)
+      // A FAILED LOOKUP MUST NOT READ AS "OFF". Falling back to a disabled
+      // shape here would be the same silence this line exists to break,
+      // only louder: the page would state something it never learnt.
+      .then(setDeletionCheck)
+      .catch(() => setDeletionCheck("unknown"));
+  }, [canView, token]);
 
   const runSync = () => {
     // Matches the button's own `canManage ? ... : undefined` rendering
@@ -144,6 +190,20 @@ export function WebshopOrdersPage() {
           ) : undefined
         }
       />
+
+      {/*
+        WHAT THE HEADER ABOVE DOES NOT SAY. It promises an automatic sync
+        every five minutes, which is true of the sync itself - but the check
+        for orders DELETED in UNAS is a separate worker, off by default, and
+        until now nothing on this page said so. Quiet by design: this is a
+        standing fact about the system, not an event, so it does not take an
+        alert's weight.
+      */}
+      {deletionCheckSentence(deletionCheck) ? (
+        <p className="text-xs text-slate-500">
+          {deletionCheckSentence(deletionCheck)}
+        </p>
+      ) : null}
 
       {syncMessage ? (
         <Alert variant="info" title="Szinkron" description={syncMessage} />

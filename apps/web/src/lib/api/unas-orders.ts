@@ -1,5 +1,6 @@
 import type {
   StockReconciliationReport,
+  UnasOrderDeletionReconciliationStatus,
   UnasOrderDetail,
   UnasOrderRefreshResult,
   UnasOrderListResponse,
@@ -61,6 +62,12 @@ export const unasOrdersApi = {
   checkStockReconciliation(token: string) {
     return apiRequest<StockReconciliationReport>(
       `/integrations/unas/orders/stock/reconciliation`,
+      token,
+    );
+  },
+  deletionReconciliationStatus(token: string) {
+    return apiRequest<UnasOrderDeletionReconciliationStatus>(
+      `/integrations/unas/orders/deletion-reconciliation/status`,
       token,
     );
   },
