@@ -56,6 +56,28 @@ describe("az új eszköz űrlapjának választói", () => {
   });
 
   /**
+   * A HELYSZIN-VALASZTO A TERVBOL RAJZOL, NEM A NYERS SZINTEKBOL.
+   *
+   * MI PIROSIT: ha valaki visszateri a kepernyot arra, hogy MINDEN szintet
+   * egyszerre listazzon. Pontosan az volt Balazs eles panasza 2026-09-02-en
+   * (kartya 8e8bfd8a): harom csoport egymas alatt, felirat nelkul, es nem
+   * latszik, mi ala tartozik a kovetkezo.
+   *
+   * A TAGADAS MELLE POZITIV KONTROLL JAR: ha csak azt allitanam, hogy a
+   * `unitLevels(...).map(` alak NINCS ott, azt egy ures fajl is kielegitene.
+   */
+  it("a helyszín-választó a tervből rajzol, egy szintet egyszerre", () => {
+    const s = forras();
+
+    assert.match(s, /unitPickerPlan\(/);
+    assert.equal(
+      /unitLevels\([^)]*\)\.map\(/.test(s),
+      false,
+      "a képernyő nem listázhatja ki egyszerre az összes szintet",
+    );
+  });
+
+  /**
    * A KET VALASZTO MASKEPP CSUKODIK, ES EZ A LENYEG, NEM RESZLET.
    *
    * A tipusnal a koppintas EGY dontes, tehat becsukodik. A helyszinnel a
