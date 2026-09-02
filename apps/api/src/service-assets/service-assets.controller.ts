@@ -133,7 +133,7 @@ export class ServiceAssetsController {
     @UploadedFile() file: Express.Multer.File | undefined,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    if (!file) throw new BadRequestException("A PDF fájl kötelező.");
+    if (!file) throw new BadRequestException("A feltöltendő fájl kötelező.");
     return this.service.addDocument(id, input.type, file, user.id);
   }
 

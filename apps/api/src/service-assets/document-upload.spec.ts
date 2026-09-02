@@ -13,13 +13,17 @@ import type { ServiceAssetsRepository } from "./service-assets.repository.js";
 
 const ASSET = "asset-1";
 const PDF = Buffer.concat([Buffer.from("%PDF-"), Buffer.from([1, 2, 3])]);
+const JPEG = Buffer.concat([
+  Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
+  Buffer.from([1, 2, 3]),
+]);
 
-function upload(buffer: Buffer = PDF): Express.Multer.File {
-  return {
-    mimetype: "application/pdf",
-    originalname: "szamla.pdf",
-    buffer,
-  } as unknown as Express.Multer.File;
+function upload(
+  buffer: Buffer = PDF,
+  mimetype = "application/pdf",
+  originalname = "szamla.pdf",
+): Express.Multer.File {
+  return { mimetype, originalname, buffer } as unknown as Express.Multer.File;
 }
 
 /**
@@ -254,5 +258,91 @@ describe("where an uploaded document's bytes go", () => {
     await service.addDocument(ASSET, "INVOICE", upload(), "user-1");
 
     assert.equal(rowsWritten, 1);
+  });
+});
+
+describe("what the stored row says the file is", () => {
+  function capture() {
+    const written: Record<string, unknown>[] = [];
+    const service = new ServiceAssetsService(
+      repositoryThat({
+        addDocument: (async (input: Record<string, unknown>) => {
+          written.push(input);
+          return {} as never;
+        }) as unknown as ServiceAssetsRepository["addDocument"],
+      }),
+      new InMemoryDocumentStore(),
+    );
+    return { service, written };
+  }
+
+  /**
+   * A TÁROLT TÍPUS A LETÖLTÉS EGYETLEN FORRÁSA, és eddig RÖGZÍTETT érték volt
+   * (`application/pdf`), függetlenül a tartalomtól. PDF mellett igaz volt, és
+   * épp ezért nem tűnt fel: a hiba csak akkor jelent meg volna, amikor az első
+   * kép feltöltése után a böngésző PDF-ként próbálja megnyitni a fényképet.
+   *
+   * Egyetlen teszt sem állította ezt a mezőt a feltöltési úton - a
+   * teszt-dupla `as unknown as` típusa mellett a hiány csendes maradt volna.
+   */
+  it("a képre képet mond, nem PDF-et", async () => {
+    delete process.env.DOCUMENT_STORE_ROOT;
+    const { service, written } = capture();
+
+    await service.addDocument(
+      ASSET,
+      "OTHER",
+      upload(JPEG, "image/jpeg", "fenykep.jpg"),
+      "user-1",
+    );
+
+    assert.equal(written.length, 1);
+    assert.equal(written[0]!.contentType, "image/jpeg");
+  });
+
+  it("a PDF-re továbbra is PDF-et", async () => {
+    delete process.env.DOCUMENT_STORE_ROOT;
+    const { service, written } = capture();
+
+    await service.addDocument(ASSET, "INVOICE", upload(), "user-1");
+
+    assert.equal(written[0]!.contentType, "application/pdf");
+  });
+
+  /**
+   * A NEM SZABVÁNYOS BEJELENTÉST ELFOGADJUK, DE NEM ADJUK VISSZA. Ha a küldő
+   * `image/jpg` alakot mond, a sor akkor is a szabványosat őrzi - különben a
+   * böngésző azon akadna fenn, amit mi engedtünk át.
+   */
+  it("a bejelentett image/jpg alakot szabványosra fordítja", async () => {
+    delete process.env.DOCUMENT_STORE_ROOT;
+    const { service, written } = capture();
+
+    await service.addDocument(
+      ASSET,
+      "OTHER",
+      upload(JPEG, "image/jpg", "fenykep.jpg"),
+      "user-1",
+    );
+
+    assert.equal(written[0]!.contentType, "image/jpeg");
+  });
+
+  it("elutasítja azt, ami képnek mondja magát, de PDF van benne", async () => {
+    delete process.env.DOCUMENT_STORE_ROOT;
+    const { service, written } = capture();
+
+    await assert.rejects(
+      () =>
+        service.addDocument(
+          ASSET,
+          "OTHER",
+          upload(PDF, "image/png", "alcazott.png"),
+          "user-1",
+        ),
+      /PDF, JPEG vagy PNG/,
+    );
+    // AZ ŐRZŐT NEM AZ BIZONYÍTJA, HOGY SZÓL, HANEM HOGY NEM TÖRTÉNT SEMMI.
+    assert.equal(written.length, 0);
   });
 });

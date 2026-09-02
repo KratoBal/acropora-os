@@ -1038,6 +1038,7 @@ export class ServiceAssetsRepository extends Repository {
     storageKey?: string | null;
     sizeBytes: number;
     sha256: string;
+    contentType: string;
     actorUserId: string;
   }): Promise<AssetDocumentSummary> {
     const id = input.id ?? randomUUID();
@@ -1049,7 +1050,7 @@ export class ServiceAssetsRepository extends Repository {
           assetId: input.assetId,
           type: input.type,
           fileName: input.fileName,
-          contentType: "application/pdf",
+          contentType: input.contentType,
           sizeBytes: input.sizeBytes,
           sha256,
           content: input.content ? Uint8Array.from(input.content) : null,
