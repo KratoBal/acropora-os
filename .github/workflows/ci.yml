@@ -79,6 +79,14 @@ jobs:
       # `pnpm-workspace.yaml` excludes `apps/mobile` from the workspace, so
       # `turbo run lint` never included it. `pnpm mobile:lint` below is how it
       # runs, and how it always ran.
+      # A titok-kereses ELOL all, es nem sorrendi izles: a tobbi kapu egy hibat
+      # mutat meg, ez egy VISSZAVONHATATLAN esemenyt elozne meg.
+      #
+      # Ugyanazt a szkriptet futtatja, mint a pre-commit hook, csak a TELJES
+      # fara. A hook kihagyhato es nem mindenhol letezik, tehat ez a hiteles fele.
+      - name: Secret scan
+        run: node scripts/scan-secrets.mjs
+
       - name: Static verification
         run: |
           pnpm typecheck
