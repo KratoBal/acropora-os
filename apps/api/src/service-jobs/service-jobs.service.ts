@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 
-import type { ServiceJobDetail } from "@acropora/types";
+import { serviceJobTimeline, type ServiceJobDetail } from "@acropora/types";
 
 import type {
   CreateServiceJobDto,
@@ -102,28 +102,37 @@ export class ServiceJobsService {
       createdAt: row.createdAt.toISOString(),
       // A tábla `readonly` tömböt ad (nem írható felül kívülről); a válasz
       // sima tömb, ezért itt másolat készül róla.
+      scheduledAt: row.scheduledAt?.toISOString() ?? null,
+      startedAt: row.startedAt?.toISOString() ?? null,
+      completedAt: row.completedAt?.toISOString() ?? null,
       allowedSteps: [...allowedServiceJobSteps(row.status)],
-      events: row.events.map((event) => ({
-        id: event.id,
-        fromStatus: event.fromStatus,
-        toStatus: event.toStatus,
-        note: event.note,
-        actorName: event.actor?.displayName ?? null,
-        createdAt: event.createdAt.toISOString(),
-      })),
-      worksheets: row.worksheets.map((worksheet) => ({
-        id: worksheet.id,
-        number: worksheet.number,
-        createdAt: worksheet.createdAt.toISOString(),
-        handedOverAt: worksheet.handedOverAt?.toISOString() ?? null,
-      })),
-      assets: row.assets.map((link) => ({
-        id: link.id,
-        assetId: link.assetId,
-        assetNumber: link.asset.assetNumber,
-        assetName: link.asset.name,
-        attachedAt: link.createdAt.toISOString(),
-      })),
+      // AZ ÖSSZEFÉSÜLÉS ITT TÖRTÉNIK, NEM A KLIENSBEN. A sorrend szabály, és a
+      // mobil csomag nem is éri el ezt a közös függvényt (nem függ a
+      // `@acropora/types`-tól), tehát ott újraíródna - két kliens, két
+      // sorrend, és a különbség néma, mert mindkettő hihetően néz ki.
+      timeline: serviceJobTimeline({
+        events: row.events.map((event) => ({
+          id: event.id,
+          fromStatus: event.fromStatus,
+          toStatus: event.toStatus,
+          note: event.note,
+          actorName: event.actor?.displayName ?? null,
+          createdAt: event.createdAt.toISOString(),
+        })),
+        worksheets: row.worksheets.map((worksheet) => ({
+          id: worksheet.id,
+          number: worksheet.number,
+          createdAt: worksheet.createdAt.toISOString(),
+          handedOverAt: worksheet.handedOverAt?.toISOString() ?? null,
+        })),
+        assets: row.assets.map((link) => ({
+          id: link.id,
+          assetId: link.assetId,
+          assetNumber: link.asset.assetNumber,
+          assetName: link.asset.name,
+          attachedAt: link.createdAt.toISOString(),
+        })),
+      }),
     };
   }
 
@@ -138,7 +147,12 @@ export class ServiceJobsService {
    * arra kényszerítené a felhasználót, hogy sorra próbálgassa a gombokat -
    * és a válasz úgyis a szerveren áll, tehát olcsóbb kimondani.
    */
-  async move(id: string, input: MoveServiceJobDto, actorUserId: string) {
+  async move(
+    id: string,
+    input: MoveServiceJobDto,
+    actorUserId: string,
+    now: Date = new Date(),
+  ) {
     const from = await this.repository.statusOf(id);
     if (from === null) throw new NotFoundException("A hibajegy nem található.");
 
@@ -157,6 +171,7 @@ export class ServiceJobsService {
       to: input.to,
       note: input.note?.trim() || null,
       actorUserId,
+      now,
     });
     // A LÉPÉS FELTÉTELE A `from` VOLT: ha közben más lépett, nem írjuk felül
     // csendben, hanem megmondjuk, hogy elmozdult alattunk.

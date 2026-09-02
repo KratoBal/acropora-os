@@ -12,13 +12,12 @@ import {
 import {
   hasPermission,
   PERMISSIONS,
-  serviceJobTimeline,
   type ServiceJobDetail,
   type ServiceJobStatusValue,
   type ServiceJobTimelineEntry,
 } from "@acropora/types";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
@@ -54,10 +53,10 @@ function timelineLine(entry: ServiceJobTimelineEntry): string {
  * lista, részlet, lépés. Hogy a képernyő végül hogyan nézzen ki, az nem itt
  * dől el - de amíg nincs semmi, addig nincs miről beszélni.
  *
- * A NAPLÓ HÁROM FORRÁSBÓL ÁLL ÖSSZE (állapotváltás, munkalap, eszköz), és az
- * összefésülést a közös `serviceJobTimeline` végzi, nem ez a komponens: a
- * mobil ugyanezt a sorrendet kell hogy mutassa, és egy szabály, ami két helyen
- * áll, egyszer elcsúszik.
+ * A NAPLÓ HÁROM FORRÁSBÓL ÁLL ÖSSZE (állapotváltás, munkalap, eszköz), de az
+ * összefésülés NEM itt történik: a szerver adja vissza már egy időrendben. A
+ * sorrend szabály, és a mobil nem is éri el a közös csomagot - ott a fésülés
+ * újraíródna, két kliens, két sorrend, és a különbség néma. A kliens rajzol.
  */
 export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
   const { session } = useAuth();
@@ -100,18 +99,6 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
-
-  const timeline = useMemo(
-    () =>
-      job
-        ? serviceJobTimeline({
-            events: job.events,
-            worksheets: job.worksheets,
-            assets: job.assets,
-          })
-        : [],
-    [job],
-  );
 
   /**
    * A LÉPÉS UTÁN ÚJRATÖLTÜNK, nem a válaszból építünk.
@@ -166,6 +153,13 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
     );
 
   if (!job) return null;
+
+  // A MUNKALAP-SZAKASZ A NAPLÓBÓL SZŰR, nem külön listából: a végpont egy
+  // időrendet ad, és ez a doboz csak MÁS NÉZETE ugyanannak. Egy második lista
+  // a válaszban két helyen tartaná ugyanazt az adatot.
+  const worksheets = job.timeline.flatMap((entry) =>
+    entry.kind === "worksheet" ? [entry.worksheet] : [],
+  );
 
   return (
     <div className="space-y-6">
@@ -232,9 +226,9 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
 
       <Card className="space-y-3 p-4">
         <h2 className="text-sm font-semibold">Ami történt</h2>
-        {timeline.length ? (
+        {job.timeline.length ? (
           <ol className="space-y-2" aria-label="A hibajegy naplója">
-            {timeline.map((entry) => (
+            {job.timeline.map((entry) => (
               <li
                 key={`${entry.kind}-${entry.sortKey}`}
                 className="border-b pb-2 text-sm last:border-0"
@@ -264,9 +258,9 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
 
       <Card className="space-y-3 p-4">
         <h2 className="text-sm font-semibold">Munkalapok a jegy mögött</h2>
-        {job.worksheets.length ? (
+        {worksheets.length ? (
           <ul className="space-y-1 text-sm">
-            {job.worksheets.map((worksheet) => (
+            {worksheets.map((worksheet) => (
               <li key={worksheet.id}>
                 <Link
                   href={`/szerviz/munkalapok/${worksheet.id}`}

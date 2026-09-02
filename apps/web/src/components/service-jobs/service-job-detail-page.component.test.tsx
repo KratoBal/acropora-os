@@ -40,34 +40,54 @@ function detail(overrides: Partial<ServiceJobDetail> = {}): ServiceJobDetail {
     partnerStatusLabel: "Feldolgozás alatt",
     customerName: "Fővárosi Állat- És Növénykert",
     createdAt: "2026-09-01T08:00:00.000Z",
+    scheduledAt: null,
+    startedAt: null,
+    completedAt: null,
     allowedSteps: ["SCHEDULED", "CANCELLED"],
-    events: [
+    /**
+     * A SORRENDET A SZERVER ADJA, ÉS EZ A MINTA SZÁNDÉKOSAN NEM DÁTUM SZERINT
+     * ÁLL: ha a komponens újrarendezné, ez a sorrend megváltozna a képernyőn.
+     * Így az állítás azt méri, hogy a kliens RAJZOL, nem dönt.
+     */
+    timeline: [
       {
-        id: "event-1",
-        fromStatus: null,
-        toStatus: "NEW",
-        note: null,
-        actorName: "Szerelő Sándor",
-        createdAt: "2026-09-01T08:00:00.000Z",
+        kind: "status",
+        at: "2026-09-03T08:00:00.000Z",
+        sortKey: "event-2",
+        event: {
+          id: "event-2",
+          fromStatus: "NEW",
+          toStatus: "TRIAGED",
+          note: "Megnéztük, alkatrész kell hozzá.",
+          actorName: "Szerelő Sándor",
+          createdAt: "2026-09-03T08:00:00.000Z",
+        },
       },
       {
-        id: "event-2",
-        fromStatus: "NEW",
-        toStatus: "TRIAGED",
-        note: "Megnéztük, alkatrész kell hozzá.",
-        actorName: "Szerelő Sándor",
-        createdAt: "2026-09-03T08:00:00.000Z",
+        kind: "worksheet",
+        at: "2026-09-02T08:00:00.000Z",
+        sortKey: "worksheet-1",
+        worksheet: {
+          id: "worksheet-1",
+          number: "BIO-2026-004",
+          createdAt: "2026-09-02T08:00:00.000Z",
+          handedOverAt: null,
+        },
+      },
+      {
+        kind: "status",
+        at: "2026-09-01T08:00:00.000Z",
+        sortKey: "event-1",
+        event: {
+          id: "event-1",
+          fromStatus: null,
+          toStatus: "NEW",
+          note: null,
+          actorName: "Szerelő Sándor",
+          createdAt: "2026-09-01T08:00:00.000Z",
+        },
       },
     ],
-    worksheets: [
-      {
-        id: "worksheet-1",
-        number: "BIO-2026-004",
-        createdAt: "2026-09-02T08:00:00.000Z",
-        handedOverAt: null,
-      },
-    ],
-    assets: [],
     ...overrides,
   };
 }
@@ -80,13 +100,12 @@ describe("ServiceJobDetailPage", () => {
   });
 
   /**
-   * A NAPLÓ HÁROM FORRÁSBÓL ÁLL, ÉS EGY IDŐRENDBEN OLVASSUK.
-   *
-   * A minta úgy van összeállítva, hogy a munkalap a KÉT állapotváltás KÖZÉ
-   * essen: forrásonként fűzve a sorrend más lenne, tehát ez az állítás azt
-   * méri, hogy tényleg összefésülünk, nem csak kiírunk három listát.
+   * A SORREND A SZERVERÉ. A minta szándékosan a munkalapot teszi a két
+   * állapotváltás közé; ha a komponens bármilyen saját rendezést végezne, ez a
+   * sorrend megváltozna. Az összefésülés szabálya a szerveren áll, mert a
+   * mobil nem éri el a közös csomagot, és ott újraíródna.
    */
-  it("a három forrást egy időrendbe fésüli, legújabb felül", async () => {
+  it("a szerver sorrendjét rajzolja ki, nem rendezi újra", async () => {
     render(<ServiceJobDetailPage jobId="job-1" />);
 
     // A NAPLÓ LISTÁJÁN BELÜL kérdezünk, nem az oldal összes listaelemén: a

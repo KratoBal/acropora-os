@@ -26,6 +26,9 @@ function row(overrides: Partial<NonNullable<DetailRow>> = {}) {
     description: null,
     status: "TRIAGED" as const,
     createdAt: new Date("2026-09-01T08:00:00.000Z"),
+    scheduledAt: null,
+    startedAt: null,
+    completedAt: new Date("2026-09-04T08:00:00.000Z"),
     customer: { displayName: "Fővárosi Állat- És Növénykert" },
     events: [
       {
@@ -62,9 +65,41 @@ describe("a hibajegy részletlapja", () => {
     const detail = await serviceWith(row()).detail("job-1");
 
     assert.equal(detail.createdAt, "2026-09-01T08:00:00.000Z");
-    assert.equal(detail.events[0]!.createdAt, "2026-09-01T08:00:00.000Z");
-    assert.equal(detail.worksheets[0]!.createdAt, "2026-09-02T08:00:00.000Z");
-    assert.equal(detail.assets[0]!.attachedAt, "2026-09-02T09:00:00.000Z");
+    assert.equal(detail.completedAt, "2026-09-04T08:00:00.000Z");
+    // A SORRENDTŐL FÜGGETLENÜL keressük ki: ez az állítás a dátum-fordítást
+    // méri, nem a rendezést. Index szerint hivatkozva egy rendezési hiba is
+    // ezt pirosítaná, és akkor két állítás mondaná ugyanazt.
+    const naplosor = detail.timeline.find((entry) => entry.kind === "status");
+    assert.equal(naplosor?.at, "2026-09-01T08:00:00.000Z");
+  });
+
+  /**
+   * AZ ÖSSZEFÉSÜLÉS A SZERVERÉ, NEM A KLIENSÉ.
+   *
+   * A minta úgy áll, hogy a két csatolás a naplósor UTÁN keletkezett: ha a
+   * végpont három listát adna vissza, vagy fésülés nélkül fűzné össze őket, ez
+   * az állítás pirosodna. A kliens rajzol, nem dönt.
+   */
+  it("egy időrendbe fésülve adja vissza a három forrást, legújabb felül", async () => {
+    const detail = await serviceWith(row()).detail("job-1");
+
+    assert.deepEqual(
+      detail.timeline.map((entry) => entry.kind),
+      ["asset", "worksheet", "status"],
+    );
+  });
+
+  /**
+   * A `scheduledAt` NEM SZÁRMAZTATOTT, a másik kettő az - de mindhárom
+   * MEGJELENIK a válaszban. Ha kimaradnának, a felület a naplóból kezdené
+   * visszafejteni őket, és a szabály két helyen állna.
+   */
+  it("mindhárom időbélyeget kiadja, a tervezettet is", async () => {
+    const detail = await serviceWith(row()).detail("job-1");
+
+    assert.equal(detail.scheduledAt, null);
+    assert.equal(detail.startedAt, null);
+    assert.equal(detail.completedAt, "2026-09-04T08:00:00.000Z");
   });
 
   /**
@@ -94,8 +129,14 @@ describe("a hibajegy részletlapja", () => {
     const eventek = row().events.map((event) => ({ ...event, actor: null }));
     const detail = await serviceWith(row({ events: eventek })).detail("job-1");
 
-    assert.equal(detail.events.length, 1);
-    assert.equal(detail.events[0]!.actorName, null);
+    const naplosorok = detail.timeline.filter(
+      (entry) => entry.kind === "status",
+    );
+    assert.equal(naplosorok.length, 1);
+    assert.equal(
+      naplosorok[0]!.kind === "status" ? naplosorok[0]!.event.actorName : "x",
+      null,
+    );
   });
 
   it("nem létező jegyre nem találhatót mond, nem üres részletlapot", async () => {

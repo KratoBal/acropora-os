@@ -72,19 +72,17 @@ export interface ServiceJobAssetLink {
 }
 
 /**
- * A RÉSZLETLAP VÁLASZA: HÁROM KÜLÖN LISTA, NEM EGY ÖSSZEFÉSÜLT SOR.
+ * A RÉSZLETLAP VÁLASZA: EGY ÖSSZEFÉSÜLT SOR, A SZERVER RENDEZI.
  *
- * Ez a ház mintája: a `GET /service/worksheets/:id` is külön, tipizált
- * listákat ad (`versions`, `assignees`, `continuedBy`), és a felület rakja
- * össze. Az összefésülést viszont NEM hagyjuk a kliensre, mert a hibajegynél a
- * három forrás EGY időrendi naplóvá áll össze - ott van egy sorrend-szabály, és
- * két kliens (web, mobil) külön-külön fésülve két helyen tartaná ugyanazt.
- * Ezért van a `serviceJobTimeline` itt, ebben a csomagban.
+ * NEM három lista, és ezt megmértük, nem elvből döntöttük el. Az összefésülés
+ * sorrendje SZABÁLY (mi számít egyidejűnek, mi jön előbb azonos bélyegnél), és
+ * egy szabály ne lakjon két helyen. Egy közös tiszta függvény ezt csak akkor
+ * oldaná meg, ha MINDKÉT kliens el tudná érni - a mobil csomag viszont NEM
+ * függ a `@acropora/types`-tól (mérve 2026-09-02, a web igen, a mobil nem),
+ * tehát ott a fésülés újraíródna. A kliens rajzol, nem dönt.
  *
- * AZ IDŐPONTOK A NAPLÓBÓL JÖNNEK, nem a jegy `startedAt` / `completedAt`
- * mezőiből. Azokat ma semmi nem írja, és ha a lépés írná őket, két írónk lenne
- * egy tényre: ha elcsúsznának, az néma hiba - két különböző időpont két
- * képernyőn, és senki nem keresi.
+ * Ha valaha típusra kell szűrni, az a végpont paramétere legyen, ne
+ * kliens-oldali válogatás.
  */
 export interface ServiceJobDetail {
   id: string;
@@ -96,11 +94,32 @@ export interface ServiceJobDetail {
   partnerStatusLabel: string;
   customerName: string | null;
   createdAt: string;
+  /**
+   * A TERVEZETT IDŐPONT MEZŐ MARAD, ÉS NEM SZÁRMAZTATOTT.
+   *
+   * Más természetű, mint a másik kettő: ez TERV, nem esemény. Valaki
+   * BEÁLLÍTJA, jövőbeli időpontra, és a naplóból soha nem vezethető le, mert
+   * nem történt meg semmi.
+   */
+  scheduledAt: string | null;
+  /**
+   * A KEZDÉS ÉS A BEFEJEZÉS MÁSOLAT, A NAPLÓ A FORRÁS.
+   *
+   * A lépés írja őket, a naplósorral EGY tranzakcióban, ugyanazzal az
+   * időbélyeggel. Azért mező és nem visszafejtés, mert a „mely jegyek
+   * fejeződtek be ebben a hónapban" kérdés a számlázás alapja lesz, és azt nem
+   * lehet minden lekérdezésnél újraszámolni.
+   *
+   * EGY SZÁRMAZTATOTT MEZŐ NEM TILTOTT - attól lesz veszélyes, ha nem mondjuk
+   * meg, melyik a forrás. HA VALAHA ELTÉRNEK, A NAPLÓ NYER, és az eltérés
+   * HIBA, nem két egyenrangú igazság.
+   */
+  startedAt: string | null;
+  completedAt: string | null;
   /** Amit a jegy tehet innen. Üres, ha a jegy lezárult. */
   allowedSteps: ServiceJobStatusValue[];
-  events: ServiceJobStatusEvent[];
-  worksheets: ServiceJobWorksheetLink[];
-  assets: ServiceJobAssetLink[];
+  /** A három forrás egy időrendben, legújabb felül. A szerver rendezte. */
+  timeline: ServiceJobTimelineEntry[];
 }
 
 export type ServiceJobTimelineEntry =

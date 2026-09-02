@@ -1,6 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import { prisma, type Prisma, type ServiceJobStatus } from "@acropora/database";
 
+import { serviceJobMoveTimestamps } from "./service-job-timestamps.js";
+
 /**
  * A LEZÁRT ÁLLAPOTOK, EGY HELYEN. A lista alapból ezeket hagyja ki - és ha egy
  * új záró állapot keletkezik, itt kell felvenni, nem a lekérdezésben.
@@ -104,13 +106,21 @@ export class ServiceJobsRepository {
     to: ServiceJobStatus;
     note: string | null;
     actorUserId: string;
+    now: Date;
   }) {
     return this.database.$transaction(async (transaction) => {
       // A `from` FELTÉTEL A WHERE-BEN, nem csak az olvasásnál: két egyszerre
       // lépő ember közül a második így nem írja felül az elsőt csendben.
       const moved = await transaction.serviceJob.updateMany({
         where: { id: input.id, status: input.from },
-        data: { status: input.to },
+        data: {
+          status: input.to,
+          // A MIT a tiszta függvény mondja meg; itt csak az UGYANAZ A `now`
+          // számít. Két külön `new Date()` már ezredmásodperc szinten eltérne,
+          // és onnantól nem lehetne megmondani, hogy az eltérés hiba-e vagy a
+          // mérés pontatlansága.
+          ...serviceJobMoveTimestamps(input.to, input.now),
+        },
       });
       if (moved.count !== 1) return { ok: false as const };
 
@@ -121,6 +131,9 @@ export class ServiceJobsRepository {
           toStatus: input.to,
           note: input.note,
           actorUserId: input.actorUserId,
+          // KIÍRVA, nem az adatbázis alapértelmezésére bízva: a jegy mezője és
+          // ez a sor csak akkor vethető össze, ha bizonyíthatóan egy időpont.
+          createdAt: input.now,
         },
       });
       return { ok: true as const };
@@ -148,6 +161,9 @@ export class ServiceJobsRepository {
         description: true,
         status: true,
         createdAt: true,
+        scheduledAt: true,
+        startedAt: true,
+        completedAt: true,
         customer: { select: { displayName: true } },
         events: {
           // A napló legújabb felül; a végleges sorrendet a közös
