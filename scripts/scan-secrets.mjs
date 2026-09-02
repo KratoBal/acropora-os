@@ -57,9 +57,18 @@
  * This makes the known shapes impossible and leaves the unknown ones exactly
  * as likely as before. It is a floor, not a ceiling.
  *
- * ESCAPE HATCH: a line carrying the marker `scan-secrets: allow` is skipped,
- * so a genuine false positive does not force `--no-verify` on the whole
- * commit. Use it with the reason on the same line.
+ * ESCAPE HATCH: a line carrying `scan-secrets: allow <reason>` is skipped, so
+ * a genuine false positive does not force `--no-verify` on the whole commit.
+ *
+ * THE REASON IS REQUIRED, AND REQUIRED BY THIS CODE RATHER THAN BY THIS
+ * COMMENT. An earlier version asked for it in prose and skipped the line
+ * either way. That is the shape we keep finding everywhere: a rule written
+ * where it cannot act. Left alone, the first bare `scan-secrets: allow`
+ * teaches everyone that the marker alone works, and the hatch quietly becomes
+ * a general off-switch - which is the same guard, with the guarding removed.
+ *
+ * So a bare marker does not skip the line. It is reported as its own finding,
+ * because a hatch used without a reason is worth seeing.
  */
 
 import { execFileSync } from "node:child_process";
@@ -148,8 +157,18 @@ for (const file of files) {
   if (content === null || content.includes("\0")) continue;
 
   content.split("\n").forEach((line, i) => {
-    if (line.includes("scan-secrets: allow")) return;
     const hol = `${file}:${i + 1}`;
+
+    const kiut = /scan-secrets: allow(.*)$/.exec(line);
+    if (kiut) {
+      // Az indok legalabb harom nem-ures karakter. Kevesebb nem indok, hanem
+      // a jelolo mellé irt zaj, es ugyanugy altalanos kikapcsolova tenne.
+      if (kiut[1].trim().length >= 3) return;
+      talalatok.push(
+        `${hol}  a kiutat INDOK NELKUL hasznaltak -- a sor nincs kihagyva`,
+      );
+      return;
+    }
 
     for (const { nev, re } of A_RULES) {
       if (
