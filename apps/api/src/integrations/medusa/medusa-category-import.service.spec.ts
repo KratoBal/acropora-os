@@ -18,6 +18,18 @@ import type { OurCategoryNode } from "./medusa-category-tree.js";
 
 const MOST = new Date("2026-09-02T22:00:00.000Z");
 
+/** Ugyanaz, mint a `medusaDupla`, de a Medusa ELDOBJA az aktiv jelolot. */
+function medusaDuplaAmiEldobjaAzAktivat() {
+  const { client, letrehozva } = medusaDupla();
+  const eredeti = client.createProductCategory.bind(client);
+  client.createProductCategory = async (input) => {
+    const sor = await eredeti(input);
+    sor.is_active = false;
+    return sor;
+  };
+  return { client, letrehozva };
+}
+
 /** A mi fank: egy gyoker es ket gyerek, a masodik a masodik szinten. */
 const FA: OurCategoryNode[] = [
   { id: "cat_hal", parentId: "cat_gyoker", name: "Halak" },
@@ -26,11 +38,17 @@ const FA: OurCategoryNode[] = [
 
 function medusaDupla(kezdo: MedusaCategoryRow[] = [], truncated = false) {
   const letrehozva: MedusaCategoryInput[] = [];
+  const keletkezett: MedusaCategoryRow[] = [];
   let n = 0;
   const client = {
+    /**
+     * A MASODIK HIVAS A LETREHOZOTTAKAT IS LATJA. Enelkul a visszaolvasas
+     * mindig nullat merne, es a hozza tartozo allitas nem tudna elbukni --
+     * pontosan az a diszlet, amit a szolgaltatas el akar kerulni.
+     */
     // eslint-disable-next-line @typescript-eslint/require-await
     async listProductCategories() {
-      return { rows: [...kezdo], truncated };
+      return { rows: [...kezdo, ...keletkezett], truncated };
     },
     // eslint-disable-next-line @typescript-eslint/require-await
     async createProductCategory(input: MedusaCategoryInput) {
@@ -42,33 +60,56 @@ function medusaDupla(kezdo: MedusaCategoryRow[] = [], truncated = false) {
        * tehat itt uj, felismerheto azonositot kell adni. Egy ures objektum a
        * sajat tesztjeit meg zolden hagyna.
        */
-      return {
+      const sor: MedusaCategoryRow = {
         id: `pcat_uj_${n}`,
         name: input.name,
         external_id: input.external_id,
         parent_category_id: input.parent_category_id ?? null,
+        is_active: input.is_active,
       };
+      keletkezett.push(sor);
+      return sor;
     },
   } as unknown as MedusaAdminClient;
   return { client, letrehozva };
 }
 
+/**
+ * A DUPLA TAROL, NEM CSAK NAPLOZ -- ES EZT A TESZT HOZTA ELO.
+ *
+ * Az elso valtozat csak a hivasokat jegyezte fel, az `all()` pedig mindig a
+ * KEZDO halmazt adta vissza. A sajat tesztjei zoldek voltak tole, mert egyik
+ * sem olvasta vissza. A hivo viszont IGEN: a futas vegen a lekepezes-sorok
+ * szamat epp innen kerdezi, es a dupla nullat mondott volna arra, amit o maga
+ * epp az elobb irt.
+ *
+ * Ugyanaz a hibafajta, amit a lapunk igy mond: amit a hivo hasznal, de a teszt
+ * nem allit, az a dupla biztos hibaja.
+ */
 function taroloDupla(kezdo: MedusaCategoryLink[] = []) {
   const hivasok: { fajta: "link" | "relink"; par: [string, string] }[] = [];
+  const sorok = [...kezdo];
+  const rogzit = (categoryId: string, medusaCategoryId: string) => {
+    const meglevo = sorok.findIndex((l) => l.categoryId === categoryId);
+    const uj = { categoryId, medusaCategoryId, lastSyncedAt: MOST };
+    if (meglevo === -1) sorok.push(uj);
+    else sorok[meglevo] = uj;
+    return uj;
+  };
   const links = {
     // eslint-disable-next-line @typescript-eslint/require-await
     async all() {
-      return [...kezdo];
+      return [...sorok];
     },
     // eslint-disable-next-line @typescript-eslint/require-await
     async link(categoryId: string, medusaCategoryId: string) {
       hivasok.push({ fajta: "link", par: [categoryId, medusaCategoryId] });
-      return { categoryId, medusaCategoryId, lastSyncedAt: MOST };
+      return rogzit(categoryId, medusaCategoryId);
     },
     // eslint-disable-next-line @typescript-eslint/require-await
     async relink(categoryId: string, medusaCategoryId: string) {
       hivasok.push({ fajta: "relink", par: [categoryId, medusaCategoryId] });
-      return { categoryId, medusaCategoryId, lastSyncedAt: MOST };
+      return rogzit(categoryId, medusaCategoryId);
     },
   } as unknown as MedusaCategoryLinkRepository;
   return { links, hivasok };
@@ -115,6 +156,37 @@ describe("a kategóriafa betöltése", () => {
     assert.deepEqual(report.conflicts, []);
   });
 
+  it("a futás VISSZAOLVASSA a saját eredményét", async () => {
+    const { client } = medusaDupla();
+    const { links } = taroloDupla();
+    const service = new MedusaCategoryImportService(links);
+    const report = await service.run(client, FA, MOST);
+    assert.deepEqual(report.verification, {
+      carryingOurId: 2,
+      activeAmongThem: 2,
+      mappingRowsHere: 2,
+      expected: 2,
+    });
+  });
+
+  it("ha a Medusa NEM tárolta el az aktív jelölőt, az ellenőrzés meglátja", async () => {
+    /*
+      EZ AZ EGYETLEN HELY, AHOL EZ A HIBA LATSZIK. A betoltes `is_active: true`
+      erteket kuld; ha a Medusa eldobja, MINDEN mas szam helyes marad: 219
+      kategoria all, mindegyiken a mi azonositonk, a fa alakja jo, es a masodik
+      futas is 219-et hagy. Csak epp senki nem latja oket.
+    */
+    const { client } = medusaDuplaAmiEldobjaAzAktivat();
+    const { links } = taroloDupla();
+    const service = new MedusaCategoryImportService(links);
+    const report = await service.run(client, FA, MOST);
+    assert.equal(report.verification.carryingOurId, 2);
+    assert.equal(report.verification.activeAmongThem, 0);
+    // ES A TOBBI SZAM VALTOZATLANUL HELYES -- ez a lenyeg.
+    assert.equal(report.created, 2);
+    assert.equal(report.verification.mappingRowsHere, 2);
+  });
+
   it("csonkolt listánál MEGÁLL, és semmit nem ír", async () => {
     const { client, letrehozva } = medusaDupla([], true);
     const { links, hivasok } = taroloDupla();
@@ -140,6 +212,7 @@ describe("a kategóriafa betöltése", () => {
         name: "Termékek",
         external_id: "cat_gyoker",
         parent_category_id: null,
+        is_active: true,
       },
     ]);
     const { links, hivasok } = taroloDupla();
@@ -195,6 +268,7 @@ describe("a kategóriafa betöltése", () => {
         name: "Termékek",
         external_id: "cat_gyoker",
         parent_category_id: null,
+        is_active: true,
       },
     ]);
     const { links, hivasok } = taroloDupla([
