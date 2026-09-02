@@ -20,10 +20,21 @@ import { ContentCreateDto } from "./dto/content.dto.js";
  * elgépelés az emberi végpontokat is nyilvánossá tenné -- és a hiba
  * pontosan olyan csendes lenne, mint amilyen súlyos.
  *
- * UGYANAZT A SZOLGÁLTATÁS-METÓDUST HÍVJA, mint az emberi út. Az ágens-tétel
- * ugyanúgy `DRAFTING` állapotban keletkezik és ugyanúgy a szerzőjére vár --
- * azzal a különbséggel, hogy a szerző az ágens saját fiókja, mert az őrző azt
- * oldotta fel a tokenből.
+ * MÁS SZOLGÁLTATÁS-METÓDUST HÍV, MINT AZ EMBERI ÚT, ÉS EZ A KÜLÖNBSÉG A LÉNYEG.
+ * Az emberi űrlap `DRAFTING` állapotba teszi a tételt, és az helyes: egy ember
+ * tényleg dolgozik még rajta. A gépi úton viszont a szerző maga a gép, tehát a
+ * "vár a szerzőjére" állapot zsákutca -- a tétel az ágens listájában állna, és
+ * a szerkesztőség képernyője üres maradna. Mérve 2026-09-02 este: a bejárat
+ * HTTP 201-et adott, a tétel létrejött, és a gazda képernyője nullát mutatott.
+ * Helyesen: a kézbesítés hiányzott, nem a bejárat.
+ *
+ * Ezért a gépi út `createForReview`-t hív, ami `AWAITING_REVIEW` állapotba tesz.
+ * Balázs jóváhagyása erre, szó szerint: "jovahagyom" (2026-09-02 22:51, Discord),
+ * acrobot közvetítésével.
+ *
+ * A szerző továbbra is a hívó -- az ágens saját fiókja --, mert az őrző azt
+ * oldotta fel a tokenből, és egy tétel, aminek a szerzője valaki más, azonnal
+ * az Ő listájában állna anélkül, hogy tudna róla.
  */
 @Public()
 @UseGuards(ContentAgentGuard)
@@ -36,6 +47,6 @@ export class ContentAgentController {
     @Body() input: ContentCreateDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.create({ ...input, authorId: user.id });
+    return this.service.createForReview({ ...input, authorId: user.id });
   }
 }
