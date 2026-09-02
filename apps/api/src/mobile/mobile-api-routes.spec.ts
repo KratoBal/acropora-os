@@ -8,6 +8,26 @@ import { maskCommentsAndStrings } from "../testing/source-mask.js";
 /**
  * A KLIENSEK ÁLTAL HÍVOTT CÍM LÉTEZZEN A SZERVEREN (telefon ÉS webes felület).
  *
+ * ===================================================================
+ * EGY KORLAT, AMI EZT A SPECET ERINTI: A GYORSITOTAR NEM LATJA A WEB FAT
+ * ===================================================================
+ *
+ * Ez a spec KET masik csomag forrasat olvassa (`../mobile/src` es `../web/src`).
+ * A turbo gyorsitotar-kulcsa a sajat csomagot es a fuggosegeit fedi, ezert a
+ * `@acropora/api#test` feladat bemenetei koze fel van veve a MOBIL fa -- es az
+ * mukodik, merve (egy mobil szerkesztes cache hitbol cache missbe fordit).
+ *
+ * A WEB FA VISZONT NEM KOTHETO BE IGY, es ez merve van, nem feltetelezes: az
+ * `$TURBO_ROOT$/apps/web/src/**` bemenet felvetele utan egy webes szerkesztes
+ * TOVABBRA IS cache hitet adott. A kulonbseg a ket fa kozott az, hogy az
+ * `apps/mobile` KI VAN ZARVA a pnpm munkaterbol, az `apps/web` viszont
+ * munkater-csomag -- a sajat fajljai a SAJAT feladatainak a hasheben ulnek.
+ *
+ * AMI EBBOL KOVETKEZIK A HASZNALORA: egy CSAK WEBES valtoztatas utan ennek a
+ * specnek a helyi eredmenye lehet elavult zold. Ha weben nyulsz hozza egy
+ * utvonalhoz, futtasd `--force` mellett, vagy hagyatkozz a CI-ra, ami hidegen
+ * fut. A CI-t ez nem erinti.
+ *
  * MÉRVE 2026-08-27, éles hibából: a mobil munkalap-képernyő teljesen
  * használhatatlan volt, mert a kliens `/worksheets` alá hívott, a controller
  * viszont a `service/worksheets` előtag alatt ül. A telefon képernyőjén ennyi
