@@ -187,6 +187,35 @@ export class ServiceJobsRepository {
     });
   }
 
+  /**
+   * EGY MEGLEVO LAP A JEGY ALA.
+   *
+   * A `serviceJobId: null` FELTETEL A `WHERE`-BEN VAN, nem egy elozetes
+   * olvasasban: ket egyszerre csatolo ember kozul a masodik igy nem veszi el
+   * csendben a lapot az elsotol, hanem nem talal sort, es a hivo utkozest mond.
+   *
+   * MASODIK JEGY ALA NEM KERULHET at egy lap. Nem azert, mert technikailag nem
+   * menne, hanem mert az ATSOROLAS mas muvelet, mas kerdesekkel (mi tortenjen a
+   * regi jegy naplojaval, latja-e a partner) - es azokra ma nincs dontes.
+   */
+  async attachWorksheet(input: { serviceJobId: string; worksheetId: string }) {
+    const attached = await this.database.worksheet.updateMany({
+      where: { id: input.worksheetId, serviceJobId: null },
+      data: { serviceJobId: input.serviceJobId },
+    });
+    return { ok: attached.count === 1 };
+  }
+
+  /** Letezik-e a lap, es all-e mar jegy alatt. `null`, ha nincs ilyen lap. */
+  async worksheetAttachState(
+    id: string,
+  ): Promise<{ serviceJobId: string | null } | null> {
+    return this.database.worksheet.findUnique({
+      where: { id },
+      select: { serviceJobId: true },
+    });
+  }
+
   async statusOf(id: string): Promise<ServiceJobStatus | null> {
     const row = await this.database.serviceJob.findUnique({
       where: { id },

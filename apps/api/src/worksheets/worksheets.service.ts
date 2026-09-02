@@ -12,7 +12,11 @@ import {
   Optional,
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
-import type { WorksheetDetail, WorksheetVersionDiff } from "@acropora/types";
+import type {
+  WorksheetAttachableListResponse,
+  WorksheetDetail,
+  WorksheetVersionDiff,
+} from "@acropora/types";
 
 import type {
   AmendWorksheetDto,
@@ -252,7 +256,13 @@ export class WorksheetsService {
    * Ha egyszer mégis kell a lap felőli út, ez a lista változatlanul jó hozzá -
    * csak a hívó lesz más. Ezért nem "hiányzó darab", hanem meg nem épített út.
    */
-  async attachableWorksheets(scope: PartnerScope) {
+  // A VISSZATERESI TIPUS KI VAN IRVA: a felulet ugyanezt importalja a kozos
+  // csomagbol, es kiiras nelkul a ket oldal csak VELETLENUL egyezne - egy
+  // atnevezett mezo mindkettoben lefordulna, es a kepernyon `undefined`
+  // jelenne meg, hibauzenet nelkul.
+  async attachableWorksheets(
+    scope: PartnerScope,
+  ): Promise<WorksheetAttachableListResponse> {
     return this.repository.attachableWorksheets(scope);
   }
 

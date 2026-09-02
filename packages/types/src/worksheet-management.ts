@@ -401,3 +401,23 @@ export interface WorksheetVersionDiff {
   changedAt: string | null;
   changes: WorksheetFieldChange[];
 }
+
+/**
+ * EGY LAP, AMI HIBAJEGY ALA TEHETO.
+ *
+ * A `number` `null`, amig a lap piszkozat - es a valaszto epp ettol nem hagyja
+ * ki: a meg szamozatlan, helyszinen felvett lap az, amiert ez a lista letezik.
+ */
+export interface WorksheetAttachableItem {
+  id: string;
+  number: string | null;
+  subject: string;
+  status: WorksheetVersionStatus | null;
+  customerName: string;
+  createdAt: string;
+  handedOverAt: string | null;
+}
+
+export interface WorksheetAttachableListResponse {
+  items: WorksheetAttachableItem[];
+}

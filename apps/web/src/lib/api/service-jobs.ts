@@ -22,6 +22,18 @@ export const serviceJobsApi = {
     return apiRequest<ServiceJobDetail>(jobPath(id), token, { signal });
   },
   /**
+   * EGY MEGLEVO LAP A JEGY ALA. A valasz itt is csak nyugta, tehat a hivo
+   * ujratolt - a csatolt lap a naploban ES a lista-szakaszban is megjelenik,
+   * es azt egy nyugtabol nem lehet felepiteni.
+   */
+  attachWorksheet(token: string, id: string, worksheetId: string) {
+    return apiRequest<{ ok: true }>(jobPath(id, "/worksheets"), token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ worksheetId }),
+    });
+  },
+  /**
    * A LÉPÉS VÁLASZA CSAK NYUGTA (`{ ok: true }`), nem a friss jegy.
    *
    * Ezért a hívó ÚJRATÖLT utána. Ha a nyugtából építenénk fel a képernyőt, a

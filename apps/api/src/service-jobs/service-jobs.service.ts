@@ -146,6 +146,50 @@ export class ServiceJobsService {
   }
 
   /**
+   * EGY MEGLEVO MUNKALAP A JEGY ALA.
+   *
+   * EZ A FOLYAMAT MASODIK FELE, es nelkule az elso fele sem teljes: a lap
+   * keletkezhet hibajegy nelkul (a szerelo karbantartas kozben veszi fel), es a
+   * jegy NALUNK szuletik meg utolag - akar hetekkel kesobb. Ha a mar meglevo
+   * lapot nem lehet a jegy ala tenni, az az ut a felenel megall.
+   *
+   * HAROM KIMENET, ES MINDHAROM MAS MONDAT:
+   *   nincs ilyen jegy vagy lap  -> nem talalhato
+   *   a lap MAR jegy alatt all   -> utkozes, es MEGMONDJUK, hogy melyik alatt
+   *   sikeres                    -> nyugta
+   *
+   * A MASODIKAT azert nem nyeljuk el: aki csatolni akar, es a lap mar mashol
+   * van, annak nem az a kerdese, hogy "sikerult-e", hanem hogy HOL van.
+   */
+  async attachWorksheet(jobId: string, worksheetId: string) {
+    const jobStatus = await this.repository.statusOf(jobId);
+    if (jobStatus === null)
+      throw new NotFoundException("A hibajegy nem található.");
+
+    const sheet = await this.repository.worksheetAttachState(worksheetId);
+    if (sheet === null)
+      throw new NotFoundException("A munkalap nem található.");
+    if (sheet.serviceJobId !== null)
+      throw new ConflictException(
+        sheet.serviceJobId === jobId
+          ? "Ez a munkalap már ehhez a hibajegyhez tartozik."
+          : "Ez a munkalap már egy másik hibajegyhez tartozik.",
+      );
+
+    const attached = await this.repository.attachWorksheet({
+      serviceJobId: jobId,
+      worksheetId,
+    });
+    // A FELTETEL A `WHERE`-BEN IS OTT VOLT: ha kozben mas csatolta, itt derul
+    // ki, es nem irjuk felul csendben.
+    if (!attached.ok)
+      throw new ConflictException(
+        "A munkalap időközben egy hibajegy alá került. Töltsd újra.",
+      );
+    return { ok: true };
+  }
+
+  /**
    * EGY LÉPÉS A JEGYEN, A TÁBLA SZERINT.
    *
    * A SZABÁLYT A TISZTA FÜGGVÉNY MONDJA MEG, nem ez a metódus: itt csak az

@@ -4,13 +4,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ServiceJobDetailPage } from "./service-job-detail-page";
 
-const api = vi.hoisted(() => ({ detail: vi.fn(), move: vi.fn() }));
+const api = vi.hoisted(() => ({
+  detail: vi.fn(),
+  move: vi.fn(),
+  attachWorksheet: vi.fn(),
+}));
+const sheets = vi.hoisted(() => ({ attachable: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session }),
 }));
 vi.mock("@/lib/api/service-jobs", () => ({ serviceJobsApi: api }));
+vi.mock("@/lib/api/worksheets", () => ({ worksheetsApi: sheets }));
 
 function sessionAs(role: Session["user"]["role"]): Session {
   return {
@@ -97,6 +103,20 @@ describe("ServiceJobDetailPage", () => {
     auth.session = sessionAs("SERVICE");
     api.detail.mockReset().mockResolvedValue(detail());
     api.move.mockReset().mockResolvedValue({ ok: true });
+    api.attachWorksheet.mockReset().mockResolvedValue({ ok: true });
+    sheets.attachable.mockReset().mockResolvedValue({
+      items: [
+        {
+          id: "worksheet-9",
+          number: null,
+          subject: "Helyszínen felvett lap",
+          status: "DRAFT",
+          customerName: "Fővárosi Állat- És Növénykert",
+          createdAt: "2026-08-30T08:00:00.000Z",
+          handedOverAt: null,
+        },
+      ],
+    });
   });
 
   /**
@@ -151,6 +171,43 @@ describe("ServiceJobDetailPage", () => {
     await waitFor(() => expect(api.move).toHaveBeenCalledTimes(1));
     expect(api.move.mock.calls[0]?.[2]).toEqual({ to: "SCHEDULED" });
     await waitFor(() => expect(api.detail).toHaveBeenCalledTimes(2));
+  });
+
+  /**
+   * A FOLYAMAT MÁSODIK FELE: a lap előbb keletkezett, a jegy utólag, és a
+   * felelős hozzáveszi a meglévő lapot.
+   */
+  it("meglévő munkalapot csatol, és utána újratölt", async () => {
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    await screen.findByText("A hibajegy létrejött (Új).");
+
+    fireEvent.change(
+      await screen.findByLabelText("Meglévő munkalap csatolása"),
+      {
+        target: { value: "worksheet-9" },
+      },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Csatolás" }));
+
+    await waitFor(() => expect(api.attachWorksheet).toHaveBeenCalledTimes(1));
+    expect(api.attachWorksheet.mock.calls[0]?.[2]).toBe("worksheet-9");
+    // A NYUGTÁBÓL NEM ÉPÍTÜNK: a csatolt lap a naplóban is megjelenik, azt
+    // csak újratöltésből lehet látni.
+    await waitFor(() => expect(api.detail).toHaveBeenCalledTimes(2));
+  });
+
+  /**
+   * A SZŰKÍTÉST MÉRŐ ÁLLÍTÁS: olvasó jognál nincs csatolás, és a választó
+   * listát le sem kérjük. A második fele külön számít - egy rejtett doboz
+   * mögött lekért lista fölösleges kérés, és azt semmi nem mondaná meg.
+   */
+  it("olvasó jognál nincs csatoló doboz, és a listát sem kéri le", async () => {
+    auth.session = sessionAs("VIEWER");
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    await screen.findByText("A hibajegy létrejött (Új).");
+
+    expect(screen.queryByText("Meglévő munkalap csatolása")).toBeNull();
+    expect(sheets.attachable).not.toHaveBeenCalled();
   });
 
   /**
