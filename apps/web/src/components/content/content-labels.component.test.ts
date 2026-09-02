@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { navigationEntry } from "@acropora/types";
 
 import {
+  CONTENT_ROLE_LABELS,
   CONTENT_STALE_DAYS,
   CONTENT_STATE_LABELS,
   CONTENT_WAITS_ON_LABELS,
@@ -150,5 +151,45 @@ describe("the summary strip and the ordering", () => {
       { id: "kozepes", updatedAt: daysAgo(10) },
     ]);
     expect(sorted.map((item) => item.id)).toEqual(["regi", "kozepes", "friss"]);
+  });
+});
+
+/**
+ * A SZEREP-VALASZTO CIMKEI: A HALMAZT NEVEZIK MEG, NEM A TULAJDONLAST.
+ *
+ * A `reviewer` nezete a #398 ota a GAZDATLAN teteleket is behozza, tehat
+ * olyanokat, amiket senki nem lektoral. A regi "amit lektorálok" TULAJDONLAST
+ * allitott, es ettol tobbet mondott, mint a valosag.
+ *
+ * KET ALLITAS KELL, NEM EGY, es a masodik a fontosabb: egy cimke-csere jellemzo
+ * hibaja, hogy a REGI szoveg valahol ottmarad, es csak az egyik peldany
+ * cserelodik. Az elso allitas ezt nem venne eszre.
+ */
+describe("what the role picker calls each view", () => {
+  it("names the set the reviewer view actually shows", () => {
+    expect(CONTENT_ROLE_LABELS.reviewer).toBe("lektorálásra vár");
+  });
+
+  it("has no ownership claim left in the reviewer label", () => {
+    // A REGI SZOVEG SEHOL. Nem elég, hogy az uj ott van: ha a regi barhol
+    // megmaradna, ket kulonbozo nevet adnank ugyanannak a nezetnek.
+    expect(Object.values(CONTENT_ROLE_LABELS)).not.toContain("amit lektorálok");
+  });
+
+  /**
+   * ES A MASIK HAROM CIMKE VALTOZATLAN. Ez a merce parja: enelkul egy kozos
+   * cserevel mind a negyet at lehetne irni, es az elso ket allitas ugyanugy
+   * zold maradna.
+   *
+   * KIMONDVA, AMIT EZ NEM ALLIT: hogy a masik harom cimke PONTOS. A
+   * `approver` es a `sender` nezete NEM szukul sajat tetelekre (merve:
+   * `content-filter.ts`, `ownOnly: role === "author" || role === "reviewer"`),
+   * tehat azok ugyanugy tulajdonlast allitanak, mint a regi reviewer-cimke --
+   * csak azt NEM a #398 okozta, es kulon dontes.
+   */
+  it("leaves the other three labels untouched", () => {
+    expect(CONTENT_ROLE_LABELS.author).toBe("amit írok");
+    expect(CONTENT_ROLE_LABELS.approver).toBe("amit jóváhagyok");
+    expect(CONTENT_ROLE_LABELS.sender).toBe("amit kiküldök");
   });
 });
