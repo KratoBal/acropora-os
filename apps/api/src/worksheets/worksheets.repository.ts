@@ -34,12 +34,11 @@ import type {
   NormalizedWorksheetContent,
   NormalizedWorksheetLine,
 } from "./worksheet-content.js";
-import { worksheetCloseBlocker } from "./worksheet-close-blockers.js";
 import {
-  buildWorksheetNumber,
-  worksheetYear,
-  type WorksheetNumberIssue,
-} from "./worksheet-number.js";
+  worksheetCloseBlocker,
+  type WorksheetCloseBlocker,
+} from "./worksheet-close-blockers.js";
+import { buildWorksheetNumber, worksheetYear } from "./worksheet-number.js";
 import {
   toWorksheetListItem,
   worksheetDetailInclude,
@@ -48,12 +47,13 @@ import {
   type WorksheetLineWriteResult,
 } from "./worksheets.types.js";
 
-export type WorksheetCloseFailure =
-  | "NOT_FOUND"
-  | "NOT_DRAFT"
-  | "NO_LINES"
-  | "LINE_PRICE_MISSING"
-  | WorksheetNumberIssue;
+/**
+ * A lezárás kudarcai. A `NOT_FOUND` az egyetlen, ami NEM a feltétel-listából
+ * jön: azt a lekérdezés dönti el, nem a szabály. A többi egy forrásból
+ * származik (`worksheet-close-blockers.ts`), hogy egy új feltétel felvétele
+ * ott is, itt is egyetlen helyen jelenjen meg.
+ */
+export type WorksheetCloseFailure = "NOT_FOUND" | WorksheetCloseBlocker;
 
 export type WorksheetCloseResult =
   { ok: true } | { ok: false; reason: WorksheetCloseFailure };
@@ -719,6 +719,7 @@ export class WorksheetsRepository extends Repository {
         select: {
           id: true,
           number: true,
+          serviceJobId: true,
           customer: { select: { worksheetPartnerCode: true } },
           department: { select: { code: true } },
           versions: {
@@ -760,6 +761,7 @@ export class WorksheetsRepository extends Repository {
         partnerCode,
         departmentCode,
         hasNumber: Boolean(worksheet.number),
+        hasServiceJob: Boolean(worksheet.serviceJobId),
       });
       if (blocker) return { ok: false, reason: blocker } as const;
 

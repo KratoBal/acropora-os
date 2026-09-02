@@ -25,7 +25,11 @@ import {
  * amihez tranzakció kell.
  */
 export type WorksheetCloseBlocker =
-  "NOT_DRAFT" | "NO_LINES" | "LINE_PRICE_MISSING" | WorksheetNumberIssue;
+  | "NOT_DRAFT"
+  | "NO_LINES"
+  | "LINE_PRICE_MISSING"
+  | "SERVICE_JOB_MISSING"
+  | WorksheetNumberIssue;
 
 export interface WorksheetCloseState {
   /** A lap MAI verziójának állapota. */
@@ -46,6 +50,15 @@ export interface WorksheetCloseState {
   departmentCode: string | null | undefined;
   /** Van-e már száma a lapnak; ha igen, a szám feltételeit nem kell újra nézni. */
   hasNumber: boolean;
+  /**
+   * Áll-e hibajegy a lap mögött.
+   *
+   * A lap KELETKEZHET hibajegy nélkül - karbantartás közben derül ki, hogy
+   * valami elromlott -, de nem ÉRHET VÉGET nélküle: hibajegy nélkül nem
+   * zárható le, nem írható alá, és nem következhet belőle teljesítési
+   * igazolás vagy számla (Balázs, 2026-09-02).
+   */
+  hasServiceJob: boolean;
 }
 
 /**
@@ -61,6 +74,7 @@ export function worksheetCloseBlocker(
   if (state.status !== "DRAFT") return "NOT_DRAFT";
   if (state.lineCount === 0) return "NO_LINES";
   if (state.linesWithoutPrice > 0) return "LINE_PRICE_MISSING";
+  if (!state.hasServiceJob) return "SERVICE_JOB_MISSING";
 
   // A SZÁM FELTÉTELEI CSAK AKKOR, HA MÉG NINCS SZÁMA. Egy már megszámozott
   // lap újralezárásánál a rövidítés hiánya nem akadály: a szám megvan, és

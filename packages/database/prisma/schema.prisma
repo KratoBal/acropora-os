@@ -513,6 +513,9 @@ model User {
   createdTasks               Task[]                        @relation("TaskCreatedBy")
   closedTasks                Task[]                        @relation("TaskClosedBy")
   createdWorksheets          Worksheet[]                   @relation("WorksheetCreatedBy")
+  /// Amiket ez a felhasználó adott át a szolgáltatónak, a helyszíni munka
+  /// befejeztével.
+  handedOverWorksheets       Worksheet[]                   @relation("WorksheetHandedOverBy")
   assignedWorksheets         WorksheetAssignee[]           @relation("WorksheetAssignee")
   worksheetAssignmentsMade   WorksheetAssignee[]           @relation("WorksheetAssignedBy")
   createdWorksheetVersions   WorksheetVersion[]            @relation("WorksheetVersionCreatedBy")
@@ -2224,6 +2227,9 @@ model ServiceJob {
   customer Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
   aquarium Aquarium?         @relation(fields: [aquariumId], references: [id], onDelete: SetNull)
   assets   ServiceJobAsset[]
+  /// A hibajegy mögött álló munkalapok. Több is lehet, és van, amelyik
+  /// hamarabb keletkezett, mint maga a hibajegy.
+  worksheets Worksheet[]
 
   @@index([status, scheduledAt])
   @@index([customerId])
@@ -2515,6 +2521,42 @@ model Worksheet {
   customerId           String
   departmentId         String
   createdById          String?
+  /**
+   * A HIBAJEGY, AMI MÖGÖTT EZ A LAP ÁLL - ELHAGYHATÓAN, ÉS UTÓLAG IS FELVEHETŐEN.
+   *
+   * A lap KELETKEZHET hibajegy nélkül, és ez nem kivétel, hanem az egyik
+   * rendes út: karbantartás közben derül ki, hogy valami elromlott, a szerelő
+   * ott helyben felveszi a lapot, és a hibajegy NÁLUNK születik meg utólag
+   * (Balázs, 2026-09-02). Ezért nullable.
+   *
+   * ÉS EZÉRT KELL AZ UTÓLAGOS CSATOLÁS IS: nem elég, hogy a hibajegy
+   * létrehozásakor lehessen lapot választani - egy MÁR MEGLÉVŐ lapnak is
+   * hibajegy alá kell tudnia kerülni. Enélkül a fenti út második fele nem megy
+   * végig.
+   *
+   * Egy hibajegyhez több lap tartozhat; ez a mező annak a másik oldala, és
+   * épp ezért nem kell kapcsolótábla.
+   */
+  serviceJobId         String?
+  /**
+   * AZ ÁTADÁS: A SZERELŐ VÉGZETT, ÉS A LAP A SZOLGÁLTATÓÉ.
+   *
+   * KÜLÖN MEZŐ, NEM ÚJ ÁLLAPOT A `WorksheetVersionStatus` ENUMBAN, és ez a
+   * megkülönböztetés fontosabb, mint amilyennek látszik: az a négy állapot az
+   * ÜGYFÉL aláírásáról szól (piszkozat, aláírásra vár, aláírva, elutasítva),
+   * az átadás pedig arról, hogy a SZERELŐ végzett. Két külön tengely.
+   *
+   * Egy ötödik enum-érték azt jelentené, hogy az átadott lap se nem `DRAFT`,
+   * se nem `AWAITING_SIGNATURE` - tehát minden mai ellenőrzés, ami erre a
+   * párra épül, más ágra futna. Az a fajta változás, ami zölden átmegy, és
+   * később egy egészen más helyen robban.
+   *
+   * A CÍMZETT NINCS TÁROLVA, mert nincs is: a lap hozzánk kerül vissza, a
+   * szolgáltatóhoz. Amikor a lap hibajegy nélkül születik, még felelős sincs,
+   * akinek címezni lehetne.
+   */
+  handedOverAt         DateTime?
+  handedOverById       String?
   /// A lap, aminek ez a folytatása.
   ///
   /// Egy aláírt munkalap végleges: nem készül róla új verzió, a munka
@@ -2534,6 +2576,11 @@ model Worksheet {
   customer    Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
   department  WorksheetDepartment @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   createdBy   User?               @relation("WorksheetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  /// `SetNull`: egy törölt hibajegy nem viheti magával a lapot. A lap önálló
+  /// dokumentum, ami a hibajegy nélkül is létezhet - épp ezzel kezdődik a
+  /// második út.
+  serviceJob  ServiceJob?         @relation(fields: [serviceJobId], references: [id], onDelete: SetNull)
+  handedOverBy User?              @relation("WorksheetHandedOverBy", fields: [handedOverById], references: [id], onDelete: SetNull)
   versions    WorksheetVersion[]
   assignees   WorksheetAssignee[]
   /// `Restrict`: a folytatás a régi lapra hivatkozik mint előzményre, és egy
@@ -2548,6 +2595,8 @@ model Worksheet {
   @@index([departmentId])
   @@index([numberYear, sequence])
   @@index([continuesWorksheetId])
+  /// A hibajegy lapjainak listázása ezen megy: egy hibajegyhez több lap.
+  @@index([serviceJobId])
 }
 
 /// Ki dolgozik a munkalapon. Kapcsolótábla és nem `assigneeId` mező, mert
