@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsIn,
   IsISO8601,
   IsOptional,
@@ -78,4 +79,47 @@ export class ContentCommentDto {
   @IsString()
   @MinLength(1)
   body!: string;
+}
+
+const CONTENT_CHANNELS = [
+  "FACEBOOK_POST",
+  "FACEBOOK_AD",
+  "ARTICLE",
+  "OTHER",
+] as const;
+
+/**
+ * EGY UJ TETEL BEMENETE.
+ *
+ * A cim es a csatorna kotelezo, mert a Prisma modellben is azok. Minden mas
+ * elhagyhato: egy vazlat attol vazlat, hogy meg nincs kesz.
+ *
+ * A KEZDO ALLAPOT NEM SZEREPEL ITT, ES EZ SZANDEKOS. A hivo nem valaszthatja
+ * meg, hova kerul a tetel: az allapot a szolgáltatasban dol el, egy helyen. Egy
+ * szabadon allithato allapotmezo ugyanaz a kapu-megkerules lenne, amit az
+ * atmenet-tablazat fejlece mar egyszer nevesitett.
+ */
+export class ContentCreateDto {
+  @IsString()
+  @MinLength(1)
+  title!: string;
+
+  @IsIn(CONTENT_CHANNELS)
+  channel!: (typeof CONTENT_CHANNELS)[number];
+
+  @IsOptional()
+  @IsString()
+  body?: string;
+
+  /**
+   * Kell-e kep. Kulon mezo, nem allapot -- lasd a content-state fejlecét: a kep
+   * a szovegtol FUGGETLEN feltetel, es a ketto osszevonasa az egyiket elfelejti.
+   */
+  @IsOptional()
+  @IsBoolean()
+  imageRequired?: boolean;
+
+  @IsOptional()
+  @IsISO8601()
+  plannedFor?: string;
 }

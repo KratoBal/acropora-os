@@ -19,6 +19,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { contentApi } from "@/lib/api/content";
+import { ContentCreateForm } from "./content-create-form";
 import {
   CONTENT_ROLE_LABELS,
   CONTENT_STATE_LABELS,
@@ -88,6 +89,13 @@ export function ContentListPage() {
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.CONTENT_VIEW),
   );
+  // A FELVETEL IRAS, TEHAT `content.manage`. Aki csak olvasni jogosult, ne
+  // lasson egy gombot, amit a szerver ugyis elutasitana -- egy gomb, ami
+  // mindig hibat ad, rosszabb, mint egy hianyzo gomb.
+  const canCreate = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.CONTENT_MANAGE),
+  );
+  const [creating, setCreating] = useState(false);
   const token = session?.token ?? "";
 
   const load = useCallback(
@@ -154,6 +162,32 @@ export function ContentListPage() {
         title="Tartalom"
         description="Ami rád vár, és ami képre vár."
       />
+
+      {/*
+        A FELVETEL A LISTA TETEJEN, ES NEM EGY ALOLDALON. A panasz, amibol ez
+        keszult, az volt, hogy a menu ures -- aki megnyitja, ott es akkor
+        akarjon tudni beleirni, ne egy masodik kattintas utan.
+      */}
+      {canCreate && !creating ? (
+        <button type="button" onClick={() => setCreating(true)}>
+          Új tartalom felvétele
+        </button>
+      ) : null}
+
+      {canCreate && creating && token ? (
+        <ContentCreateForm
+          token={token}
+          onCancel={() => setCreating(false)}
+          onCreated={() => {
+            setCreating(false);
+            // UJRAKERDEZUNK: az uj tetel DRAFTING allapotban all es a
+            // letrehozojara var, tehat a "mi var ram" nezetben AZONNAL ott a
+            // helye. Ha nem toltenenk ujra, a felhasznalo pontosan azt latna,
+            // amire panaszkodott: beirta, es nincs sehol.
+            reload();
+          }}
+        />
+      ) : null}
 
       {/*
         AZ ÖSSZEGZŐ CSÍK LEGFELÜL, A SZEREP-VÁLASZTÓ ELŐTT IS.

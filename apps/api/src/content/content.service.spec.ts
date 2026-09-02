@@ -14,6 +14,7 @@ function serviceWith(
     moveState: ContentRepository["moveState"];
     detail: ContentRepository["detail"];
     list: ContentRepository["list"];
+    create: ContentRepository["create"];
   }> = {},
 ) {
   const calls: unknown[] = [];
@@ -26,6 +27,12 @@ function serviceWith(
       id: "c1",
     })) as unknown as ContentRepository["detail"],
     list: (async () => []) as unknown as ContentRepository["list"],
+    // A VARRAT KAPJA A VALODI SZERZODES TIPUSAT, nem egy laza alakot: ez az a
+    // lepes, amitol a dupla hianya forditasi hiba lesz, nem futasideju.
+    create: (async (data: unknown) => {
+      calls.push(data);
+      return { id: "uj" } as never;
+    }) as ContentRepository["create"],
     ...overrides,
   } as unknown as ContentRepository;
   return { service: new ContentService(repository), calls };
@@ -528,5 +535,97 @@ describe("the one view that answers what waits on me", () => {
     });
 
     assert.ok(reported.items[0]!.moves.length > 0);
+  });
+});
+
+describe("putting a new piece into the queue", () => {
+  it("starts it in DRAFTING, not in the schema's IDEA default", async () => {
+    // EZ A LENYEG, ES NEM STILUS. Az IDEA a STATES_BY_ROLE tablazat egyik
+    // szerepenel sem szerepel, es a modulnak nincs "minden tetel" listaja --
+    // egy IDEA allapotu tetel tehat senki listajaban nem jelenne meg. A
+    // letrehozas pontosan azt a panaszt termelne ujra, amiert keszult.
+    const { service, calls } = serviceWith();
+
+    await service.create({
+      title: "Uj poszt",
+      channel: "FACEBOOK_POST",
+      authorId: "u1",
+    });
+
+    const data = calls[0] as { state: string; authorId: string };
+    assert.equal(data.state, "DRAFTING");
+    assert.notEqual(data.state, "IDEA");
+  });
+
+  it("makes the caller the author, so it lands on their own list", async () => {
+    const { service, calls } = serviceWith();
+
+    await service.create({
+      title: "Uj poszt",
+      channel: "ARTICLE",
+      authorId: "u42",
+    });
+
+    assert.equal((calls[0] as { authorId: string }).authorId, "u42");
+  });
+
+  it("trims the title and refuses one that is only whitespace", async () => {
+    const { service, calls } = serviceWith();
+
+    await service.create({
+      title: "  Kozeppontban a korall  ",
+      channel: "ARTICLE",
+      authorId: "u1",
+    });
+    assert.equal(
+      (calls[0] as { title: string }).title,
+      "Kozeppontban a korall",
+    );
+
+    await assert.rejects(
+      () =>
+        service.create({ title: "   ", channel: "ARTICLE", authorId: "u1" }),
+      /cim nem lehet ures/,
+    );
+  });
+
+  it("leaves an absent optional field OUT, rather than writing undefined", async () => {
+    // Egy `body: undefined` a Prisma fele nem ugyanaz, mint a mezo hianya: az
+    // elso ertelmezese a hivo verzojatol fugg, a masodik egyertelmu.
+    const { service, calls } = serviceWith();
+
+    await service.create({
+      title: "Uj poszt",
+      channel: "OTHER",
+      authorId: "u1",
+    });
+
+    const data = calls[0] as Record<string, unknown>;
+    assert.equal("body" in data, false);
+    assert.equal("plannedFor" in data, false);
+    assert.equal("imageRequired" in data, false);
+  });
+
+  it("passes the optional fields through when they are given", async () => {
+    const { service, calls } = serviceWith();
+
+    await service.create({
+      title: "Uj poszt",
+      channel: "FACEBOOK_AD",
+      authorId: "u1",
+      body: "  torzs  ",
+      imageRequired: true,
+      plannedFor: "2026-09-10T08:00:00.000Z",
+    });
+
+    const data = calls[0] as {
+      body: string;
+      imageRequired: boolean;
+      plannedFor: Date;
+    };
+    assert.equal(data.body, "torzs");
+    assert.equal(data.imageRequired, true);
+    assert.ok(data.plannedFor instanceof Date);
+    assert.equal(data.plannedFor.toISOString(), "2026-09-10T08:00:00.000Z");
   });
 });
