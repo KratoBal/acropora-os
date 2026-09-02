@@ -146,8 +146,62 @@ export interface MedusaCategoryInput {
   name: string;
   external_id: string;
   parent_category_id?: string | null;
-  is_active?: boolean;
+  /**
+   * KOTELEZO, ES EZ NEM SZIGOR: az ertek DONTES, es a dontest ne lehessen
+   * veletlenul elhagyni. Az indok a tipus alatt all.
+   */
+  is_active: boolean;
 }
+
+/**
+ * AZ AKTIV JELOLOT KI KELL KULDENI, ES EZ EGY MERESEN MULT.
+ *
+ * Az elso valtozat opcionalisan hagyta, es a betoltes nem is kuldte: az ervelés
+ * az volt, hogy ha a Medusa alapertelmezese nem aktiv, az HANGOS hiba lesz, es
+ * majd megmutatja az elso futas. Ez az ervelés MEGDOLT, mert az alapertelmezest
+ * le lehet merni, es le is mertem a Medusa sajat modelljeben:
+ *
+ *     is_active: model.boolean().default(false)
+ *
+ * Vagyis a jelolo nelkul mind a 219 kategoria INAKTIVAN keletkezne. Az nem
+ * "hangos hiba, amibol tanulunk", hanem egy futas, ami SIKERESNEK latszik es
+ * semmit nem szallit -- raadasul epp azt a futast pazarolna el, amire kulon
+ * engedelyt kell kerni.
+ *
+ * === AMIT VISZONT NEM TUDUNK, ES EZERT NEM SORONKENT DONTUNK ===
+ *
+ * A mi `Category` tablank nem hordoz lathatosagot (id, name, slug, parentId).
+ * A UNAS export IGEN, es le is mertem: 219-bol 211 megjelenik az oldalon, 8 nem
+ * (koztuk: Shop 'n the Shop, Édesvízi akvarisztika, Akváriumok, biOrb).
+ *
+ * Ezert a betoltes MINDEGYIKET aktivkent hozza letre, es ez tudatos: a cel a
+ * TESZT peldany, ott a nyolc rejtett kategoria senkinek nem jelenik meg, es a
+ * visszaallitasa nyolc sor. A forditott tevedes -- 219 lathatatlan kategoria --
+ * az egesz futast ertektelenne tenne.
+ *
+ * EZ A DONTES ERVENYTELEN, MIHELYT ELES KIRAKAT KERUL A MEDUSA ELE. Akkor a
+ * lathatosagot a sajat modellunkbe kell felvenni es soronkent szarmaztatni,
+ * nem itt egy konstanssal eldonteni.
+ *
+ * === A HANDLE, ES AMIERT A CIM-SZABALY NEM DISZ ===
+ *
+ * A `handle`-t nem kuldjuk. A Medusa ilyenkor a NEVBOL szarmaztatja
+ * (`productCategory.handle ??= kebabCase(productCategory.name)`), es a `handle`
+ * oszlopon EGYEDI index all (`IDX_category_handle_unique`).
+ *
+ * EBBOL KOVETKEZIK, hogy a `categoryTitle` szabalya nem megjelenesi kerdes: ha
+ * ket kategoria azonos NEVET kapna, azonos handle-t is kapna, es a masodik
+ * letrehozas az egyedi indexen hasalna el -- a betoltes KOZEPEN, amikor mar
+ * allnak kategoriak.
+ *
+ * MERVE 2026-09-02, a 219 soros fan, a Medusa sajat `kebabCase` fuggvenyevel:
+ * 169 kulonbozo NEV, de a `{nev} - {szulo}` szaballyal 219 kulonbozo cim ES
+ * 219 kulonbozo handle. Nulla utkozes.
+ *
+ * HA A CIM-SZABALY VALTOZIK (Balazs meg nem dontott rola), EZT UJRA KELL MERNI.
+ * Nem eleg, hogy a cimek kulonbozok: a `kebabCase` ket kulonbozo cimet is
+ * osszevonhat.
+ */
 
 export interface MedusaCategoryListResult {
   rows: MedusaCategoryRow[];
