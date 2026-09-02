@@ -34,9 +34,9 @@ import type {
   NormalizedWorksheetContent,
   NormalizedWorksheetLine,
 } from "./worksheet-content.js";
+import { worksheetCloseBlocker } from "./worksheet-close-blockers.js";
 import {
   buildWorksheetNumber,
-  worksheetNumberIssue,
   worksheetYear,
   type WorksheetNumberIssue,
 } from "./worksheet-number.js";
@@ -736,60 +736,32 @@ export class WorksheetsRepository extends Repository {
 
       const current = worksheet.versions[0];
       if (!current) return { ok: false, reason: "NOT_FOUND" } as const;
-      if (current.status !== "DRAFT")
-        return { ok: false, reason: "NOT_DRAFT" } as const;
-      if (current._count.lines === 0)
-        return { ok: false, reason: "NO_LINES" } as const;
-
       /**
-       * ÁR NÉLKÜLI TÉTELLEL A LAP NEM ZÁRHATÓ LE.
+       * A LEZÁRÁS FELTÉTELEI EGY HELYEN ÁLLNAK, nem itt egymás után.
        *
-       * Ez a párja annak, hogy az ár elhagyható: a szerelő a helyszínen azt
-       * rögzíti, mit csinált és mennyit, az árat az iroda adja meg. A hiány
-       * tehát MEGENGEDETT állapot, de nem VÉGSŐ - itt derül ki, ha valaki
-       * elfelejtette kitölteni.
+       * A lista NŐNI FOG: tudjuk, hogy jön a hibajegy-feltétel (hibajegy
+       * nélküli lap nem zárható le és nem írható alá). Egy beágyazott `if`
+       * mellett minden új feltétel ezt a tranzakciót írná át; így egy sor a
+       * `worksheet-close-blockers.ts` fájlban.
        *
-       * MIÉRT A LEZÁRÁSHOZ TARTOZIK, ÉS NEM AZ ÁTADÁSHOZ: az átadás fogalma
-       * (a lap visszaadása a hibajegy felelősének) a rendszerben MA NEM
-       * LÉTEZIK - a munkalap és a hibajegy között nincs kapcsolat, tehát azt
-       * sem tudjuk, kinek kellene visszaadni. A feltétel a legkésőbbi ma
-       * létező ponton áll; amikor az átadás megszületik, ODA kerül át.
-       * Enélkül a következő olvasó azt hinné, hogy a lezárás volt a szándék.
+       * A lekérdezés MARAD itt, mert tranzakció kell hozzá; a DÖNTÉS megy át,
+       * mert ahhoz nem.
        */
-      const withoutPrice = await transaction.worksheetLine.count({
+      const linesWithoutPrice = await transaction.worksheetLine.count({
         where: { worksheetVersionId: current.id, unitNet: null },
       });
-      if (withoutPrice > 0)
-        return { ok: false, reason: "LINE_PRICE_MISSING" } as const;
 
       const partnerCode = worksheet.customer.worksheetPartnerCode;
       const departmentCode = worksheet.department.code;
-      /**
-       * MÁSODIK KAPU UGYANARRA A FELTÉTELRE, ÉS NEM FELESLEGES ISMÉTLÉS.
-       *
-       * Az ELSŐ kapu a választó szűrője (`selectablePartnerWhere`): rövidítés
-       * nélküli partnerhez el sem lehet INDÍTANI lapot, tehát az a lap
-       * LÉTREJÖTTÉT akadályozza meg. Ez itt azt fogja meg, ami MÁS ÚTON jutott
-       * idáig: a szűrő előttről maradt régi adat, kézi beavatkozás az
-       * adatbázisban, vagy egy későbbi import, ami nem a választón keresztül
-       * ír. Két kapu ugyanarra akkor indokolt, ha a második más úton érkező
-       * esetet fog meg -- itt ez áll fenn, tehát egyiket sem szabad
-       * "duplikáció" címén kivenni.
-       *
-       * ÉS AMIÉRT A RÖVIDÍTÉS AKKOR IS FELTÉTEL, AMIKOR MÁR NEM TAGJA A
-       * SZÁMNAK: egyediségi kulcs két táblán (`Supplier.worksheetPartnerCode`
-       * és a tükör vevő-sor ugyanilyen oszlopa), a pótlása pedig egyszeri
-       * lépés. Egy kulcs, amit később kell pótolni, nem ugyanaz, mint egy
-       * mező, amit később kell kitölteni: a pótlás pillanatában már létezhet
-       * a partnerre hivatkozó lap, és onnantól a "melyik partner viseli ezt a
-       * rövidítést" kérdés visszamenőleg kétértelmű. A feltétel tehát nem
-       * korlátozás, hanem SORREND: előbb legyen kész a partner, aztán legyen
-       * lapja.
-       */
-      if (!worksheet.number) {
-        const issue = worksheetNumberIssue({ partnerCode, departmentCode });
-        if (issue) return { ok: false, reason: issue } as const;
-      }
+      const blocker = worksheetCloseBlocker({
+        status: current.status,
+        lineCount: current._count.lines,
+        linesWithoutPrice,
+        partnerCode,
+        departmentCode,
+        hasNumber: Boolean(worksheet.number),
+      });
+      if (blocker) return { ok: false, reason: blocker } as const;
 
       const claimed = await transaction.worksheetVersion.updateMany({
         where: { id: current.id, status: "DRAFT" },
