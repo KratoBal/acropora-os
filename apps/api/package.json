@@ -17,6 +17,7 @@
     "test:unas:connection": "tsc -p tsconfig.test.json && node --test test-dist/imports/unas/unas-login-expiry.spec.js test-dist/imports/unas/unas-credential-crypto.service.spec.js test-dist/imports/unas/unas-credential.provider.spec.js test-dist/imports/unas/unas-auth.service.spec.js test-dist/imports/unas/unas-connection.service.spec.js test-dist/imports/unas/unas-connection.controller.spec.js test-dist/imports/unas/unas-connection-startup.validator.spec.js",
     "test:foxpost": "tsc -p tsconfig.test.json && node --test test-dist/integrations/foxpost/foxpost-settlement.parser.spec.js test-dist/integrations/foxpost/foxpost-monthly-report.xlsx.spec.js test-dist/integrations/foxpost/foxpost-gmail.client.spec.js test-dist/integrations/foxpost/foxpost-settlement.scheduler.spec.js test-dist/integrations/foxpost/foxpost-settlement.controller.spec.js test-dist/integrations/foxpost/foxpost-settlement.service.spec.js",
     "service-token": "tsc -p tsconfig.json && node --env-file=../../.env dist/tasks/service-token.cli.js",
+    "medusa:categories": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-category.cli.js",
     "medusa:project": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-projection.cli.js",
     "medusa:inventory": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-inventory.cli.js",
     "medusa:pricing": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-pricing.cli.js",

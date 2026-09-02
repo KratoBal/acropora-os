@@ -102,6 +102,54 @@ export interface MedusaLookupResult {
  * rendellenes, és ötven bőven elég ahhoz, hogy a rendellenesség ALAKJA is
  * látszódjon, mielőtt megállunk.
  */
+/**
+ * Egy Medusa kategoria, a mezonevek a `@medusajs/types` 2.19.0 szerint
+ * (`BaseProductCategory`) - ugyanaz a verzio, amit az acropora-commerce
+ * `package.json` rogzit. A neveket MERTUK, nem talaltuk ki: a megjeleno nev
+ * `name` es nem `title`, a szulo `parent_category_id`.
+ */
+export interface MedusaCategoryRow {
+  id: string;
+  name: string;
+  external_id: string | null;
+  parent_category_id: string | null;
+}
+
+/**
+ * A letrehozo torzs, az `AdminCreateProductCategory` szerint. Csak azok a
+ * mezok allnak itt, amiket a betoltes tenylegesen kuld: ami nincs kiirva, azt
+ * a Medusa alapertelmezese donti el, es azt nem akarjuk latszolag birtokolni.
+ *
+ * Az `external_id` A SZERZODESBEN BENNE VAN iraskor. Amit ez NEM mond: hogy a
+ * telepitett peldany el is tarolja. Az elso eles futas donti el, es azert
+ * kuldjuk ki mindenkeppen, mert egy elutasitas HANGOS hiba lesz - a nema
+ * valtozat az lenne, ha ki sem kuldenenk.
+ */
+export interface MedusaCategoryInput {
+  name: string;
+  external_id: string;
+  parent_category_id?: string | null;
+  is_active?: boolean;
+}
+
+export interface MedusaCategoryListResult {
+  rows: MedusaCategoryRow[];
+  /** Igaz, ha a valasz kimeritette a limitet, tehat lehet tobb is. */
+  truncated: boolean;
+}
+
+/**
+ * A kategoria-lista felso hatara.
+ *
+ * A mai fa 219 kategoria, tehat az otszaz bo ketszeres tartalek. A limit
+ * megis KI VAN IRVA es a kimeritese KULON jelezve, mert egy csonkolt lista
+ * itt nem hianyt okozna, hanem DUPLIKATUMOT: a terv azt olvasna ki, hogy a
+ * kategoria meg nincs a Medusaban, es letrehozna masodszor is. Ezert a
+ * betoltes megall, ha a lista kimeriti a limitet - a csonkolt halmazon hozott
+ * dontes itt draagabb, mint egy elmaradt futas.
+ */
+export const CATEGORY_LIST_LIMIT = 500;
+
 export const EXTERNAL_ID_LOOKUP_LIMIT = 50;
 
 /**
@@ -196,6 +244,18 @@ export interface MedusaAdminClient {
    * írás nulla. Nem a tartalma számít, hanem hogy jön-e válasz és milyen: ha
    * jön, a hálózat áll és a hitelesítés eldőlt.
    */
+  /**
+   * MINDEN kategoria, egyben.
+   *
+   * Szandekosan NEM szur `external_id`-ra. A szures letezeset nem mertuk meg
+   * az admin oldalon, es egy nem tamogatott szuroparametert a Medusa
+   * figyelmen kivul HAGYHAT - akkor a valasz teljes listanak latszana, es a
+   * hivo egy szurtnek hitt halmazon dontene. A parositas ezert memoriaban
+   * tortenik, 219 sornal az olcso.
+   */
+  listProductCategories(): Promise<MedusaCategoryListResult>;
+  /** Egy kategoria letrehozasa. A valaszban jon a Medusa-azonosito. */
+  createProductCategory(input: MedusaCategoryInput): Promise<MedusaCategoryRow>;
   probe(): Promise<void>;
   /**
    * Egy sales channel, azonosító szerint.
@@ -565,6 +625,28 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
         return null;
       throw error;
     }
+  }
+
+  async listProductCategories(): Promise<MedusaCategoryListResult> {
+    const params = new URLSearchParams({
+      fields: "id,name,external_id,parent_category_id",
+      limit: String(CATEGORY_LIST_LIMIT),
+    });
+    const body = await this.request<{
+      product_categories: MedusaCategoryRow[];
+    }>(`/admin/product-categories?${params.toString()}`);
+    const rows = body.product_categories ?? [];
+    return { rows, truncated: rows.length >= CATEGORY_LIST_LIMIT };
+  }
+
+  async createProductCategory(
+    input: MedusaCategoryInput,
+  ): Promise<MedusaCategoryRow> {
+    const body = await this.request<{ product_category: MedusaCategoryRow }>(
+      "/admin/product-categories",
+      { method: "POST", body: JSON.stringify(input) },
+    );
+    return body.product_category;
   }
 
   async probe(): Promise<void> {
