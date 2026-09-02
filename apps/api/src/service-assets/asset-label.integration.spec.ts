@@ -82,6 +82,25 @@ describe(
         select: { id: true },
       });
       customerId = customer.id;
+
+      /**
+       * VALODI FELHASZNALO KELL, NEM URES SZTRING.
+       *
+       * Az `Asset.createdById` idegen kulcs a `User` tablara. Az ures sztring
+       * NEM null: a beszuras `Asset_createdById_fkey` megsertesevel hasal el,
+       * es a hibauzenet a `prisma.asset.create()` hivast nevezi meg, nem a
+       * fixturat, ami okozta. Merve a CI-ban 2026-09-02: negy allitas bukott
+       * el emiatt, MIELOTT barmelyik eljutott volna a mert viselkedeshez.
+       */
+      const user = await prisma.user.create({
+        data: {
+          email: `${PREFIX.toLowerCase()}-actor@example.invalid`,
+          displayName: `${PREFIX} aktor`,
+          role: "SERVICE",
+        },
+        select: { id: true },
+      });
+      actorUserId = user.id;
     });
 
     after(async () => {
