@@ -484,3 +484,80 @@ describe("A cikkszám-keresés két sikertelen esete", () => {
     );
   });
 });
+
+/**
+ * A HIANY-SOROK CSATORNAJA, SZERKEZETI ALLITASSAL.
+ *
+ * MIERT NEM VISELKEDESI: ezek a sorok a parancsok TORZSEBEN allnak, azok pedig
+ * a `prisma`-t MODUL-SZINTU importbol veszik -- teszt-duplat nem lehet nekik
+ * adni. Ugyanaz a korlat, ami miatt a kategoria-dontes kulon modulba kerult.
+ *
+ * MIT VED: egy utemezett futast burkolo szkript gyakran a STDERR JELENLETET
+ * olvassa hibanak, akkor is, ha a kilepesi kod nulla. A hianyzo lekepezes es a
+ * hianyzo keszlet-sor viszont NEM bukas -- egyik sem noveli a `failed`
+ * szamlalot --, tehat a stderr-en egy egeszseges futas riasztasnak latszana.
+ * Amig a kategoria-betoltes nincs kesz, ez MINDEN erintett termeknel megtortenne.
+ *
+ * A MINTA A PRETTIER ALAKJARA ILLESZKEDIK, es ezert kell hozza a darabszam-
+ * kontroll: ha a formazas valaha mast ad, a nulla talalat ugy nezne ki, mint egy
+ * tiszta eredmeny. A nevezot tehat allitjuk, nem csak a szamlalot.
+ */
+const MISSING_REPORTER_CALL =
+  /out\.(stdout|stderr)\(\s*`\$\{(describeMissing\w+)\(/g;
+
+const PROJECTION_COMMANDS = [
+  "src/integrations/medusa/medusa-projection.cli.ts",
+  "src/integrations/medusa/medusa-inventory.cli.ts",
+];
+
+function missingReporterCalls(): { channel: string; reporter: string }[] {
+  const found: { channel: string; reporter: string }[] = [];
+  for (const file of PROJECTION_COMMANDS)
+    for (const match of readFileSync(file, "utf8").matchAll(
+      MISSING_REPORTER_CALL,
+    ))
+      found.push({ channel: match[1]!, reporter: match[2]! });
+  return found;
+}
+
+describe("which channel a missing-data line goes to", () => {
+  /**
+   * A KONTROLL A MINTARA, MINDKET IRANYBAN. Enelkul egy elromlott minta nulla
+   * talalatot adna, es a teszt zolden azt allitana, hogy sehol nincs stderr.
+   */
+  it("recognises both channels in a sample that has them", () => {
+    const sample = [
+      "      out.stderr(`${describeMissingCategoryMapping(id, missing)}\\n`);",
+      "      out.stdout(`${describeMissingStockRow(sku, name)}\\n`);",
+    ].join("\n");
+
+    const seen = [...sample.matchAll(MISSING_REPORTER_CALL)].map(
+      (match) => match[1],
+    );
+    assert.deepEqual(seen, ["stderr", "stdout"]);
+  });
+
+  it("reads the calls it claims to read", () => {
+    const calls = missingReporterCalls();
+
+    // A NEVEZO: ket parancs, egy-egy hiany-jelzessel. Ha ez nulla lenne, a
+    // csatorna-allitas nem a kodrol szolna, hanem a sajat mintajarol.
+    assert.equal(calls.length, 2);
+    assert.deepEqual(calls.map((call) => call.reporter).sort(), [
+      "describeMissingCategoryMapping",
+      "describeMissingStockRow",
+    ]);
+  });
+
+  it("keeps every missing-data line on stdout", () => {
+    const stderrLines = missingReporterCalls().filter(
+      (call) => call.channel === "stderr",
+    );
+
+    assert.deepEqual(
+      stderrLines.map((call) => call.reporter),
+      [],
+      "A hiányzó adat nem bukás: a stderr ebben a két parancsban a valódi bukásoké, amik a failed számlálót is növelik.",
+    );
+  });
+});
