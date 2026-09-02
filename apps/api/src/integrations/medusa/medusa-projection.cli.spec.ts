@@ -4,6 +4,7 @@ import { glob } from "node:fs/promises";
 import { describe, it } from "node:test";
 
 import {
+  describeForgottenLink,
   describeSkuLookupFailure,
   describePublication,
   MEDUSA_PROJECTION_FALLBACK_NOTICE,
@@ -558,6 +559,76 @@ describe("which channel a missing-data line goes to", () => {
       stderrLines.map((call) => call.reporter),
       [],
       "A hiányzó adat nem bukás: a stderr ebben a két parancsban a valódi bukásoké, amik a failed számlálót is növelik.",
+    );
+  });
+});
+
+/**
+ * A TORLES MONDATA KET ESETET KULONBOZTET MEG, NEM CSAK KET SZAMOT MOND.
+ *
+ * A nulla eset ket okbol allhat elo, es a masodik NEMA: vagy a termek eleve nem
+ * volt lekepezve (rendben), vagy a keresesi kulcs csuszott el, es a lekepezes
+ * OTT MARADT. A regi szoveg mindkettore azt allitotta, hogy "lekepezes torolve
+ * (0 sor)" -- kijelentette a torlest.
+ */
+describe("what the forget branch says it did", () => {
+  it("reports the rows when there was something to delete", () => {
+    const sor = describeForgottenLink("prod_1", 2);
+
+    assert.match(sor, /leképezés törölve \(2 sor\)/);
+    assert.match(sor, /A termék érintetlen/);
+  });
+
+  /** EZ AZ ALLITAS: nulla sornal a mondat NEM allithatja, hogy torolt. */
+  it("does not claim a deletion when nothing was deleted", () => {
+    const sor = describeForgottenLink("prod_1", 0);
+
+    assert.match(sor, /NEM volt leképezése/);
+    assert.equal(/törölve/.test(sor), false);
+    // A "0 sor" alak sem jelenhet meg: az ugy hangzik, mintha megtortent volna.
+    assert.equal(sor.includes("0 sor"), false);
+  });
+});
+
+/**
+ * A TERMEK-KULCS IS EGY HELYEN ALL, ugyanugy, mint a kategoriae.
+ *
+ * Murena merte fel a szetcsuszast: a link-tarolo sajat konstansokat tartott, a
+ * parancs torlo aga INLINE literalokat. Ma mindketto "Product"-ot mondott, de
+ * egy elgepeles ott NEM hibazna -- a `deleteMany` nulla sort erintene.
+ */
+describe("the product link's lookup key", () => {
+  const PRODUCT_LITERAL = /["']Product["']/;
+  const LINK_REPOSITORY =
+    "src/integrations/medusa/medusa-product-link.repository.ts";
+
+  it("finds the literal in a sample that has it", () => {
+    assert.equal(PRODUCT_LITERAL.test('entityType: "Product",'), true);
+    assert.equal(
+      PRODUCT_LITERAL.test('const ENTITY_TYPE = "Product" as const;'),
+      true,
+    );
+    assert.equal(PRODUCT_LITERAL.test("a `Product` tabla"), false);
+  });
+
+  it("keeps it in one file, and everyone else calls the constant", async () => {
+    const sources = await medusaSources();
+    assert.ok(sources.length >= 10);
+    assert.equal(sources.includes(LINK_REPOSITORY), true);
+
+    const sajatLiteral = sources.filter((file) =>
+      PRODUCT_LITERAL.test(
+        readFileSync(file, "utf8")
+          .split("\n")
+          .filter((line) => !/^\s*(\*|\/\/|\/\*)/.test(line))
+          .join("\n"),
+      ),
+    );
+
+    assert.deepEqual(
+      sajatLiteral,
+      [LINK_REPOSITORY],
+      `Ezek a fájlok saját literált tartanak a közös kulcs helyett: ${sajatLiteral.join(", ")}`,
     );
   });
 });
