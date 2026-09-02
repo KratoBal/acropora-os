@@ -1,6 +1,11 @@
 import { pathToFileURL } from "node:url";
 
 import { prisma } from "@acropora/database";
+
+import {
+  decideMedusaCategories,
+  describeMissingCategoryMapping,
+} from "./medusa-category.policy.js";
 import { isKnownCatalogAuthority } from "./medusa-publication.policy.js";
 
 import {
@@ -311,38 +316,35 @@ export async function runProjectionCli(
     /**
      * A MI KATEGORIAINK -> MEDUSA AZONOSITOK.
      *
-     * A leképezes ugyanabban a tablaban all, mint a UNAS oldali kategoria-par
-     * (`ExternalReference`), csak MEDUSA rendszerre. Azokat a sorokat az irja,
-     * aki a kategoriakat a Medusaban LETREHOZZA -- a Medusa-azonosito ott
+     * Itt csak a LEKERDEZES all; maga a szabaly a `medusa-category.policy.ts`
+     * modulban, mert ez a fuggveny a `prisma`-t MODUL-SZINTU importbol veszi,
+     * tehat ami ide kerul, azt csak eles adatbazissal lehetne megmerni.
+     *
+     * A lekepezes-sorokat az irja, aki a kategoriakat a Medusaban LETREHOZZA
+     * (`ExternalReference`, `system: "MEDUSA"`): a Medusa-azonosito ott
      * keletkezik, nem itt.
      *
-     * MINDEN VAGY SEMMI, ES EZ SZANDEKOS: ha akar EGY kategoria hianyzik a
-     * leképezesbol, a mezot NEM kuldjuk ki. Egy reszleges lista ugyanis, HA a
-     * mezo csere-szemantikaju (a `sales_channels` bizonyitottan az, a
-     * `categories`-ra ez meg nincs elesben megmerve), CSENDBEN levenne a
-     * termekrol azokat a kategoriakat, amiket nem tudtunk megnevezni.
-     *
-     * ES A KET ESET, AMI A TORZSRE NEZVE UGYANAZ, A JELENTESBEN VISZONT NEM:
-     * "nincs kategoriaja" es "van, de meg nincs lekepezve". Az elso rendben
-     * van, a masodik hiany -- ezert az utobbi KIIRODIK.
+     * A HAROM ESETBOL KETTO ITT VALIK SZET: a keres torzsere nezve a "nincs
+     * kategoriaja" es a "van, de meg nincs lekepezve" ugyanaz (egyik sem kuld
+     * mezot), de a masodik HIANY, ezert kiirodik.
      */
     const osCategoryIds = product.categories.map((row) => row.categoryId);
-    const mapped = osCategoryIds.length
-      ? await prisma.externalReference.findMany({
-          where: {
-            system: "MEDUSA",
-            entityType: "Category",
-            entityId: { in: osCategoryIds },
-          },
-          select: { entityId: true, externalId: true },
-        })
-      : [];
-    const teljes =
-      osCategoryIds.length > 0 && mapped.length === osCategoryIds.length;
-    if (osCategoryIds.length > 0 && !teljes)
+    const categories = decideMedusaCategories(
+      osCategoryIds,
+      osCategoryIds.length
+        ? await prisma.externalReference.findMany({
+            where: {
+              system: "MEDUSA",
+              entityType: "Category",
+              entityId: { in: osCategoryIds },
+            },
+            select: { entityId: true, externalId: true },
+          })
+        : [],
+    );
+    if (categories.kind === "incomplete")
       out.stderr(
-        `${product.id}: ${osCategoryIds.length - mapped.length} kategória még nincs leképezve a Medusára, ` +
-          `ezért EGYIKET SEM küldjük (a részleges lista letörölhetné a többit).\n`,
+        `${describeMissingCategoryMapping(product.id, categories.missing)}\n`,
       );
 
     const outcome = await service!.project(
@@ -351,7 +353,7 @@ export async function runProjectionCli(
         name: product.name,
         description: product.description,
         primarySku: product.variants[0]?.sku ?? null,
-        medusaCategoryIds: teljes ? mapped.map((row) => row.externalId) : null,
+        medusaCategoryIds: categories.medusaCategoryIds,
         publication: {
           catalogAuthority: product.catalogAuthority,
           isActive: product.isActive,
