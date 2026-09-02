@@ -405,3 +405,86 @@ describe("WorksheetEditorPage site tree", () => {
     });
   });
 });
+
+/*
+ * EGYIK VALASZTO SEM AJANL ARCHIVALT ALEGYSEGET.
+ *
+ * MA EZ IGAZ, DE VELETLENUL: a ket select UGYANABBOL az allapotbol dolgozik, es a
+ * betoltes szuri az `isActive` mezot. Senki nem irt kulon szabalyt a szulo-valasztora --
+ * egyszeruen nincs kulonvalasztva a ket lista.
+ *
+ * EZERT AZ ALLITAS KETTO, NEM EGY. Ma egyetlen rontas (a betoltesi szures elhagyasa)
+ * MINDKETTOT pirosra valtja, es ez nem a keszlet hibaja, hanem PONT AZ A TENY, amit
+ * rogzit. Ha valaki kesobb szetvalasztja a ket listat -- teljesen ertelmes okbol, mert
+ * az egyikbe archivalt is kell --, a masik csendben elvesztene a szurest, es akkor CSAK
+ * a hozza tartozo allitas pirosodik ki. Merve: egy olyan rontas, ami csak a
+ * szulo-valasztot koti a szuretlen listahoz, pontosan egy allitast dont pirosra.
+ */
+describe("WorksheetEditorPage: archived units in the two pickers", () => {
+  const active = {
+    id: "unit-bio",
+    parentId: null,
+    code: "BIO",
+    name: "Biodóm",
+    isActive: true,
+  };
+  const archived = {
+    id: "unit-regi",
+    parentId: null,
+    code: "REG",
+    name: "Régi szárny",
+    isActive: false,
+  };
+
+  beforeEach(() => {
+    auth.session = session;
+    customers.list.mockReset();
+    worksheets.departments
+      .mockReset()
+      .mockResolvedValue({ items: [active, archived] });
+    worksheets.detail.mockReset();
+    worksheets.selectablePartners.mockReset().mockResolvedValue({
+      items: [
+        { customerId: "customer-42", name: "Fankó Kft.", partnerCode: "FANK" },
+      ],
+    });
+    worksheets.assignableUsers.mockReset().mockResolvedValue({ items: [] });
+    worksheets.create.mockReset().mockResolvedValue({ id: "worksheet-1" });
+  });
+
+  async function optionsOf(label: string): Promise<string[]> {
+    const picker = await screen.findByLabelText(label);
+    return Array.from(
+      picker.querySelectorAll("option"),
+      (option) => option.textContent ?? "",
+    );
+  }
+
+  /** A lap alegysege: ide uj MUNKA indul, tehat archivalt nem valaszthato. */
+  it("keeps an archived unit out of the sheet's own picker", async () => {
+    render(<WorksheetEditorPage />);
+    await userEvent
+      .setup()
+      .selectOptions(await screen.findByLabelText("Partner"), "customer-42");
+
+    const offered = await optionsOf("Alegység");
+    expect(offered.some((text) => text.includes("Biodóm"))).toBe(true);
+    expect(offered.some((text) => text.includes("Régi szárny"))).toBe(false);
+  });
+
+  /**
+   * A SZULO-VALASZTO: ide uj ALEGYSEG kerul. Egy archivalt ag ala tett, aktiv
+   * alegyseg a lap valasztojaban MEGJELENNE -- vagyis az archivalt ag egy
+   * gyereken keresztul csendben visszaterne a munkaba.
+   */
+  it("keeps an archived unit out of the parent picker", async () => {
+    render(<WorksheetEditorPage />);
+    await userEvent
+      .setup()
+      .selectOptions(await screen.findByLabelText("Partner"), "customer-42");
+
+    const offered = await optionsOf("Szülő helyszín");
+    expect(offered.some((text) => text.includes("Biodóm"))).toBe(true);
+    expect(offered.some((text) => text.includes("Régi szárny"))).toBe(false);
+  });
+});
