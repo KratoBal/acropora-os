@@ -137,6 +137,8 @@ export type {
 export type { AssetLabel, AssetLabelIssueResult } from "./asset-label.js";
 export {
   ASSET_LABEL_CODE_STORED_PATTERN,
+  ASSET_LABEL_REQUIRED_ON_CREATE,
+  assetLabelCreateProblem,
   normalizeAssetLabelCode,
 } from "./asset-label.js";
 export type {

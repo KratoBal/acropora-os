@@ -28,6 +28,7 @@ const form: AssetCreateForm = {
   model: "",
   serialNumber: " SN-1 ",
   inventoryNumber: "",
+  labelCode: "",
   installedAt: "",
   interval: "",
 };
@@ -265,5 +266,35 @@ describe("buildAssetCreatePayload es a leltari szam", () => {
       result.ok ? result.payload.inventoryNumber : "not-undefined",
       undefined,
     );
+  });
+});
+
+/**
+ * A MATRICAKOD A FELVITELKOR.
+ *
+ * A dontest (kotelezo-e, jo-e az alakja) a `asset-label-mirror` hozza, es azt
+ * a sajat tesztjei merik. ITT az a kerdes, hogy a payload-ba NORMALIZALVA
+ * kerul-e be, es hogy a hibas alak a HELYES mezot nevezi-e meg -- mert a
+ * kepernyon a hibauzenet a mezo mellett jelenik meg.
+ */
+describe("a matricakód a felvitelkor", () => {
+  it("normalizálva kerül a kérésbe", () => {
+    const result = buildAssetCreatePayload({ ...form, labelCode: " v2196 " });
+    assert.equal(result.ok, true);
+    assert.equal(result.ok && result.payload.labelCode, "V2196");
+  });
+
+  it("üresen nem kerül bele", () => {
+    // ISMERT POZITIV KONTROLL a fentihez: ha a mezo MINDIG bekerulne, a fenti
+    // allitas akkor is zold lenne, amikor a szerelo nem adott meg kodot.
+    const result = buildAssetCreatePayload({ ...form, labelCode: "  " });
+    assert.equal(result.ok, true);
+    assert.equal(result.ok && result.payload.labelCode, undefined);
+  });
+
+  it("a rossz alak a matrica mezőt nevezi meg", () => {
+    const result = buildAssetCreatePayload({ ...form, labelCode: "ROSSZ" });
+    assert.equal(result.ok, false);
+    assert.equal(!result.ok && result.field, "labelCode");
   });
 });

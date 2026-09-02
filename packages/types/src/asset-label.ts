@@ -57,3 +57,33 @@ export interface AssetLabelIssueResult {
    */
   alreadyIssued: string[];
 }
+
+/**
+ * KOTELEZO-E A MATRICA AZ ESZKOZ FELVITELEKOR.
+ *
+ * EGY HELYEN ALL, SZANDEKOSAN. Ha egyszer megfordul, EZ AZ EGY SOR valtozik --
+ * nem a szerver validacioja, nem a telefon urlapja, es nem a ket hibauzenet
+ * kulon-kulon. A kerdes Balazsnal all (acrobot tette fel 2026-09-02 este):
+ * kotelezo legyen-e, vagy lehessen utolag potolni.
+ *
+ * A MAI ERTEK A MEGENGEDO, es ez NEM dontes helyette: ez az az allapot, ami a
+ * mai szerver-viselkedessel egyezik (a `labelCode` opcionalis a felvitelnel).
+ * Amig a valasz meg nem jott, a megengedo ertek az, ami SEMMIT nem zar ki.
+ */
+export const ASSET_LABEL_REQUIRED_ON_CREATE = false;
+
+/**
+ * MI A BAJ A FELVITELKOR MEGADOTT MATRICAKODDAL, vagy `null`, ha semmi.
+ *
+ * A KET SZABALY EGYUTT ALL ITT: hogy KELL-E, es hogy JO-E AZ ALAKJA. Ha kulon
+ * allnanak, a telefon es a szerver ket kulonbozo pillanatban vennek at a
+ * valtozast -- es a felhasznalo azt latna, hogy az urlap atengedi, a mentes meg
+ * elutasitja.
+ */
+export function assetLabelCreateProblem(
+  raw: string | undefined,
+): "missing" | "malformed" | null {
+  const trimmed = (raw ?? "").trim();
+  if (trimmed === "") return ASSET_LABEL_REQUIRED_ON_CREATE ? "missing" : null;
+  return normalizeAssetLabelCode(trimmed) === null ? "malformed" : null;
+}
