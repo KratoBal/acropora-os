@@ -16,7 +16,6 @@ import { OrderListCard } from "@/components/orders/OrderListCard";
 import { runningVersionLine } from "@/lib/app-version";
 import { listUnasOrders } from "@/lib/api/orders";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import type { UserRole } from "@/lib/auth/types";
 import {
   servedTileIds,
   tileVisible as tileVisibleFor,
@@ -61,14 +60,6 @@ function nativeBuildNumber(): string | null {
   return android == null ? null : String(android);
 }
 
-const NAV_TILE_ROLES: UserRole[] = [
-  "OWNER",
-  "ADMIN",
-  "MANAGER",
-  "WAREHOUSE",
-  "VIEWER",
-];
-
 interface ModuleCardProps {
   code: string;
   title: string;
@@ -109,8 +100,12 @@ export default function HomeScreen() {
    * szerver egyaltalan nem kuldott menut. Amig kuld, az itteni tablak nem
    * befolyasolnak semmit a kezdokepernyon.
    */
-  const tileVisible = (code: TileCode, fallback: boolean) =>
-    tileVisibleFor(servedIds, code, fallback);
+  const tileVisible = (code: TileCode) => tileVisibleFor(servedIds, code);
+  // HANY CSEMPE LATSZIK. A visszaeses kiesesevel eloall egy allapot, ami eddig
+  // nem letezett: a szerver nem kuldott menut, tehat NULLA csempe van. Ezt a
+  // kepernyonek ki kell mondania -- egy ures szakasz cim alatt ugy nez ki, mint
+  // egy betoltesi hiba, es a felhasznalo nem tudja, mit kezdjen vele.
+  const lathatoCsempek = servedIds.size;
   const orders = useQuery({
     queryKey: ["unas-orders", { page: 1, pageSize: 5 }],
     queryFn: () => listUnasOrders(1, 5),
@@ -174,7 +169,7 @@ export default function HomeScreen() {
                 code="ES"
                 title="Eszközök"
                 description="Partnereszközök, QR-azonosítás és hierarchia"
-                available={tileVisible("ES", serviceCapabilities.assetsView)}
+                available={tileVisible("ES")}
                 enabled
                 onPress={() => router.push("/assets")}
               />
@@ -182,10 +177,7 @@ export default function HomeScreen() {
                 code="MU"
                 title="Munkalapok"
                 description="Kiosztott lapok, tételek és felelősök"
-                available={tileVisible(
-                  "MU",
-                  serviceCapabilities.worksheetsView,
-                )}
+                available={tileVisible("MU")}
                 enabled
                 onPress={() => router.push("/worksheets")}
               />
@@ -193,7 +185,7 @@ export default function HomeScreen() {
                 code="RE"
                 title="Rendelések"
                 description="UNAS rendelések, státuszok és tételek"
-                available={tileVisible("RE", capabilities.ordersView)}
+                available={tileVisible("RE")}
                 enabled
                 onPress={() => router.push("/orders")}
               />
@@ -201,14 +193,14 @@ export default function HomeScreen() {
                 code="BE"
                 title="Beszerzés"
                 description="Szállítói számlák és bevételezés"
-                available={tileVisible("BE", capabilities.purchasingView)}
+                available={tileVisible("BE")}
                 enabled={false}
               />
               <ModuleCard
                 code="TE"
                 title="Termékek"
                 description="Terméktörzs és készletállapot"
-                available={tileVisible("TE", capabilities.productsView)}
+                available={tileVisible("TE")}
                 enabled={false}
               />
               {/*
@@ -229,21 +221,43 @@ export default function HomeScreen() {
                 code="NAV"
                 title="NAV-szinkron"
                 description="Bejövő számlák és párosítások"
-                available={tileVisible(
-                  "NAV",
-                  NAV_TILE_ROLES.includes(user.role),
-                )}
+                available={tileVisible("NAV")}
                 enabled={false}
               />
               <ModuleCard
                 code="PA"
                 title="Partnerek"
                 description="Szerviz partnerek és kapcsolattartók"
-                available={tileVisible("PA", capabilities.partnersView)}
+                available={tileVisible("PA")}
                 enabled
                 onPress={() => router.push("/partners")}
               />
             </View>
+
+            {lathatoCsempek === 0 ? (
+              /*
+                NULLA CSEMPE: KI KELL MONDANI. A visszaeses kiesesevel (2026-09-02)
+                eloall egy allapot, ami eddig nem letezett: a szerver nem kuldott
+                menut, tehat egyetlen csempe sincs. Egy URES szakasz a "Modulok"
+                cim alatt betoltesi hibanak latszik, es a felhasznalo nem tudja,
+                mit kezdjen vele.
+
+                A DONTES INDOKA epp az volt, hogy a hiba legyen HANGOS a csendes
+                visszaeses helyett -- egy nema ures felulet viszont nem hangos,
+                csak zavaro. Ez a ket sor teszi a hibat elmondhatova: a
+                felhasznalo azt tudja jelenteni, amit lat.
+              */
+              <View style={styles.accessCard}>
+                <Text style={styles.accessTitle}>
+                  Nincs megjeleníthető modul
+                </Text>
+                <Text style={styles.accessText}>
+                  A kiszolgáló nem küldött menüt ehhez a munkamenethez.
+                  Jelentkezz ki és vissza; ha így marad, szólj a
+                  rendszergazdának, mert ez kiszolgáló-oldali hiba.
+                </Text>
+              </View>
+            ) : null}
 
             {capabilities.ordersView ? (
               <View style={styles.ordersSection}>

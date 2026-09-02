@@ -432,8 +432,9 @@ utána essen ki a régi** – nem lehet olyan kör, amelyben semmi nem méri.
    pont ugyanazt adja, és állítás követeli meg, hogy egyezzenek.
 3. **KÉSZ.** A telefon a kiadott válaszra áll át. A mobil táblái megmaradnak,
    tehát két független forrás áll egyszerre, és mindkettő mérve van.
-4. **ÁTÍRÁS ALATT, MERT A TERV EZEN A PONTON TÉVEDETT.** Eredetileg ez állt itt:
-   "csak ezután esik ki a mobil tábla és a hozzá tartozó két ellenőrzés". A 3. lépés után elvégzett mérés szerint **ez nem lehetséges**, két független okból:
+4. **KÉSZ, DE NEM ÚGY, AHOGY A TERV MONDTA.** Eredetileg ez állt itt: "csak
+   ezután esik ki a mobil tábla és a hozzá tartozó két ellenőrzés". A 3. lépés
+   után elvégzett mérés szerint **ez nem lehetséges**, két független okból:
 
    - A képesség-táblákat a kezdőképernyőn **kívül** 11 képernyő használja. Ebből
      4 a `*Manage` kulcsokat, amik nem menü-kérdések: a közös forrás azt írja le,
@@ -444,17 +445,17 @@ utána essen ki a régi** – nem lehet olyan kör, amelyben semmi nem méri.
      menüpontja. A menü arról szól, mi jelenjen meg a kezdőlapon; ezek sosem
      jelennek meg ott.
 
-   **Amíg a táblák élnek, a két ellenőrzésnek van tárgya**, és a kivételükkel épp
-   azok a helyek maradnának őrizetlenül, ahol a tábla tovább él. A 4. lépés ezzel
-   egyetlen, még **el nem döntött** kérdésre szűkül: megmaradjon-e a kezdőképernyő
-   visszaesése (a `tileVisible` fallback argumentuma). Megtartva egy hibás vagy
-   régi szerver mellett a telefon **csendben** a saját régi tábláira esik vissza;
-   kivéve ugyanott a kezdőlap **üres** lesz, ami hangos és egy sorral visszatehető.
+   **A két ellenőrzés ezért marad**, és ez nem engedmény: amíg a táblák élnek,
+   van tárgyuk, és a kivételükkel épp azok a helyek maradnának őrizetlenül, ahol
+   a tábla tovább él.
 
-   **Amit valóban nyugdíjazna a táblát, és ami nem ez a terv:** ha a telefon a
-   **jogait** is a szerverről kapná, és mind a 11 képernyő abból dolgozna. Az új
-   fogalom a válaszban, és külön döntés – itt azért áll, hogy a "majd a 4. lépés
-   megoldja" ne élhessen tovább.
+   **Ami valóban elvégeztetett:** a kezdőképernyő visszaesése kiesett. A telefon
+   csempéi kizárólag a kiadott menüből jönnek, és a telefonon már nincs
+   szerepkör-lista sem. Az indok nem az, hogy a tartalék ág fölösleges, hanem
+   hogy **néma**: ha a kiszolgáló egyszer mégsem küld menüt, csendben a régi
+   táblákból dolgozna, és senki nem venné észre. Nélküle a kezdőlapon nincs
+   csempe – és a képernyő **ki is mondja**, hogy nincs, mert egy üres szakasz a
+   "Modulok" cím alatt betöltési hibának látszik, nem határnak.
 
 **Az ígéret ("elrejteni új kiadás nélkül lehet") a 2. és 3. lépéssel vált igazzá.**
 Mindkettő bent van; az itteni státuszok a `main` ágon mért állapotot írják le.
@@ -463,3 +464,17 @@ Mindkettő bent van; az itteni státuszok a `main` ágon mért állapotot írjá
 
 A beállítás-felület és a felhasználónkénti felülbírálat. Mindkettő külön terv, és
 ez az ADR az előfeltételük, nem a helyettesítőjük.
+
+### MEGNEVEZETT, ELHALASZTOTT MUNKA: a telefon a JOGAIT is a szerverről kapná
+
+Ez az, ami valóban nyugdíjazná a telefon képesség-tábláit – és **ma nem
+csináljuk meg**. Azért áll itt megnevezve, mert egy elhalasztott munka, aminek
+nincs neve, fél év múlva újra fel lesz fedezve; és mert e nélkül a "majd a 4. lépés megoldja" tovább élne olyan várakozásként, amit senki nem mért meg.
+
+**Mit igényelne:** új fogalom a munkamenet válaszában (a kérő jogosultságai, nem
+csak a menüje); mind a **11 képernyő** átírása, amely ma a táblákból dolgozik; és
+a `*Manage` jogok kliens-oldali értelmezésének eldöntése – az ugyanis nem
+láthatóság, hanem művelet, és a kettő nem ugyanaz a kérdés.
+
+**Amit ez megszüntetne:** a kézzel karbantartott tükör a telefonon, és vele a két
+ellenőrzés, aminek ma van tárgya.
