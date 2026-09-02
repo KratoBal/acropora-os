@@ -102,7 +102,12 @@ export const assetsApi = {
     const body = new FormData();
     body.append("type", type);
     body.append("file", file);
-    return apiRequest<AssetDocumentSummary>(
+    // LISTÁT AD VISSZA, EGY FÁJLNÁL IS. A végpont több fájlt fogad ugyanezen a
+    // mezőnéven, és mindig listával válaszol. Ez a felület ma egy fájlt
+    // választ, tehát a lista egyelemű - de a TÍPUSNAK azt kell mondania, ami
+    // érkezik: ezt a fordító nem tudja ellenőrizni a szerver felé, mert a két
+    // oldal külön deklarálja, és egy hazug típusparaméter itt csendben marad.
+    return apiRequest<AssetDocumentSummary[]>(
       `/service/assets/${encodeURIComponent(id)}/documents`,
       token,
       { method: "POST", body },

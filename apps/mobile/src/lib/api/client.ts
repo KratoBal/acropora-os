@@ -1,6 +1,7 @@
 import { environment } from "@/config/env";
 import { authSessionStore } from "@/lib/auth/token-store";
 
+import { needsJsonContentType } from "./json-content-type";
 import { resolveRequestToken } from "./request-auth";
 
 export class ApiError extends Error {
@@ -65,7 +66,7 @@ export async function apiRequest<T>(
   const headers = new Headers(requestInit.headers);
   headers.set("Accept", "application/json");
 
-  if (requestInit.body && !headers.has("Content-Type")) {
+  if (needsJsonContentType(requestInit.body) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
   if (token) {
