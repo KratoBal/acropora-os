@@ -169,6 +169,24 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
   // futna, es a React a kovetkezo rajzolasnal mas hook-sorrendet latna --
   // ezt a hibat a komponens-teszt ures kepernyokent mutatta, nem uzenetkent.
   const unitRows = useMemo(() => buildSiteTree(units), [units]);
+  /**
+   * AMIT A SZULO-VALASZTO FELAJANL: csak az AKTIV helyszinek.
+   *
+   * A dontes acrobote (2026-09-02 21:13), es az indoka nem a valoszinuseg,
+   * hanem hogy MELYIK TEVEDES MARAD REJTVE. Ha egy uj, AKTIV alegyseg egy
+   * archivalt ag ala kerul, a sajat `isActive` mezoje igaz lesz, tehat a
+   * munkalap-valasztoban MEGJELENIK -- vagyis az archivalt ag egy gyereken
+   * keresztul csendben visszater a munkaba, hibauzenet nelkul. A forditott
+   * tevedes (valaki nem tud archivalt ag ala felvinni) HANGOS: azonnal szol.
+   *
+   * A LISTA (`unitRows`) SZANDEKOSAN MARAD TELJES: a mar letezo, archivalt
+   * helyszinek es a rajtuk allo gyerekek tovabbra is lathatok. A szigor csak
+   * azt zarja ki, hogy UJAT tegyunk melle -- a meglevot nem veszi el.
+   */
+  const parentOptions = useMemo(
+    () => unitRows.filter(({ unit }) => unit.isActive),
+    [unitRows],
+  );
 
   if (!canManage)
     return (
@@ -676,7 +694,7 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
                   }
                 >
                   <option value="">Legfelső szint</option>
-                  {unitRows.map(({ unit, depth }) => (
+                  {parentOptions.map(({ unit, depth }) => (
                     <option key={unit.id} value={unit.id}>
                       {`${"\u00a0".repeat(depth * 2)}${unit.code} - ${unit.name}`}
                     </option>

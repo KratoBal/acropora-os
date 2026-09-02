@@ -235,7 +235,16 @@ export function AssetListPage() {
                         )
                       }
                     />
-                    <span>{option.label}</span>
+                    {/* JELOLUNK, DE NEM SZURUNK (acrobot dontese, 2026-09-02
+                        21:13). Egy eszkoz allhat archivalt helyszinen, es a
+                        listat is akarhatja valaki epp arra szurni -- a
+                        valasztas itt nem hoz letre semmit. A jeloles viszont
+                        kell, kulonben a felhasznalo nem erti, miert nem
+                        ajanljuk ugyanezt a helyszint az uj munkanal. */}
+                    <span>
+                      {option.label}
+                      {option.isActive ? "" : " · archivált"}
+                    </span>
                   </label>
                 );
               })}
