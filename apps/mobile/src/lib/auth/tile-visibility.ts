@@ -37,36 +37,36 @@ export type TileCode = keyof typeof TILE_ENTRY;
  * NEM ertekel ujra szabalyt: ha megtenne, ott keletkezne a harmadik forras,
  * epp azutan, hogy a masodikat megszuntettuk.
  *
- * A `null` visszateres azt jelenti, hogy a szerver nem kuldott menut (regebbi
- * kiadas). A hivo ilyenkor a sajat kepesseg-tablaira esik vissza -- atmenetileg,
- * amig a (4) lepes azokat ki nem veszi. Enelkul egy regebbi szerver ellen a
- * kezdokepernyo EGYETLEN csempet sem rajzolna ki, hibauzenet nelkul.
+ * MENU NELKULI VALASZ = URES HALMAZ, NEM VISSZAESES. A (3) lepesben meg volt
+ * egy tartalek ag: ha a szerver nem kuldott menut, a kezdokepernyo a sajat
+ * kepesseg-tablaira esett vissza. Acrobot dontese (2026-09-02): menu nelkuli
+ * szervert nem tamogatunk, tehat az ag kiesik.
+ *
+ * AZ INDOK NEM AZ, HOGY FOLOSLEGES, HANEM AZ, HOGY NEMA. Ha a szerver egyszer
+ * megsem kuld menut, a visszaeses CSENDBEN a regi tablakbol dolgozna, es senki
+ * nem venne eszre. Nelkule a kezdolapon nem lesz csempe -- es a kepernyo ki is
+ * mondja, hogy nincs. Egy tartalek ag, ami sosem fut, nem vedelem, hanem
+ * masodik velemeny.
  *
  * CSAK A MOBIL FELULETU TETELEK szamitanak: a valasz a webeseket is hozza, es
  * azok kihagyasa nem verzio-csuszas, hanem normal mukodes.
  */
 export function servedTileIds(
   user: Pick<AuthenticatedUser, "navigation"> | null,
-): Set<string> | null {
-  if (!user?.navigation) return null;
+): Set<string> {
   return new Set(
-    user.navigation
+    (user?.navigation ?? [])
       .filter((entry) => entry.surfaces.includes("mobile"))
       .map((entry) => entry.id),
   );
 }
 
 /**
- * A SZERVER DONT, ES CSAK HA HALLGAT, AKKOR A SAJAT TABLA.
+ * A SZERVER DONT, ES CSAK O.
  *
- * A `fallback` nem masodik velemeny: pontosan akkor jut szohoz, amikor a
- * szerver egyaltalan nem kuldott menut. Amig kuld, a hivo tablai nem
- * befolyasolnak semmit.
+ * Nincs masodik velemeny: ha a tetel nincs a kiadott menuben, a csempe nem
+ * jelenik meg -- akkor sem, ha a telefon sajat tablai mast mondananak.
  */
-export function tileVisible(
-  servedIds: Set<string> | null,
-  code: TileCode,
-  fallback: boolean,
-): boolean {
-  return servedIds ? servedIds.has(TILE_ENTRY[code]) : fallback;
+export function tileVisible(servedIds: Set<string>, code: TileCode): boolean {
+  return servedIds.has(TILE_ENTRY[code]);
 }

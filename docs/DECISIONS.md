@@ -425,23 +425,67 @@ utána essen ki a régi** – nem lehet olyan kör, amelyben semmi nem méri.
    felület onnan dolgozik, és két háló őrzi, hogy a viselkedés nem változott: a
    webes menü minden szerepre azt adja, amit a korábbi, kódba írt kulcsok adtak,
    a forrás mobil nézete pedig azt, amit a telefon mai táblái.
-2. **HÁTRAVAN.** A szerver kiadja a `GET /auth/me` válaszában, a kérőre már
-   szűrve, és egy állítás követeli meg, hogy a kiadott válasz egyezzen a szerver
-   saját jogosultság-táblájával.
-3. **HÁTRAVAN.** A telefon a kiadott válaszra áll át. Ebben a körben a mobil
-   táblái még megmaradnak, tehát két független forrás áll egyszerre, és
-   mindkettő mérve van.
-4. **HÁTRAVAN.** Csak ezután esik ki a mobil tábla és a hozzá tartozó két
-   ellenőrzés. Egy nyitott kérdés ide tartozik: a telefon szolgáltatás-oldali
-   képességeit egy **függvény** számolja, nem tábla, és ha a közös forrás csak a
-   menüt írja le, az a függvény nem szűnik meg. Ezt a 3. lépésnél kell eldönteni,
-   mérésből.
+2. **KÉSZ.** A szerver kiadja a `GET /auth/me` válaszában, a kérőre már szűrve.
+   Menet közben derült ki, hogy a telefon **friss bejelentkezéskor** nem hívja az
+   `/auth/me`-t, hanem a bejelentkezési válaszból veszi a felhasználót – így a
+   menü csak egy alkalmazás-újraindítás után érkezett volna meg. Mindkét belépési
+   pont ugyanazt adja, és állítás követeli meg, hogy egyezzenek.
+3. **KÉSZ.** A telefon a kiadott válaszra áll át. A mobil táblái megmaradnak,
+   tehát két független forrás áll egyszerre, és mindkettő mérve van.
+4. **KÉSZ, DE NEM ÚGY, AHOGY A TERV MONDTA.** Eredetileg ez állt itt: "csak
+   ezután esik ki a mobil tábla és a hozzá tartozó két ellenőrzés". A 3. lépés
+   után elvégzett mérés szerint **ez nem lehetséges**, két független okból:
 
-**Amíg a 2. lépés nincs kész, a telefon menüje továbbra is kódváltozás** – vagyis
-a fenti ígéret ("elrejteni új kiadás nélkül lehet") a 2. és 3. lépéssel válik
-igazzá, nem ezzel.
+   - A képesség-táblákat a kezdőképernyőn **kívül** 11 képernyő használja. Ebből
+     4 a `*Manage` kulcsokat, amik nem menü-kérdések: a közös forrás azt írja le,
+     mit **lát** valaki, nem azt, mit **csinálhat**. Ha "manage" is bekerülne a
+     kiadott válaszba, a jogosultság-táblát duplikálnánk egy menü-forrásban.
+   - A `*View` kulcsok többsége **alképernyőt** véd (`assets/[id]`, `orders/[id]`,
+     `assets/new`, `assets/scanner` és társaik): a 11-ből csak 4-nek van saját
+     menüpontja. A menü arról szól, mi jelenjen meg a kezdőlapon; ezek sosem
+     jelennek meg ott.
+
+   **A két ellenőrzés ezért marad**, és ez nem engedmény: amíg a táblák élnek,
+   van tárgyuk, és a kivételükkel épp azok a helyek maradnának őrizetlenül, ahol
+   a tábla tovább él.
+
+   **Ami valóban elvégeztetett:** a kezdőképernyő visszaesése kiesett. A telefon
+   csempéi kizárólag a kiadott menüből jönnek, és a telefonon már nincs
+   szerepkör-lista sem. Az indok nem az, hogy a tartalék ág fölösleges, hanem
+   hogy **néma**: ha a kiszolgáló egyszer mégsem küld menüt, csendben a régi
+   táblákból dolgozna, és senki nem venné észre.
+
+   **De nem üres képernyő lett belőle, hanem megnevezett hibaállapot** (acrobot
+   döntése, 2026-09-02). Az érv, amit a két felállított lehetőség nem tartalmazott:
+   egy üres kezdőlap **pontosan úgy néz ki**, mint egy jogosultság nélküli
+   felhasználó kezdőlapja. A helyszínen álló szerelő nem tudná megkülönböztetni a
+   kettőt, és azt hinné, elvették a jogait. A képernyő ezért kimondja, hogy a menü
+   nem érkezett meg, hogy **nem a jogosultságáról van szó**, és ad egy
+   újrapróbálást – az a `retryRestore`, vagyis ugyanaz a lekérés, ami induláskor
+   fut, kijelentkezés nélkül.
+
+   Ez nem terméki döntés a felhasználó felé, ezért nem került a tulajdonos elé: a
+   kérdés nem az, mit lásson valaki normál működésben, hanem hogy egy hibaállapot
+   **nevesítve** legyen-e. A nevesítés mindig jobb.
+
+**Az ígéret ("elrejteni új kiadás nélkül lehet") a 2. és 3. lépéssel vált igazzá.**
+Mindkettő bent van; az itteni státuszok a `main` ágon mért állapotot írják le.
 
 ### Amit ez az ADR NEM dönt el
 
 A beállítás-felület és a felhasználónkénti felülbírálat. Mindkettő külön terv, és
 ez az ADR az előfeltételük, nem a helyettesítőjük.
+
+### MEGNEVEZETT, ELHALASZTOTT MUNKA: a telefon a JOGAIT is a szerverről kapná
+
+Ez az, ami valóban nyugdíjazná a telefon képesség-tábláit – és **ma nem
+csináljuk meg**. Azért áll itt megnevezve, mert egy elhalasztott munka, aminek
+nincs neve, fél év múlva újra fel lesz fedezve; és mert e nélkül a "majd a 4. lépés megoldja" tovább élne olyan várakozásként, amit senki nem mért meg.
+
+**Mit igényelne:** új fogalom a munkamenet válaszában (a kérő jogosultságai, nem
+csak a menüje); mind a **11 képernyő** átírása, amely ma a táblákból dolgozik; és
+a `*Manage` jogok kliens-oldali értelmezésének eldöntése – az ugyanis nem
+láthatóság, hanem művelet, és a kettő nem ugyanaz a kérdés.
+
+**Amit ez megszüntetne:** a kézzel karbantartott tükör a telefonon, és vele a két
+ellenőrzés, aminek ma van tárgya.

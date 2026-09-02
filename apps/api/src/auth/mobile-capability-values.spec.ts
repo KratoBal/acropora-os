@@ -202,45 +202,22 @@ const TILE_ENTRY: Record<string, string> = {
 };
 
 /**
- * A NAV-CSEMPE NEM A KEPESSEG-TABLABAN AL, HANEM A KEPERNYO SAJAT
- * SZEREP-LISTAJABAN (`NAV_TILE_ROLES` az `app/index.tsx`-ben), ezert a
- * betoltott modul nem latja. A fajl SZOVEGEBOL olvassuk ki -- ugyanaz a modszer,
- * amit a szomszed mirror-spec hasznal a szerep-uniora.
+ * A NAV-CSEMPE SZEREPLISTA-TUKRE MEGSZUNT, ES EZERT NINCS RA ALLITAS.
  *
- * ES EPP EZT A CSEMPET A LEGFONTOSABB ORIZNI: ez az EGYETLEN tetel, ami a
- * kozos forrasban szerep-listas agon all, es a forras kommentje allitast tesz
- * arrol, KIK azok. Ha valaki a telefonon atirja a listat, a forras csendben
- * mast mondana.
+ * 2026-09-02-ig itt allt egy allitas, ami a telefon `NAV_TILE_ROLES`
+ * felsorolasat vetette ossze a kozos forras szerep-listas agaval. Az ADR-012
+ * negyedik lepeseben a telefon oldali felsorolas TOROLVE lett: a csempek
+ * kizarolag a kiadott menubol jonnek, tehat nincs ket lista, ami elcsuszhatna.
+ *
+ * NEM POTOLTUK MASSAL, es ez nem hezag: egy tukor-allitasnak KET oldal kell. A
+ * szabaly maga a `packages/types/src/navigation.ts` fajlban all, kotelezo
+ * `retiredBy` mezovel, es azt a sajat csomagja tesztje orzi.
+ *
+ * AMI VISZONT MEGMARADT ES ITT ALL: a csempe-kepzes ket iranyu ellenorzese
+ * (lentebb) -- az a ket oldal ma is letezik.
  */
-const NAV_TILE_SOURCE = "../mobile/src/app/index.tsx";
-
-function navTileRoles(): string[] {
-  const source = readFileSync(NAV_TILE_SOURCE, "utf8");
-  const match = /const NAV_TILE_ROLES[^=]*=\s*\[([\s\S]*?)\];/.exec(source);
-  assert.ok(match, "Nem találtam a NAV-csempe szerep-listáját.");
-  return [...match![1]!.matchAll(/"(\w+)"/g)].map((hit) => hit[1]!).sort();
-}
 
 describe("a mobil csempek es a kozos menu-forras", () => {
-  it("a NAV-csempe szerep-listája egyezik a forrás szerep-listás ágával", () => {
-    const telefonon = navTileRoles();
-
-    // KONTROLL A KERESESRE: ha a minta nem talal semmit, ket ures halmaz
-    // egyezne, es a sor zolden allitana, hogy minden rendben.
-    assert.ok(
-      telefonon.length >= 3,
-      `Csak ${telefonon.length} szerepet találtam a NAV-csempe listájában. Ez a keresés hibája.`,
-    );
-
-    const aForrasSzerint = (Object.keys(ROLE_PERMISSIONS) as UserRole[])
-      .filter((role) =>
-        navigationIdsFor(role, "mobile").includes("nav-integration-mobile"),
-      )
-      .sort();
-
-    assert.deepEqual(aForrasSzerint, telefonon);
-  });
-
   it("ugyanazt a hat kepesseg-alapu csempet adjak minden szerepre", async () => {
     const mirror = await loadMirror();
     const eltero: string[] = [];
