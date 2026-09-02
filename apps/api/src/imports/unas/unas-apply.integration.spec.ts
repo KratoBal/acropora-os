@@ -24,6 +24,13 @@ async function catalogFixture(options: {
   firstName: string;
   firstImage: string;
   duplicateImage?: boolean;
+  /**
+   * A MASODIK TERMEK HIVATKOZASA, ha meg kell valtoztatni.
+   *
+   * Alapertelmezesben ures. A kis-nagybetu esethez ez a mezo kap egy olyan
+   * cikkszamot, ami LETEZIK a katalogusban, csak mas irasmoddal.
+   */
+  secondReference?: string;
 }) {
   const workbook = new ExcelJS.Workbook();
   const products = workbook.addWorksheet("Products");
@@ -54,7 +61,7 @@ async function catalogFixture(options: {
     "cat-apply",
     "",
     "https://example.test/target.jpg",
-    "",
+    options.secondReference ?? "",
   ]);
   const categories = workbook.addWorksheet("Categories");
   categories.addRow(["ID", "Name"]);
@@ -129,6 +136,9 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
     assert.equal(first.categoriesCreated, 1);
     assert.equal(first.variantsCreated, 2);
     assert.equal(first.relationsSynchronized, 1);
+    // A MEGSZOKOTT MENETBEN SEMMI NEM VESZ EL. Ez a szam a masik allitas
+    // parja: enelkul a szamlalo lehetne mindig nulla, es ugyanugy zold lenne.
+    assert.equal(first.unresolvedRelationReferences, 0);
     assert.equal(first.domainEventsCreated, 3);
     assert.equal(await prisma.product.count(), 2);
     assert.equal(await prisma.productVariant.count(), 2);
@@ -232,5 +242,42 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
       ).status,
       "APPROVED",
     );
+  });
+
+  /**
+   * A FEL NEM OLDOTT HIVATKOZAS NYOMOT HAGY.
+   *
+   * A UNAS cikkszammal hivatkozik a kapcsolodo termekekre, es a feloldas
+   * KIS-NAGYBETU ERZEKENY. Eddig a nem-talalat CSENDES volt: a `syncRelations`
+   * egyetlen `continue`-val lepett tovabb, ugyanazzal, amivel az onhivatkozast es
+   * a duplikatumot is kihagyja -- tehat harom kulonbozo ok volt
+   * megkulonboztethetetlen, es kozuluk csak az egyik adatvesztes.
+   *
+   * MERVE (barracuda, 2026-09-02, kartya b609d3e6): 589 hivatkozas veszett el
+   * igy, 73 cikkszambol, es kis-nagybetu fuggetlenul NULLA hivatkozott cikkszam
+   * hianyzik a katalogusbol.
+   *
+   * EZ A TESZT NEM A PAROSITAST MERI. Az tovabbra is kis-nagybetu erzekeny marad
+   * (az megvaltoztatasa adatmodell-kerdes). Amit mer: hogy a vesztes SZAMOLVA
+   * van, tehat a futas utan meg lehet nezni, tortent-e valami.
+   */
+  it("counts a reference it could not resolve, instead of dropping it silently", async () => {
+    const batch = await stageApprove(
+      await catalogFixture({
+        categoryName: "Case category",
+        firstName: "Case test product",
+        firstImage: "https://example.test/case.jpg",
+        // LETEZO cikkszam, MAS irasmoddal: a katalogusban "APPLY-SKU-1" all.
+        secondReference: "apply-sku-1",
+      }),
+      "apply-case.xlsx",
+    );
+
+    const report = await applyService.apply(batch, "integration-owner");
+
+    // A hivatkozas NEM oldodott fel (a parositas valtozatlanul erzekeny)...
+    assert.equal(report.unresolvedRelationReferences, 1);
+    // ...es epp ezert nem is keletkezett belole kapcsolat.
+    assert.equal(report.relationsSynchronized, 1);
   });
 });

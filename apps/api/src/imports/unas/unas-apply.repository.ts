@@ -159,6 +159,7 @@ export class UnasApplyRepository extends Repository {
           externalReferencesSynchronized: 0,
           domainEventsCreated: 0,
           unresolvedBrandAssociations: 0,
+          unresolvedRelationReferences: 0,
         };
         const categoryIds = await this.upsertCategories(
           transaction,
@@ -583,13 +584,24 @@ export class UnasApplyRepository extends Repository {
                 select: { productId: true },
               })
             )?.productId;
-          const key = `${targetProductId}|${relationType}`;
-          if (
-            !targetProductId ||
-            targetProductId === productId ||
-            seen.has(key)
-          )
+          /**
+           * A HAROM KIHAGYASI OK KOZUL CSAK AZ EGYIK HIBA.
+           *
+           * Eddig egyetlen `continue` kezelte mind a harmat, es ettol
+           * megkulonboztethetetlen volt, hogy egy hivatkozas SZANDEKOSAN maradt
+           * ki (onhivatkozas vagy duplikatum), vagy azert, mert a cikkszamot
+           * NEM TALALTUK MEG. Az utobbi adatvesztes, a masik ketto nem.
+           *
+           * A feloldas kis-nagybetu erzekeny, tehat a nem-talalat tipikus oka
+           * egy masik irasmod. Ez a szamlalo NEM javitja a parositast -- csak
+           * kimondja, hogy tortent valami.
+           */
+          if (!targetProductId) {
+            counts.unresolvedRelationReferences += 1;
             continue;
+          }
+          const key = `${targetProductId}|${relationType}`;
+          if (targetProductId === productId || seen.has(key)) continue;
           seen.add(key);
           const existing = await transaction.productRelation.findUnique({
             where: {
