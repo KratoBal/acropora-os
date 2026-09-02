@@ -172,3 +172,19 @@ export interface StockReconciliationReport {
   checkedCount: number;
   mismatches: StockReconciliationMismatch[];
 }
+
+/// A törölt rendeléseket kereső háttérellenőrzés állapota, ahogy a felület
+/// megkérdezheti. Azért van külön végpontja, mert az ellenőrzés üzleti
+/// szabály szerint alapértelmezetten KI van kapcsolva: enélkül a rendelés-
+/// lista csendben azt sugallná, hogy minden ellenőrzés fut, holott ez az
+/// egy nem.
+///
+/// A kikapcsolt állapotban a két szám NULL, nem nulla. A nulla egy érték
+/// volna (nulla ezredmásodpercenként, nulla tételes kötegben), és a felület
+/// ki is írná; a null azt mondja, hogy nincs értelmezve, mert nincs mit
+/// ütemezni.
+export interface UnasOrderDeletionReconciliationStatus {
+  enabled: boolean;
+  intervalMs: number | null;
+  batchSize: number | null;
+}

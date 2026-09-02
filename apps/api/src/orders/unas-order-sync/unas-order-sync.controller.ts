@@ -6,7 +6,10 @@ import {
   Post,
   Query,
 } from "@nestjs/common";
-import { PERMISSIONS } from "@acropora/types";
+import {
+  PERMISSIONS,
+  type UnasOrderDeletionReconciliationStatus,
+} from "@acropora/types";
 
 import { RequirePermissions } from "../../auth/decorators/require-permissions.decorator.js";
 import { UnasAuthService } from "../../imports/unas/unas-auth.service.js";
@@ -70,7 +73,7 @@ export class UnasOrderSyncController {
   // silently implying it always runs.
   @Get("deletion-reconciliation/status")
   @RequirePermissions(PERMISSIONS.ORDERS_VIEW)
-  deletionReconciliationStatus() {
+  deletionReconciliationStatus(): UnasOrderDeletionReconciliationStatus {
     const config = unasOrderDeletionReconciliationConfig();
     return {
       enabled: config.enabled,
