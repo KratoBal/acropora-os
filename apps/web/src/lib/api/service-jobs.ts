@@ -18,6 +18,25 @@ export const serviceJobsApi = {
       signal,
     });
   },
+  /**
+   * UJ HIBAJEGY. A valasz az AZONOSITOT es a SZAMOT hozza, mert a felvitel utan
+   * a felulet a friss jegy lapjara visz -- egy sikeruzenet a listan azt hagyna
+   * a felhasznalora, hogy megkeresse, amit epp letrehozott.
+   */
+  create(
+    token: string,
+    input: {
+      title: string;
+      description?: string | null;
+      customerId?: string | null;
+    },
+  ) {
+    return apiRequest<{ id: string; jobNumber: string }>(base, token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  },
   detail(token: string, id: string, signal?: AbortSignal) {
     return apiRequest<ServiceJobDetail>(jobPath(id), token, { signal });
   },

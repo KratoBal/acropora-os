@@ -44,6 +44,9 @@ export function ServiceJobListPage() {
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_VIEW),
   );
+  const canManage = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.SERVICE_MANAGE),
+  );
   const token = session?.token ?? "";
 
   const load = useCallback(
@@ -88,6 +91,13 @@ export function ServiceJobListPage() {
         eyebrow="Szerviz"
         title="Hibajegyek"
         description="A hibajegy a lánc első eleme: mögötte állnak a munkalapok. Egy jegyhez több lap tartozhat, és a lap keletkezhet előbb is, mint a jegy."
+        actions={
+          canManage ? (
+            <Link href="/szerviz/hibajegyek/uj">
+              <Button>Új hibajegy</Button>
+            </Link>
+          ) : undefined
+        }
       />
       {error ? (
         <Alert
