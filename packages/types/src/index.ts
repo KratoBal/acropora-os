@@ -51,9 +51,11 @@ export {
   navigationEntry,
   navigationIdsFor,
   NAVIGATION_ENTRIES,
+  visibleNavigationFor,
 } from "./navigation.js";
 export type {
   NavigationEntry,
+  NavigationEntryView,
   NavigationSurface,
   NavigationVisibility,
 } from "./navigation.js";
@@ -88,6 +90,7 @@ export type {
 } from "./brand-management.js";
 export type {
   AuthenticatedUser,
+  CurrentUserResponse,
   MachineRole,
   PartnerMembership,
   Permission,

@@ -1,5 +1,10 @@
 import { Body, Controller, Get, Post, Req, Res } from "@nestjs/common";
-import type { AuthenticatedUser, Session } from "@acropora/types";
+import { visibleNavigationFor } from "@acropora/types";
+import type {
+  AuthenticatedUser,
+  CurrentUserResponse,
+  Session,
+} from "@acropora/types";
 
 import { AuthService } from "./auth.service.js";
 import type {
@@ -21,9 +26,27 @@ import { Public } from "./decorators/public.decorator.js";
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  /**
+   * A MUNKAMENET ES A MENU EGY VALASZBAN.
+   *
+   * MIERT ITT, ES NEM KULON VEGPONTON: mindket kliens MAR HIVJA ezt, pontosan
+   * akkor, amikor a keretet felepiti (a mobil indulaskor, a web a munkamenet
+   * betoltesekor). Egy valaszban nincs reszleges allapot. Egy testverevegpont
+   * ket uj allapotot hozna letre, amelyek ma nem leteznek: mit rajzol a keret,
+   * amig az a hivas tolt, es mit, ha az hibazik.
+   *
+   * A MEZO HOZZAADAS, NEM ALAK-VALTAS: a valasz tovabbra is tartalmazza a
+   * felhasznalo osszes eddigi mezojet, tehat a mai kliensek valtozatlanul
+   * mukodnek. A telefon a (3) lepesben all at ra.
+   *
+   * A SZURES A KOZOS FORRASBAN TORTENIK (`visibleNavigationFor`), nem itt. Ha
+   * ez a metodus ujra eldontene, ki mit lat, ket forras keletkezne -- ugyanaz a
+   * hiba, amit a webes es a mobil tabla kettossege jelentett, csak egy szinttel
+   * feljebb.
+   */
   @Get("me")
-  getCurrentUser(@CurrentUser() user: AuthenticatedUser): AuthenticatedUser {
-    return user;
+  getCurrentUser(@CurrentUser() user: AuthenticatedUser): CurrentUserResponse {
+    return { ...user, navigation: visibleNavigationFor(user.role) };
   }
 
   @Public()

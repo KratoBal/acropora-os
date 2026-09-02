@@ -279,3 +279,32 @@ export function navigationIdsFor(
       isNavigationEntryVisible(entry.id, role),
   ).map((entry) => entry.id);
 }
+
+/**
+ * A KIADOTT ALAK: EGY TETEL UGY, AHOGY A SZERVER ATADJA A KLIENSNEK.
+ *
+ * MIERT AZ AZONOSITO ES A FELULET, ES MIERT NEM CSAK EGY AZONOSITO-LISTA: egy
+ * puszta lista mellett a kliens nem tudja megkulonboztetni azt, hogy egy
+ * azonositot NEM ISMER (regebbi telepites, ujabb szerver), attol, hogy az a
+ * MASIK feluletre valo. A ket eset ugyanugy "hagyd ki" -- de az elso egy
+ * verzio-csuszas, ami elobb-utobb kiadast igenyel, a masodik pedig a normal
+ * mukodes. Egy naplosorban ez a kulonbseg minden.
+ */
+export interface NavigationEntryView {
+  readonly id: string;
+  readonly surfaces: readonly NavigationSurface[];
+}
+
+/**
+ * AMIT EGY SZEREP LATHAT, MINDKET FELULETEN, A KIADASHOZ.
+ *
+ * A SZURES ITT TORTENIK, EGYSZER. Ha a szerver a valasz osszeallitasakor
+ * ujra eldontene, ki mit lat, ket forras keletkezne megint -- csak egy
+ * szinttel feljebb, es a ket oldal elterese eppolyan nema lenne, mint amilyen
+ * a webes es a mobil tabla kozott volt.
+ */
+export function visibleNavigationFor(role: UserRole): NavigationEntryView[] {
+  return NAVIGATION_ENTRIES.filter((entry) =>
+    isNavigationEntryVisible(entry.id, role),
+  ).map((entry) => ({ id: entry.id, surfaces: entry.surfaces }));
+}

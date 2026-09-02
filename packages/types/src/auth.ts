@@ -1,3 +1,9 @@
+// TIPUS-IMPORT, TEHAT NINCS FUTASIDEJU KOR: a `navigation.ts` innen importal
+// (`hasPermission`, `PERMISSIONS`), ez pedig onnan CSAK tipust. A `import type`
+// a forditas soran eltunik, tehat a ket fajl kozott nem keletkezik korkoros
+// modul-fuggoseg -- egy sima `import` mar keletkeztetne.
+import type { NavigationEntryView } from "./navigation.js";
+
 /**
  * A szerepek listája, KÉZZEL karbantartva, és a Prisma `UserRole` enumjának a
  * párja.
@@ -354,6 +360,19 @@ export function partnerMembership(
   if (customerId !== null) return { kind: "customer", customerId };
   if (supplierId !== null) return { kind: "supplier", supplierId };
   return { kind: "internal" };
+}
+
+/**
+ * A `GET /auth/me` VALASZA: a felhasznalo, PLUSZ a menuje.
+ *
+ * KULON TIPUS, ES NEM AZ `AuthenticatedUser` BOVITESE. A menu nem a
+ * felhasznalo tulajdonsaga, hanem azt irja le, mit LAT -- es az
+ * `AuthenticatedUser` sok helyen all (munkamenet, kereshez csatolt kero, teszt-
+ * fixturak). Ha a mezo oda kerulne, minden ilyen helyen ki kellene tolteni,
+ * holott a legtobbnek semmi koze a menuhoz.
+ */
+export interface CurrentUserResponse extends AuthenticatedUser {
+  navigation: NavigationEntryView[];
 }
 
 export interface Session {
