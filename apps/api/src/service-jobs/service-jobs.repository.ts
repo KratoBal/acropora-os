@@ -26,13 +26,24 @@ export class ServiceJobsRepository {
     title: string;
     description: string | null;
     customerId: string | null;
+    actorUserId: string;
   }) {
+    // A KELETKEZÉS IS ESEMÉNY, és a naplóba is bekerül - egy tranzakcióban.
+    // Külön írva a kettő szétcsúszhatna: egy jegy, aminek nincs első sora a
+    // naplóban, úgy néz ki, mintha a semmiből lépett volna tovább.
     return this.database.serviceJob.create({
       data: {
         jobNumber: input.jobNumber,
         title: input.title,
         description: input.description,
         customerId: input.customerId,
+        events: {
+          create: {
+            // `fromStatus` nincs: a keletkezésnek nincs előzménye.
+            toStatus: "NEW",
+            actorUserId: input.actorUserId,
+          },
+        },
       },
       select: { id: true, jobNumber: true },
     });
@@ -78,5 +89,49 @@ export class ServiceJobsRepository {
       select: { jobNumber: true },
     });
     return row?.jobNumber ?? null;
+  }
+
+  /**
+   * A LÉPÉS ÉS A NAPLÓSOR EGY TRANZAKCIÓBAN.
+   *
+   * Ha külön mennének, egy megszakadt kérés után a jegy már az új állapotban
+   * állna, a napló pedig hallgatna róla - és a részletlap azt mutatná, hogy a
+   * jegy magától mozdult.
+   */
+  async move(input: {
+    id: string;
+    from: ServiceJobStatus;
+    to: ServiceJobStatus;
+    note: string | null;
+    actorUserId: string;
+  }) {
+    return this.database.$transaction(async (transaction) => {
+      // A `from` FELTÉTEL A WHERE-BEN, nem csak az olvasásnál: két egyszerre
+      // lépő ember közül a második így nem írja felül az elsőt csendben.
+      const moved = await transaction.serviceJob.updateMany({
+        where: { id: input.id, status: input.from },
+        data: { status: input.to },
+      });
+      if (moved.count !== 1) return { ok: false as const };
+
+      await transaction.serviceJobEvent.create({
+        data: {
+          serviceJobId: input.id,
+          fromStatus: input.from,
+          toStatus: input.to,
+          note: input.note,
+          actorUserId: input.actorUserId,
+        },
+      });
+      return { ok: true as const };
+    });
+  }
+
+  async statusOf(id: string): Promise<ServiceJobStatus | null> {
+    const row = await this.database.serviceJob.findUnique({
+      where: { id },
+      select: { status: true },
+    });
+    return row?.status ?? null;
   }
 }

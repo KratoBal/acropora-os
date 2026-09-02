@@ -521,6 +521,8 @@ model User {
   /// Amiket ez a felhasználó adott át a szolgáltatónak, a helyszíni munka
   /// befejeztével.
   handedOverWorksheets       Worksheet[]                   @relation("WorksheetHandedOverBy")
+  /// Amit ez a felhasználó léptetett egy hibajegyen.
+  serviceJobEvents           ServiceJobEvent[]             @relation("ServiceJobEventActor")
   assignedWorksheets         WorksheetAssignee[]           @relation("WorksheetAssignee")
   worksheetAssignmentsMade   WorksheetAssignee[]           @relation("WorksheetAssignedBy")
   createdWorksheetVersions   WorksheetVersion[]            @relation("WorksheetVersionCreatedBy")
@@ -2232,6 +2234,8 @@ model ServiceJob {
   customer Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
   aquarium Aquarium?         @relation(fields: [aquariumId], references: [id], onDelete: SetNull)
   assets   ServiceJobAsset[]
+  /// Ami a jeggyel történt, időrendben. A részletlap ebből építi a naplót.
+  events   ServiceJobEvent[]
   /// A hibajegy mögött álló munkalapok. Több is lehet, és van, amelyik
   /// hamarabb keletkezett, mint maga a hibajegy.
   worksheets Worksheet[]
@@ -2399,6 +2403,45 @@ model AssetEvent {
 
   @@index([assetId, occurredAt])
   @@index([actorUserId, occurredAt])
+}
+
+/// Ami a hibajeggyel TÖRTÉNT, időrendben.
+///
+/// A részletlap egy naplót mutat, legújabb felül (Balázs döntése, 2026-09-02),
+/// és abban HÁROM forrás keveredik: a csatolt munkalapok, az érintett eszközök
+/// és az állapotváltások. Az első kettőt a saját kapcsolótábláik hordozzák -
+/// EZ a harmadik.
+///
+/// MIÉRT KÜLÖN TÁBLA, ÉS NEM EGY MEZŐ A JEGYEN. Egy `statusChangedAt` mező azt
+/// mondaná meg, mikor változott UTOLJÁRA - a napló viszont azt kérdezi, mi
+/// történt VÉGIG. A kettő nem ugyanaz, és egy mezőből az előzmény soha nem
+/// állítható vissza.
+///
+/// A `fromStatus` NULLÁZHATÓ: a jegy létrejötte is esemény, és annak nincs
+/// előzménye. Egy kitalált `NEW -> NEW` sor azt állítaná, hogy volt egy lépés,
+/// ami nem történt meg.
+///
+/// AZ AKTOR NULLÁZHATÓ, ÉS EZ SEM KÉNYELEM: egy törölt felhasználó nem viheti
+/// magával a naplót. Ami történt, megtörtént - a sor akkor is igaz, ha már nem
+/// tudjuk, ki csinálta.
+model ServiceJobEvent {
+  id           String            @id @default(cuid())
+  serviceJobId String
+  /// Ahonnan lépett; `null` a jegy létrejöttekor.
+  fromStatus   ServiceJobStatus?
+  toStatus     ServiceJobStatus
+  /// Szabad szöveg, amit a lépő hozzátehet (miért vár alkatrészre, mit
+  /// beszéltek meg az ügyféllel). A napló ebből lesz olvasható emberi
+  /// szemmel is.
+  note         String?
+  actorUserId  String?
+  createdAt    DateTime          @default(now())
+
+  serviceJob ServiceJob @relation(fields: [serviceJobId], references: [id], onDelete: Cascade)
+  actor      User?      @relation("ServiceJobEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  /// A napló mindig egy jegyre, időrendben visszafelé olvasva.
+  @@index([serviceJobId, createdAt])
 }
 
 /// Egy szervizmunka több eszközt érinthet, és ugyanazon eszköznek több

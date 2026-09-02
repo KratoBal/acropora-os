@@ -33,3 +33,33 @@ export class ServiceJobListQueryDto {
   @IsOptional()
   scope?: (typeof SERVICE_JOB_LIST_SCOPES)[number];
 }
+
+/**
+ * Egy lépés a hibajegyen.
+ *
+ * A `note` elhagyható, de a felület kérheti: hogy egy jegy MIÉRT vár
+ * alkatrészre, azt csak az tudja, aki odalépteti - és két hét múlva már senki.
+ */
+export class MoveServiceJobDto {
+  @IsIn([
+    "NEW",
+    "TRIAGED",
+    "SCHEDULED",
+    "IN_PROGRESS",
+    "WAITING_FOR_PARTS",
+    "WAITING_FOR_CUSTOMER",
+    "COMPLETED",
+    "CANCELLED",
+  ])
+  to!:
+    | "NEW"
+    | "TRIAGED"
+    | "SCHEDULED"
+    | "IN_PROGRESS"
+    | "WAITING_FOR_PARTS"
+    | "WAITING_FOR_CUSTOMER"
+    | "COMPLETED"
+    | "CANCELLED";
+
+  @IsString() @MaxLength(2000) @IsOptional() note?: string | null;
+}
