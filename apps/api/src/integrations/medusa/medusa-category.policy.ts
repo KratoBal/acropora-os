@@ -120,6 +120,24 @@ export function decideMedusaCategories(
  * A HIANY SORA. Megnevezi, HANY kategoria hianyzik es MELYIKEK, mert a
  * lekepezes potlasa pontosan azokon az azonositokon mulik -- egy darabszammal
  * senki nem tud mit kezdeni.
+ *
+ * ES A ZARO MONDAT KET KULONBOZO OKOT VALASZT SZET, AMIK UGYANEZT A KIMENETET
+ * ADJAK (murena merese, 2026-09-02):
+ *
+ *   a betoltes MEG NEM FUTOTT LE             -> minden kategoria "nincs lekepezve"
+ *   a betoltes lefutott, ROSSZ azonositoval  -> minden kategoria "nincs lekepezve"
+ *
+ * A masodik nem elmeleti: a kategoriafa forras-fajlja az UNAS azonositoit
+ * hordozza, nem a mieinket, es ha azok kerulnenek a lekepezes-sor `entityId`
+ * mezojebe, MINDEN keresesunk uresen ternee vissza. Aki a kimenetet a futas
+ * UTAN olvassa, ugyanazt a mondatot latja, mint aki elotte -- es a kezenfekvo
+ * olvasat az lesz, hogy "meg nem futott".
+ *
+ * AMI SZETVALASZTJA, EGY LEKERDEZES: hany MEDUSA/Category sor all a tablaban.
+ * Ezt a fuggveny NEM kerdezi le, es szandekosan nem: attol adatbazis-fuggo
+ * lenne, es epp azert kerult ide, hogy ne legyen az. Csak MEGMONDJA, mit kell
+ * megnezni -- ugyanaz a minta, mint a keszlet-parancs hiany-soranal, ami a
+ * sajat hatokoret irja oda.
  */
 export function describeMissingCategoryMapping(
   productId: string,
@@ -128,6 +146,8 @@ export function describeMissingCategoryMapping(
   return (
     `${productId}: ${missing.length} kategória még nincs leképezve a Medusára ` +
     `(${missing.join(", ")}), ezért EGYIKET SEM küldjük ki: ` +
-    `a részleges lista letörölhetné a többit.`
+    `a részleges lista letörölhetné a többit. Ha MINDEN terméknél ezt látod, ` +
+    `a leképezés-tábla vagy üres (a betöltés nem futott), vagy rossz ` +
+    `azonosítókkal telt meg - a kettőt a MEDUSA/Category sorok száma dönti el.`
   );
 }

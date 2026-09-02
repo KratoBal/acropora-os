@@ -125,6 +125,26 @@ describe("a kategóriák leképezése a vetítésben", () => {
     assert.match(sor, /cat_hal, cat_rak/);
     assert.match(sor, /EGYIKET SEM/);
   });
+
+  /**
+   * ES MEGMONDJA, MIT NEZZEN MEG AZ, AKI MINDEN TERMEKNEL EZT LATJA.
+   *
+   * Ket kulonbozo ok adja ugyanezt a kimenetet: a betoltes meg nem futott, vagy
+   * lefutott ROSSZ azonositokkal (a forras-fajl az UNAS azonositoit hordozza).
+   * A sor maga nem tudja eldonteni -- azt egy lekerdezes dontii el --, de
+   * megnevezi, MELYIK lekerdezes.
+   *
+   * A fuggveny ettol tiszta marad: nem kerdez le semmit, csak megmondja, mit
+   * kell megnezni.
+   */
+  it("names the query that tells the two causes apart", () => {
+    const sor = describeMissingCategoryMapping("prod_1", ["cat_hal"]);
+
+    assert.match(sor, /MINDEN terméknél/);
+    assert.match(sor, /a betöltés nem futott/);
+    assert.match(sor, /rossz\s+azonosítókkal/);
+    assert.match(sor, /MEDUSA\/Category sorok száma/);
+  });
 });
 
 /**
