@@ -8,6 +8,8 @@ const api = vi.hoisted(() => ({
   waitingOnMe: vi.fn(),
   waitingForImage: vi.fn(),
   create: vi.fn(),
+  createIdea: vi.fn(),
+  ideas: vi.fn(),
 }));
 
 vi.mock("@/lib/api/content", () => ({ contentApi: api }));
@@ -43,6 +45,8 @@ beforeEach(() => {
   api.waitingOnMe.mockReset().mockResolvedValue({ items: [], notCovered: [] });
   api.waitingForImage.mockReset().mockResolvedValue([]);
   api.create.mockReset().mockResolvedValue({ id: "uj" });
+  api.createIdea.mockReset().mockResolvedValue({ id: "otlet" });
+  api.ideas.mockReset().mockResolvedValue([]);
 });
 
 describe("putting a piece in, as it happens in production", () => {
@@ -62,6 +66,26 @@ describe("putting a piece in, as it happens in production", () => {
 
     const gomb = await screen.findByRole("button", {
       name: "Új tartalom felvétele",
+    });
+    fireEvent.click(gomb);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Cím")).toBeTruthy();
+    });
+  });
+
+  /**
+   * UGYANAZ A KERDES A MASODIK GOMBRA, ES KULON ALLITASKENT.
+   *
+   * Az otlet-urlap ugyanazon a felteteles agon all, tehat ha a token uressege
+   * elrejti az egyiket, elrejti a masikat is. Egy allitas a ket gombra egyben
+   * nem mondana meg, melyik torott -- ezert ketto.
+   */
+  it("shows the idea fields too, with no client token", async () => {
+    render(<ContentListPage />);
+
+    const gomb = await screen.findByRole("button", {
+      name: "Ötlet feljegyzése",
     });
     fireEvent.click(gomb);
 

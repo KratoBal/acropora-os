@@ -124,6 +124,25 @@ export const contentApi = {
    * helyen. Ha a kliens valaszthatna, a jovahagyasi kapu az elso kenyelmes
    * pillanatban megkerulheto lenne egy "mar kesz" allapottal.
    */
+  /**
+   * AZ OTLETEK ELOHELYE. Kulon lista, mert egy otlet SENKIRE nem var, tehat a
+   * negy szerep-nezet egyikeben sincs helye.
+   */
+  ideas(token: string, signal?: AbortSignal) {
+    return apiRequest<ContentListResponse>("/content/ideas", token, { signal });
+  },
+
+  /**
+   * EGY OTLET FELJEGYZESE. Sajat vegpont, nem a `create` egy parametere: az
+   * allapotot a kliens nem valaszthatja meg.
+   */
+  createIdea(token: string, input: { title: string; channel: ContentChannel }) {
+    return apiRequest<{ id: string }>("/content/ideas", token, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+
   create(
     token: string,
     input: {

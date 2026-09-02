@@ -123,3 +123,22 @@ export class ContentCreateDto {
   @IsISO8601()
   plannedFor?: string;
 }
+
+/**
+ * EGY OTLET BEMENETE, ES SZANDEKOSAN KEVESEBB, MINT EGY VAZLATE.
+ *
+ * Nincs torzs, nincs kep-jelolo, nincs tervezett nap. Aki egy temat jegyez fel,
+ * meg nem tudja ezeket -- es egy urlap, ami keri oket, arra tanit, hogy az
+ * otlet rogzitese nagyobb munka, mint amekkora. A tobbit a kidolgozas lepese
+ * utan lehet megadni.
+ *
+ * A cim es a csatorna azert marad, mert a Prisma modellben kotelezoek.
+ */
+export class ContentIdeaDto {
+  @IsString()
+  @MinLength(1)
+  title!: string;
+
+  @IsIn(CONTENT_CHANNELS)
+  channel!: (typeof CONTENT_CHANNELS)[number];
+}

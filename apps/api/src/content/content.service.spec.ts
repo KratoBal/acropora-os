@@ -629,3 +629,53 @@ describe("putting a new piece into the queue", () => {
     assert.equal(data.plannedFor.toISOString(), "2026-09-10T08:00:00.000Z");
   });
 });
+
+describe("an idea, and where it can be found", () => {
+  it("is created in IDEA, which is a different thing from a draft", async () => {
+    const { service, calls } = serviceWith();
+
+    await service.createIdea({
+      title: "Korall-sorozat",
+      channel: "ARTICLE",
+      authorId: "u1",
+    });
+
+    const data = calls[0] as { state: string };
+    assert.equal(data.state, "IDEA");
+  });
+
+  it("keeps the two entry points apart, so neither can be reached by a parameter", async () => {
+    // A KULONBSEG A LEPES NEVEBEN VAN, nem egy mezoben. Ha egy `state`
+    // parameter dontene, a jovahagyasi kapu egy kenyelmes ertekkel
+    // megkerulheto lenne.
+    const { service, calls } = serviceWith();
+
+    await service.create({
+      title: "Vazlat",
+      channel: "ARTICLE",
+      authorId: "u1",
+    });
+    await service.createIdea({
+      title: "Otlet",
+      channel: "ARTICLE",
+      authorId: "u1",
+    });
+
+    assert.equal((calls[0] as { state: string }).state, "DRAFTING");
+    assert.equal((calls[1] as { state: string }).state, "IDEA");
+  });
+
+  it("lists exactly the ideas, and nothing else", async () => {
+    const seen: unknown[] = [];
+    const { service } = serviceWith({
+      list: (async (where: unknown) => {
+        seen.push(where);
+        return [];
+      }) as unknown as ContentRepository["list"],
+    });
+
+    await service.ideas();
+
+    assert.deepEqual(seen[0], { state: "IDEA" });
+  });
+});
