@@ -1,4 +1,16 @@
 export { personDisplayName, personLegalName } from "./person-name.js";
+export { serviceJobTimeline } from "./service-job-management.js";
+export type {
+  ServiceJobAssetLink,
+  ServiceJobDetail,
+  ServiceJobListItem,
+  ServiceJobListResponse,
+  ServiceJobPartnerStatus,
+  ServiceJobStatusEvent,
+  ServiceJobStatusValue,
+  ServiceJobTimelineEntry,
+  ServiceJobWorksheetLink,
+} from "./service-job-management.js";
 export type { NamedPerson } from "./person-name.js";
 
 export type HealthStatus = "ok" | "unavailable";

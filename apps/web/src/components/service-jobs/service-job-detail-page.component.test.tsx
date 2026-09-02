@@ -1,0 +1,170 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ServiceJobDetail, Session } from "@acropora/types";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { ServiceJobDetailPage } from "./service-job-detail-page";
+
+const api = vi.hoisted(() => ({ detail: vi.fn(), move: vi.fn() }));
+const auth = vi.hoisted(() => ({ session: null as Session | null }));
+
+vi.mock("@/components/auth/auth-provider", () => ({
+  useAuth: () => ({ session: auth.session }),
+}));
+vi.mock("@/lib/api/service-jobs", () => ({ serviceJobsApi: api }));
+
+function sessionAs(role: Session["user"]["role"]): Session {
+  return {
+    id: "session-1",
+    token: "token-1",
+    expiresAt: "2099-01-01T00:00:00.000Z",
+    user: {
+      id: "user-sanyi",
+      email: "sanyi@acropora.local",
+      displayName: "Szerelő Sándor",
+      nickname: "Sanyi",
+      role,
+      customerId: null,
+      supplierId: null,
+    },
+  };
+}
+
+function detail(overrides: Partial<ServiceJobDetail> = {}): ServiceJobDetail {
+  return {
+    id: "job-1",
+    jobNumber: "HJ-2026-001",
+    title: "Cápasuli szivattyú leállt",
+    description: "A hármas medence szivattyúja nem indul.",
+    status: "TRIAGED",
+    partnerStatus: "IN_PROGRESS",
+    partnerStatusLabel: "Feldolgozás alatt",
+    customerName: "Fővárosi Állat- És Növénykert",
+    createdAt: "2026-09-01T08:00:00.000Z",
+    scheduledAt: null,
+    startedAt: null,
+    completedAt: null,
+    allowedSteps: ["SCHEDULED", "CANCELLED"],
+    /**
+     * A SORRENDET A SZERVER ADJA, ÉS EZ A MINTA SZÁNDÉKOSAN NEM DÁTUM SZERINT
+     * ÁLL: ha a komponens újrarendezné, ez a sorrend megváltozna a képernyőn.
+     * Így az állítás azt méri, hogy a kliens RAJZOL, nem dönt.
+     */
+    timeline: [
+      {
+        kind: "status",
+        at: "2026-09-03T08:00:00.000Z",
+        sortKey: "event-2",
+        event: {
+          id: "event-2",
+          fromStatus: "NEW",
+          toStatus: "TRIAGED",
+          note: "Megnéztük, alkatrész kell hozzá.",
+          actorName: "Szerelő Sándor",
+          createdAt: "2026-09-03T08:00:00.000Z",
+        },
+      },
+      {
+        kind: "worksheet",
+        at: "2026-09-02T08:00:00.000Z",
+        sortKey: "worksheet-1",
+        worksheet: {
+          id: "worksheet-1",
+          number: "BIO-2026-004",
+          createdAt: "2026-09-02T08:00:00.000Z",
+          handedOverAt: null,
+        },
+      },
+      {
+        kind: "status",
+        at: "2026-09-01T08:00:00.000Z",
+        sortKey: "event-1",
+        event: {
+          id: "event-1",
+          fromStatus: null,
+          toStatus: "NEW",
+          note: null,
+          actorName: "Szerelő Sándor",
+          createdAt: "2026-09-01T08:00:00.000Z",
+        },
+      },
+    ],
+    ...overrides,
+  };
+}
+
+describe("ServiceJobDetailPage", () => {
+  beforeEach(() => {
+    auth.session = sessionAs("SERVICE");
+    api.detail.mockReset().mockResolvedValue(detail());
+    api.move.mockReset().mockResolvedValue({ ok: true });
+  });
+
+  /**
+   * A SORREND A SZERVERÉ. A minta szándékosan a munkalapot teszi a két
+   * állapotváltás közé; ha a komponens bármilyen saját rendezést végezne, ez a
+   * sorrend megváltozna. Az összefésülés szabálya a szerveren áll, mert a
+   * mobil nem éri el a közös csomagot, és ott újraíródna.
+   */
+  it("a szerver sorrendjét rajzolja ki, nem rendezi újra", async () => {
+    render(<ServiceJobDetailPage jobId="job-1" />);
+
+    // A NAPLÓ LISTÁJÁN BELÜL kérdezünk, nem az oldal összes listaelemén: a
+    // munkalapok is listában állnak, és egy index-alapú állítás csendben
+    // arra csúszna át.
+    const log = await screen.findByRole("list", { name: "A hibajegy naplója" });
+    const text = Array.from(log.querySelectorAll("li")).map(
+      (row) => row.textContent ?? "",
+    );
+    expect(text[0]).toContain("Új → Felmérve");
+    expect(text[1]).toContain("Munkalap a jegy alatt: BIO-2026-004");
+    expect(text[2]).toContain("A hibajegy létrejött");
+  });
+
+  /**
+   * A SZŰKÍTÉST MÉRŐ ÁLLÍTÁS, NÉV SZERINT.
+   *
+   * A `VIEWER` szerepnek van `service.view` joga, de nincs `service.manage`:
+   * olvashatja a jegyet, lépnie viszont nem szabad. Enélkül az állítás-készlet
+   * csak a megengedett esetet nézné, és akkor is zöld maradna, ha a gombsor
+   * mindenkinek megjelenne.
+   */
+  it("olvasó jognál nem jelenik meg a lépés-gombsor", async () => {
+    auth.session = sessionAs("VIEWER");
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    await screen.findByText("A hibajegy létrejött (Új).");
+
+    expect(screen.queryByText("Következő lépés")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Ütemezve" })).toBeNull();
+  });
+
+  /**
+   * A LÉPÉS UTÁN ÚJRATÖLTÜNK. A `move` csak nyugtát ad; ha abból raknánk össze
+   * a képernyőt, a napló új sora hiányozna róla.
+   */
+  it("lépés után újratölti a jegyet, nem a nyugtából épít", async () => {
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    await screen.findByText("A hibajegy létrejött (Új).");
+    expect(api.detail).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Ütemezve" }));
+
+    await waitFor(() => expect(api.move).toHaveBeenCalledTimes(1));
+    expect(api.move.mock.calls[0]?.[2]).toEqual({ to: "SCHEDULED" });
+    await waitFor(() => expect(api.detail).toHaveBeenCalledTimes(2));
+  });
+
+  /**
+   * EGY ELTŰNT GOMBSOR ÚGY NÉZ KI, MINT EGY BETÖLTÉSI HIBA. A lezárt jegyen
+   * ezért nem üres a doboz, hanem meg van mondva, miért nincs több lépés.
+   */
+  it("lezárt jegyen megmondja, hogy nincs több lépés", async () => {
+    api.detail.mockResolvedValue(
+      detail({ status: "CANCELLED", allowedSteps: [] }),
+    );
+    render(<ServiceJobDetailPage jobId="job-1" />);
+
+    expect(
+      await screen.findByText("Ez a hibajegy lezárult, nincs több lépése."),
+    ).toBeTruthy();
+  });
+});

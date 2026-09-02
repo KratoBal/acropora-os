@@ -127,6 +127,66 @@ export class ServiceJobsRepository {
     });
   }
 
+  /**
+   * A RÉSZLETLAP HÁROM FORRÁSA, EGY LEKÉRDEZÉSBEN.
+   *
+   * Külön hívásokban N+1 lenne, és ami rosszabb: a három lista MÁS
+   * pillanatképet mutatna. Egy napló, amiben a lépés már benne van, de a
+   * hozzá tartozó munkalap még nem, olvasás közben keletkezett hazugság.
+   *
+   * A `null` visszatérés a NINCS ILYEN JEGY esetet jelenti, nem az üreset -
+   * a hívó ebből tud 404-et mondani. Egy üres részletlap ugyanúgy nézne ki,
+   * mint egy létező, még üres jegy.
+   */
+  async detail(id: string) {
+    return this.database.serviceJob.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        jobNumber: true,
+        title: true,
+        description: true,
+        status: true,
+        createdAt: true,
+        scheduledAt: true,
+        startedAt: true,
+        completedAt: true,
+        customer: { select: { displayName: true } },
+        events: {
+          // A napló legújabb felül; a végleges sorrendet a közös
+          // `serviceJobTimeline` adja, de a lekérdezés se adjon vaktában.
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          select: {
+            id: true,
+            fromStatus: true,
+            toStatus: true,
+            note: true,
+            createdAt: true,
+            actor: { select: { displayName: true } },
+          },
+        },
+        worksheets: {
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          select: {
+            id: true,
+            number: true,
+            createdAt: true,
+            handedOverAt: true,
+          },
+        },
+        assets: {
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          select: {
+            id: true,
+            assetId: true,
+            createdAt: true,
+            asset: { select: { assetNumber: true, name: true } },
+          },
+        },
+      },
+    });
+  }
+
   async statusOf(id: string): Promise<ServiceJobStatus | null> {
     const row = await this.database.serviceJob.findUnique({
       where: { id },

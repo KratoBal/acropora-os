@@ -78,6 +78,14 @@ export const primaryNavigation: AppNavigationItem[] = [
 
 export const serviceNavigation: AppNavigationItem[] = [
   {
+    // A LANC SORRENDJE, nem a felvetel sorrendje: hibajegy, munkalap,
+    // teljesitesi igazolas, szamla (Balazs, 2026-09-02 08:08).
+    href: "/szerviz/hibajegyek",
+    label: "Hibajegyek",
+    icon: "clipboard",
+    entryId: "service-jobs",
+  },
+  {
     href: "/szerviz/munkalapok",
     label: "Munkalapok",
     icon: "clipboard",

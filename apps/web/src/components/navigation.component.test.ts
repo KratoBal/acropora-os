@@ -250,8 +250,18 @@ describe("navigation", () => {
   });
 
   /**
-   * A SZERVIZES MENUJE, BALAZS LISTAJA SZERINT (2026-09-02 08:39). A lista
-   * TELJES, nem minimum: "ezen kivul nem kell masnak latszania".
+   * A SZERVIZES MENUJE, BALAZS LISTAJA SZERINT. KET MONDAT, IDORENDBEN, es a
+   * masodik BOVITI az elsot, nem cafolja:
+   *
+   *   2026-09-02 08:39, Discord: a lista TELJES, nem minimum -- "ezen kivul
+   *   nem kell masnak latszania". A Hibajegyek akkor nem szerepelt rajta.
+   *
+   *   2026-09-02 12:33, Discord (Eldontendo dolgok szal): "igen legyen a
+   *   hibajegy is elerheto nekik". A tobbi tetel valtozatlan.
+   *
+   * A REGI IDEZET AZERT MARAD ITT, mert enelkul a ket allitas kozul csak az
+   * egyikrol latszana, honnan jott -- es a datum mondja meg, hogy nem mondanak
+   * ellent egymasnak: az egyik 08:39-kor volt teljes, a masik 12:33-kor bovitette.
    *
    * AMIERT A TELJES HALMAZ ALL ITT, ES NEM AZ, HOGY "a hat tetel eltunt":
    * egy hianyra iranyulo allitas akkor is zold, ha kozben MAS jelent meg. Egy
@@ -270,6 +280,8 @@ describe("navigation", () => {
       [
         "Dashboard",
         "Feladataim",
+        // A 12:33-as bovites, es a lanc elso eleme.
+        "Hibajegyek",
         "Munkalapok",
         "Eszköznyilvántartás",
         "Partnerek",
@@ -335,10 +347,21 @@ describe("navigation", () => {
    *
    * MIT NEM BIZONYIT: azt, hogy a mai viselkedes HELYES. Csak azt, hogy a
    * bevezetes nem valtoztatta meg. Ez az (1) lepes teljes igerete.
+   *
+   * A BEVEZETES UTAN FELVETT SOROK KULON JELOLVE ALLNAK, es NEM a pillanatkep
+   * reszei. Rajuk a tabla mar nem "igy volt", hanem "ugyanaz a parositas all
+   * ra is": az uj oldal jogosultsagi kulcsa es a kozos forras szabalya
+   * egyezzen minden szerepnel. Jelolés nelkul a sor tortenetinek latszana, es
+   * a tabla sajat leirasa valna hamissa.
    */
   const A_BEVEZETES_ELOTTI_JOGOK: Record<string, Permission> = {
     "/": "dashboard.view",
     "/feladataim": "tasks.view",
+    // A BEVEZETES UTAN FELVETT SOR (2026-09-02 12:33-as dontes utan), nem a
+    // pillanatkep resze. Azert kerul ide, mert a fenti kontroll a tablat es a
+    // menut ugyanarra a halmazra koti: enelkul az uj oldal CSENDBEN kimaradna
+    // az osszevetesbol, epp ott, ahol uj a kod.
+    "/szerviz/hibajegyek": "service.view",
     "/szerviz/munkalapok": "service.view",
     "/szerviz/eszkozok": "service.view",
     "/tartalom": "content.view",

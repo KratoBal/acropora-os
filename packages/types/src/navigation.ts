@@ -122,6 +122,30 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.TASKS_VIEW),
   },
   {
+    /**
+     * A HIBAJEGY A LANC ELSO ELEME (hibajegy, munkalap, teljesitesi igazolas,
+     * szamla), ezert all a munkalap ELOTT.
+     *
+     * CSAK `web`, HOLOTT A SZOMSZEDJAI `mobile`-ON IS ALLNAK, es ez MERESEN
+     * all, nem ovatossagbol.
+     *
+     * A ket felulet NEM szimmetrikus: ELREJTENI egy csempet uj kiadas nelkul is
+     * lehet, MEGMUTATNI viszont csak azt, amit a TELEPITETT alkalmazas mar
+     * ismer (murena felmerese, 2026-09-02; a fenti `id` doksija ugyanezt mondja
+     * a masik oldalrol: a telefon erre az azonositora kepezi le a sajat
+     * kepernyoit). A telefonon ma nincs hibajegy-kepernyo, tehat a `mobile`
+     * felvetele egy olyan csempet adna a szervizesnek, ami NEM NYILIK MEG - az
+     * pedig rosszabb, mint ha nem latna.
+     *
+     * MI NYITJA MEG: a hibajegy-kepernyo elkeszulte a mobil alkalmazasban.
+     * Akkor ez a sor bovul, es a dontes kulon megy Balazs ele, hogy ne
+     * ketszer dontse el ugyanazt.
+     */
+    id: "service-jobs",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SERVICE_VIEW),
+  },
+  {
     id: "worksheets",
     surfaces: ["web", "mobile"],
     visibility: permission(PERMISSIONS.SERVICE_VIEW),
