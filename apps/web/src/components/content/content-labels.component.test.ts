@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { navigationEntry } from "@acropora/types";
 
 import {
   CONTENT_STALE_DAYS,
@@ -75,7 +76,13 @@ describe("where the content list lives in the menu", () => {
   it("is a single entry gated on content.view", () => {
     expect(contentNavigation).toHaveLength(1);
     expect(contentNavigation[0]?.href).toBe("/tartalom");
-    expect(contentNavigation[0]?.permission).toBe("content.view");
+    // A JOG MOSTANTOL A KOZOS FORRASBAN all, nem a menusorban. Az allitas
+    // celja valtozatlan (sajat menupont, sajat joggal), csak a helye mas.
+    expect(contentNavigation[0]?.entryId).toBe("content");
+    expect(navigationEntry("content")?.visibility).toEqual({
+      kind: "permission",
+      permission: "content.view",
+    });
   });
 });
 

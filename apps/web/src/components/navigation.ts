@@ -1,11 +1,22 @@
-import { PERMISSIONS, type Permission } from "@acropora/types";
 import type { IconName } from "@acropora/ui";
 
 export interface AppNavigationItem {
   href: string;
   label: string;
   icon: IconName;
-  permission: Permission;
+  /**
+   * A KOZOS FORRAS TETELE (`@acropora/types` NAVIGATION_ENTRIES).
+   *
+   * KORABBAN ITT EGY JOGOSULTSAGI KULCS ALLT, es ez volt a ket felulet
+   * elcsuszasanak a helye: a telefon ugyanezt a dontest a sajat tablaiban
+   * tartotta, mas nevekkel. A lathatosagi szabaly mostantol EGY helyen all, itt
+   * csak a MEGJELENES (utvonal, felirat, ikon) marad -- az felületenkent
+   * kulonbozik, es jol van igy.
+   *
+   * Az azonosito nem az utvonal: az utvonal valtozhat, erre viszont a telefon a
+   * sajat kepernyoit kepezi le.
+   */
+  entryId: string;
   exact?: boolean;
 }
 
@@ -55,13 +66,13 @@ export const primaryNavigation: AppNavigationItem[] = [
     href: "/",
     label: "Dashboard",
     icon: "dashboard",
-    permission: PERMISSIONS.DASHBOARD_VIEW,
+    entryId: "dashboard",
   },
   {
     href: "/feladataim",
     label: "Feladataim",
     icon: "clipboard",
-    permission: PERMISSIONS.TASKS_VIEW,
+    entryId: "my-tasks",
   },
 ];
 
@@ -70,13 +81,13 @@ export const serviceNavigation: AppNavigationItem[] = [
     href: "/szerviz/munkalapok",
     label: "Munkalapok",
     icon: "clipboard",
-    permission: PERMISSIONS.SERVICE_VIEW,
+    entryId: "worksheets",
   },
   {
     href: "/szerviz/eszkozok",
     label: "Eszköznyilvántartás",
     icon: "box",
-    permission: PERMISSIONS.SERVICE_VIEW,
+    entryId: "service-assets",
   },
 ];
 
@@ -92,7 +103,7 @@ export const contentNavigation: AppNavigationItem[] = [
     href: "/tartalom",
     label: "Tartalom",
     icon: "clipboard",
-    permission: PERMISSIONS.CONTENT_VIEW,
+    entryId: "content",
   },
 ];
 
@@ -101,7 +112,7 @@ export const businessNavigation: AppNavigationEntry[] = [
     href: "/pos",
     label: "POS",
     icon: "credit-card",
-    permission: PERMISSIONS.ORDERS_VIEW,
+    entryId: "pos",
   },
   {
     label: "Webshop",
@@ -113,13 +124,13 @@ export const businessNavigation: AppNavigationEntry[] = [
         href: "/webshop",
         label: "Megrendelések",
         icon: "cart",
-        permission: PERMISSIONS.ORDERS_VIEW,
+        entryId: "webshop-orders",
       },
       {
         href: "/vevok",
         label: "Webshop vásárlók",
         icon: "users",
-        permission: PERMISSIONS.CUSTOMERS_VIEW,
+        entryId: "webshop-customers",
       },
       {
         // The shop's own view of the catalogue. The full internal catalogue,
@@ -127,7 +138,7 @@ export const businessNavigation: AppNavigationEntry[] = [
         href: "/webshop/termekek",
         label: "Webshop termékek",
         icon: "package",
-        permission: PERMISSIONS.PRODUCTS_VIEW,
+        entryId: "webshop-products",
       },
     ],
   },
@@ -135,7 +146,7 @@ export const businessNavigation: AppNavigationEntry[] = [
     href: "/products",
     label: "Termékek",
     icon: "package",
-    permission: PERMISSIONS.PRODUCTS_VIEW,
+    entryId: "products",
   },
   {
     // A JOG ITT KORABBAN `purchasing.view` VOLT, ES AZ ANOMALIA VOLT, nem
@@ -148,7 +159,7 @@ export const businessNavigation: AppNavigationEntry[] = [
     href: "/partnerek",
     label: "Partnerek",
     icon: "truck",
-    permission: PERMISSIONS.PARTNERS_VIEW,
+    entryId: "partners",
   },
   {
     label: "Pénzügy",
@@ -158,19 +169,19 @@ export const businessNavigation: AppNavigationEntry[] = [
         href: "/beszerzes",
         label: "Beszerzés",
         icon: "cart",
-        permission: PERMISSIONS.PURCHASING_VIEW,
+        entryId: "purchasing",
       },
       {
         href: "/beszerzes/nav-szamlak",
         label: "NAV számla lekérés",
         icon: "download",
-        permission: PERMISSIONS.PURCHASING_VIEW,
+        entryId: "nav-invoices",
       },
       {
         href: "/penzugy/foxpost",
         label: "Foxpost elszámolás",
         icon: "download",
-        permission: PERMISSIONS.FINANCE_VIEW,
+        entryId: "foxpost-settlement",
       },
       {
         // Ide KÖLTÖZÖTT a korábbi felső szintű "Raktár", és a lap tartalma
@@ -179,13 +190,13 @@ export const businessNavigation: AppNavigationEntry[] = [
         href: "/raktar",
         label: "Leltár",
         icon: "warehouse",
-        permission: PERMISSIONS.INVENTORY_VIEW,
+        entryId: "inventory",
       },
       {
         href: "/keszlet-egyeztetes",
         label: "Készlet-egyeztetés",
         icon: "box",
-        permission: PERMISSIONS.INVENTORY_VIEW,
+        entryId: "inventory-reconciliation",
       },
     ],
   },
@@ -193,13 +204,13 @@ export const businessNavigation: AppNavigationEntry[] = [
     href: "/akvariumok",
     label: "Akváriumok",
     icon: "aquarium",
-    permission: PERMISSIONS.AQUARIUMS_VIEW,
+    entryId: "aquariums",
   },
   {
     href: "/icp",
     label: "ICP",
     icon: "briefcase",
-    permission: PERMISSIONS.ICP_VIEW,
+    entryId: "icp",
   },
   // Service was already a group on screen, wired by hand in the shell. It is
   // listed here now so every group in this menu comes from one place; the
@@ -212,13 +223,13 @@ export const unasSettingsNavigation: AppNavigationItem[] = [
     href: "/admin/integrations/unas/connection",
     label: "Kapcsolat",
     icon: "key",
-    permission: PERMISSIONS.SETTINGS_MANAGE,
+    entryId: "unas-connection",
   },
   {
     href: "/admin/integrations/unas",
     label: "Szinkron",
     icon: "activity",
-    permission: PERMISSIONS.PRODUCTS_VIEW,
+    entryId: "unas-sync",
     exact: true,
   },
 ];
@@ -231,13 +242,13 @@ export const secondaryNavigation: AppNavigationItem[] = [
     href: "/ai-teszt",
     label: "AI teszt",
     icon: "activity",
-    permission: PERMISSIONS.AI_TEST_VIEW,
+    entryId: "ai-test",
   },
   {
     href: "/admin/brands",
     label: "Márkák",
     icon: "package",
-    permission: PERMISSIONS.PRODUCTS_VIEW,
+    entryId: "brands",
   },
 ];
 
@@ -246,13 +257,13 @@ export const settingsNavigation: AppNavigationItem[] = [
     href: "/beallitasok",
     label: "Általános",
     icon: "settings",
-    permission: PERMISSIONS.SETTINGS_MANAGE,
+    entryId: "settings-general",
   },
   {
     href: "/admin/integrations/nav",
     label: "NAV",
     icon: "finance",
-    permission: PERMISSIONS.SETTINGS_MANAGE,
+    entryId: "nav-integration",
   },
   {
     // A webshop-motor admin kulcsa. A NAV mellett a helye, mert mind a kettő
@@ -260,13 +271,13 @@ export const settingsNavigation: AppNavigationItem[] = [
     href: "/admin/integrations/medusa/connection",
     label: "Medusa kapcsolat",
     icon: "store",
-    permission: PERMISSIONS.SETTINGS_MANAGE,
+    entryId: "medusa-connection",
   },
   {
     href: "/admin/users",
     label: "Felhasználók",
     icon: "shield",
-    permission: PERMISSIONS.USERS_MANAGE,
+    entryId: "users",
   },
 ];
 
@@ -303,3 +314,26 @@ export function isNavigationItemActive(
       (pathname === other.href || pathname.startsWith(`${other.href}/`)),
   );
 }
+
+/**
+ * MINDEN OLDAL, EGY HELYEN OSSZEFUZVE.
+ *
+ * MIERT EXPORT, ES MIERT NEM MINDENKI SAJAT MAGA FUZI OSSZE: 2026-09-02-ig
+ * HAROM helyen allt ez az osszefuzes (a keret aktiv-elem szamolasa, a keret
+ * rajzolasa, es a felhasznalo-szerkeszto "mely oldalakat eri el ez a szerep"
+ * elonezete), es KETTO kozuluk el is csuszott egymastol: az elonezet kihagyta a
+ * Tartalom oldalt, es duplan sorolta a ket szerviz-menupontot, mert a
+ * `serviceNavigation`-t kulon is felvette, holott a `businessNavigation` mar
+ * tartalmazza a Szerviz csoport gyermekeikent.
+ *
+ * A sorrend a menu sorrendje, es ez nem mindegy: a keret ebben a sorrendben
+ * rajzol, tehat aki ezt a listat olvassa, ugyanazt a sorrendet latja.
+ */
+export const allNavigationPages: AppNavigationItem[] = navigationItems([
+  ...primaryNavigation,
+  ...businessNavigation,
+  ...contentNavigation,
+  ...secondaryNavigation,
+  ...unasSettingsNavigation,
+  ...settingsNavigation,
+]);

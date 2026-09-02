@@ -10,34 +10,36 @@ import {
   Select,
   Skeleton,
 } from "@acropora/ui";
-import { hasPermission, PERMISSIONS, type UserDetail } from "@acropora/types";
+import {
+  hasPermission,
+  isNavigationEntryVisible,
+  PERMISSIONS,
+  type UserDetail,
+} from "@acropora/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useReturnTo } from "@/components/navigation-history";
-import {
-  allSettingsNavigation,
-  businessNavigation,
-  navigationItems,
-  primaryNavigation,
-  secondaryNavigation,
-  serviceNavigation,
-} from "@/components/navigation";
+import { allNavigationPages } from "@/components/navigation";
 import { ApiError } from "@/lib/api/client";
 import { usersApi } from "@/lib/api/users";
 import { ROLE_LABELS, ROLE_OPTIONS } from "./role-labels";
 
-// Opened out, because this list answers "which pages can this role reach".
-// A group heading is not a page, and the pages under it are what the reader
-// is looking for.
-const allNavigationItems = navigationItems([
-  ...primaryNavigation,
-  ...businessNavigation,
-  ...serviceNavigation,
-  ...secondaryNavigation,
-  ...allSettingsNavigation,
-]);
+/**
+ * UGYANAZ A HAT LISTA, AMIT AZ APP-SHELL OSSZEFUZ, ES UGYANABBAN A SORRENDBEN.
+ *
+ * KORABBAN MAS OT LISTA ALLT ITT, ES EL IS CSUSZOTT (merve 2026-09-02): a
+ * `serviceNavigation` kulon is szerepelt, holott a `businessNavigation` mar
+ * tartalmazza a Szerviz csoport gyermekeikent -- tehat a Munkalapok es az
+ * Eszkoznyilvantartas KETSZER jelent meg --, a `contentNavigation` viszont
+ * kimaradt, tehat a Tartalom oldal SEHOL nem latszott ebben az elonezetben.
+ * Az elonezet, ami arra valaszol, hogy "mely oldalakat eri el ez a szerep",
+ * harom ponton mondott mast, mint a valodi menu.
+ *
+ * A csoport-fejlec nem oldal, ezert a lista ki van bontva.
+ */
+const allNavigationItems = allNavigationPages;
 
 export function UserEditorPage({ userId }: { userId?: string }) {
   const { session } = useAuth();
@@ -191,7 +193,7 @@ export function UserEditorPage({ userId }: { userId?: string }) {
       </div>
     );
   const accessibleItems = allNavigationItems.filter((item) =>
-    hasPermission(role, item.permission),
+    isNavigationEntryVisible(item.entryId, role),
   );
   return (
     <div className="space-y-6">

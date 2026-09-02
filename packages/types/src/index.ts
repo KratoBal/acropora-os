@@ -46,6 +46,17 @@ export {
   ROLE_PERMISSIONS,
   USER_ROLES,
 } from "./auth.js";
+export {
+  isNavigationEntryVisible,
+  navigationEntry,
+  navigationIdsFor,
+  NAVIGATION_ENTRIES,
+} from "./navigation.js";
+export type {
+  NavigationEntry,
+  NavigationSurface,
+  NavigationVisibility,
+} from "./navigation.js";
 export type {
   BrandImportAssistantResponse,
   BrandImportBatchOption,
