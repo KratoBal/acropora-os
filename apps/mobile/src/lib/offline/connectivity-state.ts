@@ -22,6 +22,28 @@
  *     frissiteni, tehat ettol semmi nem romlik el.
  *
  * EZERT ASZIMMETRIKUS: az OFFLINE allitas var, a VISSZATERES azonnali.
+ *
+ * ===================================================================
+ * ES AMI EZ A VARAKOZAS NEM KESLELTET: A VALODI SZAKADAST
+ * ===================================================================
+ *
+ * A kerdes acrobote (2026-09-02), es jogos: ha lassitjuk a "nincs kapcsolat"
+ * allitast, nem kesik-e el a VALODI kapcsolat-vesztes jelzese? A dragabb hiba
+ * ugyanis a masik iranyu: egy elhasalt lekerdezes, ami ures listara esik, nem
+ * hibat mutat, hanem NYUGALMAT.
+ *
+ * MERVE, MINDKET KEPERNYON (`assets/index.tsx` 102. sor, `assets/[id].tsx`
+ * 184. sor): a sav bemenete nem ez a jelzes egyedul, hanem
+ *
+ *     online: online && !query.isError
+ *
+ * Vagyis a VALODI szakadast az elhasalt KERES jelzi, nem a keszulek. Az a jel
+ * fuggetlen ettol a modultol, es AZONNAL hat. Ez a varakozas kizarolag a
+ * keszulek sajat allitasat halasztja -- azt, amelyik hamis tud lenni.
+ *
+ * AMIT EBBOL NEM SZABAD ELRONTANI: ha valaha valaki "kovetkezetessegbol" ezt a
+ * varakozast ratenne a `query.isError` agra is, azzal epp a dragabb hibat
+ * hozna vissza. A ket jel kulon marad.
  */
 
 /** A NetInfo jelentesenek az a ket mezoje, amibol dontunk. */
