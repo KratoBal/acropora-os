@@ -187,4 +187,106 @@ describe("kivezetés a fő út, törlés a második", () => {
     expect(await screen.findByText(/3 munkalapsor/)).toBeTruthy();
     expect(screen.getByText(/1 alárendelt eszköz/)).toBeTruthy();
   });
+
+  /**
+   * A TOROLT ESZKOZ ADATAI NEM MARADNAK A KEPERNYON.
+   *
+   * Balazs eles hasznalatbol jelezte (2026-09-02): "ha letorlom, akkor nem a
+   * listahoz ugrik vissza hanem a torolt eszkoz adatai maradnak a kepernyon".
+   *
+   * A visszateres-kartya MAR MUKODOTT; az adatlapot mutato blokk feltetele nem
+   * tudott a torlesrol. Ket egymasnak ellentmondo dolog allt egy kepernyon.
+   *
+   * MINDKET IRANY EGY ALLITASBAN: a kartya OTT VAN, es az adatlap NINCS. A
+   * masodik onmagaban akkor is teljesulne, ha az egesz oldal ures lenne -- es
+   * epp a torles utan ez a legkonnyebben elhiheto tevedes.
+   */
+  it("törlés után a törölt eszköz adatai eltűnnek a képernyőről", async () => {
+    const dialog = await open();
+    fireEvent.click(
+      await screen.findByText("Ez az eszköz téves felvitel? Végleges törlés."),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Végleges törlés" }),
+    );
+
+    await waitFor(() =>
+      expect(api.remove).toHaveBeenCalledWith("token-1", "asset-1"),
+    );
+    await screen.findByText(/Az eszköz törölve/);
+
+    // A FEJLEC: a nev es a leltari szam.
+    expect(screen.queryByText("Cápasuli kompresszor")).toBeNull();
+    expect(screen.queryByText("ESZ-0001")).toBeNull();
+
+    // ES AZ ADATLAP-BLOKK, KULON. A ket helyet KULON kell allitani: a fenti ket
+    // ertek CSAK a fejlecben all, tehat onmagukban akkor is teljesulnenek, ha az
+    // adatlap-blokk ottmaradna. Merve 2026-09-02: a `!deleted` kivetele a blokk
+    // feltetelebol NULLA tesztet dontott pirosra, amig ez a ket sor nem allt itt.
+    expect(screen.queryByText("Fánk Kft.")).toBeNull();
+    expect(screen.queryByText("Tulajdonos")).toBeNull();
+    void dialog;
+  });
+
+  /**
+   * A MAR KIVEZETETT ESZKOZNEL VAN KOZVETLEN UT A TORLESHEZ.
+   *
+   * Balazs kerdese: "A Kivezetettet szandekosan nem lehet torolni csak ugy ha
+   * elobb ujra aktivva teszem es utana torlom ki?" A valasz: nem szandekos. A
+   * szerver megengedne (a harom akadalya kozott a RETIRED nincs ott); az utat a
+   * felulet zarta el, mert a torles egyetlen bejarata a kivezetes ablaka volt,
+   * az a gomb pedig kivezetett eszkoznel tiltott.
+   *
+   * A DONTES (2026-09-02 12:43): "igen legyen kozvetlenul elerheto a torles".
+   *
+   * A KONTROLL A HARMADIK SOR: ugyanez a gomb AKTIV eszkoznel NINCS ott. Az
+   * allitas enelkul akkor is zold lenne, ha a gomb MINDIG megjelenne -- vagyis
+   * ha epp a fenti dontest (a torles ne legyen egyenrangu ut) rontanank el.
+   */
+  it("a kivezetett eszközön a törlés közvetlenül elérhető", async () => {
+    api.detail.mockResolvedValue({ ...asset, status: "RETIRED" });
+    auth.session = session("OWNER");
+    render(<AssetDetailPage assetId="asset-1" />);
+    await waitFor(() => expect(api.detail).toHaveBeenCalled());
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Végleges törlés" }),
+    );
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain("Véglegesen törlöd");
+    expect(dialog.textContent).toContain("Nem vonható vissza");
+  });
+
+  it("aktív eszközön ugyanez a közvetlen út NINCS ott", async () => {
+    auth.session = session("OWNER");
+    render(<AssetDetailPage assetId="asset-1" />);
+    await waitFor(() => expect(api.detail).toHaveBeenCalled());
+
+    expect(
+      screen.queryByRole("button", { name: "Végleges törlés" }),
+    ).toBeNull();
+    // KONTROLL: a kivezetes utja viszont ott van, tehat nem egy ures oldalt merek.
+    expect(
+      screen.getByRole("button", { name: "Eszköz kivezetése" }),
+    ).toBeTruthy();
+  });
+
+  /**
+   * A JOG ITT IS DONT. Egy MANAGER-nek nincs `service-assets.delete` joga, es a
+   * kozvetlen ut sem keletkezhet neki -- kulonben a kivezetett eszkoz eppen egy
+   * KERULOUT lenne a jogosultsag korul.
+   */
+  it("SERVICE_ASSET_DELETE nélkül a kivezetett eszközön sincs törlés", async () => {
+    api.detail.mockResolvedValue({ ...asset, status: "RETIRED" });
+    auth.session = session("MANAGER");
+    render(<AssetDetailPage assetId="asset-1" />);
+    await waitFor(() => expect(api.detail).toHaveBeenCalled());
+
+    expect(
+      screen.queryByRole("button", { name: "Végleges törlés" }),
+    ).toBeNull();
+    // KONTROLL: a lap betoltodott, csak ez az egy ut hianyzik.
+    expect(screen.getByText("Cápasuli kompresszor")).toBeTruthy();
+  });
 });

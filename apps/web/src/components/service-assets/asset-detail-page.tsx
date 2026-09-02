@@ -313,13 +313,23 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
 
   return (
     <div className="space-y-6">
+      {/*
+        A FEJLEC IS A TOROLT ESZKOZ NEVET VISELTE, es ez a panasz MASODIK fele
+        volt. A kartya egyetlen helyet nevezett meg (az adatlap-blokkot), a
+        meres kettot talalt: a nev egy `h1`-ben all a fejlecben, a leltari szam
+        alatta. Aki a torles utan a kepernyore nez, ugyanugy a torolt eszkozt
+        latja, akkor is, ha az adatlap mar eltunt alola.
+
+        A modositas gombja is elmarad: egy torolt eszkozt nincs mit szerkeszteni,
+        es a link egy mar nem letezo rekordra vinne.
+      */}
       <PageHeader
         eyebrow="Szerviz / Eszköznyilvántartás"
-        title={asset?.name ?? "Eszköz adatlap"}
-        description={asset?.assetNumber}
+        title={deleted ? "Eszköz törölve" : (asset?.name ?? "Eszköz adatlap")}
+        description={deleted ? undefined : asset?.assetNumber}
         actions={
           <div className="flex gap-2">
-            {canManage && asset ? (
+            {canManage && asset && !deleted ? (
               <Link href={`/szerviz/eszkozok/${asset.id}/szerkesztes`}>
                 <Button>Eszköz módosítása</Button>
               </Link>
@@ -355,7 +365,18 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
           <Skeleton className="h-72" />
         </div>
       ) : null}
-      {asset ? (
+      {/*
+        A `!deleted` NEM DISZITES: nelkule a torles utan KET EGYMASNAK
+        ELLENTMONDO dolog all egy kepernyon -- a kartya azt mondja, hogy az
+        eszkoz torolve, es kozvetlenul folotte ott az adatlapja. Balazs eles
+        hasznalatbol jelezte (2026-09-02): "ha letorlom, akkor nem a listahoz
+        ugrik vissza hanem a torolt eszkoz adatai maradnak a kepernyon".
+
+        A `deleted` allapot MAR LETEZETT es a visszateres-kartya mar mukodott;
+        csak ez a feltetel nem tudott rola. Egy fel-bekotott allapot rosszabb,
+        mint a hianyzo: a kepernyo egyik fele igazat mond, a masik nem.
+      */}
+      {asset && !deleted ? (
         <>
           <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
             <div className="space-y-6">
@@ -711,6 +732,33 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
               ? "Már kivezetett"
               : "Eszköz kivezetése"}
           </Button>
+          {/*
+            A MAR KIVEZETETT ESZKOZ ZSAKUTCA VOLT, ES EZ A FENTI DONTES NEM
+            SZANDEKOLT MELLEKHATASA. A torles egyetlen bejarata a KIVEZETES
+            megerosito ablaka; ha az eszkoz mar kivezetett, a gomb tiltott, az
+            ablak nem nyilik meg, es vele a torles sem. A szerver eközben
+            MEGENGEDNE: a harom akadalya (hibajegy, munkalapsor, alarendelt
+            eszkoz) kozott a RETIRED allapot nincs ott.
+
+            Balazs dontese (2026-09-02 12:43): "igen legyen kozvetlenul elerheto
+            a torles".
+
+            CSAK A KIVEZETETT ESETBEN, es hivatkozaskent, nem gombkent. Aktiv
+            eszkoznel a kivezetes marad a fo ut, es a ketto tovabbra sem
+            egyenrangu -- ugyanaz a megerosito ablak nyilik, ugyanazokkal a
+            szerver oldali akadalyokkal.
+          */}
+          {asset.status === "RETIRED" && canDelete ? (
+            <p className="mt-3 text-sm">
+              <button
+                type="button"
+                className="underline"
+                onClick={() => setPending({ kind: "delete-asset" })}
+              >
+                Végleges törlés
+              </button>
+            </p>
+          ) : null}
         </Card>
       ) : null}
 
