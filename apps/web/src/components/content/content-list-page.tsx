@@ -15,11 +15,11 @@ import {
   type ContentListItem,
   type ContentViewerRole,
 } from "@acropora/types";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { contentApi } from "@/lib/api/content";
-import { ContentCreateForm } from "./content-create-form";
 import {
   CONTENT_ROLE_LABELS,
   CONTENT_STATE_LABELS,
@@ -39,10 +39,13 @@ import { ContentRowActions } from "./content-row-actions";
  * bármelyik szerepre válthat. Egy külön, mindig ott álló „rám vár" doboz
  * ugyanezt mutatná, de nem mondaná meg, hogy a többi tétel hova lett.
  */
-type ContentView = "mine" | ContentViewerRole;
+// AZ "OTLETEK" NEM SZEREP, HANEM ELOHELY, es ezert kulon ag a tipusban: a
+// negy szerep arra valaszol, mi var CSELEKVESRE, egy otlet pedig senkire nem var.
+type ContentView = "mine" | "ideas" | ContentViewerRole;
 
 const VIEWS: ContentView[] = [
   "mine",
+  "ideas",
   "approver",
   "reviewer",
   "author",
@@ -51,6 +54,7 @@ const VIEWS: ContentView[] = [
 
 const VIEW_LABELS: Record<ContentView, string> = {
   mine: "ami rám vár",
+  ideas: "ötletek",
   approver: CONTENT_ROLE_LABELS.approver,
   reviewer: CONTENT_ROLE_LABELS.reviewer,
   author: CONTENT_ROLE_LABELS.author,
@@ -95,7 +99,6 @@ export function ContentListPage() {
   const canCreate = Boolean(
     session && hasPermission(session.user, PERMISSIONS.CONTENT_MANAGE),
   );
-  const [creating, setCreating] = useState(false);
   const token = session?.token ?? "";
 
   const load = useCallback(
@@ -111,7 +114,9 @@ export function ContentListPage() {
         const [waiting, images] = await Promise.all([
           view === "mine"
             ? contentApi.waitingOnMe(token, signal)
-            : contentApi.waiting(token, view, signal),
+            : view === "ideas"
+              ? contentApi.ideas(token, signal)
+              : contentApi.waiting(token, view, signal),
           contentApi.waitingForImage(token, signal),
         ]);
         // A KÉT VÁLASZ ALAKJA MÁS, ÉS SZÁNDÉKOSAN: a „rám vár" nézet megnevezi,
@@ -158,36 +163,37 @@ export function ContentListPage() {
 
   return (
     <div className="space-y-6">
+      {/*
+        A FELVITEL KÜLÖN OLDALON ÁLL, ÉS EZ A LISTA ONNANTÓL LEKTORÁLÁSRA VALÓ
+        (Balázs döntése, 2026-09-02).
+
+        Korábban a két gomb és az űrlap ITT állt, a lista tetején - azért,
+        mert a panasz az volt, hogy a menü üres. Az a probléma megoldódott, a
+        nyers, stílus nélküli űrlap viszont ugyanazon a képernyőn más minőségi
+        szinten állt, mint a lap többi része.
+
+        A hivatkozás HALVÁNY, nem elsődleges gomb: aki ide jön, tipikusan
+        lektorál, nem felvisz.
+
+        A TÖRÉSPONT NEM ITT DŐL EL, hanem a `PageHeader`-ben: az `sm` alatt
+        oszlop, felette sor - tehát keskeny képernyőn a hivatkozás MINDIG a
+        cím alá kerül, a cím hosszától függetlenül. Ezt megmértük, nem
+        becsültük.
+      */}
       <PageHeader
         title="Tartalom"
         description="Ami rád vár, és ami képre vár."
+        actions={
+          canCreate ? (
+            <Link
+              href="/tartalom/uj"
+              className="text-sm font-medium text-teal-700 underline-offset-4 hover:underline"
+            >
+              Új tétel felvitele →
+            </Link>
+          ) : undefined
+        }
       />
-
-      {/*
-        A FELVETEL A LISTA TETEJEN, ES NEM EGY ALOLDALON. A panasz, amibol ez
-        keszult, az volt, hogy a menu ures -- aki megnyitja, ott es akkor
-        akarjon tudni beleirni, ne egy masodik kattintas utan.
-      */}
-      {canCreate && !creating ? (
-        <button type="button" onClick={() => setCreating(true)}>
-          Új tartalom felvétele
-        </button>
-      ) : null}
-
-      {canCreate && creating && token ? (
-        <ContentCreateForm
-          token={token}
-          onCancel={() => setCreating(false)}
-          onCreated={() => {
-            setCreating(false);
-            // UJRAKERDEZUNK: az uj tetel DRAFTING allapotban all es a
-            // letrehozojara var, tehat a "mi var ram" nezetben AZONNAL ott a
-            // helye. Ha nem toltenenk ujra, a felhasznalo pontosan azt latna,
-            // amire panaszkodott: beirta, es nincs sehol.
-            reload();
-          }}
-        />
-      ) : null}
 
       {/*
         AZ ÖSSZEGZŐ CSÍK LEGFELÜL, A SZEREP-VÁLASZTÓ ELŐTT IS.

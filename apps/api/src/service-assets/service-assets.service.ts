@@ -28,6 +28,10 @@ import type { DocumentStore } from "./document-store/document-store.js";
 import { DOCUMENT_STORE } from "./document-store/document-store.provider.js";
 import { decideQuota } from "./document-store/document-quota.js";
 import {
+  canonicalMimetypeFor,
+  detectUploadedFileKind,
+} from "./uploaded-file-type.js";
+import {
   assertStorageKeyMatches,
   storageKeyFor,
 } from "./document-store/document-storage-key.js";
@@ -205,11 +209,15 @@ export class ServiceAssetsService {
       // dokumentum-feltoltes), amit partner-oldali felhasznalo nem kap meg.
       kind: "internal",
     });
-    if (
-      file.mimetype !== "application/pdf" ||
-      !file.buffer.subarray(0, 5).equals(Buffer.from("%PDF-"))
-    )
-      throw new BadRequestException("Csak érvényes PDF fájl tölthető fel.");
+    // A BEJELENTETT TÍPUS ÉS A TARTALOM EGYÜTT DÖNT, és ez a szabály nem
+    // lazult azzal, hogy a kép is bekerült: mindkettőnek egyeznie kell.
+    // A lista és a szándékosan kihagyott formátumok indoka a
+    // `uploaded-file-type.ts` fejlécében áll.
+    const kind = detectUploadedFileKind(file.mimetype, file.buffer);
+    if (kind === null)
+      throw new BadRequestException(
+        "Csak érvényes PDF, JPEG vagy PNG fájl tölthető fel.",
+      );
     const safeName = file.originalname
       .normalize("NFKC")
       .replace(/[\\/\u0000-\u001f\u007f]/g, "-")
@@ -221,7 +229,14 @@ export class ServiceAssetsService {
       id: documentId,
       assetId: id,
       type,
-      fileName: safeName || "dokumentum.pdf",
+      // A TARTALÉK NÉV NEM MONDHAT TÍPUST, amit nem tudunk. Korábban
+      // "dokumentum.pdf" állt itt, ami PDF-en kívül hazudott volna a
+      // letöltőnek - a böngésző a kiterjesztés szerint próbálná megnyitni.
+      fileName: safeName || "dokumentum",
+      // A TÁROLT TÍPUS A FELISMERT FAJTÁBÓL JÖN, nem a küldő bejelentéséből
+      // és nem egy rögzített értékből. A letöltés ezt adja vissza, tehát egy
+      // rossz érték itt a böngészőnél derülne ki, hetekkel később.
+      contentType: canonicalMimetypeFor(kind),
       sizeBytes: file.buffer.length,
       sha256,
       actorUserId,

@@ -38,6 +38,9 @@ export {
   hasAllPermissions,
   hasAnyPermission,
   hasPermission,
+  HUMAN_ROLES,
+  isMachineRole,
+  MACHINE_ROLES,
   partnerMembership,
   PERMISSIONS,
   ROLE_PERMISSIONS,
@@ -74,6 +77,7 @@ export type {
 } from "./brand-management.js";
 export type {
   AuthenticatedUser,
+  MachineRole,
   PartnerMembership,
   Permission,
   Session,

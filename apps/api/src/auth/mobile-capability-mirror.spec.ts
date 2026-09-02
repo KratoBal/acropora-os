@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { PERMISSIONS } from "@acropora/types";
+import { HUMAN_ROLES, MACHINE_ROLES, PERMISSIONS } from "@acropora/types";
 
 /**
  * A MOBIL TÜKÖR MINDEN KULCSÁNAK LEGYEN SZERVER OLDALI PÁRJA.
@@ -48,6 +48,16 @@ const SERVER_PAIR: Record<string, string | null> = {
   worksheetsView: PERMISSIONS.SERVICE_VIEW,
   worksheetsManage: PERMISSIONS.SERVICE_MANAGE,
 };
+
+const ROLE_MIRROR = "../mobile/src/lib/auth/types.ts";
+
+/** A mobil `UserRole` unió tagjai, a fájl szövegéből. */
+function mirrorRoles(): string[] {
+  const source = readFileSync(ROLE_MIRROR, "utf8");
+  const match = /export type UserRole =([\s\S]*?);/.exec(source);
+  assert.ok(match, "Nem találtam a mobil UserRole uniót.");
+  return [...match![1]!.matchAll(/"(\w+)"/g)].map((hit) => hit[1]!).sort();
+}
 
 /** A két képesség-interfész kulcsai, a fájl szövegéből. */
 function mirrorKeys(): string[] {
@@ -118,5 +128,51 @@ test("keeps no mapping for a key the mirror no longer has", () => {
     [],
     "Ezek a sorok olyan kulcsra hivatkoznak, ami már nincs a tükörben: " +
       stale.join(", "),
+  );
+});
+
+/**
+ * A SZEREP-LISTA IS TÜKÖR, ÉS EDDIG SENKI NEM MÉRTE.
+ *
+ * A mobil app saját `UserRole` uniót tart, és rá EXHAUSTIVE `Record`-okat épít
+ * (`ROLE_CAPABILITIES`, `userRoleLabel`). Amíg a két lista egyezik, ez a
+ * másolat biztonságos: a fordító a telefonon minden szerephez kikényszerít egy
+ * sort. Ha a szerver kap egy ÚJ EMBERI szerepet, és a mobil unió nem tud róla,
+ * a telefon FORDUL, és futásidőben ad `undefined` képességet arra a szerepre --
+ * egy `Record` kulcs nélkül nem hibázik, csak nem válaszol.
+ *
+ * A GÉPI SZEREPEK SZÁNDÉKOSAN KIMARADNAK. Egy ágens-fiók nem jelentkezik be a
+ * telefonon: nincs jelszava, és a tokene csak egy szerver-végpontot nyit. Ha
+ * mégis felvennénk a mobil unióba, minden képesség-táblát ki kellene tölteni
+ * egy szerepre, ami ott soha nem fordul elő -- az a felület tágítása lenne,
+ * cserébe semmiért.
+ *
+ * MI PIROSÍT: egy új emberi szerep a szerveren, amit a mobil tükör nem kapott
+ * meg; és egy gépi szerep, ami mégis bekerült a telefonra.
+ */
+test("the mobile role mirror covers every human role, and no machine role", () => {
+  const mobil = mirrorRoles();
+
+  // A KONTROLL A KERESESRE, ugyanabbol az okbol, mint a kulcsoknal: ha a minta
+  // nem talal semmit, az osszehasonlitas ket ures halmazon menne vegig.
+  assert.ok(
+    mobil.length >= 5,
+    `Csak ${mobil.length} szerepet találtam a mobil unióban. Ez a keresés hibája, nem a tüköré.`,
+  );
+
+  assert.deepEqual(
+    mobil,
+    [...HUMAN_ROLES].sort(),
+    "A mobil UserRole unió elcsúszott a szerver emberi szerepeitől. " +
+      "Ha új emberi szerep van, vedd fel a mobil tükörbe is (és a képesség-táblákba).",
+  );
+
+  const gepi = mobil.filter((role) =>
+    (MACHINE_ROLES as readonly string[]).includes(role),
+  );
+  assert.deepEqual(
+    gepi,
+    [],
+    "Gépi szerep került a mobil tükörbe: " + gepi.join(", "),
   );
 });

@@ -1,4 +1,8 @@
 import { apiRequest } from "./client";
+import {
+  buildAssetDocumentUpload,
+  type PickedFile,
+} from "./asset-document-upload";
 
 // Declared in lib/assets/asset-fields.ts so the logic that reasons about
 // them does not have to import this module, which reaches SecureStore and
@@ -215,4 +219,57 @@ export function updateAsset(id: string, input: UpdateAssetInput) {
 
 export function getAssetQr(id: string) {
   return apiRequest<AssetQrCode>(`${BASE}/${encodeURIComponent(id)}/qr`);
+}
+
+/**
+ * A dokumentum-fajták, ahogy a szerver ismeri őket. SAJÁT másolat, nem a
+ * `@acropora/types` csomagból: az Expo app szándékosan nem húzza be a pnpm
+ * munkatér csomagjait (lásd `docs/MOBILE-DEVELOPMENT.md`). A nevek a
+ * szerveréi, hogy a két oldal összevetése olvasásra is elvégezhető legyen.
+ *
+ * FÉNYKÉPNEK MA NINCS SAJÁT FAJTÁJA: az `OTHER` alá kerül. Hogy legyen-e külön
+ * `PHOTO`, az termék-döntés, és séma-változást kíván - ez a felület úgy áll,
+ * hogy bármelyik válasz mellett megmarad.
+ */
+export type AssetDocumentType = "INVOICE" | "WARRANTY" | "MANUAL" | "OTHER";
+
+/**
+ * Egy feltöltött dokumentum sora, ahogy a végpont visszaadja.
+ *
+ * A MEZŐNEVEK A SZERVERÉI, ÉS EZT MEGMÉRTEM, NEM KITALÁLTAM. Az első
+ * változatomban `uploadedAt` állt, a szerveren `createdAt` van, és a fordító
+ * ezt SOHA nem mondta volna meg: a mobil szándékosan másolatot tart, tehát a
+ * két oldal között nincs típus-kapcsolat. Egy elgépelt mezőnév itt
+ * `undefined`-ként jelenne meg a képernyőn, hibaüzenet nélkül.
+ */
+export interface AssetDocumentSummary {
+  id: string;
+  type: AssetDocumentType;
+  fileName: string;
+  contentType: "application/pdf" | "image/jpeg" | "image/png";
+  sizeBytes: number;
+  sha256: string;
+  uploadedBy?: { id: string; displayName: string };
+  createdAt: string;
+}
+
+/**
+ * DOKUMENTUM- ÉS FÉNYKÉP-FELTÖLTÉS EGY ESZKÖZHÖZ.
+ *
+ * A törzset a `buildAssetDocumentUpload` állítja össze, és a hibát MÉG A
+ * KÜLDÉS ELŐTT megnevezi. Itt csak az marad, ami hálózatot igényel.
+ *
+ * A válasz LISTA, egyetlen fájlnál is: a végpont mindig azzal felel.
+ */
+export async function uploadAssetDocuments(
+  id: string,
+  input: { type: AssetDocumentType; files: readonly PickedFile[] },
+): Promise<AssetDocumentSummary[]> {
+  const built = buildAssetDocumentUpload(input);
+  if (!built.ok) throw new Error(built.reason);
+
+  return apiRequest<AssetDocumentSummary[]>(
+    `${BASE}/${encodeURIComponent(id)}/documents`,
+    { method: "POST", body: built.body },
+  );
 }

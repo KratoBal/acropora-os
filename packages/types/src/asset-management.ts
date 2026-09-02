@@ -159,7 +159,19 @@ export interface AssetDocumentSummary {
   id: string;
   type: AssetDocumentType;
   fileName: string;
-  contentType: "application/pdf";
+  /**
+   * A TÁROLT FÁJL TÍPUSA, ÉS EZ A LISTA MOSTANTÓL HÁROM ELEMŰ.
+   *
+   * Korábban a rögzített `"application/pdf"` literál állt itt, és igaz is volt
+   * addig, amíg a végpont csak PDF-et fogadott. A képek befogadásával a
+   * literál csendben hazudni kezdett: a szerver `image/jpeg` értéket ír a
+   * sorba, a szerződés szerint viszont az az érték nem is létezhet. A fordító
+   * nem szólt volna, mert a beírás oldalán `string` áll.
+   *
+   * Az unió szűkebb, mint a `string`, és ez szándékos: kimondja, mi állhat
+   * ott, tehát egy negyedik formátum felvétele ITT is átvezetést kíván.
+   */
+  contentType: "application/pdf" | "image/jpeg" | "image/png";
   sizeBytes: number;
   sha256: string;
   uploadedBy?: { id: string; displayName: string };

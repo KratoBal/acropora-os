@@ -31,10 +31,22 @@ const CSATORNAK: { ertek: ContentChannel; cimke: string }[] = [
 
 export function ContentCreateForm({
   token,
+  mode,
   onCreated,
   onCancel,
 }: {
   token: string;
+  /**
+   * A KET LEPES KULON, ES NEM EGY KAPCSOLO AZ URLAPON BELUL.
+   *
+   * Az otlet KEVESEBBET ker: cim es csatorna, semmi mas. Aki egy temat jegyez
+   * fel, meg nem tudja a torzset, a kepet vagy a napot -- es egy urlap, ami
+   * ezeket keri, arra tanit, hogy a rogzites nagyobb munka, mint amekkora.
+   *
+   * A szerveren is ket kulon vegpont all mogotte, tehat ez a mezo NEM allapotot
+   * valaszt, hanem azt mondja meg, MELYIK lepest hivjuk.
+   */
+  mode: "draft" | "idea";
   onCreated: () => void;
   onCancel: () => void;
 }) {
@@ -54,6 +66,14 @@ export function ContentCreateForm({
     setSaving(true);
     setError(null);
     try {
+      if (mode === "idea") {
+        await contentApi.createIdea(token, {
+          title: title.trim(),
+          channel: channel as ContentChannel,
+        });
+        onCreated();
+        return;
+      }
       await contentApi.create(token, {
         title: title.trim(),
         channel: channel as ContentChannel,
@@ -76,8 +96,13 @@ export function ContentCreateForm({
   }
 
   return (
-    <form onSubmit={submit} aria-label="Új tartalom felvétele">
-      <h2>Új tartalom</h2>
+    <form
+      onSubmit={submit}
+      aria-label={
+        mode === "idea" ? "Ötlet feljegyzése" : "Új tartalom felvétele"
+      }
+    >
+      <h2>{mode === "idea" ? "Ötlet feljegyzése" : "Új tartalom"}</h2>
 
       <label htmlFor="content-title">Cím</label>
       <input
@@ -102,35 +127,43 @@ export function ContentCreateForm({
         ))}
       </select>
 
-      <label htmlFor="content-body">Szöveg</label>
-      <textarea
-        id="content-body"
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-      />
+      {/*
+        AZ OTLET ITT ER VEGET. A torzs, a kep-jelolo es a tervezett nap csak a
+        vazlat-modban all -- lasd a `mode` mezo indoklasat feljebb.
+      */}
+      {mode === "idea" ? null : (
+        <>
+          <label htmlFor="content-body">Szöveg</label>
+          <textarea
+            id="content-body"
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+          />
 
-      <label htmlFor="content-image-required">
-        <input
-          id="content-image-required"
-          type="checkbox"
-          checked={imageRequired}
-          onChange={(e) => setImageRequired(e.target.checked)}
-        />
-        Kép kell hozzá
-      </label>
+          <label htmlFor="content-image-required">
+            <input
+              id="content-image-required"
+              type="checkbox"
+              checked={imageRequired}
+              onChange={(e) => setImageRequired(e.target.checked)}
+            />
+            Kép kell hozzá
+          </label>
 
-      <label htmlFor="content-planned-for">Tervezett nap</label>
-      <input
-        id="content-planned-for"
-        type="date"
-        value={plannedFor}
-        onChange={(e) => setPlannedFor(e.target.value)}
-      />
+          <label htmlFor="content-planned-for">Tervezett nap</label>
+          <input
+            id="content-planned-for"
+            type="date"
+            value={plannedFor}
+            onChange={(e) => setPlannedFor(e.target.value)}
+          />
+        </>
+      )}
 
       {error ? <p role="alert">{error}</p> : null}
 
       <button type="submit" disabled={!kuldheto || saving}>
-        {saving ? "Mentés..." : "Felvétel"}
+        {saving ? "Mentés..." : mode === "idea" ? "Feljegyzés" : "Felvétel"}
       </button>
       <button type="button" onClick={onCancel} disabled={saving}>
         Mégse
