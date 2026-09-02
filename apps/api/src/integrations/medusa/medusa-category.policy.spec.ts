@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { glob } from "node:fs/promises";
 import { describe, it } from "node:test";
 
 import {
   decideMedusaCategories,
   describeMissingCategoryMapping,
+  MEDUSA_CATEGORY_REFERENCE,
 } from "./medusa-category.policy.js";
 
 describe("a kategóriák leképezése a vetítésben", () => {
@@ -121,5 +124,90 @@ describe("a kategóriák leképezése a vetítésben", () => {
     assert.match(sor, /2 kategória/);
     assert.match(sor, /cat_hal, cat_rak/);
     assert.match(sor, /EGYIKET SEM/);
+  });
+});
+
+/**
+ * SZERKEZETI ALLITAS: a lekepezes-sor keresesi kulcsa EGY helyen all.
+ *
+ * Nem a viselkedest meri, hanem a LEFEDETTSEGET -- ugyanaz az alak, mint a
+ * titok-olvasas specje. Az ok a `system` es az `entityType` KULONBSEGE: a
+ * `system` a sema ENUMJA, tehat egy elgepeles forditasi hiba. Az `entityType`
+ * szabad `String`, tehat NEM az.
+ *
+ * A tabla ket vegen ket iró all: a betoltes IR ide, a vetites innen OLVAS. Ha a
+ * ket oldal ket irasmodot hasznalna, semmi nem szolna -- a vetites minden
+ * termeknel "meg nincs lekepezve" allapotot latna, es kategoria nelkul
+ * vetitene. A repoban mindket irasmod letezik (`"Category"` es `"CATEGORY"`),
+ * csak ket kulonbozo tablanal, es ugyanabban a modulban egymas mellett.
+ *
+ * A lista GEPI, nem kezzel karbantartott: pontosan egy holnap szuletett uj
+ * fajl ellen ved, ami sajat literalt irna.
+ */
+const CATEGORY_ENTITY_TYPE_LITERAL = /entityType:\s*["'`]Category["'`]/;
+const POLICY_FILE = "src/integrations/medusa/medusa-category.policy.ts";
+const PROJECTION_CLI = "src/integrations/medusa/medusa-projection.cli.ts";
+
+async function medusaSources(): Promise<string[]> {
+  const found: string[] = [];
+  for await (const entry of glob("src/integrations/medusa/**/*.ts"))
+    if (!entry.endsWith(".spec.ts")) found.push(entry.replaceAll("\\", "/"));
+  return found.sort();
+}
+
+describe("a leképezés-sor keresési kulcsa", () => {
+  /**
+   * A KONTROLL A KERESESRE. Enelkul egy elrontott minta nulla talalatot adna, es
+   * a teszt zolden azt allitana, hogy sehol nincs sajat literal -- holott azt
+   * jelentene, hogy a kereses romlott el.
+   */
+  it("finds the literal in a sample that has it", () => {
+    assert.equal(
+      CATEGORY_ENTITY_TYPE_LITERAL.test('entityType: "Category",'),
+      true,
+    );
+    // Es a NAGYBETUS alak NEM ugyanaz: a ket irasmod kulonbsege a tet.
+    assert.equal(
+      CATEGORY_ENTITY_TYPE_LITERAL.test('entityType: "CATEGORY",'),
+      false,
+    );
+  });
+
+  it("reads the files it claims to read", async () => {
+    const sources = await medusaSources();
+
+    assert.ok(
+      sources.length >= 10,
+      `Csak ${sources.length} forrásfájlt találtam. Ez a keresés hibája, nem a lefedettségé.`,
+    );
+    // A ket erintett fajlnak NEV SZERINT benne kell lennie, kulonben a nulla
+    // talalat azt jelentene, hogy nem is neztuk meg.
+    assert.equal(sources.includes(POLICY_FILE), true);
+    assert.equal(sources.includes(PROJECTION_CLI), true);
+  });
+
+  it("keeps the literal in one file, and everyone else calls the constant", async () => {
+    const sources = await medusaSources();
+
+    const sajatLiteral = sources.filter((file) =>
+      CATEGORY_ENTITY_TYPE_LITERAL.test(readFileSync(file, "utf8")),
+    );
+
+    assert.deepEqual(
+      sajatLiteral,
+      [POLICY_FILE],
+      `Ezek a fájlok saját literált tartanak a közös kulcs helyett: ${sajatLiteral.join(", ")}`,
+    );
+  });
+
+  /**
+   * ES AZ ERTEK MAGA. Ez elsore tautologianak latszik -- a konstanst meri a
+   * konstans ellen --, de nem az: azt ROGZITI, MELYIK irasmodot valasztottuk.
+   * Ha valaki atirja, ez pirosra valt, es akkor fel lehet tenni a kerdest, ami
+   * kulonben senkinek nem jutna eszebe: a tabla MASIK vege is atallt?
+   */
+  it("names the spelling both ends must share", () => {
+    assert.equal(MEDUSA_CATEGORY_REFERENCE.system, "MEDUSA");
+    assert.equal(MEDUSA_CATEGORY_REFERENCE.entityType, "Category");
   });
 });
