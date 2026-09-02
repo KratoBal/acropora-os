@@ -1,3 +1,4 @@
+import type { AssetLabelBatchSummary } from "@acropora/types";
 import type {
   AssetDetail,
   AssetListResponse,
@@ -12,6 +13,39 @@ import type {
 
 import { apiAuthHeaders, apiRequest } from "./client";
 import { API_PREFIX } from "./api-prefix";
+
+export const assetLabelsApi = {
+  /**
+   * A KORABBI GENERALASOK: mikor, hany kod, hany szabad meg.
+   *
+   * A "szabad" a MEG NEM REGISZTRALT kodok szama, es a szerver SZAMOLJA. Hogy
+   * hany matrica van meg KINYOMTATATLANUL, arra ma nincs forras -- a nyomtatas
+   * tenyet sehol nem rogzitjuk.
+   */
+  batches(token: string, signal?: AbortSignal) {
+    return apiRequest<AssetLabelBatchSummary[]>(
+      "/service/assets/label-batches",
+      token,
+      { signal },
+    );
+  },
+  /**
+   * UJ TETEL GENERALASA. A valasz a kodokat IS visszaadja, hogy a letoltes
+   * azonnal eloallithato legyen belole -- kulon lekerdezes nelkul.
+   */
+  issue(token: string, count: number, signal?: AbortSignal) {
+    return apiRequest<{ batchId: string; codes: string[] }>(
+      "/service/assets/label-batches",
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ count }),
+        signal,
+      },
+    );
+  },
+};
 
 export const assetsApi = {
   list(token: string, query: URLSearchParams, signal?: AbortSignal) {
