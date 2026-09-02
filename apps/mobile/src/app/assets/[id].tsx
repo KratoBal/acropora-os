@@ -1,8 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import * as ImagePicker from "expo-image-picker";
-import * as Print from "expo-print";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
-import * as Sharing from "expo-sharing";
 import {
   ActivityIndicator,
   Pressable,
@@ -15,20 +13,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
-import { getAsset, getAssetQr, uploadAssetDocuments } from "@/lib/api/assets";
+import { getAsset, uploadAssetDocuments } from "@/lib/api/assets";
 import { MAX_FILES_PER_UPLOAD } from "@/lib/api/asset-document-upload";
 import { photoPermissionDeniedNotice } from "@/lib/api/photo-permission-notice";
 import { toPickedImages } from "@/lib/api/picked-image";
 import { ASSET_STATUS_LABELS } from "@/lib/assets/asset-status";
-import {
-  LABEL_GAP_MM,
-  LABEL_NAME_FONT_MM,
-  LABEL_NUMBER_FONT_MM,
-  LABEL_PADDING_MM,
-  labelAssetNumber,
-  labelLayout,
-  labelPageSize,
-} from "@/lib/assets/label-format";
 import { assetPlacementDetail } from "@/lib/assets/asset-placement";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
@@ -178,32 +167,6 @@ export default function AssetDetailScreen() {
     await uploadPicked(result.assets);
   };
 
-  const printLabel = async (share: boolean) => {
-    if (!query.data) return;
-    const qr = await getAssetQr(query.data.id);
-    const html = labelHtml(qr.svg, query.data.assetNumber, query.data.name);
-    if (share) {
-      /**
-       * A LAP-MÉRET A HÍVÁSBÓL JÖN, nem a stílusból. Az `expo-print` iOS oldalon
-       * a `PrintOptions.toPageSize()` a Letter méretből indul, és csak a
-       * `width`/`height` értéket veszi figyelembe; a `@page` CSS-t ez az út nem
-       * olvassa. Enélkül teljes lapra készül a PDF, egy apró címkével a sarkában.
-       */
-      const { uri } = await Print.printToFileAsync({
-        html,
-        ...labelPageSize(),
-      });
-      if (await Sharing.isAvailableAsync())
-        await Sharing.shareAsync(uri, {
-          mimeType: "application/pdf",
-          UTI: "com.adobe.pdf",
-          dialogTitle: `${query.data.assetNumber} QR-címke`,
-        });
-      return;
-    }
-    await Print.printAsync({ html, ...labelPageSize() });
-  };
-
   if (status !== "authenticated" || !user) return <Redirect href="/login" />;
   if (!capabilities?.assetsView) return <Redirect href="/" />;
 
@@ -347,7 +310,7 @@ export default function AssetDetailScreen() {
               <Info label="Gyártó" value={asset.manufacturer} />
               <Info label="Modell" value={asset.model} />
               <Info label="Sorozatszám" value={asset.serialNumber} />
-              <Info label="Leltári szám" value={asset.inventoryNumber} />
+              <Info label="Partner azonosítója" value={asset.inventoryNumber} />
               <Info label="Termék" value={asset.product?.name} />
               <Info label="Leírás" value={asset.description} />
             </Section>
@@ -421,21 +384,6 @@ export default function AssetDetailScreen() {
                 {uploadNotice ? (
                   <Text style={styles.uploadNotice}>{uploadNotice}</Text>
                 ) : null}
-              </Section>
-            ) : null}
-
-            {!fromCache ? (
-              <Section title="QR-címke · 30 × 30 mm">
-                <AssetLink
-                  label="Nyomtatás"
-                  meta="Rendszer nyomtatási párbeszédablak"
-                  onPress={() => void printLabel(false)}
-                />
-                <AssetLink
-                  label="PDF megosztása"
-                  meta="Megnyitás a címkenyomtató alkalmazásában"
-                  onPress={() => void printLabel(true)}
-                />
               </Section>
             ) : null}
 
@@ -549,52 +497,6 @@ function formatDate(value?: string) {
         new Date(value),
       )
     : undefined;
-}
-
-function escapeHtml(value: string) {
-  return value.replace(
-    /[&<>"']/g,
-    (character) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
-        character
-      ]!,
-  );
-}
-
-/**
- * A címke tartalma. A MÉRETEK a `label-format` modulból jönnek, hogy a stílus és
- * a nyomtatási hívás ne mondhasson két különböző számot: ez a hiba csak
- * nyomtatásban derülne ki, és akkor sem mondaná meg magáról, hogy méret-eltérés.
- */
-/**
- * A CÍMKE FEKVŐ, ÉS A FELIRAT A KÓD MELLETT VAN, NEM ALATTA.
- *
- * A szalag 24 mm széles és folytonos: a magasság kötött, a hossz szabad. Ha a
- * felirat a kód ALÁ kerülne, a szövegsáv abból a magasságból venne el, amiből a
- * modul-méret származik -- vagyis pont a beolvashatóságból. Mellette viszont a
- * kód megkapja a teljes magasságot, és a szöveg a szabad irányba nő.
- *
- * MINDEN MÉRET A LEVEZETÉSBŐL JÖN (`labelLayout()`). Kézzel beírt milliméter itt
- * nincs, mert a stílus és a nyomtatási hívás akkor válna szét, és a különbség
- * csak a kinyomtatott szalagon derülne ki.
- */
-function labelHtml(svg: string, assetNumber: string, name: string) {
-  const { pageWidthMm, pageHeightMm, qrSizeMm, textWidthMm } = labelLayout();
-
-  // A CÍMKÉRE A RÖVIDÍTETT AZONOSÍTÓ KERÜL, nem a teljes eszközszám. A teljes
-  // szám a QR-ben lévő hivatkozásban van; a felirat az emberi visszakeresést
-  // szolgálja, és a rövid alak a teljes szám vége, tehát kereséssel megtalálja.
-  const number = labelAssetNumber(assetNumber);
-
-  return `<!doctype html><html><head><meta name="viewport" content="width=device-width"><style>
-    @page { size: ${pageWidthMm}mm ${pageHeightMm}mm; margin: 0; }
-    html, body { width: ${pageWidthMm}mm; height: ${pageHeightMm}mm; margin: 0; padding: 0; overflow: hidden; }
-    body { box-sizing: border-box; padding: ${LABEL_PADDING_MM}mm; font-family: -apple-system, Arial, sans-serif; color: #000; display: flex; align-items: center; gap: ${LABEL_GAP_MM}mm; }
-    svg { display: block; flex: none; width: ${qrSizeMm}mm; height: ${qrSizeMm}mm; }
-    .text { flex: none; width: ${textWidthMm}mm; overflow: hidden; }
-    .number { font-size: ${LABEL_NUMBER_FONT_MM}mm; font-weight: 800; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .name { margin-top: ${LABEL_GAP_MM}mm; font-size: ${LABEL_NAME_FONT_MM}mm; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  </style></head><body>${svg}<div class="text"><div class="number">${escapeHtml(number)}</div><div class="name">${escapeHtml(name)}</div></div></body></html>`;
 }
 
 const styles = StyleSheet.create({

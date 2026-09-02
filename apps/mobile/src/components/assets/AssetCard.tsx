@@ -44,12 +44,21 @@ export function AssetCard({
         <Text style={styles.meta}>{asset.childCount} részegység</Text>
       ) : null}
       {/*
+        A FELIRAT ES A MEZONEV TARTOSAN ELTER, ES EZ NEM ELIRAS. A mezo a
+        semaban `inventoryNumber`, a felirat viszont "Partner azonosítója"
+        (Balazs, 2026-09-02): a szam nem a MI leltarunk, hanem az ugyfele, es a
+        "leltari szam" felirat epp az ellenkezojet sugallta. A mezo atnevezese
+        kulon kor lenne (sema, migracio, API, web), a felirat viszont ma
+        felrevezet -- ezert valt a felirat elobb.
+
         AZ UGYFEL SAJAT KODJA, csak ha van, es FELIRATTAL. A kereses nezi, tehat
         a talalatnak meg kell mutatnia, mire illeszkedett -- a felirat pedig
         azert kell, hogy a sorban ne legyen osszekeverheto a mi eszkozszamunkkal.
       */}
       {asset.inventoryNumber ? (
-        <Text style={styles.meta}>Leltári szám: {asset.inventoryNumber}</Text>
+        <Text style={styles.meta}>
+          Partner azonosítója: {asset.inventoryNumber}
+        </Text>
       ) : null}
       {asset.manufacturer || asset.model || asset.serialNumber ? (
         <Text style={styles.technical}>

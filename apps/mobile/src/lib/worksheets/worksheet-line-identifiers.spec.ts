@@ -33,11 +33,11 @@ describe("a munkalap tételsora a két azonosítót külön kezeli", () => {
   it("writes the customer's own code with its label", () => {
     const source = readFileSync(SCREEN, "utf8");
 
-    assert.match(source, /Leltári szám: \{line\.inventoryNumber\}/);
+    assert.match(source, /Partner azonosítója: \{line\.inventoryNumber\}/);
   });
 
   /**
-   * ÉS CSAK AKKOR, HA VAN: egy érték nélküli "Leltári szám:" azt állítaná,
+   * ÉS CSAK AKKOR, HA VAN: egy érték nélküli "Partner azonosítója:" azt állítaná,
    * hogy tudunk róla valamit. A mező nullázható, tehát ez nem elméleti eset,
    * hanem a leggyakoribb: a legtöbb eszközön ma nincs ügyfél-kód.
    */

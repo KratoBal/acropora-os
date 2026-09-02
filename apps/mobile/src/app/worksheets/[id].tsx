@@ -144,7 +144,7 @@ export default function WorksheetDetailScreen() {
                   */}
                   {line.inventoryNumber ? (
                     <Text style={styles.muted}>
-                      Leltári szám: {line.inventoryNumber}
+                      Partner azonosítója: {line.inventoryNumber}
                     </Text>
                   ) : null}
                   <Text style={styles.lineSummary}>

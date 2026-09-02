@@ -66,6 +66,8 @@ export default function NewAssetScreen() {
   const [installedAt, setInstalledAt] = useState("");
   const [interval, setInterval] = useState("");
   const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [kindPickerOpen, setKindPickerOpen] = useState(false);
+  const [unitPickerOpen, setUnitPickerOpen] = useState(false);
   /**
    * A hiba MEZŐSTÜL. A `field` azt mondja meg, hol kell megmutatni; `null`
    * annyit tesz, hogy a szervertől jött, tehát nem köthető egy mezőhöz.
@@ -288,42 +290,68 @@ export default function NewAssetScreen() {
                 beallitott helyszin nemán eltunne. Uj eszkoznel ez nem all elo,
                 de a ket urlap ugyanazt a szabalyt kovesse.
               */}
-              {unitLevels(unitsQuery.data?.items ?? [], unitId || null).map(
-                (level, depth) =>
-                  level.options.length === 0 ? null : (
-                    <View key={`szint-${depth}`} style={styles.unitLevel}>
-                      {level.options.map((option) => {
-                        const selected = level.selectedId === option.id;
-                        return (
-                          <Pressable
-                            key={option.id}
-                            disabled={!option.isActive && !selected}
-                            onPress={() => setUnitId(selected ? "" : option.id)}
-                            style={[
-                              styles.ownerRow,
-                              selected && styles.ownerSelected,
-                              !option.isActive && !selected && styles.unitOff,
-                            ]}
-                          >
-                            <Text style={styles.ownerName}>
-                              {option.label}
-                              {option.isActive ? "" : " (kivezetett)"}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  ),
-              )}
-              {/*
-                A KIHAGYÁS NEM NÉMA. Aki tudja, hogy annak a partnernek hat
-                helyszíne van, és négyet lát, a listát hiszi hibásnak.
-              */}
-              {units.hiddenCount > 0 ? (
-                <Text style={styles.hint}>
-                  {units.hiddenCount} kivezetett helyszín nem választható.
-                </Text>
-              ) : null}
+              <Legordulo
+                osszegzes={
+                  // A TELJES UT, ahogy a `UnitOption.label` amugy is tartalmazza
+                  // ("Fánk / Biodóm (BIO)"). A becsukott sor igy megmondja, HOL
+                  // all az eszkoz -- enelkul a legordulo elrejtene a valasztast.
+                  units.options.find((option) => option.id === unitId)?.label ??
+                  "Nincs helyszín kiválasztva"
+                }
+                hint="Koppints a listához"
+                cimke="Helyszín választása"
+                nyitva={unitPickerOpen}
+                onToggle={() => setUnitPickerOpen((open) => !open)}
+              >
+                {/*
+                  LEGORDULO A LEPCSOS LISTA FOLE. Itt a partner INDOKA all, szo
+                  szerint: a helyszin-fa melysege nem korlatos, es a mindig
+                  nyitott lista lenyomja a tobbi mezot a kepernyo alja ala.
+
+                  ES AMI ITT MAS, MINT A TIPUSNAL: valasztaskor NEM csukodik be.
+                  A lepcsos valasztonal egy koppintas egyben LEFELE LEPES is (a
+                  kovetkezo szint a valasztott elem gyermekeibol all), tehat a
+                  becsukas epp a lefuras kozben venne el a listat.
+                */}
+                {unitLevels(unitsQuery.data?.items ?? [], unitId || null).map(
+                  (level, depth) =>
+                    level.options.length === 0 ? null : (
+                      <View key={`szint-${depth}`} style={styles.unitLevel}>
+                        {level.options.map((option) => {
+                          const selected = level.selectedId === option.id;
+                          return (
+                            <Pressable
+                              key={option.id}
+                              disabled={!option.isActive && !selected}
+                              onPress={() =>
+                                setUnitId(selected ? "" : option.id)
+                              }
+                              style={[
+                                styles.ownerRow,
+                                selected && styles.ownerSelected,
+                                !option.isActive && !selected && styles.unitOff,
+                              ]}
+                            >
+                              <Text style={styles.ownerName}>
+                                {option.label}
+                                {option.isActive ? "" : " (kivezetett)"}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    ),
+                )}
+                {/*
+                  A KIHAGYÁS NEM NÉMA. Aki tudja, hogy annak a partnernek hat
+                  helyszíne van, és négyet lát, a listát hiszi hibásnak.
+                */}
+                {units.hiddenCount > 0 ? (
+                  <Text style={styles.hint}>
+                    {units.hiddenCount} kivezetett helyszín nem választható.
+                  </Text>
+                ) : null}
+              </Legordulo>
             </Section>
           ) : null}
 
@@ -331,20 +359,45 @@ export default function NewAssetScreen() {
             <Field label="Eszköz neve *" value={name} onChangeText={setName} />
             <FieldError error={error} field="name" />
             <Text style={styles.label}>Típus</Text>
-            <View style={styles.kindGrid}>
-              {kinds.map((item) => (
-                <Pressable
-                  key={item.value}
-                  onPress={() => setKind(item.value)}
-                  style={[
-                    styles.kindButton,
-                    kind === item.value && styles.kindSelected,
-                  ]}
-                >
-                  <Text style={styles.kindText}>{item.label}</Text>
-                </Pressable>
-              ))}
-            </View>
+            {/*
+              LEGORDULO, MINT A PARTNERNEL. Balazs kerese (2026-09-02): "A
+              Partner valasztas legorduloje jo, de a tobbi... Ugyanugy kerem
+              mint a partnert."
+
+              ES AZ INDOK ITT MAS, MINT A PARTNERNEL -- ezt erdemes kiirni,
+              mert kulonben a kovetkezo olvaso a partner indokat vetiti ide. Ott
+              a lista KORLATLAN, es egy nyitott lista lenyomja a tobbi mezot.
+              Itt ot rogzitett ertek all, tehat nem a hossz a baj: a
+              KOVETKEZETESSEG. Egy urlap, amin harom valaszto haromfelekeppen
+              nez ki, magaban is az a panasz, amit Balazs leirt.
+            */}
+            <Legordulo
+              osszegzes={
+                kinds.find((k) => k.value === kind)?.label ?? "Válassz típust"
+              }
+              hint="Koppints a listához"
+              cimke="Típus választása"
+              nyitva={kindPickerOpen}
+              onToggle={() => setKindPickerOpen((open) => !open)}
+            >
+              <View style={styles.kindGrid}>
+                {kinds.map((item) => (
+                  <Pressable
+                    key={item.value}
+                    onPress={() => {
+                      setKind(item.value);
+                      setKindPickerOpen(false);
+                    }}
+                    style={[
+                      styles.kindButton,
+                      kind === item.value && styles.kindSelected,
+                    ]}
+                  >
+                    <Text style={styles.kindText}>{item.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </Legordulo>
             <Field
               label="Gyártó"
               value={manufacturer}
@@ -363,7 +416,7 @@ export default function NewAssetScreen() {
               lehetett pótolni -- egy külön kör telefonálással.
             */}
             <Field
-              label="Leltári szám"
+              label="Partner azonosítója"
               value={inventoryNumber}
               onChangeText={setInventoryNumber}
             />
@@ -484,6 +537,49 @@ function Field(props: {
         style={styles.input}
       />
     </View>
+  );
+}
+
+/**
+ * BECSUKOTT VALASZTO, EGY OSSZEGZO SORRAL.
+ *
+ * A partner-valaszto alakjat altalanositja: egy sor, ami MEGMONDJA a jelenlegi
+ * valasztast, es koppintasra kinyilik. Balazs kerese (2026-09-02): a felviteli
+ * urlapon minden valaszto igy nezzen ki.
+ *
+ * A KOMPONENS NEM DONTI EL, MIKOR CSUKODIK BE -- azt a hivo mondja meg. A tipusnal
+ * a valasztas egy lepes, tehat becsukodik; a helyszinnel a koppintas egyben
+ * lefele lepes is, tehat nyitva marad. Egy komponens, ami ezt magatol dontene el,
+ * a ket eset kozul az egyiket elrontana.
+ */
+function Legordulo({
+  osszegzes,
+  hint,
+  cimke,
+  nyitva,
+  onToggle,
+  children,
+}: {
+  osszegzes: string;
+  hint: string;
+  cimke: string;
+  nyitva: boolean;
+  onToggle(): void;
+  children: ReactNode;
+}) {
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${cimke}: ${osszegzes}. Koppints a módosításhoz.`}
+        onPress={onToggle}
+        style={styles.ownerRow}
+      >
+        <Text style={styles.ownerName}>{osszegzes}</Text>
+        <Text style={styles.ownerMeta}>{hint}</Text>
+      </Pressable>
+      {nyitva ? children : null}
+    </>
   );
 }
 
