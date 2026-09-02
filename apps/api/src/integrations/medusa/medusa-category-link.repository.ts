@@ -1,6 +1,8 @@
 import { Inject, Injectable, Optional } from "@nestjs/common";
 import { prisma } from "@acropora/database";
 
+import { MEDUSA_CATEGORY_REFERENCE } from "./medusa-category.policy.js";
+
 /**
  * A KATEGORIA-AZONOSSAG helye az Acropora OS es a Medusa kozott.
  *
@@ -23,8 +25,17 @@ import { prisma } from "@acropora/database";
  * nem ez zarja ki, hanem az, hogy egyszerre egy iro fut.
  */
 
-const SYSTEM = "MEDUSA" as const;
-const ENTITY_TYPE = "Category" as const;
+/**
+ * A KERESESI KULCS A KOZOS KONSTANSBOL JON, NEM SAJAT LITERALBOL.
+ *
+ * Nautilus kerese, es az indok szerkezeti: a kulcs ket mezoje nem egyformán
+ * vedett. A `system` a sema `ExternalSystem` ENUMJA, tehat egy elgepeles
+ * forditasi hiba. Az `entityType` szabad `String` -- ott semmi nem szol, ha a
+ * betoltes es a vetites ket irasmodot hasznal. Ha a ket vegunk elcsuszna, SEMMI
+ * nem hibazna: en irnam a sorokat, o nem talalna oket, es minden termek
+ * kategoria nelkul vetulne.
+ */
+const { system: SYSTEM, entityType: ENTITY_TYPE } = MEDUSA_CATEGORY_REFERENCE;
 
 export interface MedusaCategoryLink {
   /** Az Acropora OS `Category.id` erteke. */
