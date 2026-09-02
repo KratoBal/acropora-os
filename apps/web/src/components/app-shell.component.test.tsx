@@ -173,15 +173,18 @@ describe("AppShell business navigation groups", () => {
   });
 
   /**
-   * The heading disappears with its pages, and narrows to the ones that are
-   * left. A technician may see the webshop buyers but not the orders, and may
-   * see nothing at all under Pénzügy: the first heading stays with one page
-   * under it, the second is not drawn.
+   * EZ A KETTO KORABBAN EGY TESZT VOLT, es a szetvalasztas nem stilus: a
+   * szervizes szerep 2026-09-02-an elvesztette a `products.view` es a
+   * `customers.view` jogat, tehat a Webshop csoportbol MAR EGY oldalt sem lat.
+   * Egy szerep, ami egyszerre mutatja a szukulest ES az eltunest, ma nincs
+   * (merve: a Webshop csoport csak a WAREHOUSE-nal szukul, az viszont latja a
+   * Penzugyet). A ket allitas tehat ket szereppel all, egyenkent.
    *
-   * Both halves are asserted together on purpose. Checking only the missing
-   * heading would also pass on a menu that hid everything.
+   * AMI AZ EREDETI TESZTBOL ATJON: a kontroll. Egy "nem latszik" allitas akkor
+   * is zold, ha a menu MINDENT elrejtett -- ezert mindkettoben all egy pozitiv
+   * sor is, ami bizonyitja, hogy a menu egyaltalan rajzol valamit.
    */
-  it("narrows a heading to the pages in reach, and drops it when none are", () => {
+  it("drops a heading when no page under it is in reach", () => {
     auth.session = {
       ...ownerSession,
       user: { ...ownerSession.user, role: "SERVICE" },
@@ -192,14 +195,38 @@ describe("AppShell business navigation groups", () => {
     expect(
       screen.queryByRole("button", { name: "Pénzügy" }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Webshop" }),
+    ).not.toBeInTheDocument();
+
+    // A KONTROLL: a menu nem ures, csak ez a ket fejlec hianyzik.
+    fireEvent.click(screen.getByRole("button", { name: "Szerviz" }));
+    expect(
+      screen.getByRole("link", { name: "Munkalapok" }),
+    ).toBeInTheDocument();
+  });
+
+  it("narrows a heading to the pages in reach", () => {
+    // A RAKTAROS latja a megrendeleseket es a bolt termeklistajat, a webshop
+    // vasarloit viszont nem -- ezert rajta latszik, hogy a fejlec megmarad, es
+    // csak a nem elerheto sor tunik el alola.
+    auth.session = {
+      ...ownerSession,
+      user: { ...ownerSession.user, role: "WAREHOUSE" },
+    };
+
+    render(<AppShell>Oldaltartalom</AppShell>);
 
     fireEvent.click(screen.getByRole("button", { name: "Webshop" }));
 
     expect(
-      screen.getByRole("link", { name: "Webshop vásárlók" }),
+      screen.getByRole("link", { name: "Megrendelések" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("link", { name: "Megrendelések" }),
+      screen.getByRole("link", { name: "Webshop termékek" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Webshop vásárlók" }),
     ).not.toBeInTheDocument();
   });
 });

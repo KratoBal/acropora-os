@@ -12,6 +12,7 @@ import {
   ROLE_PERMISSIONS,
   USER_ROLES,
 } from "./auth.js";
+import type { UserRole } from "./auth.js";
 
 describe("role permission mapping", () => {
   it("defines a permission set for every role", () => {
@@ -118,6 +119,15 @@ describe("permission helpers", () => {
   });
 });
 
+/**
+ * A SZEREPEK, AMIKET A "mindenki" ALOL KIVETTUNK, ES MIERT.
+ *
+ * SERVICE -- Balazs 2026-09-02 08:39-i menu-listaja, ami TELJES lista, es az AI
+ * teszt nincs rajta. Ez a 2026-08-26-i dontesben kimondott szukitesi feltetel
+ * bekovetkezese, nem a felulirasa.
+ */
+const SZUKITETT: readonly UserRole[] = ["SERVICE"];
+
 describe("AI_TEST_VIEW", () => {
   it("is held by every role, because that is what was asked for", () => {
     /**
@@ -131,11 +141,22 @@ describe("AI_TEST_VIEW", () => {
      * a menüpont ott is látszana, ahol nézzük.
      *
      * A szűkítés feltételét is ő mondta ki: amikor a felhasználói
-     * jogosultságokat rendezzük. Addig ez a sor őrzi a döntést.
+     * jogosultságokat rendezzük.
      *
-     * A GÉPI SZEREPEK KIVÉTELT KÉPEZNEK, és ez a kivétel a `MACHINE_ROLES`
-     * listában áll. Nem a döntés felülírása: a mondat a kollégákról szólt,
-     * gépi fiók akkor még nem létezett.
+     * EZ A FELTÉTEL 2026-09-02-ÁN TELJESÜLT, A SERVICE SZEREPRE. Balázs aznap
+     * megadta a szervizes teljes menü-listáját ("ezen kívül nem kell másnak
+     * látszania"), és az AI teszt nincs rajta. Ezért a SERVICE kikerült a
+     * szabály alól -- nem a döntés felülírása, hanem a benne kimondott
+     * feltétel bekövetkezése.
+     *
+     * A GÉPI SZEREPEK ugyanígy kivételt képeznek (`MACHINE_ROLES`): a mondat a
+     * kollégákról szólt, gépi fiók akkor még nem létezett.
+     *
+     * AMIÉRT A KIVÉTEL-LISTA MELLÉ ÁLLÍTÁS IS KELL: egy kivétel-lista magától
+     * nem tud elbukni, tehát egy odaírt szerep csendben kivenne bárkit. Ezért
+     * az alsó állítás megköveteli, hogy a listán CSAK olyan szerep álljon, ami
+     * tényleg nem kapja meg a jogot -- egy elavult vagy indokolatlan bejegyzés
+     * így pirosít.
      */
     // A "MINDENKI" EMBERI SZEREPET JELENT, es ez most mar kiirva all
     // (`MACHINE_ROLES`), nem ennek a ciklusnak a belsejeben. A dontes 2026-08-26-an
@@ -148,13 +169,33 @@ describe("AI_TEST_VIEW", () => {
     assert.equal(HUMAN_ROLES.length, USER_ROLES.length - MACHINE_ROLES.length);
     assert.ok(HUMAN_ROLES.length > 0);
 
-    for (const role of HUMAN_ROLES) {
+    const vart = HUMAN_ROLES.filter((role) => !SZUKITETT.includes(role));
+    assert.ok(
+      vart.length >= 4,
+      `Csak ${vart.length} szerepre maradt allitas. Ez a kivetel-lista hibaja.`,
+    );
+
+    for (const role of vart) {
       assert.equal(
         hasPermission(role, PERMISSIONS.AI_TEST_VIEW),
         true,
         `${role} nem kapta meg az AI teszt-felület jogát`,
       );
     }
+
+    // A KIVETEL-LISTA SEM AVULHAT EL: ha egy szerep ott all, de KAPJA a jogot,
+    // akkor a bejegyzes indokolatlan, es a kovetkezo olvaso azt hinne, hogy
+    // valaki szandekosan vette ki. (Ugyanaz az alak, mint a mobil tukornel a
+    // bennragadt megfeleltetes.)
+    const bennragadt = SZUKITETT.filter((role) =>
+      hasPermission(role, PERMISSIONS.AI_TEST_VIEW),
+    );
+    assert.deepEqual(
+      bennragadt,
+      [],
+      "Ezek a szerepek a szukitesi listan allnak, de MEGKAPJAK a jogot: " +
+        bennragadt.join(", "),
+    );
   });
 });
 
