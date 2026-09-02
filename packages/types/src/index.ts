@@ -139,6 +139,7 @@ export type { AssetLabelBatchSummary } from "./asset-label-batch.js";
 export {
   ASSET_LABEL_BATCH_MAX,
   ASSET_LABEL_BATCH_MIN,
+  assetLabelCsv,
   randomAssetLabelCode,
 } from "./asset-label-batch.js";
 export {

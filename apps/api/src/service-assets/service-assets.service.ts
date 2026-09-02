@@ -47,6 +47,18 @@ import { documentStoreEnabled } from "./document-store/document-store.provider.j
 import { createAssetQrSvg } from "./qr-svg.js";
 import { ServiceAssetsRepository } from "./service-assets.repository.js";
 
+/**
+ * A KET UZENET, EGYMAS MELLETT, HOGY A KULONBSEG LATSZODJON.
+ *
+ * A belsos felhasznalo a KET esetet kulon latja; a partner az osszevontat. Ha
+ * ezek szet lennenek szorva a kodban, egy kesobbi "egysegesites" csendben a
+ * BOVEBBET adna a partnernek is -- es az a valtozas MUKODONEK latszana.
+ */
+const MATRICA_UZENET_BELSOS =
+  "Ez a matricakód nincs kiadva, vagy már egy másik eszközön áll. Nézd meg a kiadott kódok listáját, vagy olvass be másik matricát.";
+const MATRICA_UZENET_PARTNER =
+  "Ez a matricakód nem köthető ehhez az eszközhöz. Olvass be másik matricát.";
+
 @Injectable()
 export class ServiceAssetsService {
   constructor(
@@ -111,7 +123,21 @@ export class ServiceAssetsService {
     return asset;
   }
 
-  async create(input: CreateAssetDto, actorUserId: string) {
+  async create(
+    input: CreateAssetDto,
+    actorUserId: string,
+    /**
+     * A HATOKOR CSAK A HIBAUZENET MIATT KELL, es ezt ki kell mondani, mert
+     * kulonben a kovetkezo olvaso azt hiszi, hogy a letrehozas szur ra.
+     *
+     * Balazs dontese (2026-09-02 20:2x): "a sajat embereinknek mondjuk meg
+     * melyik eset all fenn". A BELSOS felhasznalo megtudja, hogy a kod nincs
+     * kiadva VAGY mar mason all; a PARTNER a mai, osszevont uzenetet kapja --
+     * mert a ket eset kulonvalasztasa nala felterkepezhetove tenne a kiadott
+     * keszletet (ot karakteres kod).
+     */
+    scope: PartnerScope,
+  ) {
     /**
      * A MATRICA-SZABALY EGY HELYEN ALL, ES ITT KERDEZZUK MEG.
      *
@@ -141,7 +167,7 @@ export class ServiceAssetsService {
     try {
       return await this.repository.create(input, actorUserId);
     } catch (error) {
-      this.map(error);
+      this.map(error, scope);
     }
   }
 
@@ -194,6 +220,20 @@ export class ServiceAssetsService {
     } catch (error) {
       if (error instanceof AssetLabelPoolExhaustedError)
         throw new ConflictException(error.message);
+      this.map(error);
+    }
+  }
+
+  /**
+   * MAR KINYOMTATOTT KODOK BETOLTESE. A valasz kulon mondja meg, mi jott letre
+   * es mi allt mar ott -- egy megismetelt betoltes igy nem latszik ujnak.
+   */
+  async importBatch(codes: readonly string[]) {
+    if (codes.length === 0)
+      throw new BadRequestException("Legalább egy matricakódot meg kell adni.");
+    try {
+      return await this.repository.importBatch(codes);
+    } catch (error) {
       this.map(error);
     }
   }
@@ -614,7 +654,7 @@ export class ServiceAssetsService {
       );
   }
 
-  private map(error: unknown): never {
+  private map(error: unknown, scope?: PartnerScope): never {
     /**
      * A MATRICAKOD-UTKOZES 409, NEM 400.
      *
@@ -634,7 +674,9 @@ export class ServiceAssetsService {
           "A matricakód alakja egy betű és négy szám (például V2196).",
         );
       throw new ConflictException(
-        "Ez a matricakód nem köthető: vagy nincs kiadva, vagy már másik eszközön áll. Olvass be másik matricát.",
+        scope?.kind === "internal"
+          ? MATRICA_UZENET_BELSOS
+          : MATRICA_UZENET_PARTNER,
       );
     }
     if (error instanceof Error && error.message === "ASSET_HIERARCHY_CYCLE")

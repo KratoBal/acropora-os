@@ -113,6 +113,19 @@ export class ServiceAssetsController {
     return this.service.issueBatch(input.count);
   }
 
+  /**
+   * MAR KINYOMTATOTT KODOK BETOLTESE UJ TETELKENT. SERVICE_MANAGE.
+   *
+   * Az elso tetel a nyilvantartasban eppen ilyen: a 2026-09-02-i tiz kod, amit
+   * mar kinyomtattak. Megismetelheto: a mar letezo kodok nem duplikalodnak, es
+   * a valasz megmondja, melyek voltak azok.
+   */
+  @Post("label-batches/import")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  importLabelBatch(@Body() input: IssueAssetLabelsDto) {
+    return this.service.importBatch(input.codes);
+  }
+
   /** A korabbi generalasok: mikor, hany kod, hany szabad meg. */
   @Get("label-batches")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
@@ -168,7 +181,7 @@ export class ServiceAssetsController {
     @Body() input: CreateAssetDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.create(input, user.id);
+    return this.service.create(input, user.id, partnerScopeOf(user));
   }
 
   @Patch(":id")
