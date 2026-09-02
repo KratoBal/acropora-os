@@ -153,6 +153,12 @@ export class ServiceJobsRepository {
         completedAt: true,
         customer: { select: { displayName: true } },
         events: {
+          // CSAK AZ ALLAPOTVALTASOK, KIMONDVA (ADR-013). A naplo tablaja
+          // 2026-09-02 ota tobbfajta sort hordoz, es ennek az olvasonak az
+          // ERTELME VALTOZATLAN: allapotvaltasokat fesul ossze. A szures
+          // ezert nem szukites, hanem a mai jelentes megtartasa -- enelkul
+          // egy munkalap-esemeny cel-allapot nelkul kerulne az idovonalra.
+          where: { kind: "STATUS_CHANGE" },
           // A napló legújabb felül; a végleges sorrendet a közös
           // `serviceJobTimeline` adja, de a lekérdezés se adjon vaktában.
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],

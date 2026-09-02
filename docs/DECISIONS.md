@@ -489,3 +489,61 @@ láthatóság, hanem művelet, és a kettő nem ugyanaz a kérdés.
 
 **Amit ez megszüntetne:** a kézzel karbantartott tükör a telefonon, és vele a két
 ellenőrzés, aminek ma van tárgya.
+
+## ADR-013 – A hibajegy naplójában az esemény FAJTÁJA kimondott oszlop
+
+**Dátum:** 2026-09-02
+
+**A döntés acrobot döntése, nem a tulajdonosé.** Nincs olyan üzenete Balázstól,
+ami erről szólna, tehát ez a bekezdés felülvizsgálható: ha egy mérés megdönti,
+megfordul. (Azért áll itt kimondva, mert egy kölcsönvett tekintély bezár egy
+kérdést, amit nyitva kellene hagyni.)
+
+**Döntés:** a `ServiceJobEvent` sor fajtáját külön oszlop mondja meg
+(`kind`, `ServiceJobEventKind`), és NEM egy másik mező hiánya. A `toStatus`
+nullázhatóvá válik, de a fajtát nem ő jelzi.
+
+**AZ INDOK, ÉS NEM SZÉPÉSZETI: a hiány rossz jel.** Ha az esemény fajtáját a
+`toStatus` hiánya jelölné, akkor egy ELFELEJTETT `toStatus` pontosan ugyanúgy
+nézne ki, mint egy szándékosan más fajtájú esemény. A szándékot nem lehetne
+megkülönböztetni a mulasztástól, és a tévedés nem szólna: csendben egy másik
+sorfajta keletkezne. Az adatbázis nem tud jelezni egy olyan hibát, amit a saját
+szerkezete értelmes állapotnak lát.
+
+**A második ok mérésből jön: a MEGLÉVŐ sorok értelme nem változhat.** A
+migráció pillanatában minden tárolt sor állapotváltás volt. Ha csak a `toStatus`
+válna opcionálissá, a régi sorok fajtája visszamenőleg a mező kitöltöttségéből
+következne — igaz maradna, de a séma többé nem GARANTÁLNÁ. A diszkriminátor
+alapértékkel ezt kimondja: minden meglévő sor explicit `STATUS_CHANGE` lesz.
+
+**A mezők együtt állását adatbázis-szintű CHECK tartja**
+(`ServiceJobEvent_kind_fields_agree`). Enélkül a `kind` csak címke volna a sor
+mellett, és keletkezhetne cél-állapot nélküli `STATUS_CHANGE` — pontosan az az
+állapot, amit a döntés meg akar szüntetni.
+
+**AZ ELVETETT ALTERNATÍVÁK, ÉS MIÉRT NEM AZOK LETTEK:**
+
+1. **Opcionális `toStatus`, külön fajta-oszlop nélkül.** Ez a legkisebb
+   szerkesztés, és ez a baja: a jel és a jelentés elválik. A hiány nem hordoz
+   szándékot, tehát az olvasó minden későbbi esetben KÖVETKEZTETNE, és a rossz
+   következtetés néma. Ráadásul a régi sorokra visszamenőleg is elveszti a
+   garanciát (lásd fent).
+2. **Külön tábla eseménytípusonként.** Erősebb, mint az első: mindegyik tábla
+   pontosan a maga mezőit hordozná, és nem kellene CHECK. De a napló KÉRDÉSE
+   időrendi és vegyes („mi történt a jeggyel"), tehát minden olvasás
+   `UNION`-ná válna, az időrendi lapozás pedig táblákon átívelő rendezéssé. Egy
+   új eseményfajta ilyenkor nem egy enum-érték, hanem egy tábla, egy index és
+   egy ág minden olvasóban. A közös tábla ára egy CHECK; a külön tábláké minden
+   jövőbeli olvasó.
+
+**MI FORDÍTANÁ MEG:** ha egy eseményfajta olyan mezőket hozna, amiket a
+többivel semmi nem oszt meg (például egy alkatrész-rendelés a maga
+mennyiségével, szállítójával, árával), akkor a közös tábla nullázható oszlopok
+gyűjteményévé válna, és a CHECK ágai fajtánként külön szabályhalmazt írnának le.
+Az a pont a 2. alternatíva pontja: **amikor a CHECK hosszabb lesz, mint a közös
+mezők listája**, akkor a fajták már nem egy táblába valók.
+
+**Ami ma NINCS meg, és szándékosan:** ezt a két új fajtát (`WORKSHEET_ATTACHED`,
+`WORKSHEET_DETACHED`) egyelőre semmi nem ÍRJA. A séma hordozza őket, az írási út
+külön szelet. Ez nem elfelejtett bekötés: a megjelenítés és az írás előtt az
+adat alakjának kell állnia.

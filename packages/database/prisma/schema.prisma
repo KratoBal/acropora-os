@@ -271,6 +271,23 @@ enum AddressType {
   OTHER
 }
 
+/// A naplo-sor FAJTAJA, KIMONDVA.
+///
+/// Szandekosan sajat oszlop, es nem egy masik mezo hianyabol kovetkeztetve
+/// (lasd ADR-013). Ha a fajtat a `toStatus` hianya jelezne, egy ELFELEJTETT
+/// `toStatus` pontosan ugy nezne ki, mint egy szandekosan mas fajtaju
+/// esemeny -- es a tevedes nem szolna.
+enum ServiceJobEventKind {
+  /// A jegy allapotot valtott. A `toStatus` ilyenkor KOTELEZO (adatbazis-szintu
+  /// CHECK tartja), a `fromStatus` a jegy letrejottekor `null`.
+  STATUS_CHANGE
+  /// Egy meglevo munkalap a jegy ala kerult.
+  WORKSHEET_ATTACHED
+  /// Egy munkalap lekerult a jegyrol. KELL a parja: enelkul egy levalasztott
+  /// lap CSENDBEN tunne el a jegyrol, es a naplo azt allitana, hogy ma is ott van.
+  WORKSHEET_DETACHED
+}
+
 enum ServiceJobStatus {
   NEW
   TRIAGED
@@ -2503,20 +2520,37 @@ model AssetEvent {
 /// magával a naplót. Ami történt, megtörtént - a sor akkor is igaz, ha már nem
 /// tudjuk, ki csinálta.
 model ServiceJobEvent {
-  id           String            @id @default(cuid())
+  id           String              @id @default(cuid())
   serviceJobId String
+  /// MI TORTENT. Kimondott mezo, nem kovetkeztetes (ADR-013).
+  ///
+  /// Az alapertek NEM kenyelmi kerdes: a migracio pillanataban MINDEN meglevo
+  /// sor allapotvaltas volt, es az alapertek ezt KIMONDJA rajtuk, ahelyett
+  /// hogy a `toStatus` kitoltottsegebol kellene visszafejteni.
+  kind         ServiceJobEventKind @default(STATUS_CHANGE)
   /// Ahonnan lépett; `null` a jegy létrejöttekor.
   fromStatus   ServiceJobStatus?
-  toStatus     ServiceJobStatus
+  /// Ahova lepett. `null` MINDEN nem allapotvalto esemenyen -- de a fajtat NEM
+  /// ez mondja meg, hanem a `kind`. A ketto egyutt allasat adatbazis-szintu
+  /// CHECK tartja (`ServiceJobEvent_status_change_has_to_status`), tehat egy
+  /// `STATUS_CHANGE` sor `toStatus` nelkul nem is keletkezhet.
+  toStatus     ServiceJobStatus?
+  /// A munkalap, amelyikrol az esemeny szol. `null` az allapotvaltasokon.
+  ///
+  /// `SetNull` a torlesre, nem `Cascade`: ami megtortent, megtortent. Egy
+  /// torolt munkalap nem viheti magaval a jegy naplojat -- ugyanaz a szabaly,
+  /// mint az aktornal.
+  worksheetId  String?
   /// Szabad szöveg, amit a lépő hozzátehet (miért vár alkatrészre, mit
   /// beszéltek meg az ügyféllel). A napló ebből lesz olvasható emberi
   /// szemmel is.
   note         String?
   actorUserId  String?
-  createdAt    DateTime          @default(now())
+  createdAt    DateTime            @default(now())
 
   serviceJob ServiceJob @relation(fields: [serviceJobId], references: [id], onDelete: Cascade)
   actor      User?      @relation("ServiceJobEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  worksheet  Worksheet? @relation("ServiceJobEventWorksheet", fields: [worksheetId], references: [id], onDelete: SetNull)
 
   /// A napló mindig egy jegyre, időrendben visszafelé olvasva.
   @@index([serviceJobId, createdAt])
@@ -2693,23 +2727,25 @@ model Worksheet {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  customer     Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  department   WorksheetDepartment @relation(fields: [departmentId], references: [id], onDelete: Restrict)
-  createdBy    User?               @relation("WorksheetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  customer         Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  department       WorksheetDepartment @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  createdBy        User?               @relation("WorksheetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   /// `SetNull`: egy törölt hibajegy nem viheti magával a lapot. A lap önálló
   /// dokumentum, ami a hibajegy nélkül is létezhet - épp ezzel kezdődik a
   /// második út.
-  serviceJob   ServiceJob?         @relation(fields: [serviceJobId], references: [id], onDelete: SetNull)
-  handedOverBy User?               @relation("WorksheetHandedOverBy", fields: [handedOverById], references: [id], onDelete: SetNull)
-  versions     WorksheetVersion[]
-  assignees    WorksheetAssignee[]
+  serviceJob       ServiceJob?         @relation(fields: [serviceJobId], references: [id], onDelete: SetNull)
+  handedOverBy     User?               @relation("WorksheetHandedOverBy", fields: [handedOverById], references: [id], onDelete: SetNull)
+  versions         WorksheetVersion[]
+  assignees        WorksheetAssignee[]
   /// `Restrict`: a folytatás a régi lapra hivatkozik mint előzményre, és egy
   /// lánc, aminek eltűnt az egyik vége, könyvelésnél használhatatlan.
-  continues    Worksheet?          @relation("WorksheetContinuation", fields: [continuesWorksheetId], references: [id], onDelete: Restrict)
+  continues        Worksheet?          @relation("WorksheetContinuation", fields: [continuesWorksheetId], references: [id], onDelete: Restrict)
   /// Amit ebből a lapból folytattak. A visszahivatkozás azért kell, mert a
   /// RÉGI lapon is látszania kell, hogy van folytatása -- egy lánc, aminek
   /// csak az egyik vége ismeri a másikat, nem lánc.
-  continuedBy  Worksheet[]         @relation("WorksheetContinuation")
+  continuedBy      Worksheet[]         @relation("WorksheetContinuation")
+  /// A jegy naploja, ahol EZ a lap szerepel (csatolas es levalasztas).
+  serviceJobEvents ServiceJobEvent[]   @relation("ServiceJobEventWorksheet")
 
   @@index([customerId, createdAt])
   @@index([departmentId])

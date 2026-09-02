@@ -120,14 +120,27 @@ export class ServiceJobsService {
       // `@acropora/types`-tól), tehát ott újraíródna - két kliens, két
       // sorrend, és a különbség néma, mert mindkettő hihetően néz ki.
       timeline: serviceJobTimeline({
-        events: row.events.map((event) => ({
-          id: event.id,
-          fromStatus: event.fromStatus,
-          toStatus: event.toStatus,
-          note: event.note,
-          actorName: event.actor?.displayName ?? null,
-          createdAt: event.createdAt.toISOString(),
-        })),
+        // A `toStatus` a naplo tablajan 2026-09-02 ota nullazhato (ADR-013),
+        // mert a munkalap-esemenyeknek nincs cel-allapotuk. IDE OLYAN SOR NEM
+        // ERHET, aminek nincs: a lekerdezes `STATUS_CHANGE`-re szur, es az
+        // adatbazis CHECK-je szerint egy ilyen sor cel-allapot nelkul nem is
+        // keletkezhet. Ez a sor tehat KET fuggetlen garancia utan all itt --
+        // es azert eldobassal, nem kivetellel, mert egy olvasasi uton egy
+        // lehetetlen sor miatt nem szabad a teljes reszletlapot elvenni.
+        events: row.events.flatMap((event) =>
+          event.toStatus === null
+            ? []
+            : [
+                {
+                  id: event.id,
+                  fromStatus: event.fromStatus,
+                  toStatus: event.toStatus,
+                  note: event.note,
+                  actorName: event.actor?.displayName ?? null,
+                  createdAt: event.createdAt.toISOString(),
+                },
+              ],
+        ),
         worksheets: row.worksheets.map((worksheet) => ({
           id: worksheet.id,
           number: worksheet.number,
