@@ -31,7 +31,6 @@ import {
  * érdemes. Az elfogadás feltétele az ELSŐ próbálkozásra sikeres beolvasás.
  */
 
-const SCREEN = "src/app/assets/[id].tsx";
 const MODULE = "src/lib/assets/label-format.ts";
 const SERVER_QR = "../api/src/service-assets/qr-svg.ts";
 
@@ -429,40 +428,20 @@ describe("labelAssetNumber", () => {
   });
 });
 
-describe("a képernyő ugyanabból a levezetésből dolgozik", () => {
-  /**
-   * A KONTROLL: a képernyő fájlját tényleg elolvassuk.
-   */
-  it("reads the screen it claims to read", () => {
-    const source = readFileSync(SCREEN, "utf8");
-
-    assert.ok(source.length > 1000);
-    assert.match(source, /labelHtml/);
-    assert.match(source, /labelPageSize\(\)/);
-    assert.match(source, /labelLayout\(\)/);
-    // A képernyő a RÖVIDÍTETT alakot írja ki. Ha valaha visszaírná a teljes
-    // számot, a címke kilógna a szalagról, és ezt semmi más nem jelezné.
-    assert.match(source, /labelAssetNumber\(assetNumber\)/);
-  });
-
-  it("never writes the millimetres into the style by hand", () => {
-    const source = readFileSync(SCREEN, "utf8");
-    const styleBlock = /@page \{ size: ([^;]+); margin: 0; \}/.exec(source);
-
-    assert.ok(styleBlock, "nem találtam a @page szabályt a címke stílusában");
-    // A stílusban a méret HELYE behelyettesítés, nem szám. Ha valaki visszaír
-    // egy konkrét millimétert, ez pirosra vált -- és pont az a hiba, amitől a
-    // hívás és a stílus elválhat.
-    assert.match(styleBlock![1]!, /\$\{pageWidthMm\}mm \$\{pageHeightMm\}mm/);
-  });
-
-  it("puts the text beside the code, not under it", () => {
-    const source = readFileSync(SCREEN, "utf8");
-
-    // Fekvő elrendezésben a kód megkapja a teljes magasságot. Ha a szöveg alá
-    // kerül vissza, a szövegsáv a modul-méretből venne el.
-    assert.match(source, /display: flex; align-items: center/);
-    assert.match(source, /width: \$\{qrSizeMm\}mm; height: \$\{qrSizeMm\}mm/);
-    assert.match(source, /\.text \{ flex: none; width: \$\{textWidthMm\}mm/);
-  });
-});
+/**
+ * A KEPERNYOT OLVASO ALLITASOK KIESTEK, ES EZ NEM HEZAG.
+ *
+ * 2026-09-02-ig itt allt harom allitas arrol, hogy az eszkoz reszletes lapja
+ * ugyanabbol a levezetesbol dolgozik, mint ez a modul (a `labelHtml`, a
+ * `labelPageSize()` es a `labelAssetNumber` hasznalata). Balazs keresere a
+ * QR-cimke szakasz KIKERULT a kepernyorol (kartya 05fe7f16, a cimke-nyomtatas
+ * szala 2026-08-26-an lezarult, mert a Brother modell nem tamogatott).
+ *
+ * Egy kepernyot olvaso allitasnak KEPERNYO kell. Ha bennhagynank, a kereses nem
+ * talalna meg a mintat, es a spec UGYANAZZAL az uzenettel bukna el, amit egy
+ * valodi elcsuszasnal adna ("nem talaltam") -- vagyis a hianyt hibanak
+ * mutatna.
+ *
+ * A MODUL SAJAT ALLITASAI (fentebb) VALTOZATLANUL ALLNAK. Azok a levezetest
+ * merik, nem a hivojat, es a levezetes akkor is helyes, ha ma nem hivja senki.
+ */
