@@ -120,6 +120,27 @@ export class ContentService {
    * A dátum nélküli tételek NEM szerepelnek benne, és ez szándékos: egy naptár,
    * ami a dátum nélkülieket is mutatja, nem naptár, hanem lista.
    */
+  /**
+   * AZ OTLETEK ELOHELYE.
+   *
+   * NEM UJ FOLYAMAT, HANEM EGY HELY, AHOL MEGTALALHATO. Az otlet senkire nem
+   * var, tehat a negy szerep-lista egyikeben sincs helye -- azok arra a
+   * kerdesre valaszolnak, hogy mi var CSELEKVESRE, es egy otlet betolasa oda
+   * pont attol tenne hasznalhatatlanna oket, amitol ma hasznosak.
+   *
+   * AMIT EZ A LISTA MEGOLD: az otlet MEGTALALHATO, es egy lepessel a rendes
+   * folyamatba kerul. Az `IDEA -> DRAFTING` atmenet mar ma is letezik es nem
+   * kivan jovahagyoi jogot (a `requiresApproval` csak `AWAITING_APPROVAL`
+   * allapotbol igaz), tehat a lepes gombja magatol megjelenik a soron -- nem
+   * kellett hozza uj ut.
+   *
+   * A SORREND A LEGREGEBBI ELOL: egy otlet, ami het ote all, tobbet mond
+   * annal, ami tegnap keletkezett. A tobbi lista ugyanezt az elvet koveti.
+   */
+  async ideas() {
+    return this.withMoves(await this.repository.list({ state: "IDEA" }));
+  }
+
   async calendar(from: Date, to: Date) {
     return this.withMoves(
       await this.repository.list({ plannedFor: { gte: from, lte: to } }),
@@ -311,6 +332,42 @@ export class ContentService {
     imageRequired?: boolean;
     plannedFor?: string;
   }) {
+    return this.beveszSorba(input, "DRAFTING");
+  }
+
+  /**
+   * EGY OTLET FELJEGYZESE, ES EZ SAJAT NEVESITETT LEPES, NEM EGY PARAMETER.
+   *
+   * Ket ok, es a masodik a fontosabb:
+   *
+   * EGY: az allapotot a hivo nem valaszthatja meg. Ha a `create` kapna egy
+   * `state` mezot, a jovahagyasi kapu az elso kenyelmes pillanatban
+   * megkerulheto lenne egy "mar kesz" ertekkel. Ket kulon metodus (es ket kulon
+   * vegpont) ugyanezt a ket lehetoseget adja, valasztas nelkul.
+   *
+   * KETTO: az otlet MAS DOLOG, nem egy hianyos vazlat. Egy vazlat a szerzojere
+   * var; egy otlet SENKIRE nem var, es epp ettol nincs helye a "mi var ram"
+   * listakban. A ket lepes kulon neve ezt a kulonbseget tartja fenn a kodban is.
+   */
+  async createIdea(input: {
+    title: string;
+    channel: "FACEBOOK_POST" | "FACEBOOK_AD" | "ARTICLE" | "OTHER";
+    authorId: string;
+  }) {
+    return this.beveszSorba(input, "IDEA");
+  }
+
+  private async beveszSorba(
+    input: {
+      title: string;
+      channel: "FACEBOOK_POST" | "FACEBOOK_AD" | "ARTICLE" | "OTHER";
+      authorId: string;
+      body?: string;
+      imageRequired?: boolean;
+      plannedFor?: string;
+    },
+    state: "DRAFTING" | "IDEA",
+  ) {
     const title = input.title.trim();
     if (!title) throw new BadRequestException("A cim nem lehet ures.");
 
@@ -320,7 +377,7 @@ export class ContentService {
       // A SZERZO A LETREHOZO, es nem valaszthato: egy tetel, aminek a szerzoje
       // valaki mas, azonnal az O listajaban allna, anelkul hogy tudna rola.
       authorId: input.authorId,
-      state: "DRAFTING",
+      state,
       ...(input.body?.trim() ? { body: input.body.trim() } : {}),
       ...(input.imageRequired === undefined
         ? {}

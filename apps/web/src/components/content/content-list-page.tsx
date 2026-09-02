@@ -39,10 +39,13 @@ import { ContentRowActions } from "./content-row-actions";
  * bármelyik szerepre válthat. Egy külön, mindig ott álló „rám vár" doboz
  * ugyanezt mutatná, de nem mondaná meg, hogy a többi tétel hova lett.
  */
-type ContentView = "mine" | ContentViewerRole;
+// AZ "OTLETEK" NEM SZEREP, HANEM ELOHELY, es ezert kulon ag a tipusban: a
+// negy szerep arra valaszol, mi var CSELEKVESRE, egy otlet pedig senkire nem var.
+type ContentView = "mine" | "ideas" | ContentViewerRole;
 
 const VIEWS: ContentView[] = [
   "mine",
+  "ideas",
   "approver",
   "reviewer",
   "author",
@@ -51,6 +54,7 @@ const VIEWS: ContentView[] = [
 
 const VIEW_LABELS: Record<ContentView, string> = {
   mine: "ami rám vár",
+  ideas: "ötletek",
   approver: CONTENT_ROLE_LABELS.approver,
   reviewer: CONTENT_ROLE_LABELS.reviewer,
   author: CONTENT_ROLE_LABELS.author,
@@ -95,7 +99,7 @@ export function ContentListPage() {
   const canCreate = Boolean(
     session && hasPermission(session.user, PERMISSIONS.CONTENT_MANAGE),
   );
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState<"draft" | "idea" | null>(null);
   const token = session?.token ?? "";
 
   const load = useCallback(
@@ -111,7 +115,9 @@ export function ContentListPage() {
         const [waiting, images] = await Promise.all([
           view === "mine"
             ? contentApi.waitingOnMe(token, signal)
-            : contentApi.waiting(token, view, signal),
+            : view === "ideas"
+              ? contentApi.ideas(token, signal)
+              : contentApi.waiting(token, view, signal),
           contentApi.waitingForImage(token, signal),
         ]);
         // A KÉT VÁLASZ ALAKJA MÁS, ÉS SZÁNDÉKOSAN: a „rám vár" nézet megnevezi,
@@ -169,17 +175,29 @@ export function ContentListPage() {
         akarjon tudni beleirni, ne egy masodik kattintas utan.
       */}
       {canCreate && !creating ? (
-        <button type="button" onClick={() => setCreating(true)}>
-          Új tartalom felvétele
-        </button>
+        <>
+          <button type="button" onClick={() => setCreating("draft")}>
+            Új tartalom felvétele
+          </button>
+          {/*
+            AZ ÖTLET KÜLÖN GOMB, ÉS NEM AZ ŰRLAP EGY KAPCSOLÓJA. Aki egy témát
+            jegyez fel, ne előbb egy űrlapot értelmezzen, amiben a mezők
+            többsége nem róla szól. A két lépésnek külön neve van a szerveren
+            is, és itt sem mosódik össze.
+          */}
+          <button type="button" onClick={() => setCreating("idea")}>
+            Ötlet feljegyzése
+          </button>
+        </>
       ) : null}
 
       {canCreate && creating && token ? (
         <ContentCreateForm
           token={token}
-          onCancel={() => setCreating(false)}
+          mode={creating}
+          onCancel={() => setCreating(null)}
           onCreated={() => {
-            setCreating(false);
+            setCreating(null);
             // UJRAKERDEZUNK: az uj tetel DRAFTING allapotban all es a
             // letrehozojara var, tehat a "mi var ram" nezetben AZONNAL ott a
             // helye. Ha nem toltenenk ujra, a felhasznalo pontosan azt latna,

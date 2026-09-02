@@ -12,6 +12,7 @@ import {
   ContentCalendarQueryDto,
   ContentCommentDto,
   ContentCreateDto,
+  ContentIdeaDto,
   ContentMoveDto,
   ContentWaitingQueryDto,
 } from "./dto/content.dto.js";
@@ -162,6 +163,31 @@ export class ContentController {
    * jovahagyoi jog (`content.approve`) NEM kell es nem is szamit -- egy uj
    * tetel a sor elejere kerul, nem a vegere, tehat nincs mit jovahagyni rajta.
    */
+  /**
+   * AZ OTLETEK ELOHELYE. Olvasas, tehat `content.view`.
+   */
+  @Get("ideas")
+  @RequirePermissions(PERMISSIONS.CONTENT_VIEW)
+  ideas() {
+    return this.service.ideas();
+  }
+
+  /**
+   * EGY OTLET FELJEGYZESE, SAJAT VEGPONTON.
+   *
+   * Nem a `POST /content` egy parametere: az allapotot a hivo nem valaszthatja
+   * meg. Ket vegpont, ket nevesitett lepes -- es a DTO-ban tovabbra sincs
+   * allapot-mezo.
+   */
+  @Post("ideas")
+  @RequirePermissions(PERMISSIONS.CONTENT_MANAGE)
+  createIdea(
+    @Body() input: ContentIdeaDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.createIdea({ ...input, authorId: user.id });
+  }
+
   @Post()
   @RequirePermissions(PERMISSIONS.CONTENT_MANAGE)
   create(
