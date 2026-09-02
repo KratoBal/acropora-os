@@ -43,6 +43,20 @@ export interface ProjectableProduct {
    * felület, ami maga döntene, egy nap másképp döntene.
    */
   publication: ProductPublicationState;
+  /**
+   * A termek kategoriai MEDUSA azonositokkal, vagy `null`.
+   *
+   * A `null` NEM azt jelenti, hogy a termeknek nincs kategoriaja. Azt jelenti,
+   * hogy a hivo NEM TUD teljes listat adni -- vagy mert a termeknek tenyleg
+   * nincs egy sem, vagy mert van, de valamelyik meg nincs lekepezve a
+   * Medusara. A ket eset kovetkezmenye ELLENTETES a jelentesben (az egyik
+   * rendben van, a masik hianyt jelez), de a KERES torzsere nezve ugyanaz: a
+   * mezo nem megy ki.
+   *
+   * A megkulonboztetes ezert a HIVONAL lakik, ahol az adat is van. Ide mar
+   * csak a dontes erkezik: van teljes lista, vagy nincs.
+   */
+  medusaCategoryIds: string[] | null;
 }
 
 export type ProjectionOutcome =
@@ -282,6 +296,18 @@ export class MedusaProductProjectionService {
         ? [{ id: this.storefrontSalesChannelId }]
         : [];
 
+    /**
+     * A MEZO CSAK AKKOR KERUL A TORZSBE, HA VAN MIT KULDENI.
+     *
+     * Ures tombot SOHA nem kuldunk: ha a `categories` csere-szemantikaju (a
+     * `sales_channels` bizonyitottan az), az ures lista TOROLNE a termek
+     * besorolasat -- csendben, mert a hivas sikerrel terne vissza.
+     */
+    const categoryPatch =
+      product.medusaCategoryIds && product.medusaCategoryIds.length > 0
+        ? { categories: product.medusaCategoryIds.map((id) => ({ id })) }
+        : {};
+
     const existingLink = await this.links.findByProductId(product.id);
     if (existingLink) {
       /**
@@ -297,6 +323,7 @@ export class MedusaProductProjectionService {
           external_id: product.id,
           status: publication.status,
           sales_channels: salesChannels,
+          ...categoryPatch,
         });
       } catch (error) {
         return {
@@ -418,6 +445,7 @@ export class MedusaProductProjectionService {
         external_id: product.id,
         status: publication.status,
         sales_channels: salesChannels,
+        ...categoryPatch,
         options: [
           { title: DEFAULT_OPTION_TITLE, values: [DEFAULT_OPTION_VALUE] },
         ],

@@ -271,6 +271,7 @@ export async function runProjectionCli(
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
           select: { sku: true },
         },
+        categories: { select: { categoryId: true } },
       },
     });
 
@@ -307,12 +308,50 @@ export async function runProjectionCli(
       continue;
     }
 
+    /**
+     * A MI KATEGORIAINK -> MEDUSA AZONOSITOK.
+     *
+     * A leképezes ugyanabban a tablaban all, mint a UNAS oldali kategoria-par
+     * (`ExternalReference`), csak MEDUSA rendszerre. Azokat a sorokat az irja,
+     * aki a kategoriakat a Medusaban LETREHOZZA -- a Medusa-azonosito ott
+     * keletkezik, nem itt.
+     *
+     * MINDEN VAGY SEMMI, ES EZ SZANDEKOS: ha akar EGY kategoria hianyzik a
+     * leképezesbol, a mezot NEM kuldjuk ki. Egy reszleges lista ugyanis, HA a
+     * mezo csere-szemantikaju (a `sales_channels` bizonyitottan az, a
+     * `categories`-ra ez meg nincs elesben megmerve), CSENDBEN levenne a
+     * termekrol azokat a kategoriakat, amiket nem tudtunk megnevezni.
+     *
+     * ES A KET ESET, AMI A TORZSRE NEZVE UGYANAZ, A JELENTESBEN VISZONT NEM:
+     * "nincs kategoriaja" es "van, de meg nincs lekepezve". Az elso rendben
+     * van, a masodik hiany -- ezert az utobbi KIIRODIK.
+     */
+    const osCategoryIds = product.categories.map((row) => row.categoryId);
+    const mapped = osCategoryIds.length
+      ? await prisma.externalReference.findMany({
+          where: {
+            system: "MEDUSA",
+            entityType: "Category",
+            entityId: { in: osCategoryIds },
+          },
+          select: { entityId: true, externalId: true },
+        })
+      : [];
+    const teljes =
+      osCategoryIds.length > 0 && mapped.length === osCategoryIds.length;
+    if (osCategoryIds.length > 0 && !teljes)
+      out.stderr(
+        `${product.id}: ${osCategoryIds.length - mapped.length} kategória még nincs leképezve a Medusára, ` +
+          `ezért EGYIKET SEM küldjük (a részleges lista letörölhetné a többit).\n`,
+      );
+
     const outcome = await service!.project(
       {
         id: product.id,
         name: product.name,
         description: product.description,
         primarySku: product.variants[0]?.sku ?? null,
+        medusaCategoryIds: teljes ? mapped.map((row) => row.externalId) : null,
         publication: {
           catalogAuthority: product.catalogAuthority,
           isActive: product.isActive,
