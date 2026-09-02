@@ -33,11 +33,25 @@ describe("az új eszköz űrlapjának választói", () => {
     const s = forras();
 
     // A partner sajat, korabbi alakja (ownerPickerOpen), a masik ketto a kozos
-    // `Legordulo` komponensben. A szam azert all itt, hogy egy NEGYEDIK valaszto
+    // `CollapsedPicker` komponensben. A szam azert all itt, hogy egy NEGYEDIK valaszto
     // felvetele ne csusszon at csendben a regi, mindig nyitott alakban.
-    assert.equal((s.match(/<Legordulo/g) ?? []).length, 2);
-    assert.match(s, /cimke="Típus választása"/);
-    assert.match(s, /cimke="Helyszín választása"/);
+    assert.equal((s.match(/<CollapsedPicker/g) ?? []).length, 2);
+
+    // A KET CIMKE A SAJAT ELEMEN BELUL ALLJON. A prop neve `label`, ami az
+    // urlapon mashol is szerepel (`Field label=...`), tehat a puszta
+    // `label="Típus választása"` akkor is atmenne, ha a szoveg egy MASIK
+    // elemre csuszna at. A tempered minta a kovetkezo `<CollapsedPicker`-ig
+    // enged, tehat azt allitja, hogy a cimke EBBEN az elemben all. A ZARO
+    // tagre is tiltunk: enelkul az utolso elem utan barhova csuszo cimke is
+    // atmenne, mert onnantol nincs tobb nyito tag, ami megallitana a mintat.
+    assert.match(
+      s,
+      /<CollapsedPicker(?:(?!<\/?CollapsedPicker)[\s\S])*?label="Típus választása"/,
+    );
+    assert.match(
+      s,
+      /<CollapsedPicker(?:(?!<\/?CollapsedPicker)[\s\S])*?label="Helyszín választása"/,
+    );
     assert.match(s, /setOwnerPickerOpen\(\(open\) => !open\)/);
   });
 
