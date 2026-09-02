@@ -21,10 +21,11 @@ import {
 } from "@acropora/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { worksheetsApi } from "@/lib/api/worksheets";
+import { buildSiteOptions } from "@/lib/partners/site-tree";
 import {
   toggleAssignee,
   useAssignableUsers,
@@ -110,7 +111,11 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
   const [departmentId, setDepartmentId] = useState("");
   const [header, setHeader] = useState<HeaderDraft>(emptyHeader);
   const [lines, setLines] = useState<WorksheetLineDraft[]>([emptyLine()]);
-  const [newDepartment, setNewDepartment] = useState({ code: "", name: "" });
+  const [newDepartment, setNewDepartment] = useState({
+    parentId: "",
+    code: "",
+    name: "",
+  });
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(Boolean(worksheetId));
   const [saving, setSaving] = useState(false);
@@ -165,6 +170,27 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
       }
     },
     [token],
+  );
+
+  /*
+   * A VALASZTO A TELJES UTAT MUTATJA, NEM CSAK A LEVEL NEVET.
+   *
+   * A kod es a nev csak TESTVEREK kozott egyedi (ADR-010): ket kulonbozo ag
+   * alatt ugyanaz a `BIO` es ugyanaz a "Biodom" megengedett es termeszetes.
+   * Ez a mezo adja a MUNKALAPSZAM ELSO TAGJAT, tehat ket megkulonboztethetetlen
+   * sor kozul rosszat valasztani nem szepseghiba: rossz szamot ad a lapnak.
+   * Ugyanaz a `buildSiteOptions`, amit az eszkoz-szerkeszto es az eszkoz-lista
+   * szuroje hasznal -- a szabaly egy helyen all, es innen is oda mutat.
+   *
+   * AMI ITT SZUKEBB, MINT AZ ESZKOZ-SZERKESZTON: a `departments` csak az AKTIV
+   * sorokat tartja (lasd `loadDepartments`), tehat egy archivalt szulo alatt
+   * allo aktiv helyszin utja ROVIDEBB lesz eggyel. Ez a mai viselkedes, es
+   * szandekosan nem nyulok hozza ebben a korben: a szures nem ma keletkezett,
+   * es a megvaltoztatasa a felajanlott halmazt is atirna.
+   */
+  const departmentOptions = useMemo(
+    () => buildSiteOptions(departments),
+    [departments],
   );
 
   useEffect(() => {
@@ -224,12 +250,21 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
     setError(null);
     try {
       const created = await worksheetsApi.createDepartment(token, customerId, {
+        // Ures ertek = a fa legfelso szintje. A mezot ilyenkor EL SEM kuldjuk:
+        // az ures szoveg nem "nincs szulo", hanem ervenytelen azonosito.
+        ...(newDepartment.parentId ? { parentId: newDepartment.parentId } : {}),
         code: newDepartment.code.trim().toUpperCase(),
         name: newDepartment.name.trim(),
       });
       setDepartments((current) => [...current, created]);
       setDepartmentId(created.id);
-      setNewDepartment({ code: "", name: "" });
+      // A szulo MARAD: egy ag ala tobbnyire tobb helyszin kerul egymas utan,
+      // es a nullazasa minden masodik felvitelnel ujra kivalasztast kerne.
+      setNewDepartment((current) => ({
+        parentId: current.parentId,
+        code: "",
+        name: "",
+      }));
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -367,15 +402,34 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
             onChange={(event) => setDepartmentId(event.target.value)}
           >
             <option value="">Válassz alegységet</option>
-            {departments.map((department) => (
+            {departmentOptions.map((department) => (
               <option key={department.id} value={department.id}>
-                {department.code} — {department.name}
+                {department.label}
               </option>
             ))}
           </Select>
         </FormField>
         {!worksheetId && customerId ? (
-          <div className="grid gap-2 md:col-span-2 md:grid-cols-[120px_1fr_auto]">
+          <div className="grid gap-2 md:col-span-2 md:grid-cols-[14rem_120px_1fr_auto]">
+            {/* A gyoker az ELSO es alapertelmezett valasztas: a mai helyszinek
+                tobbsege ilyen, es egy uj partnernel is ez a gyakori eset. */}
+            <Select
+              aria-label="Szülő helyszín"
+              value={newDepartment.parentId}
+              onChange={(event) =>
+                setNewDepartment((current) => ({
+                  ...current,
+                  parentId: event.target.value,
+                }))
+              }
+            >
+              <option value="">Legfelső szint</option>
+              {departmentOptions.map((department) => (
+                <option key={department.id} value={department.id}>
+                  {department.label}
+                </option>
+              ))}
+            </Select>
             <Input
               aria-label="Új alegység kódja"
               value={newDepartment.code}

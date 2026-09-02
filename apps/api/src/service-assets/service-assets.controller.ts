@@ -23,6 +23,8 @@ import { RequirePermissions } from "../auth/decorators/require-permissions.decor
 import {
   AssetListQueryDto,
   AssetOwnersQueryDto,
+  FreeAssetLabelsQueryDto,
+  IssueAssetLabelsDto,
   CreateAssetDto,
   UpdateAssetDto,
   UploadAssetDocumentDto,
@@ -63,6 +65,27 @@ export class ServiceAssetsController {
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
   documentStoreStatus() {
     return this.service.documentStoreStatus();
+  }
+
+  /**
+   * A SZABAD MATRICAK. SERVICE_MANAGE, NEM SERVICE_VIEW.
+   *
+   * A kiadott kodok listaja maga a keszlet: aki latja, az latja, mely kodok
+   * leteznek. A matricakod gyenge (egy betu es negy szam), tehat ez a lista
+   * pont az az adat, amibol egy vegigprobalas indulna. A SZERELO nem is ezt
+   * hasznalja: o a matricat olvassa be, nem listat bongesz.
+   */
+  @Get("labels/free")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  freeLabels(@Query() query: FreeAssetLabelsQueryDto) {
+    return this.service.freeLabels(query.limit ?? 100);
+  }
+
+  /** Egy nyomtatott iv kodjainak felvitele a keszletbe. */
+  @Post("labels")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  issueLabels(@Body() input: IssueAssetLabelsDto) {
+    return this.service.issueLabels(input.codes);
   }
 
   @Get("owners")

@@ -24,6 +24,7 @@ import type {
   AssetOwnerListResponse,
   AssetOwnerType,
 } from "@acropora/types";
+import { normalizeAssetLabelCode } from "@acropora/types";
 
 import { withUniqueCode } from "../common/unique-code.util.js";
 import { buildUnitPaths } from "./unit-path.js";
@@ -126,6 +127,22 @@ function payloadNamesADocument(value: unknown, depth = 0): boolean {
  */
 const DOCUMENT_EVENT_TYPES = ["DOCUMENT_UPLOADED", "DOCUMENT_DELETED"];
 const DOCUMENT_TYPES = ["INVOICE", "WARRANTY", "MANUAL", "OTHER"] as const;
+
+/**
+ * A KERT MATRICAKOD NEM KOTHETO: vagy nincs a keszletben, vagy mar mason all.
+ *
+ * A KETTOT SZANDEKOSAN NEM KULONBOZTETJUK MEG A HIVO FELE. Egy "letezik, de
+ * foglalt" es egy "nincs ilyen" valasz kulon-kulon megmondana, hogy egy kod
+ * KIADOTT-e -- es a matricakod gyenge (260 ezer lehetoseg). Aki vegigprobalja,
+ * a ket valaszbol felterkepezne a teljes kiadott keszletet. A felvitelnel ez
+ * nem is hasznos kulonbseg: mindket esetben ugyanaz a teendo, masik matricat
+ * kell olvasni vagy szolni.
+ */
+export class AssetLabelUnavailableError extends Error {
+  constructor(readonly code: string) {
+    super(`A(z) ${code} matricakód nem köthető ehhez az eszközhöz.`);
+  }
+}
 
 export function scopeMaySeeAssetEvent(
   event: { type: string; payload: unknown },
@@ -688,6 +705,20 @@ export class ServiceAssetsRepository extends Repository {
      * kodddal; a tranzakcion BELUL nem lehet ujraprobalni, mert Postgres az
      * elso elbukott utasitas utan megszakitja.
      */
+    /**
+     * A KOD ALAKJA MAR ITT ELDOL, A TRANZAKCION KIVUL.
+     *
+     * Az alak-ellenorzes nem ir, tehat semmi keresnivaloja az ujraprobalt
+     * lezaron belul: egy ritka eszkozszam-utkozes nem futtathatja le megegyszer
+     * azt, aminek az eredmenye ugyanaz lenne.
+     */
+    const labelCode =
+      input.labelCode === undefined
+        ? null
+        : normalizeAssetLabelCode(input.labelCode);
+    if (input.labelCode !== undefined && labelCode === null)
+      throw new AssetLabelUnavailableError(input.labelCode);
+
     const id = await withUniqueCode(
       /**
        * AZ EGYETLEN HELY, AHOL A BELYEG HELYI IDO SZERINT ALL.
@@ -700,6 +731,19 @@ export class ServiceAssetsRepository extends Repository {
        * A `h` a valtas jelolese: a mar kiadott szamok visszamenoleg nem
        * valtoznak, tehat jeloles nelkul ugyanaz a mezo ket dolgot jelentene,
        * kivulrol megkulonboztethetetlenul.
+       */
+      /**
+       * A `field` CSAK az `assetNumber`, ES EZ SZANDEKOS.
+       *
+       * A burkolat azert er valamit, mert a kodot ujra HUZZA: egy masodik
+       * kiserlet uj eszkozszamot kap. A MATRICAKOD viszont a felhasznalotol
+       * jon, es valtozatlan marad -- egy ujraprobalas ugyanazt a foglalt kodot
+       * kuldene be otszor, elkoltene a probalkozasokat, es a hivo ugyanazt a
+       * hibat kapna, csak kesobb.
+       *
+       * AMIT EZ SZANDEKOSAN ATENGED: az `AssetLabel.assetId` es az
+       * `AssetLabel.code` egyedi indexenek serulese. Az nem szerencsetlen
+       * huzas, hanem valodi utkozes, es HANGOSAN kell elbuknia.
        */
       { prefix: "ESZK", field: "assetNumber", stamp: "local-marked" },
       (assetNumber) =>
@@ -771,6 +815,37 @@ export class ServiceAssetsRepository extends Repository {
                 }),
               },
             });
+            /**
+             * A MATRICA HOZZAKOTESE UGYANEBBEN A TRANZAKCIOBAN.
+             *
+             * MIERT ITT, ES NEM UTANA: ha kulon menne, keletkezhetne egy
+             * eszkoz matrica nelkul, es a szerelo azt latna, hogy a felvitel
+             * sikerult. A `42056ab0` kartya pont ezt az alakot zarja ki.
+             *
+             * A FELTETELES `updateMany` A VEDELEM, NEM AZ ELOZETES OLVASAS.
+             * Csak azt a sort irja at, ami LETEZIK es MEG SZABAD
+             * (`assetId: null`). Ket parhuzamos felvitel ugyanarra a kodra
+             * igy nem tud mindketto atmenni: a masodik nulla sort erint, es
+             * itt hasal el. Egy elozetes "szabad-e" lekerdezes ugyanezt csak
+             * HINNI tudna, a ket lepes kozott ugyanis eltelik ido.
+             */
+            if (labelCode) {
+              const claimed = await tx.assetLabel.updateMany({
+                where: { code: labelCode, assetId: null },
+                data: { assetId: row.id, assignedAt: new Date() },
+              });
+              if (claimed.count !== 1)
+                throw new AssetLabelUnavailableError(labelCode);
+              await tx.assetEvent.create({
+                data: {
+                  id: randomUUID(),
+                  assetId: row.id,
+                  type: "LABEL_ASSIGNED",
+                  actorUserId,
+                  payload: jsonPayload({ code: labelCode }),
+                },
+              });
+            }
             return row.id;
           },
           { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -784,6 +859,79 @@ export class ServiceAssetsRepository extends Repository {
     });
     if (!detail) throw new Error("ASSET_CREATE_READBACK_FAILED");
     return detail;
+  }
+
+  /**
+   * MATRICAK KIADASA: a nyomtatott iv kodjai bekerulnek a keszletbe.
+   *
+   * IDEMPOTENS, ES EZ NEM KENYELEM. Egy ivet ujra lehet nyomtatni, es a kiado
+   * nem tudhatja fejbol, melyik kod all mar bent. A `skipDuplicates` miatt a
+   * masodik hivas nem hasal el -- de a valasz KULON MONDJA MEG, mi jott letre
+   * es mi allt mar ott. Enelkul a hivo azt hinne, annyi UJ matricat kapott,
+   * amennyit kert.
+   *
+   * A KODOKAT NEM ITT TALALJUK KI: a hivo adja at oket, mert a matrican mar
+   * rajta vannak. Egy generator itt azt jelentene, hogy a szoftver dont arrol,
+   * ami fizikailag mar ki van nyomtatva.
+   */
+  async issueLabels(codes: readonly string[]): Promise<{
+    issued: string[];
+    alreadyIssued: string[];
+  }> {
+    const normalized: string[] = [];
+    for (const raw of codes) {
+      const code = normalizeAssetLabelCode(raw);
+      if (code === null) throw new AssetLabelUnavailableError(raw);
+      normalized.push(code);
+    }
+    // A KERESEN BELULI ISMETLES IS ISMETLES: ket azonos kod egy hivasban nem
+    // ket matrica. Az egyedi halmaz megy be, a valasz viszont a KERT sorrendet
+    // koveti, hogy a hivo osszevethesse azzal, amit kuldott.
+    const unique = [...new Set(normalized)];
+
+    const existing = new Set(
+      (
+        await prisma.assetLabel.findMany({
+          where: { code: { in: unique } },
+          select: { code: true },
+        })
+      ).map((row) => row.code),
+    );
+    const toCreate = unique.filter((code) => !existing.has(code));
+    if (toCreate.length > 0)
+      await prisma.assetLabel.createMany({
+        data: toCreate.map((code) => ({ code })),
+        skipDuplicates: true,
+      });
+
+    return {
+      issued: normalized.filter(
+        (code, index) =>
+          normalized.indexOf(code) === index && !existing.has(code),
+      ),
+      alreadyIssued: normalized.filter(
+        (code, index) =>
+          normalized.indexOf(code) === index && existing.has(code),
+      ),
+    };
+  }
+
+  /**
+   * A SZABAD KESZLET: azok a sorok, ahol nincs eszkoz.
+   *
+   * Ez a "kiadott, de hasznalatlan kodok nyilvantartasa" -- nem kulon tabla es
+   * nem kulon allapotmezo, hanem maga a hianyzo kapcsolat. Egy `status` oszlop
+   * ugyanezt masodszor mondana el, es a ketto elcsuszhatna egymastol.
+   */
+  async listFreeLabels(
+    limit: number,
+  ): Promise<{ id: string; code: string; issuedAt: Date }[]> {
+    return prisma.assetLabel.findMany({
+      where: { assetId: null },
+      orderBy: [{ issuedAt: "asc" }, { code: "asc" }],
+      take: limit,
+      select: { id: true, code: true, issuedAt: true },
+    });
   }
 
   async update(

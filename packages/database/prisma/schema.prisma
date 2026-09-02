@@ -334,6 +334,7 @@ enum AssetEventType {
   PARENT_CHANGED
   STATUS_CHANGED
   QR_ROTATED
+  LABEL_ASSIGNED
   DOCUMENT_UPLOADED
   DOCUMENT_DELETED
 }
@@ -2376,6 +2377,7 @@ model Asset {
   serviceJobs     ServiceJobAsset[]
   documents       AssetDocument[]
   worksheetLines  WorksheetLine[]
+  label           AssetLabel?
 
   @@index([customerId, status])
   @@index([supplierId, status])
@@ -2387,6 +2389,65 @@ model Asset {
   @@index([nextServiceAt, status])
   @@index([serialNumber])
   @@index([inventoryNumber])
+}
+
+/// ELŐRE NYOMTATOTT MATRICA KÓDJA. A matrica ELŐBB létezik, mint az eszköz.
+///
+/// MIÉRT KÜLÖN TÁBLA, ÉS NEM MEZŐ AZ ESZKÖZÖN: a kód a nyomtatáskor keletkezik,
+/// az eszköz viszont csak akkor, amikor a szerelő a helyszínen felveszi. Egy
+/// oszlop az `Asset` táblán nem tud tárolni egy kiadott, de még senkihez nem
+/// tartozó kódot -- és épp ez a nyilvántartás a feladata.
+///
+/// MIÉRT NEM A MEGLÉVŐ `Asset.qrToken`, ÉS EZ A LÉNYEG. A `qrToken` 128 bites
+/// véletlen uuid, és a `detailByQrToken` szándékosan NEM ellenőriz tulajdont:
+/// ott a token birtoklása maga a felhatalmazás. Ez a kivétel a MEZŐ HELYÉHEZ
+/// tapad, nem a mező erősségéhez. Balázs kódalakja egy betű és négy szám, ami
+/// 260 ezer lehetőség: egy hitelesített SERVICE_VIEW jogú partner-felhasználó
+/// végig tudná próbálni, és sorra kapná más partnerek eszközeit. Ezért a
+/// matricakód KÜLÖN fogalom, külön táblán, és a rajta való lekérdezés
+/// TULAJDONT ELLENŐRIZ. Nem szigorúságból: ezen az úton nincs más védelem.
+///
+/// A HÁROM VÉDELEM, AMI EBBŐL A SZERKEZETBŐL KÖVETKEZIK, NEM KÓDBÓL:
+///   1. a kiadott, de használatlan kódok = azok a sorok, ahol `assetId` NULL;
+///   2. egy kód nem kerülhet két eszközre: a sor MAGA a kód, egy `assetId`-vel;
+///   3. egy eszközre nem kerülhet két kód: `assetId` egyedi.
+///
+/// A HARMADIK EGY DÖNTÉS, NEM KÉNYSZER. Ma egy eszközön egy látható matrica
+/// van. Ha egyszer cserélni kell (leázott, letépték), az NEM ennek a
+/// megkötésnek a lazítása lesz, hanem egy leválasztás-esemény: a régi sor
+/// `assetId` mezője üresre áll, és a napló őrzi, mi történt. Enélkül a csere
+/// csendben két érvényes matricát hagyna ugyanazon az eszközön.
+///
+/// KÉT MEGKÖTÉS A TÁBLÁN ÁLL, ÉS A PRISMA SÉMA NEM TUDJA KIFEJEZNI ŐKET --
+/// nyers SQL-ben a `20260902160000_asset_label_pool` migrációban:
+///   `AssetLabel_code_shape_check`          a kód alakja (`^[A-Z][0-9]{4}$`)
+///   `AssetLabel_assignment_pairing_check`  az `assetId` és az `assignedAt`
+///                                          együtt áll vagy együtt hiányzik
+/// Azért adatbázis-szinten, mert egy migráció, egy háttérmunka vagy egy későbbi
+/// végpont nem örökli az alkalmazás ellenőrzéseit, a tábla megkötését viszont
+/// igen. Ha ezek változnak, EZ a komment is változik, ugyanabban a körben.
+///
+/// AZ AKTORT NEM ITT TÁROLJUK: a hozzárendelés `AssetEvent` sort ír
+/// (`LABEL_ASSIGNED`), ahol az `actorUserId` amúgy is áll. Egy külön mező itt
+/// ugyanazt mondaná el másodszor, és a kettő elcsúszhatna egymástól.
+model AssetLabel {
+  id         String    @id @default(cuid())
+  /// A matricán álló, emberi szemnek szánt azonosító (egy betű és négy szám,
+  /// például V2196). Balázs döntése, 2026-09-02, a 42056ab0 kártyán.
+  code       String    @unique
+  /// Mikor adtuk ki (nyomtattuk). A kiadás önmagában nem köti eszközhöz.
+  issuedAt   DateTime  @default(now())
+  /// NULL, amíg a matrica szabad. Egyedi: egy eszközön egy matrica.
+  assetId    String?   @unique
+  assignedAt DateTime?
+
+  /// `SetNull`, nem `Cascade`: egy eszköz törlése nem semmisítheti meg a
+  /// matricát, mert az fizikailag ott marad valamin. A sor visszakerül a
+  /// szabad készletbe, és a kód újra kiosztható.
+  asset Asset? @relation(fields: [assetId], references: [id], onDelete: SetNull)
+
+  /// A szabad készlet lekérdezése ezen megy: `assetId IS NULL`, kiadás szerint.
+  @@index([assetId, issuedAt])
 }
 
 /// Eszközhöz csatolt, jogosultsággal védett PDF. A tartalom első körben az

@@ -1,5 +1,8 @@
 import { Transform, Type } from "class-transformer";
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
   IsIn,
   IsInt,
   IsISO8601,
@@ -137,6 +140,11 @@ export class CreateAssetDto {
   @IsString() @IsOptional() model?: string;
   @IsString() @IsOptional() serialNumber?: string;
   @IsString() @IsOptional() inventoryNumber?: string;
+  /** Előre nyomtatott matrica kódja (egy betű és négy szám, pl. V2196). Az
+   * ALAKOT a szolgáltatás ellenőrzi a közös `normalizeAssetLabelCode`
+   * függvénnyel, nem itt egy második mintával: két minta két helyen pontosan
+   * ott csúszna el, ahol senki nem nézi. */
+  @IsString() @IsOptional() labelCode?: string;
   @IsString() @IsOptional() description?: string;
   @IsISO8601() @IsOptional() installedAt?: string;
   @IsISO8601() @IsOptional() purchasedAt?: string;
@@ -193,4 +201,30 @@ export class UpdateAssetDto {
 export class UploadAssetDocumentDto {
   @IsIn(ASSET_DOCUMENT_TYPES)
   type!: (typeof ASSET_DOCUMENT_TYPES)[number];
+}
+
+/**
+ * MATRICAK KIADASA. Egy nyomtatott iv kodjai egy hivasban.
+ *
+ * A FELSO HATAR NEM ONKENYES: egy iv legfeljebb nehany szaz matricat hordoz,
+ * es egy korlatlan lista egy elgepelt ciklusbol is erkezhet. A hatar itt all,
+ * a DTO-ban, hogy a szolgaltatas ne egy mar beolvasott, tetszoleges meretu
+ * tombbel talalkozzon.
+ */
+export class IssueAssetLabelsDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(500)
+  @IsString({ each: true })
+  codes!: string[];
+}
+
+/** A szabad matricak lekerdezesenek hatara. */
+export class FreeAssetLabelsQueryDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(500)
+  @IsOptional()
+  limit?: number;
 }

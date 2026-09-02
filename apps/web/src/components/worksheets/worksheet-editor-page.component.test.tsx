@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -278,5 +278,130 @@ describe("WorksheetEditorPage assignees", () => {
         "Nincs olyan kolléga, akire a lap kiosztható lenne.",
       ),
     ).toBeTruthy();
+  });
+});
+/*
+ * A HELYSZIN-FA A MUNKALAP-SZERKESZTON.
+ *
+ * A FIXTURA NEM DISZLET: ket kulonbozo AG alatt all ugyanaz a kod ES ugyanaz a
+ * nev. Ez az ADR-010 szerint megengedett es termeszetes (a megkotes
+ * `(customerId, parentId, code)`), tehat a lapos `kod - nev` alak ezt a ket
+ * sort MEGKULONBOZTETHETETLENNE teszi. Ket TESTVER azonos koddal nem lenne jo
+ * kontroll: azt a sema eleve tiltja, tehat elo sem allhat.
+ */
+const twoBranches = {
+  items: [
+    {
+      id: "root-fank",
+      parentId: null,
+      code: "FAN",
+      name: "Fankó telephely",
+      isActive: true,
+    },
+    {
+      id: "root-korall",
+      parentId: null,
+      code: "KOR",
+      name: "Korallszirt",
+      isActive: true,
+    },
+    {
+      id: "bio-fank",
+      parentId: "root-fank",
+      code: "BIO",
+      name: "Biodóm",
+      isActive: true,
+    },
+    {
+      id: "bio-korall",
+      parentId: "root-korall",
+      code: "BIO",
+      name: "Biodóm",
+      isActive: true,
+    },
+  ],
+};
+
+describe("WorksheetEditorPage site tree", () => {
+  beforeEach(() => {
+    auth.session = session;
+    customers.list.mockReset();
+    worksheets.departments.mockReset().mockResolvedValue(twoBranches);
+    worksheets.createDepartment.mockReset().mockResolvedValue({
+      id: "uj-helyszin",
+      parentId: "bio-fank",
+      code: "FNM",
+      name: "Nagy főkamedence",
+      isActive: true,
+    });
+    worksheets.detail.mockReset();
+    worksheets.selectablePartners.mockReset().mockResolvedValue({
+      items: [
+        { customerId: "customer-42", name: "Fankó Kft.", partnerCode: "FANK" },
+      ],
+    });
+    worksheets.assignableUsers.mockReset().mockResolvedValue({ items: [] });
+    worksheets.create.mockReset().mockResolvedValue({ id: "worksheet-1" });
+  });
+
+  /**
+   * EZ A MEZO ADJA A MUNKALAPSZAM ELSO TAGJAT, tehat ket megkulonboztethetetlen
+   * sor kozul rosszat valasztani nem szepseghiba: rossz szamot ad a lapnak.
+   *
+   * Az allitas a TELJES UTAT keri szamon, nem a behuzast: a behuzo szokozok
+   * osszeolvadnak, es ket azonos nevu sor ugyanugy egyforma marad tolük.
+   */
+  it("tells two same-named units apart by their full path", async () => {
+    const user = userEvent.setup();
+    render(<WorksheetEditorPage />);
+
+    await user.selectOptions(
+      await screen.findByLabelText("Partner"),
+      "customer-42",
+    );
+
+    // A valasztora szukitve: a szulo-valaszto ugyanezeket a sorokat kinalja,
+    // es egy nem szukitett kereses ket talalatot adna mindkettore.
+    const picker = within(await screen.findByLabelText("Alegység"));
+    expect(
+      picker.getByRole("option", { name: "Fankó telephely / Biodóm (BIO)" }),
+    ).toBeTruthy();
+    expect(
+      picker.getByRole("option", { name: "Korallszirt / Biodóm (BIO)" }),
+    ).toBeTruthy();
+  });
+
+  /**
+   * A FA NEM CSAK LATSZIK, HANEM EPITHETO IS. A szerver oldal a bevezetes ota
+   * fogadja a `parentId` mezot (`worksheet.dto.ts`), a felulet viszont sokáig
+   * nem kuldte: minden itt felvitt helyszin GYOKER szintre kerult.
+   */
+  it("hangs a new unit under the chosen parent", async () => {
+    const user = userEvent.setup();
+    render(<WorksheetEditorPage />);
+
+    await user.selectOptions(
+      await screen.findByLabelText("Partner"),
+      "customer-42",
+    );
+    await user.selectOptions(
+      await screen.findByLabelText("Szülő helyszín"),
+      "bio-fank",
+    );
+    await user.type(screen.getByLabelText("Új alegység kódja"), "fnm");
+    await user.type(
+      screen.getByLabelText("Új alegység neve"),
+      "Nagy főkamedence",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Alegység felvitele" }),
+    );
+
+    expect(worksheets.createDepartment).toHaveBeenCalledTimes(1);
+    expect(worksheets.createDepartment.mock.calls[0]?.[2]).toEqual({
+      parentId: "bio-fank",
+      code: "FNM",
+      name: "Nagy főkamedence",
+    });
   });
 });
