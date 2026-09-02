@@ -444,6 +444,7 @@ export {
 export type {
   AmendWorksheetInput,
   CreateWorksheetDepartmentInput,
+  UpdateWorksheetDepartmentInput,
   CreateWorksheetInput,
   SetWorksheetAssigneesInput,
   SignWorksheetVersionInput,

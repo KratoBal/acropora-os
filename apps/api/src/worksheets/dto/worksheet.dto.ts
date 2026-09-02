@@ -2,6 +2,7 @@ import { Type } from "class-transformer";
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsIn,
   IsInt,
   IsISO8601,
@@ -201,6 +202,35 @@ export class CreateWorksheetDepartmentDto {
     message: "Az alegység neve legfeljebb 200 karakter lehet.",
   })
   name!: string;
+}
+
+/**
+ * Egy meglévő alegység szerkesztése: NÉV és ARCHIVÁLÁS, semmi más.
+ *
+ * A tulajdonos döntése (Balázs, 2026-09-02 20:29, Discord): „csak a nevet
+ * lehessen átírni menjen az archiválással".
+ *
+ * A `code` és a `parentId` SZÁNDÉKOSAN nincs itt, és a hiányuk nem passzív: a
+ * globális `ValidationPipe` `forbidNonWhitelisted` beállítással fut, tehát egy
+ * `code` mezőt tartalmazó kérés 400-zal elhasal, nem csendben lehullik. Aki
+ * ezt a végpontot bővíti, előbb ezt a bekezdést írja át.
+ *
+ * A név szabályai UGYANAZOK, mint felvitelkor. Külön indok nélkül eltérni
+ * annyit tenne, hogy egy név, amit létrehozni nem lehet, átnevezéssel mégis
+ * előállítható.
+ */
+export class UpdateWorksheetDepartmentDto {
+  @IsOptional()
+  @IsString({ message: "Az alegység nevét meg kell adni." })
+  @MinLength(2, { message: "Az alegység neve legalább két karakter legyen." })
+  @MaxLength(200, {
+    message: "Az alegység neve legfeljebb 200 karakter lehet.",
+  })
+  name?: string;
+
+  @IsOptional()
+  @IsBoolean({ message: "Az aktív jelölés csak igen vagy nem lehet." })
+  isActive?: boolean;
 }
 
 /**

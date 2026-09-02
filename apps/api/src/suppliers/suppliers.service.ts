@@ -10,7 +10,10 @@ import { Prisma } from "@acropora/database";
 import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
 import { planPartnerDeletion } from "./partner-deletion.js";
 import { SuppliersRepository } from "./suppliers.repository.js";
-import type { CreateWorksheetDepartmentDto } from "../worksheets/dto/worksheet.dto.js";
+import type {
+  CreateWorksheetDepartmentDto,
+  UpdateWorksheetDepartmentDto,
+} from "../worksheets/dto/worksheet.dto.js";
 import type {
   CreateSupplierDto,
   SupplierListQueryDto,
@@ -111,6 +114,33 @@ export class SuppliersService {
         );
       throw error;
     }
+  }
+
+  /**
+   * Egy meglevo alegyseg atnevezese vagy archivalasa.
+   *
+   * A `null` valasz KET esetet takar: nem szerviz partner (nincs tukor-vevo
+   * sora), vagy a megadott alegyseg nem ehhez a partnerhez tartozik. A hivo
+   * szemszogebol mindketto ugyanaz -- olyan alegyseget kert, ami neki nem
+   * letezik --, es a kulonbseg kimondasa mas partner adatarol arulna el
+   * valamit.
+   *
+   * A kod-utkozes agat NEM masoljuk ide a `createUnit` mellol: kodot ez a
+   * vegpont nem ir, tehat az az ellenorzes itt olyan allapotra varna, ami elo
+   * sem all.
+   */
+  async updateUnit(
+    id: string,
+    unitId: string,
+    input: UpdateWorksheetDepartmentDto,
+  ) {
+    await this.assertExists(id);
+    const updated = await this.repository.updateUnit(id, unitId, input);
+    if (!updated)
+      throw new NotFoundException(
+        "A megadott alegység nem ehhez a partnerhez tartozik.",
+      );
+    return updated;
   }
 
   async create(input: CreateSupplierDto, actorId: string) {
