@@ -6,8 +6,6 @@ import type { ServiceJobStatus } from "@acropora/database";
 import type { ServiceJobsRepository } from "./service-jobs.repository.js";
 import { ServiceJobsService } from "./service-jobs.service.js";
 
-const LEPES_IDEJE = new Date("2026-09-02T10:00:00.000Z");
-
 /**
  * A REPOSITORY HELYETTESÍTVE, mert a kérdés a DÖNTÉS, nem az adatbázis:
  * engedjük-e a lépést, és mit mondunk, ha nem.
@@ -37,7 +35,7 @@ describe("egy lépés a hibajegyen", () => {
   it("a megengedett lépés átmegy, és a naplóhoz továbbadja, honnan hova", async () => {
     const { service, calls } = serviceWith({ status: "NEW" });
 
-    await service.move("job-1", { to: "TRIAGED" }, "user-1", LEPES_IDEJE);
+    await service.move("job-1", { to: "TRIAGED" }, "user-1");
 
     assert.equal(calls.length, 1);
     assert.deepEqual(calls[0], {
@@ -46,9 +44,6 @@ describe("egy lépés a hibajegyen", () => {
       to: "TRIAGED",
       note: null,
       actorUserId: "user-1",
-      // EGY `now` MEGY LE, nem kettő: a jegy mezője és a naplósor csak akkor
-      // vethető össze utólag, ha bizonyíthatóan egy időpontból származnak.
-      now: LEPES_IDEJE,
     });
   });
 

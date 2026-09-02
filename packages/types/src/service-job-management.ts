@@ -103,16 +103,17 @@ export interface ServiceJobDetail {
    */
   scheduledAt: string | null;
   /**
-   * A KEZDÉS ÉS A BEFEJEZÉS MÁSOLAT, A NAPLÓ A FORRÁS.
+   * MA MINDKETTŐ MINDEN JEGYEN `null`, ÉS EZ SZÁNDÉKOS.
    *
-   * A lépés írja őket, a naplósorral EGY tranzakcióban, ugyanazzal az
-   * időbélyeggel. Azért mező és nem visszafejtés, mert a „mely jegyek
-   * fejeződtek be ebben a hónapban" kérdés a számlázás alapja lesz, és azt nem
-   * lehet minden lekérdezésnél újraszámolni.
+   * Az időpontok FORRÁSA a napló: a `timeline` státusz-bejegyzéseiből derül ki,
+   * mikor lépett a jegy `IN_PROGRESS`-be és mikor `COMPLETED`-be. A lépés
+   * NEM írja ezt a két mezőt, mert az második írót csinálna egy tényre, és
+   * két elcsúszott időpont NÉMA hiba: két képernyő, két válasz, és senki nem
+   * keresi.
    *
-   * EGY SZÁRMAZTATOTT MEZŐ NEM TILTOTT - attól lesz veszélyes, ha nem mondjuk
-   * meg, melyik a forrás. HA VALAHA ELTÉRNEK, A NAPLÓ NYER, és az eltérés
-   * HIBA, nem két egyenrangú igazság.
+   * A mezők attól szerepelnek a válaszban, hogy a séma hordozza őket, és egy
+   * kihagyott mező később csendes hiánynak látszana. A séma megjegyzése mondja
+   * meg, mi hozná vissza a mezős irányt (indexelt lekérdezés a számlázáshoz).
    */
   startedAt: string | null;
   completedAt: string | null;

@@ -156,12 +156,7 @@ export class ServiceJobsService {
    * arra kényszerítené a felhasználót, hogy sorra próbálgassa a gombokat -
    * és a válasz úgyis a szerveren áll, tehát olcsóbb kimondani.
    */
-  async move(
-    id: string,
-    input: MoveServiceJobDto,
-    actorUserId: string,
-    now: Date = new Date(),
-  ) {
+  async move(id: string, input: MoveServiceJobDto, actorUserId: string) {
     const from = await this.repository.statusOf(id);
     if (from === null) throw new NotFoundException("A hibajegy nem található.");
 
@@ -180,7 +175,6 @@ export class ServiceJobsService {
       to: input.to,
       note: input.note?.trim() || null,
       actorUserId,
-      now,
     });
     // A LÉPÉS FELTÉTELE A `from` VOLT: ha közben más lépett, nem írjuk felül
     // csendben, hanem megmondjuk, hogy elmozdult alattunk.

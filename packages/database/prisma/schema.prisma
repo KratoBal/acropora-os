@@ -2225,7 +2225,24 @@ model ServiceJob {
   title          String
   description    String?
   assignedUserId String?
+  /// TERV, NEM ESEMÉNY: valaki BEÁLLÍTJA, jövőbeli időpontra. A naplóból soha
+  /// nem vezethető le, mert nem történt meg semmi. MA MÉG SENKI NEM ÍRJA:
+  /// ütemezési felület nincs, tehát minden jegyen `null`.
   scheduledAt    DateTime?
+  /// MA EGYIKET SEM ÍRJA SENKI, ÉS EZ SZÁNDÉKOS - a jegy időpontjainak
+  /// FORRÁSA a `ServiceJobEvent` napló: abból derül ki, mikor lépett a jegy
+  /// `IN_PROGRESS`-be és mikor `COMPLETED`-be. Ez a két mező ma minden jegyen
+  /// `null`, és egy létező, de mindig üres mező pontosan úgy néz ki, mint egy
+  /// adat, amit még nem töltöttek ki - ezért áll itt ez a megjegyzés.
+  ///
+  /// MI HOZNÁ VISSZA A MEZŐS IRÁNYT: egy INDEXELT lekérdezés (például „mely
+  /// jegyek fejeződtek be ebben a hónapban", a számlázáshoz), amit naplóból
+  /// visszafejteni minden lekérdezésnél túl drága. Ma erre nincs mérésünk, és
+  /// egy feltevésért nem érdemes második írót csinálni egy tényre.
+  ///
+  /// HA MÉGIS: a lépés írja őket, a naplósorral EGY tranzakcióban és ugyanabból
+  /// az időbélyegből, és a napló marad az igazság - eltérés esetén a napló nyer,
+  /// az eltérés pedig HIBA, nem két egyenrangú igazság.
   startedAt      DateTime?
   completedAt    DateTime?
   createdAt      DateTime         @default(now())
