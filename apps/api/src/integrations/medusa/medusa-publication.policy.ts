@@ -18,7 +18,21 @@
 
 /** Amit a dontes bemenetkent kap. Csak allapot, semmi mas. */
 export interface ProductPublicationState {
-  /** `UNAS`, `ACROPORA` vagy `null`. A `null` fail-closed. */
+  /**
+   * `UNAS`, `ACROPORA` vagy `null`.
+   *
+   * 2026-09-02-IG A NEM-ACROPORA GAZDA ONMAGABAN ELUTASITAS VOLT. Ma nem az:
+   * a tulajdonos dontese (Balazs, 2026-09-02 17:54, Discord) szo szerint
+   * "Nem kell kapcsolo. Ami az unasban van az kell a medusaba is. Akar regi
+   * akar ujonnan rogzitett lesz". Egy UNAS gazdaju termek tehat ugyanugy
+   * ertekesitheto, ha a tobbi harom feltetel all.
+   *
+   * A `null` VISZONT MARAD FAIL-CLOSED, es ez nem ovatoskodas: a gazda ket
+   * ismert erteke UNAS es ACROPORA (a sema enumja), a `null` egyik sem --
+   * vagyis nem tudjuk, honnan jott a termek. Egy ismeretlen gazdaju termeket
+   * kiengedni CSENDES tevedes (megjelenik a boltban, es senki nem keresi),
+   * visszatartani viszont HANGOS.
+   */
   catalogAuthority: string | null;
   isActive: boolean;
   /** Az Acropora-tulajdonu uzleti dontes. */
@@ -34,7 +48,7 @@ export interface ProductPublicationState {
  */
 export type PublicationReason =
   | "sellable"
-  | "not-acropora-authority"
+  | "unknown-authority"
   | "product-inactive"
   | "no-active-variant"
   | "not-webshop-sellable";
@@ -62,6 +76,10 @@ export interface PublicationDecision {
  * uzleti jelzest. Igy az indoklas mindig a LEGKORABBI akadalyt nevezi meg, es
  * nem azt, hogy "nincs bejelolve a webshop", amikor valojaban a termek
  * inaktiv.
+ *
+ * AZ ELSO KAPU 2026-09-02 OTA SZUKEBB: nem azt kerdezi, hogy MIENK-E a
+ * torzsadat, hanem hogy ISMERJUK-E a gazdajat. A ket ismert ertek (UNAS es
+ * ACROPORA) egyarant atmegy rajta.
  */
 export function decidePublication(
   state: ProductPublicationState,
@@ -73,8 +91,11 @@ export function decidePublication(
     salesChannel: "detach",
   });
 
-  if (state.catalogAuthority !== "ACROPORA")
-    return refuse("not-acropora-authority");
+  if (
+    state.catalogAuthority !== "ACROPORA" &&
+    state.catalogAuthority !== "UNAS"
+  )
+    return refuse("unknown-authority");
   if (!state.isActive) return refuse("product-inactive");
   if (state.activeVariantCount < 1) return refuse("no-active-variant");
   if (!state.webshopSellable) return refuse("not-webshop-sellable");
@@ -90,7 +111,7 @@ export function decidePublication(
 /** Egy sor a jelentesbe, emberi olvasasra. */
 export const PUBLICATION_REASON_TEXT: Record<PublicationReason, string> = {
   sellable: "értékesíthető a webshopban",
-  "not-acropora-authority": "a törzsadat gazdája nem az Acropora OS",
+  "unknown-authority": "a törzsadat gazdája ismeretlen",
   "product-inactive": "a termék inaktív",
   "no-active-variant": "nincs aktív változata",
   "not-webshop-sellable": "nincs webshopos értékesítésre jelölve",

@@ -480,6 +480,33 @@ describe("a publikáció és a csatorna a vetítésben", () => {
     ]);
   });
 
+  /**
+   * EZ AZ A MERCE, AMI MA NEMA LENNE.
+   *
+   * A gazda-feltetel 2026-09-02-ig UNAS terméknel `draft` allapotot es URES
+   * csatorna-listat adott. Az atallas utan a termek ugyanugy publikalt --
+   * es a kulonbseg egy ZOLD FUTASBOL NEM LATSZANA, mert a vetites mindket
+   * esetben "created" eredmenyt jelent. A hiba nem hibauzenetben all elo,
+   * hanem abban, hogy a boltban semmi nem latszik.
+   *
+   * A tulajdonos dontese (Balazs, 2026-09-02 17:54): "Ami az unasban van az
+   * kell a medusaba is."
+   */
+  it("UNAS gazdájú terméket is published állapotban és a csatornához kötve hoz létre", async () => {
+    const { service, createdWith } = fakes({ link: null, found: [] });
+
+    const outcome = await service.project(
+      sellableProduct({ catalogAuthority: "UNAS" }),
+      now,
+    );
+
+    assert.equal(outcome.action, "created");
+    assert.equal(createdWith.at(-1)?.status, "published");
+    assert.deepEqual(createdWith.at(-1)?.sales_channels, [
+      { id: SALES_CHANNEL },
+    ]);
+  });
+
   it("nem értékesíthető terméknél draft ÉS üres csatorna-lista megy egy kérésben", async () => {
     /**
      * Az üres lista a LEKÖTÉS: a telepített 2.19.0 frissítő folyamata a

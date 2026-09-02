@@ -52,16 +52,39 @@ describe("a publikációs döntés", () => {
     assert.equal(decision.reason, "product-inactive");
   });
 
-  it("UNAS gazda: a szabály nem enged írást", () => {
-    // A brief 4. tesztje. A `null` ugyanígy: fail-closed.
-    for (const authority of ["UNAS", null]) {
-      const decision = decidePublication(
-        state({ catalogAuthority: authority }),
-      );
+  /**
+   * A REGI SZABALY ITT ALLT: a nem-ACROPORA gazda onmagaban elutasitas volt, a
+   * `null` es az `UNAS` egyformán. Ma NEM az.
+   *
+   * A tulajdonos dontese (Balazs, 2026-09-02 17:54, Discord): "Nem kell
+   * kapcsolo. Ami az unasban van az kell a medusaba is. Akar regi akar ujonnan
+   * rogzitett lesz". A gazda tehat nem szur tobbe -- a masik harom feltetel
+   * viszont valtozatlanul all.
+   */
+  it("UNAS gazda: ugyanúgy értékesíthető, ha a többi feltétel áll", () => {
+    const decision = decidePublication(state({ catalogAuthority: "UNAS" }));
 
-      assert.equal(decision.sellable, false, `${authority}`);
-      assert.equal(decision.reason, "not-acropora-authority", `${authority}`);
-    }
+    assert.equal(decision.sellable, true);
+    assert.equal(decision.reason, "sellable");
+    assert.equal(decision.status, "published");
+    assert.equal(decision.salesChannel, "attach");
+  });
+
+  /**
+   * A `null` VISZONT MARAD FAIL-CLOSED, es ez nem a regi szabaly maradeka.
+   *
+   * A sema szerint a gazdanak ket ismert erteke van (UNAS, ACROPORA); a `null`
+   * egyik sem, tehat nem tudjuk, honnan jott a termek. Egy ismeretlen gazdaju
+   * termeket kiengedni CSENDES tevedes -- megjelenik a boltban, es senki nem
+   * keresi. Visszatartani HANGOS: valaki szol, hogy hianyzik.
+   */
+  it("ismeretlen gazda: fail-closed marad", () => {
+    const decision = decidePublication(state({ catalogAuthority: null }));
+
+    assert.equal(decision.sellable, false);
+    assert.equal(decision.reason, "unknown-authority");
+    assert.equal(decision.status, "draft");
+    assert.equal(decision.salesChannel, "detach");
   });
 
   it("nincs aktív változat: nem értékesíthető", () => {
