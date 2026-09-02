@@ -122,6 +122,20 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.TASKS_VIEW),
   },
   {
+    /**
+     * A HIBAJEGY A LANC ELSO ELEME (hibajegy, munkalap, teljesitesi igazolas,
+     * szamla), ezert all a munkalap ELOTT.
+     *
+     * CSAK `web`, HOLOTT A SZOMSZEDJAI `mobile`-ON IS ALLNAK: a telefonon ma
+     * nincs hibajegy-kepernyo. Egy csempe, ami sehova nem visz, rosszabb, mint
+     * a hianya - es a `mobile` felvetele epp azt igerne. Amikor a kepernyo
+     * elkeszul, ez a sor bovul.
+     */
+    id: "service-jobs",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SERVICE_VIEW),
+  },
+  {
     id: "worksheets",
     surfaces: ["web", "mobile"],
     visibility: permission(PERMISSIONS.SERVICE_VIEW),
