@@ -290,8 +290,8 @@ export default function NewAssetScreen() {
                 beallitott helyszin nemán eltunne. Uj eszkoznel ez nem all elo,
                 de a ket urlap ugyanazt a szabalyt kovesse.
               */}
-              <Legordulo
-                osszegzes={
+              <CollapsedPicker
+                summary={
                   // A TELJES UT, ahogy a `UnitOption.label` amugy is tartalmazza
                   // ("Fánk / Biodóm (BIO)"). A becsukott sor igy megmondja, HOL
                   // all az eszkoz -- enelkul a legordulo elrejtene a valasztast.
@@ -299,8 +299,8 @@ export default function NewAssetScreen() {
                   "Nincs helyszín kiválasztva"
                 }
                 hint="Koppints a listához"
-                cimke="Helyszín választása"
-                nyitva={unitPickerOpen}
+                label="Helyszín választása"
+                open={unitPickerOpen}
                 onToggle={() => setUnitPickerOpen((open) => !open)}
               >
                 {/*
@@ -351,7 +351,7 @@ export default function NewAssetScreen() {
                     {units.hiddenCount} kivezetett helyszín nem választható.
                   </Text>
                 ) : null}
-              </Legordulo>
+              </CollapsedPicker>
             </Section>
           ) : null}
 
@@ -371,13 +371,13 @@ export default function NewAssetScreen() {
               KOVETKEZETESSEG. Egy urlap, amin harom valaszto haromfelekeppen
               nez ki, magaban is az a panasz, amit Balazs leirt.
             */}
-            <Legordulo
-              osszegzes={
+            <CollapsedPicker
+              summary={
                 kinds.find((k) => k.value === kind)?.label ?? "Válassz típust"
               }
               hint="Koppints a listához"
-              cimke="Típus választása"
-              nyitva={kindPickerOpen}
+              label="Típus választása"
+              open={kindPickerOpen}
               onToggle={() => setKindPickerOpen((open) => !open)}
             >
               <View style={styles.kindGrid}>
@@ -397,7 +397,7 @@ export default function NewAssetScreen() {
                   </Pressable>
                 ))}
               </View>
-            </Legordulo>
+            </CollapsedPicker>
             <Field
               label="Gyártó"
               value={manufacturer}
@@ -552,18 +552,18 @@ function Field(props: {
  * lefele lepes is, tehat nyitva marad. Egy komponens, ami ezt magatol dontene el,
  * a ket eset kozul az egyiket elrontana.
  */
-function Legordulo({
-  osszegzes,
+function CollapsedPicker({
+  summary,
   hint,
-  cimke,
-  nyitva,
+  label,
+  open,
   onToggle,
   children,
 }: {
-  osszegzes: string;
+  summary: string;
   hint: string;
-  cimke: string;
-  nyitva: boolean;
+  label: string;
+  open: boolean;
   onToggle(): void;
   children: ReactNode;
 }) {
@@ -571,14 +571,14 @@ function Legordulo({
     <>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`${cimke}: ${osszegzes}. Koppints a módosításhoz.`}
+        accessibilityLabel={`${label}: ${summary}. Koppints a módosításhoz.`}
         onPress={onToggle}
         style={styles.ownerRow}
       >
-        <Text style={styles.ownerName}>{osszegzes}</Text>
+        <Text style={styles.ownerName}>{summary}</Text>
         <Text style={styles.ownerMeta}>{hint}</Text>
       </Pressable>
-      {nyitva ? children : null}
+      {open ? children : null}
     </>
   );
 }
