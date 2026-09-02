@@ -16,6 +16,7 @@ import {
   CreateServiceJobDto,
   MoveServiceJobDto,
   ServiceJobListQueryDto,
+  SetServiceJobPartnerDto,
 } from "./dto.js";
 import { ServiceJobsService } from "./service-jobs.service.js";
 
@@ -66,6 +67,16 @@ export class ServiceJobsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.create(input, user.id);
+  }
+
+  /**
+   * A PARTNER BEALLITASA. `SERVICE_MANAGE`, mert a jegy adatat valtoztatja --
+   * es csak ott, ahol MEG NINCS partner: a csere atsorolas, arra nincs ut.
+   */
+  @Post(":id/partner")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  setPartner(@Param("id") id: string, @Body() input: SetServiceJobPartnerDto) {
+    return this.service.setPartner(id, input.customerId);
   }
 
   /**

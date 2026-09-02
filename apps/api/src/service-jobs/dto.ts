@@ -74,3 +74,13 @@ export class MoveServiceJobDto {
 export class AttachWorksheetDto {
   @IsString() @MaxLength(64) worksheetId!: string;
 }
+
+/**
+ * Partner egy meg partner nelkuli jegyre.
+ *
+ * CSAK AZ AZONOSITO: a beallitas nem valtoztat semmi mast a jegyen. Barmi mas
+ * mezo itt azt sugallna, hogy kozben a jegyet is szerkesztjuk.
+ */
+export class SetServiceJobPartnerDto {
+  @IsString() @MaxLength(64) customerId!: string;
+}
