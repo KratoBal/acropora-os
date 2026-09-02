@@ -61,7 +61,23 @@ export function contentMoveLabel(to: string): string {
 
 export const CONTENT_ROLE_LABELS: Record<ContentViewerRole, string> = {
   author: "amit írok",
-  reviewer: "amit lektorálok",
+  /**
+   * A HALMAZT NEVEZI MEG, NEM A VISZONYT -- es ez a #398 kovetkezmenye.
+   *
+   * A regi szoveg ("amit lektorálok") TULAJDONLAST allitott, es addig igaz is
+   * volt: a nezet a sajat tetelekre szurt. A #398 ota a lektor sora a
+   * GAZDATLAN teteleket is behozza (Balazs dontese, "B", 2026-09-02 23:31),
+   * tehat olyanokat, amiket senki nem lektoral -- a nezo sem.
+   *
+   * A cimke tehat tobbet allitott, mint a valosag, es epp azt a meglepetest
+   * termelte volna, amit a kozos sor ELKERULNI akar: aki racsattint, a
+   * sajatjait varja, es idegen teteleket lat.
+   *
+   * ES EZERT NEM KELL MELLE UZENET a hasznaloknak (acrobot dontese, 2026-09-03):
+   * ha a szoveg jol nevezi meg a halmazt, a magyarazat folosleges. Ha
+   * magyarazat kellene hozza, akkor a szoveg a rossz.
+   */
+  reviewer: "lektorálásra vár",
   approver: "amit jóváhagyok",
   sender: "amit kiküldök",
 };
