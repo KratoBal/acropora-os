@@ -61,7 +61,18 @@ export class ContentService {
       await this.repository.list({
         state: { in: filter.states },
         ...(filter.ownOnly
-          ? { OR: [{ authorId: userId }, { reviewerId: userId }] }
+          ? {
+              OR: [
+                { authorId: userId },
+                { reviewerId: userId },
+                // A GAZDATLAN TETELEK, CSAK A LEKTOR SORABAN. Az allapotszuro
+                // mar korlatoz (`AWAITING_REVIEW`), tehat ez nem hozza be sem a
+                // vazlatokat, sem a javitasra varokat.
+                ...(filter.includeUnassignedReviews
+                  ? [{ reviewerId: null }]
+                  : []),
+              ],
+            }
           : {}),
       }),
     );

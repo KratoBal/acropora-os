@@ -756,3 +756,83 @@ describe("a machine-submitted item, and the human draft next to it", () => {
     );
   });
 });
+
+/**
+ * A KOZOS SOR A LEKERDEZESBEN, nem csak a szuro-leirasban.
+ *
+ * A `waitingFor` csak MEGMONDJA, mit kellene szurni; hogy a lekerdezes tenyleg
+ * ugy megy, azt csak a tarolonak atadott `where` mutatja meg. A ketto kozott
+ * pontosan az a szakadas fer el, amit ez a repo mashol mar gyujt: a kepesseg
+ * megvan, es senki nem hivja.
+ */
+function whereOf(calls: unknown[]): { OR?: Record<string, unknown>[] } {
+  return calls[0] as { OR?: Record<string, unknown>[] };
+}
+
+describe("the shared review queue, in the query itself", () => {
+  function listeningService() {
+    const seen: unknown[] = [];
+    const { service } = serviceWith({
+      list: (async (where: unknown) => {
+        seen.push(where);
+        return [];
+      }) as unknown as ContentRepository["list"],
+    });
+    return { service, seen };
+  }
+
+  it("brings the unassigned items into the reviewer's query", async () => {
+    const { service, seen } = listeningService();
+
+    await service.waitingForMe("reviewer", "user-1");
+
+    assert.deepEqual(whereOf(seen).OR, [
+      { authorId: "user-1" },
+      { reviewerId: "user-1" },
+      { reviewerId: null },
+    ]);
+  });
+
+  /**
+   * ES A SZERZO LEKERDEZESE NEM LETT BOVEBB. Ez a fontosabb allitas: az
+   * `ownOnly` ag KOZOS, tehat egy ott vitt javitas csendben megtoltene a szerzo
+   * listajat mas gazdatlan teteleivel -- es az elso allitas ezt nem venne eszre.
+   */
+  it("leaves the author's query exactly as it was", async () => {
+    const { service, seen } = listeningService();
+
+    await service.waitingForMe("author", "user-1");
+
+    assert.deepEqual(whereOf(seen).OR, [
+      { authorId: "user-1" },
+      { reviewerId: "user-1" },
+    ]);
+  });
+
+  /**
+   * ES AMI NELKUL A MERCE NEM TUD ELBUKNI: egy tetel, aminek VAN lektora, es az
+   * NEM a nezo, tovabbra se jelenjen meg.
+   *
+   * A lekerdezes alakjabol kovetkezik: mindharom ag KONKRET feltetel. Ha
+   * barmelyik feltetel nelkuli lenne (ures objektum), az MINDEN lektoralasra
+   * varo tetelt behozna, es a "mutassa a gazdatlanokat" javitas eszrevetlenul
+   * "mutasson mindent"-te valna.
+   */
+  it("still hides an item assigned to somebody else", async () => {
+    const { service, seen } = listeningService();
+
+    await service.waitingForMe("reviewer", "user-1");
+
+    const or = whereOf(seen).OR!;
+    assert.equal(
+      or.some((branch) => Object.keys(branch).length === 0),
+      false,
+      "Egy feltétel nélküli ág MINDEN lektorálásra várót behozna.",
+    );
+    // Es nev szerint: masik lektor azonositoja egyik agban sem all.
+    assert.equal(
+      or.some((branch) => branch.reviewerId === "masik-lektor"),
+      false,
+    );
+  });
+});
