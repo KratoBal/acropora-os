@@ -138,6 +138,28 @@ export class ServiceAssetsService {
     }
   }
 
+  /**
+   * ESZKOZ KERESESE A BEOLVASOTT MATRICAKODROL.
+   *
+   * A HAROM VALASZ HATARA: rossz ALAK -> 400 (a keresen kell javitani),
+   * nem talalhato -> 404. A "nincs ilyen kod" es a "mas partnere" KOZOTT NEM
+   * teszunk kulonbseget: a tarolo mindkettore `null`-t ad, es a kettot
+   * megkulonbozteto valasz maga lenne a szivargas.
+   */
+  async scanLabel(rawCode: string, scope: PartnerScope) {
+    const code = normalizeAssetLabelCode(rawCode);
+    if (code === null)
+      throw new BadRequestException(
+        "A matricakód alakja egy betű és négy szám (például V2196).",
+      );
+    const asset = await this.repository.detailByLabelCode(code, scope);
+    if (!asset)
+      throw new NotFoundException(
+        "Ehhez a matricakódhoz nem tartozik elérhető eszköz.",
+      );
+    return asset;
+  }
+
   /** A kiadott, de meg egyetlen eszkozhoz sem kotott matricak. */
   async freeLabels(limit: number) {
     return this.repository.listFreeLabels(limit);

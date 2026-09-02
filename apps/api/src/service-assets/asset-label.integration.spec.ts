@@ -209,6 +209,46 @@ describe(
       assert.equal(after, before);
     });
 
+    /**
+     * A TULAJDON-ELLENORZES, ADATBAZISON.
+     *
+     * A `label-scan-scope.spec.ts` azt orzi, hogy a szuro OTT ALL a kodban --
+     * ez azt meri, hogy HAT is. A ketto nem helyettesiti egymast: az elso
+     * fejlesztes kozben sul el, a masodik bizonyit.
+     */
+    it("a saját partner MEGTALÁLJA az eszközét a matricakódról", async () => {
+      // ISMERT POZITIV KONTROLL a lenti tagadashoz. Enelkul egy olyan
+      // lekerdezes is atmenne, ami SENKINEK nem ad vissza semmit.
+      const found = await repository.detailByLabelCode(CODE_C, {
+        kind: "customer",
+        customerId,
+      });
+      assert.ok(found, "a saját eszköz látszik a saját hatókörben");
+      // A KOD ALAPJAN TALALT ESZKOZ TENYLEG AZ, AMIRE A MATRICA KERULT.
+      // Enelkul az allitas beerne barmelyik eszkozzel, amit a lekerdezes ad.
+      const label = await prisma.assetLabel.findUnique({
+        where: { code: CODE_C },
+        select: { assetId: true },
+      });
+      assert.equal(found.id, label?.assetId);
+    });
+
+    it("MÁS partner NEM találja meg ugyanazt a kódot", async () => {
+      const masik = await prisma.customer.create({
+        data: {
+          customerNumber: `${PREFIX}-2`,
+          displayName: `${PREFIX} másik vevő`,
+          type: "COMPANY",
+        },
+        select: { id: true },
+      });
+      const found = await repository.detailByLabelCode(CODE_C, {
+        kind: "customer",
+        customerId: masik.id,
+      });
+      assert.equal(found, null, "más partner eszköze nem érhető el a kódról");
+    });
+
     it("a kiadás idempotens, és megmondja, mi állt már ott", async () => {
       const result = await repository.issueLabels([CODE_A, "Z9010"]);
       assert.deepEqual(result.alreadyIssued, [CODE_A]);
