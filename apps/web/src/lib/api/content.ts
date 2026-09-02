@@ -1,4 +1,5 @@
 import type {
+  ContentChannel,
   ContentDetail,
   ContentListResponse,
   ContentState,
@@ -114,6 +115,29 @@ export const contentApi = {
           token,
           init,
         );
+  },
+
+  /**
+   * EGY UJ TETEL FELVETELE A SORBA.
+   *
+   * A KEZDO ALLAPOT NEM MEGY AT, es ez szandekos: a szerver donti el, egy
+   * helyen. Ha a kliens valaszthatna, a jovahagyasi kapu az elso kenyelmes
+   * pillanatban megkerulheto lenne egy "mar kesz" allapottal.
+   */
+  create(
+    token: string,
+    input: {
+      title: string;
+      channel: ContentChannel;
+      body?: string;
+      imageRequired?: boolean;
+      plannedFor?: string;
+    },
+  ) {
+    return apiRequest<{ id: string }>("/content", token, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
   },
 
   comment(token: string, id: string, body: string) {

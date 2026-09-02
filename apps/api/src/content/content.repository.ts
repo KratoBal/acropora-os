@@ -53,7 +53,18 @@ export class ContentRepository {
     });
   }
 
-  create(data: Prisma.ContentItemCreateInput) {
+  /**
+   * `async`, ES NEM DISZ: a Prisma `create` nem sima Promise-t ad vissza, hanem
+   * a sajat kliens-objektumat (`Prisma__ContentItemClient`), amin tovabbi
+   * metodusok is ulnek. Amig ez szivargott ki a varraton, egy teszt-dupla NEM
+   * volt tipizalhato ra -- a fordito szo szerint ezt mondta: "Property
+   * 'comments' is missing in type 'Promise<...>'".
+   *
+   * Az `async` a visszateresi tipust arra szukiti, amit a hivo TENYLEG hasznal,
+   * es ettol a varrat mockolhato lesz. Ez nem viselkedes-valtozas: a hivok
+   * eddig is await-eltek.
+   */
+  async create(data: Prisma.ContentItemCreateInput) {
     return prisma.contentItem.create({ data, select: contentListSelect });
   }
 

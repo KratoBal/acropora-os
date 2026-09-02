@@ -11,6 +11,7 @@ import { ContentService } from "./content.service.js";
 import {
   ContentCalendarQueryDto,
   ContentCommentDto,
+  ContentCreateDto,
   ContentMoveDto,
   ContentWaitingQueryDto,
 } from "./dto/content.dto.js";
@@ -152,6 +153,22 @@ export class ContentController {
       actorCanApprove: hasPermission(user, PERMISSIONS.CONTENT_APPROVE),
       actorUserId: user.id,
     });
+  }
+
+  /**
+   * EGY UJ TETEL FELVETELE.
+   *
+   * `content.manage` jog kell hozza, nem `content.view`: ez iras. A
+   * jovahagyoi jog (`content.approve`) NEM kell es nem is szamit -- egy uj
+   * tetel a sor elejere kerul, nem a vegere, tehat nincs mit jovahagyni rajta.
+   */
+  @Post()
+  @RequirePermissions(PERMISSIONS.CONTENT_MANAGE)
+  create(
+    @Body() input: ContentCreateDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.create({ ...input, authorId: user.id });
   }
 
   @Post(":id/comments")

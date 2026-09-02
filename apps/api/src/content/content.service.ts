@@ -276,6 +276,59 @@ export class ContentService {
     return { ok: true as const };
   }
 
+  /**
+   * EGY UJ TETEL FELVETELE A SORBA.
+   *
+   * A MENU MA URES, ES NEM AZERT, MERT ELROMLOTT. A modul nyolc vegpontja
+   * mind OLVAS vagy LEPTET; letrehozo ut nem volt, a taroloban allo `create`
+   * fuggvenynek nem volt hivoja. Balazs panasza szo szerint az volt, hogy
+   * "semmi nincs benne, vagyis nincs benne adat" -- a felulet a sor olvaso es
+   * jovahagyo felet mutatta, a bemenet hianyzott.
+   *
+   * A KEZDO ALLAPOT `DRAFTING`, ES EZ NEM A SEMA ALAPERTELMEZESE. A Prisma
+   * oszlop `@default(IDEA)`, es az elso valasztas az lett volna, hogy hagyjuk
+   * ugy. Megmerve viszont: az `IDEA` a `STATES_BY_ROLE` tablazat EGYIK
+   * szerepenel sem szerepel, es a modulnak nincs "minden tetel" listaja. Egy
+   * IDEA allapotu tetel tehat SENKI listajaban nem jelenne meg -- vagyis a
+   * letrehozas pontosan azt a panaszt termelne ujra, amiert keszult: az adat
+   * ott van, es nem latszik.
+   *
+   * `DRAFTING` allapotban a tetel a SZERZOJERE var, es azonnal megjelenik a
+   * sajat "mi var ram" listajaban. Az atmenet-tablazat szerint az `IDEA ->
+   * DRAFTING` ut letezik, tehat a `DRAFTING` nem megkerules, hanem ugyanannak
+   * az utnak a kezdopontja, egy lepessel kesobbrol.
+   *
+   * AMIT EZ NEM OLD MEG, ES KIMONDOM: az OTLET rogzitese. Aki csak egy temat
+   * akar feljegyezni, annak ma nincs helye, mert az `IDEA` lathatatlan. Ez
+   * kulon munka (vagy egy otlet-lista, vagy az `IDEA` felvetele valamelyik
+   * nezetbe), es NEM azert maradt ki, mert nem vettem eszre.
+   */
+  async create(input: {
+    title: string;
+    channel: "FACEBOOK_POST" | "FACEBOOK_AD" | "ARTICLE" | "OTHER";
+    authorId: string;
+    body?: string;
+    imageRequired?: boolean;
+    plannedFor?: string;
+  }) {
+    const title = input.title.trim();
+    if (!title) throw new BadRequestException("A cim nem lehet ures.");
+
+    return this.repository.create({
+      title,
+      channel: input.channel,
+      // A SZERZO A LETREHOZO, es nem valaszthato: egy tetel, aminek a szerzoje
+      // valaki mas, azonnal az O listajaban allna, anelkul hogy tudna rola.
+      authorId: input.authorId,
+      state: "DRAFTING",
+      ...(input.body?.trim() ? { body: input.body.trim() } : {}),
+      ...(input.imageRequired === undefined
+        ? {}
+        : { imageRequired: input.imageRequired }),
+      ...(input.plannedFor ? { plannedFor: new Date(input.plannedFor) } : {}),
+    });
+  }
+
   async comment(input: { contentId: string; authorId: string; body: string }) {
     if (!input.body.trim())
       throw new BadRequestException("Az üres hozzászólás nem menthető.");
