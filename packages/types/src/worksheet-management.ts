@@ -284,6 +284,16 @@ export interface WorksheetDetail {
   department: WorksheetDepartmentSummary;
   createdByName: string | null;
   /**
+   * A HIBAJEGY, AMI MÖGÖTT EZ A LAP ÁLL. `null`, amíg nincs.
+   *
+   * NEM HIÁNY, HANEM AZ EGYIK RENDES ÚT: a lap keletkezhet hibajegy nélkül
+   * (karbantartás közben derül ki, hogy valami elromlott), és a jegy utólag
+   * születik meg. A részletlapnak ezért mindkét állapotot ki kell tudnia
+   * mondani - és a SZÁM is kell hozzá, nem csak az azonosító: egy azonosító
+   * nem mond semmit annak, aki nézi.
+   */
+  serviceJob: { id: string; jobNumber: string } | null;
+  /**
    * A lap felelősei. A munkalap azonosságához tartozik, nem a verzióhoz:
    * lezárt lapon is javítható, és nem jelenik meg a verzió-eltérésben.
    */

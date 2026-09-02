@@ -256,6 +256,33 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
               <dt className="text-slate-500">Felvette</dt>
               <dd>{worksheet.createdByName ?? "—"}</dd>
             </div>
+            <div>
+              <dt className="text-slate-500">Hibajegy</dt>
+              {/*
+                A HIÁNY IS ÁLLÍTÁS, ezért nem gondolatjel áll itt, mint a többi
+                üres mezőnél: a lap keletkezhet hibajegy nélkül, és az nem
+                hiányzó ADAT, hanem a folyamat egyik rendes állapota. Egy „—"
+                azt sugallná, hogy valamit nem töltöttek ki.
+
+                ÉS AMIÉRT ITT VAN EGYÁLTALÁN: hibajegy nélkül a lap nem
+                zárható le - a felhasználó eddig csak azt látta, hogy nem megy,
+                azt nem, hogy mi hiányzik hozzá.
+              */}
+              <dd className="font-medium">
+                {worksheet.serviceJob ? (
+                  <Link
+                    href={`/szerviz/hibajegyek/${worksheet.serviceJob.id}`}
+                    className="hover:text-teal-700"
+                  >
+                    {worksheet.serviceJob.jobNumber}
+                  </Link>
+                ) : (
+                  <span className="font-normal text-slate-500">
+                    Nincs mögötte hibajegy
+                  </span>
+                )}
+              </dd>
+            </div>
           </dl>
           {current.description ? (
             <p className="whitespace-pre-line text-sm text-slate-700">

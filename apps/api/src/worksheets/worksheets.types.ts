@@ -70,6 +70,16 @@ export const worksheetDetailInclude = {
     },
   },
   createdBy: { select: { displayName: true } },
+  /**
+   * A HIBAJEGY, AMI ALATT A LAP ALL. `null`, amig nincs - es ez nem kivetel,
+   * hanem az egyik rendes ut: a lap keletkezhet elobb, es a jegy nalunk
+   * szuletik meg utolag.
+   *
+   * A SZAM IS KELL, NEM CSAK AZ AZONOSITO: a reszletlapon egy azonosito nem
+   * mond semmit annak, aki nezi, a `HJ-2026-001` igen. Kulon lekerdezes nelkul
+   * jon, ugyanabban a sorban.
+   */
+  serviceJob: { select: { id: true, jobNumber: true } },
   /** Both ends of the chain. A link only one side knows about is no use to
    * whoever finds the other side first -- and on a signed sheet the only way
    * onward IS the continuation, so the sheet has to name it. */
@@ -231,6 +241,9 @@ export function toWorksheetDetail(row: WorksheetDetailRow): WorksheetDetail {
       isActive: row.department.isActive,
     },
     createdByName: row.createdBy?.displayName ?? null,
+    serviceJob: row.serviceJob
+      ? { id: row.serviceJob.id, jobNumber: row.serviceJob.jobNumber }
+      : null,
     assignees: row.assignees.map(toAssignee),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
