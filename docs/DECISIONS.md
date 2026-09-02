@@ -453,9 +453,20 @@ utána essen ki a régi** – nem lehet olyan kör, amelyben semmi nem méri.
    csempéi kizárólag a kiadott menüből jönnek, és a telefonon már nincs
    szerepkör-lista sem. Az indok nem az, hogy a tartalék ág fölösleges, hanem
    hogy **néma**: ha a kiszolgáló egyszer mégsem küld menüt, csendben a régi
-   táblákból dolgozna, és senki nem venné észre. Nélküle a kezdőlapon nincs
-   csempe – és a képernyő **ki is mondja**, hogy nincs, mert egy üres szakasz a
-   "Modulok" cím alatt betöltési hibának látszik, nem határnak.
+   táblákból dolgozna, és senki nem venné észre.
+
+   **De nem üres képernyő lett belőle, hanem megnevezett hibaállapot** (acrobot
+   döntése, 2026-09-02). Az érv, amit a két felállított lehetőség nem tartalmazott:
+   egy üres kezdőlap **pontosan úgy néz ki**, mint egy jogosultság nélküli
+   felhasználó kezdőlapja. A helyszínen álló szerelő nem tudná megkülönböztetni a
+   kettőt, és azt hinné, elvették a jogait. A képernyő ezért kimondja, hogy a menü
+   nem érkezett meg, hogy **nem a jogosultságáról van szó**, és ad egy
+   újrapróbálást – az a `retryRestore`, vagyis ugyanaz a lekérés, ami induláskor
+   fut, kijelentkezés nélkül.
+
+   Ez nem terméki döntés a felhasználó felé, ezért nem került a tulajdonos elé: a
+   kérdés nem az, mit lásson valaki normál működésben, hanem hogy egy hibaállapot
+   **nevesítve** legyen-e. A nevesítés mindig jobb.
 
 **Az ígéret ("elrejteni új kiadás nélkül lehet") a 2. és 3. lépéssel vált igazzá.**
 Mindkettő bent van; az itteni státuszok a `main` ágon mért állapotot írják le.

@@ -103,5 +103,12 @@ describe("a kezdőképernyő kimondja, ha nincs csempe", () => {
 
     assert.match(forras, /lathatoCsempek === 0/);
     assert.match(forras, /Nincs megjeleníthető modul/);
+
+    // ES A KET RESZ, AMI A HIBAT ELVALASZTJA A JOGOSULTSAG HIANYATOL. Egy ures
+    // kezdolap ugyanugy nez ki, mint egy jog nelkuli felhasznaloe -- a szoveg
+    // ezert mondja ki, hogy nem arrol van szo, es ezert all mellette
+    // ujraprobalas, ami a menut ujra lekeri kijelentkezes nelkul.
+    assert.match(forras, /nem a\s*\n?\s*jogosultságaiddal/);
+    assert.match(forras, /onPress=\{retryRestore\}/);
   });
 });

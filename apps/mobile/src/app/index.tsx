@@ -71,7 +71,7 @@ interface ModuleCardProps {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { status, user, signOut } = useAuth();
+  const { status, user, signOut, retryRestore } = useAuth();
   /*
    * Once the session exists, and never before: registering a device is only
    * meaningful for a known colleague, and the server takes the owner from the
@@ -244,18 +244,37 @@ export default function HomeScreen() {
 
                 A DONTES INDOKA epp az volt, hogy a hiba legyen HANGOS a csendes
                 visszaeses helyett -- egy nema ures felulet viszont nem hangos,
-                csak zavaro. Ez a ket sor teszi a hibat elmondhatova: a
-                felhasznalo azt tudja jelenteni, amit lat.
+                csak zavaro.
+
+                ES AMI EBBOL A LEGFONTOSABB (acrobot erve, 2026-09-02): egy URES
+                kezdolap PONTOSAN UGY NEZ KI, mint egy jogosultsag nelkuli
+                felhasznalo kezdolapja. A helyszinen allo szerelo nem tudna
+                megkulonboztetni a kettot, es azt hinne, elvettek a jogait. Ezert
+                mondja ki a szoveg, hogy NEM a jogosultsagrol van szo.
               */
               <View style={styles.accessCard}>
                 <Text style={styles.accessTitle}>
                   Nincs megjeleníthető modul
                 </Text>
                 <Text style={styles.accessText}>
-                  A kiszolgáló nem küldött menüt ehhez a munkamenethez.
-                  Jelentkezz ki és vissza; ha így marad, szólj a
-                  rendszergazdának, mert ez kiszolgáló-oldali hiba.
+                  A kiszolgáló nem küldött menüt ehhez a munkamenethez. Ez nem a
+                  jogosultságaiddal függ össze: próbáld újra, és ha így marad,
+                  szólj a rendszergazdának.
                 </Text>
+                {/*
+                  UJRAPROBALAS, NEM KI- ES VISSZAJELENTKEZES. A `retryRestore`
+                  ugyanazt futtatja le, ami indulaskor fut (`/auth/me`), tehat a
+                  menut is ujra lekeri -- munkamenet elvesztese nelkul. A
+                  helyszinen allo szerelonek a kijelentkezes valodi koltseg.
+                */}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Menü újrakérése"
+                  style={[styles.retryButton, styles.retryInCard]}
+                  onPress={retryRestore}
+                >
+                  <Text style={styles.retryText}>Újrapróbálás</Text>
+                </Pressable>
               </View>
             ) : null}
 
@@ -537,6 +556,9 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   retryText: { color: "#ffd0ca", fontSize: 12, fontWeight: "800" },
+  // A gomb a kartyan BELUL all, ezert kap sajat felso margot -- a stilust magat
+  // a rendeles-hiba kartyaval OSZTJA, hogy a ket ujraprobalas ugyanugy nezzen ki.
+  retryInCard: { alignSelf: "flex-start", marginTop: 12 },
   emptyCard: { backgroundColor: "#0b263d", borderRadius: 14, padding: 16 },
   emptyText: { color: "#86a7ba", fontSize: 13 },
   accountCard: {
