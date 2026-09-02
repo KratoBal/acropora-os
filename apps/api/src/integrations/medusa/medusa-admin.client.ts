@@ -129,8 +129,37 @@ export interface MedusaCategoryInput {
   name: string;
   external_id: string;
   parent_category_id?: string | null;
-  is_active?: boolean;
 }
+
+/**
+ * AZ AKTIV JELOLOT SZANDEKOSAN NEM KULDJUK.
+ *
+ * A szerzodes ismeri (`is_active`), de a teszt peldany STORE oldala csak aktiv
+ * kategoriakat ad vissza, tehat onnan a mezo viselkedese nem merheto. Ha nem
+ * kuldunk semmit, a Medusa alapertelmezese dont: ha az aktiv, jo; ha nem, a
+ * kategoria nem latszik, es AZ HANGOS. Egy rosszul eltalalt mezonev viszont
+ * csendben elhasalna. Amikor az elso eles futas megvolt, ez a jegyzet elavul,
+ * es akkor kell atirni, nem elotte.
+ *
+ * === A HANDLE, ES AMIERT A CIM-SZABALY NEM DISZ ===
+ *
+ * A `handle`-t sem kuldjuk. A Medusa ilyenkor a NEVBOL szarmaztatja
+ * (`productCategory.handle ??= kebabCase(productCategory.name)`), es a
+ * `handle` oszlopon EGYEDI index all (`IDX_category_handle_unique`).
+ *
+ * EBBOL KOVETKEZIK, hogy a `categoryTitle` szabalya nem megjelenesi kerdes: ha
+ * ket kategoria azonos NEVET kapna, azonos handle-t is kapna, es a masodik
+ * letrehozas az egyedi indexen hasalna el -- a betoltes KOZEPEN, amikor mar
+ * allnak kategoriak.
+ *
+ * MERVE 2026-09-02, a 219 soros fan, a Medusa sajat `kebabCase` fuggvenyevel:
+ * 169 kulonbozo NEV, de a `{nev} - {szulo}` szaballyal 219 kulonbozo cim ES
+ * 219 kulonbozo handle. Nulla utkozes.
+ *
+ * HA A CIM-SZABALY VALTOZIK (Balazs meg nem dontott rola), EZT UJRA KELL MERNI.
+ * Nem elég, hogy a cimek kulonbozok: a `kebabCase` ket kulonbozo cimet is
+ * osszevonhat.
+ */
 
 export interface MedusaCategoryListResult {
   rows: MedusaCategoryRow[];
