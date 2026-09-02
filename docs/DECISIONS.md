@@ -425,21 +425,39 @@ utána essen ki a régi** – nem lehet olyan kör, amelyben semmi nem méri.
    felület onnan dolgozik, és két háló őrzi, hogy a viselkedés nem változott: a
    webes menü minden szerepre azt adja, amit a korábbi, kódba írt kulcsok adtak,
    a forrás mobil nézete pedig azt, amit a telefon mai táblái.
-2. **HÁTRAVAN.** A szerver kiadja a `GET /auth/me` válaszában, a kérőre már
-   szűrve, és egy állítás követeli meg, hogy a kiadott válasz egyezzen a szerver
-   saját jogosultság-táblájával.
-3. **HÁTRAVAN.** A telefon a kiadott válaszra áll át. Ebben a körben a mobil
-   táblái még megmaradnak, tehát két független forrás áll egyszerre, és
-   mindkettő mérve van.
-4. **HÁTRAVAN.** Csak ezután esik ki a mobil tábla és a hozzá tartozó két
-   ellenőrzés. Egy nyitott kérdés ide tartozik: a telefon szolgáltatás-oldali
-   képességeit egy **függvény** számolja, nem tábla, és ha a közös forrás csak a
-   menüt írja le, az a függvény nem szűnik meg. Ezt a 3. lépésnél kell eldönteni,
-   mérésből.
+2. **KÉSZ.** A szerver kiadja a `GET /auth/me` válaszában, a kérőre már szűrve.
+   Menet közben derült ki, hogy a telefon **friss bejelentkezéskor** nem hívja az
+   `/auth/me`-t, hanem a bejelentkezési válaszból veszi a felhasználót – így a
+   menü csak egy alkalmazás-újraindítás után érkezett volna meg. Mindkét belépési
+   pont ugyanazt adja, és állítás követeli meg, hogy egyezzenek.
+3. **KÉSZ.** A telefon a kiadott válaszra áll át. A mobil táblái megmaradnak,
+   tehát két független forrás áll egyszerre, és mindkettő mérve van.
+4. **ÁTÍRÁS ALATT, MERT A TERV EZEN A PONTON TÉVEDETT.** Eredetileg ez állt itt:
+   "csak ezután esik ki a mobil tábla és a hozzá tartozó két ellenőrzés". A 3. lépés után elvégzett mérés szerint **ez nem lehetséges**, két független okból:
 
-**Amíg a 2. lépés nincs kész, a telefon menüje továbbra is kódváltozás** – vagyis
-a fenti ígéret ("elrejteni új kiadás nélkül lehet") a 2. és 3. lépéssel válik
-igazzá, nem ezzel.
+   - A képesség-táblákat a kezdőképernyőn **kívül** 11 képernyő használja. Ebből
+     4 a `*Manage` kulcsokat, amik nem menü-kérdések: a közös forrás azt írja le,
+     mit **lát** valaki, nem azt, mit **csinálhat**. Ha "manage" is bekerülne a
+     kiadott válaszba, a jogosultság-táblát duplikálnánk egy menü-forrásban.
+   - A `*View` kulcsok többsége **alképernyőt** véd (`assets/[id]`, `orders/[id]`,
+     `assets/new`, `assets/scanner` és társaik): a 11-ből csak 4-nek van saját
+     menüpontja. A menü arról szól, mi jelenjen meg a kezdőlapon; ezek sosem
+     jelennek meg ott.
+
+   **Amíg a táblák élnek, a két ellenőrzésnek van tárgya**, és a kivételükkel épp
+   azok a helyek maradnának őrizetlenül, ahol a tábla tovább él. A 4. lépés ezzel
+   egyetlen, még **el nem döntött** kérdésre szűkül: megmaradjon-e a kezdőképernyő
+   visszaesése (a `tileVisible` fallback argumentuma). Megtartva egy hibás vagy
+   régi szerver mellett a telefon **csendben** a saját régi tábláira esik vissza;
+   kivéve ugyanott a kezdőlap **üres** lesz, ami hangos és egy sorral visszatehető.
+
+   **Amit valóban nyugdíjazna a táblát, és ami nem ez a terv:** ha a telefon a
+   **jogait** is a szerverről kapná, és mind a 11 képernyő abból dolgozna. Az új
+   fogalom a válaszban, és külön döntés – itt azért áll, hogy a "majd a 4. lépés
+   megoldja" ne élhessen tovább.
+
+**Az ígéret ("elrejteni új kiadás nélkül lehet") a 2. és 3. lépéssel vált igazzá.**
+Mindkettő bent van; az itteni státuszok a `main` ágon mért állapotot írják le.
 
 ### Amit ez az ADR NEM dönt el
 
