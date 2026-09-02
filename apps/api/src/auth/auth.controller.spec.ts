@@ -83,8 +83,46 @@ describe("AuthController", () => {
     });
 
     assert.equal(body.token, "mobile-token-xyz");
-    assert.deepEqual(body.user, testUser);
     assert.ok(body.expiresAt);
+
+    // A MENU KULON, A TOBBI VALTOZATLANUL. A `navigation` mezo 2026-09-02-en
+    // kerult ide, es szandekosan NEM a `testUser` resze: az a felhasznalo
+    // AZONOSSAGA, ez pedig azt irja le, mit LAT. A ket dolgot kulon allitjuk,
+    // hogy a "semmi tobb nem szivarog ki" tulajdonsag megmaradjon a tobbi
+    // mezore -- egy `deepEqual` a teljes torzsre ezt adta, es ezt tartjuk meg.
+    const { navigation, ...identity } = body.user;
+    assert.deepEqual(identity, testUser);
+    assert.ok(Array.isArray(navigation) && navigation.length > 0);
+  });
+
+  /**
+   * A KET BELEPESI PONT UGYANAZT A MENUT ADJA.
+   *
+   * Ez a (2) lepes RESE volt, es a (3)-ban derult ki: a telefon FRISS
+   * BEJELENTKEZESKOR ebbol a valaszbol veszi a felhasznalot, es sosem hivja meg
+   * utana a `/auth/me`-t. Amig a menu csak ott utazott, a telefon csak egy
+   * alkalmazas-ujrainditas utan kapta volna meg -- vagyis ugyanaz a felhasznalo
+   * ket kulonbozo allapotban letezett volna, es a kulonbseg csak bejelentkezes
+   * utan latszott volna.
+   *
+   * MI PIROSIT: ha barmelyik belepesi pont maskepp szur, vagy ha az egyikbol
+   * kimarad a mezo.
+   */
+  it("both entry points hand back the same menu for the same user", async () => {
+    const authService = {
+      loginWithPassword: async () => fakeSession("mobile-token-xyz"),
+    } as unknown as AuthService;
+    const controller = new AuthController(authService);
+
+    const bejelentkezes = await controller.loginMobileWithPassword({
+      email: testUser.email,
+      password: "secret",
+    });
+    const munkamenet = controller.getCurrentUser(testUser);
+
+    assert.deepEqual(bejelentkezes.user.navigation, munkamenet.navigation);
+    // KONTROLL: nem ket ures listat vetunk ossze.
+    assert.ok(munkamenet.navigation.length > 0);
   });
 
   it("logout invalidates a Bearer-authenticated session without touching any cookies", async () => {
