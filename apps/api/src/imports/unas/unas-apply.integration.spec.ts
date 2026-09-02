@@ -254,8 +254,14 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
    * megkulonboztethetetlen, es kozuluk csak az egyik adatvesztes.
    *
    * MERVE (barracuda, 2026-09-02, kartya b609d3e6): 589 hivatkozas veszett el
-   * igy, 73 cikkszambol, es kis-nagybetu fuggetlenul NULLA hivatkozott cikkszam
-   * hianyzik a katalogusbol.
+   * igy, 58 EGYEDI cikkszambol (33 a hasonlo agon, 40 a kiegeszito agon, 15
+   * MINDKETTON -- ezert 58 es nem 73), es kis-nagybetu fuggetlenul NULLA
+   * hivatkozott cikkszam hianyzik a katalogusbol.
+   *
+   * ES MIND AZ 58 UGYANAZ AZ ALAK: a katalogusbeli cikkszam teljesen kisbetus
+   * valtozata. A mi importunk NEM kisbetusit (merve: a parser csak a
+   * fejlec-kulcsokat normalizalja, az apply-tarolo teljes fajljaban nulla
+   * `toLowerCase`), tehat a forras adja igy.
    *
    * EZ A TESZT NEM A PAROSITAST MERI. Az tovabbra is kis-nagybetu erzekeny marad
    * (az megvaltoztatasa adatmodell-kerdes). Amit mer: hogy a vesztes SZAMOLVA
