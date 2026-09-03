@@ -8,6 +8,7 @@ import { LockedScreen } from "@/components/LockedScreen";
 import { RestoringScreen } from "@/components/RestoringScreen";
 import { environment } from "@/config/env";
 import { AuthProvider, useAuth } from "@/lib/auth/AuthProvider";
+import { usePushNavigation } from "@/lib/notifications/usePushNavigation";
 import { queryClient } from "@/lib/query-client";
 
 export default function RootLayout() {
@@ -57,6 +58,21 @@ function RootNavigator() {
     unlock,
     signOut,
   } = useAuth();
+
+  /**
+   * A KOPPINTAS AZ ERTESITESEN MEGNYITJA A MUNKALAPOT.
+   *
+   * ITT ALL, A KORAI VISSZATERESEK ELOTT, es ez nem elrendezes: a `restoring`
+   * es a `locked` ag a Stack HELYETT rajzol, tehat ha a horog azok utan allna,
+   * a React szabalya szerint borulna a horog-sorrend -- es epp abban a ket
+   * allapotban NEM futna le, amelyikbol a leggyakoribb valos eset indul (a
+   * telefon a zsebben, koppintas a zarolt kepernyorol).
+   *
+   * A horog maga tudja, hogy ilyenkor nem szabad navigalni, ES azt is, hogy a
+   * valaszt nem szabad kezeltnek jelolni -- igy ugyanaz a koppintas a
+   * bejelentkezes utan meg hat.
+   */
+  usePushNavigation(status);
 
   if (status === "restoring") {
     return (
