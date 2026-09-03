@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -18,7 +19,12 @@ import {
   toQueueEntries,
   type QueueEntryView,
 } from "@/lib/offline/queue-inspection";
-import { allQueueRows, retryQueueRow } from "@/lib/offline/queue-store";
+import { queueDiscardConfirmation } from "@/lib/offline/queue-discard";
+import {
+  allQueueRows,
+  discardQueueRow,
+  retryQueueRow,
+} from "@/lib/offline/queue-store";
 
 /**
  * FELTÖLTÉSRE VÁRÓ FELVITELEK -- ÉS AMI MEGÁLLT.
@@ -110,6 +116,46 @@ export default function QueueScreen() {
                         params: { id: entry.id },
                       })
                     }
+                    onDiscard={() => {
+                      /**
+                       * A MEGEROSITES SZOVEGE A TISZTA MODULBOL JON, mert ott
+                       * merheto, hogy tenyleg MEGNEVEZI a tartalmat -- egy
+                       * "biztos vagy benne?" ugyanaz a nema veszteseg, csak egy
+                       * kattintassal tobb.
+                       */
+                      const kerdes = queueDiscardConfirmation({
+                        kind: entry.kind,
+                        title: entry.title,
+                      });
+                      Alert.alert(kerdes.title, kerdes.message, [
+                        { text: "Mégsem", style: "cancel" },
+                        {
+                          text: kerdes.confirmLabel,
+                          style: "destructive",
+                          onPress: () => {
+                            void (async () => {
+                              const eredmeny = await discardQueueRow(entry.id);
+                              /**
+                               * A NULLA MOZDULT SOR NEM SIKER: a sor kozben
+                               * elindulhatott egy masik kiuritessel. Ilyenkor
+                               * NEM vetettuk el, es ezt ki kell mondani --
+                               * kulonben a szerelo azt hinne, hogy megtortent.
+                               */
+                              if (!eredmeny.ok || eredmeny.changed === 0)
+                                Alert.alert(
+                                  "Nem vetettük el",
+                                  eredmeny.ok
+                                    ? "Ez a felvitel közben elindult, ezért nem vetettük el. Nézd meg a listán, mi lett vele."
+                                    : eredmeny.error,
+                                );
+                              await queryClient.invalidateQueries({
+                                queryKey: ["offline-queue"],
+                              });
+                            })();
+                          },
+                        },
+                      ]);
+                    }}
                   />
                 ))}
               </View>
@@ -125,10 +171,12 @@ function Entry({
   entry,
   onRetry,
   onFix,
+  onDiscard,
 }: {
   entry: QueueEntryView;
   onRetry: () => Promise<void>;
   onFix: () => void;
+  onDiscard: () => void;
 }) {
   return (
     <View style={styles.row}>
@@ -176,11 +224,30 @@ function Entry({
           <Text style={styles.retryText}>Javítom és újraküldöm</Text>
         </Pressable>
       ) : null}
+      {/*
+        AZ ELVETES NEM EGYENRANGU GOMB, hanem alahuzott szoveg a masik alatt.
+        Ez az EGYETLEN gomb az appban, ami a szerelo sajat munkajat dobja el;
+        ket egyforma gomb egymas mellett a visszafordithatatlant ugyanolyan
+        konnyen elerhetove tenne, mint a javithatot.
+      */}
+      {entry.canDiscard ? (
+        <Pressable accessibilityRole="button" onPress={onDiscard}>
+          <Text style={styles.discardText}>Elvetem</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  discardText: {
+    color: "#ffb4ab",
+    fontSize: 13,
+    fontWeight: "800",
+    marginTop: 12,
+    textAlign: "center",
+    textDecorationLine: "underline",
+  },
   safeArea: { flex: 1, backgroundColor: "#071827" },
   container: { padding: 18, paddingBottom: 48, gap: 16 },
   eyebrow: {

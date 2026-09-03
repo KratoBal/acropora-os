@@ -68,6 +68,45 @@ export async function applyQueueResend(
 }
 
 /**
+ * EGY ELAKADT FELVITEL ELVETESE.
+ *
+ * A DONTES es a megerosites szovege a `queue-discard.ts`-ben all -- ez a
+ * fuggveny csak vegrehajt.
+ *
+ * NEM `DELETE`, HANEM `UPDATE`. Ha a sor eltunne, az kivulrol
+ * megkulonboztethetetlen lenne attol, mintha sikeresen kiment volna: ugyanaz a
+ * felvitel hianyzik a szerverrol, es senki nem tudna megmondani, hogy
+ * elvetettek-e vagy elveszett. Az allapot maga a nyom, es a torzs meg a
+ * hibauzenet ott marad mellette.
+ *
+ * A `WHERE` AZ ALLAPOTRA IS SZUR, ugyanabbol az okbol, mint a javitasnal: a
+ * keperno es az iras kozott a sor elindulhat egy masik kiuritessel, es egy
+ * EPP FELMENO felvitelt nem szabad elvetettnek jelolni -- a szerveren letre
+ * jonne, a telefonon elvetettkent allna, es a ketto egymasnak mondana ellent.
+ *
+ * A nulla mozdult sor NEM siker: a hivo mondja meg, hogy a sor kozben
+ * elmozdult.
+ */
+export async function discardQueueRow(
+  id: string,
+): Promise<{ ok: true; changed: number } | { ok: false; error: string }> {
+  try {
+    const db = await initializeOfflineDatabase();
+    const result = await db.runAsync(
+      `UPDATE sync_queue SET state = 'discarded'
+        WHERE id = ? AND state = 'conflict'`,
+      [id],
+    );
+    return { ok: true, changed: result.changes };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
  * SORBA TESZ EGY FELVITELT.
  *
  * `INSERT OR IGNORE`: ugyanaz a muvelet-azonosito ketszer NEM hiba es NEM
