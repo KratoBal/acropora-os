@@ -407,6 +407,25 @@ export async function runProjectionCli(
         medusaCategoryIds: categories.medusaCategoryIds,
         slug: product.channelListings[0]?.slug ?? null,
         seoRobots: product.channelListings[0]?.seoRobots ?? null,
+        /**
+         * MA NEM ADUNK KEPET, ES EZ DONTES, NEM MULASZTAS.
+         *
+         * A kepek a `ProductImage` tablaban ott vannak (a UNAS import irja
+         * oket, `url` es `sortOrder` mezovel), es a vetites MAR TUDNA vinni
+         * oket. Amit atadnank, az viszont a MAI URL lenne -- mind a 3426 kep a
+         * `shop.acropora.hu` hoszton all, vagyis a UNAS sajat tarolojan.
+         *
+         * Ezt az utat kulon megbeszeltuk es ELVETETTUK: a bolt kepei nem
+         * fugghetnek attol a rendszertol, amibol kifele koltozunk. A kep
+         * MESTERE a mi oldalunkra kerul, onnan tolti fel a vetites a boltba, es
+         * a termeken a bolt sajat URL-je all majd.
+         *
+         * AMI EZT FELOLDJA: a kep-atmasolas a sajat tarolonkba, es a feltoltes
+         * a bolt fajl-moduljaba. Amint a `ProductImage.url` a mi oldalunkra
+         * mutat, ez a sor egy lekerdezesre cserelheto -- a vetitesen nem kell
+         * valtoztatni semmit.
+         */
+        images: null,
         publication: {
           catalogAuthority: product.catalogAuthority,
           isActive: product.isActive,
