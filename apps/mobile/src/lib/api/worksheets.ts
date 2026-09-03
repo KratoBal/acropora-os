@@ -13,11 +13,11 @@ import {
 const BASE = "/service/worksheets";
 
 /**
- * MUNKALAPOK, OLVASÁSRA.
+ * MUNKALAPOK A TELEFONON.
  *
  * A telefonon a munkalap MUNKAUTASÍTÁS: a szerelő azt nézi meg, mit kell
- * csinálni, hol, és kire van kiosztva. A lap megírása, lezárása és aláíratása
- * ma a webes felületen történik, ezért ez a modul csak olvas.
+ * csinálni, hol, és kire van kiosztva. A lap MEGNYITÁSA, a tételek rögzítése és
+ * az ALÁÍRÁS innen is megy; a lezárás és az ár az irodáé (lásd lent).
  *
  * A szerver ugyanazzal a jogosultsággal védi a munkalapot, mint az eszközöket
  * (`service.view` az olvasáshoz, `service.manage` az íráshoz).
@@ -30,8 +30,16 @@ const BASE = "/service/worksheets";
  * (`customerId`, `departmentId`, `subject`), a tételek listája alapértelmezetten
  * ÜRES, tehát a helyszínen nyitott lap TELJES ÉRTÉKŰ, csak még nincs rajta tétel.
  *
- * Ami továbbra sem itt van: a lezárás, az aláíratás és az ár. Azok az irodai
- * oldalon dőlnek el (Balázs döntése, 2026-09-02).
+ * === ÉS AZ ALÁÍRÁS IS ITT VAN, 2026-09-03 ÓTA ===
+ *
+ * Itt korábban az állt, hogy az aláíratás az irodai oldalon dől el. Ez a mondat
+ * MA MÁR NEM IGAZ: Balázs döntése szerint a lapot a SZERELŐ írja alá, a saját
+ * nevében, a telefonon. A régi mondatot nem kiegészítettem, hanem átírtam --
+ * egy megjegyzés, ami egy megváltozott szabályt ír le, rosszabb a semminél.
+ *
+ * Ami továbbra sem itt van: a LEZÁRÁS és az ÁR. Azok az irodai oldalon dőlnek
+ * el (Balázs döntése, 2026-09-02), és ez az aláírás előfeltétele is: a szerver
+ * csak `AWAITING_SIGNATURE` állapotú verziót ír alá, oda pedig a lezárás visz.
  *
  * A típusok SAJÁT másolatok, nem a `@acropora/types` csomagból jönnek: az Expo
  * app szándékosan nem húzza be a pnpm munkatér csomagjait (lásd
@@ -331,4 +339,32 @@ export function removeWorksheetLine(id: string, lineId: string) {
     `${BASE}/${encodeURIComponent(id)}/lines/${encodeURIComponent(lineId)}`,
     { method: "DELETE" },
   );
+}
+
+/**
+ * A LAP ALAIRASA A HELYSZINEN.
+ *
+ * A DONTES a `lib/worksheets/worksheet-signature.ts`-ben all (ki ir ala, mikor
+ * all ott a gomb, mit kell megadni) -- ez a fuggveny csak elviszi.
+ *
+ * A valasz a TELJES lap, ugyanaz az alak, mint a `getWorksheet`-nel: a kepernyo
+ * ebbol frissul, es nem kell kulon lekerdezni.
+ *
+ * A `signerName` ITT NEM opcionalis es nem is szamit ki magatol: a hivo adja
+ * meg. Egy alapertelmezett ertek ("a bejelentkezett felhasznalo") ebben a
+ * fuggvenyben azt jelentene, hogy a webes felulettel kozos szerzodes ket
+ * kulonbozo dolgot jelent a ket oldalon.
+ */
+export function signWorksheet(
+  id: string,
+  input: {
+    decision: "ACCEPTED" | "REJECTED";
+    signerName: string;
+    note: string | null;
+  },
+) {
+  return apiRequest<WorksheetDetail>(`${BASE}/${encodeURIComponent(id)}/sign`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
