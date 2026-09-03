@@ -262,9 +262,10 @@ export class WorksheetsService {
   // atnevezett mezo mindkettoben lefordulna, es a kepernyon `undefined`
   // jelenne meg, hibauzenet nelkul.
   async attachableWorksheets(
+    customerId: string,
     scope: PartnerScope,
   ): Promise<WorksheetAttachableListResponse> {
-    return this.repository.attachableWorksheets(scope);
+    return this.repository.attachableWorksheets(customerId, scope);
   }
 
   async setAssignees(

@@ -199,6 +199,7 @@ export class ServiceJobsService {
       partnerStatus: partnerVisibleStatus(row.status),
       partnerStatusLabel: partnerStatusLabel(row.status),
       customerName: row.customer?.displayName ?? null,
+      customerId: row.customerId,
       createdAt: row.createdAt.toISOString(),
       // A tábla `readonly` tömböt ad (nem írható felül kívülről); a válasz
       // sima tömb, ezért itt másolat készül róla.
