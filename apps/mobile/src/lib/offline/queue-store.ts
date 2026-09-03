@@ -1,4 +1,5 @@
 import { initializeOfflineDatabase } from "./database";
+import { readPhotoPayload, type PhotoPayload } from "./photo-queue";
 import type { SyncQueueRow, SyncState } from "./sync-queue";
 
 /**
@@ -57,6 +58,76 @@ export async function enqueueAssetCreate(
   }
 }
 
+/**
+ * SORBA TESZ EGY FENYKEPET, EGY MEG FEL NEM MENT ROGZITESHEZ.
+ *
+ * UGYANAZ A TABLA, MASIK `operation` -- a ket menet sorrendjet a
+ * `photo-queue.ts` `nextBatch` adja, nem a tabla szerkezete.
+ *
+ * AZ `entity_id` ITT SZANDEKOSAN `NULL`: a szerver-oldali eszkoz-azonosito a
+ * rogzites felmenetelekor keletkezik, es a kep sorba tetelekor MEG NEM
+ * LETEZIK. Azt a `attachRecordingResult` irja ra kesobb, es amig nincs ott, a
+ * kepet nincs is HOVA felkuldeni.
+ */
+export async function enqueueAssetPhoto(input: {
+  id: string;
+  payload: PhotoPayload;
+  createdAt: string;
+}): Promise<EnqueueResult> {
+  try {
+    const db = await initializeOfflineDatabase();
+    await db.runAsync(
+      `INSERT OR IGNORE INTO sync_queue
+         (id, operation, entity_type, entity_id, payload_json, created_at, attempt_count, last_error, state)
+       VALUES (?, 'upload-photo', 'asset', NULL, ?, ?, 0, NULL, 'pending')`,
+      [input.id, JSON.stringify(input.payload), input.createdAt],
+    );
+    return { ok: true, operationId: input.id };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * A ROGZITES FELMENT: A HOZZA TARTOZO KEPEK MEGKAPJAK A SZERVER AZONOSITOT.
+ *
+ * EZ AZ EGYETLEN HELY, AHOL A KET MENET OSSZEER. A rogzites sora a nyugtazas
+ * utan torlodik, tehat ha ez a lepes elmarad, a kepek OROKRE cimzetlenul
+ * maradnak: nem hibaznak, nem akadnak el, egyszeruen sosem mennek fel -- es a
+ * sor kozben "kiurul" a rogzitesektol.
+ *
+ * A PAROSITAS JS-BEN MEGY, NEM SQL-BEN: a `payload_json`-bol kellene
+ * `json_extract`-tel kiszedni a rogzites azonositojat, es azzal a lekerdezes
+ * az SQLite JSON1 kiterjesztesetol fuggne. Nehany varakozo sorrol van szo,
+ * tehat az olvasas ara elhanyagolhato, a fuggese viszont nem.
+ *
+ * @returns hany kep kapta meg az azonositot.
+ */
+export async function attachRecordingResult(
+  recordingOperationId: string,
+  assetId: string,
+): Promise<number> {
+  const db = await initializeOfflineDatabase();
+  const rows = await db.getAllAsync<{ id: string; payload_json: string }>(
+    `SELECT id, payload_json FROM sync_queue
+      WHERE operation = 'upload-photo' AND entity_id IS NULL`,
+  );
+  let erintett = 0;
+  for (const row of rows) {
+    const payload = readPhotoPayload(row.payload_json);
+    if (payload?.recordingOperationId !== recordingOperationId) continue;
+    await db.runAsync(`UPDATE sync_queue SET entity_id = ? WHERE id = ?`, [
+      assetId,
+      row.id,
+    ]);
+    erintett += 1;
+  }
+  return erintett;
+}
+
 /** Amit el LEHET kuldeni: a `pending` es a `failed` sorok, regi elore. */
 export async function pendingQueueRows(): Promise<SyncQueueRow[]> {
   const db = await initializeOfflineDatabase();
@@ -76,9 +147,9 @@ export async function pendingQueueRows(): Promise<SyncQueueRow[]> {
       ORDER BY created_at ASC`,
     KULDHETO,
   );
-  return rows.map((r) => ({
+  return rows.filter(ismertMuvelet).map((r) => ({
     id: r.id,
-    operation: "create",
+    operation: r.operation as SyncQueueRow["operation"],
     entityType: "asset",
     entityId: r.entity_id,
     payloadJson: r.payload_json,
@@ -137,4 +208,20 @@ export async function queueCounts(): Promise<{
     pending: szam(["pending", "failed", "syncing"]),
     conflict: szam(["conflict"]),
   };
+}
+
+/**
+ * CSAK AZT KULDJUK EL, AMIT ISMERUNK.
+ *
+ * A muvelet nevet eddig `"create"`-re ALLITOTTUK a beolvasasnal, nem olvastuk:
+ * amig egyfele sor volt, ez igaz is volt. Egy `upload-photo` sor viszont igy
+ * rogzitesnek latszott volna, es a szinkron egy KEP payloadjaval hivta volna a
+ * felviteli vegpontot -- a hiba a SZERVEREN jelent volna meg, egy ertelmetlen
+ * elutasitaskent.
+ *
+ * Az ISMERETLEN muveletet nem toroljuk es nem is talalgatjuk: a sorban marad
+ * (egy ujabb valtozat irhatta oda), csak nem kuldjuk el.
+ */
+function ismertMuvelet(row: { operation: string }): boolean {
+  return row.operation === "create" || row.operation === "upload-photo";
 }

@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 
-import { createAsset, type CreateAssetInput } from "@/lib/api/assets";
+import {
+  createAsset,
+  uploadAssetDocuments,
+  type CreateAssetInput,
+} from "@/lib/api/assets";
 import { ApiError } from "@/lib/api/client";
 
 import { drainOfflineQueue } from "./drain-offline-queue";
-import { describeQueueRun } from "./queue-runner";
+import type { SyncQueueRow } from "./sync-queue";
+import { readPhotoPayload } from "./photo-queue";
+import { describeQueueRun, describeUnresolvedRecordings } from "./queue-runner";
 
 /**
  * A SOR KIURITESE, AMIKOR VISSZAJON A HALOZAT.
@@ -33,11 +39,22 @@ export function useQueueDrain(isOnline: boolean): string | null {
       try {
         const report = await drainOfflineQueue({
           send: async (row) => {
+            if (row.operation === "upload-photo") return kepetKuld(row);
             try {
-              await createAsset(
+              const letrejott = await createAsset(
                 JSON.parse(row.payloadJson) as CreateAssetInput,
               );
-              return { httpStatus: 201, error: null };
+              /**
+               * A SZERVER AZONOSITOJA ITT LEP AT A VARRATON. A sor a nyugtazas
+               * utan torlodik, tehat ha ezt eldobnank, a mar sorban allo
+               * fenykepeket semmi nem tudna megcimezni -- es a hiba nema
+               * lenne: a sor kiurul, a jelentes zold.
+               */
+              return {
+                httpStatus: 201,
+                error: null,
+                entityId: letrejott.id,
+              };
             } catch (cause) {
               /**
                * A HTTP KOD ES A HALOZATI HIBA SZETVALASZTVA. A `null` azt
@@ -52,7 +69,11 @@ export function useQueueDrain(isOnline: boolean): string | null {
             }
           },
         });
-        setUzenet(describeQueueRun(report));
+        const mondatok = [
+          describeQueueRun(report),
+          describeUnresolvedRecordings(report),
+        ].filter((m): m is string => m !== null);
+        setUzenet(mondatok.length > 0 ? mondatok.join(" ") : null);
       } finally {
         fut.current = false;
       }
@@ -60,4 +81,49 @@ export function useQueueDrain(isOnline: boolean): string | null {
   }, [isOnline]);
 
   return uzenet;
+}
+
+/**
+ * EGY FENYKEP FELKULDESE A MAR FELMENT ROGZITESHEZ.
+ *
+ * A HAROM ELUTASITAS KULON, mert mas a teendo:
+ *
+ *   ertelmezhetetlen payload -> 422, vagyis KONFLIKTUS: ember kell hozza, es
+ *                               az ujraprobalas ugyanezt adna orokke.
+ *   nincs meg az azonosito   -> halozati alak (`null`), vagyis UJRAPROBALHATO:
+ *                               a rogzites felmehet egy kesobbi futasban.
+ *   a szerver utasit el      -> a `decideDrain` besorolasa dont, ugyanugy,
+ *                               mint a rogzitesnel.
+ */
+async function kepetKuld(row: SyncQueueRow): Promise<{
+  httpStatus: number | null;
+  error: string | null;
+}> {
+  const payload = readPhotoPayload(row.payloadJson);
+  if (payload === null) {
+    return {
+      httpStatus: 422,
+      error: "A fénykép sora értelmezhetetlen, ezért nem küldjük el.",
+    };
+  }
+  if (row.entityId === null) {
+    return {
+      httpStatus: null,
+      error: "A rögzítés még nem ment fel, a képnek nincs hova kerülnie.",
+    };
+  }
+  try {
+    await uploadAssetDocuments(row.entityId, {
+      // UGYANAZ A FAJTA, MINT A KEPERNYORE VETT KEPNEL (`assets/[id].tsx`): a
+      // szamla es a garancialevel az irodabol kerul fel, a helyszini kep OTHER.
+      type: "OTHER",
+      files: [{ uri: payload.uri, name: payload.name, type: payload.type }],
+    });
+    return { httpStatus: 201, error: null };
+  } catch (cause) {
+    return {
+      httpStatus: cause instanceof ApiError ? cause.status : null,
+      error: cause instanceof Error ? cause.message : String(cause),
+    };
+  }
 }

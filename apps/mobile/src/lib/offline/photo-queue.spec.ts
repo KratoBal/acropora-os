@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { describePhotoBacklog, nextBatch } from "./photo-queue";
+import {
+  acknowledgedRecordings,
+  batchForPass,
+  describePhotoBacklog,
+  nextBatch,
+  photoOperationId,
+} from "./photo-queue";
 import type { SyncQueueRow } from "./sync-queue";
 
 /**
@@ -90,5 +96,103 @@ describe("a hátralék kimondása", () => {
     // allitason atmenne, es minden uzenetben ott lenne egy nulla.
     const s = describePhotoBacklog({ recordings: 2, photos: 0 });
     assert.doesNotMatch(s ?? "", /fénykép/);
+  });
+});
+
+describe("a kép sorának azonosítója", () => {
+  it("UGYANAZ a kép ugyanahhoz a rögzítéshez UGYANAZT az azonosítót kapja", () => {
+    /*
+      A ketszer megnyomott gomb ugyanazt a kulcsot adja, es a beszuras
+      (`INSERT OR IGNORE`) csendben elesik. Enelkul ugyanaz a kep KETSZER menne
+      fel, ket kulon dokumentumkent az eszkoz lapjan.
+    */
+    const a = photoOperationId({
+      recordingOperationId: "r1",
+      uri: "file:///kep.jpg",
+    });
+    const b = photoOperationId({
+      recordingOperationId: "r1",
+      uri: "file:///kep.jpg",
+    });
+    assert.equal(a, b);
+  });
+
+  it("ugyanaz a fájl KÉT rögzítéshez KÉT azonosító", () => {
+    /*
+      MI PIROSIT: ha a kulcs csak az `uri`-bol keszulne. A szerelo ugyanazt a
+      kepet valaszthatja ket eszkozhoz, es akkor a masodik felvitel kepe
+      csendben elveszne -- a beszuras "mar letezik" cimen eldobna.
+    */
+    assert.notEqual(
+      photoOperationId({ recordingOperationId: "r1", uri: "file:///kep.jpg" }),
+      photoOperationId({ recordingOperationId: "r2", uri: "file:///kep.jpg" }),
+    );
+  });
+});
+
+describe("melyik rögzítések mentek már fel", () => {
+  it("a kép SZERVER-AZONOSÍTÓJA a bizonyíték", () => {
+    /*
+      A rogzites sora a nyugtazaskor TOROLVE lesz, tehat a "mar felment"
+      tenynek egyetlen nyoma marad: a kep sorara felirt azonosito. Ezt a
+      halmazt NEM lehet a rogzites-sorok hianyabol kikovetkeztetni -- a hianyzas
+      azt is jelentheti, hogy a rogzites SOSEM letezett.
+    */
+    const felment = { ...foto("f1", "r1"), entityId: "eszkoz-1" };
+    assert.deepEqual([...acknowledgedRecordings([felment])], ["r1"]);
+  });
+
+  it("azonosító NÉLKÜL a rögzítés nem számít felmentnek", () => {
+    // MI PIROSIT: ha a halmaz minden fotobol venne a rogzites azonositojat.
+    // Akkor a sajat kepe "igazolna" a rogzitest, es a gazdatlan kep vedelme
+    // (`nextBatch`) sosem sulne el.
+    assert.deepEqual([...acknowledgedRecordings([foto("f1", "r1")])], []);
+  });
+
+  it("a RÖGZÍTÉS sorai nem kerülnek bele", () => {
+    // TESTVER-KONTROLL: egy valtozat, ami minden sorbol gyujt, itt bukna.
+    assert.deepEqual([...acknowledgedRecordings([rogzites("r1")])], []);
+  });
+});
+
+describe("egy menet sorai", () => {
+  it("az ELBUKOTT rögzítés NEM indul el a második menetben", () => {
+    /*
+      EZ AZ ALLITAS A SZURES LETEZESENEK OKA. Egy elbukott rogzites `failed`
+      allapotba kerul, ami tovabbra is kuldheto -- vagyis szures nelkul
+      ugyanaz a felvitel KETSZER menne el EGYETLEN futasban, es a szerveren ket
+      eszkoz keletkezne. A vegpont ma nem ismeri a muvelet-azonositot, tehat a
+      masodik peldanyt nem tudna kiszurni.
+
+      MI PIROSIT: a muvelet szerinti szures elhagyasa.
+    */
+    const bukott: SyncQueueRow = { ...rogzites("r1"), state: "failed" };
+    assert.deepEqual(
+      batchForPass([bukott], "upload-photo").map((r) => r.id),
+      [],
+    );
+    // ISMERT POZITIV KONTROLL: ugyanaz a sor az ELSO menetben elindul.
+    assert.deepEqual(
+      batchForPass([bukott], "create").map((r) => r.id),
+      ["r1"],
+    );
+  });
+
+  it("a MÁSODIK menet a címzett képet viszi", () => {
+    const cimzett: SyncQueueRow = { ...foto("f1", "r1"), entityId: "eszkoz-1" };
+    assert.deepEqual(
+      batchForPass([cimzett], "upload-photo").map((r) => r.id),
+      ["f1"],
+    );
+  });
+
+  it("amíg VAN fel nem ment rögzítés, a második menet ÜRES", () => {
+    // A ket menet MAGA a sorrend: a kep egy MAR LETEZO szerver-oldali eszkozhoz
+    // kapcsolodik, tehat amig a rogzites all, nincs mihez kapcsolodnia.
+    const cimzett: SyncQueueRow = { ...foto("f1", "r1"), entityId: "eszkoz-1" };
+    assert.deepEqual(
+      batchForPass([rogzites("r2"), cimzett], "upload-photo").map((r) => r.id),
+      [],
+    );
   });
 });

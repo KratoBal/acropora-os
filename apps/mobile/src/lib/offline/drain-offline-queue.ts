@@ -1,5 +1,7 @@
+import { batchForPass } from "./photo-queue";
 import { drainQueue, type QueueRunReport } from "./queue-runner";
 import {
+  attachRecordingResult,
   markQueueConflict,
   markQueueRetry,
   pendingQueueRows,
@@ -30,10 +32,56 @@ export interface DrainDeps {
  * A `send` marad kivul: az API-kliens a keperno retegben el, es ha ide huznank,
  * ez a modul sem lenne merheto -- ugyanaz a hiba egy szinttel feljebb.
  */
-export function drainOfflineQueue(deps: DrainDeps): Promise<QueueRunReport> {
+export async function drainOfflineQueue(
+  deps: DrainDeps,
+): Promise<QueueRunReport> {
+  /**
+   * KET MENET, EGY SOR -- ES A MASODIK MENET UJRAOLVAS.
+   *
+   * Az elso menet a rogziteseket viszi. Kozben a `attachRecordingResult` a
+   * kepek soraira felirja az uj szerver-azonositot -- vagyis az elso menet
+   * ELOTT kiolvasott sorok mar ELAVULTAK: bennuk a kepek `entityId` mezoje meg
+   * `null`. Ha a masodik menet ugyanazokbol dolgozna, minden kep gazdatlannak
+   * latszana, es SOHA egy sem menne fel.
+   *
+   * Ezert a masodik menet friss olvasassal indul, es a `nextBatch` dont ujra:
+   * ha maradt fel nem ment rogzites, a kepek megint varnak.
+   */
+  const elso = await egyMenet(deps, "create");
+  const masodik = await egyMenet(deps, "upload-photo");
+  return {
+    attempted: elso.attempted + masodik.attempted,
+    done: elso.done + masodik.done,
+    retried: elso.retried + masodik.retried,
+    conflicted: elso.conflicted + masodik.conflicted,
+    unresolved: elso.unresolved + masodik.unresolved,
+  };
+}
+
+/**
+ * EGY MENET: amit a `nextBatch` EPP most enged el.
+ *
+ * A futtato eddig KOZVETLENUL a tarolobol olvasott, tehat a ket menet szabalya
+ * (`photo-queue.ts`) le volt irva, es senki nem kerdezte meg. Ez a fuggveny az
+ * a hivas -- e nelkul a kepek a rogzitesekkel egyutt, sorrend nelkul indultak
+ * volna el, es a szerver utasitotta volna el oket.
+ */
+function egyMenet(
+  deps: DrainDeps,
+  muvelet: SyncQueueRow["operation"],
+): Promise<QueueRunReport> {
   return drainQueue({
-    pendingRows: pendingQueueRows,
+    pendingRows: async () => batchForPass(await pendingQueueRows(), muvelet),
     send: deps.send,
+    /**
+     * A VISSZAADOTT SZAM ITT ELMARAD, es ez nem elnyelt hiba: a
+     * `attachRecordingResult` azt mondja meg, HANY kep kapta meg az
+     * azonositot, es a nulla a NORMALIS eset -- egy rogzites, amihez nem
+     * keszult fenykep. A futtatonak nincs mit kezdenie vele.
+     */
+    attachRecording: async (operationId, entityId) => {
+      await attachRecordingResult(operationId, entityId);
+    },
     remove: removeQueueRow,
     markRetry: markQueueRetry,
     markConflict: markQueueConflict,
