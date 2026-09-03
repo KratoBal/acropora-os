@@ -48,8 +48,33 @@ module.exports = ({ config }) => {
     updates: {
       url: "https://u.expo.dev/95c3f5b6-fd32-4ca8-8465-62a4c1e6243c",
     },
+    /**
+     * A RUNTIMEVERSION A NATIV FELULETET KOVETI, NEM A KIADASI VERZIOT.
+     *
+     * A MERT ALLAPOT, ami miatt ez atkerult (murena, 2026-09-02): mind a nyolc
+     * production build (3-tol 10-ig) `runtimeVersion` erteke 0.1.0 volt, mert a
+     * policy az `appVersion`, a `version` pedig kezzel "0.1.0", es soha nem lett
+     * emelve. Egy 0.1.0-ra kiadott ota frissites tehat MIND A NYOLCNAK
+     * felkinalodott -- azoknak is, amikbol hianyzik a hozza tartozo nativ modul.
+     *
+     * Buildenkent merve: az `expo-image-picker` CSAK a 10-esben van benne, a
+     * `@react-native-community/datetimepicker` a 6-tol 10-ig. A route-modulok
+     * mindkettot a fajl TETEJEN importaljak, tehat egy 9-es vagy regebbi buildre
+     * kikuldve olyan nativ modulba futnanak, ami abban a binarisban nincs bent.
+     *
+     * A `fingerprint` policy ezt szerkezetileg szunteti meg: a nativ felulet
+     * valtozasa MAGATOL uj runtimeVersion-t ad, tehat a regi buildek kiesnek a
+     * celkozonsegbol. A masik ut a `version` kezi emelese lett volna minden
+     * nativ valtozasnal -- olcsobb, de emberi lepes, es pont az a fajta, amit el
+     * lehet felejteni. Egy elfelejtett emeles ugyanezt a nema hibat adja vissza.
+     *
+     * A KOVETKEZMENYE, KIMONDVA: a ma letezo nyolc build TOBBE NEM KAP ota
+     * frissitest. Ez nem mellekhatas, hanem a kivant hatas -- epp azert, hogy ne
+     * menjen ki nekik olyan csomag, ami hianyzo nativ modult hivna. Aki regi
+     * buildet hasznal, annak uj buildet kell telepitenie.
+     */
     runtimeVersion: {
-      policy: "appVersion",
+      policy: "fingerprint",
     },
     ios: {
       supportsTablet: true,
