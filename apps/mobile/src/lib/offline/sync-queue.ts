@@ -1,0 +1,96 @@
+/**
+ * AZ OFFLINE IRAS SORA: az allapotok es az idempotencia-kulcs.
+ *
+ * A `docs/MOBILE-DEVELOPMENT.md` protokollja szerint, pontrol pontra:
+ * szerver-azonositok PLUSZ kliens-generalt muvelet-azonositok; explicit
+ * pending/syncing/failed/conflict allapotok; automatikus ujraprobalas CSAK
+ * idempotens muveletre; a helyi bizonyitek megorzese a szerver nyugtazasaig.
+ *
+ * === MIERT TISZTA MODUL, ES MIERT NEM A KEPERNYOBEN ===
+ *
+ * A telefonon nincs komponens-teszt. Ami a kepernyo torzseben marad, azt csak
+ * kezzel, eszkozon lehet kiprobalni -- es epp ez az a resz, amit a legdragabb
+ * kezzel probalni: a pinceben, terero nelkul, egy felig lefutott szinkron utan.
+ */
+
+/**
+ * A NEGY ALLAPOT. Nem szabad szoveg: a `conflict` KULON all a `failed`-tol, mert
+ * a teendo mas. Egy `failed` sor ujraprobalhato; egy `conflict` sor EMBERT
+ * igenyel, es amig nincs eldontve, a helyi bizonyitek marad.
+ */
+export type SyncState = "pending" | "syncing" | "failed" | "conflict";
+
+export interface SyncQueueRow {
+  /** A KLIENS-generalt muvelet-azonosito. Ez az idempotencia kulcsa. */
+  id: string;
+  operation: "create";
+  entityType: "asset";
+  /** A szerver-oldali azonosito, ha mar van. Uj felvitelnel `null`. */
+  entityId: string | null;
+  payloadJson: string;
+  createdAt: string;
+  attemptCount: number;
+  lastError: string | null;
+  state: SyncState;
+}
+
+/**
+ * A MUVELET-AZONOSITO A TARTALOMBOL SZULETIK, NEM VELETLENBOL.
+ *
+ * Ha veletlen azonositot adnank, egy ketszer megnyomott gomb KET sort tenne a
+ * sorba, es a szerver ket eszkozt hozna letre -- pontosan az a kettos felvitel,
+ * ami ellen az egesz szelet szol. A tartalombol szarmaztatott kulcs mellett a
+ * masodik nyomas ugyanazt a sort adja, es a beszuras eldonti, hogy mar ott van.
+ *
+ * AMIT EZ NEM OLD MEG, kimondva: ha a kollega SZANDEKOSAN ket azonos eszkozt
+ * visz fel (ugyanaz a matricakod nelkul, ugyanazokkal a mezokkel), a masodikat
+ * ez elnyeli. Ezert van a `scannedAt` a kulcsban: ket kulon beolvasas ket kulon
+ * muvelet, meg ha a mezok egyeznek is.
+ */
+export function operationId(input: {
+  qrToken: string;
+  scannedAt: string;
+}): string {
+  return `asset-create:${input.qrToken}:${input.scannedAt}`;
+}
+
+/**
+ * MI KOVETKEZIK EGY ALLAPOTBOL. A tabla nem a kod egy reszlete: ez a protokoll
+ * maga, es azert all itt, hogy egyetlen helyen lehessen elolvasni.
+ *
+ *   pending  -> syncing        a szinkron felveszi
+ *   syncing  -> (torles)       a szerver nyugtazta, a helyi bizonyitek mehet
+ *   syncing  -> failed         atmeneti hiba, ujraprobalhato
+ *   syncing  -> conflict       a szerver ELUTASITOTTA (pl. a kod mar all)
+ *   failed   -> syncing        ujraprobalas
+ *   conflict -> (csak ember)   automatikus atmenet NINCS
+ */
+export function canRetry(state: SyncState): boolean {
+  return state === "pending" || state === "failed";
+}
+
+/**
+ * A KONFLIKTUS NEM HIBA, ES EZ A KULONBSEG A LENYEG.
+ *
+ * Egy halozati hiba utan ujraprobalunk; egy elutasitas utan NEM. Ha a kettot
+ * egyformán kezelnenk, egy "ez a matricakod mar all egy eszkozon" valasz
+ * vegtelen ujraprobalast inditana, es a kollega azt latna, hogy a felvitel
+ * "meg dolgozik" -- holott soha nem fog atmenni.
+ */
+export function classifyFailure(httpStatus: number): SyncState {
+  if (httpStatus === 409 || httpStatus === 422) return "conflict";
+  return "failed";
+}
+
+/**
+ * A SOR MEGORZI A BIZONYITEKOT, AMIG A SZERVER NEM NYUGTAZ.
+ *
+ * NINCS ALLAPOT, AMIBOL A TORLES KOVETKEZIK -- ezert nincs is ilyen fuggveny.
+ * A sort EGYETLEN esemeny torolheti: a szerver nyugtazasa, es azt a hivo latja,
+ * nem az allapotgep. Egy `failed` vagy `conflict` sor a keszuleken marad, mert
+ * az a felvitel egyetlen letezo peldanya.
+ *
+ * (Elso valtozatban allt itt egy `isDiscardable` fuggveny. Kivettem: minden
+ * bemenetre hamisat adott volna, tehat nem dontott semmit -- egy fuggveny, ami
+ * ugy NEZ KI, mintha szabaly lenne, es nem az.)
+ */
