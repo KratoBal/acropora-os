@@ -17,6 +17,9 @@ const validResult: LoginResult = {
   user: testUser,
 };
 
+/** Rogzitett ora, hogy a felirt ellenorzesi ido allithato legyen. */
+const MOST = new Date("2026-09-03T09:00:00Z").getTime();
+
 class FakeUnauthorizedError extends Error {
   status = 401;
   constructor() {
@@ -37,6 +40,7 @@ describe("signIn", () => {
         invalidateToken: async () => {
           throw new Error("must not be called on the success path");
         },
+        now: () => MOST,
       },
       testUser.email,
       "correct horse battery staple",
@@ -47,9 +51,17 @@ describe("signIn", () => {
       user: testUser,
       expiresAt: validResult.expiresAt,
     });
+    /*
+      A PROFIL ES AZ ELLENORZES IDEJE IS LEMEZRE MEGY, es ez nem kenyelmi
+      bovites: e nelkul a 24 oras offline kapu SOSEM engedne. A bejelentkezes
+      maga egy sikeres szerver-ellenorzes -- ha nem irjuk fel, a kapu orokre
+      `never-verified`-et ad, es a funkcio ugy all a kodban, hogy soha nem sul el.
+    */
     assert.deepEqual(savedSession, {
       token: validResult.token,
       expiresAt: validResult.expiresAt,
+      user: testUser,
+      lastVerifiedAt: new Date(MOST).toISOString(),
     });
   });
 

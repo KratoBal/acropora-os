@@ -55,6 +55,28 @@ export interface AuthenticatedUser {
 export interface StoredSession {
   token: string;
   expiresAt: string;
+  /**
+   * A BEJELENTKEZETT FELHASZNALO, A KESZULEKEN.
+   *
+   * Az offline indulashoz kell: ha nincs halozat, a `/auth/me` nem valaszol, es
+   * a kapunak nincs mit visszaadnia. Enelkul a 24 oras beengedes nem
+   * megvalosithato -- csak eldontheto.
+   *
+   * ES AZERT ITT VAN, UGYANABBAN A REKORDBAN, MINT A TOKEN: a kijelentkezes egy
+   * SecureStore kulcsot torol, tehat a profil vele megy, es ezt nem lehet
+   * elfelejteni. Egy KULON rekord kulon torlest igenyelne, es egy elmaradt
+   * torles utan a kovetkezo ember a telefonon az elozo kollega nevet es jogkoret
+   * latna -- nem hibauzenettel, hanem ugy, mintha be lenne jelentkezve.
+   *
+   * Regi telepitesen hianyzik (a mezo most szuletik), ezert opcionalis.
+   */
+  user?: AuthenticatedUser;
+  /**
+   * Az utolso SIKERES szerver-ellenorzes ideje, ISO alakban. A 24 oras offline
+   * kapu ezt meri (`lib/auth/offline-grace.ts`). Regi telepitesen hianyzik, es
+   * a hianya NEM beengedes -- lasd az ottani `never-verified` agat.
+   */
+  lastVerifiedAt?: string;
 }
 
 /** Response shape of `POST /auth/mobile/login/password`, per

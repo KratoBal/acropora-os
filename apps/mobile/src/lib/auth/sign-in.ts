@@ -6,6 +6,8 @@ export interface SignInDeps {
   /** Invalidates a token server-side by explicit value, used only when a
    * freshly issued session could not be persisted locally — see below. */
   invalidateToken(token: string): Promise<void>;
+  /** Injektalhato a mereshez; alapertelmezesben a rendszerora. */
+  now?: () => number;
 }
 
 export type SignInOutcome =
@@ -88,9 +90,20 @@ export async function signIn(
   }
 
   try {
+    /**
+     * A PROFIL ES AZ ELLENORZES IDEJE ITT SZULETIK, ES ENELKUL A 24 ORAS
+     * OFFLINE KAPU SOSEM ENGEDNE.
+     *
+     * A bejelentkezes MAGA egy sikeres szerver-ellenorzes: a szerver most adta
+     * a tokent es a felhasznalot. Ha nem irnank fel, a `lastVerifiedAt` orokre
+     * hianyozna, a kapu `never-verified`-et adna, es a funkcio ugy allna a
+     * kodban, hogy soha nem sul el -- egy kepesseg, amit semmi nem indit.
+     */
     await deps.saveSession({
       token: result.token,
       expiresAt: result.expiresAt,
+      user: result.user,
+      lastVerifiedAt: new Date(deps.now?.() ?? Date.now()).toISOString(),
     });
   } catch {
     await deps.invalidateToken(result.token).catch(() => undefined);
