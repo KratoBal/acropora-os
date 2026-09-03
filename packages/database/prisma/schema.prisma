@@ -2243,6 +2243,40 @@ model ServiceJob {
   title          String
   description    String?
   assignedUserId String?
+  /// KI NYITOTTA A JEGYET. Állítás a jegyen, nem következtetés a naplóból.
+  ///
+  /// A napló első sorából (`toStatus: NEW`) ez eddig is kiolvasható volt, és a
+  /// láthatóság egy ideig onnan is dolgozott. HÁROM DOLOG MIATT KAPOTT SAJÁT
+  /// MEZŐT, és mind a három NÉMÁN rontott volna:
+  ///
+  /// 1. A napló aktora `SetNull` a felhasználó törlésekor -- helyesen, mert a
+  ///    napló nem hazudhat arról, ki lépett. De a láthatóság nem napló-kérdés:
+  ///    egy törölt kolléga vevő NÉLKÜLI jegye így SENKINEK nem látszott volna,
+  ///    hibaüzenet nélkül.
+  /// 2. A `ServiceJobEvent` egyetlen indexe `[serviceJobId, createdAt]`, tehát a
+  ///    szűrés indexeletlen oszlopra ment volna. (Három rokon tábla --
+  ///    `AuditLog` a `userId`-n, `AssetEvent` és `StockReconciliationRepair` az
+  ///    `actorUserId`-n -- már ma indexeli ezt az oszlopot; a `DomainEvent`
+  ///    szándékosan nem.)
+  /// 3. A napló aktora azt mondja meg, KI ÍRTA BE az első sort, nem azt, KIÉ a
+  ///    jegy. Ma a kettő egybeesik, mert egyetlen úton keletkezik jegy. Egy
+  ///    második út (import, portál, ágens) esetén szétválnának, és a láthatóság
+  ///    CSENDBEN mozdulna el.
+  ///
+  /// `String?` ÉS NEM KÖTELEZŐ, szándékosan: a meglévő sorokat a migráció a
+  /// keletkezés eseményéből tölti, és ott az aktor MÁR lehet `null` (egy azóta
+  /// törölt kolléga). Egy kötelező mező itt vagy hazudna, vagy elbukna a
+  /// migráción.
+  ///
+  /// AMIT NEM OLD MEG: a már törölt felhasználók jegyeit nem hozza vissza. Az
+  /// egyszeri, megnevezhető veszteség; ez a mező a JÖVŐBELI törlésektől véd.
+  ///
+  /// ÉS NINCS RAJTA IDEGENKULCS, ugyanúgy, ahogy az `assignedUserId`-n sincs.
+  /// Itt ez nem másolás, hanem a mező LÉTEZÉSÉNEK oka: egy `SetNull` idegenkulcs
+  /// pontosan azt a veszteséget hozná vissza, ami elől a mező kitér -- a törölt
+  /// kolléga jegye újra elveszítené a nyitóját. Az azonosító így megmarad akkor
+  /// is, ha a felhasználó sora eltűnik.
+  openedById     String?
   /// TERV, NEM ESEMÉNY: valaki BEÁLLÍTJA, jövőbeli időpontra. A naplóból soha
   /// nem vezethető le, mert nem történt meg semmi. MA MÉG SENKI NEM ÍRJA:
   /// ütemezési felület nincs, tehát minden jegyen `null`.
@@ -2275,6 +2309,9 @@ model ServiceJob {
   /// hamarabb keletkezett, mint maga a hibajegy.
   worksheets Worksheet[]
 
+  /// A NYITO SZERINTI SZURES INDEXELT. A lathatosag minden partner-oldali
+  /// lekerdezesnel ezen az oszlopon szur, tehat ez nem "hatha" index.
+  @@index([openedById])
   @@index([status, scheduledAt])
   @@index([customerId])
 }
