@@ -138,6 +138,20 @@ export class ServiceJobsService {
     return { removed: true };
   }
 
+  /**
+   * A VALASZTHATO ALEGYSEGEK. A HIANYZO FELHASZNALO NEM URES LISTA.
+   *
+   * Egy ures tomb azt mondana, hogy a fiok letezik es nincs mit valasztani --
+   * egy elgepelt azonositora pedig a felulet ures legordulot mutatna, hiba
+   * nelkul, es a kezelo azt hinne, a partnernek nincs alegysege.
+   */
+  async selectableUnits(userId: string) {
+    const units = await this.repository.selectableUnits(userId);
+    if (units === null)
+      throw new NotFoundException("A felhasználó nem található.");
+    return { items: units };
+  }
+
   listAssignments(userId: string) {
     return this.repository.listAssignments(userId);
   }

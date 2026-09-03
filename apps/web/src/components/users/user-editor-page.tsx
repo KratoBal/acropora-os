@@ -25,6 +25,7 @@ import { allNavigationPages } from "@/components/navigation";
 import { ApiError } from "@/lib/api/client";
 import { usersApi } from "@/lib/api/users";
 import { ROLE_LABELS, ROLE_OPTIONS } from "./role-labels";
+import { UserVisibleUnits } from "./user-visible-units";
 
 /**
  * UGYANAZ A HAT LISTA, AMIT AZ APP-SHELL OSSZEFUZ, ES UGYANABBAN A SORRENDBEN.
@@ -313,6 +314,12 @@ export function UserEditorPage({ userId }: { userId?: string }) {
           </Button>
         </div>
       </form>
+      {/*
+        A LATHATOSAGI SZAKASZ CSAK MEGLEVO FELHASZNALONAL ALL, es ez nem
+        szepseghiba: a hozzarendeles a fiok AZONOSITOJAHOZ kotodik, ami a
+        felvitel elott meg nem letezik.
+      */}
+      {user ? <UserVisibleUnits userId={user.id} role={user.role} /> : null}
       {user ? (
         <>
           <Card className="p-6">

@@ -68,6 +68,19 @@ export class ServiceJobsController {
     return this.service.listAssignments(userId);
   }
 
+  /**
+   * A VALASZTHATO ALEGYSEGEK -- A KONKRET UT A `:userId` UTAN, `units` NEVEN.
+   *
+   * UGYANAZ A JOG, mint a hozzarendeles irasae: aki nem allithat
+   * hozzarendelest, annak a valaszthato alegysegek listaja sem tartozik ra --
+   * az maga is adat a partner szervezeterol.
+   */
+  @Get("visibility/:userId/units")
+  @RequirePermissions(PERMISSIONS.SERVICE_VISIBILITY_ASSIGN)
+  selectableUnits(@Param("userId") userId: string) {
+    return this.service.selectableUnits(userId);
+  }
+
   @Post("visibility/:userId")
   @RequirePermissions(PERMISSIONS.SERVICE_VISIBILITY_ASSIGN)
   assignUnit(

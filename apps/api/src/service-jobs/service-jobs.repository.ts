@@ -124,6 +124,45 @@ export class ServiceJobsRepository {
     };
   }
 
+  /**
+   * A FELHASZNALOHOZ VALASZTHATO ALEGYSEGEK.
+   *
+   * MIERT A SZERVER RAKJA OSSZE, ES NEM A FELULET. A lanc harom lepes:
+   * felhasznalo -> szallito -> tukor-vevo sor -> annak alegysegei. A felulet
+   * ebbol CSAK az elsot latja (a `UserDetail` a `supplierId` mezot adja), es a
+   * masodikhoz nincs utja: a `selectable-partners` valasza `customerId`-t ad,
+   * `supplierId`-t nem -- a ketto nem parosithato. Merve, nem feltetelezve.
+   *
+   * ES HA A FELULET MEGIS OSSZERAKNA, ket forras keletkezne ugyanarra a
+   * szabalyra: a `mayAssignUnit` epp ezt a lancot jarja be a MASIK oldalon. Egy
+   * kesobbi szigoritas az egyiket javitana, a masikat nem.
+   *
+   * URES LISTA HAROM KULONBOZO OKBOL JOHET, es mind a harom RENDES allapot:
+   * a fiok belsos (nincs szallitoja), a partnernek nincs tukor-vevo sora, vagy
+   * a tukor alatt nincs alegyseg. A HIANYZO felhasznalo viszont `null` -- azt
+   * a hivo 404-re forditja, mert az elgepelt azonosito nem ugyanaz.
+   */
+  async selectableUnits(userId: string) {
+    const user = await this.database.user.findUnique({
+      where: { id: userId },
+      select: { supplierId: true },
+    });
+    if (!user) return null;
+    if (user.supplierId === null) return [];
+
+    const supplier = await this.database.supplier.findUnique({
+      where: { id: user.supplierId },
+      select: { customerId: true },
+    });
+    if (!supplier?.customerId) return [];
+
+    return this.database.worksheetDepartment.findMany({
+      where: { customerId: supplier.customerId, isActive: true },
+      orderBy: [{ parentId: "asc" }, { code: "asc" }],
+      select: { id: true, name: true, code: true, parentId: true },
+    });
+  }
+
   async listAssignments(userId: string) {
     return this.database.userWorksheetDepartment.findMany({
       where: { userId },
