@@ -340,8 +340,11 @@ Three things go into `sync_queue` and leave it when there is signal again:
 - **a worksheet**, opened on site (`app/worksheets/new.tsx`) — three fields, no
   lines and no dates, because `lines` defaults to empty on the server and the
   dates are decided at the office;
-- **a photo** taken with the recording, which follows its asset: the picture is
-  attached to a server-side asset that does not exist yet at queueing time.
+- **a photo** taken with the recording, which follows its asset OR its
+  worksheet: the picture is attached to a server-side record that does not
+  exist yet at queueing time. Which one it belongs to is carried by the row
+  itself (`entityType`), not by the payload - so the two cannot drift apart,
+  and a worksheet photo can never land under an asset.
 
 How the queue behaves, and why:
 
@@ -363,10 +366,49 @@ How the queue behaves, and why:
   photos, because a queue emptied of recordings looks like a successful sync
   while the pictures are still on the phone.
 
+### What the forms need before any of that matters
+
+A queue that works is worth nothing if the form never gets far enough to fill
+it. Measured live by Balázs on 2026-09-03: without signal he could not create
+an asset at all, because the pickers were empty - the recording layer was
+fine, the screen never reached it. Three copies exist for that reason:
+
+- `cached_asset_owners` — the partner list for the asset form, cached whole;
+- `cached_partner_units` — that partner's sites, cached per partner, only for
+  the ones actually opened;
+- `cached_worksheet_departments` — the same for the worksheet form, where the
+  site is a REQUIRED field.
+
+Each refresh **deletes the old rows for its scope** before writing: the lists
+are complete for what they cover, so something removed server-side must not
+survive in the copy - the technician would pick it and the send would fail on
+the server, unexplainable from the cellar. A copy is only used when the request
+actually FAILED, and a band says how old it is: the choice made from a copy
+turns into a WRITE, which is a different risk from a stale read.
+
+### What can be recorded on an existing worksheet
+
+Line entry (`what was done`, `how much`, `in what unit`) works **online**, on
+the sheet's own screen, and only while the version is a DRAFT - the same
+condition the server enforces. The line id comes from the client, because a
+resend must not create a second line; its shape is the server's, which is why
+it is not the same shape as the queue's operation keys.
+
+**The price is not on the phone.** The office adds it, and a sheet cannot be
+closed without one - so the absence is visible, while a zero sent from the
+field would stand on the sheet as a value nobody could tell from free work.
+
+Photos on a worksheet follow the same path as asset photos, and may be added
+even AFTER the sheet is signed: the picture is evidence about the work, not
+part of the text that was signed.
+
 ### What still does not work offline
 
-Finishing. Closing or signing a worksheet, editing an existing asset, printing a
-label: all of it needs the API. The protocol rules those follow when they come:
+Finishing, and editing what already exists. Closing or signing a worksheet,
+editing an existing asset, adding a line to a sheet, printing a label: all of it
+needs the API. The queue carries `create` operations only - an update is a
+different shape, with the opposite risk: a create resent twice would DUPLICATE,
+while an update sent late would OVERWRITE something changed in the meantime. The protocol rules those follow when they come:
 
 - server IDs plus client-generated operation IDs;
 - explicit pending/syncing/failed/conflict states;
