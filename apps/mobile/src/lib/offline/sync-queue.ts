@@ -33,7 +33,17 @@ export interface SyncQueueRow {
    * `photo-queue.ts` `nextBatch` fuggvenye adja, nem a tabla szerkezete.
    */
   operation: "create" | "upload-photo";
-  entityType: "asset";
+  /**
+   * MELYIK ENTITASROL VAN SZO. EGY SOR VISZI MIND A KETTOT, es ez dontes:
+   * a negy allapot, az idempotencia es a ket menet szabalya UGYANAZ, tehat ket
+   * tabla ketszer kellene karbantartani, es a ketto elcsuszhatna.
+   *
+   * A KULONBSEG A KULDESBEN VAN, nem a sorban: az eszkoz a felviteli
+   * vegpontra megy, a munkalap a sajatjara. Ezt a `use-queue-drain.ts` donti
+   * el, es MIND A KETTO ugyanazt a kliens-kulcsot viszi (`clientOperationId`),
+   * amit a szerver 2026-09-03 ota ismer.
+   */
+  entityType: "asset" | "worksheet";
   /** A szerver-oldali azonosito, ha mar van. Uj felvitelnel `null`. */
   entityId: string | null;
   payloadJson: string;
@@ -109,3 +119,21 @@ export function classifyFailure(httpStatus: number): SyncState {
  * bemenetre hamisat adott volna, tehat nem dontott semmit -- egy fuggveny, ami
  * ugy NEZ KI, mintha szabaly lenne, es nem az.)
  */
+
+/**
+ * A MUNKALAP MUVELET-AZONOSITOJA, UGYANABBOL AZ OKBOL A TARTALOMBOL.
+ *
+ * A partner es a nyitas idopontja adja: ketszer megnyomott gomb ugyanazt a
+ * sort adja, ket KULON lap viszont ket kulcsot kap, meg akkor is, ha ugyanahhoz
+ * a partnerhez tartoznak.
+ *
+ * A SZERVER IS EZT KAPJA MEG (`clientOperationId`), tehat ha a valasz elveszik
+ * es a sor ujrakuld, a szerver a MEGLEVO lapot adja vissza -- nem masodikat
+ * hoz letre.
+ */
+export function worksheetOperationId(input: {
+  customerId: string;
+  startedAt: string;
+}): string {
+  return `worksheet-create:${input.customerId}:${input.startedAt}`;
+}

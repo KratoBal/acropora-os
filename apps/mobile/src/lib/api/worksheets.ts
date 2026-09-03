@@ -257,6 +257,14 @@ export interface CreateWorksheetInput {
   departmentId: string;
   subject: string;
   description?: string;
+  /**
+   * A HELYSZINI ROGZITES IDEMPOTENCIA-KULCSA, a sor azonositoja.
+   *
+   * Elhagyhato: terero mellett a felvitel nem all sorba, tehat nincs mit
+   * ujrakuldeni. A sorbol indulo kuldes viszont MINDIG viszi, mert ott a
+   * halozati hiba utani ujraprobalas a normalis ut.
+   */
+  clientOperationId?: string;
 }
 
 /**

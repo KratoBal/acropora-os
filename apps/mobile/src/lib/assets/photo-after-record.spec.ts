@@ -6,7 +6,7 @@ import {
   planPhotosAfterRecord,
   queuePhotosForRecording,
 } from "./photo-after-record";
-import type { SaveOutcome } from "./save-or-queue";
+import type { SaveOutcome } from "../offline/save-or-queue";
 
 /**
  * A ROGZITESNEK NEGY VEGE VAN, ES A KEP SORSA MIND A NEGYNEL MAS.

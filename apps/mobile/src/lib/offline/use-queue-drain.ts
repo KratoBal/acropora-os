@@ -5,6 +5,10 @@ import {
   uploadAssetDocuments,
   type CreateAssetInput,
 } from "@/lib/api/assets";
+import {
+  createWorksheet,
+  type CreateWorksheetInput,
+} from "@/lib/api/worksheets";
 import { ApiError } from "@/lib/api/client";
 
 import { drainOfflineQueue } from "./drain-offline-queue";
@@ -40,10 +44,21 @@ export function useQueueDrain(isOnline: boolean): string | null {
         const report = await drainOfflineQueue({
           send: async (row) => {
             if (row.operation === "upload-photo") return kepetKuld(row);
+            if (row.entityType === "worksheet") return munkalapotKuld(row);
             try {
-              const letrejott = await createAsset(
-                JSON.parse(row.payloadJson) as CreateAssetInput,
-              );
+              const letrejott = await createAsset({
+                ...(JSON.parse(row.payloadJson) as CreateAssetInput),
+                /**
+                 * A SOR AZONOSITOJA A SZERVER IDEMPOTENCIA-KULCSA IS.
+                 *
+                 * A sor a halozati hibat SZANDEKOSAN ujraprobalja, es epp ott
+                 * lehet, hogy a szerver mar letrehozta az eszkozt, csak a
+                 * valasz veszett el. A kulccsal az ujrakuldes a MEGLEVO
+                 * eszkozt adja vissza; nelkule masodikat hozna letre, es a
+                 * szerelo azt latna, hogy mindent ketszer rogzitett.
+                 */
+                clientOperationId: row.id,
+              });
               /**
                * A SZERVER AZONOSITOJA ITT LEP AT A VARRATON. A sor a nyugtazas
                * utan torlodik, tehat ha ezt eldobnank, a mar sorban allo
@@ -121,6 +136,37 @@ async function kepetKuld(row: SyncQueueRow): Promise<{
     });
     return { httpStatus: 201, error: null };
   } catch (cause) {
+    return {
+      httpStatus: cause instanceof ApiError ? cause.status : null,
+      error: cause instanceof Error ? cause.message : String(cause),
+    };
+  }
+}
+
+/**
+ * EGY MUNKALAP FELKULDESE A SORBOL.
+ *
+ * UGYANAZ A KULCS, MAS VEGPONT. A sor azonositoja megy fel
+ * `clientOperationId` neven, tehat egy megszakadt kuldes ujrakuldese a MEGLEVO
+ * lapot adja vissza. A `entityId` itt nem kell: fenykep ma csak eszkozhoz
+ * tartozik, a munkalaphoz nem kotunk kepet a sorbol.
+ */
+async function munkalapotKuld(row: SyncQueueRow): Promise<{
+  httpStatus: number | null;
+  error: string | null;
+}> {
+  try {
+    await createWorksheet({
+      ...(JSON.parse(row.payloadJson) as CreateWorksheetInput),
+      clientOperationId: row.id,
+    });
+    return { httpStatus: 201, error: null };
+  } catch (cause) {
+    /**
+     * UGYANAZ A KETTEVALASZTAS, MINT AZ ESZKOZNEL: a `null` azt jelenti, hogy
+     * a keres el sem jutott a szerverig -- azt a sor ujraprobalja. Egy
+     * valaszolt 4xx viszont NEM: azt a `decideDrain` konfliktusnak sorolja.
+     */
     return {
       httpStatus: cause instanceof ApiError ? cause.status : null,
       error: cause instanceof Error ? cause.message : String(cause),

@@ -132,6 +132,15 @@ export interface AssetQrCode {
 }
 
 export interface CreateAssetInput {
+  /**
+   * A HELYSZINI ROGZITES IDEMPOTENCIA-KULCSA, a sor azonositoja.
+   *
+   * Elhagyhato: terero mellett a felvitel nem all sorba, tehat nincs mit
+   * ujrakuldeni. A sorbol indulo kuldes viszont MINDIG viszi, mert ott a
+   * halozati hiba utani ujraprobalas a normalis ut -- es epp ott lehet, hogy a
+   * szerver mar letrehozta az eszkozt, csak a valasz veszett el.
+   */
+  clientOperationId?: string;
   ownerType: AssetOwnerType;
   ownerId: string;
   customerAddressId?: string;

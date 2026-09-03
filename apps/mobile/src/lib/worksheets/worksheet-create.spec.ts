@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   buildWorksheetCreatePayload,
+  describeWorksheetQueueWrite,
   type WorksheetCreateForm,
 } from "./worksheet-create";
 
@@ -113,5 +114,35 @@ describe("az új munkalap űrlapja", () => {
     });
     assert.equal(r.ok, false);
     assert.match(r.ok ? "" : r.message, /4001/);
+  });
+});
+
+describe("a munkalap sorba tételének üzenete", () => {
+  it("sikeres sorba tételnél KIMONDJA, hogy a lap a telefonon vár", () => {
+    const out = describeWorksheetQueueWrite({ ok: true, operationId: "op-1" });
+    assert.equal(out.type, "queued");
+    assert.match(
+      out.type === "queued" ? out.message : "",
+      /a telefonon vár feltöltésre/,
+    );
+  });
+
+  it("SIKERTELEN sorba tételnél NEM zöld üzenet jár", () => {
+    /*
+      EZ AZ ALLITAS A FUGGVENY LETEZESENEK OKA. A felhasznalo mindket esetben
+      "elkuldte" a lapot. Ha a sorba tetel bukott el, a lap SEHOL nem letezik --
+      se a szerveren, se a telefonon --, es egy zold mondat mellett a szerelo
+      tovabbmenne.
+
+      MI PIROSIT: a ket ag osszevonasa egy kozos mondatra.
+    */
+    const out = describeWorksheetQueueWrite({
+      ok: false,
+      error: "megtelt a tároló",
+    });
+    assert.equal(out.type, "queue-failed");
+    assert.match(out.message, /NEM sikerült/);
+    assert.match(out.message, /megtelt a tároló/);
+    assert.doesNotMatch(out.message, /vár feltöltésre/);
   });
 });
