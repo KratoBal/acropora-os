@@ -34,7 +34,7 @@ import type {
   NormalizedWorksheetContent,
   NormalizedWorksheetLine,
 } from "./worksheet-content.js";
-import { attachableWorksheetWhere } from "./attachable-worksheets.js";
+import { attachableWorksheetFilters } from "./attachable-worksheets.js";
 import {
   worksheetCloseBlocker,
   type WorksheetCloseBlocker,
@@ -448,12 +448,17 @@ export class WorksheetsRepository extends Repository {
    * Ezert nem szur allapotra, korra es atadottsagra. A LEZART lap is
    * csatolhato: a lezaras a dokumentumrol szol, a csatolas a besorolasrol.
    */
-  async attachableWorksheets(scope: PartnerScope) {
+  async attachableWorksheets(customerId: string, scope: PartnerScope) {
     const rows = await this.database.worksheet.findMany({
       // A JOGOSULTSAGI SZURO `AND` AGKENT, ahogy a lista is teszi: a
-      // felhasznaloi feltetel es a hatokor nem keveredhet egy szintre.
+      // felhasznaloi feltetel es a hatokor nem keveredhet egy szintre. A ket
+      // felhasznaloi szuro is KULON agkent all: mast jelentenek, es egy
+      // celzott rontas igy nev szerint mondja meg, melyik szunt meg.
       where: {
-        AND: [scopeWhereForAndBranch(scope), attachableWorksheetWhere()],
+        AND: [
+          scopeWhereForAndBranch(scope),
+          ...attachableWorksheetFilters(customerId),
+        ],
       },
       orderBy: { createdAt: "desc" },
       take: 200,

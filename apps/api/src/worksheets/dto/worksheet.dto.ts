@@ -121,6 +121,22 @@ export class WorksheetContentDto {
   lines: WorksheetLineDto[] = [];
 }
 
+/**
+ * MELYIK JEGYHEZ KERUNK CSATOLHATO LAPOKAT.
+ *
+ * A `customerId` KOTELEZO, es ez a dontes fele. Elhagyhato mezovel a hivas a
+ * regi, SZURETLEN listat adna vissza -- vagyis a mai hiba tovabb elne, csendben,
+ * minden hivonal, aki elfelejti atadni. Kotelezokent a szuretlen lista elo sem
+ * all: aki nem adja meg, hibat kap.
+ *
+ * A ket tevedes ara nem egyforma: egy hianyzo parameter HANGOS (a hivas
+ * elhasal), egy szuretlen lista NEMA (a felulet felkinal valamit, amit a
+ * vegpont utana visszautasit).
+ */
+export class AttachableWorksheetQueryDto {
+  @IsString() @MinLength(1) customerId!: string;
+}
+
 export class CreateWorksheetDto extends WorksheetContentDto {
   @IsString() @MinLength(1) customerId!: string;
   @IsString() @MinLength(1) departmentId!: string;

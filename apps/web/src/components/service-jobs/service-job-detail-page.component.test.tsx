@@ -53,6 +53,7 @@ function detail(overrides: Partial<ServiceJobDetail> = {}): ServiceJobDetail {
     partnerStatus: "IN_PROGRESS",
     partnerStatusLabel: "Feldolgozás alatt",
     customerName: "Fővárosi Állat- És Növénykert",
+    customerId: "cust-1",
     createdAt: "2026-09-01T08:00:00.000Z",
     scheduledAt: null,
     startedAt: null,
@@ -184,6 +185,39 @@ describe("ServiceJobDetailPage", () => {
   });
 
   /**
+   * AZ URES LISTA MONDATA MINDKET FELTETELT MEGNEVEZI.
+   *
+   * A lista ket dologra szur: a lap legyen szabad, ES a jegy partnereé. Ha a
+   * mondat csak az elsot mondana ki, a felhasznalo azt hinne, egyaltalan nincs
+   * szabad lap -- holott lehet boven, csak MAS partnere.
+   */
+  it("üres választónál a partnert is megnevezi, nem csak a szabadságot", async () => {
+    sheets.attachable.mockResolvedValue({ items: [] });
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    await screen.findByText("A hibajegy létrejött (Új).");
+
+    expect(
+      await screen.findByText(/Ehhez a partnerhez nincs olyan munkalap/),
+    ).toBeTruthy();
+  });
+
+  /**
+   * A VALASZTO A JEGY PARTNERET KAPJA MEG, NEM A JEGY AZONOSITOJAT.
+   *
+   * Balazs elo esete (2026-09-03): a legordulo olyan lapot kinalt fel, ami masik
+   * partnere, es a csatolas utana visszautasitotta. A vegponti ellenorzes jo
+   * volt, csak keson szolalt meg -- ez az allitas azt meri, hogy a szures mar a
+   * LISTANAL megtortenik.
+   */
+  it("a csatolható listát a jegy partnerével kéri le", async () => {
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    await screen.findByText("A hibajegy létrejött (Új).");
+
+    await waitFor(() => expect(sheets.attachable).toHaveBeenCalledTimes(1));
+    expect(sheets.attachable.mock.calls[0]?.[1]).toBe("cust-1");
+  });
+
+  /**
    * A FOLYAMAT MÁSODIK FELE: a lap előbb keletkezett, a jegy utólag, és a
    * felelős hozzáveszi a meglévő lapot.
    */
@@ -256,10 +290,18 @@ describe("ServiceJobDetailPage", () => {
    * egy másik képernyőn, és kiút nélkül.
    */
   it("partner nélküli jegyen felkínálja a partner beállítását", async () => {
-    api.detail.mockResolvedValue(detail({ customerName: null }));
+    api.detail.mockResolvedValue(
+      detail({ customerName: null, customerId: null }),
+    );
     render(<ServiceJobDetailPage jobId="job-1" />);
 
     expect(await screen.findByText("Partner beállítása")).toBeTruthy();
+    /**
+     * ES A LISTAT LE SEM KERJUK. Partner nelkul a valaszto a jegy partnerere
+     * nem tud szukulni, es egy ures lista ott ugy nezne ki, mintha nem lenne
+     * mit csatolni -- holott a csatolas amugy is elutasitana, sajat mondattal.
+     */
+    expect(sheets.attachable).not.toHaveBeenCalled();
     expect(
       screen.getByText(
         /Ehhez a hibajegyhez még nincs partner, ezért munkalapot sem lehet/,

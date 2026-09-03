@@ -31,9 +31,9 @@ export const worksheetsApi = {
     return apiRequest<WorksheetDetail>(worksheetPath(id), token, { signal });
   },
   /** A lapok, amik alatt meg nincs hibajegy. A hibajegy felulete keri. */
-  attachable(token: string, signal?: AbortSignal) {
+  attachable(token: string, customerId: string, signal?: AbortSignal) {
     return apiRequest<WorksheetAttachableListResponse>(
-      `${base}/attachable`,
+      `${base}/attachable?customerId=${encodeURIComponent(customerId)}`,
       token,
       { signal },
     );

@@ -115,15 +115,22 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
    * jegy elolvasasahoz nincs szukseg ra. Ha nem jon meg, a csatolo doboz marad
    * ures - a naplo, a lepesek es a lapok attol meg olvashatok.
    */
+  /**
+   * PARTNER NELKUL NEM KERJUK LE, es ez nem takarekossag: a lista a jegy
+   * partnerere szukul, tehat partner nelkul nincs mire szukiteni. Egy ures
+   * valaszto ott ugy nezne ki, mintha nem lenne mit csatolni -- holott a
+   * csatolas amugy is elutasitana, sajat mondattal.
+   */
+  const jobCustomerId = job?.customerId ?? null;
   useEffect(() => {
-    if (!canManage) return;
+    if (!canManage || jobCustomerId === null) return;
     const controller = new AbortController();
     worksheetsApi
-      .attachable(token, controller.signal)
+      .attachable(token, jobCustomerId, controller.signal)
       .then((response) => setAttachable(response.items))
       .catch(() => undefined);
     return () => controller.abort();
-  }, [canManage, token]);
+  }, [canManage, jobCustomerId, token]);
 
   /**
    * A LÉPÉS UTÁN ÚJRATÖLTÜNK, nem a válaszból építünk.
@@ -144,6 +151,20 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
     } finally {
       setStepping(false);
     }
+  };
+
+  /**
+   * A VALASZTO-LISTA UJRAKERESE, EGY HELYEN.
+   *
+   * A `?? ""` NEM JO ALAK IDE: ures azonositoval a vegpont elhasalna (a
+   * parameter kotelezo), a hivo `catch` aga pedig elnyelne -- a lista csendben
+   * regi maradna. Partner nelkul ezert NEM kerunk, es a lista sem valtozik: az
+   * az allapot amugy sem all elo, mert csatolni sem lehet partner nelkul.
+   */
+  const refreshAttachable = async () => {
+    if (jobCustomerId === null) return;
+    const response = await worksheetsApi.attachable(token, jobCustomerId);
+    setAttachable(response.items);
   };
 
   /**
@@ -175,11 +196,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
       await serviceJobsApi.detachWorksheet(token, jobId, worksheetId);
       // A LEVALASZTOTT LAP UJRA SZABAD, tehat a valaszto-listaba is
       // visszakerul -- mindkettot ujra kell kerni.
-      const [, frissValaszto] = await Promise.all([
-        load(),
-        worksheetsApi.attachable(token),
-      ]);
-      setAttachable(frissValaszto.items);
+      await Promise.all([load(), refreshAttachable()]);
     } catch (cause) {
       setAttachError(
         cause instanceof Error ? cause.message : "A leválasztás nem sikerült.",
@@ -198,11 +215,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
       setChosenSheet("");
       // UJRATOLTUNK MINDKETTOT: a jegy naploja es a valaszto-lista is
       // megvaltozott - a csatolt lap onnantol nem szabad.
-      const [, frissValaszto] = await Promise.all([
-        load(),
-        worksheetsApi.attachable(token),
-      ]);
-      setAttachable(frissValaszto.items);
+      await Promise.all([load(), refreshAttachable()]);
     } catch (cause) {
       setAttachError(
         cause instanceof Error ? cause.message : "A csatolás nem sikerült.",
@@ -464,9 +477,17 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
               </div>
             ) : (
               /* A HIANY IS ALLITAS: egy eltunt valaszto ugy nezne ki, mint egy
-                 betoltesi hiba. */
+                 betoltesi hiba.
+
+                 ES A MONDAT MINDKET FELTETELT MEGNEVEZI. A lista MA ket dologra
+                 szur: a lap legyen szabad, ES a jegy partnereé. A regi mondat
+                 csak az elsot mondta ki, tehat a szuro bevezetese utan hamis
+                 lenne: lehet szabad lap boven, csak MAS partnere. Egy mondat,
+                 ami ket kulonbozo allapotbol is elohivhato, a kettot osszemossa
+                 -- es a felhasznalo azt hinne, egyaltalan nincs szabad lap. */
               <p className="text-sm text-slate-500">
-                Nincs olyan munkalap, ami még egyik hibajegyhez sem tartozik.
+                Ehhez a partnerhez nincs olyan munkalap, ami még egyik
+                hibajegyhez sem tartozik.
               </p>
             )}
           </div>

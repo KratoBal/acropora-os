@@ -93,6 +93,19 @@ export interface ServiceJobDetail {
   partnerStatus: ServiceJobPartnerStatus;
   partnerStatusLabel: string;
   customerName: string | null;
+  /**
+   * A PARTNER AZONOSITOJA, A NEVE MELLE.
+   *
+   * A NEV MEGJELENITESRE JO, SZURESRE NEM. A csatolhato lapok listaja a jegy
+   * partnerere szukul, es ahhoz a felhasznalonak az AZONOSITOT kell atadnia --
+   * a nevbol nem lehet lekerdezni, es ket azonos nevu sor nem is
+   * kulonboztethetne meg.
+   *
+   * `null`, ha a jegynek meg nincs partnere. Ilyenkor a felulet a listat NEM
+   * keri le: partner nelkul a csatolas ugyis elutasitana, es egy ures valaszto
+   * ott ugy nezne ki, mintha nem lenne mit csatolni.
+   */
+  customerId: string | null;
   createdAt: string;
   /**
    * A TERVEZETT IDŐPONT MEZŐ MARAD, ÉS NEM SZÁRMAZTATOTT.

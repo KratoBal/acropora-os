@@ -17,6 +17,7 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import {
   AmendWorksheetDto,
+  AttachableWorksheetQueryDto,
   CreateWorksheetDepartmentDto,
   CreateWorksheetDto,
   CreateWorksheetLineDto,
@@ -110,8 +111,14 @@ export class WorksheetsController {
    */
   @Get("attachable")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  attachableWorksheets(@CurrentUser() user: AuthenticatedUser) {
-    return this.service.attachableWorksheets(partnerScopeOf(user));
+  attachableWorksheets(
+    @Query() query: AttachableWorksheetQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.attachableWorksheets(
+      query.customerId,
+      partnerScopeOf(user),
+    );
   }
 
   @Get("assignable-users")

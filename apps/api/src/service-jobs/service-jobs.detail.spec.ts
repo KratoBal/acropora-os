@@ -36,6 +36,7 @@ function row(overrides: Partial<NonNullable<DetailRow>> = {}) {
     scheduledAt: null,
     startedAt: null,
     completedAt: new Date("2026-09-04T08:00:00.000Z"),
+    customerId: "cust-1",
     customer: { displayName: "Fővárosi Állat- És Növénykert" },
     events: [
       {

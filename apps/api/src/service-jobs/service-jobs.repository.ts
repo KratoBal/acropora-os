@@ -279,6 +279,10 @@ export class ServiceJobsRepository {
         scheduledAt: true,
         startedAt: true,
         completedAt: true,
+        // AZ AZONOSITO A NEV MELLE: a nev megjelenitesre jo, szuresre nem. A
+        // csatolhato lapok listaja a jegy partnerere szukul, es ahhoz a
+        // feluletnek az AZONOSITO kell.
+        customerId: true,
         customer: { select: { displayName: true } },
         events: {
           // CSAK AZ ALLAPOTVALTASOK, KIMONDVA (ADR-013). A naplo tablaja
