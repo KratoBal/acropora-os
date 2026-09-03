@@ -22,11 +22,23 @@ import {
  */
 
 import { medusaHandleFromSlug } from "./medusa-product-handle.js";
+import { buildProductDescription } from "./product-description.js";
 
 export interface ProjectableProduct {
   id: string;
   name: string;
+  /** A ROVID leiras (a mai `Product.description`). */
   description: string | null;
+  /**
+   * A HOSSZU leiras, vagy `null`.
+   *
+   * KULON MEZO, MERT A MAI BOLT IS KET HELYEN MUTATJA a ket szoveget, es ahol
+   * mind a ketto letezik, a ROVID all elobb a lapon. A ketto nem valtozata
+   * egymasnak: merve a publikalt termekeken, 972-nek CSAK rovid es 105-nek CSAK
+   * hosszu leirasa van, tehat barmelyiket valasztanank egyedul, a masik halmaz
+   * lapjai URESEN erkeznenek meg.
+   */
+  descriptionLong: string | null;
   /**
    * A vetítendő változat cikkszáma, vagy `null`, ha nincs.
    *
@@ -391,9 +403,33 @@ export class MedusaProductProjectionService {
      * ELMARAD, ha nincs ertek: egy ures `metadata` felulirna, amit a bolt
      * oldalan barki mas oda tett.
      */
-    const metadataPatch = product.seoRobots
-      ? { metadata: { seo_robots: product.seoRobots } }
-      : {};
+    /**
+     * A KET LEIRAS OSSZERAKASA, ES A METAADAT MINDKETTOT VISZI.
+     *
+     * A cel oldalon EGY leiras-mezo van, a mai bolt viszont KET helyen mutatja
+     * a ket szoveget. Ezert a fo mezobe osszefuzve mennek (rovid elol, ahogy a
+     * lapon allnak), a metaadatba pedig KULON is -- hogy a kirakat ket slotba
+     * tudja tenni oket, ahogy a mai bolt teszi.
+     *
+     * A KIVETEL: ha az egyik szoveg tartalmazza a masikat, csak a tartalmazo
+     * megy a fo mezobe. Merve a publikalt termekeken: 79 ilyen eset van a 181
+     * ket-mezosbol, es a TOBBSEG a forditott irany (66-nal a HOSSZU van benne a
+     * ROVIDBEN). Egy egyiranyu vizsgalat 66 lapon hagyna ott a duplikatumot.
+     */
+    const descriptions = buildProductDescription(
+      product.description,
+      product.descriptionLong,
+    );
+
+    const metadataPatch =
+      product.seoRobots || Object.keys(descriptions.metadata).length > 0
+        ? {
+            metadata: {
+              ...(product.seoRobots ? { seo_robots: product.seoRobots } : {}),
+              ...descriptions.metadata,
+            },
+          }
+        : {};
 
     /**
      * A KEPEK ES A FO KEP EGYUTT MENNEK, ES A THUMBNAIL MINDIG KIIRODIK.
@@ -431,7 +467,7 @@ export class MedusaProductProjectionService {
       try {
         await this.medusa.update(existingLink.medusaProductId, {
           title: product.name,
-          description: product.description,
+          description: descriptions.description,
           external_id: product.id,
           ...handlePatch,
           ...metadataPatch,
@@ -556,7 +592,7 @@ export class MedusaProductProjectionService {
     try {
       created = await this.medusa.create({
         title: product.name,
-        description: product.description,
+        description: descriptions.description,
         external_id: product.id,
         ...handlePatch,
         ...metadataPatch,

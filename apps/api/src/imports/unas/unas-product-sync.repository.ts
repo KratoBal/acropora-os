@@ -614,6 +614,18 @@ export class UnasProductSyncRepository extends Repository {
                   data: {
                     name: diff.product.name,
                     description: diff.product.descriptionShort,
+                    /**
+                     * A HOSSZU LEIRAS IS BEKERUL, es ez nem uj lehivas: a mezo
+                     * MAR MEGERKEZIK a UNAS-tol es a pillanatkepbe is bekerul
+                     * (ugyanennek a fajlnak a 61. sora) -- eddig csak a Product
+                     * rekordba nem irtuk be.
+                     *
+                     * MIERT KELL: merve a publikalt termekeken, 105-nek CSAK
+                     * hosszu leirasa van. Azok a lapok ma URESEN erkeznenek meg
+                     * a boltba, pedig a mai webshopon a `tab_description_content`
+                     * blokkban ott all a szovegük.
+                     */
+                    descriptionLong: diff.product.descriptionLong,
                     type: "PHYSICAL",
                     origin: "UNAS",
                     catalogAuthority: "UNAS",
@@ -630,6 +642,18 @@ export class UnasProductSyncRepository extends Repository {
                   data: {
                     name: diff.product.name,
                     description: diff.product.descriptionShort,
+                    /**
+                     * A HOSSZU LEIRAS IS BEKERUL, es ez nem uj lehivas: a mezo
+                     * MAR MEGERKEZIK a UNAS-tol es a pillanatkepbe is bekerul
+                     * (ugyanennek a fajlnak a 61. sora) -- eddig csak a Product
+                     * rekordba nem irtuk be.
+                     *
+                     * MIERT KELL: merve a publikalt termekeken, 105-nek CSAK
+                     * hosszu leirasa van. Azok a lapok ma URESEN erkeznenek meg
+                     * a boltba, pedig a mai webshopon a `tab_description_content`
+                     * blokkban ott all a szovegük.
+                     */
+                    descriptionLong: diff.product.descriptionLong,
                     mirrorSource: "UNAS",
                     mirrorState: "ACTIVE",
                     sourceCreatedAt,
