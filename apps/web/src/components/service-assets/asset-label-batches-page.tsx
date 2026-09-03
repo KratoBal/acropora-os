@@ -9,6 +9,7 @@ import {
   Input,
   PageHeader,
   Skeleton,
+  Textarea,
 } from "@acropora/ui";
 import {
   ASSET_LABEL_BATCH_MAX,
@@ -40,6 +41,16 @@ import {
  * egyenként akár ötszáz kóddal, és az akkor is átmenne a hálón, ha senki nem
  * tölt le semmit.
  */
+/**
+ * MENNYIT KERUNK A SZABAD KESZLETBOL.
+ *
+ * A VEGPONT LIMITALT (alap 100, felso hatar 500), tehat a valasz HOSSZA nem a
+ * teljes szabad keszlet. A szam ITT all, egy helyen, es a lap KI IS IRJA -- egy
+ * "N szabad kod" felirat a limit emlitese nelkul azt allitana, hogy ennyi VAN,
+ * holott csak ennyit kertunk.
+ */
+const FREE_LIMIT = 100;
+
 export function AssetLabelBatchesPage() {
   const { session } = useAuth();
   const token = session?.token ?? "";
@@ -55,14 +66,28 @@ export function AssetLabelBatchesPage() {
   const [issuing, setIssuing] = useState(false);
   const [issueError, setIssueError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [importText, setImportText] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importResult, setImportResult] = useState<{
+    imported: string[];
+    alreadyExisted: string[];
+  } | null>(null);
+  const [freeCodes, setFreeCodes] = useState<
+    { id: string; code: string }[] | null
+  >(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
       if (!canManage) return;
       setLoading(true);
       try {
-        const rows = await assetLabelsApi.batches(token, signal);
+        const [rows, free] = await Promise.all([
+          assetLabelsApi.batches(token, signal),
+          assetLabelsApi.free(token, FREE_LIMIT, signal),
+        ]);
         setBatches(rows);
+        setFreeCodes(free);
         setListError(null);
       } catch (cause) {
         /**
@@ -117,6 +142,47 @@ export function AssetLabelBatchesPage() {
       );
     } finally {
       setIssuing(false);
+    }
+  };
+
+  /**
+   * A BEIRT SZOVEGBOL KODOK: sorok es vesszok menten, ures darabok nelkul.
+   *
+   * A SZAMOT ITT NEM ELLENORIZZUK, mert a szerver dolga: a DTO egy es otszaz
+   * kozott enged. Egy masodik hatar itt csak addig egyezne a szerverevel, amig
+   * valaki az egyiket at nem irja.
+   */
+  const parseCodes = (text: string) =>
+    text
+      .split(/[\s,;]+/)
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0);
+
+  const importCodes = async () => {
+    const codes = parseCodes(importText);
+    setImportError(null);
+    setImportResult(null);
+    if (codes.length === 0) {
+      setImportError("Adj meg legalább egy matricakódot.");
+      return;
+    }
+    setImporting(true);
+    try {
+      const result = await assetLabelsApi.importCodes(token, codes);
+      setImportResult({
+        imported: result.imported,
+        alreadyExisted: result.alreadyExisted,
+      });
+      setImportText("");
+      await load();
+    } catch (cause) {
+      setImportError(
+        cause instanceof Error
+          ? cause.message
+          : "A kódok betöltése nem sikerült.",
+      );
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -201,6 +267,64 @@ export function AssetLabelBatchesPage() {
         </p>
       </Card>
 
+      {/*
+        MAR KINYOMTATOTT KODOK BETOLTESE -- KULON DOBOZ, NEM A GENERALAS MELLE.
+        A ketto ELLENTETES IRANY: a generalas UJ kodokat allit elo, ez pedig
+        MEGLEVOKET vesz nyilvantartasba. Egy dobozban a ket gomb kozott egy
+        elgepeles otven felesleges matricat nyomtatna.
+      */}
+      <Card className="space-y-3 p-4">
+        <h2 className="text-sm font-semibold">
+          Már kinyomtatott kódok betöltése
+        </h2>
+        <p className="text-xs text-slate-500">
+          Soronként vagy vesszővel elválasztva. Megismételhető: a már felvett
+          kódok nem duplikálódnak, és a válasz megmondja, melyek voltak azok.
+        </p>
+        {importError ? (
+          <Alert
+            variant="danger"
+            title="Nem sikerült"
+            description={importError}
+          />
+        ) : null}
+        <Textarea
+          aria-label="Betöltendő kódok"
+          rows={3}
+          value={importText}
+          disabled={importing}
+          onChange={(event) => setImportText(event.target.value)}
+          placeholder="V2196, A0001"
+        />
+        <Button
+          variant="secondary"
+          disabled={importing}
+          onClick={() => void importCodes()}
+        >
+          {importing ? "Betöltés…" : "Kódok betöltése"}
+        </Button>
+        {importResult ? (
+          /*
+            A KET LISTA KULON ALL, MERT A TEENDO MAS: az UJAK sikerek, a MAR
+            LETEZOK viszont arra utalnak, hogy ezt a listat egyszer mar
+            betoltottek -- es ha valaki ezt nem latja, ujra kinyomtathatja oket.
+          */
+          <div className="space-y-1 text-sm">
+            <p>
+              Betöltve: <strong>{importResult.imported.length}</strong> új kód
+              {importResult.imported.length
+                ? ` (${importResult.imported.join(", ")})`
+                : ""}
+            </p>
+            {importResult.alreadyExisted.length ? (
+              <p className="text-amber-700">
+                Már a készletben volt: {importResult.alreadyExisted.join(", ")}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </Card>
+
       <Card className="space-y-3 p-4">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-sm font-semibold">Korábbi kötegek</h2>
@@ -279,6 +403,44 @@ export function AssetLabelBatchesPage() {
             title="Még nem generáltál köteget"
             description="Add meg a darabszámot fent, és nyomd meg a „Kötegek generálása” gombot."
           />
+        )}
+      </Card>
+
+      {/*
+        A SZABAD KESZLET KOTEGTOL FUGGETLENUL.
+        A kotegenkenti "szabad" szam azt mondja meg, EBBOL a kotegbol mennyi
+        maradt; ez azt, hogy OSSZESEN mennyi all rendelkezesre. A ketto kulon
+        kerdes, es a masodikra eddig nem volt valasz a lapon.
+      */}
+      <Card className="space-y-2 p-4">
+        <h2 className="text-sm font-semibold">Szabad kódok a készletben</h2>
+        {freeCodes === null ? (
+          <Skeleton className="h-10 w-full" />
+        ) : freeCodes.length === 0 ? (
+          <p className="text-sm text-slate-500">
+            Nincs szabad kód: minden kiadott matrica eszközhöz van rendelve.
+          </p>
+        ) : (
+          <>
+            {/*
+              A DARABSZAM MELLE ODAKERUL A LIMIT, MERT A VALASZ KORLATOZOTT.
+              Egy puszta "N szabad kod" azt allitana, hogy ennyi VAN -- holott
+              csak ennyit kertunk. A kulonbseg pontosan a limitnel latszik.
+            */}
+            <p className="text-sm">
+              {freeCodes.length < FREE_LIMIT
+                ? `${freeCodes.length} szabad kód.`
+                : `Legalább ${FREE_LIMIT} szabad kód (ennyit kértünk le, lehet több is).`}
+            </p>
+            <p className="text-xs text-slate-500">
+              A legrégebben kiadottak elöl:{" "}
+              {freeCodes
+                .slice(0, 12)
+                .map((label) => label.code)
+                .join(", ")}
+              {freeCodes.length > 12 ? " …" : ""}
+            </p>
+          </>
         )}
       </Card>
     </div>
