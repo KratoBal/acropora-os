@@ -20,7 +20,7 @@
  * ami rosszabb -- egyaltalan nem latna, mert a bejaras csak az ismert
  * gyokereket jarja be. Egy nem letezo halmazbol nem lehet elgepelni.
  */
-export const DOCUMENT_OWNERS = ["asset", "worksheet"] as const;
+export const DOCUMENT_OWNERS = ["asset", "worksheet", "product"] as const;
 export type DocumentOwner = (typeof DOCUMENT_OWNERS)[number];
 
 /**
@@ -43,11 +43,26 @@ export interface DocumentKey {
  * A TULAJDONOS KONYVTARNEVE A TAROLOBAN.
  *
  * Az `asset` -> `assets` lekepezes NEM kozmetika: ez a MAI elrendezes, es a
- * lemezen allo fajlok (ha egyszer lesznek) ezen az uton talalhatok. Aki
- * atirja, a meglevo fajlokat teszi lathatatlanna.
+ * lemezen allo fajlok ezen az uton talalhatok. Aki atirja, a meglevo fajlokat
+ * teszi lathatatlanna.
+ *
+ * TELJES LEKEPEZES, NEM TERNARIS, ES EZ MERT KULONBSEG. Az elozo alak
+ * (`owner === "asset" ? "assets" : "worksheets"`) KET ertekre volt helyes, es
+ * egy harmadik CSENDBEN a `worksheets` konyvtarba esett volna -- a fordito nem
+ * szolt volna, mert a tipus tovabbra is `string`.
+ *
+ * Igy viszont a `Record<DocumentOwner, string>` HIANYZO KULCSOT jelez: aki uj
+ * gazdat vesz fel a halmazba, forditasi hibat kap, amig ide is be nem irja.
+ * A vedelem tehat nem egy szabaly, hanem a tipus alakja.
  */
+const OWNER_DIRECTORIES: Record<DocumentOwner, string> = {
+  asset: "assets",
+  worksheet: "worksheets",
+  product: "products",
+};
+
 export function ownerDirectory(owner: DocumentOwner): string {
-  return owner === "asset" ? "assets" : "worksheets";
+  return OWNER_DIRECTORIES[owner];
 }
 
 /**
