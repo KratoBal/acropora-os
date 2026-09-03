@@ -134,6 +134,19 @@ describe("a fénykép sora", () => {
     ]);
   });
 
+  it("a FÉNYKÉP sora a KAPOTT gazdával megy be, nem beégetve", () => {
+    /*
+      A kep 2026-09-03 ota KET gazdahoz tartozhat: eszkozhoz es munkalaphoz. A
+      kuldes a sor `entity_type` mezojebol dont, tehat ha a beszuras beegetne az
+      `asset` erteket, egy munkalap-kep az ESZKOZ vegpontjara menne -- es a
+      szerver egy nem letezo eszkozre hivatkozo kerest kapna.
+
+      MI PIROSIT: a parameter visszairasa literalra.
+    */
+    assert.match(forras, /VALUES \(\?, 'upload-photo', \?, NULL/);
+    assert.match(forras, /input\.entityType,/);
+  });
+
   it("a MUNKALAP sora munkalap entitással megy be", () => {
     // MI PIROSIT: ha a munkalap `'asset'` entitassal kerulne a sorba. A
     // kuldes az entitasbol dont, tehat a lap az ESZKOZ vegpontjara menne.

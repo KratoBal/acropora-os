@@ -97,18 +97,29 @@ export async function enqueueWorksheetCreate(
  * LETEZIK. Azt a `attachRecordingResult` irja ra kesobb, es amig nincs ott, a
  * kepet nincs is HOVA felkuldeni.
  */
-export async function enqueueAssetPhoto(input: {
+export async function enqueuePhoto(input: {
   id: string;
   payload: PhotoPayload;
   createdAt: string;
+  /**
+   * MIHEZ TARTOZIK A KEP. A sor ebbol tudja, MELYIK vegpontra kell kuldeni:
+   * eszkoz-dokumentum vagy munkalap-dokumentum. Nem uj mezo a payloadban --
+   * a sor mar hordozza a gazdat, es ket helyen tarolva a ketto elcsuszhatna.
+   */
+  entityType: SyncQueueRow["entityType"];
 }): Promise<EnqueueResult> {
   try {
     const db = await initializeOfflineDatabase();
     await db.runAsync(
       `INSERT OR IGNORE INTO sync_queue
          (id, operation, entity_type, entity_id, payload_json, created_at, attempt_count, last_error, state)
-       VALUES (?, 'upload-photo', 'asset', NULL, ?, ?, 0, NULL, 'pending')`,
-      [input.id, JSON.stringify(input.payload), input.createdAt],
+       VALUES (?, 'upload-photo', ?, NULL, ?, ?, 0, NULL, 'pending')`,
+      [
+        input.id,
+        input.entityType,
+        JSON.stringify(input.payload),
+        input.createdAt,
+      ],
     );
     return { ok: true, operationId: input.id };
   } catch (error) {

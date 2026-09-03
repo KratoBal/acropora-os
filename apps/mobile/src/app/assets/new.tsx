@@ -59,10 +59,7 @@ import {
   readCachedAssetByToken,
   readCachedAssets,
 } from "@/lib/offline/asset-cache";
-import {
-  enqueueAssetCreate,
-  enqueueAssetPhoto,
-} from "@/lib/offline/queue-store";
+import { enqueueAssetCreate, enqueuePhoto } from "@/lib/offline/queue-store";
 import { filterOwners } from "@/lib/assets/owner-search";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
@@ -249,7 +246,7 @@ export default function NewAssetScreen() {
       if (outcome.type === "saved") {
         router.replace({
           pathname: "/assets/[id]",
-          params: { id: outcome.assetId },
+          params: { id: outcome.id },
         });
         return;
       }
@@ -291,7 +288,7 @@ export default function NewAssetScreen() {
 
     if (terv.type === "upload") {
       try {
-        const feltoltve = await uploadAssetDocuments(terv.assetId, {
+        const feltoltve = await uploadAssetDocuments(terv.ownerId, {
           // A SZAMLA ES A GARANCIALEVEL AZ IRODABOL KERUL FEL; a helyszini kep
           // OTHER, ugyanugy, mint az eszkoz lapjan (`assets/[id].tsx`).
           type: "OTHER",
@@ -332,7 +329,11 @@ export default function NewAssetScreen() {
           recordingOperationId: terv.recordingOperationId,
           files: terv.files,
           createdAt: keszult,
-          enqueue: enqueueAssetPhoto,
+          /**
+           * A KEP AZ ESZKOZHOZ TARTOZIK. A sor a gazdabol tudja, melyik
+           * vegpontra kuldje: eszkoz-dokumentum vagy munkalap-dokumentum.
+           */
+          enqueue: (input) => enqueuePhoto({ ...input, entityType: "asset" }),
         }),
       ),
     };

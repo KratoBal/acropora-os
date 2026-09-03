@@ -28,7 +28,13 @@ import type { SaveOutcome } from "../offline/save-or-queue";
  */
 export type PhotoPlan =
   /** A szerver ismeri az eszkozt: a kep mehet egybol. */
-  | { type: "upload"; assetId: string; files: PickedFile[] }
+  /**
+   * A szerver ismeri a rekordot: a kep mehet egybol.
+   *
+   * `ownerId`, nem `assetId`: ugyanez a terv viszi a MUNKALAP kepeit is, es egy
+   * eszkoz-nevu mezo ott hazudna.
+   */
+  | { type: "upload"; ownerId: string; files: PickedFile[] }
   /** A rogzites a sorban var: a kep utana megy, ugyanabba a sorba. */
   | { type: "queue"; recordingOperationId: string; files: PickedFile[] }
   /**
@@ -46,7 +52,7 @@ export function planPhotosAfterRecord(
 ): PhotoPlan {
   if (files.length === 0) return { type: "none" };
   if (outcome.type === "saved") {
-    return { type: "upload", assetId: outcome.assetId, files: [...files] };
+    return { type: "upload", ownerId: outcome.id, files: [...files] };
   }
   if (outcome.type === "queued") {
     return {

@@ -18,6 +18,7 @@ import {
   createWorksheet,
   listSelectableWorksheetPartners,
   listWorksheetDepartments,
+  uploadWorksheetDocuments,
   type WorksheetDepartment,
   type WorksheetSelectablePartner,
 } from "@/lib/api/worksheets";
@@ -31,9 +32,22 @@ import {
   readCachedWorksheetDepartments,
   rememberWorksheetDepartments,
 } from "@/lib/offline/worksheet-department-cache";
+import * as ImagePicker from "expo-image-picker";
+
+import { MAX_FILES_PER_UPLOAD } from "@/lib/api/asset-document-upload";
 import { ApiError } from "@/lib/api/client";
+import { photoPermissionDeniedNotice } from "@/lib/api/photo-permission-notice";
+import { toPickedImages, type PickedFile } from "@/lib/api/picked-image";
+import {
+  describePhotoQueueing,
+  planPhotosAfterRecord,
+  queuePhotosForRecording,
+} from "@/lib/assets/photo-after-record";
+import {
+  enqueuePhoto,
+  enqueueWorksheetCreate,
+} from "@/lib/offline/queue-store";
 import { saveOrQueue } from "@/lib/offline/save-or-queue";
-import { enqueueWorksheetCreate } from "@/lib/offline/queue-store";
 import { worksheetOperationId } from "@/lib/offline/sync-queue";
 import {
   buildWorksheetCreatePayload,
@@ -83,6 +97,15 @@ export default function NewWorksheetScreen() {
    * kollega elveszettnek hinne, es ujra felvinne.
    */
   const [queued, setQueued] = useState<string | null>(null);
+  /**
+   * A HELYSZINEN KESZULT KEPEK, MEG A MENTES ELOTT.
+   *
+   * Ugyanaz az indok, mint az eszkoz-urlapon: terero nelkul a mentes nem visz
+   * sehova (a lap a sorba kerul, es az adatlapja meg nem letezik), tehat nincs
+   * az a keperno, ahol a szerelo utolag ratenne a kepet.
+   */
+  const [photos, setPhotos] = useState<PickedFile[]>([]);
+  const [photoNotice, setPhotoNotice] = useState<string | null>(null);
 
   const partnersQuery = useQuery({
     queryKey: ["worksheet-partners"],
@@ -171,10 +194,112 @@ export default function NewWorksheetScreen() {
    * eszkoz-felvitelnel; a SZOVEG kulon, mert a munkalapnal nincs
    * gyorsitotar-ellenorzes, amit a mondat hordozhatna.
    */
+  /**
+   * A KEP SORSA A LAP KIMENETELEBOL KOVETKEZIK, es a dontes a kozos modulban
+   * all (`lib/assets/photo-after-record.ts`) -- ugyanaz, ami az eszkoznel fut.
+   */
+  const kepeketElintez = async (
+    outcome: Awaited<ReturnType<typeof saveOrQueue>>,
+    keszult: string,
+  ): Promise<{ maradjunk: boolean; message: string | null }> => {
+    const terv = planPhotosAfterRecord(outcome, photos);
+    if (terv.type === "none") return { maradjunk: false, message: null };
+    if (terv.type === "dropped")
+      return { maradjunk: false, message: terv.message };
+
+    if (terv.type === "upload") {
+      try {
+        const feltoltve = await uploadWorksheetDocuments(terv.ownerId, {
+          files: terv.files,
+        });
+        return {
+          maradjunk: false,
+          message: `${feltoltve.length} fénykép feltöltve.`,
+        };
+      } catch (cause) {
+        /**
+         * A LAP MAR FENT VAN, tehat ez nem elveszett munkalap -- de a kep NEM
+         * ment fel, es ezen a kepernyon KELL maradnunk: a `saved` ag kulonben
+         * azonnal atlep a lap adatlapjara, es a mondat egy mar elhagyott
+         * kepernyore kerulne.
+         */
+        return {
+          maradjunk: true,
+          message:
+            cause instanceof Error
+              ? `A munkalap felment, a fénykép viszont nem: ${cause.message}. A képek megmaradtak, próbáld újra.`
+              : "A munkalap felment, a fénykép viszont nem. A képek megmaradtak, próbáld újra.",
+        };
+      }
+    }
+
+    return {
+      maradjunk: false,
+      message: describePhotoQueueing(
+        await queuePhotosForRecording({
+          recordingOperationId: terv.recordingOperationId,
+          files: terv.files,
+          createdAt: keszult,
+          /**
+           * A KEP A MUNKALAPHOZ TARTOZIK. A sor a gazdabol tudja, melyik
+           * vegpontra kuldje, tehat egy munkalap-kep sosem kerulhet egy eszkoz
+           * ala.
+           */
+          enqueue: (input) =>
+            enqueuePhoto({ ...input, entityType: "worksheet" }),
+        }),
+      ),
+    };
+  };
+
+  const kepeketFelvesz = (assets: ImagePicker.ImagePickerAsset[]) => {
+    const { files, skipped } = toPickedImages(assets);
+    setPhotos((elozo) => {
+      // UGYANAZ A FAJL KETSZER NEM KET KEP: a valaszto ugyanazt az `uri`-t adja.
+      const utak = new Set(elozo.map((f) => f.uri));
+      return [...elozo, ...files.filter((f) => !utak.has(f.uri))];
+    });
+    setPhotoNotice(
+      skipped.length > 0
+        ? `Kimaradt (csak JPEG és PNG megy): ${skipped.join(", ")}.`
+        : null,
+    );
+  };
+
+  const kepetKeszit = async () => {
+    setPhotoNotice(null);
+    const jog = await ImagePicker.requestCameraPermissionsAsync();
+    if (!jog.granted) {
+      setPhotoNotice(photoPermissionDeniedNotice("camera"));
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["images"],
+    });
+    if (result.canceled) return;
+    kepeketFelvesz(result.assets);
+  };
+
+  const kepetValaszt = async () => {
+    setPhotoNotice(null);
+    const jog = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!jog.granted) {
+      setPhotoNotice(photoPermissionDeniedNotice("library"));
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsMultipleSelection: true,
+      selectionLimit: MAX_FILES_PER_UPLOAD,
+    });
+    if (result.canceled) return;
+    kepeketFelvesz(result.assets);
+  };
+
   const mutation = useMutation({
     mutationFn: async (payload: WorksheetCreatePayload) => {
       const nyitas = new Date().toISOString();
-      return saveOrQueue({
+      const outcome = await saveOrQueue({
         save: () => createWorksheet(payload),
         enqueue: () =>
           enqueueWorksheetCreate({
@@ -193,12 +318,19 @@ export default function NewWorksheetScreen() {
         statusOf: (cause) => (cause instanceof ApiError ? cause.status : null),
         describeWrite: describeWorksheetQueueWrite,
       });
+      return { outcome, photo: await kepeketElintez(outcome, nyitas) };
     },
-    onSuccess: (outcome) => {
+    onSuccess: ({ outcome, photo }) => {
+      setPhotoNotice(photo.message);
+      /**
+       * EGY ELBUKOTT KEP-FELTOLTES ITT TART MINKET, kulonben a mondat egy mar
+       * elhagyott kepernyore kerulne.
+       */
+      if (outcome.type === "saved" && photo.maradjunk) return;
       if (outcome.type === "saved") {
         router.replace({
           pathname: "/worksheets/[id]",
-          params: { id: outcome.assetId },
+          params: { id: outcome.id },
         });
         return;
       }
@@ -381,6 +513,48 @@ export default function NewWorksheetScreen() {
             <FieldError error={error} field="subject" />
           </Section>
 
+          <Section title="Fénykép">
+            {/*
+              A KEP A LAP MEGNYITASA ELOTT KESZUL, ugyanabbol az okbol, mint az
+              eszkoznel: terero nelkul a mentes nem visz sehova, es nincs az a
+              keperno, ahol utolag ra lehetne tenni.
+
+              A SZERVEREN A KEP A LAPHOZ tartozik, nem a verziohoz -- es alairas
+              utan is felkerulhet, mert a bizonyitek gyakran keson erkezik.
+            */}
+            <Text style={styles.hint}>
+              A fénykép a munkalap mellé kerül, és térerő nélkül is vár a
+              telefonon, amíg fel nem megy.
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={kepetKeszit}
+              style={styles.pickerRow}
+            >
+              <Text style={styles.pickerName}>Fénykép készítése</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={kepetValaszt}
+              style={styles.pickerRow}
+            >
+              <Text style={styles.pickerName}>Kép a galériából</Text>
+            </Pressable>
+            {photos.length > 0 ? (
+              <View style={styles.photoRow}>
+                <Text style={styles.pickerName}>
+                  {photos.length} fénykép a munkalaphoz
+                </Text>
+                <Pressable onPress={() => setPhotos([])}>
+                  <Text style={styles.clearPhotos}>Képek törlése</Text>
+                </Pressable>
+              </View>
+            ) : null}
+            {photoNotice ? (
+              <Text style={styles.hint}>{photoNotice}</Text>
+            ) : null}
+          </Section>
+
           {/*
             A HIBA A GOMB MELLETT IS. Ugyanaz a mért ok, mint az eszköz-űrlapon:
             a mezőnél megjelenő üzenet a képernyő tetején lehet, a gomb viszont
@@ -484,6 +658,12 @@ const styles = StyleSheet.create({
   listName: { color: "#f4fbff", fontSize: 14 },
   listMeta: { color: "#789cad", fontSize: 11, marginTop: 2 },
   hint: { color: "#789cad", fontSize: 12, lineHeight: 17 },
+  photoRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  clearPhotos: { color: "#52d6c7", fontSize: 12, fontWeight: "800" },
   notice: {
     backgroundColor: "#0b2f3f",
     borderRadius: 10,

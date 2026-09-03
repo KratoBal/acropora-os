@@ -23,12 +23,12 @@ const kep = (nev: string) => ({
 
 describe("mi lesz a helyszíni képpel", () => {
   it("MENTETT rögzítésnél a kép MOST megy fel", () => {
-    const terv = planPhotosAfterRecord({ type: "saved", assetId: "eszkoz-1" }, [
+    const terv = planPhotosAfterRecord({ type: "saved", id: "eszkoz-1" }, [
       kep("a.jpg"),
     ]);
     assert.deepEqual(terv, {
       type: "upload",
-      assetId: "eszkoz-1",
+      ownerId: "eszkoz-1",
       files: [kep("a.jpg")],
     });
   });
@@ -73,7 +73,7 @@ describe("mi lesz a helyszíni képpel", () => {
     // ISMERT POZITIV KONTROLL a fentiekhez: e nelkul egy "mindig szol"
     // valtozat is atmenne rajtuk.
     assert.deepEqual(
-      planPhotosAfterRecord({ type: "saved", assetId: "eszkoz-1" }, []),
+      planPhotosAfterRecord({ type: "saved", id: "eszkoz-1" }, []),
       { type: "none" },
     );
     assert.deepEqual(
