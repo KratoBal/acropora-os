@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { decideDrain, describeQueueState } from "./queue-drain";
+import {
+  decideDrain,
+  describeQueueBacklog,
+  describeQueueState,
+} from "./queue-drain";
 
 /**
  * A KET IRANY KULON ALL, ES A MASODIK A FONTOSABB.
@@ -115,5 +119,43 @@ describe("a sor állapota emberi szemmel", () => {
     const s = describeQueueState({ pending: 0, conflict: 1 });
     assert.match(s ?? "", /döntés kell/);
     assert.doesNotMatch(s ?? "", /még nem ment fel/);
+  });
+});
+
+describe("ami a sorban MARAD", () => {
+  it("a KÉP-hátralékot akkor is kimondja, ha minden rögzítés felment", () => {
+    /*
+      EZ AZ ALLITAS A FUGGVENY LETEZESENEK OKA. Ez az az allapot, ami "sikeres
+      szinkronnak" latszik: nulla rogzites var, es kozben harom kep sosem ment
+      fel. Egy egyetlen szamot mutato sav ezt elrejtene.
+    */
+    const s = describeQueueBacklog({ recordings: 0, photos: 3, conflict: 0 });
+    assert.match(s ?? "", /3 fénykép még nem ment fel/);
+  });
+
+  it("az ELAKADT sort KÜLÖN mondja, mert más a teendő", () => {
+    // A varakozo magatol felmegy, ha lesz halozat. Az elakadt SOSEM.
+    const s = describeQueueBacklog({ recordings: 1, photos: 0, conflict: 2 });
+    assert.match(s ?? "", /1 rögzítés vár feltöltésre/);
+    assert.match(s ?? "", /döntés kell/);
+  });
+
+  it("ÜRES sornál hallgat", () => {
+    // ISMERT POZITIV KONTROLL a fentiekhez: e nelkul egy "mindig szol"
+    // valtozat is atmenne rajtuk, es a kezdolapon allando sav lenne.
+    assert.equal(
+      describeQueueBacklog({ recordings: 0, photos: 0, conflict: 0 }),
+      null,
+    );
+  });
+
+  it("rögzítést ÉS képet együtt is bont", () => {
+    /*
+      A ket szam KULON all, nem osszegezve. Az osszeg (`pending`) ugyanezt a
+      kettot szamolja, tehat egy osszeg + bontas parositas ugyanazt ketszer
+      mondana -- ezert nem is kerul a fuggveny bemenetei koze.
+    */
+    const s = describeQueueBacklog({ recordings: 2, photos: 3, conflict: 0 });
+    assert.match(s ?? "", /2 rögzítés és 3 fénykép vár feltöltésre/);
   });
 });
