@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { canRetry, classifyFailure, operationId } from "./sync-queue";
+import { canRetryState, classifyFailure, operationId } from "./sync-queue";
 
 /**
  * A KETTOS FELVITEL ES A VEGTELEN UJRAPROBALAS -- ez a ket hiba, amit a
@@ -81,17 +81,17 @@ describe("az újrapróbálás", () => {
   it("a konfliktust NEM próbálja újra", () => {
     // A `conflict` sor embert igenyel. Egy automatikus ujraprobalas itt nem
     // csak felesleges: elrejti, hogy dontesre var.
-    assert.equal(canRetry("conflict"), false);
+    assert.equal(canRetryState("conflict"), false);
   });
 
   it("a syncing sort sem, mert az már fut", () => {
-    assert.equal(canRetry("syncing"), false);
+    assert.equal(canRetryState("syncing"), false);
   });
 
   it("a pending és a failed újrapróbálható", () => {
     // ISMERT POZITIV KONTROLL: e nelkul egy "mindig hamis" valtozat is
     // atmenne a ket fenti allitason.
-    assert.equal(canRetry("pending"), true);
-    assert.equal(canRetry("failed"), true);
+    assert.equal(canRetryState("pending"), true);
+    assert.equal(canRetryState("failed"), true);
   });
 });
