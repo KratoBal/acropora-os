@@ -38,6 +38,7 @@ import {
  *     1  TALALT eltérést (arva fajl vagy hianyzo fajl), es felsorolja
  *     2  a lekerdezes vagy a tarolo elhasalt -- NEM tudjuk, hogy van-e elteres
  *     3  a tarolo NINCS BEALLITVA: nem egyeztettunk semmit
+ *     4  a kulcsok egyeznek, de a TAROLO NEM AD MERETET -- a meres FELIG kesz
  *
  * A 3-as azert all kulon a 0-tol, mert a "nincs beallitva" es a "tiszta" KET
  * KULONBOZO allapot, es egy kozos nulla osszemosna oket. Ez ma tobbszor
@@ -54,21 +55,27 @@ import {
  * sorok is bejonnenek, amiknek nincs is fajljuk: MINDEN mai sor "elveszett
  * sornak" latszana.
  */
-export type FetchRowsWithStorageKey = () => Promise<DocumentKey[]>;
+export interface RowWithSize {
+  key: DocumentKey;
+  /** A TABLA allitasa a fajl mereterol -- ezt vetjuk ossze a taroloeval. */
+  sizeBytes: number;
+}
+
+export type FetchRowsWithStorageKey = () => Promise<RowWithSize[]>;
 
 const fetchFromPrisma: FetchRowsWithStorageKey = async () => {
   const sorok = await prisma.assetDocument.findMany({
     where: { storageKey: { not: null } },
-    select: { assetId: true, id: true },
+    select: { assetId: true, id: true, sizeBytes: true },
   });
   return sorok.map((sor) => ({
-    assetId: sor.assetId,
-    documentId: sor.id,
+    key: { assetId: sor.assetId, documentId: sor.id },
+    sizeBytes: sor.sizeBytes,
   }));
 };
 
 export interface ReconciliationOutcome {
-  code: 0 | 1 | 2 | 3;
+  code: 0 | 1 | 2 | 3 | 4;
   lines: string[];
 }
 
@@ -115,7 +122,7 @@ export async function runReconciliation(deps: {
   if (status.state === "broken")
     return { code: 2, lines: [`a tarolo hibas: ${status.reason}`] };
 
-  let rows: DocumentKey[];
+  let rows: RowWithSize[];
   let files: DocumentKey[];
   try {
     [rows, files] = await Promise.all([
@@ -127,11 +134,69 @@ export async function runReconciliation(deps: {
   }
 
   const report = reconcileDocumentStore({
-    rowsWithStorageKey: rows,
+    rowsWithStorageKey: rows.map((sor) => sor.key),
     filesInStore: files,
   });
+  const lines = describeReport(report);
   const elteres = report.orphanedFiles.length + report.missingFiles.length;
-  return { code: elteres > 0 ? 1 : 0, lines: describeReport(report) };
+  if (elteres > 0) return { code: 1, lines };
+
+  /**
+   * A MERET-OSSZEVETES CSAK AKKOR JON, HA A KULCSOK MAR EGYEZNEK.
+   *
+   * Ha van arva vagy hianyzo fajl, az a SULYOSABB lelet, es a meret-elteres
+   * mellette zaj lenne: egy hianyzo fajlnak nincs merete, amit ossze lehetne
+   * vetni. Eloszor a halmaz alljon helyre, aztan a tartalom.
+   */
+  const size = deps.store.size?.bind(deps.store);
+  if (!size)
+    return {
+      code: 4,
+      lines: [
+        ...lines,
+        "a tarolo NEM AD MERETET, tehat a meret-osszevetes NEM tortent meg.",
+        "A kulcsok egyeznek; hogy a MERETUK is egyezik-e, azt nem mertuk.",
+      ],
+    };
+
+  const meretElteres: string[] = [];
+  for (const sor of rows) {
+    let tarolt: number | null;
+    try {
+      tarolt = await size(sor.key);
+    } catch (cause) {
+      return {
+        code: 2,
+        lines: [`a meret-lekerdezes elhasalt: ${String(cause)}`],
+      };
+    }
+    /**
+     * A `null` ITT NEM ELTERES: a kulcs-osszevetes szerint a fajl OTT VAN, es
+     * ha a meret kozben megis megallapithatatlan, az VERSENYHELYZET (torles a
+     * ket meres kozott), nem adathiba. Kulon soron all, hogy a szam ne
+     * hazudjon.
+     */
+    if (tarolt === null) {
+      meretElteres.push(
+        `  MERET?  ${sor.key.assetId}/${sor.key.documentId} (a merete nem allapithato meg)`,
+      );
+      continue;
+    }
+    if (tarolt !== sor.sizeBytes)
+      meretElteres.push(
+        `  MERET   ${sor.key.assetId}/${sor.key.documentId} tabla=${sor.sizeBytes} tarolo=${tarolt}`,
+      );
+  }
+  if (meretElteres.length > 0)
+    return {
+      code: 1,
+      lines: [
+        ...lines,
+        `meret-elteres: ${meretElteres.length}`,
+        ...meretElteres,
+      ],
+    };
+  return { code: 0, lines: [...lines, "meret-elteres: 0"] };
 }
 
 async function main(): Promise<number> {
