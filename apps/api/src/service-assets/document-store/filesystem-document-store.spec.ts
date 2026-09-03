@@ -395,7 +395,7 @@ describe("a gazda a lemezen is elvalik", () => {
     }
   });
 
-  it("a bejaras MIND A KET gazdat latja, idegen konyvtarat viszont NEM", async () => {
+  it("a bejaras MINDEN gazdat latja, idegen konyvtarat viszont NEM", async () => {
     /*
       A bejaras a ZART halmazon megy vegig, nem azon, ami a lemezen all. Egy
       idegen konyvtar (kezzel odamasolt adat, regi elrendezes maradeka) igy nem
@@ -414,6 +414,17 @@ describe("a gazda a lemezen is elvalik", () => {
         { owner: "worksheet", ownerId: "w", documentId: "2" },
         new Uint8Array([2]),
       );
+      /*
+        A HARMADIK GAZDA (`product`) 2026-09-03-tol letezik, es ez a sor NEM
+        kozmetika: a teszt neve korabban "MIND A KET gazdat" volt, es a
+        harmadik felvetele utan a NEV hazudott volna, a TARTALOM pedig egy
+        gazdat nem mert volna. Egy halo, ami a zart halmazrol szol, csak akkor
+        er valamit, ha a halmaz MINDEN elemet felsorolja.
+      */
+      await store.put(
+        { owner: "product", ownerId: "p", documentId: "3" },
+        new Uint8Array([3]),
+      );
       await mkdir(path.join(root, "idegen", "x"), { recursive: true });
       await writeFile(path.join(root, "idegen", "x", "3"), new Uint8Array([3]));
 
@@ -423,7 +434,7 @@ describe("a gazda a lemezen is elvalik", () => {
         listed
           .map((key) => `${key.owner}/${key.ownerId}/${key.documentId}`)
           .sort(),
-        ["asset/a/1", "worksheet/w/2"],
+        ["asset/a/1", "product/p/3", "worksheet/w/2"],
       );
     } finally {
       await rm(root, { recursive: true, force: true });
