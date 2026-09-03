@@ -5,6 +5,7 @@ import {
   mkdir,
   mkdtemp,
   readdir,
+  readFile,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -32,10 +33,17 @@ describe("the filesystem document store", () => {
     const store = new FilesystemDocumentStore(root);
     const bytes = Uint8Array.from([1, 2, 3, 250]);
 
-    await store.put({ assetId: "asset-1", documentId: "doc-1" }, bytes);
+    await store.put(
+      { owner: "asset" as const, ownerId: "asset-1", documentId: "doc-1" },
+      bytes,
+    );
 
     assert.deepEqual(
-      await store.get({ assetId: "asset-1", documentId: "doc-1" }),
+      await store.get({
+        owner: "asset" as const,
+        ownerId: "asset-1",
+        documentId: "doc-1",
+      }),
       bytes,
     );
   });
@@ -44,20 +52,28 @@ describe("the filesystem document store", () => {
     const store = new FilesystemDocumentStore(root);
 
     await store.put(
-      { assetId: "asset-a", documentId: "same" },
+      { owner: "asset" as const, ownerId: "asset-a", documentId: "same" },
       Uint8Array.from([1]),
     );
     await store.put(
-      { assetId: "asset-b", documentId: "same" },
+      { owner: "asset" as const, ownerId: "asset-b", documentId: "same" },
       Uint8Array.from([2]),
     );
 
     assert.deepEqual(
-      await store.get({ assetId: "asset-a", documentId: "same" }),
+      await store.get({
+        owner: "asset" as const,
+        ownerId: "asset-a",
+        documentId: "same",
+      }),
       Uint8Array.from([1]),
     );
     assert.deepEqual(
-      await store.get({ assetId: "asset-b", documentId: "same" }),
+      await store.get({
+        owner: "asset" as const,
+        ownerId: "asset-b",
+        documentId: "same",
+      }),
       Uint8Array.from([2]),
     );
   });
@@ -66,14 +82,22 @@ describe("the filesystem document store", () => {
     const store = new FilesystemDocumentStore(root);
 
     assert.equal(
-      await store.get({ assetId: "asset-1", documentId: "missing" }),
+      await store.get({
+        owner: "asset" as const,
+        ownerId: "asset-1",
+        documentId: "missing",
+      }),
       null,
     );
   });
 
   it("reports whether the delete removed anything", async () => {
     const store = new FilesystemDocumentStore(root);
-    const key = { assetId: "asset-delete", documentId: "doc-1" };
+    const key = {
+      owner: "asset" as const,
+      ownerId: "asset-delete",
+      documentId: "doc-1",
+    };
     await store.put(key, Uint8Array.from([1]));
 
     assert.equal(await store.delete(key), true);
@@ -104,7 +128,7 @@ describe("the filesystem document store", () => {
     await assert.rejects(
       () =>
         store.put(
-          { assetId: "../..", documentId: "escaped" },
+          { owner: "asset" as const, ownerId: "../..", documentId: "escaped" },
           Uint8Array.from([1]),
         ),
       /gyökerén kívülre mutat/,
@@ -120,7 +144,11 @@ describe("the filesystem document store", () => {
     await assert.rejects(
       () =>
         store.put(
-          { assetId: "asset-1", documentId: "/etc/passwd" },
+          {
+            owner: "asset" as const,
+            ownerId: "asset-1",
+            documentId: "/etc/passwd",
+          },
           Uint8Array.from([1]),
         ),
       /gyökerén kívülre mutat/,
@@ -135,7 +163,7 @@ describe("the filesystem document store", () => {
   it("leaves no temporary file behind after a successful write", async () => {
     const store = new FilesystemDocumentStore(root);
     await store.put(
-      { assetId: "asset-tmp", documentId: "doc-1" },
+      { owner: "asset" as const, ownerId: "asset-tmp", documentId: "doc-1" },
       Uint8Array.from([1, 2, 3]),
     );
 
@@ -174,14 +202,22 @@ describe("the filesystem document store", () => {
     const listRoot = await mkdtemp(path.join(tmpdir(), "document-store-list-"));
     try {
       const store = new FilesystemDocumentStore(listRoot);
-      await store.put({ assetId: "a", documentId: "1" }, Uint8Array.from([1]));
-      await store.put({ assetId: "b", documentId: "2" }, Uint8Array.from([2]));
+      await store.put(
+        { owner: "asset" as const, ownerId: "a", documentId: "1" },
+        Uint8Array.from([1]),
+      );
+      await store.put(
+        { owner: "asset" as const, ownerId: "b", documentId: "2" },
+        Uint8Array.from([2]),
+      );
 
       const listed = await collectDocumentKeys(store.list());
 
       assert.deepEqual(
-        listed.map((key) => `${key.assetId}/${key.documentId}`).sort(),
-        ["a/1", "b/2"],
+        listed
+          .map((key) => `${key.owner}/${key.ownerId}/${key.documentId}`)
+          .sort(),
+        ["asset/a/1", "asset/b/2"],
       );
     } finally {
       await rm(listRoot, { recursive: true, force: true });
@@ -208,7 +244,7 @@ describe("the filesystem document store", () => {
       const store = new FilesystemDocumentStore(listRoot);
 
       assert.deepEqual(await collectDocumentKeys(store.list()), [
-        { assetId: "a", documentId: "1" },
+        { owner: "asset" as const, ownerId: "a", documentId: "1" },
       ]);
     } finally {
       await rm(listRoot, { recursive: true, force: true });
@@ -271,7 +307,7 @@ describe("the filesystem document store", () => {
     try {
       const store = new FilesystemDocumentStore(unmarked);
       await store.put(
-        { assetId: "asset-1", documentId: "doc-1" },
+        { owner: "asset" as const, ownerId: "asset-1", documentId: "doc-1" },
         Uint8Array.from([1]),
       );
 
@@ -312,6 +348,85 @@ describe("the filesystem document store", () => {
     } finally {
       await chmod(readOnly, 0o700);
       await rm(readOnly, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("a gazda a lemezen is elvalik", () => {
+  it("az ESZKOZ fajlja az `assets` alatt all, valtozatlanul", async () => {
+    /*
+      EZ AZ ALLITAS AZT VEDI, AMI NEM VALTOZHAT. A gazda bevezetese REFAKTOR: a
+      meglevo eszkoz-ut viselkedese ugyanaz marad, es a fajl ugyanoda kerul,
+      ahova eddig.
+
+      MI PIROSIT: a gazda konyvtarnevenek atirasa (`assets` -> `asset`).
+    */
+    const root = await mkdtemp(path.join(tmpdir(), "docstore-owner-"));
+    try {
+      const store = new FilesystemDocumentStore(root);
+      await store.put(
+        { owner: "asset", ownerId: "esz-1", documentId: "d-1" },
+        new Uint8Array([1, 2, 3]),
+      );
+      const bytes = await readFile(path.join(root, "assets", "esz-1", "d-1"));
+      assert.deepEqual(new Uint8Array(bytes), new Uint8Array([1, 2, 3]));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("a MUNKALAP fajlja MAS konyvtarba kerul", async () => {
+    // ISMERT POZITIV KONTROLL: e nelkul egy valtozat, ami minden gazdat az
+    // `assets` ala ir, atmenne a fenti allitason -- es egy munkalap-kep
+    // felulirhatna egy eszkoz-dokumentumot.
+    const root = await mkdtemp(path.join(tmpdir(), "docstore-owner-"));
+    try {
+      const store = new FilesystemDocumentStore(root);
+      await store.put(
+        { owner: "worksheet", ownerId: "ml-1", documentId: "d-1" },
+        new Uint8Array([9]),
+      );
+      const bytes = await readFile(
+        path.join(root, "worksheets", "ml-1", "d-1"),
+      );
+      assert.deepEqual(new Uint8Array(bytes), new Uint8Array([9]));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("a bejaras MIND A KET gazdat latja, idegen konyvtarat viszont NEM", async () => {
+    /*
+      A bejaras a ZART halmazon megy vegig, nem azon, ami a lemezen all. Egy
+      idegen konyvtar (kezzel odamasolt adat, regi elrendezes maradeka) igy nem
+      latszik elarvult fajlkent -- a lista a MI elrendezesunkrol szol.
+
+      MI PIROSIT: ha a bejaras a gyoker OSSZES konyvtarat vegigmenne.
+    */
+    const root = await mkdtemp(path.join(tmpdir(), "docstore-owner-"));
+    try {
+      const store = new FilesystemDocumentStore(root);
+      await store.put(
+        { owner: "asset", ownerId: "a", documentId: "1" },
+        new Uint8Array([1]),
+      );
+      await store.put(
+        { owner: "worksheet", ownerId: "w", documentId: "2" },
+        new Uint8Array([2]),
+      );
+      await mkdir(path.join(root, "idegen", "x"), { recursive: true });
+      await writeFile(path.join(root, "idegen", "x", "3"), new Uint8Array([3]));
+
+      const listed = [];
+      for await (const key of store.list()) listed.push(key);
+      assert.deepEqual(
+        listed
+          .map((key) => `${key.owner}/${key.ownerId}/${key.documentId}`)
+          .sort(),
+        ["asset/a/1", "worksheet/w/2"],
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
     }
   });
 });

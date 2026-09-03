@@ -1,5 +1,6 @@
 import type {
   DocumentKey,
+  DocumentOwner,
   DocumentStore,
   DocumentStoreStatus,
 } from "./document-store.js";
@@ -36,8 +37,12 @@ export class InMemoryDocumentStore implements DocumentStore {
 
   async *list(): AsyncIterable<DocumentKey> {
     for (const serialised of [...this.documents.keys()]) {
-      const [assetId, documentId] = JSON.parse(serialised) as [string, string];
-      yield { assetId, documentId };
+      const [owner, ownerId, documentId] = JSON.parse(serialised) as [
+        DocumentOwner,
+        string,
+        string,
+      ];
+      yield { owner, ownerId, documentId };
     }
   }
 
@@ -61,5 +66,5 @@ export class InMemoryDocumentStore implements DocumentStore {
  * határokat megőrzi, mert az elválasztót magát is idézi.
  */
 function serialiseKey(key: DocumentKey): string {
-  return JSON.stringify([key.assetId, key.documentId]);
+  return JSON.stringify([key.owner, key.ownerId, key.documentId]);
 }

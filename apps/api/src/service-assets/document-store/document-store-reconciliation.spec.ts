@@ -3,7 +3,12 @@ import { describe, it } from "node:test";
 
 import { reconcileDocumentStore } from "./document-store-reconciliation.js";
 
-const key = (assetId: string, documentId: string) => ({ assetId, documentId });
+/** A ket gazda kozul az eszkoz az alapertelmezett; a munkalapot kulon adjuk meg. */
+const key = (
+  ownerId: string,
+  documentId: string,
+  owner: "asset" | "worksheet" = "asset",
+) => ({ owner, ownerId, documentId });
 
 describe("reconciling the table against the store", () => {
   it("reports nothing when every row has its file", () => {

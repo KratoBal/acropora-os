@@ -13,10 +13,17 @@ describe("the in-memory document store", () => {
     const store = new InMemoryDocumentStore();
     const bytes = Uint8Array.from([1, 2, 3, 250]);
 
-    await store.put({ assetId: "asset-1", documentId: "doc-1" }, bytes);
+    await store.put(
+      { owner: "asset" as const, ownerId: "asset-1", documentId: "doc-1" },
+      bytes,
+    );
 
     assert.deepEqual(
-      await store.get({ assetId: "asset-1", documentId: "doc-1" }),
+      await store.get({
+        owner: "asset" as const,
+        ownerId: "asset-1",
+        documentId: "doc-1",
+      }),
       bytes,
     );
   });
@@ -30,20 +37,28 @@ describe("the in-memory document store", () => {
     const store = new InMemoryDocumentStore();
 
     await store.put(
-      { assetId: "asset-1", documentId: "same" },
+      { owner: "asset" as const, ownerId: "asset-1", documentId: "same" },
       Uint8Array.from([1]),
     );
     await store.put(
-      { assetId: "asset-2", documentId: "same" },
+      { owner: "asset" as const, ownerId: "asset-2", documentId: "same" },
       Uint8Array.from([2]),
     );
 
     assert.deepEqual(
-      await store.get({ assetId: "asset-1", documentId: "same" }),
+      await store.get({
+        owner: "asset" as const,
+        ownerId: "asset-1",
+        documentId: "same",
+      }),
       Uint8Array.from([1]),
     );
     assert.deepEqual(
-      await store.get({ assetId: "asset-2", documentId: "same" }),
+      await store.get({
+        owner: "asset" as const,
+        ownerId: "asset-2",
+        documentId: "same",
+      }),
       Uint8Array.from([2]),
     );
   });
@@ -59,15 +74,29 @@ describe("the in-memory document store", () => {
   it("does not let a separator inside an id collide two keys", async () => {
     const store = new InMemoryDocumentStore();
 
-    await store.put({ assetId: "a", documentId: "b c" }, Uint8Array.from([1]));
-    await store.put({ assetId: "a b", documentId: "c" }, Uint8Array.from([2]));
+    await store.put(
+      { owner: "asset" as const, ownerId: "a", documentId: "b c" },
+      Uint8Array.from([1]),
+    );
+    await store.put(
+      { owner: "asset" as const, ownerId: "a b", documentId: "c" },
+      Uint8Array.from([2]),
+    );
 
     assert.deepEqual(
-      await store.get({ assetId: "a", documentId: "b c" }),
+      await store.get({
+        owner: "asset" as const,
+        ownerId: "a",
+        documentId: "b c",
+      }),
       Uint8Array.from([1]),
     );
     assert.deepEqual(
-      await store.get({ assetId: "a b", documentId: "c" }),
+      await store.get({
+        owner: "asset" as const,
+        ownerId: "a b",
+        documentId: "c",
+      }),
       Uint8Array.from([2]),
     );
   });
@@ -76,7 +105,11 @@ describe("the in-memory document store", () => {
     const store = new InMemoryDocumentStore();
 
     assert.equal(
-      await store.get({ assetId: "asset-1", documentId: "missing" }),
+      await store.get({
+        owner: "asset" as const,
+        ownerId: "asset-1",
+        documentId: "missing",
+      }),
       null,
     );
   });
@@ -91,11 +124,18 @@ describe("the in-memory document store", () => {
     const store = new InMemoryDocumentStore();
     const bytes = Uint8Array.from([1, 2, 3]);
 
-    await store.put({ assetId: "asset-1", documentId: "doc-1" }, bytes);
+    await store.put(
+      { owner: "asset" as const, ownerId: "asset-1", documentId: "doc-1" },
+      bytes,
+    );
     bytes[0] = 99;
 
     assert.deepEqual(
-      await store.get({ assetId: "asset-1", documentId: "doc-1" }),
+      await store.get({
+        owner: "asset" as const,
+        ownerId: "asset-1",
+        documentId: "doc-1",
+      }),
       Uint8Array.from([1, 2, 3]),
     );
   });
@@ -107,23 +147,35 @@ describe("the in-memory document store", () => {
   it("is not changed by the caller mutating what it read back", async () => {
     const store = new InMemoryDocumentStore();
     await store.put(
-      { assetId: "asset-1", documentId: "doc-1" },
+      { owner: "asset" as const, ownerId: "asset-1", documentId: "doc-1" },
       Uint8Array.from([1, 2, 3]),
     );
 
-    const first = await store.get({ assetId: "asset-1", documentId: "doc-1" });
+    const first = await store.get({
+      owner: "asset" as const,
+      ownerId: "asset-1",
+      documentId: "doc-1",
+    });
     assert.ok(first);
     first[0] = 99;
 
     assert.deepEqual(
-      await store.get({ assetId: "asset-1", documentId: "doc-1" }),
+      await store.get({
+        owner: "asset" as const,
+        ownerId: "asset-1",
+        documentId: "doc-1",
+      }),
       Uint8Array.from([1, 2, 3]),
     );
   });
 
   it("reports whether the delete removed anything", async () => {
     const store = new InMemoryDocumentStore();
-    const key = { assetId: "asset-1", documentId: "doc-1" };
+    const key = {
+      owner: "asset" as const,
+      ownerId: "asset-1",
+      documentId: "doc-1",
+    };
     await store.put(key, Uint8Array.from([1]));
 
     assert.equal(await store.delete(key), true);
@@ -138,21 +190,29 @@ describe("the in-memory document store", () => {
    */
   it("lists what it holds, as keys rather than strings", async () => {
     const store = new InMemoryDocumentStore();
-    await store.put({ assetId: "a", documentId: "1" }, Uint8Array.from([1]));
-    await store.put({ assetId: "b", documentId: "2" }, Uint8Array.from([2]));
+    await store.put(
+      { owner: "asset" as const, ownerId: "a", documentId: "1" },
+      Uint8Array.from([1]),
+    );
+    await store.put(
+      { owner: "asset" as const, ownerId: "b", documentId: "2" },
+      Uint8Array.from([2]),
+    );
 
     const listed = await collectDocumentKeys(store.list());
 
     assert.equal(listed.length, 2);
     assert.deepEqual(
-      listed.map((key) => `${key.assetId}/${key.documentId}`).sort(),
-      ["a/1", "b/2"],
+      listed
+        .map((key) => `${key.owner}/${key.ownerId}/${key.documentId}`)
+        .sort(),
+      ["asset/a/1", "asset/b/2"],
     );
   });
 
   it("stops listing what was deleted", async () => {
     const store = new InMemoryDocumentStore();
-    const key = { assetId: "a", documentId: "1" };
+    const key = { owner: "asset" as const, ownerId: "a", documentId: "1" };
     await store.put(key, Uint8Array.from([1]));
     await store.delete(key);
 

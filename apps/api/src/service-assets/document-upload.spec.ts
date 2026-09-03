@@ -90,7 +90,8 @@ describe("where an uploaded document's bytes go", () => {
       repositoryThat({
         addDocument: (async (input: { id: string }) => {
           storeHeldBytesWhenRowWasWritten = await store.get({
-            assetId: ASSET,
+            owner: "asset" as const,
+            ownerId: ASSET,
             documentId: input.id,
           });
           return {} as never;

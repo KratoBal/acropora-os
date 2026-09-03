@@ -424,7 +424,11 @@ export class ServiceAssetsService {
     // LATJA a dokumentumot a listaban, es a letoltesnel kap hibat. Igy viszont
     // legfeljebb egy ELARVULT FAJL marad, amire senki nem hivatkozik -- szemet,
     // nem adatvesztes. A ket allapot kozul a kevesbe latszot valasztjuk.
-    const key = { assetId: id, documentId };
+    /**
+     * A KULCS MOSTANTOL MEGNEVEZI A GAZDAT. Ez az eszkoz-ut, tehat `asset` --
+     * a munkalap ugyanezt a magot hasznalja majd, mas gazdaval.
+     */
+    const key = { owner: "asset" as const, ownerId: id, documentId };
     await this.documentStore.put(key, file.buffer);
     try {
       return await this.repository.addDocument({
@@ -553,11 +557,16 @@ export class ServiceAssetsService {
     }
 
     assertStorageKeyMatches(document.storageKey, {
-      assetId: id,
+      owner: "asset",
+      ownerId: id,
       documentId,
     });
 
-    const bytes = await this.documentStore.get({ assetId: id, documentId });
+    const bytes = await this.documentStore.get({
+      owner: "asset",
+      ownerId: id,
+      documentId,
+    });
     if (bytes === null) {
       throw new ServiceUnavailableException(
         "A dokumentum tartalma a tárolóban nem érhető el.",
