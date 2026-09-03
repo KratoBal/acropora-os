@@ -495,7 +495,61 @@ export interface MedusaAdminClient {
     productId: string,
     variantId: string,
     prices: MedusaPriceInput[],
-  ): Promise<void>;
+  ): Promise<void>; /**
+   * EGY FAJL FELTOLTESE A BOLT SAJAT TAROLOJABA.
+   *
+   * A valaszban a Medusa fajl-KULCSA es a nyilvanos URL-je jon vissza. A
+   * kettot EGYUTT kell megorizni: a kulcs az azonossag, az URL pedig az, ami
+   * a termek kep-mezojebe kerul, es a ketto kozott nincs kiszamithato
+   * kapcsolat (a local provider a backend cimebol epiti, az S3 a bucket
+   * cimebol).
+   *
+   * A FELTOLTES NEM IDEMPOTENS, ES EZ MERT TENY, NEM OVATOSSAG. Mindket
+   * telepitett provider MAGA general kulcsot, es mindig egyedive teszi:
+   *
+   *   file-local   `${Date.now()}-${eredeti fajlnev}`
+   *   file-s3      `${nev}-${ulid()}${kiterjesztes}`
+   *
+   * Ugyanaz a fajl ketszer feltoltve KET kulonbozo kulcsot es KET kulonbozo
+   * URL-t kap. Es a Medusa oldalan nem is lehet megkerdezni, hogy egy fajl mar
+   * fent van-e: a file modul `listFiles` metodusa azonosito nelkul HIBAT DOB
+   * ("Listing of files is only supported when filtering by ID"), tehat nev
+   * szerinti kereses nincs.
+   *
+   * EBBOL KOVETKEZIK A HIVO KOTELEZETTSEGE: aki ezt hivja, tartson
+   * nyilvantartast arrol, mit toltott mar fel. Enelkul minden futas
+   * megdupllazza a fajlokat a boltban, es atirja a termek kep-URL-jeit.
+   *
+   * AZ `access` A VEGPONTON BEEGETVE "public" -- a bolti kepek nyilvanosak, es
+   * ez szandek, nem melleklet. Privat fajlt ezen az uton nem lehet feltolteni.
+   */
+  uploadFile(file: MedusaFileUpload): Promise<MedusaUploadedFile>;
+}
+
+/** Egy feltoltendo fajl: a tartalom, a neve es a tipusa. */
+export interface MedusaFileUpload {
+  /**
+   * A fajl NEVE, ahogy a bolt taroloja latni fogja.
+   *
+   * A Medusa a kulcsot ebbol epiti, de nem ezt hasznalja: egyedive teszi (a
+   * local provider ido-belyeget tesz ele, az S3 egy ulid-ot fuz a nevhez).
+   * Vagyis a nev a felismerhetoseget szolgalja, nem az azonossagot.
+   */
+  filename: string;
+  /** A fajl tartalma. */
+  content: Buffer;
+  /** A tartalom tipusa (peldaul `image/jpeg`). */
+  contentType: string;
+}
+
+/** Amit a bolt visszaad egy sikeres feltoltes utan. */
+export interface MedusaUploadedFile {
+  /**
+   * A fajl KULCSA a bolt taroloján. Ez az azonossag, es ezt kell megorizni.
+   */
+  id: string;
+  /** A nyilvanos URL, ami a termek kep-mezojebe kerul. */
+  url: string;
 }
 
 /** Egy ár-sor, ahogy az admin válasz hozza. */
@@ -704,12 +758,25 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
-  private headers(): Record<string, string> {
+  /**
+   * A HITELESITO FEJLEC ONALLOAN, mert nem minden keres kuld JSON-t.
+   *
+   * A feltoltes multipart torzzsel megy, es ott a `content-type` fejlecet a
+   * `FormData`-ra kell hagyni. Egy `Record<string, string>` indexelese
+   * `string | undefined` erteket ad (a repo `noUncheckedIndexedAccess`
+   * beallitasa miatt), tehat a kiemeles nem kenyelem: enelkul egy esetleg
+   * hianyzo fejlec csendben `undefined` ertekkel menne ki.
+   */
+  private authorization(): string {
     // A kulcs a Basic séma FELHASZNÁLÓNEVE, jelszó nélkül, ezért a záró
     // kettőspont - így írja le a Medusa saját olvasása is.
     const encoded = Buffer.from(`${this.config.apiKey}:`).toString("base64");
+    return `Basic ${encoded}`;
+  }
+
+  private headers(): Record<string, string> {
     return {
-      authorization: `Basic ${encoded}`,
+      authorization: this.authorization(),
       "content-type": "application/json",
     };
   }
@@ -937,5 +1004,76 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
         `/variants/${encodeURIComponent(variantId)}`,
       { method: "POST", body: JSON.stringify({ prices }) },
     );
+  }
+
+  /**
+   * A FELTOLTES NEM A KOZOS `request()` UTON MEGY, ES EZ NEM STILUS.
+   *
+   * A `headers()` MINDEN keresre `content-type: application/json`-t tesz, es a
+   * `request()` ezt fuzi ossze a hivo fejleceivel. Egy multipart torzsnel ez
+   * elrontja a kerest, es MERVE EGYIK KERULOUT SEM MUKODIK:
+   *
+   *   a JSON rajta marad          -> `application/json` megy, a fetch NEM javitja ki
+   *   "multipart/form-data"-ra    -> boundary NELKUL megy, hasznalhatatlan
+   *   `undefined` erteket adunk   -> a kulcs OTT MARAD, a boundary NEM all be
+   *   `new Headers(...)` peldany  -> a spread NEMAN eldobja az egeszet
+   *
+   * A FormData sajat hatarolo-erteke CSAK akkor all be, ha a `headers` objektum
+   * egyaltalan NINCS megadva. Ezert ez a metodus a fejlecet maga allitja ossze,
+   * es KIZAROLAG az `authorization` sort veszi at.
+   *
+   * ES A HIBA, AMIT EZ ELKERUL, NEMA VOLNA: a keres MEGERKEZNE, a bolt
+   * `multer` retege nem talalna benne fajlt, es a hiba ugy nezne ki, mintha a
+   * kepfajllal lenne baj. Ugyanez a hiba mar megharapott minket a mobil
+   * kliensben.
+   */
+  async uploadFile(file: MedusaFileUpload): Promise<MedusaUploadedFile> {
+    const form = new FormData();
+    /**
+     * A mezo neve `files`, TOBBES SZAMBAN, es ez a bolt oldalarol kotott: a
+     * vegpont `upload.array("files")` alakban olvassa a kerest, es ures
+     * listanal `No files were uploaded` hibat dob. Egy egyes szamu mezonev
+     * tehat nem elgepeles lenne, hanem ures feltoltes.
+     */
+    form.append(
+      "files",
+      new Blob([new Uint8Array(file.content)], { type: file.contentType }),
+      file.filename,
+    );
+
+    const response = await this.fetchImpl(
+      `${this.config.baseUrl}/admin/uploads`,
+      {
+        method: "POST",
+        headers: { authorization: this.authorization() },
+        body: form,
+      },
+    );
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new MedusaAdminHttpError(response.status, body.slice(0, 500));
+    }
+
+    const payload = (await response.json()) as {
+      files?: { id?: string; url?: string }[];
+    };
+    /**
+     * A VALASZ ALAKJAT ELLENORIZZUK, MERT EGY HIANYZO MEZO ITT NEMA VOLNA.
+     *
+     * A vegpont `{ files: [...] }` alakban valaszol, es egy `undefined` URL
+     * kesobb, a termek kep-mezojeben jelenne meg -- ott mar semmi nem mondana
+     * meg, hogy a feltoltes volt hianyos. Egy fajlt kuldtunk, egy sort varunk.
+     */
+    const uploaded = payload.files?.[0];
+    if (!uploaded?.id || !uploaded.url)
+      throw new MedusaAdminHttpError(
+        response.status,
+        `A bolt elfogadta a feltöltést, de a válasz nem hozott azonosítót és ` +
+          `URL-t (${file.filename}). Ilyenkor a fájl ODAÁT LEHET, csak nem ` +
+          `tudjuk, hol: a hívó ne jegyezzen fel semmit.`,
+      );
+
+    return { id: uploaded.id, url: uploaded.url };
   }
 }
