@@ -24,11 +24,11 @@ import type {
 /**
  * A KIMONDOTT HIÁNY A TÉT.
  *
- * A szerelő a helyszínen abból dolgozik, ami a képernyőn van. A munkalapon két
- * hiány maga az információ: a piszkozatnak nincs száma, és a lap lehet
- * kiosztatlan. Ha ezek üres helyként jelennének meg, a helyszínen az a kérdés
- * születne, hogy „miért nem töltődött be" -- és az irodát hívná valaki egy
- * szabály miatt.
+ * A szerelő a helyszínen abból dolgozik, ami a képernyőn van. A munkalapon
+ * HÁROM hiány maga az információ: a piszkozatnak nincs száma, a lap lehet
+ * kiosztatlan, és állhat hibajegy nélkül. Ha ezek üres helyként jelennének meg,
+ * a helyszínen az a kérdés születne, hogy „miért nem töltődött be" -- és az
+ * irodát hívná valaki egy szabály miatt.
  *
  * A PÉNZ- ÉS SZÁMFORMÁTUM elválasztó karaktere futtatókörnyezet szerint
  * eltérhet (törhetetlen szóköz, keskeny törhetetlen szóköz), ezért az
@@ -67,6 +67,7 @@ const worksheet: WorksheetDetailLike = {
   customer: { displayName: "Fánk Kft." },
   department: { code: "BIO", name: "Biodóm" },
   createdByName: "Szabó Péter",
+  serviceJob: { jobNumber: "HJ-2026-007" },
   currentVersion: {
     unitName: "Biodóm",
     issueDate: "2026-08-26T00:00:00.000Z",
@@ -202,6 +203,36 @@ describe("worksheetDetailRows", () => {
 
     assert.deepEqual(rows[0], { label: "Partner", value: "Fánk Kft." });
     assert.deepEqual(rows[1], { label: "Helyszín", value: "Biodóm · BIO" });
+  });
+
+  /**
+   * A HIBAJEGY SORA MINDIG OTT ÁLL, mert a hiánya is állítás: hibajegy nélkül
+   * a lapot nem lehet lezárni. A telefon eddig ezt NEM mutatta -- nem azért,
+   * mert a szerver nem küldte, hanem mert a mobil típusából hiányzott a mező.
+   */
+  it("names the ticket the sheet belongs to", () => {
+    const ticket = worksheetDetailRows(worksheet).find(
+      (row) => row.label === "Hibajegy",
+    );
+
+    assert.deepEqual(ticket, { label: "Hibajegy", value: "HJ-2026-007" });
+  });
+
+  it("says out loud when there is no ticket behind the sheet", () => {
+    /*
+      MI PIROSIT: a sor `if` moge tetele. Akkor a hibajegy nelkuli lapon
+      egyszeruen nem lenne sor -- es a szerelo nem tudna meg, miert nem
+      zarhato le a lap. A szoveg a webes lape, hogy ket helyen ne ket
+      kulonbozo mondat alljon ugyanarrol.
+    */
+    const ticket = worksheetDetailRows({ ...worksheet, serviceJob: null }).find(
+      (row) => row.label === "Hibajegy",
+    );
+
+    assert.deepEqual(ticket, {
+      label: "Hibajegy",
+      value: "Nincs mögötte hibajegy",
+    });
   });
 
   /**
