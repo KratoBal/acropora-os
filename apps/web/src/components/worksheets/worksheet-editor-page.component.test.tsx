@@ -362,6 +362,92 @@ describe("WorksheetEditorPage assignees", () => {
   });
 
   /**
+   * AZ URES ALEGYSEG-VALASZTO KET OKBOL ALLHAT ELO, ES A KETTO TEENDOJE MAS.
+   *
+   * Itt a jegy partnere BENNE van a szervizpartner-listaban, tehat tukor-vevo
+   * sora van: tenyleg nincs alatta alegyseg, es a kezelo letrehozhat egyet ITT.
+   */
+  it("üres alegység-listánál tükör-soros partnernél a felvitelre mutat", async () => {
+    query.params = new URLSearchParams("hibajegy=job-1");
+    worksheets.selectablePartners.mockResolvedValue({
+      items: [
+        { customerId: "customer-42", name: "Fankó Kft.", partnerCode: "FANK" },
+      ],
+    });
+    worksheets.departments.mockResolvedValue({ items: [] });
+    render(<WorksheetEditorPage />);
+
+    expect(
+      await screen.findByText(/Ehhez a partnerhez még nincs alegység/),
+    ).toBeTruthy();
+  });
+
+  /**
+   * ES A MASIK OK: a jegy partnere NINCS a szervizpartner-listaban, tehat regi
+   * jegy nem-tukor vevo-soron. Ott alegyseg SOHA nem lesz -- a kezelot ITT
+   * tartani hiabavalo, a jegy partneret kell rendbe tenni.
+   *
+   * A KET ALLITAS EGYUTT MERI A SZETVALASZTAST: ha egy kozos mondat allna
+   * mindkettore, az egyik ITT tartana valakit, akinek mashol van dolga.
+   */
+  it("üres alegység-listánál nem-tükör partnernél a jegyre mutat", async () => {
+    query.params = new URLSearchParams("hibajegy=job-1");
+    jobs.detail.mockResolvedValue({
+      id: "job-1",
+      customerId: "regi-vevo",
+      customerName: "Régi Vevő",
+    });
+    worksheets.selectablePartners.mockResolvedValue({
+      items: [
+        { customerId: "customer-42", name: "Fankó Kft.", partnerCode: "FANK" },
+      ],
+    });
+    worksheets.departments.mockResolvedValue({ items: [] });
+    render(<WorksheetEditorPage />);
+
+    expect(
+      await screen.findByText(/a partnere nem szerviz partnerként van felvéve/),
+    ).toBeTruthy();
+  });
+
+  /**
+   * TESTVER-KONTROLL: HA VAN ALEGYSEG, A RENDES LEIRAS ALL.
+   *
+   * Enelkul a ket allitas akkor is zold lenne, ha a lap MINDIG az ures-eset
+   * mondatat mutatna.
+   */
+  it("alegységgel a rendes leírás áll", async () => {
+    worksheets.selectablePartners.mockResolvedValue({
+      items: [
+        { customerId: "customer-42", name: "Fankó Kft.", partnerCode: "FANK" },
+      ],
+    });
+    worksheets.departments.mockResolvedValue({
+      items: [
+        {
+          id: "department-1",
+          name: "Biotóp",
+          code: "BIO",
+          parentId: null,
+          isActive: true,
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    render(<WorksheetEditorPage />);
+
+    await user.selectOptions(
+      await screen.findByLabelText("Partner"),
+      "customer-42",
+    );
+
+    expect(
+      await screen.findByText("A munkalapszám első tagja is ebből lesz."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/még nincs alegység/)).toBeNull();
+  });
+
+  /**
    * A KIOSZTÁS ELHAGYHATÓ. Egy lapot fel kell tudni vinni akkor is, ha még nem
    * dőlt el, ki megy ki -- a felelős a lap adatlapján később is megadható.
    */
