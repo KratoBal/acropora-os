@@ -43,8 +43,11 @@ export class ServiceJobsController {
 
   @Get()
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  list(@Query() query: ServiceJobListQueryDto) {
-    return this.service.list(query);
+  list(
+    @Query() query: ServiceJobListQueryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.list(query, user);
   }
 
   /**
@@ -56,8 +59,8 @@ export class ServiceJobsController {
    */
   @Get(":id")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
-  detail(@Param("id") id: string) {
-    return this.service.detail(id);
+  detail(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.detail(id, user);
   }
 
   @Post()

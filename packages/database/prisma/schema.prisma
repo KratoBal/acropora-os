@@ -513,6 +513,8 @@ model User {
   updatedAt         DateTime       @updatedAt
 
   sessions                   Session[]
+  /// A LATHATOSAGI HOZZARENDELESEI: melyik alegysegeket latja (a reszfaval egyutt).
+  unitAssignments            UserWorksheetDepartment[]
   auditLogs                  AuditLog[]
   domainEvents               DomainEvent[]
   stockMovements             StockMovement[]
@@ -2678,6 +2680,8 @@ model WorksheetDepartment {
   children   WorksheetDepartment[] @relation("WorksheetDepartmentTree")
   worksheets Worksheet[]
   assets     Asset[]
+  /// Kik latjak ezt az alegyseget (es vele a reszfajat).
+  assignees  UserWorksheetDepartment[]
 
   /// TESTVEREK KOZOTT EGYEDI A KOD. Ket kulonbozo ag alatt ugyanaz a kod
   /// (`BIO`) megengedett es termeszetes, egy szulon belul viszont nem.
@@ -2691,6 +2695,44 @@ model WorksheetDepartment {
   @@unique([customerId, parentId, code])
   @@index([customerId, isActive])
   @@index([parentId])
+}
+
+/// KI MELYIK ALEGYSEGET LATJA -- A LATHATOSAGI HOZZARENDELES.
+///
+/// Balazs modellje (2026-08-31): egy emberhez EGY VAGY TOBB csomopontot
+/// rendelunk, es o azt a csomopontot ES MINDENT ALATTA latja, feljebb semmit. A
+/// muszaki vezeto foegyseget kap, a korletvezeto lejjebbit -- de ez NEM ket
+/// szabaly, hanem egy: a ket szerepkor kozott nincs mechanizmusbeli kulonbseg,
+/// csak az, hogy MELYIK SZINTEN kapjak a hozzarendelest.
+///
+/// EZERT KAPCSOLOTABLA ES NEM MEZO A FELHASZNALON: mert egy ember TOBB egyseget
+/// is kaphat (pelda a dontesbol: PALMAHAZ es VARAZSHEGY egyszerre). Egy mezovel
+/// indulni a masodik egysegnel adatbazis-koltoztetes lenne.
+///
+/// A RESZFA NEM ITT LAKIK. Ez a tabla a hozzarendelt CSOMOPONTOKAT tarolja; az
+/// alattuk levok a `collectUnitSubtreeIds` bejarasabol jonnek, lekerdezeskor. Ha
+/// a reszfat ide irnank ki, egy uj alcsomopont felvetele CSENDBEN kihagyna azt
+/// mindenkinek, akinek a hozzarendelese korabban keszult.
+///
+/// `Cascade` mindket iranyban, es ez KULONBOZIK a naplotol: egy hozzarendeles
+/// nem tortenelem, hanem AKTUALIS allapot. Ha a felhasznalo vagy az alegyseg
+/// megszunik, a hozzarendelesnek nincs mit jelentenie.
+model UserWorksheetDepartment {
+  id           String   @id @default(cuid())
+  userId       String
+  departmentId String
+  createdAt    DateTime @default(now())
+
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department WorksheetDepartment @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  /// UGYANAZT AZ EGYSEGET KETSZER hozzarendelni ertelmetlen, es a duplikatum a
+  /// reszfa-bejarasban NEM okozna hibat -- csak ketszer jarna be ugyanazt.
+  /// Vagyis a hiba NEMA lenne, ezert all adatbazis-szinten.
+  @@unique([userId, departmentId])
+  /// A LEKERDEZES IRANYA: egy felhasznalo osszes hozzarendelese, minden
+  /// jegy-listazasnal. Ez az index a forgalmas ut.
+  @@index([userId])
 }
 
 /// A munkalap-sorszám számlálója partner + részleg + év hármasonként.

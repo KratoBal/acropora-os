@@ -4,6 +4,13 @@ import { describe, it } from "node:test";
 import type { ServiceJobsRepository } from "./service-jobs.repository.js";
 import { ServiceJobsService } from "./service-jobs.service.js";
 
+/**
+ * BELSOS HIVO: a reszletlap tartalmarol szolo allitasok NEM a hatokorrol
+ * szolnak, tehat itt a szures ures objektum. A hatokort a
+ * `service-job-visibility.spec.ts` meri, kulon.
+ */
+const BELSOS = { id: "user-1", customerId: null, supplierId: null } as never;
+
 type DetailRow = Awaited<ReturnType<ServiceJobsRepository["detail"]>>;
 
 /**
@@ -62,7 +69,7 @@ function row(overrides: Partial<NonNullable<DetailRow>> = {}) {
 
 describe("a hibajegy részletlapja", () => {
   it("dátumot ISO szöveggé fordít, mert a válasz JSON, nem Date", async () => {
-    const detail = await serviceWith(row()).detail("job-1");
+    const detail = await serviceWith(row()).detail("job-1", BELSOS);
 
     assert.equal(detail.createdAt, "2026-09-01T08:00:00.000Z");
     assert.equal(detail.completedAt, "2026-09-04T08:00:00.000Z");
@@ -81,7 +88,7 @@ describe("a hibajegy részletlapja", () => {
    * az állítás pirosodna. A kliens rajzol, nem dönt.
    */
   it("egy időrendbe fésülve adja vissza a három forrást, legújabb felül", async () => {
-    const detail = await serviceWith(row()).detail("job-1");
+    const detail = await serviceWith(row()).detail("job-1", BELSOS);
 
     assert.deepEqual(
       detail.timeline.map((entry) => entry.kind),
@@ -95,7 +102,7 @@ describe("a hibajegy részletlapja", () => {
    * visszafejteni őket, és a szabály két helyen állna.
    */
   it("mindhárom időbélyeget kiadja, a tervezettet is", async () => {
-    const detail = await serviceWith(row()).detail("job-1");
+    const detail = await serviceWith(row()).detail("job-1", BELSOS);
 
     assert.equal(detail.scheduledAt, null);
     assert.equal(detail.startedAt, null);
@@ -108,7 +115,7 @@ describe("a hibajegy részletlapja", () => {
    * állna, ami közül csak az egyik a szerver.
    */
   it("megmondja, mit tehet a jegy innen", async () => {
-    const detail = await serviceWith(row()).detail("job-1");
+    const detail = await serviceWith(row()).detail("job-1", BELSOS);
     assert.ok(detail.allowedSteps.length > 0);
     assert.ok(!detail.allowedSteps.includes("NEW"));
   });
@@ -116,6 +123,7 @@ describe("a hibajegy részletlapja", () => {
   it("lezárt jegyen üres a lépések listája", async () => {
     const detail = await serviceWith(row({ status: "CANCELLED" })).detail(
       "job-1",
+      BELSOS,
     );
     assert.deepEqual(detail.allowedSteps, []);
   });
@@ -127,7 +135,10 @@ describe("a hibajegy részletlapja", () => {
    */
   it("aktor nélküli naplósort is kiad, nem hagyja ki", async () => {
     const eventek = row().events.map((event) => ({ ...event, actor: null }));
-    const detail = await serviceWith(row({ events: eventek })).detail("job-1");
+    const detail = await serviceWith(row({ events: eventek })).detail(
+      "job-1",
+      BELSOS,
+    );
 
     const naplosorok = detail.timeline.filter(
       (entry) => entry.kind === "status",
@@ -141,7 +152,7 @@ describe("a hibajegy részletlapja", () => {
 
   it("nem létező jegyre nem találhatót mond, nem üres részletlapot", async () => {
     await assert.rejects(
-      () => serviceWith(null).detail("hianyzik"),
+      () => serviceWith(null).detail("hianyzik", BELSOS),
       /nem található/,
     );
   });

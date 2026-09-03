@@ -4,6 +4,11 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import type { Prisma } from "@acropora/database";
+import type { AuthenticatedUser } from "@acropora/types";
+
+import { partnerScopeOf } from "../auth/partner-scope.util.js";
+import { serviceJobVisibilityWhere } from "./service-job-visibility.js";
 
 import {
   serviceJobTimeline,
@@ -66,8 +71,33 @@ export class ServiceJobsService {
    * elmozdulhatna (egy átnevezett mező mindkét oldalon lefordul), és a
    * képernyőn `undefined` jelenne meg, hibaüzenet nélkül.
    */
-  async list(query: ServiceJobListQueryDto): Promise<ServiceJobListResponse> {
-    const rows = await this.repository.list(query.scope ?? "open");
+  /**
+   * A LATHATOSAG A LEKERDEZESBEN DOL EL, NEM A VALASZ SZUKITESEVEL.
+   *
+   * Ket lepes, es a sorrend szamit: eloszor a hozzarendelt egysegek (reszfaval),
+   * aztan a szuro. Belsos hivonal a masodik lepes ures objektumot ad, tehat az
+   * elso lekerdezest sem inditjuk el feleslegesen.
+   */
+  private async visibilityFor(
+    user: AuthenticatedUser,
+  ): Promise<Prisma.ServiceJobWhereInput> {
+    const scope = partnerScopeOf(user);
+    if (scope.kind === "internal") return {};
+    return serviceJobVisibilityWhere({
+      scope,
+      userId: user.id,
+      unitIds: await this.repository.assignedUnitIds(user.id),
+    });
+  }
+
+  async list(
+    query: ServiceJobListQueryDto,
+    user: AuthenticatedUser,
+  ): Promise<ServiceJobListResponse> {
+    const rows = await this.repository.list(
+      query.scope ?? "open",
+      await this.visibilityFor(user),
+    );
     return {
       items: rows.map((row) => ({
         id: row.id,
@@ -95,8 +125,17 @@ export class ServiceJobsService {
    * `completedAt` is, de azokat ma semmi nem írja, és ha ez a metódus írná
    * őket, két írónk lenne egy tényre. Az elcsúszásuk néma hiba volna.
    */
-  async detail(id: string): Promise<ServiceJobDetail> {
-    const row = await this.repository.detail(id);
+  async detail(id: string, user: AuthenticatedUser): Promise<ServiceJobDetail> {
+    /**
+     * A NEM LATHATO JEGY UGYANAZT A VALASZT ADJA, MINT A NEM LETEZO.
+     *
+     * Szandekos: egy kulon "nincs jogod" uzenet elarulna, hogy a jegy LETEZIK --
+     * a szamabol pedig egy partner vegigprobalhatna, mennyi jegyunk van.
+     */
+    const row = await this.repository.detail(
+      id,
+      await this.visibilityFor(user),
+    );
     if (row === null) throw new NotFoundException("A hibajegy nem található.");
 
     return {

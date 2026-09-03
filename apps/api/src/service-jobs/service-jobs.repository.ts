@@ -1,4 +1,6 @@
 import { Injectable } from "@nestjs/common";
+
+import { expandAssignedUnits } from "./assigned-units.js";
 import { prisma, type Prisma, type ServiceJobStatus } from "@acropora/database";
 
 /**
@@ -54,9 +56,59 @@ export class ServiceJobsRepository {
     });
   }
 
-  async list(scope: "open" | "all"): Promise<ServiceJobRow[]> {
-    const where: Prisma.ServiceJobWhereInput =
-      scope === "open" ? { status: { notIn: FINISHED } } : {};
+  /**
+   * EGY FELHASZNALO LATHATOSAGI EGYSEGEI, A RESZFAVAL EGYUTT.
+   *
+   * KET LEPES, es a masodik tiszta fuggveny: a Prisma rekurziv lekerdezest nem
+   * tud kifejezni, a fa melysege viszont nem korlatos. Ugyanaz az alak, mint a
+   * `service-assets` oldalan -- ket kulonbozo bejaras ugyanarra a fara ket
+   * kulonbozo valaszt tudna adni.
+   *
+   * URES HALMAZ IS ERVENYES VALASZ, es nem hiba: aki meg nem kapott
+   * hozzarendelest -- vagy akinek a partnere alatt nincs alegyseg, mert nincs
+   * tukor-vevo sora -- csak a SAJAT nyitott jegyeit latja. A szuro erre az agra
+   * kulon fel van keszitve.
+   */
+  async assignedUnitIds(userId: string): Promise<string[]> {
+    const assignments = await this.database.userWorksheetDepartment.findMany({
+      where: { userId },
+      select: { departmentId: true },
+    });
+    if (assignments.length === 0) return [];
+
+    const assignedIds = assignments.map((row) => row.departmentId);
+    const found = await this.database.worksheetDepartment.findMany({
+      where: { id: { in: assignedIds } },
+      select: { customerId: true },
+    });
+    const customerIds = [...new Set(found.map((row) => row.customerId))];
+    const units = customerIds.length
+      ? await this.database.worksheetDepartment.findMany({
+          where: { customerId: { in: customerIds } },
+          select: { id: true, name: true, parentId: true },
+        })
+      : [];
+
+    return expandAssignedUnits({ assignedIds, units });
+  }
+
+  async list(
+    scope: "open" | "all",
+    visibility: Prisma.ServiceJobWhereInput,
+  ): Promise<ServiceJobRow[]> {
+    /**
+     * A LATHATOSAGI SZURO `AND` AGBAN ALL, nem kulcskent. Ugyanaz az indok, mint
+     * a partner-hatokornel: a felso szintu objektum implicit ES, es egy kesobbi
+     * azonos kulcsu spread FELULIRNA a jogosultsagit. A `visibility` sajat
+     * `OR`-t is hordozhat -- egy szinten a statusz-szurovel az `OR` mindent
+     * atengedne, ami az egyik agara illik.
+     */
+    const where: Prisma.ServiceJobWhereInput = {
+      AND: [
+        visibility,
+        scope === "open" ? { status: { notIn: FINISHED } } : {},
+      ],
+    };
 
     const rows = await this.database.serviceJob.findMany({
       where,
@@ -143,9 +195,17 @@ export class ServiceJobsRepository {
    * a hívó ebből tud 404-et mondani. Egy üres részletlap ugyanúgy nézne ki,
    * mint egy létező, még üres jegy.
    */
-  async detail(id: string) {
-    return this.database.serviceJob.findUnique({
-      where: { id },
+  /**
+   * A RESZLETLAP IS SZUR, es ez nem masolas: egy azonositot ki lehet talalni vagy
+   * megkapni egy linkbol. Ha csak a lista szurne, a jegy tartalma egy kozvetlen
+   * lekeressel elerheto maradna -- es az a fajta szivargas NEMA.
+   *
+   * `findFirst` es nem `findUnique`: az utobbi csak egyedi kulcsra szur, tehat a
+   * hatokort nem lehetne melle tenni.
+   */
+  async detail(id: string, visibility: Prisma.ServiceJobWhereInput) {
+    return this.database.serviceJob.findFirst({
+      where: { AND: [{ id }, visibility] },
       select: {
         id: true,
         jobNumber: true,
