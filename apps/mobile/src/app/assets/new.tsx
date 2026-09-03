@@ -2,7 +2,7 @@ import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -32,7 +32,7 @@ import {
   planPhotosAfterRecord,
   queuePhotosForRecording,
 } from "@/lib/assets/photo-after-record";
-import { listPartnerUnits } from "@/lib/api/partners";
+import { listPartnerUnits, type PartnerUnit } from "@/lib/api/partners";
 import {
   selectableUnitOptions,
   unitLevels,
@@ -59,6 +59,13 @@ import {
   readCachedAssetByToken,
   readCachedAssets,
 } from "@/lib/offline/asset-cache";
+import {
+  readCachedAssetOwners,
+  readCachedPartnerUnits,
+  rememberAssetOwners,
+  rememberPartnerUnits,
+} from "@/lib/offline/asset-form-cache";
+import { describeCachedDepartmentsNotice } from "@/lib/offline/offline-notice";
 import { enqueueAssetCreate, enqueuePhoto } from "@/lib/offline/queue-store";
 import { filterOwners } from "@/lib/assets/owner-search";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -157,15 +164,103 @@ export default function NewAssetScreen() {
       owner?.type === "SUPPLIER",
   });
 
+  /**
+   * A KET LISTA MENTESE, AMIKOR MEGJON.
+   *
+   * Balazs 2026-09-03-an elesben merte, hogy terero nelkul nem tud eszkozt
+   * felvinni: a ROGZITES megy offline, de az URLAP ket listaja halozatrol jott,
+   * es e nelkul nincs mit valasztani.
+   */
+  useEffect(() => {
+    const items = ownersQuery.data?.items;
+    if (items) void rememberAssetOwners(items);
+  }, [ownersQuery.data]);
+
+  useEffect(() => {
+    const items = unitsQuery.data?.items;
+    if (owner?.id && items) void rememberPartnerUnits(owner.id, items);
+  }, [owner?.id, unitsQuery.data]);
+
+  /**
+   * A MASOLAT CSAK AKKOR KERUL ELO, HA A HIVAS TENYLEG ELHASALT -- nem akkor,
+   * ha a keszulek offline-nak MONDJA magat. Ugyanaz a szabaly, mint a
+   * `connectivity.ts` fejleceben.
+   */
+  const [cachedOwners, setCachedOwners] = useState<{
+    items: AssetOwnerOption[];
+    syncedAt: string | null;
+  }>({ items: [], syncedAt: null });
+  const [cachedUnits, setCachedUnits] = useState<{
+    items: PartnerUnit[];
+    syncedAt: string | null;
+  }>({ items: [], syncedAt: null });
+
+  useEffect(() => {
+    if (!ownersQuery.isError) return;
+    let ervenyes = true;
+    void (async () => {
+      const masolat = await readCachedAssetOwners();
+      if (ervenyes) setCachedOwners(masolat);
+    })();
+    return () => {
+      ervenyes = false;
+    };
+  }, [ownersQuery.isError]);
+
+  useEffect(() => {
+    const partnerId = owner?.id;
+    if (!partnerId || !unitsQuery.isError) return;
+    let ervenyes = true;
+    void (async () => {
+      const masolat = await readCachedPartnerUnits(partnerId);
+      if (ervenyes) setCachedUnits(masolat);
+    })();
+    return () => {
+      ervenyes = false;
+    };
+  }, [owner?.id, unitsQuery.isError]);
+
+  const ownersFromCache = ownersQuery.isError;
+  const unitsFromCache = unitsQuery.isError;
+
   const units = useMemo(
-    () => selectableUnitOptions(unitsQuery.data?.items ?? []),
-    [unitsQuery.data],
+    () =>
+      selectableUnitOptions(
+        unitsFromCache ? cachedUnits.items : (unitsQuery.data?.items ?? []),
+      ),
+    [unitsFromCache, cachedUnits.items, unitsQuery.data],
   );
 
   const filteredOwners = useMemo(
-    () => filterOwners(ownersQuery.data?.items ?? [], ownerSearch),
-    [ownerSearch, ownersQuery.data],
+    () =>
+      filterOwners(
+        ownersFromCache ? cachedOwners.items : (ownersQuery.data?.items ?? []),
+        ownerSearch,
+      ),
+    [ownersFromCache, cachedOwners.items, ownerSearch, ownersQuery.data],
   );
+
+  /**
+   * A SAV AKKOR SZOL, HA A LISTA MASOLATBOL VAN. A valasztas ITT IRASSA valik:
+   * egy idokozben megszunt partner vagy alegyseg a masolatban meg ott all, es a
+   * felvitel a szerveren bukna el, jóval kesobb.
+   */
+  const ownersNotice = ownersFromCache
+    ? describeCachedDepartmentsNotice({
+        online: false,
+        count: cachedOwners.items.length,
+        syncedAt: cachedOwners.syncedAt,
+        now: new Date(),
+      })
+    : null;
+  const unitsNotice = unitsFromCache
+    ? describeCachedDepartmentsNotice({
+        online: false,
+        count: cachedUnits.items.length,
+        syncedAt: cachedUnits.syncedAt,
+        now: new Date(),
+      })
+    : null;
 
   /**
    * MENTES: A SZERVERNEK, ES CSAK HALOZATI HIBANAL A SORBA.
@@ -488,6 +583,21 @@ export default function NewAssetScreen() {
                 {ownersQuery.isPending ? (
                   <ActivityIndicator color="#52d6c7" />
                 ) : null}
+                {/*
+                  A MENTETT LISTA KIMONDVA. A valasztas itt IRASSA valik: egy
+                  idokozben megszunt partner a masolatban meg ott all, es a
+                  felvitel a szerveren bukna el, jóval kesobb.
+                */}
+                {ownersNotice ? (
+                  <View style={styles.cacheNotice}>
+                    <Text style={styles.cacheNoticeTitle}>
+                      {ownersNotice.title}
+                    </Text>
+                    <Text style={styles.cacheNoticeBody}>
+                      {ownersNotice.message}
+                    </Text>
+                  </View>
+                ) : null}
                 {filteredOwners.map((item) => {
                   const selected =
                     owner?.type === item.type && owner.id === item.id;
@@ -537,15 +647,23 @@ export default function NewAssetScreen() {
               {unitsQuery.isPending ? (
                 <ActivityIndicator color="#52d6c7" />
               ) : null}
-              {unitsQuery.isError ? (
-                <Text style={styles.unitError}>
-                  A partner helyszínei nem tölthetők be. Az eszköz helyszín
-                  nélkül is menthető.
-                </Text>
+              {/*
+                A MENTETT HELYSZINEK KIMONDVA. A regi szoveg ("nem tolthetok
+                be") 2026-09-03-ig IGAZ volt, mert nem volt masolat -- most van,
+                tehat a mondat is mast mond: ha van mentett lista, abbol lehet
+                valasztani, es a sav megmondja, milyen regi.
+              */}
+              {unitsNotice ? (
+                <View style={styles.cacheNotice}>
+                  <Text style={styles.cacheNoticeTitle}>
+                    {unitsNotice.title}
+                  </Text>
+                  <Text style={styles.cacheNoticeBody}>
+                    {unitsNotice.message}
+                  </Text>
+                </View>
               ) : null}
-              {!unitsQuery.isPending &&
-              !unitsQuery.isError &&
-              units.options.length === 0 ? (
+              {!unitsQuery.isPending && units.options.length === 0 ? (
                 <Text style={styles.hint}>
                   Ehhez a partnerhez még nincs felvéve helyszín.
                 </Text>
@@ -1127,6 +1245,15 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   disabled: { opacity: 0.55 },
+  cacheNotice: {
+    backgroundColor: "#0b2f3f",
+    borderRadius: 10,
+    gap: 4,
+    marginTop: 8,
+    padding: 12,
+  },
+  cacheNoticeTitle: { color: "#f4fbff", fontSize: 13, fontWeight: "900" },
+  cacheNoticeBody: { color: "#a9c4d1", fontSize: 12, lineHeight: 17 },
   photoRow: {
     flexDirection: "row",
     alignItems: "center",
