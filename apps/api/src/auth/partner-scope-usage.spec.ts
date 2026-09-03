@@ -117,6 +117,22 @@ describe("minden hatókört átvevő metódus használja is", () => {
     // ISMERT POZITIV KONTROLL. Egy elrontott minta ures listat adna, es akkor a
     // lenti allitas -- ami egy URES halmazon fut vegig -- ZOLDEN allna, holott
     // semmit nem mert. A szam nem beegetett felso korlat: also.
+    //
+    // HA EZ A SZAM CSOKKEN, ELOSZOR NE A SZAMOT VIDD LEJJEBB. Ket kulonbozo
+    // dolog adja ugyanezt a pirosat:
+    //   a) egy metodus JOGOSAN tunt el (osszevonas, refaktor) -> a szam mehet
+    //      lejjebb, de a diffben latszodjon, MELYIK metodus veszett el
+    //   b) a MINTA romlott el (uj irasmod, mas behuzas, uj lathatosag-jelolo)
+    //      -> ilyenkor a szam csokkentese ELFEDNE a hibat, es az orzo attol
+    //      kezdve kevesebbet nez
+    // A ketto szetvalasztasa egy lepes: nezd meg, MELYIK nev esett ki a
+    // leltarbol. Ha nem tudod megnevezni, akkor a (b) all fenn.
+    //
+    // ES AMIERT EZ MOST KELL, NEM AKKOR, AMIKOR A SZAM MEGIRODOTT: a korlat a
+    // #408-ig `>= 10` volt, ami harom jogos eltavolitast eltűrt volna. A `>= 14`
+    // egyet sem tur el, tehat a szorosabb korlattal EGYUTT jar a kotelezettseg,
+    // hogy az uzenet megmondja, mi a teendo. Szoros korlat nema utmutatassal a
+    // legrosszabb parositas: hangosan bukik, es rossz iranyba kuld.
     assert.ok(
       metodusok.length >= 14,
       `csak ${metodusok.length} hatóköröt átvevő metódust találtam`,
