@@ -561,16 +561,41 @@ export class UnasApplyRepository extends Repository {
     productIdsBySku: Map<string, string>,
     counts: MutableCounts,
   ) {
+    /**
+     * CSAK AZ A KET OSZLOP, AMI TENYLEG HIVATKOZAS-LISTAT TARTALMAZ.
+     *
+     * A lista korabban OT TOVABBI oszlopot is olvasott cikkszamkent
+     * (`crosssale1..3`, `upsale1..2`). Merve a valodi munkafuzet-exportbol
+     * (barracuda, 2026-09-03, `exchange/unas-teljes-export-2026-09-02/
+     * termekek.xml`, 1893 adatsor): azok az oszlopok NUMBER tipusuak, 0 vagy 1
+     * ertekkel -- kapcsolok, nem termekhivatkozasok. Egyetlen szoveges ertek
+     * sincs bennuk a fejlecen kivul.
+     *
+     * A 87-es (`Kiegeszito Termekek`) es a 91-es (`Hasonlo Termekek`) oszlop
+     * viszont csovel elvalasztott cikkszam-listakat tartalmaz -- ez a ketto
+     * marad.
+     *
+     * MI TORTENT VOLNA NELKULE: a `rawText` a szam 0-t is `"0"` szoveggé
+     * alakitja (nem ures string, tehat nem esik ki), a `splitReferences` pedig
+     * egyelemu listat csinal belole. Vagyis MINDEN sorbol MINDEN ot oszlopbol
+     * keletkezett volna egy hivatkozas: 5 * 1893 = 9465 darab, ami sosem oldodik
+     * fel.
+     *
+     * A KAR NEM ROSSZ KAPCSOLAT LETT VOLNA: a katalogusban nincs "0" es nincs
+     * "1" nevu cikkszam (merve), tehat ezek soha nem kotottek volna ossze rossz
+     * termekeket. A kar a SZAMOKON van: a `unresolvedRelationReferences` 589
+     * helyett tizezer korul allt volna, es a valodi vesztes elveszett volna a
+     * zajban.
+     *
+     * ES AMI EBBOL NEM KOVETKEZIK: hogy a UNAS-ban nincs cross-sale vagy
+     * up-sale. Csak az, hogy EBBEN az exportban nem termekhivatkozaskent all.
+     * Ha valaha kell, az egy masik mezo lesz, es akkor NEVVEL kerul ide vissza.
+     */
     const relationFields: Array<
       [string, "ACCESSORY" | "CROSS_SELL" | "SIMILAR" | "UP_SELL"]
     > = [
       ["kiegeszitotermekek", "ACCESSORY"],
-      ["crosssale1", "CROSS_SELL"],
-      ["crosssale2", "CROSS_SELL"],
-      ["crosssale3", "CROSS_SELL"],
       ["hasonlotermekek", "SIMILAR"],
-      ["upsale1", "UP_SELL"],
-      ["upsale2", "UP_SELL"],
     ];
     for (const { productId, row } of products) {
       await transaction.productRelation.deleteMany({

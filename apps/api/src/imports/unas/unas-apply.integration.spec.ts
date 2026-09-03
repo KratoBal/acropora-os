@@ -40,6 +40,13 @@ async function catalogFixture(options: {
    * elore, meg a teszt megirasa elott.
    */
   collidingPair?: boolean;
+  /**
+   * A KAPCSOLO-OSZLOPOK, AHOGY A VALODI MUNKAFUZETBEN ALLNAK: 0 vagy 1.
+   *
+   * A nevuk pontosan az, amit a REGI mezolista cikkszamkent olvasott, tehat ez
+   * a fixture azt meri, hogy MOST mar nem olvassuk oket.
+   */
+  switchColumns?: boolean;
 }) {
   const workbook = new ExcelJS.Workbook();
   const products = workbook.addWorksheet("Products");
@@ -51,6 +58,9 @@ async function catalogFixture(options: {
     "Brand",
     "Images",
     "Kiegészítő termékek",
+    ...(options.switchColumns
+      ? ["CrossSale1", "CrossSale2", "CrossSale3", "UpSale1", "UpSale2"]
+      : []),
   ]);
   products.addRow([
     "APPLY-SKU-1",
@@ -62,6 +72,7 @@ async function catalogFixture(options: {
       ? `${options.firstImage}|${options.firstImage}`
       : options.firstImage,
     "APPLY-SKU-2",
+    ...(options.switchColumns ? [1, 0, 1, 0, 1] : []),
   ]);
   products.addRow([
     "APPLY-SKU-2",
@@ -71,6 +82,7 @@ async function catalogFixture(options: {
     "",
     "https://example.test/target.jpg",
     options.secondReference ?? "",
+    ...(options.switchColumns ? [0, 1, 0, 1, 0] : []),
   ]);
   if (options.collidingPair) {
     products.addRow([
@@ -296,6 +308,43 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
    * (az megvaltoztatasa adatmodell-kerdes). Amit mer: hogy a vesztes SZAMOLVA
    * van, tehat a futas utan meg lehet nezni, tortent-e valami.
    */
+  /**
+   * A KAPCSOLO-OSZLOPOK NEM HIVATKOZASOK, ES NEM IS SZAMOLODNAK.
+   *
+   * A valodi munkafuzetben a `CrossSale1..3` es az `UpSale1..2` oszlop NUMBER
+   * tipusu, 0 vagy 1 ertekkel (merve: barracuda, 2026-09-03, a
+   * `unas-teljes-export-2026-09-02/termekek.xml` 1893 adatsoran; egyetlen
+   * szoveges ertek sincs bennuk a fejlecen kivul).
+   *
+   * A `rawText` a szam 0-t is `"0"`-va alakitja -- nem ures string, tehat NEM
+   * esik ki --, es a `splitReferences` egyelemu listat csinal belole. Ha
+   * ezeket az oszlopokat olvasnank, MINDEN sorbol OT hamis hivatkozas
+   * keletkezne: 5 * 1893 = 9465 darab, ami sosem oldodik fel.
+   *
+   * A KAR NEM ROSSZ KAPCSOLAT: a katalogusban nincs "0" es nincs "1" nevu
+   * cikkszam, tehat ezek sosem kotottek volna ossze rossz termekeket. A kar a
+   * SZAMOKON van -- a valodi vesztes elveszett volna a zajban.
+   */
+  it("ignores the switch columns instead of reading them as SKUs", async () => {
+    const batch = await stageApprove(
+      await catalogFixture({
+        categoryName: "Switch category",
+        firstName: "Switch test product",
+        firstImage: "https://example.test/switch.jpg",
+        switchColumns: true,
+      }),
+      "apply-switch.xlsx",
+    );
+
+    const report = await applyService.apply(batch, "integration-owner");
+
+    // A "0" es az "1" NEM lett hivatkozas.
+    assert.equal(report.unresolvedRelationReferences, 0);
+    // Es a valodi hivatkozas-oszlop tovabbra is mukodik: a masodik termek
+    // hivatkozasa az elsore letrejott.
+    assert.equal(report.relationsSynchronized, 1);
+  });
+
   it("resolves a differently cased reference, and says it fell back", async () => {
     const batch = await stageApprove(
       await catalogFixture({
