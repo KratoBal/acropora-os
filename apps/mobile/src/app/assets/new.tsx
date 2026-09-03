@@ -1,4 +1,5 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
+import * as ImagePicker from "expo-image-picker";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
 import { type ReactNode, useMemo, useState } from "react";
@@ -19,9 +20,18 @@ import {
   createAsset,
   type CreateAssetInput,
   listAssetOwners,
+  uploadAssetDocuments,
   type AssetKind,
   type AssetOwnerOption,
 } from "@/lib/api/assets";
+import { MAX_FILES_PER_UPLOAD } from "@/lib/api/asset-document-upload";
+import { photoPermissionDeniedNotice } from "@/lib/api/photo-permission-notice";
+import { toPickedImages, type PickedFile } from "@/lib/api/picked-image";
+import {
+  describePhotoQueueing,
+  planPhotosAfterRecord,
+  queuePhotosForRecording,
+} from "@/lib/assets/photo-after-record";
 import { listPartnerUnits } from "@/lib/api/partners";
 import {
   selectableUnitOptions,
@@ -40,13 +50,16 @@ import {
 } from "@/lib/assets/asset-create";
 import { normalizeAssetLabelCode } from "@/lib/assets/asset-label-mirror";
 import { decideOfflineRecord } from "@/lib/assets/offline-record";
-import { saveAssetOrQueue } from "@/lib/assets/save-or-queue";
+import { saveAssetOrQueue, type SaveOutcome } from "@/lib/assets/save-or-queue";
 import { ApiError } from "@/lib/api/client";
 import {
   readCachedAssetByToken,
   readCachedAssets,
 } from "@/lib/offline/asset-cache";
-import { enqueueAssetCreate } from "@/lib/offline/queue-store";
+import {
+  enqueueAssetCreate,
+  enqueueAssetPhoto,
+} from "@/lib/offline/queue-store";
 import { filterOwners } from "@/lib/assets/owner-search";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
@@ -116,6 +129,18 @@ export default function NewAssetScreen() {
    */
   const [queued, setQueued] = useState<string | null>(null);
 
+  /**
+   * A HELYSZINEN KESZULT KEPEK, MEG A MENTES ELOTT.
+   *
+   * MIERT A MENTES ELOTT VALASZTUNK, ES MIERT NEM UTANA: a pinceben a mentes
+   * NEM visz sehova -- a felvitel a sorba kerul, es az eszkoz lapja meg nem
+   * letezik, tehat nincs az a keperno, ahol a szerelo utolag ratenne a kepet.
+   * Ha itt nem lehet fenykepezni, akkor a helyszinen SEHOL nem lehet.
+   */
+  const [photos, setPhotos] = useState<PickedFile[]>([]);
+  /** Amit a kepekrol mondunk: kihagyott formatum, jog, sorba tetel eredmenye. */
+  const [photoNotice, setPhotoNotice] = useState<string | null>(null);
+
   /*
    * A PARTNER HELYSZÍNEI. Csak szerviz partnernél van mit betölteni: vevő
    * tulajdonosnál a cím a pontosítás, és a szerver az alegységet ott el is
@@ -168,9 +193,21 @@ export default function NewAssetScreen() {
         syncedAt: gyorsitotar.syncedAt,
       });
       if (dontes.type === "blocked") {
-        return { type: "rejected" as const, message: dontes.message };
+        /**
+         * A KOD MAR ALL EGY ESZKOZON: a felvitel itt megall. A kepekkel sincs
+         * mit tenni -- nincs mihez kotni oket --, es ugyanazt az alakot adjuk
+         * vissza, mint a tobbi ag: egy masik alak itt csendben elvinne a
+         * kepekrol szolo mondatot.
+         */
+        return {
+          outcome: {
+            type: "rejected" as const,
+            message: dontes.message,
+          } satisfies SaveOutcome,
+          photo: { maradjunk: false, message: null as string | null },
+        };
       }
-      return saveAssetOrQueue({
+      const outcome = await saveAssetOrQueue({
         createAsset: () => createAsset(payload),
         enqueue: () =>
           enqueueAssetCreate({
@@ -181,8 +218,26 @@ export default function NewAssetScreen() {
         statusOf: (cause) => (cause instanceof ApiError ? cause.status : null),
         checkMessage: dontes.message,
       });
+      /**
+       * A KEP SORSA A ROGZITES KIMENETELEBOL KOVETKEZIK, es a dontes a
+       * `lib/assets/photo-after-record.ts`-ben all, mert ott MERHETO. Ide
+       * csak a VEGREHAJTAS kerul.
+       */
+      return { outcome, photo: await kepeketElintez(outcome, beolvasas) };
     },
-    onSuccess: (outcome) => {
+    onSuccess: ({ outcome, photo }) => {
+      /**
+       * A KEPEKROL SZOLO MONDAT AKKOR IS MEGJELENIK, HA A ROGZITES SIKERULT.
+       * Egy kimaradt kep kulon hir: a felvitel attol meg fent van.
+       */
+      setPhotoNotice(photo.message);
+      /**
+       * EGY ELBUKOTT KEP-FELTOLTES ITT TART MINKET. A `saved` ag kulonben
+       * azonnal atlep az eszkoz lapjara, es a fenti mondat egy mar elhagyott
+       * kepernyore kerulne -- a szerelo semmit nem latna abbol, hogy a
+       * fenykepe sehol nincs.
+       */
+      if (outcome.type === "saved" && photo.maradjunk) return;
       if (outcome.type === "saved") {
         router.replace({
           pathname: "/assets/[id]",
@@ -211,6 +266,121 @@ export default function NewAssetScreen() {
 
   if (status !== "authenticated" || !user) return <Redirect href="/login" />;
   if (!capabilities?.assetsManage) return <Redirect href="/assets" />;
+
+  /**
+   * A TERV VEGREHAJTASA. Harom eset, harom kulon valasz -- es a `dropped` a
+   * legfontosabb: ott a kep a kezunkben marad, es ha hallgatnank rola, a
+   * szerelo azt hinne, felment.
+   */
+  const kepeketElintez = async (
+    outcome: SaveOutcome,
+    keszult: string,
+  ): Promise<{ maradjunk: boolean; message: string | null }> => {
+    const terv = planPhotosAfterRecord(outcome, photos);
+    if (terv.type === "none") return { maradjunk: false, message: null };
+    if (terv.type === "dropped")
+      return { maradjunk: false, message: terv.message };
+
+    if (terv.type === "upload") {
+      try {
+        const feltoltve = await uploadAssetDocuments(terv.assetId, {
+          // A SZAMLA ES A GARANCIALEVEL AZ IRODABOL KERUL FEL; a helyszini kep
+          // OTHER, ugyanugy, mint az eszkoz lapjan (`assets/[id].tsx`).
+          type: "OTHER",
+          files: terv.files,
+        });
+        return {
+          maradjunk: false,
+          message: `${feltoltve.length} fénykép feltöltve.`,
+        };
+      } catch (cause) {
+        /**
+         * A ROGZITES MAR FENT VAN, tehat ez nem elveszett felvitel -- de a kep
+         * NEM ment fel, es EZEN A KEPERNYON KELL MARADNUNK.
+         *
+         * Enelkul a mondat egy mar elhagyott kepernyore kerulne: a `saved` ag
+         * azonnal atlep az eszkoz lapjara, es a szerelo semmit nem latna
+         * abbol, hogy a fenykepe sehol nincs. A kivalasztott kepek is
+         * megmaradnak, tehat a gomb ujra megnyomhato.
+         */
+        return {
+          maradjunk: true,
+          message:
+            cause instanceof Error
+              ? `A rögzítés felment, a fénykép viszont nem: ${cause.message}. A képek megmaradtak, próbáld újra.`
+              : "A rögzítés felment, a fénykép viszont nem. A képek megmaradtak, próbáld újra.",
+        };
+      }
+    }
+
+    /**
+     * A CIKLUS IS KIVUL VAN (`photo-after-record.ts`), mert a KIMARADT kep az,
+     * amirol hallgatni a legdragabb -- es ezen a kepernyon semmi nem merne.
+     */
+    return {
+      maradjunk: false,
+      message: describePhotoQueueing(
+        await queuePhotosForRecording({
+          recordingOperationId: terv.recordingOperationId,
+          files: terv.files,
+          createdAt: keszult,
+          enqueue: enqueueAssetPhoto,
+        }),
+      ),
+    };
+  };
+
+  /**
+   * A KEPVALASZTAS EREDMENYE. A FENYKEPEZES AZ ELSODLEGES, a galeria a
+   * masodik: a szerelo a helyszinen MOST keszit kepet, nem regit keres
+   * (Balazs, 2026-09-02). Ugyanaz a sorrend, mint az eszkoz lapjan.
+   */
+  const kepeketFelvesz = (assets: ImagePicker.ImagePickerAsset[]) => {
+    const { files, skipped } = toPickedImages(assets);
+    setPhotos((elozo) => {
+      /**
+       * UGYANAZ A FAJL KETSZER NEM KET KEP. A valaszto ugyanazt az `uri`-t
+       * adja vissza, es ket azonos sor a sorban ket feltoltes lenne.
+       */
+      const utak = new Set(elozo.map((f) => f.uri));
+      return [...elozo, ...files.filter((f) => !utak.has(f.uri))];
+    });
+    setPhotoNotice(
+      skipped.length > 0
+        ? `Kimaradt (csak JPEG és PNG megy): ${skipped.join(", ")}.`
+        : null,
+    );
+  };
+
+  const kepetKeszit = async () => {
+    setPhotoNotice(null);
+    const jog = await ImagePicker.requestCameraPermissionsAsync();
+    if (!jog.granted) {
+      setPhotoNotice(photoPermissionDeniedNotice("camera"));
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["images"],
+    });
+    if (result.canceled) return;
+    kepeketFelvesz(result.assets);
+  };
+
+  const kepetValaszt = async () => {
+    setPhotoNotice(null);
+    const jog = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!jog.granted) {
+      setPhotoNotice(photoPermissionDeniedNotice("library"));
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsMultipleSelection: true,
+      selectionLimit: MAX_FILES_PER_UPLOAD,
+    });
+    if (result.canceled) return;
+    kepeketFelvesz(result.assets);
+  };
 
   const submit = () => {
     setError(null);
@@ -646,6 +816,47 @@ export default function NewAssetScreen() {
           bejelentés született: „ha megnyomom a mentés gombot, nem történik
           semmi".
         */}
+          <Section title="Fénykép">
+            {/*
+              A KEP A MENTES ELOTT KESZUL, ES EZ NEM KENYELMI KERDES. A
+              pinceben a mentes nem visz sehova: a felvitel a sorba kerul, az
+              eszkoz lapja meg nem letezik, tehat nincs az a keperno, ahol a
+              szerelo utolag ratenne a kepet. Ha itt nem lehet fenykepezni, a
+              helyszinen SEHOL nem lehet.
+            */}
+            <Text style={styles.hint}>
+              A fénykép a rögzítés UTÁN megy fel, magától. Térerő nélkül a
+              telefonon vár, ugyanabban a sorban, mint a felvitel.
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={kepetKeszit}
+              style={styles.scanButton}
+            >
+              <Text style={styles.scanButtonText}>Fénykép készítése</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={kepetValaszt}
+              style={styles.scanButton}
+            >
+              <Text style={styles.scanButtonText}>Kép a galériából</Text>
+            </Pressable>
+            {photos.length > 0 ? (
+              <View style={styles.photoRow}>
+                <Text style={styles.dateValue}>
+                  {photos.length} fénykép a felvitelhez
+                </Text>
+                <Pressable onPress={() => setPhotos([])}>
+                  <Text style={styles.clearDate}>Képek törlése</Text>
+                </Pressable>
+              </View>
+            ) : null}
+            {photoNotice ? (
+              <Text style={styles.hint}>{photoNotice}</Text>
+            ) : null}
+          </Section>
+
           {error ? <Text style={styles.error}>{error.message}</Text> : null}
           {/*
             A SORBA KERULT FELVITEL KULON SAVOT KAP, NEM PIROSAT.
@@ -907,4 +1118,9 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   disabled: { opacity: 0.55 },
+  photoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
 });
