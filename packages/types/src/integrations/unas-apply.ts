@@ -54,6 +54,59 @@ export interface UnasApplySummary {
    * a vesztes NYOMOT HAGY.
    */
   unresolvedRelationReferences: number;
+  /**
+   * HANY HIVATKOZAS OLDODOTT FEL KIS-NAGYBETU FUGGETLEN VISSZAESESSEL.
+   *
+   * A UNAS forrasa ugyanarra a termekre hol a katalogusbeli, hol a teljesen
+   * kisbetus cikkszam-alakkal hivatkozik. Merve (barracuda, 2026-09-03): 589
+   * hivatkozas 58 egyedi cikkszamon all rossz irasmoddal, es UGYANEZEKRE a
+   * cikkszamokra 1798 HELYES alaku hivatkozas is all -- vagyis nem egy
+   * lekisbetusito lepesrol van szo, hanem arrol, hogy a forras vegyesen ir.
+   *
+   * EZ A SZAM NEM "IDEIGLENES TAPASZ". Az UNAS az a forras, amibol KIFELE
+   * megyunk; egy betolto, ami ismeri a forrasrendszer irasmod-hanyagsagat es
+   * szamol is rola, helyesen viselkedik. A celoldalon mar a helyes alak all.
+   *
+   * ES AMIERT SZAMOLJUK, NEM CSAK CSINALJUK: ma egy NEMA VESZTES all fenn (589
+   * hivatkozas eldobodik, es senki nem latja). Ha a visszaeses csendben javit,
+   * akkor nema vesztest cserelunk NEMA JAVITASRA -- a vevonek jobb, nekunk nem.
+   * Ha ez a szam egyszer nullara esik, az azt jelenti, hogy a FORRAS javult meg,
+   * es azt tudni akarjuk.
+   */
+  relationReferencesResolvedByCaseFallback: number;
+  /**
+   * HANY HIVATKOZASNAL A VISSZAESES TOBB TERMEKET TALALT, ezert NEM oldottuk fel.
+   *
+   * A visszaeses CSAK akkor lep, ha PONTOSAN EGY talalatot ad. Ket termek
+   * ("ABC" es "abc") eseten nem tippelunk: a hivatkozas feloldatlan marad, es
+   * ITT szamolodik -- kulon a nem-talalattol, mert a ket eset teendoje mas.
+   *
+   * MA EZ A SZAM MINDIG NULLA, ES EZT KI KELL MONDANI (acrobot kikotese,
+   * 2026-09-03). Merve a 2026-09-02 22:01-es exportbol: 1893 termek, 1893
+   * egyedi pontos cikkszam, 1893 egyedi KISBETUSITETT alak -- nulla utkozes. A
+   * mero tud utkozest talalni (egy mesterseges swapcase par azonnal egyet ad),
+   * tehat a nulla nem a kerdes tulajdonsaga.
+   *
+   * VAGYIS A FELTETEL MA NEM SZUR, HANEM TARTALEK egy jovobeli katalogusra. A
+   * kulonbseg akkor szamit, amikor valaki azt kerdezi, mit vedett: ma semmit,
+   * es ez rendben van.
+   */
+  relationReferencesAmbiguous: number;
+  /**
+   * HANY HIVATKOZAST HAGYTUNK KI DUPLIKATUMKENT.
+   *
+   * Egy termek listajan ugyanaz a cel ketszer is szerepelhet -- tipikusan a
+   * helyes es a kisbetus alak PARBAN (merve: 269 par, es pontos irasmoddal
+   * NULLA ismetlodes). Ma ez a par csendben feloldodik egyre, mert a kisbetus
+   * tag fel sem oldodik; a visszaeses utan MINDKETTO feloldodik, es a masodikat
+   * a `seen` halmaz viszi el.
+   *
+   * A SZAMLALO AZERT KELL, MERT A JAVITAS EGY NEMA VESZTEST EGY MASIK NEMA
+   * KIHAGYASRA CSERELNE. A `unresolvedRelationReferences` a javitas utan
+   * nullara esik -- vagyis epp akkor mutatna nullat, amikor a legtobb dolog
+   * tortenik. Ez a szam mondja meg, hogy a 269 nem eltunt, hanem osszevonodott.
+   */
+  relationReferencesSkippedAsDuplicate: number;
   durationMs?: number;
   appliedAt: string;
   appliedBy: string;

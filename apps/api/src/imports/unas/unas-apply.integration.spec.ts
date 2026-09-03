@@ -31,6 +31,15 @@ async function catalogFixture(options: {
    * cikkszamot, ami LETEZIK a katalogusban, csak mas irasmoddal.
    */
   secondReference?: string;
+  /**
+   * KET TOVABBI TERMEK, AMIK CSAK KIS-NAGYBETUBEN TERNEK EL.
+   *
+   * Ez az UTKOZES esete, es kulon fixture-t igenyel: a valodi katalogusban ma
+   * NINCS ilyen par (1893 termek, 1893 egyedi kisbetusitett alak), tehat a
+   * "tobb talalat" ag valodi adaton SOSEM futna le. Barracuda merte fel ezt
+   * elore, meg a teszt megirasa elott.
+   */
+  collidingPair?: boolean;
 }) {
   const workbook = new ExcelJS.Workbook();
   const products = workbook.addWorksheet("Products");
@@ -63,6 +72,26 @@ async function catalogFixture(options: {
     "https://example.test/target.jpg",
     options.secondReference ?? "",
   ]);
+  if (options.collidingPair) {
+    products.addRow([
+      "COLLIDE-1",
+      "Upper case product",
+      "1",
+      "cat-apply",
+      "",
+      "https://example.test/upper.jpg",
+      "",
+    ]);
+    products.addRow([
+      "collide-1",
+      "Lower case product",
+      "1",
+      "cat-apply",
+      "",
+      "https://example.test/lower.jpg",
+      "",
+    ]);
+  }
   const categories = workbook.addWorksheet("Categories");
   categories.addRow(["ID", "Name"]);
   categories.addRow(["cat-apply", options.categoryName]);
@@ -267,7 +296,7 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
    * (az megvaltoztatasa adatmodell-kerdes). Amit mer: hogy a vesztes SZAMOLVA
    * van, tehat a futas utan meg lehet nezni, tortent-e valami.
    */
-  it("counts a reference it could not resolve, instead of dropping it silently", async () => {
+  it("resolves a differently cased reference, and says it fell back", async () => {
     const batch = await stageApprove(
       await catalogFixture({
         categoryName: "Case category",
@@ -281,9 +310,72 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
 
     const report = await applyService.apply(batch, "integration-owner");
 
-    // A hivatkozas NEM oldodott fel (a parositas valtozatlanul erzekeny)...
-    assert.equal(report.unresolvedRelationReferences, 1);
-    // ...es epp ezert nem is keletkezett belole kapcsolat.
-    assert.equal(report.relationsSynchronized, 1);
+    // A HAROM SZAM EGYUTT MER, es egyik sem elhagyhato:
+    // feloldodott, VISSZAESESSEL, es nem tunt el csendben.
+    assert.equal(report.relationReferencesResolvedByCaseFallback, 1);
+    assert.equal(report.unresolvedRelationReferences, 0);
+    assert.equal(report.relationsSynchronized, 2);
+    // Es NEM utkozeskent: egyetlen termek illeszkedett.
+    assert.equal(report.relationReferencesAmbiguous, 0);
+  });
+
+  /**
+   * A PAR EGY KAPCSOLATOT AD, NEM KETTOT -- ES EZ SZAMOLVA VAN.
+   *
+   * A valodi adatban 269 ilyen par all (helyes alak plusz kisbetus masolat,
+   * ugyanazon a terméken; pontos irasmoddal NULLA ismetlodes). Ma a masodik tag
+   * fel sem oldodik. A visszaeses utan MINDKETTO feloldodik, es a masodikat a
+   * duplikatum-szures viszi el -- ha nem szamolnank, egy nema vesztest
+   * cserelnenk egy masik NEMA KIHAGYASRA.
+   */
+  it("counts the duplicate it skipped, instead of just dropping it", async () => {
+    const batch = await stageApprove(
+      await catalogFixture({
+        categoryName: "Pair category",
+        firstName: "Pair test product",
+        firstImage: "https://example.test/pair.jpg",
+        // UGYANAZ a termek KETSZER: helyes alak es kisbetus masolat.
+        secondReference: "APPLY-SKU-1|apply-sku-1",
+      }),
+      "apply-pair.xlsx",
+    );
+
+    const report = await applyService.apply(batch, "integration-owner");
+
+    assert.equal(report.relationReferencesResolvedByCaseFallback, 1);
+    assert.equal(report.relationReferencesSkippedAsDuplicate, 1);
+    // EGY kapcsolat lett belole, nem ketto.
+    assert.equal(report.relationsSynchronized, 2);
+  });
+
+  /**
+   * UTKOZESNEL NEM TIPPELUNK, ES EZ SAJAT FIXTURE-T IGENYEL.
+   *
+   * A valodi katalogusban ma NINCS ket termek, ami csak kis-nagybetuben ter el
+   * (merve: 1893 termek, 1893 egyedi kisbetusitett alak). Vagyis a valodi
+   * adaton ez az ag SOSEM futna le, es egy teszt, ami csak valodi cikkszamokat
+   * hasznal, a feltetellel ES nelkule is zold lenne. Ezert all itt szandekos
+   * utkozes.
+   */
+  it("does not guess when the fallback finds more than one product", async () => {
+    const batch = await stageApprove(
+      await catalogFixture({
+        categoryName: "Collision category",
+        firstName: "Collision test product",
+        firstImage: "https://example.test/collide.jpg",
+        collidingPair: true,
+        // Egy HARMADIK irasmod, ami MINDKET utkozo termekre illeszkedne.
+        secondReference: "Collide-1",
+      }),
+      "apply-collide.xlsx",
+    );
+
+    const report = await applyService.apply(batch, "integration-owner");
+
+    assert.equal(report.relationReferencesAmbiguous, 1);
+    // NEM oldottuk fel, tehat kapcsolat sem keletkezett belole...
+    assert.equal(report.relationReferencesResolvedByCaseFallback, 0);
+    // ...es NEM is szamoljuk feloldatlannak: a ket eset teendoje mas.
+    assert.equal(report.unresolvedRelationReferences, 0);
   });
 });

@@ -160,6 +160,9 @@ export class UnasApplyRepository extends Repository {
           domainEventsCreated: 0,
           unresolvedBrandAssociations: 0,
           unresolvedRelationReferences: 0,
+          relationReferencesResolvedByCaseFallback: 0,
+          relationReferencesAmbiguous: 0,
+          relationReferencesSkippedAsDuplicate: 0,
         };
         const categoryIds = await this.upsertCategories(
           transaction,
@@ -576,7 +579,7 @@ export class UnasApplyRepository extends Repository {
       for (const [field, relationType] of relationFields) {
         const references = splitReferences(rawText(row, field));
         for (const [sortOrder, sku] of references.entries()) {
-          const targetProductId =
+          let targetProductId =
             productIdsBySku.get(sku) ??
             (
               await transaction.productVariant.findUnique({
@@ -584,6 +587,36 @@ export class UnasApplyRepository extends Repository {
                 select: { productId: true },
               })
             )?.productId;
+
+          /**
+           * KIS-NAGYBETU FUGGETLEN VISSZAESES, CSAK PONTOS EGY TALALATNAL.
+           *
+           * A UNAS ugyanarra a termekre hol a katalogusbeli, hol a teljesen
+           * kisbetus alakkal hivatkozik (merve: 589 hivatkozas 58 cikkszamon,
+           * es ugyanezekre 1798 HELYES alaku hivatkozas is all). A pontos
+           * egyezes ezeket eldobta -- csendben.
+           *
+           * HA TOBB TALALAT VAN, NEM TIPPELUNK. Ket termek ("ABC" es "abc")
+           * eseten barmelyik valasztas onkenyes lenne, es a tevedes NEMA:
+           * a kapcsolat rossz termekre mutatna, es senki nem keresne.
+           *
+           * ES A KIKOTES MA NEM SZUR SEMMIT, HANEM TARTALEK: a 2026-09-02
+           * 22:01-es exportban 1893 termek all, 1893 egyedi pontos es 1893
+           * egyedi kisbetusitett cikkszammal -- NULLA utkozes. A tobbszoros ag
+           * tehat ma nem fut le; egy jovobeli katalogusra szol.
+           */
+          if (!targetProductId) {
+            const insensitive = await transaction.productVariant.findMany({
+              where: { sku: { equals: sku, mode: "insensitive" } },
+              select: { productId: true },
+              take: 2,
+            });
+            if (insensitive.length === 1) {
+              targetProductId = insensitive[0]!.productId;
+              counts.relationReferencesResolvedByCaseFallback += 1;
+            } else if (insensitive.length > 1)
+              counts.relationReferencesAmbiguous += 1;
+          }
           /**
            * A HAROM KIHAGYASI OK KOZUL CSAK AZ EGYIK HIBA.
            *
@@ -601,7 +634,20 @@ export class UnasApplyRepository extends Repository {
             continue;
           }
           const key = `${targetProductId}|${relationType}`;
-          if (targetProductId === productId || seen.has(key)) continue;
+          if (targetProductId === productId) continue;
+          /**
+           * A DUPLIKATUM-KIHAGYAS SZAMOLODIK, ES EZ A VISSZAESES ARA.
+           *
+           * A 269 ismetlodo hivatkozas mind PAR: a helyes es a kisbetus alak
+           * ugyanazon a terméken. Ma a masodik tag fel sem oldodik, tehat a
+           * `unresolvedRelationReferences` szamolja. A visszaeses utan
+           * feloldodik, es ITT esik ki -- ha nem szamolnank, egy nema vesztest
+           * cserelnenk egy masik NEMA KIHAGYASRA.
+           */
+          if (seen.has(key)) {
+            counts.relationReferencesSkippedAsDuplicate += 1;
+            continue;
+          }
           seen.add(key);
           const existing = await transaction.productRelation.findUnique({
             where: {
