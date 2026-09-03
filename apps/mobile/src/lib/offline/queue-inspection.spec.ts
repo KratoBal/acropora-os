@@ -189,4 +189,57 @@ describe("melyik sorral mit lehet kezdeni", () => {
     ]);
     assert.equal(entry?.canFix, false);
   });
+
+  it("az ELAKADT soron van elvetés, a többin nincs", () => {
+    assert.equal(
+      toQueueEntries([sor({ state: "conflict" })])[0]?.canDiscard,
+      true,
+    );
+    for (const state of ["pending", "syncing", "failed", "stalled"] as const) {
+      assert.equal(
+        toQueueEntries([sor({ state })])[0]?.canDiscard,
+        false,
+        state,
+      );
+    }
+  });
+
+  it("FÉNYKÉP-soron IS lehet elvetés, mert azt is el kell tudni engedni", () => {
+    /*
+      A JAVITAS es az ELVETES KORE NEM UGYANAZ, es ezt kulon allitjuk. Egy
+      elakadt fenykepet nem lehet ATIRNI (nincs szoveges torzse), de EL KELL
+      tudni vetni -- kulonben pont az a sor ragadna bent orokre, amelyiken a
+      szerelo semmit nem tud tenni.
+
+      MI PIROSIT: ha valaki az elvetest a javitas felteteleihez kotne.
+    */
+    const [entry] = toQueueEntries([
+      sor({ state: "conflict", operation: "upload-photo" }),
+    ]);
+    assert.equal(entry?.canFix, false);
+    assert.equal(entry?.canDiscard, true);
+  });
+});
+
+describe("az elvetett sor nem a várakozók között van", () => {
+  it("saját szakaszba kerül", () => {
+    /*
+      EZ A LEGFONTOSABB ALLITAS EBBEN A SZELETBEN, es a fordito NEM szolt rola:
+      a `sectionOf` alapertelmezese a "waiting", tehat az uj allapot MAGATOL oda
+      esett volna -- a szerelo azt latta volna, hogy az altala ELVETETT felvitel
+      "vár feltöltésre". A `SyncState` boviteseto ez a fuggveny tovabbra is
+      lefordult, tehat a typecheck hallgatasa nem volt bizonyitek.
+
+      MI PIROSIT: az explicit ag kivetele a `sectionOf`-bol.
+    */
+    const [entry] = toQueueEntries([sor({ state: "discarded" })]);
+    assert.equal(entry?.section, "discarded");
+  });
+
+  it("és nincs rajta se javítás, se elvetés", () => {
+    const [entry] = toQueueEntries([sor({ state: "discarded" })]);
+    assert.equal(entry?.canFix, false);
+    assert.equal(entry?.canDiscard, false);
+    assert.equal(entry?.canRetry, false);
+  });
 });

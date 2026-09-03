@@ -19,7 +19,25 @@
  * igenyel, es amig nincs eldontve, a helyi bizonyitek marad.
  */
 export type SyncState =
-  "pending" | "syncing" | "failed" | "conflict" | "stalled";
+  | "pending"
+  | "syncing"
+  | "failed"
+  | "conflict"
+  | "stalled"
+  /**
+   * A SZERELO ELVETETTE. A sor NEM megy fel, es NEM tunik el.
+   *
+   * MIERT NEM TOROLJUK: ha egy sor egyszeruen eltunne a listarol, az kivulrol
+   * MEGKULONBOZTETHETETLEN attol, mintha sikeresen kiment volna. Ugyanaz a lap
+   * hianyozna a szerverrol, es senki nem tudna megmondani, hogy elvetettek-e
+   * vagy elveszett. Az allapot maga a nyom.
+   *
+   * A KULDESBOL MAGATOL KIESIK: a `KULDHETO` lista csak a `pending` es a
+   * `failed` sorokat viszi, tehat ez az allapot nem igenyel kulon kaput a
+   * kiuritesben -- de a KEPERNYON igen, kulonben a "varakozo" szakaszba esne,
+   * es a kollega azt hinne, hogy meg fel fog menni.
+   */
+  | "discarded";
 
 /**
  * HANYSZOR PROBALJUK MEG, HA A SZERVER VALASZOL, DE HIBAVAL.

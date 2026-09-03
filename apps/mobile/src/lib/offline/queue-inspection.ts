@@ -1,4 +1,5 @@
 import { readPhotoPayload } from "./photo-queue";
+import { queueDiscardEligibility } from "./queue-discard";
 import { queueResendEligibility } from "./queue-resend";
 import type { SyncQueueRow } from "./sync-queue";
 
@@ -20,7 +21,7 @@ import type { SyncQueueRow } from "./sync-queue";
  */
 
 /** A lista harom szakasza. A SORREND a teendo surgossege, nem az allapote. */
-export type QueueSection = "stalled" | "conflict" | "waiting";
+export type QueueSection = "stalled" | "conflict" | "waiting" | "discarded";
 
 export interface QueueEntryView {
   id: string;
@@ -55,6 +56,15 @@ export interface QueueEntryView {
    * szabaly kell a kepernyonek es a mentesnek.
    */
   canFix: boolean;
+  /**
+   * MEGJELENJEN-E AZ ELVETES GOMB.
+   *
+   * Ugyanazon a soron all, mint a `canFix`, es ez SZANDEKOS: az elakadt
+   * felvitelnek KET kijarata van, es a szerelo valaszt kozottuk. A ket gomb
+   * SULYA viszont nem egyforma -- a kepernyo dolga, hogy az elvetes ne legyen
+   * ugyanolyan konnyen elerheto, mint a javitas.
+   */
+  canDiscard: boolean;
 }
 
 export interface QueueErrorView {
@@ -181,6 +191,7 @@ export function toQueueEntries(
       error: describeQueueError(row.lastError),
       canRetry: section === "stalled",
       canFix: queueResendEligibility(row).ok,
+      canDiscard: queueDiscardEligibility(row).ok,
     };
   });
 }
@@ -188,6 +199,15 @@ export function toQueueEntries(
 function sectionOf(state: SyncQueueRow["state"]): QueueSection {
   if (state === "stalled") return "stalled";
   if (state === "conflict") return "conflict";
+  /**
+   * AZ ELVETETT SOR SAJAT SZAKASZBA MEGY, ES EZ NEM RENDEZESI IZLES.
+   *
+   * A fuggveny alapertelmezese a "waiting", tehat egy uj allapot MAGATOL oda
+   * esne -- es a kollega azt latna, hogy az altala ELVETETT felvitel "vár
+   * feltöltésre". A fordito errol NEM szol (a `SyncState` bovulesetol ez a
+   * fuggveny tovabbra is lefordul), tehat a hallgatasa nem bizonyitek.
+   */
+  if (state === "discarded") return "discarded";
   return "waiting";
 }
 
@@ -205,12 +225,23 @@ export const QUEUE_SECTIONS: {
   {
     section: "conflict",
     title: "Elakadt",
-    hint: "A szerver elutasította. Ezen az újrapróbálás nem segít: a felvitelt kell javítani, az irodából.",
+    hint: "A szerver elutasította. Ezen az újrapróbálás nem segít: a felvitelt kell javítani, vagy elvetni.",
   },
   {
     section: "waiting",
     title: "Vár feltöltésre",
     hint: "Ezek magukat küldik fel, amint van térerő. Nincs velük teendő.",
+  },
+  {
+    /**
+     * A SZAKASZ AZERT LETEZIK, MERT A HIANYA HAZUDNA. Egy sor, ami eltunik a
+     * listarol, kivulrol ugyanugy nez ki, mintha felment volna -- ugyanaz a
+     * felvitel hianyzik a szerverrol, es senki nem tudja megmondani, hogy
+     * elvetettek-e vagy elveszett.
+     */
+    section: "discarded",
+    title: "Elvetve",
+    hint: "Ezeket te vetetted el: nem mennek fel, és nem is fognak. Azért látszanak, hogy ne tűnjenek el nyomtalanul.",
   },
 ];
 
