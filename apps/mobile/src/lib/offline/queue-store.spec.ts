@@ -125,3 +125,18 @@ describe("a fénykép sora", () => {
     assert.match(forras, /UPDATE sync_queue SET entity_id = \? WHERE id = \?/);
   });
 });
+
+describe("a hátralék számai", () => {
+  it("a számlálás MŰVELET szerint is bont", () => {
+    /*
+      Egy csak allapot szerinti csoportositas EGY szamot adna, es abbol nem
+      derulne ki, hogy a sorban mar CSAK kepek allnak -- pontosan az az
+      allapot, ami "sikeres szinkronnak" latszik.
+
+      MI PIROSIT: a `operation` kivetele a csoportositasbol.
+    */
+    assert.match(forras, /GROUP BY state, operation/);
+    assert.match(forras, /recordings: szam\(varakozo, "create"\)/);
+    assert.match(forras, /photos: szam\(varakozo, "upload-photo"\)/);
+  });
+});

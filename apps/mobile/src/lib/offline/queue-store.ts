@@ -189,24 +189,46 @@ export async function markQueueConflict(
   );
 }
 
-/** Hany sor var, es hany akadt el. A felulet ebbol mondja meg, mi van hatra. */
+/**
+ * Hany sor var, es hany akadt el. A felulet ebbol mondja meg, mi van hatra.
+ *
+ * A VARAKOZOK KETFELE BONTVA IS MEGJONNEK (`recordings`, `photos`), es ez nem
+ * kenyelmi bontas: egy sor, ami kiurult a ROGZITESEKTOL, "sikeres
+ * szinkronnak" latszik, mikozben csak kepek maradtak benne. A `pending` a
+ * kettot EGYUTT szamolja, tehat a ket szamot NEM szabad egymas melle irni --
+ * a `describeQueueBacklog` epp ezert nem hasznalja a `pending` erteket.
+ */
 export async function queueCounts(): Promise<{
   pending: number;
   conflict: number;
+  recordings: number;
+  photos: number;
 }> {
   const db = await initializeOfflineDatabase();
-  const rows = await db.getAllAsync<{ state: string; db: number }>(
-    `SELECT state, COUNT(*) AS db FROM sync_queue GROUP BY state`,
+  const rows = await db.getAllAsync<{
+    state: string;
+    operation: string;
+    db: number;
+  }>(
+    `SELECT state, operation, COUNT(*) AS db FROM sync_queue
+      GROUP BY state, operation`,
   );
-  const szam = (allapotok: string[]) =>
+  const szam = (allapotok: string[], muvelet?: string) =>
     rows
-      .filter((r) => allapotok.includes(r.state))
+      .filter(
+        (r) =>
+          allapotok.includes(r.state) &&
+          (muvelet === undefined || r.operation === muvelet),
+      )
       .reduce((sum, r) => sum + r.db, 0);
+  // A `syncing` a VARAKOZOKHOZ szamit: elindult, de meg nem ert celba, es a
+  // kollega szempontjabol ugyanugy "meg nem ment fel".
+  const varakozo = ["pending", "failed", "syncing"];
   return {
-    // A `syncing` a VARAKOZOKHOZ szamit: elindult, de meg nem ert celba, es a
-    // kollega szempontjabol ugyanugy "meg nem ment fel".
-    pending: szam(["pending", "failed", "syncing"]),
+    pending: szam(varakozo),
     conflict: szam(["conflict"]),
+    recordings: szam(varakozo, "create"),
+    photos: szam(varakozo, "upload-photo"),
   };
 }
 
