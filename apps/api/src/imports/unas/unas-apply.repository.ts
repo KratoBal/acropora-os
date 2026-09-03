@@ -163,6 +163,7 @@ export class UnasApplyRepository extends Repository {
           relationReferencesResolvedByCaseFallback: 0,
           relationReferencesAmbiguous: 0,
           relationReferencesSkippedAsDuplicate: 0,
+          relationReferencesSkippedAsSelfReference: 0,
           relationReferencesByField: {} as Record<string, number>,
         };
         const categoryIds = await this.upsertCategories(
@@ -690,7 +691,25 @@ export class UnasApplyRepository extends Repository {
             continue;
           }
           const key = `${targetProductId}|${relationType}`;
-          if (targetProductId === productId) continue;
+          /**
+           * AZ ONHIVATKOZAS A HARMADIK KIHAGYASI OK, ES EDDIG NEM SZAMOLTUK.
+           *
+           * A kis-nagybetu fuggetlen visszaeses ezt a szamot MEGNOVELI: merve a
+           * 2026-09-02 22:01-es exporton ma 2 ilyen hivatkozas all, a visszaeses
+           * utan 32 -- vagyis 30 olyan sor, ami eddig a feloldatlanok kozott
+           * ult, mostantol ide kerul. E nelkul a szamlalo nelkul a 30 nem
+           * eltunne, hanem LATHATATLANNA valna: a feloldatlanok szama nullara
+           * esik, es semmi nem mondana meg, hova lettek.
+           *
+           * ES A TEENDOJE MAS, MINT A MASIK KET KIHAGYASE: egy onhivatkozas nem
+           * hianyzo cikkszam es nem osszeteveszthető par, hanem a forras
+           * szerkesztesi szokasa. Ezert kap sajat szamlalot, nem a
+           * duplikatum-szamlalot.
+           */
+          if (targetProductId === productId) {
+            counts.relationReferencesSkippedAsSelfReference += 1;
+            continue;
+          }
           /**
            * A DUPLIKATUM-KIHAGYAS SZAMOLODIK, ES EZ A VISSZAESES ARA.
            *

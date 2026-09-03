@@ -134,37 +134,68 @@ export interface UnasApplySummary {
    */
   relationReferencesSkippedAsDuplicate: number;
   /**
+   * HANY HIVATKOZAST HAGYTUNK KI, MERT A TERMEK ONMAGARA MUTAT.
+   *
+   * A HARMADIK KIHAGYASI OK, ES EDDIG EZ VOLT AZ EGYETLEN, AMIT SEMMI NEM
+   * SZAMOLT. A betolto harom okbol dob el egy MAR FELOLDOTT hivatkozast:
+   *
+   *     onhivatkozas  ->  ez a szamlalo
+   *     duplikatum    ->  `relationReferencesSkippedAsDuplicate`
+   *     utkozes       ->  `relationReferencesAmbiguous`
+   *
+   * ES AMIERT EPP MOST KELL: a kis-nagybetu fuggetlen visszaeses (#404)
+   * MEGNOVELI a szamat. Merve a 2026-09-02 22:01-es exporton (`termekek.xml`,
+   * 1893 adatsor), a betolto sajat szabalyaival, ketszer futtatva -- egyszer a
+   * visszaesessel, egyszer nelkule:
+   *
+   *     ma:     2 onhivatkozas (ezek pontos irasmoddal is illeszkednek)
+   *     utana: 32 onhivatkozas (a tobbi 30 CSAK a visszaeses utan valik azza)
+   *
+   * VAGYIS A VISSZAESES-SZAMLALO TOBBET IGER, MINT AMENNYIT SZALLIT: az 589
+   * feloldott hivatkozasbol 290 lesz uj kapcsolat, 269 a par masodik tagja, es
+   * 30 sajat magara mutat. E nelkul a szamlalo nelkul a harmincat semmi nem
+   * mondja meg, es a kulonbseg ugy nezne ki, mint egy megmagyarazatlan hiany.
+   *
+   * A TEENDOJE MAS, MINT A MASIK KETTONEK, es ezert all kulon szamlalon: egy
+   * onhivatkozas nem adatvesztes es nem is katalogus-hiba, hanem a FORRAS
+   * szerkesztesi szokasa. Ha ez a szam elszalad, az a forrasrol mond valamit,
+   * nem a parositasunkrol.
+   */
+  relationReferencesSkippedAsSelfReference: number;
+  /**
    * MEZONKENTI BONTAS: melyik forras-oszlopbol hany hivatkozas NEM oldodott fel.
    *
-   * MIERT NEM ELEG AZ OSSZEG (acrobot kikotese, 2026-09-03): a betolto HET
-   * oszlopot olvas cikkszam-listakent (`kiegeszitotermekek`, `crosssale1..3`,
-   * `hasonlotermekek`, `upsale1..2`), es barracuda merese csak KETTOT fed --
-   * a hasonlo es a kiegeszito listajat. Ha a munkafuzetben a tobbi oszlop
-   * KAPCSOLOKAT tartalmaz ("no", "yes"), azok sosem oldodnak fel, es az
-   * osszegben megkulonboztethetetlenul allnanak a valodi vesztestol.
+   * MIERT NEM ELEG AZ OSSZEG (acrobot kikotese, 2026-09-03): amikor ez a mezo
+   * keszult, a betolto HET oszlopot olvasott cikkszam-listakent, es ebbol csak
+   * ketto tartalmazott valodi hivatkozast. A #405 ota a lista KET oszlop
+   * (`kiegeszitotermekek`, `hasonlotermekek`), tehat a tobblet-zaj kerdese
+   * eldolt -- a bontas viszont marad, mert az mondana meg, ha egy KESOBB
+   * felvett oszlop megint nem cikkszamokat tartalmazna.
    *
-   * A BONTASSAL AZ ELSO ELES FUTAS MAGATOL VALASZOL, magyarazat nelkul: ha a
-   * feloldatlanok a `crosssale*` vagy `upsale*` oszlopokbol jonnek, akkor a
-   * teendo a MEZOLISTA szukitese, nem a parositas.
+   * A BONTASSAL AZ ELSO ELES FUTAS MAGATOL VALASZOL, magyarazat nelkul: ha
+   * megis erkezik feloldatlan, a bontas megnevezi, MELYIK oszlopbol -- es abbol
+   * latszik, hogy a mezolistat kell-e szukiteni vagy a parositast nezni.
    *
    * ES A VARHATO BONTAS, hogy az elso futas ELLENORIZHETO legyen, ne
    * ertelmezheto (barracuda merese, 2026-09-03):
    *
-   *     589  hivatkozas oldodik fel visszaesessel
-   *     320  ebbol UJ kapcsolatot hoz letre
-   *     269  a par masodik tagja, a szures kihagyja (145 hasonlo + 124 kiegeszito)
-   *       0  marad feloldatlan -- DE CSAK A MEZOLISTA SZUKITESEVEL EGYUTT
+   *     589  hivatkozas oldodik fel visszaesessel, es HAROM fele valik:
+   *     290    uj kapcsolatot hoz letre  (31680 -> 31970 kapcsolat a ket oszlopbol)
+   *     269    a par masodik tagja, a szures kihagyja (145 hasonlo + 124 kiegeszito)
+   *      30    a termek ONMAGARA mutat
+   *       0  marad feloldatlan
    *
-   * A NEGYEDIK SOR FELTETELE AZOTA ELDOLT, ES NEM MAGATOL TELJESUL. Barracuda
-   * megmerte a valodi munkafuzet-exportot: a `crosssale1..3` es az `upsale1..2`
-   * oszlop 0/1 KAPCSOLOKAT tartalmaz, es MINDEN sorban van erteke. Amig ezek a
-   * mezok a listaban vannak, a szamlalo NEM nullara esik, hanem FELFELE megy:
-   * kb. 949-re (ha a nulla uresnek szamit) vagy kb. 9465-re (ha nem) -- es az
-   * egesz tobblet ZAJ, nem adatvesztes.
+   * A KORABBI ALAK ITT 320-AT MONDOTT, ES AZ HAMIS VOLT: 589 minusz 269, vagyis
+   * kimaradt a harmadik kihagyasi ok, az onhivatkozas. 589 = 290 + 269 + 30.
+   * Merve ugyanazon az exporton, a betolto szabalyaival, ketszer futtatva (a
+   * visszaesessel es nelkule); ugyanaz a futas adja ki az 589-et, a 269-et es a
+   * 145/124 bontast is, tehat a 290 nem egy masik modszerbol jon.
    *
-   * A szukites kulon valtozasban all. Amig az nincs bent, a fenti negyedik sor
-   * NEM ervenyes, es egy nem-nulla szamlalo nem lelet, hanem a mezolista
-   * kovetkezmenye.
+   * A NEGYEDIK SOR FELTETELE AZOTA ELDOLT: a #405 kivette a `crosssale1..3` es
+   * `upsale1..2` oszlopokat, mert azok 0/1 KAPCSOLOKAT tartalmaznak minden
+   * soron. Amig azok bent voltak, a szamlalo nem nullara esett volna, hanem
+   * felfele ment volna kb. 9465-ig -- es az egesz tobblet ZAJ lett volna, nem
+   * adatvesztes.
    *
    * Csak a NEM NULLA mezok kerulnek bele: egy ures bontas azt jelenti, hogy
    * minden hivatkozas feloldodott.

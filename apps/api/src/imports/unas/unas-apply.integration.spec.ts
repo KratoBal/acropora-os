@@ -464,6 +464,50 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
     assert.equal(report.relationReferencesResolvedByCaseFallback, 1);
   });
 
+  /**
+   * A HARMADIK KIHAGYASI OK: A TERMEK ONMAGARA MUTAT.
+   *
+   * A fixture epp azt az alakot allitja elo, amibol a valodi exportban HARMINC
+   * van: az `APPLY-SKU-2` a SAJAT cikkszamat sorolja fel, kisbetusen. Pontos
+   * egyezessel nem talalna meg magat, tehat ma feloldatlankent szamolodna; a
+   * visszaeses feloldja, es akkor derul ki, hogy onmagara mutat.
+   *
+   * A NEGYEDIK ALLITAS AZ, AMI SZAMIT: a duplikatum-szamlalo NULLA marad. Ha az
+   * onhivatkozas oda kerulne, harom allitas ugyanigy zold lenne, es csak ez az
+   * egy mondana meg, hogy rossz vodorbe esett.
+   */
+  it("counts a self-reference in its own bucket, not as a duplicate", async () => {
+    const batch = await stageApprove(
+      await catalogFixture({
+        categoryName: "Self reference category",
+        firstName: "Self reference test product",
+        firstImage: "https://example.test/self.jpg",
+        // Az APPLY-SKU-2 sajat magara hivatkozik, MAS irasmoddal.
+        secondReference: "apply-sku-2",
+      }),
+      "apply-self.xlsx",
+    );
+
+    const report = await applyService.apply(batch, "integration-owner");
+
+    /**
+     * ES EZ AZ ALLITAS FOGJA MEG A VALODI KART, nem a konyvelest.
+     *
+     * Ha az ag SZAMOL, de nem lep ki -- pontosan a #404 alakja --, akkor a
+     * szamlalo helyes marad, a termek viszont KAPCSOLATOT KAP ONMAGARA, es
+     * egyetlen szamlalo sem szol. Csak ez a szam valtozik: 1 helyett 2.
+     */
+    assert.equal(report.relationsSynchronized, 1);
+    assert.equal(report.relationReferencesSkippedAsSelfReference, 1);
+    // A visszaeses feloldotta -- enelkul feloldatlan lenne, nem onhivatkozas.
+    assert.equal(report.relationReferencesResolvedByCaseFallback, 1);
+    assert.equal(report.unresolvedRelationReferences, 0);
+    // ES NEM DUPLIKATUM: mas a teendo, tehat mas a szamlalo.
+    assert.equal(report.relationReferencesSkippedAsDuplicate, 0);
+    // A mezo-bontasba sem kerul bele: nem az oszlop hibaja.
+    assert.deepEqual(report.relationReferencesByField, {});
+  });
+
   it("does not guess when the fallback finds more than one product", async () => {
     const batch = await stageApprove(
       await catalogFixture({
