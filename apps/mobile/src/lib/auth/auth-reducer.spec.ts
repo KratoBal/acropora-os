@@ -195,3 +195,56 @@ describe("authReducer", () => {
     assert.deepEqual(state.user, testUser);
   });
 });
+
+describe("az offline visszaállítás", () => {
+  it("RESTORE_AUTHENTICATED_OFFLINE bejelentkezett állapotot ad, offline jelöléssel", () => {
+    const state = authReducer(initialAuthState, {
+      type: "RESTORE_AUTHENTICATED_OFFLINE",
+      user: { id: "u1" } as never,
+      expiresAt: "2026-09-04T00:00:00Z",
+    });
+    assert.equal(state.status, "authenticated");
+    assert.equal(state.offline, true);
+  });
+
+  it("NEM állítja be az újrapróbálás-jelzőt", () => {
+    /*
+      Halozati hiba tortent, de a visszaallitas BEFEJEZODOTT -- mas eredmennyel,
+      mint online, de befejezodott. Ha a `restoreNetworkError` igaz lenne, a
+      kepernyo egyszerre mutatna bejelentkezett allapotot es egy "probald ujra"
+      savot, ami egy mar lezart lepesre mutat.
+    */
+    const state = authReducer(
+      { ...initialAuthState, restoreNetworkError: true },
+      {
+        type: "RESTORE_AUTHENTICATED_OFFLINE",
+        user: { id: "u1" } as never,
+        expiresAt: "2026-09-04T00:00:00Z",
+      },
+    );
+    assert.equal(state.restoreNetworkError, false);
+  });
+
+  it("az ONLINE visszaállítás NEM jelöli offline-nak", () => {
+    /*
+      TESTVER-KONTROLL. Enelkul egy valtozat, ami MINDEN bejelentkezett
+      allapotot offline-nak jelol, atmenne a fenti ket allitason -- es a
+      felulet minden indulasnal kiirna, hogy nincs halozat.
+    */
+    const state = authReducer(initialAuthState, {
+      type: "RESTORE_AUTHENTICATED",
+      user: { id: "u1" } as never,
+      expiresAt: "2026-09-04T00:00:00Z",
+    });
+    assert.equal(state.offline, false);
+  });
+
+  it("a sikeres BEJELENTKEZÉS sem offline", () => {
+    const state = authReducer(initialAuthState, {
+      type: "SIGN_IN_SUCCESS",
+      user: { id: "u1" } as never,
+      expiresAt: "2026-09-04T00:00:00Z",
+    });
+    assert.equal(state.offline, false);
+  });
+});

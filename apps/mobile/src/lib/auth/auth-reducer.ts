@@ -31,6 +31,20 @@ export interface AuthState {
    * locked screen may offer: another attempt is only worth a button on a
    * device that has something to attempt. */
   lockReason: LockReason | null;
+  /**
+   * TRUE, HA A MUNKAMENET A LEMEZROL JOTT, NEM A SZERVERTOL.
+   *
+   * A statusz ilyenkor is `authenticated` -- a kollega dolgozhat --, DE a
+   * kulonbseg nem elhanyagolhato, es ezert kulon mezo, nem egy hatodik statusz:
+   * minden kepernyo, ami ma az `authenticated` allapotra epul, valtozatlanul
+   * mukodik, es CSAK az veszi eszre a kulonbseget, aki keresi.
+   *
+   * AMIT A FELULETNEK KI KELL MONDANIA: hogy nincs halozat, es hogy a jogkorok
+   * a legutobbi ellenorzes szerintiek. Egy visszavont jogosultsag legfeljebb 24
+   * oraig nem latszik -- ez Balazs dontesenek az ara, es a kollega csak akkor
+   * tud vele szamolni, ha tudja, hogy offline all.
+   */
+  offline: boolean;
 }
 
 export const initialAuthState: AuthState = {
@@ -40,6 +54,7 @@ export const initialAuthState: AuthState = {
   restoreNetworkError: false,
   signInError: null,
   lockReason: null,
+  offline: false,
 };
 
 export type AuthAction =
@@ -51,6 +66,17 @@ export type AuthAction =
       expiresAt: string;
     }
   | { type: "RESTORE_NETWORK_ERROR" }
+  /**
+   * A tarolt munkamenettel indultunk, halozat nelkul. Kulon esemeny, nem a
+   * `RESTORE_AUTHENTICATED` egy jelzovel: a ket ut MAS bizonyitekon all (az
+   * egyik a szerver valaszan, a masik a lemezen), es egy kozos esemeny a
+   * kulonbseget a hivora bizna.
+   */
+  | {
+      type: "RESTORE_AUTHENTICATED_OFFLINE";
+      user: AuthenticatedUser;
+      expiresAt: string;
+    }
   /** `reason` is absent when the gate simply closed and nobody has been
    * asked yet - coming back to the foreground after a long absence. It is
    * present when an attempt ran and did not open it. */
@@ -75,6 +101,26 @@ export function authReducer(state: AuthState, action: AuthAction): AuthState {
         restoreNetworkError: false,
         signInError: null,
         lockReason: null,
+        offline: false,
+      };
+    case "RESTORE_AUTHENTICATED_OFFLINE":
+      /**
+       * A `restoreNetworkError` HAMIS lesz, pedig halozati hiba tortent.
+       *
+       * Ez szandekos: az a mezo azt vezerli, hogy a felulet UJRAPROBALAST
+       * kinaljon a visszaallitas kozben. Itt a visszaallitas BEFEJEZODOTT --
+       * mas eredmennyel, mint online, de befejezodott. Ha igazra allitanank, a
+       * kepernyo egyszerre mutatna bejelentkezett allapotot es egy "probald
+       * ujra" savot, ami ugyanarra a mar lezart lepesre mutat.
+       */
+      return {
+        status: "authenticated",
+        user: action.user,
+        expiresAt: action.expiresAt,
+        restoreNetworkError: false,
+        signInError: null,
+        lockReason: null,
+        offline: true,
       };
     case "RESTORE_NETWORK_ERROR":
       return { ...state, status: "restoring", restoreNetworkError: true };
@@ -102,6 +148,9 @@ export function authReducer(state: AuthState, action: AuthAction): AuthState {
         restoreNetworkError: false,
         signInError: null,
         lockReason: null,
+        // Egy sikeres bejelentkezes ONLINE tortent: a szerver most adta a
+        // tokent. Ez az egyetlen hely, ahol ez biztosan allithato.
+        offline: false,
       };
     case "SIGN_IN_ERROR":
       return {
