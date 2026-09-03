@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -23,6 +23,14 @@ import {
 } from "@/lib/api/worksheets";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
+// A `useIsOnline` SZANDEKOSAN nem szerepel itt: a masolat akkor kerul elo, ha a
+// hivas TENYLEG elhasalt, nem akkor, ha a keszulek offline-nak mondja magat.
+// Ugyanaz a szabaly, mint a `connectivity.ts` fejleceben.
+import { describeCachedDepartmentsNotice } from "@/lib/offline/offline-notice";
+import {
+  readCachedWorksheetDepartments,
+  rememberWorksheetDepartments,
+} from "@/lib/offline/worksheet-department-cache";
 import {
   buildWorksheetCreatePayload,
   type WorksheetCreateField,
@@ -84,10 +92,64 @@ export default function NewWorksheetScreen() {
     enabled: Boolean(partner?.customerId),
   });
 
+  /**
+   * A FRISS LISTÁT MENTJÜK, hogy a pincében legyen miből választani. A helyszín
+   * KÖTELEZŐ mező: e nélkül a másolat nélkül a helyszíni felvitel pont ott nem
+   * működne, ahol a legtöbbet érne.
+   */
+  useEffect(() => {
+    const customerId = partner?.customerId;
+    const items = departmentsQuery.data?.items;
+    if (!customerId || !items) return;
+    void rememberWorksheetDepartments(customerId, items);
+  }, [partner?.customerId, departmentsQuery.data]);
+
+  /**
+   * A MENTETT MÁSOLAT CSAK AKKOR KERÜL ELŐ, HA A HÍVÁS TÉNYLEG ELHASALT -- nem
+   * akkor, ha a készülék offline-nak MONDJA magát. Ugyanaz a szabály, mint a
+   * `connectivity.ts` fejlécében: egy rosszul jelentő jelzés nem tarthat vissza
+   * egy működő lekérdezést.
+   */
+  const [cached, setCached] = useState<{
+    items: WorksheetDepartment[];
+    syncedAt: string | null;
+  }>({ items: [], syncedAt: null });
+
+  useEffect(() => {
+    const customerId = partner?.customerId;
+    if (!customerId || !departmentsQuery.isError) return;
+    let ervenyes = true;
+    void (async () => {
+      const masolat = await readCachedWorksheetDepartments(customerId);
+      if (ervenyes) setCached(masolat);
+    })();
+    return () => {
+      ervenyes = false;
+    };
+  }, [partner?.customerId, departmentsQuery.isError]);
+
+  const fromCache = departmentsQuery.isError;
   const departments = useMemo(
-    () => (departmentsQuery.data?.items ?? []).filter((d) => d.isActive),
-    [departmentsQuery.data],
+    () =>
+      (fromCache ? cached.items : (departmentsQuery.data?.items ?? [])).filter(
+        (d) => d.isActive,
+      ),
+    [fromCache, cached.items, departmentsQuery.data],
   );
+
+  /**
+   * A SÁV AKKOR SZÓL, HA A LISTA MÁSOLATBÓL VAN. A választás ITT ÍRÁSSÁ válik:
+   * egy időközben törölt helyszín a másolatban még ott áll, és a lap küldése a
+   * szerveren bukna el, jóval később.
+   */
+  const cacheNotice = fromCache
+    ? describeCachedDepartmentsNotice({
+        online: false,
+        count: departments.length,
+        syncedAt: cached.syncedAt,
+        now: new Date(),
+      })
+    : null;
 
   const mutation = useMutation({
     mutationFn: createWorksheet,
@@ -201,10 +263,6 @@ export default function NewWorksheetScreen() {
               </Text>
             ) : departmentsQuery.isPending ? (
               <ActivityIndicator color="#52d6c7" />
-            ) : departmentsQuery.isError ? (
-              <Text style={styles.hint}>
-                A helyszínek nem töltődtek be. Válassz újra partnert.
-              </Text>
             ) : departments.length === 0 ? (
               /**
                * AZ ÜRES LISTA OKÁT KIMONDJUK. Egy néma üres doboz mellett a
@@ -213,8 +271,9 @@ export default function NewWorksheetScreen() {
                * irodából lehet pótolni.
                */
               <Text style={styles.hint}>
-                Ehhez a partnerhez még nincs helyszín felvéve. Az irodából lehet
-                hozzáadni, addig a lap nem nyitható meg.
+                {fromCache
+                  ? "Nincs mentett helyszín ehhez a partnerhez a telefonon."
+                  : "Ehhez a partnerhez még nincs helyszín felvéve. Az irodából lehet hozzáadni, addig a lap nem nyitható meg."}
               </Text>
             ) : (
               <View style={styles.list}>
@@ -233,6 +292,12 @@ export default function NewWorksheetScreen() {
                 ))}
               </View>
             )}
+            {cacheNotice ? (
+              <View style={styles.notice}>
+                <Text style={styles.noticeTitle}>{cacheNotice.title}</Text>
+                <Text style={styles.noticeBody}>{cacheNotice.message}</Text>
+              </View>
+            ) : null}
             <FieldError error={error} field="department" />
           </Section>
 
@@ -363,6 +428,14 @@ const styles = StyleSheet.create({
   listName: { color: "#f4fbff", fontSize: 14 },
   listMeta: { color: "#789cad", fontSize: 11, marginTop: 2 },
   hint: { color: "#789cad", fontSize: 12, lineHeight: 17 },
+  notice: {
+    backgroundColor: "#0b2f3f",
+    borderRadius: 10,
+    gap: 4,
+    padding: 12,
+  },
+  noticeTitle: { color: "#f4fbff", fontSize: 13, fontWeight: "900" },
+  noticeBody: { color: "#a9c4d1", fontSize: 12, lineHeight: 17 },
   fieldError: { color: "#fecaca", fontSize: 12, fontWeight: "700" },
   error: {
     backgroundColor: "#3a1a1a",

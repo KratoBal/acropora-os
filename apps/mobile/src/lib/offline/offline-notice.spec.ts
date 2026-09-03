@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   describeCacheAge,
+  describeCachedDepartmentsNotice,
   describeOfflineDetailNotice,
   describeOfflineNotice,
   isCacheStale,
@@ -177,5 +178,54 @@ describe("describeOfflineDetailNotice", () => {
     assert.equal(notice?.tone, "stale");
     assert.match(notice!.title, /hiányos adatlap/);
     assert.match(notice!.message, /csak térerővel látszik/);
+  });
+});
+
+describe("a mentett helyszínek sávja", () => {
+  const most = new Date("2026-09-03T12:00:00.000Z");
+
+  it("kapcsolattal NEM szól", () => {
+    // ISMERT POZITIV KONTROLL a lentiekhez: e nelkul egy "mindig szol" valtozat
+    // is atmenne rajtuk, es a sav allandoan ott ulne a valaszto folott.
+    assert.equal(
+      describeCachedDepartmentsNotice({
+        online: true,
+        count: 3,
+        syncedAt: "2026-09-03T06:00:00.000Z",
+        now: most,
+      }),
+      null,
+    );
+  });
+
+  it("mentett listánál kimondja a DARABSZÁMOT és a KORT", () => {
+    const notice = describeCachedDepartmentsNotice({
+      online: false,
+      count: 3,
+      syncedAt: "2026-09-03T06:00:00.000Z",
+      now: most,
+    });
+    assert.match(notice?.message ?? "", /3 helyszín/);
+    assert.match(notice?.message ?? "", /6 órája/);
+    // ES AMI A LENYEG: hogy ami azota MEGSZUNT, azt itt nem latni. A valasztas
+    // ITT irassa valik, es egy torolt helyszin a kuldest bukna el kesobb.
+    assert.match(notice?.message ?? "", /megszűnt/);
+  });
+
+  it("ÜRES másolatnál MÁS mondat jár, mert más a teendő", () => {
+    /*
+      MI PIROSIT: egy kozos mondat a ket esetre. "Nulla helyszin a telefonrol"
+      ugy hangzana, mintha a partnernek nem lenne helyszine -- holott csak MI nem
+      mentettuk le, es terero mellett ott van mind.
+    */
+    const notice = describeCachedDepartmentsNotice({
+      online: false,
+      count: 0,
+      syncedAt: null,
+      now: most,
+    });
+    assert.match(notice?.message ?? "", /nincs mentett helyszín/);
+    assert.match(notice?.message ?? "", /kötelező/);
+    assert.doesNotMatch(notice?.message ?? "", /0 helyszín/);
   });
 });
