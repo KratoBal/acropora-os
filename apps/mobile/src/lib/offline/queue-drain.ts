@@ -140,3 +140,38 @@ export function describeQueueBacklog(counts: {
   const reszek = [varakozo, elakadt].filter((r): r is string => r !== null);
   return reszek.length > 0 ? reszek.join(" ") : null;
 }
+
+/**
+ * AMI ISMETELTEN ELBUKIK -- ES EZ EDDIG SEHOL NEM LATSZOTT.
+ *
+ * === MIERT KULON MONDAT A HATRALEK MELLETT ===
+ *
+ * A hatralek azt mondja meg, MENNYI var. Ez azt, hogy valamelyik NEM CSAK VAR:
+ * mar tobbszor elindult, es mindannyiszor elbukott. A ketto kozott a szerelo
+ * szamara ez a kulonbseg: az elsore varni kell, a masodikkal KEZDENI kell
+ * valamit -- vagy legalabb tudni rola, hogy nem magatol fog megoldodni.
+ *
+ * A HIBA SZOVEGET IS KIIRJUK, akkor is, ha technikai. A `last_error` mezot a
+ * sor eddig is tarolta, es senki nem latta. Egy technikai mondat, amit a
+ * szerelo tovabb tud adni, tobbet er, mint egy sima "nem sikerult".
+ *
+ * `null`, ha nincs ilyen sor -- olyankor a felulet marad csendben.
+ */
+export function describeRepeatedFailures(input: {
+  rows: number;
+  maxAttempts: number;
+  lastError: string | null;
+}): string | null {
+  if (input.rows === 0) return null;
+
+  const mennyi = input.rows === 1 ? "Egy felvitel" : `${input.rows} felvitel`;
+  const hiba = input.lastError
+    ? ` Utolsó hiba: ${input.lastError}`
+    : " A hiba szövege nem maradt meg.";
+
+  return (
+    `${mennyi} már ${input.maxAttempts} alkalommal nem ment fel.` +
+    hiba +
+    " Ez magától nem fog megoldódni: szólj, ha ismétlődik."
+  );
+}

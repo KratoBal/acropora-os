@@ -5,6 +5,7 @@ import {
   decideDrain,
   describeQueueBacklog,
   describeQueueState,
+  describeRepeatedFailures,
 } from "./queue-drain";
 
 /**
@@ -157,5 +158,50 @@ describe("ami a sorban MARAD", () => {
     */
     const s = describeQueueBacklog({ recordings: 2, photos: 3, conflict: 0 });
     assert.match(s ?? "", /2 rögzítés és 3 fénykép vár feltöltésre/);
+  });
+});
+
+describe("ami ISMÉTELTEN elbukik", () => {
+  it("nulla ilyen sornál hallgat", () => {
+    // ISMERT POZITIV KONTROLL: e nelkul egy "mindig szol" valtozat is atmenne
+    // a lentieken, es a kezdolapon allando riasztas ulne.
+    assert.equal(
+      describeRepeatedFailures({ rows: 0, maxAttempts: 0, lastError: null }),
+      null,
+    );
+  });
+
+  it("kimondja a KÍSÉRLETSZÁMOT és az UTOLSÓ HIBÁT", () => {
+    /*
+      EZ AZ ALLITAS A FUGGVENY LETEZESENEK OKA. Az `attempt_count` es a
+      `last_error` 2026-09-03-ig IROTT, DE OLVASATLAN adat volt: egy tetel, ami
+      SOSEM fog atmenni, pontosan ugy nezett ki, mint az, ami terero nelkul var.
+    */
+    const s = describeRepeatedFailures({
+      rows: 1,
+      maxAttempts: 4,
+      lastError: "szerver hiba (500)",
+    });
+    assert.match(s ?? "", /4 alkalommal/);
+    assert.match(s ?? "", /szerver hiba \(500\)/);
+    // ES AZT IS KIMONDJA, hogy ez nem magatol oldodik meg -- kulonben a mondat
+    // csak egy szam lenne, es a szerelo tovabb varna.
+    assert.match(s ?? "", /magától nem fog megoldódni/);
+  });
+
+  it("HIÁNYZÓ hibaszövegnél is mond valamit, nem hallgat el", () => {
+    /*
+      MI PIROSIT: ha az uzenet a `lastError` nelkul ures maradna. A sor akkor is
+      ismetelten bukik, ha a hiba szovege nem maradt meg -- a hallgatas ugyanaz
+      a vakfolt lenne, amit ez a mondat megszuntet.
+    */
+    const s = describeRepeatedFailures({
+      rows: 2,
+      maxAttempts: 7,
+      lastError: null,
+    });
+    assert.match(s ?? "", /2 felvitel/);
+    assert.match(s ?? "", /7 alkalommal/);
+    assert.match(s ?? "", /nem maradt meg/);
   });
 });

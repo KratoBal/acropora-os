@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
-import { describeQueueBacklog } from "./queue-drain";
-import { queueCounts } from "./queue-store";
+import { describeQueueBacklog, describeRepeatedFailures } from "./queue-drain";
+import { queueCounts, repeatedFailures } from "./queue-store";
 
 /**
  * MI VAR MEG A TELEFONON -- A FUTASTOL FUGGETLENUL.
@@ -31,7 +31,21 @@ export function useQueueBacklog(frissites: unknown): string | null {
     void (async () => {
       try {
         const counts = await queueCounts();
-        if (ervenyes) setUzenet(describeQueueBacklog(counts));
+        /**
+         * KET KULON MONDAT, MERT KET KULON DOLOG.
+         *
+         * A hatralek azt mondja meg, MENNYI var; az ismetlodo hiba azt, hogy
+         * valamelyik nem csak var, hanem mar tobbszor elbukott. A masodik
+         * eddig SEHOL nem latszott: az `attempt_count` es a `last_error` irott,
+         * de olvasatlan adat volt.
+         */
+        const ismetlodo = await repeatedFailures();
+        const mondatok = [
+          describeQueueBacklog(counts),
+          describeRepeatedFailures(ismetlodo),
+        ].filter((m): m is string => m !== null);
+        if (ervenyes)
+          setUzenet(mondatok.length > 0 ? mondatok.join(" ") : null);
       } catch {
         /**
          * A SZAMLALAS HIBAJAT ELNYELJUK, es ez itt SZANDEKOS: ez a sav egy
