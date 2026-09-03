@@ -59,6 +59,13 @@ function detail(overrides: Partial<ServiceJobDetail> = {}): ServiceJobDetail {
     completedAt: null,
     allowedSteps: ["SCHEDULED", "CANCELLED"],
     /**
+     * A FIXTURA SZANDEKOSAN VEGYES: az egyik engedett lepes indokot kovetel, a
+     * masik nem. Ha mindketto ugyanolyan lenne, egy allitas nem tudna
+     * megkulonboztetni a helyes viselkedest attol, hogy MINDEN gomb tiltva van
+     * (vagy egyik sem).
+     */
+    stepsRequiringNote: ["CANCELLED"],
+    /**
      * A SORRENDET A SZERVER ADJA, ÉS EZ A MINTA SZÁNDÉKOSAN NEM DÁTUM SZERINT
      * ÁLL: ha a komponens újrarendezné, ez a sorrend megváltozna a képernyőn.
      * Így az állítás azt méri, hogy a kliens RAJZOL, nem dönt.
@@ -179,8 +186,64 @@ describe("ServiceJobDetailPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Ütemezve" }));
 
     await waitFor(() => expect(api.move).toHaveBeenCalledTimes(1));
-    expect(api.move.mock.calls[0]?.[2]).toEqual({ to: "SCHEDULED" });
+    expect(api.move.mock.calls[0]?.[2]).toEqual({
+      to: "SCHEDULED",
+      note: null,
+    });
     await waitFor(() => expect(api.detail).toHaveBeenCalledTimes(2));
+  });
+
+  /**
+   * A KET GOMB EGYUTT MERI A SZUKITEST.
+   *
+   * Az "Elallt" allitasa onmagaban akkor is zold lenne, ha a kepernyo MINDEN
+   * gombot tiltana ures mezonel; az "Utemezve" allitasa akkor is, ha egyiket
+   * sem. A ketto egyutt mondja ki, hogy a kepernyo a szerver listajat koveti.
+   */
+  it("indokot kérő lépés gombja zárva marad, amíg a mező üres", async () => {
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    await screen.findByText("A hibajegy létrejött (Új).");
+
+    expect(screen.getByRole("button", { name: "Elállt" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Ütemezve" })).not.toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Megjegyzés a lépéshez"), {
+      target: { value: "A vevő mégsem kéri." },
+    });
+
+    expect(screen.getByRole("button", { name: "Elállt" })).not.toBeDisabled();
+  });
+
+  /**
+   * A CSUPA SZOKOZ NEM OLDJA FEL. Ugyanaz a szabaly, mint a szerveren: a
+   * hianyt egyfele alak jelolje. Ha ez a ketto elcsuszna, a kepernyo atengedne
+   * valamit, amit a vegpont utana visszautasit.
+   */
+  it("a csupa szóköz nem oldja fel a gombot", async () => {
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    await screen.findByText("A hibajegy létrejött (Új).");
+
+    fireEvent.change(screen.getByLabelText("Megjegyzés a lépéshez"), {
+      target: { value: "   " },
+    });
+
+    expect(screen.getByRole("button", { name: "Elállt" })).toBeDisabled();
+  });
+
+  it("a beírt indokot átadja a lépésnek, és utána üríti a mezőt", async () => {
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    await screen.findByText("A hibajegy létrejött (Új).");
+
+    const field = screen.getByLabelText("Megjegyzés a lépéshez");
+    fireEvent.change(field, { target: { value: "  A vevő mégsem kéri.  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Elállt" }));
+
+    await waitFor(() => expect(api.move).toHaveBeenCalledTimes(1));
+    expect(api.move.mock.calls[0]?.[2]).toEqual({
+      to: "CANCELLED",
+      note: "A vevő mégsem kéri.",
+    });
+    await waitFor(() => expect(field).toHaveValue(""));
   });
 
   /**

@@ -89,6 +89,54 @@ describe("egy lépés a hibajegyen", () => {
     );
   });
 
+  /**
+   * AZ ORZO KET MERES: a mondat megjelenik, ES NEM TORTENIK SEMMI. A `calls`
+   * uressege az utobbi -- enelkul azt mernenk, hogy a szoveg megvan, nem azt,
+   * hogy a vedelem megvolt.
+   */
+  it("indok nélkül nem enged a várakozó állapotba, és nem ír", async () => {
+    const { service, calls } = serviceWith({ status: "TRIAGED" });
+
+    await assert.rejects(
+      () => service.move("job-1", { to: "WAITING_FOR_PARTS" }, "user-1"),
+      /alkatrész/,
+    );
+    assert.equal(calls.length, 0);
+  });
+
+  /**
+   * A CSUPA SZOKOZ UGYANAZ, MINT A SEMMI. Egy szokozokbol allo megjegyzes
+   * kitoltott mezonek latszana, es ures sort vinne a jegy tortenetebe.
+   */
+  it("a csupa szóközből álló indokot nem fogadja el", async () => {
+    const { service, calls } = serviceWith({ status: "NEW" });
+
+    await assert.rejects(
+      () => service.move("job-1", { to: "CANCELLED", note: "   " }, "user-1"),
+      /elállás indoka/,
+    );
+    assert.equal(calls.length, 0);
+  });
+
+  it("indokkal átmegy, és a szöveg eljut a naplóhoz", async () => {
+    const { service, calls } = serviceWith({ status: "TRIAGED" });
+
+    await service.move(
+      "job-1",
+      { to: "WAITING_FOR_PARTS", note: "  Szivattyú, hétfőre ígérik.  " },
+      "user-1",
+    );
+
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0], {
+      id: "job-1",
+      from: "TRIAGED",
+      to: "WAITING_FOR_PARTS",
+      note: "Szivattyú, hétfőre ígérik.",
+      actorUserId: "user-1",
+    });
+  });
+
   it("nem létező jegyre nem találhatót mond", async () => {
     const { service } = serviceWith({ status: null });
 

@@ -7,8 +7,10 @@ import {
   Card,
   ConfirmDialog,
   EmptyState,
+  FormField,
   PageHeader,
   Skeleton,
+  Textarea,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -69,6 +71,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [stepError, setStepError] = useState<string | null>(null);
   const [stepping, setStepping] = useState(false);
+  const [note, setNote] = useState("");
   const [attachable, setAttachable] = useState<WorksheetAttachableItem[]>([]);
   const [chosenSheet, setChosenSheet] = useState("");
   const [attachError, setAttachError] = useState<string | null>(null);
@@ -135,7 +138,17 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
     setStepping(true);
     setStepError(null);
     try {
-      await serviceJobsApi.move(token, jobId, { to });
+      await serviceJobsApi.move(token, jobId, {
+        to,
+        note: note.trim() || null,
+      });
+      /**
+       * A MEZO CSAK SIKERES LEPES UTAN URUL. Ha a hivas elbukik (halozat,
+       * utkozes, elutasitas), a felhasznalo begepelt szovege ottmarad -- egy
+       * elveszett indokot ujra le kellene irni, es a masodik nekifutas
+       * rovidebb lenne, mint az elso.
+       */
+      setNote("");
       await load();
     } catch (cause) {
       setStepError(
@@ -293,18 +306,50 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
             />
           ) : null}
           {job.allowedSteps.length ? (
-            <div className="flex flex-wrap gap-2">
-              {job.allowedSteps.map((to) => (
-                <Button
-                  key={to}
-                  variant="secondary"
-                  disabled={stepping}
-                  onClick={() => void step(to)}
-                >
-                  {serviceJobStatusLabel[to]}
-                </Button>
-              ))}
-            </div>
+            <>
+              <FormField
+                label="Megjegyzés"
+                description={
+                  job.stepsRequiringNote.length
+                    ? `Indok nélkül nem mehet: ${job.stepsRequiringNote
+                        .map((to) => serviceJobStatusLabel[to])
+                        .join(", ")}. A többi lépéshez elhagyható.`
+                    : "Elhagyható. Ami ide kerül, a jegy naplójában marad."
+                }
+              >
+                <Textarea
+                  aria-label="Megjegyzés a lépéshez"
+                  rows={3}
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                  maxLength={2000}
+                />
+              </FormField>
+              {/*
+                A TILTOTT GOMB NEMA, EZERT ALL A MONDAT A MEZO LEIRASABAN, ES
+                NEM CSAK A `disabled` ALLAPOTBAN. Egy gomb, ami szurke es nem
+                mondja meg, mire var, ugyanugy nez ki, mint egy elromlott gomb.
+
+                ES A TILTAS ITT NEM A SZABALY: azt a vegpont mondja ki. A
+                kepernyo ELORE mutatja, hogy a felhasznalo ne egy elutasitasbol
+                tudja meg -- ugyanaz a megfontolas, mint a partner-doboznal.
+              */}
+              <div className="flex flex-wrap gap-2">
+                {job.allowedSteps.map((to) => (
+                  <Button
+                    key={to}
+                    variant="secondary"
+                    disabled={
+                      stepping ||
+                      (job.stepsRequiringNote.includes(to) && !note.trim())
+                    }
+                    onClick={() => void step(to)}
+                  >
+                    {serviceJobStatusLabel[to]}
+                  </Button>
+                ))}
+              </div>
+            </>
           ) : (
             /* A LEZÁRT JEGYEN NEM ÜRES A DOBOZ, hanem meg van mondva, miért.
                Egy eltűnt gombsor úgy néz ki, mint egy betöltési hiba. */
