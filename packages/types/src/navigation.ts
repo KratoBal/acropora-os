@@ -222,6 +222,18 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     visibility: permission(PERMISSIONS.INVENTORY_VIEW),
   },
   {
+    /**
+     * A kimenosor OLVASASA `inventory.view`, ugyanaz, mint a szomszedjaie. A
+     * ket admin muvelet (ujra sorba allitas, azonnali futtatas) `inventory.manage`
+     * jogot igenyel a vegponton -- a menupont attol meg lathato marad, mert a
+     * lapon az ALLAPOT a lenyeg, es azt egy view-jogu felhasznalonak is latnia
+     * kell.
+     */
+    id: "stock-sync-outbox",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.INVENTORY_VIEW),
+  },
+  {
     id: "aquariums",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.AQUARIUMS_VIEW),

@@ -115,6 +115,7 @@ describe("navigation", () => {
       "/penzugy/foxpost",
       "/raktar",
       "/keszlet-egyeztetes",
+      "/keszlet-kimenosor",
     ]);
   });
 
@@ -376,6 +377,7 @@ describe("navigation", () => {
     "/penzugy/foxpost": "finance.view",
     "/raktar": "inventory.view",
     "/keszlet-egyeztetes": "inventory.view",
+    "/keszlet-kimenosor": "inventory.view",
     "/akvariumok": "aquariums.view",
     "/icp": "icp.view",
     "/admin/integrations/unas/connection": "settings.manage",

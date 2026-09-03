@@ -206,6 +206,12 @@ export const businessNavigation: AppNavigationEntry[] = [
         icon: "box",
         entryId: "inventory-reconciliation",
       },
+      {
+        href: "/keszlet-kimenosor",
+        label: "Készlet-kimenősor",
+        icon: "box",
+        entryId: "stock-sync-outbox",
+      },
     ],
   },
   {
