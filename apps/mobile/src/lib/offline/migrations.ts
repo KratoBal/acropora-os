@@ -45,6 +45,27 @@ export const MIGRATIONS: readonly Migration[] = [
     name: "a sync_queue allapot szerint kereshetu",
     sql: `CREATE INDEX IF NOT EXISTS sync_queue_state ON sync_queue (state);`,
   },
+  {
+    version: 3,
+    /**
+     * MIKOR PROBALTUK UTOLJARA -- A VARAKOZTATAS EGYETLEN LEHETSEGES ALAPJA.
+     *
+     * A kiuritest nem idozito inditja, hanem esemeny (app-indulas, halozat
+     * visszaterese). Egy "varj harminc masodpercet" szabaly tehat nem tud
+     * varakozni: nincs, ami kesobb visszajon. Amit MEG LEHET tenni, az az,
+     * hogy a KOVETKEZO alkalommal atugorjuk a sort, ha az elozo kiserlet ota
+     * meg nem telt el eleg ido.
+     *
+     * Ehhez kell ez az oszlop: az `attempt_count` megmondja, HANYSZOR, de nem
+     * azt, hogy MIKOR.
+     *
+     * SORSZAMOZOTT LEPESKENT, nem `CREATE TABLE IF NOT EXISTS` alakban: a
+     * tabla mar letezik minden keszuleken, es az `IF NOT EXISTS` egy MEGLEVO
+     * tablat nem modosit.
+     */
+    name: "a sync_queue sorai megjegyzik az utolso kiserlet idejet",
+    sql: `ALTER TABLE sync_queue ADD COLUMN last_attempt_at TEXT;`,
+  },
 ];
 
 /** A legmagasabb sorszam, amire a mai kod szamit. */

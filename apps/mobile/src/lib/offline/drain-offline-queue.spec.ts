@@ -96,10 +96,8 @@ describe("a két menet", () => {
       MI PIROSIT: ha a `pendingQueueRows` hivas kikerul a menetbol egy kozos,
       egyszer kiolvasott listaba.
     */
-    assert.match(
-      forras,
-      /pendingRows: async \(\) => batchForPass\(await pendingQueueRows\(\), muvelet\)/,
-    );
+    assert.match(forras, /const sorok = \(await pendingQueueRows\(\)\)/);
+    assert.match(forras, /batchForPass\(sorok, muvelet\)/);
   });
 
   it("a MENET TARTALMÁT a batchForPass dönti el, nem a lekérdezés", () => {
@@ -109,5 +107,27 @@ describe("a két menet", () => {
       le lenne irva, es senki nem kerdezne meg.
     */
     assert.match(forras, /batchForPass\(/);
+  });
+});
+
+describe("a várakoztatás", () => {
+  it("a sorok a KISERLET ÓTA ELTELT IDŐ szerint is szűrődnek", () => {
+    /*
+      A kiuritest esemeny inditja, nem idozito: nincs, ami kesobb visszajonne.
+      Amit tenni lehet, az az, hogy a KOVETKEZO alkalommal atugorjuk azt a sort,
+      aminek az elozo kiserlete ota meg nem telt el eleg ido -- kulonben egy
+      sorozatosan buko tetel minden halozat-valtasnal ujra elindul.
+
+      MI PIROSIT: a szures elhagyasa. A dontes maga (`isDueForRetry`) a
+      `queue-drain.ts`-ben all, es ott VISELKEDESSEL is meg van kotve.
+    */
+    assert.match(forras, /isDueForRetry\(row, most\)/);
+  });
+
+  it("a MEGÁLLT sorokat is a valódi tárolóra köti", () => {
+    // MI PIROSIT: ha a `markStalled` kimaradna. A futtato akkor a megallt
+    // soroknal semmit nem irna, es a tetel a kovetkezo futasban ujra elindulna
+    // -- vagyis a felso hatar szolna, es nem allitana meg semmit.
+    assert.match(forras, /markStalled: markQueueStalled/);
   });
 });

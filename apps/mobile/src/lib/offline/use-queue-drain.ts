@@ -14,7 +14,11 @@ import { ApiError } from "@/lib/api/client";
 import { drainOfflineQueue } from "./drain-offline-queue";
 import type { SyncQueueRow } from "./sync-queue";
 import { readPhotoPayload } from "./photo-queue";
-import { describeQueueRun, describeUnresolvedRecordings } from "./queue-runner";
+import {
+  describeQueueRun,
+  describeStalled,
+  describeUnresolvedRecordings,
+} from "./queue-runner";
 
 /**
  * A SOR KIURITESE, AMIKOR VISSZAJON A HALOZAT.
@@ -86,6 +90,7 @@ export function useQueueDrain(isOnline: boolean): string | null {
         });
         const mondatok = [
           describeQueueRun(report),
+          describeStalled(report),
           describeUnresolvedRecordings(report),
         ].filter((m): m is string => m !== null);
         setUzenet(mondatok.length > 0 ? mondatok.join(" ") : null);

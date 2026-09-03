@@ -168,6 +168,7 @@ export async function pendingQueueRows(): Promise<SyncQueueRow[]> {
     created_at: string;
     attempt_count: number;
     last_error: string | null;
+    last_attempt_at: string | null;
     state: string;
   }>(
     `SELECT * FROM sync_queue
@@ -184,6 +185,7 @@ export async function pendingQueueRows(): Promise<SyncQueueRow[]> {
     createdAt: r.created_at,
     attemptCount: r.attempt_count,
     lastError: r.last_error,
+    lastAttemptAt: r.last_attempt_at,
     state: r.state as SyncState,
   }));
 }
@@ -201,8 +203,36 @@ export async function markQueueRetry(
 ): Promise<void> {
   const db = await initializeOfflineDatabase();
   await db.runAsync(
-    `UPDATE sync_queue SET state = 'failed', attempt_count = ?, last_error = ? WHERE id = ?`,
-    [attemptCount, lastError, id],
+    /**
+     * AZ IDOPONT IS FELKERUL, ES E NELKUL A VARAKOZTATAS NEM LETEZIK. Az
+     * `attempt_count` megmondja, HANYSZOR probaltuk; a varakoztatashoz azt kell
+     * tudni, MIKOR volt az utolso.
+     */
+    `UPDATE sync_queue
+        SET state = 'failed', attempt_count = ?, last_error = ?, last_attempt_at = ?
+      WHERE id = ?`,
+    [attemptCount, lastError, new Date().toISOString(), id],
+  );
+}
+
+/**
+ * A SZERVER SOKADSZORRA IS HIBAT ADOTT: A SOR MEGALL, ES EMBERRE VAR.
+ *
+ * NEM torles: a felvitel egyetlen letezo peldanya tovabbra is a keszuleken van.
+ * Es nem `conflict`: ott a FELVITELT kell javitani, itt a szerverrel van baj --
+ * a felulet a ket esetrol mast mond.
+ */
+export async function markQueueStalled(
+  id: string,
+  attemptCount: number,
+  lastError: string,
+): Promise<void> {
+  const db = await initializeOfflineDatabase();
+  await db.runAsync(
+    `UPDATE sync_queue
+        SET state = 'stalled', attempt_count = ?, last_error = ?, last_attempt_at = ?
+      WHERE id = ?`,
+    [attemptCount, lastError, new Date().toISOString(), id],
   );
 }
 
@@ -229,6 +259,7 @@ export async function markQueueConflict(
 export async function queueCounts(): Promise<{
   pending: number;
   conflict: number;
+  stalled: number;
   recordings: number;
   photos: number;
 }> {
@@ -255,6 +286,12 @@ export async function queueCounts(): Promise<{
   return {
     pending: szam(varakozo),
     conflict: szam(["conflict"]),
+    /**
+     * A MEGALLT SOROK KULON SZAMBAN: nem varakoznak (nem indulnak el maguktol)
+     * es nem is elutasitottak. Ha a `pending` alatt allnanak, a felulet azt
+     * mondana rolok, hogy fel fognak menni.
+     */
+    stalled: szam(["stalled"]),
     recordings: szam(varakozo, "create"),
     photos: szam(varakozo, "upload-photo"),
   };
