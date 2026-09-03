@@ -27,6 +27,7 @@ import {
   type ProjectionPublicationReport,
 } from "./medusa-product-projection.service.js";
 import { storefrontSalesChannelId } from "./medusa-sales-channel.config.js";
+import { parseBatchArguments } from "./medusa-projection-batch.js";
 
 /**
  * KÉZZEL indított vetítés, termékazonosítónként.
@@ -242,12 +243,55 @@ export async function runProjectionCli(
    * DELETE utasítást adni valakinek egy éles adatbázisra. A vetítés
    * újrafuttatása vissza is állítja.
    */
-  const forgetOnly = productIds.includes("--forget-link");
-  const targets = productIds.filter((value) => value !== "--forget-link");
+  /**
+   * AZ ERTELMEZES KULON MODULBAN AL, ES A HIBAT ITT IRJUK KI.
+   *
+   * A kotegeles nelkul a parancs csak kezzel felsorolt azonositokat vett, es a
+   * teljes katalogushoz (1893 termek) semmilyen alakban nem ment. Az
+   * ertelmezes azert tiszta fuggveny, mert a parancs torzsenek nem lehet
+   * teszt-duplat adni -- egy elgepelt kapcsolo viszont CSENDBEN mast futtatna.
+   */
+  const parsed = parseBatchArguments(productIds);
+  if (parsed.kind === "error") {
+    out.stderr(`${parsed.message}\n`);
+    return 1;
+  }
+  const { forgetOnly, from, limit } = parsed.selection;
+
+  /**
+   * A KOTEG STABIL RENDEZESSEL JON, es ez nem kozmetika: a `--from` egy adott
+   * ponttol folytat, es egy rendezetlen lekerdezes minden futasnal MAS ablakot
+   * adna -- ugyanaz a parancs ketszer futtatva termekeket hagyna ki es
+   * ismetelne, csendben.
+   *
+   * A `gt` (nem `gte`) azert kell, mert a `--from` a MAR MEGVOLT utolso
+   * azonosito: azt nem akarjuk megegyszer.
+   */
+  const targets = parsed.selection.targets.length
+    ? parsed.selection.targets
+    : (
+        await prisma.product.findMany({
+          where: from ? { id: { gt: from } } : {},
+          orderBy: { id: "asc" },
+          take: limit ?? undefined,
+          select: { id: true },
+        })
+      ).map((row) => row.id);
 
   if (!targets.length) {
-    out.stderr("Adj meg legalább egy termékazonosítót vagy sku: alakot.\n");
-    return 1;
+    /**
+     * A KOTEG ES A FELSOROLAS URES ESETE MAS UZENETET KAP.
+     *
+     * Egy ures koteg NEM hiba: azt jelenti, hogy a `--from` utan mar nincs
+     * termek, tehat a menet VEGIGERT. Egy kozos "adj meg azonositot" sor itt
+     * azt sugallna, hogy a hivo rontott el valamit.
+     */
+    out.stdout(
+      from
+        ? `A(z) ${from} után nincs több termék: a menet végigért.\n`
+        : "Nincs vetíthető termék.\n",
+    );
+    return 0;
   }
 
   let service: MedusaProductProjectionService | null = null;
