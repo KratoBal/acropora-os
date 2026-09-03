@@ -25,6 +25,8 @@
  * senki nem tudná megkülönböztetni a szándékostól.
  */
 
+import type { QueueWriteOutcome } from "../offline/save-or-queue";
+
 export interface WorksheetCreateForm {
   /** A munkalap partnere. A választó a `customerId` mezőt adja, nem a partnerét. */
   customerId: string;
@@ -117,5 +119,36 @@ export function buildWorksheetCreatePayload(
        */
       ...(description ? { description } : {}),
     },
+  };
+}
+
+/**
+ * A SORBA TETEL EREDMENYE, EMBERI ALAKBAN -- A MUNKALAPRA SZABVA.
+ *
+ * A dontes kozos (`offline/save-or-queue.ts`), a SZOVEG viszont nem lehet az:
+ * az eszkoznel a mondat a gyorsitotar-ellenorzest is hordozza (hany eszkoz
+ * ellen neztuk meg a matricakodot), a munkalapnal nincs mit hordoznia. Egy
+ * kozos szoveg itt tobbet allitana, mint amit tudunk.
+ *
+ * A KET ESET KULON, es ez a lenyeg: a felhasznalo MINDKETTONEL "elkuldte" a
+ * lapot. Ha a sorba tetel bukott el, a lap SEHOL nem letezik -- se a
+ * szerveren, se a telefonon --, es ha ugyanazt a zold mondatot adnank, a
+ * szerelo tovabbmenne.
+ */
+export function describeWorksheetQueueWrite(
+  result: { ok: true; operationId: string } | { ok: false; error: string },
+): QueueWriteOutcome {
+  if (result.ok)
+    return {
+      type: "queued",
+      operationId: result.operationId,
+      message:
+        "A munkalap a telefonon vár feltöltésre. Amint van térerő, magától felmegy.",
+    };
+  return {
+    type: "queue-failed",
+    message:
+      `A munkalapot NEM sikerült elmenteni a telefonra (${result.error}). ` +
+      "Ez a lap elveszett: vidd fel újra, és ha ismétlődik, szólj.",
   };
 }

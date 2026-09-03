@@ -92,24 +92,52 @@ describe("a fénykép sora", () => {
     );
   });
 
-  it("csak ISMERT műveletet küldünk el, és az ismeretlent nem dobjuk el", () => {
-    // Egy ismeretlen muveletet egy UJABB valtozat irhatott a sorba. Nem
-    // talalgatjuk (az a szerverig menne), es nem is toroljuk (az a felvitel
-    // egyetlen peldanya lehet): a sorban marad, csak nem indul el.
-    assert.match(forras, /ismertMuvelet/);
+  it("csak ISMERT sort küldünk el, és az ismeretlent nem dobjuk el", () => {
+    // Egy ismeretlen muveletet vagy entitast egy UJABB valtozat irhatott a
+    // sorba. Nem talalgatjuk (az a szerverig menne), es nem is toroljuk (az a
+    // felvitel egyetlen peldanya lehet): a sorban marad, csak nem indul el.
+    assert.match(forras, /ismertSor/);
     assert.doesNotMatch(forras, /DELETE FROM sync_queue WHERE operation/);
   });
 
-  it("a kép sora is IDEMPOTENS beszúrással megy be", () => {
-    // MI PIROSIT: egy sima `INSERT`. Akkor a ketszer megnyomott gomb ket sort
-    // tenne a sorba, es ugyanaz a kep KETSZER menne fel.
+  it("az ENTITÁST is OLVASSUK, nem állítjuk", () => {
+    /*
+      A beolvasas eddig minden sorra `"asset"`-et irt. Amig egyfele entitas
+      volt, ez igaz is volt. Egy MUNKALAP sor viszont igy eszkoznek latszana,
+      es a szinkron a munkalap payloadjaval hivna az ESZKOZ vegpontjat.
+
+      MI PIROSIT: a literal visszairasa a lekepezesbe.
+    */
+    assert.match(
+      forras,
+      /entityType: r\.entity_type as SyncQueueRow\["entityType"\]/,
+    );
+  });
+
+  it("MINDHÁROM sorfajta IDEMPOTENS beszúrással megy be", () => {
+    /*
+      MI PIROSIT: egyetlen sima `INSERT` barmelyik agban. Akkor a ketszer
+      megnyomott gomb ket sort tenne a sorba, es ugyanaz a felvitel KETSZER
+      menne fel.
+
+      A HARMAS SZAM MAGA IS ALLITAS: eszkoz, munkalap, fenykep. Ha egy negyedik
+      sorfajta jon, ez a sor pirosra valt, es akkor kell eldonteni, hogy az uj
+      ag is idempotens-e.
+    */
     const beszurasok = [
       ...forras.matchAll(/INSERT( OR IGNORE)? INTO sync_queue/g),
     ].map((m) => m[0]);
     assert.deepEqual(beszurasok, [
       "INSERT OR IGNORE INTO sync_queue",
       "INSERT OR IGNORE INTO sync_queue",
+      "INSERT OR IGNORE INTO sync_queue",
     ]);
+  });
+
+  it("a MUNKALAP sora munkalap entitással megy be", () => {
+    // MI PIROSIT: ha a munkalap `'asset'` entitassal kerulne a sorba. A
+    // kuldes az entitasbol dont, tehat a lap az ESZKOZ vegpontjara menne.
+    assert.match(forras, /VALUES \(\?, 'create', 'worksheet', NULL/);
   });
 
   it("a párosítás CSAK a címzetlen fotó-sorokat érinti", () => {

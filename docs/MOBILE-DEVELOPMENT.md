@@ -300,8 +300,11 @@ other secret) belong in the EAS environment configuration
 
 ## Offline boundary
 
-**Reading works offline; writing does not.** The line runs between the two, and
-it is deliberate — see ADR-011 in `docs/DECISIONS.md`.
+**Reading works offline, and since 2026-09-03 so does recording.** What is
+still not possible without signal is everything that CLOSES something: closing
+or signing a worksheet, editing an existing asset, printing a label. The line
+now runs between _creating_ and _finishing_, not between reading and writing —
+see ADR-011 in `docs/DECISIONS.md` for the original boundary.
 
 ### What works without signal (the field asset catalogue)
 
@@ -309,7 +312,9 @@ it is deliberate — see ADR-011 in `docs/DECISIONS.md`.
 
 - `database.ts` — SQLite/WAL, with `cached_assets` (every row the asset list
   returned) and `cached_asset_details` (the full sheet, only for assets someone
-  opened while online), plus the untouched `sync_queue` table for future writes.
+  opened while online), `cached_worksheet_departments` (a partner's sites, per
+  customer, because the site is REQUIRED when opening a worksheet), and
+  `sync_queue`, the queue the recordings actually go through.
 - `asset-cache.ts` — reads and writes that copy, resolves a scanned `qrToken`
   against it, and drops everything on sign-out. A failed save never breaks a
   screen that is working online.
@@ -327,13 +332,41 @@ it is deliberate — see ADR-011 in `docs/DECISIONS.md`.
 Server-only actions are hidden on a saved copy rather than left to fail: label
 printing and editing need the API.
 
+### What CAN be recorded without signal (the queue)
+
+Three things go into `sync_queue` and leave it when there is signal again:
+
+- **an asset**, recorded on site (`app/assets/new.tsx`);
+- **a worksheet**, opened on site (`app/worksheets/new.tsx`) — three fields, no
+  lines and no dates, because `lines` defaults to empty on the server and the
+  dates are decided at the office;
+- **a photo** taken with the recording, which follows its asset: the picture is
+  attached to a server-side asset that does not exist yet at queueing time.
+
+How the queue behaves, and why:
+
+- **The order is two passes, not a sort.** First every `create`, then every
+  `upload-photo`. A photo attaches to an asset that must already exist server
+  side, so the passes ARE the dependency (`offline/photo-queue.ts`).
+- **The operation id comes from the content, not from a random number**, and the
+  same id goes to the server as `clientOperationId`. A resend after a lost
+  response therefore returns the EXISTING record instead of creating a second
+  one — the column is optional and unique on both `Asset` and `Worksheet`, so
+  the web forms, which send no key, are unaffected.
+- **A responded 4xx is not queued for retry.** 409/422 mean the server refused;
+  retrying would loop forever while the screen showed "waiting". Only a request
+  that never reached the server is retried.
+- **The local row survives until the server acknowledges it**, and sign-out
+  clears the CACHES but never the queue: a queued recording is the only copy
+  that exists.
+- **The home screen says what is still waiting**, split into recordings and
+  photos, because a queue emptied of recordings looks like a successful sync
+  while the pictures are still on the phone.
+
 ### What still does not work offline
 
-Writing. Creating or editing an asset, closing or signing a worksheet — none of
-it is queued locally. `sync_queue` remains a table nobody calls.
-
-Domain work will add task-specific tables and an idempotent sync protocol. The
-rules for that protocol are:
+Finishing. Closing or signing a worksheet, editing an existing asset, printing a
+label: all of it needs the API. The protocol rules those follow when they come:
 
 - server IDs plus client-generated operation IDs;
 - explicit pending/syncing/failed/conflict states;
@@ -342,6 +375,11 @@ rules for that protocol are:
 - signatures and document versions are server-confirmed actions;
 - preserve local evidence until the server acknowledges it;
 - show unresolved conflicts to the colleague instead of silently overwriting.
+
+**A KNOWN GAP, stated rather than implied:** a row that can never succeed (a
+server answering 5xx every time) is retried forever, and looks exactly like one
+that is merely waiting for signal — `attempt_count` is written but read by
+nothing, and `last_error` is stored and never shown. Card `cde22311` covers it.
 
 ## Push notification boundary
 

@@ -3,7 +3,7 @@
 // futasi kornyezetet.
 import type { PickedFile } from "../api/picked-image";
 import { photoOperationId, type PhotoPayload } from "../offline/photo-queue";
-import type { SaveOutcome } from "./save-or-queue";
+import type { SaveOutcome } from "../offline/save-or-queue";
 
 /**
  * MI TORTENJEN A HELYSZINEN KESZULT KEPPEL, MIUTAN A ROGZITES ELDOLT.
@@ -16,7 +16,7 @@ import type { SaveOutcome } from "./save-or-queue";
  *
  * === A NEGY KIMENET NEGY KULON TEENDO ===
  *
- * A rogzitesnek negy vege van (`save-or-queue.ts`), es a kep sorsa MIND A
+ * A rogzitesnek negy vege van (`offline/save-or-queue.ts`), es a kep sorsa MIND A
  * NEGYNEL MAS. A legkonnyebben elsikkado a ket utolso: ott a kep marad a
  * kezunkben, es ha hallgatunk rola, a szerelo azt hiszi, felment.
  *

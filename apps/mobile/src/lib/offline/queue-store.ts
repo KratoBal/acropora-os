@@ -59,6 +59,34 @@ export async function enqueueAssetCreate(
 }
 
 /**
+ * SORBA TESZ EGY MUNKALAPOT.
+ *
+ * UGYANAZ A TABLA, MAS ENTITAS. A kulcs a tartalombol szuletik
+ * (`worksheetOperationId`), es ugyanez a kulcs megy fel a szervernek is
+ * `clientOperationId` neven -- tehat egy megszakadt kuldes ujrakuldese a
+ * MEGLEVO lapot adja vissza, nem masodikat hoz letre.
+ */
+export async function enqueueWorksheetCreate(
+  input: EnqueueInput,
+): Promise<EnqueueResult> {
+  try {
+    const db = await initializeOfflineDatabase();
+    await db.runAsync(
+      `INSERT OR IGNORE INTO sync_queue
+         (id, operation, entity_type, entity_id, payload_json, created_at, attempt_count, last_error, state)
+       VALUES (?, 'create', 'worksheet', NULL, ?, ?, 0, NULL, 'pending')`,
+      [input.id, JSON.stringify(input.payload), input.createdAt],
+    );
+    return { ok: true, operationId: input.id };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
  * SORBA TESZ EGY FENYKEPET, EGY MEG FEL NEM MENT ROGZITESHEZ.
  *
  * UGYANAZ A TABLA, MASIK `operation` -- a ket menet sorrendjet a
@@ -147,10 +175,10 @@ export async function pendingQueueRows(): Promise<SyncQueueRow[]> {
       ORDER BY created_at ASC`,
     KULDHETO,
   );
-  return rows.filter(ismertMuvelet).map((r) => ({
+  return rows.filter(ismertSor).map((r) => ({
     id: r.id,
     operation: r.operation as SyncQueueRow["operation"],
-    entityType: "asset",
+    entityType: r.entity_type as SyncQueueRow["entityType"],
     entityId: r.entity_id,
     payloadJson: r.payload_json,
     createdAt: r.created_at,
@@ -233,17 +261,21 @@ export async function queueCounts(): Promise<{
 }
 
 /**
- * CSAK AZT KULDJUK EL, AMIT ISMERUNK.
+ * CSAK AZT KULDJUK EL, AMIT ISMERUNK -- ES EZ KET MEZORE ALL.
  *
- * A muvelet nevet eddig `"create"`-re ALLITOTTUK a beolvasasnal, nem olvastuk:
- * amig egyfele sor volt, ez igaz is volt. Egy `upload-photo` sor viszont igy
- * rogzitesnek latszott volna, es a szinkron egy KEP payloadjaval hivta volna a
- * felviteli vegpontot -- a hiba a SZERVEREN jelent volna meg, egy ertelmetlen
- * elutasitaskent.
+ * A muvelet nevet eddig `"create"`-re, az entitast `"asset"`-re ALLITOTTUK a
+ * beolvasasnal, nem olvastuk. Amig egyfele sor volt, mind a ketto igaz is volt.
+ * Egy `upload-photo` sor igy rogzitesnek latszott volna, egy MUNKALAP sor pedig
+ * eszkoznek -- es a szinkron a munkalap payloadjaval hivta volna az ESZKOZ
+ * vegpontjat. A hiba a SZERVEREN jelent volna meg, ertelmetlen elutasitaskent.
  *
- * Az ISMERETLEN muveletet nem toroljuk es nem is talalgatjuk: a sorban marad
- * (egy ujabb valtozat irhatta oda), csak nem kuldjuk el.
+ * Az ISMERETLENT nem toroljuk es nem talalgatjuk: a sorban marad (egy ujabb
+ * valtozat irhatta oda), csak nem kuldjuk el.
  */
-function ismertMuvelet(row: { operation: string }): boolean {
-  return row.operation === "create" || row.operation === "upload-photo";
+function ismertSor(row: { operation: string; entity_type: string }): boolean {
+  const muvelet =
+    row.operation === "create" || row.operation === "upload-photo";
+  const entitas =
+    row.entity_type === "asset" || row.entity_type === "worksheet";
+  return muvelet && entitas;
 }

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { canRetryState, classifyFailure, operationId } from "./sync-queue";
+import {
+  canRetryState,
+  classifyFailure,
+  operationId,
+  worksheetOperationId,
+} from "./sync-queue";
 
 /**
  * A KETTOS FELVITEL ES A VEGTELEN UJRAPROBALAS -- ez a ket hiba, amit a
@@ -93,5 +98,56 @@ describe("az újrapróbálás", () => {
     // atmenne a ket fenti allitason.
     assert.equal(canRetryState("pending"), true);
     assert.equal(canRetryState("failed"), true);
+  });
+});
+
+describe("a munkalap művelet-azonosítója", () => {
+  it("UGYANAZ a partner és időpont UGYANAZT a kulcsot adja", () => {
+    /*
+      A kulcs a tartalombol szuletik, es UGYANEZ megy fel a szervernek is
+      `clientOperationId` neven. Ha veletlen kulcsot adnank, egy megszakadt
+      kuldes ujrakuldese MASODIK munkalapot hozna letre a szerveren.
+    */
+    const a = worksheetOperationId({
+      customerId: "customer-42",
+      startedAt: "2026-09-03T10:00:00.000Z",
+    });
+    const b = worksheetOperationId({
+      customerId: "customer-42",
+      startedAt: "2026-09-03T10:00:00.000Z",
+    });
+    assert.equal(a, b);
+  });
+
+  it("KÉT lap ugyanannál a partnernél KÉT kulcsot kap", () => {
+    /*
+      MI PIROSIT: ha a kulcs csak a partnerbol keszulne. Akkor a nap masodik
+      munkalapja a beszurasnal csendben elesne (`INSERT OR IGNORE`), es a
+      szerelo azt hinne, hogy felvitte -- holott csak az elso lap all a sorban.
+    */
+    assert.notEqual(
+      worksheetOperationId({
+        customerId: "customer-42",
+        startedAt: "2026-09-03T10:00:00.000Z",
+      }),
+      worksheetOperationId({
+        customerId: "customer-42",
+        startedAt: "2026-09-03T11:30:00.000Z",
+      }),
+    );
+  });
+
+  it("a MUNKALAP kulcsa nem ütközhet az ESZKÖZÉVEL", () => {
+    // A ket kulcs UGYANABBAN a tablaban, ugyanabban az oszlopban all -- a
+    // sorban es a szerveren is. Az elotag az, ami elvalasztja oket.
+    const lap = worksheetOperationId({
+      customerId: "x",
+      startedAt: "2026-09-03T10:00:00.000Z",
+    });
+    const eszkoz = operationId({
+      qrToken: "x",
+      scannedAt: "2026-09-03T10:00:00.000Z",
+    });
+    assert.notEqual(lap, eszkoz);
   });
 });

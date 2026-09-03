@@ -7,6 +7,7 @@ import {
 // (`tsconfig.test.json`-ban nincs `paths`), es a feloldasa behuzna az Expo
 // futasi kornyezetet. A kepernyok hasznalhatjak az aliast, a teszt-forditott
 // fajlok nem.
+import type { QueueWriteOutcome } from "../offline/save-or-queue";
 import { operationId } from "../offline/sync-queue";
 
 /**
@@ -76,9 +77,7 @@ export function decideOfflineRecord(input: {
  * valaszban latszik -- es ha nem latszik, egy elveszett felvitelt keresne
  * napokkal kesobb valaki mas.
  */
-export type QueueWriteOutcome =
-  | { type: "queued"; operationId: string; message: string }
-  | { type: "queue-failed"; message: string };
+export type { QueueWriteOutcome };
 
 export function describeQueueWrite(
   result: { ok: true; operationId: string } | { ok: false; error: string },

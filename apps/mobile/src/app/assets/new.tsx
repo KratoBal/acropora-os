@@ -49,8 +49,11 @@ import {
   type AssetCreateField,
 } from "@/lib/assets/asset-create";
 import { normalizeAssetLabelCode } from "@/lib/assets/asset-label-mirror";
-import { decideOfflineRecord } from "@/lib/assets/offline-record";
-import { saveAssetOrQueue, type SaveOutcome } from "@/lib/assets/save-or-queue";
+import {
+  decideOfflineRecord,
+  describeQueueWrite,
+} from "@/lib/assets/offline-record";
+import { saveOrQueue, type SaveOutcome } from "@/lib/offline/save-or-queue";
 import { ApiError } from "@/lib/api/client";
 import {
   readCachedAssetByToken,
@@ -170,7 +173,7 @@ export default function NewAssetScreen() {
   /**
    * MENTES: A SZERVERNEK, ES CSAK HALOZATI HIBANAL A SORBA.
    *
-   * A dontes a `lib/assets/save-or-queue.ts`-ben van, mert ott MERHETO -- ebben
+   * A dontes a `lib/offline/save-or-queue.ts`-ben van, mert ott MERHETO -- ebben
    * a fajlban nincs, ami tesztelne. Ide csak a HIVAS kerul, es az, hogy a
    * negy kimenet KULON valaszt kap:
    *
@@ -207,8 +210,8 @@ export default function NewAssetScreen() {
           photo: { maradjunk: false, message: null as string | null },
         };
       }
-      const outcome = await saveAssetOrQueue({
-        createAsset: () => createAsset(payload),
+      const outcome = await saveOrQueue({
+        save: () => createAsset(payload),
         enqueue: () =>
           enqueueAssetCreate({
             id: dontes.operationId,
@@ -216,7 +219,12 @@ export default function NewAssetScreen() {
             createdAt: beolvasas,
           }),
         statusOf: (cause) => (cause instanceof ApiError ? cause.status : null),
-        checkMessage: dontes.message,
+        /**
+         * A SZOVEG ITT AZ ESZKOZE: a mondat a gyorsitotar-ellenorzest is
+         * hordozza (hany eszkoz ellen neztuk meg a kodot). A DONTES kozos, a
+         * munkalap ugyanezt a fuggvenyt hivja, mas szoveggel.
+         */
+        describeWrite: (result) => describeQueueWrite(result, dontes.message),
       });
       /**
        * A KEP SORSA A ROGZITES KIMENETELEBOL KOVETKEZIK, es a dontes a

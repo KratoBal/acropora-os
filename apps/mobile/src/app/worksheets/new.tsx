@@ -31,9 +31,15 @@ import {
   readCachedWorksheetDepartments,
   rememberWorksheetDepartments,
 } from "@/lib/offline/worksheet-department-cache";
+import { ApiError } from "@/lib/api/client";
+import { saveOrQueue } from "@/lib/offline/save-or-queue";
+import { enqueueWorksheetCreate } from "@/lib/offline/queue-store";
+import { worksheetOperationId } from "@/lib/offline/sync-queue";
 import {
   buildWorksheetCreatePayload,
+  describeWorksheetQueueWrite,
   type WorksheetCreateField,
+  type WorksheetCreatePayload,
 } from "@/lib/worksheets/worksheet-create";
 
 /**
@@ -71,6 +77,12 @@ export default function NewWorksheetScreen() {
     field: WorksheetCreateField | null;
     message: string;
   } | null>(null);
+  /**
+   * A SORBA KERULT LAP UZENETE, KULON AZ ERRORTOL. Nem hiba: a felvitel
+   * megtortent, csak meg a telefonon var. Ugyanabban a piros dobozban a
+   * kollega elveszettnek hinne, es ujra felvinne.
+   */
+  const [queued, setQueued] = useState<string | null>(null);
 
   const partnersQuery = useQuery({
     queryKey: ["worksheet-partners"],
@@ -151,13 +163,56 @@ export default function NewWorksheetScreen() {
       })
     : null;
 
+  /**
+   * MENTES: A SZERVERNEK, ES CSAK HALOZATI HIBANAL A SORBA.
+   *
+   * A dontes a `lib/offline/save-or-queue.ts`-ben van, mert ott MERHETO --
+   * ebben a fajlban nincs, ami tesztelne. Ugyanaz a fuggveny fut, mint az
+   * eszkoz-felvitelnel; a SZOVEG kulon, mert a munkalapnal nincs
+   * gyorsitotar-ellenorzes, amit a mondat hordozhatna.
+   */
   const mutation = useMutation({
-    mutationFn: createWorksheet,
-    onSuccess: (worksheet) =>
-      router.replace({
-        pathname: "/worksheets/[id]",
-        params: { id: worksheet.id },
-      }),
+    mutationFn: async (payload: WorksheetCreatePayload) => {
+      const nyitas = new Date().toISOString();
+      return saveOrQueue({
+        save: () => createWorksheet(payload),
+        enqueue: () =>
+          enqueueWorksheetCreate({
+            /**
+             * A KULCS A TARTALOMBOL SZULETIK, es UGYANEZ megy fel a szervernek
+             * `clientOperationId` neven: egy megszakadt kuldes ujrakuldese a
+             * MEGLEVO lapot adja vissza, nem masodikat hoz letre.
+             */
+            id: worksheetOperationId({
+              customerId: payload.customerId,
+              startedAt: nyitas,
+            }),
+            payload,
+            createdAt: nyitas,
+          }),
+        statusOf: (cause) => (cause instanceof ApiError ? cause.status : null),
+        describeWrite: describeWorksheetQueueWrite,
+      });
+    },
+    onSuccess: (outcome) => {
+      if (outcome.type === "saved") {
+        router.replace({
+          pathname: "/worksheets/[id]",
+          params: { id: outcome.assetId },
+        });
+        return;
+      }
+      if (outcome.type === "queued") {
+        setQueued(outcome.message);
+        return;
+      }
+      /**
+       * A `lost` ES A `rejected` HIBAKENT jelenik meg, nem zolden. A ket eset
+       * kulonbozik (az egyiknel a lap SEHOL nincs, a masiknal a szerver tudja
+       * es elutasitotta), de EGYIK SEM siker.
+       */
+      setError({ field: null, message: outcome.message });
+    },
     onError: (cause) =>
       setError({
         field: null,
@@ -332,6 +387,7 @@ export default function NewWorksheetScreen() {
             az alján van, és aki megnyomta, semmit nem lát.
           */}
           {error ? <Text style={styles.error}>{error.message}</Text> : null}
+          {queued ? <Text style={styles.queued}>{queued}</Text> : null}
 
           <Pressable
             disabled={mutation.isPending}
@@ -441,6 +497,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#3a1a1a",
     borderRadius: 10,
     color: "#ffb4ab",
+    padding: 12,
+  },
+  queued: {
+    backgroundColor: "#0b2f3f",
+    borderRadius: 10,
+    color: "#a9e7dd",
     padding: 12,
   },
   saveButton: { backgroundColor: "#177b74", borderRadius: 12, padding: 15 },
