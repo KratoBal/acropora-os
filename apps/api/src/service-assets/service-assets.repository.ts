@@ -988,65 +988,10 @@ export class ServiceAssetsRepository extends Repository {
   }
 
   /**
-   * MATRICAK KIADASA: a nyomtatott iv kodjai bekerulnek a keszletbe.
-   *
-   * IDEMPOTENS, ES EZ NEM KENYELEM. Egy ivet ujra lehet nyomtatni, es a kiado
-   * nem tudhatja fejbol, melyik kod all mar bent. A `skipDuplicates` miatt a
-   * masodik hivas nem hasal el -- de a valasz KULON MONDJA MEG, mi jott letre
-   * es mi allt mar ott. Enelkul a hivo azt hinne, annyi UJ matricat kapott,
-   * amennyit kert.
-   *
-   * A KODOKAT NEM ITT TALALJUK KI: a hivo adja at oket, mert a matrican mar
-   * rajta vannak. Egy generator itt azt jelentene, hogy a szoftver dont arrol,
-   * ami fizikailag mar ki van nyomtatva.
-   */
-  async issueLabels(codes: readonly string[]): Promise<{
-    issued: string[];
-    alreadyIssued: string[];
-  }> {
-    const normalized: string[] = [];
-    for (const raw of codes) {
-      const code = normalizeAssetLabelCode(raw);
-      if (code === null) throw new AssetLabelUnavailableError(raw);
-      normalized.push(code);
-    }
-    // A KERESEN BELULI ISMETLES IS ISMETLES: ket azonos kod egy hivasban nem
-    // ket matrica. Az egyedi halmaz megy be, a valasz viszont a KERT sorrendet
-    // koveti, hogy a hivo osszevethesse azzal, amit kuldott.
-    const unique = [...new Set(normalized)];
-
-    const existing = new Set(
-      (
-        await prisma.assetLabel.findMany({
-          where: { code: { in: unique } },
-          select: { code: true },
-        })
-      ).map((row) => row.code),
-    );
-    const toCreate = unique.filter((code) => !existing.has(code));
-    if (toCreate.length > 0)
-      await prisma.assetLabel.createMany({
-        data: toCreate.map((code) => ({ code })),
-        skipDuplicates: true,
-      });
-
-    return {
-      issued: normalized.filter(
-        (code, index) =>
-          normalized.indexOf(code) === index && !existing.has(code),
-      ),
-      alreadyIssued: normalized.filter(
-        (code, index) =>
-          normalized.indexOf(code) === index && existing.has(code),
-      ),
-    };
-  }
-
-  /**
    * EGY GENERALASI TETEL: `count` darab UJ, meg nem letezo kod.
    *
    * A KODOKAT ITT GENERALJUK, nem a hivo adja -- ez a kulonbseg az
-   * `issueLabels`-hez kepest, ami egy MAR KINYOMTATOTT iv kodjait veszi at.
+   * `importBatch`-hez kepest, ami egy MAR KINYOMTATOTT iv kodjait veszi at.
    *
    * AZ UTKOZES KEZELESE NEM UJRAPROBALKOZAS A TRANZAKCIOBAN. Eloszor
    * osszegyujtjuk a jelolteket a MAR LETEZO kodok ellenében, es csak a kesz

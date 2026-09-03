@@ -145,13 +145,6 @@ export class ServiceAssetsController {
     return this.service.labelBatchCodes(id);
   }
 
-  /** Egy nyomtatott iv kodjainak felvitele a keszletbe. */
-  @Post("labels")
-  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
-  issueLabels(@Body() input: IssueAssetLabelsDto) {
-    return this.service.issueLabels(input.codes);
-  }
-
   @Get("owners")
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
   owners(

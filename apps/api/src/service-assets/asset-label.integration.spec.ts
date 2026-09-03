@@ -156,7 +156,7 @@ describe(
       // A NULL nem egyenlő önmagával, ezért az `assetId` egyedi indexe a szabad
       // sorokra nem korlátoz -- ez a viselkedés a készlet MŰKÖDÉSI feltétele,
       // nem mellékhatás, ezért áll itt állításként.
-      await repository.issueLabels([CODE_B, CODE_C]);
+      await repository.importBatch([CODE_B, CODE_C]);
       const free = await repository.listFreeLabels(100);
       const codes = free.map((row) => row.code);
       assert.ok(codes.includes(CODE_B));
@@ -336,11 +336,21 @@ describe(
       await prisma.assetLabelBatch.delete({ where: { id: batch.batchId } });
     });
 
-    it("a kiadás idempotens, és megmondja, mi állt már ott", async () => {
-      const result = await repository.issueLabels([CODE_A, "Z9010"]);
-      assert.deepEqual(result.alreadyIssued, [CODE_A]);
-      assert.deepEqual(result.issued, ["Z9010"]);
+    /**
+     * A FELVITEL IDEMPOTENS, ES A KET MEZO KULON MONDJA MEG, MI TORTENT.
+     *
+     * Ez az allitas 2026-09-03-ig a `issueLabels` agan allt; azt a vegpontot
+     * torolte a "ket ajto" javitas, mert kliens-hivoja nem volt es a
+     * keletkezo kod KOTEG NELKUL maradt. Az allitas viszont ugyanugy ervenyes
+     * az import agra -- csak ott `alreadyExisted` a mezo neve --, tehat NEM
+     * veszett el lefedettseg a torlessel.
+     */
+    it("a felvitel idempotens, és megmondja, mi állt már ott", async () => {
+      const result = await repository.importBatch([CODE_A, "Z9010"]);
+      assert.deepEqual(result.alreadyExisted, [CODE_A]);
+      assert.deepEqual(result.imported, ["Z9010"]);
       await prisma.assetLabel.deleteMany({ where: { code: "Z9010" } });
+      await prisma.assetLabelBatch.delete({ where: { id: result.batchId } });
     });
   },
 );

@@ -22,7 +22,6 @@ const CONTROLLER = "src/service-assets/service-assets.controller.ts";
 /** A matricas vegpontok utvonalai, ahogy a vezerloben allnak. */
 const UTVONALAK = [
   '@Get("labels/free")',
-  '@Post("labels")',
   '@Post("label-batches")',
   '@Get("label-batches")',
   '@Post("label-batches/import")',
@@ -58,7 +57,7 @@ describe("a matricás menüpont és a végpontjai", () => {
     assert.equal(menupontJoga(), "SETTINGS_MANAGE");
   });
 
-  it("mind az öt végpont ugyanazt a jogot kéri, mint a menüpont", () => {
+  it("mind a négy végpont ugyanazt a jogot kéri, mint a menüpont", () => {
     const menu = menupontJoga();
     const eltero = UTVONALAK.filter((ut) => vegpontJoga(ut) !== menu).map(
       (ut) => `${ut}: ${vegpontJoga(ut)}`,
