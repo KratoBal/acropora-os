@@ -1,14 +1,11 @@
 import { randomUUID } from "node:crypto";
 
 import { Injectable } from "@nestjs/common";
-import { Prisma, Repository, prisma, type User } from "@acropora/database";
-import type {
-  UserDetail,
-  UserListResponse,
-  UserSummary,
-} from "@acropora/types";
+import { Prisma, Repository, prisma } from "@acropora/database";
+import type { UserDetail, UserListResponse } from "@acropora/types";
 
 import { hashPassword } from "./password.util.js";
+import { toUserDetail, toUserSummary } from "./user-view.js";
 import type {
   CreateUserDto,
   SetUserPasswordDto,
@@ -52,7 +49,7 @@ export class UsersRepository extends Repository {
       prisma.user.count({ where }),
     ]);
     return {
-      items: users.map((user) => this.toSummary(user)),
+      items: users.map((user) => toUserSummary(user)),
       pagination: {
         page: query.page,
         pageSize: query.pageSize,
@@ -64,7 +61,7 @@ export class UsersRepository extends Repository {
 
   async detail(id: string): Promise<UserDetail | null> {
     const user = await prisma.user.findUnique({ where: { id } });
-    return user ? this.toDetail(user) : null;
+    return user ? toUserDetail(user) : null;
   }
 
   create(input: CreateUserDto, actorId: string) {
@@ -104,7 +101,7 @@ export class UsersRepository extends Repository {
             } satisfies Prisma.JsonObject,
           },
         });
-        return this.toDetail(user);
+        return toUserDetail(user);
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
@@ -152,7 +149,7 @@ export class UsersRepository extends Repository {
             } satisfies Prisma.JsonObject,
           },
         });
-        return this.toDetail(user);
+        return toUserDetail(user);
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
@@ -180,7 +177,7 @@ export class UsersRepository extends Repository {
             } satisfies Prisma.JsonObject,
           },
         });
-        return this.toDetail(user);
+        return toUserDetail(user);
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
@@ -204,34 +201,10 @@ export class UsersRepository extends Repository {
             metadata: { email: user.email } satisfies Prisma.JsonObject,
           },
         });
-        return this.toDetail(user);
+        return toUserDetail(user);
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
-  }
-
-  private toSummary(user: User): UserSummary {
-    return {
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      displayName: user.displayName,
-      nickname: user.nickname,
-      email: user.email,
-      role: user.role,
-      isActive: user.isActive,
-      hasPassword: Boolean(user.passwordHash),
-      createdAt: user.createdAt.toISOString(),
-      updatedAt: user.updatedAt.toISOString(),
-    };
-  }
-
-  private toDetail(user: User): UserDetail {
-    return {
-      ...this.toSummary(user),
-      avatarUrl: user.avatarUrl ?? undefined,
-      passwordUpdatedAt: user.passwordUpdatedAt?.toISOString(),
-    };
   }
 
   private event(
