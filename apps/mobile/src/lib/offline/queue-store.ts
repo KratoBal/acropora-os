@@ -371,3 +371,64 @@ export async function repeatedFailures(
     lastError: elso?.last_error ?? null,
   };
 }
+
+/**
+ * A SOR MINDEN SORA, ALLAPOTTOL FUGGETLENUL -- A LISTANAK, NEM A KULDESNEK.
+ *
+ * A `pendingQueueRows` SZANDEKOSAN szur (csak amit el LEHET kuldeni). Ez a
+ * fuggveny az ellenkezoje: a szerelo epp azokat akarja latni, amik NEM mennek
+ * -- a megallt es az elakadt sorokat.
+ *
+ * A `syncing` is bekerul: az elindult, es a kollega szempontjabol ugyanugy
+ * „meg nem ment fel".
+ */
+export async function allQueueRows(): Promise<SyncQueueRow[]> {
+  const db = await initializeOfflineDatabase();
+  const rows = await db.getAllAsync<{
+    id: string;
+    operation: string;
+    entity_type: string;
+    entity_id: string | null;
+    payload_json: string;
+    created_at: string;
+    attempt_count: number;
+    last_error: string | null;
+    last_attempt_at: string | null;
+    state: string;
+  }>(`SELECT * FROM sync_queue ORDER BY created_at ASC`);
+  return rows.filter(ismertSor).map((r) => ({
+    id: r.id,
+    operation: r.operation as SyncQueueRow["operation"],
+    entityType: r.entity_type as SyncQueueRow["entityType"],
+    entityId: r.entity_id,
+    payloadJson: r.payload_json,
+    createdAt: r.created_at,
+    attemptCount: r.attempt_count,
+    lastError: r.last_error,
+    lastAttemptAt: r.last_attempt_at,
+    state: r.state as SyncState,
+  }));
+}
+
+/**
+ * KEZI UJRAPROBALAS: A MEGALLT SOR VISSZAKERUL A VARAKOZOK KOZE.
+ *
+ * A KISERLETSZAM NULLAZODIK, es ez nem kozmetika: e nelkul a nyolcas hatar a
+ * kovetkezo bukasnal AZONNAL ujra elsulne, es a gomb semmit nem erne. A kezi
+ * ujraprobalas azt jelenti, hogy egy EMBER azt mondja: a szerver rendben van.
+ *
+ * A varakoztatas belyege is torlodik, kulonben a sor a felórás backoff vegeig
+ * meg akkor sem indulna el, amikor a szerelo epp most kerte.
+ *
+ * A `last_error` MEGMARAD: a lista tovabbra is mutassa, mi volt a baj, amig az
+ * ujrakuldes eredmenye meg nem erkezik.
+ */
+export async function retryQueueRow(id: string): Promise<void> {
+  const db = await initializeOfflineDatabase();
+  await db.runAsync(
+    `UPDATE sync_queue
+        SET state = 'pending', attempt_count = 0, last_attempt_at = NULL
+      WHERE id = ?`,
+    [id],
+  );
+}

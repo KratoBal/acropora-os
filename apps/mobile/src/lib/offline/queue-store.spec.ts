@@ -206,3 +206,39 @@ describe("az ismételten elbukó sorok", () => {
     assert.match(forras, /A HATAR NEM IDO, HANEM ESEMENY/);
   });
 });
+
+describe("a kézi újrapróbálás", () => {
+  it("NULLÁZZA a kísérletszámot, és törli a várakoztatást", () => {
+    /*
+      E nelkul a nyolcas hatar a KOVETKEZO bukasnal azonnal ujra elsulne, es a
+      gomb semmit nem erne; a felórás varakoztatas pedig meg akkor is
+      visszatartana a sort, amikor a szerelo epp most kerte.
+
+      MI PIROSIT: barmelyik ket mezo elhagyasa a frissitesbol.
+    */
+    assert.match(
+      forras,
+      /SET state = 'pending', attempt_count = 0, last_attempt_at = NULL/,
+    );
+  });
+
+  it("a HIBASZÖVEGET MEGTARTJA", () => {
+    // A lista tovabbra is mutassa, mi volt a baj, amig az ujrakuldes eredmenye
+    // meg nem erkezik. Egy torolt hibaszoveg mellett a sor ugy nezne ki, mintha
+    // sosem bukott volna el.
+    assert.doesNotMatch(forras, /SET state = 'pending'[^`]*last_error = NULL/);
+  });
+
+  it("a LISTA minden sort lát, a küldés viszont szűr", () => {
+    /*
+      A `pendingQueueRows` SZANDEKOSAN szur (csak amit el LEHET kuldeni); a
+      lista epp az ellenkezojet akarja: a szerelo azokat keresi, amik NEM
+      mennek.
+
+      MI PIROSIT: ha a lista is a kuldheto sorokra szurne -- akkor a megallt es
+      az elakadt tetel SEHOL nem latszana, es a kepernyo ures lenne, amikor a
+      legnagyobb szukseg van ra.
+    */
+    assert.match(forras, /SELECT \* FROM sync_queue ORDER BY created_at ASC/);
+  });
+});
