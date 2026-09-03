@@ -21,6 +21,8 @@ import {
  * futtatás MEGISMÉTELHETŐ-e. Ezért a szolgáltatás magja a döntés, nem az írás.
  */
 
+import { medusaHandleFromSlug } from "./medusa-product-handle.js";
+
 export interface ProjectableProduct {
   id: string;
   name: string;
@@ -57,6 +59,20 @@ export interface ProjectableProduct {
    * csak a dontes erkezik: van teljes lista, vagy nincs.
    */
   medusaCategoryIds: string[] | null;
+  /**
+   * A MAI BOLTI CIM (a UNAS SefUrl-je), vagy `null`, ha nincs.
+   *
+   * A `null` NEM azt jelenti, hogy a termeknek ne lenne cime a boltban: azt,
+   * hogy a hivo nem tud MAI cimet adni. A ket eset kovetkezmenye ellentetes --
+   * ha nem kuldunk `handle`-t, a Medusa a NEVBOL szarmaztat egyet --, es a
+   * megkulonboztetes ezert a hivonal lakik, ahol az adat is van.
+   *
+   * MIERT SZAMIT: merve az 1893 termeken (2026-09-03), a nevbol szarmaztatott
+   * alak a mai SefUrl-lel mindossze NEGY esetben egyezne beture. A tobbi 1809
+   * termek uj cimet kapna a boltban, es a regi hivatkozasok sehova nem
+   * vezetnenek.
+   */
+  slug: string | null;
 }
 
 export type ProjectionOutcome =
@@ -308,6 +324,22 @@ export class MedusaProductProjectionService {
         ? { categories: product.medusaCategoryIds.map((id) => ({ id })) }
         : {};
 
+    /**
+     * A `handle` MEZO ELHAGYASA ES AZ URES ERTEK NEM UGYANAZ, ugyanugy, mint a
+     * kategoriaknal -- csak itt a kulonbseg MERT, nem felteves.
+     *
+     * Ha a mezot elhagyjuk, a Medusa a NEVBOL szarmaztat handle-t
+     * (`productCategory.handle ??= kebabCase(name)` a kategoriaknal merve, a
+     * termeknel ugyanez a minta). Ha URESET kuldenenk, azt vagy elutasitana,
+     * vagy felulirna a mar meglevo cimet -- mindket eset rosszabb, mint ha a
+     * mezo nem megy ki.
+     *
+     * Ezert a `medusaHandleFromSlug` `null`-t ad, ha nincs mit atvinni, es a
+     * mezo ilyenkor KI SEM KERUL a kerésbe.
+     */
+    const handle = medusaHandleFromSlug(product.slug);
+    const handlePatch = handle ? { handle } : {};
+
     const existingLink = await this.links.findByProductId(product.id);
     if (existingLink) {
       /**
@@ -321,6 +353,7 @@ export class MedusaProductProjectionService {
           title: product.name,
           description: product.description,
           external_id: product.id,
+          ...handlePatch,
           status: publication.status,
           sales_channels: salesChannels,
           ...categoryPatch,
@@ -443,6 +476,7 @@ export class MedusaProductProjectionService {
         title: product.name,
         description: product.description,
         external_id: product.id,
+        ...handlePatch,
         status: publication.status,
         sales_channels: salesChannels,
         ...categoryPatch,

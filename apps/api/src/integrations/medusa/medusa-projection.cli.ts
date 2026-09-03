@@ -305,6 +305,19 @@ export async function runProjectionCli(
           select: { sku: true },
         },
         categories: { select: { categoryId: true } },
+        /**
+         * A MAI BOLTI CIM, ES CSAK A UNAS CSATORNAROL.
+         *
+         * A `ChannelListing` tobb csatornat is hordozhat; a `slug`, amit at
+         * akarunk vinni, a UNAS-bol jott (a szinkron a `sefUrl`-t irja ide).
+         * Egy szures nelkuli `findFirst` egy masik csatorna cimet hozna, ha
+         * valaha lesz ilyen -- es a hiba csak a boltban latszana.
+         */
+        channelListings: {
+          where: { channel: "UNAS" },
+          select: { slug: true },
+          take: 1,
+        },
       },
     });
 
@@ -392,6 +405,7 @@ export async function runProjectionCli(
         description: product.description,
         primarySku: product.variants[0]?.sku ?? null,
         medusaCategoryIds: categories.medusaCategoryIds,
+        slug: product.channelListings[0]?.slug ?? null,
         publication: {
           catalogAuthority: product.catalogAuthority,
           isActive: product.isActive,

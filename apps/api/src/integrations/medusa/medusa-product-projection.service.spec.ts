@@ -34,6 +34,7 @@ const product: ProjectableProduct = {
    */
   /** A fixtura NEM ad teljes kategoria-listat: a mezo igy nem kerul a torzsbe. */
   medusaCategoryIds: null,
+  slug: null,
   publication: {
     catalogAuthority: "ACROPORA",
     isActive: true,
@@ -114,6 +115,72 @@ function fakes(options: {
     service: new MedusaProductProjectionService(links, medusa, SALES_CHANNEL),
   };
 }
+
+describe("MedusaProductProjectionService -- a bolti cim", () => {
+  /**
+   * EZ AZ ALLITAS A MEZO LETEZESENEK OKA.
+   *
+   * A vetites 2026-09-03-ig nem kuldott `handle`-t, tehat a Medusa a NEVBOL
+   * szarmaztatta. Merve az 1893 termeken: a mai SefUrl-lel mindossze NEGY
+   * egyezne beture, a tobbi 1809 UJ cimet kapna -- es a regi hivatkozasok
+   * sehova nem vezetnenek.
+   */
+  it("a mai bolti cimet atviszi a letrehozasnal", async () => {
+    const f = fakes({ link: null, found: [] });
+    await f.service.project(
+      { ...product, slug: "Aqua-Illumination-Prime-HD-LED-panel" },
+      now,
+    );
+    assert.equal(
+      f.createdWith[0]?.handle,
+      "Aqua-Illumination-Prime-HD-LED-panel",
+    );
+  });
+
+  it("a mai bolti cimet a frissitesnel is atviszi", async () => {
+    const f = fakes({
+      link: { productId: "prod-os-1", medusaProductId: "prod_x" },
+    });
+    await f.service.project(
+      { ...product, slug: "Aqua-Illumination-Prime-HD-LED-panel" },
+      now,
+    );
+    assert.equal(
+      f.updatedWith[0]?.handle,
+      "Aqua-Illumination-Prime-HD-LED-panel",
+    );
+  });
+
+  /**
+   * A SZUKITES ALLITASA: cim nelkul a mezo KI SEM KERUL a keresbe.
+   *
+   * Ez nem ugyanaz, mint egy ures ertek: az ures `handle` felulirna azt, amit
+   * a Medusa korabban a nevbol szarmaztatott. A `handle in input` alak
+   * szandekos -- egy `equal(undefined)` akkor is atmenne, ha a mezot URESEN
+   * kikuldenenk.
+   */
+  it("cim nelkul a handle mezot ki sem kuldi", async () => {
+    const f = fakes({ link: null, found: [] });
+    await f.service.project({ ...product, slug: null }, now);
+    assert.equal("handle" in (f.createdWith[0] ?? {}), false);
+  });
+
+  /**
+   * A VALODI ADAT ALAKJA: 107 SefUrl PERJELET tartalmaz a mertekegyseg miatt,
+   * es a `handle` egyetlen URL-szegmens. Perjellel a cim kettevalna.
+   */
+  it("a mertekegyseg perjelet atalakitva viszi at", async () => {
+    const f = fakes({ link: null, found: [] });
+    await f.service.project(
+      { ...product, slug: "Jebao-Sine-Wave-Pump-SLW-5-aramoltato-3000-l/h" },
+      now,
+    );
+    assert.equal(
+      f.createdWith[0]?.handle,
+      "Jebao-Sine-Wave-Pump-SLW-5-aramoltato-3000-l-h",
+    );
+  });
+});
 
 describe("MedusaProductProjectionService", () => {
   it("creates the product when nothing points at it yet", async () => {
