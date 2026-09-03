@@ -28,6 +28,9 @@ const DATABASE_NAME = "acropora-field.db";
  *   működött, a felvitel mégsem -- a réteg helyessége nem elég, ha a képernyő
  *   nem jut el odáig.
  *
+ * - `cached_worksheet_details`: a MEGNYITOTT munkalap teljes adatlapja. A lap a
+ *   MUNKAUTASITAS: terero nelkul ezt olvassa a szerelo a helyszinen.
+ *
  * - `cached_worksheet_departments`: a munkalap HELYSZÍNEI partnerenként. Külön
  *   tábla, mert a helyszín-lista a munkalap `customerId` mezőjéhez tartozik, és
  *   NEM azonos a `partners.ts` alegység-hívásával: a két végpont más azonosítót
@@ -82,6 +85,12 @@ export async function initializeOfflineDatabase(): Promise<SQLite.SQLiteDatabase
 
     CREATE INDEX IF NOT EXISTS cached_asset_details_qr_token
       ON cached_asset_details (qr_token);
+
+    CREATE TABLE IF NOT EXISTS cached_worksheet_details (
+      id TEXT PRIMARY KEY NOT NULL,
+      payload_json TEXT NOT NULL,
+      synced_at TEXT NOT NULL
+    );
 
     CREATE TABLE IF NOT EXISTS cached_worksheet_departments (
       id TEXT PRIMARY KEY NOT NULL,

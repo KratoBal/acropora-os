@@ -12,11 +12,18 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { OfflineNoticeCard } from "@/components/offline/OfflineNoticeCard";
 import {
   addWorksheetLine,
   getWorksheet,
   removeWorksheetLine,
 } from "@/lib/api/worksheets";
+import { useIsOnline } from "@/lib/offline/connectivity";
+import { describeCachedWorksheetNotice } from "@/lib/offline/offline-notice";
+import {
+  readCachedWorksheet,
+  rememberWorksheet,
+} from "@/lib/offline/worksheet-cache";
 import {
   buildWorksheetLinePayload,
   worksheetLineId,
@@ -63,12 +70,31 @@ export default function WorksheetDetailScreen() {
   const { status, user } = useAuth();
   const capabilities = user ? getServiceCapabilities(user.role) : null;
 
+  const online = useIsOnline();
+
+  /**
+   * A LAP A MUNKAUTASITAS: TERERŐ NELKUL IS OLVASHATONAK KELL LENNIE.
+   *
+   * A sikeres lekerdezes MENT is: ami a kepernyore kerult, az a keszuleken
+   * marad. Nem elore toltunk le semmit -- csak azt, amit a szerelo tenylegesen
+   * megnyitott.
+   */
   const worksheet = useQuery({
     queryKey: ["worksheet", id],
-    queryFn: () => getWorksheet(id),
+    queryFn: async () => {
+      const detail = await getWorksheet(id);
+      await rememberWorksheet(detail);
+      return detail;
+    },
     enabled: Boolean(
       id && capabilities?.worksheetsView && status === "authenticated",
     ),
+  });
+
+  const cached = useQuery({
+    queryKey: ["worksheet-cache", id],
+    queryFn: () => readCachedWorksheet(id),
+    enabled: Boolean(id && status === "authenticated"),
   });
 
   /**
@@ -125,7 +151,23 @@ export default function WorksheetDetailScreen() {
     return <Redirect href="/login" />;
   if (!capabilities.worksheetsView) return <Redirect href="/" />;
 
-  const data = worksheet.data;
+  /**
+   * A MENTETT MASOLAT CSAK AKKOR LEP BE, HA A FRISS NINCS MEG. Egy mukodo
+   * lekerdezes melle odatett masolat azt kockaztatna, hogy a regi adat egy
+   * pillanatra felulirja az ujat.
+   */
+  const cachedDetail = cached.data?.detail ?? null;
+  const data = worksheet.data ?? cachedDetail;
+  const fromCache = !worksheet.data && Boolean(cachedDetail);
+  const cacheNotice =
+    fromCache && cachedDetail
+      ? describeCachedWorksheetNotice({
+          online,
+          syncedAt: cached.data?.syncedAt ?? null,
+          status: cachedDetail.currentVersion.status,
+          now: new Date(),
+        })
+      : null;
   const current = data?.currentVersion;
   const rows = data ? worksheetDetailRows(data) : [];
   const continuesFrom = data?.continues ?? null;
@@ -150,9 +192,13 @@ export default function WorksheetDetailScreen() {
           ) : null}
         </View>
 
-        {worksheet.isPending ? <ActivityIndicator color="#52d6c7" /> : null}
+        {cacheNotice ? <OfflineNoticeCard notice={cacheNotice} /> : null}
 
-        {worksheet.isError ? (
+        {worksheet.isPending && !fromCache ? (
+          <ActivityIndicator color="#52d6c7" />
+        ) : null}
+
+        {worksheet.isError && !fromCache ? (
           <Text style={styles.error}>
             {worksheet.error instanceof Error
               ? worksheet.error.message

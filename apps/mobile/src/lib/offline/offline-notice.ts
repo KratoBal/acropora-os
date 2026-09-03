@@ -142,6 +142,55 @@ export function describeOfflineDetailNotice(input: {
 }
 
 /**
+ * A MUNKALAP FÖLÖTTI SÁV, ha az adatlap a mentett másolatból áll.
+ *
+ * === MIÉRT KÜLÖN FÜGGVÉNY, ÉS MIÉRT NEM ELÉG AZ ESZKÖZÉ ===
+ *
+ * Az eszköz adatlapjánál a régi másolat annyit jelent, hogy „ami azóta
+ * változott, azt nem látod". A munkalapnál van egy adat, ami ENNÉL TÖBBET
+ * ronthat: az ÁLLAPOT. Ha az iroda időközben LEZÁRTA a lapot, a másolatban az
+ * még piszkozatnak látszik -- a szerelő tehát azt hiszi, nyitott lapra
+ * dolgozik, és amit ráír, később elakad.
+ *
+ * Egy elavult gyorsítótár itt ROSSZABB a hiányánál, és ezért mondja ki a sáv
+ * külön, nem csak a korát.
+ *
+ * === EGYETLEN ÁLLAPOT VÉGLEGES, ÉS EZ MÉRVE VAN ===
+ *
+ * Az `ALÁÍRT` lap nem mozdul többé: a szerver `amendRefusal` függvénye a
+ * `SIGNED` állapotra elutasítást ad, a munka folytatása pedig ÚJ lap. Minden
+ * más állapot MOZOGHAT alatta: a piszkozatot lezárhatják, az aláírásra várót
+ * aláírhatják vagy elutasíthatják, az elutasítottat pedig átírhatják.
+ *
+ * Ezért a sáv KÉT mondatot ad, nem egyet: aláírt lapnál a kor a kérdés, minden
+ * másnál az állapot.
+ */
+export function describeCachedWorksheetNotice(input: {
+  online: boolean;
+  syncedAt: string | null;
+  /** A MENTETT állapot -- épp az, amiről nem tudjuk, igaz-e még. */
+  status: string;
+  now: Date;
+}): OfflineNotice | null {
+  if (input.online) return null;
+
+  const age = describeCacheAge(input.syncedAt, input.now);
+
+  if (input.status === "SIGNED")
+    return {
+      tone: "offline",
+      title: "Nincs kapcsolat: mentett munkalap",
+      message: `Ez a lap ${age} mentett másolat. Alá van írva, tehát az állapota nem változhatott -- de ami azóta a lapra került, azt itt nem látod.`,
+    };
+
+  return {
+    tone: "stale",
+    title: "Nincs kapcsolat: az állapot elavulhatott",
+    message: `Ez a lap ${age} mentett másolat, és azóta az iroda LEZÁRHATTA. Itt még nyitottnak látszik: amit ráírsz, a feltöltéskor elakadhat. A begépelt szöveg olyankor nem vész el, a sorban marad.`,
+  };
+}
+
+/**
  * A HELYSZÍN-VÁLASZTÓ FÖLÖTTI SÁV, ha a lista a mentett másolatból áll.
  *
  * === MIÉRT KÜLÖN MONDAT, ÉS MIÉRT NEM ELÉG A KÉT MEGLÉVŐ ===
