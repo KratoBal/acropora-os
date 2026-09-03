@@ -376,10 +376,36 @@ label: all of it needs the API. The protocol rules those follow when they come:
 - preserve local evidence until the server acknowledges it;
 - show unresolved conflicts to the colleague instead of silently overwriting.
 
-**A KNOWN GAP, stated rather than implied:** a row that can never succeed (a
-server answering 5xx every time) is retried forever, and looks exactly like one
-that is merely waiting for signal — `attempt_count` is written but read by
-nothing, and `last_error` is stored and never shown. Card `cde22311` covers it.
+### When an upload does not go through
+
+That gap closed the same day it was written down (card `cde22311`), and the
+shape of the answer matters more than the fact:
+
+- **A failing row says so.** After three attempts the band names the count and
+  the last error. Three is an EVENT count, not a duration: a drain runs on app
+  start and when the network returns, so three attempts mean three separate
+  occasions when there was a network and it still did not go up.
+- **A server that keeps erroring stops the row after 8 attempts** — the number
+  the server-side retry worker already uses. The row moves to `stalled`, which
+  is NOT `conflict`: a conflict means the server refused the recording and the
+  recording needs fixing; stalled means the server keeps failing and the
+  recording is fine. One shared state would send the technician to fix his own
+  data because of a server fault.
+- **A network failure never stops the row**, only slows it: 30s, 1m, 2m, up to
+  half an hour. Without signal that is the normal state, and a cap there would
+  make a perfectly good recording give up after a week in a cellar. The delay is
+  not a timer and cannot be one — it only decides whether the row is taken on
+  the next occasion.
+- **The technician has somewhere to go with it.** The band on the home screen
+  opens the queue list: what is waiting, what stopped, what was refused, and a
+  retry button on the stopped rows only — on a refused row the same request
+  would get the same answer, and a button that cannot help is worse than none.
+
+**What is still missing, stated rather than implied:** there is no way to
+DISCARD a queued row from the phone. That is deliberate — the row is the only
+existing copy of the recording, so a mis-tap would take field work away for
+good and silently, while its absence only nags. It belongs in the same slice
+that puts the recorded content itself on screen, with a confirmation.
 
 ## Push notification boundary
 
