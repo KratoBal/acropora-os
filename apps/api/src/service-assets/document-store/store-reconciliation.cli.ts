@@ -4,7 +4,9 @@ import { prisma } from "@acropora/database";
 
 import {
   collectDocumentKeys,
+  DOCUMENT_OWNERS,
   type DocumentKey,
+  type DocumentOwner,
   type DocumentStore,
   type DocumentStoreStatus,
 } from "./document-store.js";
@@ -58,27 +60,97 @@ import {
  */
 export interface RowWithSize {
   key: DocumentKey;
-  /** A TABLA allitasa a fajl mereterol -- ezt vetjuk ossze a taroloeval. */
-  sizeBytes: number;
+  /**
+   * A TABLA allitasa a fajl mereterol -- ezt vetjuk ossze a taroloeval.
+   *
+   * `null`, ha a tabla NEM TART meretet. A termekkepeknel ez az eset: a
+   * `ProductImage` sor a forras URL-jet es a tarolo-kulcsot hordozza, meretet
+   * nem. A kulcs-osszevetes (arva es hianyzo fajl) attol meg mukodik -- a
+   * meret-osszevetes az, ami ott kimarad.
+   *
+   * MIERT NEM NULLA: a nulla azt allitana, hogy a fajl URES, es egy valodi
+   * ures fajl mellett ugyanaz a szam allna. A `null` azt mondja, hogy NEM
+   * TUDJUK -- es a kimenetben is igy jelenik meg.
+   */
+  sizeBytes: number | null;
 }
 
 export type FetchRowsWithStorageKey = () => Promise<RowWithSize[]>;
 
+/**
+ * MINDEN GAZDA LEKERDEZESE, ES A LISTA A ZART HALMAZBOL JON.
+ *
+ * MIERT KELLETT ATIRNI: a tarolo oldalarol a bejaras MAR MA is minden gazdat
+ * lat (a `DOCUMENT_OWNERS` halmazon megy), a TABLA oldalarol viszont egyetlen
+ * lekerdezes futott, az `AssetDocument`-re. Vagyis minden mas fajl ARVANAK
+ * latszott: ma a munkalap-fenykepek, a termekkep-masolo utan pedig 3426 kep.
+ *
+ * A KAR NEM ADATVESZTES (az egyeztetes nem torol), hanem hogy a MERO valik
+ * hasznalhatatlanna: ezer hamis arva mellett egy valodi elveszne a listaban.
+ *
+ * ES A LENYEG A `Record` ALAK: aki uj gazdat vesz fel a halmazba, FORDITASI
+ * HIBAT kap, amig ide is be nem irja a lekerdezeset. Egy kezzel irt lista
+ * pontosan az uj gazdat hagyna ki -- azt, amiert a mero letezik.
+ */
+const OWNER_QUERIES: Record<DocumentOwner, () => Promise<RowWithSize[]>> = {
+  asset: async () =>
+    (
+      await prisma.assetDocument.findMany({
+        where: { storageKey: { not: null } },
+        select: { assetId: true, id: true, sizeBytes: true },
+      })
+    ).map((sor) => ({
+      key: {
+        owner: "asset" as const,
+        ownerId: sor.assetId,
+        documentId: sor.id,
+      },
+      sizeBytes: sor.sizeBytes,
+    })),
+  worksheet: async () =>
+    (
+      await prisma.worksheetDocument.findMany({
+        where: { storageKey: { not: null } },
+        select: { worksheetId: true, id: true, sizeBytes: true },
+      })
+    ).map((sor) => ({
+      key: {
+        owner: "worksheet" as const,
+        ownerId: sor.worksheetId,
+        documentId: sor.id,
+      },
+      sizeBytes: sor.sizeBytes,
+    })),
+  /**
+   * A TERMEKKEPEK MERET NELKUL JONNEK, es a kulcs a TAROLT `storageKey`-bol
+   * olvasodik vissza, nem az URL-bol szamolodik ujra.
+   *
+   * MIERT A TAROLT ERTEKBOL: a kulcs az URL lenyomatabol keletkezik, es ha a
+   * szamitas valaha valtozik, a KET alak elterne -- a mero ilyenkor ARVANAK
+   * latna minden regi fajlt. A tarolt kulcs azt mondja meg, hova IRTUK, es a
+   * mero pontosan azt keresi.
+   */
+  product: async () =>
+    (
+      await prisma.productImage.findMany({
+        where: { storageKey: { not: null } },
+        select: { productId: true, storageKey: true },
+      })
+    ).map((sor) => ({
+      key: {
+        owner: "product" as const,
+        ownerId: sor.productId,
+        documentId: sor.storageKey!.split("/").pop() ?? sor.storageKey!,
+      },
+      sizeBytes: null,
+    })),
+};
+
 const fetchFromPrisma: FetchRowsWithStorageKey = async () => {
-  const sorok = await prisma.assetDocument.findMany({
-    where: { storageKey: { not: null } },
-    select: { assetId: true, id: true, sizeBytes: true },
-  });
-  return sorok.map((sor) => ({
-    /**
-     * A GAZDA ITT `asset`, MERT EZ A LEKERDEZES AZ `AssetDocument` TABLARA MEGY.
-     * A munkalap-dokumentumok sajat lekerdezest kapnak majd, ugyanezzel az
-     * alakkal -- a kulcsban a gazda 2026-09-03 ota SZEREPEL, hogy a ket halmaz
-     * ne mosodjon ossze a lemezen es itt sem.
-     */
-    key: { owner: "asset" as const, ownerId: sor.assetId, documentId: sor.id },
-    sizeBytes: sor.sizeBytes,
-  }));
+  const sorok: RowWithSize[] = [];
+  for (const owner of DOCUMENT_OWNERS)
+    sorok.push(...(await OWNER_QUERIES[owner]()));
+  return sorok;
 };
 
 export interface ReconciliationOutcome {
@@ -183,6 +255,12 @@ export async function runReconciliation(deps: {
      * ket meres kozott), nem adathiba. Kulon soron all, hogy a szam ne
      * hazudjon.
      */
+    /**
+     * A TABLA NEM TART MERETET: nincs mit osszevetni, es ez NEM elteres.
+     * A termekkepeknel ez az eset. A kulcs-osszevetes (arva es hianyzo fajl)
+     * attol meg lefutott rajuk -- csak a meret-ag marad ki.
+     */
+    if (sor.sizeBytes === null) continue;
     if (tarolt === null) {
       meretElteres.push(
         `  MERET?  ${storageKeyFor(sor.key)} (a merete nem allapithato meg)`,
