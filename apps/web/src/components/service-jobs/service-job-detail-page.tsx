@@ -469,6 +469,28 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
           semmilyen allapot szerint nem szur: a lezart lap is csatolhato, mert a
           lezaras a DOKUMENTUMROL szol, a csatolas a BESOROLASROL.
         */}
+        {/*
+          AZ UJ LAP NYITASA A FELVITELI LAPRA VISZ, NEM SAJAT URLAPPAL.
+          A felviteli lap mar tud mindent (partner, alegyseg, targy, sorok,
+          felelosok); egy masodik urlap ITT duplikalna, es a ketto egyszer
+          elcsuszna egymastol. A jegy azonositoja a cimben megy at, a PARTNERT
+          viszont a felviteli lap a SZERVERTOL kerdezi -- egy cimben atadott
+          partner-azonositot barki atirhatna.
+
+          PARTNER NELKULI JEGYNEL NEM ALL OTT: a lap ugyis elutasitana, es egy
+          gomb, ami biztosan hibara visz, rosszabb a hianyanal.
+        */}
+        {canManage && job.customerId !== null ? (
+          <div className="border-t pt-3">
+            <Link
+              href={`/szerviz/munkalapok/uj?hibajegy=${encodeURIComponent(jobId)}`}
+            >
+              <Button variant="secondary">
+                Új munkalap nyitása a jegy alá
+              </Button>
+            </Link>
+          </div>
+        ) : null}
         {canManage ? (
           <div className="space-y-2 border-t pt-3">
             <label

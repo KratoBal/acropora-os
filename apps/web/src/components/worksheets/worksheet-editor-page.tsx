@@ -20,10 +20,11 @@ import {
   type WorksheetDepartmentSummary,
 } from "@acropora/types";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { buildSiteOptions } from "@/lib/partners/site-tree";
 import {
@@ -84,6 +85,16 @@ export interface WorksheetEditorPageProps {
 export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
   const { session } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  /**
+   * A HIBAJEGY, AMI ALA A LAP KERUL -- A CIMBOL, ES CSAK FELVITELNEL.
+   *
+   * A jegy reszletlapja hozza ide a felhasznalot, es a lap ebbol tudja meg,
+   * melyik jegy ala keszul. MEGLEVO lapon nincs ertelme: a csatolas ott sajat
+   * uton megy (a jegy reszletlapjarol), es egy cimben all6 azonosito
+   * ELCSUSZHATNA attol, ami a lapon all.
+   */
+  const ticketId = worksheetId ? null : searchParams.get("hibajegy");
   const token = session?.token ?? "";
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_MANAGE),
@@ -120,6 +131,16 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
   const [loading, setLoading] = useState(Boolean(worksheetId));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * A JEGY PARTNERE, HA JEGY ALA KESZUL A LAP. `null`, amig nem tudjuk.
+   *
+   * Ha megvan, a partner-valaszto ZART: a szerver ugyis visszautasitana az
+   * eltero partnert (`mayWorksheetJoinTicket`), es egy valaszto, ami olyat
+   * kinal, amit a vegpont utana elutasit, epp az a nema alak, amit ma reggel a
+   * csatolo listanal is megszuntettunk.
+   */
+  const [ticketCustomerId, setTicketCustomerId] = useState<string | null>(null);
+  const [ticketError, setTicketError] = useState<string | null>(null);
   /*
    * A FELELŐSÖK CSAK A FELVITELNÉL kerülnek ide. Egy meglévő lapon a kiosztást a
    * részletek oldal szerkeszti: az a lap AZONOSSÁGÁHOZ tartozik, nem a
@@ -198,6 +219,43 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
     void loadDepartments(customerId, controller.signal);
     return () => controller.abort();
   }, [customerId, loadDepartments]);
+
+  /**
+   * A JEGY PARTNERE A SZERVERTOL JON, NEM A CIMBOL.
+   *
+   * A cim CSAK a jegy azonositojat hozza. A partnert lekerdezzuk, mert egy
+   * cimben atadott partner-azonositot barki atirhatna -- es a lap ettol olyat
+   * kinalna, amit a vegpont utana visszautasit.
+   *
+   * A HIBA ES A PARTNER NELKULI JEGY KET KULONBOZO ALLAPOT: az elso azt jelenti,
+   * hogy nem tudjuk, mi a helyzet; a masodik azt, hogy a jegynek eloszb partnert
+   * kell kapnia. Kulon mondatot kapnak.
+   */
+  useEffect(() => {
+    if (!ticketId || !canManage) return;
+    const controller = new AbortController();
+    serviceJobsApi
+      .detail(token, ticketId, controller.signal)
+      .then((job) => {
+        setTicketError(null);
+        if (job.customerId === null) {
+          setTicketError(
+            "Ehhez a hibajegyhez még nincs partner. Először állítsd be a hibajegy partnerét, és utána nyiss alá munkalapot.",
+          );
+          return;
+        }
+        setTicketCustomerId(job.customerId);
+        setCustomerId(job.customerId);
+      })
+      .catch((cause: unknown) => {
+        setTicketError(
+          cause instanceof Error
+            ? cause.message
+            : "A hibajegy nem tölthető be, ezért a partnere sem állítható be automatikusan.",
+        );
+      });
+    return () => controller.abort();
+  }, [canManage, ticketId, token]);
 
   useEffect(() => {
     if (!worksheetId || !canManage) return;
@@ -286,6 +344,10 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
             customerId,
             departmentId,
             assigneeIds,
+            // EGY TRANZAKCIOBAN a lappal: ket hivasban a masodik fele
+            // elbukhatna, es epp az a jegy nelkuli lap keletkezne, amit senki
+            // nem keresne a jegy alatt.
+            ...(ticketId ? { serviceJobId: ticketId } : {}),
           });
       router.push(`/szerviz/munkalapok/${saved.id}`);
     } catch (cause) {
@@ -360,6 +422,18 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
       {error ? (
         <Alert variant="danger" title="Hiba" description={error} />
       ) : null}
+      {/*
+        A JEGY OLDALAROL JOTT BAJ KULON MONDATOT KAP, mert MAS a teendo: a
+        mentesi hiba a lapon mulik, ez a HIBAJEGYEN. Egy kozos "Hiba" fejlec
+        mindkettot ugyanoda tenne, es a felhasznalo a rossz helyen keresne.
+      */}
+      {ticketError ? (
+        <Alert
+          variant="danger"
+          title="A hibajegy oldaláról"
+          description={ticketError}
+        />
+      ) : null}
 
       <Card className="grid gap-4 p-4 md:grid-cols-2">
         <FormField
@@ -373,7 +447,9 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
           <Select
             aria-label="Partner"
             value={customerId}
-            disabled={Boolean(worksheetId)}
+            // A JEGY ALA KESZULO LAPON A PARTNER ZART: a jegy dönti el, es a
+            // szerver ugyis visszautasitana az elterot.
+            disabled={Boolean(worksheetId) || ticketCustomerId !== null}
             onChange={(event) => {
               setCustomerId(event.target.value);
               setDepartmentId("");
