@@ -12,9 +12,42 @@
  * ellenőriznie kell, hogy az összerakott útvonal a gyökér ALATT marad. Egy
  * előre összefűzött szöveg ezt már nem engedné meg, mert a határ eltűnne benne.
  */
+/**
+ * KI A DOKUMENTUM GAZDAJA. ZART HALMAZ, NEM SZABAD SZOVEG.
+ *
+ * Egy szabad string mellett egy elgepeles UJ tulajdonost hozna letre a lemezen
+ * (`worksheeet/...`), es az egyeztetes vagy elarvult fajlkent latna, vagy --
+ * ami rosszabb -- egyaltalan nem latna, mert a bejaras csak az ismert
+ * gyokereket jarja be. Egy nem letezo halmazbol nem lehet elgepelni.
+ */
+export const DOCUMENT_OWNERS = ["asset", "worksheet"] as const;
+export type DocumentOwner = (typeof DOCUMENT_OWNERS)[number];
+
+/**
+ * A KULCS HAROM RESZBOL ALL, es a harmadik (a tulajdonos) 2026-09-03-tol van
+ * benne. Elotte a tarolo csak eszkoz-dokumentumot ismert, es a fajta a
+ * konyvtarnevben (`assets/`) allt -- vagyis a kodban SEHOL, csak egy
+ * sztringben.
+ *
+ * A HATAR MEGMARADT: a fajlrendszeres megvalositas tovabbra is ellenorzi, hogy
+ * az osszerakott utvonal a gyoker ALATT marad, es egy elore osszefuzott szoveg
+ * ezt mar nem engedne meg.
+ */
 export interface DocumentKey {
-  assetId: string;
+  owner: DocumentOwner;
+  ownerId: string;
   documentId: string;
+}
+
+/**
+ * A TULAJDONOS KONYVTARNEVE A TAROLOBAN.
+ *
+ * Az `asset` -> `assets` lekepezes NEM kozmetika: ez a MAI elrendezes, es a
+ * lemezen allo fajlok (ha egyszer lesznek) ezen az uton talalhatok. Aki
+ * atirja, a meglevo fajlokat teszi lathatatlanna.
+ */
+export function ownerDirectory(owner: DocumentOwner): string {
+  return owner === "asset" ? "assets" : "worksheets";
 }
 
 /**

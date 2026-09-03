@@ -8,6 +8,7 @@ import {
   type DocumentStore,
   type DocumentStoreStatus,
 } from "./document-store.js";
+import { storageKeyFor } from "./document-storage-key.js";
 import { createDocumentStore } from "./document-store.provider.js";
 import {
   reconcileDocumentStore,
@@ -69,7 +70,13 @@ const fetchFromPrisma: FetchRowsWithStorageKey = async () => {
     select: { assetId: true, id: true, sizeBytes: true },
   });
   return sorok.map((sor) => ({
-    key: { assetId: sor.assetId, documentId: sor.id },
+    /**
+     * A GAZDA ITT `asset`, MERT EZ A LEKERDEZES AZ `AssetDocument` TABLARA MEGY.
+     * A munkalap-dokumentumok sajat lekerdezest kapnak majd, ugyanezzel az
+     * alakkal -- a kulcsban a gazda 2026-09-03 ota SZEREPEL, hogy a ket halmaz
+     * ne mosodjon ossze a lemezen es itt sem.
+     */
+    key: { owner: "asset" as const, ownerId: sor.assetId, documentId: sor.id },
     sizeBytes: sor.sizeBytes,
   }));
 };
@@ -92,9 +99,9 @@ function describeReport(report: ReconciliationReport): string[] {
    * ellentetes bajra.
    */
   for (const key of report.orphanedFiles)
-    lines.push(`  ARVA    ${key.assetId}/${key.documentId}`);
+    lines.push(`  ARVA    ${storageKeyFor(key)}`);
   for (const key of report.missingFiles)
-    lines.push(`  HIANYZO ${key.assetId}/${key.documentId}`);
+    lines.push(`  HIANYZO ${storageKeyFor(key)}`);
   return lines;
 }
 
@@ -178,13 +185,13 @@ export async function runReconciliation(deps: {
      */
     if (tarolt === null) {
       meretElteres.push(
-        `  MERET?  ${sor.key.assetId}/${sor.key.documentId} (a merete nem allapithato meg)`,
+        `  MERET?  ${storageKeyFor(sor.key)} (a merete nem allapithato meg)`,
       );
       continue;
     }
     if (tarolt !== sor.sizeBytes)
       meretElteres.push(
-        `  MERET   ${sor.key.assetId}/${sor.key.documentId} tabla=${sor.sizeBytes} tarolo=${tarolt}`,
+        `  MERET   ${storageKeyFor(sor.key)} tabla=${sor.sizeBytes} tarolo=${tarolt}`,
       );
   }
   if (meretElteres.length > 0)

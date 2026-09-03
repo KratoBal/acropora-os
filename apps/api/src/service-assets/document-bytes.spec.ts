@@ -53,13 +53,17 @@ describe("which source a document's bytes come from", () => {
   it("serves a row with a storage key from the store", async () => {
     const store = new InMemoryDocumentStore();
     await store.put(
-      { assetId: ASSET, documentId: DOCUMENT },
+      { owner: "asset" as const, ownerId: ASSET, documentId: DOCUMENT },
       Uint8Array.from([9, 8, 7]),
     );
     const service = new ServiceAssetsService(
       repositoryWith({
         content: null,
-        storageKey: storageKeyFor({ assetId: ASSET, documentId: DOCUMENT }),
+        storageKey: storageKeyFor({
+          owner: "asset" as const,
+          ownerId: ASSET,
+          documentId: DOCUMENT,
+        }),
       }),
       store,
     );
@@ -82,7 +86,11 @@ describe("which source a document's bytes come from", () => {
     const service = new ServiceAssetsService(
       repositoryWith({
         content: null,
-        storageKey: storageKeyFor({ assetId: ASSET, documentId: DOCUMENT }),
+        storageKey: storageKeyFor({
+          owner: "asset" as const,
+          ownerId: ASSET,
+          documentId: DOCUMENT,
+        }),
       }),
       new InMemoryDocumentStore(),
     );

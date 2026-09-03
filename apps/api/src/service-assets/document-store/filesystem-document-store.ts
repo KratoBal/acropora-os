@@ -12,15 +12,18 @@ import {
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 
-import type {
-  DocumentKey,
-  DocumentStore,
-  DocumentStoreStatus,
+import {
+  DOCUMENT_OWNERS,
+  ownerDirectory,
+  type DocumentKey,
+  type DocumentOwner,
+  type DocumentStore,
+  type DocumentStoreStatus,
 } from "./document-store.js";
 
 /**
  * FÁJLRENDSZERES DOKUMENTUM-TÁROLÓ: a bájtok egy csatolt könyvtárba kerülnek,
- * `assets/<assetId>/<documentId>` néven.
+ * `<gazda>/<ownerId>/<documentId>` néven (ma `assets/` és `worksheets/`).
  *
  * AZ ÍRÁS HÁROM LÉPÉSBEN MEGY, és a sorrend nem stílus kérdése:
  * ideiglenes névre írunk, `fsync`-elünk, és csak azután nevezzük át a végleges
@@ -146,27 +149,39 @@ export class FilesystemDocumentStore implements DocumentStore {
    * tenne, hogy a hívó két különböző választ kaphat ugyanarra.
    */
   async *list(): AsyncIterable<DocumentKey> {
-    const assetsRoot = path.join(this.root, "assets");
-    let assetDirectories;
+    /**
+     * MINDEN ISMERT GAZDA GYOKERE, ES CSAK AZ.
+     *
+     * A bejaras a ZART halmazon megy vegig, nem azon, ami a lemezen all. Egy
+     * idegen konyvtar (kezzel odamasolt adat, egy regi elrendezes maradeka)
+     * igy NEM latszik elarvult fajlkent -- es ez helyes: a lista a MI
+     * elrendezesunkrol szol, nem arrol, mi van meg azon a koteten.
+     */
+    for (const owner of DOCUMENT_OWNERS) {
+      yield* this.listOwner(owner);
+    }
+  }
+
+  private async *listOwner(owner: DocumentOwner): AsyncIterable<DocumentKey> {
+    const ownerRoot = path.join(this.root, ownerDirectory(owner));
+    let ownerDirectories;
     try {
       // AZ `opendir` EGYESEVEL AD, a `readdir` egyben olvassa be az egesz
       // konyvtarat. Sok ezer bejegyzesnel a masodik magat a merest teszi
       // kockazatta -- epp azt, aminek a baj MEGTALALASA a dolga.
-      assetDirectories = await opendir(assetsRoot);
+      ownerDirectories = await opendir(ownerRoot);
     } catch (error) {
       if (isMissingFile(error)) return;
       throw error;
     }
 
-    for await (const assetDirectory of assetDirectories) {
-      if (!assetDirectory.isDirectory()) continue;
-      const documents = await opendir(
-        path.join(assetsRoot, assetDirectory.name),
-      );
+    for await (const entry of ownerDirectories) {
+      if (!entry.isDirectory()) continue;
+      const documents = await opendir(path.join(ownerRoot, entry.name));
       for await (const document of documents) {
         if (!document.isFile()) continue;
         if (document.name.endsWith(".tmp")) continue;
-        yield { assetId: assetDirectory.name, documentId: document.name };
+        yield { owner, ownerId: entry.name, documentId: document.name };
       }
     }
   }
@@ -249,8 +264,8 @@ export class FilesystemDocumentStore implements DocumentStore {
   private resolveWithin(key: DocumentKey): string {
     const target = path.resolve(
       this.root,
-      "assets",
-      key.assetId,
+      ownerDirectory(key.owner),
+      key.ownerId,
       key.documentId,
     );
     const relative = path.relative(this.root, target);
@@ -261,7 +276,7 @@ export class FilesystemDocumentStore implements DocumentStore {
       path.isAbsolute(relative)
     ) {
       throw new Error(
-        `A dokumentum útvonala a tároló gyökerén kívülre mutat: ${key.assetId}/${key.documentId}`,
+        `A dokumentum útvonala a tároló gyökerén kívülre mutat: ${ownerDirectory(key.owner)}/${key.ownerId}/${key.documentId}`,
       );
     }
 

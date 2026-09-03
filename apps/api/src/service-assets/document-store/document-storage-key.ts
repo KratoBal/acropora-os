@@ -1,9 +1,16 @@
-import type { DocumentKey } from "./document-store.js";
+import { ownerDirectory, type DocumentKey } from "./document-store.js";
 
 /**
  * A `storageKey` MEZŐ ÉS A TÁROLÓ KULCSA KÖZTI KAPCSOLAT.
  *
- * A kulcs LEVEZETHETŐ a sorból: az `assetId` és a `documentId` úgyis ott áll.
+ * A kulcs LEVEZETHETŐ a sorból: a gazda és a `documentId` úgyis ott áll.
+ *
+ * A KULCS 2026-09-03 ÓTA A TULAJDONOS KÖNYVTÁRÁVAL KEZDŐDIK
+ * (`assets/<id>/<doc>`), és ez a lemezen álló úttal EGYEZIK. Előtte a tárolt
+ * kulcs prefix nélkül állt, a fájl viszont az `assets/` alatt: két alak
+ * ugyanarra a dologra, ami pontosan az a fajta csendes eltérés, amit ez a
+ * modul fejlécének a többi része leír. A váltás azért nem ír át semmit, mert a
+ * külső tároló SOHA nem volt bekapcsolva -- lásd a PR törzsét.
  * A `storageKey` mező ettől függetlenül tárolja is, és ez SZÁNDÉKOSAN
  * redundáns.
  *
@@ -19,7 +26,7 @@ import type { DocumentKey } from "./document-store.js";
  * olvasás), és a kettő külön romlana el.
  */
 export function storageKeyFor(key: DocumentKey): string {
-  return `${key.assetId}/${key.documentId}`;
+  return `${ownerDirectory(key.owner)}/${key.ownerId}/${key.documentId}`;
 }
 
 export function assertStorageKeyMatches(
