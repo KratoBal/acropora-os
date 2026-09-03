@@ -72,6 +72,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       case "unauthenticated":
         dispatch({ type: "RESTORE_UNAUTHENTICATED" });
         break;
+      case "authenticated-offline":
+        /**
+         * A TAROLT MUNKAMENETTEL INDULUNK, HALOZAT NELKUL.
+         *
+         * Eddig ez az ag `network-error`-kent vegzodott, es az app a
+         * ujraprobalas-kepernyon allt meg -- vagyis repulogep uzemmodban EL SEM
+         * INDULT. A `restoreSession` mostantol megkulonbozteti a ket esetet, es
+         * ez a nehany sor az, amitol a kulonbseg a KEPERNYON is latszik.
+         */
+        dispatch({
+          type: "RESTORE_AUTHENTICATED_OFFLINE",
+          user: outcome.user,
+          expiresAt: outcome.expiresAt,
+          /**
+           * A `verifiedAgeMs` a KORT adja, a felulet viszont IDOPONTOT tud
+           * megjeleniteni -- ezert itt szamoljuk vissza, egyszer, ahol a kor
+           * meg friss. A kepernyon ujraszamolva minden ujrarajzolasnal mas
+           * erteket adna.
+           */
+          lastVerifiedAt: new Date(
+            Date.now() - outcome.verifiedAgeMs,
+          ).toISOString(),
+        });
+        break;
       case "network-error":
         dispatch({ type: "RESTORE_NETWORK_ERROR" });
         break;

@@ -202,6 +202,7 @@ describe("az offline visszaállítás", () => {
       type: "RESTORE_AUTHENTICATED_OFFLINE",
       user: { id: "u1" } as never,
       expiresAt: "2026-09-04T00:00:00Z",
+      lastVerifiedAt: "2026-09-03T10:00:00Z",
     });
     assert.equal(state.status, "authenticated");
     assert.equal(state.offline, true);
@@ -220,6 +221,7 @@ describe("az offline visszaállítás", () => {
         type: "RESTORE_AUTHENTICATED_OFFLINE",
         user: { id: "u1" } as never,
         expiresAt: "2026-09-04T00:00:00Z",
+        lastVerifiedAt: "2026-09-03T10:00:00Z",
       },
     );
     assert.equal(state.restoreNetworkError, false);

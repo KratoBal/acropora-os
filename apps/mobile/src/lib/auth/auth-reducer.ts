@@ -45,6 +45,8 @@ export interface AuthState {
    * tud vele szamolni, ha tudja, hogy offline all.
    */
   offline: boolean;
+  /** Az utolso sikeres szerver-ellenorzes, ha a munkamenet a lemezrol jott. */
+  lastVerifiedAt: string | null;
 }
 
 export const initialAuthState: AuthState = {
@@ -55,6 +57,7 @@ export const initialAuthState: AuthState = {
   signInError: null,
   lockReason: null,
   offline: false,
+  lastVerifiedAt: null,
 };
 
 export type AuthAction =
@@ -76,6 +79,13 @@ export type AuthAction =
       type: "RESTORE_AUTHENTICATED_OFFLINE";
       user: AuthenticatedUser;
       expiresAt: string;
+      /**
+       * Az utolso sikeres szerver-ellenorzes ideje, ISO alakban. A felulet ebbol
+       * mondja meg, HANY ORAIG indul meg igy az app -- e nelkul csak annyit
+       * tudna kiirni, hogy nincs halozat, es a kollega nem tudna, mennyi ideje
+       * van.
+       */
+      lastVerifiedAt: string | null;
     }
   /** `reason` is absent when the gate simply closed and nobody has been
    * asked yet - coming back to the foreground after a long absence. It is
@@ -102,6 +112,7 @@ export function authReducer(state: AuthState, action: AuthAction): AuthState {
         signInError: null,
         lockReason: null,
         offline: false,
+        lastVerifiedAt: null,
       };
     case "RESTORE_AUTHENTICATED_OFFLINE":
       /**
@@ -121,6 +132,7 @@ export function authReducer(state: AuthState, action: AuthAction): AuthState {
         signInError: null,
         lockReason: null,
         offline: true,
+        lastVerifiedAt: action.lastVerifiedAt,
       };
     case "RESTORE_NETWORK_ERROR":
       return { ...state, status: "restoring", restoreNetworkError: true };
@@ -151,6 +163,7 @@ export function authReducer(state: AuthState, action: AuthAction): AuthState {
         // Egy sikeres bejelentkezes ONLINE tortent: a szerver most adta a
         // tokent. Ez az egyetlen hely, ahol ez biztosan allithato.
         offline: false,
+        lastVerifiedAt: null,
       };
     case "SIGN_IN_ERROR":
       return {
