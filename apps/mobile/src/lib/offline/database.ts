@@ -21,6 +21,13 @@ const DATABASE_NAME = "acropora-field.db";
  * A kettő megkülönböztetése a felületen is látszik: a listából összerakott lap
  * HIÁNYOS, és a sáv kimondja (`offline-notice.ts`).
  *
+ * - `cached_asset_owners` és `cached_partner_units`: az ESZKÖZ-FELVITEL két
+ *   kötelező választója. Balázs 2026-09-03-án élesben mérte, hogy térerő nélkül
+ *   nem tud eszközt felvinni: a rögzítés (a sor) MEGY offline, de az ŰRLAP két
+ *   listája hálózatról jött, és e nélkül nincs mit választani. A sor tehát
+ *   működött, a felvitel mégsem -- a réteg helyessége nem elég, ha a képernyő
+ *   nem jut el odáig.
+ *
  * - `cached_worksheet_departments`: a munkalap HELYSZÍNEI partnerenként. Külön
  *   tábla, mert a helyszín-lista a munkalap `customerId` mezőjéhez tartozik, és
  *   NEM azonos a `partners.ts` alegység-hívásával: a két végpont más azonosítót
@@ -85,6 +92,22 @@ export async function initializeOfflineDatabase(): Promise<SQLite.SQLiteDatabase
 
     CREATE INDEX IF NOT EXISTS cached_worksheet_departments_customer
       ON cached_worksheet_departments (customer_id);
+
+    CREATE TABLE IF NOT EXISTS cached_asset_owners (
+      id TEXT PRIMARY KEY NOT NULL,
+      payload_json TEXT NOT NULL,
+      synced_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS cached_partner_units (
+      id TEXT PRIMARY KEY NOT NULL,
+      partner_id TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      synced_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS cached_partner_units_partner
+      ON cached_partner_units (partner_id);
   `);
   await applyMigrations(database);
   return database;

@@ -1,4 +1,5 @@
 import { forgetOfflineAssets } from "./asset-cache";
+import { forgetAssetFormCache } from "./asset-form-cache";
 import { forgetWorksheetDepartments } from "./worksheet-department-cache";
 
 /**
@@ -26,4 +27,5 @@ import { forgetWorksheetDepartments } from "./worksheet-department-cache";
 export async function forgetOfflineData(): Promise<void> {
   await forgetOfflineAssets();
   await forgetWorksheetDepartments();
+  await forgetAssetFormCache();
 }
