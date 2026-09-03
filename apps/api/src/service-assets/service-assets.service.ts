@@ -243,6 +243,19 @@ export class ServiceAssetsService {
     return this.repository.listLabelBatches(limit);
   }
 
+  /**
+   * EGY KOTEG KODJAI. A NEM LETEZO KOTEG NEM URES LISTA.
+   *
+   * Egy ures tomb azt mondana, hogy a koteg letezik es nincs benne kod -- egy
+   * elgepelt azonositora pedig a felulet ures fajlt tolt le, hibauzenet nelkul.
+   */
+  async labelBatchCodes(batchId: string) {
+    const codes = await this.repository.labelBatchCodes(batchId);
+    if (codes === null)
+      throw new NotFoundException("A matrica-köteg nem található.");
+    return { codes };
+  }
+
   /** A kiadott, de meg egyetlen eszkozhoz sem kotott matricak. */
   async freeLabels(limit: number) {
     return this.repository.listFreeLabels(limit);

@@ -75,6 +75,48 @@ function repository(
   } as unknown as ServiceAssetsRepository;
 }
 
+/**
+ * A NEM LETEZO KOTEG NEM URES LISTA.
+ *
+ * A ket eset TEENDOJE mas: egy elgepelt azonositora a felulet ures fajlt toltene
+ * le, hibauzenet nelkul -- a kezelo pedig azt hinne, hogy a koteg ures. Az ures
+ * koteg viszont letezo allapot (kod nelkuli koteg), es arra a valasz egy ures
+ * lista, nem hiba.
+ */
+test("a nem letezo matrica-koteg nem talalhato, nem ures lista", async () => {
+  const service = new ServiceAssetsService(
+    repository({ labelBatchCodes: async () => null }),
+    new InMemoryDocumentStore(),
+  );
+
+  await assert.rejects(
+    () => service.labelBatchCodes("hianyzik"),
+    /nem található/,
+  );
+});
+
+/**
+ * TESTVER-KONTROLL: A LETEZO, DE URES KOTEG ATMEGY.
+ *
+ * Enelkul az elso allitas akkor is zold lenne, ha a metodus MINDEN bemenetre
+ * hibat dobna -- es akkor egy valodi, ures koteg letoltese is elhasalna.
+ */
+test("a letezo koteg kodjai atmennek, ures listaval is", async () => {
+  const ures = new ServiceAssetsService(
+    repository({ labelBatchCodes: async () => [] }),
+    new InMemoryDocumentStore(),
+  );
+  assert.deepEqual(await ures.labelBatchCodes("koteg-1"), { codes: [] });
+
+  const teli = new ServiceAssetsService(
+    repository({ labelBatchCodes: async () => ["V2196", "A0001"] }),
+    new InMemoryDocumentStore(),
+  );
+  assert.deepEqual(await teli.labelBatchCodes("koteg-2"), {
+    codes: ["V2196", "A0001"],
+  });
+});
+
 test("rejects a parent asset owned by a different customer", async () => {
   const service = new ServiceAssetsService(
     repository({

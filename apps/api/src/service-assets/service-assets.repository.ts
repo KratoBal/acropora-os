@@ -1102,6 +1102,36 @@ export class ServiceAssetsRepository extends Repository {
    * igenyelne, es az elcsuszasa CSENDES lenne -- a lista tovabbra is szamot
    * mutatna, csak rosszat.
    */
+  /**
+   * EGY KOTEG KODJAI, A LETOLTESHEZ.
+   *
+   * KULON VEGPONT, ES NEM A LISTA BOVITESE. Otven koteg otszaz koddal egyetlen
+   * valaszban akkor is atmenne a halon, ha senki nem tolt le semmit -- a lista
+   * a KOTEGEKROL szol, ez pedig EGY kotegrol.
+   *
+   * A SORREND A KIADASE (`issuedAt`), nem a kode: a nyomtatott iven a kodok
+   * abban a sorrendben allnak, ahogy keletkeztek, es a letoltott fajlnak
+   * ugyanazt kell adnia. Egy kod szerinti rendezes UJRARENDEZNE azt, ami a
+   * papiron mar rogzitett.
+   */
+  async labelBatchCodes(batchId: string): Promise<string[] | null> {
+    const batch = await prisma.assetLabelBatch.findUnique({
+      where: { id: batchId },
+      select: { id: true },
+    });
+    // A NEM LETEZO KOTEG ES AZ URES KOTEG KET KULONBOZO VALASZ: az elso
+    // elgepelt azonosito (404), a masodik egy koteg, amiben nincs kod. Egy
+    // ures tomb mindkettore ugyanazt mondana.
+    if (!batch) return null;
+
+    const rows = await prisma.assetLabel.findMany({
+      where: { batchId },
+      orderBy: { issuedAt: "asc" },
+      select: { code: true },
+    });
+    return rows.map((row) => row.code);
+  }
+
   async listLabelBatches(
     limit: number,
   ): Promise<
