@@ -73,6 +73,20 @@ export interface ProjectableProduct {
    * vezetnenek.
    */
   slug: string | null;
+  /**
+   * AZ INDEXELESI TILTAS, VAGY `null`.
+   *
+   * EZ AZ EGYETLEN SEO-TETEL, AMINEK ONALLO TETJE VAN, es a szam mondja meg,
+   * miert: az 1893 termekbol MINDOSSZE KETTONEK van kezzel irt Meta blokkja, es
+   * mindkettonel CSAK a `Robots` mezo all benne, `noindex, nofollow` ertekkel.
+   * A tobbi 1891 `AutomaticMeta`, amit a UNAS a nevbol general -- azt a bolt is
+   * tudna.
+   *
+   * VAGYIS AZ AT NEM VITEL ITT NEM VESZTESEG, HANEM A TILTAS ELTUNESE: az a ket
+   * termek a boltban indexelhetove valna. Nem SEO-szoveg, hanem egy DONTES,
+   * amit valaki meghozott, es amit csendben visszavonnank.
+   */
+  seoRobots: string | null;
 }
 
 export type ProjectionOutcome =
@@ -340,6 +354,22 @@ export class MedusaProductProjectionService {
     const handle = medusaHandleFromSlug(product.slug);
     const handlePatch = handle ? { handle } : {};
 
+    /**
+     * A `metadata` MEZOBE MEGY, MERT A MEDUSANAK NINCS SAJAT SEO-MEZOJE.
+     *
+     * Merve a telepitett 2.19.0 tipusdefiniciojan (acrobot, 2026-09-03): a
+     * `CreateProductDTO` ismer `thumbnail`, `images`, `handle` es `metadata`
+     * mezot -- SEO-mezot nem. A `metadata` tehat nem kenyelmi valasztas, hanem
+     * az egyetlen hely, ahol ez az ertek atmehet.
+     *
+     * A KULCS `snake_case`, a Medusa sajat konvencioja szerint. Es a mezo
+     * ELMARAD, ha nincs ertek: egy ures `metadata` felulirna, amit a bolt
+     * oldalan barki mas oda tett.
+     */
+    const metadataPatch = product.seoRobots
+      ? { metadata: { seo_robots: product.seoRobots } }
+      : {};
+
     const existingLink = await this.links.findByProductId(product.id);
     if (existingLink) {
       /**
@@ -354,6 +384,7 @@ export class MedusaProductProjectionService {
           description: product.description,
           external_id: product.id,
           ...handlePatch,
+          ...metadataPatch,
           status: publication.status,
           sales_channels: salesChannels,
           ...categoryPatch,
@@ -477,6 +508,7 @@ export class MedusaProductProjectionService {
         description: product.description,
         external_id: product.id,
         ...handlePatch,
+        ...metadataPatch,
         status: publication.status,
         sales_channels: salesChannels,
         ...categoryPatch,
