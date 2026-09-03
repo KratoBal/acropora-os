@@ -172,23 +172,6 @@ export class ServiceAssetsService {
   }
 
   /**
-   * MATRICAK KIADASA A KESZLETBE. SERVICE_MANAGE jog alatt all.
-   *
-   * A valasz KULON mondja meg, mi jott letre es mi allt mar ott -- lasd a
-   * tarolo jegyzetet. A hivo ebbol latja, hogy egy ujranyomtatott iv masodik
-   * feltoltese nem hozott uj matricakat.
-   */
-  async issueLabels(codes: readonly string[]) {
-    if (codes.length === 0)
-      throw new BadRequestException("Legalább egy matricakódot meg kell adni.");
-    try {
-      return await this.repository.issueLabels(codes);
-    } catch (error) {
-      this.map(error);
-    }
-  }
-
-  /**
    * ESZKOZ KERESESE A BEOLVASOTT MATRICAKODROL.
    *
    * A HAROM VALASZ HATARA: rossz ALAK -> 400 (a keresen kell javitani),
