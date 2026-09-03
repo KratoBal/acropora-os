@@ -16,10 +16,18 @@ const BASE = "/service/worksheets";
  * ma a webes felületen történik, ezért ez a modul csak olvas.
  *
  * A szerver ugyanazzal a jogosultsággal védi a munkalapot, mint az eszközöket
- * (`service.view` az olvasáshoz, `service.manage` az íráshoz), tehát az írás
- * itt NEM jogosultsági kérdés, hanem szándékos szűkítés: egy félkész lap-írás
- * a telefonon olyan állapotot hozna létre, amit csak a webes felület tud
- * befejezni.
+ * (`service.view` az olvasáshoz, `service.manage` az íráshoz).
+ *
+ * === EZ A MODUL 2026-09-03 ÓTA ÍR IS, ÉS A KORÁBBI SZŰKÍTÉS INDOKA MEGDŐLT ===
+ *
+ * Itt korábban az állt, hogy a telefonon szándékosan nincs írás, mert egy
+ * félkész lap-írás olyan állapotot hozna létre, amit csak a webes felület tud
+ * befejezni. A LAP MEGNYITÁSA nem ilyen: a szerver három mezőt kér
+ * (`customerId`, `departmentId`, `subject`), a tételek listája alapértelmezetten
+ * ÜRES, tehát a helyszínen nyitott lap TELJES ÉRTÉKŰ, csak még nincs rajta tétel.
+ *
+ * Ami továbbra sem itt van: a lezárás, az aláíratás és az ár. Azok az irodai
+ * oldalon dőlnek el (Balázs döntése, 2026-09-02).
  *
  * A típusok SAJÁT másolatok, nem a `@acropora/types` csomagból jönnek: az Expo
  * app szándékosan nem húzza be a pnpm munkatér csomagjait (lásd
@@ -219,4 +227,47 @@ export function listWorksheets({
 
 export function getWorksheet(id: string) {
   return apiRequest<WorksheetDetail>(`${BASE}/${encodeURIComponent(id)}`);
+}
+
+/**
+ * A PARTNER HELYSZÍNEI (alegységei), a munkalap oldaláról nézve.
+ *
+ * NEM a `partners.ts` `listPartnerUnits` hívása: az a PARTNER azonosítójára
+ * megy, a munkalap viszont `customerId` szerint gondolkodik, és a kettő nem
+ * ugyanaz. A webes szerkesztő is ezt a végpontot hívja.
+ *
+ * A lista LAPOSAN jön vissza, a fát a `parentId` mezőből lehet felépíteni.
+ */
+export interface WorksheetDepartment {
+  id: string;
+  parentId: string | null;
+  code: string;
+  name: string;
+  isActive: boolean;
+}
+
+export function listWorksheetDepartments(customerId: string) {
+  return apiRequest<{ items: WorksheetDepartment[] }>(
+    `${BASE}/customers/${encodeURIComponent(customerId)}/departments`,
+  );
+}
+
+export interface CreateWorksheetInput {
+  customerId: string;
+  departmentId: string;
+  subject: string;
+  description?: string;
+}
+
+/**
+ * ÚJ MUNKALAP A HELYSZÍNRŐL.
+ *
+ * A válasz a teljes lap, ugyanaz az alak, amit a `getWorksheet` ad -- a
+ * képernyő ebből lép tovább a lap adatlapjára, szerver-oldali azonosítóval.
+ */
+export function createWorksheet(input: CreateWorksheetInput) {
+  return apiRequest<WorksheetDetail>(BASE, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
