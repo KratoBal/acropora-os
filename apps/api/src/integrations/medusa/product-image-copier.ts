@@ -6,8 +6,18 @@ import { productImageDocumentId } from "./product-image-storage-key.js";
  * A KEP MESTERE ATKERUL A MI OLDALUNKRA.
  *
  * MIERT KELL, ES MIERT NEM ELEG A BOLTBA FELTOLTENI: a bolt alkalmazasanak
- * NULLA allando tarhelye van (merve a Coolify felulerol), tehat egy telepites
- * elviheti a fajljait. Ha a mester nalunk all, a vetites egyszeruen ujratolt.
+ * NULLA allando tarhelye van, tehat egy telepites elviheti a fajljait.
+ *
+ * A FORRAS-MEGJELOLES 2026-09-03 ESTE JAVITVA, es a kulonbseg nem szorszalhasogatas.
+ * Elso alakjaban ez a mondat ugy szolt, hogy "merve a Coolify felulerol" -- a szam
+ * ONNAN viszont nem is szarmazhatott: az alkalmazas-rekordban EGYALTALAN NINCS
+ * tarolo-mezo. A helyes forras a `/api/v1/applications/<uuid>/storages` vegpont,
+ * es a szam onnan MERT (acrobot, mind a negy alkalmazasra).
+ *
+ * A SZAM UGYANAZ MARADT. Epp ezert erdemes kimondani: egy megjegyzes, ami ROSSZ
+ * FELULETRE hivatkozik, a kovetkezo olvasot ugyanoda vezeti -- egy helyre, ahol
+ * nincs mit megnezni --, es ott vagy nem talal semmit, vagy azt hiszi, a mezo
+ * eltunt azota. Ha a mester nalunk all, a vetites egyszeruen ujratolt.
  * Ha nem, akkor a UNAS-rol kellene ujra lehivni -- ami MA megy, es a koltozes
  * utan nem. Ez nem "atmeneti alak", hanem egy fuggoseg, ami pont akkor szunne
  * meg mukodni, amikor a legjobban kellene.
