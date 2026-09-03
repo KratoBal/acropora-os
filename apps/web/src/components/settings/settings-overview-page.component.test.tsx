@@ -94,12 +94,56 @@ describe("beállítások gyűjtőoldal", () => {
     }
   });
 
+  /**
+   * EGY-LINKES TERULETNEL A CIM PONTOSAN EGYSZER ALL OTT.
+   *
+   * Az elso valtozat minden kartyat cim PLUSZ lista alakban adott, es ettol a
+   * "Felhasznalok" es a "Markak" KETSZER allt a kepernyon -- egyszer a kartya
+   * cimekent, egyszer a sajat linkjekent. Merve, mielott a javitas keszult:
+   * ket elofordulas mindkettonel.
+   *
+   * Ez nem esztetikai allitas: egy ketszer kiirt nev azt sugallja, hogy KET
+   * kulonbozo dologrol van szo.
+   */
+  it("egy-linkes területnél a nevet nem írja ki kétszer", () => {
+    auth.role = "OWNER";
+    render(<SettingsOverviewPage />);
+    expect(screen.getAllByText("Felhasználók")).toHaveLength(1);
+    expect(screen.getAllByText("Márkák")).toHaveLength(1);
+  });
+
+  /**
+   * A TOBB-LINKES TERULET MINDEN LINKJE LATSZIK, ES A KARTYA NEM VALASZT
+   * HELYETTUK. Negybol egyet kiemelni onkenyes lenne, a masik harom pedig
+   * lathatatlan maradna -- pontosan az a hiba, amit ez a lap javit, csak
+   * eggyel beljebb.
+   */
+  it("a több oldalas területnél mind a négy hivatkozás ott áll", () => {
+    auth.role = "OWNER";
+    render(<SettingsOverviewPage />);
+    for (const nev of [
+      "UNAS kapcsolat",
+      "UNAS szinkron",
+      "NAV",
+      "Medusa kapcsolat",
+    ]) {
+      expect(screen.getByRole("link", { name: new RegExp(nev) })).toBeTruthy();
+    }
+  });
+
+  /**
+   * A LINKET AZ UTVONALA AZONOSITJA, NEM A SZOVEGE. Az egy-linkes kartyan a
+   * cim a TERULET neve, a menuben viszont "QR-kód nyomtatás" all ugyanarra a
+   * lapra -- egy nevre allitott kereses ezert a megjelenites egy dontesehez
+   * kotne az allitast, nem ahhoz, hogy a hivatkozas jo helyre visz.
+   */
   it("a matricák hivatkozása a már létező alpontra visz", () => {
     auth.role = "OWNER";
     render(<SettingsOverviewPage />);
-    expect(
-      screen.getByRole("link", { name: /QR-kód nyomtatás/ }),
-    ).toHaveAttribute("href", "/beallitasok/matricak");
+    const linkek = screen
+      .getAllByRole("link")
+      .map((elem) => elem.getAttribute("href"));
+    expect(linkek).toContain("/beallitasok/matricak");
   });
 
   /**

@@ -130,7 +130,7 @@ export const SETTINGS_AREAS: SettingsArea[] = [
     links: [
       {
         label: "UNAS katalógus-import",
-        description: "Feltöltött munkafüzetek állapota és előzményei.",
+        description: "Feltöltött UNAS munkafüzetek állapota és előzményei.",
         href: "/admin/imports/unas",
         permission: PERMISSIONS.PRODUCTS_MANAGE,
       },
@@ -141,8 +141,15 @@ export const SETTINGS_AREAS: SettingsArea[] = [
     icon: "settings",
     links: [
       {
+        /**
+         * A LEIRAS KIMONDJA A MENUBELI NEVET IS. Egy-linkes teruletnel a kartya
+         * cime a TERULET neve ("Matricák"), a menuben viszont "QR-kód
+         * nyomtatás" all ugyanarra a lapra. Ket kulonbozo nev ugyanarra a
+         * celra elbizonytalanit, ezert a leiras osszekoti a kettot.
+         */
         label: "QR-kód nyomtatás",
-        description: "Eszköz-matricakódok generálása és nyilvántartása.",
+        description:
+          "QR-kód nyomtatás: eszköz-matricakódok generálása és nyilvántartása.",
         href: "/beallitasok/matricak",
         entryId: "asset-labels",
       },
@@ -183,36 +190,71 @@ export function SettingsOverviewPage() {
         </p>
       </div>
 
+      {/*
+        EGY LINK -> A KARTYA MAGA A LINK. TOBB -> CIM PLUSZ BELSO LISTA.
+        (picasso eszrevetele, 2026-09-03: negy kulon link egy kartyan megbontja
+        a tobbi, egy-linkes kartya egyenletesseget.)
+
+        ES EGY MERT OK, AMI EBBOL KOVETKEZIK: az elso valtozatban minden kartya
+        cim PLUSZ lista volt, es ettol a "Felhasznalok" es a "Markak" KETSZER
+        allt a kepernyon (a kartya cimekent es a sajat linkjekent is) -- merve,
+        ket elofordulas mindkettonel. Egy-linkes teruletnel a linknev nem ad
+        hozza semmit a cimhez, tehat a LEIRAS viszi az informaciot.
+
+        ES AMIERT A TOBB-LINKES KARTYA NEM KAP SAJAT href-et: negybol egyet
+        valasztani onkenyes lenne (miert epp az UNAS kapcsolat?), a masik harom
+        pedig lathatatlan maradna.
+      */}
       <div className="grid gap-4 sm:grid-cols-2">
-        {areas.map((area) => (
-          <Card key={area.title}>
-            <CardHeader>
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                <Icon name={area.icon} className="size-4 text-slate-400" />
-                {area.title}
-              </h2>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-3">
-                {area.links.map((link) => (
-                  <li key={link.href}>
-                    <Link
-                      href={link.href}
-                      className="block rounded-md border border-slate-200 px-3 py-2 transition hover:border-teal-500 hover:bg-slate-50"
-                    >
-                      <span className="block text-sm font-medium text-slate-900">
-                        {link.label}
-                      </span>
-                      <span className="block text-xs text-slate-500">
-                        {link.description}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
-        ))}
+        {areas.map((area) => {
+          const cim = (
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+              <Icon name={area.icon} className="size-4 text-slate-400" />
+              {area.title}
+            </h2>
+          );
+          const egyetlen = area.links.length === 1 ? area.links[0] : null;
+          return (
+            <Card key={area.title}>
+              {egyetlen ? (
+                <Link
+                  href={egyetlen.href}
+                  className="block rounded-lg transition hover:bg-slate-50"
+                >
+                  <CardHeader>{cim}</CardHeader>
+                  <CardContent>
+                    <p className="text-xs text-slate-500">
+                      {egyetlen.description}
+                    </p>
+                  </CardContent>
+                </Link>
+              ) : (
+                <>
+                  <CardHeader>{cim}</CardHeader>
+                  <CardContent>
+                    <ul className="space-y-2">
+                      {area.links.map((link) => (
+                        <li key={link.href}>
+                          <Link
+                            href={link.href}
+                            className="block rounded-md border border-slate-200 px-3 py-2 transition hover:border-teal-500 hover:bg-slate-50"
+                          >
+                            <span className="block text-sm font-medium text-slate-900">
+                              {link.label}
+                            </span>
+                            <span className="block text-xs text-slate-500">
+                              {link.description}
+                            </span>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </>
+              )}
+            </Card>
+          );
+        })}
       </div>
     </div>
   );
