@@ -125,6 +125,21 @@ export class CreateWorksheetDto extends WorksheetContentDto {
   @IsString() @MinLength(1) customerId!: string;
   @IsString() @MinLength(1) departmentId!: string;
   /**
+   * A HIBAJEGY, AMI ALA A LAP KERUL -- ELHAGYHATOAN, ES EGY TRANZAKCIOBAN.
+   *
+   * ELHAGYHATO, mert a lap KELETKEZHET jegy nelkul: karbantartas kozben derul
+   * ki, hogy valami elromlott, a szerelo ott helyben felveszi a lapot, es a
+   * hibajegy nalunk szuletik meg utolag. Ez nem kivetel, hanem az egyik rendes
+   * ut (a sema jegyzete is ezt mondja).
+   *
+   * ES MIERT ITT, NEM KET HIVASBAN: ket lepesben a masodik fele elbukhat
+   * (halozat, jogosultsag, elgepelt azonosito), es epp az a JEGY NELKULI lap
+   * keletkezne, amit a felhasznalo nem is keresne ott. A `create` metodus
+   * kommentje ugyanezt az esetet keruli el a felelosoknel -- ez a mezo a haz
+   * sajat precedenset koveti, nem uj dontes.
+   */
+  @IsString() @IsOptional() serviceJobId?: string | null;
+  /**
    * A felelősök MÁR A FELVITELKOR, opcionálisan.
    *
    * Ugyanaz a szabály, mint a `SetWorksheetAssigneesDto` esetén: a beküldött

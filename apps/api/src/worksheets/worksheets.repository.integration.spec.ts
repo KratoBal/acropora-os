@@ -774,6 +774,59 @@ describe(
      * A lap szándékosan aláírt állapotban van: az aláírt lap a legerősebb
      * eset, mert azt egyébként semmi nem írhatja át.
      */
+    /**
+     * A JEGY ALA NYITOTT LAP -- ES EZ AZ EGYETLEN HELY, AHOL A BEIRAS MERHETO.
+     *
+     * A service oldalan a repository DUPLA, tehat ott az allitas annyit mond,
+     * hogy a `serviceJobId` eljut a `createDraft` BEMENETEIG. Hogy onnan a SORBA
+     * is bekerul, azt csak valodi adatbazis mondja meg -- egy kimaradt mezo ott
+     * nem hibazik, csak `null` marad, es a lap jegy nelkul all.
+     */
+    it("writes the ticket onto the sheet in the same transaction", async () => {
+      const job = await prisma.serviceJob.create({
+        data: {
+          jobNumber: `HJ-WS-INT-${suffix}`,
+          title: "Cápasuli szivattyú",
+          customerId,
+        },
+        select: { id: true },
+      });
+
+      const worksheetId = await repository.createDraft({
+        customerId,
+        departmentId: bioDepartmentId,
+        content: content(),
+        actorUserId,
+        serviceJobId: job.id,
+      });
+
+      const row = await prisma.worksheet.findUniqueOrThrow({
+        where: { id: worksheetId },
+        select: { serviceJobId: true },
+      });
+      assert.equal(row.serviceJobId, job.id);
+    });
+
+    /**
+     * TESTVER-KONTROLL: JEGY NELKUL A MEZO `null` MARAD, es a lap letrejon. Ha
+     * egy rontas MINDKETTOT pirosra dontene, akkor nem a jegy beirasat mernenk,
+     * hanem a letrehozast magat.
+     */
+    it("leaves the ticket null when the sheet is opened without one", async () => {
+      const worksheetId = await repository.createDraft({
+        customerId,
+        departmentId: bioDepartmentId,
+        content: content(),
+        actorUserId,
+      });
+
+      const row = await prisma.worksheet.findUniqueOrThrow({
+        where: { id: worksheetId },
+        select: { serviceJobId: true },
+      });
+      assert.equal(row.serviceJobId, null);
+    });
+
     it("reads the customer's own code from the asset, even on a signed sheet", async () => {
       const asset = await prisma.asset.create({
         data: {
