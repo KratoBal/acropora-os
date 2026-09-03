@@ -4,7 +4,7 @@ import { Alert, Button, Card, Input, PageHeader } from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
-  type CustomerSummary,
+  type WorksheetSelectablePartner,
 } from "@acropora/types";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -37,7 +37,9 @@ export function ServiceJobEditorPage() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [customer, setCustomer] = useState<CustomerSummary | null>(null);
+  const [customer, setCustomer] = useState<WorksheetSelectablePartner | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const canManage = Boolean(
@@ -61,7 +63,7 @@ export function ServiceJobEditorPage() {
       const created = await serviceJobsApi.create(token, {
         title: title.trim(),
         description: description.trim() || null,
-        customerId: customer?.id ?? null,
+        customerId: customer?.customerId ?? null,
       });
       // A FRISS JEGY LAPJÁRA VISZÜNK, nem a listára: aki most nyitotta, azt
       // akarja folytatni - munkalapot csatolni, léptetni.
@@ -116,7 +118,7 @@ export function ServiceJobEditorPage() {
           </label>
           {customer ? (
             <div className="flex items-center gap-2 text-sm">
-              <span className="font-medium">{customer.displayName}</span>
+              <span className="font-medium">{customer.name}</span>
               <button
                 type="button"
                 className="text-xs text-slate-500 underline"

@@ -371,7 +371,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
           ) : null}
           <PartnerPicker
             id="jegy-partner"
-            onPick={(picked) => void setPartner(picked.id)}
+            onPick={(picked) => void setPartner(picked.customerId)}
           />
         </Card>
       ) : null}

@@ -17,7 +17,10 @@ const api = vi.hoisted(() => ({
   detachWorksheet: vi.fn(),
   setPartner: vi.fn(),
 }));
-const sheets = vi.hoisted(() => ({ attachable: vi.fn() }));
+const sheets = vi.hoisted(() => ({
+  attachable: vi.fn(),
+  selectablePartners: vi.fn(),
+}));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
 vi.mock("@/components/auth/auth-provider", () => ({
@@ -124,6 +127,18 @@ describe("ServiceJobDetailPage", () => {
           customerName: "Fővárosi Állat- És Növénykert",
           createdAt: "2026-08-30T08:00:00.000Z",
           handedOverAt: null,
+        },
+      ],
+    });
+    // A PARTNER-VALASZTO A SZERVIZPARTNEREKET KERI LE (Balazs dontese,
+    // 2026-09-03). A doboz csak partner nelkuli jegynel latszik, de a mock
+    // MINDIG all: egy hianyzo dupla ott is elhasalna, ahol a doboz rejtve van.
+    sheets.selectablePartners.mockReset().mockResolvedValue({
+      items: [
+        {
+          customerId: "vevo-1",
+          name: "Fővárosi Állat- És Növénykert",
+          partnerCode: "FANK",
         },
       ],
     });
