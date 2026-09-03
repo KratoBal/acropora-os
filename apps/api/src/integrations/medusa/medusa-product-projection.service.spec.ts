@@ -35,6 +35,7 @@ const product: ProjectableProduct = {
   /** A fixtura NEM ad teljes kategoria-listat: a mezo igy nem kerul a torzsbe. */
   medusaCategoryIds: null,
   slug: null,
+  seoRobots: null,
   publication: {
     catalogAuthority: "ACROPORA",
     isActive: true,
@@ -142,6 +143,7 @@ const MEZO_SORSA: Record<string, "atmegy" | "szandekosan-nem"> = {
   description: "atmegy",
   primarySku: "atmegy", // -> a valtozat sku mezoje
   slug: "atmegy", // -> handle
+  seoRobots: "atmegy", // -> metadata.seo_robots
   medusaCategoryIds: "atmegy", // -> categories, ha van teljes lista
   /**
    * A publikacios ALLAPOT bemenet, nem mezo: belole a `status` es a
@@ -173,6 +175,7 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
       {
         ...product,
         slug: "Teszt-cim",
+        seoRobots: "noindex, nofollow",
         medusaCategoryIds: ["cat_1"],
       },
       now,
@@ -186,6 +189,7 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
       primarySku: torzs.variants[0]?.sku === "PUMP-1",
       slug: torzs.handle === "Teszt-cim",
       medusaCategoryIds: torzs.categories?.[0]?.id === "cat_1",
+      seoRobots: torzs.metadata?.seo_robots === "noindex, nofollow",
       publication: torzs.status !== undefined,
     };
     const hianyzo = Object.entries(MEZO_SORSA)
@@ -196,6 +200,49 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
       [],
       "a tablaban 'atmegy', a keresbol mégis hianyzik",
     );
+  });
+});
+
+describe("MedusaProductProjectionService -- az indexelesi tiltas", () => {
+  /**
+   * KULON ALLITAS, NEM A "TOBBI MEZO" CSOMAGBAN -- acrobot kikotese, es a szam
+   * indokolja: az 1893 termekbol MINDOSSZE KETTONEK van kezzel irt Meta
+   * blokkja, es mindkettonel CSAK a `Robots` all benne. A tobbi 1891
+   * automatikusan generalt, amit a bolt is tudna.
+   *
+   * Vagyis az at nem vitel itt nem veszteseg, hanem a TILTAS ELTUNESE.
+   */
+  it("a noindex tiltast atviszi a metadata mezobe", async () => {
+    const f = fakes({ link: null, found: [] });
+    await f.service.project(
+      { ...product, seoRobots: "noindex, nofollow" },
+      now,
+    );
+    assert.equal(f.createdWith[0]?.metadata?.seo_robots, "noindex, nofollow");
+  });
+
+  /**
+   * A SZUKITES: tiltas nelkul a `metadata` mezo KI SEM KERUL a keresbe.
+   *
+   * Egy ures `metadata` felulirna, amit a bolt oldalan barki mas oda tett -- ez
+   * ugyanaz a megkulonboztetes, mint a `handle`-nel: a hiany es az uresség ket
+   * kulonbozo dolog.
+   */
+  it("tiltas nelkul a metadata mezot ki sem kuldi", async () => {
+    const f = fakes({ link: null, found: [] });
+    await f.service.project({ ...product, seoRobots: null }, now);
+    assert.equal("metadata" in (f.createdWith[0] ?? {}), false);
+  });
+
+  it("a frissitesnel is atviszi", async () => {
+    const f = fakes({
+      link: { productId: "prod-os-1", medusaProductId: "prod_x" },
+    });
+    await f.service.project(
+      { ...product, seoRobots: "noindex, nofollow" },
+      now,
+    );
+    assert.equal(f.updatedWith[0]?.metadata?.seo_robots, "noindex, nofollow");
   });
 });
 

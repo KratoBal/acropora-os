@@ -48,6 +48,7 @@ const product: ProjectableProduct = {
   /** A fixtura NEM ad teljes kategoria-listat: a mezo igy nem kerul a torzsbe. */
   medusaCategoryIds: null,
   slug: null,
+  seoRobots: null,
   publication: {
     catalogAuthority: "ACROPORA",
     isActive: true,

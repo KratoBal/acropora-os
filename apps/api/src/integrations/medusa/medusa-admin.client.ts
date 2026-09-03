@@ -81,6 +81,20 @@ export interface MedusaProductInput {
    * SULYOSAN.
    */
   categories?: { id: string }[];
+  /**
+   * SZABAD KULCS-ERTEK PAROK A TERMEKEN.
+   *
+   * MIERT KELL: a Medusanak NINCS sajat SEO-mezoje (merve a telepitett 2.19.0
+   * tipusdefinicioján: a `CreateProductDTO` ismer `thumbnail`, `images`,
+   * `handle` es `metadata` mezot, SEO-t nem). A UNAS `Robots` erteke -- az
+   * egyetlen kezzel irt SEO-adat a katalogusban, ket termeken -- igy csak itt
+   * mehet at.
+   *
+   * A MEZO ELHAGYASA ES AZ URES OBJEKTUM NEM UGYANAZ, ugyanugy, mint a
+   * `handle`-nel: egy ures `metadata` felulirna, amit a bolt oldalan barki mas
+   * oda tett. A hivo szabalya: ha nincs mit kuldeni, a mezot EL KELL HAGYNI.
+   */
+  metadata?: Record<string, string>;
   options: { title: string; values: string[] }[];
   variants: {
     title: string;

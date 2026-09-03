@@ -315,7 +315,7 @@ export async function runProjectionCli(
          */
         channelListings: {
           where: { channel: "UNAS" },
-          select: { slug: true },
+          select: { slug: true, seoRobots: true },
           take: 1,
         },
       },
@@ -406,6 +406,7 @@ export async function runProjectionCli(
         primarySku: product.variants[0]?.sku ?? null,
         medusaCategoryIds: categories.medusaCategoryIds,
         slug: product.channelListings[0]?.slug ?? null,
+        seoRobots: product.channelListings[0]?.seoRobots ?? null,
         publication: {
           catalogAuthority: product.catalogAuthority,
           isActive: product.isActive,
