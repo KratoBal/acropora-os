@@ -2,6 +2,7 @@
 
 import {
   Alert,
+  Button,
   Card,
   CardContent,
   CardHeader,
@@ -15,6 +16,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import {
   stockSyncOutboxApi,
   type StockSyncOutboxRow,
+  type StockSyncOutboxRunResult,
   type StockSyncOutboxStatus,
   type StockSyncOutboxSummary,
 } from "@/lib/api/inventory";
@@ -36,6 +38,25 @@ import {
  * Kikapcsolt munkas mellett egy nulla melletti PENDING szam nem azt jelenti,
  * hogy nincs teendo, hanem hogy senki nem viszi ki -- es ez a ket allapot
  * ugyanugy nezne ki, ha csak a szamokat mutatnank.
+ *
+ * MASODIK KOR (2026-09-03): A LAP EDDIG CSAK NEZTE A SORT, NEM NYULT HOZZA.
+ *
+ * Az ot vegpontbol a `summary` es a `list` volt bekotve; a ket ADMIN muvelet
+ * (`POST :id/retry` es `POST run`) tovabbra is fogyaszto nelkul allt -- a
+ * kliensben mar megvolt mind a ketto, csak a kepernyo nem hivta. Ez ugyanaz a
+ * szakadas eggyel beljebb: a kepesseg megvan, a felulet megvan, es senki nem
+ * koti ossze oket.
+ *
+ * A hatasa nem elmeleti: egy DEAD_LETTER sort ma SEMMIVEL nem lehetett
+ * visszatenni a sorba a feluletrol, es a kikapcsolt munkas mellett gyulo
+ * teteleket sem lehetett kezzel kivinni. Mind a ketto ott allt kesz
+ * vegpontkent.
+ *
+ * A HARMADIK LELET, ES EZ NEM HIANY VOLT, HANEM HAMIS JELZES: szurovaltaskor
+ * a lap egy pillanatra kiirta, hogy "A tetelek betoltese nem sikerult" --
+ * mert a SAJAT megszakitasunk ugyanazon a hiba-agon jott vissza, mint egy
+ * valodi halozati hiba. Ez rosszabb a hianynal: egy hibauzenet, ami nem
+ * hibarol szol, elobb-utobb megtanitja a nezot, hogy hagyja figyelmen kivul.
  */
 const STATUS_LABELS: Record<StockSyncOutboxStatus, string> = {
   PENDING: "Várakozik",
@@ -71,11 +92,64 @@ function formatLastPublish(value: string | null): string {
   return date.toLocaleString("hu-HU");
 }
 
+/**
+ * A HAROM KIMENET HAROM KULONBOZO MONDATOT KAP, mert a teendojuk ellentetes.
+ *
+ * A `"DISABLED"` a legfontosabb, es epp az az alapertelmezes: a munkas
+ * kikapcsolva indul, tehat a "Futtatas most" ilyenkor SEMMIT nem csinal. Egy
+ * kozos "lefutott" visszajelzes mellett ez ugyanugy nezne ki, mint egy valodi
+ * futas -- es a nezo azt hinne, hogy kivitte a tetelekt.
+ */
+function describeRun(result: StockSyncOutboxRunResult): {
+  variant: "info" | "danger";
+  title: string;
+  description: string;
+} {
+  if (result === "DISABLED") {
+    return {
+      variant: "danger",
+      title: "Nem futott le semmi",
+      description:
+        "A kiküldő ki van kapcsolva, ezért a kézi futtatás sem visz ki tételt. Ehhez a UNAS_STOCK_SYNC_WORKER_ENABLED beállítás kell.",
+    };
+  }
+  if (result === "FAILED") {
+    return {
+      variant: "danger",
+      title: "A köteg hibára futott",
+      description:
+        "A futás elindult, de hibával állt le. A tételek a sorban maradtak, a részletek a szerver naplójában vannak.",
+    };
+  }
+  if (result.claimed === 0) {
+    return {
+      variant: "info",
+      title: "Lefutott, de nem volt kivihető tétel",
+      description:
+        "A kiküldő elindult, és egyetlen várakozó sort sem talált. Ez nem hiba: a sor üres, vagy a tételek következő próbálkozása még nem járt le.",
+    };
+  }
+  return {
+    variant: "info",
+    title: "A köteg lefutott",
+    description: `Elvéve: ${result.claimed}. Kiment: ${result.succeeded}. Elavult (újabb érték írta felül): ${result.superseded}. Újrapróbálásra ütemezve: ${result.retried}. Feladva: ${result.deadLettered}.`,
+  };
+}
+
 export function StockSyncOutboxPage() {
   const { session } = useAuth();
   const token = session?.token ?? "";
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.INVENTORY_VIEW),
+  );
+  /**
+   * A KET MUVELET `inventory.manage`-t kér, nem `view`-t: mindketto IRAST
+   * utemez a UNAS fele. Aki csak nezi a sort, a gombokat sem latja -- a
+   * szerver ugyanezt 403-mal mondana, de egy letiltott gomb, aminek soha nem
+   * lehet oka, csak azt tanitja meg, hogy a lap gombjai nem mukodnek.
+   */
+  const canManage = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.INVENTORY_MANAGE),
   );
 
   const [summary, setSummary] = useState<StockSyncOutboxSummary | null>(null);
@@ -91,6 +165,19 @@ export function StockSyncOutboxPage() {
   const [status, setStatus] = useState<StockSyncOutboxStatus | "">("");
   const [rows, setRows] = useState<StockSyncOutboxRow[] | null>(null);
   const [rowsLoading, setRowsLoading] = useState(true);
+
+  /**
+   * Egy muvelet utan a SZAMOK is elavulnak, nem csak a lista: egy sikeres
+   * futas a PENDING-bol SUCCEEDED-be visz tetelekt, es a fenti kartya ettol
+   * meg a regi allast mutatna. A `reloadKey` mindket lekerdezest ujrainditja.
+   */
+  const [reloadKey, setReloadKey] = useState(0);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [actionResult, setActionResult] = useState<{
+    variant: "info" | "danger";
+    title: string;
+    description: string;
+  } | null>(null);
 
   const load = useCallback(() => {
     if (!canView) return;
@@ -109,7 +196,7 @@ export function StockSyncOutboxPage() {
       .finally(() => setLoading(false));
   }, [canView, token]);
 
-  useEffect(load, [load]);
+  useEffect(load, [load, reloadKey]);
 
   useEffect(() => {
     if (!canView) return;
@@ -117,11 +204,108 @@ export function StockSyncOutboxPage() {
     setRowsLoading(true);
     void stockSyncOutboxApi
       .list(token, status ? { status } : {}, controller.signal)
-      .then(setRows)
-      .catch(() => setRows(null))
-      .finally(() => setRowsLoading(false));
+      .then(
+        (result) => {
+          setRows(result);
+          setRowsLoading(false);
+        },
+        () => {
+          /**
+           * A MEGSZAKITAS NEM HIBA, ES EDDIG ANNAK LATSZOTT.
+           *
+           * Szurovaltaskor a cleanup megszakitja az elozo kerest, es a
+           * megszakitas ugyanezen a hiba-agon jott vissza: a lap egy
+           * pillanatra kiirta, hogy "A tetelek betoltese nem sikerult",
+           * mielott az uj valasz beert. Semmi nem romlott el -- mi magunk
+           * mondtuk le a kerest.
+           *
+           * A jel a `signal`, nem a hiba tipusa: ha MI szakitottuk meg, a
+           * kepernyo mar a KOVETKEZO kereshez tartozik, nem ehhez.
+           *
+           * ES AZ ORZO SZANDEKOSAN EGY HELYEN ALL, nem `catch` plusz
+           * `finally` parban. Az elso alakjaban ket orzo volt, es egymast
+           * fedtek: a hibauzenet ket allapotbol all ossze (`rows === null`
+           * ES nem toltunk), tehat barmelyik orzo egyedul is elnyomta --
+           * a kalibracios rontas ezert ZOLD maradt, holott az allitas jo
+           * volt. Egy vedelem, amit csak KETTOT rontva lehet elsutni,
+           * merhetetlen.
+           */
+          if (controller.signal.aborted) return;
+          setRows(null);
+          setRowsLoading(false);
+        },
+      );
     return () => controller.abort();
-  }, [canView, status, token]);
+  }, [canView, status, token, reloadKey]);
+
+  /**
+   * A KET MUVELET KOZOS AGA. A hiba SZOVEGE a szerverrol jon (`ApiError`), mert
+   * a 403 es a 409 mast jelent, es egy kozos "nem sikerult" mindkettot
+   * elfedne.
+   */
+  const runAction = useCallback(
+    async (
+      key: string,
+      action: () => Promise<{
+        variant: "info" | "danger";
+        title: string;
+        description: string;
+      }>,
+    ) => {
+      setPendingAction(key);
+      setActionResult(null);
+      try {
+        setActionResult(await action());
+      } catch (cause: unknown) {
+        setActionResult({
+          variant: "danger",
+          title: "A művelet nem sikerült",
+          description:
+            cause instanceof Error
+              ? cause.message
+              : "A kérés feldolgozása nem sikerült.",
+        });
+      } finally {
+        setPendingAction(null);
+        setReloadKey((value) => value + 1);
+      }
+    },
+    [],
+  );
+
+  const runBatch = useCallback(
+    () =>
+      runAction("run", async () =>
+        describeRun(await stockSyncOutboxApi.run(token)),
+      ),
+    [runAction, token],
+  );
+
+  const retryRow = useCallback(
+    (row: StockSyncOutboxRow) =>
+      runAction(`retry:${row.id}`, async () => {
+        const result = await stockSyncOutboxApi.retry(token, row.id);
+        /**
+         * A `retried: false` NEM HIBA, es nem is siker: azt jelenti, hogy a sor
+         * idokozben kikerult a hibas allapotbol. A szerver szandekosan ezt
+         * jelenti vissza ahelyett, hogy sikert allitana -- ha a lap sikernek
+         * mutatna, a nezo azt hinne, hogy O inditotta ujra.
+         */
+        return result.retried
+          ? {
+              variant: "info" as const,
+              title: `${row.sku}: újra sorba állítva`,
+              description:
+                "A sor várakozó állapotba került, a próbálkozás-számláló nullázva. A kiküldő a következő körben viszi ki.",
+            }
+          : {
+              variant: "danger" as const,
+              title: `${row.sku}: nem történt újrapróbálás`,
+              description: `A sor időközben kikerült a hibás állapotból (most: ${STATUS_LABELS[result.status]}), ezért nem állítottuk újra sorba.`,
+            };
+      }),
+    [runAction, token],
+  );
 
   if (!canView) {
     return (
@@ -144,11 +328,31 @@ export function StockSyncOutboxPage() {
         <Alert variant="danger" title="Hiba történt" description={error} />
       ) : null}
 
+      {actionResult ? (
+        <Alert
+          variant={actionResult.variant}
+          title={actionResult.title}
+          description={actionResult.description}
+        />
+      ) : null}
+
       <Card>
         <CardHeader>
-          <h2 className="text-sm font-semibold text-slate-900">
-            A kiküldő állapota
-          </h2>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold text-slate-900">
+              A kiküldő állapota
+            </h2>
+            {canManage ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={pendingAction !== null}
+                onClick={() => void runBatch()}
+              >
+                {pendingAction === "run" ? "Futtatás…" : "Futtatás most"}
+              </Button>
+            ) : null}
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -268,7 +472,8 @@ export function StockSyncOutboxPage() {
                     <th className="py-1 pr-3">Cél készlet</th>
                     <th className="py-1 pr-3">Próbálkozás</th>
                     <th className="py-1 pr-3">Következő</th>
-                    <th className="py-1">Hiba</th>
+                    <th className="py-1 pr-3">Hiba</th>
+                    {canManage ? <th className="py-1">Művelet</th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -288,9 +493,35 @@ export function StockSyncOutboxPage() {
                         csonkolt UNAS-hibauzenetbol nem lehet eldonteni, ugyanaz
                         a hiba ismetlodik-e, vagy egy masik jott.
                       */}
-                      <td className="py-1 text-slate-600">
+                      <td className="py-1 pr-3 text-slate-600">
                         {row.lastError ?? "-"}
                       </td>
+                      {canManage ? (
+                        <td className="py-1">
+                          {/*
+                            A GOMB CSAK OTT ALL, AHOL A SZERVER IS ENGEDI.
+                            A `manualRetry` kizarolag FAILED es DEAD_LETTER
+                            sort vesz vissza; barmi mason `retried: false`
+                            jonne, tehat egy mindenhol kirakott gomb olyan
+                            muveletet igerne, ami sosem tortenik meg.
+                          */}
+                          {row.status === "FAILED" ||
+                          row.status === "DEAD_LETTER" ? (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              disabled={pendingAction !== null}
+                              onClick={() => void retryRow(row)}
+                            >
+                              {pendingAction === `retry:${row.id}`
+                                ? "Küldés…"
+                                : "Újra"}
+                            </Button>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </td>
+                      ) : null}
                     </tr>
                   ))}
                 </tbody>

@@ -3,14 +3,27 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { StockSyncOutboxPage } from "./stock-sync-outbox-page";
 
-const api = vi.hoisted(() => ({ summary: vi.fn(), list: vi.fn() }));
+const api = vi.hoisted(() => ({
+  summary: vi.fn(),
+  list: vi.fn(),
+  retry: vi.fn(),
+  run: vi.fn(),
+}));
+
+/**
+ * A SZEREPKOR VALTOZTATHATO, mert a lap ket muvelete `inventory.manage`-t ker,
+ * a nezes viszont `inventory.view`-t. A SALES szerepkor pont a ketto kozott
+ * all: lat, de nem kezel -- vagyis ez nem kitalalt fixtura, hanem a valodi
+ * jog-tablabol vett eset.
+ */
+const auth = vi.hoisted(() => ({ role: "OWNER" as "OWNER" | "SALES" }));
 
 vi.mock("@/lib/api/inventory", () => ({ stockSyncOutboxApi: api }));
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({
     session: {
       token: "token-1",
-      user: { id: "user-1", email: "b@acropora.local", role: "OWNER" },
+      user: { id: "user-1", email: "b@acropora.local", role: auth.role },
     },
   }),
 }));
@@ -49,8 +62,17 @@ const row = (overrides: Record<string, unknown> = {}) => ({
 });
 
 beforeEach(() => {
+  auth.role = "OWNER";
   api.summary.mockReset().mockResolvedValue(summary());
   api.list.mockReset().mockResolvedValue([]);
+  api.retry.mockReset().mockResolvedValue({ retried: true, status: "PENDING" });
+  api.run.mockReset().mockResolvedValue({
+    claimed: 3,
+    succeeded: 3,
+    superseded: 0,
+    retried: 0,
+    deadLettered: 0,
+  });
 });
 
 describe("készlet-kimenősor oldal", () => {
@@ -153,5 +175,187 @@ describe("készlet-kimenősor oldal", () => {
     expect(
       await screen.findByText("A UNAS elutasította a készletet."),
     ).toBeInTheDocument();
+  });
+
+  /**
+   * A MEGSZAKITOTT KERES NEM HIBA.
+   *
+   * A `list` itt CSAK a megszakitasra valaszol, ezert a szurovaltas pontosan
+   * azt az utat jarja be, amit a bongeszoben: a cleanup megszakitja az elozo
+   * kerest, es az AbortError ugyanazon a `catch` agon jon vissza, mint egy
+   * valodi halozati hiba. A `waitFor` azert kell, mert a megszakitas
+   * microtaskban erkezik: enelkul az allitas AZELOTT futna le, hogy a hibas
+   * kod egyaltalan kiirhatna a figyelmeztetest -- vagyis zold lenne a javitas
+   * nelkul is.
+   */
+  it("a megszakított lekérdezést nem mutatja hibaként", async () => {
+    api.list.mockImplementation(
+      (_token: string, _query: unknown, signal?: AbortSignal) =>
+        new Promise((_resolve, reject) => {
+          signal?.addEventListener("abort", () =>
+            reject(new DOMException("Aborted", "AbortError")),
+          );
+        }),
+    );
+    render(<StockSyncOutboxPage />);
+    fireEvent.change(await screen.findByLabelText("Állapot szűrő"), {
+      target: { value: "FAILED" },
+    });
+    await waitFor(() => expect(api.list).toHaveBeenCalledTimes(2));
+    expect(
+      screen.queryByText("A tételek betöltése nem sikerült"),
+    ).not.toBeInTheDocument();
+  });
+
+  /**
+   * A KONTROLL A KET UJ VEGPONTRA: a lap TENYLEG hivja oket. Enelkul minden
+   * lenti allitas egy soha meg nem hivott vegpont szovegerol szolna.
+   */
+  it("a futtatás gombja a run végpontot hívja", async () => {
+    render(<StockSyncOutboxPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Futtatás most" }),
+    );
+    await waitFor(() => expect(api.run).toHaveBeenCalledWith("token-1"));
+  });
+
+  /**
+   * EZ AZ ALLITAS A GOMB LETEZESENEK ARA.
+   *
+   * A munkas ALAPERTELMEZETTEN ki van kapcsolva, tehat ez a leggyakoribb
+   * valasz. Ilyenkor SEMMI nem fut le -- es ha a lap ugyanazt a visszajelzest
+   * adna, mint egy valodi futasra, a nezo azt hinne, hogy kivitte a tetelekt.
+   */
+  it("kimondja, ha a kézi futtatás azért nem vitt ki semmit, mert a kiküldő ki van kapcsolva", async () => {
+    api.run.mockResolvedValue("DISABLED");
+    render(<StockSyncOutboxPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Futtatás most" }),
+    );
+    expect(await screen.findByText("Nem futott le semmi")).toBeInTheDocument();
+    expect(screen.queryByText("A köteg lefutott")).not.toBeInTheDocument();
+  });
+
+  it("a hibára futott kötegre nem sikert ír", async () => {
+    api.run.mockResolvedValue("FAILED");
+    render(<StockSyncOutboxPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Futtatás most" }),
+    );
+    expect(
+      await screen.findByText("A köteg hibára futott"),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * A NULLA TETEL SEM UGYANAZ, MINT EGY KIMENT KOTEG: a futas lefutott, csak
+   * nem volt mit kivinnie. Ket kulonbozo allapot, ket kulonbozo teendo.
+   */
+  it("a nulla tételes futást megkülönbözteti a kimenttől", async () => {
+    api.run.mockResolvedValue({
+      claimed: 0,
+      succeeded: 0,
+      superseded: 0,
+      retried: 0,
+      deadLettered: 0,
+    });
+    render(<StockSyncOutboxPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Futtatás most" }),
+    );
+    expect(
+      await screen.findByText("Lefutott, de nem volt kivihető tétel"),
+    ).toBeInTheDocument();
+  });
+
+  it("a lefutott köteg mérlegét számokkal mondja ki", async () => {
+    render(<StockSyncOutboxPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Futtatás most" }),
+    );
+    expect(await screen.findByText("A köteg lefutott")).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Elvéve: 3\. Kiment: 3\./),
+    ).toBeInTheDocument();
+  });
+
+  it("a hibás sort újra sorba állítja", async () => {
+    api.list.mockResolvedValue([row()]);
+    render(<StockSyncOutboxPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Újra" }));
+    await waitFor(() =>
+      expect(api.retry).toHaveBeenCalledWith("token-1", "row-1"),
+    );
+    expect(
+      await screen.findByText("ACR-001: újra sorba állítva"),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * A `retried: false` NEM SIKER. A szerver akkor adja, ha a sor idokozben
+   * kikerult a hibas allapotbol -- es ha a lap ezt is sikernek mutatna, a nezo
+   * azt hinne, hogy O inditotta ujra. A szerver valaszanak KET agát ket kulon
+   * mondat fedi.
+   */
+  it("a meg nem történt újrapróbálást nem mutatja sikernek", async () => {
+    api.list.mockResolvedValue([row()]);
+    api.retry.mockResolvedValue({ retried: false, status: "PROCESSING" });
+    render(<StockSyncOutboxPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Újra" }));
+    expect(
+      await screen.findByText("ACR-001: nem történt újrapróbálás"),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText(/most: Feldolgozás alatt/),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * A SZUKITES ALLITASA, NEM A MUKODESE. A szerver `manualRetry` aga kizarolag
+   * FAILED es DEAD_LETTER sort vesz vissza; egy PENDING sor melle kitett gomb
+   * olyan muveletet igerne, ami sosem tortenik meg.
+   */
+  it("nem hibás sor mellé nem tesz újrapróbálás gombot", async () => {
+    api.list.mockResolvedValue([
+      row({ id: "row-2", sku: "ACR-002", status: "PENDING", lastError: null }),
+    ]);
+    render(<StockSyncOutboxPage />);
+    await screen.findByText("ACR-002");
+    expect(
+      screen.queryByRole("button", { name: "Újra" }),
+    ).not.toBeInTheDocument();
+  });
+
+  /**
+   * A MASIK SZUKITES: a ket muvelet `inventory.manage`-t ker. A SALES
+   * szerepkor lat, de nem kezel -- ez a valodi jog-tablabol vett eset, nem
+   * kitalalt fixtura.
+   */
+  it("inventory.manage jog nélkül egyik művelet gombja sem jelenik meg", async () => {
+    auth.role = "SALES";
+    api.list.mockResolvedValue([row()]);
+    render(<StockSyncOutboxPage />);
+    await screen.findByText("ACR-001");
+    expect(
+      screen.queryByRole("button", { name: "Futtatás most" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Újra" }),
+    ).not.toBeInTheDocument();
+  });
+
+  /**
+   * EGY MUVELET UTAN A SZAMOK IS ELAVULNAK, nem csak a lista: egy sikeres
+   * futas PENDING-bol SUCCEEDED-be visz tetelekt. Ha csak a lista frissulne,
+   * a fenti kartya a muvelet ELOTTI allast mutatna tovabb.
+   */
+  it("a művelet után újratölti az összefoglalót és a listát is", async () => {
+    render(<StockSyncOutboxPage />);
+    await waitFor(() => expect(api.summary).toHaveBeenCalledTimes(1));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Futtatás most" }),
+    );
+    await waitFor(() => expect(api.summary).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(api.list).toHaveBeenCalledTimes(2));
   });
 });
