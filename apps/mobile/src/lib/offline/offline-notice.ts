@@ -140,3 +140,41 @@ export function describeOfflineDetailNotice(input: {
     message: `Ezt az eszközt csak a listáról ismerjük (${age} mentve). A leírás, a beszerelés dátuma és a garancia csak térerővel látszik -- most nem azért nem szerepel, mert nincs kitöltve.`,
   };
 }
+
+/**
+ * A HELYSZÍN-VÁLASZTÓ FÖLÖTTI SÁV, ha a lista a mentett másolatból áll.
+ *
+ * === MIÉRT KÜLÖN MONDAT, ÉS MIÉRT NEM ELÉG A KÉT MEGLÉVŐ ===
+ *
+ * A másik két sáv OLVASÁSRÓL szól: azt mondja ki, hogy amit látsz, az régi. Itt
+ * a másolatból ÍRÁS lesz -- a szerelő ebből a listából választ, és a választás
+ * felkerül egy munkalapra. A kockázat is más: egy időközben TÖRÖLT helyszín a
+ * másolatban még ott áll, és a lap küldése a szerveren bukna el, jóval később,
+ * a pincéből nézve megmagyarázhatatlanul.
+ *
+ * `null`, ha van kapcsolat: olyankor a friss lista jön, és egy sáv csak elvenné
+ * a helyet.
+ */
+export function describeCachedDepartmentsNotice(input: {
+  online: boolean;
+  count: number;
+  syncedAt: string | null;
+  now: Date;
+}): OfflineNotice | null {
+  if (input.online) return null;
+
+  if (input.count === 0)
+    return {
+      tone: "stale",
+      title: "Nincs kapcsolat: nincs mentett helyszín",
+      message:
+        "Ehhez a partnerhez nincs mentett helyszín a telefonon, és a helyszín kötelező. A lapot térerőnél tudod megnyitni, vagy nyisd meg egyszer a partnert, amíg van hálózat.",
+    };
+
+  const age = describeCacheAge(input.syncedAt, input.now);
+  return {
+    tone: "offline",
+    title: "Nincs kapcsolat: mentett helyszínek",
+    message: `${input.count} helyszín a telefonról, ${age} mentve. Ami azóta változott vagy megszűnt, azt itt nem látod.`,
+  };
+}

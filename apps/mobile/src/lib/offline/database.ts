@@ -21,9 +21,19 @@ const DATABASE_NAME = "acropora-field.db";
  * A kettő megkülönböztetése a felületen is látszik: a listából összerakott lap
  * HIÁNYOS, és a sáv kimondja (`offline-notice.ts`).
  *
- * A `sync_queue` táblát ma sem hívja senki: az offline ÍRÁS külön munka, saját
- * idempotencia-protokollal (lásd `docs/MOBILE-DEVELOPMENT.md`). A helyszíni
- * katalógus szándékosan csak OLVAS.
+ * - `cached_worksheet_departments`: a munkalap HELYSZÍNEI partnerenként. Külön
+ *   tábla, mert a helyszín-lista a munkalap `customerId` mezőjéhez tartozik, és
+ *   NEM azonos a `partners.ts` alegység-hívásával: a két végpont más azonosítót
+ *   vesz be. A felvitelnél a helyszín KÖTELEZŐ, tehát e nélkül a másolat nélkül
+ *   a pincében nincs miből választani.
+ *
+ * ÚJ TÁBLÁT `CREATE TABLE IF NOT EXISTS` HOZ LÉTRE, ÉS EZ ITT HELYES -- a
+ * sorszámozott lépések a MEGLÉVŐ táblák módosítására valók, mert azokat az
+ * `IF NOT EXISTS` alak nem éri el. Egy táblát, ami sehol nem létezik, ez a sor
+ * minden telepítésen létrehoz, a régieken is.
+ *
+ * A `sync_queue` az offline ÍRÁS sora, saját idempotencia-protokollal (lásd
+ * `docs/MOBILE-DEVELOPMENT.md`).
  *
  * A SÉMA VÁLTOZÁSAI VISZONT MOSTANTÓL SORSZÁMOZOTT LÉPÉSEKBEN mennek, lásd
  * `applyMigrations` -- a `CREATE TABLE IF NOT EXISTS` egy MEGLÉVŐ táblát nem
@@ -65,6 +75,16 @@ export async function initializeOfflineDatabase(): Promise<SQLite.SQLiteDatabase
 
     CREATE INDEX IF NOT EXISTS cached_asset_details_qr_token
       ON cached_asset_details (qr_token);
+
+    CREATE TABLE IF NOT EXISTS cached_worksheet_departments (
+      id TEXT PRIMARY KEY NOT NULL,
+      customer_id TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      synced_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS cached_worksheet_departments_customer
+      ON cached_worksheet_departments (customer_id);
   `);
   await applyMigrations(database);
   return database;
