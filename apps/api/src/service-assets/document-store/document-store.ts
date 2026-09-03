@@ -94,6 +94,27 @@ export interface DocumentStore {
    * neve kimondja, hogy mindent bent tart.
    */
   list(): AsyncIterable<DocumentKey>;
+
+  /**
+   * EGY FAJL MERETE A TAROLOBAN -- ES A METODUS SZANDEKOSAN ELHAGYHATO.
+   *
+   * MIERT KELL: a kvota a TABLABOL szamol (`SUM("sizeBytes")`), es a tarolo
+   * tenyleges foglaltsagat ma senki nem meri. A kulcs-osszevetes megtalalja az
+   * arva es a hianyzo fajlt, de NEM azt, aminek van sora ES van fajlja, csak
+   * mas a merete -- egy csonka iras vagy egy felbeszakadt feltoltes pontosan
+   * igy nez ki.
+   *
+   * MIERT ELHAGYHATO, ES EZ NEM KENYELEM: ha kotelezo lenne, minden jovobeli
+   * megvalositasnak tudnia kellene meretet adni. Egy TAVOLI tarolonal a meret
+   * kulon halozati keres fajlonkent -- draga, vagy egyaltalan nem elerheto. Az
+   * elhagyhato alak megengedi, hogy a futtato KIMONDJA: ez a tarolo nem ad
+   * meretet. Az nem ugyanaz, mint hogy nincs elteres.
+   *
+   * `null` VISSZATERES: a kulcs letezik a tarolo szerint, de a merete nem
+   * allapithato meg. Ez megint MAS, mint a hianyzo metodus: ott a TAROLO nem
+   * tud meretet adni egyaltalan, itt EGY fajle nem allapithato meg.
+   */
+  size?(key: DocumentKey): Promise<number | null>;
 }
 
 /**

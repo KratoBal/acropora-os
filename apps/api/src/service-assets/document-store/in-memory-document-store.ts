@@ -31,6 +31,16 @@ export class InMemoryDocumentStore implements DocumentStore {
     return stored ? Uint8Array.from(stored) : null;
   }
 
+  /**
+   * A TAROLT TOMB HOSSZA. Itt nincs kulon `stat`, tehat a meret ugyanabbol az
+   * adatbol jon, amit a `get()` ad vissza -- a ket megvalositas igy ugyanazt
+   * allitja ugyanarrol a fajlrol.
+   */
+  async size(key: DocumentKey): Promise<number | null> {
+    const stored = this.documents.get(serialiseKey(key));
+    return stored ? stored.byteLength : null;
+  }
+
   async delete(key: DocumentKey): Promise<boolean> {
     return this.documents.delete(serialiseKey(key));
   }

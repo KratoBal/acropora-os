@@ -82,6 +82,28 @@ export class FilesystemDocumentStore implements DocumentStore {
     }
   }
 
+  /**
+   * A MERET A `stat`-bol, NEM a fajl beolvasasabol.
+   *
+   * Egy `get()`-tel is meg lehetne allapitani, de az MINDEN bajtot behozna a
+   * memoriaba, es az egyeztetes epp azon a koteten fut, ahol sok ezer fajl all.
+   * Egy mereszkoz, ami elszall a nagy bemeneten, akkor mond csodot, amikor a
+   * legnagyobb szukseg lenne ra -- ugyanaz az indok, amiert a `list()` folyam.
+   *
+   * A HIANYZO FAJL `null`, nem kivetel: a hivo mar tudja a kulcsot a `list()`
+   * folyambol, tehat ha kozben eltunt, az VERSENYHELYZET, nem hiba. A `null`
+   * ezt mondja el, es a futtato meg tudja kulonboztetni.
+   */
+  async size(key: DocumentKey): Promise<number | null> {
+    try {
+      const entry = await stat(this.resolveWithin(key));
+      return entry.isFile() ? entry.size : null;
+    } catch (error) {
+      if (isMissingFile(error)) return null;
+      throw error;
+    }
+  }
+
   async delete(key: DocumentKey): Promise<boolean> {
     try {
       await rm(this.resolveWithin(key));
