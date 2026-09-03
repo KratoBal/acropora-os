@@ -114,8 +114,7 @@ export interface MedusaProductInput {
    *
    * EBBŐL KÖVETKEZIK, HOGY AZ ALT SZÖVEG EZEN AZ ÚTON NEM MEGY ÁT. Nem
    * mulasztás: nincs mező, ahova menne, és a próbálkozás nem hibázna, hanem
-   * csendben veszne el. (Ma nálunk sincs meg: a UNAS import a `ProductImage`
-   * sorokat `altText` nélkül írja.)
+   * csendben veszne el.
    *
    * A MEZŐ ELHAGYÁSA ÉS AZ ÜRES TÖMB NEM UGYANAZ, ugyanúgy, mint a
    * kategóriáknál -- csak itt a különbség MÉRT: az `images` az update-ágon
