@@ -18,6 +18,7 @@ import { listUnasOrders } from "@/lib/api/orders";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { describeOfflineSession } from "@/lib/auth/offline-session-notice";
 import { useIsOnline } from "@/lib/offline/connectivity";
+import { useQueueBacklog } from "@/lib/offline/use-queue-backlog";
 import { useQueueDrain } from "@/lib/offline/use-queue-drain";
 import {
   servedTileIds,
@@ -86,6 +87,13 @@ export default function HomeScreen() {
    * `status !== "authenticated"` ag kulonben kihagyna.
    */
   const queueMessage = useQueueDrain(isOnline);
+  /**
+   * ES AMI A FUTAS UTAN IS MARAD. A fenti uzenet egy FUTASROL szol, es eltunik;
+   * ez az ALLAPOTROL, es epp akkor a legfontosabb, amikor nincs halozat, tehat
+   * futas sincs, amirol beszelni lehetne. A kiurites uzenete a fuggoseg: utana
+   * a szamok masok.
+   */
+  const backlogMessage = useQueueBacklog(queueMessage);
   /*
    * Once the session exists, and never before: registering a device is only
    * meaningful for a known colleague, and the server takes the owner from the
@@ -156,6 +164,11 @@ export default function HomeScreen() {
         {queueMessage ? (
           <View style={styles.offlineBanner}>
             <Text style={styles.offlineBannerBody}>{queueMessage}</Text>
+          </View>
+        ) : null}
+        {backlogMessage ? (
+          <View style={styles.offlineBanner}>
+            <Text style={styles.offlineBannerBody}>{backlogMessage}</Text>
           </View>
         ) : null}
         {offlineNotice ? (
