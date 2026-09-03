@@ -59,6 +59,38 @@ export function contentMoveLabel(to: string): string {
   return (CONTENT_STATE_LABELS as Record<string, string | undefined>)[to] ?? to;
 }
 
+/**
+ * A SZEREP-VALASZTO CIMKEI, ES A SZABALY, AMI ELDONTI OKET.
+ *
+ * A cimke AKKOR ES CSAK AKKOR nevezhet tulajdonost ("amit ..."), ha a nezet
+ * KIZAROLAG a nezo sajat teteleit mutatja. Ket feltetel egyutt, es a masodik
+ * miatt nem eleg emlekezetre bizni:
+ *
+ *   ownOnly                    -- a nezet a sajat szerzoseget/lektorsagat szuri
+ *   ES nincs gazdatlan ag      -- a #398 ota a lektor sora ezt kinyitotta
+ *
+ *   szerep     ownOnly  gazdatlan is   a cimke allithat tulajdonlast
+ *   author     igen     nem            IGEN  -> "amit írok"
+ *   reviewer   igen     IGEN           nem   -> "lektorálásra vár"
+ *   approver   nem      -              nem   -> "jóváhagyásra vár"
+ *   sender     nem      -              nem   -> "kiküldésre vár"
+ *
+ * A `reviewer` mutatja meg, miert nem eleg az `ownOnly` mezot nezni: az IGAZ,
+ * es a cimke megis rossz volt, mert a gazdatlan ag kinyitotta a halmazt.
+ *
+ * MIERT A CIMKE IGAZODIK A NEZETHEZ, ES NEM FORDITVA (acrobot dontese,
+ * 2026-09-03): azt kell merni, melyik tevedes MARAD REJTVE. Egy rosszul
+ * valasztott szo HANGOS -- valaki szol. Egy szukitett nezet NEMA: a tetel
+ * csendben eltunik mindenki listajarol, es senki nem keresi.
+ *
+ * A `sender`-nel a szukites nem is lehetseges: nincs sender mezo a semaban,
+ * tehat az "amit kiküldök" olyan viszonyt allitott, ami a rendszerben NEM
+ * LETEZIK.
+ *
+ * A szabalyt allitas tartja, nem ez a komment: lasd
+ * `apps/api/src/content/content-filter.spec.ts`, ahol a valodi `waitingFor`
+ * fut le mind a negy szerepre, es a cimkeket innen olvassa vissza.
+ */
 export const CONTENT_ROLE_LABELS: Record<ContentViewerRole, string> = {
   author: "amit írok",
   /**
@@ -78,8 +110,8 @@ export const CONTENT_ROLE_LABELS: Record<ContentViewerRole, string> = {
    * magyarazat kellene hozza, akkor a szoveg a rossz.
    */
   reviewer: "lektorálásra vár",
-  approver: "amit jóváhagyok",
-  sender: "amit kiküldök",
+  approver: "jóváhagyásra vár",
+  sender: "kiküldésre vár",
 };
 
 /**

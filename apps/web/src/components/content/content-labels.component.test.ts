@@ -177,19 +177,27 @@ describe("what the role picker calls each view", () => {
   });
 
   /**
-   * ES A MASIK HAROM CIMKE VALTOZATLAN. Ez a merce parja: enelkul egy kozos
-   * cserevel mind a negyet at lehetne irni, es az elso ket allitas ugyanugy
-   * zold maradna.
+   * A MASIK HAROM CIMKE, A DONTES UTAN.
    *
-   * KIMONDVA, AMIT EZ NEM ALLIT: hogy a masik harom cimke PONTOS. A
-   * `approver` es a `sender` nezete NEM szukul sajat tetelekre (merve:
-   * `content-filter.ts`, `ownOnly: role === "author" || role === "reviewer"`),
-   * tehat azok ugyanugy tulajdonlast allitanak, mint a regi reviewer-cimke --
-   * csak azt NEM a #398 okozta, es kulon dontes.
+   * Ez az allitas a #401-ben azt rogzitette, hogy a masik harom VALTOZATLAN --
+   * es akkor helyesen, mert az `approver` es a `sender` cimkejenek javitasa NEM
+   * a #398 kovetkezmenye volt, tehat kulon dontest igenyelt.
+   *
+   * A DONTES MEGSZULETETT (acrobot, 2026-09-03): a cimke akkor es csak akkor
+   * nevezhet tulajdonost, ha a nezet KIZAROLAG a sajatot mutatja. Az `approver`
+   * es a `sender` nezete nem ilyen, ezert a szovegek is a halmazt nevezik meg.
+   *
+   * Az `author` MARAD tulajdonlo alakban, es ez nem kivetel, hanem a szabaly
+   * masik iranya: az a nezet tenyleg csak a sajat vazlatokat mutatja.
+   *
+   * MAGAT A SZABALYT nem itt allitjuk, hanem ott, ahol a szuro lakik:
+   * `apps/api/src/content/content-filter.spec.ts` vegigfuttatja mind a negy
+   * szerepen. Ez itt a szoveg-oldali rogzites, hogy egy veletlen atiras is
+   * pirosodjon.
    */
-  it("leaves the other three labels untouched", () => {
+  it("keeps ownership only where the view narrows to it", () => {
     expect(CONTENT_ROLE_LABELS.author).toBe("amit írok");
-    expect(CONTENT_ROLE_LABELS.approver).toBe("amit jóváhagyok");
-    expect(CONTENT_ROLE_LABELS.sender).toBe("amit kiküldök");
+    expect(CONTENT_ROLE_LABELS.approver).toBe("jóváhagyásra vár");
+    expect(CONTENT_ROLE_LABELS.sender).toBe("kiküldésre vár");
   });
 });
