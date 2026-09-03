@@ -102,6 +102,10 @@ function RootNavigator() {
       <Stack.Screen name="worksheets/index" options={{ title: "Munkalapok" }} />
       <Stack.Screen name="worksheets/new" options={{ title: "Új munkalap" }} />
       <Stack.Screen name="worksheets/[id]" options={{ title: "Munkalap" }} />
+      <Stack.Screen
+        name="worksheets/sign/[id]"
+        options={{ title: "Munkalap aláírása" }}
+      />
       <Stack.Screen name="assets/index" options={{ title: "Eszközök" }} />
       <Stack.Screen name="assets/new" options={{ title: "Új eszköz" }} />
       <Stack.Screen

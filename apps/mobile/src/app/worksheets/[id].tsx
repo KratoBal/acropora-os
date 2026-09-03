@@ -21,6 +21,7 @@ import {
   buildWorksheetLinePayload,
   worksheetLineId,
 } from "@/lib/worksheets/worksheet-line";
+import { canSignWorksheetVersion } from "@/lib/worksheets/worksheet-signature";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import {
@@ -34,12 +35,15 @@ import {
 } from "@/lib/worksheets/worksheet-presentation";
 
 /**
- * MUNKALAP A HELYSZÍNEN, OLVASÁSRA.
+ * MUNKALAP A HELYSZÍNEN.
  *
- * Nincs rajta szerkesztés, és ez szándékos szűkítés, nem hiányosság: a szerver
- * ugyan `service.manage` jogot ad a szerviz szerepkörnek, de egy félig megírt
- * lap a telefonon olyan állapotot hozna létre, amit csak a webes felület tud
- * befejezni (lezárás, aláíratás, folytatás).
+ * Itt korábban az állt, hogy a képernyőn nincs szerkesztés, mert egy félig
+ * megírt lapot csak a webes felület tudna befejezni. Ez a mondat MA MÁR NEM
+ * IGAZ, és nem kiegészítettem, hanem átírtam: a tételek rögzítése és az
+ * ALÁÍRÁS is innen megy (Balázs döntése, 2026-09-03).
+ *
+ * Ami továbbra sem itt van: a LEZÁRÁS, az ÁR és a folytatás. Azok az irodáé, és
+ * a lezárás az aláírás ELŐFELTÉTELE: aláírni csak aláírásra váró lapot lehet.
  *
  * AMI A LAP MAI ÁLLAPOTA, az a `currentVersion`. A korábbi változatok
  * változatlanok, és külön szakaszban látszanak: aki a kezében tartott papírral
@@ -321,6 +325,37 @@ export default function WorksheetDetailScreen() {
               </View>
             </View>
 
+            {/*
+              AZ ALAIRAS GOMBJA. UGYANAZ A KET FELTETEL, mint a szerveren
+              (`AWAITING_SIGNATURE` allapot es `service.manage` jog), es a
+              dontes a `worksheet-signature.ts`-ben all -- ott merheto.
+
+              KULON KEPERNYORE VISZ, es ez nem elrendezesi izles: azt a lapot a
+              szerelo ODAADJA az ugyfelnek, tehat a tetel-felvitel es a torles
+              nem lehet rajta.
+            */}
+            {canSignWorksheetVersion({
+              status: current.status,
+              worksheetsManage: capabilities.worksheetsManage,
+            }) ? (
+              <Pressable
+                onPress={() =>
+                  router.push({
+                    pathname: "/worksheets/sign/[id]",
+                    params: { id },
+                  })
+                }
+                style={({ pressed }) => [
+                  styles.signButton,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.signButtonText}>
+                  Aláíratás az ügyféllel
+                </Text>
+              </Pressable>
+            ) : null}
+
             {current.signature ? (
               <>
                 <Text style={styles.sectionTitle}>Aláírás</Text>
@@ -516,6 +551,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
     marginTop: 8,
+  },
+  signButton: {
+    backgroundColor: "#177b74",
+    borderRadius: 12,
+    marginTop: 6,
+    padding: 16,
+  },
+  signButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "900",
+    textAlign: "center",
   },
   disabled: { opacity: 0.55 },
   pressed: { opacity: 0.75 },
