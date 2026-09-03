@@ -129,14 +129,41 @@ describe("a keletkezési út beírja a nyitót", () => {
     const kommentNelkul = forras
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/\/\/[^\n]*/g, "");
-    const create = kommentNelkul.slice(
-      kommentNelkul.indexOf("serviceJob.create("),
-      kommentNelkul.indexOf("select: { id: true, jobNumber: true }"),
+    /**
+     * A KET HATART KULON KELL ELLENORIZNI, ES EZT ACROBOT MERTE VISSZA A DIFFBOL.
+     *
+     * A `slice` a ket hianyzo hatarra MASKEPP viselkedik, es csak az egyik bukik
+     * hangosan:
+     *
+     *   a KEZDET tunik el   -> indexOf -1, a regio URES lesz -> a hossz-ellenorzes
+     *                          elkapja
+     *   a VEG tunik el      -> indexOf -1, DE a slice masodik parametereben a -1
+     *                          azt jelenti, hogy "a vegetol egy karakterrel
+     *                          visszafele". A regio nem ures lesz, hanem KITAGUL
+     *                          a fajl vegeig -- es a hossz-ellenorzes ATENGEDI
+     *
+     * Merve (nem a diffbol, hanem futtatva): a `select` sor egyetlen uj mezovel
+     * valo bovitese ma ZOLDET adott, mikozben az orzo attol kezdve nem a `create`
+     * adat-blokkjat merte, hanem azt, hogy a minta VALAHOL a fajlban all.
+     *
+     * Ugyanaz a csalad, mint a komment-hiba: az orzo zold marad, csak mar nem azt
+     * meri, amit hiszunk rola.
+     */
+    const kezdet = kommentNelkul.indexOf("serviceJob.create(");
+    assert.notEqual(
+      kezdet,
+      -1,
+      "nem találtam a serviceJob.create hívást -- a minta KEZDETE romlott el, nem a kód",
     );
-    assert.ok(
-      create.length > 0,
-      "nem találtam a serviceJob.create hívást -- a minta romlott el, nem a kód",
+    const veg = kommentNelkul.indexOf("select: { id: true, jobNumber: true }");
+    assert.notEqual(
+      veg,
+      -1,
+      "nem találtam a create záró select sorát -- a minta VÉGE romlott el, " +
+        "és enélkül a vizsgált rész csendben kitágulna a fájl végéig",
     );
+    const create = kommentNelkul.slice(kezdet, veg);
+    assert.ok(create.length > 0, "a kivágott rész üres");
     assert.match(
       create,
       /openedById:\s*input\.actorUserId/,
