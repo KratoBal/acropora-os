@@ -116,6 +116,89 @@ function fakes(options: {
   };
 }
 
+/**
+ * A VETITES NEM EJTHET MEZOT CSENDBEN.
+ *
+ * MIERT LETEZIK: 2026-09-03-ig a vetites HAT dolgot vitt at (nev, leiras,
+ * azonosito, allapot, csatorna, kategoria plusz a cikkszam), es senki nem
+ * vette eszre, hogy a tobbi lemarad. A `handle` peldaul MAR OTT VOLT a kliens
+ * tipusaban, es a vetites megsem kuldte -- egy be nem kotott mezo semmiben nem
+ * kulonbozik egy nem letezotol, amig valaki meg nem szamolja.
+ *
+ * A LISTA A FIXTURABOL JON, NEM KEZZEL IRVA. Ha valaki uj mezot vesz fel a
+ * `ProjectableProduct`-ba, a fixtura kulcsai kozott megjelenik, es ez az
+ * allitas AZONNAL szol -- meg akkor is, ha a bekotest elfelejtette. Egy kezzel
+ * karbantartott lista pontosan az uj mezot hagyna ki, amiert letezik.
+ *
+ * ES EZ A MASODIK VEDELEM, NEM AZ ELSO -- kalibraciobol tudjuk. Ha a mezo
+ * KOTELEZO, a fordito elobb megall: a harom fixtura es a hivo mind hianyolja.
+ * Ez az allitas akkor szolal meg, amikor a fejleszto MAR VEGIGVITTE a mezot
+ * mindenhol, es csak a nyilvantartasba nem vette fel -- mert onnantol a
+ * fordito elegedett, es semmi mas nem szolna.
+ */
+const MEZO_SORSA: Record<string, "atmegy" | "szandekosan-nem"> = {
+  id: "atmegy", // -> external_id
+  name: "atmegy", // -> title es a valtozat neve
+  description: "atmegy",
+  primarySku: "atmegy", // -> a valtozat sku mezoje
+  slug: "atmegy", // -> handle
+  medusaCategoryIds: "atmegy", // -> categories, ha van teljes lista
+  /**
+   * A publikacios ALLAPOT bemenet, nem mezo: belole a `status` es a
+   * `sales_channels` szuletik, a szolgaltatas dontese szerint.
+   */
+  publication: "atmegy",
+};
+
+describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
+  it("a bemenet minden mezojenek ki van mondva a sorsa", () => {
+    const fixturaMezok = Object.keys(product).sort();
+    const nyilvantartott = Object.keys(MEZO_SORSA).sort();
+    assert.deepEqual(
+      fixturaMezok,
+      nyilvantartott,
+      "uj mezo a ProjectableProduct-ban: vedd fel a MEZO_SORSA tablaba, es " +
+        "mondd ki, atmegy-e vagy szandekosan nem",
+    );
+  });
+
+  /**
+   * ES A NYILVANTARTAS NEM ELEG: az "atmegy" jelolesnek LATSZANIA is kell a
+   * keres torzseben. Enelkul a tabla csak egy szandek-nyilatkozat lenne, es
+   * pontosan ugy nezne ki egy bekotott es egy elfelejtett mezo.
+   */
+  it("amire azt mondjuk, hogy atmegy, az tenyleg ott van a keresben", async () => {
+    const f = fakes({ link: null, found: [] });
+    await f.service.project(
+      {
+        ...product,
+        slug: "Teszt-cim",
+        medusaCategoryIds: ["cat_1"],
+      },
+      now,
+    );
+    const torzs = f.createdWith[0];
+    assert.ok(torzs, "a create nem futott le");
+    const megjelenik: Record<string, boolean> = {
+      id: torzs.external_id === "prod-os-1",
+      name: torzs.title === "Reef Pump",
+      description: torzs.description === "Leírás",
+      primarySku: torzs.variants[0]?.sku === "PUMP-1",
+      slug: torzs.handle === "Teszt-cim",
+      medusaCategoryIds: torzs.categories?.[0]?.id === "cat_1",
+      publication: torzs.status !== undefined,
+    };
+    const hianyzo = Object.entries(MEZO_SORSA)
+      .filter(([mezo, sors]) => sors === "atmegy" && !megjelenik[mezo])
+      .map(([mezo]) => mezo);
+    assert.deepEqual(
+      hianyzo,
+      [],
+      "a tablaban 'atmegy', a keresbol mégis hianyzik",
+    );
+  });
+});
+
 describe("MedusaProductProjectionService -- a bolti cim", () => {
   /**
    * EZ AZ ALLITAS A MEZO LETEZESENEK OKA.
