@@ -2,6 +2,7 @@
 
 import {
   Alert,
+  Button,
   Card,
   CardContent,
   CardHeader,
@@ -77,6 +78,21 @@ export function StockSyncOutboxPage() {
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.INVENTORY_VIEW),
   );
+  /**
+   * A KET MUVELET SZUKEBB JOGON ALL, MINT A LAP, es ez nem uj dontes: a
+   * vegpontok `inventory.manage` alatt allnak, a lista es az osszefoglalo
+   * `inventory.view` alatt. A navigation.ts kommentje ki is mondja, hogy a
+   * menupont attol MEG lathato marad -- a lapon az ALLAPOT a lenyeg, es azt egy
+   * olvaso jogu felhasznalonak is latnia kell.
+   *
+   * A GOMBOK EZERT NEM JELENNEK MEG NEKI. Egy gomb, ami biztosan 403-at ad,
+   * rosszabb a hianyanal: a felhasznalo azt hiszi, elromlott valami.
+   */
+  const canManage = Boolean(
+    session && hasPermission(session.user, PERMISSIONS.INVENTORY_MANAGE),
+  );
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const [summary, setSummary] = useState<StockSyncOutboxSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -111,6 +127,40 @@ export function StockSyncOutboxPage() {
 
   useEffect(load, [load]);
 
+  /**
+   * A KET MUVELET UGYANAZT A KET LISTAT FRISSITI, EZERT KOZOS UT.
+   *
+   * Mindketto UTAN ujratoltunk: a valasz csak nyugta (a retry egy sort ad
+   * vissza, a run semmit), es ha abbol epitenenk a kepernyot, a MASIK lista --
+   * az osszefoglalo szamai -- regi maradna. Ket kulon kepernyo-igazsag egy
+   * lapon: pontosan az, amit a hibajegy-lepesnel is elkerultunk.
+   */
+  const runAction = async (
+    id: string | null,
+    muvelet: () => Promise<unknown>,
+  ) => {
+    setBusyId(id ?? "run");
+    setActionError(null);
+    try {
+      await muvelet();
+      load();
+      const friss = await stockSyncOutboxApi.list(
+        token,
+        status ? { status } : {},
+      );
+      setRows(friss);
+    } catch (cause) {
+      // A SZERVER MONDATA MEGY KI: a ket muvelet kulonbozo okokbol utasithat
+      // vissza (rossz allapotu sor, kikapcsolt munkas), es egy kozos "nem
+      // sikerult" mindkettot elrejtene.
+      setActionError(
+        cause instanceof Error ? cause.message : "A művelet nem sikerült.",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   useEffect(() => {
     if (!canView) return;
     const controller = new AbortController();
@@ -118,8 +168,22 @@ export function StockSyncOutboxPage() {
     void stockSyncOutboxApi
       .list(token, status ? { status } : {}, controller.signal)
       .then(setRows)
-      .catch(() => setRows(null))
-      .finally(() => setRowsLoading(false));
+      .catch((cause: unknown) => {
+        /**
+         * A MEGSZAKITAS NEM HIBA, ES EDDIG ANNAK LATSZOTT.
+         *
+         * A cleanup MINDEN szuro-valtasnal abortal, tehat egy gyors valtas utan
+         * az elozo keres ide esett, a `rows` null lett, es a lap PIROS savot
+         * villantott -- holott semmi nem romlott el. Az abortnal a lista MARAD,
+         * ahogy volt: uj adat ugyis erkezik a friss keresbol.
+         */
+        if (cause instanceof DOMException && cause.name === "AbortError")
+          return;
+        setRows(null);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setRowsLoading(false);
+      });
     return () => controller.abort();
   }, [canView, status, token]);
 
@@ -212,6 +276,17 @@ export function StockSyncOutboxPage() {
           <h2 className="text-sm font-semibold text-slate-900">
             A sor tételei
           </h2>
+          {canManage ? (
+            <Button
+              variant="secondary"
+              disabled={busyId !== null}
+              onClick={() =>
+                void runAction(null, () => stockSyncOutboxApi.run(token))
+              }
+            >
+              {busyId === "run" ? "Futtatás…" : "Köteg futtatása most"}
+            </Button>
+          ) : null}
           <label className="text-xs text-slate-500">
             Állapot:{" "}
             <select
@@ -232,6 +307,13 @@ export function StockSyncOutboxPage() {
           </label>
         </CardHeader>
         <CardContent>
+          {actionError ? (
+            <Alert
+              variant="danger"
+              title="A művelet nem sikerült"
+              description={actionError}
+            />
+          ) : null}
           {rowsLoading ? (
             <Skeleton className="h-24 w-full" />
           ) : rows === null ? (
@@ -268,7 +350,8 @@ export function StockSyncOutboxPage() {
                     <th className="py-1 pr-3">Cél készlet</th>
                     <th className="py-1 pr-3">Próbálkozás</th>
                     <th className="py-1 pr-3">Következő</th>
-                    <th className="py-1">Hiba</th>
+                    <th className="py-1 pr-3">Hiba</th>
+                    {canManage ? <th className="py-1">Művelet</th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -288,9 +371,38 @@ export function StockSyncOutboxPage() {
                         csonkolt UNAS-hibauzenetbol nem lehet eldonteni, ugyanaz
                         a hiba ismetlodik-e, vagy egy masik jott.
                       */}
-                      <td className="py-1 text-slate-600">
+                      <td className="py-1 pr-3 text-slate-600">
                         {row.lastError ?? "-"}
                       </td>
+                      {/*
+                        AZ UJRA SORBA ALLITAS CSAK OTT ALL, AHOL ERTELME VAN.
+                        A vegpont FAILED es DEAD_LETTER sort enged ujra sorba
+                        allitani; egy varakozo vagy mar sikeres soron a gomb
+                        biztosan elutasitast kapna -- es egy gomb, ami biztosan
+                        hibara visz, rosszabb a hianyanal.
+                      */}
+                      {canManage ? (
+                        <td className="py-1">
+                          {row.status === "FAILED" ||
+                          row.status === "DEAD_LETTER" ? (
+                            <Button
+                              variant="secondary"
+                              disabled={busyId !== null}
+                              onClick={() =>
+                                void runAction(row.id, () =>
+                                  stockSyncOutboxApi.retry(token, row.id),
+                                )
+                              }
+                            >
+                              {busyId === row.id
+                                ? "Sorba állítás…"
+                                : "Újra sorba"}
+                            </Button>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </td>
+                      ) : null}
                     </tr>
                   ))}
                 </tbody>

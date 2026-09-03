@@ -3,7 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { StockSyncOutboxPage } from "./stock-sync-outbox-page";
 
-const api = vi.hoisted(() => ({ summary: vi.fn(), list: vi.fn() }));
+const api = vi.hoisted(() => ({
+  summary: vi.fn(),
+  list: vi.fn(),
+  retry: vi.fn(),
+  run: vi.fn(),
+}));
 
 vi.mock("@/lib/api/inventory", () => ({ stockSyncOutboxApi: api }));
 vi.mock("@/components/auth/auth-provider", () => ({
@@ -51,6 +56,8 @@ const row = (overrides: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   api.summary.mockReset().mockResolvedValue(summary());
   api.list.mockReset().mockResolvedValue([]);
+  api.retry.mockReset().mockResolvedValue(row());
+  api.run.mockReset().mockResolvedValue(undefined);
 });
 
 describe("készlet-kimenősor oldal", () => {
@@ -152,6 +159,93 @@ describe("készlet-kimenősor oldal", () => {
     expect(await screen.findByText("ACR-001")).toBeInTheDocument();
     expect(
       await screen.findByText("A UNAS elutasította a készletet."),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * A KET MUVELET EDDIG FOGYASZTO NELKUL ALLT: a vegpont es a kliens-fuggveny is
+   * keszen volt, csak a lap nem hivta. Ez a ket allitas azt a kotest meri.
+   */
+  it("a hibás sort újra sorba lehet állítani, és utána újratölt", async () => {
+    api.list.mockResolvedValue([row()]);
+    render(<StockSyncOutboxPage />);
+    await screen.findByText("ACR-001");
+    expect(api.list).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Újra sorba" }));
+
+    await waitFor(() => expect(api.retry).toHaveBeenCalledTimes(1));
+    expect(api.retry.mock.calls[0]?.[1]).toBe("row-1");
+    // A VALASZ CSAK NYUGTA: a kepernyot ujratoltesbol epitjuk, kulonben az
+    // OSSZEFOGLALO szamai regiek maradnanak a friss lista mellett.
+    await waitFor(() => expect(api.summary).toHaveBeenCalledTimes(2));
+  });
+
+  it("a köteget azonnal le lehet futtatni", async () => {
+    api.list.mockResolvedValue([row()]);
+    render(<StockSyncOutboxPage />);
+    await screen.findByText("ACR-001");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Köteg futtatása most" }),
+    );
+
+    await waitFor(() => expect(api.run).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.summary).toHaveBeenCalledTimes(2));
+  });
+
+  /**
+   * AZ UJRA SORBA ALLITAS CSAK OTT ALL, AHOL A VEGPONT IS ENGEDI.
+   *
+   * KET ALLITAS EGYUTT: a hibas soron OTT a gomb, a varakozon NINCS. Az elso
+   * onmagaban akkor is zold lenne, ha a gomb MINDEN soron allna.
+   */
+  it("csak a hibás és a holtlevél soron kínálja az újra sorba állítást", async () => {
+    api.list.mockResolvedValue([
+      row(),
+      row({ id: "row-2", sku: "ACR-002", status: "PENDING" }),
+    ]);
+    render(<StockSyncOutboxPage />);
+    await screen.findByText("ACR-002");
+
+    expect(screen.getAllByRole("button", { name: "Újra sorba" })).toHaveLength(
+      1,
+    );
+  });
+
+  /**
+   * A MEGSZAKITOTT KERES NEM HIBA.
+   *
+   * A cleanup MINDEN szuro-valtasnal abortal. Eddig az abort ugyanabba a catch
+   * agba esett, mint egy valodi hiba, es a lap PIROS savot villantott -- holott
+   * semmi nem romlott el.
+   */
+  it("megszakított lekérdezésnél nem villant hibát", async () => {
+    api.list.mockResolvedValue([row()]);
+    render(<StockSyncOutboxPage />);
+    await screen.findByText("ACR-001");
+
+    api.list.mockRejectedValueOnce(new DOMException("aborted", "AbortError"));
+    fireEvent.change(screen.getByLabelText("Állapot szűrő"), {
+      target: { value: "FAILED" },
+    });
+
+    await waitFor(() => expect(api.list).toHaveBeenCalledTimes(2));
+    expect(
+      screen.queryByText("A tételek betöltése nem sikerült"),
+    ).not.toBeInTheDocument();
+  });
+
+  /**
+   * TESTVER-KONTROLL: A VALODI HIBA TOVABBRA IS LATSZIK. Enelkul az elozo
+   * allitas akkor is zold lenne, ha a lap SOHA nem mutatna hibat.
+   */
+  it("valódi hibánál továbbra is szól", async () => {
+    api.list.mockRejectedValue(new Error("A szerver nem válaszol."));
+    render(<StockSyncOutboxPage />);
+
+    expect(
+      await screen.findByText("A tételek betöltése nem sikerült"),
     ).toBeInTheDocument();
   });
 });
