@@ -288,6 +288,44 @@ describe("ServiceJobDetailPage", () => {
   });
 
   /**
+   * AZ UJ LAP NYITASA A JEGY AZONOSITOJAVAL MEGY AT.
+   *
+   * A felviteli lap ebbol kerdezi le a jegyet es allitja be a partnert -- a
+   * PARTNER nem a cimben utazik, mert azt barki atirhatna.
+   */
+  it("az új munkalap nyitása a jegy azonosítójával visz a felvitelre", async () => {
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    await screen.findByText("A hibajegy létrejött (Új).");
+
+    const gomb = screen.getByRole("link", {
+      name: "Új munkalap nyitása a jegy alá",
+    });
+    expect(gomb.getAttribute("href")).toBe(
+      "/szerviz/munkalapok/uj?hibajegy=job-1",
+    );
+  });
+
+  /**
+   * PARTNER NELKULI JEGYEN NEM ALL OTT A GOMB.
+   *
+   * A felviteli lap ugyis elutasitana (a jegynek partner kell), es egy gomb,
+   * ami BIZTOSAN hibara visz, rosszabb a hianyanal. Ez a testver-kontroll az
+   * elozo allitashoz: az onmagaban akkor is zold lenne, ha a gomb MINDIG ott
+   * allna.
+   */
+  it("partner nélküli jegyen nincs új munkalap gomb", async () => {
+    api.detail.mockResolvedValue(
+      detail({ customerName: null, customerId: null }),
+    );
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    await screen.findByText("A hibajegy létrejött (Új).");
+
+    expect(
+      screen.queryByRole("link", { name: "Új munkalap nyitása a jegy alá" }),
+    ).toBeNull();
+  });
+
+  /**
    * A FOLYAMAT MÁSODIK FELE: a lap előbb keletkezett, a jegy utólag, és a
    * felelős hozzáveszi a meglévő lapot.
    */

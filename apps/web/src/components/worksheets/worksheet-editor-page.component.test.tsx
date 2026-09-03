@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,13 +16,25 @@ const worksheets = vi.hoisted(() => ({
   selectablePartners: vi.fn(),
   assignableUsers: vi.fn(),
 }));
+const jobs = vi.hoisted(() => ({ detail: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
-vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
+/**
+ * A `useSearchParams` IS KELL A DUPLABA, es nem kenyelmi kerdes: a felviteli lap
+ * a cimbol veszi at a hibajegy azonositojat. Egy hianyzo hook nem "egy teszt
+ * bukik", hanem a KOMPONENS dol el a renderelesnel -- ezert bukott elsore
+ * mind a tizenharom allitas ebben a fajlban.
+ */
+const query = vi.hoisted(() => ({ params: new URLSearchParams() }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => navigation,
+  useSearchParams: () => query.params,
+}));
 vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session }),
 }));
 vi.mock("@/lib/api/customers", () => ({ customersApi: customers }));
+vi.mock("@/lib/api/service-jobs", () => ({ serviceJobsApi: jobs }));
 vi.mock("@/lib/api/worksheets", () => ({ worksheetsApi: worksheets }));
 
 const session: Session = {
@@ -49,6 +61,14 @@ describe("WorksheetEditorPage partner picker", () => {
     worksheets.selectablePartners.mockReset().mockResolvedValue({ items: [] });
     worksheets.assignableUsers.mockReset().mockResolvedValue({ items: [] });
     worksheets.create.mockReset().mockResolvedValue({ id: "worksheet-1" });
+    // A CIM ALAPHELYZETBEN URES: a felvitel tobbsege NEM jegy alol indul, es
+    // egy ottfelejtett parameter minden mas allitast is elmozditana.
+    query.params = new URLSearchParams();
+    jobs.detail.mockReset().mockResolvedValue({
+      id: "job-1",
+      customerId: "customer-42",
+      customerName: "Fankó Kft.",
+    });
   });
 
   /**
@@ -213,6 +233,14 @@ describe("WorksheetEditorPage assignees", () => {
       items: [{ id: "user-sanyi", name: "Sanyi", role: "SERVICE" }],
     });
     worksheets.create.mockReset().mockResolvedValue({ id: "worksheet-1" });
+    // A CIM ALAPHELYZETBEN URES: a felvitel tobbsege NEM jegy alol indul, es
+    // egy ottfelejtett parameter minden mas allitast is elmozditana.
+    query.params = new URLSearchParams();
+    jobs.detail.mockReset().mockResolvedValue({
+      id: "job-1",
+      customerId: "customer-42",
+      customerName: "Fankó Kft.",
+    });
   });
 
   /**
@@ -240,6 +268,97 @@ describe("WorksheetEditorPage assignees", () => {
     expect(worksheets.create.mock.calls[0]?.[1]?.assigneeIds).toEqual([
       "user-sanyi",
     ]);
+  });
+
+  /**
+   * A JEGY ALOL INDITOTT FELVITEL: A JEGY AZONOSITOJA A CIMBOL JON, A PARTNER A
+   * SZERVERTOL.
+   *
+   * KET ALLITAS EGY ESETBEN, es mindketto kulon szamit: a `serviceJobId` eljut
+   * a `create` hivasig (enelkul a lap jegy nelkul keletkezne, csendben), ES a
+   * partnert a jegy adja (enelkul a felhasznalo mast valaszthatna, amit a
+   * szerver utana visszautasitana).
+   */
+  it("a jegy alól indított felvitel a jegyet és a partnerét viszi", async () => {
+    query.params = new URLSearchParams("hibajegy=job-1");
+    worksheets.selectablePartners.mockResolvedValue({
+      items: [
+        { customerId: "customer-42", name: "Fankó Kft.", partnerCode: "FANK" },
+      ],
+    });
+    worksheets.departments.mockResolvedValue({
+      items: [
+        {
+          id: "department-1",
+          name: "Biotóp",
+          code: "BIO",
+          parentId: null,
+          isActive: true,
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    render(<WorksheetEditorPage />);
+
+    await waitFor(() => expect(jobs.detail).toHaveBeenCalledTimes(1));
+    expect(jobs.detail.mock.calls[0]?.[1]).toBe("job-1");
+
+    await user.selectOptions(
+      await screen.findByLabelText("Alegység"),
+      "department-1",
+    );
+    await user.type(screen.getByLabelText("Tárgy"), "Szivattyú csere");
+    await user.click(screen.getByRole("button", { name: "Mentés" }));
+
+    await waitFor(() => expect(worksheets.create).toHaveBeenCalledTimes(1));
+    const kuldott = worksheets.create.mock.calls[0]?.[1];
+    expect(kuldott?.serviceJobId).toBe("job-1");
+    expect(kuldott?.customerId).toBe("customer-42");
+  });
+
+  /**
+   * TESTVER-KONTROLL: JEGY NELKUL A MEZO EL SEM MEGY.
+   *
+   * A felvitel tobbsege nem jegy alol indul. Ha a `serviceJobId` ott is
+   * megjelenne, a szerver egy nem letezo jegyre hivatkozna -- es az elso
+   * allitas onmagaban akkor is zold lenne, ha a mezot MINDIG elkuldenenk.
+   */
+  it("jegy nélkül a serviceJobId nem megy el", async () => {
+    worksheets.selectablePartners.mockResolvedValue({
+      items: [
+        { customerId: "customer-42", name: "Fankó Kft.", partnerCode: "FANK" },
+      ],
+    });
+    worksheets.departments.mockResolvedValue({
+      items: [
+        {
+          id: "department-1",
+          name: "Biotóp",
+          code: "BIO",
+          parentId: null,
+          isActive: true,
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    render(<WorksheetEditorPage />);
+
+    await user.selectOptions(
+      await screen.findByLabelText("Partner"),
+      "customer-42",
+    );
+    await user.selectOptions(
+      await screen.findByLabelText("Alegység"),
+      "department-1",
+    );
+    await user.type(screen.getByLabelText("Tárgy"), "Havi karbantartás");
+    await user.click(screen.getByRole("button", { name: "Mentés" }));
+
+    await waitFor(() => expect(worksheets.create).toHaveBeenCalledTimes(1));
+    expect(jobs.detail).not.toHaveBeenCalled();
+    expect("serviceJobId" in (worksheets.create.mock.calls[0]?.[1] ?? {})).toBe(
+      false,
+    );
   });
 
   /**
@@ -342,6 +461,14 @@ describe("WorksheetEditorPage site tree", () => {
     });
     worksheets.assignableUsers.mockReset().mockResolvedValue({ items: [] });
     worksheets.create.mockReset().mockResolvedValue({ id: "worksheet-1" });
+    // A CIM ALAPHELYZETBEN URES: a felvitel tobbsege NEM jegy alol indul, es
+    // egy ottfelejtett parameter minden mas allitast is elmozditana.
+    query.params = new URLSearchParams();
+    jobs.detail.mockReset().mockResolvedValue({
+      id: "job-1",
+      customerId: "customer-42",
+      customerName: "Fankó Kft.",
+    });
   });
 
   /**
@@ -450,6 +577,14 @@ describe("WorksheetEditorPage: archived units in the two pickers", () => {
     });
     worksheets.assignableUsers.mockReset().mockResolvedValue({ items: [] });
     worksheets.create.mockReset().mockResolvedValue({ id: "worksheet-1" });
+    // A CIM ALAPHELYZETBEN URES: a felvitel tobbsege NEM jegy alol indul, es
+    // egy ottfelejtett parameter minden mas allitast is elmozditana.
+    query.params = new URLSearchParams();
+    jobs.detail.mockReset().mockResolvedValue({
+      id: "job-1",
+      customerId: "customer-42",
+      customerName: "Fankó Kft.",
+    });
   });
 
   async function optionsOf(label: string): Promise<string[]> {
