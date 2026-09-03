@@ -208,6 +208,33 @@ describe("készlet-kimenősor oldal", () => {
   });
 
   /**
+   * A PAR MASIK FELE, ES NELKULE AZ ELOZO ALLITAS FELREVEZET.
+   *
+   * Az abort-orzo egy hibauzenetet nyom el. Ha valaki tul szelesre veszi --
+   * ugy, hogy MINDEN hibat elnyel --, a fenti allitas ZOLD marad, mert az
+   * csak azt meri, hogy a megszakitasra NEM jelenik meg semmi. Merve
+   * 2026-09-03, a fo agon: egy olyan rontas, ami minden hibat elnyel, az
+   * EGESZ keszletbol nulla allitast dontott pirosra (515 lefutott, 0 piros).
+   *
+   * Ezert all itt a par masik fele: egy VALODI hiba (nem megszakitas)
+   * tovabbra is latszodjon. A ketto egyutt hataroz meg egy viselkedest; kulon
+   * egyik sem, es a hiany EPP abba az iranyba engedne, ami a lapot
+   * megnyugtatova teszi, amikor baj van.
+   *
+   * ES AMIT A KOD SZERKEZETEBOL TUDNI KELL HOZZA: a hibauzenet KET allapotbol
+   * all ossze (`rows === null` ES nem toltunk epp), a `rows` kezdoerteke pedig
+   * szinten `null`. A megkulonboztetest a toltes-jelzo adja, tehat egy elnyelt
+   * hiba nem hibauzenetet ad, hanem OROKKE POROG.
+   */
+  it("a valódi hibát továbbra is kimondja", async () => {
+    api.list.mockRejectedValue(new Error("A szerver nem érhető el."));
+    render(<StockSyncOutboxPage />);
+    expect(
+      await screen.findByText("A tételek betöltése nem sikerült"),
+    ).toBeInTheDocument();
+  });
+
+  /**
    * A KONTROLL A KET UJ VEGPONTRA: a lap TENYLEG hivja oket. Enelkul minden
    * lenti allitas egy soha meg nem hivott vegpont szovegerol szolna.
    */
