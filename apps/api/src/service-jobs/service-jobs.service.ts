@@ -9,6 +9,7 @@ import type { AuthenticatedUser } from "@acropora/types";
 
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import { serviceJobVisibilityWhere } from "./service-job-visibility.js";
+import { mayAssignUnit } from "./visibility-assignment.js";
 
 import {
   serviceJobTimeline,
@@ -88,6 +89,56 @@ export class ServiceJobsService {
       userId: user.id,
       unitIds: await this.repository.assignedUnitIds(user.id),
     });
+  }
+
+  /**
+   * A LATHATOSAGI HOZZARENDELES BEALLITASA -- MINDIG A MI OLDALUNKROL.
+   *
+   * Balazs megkotese (2026-08-26 22:10, szo szerint acrobot atadasaban): "mindig
+   * mi allitjuk". A partner sajat vezetoje SOHA nem allithat, es ezert nincs
+   * partner-oldali valtozata ennek a hivasnak: a jogkort
+   * (`service.visibility.assign`) egyetlen partner-szerep sem kapja meg.
+   *
+   * A HIBAUZENETEK KULONBOZNEK, ES EZ NEM KOZLEKENYSEG: a harom eset TEENDOJE
+   * mas. Tukor nelkul a partnert kell szerviznek jelolni; masik partner
+   * alegysegenel masik egyseget kell valasztani; sajat kollegan pedig nincs mit
+   * szukiteni. Egy osszevont "nem lehet" mindharomnal rossz iranyba kuldene.
+   */
+  async assignUnit(userId: string, departmentId: string) {
+    const context = await this.repository.assignmentContext(
+      userId,
+      departmentId,
+    );
+    if (context === null)
+      throw new NotFoundException(
+        "A felhasználó vagy az alegység nem található.",
+      );
+
+    const check = mayAssignUnit(context);
+    if (!check.ok) {
+      throw new BadRequestException(
+        check.reason === "not-partner-user"
+          ? "Ez a fiók nem partner-oldali: belső hatókörrel amúgy is mindent lát."
+          : check.reason === "no-mirror"
+            ? "A partnernek nincs tükör-vevő sora, ezért alegysége sincs. Előbb szerviz partnernek kell jelölni."
+            : "Ez az alegység másik partnerhez tartozik.",
+      );
+    }
+    return this.repository.addAssignment(userId, departmentId);
+  }
+
+  async unassignUnit(userId: string, departmentId: string) {
+    const removed = await this.repository.removeAssignment(
+      userId,
+      departmentId,
+    );
+    if (!removed)
+      throw new NotFoundException("Ez a hozzárendelés nem található.");
+    return { removed: true };
+  }
+
+  listAssignments(userId: string) {
+    return this.repository.listAssignments(userId);
   }
 
   async list(

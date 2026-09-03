@@ -39,6 +39,27 @@ describe("role permission mapping", () => {
     assert.ok(
       ROLE_PERMISSIONS.OWNER.includes(PERMISSIONS.SERVICE_WORKSHEET_AMEND),
     );
+
+    /**
+     * A LATHATOSAGI HOZZARENDELES UGYANEZ AZ ALAK, DE MAS OKBOL.
+     *
+     * A `service.worksheet.amend` egy VESZELYES MUVELET; ez viszont azt
+     * szabalyozza, KI MIT LAT. A ket tevedes sulya is mas: egy rossz javitas a
+     * naploban latszik, egy rossz hozzarendeles CSENDBEN tobb jegyet mutat.
+     *
+     * ES A KIZARAS AZERT KAP SAJAT ALLITAST, mert a MANAGER lista TILTOLISTA az
+     * osszes jogkor felett: egy uj kulcs MAGATOL a MANAGER-hez kerul. Ha valaki
+     * a kizarast kiveszi, semmi nem hibazik -- a vezetok csendben megkapjak a
+     * jogot, es a lista tobb sort ad, ami helyes valasznak nez ki.
+     */
+    assert.ok(
+      !ROLE_PERMISSIONS.MANAGER.includes(PERMISSIONS.SERVICE_VISIBILITY_ASSIGN),
+      "a láthatósági hozzárendelés bekerült a MANAGER jogai közé -- " +
+        "a tiltólistából kiesett, és ez csendben bővíti a vezetők látókörét",
+    );
+    assert.ok(
+      ROLE_PERMISSIONS.OWNER.includes(PERMISSIONS.SERVICE_VISIBILITY_ASSIGN),
+    );
   });
 
   it("lets the service role see partners without editing them", () => {
@@ -268,6 +289,67 @@ describe("partnerMembership", () => {
         supplierId: undefined,
       } as unknown as { customerId: string | null; supplierId: string | null }),
       { kind: "internal" },
+    );
+  });
+});
+
+describe("a MANAGER jogkör-készlete rögzítve van", () => {
+  /**
+   * ALLAPOT, NEM SZABALY -- ES EZ SZANDEKOS.
+   *
+   * A kezenfekvo alak egy szabaly lett volna: "minden SZUK jogkor legyen kizarva
+   * a MANAGER listabol". A baj vele, hogy a "szuk" fogalom A KODBAN NEM LETEZIK,
+   * tehat egy ilyen allitas egy KEZZEL TARTOTT listat olvasna arrol, mi szamit
+   * szuknek -- es akkor ugyanaz a hiba all elo egy szinttel feljebb: a kovetkezo
+   * ember felvesz egy szuk jogkort, elfelejti felvenni a "szuk" listara, es az
+   * allitas CSENDBEN atengedi.
+   *
+   * Egy orzo, ami kezzel tartott listat olvas, pontosan azt a hibat nem fogja
+   * meg, ami letrehozta. (acrobot erve, 2026-09-03, es jobb, mint az enyem volt.)
+   *
+   * EZ HELYETTE A TENYLEGES KESZLETET rogziti, nev szerint. Egy UJ jogkor
+   * felvetele ezt a sort PIROSRA donti -- barmelyik iranyba --, es a fejlesztonek
+   * VALASZTANIA kell: felveszi ide, vagy kizarja a MANAGER listajabol.
+   *
+   * AZ ARA, KIMONDVA: minden jogkor-felvetelnel piros lesz ez a teszt. Ez nem
+   * zaj, hanem a kikenyszeritett dontes -- es ha valaki zajnak erzi, az azt
+   * jelenti, hogy ugy vesz fel jogkort, hogy nem gondolja vegig, ki kapja meg.
+   *
+   * ES A DIFFBEN IS LATSZIK: aki a listat bovíti, az a MANAGER korét bovíti, es
+   * az atnezo ezt egy sorbol latja.
+   */
+  it("pontosan ezeket a jogokat tartalmazza, se többet, se kevesebbet", () => {
+    assert.deepEqual(
+      [...ROLE_PERMISSIONS.MANAGER].sort(),
+      [
+        "ai-test.view",
+        "aquariums.manage",
+        "aquariums.view",
+        "content.manage",
+        "content.view",
+        "customers.manage",
+        "customers.view",
+        "dashboard.view",
+        "finance.manage",
+        "finance.view",
+        "icp.manage",
+        "icp.view",
+        "inventory.manage",
+        "inventory.view",
+        "orders.manage",
+        "orders.view",
+        "partners.manage",
+        "partners.view",
+        "products.manage",
+        "products.view",
+        "purchasing.manage",
+        "purchasing.view",
+        "service.manage",
+        "service.view",
+        "tasks.view",
+      ],
+      "a MANAGER jogkör-készlete elmozdult -- ha új jogkör került be, döntsd el, " +
+        "hogy a vezetők megkapják-e, és vezesd át itt VAGY a tiltólistán",
     );
   });
 });

@@ -92,6 +92,69 @@ export class ServiceJobsRepository {
     return expandAssignedUnits({ assignedIds, units });
   }
 
+  /**
+   * A HOZZARENDELESHEZ SZUKSEGES HAROM ADAT, EGY KORBEN.
+   *
+   * Kulon lekerdezesekkel ugyanez harom kor lenne, es a kozottuk eltelt idoben a
+   * partner tukor-sora megvaltozhatna -- egy ellenorzes, ami mas allapoton dont,
+   * mint amin ir, nem ellenorzes.
+   */
+  async assignmentContext(userId: string, departmentId: string) {
+    const [user, unit] = await Promise.all([
+      this.database.user.findUnique({
+        where: { id: userId },
+        select: { supplierId: true },
+      }),
+      this.database.worksheetDepartment.findUnique({
+        where: { id: departmentId },
+        select: { customerId: true },
+      }),
+    ]);
+    if (!user || !unit) return null;
+    const supplier = user.supplierId
+      ? await this.database.supplier.findUnique({
+          where: { id: user.supplierId },
+          select: { customerId: true },
+        })
+      : null;
+    return {
+      userSupplierId: user.supplierId,
+      supplierMirrorCustomerId: supplier?.customerId ?? null,
+      unitCustomerId: unit.customerId,
+    };
+  }
+
+  async listAssignments(userId: string) {
+    return this.database.userWorksheetDepartment.findMany({
+      where: { userId },
+      orderBy: { createdAt: "asc" },
+      select: {
+        departmentId: true,
+        createdAt: true,
+        department: { select: { name: true, code: true } },
+      },
+    });
+  }
+
+  /**
+   * `createMany` + `skipDuplicates` HELYETT `create`, es ez szandekos: a
+   * duplikatum NEM csendes atlepes, hanem hiba. Aki ketszer rendeli hozza
+   * ugyanazt, valoszinuleg mast akart -- es egy nema siker elrejtene.
+   */
+  async addAssignment(userId: string, departmentId: string) {
+    return this.database.userWorksheetDepartment.create({
+      data: { userId, departmentId },
+      select: { departmentId: true },
+    });
+  }
+
+  async removeAssignment(userId: string, departmentId: string) {
+    const result = await this.database.userWorksheetDepartment.deleteMany({
+      where: { userId, departmentId },
+    });
+    return result.count > 0;
+  }
+
   async list(
     scope: "open" | "all",
     visibility: Prisma.ServiceJobWhereInput,
