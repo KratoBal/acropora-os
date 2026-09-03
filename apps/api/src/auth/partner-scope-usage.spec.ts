@@ -60,8 +60,22 @@ const HELPERS = [
  */
 const DOKUMENTALT_KIVETELEK = new Set(["detailByQrToken"]);
 
-/** Metodus-kezdet: ket szokoz behuzas, opcionalis `async`, nev, nyito zarojel. */
-const METHOD = /^ {2}(?:async )?([A-Za-z0-9_]+)\(/gm;
+/**
+ * Metodus-kezdet: ket szokoz behuzas, opcionalis lathatosag-jelolo, opcionalis
+ * `async`, nev, nyito zarojel.
+ *
+ * A LATHATOSAG-JELOLO NELKUL EZ A LELTAR VAK VOLT A PRIVATE METODUSOKRA
+ * (merve 2026-09-03): a minta 13 scope-parameteres metodust talalt, a jelolovel
+ * 14-et. A tizennegyedik a `private toDetail`, ami hatokort vesz at ES
+ * ervenyesit is vele (o szuri az esemenyeket es a dokumentumokat) -- tehat a
+ * hianya nem adott hamis zoldet, DE egy jovobeli private metodus, ami elfelejti
+ * a hatokort, eszrevetlen maradt volna.
+ *
+ * A szam nem a kod novekedesetol valtozott, hanem attol, hogy a MERO lett
+ * teljesebb.
+ */
+const METHOD =
+  /^ {2}(?:(?:private|protected|public|static) )*(?:async )?([A-Za-z0-9_]+)\(/gm;
 
 interface Metodus {
   fajl: string;
@@ -104,7 +118,7 @@ describe("minden hatókört átvevő metódus használja is", () => {
     // lenti allitas -- ami egy URES halmazon fut vegig -- ZOLDEN allna, holott
     // semmit nem mert. A szam nem beegetett felso korlat: also.
     assert.ok(
-      metodusok.length >= 10,
+      metodusok.length >= 14,
       `csak ${metodusok.length} hatóköröt átvevő metódust találtam`,
     );
   });
