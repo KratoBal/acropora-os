@@ -1,94 +1,95 @@
 "use client";
 
-import { Input } from "@acropora/ui";
-import type { CustomerSummary } from "@acropora/types";
-import { useCallback, useEffect, useState } from "react";
+import type { WorksheetSelectablePartner } from "@acropora/types";
+import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
-import { customersApi } from "@/lib/api/customers";
+import { worksheetsApi } from "@/lib/api/worksheets";
 
 /**
- * PARTNER-VÁLASZTÓ, KÖZÖS, KÉT KÉPERNYŐNEK.
+ * PARTNER-VÁLASZTÓ A HIBAJEGYHEZ, KÖZÖS, KÉT KÉPERNYŐNEK.
  *
- * KERES, NEM LISTÁZ: a vevő-lista lapozott, és egy oldal legfeljebb százat ad.
- * Egy sima legördülő CSENDBEN levágná a többit, és a hiányzó partner úgy nézne
- * ki, mintha nem is létezne.
+ * A HALMAZ 2026-09-03 ÓTA MÁS, ÉS EZ BALÁZS DÖNTÉSE (09:32, Discord, szó
+ * szerint: „nem lehet hibajegyet nyitni nem szervizpartnerre"). A választó a
+ * `selectable-partners` végpontból dolgozik -- ugyanabból, amiből a munkalap --,
+ * nem a vevő-listából.
  *
- * ÉS AZÉRT EGY KOMPONENS, NEM KETTŐ: a küszöb, a késleltetés és az, hogy egy
- * hibás keresés nem állítja meg a képernyőt, mind SZABÁLY. Két példányban egyszer
- * elcsúsznának, és a különbség néma lenne - az egyik képernyő két betűtől
- * keresne, a másik egytől, és senki nem venné észre.
+ * MIÉRT SZÁMÍT: a vevő-lista a tükör-sorokat KIZÁRJA (`partner: null`), a
+ * munkalapok viszont ÉPP azokon állnak. A két halmaz szerkezetileg diszjunkt
+ * volt, tehát a felületen felvitt jegyhez SOHA egyetlen munkalap sem volt
+ * csatolható -- és a felhasználó ezt csak a csatolásnál tudta meg, egy
+ * elutasításból.
+ *
+ * ÉS AZÉRT LETT LEGÖRDÜLŐ, MERT A KERESÉS INDOKA MEGSZŰNT. A korábbi változat
+ * azért keresett és nem listázott, mert a vevő-lista LAPOZOTT (egy oldal
+ * legfeljebb százat ad), és egy legördülő csendben levágta volna a többit. A
+ * `selectable-partners` NEM lapozott: a teljes listát adja, rendezve. Egy
+ * megtartott kereső itt már csak a régi indok maradványa lenne.
+ *
+ * AZ AKTÍV-SZŰRÉS NEM A HÍVÓÉ. A `selectablePartnerWhere` már a szerveren szűr
+ * (szerviz, aktív, nem törölt, van munkalap-rövidítése, van tükör-sora), és
+ * saját állítása is van rá. Ha itt is szűrnénk, az úgy nézne ki, mintha a
+ * szerver nem tenné -- és a következő olvasó a szervert „javítaná" hozzá.
  */
 export function PartnerPicker({
   id,
   onPick,
 }: {
   id: string;
-  onPick: (customer: CustomerSummary) => void;
+  onPick: (partner: WorksheetSelectablePartner) => void;
 }) {
   const { session } = useAuth();
   const token = session?.token ?? "";
-  const [search, setSearch] = useState("");
-  const [matches, setMatches] = useState<CustomerSummary[]>([]);
-
-  const find = useCallback(
-    async (text: string, signal?: AbortSignal) => {
-      // KÉT KARAKTER ALATT NEM KÉRDEZ: egyetlen leütés nem hozza le a fél könyvet.
-      if (text.trim().length < 2) {
-        setMatches([]);
-        return;
-      }
-      const query = new URLSearchParams({
-        search: text.trim(),
-        page: "1",
-        pageSize: "10",
-      });
-      try {
-        const response = await customersApi.list(token, query, signal);
-        setMatches(response.items);
-      } catch {
-        // A KERESÉS HIBÁJA NEM ÁLLÍTJA MEG A KÉPERNYŐT.
-        setMatches([]);
-      }
-    },
-    [token],
-  );
+  const [partners, setPartners] = useState<WorksheetSelectablePartner[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
-    const timer = window.setTimeout(
-      () => void find(search, controller.signal),
-      300,
+    worksheetsApi
+      .selectablePartners(token, controller.signal)
+      .then((response) => {
+        setPartners(response.items);
+        setLoaded(true);
+      })
+      // A LISTA HIBÁJA NEM ÁLLÍTJA MEG A KÉPERNYŐT, de a `loaded` sem billen
+      // át: egy hibába futott betöltés NEM ugyanaz, mint egy üres lista, és a
+      // két állapot két különböző mondatot érdemel.
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [token]);
+
+  if (loaded && partners.length === 0) {
+    /**
+     * A HIÁNY IS ÁLLÍTÁS, ÉS MEGNEVEZI A FELTÉTELT. Egy üres legördülő
+     * önmagában úgy nézne ki, mint egy betöltési hiba -- és a felhasználó nem
+     * tudná, hogy a partner nem hiányzik, hanem nem felel meg.
+     */
+    return (
+      <p className="text-sm text-slate-500">
+        Nincs kiválasztható szervizpartner. Egy partner akkor jelenik meg itt,
+        ha szerviz partnerként aktív, és fel van véve a munkalap-rövidítése.
+      </p>
     );
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [find, search]);
+  }
 
   return (
-    <>
-      <Input
-        id={id}
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-        placeholder="Kezdd el gépelni a partner nevét"
-      />
-      {matches.length ? (
-        <ul className="space-y-1 pt-1 text-sm">
-          {matches.map((match) => (
-            <li key={match.id}>
-              <button
-                type="button"
-                className="underline hover:text-teal-700"
-                onClick={() => onPick(match)}
-              >
-                {match.displayName}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </>
+    <select
+      id={id}
+      className="rounded border px-2 py-1 text-sm"
+      defaultValue=""
+      onChange={(event) => {
+        const picked = partners.find(
+          (partner) => partner.customerId === event.target.value,
+        );
+        if (picked) onPick(picked);
+      }}
+    >
+      <option value="">Válassz partnert</option>
+      {partners.map((partner) => (
+        <option key={partner.customerId} value={partner.customerId}>
+          {partner.name} ({partner.partnerCode})
+        </option>
+      ))}
+    </select>
   );
 }
