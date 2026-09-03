@@ -25,8 +25,14 @@
  */
 
 export type SaveOutcome =
-  /** A szerver elfogadta. Nincs sor, nincs várakozás. */
-  | { type: "saved"; assetId: string }
+  /**
+   * A szerver elfogadta. Nincs sor, nincs várakozás.
+   *
+   * A MEZŐ NEVE `id`, NEM `assetId`: 2026-09-03 óta ugyanez a döntés viszi a
+   * munkalapot is, és egy eszköz-nevű mező a munkalap ágán HAZUDNA. A típus
+   * nem tudja, mit mentettünk -- a hívó tudja.
+   */
+  | { type: "saved"; id: string }
   /** Nem értük el a szervert: a felvitel a sorban vár. */
   | { type: "queued"; operationId: string; message: string }
   /** A sorba tétel is elbukott: a felvitel SEHOL nem létezik. */
@@ -63,7 +69,7 @@ export interface SaveDeps {
 export async function saveOrQueue(deps: SaveDeps): Promise<SaveOutcome> {
   try {
     const created = await deps.save();
-    return { type: "saved", assetId: created.id };
+    return { type: "saved", id: created.id };
   } catch (error) {
     const status = deps.statusOf(error);
     if (status !== null) {

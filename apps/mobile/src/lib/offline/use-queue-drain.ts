@@ -7,6 +7,7 @@ import {
 } from "@/lib/api/assets";
 import {
   createWorksheet,
+  uploadWorksheetDocuments,
   type CreateWorksheetInput,
 } from "@/lib/api/worksheets";
 import { ApiError } from "@/lib/api/client";
@@ -132,13 +133,25 @@ async function kepetKuld(row: SyncQueueRow): Promise<{
       error: "A rögzítés még nem ment fel, a képnek nincs hova kerülnie.",
     };
   }
+  const files = [{ uri: payload.uri, name: payload.name, type: payload.type }];
   try {
-    await uploadAssetDocuments(row.entityId, {
-      // UGYANAZ A FAJTA, MINT A KEPERNYORE VETT KEPNEL (`assets/[id].tsx`): a
-      // szamla es a garancialevel az irodabol kerul fel, a helyszini kep OTHER.
-      type: "OTHER",
-      files: [{ uri: payload.uri, name: payload.name, type: payload.type }],
-    });
+    /**
+     * A GAZDA DONTI EL, MELYIK VEGPONTRA MEGY A KEP.
+     *
+     * A sor mar hordozza (`entityType`), tehat nem kell uj mezo a payloadba --
+     * es a ket ut igy nem tud elcsuszni egymastol: egy munkalap-kep sosem
+     * kerulhet egy eszkoz ala.
+     */
+    if (row.entityType === "worksheet") {
+      await uploadWorksheetDocuments(row.entityId, { files });
+    } else {
+      await uploadAssetDocuments(row.entityId, {
+        // A SZAMLA ES A GARANCIALEVEL AZ IRODABOL KERUL FEL; a helyszini kep
+        // az eszkoznel OTHER, a munkalapnal PHOTO (a szerver alapertelmezese).
+        type: "OTHER",
+        files,
+      });
+    }
     return { httpStatus: 201, error: null };
   } catch (cause) {
     return {
@@ -159,13 +172,20 @@ async function kepetKuld(row: SyncQueueRow): Promise<{
 async function munkalapotKuld(row: SyncQueueRow): Promise<{
   httpStatus: number | null;
   error: string | null;
+  entityId?: string | null;
 }> {
   try {
-    await createWorksheet({
+    const letrejott = await createWorksheet({
       ...(JSON.parse(row.payloadJson) as CreateWorksheetInput),
       clientOperationId: row.id,
     });
-    return { httpStatus: 201, error: null };
+    /**
+     * AZ AZONOSITO ITT LEP AT A VARRATON, ugyanugy, mint az eszkoznel. A sor a
+     * nyugtazas utan torlodik: ha eldobnank, a lapra varo fenykepeket semmi nem
+     * tudna megcimezni -- es a hiba NEMA lenne, mert a sor kiurul es a jelentes
+     * zold marad.
+     */
+    return { httpStatus: 201, error: null, entityId: letrejott.id };
   } catch (cause) {
     /**
      * UGYANAZ A KETTEVALASZTAS, MINT AZ ESZKOZNEL: a `null` azt jelenti, hogy
