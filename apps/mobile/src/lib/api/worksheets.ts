@@ -161,6 +161,18 @@ export interface WorksheetDetail {
     name: string;
   };
   createdByName: string | null;
+  /**
+   * A HIBAJEGY, AMI MOGOTT EZ A LAP ALL -- vagy `null`, ha nincs.
+   *
+   * A `null` NEM hianyzo adat, hanem a folyamat egyik rendes allapota: a lap
+   * keletkezhet hibajegy nelkul (a szerelo a helyszinen felveszi, a jegy nalunk
+   * szuletik meg utolag). A kepernyo ezert nem elrejti, hanem kimondja.
+   *
+   * A SZERVER EZT MAR REGOTA KULDI, es a webes lap ki is rajzolja. A telefon
+   * tipusabol hianyzott, tehat a mezo megerkezett es eldobodott -- nem hianyzo
+   * kepesseg volt, hanem be nem kotott.
+   */
+  serviceJob: { id: string; jobNumber: string } | null;
   assignees: WorksheetAssignee[];
   createdAt: string;
   updatedAt: string;

@@ -60,6 +60,8 @@ export interface WorksheetDetailLike {
   customer: { displayName: string };
   department: { code: string; name: string };
   createdByName: string | null;
+  /** `null`, ha a lap hibajegy nelkul keletkezett -- lasd a sor indokat lent. */
+  serviceJob: { jobNumber: string } | null;
   currentVersion: {
     unitName: string | null;
     issueDate: string | null;
@@ -171,7 +173,14 @@ export function worksheetVersionNote(item: WorksheetListLike): string {
 
 /**
  * A lap fejadatai, sorokban. Ami hiányzik, NEM lesz sor -- kivéve a fenti két
- * kimondott hiányt, amik nem itt keletkeznek.
+ * kimondott hiányt, amik nem itt keletkeznek, ÉS a hibajegyet, ami itt igen.
+ *
+ * A HIBAJEGY SORA MINDIG OTT ÁLL, akkor is, ha nincs mögötte jegy, és ez az
+ * egyetlen kivétel a fenti szabály alól ebben a függvényben. Az indok
+ * ugyanaz, mint a webes lapon: a hiány itt nem kitöltetlen mező, hanem a
+ * folyamat egyik rendes állapota -- és van következménye, mert hibajegy
+ * nélkül a lapot nem lehet lezárni. Aki csak azt látja, hogy a lezárás nem
+ * megy, nem tudja meg, mi hiányzik hozzá.
  */
 export function worksheetDetailRows(
   worksheet: WorksheetDetailLike,
@@ -200,6 +209,20 @@ export function worksheetDetailRows(
 
   const createdBy = clean(worksheet.createdByName);
   if (createdBy) rows.push({ label: "Felvette", value: createdBy });
+
+  /**
+   * A SOR NEM `if` MOGOTT ALL: a hiany is allitas. A szoveg a webes lape
+   * (`worksheet-detail-page.tsx`), hogy ugyanarrol a lapról az irodaban es a
+   * helyszinen ugyanaz a mondat hangozzon el.
+   *
+   * A telefonon a szam CSAK SZOVEG, nem hivatkozas: hibajegy-keperno ma nincs
+   * a mobil alkalmazasban, es egy megnyomhatonak latszo szam olyat igerne,
+   * ami sehova nem visz.
+   */
+  rows.push({
+    label: "Hibajegy",
+    value: clean(worksheet.serviceJob?.jobNumber) || "Nincs mögötte hibajegy",
+  });
 
   return rows;
 }
