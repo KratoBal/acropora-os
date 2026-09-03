@@ -79,7 +79,30 @@ export class NotificationsService {
           bundleId: recipient.bundleId,
           title: "Új munkalap került hozzád",
           body: notice.subject,
-          data: { worksheetId: notice.worksheetId },
+          /**
+           * A CELPONT TIPUSSAL EGYUTT MEGY, ES EZ MA EGY ELAGAZAS EGY AGGAL.
+           *
+           * Balazs kerese (2026-09-03 20:20): hibajegy-keperno ma nincs a
+           * telefonon, tehat oda nem lehet vinni senkit -- de az ALAK legyen
+           * olyan, hogy a masodik tipus ne kivanjon atirast. Egy tipus-mezo ma
+           * egy sor, kesobb migracio: a mar kikuldott ertesitesek nem
+           * ertelmezhetok ujra visszamenoleg.
+           *
+           * A REGI `worksheetId` MEZO IS MEGY, es ez nem masolas: az ertesitesi
+           * kozpontban MA is allhat bontatlan ertesites, ami csak azt hordozza.
+           * Egy koppintas rajta a frissites UTAN tortenne, es tipus nelkul
+           * sehova nem vinne. A telefon ezert visszaesik ra -- de CSAK ha tipus
+           * nincs, ismeretlen tipusnal nem (lasd `push-target.ts`).
+           *
+           * MIKOR HAGYHATO EL: ha egyszer biztosak vagyunk benne, hogy egyetlen
+           * keszuleken sem all bontatlan, tipus nelkuli ertesites. Addig a ket
+           * mezo egyutt megy, es a masodik nem kerul semmibe.
+           */
+          data: {
+            targetType: "worksheet",
+            targetId: notice.worksheetId,
+            worksheetId: notice.worksheetId,
+          },
         });
         if (!result.ok && result.retired)
           await this.deviceTokens.retire(recipient.token);

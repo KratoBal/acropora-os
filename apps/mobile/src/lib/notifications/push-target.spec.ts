@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import {
   decidePushNavigation,
   pushResponseKey,
-  pushWorksheetId,
+  pushTarget,
   type PushResponseLike,
 } from "./push-target";
 
@@ -23,34 +23,89 @@ const valasz = (
   notification: { request: { identifier, content: { data } } },
 });
 
-const munkalapValasz = valasz({ worksheetId: "ws-1" });
+const munkalapValasz = valasz({ targetType: "worksheet", targetId: "ws-1" });
 
-describe("a munkalap azonosítója a törzsből", () => {
-  it("kiolvassa, ha ott van", () => {
-    assert.equal(pushWorksheetId(munkalapValasz), "ws-1");
+describe("a célpont a törzsből", () => {
+  it("a tipusos párt olvassa ki", () => {
+    assert.deepEqual(pushTarget(munkalapValasz), {
+      type: "worksheet",
+      id: "ws-1",
+    });
   });
 
   it("levágja a körülötte álló szóközöket", () => {
-    assert.equal(pushWorksheetId(valasz({ worksheetId: "  ws-1 " })), "ws-1");
+    assert.deepEqual(
+      pushTarget(valasz({ targetType: "worksheet", targetId: "  ws-1 " })),
+      { type: "worksheet", id: "ws-1" },
+    );
   });
 
-  it("`null`, ha nincs törzs, nincs mező, vagy nem szöveg", () => {
+  it("`null`, ha nincs törzs, nincs azonosító, vagy nem szöveg", () => {
     /*
       A `content.data` SZABAD JSON: a tipusa nem garantalt. MI PIROSIT, ha
       valaki elhagyja az ellenorzest: egy `undefined` azonositoval osszerakott
       utvonal nem HIBAZNA, csak egy ures lapra vinne -- vagyis a hiba nema.
     */
-    assert.equal(pushWorksheetId(valasz(undefined)), null);
-    assert.equal(pushWorksheetId(valasz({})), null);
-    assert.equal(pushWorksheetId(valasz({ worksheetId: 42 })), null);
-    assert.equal(pushWorksheetId(valasz({ worksheetId: "" })), null);
-    assert.equal(pushWorksheetId(valasz({ worksheetId: "   " })), null);
-    assert.equal(pushWorksheetId(null), null);
+    assert.equal(pushTarget(valasz(undefined)), null);
+    assert.equal(pushTarget(valasz({})), null);
+    assert.equal(pushTarget(valasz({ targetType: "worksheet" })), null);
+    assert.equal(
+      pushTarget(valasz({ targetType: "worksheet", targetId: 42 })),
+      null,
+    );
+    assert.equal(
+      pushTarget(valasz({ targetType: "worksheet", targetId: "  " })),
+      null,
+    );
+    assert.equal(pushTarget(null), null);
+  });
+
+  it("TIPUS NELKUL visszaesik a régi `worksheetId` mezőre", () => {
+    /*
+      MIERT KELL EZ, ES MIERT NEM ELMELETI: az ertesitesi kozpontban MA is
+      allhat bontatlan ertesites, amit a tipus-mezo ELOTT kuldtunk ki -- az
+      csak `worksheetId`-t hordoz. Egy koppintas rajta a frissites UTAN
+      tortenne, es visszaeses nelkul SEHOVA nem vinne.
+
+      MI PIROSIT: a visszaeses elhagyasa. A hiba nema lenne -- a koppintas
+      egyszeruen nem csinal semmit, es azt a felhasznalo ugy eli meg, hogy
+      "neha nem mukodik".
+    */
+    assert.deepEqual(pushTarget(valasz({ worksheetId: "ws-9" })), {
+      type: "worksheet",
+      id: "ws-9",
+    });
+  });
+
+  it("ISMERETLEN tipusnal viszont NEM esik vissza", () => {
+    /*
+      EZ A LENYEG, ES EZ A KULONBSEG A KET AG KOZOTT. Ha egyszer jon egy
+      hibajegy-ertesites, es egy REGI app kapja meg, az NEM nyithatja meg
+      helyette a munkalapot. Inkabb ne vigyen sehova, mint rossz helyre: egy
+      rossz keperno az ugyfel elott rosszabb, mint egy nem mukodo koppintas.
+
+      A visszaeses tehat CSAK a tipus HIANYARA szol, nem az ismeretlen
+      tipusra -- meg akkor sem, ha a regi mezo is ott van.
+    */
+    assert.equal(
+      pushTarget(valasz({ targetType: "serviceJob", targetId: "job-1" })),
+      null,
+    );
+    assert.equal(
+      pushTarget(
+        valasz({
+          targetType: "serviceJob",
+          targetId: "job-1",
+          worksheetId: "ws-1",
+        }),
+      ),
+      null,
+    );
   });
 });
 
 describe("a válasz azonosítója", () => {
-  it("a notification saját azonosítója, nem a munkalapé", () => {
+  it("a notification saját azonosítója, nem a célponté", () => {
     /*
       MIERT NEM A MUNKALAP AZONOSITOJA A KULCS: ugyanarrol a laprol JOGOSAN
       johet ket ertesites (ujra kiosztottak), es azt ket kulon koppintassal ket
@@ -61,8 +116,8 @@ describe("a válasz azonosítója", () => {
   });
 
   it("`null`, ha hiányzik vagy üres", () => {
-    assert.equal(pushResponseKey(valasz({ worksheetId: "ws-1" }, 7)), null);
-    assert.equal(pushResponseKey(valasz({ worksheetId: "ws-1" }, "  ")), null);
+    assert.equal(pushResponseKey(valasz({ targetId: "ws-1" }, 7)), null);
+    assert.equal(pushResponseKey(valasz({ targetId: "ws-1" }, "  ")), null);
     assert.equal(pushResponseKey(undefined), null);
   });
 });
@@ -75,7 +130,11 @@ describe("mikor navigálunk", () => {
         status: "authenticated",
         handledKey: null,
       }),
-      { navigate: true, worksheetId: "ws-1", key: "apns-1" },
+      {
+        navigate: true,
+        target: { type: "worksheet", id: "ws-1" },
+        key: "apns-1",
+      },
     );
   });
 
@@ -100,11 +159,15 @@ describe("mikor navigálunk", () => {
       teljesulne, ha a fuggveny MINDENT elutasitana a masodik korben.
     */
     const d = decidePushNavigation({
-      response: valasz({ worksheetId: "ws-1" }, "apns-2"),
+      response: valasz({ targetType: "worksheet", targetId: "ws-1" }, "apns-2"),
       status: "authenticated",
       handledKey: "apns-1",
     });
-    assert.deepEqual(d, { navigate: true, worksheetId: "ws-1", key: "apns-2" });
+    assert.deepEqual(d, {
+      navigate: true,
+      target: { type: "worksheet", id: "ws-1" },
+      key: "apns-2",
+    });
   });
 
   it("nem bejelentkezett állapotban nem navigál, és NEM is jegyzi fel kezeltnek", () => {

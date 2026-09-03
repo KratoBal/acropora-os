@@ -40,9 +40,23 @@ export function usePushNavigation(status: string): void {
      * regi (ures) jelolest latna, es masodszor is navigalna.
      */
     handled.current = decision.key;
-    router.push({
-      pathname: "/worksheets/[id]",
-      params: { id: decision.worksheetId },
-    });
+    /**
+     * A TIPUS VALASZT UTVONALAT, ES EZ MA EGY ELAGAZAS EGY AGGAL.
+     *
+     * Balazs kerese (2026-09-03 20:20): hibajegy-keperno ma nincs a
+     * telefonon, tehat oda nem lehet vinni senkit -- de az alak legyen olyan,
+     * hogy a masodik tipus ne kivanjon atirast. A `switch` egy aggal
+     * ertelmetlennek latszik; a `PushTargetType` viszont zart halmaz, tehat a
+     * fordito MEG FOGJA MONDANI, ha egy uj tipus bekerul es ez a hely nem
+     * kezeli. Egy `if` ezt a jelzest nem adna meg.
+     */
+    switch (decision.target.type) {
+      case "worksheet":
+        router.push({
+          pathname: "/worksheets/[id]",
+          params: { id: decision.target.id },
+        });
+        return;
+    }
   }, [response, status]);
 }

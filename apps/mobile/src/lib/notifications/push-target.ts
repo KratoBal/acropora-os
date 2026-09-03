@@ -39,8 +39,24 @@ export interface PushResponseLike {
   };
 }
 
+/**
+ * AMIRE EGY ERTESITES VIHET. MA EGY ERTEK, ES EZ SZANDEKOS.
+ *
+ * Balazs kerese (2026-09-03 20:20): hibajegy-keperno ma nincs a telefonon,
+ * tehat oda nem lehet vinni senkit -- de az ALAK legyen olyan, hogy a masodik
+ * tipus ne kivanjon atirast. Ez ma egy elagazas EGY aggal.
+ */
+export const PUSH_TARGET_TYPES = ["worksheet"] as const;
+
+export type PushTargetType = (typeof PUSH_TARGET_TYPES)[number];
+
+export interface PushTarget {
+  type: PushTargetType;
+  id: string;
+}
+
 export type PushNavigationDecision =
-  | { navigate: true; worksheetId: string; key: string }
+  | { navigate: true; target: PushTarget; key: string }
   | {
       navigate: false;
       reason:
@@ -57,21 +73,53 @@ export function pushResponseKey(
   return trimmed ? trimmed : null;
 }
 
-/**
- * A MUNKALAP AZONOSITOJA A TORZSBOL, ha van es hasznalhato.
- *
- * A `data` szabad JSON: minden lepesnel ellenorizni kell. Egy `undefined`
- * azonositoval osszerakott utvonal nem hibazna, csak egy ures lapra vinne.
- */
-export function pushWorksheetId(
-  response: PushResponseLike | null | undefined,
-): string | null {
-  const data = response?.notification?.request?.content?.data;
-  if (typeof data !== "object" || data === null) return null;
-  const value = (data as Record<string, unknown>).worksheetId;
+function szoveg(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
+}
+
+/**
+ * A CELPONT A TORZSBOL, ha van es hasznalhato.
+ *
+ * A `data` szabad JSON: minden lepesnel ellenorizni kell. Egy `undefined`
+ * azonositoval osszerakott utvonal nem hibazna, csak egy ures lapra vinne.
+ *
+ * === KET ALAKOT OLVAS, ES A SORREND NEM MINDEGY ===
+ *
+ * ELOSZOR a tipusos part (`targetType` + `targetId`). Ez a mai alak.
+ *
+ * MASODSZOR, es CSAK HA TIPUS NINCS, a regi `worksheetId` mezot. Az ertesitesi
+ * kozpontban MA is allhat bontatlan ertesites, ami csak azt hordozza: egy
+ * koppintas rajta a frissites UTAN tortenne, es fallback nelkul sehova nem
+ * vinne. Ez elo eset, nem elmeleti.
+ *
+ * ES AMI NEM ESIK VISSZA: az ISMERETLEN tipus. Ha egyszer jon egy hibajegy-
+ * ertesites, es egy REGI app kapja meg, az NEM nyithatja meg helyette a
+ * munkalapot. Inkabb ne vigyen sehova, mint rossz helyre -- egy rossz kepernyo
+ * az ugyfel elott rosszabb, mint egy nem mukodo koppintas.
+ *
+ * MIKOR HAGYHATO EL A VISSZAESES: ha egyszer biztosak vagyunk benne, hogy
+ * egyetlen keszuleken sem all bontatlan, tipus nelkuli ertesites.
+ */
+export function pushTarget(
+  response: PushResponseLike | null | undefined,
+): PushTarget | null {
+  const data = response?.notification?.request?.content?.data;
+  if (typeof data !== "object" || data === null) return null;
+  const row = data as Record<string, unknown>;
+
+  const rawType = row.targetType;
+  if (rawType !== undefined && rawType !== null) {
+    const type = szoveg(rawType);
+    if (!type) return null;
+    if (!(PUSH_TARGET_TYPES as readonly string[]).includes(type)) return null;
+    const id = szoveg(row.targetId);
+    return id ? { type: type as PushTargetType, id } : null;
+  }
+
+  const legacy = szoveg(row.worksheetId);
+  return legacy ? { type: "worksheet", id: legacy } : null;
 }
 
 export function decidePushNavigation(input: {
@@ -84,8 +132,8 @@ export function decidePushNavigation(input: {
   const key = pushResponseKey(input.response);
   if (!key) return { navigate: false, reason: "no-response" };
 
-  const worksheetId = pushWorksheetId(input.response);
-  if (!worksheetId) return { navigate: false, reason: "no-target" };
+  const target = pushTarget(input.response);
+  if (!target) return { navigate: false, reason: "no-target" };
 
   /**
    * A SORREND ITT SZAMIT, ES SZANDEKOS: eloszor a bejelentkezes, csak azutan a
@@ -99,5 +147,5 @@ export function decidePushNavigation(input: {
   if (input.handledKey === key)
     return { navigate: false, reason: "already-handled" };
 
-  return { navigate: true, worksheetId, key };
+  return { navigate: true, target, key };
 }
