@@ -903,5 +903,80 @@ describe(
         before.currentVersion.unitName,
       );
     });
+
+    /**
+     * A HELYSZÍNI RÖGZÍTÉS IDEMPOTENCIÁJA.
+     *
+     * A telefon térerő nélkül sorba teszi a lapot, és a sor a hálózati hibát
+     * SZÁNDÉKOSAN újrapróbálja -- offline az a normális állapot. Épp ott lehet
+     * viszont, hogy a kérés MÁR lefutott, és csak a válasz veszett el.
+     *
+     * MIÉRT ADATBÁZISON: a kód előzetes keresése két PÁRHUZAMOS kérésnél
+     * elcsúszhat, és azt az esetet az EGYEDI INDEX vágja el. Mockkal ez a rés
+     * láthatatlan marad.
+     */
+    describe("a kliens művelet-azonosítója", () => {
+      const KULCS = "worksheet-create:WS-INT:2026-09-03T10:00:00.000Z";
+      const MASIK = "worksheet-create:WS-INT:2026-09-03T10:05:00.000Z";
+
+      it("UGYANAZ a kulcs kétszer EGY lapot ad", async () => {
+        /*
+          MI PIROSIT: a kulcsra kereses elhagyasa a letrehozas elol. Enelkul
+          ket munkalap keletkezne, es a szerelo azt latna, hogy mindent ketszer
+          rogzitett -- nem hibauzenetet, hanem ket sort, amirol el kell donteni,
+          melyik az igazi.
+        */
+        const elso = await repository.createDraft({
+          customerId,
+          departmentId: bioDepartmentId,
+          content: content(),
+          actorUserId,
+          clientOperationId: KULCS,
+        });
+        const masodik = await repository.createDraft({
+          customerId,
+          departmentId: bioDepartmentId,
+          content: content(),
+          actorUserId,
+          clientOperationId: KULCS,
+        });
+
+        assert.equal(masodik, elso);
+        // ES A TABLABAN IS EGY SOR ALL: a ket azonosito egyezese magaban meg
+        // jöhetne ket rekordbol is.
+        const darab = await prisma.worksheet.count({
+          where: { clientOperationId: KULCS },
+        });
+        assert.equal(darab, 1);
+      });
+
+      it("MÁSIK kulcs MÁSIK lapot ad", async () => {
+        // TESTVER-KONTROLL: e nelkul egy valtozat, ami MINDIG az elsot adja
+        // vissza, atmenne a fenti allitason.
+        const masik = await repository.createDraft({
+          customerId,
+          departmentId: bioDepartmentId,
+          content: content(),
+          actorUserId,
+          clientOperationId: MASIK,
+        });
+        const elso = await prisma.worksheet.findUnique({
+          where: { clientOperationId: KULCS },
+          select: { id: true },
+        });
+        assert.notEqual(masik, elso?.id);
+      });
+
+      it("KULCS NÉLKÜL továbbra is minden hívás LÉTREHOZ", async () => {
+        /*
+          A MASIK IRANY, ES EZ VEDI A WEBES URLAPOT: az nem kuld kulcsot, es ma
+          mukodik. Egy javitas, ami a kulcs nelkuli hivasokat osszevonna vagy a
+          mezot kotelezove tenne, azt allitana le.
+        */
+        const egyik = await createDraft(bioDepartmentId);
+        const masik = await createDraft(bioDepartmentId);
+        assert.notEqual(masik, egyik);
+      });
+    });
   },
 );

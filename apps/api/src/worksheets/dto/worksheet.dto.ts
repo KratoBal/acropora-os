@@ -138,6 +138,24 @@ export class AttachableWorksheetQueryDto {
 }
 
 export class CreateWorksheetDto extends WorksheetContentDto {
+  /**
+   * A KLIENS ALTAL ADOTT MUVELET-AZONOSITO, A HELYSZINI ROGZITES
+   * IDEMPOTENCIA-KULCSA.
+   *
+   * ELHAGYHATO, ES EZ KIKOTES: a webes felvitel nem kuld kulcsot, es MA
+   * MUKODIK. Kotelezove teve az urlapot is at kellene irni.
+   *
+   * UGYANAZ AZ ALAK, MINT AZ ESZKOZNEL (`CreateAssetDto`), es ez szandekos: a
+   * telefonon EGY sor viszi mind a kettot, es ket kulonbozo minta abban a
+   * sorban a legrosszabb hely. Megengedobb, mint a SOR-azonositoe, mert a mai
+   * kliens-kulcs kettospontot es pontot is tartalmaz.
+   */
+  @Matches(/^[A-Za-z0-9_.:-]{8,128}$/, {
+    message:
+      "A művelet-azonosító 8-128 karakter lehet: betű, szám, kötőjel, aláhúzás, pont és kettőspont.",
+  })
+  @IsOptional()
+  clientOperationId?: string;
   @IsString() @MinLength(1) customerId!: string;
   @IsString() @MinLength(1) departmentId!: string;
   /**
