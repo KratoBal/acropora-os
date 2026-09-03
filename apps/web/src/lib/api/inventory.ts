@@ -219,6 +219,46 @@ export interface StockSyncOutboxRow {
   processedAt: string | null;
 }
 
+/**
+ * A KEZI UJRAPROBALAS VALASZA NEM SOR, HANEM KET MEZO -- es ez a kulonbseg
+ * eddig hamisan allt itt (`StockSyncOutboxRow`).
+ *
+ * A szerver `manualRetry` aga `{ retried, status }` alakot ad vissza, es a
+ * `retried: false` NEM hiba: azt jelenti, hogy a sor idokozben mar kikerult a
+ * FAILED/DEAD_LETTER allapotbol (a munkas elvitte, vagy valaki mas mar
+ * ujraindította). Ha a hivo sornak nezi, `undefined` mezoket olvas, es a
+ * kepernyon ures cellak jelennek meg hibauzenet nelkul -- pontosan az a nema
+ * alak, amit ez a fajl fejleceben mar egyszer kimondtunk a `Date`/`Decimal`
+ * kapcsan: a tipus a DROTON ATJOVO alakot irja le, nem azt, amit varunk.
+ */
+export interface StockSyncOutboxRetryResult {
+  retried: boolean;
+  status: StockSyncOutboxStatus;
+}
+
+/** Egy koteg feldolgozasanak merlege, ahogy az utemezo is naplozza. */
+export interface StockSyncOutboxBatchSummary {
+  claimed: number;
+  succeeded: number;
+  superseded: number;
+  retried: number;
+  deadLettered: number;
+}
+
+/**
+ * A KEZI FUTTATASNAK HAROM KIMENETE VAN, ES A KETTO NEM-MERLEG A FONTOSABB:
+ *
+ *   "DISABLED"  a munkas ki van kapcsolva, tehat SEMMI nem futott le
+ *   "FAILED"    a koteg hibara futott (a reszleteket a szerver naplozza)
+ *   merleg      lefutott, es ennyi tetelt vitt ki
+ *
+ * A `"DISABLED"` azert a legfontosabb, mert az alapertelmezes: a munkas
+ * kikapcsolva indul. Aki ezt sikernek mutatja, epp azt a nema allapotot
+ * vezeti vissza, ami miatt ez a lap egyaltalan letezik.
+ */
+export type StockSyncOutboxRunResult =
+  StockSyncOutboxBatchSummary | "DISABLED" | "FAILED";
+
 const OUTBOX_BASE = "/integrations/unas/stock-sync/outbox";
 
 export const stockSyncOutboxApi = {
@@ -247,7 +287,7 @@ export const stockSyncOutboxApi = {
    * jogot igenyel, nem `view`-t: ez ujra utemez egy IRAST a UNAS fele.
    */
   retry(token: string, id: string) {
-    return apiRequest<StockSyncOutboxRow>(
+    return apiRequest<StockSyncOutboxRetryResult>(
       `${OUTBOX_BASE}/${encodeURIComponent(id)}/retry`,
       token,
       { method: "POST" },
@@ -256,6 +296,8 @@ export const stockSyncOutboxApi = {
 
   /** Egy koteg azonnali lefuttatasa, az utemezo sajat kodutjan. */
   run(token: string) {
-    return apiRequest<unknown>(`${OUTBOX_BASE}/run`, token, { method: "POST" });
+    return apiRequest<StockSyncOutboxRunResult>(`${OUTBOX_BASE}/run`, token, {
+      method: "POST",
+    });
   },
 };
