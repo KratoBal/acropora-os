@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Redirect } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import {
   ActivityIndicator,
   Pressable,
@@ -45,6 +45,7 @@ import { allQueueRows, retryQueueRow } from "@/lib/offline/queue-store";
 export default function QueueScreen() {
   const { status } = useAuth();
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const rows = useQuery({
     queryKey: ["offline-queue"],
@@ -103,6 +104,12 @@ export default function QueueScreen() {
                         queryKey: ["offline-queue"],
                       });
                     }}
+                    onFix={() =>
+                      router.push({
+                        pathname: "/queue-fix/[id]",
+                        params: { id: entry.id },
+                      })
+                    }
                   />
                 ))}
               </View>
@@ -117,9 +124,11 @@ export default function QueueScreen() {
 function Entry({
   entry,
   onRetry,
+  onFix,
 }: {
   entry: QueueEntryView;
   onRetry: () => Promise<void>;
+  onFix: () => void;
 }) {
   return (
     <View style={styles.row}>
@@ -150,6 +159,21 @@ function Entry({
           style={styles.retryButton}
         >
           <Text style={styles.retryText}>Újrapróbálom</Text>
+        </Pressable>
+      ) : null}
+      {/*
+        A JAVITAS GOMB AZ ELAKADT SORON, es KIZARJA az ujraprobalast: ott a
+        szerverrel van baj, itt a felvitellel. Ugyanaz a keres ugyanazt a
+        valaszt kapna, tehat egy "ujraprobalom" gomb itt azt igerne, hogy
+        megoldodik.
+      */}
+      {entry.canFix ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={onFix}
+          style={styles.retryButton}
+        >
+          <Text style={styles.retryText}>Javítom és újraküldöm</Text>
         </Pressable>
       ) : null}
     </View>

@@ -115,6 +115,10 @@ function RootNavigator() {
       />
       <Stack.Screen name="settings" options={{ title: "Beállítások" }} />
       <Stack.Screen name="queue" options={{ title: "Feltöltésre várók" }} />
+      <Stack.Screen
+        name="queue-fix/[id]"
+        options={{ title: "Elakadt felvitel" }}
+      />
       <Stack.Screen name="worksheets/index" options={{ title: "Munkalapok" }} />
       <Stack.Screen name="worksheets/new" options={{ title: "Új munkalap" }} />
       <Stack.Screen name="worksheets/[id]" options={{ title: "Munkalap" }} />

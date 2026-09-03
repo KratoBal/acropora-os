@@ -137,4 +137,56 @@ describe("melyik sorral mit lehet kezdeni", () => {
       assert.equal(entry?.canRetry, false);
     }
   });
+
+  it("az ELAKADT eszköz-felvitelen VAN javítás", () => {
+    const [entry] = toQueueEntries([sor({ state: "conflict" })]);
+    assert.equal(entry?.canFix, true);
+  });
+
+  it("a JAVÍTÁS és az ÚJRAPRÓBÁLÁS kizárja egymást", () => {
+    /*
+      EZ A LENYEG, ES EZERT NEM ELEG KULON-KULON ALLITANI A KETTOT: a ket gomb
+      MAS teendore kuld. Az ujraprobalas a megallt soron van (a SZERVERREL van
+      baj, varni kell), a javitas az elakadton (a FELVITELLEL van baj, at kell
+      irni). Ha valaha mindketto megjelenne ugyanazon a soron, a szerelo a
+      rossz felet kezdene javitani.
+
+      MI PIROSIT: barmelyik feltetel kiszelesitese ugy, hogy a ket halmaz
+      atfedjen.
+    */
+    for (const state of [
+      "stalled",
+      "conflict",
+      "pending",
+      "failed",
+      "syncing",
+    ] as const) {
+      const [entry] = toQueueEntries([sor({ state })]);
+      assert.equal(
+        entry?.canRetry && entry?.canFix,
+        false,
+        `${state}: mindkét gomb megjelenne`,
+      );
+    }
+  });
+
+  it("MUNKALAP-felvitelen NINCS javítás, és ez szándékos", () => {
+    /*
+      IDOZITETT HATAR, nem hiany: a valodi utkozes az eszkoz-felvitelnel
+      keletkezik (matricakod). A munkalap lathato marad, de nem feloldhato --
+      az indok a `queue-resend.ts` fejlecében all, hogy a kovetkezo olvaso ne
+      irja meg megegyszer.
+    */
+    const [entry] = toQueueEntries([
+      sor({ state: "conflict", entityType: "worksheet" }),
+    ]);
+    assert.equal(entry?.canFix, false);
+  });
+
+  it("FÉNYKÉP-soron sincs javítás", () => {
+    const [entry] = toQueueEntries([
+      sor({ state: "conflict", operation: "upload-photo" }),
+    ]);
+    assert.equal(entry?.canFix, false);
+  });
 });

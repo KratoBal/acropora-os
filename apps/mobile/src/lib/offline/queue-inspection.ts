@@ -1,4 +1,5 @@
 import { readPhotoPayload } from "./photo-queue";
+import { queueResendEligibility } from "./queue-resend";
 import type { SyncQueueRow } from "./sync-queue";
 
 /**
@@ -41,6 +42,19 @@ export interface QueueEntryView {
    * gomb, ami nem tud segiteni, rosszabb a hianyanal.
    */
   canRetry: boolean;
+  /**
+   * MEGJELENJEN-E A JAVITAS GOMB.
+   *
+   * A `canRetry` PARJA, es szandekosan KIZARO: az ujraprobalas a megallt
+   * (`stalled`) soron van, a javitas az ELAKADTON (`conflict`). A ket sor
+   * teendoje MAS -- ott a szerverrel van baj es varni kell, itt a felvitelt
+   * kell atirni --, es egy gomb, ami a rossz soron all, a rossz teendore
+   * kuldi a szerelot.
+   *
+   * A dontes a `queue-resend.ts`-ben all, mert ott merheto, es mert ugyanaz a
+   * szabaly kell a kepernyonek es a mentesnek.
+   */
+  canFix: boolean;
 }
 
 export interface QueueErrorView {
@@ -166,6 +180,7 @@ export function toQueueEntries(
       attemptCount: row.attemptCount,
       error: describeQueueError(row.lastError),
       canRetry: section === "stalled",
+      canFix: queueResendEligibility(row).ok,
     };
   });
 }
