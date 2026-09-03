@@ -167,9 +167,25 @@ export default function HomeScreen() {
           </View>
         ) : null}
         {backlogMessage ? (
-          <View style={styles.offlineBanner}>
+          /*
+            A SAV MOSTANTOL AJTO IS. Amig csak SZAMOLT, egy megallt felvitel
+            zsakutca volt: a mondat kimondta, hogy segitseg kell, es nem volt
+            hova menni vele.
+          */
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Feltöltésre váró felvitelek megnyitása"
+            onPress={() => router.push("/queue")}
+            style={({ pressed }) => [
+              styles.offlineBanner,
+              pressed && styles.pressed,
+            ]}
+          >
             <Text style={styles.offlineBannerBody}>{backlogMessage}</Text>
-          </View>
+            <Text style={styles.offlineBannerLink}>
+              Koppints: mi vár, és mi akadt el
+            </Text>
+          </Pressable>
         ) : null}
         {offlineNotice ? (
           <View style={styles.offlineBanner}>
@@ -523,6 +539,12 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   offlineBannerBody: { color: "#e6d5b0", fontSize: 13, lineHeight: 19 },
+  offlineBannerLink: {
+    color: "#6de0ce",
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 6,
+  },
   container: { gap: 18, padding: 20, paddingBottom: 36 },
   hero: { gap: 10, paddingBottom: 8, paddingTop: 18 },
   heroTopline: {
