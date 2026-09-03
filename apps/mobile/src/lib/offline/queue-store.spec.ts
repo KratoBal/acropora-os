@@ -168,3 +168,41 @@ describe("a hátralék számai", () => {
     assert.match(forras, /photos: szam\(varakozo, "upload-photo"\)/);
   });
 });
+
+describe("az ismételten elbukó sorok", () => {
+  it("a KÜSZÖB fölötti VÁRAKOZÓ sorokat kérdezi le", () => {
+    /*
+      A `conflict` sorok KIMARADNAK: azoknak mar van sajat mondatuk (a szerver
+      elutasitotta, ember kell hozza). Ket mondat ugyanarrol a sorrol azt
+      sugallna, hogy ket kulon baj van.
+
+      MI PIROSIT: a `state` szures elhagyasa, vagy a kuszob-osszehasonlitas
+      kivetele -- utobbitol MINDEN varakozo sor "ismetelten elbukonak"
+      latszana, mar az elso probalkozas elott.
+    */
+    assert.match(
+      forras,
+      /WHERE state IN \('pending', 'failed', 'syncing'\) AND attempt_count >= \?/,
+    );
+  });
+
+  it("a LEGTÖBBSZÖR próbált sor hibáját adja vissza", () => {
+    // A sorrend maga az allitas: a szam es a hibaszoveg UGYANARROL a sorrol
+    // valo legyen. Kulonben a mondat egy sor kiserletszamat egy masik sor
+    // hibajaval parositana.
+    assert.match(forras, /ORDER BY attempt_count DESC/);
+  });
+
+  it("a küszöb HÁROM, és a szám mellé oda van írva, miért", () => {
+    /*
+      A hatar nem ido, hanem esemeny: egy kiserlet nagyjabol egy app-indulas
+      vagy egy offline-online atmenet. Harom kiserlet tehat harom KULON
+      alkalom, amikor volt halozat es megsem ment fel.
+
+      MI PIROSIT: a szam nemá atirasa. A specnek nem az a dolga, hogy a
+      hatart vedje, hanem hogy egy VALTOZAS dontes legyen, ne mellekhatas.
+    */
+    assert.match(forras, /ISMETLODO_HIBA_HATAR = 3/);
+    assert.match(forras, /A HATAR NEM IDO, HANEM ESEMENY/);
+  });
+});

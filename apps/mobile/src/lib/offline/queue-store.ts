@@ -279,3 +279,58 @@ function ismertSor(row: { operation: string; entity_type: string }): boolean {
     row.entity_type === "asset" || row.entity_type === "worksheet";
   return muvelet && entitas;
 }
+
+/**
+ * HANY KISERLET UTAN MONDJUK KI, HOGY EZ A TETEL ISMETELTEN ELBUKIK.
+ *
+ * A HATAR NEM IDO, HANEM ESEMENY, es ezert alacsony. A kiuritest a kezdolap
+ * inditja: egy kiserlet nagyjabol egy app-indulas vagy egy offline-online
+ * atmenet. Harom kiserlet tehat HAROM KULON alkalom, amikor volt halozat es
+ * megsem ment fel -- az mar nem "eppen nincs terero".
+ *
+ * EZ CSAK A KIMONDAS HATARA. Nem allit meg semmit: a felso hatar es a backoff
+ * kulon szelet (cde22311), mas kockazattal.
+ */
+export const ISMETLODO_HIBA_HATAR = 3;
+
+export interface RepeatedFailures {
+  /** Hany varakozo sor bukott el legalabb a hatarnyi alkalommal. */
+  rows: number;
+  /** A legtobbszor probalt sor kiserletszama. */
+  maxAttempts: number;
+  /** Annak a sornak az utolso hibaja. `null`, ha nincs ilyen sor. */
+  lastError: string | null;
+}
+
+/**
+ * AZ ISMETELTEN ELBUKO SOROK -- AZ AZ ADAT, AMI EDDIG IROTT, DE OLVASATLAN VOLT.
+ *
+ * Az `attempt_count` mezot a sor minden bukasnal noveli, a `last_error` mezobe
+ * beirja a hibat, es 2026-09-03-ig EGYIKET SEM olvasta senki. Emiatt egy tetel,
+ * ami SOSEM fog atmenni, a telefonon PONTOSAN ugyanugy nezett ki, mint az, ami
+ * csak terero nelkul var.
+ *
+ * A `conflict` sorok KIMARADNAK: azoknak mar van sajat mondatuk (a szerver
+ * elutasitotta, ember kell hozza), es ket mondat ugyanarrol a sorrol azt
+ * sugallna, hogy ket kulon baj van.
+ */
+export async function repeatedFailures(
+  threshold: number = ISMETLODO_HIBA_HATAR,
+): Promise<RepeatedFailures> {
+  const db = await initializeOfflineDatabase();
+  const rows = await db.getAllAsync<{
+    attempt_count: number;
+    last_error: string | null;
+  }>(
+    `SELECT attempt_count, last_error FROM sync_queue
+      WHERE state IN ('pending', 'failed', 'syncing') AND attempt_count >= ?
+      ORDER BY attempt_count DESC`,
+    [threshold],
+  );
+  const elso = rows[0];
+  return {
+    rows: rows.length,
+    maxAttempts: elso?.attempt_count ?? 0,
+    lastError: elso?.last_error ?? null,
+  };
+}
