@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import {
@@ -147,5 +148,81 @@ describe("what waits on me, without picking a role", () => {
     assert.equal(ROLES_THIS_VIEW_CANNOT_COVER[0]!.role, "sender");
     // AZ INDOK NEM DÍSZ: abból tudja meg az olvasó, HOL nézze meg helyette.
     assert.match(ROLES_THIS_VIEW_CANNOT_COVER[0]!.reason, /szerep-választóval/);
+  });
+});
+
+/**
+ * A CIMKE AKKOR ES CSAK AKKOR NEVEZHET TULAJDONOST, HA A NEZET KIZAROLAG A
+ * SAJATOT MUTATJA.
+ *
+ * Ez a szabaly HAROM cimke-javitast dontott el egymas utan (a lektor a #401-ben,
+ * a jovahagyo es a kikuldo ezutan), es mindannyiszor UTOLAG vettuk eszre, hogy
+ * a szoveg tobbet allit a szurojenél. Ezert nem harom kulon allitas all itt,
+ * hanem MAGA A SZABALY, vegigfuttatva mind a negy szerepen.
+ *
+ * A HASZNA: ha valaki holnap atirja az `ownOnly` sort vagy a gazdatlan agat, ez
+ * MAGATOL pirosodik ki -- nem attol, hogy valakinek eszebe jut megnezni a
+ * cimkeket is.
+ *
+ * MIERT ITT ES NEM A WEBES TESZTBEN: a `waitingFor` ebben a csomagban lakik, a
+ * cimkek a webesben, es a web NEM fugg az api-tol. Ha a webes oldalon irnank, a
+ * SZABALY jonne szovegbol (egy regex az `ownOnly` sorra), es az torekeny. Igy
+ * forditva van: a szabaly VALODI HIVAS, es csak a cimke-szoveg jon fajlbol.
+ *
+ * A `reviewer` mutatja meg, miert nem eleg az `ownOnly`-t nezni: az IGAZ, es a
+ * cimke megis rossz volt, mert a #398 gazdatlan aga kinyitotta a halmazt.
+ */
+const LABELS_FILE = "../web/src/components/content/content-labels.ts";
+const OWNERSHIP_CLAIM = /^amit /;
+
+function roleLabels(): Record<string, string> {
+  const source = readFileSync(LABELS_FILE, "utf8");
+  const block = source.slice(
+    source.indexOf(
+      "CONTENT_ROLE_LABELS: Record<ContentViewerRole, string> = {",
+    ),
+  );
+  const labels: Record<string, string> = {};
+  for (const match of block
+    .slice(0, block.indexOf("};"))
+    .matchAll(/^\s*(author|reviewer|approver|sender):\s*"([^"]+)"/gm))
+    labels[match[1]!] = match[2]!;
+  return labels;
+}
+
+describe("when a role label may name an owner", () => {
+  /**
+   * A KONTROLL A KIOLVASASRA. Enelkul egy elrontott minta URES objektumot adna,
+   * es a szabaly-ellenorzes nulla szerepen futna le -- zolden, es semmit nem
+   * merve. A nevezot tehat allitjuk, nem csak a tartalmat.
+   */
+  it("reads all four labels from the web package", () => {
+    const labels = roleLabels();
+
+    assert.deepEqual(Object.keys(labels).sort(), [
+      "approver",
+      "author",
+      "reviewer",
+      "sender",
+    ]);
+    // Es a minta MEG TUDJA kulonboztetni a ket alakot, kulonben a fo allitas
+    // barmit elfogadna.
+    assert.equal(OWNERSHIP_CLAIM.test("amit írok"), true);
+    assert.equal(OWNERSHIP_CLAIM.test("lektorálásra vár"), false);
+  });
+
+  it("only lets a label claim ownership when the view narrows to it", () => {
+    const labels = roleLabels();
+
+    for (const role of ["author", "reviewer", "approver", "sender"] as const) {
+      const filter = waitingFor(role);
+      const csakSajat = filter.ownOnly && !filter.includeUnassignedReviews;
+
+      assert.equal(
+        OWNERSHIP_CLAIM.test(labels[role]!),
+        csakSajat,
+        `A(z) "${labels[role]}" címke ${csakSajat ? "nevezhetne" : "NEM nevezhet"} tulajdonost: ownOnly=${filter.ownOnly}, gazdátlan ág=${filter.includeUnassignedReviews}.`,
+      );
+    }
   });
 });
