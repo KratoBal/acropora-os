@@ -3,6 +3,7 @@ import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -23,6 +24,7 @@ import {
 import {
   buildWorksheetSignaturePayload,
   canSignWorksheetVersion,
+  worksheetSignatureConfirmation,
   worksheetSignerName,
   type WorksheetSignatureDecision,
 } from "@/lib/worksheets/worksheet-signature";
@@ -30,12 +32,20 @@ import {
 /**
  * A MUNKALAP ALAIRASA A HELYSZINEN.
  *
- * === A LAP A SZERELO NEVEBEN ZARUL (Balazs dontese, 2026-09-03) ===
+ * === EGY GOMB ES EGY MEGEROSITES (Balazs, 2026-09-03 19:42) ===
  *
- * A nev a BEJELENTKEZETT felhasznaloe, es a kepernyo NEM engedi atirni. A
- * szerelo nem az ugyfel nevet gepeli be. A dontes indoka a
- * `lib/worksheets/worksheet-signature.ts` fejleceben all, a szerver-oldali
- * hatarokkal egyutt.
+ * A kepernyo a nevet MEG SEM KERDEZI: nincs nev-mezo. Az elfogadas EGY gomb,
+ * utana egy megerosites, ami KIMONDJA, mi tortenik -- nem azt kerdezi, hogy
+ * biztos-e. A nevet a kliens tolti ki a bejelentkezett felhasznalobol; a
+ * szerver tovabbra is szovegkent varja, tehat ehhez nem kellett szerver-valtozas.
+ *
+ * AZ ELUTASITAS UTJA MAS, ES SZANDEKOSAN NEM UGYANAZ A GOMB: ott az indok
+ * KOTELEZO (Balazs dontese, 2026-08-26), tehat a szerelo ir. Egy indok plusz
+ * megerosites. A ket utat osszevonni annyi lenne, mint az elfogadas ele is
+ * odatenni egy mezot, amit senki nem tolt ki.
+ *
+ * A dontesek es a megerosito szovegek a
+ * `lib/worksheets/worksheet-signature.ts` modulban allnak, mert ott MERHETOK.
  *
  * === KULON KEPERNYO, ES EZ NEM ELRENDEZESI IZLES ===
  *
@@ -54,8 +64,15 @@ import {
  * egy kesobb felmeno alairas datuma nem az lenne, amit az ugyfel latott.
  */
 export default function WorksheetSignScreen() {
-  const [decision, setDecision] =
-    useState<WorksheetSignatureDecision>("ACCEPTED");
+  /**
+   * NEM A DONTEST TAROLJUK, HANEM AZT, HOGY NYITVA VAN-E AZ ELUTASITAS UTJA.
+   *
+   * A dontes a gomb megnyomasakor SZULETIK, es argumentumkent megy vegig a
+   * megerositesen es a kuldesen. Egy tarolt dontes-allapot azt engedne meg,
+   * hogy a parbeszed nyitva allasa kozben megvaltozzon, amire epp
+   * megerositest kertunk.
+   */
+  const [rejecting, setRejecting] = useState(false);
   const [note, setNote] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -81,10 +98,19 @@ export default function WorksheetSignScreen() {
    */
   const signerName = user ? worksheetSignerName(user) : "";
 
+  /**
+   * A DONTES ARGUMENTUMKENT MEGY BE, NEM ALLAPOTBOL OLVASSUK.
+   *
+   * A megerosito parbeszed egy visszahivast kap, es az akkor fut le, amikor a
+   * felhasznalo megnyomja a gombot -- addigra a keperno allapota MAR MAS lehet.
+   * Ami ellen ez ved: a szerelo megnyomja az alairast, a parbeszed all, valaki
+   * hozzaer az elutasitas gombjahoz, es az elfogadasnak indult muvelet
+   * elutasitaskent menne el. Egy argumentum ezt szerkezetileg kizarja.
+   */
   const sign = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (chosen: WorksheetSignatureDecision) => {
       const built = buildWorksheetSignaturePayload(
-        { decision, note },
+        { decision: chosen, note },
         signerName,
       );
       if (!built.ok) throw new Error(built.message);
@@ -106,6 +132,44 @@ export default function WorksheetSignScreen() {
         cause instanceof Error ? cause.message : "Az aláírás nem rögzíthető.",
       ),
   });
+
+  /**
+   * A MEGEROSITES. Balazs kerese: az alairas egy gomb plusz egy megerosites.
+   *
+   * A SZOVEG NEM ITT SZULETIK: a `worksheetSignatureConfirmation` adja, mert
+   * ott merheto, hogy tenyleg KIMONDJA, mi tortenik -- egy "Biztos vagy
+   * benne?" csak annyit ker, hogy nyomd meg megegyszer.
+   *
+   * A megse gomb a `cancel` szerep, es a megerosito `destructive`: a
+   * rendszer-parbeszedben ez az, ami elvalasztja a ket gombot ranezesre is.
+   *
+   * ES A HELYI ELLENORZES A PARBESZED ELE KERUL, nem moge: egy indok nelkuli
+   * elutasitasnal a szerelo NE azt lassa, hogy megerositette a semmit, aztan
+   * kapjon hibat. Ugyanaz a fuggveny mond nemet, ami a kuldeskor is.
+   */
+  const megerosit = (chosen: WorksheetSignatureDecision) => {
+    const built = buildWorksheetSignaturePayload(
+      { decision: chosen, note },
+      signerName,
+    );
+    if (!built.ok) {
+      setFormError(built.message);
+      return;
+    }
+    setFormError(null);
+    const kerdes = worksheetSignatureConfirmation({
+      decision: chosen,
+      signerName,
+    });
+    Alert.alert(kerdes.title, kerdes.message, [
+      { text: "Mégsem", style: "cancel" },
+      {
+        text: kerdes.confirmLabel,
+        style: "destructive",
+        onPress: () => sign.mutate(chosen),
+      },
+    ]);
+  };
 
   if (status !== "authenticated" || !user || !capabilities)
     return <Redirect href="/login" />;
@@ -202,95 +266,18 @@ export default function WorksheetSignScreen() {
               </View>
             ) : (
               <>
-                <Text style={styles.sectionTitle}>Az ügyfél döntése</Text>
-                <View style={styles.card}>
-                  {/*
-                    KET NAGY GOMB, NEM LEGORDULO LISTA. Ezt a kepernyot az
-                    ugyfel kapja a kezebe: egy legorduloben a valasztas rejtve
-                    van, es a nyitott lista alatt a dontes nem is latszik.
-                  */}
-                  <Pressable
-                    onPress={() => {
-                      setDecision("ACCEPTED");
-                      setFormError(null);
-                    }}
-                    style={[
-                      styles.choice,
-                      decision === "ACCEPTED" && styles.choiceOn,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.choiceText,
-                        decision === "ACCEPTED" && styles.choiceTextOn,
-                      ]}
-                    >
-                      Elfogadom
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => {
-                      setDecision("REJECTED");
-                      setFormError(null);
-                    }}
-                    style={[
-                      styles.choice,
-                      decision === "REJECTED" && styles.choiceOffOn,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.choiceText,
-                        decision === "REJECTED" && styles.choiceTextOn,
-                      ]}
-                    >
-                      Nem fogadom el
-                    </Text>
-                  </Pressable>
-                </View>
-
-                <Text style={styles.sectionTitle}>
-                  {decision === "REJECTED"
-                    ? "Miért nem fogadja el?"
-                    : "Megjegyzés"}
-                </Text>
-                <View style={styles.card}>
-                  <TextInput
-                    value={note}
-                    onChangeText={(next) => {
-                      setNote(next);
-                      setFormError(null);
-                    }}
-                    multiline
-                    numberOfLines={3}
-                    placeholder={
-                      decision === "REJECTED"
-                        ? "Például: a szivattyú továbbra is zajos"
-                        : "Nem kötelező"
-                    }
-                    placeholderTextColor="#5b7d8f"
-                    style={[styles.input, styles.noteInput]}
-                  />
-                  {decision === "REJECTED" ? (
-                    <Text style={styles.muted}>
-                      Elutasításnál az indoklás kötelező: enélkül nem derül ki,
-                      mit kell javítani.
-                    </Text>
-                  ) : null}
-                </View>
-
                 {/*
-                  A NEV, ZARVA. Nem `editable={false}` mezoben, hanem sima
-                  szovegkent: egy letiltott beviteli mezo ugy nez ki, mint egy
-                  mezo, amit "valamiert" nem lehet szerkeszteni, es az elso
-                  kerdes az lesz, hogyan lehetne megis.
+                  A NEV, ZARVA -- ES NEM MEZOBEN. Egy letiltott beviteli mezo is
+                  MEZO: ugy nez ki, mint amit "valamiert" nem lehet szerkeszteni,
+                  es az elso kerdes az lesz, hogyan lehetne megis. Itt sima
+                  szoveg all, mert a kepernyo nem KERDEZI a nevet, csak megmutatja,
+                  kinek a neveben zarul a lap.
                 */}
                 <Text style={styles.sectionTitle}>Aláíró</Text>
                 <View style={styles.card}>
                   <Text style={styles.signer}>{signerName}</Text>
                   <Text style={styles.muted}>
-                    A lap a bejelentkezett szerelő nevében zárul. A név nem
-                    módosítható.
+                    A lap a bejelentkezett szerelő nevében zárul.
                   </Text>
                 </View>
 
@@ -298,22 +285,103 @@ export default function WorksheetSignScreen() {
                   <Text style={styles.error}>{formError}</Text>
                 ) : null}
 
-                <Pressable
-                  disabled={sign.isPending}
-                  onPress={() => sign.mutate()}
-                  style={[
-                    styles.submitButton,
-                    sign.isPending && styles.disabled,
-                  ]}
-                >
-                  <Text style={styles.submitText}>
-                    {sign.isPending ? "Rögzítés…" : "Döntés rögzítése"}
-                  </Text>
-                </Pressable>
-                <Text style={styles.muted}>
-                  A rögzítés végleges: a lap ezután nem írható át, a munka
-                  folytatása új lapra kerül.
-                </Text>
+                {rejecting ? (
+                  <>
+                    {/*
+                      AZ ELUTASITAS UTJA: INDOK PLUSZ MEGEROSITES. Az indok
+                      KOTELEZO (Balazs dontese, 2026-08-26), es ez az EGYETLEN
+                      hely a kepernyon, ahol a szerelo gepel.
+                    */}
+                    <Text style={styles.sectionTitle}>
+                      Miért nem fogadja el?
+                    </Text>
+                    <View style={styles.card}>
+                      <TextInput
+                        value={note}
+                        onChangeText={(next) => {
+                          setNote(next);
+                          setFormError(null);
+                        }}
+                        multiline
+                        numberOfLines={3}
+                        placeholder="Például: a szivattyú továbbra is zajos"
+                        placeholderTextColor="#5b7d8f"
+                        style={[styles.input, styles.noteInput]}
+                      />
+                      <Text style={styles.muted}>
+                        Az indoklás kötelező: enélkül nem derül ki, mit kell
+                        javítani.
+                      </Text>
+                    </View>
+
+                    <Pressable
+                      disabled={sign.isPending}
+                      onPress={() => megerosit("REJECTED")}
+                      style={[
+                        styles.rejectButton,
+                        sign.isPending && styles.disabled,
+                      ]}
+                    >
+                      <Text style={styles.submitText}>
+                        {sign.isPending ? "Rögzítés…" : "Elutasítás rögzítése"}
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      disabled={sign.isPending}
+                      onPress={() => {
+                        setRejecting(false);
+                        setNote("");
+                        setFormError(null);
+                      }}
+                    >
+                      <Text style={styles.secondaryLink}>
+                        Mégis aláírja az ügyfél
+                      </Text>
+                    </Pressable>
+                  </>
+                ) : (
+                  <>
+                    {/*
+                      AZ ELFOGADAS: EGY GOMB. Nincs mezo, nincs valaszto -- a
+                      megerosites mondja meg, mi tortenik.
+                    */}
+                    <Pressable
+                      disabled={sign.isPending}
+                      onPress={() => megerosit("ACCEPTED")}
+                      style={[
+                        styles.submitButton,
+                        sign.isPending && styles.disabled,
+                      ]}
+                    >
+                      <Text style={styles.submitText}>
+                        {sign.isPending ? "Rögzítés…" : "Aláírás"}
+                      </Text>
+                    </Pressable>
+                    <Text style={styles.muted}>
+                      Az aláírás végleges: a lap ezután nem írható át, a munka
+                      folytatása új lapra kerül.
+                    </Text>
+
+                    {/*
+                      AZ ELUTASITAS NEM EGYENRANGU GOMB. A helyszinen a lap
+                      tulnyomo tobbsege alairassal zarul; ket egyforma gomb
+                      egymas mellett a ritka esetet ugyanolyan konnyen
+                      elerhetove tenne, mint a gyakorit.
+                    */}
+                    <Pressable
+                      disabled={sign.isPending}
+                      onPress={() => {
+                        setRejecting(true);
+                        setFormError(null);
+                      }}
+                    >
+                      <Text style={styles.secondaryLink}>
+                        Az ügyfél nem fogadja el
+                      </Text>
+                    </Pressable>
+                  </>
+                )}
               </>
             )}
           </>
@@ -361,18 +429,20 @@ const styles = StyleSheet.create({
   muted: { color: "#789cad", fontSize: 12 },
   blockedTitle: { color: "#f4fbff", fontSize: 15, fontWeight: "800" },
   signer: { color: "#f4fbff", fontSize: 18, fontWeight: "800" },
-  choice: {
-    alignItems: "center",
-    backgroundColor: "#08192a",
-    borderColor: "#17394f",
+  rejectButton: {
+    backgroundColor: "#8c2f3f",
     borderRadius: 12,
-    borderWidth: 2,
+    marginTop: 4,
     padding: 16,
   },
-  choiceOn: { backgroundColor: "#123f3b", borderColor: "#52d6c7" },
-  choiceOffOn: { backgroundColor: "#4a1f2b", borderColor: "#ff8f80" },
-  choiceText: { color: "#a8c4d2", fontSize: 16, fontWeight: "800" },
-  choiceTextOn: { color: "#f4fbff" },
+  secondaryLink: {
+    color: "#789cad",
+    fontSize: 13,
+    fontWeight: "700",
+    marginTop: 14,
+    textAlign: "center",
+    textDecorationLine: "underline",
+  },
   input: {
     backgroundColor: "#08192a",
     borderColor: "#17394f",
