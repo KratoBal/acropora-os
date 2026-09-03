@@ -18,7 +18,43 @@
  * a teendo mas. Egy `failed` sor ujraprobalhato; egy `conflict` sor EMBERT
  * igenyel, es amig nincs eldontve, a helyi bizonyitek marad.
  */
-export type SyncState = "pending" | "syncing" | "failed" | "conflict";
+export type SyncState =
+  "pending" | "syncing" | "failed" | "conflict" | "stalled";
+
+/**
+ * HANYSZOR PROBALJUK MEG, HA A SZERVER VALASZOL, DE HIBAVAL.
+ *
+ * Aki nyolcszor 500-at ad, a kilencedikre is azt fogja. A szam a repo sajat
+ * mintajabol jon (a szerver-oldali ujraprobalo `MAX_ATTEMPTS=8` erteke,
+ * `docs/INVENTORY-CONSISTENCY.md`): egy szam, aminek van tortenete, jobb, mint
+ * egy szep kerek szam, amit most talalunk ki.
+ *
+ * EZ CSAK A SZERVER-HIBAKRA ALL. A halozati hiba (a keres el sem jutott oda)
+ * NEM szamit bele: terero nelkul az a normalis allapot, es egy pinceben toltott
+ * het utan a felvitel nem adhatja fel.
+ */
+export const SZERVER_HIBA_HATAR = 8;
+
+/** A varakoztatas alapja es teteje, a szerver-oldali mintat kovetve. */
+export const BACKOFF_ALAP_MS = 30 * 1000;
+export const BACKOFF_TETO_MS = 30 * 60 * 1000;
+
+/**
+ * MENNYIT VARJON A KOVETKEZO KISERLETIG.
+ *
+ * Exponencialis, tetovel: 30 masodperc, 1 perc, 2 perc, ... legfeljebb fel ora.
+ * A kepletet a szerver-oldali ujraprobalo hasznalja, ugyanebben az alakban.
+ *
+ * AMIT EZ NEM TESZ, es ki kell mondani: NEM idozit. A kiuritest esemeny
+ * inditja (app-indulas, halozat visszaterese), tehat ez a szam csak azt dönti
+ * el, hogy a KOVETKEZO alkalommal sorra kerul-e a tetel. Ha a telefon egy hetig
+ * nem kap halozatot, egyetlen kiserlet sem tortenik -- es ez helyes.
+ */
+export function backoffMs(attemptCount: number): number {
+  if (attemptCount <= 0) return 0;
+  const nyers = BACKOFF_ALAP_MS * 2 ** (attemptCount - 1);
+  return Math.min(BACKOFF_TETO_MS, nyers);
+}
 
 export interface SyncQueueRow {
   /** A KLIENS-generalt muvelet-azonosito. Ez az idempotencia kulcsa. */
@@ -50,6 +86,11 @@ export interface SyncQueueRow {
   createdAt: string;
   attemptCount: number;
   lastError: string | null;
+  /**
+   * MIKOR PROBALTUK UTOLJARA. `null`, amig egyszer sem -- es a mezo elott
+   * keszult sorokon is, ezert a varakoztatas a hianyt ESEDEKESNEK veszi.
+   */
+  lastAttemptAt: string | null;
   state: SyncState;
 }
 
@@ -81,8 +122,17 @@ export function operationId(input: {
  *   syncing  -> (torles)       a szerver nyugtazta, a helyi bizonyitek mehet
  *   syncing  -> failed         atmeneti hiba, ujraprobalhato
  *   syncing  -> conflict       a szerver ELUTASITOTTA (pl. a kod mar all)
+ *   syncing  -> stalled        a szerver HIBAT adott, sokadszorra is
  *   failed   -> syncing        ujraprobalas
  *   conflict -> (csak ember)   automatikus atmenet NINCS
+ *   stalled  -> (csak ember)   automatikus atmenet NINCS
+ *
+ * A `stalled` KULON ALL A `conflict`-TOL, es ez nem szormentes megkulonboztetes.
+ * A conflict azt jelenti, hogy a szerver ELUTASITOTTA a felvitelt (a kod mar
+ * all, az adat hibas): ott a teendo a felvitel javitasa. A stalled azt, hogy a
+ * szerver HIBAT adott, ujra es ujra: ott a felvitellel semmi baj, a szerverrel
+ * van. Egy kozos allapot mellett a felulet az egyik esetben HAZUDNA -- es a
+ * szerelo a sajat adatat kezdene javitani egy szerver-hiba miatt.
  */
 export function canRetryState(state: SyncState): boolean {
   return state === "pending" || state === "failed";

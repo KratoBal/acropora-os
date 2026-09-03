@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   decideDrain,
+  isDueForRetry,
   describeQueueBacklog,
   describeQueueState,
   describeRepeatedFailures,
@@ -20,7 +21,7 @@ import {
  */
 
 const sor = (
-  allapot: "pending" | "failed" | "conflict" | "syncing",
+  allapot: "pending" | "failed" | "conflict" | "syncing" | "stalled",
   n = 0,
 ) => ({
   id: "op1",
@@ -203,5 +204,147 @@ describe("ami ISMÉTELTEN elbukik", () => {
     assert.match(s ?? "", /2 felvitel/);
     assert.match(s ?? "", /7 alkalommal/);
     assert.match(s ?? "", /nem maradt meg/);
+  });
+});
+
+describe("a szerver-hibák felső határa", () => {
+  it("a NYOLCADIK szerver-hiba MEGÁLLÍTJA a sort", () => {
+    /*
+      Aki nyolcszor 500-at ad, a kilencedikre is azt fogja. A sor MARAD (a
+      felvitel egyetlen letezo peldanya), de nem indul el maganak tobbe.
+
+      MI PIROSIT: a hatar elhagyasa. Akkor ugyanez a tetel a vegtelensegig
+      probalkozna, es a szerelo azt latna, hogy "var feltoltesre".
+    */
+    const out = decideDrain({
+      row: sor("failed", 7),
+      httpStatus: 500,
+      errorMessage: "szerver hiba (500)",
+    });
+    assert.equal(out.type, "stalled");
+    assert.equal(out.type === "stalled" && out.attemptCount, 8);
+  });
+
+  it("a HETEDIK szerver-hiba még újrapróbálható", () => {
+    // ISMERT POZITIV KONTROLL: e nelkul egy valtozat, ami MINDEN szerver-hibat
+    // megallit, atmenne a fenti allitason -- es az elso atmeneti 500 utan a
+    // felvitel emberre varna.
+    const out = decideDrain({
+      row: sor("failed", 6),
+      httpStatus: 500,
+      errorMessage: null,
+    });
+    assert.equal(out.type, "retry");
+  });
+
+  it("a HÁLÓZATI hiba SOHA nem állítja meg, akárhányszor volt", () => {
+    /*
+      EZ AZ ALLITAS VEDI MEG A PINCEBEN DOLGOZO SZERELOT. A `null` statusz azt
+      jelenti, hogy a keres el sem jutott a szerverig -- terero nelkul ez a
+      normalis allapot. Egy felso hatar itt azt jelentene, hogy egy het utan az
+      EP felvitel feladja.
+
+      MI PIROSIT: ha a hatar a halozati agra is vonatkozna.
+    */
+    const out = decideDrain({
+      row: sor("failed", 99),
+      httpStatus: null,
+      errorMessage: null,
+    });
+    assert.equal(out.type, "retry");
+  });
+
+  it("a szerver ELUTASÍTÁSA továbbra is KONFLIKTUS, nem megállás", () => {
+    // A ket eset teendoje mas: a conflictnal a FELVITELT kell javitani, a
+    // stallednel a szerverrel van baj.
+    const out = decideDrain({
+      row: sor("failed", 50),
+      httpStatus: 422,
+      errorMessage: null,
+    });
+    assert.equal(out.type, "conflict");
+  });
+});
+
+describe("a várakoztatás", () => {
+  const most = new Date("2026-09-03T12:00:00.000Z");
+
+  it("HIÁNYZÓ időpont ESEDÉKES", () => {
+    /*
+      A mezo elott keletkezett sorokon `null` all. Ha a hianyt varakoztatasnak
+      vennenk, azok a sorok SOHA nem indulnanak el -- egy uj mezo csendben
+      allitana meg a regi felviteleket.
+    */
+    assert.equal(
+      isDueForRetry({ attemptCount: 3, lastAttemptAt: null }, most),
+      true,
+    );
+  });
+
+  it("FRISS kísérlet után VÁR", () => {
+    // Harom kiserlet utan ket perc a varakozas; harminc masodperccel a kiserlet
+    // utan tehat meg nem esedekes.
+    assert.equal(
+      isDueForRetry(
+        { attemptCount: 3, lastAttemptAt: "2026-09-03T11:59:30.000Z" },
+        most,
+      ),
+      false,
+    );
+  });
+
+  it("ELÉG idő után ESEDÉKES", () => {
+    // ISMERT POZITIV KONTROLL: e nelkul egy "mindig var" valtozat is atmenne a
+    // fenti allitason, es a sor SOHA nem urulne ki.
+    assert.equal(
+      isDueForRetry(
+        { attemptCount: 3, lastAttemptAt: "2026-09-03T11:50:00.000Z" },
+        most,
+      ),
+      true,
+    );
+  });
+
+  it("ÉRTELMEZHETETLEN időbélyeg ESEDÉKES", () => {
+    // Elallitott ora vagy serult sor: a felvitel elkuldese fontosabb, mint a
+    // varakoztatas pontossaga.
+    assert.equal(
+      isDueForRetry({ attemptCount: 3, lastAttemptAt: "nem dátum" }, most),
+      true,
+    );
+  });
+});
+
+describe("a megállt sorok a felületen", () => {
+  it("KÜLÖN mondatot kapnak, nem a konfliktusét", () => {
+    /*
+      A conflictnal a FELVITELT kell javitani ("a szerver elutasitotta"), a
+      stallednel a felvitellel semmi baj: a szerverrel van. Egy kozos mondat
+      mellett a szerelo a sajat adatat kezdene javitani egy szerver-hiba miatt.
+
+      MI PIROSIT: a ket szam osszevonasa egy mondatba.
+    */
+    const s = describeQueueState({ pending: 0, conflict: 0, stalled: 2 });
+    assert.match(s ?? "", /2 megállt/);
+    assert.match(s ?? "", /segítség kell/);
+    assert.doesNotMatch(s ?? "", /elutasította/);
+  });
+
+  it("a hátralék mondatában is megjelennek", () => {
+    const s = describeQueueBacklog({
+      recordings: 1,
+      photos: 0,
+      conflict: 0,
+      stalled: 1,
+    });
+    assert.match(s ?? "", /1 rögzítés vár feltöltésre/);
+    assert.match(s ?? "", /1 megállt/);
+  });
+
+  it("megállt sor NÉLKÜL a mondat változatlan", () => {
+    // TESTVER-KONTROLL: e nelkul egy valtozat, ami MINDIG emliti a megallt
+    // sorokat, atmenne a fenti kettoen, es minden uzenetben ott lenne egy nulla.
+    const s = describeQueueBacklog({ recordings: 1, photos: 0, conflict: 0 });
+    assert.doesNotMatch(s ?? "", /megállt/);
   });
 });

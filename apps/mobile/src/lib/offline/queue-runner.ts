@@ -27,6 +27,14 @@ export interface QueueRunReport {
   /** Hany akadt el emberi dontesre varva. */
   conflicted: number;
   /**
+   * HANY ALLT MEG, MERT A SZERVER SOKADSZORRA IS HIBAT ADOTT.
+   *
+   * Kulon a `conflicted`-tol: ott a FELVITELT kell javitani, itt a szerverrel
+   * van baj. A ket szam osszevonasa a szerelot a sajat adata javitasara
+   * kuldene egy szerver-hiba miatt.
+   */
+  stalled: number;
+  /**
    * HANY ROGZITES MENT FEL UGY, HOGY A SZERVER AZONOSITOJA NEM JOTT VISSZA.
    *
    * Nem hiba es nem is siker: a rogzites FENT VAN, de a hozza tartozo kepeket
@@ -63,6 +71,21 @@ export function describeQueueRun(report: QueueRunReport): string | null {
   return (
     `${report.done} felvitel felment, ${report.attempted - report.done} maradt` +
     (report.conflicted > 0 ? `, ebből ${report.conflicted} elakadt.` : ".")
+  );
+}
+
+/**
+ * A MEGALLT FELVITELEK KIMONDASA, KULON MONDATBAN.
+ *
+ * `null`, ha nincs ilyen. Azert nem folyik bele a futas mondataba, mert az a
+ * FUTASROL szol (mi ment fel most), ez pedig egy MARADO allapotrol: ezek a
+ * sorok a kovetkezo futasban SEM indulnak el maguktol.
+ */
+export function describeStalled(report: QueueRunReport): string | null {
+  if (report.stalled === 0) return null;
+  return (
+    `${report.stalled} felvitel megállt: a szerver többször hibát adott. ` +
+    "A rögzítés megvan a telefonon, de segítség kell hozzá."
   );
 }
 
@@ -107,6 +130,12 @@ export interface QueueRunnerDeps {
   markRetry(id: string, attemptCount: number, lastError: string): Promise<void>;
   /** A sor marad, es emberre var. */
   markConflict(id: string, lastError: string): Promise<void>;
+  /** A sor marad, megall, es emberre var -- de MASERT, mint a conflict. */
+  markStalled(
+    id: string,
+    attemptCount: number,
+    lastError: string,
+  ): Promise<void>;
 }
 
 export async function drainQueue(
@@ -118,6 +147,7 @@ export async function drainQueue(
     done: 0,
     retried: 0,
     conflicted: 0,
+    stalled: 0,
     unresolved: 0,
   };
 
@@ -146,6 +176,10 @@ export async function drainQueue(
       case "conflict":
         await deps.markConflict(row.id, outcome.lastError);
         report.conflicted += 1;
+        break;
+      case "stalled":
+        await deps.markStalled(row.id, outcome.attemptCount, outcome.lastError);
+        report.stalled += 1;
         break;
     }
   }

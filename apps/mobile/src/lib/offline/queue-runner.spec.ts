@@ -27,6 +27,7 @@ const sor = (id: string): SyncQueueRow => ({
   createdAt: "2026-09-03T09:00:00Z",
   attemptCount: 0,
   lastError: null,
+  lastAttemptAt: null,
   state: "pending",
 });
 
@@ -58,6 +59,10 @@ function deps(
       },
       markConflict: (id: string) => {
         naplo.push(`conflict:${id}`);
+        return Promise.resolve();
+      },
+      markStalled: (id: string, attemptCount: number) => {
+        naplo.push(`stalled:${id}@${attemptCount}`);
         return Promise.resolve();
       },
     },
@@ -155,6 +160,7 @@ describe("a futás jelentése", () => {
         done: 0,
         retried: 0,
         conflicted: 0,
+        stalled: 0,
         unresolved: 0,
       }),
       null,
@@ -172,6 +178,7 @@ describe("a futás jelentése", () => {
       done: 0,
       retried: 0,
       conflicted: 0,
+      stalled: 0,
       unresolved: 0,
     });
     const sikertelen = describeQueueRun({
@@ -179,6 +186,7 @@ describe("a futás jelentése", () => {
       done: 0,
       retried: 3,
       conflicted: 0,
+      stalled: 0,
       unresolved: 0,
     });
     assert.equal(uresen, null);
@@ -194,6 +202,7 @@ describe("a futás jelentése", () => {
       done: 2,
       retried: 0,
       conflicted: 0,
+      stalled: 0,
       unresolved: 0,
     });
     assert.match(s ?? "", /Minden várakozó felvitel felment/);
@@ -205,6 +214,7 @@ describe("a futás jelentése", () => {
       done: 1,
       retried: 1,
       conflicted: 1,
+      stalled: 0,
       unresolved: 0,
     });
     assert.match(s ?? "", /1 felvitel felment/);
@@ -223,6 +233,7 @@ describe("a címzetlen képek kimondása", () => {
         done: 2,
         retried: 0,
         conflicted: 0,
+        stalled: 0,
         unresolved: 0,
       }),
       null,
@@ -240,6 +251,7 @@ describe("a címzetlen képek kimondása", () => {
       done: 2,
       retried: 0,
       conflicted: 0,
+      stalled: 0,
       unresolved: 2,
     });
     assert.match(s ?? "", /2 rögzítés felment/);

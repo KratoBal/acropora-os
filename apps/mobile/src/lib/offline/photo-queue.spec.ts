@@ -27,6 +27,7 @@ const rogzites = (id: string): SyncQueueRow => ({
   createdAt: "2026-09-03T09:00:00Z",
   attemptCount: 0,
   lastError: null,
+  lastAttemptAt: null,
   state: "pending",
 });
 

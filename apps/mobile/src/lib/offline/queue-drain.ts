@@ -1,7 +1,9 @@
 import { describePhotoBacklog } from "./photo-queue";
 import {
+  backoffMs,
   canRetryState,
   classifyFailure,
+  SZERVER_HIBA_HATAR,
   type SyncQueueRow,
 } from "./sync-queue";
 
@@ -34,10 +36,19 @@ export type DrainOutcome =
    * hozza. Egy automatikus ujraprobalas itt vegtelen kort adna, es a
    * kepernyon MUNKANAK latszana.
    */
-  | { type: "conflict"; lastError: string };
+  | { type: "conflict"; lastError: string }
+  /**
+   * A SZERVER SOKADSZORRA IS HIBAT ADOTT. A sor marad, de nem probaljuk tovabb:
+   * aki nyolcszor 500-at ad, a kilencedikre is azt fogja. NEM ugyanaz, mint a
+   * conflict: ott a FELVITELLEL van baj, itt a szerverrel -- es a szerelo mast
+   * tud vele kezdeni.
+   */
+  | { type: "stalled"; attemptCount: number; lastError: string };
 
 export interface DrainInput {
   row: Pick<SyncQueueRow, "id" | "state" | "attemptCount">;
+  /** Hany szerver-hiba utan all meg a sor. Kivulrol, hogy merheto legyen. */
+  serverErrorLimit?: number;
   /** A szerver valaszanak HTTP kodja; `null`, ha el sem jutott odaig. */
   httpStatus: number | null;
   errorMessage: string | null;
@@ -82,11 +93,44 @@ export function decideDrain(input: DrainInput): DrainOutcome {
         input.errorMessage ?? `a szerver elutasította (${input.httpStatus})`,
     };
   }
-  return {
-    type: "retry",
-    attemptCount: input.row.attemptCount + 1,
-    lastError: input.errorMessage ?? `szerver hiba (${input.httpStatus})`,
-  };
+
+  const kiserlet = input.row.attemptCount + 1;
+  const hatar = input.serverErrorLimit ?? SZERVER_HIBA_HATAR;
+  const lastError = input.errorMessage ?? `szerver hiba (${input.httpStatus})`;
+
+  /**
+   * A FELSO HATAR CSAK ITT ALL: a SZERVER VALASZOLT, es hibat adott. A halozati
+   * hiba (a `null` statusz) fentebb, feltetel nelkul ujraprobalhato -- terero
+   * nelkul az a normalis allapot, es egy pinceben toltott het utan a felvitel
+   * nem adhatja fel.
+   */
+  if (kiserlet >= hatar) {
+    return { type: "stalled", attemptCount: kiserlet, lastError };
+  }
+
+  return { type: "retry", attemptCount: kiserlet, lastError };
+}
+
+/**
+ * SORRA KERUL-E MOST EZ A TETEL, VAGY MEG VARAKOZTATJUK.
+ *
+ * A varakoztatas nem idozites: a kiuritest esemeny inditja, tehat ez a
+ * fuggveny csak azt donti el, hogy a KOVETKEZO alkalommal atugorjuk-e a sort.
+ *
+ * A HIANYZO IDOPONT ESEDEKES. A mezo elott keletkezett sorokon `null` all, es
+ * egy `null`-t varakoztatasnak venni azt jelentene, hogy azok a sorok SOHA nem
+ * indulnak el -- egy uj mezo csendben allitana meg a regi felviteleket.
+ */
+export function isDueForRetry(
+  row: Pick<SyncQueueRow, "attemptCount" | "lastAttemptAt">,
+  now: Date,
+): boolean {
+  if (!row.lastAttemptAt) return true;
+  const utolso = new Date(row.lastAttemptAt).getTime();
+  // Ertelmezhetetlen belyeg (elallitott ora, serult sor) ESEDEKES: a felvitel
+  // elkuldese fontosabb, mint a varakoztatas pontossaga.
+  if (!Number.isFinite(utolso)) return true;
+  return now.getTime() - utolso >= backoffMs(row.attemptCount);
 }
 
 /**
@@ -99,14 +143,26 @@ export function decideDrain(input: DrainInput): DrainOutcome {
 export function describeQueueState(counts: {
   pending: number;
   conflict: number;
+  stalled?: number;
 }): string | null {
-  if (counts.pending === 0 && counts.conflict === 0) return null;
+  const stalled = counts.stalled ?? 0;
+  if (counts.pending === 0 && counts.conflict === 0 && stalled === 0)
+    return null;
   const reszek: string[] = [];
   if (counts.pending > 0)
     reszek.push(`${counts.pending} felvitel még nem ment fel`);
   if (counts.conflict > 0)
     reszek.push(
       `${counts.conflict} elakadt, mert a szerver elutasította - ezekhez döntés kell`,
+    );
+  if (stalled > 0)
+    /**
+     * MAS MONDAT, MERT MAS A TEENDO. A conflictnal a FELVITELT kell javitani,
+     * itt a felvitellel semmi baj: a szerver hibazik. Egy kozos mondat mellett
+     * a szerelo a sajat adatat kezdene javitani egy szerver-hiba miatt.
+     */
+    reszek.push(
+      `${stalled} megállt, mert a szerver többször hibát adott - ezekhez segítség kell`,
     );
   return `Feltöltésre vár: ${reszek.join("; ")}.`;
 }
@@ -128,14 +184,19 @@ export function describeQueueBacklog(counts: {
   recordings: number;
   photos: number;
   conflict: number;
+  stalled?: number;
 }): string | null {
   const varakozo = describePhotoBacklog({
     recordings: counts.recordings,
     photos: counts.photos,
   });
   const elakadt =
-    counts.conflict > 0
-      ? describeQueueState({ pending: 0, conflict: counts.conflict })
+    counts.conflict > 0 || (counts.stalled ?? 0) > 0
+      ? describeQueueState({
+          pending: 0,
+          conflict: counts.conflict,
+          stalled: counts.stalled ?? 0,
+        })
       : null;
   const reszek = [varakozo, elakadt].filter((r): r is string => r !== null);
   return reszek.length > 0 ? reszek.join(" ") : null;

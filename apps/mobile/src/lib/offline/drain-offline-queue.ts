@@ -1,9 +1,11 @@
 import { batchForPass } from "./photo-queue";
+import { isDueForRetry } from "./queue-drain";
 import { drainQueue, type QueueRunReport } from "./queue-runner";
 import {
   attachRecordingResult,
   markQueueConflict,
   markQueueRetry,
+  markQueueStalled,
   pendingQueueRows,
   removeQueueRow,
 } from "./queue-store";
@@ -54,6 +56,7 @@ export async function drainOfflineQueue(
     done: elso.done + masodik.done,
     retried: elso.retried + masodik.retried,
     conflicted: elso.conflicted + masodik.conflicted,
+    stalled: elso.stalled + masodik.stalled,
     unresolved: elso.unresolved + masodik.unresolved,
   };
 }
@@ -71,7 +74,22 @@ function egyMenet(
   muvelet: SyncQueueRow["operation"],
 ): Promise<QueueRunReport> {
   return drainQueue({
-    pendingRows: async () => batchForPass(await pendingQueueRows(), muvelet),
+    pendingRows: async () => {
+      /**
+       * A VARAKOZTATAS ITT SZUR, ES NEM IDOZITO.
+       *
+       * A kiuritest esemeny inditja (app-indulas, halozat visszaterese), tehat
+       * nincs, ami kesobb visszajonne. Amit tenni lehet: a KOVETKEZO alkalommal
+       * atugorjuk azt a sort, aminek az elozo kiserlete ota meg nem telt el
+       * eleg ido. Igy egy sorozatosan bukó tetel nem indul el minden egyes
+       * halozat-valtasnal ujra.
+       */
+      const most = new Date();
+      const sorok = (await pendingQueueRows()).filter((row) =>
+        isDueForRetry(row, most),
+      );
+      return batchForPass(sorok, muvelet);
+    },
     send: deps.send,
     /**
      * A VISSZAADOTT SZAM ITT ELMARAD, es ez nem elnyelt hiba: a
@@ -85,5 +103,6 @@ function egyMenet(
     remove: removeQueueRow,
     markRetry: markQueueRetry,
     markConflict: markQueueConflict,
+    markStalled: markQueueStalled,
   });
 }
