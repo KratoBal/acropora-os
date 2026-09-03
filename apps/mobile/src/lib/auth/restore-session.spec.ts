@@ -204,3 +204,67 @@ describe("restoreSession", () => {
     });
   });
 });
+
+describe("offline indulás a tárolt munkamenettel", () => {
+  const MOST = new Date("2026-09-03T12:00:00Z").getTime();
+  const ora = (n: number) => new Date(MOST - n * 3600_000).toISOString();
+  const USER = { id: "u1", name: "Teszt Elek" } as never;
+
+  const deps = (session: Record<string, unknown>) => ({
+    getSession: () => Promise.resolve(session as never),
+    clearSession: () => Promise.resolve(),
+    getCurrentUser: () => Promise.reject(new Error("nincs halozat")),
+    now: () => MOST,
+  });
+
+  it("friss ellenőrzéssel és tárolt profillal OFFLINE indul", async () => {
+    const out = await restoreSession(
+      deps({
+        token: "t",
+        expiresAt: new Date(MOST + 3600_000).toISOString(),
+        user: USER,
+        lastVerifiedAt: ora(2),
+      }),
+    );
+    assert.equal(out.type, "authenticated-offline");
+  });
+
+  it("tárolt profil NÉLKÜL marad a hálózati hiba", async () => {
+    /*
+      A PROFIL NEM DISZ: a kapu eldontheto lenne nelkule is, de nem
+      MEGVALOSITHATO -- nincs mit visszaadni. Ezert marad a regi viselkedes.
+    */
+    const out = await restoreSession(
+      deps({
+        token: "t",
+        expiresAt: new Date(MOST + 3600_000).toISOString(),
+        lastVerifiedAt: ora(2),
+      }),
+    );
+    assert.equal(out.type, "network-error");
+  });
+
+  it("SOHA nem ellenőrzött munkamenettel marad a hálózati hiba", async () => {
+    // Egy meglevo telepitesen nincs `lastVerifiedAt`. A hianya NEM beengedes.
+    const out = await restoreSession(
+      deps({
+        token: "t",
+        expiresAt: new Date(MOST + 3600_000).toISOString(),
+        user: USER,
+      }),
+    );
+    assert.equal(out.type, "network-error");
+  });
+
+  it("24 óránál RÉGEBBI ellenőrzéssel marad a hálózati hiba", async () => {
+    const out = await restoreSession(
+      deps({
+        token: "t",
+        expiresAt: new Date(MOST + 3600_000).toISOString(),
+        user: USER,
+        lastVerifiedAt: ora(30),
+      }),
+    );
+    assert.equal(out.type, "network-error");
+  });
+});

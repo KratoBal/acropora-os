@@ -2,6 +2,17 @@ import * as SecureStore from "expo-secure-store";
 
 import type { StoredSession } from "./types";
 
+/**
+ * EGYETLEN KULCS, ES EZ SZERKEZETI GARANCIA, NEM RENDSZERETET.
+ *
+ * A kijelentkezes ezt az EGY rekordot torli. Amit ide teszunk -- token, lejarat,
+ * profil, az ellenorzes ideje --, az vele megy. Egy MASODIK kulcs kulon torlest
+ * igenyelne, es egy elmaradt torles utan a kovetkezo ember a telefonon az elozo
+ * kollega adatait latna, hibauzenet nelkul.
+ *
+ * Ha valaha masodik kulcs kell, a `clearSession`-t ES a kijelentkezest is egyszerre
+ * kell bovíteni -- a `token-store.spec.ts` szerkezeti allitasa epp ezert szol.
+ */
 const SESSION_KEY = "acropora.auth-session";
 
 /**
@@ -32,7 +43,21 @@ export const authSessionStore = {
       ) {
         return null;
       }
-      return { token: parsed.token, expiresAt: parsed.expiresAt };
+      /**
+       * A PROFIL ES AZ ELLENORZES IDEJE OPCIONALIS, ES A HIANYUK NEM ERVENYTELEN
+       * MUNKAMENET. Egy meglevo telepitesen a rekordban csak a token es a
+       * lejarat all -- ha ezeket kovetelnenk, minden mai felhasznalot
+       * kileptetnenk egy frissitessel. A hianyuk annyit jelent, hogy offline nem
+       * indulhat; a bejelentkezett allapot ettol meg all.
+       */
+      return {
+        token: parsed.token,
+        expiresAt: parsed.expiresAt,
+        ...(parsed.user ? { user: parsed.user } : {}),
+        ...(typeof parsed.lastVerifiedAt === "string"
+          ? { lastVerifiedAt: parsed.lastVerifiedAt }
+          : {}),
+      };
     } catch {
       // Corrupt/unexpected content — treat as "no session" rather than
       // throwing during app startup.

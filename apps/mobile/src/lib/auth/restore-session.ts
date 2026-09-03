@@ -1,3 +1,4 @@
+import { canStartOffline } from "./offline-grace";
 import type { AuthenticatedUser, StoredSession } from "./types";
 
 /**
@@ -38,6 +39,23 @@ export type RestoreOutcome =
   | { type: "unauthenticated" }
   | { type: "authenticated"; user: AuthenticatedUser; expiresAt: string }
   | { type: "network-error" }
+  /**
+   * NINCS HALOZAT, DE A TAROLT MUNKAMENET MEG HIHETO.
+   *
+   * Balazs dontese (2026-09-02): legfeljebb 24 oraig. A hatart es az arat a
+   * `offline-grace.ts` hordozza; ez az ag csak akkor all elo, ha ott ENGED.
+   *
+   * A felhasznalo a LEMEZROL jon, nem a szervertol -- ezert kell a profilt a
+   * munkamenettel egyutt tarolni. Enelkul a kapu eldontheto lenne, de nem
+   * megvalosithato: nincs mit visszaadni.
+   */
+  | {
+      type: "authenticated-offline";
+      user: AuthenticatedUser;
+      expiresAt: string;
+      /** Hany ezredmasodperce volt az utolso sikeres szerver-ellenorzes. */
+      verifiedAgeMs: number;
+    }
   /**
    * A usable session is on disk, but the owner was not confirmed. The
    * token is deliberately NOT discarded: a cancelled Face ID prompt says
@@ -116,6 +134,31 @@ export async function restoreSession(
     if (isUnauthorized(error)) {
       await deps.clearSession();
       return { type: "unauthenticated" };
+    }
+    /**
+     * A HALOZATI HIBA MOSTANTOL KET DOLGOT JELENTHET, ES A KULONBSEG A TAROLT
+     * ADATON MULIK, NEM A HIBAN.
+     *
+     * Ha van profil ES az utolso sikeres ellenorzes a 24 oras ablakon belul
+     * van, az app elindulhat offline. Ha barmelyik hianyzik, marad a regi
+     * viselkedes: `network-error`, es a felulet ujraprobalast kinal.
+     *
+     * A HIANYZO ADAT NEM BEENGEDES -- a `canStartOffline` `never-verified` aga
+     * epp ezert all ott, es epp ezert nem `??`-al oldjuk fel.
+     */
+    if (session.user) {
+      const verdict = canStartOffline({
+        lastVerifiedAt: session.lastVerifiedAt ?? null,
+        now: now(),
+      });
+      if (verdict.allowed) {
+        return {
+          type: "authenticated-offline",
+          user: session.user,
+          expiresAt: session.expiresAt,
+          verifiedAgeMs: verdict.ageMs,
+        };
+      }
     }
     return { type: "network-error" };
   }
