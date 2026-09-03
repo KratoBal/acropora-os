@@ -484,5 +484,14 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
     assert.equal(report.relationReferencesResolvedByCaseFallback, 0);
     // ...es NEM is szamoljuk feloldatlannak: a ket eset teendoje mas.
     assert.equal(report.unresolvedRelationReferences, 0);
+    /**
+     * ES A MEZO-BONTASBA SEM KERUL BELE.
+     *
+     * Ez a harmadik allitas parja, es kulon kell: ha az utkozes a bontasba
+     * kerulne, az azt sugallna, hogy abbol az OSZLOPBOL jott a vesztes -- es a
+     * teendo ott mas. Nem a mezolistat kell szukiteni, hanem a katalogusban all
+     * ket osszeteveszthető cikkszam.
+     */
+    assert.deepEqual(report.relationReferencesByField, {});
   });
 });

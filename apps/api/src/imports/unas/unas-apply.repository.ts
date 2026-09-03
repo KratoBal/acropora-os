@@ -640,8 +640,31 @@ export class UnasApplyRepository extends Repository {
             if (insensitive.length === 1) {
               targetProductId = insensitive[0]!.productId;
               counts.relationReferencesResolvedByCaseFallback += 1;
-            } else if (insensitive.length > 1)
+            } else if (insensitive.length > 1) {
+              /**
+               * AZ UTKOZES SAJAT AG, ES ITT KI IS LEP.
+               *
+               * Enelkul ugyanaz a hivatkozas KETSZER szamolodna: egyszer
+               * utkozeskent, majd -- mivel a `targetProductId` uresen maradt --
+               * megegyszer feloldatlankent, es a mezo-bontasba is bekerulne.
+               *
+               * A KET ESET TEENDOJE MAS, es epp ezert all kulon szamlalon:
+               *   feloldatlan  -> a cikkszam nincs meg, VAGY az oszlop nem is
+               *                   cikkszamokat tartalmaz (a bontas megmondja)
+               *   utkozes      -> a cikkszam MEGVAN, ketszer is, kulonbozo
+               *                   irasmoddal a katalogusban
+               *
+               * Ha az utkozes a mezo-bontasba is bekerulne, az azt sugallna,
+               * hogy abbol az OSZLOPBOL jott a vesztes -- holott ott nem a
+               * mezolistat kell szukiteni, hanem a KATALOGUSBAN all ket
+               * osszeteveszthető cikkszam.
+               *
+               * A TELJES VESZTES EZERT KET SZAM OSSZEGE: a feloldatlanoke es az
+               * utkozeseke. Egyik onmagaban nem mondja meg.
+               */
               counts.relationReferencesAmbiguous += 1;
+              continue;
+            }
           }
           /**
            * A HAROM KIHAGYASI OK KOZUL CSAK AZ EGYIK HIBA.

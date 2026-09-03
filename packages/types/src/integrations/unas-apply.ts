@@ -114,6 +114,10 @@ export interface UnasApplySummary {
    * es ez rendben van.
    */
   relationReferencesAmbiguous: number;
+  // A TELJES VESZTES KET SZAM OSSZEGE: ez es az `unresolvedRelationReferences`.
+  // Az utkozo hivatkozas NEM kerul a feloldatlanok koze es a mezo-bontasba sem,
+  // mert ott mas a teendo: nem a mezolistat kell szukiteni, hanem a
+  // katalogusban all ket osszeteveszthető cikkszam.
   /**
    * HANY HIVATKOZAST HAGYTUNK KI DUPLIKATUMKENT.
    *
