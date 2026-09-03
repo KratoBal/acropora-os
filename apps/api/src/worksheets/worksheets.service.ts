@@ -32,6 +32,7 @@ import type {
   WorksheetLineDto,
   WorksheetListQueryDto,
 } from "./dto/worksheet.dto.js";
+import { mayWorksheetJoinTicket } from "../common/worksheet-under-ticket.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
 import { normalizeAssigneeIds } from "./worksheet-assignment.js";
 import {
@@ -324,6 +325,12 @@ export class WorksheetsService {
   ): Promise<WorksheetDetail> {
     await this.requireCustomer(input.customerId);
     await this.requireDepartment(input.departmentId, input.customerId);
+    const serviceJobId = input.serviceJobId?.trim() || null;
+    // MINDEN ELLENORZES A LETREHOZAS ELOTT FUT, ahogy a felelosoknel is: egy
+    // ismeretlen jegyazonosito igy nem hoz letre semmit, ahelyett hogy egy mar
+    // megirt lapot hagyna felkeszen.
+    if (serviceJobId !== null)
+      await this.requireTicketFor(serviceJobId, input.customerId);
     const content = this.normalize(input);
     await this.requireAssets(content);
     const assigneeIds = normalizeAssigneeIds(input.assigneeIds ?? []);
@@ -335,6 +342,7 @@ export class WorksheetsService {
       content,
       actorUserId,
       assigneeIds,
+      serviceJobId,
     });
     const detail = await this.detailAfterWrite(id);
 
@@ -664,6 +672,30 @@ export class WorksheetsService {
    * vagy a munkalap partnerválasztójából indul. Ezért az üzenet partnert
    * mond - a vevő szó itt a tárolás nyelve, nem azé, aki olvassa.
    */
+  /**
+   * A JEGY LETEZIK-E, ES FOGADHATJA-E EZT A LAPOT.
+   *
+   * A SZABALY KOZOS A CSATOLASSAL (`common/worksheet-under-ticket.ts`), a
+   * MONDAT viszont ezé az uté: itt a lap MOST keletkezne, tehat a felhasznalo
+   * nem masik lapot valaszt, hanem vagy a jegyet, vagy a partnert javitja.
+   */
+  private async requireTicketFor(serviceJobId: string, customerId: string) {
+    const ticket = await this.repository.ticketPartner(serviceJobId);
+    if (!ticket)
+      throw new NotFoundException("A megadott hibajegy nem található.");
+
+    const check = mayWorksheetJoinTicket({
+      ticketCustomerId: ticket.customerId,
+      worksheetCustomerId: customerId,
+    });
+    if (!check.ok)
+      throw new BadRequestException(
+        check.reason === "ticket-has-no-partner"
+          ? "Ehhez a hibajegyhez még nincs partner. Először állítsd be a hibajegy partnerét, és utána nyiss alá munkalapot."
+          : "A munkalap partnere nem egyezik a hibajegyével. Válassz másik hibajegyet, vagy javítsd a lap partnerét.",
+      );
+  }
+
   private async requireCustomer(customerId: string) {
     const customer = await this.repository.customer(customerId);
     if (!customer)
