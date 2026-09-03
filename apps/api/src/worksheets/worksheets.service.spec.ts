@@ -83,6 +83,9 @@ function worksheetRow(
     number: null,
     numberYear: null,
     sequence: null,
+    // A HELYSZINI ROGZITES KULCSA ALAPBOL HIANYZIK: a webes felvitel nem kuld
+    // kulcsot, es a lapok tobbsege ma onnan szuletik.
+    clientOperationId: null,
     // A HIBAJEGY ÉS AZ ÁTADÁS ALAPBÓL HIÁNYZIK, és ez a rendes kiindulás: a
     // lap keletkezhet hibajegy nélkül, és addig nincs átadva, amíg a szerelő
     // nem végzett. Ami ezt méri, az `overrides`-szal állítja be.
@@ -656,6 +659,61 @@ describe("WorksheetsService.create és a felelősök", () => {
     assert.equal(
       (received as { serviceJobId?: string | null }).serviceJobId,
       "job-1",
+    );
+  });
+
+  /**
+   * A HELYSZINI ROGZITES KULCSA A TAROLOIG JUT EL.
+   *
+   * A telefon sorba teszi a lapot, es a sor a halozati hibat ujraprobalja. Ha a
+   * kulcs itt elveszne, az ujrakuldes MASODIK munkalapot hozna letre -- es a
+   * javitas tovabbra is "mukodne", mert a szolgaltatas hibatlanul lefutna.
+   */
+  it("a művelet-azonosító eljut a tárolóig", async () => {
+    let received: unknown = null;
+    const service = new WorksheetsService(
+      repository({
+        createDraft: async (input: unknown) => {
+          received = input;
+          return "worksheet-1";
+        },
+      }),
+    );
+
+    await service.create(
+      { ...contentDto(), clientOperationId: "worksheet-create:abc:123" },
+      "user-1",
+    );
+
+    assert.equal(
+      (received as { clientOperationId?: string }).clientOperationId,
+      "worksheet-create:abc:123",
+    );
+  });
+
+  /**
+   * TESTVER-KONTROLL: KULCS NELKUL a mezo `undefined` marad, nem ures sztring.
+   *
+   * A webes felvitel nem kuld kulcsot. Egy ures sztring az EGYEDI indexen
+   * masodszor elbukna, tehat a MASODIK webes felvitel hasalna el -- csendben,
+   * es olyan hibaval, ami a telefonrol szol.
+   */
+  it("kulcs nélkül a mező üresen marad, nem üres sztringként", async () => {
+    let received: unknown = null;
+    const service = new WorksheetsService(
+      repository({
+        createDraft: async (input: unknown) => {
+          received = input;
+          return "worksheet-1";
+        },
+      }),
+    );
+
+    await service.create(contentDto(), "user-1");
+
+    assert.equal(
+      (received as { clientOperationId?: string }).clientOperationId,
+      undefined,
     );
   });
 

@@ -9,6 +9,7 @@ import {
   IsISO8601,
   IsOptional,
   IsString,
+  Matches,
   Max,
   Min,
   MinLength,
@@ -136,6 +137,24 @@ export class AssetOwnersQueryDto {
 }
 
 export class CreateAssetDto {
+  /**
+   * A KLIENS ALTAL ADOTT MUVELET-AZONOSITO, A HELYSZINI ROGZITES
+   * IDEMPOTENCIA-KULCSA.
+   *
+   * ELHAGYHATO, ES EZ KIKOTES: a webes felvitel nem kuld kulcsot, es MA
+   * MUKODIK. Kotelezove teve az urlapot is at kellene irni.
+   *
+   * AZ ALAK MEGENGEDOBB, MINT A MUNKALAP-SORE (`^[A-Za-z0-9_-]{8,64}$`), es ez
+   * merve van: a telefon mai kulcsa `asset-create:<matricakod>:<ISO idopont>`
+   * alaku, tehat KETTOSPONTOT es PONTOT is tartalmaz. Egy szukebb minta a
+   * meglevo kliens-kulcsot utasitana el -- vagyis nem vedene, hanem elvagna.
+   */
+  @Matches(/^[A-Za-z0-9_.:-]{8,128}$/, {
+    message:
+      "A művelet-azonosító 8-128 karakter lehet: betű, szám, kötőjel, aláhúzás, pont és kettőspont.",
+  })
+  @IsOptional()
+  clientOperationId?: string;
   @IsIn(ASSET_OWNER_TYPES) ownerType!: (typeof ASSET_OWNER_TYPES)[number];
   @IsString() @MinLength(1) ownerId!: string;
   @IsString() @IsOptional() customerAddressId?: string;

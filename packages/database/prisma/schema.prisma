@@ -2352,6 +2352,30 @@ model Aquarium {
 model Asset {
   id                  String           @id @default(cuid())
   assetNumber         String           @unique
+  /// A KLIENS ÁLTAL ADOTT MŰVELET-AZONOSÍTÓ, A HELYSZÍNI RÖGZÍTÉS
+  /// IDEMPOTENCIA-KULCSA.
+  ///
+  /// A telefon térerő nélkül SORBA teszi a felvitelt, és a sor a hálózati hibát
+  /// SZÁNDÉKOSAN újrapróbálhatónak veszi -- offline épp az a normális állapot.
+  /// Csakhogy pontosan ott lehet, hogy a szerver MÁR létrehozta a rekordot, és
+  /// csak a válasz veszett el: kulcs nélkül az újraküldés MÁSODIK rekordot
+  /// hozna létre, a szerelő pedig azt látná, hogy mindent kétszer rögzített.
+  /// Nem hibaüzenet, hanem két sor, amiről valakinek el kell döntenie, melyik
+  /// az igazi.
+  ///
+  /// ELHAGYHATÓ, ÉS EZ NEM LAZASÁG: a webes felvitel nem küld kulcsot, és MA
+  /// MŰKÖDIK. Kötelezővé téve az űrlapot is át kellene írni, tehát a mező
+  /// bevezetése törné azt, ami áll. Aki egyszer „tisztaságból" kötelezővé
+  /// tenné, a webes felvitelt állítaná le.
+  ///
+  /// EGYEDI: ez maga a védelem. A létrehozás előtt a kulcsra keresünk, és
+  /// találat esetén a MEGLÉVŐ rekordot adjuk vissza; az egyediség pedig azt is
+  /// elvágja, amit két párhuzamos kérés csúsztatna át a keresés és a beszúrás
+  /// között.
+  ///
+  /// A NULL nem egyenlő önmagával, tehát a kulcs nélküli sorok (minden mai sor
+  /// és minden webes felvitel) korlátlanul állhatnak egymás mellett.
+  clientOperationId   String?          @unique
   qrToken             String           @unique @default(uuid()) @db.Uuid
   customerId          String?
   supplierId          String?
@@ -2675,9 +2699,9 @@ model WorksheetDepartment {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  customer   Customer              @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  parent     WorksheetDepartment?  @relation("WorksheetDepartmentTree", fields: [parentId], references: [id], onDelete: Restrict)
-  children   WorksheetDepartment[] @relation("WorksheetDepartmentTree")
+  customer   Customer                  @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  parent     WorksheetDepartment?      @relation("WorksheetDepartmentTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children   WorksheetDepartment[]     @relation("WorksheetDepartmentTree")
   worksheets Worksheet[]
   assets     Asset[]
   /// Kik latjak ezt az alegyseget (es vele a reszfajat).
@@ -2792,6 +2816,15 @@ model WorksheetNumberSequence {
 /// másik partnerre átírni nem javítás, hanem egy másik lap.
 model Worksheet {
   id                   String    @id @default(cuid())
+  /// A KLIENS ÁLTAL ADOTT MŰVELET-AZONOSÍTÓ, A HELYSZÍNI RÖGZÍTÉS
+  /// IDEMPOTENCIA-KULCSA. Ugyanaz a fogalom és ugyanaz a szabály, mint az
+  /// `Asset.clientOperationId` mezőnél -- SZÁNDÉKOSAN egy minta a kettőre,
+  /// mert a telefonon EGY sor viszi mind a kettőt, és két különböző
+  /// idempotencia-szabály abban a sorban a legrosszabb hely.
+  ///
+  /// ELHAGYHATÓ: a webes felvitel nem küld kulcsot, és ma működik. EGYEDI: a
+  /// létrehozás előtti keresés mellett ez vágja el a két párhuzamos kérést is.
+  clientOperationId    String?   @unique
   /// Teljes, emberi olvasású szám (`BIO-2026-001`) - csak lezárt lapnál.
   number               String?   @unique
   /// A sorozat éve és a sorszám nyers értéke, hogy a hiánytalanság

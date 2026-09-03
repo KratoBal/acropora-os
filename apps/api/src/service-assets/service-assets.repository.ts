@@ -26,6 +26,7 @@ import type {
 } from "@acropora/types";
 import { normalizeAssetLabelCode, randomAssetLabelCode } from "@acropora/types";
 
+import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
 import { withUniqueCode } from "../common/unique-code.util.js";
 import { buildUnitPaths } from "./unit-path.js";
 import type {
@@ -750,144 +751,201 @@ export class ServiceAssetsRepository extends Repository {
     if (input.labelCode !== undefined && labelCode === null)
       throw new AssetLabelUnavailableError(input.labelCode);
 
-    const id = await withUniqueCode(
-      /**
-       * AZ EGYETLEN HELY, AHOL A BELYEG HELYI IDO SZERINT ALL.
-       *
-       * Az eszkozszam kerul CIMKERE, es ott egy ember olvassa le. A tobbi
-       * csalad belyege UTC marad -- a beszerzesi bizonylatszam es a POS
-       * rendelesszam kulso rendszerbe is kimegy, es azok alakjat ez a kor
-       * szandekosan nem valtoztatja.
-       *
-       * A `h` a valtas jelolese: a mar kiadott szamok visszamenoleg nem
-       * valtoznak, tehat jeloles nelkul ugyanaz a mezo ket dolgot jelentene,
-       * kivulrol megkulonboztethetetlenul.
-       */
-      /**
-       * A `field` CSAK az `assetNumber`, ES EZ SZANDEKOS.
-       *
-       * A burkolat azert er valamit, mert a kodot ujra HUZZA: egy masodik
-       * kiserlet uj eszkozszamot kap. A MATRICAKOD viszont a felhasznalotol
-       * jon, es valtozatlan marad -- egy ujraprobalas ugyanazt a foglalt kodot
-       * kuldene be otszor, elkoltene a probalkozasokat, es a hivo ugyanazt a
-       * hibat kapna, csak kesobb.
-       *
-       * AMIT EZ SZANDEKOSAN ATENGED: az `AssetLabel.assetId` es az
-       * `AssetLabel.code` egyedi indexenek serulese. Az nem szerencsetlen
-       * huzas, hanem valodi utkozes, es HANGOSAN kell elbuknia.
-       */
-      { prefix: "ESZK", field: "assetNumber", stamp: "local-marked" },
-      (assetNumber) =>
-        prisma.$transaction(
-          async (tx) => {
-            const row = await tx.asset.create({
-              data: {
-                assetNumber,
-                customerId:
-                  input.ownerType === "CUSTOMER" ? input.ownerId : null,
-                supplierId:
-                  input.ownerType === "SUPPLIER" ? input.ownerId : null,
-                customerAddressId:
-                  input.ownerType === "CUSTOMER"
-                    ? input.customerAddressId
-                    : null,
-                aquariumId:
-                  input.ownerType === "CUSTOMER" ? input.aquariumId : null,
-                // Az alegyseg a masik iranyban all: SZERVIZ PARTNER eszkozehez
-                // tartozik, vevoehez nem. A ket mezo nem ugyanaz a fogalom.
-                departmentId:
-                  input.ownerType === "SUPPLIER" ? input.departmentId : null,
-                parentAssetId: input.parentAssetId,
-                productVariantId: input.productVariantId,
-                kind: input.kind,
-                status: input.status,
-                criticality: input.criticality,
-                name: input.name.trim(),
-                category: optionalText(input.category),
-                manufacturer: optionalText(input.manufacturer),
-                model: optionalText(input.model),
-                serialNumber: optionalText(input.serialNumber),
-                inventoryNumber: optionalText(input.inventoryNumber),
-                description: optionalText(input.description),
-                installedAt: optionalDate(input.installedAt),
-                purchasedAt: optionalDate(input.purchasedAt),
-                warrantyExpiresAt: optionalDate(input.warrantyExpiresAt),
-                serviceIntervalDays: input.serviceIntervalDays,
-                lastServicedAt: optionalDate(input.lastServicedAt),
-                nextServiceAt:
-                  optionalDate(input.nextServiceAt) ??
-                  (input.serviceIntervalDays
-                    ? addDays(
-                        optionalDate(input.lastServicedAt) ??
-                          optionalDate(input.installedAt) ??
-                          new Date(),
-                        input.serviceIntervalDays,
-                      )
-                    : undefined),
-                notes: optionalText(input.notes),
-                archivedAt: input.status === "RETIRED" ? new Date() : undefined,
-                createdById: actorUserId,
-                updatedById: actorUserId,
-              },
-              include: assetDetailInclude,
-            });
-            await tx.assetEvent.create({
-              data: {
-                id: randomUUID(),
-                assetId: row.id,
-                type: "CREATED",
-                actorUserId,
-                payload: jsonPayload({
-                  assetNumber: row.assetNumber,
-                  customerId: row.customerId,
-                  supplierId: row.supplierId,
-                  parentAssetId: row.parentAssetId,
-                  status: row.status,
-                }),
-              },
-            });
-            /**
-             * A MATRICA HOZZAKOTESE UGYANEBBEN A TRANZAKCIOBAN.
-             *
-             * MIERT ITT, ES NEM UTANA: ha kulon menne, keletkezhetne egy
-             * eszkoz matrica nelkul, es a szerelo azt latna, hogy a felvitel
-             * sikerult. A `42056ab0` kartya pont ezt az alakot zarja ki.
-             *
-             * A FELTETELES `updateMany` A VEDELEM, NEM AZ ELOZETES OLVASAS.
-             * Csak azt a sort irja at, ami LETEZIK es MEG SZABAD
-             * (`assetId: null`). Ket parhuzamos felvitel ugyanarra a kodra
-             * igy nem tud mindketto atmenni: a masodik nulla sort erint, es
-             * itt hasal el. Egy elozetes "szabad-e" lekerdezes ugyanezt csak
-             * HINNI tudna, a ket lepes kozott ugyanis eltelik ido.
-             */
-            if (labelCode) {
-              const claimed = await tx.assetLabel.updateMany({
-                where: { code: labelCode, assetId: null },
-                data: { assetId: row.id, assignedAt: new Date() },
+    /**
+     * A HELYSZINI ROGZITES IDEMPOTENCIA-KULCSA, A LETREHOZAS ELOTT.
+     *
+     * A telefon terero nelkul sorba teszi a felvitelt, es a sor a halozati
+     * hibat SZANDEKOSAN ujraprobalja -- offline az a normalis allapot. Pontosan
+     * ott lehet viszont, hogy ez a kod MAR lefutott, es csak a valasz veszett
+     * el. Kulcs nelkul az ujrakuldes MASODIK eszkozt hozna letre.
+     *
+     * A KERESES NEM ONMAGABAN A VEDELEM: ket parhuzamos keres a kereses es a
+     * beszuras kozott elcsuszhat. Azt az esetet az EGYEDI INDEX vagja el, es a
+     * lenti `catch` forditja vissza ugyanarra a valaszra -- nem hibara. Egy
+     * felvitel, ami ketszer erkezik, EGY eszkozt kell hogy adjon, ketszer.
+     */
+    if (input.clientOperationId) {
+      const meglevo = await prisma.asset.findUnique({
+        where: { clientOperationId: input.clientOperationId },
+        select: { id: true },
+      });
+      if (meglevo) return this.readBack(meglevo.id);
+    }
+
+    let id: string;
+    try {
+      id = await withUniqueCode(
+        /**
+         * AZ EGYETLEN HELY, AHOL A BELYEG HELYI IDO SZERINT ALL.
+         *
+         * Az eszkozszam kerul CIMKERE, es ott egy ember olvassa le. A tobbi
+         * csalad belyege UTC marad -- a beszerzesi bizonylatszam es a POS
+         * rendelesszam kulso rendszerbe is kimegy, es azok alakjat ez a kor
+         * szandekosan nem valtoztatja.
+         *
+         * A `h` a valtas jelolese: a mar kiadott szamok visszamenoleg nem
+         * valtoznak, tehat jeloles nelkul ugyanaz a mezo ket dolgot jelentene,
+         * kivulrol megkulonboztethetetlenul.
+         */
+        /**
+         * A `field` CSAK az `assetNumber`, ES EZ SZANDEKOS.
+         *
+         * A burkolat azert er valamit, mert a kodot ujra HUZZA: egy masodik
+         * kiserlet uj eszkozszamot kap. A MATRICAKOD viszont a felhasznalotol
+         * jon, es valtozatlan marad -- egy ujraprobalas ugyanazt a foglalt kodot
+         * kuldene be otszor, elkoltene a probalkozasokat, es a hivo ugyanazt a
+         * hibat kapna, csak kesobb.
+         *
+         * AMIT EZ SZANDEKOSAN ATENGED: az `AssetLabel.assetId` es az
+         * `AssetLabel.code` egyedi indexenek serulese. Az nem szerencsetlen
+         * huzas, hanem valodi utkozes, es HANGOSAN kell elbuknia.
+         */
+        { prefix: "ESZK", field: "assetNumber", stamp: "local-marked" },
+        (assetNumber) =>
+          prisma.$transaction(
+            async (tx) => {
+              const row = await tx.asset.create({
+                data: {
+                  assetNumber,
+                  customerId:
+                    input.ownerType === "CUSTOMER" ? input.ownerId : null,
+                  supplierId:
+                    input.ownerType === "SUPPLIER" ? input.ownerId : null,
+                  customerAddressId:
+                    input.ownerType === "CUSTOMER"
+                      ? input.customerAddressId
+                      : null,
+                  aquariumId:
+                    input.ownerType === "CUSTOMER" ? input.aquariumId : null,
+                  // Az alegyseg a masik iranyban all: SZERVIZ PARTNER eszkozehez
+                  // tartozik, vevoehez nem. A ket mezo nem ugyanaz a fogalom.
+                  departmentId:
+                    input.ownerType === "SUPPLIER" ? input.departmentId : null,
+                  parentAssetId: input.parentAssetId,
+                  productVariantId: input.productVariantId,
+                  kind: input.kind,
+                  status: input.status,
+                  criticality: input.criticality,
+                  name: input.name.trim(),
+                  category: optionalText(input.category),
+                  manufacturer: optionalText(input.manufacturer),
+                  model: optionalText(input.model),
+                  serialNumber: optionalText(input.serialNumber),
+                  inventoryNumber: optionalText(input.inventoryNumber),
+                  description: optionalText(input.description),
+                  installedAt: optionalDate(input.installedAt),
+                  purchasedAt: optionalDate(input.purchasedAt),
+                  warrantyExpiresAt: optionalDate(input.warrantyExpiresAt),
+                  serviceIntervalDays: input.serviceIntervalDays,
+                  lastServicedAt: optionalDate(input.lastServicedAt),
+                  nextServiceAt:
+                    optionalDate(input.nextServiceAt) ??
+                    (input.serviceIntervalDays
+                      ? addDays(
+                          optionalDate(input.lastServicedAt) ??
+                            optionalDate(input.installedAt) ??
+                            new Date(),
+                          input.serviceIntervalDays,
+                        )
+                      : undefined),
+                  notes: optionalText(input.notes),
+                  clientOperationId: input.clientOperationId ?? null,
+                  archivedAt:
+                    input.status === "RETIRED" ? new Date() : undefined,
+                  createdById: actorUserId,
+                  updatedById: actorUserId,
+                },
+                include: assetDetailInclude,
               });
-              if (claimed.count !== 1)
-                throw new AssetLabelUnavailableError(labelCode);
               await tx.assetEvent.create({
                 data: {
                   id: randomUUID(),
                   assetId: row.id,
-                  type: "LABEL_ASSIGNED",
+                  type: "CREATED",
                   actorUserId,
-                  payload: jsonPayload({ code: labelCode }),
+                  payload: jsonPayload({
+                    assetNumber: row.assetNumber,
+                    customerId: row.customerId,
+                    supplierId: row.supplierId,
+                    parentAssetId: row.parentAssetId,
+                    status: row.status,
+                  }),
                 },
               });
-            }
-            return row.id;
-          },
-          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-        ),
-    );
-    const detail = await this.detail(id, {
-      // BELSOS UT: irasi muvelet vegen a SAJAT, epp irt sort adjuk vissza. A
-      // hivo vegpont SERVICE_MANAGE jog alatt all. A hatokort a kotelezo
-      // parameter miatt ki KELL mondani, es ez helyes: itt nem szukitunk.
-      kind: "internal",
-    });
+              /**
+               * A MATRICA HOZZAKOTESE UGYANEBBEN A TRANZAKCIOBAN.
+               *
+               * MIERT ITT, ES NEM UTANA: ha kulon menne, keletkezhetne egy
+               * eszkoz matrica nelkul, es a szerelo azt latna, hogy a felvitel
+               * sikerult. A `42056ab0` kartya pont ezt az alakot zarja ki.
+               *
+               * A FELTETELES `updateMany` A VEDELEM, NEM AZ ELOZETES OLVASAS.
+               * Csak azt a sort irja at, ami LETEZIK es MEG SZABAD
+               * (`assetId: null`). Ket parhuzamos felvitel ugyanarra a kodra
+               * igy nem tud mindketto atmenni: a masodik nulla sort erint, es
+               * itt hasal el. Egy elozetes "szabad-e" lekerdezes ugyanezt csak
+               * HINNI tudna, a ket lepes kozott ugyanis eltelik ido.
+               */
+              if (labelCode) {
+                const claimed = await tx.assetLabel.updateMany({
+                  where: { code: labelCode, assetId: null },
+                  data: { assetId: row.id, assignedAt: new Date() },
+                });
+                if (claimed.count !== 1)
+                  throw new AssetLabelUnavailableError(labelCode);
+                await tx.assetEvent.create({
+                  data: {
+                    id: randomUUID(),
+                    assetId: row.id,
+                    type: "LABEL_ASSIGNED",
+                    actorUserId,
+                    payload: jsonPayload({ code: labelCode }),
+                  },
+                });
+              }
+              return row.id;
+            },
+            { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+          ),
+      );
+    } catch (error) {
+      /**
+       * A KET PARHUZAMOS KERES ESETE, ES EZ NEM HIBA.
+       *
+       * A fenti kereses es ez a beszuras kozott eltelik ido: ha ugyanaz a
+       * muvelet-azonosito ketszer erkezik egyszerre, a masodik itt hasal el az
+       * EGYEDI INDEXEN. Ilyenkor a hivo ugyanazt a valaszt kapja, mint az elso
+       * -- a felvitel EGY eszkozt jelent, akkor is, ha ketszer kertek.
+       *
+       * A SZURES SZUK: kizarolag a `clientOperationId` utkozese. Egy
+       * eszkozszam- vagy matricakod-utkozes VALODI hiba, es hangosan kell
+       * elbuknia.
+       */
+      if (
+        input.clientOperationId &&
+        isPrismaUniqueConstraintViolation(error, "clientOperationId")
+      ) {
+        const meglevo = await prisma.asset.findUnique({
+          where: { clientOperationId: input.clientOperationId },
+          select: { id: true },
+        });
+        if (meglevo) return this.readBack(meglevo.id);
+      }
+      throw error;
+    }
+    return this.readBack(id);
+  }
+
+  /**
+   * A SAJAT, EPP IRT SOR VISSZAOLVASASA.
+   *
+   * BELSOS UT: irasi muvelet vegen a hivo vegpont SERVICE_MANAGE jog alatt all.
+   * A hatokort a kotelezo parameter miatt ki KELL mondani, es ez helyes: itt
+   * nem szukitunk. Kulon fuggveny, mert a kulcs-talalat aga UGYANEZT adja
+   * vissza -- ket kulon visszaolvasas ket kulon hatokorre csuszhatna szet.
+   */
+  private async readBack(id: string): Promise<AssetDetail> {
+    const detail = await this.detail(id, { kind: "internal" });
     if (!detail) throw new Error("ASSET_CREATE_READBACK_FAILED");
     return detail;
   }

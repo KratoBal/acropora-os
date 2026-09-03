@@ -344,6 +344,7 @@ export class WorksheetsService {
       actorUserId,
       assigneeIds,
       serviceJobId,
+      clientOperationId: input.clientOperationId,
     });
     const detail = await this.detailAfterWrite(id);
 

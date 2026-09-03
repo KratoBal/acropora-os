@@ -22,6 +22,7 @@ import {
   assertPartnerCodeNeverNumbered,
   assertPartnerCodeUnlocked,
 } from "../suppliers/partner-code-numbers.js";
+import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
 import { assertPartnerCodeFreeForCustomer } from "../suppliers/suppliers.repository.js";
 import type {
   CreateWorksheetDepartmentDto,
@@ -702,6 +703,62 @@ export class WorksheetsRepository extends Repository {
     assigneeIds?: readonly string[];
     /** A hibajegy, ami alá a lap kerül. `null`, ha jegy nélkül keletkezik. */
     serviceJobId?: string | null;
+    /**
+     * A HELYSZÍNI RÖGZÍTÉS IDEMPOTENCIA-KULCSA. `undefined` a webes felvitelnél
+     * -- az nem sorba áll, tehát nincs mit újraküldeni.
+     */
+    clientOperationId?: string;
+  }): Promise<string> {
+    /**
+     * A KULCSRA KERESÉS A LÉTREHOZÁS ELŐTT.
+     *
+     * A telefon térerő nélkül sorba teszi a lapot, és a sor a hálózati hibát
+     * SZÁNDÉKOSAN újrapróbálja. Épp ott lehet viszont, hogy ez a kérés MÁR
+     * lefutott, és csak a válasz veszett el: kulcs nélkül az újraküldés MÁSODIK
+     * munkalapot hozna létre, és a szerelő azt látná, hogy mindent kétszer
+     * rögzített.
+     *
+     * A KERESÉS ÖNMAGÁBAN NEM ELÉG: két párhuzamos kérés elcsúszhat a keresés
+     * és a beszúrás között. Azt az EGYEDI INDEX vágja el, és a lenti `catch`
+     * fordítja vissza ugyanarra a válaszra.
+     */
+    if (input.clientOperationId) {
+      const meglevo = await this.database.worksheet.findUnique({
+        where: { clientOperationId: input.clientOperationId },
+        select: { id: true },
+      });
+      if (meglevo) return meglevo.id;
+    }
+
+    try {
+      return await this.createDraftRow(input);
+    } catch (error) {
+      /**
+       * A SZŰRÉS SZŰK: kizárólag a `clientOperationId` ütközése. Bármi más
+       * VALÓDI hiba, és hangosan kell elbuknia.
+       */
+      if (
+        input.clientOperationId &&
+        isPrismaUniqueConstraintViolation(error, "clientOperationId")
+      ) {
+        const meglevo = await this.database.worksheet.findUnique({
+          where: { clientOperationId: input.clientOperationId },
+          select: { id: true },
+        });
+        if (meglevo) return meglevo.id;
+      }
+      throw error;
+    }
+  }
+
+  private createDraftRow(input: {
+    customerId: string;
+    departmentId: string;
+    content: NormalizedWorksheetContent;
+    actorUserId: string;
+    assigneeIds?: readonly string[];
+    serviceJobId?: string | null;
+    clientOperationId?: string;
   }): Promise<string> {
     return this.database.$transaction(async (transaction) => {
       const department =
@@ -718,6 +775,7 @@ export class WorksheetsRepository extends Repository {
           // kulon hivas elbukhatna, es epp az a jegy nelkuli lap keletkezne,
           // amit a felhasznalo nem keresne ott.
           serviceJobId: input.serviceJobId ?? null,
+          clientOperationId: input.clientOperationId ?? null,
           versions: {
             create: {
               version: 1,
