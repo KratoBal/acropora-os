@@ -534,6 +534,7 @@ model User {
   updatedAssets              Asset[]                       @relation("AssetUpdatedBy")
   assetEvents                AssetEvent[]
   uploadedAssetDocuments     AssetDocument[]               @relation("AssetDocumentUploadedBy")
+  uploadedWorksheetDocuments WorksheetDocument[]           @relation("WorksheetDocumentUploadedBy")
   assignedTasks              Task[]                        @relation("TaskAssignee")
   createdTasks               Task[]                        @relation("TaskCreatedBy")
   closedTasks                Task[]                        @relation("TaskClosedBy")
@@ -2589,6 +2590,61 @@ model AssetDocument {
 
 /// Append-only üzleti előzmény az eszköz létrehozásáról, áthelyezéséről,
 /// státusz- és hierarchiaváltásáról, valamint QR-token cseréjéről.
+/// A MUNKALAPHOZ CSATOLT FAJL FAJTAJA.
+///
+/// KET ERTEK, ES EGYIK SEM SPEKULACIO. A `PHOTO` az, amiert a tabla keszul: a
+/// szerelo a helyszinen fenykepez. Az `OTHER` a menekulout, hogy egy masfajta
+/// csatolmany ne kivanjon migraciot -- a nevek szandekosan ugyanabbol a
+/// keszletbol valok, mint az eszkoznel.
+enum WorksheetDocumentType {
+  PHOTO
+  OTHER
+}
+
+/// MUNKALAPHOZ CSATOLT FENYKEP VAGY EGYEB FAJL.
+///
+/// === MIERT A LAPHOZ, ES NEM A VERZIOHOZ ===
+///
+/// A kep BIZONYITEK a munkarol, nem a lap SZOVEGENEK resze. A lapnak verzioi
+/// vannak, es egy alairt verzio valtozatlan: ha a kep a verziohoz tartozna, egy
+/// kesobb erkezo fenykep VAGY nem ferne fel, VAGY egy alairt valtozatot irna at.
+/// Az egyik adatot veszit, a masik egy alairt rekordot modosit -- egyik sem
+/// vallalhato, tehat a verzio-hivatkozas nem "kevesbe jo", hanem kiesik.
+/// (acrobot dontese, 2026-09-03, a 11553-as uzenetben; felulirhato.)
+///
+/// ALAIRAS UTAN IS FELKERULHET, ugyanabbol az okbol: a bizonyitek gyakran keson
+/// erkezik, es a lap tartalmat nem valtoztatja meg.
+///
+/// === A TARTALOM KET HELYEN ALLHAT, ES PONTOSAN AZ EGYIKEN ===
+///
+/// Ugyanaz a szabaly, mint az `AssetDocument`-nel, es SZANDEKOSAN ugyanaz: a
+/// ket modell elterese azt jelentene, hogy minden kesobbi valtozast ketszer
+/// kell megcsinalni, es a masodik mindig lemarad. A megkotest adatbazis-szintu
+/// CHECK orzi (`WorksheetDocument_content_or_storage_key`), nem csak a kod: egy
+/// hattermunka vagy egy kesobbi vegpont nem orokli az alkalmazas
+/// ellenorzeseit, a tabla megkoteset viszont igen.
+model WorksheetDocument {
+  id           String                @id @default(cuid())
+  worksheetId  String
+  type         WorksheetDocumentType @default(PHOTO)
+  fileName     String
+  contentType  String                @default("image/jpeg")
+  sizeBytes    Int
+  sha256       String                @db.VarChar(64)
+  content      Bytes?
+  storageKey   String?
+  uploadedById String?
+  /// A KEP SAJAT IDEJE. Nem a lap ideje es nem a verzioe: utolag ebbol latszik,
+  /// melyik napi munkahoz keszult.
+  createdAt    DateTime              @default(now())
+
+  worksheet  Worksheet @relation(fields: [worksheetId], references: [id], onDelete: Cascade)
+  uploadedBy User?     @relation("WorksheetDocumentUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([worksheetId, createdAt])
+  @@index([sha256])
+}
+
 model AssetEvent {
   id          String         @id @default(cuid())
   assetId     String
@@ -2899,6 +2955,8 @@ model Worksheet {
   continuedBy      Worksheet[]         @relation("WorksheetContinuation")
   /// A jegy naploja, ahol EZ a lap szerepel (csatolas es levalasztas).
   serviceJobEvents ServiceJobEvent[]   @relation("ServiceJobEventWorksheet")
+
+  documents WorksheetDocument[]
 
   @@index([customerId, createdAt])
   @@index([departmentId])

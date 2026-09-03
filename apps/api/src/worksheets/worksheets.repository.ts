@@ -1348,4 +1348,101 @@ export class WorksheetsRepository extends Repository {
     if (value === undefined) throw new Error("WORKSHEET_SEQUENCE_FAILED");
     return Number(value);
   }
+
+  /**
+   * A MUNKALAPHOZ CSATOLT FAJL SORA.
+   *
+   * A HIVO ADJA AZ AZONOSITOT, es ez nem stilus: a tarolo-kulcs ebbol all
+   * ossze, tehat a bajtokat MEG A SOR ELOTT ki kell tudni irni. Ha az
+   * azonosito csak a beszurasnal keletkezne, egy tarolo-hiba mar egy LETEZO,
+   * tartalom nelkuli sort hagyna maga utan.
+   */
+  async addDocument(input: {
+    id: string;
+    worksheetId: string;
+    type: "PHOTO" | "OTHER";
+    fileName: string;
+    contentType: string;
+    sizeBytes: number;
+    sha256: string;
+    content: Buffer | null;
+    storageKey?: string | null;
+    actorUserId: string;
+  }) {
+    return this.database.worksheetDocument.create({
+      data: {
+        id: input.id,
+        worksheetId: input.worksheetId,
+        type: input.type,
+        fileName: input.fileName,
+        contentType: input.contentType,
+        sizeBytes: input.sizeBytes,
+        sha256: input.sha256,
+        /**
+         * A BAJTOK MASOLVA MENNEK BE, ugyanugy, mint az eszkoznel: a Prisma
+         * `Uint8Array`-t var, es a `Buffer` alosztaly -- a ket tipus nem
+         * cserelheto fel szigoru ellenorzes mellett.
+         */
+        content: input.content ? Uint8Array.from(input.content) : null,
+        storageKey: input.storageKey ?? null,
+        uploadedById: input.actorUserId,
+      },
+      select: {
+        id: true,
+        type: true,
+        fileName: true,
+        contentType: true,
+        sizeBytes: true,
+        sha256: true,
+        createdAt: true,
+      },
+    });
+  }
+
+  /**
+   * A KERET SZAMITASA: MINDEN DOKUMENTUM, MINDKET TABLABOL.
+   *
+   * UGYANAZ A SZAM, mint az eszkoz-oldalon, es szandekosan: a hatar EGY
+   * kotetrol szol. Ha a ket ut ket kulon osszeget hasznalna, mindketto a
+   * sajatjat latna alatta maradni, mikozben a lemez betelik.
+   */
+  async documentBytesInUse(): Promise<number> {
+    const [eszkoz, munkalap] = await Promise.all([
+      this.database.assetDocument.aggregate({ _sum: { sizeBytes: true } }),
+      this.database.worksheetDocument.aggregate({ _sum: { sizeBytes: true } }),
+    ]);
+    return (eszkoz._sum.sizeBytes ?? 0) + (munkalap._sum.sizeBytes ?? 0);
+  }
+
+  /** Egy csatolmany sora, a bajtokkal vagy a tarolo-kulccsal egyutt. */
+  async document(worksheetId: string, documentId: string) {
+    return this.database.worksheetDocument.findFirst({
+      where: { id: documentId, worksheetId },
+      select: {
+        id: true,
+        fileName: true,
+        contentType: true,
+        sizeBytes: true,
+        content: true,
+        storageKey: true,
+      },
+    });
+  }
+
+  /** Egy lap csatolmanyai, tartalom nelkul: a lista nem tolt le bajtokat. */
+  async documents(worksheetId: string) {
+    return this.database.worksheetDocument.findMany({
+      where: { worksheetId },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        type: true,
+        fileName: true,
+        contentType: true,
+        sizeBytes: true,
+        sha256: true,
+        createdAt: true,
+      },
+    });
+  }
 }

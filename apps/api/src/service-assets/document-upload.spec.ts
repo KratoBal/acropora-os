@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import { collectDocumentKeys } from "./document-store/document-store.js";
 import { describe, it } from "node:test";
 
-import { mkdtemp, rm } from "node:fs/promises";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { FilesystemDocumentStore } from "./document-store/filesystem-document-store.js";
+import {
+  FilesystemDocumentStore,
+  MARKER_FILE,
+} from "./document-store/filesystem-document-store.js";
 import { InMemoryDocumentStore } from "./document-store/in-memory-document-store.js";
 import { ServiceAssetsService } from "./service-assets.service.js";
 import type { ServiceAssetsRepository } from "./service-assets.repository.js";
@@ -234,6 +237,53 @@ describe("where an uploaded document's bytes go", () => {
     } finally {
       delete process.env.DOCUMENT_STORE_ROOT;
       await rm(unmarked, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * A MASIK VISSZAESES: A KOTET OTT VAN, DE IRASVEDETT (`broken`).
+   *
+   * A szomszedos allitas a JELOLO HIANYAT meri (`not-configured`), es ez a
+   * ketto MAS hiba: az elsot telepites oldja fel, a masodikat jogosultsag. A
+   * kod egyetlen feltetellel kezeli mind a kettot, de a KETTOT KULON kell
+   * merni -- kulonben egy javitas, ami csak az egyik agra szukiti a
+   * visszaesest, zolden atmenne.
+   *
+   * MERVE 2026-09-03: pontosan ez tortent. A feltetel `not-configured`-re
+   * szukitese utan MIND az 1937 teszt zold maradt, mert ezt az agat semmi nem
+   * merte. Ez az allitas azota all.
+   */
+  it("falls back to the database when the volume is there but NOT WRITABLE", async () => {
+    const readOnly = await mkdtemp(
+      path.join(tmpdir(), "document-store-readonly-"),
+    );
+    await writeFile(path.join(readOnly, MARKER_FILE), "");
+    await chmod(readOnly, 0o500);
+    process.env.DOCUMENT_STORE_ROOT = readOnly;
+    const store = new FilesystemDocumentStore(readOnly);
+    let written: { content: Buffer | null } | null = null;
+    const service = new ServiceAssetsService(
+      repositoryThat({
+        addDocument: (async (input: { content: Buffer | null }) => {
+          written = input;
+          return {} as never;
+        }) as ServiceAssetsRepository["addDocument"],
+      }),
+      store,
+    );
+
+    try {
+      await service.addDocument(ASSET, "INVOICE", upload(), "user-1");
+
+      assert.ok(written, "a sornak létre kell jönnie");
+      assert.ok(
+        (written as { content: Buffer | null }).content,
+        "a bájtoknak az adatbázisba kell menniük, nem az írásvédett kötetre",
+      );
+    } finally {
+      delete process.env.DOCUMENT_STORE_ROOT;
+      await chmod(readOnly, 0o700);
+      await rm(readOnly, { recursive: true, force: true });
     }
   });
 

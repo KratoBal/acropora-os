@@ -1,16 +1,23 @@
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
   Get,
+  Header,
   Param,
   ParseIntPipe,
   Patch,
   Post,
   Put,
   Query,
+  StreamableFile,
+  UploadedFiles,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FilesInterceptor } from "@nestjs/platform-express";
+import { memoryStorage } from "multer";
 import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
@@ -26,7 +33,9 @@ import {
   SignWorksheetVersionDto,
   UpdateWorksheetDraftDto,
   UpdateWorksheetLineDto,
+  UploadWorksheetDocumentDto,
   WorksheetListQueryDto,
+  MAX_WORKSHEET_DOCUMENTS_PER_UPLOAD,
 } from "./dto/worksheet.dto.js";
 import { WorksheetsService } from "./worksheets.service.js";
 
@@ -244,5 +253,83 @@ export class WorksheetsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.sign(id, input, user.id);
+  }
+
+  /**
+   * FENYKEP A MUNKALAPHOZ, A HELYSZINROL.
+   *
+   * UGYANAZ AZ ALAK, MINT AZ ESZKOZNEL, es ez nem masolas: a feltoltes
+   * szabalyai a kozos magban allnak (`documents/document-intake.ts`), itt csak
+   * a keres bontasa es a darabszam-hatar all.
+   *
+   * EGGYEL TOBBET ENGEDUNK BE, MINT AMENNYIT ELFOGADUNK: a multer a sajat
+   * korlatjat a stream szintjen vagja el, es a hibajat semmi nem alakitja at --
+   * a hivo 500-at kapna, holott csak tul sok fajlt jelolt ki.
+   */
+  @Post(":id/documents")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  @UseInterceptors(
+    FilesInterceptor("file", MAX_WORKSHEET_DOCUMENTS_PER_UPLOAD + 1, {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  async uploadDocument(
+    @Param("id") id: string,
+    @Body() input: UploadWorksheetDocumentDto,
+    @UploadedFiles() files: Express.Multer.File[] | undefined,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (!files?.length)
+      throw new BadRequestException("A feltöltendő fájl kötelező.");
+    if (files.length > MAX_WORKSHEET_DOCUMENTS_PER_UPLOAD)
+      throw new BadRequestException(
+        `Egyszerre legfeljebb ${MAX_WORKSHEET_DOCUMENTS_PER_UPLOAD} fájl tölthető fel.`,
+      );
+
+    // EGYESEVEL, SORBAN, NEM PARHUZAMOSAN: a keret-ellenorzes a mar
+    // felhasznalt helyet olvassa a tablabol, es parhuzamos irasoknal mindegyik
+    // ugyanazt a regi osszeget latna.
+    const created = [];
+    for (const file of files) {
+      created.push(
+        await this.service.addDocument(
+          id,
+          input.type ?? "PHOTO",
+          file,
+          user.id,
+          partnerScopeOf(user),
+        ),
+      );
+    }
+    // MINDIG LISTA, EGY FAJLNAL IS: egy valasz, aminek a TIPUSA a bemenettol
+    // fugg, minden hivot arra kenyszerit, hogy kitalalja, melyik agon jar.
+    return created;
+  }
+
+  @Get(":id/documents")
+  @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
+  documents(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.documents(id, partnerScopeOf(user));
+  }
+
+  @Get(":id/documents/:documentId")
+  @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
+  @Header("Cache-Control", "private, no-store")
+  async downloadDocument(
+    @Param("id") id: string,
+    @Param("documentId") documentId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const document = await this.service.documentBytes(
+      id,
+      documentId,
+      partnerScopeOf(user),
+    );
+    return new StreamableFile(document.bytes, {
+      type: document.contentType,
+      length: document.bytes.length,
+      disposition: `attachment; filename*=UTF-8''${encodeURIComponent(document.fileName)}`,
+    });
   }
 }
