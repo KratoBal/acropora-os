@@ -17,6 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
   createAsset,
+  type CreateAssetInput,
   listAssetOwners,
   type AssetKind,
   type AssetOwnerOption,
@@ -38,6 +39,14 @@ import {
   type AssetCreateField,
 } from "@/lib/assets/asset-create";
 import { normalizeAssetLabelCode } from "@/lib/assets/asset-label-mirror";
+import { decideOfflineRecord } from "@/lib/assets/offline-record";
+import { saveAssetOrQueue } from "@/lib/assets/save-or-queue";
+import { ApiError } from "@/lib/api/client";
+import {
+  readCachedAssetByToken,
+  readCachedAssets,
+} from "@/lib/offline/asset-cache";
+import { enqueueAssetCreate } from "@/lib/offline/queue-store";
 import { filterOwners } from "@/lib/assets/owner-search";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
@@ -98,6 +107,14 @@ export default function NewAssetScreen() {
     field: AssetCreateField | null;
     message: string;
   } | null>(null);
+  /**
+   * A SORBA KERULT FELVITEL UZENETE, KULON AZ ERRORTOL.
+   *
+   * Nem hiba: a rogzites megtortent, csak meg a telefonon var. Ha ugyanabban a
+   * piros dobozban jelenne meg, a kollega azt hinne, hogy elveszett -- es
+   * ujra felvinne, most mar ket sorral.
+   */
+  const [queued, setQueued] = useState<string | null>(null);
 
   /*
    * A PARTNER HELYSZÍNEI. Csak szerviz partnernél van mit betölteni: vevő
@@ -125,10 +142,65 @@ export default function NewAssetScreen() {
     [ownerSearch, ownersQuery.data],
   );
 
+  /**
+   * MENTES: A SZERVERNEK, ES CSAK HALOZATI HIBANAL A SORBA.
+   *
+   * A dontes a `lib/assets/save-or-queue.ts`-ben van, mert ott MERHETO -- ebben
+   * a fajlban nincs, ami tesztelne. Ide csak a HIVAS kerul, es az, hogy a
+   * negy kimenet KULON valaszt kap:
+   *
+   *   saved     -> atlepunk az eszkoz lapjara, ahogy eddig
+   *   queued    -> a felvitel a telefonon var; kiirjuk, mihez kepest ellenoriztunk
+   *   lost      -> a rogzites SEHOL nincs; ezt HIBAKENT mondjuk, nem zolden
+   *   rejected  -> a szerver elutasitotta; nem kerul sorba
+   */
   const mutation = useMutation({
-    mutationFn: createAsset,
-    onSuccess: (created) =>
-      router.replace({ pathname: "/assets/[id]", params: { id: created.id } }),
+    mutationFn: async (payload: CreateAssetInput) => {
+      const gyorsitotar = await readCachedAssets();
+      const beolvasas = new Date().toISOString();
+      const dontes = decideOfflineRecord({
+        qrToken: payload.labelCode ?? "",
+        scannedAt: beolvasas,
+        cached: payload.labelCode
+          ? await readCachedAssetByToken(payload.labelCode)
+          : null,
+        cachedCount: gyorsitotar.items.length,
+        syncedAt: gyorsitotar.syncedAt,
+      });
+      if (dontes.type === "blocked") {
+        return { type: "rejected" as const, message: dontes.message };
+      }
+      return saveAssetOrQueue({
+        createAsset: () => createAsset(payload),
+        enqueue: () =>
+          enqueueAssetCreate({
+            id: dontes.operationId,
+            payload,
+            createdAt: beolvasas,
+          }),
+        statusOf: (cause) => (cause instanceof ApiError ? cause.status : null),
+        checkMessage: dontes.message,
+      });
+    },
+    onSuccess: (outcome) => {
+      if (outcome.type === "saved") {
+        router.replace({
+          pathname: "/assets/[id]",
+          params: { id: outcome.assetId },
+        });
+        return;
+      }
+      if (outcome.type === "queued") {
+        setQueued(outcome.message);
+        return;
+      }
+      /**
+       * A `lost` ES A `rejected` HIBAKENT jelenik meg, nem zolden. A ket eset
+       * kulonbozik (az egyiknel a felvitel SEHOL nincs, a masiknal a szerver
+       * tudja es elutasitotta), es a szoveguk is kulon -- de EGYIK SEM siker.
+       */
+      setError({ field: null, message: outcome.message });
+    },
     onError: (cause) =>
       setError({
         field: null,
@@ -575,6 +647,12 @@ export default function NewAssetScreen() {
           semmi".
         */}
           {error ? <Text style={styles.error}>{error.message}</Text> : null}
+          {/*
+            A SORBA KERULT FELVITEL KULON SAVOT KAP, NEM PIROSAT.
+            A rogzites megtortent, csak meg a telefonon var. Ugyanabban a piros
+            dobozban a kollega elveszettnek hinne, es ujra felvinne.
+          */}
+          {queued ? <Text style={styles.queued}>{queued}</Text> : null}
 
           <Pressable
             disabled={mutation.isPending}
@@ -765,6 +843,15 @@ const styles = StyleSheet.create({
   error: {
     color: "#fecaca",
     backgroundColor: "#541b2b",
+    padding: 12,
+    borderRadius: 10,
+  },
+  /** Nem piros: a felvitel megvan, csak var. Lasd a kiiras helyet. */
+  queued: {
+    color: "#e6d5b0",
+    backgroundColor: "#3a2a12",
+    borderColor: "#8a6a2a",
+    borderWidth: 1,
     padding: 12,
     borderRadius: 10,
   },
