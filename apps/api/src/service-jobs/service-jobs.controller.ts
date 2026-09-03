@@ -17,6 +17,7 @@ import {
   MoveServiceJobDto,
   ServiceJobListQueryDto,
   SetServiceJobPartnerDto,
+  AssignVisibilityUnitDto,
 } from "./dto.js";
 import { ServiceJobsService } from "./service-jobs.service.js";
 
@@ -48,6 +49,41 @@ export class ServiceJobsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.list(query, user);
+  }
+
+  /**
+   * A LATHATOSAGI HOZZARENDELESEK -- KONKRET UT, A `:id` ELE.
+   *
+   * A `:id` mintat a `visibility` szo kulonben elnyelne, es a hibajegy-reszletlap
+   * probalna feloldani egy felhasznalo-azonositot. Ugyanaz a sorrend-szabaly,
+   * amit a fajl mar kimond a `@Get(":id")` folott.
+   *
+   * SAJAT JOGKOR, NEM `service.manage`: ez azt szabalyozza, KI MIT LAT, nem azt,
+   * hogy mi tortenik egy jeggyel. A MANAGER szandekosan NEM kapja meg (lasd az
+   * `auth.ts` tiltolistajat es a hozza tartozo allitast).
+   */
+  @Get("visibility/:userId")
+  @RequirePermissions(PERMISSIONS.SERVICE_VISIBILITY_ASSIGN)
+  listAssignments(@Param("userId") userId: string) {
+    return this.service.listAssignments(userId);
+  }
+
+  @Post("visibility/:userId")
+  @RequirePermissions(PERMISSIONS.SERVICE_VISIBILITY_ASSIGN)
+  assignUnit(
+    @Param("userId") userId: string,
+    @Body() body: AssignVisibilityUnitDto,
+  ) {
+    return this.service.assignUnit(userId, body.departmentId);
+  }
+
+  @Delete("visibility/:userId/:departmentId")
+  @RequirePermissions(PERMISSIONS.SERVICE_VISIBILITY_ASSIGN)
+  unassignUnit(
+    @Param("userId") userId: string,
+    @Param("departmentId") departmentId: string,
+  ) {
+    return this.service.unassignUnit(userId, departmentId);
   }
 
   /**

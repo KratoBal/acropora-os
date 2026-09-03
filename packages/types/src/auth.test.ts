@@ -39,6 +39,27 @@ describe("role permission mapping", () => {
     assert.ok(
       ROLE_PERMISSIONS.OWNER.includes(PERMISSIONS.SERVICE_WORKSHEET_AMEND),
     );
+
+    /**
+     * A LATHATOSAGI HOZZARENDELES UGYANEZ AZ ALAK, DE MAS OKBOL.
+     *
+     * A `service.worksheet.amend` egy VESZELYES MUVELET; ez viszont azt
+     * szabalyozza, KI MIT LAT. A ket tevedes sulya is mas: egy rossz javitas a
+     * naploban latszik, egy rossz hozzarendeles CSENDBEN tobb jegyet mutat.
+     *
+     * ES A KIZARAS AZERT KAP SAJAT ALLITAST, mert a MANAGER lista TILTOLISTA az
+     * osszes jogkor felett: egy uj kulcs MAGATOL a MANAGER-hez kerul. Ha valaki
+     * a kizarast kiveszi, semmi nem hibazik -- a vezetok csendben megkapjak a
+     * jogot, es a lista tobb sort ad, ami helyes valasznak nez ki.
+     */
+    assert.ok(
+      !ROLE_PERMISSIONS.MANAGER.includes(PERMISSIONS.SERVICE_VISIBILITY_ASSIGN),
+      "a láthatósági hozzárendelés bekerült a MANAGER jogai közé -- " +
+        "a tiltólistából kiesett, és ez csendben bővíti a vezetők látókörét",
+    );
+    assert.ok(
+      ROLE_PERMISSIONS.OWNER.includes(PERMISSIONS.SERVICE_VISIBILITY_ASSIGN),
+    );
   });
 
   it("lets the service role see partners without editing them", () => {

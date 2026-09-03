@@ -142,6 +142,24 @@ export const PERMISSIONS = {
   /// A KIVEZETÉS NEM EZ: egy használatból kivont eszköz `RETIRED` állapotba
   /// kerül, és megmarad. Ez a jog a téves felvitel visszavonására való.
   SERVICE_ASSET_DELETE: "service.asset.delete",
+  /**
+   * KI LATHATJA MELYIK ALEGYSEG HIBAJEGYEIT -- A LATHATOSAGI HOZZARENDELES.
+   *
+   * KULON JOGKOR, ES NEM A `service.manage` alatt, mert MAS FAJTA: a
+   * `service.manage` ADATOT ir (jegy lepteteset, partner beallitasat), ez
+   * viszont azt szabalyozza, KI MIT LAT. A ketto tevedese sem egyforma -- egy
+   * rossz lepes a naploban latszik, egy rossz hozzarendeles viszont csendben
+   * TOBB jegyet mutat valakinek, es senki nem keresi.
+   *
+   * Merve (2026-09-03): a 32 mai jogkor kozul EGYIK SEM szabalyoz lathatosagot.
+   * Huszonhet domain szerinti view/manage, ot pedig egy-egy nevesitett VESZELYES
+   * MUVELETRE szol. Nem volt mihez csatlakozni.
+   *
+   * A PARTNER SAJAT VEZETOJE SOHA nem kapja meg (Balazs, 2026-08-26 22:10:
+   * "mindig mi allitjuk"). Ezert nincs partner-oldali valtozata, es a vegpont
+   * belsos hatokort kovetel.
+   */
+  SERVICE_VISIBILITY_ASSIGN: "service.visibility.assign",
   /// A termék törzsadat-gazdájának átvétele a UNAS-tól (UNAS -> ACROPORA).
   /// Szándékosan KÜLÖN a PRODUCTS_MANAGE-től, és nem azért, mert ritkán
   /// használt: az átvétel után a webshop-szinkron TÖBBÉ NEM ír a terméken,
@@ -192,6 +210,11 @@ export const ROLE_PERMISSIONS: Readonly<
       permission !== PERMISSIONS.INVENTORY_RECONCILIATION_REPAIR &&
       permission !== PERMISSIONS.SERVICE_WORKSHEET_AMEND &&
       permission !== PERMISSIONS.SERVICE_ASSET_DELETE &&
+      // A LATHATOSAGI HOZZARENDELES NEM VEZETOI JOG. Egy MANAGER, aki
+      // hozzarendelest allithat, sajat magat is beallithatna -- es a lathatosag
+      // epp az a fajta, ahol a tullepes NEM latszik: a lista tobb sort ad, es
+      // helyes valasznak nez ki.
+      permission !== PERMISSIONS.SERVICE_VISIBILITY_ASSIGN &&
       permission !== PERMISSIONS.PRODUCTS_CATALOG_AUTHORITY_TRANSFER &&
       // A JOVAHAGYAS NEM VEZETOI JOG, HANEM KET NEVESITETT EMBERE. Balazs
       // szabalya 2026-09-01 14:28-rol: egyelore semmi nem mehet ki nelkule vagy

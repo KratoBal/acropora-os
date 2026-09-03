@@ -84,3 +84,13 @@ export class AttachWorksheetDto {
 export class SetServiceJobPartnerDto {
   @IsString() @MaxLength(64) customerId!: string;
 }
+
+/**
+ * EGY ALEGYSEG HOZZARENDELESE EGY FELHASZNALOHOZ.
+ *
+ * CSAK AZ AZONOSITO: a hozzarendeles nem valtoztat semmi mast. Barmi tovabbi
+ * mezo azt sugallna, hogy kozben a felhasznalot is szerkesztjuk.
+ */
+export class AssignVisibilityUnitDto {
+  @IsString() @MaxLength(64) departmentId!: string;
+}
