@@ -106,6 +106,14 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
    * is worth explaining: an empty list is a rule, a list that never arrived is
    * a broken connection, and that already has its own message. */
   const [partnersLoaded, setPartnersLoaded] = useState(false);
+  /**
+   * CSAK SIKERES BETOLTES UTAN BILLEN AT, ugyanaz a megfontolas, mint a
+   * partnereknel: egy URES lista szabaly, egy MEG MEG NEM ERKEZETT lista
+   * szakadt kapcsolat -- es a masodiknak sajat mondata van. Ha a jelzo a
+   * hibanal is atbillenne, a lap azt allitana, hogy nincs alegyseg, holott
+   * nem tudjuk lekerdezni.
+   */
+  const [departmentsLoaded, setDepartmentsLoaded] = useState(false);
   /** The partner of a worksheet that already exists. It comes from the
    * worksheet itself rather than from the customer list, because the list is
    * deliberately not loaded while editing: the field is read-only there, so
@@ -180,11 +188,13 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
     async (owner: string, signal?: AbortSignal) => {
       if (!owner) {
         setDepartments([]);
+        setDepartmentsLoaded(false);
         return;
       }
       try {
         const response = await worksheetsApi.departments(token, owner, signal);
         setDepartments(response.items.filter((item) => item.isActive));
+        setDepartmentsLoaded(true);
       } catch (cause) {
         if (!(cause instanceof DOMException && cause.name === "AbortError"))
           setError("Az alegységek nem tölthetők be.");
@@ -393,6 +403,29 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
   const noSelectablePartners =
     !worksheetId && partnersLoaded && partnerOptions.length === 0;
 
+  /**
+   * MIERT URES AZ ALEGYSEG-VALASZTO -- KET KULONBOZO OK, KET KULONBOZO TEENDO.
+   *
+   * A `selectable-partners` lista MAR ITT VAN, es ez adja a megkulonboztetest:
+   * ha a jegy partnere BENNE all, akkor tukor-vevo soros szerviz partner, tehat
+   * tenyleg nincs alatta alegyseg -- a kezelo letrehozhat egyet, itt helyben.
+   * Ha NINCS benne, akkor a jegy egy REGI, nem-tukor vevo-soron all (a 430
+   * elott a hibajegy-valaszto epp azokat kinalta), es ott alegyseg SOHA nem
+   * lesz: ott a jegy partnerét kell rendbe tenni, nem alegyseget felvenni.
+   *
+   * A KETTOT AZERT KELL SZETVALASZTANI, mert az egyik esetben a kezelo TUD
+   * tenni valamit ezen a lapon, a masikban NEM -- es egy kozos mondat a masodik
+   * felhasznalot itt tartana, hiaba.
+   */
+  const noSelectableUnits =
+    !worksheetId &&
+    Boolean(customerId) &&
+    departmentsLoaded &&
+    departmentOptions.length === 0;
+  const ticketPartnerIsMirror =
+    ticketCustomerId === null ||
+    partners.some((partner) => partner.customerId === ticketCustomerId);
+
   const canSubmit =
     Boolean(header.subject.trim()) &&
     (Boolean(worksheetId) || (Boolean(customerId) && Boolean(departmentId)));
@@ -469,7 +502,13 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
         </FormField>
         <FormField
           label="Alegység"
-          description="A munkalapszám első tagja is ebből lesz."
+          description={
+            noSelectableUnits
+              ? ticketPartnerIsMirror
+                ? "Ehhez a partnerhez még nincs alegység. Vegyél fel egyet lent -- a kódja lesz a munkalapszám első tagja."
+                : "Ehhez a hibajegyhez nem tartozhat alegység: a partnere nem szerviz partnerként van felvéve. A jegy partnerét kell rendbe tenni, alegységet felvenni itt nem segít."
+              : "A munkalapszám első tagja is ebből lesz."
+          }
         >
           <Select
             aria-label="Alegység"
