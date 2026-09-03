@@ -23,6 +23,9 @@ function tarolo(options: {
   files?: DocumentKey[];
   describeThrows?: boolean;
   listThrows?: boolean;
+  /** `null`: a tarolo EGYALTALAN nem ad meretet (a metodus hianyzik). */
+  sizes?: Record<string, number | null> | null;
+  sizeThrows?: boolean;
 }): DocumentStore {
   return {
     put: async () => undefined,
@@ -36,6 +39,21 @@ function tarolo(options: {
       if (options.listThrows) throw new Error("a listazas elhasalt");
       for (const key of options.files ?? []) yield key;
     },
+    /**
+     * A MERET-ADO ALAK ELHAGYHATO A SZERZODESBEN, es a dupla ezt utanozza: ha
+     * a hivo `sizes: null`-t ker, a metodus NINCS az objektumon -- nem az,
+     * hogy `undefined`-ot ad vissza. A ket allapot mast jelent, es a futtato
+     * epp ezt kulonbozteti meg.
+     */
+    ...(options.sizes === null
+      ? {}
+      : {
+          size: async (key: DocumentKey) => {
+            if (options.sizeThrows) throw new Error("a meret nem olvashato");
+            const kulcs = `${key.assetId}/${key.documentId}`;
+            return options.sizes?.[kulcs] ?? 10;
+          },
+        }),
   } as unknown as DocumentStore;
 }
 
@@ -43,7 +61,7 @@ describe("tarolo-egyeztetes futtatoja", () => {
   it("egyezo allapotban nulla", async () => {
     const ki = await runReconciliation({
       store: tarolo({ files: [kulcs("a1", "d1")] }),
-      fetchRows: async () => [kulcs("a1", "d1")],
+      fetchRows: async () => [{ key: kulcs("a1", "d1"), sizeBytes: 10 }],
     });
     assert.equal(ki.code, 0);
     assert.ok(ki.lines.some((l) => l.includes("parba allt: 1")));
@@ -57,7 +75,7 @@ describe("tarolo-egyeztetes futtatoja", () => {
   it("megkulonbozteti az arva fajlt a hianyzotol", async () => {
     const ki = await runReconciliation({
       store: tarolo({ files: [kulcs("a1", "arva")] }),
-      fetchRows: async () => [kulcs("a1", "hianyzo")],
+      fetchRows: async () => [{ key: kulcs("a1", "hianyzo"), sizeBytes: 10 }],
     });
     assert.equal(ki.code, 1);
     assert.ok(ki.lines.some((l) => l.startsWith("  ARVA    a1/arva")));
@@ -96,6 +114,45 @@ describe("tarolo-egyeztetes futtatoja", () => {
    * maga mondja meg; itt menet kozben derul ki, es ugyanugy NEM tudjuk, van-e
    * elteres.
    */
+  /**
+   * AZ OTODIK ALLAPOT: a kulcsok egyeznek, de a MERETET nem tudtuk megnezni.
+   *
+   * Ez NEM ugyanaz, mint hogy nincs elteres. Egy tavoli tarolonal a meret
+   * kulon halozati keres fajlonkent, tehat a meret-ado alak elhagyhato -- es
+   * ilyenkor a futtato KIMONDJA, hogy felig mert, nem allitja tisztanak.
+   */
+  it("a meretet nem ado tarolot NEM mondja tisztanak", async () => {
+    const ki = await runReconciliation({
+      store: tarolo({ files: [kulcs("a1", "d1")], sizes: null }),
+      fetchRows: async () => [{ key: kulcs("a1", "d1"), sizeBytes: 10 }],
+    });
+    assert.equal(ki.code, 4);
+    assert.ok(ki.lines.some((l) => l.includes("NEM AD MERETET")));
+  });
+
+  it("az eltero meretet megtalalja, es kiirja mindket szamot", async () => {
+    const ki = await runReconciliation({
+      store: tarolo({ files: [kulcs("a1", "d1")], sizes: { "a1/d1": 7 } }),
+      fetchRows: async () => [{ key: kulcs("a1", "d1"), sizeBytes: 10 }],
+    });
+    assert.equal(ki.code, 1);
+    assert.ok(ki.lines.some((l) => l.includes("tabla=10 tarolo=7")));
+  });
+
+  /**
+   * A KULCS-ELTERES ELOZI A MERETET, es ez nem sorrendi izles: egy HIANYZO
+   * fajlnak nincs merete, amit ossze lehetne vetni. Eloszor a halmaz alljon
+   * helyre, aztan a tartalom.
+   */
+  it("kulcs-elteresnel a meretet meg nem is nezi", async () => {
+    const ki = await runReconciliation({
+      store: tarolo({ files: [], sizeThrows: true }),
+      fetchRows: async () => [{ key: kulcs("a1", "d1"), sizeBytes: 10 }],
+    });
+    assert.equal(ki.code, 1);
+    assert.ok(ki.lines.some((l) => l.startsWith("  HIANYZO")));
+  });
+
   it("a menet kozben elhasalt listazas nem nulla", async () => {
     const ki = await runReconciliation({
       store: tarolo({ listThrows: true }),
