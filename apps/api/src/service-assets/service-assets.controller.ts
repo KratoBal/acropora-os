@@ -133,6 +133,18 @@ export class ServiceAssetsController {
     return this.service.labelBatches(query.limit ?? 50);
   }
 
+  /**
+   * EGY KOTEG KODJAI, A LETOLTESHEZ. SETTINGS_MANAGE, mint a listae.
+   *
+   * A KONKRET UT A `label-batches` ALATT ALL, es a `:id` szegmens utan jon a
+   * `codes` -- igy nem nyeli el a lista utvonalat.
+   */
+  @Get("label-batches/:id/codes")
+  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
+  labelBatchCodes(@Param("id") id: string) {
+    return this.service.labelBatchCodes(id);
+  }
+
   /** Egy nyomtatott iv kodjainak felvitele a keszletbe. */
   @Post("labels")
   @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)

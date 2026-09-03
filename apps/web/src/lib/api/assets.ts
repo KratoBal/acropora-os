@@ -30,6 +30,21 @@ export const assetLabelsApi = {
     );
   },
   /**
+   * EGY KOTEG KODJAI, A LETOLTESHEZ.
+   *
+   * KULON HIVAS, ES NEM A LISTA RESZE: a `batches` valasza otven kotegre
+   * szolna, egyenkent akar otszaz koddal -- az akkor is atmenne a halon, ha
+   * senki nem tolt le semmit. Ez EGY kotegrol szol, es akkor fut, amikor a
+   * kezelo tenylegesen letoltene.
+   */
+  codes(token: string, batchId: string, signal?: AbortSignal) {
+    return apiRequest<{ codes: string[] }>(
+      `/service/assets/label-batches/${encodeURIComponent(batchId)}/codes`,
+      token,
+      { signal },
+    );
+  },
+  /**
    * UJ TETEL GENERALASA. A valasz a kodokat IS visszaadja, hogy a letoltes
    * azonnal eloallithato legyen belole -- kulon lekerdezes nelkul.
    */
