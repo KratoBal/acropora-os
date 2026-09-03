@@ -3,8 +3,14 @@
  *
  * === KI IR ALA: A SZERELO (Balazs dontese, 2026-09-03) ===
  *
- * A lap a BEJELENTKEZETT felhasznalo neveben zarul. A nevet a kepernyo NEM
- * engedi atirni, es a szerelo NEM az ugyfel nevet gepeli be.
+ * A lap a BEJELENTKEZETT felhasznalo neveben zarul. A kepernyo a nevet MEG SEM
+ * KERDEZI: nincs nev-mezo, es a szerelo nem gepel be semmit.
+ *
+ * EZ 2026-09-03 19:42 OTA IGY ALL, es a korabbi alak MAS volt: akkor a nev egy
+ * NEM SZERKESZTHETO mezokent allt a kepernyon. Balazs pontositotta ("Ne kerje
+ * szovegkent. Legyen ott egy alairo gomb amit ha megnyom a szerelo akkor egy
+ * megerosites utan alairodik a lap"), es a kulonbseg nem stilus: egy zarolt
+ * mezo is MEZO, tehat az elso kerdes az lesz, hogyan lehetne megis atirni.
  *
  * EZ A MI SZIGORITASUNK, NEM A SZERVERE. A `SignWorksheetVersionDto` ma is
  * szoveget ker (`signerName`, 2-200 karakter), tehat technikailag barmilyen nev
@@ -153,5 +159,55 @@ export function buildWorksheetSignaturePayload(
       signerName: name,
       note: note ? note : null,
     },
+  };
+}
+
+/** Amit a megerosito parbeszed kiir. */
+export interface WorksheetSignatureConfirmation {
+  title: string;
+  message: string;
+  confirmLabel: string;
+}
+
+/**
+ * A MEGEROSITES SZOVEGE, ES MIERT VAN A TISZTA MODULBAN.
+ *
+ * Balazs kerese szerint (2026-09-03 19:42) az elfogadas EGY gomb plusz egy
+ * megerosites. A megerosites viszont csak akkor er valamit, ha KIMONDJA, MI
+ * TORTENIK -- egy "Biztos vagy benne?" annyit ker, hogy nyomd meg megegyszer,
+ * es a masodik nyomast ugyanaz a kez vegzi, ugyanabban a masodpercben.
+ *
+ * A szoveg ezert nem a keperno torzseben all: ott semmi nem merne, es epp ez
+ * az a resz, amit acrobot elore megnevezett, hogy konnyu elrontani.
+ *
+ * ES A KET AG KET KULONBOZO DOLGOT MOND, MERT KET KULONBOZO DOLOG TORTENIK.
+ * Ezt lemertem a szerveren (`worksheet-amendment.ts`), nem feltetelezem:
+ *
+ *   ALAIRVA     vegleges. Az `amendRefusal` a `SIGNED` allapotra elutasitast
+ *               ad, tehat a lap tobbe nem irhato at; a munka folytatasa UJ lap.
+ *   ELUTASITVA  NEM vegleges. Ugyanaz a fuggveny `null`-t ad ra, vagyis az
+ *               iroda atirhatja, es uj valtozat keszul belole.
+ *
+ * Egy kozos, altalanos mondat tehat az egyik agon hazudna.
+ */
+export function worksheetSignatureConfirmation(input: {
+  decision: WorksheetSignatureDecision;
+  signerName: string;
+}): WorksheetSignatureConfirmation {
+  if (input.decision === "REJECTED")
+    return {
+      title: "Rögzíted, hogy az ügyfél nem fogadta el?",
+      message:
+        `Feljegyezzük az indokot, és hogy ${input.signerName} rögzítette. ` +
+        "Ezen a változaton több döntés nem születhet, de az iroda átírhatja, és új változat készül belőle.",
+      confirmLabel: "Elutasítás rögzítése",
+    };
+
+  return {
+    title: "Aláírod a munkalapot?",
+    message:
+      `A lap ${input.signerName} nevében zárul. ` +
+      "A munkalap ezzel lezárul, és nem szerkeszthető tovább: a munka folytatása új lapra kerül.",
+    confirmLabel: "Aláírom",
   };
 }
