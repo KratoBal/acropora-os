@@ -23,7 +23,16 @@ export type SyncState = "pending" | "syncing" | "failed" | "conflict";
 export interface SyncQueueRow {
   /** A KLIENS-generalt muvelet-azonosito. Ez az idempotencia kulcsa. */
   id: string;
-  operation: "create";
+  /**
+   * MI EZ A SOR. A `create` egy eszkoz felvitele, az `upload-photo` egy kep,
+   * ami egy MAR FELMENT rogziteshez tartozik.
+   *
+   * EGY OSZLOP, KET MENET -- nem ket tabla. A kozos szabalyok (idempotencia, a
+   * negy allapot, az ujraprobalas) igy EGY helyen allnak; ket sorral ketszer
+   * kellene oket karbantartani, es a ketto elcsuszhatna. A sorrendet a
+   * `photo-queue.ts` `nextBatch` fuggvenye adja, nem a tabla szerkezete.
+   */
+  operation: "create" | "upload-photo";
   entityType: "asset";
   /** A szerver-oldali azonosito, ha mar van. Uj felvitelnel `null`. */
   entityId: string | null;
