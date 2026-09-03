@@ -75,3 +75,53 @@ describe("a sor tárolójának szerkezete", () => {
     assert.match(forras, /KULDHETO/);
   });
 });
+
+describe("a fénykép sora", () => {
+  it("a művelet nevét OLVASSUK, nem állítjuk", () => {
+    /*
+      A beolvasas eddig `operation: "create"`-et irt minden sorra -- amig
+      egyfele sor volt, ez igaz is volt. Egy `upload-photo` sor viszont igy
+      rogzitesnek latszana, es a szinkron egy KEP payloadjaval hivna a felviteli
+      vegpontot: a hiba a SZERVEREN jelenne meg, ertelmetlen elutasitaskent.
+
+      MI PIROSIT: a literal visszairasa a lekepezesbe.
+    */
+    assert.match(
+      forras,
+      /operation: r\.operation as SyncQueueRow\["operation"\]/,
+    );
+  });
+
+  it("csak ISMERT műveletet küldünk el, és az ismeretlent nem dobjuk el", () => {
+    // Egy ismeretlen muveletet egy UJABB valtozat irhatott a sorba. Nem
+    // talalgatjuk (az a szerverig menne), es nem is toroljuk (az a felvitel
+    // egyetlen peldanya lehet): a sorban marad, csak nem indul el.
+    assert.match(forras, /ismertMuvelet/);
+    assert.doesNotMatch(forras, /DELETE FROM sync_queue WHERE operation/);
+  });
+
+  it("a kép sora is IDEMPOTENS beszúrással megy be", () => {
+    // MI PIROSIT: egy sima `INSERT`. Akkor a ketszer megnyomott gomb ket sort
+    // tenne a sorba, es ugyanaz a kep KETSZER menne fel.
+    const beszurasok = [
+      ...forras.matchAll(/INSERT( OR IGNORE)? INTO sync_queue/g),
+    ].map((m) => m[0]);
+    assert.deepEqual(beszurasok, [
+      "INSERT OR IGNORE INTO sync_queue",
+      "INSERT OR IGNORE INTO sync_queue",
+    ]);
+  });
+
+  it("a párosítás CSAK a címzetlen fotó-sorokat érinti", () => {
+    /*
+      MI PIROSIT: ha a lekerdezes elhagyna az `entity_id IS NULL` feltetelt vagy
+      a muvelet szurest. Az elso egy MASIK eszkozhoz mar hozzarendelt kepre irna
+      ra egy ujabb azonositot; a masodik a rogzites sorat modositana.
+    */
+    assert.match(
+      forras,
+      /WHERE operation = 'upload-photo' AND entity_id IS NULL/,
+    );
+    assert.match(forras, /UPDATE sync_queue SET entity_id = \? WHERE id = \?/);
+  });
+});

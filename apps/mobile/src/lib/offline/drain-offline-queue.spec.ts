@@ -50,7 +50,8 @@ describe("a sor futtatója a valódi tárolóra van kötve", () => {
       mondana -- a felvitelek gyulnenek egy vidam uzenet alatt.
     */
     for (const nev of [
-      "pendingRows: pendingQueueRows",
+      "pendingQueueRows()",
+      "await attachRecordingResult(operationId, entityId)",
       "remove: removeQueueRow",
       "markRetry: markQueueRetry",
       "markConflict: markQueueConflict",
@@ -69,5 +70,44 @@ describe("a sor futtatója a valódi tárolóra van kötve", () => {
     */
     assert.match(forras, /send: deps\.send/);
     assert.doesNotMatch(forras, /from "@\/lib\/api/);
+  });
+});
+
+describe("a két menet", () => {
+  it("a RÖGZÍTÉSEK mennek elöl, a KÉPEK utánuk", () => {
+    /*
+      A ket menet MAGA a sorrend: egy kep egy MAR LETEZO szerver-oldali
+      eszkozhoz kapcsolodik, tehat amig a rogzites nem ment fel, nincs mihez
+      kapcsolodnia.
+
+      MI PIROSIT: egyetlen menet. Akkor a kepek a rogzitesekkel EGYUTT
+      indulnanak, es a szerver utasitana el oket.
+    */
+    assert.match(forras, /egyMenet\(deps, "create"\)/);
+    assert.match(forras, /egyMenet\(deps, "upload-photo"\)/);
+  });
+
+  it("a második menet ÚJRAOLVASSA a sort", () => {
+    /*
+      Az elso menet kozben a kepek sorara felkerul a szerver-azonosito. Ha a
+      masodik menet az elso ELOTT kiolvasott sorokbol dolgozna, minden kep
+      gazdatlannak latszana, es SOHA egy sem menne fel.
+
+      MI PIROSIT: ha a `pendingQueueRows` hivas kikerul a menetbol egy kozos,
+      egyszer kiolvasott listaba.
+    */
+    assert.match(
+      forras,
+      /pendingRows: async \(\) => batchForPass\(await pendingQueueRows\(\), muvelet\)/,
+    );
+  });
+
+  it("a MENET TARTALMÁT a batchForPass dönti el, nem a lekérdezés", () => {
+    /*
+      A szabaly a `photo-queue.ts`-ben all, es ott VISELKEDESSEL is meg van
+      kotve (`batchForPass` specje). Ez a sor csak a HIVAS -- e nelkul a szabaly
+      le lenne irva, es senki nem kerdezne meg.
+    */
+    assert.match(forras, /batchForPass\(/);
   });
 });

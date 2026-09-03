@@ -26,6 +26,15 @@ export interface QueueRunReport {
   retried: number;
   /** Hany akadt el emberi dontesre varva. */
   conflicted: number;
+  /**
+   * HANY ROGZITES MENT FEL UGY, HOGY A SZERVER AZONOSITOJA NEM JOTT VISSZA.
+   *
+   * Nem hiba es nem is siker: a rogzites FENT VAN, de a hozza tartozo kepeket
+   * mar nincs mire cimezni. Egy sikeres futas jelenteseben ez a szam az
+   * egyetlen jel arrol, hogy a fenykepek soha nem fognak felmenni -- ezert all
+   * kulon mezoben, nem a `done`-ban elrejtve.
+   */
+  unresolved: number;
 }
 
 /**
@@ -57,13 +66,41 @@ export function describeQueueRun(report: QueueRunReport): string | null {
   );
 }
 
+/**
+ * A CIMZETLEN KEPEK KIMONDASA, KULON MONDATBAN.
+ *
+ * `null`, ha nincs ilyen. Azert nem folyik bele a fenti mondatba, mert az a
+ * FUTASROL szol (mi ment fel most), ez pedig egy MARADO allapotrol: ezek a
+ * kepek a kovetkezo futasban sem fognak felmenni, mert nincs hova.
+ */
+export function describeUnresolvedRecordings(
+  report: QueueRunReport,
+): string | null {
+  if (report.unresolved === 0) return null;
+  return (
+    `${report.unresolved} rögzítés felment, de a szerver azonosítója nem jött ` +
+    "vissza: a hozzájuk készült fényképeket nem tudjuk feltölteni."
+  );
+}
+
 export interface QueueRunnerDeps {
   /** A sorbol azok, amiket EL LEHET kuldeni. */
   pendingRows(): Promise<SyncQueueRow[]>;
-  /** Elkuldi a sort a szervernek. A HTTP kod `null`, ha el sem jutott oda. */
-  send(
-    row: SyncQueueRow,
-  ): Promise<{ httpStatus: number | null; error: string | null }>;
+  /**
+   * Elkuldi a sort a szervernek. A HTTP kod `null`, ha el sem jutott oda.
+   *
+   * AZ `entityId` A VARRAT. Egy sikeres felvitelnel a szerver visszaadja az uj
+   * eszkoz azonositojat, es ez az EGYETLEN alkalom, amikor ezt latjuk: a sor a
+   * nyugtazas utan torlodik. Ha itt eldobnank, a mar sorban allo fenykepeket
+   * semmi nem tudna megcimezni.
+   */
+  send(row: SyncQueueRow): Promise<{
+    httpStatus: number | null;
+    error: string | null;
+    entityId?: string | null;
+  }>;
+  /** A felment rogziteshez tartozo kepek megkapjak a szerver azonositojat. */
+  attachRecording(operationId: string, entityId: string): Promise<void>;
   /** A szerver nyugtazta: a helyi bizonyitek mehet. */
   remove(id: string): Promise<void>;
   /** A sor marad, uj kiserletszammal es hibaval. */
@@ -81,13 +118,24 @@ export async function drainQueue(
     done: 0,
     retried: 0,
     conflicted: 0,
+    unresolved: 0,
   };
 
   for (const row of rows) {
-    const { httpStatus, error } = await deps.send(row);
+    const { httpStatus, error, entityId } = await deps.send(row);
     const outcome = decideDrain({ row, httpStatus, errorMessage: error });
     switch (outcome.type) {
       case "done":
+        if (row.operation === "create") {
+          /**
+           * A PAROSITAS A TORLES ELOTT MEGY. A sor torlese utan a rogzites
+           * muvelet-azonositoja mar sehol nem all, tehat a kepeket nem lehetne
+           * mihez kotni -- es az a hiba CSENDES lenne: a sor kiurul, a
+           * jelentes zold, a kepek maradnak.
+           */
+          if (entityId) await deps.attachRecording(row.id, entityId);
+          else report.unresolved += 1;
+        }
         await deps.remove(row.id);
         report.done += 1;
         break;

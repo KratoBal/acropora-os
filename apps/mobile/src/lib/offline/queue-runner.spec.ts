@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { describeQueueRun, drainQueue } from "./queue-runner";
+import {
+  describeQueueRun,
+  describeUnresolvedRecordings,
+  drainQueue,
+} from "./queue-runner";
 import type { SyncQueueRow } from "./sync-queue";
 
 /**
@@ -28,7 +32,11 @@ const sor = (id: string): SyncQueueRow => ({
 
 function deps(
   rows: SyncQueueRow[],
-  valasz: (id: string) => { httpStatus: number | null; error: string | null },
+  valasz: (id: string) => {
+    httpStatus: number | null;
+    error: string | null;
+    entityId?: string | null;
+  },
 ) {
   const naplo: string[] = [];
   return {
@@ -36,6 +44,10 @@ function deps(
     d: {
       pendingRows: () => Promise.resolve(rows),
       send: (r: SyncQueueRow) => Promise.resolve(valasz(r.id)),
+      attachRecording: (operationId: string, entityId: string) => {
+        naplo.push(`attach:${operationId}=${entityId}`);
+        return Promise.resolve();
+      },
       remove: (id: string) => {
         naplo.push(`remove:${id}`);
         return Promise.resolve();
@@ -78,10 +90,73 @@ describe("a sor végigjárása", () => {
   });
 });
 
+describe("a fénykép megkapja a szerver azonosítóját", () => {
+  const foto = (id: string, entityId: string | null): SyncQueueRow => ({
+    ...sor(id),
+    operation: "upload-photo",
+    entityId,
+  });
+
+  it("a párosítás a TÖRLÉS ELŐTT megy", async () => {
+    /*
+      MI PIROSIT: ha a `remove` elore kerul. A sor torlese utan a rogzites
+      muvelet-azonositoja mar sehol nem all, tehat a kepeket nem lehetne mihez
+      kotni -- es a hiba CSENDES: a sor kiurul, a jelentes zold, a kepek
+      maradnak. A sorrend maga az allitas, ezert nem eleg megszamolni a
+      hivasokat.
+    */
+    const { d, naplo } = deps([sor("r1")], () => ({
+      httpStatus: 201,
+      error: null,
+      entityId: "eszkoz-1",
+    }));
+    const r = await drainQueue(d);
+    assert.equal(r.done, 1);
+    assert.equal(r.unresolved, 0);
+    assert.deepEqual(naplo, ["attach:r1=eszkoz-1", "remove:r1"]);
+  });
+
+  it("azonosító NÉLKÜLI siker: a sor törlődik, de KIMONDJUK", async () => {
+    /*
+      A rogzites FENT VAN -- egy ujrakuldes ket eszkozt csinalna belole (a
+      vegpont ma nem ismeri a muvelet-azonositot). Ezert a torles helyes; a
+      kepek viszont cimezhetetlenek maradnak, es ez a szam az EGYETLEN jel.
+    */
+    const { d, naplo } = deps([sor("r1")], () => ({
+      httpStatus: 201,
+      error: null,
+      entityId: null,
+    }));
+    const r = await drainQueue(d);
+    assert.equal(r.done, 1);
+    assert.equal(r.unresolved, 1);
+    assert.deepEqual(naplo, ["remove:r1"]);
+  });
+
+  it("egy FOTÓ sor sikere nem párosít semmit", async () => {
+    // TESTVER-KONTROLL: egy valtozat, ami minden sikerre parosit, a fenti ket
+    // allitason atmenne, es a kepek egymasra irnak az azonositot.
+    const { d, naplo } = deps([foto("f1", "eszkoz-1")], () => ({
+      httpStatus: 201,
+      error: null,
+      entityId: "eszkoz-9",
+    }));
+    const r = await drainQueue(d);
+    assert.equal(r.unresolved, 0);
+    assert.deepEqual(naplo, ["remove:f1"]);
+  });
+});
+
 describe("a futás jelentése", () => {
   it("ÜRES sornál nincs mit mondani", () => {
     assert.equal(
-      describeQueueRun({ attempted: 0, done: 0, retried: 0, conflicted: 0 }),
+      describeQueueRun({
+        attempted: 0,
+        done: 0,
+        retried: 0,
+        conflicted: 0,
+        unresolved: 0,
+      }),
       null,
     );
   });
@@ -97,12 +172,14 @@ describe("a futás jelentése", () => {
       done: 0,
       retried: 0,
       conflicted: 0,
+      unresolved: 0,
     });
     const sikertelen = describeQueueRun({
       attempted: 3,
       done: 0,
       retried: 3,
       conflicted: 0,
+      unresolved: 0,
     });
     assert.equal(uresen, null);
     assert.notEqual(sikertelen, null);
@@ -117,6 +194,7 @@ describe("a futás jelentése", () => {
       done: 2,
       retried: 0,
       conflicted: 0,
+      unresolved: 0,
     });
     assert.match(s ?? "", /Minden várakozó felvitel felment/);
   });
@@ -127,9 +205,44 @@ describe("a futás jelentése", () => {
       done: 1,
       retried: 1,
       conflicted: 1,
+      unresolved: 0,
     });
     assert.match(s ?? "", /1 felvitel felment/);
     assert.match(s ?? "", /2 maradt/);
     assert.match(s ?? "", /1 elakadt/);
+  });
+});
+
+describe("a címzetlen képek kimondása", () => {
+  it("ha MINDEN azonosító megjött, nincs külön mondat", () => {
+    // ISMERT POZITIV KONTROLL a lenti allitashoz: e nelkul egy "mindig szol"
+    // valtozat is atmenne rajta.
+    assert.equal(
+      describeUnresolvedRecordings({
+        attempted: 2,
+        done: 2,
+        retried: 0,
+        conflicted: 0,
+        unresolved: 0,
+      }),
+      null,
+    );
+  });
+
+  it("a fényképeket NÉV SZERINT említi, nem a rögzítés sikerét", () => {
+    /*
+      A `describeQueueRun` ilyenkor teljes sikert mond, es igaza is van: a
+      rogzitesek felmentek. A kepekrol viszont HALLGATNA -- ez a mondat az,
+      ami miatt a kollega nem olvassa a zold jelentest megnyugvaskent.
+    */
+    const s = describeUnresolvedRecordings({
+      attempted: 2,
+      done: 2,
+      retried: 0,
+      conflicted: 0,
+      unresolved: 2,
+    });
+    assert.match(s ?? "", /2 rögzítés felment/);
+    assert.match(s ?? "", /fényképeket nem tudjuk feltölteni/);
   });
 });

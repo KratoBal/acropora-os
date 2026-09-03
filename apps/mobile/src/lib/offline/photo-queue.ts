@@ -35,6 +35,47 @@ export interface PhotoPayload {
 }
 
 /**
+ * A KEP SOR-AZONOSITOJA IS A TARTALOMBOL SZULETIK, ugyanabbol az okbol, mint a
+ * rogzitese (`sync-queue.ts` `operationId`): a ketszer megnyomott gomb ugyanazt
+ * a kulcsot adja, es a masodik beszuras csendben elesik ahelyett, hogy ugyanaz
+ * a kep KETSZER menne fel.
+ *
+ * A ROGZITES AZONOSITOJA IS BENNE VAN, nem csak az `uri`. Ugyanaz a fajl ket
+ * KULON rogziteshez tartozhat (a szerelo ugyanazt a kepet valasztja ki
+ * ketszer, ket eszkozhoz), es azok ket kulon feltoltes.
+ */
+export function photoOperationId(input: {
+  recordingOperationId: string;
+  uri: string;
+}): string {
+  return `asset-photo:${input.recordingOperationId}:${input.uri}`;
+}
+
+/**
+ * MELYIK ROGZITESEK MENTEK MAR FEL -- ES MIERT EPP A KEP SORA MONDJA MEG.
+ *
+ * A rogzites sora a szerver nyugtazasakor TOROLVE lesz (ez a protokoll: a
+ * helyi bizonyitek csak akkor mehet). Vagyis a "mar felment" tenynek a
+ * torles utan EGYETLEN nyoma marad: a kep sorara felirt szerver-oldali
+ * azonosito (`entityId`).
+ *
+ * Ezert nem lehet ezt a halmazt a rogzites-sorok HIANYABOL kikovetkeztetni: a
+ * hianyzas azt is jelentheti, hogy a rogzites SOSEM letezett -- es epp az a
+ * gazdatlan kep, amit vissza kell tartani.
+ */
+export function acknowledgedRecordings(
+  rows: readonly SyncQueueRow[],
+): Set<string> {
+  const halmaz = new Set<string>();
+  for (const row of rows) {
+    if (row.operation !== "upload-photo" || row.entityId === null) continue;
+    const payload = readPhotoPayload(row.payloadJson);
+    if (payload !== null) halmaz.add(payload.recordingOperationId);
+  }
+  return halmaz;
+}
+
+/**
  * MI KULDHETO EL MOST, ES MI NEM.
  *
  * A ket menet ITT dol el, nem a lekerdezes sorrendjeben: eloszor minden
@@ -58,7 +99,7 @@ export function nextBatch(
   }
   return rows.filter((r) => {
     if (r.operation !== "upload-photo") return false;
-    const payload = parsePhoto(r.payloadJson);
+    const payload = readPhotoPayload(r.payloadJson);
     /**
      * A GAZDATLAN KEP NEM MEGY EL. Ha a hozza tartozo rogzites nincs a
      * felmentek kozott ES nincs a sorban sem, akkor valami elveszett -- es egy
@@ -71,7 +112,8 @@ export function nextBatch(
   });
 }
 
-function parsePhoto(json: string): PhotoPayload | null {
+/** A sor payloadja fotokent, vagy `null`, ha nem az. */
+export function readPhotoPayload(json: string): PhotoPayload | null {
   try {
     const p = JSON.parse(json) as Partial<PhotoPayload>;
     return typeof p.uri === "string" &&
@@ -81,6 +123,25 @@ function parsePhoto(json: string): PhotoPayload | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * EGY MENET SORAI: amit a `nextBatch` elenged, ES ami ebbe a menetbe tartozik.
+ *
+ * A SZURES NEM A `nextBatch` MEGISMETLESE. A `nextBatch` a SORRENDET adja; ez
+ * a szures azt zarja ki, hogy egy ELBUKOTT rogzites a MASODIK menetben ujra
+ * elinduljon. A bukas utan a sor `failed` allapotba kerul, ami tovabbra is
+ * kuldheto -- vagyis e nelkul ugyanaz a felvitel KETSZER menne el egyetlen
+ * futasban, es a szerveren KET eszkoz keletkezne. (A felviteli vegpont ma nem
+ * ismeri a muvelet-azonositot, tehat a masodik peldanyt nem tudna kiszurni.)
+ */
+export function batchForPass(
+  rows: readonly SyncQueueRow[],
+  muvelet: SyncQueueRow["operation"],
+): SyncQueueRow[] {
+  return nextBatch(rows, acknowledgedRecordings(rows)).filter(
+    (r) => r.operation === muvelet,
+  );
 }
 
 /**
