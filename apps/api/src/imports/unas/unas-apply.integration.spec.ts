@@ -357,6 +357,64 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
    * hasznal, a feltetellel ES nelkule is zold lenne. Ezert all itt szandekos
    * utkozes.
    */
+  /**
+   * A FELOLDATLANOK MEZONKENT IS SZAMOLODNAK.
+   *
+   * Az osszeg nem valasztja szet a valodi vesztest attol, ha egy forras-oszlop
+   * egyaltalan nem cikkszamokat tartalmaz. A betolto HET oszlopot olvas
+   * cikkszam-listakent, es barracuda merese csak KETTOT fed -- ha a tobbiben
+   * kapcsolok allnak ("no", "yes"), azok sosem oldodnak fel, es az osszegben
+   * megkulonboztethetetlenek lennenek.
+   *
+   * A BONTASSAL AZ ELSO ELES FUTAS MAGATOL VALASZOL: ha a feloldatlanok a
+   * `crosssale*` oszlopokbol jonnek, a teendo a mezolista szukitese.
+   */
+  it("names the field a reference could not be resolved from", async () => {
+    const batch = await stageApprove(
+      await catalogFixture({
+        categoryName: "Field category",
+        firstName: "Field test product",
+        firstImage: "https://example.test/field.jpg",
+        // NEM LETEZO cikkszam, tehat meg a visszaeses sem talalja meg.
+        secondReference: "NINCS-ILYEN-SKU",
+      }),
+      "apply-field.xlsx",
+    );
+
+    const report = await applyService.apply(batch, "integration-owner");
+
+    assert.equal(report.unresolvedRelationReferences, 1);
+    // ES MEGNEVEZI AZ OSZLOPOT, nem csak osszegez.
+    assert.deepEqual(report.relationReferencesByField, {
+      kiegeszitotermekek: 1,
+    });
+    // A visszaeses NEM sult el: nincs mihez visszaesni.
+    assert.equal(report.relationReferencesResolvedByCaseFallback, 0);
+  });
+
+  /**
+   * ES HA MINDEN FELOLDODIK, A BONTAS URES -- nem nullakkal teli.
+   *
+   * Ez a parja az elozonek: enelkul a bontas lehetne mindig ures, es az elso
+   * allitas ugyanugy zold maradna.
+   */
+  it("leaves the breakdown empty when nothing was lost", async () => {
+    const batch = await stageApprove(
+      await catalogFixture({
+        categoryName: "Clean category",
+        firstName: "Clean test product",
+        firstImage: "https://example.test/clean.jpg",
+        secondReference: "apply-sku-1",
+      }),
+      "apply-clean.xlsx",
+    );
+
+    const report = await applyService.apply(batch, "integration-owner");
+
+    assert.deepEqual(report.relationReferencesByField, {});
+    assert.equal(report.relationReferencesResolvedByCaseFallback, 1);
+  });
+
   it("does not guess when the fallback finds more than one product", async () => {
     const batch = await stageApprove(
       await catalogFixture({

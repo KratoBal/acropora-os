@@ -60,9 +60,15 @@ export interface UnasApplySummary {
    * adatvesztes, hanem zaj.
    *
    * EZT A KODBOL NEM LEHET ELDONTENI: attol fugg, van-e ilyen nevu oszlop a
-   * betoltott munkafuzetben. Az ELSO eles futas utan ezert erdemes megnezni,
-   * hogy a szam a 589-es nagysagrendben all-e. Ha sokkal nagyobb, a kovetkezo
-   * lepes a mezolista szukitese, nem a parositas.
+   * betoltott munkafuzetben. Acrobot lemerte a UNAS API-exportjat (2026-09-03):
+   * ott a `CrossSale` es az `UpSale` mind az 1893 soron BEAGYAZOTT OBJEKTUM,
+   * kapcsolokkal (`{Cart: "no", ...}`). De az EGY MASIK ALAK: a mi betoltonk
+   * XLSX-et olvas, `crosssale1..3` nevu OSZLOPOKAT keresve, es munkafuzet
+   * nincs a fankban. Az egyik alakbol a masik oszlopneveire nem lehet
+   * kovetkeztetni.
+   *
+   * EZERT NEM BECSLES ALL ITT, HANEM ELOREJELZES, es a mezonkenti bontas
+   * (`relationReferencesByField`) magatol eldonti az elso futasnal.
    *
    * EZ A SZAMLALO NEM JAVITJA A PAROSITAST, es szandekosan nem: hogy a
    * feloldas kis-nagybetu fuggetlen LEGYEN-E, az adatmodell-kerdes (ket termek
@@ -123,6 +129,32 @@ export interface UnasApplySummary {
    * tortenik. Ez a szam mondja meg, hogy a 269 nem eltunt, hanem osszevonodott.
    */
   relationReferencesSkippedAsDuplicate: number;
+  /**
+   * MEZONKENTI BONTAS: melyik forras-oszlopbol hany hivatkozas NEM oldodott fel.
+   *
+   * MIERT NEM ELEG AZ OSSZEG (acrobot kikotese, 2026-09-03): a betolto HET
+   * oszlopot olvas cikkszam-listakent (`kiegeszitotermekek`, `crosssale1..3`,
+   * `hasonlotermekek`, `upsale1..2`), es barracuda merese csak KETTOT fed --
+   * a hasonlo es a kiegeszito listajat. Ha a munkafuzetben a tobbi oszlop
+   * KAPCSOLOKAT tartalmaz ("no", "yes"), azok sosem oldodnak fel, es az
+   * osszegben megkulonboztethetetlenul allnanak a valodi vesztestol.
+   *
+   * A BONTASSAL AZ ELSO ELES FUTAS MAGATOL VALASZOL, magyarazat nelkul: ha a
+   * feloldatlanok a `crosssale*` vagy `upsale*` oszlopokbol jonnek, akkor a
+   * teendo a MEZOLISTA szukitese, nem a parositas.
+   *
+   * ES A VARHATO BONTAS, hogy az elso futas ELLENORIZHETO legyen, ne
+   * ertelmezheto (barracuda merese, 2026-09-03):
+   *
+   *     589  hivatkozas oldodik fel visszaesessel
+   *     320  ebbol UJ kapcsolatot hoz letre
+   *     269  a par masodik tagja, a szures kihagyja (145 hasonlo + 124 kiegeszito)
+   *       0  marad feloldatlan -- HA a tobbi oszlop nem tartalmaz kapcsolokat
+   *
+   * Csak a NEM NULLA mezok kerulnek bele: egy ures bontas azt jelenti, hogy
+   * minden hivatkozas feloldodott.
+   */
+  relationReferencesByField: Record<string, number>;
   durationMs?: number;
   appliedAt: string;
   appliedBy: string;

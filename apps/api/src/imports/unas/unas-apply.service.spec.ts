@@ -123,6 +123,7 @@ describe("UNAS apply execution", () => {
     relationReferencesResolvedByCaseFallback: 0,
     relationReferencesAmbiguous: 0,
     relationReferencesSkippedAsDuplicate: 0,
+    relationReferencesByField: {},
     appliedAt: "2026-07-19T00:00:00.000Z",
     appliedBy: "owner",
   };

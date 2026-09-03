@@ -163,6 +163,7 @@ export class UnasApplyRepository extends Repository {
           relationReferencesResolvedByCaseFallback: 0,
           relationReferencesAmbiguous: 0,
           relationReferencesSkippedAsDuplicate: 0,
+          relationReferencesByField: {} as Record<string, number>,
         };
         const categoryIds = await this.upsertCategories(
           transaction,
@@ -631,6 +632,13 @@ export class UnasApplyRepository extends Repository {
            */
           if (!targetProductId) {
             counts.unresolvedRelationReferences += 1;
+            /**
+             * ES MEGNEVEZZUK, MELYIK OSZLOPBOL. Egy osszeg nem valasztja szet a
+             * valodi vesztest attol, ha egy oszlop egyaltalan nem cikkszamokat
+             * tartalmaz -- a bontas viszont az elso futasnal megmondja.
+             */
+            counts.relationReferencesByField[field] =
+              (counts.relationReferencesByField[field] ?? 0) + 1;
             continue;
           }
           const key = `${targetProductId}|${relationType}`;
