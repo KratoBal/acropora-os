@@ -65,7 +65,7 @@ export function operationId(input: {
  *   failed   -> syncing        ujraprobalas
  *   conflict -> (csak ember)   automatikus atmenet NINCS
  */
-export function canRetry(state: SyncState): boolean {
+export function canRetryState(state: SyncState): boolean {
   return state === "pending" || state === "failed";
 }
 
@@ -76,6 +76,12 @@ export function canRetry(state: SyncState): boolean {
  * egyformán kezelnenk, egy "ez a matricakod mar all egy eszkozon" valasz
  * vegtelen ujraprobalast inditana, es a kollega azt latna, hogy a felvitel
  * "meg dolgozik" -- holott soha nem fog atmenni.
+ *
+ * A NEVBEN AZERT ALL A `State`, mert a `canRetry` szo MAR FOGLALT ebben az
+ * appban: a `lib/assets/scan-failure.ts`-ben egy MEZO viseli, mas jelentessel
+ * (egy beolvasasi hiba ujraprobalhato-e). Nem utkoznek -- kulon modulok --, de
+ * aki ra keres, ket kulonbozo dolgot talal. Ha valaki egyszer vissza akarna
+ * nevezni, ez a bekezdes mondja meg, miert ne tegye.
  */
 export function classifyFailure(httpStatus: number): SyncState {
   if (httpStatus === 409 || httpStatus === 422) return "conflict";
