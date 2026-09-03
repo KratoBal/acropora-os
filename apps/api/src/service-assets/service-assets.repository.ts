@@ -1404,10 +1404,23 @@ export class ServiceAssetsRepository extends Repository {
    * soha nem szolalna meg.
    */
   async documentBytesInUse(): Promise<number> {
-    const total = await prisma.assetDocument.aggregate({
-      _sum: { sizeBytes: true },
-    });
-    return total._sum.sizeBytes ?? 0;
+    /**
+     * A KERET EGY KOTETROL SZOL, TEHAT MINDEN DOKUMENTUMOT SZAMOL.
+     *
+     * 2026-09-03-ig csak az eszkoz-dokumentumokat osszegezte, mert csak azok
+     * voltak. A munkalap-fenykepek UGYANARRA a kotetre kerulnek: ha kimaradnanak
+     * az osszegbol, a hatart CSENDBEN lepnenk at -- a szam alatta maradna,
+     * mikozben a lemez betelik.
+     *
+     * VISELKEDES-VALTOZAS AZ ESZKOZ-UTON IS, es ezt kimondom: a keret mostantol
+     * hamarabb telik be, mint eddig. Ez a helyes irany (a kevesbe latszo hiba a
+     * csendes tullepes lenne), de nem mellekhatas: dontes.
+     */
+    const [eszkoz, munkalap] = await Promise.all([
+      prisma.assetDocument.aggregate({ _sum: { sizeBytes: true } }),
+      prisma.worksheetDocument.aggregate({ _sum: { sizeBytes: true } }),
+    ]);
+    return (eszkoz._sum.sizeBytes ?? 0) + (munkalap._sum.sizeBytes ?? 0);
   }
 
   /**

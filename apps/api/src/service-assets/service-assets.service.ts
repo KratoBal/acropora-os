@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 import type { PartnerScope } from "../auth/partner-scope.util.js";
 import { assetDeletionRefusal } from "./asset-deletion.js";
@@ -34,16 +34,14 @@ import type {
 } from "./dto/asset.dto.js";
 import type { DocumentStore } from "./document-store/document-store.js";
 import { DOCUMENT_STORE } from "./document-store/document-store.provider.js";
-import { decideQuota } from "./document-store/document-quota.js";
-import {
-  canonicalMimetypeFor,
-  detectUploadedFileKind,
-} from "./uploaded-file-type.js";
-import {
-  assertStorageKeyMatches,
-  storageKeyFor,
-} from "./document-store/document-storage-key.js";
+import { assertStorageKeyMatches } from "./document-store/document-storage-key.js";
 import { documentStoreEnabled } from "./document-store/document-store.provider.js";
+import {
+  discardStoredDocument,
+  DocumentOverQuota,
+  DocumentRejected,
+  prepareDocument,
+} from "../documents/document-intake.js";
 import { createAssetQrSvg } from "./qr-svg.js";
 import { ServiceAssetsRepository } from "./service-assets.repository.js";
 
@@ -338,125 +336,68 @@ export class ServiceAssetsService {
     // lazult azzal, hogy a kép is bekerült: mindkettőnek egyeznie kell.
     // A lista és a szándékosan kihagyott formátumok indoka a
     // `uploaded-file-type.ts` fejlécében áll.
-    const kind = detectUploadedFileKind(file.mimetype, file.buffer);
-    if (kind === null)
-      throw new BadRequestException(
-        "Csak érvényes PDF, JPEG vagy PNG fájl tölthető fel.",
-      );
-    const safeName = file.originalname
-      .normalize("NFKC")
-      .replace(/[\\/\u0000-\u001f\u007f]/g, "-")
-      .slice(0, 180);
-
-    const documentId = randomUUID();
-    const sha256 = createHash("sha256").update(file.buffer).digest("hex");
-    const common = {
-      id: documentId,
-      assetId: id,
-      type,
-      // A TARTALÉK NÉV NEM MONDHAT TÍPUST, amit nem tudunk. Korábban
-      // "dokumentum.pdf" állt itt, ami PDF-en kívül hazudott volna a
-      // letöltőnek - a böngésző a kiterjesztés szerint próbálná megnyitni.
-      fileName: safeName || "dokumentum",
-      // A TÁROLT TÍPUS A FELISMERT FAJTÁBÓL JÖN, nem a küldő bejelentéséből
-      // és nem egy rögzített értékből. A letöltés ezt adja vissza, tehát egy
-      // rossz érték itt a böngészőnél derülne ki, hetekkel később.
-      contentType: canonicalMimetypeFor(kind),
-      sizeBytes: file.buffer.length,
-      sha256,
-      actorUserId,
-    };
-
-    // A KERET A LEGELSO ELLENORZES, MEG AZ IRAS ELOTT. Egy elutasitas utan sem
-    // a tarolon, sem a tablaban nem keletkezhet semmi: az orzot nem az
-    // bizonyitja, hogy szol, hanem hogy nem tortent semmi.
-    await this.refuseIfOverQuota(file.buffer.length);
-
-    if (!documentStoreEnabled()) {
-      // A MAI UT, VALTOZATLANUL. A tarolo nincs bekapcsolva, tehat a bajtok az
-      // adatbazisba mennek, ugyanugy, mint eddig.
-      return this.repository.addDocument({ ...common, content: file.buffer });
-    }
-
-    // A BEKAPCSOLAS MEG NEM JELENTI, HOGY HASZNALHATO, es ezt a feltoltesi
-    // utnak MAGANAK kell megneznie.
-    //
-    // A LEGVESZELYESEBB TELEPITESI HIBA: a DOCUMENT_STORE_ROOT be van allitva,
-    // de a kotet nincs csatolva vagy a jelolo fajl hianyzik. A konyvtar
-    // ilyenkor IRHATO (a csatolasi pont ures konyvtara is az), tehat az iras
-    // SIKERUL -- csak epp a konteneri retegre, es a kovetkezo ujratelepites
-    // elviszi. Semmi nem hibazna, es a hiba hetekkel kesobb, letoltesnel
-    // derulne ki.
-    //
-    // AMIT ILYENKOR TESZUNK: visszaesunk az adatbazisra, es NAPLOZUNK. Nem
-    // elutasitas, mert a rendszernek mennie kell, es az adatbazis-ut ep; nem
-    // is csendes, mert a naplo es az allapot-vegpont is kimondja. A ket rossz
-    // valasz kozul (megall / csendben elveszit) egyik sem kell.
-    const status = await this.documentStore.describe();
-    if (status.state !== "ready") {
-      this.logger.warn(
-        `A dokumentum-tarolo be van kapcsolva, de nem hasznalhato (${status.state}: ${status.reason}). A feltoltes az adatbazisba megy.`,
-      );
-      return this.repository.addDocument({ ...common, content: file.buffer });
-    }
-
-    // A BAJTOK ELOSZOR A TAROLOBA MENNEK, ES CSAK AZUTAN A SOR.
-    //
-    // A ket lehetseges felig-kesz allapot NEM egyforma sulyu. Ha eloszor a sor
-    // jonne letre es a tarolo bukna, egy ELVESZETT SOR maradna: a felhasznalo
-    // LATJA a dokumentumot a listaban, es a letoltesnel kap hibat. Igy viszont
-    // legfeljebb egy ELARVULT FAJL marad, amire senki nem hivatkozik -- szemet,
-    // nem adatvesztes. A ket allapot kozul a kevesbe latszot valasztjuk.
     /**
-     * A KULCS MOSTANTOL MEGNEVEZI A GAZDAT. Ez az eszkoz-ut, tehat `asset` --
-     * a munkalap ugyanezt a magot hasznalja majd, mas gazdaval.
+     * A FELTOLTES SZABALYAI A KOZOS MAGBAN ALLNAK (`documents/document-intake.ts`).
+     *
+     * MI MARAD ITT: a jogosultsag (fentebb, a `detail` belsos hivasa), a SOR
+     * irasa, es a hibak leforditasa HTTP valaszra. A tobbi -- tartalom-
+     * felismeres, fajlnev, sha256, keret, a tarolo es a visszaeses, a sorrend --
+     * gazdatol fuggetlen, es a munkalap ugyanazt hasznalja.
      */
-    const key = { owner: "asset" as const, ownerId: id, documentId };
-    await this.documentStore.put(key, file.buffer);
+    const documentId = randomUUID();
+    let prepared;
     try {
-      return await this.repository.addDocument({
-        ...common,
-        content: null,
-        storageKey: storageKeyFor(key),
-      });
+      prepared = await prepareDocument(
+        {
+          owner: "asset",
+          ownerId: id,
+          documentId,
+          file,
+        },
+        {
+          store: this.documentStore,
+          usedBytes: () => this.repository.documentBytesInUse(),
+          logger: this.logger,
+        },
+      );
     } catch (error) {
-      // A SOR NEM JOTT LETRE, TEHAT A FAJL SEM MARADHAT. A takaritas hibajat
-      // elnyeljuk: az eredeti hiba a fontosabb, azt nem szabad elfednie. Ha a
-      // takaritas is bukik, a fajl elarvultan marad, es az osszevetes
-      // megtalalja -- tehat nem veszik el, csak keson derul ki.
-      await this.documentStore.delete(key).catch(() => undefined);
+      // A KET ELUTASITAS KET KULONBOZO HTTP VALASZ, es ezt a mag NEM tudhatja:
+      // ott nincs Nest. A rossz fajl a KULDO hibaja (400), a betelt keret a
+      // rendszere (409).
+      if (error instanceof DocumentRejected)
+        throw new BadRequestException(error.message);
+      if (error instanceof DocumentOverQuota)
+        throw new ConflictException(error.message);
       throw error;
     }
-  }
 
-  /**
-   * A KERET ELLENORZESE, MIELOTT BARMI KELETKEZNE.
-   *
-   * A felhasznalt helyet a TABLABOL osszegezzuk, nem konyvtar-bejarasbol: a ket
-   * meres nem ugyanaz, es az elteresuk MAS kerdes (lasd a
-   * `document-store-reconciliation.ts` jegyzetet).
-   *
-   * BEALLITAS NELKUL NINCS KERET, es ez szandekos: egy kitalalt alapertelmezett
-   * hatar egy nap csendben elutasitana egy feltoltest, amirol senki nem dontott.
-   *
-   * A JELZES NEM ALLITJA MEG A FELTOLTEST, csak naploz. Az MINEKUNK szol, nem a
-   * feltoltonek: egy sikeres feltoltes utan riasztast kapni olyasmirol, amin a
-   * feltolto nem tud segiteni, csak zaj.
-   */
-  private async refuseIfOverQuota(incomingBytes: number): Promise<void> {
-    const limitBytes = Number(process.env.DOCUMENT_STORE_LIMIT_BYTES ?? 0);
-    if (!Number.isFinite(limitBytes) || limitBytes <= 0) return;
+    if (prepared.placement === "database")
+      return this.repository.addDocument({
+        ...prepared.common,
+        assetId: id,
+        type,
+        actorUserId,
+        content: prepared.content,
+      });
 
-    const decision = decideQuota({
-      usedBytes: await this.repository.documentBytesInUse(),
-      incomingBytes,
-      limitBytes,
-    });
-    if (decision.state === "reject") {
-      throw new ConflictException(decision.reason);
-    }
-    if (decision.state === "warn" && decision.reason) {
-      this.logger.warn(decision.reason);
+    try {
+      return await this.repository.addDocument({
+        ...prepared.common,
+        assetId: id,
+        type,
+        actorUserId,
+        content: null,
+        storageKey: prepared.storageKey,
+      });
+    } catch (error) {
+      // A SOR NEM JOTT LETRE, TEHAT A FAJL SEM MARADHAT. Ha a takaritas is
+      // bukik, a fajl elarvultan marad, es az osszevetes megtalalja -- tehat
+      // nem veszik el, csak keson derul ki.
+      await discardStoredDocument(
+        { owner: "asset", ownerId: id, documentId },
+        { store: this.documentStore },
+      );
+      throw error;
     }
   }
 

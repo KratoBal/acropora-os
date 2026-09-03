@@ -7,11 +7,23 @@ import { randomUUID } from "node:crypto";
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
+import {
+  discardStoredDocument,
+  DocumentOverQuota,
+  DocumentRejected,
+  prepareDocument,
+} from "../documents/document-intake.js";
+import { assertStorageKeyMatches } from "../service-assets/document-store/document-storage-key.js";
+import type { DocumentStore } from "../service-assets/document-store/document-store.js";
+import { DOCUMENT_STORE } from "../service-assets/document-store/document-store.provider.js";
 import type {
   WorksheetAttachableListResponse,
   WorksheetDetail,
@@ -85,10 +97,133 @@ export class WorksheetsService {
    * repository alone. A worksheet is not worth less when nobody is notified,
    * and the assignment must not depend on it.
    */
+  private readonly logger = new Logger(WorksheetsService.name);
+
   constructor(
     private readonly repository: WorksheetsRepository,
     @Optional() private readonly notifications?: NotificationsService,
+    /**
+     * A DOKUMENTUM-TAROLO ELHAGYHATO, es ez a meglevo tesztek miatt van igy:
+     * a lap-tesztek tobb tucat helyen allitjak elo a szolgaltatast, es egyik
+     * sem tolt fel fajlt. Ha kotelezo lenne, mindegyiket at kellene irni --
+     * a feltoltesi ut viszont KIMONDJA, ha hianyzik, tehat nem nema.
+     */
+    @Optional()
+    @Inject(DOCUMENT_STORE)
+    private readonly documentStore?: DocumentStore,
   ) {}
+
+  /**
+   * FENYKEP (VAGY EGYEB FAJL) A MUNKALAPHOZ.
+   *
+   * === MIHEZ KOTODIK, ES MIERT NEM A VERZIOHOZ ===
+   *
+   * A kep BIZONYITEK a munkarol, nem a lap SZOVEGENEK resze. Egy alairt verzio
+   * valtozatlan: ha a kep a verziohoz tartozna, egy kesobb erkezo fenykep vagy
+   * nem ferne fel, vagy egy alairt rekordot irna at. ALAIRAS UTAN IS
+   * felkerulhet -- a bizonyitek gyakran keson erkezik.
+   *
+   * A FELTOLTES SZABALYAI A KOZOS MAGBAN allnak, ugyanazok, mint az eszkoznel.
+   */
+  async addDocument(
+    id: string,
+    type: "PHOTO" | "OTHER",
+    file: Express.Multer.File,
+    actorUserId: string,
+    scope: PartnerScope,
+  ) {
+    // A JOGOSULTSAG ITT DOL EL, nem a magban: a lap sajat hatokor-szabalya
+    // vonatkozik ra, es azt egy kozos modul nem ismerheti.
+    const lap = await this.repository.detail(id, scope);
+    if (!lap) throw new NotFoundException("A munkalap nem található.");
+
+    if (!this.documentStore)
+      throw new ServiceUnavailableException(
+        "A dokumentum-tároló nincs beállítva ebben a példányban.",
+      );
+
+    const documentId = randomUUID();
+    let prepared;
+    try {
+      prepared = await prepareDocument(
+        { owner: "worksheet", ownerId: id, documentId, file },
+        {
+          store: this.documentStore,
+          usedBytes: () => this.repository.documentBytesInUse(),
+          logger: this.logger,
+        },
+      );
+    } catch (error) {
+      // A KET ELUTASITAS KET KULONBOZO HTTP VALASZ: a rossz fajl a KULDO
+      // hibaja (400), a betelt keret a rendszere (409).
+      if (error instanceof DocumentRejected)
+        throw new BadRequestException(error.message);
+      if (error instanceof DocumentOverQuota)
+        throw new ConflictException(error.message);
+      throw error;
+    }
+
+    if (prepared.placement === "database")
+      return this.repository.addDocument({
+        ...prepared.common,
+        worksheetId: id,
+        type,
+        actorUserId,
+        content: prepared.content,
+      });
+
+    try {
+      return await this.repository.addDocument({
+        ...prepared.common,
+        worksheetId: id,
+        type,
+        actorUserId,
+        content: null,
+        storageKey: prepared.storageKey,
+      });
+    } catch (error) {
+      // A SOR NEM JOTT LETRE, TEHAT A FAJL SEM MARADHAT.
+      await discardStoredDocument(
+        { owner: "worksheet", ownerId: id, documentId },
+        { store: this.documentStore },
+      );
+      throw error;
+    }
+  }
+
+  /** Egy lap csatolmanyai, tartalom nelkul. */
+  async documents(id: string, scope: PartnerScope) {
+    const lap = await this.repository.detail(id, scope);
+    if (!lap) throw new NotFoundException("A munkalap nem található.");
+    return { items: await this.repository.documents(id) };
+  }
+
+  /**
+   * EGY CSATOLMANY BAJTJAI.
+   *
+   * A KET FORRAS KULON AG, es a tarolo-kulcs EGYEZESET ellenorizzuk: ha a sor
+   * mas elrendezessel keszult, a helyes viselkedes a MEGALLAS, nem az, hogy a
+   * mai elrendezes szerint keresunk egy fajlt, ami nincs ott.
+   */
+  async documentBytes(id: string, documentId: string, scope: PartnerScope) {
+    const lap = await this.repository.detail(id, scope);
+    if (!lap) throw new NotFoundException("A munkalap nem található.");
+
+    const document = await this.repository.document(id, documentId);
+    if (!document) throw new NotFoundException("A csatolmány nem található.");
+
+    if (document.content) return { ...document, bytes: document.content };
+
+    if (!document.storageKey || !this.documentStore)
+      throw new NotFoundException("A csatolmány tartalma nem érhető el.");
+
+    const key = { owner: "worksheet" as const, ownerId: id, documentId };
+    assertStorageKeyMatches(document.storageKey, key);
+    const bytes = await this.documentStore.get(key);
+    if (!bytes)
+      throw new NotFoundException("A csatolmány tartalma nem érhető el.");
+    return { ...document, bytes };
+  }
 
   list(query: WorksheetListQueryDto, scope: PartnerScope) {
     return this.repository.list(query, scope);

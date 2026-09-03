@@ -304,3 +304,25 @@ export class SetWorksheetPartnerCodeDto {
   })
   partnerCode!: string;
 }
+
+/**
+ * HANY FAJL MEHET EGY KERESBEN.
+ *
+ * UGYANAZ A SZAM, MINT AZ ESZKOZNEL (tiz), es szandekosan: a ket felulet
+ * ugyanazt a kotetet es ugyanazt a keretet hasznalja, tehat ket kulonbozo
+ * hatar csak azt jelentene, hogy az egyiket elfelejtettuk karbantartani.
+ */
+export const MAX_WORKSHEET_DOCUMENTS_PER_UPLOAD = 10;
+
+const WORKSHEET_DOCUMENT_TYPES = ["PHOTO", "OTHER"] as const;
+
+export class UploadWorksheetDocumentDto {
+  /**
+   * A CSATOLMANY FAJTAJA. ELHAGYHATO, es az alapertelmezes a `PHOTO`: a
+   * telefonrol erkezo feltoltes MINDIG fenykep, es egy kotelezo mezo ott csak
+   * egy allando literal lenne a kliensben.
+   */
+  @IsIn(WORKSHEET_DOCUMENT_TYPES)
+  @IsOptional()
+  type?: (typeof WORKSHEET_DOCUMENT_TYPES)[number];
+}
