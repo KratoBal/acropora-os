@@ -8,10 +8,11 @@ import type {
 } from "./document-store.js";
 import { runReconciliation } from "./store-reconciliation.cli.js";
 
-const kulcs = (assetId: string, documentId: string): DocumentKey => ({
-  assetId,
-  documentId,
-});
+const kulcs = (
+  ownerId: string,
+  documentId: string,
+  owner: "asset" | "worksheet" = "asset",
+): DocumentKey => ({ owner, ownerId, documentId });
 
 /**
  * A TAROLO-DUPLA A VARRATON KAPJA A VALODI SZERZODEST (`DocumentStore`), nem egy
@@ -50,7 +51,7 @@ function tarolo(options: {
       : {
           size: async (key: DocumentKey) => {
             if (options.sizeThrows) throw new Error("a meret nem olvashato");
-            const kulcs = `${key.assetId}/${key.documentId}`;
+            const kulcs = `${key.ownerId}/${key.documentId}`;
             return options.sizes?.[kulcs] ?? 10;
           },
         }),
@@ -78,8 +79,15 @@ describe("tarolo-egyeztetes futtatoja", () => {
       fetchRows: async () => [{ key: kulcs("a1", "hianyzo"), sizeBytes: 10 }],
     });
     assert.equal(ki.code, 1);
-    assert.ok(ki.lines.some((l) => l.startsWith("  ARVA    a1/arva")));
-    assert.ok(ki.lines.some((l) => l.startsWith("  HIANYZO a1/hianyzo")));
+    /*
+      A KIIRT UT MOSTANTOL A TELJES TAROLO-KULCS (`assets/a1/arva`), nem a
+      prefix nelkuli alak. Ez az, amit az uzemelteto a LEMEZEN is megtalal --
+      eddig a ket alak elter, es a kulonbseget a fejeben kellett potolnia.
+    */
+    assert.ok(ki.lines.some((l) => l.startsWith("  ARVA    assets/a1/arva")));
+    assert.ok(
+      ki.lines.some((l) => l.startsWith("  HIANYZO assets/a1/hianyzo")),
+    );
   });
 
   /**
