@@ -303,10 +303,30 @@ describe("WorksheetEditorPage assignees", () => {
     await waitFor(() => expect(jobs.detail).toHaveBeenCalledTimes(1));
     expect(jobs.detail.mock.calls[0]?.[1]).toBe("job-1");
 
-    await user.selectOptions(
-      await screen.findByLabelText("Alegység"),
-      "department-1",
+    /**
+     * AZ OPCIORA VARUNK, NEM A MEZORE -- ES EZ NEM STILUS.
+     *
+     * A mezo a betoltestol FUGGETLENUL ott van, tehat a ra valo varakozas
+     * azonnal teljesul. Az alegyseg-opciok viszont harom lepes utan erkeznek
+     * (jegy lekerdezese -> partner beallitasa -> alegysegek betoltese), es a
+     * `selectOptions` egy meg nem letezo opciora HIBAT dob.
+     *
+     * MERVE, nem sejtve: a regi alakkal tizenket futasbol egy piros, es a
+     * hibauzenet szo szerint ez volt: `Value "department-1" not found in
+     * options`, a kiirt DOM-ban csak az ures opcioval.
+     *
+     * ES A VARAKOZAS A MEZON BELUL ALL, NEM A LAPON: ugyanaz az alegyseg-lista
+     * KET valasztoban szerepel (az "Alegyseg" es a letrehozo blokk "Szulo
+     * helyszin" mezoje), tehat egy lap-szintu kereses KETTOT talal es hibat dob.
+     * Ezt is mertem: `Found multiple elements with the role "option"`.
+     */
+    const alegyseg = await screen.findByLabelText("Alegység");
+    await waitFor(() =>
+      expect(
+        within(alegyseg).getByRole("option", { name: /Biotóp/ }),
+      ).toBeTruthy(),
     );
+    await user.selectOptions(alegyseg, "department-1");
     await user.type(screen.getByLabelText("Tárgy"), "Szivattyú csere");
     await user.click(screen.getByRole("button", { name: "Mentés" }));
 
@@ -359,6 +379,92 @@ describe("WorksheetEditorPage assignees", () => {
     expect("serviceJobId" in (worksheets.create.mock.calls[0]?.[1] ?? {})).toBe(
       false,
     );
+  });
+
+  /**
+   * AZ URES ALEGYSEG-VALASZTO KET OKBOL ALLHAT ELO, ES A KETTO TEENDOJE MAS.
+   *
+   * Itt a jegy partnere BENNE van a szervizpartner-listaban, tehat tukor-vevo
+   * sora van: tenyleg nincs alatta alegyseg, es a kezelo letrehozhat egyet ITT.
+   */
+  it("üres alegység-listánál tükör-soros partnernél a felvitelre mutat", async () => {
+    query.params = new URLSearchParams("hibajegy=job-1");
+    worksheets.selectablePartners.mockResolvedValue({
+      items: [
+        { customerId: "customer-42", name: "Fankó Kft.", partnerCode: "FANK" },
+      ],
+    });
+    worksheets.departments.mockResolvedValue({ items: [] });
+    render(<WorksheetEditorPage />);
+
+    expect(
+      await screen.findByText(/Ehhez a partnerhez még nincs alegység/),
+    ).toBeTruthy();
+  });
+
+  /**
+   * ES A MASIK OK: a jegy partnere NINCS a szervizpartner-listaban, tehat regi
+   * jegy nem-tukor vevo-soron. Ott alegyseg SOHA nem lesz -- a kezelot ITT
+   * tartani hiabavalo, a jegy partneret kell rendbe tenni.
+   *
+   * A KET ALLITAS EGYUTT MERI A SZETVALASZTAST: ha egy kozos mondat allna
+   * mindkettore, az egyik ITT tartana valakit, akinek mashol van dolga.
+   */
+  it("üres alegység-listánál nem-tükör partnernél a jegyre mutat", async () => {
+    query.params = new URLSearchParams("hibajegy=job-1");
+    jobs.detail.mockResolvedValue({
+      id: "job-1",
+      customerId: "regi-vevo",
+      customerName: "Régi Vevő",
+    });
+    worksheets.selectablePartners.mockResolvedValue({
+      items: [
+        { customerId: "customer-42", name: "Fankó Kft.", partnerCode: "FANK" },
+      ],
+    });
+    worksheets.departments.mockResolvedValue({ items: [] });
+    render(<WorksheetEditorPage />);
+
+    expect(
+      await screen.findByText(/a partnere nem szerviz partnerként van felvéve/),
+    ).toBeTruthy();
+  });
+
+  /**
+   * TESTVER-KONTROLL: HA VAN ALEGYSEG, A RENDES LEIRAS ALL.
+   *
+   * Enelkul a ket allitas akkor is zold lenne, ha a lap MINDIG az ures-eset
+   * mondatat mutatna.
+   */
+  it("alegységgel a rendes leírás áll", async () => {
+    worksheets.selectablePartners.mockResolvedValue({
+      items: [
+        { customerId: "customer-42", name: "Fankó Kft.", partnerCode: "FANK" },
+      ],
+    });
+    worksheets.departments.mockResolvedValue({
+      items: [
+        {
+          id: "department-1",
+          name: "Biotóp",
+          code: "BIO",
+          parentId: null,
+          isActive: true,
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    render(<WorksheetEditorPage />);
+
+    await user.selectOptions(
+      await screen.findByLabelText("Partner"),
+      "customer-42",
+    );
+
+    expect(
+      await screen.findByText("A munkalapszám első tagja is ebből lesz."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/még nincs alegység/)).toBeNull();
   });
 
   /**

@@ -8,6 +8,8 @@ const labels = vi.hoisted(() => ({
   batches: vi.fn(),
   issue: vi.fn(),
   codes: vi.fn(),
+  importCodes: vi.fn(),
+  free: vi.fn(),
 }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
@@ -52,6 +54,14 @@ describe("AssetLabelBatchesPage", () => {
       codes: ["V2196"],
     });
     labels.codes.mockReset().mockResolvedValue({ codes: ["V2196", "A0001"] });
+    labels.importCodes.mockReset().mockResolvedValue({
+      batchId: "koteg-3",
+      imported: ["V2196"],
+      alreadyExisted: [],
+    });
+    labels.free
+      .mockReset()
+      .mockResolvedValue([{ id: "l1", code: "V2196", issuedAt: "2026-09-02" }]);
   });
 
   /**
@@ -65,6 +75,74 @@ describe("AssetLabelBatchesPage", () => {
     expect(
       screen.getByText(/10 kód, ebből 0 még nincs eszközhöz rendelve/),
     ).toBeTruthy();
+  });
+
+  /**
+   * A BETOLTES KET LISTAT AD VISSZA, ES A LAP MINDKETTOT MUTATJA.
+   *
+   * Az UJAK sikerek; a MAR LETEZOK arra utalnak, hogy ezt a listat egyszer mar
+   * betoltottek -- es aki ezt nem latja, ujra kinyomtathatja oket. A ket
+   * allitas egyutt meri, hogy a lap SZETVALASZTJA a kettot.
+   */
+  it("a betöltés után megmutatja az újakat és a már meglévőket is", async () => {
+    labels.importCodes.mockResolvedValue({
+      batchId: "koteg-3",
+      imported: ["A0002"],
+      alreadyExisted: ["V2196"],
+    });
+    render(<AssetLabelBatchesPage />);
+    await screen.findByText(/2026\. 09\. 02\./);
+
+    fireEvent.change(screen.getByLabelText("Betöltendő kódok"), {
+      target: { value: "A0002, V2196" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Kódok betöltése" }));
+
+    await waitFor(() => expect(labels.importCodes).toHaveBeenCalledTimes(1));
+    expect(labels.importCodes.mock.calls[0]?.[1]).toEqual(["A0002", "V2196"]);
+    expect(await screen.findByText(/Betöltve:/)).toBeTruthy();
+    expect(await screen.findByText(/Már a készletben volt/)).toBeTruthy();
+  });
+
+  /**
+   * URES BEMENETTEL NEM HIVUNK. KET MERES: a mondat megjelenik, ES a hivas nem
+   * tortenik meg -- egy orzot nem az bizonyit, hogy szol, hanem hogy nem
+   * tortent semmi.
+   */
+  it("üres mezővel nem tölt be", async () => {
+    render(<AssetLabelBatchesPage />);
+    await screen.findByText(/2026\. 09\. 02\./);
+
+    fireEvent.click(screen.getByRole("button", { name: "Kódok betöltése" }));
+
+    expect(
+      await screen.findByText(/Adj meg legalább egy matricakódot/),
+    ).toBeTruthy();
+    expect(labels.importCodes).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A SZABAD KESZLET SZAMA MELLE ODAKERUL A LIMIT, HA ELERTUK.
+   *
+   * A vegpont valasza korlatozott: egy puszta "N szabad kod" azt allitana, hogy
+   * ennyi VAN, holott csak ennyit kertunk. A ket allitas egyutt meri a
+   * kulonbseget -- a limit alatt pontos szam all, a limiten "legalabb".
+   */
+  it("a limit alatt pontos számot mond, a limiten legalábbat", async () => {
+    render(<AssetLabelBatchesPage />);
+    expect(await screen.findByText("1 szabad kód.")).toBeTruthy();
+  });
+
+  it("a limitet elérve nem állítja, hogy pontosan annyi van", async () => {
+    labels.free.mockResolvedValue(
+      Array.from({ length: 100 }, (_, i) => ({
+        id: `l${i}`,
+        code: `V${1000 + i}`,
+        issuedAt: "2026-09-02",
+      })),
+    );
+    render(<AssetLabelBatchesPage />);
+    expect(await screen.findByText(/Legalább 100 szabad kód/)).toBeTruthy();
   });
 
   /**
