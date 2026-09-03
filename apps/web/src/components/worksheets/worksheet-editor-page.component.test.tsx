@@ -303,10 +303,30 @@ describe("WorksheetEditorPage assignees", () => {
     await waitFor(() => expect(jobs.detail).toHaveBeenCalledTimes(1));
     expect(jobs.detail.mock.calls[0]?.[1]).toBe("job-1");
 
-    await user.selectOptions(
-      await screen.findByLabelText("Alegység"),
-      "department-1",
+    /**
+     * AZ OPCIORA VARUNK, NEM A MEZORE -- ES EZ NEM STILUS.
+     *
+     * A mezo a betoltestol FUGGETLENUL ott van, tehat a ra valo varakozas
+     * azonnal teljesul. Az alegyseg-opciok viszont harom lepes utan erkeznek
+     * (jegy lekerdezese -> partner beallitasa -> alegysegek betoltese), es a
+     * `selectOptions` egy meg nem letezo opciora HIBAT dob.
+     *
+     * MERVE, nem sejtve: a regi alakkal tizenket futasbol egy piros, es a
+     * hibauzenet szo szerint ez volt: `Value "department-1" not found in
+     * options`, a kiirt DOM-ban csak az ures opcioval.
+     *
+     * ES A VARAKOZAS A MEZON BELUL ALL, NEM A LAPON: ugyanaz az alegyseg-lista
+     * KET valasztoban szerepel (az "Alegyseg" es a letrehozo blokk "Szulo
+     * helyszin" mezoje), tehat egy lap-szintu kereses KETTOT talal es hibat dob.
+     * Ezt is mertem: `Found multiple elements with the role "option"`.
+     */
+    const alegyseg = await screen.findByLabelText("Alegység");
+    await waitFor(() =>
+      expect(
+        within(alegyseg).getByRole("option", { name: /Biotóp/ }),
+      ).toBeTruthy(),
     );
+    await user.selectOptions(alegyseg, "department-1");
     await user.type(screen.getByLabelText("Tárgy"), "Szivattyú csere");
     await user.click(screen.getByRole("button", { name: "Mentés" }));
 
