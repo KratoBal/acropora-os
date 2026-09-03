@@ -30,6 +30,39 @@ export const assetLabelsApi = {
     );
   },
   /**
+   * MAR KINYOMTATOTT KODOK BETOLTESE UJ KOTEGKENT.
+   *
+   * MEGISMETELHETO, es a valasz megmondja, mi tortent: az `imported` az UJAK, az
+   * `alreadyExisted` azok, amik mar a keszletben voltak. A ketto kulon all,
+   * mert a teendo mas -- az elso siker, a masodik arra utal, hogy a listat mar
+   * betoltottek egyszer.
+   */
+  importCodes(token: string, codes: string[]) {
+    return apiRequest<{
+      batchId: string;
+      imported: string[];
+      alreadyExisted: string[];
+    }>("/service/assets/label-batches/import", token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ codes }),
+    });
+  },
+  /**
+   * A SZABAD MATRICAK, KOTEGTOL FUGGETLENUL.
+   *
+   * A VALASZ LIMITALT (a vegpont alapja 100, felso hatara 500), tehat a lista
+   * HOSSZA NEM a teljes szabad keszlet szama. A hivo ezert nem irhat ki belole
+   * darabszamot ugy, mintha az az osszes lenne -- a lapon a limit is ott all.
+   */
+  free(token: string, limit: number, signal?: AbortSignal) {
+    return apiRequest<{ id: string; code: string; issuedAt: string }[]>(
+      `/service/assets/labels/free?limit=${limit}`,
+      token,
+      { signal },
+    );
+  },
+  /**
    * EGY KOTEG KODJAI, A LETOLTESHEZ.
    *
    * KULON HIVAS, ES NEM A LISTA RESZE: a `batches` valasza otven kotegre
