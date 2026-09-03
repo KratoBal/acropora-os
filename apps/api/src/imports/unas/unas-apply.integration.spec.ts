@@ -508,6 +508,39 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
     assert.deepEqual(report.relationReferencesByField, {});
   });
 
+  /**
+   * ES A MASIK UT UGYANARRA A VODORRE: PONTOS IRASMODDAL.
+   *
+   * A valodi munkafuzetben 32 onhivatkozas all, es ebbol KETTO mar ma is
+   * illeszkedik pontos egyezessel -- azok nem a visszaesesen at jutnak ide.
+   * Az elozo allitas csak a visszaeses agat jarja be, tehat egy olyan
+   * valtoztatas, ami a szamlalot a visszaeses BLOKKJABA teszi, ott zold
+   * maradna, es a mai ket tetel csendben megszunne szamolodni.
+   *
+   * acrobot vette eszre, hogy erre kulon ismert pozitiv kontroll all
+   * rendelkezesre: a mai kodon a szamlalo a visszaeses nelkul is mutat.
+   */
+  it("counts a self-reference that matched without the fallback", async () => {
+    const batch = await stageApprove(
+      await catalogFixture({
+        categoryName: "Exact self reference category",
+        firstName: "Exact self reference test product",
+        firstImage: "https://example.test/exact-self.jpg",
+        // Ugyanaz a cikkszam, PONTOS irasmoddal: a visszaeses el sem sul.
+        secondReference: "APPLY-SKU-2",
+      }),
+      "apply-exact-self.xlsx",
+    );
+
+    const report = await applyService.apply(batch, "integration-owner");
+
+    assert.equal(report.relationReferencesSkippedAsSelfReference, 1);
+    // A visszaeses NEM sult el, tehat ez az ut fuggetlen tole.
+    assert.equal(report.relationReferencesResolvedByCaseFallback, 0);
+    assert.equal(report.relationsSynchronized, 1);
+    assert.equal(report.unresolvedRelationReferences, 0);
+  });
+
   it("does not guess when the fallback finds more than one product", async () => {
     const batch = await stageApprove(
       await catalogFixture({
