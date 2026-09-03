@@ -304,3 +304,31 @@ export async function uploadWorksheetDocuments(
     { method: "POST", body: built.body },
   );
 }
+
+/**
+ * EGY TETEL HOZZAADASA A PISZKOZATHOZ.
+ *
+ * SOR-SZINTU MUVELET, NEM TELJES CSERE, es ezt a szerver kommentje is
+ * kimondja: egy lapnak TOBB felelose lehet, es a teljes tartalmat cserelo
+ * mentes a masik szerelo sorait torolne -- nem versenyhelyzetkent, hanem
+ * MINDEN mentesnel.
+ *
+ * A valasz a TELJES lap, tehat a keperno frissul, es nem kell kulon lekerdezni.
+ */
+export function addWorksheetLine(
+  id: string,
+  input: { id: string; description: string; quantity: number; unit: string },
+) {
+  return apiRequest<WorksheetDetail>(
+    `${BASE}/${encodeURIComponent(id)}/lines`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+/** Egy tetel torlese a piszkozatrol. A valasz szinten a teljes lap. */
+export function removeWorksheetLine(id: string, lineId: string) {
+  return apiRequest<WorksheetDetail>(
+    `${BASE}/${encodeURIComponent(id)}/lines/${encodeURIComponent(lineId)}`,
+    { method: "DELETE" },
+  );
+}
