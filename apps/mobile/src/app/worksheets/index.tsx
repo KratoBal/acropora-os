@@ -144,6 +144,24 @@ export default function WorksheetsScreen() {
             : "Munkalapok a helyszíni munkához"}
         </Text>
 
+        {/*
+          ÚJ LAP A HELYSZÍNRŐL. Csak `worksheetsManage` joggal látszik, ugyanaz a
+          kapu, ami a szerveren az írást védi -- egy gomb, ami 403-mal tér
+          vissza, rosszabb, mint egy gomb, ami nincs ott.
+        */}
+        {capabilities?.worksheetsManage ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push("/worksheets/new")}
+            style={({ pressed }) => [
+              styles.newButton,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text style={styles.newButtonText}>Új munkalap</Text>
+          </Pressable>
+        ) : null}
+
         <Pressable
           accessibilityRole="switch"
           accessibilityState={{ checked: mineOnly }}
@@ -493,6 +511,17 @@ const styles = StyleSheet.create({
   rowAmount: { color: "#f4fbff", fontSize: 13, fontWeight: "800" },
   rowVersion: { color: "#e2b168", fontSize: 11, fontWeight: "700" },
   empty: { color: "#91afbe" },
+  newButton: {
+    backgroundColor: "#177b74",
+    borderRadius: 12,
+    padding: 13,
+  },
+  newButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "900",
+    textAlign: "center",
+  },
   error: {
     color: "#fecaca",
     backgroundColor: "#541b2b",
