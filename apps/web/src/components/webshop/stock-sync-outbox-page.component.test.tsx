@@ -1,9 +1,9 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { StockSyncOutboxPage } from "./stock-sync-outbox-page";
 
-const api = vi.hoisted(() => ({ summary: vi.fn() }));
+const api = vi.hoisted(() => ({ summary: vi.fn(), list: vi.fn() }));
 
 vi.mock("@/lib/api/inventory", () => ({ stockSyncOutboxApi: api }));
 vi.mock("@/components/auth/auth-provider", () => ({
@@ -29,8 +29,28 @@ const summary = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+const row = (overrides: Record<string, unknown> = {}) => ({
+  id: "row-1",
+  variantId: "v1",
+  warehouseId: "w1",
+  sku: "ACR-001",
+  targetOnHand: "7",
+  status: "FAILED" as const,
+  attempts: 2,
+  nextAttemptAt: "2026-09-03T10:00:00.000Z",
+  lastError: "A UNAS elutasította a készletet.",
+  resolutionNote: null,
+  sourceProcess: "inventory-count",
+  sourceRecordId: "count-1",
+  createdAt: "2026-09-01T10:00:00.000Z",
+  updatedAt: "2026-09-01T10:00:00.000Z",
+  processedAt: null,
+  ...overrides,
+});
+
 beforeEach(() => {
   api.summary.mockReset().mockResolvedValue(summary());
+  api.list.mockReset().mockResolvedValue([]);
 });
 
 describe("készlet-kimenősor oldal", () => {
@@ -92,5 +112,46 @@ describe("készlet-kimenősor oldal", () => {
     api.summary.mockResolvedValue(summary({ lastSuccessfulPublishAt: null }));
     render(<StockSyncOutboxPage />);
     expect(await screen.findByText("még soha")).toBeInTheDocument();
+  });
+
+  /**
+   * AZ URES ALLAPOT KET ALLITASA. Nem az a lenyeg, hogy megjelenik a "Nincs
+   * talalat" -- hanem hogy MELLETTE ott all, MIT kerdeztunk. A ket allapot
+   * ("tenyleg ures" es "rossz szuro") teendoje ellentetes, es egy nema ures
+   * lap ugyanazt a kepernyot adja rajuk.
+   */
+  it("üres sornál kimondja, hogy minden állapotot kérdezett", async () => {
+    render(<StockSyncOutboxPage />);
+    expect(await screen.findByText("Nincs találat.")).toBeInTheDocument();
+    expect(
+      await screen.findByText(/A szűrő: minden állapot/),
+    ).toBeInTheDocument();
+  });
+
+  it("szűrt üres sornál a szűrőt nevezi meg, és más állapotra irányít", async () => {
+    render(<StockSyncOutboxPage />);
+    await screen.findByText("Nincs találat.");
+    fireEvent.change(screen.getByLabelText("Állapot szűrő"), {
+      target: { value: "FAILED" },
+    });
+    expect(
+      await screen.findByText(/A szűrő: Hibás állapotú tételek/),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(api.list).toHaveBeenCalledWith(
+        "token-1",
+        { status: "FAILED" },
+        expect.anything(),
+      ),
+    );
+  });
+
+  it("a sorokat megmutatja, a hibaszöveggel együtt", async () => {
+    api.list.mockResolvedValue([row()]);
+    render(<StockSyncOutboxPage />);
+    expect(await screen.findByText("ACR-001")).toBeInTheDocument();
+    expect(
+      await screen.findByText("A UNAS elutasította a készletet."),
+    ).toBeInTheDocument();
   });
 });

@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import {
   stockSyncOutboxApi,
+  type StockSyncOutboxRow,
   type StockSyncOutboxStatus,
   type StockSyncOutboxSummary,
 } from "@/lib/api/inventory";
@@ -81,6 +82,16 @@ export function StockSyncOutboxPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * A SZURO ALAPERTELMEZESE URES, ES EZ DONTES: a lap elso kepe a TELJES sor
+   * legyen, ne egy szurt reszhalmaz. Egy elore beallitott szuro mellett a nulla
+   * talalat ugy nezne ki, mintha nem lenne teendo -- holott csak nem azt
+   * kerdeztuk.
+   */
+  const [status, setStatus] = useState<StockSyncOutboxStatus | "">("");
+  const [rows, setRows] = useState<StockSyncOutboxRow[] | null>(null);
+  const [rowsLoading, setRowsLoading] = useState(true);
+
   const load = useCallback(() => {
     if (!canView) return;
     setLoading(true);
@@ -99,6 +110,18 @@ export function StockSyncOutboxPage() {
   }, [canView, token]);
 
   useEffect(load, [load]);
+
+  useEffect(() => {
+    if (!canView) return;
+    const controller = new AbortController();
+    setRowsLoading(true);
+    void stockSyncOutboxApi
+      .list(token, status ? { status } : {}, controller.signal)
+      .then(setRows)
+      .catch(() => setRows(null))
+      .finally(() => setRowsLoading(false));
+    return () => controller.abort();
+  }, [canView, status, token]);
 
   if (!canView) {
     return (
@@ -181,6 +204,99 @@ export function StockSyncOutboxPage() {
               </p>
             </div>
           ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <h2 className="text-sm font-semibold text-slate-900">
+            A sor tételei
+          </h2>
+          <label className="text-xs text-slate-500">
+            Állapot:{" "}
+            <select
+              aria-label="Állapot szűrő"
+              className="rounded border px-2 py-1 text-xs"
+              value={status}
+              onChange={(event) =>
+                setStatus(event.target.value as StockSyncOutboxStatus | "")
+              }
+            >
+              <option value="">összes</option>
+              {STATUS_ORDER.map((value) => (
+                <option key={value} value={value}>
+                  {STATUS_LABELS[value]}
+                </option>
+              ))}
+            </select>
+          </label>
+        </CardHeader>
+        <CardContent>
+          {rowsLoading ? (
+            <Skeleton className="h-24 w-full" />
+          ) : rows === null ? (
+            <Alert
+              variant="danger"
+              title="A tételek betöltése nem sikerült"
+              description="A lista nem érhető el. Az összefoglaló ettől függetlenül a fenti kártyán látszik."
+            />
+          ) : rows.length === 0 ? (
+            /**
+             * AZ URES ALLAPOT NEM LEHET NEMA (acrobot kikotese, 2026-09-03).
+             *
+             * Egy "nincs adat" felirat UGYANUGY nez ki akkor, ha tenyleg nincs
+             * teendo, es akkor, ha rossz szurovel kerdeztunk. A ket allapot
+             * teendoje ELLENTETES, tehat a lapnak ki kell mondania, MIT keresett
+             * es MILYEN szurovel -- ugyanaz a szabaly, amit a nulla talalatnal
+             * meresre alkalmazunk, csak most a felhasznalo fele.
+             */
+            <div className="space-y-1 text-sm text-slate-600">
+              <p className="font-medium text-slate-900">Nincs találat.</p>
+              <p className="text-xs">
+                {status
+                  ? `A szűrő: ${STATUS_LABELS[status]} állapotú tételek, a legutóbbi 50. Más állapotban lehetnek tételek — válts az "összes" nézetre.`
+                  : "A szűrő: minden állapot, a legutóbbi 50 tétel. Ez azt jelenti, hogy a sor üres, nem azt, hogy a lekérdezés nem talált rá."}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="text-slate-500">
+                  <tr>
+                    <th className="py-1 pr-3">Cikkszám</th>
+                    <th className="py-1 pr-3">Állapot</th>
+                    <th className="py-1 pr-3">Cél készlet</th>
+                    <th className="py-1 pr-3">Próbálkozás</th>
+                    <th className="py-1 pr-3">Következő</th>
+                    <th className="py-1">Hiba</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr key={row.id} className="border-t">
+                      <td className="py-1 pr-3 font-medium text-slate-900">
+                        {row.sku}
+                      </td>
+                      <td className="py-1 pr-3">{STATUS_LABELS[row.status]}</td>
+                      <td className="py-1 pr-3">{row.targetOnHand}</td>
+                      <td className="py-1 pr-3">{row.attempts}</td>
+                      <td className="py-1 pr-3">
+                        {new Date(row.nextAttemptAt).toLocaleString("hu-HU")}
+                      </td>
+                      {/*
+                        A HIBA SZOVEGE TELJES EGESZEBEN LATSZIK, nem levagva: egy
+                        csonkolt UNAS-hibauzenetbol nem lehet eldonteni, ugyanaz
+                        a hiba ismetlodik-e, vagy egy masik jott.
+                      */}
+                      <td className="py-1 text-slate-600">
+                        {row.lastError ?? "-"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
