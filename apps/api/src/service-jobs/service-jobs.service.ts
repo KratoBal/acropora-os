@@ -438,11 +438,20 @@ export class ServiceJobsService {
       );
     }
 
+    /**
+     * A CSUPA SZOKOZ UGYANAZ, MINT A SEMMI. A megjegyzes ELHAGYHATO (Balazs
+     * dontese, 2026-09-03), de ha be van irva, akkor tartalom legyen: egy
+     * szokozokbol allo szoveg kitoltott mezonek latszik, es ures sort vinne a
+     * jegy tortenetebe. A `|| null` ezert all itt: a hianyt EGYFELE alak
+     * jelolje, ne ketfele.
+     */
+    const note = input.note?.trim() || null;
+
     const moved = await this.repository.move({
       id,
       from,
       to: input.to,
-      note: input.note?.trim() || null,
+      note,
       actorUserId,
     });
     // A LÉPÉS FELTÉTELE A `from` VOLT: ha közben más lépett, nem írjuk felül

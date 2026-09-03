@@ -7,8 +7,10 @@ import {
   Card,
   ConfirmDialog,
   EmptyState,
+  FormField,
   PageHeader,
   Skeleton,
+  Textarea,
 } from "@acropora/ui";
 import {
   hasPermission,
@@ -69,6 +71,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [stepError, setStepError] = useState<string | null>(null);
   const [stepping, setStepping] = useState(false);
+  const [note, setNote] = useState("");
   const [attachable, setAttachable] = useState<WorksheetAttachableItem[]>([]);
   const [chosenSheet, setChosenSheet] = useState("");
   const [attachError, setAttachError] = useState<string | null>(null);
@@ -135,7 +138,17 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
     setStepping(true);
     setStepError(null);
     try {
-      await serviceJobsApi.move(token, jobId, { to });
+      await serviceJobsApi.move(token, jobId, {
+        to,
+        note: note.trim() || null,
+      });
+      /**
+       * A MEZO CSAK SIKERES LEPES UTAN URUL. Ha a hivas elbukik (halozat,
+       * utkozes, elutasitas), a felhasznalo begepelt szovege ottmarad -- egy
+       * elveszett indokot ujra le kellene irni, es a masodik nekifutas
+       * rovidebb lenne, mint az elso.
+       */
+      setNote("");
       await load();
     } catch (cause) {
       setStepError(
@@ -293,18 +306,37 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
             />
           ) : null}
           {job.allowedSteps.length ? (
-            <div className="flex flex-wrap gap-2">
-              {job.allowedSteps.map((to) => (
-                <Button
-                  key={to}
-                  variant="secondary"
-                  disabled={stepping}
-                  onClick={() => void step(to)}
-                >
-                  {serviceJobStatusLabel[to]}
-                </Button>
-              ))}
-            </div>
+            <>
+              <FormField
+                label="Megjegyzés"
+                description="Elhagyható. Ami ide kerül, a jegy naplójában marad, annál a lépésnél, amelyikhez írtad."
+              >
+                <Textarea
+                  aria-label="Megjegyzés a lépéshez"
+                  rows={3}
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                  maxLength={2000}
+                />
+              </FormField>
+              {/*
+                EGYETLEN GOMB SEM VAR SZOVEGRE. A megjegyzes minden atmenetnel
+                elhagyhato (Balazs dontese, 2026-09-03), tehat a `disabled`
+                egyedul a folyamatban levo hivasrol szol.
+              */}
+              <div className="flex flex-wrap gap-2">
+                {job.allowedSteps.map((to) => (
+                  <Button
+                    key={to}
+                    variant="secondary"
+                    disabled={stepping}
+                    onClick={() => void step(to)}
+                  >
+                    {serviceJobStatusLabel[to]}
+                  </Button>
+                ))}
+              </div>
+            </>
           ) : (
             /* A LEZÁRT JEGYEN NEM ÜRES A DOBOZ, hanem meg van mondva, miért.
                Egy eltűnt gombsor úgy néz ki, mint egy betöltési hiba. */

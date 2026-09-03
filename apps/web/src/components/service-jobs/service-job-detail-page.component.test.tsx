@@ -179,8 +179,63 @@ describe("ServiceJobDetailPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Ütemezve" }));
 
     await waitFor(() => expect(api.move).toHaveBeenCalledTimes(1));
-    expect(api.move.mock.calls[0]?.[2]).toEqual({ to: "SCHEDULED" });
+    expect(api.move.mock.calls[0]?.[2]).toEqual({
+      to: "SCHEDULED",
+      note: null,
+    });
     await waitFor(() => expect(api.detail).toHaveBeenCalledTimes(2));
+  });
+
+  /**
+   * EGYETLEN GOMB SEM VAR SZOVEGRE. A megjegyzes minden atmenetnel elhagyhato
+   * (Balazs dontese, 2026-09-03), es ez az allitas azert all itt nev szerint,
+   * mert a korabbi valtozat epp ezt tiltotta: ha valaki ujra bevezetne egy
+   * atmenet-fuggo kotelezoseget, ez pirosodik, es nem a felhasznalo talalkozik
+   * vele eloszor.
+   */
+  it("üres megjegyzés mellett is minden lépés gombja nyitva van", async () => {
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    await screen.findByText("A hibajegy létrejött (Új).");
+
+    expect(screen.getByLabelText("Megjegyzés a lépéshez")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Elállt" })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "Ütemezve" })).not.toBeDisabled();
+  });
+
+  /**
+   * A MEGJEGYZES AZ ATMENETTEL EGYUTT LATSZIK, ES EZ NEM AZ, HOGY "VALAHOL A
+   * LAPON SZEREPEL".
+   *
+   * Az allitas a naplo ADOTT SORAN belul keres: az a sor, ami a lepest
+   * mondja ki, tartalmazza a hozza irt szoveget is. Egy sima getByText akkor is
+   * zold maradna, ha a megjegyzes egy MASIK bejegyzes ala csuszna -- es egy
+   * megjegyzes, ami elszakad az atmenettol, ket honap mulva nem mond semmit.
+   */
+  it("a megjegyzés annál a lépésnél áll, amelyikhez írták", async () => {
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    const line = await screen.findByText("Új → Felmérve");
+    const row = line.closest("li");
+
+    expect(row).not.toBeNull();
+    expect(
+      within(row as HTMLElement).getByText("Megnéztük, alkatrész kell hozzá."),
+    ).toBeTruthy();
+  });
+
+  it("a beírt indokot átadja a lépésnek, és utána üríti a mezőt", async () => {
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    await screen.findByText("A hibajegy létrejött (Új).");
+
+    const field = screen.getByLabelText("Megjegyzés a lépéshez");
+    fireEvent.change(field, { target: { value: "  A vevő mégsem kéri.  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Elállt" }));
+
+    await waitFor(() => expect(api.move).toHaveBeenCalledTimes(1));
+    expect(api.move.mock.calls[0]?.[2]).toEqual({
+      to: "CANCELLED",
+      note: "A vevő mégsem kéri.",
+    });
+    await waitFor(() => expect(field).toHaveValue(""));
   });
 
   /**
