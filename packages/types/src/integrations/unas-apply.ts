@@ -187,6 +187,16 @@ export interface UnasApplySummary {
    *
    * A KORABBI ALAK ITT 320-AT MONDOTT, ES AZ HAMIS VOLT: 589 minusz 269, vagyis
    * kimaradt a harmadik kihagyasi ok, az onhivatkozas. 589 = 290 + 269 + 30.
+   *
+   * ES EGY SZAM, AMI HELYESNEK LATSZIK, ES MEGSEM EZ: 448. Ennyi hivatkozast old
+   * fel a visszaeses UGY, hogy kapcsolat lesz belole -- de ebbol 158 olyan
+   * kapcsolat, amit MA IS letrehoz egy pontos irasmodu hivatkozas. A visszaeses
+   * ott nem letrehoz, hanem ELVESZI A HELYET a dedup `seen` halmazaban, es a
+   * pontos parja atkerul a duplikatum-szamlalora (ezert megy az 0-rol 269-re).
+   * 448 - 158 = 290. A 448 tehat ATTRIBUCIO (melyik uton keletkezett), nem
+   * EREDMENY (mennyivel tobb kapcsolat all) -- es EGYETLEN szamlalon sem fog
+   * megjelenni. Merve ket teljes futas halmaz-kulonbsegevel: 290 uj kapcsolat,
+   * nulla eltuno.
    * Merve ugyanazon az exporton, a betolto szabalyaival, ketszer futtatva (a
    * visszaesessel es nelkule); ugyanaz a futas adja ki az 589-et, a 269-et es a
    * 145/124 bontast is, tehat a 290 nem egy masik modszerbol jon.
