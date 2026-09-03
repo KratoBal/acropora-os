@@ -87,6 +87,31 @@ export interface ProjectableProduct {
    * amit valaki meghozott, es amit csendben visszavonnank.
    */
   seoRobots: string | null;
+  /**
+   * A TERMEK KEPEI, MAR SORRENDBEN, vagy `null`.
+   *
+   * A LISTA SORRENDJE MAGA AZ ADAT: az ELSO elem a fo kep, a tobbi utana a
+   * megadott sorrendben. A cel oldalon ugyanez az alak all -- a rang a tomb
+   * indexebol keletkezik --, tehat itt sincs kulon rang-mezo.
+   *
+   * A `null` NEM azt jelenti, hogy a termeknek nincs kepe. Azt jelenti, hogy a
+   * HIVO nem tud listat adni. A ket eset kovetkezmenye a keres torzsere nezve
+   * ugyanaz (a mezo nem megy ki), de a jelentesben ELLENTETES, es ezert a
+   * megkulonboztetes a hivonal lakik, ahol az adat is van -- ugyanugy, mint a
+   * kategoriaknal es a bolti cimnel.
+   *
+   * MIERT NEM MEGY KI SOSEM URES TOMB: az `images` a cel oldalon az
+   * update-agon CSERE-szemantikaju, tehat az ures lista LETOROLNE a termek
+   * meglevo kepeit -- csendben, mert a hivas sikerrel terne vissza. Merve a
+   * mai adaton: 1893 termekbol 88-nak nincs egyetlen kepe sem, tehat ez nem
+   * elmeleti eset.
+   *
+   * AMI NEM UTAZIK VELE: az ALT SZOVEG. A cel oldali HTTP-ut a kepobjektumban
+   * kizarolag `url`-t fogad, minden mas kulcsot csendben eldob. Ezert a lista
+   * szandekosan URL-eket hordoz, nem objektumokat: egy `alt` mezo itt azt
+   * igerne, hogy atmegy.
+   */
+  images: string[] | null;
 }
 
 export type ProjectionOutcome =
@@ -370,6 +395,31 @@ export class MedusaProductProjectionService {
       ? { metadata: { seo_robots: product.seoRobots } }
       : {};
 
+    /**
+     * A KEPEK ES A FO KEP EGYUTT MENNEK, ES A THUMBNAIL MINDIG KIIRODIK.
+     *
+     * A ket mezot azert epiti egy helyen ez a foltocska, mert egyutt igazak:
+     * a fo kep a lista ELSO eleme, es ha a lista nem megy ki, a thumbnailnek
+     * sincs mire mutatnia.
+     *
+     * A THUMBNAIL NEM HAGYHATO EL, ES EZ MERT KULONBSEG A KET AG KOZOTT: a
+     * create-ag normalizaloja visszaesik az `images[0].url` ertekere, ha a mezo
+     * hianyzik; az UPDATE-agon viszont nincs ilyen visszaeses, ott a REGI ertek
+     * maradna. Egy megvaltozott fo kep tehat a masodik futastol csendben nem
+     * erne at -- es a vetites eppen a masodik futastol update-el.
+     *
+     * URES LISTA SOSEM MEGY: sem a `null`, sem az ures tomb nem kerul a
+     * torzsbe, mert az update-agon a mezo csere-szemantikaju, es az ures lista
+     * letorolne a termek meglevo kepeit.
+     */
+    const imagePatch =
+      product.images && product.images.length > 0
+        ? {
+            images: product.images.map((url) => ({ url })),
+            thumbnail: product.images[0],
+          }
+        : {};
+
     const existingLink = await this.links.findByProductId(product.id);
     if (existingLink) {
       /**
@@ -385,6 +435,7 @@ export class MedusaProductProjectionService {
           external_id: product.id,
           ...handlePatch,
           ...metadataPatch,
+          ...imagePatch,
           status: publication.status,
           sales_channels: salesChannels,
           ...categoryPatch,
@@ -509,6 +560,7 @@ export class MedusaProductProjectionService {
         external_id: product.id,
         ...handlePatch,
         ...metadataPatch,
+        ...imagePatch,
         status: publication.status,
         sales_channels: salesChannels,
         ...categoryPatch,

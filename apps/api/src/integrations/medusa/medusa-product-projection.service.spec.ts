@@ -36,6 +36,7 @@ const product: ProjectableProduct = {
   medusaCategoryIds: null,
   slug: null,
   seoRobots: null,
+  images: null,
   publication: {
     catalogAuthority: "ACROPORA",
     isActive: true,
@@ -144,6 +145,7 @@ const MEZO_SORSA: Record<string, "atmegy" | "szandekosan-nem"> = {
   primarySku: "atmegy", // -> a valtozat sku mezoje
   slug: "atmegy", // -> handle
   seoRobots: "atmegy", // -> metadata.seo_robots
+  images: "atmegy", // -> images (sorrendben) es thumbnail (az elso elem)
   medusaCategoryIds: "atmegy", // -> categories, ha van teljes lista
   /**
    * A publikacios ALLAPOT bemenet, nem mezo: belole a `status` es a
@@ -177,6 +179,7 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
         slug: "Teszt-cim",
         seoRobots: "noindex, nofollow",
         medusaCategoryIds: ["cat_1"],
+        images: ["https://kep/1.jpg", "https://kep/2.jpg"],
       },
       now,
     );
@@ -190,6 +193,9 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
       slug: torzs.handle === "Teszt-cim",
       medusaCategoryIds: torzs.categories?.[0]?.id === "cat_1",
       seoRobots: torzs.metadata?.seo_robots === "noindex, nofollow",
+      images:
+        torzs.images?.[0]?.url === "https://kep/1.jpg" &&
+        torzs.thumbnail === "https://kep/1.jpg",
       publication: torzs.status !== undefined,
     };
     const hianyzo = Object.entries(MEZO_SORSA)
@@ -883,5 +889,93 @@ describe("a publikáció és a csatorna a vetítésben", () => {
     await service.project(product, now);
 
     assert.equal(calls.filter((call) => call === "findSalesChannel").length, 1);
+  });
+});
+
+/**
+ * A KEPEK: A SORREND, A FO KEP, ES AZ, AMI NEM MEHET KI.
+ *
+ * A negy allitasbol KETTO a szukitest meri, nem a mukodest -- es ez szandekos.
+ * Egy keszlet, ami csak azt nezi, hogy a kepek atmennek, ugyanolyan zold lenne
+ * akkor is, ha a vetites URES listat kuldene: az is "atvinne" a kepeket.
+ */
+describe("MedusaProductProjectionService -- a termek kepei", () => {
+  it("a lista sorrendben megy, es a fo kep az ELSO elem", async () => {
+    const f = fakes({ link: null, found: [] });
+
+    await f.service.project(
+      { ...product, images: ["https://kep/a.jpg", "https://kep/b.jpg"] },
+      now,
+    );
+
+    const torzs = f.createdWith[0];
+    assert.ok(torzs, "a create nem futott le");
+    assert.deepEqual(torzs.images, [
+      { url: "https://kep/a.jpg" },
+      { url: "https://kep/b.jpg" },
+    ]);
+    assert.equal(torzs.thumbnail, "https://kep/a.jpg");
+  });
+
+  /**
+   * AZ UPDATE-AG KULON ALLITAS, ES NEM ISMETLES.
+   *
+   * A cel oldalon a ket ag MASKEPP viselkedik: a create-nel a hianyzo
+   * thumbnail visszaesik az elso kep URL-jere, az update-nel NEM -- ott a regi
+   * ertek maradna benne. Ha csak a create-et mernenk, egy elfelejtett
+   * thumbnail az update-agon csendben menne at.
+   */
+  it("az update-agon IS kimegy a fo kep, nem csak a lista", async () => {
+    const f = fakes({
+      link: { productId: product.id, medusaProductId: "prod_medusa_1" },
+      found: [],
+    });
+
+    await f.service.project(
+      { ...product, images: ["https://kep/uj-fokep.jpg", "https://kep/b.jpg"] },
+      now,
+    );
+
+    const torzs = f.updatedWith[0];
+    assert.ok(torzs, "az update nem futott le");
+    assert.equal(torzs.thumbnail, "https://kep/uj-fokep.jpg");
+    assert.equal(torzs.images?.length, 2);
+  });
+
+  /**
+   * ES A KET ALLITAS, AMI A NEMA KART MERI.
+   *
+   * Az `images` a cel oldalon csere-szemantikaju: egy ures lista LETOROLNE a
+   * termek meglevo kepeit, es a hivas sikerrel terne vissza. A "nincs kepunk"
+   * es a "torold a kepeket" tehat ket kulonbozo szandek, amit ugyanaz a
+   * kimenet kepvisel -- ezert kell nev szerinti allitas arra, hogy a mezo KI
+   * SEM KERUL.
+   */
+  it("ha nincs kep-lista, sem a lista, sem a fo kep NEM kerul a torzsbe", async () => {
+    const f = fakes({
+      link: { productId: product.id, medusaProductId: "prod_medusa_1" },
+      found: [],
+    });
+
+    await f.service.project({ ...product, images: null }, now);
+
+    const torzs = f.updatedWith[0];
+    assert.ok(torzs, "az update nem futott le");
+    assert.ok(!("images" in torzs), "ures kep-lista ment ki");
+    assert.ok(!("thumbnail" in torzs), "fo kep ment ki lista nelkul");
+  });
+
+  it("az URES lista ugyanugy nem kerul ki, mint a hianyzo", async () => {
+    const f = fakes({
+      link: { productId: product.id, medusaProductId: "prod_medusa_1" },
+      found: [],
+    });
+
+    await f.service.project({ ...product, images: [] }, now);
+
+    const torzs = f.updatedWith[0];
+    assert.ok(torzs, "az update nem futott le");
+    assert.ok(!("images" in torzs), "ures tomb ment ki, ez torolne a kepeket");
+    assert.ok(!("thumbnail" in torzs), "fo kep ment ki kepek nelkul");
   });
 });

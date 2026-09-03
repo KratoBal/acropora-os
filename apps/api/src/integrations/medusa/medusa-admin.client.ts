@@ -95,6 +95,48 @@ export interface MedusaProductInput {
    * oda tett. A hivo szabalya: ha nincs mit kuldeni, a mezot EL KELL HAGYNI.
    */
   metadata?: Record<string, string>;
+  /**
+   * A TERMÉK KÉPEI, A LISTA SORRENDJÉBEN.
+   *
+   * A SORREND MAGA AZ ADAT, ezért nincs rang-mező. Mérve a telepített 2.19.0
+   * forrásából, MINDKÉT ágon:
+   *
+   *   create  a hiányzó `rank` a tömb INDEXE lesz (a normalizáló csak akkor
+   *           hagyja békén, ha a hívó adott ilyet)
+   *   update  a `rank` MINDIG felülíródik a tömb indexével (a repository
+   *           `deepUpdate` metódusa feltétel nélkül képezi le)
+   *
+   * Rangot tehát sosem küldünk: nem is tudnánk. A HTTP admin validátor a
+   * képobjektumban KIZÁRÓLAG `url`-t fogad, és minden más kulcsot CSENDBEN
+   * eldob (a kép-szintű séma stripel, a felső szint strictel). Futtatva a
+   * telepített validátoron: `{ url, rank }`, `{ url, alt }` és
+   * `{ url, metadata }` mind ELFOGADVA, és a többlet eltűnik.
+   *
+   * EBBŐL KÖVETKEZIK, HOGY AZ ALT SZÖVEG EZEN AZ ÚTON NEM MEGY ÁT. Nem
+   * mulasztás: nincs mező, ahova menne, és a próbálkozás nem hibázna, hanem
+   * csendben veszne el. (Ma nálunk sincs meg: a UNAS import a `ProductImage`
+   * sorokat `altText` nélkül írja.)
+   *
+   * A MEZŐ ELHAGYÁSA ÉS AZ ÜRES TÖMB NEM UGYANAZ, ugyanúgy, mint a
+   * kategóriáknál -- csak itt a különbség MÉRT: az `images` az update-ágon
+   * CSERE-szemantikájú, tehát az üres tömb LETÖRÖLNÉ a termék meglévő képeit,
+   * és a hívás sikerrel térne vissza.
+   */
+  images?: { url: string }[];
+  /**
+   * A FŐ KÉP URL-JE, KÜLÖN MEZŐBEN.
+   *
+   * Nem hivatkozás a fenti lista egyik elemére: a Medusán ez egy önálló,
+   * szabad szöveges mező (`model.text().nullable()`).
+   *
+   * MINDEN FUTÁSNÁL EXPLICIT MEGY, és ez a lelet mondja meg, miért: a
+   * create-ág normalizálója visszaesik az `images[0].url` értékére, ha a mező
+   * hiányzik -- az UPDATE-ág viszont NEM. Ott a régi érték ragadna benne, és
+   * egy megváltozott fő kép csendben nem érne át. A vetítés a második
+   * futástól update-el, tehát a visszaesésre hagyatkozni annyi lenne, mint
+   * csak az első futásra megírni a szabályt.
+   */
+  thumbnail?: string;
   options: { title: string; values: string[] }[];
   variants: {
     title: string;
