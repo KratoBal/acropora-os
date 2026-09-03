@@ -632,3 +632,46 @@ describe("the product link's lookup key", () => {
     );
   });
 });
+
+/**
+ * A KEP-BEKOTES SZERKEZETI ALLITASSAL, UGYANABBOL AZ OKBOL, MINT A HIANY-SOROK.
+ *
+ * A parancs torzse a `prisma`-t modul-szintu importbol veszi, tehat teszt-duplat
+ * nem lehet neki adni -- viselkedesi allitas igy nem irhato ra. A kalibracio ezt
+ * MEG IS MUTATTA: a bekotes elvagasa (`images: publishedImageUrls && null`)
+ * NULLA allitast dontott pirosra, 1982 lefutott teszt mellett.
+ *
+ * AMIT EZ VED: hogy a vetites a KIVITT bolti URL-eket kapja, ne `null`-t. A
+ * `null` ma is helyes ertek (akkor a mezo kimarad), es epp ezert nema: egy
+ * elvagott bekotes utan a parancs HIBATLANUL fut le, csak sosem vinne kepet.
+ */
+const KEP_MEZO = /images:\s*([A-Za-z0-9_?.]+)\s*,/g;
+
+function imageFieldArguments(): string[] {
+  return [
+    ...readFileSync(PROJECTION_COMMANDS[0]!, "utf8").matchAll(KEP_MEZO),
+  ].map((match) => match[1]!);
+}
+
+describe("a vetítés kép-mezője a kivitt URL-eket kapja", () => {
+  /** A KONTROLL A MINTARA: egy mintan, ami biztosan tartalmazza. */
+  it("felismeri a mezőt egy mintában", () => {
+    const sample = "        images: valami,\n        images: null,\n";
+    assert.deepEqual(
+      [...sample.matchAll(KEP_MEZO)].map((m) => m[1]),
+      ["valami", "null"],
+    );
+  });
+
+  it("a parancsban PONTOSAN egy kép-mező áll, és nem `null`", () => {
+    const args = imageFieldArguments();
+
+    // A NEVEZO: ha ez nulla lenne, az allitas a sajat mintajarol szolna.
+    assert.equal(args.length, 1, "nem egy kép-mező áll a parancsban");
+    assert.notEqual(
+      args[0],
+      "null",
+      "a kép-bekötés el van vágva: a vetítés sosem kapna képet",
+    );
+  });
+});

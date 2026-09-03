@@ -27,6 +27,9 @@ import {
   type ProjectionPublicationReport,
 } from "./medusa-product-projection.service.js";
 import { storefrontSalesChannelId } from "./medusa-sales-channel.config.js";
+import { createDocumentStore } from "../../service-assets/document-store/document-store.provider.js";
+import { MedusaImageLinkRepository } from "./medusa-image-link.repository.js";
+import { publishProductImages } from "./product-image-publisher.js";
 
 /**
  * KÉZZEL indított vetítés, termékazonosítónként.
@@ -251,11 +254,23 @@ export async function runProjectionCli(
   }
 
   let service: MedusaProductProjectionService | null = null;
+  /**
+   * A KEP-OLDALI VARRATOK KULON ALLNAK, MERT MAS AZ ELETUK.
+   *
+   * A vetites-szolgaltatas a kliens KORE epul; a kep-kivitel UGYANAZT a
+   * klienst hasznalja (a feltoltes az `uploadFile`-on megy), de a lekepezese
+   * mas tabla. Egy kozos konstruktorba tomorites azt sugallna, hogy a ketto
+   * egyutt romlik el -- pedig a kep-lekepezes hianya nem akadalyozza a
+   * termek-vetitest.
+   */
+  let imageClient: MedusaAdminClient | null = null;
+  const imageLinks = new MedusaImageLinkRepository();
   if (!forgetOnly) {
     try {
+      imageClient = await medusaClientForProjection(credentials, out);
       service = new MedusaProductProjectionService(
         new MedusaProductLinkRepository(),
-        await medusaClientForProjection(credentials, out),
+        imageClient,
         storefrontSalesChannelId(env),
       );
     } catch (error) {
@@ -317,6 +332,15 @@ export async function runProjectionCli(
           where: { channel: "UNAS" },
           select: { slug: true, seoRobots: true },
           take: 1,
+        },
+        /**
+         * A KEPEK SORRENDBEN, es a `sortOrder` NEM elhagyhato: a cel oldalon a
+         * tomb sorrendje adja a rangot, es az ELSO elem lesz a fo kep. Egy
+         * rendezetlen lekerdezes csendben mas fo kepet adna minden futasnal.
+         */
+        images: {
+          orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+          select: { id: true, url: true, storageKey: true, fileName: true },
         },
       },
     });
@@ -398,6 +422,44 @@ export async function runProjectionCli(
         `${describeMissingCategoryMapping(product.id, categories.missing)}\n`,
       );
 
+    /**
+     * A KEPEK KIVITELE A VETITES ELE KERUL, ES EZ A SORREND KOTOTT: a vetites
+     * BOLTI URL-eket var, azok pedig csak a feltoltes utan leteznek.
+     *
+     * A bukas ITT NEM allitja meg a termeket -- a `blockedBy` sor a jelentesbe
+     * megy, es a vetites `null` kep-listaval fut le. Egy termek, aminek a nevet
+     * javitottuk, attol meg frissuljon, hogy a kepei meg uton vannak.
+     */
+    const futasIdeje = new Date();
+    const published = product.images.length
+      ? await publishProductImages(
+          product.id,
+          product.images.map((image) => ({
+            id: image.id,
+            url: image.url,
+            storageKey: image.storageKey,
+            fileName: image.fileName ?? `${image.id}.jpg`,
+            contentType: "image/jpeg",
+          })),
+          {
+            store: createDocumentStore(env),
+            medusa: imageClient!,
+            links: imageLinks,
+            /**
+             * UGYANAZ AZ IDOPONT, mint amit a vetites kap -- ket kulon
+             * `new Date()` ket kulonbozo masodpercet adna ugyanarra a
+             * muveletre, es a ket lekepezes idobelyege elcsuszna egymastol.
+             */
+            now: futasIdeje,
+          },
+        )
+      : null;
+    if (published?.blockedBy)
+      out.stdout(
+        `${product.id}: a képek nem mentek ki (${published.blockedBy})\n`,
+      );
+    const publishedImageUrls = published?.urls.length ? published.urls : null;
+
     const outcome = await service!.project(
       {
         id: product.id,
@@ -408,24 +470,20 @@ export async function runProjectionCli(
         slug: product.channelListings[0]?.slug ?? null,
         seoRobots: product.channelListings[0]?.seoRobots ?? null,
         /**
-         * MA NEM ADUNK KEPET, ES EZ DONTES, NEM MULASZTAS.
+         * A KEPEK BOLTI URL-JEI, vagy `null`.
          *
-         * A kepek a `ProductImage` tablaban ott vannak (a UNAS import irja
-         * oket, `url` es `sortOrder` mezovel), es a vetites MAR TUDNA vinni
-         * oket. Amit atadnank, az viszont a MAI URL lenne -- mind a 3426 kep a
-         * `shop.acropora.hu` hoszton all, vagyis a UNAS sajat tarolojan.
+         * A `null` NEM azt jelenti, hogy nincs kep: azt, hogy MOST nem tudunk
+         * teljes listat adni (nincs meg a mester, serult a fajl, vagy elhasalt
+         * a feltoltes). A vetites ilyenkor KIHAGYJA a mezot, tehat a boltban
+         * mar kint levo kepek ERINTETLENUL maradnak.
          *
-         * Ezt az utat kulon megbeszeltuk es ELVETETTUK: a bolt kepei nem
-         * fugghetnek attol a rendszertol, amibol kifele koltozunk. A kep
-         * MESTERE a mi oldalunkra kerul, onnan tolti fel a vetites a boltba, es
-         * a termeken a bolt sajat URL-je all majd.
-         *
-         * AMI EZT FELOLDJA: a kep-atmasolas a sajat tarolonkba, es a feltoltes
-         * a bolt fajl-moduljaba. Amint a `ProductImage.url` a mi oldalunkra
-         * mutat, ez a sor egy lekerdezesre cserelheto -- a vetitesen nem kell
-         * valtoztatni semmit.
+         * ES EZ PONTOSITAS A SAJAT KORABBI TERVEMHEZ KEPEST. Azt irtam, hogy a
+         * termek KIMARAD a vetitesbol, ha a kepei nem mennek. Az tul szigoru:
+         * akkor a NEV, a leiras es az allapot sem frissulne, holott azoknak
+         * semmi kozuk a kepekhez. A helyes alak az, hogy a KEP-MEZO marad ki,
+         * nem a termek.
          */
-        images: null,
+        images: publishedImageUrls,
         publication: {
           catalogAuthority: product.catalogAuthority,
           isActive: product.isActive,
@@ -433,7 +491,7 @@ export async function runProjectionCli(
           activeVariantCount: product.variants.length,
         },
       },
-      new Date(),
+      futasIdeje,
     );
 
     if (outcome.action === "stopped") {
