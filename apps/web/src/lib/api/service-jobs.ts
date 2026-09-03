@@ -76,6 +76,59 @@ export const serviceJobsApi = {
     );
   },
   /**
+   * A LATHATOSAGI HOZZARENDELESEK EGY FELHASZNALOHOZ.
+   *
+   * A HAROM HIVAS UGYANAZON A JOGON ALL (`service.visibility.assign`), a
+   * felhasznalo-lap viszont `users.manage` alatt: ma a ket halmaz egybeesik
+   * (OWNER es ADMIN), de nem ugyanaz a szabaly. A szakaszt ezert a SAJAT jogan
+   * kapuzzuk a kepernyon, nem a lapera bizva.
+   */
+  visibilityAssignments(token: string, userId: string, signal?: AbortSignal) {
+    return apiRequest<
+      {
+        departmentId: string;
+        createdAt: string;
+        department: { name: string; code: string };
+      }[]
+    >(`${base}/visibility/${encodeURIComponent(userId)}`, token, { signal });
+  },
+  /**
+   * AMIBOL VALASZTANI LEHET. A szerver rakja ossze a lancot (felhasznalo ->
+   * szallito -> tukor-vevo sor -> alegysegek), mert a felulet a masodik
+   * lepeshez nem lat utat: a `UserDetail` `supplierId`-t ad, a partner-lista
+   * `customerId`-t, es a ketto nem parosithato.
+   */
+  selectableUnits(token: string, userId: string, signal?: AbortSignal) {
+    return apiRequest<{
+      items: {
+        id: string;
+        name: string;
+        code: string;
+        parentId: string | null;
+      }[];
+    }>(`${base}/visibility/${encodeURIComponent(userId)}/units`, token, {
+      signal,
+    });
+  },
+  assignUnit(token: string, userId: string, departmentId: string) {
+    return apiRequest<{ departmentId: string }>(
+      `${base}/visibility/${encodeURIComponent(userId)}`,
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ departmentId }),
+      },
+    );
+  },
+  unassignUnit(token: string, userId: string, departmentId: string) {
+    return apiRequest<{ ok: true }>(
+      `${base}/visibility/${encodeURIComponent(userId)}/${encodeURIComponent(departmentId)}`,
+      token,
+      { method: "DELETE" },
+    );
+  },
+  /**
    * A LÉPÉS VÁLASZA CSAK NYUGTA (`{ ok: true }`), nem a friss jegy.
    *
    * Ezért a hívó ÚJRATÖLT utána. Ha a nyugtából építenénk fel a képernyőt, a
