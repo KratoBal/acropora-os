@@ -61,8 +61,12 @@ export function serviceJobVisibilityWhere(input: {
   // valasztok teljes halmazt kell lassanak.
   if (input.scope.kind === "internal") return {};
 
+  // A NYITO MOSTANTOL A JEGYEN ALL, nem a naplobol jon. A valtas indoka a mezo
+  // folott all a semaban; roviden: a naplo aktora `SetNull` a felhasznalo
+  // torlesekor, indexeletlen oszlopon szurtunk volna, es az aktor azt mondja
+  // meg, ki IRTA BE az elso sort, nem azt, kie a jegy.
   const nyitoTengely: Prisma.ServiceJobWhereInput = {
-    events: { some: { toStatus: "NEW", actorUserId: input.userId } },
+    openedById: input.userId,
   };
 
   if (input.unitIds.length === 0) return nyitoTengely;

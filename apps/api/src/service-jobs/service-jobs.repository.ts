@@ -37,6 +37,11 @@ export class ServiceJobsRepository {
         title: input.title,
         description: input.description,
         customerId: input.customerId,
+        // A NYITO A JEGYEN, NEM CSAK A NAPLOBAN. Ugyanaz az aktor kerul mindket
+        // helyre, egy tranzakcioban -- de a naplo aktora `SetNull` egy kesobbi
+        // felhasznalo-torlesnel, ez a mezo pedig megmarad. A ketto tehat nem
+        // duplikacio: mas a feladatuk es mas a sorsuk.
+        openedById: input.actorUserId,
         events: {
           create: {
             // `fromStatus` nincs: a keletkezésnek nincs előzménye.
