@@ -174,3 +174,88 @@ export const stockItemReconciliationApi = {
     );
   },
 };
+
+/**
+ * A UNAS KESZLET-KIMENOSOR: az ot vegpont, aminek eddig NULLA fogyasztoja volt.
+ *
+ * A mert allapot (nautilus, 2026-09-02): a summary vegpont pontosan azt az
+ * alakot adja, amit a #337-ben bekotottunk, es sem a web, sem a mobil nem hivja
+ * (pozitiv kontrollal ellenorizve). Vagyis senki nem latja, hany tetel torlodik
+ * es mikor ment ki utoljara keszlet -- epp azt a ket szamot, amit a summary ad.
+ *
+ * A TIPUSOK A DROTON ATJOVO ALAKOT irjak le, nem a szerver belso tipusait: a
+ * `Date` ISO-stringkent, a `Prisma.Decimal` pedig stringkent erkezik. Ha ide a
+ * szerver-oldali alakot masolnank, a kulonbseg CSENDBEN jelenne meg a
+ * kepernyon (ugyanaz a csapda, mint a mobil tipus-masolatnal, 2026-09-02).
+ */
+export type StockSyncOutboxStatus =
+  "PENDING" | "PROCESSING" | "SUCCEEDED" | "FAILED" | "DEAD_LETTER";
+
+export interface StockSyncOutboxSummary {
+  workerEnabled: boolean;
+  /** `null`, ha a munkas ki van kapcsolva -- a vegpont maga donti el. */
+  intervalMs: number | null;
+  counts: Record<StockSyncOutboxStatus, number>;
+  /** ISO idobelyeg, vagy `null`, ha meg SOHA nem ment ki keszlet. */
+  lastSuccessfulPublishAt: string | null;
+}
+
+export interface StockSyncOutboxRow {
+  id: string;
+  variantId: string;
+  warehouseId: string;
+  sku: string;
+  /** Decimal a szerveren, STRING a droton. */
+  targetOnHand: string;
+  status: StockSyncOutboxStatus;
+  attempts: number;
+  nextAttemptAt: string;
+  lastError: string | null;
+  resolutionNote: string | null;
+  sourceProcess: string;
+  sourceRecordId: string;
+  createdAt: string;
+  updatedAt: string;
+  processedAt: string | null;
+}
+
+const OUTBOX_BASE = "/integrations/unas/stock-sync/outbox";
+
+export const stockSyncOutboxApi = {
+  summary(token: string, signal?: AbortSignal) {
+    return apiRequest<StockSyncOutboxSummary>(`${OUTBOX_BASE}/summary`, token, {
+      signal,
+    });
+  },
+
+  list(
+    token: string,
+    query: { status?: StockSyncOutboxStatus; limit?: number } = {},
+    signal?: AbortSignal,
+  ) {
+    const params = new URLSearchParams();
+    if (query.status) params.set("status", query.status);
+    if (query.limit) params.set("limit", String(query.limit));
+    const suffix = params.toString() ? `?${params.toString()}` : "";
+    return apiRequest<StockSyncOutboxRow[]>(`${OUTBOX_BASE}${suffix}`, token, {
+      signal,
+    });
+  },
+
+  /**
+   * Egy FAILED vagy DEAD_LETTER sor ujra sorba allitasa. `inventory.manage`
+   * jogot igenyel, nem `view`-t: ez ujra utemez egy IRAST a UNAS fele.
+   */
+  retry(token: string, id: string) {
+    return apiRequest<StockSyncOutboxRow>(
+      `${OUTBOX_BASE}/${encodeURIComponent(id)}/retry`,
+      token,
+      { method: "POST" },
+    );
+  },
+
+  /** Egy koteg azonnali lefuttatasa, az utemezo sajat kodutjan. */
+  run(token: string) {
+    return apiRequest<unknown>(`${OUTBOX_BASE}/run`, token, { method: "POST" });
+  },
+};
