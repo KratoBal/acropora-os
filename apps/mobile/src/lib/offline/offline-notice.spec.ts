@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   describeCacheAge,
   describeCachedDepartmentsNotice,
+  describeCachedWorksheetNotice,
   describeOfflineDetailNotice,
   describeOfflineNotice,
   isCacheStale,
@@ -227,5 +228,94 @@ describe("a mentett helyszínek sávja", () => {
     assert.match(notice?.message ?? "", /nincs mentett helyszín/);
     assert.match(notice?.message ?? "", /kötelező/);
     assert.doesNotMatch(notice?.message ?? "", /0 helyszín/);
+  });
+});
+
+describe("a mentett munkalap sávja", () => {
+  const most = new Date("2026-09-04T10:00:00Z");
+  const ket_oraja = "2026-09-04T08:00:00Z";
+
+  it("térerővel nincs sáv", () => {
+    assert.equal(
+      describeCachedWorksheetNotice({
+        online: true,
+        syncedAt: ket_oraja,
+        status: "DRAFT",
+        now: most,
+      }),
+      null,
+    );
+  });
+
+  it("PISZKOZATNÁL az ÁLLAPOTOT mondja ki, nem csak a korát", () => {
+    /*
+      EZ A LENYEG. Az eszkoz adatlapjanal a regi masolat annyit jelent, hogy
+      "ami azota valtozott, azt nem latod". A munkalapnal az ALLAPOT ennel
+      tobbet ronthat: ha az iroda kozben LEZARTA, a masolatban meg piszkozatnak
+      latszik, es a szerelo azt hiszi, nyitott lapra dolgozik.
+
+      MI PIROSIT: ha a sav csak a kort mondja el, mint az eszkoznel.
+    */
+    const notice = describeCachedWorksheetNotice({
+      online: false,
+      syncedAt: ket_oraja,
+      status: "DRAFT",
+      now: most,
+    });
+    assert.equal(notice?.tone, "stale");
+    assert.ok(notice?.message.includes("LEZÁRHATTA"), notice?.message ?? "");
+    assert.ok(notice?.message.includes("2 órája"), notice?.message ?? "");
+  });
+
+  it("és azt is kimondja, hogy a begépelt szöveg NEM vész el", () => {
+    /*
+      A figyelmeztetes fele csak ijesztget, ha nem mondja meg, mi tortenik a
+      munkaval. A sorban marad -- ezt a 488 ota tudjuk allitani, mert az
+      elvetett sor sem tunik el.
+    */
+    const notice = describeCachedWorksheetNotice({
+      online: false,
+      syncedAt: ket_oraja,
+      status: "DRAFT",
+      now: most,
+    });
+    assert.ok(notice?.message.includes("nem vész el"), notice?.message ?? "");
+  });
+
+  it("ALÁÍRT lapnál MÁS a mondat, mert az állapot nem mozdulhat", () => {
+    /*
+      LEMERVE a szerveren: az `amendRefusal` a SIGNED allapotra elutasitast ad,
+      a munka folytatasa UJ lap. Vagyis ez az EGYETLEN allapot, ami nem valtozhat
+      a masolat alatt -- ott a kor a kerdes, nem az allapot.
+
+      MI PIROSIT: egy kozos szoveg a ket agra. Az alairt lapnal az "iroda
+      lezarhatta" mondat egyszeruen HAMIS lenne.
+    */
+    const notice = describeCachedWorksheetNotice({
+      online: false,
+      syncedAt: ket_oraja,
+      status: "SIGNED",
+      now: most,
+    });
+    assert.equal(notice?.tone, "offline");
+    assert.equal(notice.message.includes("LEZÁRHATTA"), false);
+    assert.ok(notice.message.includes("nem változhatott"), notice.message);
+  });
+
+  it("minden NEM aláírt állapot a figyelmeztető ágra megy", () => {
+    /*
+      ISMERT POZITIV KONTROLL a fenti mellé: a piszkozat NEM kulonleges eset.
+      Az alairasra varo lapot alairhatjak vagy elutasithatjak, az elutasitottat
+      atirhatjak -- mindharom MOZOG a masolat alatt.
+    */
+    for (const status of ["DRAFT", "AWAITING_SIGNATURE", "REJECTED"]) {
+      const notice = describeCachedWorksheetNotice({
+        online: false,
+        syncedAt: ket_oraja,
+        status,
+        now: most,
+      });
+      assert.equal(notice?.tone, "stale", status);
+    }
   });
 });
