@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   EXTERNAL_ID_LOOKUP_LIMIT,
   HttpMedusaAdminClient,
+  type MedusaFileUpload,
 } from "./medusa-admin.client.js";
 
 /**
@@ -117,5 +118,157 @@ describe("HttpMedusaAdminClient.listProductVariants", () => {
      * mainál: több sort hozna, és mind élőnek látszana.
      */
     assert.match(urls[0]!, /deleted_at/);
+  });
+});
+
+/**
+ * A FELTOLTES KERES-ALAKJA, ES NEM AZ, HOGY "MUKODIK".
+ *
+ * MIERT EZ A HAT ALLITAS: a multipart hiba NEMA. Ha a `content-type` rossz, a
+ * keres MEGERKEZIK, a bolt `multer` retege nem talal benne fajlt, es a hiba ugy
+ * nez ki, mintha a kepfajllal lenne baj. Egy allitas, ami csak a visszakapott
+ * URL-t nezi, egy HAMISITVANY mellett akkor is zold, ha a valodi bolt
+ * elutasitana -- ezert a KERES alakjat merjuk, nem a valaszt.
+ *
+ * Ugyanez a hiba mar megharapott minket a mobil kliensben: ott is minden torzsre
+ * `application/json` ment.
+ */
+function uploadClient(valasz: {
+  ok?: boolean;
+  status?: number;
+  body?: unknown;
+  szoveg?: string;
+}) {
+  const keresek: { url: string; init: RequestInit }[] = [];
+  const fetchImpl = (async (url: string, init: RequestInit) => {
+    keresek.push({ url: String(url), init });
+    return {
+      ok: valasz.ok ?? true,
+      status: valasz.status ?? 200,
+      json: async () => valasz.body ?? { files: [] },
+      text: async () => valasz.szoveg ?? "",
+    } as unknown as Response;
+  }) as unknown as typeof fetch;
+
+  return {
+    keresek,
+    client: new HttpMedusaAdminClient(
+      { baseUrl: "https://példa.invalid", apiKey: "sk_teszt" },
+      fetchImpl,
+    ),
+  };
+}
+
+const KEP: MedusaFileUpload = {
+  filename: "korall.jpg",
+  content: Buffer.from("kép-bájtok"),
+  contentType: "image/jpeg",
+};
+
+describe("HttpMedusaAdminClient.uploadFile", () => {
+  it("a boltnak a fajl-kulcsot ES az URL-t adja vissza", async () => {
+    const { client } = uploadClient({
+      body: {
+        files: [{ id: "1787744818-korall.jpg", url: "https://bolt/x.jpg" }],
+      },
+    });
+
+    const eredmeny = await client.uploadFile(KEP);
+
+    assert.deepEqual(eredmeny, {
+      id: "1787744818-korall.jpg",
+      url: "https://bolt/x.jpg",
+    });
+  });
+
+  /**
+   * A LEGFONTOSABB ALLITAS, ES A LEGKONNYEBB KIHAGYNI.
+   *
+   * A kliens kozos `headers()` metodusa MINDEN keresre `application/json`-t
+   * tesz. Ha a feltoltes azon az uton menne, ez a fejlec rairodna a multipart
+   * torzsre, es a `FormData` sajat hatarolo-erteke sosem allna be.
+   */
+  it("NEM ir sajat content-type fejlecet a multipart torzsre", async () => {
+    const { client, keresek } = uploadClient({
+      body: { files: [{ id: "kulcs", url: "https://bolt/x.jpg" }] },
+    });
+
+    await client.uploadFile(KEP);
+
+    const fejlecek = keresek[0]?.init.headers as Record<string, string>;
+    assert.ok(fejlecek, "nem ment ki keres");
+    assert.deepEqual(
+      Object.keys(fejlecek),
+      ["authorization"],
+      "a multipart torzson CSAK a hitelesito fejlec allhat",
+    );
+  });
+
+  /**
+   * ES A HATAROLO-ERTEK TENYLEGES MEGLETE, nem csak a fejlec hianya.
+   *
+   * A ketto nem ugyanaz: a fejlec hianya a MI oldalunk dontese, a hatarolo-ertek
+   * viszont a `FormData`-e. Ha valaki a torzset egy nyers stringre cserelne, az
+   * elso allitas ZOLD maradna, es a bolt megsem talalna fajlt a keresben.
+   */
+  it("a torzs valodi multipart, hatarolo-ertekkel", async () => {
+    const { client, keresek } = uploadClient({
+      body: { files: [{ id: "kulcs", url: "https://bolt/x.jpg" }] },
+    });
+
+    await client.uploadFile(KEP);
+
+    const torzs = keresek[0]?.init.body;
+    assert.ok(torzs instanceof FormData, "a torzs nem FormData");
+    /**
+     * SZANDEKOSAN NEM a `files` mezore kerdez: azt a KOVETKEZO allitas meri.
+     * Ha ez a sor a mezonevet is nezne, egy elgepelt mezonev KET allitast
+     * dontene pirosra, es a diagnozis nem mondana meg, melyik romlott el.
+     */
+    const elso = [...torzs.values()][0];
+    assert.ok(elso instanceof Blob, "a torzsben nem fajl all");
+    assert.equal(
+      new Request("https://példa.invalid", {
+        method: "POST",
+        body: torzs,
+      }).headers
+        .get("content-type")
+        ?.startsWith("multipart/form-data; boundary="),
+      true,
+    );
+  });
+
+  /**
+   * A MEZONEV A BOLT OLDALAROL KOTOTT: a vegpont `upload.array("files")`
+   * alakban olvas, es ures listanal `No files were uploaded` hibat dob. Egy
+   * egyes szamu mezonev tehat nem elgepeles, hanem URES feltoltes lenne.
+   */
+  it("a mezo neve `files`, tobbes szamban", async () => {
+    const { client, keresek } = uploadClient({
+      body: { files: [{ id: "kulcs", url: "https://bolt/x.jpg" }] },
+    });
+
+    await client.uploadFile(KEP);
+
+    const torzs = keresek[0]?.init.body as FormData;
+    assert.deepEqual([...torzs.keys()], ["files"]);
+  });
+
+  /**
+   * ES A KET ALLITAS, AMI A NEMA VALASZT FOGJA MEG.
+   *
+   * Egy hianyzo URL kesobb, a termek kep-mezojeben jelenne meg -- ott mar semmi
+   * nem mondana meg, hogy a feltoltes volt hianyos.
+   */
+  it("hibat dob, ha a valasz nem hoz URL-t", async () => {
+    const { client } = uploadClient({ body: { files: [{ id: "kulcs" }] } });
+
+    await assert.rejects(() => client.uploadFile(KEP), /nem hozott azonosítót/);
+  });
+
+  it("hibat dob, ha a valasz URES fajl-listat hoz", async () => {
+    const { client } = uploadClient({ body: { files: [] } });
+
+    await assert.rejects(() => client.uploadFile(KEP), /nem hozott azonosítót/);
   });
 });
