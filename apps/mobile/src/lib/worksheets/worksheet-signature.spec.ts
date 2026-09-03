@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   buildWorksheetSignaturePayload,
   canSignWorksheetVersion,
+  worksheetSignatureConfirmation,
   worksheetSignerName,
 } from "./worksheet-signature";
 
@@ -213,5 +214,72 @@ describe("a név a szerver határain belül kell legyen", () => {
       buildWorksheetSignaturePayload(ALAP, "K".repeat(200)).ok,
       true,
     );
+  });
+});
+
+describe("a megerősítés szövege", () => {
+  const elfogad = worksheetSignatureConfirmation({
+    decision: "ACCEPTED",
+    signerName: "Kovács Béla",
+  });
+  const elutasit = worksheetSignatureConfirmation({
+    decision: "REJECTED",
+    signerName: "Kovács Béla",
+  });
+
+  it("aláírásnál KIMONDJA, mi történik, nem csak kérdez", () => {
+    /*
+      EZ A LENYEG, es acrobot elore megnevezte, hogy konnyu elrontani: egy
+      "Biztos vagy benne?" annyit ker, hogy nyomd meg megegyszer, es a
+      masodik nyomast ugyanaz a kez vegzi, ugyanabban a masodpercben.
+
+      MI PIROSIT: a szoveg lecserelese barmilyen puszta kerdesre. A ket
+      kifejezes a KOVETKEZMENYT nevezi meg, nem a muveletet.
+    */
+    assert.ok(elfogad.message.includes("lezárul"), elfogad.message);
+    assert.ok(elfogad.message.includes("nem szerkeszthető"), elfogad.message);
+  });
+
+  it("mindkét ágon megnevezi, kinek a nevében zárul a lap", () => {
+    /*
+      A kepernyon nincs nev-mezo, tehat a megerosites az UTOLSO hely, ahol a
+      nev meg lathato, mielott felmegy.
+    */
+    assert.ok(elfogad.message.includes("Kovács Béla"), elfogad.message);
+    assert.ok(elutasit.message.includes("Kovács Béla"), elutasit.message);
+  });
+
+  it("elutasításnál MÁST mond, mert más is történik", () => {
+    /*
+      LEMERVE a szerveren (`worksheet-amendment.ts`): az `amendRefusal` a
+      SIGNED allapotra elutasitast ad, a REJECTED-re `null`-t. Vagyis az
+      alairt lap vegleges, az elutasitott viszont atirhato -- egy kozos,
+      altalanos mondat az egyik agon HAZUDNA.
+
+      MI PIROSIT: egy megosztott szoveg a ket agra.
+    */
+    assert.ok(elutasit.message.includes("átírhatja"), elutasit.message);
+    assert.equal(elutasit.message.includes("nem szerkeszthető"), false);
+    assert.notEqual(elfogad.message, elutasit.message);
+  });
+
+  it("a megerősítő gomb felirata megnevezi a tettet", () => {
+    /*
+      A rendszer-parbeszedben a gomb felirata az utolso, amit valaki elolvas.
+      Egy "Igen" ott ugyanannyit mond, mint egy ures gomb.
+    */
+    assert.equal(elfogad.confirmLabel, "Aláírom");
+    assert.equal(elutasit.confirmLabel, "Elutasítás rögzítése");
+  });
+
+  it("a cím kérdés, a törzs állítás", () => {
+    /*
+      ISMERT POZITIV KONTROLL a fentiek melle: a fenti allitasok akkor is
+      teljesulnenek, ha a cim es a torzs ugyanaz a szoveg lenne. Ket kulon
+      szerepuk van, es ez meri, hogy tenyleg ketto van.
+    */
+    assert.ok(elfogad.title.endsWith("?"), elfogad.title);
+    assert.ok(elutasit.title.endsWith("?"), elutasit.title);
+    assert.notEqual(elfogad.title, elfogad.message);
   });
 });
