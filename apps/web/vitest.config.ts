@@ -20,7 +20,12 @@ export default defineConfig({
     // ezt a listát a lemezen lévő fájlokhoz.
     include: [
       "src/**/*.component.test.{ts,tsx}",
-      "src/components/brands/brand-import-assistant-page.test.tsx",
+      // A KOMPONENS-MAPPA MINDEN TESZTJE, NEM FAJLONKENT FELSOROLVA. Eddig egy
+      // fajlnev allt itt kezzel; egy masodik ugyanolyan fajta teszt (tiszta
+      // fuggveny a kepernyo szotarabol) nem illeszkedett volna ra, es CSENDBEN
+      // nem futott volna le. A leltar-halo ezt megfogta -- de a javitas nem egy
+      // ujabb kezzel irt sor, mert az pontosan a KOVETKEZO uj esetet hagyna ki.
+      "src/components/**/*.test.{ts,tsx}",
       "src/lib/api/**/*.test.ts",
       "src/lib/auth/production-auth.test.ts",
       "src/lib/proxy-timeout.test.ts",

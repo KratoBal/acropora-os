@@ -29,6 +29,7 @@ import { worksheetsApi } from "@/lib/api/worksheets";
 import { formatDateTime } from "@/components/worksheets/worksheet-labels";
 import { PartnerPicker } from "./partner-picker";
 import {
+  serviceJobNoteDescription,
   serviceJobStatusLabel,
   serviceJobStatusVariant,
 } from "./service-job-labels";
@@ -309,7 +310,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
             <>
               <FormField
                 label="Megjegyzés"
-                description="Elhagyható. Ami ide kerül, a jegy naplójában marad, annál a lépésnél, amelyikhez írtad."
+                description={serviceJobNoteDescription(job.allowedSteps)}
               >
                 <Textarea
                   aria-label="Megjegyzés a lépéshez"
