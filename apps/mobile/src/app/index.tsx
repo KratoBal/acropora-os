@@ -17,6 +17,8 @@ import { runningVersionLine } from "@/lib/app-version";
 import { listUnasOrders } from "@/lib/api/orders";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { describeOfflineSession } from "@/lib/auth/offline-session-notice";
+import { useIsOnline } from "@/lib/offline/connectivity";
+import { useQueueDrain } from "@/lib/offline/use-queue-drain";
 import {
   servedTileIds,
   tileVisible as tileVisibleFor,
@@ -74,6 +76,16 @@ export default function HomeScreen() {
   const router = useRouter();
   const { status, user, signOut, retryRestore, offline, lastVerifiedAt } =
     useAuth();
+  const isOnline = useIsOnline();
+  /**
+   * A SOR KIURITESE ITT INDUL, mert ez az elso kepernyo, amit a kollega lat.
+   * A hook maga dont: csak online fut, es csak egyszer egyidoben.
+   *
+   * A TOBBI HOOK MELLE KERULT, a korai visszateresek ELE: a React szabalya
+   * szerint minden renderelesben ugyanabban a sorrendben kell lefutniuk, es a
+   * `status !== "authenticated"` ag kulonben kihagyna.
+   */
+  const queueMessage = useQueueDrain(isOnline);
   /*
    * Once the session exists, and never before: registering a device is only
    * meaningful for a known colleague, and the server takes the owner from the
@@ -141,6 +153,11 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={["bottom", "left", "right"]}>
       <ScrollView contentContainerStyle={styles.container}>
+        {queueMessage ? (
+          <View style={styles.offlineBanner}>
+            <Text style={styles.offlineBannerBody}>{queueMessage}</Text>
+          </View>
+        ) : null}
         {offlineNotice ? (
           <View style={styles.offlineBanner}>
             <Text style={styles.offlineBannerTitle}>{offlineNotice.title}</Text>
