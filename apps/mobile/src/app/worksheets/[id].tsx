@@ -1,16 +1,26 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
+import { useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { getWorksheet } from "@/lib/api/worksheets";
+import {
+  addWorksheetLine,
+  getWorksheet,
+  removeWorksheetLine,
+} from "@/lib/api/worksheets";
+import {
+  buildWorksheetLinePayload,
+  worksheetLineId,
+} from "@/lib/worksheets/worksheet-line";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import {
@@ -36,6 +46,14 @@ import {
  * érkezik, itt tudja eldönteni, hogy azóta átírták-e a lapot.
  */
 export default function WorksheetDetailScreen() {
+  /**
+   * A TETEL-FELVITEL ALLAPOTA. Harom mezo, mert a szerelo harmat rogzit: mit
+   * csinalt, mennyit, milyen egysegben. Az ARAT az iroda adja meg.
+   */
+  const [description, setDescription] = useState("");
+  const [quantity, setQuantity] = useState("");
+  const [unit, setUnit] = useState("óra");
+  const [lineError, setLineError] = useState<string | null>(null);
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { status, user } = useAuth();
@@ -47,6 +65,56 @@ export default function WorksheetDetailScreen() {
     enabled: Boolean(
       id && capabilities?.worksheetsView && status === "authenticated",
     ),
+  });
+
+  /**
+   * A HOROK A KORAI VISSZATERESEK ELOTT ALLNAK, es ez nem stilus: a React
+   * szabalya szerint minden renderelesben UGYANABBAN a sorrendben kell
+   * lefutniuk. Egy `Redirect` utan elhelyezve az elso jogosultsag-valtasnal
+   * borulna a sorrend, es a hiba nem itt jelenne meg.
+   */
+  const queryClient = useQueryClient();
+
+  /**
+   * TETEL HOZZAADASA -- SOR-SZINTU MUVELET, NEM TELJES CSERE.
+   *
+   * Egy lapnak TOBB felelose lehet, es a teljes tartalmat cserelo mentes a
+   * masik szerelo sorait torolne. A szerver ezt a vegpontot EPP A MOBILNAK
+   * keszitette (a kod megjegyzese ki is mondja), es 2026-09-03-ig NEM hivta
+   * senki: a kepesseg megvolt, a hivo hianyzott.
+   *
+   * A DONTES a `lib/worksheets/worksheet-line.ts`-ben all, mert ott MERHETO.
+   */
+  const addLine = useMutation({
+    mutationFn: async () => {
+      const built = buildWorksheetLinePayload(
+        { description, quantity, unit },
+        worksheetLineId({ now: Date.now(), random: Math.random() }),
+      );
+      if (!built.ok) throw new Error(built.message);
+      return addWorksheetLine(id, built.payload);
+    },
+    onSuccess: async () => {
+      setDescription("");
+      setQuantity("");
+      setLineError(null);
+      await queryClient.invalidateQueries({ queryKey: ["worksheet", id] });
+    },
+    onError: (cause) =>
+      setLineError(
+        cause instanceof Error ? cause.message : "A tétel nem menthető.",
+      ),
+  });
+
+  const removeLine = useMutation({
+    mutationFn: (lineId: string) => removeWorksheetLine(id, lineId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["worksheet", id] });
+    },
+    onError: (cause) =>
+      setLineError(
+        cause instanceof Error ? cause.message : "A tétel nem törölhető.",
+      ),
   });
 
   if (status !== "authenticated" || !user || !capabilities)
@@ -122,6 +190,71 @@ export default function WorksheetDetailScreen() {
             <Text style={styles.sectionTitle}>
               Tételek ({current.lines.length})
             </Text>
+
+            {/*
+              A FELVITEL CSAK PISZKOZATON, ES CSAK IRASI JOGGAL.
+              A szerver ugyanezt koveteli (a sor-vegpontok piszkozat-verziot
+              kernek), es ha a gomb ott allna egy lezart lapon, azt igerne,
+              hogy megoldodik -- holott a keres ugyanazt a hibat kapna.
+            */}
+            {capabilities.worksheetsManage && current.status === "DRAFT" ? (
+              <View style={styles.card}>
+                <Text style={styles.label}>Mit csináltál</Text>
+                <TextInput
+                  value={description}
+                  onChangeText={setDescription}
+                  placeholder="Például: szivattyú csere"
+                  placeholderTextColor="#5b7d8f"
+                  style={styles.input}
+                />
+                <View style={styles.lineRow}>
+                  <View style={styles.lineCell}>
+                    <Text style={styles.label}>Mennyi</Text>
+                    <TextInput
+                      value={quantity}
+                      onChangeText={setQuantity}
+                      placeholder="1,5"
+                      placeholderTextColor="#5b7d8f"
+                      keyboardType="decimal-pad"
+                      style={styles.input}
+                    />
+                  </View>
+                  <View style={styles.lineCell}>
+                    <Text style={styles.label}>Egység</Text>
+                    <TextInput
+                      value={unit}
+                      onChangeText={setUnit}
+                      placeholder="óra"
+                      placeholderTextColor="#5b7d8f"
+                      style={styles.input}
+                    />
+                  </View>
+                </View>
+                {/*
+                  AZ AR NINCS ITT, ES EZ DONTES: az arat az iroda adja meg
+                  (Balazs, 2026-09-02). Ar nelkuli tetellel a lap nem zarhato
+                  le, tehat a hiany nem marad eszrevetlen.
+                */}
+                <Text style={styles.muted}>
+                  Az árat az irodából teszik rá; enélkül a lap nem zárható le.
+                </Text>
+                {lineError ? (
+                  <Text style={styles.lineError}>{lineError}</Text>
+                ) : null}
+                <Pressable
+                  disabled={addLine.isPending}
+                  onPress={() => addLine.mutate()}
+                  style={[
+                    styles.addLineButton,
+                    addLine.isPending && styles.disabled,
+                  ]}
+                >
+                  <Text style={styles.addLineText}>
+                    {addLine.isPending ? "Mentés…" : "Tétel hozzáadása"}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
             {current.lines.length === 0 ? (
               <View style={styles.card}>
                 <Text style={styles.muted}>Ezen a lapon még nincs tétel.</Text>
@@ -150,6 +283,19 @@ export default function WorksheetDetailScreen() {
                   <Text style={styles.lineSummary}>
                     {worksheetLineSummary(line, current.currency)}
                   </Text>
+                  {/*
+                    A TORLES CSAK PISZKOZATON. Egy lezart lapon a gomb olyat
+                    igerne, amit a szerver elutasit.
+                  */}
+                  {capabilities.worksheetsManage &&
+                  current.status === "DRAFT" ? (
+                    <Pressable
+                      disabled={removeLine.isPending}
+                      onPress={() => removeLine.mutate(line.id)}
+                    >
+                      <Text style={styles.removeLine}>Tétel törlése</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               ))
             )}
@@ -345,5 +491,32 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 10,
   },
+  input: {
+    backgroundColor: "#08192a",
+    borderColor: "#17394f",
+    borderRadius: 10,
+    borderWidth: 1,
+    color: "#f4fbff",
+    marginTop: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  lineRow: { flexDirection: "row", gap: 10, marginTop: 8 },
+  lineCell: { flex: 1 },
+  lineError: { color: "#ffb4ab", fontSize: 12, marginTop: 8 },
+  addLineButton: {
+    backgroundColor: "#177b74",
+    borderRadius: 10,
+    marginTop: 10,
+    padding: 12,
+  },
+  addLineText: { color: "#fff", fontWeight: "900", textAlign: "center" },
+  removeLine: {
+    color: "#ffb4ab",
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 8,
+  },
+  disabled: { opacity: 0.55 },
   pressed: { opacity: 0.75 },
 });
