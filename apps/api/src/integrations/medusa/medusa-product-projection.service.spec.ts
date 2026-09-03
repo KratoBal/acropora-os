@@ -26,6 +26,7 @@ const product: ProjectableProduct = {
   id: "prod-os-1",
   name: "Reef Pump",
   description: "Leírás",
+  descriptionLong: null,
   primarySku: "PUMP-1",
   /**
    * Alapból ÉRTÉKESÍTHETŐ állapot, hogy a meglévő tesztek arról szóljanak,
@@ -145,6 +146,7 @@ const MEZO_SORSA: Record<string, "atmegy" | "szandekosan-nem"> = {
   primarySku: "atmegy", // -> a valtozat sku mezoje
   slug: "atmegy", // -> handle
   seoRobots: "atmegy", // -> metadata.seo_robots
+  descriptionLong: "atmegy", // -> description (osszefuzve) es metadata
   images: "atmegy", // -> images (sorrendben) es thumbnail (az elso elem)
   medusaCategoryIds: "atmegy", // -> categories, ha van teljes lista
   /**
@@ -180,6 +182,7 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
         seoRobots: "noindex, nofollow",
         medusaCategoryIds: ["cat_1"],
         images: ["https://kep/1.jpg", "https://kep/2.jpg"],
+        descriptionLong: "Hosszú leírás",
       },
       now,
     );
@@ -188,7 +191,8 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
     const megjelenik: Record<string, boolean> = {
       id: torzs.external_id === "prod-os-1",
       name: torzs.title === "Reef Pump",
-      description: torzs.description === "Leírás",
+      description: (torzs.description ?? "").includes("Leírás"),
+      descriptionLong: (torzs.description ?? "").includes("Hosszú leírás"),
       primarySku: torzs.variants[0]?.sku === "PUMP-1",
       slug: torzs.handle === "Teszt-cim",
       medusaCategoryIds: torzs.categories?.[0]?.id === "cat_1",
@@ -234,10 +238,44 @@ describe("MedusaProductProjectionService -- az indexelesi tiltas", () => {
    * ugyanaz a megkulonboztetes, mint a `handle`-nel: a hiany es az uresség ket
    * kulonbozo dolog.
    */
-  it("tiltas nelkul a metadata mezot ki sem kuldi", async () => {
+  it("ha SEMMI nem megy a metaadatba, a mezot ki sem kuldi", async () => {
+    /**
+     * A FELTETEL 2026-09-04-en BOVULT, es az allitas VELE EGYUTT -- nem lazult.
+     *
+     * Korabban eleg volt a `seoRobots: null`, mert csak az kerult a metaadatba.
+     * Azota a KET LEIRAS is odamegy (kulon kulcson), tehat az uresség
+     * feltetele HAROM mezo egyuttes hianya. A vedelem valtozatlan: egy URES
+     * `metadata` felulirna, amit a bolt oldalan barki mas oda tett.
+     */
     const f = fakes({ link: null, found: [] });
-    await f.service.project({ ...product, seoRobots: null }, now);
+    await f.service.project(
+      { ...product, seoRobots: null, description: null, descriptionLong: null },
+      now,
+    );
     assert.equal("metadata" in (f.createdWith[0] ?? {}), false);
+  });
+
+  /**
+   * ES AZ UJ VISELKEDES ALLITASA, KULON: tiltas NELKUL is kimegy a metaadat, ha
+   * van leiras. Enelkul a fenti allitas ugy is teljesulne, hogy a leirasok
+   * SOSEM jutnak el a metaadatba -- vagyis a kirakat nem tudna ket slotot
+   * tolteni, es a szukites elrejtené a hianyt.
+   */
+  it("tiltas nelkul is kimegy a metaadat, ha van leiras", async () => {
+    const f = fakes({ link: null, found: [] });
+    await f.service.project(
+      {
+        ...product,
+        seoRobots: null,
+        description: "<p>Rovid</p>",
+        descriptionLong: "<p>Hosszu</p>",
+      },
+      now,
+    );
+    const torzs = f.createdWith[0];
+    assert.equal(torzs?.metadata?.unas_short_description, "<p>Rovid</p>");
+    assert.equal(torzs?.metadata?.unas_long_description, "<p>Hosszu</p>");
+    assert.ok(!("seo_robots" in (torzs?.metadata ?? {})));
   });
 
   it("a frissitesnel is atviszi", async () => {
@@ -368,6 +406,13 @@ describe("MedusaProductProjectionService", () => {
     assert.deepEqual(createdWith[0], {
       title: "Reef Pump",
       description: "Leírás",
+      /**
+       * A METAADAT 2026-09-04 OTA ITT ALL, es ez a halo epp ezert letezik: a
+       * ket UNAS-leiras KULON kulcson is atmegy, hogy a kirakat ket slotba
+       * tudja tenni oket, ahogy a mai bolt teszi. A fixtura csak rovid
+       * leirast ad, ezert csak az egyik kulcs all itt.
+       */
+      metadata: { unas_short_description: "Leírás" },
       external_id: "prod-os-1",
       /**
        * A publikációs mezők a LÉTREHOZÁSNÁL is mennek, és ez nem díszítés: a

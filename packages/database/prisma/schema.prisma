@@ -622,7 +622,22 @@ model Session {
 model Product {
   id               String                   @id @default(cuid())
   name             String
+  /// A ROVID leiras (a UNAS `Description.Short` mezoje).
+  ///
+  /// A NEVE MARAD `description`, mert minden mai hivo ezt olvassa, es egy
+  /// atnevezes ugyanazt a munkat jelentene, csak kockazattal.
   description      String?
+  /// A HOSSZU leiras (a UNAS `Description.Long` mezoje).
+  ///
+  /// KULON MEZO, MERT A BOLT IS KET HELYEN MUTATJA OKET: a mai lapon a rovid a
+  /// `page_artdet_rovleir`, a hosszu a `tab_description_content` blokkban all,
+  /// es ahol mind a ketto letezik, a ROVID all elobb. A ketto tehat nem
+  /// valtozata egymasnak, hanem ket kulon tartalom.
+  ///
+  /// MIERT NEM ELEG AZ EGYIK: merve a publikalt termekeken, 972-nek CSAK rovid
+  /// leirasa van es 105-nek CSAK hosszu. Barmelyiket valasztanank egyedul, a
+  /// masik halmaz lapjai uresen erkeznenek a boltba.
+  descriptionLong  String?
   type             ProductType              @default(PHYSICAL)
   brandId          String?
   /// @deprecated Compatibility pointer. ProductCategory is the category source of truth.

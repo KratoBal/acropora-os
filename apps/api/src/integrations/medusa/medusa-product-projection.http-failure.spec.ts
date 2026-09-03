@@ -44,6 +44,7 @@ const product: ProjectableProduct = {
   id: "prod-os-1",
   name: "Reef Pump",
   description: "Leírás",
+  descriptionLong: null,
   primarySku: "PUMP-1",
   /** A fixtura NEM ad teljes kategoria-listat: a mezo igy nem kerul a torzsbe. */
   medusaCategoryIds: null,

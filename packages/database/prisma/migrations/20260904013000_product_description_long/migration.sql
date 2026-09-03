@@ -1,0 +1,14 @@
+-- A HOSSZU LEIRAS KULON MEZOBEN.
+--
+-- A UNAS ket leirast tart, es a MAI BOLT MIND A KETTOT KIRAKJA, ket kulon
+-- helyre: a `page_artdet_rovleir` blokkba a rovidet, a `tab_description_content`
+-- blokkba a hosszut. Ahol mind a ketto letezik, a rovid all elobb.
+--
+-- A ketto tehat NEM valtozata egymasnak, hanem ket kulon tartalom -- ezert kap
+-- kulon mezot, es ezert nem valasztunk kozottuk.
+--
+-- MIERT NULLAZHATO ES MIERT NINCS MEGKOTES: a mezo ma minden soron URES lesz, es
+-- a szinkron tolti fel. Egy `NOT NULL` megkotes a migraciot allitana meg; egy
+-- XOR-szeru megkotes (csak az egyik allhat) pedig eppen a 181 publikalt
+-- terméket tiltana ki, ahol MIND A KETTO ki van toltve.
+ALTER TABLE "Product" ADD COLUMN "descriptionLong" TEXT;
