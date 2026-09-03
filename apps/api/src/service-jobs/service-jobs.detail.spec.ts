@@ -118,22 +118,6 @@ describe("a hibajegy részletlapja", () => {
     const detail = await serviceWith(row()).detail("job-1", BELSOS);
     assert.ok(detail.allowedSteps.length > 0);
     assert.ok(!detail.allowedSteps.includes("NEW"));
-    /**
-     * A KOVETELMENY-LISTA AZ ENGEDETT LEPESEK RESZHALMAZA, ES NEM UGYANAZ.
-     *
-     * A HARMADIK ALLITAS `SCHEDULED`-re SZOL, ES EZ NEM MINDEGY. Eloszor
-     * `TRIAGED`-et irtam ide, es a kalibracio megmutatta, hogy az allitas MAS
-     * OKBOL lett volna zold: `TRIAGED`-bol nem lehet `TRIAGED`-be lepni, tehat
-     * az az ertek amugy sem allhatna a listaban. A `SCHEDULED` viszont
-     * ENGEDETT lepes innen, csak nem kovetel indokot -- vagyis csak az az
-     * allitas meri a SZURESt, aminel a tobbi feltetel igaz.
-     */
-    for (const step of detail.stepsRequiringNote) {
-      assert.ok(detail.allowedSteps.includes(step), step);
-    }
-    assert.ok(detail.allowedSteps.includes("SCHEDULED"));
-    assert.ok(detail.stepsRequiringNote.includes("CANCELLED"));
-    assert.ok(!detail.stepsRequiringNote.includes("SCHEDULED"));
   });
 
   it("lezárt jegyen üres a lépések listája", async () => {

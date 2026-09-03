@@ -90,32 +90,42 @@ describe("egy lépés a hibajegyen", () => {
   });
 
   /**
-   * AZ ORZO KET MERES: a mondat megjelenik, ES NEM TORTENIK SEMMI. A `calls`
-   * uressege az utobbi -- enelkul azt mernenk, hogy a szoveg megvan, nem azt,
-   * hogy a vedelem megvolt.
+   * A CSUPA SZOKOZ UGYANAZ, MINT A SEMMI, ES NEM ELUTASITAS: a megjegyzes
+   * ELHAGYHATO (Balazs dontese, 2026-09-03), tehat a lepes atmegy -- csak a
+   * jegy tortenetebe `null` kerul, nem egy ures sor.
+   *
+   * KET ALLITAS EGYUTT, ES SZANDEKOSAN: a lepes MEGTORTENT (a hivas eljutott a
+   * repositoryig), ES a szoveg `null` lett. Az elso nelkul egy visszautasitas
+   * is teljesitene a masodikat.
    */
-  it("indok nélkül nem enged a várakozó állapotba, és nem ír", async () => {
-    const { service, calls } = serviceWith({ status: "TRIAGED" });
+  it("a csupa szóközből álló megjegyzés null-ként megy át, a lépés nem akad el", async () => {
+    const { service, calls } = serviceWith({ status: "NEW" });
 
-    await assert.rejects(
-      () => service.move("job-1", { to: "WAITING_FOR_PARTS" }, "user-1"),
-      /alkatrész/,
-    );
-    assert.equal(calls.length, 0);
+    await service.move("job-1", { to: "CANCELLED", note: "   " }, "user-1");
+
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0], {
+      id: "job-1",
+      from: "NEW",
+      to: "CANCELLED",
+      note: null,
+      actorUserId: "user-1",
+    });
   });
 
   /**
-   * A CSUPA SZOKOZ UGYANAZ, MINT A SEMMI. Egy szokozokbol allo megjegyzes
-   * kitoltott mezonek latszana, es ures sort vinne a jegy tortenetebe.
+   * A VEGALLAPOTBA INDOK NELKUL IS LEHET LEPNI. Kulon allitas, mert a
+   * korabbi valtozat epp ezt tiltotta: ha valaki ujra bevezetne egy
+   * atmenet-fuggo kotelezoseget, ez a sor pirosodik, es nem a felhasznalo
+   * talalkozik vele eloszor.
    */
-  it("a csupa szóközből álló indokot nem fogadja el", async () => {
-    const { service, calls } = serviceWith({ status: "NEW" });
+  it("végállapotba megjegyzés nélkül is lehet lépni", async () => {
+    const { service, calls } = serviceWith({ status: "TRIAGED" });
 
-    await assert.rejects(
-      () => service.move("job-1", { to: "CANCELLED", note: "   " }, "user-1"),
-      /elállás indoka/,
-    );
-    assert.equal(calls.length, 0);
+    await service.move("job-1", { to: "CANCELLED" }, "user-1");
+
+    assert.equal(calls.length, 1);
+    assert.equal((calls[0] as { note: unknown }).note, null);
   });
 
   it("indokkal átmegy, és a szöveg eljut a naplóhoz", async () => {

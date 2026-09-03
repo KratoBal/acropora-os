@@ -119,19 +119,6 @@ export interface ServiceJobDetail {
   completedAt: string | null;
   /** Amit a jegy tehet innen. Üres, ha a jegy lezárult. */
   allowedSteps: ServiceJobStatusValue[];
-  /**
-   * AZ `allowedSteps` RESZHALMAZA: amelyik lepeshez INDOKOT kell irni.
-   *
-   * A SZERVER KULDI, ES NEM A KLIENS SZAMOLJA. A szabaly az atmenet-tabla
-   * mellett all, es ha a kliens ujrairna, ket forras keletkezne ugyanarrol --
-   * pontosan az az alak, amit a menu-forras osszevonasa mar egyszer megszuntetett
-   * ezen a rendszeren. A kepernyo ebbol tudja elore, melyik gomb var szoveget;
-   * a KOVETELMENY viszont a vegponton all, nem itt.
-   *
-   * RESZHALMAZ, NEM TELJES LISTA: amit a jegy innen nem tehet, arrol a
-   * kepernyonek nincs mit mondania.
-   */
-  stepsRequiringNote: ServiceJobStatusValue[];
   /** A három forrás egy időrendben, legújabb felül. A szerver rendezte. */
   timeline: ServiceJobTimelineEntry[];
 }

@@ -5,8 +5,6 @@ import {
   allowedServiceJobSteps,
   isServiceJobFinished,
   isServiceJobStepAllowed,
-  serviceJobStepRequiresNote,
-  SERVICE_JOB_NOTE_REQUIRED_MESSAGES,
 } from "./service-job-transitions.js";
 
 describe("melyik lépés engedélyezett egy hibajegyen", () => {
@@ -70,62 +68,6 @@ describe("melyik lépés engedélyezett egy hibajegyen", () => {
    * MINDEN ÁLLAPOTNAK VAN SORA. Egy hiányzó kulcs futásidőben dobna, és a
    * hiba az első olyan jegynél derülne ki, ami abba az állapotba kerül.
    */
-  /**
-   * A KOVETELMENY A RENDES MENETET NEM ERINTI, ES EZ AZ ALLITAS FELE.
-   *
-   * Egy allitas, ami csak azt meri, hogy a harom kijelolt allapot kotelezo,
-   * AKKOR IS ZOLD LENNE, ha a fuggveny MINDENRE igazat adna. A negatik ag nelkul
-   * nem tudnank, hogy a szukites egyaltalan szukit.
-   */
-  it("indokot csak a harom kilepo allapot kovetel, a rendes menet nem", () => {
-    for (const to of [
-      "CANCELLED",
-      "WAITING_FOR_PARTS",
-      "WAITING_FOR_CUSTOMER",
-    ] as const) {
-      assert.ok(serviceJobStepRequiresNote(to), to);
-    }
-    for (const to of [
-      "NEW",
-      "TRIAGED",
-      "SCHEDULED",
-      "IN_PROGRESS",
-      "COMPLETED",
-    ] as const) {
-      assert.ok(!serviceJobStepRequiresNote(to), to);
-    }
-  });
-
-  /**
-   * MINDEN KOVETELT ALLAPOTNAK VAN SAJAT MONDATA, ES A HAROM KULONBOZIK.
-   *
-   * A lista a FUGGVENYBOL jon, nem kezzel irva: ha egy negyedik allapot kerul a
-   * kovetelmeny ala uzenet nelkul, ez az allitas pirosodik. Egy kezzel irt
-   * felsorolas pontosan az uj esetet hagyna ki.
-   */
-  it("minden indokot kovetelo allapotnak sajat mondata van", () => {
-    const required = (
-      [
-        "NEW",
-        "TRIAGED",
-        "SCHEDULED",
-        "IN_PROGRESS",
-        "WAITING_FOR_PARTS",
-        "WAITING_FOR_CUSTOMER",
-        "COMPLETED",
-        "CANCELLED",
-      ] as const
-    ).filter((status) => serviceJobStepRequiresNote(status));
-
-    for (const status of required) {
-      assert.ok(SERVICE_JOB_NOTE_REQUIRED_MESSAGES[status], status);
-    }
-    const messages = required.map(
-      (status) => SERVICE_JOB_NOTE_REQUIRED_MESSAGES[status],
-    );
-    assert.equal(new Set(messages).size, required.length);
-  });
-
   it("nincs olyan állapot, aminek ne lenne sora", () => {
     for (const status of [
       "NEW",

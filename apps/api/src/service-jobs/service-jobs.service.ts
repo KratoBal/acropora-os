@@ -33,8 +33,6 @@ import {
 import {
   allowedServiceJobSteps,
   isServiceJobStepAllowed,
-  serviceJobStepRequiresNote,
-  SERVICE_JOB_NOTE_REQUIRED_MESSAGES,
 } from "./service-job-transitions.js";
 import { ServiceJobsRepository } from "./service-jobs.repository.js";
 
@@ -207,12 +205,6 @@ export class ServiceJobsService {
       startedAt: row.startedAt?.toISOString() ?? null,
       completedAt: row.completedAt?.toISOString() ?? null,
       allowedSteps: [...allowedServiceJobSteps(row.status)],
-      // A LISTA A TABLABOL SZUROdik, NEM KEZZEL IRT: ha egy negyedik allapot
-      // kerul a kovetelmeny ala, ez a mezo magatol koveti. Egy kezzel irt
-      // felsorolas pontosan az uj esetet hagyna ki.
-      stepsRequiringNote: allowedServiceJobSteps(row.status).filter(
-        serviceJobStepRequiresNote,
-      ),
       // AZ ÖSSZEFÉSÜLÉS ITT TÖRTÉNIK, NEM A KLIENSBEN. A sorrend szabály, és a
       // mobil csomag nem is éri el ezt a közös függvényt (nem függ a
       // `@acropora/types`-tól), tehát ott újraíródna - két kliens, két
@@ -447,18 +439,13 @@ export class ServiceJobsService {
     }
 
     /**
-     * A TRIM ELOBB FUT, MINT AZ ELLENORZES, es ez nem sorrendi apróság: egy
-     * csupa szokozbol allo megjegyzes UGY nezne ki, mint egy kitoltott mezo, es
-     * a jegy tortenetebe ures sor kerulne. A `|| null` epp ezert all itt: a
-     * hianyt egyfele alak jelolje, ne ketfele.
+     * A CSUPA SZOKOZ UGYANAZ, MINT A SEMMI. A megjegyzes ELHAGYHATO (Balazs
+     * dontese, 2026-09-03), de ha be van irva, akkor tartalom legyen: egy
+     * szokozokbol allo szoveg kitoltott mezonek latszik, es ures sort vinne a
+     * jegy tortenetebe. A `|| null` ezert all itt: a hianyt EGYFELE alak
+     * jelolje, ne ketfele.
      */
     const note = input.note?.trim() || null;
-    if (note === null && serviceJobStepRequiresNote(input.to)) {
-      throw new BadRequestException(
-        SERVICE_JOB_NOTE_REQUIRED_MESSAGES[input.to] ??
-          "Ehhez a lépéshez indokot kell írni.",
-      );
-    }
 
     const moved = await this.repository.move({
       id,

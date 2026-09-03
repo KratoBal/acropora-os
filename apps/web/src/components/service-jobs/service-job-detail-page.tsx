@@ -309,13 +309,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
             <>
               <FormField
                 label="Megjegyzés"
-                description={
-                  job.stepsRequiringNote.length
-                    ? `Indok nélkül nem mehet: ${job.stepsRequiringNote
-                        .map((to) => serviceJobStatusLabel[to])
-                        .join(", ")}. A többi lépéshez elhagyható.`
-                    : "Elhagyható. Ami ide kerül, a jegy naplójában marad."
-                }
+                description="Elhagyható. Ami ide kerül, a jegy naplójában marad, annál a lépésnél, amelyikhez írtad."
               >
                 <Textarea
                   aria-label="Megjegyzés a lépéshez"
@@ -326,23 +320,16 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                 />
               </FormField>
               {/*
-                A TILTOTT GOMB NEMA, EZERT ALL A MONDAT A MEZO LEIRASABAN, ES
-                NEM CSAK A `disabled` ALLAPOTBAN. Egy gomb, ami szurke es nem
-                mondja meg, mire var, ugyanugy nez ki, mint egy elromlott gomb.
-
-                ES A TILTAS ITT NEM A SZABALY: azt a vegpont mondja ki. A
-                kepernyo ELORE mutatja, hogy a felhasznalo ne egy elutasitasbol
-                tudja meg -- ugyanaz a megfontolas, mint a partner-doboznal.
+                EGYETLEN GOMB SEM VAR SZOVEGRE. A megjegyzes minden atmenetnel
+                elhagyhato (Balazs dontese, 2026-09-03), tehat a `disabled`
+                egyedul a folyamatban levo hivasrol szol.
               */}
               <div className="flex flex-wrap gap-2">
                 {job.allowedSteps.map((to) => (
                   <Button
                     key={to}
                     variant="secondary"
-                    disabled={
-                      stepping ||
-                      (job.stepsRequiringNote.includes(to) && !note.trim())
-                    }
+                    disabled={stepping}
                     onClick={() => void step(to)}
                   >
                     {serviceJobStatusLabel[to]}

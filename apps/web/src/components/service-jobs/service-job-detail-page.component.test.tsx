@@ -59,13 +59,6 @@ function detail(overrides: Partial<ServiceJobDetail> = {}): ServiceJobDetail {
     completedAt: null,
     allowedSteps: ["SCHEDULED", "CANCELLED"],
     /**
-     * A FIXTURA SZANDEKOSAN VEGYES: az egyik engedett lepes indokot kovetel, a
-     * masik nem. Ha mindketto ugyanolyan lenne, egy allitas nem tudna
-     * megkulonboztetni a helyes viselkedest attol, hogy MINDEN gomb tiltva van
-     * (vagy egyik sem).
-     */
-    stepsRequiringNote: ["CANCELLED"],
-    /**
      * A SORRENDET A SZERVER ADJA, ÉS EZ A MINTA SZÁNDÉKOSAN NEM DÁTUM SZERINT
      * ÁLL: ha a komponens újrarendezné, ez a sorrend megváltozna a képernyőn.
      * Így az állítás azt méri, hogy a kliens RAJZOL, nem dönt.
@@ -194,40 +187,39 @@ describe("ServiceJobDetailPage", () => {
   });
 
   /**
-   * A KET GOMB EGYUTT MERI A SZUKITEST.
-   *
-   * Az "Elallt" allitasa onmagaban akkor is zold lenne, ha a kepernyo MINDEN
-   * gombot tiltana ures mezonel; az "Utemezve" allitasa akkor is, ha egyiket
-   * sem. A ketto egyutt mondja ki, hogy a kepernyo a szerver listajat koveti.
+   * EGYETLEN GOMB SEM VAR SZOVEGRE. A megjegyzes minden atmenetnel elhagyhato
+   * (Balazs dontese, 2026-09-03), es ez az allitas azert all itt nev szerint,
+   * mert a korabbi valtozat epp ezt tiltotta: ha valaki ujra bevezetne egy
+   * atmenet-fuggo kotelezoseget, ez pirosodik, es nem a felhasznalo talalkozik
+   * vele eloszor.
    */
-  it("indokot kérő lépés gombja zárva marad, amíg a mező üres", async () => {
+  it("üres megjegyzés mellett is minden lépés gombja nyitva van", async () => {
     render(<ServiceJobDetailPage jobId="job-1" />);
     await screen.findByText("A hibajegy létrejött (Új).");
 
-    expect(screen.getByRole("button", { name: "Elállt" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Ütemezve" })).not.toBeDisabled();
-
-    fireEvent.change(screen.getByLabelText("Megjegyzés a lépéshez"), {
-      target: { value: "A vevő mégsem kéri." },
-    });
-
+    expect(screen.getByLabelText("Megjegyzés a lépéshez")).toHaveValue("");
     expect(screen.getByRole("button", { name: "Elállt" })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "Ütemezve" })).not.toBeDisabled();
   });
 
   /**
-   * A CSUPA SZOKOZ NEM OLDJA FEL. Ugyanaz a szabaly, mint a szerveren: a
-   * hianyt egyfele alak jelolje. Ha ez a ketto elcsuszna, a kepernyo atengedne
-   * valamit, amit a vegpont utana visszautasit.
+   * A MEGJEGYZES AZ ATMENETTEL EGYUTT LATSZIK, ES EZ NEM AZ, HOGY "VALAHOL A
+   * LAPON SZEREPEL".
+   *
+   * Az allitas a naplo ADOTT SORAN belul keres: az a sor, ami a lepest
+   * mondja ki, tartalmazza a hozza irt szoveget is. Egy sima getByText akkor is
+   * zold maradna, ha a megjegyzes egy MASIK bejegyzes ala csuszna -- es egy
+   * megjegyzes, ami elszakad az atmenettol, ket honap mulva nem mond semmit.
    */
-  it("a csupa szóköz nem oldja fel a gombot", async () => {
+  it("a megjegyzés annál a lépésnél áll, amelyikhez írták", async () => {
     render(<ServiceJobDetailPage jobId="job-1" />);
-    await screen.findByText("A hibajegy létrejött (Új).");
+    const line = await screen.findByText("Új → Felmérve");
+    const row = line.closest("li");
 
-    fireEvent.change(screen.getByLabelText("Megjegyzés a lépéshez"), {
-      target: { value: "   " },
-    });
-
-    expect(screen.getByRole("button", { name: "Elállt" })).toBeDisabled();
+    expect(row).not.toBeNull();
+    expect(
+      within(row as HTMLElement).getByText("Megnéztük, alkatrész kell hozzá."),
+    ).toBeTruthy();
   });
 
   it("a beírt indokot átadja a lépésnek, és utána üríti a mezőt", async () => {
