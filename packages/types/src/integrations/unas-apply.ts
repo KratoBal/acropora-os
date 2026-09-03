@@ -149,7 +149,18 @@ export interface UnasApplySummary {
    *     589  hivatkozas oldodik fel visszaesessel
    *     320  ebbol UJ kapcsolatot hoz letre
    *     269  a par masodik tagja, a szures kihagyja (145 hasonlo + 124 kiegeszito)
-   *       0  marad feloldatlan -- HA a tobbi oszlop nem tartalmaz kapcsolokat
+   *       0  marad feloldatlan -- DE CSAK A MEZOLISTA SZUKITESEVEL EGYUTT
+   *
+   * A NEGYEDIK SOR FELTETELE AZOTA ELDOLT, ES NEM MAGATOL TELJESUL. Barracuda
+   * megmerte a valodi munkafuzet-exportot: a `crosssale1..3` es az `upsale1..2`
+   * oszlop 0/1 KAPCSOLOKAT tartalmaz, es MINDEN sorban van erteke. Amig ezek a
+   * mezok a listaban vannak, a szamlalo NEM nullara esik, hanem FELFELE megy:
+   * kb. 949-re (ha a nulla uresnek szamit) vagy kb. 9465-re (ha nem) -- es az
+   * egesz tobblet ZAJ, nem adatvesztes.
+   *
+   * A szukites kulon valtozasban all. Amig az nincs bent, a fenti negyedik sor
+   * NEM ervenyes, es egy nem-nulla szamlalo nem lelet, hanem a mezolista
+   * kovetkezmenye.
    *
    * Csak a NEM NULLA mezok kerulnek bele: egy ures bontas azt jelenti, hogy
    * minden hivatkozas feloldodott.
