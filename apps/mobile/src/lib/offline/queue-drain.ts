@@ -1,3 +1,4 @@
+import { describePhotoBacklog } from "./photo-queue";
 import {
   canRetryState,
   classifyFailure,
@@ -108,4 +109,34 @@ export function describeQueueState(counts: {
       `${counts.conflict} elakadt, mert a szerver elutasította - ezekhez döntés kell`,
     );
   return `Feltöltésre vár: ${reszek.join("; ")}.`;
+}
+
+/**
+ * AMI A SORBAN ALL, EGY MONDATBAN -- ES EZ AZ, AMI EDDIG SEHOL NEM LATSZOTT.
+ *
+ * A `describeQueueRun` egy FUTASROL szol (mi ment fel most). Ez az ALLAPOTROL:
+ * mi var meg. A ketto nem helyettesiti egymast, mert a futas utani mondat
+ * eltunik, a hatralek pedig marad.
+ *
+ * A `pending` erteket SZANDEKOSAN nem hasznaljuk: az a rogziteseket ES a
+ * kepeket EGYUTT szamolja, tehat egy "2 felvitel var" mondat melle irt "2
+ * fenykep var" ugyanazt a kettot ketszer mondana. A bontott szamok pontosabbak,
+ * es epp a KEP-hatralekot teszik lathatova, ami kulonben "sikeres szinkronnak"
+ * latszik.
+ */
+export function describeQueueBacklog(counts: {
+  recordings: number;
+  photos: number;
+  conflict: number;
+}): string | null {
+  const varakozo = describePhotoBacklog({
+    recordings: counts.recordings,
+    photos: counts.photos,
+  });
+  const elakadt =
+    counts.conflict > 0
+      ? describeQueueState({ pending: 0, conflict: counts.conflict })
+      : null;
+  const reszek = [varakozo, elakadt].filter((r): r is string => r !== null);
+  return reszek.length > 0 ? reszek.join(" ") : null;
 }
