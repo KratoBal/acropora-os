@@ -31,6 +31,43 @@ export type EnqueueResult =
   { ok: true; operationId: string } | { ok: false; error: string };
 
 /**
+ * EGY ELAKADT FELVITEL JAVITASA ES UJRAKULDESE.
+ *
+ * A DONTES a `queue-resend.ts`-ben all (melyik sor javithato, es mit valtoztat
+ * az ujrakuldes) -- ez a fuggveny csak vegrehajt.
+ *
+ * A `WHERE` NEM CSAK AZ AZONOSITOT NEZI, HANEM AZ ALLAPOTOT IS, es ez nem
+ * ovintezkedes-izles: a kepernyo es ez az iras kozott eltelik ido, es a sor
+ * kozben elindulhat (`syncing`) egy masik kiuritessel. Ha csak az azonositora
+ * irnank, egy epp UTON LEVO felvitel torzset irnank at -- a szerver a regit
+ * kapja meg, a keszuleken pedig az uj all, es a ketto kozul az egyik nemán
+ * elveszik.
+ *
+ * A visszaadott darabszam mondja meg, tortent-e valami: nulla annyit tesz,
+ * hogy a sor kozben elmozdult, es a hivonak ujra kell olvasnia.
+ */
+export async function applyQueueResend(
+  id: string,
+  patch: { payloadJson: string; attemptCount: number; lastError: null },
+): Promise<{ ok: true; changed: number } | { ok: false; error: string }> {
+  try {
+    const db = await initializeOfflineDatabase();
+    const result = await db.runAsync(
+      `UPDATE sync_queue
+          SET payload_json = ?, state = 'pending', attempt_count = ?, last_error = NULL
+        WHERE id = ? AND state = 'conflict'`,
+      [patch.payloadJson, patch.attemptCount, id],
+    );
+    return { ok: true, changed: result.changes };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
  * SORBA TESZ EGY FELVITELT.
  *
  * `INSERT OR IGNORE`: ugyanaz a muvelet-azonosito ketszer NEM hiba es NEM
