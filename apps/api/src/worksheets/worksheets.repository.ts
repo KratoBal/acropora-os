@@ -677,6 +677,22 @@ export class WorksheetsRepository extends Repository {
     });
   }
 
+  /**
+   * EGY HIBAJEGY PARTNERE, A LAP-NYITASHOZ.
+   *
+   * `undefined`, ha a jegy nem letezik; `null` a `customerId` helyen, ha
+   * letezik, de meg nincs partnere. A KETTO KULONBSEGE SZAMIT: az elso
+   * elgepelt azonosito, a masodik egy rendes jegy, aminek eloszor partnert
+   * kell adni -- ket kulonbozo teendo.
+   */
+  async ticketPartner(serviceJobId: string) {
+    const row = await this.database.serviceJob.findUnique({
+      where: { id: serviceJobId },
+      select: { customerId: true },
+    });
+    return row ?? undefined;
+  }
+
   async createDraft(input: {
     customerId: string;
     departmentId: string;
@@ -684,6 +700,8 @@ export class WorksheetsRepository extends Repository {
     actorUserId: string;
     /** A lap felelősei, a lappal EGY tranzakcióban. Üres lista megengedett. */
     assigneeIds?: readonly string[];
+    /** A hibajegy, ami alá a lap kerül. `null`, ha jegy nélkül keletkezik. */
+    serviceJobId?: string | null;
   }): Promise<string> {
     return this.database.$transaction(async (transaction) => {
       const department =
@@ -696,6 +714,10 @@ export class WorksheetsRepository extends Repository {
           customerId: input.customerId,
           departmentId: input.departmentId,
           createdById: input.actorUserId,
+          // UGYANABBAN A TRANZAKCIOBAN, mint a lap maga es a felelosok: egy
+          // kulon hivas elbukhatna, es epp az a jegy nelkuli lap keletkezne,
+          // amit a felhasznalo nem keresne ott.
+          serviceJobId: input.serviceJobId ?? null,
           versions: {
             create: {
               version: 1,

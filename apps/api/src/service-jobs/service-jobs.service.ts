@@ -30,6 +30,7 @@ import {
   partnerStatusLabel,
   partnerVisibleStatus,
 } from "./service-job-status.js";
+import { mayWorksheetJoinTicket } from "../common/worksheet-under-ticket.js";
 import {
   allowedServiceJobSteps,
   isServiceJobStepAllowed,
@@ -302,13 +303,21 @@ export class ServiceJobsService {
      * a felhasznalo megerositi. Ez ma nem donthetо el maskepp: nulla adatunk
      * van rola, mert a modul meg nem all elesben.
      */
-    if (job.customerId === null)
+    /**
+     * A SZABALY KOZOS A LAP-NYITASSAL (`common/worksheet-under-ticket.ts`), a
+     * MONDAT viszont ezé az uté: itt egy MAR LETEZO lap kerul a jegy ala, tehat
+     * a felhasznalo masik lapot valaszt. A nyitasnal ugyanez a helyzet mast
+     * jelent, es mas a teendo is.
+     */
+    const check = mayWorksheetJoinTicket({
+      ticketCustomerId: job.customerId,
+      worksheetCustomerId: sheet.customerId,
+    });
+    if (!check.ok)
       throw new BadRequestException(
-        "Ehhez a hibajegyhez még nincs partner. Először állítsd be a hibajegy partnerét.",
-      );
-    if (job.customerId !== sheet.customerId)
-      throw new BadRequestException(
-        "Ez a munkalap másik partnerhez tartozik, mint a hibajegy.",
+        check.reason === "ticket-has-no-partner"
+          ? "Ehhez a hibajegyhez még nincs partner. Először állítsd be a hibajegy partnerét."
+          : "Ez a munkalap másik partnerhez tartozik, mint a hibajegy.",
       );
 
     const attached = await this.repository.attachWorksheet({
@@ -439,11 +448,20 @@ export class ServiceJobsService {
       );
     }
 
+    /**
+     * A CSUPA SZOKOZ UGYANAZ, MINT A SEMMI. A megjegyzes ELHAGYHATO (Balazs
+     * dontese, 2026-09-03), de ha be van irva, akkor tartalom legyen: egy
+     * szokozokbol allo szoveg kitoltott mezonek latszik, es ures sort vinne a
+     * jegy tortenetebe. A `|| null` ezert all itt: a hianyt EGYFELE alak
+     * jelolje, ne ketfele.
+     */
+    const note = input.note?.trim() || null;
+
     const moved = await this.repository.move({
       id,
       from,
       to: input.to,
-      note: input.note?.trim() || null,
+      note,
       actorUserId,
     });
     // A LÉPÉS FELTÉTELE A `from` VOLT: ha közben más lépett, nem írjuk felül

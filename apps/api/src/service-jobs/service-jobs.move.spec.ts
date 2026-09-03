@@ -89,6 +89,64 @@ describe("egy lépés a hibajegyen", () => {
     );
   });
 
+  /**
+   * A CSUPA SZOKOZ UGYANAZ, MINT A SEMMI, ES NEM ELUTASITAS: a megjegyzes
+   * ELHAGYHATO (Balazs dontese, 2026-09-03), tehat a lepes atmegy -- csak a
+   * jegy tortenetebe `null` kerul, nem egy ures sor.
+   *
+   * KET ALLITAS EGYUTT, ES SZANDEKOSAN: a lepes MEGTORTENT (a hivas eljutott a
+   * repositoryig), ES a szoveg `null` lett. Az elso nelkul egy visszautasitas
+   * is teljesitene a masodikat.
+   */
+  it("a csupa szóközből álló megjegyzés null-ként megy át, a lépés nem akad el", async () => {
+    const { service, calls } = serviceWith({ status: "NEW" });
+
+    await service.move("job-1", { to: "CANCELLED", note: "   " }, "user-1");
+
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0], {
+      id: "job-1",
+      from: "NEW",
+      to: "CANCELLED",
+      note: null,
+      actorUserId: "user-1",
+    });
+  });
+
+  /**
+   * A VEGALLAPOTBA INDOK NELKUL IS LEHET LEPNI. Kulon allitas, mert a
+   * korabbi valtozat epp ezt tiltotta: ha valaki ujra bevezetne egy
+   * atmenet-fuggo kotelezoseget, ez a sor pirosodik, es nem a felhasznalo
+   * talalkozik vele eloszor.
+   */
+  it("végállapotba megjegyzés nélkül is lehet lépni", async () => {
+    const { service, calls } = serviceWith({ status: "TRIAGED" });
+
+    await service.move("job-1", { to: "CANCELLED" }, "user-1");
+
+    assert.equal(calls.length, 1);
+    assert.equal((calls[0] as { note: unknown }).note, null);
+  });
+
+  it("indokkal átmegy, és a szöveg eljut a naplóhoz", async () => {
+    const { service, calls } = serviceWith({ status: "TRIAGED" });
+
+    await service.move(
+      "job-1",
+      { to: "WAITING_FOR_PARTS", note: "  Szivattyú, hétfőre ígérik.  " },
+      "user-1",
+    );
+
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0], {
+      id: "job-1",
+      from: "TRIAGED",
+      to: "WAITING_FOR_PARTS",
+      note: "Szivattyú, hétfőre ígérik.",
+      actorUserId: "user-1",
+    });
+  });
+
   it("nem létező jegyre nem találhatót mond", async () => {
     const { service } = serviceWith({ status: null });
 

@@ -16,6 +16,7 @@ import { OrderListCard } from "@/components/orders/OrderListCard";
 import { runningVersionLine } from "@/lib/app-version";
 import { listUnasOrders } from "@/lib/api/orders";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { describeOfflineSession } from "@/lib/auth/offline-session-notice";
 import {
   servedTileIds,
   tileVisible as tileVisibleFor,
@@ -71,7 +72,8 @@ interface ModuleCardProps {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { status, user, signOut, retryRestore } = useAuth();
+  const { status, user, signOut, retryRestore, offline, lastVerifiedAt } =
+    useAuth();
   /*
    * Once the session exists, and never before: registering a device is only
    * meaningful for a known colleague, and the server takes the owner from the
@@ -123,9 +125,28 @@ export default function HomeScreen() {
 
   const signingOut = status === "signingOut";
 
+  /**
+   * AZ OFFLINE SAV A KEZDOLAP TETEJEN.
+   *
+   * `null`, ha az app ONLINE indult -- akkor a kepernyo valtozatlan. Ha
+   * mindig kiirnank, a kollega harmadszorra nem olvasna el, es akkor a VALODI
+   * eset is elveszne.
+   */
+  const offlineNotice = describeOfflineSession({
+    offline,
+    lastVerifiedAt,
+    now: new Date(),
+  });
+
   return (
     <SafeAreaView style={styles.safeArea} edges={["bottom", "left", "right"]}>
       <ScrollView contentContainerStyle={styles.container}>
+        {offlineNotice ? (
+          <View style={styles.offlineBanner}>
+            <Text style={styles.offlineBannerTitle}>{offlineNotice.title}</Text>
+            <Text style={styles.offlineBannerBody}>{offlineNotice.body}</Text>
+          </View>
+        ) : null}
         <View style={styles.hero}>
           <View style={styles.heroTopline}>
             <Text style={styles.eyebrow}>
@@ -457,6 +478,21 @@ function ErrorCard({ message, onRetry }: { message: string; onRetry(): void }) {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#071827" },
+  offlineBanner: {
+    backgroundColor: "#3a2a12",
+    borderColor: "#8a6a2a",
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
+  offlineBannerTitle: {
+    color: "#f5c96b",
+    fontSize: 15,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  offlineBannerBody: { color: "#e6d5b0", fontSize: 13, lineHeight: 19 },
   container: { gap: 18, padding: 20, paddingBottom: 36 },
   hero: { gap: 10, paddingBottom: 8, paddingTop: 18 },
   heroTopline: {

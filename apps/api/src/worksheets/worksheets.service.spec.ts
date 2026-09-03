@@ -633,6 +633,122 @@ describe("WorksheetsService.create és a felelősök", () => {
   });
 
   /**
+   * A LAP A JEGY ALA NYITHATO, EGY HIVASBAN.
+   *
+   * A `serviceJobId` a `createDraft` bemeneteig jut el, tehat a lap es a jegy
+   * alatti besorolas EGY tranzakcioban keletkezik. Ket hivasban a masodik fele
+   * elbukhatna, es epp az a jegy nelkuli lap maradna, amit senki nem keresne.
+   */
+  it("a jegy alá nyitott lap egy hívásban kapja meg a jegyet", async () => {
+    let received: unknown = null;
+    const service = new WorksheetsService(
+      repository({
+        ticketPartner: async () => ({ customerId: "customer-1" }),
+        createDraft: async (input: unknown) => {
+          received = input;
+          return "worksheet-1";
+        },
+      }),
+    );
+
+    await service.create({ ...contentDto(), serviceJobId: "job-1" }, "user-1");
+
+    assert.equal(
+      (received as { serviceJobId?: string | null }).serviceJobId,
+      "job-1",
+    );
+  });
+
+  /**
+   * TESTVER-KONTROLL: JEGY NELKUL A LAP UGYANUGY LETREJON.
+   *
+   * A lap keletkezhet jegy nelkul -- ez nem kivetel, hanem az egyik rendes ut.
+   * Ha egy celzott rontas ezt is pirosra dontene, akkor nem a jegy-ellenorzest
+   * mernenk, hanem a letrehozast magat.
+   */
+  it("jegy nélkül a lap ugyanúgy létrejön, null jeggyel", async () => {
+    let received: unknown = null;
+    const service = new WorksheetsService(
+      repository({
+        createDraft: async (input: unknown) => {
+          received = input;
+          return "worksheet-1";
+        },
+      }),
+    );
+
+    await service.create(contentDto(), "user-1");
+
+    assert.equal(
+      (received as { serviceJobId?: string | null }).serviceJobId,
+      null,
+    );
+  });
+
+  /**
+   * A HAROM ELUTASITAS KULON MONDATTAL, ES MINDHAROMNAL A `createDraft` HIANYAT
+   * IS ALLITJUK. Egy orzot nem az bizonyit, hogy szol, hanem hogy NEM TORTENT
+   * SEMMI -- enelkul azt mernenk, hogy a szoveg megvan, nem azt, hogy a lap nem
+   * jott letre.
+   */
+  it("ismeretlen jegyre nem hoz létre lapot", async () => {
+    let created = false;
+    const service = new WorksheetsService(
+      repository({
+        ticketPartner: async () => undefined,
+        createDraft: async () => {
+          created = true;
+          return "worksheet-1";
+        },
+      }),
+    );
+
+    await assert.rejects(
+      service.create({ ...contentDto(), serviceJobId: "hianyzik" }, "user-1"),
+      /hibajegy nem található/,
+    );
+    assert.equal(created, false);
+  });
+
+  it("partner nélküli jegy alá nem nyit lapot, és a partnert kéri", async () => {
+    let created = false;
+    const service = new WorksheetsService(
+      repository({
+        ticketPartner: async () => ({ customerId: null }),
+        createDraft: async () => {
+          created = true;
+          return "worksheet-1";
+        },
+      }),
+    );
+
+    await assert.rejects(
+      service.create({ ...contentDto(), serviceJobId: "job-1" }, "user-1"),
+      /még nincs partner/,
+    );
+    assert.equal(created, false);
+  });
+
+  it("eltérő partnerű jegy alá nem nyit lapot", async () => {
+    let created = false;
+    const service = new WorksheetsService(
+      repository({
+        ticketPartner: async () => ({ customerId: "customer-2" }),
+        createDraft: async () => {
+          created = true;
+          return "worksheet-1";
+        },
+      }),
+    );
+
+    await assert.rejects(
+      service.create({ ...contentDto(), serviceJobId: "job-1" }, "user-1"),
+      /nem egyezik a hibajegyével/,
+    );
+    assert.equal(created, false);
+  });
+
+  /**
    * AZ ELLENŐRZÉS A LÉTREHOZÁS ELŐTT FUT. Fordított sorrendben egy elgépelt
    * azonosító már meglévő lapot hagyna félkészen -- és a felvivő a hibaüzenetből
    * nem tudná, hogy a lap közben létrejött.
