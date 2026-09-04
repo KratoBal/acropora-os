@@ -230,6 +230,41 @@ export interface UnasChannelProjection {
   unasProductUrl: string | null;
 }
 
+/**
+ * A VALTOZAT MEZOI -> A VETITES BEMENETE, EGY TISZTA FUGGVENYBEN.
+ *
+ * UGYANAZ AZ OK, MINT A CSATORNA-SORNAL, ES MA MASODSZOR MERTEM MEG: a parancs
+ * torzsebe irt lekepezes rontasa NULLA allitast dont pirosra, mert a `prisma`
+ * modul-szintu import mellett a torzs eles adatbazis nelkul nem merheto. A
+ * kalibracio elso koreben pontosan ez tortent a szorzoval.
+ *
+ * A SZORZO ITT VALIK SZOVEGGE, es ez a fuggveny egyetlen nem trivialis lepese: a
+ * `Decimal` a Prisma tipusa, a metaadat viszont kulcs-ertek parokat tart. A
+ * `toString` a TAROLT pontossagot adja vissza, nem egy talalgatast -- egy
+ * `Number()` konverzio hat tizedesnel csendben kerekitene.
+ */
+export interface ValtozatMezok {
+  unit?: string | null;
+  secondaryUnit?: string | null;
+  secondaryUnitFactor?: { toString(): string } | null;
+}
+
+export interface ValtozatProjekcio {
+  unit: string | null;
+  secondaryUnit: string | null;
+  secondaryUnitFactor: string | null;
+}
+
+export function projectValtozatMezok(
+  valtozat: ValtozatMezok | undefined,
+): ValtozatProjekcio {
+  return {
+    unit: valtozat?.unit ?? null,
+    secondaryUnit: valtozat?.secondaryUnit ?? null,
+    secondaryUnitFactor: valtozat?.secondaryUnitFactor?.toString() ?? null,
+  };
+}
+
 export function projectUnasChannelRow(
   row: UnasChannelRow | undefined,
 ): UnasChannelProjection {
@@ -442,7 +477,13 @@ export async function runProjectionCli(
         variants: {
           where: { isActive: true },
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-          select: { sku: true, manufacturerPartNumber: true },
+          select: {
+            sku: true,
+            manufacturerPartNumber: true,
+            unit: true,
+            secondaryUnit: true,
+            secondaryUnitFactor: true,
+          },
         },
         categories: { select: { categoryId: true } },
         /**
@@ -671,6 +712,13 @@ export async function runProjectionCli(
         barcode: vonalkod.field
           ? { field: vonalkod.field, value: vonalkod.value }
           : null,
+        /**
+         * A SZORZO ITT VALIK SZOVEGGE, es itt van a helye: a `Decimal` alak a
+         * PRISMA tipusa, es a metaadat kulcs-ertek parokat tart. A vetites mar
+         * nem tudna eldonteni, hany tizedes kell -- a `toString` a tarolt
+         * pontossagot adja vissza, nem egy talalgatast.
+         */
+        ...projectValtozatMezok(product.variants[0]),
         ...projectUnasChannelRow(product.channelListings[0]),
         /**
          * A KEPEK BOLTI URL-JEI, vagy `null`.

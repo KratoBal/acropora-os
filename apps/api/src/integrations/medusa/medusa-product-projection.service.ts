@@ -92,6 +92,23 @@ export interface ProjectableProduct {
    */
   barcode: { field: "ean" | "upc"; value: string } | null;
   /**
+   * A MERTEKEGYSEG ES A MASODLAGOS EGYSEG, MAR SZOVEGGE ALAKITVA.
+   *
+   * A Medusa termek- es variant-modelljenek NINCS mertekegyseg-mezoje (merve a
+   * telepitett 2.19.0 forrasan: a varianson `barcode`, `ean`, `upc`, `hs_code`,
+   * `mid_code`, `material` es `metadata` all, egyik sem az), tehat mind a harom
+   * a metaadatba megy, `unas_` elotaggal.
+   *
+   * MIERT MEGY KI A "db" IS, HOLOTT 1893-bol 1844 termeken az all: mert a
+   * szukites egy BEEGETETT erteket tenne a kodba a MI katalogusunkrol, es az a
+   * valosag elmozdulasakor csendben hazuggá valna. A szorzo azert `string`,
+   * mert a metaadat kulcs-ertek parokat tart, es a Decimal alakot a HIVO
+   * fogalmazza meg -- itt mar nem lehet eldonteni, hany tizedes kell.
+   */
+  unit: string | null;
+  secondaryUnit: string | null;
+  secondaryUnitFactor: string | null;
+  /**
    * A MAI BOLTI CIM (a UNAS SefUrl-je), vagy `null`, ha nincs.
    *
    * A `null` NEM azt jelenti, hogy a termeknek ne lenne cime a boltban: azt,
@@ -497,6 +514,13 @@ export class MedusaProductProjectionService {
       ...(product.seoKeywords ? { seo_keywords: product.seoKeywords } : {}),
       ...(product.unasProductUrl
         ? { unas_product_url: product.unasProductUrl }
+        : {}),
+      ...(product.unit ? { unas_unit: product.unit } : {}),
+      ...(product.secondaryUnit
+        ? { unas_secondary_unit: product.secondaryUnit }
+        : {}),
+      ...(product.secondaryUnitFactor
+        ? { unas_secondary_unit_factor: product.secondaryUnitFactor }
         : {}),
     };
     const metadataPatch =

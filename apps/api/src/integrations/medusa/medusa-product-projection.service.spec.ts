@@ -37,6 +37,9 @@ const product: ProjectableProduct = {
   medusaCategoryIds: null,
   medusaCollectionId: null,
   barcode: null,
+  unit: null,
+  secondaryUnit: null,
+  secondaryUnitFactor: null,
   slug: null,
   seoRobots: null,
   seoTitle: null,
@@ -161,6 +164,9 @@ const MEZO_SORSA: Record<string, "atmegy" | "szandekosan-nem"> = {
   medusaCategoryIds: "atmegy", // -> categories, ha van teljes lista
   medusaCollectionId: "atmegy", // -> collection_id (a marka gyujtemenye)
   barcode: "atmegy", // -> a valtozat ean vagy upc mezoje, hossz szerint
+  unit: "atmegy", // -> metadata.unas_unit
+  secondaryUnit: "atmegy", // -> metadata.unas_secondary_unit
+  secondaryUnitFactor: "atmegy", // -> metadata.unas_secondary_unit_factor
   /**
    * A publikacios ALLAPOT bemenet, nem mezo: belole a `status` es a
    * `sales_channels` szuletik, a szolgaltatas dontese szerint.
@@ -199,6 +205,9 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
         medusaCategoryIds: ["cat_1"],
         medusaCollectionId: "pcol_1",
         barcode: { field: "ean" as const, value: "4006381333931" },
+        unit: "ml",
+        secondaryUnit: "karton",
+        secondaryUnitFactor: "12",
         images: ["https://kep/1.jpg", "https://kep/2.jpg"],
         descriptionLong: "Hosszú leírás",
       },
@@ -216,6 +225,9 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
       medusaCategoryIds: torzs.categories?.[0]?.id === "cat_1",
       medusaCollectionId: torzs.collection_id === "pcol_1",
       barcode: torzs.variants[0]?.ean === "4006381333931",
+      unit: torzs.metadata?.unas_unit === "ml",
+      secondaryUnit: torzs.metadata?.unas_secondary_unit === "karton",
+      secondaryUnitFactor: torzs.metadata?.unas_secondary_unit_factor === "12",
       seoRobots: torzs.metadata?.seo_robots === "noindex, nofollow",
       seoTitle: torzs.metadata?.seo_title === "Teszt cim",
       seoDescription: torzs.metadata?.seo_description === "Teszt leiras",
@@ -310,6 +322,63 @@ describe("MedusaProductProjectionService -- az indexelesi tiltas", () => {
    * metaadat-osszeallitasban. Egy tesztbe irva a kalibracio ugyanazt a nevet
    * adna vissza mindegyikre, tehat nem mondana meg, melyik ag romlott el.
    */
+  /**
+   * A MERTEKEGYSEG A "db" ESETEN IS KIMEGY, es ez DONTES, nem mulasztas.
+   *
+   * 1893 termekbol 1844-en a "db" all -- a szukites tehat kezenfekvo lenne. De
+   * az egy BEEGETETT erteket tenne a kodba a MI katalogusunkrol, es az a
+   * valosag elmozdulasakor csendben hazuggá valna: holnap lehet 1800, es a kod
+   * ettol nem lesz pirosabb, csak hamisabb.
+   *
+   * Ezert all itt allitas KIFEJEZETTEN a "db" ertekre: enelkul egy kesobbi
+   * "optimalizalas" eltavolithatna, es semmi nem szolna.
+   */
+  it("a db mertekegyseg is kimegy, nem csak a ritka egysegek", async () => {
+    const f = fakes({ link: null, found: [] });
+
+    await f.service.project({ ...product, unit: "db" }, now);
+
+    assert.equal(f.createdWith[0]?.metadata?.unas_unit, "db");
+  });
+
+  it("a masodlagos egyseg es a szorzo kulon kulcsot kap", async () => {
+    const f = fakes({ link: null, found: [] });
+
+    await f.service.project(
+      { ...product, secondaryUnit: "karton", secondaryUnitFactor: "12" },
+      now,
+    );
+
+    const metadata = f.createdWith[0]?.metadata ?? {};
+    assert.equal(metadata.unas_secondary_unit, "karton");
+    assert.equal(metadata.unas_secondary_unit_factor, "12");
+  });
+
+  /**
+   * ES A HIANYZO MASODLAGOS EGYSEG KULCSA KI SEM MEGY. A mert adatban 1893-bol
+   * 1874 termeknek NINCS masodlagos egysege, tehat ez az ag fut le szinte
+   * mindenhol -- egy kikuldott ures ertek felulirna, amit a bolt oldalan barki
+   * mas oda tett.
+   */
+  it("masodlagos egyseg nelkul a ket kulcs ki sem kerul", async () => {
+    const f = fakes({ link: null, found: [] });
+
+    await f.service.project(
+      {
+        ...product,
+        unit: "db",
+        secondaryUnit: null,
+        secondaryUnitFactor: null,
+      },
+      now,
+    );
+
+    const metadata = f.createdWith[0]?.metadata ?? {};
+    assert.equal(metadata.unas_unit, "db");
+    assert.ok(!("unas_secondary_unit" in metadata));
+    assert.ok(!("unas_secondary_unit_factor" in metadata));
+  });
+
   it("a vonalkod a valtozat ean mezojebe kerul", async () => {
     const f = fakes({ link: null, found: [] });
 
