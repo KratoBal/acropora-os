@@ -23,6 +23,7 @@
     "medusa:project": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-projection.cli.js",
     "medusa:inventory": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-inventory.cli.js",
     "medusa:pricing": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-pricing.cli.js",
+    "medusa:image-addresses": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-image-audit.cli.js",
     "datasheet:audit": "tsc -p tsconfig.json && node dist/products/datasheet-audit.cli.js",
     "datasheet:fill-state": "tsc -p tsconfig.json && node dist/products/datasheet-fill-state.cli.js",
     "ai-search:rebuild": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/ai-product-search/ai-product-search.cli.js",

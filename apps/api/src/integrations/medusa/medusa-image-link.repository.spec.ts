@@ -54,6 +54,22 @@ function memoriaDb(kezdo: Sor[] = []) {
         };
         return kulcsSzerint(where) ?? null;
       },
+      /**
+       * A LISTAZO IS A DUPLA RESZE, NEM CSAK A KERESOK.
+       *
+       * A szurot IS eljatssza (`system`, `entityType`), mert a hivo arra
+       * tamaszkodik: egy dupla, ami MINDENT visszaad, zolden hagyna egy olyan
+       * tarolot, ami masik entitas sorait is beszamolja.
+       */
+      // eslint-disable-next-line @typescript-eslint/require-await
+      async findMany(args: unknown) {
+        const { where } = args as {
+          where: { system: string; entityType: string };
+        };
+        return sorok.filter(
+          (s) => s.system === where.system && s.entityType === where.entityType,
+        );
+      },
       // eslint-disable-next-line @typescript-eslint/require-await
       async create(args: unknown) {
         const { data } = args as { data: Sor };
@@ -240,5 +256,82 @@ describe("a kép-leképezés tárolója", () => {
       () => tarolo.findByImage("prod_1", KEP),
       /MEDUSA_IMAGE_LINK_BROKEN_ROW/,
     );
+  });
+  /**
+   * A LISTAZAS MAS SZERZODES, MINT A KERESES, ES EZT KET ALLITAS KOTI LE.
+   *
+   * A kereso utjaban a tort sor HIBA (a vetites kulonben kep nelkul kuldene ki
+   * egy termeket). A szamlalo utjaban ugyanaz a dobas EGY sor miatt megolne az
+   * EGESZ merest -- epp azt nem tudnank meg, hany ilyen van. A ket viselkedes
+   * egyszerre helyes, es ezert kell mind a kettot allitani.
+   */
+  it("a listázás a tört sort KÜLÖN adja vissza, nem hasal el rajta", async () => {
+    const db = memoriaDb([
+      {
+        system: "MEDUSA",
+        entityType: "ProductImage",
+        entityId: medusaImageKey("prod_1", KEP),
+        externalId: "fajl_1",
+        externalKey: BOLTI,
+        lastSyncedAt: MOST,
+      },
+      {
+        system: "MEDUSA",
+        entityType: "ProductImage",
+        entityId: medusaImageKey("prod_2", KEP),
+        externalId: "fajl_2",
+        externalKey: null,
+        lastSyncedAt: MOST,
+      },
+    ]);
+    const tarolo = new MedusaImageLinkRepository(db);
+
+    const listing = await tarolo.listAll();
+
+    assert.equal(listing.links.length, 1);
+    assert.equal(listing.links[0]!.productId, "prod_1");
+    assert.equal(listing.links[0]!.medusaUrl, BOLTI);
+    assert.equal(listing.broken.length, 1);
+    assert.equal(listing.broken[0]!.externalId, "fajl_2");
+  });
+
+  /**
+   * ES A SZURO IS A SZERZODES RESZE: az `ExternalReference` tabla ma tizennegy
+   * `entityType` erteket hordoz. Egy szuretlen listazas MAS entitasok sorait
+   * szamolna bele, es a szam hihetonek latszana.
+   */
+  it("a listázás CSAK a kép-leképezéseket adja vissza", async () => {
+    const db = memoriaDb([
+      {
+        system: "MEDUSA",
+        entityType: "ProductImage",
+        entityId: medusaImageKey("prod_1", KEP),
+        externalId: "fajl_1",
+        externalKey: BOLTI,
+        lastSyncedAt: MOST,
+      },
+      {
+        system: "MEDUSA",
+        entityType: "Product",
+        entityId: "prod_9",
+        externalId: "medusa_prod_9",
+        externalKey: "kulcs",
+        lastSyncedAt: MOST,
+      },
+      {
+        system: "UNAS",
+        entityType: "ProductImage",
+        entityId: medusaImageKey("prod_8", KEP),
+        externalId: "unas_8",
+        externalKey: "kulcs",
+        lastSyncedAt: MOST,
+      },
+    ]);
+    const tarolo = new MedusaImageLinkRepository(db);
+
+    const listing = await tarolo.listAll();
+
+    assert.equal(listing.links.length, 1);
+    assert.equal(listing.links[0]!.productId, "prod_1");
   });
 });
