@@ -773,9 +773,60 @@ export class MedusaConfigurationError extends Error {}
  * az a szöveg a futtatókörnyezetből jön (időtúllépés, névfeloldás), nem a
  * Medusa válaszából, tehát nem visszhangozhat semmit, amit mi küldtünk.
  */
+/**
+ * A MEZŐ NEVE ÁTMEGY, A VÁLASZ TÖBBI RÉSZE NEM.
+ *
+ * === MIÉRT KELLETT, ÉS MI VOLT AZ ÁRA A HIÁNYÁNAK ===
+ *
+ * Mérve 2026-09-04: huszonegy cikkszámból tizenkilenc elakadt a vetítésen,
+ * mindegyik `HTTP 400`-zal, és a naplóban ennyi állt róla: „a Medusa HTTP 400
+ * választ adott". Az OK sehol. A cél oldali állapot ép, a futás ismételhető --
+ * de senki nem tudta megmondani, MIT kell javítani, és két termék ugyanabból a
+ * családból (ugyanaz az ár, egység, készlet, kategória, csak a szín más)
+ * ellentétesen viselkedett.
+ *
+ * === MEGENGEDŐ LISTA, NEM TILTÓ, ÉS EZ A LÉNYEG ===
+ *
+ * NEM azt soroljuk fel, mit dobunk el, hanem azt, mit engedünk át. A minta
+ * kizárólag a MEZŐ-ÚTVONALAT emeli ki, és annak a karakterkészletét is
+ * megköti: betű, szám, pont, kötőjel, aláhúzás, vessző és szóköz. Ami ezen
+ * kívül esik -- idézőjel, kapcsos zárójel, egyenlőségjel --, az NEM illeszkedik,
+ * tehát a válasz semmilyen más része nem tud átcsúszni.
+ *
+ * Egy tiltólistás alak itt CSENDBEN engedne át valamit egy új Medusa-verzió új
+ * hibaalakjánál. A megengedő alak ilyenkor csak annyit mond, hogy nem ismerte
+ * fel -- és az HANGOS.
+ *
+ * === AMIT EZ NEM AD FEL ===
+ *
+ * A fenti védelem áll: a válasz TÖRZSE továbbra sem kerül a kimenetre. Amit
+ * átengedünk, az egy mező-ÚTVONAL (`variants, 0, prices`), nem érték. Titok
+ * ilyen alakban nem tud megjelenni: a hossz százhúsz karakterben van fogva, és
+ * a karakterkészlet nem enged idézőjelet vagy zárójelet, amivel egy
+ * visszhangzott érték jönne.
+ *
+ * === HA NEM ILLESZKEDIK, A MAI VISELKEDÉS MARAD ===
+ *
+ * Nem próbálunk „valamit" kiírni. A státuszkód önmagában kevés, de IGAZ; egy
+ * félig felismert szöveg viszont félrevezetne.
+ */
+const MEDUSA_MEZO_MINTA = /Field '([A-Za-z0-9_.\-]+(?:, ?[A-Za-z0-9_.\-]+)*)'/;
+
+/** A mező-útvonal a Medusa hibaválaszából, ha felismerhető alakban áll ott. */
+export function medusaFailureField(body: string): string | null {
+  const talalat = MEDUSA_MEZO_MINTA.exec(body);
+  const mezo = talalat?.[1];
+  if (!mezo || mezo.length > 120) return null;
+  return mezo;
+}
+
 export function describeMedusaFailure(error: unknown): string {
-  if (error instanceof MedusaAdminHttpError)
-    return `a Medusa HTTP ${error.status} választ adott`;
+  if (error instanceof MedusaAdminHttpError) {
+    const mezo = medusaFailureField(error.body);
+    return mezo
+      ? `a Medusa HTTP ${error.status} választ adott (a hibás mező: ${mezo})`
+      : `a Medusa HTTP ${error.status} választ adott`;
+  }
   if (error instanceof Error) return error.message;
   return String(error);
 }
