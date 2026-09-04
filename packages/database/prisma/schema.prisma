@@ -405,6 +405,24 @@ enum CatalogChannel {
   UNAS
 }
 
+/// MIERT NEM MENT KI EGY TERMEK KEPE A BOLTBA.
+///
+/// ENUM ES NEM SZOVEG, mert az ot ok kozott MAS a teendo, es egy kozos
+/// "blokkolva" jelzo epp ezt tuntetne el. A szoveges reszlet kulon oszlopban
+/// all mellette (melyik kep, milyen hiba) -- az a diagnozis, ez a besorolas.
+enum MedusaImageBlockReason {
+  /// A forrasban NINCS kep-sor. Nem hiba: nincs mit kikuldeni.
+  NO_IMAGE_ROW
+  /// A kep meg nincs athozva a mesterbe (nincs tarolo-kulcs). A masolo dolga.
+  MASTER_MISSING
+  /// A tarolo-kulcs all a soron, de a fajl nincs meg: a mestert kell javitani.
+  MASTER_CORRUPT
+  /// A bajtok nem ismerhetok fel kepkent -- valoszinuleg nem is kep.
+  NOT_AN_IMAGE
+  /// A feltoltes elhasalt: a bolt vagy a halozat.
+  UPLOAD_FAILED
+}
+
 enum ProductRelationType {
   ACCESSORY
   CROSS_SELL
@@ -710,19 +728,38 @@ model Product {
   createdAt        DateTime                 @default(now())
   updatedAt        DateTime                 @updatedAt
 
-  brand            Brand?                   @relation(fields: [brandId], references: [id], onDelete: SetNull)
-  legacyCategory   Category?                @relation("LegacyProductCategory", fields: [categoryId], references: [id], onDelete: SetNull)
-  createdBy        User?                    @relation("ProductCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  categories       ProductCategory[]
-  variants         ProductVariant[]
-  channelListings  ChannelListing[]
-  images           ProductImage[]
+  brand                   Brand?                  @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  legacyCategory          Category?               @relation("LegacyProductCategory", fields: [categoryId], references: [id], onDelete: SetNull)
+  createdBy               User?                   @relation("ProductCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  categories              ProductCategory[]
+  variants                ProductVariant[]
+  channelListings         ChannelListing[]
+  /// MIERT NEM MENT KI A KEP A LEGUTOBBI VETITESKOR. `null`, ha kiment.
+  ///
+  /// === MIERT A TERMEKEN ALL, ES NEM A KEP SORAN ===
+  ///
+  /// Merve 2026-09-04: a `ProductImage` sorokat KET UNAS-iro is `deleteMany` +
+  /// `createMany` parossal irja ujra, tehat egy ott tarolt ok minden import
+  /// utan CSENDBEN eltunne. A termek sorat ezzel szemben csak mezo-szintu
+  /// `updateMany` irja.
+  ///
+  /// A granularitas is ezt kivanja: a kiado az ELSO bukott kepnel megall, es a
+  /// termek EGESZ kep-listajat visszatartja (egy felig feltoltott lista a cel
+  /// oldalon torolne a tobbi kepet). Egy termek tehat egy okkal all.
+  medusaImageBlockReason  MedusaImageBlockReason?
+  /// A reszletezo mondat: melyik kep, es mi tortent. A besorolas az enum.
+  medusaImageBlockDetails String?
+  /// MIKOR ALLAPITOTTUK MEG. Egy elavult ok rosszabb, mint a semmi: e nelkul
+  /// nem lehet megmondani, a mai futasbol valo-e a verdikt.
+  medusaImageBlockedAt    DateTime?
+
+  images                     ProductImage[]
   descriptionImageReferences ProductDescriptionImageReference[]
-  sourceRelations  ProductRelation[]        @relation("ProductRelationSource")
-  targetRelations  ProductRelation[]        @relation("ProductRelationTarget")
-  unasSnapshot     UnasProductSnapshot?
-  aiSearchDocument AiProductSearchDocument?
-  datasheet        ProductDatasheet?
+  sourceRelations            ProductRelation[]                  @relation("ProductRelationSource")
+  targetRelations            ProductRelation[]                  @relation("ProductRelationTarget")
+  unasSnapshot               UnasProductSnapshot?
+  aiSearchDocument           AiProductSearchDocument?
+  datasheet                  ProductDatasheet?
 
   @@index([brandId])
   @@index([categoryId])
@@ -742,7 +779,8 @@ model ProductDescriptionImageReference {
   host            String?
   isOwn           Boolean
   createdAt       DateTime @default(now())
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
   @@unique([productId, descriptionPart, url])
   @@index([isOwn])
   @@index([host])

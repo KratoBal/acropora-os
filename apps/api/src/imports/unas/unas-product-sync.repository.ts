@@ -97,11 +97,33 @@ const snapshotData = (product: CanonicalUnasProduct, syncedAt: Date) => ({
 const ACTIVE_SYNC_KEY = "UNAS_PRODUCTS";
 const STALE_RUN_AFTER_MS = 15 * 60_000;
 
+/**
+ * A UNAS `base` STATUSZ NEGY ERTEKE, ES AMELYIK KETTO A BOLTBAN AL.
+ *
+ * A UNAS sajat dokumentacioja szerint: 0=inaktiv, 1=aktiv, 2=aktiv/uj,
+ * 3=aktiv/nem vasarolhato. A szabaly 2026-09-04-ig CSAK az `1` erteket fogadta
+ * el, es ezzel 54 olyan termeket zart ki, ami MA elo es megvasarolhato.
+ *
+ * HAROM FUGGETLEN MERES VAGOTT EGYBE a dokumentacioval (acrobot es polip,
+ * 2026-09-04): a `base=0` lapok 404-et adnak; a `base=1` es a `base=2` lapok
+ * 200-at ES azonos vasarlasi jelolo-szamot; a `base=3` lapok 200-at, de
+ * kevesebb gombbal.
+ *
+ * ES A `3` SZANDEKOSAN KIMARAD. Az "aktiv, de nem vasarolhato" -- vagyis rokona
+ * az `Inquire=1` csoportnak, amit ez a szabaly szinten kizar. Egy termek,
+ * amit meg lehet nezni, de nem lehet megvenni, NEM "eladhato a webshopban", es
+ * a bevetele kulon dontes, nem ennek a javitasnak a mellekhatasa.
+ */
+const WEBSHOP_LISTED_BASE_STATUSES = new Set(["1", "2"]);
+
 /// OS-side import rule only: it never writes to UNAS or Medusa.
 export function webshopSellableFromUnas(
   product: Pick<UnasApiProduct, "externalStatus" | "inquireOnly">,
 ): boolean {
-  const isListedInWebshop = product.externalStatus === "1";
+  const isListedInWebshop =
+    product.externalStatus !== null &&
+    product.externalStatus !== undefined &&
+    WEBSHOP_LISTED_BASE_STATUSES.has(product.externalStatus);
   const isInquiryOnly = product.inquireOnly === true;
   return isListedInWebshop && !isInquiryOnly;
 }

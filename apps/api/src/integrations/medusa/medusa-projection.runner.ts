@@ -48,6 +48,7 @@ import {
   MEDUSA_STOREFRONT_SALES_CHANNEL_ENV,
   storefrontSalesChannelId,
 } from "./medusa-sales-channel.config.js";
+import { imageBlockUpdate, NO_IMAGE_ROW_BLOCK } from "./medusa-image-block.js";
 import { createDocumentStore } from "../../service-assets/document-store/document-store.provider.js";
 import { MedusaImageLinkRepository } from "./medusa-image-link.repository.js";
 import {
@@ -901,10 +902,42 @@ export async function runProjectionCli(
           },
         )
       : null;
+    /**
+     * AZ OTODIK OK ITT KELETKEZIK: ha nincs egyetlen kep-sor sem, a kiadot meg
+     * sem hivjuk meg, tehat o ezt az allapotot nem is latja. Ma ez az eset
+     * NEMA -- egy sort sem irunk ki rola --, holott pont ez a valasz arra, hogy
+     * miert nincs kepe a termeknek a boltban.
+     */
+    const kepBlokk = published ? published.blockedBy : NO_IMAGE_ROW_BLOCK;
     if (published?.blockedBy)
       out.stdout(
-        `${product.id}: a képek nem mentek ki (${published.blockedBy})\n`,
+        `${product.id}: a képek nem mentek ki (${published.blockedBy.details})\n`,
       );
+
+    /**
+     * AZ OK A TERMEK SORARA IS FELKERUL, ES EZ AZ IRAS NEM VALTOZTAT A
+     * VETITES VISELKEDESEN.
+     *
+     * A `try/catch` nem ovatoskodas: a kep-hiba SZANDEKOSAN csak a kep-mezot
+     * erinti, es egy termek, aminek a nevet javitottuk, attol meg frissuljon,
+     * hogy a kepei uton vannak. Ha ez a feliras elhasalna es kivetelt dobna, az
+     * a termek OSSZES tobbi mezojet visszatartana -- vagyis egy DIAGNOSZTIKAI
+     * mezo dontene egy uzleti frissitesrol.
+     *
+     * A bukas ezert egy sor a kimeneten, es a menet megy tovabb.
+     */
+    try {
+      await db.product.update({
+        where: { id: product.id },
+        data: imageBlockUpdate(kepBlokk, futasIdeje),
+      });
+    } catch (error) {
+      out.stdout(
+        `${product.id}: a kép-blokkolás oka nem került a termékre ` +
+          `(${error instanceof Error ? error.message : String(error)})\n`,
+      );
+    }
+
     const publishedImageUrls = published?.urls.length ? published.urls : null;
 
     const outcome = await service!.project(

@@ -1060,6 +1060,18 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
           hivasok.push({ metodus: "product.findUnique", args });
           return sor;
         },
+        /**
+         * A KEP-BLOKKOLAS OKA A TERMEK SORARA.
+         *
+         * MERVE, ES EZERT ALL ITT: amig ez a metodus hianyzott, a torzs
+         * `db.product.update is not a function` hibaval hasalt el, a hivo
+         * `try/catch`-e elnyelte, es MIND A 2310 teszt zold maradt. Egy
+         * hianyzo dupla-metodus egy elnyelt hiba mogott lathatatlan.
+         */
+        update: async (args: unknown) => {
+          hivasok.push({ metodus: "product.update", args });
+          return sor;
+        },
       },
       externalReference: {
         findMany: async (args: unknown) => {
@@ -1256,6 +1268,38 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
     /** A bukas OKA a hibauzenetbe kerul: enelkul csak annyi latszana, hogy 1 !== 0. */
     assert.equal(code, 0, stderr.join("") + stdout.join(""));
     assert.match(stdout.join(""), /prod-1: created -> prod_medusa_1/);
+    /**
+     * A FELIRAS TENYLEG MEGTORTENT. Ez az allitas NEM ovatoskodas: a hivo
+     * `try/catch`-e elnyeli az iras hibajat (szandekosan, mert egy
+     * diagnosztikai mezo nem allithatja meg a termek tobbi mezojet), tehat egy
+     * elhasalt feliras kulonben LATHATATLAN lenne. Merve: amig a dupla nem
+     * ismerte az `update` metodust, mind a 2310 teszt zold volt.
+     */
+    assert.equal(
+      stdout.join("").includes("nem került a termékre"),
+      false,
+      stdout.join(""),
+    );
+    /**
+     * ES AZ OK AZ OTODIK, NEM AZ ELSO. Ennek a termeknek a FORRASBAN nincs
+     * kep-sora (`images: []`), tehat nem "nincs athozva a mesterbe", hanem
+     * "nincs mit kikuldeni". Ez a ket allapot ma egyforman nezett ki: egyikrol
+     * sem irtunk ki semmit.
+     */
+    const felirasok = hivasok.filter((h) => h.metodus === "product.update");
+    assert.equal(felirasok.length, 1);
+    const irt = (
+      felirasok[0]!.args as {
+        data: {
+          medusaImageBlockReason: string | null;
+          medusaImageBlockDetails: string | null;
+          medusaImageBlockedAt: Date | null;
+        };
+      }
+    ).data;
+    assert.equal(irt.medusaImageBlockReason, "NO_IMAGE_ROW");
+    assert.match(irt.medusaImageBlockDetails ?? "", /nincs mit kiküldeni/);
+    assert.ok(irt.medusaImageBlockedAt instanceof Date);
 
     const utak = keresek.map((k) => `${k.method} ${new URL(k.url).pathname}`);
     assert.deepEqual(utak, [
@@ -1272,6 +1316,131 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
     const adat = (irasok[0]!.args as { data: Record<string, unknown> }).data;
     assert.equal(adat.entityId, "prod-1");
     assert.equal(adat.externalId, "prod_medusa_1");
+  });
+
+  /**
+   * A SIKER NULLAZ, ES EZ NEM MELLEKES: EGY OTTFELEJTETT OK HAZUDIK.
+   *
+   * A kep itt UGY megy ki, hogy a taroloig el sem jutunk: a lekepezes MAR
+   * letezik, tehat a kiado a tarolt bolti cimet adja tovabb, es nem tolt fel
+   * semmit. Ez az egyetlen ut, amin a harness-ben sikeres kep-kivitel merheto
+   * -- a masolo es a publikalo kulon memoriabeli tarolot kap, tehat egy VALODI
+   * feltoltes itt nem tud vegigmenni (ezt a szomszed teszt kommentje meri).
+   */
+  it("sikeres kep-kivitel utan MIND A HAROM oszlop nullazodik", async () => {
+    const { out, stdout, stderr } = collector();
+    const kepSor = {
+      id: "img-1",
+      url: "https://kep.test/1.jpg",
+      storageKey: "product/prod-1/img-1",
+      fileName: "1.jpg",
+    };
+    const { db, hivasok } = adatbazis(termek({ images: [kepSor] }), {
+      productImage: {
+        findMany: async () => [kepSor],
+        update: async () => ({}),
+      },
+      externalReference: {
+        findMany: async () => [],
+        /**
+         * A TERMEK lekepezese nincs, a KEPE viszont van. A ketto ugyanazon a
+         * metoduson jon be, ezert az `entityType` donti el, melyiket kerdezik.
+         */
+        findUnique: async (args: unknown) => {
+          const { where } = args as {
+            where: {
+              system_entityType_entityId?: { entityType: string };
+              system_entityType_externalId?: { entityType: string };
+            };
+          };
+          const tipus =
+            where.system_entityType_entityId?.entityType ??
+            where.system_entityType_externalId?.entityType;
+          return tipus === "ProductImage"
+            ? {
+                entityId: `prod-1:${kepSor.url}`,
+                externalId: "fajl_1",
+                externalKey: "https://bolt.test/static/1.jpg",
+                lastSyncedAt: new Date("2026-09-01T00:00:00.000Z"),
+              }
+            : null;
+        },
+        create: async () => ({
+          entityId: "prod-1",
+          externalId: "prod_medusa_1",
+          lastSyncedAt: new Date(),
+        }),
+        deleteMany: async () => ({ count: 0 }),
+      },
+    });
+
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1"],
+        out,
+        provider(environmentSetting),
+        boltiKornyezet,
+        db,
+        boltiFetch([]),
+      ),
+    );
+
+    assert.equal(code, 0, stderr.join("") + stdout.join(""));
+    assert.equal(
+      stdout.join("").includes("nem került a termékre"),
+      false,
+      stdout.join(""),
+    );
+
+    const felirasok = hivasok.filter((h) => h.metodus === "product.update");
+    assert.equal(felirasok.length, 1);
+    assert.deepEqual((felirasok[0]!.args as { data: unknown }).data, {
+      medusaImageBlockReason: null,
+      medusaImageBlockDetails: null,
+      medusaImageBlockedAt: null,
+    });
+  });
+
+  /**
+   * A FELIRAS NEM VALTOZTAT A VETITES VISELKEDESEN, ES EZ acrobot KIKOTESE.
+   *
+   * A kep-hiba SZANDEKOSAN csak a kep-mezot erinti: egy termek, aminek a nevet
+   * javitottuk, attol meg frissuljon, hogy a kepei uton vannak. Ha egy
+   * DIAGNOSZTIKAI mezo felirasa megallitana a termeket, az pont ezt forditana
+   * meg.
+   */
+  it("ha a feliras elhasal, a termek attol meg kimegy", async () => {
+    const { out, stdout, stderr } = collector();
+    const { db, hivasok } = adatbazis(termek(), {
+      product: {
+        findMany: async () => [],
+        findUnique: async () => termek(),
+        update: async () => {
+          throw new Error("az adatbazis nem valaszol");
+        },
+      },
+    });
+
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1"],
+        out,
+        provider(environmentSetting),
+        boltiKornyezet,
+        db,
+        boltiFetch([]),
+      ),
+    );
+
+    // A TERMEK EREDMENYE VALTOZATLAN: kiment, es a kilepesi kod nulla.
+    assert.equal(code, 0, stderr.join("") + stdout.join(""));
+    assert.match(stdout.join(""), /prod-1: created -> prod_medusa_1/);
+    // ES A BUKAS NEM NEMA: egy sor megnevezi.
+    assert.match(stdout.join(""), /a kép-blokkolás oka nem került a termékre/);
+    assert.equal(
+      hivasok.some((h) => h.metodus === "externalReference.create"),
+      true,
+    );
   });
 
   /**
