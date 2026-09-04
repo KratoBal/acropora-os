@@ -219,18 +219,17 @@ describe("a három hiány három külön néven", () => {
   });
 });
 
-describe("az aktív akció megállít", () => {
-  it("aktív akciós árnál NEM vetítünk listaárat", () => {
+describe("az aktív akciós ár megy ki, nem a listaár", () => {
+  it("aktív akciónál az AKCIOS ár megy, és a forrás ezt meg is nevezi", () => {
     /*
+      BALAZS DONTESE, 2026-09-04, szo szerint: "viszi az akciokat". A vevo tehat
+      ugyanazt latja a koltozo boltban, mint a maiban.
+
       MERVE a 2026-08-27-i UNAS exporton: 1893 termekbol 95-nel van akcios sor
-      es 67-nel AKTIV. A kulonbseg nagy (peldaul 198000 helyett 130000), tehat
-      ez nem kerekitesi kerdes.
+      es 67-nel AKTIV, es a kulonbseg nagy (198000 helyett 130000).
 
-      A KET TEVEDES ARA NEM EGYFORMA: a listaar vetitese egy akcios termekre
-      azt jelenti, hogy a vevo TOBBET fizet, es semmi nem szol rola. A megallas
-      hangos.
-
-      MI PIROSIT: ha az ag kikerul, es a listaar csendben atmegy.
+      MI PIROSIT: ha a listaar megy ki akcio kozben (a vevo tobbet fizetne), es
+      az is, ha a forras neve nem kulonbozteti meg az akcios agat.
     */
     const d = resolvePriceSource({
       authority: "UNAS",
@@ -239,17 +238,32 @@ describe("az aktív akció megállít", () => {
       now: most,
     });
 
-    assert.equal(!d.ok && d.reason, "mirror-sale-active-needs-decision");
-    // A SZAMOK IS OTT VANNAK: enelkul a megallas nem mondja meg, mekkora a tet.
-    assert.match(!d.ok ? d.details : "", /3500/);
-    assert.match(!d.ok ? d.details : "", /7800/);
+    assert.equal(d.ok, true);
+    assert.equal(d.ok && d.source, "mirror-sale");
+    assert.equal(d.ok && d.price.sellingGrossPrice?.toString(), "3500");
   });
 
-  it("ISMERT POZITÍV: LEJÁRT akció mellett a listaár megy", () => {
+  it("az akciós ág is FORINTTAL megy, ha a tükör nem mond pénznemet", () => {
     /*
-      E NELKUL a fenti allitas semmit nem mondana: egy fuggveny, ami MINDEN
-      akcios sorra megall, ugyanugy atmenne rajta -- es akkor egy evekkel
-      ezelotti akcio orokre feltartana a termeket.
+      TESTVER-KONTROLL a penznem-javitashoz: az akcios ag KULON visszateres,
+      tehat ha ott kimaradna a tartalek, MINDEN akcios termek megallna
+      currency-missing okkal -- ugyanaz a nema no-op, csak a 67 termeken.
+    */
+    const d = resolvePriceSource({
+      authority: "UNAS",
+      mirror: tukor({ saleGrossPrice: forint("3500") }),
+      own: nincsSajat,
+      now: most,
+    });
+
+    assert.equal(d.ok && d.price.sellingPriceCurrency, "HUF");
+  });
+
+  it("LEJÁRT akció mellett a LISTAÁR megy", () => {
+    /*
+      A HATAR MASIK OLDALA. E nelkul egy fuggveny, ami MINDEN akcios sorra az
+      akcios arat kuldi, ugyanugy atmenne a fenti alliton -- es egy evekkel
+      ezelotti akcio ara menne ki a mai listaar helyett.
     */
     const d = resolvePriceSource({
       authority: "UNAS",
@@ -295,8 +309,16 @@ describe("a jelentés megnevezi a forrást", () => {
       regi egy ar. Egy befagyott tukor-ar es egy elavult sajat ar a jelentesben
       ugyanugy nez ki.
     */
-    assert.notEqual(describePriceSource("mirror"), describePriceSource("own"));
-    assert.match(describePriceSource("mirror"), /UnasProductSnapshot/);
-    assert.match(describePriceSource("own"), /sellingGrossPrice/);
+    const nevek = [
+      describePriceSource("mirror"),
+      describePriceSource("mirror-sale"),
+      describePriceSource("own"),
+    ];
+    // MIND A HAROM KULONBOZO: egy kozos mondat epp azt venne el, amiert a mezo van.
+    assert.equal(new Set(nevek).size, 3);
+    assert.match(nevek[0]!, /UnasProductSnapshot/);
+    assert.match(nevek[1]!, /AKCIÓS/);
+    assert.match(nevek[1]!, /saleGrossPrice/);
+    assert.match(nevek[2]!, /sellingGrossPrice/);
   });
 });

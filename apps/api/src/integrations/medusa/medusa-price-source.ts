@@ -51,8 +51,14 @@ export interface MirrorPriceRow {
   saleEndsAt: Date | null;
 }
 
-/** Melyik oldalról jött az ár. A jelentés ezt írja ki. */
-export type PriceOwner = "mirror" | "own";
+/**
+ * MELYIK OLDALRÓL JÖTT AZ ÁR, ÉS MELYIK ÁR. A jelentés ezt írja ki.
+ *
+ * A `mirror` és a `mirror-sale` KÜLÖN ÉRTÉK, nem egy: enélkül egy későbbi olvasó
+ * nem tudná eldönteni, miért alacsonyabb egy ár, mint amit várt (acrobot
+ * kikötése, 2026-09-04).
+ */
+export type PriceOwner = "mirror" | "mirror-sale" | "own";
 
 export type PriceSourceRefusal =
   /**
@@ -68,25 +74,7 @@ export type PriceSourceRefusal =
   /** Van tükör-sor, de nincs benne bruttó ár. */
   | "mirror-price-missing"
   /** ACROPORA a gazda, és a saját ár mezőnk üres. */
-  | "own-price-missing"
-  /**
-   * A TÜKÖRBEN AKCIÓS ÁR FUT, ÉS EZ NEM VETÍTÉSI RÉSZLET.
-   *
-   * Ilyenkor a „tükör ára" kifejezés KÉT különböző számot jelenthet: a listaárat
-   * és azt, amennyiért a bolt MOST adja. A kettő nem közel van egymáshoz --
-   * mérve a 2026-08-27-i exporton, 1893 termékből 95-nél van akciós sor és
-   * 67-nél AKTÍV, és a különbség ott a legnagyobb, ahol a legdrágább a tévedés
-   * (például 198000 helyett 130000 forint).
-   *
-   * Hogy a költöző bolt ÖRÖKÖLJE-E a futó akciókat, üzleti kérdés, és nincs
-   * megválaszolva. A két tévedés ára pedig NEM egyforma: ha a listaárat
-   * vetítenénk egy akciós termékre, a vevő TÖBBET fizetne, és semmi nem szólna
-   * róla. Egy megállás hangos, és 67 terméket érint; egy néma túlárazás
-   * ugyanennyit, csak a vevő oldalán.
-   *
-   * Ha megjön a döntés, ez egy ág -- addig megáll.
-   */
-  | "mirror-sale-active-needs-decision";
+  | "own-price-missing";
 
 export type PriceSourceDecision =
   | { ok: true; source: PriceOwner; price: ProjectablePrice }
@@ -129,14 +117,36 @@ export function resolvePriceSource(input: {
         "nincs tükör-sor. Előbb a UNAS import fusson le erre a termékre.",
     );
 
+  /**
+   * AZ AKTÍV AKCIÓS ÁR MEGY KI, NEM A LISTAÁR.
+   *
+   * Balázs döntése, 2026-09-04, szó szerint: „viszi az akciokat". A vevő tehát
+   * ugyanazt látja a költöző boltban, mint a maiban.
+   *
+   * Ez korábban NÉVEN NEVEZETT MEGÁLLÁS volt, mert a „tükör ára" akció közben
+   * két számot jelent, és a választás üzleti kérdés. A döntés megérkezett, és
+   * pontosan egy ág lett belőle, ahogy a megállás szövege előre megmondta.
+   *
+   * A MÉRET, hogy tudjuk, mekkora halmazról van szó: a 2026-08-27-i exporton
+   * 1893 termékből 95-nél van akciós sor és 67-nél AKTÍV, és a különbség nagy
+   * (például 198000 helyett 130000 forint).
+   *
+   * AMIT EZ AZ ÁG NEM OLD MEG, ÉS SZÁNDÉKOSAN NEM: az akció LEJÁRHAT. A
+   * vetítésnek nincs ütemezője (mérve: a `MedusaPricingProjectionService`
+   * egyetlen hívója a kézi parancs, és a fájl fejléce ki is mondja, hogy a
+   * brief 17. pontja kizárja az automatikus vetítést), tehát egy lejárt akció
+   * ára addig marad kint, amíg valaki újra le nem futtatja a parancsot. Ez
+   * KÜLÖN kérdés, és nem a forrás-választás dolga eldönteni.
+   */
   if (isSaleActive(input.mirror, input.now))
-    return refuse(
-      "mirror-sale-active-needs-decision",
-      `a tükörben AKTÍV akciós ár áll (${input.mirror.saleGrossPrice?.toString()} ` +
-        `a listaár ${input.mirror.grossPrice?.toString() ?? "hiányzik"} mellett). ` +
-        "Hogy a költöző bolt örökölje-e a futó akciókat, üzleti döntés, és " +
-        "nincs meg. A listaár vetítése azt jelentené, hogy a vevő többet fizet.",
-    );
+    return {
+      ok: true,
+      source: "mirror-sale",
+      price: {
+        sellingGrossPrice: input.mirror.saleGrossPrice,
+        sellingPriceCurrency: input.mirror.currency ?? SUPPORTED_CURRENCY,
+      },
+    };
 
   if (input.mirror.grossPrice === null)
     return refuse(
@@ -212,7 +222,19 @@ export function isSaleActive(mirror: MirrorPriceRow, now: Date): boolean {
  * ebben az egy szóban látszik.
  */
 export function describePriceSource(source: PriceOwner): string {
-  return source === "mirror"
-    ? "UNAS tükör (UnasProductSnapshot.grossPrice) -- a termék gazdája még a UNAS"
-    : "Acropora OS (ProductVariant.sellingGrossPrice) -- a gazdaságot átvettük";
+  return FORRAS_NEVE[source];
 }
+
+/**
+ * `Record`, nem `if`-lánc: egy NEGYEDIK forrás felvétele így FORDÍTÁSI HIBA. A
+ * korábbi kétágú feltétel mellett az akciós ág MAGÁTÓL a saját árunk mondatát
+ * kapta volna meg, és a jelentés azt állította volna, hogy a gazdaságot
+ * átvettük -- pontosan az az adat, amiért a sor létezik.
+ */
+const FORRAS_NEVE: Record<PriceOwner, string> = {
+  mirror:
+    "UNAS tükör (UnasProductSnapshot.grossPrice) -- a termék gazdája még a UNAS",
+  "mirror-sale":
+    "UNAS tükör, AKCIÓS ár (UnasProductSnapshot.saleGrossPrice) -- a boltban most is ez az ár fut",
+  own: "Acropora OS (ProductVariant.sellingGrossPrice) -- a gazdaságot átvettük",
+};
