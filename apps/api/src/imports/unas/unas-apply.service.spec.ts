@@ -107,6 +107,7 @@ describe("UNAS apply execution", () => {
   const applied: UnasApplySummary = {
     batchId: "batch-1",
     status: "APPLIED",
+    relationWriteRequested: true,
     categoriesCreated: 1,
     categoriesUpdated: 0,
     productsCreated: 1,

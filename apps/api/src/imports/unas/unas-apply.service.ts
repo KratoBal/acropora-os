@@ -122,7 +122,18 @@ export class UnasApplyService {
     }
   }
 
-  async apply(batchId: string, actorId: string): Promise<UnasApplySummary> {
+  /**
+   * A `writeRelations` a HIVOTOL jon, es alapertelmezesben hamis.
+   *
+   * A repository megjegyzese mondja meg, miert: a tablazat a kapcsolatokra nezve
+   * mervado, tehat egy reszleges munkafuzet csendben torolne. Itt annyi all, hogy
+   * a dontes a hivoe -- a szandekot egyedul o ismeri.
+   */
+  async apply(
+    batchId: string,
+    actorId: string,
+    writeRelations = false,
+  ): Promise<UnasApplySummary> {
     const batch = await this.repository.getBatch(batchId);
     if (!batch) throw new NotFoundException("Az import batch nem található.");
     if (batch.status === "APPLIED" && batch.applyReport)
@@ -140,6 +151,7 @@ export class UnasApplyService {
         batchId,
         actorId,
         BRAND_RESOLUTION_VERSIONS.config,
+        writeRelations,
       );
     } catch (error) {
       if (!(error instanceof Error)) throw error;
