@@ -217,6 +217,78 @@ describe("brand resolver strategies", () => {
   });
 });
 
+/**
+ * AZ ELGEPELT ALAKOK, TERMEKNEVENKENT NEVESITVE.
+ *
+ * MIERT OT KULON ALLITAS, ES NEM EGY CIKLUS OT ERTEKKEL: egy ciklus EGY allitas.
+ * Ha egyetlen alias hianyzik, az is elbukik -- de nem mondja meg, MELYIK. Ot kulon
+ * allitasnal a kalibracio kimenete nev szerint megnevezi a hianyzot.
+ *
+ * A nevek a 09-03-as UNAS export VALODI terméknevei, nem kitalalt peldak.
+ */
+describe("brand typo aliases measured on the 09-03 export", () => {
+  const engine = new BrandResolutionEngine();
+
+  it("a Korallen-zuht irasmod a Korallen-Zucht markara oldodik", () => {
+    const result = engine.resolve(
+      row({ name: "Korallen-zuht Coral Snow 500 ml" }),
+    );
+    assert.equal(result.candidates[0]?.brandKey, "korallen-zucht");
+  });
+
+  it("az Aqua Mdic irasmod az AquaMedic markara oldodik", () => {
+    const result = engine.resolve(
+      row({ name: "Aqua Mdic DC Runner 1.1 lahabzó motor" }),
+    );
+    assert.equal(result.candidates[0]?.brandKey, "aquamedic");
+  });
+
+  it("a Fauna Marine irasmod a Fauna Marin markara oldodik", () => {
+    const result = engine.resolve(
+      row({ name: "Fauna Marine DIY Reactor artemia keltető" }),
+    );
+    assert.equal(result.candidates[0]?.brandKey, "fauna-marin");
+  });
+
+  it("a Groteh irasmod a Grotech markara oldodik", () => {
+    const result = engine.resolve(
+      row({ name: "Groteh szűrőanyag tartó zsák 4 colos" }),
+    );
+    assert.equal(result.candidates[0]?.brandKey, "grotech");
+  });
+
+  it("a Coral Essential irasmod a Coral Essentials markara oldodik", () => {
+    const result = engine.resolve(
+      row({
+        name: "Coral Essential - Coral Power FW Dip - korallfürdető szer",
+      }),
+    );
+    assert.equal(result.candidates[0]?.brandKey, "coral-essentials");
+  });
+
+  /**
+   * A KONTROLL BEKOTESE A TESZTSORBA.
+   *
+   * A kuszob-kalibracio szerint ket betu tavolsagon az `Ecotech` es a `Grotech`
+   * egymas elgepelesenek latszik, holott ket valodi marka. A katalogus ezt elo is
+   * allitotta: ket betus savval a Grotech nevek 62 termeken futottak volna az
+   * Ecotech ala, az Ecotech nevek 26-on a Grotech ala.
+   *
+   * Ez az allitas azert all itt, hogy ha valaki kesobb tagitani akarja a kuszobot,
+   * NE csendben tegye: ez a sor szol.
+   */
+  it("az ecotech nev NEM oldodik fel Grotech-re -- a ket betus sav kontrollja", () => {
+    const result = engine.resolve(
+      row({ name: "Ecotech Marine Vectra VL2 felnyomó szivattyú" }),
+    );
+    assert.equal(result.candidates[0]?.brandKey, "ecotech");
+    assert.equal(
+      result.candidates.some((candidate) => candidate.brandKey === "grotech"),
+      false,
+    );
+  });
+});
+
 describe("brand scoring and report", () => {
   const engine = new BrandResolutionEngine();
 
