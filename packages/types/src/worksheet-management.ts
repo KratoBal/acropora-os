@@ -259,10 +259,54 @@ export interface WorksheetLineInput {
 
 export interface WorksheetSignatureDetail {
   decision: WorksheetSignatureDecision;
+  /**
+   * AZ ALAIRO NEVE. 2026-09-04 ota az UGYFEL embere, mindket feluleten.
+   *
+   * Korabban a mobil a SZERELO nevet kuldte ide, a web az ugyfelet -- ugyanaz a
+   * mezo, ket jelentes. A `signerNotice` valasztja szet oket.
+   */
   signerName: string;
+  /** KI ROGZITETTE (a telefont kezelo kollega). Nem az alairo. */
   signedByName: string | null;
   signedAt: string;
   note: string | null;
+  /**
+   * MIT MOND A LAP AZ ALAIRASROL -- `null`, ha nincs mit mondani.
+   *
+   * HAROM ALLAPOT, es a harmadik a fontos: listarol valasztott alairo (nincs
+   * mondat), a szerelo altal BEIRT nev (a lap kimondja, hogy nem a partner
+   * munkatarsa), es a 2026-09-04 ELOTTI sorok (azokrol nem allitunk semmit,
+   * mert nem eldontheto).
+   *
+   * A MONDAT A SZERVERTOL JON, es nem a kepernyoktol: ket felulet olvassa, a
+   * mobil nem tudja importalni a munkater csomagjait, es ket masolat epp a
+   * JELZESNEL csuszna el.
+   */
+  signerNotice: string | null;
+}
+
+/**
+ * AKI ALAIRHATJA A LAPOT: a lap partnerenek egy nyilvantartott munkatarsa.
+ *
+ * A halmaz forrasa a `User.customerId` -- azok a fiokok, amiket a lap vevojehez
+ * kotottek (a felhasznalo adatlapjan, "Vevő nevében lép be").
+ */
+export interface WorksheetSignerCandidate {
+  id: string;
+  name: string;
+}
+
+export interface WorksheetSignerListResponse {
+  items: WorksheetSignerCandidate[];
+  /**
+   * MIERT URES A LISTA -- `null`, ha nem ures.
+   *
+   * KET KULONBOZO OK VAN, ES A TEENDOJUK MAS: nincs hozzakotott munkatars
+   * (vigyenek fel egyet), vagy a lap partnere nem valaszthato szervizpartner
+   * (torzsadat-hiany). Egy nema ures lista mind a kettore raillik, es a szerelo
+   * EGYIKET SEM tudja megoldani a helyszinen.
+   */
+  emptyReason: string | null;
 }
 
 export interface WorksheetVersionSummary {
@@ -452,7 +496,23 @@ export interface AmendWorksheetInput extends WorksheetContentInput {
 
 export interface SignWorksheetVersionInput {
   decision: WorksheetSignatureDecision;
-  signerName: string;
+  /**
+   * A BEIRT NEV -- CSAK az "egyik sem" agon.
+   *
+   * ELHAGYHATOVA VALT 2026-09-04-en: ha van `signerUserId`, a nevet a SZERVER
+   * veszi a valasztott sorbol, es ezt a mezot figyelmen kivul hagyja. Ha mind a
+   * ketto ott allna, a szerver ket kulonbozo allitast kapna arrol, ki irta ala.
+   */
+  signerName?: string;
+  /**
+   * A VALASZTOTT MUNKATARS a lap partnerenek nyilvantartott emberei kozul.
+   *
+   * A JELENLETE DONTI EL a szerveren, melyik agon ment az alairas: a
+   * `signerSource` erteket a szerver ebbol szamolja, nem a klienstol kerdezi.
+   * Egy klienstol jovo "forras" mezo ellentmondhatna a valasztott szemelynek,
+   * es akkor a lapon egy HAMIS jelzes allna.
+   */
+  signerUserId?: string;
   note?: string | null;
 }
 

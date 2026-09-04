@@ -221,12 +221,35 @@ export class UpdateWorksheetEntryDto extends WorksheetEntryBodyDto {}
 export class SignWorksheetVersionDto {
   @IsIn(WORKSHEET_SIGNATURE_DECISIONS)
   decision!: (typeof WORKSHEET_SIGNATURE_DECISIONS)[number];
+  /**
+   * AZ ALAIRO NEVE, HA A HIVO IRTA BE ("egyik sem" ag).
+   *
+   * ELHAGYHATOVA VALT 2026-09-04-en, es a kotelezoseget a SZOLGALTATAS mondja
+   * ki, nem ez a dekorator-sor: a szabaly KET mezot kot ossze (ha nincs
+   * `signerUserId`, akkor a nev kotelezo). Ugyanaz a megfontolas, mint az
+   * elutasitas indokanal -- ket `ValidateIf` ugyanazon a mezon nem osszeadodik,
+   * hanem felulirja egymast, es a hianyzo nev CSENDBEN atmenne.
+   *
+   * ES HA VAN `signerUserId`, EZT A MEZOT A SZERVER FIGYELMEN KIVUL HAGYJA: a
+   * nevet a valasztott felhasznalo soraból veszi. Egy klienstol jovo nev
+   * ilyenkor azt jelentene, hogy a lapra MAS nev kerul, mint akit valasztottak.
+   */
   @IsString({ message: "Az aláíró nevét meg kell adni." })
   @MinLength(2, { message: "Az aláíró neve legalább két karakter legyen." })
   @MaxLength(200, {
     message: "Az aláíró neve legfeljebb 200 karakter lehet.",
   })
-  signerName!: string;
+  @IsOptional()
+  signerName?: string;
+  /**
+   * KIT VALASZTOTT A SZERELO a lap partnerenek munkatarsai kozul.
+   *
+   * A jelenlete donti el, MELYIK agon ment az alairas -- a szerver ebbol
+   * szamolja a `signerSource` erteket, nem a klienstol kerdezi. Egy
+   * klienstol jovo "forras" mezo ellentmondhatna a valasztott szemelynek, es
+   * akkor a lapon egy hamis jelzes allna.
+   */
+  @IsString() @IsOptional() signerUserId?: string;
   /**
    * Elfogadásnál megjegyzés, elutasításnál INDOK -- és akkor kötelező.
    *

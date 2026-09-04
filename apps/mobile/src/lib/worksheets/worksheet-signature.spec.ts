@@ -5,7 +5,6 @@ import {
   buildWorksheetSignaturePayload,
   canSignWorksheetVersion,
   worksheetSignatureConfirmation,
-  worksheetSignerName,
 } from "./worksheet-signature";
 
 /**
@@ -16,28 +15,6 @@ import {
  */
 
 const ALAP = { decision: "ACCEPTED" as const, note: "" };
-
-describe("kinek a neve megy a lapra", () => {
-  it("a HIVATALOS nevet adja, akkor is, ha van beceneve", () => {
-    /*
-      MI PIROSIT: a `personDisplayName` helper hivasa. Az a becenevet
-      reszesiti elonyben, es akkor egy alairt munkalapon "Bébé" allna.
-      Ez a spec az egyetlen hely, ahol ez a tevedes kiderulne: a ket fuggveny
-      MINDEN olyan emberre ugyanazt adja, akinek nincs beceneve.
-    */
-    assert.equal(
-      worksheetSignerName({ displayName: "Kovács Béla", nickname: "Bébé" }),
-      "Kovács Béla",
-    );
-  });
-
-  it("a nev korul allo szokozoket levagja", () => {
-    assert.equal(
-      worksheetSignerName({ displayName: "  Kovács Béla " }),
-      "Kovács Béla",
-    );
-  });
-});
 
 describe("mikor all ott az alairas gomb", () => {
   it("aláírásra váró lapon, írási joggal: igen", () => {
@@ -77,9 +54,36 @@ describe("mikor all ott az alairas gomb", () => {
 });
 
 describe("a küldött törzs", () => {
-  it("elfogadásnál a nevet és üres megjegyzést ad", () => {
-    const result = buildWorksheetSignaturePayload(ALAP, "Kovács Béla");
+  it("a LISTÁRÓL választott aláírónál CSAK az azonosító megy fel", () => {
+    /*
+      A NEVET A SZERVER VESZI a valasztott sorbol. Ha a kliens is kuldene egyet,
+      a szerver KET allitast kapna arrol, ki irta ala, es a KLIENS dontene el,
+      melyik nyer -- vagyis a lapra mas nev kerulhetne, mint akit valasztottak.
+
+      MI PIROSIT: ha a `signerName` is bekerulne a torzsbe. A `deepEqual` epp
+      ezert TELJES alakot allit, nem mezonkent.
+    */
+    const result = buildWorksheetSignaturePayload(ALAP, "kontakt-1");
     assert.equal(result.ok, true);
+    assert.deepEqual(result.ok && result.payload, {
+      decision: "ACCEPTED",
+      signerUserId: "kontakt-1",
+      note: null,
+    });
+  });
+
+  it("az EGYIK SEM ágon a BEÍRT név megy, azonosító nélkül", () => {
+    /*
+      A masik ag, es a ket alak KIZARJA egymast: itt nincs valasztott szemely,
+      tehat a nev az egyetlen, amit a szerver kaphat.
+
+      MI PIROSIT: ha mind a ketto ott allna -- akkor a szerver nem tudna, melyik
+      agon ment az alairas, es a lapon a jelzes hamis lehetne.
+    */
+    const result = buildWorksheetSignaturePayload(
+      { decision: "ACCEPTED", note: "", typedName: "  Kovács Béla  " },
+      null,
+    );
     assert.deepEqual(result.ok && result.payload, {
       decision: "ACCEPTED",
       signerName: "Kovács Béla",
@@ -90,7 +94,7 @@ describe("a küldött törzs", () => {
   it("a megjegyzés köré írt szóközöket levágja", () => {
     const result = buildWorksheetSignaturePayload(
       { decision: "ACCEPTED", note: "  Jövő héten visszamegyek.  " },
-      "Kovács Béla",
+      "kontakt-1",
     );
     assert.equal(result.ok && result.payload.note, "Jövő héten visszamegyek.");
   });
@@ -104,7 +108,7 @@ describe("a küldött törzs", () => {
     */
     const result = buildWorksheetSignaturePayload(
       { decision: "ACCEPTED", note: "     " },
-      "Kovács Béla",
+      "kontakt-1",
     );
     assert.equal(result.ok, true);
     assert.equal(result.ok && result.payload.note, null);
@@ -118,14 +122,14 @@ describe("a küldött törzs", () => {
     assert.equal(
       buildWorksheetSignaturePayload(
         { decision: "ACCEPTED", note: "a".repeat(1001) },
-        "Kovács Béla",
+        "kontakt-1",
       ).ok,
       false,
     );
     assert.equal(
       buildWorksheetSignaturePayload(
         { decision: "ACCEPTED", note: "a".repeat(1000) },
-        "Kovács Béla",
+        "kontakt-1",
       ).ok,
       true,
     );
@@ -136,7 +140,7 @@ describe("az elutasítás oka kötelező", () => {
   it("indok nélkül nem engedi el", () => {
     const result = buildWorksheetSignaturePayload(
       { decision: "REJECTED", note: "" },
-      "Kovács Béla",
+      "kontakt-1",
     );
     assert.equal(result.ok, false);
     assert.equal(!result.ok && result.field, "note");
@@ -151,7 +155,7 @@ describe("az elutasítás oka kötelező", () => {
     */
     const result = buildWorksheetSignaturePayload(
       { decision: "REJECTED", note: "   " },
-      "Kovács Béla",
+      "kontakt-1",
     );
     assert.equal(result.ok, false);
   });
@@ -165,14 +169,14 @@ describe("az elutasítás oka kötelező", () => {
     assert.equal(
       buildWorksheetSignaturePayload(
         { decision: "REJECTED", note: "ok" },
-        "Kovács Béla",
+        "kontakt-1",
       ).ok,
       false,
     );
     assert.equal(
       buildWorksheetSignaturePayload(
         { decision: "REJECTED", note: "drá" },
-        "Kovács Béla",
+        "kontakt-1",
       ).ok,
       true,
     );
@@ -183,35 +187,66 @@ describe("az elutasítás oka kötelező", () => {
       ISMERT POZITIV KONTROLL az elozo harom mellé: enelkul mindharom
       teljesulne attol is, ha a fuggveny MINDENT elutasitana.
     */
-    assert.equal(buildWorksheetSignaturePayload(ALAP, "Kovács Béla").ok, true);
+    assert.equal(buildWorksheetSignaturePayload(ALAP, "kontakt-1").ok, true);
   });
 });
 
 describe("a név a szerver határain belül kell legyen", () => {
-  it("egy karakteres név nem elég, és az üzenet NEM az űrlapra mutat", () => {
+  it("az EGYIK SEM ágon egy karakteres név nem elég, és az üzenet a MEZŐRE mutat", () => {
     /*
-      A MEZO ZARVA VAN: a szerelo nem tudja "kijavitani" a sajat nevet ezen a
-      kepernyon. Egy "add meg a neved" alaku mondat egy nem letezo gombra
-      mutatna, ezert az uzenet az irodara mutat. Ezt a spec allitja, mert a
-      szoveg a viselkedes resze, nem diszites.
+      2026-09-04 ELOTT ez a mondat az IRODARA mutatott, mert a nev a
+      bejelentkezett felhasznalobol jott, es a szerelo nem tudta kijavitani.
+      MA MAS: a mezo ott van, a szerelo BE TUDJA irni -- tehat a mondat egy
+      LETEZO helyre mutat, es a valasztast is felkinalja.
+
+      MI PIROSIT: a regi, irodara mutato szoveg visszairasa. Az ma egy nem
+      letezo teendore kuldene a szerelot.
     */
-    const result = buildWorksheetSignaturePayload(ALAP, "K");
+    const result = buildWorksheetSignaturePayload(
+      { ...ALAP, typedName: "K" },
+      null,
+    );
     assert.equal(result.ok, false);
     assert.equal(!result.ok && result.field, "signerName");
-    assert.ok(!result.ok && result.message.includes("irodának"));
+    assert.match(!result.ok ? result.message : "", /Válaszd ki az aláírót/);
   });
 
-  it("üres név sem", () => {
-    assert.equal(buildWorksheetSignaturePayload(ALAP, "   ").ok, false);
-  });
-
-  it("kétszáz karakternél hosszabb név sem", () => {
+  it("az EGYIK SEM ágon üres név sem elég", () => {
     assert.equal(
-      buildWorksheetSignaturePayload(ALAP, "K".repeat(201)).ok,
+      buildWorksheetSignaturePayload({ ...ALAP, typedName: "   " }, null).ok,
+      false,
+    );
+  });
+
+  it("kétszáz karakternél hosszabb BEÍRT név sem", () => {
+    assert.equal(
+      buildWorksheetSignaturePayload(
+        { ...ALAP, typedName: "K".repeat(201) },
+        null,
+      ).ok,
       false,
     );
     assert.equal(
-      buildWorksheetSignaturePayload(ALAP, "K".repeat(200)).ok,
+      buildWorksheetSignaturePayload(
+        { ...ALAP, typedName: "K".repeat(200) },
+        null,
+      ).ok,
+      true,
+    );
+  });
+
+  it("a LISTÁRÓL választott ágon a NÉV-ellenőrzés KIMARAD", () => {
+    /*
+      TESTVER-KONTROLL, ES NEM DISZ. A nevet ott nem is a kliens adja: egy
+      itteni hossz-kapu olyan erteket vizsgalna, ami fel sem megy -- es a
+      valasztott alairoval indulo alairas elakadna egy ures szovegmezo miatt,
+      amit a szerelo ki sem nyitott.
+
+      MI PIROSIT: ha az ellenorzes a valasztott agon is futna.
+    */
+    assert.equal(
+      buildWorksheetSignaturePayload({ ...ALAP, typedName: "" }, "kontakt-1")
+        .ok,
       true,
     );
   });

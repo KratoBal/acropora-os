@@ -476,6 +476,8 @@ export type {
   WorksheetChainLink,
   WorksheetSelectablePartner,
   WorksheetSelectablePartnerListResponse,
+  WorksheetSignerCandidate,
+  WorksheetSignerListResponse,
   WorksheetNumberParts,
   WorksheetSignatureDecision,
   WorksheetSignatureDetail,
