@@ -116,9 +116,19 @@ const detail: ProductDetail = {
     priceDisplay: "normal",
     productUrl: null,
     manufacturerUrl: null,
-    minimumOrderQuantity: "1",
+    /**
+     * EGYEDI ERTEKEK, SZANDEKOSAN. A korabbi "1" es "1" par egyik allitasban sem
+     * szerepelt, es ha most azokra mernenk, a `getByText` a lap barmelyik masik
+     * egyesevel osszeakadhatna -- a teszt akkor is zold lenne, ha a harom mezo
+     * kozul csak egy jelenik meg.
+     *
+     * A lepeskoz a TAROLT alakjaban all (`Decimal(19, 6)`): igy az allitas azt is
+     * meri, hogy a lap nem kerekit. A maximum `null` MARAD, mert az a hiany
+     * kontrollja: ott a `—` jelnek kell allnia, nem uresnek.
+     */
+    minimumOrderQuantity: "3",
     maximumOrderQuantity: null,
-    orderQuantityStep: "1",
+    orderQuantityStep: "0.250000",
     lowStockThreshold: "2",
     backorderAllowed: true,
     variantStockEnabled: false,
@@ -243,6 +253,48 @@ describe("ProductDetailPage mirror ownership", () => {
    * átmenne, ami sehol nem kínál szerkesztést; csak a másodikat nézve egy
    * olyan, ami mindenhol.
    */
+  /**
+   * A RENDELESI KORLATOK, HAROM KULON ALLITASSAL.
+   *
+   * MIERT NEM EGY: harom kulon sor viszi oket a lapon, es egy osszevont allitas
+   * elbukna, ha barmelyik hianyzik, de nem mondana meg, MELYIK.
+   *
+   * ES MIERT A CIMKE SZULOJEBEN KERESSUK AZ ERTEKET, nem a lapon barhol: az
+   * elso valtozat `getByText("3")` alakban allt, es "Found multiple elements"
+   * hibaval elhasalt -- a harmas mashol is all a lapon. Egy ilyen allitas nem
+   * attol lenne jo, hogy egyedi erteket valasztunk (az a kovetkezo fixture-nal
+   * ujra elromlana), hanem attol, hogy a SZERKEZETET meri: a cimke melletti
+   * ertek az, ami bizonyit.
+   */
+  it("kiírja a minimális rendelhető mennyiséget a tükör-adatok közt", async () => {
+    render(<ProductDetailPage productId="product-1" />);
+
+    const cimke = await screen.findByText("Minimális rendelhető mennyiség");
+    expect(cimke.parentElement?.textContent).toContain("3");
+  });
+
+  it("kiírja a rendelési lépésközt, a tárolt pontosságával", async () => {
+    render(<ProductDetailPage productId="product-1" />);
+
+    const cimke = await screen.findByText("Rendelési lépésköz");
+    expect(cimke.parentElement?.textContent).toContain("0.250000");
+  });
+
+  /**
+   * A HIANYZO MAXIMUM KONTROLLJA. A mert adatban a maximum a legritkabb a
+   * haromkozul (a 09-03-as exporton het termeken all), tehat ez az ag fut le
+   * szinte mindenhol -- es a lapnak akkor is ki kell irnia a SORT, nem
+   * elhagynia, kulonben a kollega nem tudja megkulonboztetni a "nincs korlat"
+   * es a "nem tudjuk" esetet.
+   */
+  it("hiányzó maximumnál is kiírja a sort, üres jellel", async () => {
+    render(<ProductDetailPage productId="product-1" />);
+
+    const cimke = await screen.findByText("Maximális rendelhető mennyiség");
+    expect(cimke).toBeInTheDocument();
+    expect(cimke.parentElement?.textContent).toContain("—");
+  });
+
   it("nem kínál szerkesztőt a webshop által gondozott terméken", async () => {
     render(<ProductDetailPage productId="product-1" />);
 

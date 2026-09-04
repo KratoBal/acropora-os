@@ -911,6 +911,41 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                         {dateTime(product.unasMirror.reportedStockSyncedAt)}
                       </dd>
                     </div>
+                    {/*
+                      A RENDELESI KORLATOK. A tukorbol jonnek, es eddig eljutottak
+                      a sajat API-nkig (a `toProductDetail` mind a harmat
+                      visszaadja), csak ez a lap nem hasznalta oket.
+
+                      EZ A LAP A BELSO KOLLEGA KEPERNYOJE, tehat a megjelenites
+                      itt NEM tesz igeretet a vevonek -- eleg megmutatni. A
+                      bevitel ellenorzese (hogy a rendelt mennyiseg tenyleg a
+                      lepeskozre essen) NEM ide tartozik: az a bolti oldal
+                      kerdese, es kulon dontes.
+                    */}
+                    <div>
+                      <dt className="text-xs text-slate-400">
+                        Minimális rendelhető mennyiség
+                      </dt>
+                      <dd className="mt-1 text-slate-800">
+                        {value(product.unasMirror.minimumOrderQuantity)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-slate-400">
+                        Maximális rendelhető mennyiség
+                      </dt>
+                      <dd className="mt-1 text-slate-800">
+                        {value(product.unasMirror.maximumOrderQuantity)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-slate-400">
+                        Rendelési lépésköz
+                      </dt>
+                      <dd className="mt-1 text-slate-800">
+                        {value(product.unasMirror.orderQuantityStep)}
+                      </dd>
+                    </div>
                   </dl>
                   {product.unasMirror.isPackageProduct ? (
                     <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4">
