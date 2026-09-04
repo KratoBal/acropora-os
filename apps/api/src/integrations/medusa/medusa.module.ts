@@ -6,6 +6,7 @@ import { MedusaConnectionService } from "./medusa-connection.service.js";
 import { MedusaConnectionStartupValidator } from "./medusa-connection-startup.validator.js";
 import { MedusaCredentialCryptoService } from "./medusa-credential-crypto.service.js";
 import { MedusaCredentialProvider } from "./medusa-credential.provider.js";
+import { MedusaProjectionScheduler } from "./medusa-projection.scheduler.js";
 
 /**
  * Az INTEGRÁCIÓ HATÁRA.
@@ -15,9 +16,14 @@ import { MedusaCredentialProvider } from "./medusa-credential.provider.js";
  * modul az a határ, ahol a hitelesítő adat kezelése bekerül oda, ahol a többi
  * integrációé is van.
  *
- * Amit ez a modul SZÁNDÉKOSAN nem tartalmaz: vetítést indító végpontot,
- * ütemezőt és eseményfigyelőt. A vetítés indítási módja ebben a körben nem
- * változik.
+ * AZ UTEMEZO 2026-09-04 OTA ITT VAN, es ez a mondat azert lett atirva, nem
+ * kiegeszitve: korabban azt allitotta, hogy ez a modul SZANDEKOSAN nem
+ * tartalmaz utemezot. Igaz volt, amikor irodott, es azota nem az -- egy
+ * megjegyzes, ami egy megvaltozott allapotot ir le, rosszabb a semminel.
+ *
+ * AMI VISZONT VALTOZATLANUL NINCS ITT: vetitest indito VEGPONT es
+ * esemenyfigyelo. Az utemezo alapertelmezesben KIKAPCSOLT, tehat a vetites
+ * indítasi modja csak ott valtozik, ahol valaki a kapcsolot bekapcsolja.
  */
 @Module({
   controllers: [MedusaConnectionController],
@@ -27,6 +33,7 @@ import { MedusaCredentialProvider } from "./medusa-credential.provider.js";
     MedusaCredentialProvider,
     MedusaConnectionService,
     MedusaConnectionStartupValidator,
+    MedusaProjectionScheduler,
   ],
   exports: [
     MedusaConnectionService,
