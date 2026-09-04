@@ -130,6 +130,31 @@ export interface UnasVariantValue {
 export interface UnasApiVariantStock {
   values: UnasVariantValue[];
   reportedStock: string;
+  /**
+   * A KOMBINACIO FELARA, BRUTTO, VAGY `null`, HA NINCS.
+   *
+   * A UNAS a felarat nem a keszlet-soron kuldi, hanem a TENGELY-DEFINICIOBAN:
+   * `Variants.Variant.Values.Value` alatt, `ExtraPrice` neven, ertekenkent. Ez
+   * a mezo az a szam, ami EBBEN a kombinacioban osszeadodik -- tobb tengely
+   * eseten a valasztott ertekek felarainak osszege.
+   *
+   * MERVE (nautilus, 2026-09-04, a 2026-09-03-i exporton, 1893 termek): kilenc
+   * terméknek van tengely-blokkja, mind EGY tengelyes, tizennyolc
+   * kombinacioval, es EGYETLEN ertek visel felarat (a `5902026731119cs`
+   * "Flakon" erteke, 150). A tobbtengelyes osszeadas tehat MA nem all elo --
+   * azert igy van megirva, mert a forras szerkezete ezt engedi, es egy
+   * "csak az elso tengely szamit" alak csendben veszitene el a masodikat.
+   *
+   * AMIERT KULON MEZO, ES NEM A `values` ELEMEIN: a `UnasVariantValue` a
+   * getStock valaszaban is szerepel, ahol se tengely-nev, se felar nem letezik.
+   * Egy ott ertelmezhetetlen mezo azt sugallna, hogy a hianya adat -- pedig
+   * csak az a felulet nem hordozza.
+   *
+   * A `null` NEM nulla: azt jelenti, hogy ehhez a kombinaciohoz a forras nem
+   * rendelt felarat. A ketto azert nem ugyanaz, mert egy kesobbi olvaso a
+   * nullat MERT ertekként olvasna.
+   */
+  extraGrossPrice: string | null;
 }
 
 export interface UnasPackageComponent {

@@ -148,6 +148,7 @@ async function syncProductVariants(
           name: `${source.name} — ${unasVariantLabel(stock.values)}`,
           values: stock.values,
           reportedStock: stock.reportedStock,
+          extraGrossPrice: stock.extraGrossPrice,
         };
       })
     : [
@@ -157,6 +158,11 @@ async function syncProductVariants(
           name: source.name,
           values: null,
           reportedStock: source.reportedStock,
+          /**
+           * A VALTOZAT NELKULI TERMEKNEK NINCS FELARA, ES EZ NEM UGYANAZ,
+           * MINT A NULLA: nincs tengely, tehat nincs mihez felarat rendelni.
+           */
+          extraGrossPrice: null,
         },
       ];
   const keys = expected.flatMap((item) => (item.key ? [item.key] : []));
@@ -274,6 +280,7 @@ async function syncProductVariants(
       unasBaseSku: source.sku,
       unasVariantKey: item.key,
       unasVariantValues: json(item.values),
+      unasVariantExtraGrossPrice: item.extraGrossPrice,
       unasReportedStock: item.reportedStock,
       unasReportedStockSyncedAt: syncedAt,
     };

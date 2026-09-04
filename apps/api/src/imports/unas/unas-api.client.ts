@@ -265,6 +265,40 @@ function decimal(valueToParse: string | undefined): string | null {
   return normalized;
 }
 
+/**
+ * TIZEDES SZAMOK OSSZEADASA VESZTESEG NELKUL.
+ *
+ * `BigInt`, nem `Number`: penzosszeget lebegopontosan osszeadni azert rossz,
+ * mert a hiba NEM all meg -- `0.1 + 0.2` nem `0.3`, es a kulonbseg a tarolt
+ * `Decimal(19, 4)` mezoben mar rogzul. A hiba nema: egyetlen fillér, amirol
+ * senki nem szol.
+ *
+ * A bemenet a `decimal()` normalizalt alakja (opcionalis elojel, pont
+ * tizedeselvalaszto), tehat itt mar nem kell alakot ellenorizni.
+ */
+function sumDecimals(values: string[]): string {
+  const scale = values.reduce(
+    (max, item) => Math.max(max, (item.split(".")[1] ?? "").length),
+    0,
+  );
+  const total = values.reduce((sum, item) => {
+    const [whole = "0", fraction = ""] = item.split(".");
+    const negative = whole.startsWith("-");
+    const digits = BigInt(
+      `${whole.replace("-", "")}${fraction.padEnd(scale, "0")}`,
+    );
+    return sum + (negative ? -digits : digits);
+  }, 0n);
+  if (scale === 0) return total.toString();
+  const negative = total < 0n;
+  const digits = (negative ? -total : total)
+    .toString()
+    .padStart(scale + 1, "0");
+  const whole = digits.slice(0, digits.length - scale);
+  const fraction = digits.slice(digits.length - scale);
+  return `${negative ? "-" : ""}${whole}.${fraction}`;
+}
+
 function vatRate(valueToParse: string | undefined): string | null {
   if (!valueToParse) return null;
   const trimmed = valueToParse.trim();
@@ -479,9 +513,26 @@ export function parseUnasProductResponse(xml: string): UnasApiProduct[] {
       const stocks = child(product, "Stocks");
       const stockStatus = stocks ? child(stocks, "Status") : undefined;
       const stockRows = children(stocks, "Stock");
-      const variantNames = children(child(product, "Variants"), "Variant").map(
-        (variant, index) => value(variant, "Name") ?? `Változat ${index + 1}`,
+      /**
+       * A TENGELYEK, NEVVEL ES ERTEKENKENTI FELARRAL.
+       *
+       * A `Variants` blokk KET dolgot hordoz, es eddig csak az elsot olvastuk
+       * ki: a tengely NEVET (`Variant.Name`) es az ertekeket a felarukkal
+       * (`Variant.Values.Value[].Name` es `.ExtraPrice`). A keszlet-sorok csak
+       * az ertek SZOVEGET kuldik, tehat a felar egyedul innen szerezheto meg.
+       */
+      const variantAxes = children(child(product, "Variants"), "Variant").map(
+        (variant, index) => ({
+          name: value(variant, "Name") ?? `Változat ${index + 1}`,
+          extraPrices: new Map(
+            children(child(variant, "Values"), "Value").map((option) => [
+              value(option, "Name") ?? "",
+              decimal(value(option, "ExtraPrice")),
+            ]),
+          ),
+        }),
       );
+      const variantNames = variantAxes.map((axis) => axis.name);
       const mainStockRows = stockRows.filter(
         (stock) => !value(stock, "WarehouseId"),
       );
@@ -504,6 +555,37 @@ export function parseUnasProductResponse(xml: string): UnasApiProduct[] {
             variantNames.length !== variantValues.length)
         )
           throw new UnasApiError("FIELD_FORMAT_INVALID");
+        /**
+         * A FELAR OSSZEADASA, ES A NEM ISMERT ERTEK NEVESITETT MEGALLAS.
+         *
+         * Ha egy keszlet-kombinacio olyan erteket nevez meg, ami a tengely
+         * definiciojaban nem szerepel, akkor NEM nulla felarral megyunk
+         * tovabb. Az a valtozat csendben OLCSOBBAN kerulne ki -- se hiba, se
+         * megallas, csak kevesebb penz --, es ez pontosan az a nema kar, ami
+         * ellen a felar atvitele letezik. A hangos megallas dragabb egy
+         * importnal, de latszik.
+         *
+         * MERVE (2026-09-04, a 2026-09-03-i exporton): mind a 18 kombinacio
+         * mind a 9 tengely-blokkos terméknel megtalalhato a definicioban,
+         * tehat ez a megallas ma egyszer sem sulne el.
+         *
+         * ES AZ ORZO CSAK OTT ALL, AHOL A KAR LEHETSEGES: ha a tengelynek
+         * NINCS ertek-listaja, akkor a forras nem is nyilatkozik felarrol --
+         * ott a `null` a helyes valasz, nem a megallas. Ez nem kiskapu: a
+         * felar KIZAROLAG az ertek-listaban letezik, tehat egy lista nelkuli
+         * tengelynel nincs mit elveszteni. Enelkul a megszoritas olyan
+         * alakot utne el, amit a mai kod elfogad.
+         */
+        const extraPrices = variantValues.map((variantValue, index) => {
+          const axis = variantAxes[index];
+          if (!axis || axis.extraPrices.size === 0) return null;
+          if (!axis.extraPrices.has(variantValue))
+            throw new UnasApiError("FIELD_FORMAT_INVALID");
+          return axis.extraPrices.get(variantValue) ?? null;
+        });
+        const present = extraPrices.filter(
+          (item): item is string => item !== null,
+        );
         return [
           {
             values: variantValues.map((variantValue, index) => ({
@@ -511,6 +593,7 @@ export function parseUnasProductResponse(xml: string): UnasApiProduct[] {
               value: variantValue,
             })),
             reportedStock,
+            extraGrossPrice: present.length ? sumDecimals(present) : null,
           },
         ];
       });
