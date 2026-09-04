@@ -59,6 +59,35 @@ describe("decideMedusaBarcode", () => {
   });
 
   /**
+   * A KIADVANY-ELOTAG ERVENYES, ES MEGSEM TERMEK-VONALKOD.
+   *
+   * A 9780301379722 valodi, ervenyes ellenorzo szamjegyu kod -- es egy ISBN,
+   * tehat konyv. A mert adatban egy ilyen all, egy olyan termeken, aminek a
+   * sajat cikkszama ugyanez.
+   *
+   * ES AZ EGYEDISEG NEM VEDI MEG: a tobbi generalt kodot ma az ismetlodes-ag
+   * tartja vissza, de az VELETLEN vedelem -- nem azert maradnak bent, mert
+   * generaltak, hanem mert tobbszor allnak. Ezert all itt kulon allitas, es
+   * ezert EGYEDIKENT adjuk at (sameValueCount 1): epp azt az esetet merjuk,
+   * amit az ismetlodes-ag NEM fogna meg.
+   */
+  it("a kiadvany-elotagu kod nem megy ki, meg akkor sem, ha egyedi es ervenyes", () => {
+    const dontes = decideMedusaBarcode("9780301379722", 1);
+
+    assert.equal(dontes.kind, "none");
+    assert.equal(dontes.field, null);
+    // NEM `skipped`: a ket kimenet MAS teendot jelent. A `skipped` a
+    // forras-oldali tisztitasra var; ez soha nem lesz termek-vonalkod.
+    assert.equal(dontes.duplicate, null);
+  });
+
+  it("a nem kiadvany-elotagu 13 jegyu kod tovabbra is kimegy", () => {
+    // ISMERT POZITIV KONTROLL a fenti allitashoz: enelkul egy olyan
+    // megvalositas is atmenne, ami MINDEN 13 jegyu kodot elutasit.
+    assert.equal(decideMedusaBarcode("4006381333931", 1).kind, "ean");
+  });
+
+  /**
    * AZ ISMETLODES A LEGFONTOSABB AG: ket kulonbozo cikkszam ugyanarra a
    * vonalkodra a boltban azt allitana, hogy a ket termek ugyanaz. Merve a
    * forrason: 50 kod 151 termeken all igy.
@@ -72,6 +101,37 @@ describe("decideMedusaBarcode", () => {
     assert.equal(dontes.kind, "skipped");
     assert.equal(dontes.field, null);
     assert.equal(dontes.duplicate, "4006381333931");
+  });
+
+  /**
+   * A HARMADIK ESET, AMI A KET SORRENDET MEGKULONBOZTETI.
+   *
+   * A masik ket kiadvany-allitas EGYEDI koddal dolgozik, tehat a sorrend nem
+   * szamit bennuk: mindket felallasban `none` jonne ki. Ez az eset az egyetlen,
+   * ami elvalasztja oket.
+   *
+   * ES A KULONBSEG NEM BELSO: a `skipped` azt mondja a kimenetben, hogy a
+   * tisztitas helye a forras, ott dol el, MELYIK terméke a kod. Egy ISBN-nel ez
+   * hamis -- egyikuke sem --, es a tisztitasi lista ezeket kulon csoportba
+   * teszi ("a mezo torlendo"). Ha a mi kimenetunk a masik csoportba sorolna
+   * oket, a ket lista ellentmondana egymasnak.
+   */
+  it("az ismetlodo KIADVANY-kod is none, nem skipped -- a sorrend miatt", () => {
+    const dontes = decideMedusaBarcode("9780301379722", 4);
+
+    assert.equal(dontes.kind, "none");
+    assert.equal(dontes.duplicate, null);
+  });
+
+  /**
+   * UGYANEZ A HOSSZRA. Egy nyolc jegyu ervenyes kod ismetlodve is `none`: nincs
+   * cel-mezoje, tehat nincs mire varni a forrastol. A mert adatban ma nulla ilyen
+   * all, tehat ez az ag elore szol, nem visszamenoleg.
+   */
+  it("az ismetlodo, cel-mezo nelkuli hosszusagu kod is none", () => {
+    // 96385074 -- ervenyes EAN-8 ellenorzo szamjeggyel.
+    assert.equal(hasValidCheckDigit("96385074"), true);
+    assert.equal(decideMedusaBarcode("96385074", 3).kind, "none");
   });
 
   /**
