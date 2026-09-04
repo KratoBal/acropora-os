@@ -234,6 +234,12 @@ describe("az aktív akció ára megy ki", () => {
       Most a dontes megvan, es az allitas azt meri, ami helyette all.
 
       MI PIROSIT: ha a listaar (7800) menne ki az akcios (3500) helyett.
+
+      A FORRAS NEVE MAR NEM ITT ALL, hanem a kovetkezo allitasban. Eredetileg
+      ide is bekerult (`source === "mirror"`), es az a sor a KETFORRASOS
+      vilagbol jott: amikor az akcios agnak meg nem volt sajat neve. Amint
+      kapott egyet, ez a fel HAMISSA valt volna -- ezert kulon allitas meri, es
+      itt csak az OSSZEG all.
     */
     const d = resolvePriceSource({
       authority: "UNAS",
@@ -243,8 +249,54 @@ describe("az aktív akció ára megy ki", () => {
     });
 
     assert.equal(d.ok, true);
-    assert.equal(d.ok && d.source, "mirror");
     assert.equal(d.ok ? d.price.sellingGrossPrice?.toString() : null, "3500");
+  });
+
+  it("az akciós ág a FORRÁSÁT is megnevezi, nem listaárnak látszik", () => {
+    /*
+      ACROBOT KIKOTESE, 2026-09-04: a kimenet nevezze meg, AKCIOS arat kuldott-e
+      vagy listaarat. Enelkul egy kesobbi olvaso nem tudja eldonteni, MIERT
+      alacsonyabb egy ar, mint amit vart -- ugyanaz az indok, mint a forras
+      megnevezesenel.
+
+      MI PIROSIT: ha az akcios ag a listaar forras-erteket adja vissza. Akkor a
+      jelentes ugyanazt mondana ket kulonbozo arrol.
+    */
+    const d = resolvePriceSource({
+      authority: "UNAS",
+      mirror: tukor({ saleGrossPrice: forint("3500") }),
+      own: nincsSajat,
+      now: most,
+    });
+
+    assert.equal(d.ok && d.source, "mirror-sale");
+  });
+
+  it("az akciós ág is FORINTTAL megy, ha a tükör nem mond pénznemet", () => {
+    /*
+      EZ A LEGFONTOSABB ALLITAS EBBEN A SZAKASZBAN, ES EGY MAR EGYSZER LEZART
+      HIBA VISSZATERESET KOTI LE.
+
+      A tukor SOHA nem hordoz penznemet (merve a #557-ben, ket iranybol). A
+      listaar aga ezert forintra esik vissza -- az akcios ag viszont KULON
+      visszateres, es a tartalek kimaradt belole.
+
+      Kovetkezmeny: MINDEN aktiv akcios termek `currency-missing` okkal allt
+      volna meg. Nem hibazik, nem tor el semmit, csak nulla arat publikal --
+      ugyanaz a nema no-op, amit a #557 mar lezart, csak az uj agon ujra
+      eloallt.
+
+      MI PIROSIT: a tartalek elhagyasa az akcios agrol. A listaar agara irt
+      allitas erre VAK, mert az mas visszateres.
+    */
+    const d = resolvePriceSource({
+      authority: "UNAS",
+      mirror: tukor({ saleGrossPrice: forint("3500") }),
+      own: nincsSajat,
+      now: most,
+    });
+
+    assert.equal(d.ok && d.price.sellingPriceCurrency, "HUF");
   });
 
   it("ISMERT POZITÍV: LEJÁRT akció mellett a listaár megy", () => {
@@ -291,14 +343,25 @@ describe("az aktív akció ára megy ki", () => {
 });
 
 describe("a jelentés megnevezi a forrást", () => {
-  it("a két forrás MÁS mondatot kap, és mindkettő megnevezi a mezőt", () => {
+  it("MIND A HÁROM forrás más mondatot kap", () => {
     /*
       acrobot kikotese: enelkul egy kesobbi olvaso nem tudja eldonteni, MIERT
       regi egy ar. Egy befagyott tukor-ar es egy elavult sajat ar a jelentesben
       ugyanugy nez ki.
     */
-    assert.notEqual(describePriceSource("mirror"), describePriceSource("own"));
-    assert.match(describePriceSource("mirror"), /UnasProductSnapshot/);
-    assert.match(describePriceSource("own"), /sellingGrossPrice/);
+    const nevek = [
+      describePriceSource("mirror"),
+      describePriceSource("mirror-sale"),
+      describePriceSource("own"),
+    ];
+    /*
+      HAROM KULONBOZO MONDAT. Egy kozos szoveg epp azt venne el, amiert a mezo
+      letezik -- es az akcios ag korabban PONTOSAN a listaar mondatat kapta meg.
+    */
+    assert.equal(new Set(nevek).size, 3);
+    assert.match(nevek[0]!, /UnasProductSnapshot/);
+    assert.match(nevek[1]!, /AKCIÓS/);
+    assert.match(nevek[1]!, /saleGrossPrice/);
+    assert.match(nevek[2]!, /sellingGrossPrice/);
   });
 });
