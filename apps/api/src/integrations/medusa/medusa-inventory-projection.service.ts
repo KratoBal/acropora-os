@@ -41,6 +41,15 @@ export interface ProjectableStock {
   sku: string;
   onHand: Prisma.Decimal;
   reserved?: Prisma.Decimal | null;
+  /**
+   * ELORE RENDELHETO-E. Hianyzo ertek eseten a MAI viselkedes all
+   * (`PROJECTED_ALLOW_BACKORDER`, azaz `true`).
+   *
+   * A DONTES ERKEZIK IDE, NEM A KATEGORIAK: ez a szolgaltatas szandekosan nem
+   * tud a kategoria-farol. A WYSIWYG szabaly a `medusa-wysiwyg.policy.ts`
+   * modulban all, es a parancs szamolja ki, mielott idehiv.
+   */
+  allowBackorder?: boolean;
 }
 
 export interface InventoryProjectionReport {
@@ -439,7 +448,7 @@ export class MedusaInventoryProjectionService {
 
     let decision;
     try {
-      decision = decideInventoryProjection(stock);
+      decision = decideInventoryProjection(stock, stock.allowBackorder);
     } catch (error) {
       if (error instanceof MedusaInventoryQuantityError)
         return {

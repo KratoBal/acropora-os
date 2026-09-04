@@ -2,6 +2,10 @@ import { pathToFileURL } from "node:url";
 
 import { prisma, Prisma } from "@acropora/database";
 import { isKnownCatalogAuthority } from "./medusa-publication.policy.js";
+import {
+  decideWysiwygBackorder,
+  wysiwygSubtreeIds,
+} from "./medusa-wysiwyg.policy.js";
 
 import {
   ensureMainWarehouse,
@@ -69,6 +73,27 @@ export interface InventoryCliDatabase extends WarehouseLookupDatabase {
       }[]
     >;
   };
+  /**
+   * A TELJES KATEGORIA-FA, es igen, MIND a sorok.
+   *
+   * A WYSIWYG szabaly a RESZFAT jarja be, tehat a szulo-gyerek kapcsolatokat
+   * ismerni kell. Egy szurt lekerdezes (csak a WYSIWYG nevu sor) epp azt a
+   * gyereket hagyna ki, amiert a bejaras letezik -- merve: ket termek all az
+   * SPS gyerek-kategoriaban, es azok egy szintu bejarasnal kiesnek.
+   *
+   * A fa merete ma 219 sor a teszt adatbazisban; ez nem az a nagysagrend,
+   * ahol egy okosabb lekerdezes megerne egy kihagyhato hibat.
+   */
+  category: {
+    findMany(
+      args?: unknown,
+    ): Promise<{ id: string; name: string; parentId: string | null }[]>;
+  };
+  productCategory: {
+    findMany(
+      args: unknown,
+    ): Promise<{ productId: string; categoryId: string }[]>;
+  };
 }
 
 /** Egy változat, amit vetítünk, a hozzá tartozó OS készletsorral. */
@@ -84,6 +109,19 @@ export interface VariantStock {
    * néztünk - lásd `describeMissingStockRow`.
    */
   missingRow: boolean;
+  /**
+   * ELORE RENDELHETO-E, a WYSIWYG szabaly szerint.
+   *
+   * A DONTES UTAZIK, NEM A KATEGORIAK, es ez szandekos: a Medusa-vetites
+   * szolgaltatasa igy NEM tud a kategoria-farol. Ha a nyers besorolasokat
+   * adnank at, a keszlet-szolgaltatas es a kategoria-szabaly egymasba erne,
+   * es egy rontas utan nem lehetne megmondani, melyik romlott el.
+   *
+   * MERVE (2026-09-04): a hat WYSIWYG termekbol NEGYNEL a kategoria csak
+   * ALTERNATIV besoroláskent all -- ezert szamit MINDEN besorolas, nem csak
+   * az elsodleges.
+   */
+  allowBackorder: boolean;
 }
 
 /**
@@ -216,6 +254,31 @@ export async function resolveTargets(
    * a mai gyakorlat sem összegez - egy másik olvasás itt csendben egy MÁSIK
    * készletfogalmat vezetne be, és a brief 13. pontja pontosan ezt tiltja.
    */
+  /**
+   * A KATEGORIA-BESOROLASOK ES A FA, a WYSIWYG szabalyhoz.
+   *
+   * KET lekerdezes, es a masodik NEM szurheto: a reszfa bejarasahoz a
+   * szulo-gyerek kapcsolatok kellenek. A szabaly maga a
+   * `medusa-wysiwyg.policy.ts` modulban all.
+   */
+  const besorolasok = await database.productCategory.findMany({
+    where: {
+      productId: { in: [...new Set(variants.map((row) => row.productId))] },
+    },
+    select: { productId: true, categoryId: true },
+  });
+  const kategoriakTermekenkent = new Map<string, string[]>();
+  for (const sor of besorolasok) {
+    const lista = kategoriakTermekenkent.get(sor.productId);
+    if (lista) lista.push(sor.categoryId);
+    else kategoriakTermekenkent.set(sor.productId, [sor.categoryId]);
+  }
+  const wysiwyg = wysiwygSubtreeIds(
+    await database.category.findMany({
+      select: { id: true, name: true, parentId: true },
+    }),
+  );
+
   const rows = await database.stockItem.findMany({
     where: {
       warehouseId,
@@ -235,6 +298,10 @@ export async function resolveTargets(
       onHand: row?.onHand ?? new Prisma.Decimal(0),
       reserved: row?.reserved ?? new Prisma.Decimal(0),
       missingRow: !row,
+      allowBackorder: decideWysiwygBackorder(
+        kategoriakTermekenkent.get(variant.productId) ?? [],
+        wysiwyg,
+      ),
     };
   });
 }

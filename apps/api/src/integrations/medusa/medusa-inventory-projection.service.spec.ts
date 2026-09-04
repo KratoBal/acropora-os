@@ -275,6 +275,38 @@ describe("Medusa készlet-vetítés", () => {
     assert.equal(outcome.report.backorderResult, "set");
   });
 
+  /**
+   * A WYSIWYG DONTES ATERKEZIK A BOLTBA, ES EZ AZ ALLITAS A SZAKADAS ELLEN VAN.
+   *
+   * A dontest a parancs szamolja ki (`medusa-wysiwyg.policy.ts`), es ez a
+   * szolgaltatas csak TOVABBADJA. A tovabbadas egyetlen sor -- es kalibraciora
+   * kiderult, hogy a kivetele NULLA allitast dontott pirosra: minden termek
+   * elore rendelheto maradt volna, csendben, mindket oldal zold tesztjei
+   * mellett.
+   *
+   * BALAZS DONTESE (2026-09-04): egy WYSIWYG termek EGY DARAB. Ha elfogyott,
+   * nincs "ugyanolyan" masik, tehat elore rendelni sem lehet ra.
+   */
+  it("a WYSIWYG termek rendelhetosege KIKAPCSOLVA megy ki a boltba", async () => {
+    const { service, calls, variants } = fakes({
+      variants: [variantWith({ allowBackorder: true, levels: [] })],
+    });
+
+    const outcome = await service.project({
+      ...stock("0"),
+      allowBackorder: false,
+    });
+
+    assert.ok(outcome.action !== "stopped");
+    assert.ok(
+      calls.includes("backorder:variant_1:false"),
+      "a WYSIWYG termek allow_backorder mezoje nem lett kikapcsolva: a bolt " +
+        "tovabbra is elore rendelhetove tenne egy egyedi allatot",
+    );
+    assert.equal(variants[0]!.allow_backorder, false);
+    assert.equal(outcome.report.backorder, false);
+  });
+
   it("a rendelhetőség a MENNYISÉG ELŐTT áll be (a legkárosabb félállapot ellen)", async () => {
     const { service, calls } = fakes({
       variants: [variantWith({ allowBackorder: false, levels: [] })],
