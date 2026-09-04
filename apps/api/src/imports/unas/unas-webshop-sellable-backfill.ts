@@ -1,4 +1,5 @@
 import { webshopSellableFromUnas } from "./unas-product-sync.repository.js";
+import { unasRawRows } from "./unas-raw-list.js";
 
 export interface SellableBackfillRow {
   id: string;
@@ -36,23 +37,12 @@ function baseStatusFromPayload(
 ): string | null {
   const statuses = rawPayload.Statuses;
   if (!statuses || typeof statuses !== "object") return null;
-  const status = (statuses as Record<string, unknown>).Status;
   /**
-   * EGYETLEN GYEREK ESETEN NEM LISTA, HANEM OBJEKTUM.
-   *
-   * A nyers valaszt eloallito `nodePayload` csak akkor csinal tombot, ha
-   * UGYANAZ a nev tobbszor szerepel. Egy `Statuses` blokk egyetlen `Status`
-   * elemmel tehat OBJEKTUMKENT all -- es egy csak tombre iro olvaso ott
-   * CSENDBEN `null`-t adna, vagyis a termeket hamisra irna.
+   * EGYETLEN GYEREK ESETEN NEM LISTA, HANEM OBJEKTUM -- a szabaly az
+   * `unasRawRows`-ban all, mert ugyanez a csapda minden tarolt nyers valaszbol
+   * olvasott beagyazott listara vonatkozik, nem csak a statuszra.
    */
-  const items = Array.isArray(status)
-    ? status
-    : status && typeof status === "object"
-      ? [status]
-      : [];
-  for (const item of items) {
-    if (!item || typeof item !== "object") continue;
-    const row = item as Record<string, unknown>;
+  for (const row of unasRawRows((statuses as Record<string, unknown>).Status)) {
     if (String(row.Type) !== "base") continue;
     return row.Value === undefined || row.Value === null
       ? null
