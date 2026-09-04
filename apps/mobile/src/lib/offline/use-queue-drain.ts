@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import {
   createAsset,
+  updateAsset,
   uploadAssetDocuments,
   type CreateAssetInput,
 } from "@/lib/api/assets";
@@ -14,6 +15,7 @@ import {
 import { readQueuedWorksheetLine } from "@/lib/worksheets/worksheet-line";
 import { ApiError } from "@/lib/api/client";
 
+import { readQueuedAssetUpdate } from "./asset-update-queue";
 import { drainOfflineQueue } from "./drain-offline-queue";
 import type { SyncQueueRow } from "./sync-queue";
 import { readPhotoPayload } from "./photo-queue";
@@ -51,6 +53,7 @@ export function useQueueDrain(isOnline: boolean): string | null {
         const report = await drainOfflineQueue({
           send: async (row) => {
             if (row.operation === "upload-photo") return kepetKuld(row);
+            if (row.operation === "update") return modositastKuld(row);
             if (row.entityType === "worksheet") return munkalapotKuld(row);
             if (row.entityType === "worksheet-line") return tetelKuld(row);
             try {
@@ -156,6 +159,67 @@ async function kepetKuld(row: SyncQueueRow): Promise<{
       });
     }
     return { httpStatus: 201, error: null };
+  } catch (cause) {
+    return {
+      httpStatus: cause instanceof ApiError ? cause.status : null,
+      error: cause instanceof Error ? cause.message : String(cause),
+    };
+  }
+}
+
+/**
+ * EGY ESZKOZ-MODOSITAS FELKULDESE A SORBOL.
+ *
+ * === AMI ITT MAS, MINT A HAROM FELVITELNEL: NINCS UJ AZONOSITO ===
+ *
+ * A felviteleknel a valasz hozza a szerver-oldali azonositot, es az lep at a
+ * varraton. Itt a celpont MAR letezett, tehat nincs mit atadni: az `entityId`
+ * mar a soron all, es a valasz nem mond ujat rola.
+ *
+ * === AZ ELAVULT `expectedUpdatedAt` NEM HIBA, ES EZ AZ EGESZ SZELET ALAPJA ===
+ *
+ * A sorban allo torzs azt a verziot nevezi meg, amit a SZERELO latott -- ami
+ * ora- vagy naphosszat allhatott a telefonon. A szerver 2026-09-04 ota nem a
+ * verziot hasonlitja, hanem azt nezi, hogy a KOZBEN tortent esemenyek
+ * UGYANAZOKAT A MEZOKET erintettek-e (`asset-field-conflict.ts`). Egy tegnapi
+ * szerkesztes tehat ma is felmegy, ha kozben senki nem nyult UGYANAHHOZ a
+ * mezohoz.
+ *
+ * Ha megis ugyanahhoz nyultak, a szerver 409-et ad, azt a `decideDrain`
+ * KONFLIKTUSNAK sorolja, es a sor emberre var. Ez helyes: ilyenkor nem
+ * ujraprobalni kell, hanem eldonteni, MELYIK ERTEK MARADJON -- es azt a
+ * kepernyot a kovetkezo szelet hozza.
+ */
+async function modositastKuld(row: SyncQueueRow): Promise<{
+  httpStatus: number | null;
+  error: string | null;
+}> {
+  const payload = readQueuedAssetUpdate(row.payloadJson);
+  if (payload === null) {
+    /**
+     * 422, VAGYIS KONFLIKTUS: ember kell hozza. Egy ertelmezhetetlen torzs
+     * ujraprobalva ORokke ugyanezt adna, es a sor csendben porogne.
+     */
+    return {
+      httpStatus: 422,
+      error: "A módosítás sora értelmezhetetlen, ezért nem küldjük el.",
+    };
+  }
+  if (row.entityId === null) {
+    /**
+     * EZ NEM ALLHAT ELO A MAI IRASI UTON (modositast csak MEGLEVO eszkozre
+     * lehet inditani, es a sorba tetel oda is irja az azonositot), de a mezo
+     * tipusa megengedi. Az ag ezert VAN: egy jovobeli hivo, aki elfelejti
+     * kitolteni, itt egy mondatot kap, nem egy `null` erteku URL-t.
+     */
+    return {
+      httpStatus: 422,
+      error: "A módosítás sorához nem tartozik eszköz, ezért nem küldjük el.",
+    };
+  }
+  try {
+    await updateAsset(row.entityId, payload.patch);
+    return { httpStatus: 200, error: null };
   } catch (cause) {
     return {
       httpStatus: cause instanceof ApiError ? cause.status : null,

@@ -31,6 +31,16 @@ const rogzites = (id: string): SyncQueueRow => ({
   state: "pending",
 });
 
+const modositas = (id: string): SyncQueueRow => ({
+  ...rogzites(id),
+  operation: "update",
+  entityId: "asset-1",
+  payloadJson: JSON.stringify({
+    assetName: "Szivattyú",
+    patch: { expectedUpdatedAt: "2026-09-04T08:00:00Z", status: "ACTIVE" },
+  }),
+});
+
 const foto = (id: string, rogzitesId: string): SyncQueueRow => ({
   ...rogzites(id),
   operation: "upload-photo",
@@ -62,6 +72,49 @@ describe("mi mehet fel most", () => {
     assert.deepEqual(
       batch.map((r) => r.id),
       ["f1"],
+    );
+  });
+
+  it("a MÓDOSÍTÁS akkor is mehet, ha rögzítés vár", () => {
+    /*
+      A ket menet oka a FUGGOSEG, es a modositasnak nincs ilyenje: a celpontja
+      MAR a szerveren all, kulonben nem lehetne szerkeszteni.
+
+      MI PIROSIT: ha az elso ag csak a rogziteseket adna vissza. Akkor egy
+      ismetelten elbukó felvitel (ami `failed` allapotban a sorban MARAD)
+      VEGTELENUL feltartana minden javitast a telefonon.
+    */
+    const batch = nextBatch([rogzites("r1"), modositas("m1")], new Set());
+    assert.deepEqual(
+      batch.map((r) => r.id),
+      ["r1", "m1"],
+    );
+  });
+
+  it("a MÓDOSÍTÁS akkor is mehet, ha nincs rögzítés", () => {
+    // A masik ag. Egy modositas soha nem var senkire.
+    const batch = nextBatch([modositas("m1")], new Set());
+    assert.deepEqual(
+      batch.map((r) => r.id),
+      ["m1"],
+    );
+  });
+
+  it("a menet szűrése a MÓDOSÍTÁSOKAT külön adja", () => {
+    /*
+      A `batchForPass` az, amit a kiurites tenylegesen hiv. Ha a modositas
+      benne lenne a `nextBatch` kimeneteben, de a menet-szures nem ismerne,
+      ugyanugy sosem menne el.
+    */
+    const sorok = [rogzites("r1"), modositas("m1"), foto("f1", "r1")];
+    assert.deepEqual(
+      batchForPass(sorok, "update").map((r) => r.id),
+      ["m1"],
+    );
+    // TESTVER-KONTROLL: a rogzites menete NEM viszi el a modositast.
+    assert.deepEqual(
+      batchForPass(sorok, "create").map((r) => r.id),
+      ["r1"],
     );
   });
 

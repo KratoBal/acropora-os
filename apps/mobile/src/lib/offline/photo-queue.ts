@@ -88,6 +88,20 @@ export function nextBatch(
   rows: readonly SyncQueueRow[],
   felmentRogzitesek: ReadonlySet<string>,
 ): SyncQueueRow[] {
+  /**
+   * A MODOSITAS MINDIG MEHET, ES EZ NEM KIVETEL, HANEM A SZABALY MASIK FELE.
+   *
+   * A ket menet oka a FUGGOSEG: a kep a rogzitesere var, mert amig az fel nem
+   * ment, nincs hova kerulnie. A modositas celpontja viszont MAR OTT VAN a
+   * szerveren -- kulonben nem lehetne szerkeszteni --, tehat se nem var, se nem
+   * varakoztat.
+   *
+   * EZERT SZEREPEL MINDKET AGBAN. Ha csak az elsoben allna, egy ismetelten
+   * elbukó rogzites (ami `failed` allapotban a sorban marad) VEGTELENUL
+   * feltartana minden modositast; ha csak a masodikban, akkor egy varakozo
+   * rogzites tartana fel oket. Egyik sem igaz rola.
+   */
+  const modositasok = rows.filter((r) => r.operation === "update");
   const rogzitesek = rows.filter((r) => r.operation === "create");
   if (rogzitesek.length > 0) {
     /**
@@ -95,9 +109,9 @@ export function nextBatch(
      * hanem mert egy kep, aminek a rogzitese meg a sorban all, nem tud hova
      * felkerulni.
      */
-    return rogzitesek;
+    return [...rogzitesek, ...modositasok];
   }
-  return rows.filter((r) => {
+  const kepek = rows.filter((r) => {
     if (r.operation !== "upload-photo") return false;
     const payload = readPhotoPayload(r.payloadJson);
     /**
@@ -110,6 +124,7 @@ export function nextBatch(
       payload !== null && felmentRogzitesek.has(payload.recordingOperationId)
     );
   });
+  return [...modositasok, ...kepek];
 }
 
 /** A sor payloadja fotokent, vagy `null`, ha nem az. */

@@ -65,7 +65,12 @@
  * vissza, ami ellen az a lista keszult.
  */
 
-import { isSyncEntityType, type SyncEntityType } from "./sync-queue";
+import {
+  isSyncEntityType,
+  isSyncOperation,
+  type SyncEntityType,
+  type SyncOperation,
+} from "./sync-queue";
 
 /** Amennyit egy sorbol ez a modul olvas. */
 export interface ResendableRowLike {
@@ -102,13 +107,33 @@ export function queueResendEligibility(
       message: "Ez a felvitel nem akadt el: nincs mit javítani rajta.",
     };
 
-  if (row.operation !== "create")
-    return {
-      ok: false,
-      reason: "not-a-create",
-      message:
-        "Ez egy fénykép, nincs mit átírni rajta. A képet a rögzítés után lehet újra feltölteni.",
-    };
+  if (row.operation !== "create") {
+    /**
+     * ISMERETLEN MUVELET: NEM JAVITHATO, es nem is talalgatunk rola. Ugyanaz
+     * az ag, mint lentebb az ismeretlen fajtanal, ugyanabbol az okbol.
+     */
+    if (!isSyncOperation(row.operation))
+      return {
+        ok: false,
+        reason: "not-a-create",
+        message:
+          "Ezt a sort ez a verzió nem ismeri, ezért nem tudja javítani. Frissítsd az appot, és ha marad, szólj.",
+      };
+    /**
+     * MUVELETENKENT SAJAT MONDAT, ES EZT DRAGAN TANULTUK MEG EGY SORRAL LEJJEBB.
+     *
+     * Ez a feltetel korabban EGY mondatot adott mindenre, ami nem felvitel:
+     * „Ez egy fénykép". Amint a modositas sora megjelent, az a mondat rola
+     * HAMIS lett -- ugyanaz az alak, amit a `JAVITAS_ELUTASITAS` fejlece ir le
+     * egy szinttel lejjebb, csak ott a FAJTA, itt a MUVELET a tengely.
+     *
+     * A `Record` miatt egy negyedik muvelet felvetele forditasi hiba, nem
+     * csendes felreirat.
+     */
+    const muveletUzenet = JAVITAS_ELUTASITAS_MUVELET[row.operation];
+    if (muveletUzenet !== null)
+      return { ok: false, reason: "not-a-create", message: muveletUzenet };
+  }
 
   /**
    * ISMERETLEN FAJTA: NEM JAVITHATO, es nem is talalgatunk rola.
@@ -131,6 +156,27 @@ export function queueResendEligibility(
 
   return { ok: true };
 }
+
+/**
+ * MUVELETENKENT MIERT NEM JAVITHATO -- `null`, ha javithato.
+ *
+ * A MODOSITAS AZERT NEM JAVITHATO A SOR-KEPERNYON, mert nem a szoveggel van
+ * baj. A szerver akkor utasitja el, ha KOZBEN mas irta at UGYANAZOKAT a
+ * mezoket: ilyenkor a torzs valtozatlan ujrakuldese ugyanezt adna vissza, es a
+ * javito gomb egy soha nem teljesulo igeret lenne.
+ *
+ * A kijarat ma az, hogy a szerelo megnyitja az eszkozt, megnezi a MOSTANI
+ * erteket, es ha a sajatja kell, ujra beirja. A „melyik ertek maradjon"
+ * kepernyo kulon szelet -- amig nincs, ez a mondat mondja meg, mit lehet tenni,
+ * es nem igeri, hogy majd valaki mas feloldja.
+ */
+const JAVITAS_ELUTASITAS_MUVELET: Record<SyncOperation, string | null> = {
+  create: null,
+  update:
+    "Ezt a módosítást nem a szövege miatt utasította el a szerver, hanem azért, mert időközben más is átírta ugyanazokat a mezőket. Változatlanul újraküldve ugyanezt kapnád: nyisd meg az eszközt, nézd meg a mostani értéket, és ha a tiéd kell, írd be újra. Amit beírtál, addig itt marad.",
+  "upload-photo":
+    "Ez egy fénykép, nincs mit átírni rajta. A képet a rögzítés után lehet újra feltölteni.",
+};
 
 /**
  * FAJTANKENT MIERT NEM JAVITHATO -- `null`, ha javithato.

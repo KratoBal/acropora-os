@@ -38,7 +38,7 @@ export async function drainOfflineQueue(
   deps: DrainDeps,
 ): Promise<QueueRunReport> {
   /**
-   * KET MENET, EGY SOR -- ES A MASODIK MENET UJRAOLVAS.
+   * HAROM MENET, EGY SOR -- ES MINDEGYIK MENET UJRAOLVAS.
    *
    * Az elso menet a rogziteseket viszi. Kozben a `attachRecordingResult` a
    * kepek soraira felirja az uj szerver-azonositot -- vagyis az elso menet
@@ -46,18 +46,29 @@ export async function drainOfflineQueue(
    * `null`. Ha a masodik menet ugyanazokbol dolgozna, minden kep gazdatlannak
    * latszana, es SOHA egy sem menne fel.
    *
-   * Ezert a masodik menet friss olvasassal indul, es a `nextBatch` dont ujra:
-   * ha maradt fel nem ment rogzites, a kepek megint varnak.
+   * Ezert MINDEN menet friss olvasassal indul, es a `nextBatch` dont ujra: ha
+   * maradt fel nem ment rogzites, a kepek megint varnak.
    */
   const elso = await egyMenet(deps, "create");
-  const masodik = await egyMenet(deps, "upload-photo");
+  /**
+   * A MODOSITASOK MENETE A KETTO KOZOTT, ES A HELYE NEM MINDEGY.
+   *
+   * Nem a rogzitesek ELE: egy uj eszkoz felvitele az, ami a helyszinen elveszne,
+   * ha a telefon kozben lemerul -- egy modositas celpontja mar a szerveren all,
+   * tehat az varhat egy korrel tovabb.
+   *
+   * Nem is a kepek MOGE: a kepek menete a rogzitesekre var, es egy modositas
+   * ebbe a varakozasba semmilyen modon nem tartozik bele.
+   */
+  const masodik = await egyMenet(deps, "update");
+  const harmadik = await egyMenet(deps, "upload-photo");
   return {
-    attempted: elso.attempted + masodik.attempted,
-    done: elso.done + masodik.done,
-    retried: elso.retried + masodik.retried,
-    conflicted: elso.conflicted + masodik.conflicted,
-    stalled: elso.stalled + masodik.stalled,
-    unresolved: elso.unresolved + masodik.unresolved,
+    attempted: elso.attempted + masodik.attempted + harmadik.attempted,
+    done: elso.done + masodik.done + harmadik.done,
+    retried: elso.retried + masodik.retried + harmadik.retried,
+    conflicted: elso.conflicted + masodik.conflicted + harmadik.conflicted,
+    stalled: elso.stalled + masodik.stalled + harmadik.stalled,
+    unresolved: elso.unresolved + masodik.unresolved + harmadik.unresolved,
   };
 }
 

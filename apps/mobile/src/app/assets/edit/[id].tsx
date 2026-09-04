@@ -27,6 +27,11 @@ import {
   type EditableAsset,
 } from "@/lib/assets/asset-edit";
 import { ASSET_STATUS_OPTIONS } from "@/lib/assets/asset-status";
+import { describeAssetUpdateWrite } from "@/lib/assets/offline-edit";
+import { ApiError } from "@/lib/api/client";
+import { assetUpdateOperationId } from "@/lib/offline/sync-queue";
+import { enqueueAssetUpdate } from "@/lib/offline/queue-store";
+import { saveOrQueue, type SaveOutcome } from "@/lib/offline/save-or-queue";
 import { unitLevels } from "@/lib/partners/site-tree";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
@@ -77,6 +82,15 @@ export default function AssetEditScreen() {
   });
 
   const [form, setForm] = useState<AssetEditForm | null>(null);
+  /**
+   * A SORBA TETEL ES A VESZTES KULON ALLAPOT, MERT KULON SZINU.
+   *
+   * A varakozo modositas NEM hiba: elmentodott, csak nem a szerveren. Az
+   * elveszett viszont az, es ha egy kozos „uzenet" mezoben allna, ugyanabban a
+   * dobozban jelenne meg a ketto.
+   */
+  const [queued, setQueued] = useState<string | null>(null);
+  const [lost, setLost] = useState<string | null>(null);
   const [loadedFrom, setLoadedFrom] = useState<string | null>(null);
 
   /*
@@ -105,16 +119,76 @@ export default function AssetEditScreen() {
   }
 
   const save = useMutation({
-    mutationFn: () => {
+    mutationFn: async (): Promise<SaveOutcome> => {
       if (!query.data || !form)
         throw new Error("A szerkesztés nem áll készen.");
-      return updateAsset(
-        query.data.id,
-        buildAssetPatch(editable(query.data), form),
-      );
+      /**
+       * AZ ELOZO KOR UZENETE ELTUNIK, MIELOTT AZ UJ ELINDUL. E nelkul egy
+       * sikeres masodik probalkozas mellett is ott allna a „vár feltöltésre"
+       * doboz, es a szerelo azt hinne, hogy megint nem ment fel.
+       */
+      setQueued(null);
+      setLost(null);
+      const asset = query.data;
+      const patch = buildAssetPatch(editable(asset), form);
+      /**
+       * A SZERVER ELUTASITASAT AZ EREDETI HIBAVAL DOBJUK TOVABB, NEM A
+       * SZOVEGEVEL.
+       *
+       * A `saveOrQueue` a `rejected` agon csak a MONDATOT adja vissza -- a
+       * kivetel maga elveszik. Ezen a kepernyon viszont a 409-nek SAJAT
+       * kartyaja van („Valaki más közben módosította"), es azt a `isConflict`
+       * a hiba `status` mezojebol ismeri fel. Egy sima `Error` mellett a
+       * mezo-szintu utkozes ugyanugy nezne ki, mint egy elgepeles, es a
+       * szerelo nem kapna Ujratoltés gombot.
+       */
+      let utolsoHiba: unknown = null;
+      const outcome = await saveOrQueue({
+        save: async () => {
+          try {
+            return await updateAsset(asset.id, patch);
+          } catch (cause) {
+            utolsoHiba = cause;
+            throw cause;
+          }
+        },
+        enqueue: () =>
+          enqueueAssetUpdate({
+            id: assetUpdateOperationId({
+              assetId: asset.id,
+              expectedUpdatedAt: patch.expectedUpdatedAt,
+            }),
+            assetId: asset.id,
+            payload: { assetName: asset.name, patch },
+            createdAt: new Date().toISOString(),
+          }),
+        statusOf: (cause) => (cause instanceof ApiError ? cause.status : null),
+        describeWrite: describeAssetUpdateWrite,
+      });
+      if (outcome.type === "rejected")
+        throw utolsoHiba ?? new Error(outcome.message);
+      return outcome;
     },
-    onSuccess: async (updated) => {
-      queryClient.setQueryData(["service-asset", updated.id], updated);
+    onSuccess: async (outcome) => {
+      if (outcome.type === "queued") {
+        /**
+         * A SORBA TETT MODOSITASNAL NEM FRISSITUNK GYORSITOTARAT, ES EZ NEM
+         * FELEDEKENYSEG.
+         *
+         * A szerveren MEG a regi adat all: ha a helyi masolatot mar a javitott
+         * ertekre allitanank, a szerelo ket kulonbozo igazsagot latna
+         * (telefonon az uj, az irodaban a regi), es semmi nem mondana meg,
+         * melyik ment fel. A sor-kepernyo az egyetlen hely, ahol ez a kulonbseg
+         * lathato -- es a mondat is oda mutat.
+         */
+        setQueued(outcome.message);
+        return;
+      }
+      if (outcome.type === "lost") {
+        setLost(outcome.message);
+        return;
+      }
+      await queryClient.invalidateQueries({ queryKey: ["service-asset", id] });
       await queryClient.invalidateQueries({ queryKey: ["service-assets"] });
       router.back();
     },
@@ -184,6 +258,33 @@ export default function AssetEditScreen() {
           <Text style={styles.assetNumber}>{asset.assetNumber}</Text>
           <Text style={styles.assetName}>{asset.name}</Text>
         </View>
+
+        {/*
+          A VARAKOZO MODOSITAS SAJAT DOBOZT KAP, ES NEM LEPUNK VISSZA VELE.
+          A felviteli kepernyo ugyanigy marad allva a `queued` agon: ha
+          visszalepnenk, a mondat egy mar elhagyott kepernyore kerulne, es a
+          szerelo semmit nem latna abbol, hogy az iroda meg a REGI adatot latja.
+        */}
+        {queued ? (
+          <View style={styles.queuedCard}>
+            <Text style={styles.errorTitle}>A módosítás vár feltöltésre</Text>
+            <Text style={styles.errorText}>{queued}</Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.back()}
+              style={styles.primaryButton}
+            >
+              <Text style={styles.primaryButtonText}>Rendben</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {lost ? (
+          <View style={styles.errorCard}>
+            <Text style={styles.errorTitle}>A módosítás nem mentődött el</Text>
+            <Text style={styles.errorText}>{lost}</Text>
+          </View>
+        ) : null}
 
         {save.isError ? (
           <View style={conflict ? styles.conflictCard : styles.errorCard}>
@@ -511,6 +612,19 @@ const styles = StyleSheet.create({
   errorCard: {
     backgroundColor: "#3b2b2d",
     borderRadius: 14,
+    gap: 10,
+    padding: 16,
+  },
+  /*
+    A VARAKOZO MODOSITAS NEM PIROS. A javitas elmentodott, csak nem a
+    szerveren -- egy hibaszinu doboz azt mondana, hogy elveszett, es a szerelo
+    ujra beirna mindent.
+  */
+  queuedCard: {
+    backgroundColor: "#23383a",
+    borderColor: "#2f6f6a",
+    borderRadius: 14,
+    borderWidth: 1,
     gap: 10,
     padding: 16,
   },

@@ -87,6 +87,26 @@ export function backoffMs(attemptCount: number): number {
  *   worksheet       uj munkalap megnyitasa a helyszinen
  *   worksheet-line  tetel egy MAR LETEZO munkalap piszkozatara
  */
+/**
+ * A SOR HAROM MUVELETET ISMER, ES UGYANAZERT LISTA, MINT A FAJTAKNAL.
+ *
+ * A `ismertSor` szures a `operation` oszlopot is olvassa, es egy kezzel irt
+ * union mellett az a lista kulon elne: egy uj muvelet bekerulne a tipusba, a
+ * szures pedig CSENDBEN eldobna a sorait.
+ *
+ *   create        uj rekord felvitele
+ *   update        MAR LETEZO rekord modositasa
+ *   upload-photo  kep egy MAR FELMENT rogziteshez
+ */
+export const SYNC_OPERATIONS = ["create", "update", "upload-photo"] as const;
+
+export type SyncOperation = (typeof SYNC_OPERATIONS)[number];
+
+/** Ismert muvelet-e, ami a tabla `operation` oszlopabol jott. */
+export function isSyncOperation(value: string): value is SyncOperation {
+  return (SYNC_OPERATIONS as readonly string[]).includes(value);
+}
+
 export const SYNC_ENTITY_TYPES = [
   "asset",
   "worksheet",
@@ -128,15 +148,22 @@ export interface SyncQueueRow {
   /** A KLIENS-generalt muvelet-azonosito. Ez az idempotencia kulcsa. */
   id: string;
   /**
-   * MI EZ A SOR. A `create` egy eszkoz felvitele, az `upload-photo` egy kep,
-   * ami egy MAR FELMENT rogziteshez tartozik.
+   * MI EZ A SOR. A `create` egy felvitel, az `update` egy MAR LETEZO rekord
+   * modositasa, az `upload-photo` egy kep, ami egy MAR FELMENT rogziteshez
+   * tartozik.
    *
-   * EGY OSZLOP, KET MENET -- nem ket tabla. A kozos szabalyok (idempotencia, a
-   * negy allapot, az ujraprobalas) igy EGY helyen allnak; ket sorral ketszer
-   * kellene oket karbantartani, es a ketto elcsuszhatna. A sorrendet a
+   * EGY OSZLOP, HAROM MENET -- nem harom tabla. A kozos szabalyok (idempotencia,
+   * a negy allapot, az ujraprobalas) igy EGY helyen allnak; kulon sorokkal
+   * tobbszor kellene oket karbantartani, es elcsuszhatnanak. A sorrendet a
    * `photo-queue.ts` `nextBatch` fuggvenye adja, nem a tabla szerkezete.
+   *
+   * AZ `update` ABBAN TER EL A MASIK KETTOTOL, HOGY NEM VAR SENKIRE ES NEM IS
+   * VARAKOZTAT SENKIT. A kep a rogzitesere var, mert amig az fel nem ment,
+   * nincs hova kerulnie. A modositas celpontja viszont MAR OTT VAN a szerveren
+   * (kulonben nem lehetne szerkeszteni), tehat a sorban allo tobbi tetel nem
+   * befolyasolja.
    */
-  operation: "create" | "upload-photo";
+  operation: SyncOperation;
   /**
    * MELYIK ENTITASROL VAN SZO. EGY SOR VISZI MINDET, es ez dontes: a negy
    * allapot, az idempotencia es a ket menet szabalya UGYANAZ, tehat kulon
@@ -187,6 +214,35 @@ export function operationId(input: {
   scannedAt: string;
 }): string {
   return `asset-create:${input.qrToken}:${input.scannedAt}`;
+}
+
+/**
+ * A MODOSITAS KULCSA: AZ ESZKOZ ES AZ A VERZIO, AMIT A SZERELO LATOTT.
+ *
+ * === MIERT NEM A TARTALOMBOL, MINT A FELVITELNEL ===
+ *
+ * A felvitelnel ket kulon beolvasas ket kulon muvelet, meg ha a mezok egyeznek
+ * is. A modositasnal FORDITVA: ha ugyanarrol a verziorol ketszer indul
+ * szerkesztes, az EGY szandek ket lepesben, nem ket muvelet. A kulcsbol ezert
+ * szandekosan kimarad a torzs.
+ *
+ * Ennek az az ara, hogy az azonos kulcsu masodik szerkesztest a sorba tetelnek
+ * OSSZE KELL FESULNIE az elsovel (`mergeQueuedAssetUpdate`), nem eldobnia es
+ * nem is felulirnia. Egy `INSERT OR IGNORE` itt az ELSO szerkesztest tartana
+ * meg es a masodikat nyelne el; egy `REPLACE` forditva. Mindketto NEMA
+ * adatvesztes lenne, es a szerelo egyiket sem latna.
+ *
+ * === MIERT A VERZIO, ES NEM CSAK AZ ESZKOZ AZONOSITOJA ===
+ *
+ * Ha egy sorban allo modositas felmegy, az eszkoz uj verziot kap. Egy EZUTAN
+ * kezdett szerkesztes mar arrol a friss verziorol szol, tehat kulon muvelet:
+ * mas a kulcsa, es nem fesulodik bele az elozobe.
+ */
+export function assetUpdateOperationId(input: {
+  assetId: string;
+  expectedUpdatedAt: string;
+}): string {
+  return `asset-update:${input.assetId}:${input.expectedUpdatedAt}`;
 }
 
 /**

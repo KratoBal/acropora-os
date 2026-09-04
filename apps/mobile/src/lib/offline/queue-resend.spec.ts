@@ -44,6 +44,49 @@ describe("melyik sor javítható és küldhető újra", () => {
     assert.equal(!d.ok && d.reason, "not-a-create");
   });
 
+  it("a MÓDOSÍTÁS nem kapja a fénykép mondatát", () => {
+    /*
+      EZ A LEGFONTOSABB ALLITAS EBBEN A FAJLBAN, ES EGY MERT HIBAT KOT LE.
+
+      A feltetel korabban EGY mondatot adott mindenre, ami nem felvitel:
+      „Ez egy fénykép, nincs mit átírni rajta." Amint a modositas sora
+      megjelent, az a mondat rola HAMIS lett -- es a szerelo egy javitasrol
+      olvasta volna, hogy fenykep.
+
+      MI PIROSIT: a `Record` visszaalakitasa egyetlen kozos mondatta.
+    */
+    const d = queueResendEligibility({
+      ...elakadtEszkoz,
+      operation: "update",
+    });
+    assert.equal(d.ok, false);
+    assert.equal(!d.ok && d.reason, "not-a-create");
+    assert.doesNotMatch(!d.ok ? d.message : "", /fénykép/);
+    /*
+      ES AZ UZENET MEGMONDJA, MI TORTENT ES MIT LEHET TENNI. A szerver nem a
+      szoveg miatt utasitotta el, hanem mert kozben MAS irta at ugyanazokat a
+      mezoket: egy valtozatlan ujrakuldes ugyanezt adna vissza.
+    */
+    assert.match(!d.ok ? d.message : "", /időközben más is átírta/);
+    assert.match(!d.ok ? d.message : "", /írd be újra/);
+  });
+
+  it("ISMERETLEN műveletről nem találgatunk", () => {
+    /*
+      Ide egy UJABB valtozat altal irt sor eshet. A lekepezes kimerito, tehat
+      ez az ag csak akkor fut, ha a tabla olyat hordoz, amit a tipus nem ismer.
+
+      MI PIROSIT: ha az ismeretlen muvelet a fenykep vagy a modositas mondatat
+      kapna -- vagyis ha a `Record` inditasa elott nincs ellenorzes.
+    */
+    const d = queueResendEligibility({
+      ...elakadtEszkoz,
+      operation: "archive",
+    });
+    assert.equal(d.ok, false);
+    assert.match(!d.ok ? d.message : "", /nem ismeri/);
+  });
+
   it("munkalap-felvitel: SZÁNDÉKOS szűkítés, és az üzenet ezt ki is mondja", () => {
     /*
       EZ NEM HIANY, HANEM IDOZITETT HATAR. Az uzenet azert allitando, mert a
