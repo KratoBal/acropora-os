@@ -419,6 +419,35 @@ export function describeForgottenLink(
     : `${productId}: NEM volt leképezése, így nem is töröltünk semmit. A termék érintetlen.`;
 }
 
+/**
+ * AZ ADATBAZIS-HOZZAFERES, MINT PARAMETER -- ES EZ A HARMADIK PARAMETER
+ * MINTAJANAK FOLYTATASA, NEM UJ TALALMANY.
+ *
+ * A `credentials` melletti megjegyzes szo szerint azt mondja: "Parameter, hogy
+ * adatbazis nelkul is merheto legyen". Ugyanez az ok all itt is, egy szinttel
+ * lejjebb: a torzs `prisma`-t hasznal MODUL-SZINTU importbol, tehat a benne allo
+ * 304 sor erdemi kodot ma egyetlen teszt sem tudja lefuttatni.
+ *
+ * MIERT NEM MODUL-MOCKOLAS: merve (2026-09-04) a `mock.module` ezen a futtaton
+ * NEM elerheto (kiserleti kapcsolot var, es a teszt-parancs nem adja meg), es a
+ * repo sehol nem hasznalja. A bevezetese a teszt-parancsot valtoztatna meg, ami
+ * az EGESZ csomag futtatasat erinti.
+ *
+ * AZ ALAPERTELMEZES A MAI VISELKEDES: minden mai hivo ugyanazt a `prisma`
+ * peldanyt kapja, amit eddig.
+ *
+ * A TIPUS A VALODI SZERZODES RESZHALMAZA (`Pick<typeof prisma, ...>`), nem egy
+ * kezzel irt interfesz. Az elso valtozat kezzel irt alakot hasznalt `unknown`
+ * visszateressel, es a FORDITO fogta meg: a torzs a `webshopSellable` es a
+ * `variants` mezot olvassa a talalatbol, tehat a laza tipus nem irja le a
+ * hasznalatot. A `Pick` a Prisma sajat tipusat viszi tovabb, igy a torzs minden
+ * mezo-hivatkozasa ellenorzott marad.
+ */
+export type ProjectionDatabase = Pick<
+  typeof prisma,
+  "product" | "externalReference" | "productVariant" | "productImage"
+>;
+
 export async function runProjectionCli(
   productIds: string[],
   out: { stdout(value: string): void; stderr(value: string): void } = {
@@ -428,6 +457,17 @@ export async function runProjectionCli(
   /** A hitelesítő adat útja. Paraméter, hogy adatbázis nélkül is mérhető legyen. */
   credentials: MedusaCredentialProvider = storedCredentialProvider(),
   env: Record<string, string | undefined> = process.env,
+  db: ProjectionDatabase = prisma as unknown as ProjectionDatabase,
+  /**
+   * A HALOZATI HIVAS UTJA, ES EZ IS A REPO SAJAT MINTAJA: a
+   * `medusaClientForProjection` MAR FOGAD `fetchImpl` parametert, es a
+   * `medusa-admin.client.spec.ts` pontosan igy meri a klienst -- nem globalis
+   * `fetch` felulirassal, hanem atadassal.
+   *
+   * `undefined` eseten a kliens a globalis `fetch` fuggvenyt hasznalja, tehat a
+   * mai viselkedes valtozatlan.
+   */
+  fetchImpl?: typeof fetch,
 ): Promise<number> {
   if (!productIds.length) {
     out.stderr("Adj meg legalább egy termékazonosítót.\n");
@@ -468,7 +508,7 @@ export async function runProjectionCli(
   const targets = parsed.selection.targets.length
     ? parsed.selection.targets
     : (
-        await prisma.product.findMany({
+        await db.product.findMany({
           where: from ? { id: { gt: from } } : {},
           orderBy: { id: "asc" },
           take: limit ?? undefined,
@@ -503,12 +543,31 @@ export async function runProjectionCli(
    * termek-vetitest.
    */
   let imageClient: MedusaAdminClient | null = null;
-  const imageLinks = new MedusaImageLinkRepository();
+  /**
+   * A KET LINK-TARHOZ IS A PARAMETERKENT KAPOTT ADATBAZIS MEGY.
+   *
+   * Mindketto konstruktora OPCIONALIS adatbazist fogad, es hianyaban a
+   * modul-szintu `prisma` peldanyra esik vissza -- vagyis eddig a torzs
+   * megkerulte a sajat parameteret. A mai viselkedes valtozatlan: az
+   * alapertelmezett `db` maga a `prisma`.
+   */
+  const imageLinks = new MedusaImageLinkRepository(
+    db as unknown as ConstructorParameters<typeof MedusaImageLinkRepository>[0],
+  );
   if (!forgetOnly) {
     try {
-      imageClient = await medusaClientForProjection(credentials, out);
+      imageClient = await medusaClientForProjection(
+        credentials,
+        out,
+        env,
+        fetchImpl,
+      );
       service = new MedusaProductProjectionService(
-        new MedusaProductLinkRepository(),
+        new MedusaProductLinkRepository(
+          db as unknown as ConstructorParameters<
+            typeof MedusaProductLinkRepository
+          >[0],
+        ),
         imageClient,
         storefrontSalesChannelId(env),
       );
@@ -577,7 +636,7 @@ export async function runProjectionCli(
       productId = lookup.productId;
     } else productId = argument;
 
-    const product = await prisma.product.findUnique({
+    const product = await db.product.findUnique({
       where: { id: productId },
       select: {
         id: true,
@@ -674,7 +733,7 @@ export async function runProjectionCli(
     }
 
     if (forgetOnly) {
-      const removed = await prisma.externalReference.deleteMany({
+      const removed = await db.externalReference.deleteMany({
         where: {
           ...MEDUSA_PRODUCT_REFERENCE,
           entityId: product.id,
@@ -703,7 +762,7 @@ export async function runProjectionCli(
     const categories = decideMedusaCategories(
       osCategoryIds,
       osCategoryIds.length
-        ? await prisma.externalReference.findMany({
+        ? await db.externalReference.findMany({
             where: {
               ...MEDUSA_CATEGORY_REFERENCE,
               entityId: { in: osCategoryIds },
@@ -746,7 +805,7 @@ export async function runProjectionCli(
     const brand = decideMedusaBrandCollection(
       product.brandId,
       product.brandId
-        ? await prisma.externalReference.findMany({
+        ? await db.externalReference.findMany({
             where: {
               ...MEDUSA_BRAND_REFERENCE,
               entityId: product.brandId,
@@ -790,7 +849,7 @@ export async function runProjectionCli(
      * allhatna.
      */
     const azonosKodudarab = nyersVonalkod
-      ? await prisma.productVariant.count({
+      ? await db.productVariant.count({
           where: { manufacturerPartNumber: nyersVonalkod, isActive: true },
         })
       : 0;
@@ -832,10 +891,18 @@ export async function runProjectionCli(
             url: image.url,
           })),
           {
-            fetchImpl: fetch,
+            /**
+             * UGYANAZ A PARAMETER, MINT A MEDUSA KLIENSNEL. A masolo `fetch`-e
+             * eddig a GLOBALIS peldany volt, tehat a hatodik parameter idaig
+             * nem ert el -- es a masolo ag halozat nelkul merhetetlen maradt.
+             *
+             * A MAI VISELKEDES VALTOZATLAN: `fetchImpl` hianyaban ugyanaz a
+             * globalis `fetch` all itt, ami eddig.
+             */
+            fetchImpl: fetchImpl ?? fetch,
             store: createDocumentStore(env),
             recordStorageKey: async (imageId, storageKey) => {
-              await prisma.productImage.update({
+              await db.productImage.update({
                 where: { id: imageId },
                 data: { storageKey },
               });
@@ -856,7 +923,7 @@ export async function runProjectionCli(
      * nema elteres a tarolo-kulcsban.
      */
     const kepek = masolas
-      ? await prisma.productImage.findMany({
+      ? await db.productImage.findMany({
           where: { id: { in: product.images.map((image) => image.id) } },
           select: { id: true, url: true, storageKey: true, fileName: true },
         })

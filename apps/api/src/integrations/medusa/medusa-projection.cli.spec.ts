@@ -15,6 +15,7 @@ import {
   MEDUSA_PROJECTION_FALLBACK_NOTICE,
   medusaClientForProjection,
   runProjectionCli,
+  type ProjectionDatabase,
 } from "./medusa-projection.cli.js";
 import { MedusaAdminHttpError } from "./medusa-admin.client.js";
 import { MedusaCredentialCryptoService } from "./medusa-credential-crypto.service.js";
@@ -949,5 +950,326 @@ describe("a kapcsolodas HTTP-hibaja", () => {
     assert.equal(stderr.join("").includes("belso reszlet"), false);
     assert.equal(stderr.join("").includes("MEDUSA_ADMIN_HTTP"), false);
     assert.equal(stdout.join(""), "");
+  });
+});
+
+/**
+ * A CLI TORZSE, ADATBAZIS NELKUL MERVE.
+ *
+ * MIERT MOST: a torzsben 304 sor erdemi kod all, es eddig EGYETLEN teszt hivta --
+ * az is csak a hitelesites-hianyos agat, ami az adatbazisig el sem jut. A
+ * kovetkezo lepes ennek a torzsnek a kiemelese egy szolgaltatasba, es egy
+ * mozgatas helyesseget nem a diff bizonyitja, hanem az, hogy UGYANAZ a bemenet
+ * UGYANAZT a kimenetet adja utana is.
+ *
+ * MIERT A KET IRO HIVAS KAP KULON ALLITAST: a torzs nyolc adatbazis-hivasabol
+ * ketto IR (`externalReference.deleteMany` es `productImage.update`). Egy iro
+ * kod mozgatasa mas kockazat, mint egy olvasoe: ha egy torles rossz helyre
+ * kerul, az nem hibauzenetkent jelentkezik, hanem hianyzo lekepezeskent, es
+ * utolag nem visszafejtheto.
+ *
+ * A DUPLA PARAMETEREN MEGY, NEM MODUL-MOCKOLASSAL. Merve (2026-09-04): a
+ * `mock.module` ezen a futtaton nem elerheto -- kiserleti kapcsolot varna, es a
+ * teszt-parancs nem adja meg --, es a repo sehol nem hasznalja. A parameter
+ * viszont a repo sajat mintaja: a `credentials` melletti megjegyzes szo szerint
+ * ezt mondja, hogy "adatbazis nelkul is merheto legyen".
+ */
+describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
+  /**
+   * EGY TERMEK, ES A MEZOI PONTOSAN AZOK, AMIKET A TORZS `select`-je KER.
+   *
+   * A `variants` alapertelmezesben egy AKTIV valtozatot hoz sku-val: a vetites
+   * `primarySku` nelkul meg sem indul (`stopped`), tehat egy ures lista nem a
+   * fo utat merne.
+   */
+  function termek(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "prod-1",
+      name: "Teszt termék",
+      description: null,
+      descriptionLong: null,
+      catalogAuthority: "ACROPORA",
+      isActive: true,
+      webshopSellable: true,
+      brandId: null,
+      variants: [
+        {
+          sku: "SKU-1",
+          manufacturerPartNumber: null,
+          unit: null,
+          secondaryUnit: null,
+          secondaryUnitFactor: null,
+        },
+      ],
+      unasSnapshot: null,
+      categories: [],
+      channelListings: [],
+      images: [],
+      ...overrides,
+    };
+  }
+
+  /**
+   * AZ ADATBAZIS-DUPLA MINDEN HIVAST FELIR, es a felirt lista MAGA az allitas
+   * targya: nem azt merjuk, hogy a torzs "lefutott", hanem hogy MELYIK sort
+   * irta, MILYEN feltetellel.
+   *
+   * A `productImage.update` es az `externalReference.deleteMany` a KET IRO
+   * hivas -- a tobbi olvas.
+   */
+  function adatbazis(
+    sor: Record<string, unknown> = termek(),
+    overrides: Record<string, unknown> = {},
+  ) {
+    const hivasok: { metodus: string; args: unknown }[] = [];
+    const db = {
+      product: {
+        findMany: async (args: unknown) => {
+          hivasok.push({ metodus: "product.findMany", args });
+          return [];
+        },
+        findUnique: async (args: unknown) => {
+          hivasok.push({ metodus: "product.findUnique", args });
+          return sor;
+        },
+      },
+      externalReference: {
+        findMany: async (args: unknown) => {
+          hivasok.push({ metodus: "externalReference.findMany", args });
+          return [];
+        },
+        /** A lekepezes-kereso: `null` azt jelenti, hogy a termek MEG NINCS kint. */
+        findUnique: async (args: unknown) => {
+          hivasok.push({ metodus: "externalReference.findUnique", args });
+          return null;
+        },
+        create: async (args: unknown) => {
+          hivasok.push({ metodus: "externalReference.create", args });
+          return {
+            entityId: "prod-1",
+            externalId: "prod_medusa_1",
+            lastSyncedAt: new Date("2026-01-01T00:00:00.000Z"),
+          };
+        },
+        deleteMany: async (args: unknown) => {
+          hivasok.push({ metodus: "externalReference.deleteMany", args });
+          return { count: 1 };
+        },
+      },
+      productVariant: {
+        count: async (args: unknown) => {
+          hivasok.push({ metodus: "productVariant.count", args });
+          return 0;
+        },
+      },
+      productImage: {
+        findMany: async (args: unknown) => {
+          hivasok.push({ metodus: "productImage.findMany", args });
+          return [];
+        },
+        update: async (args: unknown) => {
+          hivasok.push({ metodus: "productImage.update", args });
+          return {};
+        },
+      },
+      ...overrides,
+    } as unknown as ProjectionDatabase;
+    return { db, hivasok };
+  }
+
+  /**
+   * AZ ELSO IRO HIVAS: a lekepezes torlese. Ez a legrovidebb ut, amin a torzs
+   * ADATBAZISBA IR -- es a `--forget-link` ag szandekosan nem epit Medusa
+   * klienst, tehat halozat nelkul merheto.
+   */
+  it("a --forget-link a lekepezes sorat torli, es csak azt", async () => {
+    const { out, stdout, stderr } = collector();
+    const { db, hivasok } = adatbazis();
+
+    const code = await runProjectionCli(
+      ["--forget-link", "prod-1"],
+      out,
+      provider(environmentSetting),
+      { MEDUSA_BACKEND_URL: "https://bolt.test" },
+      db,
+    );
+
+    assert.equal(code, 0);
+    const torlesek = hivasok.filter(
+      (h) => h.metodus === "externalReference.deleteMany",
+    );
+    assert.equal(torlesek.length, 1);
+    assert.deepEqual((torlesek[0]!.args as { where: unknown }).where, {
+      system: "MEDUSA",
+      entityType: "Product",
+      entityId: "prod-1",
+    });
+    assert.equal(
+      hivasok.some((h) => h.metodus === "productImage.update"),
+      false,
+    );
+    assert.match(stdout.join(""), /prod-1/);
+    assert.equal(stderr.join(""), "");
+  });
+
+  /** A bolt valasza, a ket alakkal, amit a torzs olvas: JSON es nyers bajtok. */
+  function valasz(data: unknown, bajtok?: Uint8Array): Response {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => data,
+      arrayBuffer: async () => (bajtok ?? new Uint8Array()).buffer,
+      text: async () => JSON.stringify(data),
+    } as unknown as Response;
+  }
+
+  /**
+   * A BOLT DUPLAJA, UTVONAL SZERINT -- es minden kerest felir.
+   *
+   * A `fetchImpl` a HATODIK parameter: enelkul a kliens a globalis `fetch`-re
+   * esne, es a fo ut csak valodi halozattal futna le.
+   */
+  function boltiFetch(
+    keresek: { url: string; method: string }[],
+    kepBajtok?: Uint8Array,
+  ): typeof fetch {
+    return (async (url: unknown, init?: RequestInit) => {
+      const cim = String(url);
+      const method = init?.method ?? "GET";
+      keresek.push({ url: cim, method });
+      if (cim.includes("/admin/sales-channels/"))
+        return valasz({ sales_channel: { id: "sc_1", name: "Bolt" } });
+      if (cim.includes("/admin/products?")) return valasz({ products: [] });
+      if (cim.endsWith("/admin/products") && method === "POST")
+        return valasz({ product: { id: "prod_medusa_1" } });
+      /** Minden mas cim a KEP lehivasa: nyers bajtok, nem JSON. */
+      return valasz({}, kepBajtok ?? new Uint8Array([1, 2, 3]));
+    }) as unknown as typeof fetch;
+  }
+
+  const boltiKornyezet = {
+    ...withEnvironmentKey,
+    MEDUSA_STOREFRONT_SALES_CHANNEL_ID: "sc_1",
+  };
+
+  /**
+   * A KULCS A `process.env`-BOL JON, ES EZ NEM AZ EN VALASZTASOM.
+   *
+   * A hitelesito-szolgaltato `environmentCredential()` aga kozvetlenul a
+   * `process.env`-et olvassa, tehat az atadott `env` OBJEKTUM nem eri el. A
+   * cim es az ertekesitesi csatorna viszont igen -- ezert megy mindketto
+   * parameterkent is. (Ez a repo sajat mintaja: a szomszed korok ugyanigy
+   * hasznaljak a `withEnvironment` helpert.)
+   */
+  function boltiKorben<T>(run: () => Promise<T>): Promise<T> {
+    return withEnvironment(boltiKornyezet, run);
+  }
+
+  /**
+   * A FO UT: BEMENET -> VETITES -> KIMENET.
+   *
+   * Egy termek, duplazott adatbazis, duplazott bolt. NEM fedi le a torzs 304
+   * sorat, es nem is akarja: azt meri, hogy a lanc VEGIGMEGY, es hogy a
+   * vetites eredmenye a KIMENETRE kerul.
+   *
+   * A kimeno keresek sorrendje maga is allitas: eloszor a csatorna (letezik-e
+   * egyaltalan a cel), aztan a kulso azonosito keresese (kint van-e mar), es
+   * CSAK EZUTAN a letrehozas. Egy forditott sorrend duplikatumot szulne.
+   */
+  it("a fo ut: egy termek kimegy, es a lekepezes sora megszuletik", async () => {
+    const { out, stdout, stderr } = collector();
+    const { db, hivasok } = adatbazis();
+    const keresek: { url: string; method: string }[] = [];
+
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1"],
+        out,
+        provider(environmentSetting),
+        boltiKornyezet,
+        db,
+        boltiFetch(keresek),
+      ),
+    );
+
+    /** A bukas OKA a hibauzenetbe kerul: enelkul csak annyi latszana, hogy 1 !== 0. */
+    assert.equal(code, 0, stderr.join("") + stdout.join(""));
+    assert.match(stdout.join(""), /prod-1: created -> prod_medusa_1/);
+
+    const utak = keresek.map((k) => `${k.method} ${new URL(k.url).pathname}`);
+    assert.deepEqual(utak, [
+      "GET /admin/sales-channels/sc_1",
+      "GET /admin/products",
+      "POST /admin/products",
+    ]);
+
+    /** A LEKEPEZES SORA: a vetites utan a par be van irva, es csak egyszer. */
+    const irasok = hivasok.filter(
+      (h) => h.metodus === "externalReference.create",
+    );
+    assert.equal(irasok.length, 1);
+    const adat = (irasok[0]!.args as { data: Record<string, unknown> }).data;
+    assert.equal(adat.entityId, "prod-1");
+    assert.equal(adat.externalId, "prod_medusa_1");
+  });
+
+  /**
+   * A MASODIK IRO HIVAS: a `storageKey` visszairasa a kep sorara.
+   *
+   * A ket iro hivast KULON allitas meri, mert a kockazat is kulon all: az
+   * elso egy lekepezest TOROL, ez pedig egy meglevo sort IR AT.
+   *
+   * AMIT EZ AZ ALLITAS MEG NEM MER, ES KIMONDVA: a kep ezutan NEM megy ki a
+   * boltba. A masolo es a publikalo KET KULON `createDocumentStore(env)`
+   * hivast kap, tehat `DOCUMENT_STORE_ROOT` nelkul ket kulon memoriabeli
+   * tarolo all -- amibe az egyik ir, abbol a masik nem olvas. Elesben (beallitott
+   * gyokerrel) ugyanaz a fajlrendszeres tarolo all mindket helyen. Ez MERES,
+   * nem javitas: a sor itt all, hogy a kovetkezo olvaso lassa.
+   */
+  it("a kep mestere atkerul, es a storageKey a sorba iródik", async () => {
+    const { out, stdout, stderr } = collector();
+    const { db, hivasok } = adatbazis(
+      termek({
+        images: [
+          {
+            id: "img-1",
+            url: "https://kep.test/1.jpg",
+            storageKey: null,
+            fileName: "1.jpg",
+          },
+        ],
+      }),
+    );
+    const keresek: { url: string; method: string }[] = [];
+
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1"],
+        out,
+        provider(environmentSetting),
+        boltiKornyezet,
+        db,
+        boltiFetch(keresek),
+      ),
+    );
+
+    assert.equal(code, 0, stderr.join("") + stdout.join(""));
+
+    const irasok = hivasok.filter((h) => h.metodus === "productImage.update");
+    assert.equal(irasok.length, 1);
+    const args = irasok[0]!.args as {
+      where: { id: string };
+      data: { storageKey: string };
+    };
+    assert.equal(args.where.id, "img-1");
+    assert.match(args.data.storageKey, /product/);
+
+    /** A kep bajtjai a LEHIVASBOL jonnek, nem a semmibol. */
+    assert.equal(
+      keresek.some((k) => k.url === "https://kep.test/1.jpg"),
+      true,
+    );
+    /** A zaro sor megnevezi, hogy a mester atkerult. */
+    assert.match(stdout.join(""), /1 kép mestere került át/);
   });
 });
