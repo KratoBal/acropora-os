@@ -812,12 +812,51 @@ export class MedusaConfigurationError extends Error {}
  */
 const MEDUSA_MEZO_MINTA = /Field '([A-Za-z0-9_.\-]+(?:, ?[A-Za-z0-9_.\-]+)*)'/;
 
-/** A mező-útvonal a Medusa hibaválaszából, ha felismerhető alakban áll ott. */
+/**
+ * A MÁSODIK FELISMERT ALAK: A NEVESÍTETT MEZŐ-ELUTASÍTÁS.
+ *
+ * A Medusa nem minden érvényesítési hibát ír `Field '...'` alakban. A termék
+ * `handle` mezőjének saját ellenőrzése van, saját üzenettel (mérve a telepített
+ * 2.19.0 forrásán, `product-module-service.js`):
+ *
+ *     Invalid product handle '<érték>'. It must contain URL safe characters
+ *
+ * A `Field '...'` minta erre NEM illeszkedik, tehát eddig ez a hiba csak a
+ * státuszkóddal jelent meg -- épp az a hibaosztály, ami a migrációt ma
+ * megállítja.
+ *
+ * === A MEZŐNÉV ÁLLANDÓ, NEM A VÁLASZBÓL JÖN ===
+ *
+ * Ez a lista az ALAKOT ismeri fel, és a mezőnevet MAGA ADJA. Az üzenetben ott
+ * álló `<érték>` -- a konkrét cím -- soha nem kerül a kimenetre, és nem is
+ * kiszűrjük: egyszerűen nem is olvassuk ki. Egy kiemelés-plusz-szűrés alak
+ * ugyanezt ígérné, de akkor a védelem egy mintán múlna; így szerkezetileg nem
+ * tud átcsúszni semmi.
+ *
+ * A cím a MI adatunk, nem titok -- de a szabály nem attól jó, hogy ma ismerjük
+ * a tartalmat (acrobot, 2026-09-04).
+ *
+ * === CSAK AMIT MÉRTÜNK ===
+ *
+ * Egyetlen alak áll benne, mert egyet mértem le. A kategória és a gyűjtemény
+ * handle-je más úton megy, és amíg azt nem néztük meg, ide sem kerül. Egy
+ * "biztos ez is olyan" bejegyzés pontosan az a fajta bővítés, ami ellen a
+ * megengedő lista szól.
+ */
+const MEDUSA_NEVESITETT_MEZOK: { minta: RegExp; mezo: string }[] = [
+  { minta: /Invalid product handle '/, mezo: "handle" },
+];
+
+/** A mező a Medusa hibaválaszából, ha felismerhető alakban áll ott. */
 export function medusaFailureField(body: string): string | null {
   const talalat = MEDUSA_MEZO_MINTA.exec(body);
   const mezo = talalat?.[1];
-  if (!mezo || mezo.length > 120) return null;
-  return mezo;
+  if (mezo && mezo.length <= 120) return mezo;
+
+  for (const alak of MEDUSA_NEVESITETT_MEZOK)
+    if (alak.minta.test(body)) return alak.mezo;
+
+  return null;
 }
 
 export function describeMedusaFailure(error: unknown): string {
