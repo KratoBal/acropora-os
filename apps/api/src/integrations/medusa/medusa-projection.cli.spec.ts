@@ -8,6 +8,7 @@ import {
   projectValtozatMezok,
   projectUnasChannelRow,
   describeCimValtozas,
+  describeKepMasolas,
   describeForgottenLink,
   describeSkuLookupFailure,
   describePublication,
@@ -854,5 +855,49 @@ describe("a bolti cim valtozasa a kimeneten", () => {
       szurest vegzo ember 1798 helyett 1812 sorral szamolna.
     */
     assert.equal(describeCimValtozas(null), "");
+  });
+});
+
+/**
+ * A MESTER-MASOLAS LATHATOSAGA.
+ *
+ * A masolas nem forditható vissza konnyen: 3426 kep utan egy rossz futast
+ * fajlonkent kellene rendezni. Az elso futasnak tehat KOZBEN kell latszania.
+ */
+describe("a mester athozasa a kimeneten", () => {
+  it("kiirja, hany kep kerult at", () => {
+    assert.equal(
+      describeKepMasolas({ copied: 3, alreadyStored: 0, failed: [] }),
+      "      MESTER: 3 kép áthozva\n",
+    );
+  });
+
+  it("a BUKAST kulon szamban mondja, nem a sikerbe olvasztva", () => {
+    /*
+      MI PIROSIT: ha a bukas a sikerrel egy szamban allna. Akkor egy csendben
+      fogyo keszlet ugy nezne ki, mint egy kesz munka -- pedig a sor valtozatlan
+      maradt, es a kovetkezo futas ujra probalja.
+    */
+    const sor = describeKepMasolas({
+      copied: 2,
+      alreadyStored: 1,
+      failed: [{ imageId: "kep-1", url: "x", reason: "404" }],
+    });
+    assert.ok(sor.includes("2 kép áthozva"), sor);
+    assert.ok(sor.includes("1 már megvolt"), sor);
+    assert.ok(sor.includes("1 NEM sikerült"), sor);
+  });
+
+  it("URES sor, ha nem tortent semmi", () => {
+    /*
+      Ugyanaz a szabaly, mint a tobbi zaro sornal: egy allando "0 kep athozva"
+      minden termeknel ott allna, es epp attol nem venne eszre senki, amikor NEM
+      nulla. A `null` az az eset, amikor a masolo el sem indult.
+    */
+    assert.equal(describeKepMasolas(null), "");
+    assert.equal(
+      describeKepMasolas({ copied: 0, alreadyStored: 5, failed: [] }),
+      "",
+    );
   });
 });
