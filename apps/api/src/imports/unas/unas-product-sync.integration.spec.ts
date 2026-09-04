@@ -26,6 +26,7 @@ const product = (
     name?: string;
     description?: string;
     primaryCategoryExternalId?: string;
+    similarProducts?: UnasApiProduct["similarProducts"];
   } = {},
 ): UnasApiProduct => ({
   externalId: overrides.externalId ?? "159850145",
@@ -62,7 +63,7 @@ const product = (
   variantStocks: [],
   isPackageProduct: false,
   packageComponents: [],
-  similarProducts: [],
+  similarProducts: overrides.similarProducts ?? [],
   similarProductsSkipped: 0,
   productUrl: "https://example.test/integration-pump",
   sefUrl: "integration-pump",
@@ -820,5 +821,144 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
     assert.notEqual(event, null);
 
     deletedProducts = [];
+  });
+
+  /**
+   * A CELPONT UGYANABBAN A KOTEGBEN KELETKEZIK. Ez az az eset, amiert a
+   * kapcsolat-iras masodik menetben all: a forras irasakor a celpont termek meg
+   * nem letezett.
+   */
+  it("links two products created in the same batch", async () => {
+    await cleanup();
+    categoryPage = [category];
+    deletedProducts = [];
+
+    liveProducts = [
+      product("SIMILAR-SOURCE", {
+        externalId: "910001",
+        similarProducts: [
+          { externalId: "910002", sku: "SIMILAR-TARGET", name: "Target" },
+        ],
+      }),
+      product("SIMILAR-TARGET", { externalId: "910002" }),
+    ];
+    const run = await service.runIncremental(
+      "integration-token",
+      new Date("2026-07-24T10:00:00.000Z"),
+      100,
+    );
+
+    assert.equal(run.similarRelationsWritten, 1);
+    assert.equal(run.similarReferencesUnresolved, 0);
+    const source = await prisma.productVariant.findUniqueOrThrow({
+      where: { sku: "SIMILAR-SOURCE" },
+      select: { productId: true },
+    });
+    const target = await prisma.productVariant.findUniqueOrThrow({
+      where: { sku: "SIMILAR-TARGET" },
+      select: { productId: true },
+    });
+    const relations = await prisma.productRelation.findMany({
+      where: { sourceProductId: source.productId, relationType: "SIMILAR" },
+      select: { targetProductId: true, sortOrder: true, source: true },
+    });
+    assert.deepEqual(relations, [
+      { targetProductId: target.productId, sortOrder: 0, source: "UNAS" },
+    ]);
+  });
+
+  /**
+   * A CELPONT AZ ELOZO FUTASBOL VAN, ES A MAI KOTEGBEN NINCS BENNE.
+   *
+   * EZ A TESZT AZERT ALL ITT, MERT EGY KEZENFEKVO ROVIDITES CSENDBEN TORLI A
+   * KAPCSOLATOKAT: ha az azonosito-terkep csak a futas termekeibol epulne, egy
+   * inkrementalis futasban a celpont ismeretlen lenne, a hivatkozas
+   * feloldatlanul maradna -- es mivel az iras torol, mielott ujrair, a meglevo
+   * kapcsolat is eltunne. A szamlalo nőne, es az lenne az egyetlen jel.
+   */
+  it("resolves a target that is not in the incremental batch", async () => {
+    await cleanup();
+    categoryPage = [category];
+    deletedProducts = [];
+
+    liveProducts = [product("SIMILAR-OLD-TARGET", { externalId: "910012" })];
+    await service.runIncremental(
+      "integration-token",
+      new Date("2026-07-24T11:00:00.000Z"),
+      100,
+    );
+    const target = await prisma.productVariant.findUniqueOrThrow({
+      where: { sku: "SIMILAR-OLD-TARGET" },
+      select: { productId: true },
+    });
+
+    liveProducts = [
+      product("SIMILAR-NEW-SOURCE", {
+        externalId: "910011",
+        similarProducts: [
+          { externalId: "910012", sku: "SIMILAR-OLD-TARGET", name: "Old" },
+        ],
+      }),
+    ];
+    const run = await service.runIncremental(
+      "integration-token",
+      new Date("2026-07-24T12:00:00.000Z"),
+      100,
+    );
+
+    assert.equal(run.similarRelationsWritten, 1);
+    assert.equal(run.similarReferencesUnresolved, 0);
+    const source = await prisma.productVariant.findUniqueOrThrow({
+      where: { sku: "SIMILAR-NEW-SOURCE" },
+      select: { productId: true },
+    });
+    assert.deepEqual(
+      (
+        await prisma.productRelation.findMany({
+          where: { sourceProductId: source.productId, relationType: "SIMILAR" },
+          select: { targetProductId: true },
+        })
+      ).map((relation) => relation.targetProductId),
+      [target.productId],
+    );
+  });
+
+  /**
+   * A CELPONT SEHOL NINCS: a szamlalo no, es kapcsolat NEM keletkezik.
+   *
+   * A ket allitas egyutt kell: egy no szamlalo onmagaban megengedne, hogy
+   * kozben egy rossz sor is letrejojjon.
+   */
+  it("counts an unresolvable reference and writes no relation for it", async () => {
+    await cleanup();
+    categoryPage = [category];
+    deletedProducts = [];
+
+    liveProducts = [
+      product("SIMILAR-LONE", {
+        externalId: "910021",
+        similarProducts: [
+          { externalId: "999999", sku: "NOT-IN-CATALOGUE", name: "Gone" },
+        ],
+      }),
+    ];
+    const run = await service.runIncremental(
+      "integration-token",
+      new Date("2026-07-24T13:00:00.000Z"),
+      100,
+    );
+
+    assert.equal(run.similarReferencesUnresolved, 1);
+    assert.equal(run.similarRelationsWritten, 0);
+    const source = await prisma.productVariant.findUniqueOrThrow({
+      where: { sku: "SIMILAR-LONE" },
+      select: { productId: true },
+    });
+    assert.equal(
+      await prisma.productRelation.count({
+        where: { sourceProductId: source.productId },
+      }),
+      0,
+    );
   });
 });
