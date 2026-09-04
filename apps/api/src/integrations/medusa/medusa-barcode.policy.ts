@@ -102,31 +102,45 @@ export function decideMedusaBarcode(
   if (!kod || !hasValidCheckDigit(kod))
     return { kind: "none", field: null, value: null, duplicate: null };
 
+  /**
+   * A MEZO-VALASZTAS AZ ISMETLODES-VIZSGALAT ELOTT ALL, ES EZ A SORREND MERT
+   * DONTES, NEM IZLES.
+   *
+   * A `skipped` azt mondja a kimenetben, hogy a tisztitas helye a FORRAS: ott
+   * dol el, MELYIK terméke a kod. Egy kiadvany-elotagu kodnal ez HAMIS -- nem
+   * az a kerdes, melyikuke, hanem hogy EGYIKUKE SEM, mert nem is vonalkod.
+   * Ugyanez all a 8 es a 14 jegyu alakra: azoknak nincs cel-mezojuk.
+   *
+   * A forditott sorrend tizenhat terméket sorolna a rossz csoportba (merve a
+   * forrason), es a kimenetunk ellentmondana a tisztitasi listanak: ott ezek
+   * "a mezo torlendo" jelolest kapnak, nem "szetvalasztando"-t.
+   *
+   * VAGYIS ELOSZOR AZT KERDEZZUK MEG, HOGY EGYALTALAN VONALKOD-E, es csak
+   * azutan, hogy egyedi-e.
+   */
+  const mezo =
+    kod.length === 13 &&
+    !KIADVANY_ELOTAGOK.some((elotag) => kod.startsWith(elotag))
+      ? "ean"
+      : kod.length === 12
+        ? "upc"
+        : null;
+
+  /**
+   * A 8 es a 14 jegyu alak, valamint a kiadvany-elotag ERVENYES ellenorzo
+   * szamjeggyel is ide esik: a cel oldalon `ean` (13) es `upc` (12) mezo van, a
+   * GTIN-14 es az EAN-8 egyikbe sem illik. A mert adatban a hat ilyen hosszusagu
+   * ertek MIND ervenytelen volt, tehat az az ag ma nem all elo -- de a
+   * hossz-vizsgalat nem tamaszkodhat erre.
+   */
+  if (!mezo) return { kind: "none", field: null, value: null, duplicate: null };
+
   if (sameValueCount > 1)
     return { kind: "skipped", field: null, value: null, duplicate: kod };
 
-  if (kod.length === 13) {
-    /**
-     * A KIADVANY-ELOTAG KIZARASA A HOSSZ-VIZSGALAT UTAN ALL, es ez a sorrend
-     * szandekos: igy a kizart kod a `none` agba esik, nem a `skipped`-be. A
-     * ketto MAS teendot jelent -- a `skipped` a forras-oldali tisztitasra var,
-     * ez viszont soha nem lesz termek-vonalkod, tehat nincs mire varni.
-     */
-    if (KIADVANY_ELOTAGOK.some((elotag) => kod.startsWith(elotag)))
-      return { kind: "none", field: null, value: null, duplicate: null };
-    return { kind: "ean", field: "ean", value: kod, duplicate: null };
-  }
-  if (kod.length === 12)
-    return { kind: "upc", field: "upc", value: kod, duplicate: null };
-
-  /**
-   * A 8 es a 14 jegyu alak ERVENYES ellenorzo szamjeggyel is kimarad, es ez
-   * szandekos: a cel oldalon `ean` (13) es `upc` (12) mezo van, a GTIN-14 es az
-   * EAN-8 egyikbe sem illik. A mert adatban egyebkent MIND A HAT ilyen ertek
-   * ervenytelen volt, tehat ez az ag ma nem is all elo -- de a hossz-vizsgalat
-   * nem tamaszkodhat erre.
-   */
-  return { kind: "none", field: null, value: null, duplicate: null };
+  return mezo === "ean"
+    ? { kind: "ean", field: "ean", value: kod, duplicate: null }
+    : { kind: "upc", field: "upc", value: kod, duplicate: null };
 }
 
 /**

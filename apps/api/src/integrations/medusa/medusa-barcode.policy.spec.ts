@@ -104,6 +104,37 @@ describe("decideMedusaBarcode", () => {
   });
 
   /**
+   * A HARMADIK ESET, AMI A KET SORRENDET MEGKULONBOZTETI.
+   *
+   * A masik ket kiadvany-allitas EGYEDI koddal dolgozik, tehat a sorrend nem
+   * szamit bennuk: mindket felallasban `none` jonne ki. Ez az eset az egyetlen,
+   * ami elvalasztja oket.
+   *
+   * ES A KULONBSEG NEM BELSO: a `skipped` azt mondja a kimenetben, hogy a
+   * tisztitas helye a forras, ott dol el, MELYIK terméke a kod. Egy ISBN-nel ez
+   * hamis -- egyikuke sem --, es a tisztitasi lista ezeket kulon csoportba
+   * teszi ("a mezo torlendo"). Ha a mi kimenetunk a masik csoportba sorolna
+   * oket, a ket lista ellentmondana egymasnak.
+   */
+  it("az ismetlodo KIADVANY-kod is none, nem skipped -- a sorrend miatt", () => {
+    const dontes = decideMedusaBarcode("9780301379722", 4);
+
+    assert.equal(dontes.kind, "none");
+    assert.equal(dontes.duplicate, null);
+  });
+
+  /**
+   * UGYANEZ A HOSSZRA. Egy nyolc jegyu ervenyes kod ismetlodve is `none`: nincs
+   * cel-mezoje, tehat nincs mire varni a forrastol. A mert adatban ma nulla ilyen
+   * all, tehat ez az ag elore szol, nem visszamenoleg.
+   */
+  it("az ismetlodo, cel-mezo nelkuli hosszusagu kod is none", () => {
+    // 96385074 -- ervenyes EAN-8 ellenorzo szamjeggyel.
+    assert.equal(hasValidCheckDigit("96385074"), true);
+    assert.equal(decideMedusaBarcode("96385074", 3).kind, "none");
+  });
+
+  /**
    * A NULLA DARABSZAM A HIVO SZAMLALASI HIBAJA, es ilyenkor NEM dobunk el egy
    * jo kodot. A ket teves irany ara nem egyforma: egy folosleges kod
    * kikuldese lathato es javithato, egy csendben eldobott kod nem.
