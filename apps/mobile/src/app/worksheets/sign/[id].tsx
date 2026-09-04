@@ -121,6 +121,15 @@ export default function WorksheetSignScreen() {
    */
   const [signerUserId, setSignerUserId] = useState<string | null>(null);
   const [typedName, setTypedName] = useState("");
+  /**
+   * AZ ALAIROKOD, amit az UGYFEL ir be. CSAK a listarol valasztott agon kell.
+   *
+   * INLINE MEZO, NEM FELUGRO ABLAK: ezt a kepernyot a szerelo ODAADJA az
+   * ugyfelnek, es ott a kod ugyanazon a lapon all, mint amit az ugyfel epp
+   * olvas. Egy kulon parbeszed egy MASODIK, teljes kepernyos ablakot nyitna a
+   * mar atadott telefonon.
+   */
+  const [signatureCode, setSignatureCode] = useState("");
   const signerName =
     signers.data?.items.find((item) => item.id === signerUserId)?.name ??
     typedName.trim();
@@ -137,7 +146,7 @@ export default function WorksheetSignScreen() {
   const sign = useMutation({
     mutationFn: async (chosen: WorksheetSignatureDecision) => {
       const built = buildWorksheetSignaturePayload(
-        { decision: chosen, note, typedName },
+        { decision: chosen, note, typedName, signatureCode },
         signerUserId,
       );
       if (!built.ok) throw new Error(built.message);
@@ -176,7 +185,7 @@ export default function WorksheetSignScreen() {
    */
   const megerosit = (chosen: WorksheetSignatureDecision) => {
     const built = buildWorksheetSignaturePayload(
-      { decision: chosen, note, typedName },
+      { decision: chosen, note, typedName, signatureCode },
       signerUserId,
     );
     if (!built.ok) {
@@ -349,6 +358,33 @@ export default function WorksheetSignScreen() {
                   >
                     <Text style={styles.signer}>Egyik sem</Text>
                   </Pressable>
+
+                  {/*
+                    A KOD AZ UGYFELE, ES A VALASZTAS UTAN JON ELO. Amig nincs
+                    kivalasztva senki, a mezo ertelmetlen lenne; az "egyik sem"
+                    agon pedig NINCS kod, es ez nem kiskapu: ott a lap MAGA
+                    MONDJA KI, hogy nem a partner nyilvantartott munkatarsa irta
+                    ala.
+                  */}
+                  {signerUserId !== null ? (
+                    <>
+                      <Text style={styles.label}>Aláírókód</Text>
+                      <TextInput
+                        value={signatureCode}
+                        onChangeText={setSignatureCode}
+                        placeholder="Négy számjegy"
+                        placeholderTextColor="#5b7d8f"
+                        keyboardType="number-pad"
+                        maxLength={4}
+                        secureTextEntry
+                        style={styles.input}
+                        accessibilityLabel="Aláírókód"
+                      />
+                      <Text style={styles.muted}>
+                        Add oda a telefont az ügyfélnek: a kódot ő írja be.
+                      </Text>
+                    </>
+                  ) : null}
 
                   {signerUserId === null ? (
                     <>

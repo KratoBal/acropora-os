@@ -14,7 +14,16 @@ import {
  * appban csak kezzel, a helyszinen lehet kiprobalni.
  */
 
-const ALAP = { decision: "ACCEPTED" as const, note: "" };
+/**
+ * AZ ALAPFORMA A KODOT IS VISZI, mert a listarol valasztott agon az KOTELEZO.
+ * Enelkul minden ilyen allitas a kod hianyan bukna el, es a tesztek nem arrol
+ * szolnanak, amirol szolni akarnak.
+ */
+const ALAP = {
+  decision: "ACCEPTED" as const,
+  note: "",
+  signatureCode: "0000",
+};
 
 describe("mikor all ott az alairas gomb", () => {
   it("aláírásra váró lapon, írási joggal: igen", () => {
@@ -68,6 +77,7 @@ describe("a küldött törzs", () => {
     assert.deepEqual(result.ok && result.payload, {
       decision: "ACCEPTED",
       signerUserId: "kontakt-1",
+      signatureCode: "0000",
       note: null,
     });
   });
@@ -93,7 +103,11 @@ describe("a küldött törzs", () => {
 
   it("a megjegyzés köré írt szóközöket levágja", () => {
     const result = buildWorksheetSignaturePayload(
-      { decision: "ACCEPTED", note: "  Jövő héten visszamegyek.  " },
+      {
+        decision: "ACCEPTED",
+        note: "  Jövő héten visszamegyek.  ",
+        signatureCode: "0000",
+      },
       "kontakt-1",
     );
     assert.equal(result.ok && result.payload.note, "Jövő héten visszamegyek.");
@@ -107,7 +121,7 @@ describe("a küldött törzs", () => {
       valamit.
     */
     const result = buildWorksheetSignaturePayload(
-      { decision: "ACCEPTED", note: "     " },
+      { ...ALAP, note: "     " },
       "kontakt-1",
     );
     assert.equal(result.ok, true);
@@ -121,14 +135,14 @@ describe("a küldött törzs", () => {
     */
     assert.equal(
       buildWorksheetSignaturePayload(
-        { decision: "ACCEPTED", note: "a".repeat(1001) },
+        { ...ALAP, note: "a".repeat(1001) },
         "kontakt-1",
       ).ok,
       false,
     );
     assert.equal(
       buildWorksheetSignaturePayload(
-        { decision: "ACCEPTED", note: "a".repeat(1000) },
+        { ...ALAP, note: "a".repeat(1000) },
         "kontakt-1",
       ).ok,
       true,
@@ -139,7 +153,7 @@ describe("a küldött törzs", () => {
 describe("az elutasítás oka kötelező", () => {
   it("indok nélkül nem engedi el", () => {
     const result = buildWorksheetSignaturePayload(
-      { decision: "REJECTED", note: "" },
+      { ...ALAP, decision: "REJECTED", note: "" },
       "kontakt-1",
     );
     assert.equal(result.ok, false);
@@ -154,7 +168,7 @@ describe("az elutasítás oka kötelező", () => {
       az ugyfel elott.
     */
     const result = buildWorksheetSignaturePayload(
-      { decision: "REJECTED", note: "   " },
+      { ...ALAP, decision: "REJECTED", note: "   " },
       "kontakt-1",
     );
     assert.equal(result.ok, false);
@@ -168,14 +182,14 @@ describe("az elutasítás oka kötelező", () => {
     */
     assert.equal(
       buildWorksheetSignaturePayload(
-        { decision: "REJECTED", note: "ok" },
+        { ...ALAP, decision: "REJECTED", note: "ok" },
         "kontakt-1",
       ).ok,
       false,
     );
     assert.equal(
       buildWorksheetSignaturePayload(
-        { decision: "REJECTED", note: "drá" },
+        { ...ALAP, decision: "REJECTED", note: "drá" },
         "kontakt-1",
       ).ok,
       true,
@@ -316,5 +330,74 @@ describe("a megerősítés szövege", () => {
     assert.ok(elfogad.title.endsWith("?"), elfogad.title);
     assert.ok(elutasit.title.endsWith("?"), elutasit.title);
     assert.notEqual(elfogad.title, elfogad.message);
+  });
+});
+
+describe("az aláírókód a telefonon", () => {
+  it("a LISTÁRÓL választott aláírónál KÖTELEZŐ", () => {
+    /*
+      A szerver ugyanezt ellenorzi, es azé a donto szo. Ez a masolat azert all
+      itt, hogy a szerelo a valaszt AZONNAL lassa -- ne egy korut utan, az
+      ugyfel elott allva.
+
+      MI PIROSIT: a kapu elhagyasa. Olyankor a hianyzo kod csak a szerverrol
+      derulne ki, es a hibauzenet egy mar atadott telefonon jelenne meg.
+    */
+    const result = buildWorksheetSignaturePayload(
+      { decision: "ACCEPTED", note: "" },
+      "kontakt-1",
+    );
+    assert.equal(result.ok, false);
+    assert.equal(!result.ok && result.field, "signatureCode");
+  });
+
+  it("PONTOSAN négy számjegy, és a szóköz nem számít", () => {
+    /*
+      A telefon billentyuzete konnyen ad szokozt, es a " 0000" a felhasznalo
+      szemszogebol UGYANAZ a kod. Egy szigoru olvasas olyan hibat mutatna, amit
+      a beiro nem lat.
+    */
+    assert.equal(
+      buildWorksheetSignaturePayload(
+        { ...ALAP, signatureCode: " 1234 " },
+        "kontakt-1",
+      ).ok,
+      true,
+    );
+    assert.equal(
+      buildWorksheetSignaturePayload(
+        { ...ALAP, signatureCode: "123" },
+        "kontakt-1",
+      ).ok,
+      false,
+    );
+  });
+
+  it("az EGYIK SEM ágon NEM kér kódot", () => {
+    /*
+      TESTVER-KONTROLL, ES KI KELL MONDANI, MIERT NEM KISKAPU: ezen az agon a
+      lap MAGA MONDJA KI, hogy nem a partner nyilvantartott munkatarsa irta ala.
+      A kod hianya tehat nem rejtve marad, hanem a dokumentum resze lesz.
+
+      MI PIROSIT: ha a kod-kapu ezen az agon is elsulne -- olyankor a szabad
+      szoveges ut jarhatatlanna valna, es a szerelo ott allna a helyszinen.
+    */
+    assert.equal(
+      buildWorksheetSignaturePayload(
+        { decision: "ACCEPTED", note: "", typedName: "Kovács Kázmér" },
+        null,
+      ).ok,
+      true,
+    );
+  });
+
+  it("a kód a TORZSBE is bekerül, levágva", () => {
+    // A szerver a levagott erteket varja; ha a szokoz felmenne, a hash-hasonlitas
+    // MINDIG elbukna -- es a hiba a kod beirojara mutatna, holott jol irta be.
+    const result = buildWorksheetSignaturePayload(
+      { ...ALAP, signatureCode: " 4321 " },
+      "kontakt-1",
+    );
+    assert.equal(result.ok && result.payload.signatureCode, "4321");
   });
 });

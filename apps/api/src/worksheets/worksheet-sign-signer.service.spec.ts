@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { before, describe, it } from "node:test";
 
 import { BadRequestException } from "@nestjs/common";
 import { Prisma } from "@acropora/database";
+
+import { hashPassword } from "../users/password.util.js";
 
 import type { WorksheetsRepository } from "./worksheets.repository.js";
 import { WorksheetsService } from "./worksheets.service.js";
@@ -82,6 +84,9 @@ function worksheetRow() {
   };
 }
 
+const KOD = "0000";
+let KOD_HASH = "";
+
 const CONTACTS = [
   { id: "kontakt-1", name: "Vevő Vilmos" },
   { id: "kontakt-2", name: "Vevő Vera" },
@@ -91,6 +96,16 @@ function repository(overrides: Record<string, unknown> = {}) {
   return {
     detail: async () => worksheetRow(),
     customerContacts: async () => CONTACTS,
+    /**
+     * A VARRAT: a szolgaltatas MINDEN listarol valasztott alairasnal ezt hivja.
+     * Ha a duplabol hianyozna, minden ilyen ag `undefined`-ot hivna
+     * fuggvenykent, es a hiba nem a szabalyrol szolna, hanem a duplarol.
+     *
+     * Az ertek a `0000` scrypt-hashe, ugyanabbol a fuggvenybol, amit a valodi
+     * kod hasznal -- egy kezzel kitalalt "hash" itt sosem egyezne, es a
+     * tesztek a rossz okbol lennenek zoldek.
+     */
+    signingCodeHash: async () => KOD_HASH,
     isSelectablePartner: async () => true,
     sign: async () => ({ ok: true }) as const,
     ...overrides,
@@ -100,6 +115,10 @@ function repository(overrides: Record<string, unknown> = {}) {
 function service(overrides: Record<string, unknown> = {}) {
   return new WorksheetsService(repository(overrides));
 }
+
+before(async () => {
+  KOD_HASH = await hashPassword(KOD);
+});
 
 describe("az aláíró feloldása", () => {
   it("a LISTÁRÓL választott aláírónál a NEVET a választott sor adja", async () => {
@@ -123,6 +142,7 @@ describe("az aláíró feloldása", () => {
         decision: "ACCEPTED",
         signerUserId: "kontakt-2",
         signerName: "Hamis Hugó",
+        signatureCode: KOD,
         note: null,
       } as never,
       "szerelo-1",
@@ -147,6 +167,7 @@ describe("az aláíró feloldása", () => {
           {
             decision: "ACCEPTED",
             signerUserId: "idegen-9",
+            signatureCode: KOD,
             note: null,
           } as never,
           "szerelo-1",
@@ -231,5 +252,142 @@ describe("az aláírók listája", () => {
     const out = await service().signerCandidates("worksheet-1");
     assert.equal(out.items.length, 2);
     assert.equal(out.emptyReason, null);
+  });
+});
+
+/**
+ * AZ ALAIROKOD A SZERVEREN.
+ *
+ * A legordulo azt rogziti, KINEK mondta magat az alairo; a kod az, ami ezt
+ * bizonyitja. Ezek az allitasok azt kotik le, hogy a kapu NEM engedheto meg
+ * -- kulonben a lapon egy ellenorzottnek latszo alairas allna.
+ */
+describe("az aláírókód ellenőrzése", () => {
+  it("KÓD NÉLKÜL a listáról választott aláírás NEM megy át", async () => {
+    /*
+      MI PIROSIT: a kapu elhagyasa. Olyankor a legordulos ag ugyanugy mukodne,
+      mint a kod elott -- es a lap ugyanazt allitana, mint egy ellenorzott
+      alairasrol. A hianyzo bizonyitek megkulonboztethetetlen lenne a
+      meglevotol.
+    */
+    await assert.rejects(
+      () =>
+        service().sign(
+          "worksheet-1",
+          {
+            decision: "ACCEPTED",
+            signerUserId: "kontakt-1",
+            note: null,
+          } as never,
+          "szerelo-1",
+        ),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        /négy számjegy/.test(error.message),
+    );
+  });
+
+  it("ROSSZ ALAKÚ kód sem", async () => {
+    await assert.rejects(
+      () =>
+        service().sign(
+          "worksheet-1",
+          {
+            decision: "ACCEPTED",
+            signerUserId: "kontakt-1",
+            signatureCode: "12",
+            note: null,
+          } as never,
+          "szerelo-1",
+        ),
+      BadRequestException,
+    );
+  });
+
+  it("NEM EGYEZŐ kód sem, és a mondat MÁS, mint a hiányzó kódé", async () => {
+    /*
+      A ket eset TEENDOJE mas: a hianyzo TAROLT kod a fiokrol szol (szolj az
+      irodanak), az elteres arrol, hogy az ott allo ember nem tudja a kodot.
+
+      MI PIROSIT: kozos mondat a ket agra.
+    */
+    await assert.rejects(
+      () =>
+        service().sign(
+          "worksheet-1",
+          {
+            decision: "ACCEPTED",
+            signerUserId: "kontakt-1",
+            signatureCode: "9999",
+            note: null,
+          } as never,
+          "szerelo-1",
+        ),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        /nem egyezik/.test(error.message),
+    );
+  });
+
+  it("HIÁNYZÓ TÁROLT kód esetén SOHA nem enged át", async () => {
+    /*
+      EZ A LEGFONTOSABB ALLITAS EBBEN A CSOPORTBAN. Egy "nincs kod, tehat
+      atengedjuk" ag pontosan azt a bizonyito erot venne el, amiert az egesz
+      keszul.
+
+      ES EZ AZ ALLITAS NEM HALOTT, PEDIG A MIGRACIO MINDEN SORT FELTOLT.
+      Acrobot pont erre kerdezett ra: ha minden soron van hash, a "nincs hash"
+      ag SOHA nem futna le, es a teszt zold maradna akkor is, ha rossz. Azert
+      nem halott, mert a dupla ITT SZANDEKOSAN `null`-t ad -- vagyis az agat
+      nem az adatbazis allapota hozza elo, hanem a fixture. Merve: a kapu
+      kivetele pontosan EZT az allitast pirositja.
+
+      MI PIROSIT: ha a hianyzo hash atengedne. A mondat az IRODARA mutat, mert
+      ez nem a beiro hibaja.
+    */
+    await assert.rejects(
+      () =>
+        service({ signingCodeHash: async () => null }).sign(
+          "worksheet-1",
+          {
+            decision: "ACCEPTED",
+            signerUserId: "kontakt-1",
+            signatureCode: "0000",
+            note: null,
+          } as never,
+          "szerelo-1",
+        ),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        /Szólj az irodának/.test(error.message),
+    );
+  });
+
+  it("az EGYIK SEM ágon NINCS kód, és ez nem kiskapu", async () => {
+    /*
+      TESTVER-KONTROLL, ES KI KELL MONDANI, MIERT NEM KISKAPU: ezen az agon a
+      lap MAGA MONDJA KI, hogy nem a partner nyilvantartott munkatarsa irta ala
+      (`signerSource: TYPED`). A kod hianya tehat nem rejtve marad, hanem a
+      dokumentum resze lesz.
+
+      MI PIROSIT: ha a kod-kapu ezen az agon is elsulne -- olyankor a szabad
+      szoveges ut jarhatatlanna valna, es a szerelo ott allna a helyszinen.
+    */
+    const kapott: Record<string, unknown>[] = [];
+    await service({
+      sign: async (input: Record<string, unknown>) => {
+        kapott.push(input);
+        return { ok: true } as const;
+      },
+    }).sign(
+      "worksheet-1",
+      {
+        decision: "ACCEPTED",
+        signerName: "Kovács Kázmér",
+        note: null,
+      } as never,
+      "szerelo-1",
+    );
+    assert.equal(kapott[0]?.signerSource, "TYPED");
   });
 });

@@ -1351,6 +1351,20 @@ export class WorksheetsRepository extends Repository {
     };
   }
 
+  /**
+   * A MUNKATARS ALAIROKODJANAK HASHE, vagy `null`, ha nincs.
+   *
+   * CSAK A HASH JON VISSZA, es a szolgaltatas hasonlit -- a nyers kod sehol nem
+   * hagyja el az adatbazist, mert sehol nem is letezik nyersen.
+   */
+  async signingCodeHash(userId: string): Promise<string | null> {
+    const row = await this.database.user.findUnique({
+      where: { id: userId },
+      select: { signatureCodeHash: true },
+    });
+    return row?.signatureCodeHash ?? null;
+  }
+
   /** Egy uj bejegyzes. A szerzo a bejelentkezett kollega. */
   async addEntry(input: {
     worksheetId: string;
