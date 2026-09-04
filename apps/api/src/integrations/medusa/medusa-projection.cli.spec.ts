@@ -1220,6 +1220,14 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
     }) as unknown as typeof fetch;
   }
 
+  /**
+   * A TAROLT BOLTI CIM, ahogy a lekepezes-soron all. SZANDEKOSAN a mert, hibas
+   * alak: ez a ket regi sor cime (2d3f64d2), es a teszt epp azt mutatja meg,
+   * hogy egy ilyen cim MINDEN futasban ujra kimegy.
+   */
+  const TAROLT_BOLTI_CIM =
+    "http://localhost:9000/static/1788516704783-156161.jpg";
+
   const boltiKornyezet = {
     ...withEnvironmentKey,
     MEDUSA_STOREFRONT_SALES_CHANNEL_ID: "sc_1",
@@ -1456,6 +1464,151 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
    * gyokerrel) ugyanaz a fajlrendszeres tarolo all mindket helyen. Ez MERES,
    * nem javitas: a sor itt all, hogy a kovetkezo olvaso lassa.
    */
+  /**
+   * A KEP-LISTA MINDEN UPDATE-BEN KIMEGY, AKKOR IS, HA SEMMI NEM VALTOZOTT.
+   *
+   * === EZ MERT VISELKEDES, NEM OHAJ ===
+   *
+   * Merve 2026-09-04, a kimeno keres TORZSEN: egy olyan futasban, ahol a
+   * lekepezes MAR letezett es a forras NEM valtozott, a kep-lista teljes
+   * egeszeben kiment, a `thumbnail` mezovel egyutt. Nincs osszehasonlitas a
+   * bolt mai allapotaval: a lista feltetel nelkul bekerul a torzsbe, ha a
+   * termeknek van kepe.
+   *
+   * === MIERT KELL RA ALLITAS ===
+   *
+   * A cel oldalon a `images` mezo az update-agon CSERE-szemantikaju. Vagyis ha
+   * valaki a bolt admin feluleten KEZZEL javit egy kep-cimet, a kovetkezo
+   * vetites-futas visszairja a mienket -- csendben, sikeres valasszal. Ma ezt a
+   * viselkedest SEMMI nem orzi, tehat egy jovobeli valtoztatas eszrevetlenul
+   * megfordithatna.
+   *
+   * ES HA EZT SZANDEKOSAN MEGVALTOZTATJUK, EZ A TESZT PIROS LESZ -- ez nem hiba,
+   * hanem a lenyeg: akkor a dontes LATSZIK, ahelyett hogy egy futas kozben
+   * derulne ki.
+   */
+  function valtozatlanAllapotDb(kepSor: {
+    id: string;
+    url: string;
+    storageKey: string;
+    fileName: string;
+  }) {
+    return adatbazis(termek({ images: [kepSor] }), {
+      productImage: {
+        findMany: async () => [kepSor],
+        update: async () => ({}),
+      },
+      externalReference: {
+        findMany: async () => [],
+        /**
+         * MIND A KET LEKEPEZES MAR ALL: a termeke (ettol megy az UPDATE agra,
+         * nem a create-re) es a kepe (ettol a kiado a TAROLT cimet adja tovabb,
+         * es nem tolt fel semmit). Ez egyutt allitja elo azt az allapotot, ahol
+         * SEMMI nem valtozott -- epp ezt akarjuk merni.
+         */
+        findUnique: async (args: unknown) => {
+          const { where } = args as {
+            where: Record<string, { entityType: string } | undefined>;
+          };
+          const tipus = (
+            where.system_entityType_entityId ??
+            where.system_entityType_externalId
+          )?.entityType;
+          return tipus === "ProductImage"
+            ? {
+                entityId: `prod-1:${kepSor.url}`,
+                externalId: "fajl_1",
+                externalKey: TAROLT_BOLTI_CIM,
+                lastSyncedAt: new Date("2026-09-01T00:00:00.000Z"),
+              }
+            : {
+                entityId: "prod-1",
+                externalId: "prod_medusa_1",
+                externalKey: null,
+                lastSyncedAt: new Date("2026-09-01T00:00:00.000Z"),
+              };
+        },
+        create: async () => ({
+          entityId: "prod-1",
+          externalId: "prod_medusa_1",
+          lastSyncedAt: new Date(),
+        }),
+        update: async () => ({
+          entityId: "prod-1",
+          externalId: "prod_medusa_1",
+          lastSyncedAt: new Date(),
+        }),
+        deleteMany: async () => ({ count: 0 }),
+      },
+    });
+  }
+
+  /** A bolt duplaja, ami a keres TORZSET is felirja -- ez az allitas targya. */
+  function torzsetIroFetch(
+    torzsek: { ut: string; torzs: string }[],
+  ): typeof fetch {
+    return (async (url: unknown, init?: RequestInit) => {
+      const cim = String(url);
+      torzsek.push({
+        ut: new URL(cim).pathname,
+        torzs: String(init?.body ?? ""),
+      });
+      if (cim.includes("/admin/sales-channels/"))
+        return valasz({ sales_channel: { id: "sc_1", name: "Bolt" } });
+      if (cim.includes("/admin/products?")) return valasz({ products: [] });
+      return valasz({ product: { id: "prod_medusa_1" } });
+    }) as unknown as typeof fetch;
+  }
+
+  async function valtozatlanFutas() {
+    const { out, stdout, stderr } = collector();
+    const kepSor = {
+      id: "img-1",
+      url: "https://kep.test/1.jpg",
+      storageKey: "product/prod-1/img-1",
+      fileName: "1.jpg",
+    };
+    const torzsek: { ut: string; torzs: string }[] = [];
+    const { db } = valtozatlanAllapotDb(kepSor);
+
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1"],
+        out,
+        provider(environmentSetting),
+        boltiKornyezet,
+        db,
+        torzsetIroFetch(torzsek),
+      ),
+    );
+    assert.equal(code, 0, stderr.join("") + stdout.join(""));
+    const frissites = torzsek.find(
+      (t) => t.ut === "/admin/products/prod_medusa_1",
+    );
+    assert.ok(
+      frissites,
+      "nem ment ki termek-frissites: " + JSON.stringify(torzsek),
+    );
+    return JSON.parse(frissites.torzs) as Record<string, unknown>;
+  }
+
+  it("a kep-lista akkor is kimegy, ha semmi nem valtozott", async () => {
+    const torzs = await valtozatlanFutas();
+
+    assert.deepEqual(torzs.images, [{ url: TAROLT_BOLTI_CIM }]);
+  });
+
+  /**
+   * A `thumbnail` KULON allitas, mert kulon mezo es kulon is elveszhet. Az
+   * update-agon nincs visszaeses az `images[0]` ertekere: ha a mezo kimarad, a
+   * REGI fo kep marad odaat -- csendben.
+   */
+  it("a fo kep (thumbnail) is minden update-ben kimegy", async () => {
+    const torzs = await valtozatlanFutas();
+
+    assert.equal(torzs.thumbnail, TAROLT_BOLTI_CIM);
+  });
+
   it("a kep mestere atkerul, es a storageKey a sorba iródik", async () => {
     const { out, stdout, stderr } = collector();
     const { db, hivasok } = adatbazis(
