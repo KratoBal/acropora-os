@@ -179,7 +179,8 @@ describe("a termékképek kivitele a kirakatba", () => {
     );
 
     assert.deepEqual(out.urls, [], "részleges listát adott vissza");
-    assert.match(out.blockedBy ?? "", /nincs áthozva/);
+    assert.equal(out.blockedBy?.reason, "MASTER_MISSING");
+    assert.match(out.blockedBy?.details ?? "", /nincs áthozva/);
   });
 
   /**
@@ -193,7 +194,8 @@ describe("a termékképek kivitele a kirakatba", () => {
     const out = await publishProductImages(PROD, [kep(1)], f.deps);
 
     assert.deepEqual(out.urls, []);
-    assert.match(out.blockedBy ?? "", /a mester sérült/);
+    assert.equal(out.blockedBy?.reason, "MASTER_CORRUPT");
+    assert.match(out.blockedBy?.details ?? "", /a mester sérült/);
     assert.equal(f.feltoltott.length, 0);
   });
 
@@ -203,7 +205,8 @@ describe("a termékképek kivitele a kirakatba", () => {
     const out = await publishProductImages(PROD, [kep(1), kep(2)], f.deps);
 
     assert.deepEqual(out.urls, []);
-    assert.match(out.blockedBy ?? "", /elhasalt/);
+    assert.equal(out.blockedBy?.reason, "UPLOAD_FAILED");
+    assert.match(out.blockedBy?.details ?? "", /elhasalt/);
   });
 
   /**
@@ -266,7 +269,11 @@ describe("a termékképek kivitele a kirakatba", () => {
       "fel nem ismert tartalmat toltott fel",
     );
     assert.deepEqual(eredmeny.urls, []);
-    assert.match(eredmeny.blockedBy ?? "", /nem ismerhető fel képként/);
+    assert.equal(eredmeny.blockedBy?.reason, "NOT_AN_IMAGE");
+    assert.match(
+      eredmeny.blockedBy?.details ?? "",
+      /nem ismerhető fel képként/,
+    );
   });
 
   it("a bájtok a tárolóból jönnek, nem a forrás URL-ről", async () => {
@@ -319,14 +326,12 @@ describe("a feltoltes hibaja nem viszi ki a valasz torzset", () => {
     });
     const eredmeny = await publishProductImages(PROD, [kep(1)], f.deps);
 
-    assert.equal(
-      eredmeny.blockedBy?.includes("HTTP 401"),
-      true,
-      eredmeny.blockedBy ?? "",
-    );
-    assert.equal(eredmeny.blockedBy?.includes("sk_test_titok123"), false);
-    assert.equal(eredmeny.blockedBy?.includes("belso reszlet"), false);
-    assert.equal(eredmeny.blockedBy?.includes("MEDUSA_ADMIN_HTTP"), false);
+    const reszletek = eredmeny.blockedBy?.details ?? "";
+    assert.equal(eredmeny.blockedBy?.reason, "UPLOAD_FAILED");
+    assert.equal(reszletek.includes("HTTP 401"), true, reszletek);
+    assert.equal(reszletek.includes("sk_test_titok123"), false);
+    assert.equal(reszletek.includes("belso reszlet"), false);
+    assert.equal(reszletek.includes("MEDUSA_ADMIN_HTTP"), false);
   });
 
   it("a NEM HTTP hiba uzenete viszont megmarad", async () => {
@@ -339,10 +344,7 @@ describe("a feltoltes hibaja nem viszi ki a valasz torzset", () => {
     const f = await deps({ tarolt: [1], feltoltesDob: true });
     const eredmeny = await publishProductImages(PROD, [kep(1)], f.deps);
 
-    assert.equal(
-      eredmeny.blockedBy?.includes("a bolt nem valaszol"),
-      true,
-      eredmeny.blockedBy ?? "",
-    );
+    const reszletek = eredmeny.blockedBy?.details ?? "";
+    assert.equal(reszletek.includes("a bolt nem valaszol"), true, reszletek);
   });
 });

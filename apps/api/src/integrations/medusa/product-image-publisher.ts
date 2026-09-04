@@ -1,3 +1,5 @@
+import type { MedusaImageBlockReason } from "@acropora/database";
+
 import {
   detectImageContentType,
   imageFileNameFor,
@@ -37,6 +39,19 @@ export interface PublishableImage {
   contentType: string;
 }
 
+/**
+ * A BESOROLAS ES A MONDAT EGYUTT.
+ *
+ * A `reason` a Prisma enumja, tehat ugyanaz az ertekkeszlet all a kodban es az
+ * adatbazisban -- egy elgepelesre forditasi hiba jon, nem egy sor, ami sehol
+ * nem talalhato meg.
+ */
+export interface ImageBlock {
+  reason: MedusaImageBlockReason;
+  /** A reszletezo mondat, ugyanaz, ami eddig a kimenetre ment. */
+  details: string;
+}
+
 export interface PublishOutcome {
   /** A bolti URL-ek, a bemeneti SORRENDBEN. Ures, ha a termek nem mehet. */
   urls: string[];
@@ -46,10 +61,17 @@ export interface PublishOutcome {
   /**
    * MIERT NEM MEHET A TERMEK. `null`, ha mehet.
    *
-   * Egy szoveg, nem logikai ertek: a hivo jelentesbe irja, es a "nincs meg a
-   * mester" es a "elhasalt a feltoltes" KET kulonbozo teendo.
+   * BESOROLAS ES SZOVEG EGYUTT, es a ketto nem helyettesiti egymast. A szoveg
+   * a diagnozis (melyik kep, milyen hiba), az `reason` viszont az, amire
+   * SZURNI lehet: a "nincs meg a mester" es az "elhasalt a feltoltes" ket
+   * kulonbozo teendo, es egy szabad szoveges mezo ezt a kulonbseget csak
+   * addig orzi, amig valaki at nem fogalmazza az egyik mondatot.
+   *
+   * Ez a mezo 2026-09-04-ig CSAK szoveg volt, es kizarolag a futas kimenetere
+   * kerult. Az `reason` azert kell, mert a hivo mostantol a TERMEK sorara is
+   * felirja, es egy tarolt szoveg nem kereshetо.
    */
-  blockedBy: string | null;
+  blockedBy: ImageBlock | null;
 }
 
 export interface PublishDeps {
@@ -88,7 +110,10 @@ export async function publishProductImages(
         urls: [],
         uploaded,
         reused,
-        blockedBy: `a kép még nincs áthozva a mesterbe (${image.url})`,
+        blockedBy: {
+          reason: "MASTER_MISSING",
+          details: `a kép még nincs áthozva a mesterbe (${image.url})`,
+        },
       };
 
     const existing = await deps.links.findByImage(productId, image.url);
@@ -115,9 +140,12 @@ export async function publishProductImages(
         urls: [],
         uploaded,
         reused,
-        blockedBy:
-          `a tároló-kulcs áll a soron, de a fájl nincs meg ` +
-          `(${image.storageKey}) -- a mester sérült`,
+        blockedBy: {
+          reason: "MASTER_CORRUPT",
+          details:
+            `a tároló-kulcs áll a soron, de a fájl nincs meg ` +
+            `(${image.storageKey}) -- a mester sérült`,
+        },
       };
 
     /**
@@ -139,9 +167,12 @@ export async function publishProductImages(
         urls: [],
         uploaded,
         reused,
-        blockedBy:
-          `a fájl tartalma nem ismerhető fel képként (${image.url}) -- ` +
-          `nem töltjük fel, mert a típusát nem tudjuk megmondani`,
+        blockedBy: {
+          reason: "NOT_AN_IMAGE",
+          details:
+            `a fájl tartalma nem ismerhető fel képként (${image.url}) -- ` +
+            `nem töltjük fel, mert a típusát nem tudjuk megmondani`,
+        },
       };
 
     let file: MedusaUploadedFile;
@@ -175,7 +206,10 @@ export async function publishProductImages(
         urls: [],
         uploaded,
         reused,
-        blockedBy: `a feltöltés elhasalt (${image.url}): ${describeMedusaFailure(error)}`,
+        blockedBy: {
+          reason: "UPLOAD_FAILED",
+          details: `a feltöltés elhasalt (${image.url}): ${describeMedusaFailure(error)}`,
+        },
       };
     }
 
