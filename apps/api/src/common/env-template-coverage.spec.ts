@@ -150,36 +150,35 @@ const SZANDEKOS_KIVETEL = new Set<string>([
   // sablon kommentben KI IS MONDJA, hogy soha ne alljanak be elesben.
   "RUN_DB_INTEGRATION",
   "RUN_BRAND_INTEGRATION",
+  /**
+   * NEM A FUTO ALKALMAZAS OLVASSA, hanem a
+   * `packages/database/prisma/record-release-evidence.ts` szkript. A
+   * production sablon a KOMMENTEZETT alakot tartja (ugyanugy, mint a ket
+   * RUN_* kapcsolonal), a fejlesztoibe viszont nem valo: az a fajl arrol
+   * szol, amit egy fejlesztoi FUTTATAS igenyel.
+   *
+   * A megkulonboztetes nem szorszalhasogatas: ha ez a nev az ISMERT_HIANY
+   * listan allna, adossagnak latszana -- holott nincs mit potolni.
+   */
+  "RELEASE_EVIDENCE_RESULT_DETAIL_JSON",
 ]);
 
 /**
  * A MAI ADOSSAG, NEVVEL. EZ A LISTA CSAK ROVIDULHET.
  *
  * A halo elso futasa 33 hianyzot talalt; a ket UNAS utemezo-csalad azota
- * bekerult a production sablonba, tehat a lista 32-rol 15-re rovidult. Ha mind riasztana, valaki
+ * bekerult a production sablonba, tehat a lista 32-rol 15-re rovidult.
+ * A masodik korben (ugyanaznap) a maradek tizennegy is bekerult mindket
+ * sablonba, es a tizenotodik a SZANDEKOS_KIVETEL listara. EZ A LISTA MA URES --
+ * es epp ezert erdemes itt hagyni: az elso nev, ami ide kerul, a PR-ben
+ * indoklast igenyel, nem egy csendes sort. Ha mind riasztana, valaki
  * kikapcsolna az egeszet -- ezert all itt a mai allapot rogzitve, es a halo
  * attol kezdve MINDEN UJAT megfog. A mai adossag felszamolasa kulon munka.
  *
  * ES A LISTA NEM NOHET: egy uj nev ide irasa ugyanaz, mint kikapcsolni a halot
  * arra az egy valtozora. Ha valaki ide ir, azt a PR-ben meg kell indokolnia.
  */
-const ISMERT_HIANY = new Set<string>([
-  "ACROPORA_AI_ACCESS_TOKEN",
-  "ACROPORA_AI_BASE_URL",
-  "ACROPORA_AI_PRODUCT_SEARCH_TOKEN_ID",
-  "ACROPORA_AI_USER_CONTEXT_TOKEN_ID",
-  "ACROPORA_CONTENT_AGENT_TOKEN_IDS",
-  "API_KEEP_ALIVE_TIMEOUT_MS",
-  "APNS_ENVIRONMENT",
-  "APNS_KEY_ID",
-  "APNS_PRIVATE_KEY_BASE64",
-  "APNS_TEAM_ID",
-  "DOCUMENT_STORE_LIMIT_BYTES",
-  "NEXT_PROXY_TIMEOUT_MS",
-  "RELEASE_COMMIT_SHA",
-  "RELEASE_EVIDENCE_EXPECTED_REPOSITORY",
-  "RELEASE_EVIDENCE_RESULT_DETAIL_JSON",
-]);
+const ISMERT_HIANY = new Set<string>([]);
 
 function sablon(nev: string): string {
   return readFileSync(`${REPO}${nev}`, "utf8");
@@ -266,6 +265,30 @@ describe("a kornyezeti sablonok lefedettsege", () => {
       [],
       `Ezek a valtozok hianyoznak valamelyik sablonbol: ${hianyzo.join(", ")}. ` +
         `Vedd fel oket a .env.example ES a .env.production.example fajlba is.`,
+    );
+  });
+
+  /**
+   * A KET LISTA NEM METSZHETI EGYMAST, ES EZ NEM ELMELETI.
+   *
+   * A masodik adossag-korben egy nev EGYSZERRE kerult mindket listara: a
+   * SZANDEKOS_KIVETEL-be szandekosan, az ISMERT_HIANY-ban pedig BENT MARADT.
+   * A halo ZOLD maradt tole, mert MINDKET lista kizarja a nevet -- vagyis a
+   * hiba pontosan azon a helyen volt nema, ahol a halo maga all.
+   *
+   * Es a kar nem a duplikacio: a KET LISTA MAST JELENT. Egy nev, ami
+   * szandekosan nincs a sablonban, adossagnak latszana a masik listan -- es
+   * valaki egyszer "potolni" fogja.
+   */
+  it("egy nev nem allhat mindket kivetel-listan", () => {
+    const metszet = [...ISMERT_HIANY]
+      .filter((nev) => SZANDEKOS_KIVETEL.has(nev))
+      .sort();
+
+    assert.deepEqual(
+      metszet,
+      [],
+      `Ezek mindket kivetel-listan allnak, pedig a ketto mast jelent: ${metszet.join(", ")}`,
     );
   });
 
