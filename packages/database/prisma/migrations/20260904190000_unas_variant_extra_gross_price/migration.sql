@@ -1,0 +1,56 @@
+-- A UNAS VALTOZAT-FELAR OSZLOPA.
+--
+-- === MIERT KELL, ES MI TORTENIK NELKULE ===
+--
+-- A UNAS a valtozat-felarat nem a keszlet-soron kuldi, hanem a tengely
+-- definiciojaban: `Variants.Variant.Values.Value` alatt, `ExtraPrice` neven,
+-- ertekenkent. A keszlet-sorok csak az ertek SZOVEGET tartalmazzak, tehat a
+-- felar egyedul a tengely-blokkbol szerezheto meg.
+--
+-- Amig ez az oszlop nincs meg, a felar SEHOL nem all tipusos alakban: a nyers
+-- valasz (`UnasProductSnapshot.rawPayload`) tartalmazza ugyan, de ertelmezetlen
+-- JSON-kent. Ha a tobb valtozat vetitese ugy epulne meg, hogy ezt nem olvassa,
+-- a dragabb valtozat a TERMEK alapjaran menne ki a boltba. Nem hiba, nem
+-- megallas, csak kevesebb penz -- pontosan az a nema kar, ami ellen ez az
+-- oszlop letezik.
+--
+-- === A MERES, AMI A MERETET MEGMONDJA ===
+--
+-- nautilus, 2026-09-04, a 2026-09-03-i API-exporton, 1893 termeken:
+--
+--   tengely-blokkos termek                     9
+--   keszlet-kombinacio                        18
+--   felarat viselo ertek                       1  (5902026731119cs, "Flakon", 150)
+--   kombinacio, aminek erteke nincs a definicioban  0
+--
+-- Vagyis a backfill MA egyetlen sort erintene. Az oszlop megis kell: a
+-- kilenc termek barmelyikenel egy uj felar felvitele a UNAS oldalan azonnal
+-- elo allitja a kart, es akkor mar nincs hova irni.
+--
+-- === MIERT NULLABLE, ES MIERT NINCS BACKFILL ===
+--
+-- A NULL NEM NULLA. A nulla azt allitana, hogy a forras nulla felarat rendelt
+-- a kombinaciohoz; a NULL azt, hogy nem rendelt hozza semmit. A ketto teendoje
+-- kulonbozik, es egy tarolt nulla mert erteknek latszana.
+--
+-- Backfill azert nincs, mert az adat FORRASA a UNAS import: a kovetkezo
+-- termek-szinkron irja be, ugyanabbol a valaszbol, amibol a tobbi valtozat-mezo
+-- is jon. Egy SQL-bol kitalalt ertek itt talalgatas lenne.
+--
+-- === MIERT NINCS "NEM NEGATIV" MEGSZORITAS, HOLOTT A SZOMSZED ARMEZON VAN ===
+--
+-- A `sellingGrossPrice` a MI arunk: egy negativ eladasi ar ertelmetlen, tehat
+-- ott a CHECK valodi allitas. Ez az oszlop viszont a FORRAS erteket tukrozi, es
+-- egy negativ felar ertelmes lehet (olcsobb kivitel). Hogy a UNAS kuld-e ilyet,
+-- azt NEM MERTEM: a 2026-09-03-i exporton egyetlen felar all, es az pozitiv.
+--
+-- Egy megszoritas, amit nem adat tamaszt ala, itt a rosszabb irany: az egesz
+-- termek-import elhasalna egy olyan erteken, amit a forras jogosan kuldhet. Ha
+-- valaha kiderul, hogy a UNAS nem kuld negativat, ez a sor valtozik -- addig a
+-- hianya kimondott dontes, nem feledekenyseg.
+--
+-- VISSZAFELE KOMPATIBILIS: uj, nullazhato oszlop, alapertelmezes nelkul. A
+-- regi kod nem olvassa es nem irja.
+
+ALTER TABLE "ProductVariant"
+  ADD COLUMN "unasVariantExtraGrossPrice" DECIMAL(19,4);

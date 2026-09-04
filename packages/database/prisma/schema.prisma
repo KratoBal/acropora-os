@@ -749,12 +749,12 @@ model ProductDescriptionImageReference {
 }
 
 model ProductVariant {
-  id                        String    @id @default(cuid())
-  productId                 String
-  sku                       String    @unique
-  name                      String?
-  unit                      String    @default("db")
-  vatRate                   Decimal?  @db.Decimal(5, 2)
+  id                         String    @id @default(cuid())
+  productId                  String
+  sku                        String    @unique
+  name                       String?
+  unit                       String    @default("db")
+  vatRate                    Decimal?  @db.Decimal(5, 2)
   /// Az ACROPORA-tulajdonu termek sajat, BRUTTO eladasi ara. Balazs dontese,
   /// 2026-08-29 19:31, Discord, szo szerint: "Vegyuk fel a brutto arat."
   ///
@@ -769,7 +769,7 @@ model ProductVariant {
   /// vagy egyik sem. Ezt adatbazis-szintu CHECK feltetel tartja, mert a
   /// felallapot (osszeg penznem nelkul) nema hiba lenne: a szam onmagaban
   /// helyesnek latszik.
-  sellingGrossPrice         Decimal?  @db.Decimal(19, 4)
+  sellingGrossPrice          Decimal?  @db.Decimal(19, 4)
   /// Az eladasi ar penzneme, ISO 4217 harombetus kod. Ebben a korben KIZAROLAG
   /// `HUF` megengedett, es a vetites minden mast elutasit.
   ///
@@ -777,27 +777,42 @@ model ProductVariant {
   /// nem mondja meg magarol, mi o, es a "rossz penznem" eset nem is lenne
   /// merheto. A brief 12. pontja epp ezt keri falszifikaciokent, es egy olyan
   /// teszt, ami nem tud elbukni, nem kapu.
-  sellingPriceCurrency      String?   @db.VarChar(3)
-  manufacturerPartNumber    String?
-  secondaryUnit             String?
-  secondaryUnitFactor       Decimal?  @db.Decimal(19, 6)
-  isActive                  Boolean   @default(true)
+  sellingPriceCurrency       String?   @db.VarChar(3)
+  manufacturerPartNumber     String?
+  secondaryUnit              String?
+  secondaryUnitFactor        Decimal?  @db.Decimal(19, 6)
+  isActive                   Boolean   @default(true)
   /// Original product-level SKU used by UNAS getStock/setStock. Equal to
   /// sku for ordinary products; shared by the locally separated variants
   /// of an UNAS variant-stock product.
-  unasBaseSku               String?
+  unasBaseSku                String?
   /// Deterministic, ordered value-only key for one UNAS combination.
   /// NULL for ordinary product-level stock.
-  unasVariantKey            String?
+  unasVariantKey             String?
   /// Ordered [{ name, value }] values mirrored from UNAS. The order is
   /// significant because setStock identifies a combination positionally.
-  unasVariantValues         Json?
+  unasVariantValues          Json?
+  /// A kombinacio brutto FELARA a UNAS oldalarol, vagy NULL, ha a forras nem
+  /// rendelt hozza felarat.
+  ///
+  /// A UNAS a felarat nem a keszlet-soron kuldi, hanem a tengely
+  /// definiciojaban (`Variants.Variant.Values.Value.ExtraPrice`), ertekenkent.
+  /// Ez az oszlop az EBBEN a kombinacioban osszeado ertek.
+  ///
+  /// AZERT KULON OSZLOP, ES NEM A `unasVariantValues` JSON-jaban: az arat a
+  /// vetites olvassa, valtozatonkent, es egy JSON-bol kibanyaszott szam nem
+  /// mondja meg magarol, hogy penz -- se tipusa, se pontossaga nem lenne. Ez
+  /// ugyanaz az indok, amiert a `sellingPriceCurrency` is sajat oszlop.
+  ///
+  /// A NULL NEM NULLA: azt jelenti, hogy a forras nem rendelt felarat ehhez a
+  /// kombinaciohoz. Egy tarolt nulla mert erteknek latszana.
+  unasVariantExtraGrossPrice Decimal?  @db.Decimal(19, 4)
   /// UNAS comparison snapshot for this exact local variant. Ordinary
   /// products retain the product-level snapshot as a compatibility fallback.
-  unasReportedStock         Decimal?  @db.Decimal(19, 6)
-  unasReportedStockSyncedAt DateTime?
-  createdAt                 DateTime  @default(now())
-  updatedAt                 DateTime  @updatedAt
+  unasReportedStock          Decimal?  @db.Decimal(19, 6)
+  unasReportedStockSyncedAt  DateTime?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
 
   product                    Product                       @relation(fields: [productId], references: [id], onDelete: Cascade)
   barcodes                   ProductBarcode[]

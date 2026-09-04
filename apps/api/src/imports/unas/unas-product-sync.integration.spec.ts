@@ -357,10 +357,17 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
           {
             values: [{ name: "Szín", value: "Fekete" }],
             reportedStock: "2",
+            extraGrossPrice: null,
           },
           {
             values: [{ name: "Szín", value: "Fehér" }],
             reportedStock: "3",
+            /**
+             * A KET VALTOZAT KULONBOZIK A FELARBAN, ES EZ SZANDEKOS: egy
+             * fixtura, amiben mindket ertek `null`, a tarolast is
+             * atengedne, ha a mezo sehova nem kerulne be.
+             */
+            extraGrossPrice: "150",
           },
         ],
       },
@@ -384,10 +391,11 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
       active.map((variant) => ({
         baseSku: variant.unasBaseSku,
         reported: variant.unasReportedStock?.toString(),
+        extra: variant.unasVariantExtraGrossPrice?.toString() ?? null,
       })),
       [
-        { baseSku: "RF-BLUEM", reported: "3" },
-        { baseSku: "RF-BLUEM", reported: "2" },
+        { baseSku: "RF-BLUEM", reported: "3", extra: "150" },
+        { baseSku: "RF-BLUEM", reported: "2", extra: null },
       ],
     );
     assert.equal(

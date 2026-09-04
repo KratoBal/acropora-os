@@ -191,12 +191,127 @@ describe("UNAS API XML contract", () => {
       {
         values: [{ name: "Szín", value: "Fekete" }],
         reportedStock: "2",
+        /**
+         * ERTEK-LISTA NELKULI TENGELY: a forras nem nyilatkozik felarrol,
+         * tehat `null` -- es NEM megallas. A megszoritas ott all, ahol a kar
+         * lehetseges (van ertek-lista, es a kombinacio erteke nincs benne).
+         */
+        extraGrossPrice: null,
       },
       {
         values: [{ name: "Szín", value: "Fehér" }],
         reportedStock: "3",
+        extraGrossPrice: null,
       },
     ]);
+  });
+
+  /**
+   * ISMERT POZITIV, ES NEM KITALALT: ez a `5902026731119cs` cikkszamu termek
+   * VALODI alakja a 2026-09-03-i exportbol -- egy "Flakon" nevu tengely, ket
+   * ertekkel, es a masodikon 150 forint felar. Ez az EGYETLEN felar az egesz
+   * katalogusban (1893 termek, 9 tengely-blokkos, 18 kombinacio).
+   */
+  it("a tengely ertekehez rendelt felar atkerul a kombinaciora", () => {
+    const felaras = parseUnasProductResponse(
+      response
+        .replace(
+          "<Stocks>",
+          "<Variants><Variant><Name>Flakon</Name><Values>" +
+            "<Value><Name>Egyedi csomagolás</Name></Value>" +
+            "<Value><Name>Flakon</Name><ExtraPrice>150</ExtraPrice></Value>" +
+            "</Values></Variant></Variants><Stocks>",
+        )
+        .replace("<Variant>0</Variant>", "<Variant>1</Variant>")
+        .replace(
+          "<Stock><Qty>7.5</Qty></Stock>",
+          "<Stock><Variants><Variant>Egyedi csomagolás</Variant></Variants><Qty>0</Qty></Stock>" +
+            "<Stock><Variants><Variant>Flakon</Variant></Variants><Qty>0</Qty></Stock>",
+        ),
+    )[0]!;
+
+    assert.deepEqual(felaras.variantStocks, [
+      {
+        values: [{ name: "Flakon", value: "Egyedi csomagolás" }],
+        reportedStock: "0",
+        extraGrossPrice: null,
+      },
+      {
+        values: [{ name: "Flakon", value: "Flakon" }],
+        reportedStock: "0",
+        extraGrossPrice: "150",
+      },
+    ]);
+  });
+
+  /**
+   * A TOBBTENGELYES OSSZEADAS MA NEM ALL ELO (mind a kilenc termek egy
+   * tengelyes), ezert a fixtura SZINTETIKUS -- es ezt ki kell mondani.
+   *
+   * Azert van megis teszt ra, mert a forras szerkezete tobb tengelyt ENGED, es
+   * egy "csak az elso tengely szamit" alak csendben veszitene el a masodik
+   * felarat. A tizedes osszeadas azert `BigInt`-tel megy, hogy a
+   * `0.1 + 0.2` fajta hiba ne rogzuljon a tarolt `Decimal(19, 4)` mezoben.
+   */
+  it("tobb tengely felarai osszeadodnak, tizedes vesztesegetol mentesen", () => {
+    const tobbTengely = parseUnasProductResponse(
+      response
+        .replace(
+          "<Stocks>",
+          "<Variants>" +
+            "<Variant><Name>Szín</Name><Values>" +
+            "<Value><Name>Fekete</Name><ExtraPrice>0.1</ExtraPrice></Value>" +
+            "</Values></Variant>" +
+            "<Variant><Name>Méret</Name><Values>" +
+            "<Value><Name>L</Name><ExtraPrice>0.2</ExtraPrice></Value>" +
+            "</Values></Variant>" +
+            "</Variants><Stocks>",
+        )
+        .replace("<Variant>0</Variant>", "<Variant>1</Variant>")
+        .replace(
+          "<Stock><Qty>7.5</Qty></Stock>",
+          "<Stock><Variants><Variant>Fekete</Variant><Variant>L</Variant></Variants><Qty>1</Qty></Stock>",
+        ),
+    )[0]!;
+
+    assert.deepEqual(tobbTengely.variantStocks, [
+      {
+        values: [
+          { name: "Szín", value: "Fekete" },
+          { name: "Méret", value: "L" },
+        ],
+        reportedStock: "1",
+        extraGrossPrice: "0.3",
+      },
+    ]);
+  });
+
+  /**
+   * A NEM ISMERT ERTEK NEVESITETT MEGALLAS, ES EZ A LENYEG.
+   *
+   * A csendes `null` alak azt jelentene, hogy a valtozat a termek alapjaran
+   * megy ki: se hiba, se megallas, csak kevesebb penz. A hangos megallas
+   * dragabb egy importnal, de latszik -- es ezt a kulonbseget meri ez a teszt.
+   */
+  it("a tengely-definicioban nem szereplo ertek megallast ad, nem nulla felarat", () => {
+    const hibasXml = response
+      .replace(
+        "<Stocks>",
+        "<Variants><Variant><Name>Flakon</Name><Values>" +
+          "<Value><Name>Flakon</Name><ExtraPrice>150</ExtraPrice></Value>" +
+          "</Values></Variant></Variants><Stocks>",
+      )
+      .replace("<Variant>0</Variant>", "<Variant>1</Variant>")
+      .replace(
+        "<Stock><Qty>7.5</Qty></Stock>",
+        "<Stock><Variants><Variant>Ismeretlen kivitel</Variant></Variants><Qty>4</Qty></Stock>",
+      );
+
+    assert.throws(
+      () => parseUnasProductResponse(hibasXml),
+      (error: unknown) =>
+        error instanceof UnasApiError && error.code === "FIELD_FORMAT_INVALID",
+    );
   });
 
   it("builds and parses the dedicated incremental getStock contract", () => {
