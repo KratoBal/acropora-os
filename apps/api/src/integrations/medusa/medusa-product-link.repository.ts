@@ -61,6 +61,47 @@ interface ExternalReferenceRow {
   entityId: string;
   externalId: string;
   lastSyncedAt: Date | null;
+  metadata?: unknown;
+}
+
+/**
+ * AZ ÁRVA LEKÉPEZÉS JELE -- a `metadata` egyetlen, névterezett kulcsa alatt.
+ *
+ * Azért a `metadata`, és nem új oszlop: a jel MEGFIGYELÉS, nem azonosság. A
+ * sor `externalId` és `lastSyncedAt` mezőjéhez nem nyúlunk, mert épp azok az
+ * egyetlen nyomok, amikből utólag meg lehet mondani, MELYIK bolti termék tűnt
+ * el és MIKOR még megvolt.
+ */
+export const MEDUSA_ORPHAN_METADATA_KEY = "medusaOrphan";
+
+/** Amit a jel tárol. Kifelé is ez megy, hogy a jelentés írhassa. */
+export interface MedusaOrphanMark {
+  /** Az ELSŐ észlelés. Ez nem íródik felül, mert a kor a lényege. */
+  firstObservedAt: string;
+  /** A LEGUTÓBBI észlelés. Ez mondja meg, hogy az állapot még mindig áll. */
+  lastObservedAt: string;
+  /** A bolti azonosító, amire a sor mutatott, amikor árvának bizonyult. */
+  medusaProductId: string;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+/**
+ * A JEL LEVÉTELE, HA VAN MIT LEVENNI -- különben a `metadata` KI SEM MEGY.
+ *
+ * Egy visszaállított bolti termék után a sor újra ép, és egy ottfelejtett jel
+ * ilyenkor HAZUDNA. Viszont ha nincs jel, a mezőt nem is küldjük: a `metadata`
+ * csere-szemantikájú, tehát egy felesleges kiírás más kulcsait törölné.
+ */
+function orphanClearPatch(metadata: unknown): { metadata?: unknown } {
+  const current = asRecord(metadata);
+  if (!(MEDUSA_ORPHAN_METADATA_KEY in current)) return {};
+  const { [MEDUSA_ORPHAN_METADATA_KEY]: _removed, ...rest } = current;
+  return { metadata: rest };
 }
 
 export interface MedusaLinkDatabase {
@@ -93,9 +134,10 @@ export class MedusaProductLinkRepository {
     this.database = database ?? (prisma as unknown as MedusaLinkDatabase);
   }
 
-  /** Melyik Medusa-termék tartozik ehhez az OS-termékhez, ha van ilyen. */
-  async findByProductId(productId: string): Promise<MedusaProductLink | null> {
-    const row = await this.database.externalReference.findUnique({
+  private async findRowByProductId(
+    productId: string,
+  ): Promise<ExternalReferenceRow | null> {
+    return this.database.externalReference.findUnique({
       where: {
         system_entityType_entityId: {
           system: SYSTEM,
@@ -104,7 +146,56 @@ export class MedusaProductLinkRepository {
         },
       },
     });
+  }
+
+  /** Melyik Medusa-termék tartozik ehhez az OS-termékhez, ha van ilyen. */
+  async findByProductId(productId: string): Promise<MedusaProductLink | null> {
+    const row = await this.findRowByProductId(productId);
     return row ? toLink(row) : null;
+  }
+
+  /**
+   * MEGJELÖLI a sort, hogy a bolt szerint már nem létezik, amire mutat.
+   *
+   * NEM TÖRÖL, és nem is ír azonosságot. Egy törlés innen nem semleges: a
+   * vetítés következő futása leképezés nélkül a létrehozó ágra menne, tehát a
+   * törlésből CSENDBEN ÚJRA LÉTREHOZÁS lenne -- pont az, amit a bolt oldali
+   * törlés meg akart szüntetni. A döntést ezért emberre hagyjuk, a jel meg
+   * megőrzi hozzá a bizonyítékot.
+   *
+   * Akkor sem ír, ha a sor időközben MÁS bolti azonosítóra állt: azt a párost
+   * nem mi figyeltük meg, tehát nem a mi jelünk való rá.
+   */
+  async markOrphaned(
+    productId: string,
+    medusaProductId: string,
+    observedAt: Date,
+  ): Promise<MedusaOrphanMark | null> {
+    const row = await this.findRowByProductId(productId);
+    if (!row || row.externalId !== medusaProductId) return null;
+
+    const metadata = asRecord(row.metadata);
+    const previous = asRecord(metadata[MEDUSA_ORPHAN_METADATA_KEY]);
+    const mark: MedusaOrphanMark = {
+      firstObservedAt:
+        typeof previous.firstObservedAt === "string"
+          ? previous.firstObservedAt
+          : observedAt.toISOString(),
+      lastObservedAt: observedAt.toISOString(),
+      medusaProductId,
+    };
+
+    await this.database.externalReference.update({
+      where: {
+        system_entityType_entityId: {
+          system: SYSTEM,
+          entityType: ENTITY_TYPE,
+          entityId: productId,
+        },
+      },
+      data: { metadata: { ...metadata, [MEDUSA_ORPHAN_METADATA_KEY]: mark } },
+    });
+    return mark;
   }
 
   /** Melyik OS-termék tartozik ehhez a Medusa-azonosítóhoz, ha van ilyen. */
@@ -142,10 +233,11 @@ export class MedusaProductLinkRepository {
     medusaProductId: string,
     syncedAt: Date,
   ): Promise<MedusaProductLink> {
-    const [byProduct, byMedusa] = await Promise.all([
-      this.findByProductId(productId),
+    const [byProductRow, byMedusa] = await Promise.all([
+      this.findRowByProductId(productId),
       this.findByMedusaProductId(medusaProductId),
     ]);
+    const byProduct = byProductRow ? toLink(byProductRow) : null;
 
     for (const existing of [byProduct, byMedusa]) {
       if (
@@ -160,7 +252,7 @@ export class MedusaProductLinkRepository {
         );
     }
 
-    if (byProduct)
+    if (byProductRow)
       return toLink(
         await this.database.externalReference.update({
           where: {
@@ -170,7 +262,10 @@ export class MedusaProductLinkRepository {
               entityId: productId,
             },
           },
-          data: { lastSyncedAt: syncedAt },
+          data: {
+            lastSyncedAt: syncedAt,
+            ...orphanClearPatch(byProductRow.metadata),
+          },
         }),
       );
 
