@@ -359,3 +359,68 @@ describe("a Medusa hibaüzenete megnevezi a mezőt", () => {
     );
   });
 });
+
+/**
+ * A MASODIK FELISMERT ALAK: A HANDLE ELUTASITASA.
+ *
+ * Merve 2026-09-04 a telepitett 2.19.0 forrasan: a termek `handle` mezojenek
+ * SAJAT ellenorzese van, sajat uzenettel -- a `Field '...'` mintara NEM
+ * illeszkedik. Epp ez a hibaosztaly allitja meg ma a migraciot: az 1813
+ * SefUrl-bol 1799-et a NAGYBETU miatt utasitana el a Medusa.
+ */
+describe("a handle elutasítása is megnevezi a mezőt, de az ÉRTÉKET nem", () => {
+  const HANDLE_HIBA =
+    '{"type":"invalid_data","message":"Invalid product handle \'Aqua-Illumination-Prime-HD-LED-panel\'. It must contain URL safe characters"}';
+
+  it("felismeri az alakot, és `handle`-t mond", () => {
+    /*
+      MI PIROSIT: a mai kod. Az csak a `Field '...'` alakot ismeri, tehat erre
+      `null`-t ad, es a naplo csak a statuszkodot mutatna -- pontosan az az
+      allapot, ami ma megallitja a migraciot.
+    */
+    assert.equal(medusaFailureField(HANDLE_HIBA), "handle");
+  });
+
+  it("a KONKRET CIM nem kerul a kimenetre", () => {
+    /*
+      EZ A VEDELEM, ES SZERKEZETI, NEM SZURESI. A mezonevet a lista MAGA ADJA;
+      az uzenetben allo erteket nem is olvassuk ki. Egy kiemeles-plusz-szures
+      alak ugyanezt igerne, de akkor a vedelem egy mintan mulna.
+
+      MI PIROSIT: ha valaki a nevesitett alakot is kiemelesse alakitja.
+    */
+    const kimenet = describeMedusaFailure(
+      new MedusaAdminHttpError(400, HANDLE_HIBA),
+    );
+    assert.equal(
+      kimenet,
+      "a Medusa HTTP 400 választ adott (a hibás mező: handle)",
+    );
+    assert.equal(kimenet.includes("Aqua-Illumination"), false);
+    assert.equal(kimenet.includes("URL safe"), false);
+  });
+
+  it("a `Field '...'` alak TOVABBRA IS elsobbseget elvez", () => {
+    /*
+      ISMERT POZITIV KONTROLL: a masodik lista nem takarhatja el az elsot. Ha
+      egy valasz mindkettot hordozna, a pontosabb (mezo-UTVONALAT ado) alak kell.
+    */
+    const mindketto =
+      "{\"message\":\"Invalid request: Field 'variants, 0, prices' is required. Invalid product handle 'x'.\"}";
+    assert.equal(medusaFailureField(mindketto), "variants, 0, prices");
+  });
+
+  it("egy MASIK entitas handle-hibaja NEM illeszkedik", () => {
+    /*
+      CSAK AMIT MERTUNK. A kategoria es a gyujtemeny handle-je mas uton megy, es
+      amig azt nem neztuk meg, ide sem kerul -- egy "biztos ez is olyan"
+      bejegyzes pontosan az a fajta bovites, ami ellen a megengedo lista szol.
+    */
+    assert.equal(
+      medusaFailureField(
+        '{"message":"Invalid category handle \'valami\'. It must contain URL safe characters"}',
+      ),
+      null,
+    );
+  });
+});
