@@ -2,8 +2,20 @@
  * A GYARTOI CIKKSZAM MEZO TARTALMA VONALKOD IS LEHET, ES AKKOR MAS A HELYE.
  *
  * KULON MODUL, ADATBAZIS NELKUL MERHETO, ugyanabbol az okbol, amiert a
- * kategoria-, a marka- es a publikacios szabaly is kulon all: a parancssori
- * felulet torzse a `prisma`-t MODUL-SZINTU importbol veszi.
+ * kategoria-, a marka- es a publikacios szabaly is kulon all. *
+ * AZ EREDETI INDOK AZOTA ELAVULT, ES A KOVETKEZTETESE MA MAR HAMIS. Ez a
+ * bekezdes ugy szolt, hogy a torzs a `prisma`-t MODUL-SZINTU importbol veszi,
+ * TEHAT teszt-duplat nem lehet neki adni. Az elso fele ma is igaz (az
+ * alapertelmezeshez), a masodik nem: a `db` parameter (2026-09-04, #515) ota a
+ * torzs MERHETO, es harom allitas fut rajta.
+ *
+ * A KOVETKEZTETES VALTOZATLAN, AZ OKA MAS: egy tiszta fuggveny allitasa NEV
+ * SZERINT tud pirosodni, a torzs-teszte viszont a TELJES lancot futtatja. Ha
+ * ez a szabaly a torzsben allna, egy rontasa utan nem lehetne megmondani,
+ * MELYIK resz romlott el.
+ *
+ * ES A "PARANCS TORZSE" KIFEJEZES IS ELAVULT: a torzs 2026-09-04 ota a
+ * `medusa-projection.runner.ts` modulban all (#518), a parancs maga kilenc sor.
  *
  * MIERT KELL EZ A DONTES, ES MIERT NEM ELEG "atvinni a mezot": a
  * `manufacturerPartNumber` oszlop VEGYES tartalmu. A 09-03-as UNAS exporton

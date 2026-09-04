@@ -2,9 +2,20 @@
  * MELYIK TERMEKET KELL UJRA VETITENI: A JEL, ES AMIT NEM LAT.
  *
  * KULON MODUL, ADATBAZIS NELKUL MERHETO, ugyanabbol az okbol, amiert a
- * kategoria-, a marka- es a vonalkod-szabaly is kulon all: a parancssori felulet
- * torzse a `prisma`-t MODUL-SZINTU importbol veszi, tehat ami ott lakik, azt
- * csak eles adatbazissal lehetne megnezni.
+ * kategoria-, a marka- es a vonalkod-szabaly is kulon all. *
+ * AZ EREDETI INDOK AZOTA ELAVULT, ES A KOVETKEZTETESE MA MAR HAMIS. Ez a
+ * bekezdes ugy szolt, hogy a torzs a `prisma`-t MODUL-SZINTU importbol veszi,
+ * TEHAT teszt-duplat nem lehet neki adni. Az elso fele ma is igaz (az
+ * alapertelmezeshez), a masodik nem: a `db` parameter (2026-09-04, #515) ota a
+ * torzs MERHETO, es harom allitas fut rajta.
+ *
+ * A KOVETKEZTETES VALTOZATLAN, AZ OKA MAS: egy tiszta fuggveny allitasa NEV
+ * SZERINT tud pirosodni, a torzs-teszte viszont a TELJES lancot futtatja. Ha
+ * ez a szabaly a torzsben allna, egy rontasa utan nem lehetne megmondani,
+ * MELYIK resz romlott el.
+ *
+ * ES A "PARANCS TORZSE" KIFEJEZES IS ELAVULT: a torzs 2026-09-04 ota a
+ * `medusa-projection.runner.ts` modulban all (#518), a parancs maga kilenc sor.
  *
  * A VALASZTOTT JEL: A RELACIOKAT IS FIGYELO IDOBELYEG.
  *

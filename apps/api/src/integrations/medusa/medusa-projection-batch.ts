@@ -1,11 +1,21 @@
 /**
  * A VETITES KOTEGELESE: MIT KER A HIVO, ES MI TORTENIK, HA ELLENTMOND MAGANAK.
  *
- * MIERT KULON MODUL: a parancs torzse a `prisma`-t modul-szintu importbol veszi,
- * tehat teszt-duplat nem lehet neki adni -- a fajl mar ma is ezt dokumentalja a
- * hiany-sorok kapcsan. Az ARGUMENTUM-ERTELMEZES viszont tiszta fuggveny, es
- * pontosan az a resz, ahol egy elgepeles CSENDBEN mast futtatna, mint amit a
- * hivo akart.
+ * MIERT KULON MODUL: az ARGUMENTUM-ERTELMEZES tiszta fuggveny, es pontosan az
+ * a resz, ahol egy elgepeles CSENDBEN mast futtatna, mint amit a hivo akart. *
+ * AZ EREDETI INDOK AZOTA ELAVULT, ES A KOVETKEZTETESE MA MAR HAMIS. Ez a
+ * bekezdes ugy szolt, hogy a torzs a `prisma`-t MODUL-SZINTU importbol veszi,
+ * TEHAT teszt-duplat nem lehet neki adni. Az elso fele ma is igaz (az
+ * alapertelmezeshez), a masodik nem: a `db` parameter (2026-09-04, #515) ota a
+ * torzs MERHETO, es harom allitas fut rajta.
+ *
+ * A KOVETKEZTETES VALTOZATLAN, AZ OKA MAS: egy tiszta fuggveny allitasa NEV
+ * SZERINT tud pirosodni, a torzs-teszte viszont a TELJES lancot futtatja. Ha
+ * ez a szabaly a torzsben allna, egy rontasa utan nem lehetne megmondani,
+ * MELYIK resz romlott el.
+ *
+ * ES A "PARANCS TORZSE" KIFEJEZES IS ELAVULT: a torzs 2026-09-04 ota a
+ * `medusa-projection.runner.ts` modulban all (#518), a parancs maga kilenc sor.
  *
  * MIERT KELL EGYALTALAN: a parancs ma KOTELEZOEN ker legalabb egy
  * termekazonositot, es nincs koteg-kapcsoloja. Egy "par tucat termek" adaghoz ma
