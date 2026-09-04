@@ -59,6 +59,35 @@ describe("decideMedusaBarcode", () => {
   });
 
   /**
+   * A KIADVANY-ELOTAG ERVENYES, ES MEGSEM TERMEK-VONALKOD.
+   *
+   * A 9780301379722 valodi, ervenyes ellenorzo szamjegyu kod -- es egy ISBN,
+   * tehat konyv. A mert adatban egy ilyen all, egy olyan termeken, aminek a
+   * sajat cikkszama ugyanez.
+   *
+   * ES AZ EGYEDISEG NEM VEDI MEG: a tobbi generalt kodot ma az ismetlodes-ag
+   * tartja vissza, de az VELETLEN vedelem -- nem azert maradnak bent, mert
+   * generaltak, hanem mert tobbszor allnak. Ezert all itt kulon allitas, es
+   * ezert EGYEDIKENT adjuk at (sameValueCount 1): epp azt az esetet merjuk,
+   * amit az ismetlodes-ag NEM fogna meg.
+   */
+  it("a kiadvany-elotagu kod nem megy ki, meg akkor sem, ha egyedi es ervenyes", () => {
+    const dontes = decideMedusaBarcode("9780301379722", 1);
+
+    assert.equal(dontes.kind, "none");
+    assert.equal(dontes.field, null);
+    // NEM `skipped`: a ket kimenet MAS teendot jelent. A `skipped` a
+    // forras-oldali tisztitasra var; ez soha nem lesz termek-vonalkod.
+    assert.equal(dontes.duplicate, null);
+  });
+
+  it("a nem kiadvany-elotagu 13 jegyu kod tovabbra is kimegy", () => {
+    // ISMERT POZITIV KONTROLL a fenti allitashoz: enelkul egy olyan
+    // megvalositas is atmenne, ami MINDEN 13 jegyu kodot elutasit.
+    assert.equal(decideMedusaBarcode("4006381333931", 1).kind, "ean");
+  });
+
+  /**
    * AZ ISMETLODES A LEGFONTOSABB AG: ket kulonbozo cikkszam ugyanarra a
    * vonalkodra a boltban azt allitana, hogy a ket termek ugyanaz. Merve a
    * forrason: 50 kod 151 termeken all igy.
