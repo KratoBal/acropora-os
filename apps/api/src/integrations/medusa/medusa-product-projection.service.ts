@@ -2,11 +2,15 @@ import { Injectable } from "@nestjs/common";
 
 import {
   describeMedusaFailure,
+  MedusaAdminHttpError,
   type MedusaAdminClient,
   type MedusaProductRow,
   type MedusaSalesChannelRow,
 } from "./medusa-admin.client.js";
-import { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
+import {
+  MedusaProductLinkRepository,
+  type MedusaOrphanMark,
+} from "./medusa-product-link.repository.js";
 import {
   decidePublication,
   PUBLICATION_REASON_TEXT,
@@ -337,7 +341,19 @@ export type ProjectionStopReason =
    * leképezést sem írjuk: egy leképezés azt állítaná, hogy a termék odaát a
    * mi azonosítónkon áll, holott épp ez az, ami bizonytalan.
    */
-  | "medusa-write-failed";
+  | "medusa-write-failed"
+  /**
+   * A LEKÉPEZÉS ÁRVA: olyan bolti termékre mutat, ami már nincs.
+   *
+   * KÜLÖN ÁLL a `medusa-write-failed`-től, és pont azon a tengelyen, amin az
+   * az írást elválasztja az olvasástól. Egy írás bukásánál azért nem tudjuk a
+   * cél oldali állapotot, mert a hívás elindulhatott; egy HTTP 404-nél viszont
+   * TUDJUK: nem volt mit módosítani, tehát odaát biztosan nem változott semmi.
+   * Ugyanaz a név a kettőre azt mondaná a jelentés olvasójának, hogy „próbáld
+   * újra" -- holott ez az egyetlen írásbukás, amit az ismétlés SOHA nem old
+   * meg, és ami emberi döntést kér.
+   */
+  | "orphaned-link";
 
 /**
  * MIÉRT nincs átvihető cikkszám - és a szolgáltatás EZT MEG TUDJA MONDANI.
@@ -645,6 +661,46 @@ export class MedusaProductProjectionService {
           ...collectionPatch,
         });
       } catch (error) {
+        /**
+         * A 404 NEM ÍRÁSBUKÁS, HANEM VÁLASZ: a termék, amire a leképezésünk
+         * mutat, nincs a boltban. Itt derül ki a legolcsóbban, mert ez az a
+         * kérés, amit ÚGYIS elküldünk -- egy előzetes létezés-ellenőrzés
+         * minden termékre, minden futásban egy plusz kört fizetne azért, amit
+         * ez a válasz ingyen megmond.
+         */
+        if (error instanceof MedusaAdminHttpError && error.status === 404) {
+          /**
+           * A JEL ELMARADHAT, A DIAGNÓZIS NEM. Ha a megjelölés maga hasal el,
+           * attól még ugyanaz a baj áll fenn, és a jelentésnek ki kell
+           * mondania -- egy elnyelt árvaság rosszabb, mint egy jel nélküli.
+           */
+          let mark: MedusaOrphanMark | null = null;
+          try {
+            mark = await this.links.markOrphaned(
+              product.id,
+              existingLink.medusaProductId,
+              now,
+            );
+          } catch {
+            mark = null;
+          }
+          return {
+            action: "stopped",
+            reason: "orphaned-link",
+            details:
+              `${product.id}: a leképezés ÁRVA -- a Medusa-termék ` +
+              `(${existingLink.medusaProductId}) a bolt szerint NEM LÉTEZIK ` +
+              `(HTTP 404), tehát odaát biztosan nem változott semmi. ` +
+              `A leképezést NEM töröltük és új terméket sem hoztunk létre: ` +
+              `egy 404 mögött rendszerint SZÁNDÉKOS bolti törlés áll, amit az ` +
+              `újra létrehozás csendben visszacsinálna. ` +
+              (mark
+                ? `Megjelöltük (először így láttuk: ${mark.firstObservedAt}). `
+                : `A megjelölés nem sikerült, a leképezés érintetlen. `) +
+              `Ha a törlés szándékos volt, a leképezést a --forget-link engedi ` +
+              `el, és a következő vetítés tiszta lappal hoz létre újat.`,
+          };
+        }
         return {
           action: "stopped",
           reason: "medusa-write-failed",
