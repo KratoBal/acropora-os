@@ -30,6 +30,9 @@ function database(options: {
     onHand: Prisma.Decimal;
     reserved: Prisma.Decimal | null;
   }[];
+  /** A kategoria-fa es a besorolasok, a WYSIWYG szabalyhoz. */
+  categories?: { id: string; name: string; parentId: string | null }[];
+  productCategories?: { productId: string; categoryId: string }[];
 }) {
   const queries: Record<string, unknown>[] = [];
   const db = {
@@ -53,6 +56,26 @@ function database(options: {
       async findMany(args: Record<string, unknown>) {
         queries.push({ table: "stockItem", ...args });
         return options.stock ?? [];
+      },
+    },
+    /**
+     * A KATEGORIA-FA ES A BESOROLASOK.
+     *
+     * Alapertelmezesben URESEK, es ez a MAI viselkedest adja vissza: WYSIWYG
+     * kategoria nelkul minden termek elore rendelheto marad. A WYSIWYG
+     * szabalynak SAJAT specje van (`medusa-wysiwyg.policy.spec.ts`); itt csak
+     * annyit merunk, hogy a parancs LEKERDEZI oket es TOVABBADJA a dontest.
+     */
+    category: {
+      async findMany(args?: Record<string, unknown>) {
+        queries.push({ table: "category", ...(args ?? {}) });
+        return options.categories ?? [];
+      },
+    },
+    productCategory: {
+      async findMany(args: Record<string, unknown>) {
+        queries.push({ table: "productCategory", ...args });
+        return options.productCategories ?? [];
       },
     },
     warehouse: {
@@ -85,6 +108,61 @@ describe("Készlet-parancs: kit vetítünk", () => {
     assert.equal(resolved[0]!.onHand.toString(), "5");
     assert.equal(resolved[0]!.reserved.toString(), "2");
     assert.equal(resolved[0]!.missingRow, false);
+  });
+
+  /**
+   * A WYSIWYG SZABALY BEKOTESE, ES EZ AZ ALLITAS A SZAKADAS ELLEN VAN.
+   *
+   * A szabalynak sajat specje van (`medusa-wysiwyg.policy.spec.ts`), es a
+   * parancsnak sajat tesztjei -- a KETTO KOZOTTI kapcsolatra viszont egyik sem
+   * allit semmit. Egy tiszta fuggveny, amit senki nem hiv, pontosan ugy nez
+   * ki, mint egy bekotott: mindket oldal zold, es a termek megis elore
+   * rendelheto marad.
+   *
+   * A GYEREK-KATEGORIAT MERI, nem a szulot: merve, a hat termekbol ketto az
+   * SPS gyerek-kategoriaban all, es azok esnek ki elsokent, ha a bejaras
+   * valaha egy szintre szukul.
+   */
+  it("a WYSIWYG reszfaban allo termek NEM lesz elore rendelheto", async () => {
+    const { db } = database({
+      variants: [VARIANT],
+      categories: [
+        { id: "cat-korallok", name: "Korallok", parentId: null },
+        { id: "cat-wysiwyg", name: "WYSIWYG", parentId: "cat-korallok" },
+        { id: "cat-sps", name: "SPS", parentId: "cat-wysiwyg" },
+      ],
+      // A GYEREK-kategoria, es ALTERNATIV besoroláskent: a mert hat termekbol
+      // negynel csak igy all a kapcsolat.
+      productCategories: [{ productId: "prod-os-1", categoryId: "cat-sps" }],
+    });
+
+    const resolved = await resolveTargets("sku:teszt0001", "wh_1", db);
+
+    assert.ok(Array.isArray(resolved));
+    assert.equal(resolved[0]!.allowBackorder, false);
+  });
+
+  /**
+   * ES A MASIK IRANY, KULON ALLITASSAL: a reszfan KIVULI termek rendelheto
+   * marad. Enelkul egy "mindent kikapcsolo" bekotes is zold lenne, es az a
+   * hiba az EGESZ katalogust rendelhetetlenne tenne -- csendben.
+   */
+  it("a reszfan kivuli termek elore rendelheto marad", async () => {
+    const { db } = database({
+      variants: [VARIANT],
+      categories: [
+        { id: "cat-korallok", name: "Korallok", parentId: null },
+        { id: "cat-wysiwyg", name: "WYSIWYG", parentId: "cat-korallok" },
+      ],
+      productCategories: [
+        { productId: "prod-os-1", categoryId: "cat-korallok" },
+      ],
+    });
+
+    const resolved = await resolveTargets("sku:teszt0001", "wh_1", db);
+
+    assert.ok(Array.isArray(resolved));
+    assert.equal(resolved[0]!.allowBackorder, true);
   });
 
   /**

@@ -61,7 +61,13 @@ export interface InventoryProjectionDecision {
    * 2-t adna el - és a különbség sehol nem látszana.
    */
   fractionDropped: boolean;
-  /** Mindig `true`. Lásd `PROJECTED_ALLOW_BACKORDER`. */
+  /**
+   * Amit a bolt `allow_backorder` mezojebe irunk.
+   *
+   * ALAPERTELMEZESBEN `true` (lasd `PROJECTED_ALLOW_BACKORDER`), de a hivo
+   * felulirhatja: a WYSIWYG termekeknel `false`. A ket eset SZANDEKOSAN ket
+   * kulon dontes -- a keszlet-szabaly nem tud a kategoriakrol.
+   */
   allowBackorder: boolean;
 }
 
@@ -78,6 +84,20 @@ export class MedusaInventoryQuantityError extends Error {}
 
 export function decideInventoryProjection(
   stock: StockRowForSale,
+  /**
+   * A RENDELHETOSEG, PARAMETERKENT -- es az alapertelmezes a MAI viselkedes.
+   *
+   * Balazs dontese (2026-09-04): a WYSIWYG termekeknel a rendelhetoseg legyen
+   * KIKAPCSOLVA, es a jelolest a KATEGORIA adja. A szabaly a
+   * `medusa-wysiwyg.policy.ts` modulban all, mert a KATEGORIA-FA bejarasa
+   * onallo dontes, es kulon allitasokkal merheto.
+   *
+   * MIERT PARAMETER, ES NEM ITT SZAMOLJUK KI: ez a modul egy KESZLETSORT lat,
+   * es a kategoriakat nem. Ha a fat ide hoznank, a keszlet-szabaly es a
+   * kategoria-szabaly egyetlen fuggvenybe olvadna -- es egy rontas utan nem
+   * lehetne megmondani, MELYIK romlott el.
+   */
+  allowBackorder: boolean = PROJECTED_ALLOW_BACKORDER,
 ): InventoryProjectionDecision {
   const available = availableToSell(stock);
   const floored = available.floor();
@@ -102,6 +122,6 @@ export function decideInventoryProjection(
      * kevesebbet ad el, mint amennyi a nyilvántartásban áll.
      */
     fractionDropped: !clamped && !available.equals(floored),
-    allowBackorder: PROJECTED_ALLOW_BACKORDER,
+    allowBackorder,
   };
 }
