@@ -288,6 +288,61 @@ describe("MedusaProductProjectionService -- az indexelesi tiltas", () => {
     );
     assert.equal(f.updatedWith[0]?.metadata?.seo_robots, "noindex, nofollow");
   });
+
+  /**
+   * AZ UPDATE-AG A LEIRASRA, es ez NEM ugyanaz, mint a fenti.
+   *
+   * A fenti allitas a `seo_robots` kulcsot meri, tehat csak azt mondja ki,
+   * hogy a metaadat MINT MEZO kimegy a frissitesen. A leirasra eddig minden
+   * allitasom a create-agon allt (`createdWith`), es a ketto NEM egy ut: a
+   * `metadataPatch` mas feltetelbol keletkezik, es a `description` kulon mezo.
+   *
+   * Es epp ez az az ut, amin egy MAR ATVITT termek ujrafuttatasa megy: az elso
+   * adag termekei a regi kod szerint mentek at, tehat a boltban ma a csonka
+   * leiras all, es a javitasukhoz ugyanaz a `medusa:project` parancs fut le
+   * ujra -- csak most a link mar megvan, tehat az UPDATE-ag visz mindent.
+   * Enelkul az allitas nelkul a "ujrafuttathato" mondat kodolvasas, nem meres.
+   */
+  const updateWithBothDescriptions = async () => {
+    const f = fakes({
+      link: { productId: "prod-os-1", medusaProductId: "prod_x" },
+    });
+    await f.service.project(
+      {
+        ...product,
+        seoRobots: null,
+        description: "<p>Rovid</p>",
+        descriptionLong: "<p>Hosszu</p>",
+      },
+      now,
+    );
+    assert.equal(f.createdWith.length, 0, "meglevo linknel nem hozunk letre");
+    const torzs = f.updatedWith[0];
+    assert.ok(torzs, "az update nem futott le");
+    return torzs;
+  };
+
+  it("az update-agon a FO mezoben ott van mindket leiras", async () => {
+    const torzs = await updateWithBothDescriptions();
+
+    // Az osszefuzott fo mezo az, ami keresheto a boltban.
+    assert.ok((torzs.description ?? "").includes("Rovid"));
+    assert.ok((torzs.description ?? "").includes("Hosszu"));
+  });
+
+  /**
+   * KULON teszt, nem ugyanannak a masik fele: a `description` es a
+   * `metadataPatch` KET kulon mezo, kulon feltetellel keletkeznek, es kulon
+   * rontas donti pirosra oket. Egy tesztbe irva a kalibracio kimenete
+   * ugyanazt a nevet adna mindket rontasra, tehat nem mondana meg, melyik ut
+   * romlott el.
+   */
+  it("az update-agon a METAADAT is viszi kulon mindket leirast", async () => {
+    const torzs = await updateWithBothDescriptions();
+
+    assert.equal(torzs.metadata?.unas_short_description, "<p>Rovid</p>");
+    assert.equal(torzs.metadata?.unas_long_description, "<p>Hosszu</p>");
+  });
 });
 
 describe("MedusaProductProjectionService -- a bolti cim", () => {
