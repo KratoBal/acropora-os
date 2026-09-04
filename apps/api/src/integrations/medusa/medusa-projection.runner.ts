@@ -614,6 +614,14 @@ export async function runProjectionCli(
             unit: true,
             secondaryUnit: true,
             secondaryUnitFactor: true,
+            /**
+             * A UNAS KOMBINACIO, amibol a bolti opcio-blokk kepzodik.
+             *
+             * A SORREND SZAMIT, es ezert marad az `orderBy` valtozatlan: a
+             * tengelyek egyezeset a lista POZICIO szerint vetjuk ossze, es a
+             * bolti opcio-ertekek is ebben a sorrendben allnak elo.
+             */
+            unasVariantValues: true,
           },
         },
         /**
@@ -947,6 +955,17 @@ export async function runProjectionCli(
         description: product.description,
         descriptionLong: product.descriptionLong,
         primarySku: product.variants[0]?.sku ?? null,
+        /**
+         * MIND AZ AKTIV VALTOZAT, es nem csak az elso.
+         *
+         * A lekepezes szabalya a `medusa-variant-options.ts`-ben all, tiszta
+         * fuggvenyben; ide csak a nyers sorok kerulnek. Ugyanaz az indok, mint
+         * a publikacios allapotnal: a hivo ne dontson helyette.
+         */
+        variantRows: product.variants.map((variant) => ({
+          sku: variant.sku,
+          unasVariantValues: variant.unasVariantValues,
+        })),
         medusaCategoryIds: categories.medusaCategoryIds,
         medusaCollectionId: brand.medusaCollectionId,
         barcode: vonalkod.field
