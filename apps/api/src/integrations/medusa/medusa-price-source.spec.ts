@@ -21,9 +21,21 @@ import {
 
 const forint = (value: string) => new Prisma.Decimal(value);
 
+/*
+  A TUKOR-SOR ALAPERTELMEZESE PENZNEM NELKUL ALL, MERT A VALODI SOR IS OLYAN.
+
+  Az elso valtozat "HUF" erteket tett ide, es ezzel a fixture olyan mezot
+  toltott ki, amit a VALODI iro SOHA nem tolt ki: a
+  unas-product-sync.repository.ts sehol nem ir currency mezot a pillanatkepbe,
+  es a UNAS forras nem is kuld penznemet (a Prices blokk kulcsai 1893 termeken
+  csak Appearance, Price es Vat).
+
+  Emiatt a tesztek zoldek voltak, kozben az eles agon MINDEN termek megallt
+  volna. A fixture hazudott, nem a kod.
+*/
 const tukor = (over: Partial<MirrorPriceRow> = {}): MirrorPriceRow => ({
   grossPrice: forint("7800"),
-  currency: "HUF",
+  currency: null,
   saleGrossPrice: null,
   saleStartsAt: null,
   saleEndsAt: null,
@@ -76,6 +88,43 @@ describe("honnan jön az ár", () => {
 
     assert.equal(d.ok && d.source, "own");
     assert.equal(d.ok && d.price.sellingGrossPrice?.toString(), "9900");
+  });
+
+  it("a hiányzó pénznem FORINT, különben egyetlen ár sem menne ki", () => {
+    /*
+      EZ A LEGFONTOSABB ALLITAS EBBEN A FAJLBAN, ES EGY MERT VAK FOLTOT KOT LE.
+
+      A tukor penzneme MINDIG ures: se az import nem irja, se a forras nem kuldi.
+      Ha valtozatlanul adnank tovabb, a policy `currency-missing` okkal allna meg
+      MIND az 1894 UNAS-gazdaju termeken -- rendezett jelentes, nulla publikalt
+      ar, es az egesz szelet no-op lenne.
+
+      MI PIROSIT: a `?? SUPPORTED_CURRENCY` visszavetele pass-through alakra.
+    */
+    const d = resolvePriceSource({
+      authority: "UNAS",
+      mirror: tukor(),
+      own: nincsSajat,
+      now: most,
+    });
+
+    assert.equal(d.ok && d.price.sellingPriceCurrency, "HUF");
+  });
+
+  it("de a MEGADOTT pénznemet NEM írjuk felül", () => {
+    /*
+      TESTVER-KONTROLL: a vedelem nem veszett el, csak nem a hianyra szol. Ha a
+      mezo valaha erteket kap, egy idegen penznem a policy neven nevezett
+      megallasara fut -- egy beegetett HUF ezt csendben forintta tenne.
+    */
+    const d = resolvePriceSource({
+      authority: "UNAS",
+      mirror: tukor({ currency: "EUR" }),
+      own: nincsSajat,
+      now: most,
+    });
+
+    assert.equal(d.ok && d.price.sellingPriceCurrency, "EUR");
   });
 
   it("ISMERETLEN gazdánál egyik sem: megáll", () => {
