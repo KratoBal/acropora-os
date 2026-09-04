@@ -74,6 +74,56 @@ export function backoffMs(attemptCount: number): number {
   return Math.min(BACKOFF_TETO_MS, nyers);
 }
 
+/**
+ * A SOR HAROM ENTITAS-FAJTAT ISMER, ES A LISTA A FORRAS, NEM A TIPUS.
+ *
+ * A `SyncEntityType` union EBBOL a tombbol szuletik, nem forditva. Ez nem
+ * stilus: egy kezzel irt union mellett a FUTASIDEJU ellenorzes (`ismertSor` a
+ * tarolóban) kulon listat vezetne, es a ketto elcsuszhatna -- egy uj fajta
+ * bekerulne a tipusba, a szures pedig CSENDBEN eldobna a sorait. Igy egyetlen
+ * helyen all mind a ketto.
+ *
+ *   asset           uj eszkoz felvitele a helyszinen
+ *   worksheet       uj munkalap megnyitasa a helyszinen
+ *   worksheet-line  tetel egy MAR LETEZO munkalap piszkozatara
+ */
+export const SYNC_ENTITY_TYPES = [
+  "asset",
+  "worksheet",
+  "worksheet-line",
+] as const;
+
+export type SyncEntityType = (typeof SYNC_ENTITY_TYPES)[number];
+
+/** Ismert fajta-e, ami a tabla `entity_type` oszlopabol jott. */
+export function isSyncEntityType(value: string): value is SyncEntityType {
+  return (SYNC_ENTITY_TYPES as readonly string[]).includes(value);
+}
+
+/**
+ * TARTOZHAT-E FENYKEP EHHEZ A FAJTAHOZ -- ES MIERT NEM ELEG EGY `!==`.
+ *
+ * A `queue-runner.ts` ebbol donti el, hogy egy felment `create` sor
+ * azonosito NELKUL baj-e. Eszkoznel es munkalapnal IGEN: a sorban allo kepeket
+ * a szerver-azonosito nelkul mar semmi nem tudja megcimezni, es ez a szam az
+ * EGYETLEN jel rola. Tetelnel NEM: tetelhez nem tartozik kep, es a lap
+ * azonositoja amugy is a soron all.
+ *
+ * `Record`, nem feltetel: egy NEGYEDIK fajta felvetele igy FORDITASI HIBAT ad,
+ * nem csendes alapertelmezest. Pontosan ez a hiba tortent 2026-09-03-ig a
+ * `sectionOf` fuggvenyben, ahol az uj allapot magatol a "varakozo" szakaszba
+ * esett.
+ */
+const FENYKEP_GAZDA: Record<SyncEntityType, boolean> = {
+  asset: true,
+  worksheet: true,
+  "worksheet-line": false,
+};
+
+export function canOwnPhotos(entityType: SyncEntityType): boolean {
+  return FENYKEP_GAZDA[entityType];
+}
+
 export interface SyncQueueRow {
   /** A KLIENS-generalt muvelet-azonosito. Ez az idempotencia kulcsa. */
   id: string;
@@ -88,17 +138,24 @@ export interface SyncQueueRow {
    */
   operation: "create" | "upload-photo";
   /**
-   * MELYIK ENTITASROL VAN SZO. EGY SOR VISZI MIND A KETTOT, es ez dontes:
-   * a negy allapot, az idempotencia es a ket menet szabalya UGYANAZ, tehat ket
-   * tabla ketszer kellene karbantartani, es a ketto elcsuszhatna.
+   * MELYIK ENTITASROL VAN SZO. EGY SOR VISZI MINDET, es ez dontes: a negy
+   * allapot, az idempotencia es a ket menet szabalya UGYANAZ, tehat kulon
+   * tablakat kulon kellene karbantartani, es azok elcsuszhatnanak.
    *
    * A KULONBSEG A KULDESBEN VAN, nem a sorban: az eszkoz a felviteli
-   * vegpontra megy, a munkalap a sajatjara. Ezt a `use-queue-drain.ts` donti
-   * el, es MIND A KETTO ugyanazt a kliens-kulcsot viszi (`clientOperationId`),
-   * amit a szerver 2026-09-03 ota ismer.
+   * vegpontra megy, a munkalap a sajatjara, a tetel a lap sor-vegpontjara. Ezt
+   * a `use-queue-drain.ts` donti el, es MINDEGYIK ugyanazt a kliens-kulcsot
+   * viszi, amit a szerver 2026-09-03 ota ismer.
    */
-  entityType: "asset" | "worksheet";
-  /** A szerver-oldali azonosito, ha mar van. Uj felvitelnel `null`. */
+  entityType: SyncEntityType;
+  /**
+   * A SZERVER-OLDALI AZONOSITO, HA MAR VAN. Uj felvitelnel `null`.
+   *
+   * A `worksheet-line` sorokon SZANDEKOSAN NEM `null` mar a sorba tetelkor: ott
+   * ez a GAZDA lap azonositoja, ami mar letezik (tetelt csak meglevo lapra lehet
+   * felvenni). Ugyanaz a mezo ket iranyban: az eszkoznel es a munkalapnal a
+   * felmenetel TOLTI KI, a tetelnel a felmenetel HASZNALJA.
+   */
   entityId: string | null;
   payloadJson: string;
   createdAt: string;

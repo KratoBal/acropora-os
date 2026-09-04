@@ -225,6 +225,15 @@ function Entry({
         </Pressable>
       ) : null}
       {/*
+        HA NINCS JAVITAS GOMB EGY ELAKADT SORON, AZT MEG KELL INDOKOLNI.
+        Enelkul a szerelo azt latja, hogy baj van, es azt NEM, hogy mit tehet --
+        egy magyarazat nelkuli hianyzo gomb ugy nez ki, mint hiba a programban.
+        A mondat a `queue-inspection.ts`-bol jon, mert ott merheto.
+      */}
+      {entry.fixHint ? (
+        <Text style={styles.rowHint}>{entry.fixHint}</Text>
+      ) : null}
+      {/*
         AZ ELVETES NEM EGYENRANGU GOMB, hanem alahuzott szoveg a masik alatt.
         Ez az EGYETLEN gomb az appban, ami a szerelo sajat munkajat dobja el;
         ket egyforma gomb egymas mellett a visszafordithatatlant ugyanolyan
@@ -240,6 +249,7 @@ function Entry({
 }
 
 const styles = StyleSheet.create({
+  rowHint: { color: "#91afbe", fontSize: 13, lineHeight: 19, marginTop: 8 },
   discardText: {
     color: "#ffb4ab",
     fontSize: 13,

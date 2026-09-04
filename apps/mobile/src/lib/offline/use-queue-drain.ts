@@ -6,10 +6,12 @@ import {
   type CreateAssetInput,
 } from "@/lib/api/assets";
 import {
+  addWorksheetLine,
   createWorksheet,
   uploadWorksheetDocuments,
   type CreateWorksheetInput,
 } from "@/lib/api/worksheets";
+import { readQueuedWorksheetLine } from "@/lib/worksheets/worksheet-line";
 import { ApiError } from "@/lib/api/client";
 
 import { drainOfflineQueue } from "./drain-offline-queue";
@@ -50,6 +52,7 @@ export function useQueueDrain(isOnline: boolean): string | null {
           send: async (row) => {
             if (row.operation === "upload-photo") return kepetKuld(row);
             if (row.entityType === "worksheet") return munkalapotKuld(row);
+            if (row.entityType === "worksheet-line") return tetelKuld(row);
             try {
               const letrejott = await createAsset({
                 ...(JSON.parse(row.payloadJson) as CreateAssetInput),
@@ -191,6 +194,66 @@ async function munkalapotKuld(row: SyncQueueRow): Promise<{
      * UGYANAZ A KETTEVALASZTAS, MINT AZ ESZKOZNEL: a `null` azt jelenti, hogy
      * a keres el sem jutott a szerverig -- azt a sor ujraprobalja. Egy
      * valaszolt 4xx viszont NEM: azt a `decideDrain` konfliktusnak sorolja.
+     */
+    return {
+      httpStatus: cause instanceof ApiError ? cause.status : null,
+      error: cause instanceof Error ? cause.message : String(cause),
+    };
+  }
+}
+
+/**
+ * EGY MUNKALAP-TETEL FELKULDESE A SORBOL.
+ *
+ * === AMIBEN ELTER A MASIK KETTOTOL ===
+ *
+ * Itt a GAZDA mar letezik: a lap azonositoja a soron all (`entityId`), es nem a
+ * valaszbol keletkezik. Ezert nem is ad vissza `entityId`-t: nincs uj entitas,
+ * amihez barmit cimezni kellene, es a `queue-runner.ts` ezt a `canOwnPhotos`
+ * lekepezesbol tudja -- e nelkul minden felment tetel „azonosito nelkul
+ * felment rogzitesnek" latszana.
+ *
+ * === A TETEL AZONOSITOJA A SOR KULCSA ===
+ *
+ * Nem a payloadbol jon, hanem a `row.id` mezobol, es ez a lenyeg: a szerver
+ * EPP ERRE idempotens (`alreadyPresent`). Ha a valasz elveszik es a sor
+ * ujrakuld, a MEGLEVO tetelt talalja meg. Ket kulon kulcs mellett az
+ * ujrakuldes masodik tetelt hozna letre ugyanarrol a munkarol.
+ *
+ * === A KET ELUTASITAS KULON, MERT MAS A TEENDO ===
+ *
+ * Ertelmezhetetlen torzs vagy hianyzo gazda -> 422, vagyis KONFLIKTUS: ember
+ * kell hozza, es az ujraprobalas ugyanezt adna orokke. Ezek a sorok NEM
+ * keletkezhetnek a mai kodbol (a sorba tetel mind a kettot kitolti), es epp
+ * ezert kell hangosnak lenniuk: ha megis eloall, az egy MASIK hiba nyoma, nem
+ * halozati zaj.
+ */
+async function tetelKuld(row: SyncQueueRow): Promise<{
+  httpStatus: number | null;
+  error: string | null;
+}> {
+  const payload = readQueuedWorksheetLine(row.payloadJson);
+  if (payload === null) {
+    return {
+      httpStatus: 422,
+      error: "A tétel sora értelmezhetetlen, ezért nem küldjük el.",
+    };
+  }
+  if (row.entityId === null) {
+    return {
+      httpStatus: 422,
+      error: "A tételhez nem tartozik munkalap, ezért nincs hova felküldeni.",
+    };
+  }
+  try {
+    await addWorksheetLine(row.entityId, { id: row.id, ...payload });
+    return { httpStatus: 201, error: null };
+  } catch (cause) {
+    /**
+     * UGYANAZ A KETTEVALASZTAS, MINT A MASIK KETTONEL: a `null` azt jelenti,
+     * hogy a keres el sem jutott a szerverig -- azt a sor ujraprobalja. Egy
+     * valaszolt 409 viszont NEM: azt a `decideDrain` konfliktusnak sorolja, es
+     * a tetelnel ez EGYET jelent -- a lap kozben lezarult.
      */
     return {
       httpStatus: cause instanceof ApiError ? cause.status : null,

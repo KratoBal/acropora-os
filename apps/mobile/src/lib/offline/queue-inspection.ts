@@ -1,7 +1,8 @@
 import { readPhotoPayload } from "./photo-queue";
 import { queueDiscardEligibility } from "./queue-discard";
 import { queueResendEligibility } from "./queue-resend";
-import type { SyncQueueRow } from "./sync-queue";
+import type { SyncEntityType, SyncQueueRow } from "./sync-queue";
+import { readQueuedWorksheetLine } from "../worksheets/worksheet-line";
 
 /**
  * MI ALL A SORBAN, EMBERI ALAKBAN -- ES MIT LEHET VELE KEZDENI.
@@ -26,9 +27,9 @@ export type QueueSection = "stalled" | "conflict" | "waiting" | "discarded";
 export interface QueueEntryView {
   id: string;
   section: QueueSection;
-  /** MI EZ: „Eszköz", „Munkalap" vagy „Fénykép". */
+  /** MI EZ: „Eszköz", „Munkalap", „Munkalap-tétel" vagy „Fénykép". */
   kind: string;
-  /** MELYIK: az eszkoz neve, a lap targya, vagy a fajlnev. */
+  /** MELYIK: az eszkoz neve, a lap targya, a tetel megnevezese, vagy a fajlnev. */
   title: string;
   /** Mikor keletkezett, ISO alakban -- a keperno formazza. */
   createdAt: string;
@@ -65,6 +66,20 @@ export interface QueueEntryView {
    * ugyanolyan konnyen elerheto, mint a javitas.
    */
   canDiscard: boolean;
+  /**
+   * MIERT NINCS ITT JAVITAS GOMB -- CSAK AZ ELAKADT SOROKON.
+   *
+   * `null` mindenhol maszhol, es ez nem opcionalis reszlet: egy varakozo soron
+   * a „nincs mit javitani rajta" mondat ZAJ, es a valodi teendot (varni) nyomna
+   * el. Az ELAKADT soron viszont a hianyzo gomb magyarazat nelkul ugy nez ki,
+   * mint egy hiba a programban -- a szerelo latja, hogy baj van, es nem latja,
+   * hogy mit tehet.
+   *
+   * Acrobot dontese, 2026-09-04: a munkalap-tetel elakadasat ELFOGADJUK
+   * (az egyetlen kijarat az elvetes), DE a keperno mondja meg, MIERT, es azt is,
+   * hogy a beirt szoveg megmarad, amig el nem veti.
+   */
+  fixHint: string | null;
 }
 
 export interface QueueErrorView {
@@ -132,11 +147,33 @@ interface WorksheetPayloadLike {
 }
 
 /**
+ * A FAJTA NEVE, KIMERITO LEKEPEZESSEL -- ES EZ NEM STILUS.
+ *
+ * Korabban a fajta egy `if`-lanc ALAPERTELMEZESEBOL jott: ami nem fenykep es
+ * nem munkalap, az „Eszköz". Egy HARMADIK fajta igy MAGATOL eszkoz nevet
+ * kapott volna, es a szerelo a sorban egy munkalap-tetelt eszkozkent latott
+ * volna. A fordito errol nem szolt volna: a fuggveny a bovulestol tovabbra is
+ * lefordul, csak MAST mond.
+ *
+ * `Record`, tehat egy NEGYEDIK fajta felvetele forditasi hiba. Ugyanaz az alak,
+ * amit a szerveren a `document-store.ts` kapott, ugyanezert.
+ */
+const FAJTA_NEVE: Record<SyncEntityType, string> = {
+  asset: "Eszköz",
+  worksheet: "Munkalap",
+  "worksheet-line": "Munkalap-tétel",
+};
+
+/**
  * MI EZ A SOR, EGY SZOBAN ES EGY CIMBEN.
  *
  * A CIM A PAYLOADBOL JON, mert a szerelonek az mond valamit: „Szivattyú" vagy
  * „Szivattyú csere". Egy muvelet-azonosito (`asset-create:V2196:...`) technikai
  * adat, amivel az iroda tud dolgozni, a helyszinen allo ember nem.
+ *
+ * A FAJTA ISMERT: a sorok a `queue-store.ts` `ismertSor` szuresen at jonnek,
+ * ami ismeretlen `entity_type` erteket ki sem enged. Ezert nincs itt „ismeretlen
+ * fajta" ag: az az ag SOHA nem futna le, tehat merni sem lehetne.
  */
 export function describeQueueEntry(row: SyncQueueRow): {
   kind: string;
@@ -146,19 +183,35 @@ export function describeQueueEntry(row: SyncQueueRow): {
     const payload = readPhotoPayload(row.payloadJson);
     return { kind: "Fénykép", title: payload?.name ?? "ismeretlen kép" };
   }
+  const kind = FAJTA_NEVE[row.entityType];
   if (row.entityType === "worksheet") {
     const payload = parse<WorksheetPayloadLike>(row.payloadJson);
     return {
-      kind: "Munkalap",
+      kind,
       title:
         typeof payload?.subject === "string" && payload.subject.trim()
           ? payload.subject
           : "tárgy nélkül",
     };
   }
+  if (row.entityType === "worksheet-line") {
+    /**
+     * A TETEL CIME A MENNYISEGET IS VISZI, es ez nem diszites: ugyanaz a munka
+     * ket kulon tetelkent is allhat a soron („Szivattyú csere, 2 óra" es
+     * „Szivattyú csere, 1 óra"). Egy csupasz megnevezes mellett a szerelo nem
+     * tudna kozottuk valasztani, amikor elvet valamelyiket.
+     */
+    const payload = readQueuedWorksheetLine(row.payloadJson);
+    return {
+      kind,
+      title: payload
+        ? `${payload.description} (${payload.quantity} ${payload.unit})`
+        : "olvashatatlan tétel",
+    };
+  }
   const payload = parse<AssetPayloadLike>(row.payloadJson);
   return {
-    kind: "Eszköz",
+    kind,
     title:
       typeof payload?.name === "string" && payload.name.trim()
         ? payload.name
@@ -181,6 +234,7 @@ export function toQueueEntries(
   return rows.map((row) => {
     const { kind, title } = describeQueueEntry(row);
     const section = sectionOf(row.state);
+    const javitas = queueResendEligibility(row);
     return {
       id: row.id,
       section,
@@ -190,8 +244,16 @@ export function toQueueEntries(
       attemptCount: row.attemptCount,
       error: describeQueueError(row.lastError),
       canRetry: section === "stalled",
-      canFix: queueResendEligibility(row).ok,
+      canFix: javitas.ok,
       canDiscard: queueDiscardEligibility(row).ok,
+      /**
+       * A MONDAT MAR MEGVOLT, CSAK SENKI NEM OLVASTA. A `queueResendEligibility`
+       * minden elutasitashoz irt egy emberi indoklast, es a keperno eddig CSAK
+       * az `ok` mezot hasznalta belole -- vagyis a magyarazat keszen allt, es a
+       * szerelohoz nem jutott el. Ugyanaz a szakadas-alak, mint amikor egy
+       * vegpont letezik, es senki nem hivja.
+       */
+      fixHint: section === "conflict" && !javitas.ok ? javitas.message : null,
     };
   });
 }

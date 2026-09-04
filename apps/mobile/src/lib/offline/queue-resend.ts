@@ -44,9 +44,28 @@
  * ott a gyakorlatban nem keletkezik utkozes, es akkor ez a sor marad, de az
  * indoka valtozik.
  *
+ * === A TETELNEL AZ INDOK MAS, ES EZERT MAS A MONDAT IS ===
+ *
+ * A munkalap-TETEL (`worksheet-line`) sora ugyanugy nem javithato, de NEM
+ * ugyanabbol az okbol, es egy kozos mondat itt HAZUDNA. A tetel konfliktusa
+ * merve EGYFELE lehet: a szerver 409-et ad, ha a lap mar nem piszkozat
+ * (`requireDraftVersionId`, illetve a `version-gone` ag). Merve 2026-09-04 a
+ * `worksheets.service.ts`-ben: ezen az uton MAS conflict-forras nincs, a 422-t
+ * pedig ez a modul sehol nem allitja elo.
+ *
+ * Vagyis a tetel torzsenek atirasa SEMMIN nem segitene: nem a szoveggel van
+ * baj, hanem azzal, hogy a lap kozben lezarult. Az "ezt csak az irodabol lehet
+ * feloldani" mondat itt azt igerne, hogy valaki mas majd atengedi -- pedig
+ * lezart lapra tetel egyaltalan nem vehet fel. A kijarat az elvetes, es azt a
+ * kepernyonek MEG KELL INDOKOLNIA (acrobot dontese, 2026-09-04).
+ *
  * A tipusok SAJAT, szerkezeti alakok: ez a fajl a teszt-forditasba is bekerul,
- * az pedig nem ismeri az `@/` aliast.
+ * az pedig nem ismeri az `@/` aliast. A fajta-listat viszont a `sync-queue.ts`
+ * adja, relativ importtal: egy sajat masolat epp azt a nema elcsuszast hozna
+ * vissza, ami ellen az a lista keszult.
  */
+
+import { isSyncEntityType, type SyncEntityType } from "./sync-queue";
 
 /** Amennyit egy sorbol ez a modul olvas. */
 export interface ResendableRowLike {
@@ -91,16 +110,43 @@ export function queueResendEligibility(
         "Ez egy fénykép, nincs mit átírni rajta. A képet a rögzítés után lehet újra feltölteni.",
     };
 
-  if (row.entityType !== "asset")
+  /**
+   * ISMERETLEN FAJTA: NEM JAVITHATO, es nem is talalgatunk rola.
+   *
+   * Ide egy UJABB valtozat altal irt sor eshet. A lekepezes lent KIMERITO
+   * (`Record`), tehat ha az uj fajtat felvettuk a listara, ez az ag nem is
+   * fut -- a fordito viszont KOVETELI, hogy a mondatat megirjuk.
+   */
+  if (!isSyncEntityType(row.entityType))
     return {
       ok: false,
       reason: "unsupported-entity",
       message:
-        "Ezt a felvitelt egyelőre csak az irodából lehet feloldani. Szándékos szűkítés: ma az eszköz-felvitel javítható a telefonon.",
+        "Ezt a felvitelt ez a verzió nem ismeri, ezért nem tudja javítani. Frissítsd az appot, és ha marad, szólj.",
     };
+
+  const elutasitas = JAVITAS_ELUTASITAS[row.entityType];
+  if (elutasitas !== null)
+    return { ok: false, reason: "unsupported-entity", message: elutasitas };
 
   return { ok: true };
 }
+
+/**
+ * FAJTANKENT MIERT NEM JAVITHATO -- `null`, ha javithato.
+ *
+ * `Record`, nem `if`-lanc: egy uj fajta felvetele igy FORDITASI HIBAT ad. Egy
+ * `!== "asset"` alaku feltetel mellett minden uj fajta MAGATOL a munkalap
+ * mondatat kapta volna meg, es az a mondat rola HAMIS -- pontosan az a nema
+ * visszaeses, amit a `sectionOf` fuggvenynel mar egyszer megmertunk.
+ */
+const JAVITAS_ELUTASITAS: Record<SyncEntityType, string | null> = {
+  asset: null,
+  worksheet:
+    "Ezt a felvitelt egyelőre csak az irodából lehet feloldani. Szándékos szűkítés: ma az eszköz-felvitel javítható a telefonon.",
+  "worksheet-line":
+    "Ezt a tételt nem a szövege miatt utasította el a szerver, hanem azért, mert a munkalap időközben lezárult, és lezárt lapra tétel nem vehető fel. Átírni tehát nincs mit rajta: vagy az irodában nyitnak új verziót a lapból, vagy elveted. Amit beírtál, addig itt marad.",
+};
 
 /** Amit az ujrakuldes a soron megvaltoztat. */
 export interface QueueResendPatch {
