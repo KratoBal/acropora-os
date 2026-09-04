@@ -23,6 +23,12 @@ const FILE = {
   buffer: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46]),
 } as unknown as Express.Multer.File;
 
+const PNG_FILE = {
+  originalname: "kep.png",
+  mimetype: "image/png",
+  buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+} as unknown as Express.Multer.File;
+
 function repositoryThat(overrides: Record<string, unknown> = {}) {
   return {
     detail: async () => ({ id: "worksheet-1" }),
@@ -33,6 +39,27 @@ function repositoryThat(overrides: Record<string, unknown> = {}) {
 }
 
 describe("fénykép a munkalaphoz", () => {
+  it("PNG bájtoknál PNG típust ír, nem a munkalap JPEG alapértelmezését", async () => {
+    delete process.env.DOCUMENT_STORE_ROOT;
+    const contentTypes: string[] = [];
+    const service = new WorksheetsService(
+      repositoryThat({
+        addDocument: async (input: { contentType: string }) => {
+          contentTypes.push(input.contentType);
+          return { id: "doc-1" };
+        },
+      }),
+      undefined,
+      new InMemoryDocumentStore(),
+    );
+
+    await service.addDocument("worksheet-1", "PHOTO", PNG_FILE, "user-1", {
+      kind: "internal",
+    });
+
+    assert.deepEqual(contentTypes, ["image/png"]);
+  });
+
   it("a tároló KIKAPCSOLT állapotában az adatbázisba megy", async () => {
     delete process.env.DOCUMENT_STORE_ROOT;
     let written: { content: unknown; storageKey?: unknown } | null = null;

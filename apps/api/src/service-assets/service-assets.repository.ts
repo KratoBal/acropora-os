@@ -1759,7 +1759,7 @@ export class ServiceAssetsRepository extends Repository {
       id: document.id,
       type: document.type,
       fileName: document.fileName,
-      contentType: "application/pdf",
+      contentType: documentedContentType(document.contentType),
       sizeBytes: document.sizeBytes,
       sha256: document.sha256,
       uploadedBy: document.uploadedBy
@@ -1771,4 +1771,18 @@ export class ServiceAssetsRepository extends Repository {
       createdAt: document.createdAt.toISOString(),
     };
   }
+}
+
+/** A letöltő/DTO csak a feltöltő által ténylegesen támogatott típusokat ismeri. */
+export function documentedContentType(
+  contentType: string,
+): AssetDocumentSummary["contentType"] {
+  if (
+    contentType === "application/pdf" ||
+    contentType === "image/jpeg" ||
+    contentType === "image/png"
+  )
+    return contentType;
+
+  throw new Error(`Nem támogatott tárolt dokumentumtípus: ${contentType}`);
 }
