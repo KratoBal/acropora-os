@@ -282,6 +282,7 @@ export type {
   UnasApiStock,
   UnasApiVariantStock,
   UnasPackageComponent,
+  UnasSimilarProduct,
   UnasVariantValue,
   UnasProductIdentitySnapshot,
   UnasProductSyncAction,
