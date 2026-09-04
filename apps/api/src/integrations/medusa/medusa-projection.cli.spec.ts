@@ -4,6 +4,7 @@ import { glob } from "node:fs/promises";
 import { describe, it } from "node:test";
 
 import {
+  projectValtozatMezok,
   projectUnasChannelRow,
   describeForgottenLink,
   describeSkuLookupFailure,
@@ -735,6 +736,42 @@ describe("projectUnasChannelRow", () => {
       seoDescription: null,
       seoKeywords: null,
       unasProductUrl: null,
+    });
+  });
+});
+
+describe("projectValtozatMezok", () => {
+  it("atviszi a mertekegyseget es a masodlagos egyseget", () => {
+    const eredmeny = projectValtozatMezok({
+      unit: "ml",
+      secondaryUnit: "karton",
+      secondaryUnitFactor: { toString: () => "12" },
+    });
+
+    assert.equal(eredmeny.unit, "ml");
+    assert.equal(eredmeny.secondaryUnit, "karton");
+  });
+
+  /**
+   * A SZORZO SZOVEGGE ALAKITASA AZ EGYETLEN NEM TRIVIALIS LEPES, es ezert all
+   * kulon allitasban: a Prisma `Decimal` alakja HAT tizedest tart, es egy
+   * szam-konverzio csendben kerekitene. A `toString` a TAROLT erteket adja.
+   */
+  it("a szorzot a tarolt alakjaban viszi at, nem szamma alakitva", () => {
+    const eredmeny = projectValtozatMezok({
+      unit: null,
+      secondaryUnit: null,
+      secondaryUnitFactor: { toString: () => "12.500000" },
+    });
+
+    assert.equal(eredmeny.secondaryUnitFactor, "12.500000");
+  });
+
+  it("hianyzo valtozatnal mind a harom ertek null", () => {
+    assert.deepEqual(projectValtozatMezok(undefined), {
+      unit: null,
+      secondaryUnit: null,
+      secondaryUnitFactor: null,
     });
   });
 });
