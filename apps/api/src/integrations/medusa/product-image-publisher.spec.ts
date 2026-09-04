@@ -25,6 +25,8 @@ function kep(n: number, storageKey: string | null = "van"): PublishableImage {
 
 async function deps(options: {
   tarolt?: number[];
+  /** Nyers bajtok EGY kephez, ha nem a JPEG-fejleces alapertelmezes kell. */
+  nyersBajtok?: { n: number; bytes: Uint8Array };
   linkelt?: Record<string, string>;
   feltoltesDob?: boolean;
   feltoltesHttpHiba?: { status: number; body: string };
@@ -37,10 +39,35 @@ async function deps(options: {
         ownerId: PROD,
         documentId: productImageDocumentId(kep(n).url),
       },
-      new Uint8Array([n]),
+      /**
+       * VALODI JPEG-FEJLEC, es ez nem koritmenyeskedes: a publikalo 2026-09-04
+       * ota a BAJTOKBOL ismeri fel a tipust, es amit nem ismer fel, azt NEM
+       * tolti fel. Egy `[n]` egybajtos fixtura ezert MINDEN feltoltest
+       * blokkolna -- es a hiba ugy nezne ki, mintha a feltoltes romlott volna
+       * el.
+       *
+       * Az utolso bajt tovabbra is `n`, hogy a kepek megkulonboztethetok
+       * maradjanak (a meret- es sorrend-allitasok arra epulnek).
+       */
+      new Uint8Array([0xff, 0xd8, 0xff, 0xe0, n]),
     );
 
-  const feltoltott: { filename: string; meret: number }[] = [];
+  if (options.nyersBajtok)
+    await store.put(
+      {
+        owner: "product",
+        ownerId: PROD,
+        documentId: productImageDocumentId(kep(options.nyersBajtok.n).url),
+      },
+      options.nyersBajtok.bytes,
+    );
+
+  const feltoltott: {
+    filename: string;
+    meret: number;
+    jeloloBajt: number | undefined;
+    contentType: string;
+  }[] = [];
   const linkelt = new Map(Object.entries(options.linkelt ?? {}));
 
   const d: PublishDeps = {
@@ -57,6 +84,9 @@ async function deps(options: {
         feltoltott.push({
           filename: file.filename,
           meret: file.content.length,
+          /** A fixtura utolso bajtja azonositja, MELYIK kep ment ki. */
+          jeloloBajt: file.content[file.content.length - 1],
+          contentType: file.contentType,
         });
         return {
           id: `fajl_${file.filename}`,
@@ -189,12 +219,76 @@ describe("a termékképek kivitele a kirakatba", () => {
     assert.equal(f.linkelt.size, 0, "bukás után is rögzített leképezést");
   });
 
+  /**
+   * A TIPUS A BAJTOKBOL MEGY KI, ES A NEV IS AHHOZ IGAZODIK.
+   *
+   * A publikalo 2026-09-04-ig KEMENYEN `image/jpeg` tipust kuldott (a hivo
+   * mezojet), mert a `ProductImage` soron nincs tipus-mezo. Ez az allitas a
+   * BEKOTEST meri: a felismero kulon modulban all, sajat tesztekkel -- de egy
+   * tiszta fuggveny, amit senki nem hiv, pontosan ugy nez ki, mint egy
+   * bekotott.
+   */
+  it("PNG bajtoknal PNG tipus es .png nev megy ki", async () => {
+    const f = await deps({
+      nyersBajtok: {
+        n: 3,
+        bytes: new Uint8Array([
+          0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x03,
+        ]),
+      },
+    });
+
+    await publishProductImages(PROD, [kep(3)], f.deps);
+
+    assert.equal(f.feltoltott.length, 1);
+    assert.equal(f.feltoltott[0]?.contentType, "image/png");
+    assert.match(f.feltoltott[0]?.filename ?? "", /\.png$/);
+  });
+
+  /**
+   * AMIT NEM ISMERUNK FEL, AZT NEM TOLTJUK FEL -- ES A KIHAGYAS HANGOS.
+   *
+   * Ez VALTOZAS a korabbi viselkedeshez kepest: eddig minden bajtsor kiment,
+   * `image/jpeg` tipussal. Egy nem-kep fajlt kikuldeni a boltba rosszabb, mint
+   * kihagyni, es a `blockedBy` sor a jelentesbe kerul -- a termek tobbi mezoje
+   * ettol meg kimegy.
+   */
+  it("fel nem ismert tartalmat NEM tolt fel, es megnevezi", async () => {
+    const f = await deps({
+      nyersBajtok: { n: 4, bytes: new Uint8Array([0x3c, 0x21, 0x44, 0x4f]) },
+    });
+
+    const eredmeny = await publishProductImages(PROD, [kep(4)], f.deps);
+
+    assert.equal(
+      f.feltoltott.length,
+      0,
+      "fel nem ismert tartalmat toltott fel",
+    );
+    assert.deepEqual(eredmeny.urls, []);
+    assert.match(eredmeny.blockedBy ?? "", /nem ismerhető fel képként/);
+  });
+
   it("a bájtok a tárolóból jönnek, nem a forrás URL-ről", async () => {
     const f = await deps({ tarolt: [7] });
 
     await publishProductImages(PROD, [kep(7)], f.deps);
 
-    assert.equal(f.feltoltott[0]?.meret, 1, "nem a tárolt bájtokat küldte");
+    /**
+     * A JELOLO BAJTOT nezzuk, nem a MERETET.
+     *
+     * A meret 2026-09-04-ig 1 volt, mert a fixtura egyetlen bajtot tarolt.
+     * Azota a tartalomnak valodi kep-fejlecet kell viselnie (a publikalo a
+     * bajtokbol ismeri fel a tipust), tehat a meret a fixtura reszlete lett --
+     * es egy allitas, ami egy fixtura-reszletre epul, a kovetkezo valtozasnal
+     * ujra eltorik. Az utolso bajt viszont AZT mondja meg, amit az allitas
+     * neve iger: MELYIK kep bajtjai mentek ki.
+     */
+    assert.equal(
+      f.feltoltott[0]?.jeloloBajt,
+      7,
+      "nem a tárolt bájtokat küldte",
+    );
   });
 });
 

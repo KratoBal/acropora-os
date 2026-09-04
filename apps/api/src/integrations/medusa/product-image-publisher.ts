@@ -1,3 +1,7 @@
+import {
+  detectImageContentType,
+  imageFileNameFor,
+} from "./image-content-type.js";
 import type { DocumentStore } from "../../service-assets/document-store/document-store.js";
 import type {
   MedusaAdminClient,
@@ -116,12 +120,41 @@ export async function publishProductImages(
           `(${image.storageKey}) -- a mester sérült`,
       };
 
+    /**
+     * A TIPUS A BAJTOKBOL, NEM A MEZOBOL.
+     *
+     * A hivo `image.contentType` mezoje 2026-09-04-ig KEMENYEN `image/jpeg`
+     * volt minden kepre, mert a `ProductImage` soron nincs tipus-mezo -- egy
+     * PNG is JPEG-kent ment fel. A bajtok viszont megmondjak.
+     *
+     * ES HA NEM ISMERJUK FEL, NEM TOLTJUK FEL. Ez VALTOZAS a mai
+     * viselkedeshez kepest, es szandekos: egy fel nem ismert bajtsor
+     * valoszinuleg nem is kep, es egy nem-kep fajlt kikuldeni a boltba
+     * rosszabb, mint kihagyni. A kihagyas HANGOS -- a `blockedBy` sor a
+     * jelentesbe kerul, es a termek tobbi mezoje ettol meg kimegy.
+     */
+    const felismert = detectImageContentType(bytes);
+    if (felismert === null)
+      return {
+        urls: [],
+        uploaded,
+        reused,
+        blockedBy:
+          `a fájl tartalma nem ismerhető fel képként (${image.url}) -- ` +
+          `nem töltjük fel, mert a típusát nem tudjuk megmondani`,
+      };
+
     let file: MedusaUploadedFile;
     try {
       file = await deps.medusa.uploadFile({
-        filename: image.fileName,
+        /**
+         * A NEV KITERJESZTESE IS A TARTALOMHOZ IGAZODIK, es ez a MASODIK
+         * lehetseges okot celozza: ha a bolt a fajlnevbol dolgozik, egy
+         * `.jpg`-re vegzodo PNG ugyanugy rossz tipust kapna.
+         */
+        filename: imageFileNameFor(image.fileName, felismert),
         content: Buffer.from(bytes),
-        contentType: image.contentType,
+        contentType: felismert,
       });
     } catch (error) {
       /**
