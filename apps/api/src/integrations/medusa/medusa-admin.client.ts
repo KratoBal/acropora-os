@@ -297,6 +297,25 @@ export interface MedusaCollectionRow {
   external_id: string | null;
 }
 
+/**
+ * Amit egy gyujtemeny letrehozasakor kuldunk.
+ *
+ * Merve a telepitett 2.19.0 `CreateCollection` validatorabol: `title` kotelezo,
+ * a `handle`, az `external_id` es a `metadata` elhagyhato. NINCS `is_active`
+ * mezoje -- ellentetben a kategoriaval, ahol az elhagyasa csendben inaktiv sort
+ * hozott volna letre.
+ *
+ * A `handle` es az `external_id` NALUNK MEGIS KOTELEZO, es ez dontes: a handle
+ * nelkul a Medusa a cimbol szarmaztatna egyet (tehat a marka-oldal cime nem a
+ * mi `slug` mezonk lenne), a kulso azonosito nelkul pedig egy kesobbi futas nem
+ * tudna megmondani, hogy ezt a gyujtemenyt MI hoztuk-e letre.
+ */
+export interface MedusaCollectionInput {
+  title: string;
+  handle: string;
+  external_id: string;
+}
+
 export interface MedusaCollectionListResult {
   rows: MedusaCollectionRow[];
   /** Igaz, ha a valasz kimeritette a limitet, tehat lehet tobb is. */
@@ -431,6 +450,18 @@ export interface MedusaAdminClient {
   listProductCategories(): Promise<MedusaCategoryListResult>;
   /** Egy kategoria letrehozasa. A valaszban jon a Medusa-azonosito. */
   createProductCategory(input: MedusaCategoryInput): Promise<MedusaCategoryRow>;
+  /**
+   * A GYUJTEMENYEK LISTAJA. NALUNK EZ A MARKA.
+   *
+   * Az utvonal `/admin/collections`, nem `/admin/product-collections` -- a
+   * modell neve `ProductCollection`, tehat a ket vegpont NEM egy mintat kovet.
+   * A reszletek a megvalositas mellett allnak.
+   */
+  listProductCollections(): Promise<MedusaCollectionListResult>;
+  /** Egy gyujtemeny letrehozasa. EZ IR A BOLTI OLDALRA. */
+  createProductCollection(
+    input: MedusaCollectionInput,
+  ): Promise<MedusaCollectionRow>;
   probe(): Promise<void>;
   /**
    * Egy sales channel, azonosító szerint.
@@ -901,6 +932,24 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
     }>(`/admin/collections?${params.toString()}`);
     const rows = body.collections ?? [];
     return { rows, truncated: rows.length >= COLLECTION_LIST_LIMIT };
+  }
+
+  /**
+   * EGY GYUJTEMENY LETREHOZASA. EZ IR A BOLTI OLDALRA.
+   *
+   * A valasz kulcsa `collection` (nem tobbes szam), es a statusz 200, nem 201 --
+   * merve a telepitett 2.19.0 utvonalabol. A `request` a nem-2xx valaszt ugyis
+   * kivetelle alakitja, tehat a statusz szama itt nem dont; azert all itt, mert
+   * a 201-re iras hibas feltevés lenne, ha valaha valaki ellenorizni akarna.
+   */
+  async createProductCollection(
+    input: MedusaCollectionInput,
+  ): Promise<MedusaCollectionRow> {
+    const body = await this.request<{ collection: MedusaCollectionRow }>(
+      "/admin/collections",
+      { method: "POST", body: JSON.stringify(input) },
+    );
+    return body.collection;
   }
 
   async createProductCategory(
