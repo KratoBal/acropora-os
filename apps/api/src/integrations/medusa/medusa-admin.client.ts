@@ -152,6 +152,16 @@ export interface MedusaProductInput {
     sku: string;
     options: Record<string, string>;
     /**
+     * A VONALKOD, ES A HOSSZ DONTI EL A MEZOT: 13 szamjegy `ean`, 12 szamjegy
+     * `upc`. Mind a ketto SEARCHABLE a cel oldalon (merve a telepitett 2.19.0
+     * variant-modelljen), tehat a vevo altal beirt kod ezen mulik.
+     *
+     * Elhagyhato, es az elhagyas NEM ugyanaz, mint az ures ertek: amelyik
+     * termeknek nincs ervenyes vonalkodja, annal a kulcs ki sem megy.
+     */
+    ean?: string;
+    upc?: string;
+    /**
      * A Medusa termék-létrehozó végpontja MEGKÖVETELI ezt a mezőt: nélküle
      * `Invalid request: Field 'variants, 0, prices' is required` jön, HTTP
      * 400-zal (mérve a stage-en, 2026-08-25).

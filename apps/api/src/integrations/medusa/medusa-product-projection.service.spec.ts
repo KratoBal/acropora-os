@@ -36,6 +36,7 @@ const product: ProjectableProduct = {
   /** A fixtura NEM ad teljes kategoria-listat: a mezo igy nem kerul a torzsbe. */
   medusaCategoryIds: null,
   medusaCollectionId: null,
+  barcode: null,
   slug: null,
   seoRobots: null,
   seoTitle: null,
@@ -159,6 +160,7 @@ const MEZO_SORSA: Record<string, "atmegy" | "szandekosan-nem"> = {
   images: "atmegy", // -> images (sorrendben) es thumbnail (az elso elem)
   medusaCategoryIds: "atmegy", // -> categories, ha van teljes lista
   medusaCollectionId: "atmegy", // -> collection_id (a marka gyujtemenye)
+  barcode: "atmegy", // -> a valtozat ean vagy upc mezoje, hossz szerint
   /**
    * A publikacios ALLAPOT bemenet, nem mezo: belole a `status` es a
    * `sales_channels` szuletik, a szolgaltatas dontese szerint.
@@ -196,6 +198,7 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
         unasProductUrl: "https://bolt.test/regi-lap",
         medusaCategoryIds: ["cat_1"],
         medusaCollectionId: "pcol_1",
+        barcode: { field: "ean" as const, value: "4006381333931" },
         images: ["https://kep/1.jpg", "https://kep/2.jpg"],
         descriptionLong: "Hosszú leírás",
       },
@@ -212,6 +215,7 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
       slug: torzs.handle === "Teszt-cim",
       medusaCategoryIds: torzs.categories?.[0]?.id === "cat_1",
       medusaCollectionId: torzs.collection_id === "pcol_1",
+      barcode: torzs.variants[0]?.ean === "4006381333931",
       seoRobots: torzs.metadata?.seo_robots === "noindex, nofollow",
       seoTitle: torzs.metadata?.seo_title === "Teszt cim",
       seoDescription: torzs.metadata?.seo_description === "Teszt leiras",
@@ -306,6 +310,45 @@ describe("MedusaProductProjectionService -- az indexelesi tiltas", () => {
    * metaadat-osszeallitasban. Egy tesztbe irva a kalibracio ugyanazt a nevet
    * adna vissza mindegyikre, tehat nem mondana meg, melyik ag romlott el.
    */
+  it("a vonalkod a valtozat ean mezojebe kerul", async () => {
+    const f = fakes({ link: null, found: [] });
+
+    await f.service.project(
+      { ...product, barcode: { field: "ean", value: "4006381333931" } },
+      now,
+    );
+
+    assert.equal(f.createdWith[0]?.variants[0]?.ean, "4006381333931");
+  });
+
+  it("a 12 jegyu kod az upc mezobe kerul, nem az ean-be", async () => {
+    const f = fakes({ link: null, found: [] });
+
+    await f.service.project(
+      { ...product, barcode: { field: "upc", value: "036000291452" } },
+      now,
+    );
+
+    const valtozat = f.createdWith[0]?.variants[0];
+    assert.equal(valtozat?.upc, "036000291452");
+    assert.ok(!("ean" in (valtozat ?? {})));
+  });
+
+  /**
+   * VONALKOD NELKUL A KULCS KI SEM MEGY. Egy ures `ean` kikuldese felulirna
+   * azt, amit a bolt oldalan barki mas oda tett -- ugyanaz a szabaly, mint a
+   * metaadatnal, es ugyanugy a kulcs JELENLETET merjuk, nem az erteket.
+   */
+  it("vonalkod nelkul sem ean, sem upc kulcs nem kerul a valtozatra", async () => {
+    const f = fakes({ link: null, found: [] });
+
+    await f.service.project({ ...product, barcode: null }, now);
+
+    const valtozat = f.createdWith[0]?.variants[0] ?? {};
+    assert.ok(!("ean" in valtozat));
+    assert.ok(!("upc" in valtozat));
+  });
+
   it("a UNAS bolti cime a metaadatba megy, nem a handle-be", async () => {
     const f = fakes({ link: null, found: [] });
 

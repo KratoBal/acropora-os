@@ -82,6 +82,16 @@ export interface ProjectableProduct {
    */
   medusaCollectionId: string | null;
   /**
+   * A VALTOZAT VONALKODJA, MAR ELDONTOTT MEZONEVVEL, vagy `null`.
+   *
+   * A dontes (ervenyes-e, melyik mezobe valo, ismetlodik-e) a HIVONAL lakik, a
+   * `medusa-barcode.policy` modulban -- ide mar csak az eredmeny erkezik. A
+   * `null` HAROM allapotot fed le (nincs ertek; van, de nem vonalkod; ervenyes,
+   * de ismetlodik), es a kulonbseg itt mar nem visszafejtheto: ugyanaz a
+   * szerkezet, mint a `medusaCategoryIds` es a `medusaCollectionId` eseteben.
+   */
+  barcode: { field: "ean" | "upc"; value: string } | null;
+  /**
    * A MAI BOLTI CIM (a UNAS SefUrl-je), vagy `null`, ha nincs.
    *
    * A `null` NEM azt jelenti, hogy a termeknek ne lenne cime a boltban: azt,
@@ -679,6 +689,14 @@ export class MedusaProductProjectionService {
             title: product.name,
             sku: product.primarySku,
             options: { [DEFAULT_OPTION_TITLE]: DEFAULT_OPTION_VALUE },
+            /**
+             * A VONALKOD KULCSA CSAK AKKOR KERUL BE, HA VAN ERTEK. Egy ures
+             * `ean` kikuldese nem semleges: felulirna azt, amit a bolt oldalan
+             * barki mas oda tett -- ugyanaz a szabaly, mint a metaadatnal.
+             */
+            ...(product.barcode
+              ? { [product.barcode.field]: product.barcode.value }
+              : {}),
             /**
              * ÜRESEN, és ez állítás, nem mulasztás: nem viszünk át árat. A
              * mező azért van itt, mert a Medusa megköveteli; a tartalma azért
