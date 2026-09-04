@@ -37,11 +37,19 @@ function priced(
     csak TOVABBVISZI, tehat itt egy alapertelmezes nem rejt el semmit.
   */
   source: PriceOwner = "own",
+  /*
+    A FELAR ALAPERTELMEZESE `null`, UGYANAZZAL AZ INDOKKAL, MINT A FORRASE: ez a
+    szolgaltatas a mezot csak TOVABBVISZI a jelentesbe, nem szamol vele. Az
+    OSSZEADAST a `medusa-price-source.ts` vegzi, es ott all rajta a ket
+    nev szerinti allitas (hozzaadjuk a tukornel, NEM adjuk hozza a sajat arnal).
+  */
+  surcharge: Prisma.Decimal | null = null,
 ) {
   return {
     osProductId: OS_PRODUCT,
     sku: SKU,
     source,
+    surcharge,
     price: {
       sellingGrossPrice: amount === null ? null : new Prisma.Decimal(amount),
       sellingPriceCurrency: currency,

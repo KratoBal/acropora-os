@@ -60,6 +60,7 @@ export interface PricingCliDatabase {
         productId: string;
         sellingGrossPrice: PrismaTypes.Decimal | null;
         sellingPriceCurrency: string | null;
+        unasVariantExtraGrossPrice: PrismaTypes.Decimal | null;
       }[]
     >;
   };
@@ -92,6 +93,13 @@ export interface PricingTarget {
   sku: string;
   /** Honnan jött az ár. A jelentés ezt írja ki, és nem a hívó találgatja. */
   source: PriceOwner;
+  /**
+   * A VALTOZAT FELARA, AMI MAR BENNE VAN A `price` ERTEKEBEN.
+   *
+   * Azert utazik kulon is, mert a jelentesben allo osszeg kulonben nem egyezne
+   * a tukor-sorral, es a kovetkezo olvaso az egyiket elavultnak hinne.
+   */
+  surcharge: PrismaTypes.Decimal | null;
   price: {
     sellingGrossPrice: PrismaTypes.Decimal | null;
     sellingPriceCurrency: string | null;
@@ -126,6 +134,16 @@ export function describePricing(report: PricingProjectionReport): string {
   return [
     `forras: ${describePriceSource(report.source)}`,
     `ar: ${report.sourceAmount} ${report.sourceCurrency} brutto`,
+    /**
+     * A FELAR SORA CSAK AKKOR ALL ITT, HA VAN FELAR -- es ez nem takarekossag.
+     *
+     * Egy "felar: nincs" sor minden termeknel ott allna, es a jelentes
+     * olvasoja atsiklana rajta. Igy viszont a sor MEGJELENESE maga a jelzes:
+     * ott all, ahol a kiirt osszeg TOBB, mint a tukor-sor erteke.
+     */
+    ...(report.surcharge === null
+      ? []
+      : [`felar: ${report.surcharge} ${report.sourceCurrency} (a valtozate)`]),
     `medusa amount: ${report.medusaAmount} ${report.medusaCurrencyCode}`,
     `ar-azonosito: ${report.priceId}`,
     `valtozat: ${report.variantId}`,
@@ -146,6 +164,12 @@ export async function resolvePricingTargets(
     productId: true,
     sellingGrossPrice: true,
     sellingPriceCurrency: true,
+    /**
+     * A VALTOZAT FELARA. A tukor ara TERMEK-szintu, tehat enelkul egy termek
+     * minden valtozata ugyanazt a bruttot kapna -- es a dragabb valtozat az
+     * alaparon menne ki.
+     */
+    unasVariantExtraGrossPrice: true,
   };
 
   const variants = argument.startsWith("sku:")
@@ -217,6 +241,7 @@ export async function resolvePricingTargets(
         sellingGrossPrice: variant.sellingGrossPrice,
         sellingPriceCurrency: variant.sellingPriceCurrency,
       },
+      variantSurcharge: variant.unasVariantExtraGrossPrice,
       now,
     });
 
@@ -231,6 +256,7 @@ export async function resolvePricingTargets(
       osProductId: variant.productId,
       sku: variant.sku,
       source: decision.source,
+      surcharge: decision.surcharge,
       price: decision.price,
     });
   }

@@ -22,6 +22,7 @@ interface VariantRow {
   productId: string;
   sellingGrossPrice: Prisma.Decimal | null;
   sellingPriceCurrency: string | null;
+  unasVariantExtraGrossPrice: Prisma.Decimal | null;
 }
 
 function db(options: {
@@ -49,6 +50,7 @@ function db(options: {
       productId: "prod-os-1",
       sellingGrossPrice: new Prisma.Decimal("12990"),
       sellingPriceCurrency: "HUF",
+      unasVariantExtraGrossPrice: null,
     },
   ];
 
@@ -199,8 +201,32 @@ describe("Ár-parancs: mit ír ki", () => {
     variantId: "variant_1",
     priceId: "price_1",
     source: "own",
+    surcharge: null,
     result: "updated",
   };
+
+  /**
+   * A FELAR SORA CSAK AKKOR ALL OTT, HA VAN FELAR -- ES MINDKET IRANYRA VAN
+   * ALLITAS.
+   *
+   * Ha csak a megjeleneset mernenk, egy olyan valtozat is atmenne, ami MINDIG
+   * kiirja (akar "nincs" ertekkel), es akkor a sor puszta megjelenese nem
+   * jelentene semmit. A jelzes epp az, hogy hianyzik, amikor nincs felar.
+   */
+  it("a felár sora ott áll, ha van felár", () => {
+    const text = describePricing({
+      ...report,
+      source: "mirror",
+      sourceAmount: "7950",
+      surcharge: "150",
+    });
+
+    assert.match(text, /felar: 150 HUF \(a valtozate\)/);
+  });
+
+  it("és NEM áll ott, ha nincs felár", () => {
+    assert.doesNotMatch(describePricing(report), /felar:/);
+  });
 
   it("a brief kért sorai mind ott vannak", () => {
     const text = describePricing(report);

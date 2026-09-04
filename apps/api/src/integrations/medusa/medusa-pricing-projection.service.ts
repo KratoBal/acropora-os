@@ -6,6 +6,8 @@ import {
   type MedusaPriceRow,
   type MedusaVariantPriceRow,
 } from "./medusa-admin.client.js";
+import type { Prisma as PrismaTypes } from "@acropora/database";
+
 import type { PriceOwner } from "./medusa-price-source.js";
 import type { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
 import {
@@ -48,6 +50,15 @@ export interface ProjectablePricedVariant {
    * tükör-ár és egy elavult saját ár különben ugyanúgy néz ki.
    */
   source: PriceOwner;
+  /**
+   * A VALTOZAT FELARA, AMI MAR BENNE VAN A `price` ERTEKEBEN -- vagy `null`.
+   *
+   * A dontes nem itt van (`medusa-price-source.ts`), es a szam sem itt adodik
+   * ossze. Ami itt a dolga: hogy a JELENTESBE kikeruljon. Enelkul a kiirt
+   * osszeg nem egyezne a tukor-sorral, es a kovetkezo olvaso az egyiket
+   * elavultnak hinne -- ugyanaz az indok, amiert a `source` is itt utazik.
+   */
+  surcharge: PrismaTypes.Decimal | null;
   price: ProjectablePrice;
 }
 
@@ -55,6 +66,11 @@ export interface PricingProjectionReport {
   sku: string;
   /** Az OS-ben tárolt érték, szövegként, hogy ne veszítsen pontosságot. */
   sourceAmount: string;
+  /**
+   * A FELAR, SZOVEGKENT, vagy `null`. A `sourceAmount` mar tartalmazza; ez
+   * mondja meg, MENNYI abbol a valtozate.
+   */
+  surcharge: string | null;
   sourceCurrency: string;
   /** Amit ténylegesen elküldtünk. */
   medusaAmount: number;
@@ -387,6 +403,7 @@ function buildReport(
   return {
     sku: variant.sku,
     source: variant.source,
+    surcharge: variant.surcharge?.toString() ?? null,
     sourceAmount: variant.price.sellingGrossPrice!.toString(),
     sourceCurrency: variant.price.sellingPriceCurrency!,
     medusaAmount: amount,
