@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { parseBatchArguments } from "./medusa-projection-batch.js";
+import {
+  describeBatchSize,
+  parseBatchArguments,
+  selectBatchTargets,
+  type BatchSelectionDatabase,
+} from "./medusa-projection-batch.js";
 
 function ok(args: string[]) {
   const result = parseBatchArguments(args);
@@ -35,6 +40,40 @@ describe("a vetítés kötegelése", () => {
     assert.equal(selection.limit, 20);
     assert.equal(selection.from, "prod_x");
     assert.deepEqual(selection.targets, []);
+  });
+
+  it("a köteg ugyanazzal a stabil termék-lekérdezéssel jön minden hívónak", async () => {
+    const queries: unknown[] = [];
+    const database: BatchSelectionDatabase = {
+      product: {
+        findMany: async (query: unknown) => {
+          queries.push(query);
+          return [{ id: "prod_2" }, { id: "prod_3" }];
+        },
+      },
+    };
+
+    const targets = await selectBatchTargets(
+      ok(["--limit", "2", "--from", "prod_1"]),
+      database,
+    );
+
+    assert.deepEqual(targets, ["prod_2", "prod_3"]);
+    assert.deepEqual(queries, [
+      {
+        where: { id: { gt: "prod_1" } },
+        orderBy: { id: "asc" },
+        take: 2,
+        select: { id: true },
+      },
+    ]);
+  });
+
+  it("a tömeges menet az írás ELŐTT kimondja a kiválasztott darabszámot", () => {
+    assert.equal(
+      describeBatchSize(["prod_1", "prod_2"]),
+      "A tömeges vetítés 2 terméket fog érinteni.\n",
+    );
   });
 
   /**

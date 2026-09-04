@@ -8,6 +8,7 @@ import {
   describeInventory,
   describeMissingStockRow,
   resolveTargets,
+  runInventoryCli,
   type InventoryCliDatabase,
 } from "./medusa-inventory.cli.js";
 
@@ -93,6 +94,17 @@ function database(options: {
 const VARIANT = { id: "var_1", sku: "teszt0001", productId: "prod-os-1" };
 
 describe("Készlet-parancs: kit vetítünk", () => {
+  it("a korlát nélküli tömeges indítást elutasítja, mielőtt bármit írna", async () => {
+    const stderr: string[] = [];
+    const code = await runInventoryCli([], {
+      stdout: () => undefined,
+      stderr: (value) => stderr.push(value),
+    });
+
+    assert.equal(code, 1);
+    assert.match(stderr.join(""), /kérj köteget a --limit kapcsolóval/);
+  });
+
   it("cikkszámból megtalálja a változatot és a készletsort", async () => {
     const { db } = database({
       variants: [VARIANT],

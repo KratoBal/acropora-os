@@ -15,9 +15,15 @@ import {
   medusaClientForProjection,
   storedCredentialProvider,
 } from "./medusa-projection.cli.js";
+import {
+  describeBatchSize,
+  parseBatchArguments,
+  selectBatchTargets,
+} from "./medusa-projection-batch.js";
 
 /**
- * KÉZZEL indított ÁR-vetítés, cikkszámonként vagy termékazonosítónként.
+ * KÉZZEL indított ÁR-vetítés, cikkszámonként, termékazonosítónként vagy
+ * korlátos termékkötegben.
  *
  * KÜLÖN PARANCS a termék- és a készlet-vetítéstől, ugyanazzal az indokkal,
  * amiért azok is külön állnak: a brief 10. pontja kimondja, hogy az
@@ -32,6 +38,7 @@ import {
  * Használat:
  *   pnpm --filter @acropora/api medusa:pricing sku:STAGEPROOF0002 [további...]
  *   pnpm --filter @acropora/api medusa:pricing <termékazonosító> [további...]
+ *   pnpm --filter @acropora/api medusa:pricing --limit 50 [--from <termékazonosító>]
  */
 
 /**
@@ -159,10 +166,15 @@ export async function runPricingCli(
   credentials = storedCredentialProvider(),
   database: PricingCliDatabase = prisma,
 ): Promise<number> {
-  if (!targets.length) {
-    out.stderr("Adj meg legalább egy termékazonosítót vagy sku: alakot.\n");
+  const parsed = parseBatchArguments(targets);
+  if (parsed.kind === "error") {
+    out.stderr(`${parsed.message}\n`);
     return 1;
   }
+
+  const selectedTargets = await selectBatchTargets(parsed.selection, database);
+  if (parsed.selection.limit !== null)
+    out.stdout(describeBatchSize(selectedTargets));
 
   let service: MedusaPricingProjectionService;
   try {
@@ -183,7 +195,7 @@ export async function runPricingCli(
   }
 
   let failed = 0;
-  for (const argument of targets) {
+  for (const argument of selectedTargets) {
     const resolved = await resolvePricingTargets(argument, database);
     if ("error" in resolved) {
       out.stderr(`${resolved.error}\n`);
