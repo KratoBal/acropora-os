@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
+import { after, before, beforeEach, describe, it } from "node:test";
 
 import ExcelJS from "exceljs";
 import { prisma } from "@acropora/database";
@@ -134,6 +134,16 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
     if (gate.mode === "refuse") throw new Error(gate.reason);
     await cleanup();
   });
+  /**
+   * MINDEN TESZT TISZTA LAPPAL INDUL.
+   *
+   * Eddig csak `before` allt itt, tehat a tesztek allapotot orokoltek egymastol.
+   * Amig semmi nem fuggott a KORABBI allapottol, ez nem latszott; egy uj,
+   * relacio-szintu orzo alatt viszont negy allitas dolt pirosra ugyanattol az egy
+   * terektol, amit ket korabbi fixture hagyott ott. A hiba nem az orzoe volt es
+   * nem is a negy teszte: a suite szerkezete termelte.
+   */
+  beforeEach(cleanup);
   after(async () => {
     await cleanup();
     await prisma.$disconnect();
@@ -169,8 +179,16 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
       }),
       "apply-first.xlsx",
     );
-    const first = await applyService.apply(firstBatch, "integration-owner");
-    const repeated = await applyService.apply(firstBatch, "integration-owner");
+    const first = await applyService.apply(
+      firstBatch,
+      "integration-owner",
+      true,
+    );
+    const repeated = await applyService.apply(
+      firstBatch,
+      "integration-owner",
+      true,
+    );
 
     assert.deepEqual(repeated, first);
     assert.equal(first.productsCreated, 2);
@@ -215,7 +233,11 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
       }),
       "apply-second.xlsx",
     );
-    const second = await applyService.apply(secondBatch, "integration-owner");
+    const second = await applyService.apply(
+      secondBatch,
+      "integration-owner",
+      true,
+    );
     const updated = await prisma.productVariant.findUniqueOrThrow({
       where: { sku: "APPLY-SKU-1" },
       include: { product: { include: { images: true, categories: true } } },
@@ -336,7 +358,7 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
       "apply-switch.xlsx",
     );
 
-    const report = await applyService.apply(batch, "integration-owner");
+    const report = await applyService.apply(batch, "integration-owner", true);
 
     // A "0" es az "1" NEM lett hivatkozas.
     assert.equal(report.unresolvedRelationReferences, 0);
@@ -357,7 +379,7 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
       "apply-case.xlsx",
     );
 
-    const report = await applyService.apply(batch, "integration-owner");
+    const report = await applyService.apply(batch, "integration-owner", true);
 
     // A HAROM SZAM EGYUTT MER, es egyik sem elhagyhato:
     // feloldodott, VISSZAESESSEL, es nem tunt el csendben.
@@ -389,7 +411,7 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
       "apply-pair.xlsx",
     );
 
-    const report = await applyService.apply(batch, "integration-owner");
+    const report = await applyService.apply(batch, "integration-owner", true);
 
     assert.equal(report.relationReferencesResolvedByCaseFallback, 1);
     assert.equal(report.relationReferencesSkippedAsDuplicate, 1);
@@ -430,7 +452,7 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
       "apply-field.xlsx",
     );
 
-    const report = await applyService.apply(batch, "integration-owner");
+    const report = await applyService.apply(batch, "integration-owner", true);
 
     assert.equal(report.unresolvedRelationReferences, 1);
     // ES MEGNEVEZI AZ OSZLOPOT, nem csak osszegez.
@@ -458,7 +480,7 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
       "apply-clean.xlsx",
     );
 
-    const report = await applyService.apply(batch, "integration-owner");
+    const report = await applyService.apply(batch, "integration-owner", true);
 
     assert.deepEqual(report.relationReferencesByField, {});
     assert.equal(report.relationReferencesResolvedByCaseFallback, 1);
@@ -488,7 +510,7 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
       "apply-self.xlsx",
     );
 
-    const report = await applyService.apply(batch, "integration-owner");
+    const report = await applyService.apply(batch, "integration-owner", true);
 
     /**
      * ES EZ AZ ALLITAS FOGJA MEG A VALODI KART, nem a konyvelest.
@@ -532,7 +554,7 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
       "apply-exact-self.xlsx",
     );
 
-    const report = await applyService.apply(batch, "integration-owner");
+    const report = await applyService.apply(batch, "integration-owner", true);
 
     assert.equal(report.relationReferencesSkippedAsSelfReference, 1);
     // A visszaeses NEM sult el, tehat ez az ut fuggetlen tole.
@@ -554,7 +576,7 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
       "apply-collide.xlsx",
     );
 
-    const report = await applyService.apply(batch, "integration-owner");
+    const report = await applyService.apply(batch, "integration-owner", true);
 
     assert.equal(report.relationReferencesAmbiguous, 1);
     // NEM oldottuk fel, tehat kapcsolat sem keletkezett belole...
@@ -583,7 +605,6 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
    * eldonteni, hogy egy szandekos torlest vagy egy utkozest lat.
    */
   it("refuses to replace a larger relation set with a smaller one", async () => {
-    await cleanup();
     const rich = await stageApprove(
       await catalogFixture({
         categoryName: "Guard category",
@@ -593,7 +614,7 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
       }),
       "apply-guard-rich.xlsx",
     );
-    const first = await applyService.apply(rich, "integration-owner");
+    const first = await applyService.apply(rich, "integration-owner", true);
     assert.equal(first.relationsSynchronized, 2);
 
     const poor = await stageApprove(
@@ -606,7 +627,7 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
     );
 
     await assert.rejects(
-      () => applyService.apply(poor, "integration-owner"),
+      () => applyService.apply(poor, "integration-owner", true),
       (error: Error) =>
         error.message.startsWith("UNAS_RELATION_WRITE_WOULD_LOSE:") &&
         error.message.endsWith(":1:0"),
@@ -632,7 +653,6 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
    * fenti allitas ugyanugy zold lenne.
    */
   it("lets a second import through when the relation set does not shrink", async () => {
-    await cleanup();
     const rich = await stageApprove(
       await catalogFixture({
         categoryName: "Guard category",
@@ -642,7 +662,7 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
       }),
       "apply-steady-1.xlsx",
     );
-    await applyService.apply(rich, "integration-owner");
+    await applyService.apply(rich, "integration-owner", true);
 
     const again = await stageApprove(
       await catalogFixture({
@@ -653,12 +673,80 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
       }),
       "apply-steady-2.xlsx",
     );
-    const second = await applyService.apply(again, "integration-owner");
+    const second = await applyService.apply(again, "integration-owner", true);
 
     assert.equal(
       await prisma.productRelation.count({ where: { source: "UNAS" } }),
       2,
     );
     assert.equal(second.unresolvedRelationReferences, 0);
+  });
+
+  /**
+   * A KAPCSOLO NELKUL AZ IMPORT NEM NYUL A KAPCSOLATOKHOZ.
+   *
+   * Ez a fontosabbik allitas a parbol: nem az, hogy nem ir UJAT, hanem hogy a
+   * MEGLEVOKET sem viszi el. A tablazat a kapcsolatokra nezve mervado, tehat egy
+   * reszleges munkafuzet (ar, keszlet) a regi viselkedessel csendben torolt volna.
+   */
+  it("leaves relations untouched when the caller does not ask for them", async () => {
+    const rich = await stageApprove(
+      await catalogFixture({
+        categoryName: "Opt-in category",
+        firstName: "Opt-in product",
+        firstImage: "https://example.test/optin.jpg",
+        secondReference: "APPLY-SKU-1",
+      }),
+      "apply-optin-1.xlsx",
+    );
+    const first = await applyService.apply(rich, "integration-owner", true);
+    assert.equal(first.relationWriteRequested, true);
+    assert.equal(first.relationsSynchronized, 2);
+
+    const again = await stageApprove(
+      await catalogFixture({
+        categoryName: "Opt-in category",
+        firstName: "Opt-in product renamed",
+        firstImage: "https://example.test/optin.jpg",
+      }),
+      "apply-optin-2.xlsx",
+    );
+    const second = await applyService.apply(again, "integration-owner");
+
+    assert.equal(second.relationWriteRequested, false);
+    assert.equal(second.relationsSynchronized, 0);
+    /**
+     * A KONTROLL: a ket kapcsolat MEGVAN. A nulla szamlalo onmagaban azt is
+     * jelenthetne, hogy torolt es nem irt vissza semmit.
+     */
+    assert.equal(
+      await prisma.productRelation.count({ where: { source: "UNAS" } }),
+      2,
+    );
+  });
+
+  /**
+   * ES A PARJA, MERT EGY NULLA SZAMLALO KET ALLAPOTBOL JON.
+   *
+   * Az elozo teszt azt meri, hogy a kapcsolo nelkul nem tortenik semmi. Ez azt,
+   * hogy a nulla NEM azert all, mert nincs mit irni: ugyanaz a munkafuzet
+   * bekapcsolt allapotban ketto ir.
+   */
+  it("writes nothing from a workbook that does have relations", async () => {
+    const batch = await stageApprove(
+      await catalogFixture({
+        categoryName: "Opt-in pair category",
+        firstName: "Opt-in pair product",
+        firstImage: "https://example.test/optinpair.jpg",
+        secondReference: "APPLY-SKU-1",
+      }),
+      "apply-optin-pair.xlsx",
+    );
+    const off = await applyService.apply(batch, "integration-owner");
+    assert.equal(off.relationsSynchronized, 0);
+    assert.equal(
+      await prisma.productRelation.count({ where: { source: "UNAS" } }),
+      0,
+    );
   });
 });

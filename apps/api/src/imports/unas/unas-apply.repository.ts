@@ -110,6 +110,23 @@ export class UnasApplyRepository extends Repository {
     batchId: string,
     actorId: string,
     expectedAnalysisVersion: string,
+    /**
+     * A KAPCSOLAT-IRAS ALAPERTELMEZESBEN KI VAN KAPCSOLVA, ES EZ NEM OVATOSSAG.
+     *
+     * A tablazat a kapcsolatokra nezve MERVADO: amit nem sorol fel, azt torli.
+     * Aki arat vagy keszletet frissit egy reszleges munkafuzettel, az nem akar
+     * kapcsolatot torolni -- ma megis torolne, csendben.
+     *
+     * A KET TEVEDES ARA NEM EGYFORMA. Ha valaki elfelejti bekapcsolni, a
+     * kapcsolatok valtozatlanok maradnak, es ezt eszreveszi: HANGOS. Ha egy
+     * ar-frissites elviszi oket, arrol senki nem kap jelzest: NEMA.
+     *
+     * A kepesseget ez NEM veszi el, csak a szandekot koveteli meg. Ma erre
+     * szukseg is van: az API-alapu szinkron utemezoje alapertelmezesben
+     * kikapcsolt, tehat ha a kezi utbol egyszeruen kivennenk az irast, semmi
+     * nem irna kapcsolatot.
+     */
+    writeRelations = false,
   ): Promise<UnasApplySummary> {
     const startedAt = Date.now();
     return prisma.$transaction(
@@ -319,12 +336,13 @@ export class UnasApplyRepository extends Repository {
           relations.push({ productId: product.id, row });
         }
 
-        await this.syncRelations(
-          transaction,
-          relations,
-          productIdsBySku,
-          counts,
-        );
+        if (writeRelations)
+          await this.syncRelations(
+            transaction,
+            relations,
+            productIdsBySku,
+            counts,
+          );
         await transaction.domainEvent.create({
           data: {
             id: stableId(batchId, "catalog-import.applied"),
@@ -347,6 +365,7 @@ export class UnasApplyRepository extends Repository {
           batchId,
           status: "APPLIED",
           ...counts,
+          relationWriteRequested: writeRelations,
           durationMs: Date.now() - startedAt,
           appliedAt: appliedAt.toISOString(),
           appliedBy: actorId,
@@ -810,7 +829,14 @@ interface CategoryRow {
   parentExternalId?: string;
 }
 
+/**
+ * A `relationWriteRequested` KIMARAD: az nem szamlalo, hanem a HIVO dontese.
+ *
+ * A tobbi mezot a szinkron-lepesek noveilk menet kozben; ezt egyszer allitjuk be,
+ * az apply parameterebol. Ha benne allna, minden reszlepes atirhatna azt, amit a
+ * hivo kert -- es epp az a mezo lenne felulirhato, ami a szandekot rogziti.
+ */
 type MutableCounts = Omit<
   UnasApplySummary,
-  "batchId" | "status" | "appliedAt" | "appliedBy"
+  "batchId" | "status" | "appliedAt" | "appliedBy" | "relationWriteRequested"
 >;

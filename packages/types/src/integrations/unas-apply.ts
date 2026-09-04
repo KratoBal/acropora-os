@@ -8,6 +8,14 @@ export interface UnasApplySummary {
   variantsCreated: number;
   imagesSynchronized: number;
   categoryLinksSynchronized: number;
+  /**
+   * IRTUNK-E EGYALTALAN KAPCSOLATOT EBBEN A FUTASBAN.
+   *
+   * A `relationsSynchronized` nullaja KET allapotbol jon: vagy nem volt mit
+   * irni, vagy a hivo NEM KERTE a kapcsolat-irast. A ketto teendoje mas, es a
+   * szam onmagaban nem valasztja szet oket -- ezert all itt ez a mezo.
+   */
+  relationWriteRequested: boolean;
   relationsSynchronized: number;
   channelListingsSynchronized: number;
   externalReferencesSynchronized: number;

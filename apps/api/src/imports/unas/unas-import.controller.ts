@@ -18,6 +18,7 @@ import { memoryStorage } from "multer";
 
 import { CurrentUser } from "../../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../../auth/decorators/require-permissions.decorator.js";
+import { ApplyUnasImportDto } from "./dto/apply-unas-import.dto.js";
 import { ApproveUnasImportDto } from "./dto/approve-unas-import.dto.js";
 import {
   BrandReviewQueryDto,
@@ -108,8 +109,13 @@ export class UnasImportController {
   apply(
     @Param("batchId") batchId: string,
     @CurrentUser() user: AuthenticatedUser,
+    @Body() input: ApplyUnasImportDto = {},
   ) {
-    return this.applyService.apply(batchId, user.id);
+    return this.applyService.apply(
+      batchId,
+      user.id,
+      input.writeRelations ?? false,
+    );
   }
 
   @Get(":batchId/report")
