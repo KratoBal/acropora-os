@@ -62,12 +62,45 @@ export interface BrandDictionaryEntry {
   skuPrefixes: string[];
 }
 
+/**
+ * AZ ELGEPELT ALAKOK, AMIK A KATALOGUSBAN ALLNAK.
+ *
+ * Merve a 09-03-as UNAS exporton, mind az 1893 terméknev ellen, betu-tavolsaggal:
+ * ot alak ter el EGY betuben valamelyik szotari nevtol, es mind az ot a nev
+ * ELEJEN all. Egyuttesen het termeket erintenek, es kozuluk hat ma marka nelkul
+ * marad (a hetediknel a `brand` mezo helyesen all, tehat a nevbeli elteres ott
+ * nem okoz kart -- de az alak akkor is ott van).
+ *
+ * A KUSZOB NEM IZLES, HANEM KALIBRALT: legfeljebb EGY betu elteres, es legalabb
+ * OT karakteres normalizalt szotari alak. A probaja a szotar SAJAT nevei
+ * egymas ellen -- ha ket KULONBOZO marka a meron belul egymas elgepelese, akkor
+ * a mero nem donteni tud, hanem osszemosni:
+ *
+ *   tav<=1, barmilyen hossz   2 hamis par   (AI/ATI, ATB/ATI)
+ *   tav<=1, hossz>=5          0 hamis par   <- EZ a sav
+ *   tav<=2, barmilyen hossz   5 hamis par
+ *   tav<=2, hossz>=5          1 hamis par   (Ecotech/Grotech)
+ *
+ * ES A KONTROLL NEM MARADT ELMELETI: ket betu tavolsaggal a katalogus 298
+ * talalatot ad, es a ket legnagyobb csoport pontosan a megjosolt par -- a
+ * Grotech nevek a szotari Ecotech ellen 62 termeken, az Ecotech nevek a Grotech
+ * ellen 26-on. Ezert all kulon allitas arra, hogy az "ecotech" nev NEM oldodik
+ * fel Grotech-re: az koti be ezt a kontrollt a tesztsorba.
+ *
+ * AMI SZANDEKOSAN KIMARADT: a ot betunel rovidebb es a ketertelmu alakok (ATB,
+ * ATI, AI, Arka, D-D, KZ, Nyos, OASE, VCA). Nem azert, mert ott nincs elgepeles,
+ * hanem mert a betu-tavolsag ott nem hasznalhato mero. Azok MERETLENEK, nem
+ * tisztak, es masik jel kell hozzajuk.
+ */
 const aliases: Record<string, string[]> = {
   "aqua illumination": ["AI"],
-  aquamedic: ["Aqua Medic"],
+  aquamedic: ["Aqua Medic", "Aqua Mdic"],
+  "coral essentials": ["Coral Essential"],
   ecotech: ["EcoTech Marine"],
+  "fauna marin": ["Fauna Marine"],
+  grotech: ["Groteh"],
   "jebao jecod": ["Jebao", "Jecod"],
-  "korallen zucht": ["KZ"],
+  "korallen zucht": ["KZ", "Korallen-zuht"],
   redsea: ["Red Sea"],
   "polyp lab": ["PolypLab"],
 };
