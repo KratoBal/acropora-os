@@ -60,6 +60,7 @@ describe("honnan jön az ár", () => {
       authority: "UNAS",
       mirror: tukor(),
       own: nincsSajat,
+      variantSurcharge: null,
       now: most,
     });
 
@@ -83,6 +84,7 @@ describe("honnan jön az ár", () => {
       authority: "ACROPORA",
       mirror: tukor({ grossPrice: forint("7800") }),
       own: sajat,
+      variantSurcharge: null,
       now: most,
     });
 
@@ -105,6 +107,7 @@ describe("honnan jön az ár", () => {
       authority: "UNAS",
       mirror: tukor(),
       own: nincsSajat,
+      variantSurcharge: null,
       now: most,
     });
 
@@ -121,6 +124,7 @@ describe("honnan jön az ár", () => {
       authority: "UNAS",
       mirror: tukor({ currency: "EUR" }),
       own: nincsSajat,
+      variantSurcharge: null,
       now: most,
     });
 
@@ -136,6 +140,7 @@ describe("honnan jön az ár", () => {
       authority: null,
       mirror: tukor(),
       own: sajat,
+      variantSurcharge: null,
       now: most,
     });
 
@@ -150,6 +155,7 @@ describe("a három hiány három külön néven", () => {
       authority: "UNAS",
       mirror: null,
       own: nincsSajat,
+      variantSurcharge: null,
       now: most,
     });
 
@@ -162,6 +168,7 @@ describe("a három hiány három külön néven", () => {
       authority: "UNAS",
       mirror: tukor({ grossPrice: null }),
       own: nincsSajat,
+      variantSurcharge: null,
       now: most,
     });
 
@@ -173,6 +180,7 @@ describe("a három hiány három külön néven", () => {
       authority: "ACROPORA",
       mirror: tukor(),
       own: nincsSajat,
+      variantSurcharge: null,
       now: most,
     });
 
@@ -195,6 +203,7 @@ describe("a három hiány három külön néven", () => {
         authority: "UNAS",
         mirror: null,
         own: nincsSajat,
+        variantSurcharge: null,
         now: most,
       }),
     );
@@ -203,6 +212,7 @@ describe("a három hiány három külön néven", () => {
         authority: "UNAS",
         mirror: tukor({ grossPrice: null }),
         own: nincsSajat,
+        variantSurcharge: null,
         now: most,
       }),
     );
@@ -211,6 +221,7 @@ describe("a három hiány három külön néven", () => {
         authority: "ACROPORA",
         mirror: tukor(),
         own: nincsSajat,
+        variantSurcharge: null,
         now: most,
       }),
     );
@@ -245,6 +256,7 @@ describe("az aktív akció ára megy ki", () => {
       authority: "UNAS",
       mirror: tukor({ saleGrossPrice: forint("3500") }),
       own: nincsSajat,
+      variantSurcharge: null,
       now: most,
     });
 
@@ -266,6 +278,7 @@ describe("az aktív akció ára megy ki", () => {
       authority: "UNAS",
       mirror: tukor({ saleGrossPrice: forint("3500") }),
       own: nincsSajat,
+      variantSurcharge: null,
       now: most,
     });
 
@@ -293,6 +306,7 @@ describe("az aktív akció ára megy ki", () => {
       authority: "UNAS",
       mirror: tukor({ saleGrossPrice: forint("3500") }),
       own: nincsSajat,
+      variantSurcharge: null,
       now: most,
     });
 
@@ -312,6 +326,7 @@ describe("az aktív akció ára megy ki", () => {
         saleEndsAt: new Date("2026-08-01T00:00:00Z"),
       }),
       own: nincsSajat,
+      variantSurcharge: null,
       now: most,
     });
 
@@ -363,5 +378,114 @@ describe("a jelentés megnevezi a forrást", () => {
     assert.match(nevek[1]!, /AKCIÓS/);
     assert.match(nevek[1]!, /saleGrossPrice/);
     assert.match(nevek[2]!, /sellingGrossPrice/);
+  });
+});
+
+/**
+ * A VALTOZAT FELARA: A TUKOR ARA TERMEK-SZINTU, A FELAR VALTOZAT-SZINTU.
+ *
+ * A KET TEVEDES MINDKETTEJE NEMA, ES EPP EZERT KELL MINDKETTORE NEV SZERINTI
+ * ALLITAS:
+ *
+ *   a tukornel NEM adni hozza  ->  a vevo KEVESEBBET fizet, es semmi nem szol
+ *   a sajat arhoz hozzaadni    ->  a vevo TOBBET fizet (a felar ketszer szamol)
+ *
+ * Egy allitas, ami csak az elsot meri, a masodikat szabadon hagyja -- es a
+ * masodik a dragabb, mert azt a VEVO panasza deriti ki, nem egy jelentes.
+ *
+ * ISMERT POZITIV, ES NEM KITALALT: a 150 forintos felar a `5902026731119cs`
+ * termek "Flakon" ertekerol jon, a 2026-09-03-i exportbol. Ez az EGYETLEN felar
+ * az egesz katalogusban.
+ */
+describe("a változat felára a termék-szintű tükör-ár tetejére kerül", () => {
+  it("a tükör LISTAÁRÁHOZ hozzáadódik", () => {
+    const d = resolvePriceSource({
+      authority: "UNAS",
+      mirror: tukor(),
+      own: nincsSajat,
+      variantSurcharge: forint("150"),
+      now: most,
+    });
+
+    assert.equal(d.ok, true);
+    if (!d.ok) return;
+    assert.equal(d.source, "mirror");
+    assert.equal(d.price.sellingGrossPrice?.toString(), "7950");
+    assert.equal(d.surcharge?.toString(), "150");
+  });
+
+  it("a tükör AKCIÓS árához is hozzáadódik", () => {
+    const d = resolvePriceSource({
+      authority: "UNAS",
+      mirror: tukor({ saleGrossPrice: forint("6000") }),
+      own: nincsSajat,
+      variantSurcharge: forint("150"),
+      now: most,
+    });
+
+    assert.equal(d.ok, true);
+    if (!d.ok) return;
+    assert.equal(d.source, "mirror-sale");
+    assert.equal(d.price.sellingGrossPrice?.toString(), "6150");
+    assert.equal(d.surcharge?.toString(), "150");
+  });
+
+  /**
+   * ES EZ AZ ELLENKEZO IRANY, KULON ALLITASSAL.
+   *
+   * A `sellingGrossPrice` VALTOZAT-szintu mezo: ha egy valtozat dragabb, az mar
+   * benne van. Ha ide is hozzaadnank a felarat, a vevo ketszer fizetne meg --
+   * es ez ugyanolyan nema, mint a kimarado felar, csak a masik iranyban.
+   */
+  it("a SAJÁT árunkhoz NEM adódik hozzá, mert az már változat-szintű", () => {
+    const d = resolvePriceSource({
+      authority: "ACROPORA",
+      mirror: tukor(),
+      own: sajat,
+      variantSurcharge: forint("150"),
+      now: most,
+    });
+
+    assert.equal(d.ok, true);
+    if (!d.ok) return;
+    assert.equal(d.source, "own");
+    assert.equal(d.price.sellingGrossPrice?.toString(), "9900");
+    assert.equal(d.surcharge, null);
+  });
+
+  /**
+   * A FELAR NEM POTOLJA A HIANYZO ARAT.
+   *
+   * Egy hianyzo tukor-ar melle tett felar azt allitana, hogy a felar MAGA az
+   * ar: a vevo 150 forintert vinne el egy terméket. A nevesitett megallas
+   * marad, es a felar nem irja felul.
+   */
+  it("hiányzó tükör-ár mellett a felár nem lesz ár", () => {
+    const d = resolvePriceSource({
+      authority: "UNAS",
+      mirror: tukor({ grossPrice: null }),
+      own: nincsSajat,
+      variantSurcharge: forint("150"),
+      now: most,
+    });
+
+    assert.equal(d.ok, false);
+    if (d.ok) return;
+    assert.equal(d.reason, "mirror-price-missing");
+  });
+
+  it("felár nélkül a tükör ára változatlanul megy", () => {
+    const d = resolvePriceSource({
+      authority: "UNAS",
+      mirror: tukor(),
+      own: nincsSajat,
+      variantSurcharge: null,
+      now: most,
+    });
+
+    assert.equal(d.ok, true);
+    if (!d.ok) return;
+    assert.equal(d.price.sellingGrossPrice?.toString(), "7800");
+    assert.equal(d.surcharge, null);
   });
 });

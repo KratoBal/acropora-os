@@ -71,13 +71,35 @@ export type PriceSourceRefusal =
   | "own-price-missing";
 
 export type PriceSourceDecision =
-  | { ok: true; source: PriceOwner; price: ProjectablePrice }
+  | {
+      ok: true;
+      source: PriceOwner;
+      price: ProjectablePrice;
+      /**
+       * A VALTOZAT FELARA, AMIT HOZZAADTUNK -- vagy `null`, ha nem adtunk hozza.
+       *
+       * Azert kerul vissza, mert a `price` mar az OSSZEG. Enelkul a jelentesben
+       * allo szam nem egyezne a tukor-sorral, es a kovetkezo olvaso azt hinne,
+       * hogy elavult az egyik. Nem dísz: ez az egyetlen hely, ahol a kulonbseg
+       * megmagyarazza magat.
+       */
+      surcharge: Prisma.Decimal | null;
+    }
   | { ok: false; reason: PriceSourceRefusal; details: string };
 
 export function resolvePriceSource(input: {
   authority: CatalogAuthority | null;
   mirror: MirrorPriceRow | null;
   own: ProjectablePrice;
+  /**
+   * A VALTOZAT FELARA A UNAS OLDALAROL (`ProductVariant.unasVariantExtraGrossPrice`).
+   *
+   * A TUKOR ARA TERMEK-SZINTU: egy termek minden valtozata ugyanazt a bruttot
+   * kapna belole. A UNAS viszont ertekenkent felarat rendelhet a
+   * tengely-definicioban, es a dragabb valtozat enelkul az ALAPARON menne ki --
+   * se hiba, se megallas, csak kevesebb penz.
+   */
+  variantSurcharge: Prisma.Decimal | null;
   /** A „most", kívülről. Az akció aktivitása időfüggő, tehát mérhetőnek kell lennie. */
   now: Date;
 }): PriceSourceDecision {
@@ -101,7 +123,19 @@ export function resolvePriceSource(input: {
           "és az nincs kitöltve. A tükör ára itt NEM használható: az a " +
           "gazdaság átvétele óta befagyott, a legutolsó UNAS állapotot őrzi.",
       );
-    return { ok: true, source: "own", price: input.own };
+    /**
+     * A SAJAT ARHOZ NEM ADUNK FELARAT, ES EZ ALLITAS, NEM MULASZTAS.
+     *
+     * A `sellingGrossPrice` VALTOZAT-SZINTU mezo: ha egy valtozat dragabb, az
+     * mar benne van. A tukor ara ezzel szemben TERMEK-szintu, ezert kell ott a
+     * felar.
+     *
+     * A KET TEVEDES ARA NEM EGYFORMA, es mindketto NEMA -- ezert all rajta ket
+     * kulon, nev szerinti allitas:
+     *   itt hozzaadni    -> a vevo TOBBET fizetne (a felar ketszer szamolna)
+     *   a tukornel nem   -> a vevo KEVESEBBET fizetne
+     */
+    return { ok: true, source: "own", price: input.own, surcharge: null };
   }
 
   if (input.mirror === null)
@@ -133,8 +167,12 @@ export function resolvePriceSource(input: {
     return {
       ok: true,
       source: "mirror-sale",
+      surcharge: input.variantSurcharge,
       price: {
-        sellingGrossPrice: input.mirror.saleGrossPrice,
+        sellingGrossPrice: addSurcharge(
+          input.mirror.saleGrossPrice,
+          input.variantSurcharge,
+        ),
         /**
          * A TARTALEK ITT IS KELL, ES A HIANYA EPP EZT A 67 TERMEKET ALLITANA MEG.
          *
@@ -162,8 +200,12 @@ export function resolvePriceSource(input: {
   return {
     ok: true,
     source: "mirror",
+    surcharge: input.variantSurcharge,
     price: {
-      sellingGrossPrice: input.mirror.grossPrice,
+      sellingGrossPrice: addSurcharge(
+        input.mirror.grossPrice,
+        input.variantSurcharge,
+      ),
       /**
        * A TÜKÖR NEM HORDOZ PÉNZNEMET, ÉS EZ MÉRVE VAN -- NEM FELTEVÉS.
        *
@@ -201,6 +243,27 @@ export function resolvePriceSource(input: {
       sellingPriceCurrency: input.mirror.currency ?? SUPPORTED_CURRENCY,
     },
   };
+}
+
+/**
+ * A FELAR HOZZAADASA A TUKOR ARAHOZ.
+ *
+ * A `null` bazis valtozatlanul `null` marad: a hianyzo ar nem nulla, es egy
+ * hianyzo arhoz felarat adni azt allitana, hogy a felar MAGA az ar. A hianyt a
+ * hivo agai nevesitett megallassal kezelik (`mirror-price-missing`), es ez a
+ * fuggveny nem veszi el toluk.
+ *
+ * A `Prisma.Decimal.plus` pontos: a `Decimal(19, 4)` oszlop erteke lebegopontos
+ * kerulout nelkul adodik ossze. Ugyanaz az indok, amiert a kliens oldalan a
+ * felarak osszege `BigInt` fixpontos aritmetikaval megy.
+ */
+function addSurcharge(
+  base: Prisma.Decimal | null,
+  surcharge: Prisma.Decimal | null,
+): Prisma.Decimal | null {
+  if (base === null) return null;
+  if (surcharge === null) return base;
+  return base.plus(surcharge);
 }
 
 /**
