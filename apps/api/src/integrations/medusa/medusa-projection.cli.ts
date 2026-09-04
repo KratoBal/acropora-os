@@ -205,12 +205,15 @@ async function resolveBySku(sku: string): Promise<SkuLookup> {
 /**
  * A CSATORNA-SOR HAT MEZOJE -> A VETITES BEMENETE, EGY TISZTA FUGGVENYBEN.
  *
- * KULON FUGGVENY, ES EZ MERESI KERDES, NEM STILUS. A parancs torzse a `prisma`-t
- * MODUL-SZINTU importbol veszi, tehat ami ott all, azt csak eles adatbazissal
- * lehetne megnezni -- ugyanaz az ok, amiert a kategoria- es a marka-szabaly is
- * kulon modulban all. Enelkul a lekepezes elrontasara SEMMI nem szolna, es ezt
- * nem feltetelezem: a kalibraciom megmutatta, hogy egy rontas a parancs
- * torzseben NULLA allitast dontott pirosra.
+ * KULON FUGGVENY, ES EZ MERESI KERDES, NEM STILUS. Egy tiszta fuggveny allitasa
+ * NEV SZERINT tud pirosodni; a torzsbe irt lekepezes rontasa csak akkor, ha a
+ * torzs-teszt eppen azt a mezot nezi.
+ *
+ * AZ EREDETI INDOKOM AZOTA ELAVULT, ES AZ EN SAJAT VALTOZASOM MIATT. Ez a
+ * bekezdes korabban azt mondta, hogy a torzs a `prisma`-t MODUL-SZINTU importbol
+ * veszi, tehat eles adatbazis nelkul nem merheto. A `db` parameter (2026-09-04)
+ * ezt megszuntette: a torzs MA MERHETO. A kovetkeztetes valtozatlan, az OKA mas
+ * -- es egy megjegyzes, ami egy azota bezart lyukat ir le, rosszabb a semminel.
  *
  * A hianyzo sor NEM hibaallapot: egy termeknek nem kotelezo UNAS-csatorna sora
  * lennie, es akkor mind a hat ertek `null`.
@@ -236,10 +239,10 @@ export interface UnasChannelProjection {
 /**
  * A VALTOZAT MEZOI -> A VETITES BEMENETE, EGY TISZTA FUGGVENYBEN.
  *
- * UGYANAZ AZ OK, MINT A CSATORNA-SORNAL, ES MA MASODSZOR MERTEM MEG: a parancs
- * torzsebe irt lekepezes rontasa NULLA allitast dont pirosra, mert a `prisma`
- * modul-szintu import mellett a torzs eles adatbazis nelkul nem merheto. A
- * kalibracio elso koreben pontosan ez tortent a szorzoval.
+ * UGYANAZ AZ OK, MINT A CSATORNA-SORNAL: egy tiszta fuggveny allitasa nev
+ * szerint pirosodik. A kalibracio elso koreben a torzsbe irt lekepezes rontasa
+ * NULLA allitast dontott pirosra -- akkor azert, mert a torzs merhetetlen volt,
+ * ma azert, mert a torzs-teszt a fo utat jarja, nem minden mezot.
  *
  * A SZORZO ITT VALIK SZOVEGGE, es ez a fuggveny egyetlen nem trivialis lepese: a
  * `Decimal` a Prisma tipusa, a metaadat viszont kulcs-ertek parokat tart. A
@@ -272,9 +275,8 @@ export function projectValtozatMezok(
  * A RENDELESI KORLATOK A TUKORBOL, MAR SZOVEGKENT.
  *
  * KULON, EXPORTALT TISZTA FUGGVENY, ugyanabbol az okbol, mint a valtozat-mezok
- * es a csatorna-sor lekepezese: a parancs torzsebe irt lekepezes rontasa NULLA
- * allitast dont pirosra, mert a `prisma` modul-szintu importja mellett a torzs
- * eles adatbazis nelkul nem merheto.
+ * es a csatorna-sor lekepezese: a torzsbe irt lekepezes rontasara csak akkor
+ * szolna valami, ha a torzs-teszt eppen ezt a harom mezot nezne -- es nem nezi.
  *
  * A HAROM MEZO A `UnasProductSnapshot` MODELLEN UL, nem a varianson es nem a
  * terméken -- ezert jon MASIK relaciobol, mint a mertekegyseg.
@@ -339,9 +341,10 @@ export function describeSkuLookupFailure(
 /**
  * A LEKEPEZES-TORLES MONDATA, ES MIERT KULON FUGGVENY.
  *
- * A parancs torzse a `prisma`-t modul-szintu importbol veszi, tehat ami ott
- * all, azt csak eles adatbazissal lehetne megnezni. A tobbi leiro
- * (`describeSkuLookupFailure`, `describePublication`) ugyanezert all kulon.
+ * A leiro fuggvenyek (`describeSkuLookupFailure`, `describePublication`) mind
+ * kulon allnak, hogy a MONDATUK nev szerint merheto legyen. A torzs maga a `db`
+ * parameter ota merheto (2026-09-04), de egy torzs-allitas a TELJES lancot
+ * futtatja: a szoveg elirasat egy sajat allitas olcsobban fogja meg.
  *
  * ES A NULLA ESET KULON MONDAT, NEM CSAK MAS SZAM. A regi szoveg nulla sornal
  * is azt allitotta, hogy "lekepezes torolve (0 sor)" -- kijelentette a torlest,
@@ -747,8 +750,8 @@ export async function runProjectionCli(
      * A MI KATEGORIAINK -> MEDUSA AZONOSITOK.
      *
      * Itt csak a LEKERDEZES all; maga a szabaly a `medusa-category.policy.ts`
-     * modulban, mert ez a fuggveny a `prisma`-t MODUL-SZINTU importbol veszi,
-     * tehat ami ide kerul, azt csak eles adatbazissal lehetne megmerni.
+     * modulban, hogy nev szerint merheto legyen. (A `db` parameter ota a torzs
+     * is merheto, de a szabaly kulon allitasa ettol nem lett folosleges.)
      *
      * A lekepezes-sorokat az irja, aki a kategoriakat a Medusaban LETREHOZZA
      * (`ExternalReference`, `system: "MEDUSA"`): a Medusa-azonosito ott
@@ -794,8 +797,8 @@ export async function runProjectionCli(
      * A MI MARKANK -> MEDUSA GYUJTEMENY.
      *
      * Ugyanaz a szerkezet, mint a kategorianal: itt csak a LEKERDEZES all, a
-     * szabaly a `medusa-brand.policy.ts` modulban, mert ez a fuggveny a
-     * `prisma`-t modul-szintu importbol veszi.
+     * szabaly a `medusa-brand.policy.ts` modulban, hogy nev szerint merheto
+     * legyen.
      *
      * A HIANY SORA A STDOUT-RA MEGY, ugyanabbol az okbol, mint a kategoriae: a
      * hianyzo lekepezes NEM bukas. A termek kimegy, csak gyujtemeny nelkul, es
