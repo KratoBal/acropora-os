@@ -1,4 +1,5 @@
 import type { Prisma } from "@acropora/database";
+import { describeSignerSource } from "./worksheet-signer.js";
 import {
   formatWorksheetVersionLabel,
   personDisplayName,
@@ -151,6 +152,12 @@ function toSignatureDetail(
     signedByName: row.signedBy?.displayName ?? null,
     signedAt: row.signedAt.toISOString(),
     note: row.note,
+    /**
+     * A JELZES A SZERVEREN SZULETIK, es a TAROLT allapotbol -- nem abbol, hogy
+     * a nev "ugy nez ki", mintha ugyfele lenne. A regi sorokon a forras `null`,
+     * es a mondat ott azt mondja meg, hogy NEM TUDJUK, ki irta ala.
+     */
+    signerNotice: describeSignerSource(row.signerSource ?? null),
   };
 }
 

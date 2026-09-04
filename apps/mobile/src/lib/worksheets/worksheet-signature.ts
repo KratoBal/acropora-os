@@ -1,25 +1,28 @@
 /**
  * A MUNKALAP ALAIRASA A HELYSZINEN.
  *
- * === KI IR ALA: A SZERELO (Balazs dontese, 2026-09-03) ===
+ * === KI IR ALA: AZ UGYFEL EMBERE (Balazs, 2026-09-04) ===
  *
- * A lap a BEJELENTKEZETT felhasznalo neveben zarul. A kepernyo a nevet MEG SEM
- * KERDEZI: nincs nev-mezo, es a szerelo nem gepel be semmit.
+ * A szerelo a lap partnerenek nyilvantartott munkatarsai kozul VALASZT, es az
+ * ugyfel irja ala. Van egy "egyik sem" ertek: akkor a szerelo beirja a nevet,
+ * DE A LAP EZT KIMONDJA -- a jelzes TAROLT allapot a soron (`signerSource`),
+ * nem kepernyo-szoveg.
  *
- * EZ 2026-09-03 19:42 OTA IGY ALL, es a korabbi alak MAS volt: akkor a nev egy
- * NEM SZERKESZTHETO mezokent allt a kepernyon. Balazs pontositotta ("Ne kerje
- * szovegkent. Legyen ott egy alairo gomb amit ha megnyom a szerelo akkor egy
- * megerosites utan alairodik a lap"), es a kulonbseg nem stilus: egy zarolt
- * mezo is MEZO, tehat az elso kerdes az lesz, hogyan lehetne megis atirni.
+ * === EZ ATIRJA A 2026-09-03-I ALAKOT, ES NEM SERTI ===
  *
- * EZ A MI SZIGORITASUNK, NEM A SZERVERE. A `SignWorksheetVersionDto` ma is
- * szoveget ker (`signerName`, 2-200 karakter), tehat technikailag barmilyen nev
- * felmehetne. Ha kesobb megis kell az ugyfel neve a lapon, az KULON MEZO lesz,
- * nem ennek a felulirasa -- ezert nem a szerzodesbol vesszuk ki a mezot, hanem
- * a kepernyo nem engedi szerkeszteni.
+ * Itt korabban az allt, hogy a lap a BEJELENTKEZETT felhasznalo (a szerelo)
+ * neveben zarul, mert Balazs azt kerte, hogy "Ne kerje szovegkent" a nevet. Az
+ * a mondat TILTAS volt a szabad szoveges mezore, es a mai alak teljesiti: a
+ * legordulo all a szabad szoveg helyett, es a beiras KIVETEL, amit jelolunk.
  *
- * A webes felulet MASHOGY mukodik, es ez sem veletlen: ott az iroda rogziti az
- * ugyfel dontesét, tehat ott a nev szabad szoveg marad.
+ * A regi valtozat mellett en irtam ide, hogy "ha kesobb megis kell az ugyfel
+ * neve a lapon, az KULON MEZO lesz, nem ennek a felulirasa". Ez a mondat MA MAR
+ * NEM ALL, es nem hagytam ott: nem kellett kulon mezo, mert a ket teny MAR
+ * KULON OSZLOPBAN allt. A `signedByUserId` azt mondja meg, KI ROGZITETTE (a
+ * szerelo, aki a telefont kezeli), a `signerName` azt, KI IRTA ALA.
+ *
+ * A webes felulet ugyanezt a szerzodest hasznalja, tehat a ket oldal jelentese
+ * 2026-09-04 ota EGYSEGES.
  *
  * === MIERT KULON MODUL ===
  *
@@ -33,20 +36,30 @@
 
 export type WorksheetSignatureDecision = "ACCEPTED" | "REJECTED";
 
-/** Amit a bejelentkezett felhasznalorol tudni kell ahhoz, hogy alairjon. */
-export interface WorksheetSignerLike {
-  displayName: string;
-  nickname?: string | null;
-}
-
 export interface WorksheetSignatureForm {
   decision: WorksheetSignatureDecision;
   note: string;
+  /** Az "egyik sem" agon beirt nev. Ures, ha listarol valasztottak. */
+  typedName?: string;
 }
 
 export interface WorksheetSignaturePayload {
   decision: WorksheetSignatureDecision;
-  signerName: string;
+  /**
+   * A BEIRT NEV -- CSAK az "egyik sem" agon megy fel.
+   *
+   * Ha a szerelo listarol valasztott, a NEVET A SZERVER veszi a valasztott
+   * sorbol, es ezt a mezot figyelmen kivul hagyja. Igy a lapra nem kerulhet mas
+   * nev, mint akit valasztottak.
+   */
+  signerName?: string;
+  /**
+   * A VALASZTOTT MUNKATARS. `null` (illetve hianyzik) az "egyik sem" agon.
+   *
+   * A jelenlete donti el a szerveren, MELYIK agon ment az alairas -- a
+   * `signerSource` erteket a szerver ebbol szamolja, nem a klienstol kerdezi.
+   */
+  signerUserId?: string;
   /** `null`, ha nincs megjegyzes -- a szerver is igy varja. */
   note: string | null;
 }
@@ -63,18 +76,6 @@ const SIGNER_NAME_MAX = 200;
 const NOTE_MAX = 1000;
 /** Az elutasitas indokanak also hatara a SZOLGALTATASBAN all, nem a DTO-ban. */
 const REJECTION_NOTE_MIN = 3;
-
-/**
- * A HIVATALOS NEV, NEM A BECENEV.
- *
- * Szandekosan NEM a `personDisplayName` helper: az a becenevet reszesiti
- * elonyben, es a sajat fejlecben ki is mondja, hogy a dokumentum mas kerdes --
- * egy alairt munkalapnak azt kell mondania, ki valaki HIVATALOSAN. A becenev a
- * kepernyok koszonoszovegebe valo, nem egy alairas melle.
- */
-export function worksheetSignerName(person: WorksheetSignerLike): string {
-  return person.displayName.trim();
-}
 
 /**
  * ALAIRHATO-E EZ A VERZIO EBBOL A KEPERNYOBOL.
@@ -102,30 +103,37 @@ export const worksheetSignatureDecisionLabel: Record<
 
 export function buildWorksheetSignaturePayload(
   form: WorksheetSignatureForm,
-  signerName: string,
+  /**
+   * A VALASZTOTT MUNKATARS AZONOSITOJA, vagy `null` az "egyik sem" agon --
+   * olyankor a `form.typedName` a nev.
+   */
+  signerUserId: string | null,
 ): WorksheetSignatureResult {
-  const name = signerName.trim();
+  const name = (form.typedName ?? "").trim();
 
   /**
-   * A NEV HIANYA ITT NEM URLAPHIBA, ES EZERT MAS A MONDAT.
+   * AZ "EGYIK SEM" AGON A NEV KOTELEZO, ES ITT MAR URLAPHIBA -- a szerelo BE
+   * TUDJA irni, tehat a mondat egy letezo mezore mutat.
    *
-   * A mezo zarva van: a szerelo nem tudja "kijavitani", barmit is irunk oda.
-   * Egy "add meg a neved" alaku uzenet ilyenkor egy nem letezo gombra
-   * mutatna. Amit tehet, az az iroda ertesitese, tehat azt mondjuk meg.
+   * A LISTAROL VALASZTOTT AGON EZ AZ ELLENORZES KIMARAD, mert a nevet nem is a
+   * kliens adja: a szerver a valasztott sorbol veszi. Egy itteni hossz-kapu
+   * olyan erteket vizsgalna, ami fel sem megy.
    */
-  if (name.length < SIGNER_NAME_MIN)
-    return {
-      ok: false,
-      field: "signerName",
-      message:
-        "A bejelentkezett felhasználó neve hiányzik vagy túl rövid, ezért a lap nem írható alá. Szólj az irodának, hogy pótolják a nevedet.",
-    };
-  if (name.length > SIGNER_NAME_MAX)
-    return {
-      ok: false,
-      field: "signerName",
-      message: `A bejelentkezett felhasználó neve ${SIGNER_NAME_MAX} karakternél hosszabb, ezért a lap nem írható alá. Szólj az irodának.`,
-    };
+  if (!signerUserId) {
+    if (name.length < SIGNER_NAME_MIN)
+      return {
+        ok: false,
+        field: "signerName",
+        message:
+          "Válaszd ki az aláírót a listáról, vagy add meg a nevét legalább két karakterrel.",
+      };
+    if (name.length > SIGNER_NAME_MAX)
+      return {
+        ok: false,
+        field: "signerName",
+        message: `Az aláíró neve legfeljebb ${SIGNER_NAME_MAX} karakter lehet.`,
+      };
+  }
 
   const note = form.note.trim();
 
@@ -156,7 +164,13 @@ export function buildWorksheetSignaturePayload(
     ok: true,
     payload: {
       decision: form.decision,
-      signerName: name,
+      /**
+       * CSAK AZ EGYIK MEZO MEGY FEL, es ez nem takarekossag: ha mind a ketto
+       * ott allna, a szerver ket kulonbozo allitast kapna arrol, ki irta ala --
+       * es a kliens dontene el, melyik nyer. Igy a szerver donti el, es a
+       * lapra nem kerulhet mas nev, mint akit valasztottak.
+       */
+      ...(signerUserId ? { signerUserId } : { signerName: name }),
       note: note ? note : null,
     },
   };

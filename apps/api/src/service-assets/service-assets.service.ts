@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { PartnerScope } from "../auth/partner-scope.util.js";
 import { assetDeletionRefusal } from "./asset-deletion.js";
+import { describeFieldConflict } from "./asset-field-conflict.js";
 import {
   BadRequestException,
   ConflictException,
@@ -628,6 +629,20 @@ export class ServiceAssetsService {
     if (error instanceof Error && error.message === "ASSET_HIERARCHY_CYCLE")
       throw new BadRequestException(
         "Az eszközhierarchia nem tartalmazhat önmagába visszatérő kapcsolatot.",
+      );
+    /**
+     * MEZO-SZINTU UTKOZES: A MEZOT MEG IS NEVEZZUK.
+     *
+     * A tarolo a mezoneveket a hibauzenetben adja at, mert ott nincs sajat
+     * hibatipusa. A MONDAT viszont itt keszul, es az `asset-field-conflict.ts`
+     * fuggvenyebol -- egy "valaki modositotta idokozben" szoveg nem mondja meg,
+     * MIT kell megnezni.
+     */
+    if (error instanceof Error && error.message.startsWith("FIELD_CONFLICT:"))
+      throw new ConflictException(
+        describeFieldConflict(
+          error.message.slice("FIELD_CONFLICT:".length).split(","),
+        ),
       );
     if (error instanceof Error && error.message === "STALE_UPDATE")
       throw new ConflictException(

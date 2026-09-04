@@ -573,6 +573,8 @@ model User {
   createdWorksheetVersions   WorksheetVersion[]            @relation("WorksheetVersionCreatedBy")
   closedWorksheetVersions    WorksheetVersion[]            @relation("WorksheetVersionClosedBy")
   worksheetSignatures        WorksheetVersionSignature[]   @relation("WorksheetSignedBy")
+  /// Amiket EZ a szemely irt ala (a lap partnerenek munkatarsakent).
+  signedWorksheets           WorksheetVersionSignature[]   @relation("WorksheetSigner")
   /// A munkanaplo-bejegyzesei. `SetNull` a torleskor: a bejegyzes marad, a
   /// szerzo neve nelkul.
   worksheetEntries           WorksheetEntry[]              @relation("WorksheetEntryAuthor")
@@ -3223,20 +3225,60 @@ model WorksheetEntry {
 /// Ez a v0 minimális, belső változata: a döntést egy belépett felhasználó
 /// rögzíti. Az e-mailes link, a külsős belépés, a megnyitás-nyom és a
 /// küldéskori dokumentum-hash NEM része ennek a szeletnek.
+/// HONNAN JOTT AZ ALAIRO NEVE.
+///
+/// Balazs kerese, 2026-09-04: az ugyfel neve legorduloből valaszthato, es ha
+/// "egyik sem", akkor a szerelo irja be -- DE AKKOR JELEZNI KELL, hogy nem az
+/// irta ala, akie a munkalap.
+///
+/// A JELZES TAROLT ALLAPOT, NEM KEPERNYO-SZOVEG (acrobot dontese, 2026-09-04).
+/// Igy az uj sorok MAGUKROL mondjak meg, melyik agon keletkeztek.
+///
+/// ES AZ `null` A HARMADIK ALLAPOT: a 2026-09-04 ELOTTI sorokon ez a mezo
+/// ures, es ott a `signerName` MAST jelentett -- a mobilon a SZERELO nevet, a
+/// weben az ugyfelet. Visszamenoleg nem tudjuk eldonteni, melyiket, es egy
+/// kitalalt ertek rosszabb, mint egy ketertelmu: ezert nincs ra migracio, es
+/// ezert a HIANY maga a megkulonboztetes.
+enum WorksheetSignerSource {
+  /// A szerelo a lap partnerenek egy munkatarsat valasztotta a listarol.
+  SELECTED
+  /// "Egyik sem": a szerelo irta be a nevet. A lap ezt KIMONDJA.
+  TYPED
+}
+
 model WorksheetVersionSignature {
   id                 String                     @id @default(cuid())
   worksheetVersionId String                     @unique
   decision           WorksheetSignatureDecision
   /// Az aláíró neve, ahogy aláírta - nem a fiók megjelenített neve.
+  ///
+  /// 2026-09-04 OTA EZ AZ UGYFEL EMBERE, mindket feluleten (acrobot dontese).
+  /// Korabban a mobilon a SZERELO neve allt itt, a weben az ugyfele: ugyanaz az
+  /// oszlop, ket jelentes. A `signerSource` valasztja szet oket -- ahol az
+  /// `null`, ott a regi, ketertelmu allapot van.
   signerName         String
+  /// KIT VALASZTOTT A SZERELO a lap partnerenek munkatarsai kozul.
+  ///
+  /// `null`, ha "egyik sem" agon ment (a nev szabad szoveg), ES a regi sorokon
+  /// is. A ketto kozott a `signerSource` kulonboztet.
+  ///
+  /// MIERT KELL A NEV MELLE: ket ember viselhet ugyanazt a nevet, es egy alairas
+  /// utolag akkor is azonosithato kell legyen. `SetNull` a torleskor: az alairas
+  /// tenye nem tunhet el egy fiok torlesevel.
+  signerUserId       String?
+  signerSource       WorksheetSignerSource?
+  /// KI ROGZITETTE -- a bejelentkezett kollega, tipikusan a szerelo. NEM
+  /// ugyanaz, mint az alairo: az elobbi a telefont kezeli, az utobbi alair.
   signedByUserId     String?
   signedAt           DateTime                   @default(now())
   note               String?
 
   worksheetVersion WorksheetVersion @relation(fields: [worksheetVersionId], references: [id], onDelete: Cascade)
   signedBy         User?            @relation("WorksheetSignedBy", fields: [signedByUserId], references: [id], onDelete: SetNull)
+  signer           User?            @relation("WorksheetSigner", fields: [signerUserId], references: [id], onDelete: SetNull)
 
   @@index([signedByUserId, signedAt])
+  @@index([signerUserId])
 }
 
 model AquariumMeasurement {

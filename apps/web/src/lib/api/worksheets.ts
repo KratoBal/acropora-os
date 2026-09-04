@@ -12,6 +12,7 @@ import type {
   WorksheetDetail,
   WorksheetEntryListResponse,
   WorksheetListResponse,
+  WorksheetSignerListResponse,
 } from "@acropora/types";
 
 import { apiRequest } from "./client";
@@ -146,6 +147,14 @@ export const worksheetsApi = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ body }),
       },
+    );
+  },
+  /** Aki alairhatja a lapot: a lap partnerenek nyilvantartott munkatarsai. */
+  signers(token: string, id: string, signal?: AbortSignal) {
+    return apiRequest<WorksheetSignerListResponse>(
+      worksheetPath(id, "/signers"),
+      token,
+      { signal },
     );
   },
   sign(token: string, id: string, input: SignWorksheetVersionInput) {

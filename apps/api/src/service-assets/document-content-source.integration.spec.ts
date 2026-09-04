@@ -55,8 +55,21 @@ async function insertDocument(
   storageKey: string | null,
 ): Promise<void> {
   await prisma.$executeRawUnsafe(
-    `INSERT INTO "AssetDocument" (id, "assetId", type, "fileName", "sizeBytes", sha256, content, "storageKey")
-     VALUES ($1, $2, 'MANUAL', 'x.pdf', 1, $3, $4, $5)`,
+    /**
+     * A `contentType` KEZZEL KERUL BE, ES EZ NEM MINDIG VOLT IGY.
+     *
+     * 2026-09-04-ig az oszlopon adatbazis-alapertelmezes allt
+     * (`'application/pdf'`), es ez a beszuras RA TAMASZKODOTT anelkul, hogy
+     * barhol kimondta volna. Amikor az alapertelmezes eldobasra kerult (#536,
+     * mert a tipus mostantol a BAJTOKBOL jon), mind a negy alteszt elhasalt egy
+     * `23502` NOT NULL megsertessel -- egy tesztben, ami nem is a tipusrol szol.
+     *
+     * ITT AZ ERTEK KOZOMBOS: ez a spec az `exactly_one_content_source`
+     * megszoritast meri (a `content` es a `storageKey` KIZAROLAGOSSAGAT), es a
+     * tipus csak egy kitoltendo mezo.
+     */
+    `INSERT INTO "AssetDocument" (id, "assetId", type, "fileName", "contentType", "sizeBytes", sha256, content, "storageKey")
+     VALUES ($1, $2, 'MANUAL', 'x.pdf', 'application/pdf', 1, $3, $4, $5)`,
     id,
     assetId,
     randomUUID().replaceAll("-", "").padEnd(64, "0").slice(0, 64),

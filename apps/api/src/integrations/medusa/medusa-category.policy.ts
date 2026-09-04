@@ -2,10 +2,21 @@
  * Mit kuldunk ki a termek kategoriaibol a Medusara, es mit NEM.
  *
  * KULON MODUL, ADATBAZIS NELKUL MERHETO -- ugyanabbol az okbol, amiert a
- * publikacios es az ar-szabaly is kulon all. A dontes eddig a parancssori
- * felulet torzseben lakott, ahol a `prisma` MODUL-SZINTU import: teszt-duplat
- * nem lehet neki adni, tehat a szabalyt csak eles adatbazissal lehetett volna
- * megnezni. Egy szabaly, amit csak eles futassal lehet merni, meretlen marad.
+ * publikacios es az ar-szabaly is kulon all. Egy szabaly, amit csak eles
+ * futassal lehet merni, meretlen marad. *
+ * AZ EREDETI INDOK AZOTA ELAVULT, ES A KOVETKEZTETESE MA MAR HAMIS. Ez a
+ * bekezdes ugy szolt, hogy a torzs a `prisma`-t MODUL-SZINTU importbol veszi,
+ * TEHAT teszt-duplat nem lehet neki adni. Az elso fele ma is igaz (az
+ * alapertelmezeshez), a masodik nem: a `db` parameter (2026-09-04, #515) ota a
+ * torzs MERHETO, es harom allitas fut rajta.
+ *
+ * A KOVETKEZTETES VALTOZATLAN, AZ OKA MAS: egy tiszta fuggveny allitasa NEV
+ * SZERINT tud pirosodni, a torzs-teszte viszont a TELJES lancot futtatja. Ha
+ * ez a szabaly a torzsben allna, egy rontasa utan nem lehetne megmondani,
+ * MELYIK resz romlott el.
+ *
+ * ES A "PARANCS TORZSE" KIFEJEZES IS ELAVULT: a torzs 2026-09-04 ota a
+ * `medusa-projection.runner.ts` modulban all (#518), a parancs maga kilenc sor.
  *
  * A SZABALY MINDEN VAGY SEMMI, ES EZ SZANDEKOS. Ha akar EGY kategoria hianyzik
  * a lekepezesbol, EGYIKET SEM kuldjuk. Egy reszleges lista ugyanis -- HA a
