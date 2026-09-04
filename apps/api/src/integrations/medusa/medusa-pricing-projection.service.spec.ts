@@ -9,6 +9,7 @@ import type {
   MedusaPriceRow,
   MedusaVariantPriceRow,
 } from "./medusa-admin.client.js";
+import type { PriceOwner } from "./medusa-price-source.js";
 import type { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
 import { MedusaPricingProjectionService } from "./medusa-pricing-projection.service.js";
 
@@ -27,10 +28,20 @@ const SKU = "STAGEPROOF0002";
 const MEDUSA_PRODUCT = "prod_medusa_1";
 const VARIANT = "variant_1";
 
-function priced(amount: string | null, currency: string | null = "HUF") {
+function priced(
+  amount: string | null,
+  currency: string | null = "HUF",
+  /*
+    A FORRAS ALAPERTELMEZESE A SAJAT ARUNK, mert ezek a tesztek az OS-ben tarolt
+    arrol szolnak. A tukor-ag SAJAT allitast kap lentebb: a mezot a szolgaltatas
+    csak TOVABBVISZI, tehat itt egy alapertelmezes nem rejt el semmit.
+  */
+  source: PriceOwner = "own",
+) {
   return {
     osProductId: OS_PRODUCT,
     sku: SKU,
+    source,
     price: {
       sellingGrossPrice: amount === null ? null : new Prisma.Decimal(amount),
       sellingPriceCurrency: currency,

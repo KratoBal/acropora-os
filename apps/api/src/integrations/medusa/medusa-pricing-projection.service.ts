@@ -6,6 +6,7 @@ import {
   type MedusaPriceRow,
   type MedusaVariantPriceRow,
 } from "./medusa-admin.client.js";
+import type { PriceOwner } from "./medusa-price-source.js";
 import type { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
 import {
   decidePricingProjection,
@@ -38,6 +39,15 @@ export interface ProjectablePricedVariant {
   osProductId: string;
   /** A változat cikkszáma. A Medusa oldali változatot ezzel találjuk meg. */
   sku: string;
+  /**
+   * HONNAN JÖTT AZ ÁR: a UNAS tükörből vagy a sajátunkból.
+   *
+   * A DÖNTÉS NEM ITT VAN (`medusa-price-source.ts`), és ez szándékos: ez a
+   * szolgáltatás az ÁRAT vetíti, nem azt dönti el, melyik ár az igaz. Ami itt
+   * a dolga, az az, hogy a forrás a JELENTÉSBE is kikerüljön -- egy befagyott
+   * tükör-ár és egy elavult saját ár különben ugyanúgy néz ki.
+   */
+  source: PriceOwner;
   price: ProjectablePrice;
 }
 
@@ -50,6 +60,8 @@ export interface PricingProjectionReport {
   medusaAmount: number;
   medusaCurrencyCode: string;
   variantId: string;
+  /** Melyik oldalról jött az ár: a tükörből vagy a sajátunkból. */
+  source: PriceOwner;
   /**
    * AZ ÁR SORÁNAK AZONOSÍTÓJA. Enélkül a jelentés nem bizonyít semmit: a
    * darabszám ugyanaz marad akkor is, ha minden futás újraépíti az árat.
@@ -374,6 +386,7 @@ function buildReport(
 ): PricingProjectionReport {
   return {
     sku: variant.sku,
+    source: variant.source,
     sourceAmount: variant.price.sellingGrossPrice!.toString(),
     sourceCurrency: variant.price.sellingPriceCurrency!,
     medusaAmount: amount,

@@ -27,6 +27,19 @@ interface VariantRow {
 function db(options: {
   variants?: VariantRow[];
   authority?: string | null;
+  /*
+    A TUKOR-SOR. Alapertelmezesben NINCS, mert ezek a tesztek tobbsegukben
+    ACROPORA gazdaju termekrol szolnak, ahol a tukor nem is szamit. A UNAS agnak
+    SAJAT allitasa van, sajat tukorrel.
+  */
+  mirror?: {
+    productId: string;
+    grossPrice: Prisma.Decimal | null;
+    currency: string | null;
+    saleGrossPrice: Prisma.Decimal | null;
+    saleStartsAt: Date | null;
+    saleEndsAt: Date | null;
+  } | null;
 }): PricingCliDatabase & { queries: unknown[] } {
   const queries: unknown[] = [];
   const variants = options.variants ?? [
@@ -56,6 +69,9 @@ function db(options: {
         },
       ],
     },
+    unasProductSnapshot: {
+      findMany: async () => (options.mirror ? [options.mirror] : []),
+    },
   };
 }
 
@@ -74,13 +90,16 @@ describe("Ár-parancs: kit vetítünk", () => {
   it("cikkszámból megtalálja a változatot és az árát", async () => {
     const resolved = await resolvePricingTargets("sku:STAGEPROOF0002", db({}));
 
-    assert.ok(!("error" in resolved));
-    if ("error" in resolved) return;
-    assert.equal(resolved.length, 1);
-    assert.equal(resolved[0]!.sku, "STAGEPROOF0002");
-    assert.equal(resolved[0]!.osProductId, "prod-os-1");
-    assert.equal(resolved[0]!.price.sellingGrossPrice?.toString(), "12990");
-    assert.equal(resolved[0]!.price.sellingPriceCurrency, "HUF");
+    assert.deepEqual(resolved.errors, []);
+    assert.equal(resolved.targets.length, 1);
+    assert.equal(resolved.targets[0]!.sku, "STAGEPROOF0002");
+    assert.equal(resolved.targets[0]!.osProductId, "prod-os-1");
+    assert.equal(resolved.targets[0]!.source, "own");
+    assert.equal(
+      resolved.targets[0]!.price.sellingGrossPrice?.toString(),
+      "12990",
+    );
+    assert.equal(resolved.targets[0]!.price.sellingPriceCurrency, "HUF");
   });
 
   /**
@@ -88,16 +107,47 @@ describe("Ár-parancs: kit vetítünk", () => {
    * pillanatképben él. Ha ráfutnánk, a SAJÁT üres mezőnkből próbálnánk árat
    * vetíteni egy olyan termékre, aminek van ára - csak nem a miénk.
    */
-  it("UNAS-gazdájú terméket IS vetít (ar-vetítés)", async () => {
+  it("UNAS gazdánál a TÜKÖR ára megy, nem a mi üres mezőnk", async () => {
+    /*
+      EZ A (b) UT A PARANCS SZINTJEN (Balazs dontese, 2026-09-04). A valtozat
+      sajat ara 12990, a tukore 7800 -- es UNAS gazdanal a TUKORE az igaz. A
+      sajat mezo egy valodi UNAS-gazdaju termeknel amugy is ures; itt
+      szandekosan NEM az, hogy a ket ar megkulonboztetheto legyen.
+
+      MI PIROSIT: ha a parancs tovabbra is a sajat mezobol olvasna. Akkor
+      12990 jonne vissza, es a forras "own" lenne.
+    */
+    const resolved = await resolvePricingTargets(
+      "sku:STAGEPROOF0002",
+      db({
+        authority: "UNAS",
+        mirror: {
+          productId: "prod-os-1",
+          grossPrice: new Prisma.Decimal("7800"),
+          currency: "HUF",
+          saleGrossPrice: null,
+          saleStartsAt: null,
+          saleEndsAt: null,
+        },
+      }),
+    );
+
+    assert.deepEqual(resolved.errors, []);
+    assert.equal(resolved.targets[0]!.source, "mirror");
+    assert.equal(
+      resolved.targets[0]!.price.sellingGrossPrice?.toString(),
+      "7800",
+    );
+  });
+
+  it("UNAS gazda tükör-sor NÉLKÜL: megáll, és megnevezi az okát", async () => {
     const resolved = await resolvePricingTargets(
       "sku:STAGEPROOF0002",
       db({ authority: "UNAS" }),
     );
 
-    assert.ok(
-      !("error" in resolved),
-      "a UNAS gazda 2026-09-02 óta nem szűr az ár-vetítésben sem",
-    );
+    assert.deepEqual(resolved.targets, []);
+    assert.match(resolved.errors.join(""), /mirror-row-missing/);
   });
 
   it("ismeretlen gazda ugyanúgy kizár (fail-closed)", async () => {
@@ -106,7 +156,8 @@ describe("Ár-parancs: kit vetítünk", () => {
       db({ authority: null }),
     );
 
-    assert.ok("error" in resolved);
+    assert.deepEqual(resolved.targets, []);
+    assert.match(resolved.errors.join(""), /authority-unknown/);
   });
 
   it("nincs ilyen cikkszám: hibaüzenet, nem üres siker", async () => {
@@ -115,9 +166,11 @@ describe("Ár-parancs: kit vetítünk", () => {
       db({ variants: [] }),
     );
 
-    assert.ok("error" in resolved);
-    if (!("error" in resolved)) return;
-    assert.match(resolved.error, /nincs ilyen cikkszámú aktív változat/);
+    assert.deepEqual(resolved.targets, []);
+    assert.match(
+      resolved.errors.join(""),
+      /nincs ilyen cikkszámú aktív változat/,
+    );
   });
 
   /**
@@ -145,6 +198,7 @@ describe("Ár-parancs: mit ír ki", () => {
     medusaCurrencyCode: "huf",
     variantId: "variant_1",
     priceId: "price_1",
+    source: "own",
     result: "updated",
   };
 
@@ -171,5 +225,21 @@ describe("Ár-parancs: mit ír ki", () => {
    */
   it("kiírja az ár azonosítóját", () => {
     assert.match(describePricing(report), /ar-azonosito: price_1/);
+  });
+
+  /**
+   * A FORRAS MEGNEVEZESE acrobot kikotese (2026-09-04): enelkul egy kesobbi
+   * olvaso nem tudja eldonteni, MIERT regi egy ar. Egy befagyott tukor-ar es
+   * egy elavult sajat ar a jelentesben kulonben ugyanugy nez ki.
+   *
+   * MI PIROSIT: ha a `forras:` sor visszaall allandora.
+   */
+  it("a jelentés megnevezi a forrást, és a kettő MÁS sort ad", () => {
+    const sajat = describePricing(report);
+    const tukor = describePricing({ ...report, source: "mirror" });
+
+    assert.match(sajat, /forras: Acropora OS/);
+    assert.match(tukor, /forras: UNAS tükör/);
+    assert.notEqual(sajat, tukor);
   });
 });
