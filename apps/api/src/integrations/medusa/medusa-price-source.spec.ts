@@ -17,6 +17,25 @@ import {
  *  - a befagyott tükör-árat a saját, friss ár helyett publikálni (a gazdaság
  *    már a miénk),
  *  - a listaárat publikálni egy AKTÍV akció mellett (a vevő többet fizet).
+ *
+ * === HA A UNAS-ÁGAT ELRONTOD, HÁROM ÁLLÍTÁS PIROSODIK. EZ NEM ROSSZ TESZT. ===
+ *
+ * A kalibráció harmadik állapota („több piros a szántnál") a legkönnyebben
+ * olvasható sikernek -- „hát elbukott, tehát működik" --, pedig általában azt
+ * mondja, hogy nem tudjuk, mit mértünk. ITT MÁS A HELYZET, és mérve van:
+ *
+ * A UNAS-ág EGYETLEN visszatérés. Mind a három állítás ARRA az egy sorra épül,
+ * két rétegen (ez a tiszta modul és a parancs specje), plusz a lejárt akció
+ * pozitív kontrollja, ami szintén a tükör árát állítja. Szűkebb rontás erre az
+ * ágra nem írható, mert a viselkedés egyetlen sor.
+ *
+ * Vagyis a három piros nem azt jelenti, hogy a teszt nem különböztet, hanem
+ * hogy a KÓD egy pontban dönt. A különbség eldöntéséhez nem elég ránézni a
+ * számra: meg kell nézni, hogy a piros állítások UGYANARRA a sorra épülnek-e.
+ *
+ * ELLENPÉLDA UGYANEBBŐL A FÁJLBÓL: az ACROPORA-ág elrontása PONTOSAN EGY
+ * állítást pirosít. Ott a kód két külön helyen dönt, tehát ott a szám is
+ * elvárható.
  */
 
 const forint = (value: string) => new Prisma.Decimal(value);
