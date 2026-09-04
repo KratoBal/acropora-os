@@ -2654,7 +2654,7 @@ model AssetDocument {
   assetId      String
   type         AssetDocumentType
   fileName     String
-  contentType  String            @default("application/pdf")
+  contentType  String
   sizeBytes    Int
   sha256       String            @db.VarChar(64)
   content      Bytes?
@@ -2709,7 +2709,7 @@ model WorksheetDocument {
   worksheetId  String
   type         WorksheetDocumentType @default(PHOTO)
   fileName     String
-  contentType  String                @default("image/jpeg")
+  contentType  String
   sizeBytes    Int
   sha256       String                @db.VarChar(64)
   content      Bytes?
