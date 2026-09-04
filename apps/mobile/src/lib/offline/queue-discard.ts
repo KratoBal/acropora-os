@@ -24,6 +24,8 @@
  * A tipusok SAJAT, szerkezeti alakok: ez a fajl a teszt-forditasba is bekerul.
  */
 
+import type { SyncOperation } from "./sync-queue";
+
 export interface DiscardableRowLike {
   state: string;
 }
@@ -66,20 +68,65 @@ export interface QueueDiscardConfirmation {
  * merne, hogy tenyleg megnevezi-e a tartalmat.
  */
 export function queueDiscardConfirmation(input: {
-  /** „Eszköz", „Munkalap" vagy „Fénykép" -- a `describeQueueEntry` adja. */
+  /** „Eszköz", „Munkalap", „Fénykép" vagy „Eszköz módosítás" -- a `describeQueueEntry` adja. */
   kind: string;
   /** A neve vagy a targya, ugyanonnan. */
   title: string;
+  /**
+   * MI EZ A SOR: felvitel, modositas vagy kep.
+   *
+   * AZ ELVETES KOVETKEZMENYE MUVELETENKENT MAS, ES A KULONBSEG NEM ARNYALAT.
+   * Egy felvitelnel a rekord SOHA nem fog letezni a szerveren; egy
+   * modositasnal a rekord OTT VAN, es a JAVITAS nem megy fel. A ket mondat
+   * MASROL szol, es a szerelo epp ebbol donti el, hogy elveti-e.
+   */
+  operation: SyncOperation;
 }): QueueDiscardConfirmation {
+  const szoveg = ELVETES_KOVETKEZMENYE[input.operation];
   return {
-    title: "Elveted ezt a felvitelt?",
+    title: szoveg.title,
     message:
       `${input.kind}: ${input.title}. ` +
-      "Ez a felvitel SOHA nem megy fel: nincs róla másik példány, és a szerveren nem fog létezni. " +
-      "A listán elvetettként marad meg, hogy látszódjon, mi történt vele.",
+      szoveg.body +
+      " A listán elvetettként marad meg, hogy látszódjon, mi történt vele.",
     confirmLabel: "Elvetem",
   };
 }
+
+/**
+ * MUVELETENKENT MI VESZ EL AZ ELVETESSEL -- ES MI NEM.
+ *
+ * `Record`, nem `if`-lanc, ugyanabbol az okbol, mint a javitas-elutasitasnal:
+ * egy negyedik muvelet felvetele igy FORDITASI HIBA, nem csendes felreirat.
+ *
+ * A MODOSITAS SORA A LEGKONNYEBBEN FELREERTHETO. A felvitel mondata
+ * („a szerveren nem fog létezni") egy szerkesztesrol HAMIS, es ijeszto is: a
+ * szerelo azt olvashatna ki belole, hogy maga az ESZKOZ tunik el. Az eszkoz ott
+ * marad, csak a javitas veszik el -- es epp ezt kell tudnia annak, aki dont.
+ */
+const ELVETES_KOVETKEZMENYE: Record<
+  SyncOperation,
+  { title: string; body: string }
+> = {
+  create: {
+    title: "Elveted ezt a felvitelt?",
+    body:
+      "Ez a felvitel SOHA nem megy fel: nincs róla másik példány, és a " +
+      "szerveren nem fog létezni.",
+  },
+  update: {
+    title: "Elveted ezt a módosítást?",
+    body:
+      "A javítás SOHA nem megy fel. Az eszköz a rendszerben megmarad, de a " +
+      "mostani, javítás előtti adatával -- amit itt beírtál, elveszik.",
+  },
+  "upload-photo": {
+    title: "Elveted ezt a fényképet?",
+    body:
+      "Ez a fénykép SOHA nem megy fel: a rögzítés a szerveren marad, kép " +
+      "nélkül.",
+  },
+};
 
 /** Amit az elvetes a soron megvaltoztat. */
 export interface QueueDiscardPatch {
