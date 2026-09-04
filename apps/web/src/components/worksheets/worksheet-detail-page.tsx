@@ -17,6 +17,7 @@ import {
   PERMISSIONS,
   type WorksheetDetail,
   type WorksheetSignatureDecision,
+  type WorksheetSignerListResponse,
 } from "@acropora/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -56,6 +57,11 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
   const [signature, setSignature] = useState({
     decision: "ACCEPTED" as WorksheetSignatureDecision,
     signerName: "",
+    /**
+     * KIT VALASZTOTTAK a lap partnerenek munkatarsai kozul. Ures sztring =
+     * "egyik sem", vagyis a nevet az iroda irja be -- es a lap ezt KIMONDJA.
+     */
+    signerUserId: "",
     note: "",
   });
 
@@ -85,6 +91,28 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  /**
+   * AKI ALAIRHATJA A LAPOT: a lap partnerenek nyilvantartott munkatarsai.
+   *
+   * KULON LEKERDEZES, es a hibaja NEM allitja meg a lapot: az alairas egy
+   * szakasz a sok kozul, es egy be nem tolt lista miatt a lap tobbi resze
+   * (tetelek, verziok, naplo) ugyanugy olvashato marad. Ami viszont NEM
+   * torenik meg: nem esik vissza ures listara csendben -- olyankor a valaszto
+   * "egyik sem" agra all, ami LATSZIK.
+   */
+  const [signers, setSigners] = useState<WorksheetSignerListResponse | null>(
+    null,
+  );
+  useEffect(() => {
+    if (!token || !worksheetId) return;
+    const controller = new AbortController();
+    worksheetsApi
+      .signers(token, worksheetId, controller.signal)
+      .then(setSigners)
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [token, worksheetId]);
 
   const run = async (action: () => Promise<WorksheetDetail>) => {
     setBusy(true);
@@ -402,18 +430,56 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
                 <option value="REJECTED">Elutasította</option>
               </Select>
             </FormField>
-            <FormField label="Aláíró neve" className="md:col-span-2">
-              <Input
-                aria-label="Aláíró neve"
-                value={signature.signerName}
+            {/*
+              AZ ALAIRO A LISTAROL VALASZTHATO (Balazs, 2026-09-04), es a
+              szabad szoveg az "egyik sem" ag -- amit a lap KIMOND.
+
+              A LISTA UGYANABBOL A VEGPONTBOL JON, mint a telefonon, es az
+              `emptyReason` is: ket kulonbozo ok van arra, hogy ures, es a
+              teendojuk MAS.
+            */}
+            <FormField label="Aláíró" className="md:col-span-2">
+              <Select
+                aria-label="Aláíró"
+                value={signature.signerUserId}
                 onChange={(event) =>
                   setSignature((current) => ({
                     ...current,
-                    signerName: event.target.value,
+                    signerUserId: event.target.value,
                   }))
                 }
-              />
+              >
+                <option value="">Egyik sem (a nevet beírom)</option>
+                {signers?.items.map((jelolt) => (
+                  <option key={jelolt.id} value={jelolt.id}>
+                    {jelolt.name}
+                  </option>
+                ))}
+              </Select>
+              {signers?.emptyReason ? (
+                <p className="pt-1 text-xs text-slate-500">
+                  {signers.emptyReason}
+                </p>
+              ) : null}
             </FormField>
+            {signature.signerUserId === "" ? (
+              <FormField label="Aláíró neve" className="md:col-span-2">
+                <Input
+                  aria-label="Aláíró neve"
+                  value={signature.signerName}
+                  onChange={(event) =>
+                    setSignature((current) => ({
+                      ...current,
+                      signerName: event.target.value,
+                    }))
+                  }
+                />
+                <p className="pt-1 text-xs text-slate-500">
+                  A lapon látszani fog, hogy a nevet te írtad be, és nem a
+                  partner nyilvántartott munkatársa írta alá.
+                </p>
+              </FormField>
+            ) : null}
             <FormField label="Megjegyzés" className="md:col-span-3">
               <Textarea
                 aria-label="Aláírás megjegyzése"
@@ -429,12 +495,27 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
             </FormField>
           </div>
           <Button
-            disabled={busy || signature.signerName.trim().length < 2}
+            /**
+             * A NEV CSAK AZ "EGYIK SEM" AGON KOTELEZO. Listarol valasztva a
+             * nevet a SZERVER veszi a valasztott sorbol -- egy itteni kapu
+             * olyan mezot kovetelne, ami fel sem megy.
+             */
+            disabled={
+              busy ||
+              (signature.signerUserId === "" &&
+                signature.signerName.trim().length < 2)
+            }
             onClick={() =>
               void run(() =>
                 worksheetsApi.sign(token, worksheet.id, {
                   decision: signature.decision,
-                  signerName: signature.signerName.trim(),
+                  /**
+                   * CSAK AZ EGYIK MEZO MEGY FEL. Ha mind a ketto ott allna, a
+                   * szerver ket kulonbozo allitast kapna arrol, ki irta ala.
+                   */
+                  ...(signature.signerUserId
+                    ? { signerUserId: signature.signerUserId }
+                    : { signerName: signature.signerName.trim() }),
                   note: signature.note.trim() ? signature.note.trim() : null,
                 }),
               )
@@ -495,13 +576,29 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
                   {version.changeReason ?? "—"}
                 </td>
                 <td className="p-3">
-                  {version.signature
-                    ? `${version.signature.signerName} (${
+                  {version.signature ? (
+                    <>
+                      {`${version.signature.signerName} (${
                         version.signature.decision === "ACCEPTED"
                           ? "elfogadta"
                           : "elutasította"
-                      })`
-                    : "—"}
+                      })`}
+                      {/*
+                        A JELZES A SZERVERTOL JON, a TAROLT allapotbol -- nem
+                        abbol, hogy a nev "ugy nez ki", mintha ugyfele lenne.
+                        Harom eset van: listarol valasztott (nincs mondat), a
+                        nevet beirtak (a lap kimondja), es a 2026-09-04 elotti
+                        sorok (azokrol nem allitunk semmit).
+                      */}
+                      {version.signature.signerNotice ? (
+                        <span className="block pt-1 text-xs text-slate-500">
+                          {version.signature.signerNotice}
+                        </span>
+                      ) : null}
+                    </>
+                  ) : (
+                    "—"
+                  )}
                 </td>
               </tr>
             ))}

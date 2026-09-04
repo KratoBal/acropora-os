@@ -6,6 +6,7 @@ import {
   canEditWorksheetEntry,
   describeEntryEditRefusal,
 } from "./worksheet-entry-permission.js";
+import { describeEmptySignerList } from "./worksheet-signer.js";
 import { randomUUID } from "node:crypto";
 
 import {
@@ -611,10 +612,13 @@ export class WorksheetsService {
         "Az elutasítás okát meg kell adni, legalább három karakterrel: enélkül nem derül ki, mit kell javítani.",
       );
 
+    const signer = await this.resolveSigner(id, input);
     const result = await this.repository.sign({
       worksheetId: id,
       decision: input.decision,
-      signerName: input.signerName.trim(),
+      signerName: signer.signerName,
+      signerUserId: signer.signerUserId,
+      signerSource: signer.signerSource,
       note: input.note?.trim() || null,
       actorUserId,
       now,
@@ -737,6 +741,86 @@ export class WorksheetsService {
         "A tételen hivatkozott eszköz nem található.",
       );
     }
+  }
+
+  /**
+   * AKI ALAIRHATJA A LAPOT: a lap partnerenek nyilvantartott munkatarsai.
+   *
+   * A HALMAZ A `User.customerId` MEZOBOL JON -- azok a fiokok, amiket a lap
+   * vevojehez kotottek. Ugyanaz az azonosito-ter, amit a lap visel: a
+   * munkalap partneret a szervizpartner-valaszto adja, es az a partner
+   * TUKOR-VEVO soranak azonositojat adja vissza. Vagyis ez EGYENES egyezes,
+   * nem join a partneren keresztul.
+   *
+   * BELSOS UT, mint a tobbi sor-vegpont: a valaszto a szerelo eszkoze.
+   */
+  async signerCandidates(id: string) {
+    const worksheet = await this.requireWorksheet(id, { kind: "internal" });
+    const items = await this.repository.customerContacts(worksheet.customerId);
+    const partnerSelectable = await this.repository.isSelectablePartner(
+      worksheet.customerId,
+    );
+    return {
+      items,
+      emptyReason: describeEmptySignerList({
+        partnerSelectable,
+        count: items.length,
+      }),
+    };
+  }
+
+  /**
+   * KI IRJA ALA, ES HONNAN JON A NEVE.
+   *
+   * A FORRAST A SZERVER SZAMOLJA, NEM A KLIENS KERDI: ha a hivo kuldene egy
+   * "forras" mezot, az ellentmondhatna a valasztott szemelynek, es akkor a
+   * lapon egy HAMIS jelzes allna. Igy a ketto nem tud elcsuszni.
+   *
+   * ES A NEVET A VALASZTOTT SOR ADJA, nem a kliens: egy klienstol jovo nev
+   * ilyenkor azt jelentene, hogy a lapra MAS nev kerul, mint akit valasztottak.
+   */
+  private async resolveSigner(
+    worksheetId: string,
+    input: SignWorksheetVersionDto,
+  ): Promise<{
+    signerName: string;
+    signerUserId: string | null;
+    signerSource: "SELECTED" | "TYPED";
+  }> {
+    if (input.signerUserId) {
+      const worksheet = await this.requireWorksheet(worksheetId, {
+        kind: "internal",
+      });
+      const contacts = await this.repository.customerContacts(
+        worksheet.customerId,
+      );
+      const picked = contacts.find((c) => c.id === input.signerUserId);
+      /**
+       * A VALASZTOTT SZEMELY A LAP PARTNEREHEZ TARTOZZON. Enelkul a hivo
+       * BARMELYIK felhasznalo azonositojat kuldhetne, es a lapra egy idegen
+       * ember neve kerulne -- ugy, hogy a jelzes szerint a partner
+       * nyilvantartott munkatarsa irta ala.
+       */
+      if (!picked)
+        throw new BadRequestException(
+          "A választott aláíró nem a munkalap partnerének munkatársa, ezért nem írhatja alá.",
+        );
+      return {
+        signerName: picked.name,
+        signerUserId: picked.id,
+        signerSource: "SELECTED",
+      };
+    }
+    /**
+     * "EGYIK SEM": a szerelo irja be a nevet, es a lap ezt KIMONDJA. A
+     * kotelezoseg ITT all, nem a DTO dekoratorain, mert KET mezot kot ossze.
+     */
+    const typed = input.signerName?.trim() ?? "";
+    if (typed.length < 2)
+      throw new BadRequestException(
+        "Válassz aláírót a listáról, vagy add meg a nevét legalább két karakterrel.",
+      );
+    return { signerName: typed, signerUserId: null, signerSource: "TYPED" };
   }
 
   /**

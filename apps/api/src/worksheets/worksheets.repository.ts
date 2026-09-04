@@ -1059,6 +1059,10 @@ export class WorksheetsRepository extends Repository {
     worksheetId: string;
     decision: "ACCEPTED" | "REJECTED";
     signerName: string;
+    /** A valasztott munkatars, ha listarol ment. `null` az "egyik sem" agon. */
+    signerUserId: string | null;
+    /** Honnan jott a nev. TAROLT allapot, nem kepernyo-szoveg. */
+    signerSource: "SELECTED" | "TYPED";
     note: string | null;
     actorUserId: string;
     now: Date;
@@ -1085,6 +1089,8 @@ export class WorksheetsRepository extends Repository {
           worksheetVersionId: current.id,
           decision: input.decision,
           signerName: input.signerName,
+          signerUserId: input.signerUserId,
+          signerSource: input.signerSource,
           signedByUserId: input.actorUserId,
           signedAt: input.now,
           note: input.note,
@@ -1249,6 +1255,46 @@ export class WorksheetsRepository extends Repository {
       await this.refreshTotals(transaction, input.versionId);
       return { outcome: "ok", alreadyPresent: false };
     });
+  }
+
+  /**
+   * A VEVO NYILVANTARTOTT MUNKATARSAI -- akiket a lapja alairhat.
+   *
+   * A halmaz a `User.customerId` mezobol jon: azok a fiokok, amiket ehhez a
+   * vevohoz kotottek (a felhasznalo adatlapjan). AKTIV fiokok, mert egy
+   * inaktivalt kollega neve nem kerulhet uj alairasra -- a REGI alairasokon
+   * ott marad, es ez helyes: az mar megtortent.
+   */
+  async customerContacts(
+    customerId: string,
+  ): Promise<{ id: string; name: string }[]> {
+    const rows = await this.database.user.findMany({
+      where: { customerId, isActive: true },
+      select: { id: true, displayName: true },
+      orderBy: { displayName: "asc" },
+    });
+    return rows.map((row) => ({ id: row.id, name: row.displayName }));
+  }
+
+  /**
+   * VALASZTHATO SZERVIZPARTNER-E EZ A VEVO.
+   *
+   * UGYANAZ A FELTETEL-HALMAZ, mint a partner-valasztonal
+   * (`selectablePartnerWhere`), es szandekosan onnan hivva: ket masolat
+   * elcsuszna, es akkor a lap azt allitana, hogy a partner torzsadata rendben
+   * van, mikozben a valasztobol hianyzik.
+   *
+   * A `customerId` a partner TUKOR-VEVO sorara mutat -- ugyanaz az azonosito,
+   * amit a munkalap visel.
+   */
+  async isSelectablePartner(customerId: string): Promise<boolean> {
+    const partner = await this.database.supplier.findFirst({
+      where: {
+        AND: [{ customerId }, WorksheetsRepository.selectablePartnerWhere()],
+      },
+      select: { id: true },
+    });
+    return partner !== null;
   }
 
   /**

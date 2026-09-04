@@ -194,6 +194,19 @@ export class WorksheetsController {
   }
 
   /**
+   * AKI ALAIRHATJA A LAPOT: a lap partnerenek nyilvantartott munkatarsai.
+   *
+   * `SERVICE_VIEW`, mert ez OLVASAS -- a valaszto a szerelo eszkoze, es a
+   * szerelo a lapot amugy is latja. Az ALAIRAS maga tovabbra is
+   * `SERVICE_MANAGE` alatt all.
+   */
+  @Get(":id/signers")
+  @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
+  signers(@Param("id") id: string) {
+    return this.service.signerCandidates(id);
+  }
+
+  /**
    * A MUNKANAPLO. OLVASNI `SERVICE_VIEW`, IRNI `SERVICE_MANAGE` -- ugyanaz a
    * paros, mint a lap tobbi reszen.
    *

@@ -505,6 +505,8 @@ describe(
       await repository.sign({
         worksheetId: id,
         decision: "ACCEPTED",
+        signerUserId: null,
+        signerSource: "TYPED" as const,
         signerName: "Kovács Béla",
         note: null,
         actorUserId,
@@ -858,6 +860,8 @@ describe(
       const signed = await repository.sign({
         worksheetId,
         decision: "ACCEPTED",
+        signerUserId: null,
+        signerSource: "TYPED" as const,
         signerName: "Gondnok Gábor",
         note: null,
         actorUserId,

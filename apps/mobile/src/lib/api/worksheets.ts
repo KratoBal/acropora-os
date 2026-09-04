@@ -371,7 +371,10 @@ export function signWorksheet(
   id: string,
   input: {
     decision: "ACCEPTED" | "REJECTED";
-    signerName: string;
+    /** CSAK az "egyik sem" agon. Listarol valasztva a szerver adja a nevet. */
+    signerName?: string;
+    /** A valasztott munkatars. A szerver ebbol szamolja a forrast. */
+    signerUserId?: string;
     note: string | null;
   },
 ) {
@@ -426,4 +429,24 @@ export function updateWorksheetEntry(
     `${BASE}/${encodeURIComponent(id)}/entries/${encodeURIComponent(entryId)}`,
     { method: "PATCH", body: JSON.stringify({ body }) },
   );
+}
+
+/**
+ * AKI ALAIRHATJA EZT A LAPOT: a lap partnerenek nyilvantartott munkatarsai.
+ *
+ * Az `emptyReason` A SZERVERTOL JON, es nem dísz: ket kulonbozo ok van, es a
+ * teendojuk MAS (nincs hozzakotott munkatars kontra a partner torzsadata
+ * hianyzik). Egy nema ures lista mind a kettore raillik, es a szerelo egyiket
+ * sem tudja megoldani a helyszinen.
+ */
+export interface WorksheetSignerCandidate {
+  id: string;
+  name: string;
+}
+
+export function listWorksheetSigners(id: string) {
+  return apiRequest<{
+    items: WorksheetSignerCandidate[];
+    emptyReason: string | null;
+  }>(`${BASE}/${encodeURIComponent(id)}/signers`);
 }

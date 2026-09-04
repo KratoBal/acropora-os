@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { Session, WorksheetDetail } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -12,6 +12,15 @@ const api = vi.hoisted(() => ({
   sign: vi.fn(),
   setAssignees: vi.fn(),
   assignableUsers: vi.fn(),
+  /**
+   * A VARRAT, ES A DUPLABOL 2026-09-04-IG HIANYZOTT.
+   *
+   * A lap MOSTANTOL lekeri az alairo-jelolteket. A dupla nem tud rola, tehat
+   * a hivas `undefined`-ot hivna fuggvenykent -- es NEGY, egeszen mas
+   * allitasrol szolo teszt bukott el rajta. Amit a HIVO hasznal, de a teszt
+   * nem allit, az a dupla biztos hibaja.
+   */
+  signers: vi.fn(),
 }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
@@ -120,6 +129,7 @@ describe("WorksheetDetailPage és az ügyfél saját kódja a tételsoron", () =
     auth.session = session;
     api.detail.mockReset();
     api.assignableUsers.mockResolvedValue({ items: [] });
+    api.signers.mockResolvedValue({ items: [], emptyReason: null });
   });
 
   /**
@@ -189,5 +199,133 @@ describe("WorksheetDetailPage és az ügyfél saját kódja a tételsoron", () =
 
     expect(await screen.findByText("Nincs mögötte hibajegy")).toBeTruthy();
     expect(screen.queryByRole("link", { name: /^HJ-/ })).toBeNull();
+  });
+});
+
+/**
+ * KI IRJA ALA A LAPOT (Balazs, 2026-09-04).
+ *
+ * Az alairo a lap partnerenek nyilvantartott munkatarsa, listarol valasztva; az
+ * "egyik sem" agon az iroda irja be a nevet, ES A LAP EZT KIMONDJA. A jelzes a
+ * SZERVERTOL jon, tarolt allapotbol.
+ */
+describe("WorksheetDetailPage és az aláíró", () => {
+  beforeEach(() => {
+    auth.session = session;
+    api.detail.mockReset();
+    api.sign.mockReset();
+    api.assignableUsers.mockResolvedValue({ items: [] });
+    api.signers.mockResolvedValue({
+      items: [{ id: "kontakt-1", name: "Vevő Vilmos" }],
+      emptyReason: null,
+    });
+  });
+
+  function awaitingSignature() {
+    const alap = detail(null);
+    return {
+      ...alap,
+      currentVersion: { ...alap.currentVersion, status: "AWAITING_SIGNATURE" },
+    };
+  }
+
+  it("a LISTÁRÓL választott aláírónál CSAK az azonosító megy fel", async () => {
+    /*
+      EZ A LEGFONTOSABB ALLITAS. A nevet a SZERVER veszi a valasztott sorbol; ha
+      a kliens is kuldene egyet, a lapra MAS nev kerulhetne, mint akit
+      valasztottak.
+
+      MI PIROSIT: ha a `signerName` is bekerulne a torzsbe.
+    */
+    api.detail.mockResolvedValue(awaitingSignature());
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+    await screen.findByLabelText("Aláíró");
+    fireEvent.change(screen.getByLabelText("Aláíró"), {
+      target: { value: "kontakt-1" },
+    });
+    api.sign.mockResolvedValue(awaitingSignature());
+    fireEvent.click(screen.getByRole("button", { name: "Döntés rögzítése" }));
+    await waitFor(() => expect(api.sign).toHaveBeenCalled());
+    const [, , input] = api.sign.mock.calls[0] as [
+      string,
+      string,
+      Record<string, unknown>,
+    ];
+    expect(input.signerUserId).toBe("kontakt-1");
+    expect("signerName" in input).toBe(false);
+  });
+
+  it("az EGYIK SEM ágon jön elő a névmező, és KIMONDJA a következményét", async () => {
+    /*
+      A szabad szoveges ag NEM kiskapu: ez az az ut, amin az iroda beirja a
+      nevet -- es a lap KIMONDJA, hogy nem a partner nyilvantartott munkatarsa
+      irta ala. Ha a mondat hianyozna, a ket ag a kepernyon
+      megkulonboztethetetlen lenne.
+
+      MI PIROSIT: a mondat torlese, vagy ha a mezo a valasztott agon is ott
+      allna.
+    */
+    api.detail.mockResolvedValue(awaitingSignature());
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+    await screen.findByLabelText("Aláíró");
+    expect(screen.getByLabelText("Aláíró neve")).toBeTruthy();
+    expect(screen.getByText(/a nevet te írtad be/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Aláíró"), {
+      target: { value: "kontakt-1" },
+    });
+    await waitFor(() =>
+      expect(screen.queryByLabelText("Aláíró neve")).toBeNull(),
+    );
+  });
+
+  it("az ÜRES listánál a szerver mondata látszik, nem néma üres legördülő", async () => {
+    /*
+      Ket kulonbozo ok van, es a teendojuk MAS. Egy nema ures legordulo mind a
+      kettore raillik, es a felhasznalo egyiket sem tudja megoldani.
+
+      MI PIROSIT: az `emptyReason` kirajzolasanak elhagyasa.
+    */
+    api.detail.mockResolvedValue(awaitingSignature());
+    api.signers.mockResolvedValue({
+      items: [],
+      emptyReason: "Ehhez a partnerhez még nincs hozzákötött munkatárs.",
+    });
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+    await screen.findByText(/nincs hozzákötött munkatárs/);
+  });
+
+  it("a RÖGZÍTETT aláírás mellett a szerver jelzése áll", async () => {
+    /*
+      A jelzes TAROLT allapotbol jon, nem abbol, hogy a nev "ugy nez ki",
+      mintha ugyfele lenne -- es a regi sorokrol MAST mond, mint az ujakrol.
+
+      MI PIROSIT: a `signerNotice` kirajzolasanak elhagyasa.
+    */
+    const alap = detail(null);
+    /*
+      A VERZIO-TABLAZAT SORAT ALLITJUK ELO, mert a jelzes OTT latszik: a
+      fixture alapbol ures `versions` tombot ad (a lap tobbi allitasa nem
+      hasznalja), tehat a jelzest egy sor NELKUL nem is lehetne merni -- a
+      teszt zold maradna, es semmit nem mondana.
+    */
+    api.detail.mockResolvedValue({
+      ...alap,
+      versions: [
+        {
+          ...alap.currentVersion,
+          signature: {
+            decision: "ACCEPTED" as const,
+            signerName: "Kovács Kázmér",
+            signedByName: "Szerelő Sándor",
+            signedAt: "2026-09-04T10:00:00.000Z",
+            note: null,
+            signerNotice:
+              "A nevet a szerelő írta be: az aláíró NEM a partner munkatársa.",
+          },
+        },
+      ],
+    });
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+    await screen.findByText(/NEM a partner munkatársa/);
   });
 });

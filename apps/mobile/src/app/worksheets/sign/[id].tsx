@@ -13,7 +13,11 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { getWorksheet, signWorksheet } from "@/lib/api/worksheets";
+import {
+  getWorksheet,
+  listWorksheetSigners,
+  signWorksheet,
+} from "@/lib/api/worksheets";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import {
@@ -25,7 +29,6 @@ import {
   buildWorksheetSignaturePayload,
   canSignWorksheetVersion,
   worksheetSignatureConfirmation,
-  worksheetSignerName,
   type WorksheetSignatureDecision,
 } from "@/lib/worksheets/worksheet-signature";
 
@@ -96,7 +99,31 @@ export default function WorksheetSignScreen() {
    * sajat maga olvasna ki ujra, a ket hely kulon romolhatna el -- es az ugyfel
    * MAS nevet latna, mint ami a lapra kerul.
    */
-  const signerName = user ? worksheetSignerName(user) : "";
+  /**
+   * AKI ALAIRHATJA: a lap partnerenek nyilvantartott munkatarsai.
+   *
+   * A LISTA A SZERVERTOL JON, es vele egyutt az is, MIERT ures, ha ures. Ket
+   * kulonbozo ok van (nincs hozzakotott munkatars kontra a partner torzsadata
+   * hianyzik), es a teendojuk MAS -- egy nema ures lista mind a kettore
+   * raillik, es a szerelo egyiket sem tudja megoldani a helyszinen.
+   */
+  const signers = useQuery({
+    queryKey: ["worksheet-signers", id],
+    queryFn: () => listWorksheetSigners(id),
+    enabled: Boolean(
+      id && capabilities?.worksheetsView && status === "authenticated",
+    ),
+  });
+
+  /**
+   * KIT VALASZTOTT A SZERELO. `null` = "egyik sem", vagyis a nevet beirja --
+   * es a lap ezt KIMONDJA (a jelzes a soron tarolodik, nem a kepernyon).
+   */
+  const [signerUserId, setSignerUserId] = useState<string | null>(null);
+  const [typedName, setTypedName] = useState("");
+  const signerName =
+    signers.data?.items.find((item) => item.id === signerUserId)?.name ??
+    typedName.trim();
 
   /**
    * A DONTES ARGUMENTUMKENT MEGY BE, NEM ALLAPOTBOL OLVASSUK.
@@ -110,8 +137,8 @@ export default function WorksheetSignScreen() {
   const sign = useMutation({
     mutationFn: async (chosen: WorksheetSignatureDecision) => {
       const built = buildWorksheetSignaturePayload(
-        { decision: chosen, note },
-        signerName,
+        { decision: chosen, note, typedName },
+        signerUserId,
       );
       if (!built.ok) throw new Error(built.message);
       return signWorksheet(id, built.payload);
@@ -149,8 +176,8 @@ export default function WorksheetSignScreen() {
    */
   const megerosit = (chosen: WorksheetSignatureDecision) => {
     const built = buildWorksheetSignaturePayload(
-      { decision: chosen, note },
-      signerName,
+      { decision: chosen, note, typedName },
+      signerUserId,
     );
     if (!built.ok) {
       setFormError(built.message);
@@ -267,18 +294,78 @@ export default function WorksheetSignScreen() {
             ) : (
               <>
                 {/*
-                  A NEV, ZARVA -- ES NEM MEZOBEN. Egy letiltott beviteli mezo is
-                  MEZO: ugy nez ki, mint amit "valamiert" nem lehet szerkeszteni,
-                  es az elso kerdes az lesz, hogyan lehetne megis. Itt sima
-                  szoveg all, mert a kepernyo nem KERDEZI a nevet, csak megmutatja,
-                  kinek a neveben zarul a lap.
+                  AZ ALAIRO AZ UGYFEL EMBERE (Balazs, 2026-09-04): a szerelo a
+                  lap partnerenek nyilvantartott munkatarsai kozul valaszt.
+
+                  A LISTA GOMBOKBOL ALL, NEM LEGORDULOBOL: ezt a kepernyot a
+                  szerelo ODAADJA az ugyfelnek, es egy rendszer-legordulo a
+                  telefonon egy tovabbi, teljes kepernyos parbeszedet nyit.
+                  Nehany nevnel egy sor gomb kevesebb lepes, es latszik is,
+                  hany ember kozul lehet valasztani.
                 */}
                 <Text style={styles.sectionTitle}>Aláíró</Text>
                 <View style={styles.card}>
-                  <Text style={styles.signer}>{signerName}</Text>
-                  <Text style={styles.muted}>
-                    A lap a bejelentkezett szerelő nevében zárul.
-                  </Text>
+                  {signers.isPending ? (
+                    <ActivityIndicator color="#52d6c7" />
+                  ) : null}
+
+                  {signers.data?.items.map((jelolt) => (
+                    <Pressable
+                      key={jelolt.id}
+                      accessibilityRole="button"
+                      onPress={() => setSignerUserId(jelolt.id)}
+                      style={[
+                        styles.signerOption,
+                        signerUserId === jelolt.id && styles.signerOptionPicked,
+                      ]}
+                    >
+                      <Text style={styles.signer}>{jelolt.name}</Text>
+                    </Pressable>
+                  ))}
+
+                  {/*
+                    AZ URES LISTA MEGMONDJA, MIERT. Ket kulonbozo ok van, es a
+                    teendojuk MAS -- egy nema ures lista mind a kettore raillik,
+                    es a szerelo egyiket sem tudja megoldani a helyszinen. A
+                    mondat a SZERVERTOL jon, hogy a ket felulet ugyanazt mondja.
+                  */}
+                  {signers.data?.emptyReason ? (
+                    <Text style={styles.muted}>{signers.data.emptyReason}</Text>
+                  ) : null}
+
+                  {/*
+                    AZ "EGYIK SEM" AG. Balazs kerte, es NEM kiskapu: ez az az
+                    ut, amin a szerelo beirja a nevet -- es a lap KIMONDJA, hogy
+                    nem a partner nyilvantartott munkatarsa irta ala. A jelzes a
+                    soron tarolodik, nem ezen a kepernyon.
+                  */}
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setSignerUserId(null)}
+                    style={[
+                      styles.signerOption,
+                      signerUserId === null && styles.signerOptionPicked,
+                    ]}
+                  >
+                    <Text style={styles.signer}>Egyik sem</Text>
+                  </Pressable>
+
+                  {signerUserId === null ? (
+                    <>
+                      <TextInput
+                        value={typedName}
+                        onChangeText={setTypedName}
+                        placeholder="Az aláíró neve"
+                        placeholderTextColor="#5b7d8f"
+                        style={styles.input}
+                        accessibilityLabel="Az aláíró neve"
+                      />
+                      <Text style={styles.muted}>
+                        A lapon látszani fog, hogy a nevet te írtad be, és nem a
+                        partner nyilvántartott munkatársa írta alá.
+                      </Text>
+                    </>
+                  ) : null}
                 </View>
 
                 {formError ? (
@@ -428,6 +515,15 @@ const styles = StyleSheet.create({
   },
   muted: { color: "#789cad", fontSize: 12 },
   blockedTitle: { color: "#f4fbff", fontSize: 15, fontWeight: "800" },
+  signerOption: {
+    backgroundColor: "#071827",
+    borderColor: "#123449",
+    borderRadius: 10,
+    borderWidth: 2,
+    marginBottom: 8,
+    padding: 12,
+  },
+  signerOptionPicked: { borderColor: "#52d6c7" },
   signer: { color: "#f4fbff", fontSize: 18, fontWeight: "800" },
   rejectButton: {
     backgroundColor: "#8c2f3f",
