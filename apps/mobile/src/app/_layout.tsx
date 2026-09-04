@@ -139,6 +139,10 @@ function RootNavigator() {
         name="queue-fix/[id]"
         options={{ title: "Elakadt felvitel" }}
       />
+      <Stack.Screen
+        name="queue-resolve/[id]"
+        options={{ title: "Elakadt módosítás" }}
+      />
       <Stack.Screen name="worksheets/index" options={{ title: "Munkalapok" }} />
       <Stack.Screen name="worksheets/new" options={{ title: "Új munkalap" }} />
       <Stack.Screen name="worksheets/[id]" options={{ title: "Munkalap" }} />

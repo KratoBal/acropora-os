@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { queueResendEligibility, queueResendPatch } from "./queue-resend";
+import {
+  queueResendEligibility,
+  queueResendPatch,
+  queueResolveEligibility,
+} from "./queue-resend";
 
 /**
  * MELYIK SOR JAVITHATO, ES MI TORTENIK VELE.
@@ -68,7 +72,16 @@ describe("melyik sor javítható és küldhető újra", () => {
       mezoket: egy valtozatlan ujrakuldes ugyanezt adna vissza.
     */
     assert.match(!d.ok ? d.message : "", /időközben más is átírta/);
-    assert.match(!d.ok ? d.message : "", /írd be újra/);
+    /*
+      A MONDAT MASODIK FELE A KIJARATOT NEVEZI MEG, es ez a fele 2026-09-04-en
+      MEGVALTOZOTT: amig feloldo keperno nem volt, a szerelot az eszkoz
+      ujranyitasara kuldte. Most van keperno, tehat a regi mondat egy rosszabb
+      utat ajanlana.
+
+      AZ ALLITAS CELJA VALTOZATLAN: a szoveg mondja meg, mit lehet TENNI. Csak
+      az valtozott, hogy MI a helyes tenni valo.
+    */
+    assert.match(!d.ok ? d.message : "", /Feloldás gombbal/);
   });
 
   it("ISMERETLEN műveletről nem találgatunk", () => {
@@ -196,5 +209,62 @@ describe("mit változtat az újraküldés a soron", () => {
       ATIRT sor mellett -- olvashato, hiheto, es hamis.
     */
     assert.equal(queueResendPatch("{}").lastError, null);
+  });
+});
+
+describe("melyik sor OLDHATO FEL mezőnként", () => {
+  const elakadtModositas = {
+    state: "conflict",
+    operation: "update",
+    entityType: "asset",
+  };
+
+  it("elakadt eszköz-MÓDOSÍTÁS: igen", () => {
+    assert.deepEqual(queueResolveEligibility(elakadtModositas), { ok: true });
+  });
+
+  it("a JAVÍTÁS és a FELOLDÁS kizárja egymást", () => {
+    /*
+      EZ A LEGFONTOSABB ALLITAS EBBEN A SZAKASZBAN, ES UGYANAZ AZ ALAK, MINT AZ
+      UJRAPROBALAS ES A JAVITAS KOZOTT.
+
+      A ket gomb MAS kerdest tesz fel. A javitas a torzset iratja at es ugyanugy
+      kuldi ujra; egy elakadt modositasnal ez SOHA nem tudna sikerulni, mert a
+      torzsben allo verzio veglegesen elavult. Ha mindketto megjelenne ugyanazon
+      a soron, a szerelo a rossz gombot nyomna meg.
+
+      MI PIROSIT: barmelyik feltetel kiszelesitese ugy, hogy a ket halmaz
+      atfedjen.
+    */
+    for (const operation of ["create", "update", "upload-photo"]) {
+      const sor = { ...elakadtModositas, operation };
+      const javitas = queueResendEligibility(sor);
+      const feloldas = queueResolveEligibility(sor);
+      assert.equal(
+        javitas.ok && feloldas.ok,
+        false,
+        `${operation}: mindkét gomb megjelenne`,
+      );
+    }
+  });
+
+  it("ami nem akadt el, azon nincs mit feloldani", () => {
+    for (const state of ["pending", "syncing", "failed"]) {
+      const d = queueResolveEligibility({ ...elakadtModositas, state });
+      assert.equal(!d.ok && d.reason, "not-conflicted", state);
+    }
+  });
+
+  it("MÁS FAJTÁRA nem áll: szándékos, időzített határ", () => {
+    /*
+      A feloldo keperno az ESZKOZ mezoit ismeri. Egy masik fajtat nem tudna
+      megmutatni, es egy ures keperno rosszabb, mint a kimondott hatar.
+    */
+    const d = queueResolveEligibility({
+      ...elakadtModositas,
+      entityType: "worksheet",
+    });
+    assert.equal(d.ok, false);
+    assert.match(!d.ok ? d.message : "", /Szándékos szűkítés/);
   });
 });

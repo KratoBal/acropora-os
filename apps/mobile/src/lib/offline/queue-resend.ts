@@ -173,7 +173,7 @@ export function queueResendEligibility(
 const JAVITAS_ELUTASITAS_MUVELET: Record<SyncOperation, string | null> = {
   create: null,
   update:
-    "Ezt a módosítást nem a szövege miatt utasította el a szerver, hanem azért, mert időközben más is átírta ugyanazokat a mezőket. Változatlanul újraküldve ugyanezt kapnád: nyisd meg az eszközt, nézd meg a mostani értéket, és ha a tiéd kell, írd be újra. Amit beírtál, addig itt marad.",
+    "Ezt a módosítást nem a szövege miatt utasította el a szerver, hanem azért, mert időközben más is átírta ugyanazokat a mezőket. Változatlanul újraküldve ugyanezt kapnád, ezért itt nincs javítás: a Feloldás gombbal mezőnként eldöntheted, melyik érték maradjon.",
   "upload-photo":
     "Ez egy fénykép, nincs mit átírni rajta. A képet a rögzítés után lehet újra feltölteni.",
 };
@@ -223,4 +223,55 @@ export function queueResendPatch(payloadJson: string): QueueResendPatch {
     attemptCount: 0,
     lastError: null,
   };
+}
+
+/**
+ * A FELOLDAS MAS KERDES, MINT A JAVITAS, EZERT KULON DONTES.
+ *
+ * A javitas (`queueResendEligibility`) azt kerdezi: at lehet-e IRNI a torzset,
+ * es ujra elkuldeni ugyanugy. Egy elakadt MODOSITASNAL ez nem mukodhet: a
+ * torzsben allo `expectedUpdatedAt` vegleg elavult, tehat barmilyen szoveggel
+ * ugyanazt a 409-et kapna vissza.
+ *
+ * A FELOLDAS azt kerdezi: MELYIK ERTEK MARADJON, mezonkent -- es a valaszbol
+ * UJ torzs keszul, a FRISS verzioval. Ez az egyetlen ut, ami valoban at tud
+ * menni.
+ *
+ * A KETTO KIZARJA EGYMAST, es ez nem izles: ha mindketto megjelenne ugyanazon a
+ * soron, a szerelo a rossz gombot nyomna meg -- a javitas ott egy soha nem
+ * teljesulo igeret lenne.
+ */
+export function queueResolveEligibility(
+  row: ResendableRowLike,
+): QueueResendEligibility {
+  if (row.state !== "conflict")
+    return {
+      ok: false,
+      reason: "not-conflicted",
+      message: "Ez a sor nem akadt el: nincs mit feloldani rajta.",
+    };
+
+  if (row.operation !== "update")
+    return {
+      ok: false,
+      reason: "not-a-create",
+      message:
+        "Ez nem módosítás, hanem felvitel vagy fénykép: nincs mit mezőnként eldönteni rajta.",
+    };
+
+  /**
+   * MA CSAK ESZKOZ. A feloldo keperno az eszkoz mezoit ismeri (statusz,
+   * kritikussag, helyszin, hat szoveges mezo), es egy masik fajtat NEM tudna
+   * megmutatni. Ez idozitett hatar, nem hiany: amikor mas fajta is kaphat
+   * `update` sort, ez a sor valtozik, es a mondat vele.
+   */
+  if (row.entityType !== "asset")
+    return {
+      ok: false,
+      reason: "unsupported-entity",
+      message:
+        "Ezt a fajtát a feloldó képernyő még nem ismeri. Szándékos szűkítés: ma az eszköz módosítása oldható fel a telefonon.",
+    };
+
+  return { ok: true };
 }
