@@ -31,8 +31,11 @@ node scripts/scan-secrets.mjs --staged
 
 # --no-error-on-unmatched-pattern: after .gitignore/.prettierignore filtering
 # the list can end up empty, which is a pass, not a failure.
-if ! printf '%s\n' "$staged" | xargs -d '\n' -r \
-  pnpm exec prettier --check --ignore-unknown --no-error-on-unmatched-pattern
+# A listat itt a git adja ujra, `-z`-vel, nem a `$staged`: a NUL bajtot egy
+# shell valtozo nem tudja hordozni, a `-z` nelkuli git pedig a nem-ASCII
+# neveket idezojelezve, oktalisan escape-elve irja ki.
+if ! git diff --cached --name-only --diff-filter=ACMR -z |
+  xargs -0 pnpm exec prettier --check --ignore-unknown --no-error-on-unmatched-pattern
 then
   echo >&2
   echo "A commit elutasitva: a fenti fajlok nincsenek formazva." >&2
