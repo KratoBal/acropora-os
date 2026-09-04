@@ -28,6 +28,10 @@ import {
   partitionByUnasAuthority,
   type SkippedProduct,
 } from "./unas-write-policy.js";
+import {
+  descriptionImageReferences,
+  ownImageReferenceHosts,
+} from "./description-image-references.js";
 
 const json = (value: unknown) =>
   JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -474,6 +478,7 @@ export class UnasProductSyncRepository extends Repository {
           throw new Error(`INVALID_SYNC_RUN_STATE:${run.status}`);
         if (diffs.some((diff) => diff.action === "CONFLICT"))
           throw new Error("UNAS_PRODUCT_IDENTITY_CONFLICT");
+        const ownHosts = ownImageReferenceHosts();
 
         /**
          * Egy idegen termék a listában KIMARAD, nem állítja meg a köteget.
@@ -701,6 +706,37 @@ export class UnasProductSyncRepository extends Repository {
             diff.product,
             windowEnd,
           );
+          const references = [
+            ...descriptionImageReferences(
+              diff.product.descriptionShort,
+              ownHosts,
+            ).map((reference) => ({ ...reference, descriptionPart: "short" })),
+            ...descriptionImageReferences(
+              diff.product.descriptionLong,
+              ownHosts,
+            ).map((reference) => ({ ...reference, descriptionPart: "long" })),
+          ];
+          await transaction.productDescriptionImageReference.deleteMany({
+            where: { productId: product.id },
+          });
+          const uniqueReferences = [
+            ...new Map(
+              references.map((reference) => [
+                `${reference.descriptionPart}|${reference.url}`,
+                reference,
+              ]),
+            ).values(),
+          ];
+          if (uniqueReferences.length)
+            await transaction.productDescriptionImageReference.createMany({
+              data: uniqueReferences.map((reference) => ({
+                productId: product.id,
+                descriptionPart: reference.descriptionPart,
+                url: reference.url,
+                host: reference.host,
+                isOwn: reference.isOwn,
+              })),
+            });
 
           const referenceByEntity =
             await transaction.externalReference.findUnique({

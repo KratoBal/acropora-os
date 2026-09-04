@@ -717,6 +717,7 @@ model Product {
   variants         ProductVariant[]
   channelListings  ChannelListing[]
   images           ProductImage[]
+  descriptionImageReferences ProductDescriptionImageReference[]
   sourceRelations  ProductRelation[]        @relation("ProductRelationSource")
   targetRelations  ProductRelation[]        @relation("ProductRelationTarget")
   unasSnapshot     UnasProductSnapshot?
@@ -731,6 +732,20 @@ model Product {
   @@index([catalogAuthority, isActive, webshopSellable])
   @@index([mirrorSource, mirrorState])
   @@index([missingSince])
+}
+
+model ProductDescriptionImageReference {
+  id              String   @id @default(cuid())
+  productId       String
+  descriptionPart String
+  url             String
+  host            String?
+  isOwn           Boolean
+  createdAt       DateTime @default(now())
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  @@unique([productId, descriptionPart, url])
+  @@index([isOwn])
+  @@index([host])
 }
 
 model ProductVariant {
