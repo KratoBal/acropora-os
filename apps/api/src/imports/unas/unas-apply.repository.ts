@@ -599,10 +599,36 @@ export class UnasApplyRepository extends Repository {
       ["hasonlotermekek", "SIMILAR"],
     ];
     for (const { productId, row } of products) {
-      await transaction.productRelation.deleteMany({
-        where: { sourceProductId: productId, source: "UNAS" },
-      });
+      /**
+       * A TORLES A FELOLDAS UTAN ALL, ES EZ ORZO, NEM ATRENDEZES.
+       *
+       * KET UT IR EBBE A TABLABA ugyanazzal a `source` ertekkel: ez a kezi
+       * tablazat-import, es az API-alapu szinkron. Az adat forrasa ugyanaz, es
+       * az egyedi kulcs nem is enged mas erteket -- viszont a KET UT NEM
+       * UGYANANNYIT LAT. A cikkszam-alapu parositas ma 589 hivatkozast veszit
+       * (kisbetus irasmod a forrasban); az azonosito-alapu API-ut egyet sem.
+       *
+       * Vagyis egy kezi import az API-szinkron UTAN CSENDBEN visszavinne a
+       * kapcsolatokat a szegenyebb halmazra: torol, es kevesebbet ir vissza.
+       * Semmi nem hibazna, es a ket szamlalo kulon futasokrol szolna, tehat
+       * senki nem vetne ossze oket.
+       *
+       * A FELTETEL A MUVELET PILLANATABAN MERHETO, es nem igenyel semmilyen
+       * tudast arrol, ki futott elobb: ha kevesebbet irnank, mint amennyi ott
+       * all, megallunk a TORLES ELOTT. Igy a leallas MEGELOZI a kart, nem
+       * utana szol rola.
+       *
+       * MIERT AZ EGESZ KOTEG ALL LE, es nem csak ez a termek: a hivas egyetlen
+       * tranzakcio, tehat a "hagyjuk ki ezt az egyet" alak egy FELIG atirt
+       * katalogust hagyna maga utan. Egy hangos leallas visszaforditható; egy
+       * felig lefutott import nem.
+       */
       const seen = new Set<string>();
+      const planned: Array<{
+        targetProductId: string;
+        relationType: "ACCESSORY" | "CROSS_SELL" | "SIMILAR" | "UP_SELL";
+        sortOrder: number;
+      }> = [];
       for (const [field, relationType] of relationFields) {
         const references = splitReferences(rawText(row, field));
         for (const [sortOrder, sku] of references.entries()) {
@@ -724,27 +750,55 @@ export class UnasApplyRepository extends Repository {
             continue;
           }
           seen.add(key);
-          const existing = await transaction.productRelation.findUnique({
-            where: {
-              sourceProductId_targetProductId_relationType: {
-                sourceProductId: productId,
-                targetProductId,
-                relationType,
-              },
-            },
-          });
-          if (existing) continue;
-          await transaction.productRelation.create({
-            data: {
-              sourceProductId: productId,
-              targetProductId,
-              relationType,
-              sortOrder,
-              source: "UNAS",
-            },
-          });
-          counts.relationsSynchronized += 1;
+          planned.push({ targetProductId, relationType, sortOrder });
         }
+      }
+
+      /**
+       * A KET SZAM, AMIT AZ ORZO OSSZEVET.
+       *
+       * A `seen` merete a mai koteg alapjan alló kapcsolatok szama erre a
+       * termekre; a `count` az, amennyi MOST all a mi forrasunkbol. Ha az elso
+       * kisebb, akkor ez az iras vesztes lenne.
+       */
+      const existingRelations = await transaction.productRelation.count({
+        where: { sourceProductId: productId, source: "UNAS" },
+      });
+      if (planned.length < existingRelations)
+        throw new Error(
+          `UNAS_RELATION_WRITE_WOULD_LOSE:${productId}:` +
+            `${existingRelations}:${planned.length}`,
+        );
+      await transaction.productRelation.deleteMany({
+        where: { sourceProductId: productId, source: "UNAS" },
+      });
+      for (const item of planned) {
+        /**
+         * A TORLES A SAJAT FORRASUNKRA SZURT, tehat egy mas forrasbol allo sor
+         * megmaradhatott, es az egyedi kulcson utkozne. Ez az ellenorzes ezert
+         * a TORLES UTAN all: elotte minden sajat sorunk letezne, es semmi nem
+         * irodna ujra.
+         */
+        const existing = await transaction.productRelation.findUnique({
+          where: {
+            sourceProductId_targetProductId_relationType: {
+              sourceProductId: productId,
+              targetProductId: item.targetProductId,
+              relationType: item.relationType,
+            },
+          },
+        });
+        if (existing) continue;
+        await transaction.productRelation.create({
+          data: {
+            sourceProductId: productId,
+            targetProductId: item.targetProductId,
+            relationType: item.relationType,
+            sortOrder: item.sortOrder,
+            source: "UNAS",
+          },
+        });
+        counts.relationsSynchronized += 1;
       }
     }
   }
