@@ -14,17 +14,11 @@ export async function runWebshopSellableBackfill(): Promise<void> {
       id: true,
       webshopSellable: true,
       unasSnapshot: { select: { rawPayload: true } },
-      channelListings: {
-        where: { channel: "UNAS" },
-        select: { externalStatus: true },
-        take: 1,
-      },
     },
   });
   const rows: SellableBackfillRow[] = products.map((product) => ({
     id: product.id,
     webshopSellable: product.webshopSellable,
-    externalStatus: product.channelListings[0]?.externalStatus ?? null,
     rawPayload: product.unasSnapshot?.rawPayload as Record<string, unknown>,
   }));
   const decisions = decideSellableBackfill(rows);
