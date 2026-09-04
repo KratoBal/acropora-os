@@ -79,12 +79,17 @@ const STAGED = process.argv.includes("--staged");
 const git = (args) =>
   execFileSync("git", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
 
+// `-z` nelkul a git a nem-ASCII utvonalakat idezojelezve, oktalisan
+// escape-elve irja ki. Az igy kapott nev a `git show :<fajl>`-nak mar nem
+// letezo utvonal, a hibat pedig a `read` elnyeli, tehat az ekezetes nevu
+// fajlok tartalma ATVIZSGALATLANUL menne at. A NUL-elvalasztas egyben a
+// sortorest tartalmazo neveket is helyben kezeli.
 const files = (
   STAGED
-    ? git(["diff", "--cached", "--name-only", "--diff-filter=ACMR"])
-    : git(["ls-files"])
+    ? git(["diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"])
+    : git(["ls-files", "-z"])
 )
-  .split("\n")
+  .split("\0")
   .filter(Boolean);
 
 const read = (file) => {
