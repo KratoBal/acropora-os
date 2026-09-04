@@ -25,6 +25,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useReturnTo } from "@/components/navigation-history";
 import { worksheetsApi } from "@/lib/api/worksheets";
+import { WorksheetEntries } from "./worksheet-entries";
 import { WorksheetAssigneeEditor } from "./worksheet-assignee-editor";
 import {
   formatAmount,
@@ -443,6 +444,17 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
           </Button>
         </Card>
       ) : null}
+
+      {/*
+        A MUNKANAPLO. Ugyanazok a funkciok, mint a telefonon (Balazs kerese,
+        2026-09-03: "Ugyanezek a funkciok kellene a webes feluletre is"), es
+        ugyanabbol a vegpontbol -- a ket felulet nem tud elcsuszni egymastol.
+
+        A LAP ALLAPOTA NEM SZAMIT: alairt lapra is lehet bejegyzest irni. A
+        naplo arrol szol, MI TORTENT, es a tiltas NEMAN veszitene el egy
+        jegyzetet; az engedes LATSZIK, mert a bejegyzesen ott az idopont.
+      */}
+      <WorksheetEntries worksheetId={worksheet.id} canWrite={canManage} />
 
       <Card className="overflow-x-auto">
         <table className="w-full min-w-[720px] text-left text-sm">
