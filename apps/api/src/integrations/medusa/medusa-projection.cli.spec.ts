@@ -277,7 +277,7 @@ const ALLOWED_DIRECT = new Set([
 ]);
 /** ÜRES, és ez az állítás: a kombinált olvasó sehol nem hívható, mert nincs. */
 const ALLOWED_COMBINED = new Set<string>();
-const PROJECTION_CLI = "src/integrations/medusa/medusa-projection.cli.ts";
+const PROJECTION_CLI = "src/integrations/medusa/medusa-projection.runner.ts";
 
 async function medusaSources(): Promise<string[]> {
   const found: string[] = [];
@@ -514,8 +514,14 @@ describe("A cikkszám-keresés két sikertelen esete", () => {
 const MISSING_REPORTER_CALL =
   /out\.(stdout|stderr)\(\s*`\$\{(describeMissing\w+)\(/g;
 
+/**
+ * A VETITES TORZSE 2026-09-04 ota a FUTTATOBAN all. Ez a lista KEZZEL irt: a
+ * kiemeles utan a regi nevre mutatva egy belepesi pontot merne, amiben nulla
+ * hiany-sor all -- es a nevezo-kontroll (`calls.length === 3`) pontosan ezert
+ * van itt.
+ */
 const PROJECTION_COMMANDS = [
-  "src/integrations/medusa/medusa-projection.cli.ts",
+  "src/integrations/medusa/medusa-projection.runner.ts",
   "src/integrations/medusa/medusa-inventory.cli.ts",
 ];
 

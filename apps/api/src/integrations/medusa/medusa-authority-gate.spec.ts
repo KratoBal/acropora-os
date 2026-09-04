@@ -30,7 +30,13 @@ import {
  */
 
 const FORRAS = {
-  "termek-vetítés": "medusa-projection.cli.ts",
+  /**
+   * A TORZS 2026-09-04 ota a FUTTATOBAN all, nem a parancsban. A halo listaja
+   * KEZZEL irt fajlnev, tehat a kiemeles utan a regi nevre mutatva NEM a
+   * kodot merne, hanem egy belepesi pontot -- es az `ismert pozitiv kontroll`
+   * (a `catalogAuthority` jelenlete) hangosan meg is mondta.
+   */
+  "termek-vetítés": "medusa-projection.runner.ts",
   "készlet-vetítés": "medusa-inventory.cli.ts",
   "ár-vetítés": "medusa-pricing.cli.ts",
   "publikációs szabály": "medusa-publication.policy.ts",
