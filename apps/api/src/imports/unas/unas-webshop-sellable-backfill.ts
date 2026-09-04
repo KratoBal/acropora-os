@@ -3,7 +3,6 @@ import { webshopSellableFromUnas } from "./unas-product-sync.repository.js";
 export interface SellableBackfillRow {
   id: string;
   webshopSellable: boolean;
-  externalStatus: string | null;
   rawPayload: Record<string, unknown>;
 }
 
@@ -11,6 +10,55 @@ export interface SellableBackfillSummary {
   inspected: number;
   updated: number;
   remainedFalse: number;
+}
+
+/**
+ * MIND A KET DONTO MEZO UGYANABBOL A FORRASBOL JON: A TAROLT NYERS VALASZBOL.
+ *
+ * Az elso valtozat a statuszt a `ChannelListing` tablabol vette, az `Inquire`
+ * jelzot pedig a nyers valaszbol -- KET kulonbozo tabla KET kulonbozo
+ * pillanatabol. A szinkron viszont mindkettot ugyanabbol az API-valaszbol veszi,
+ * es ez a parancs epp azt hivatott potolni, amit a szinkron nem irt be.
+ *
+ * ES A `ChannelListing.externalStatus` MEZOT KET IRO TOLTI: az API-szinkron a
+ * `baseStatus` fuggvennyel, a kezi XLSX-import viszont a munkafuzet "Statusz"
+ * oszlopabol. Ket kulonbozo ut ugyanabba a mezobe.
+ *
+ * A KOCKAZAT ALAKJA, ES EZ A NEMA FAJTA: ha egy termeknek nincs UNAS-csatornas
+ * sora, a statusz `null`, a szabaly HAMIS-t ad, a parancs SIMAN lefut, es kisebb
+ * `updated` szamot ir ki. Ez pontosan ugy nez ki, mint egy sikeres futas egy
+ * mar-helyes allapoton -- kozben a ma IGAZ sorokat is hamisra irna at.
+ *
+ * A ChannelListing sor a helyen marad: nem toroljuk, csak nem ONNAN dontunk.
+ */
+function baseStatusFromPayload(
+  rawPayload: Record<string, unknown>,
+): string | null {
+  const statuses = rawPayload.Statuses;
+  if (!statuses || typeof statuses !== "object") return null;
+  const status = (statuses as Record<string, unknown>).Status;
+  /**
+   * EGYETLEN GYEREK ESETEN NEM LISTA, HANEM OBJEKTUM.
+   *
+   * A nyers valaszt eloallito `nodePayload` csak akkor csinal tombot, ha
+   * UGYANAZ a nev tobbszor szerepel. Egy `Statuses` blokk egyetlen `Status`
+   * elemmel tehat OBJEKTUMKENT all -- es egy csak tombre iro olvaso ott
+   * CSENDBEN `null`-t adna, vagyis a termeket hamisra irna.
+   */
+  const items = Array.isArray(status)
+    ? status
+    : status && typeof status === "object"
+      ? [status]
+      : [];
+  for (const item of items) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    if (String(row.Type) !== "base") continue;
+    return row.Value === undefined || row.Value === null
+      ? null
+      : String(row.Value);
+  }
+  return null;
 }
 
 /** A már eltárolt UNAS nyers érték ugyanazt a flag-alakot követi, mint a kliens. */
@@ -24,7 +72,7 @@ export function decideSellableBackfill(rows: readonly SellableBackfillRow[]) {
   return rows.map((row) => ({
     id: row.id,
     webshopSellable: webshopSellableFromUnas({
-      externalStatus: row.externalStatus,
+      externalStatus: baseStatusFromPayload(row.rawPayload),
       inquireOnly: inquiryOnly(row.rawPayload),
     }),
   }));
