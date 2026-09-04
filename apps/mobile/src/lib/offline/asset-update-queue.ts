@@ -23,6 +23,50 @@ export interface QueuedAssetUpdate {
   assetName: string;
   /** A szervernek menő torzs. Ez es semmi mas megy fel. */
   patch: UpdateAssetInput;
+  /**
+   * AMIT A SZERELO LATOTT, MIELOTT ATIRTA -- mezonkent, nyers alakban.
+   *
+   * === MIERT KELL, ES MIERT NEM ELEG NELKULE A FRISS ALLAPOT ===
+   *
+   * Egy elakadt modositas feloldasakor a kerdes az, hogy MAS is hozzanyult-e
+   * ugyanahhoz a mezohoz. Ezt CSAK harom ertekbol lehet eldonteni: amit a
+   * szerelo latott, amit beirt, es ami MOST all a szerveren.
+   *
+   * Ket ertekbol (beirt es mostani) nem: ha a szerelo Wilorol Grundfosra irta
+   * at a gyartot es RAJTA KIVUL SENKI nem nyult hozza, a friss eszkozon meg
+   * mindig Wilo all -- ez ELTERESNEK latszik, holott nincs mit eldonteni. Egy
+   * ilyen kerdesre a szerelo zavaraban a masikat valaszthatja, es a SAJAT
+   * javitasa tunik el csendben.
+   *
+   * === MIERT NYERS ERTEK, ES NEM A KIIRT SZOVEG ===
+   *
+   * A helyszinnel a torzs AZONOSITOT visz, a kepernyo NEVET mutat. Ha itt a nev
+   * allna, egy atnevezett helyszin valtozasnak latszana, holott ugyanaz a
+   * helyszin.
+   *
+   * === MIERT NEM KOTELEZO ===
+   *
+   * A 2026-09-04 delelottjen sorba tett modositasokon ez a mezo nincs ott. Egy
+   * kotelezo mezo azokat OLVASHATATLANNA tenne, es a szerelo munkaja veszne el
+   * egy formai valtozas miatt. Hianyzo alapertek eseten a feloldo keperno
+   * MINDEN mezorol kerdez -- tobbet kerdez a kelletenel, de semmit nem hallgat
+   * el.
+   */
+  base?: QueuedAssetUpdateBase;
+}
+
+/** A szerkesztes kezdetekor lathato ertekek, nyers alakban. */
+export interface QueuedAssetUpdateBase {
+  status?: string;
+  criticality?: string;
+  /** A helyszin AZONOSITOJA, nem a neve. `null`, ha nem volt beallitva. */
+  departmentId?: string | null;
+  manufacturer?: string | null;
+  model?: string | null;
+  serialNumber?: string | null;
+  inventoryNumber?: string | null;
+  description?: string | null;
+  notes?: string | null;
 }
 
 /**
@@ -38,7 +82,16 @@ export function readQueuedAssetUpdate(json: string): QueuedAssetUpdate | null {
     if (typeof p.assetName !== "string") return null;
     const patch = p.patch as Partial<UpdateAssetInput> | undefined;
     if (!patch || typeof patch.expectedUpdatedAt !== "string") return null;
-    return { assetName: p.assetName, patch: patch as UpdateAssetInput };
+    /**
+     * AZ ALAPERTEK HIANYA NEM TESZI OLVASHATATLANNA A SORT. A mezo 2026-09-04
+     * delutanjan keletkezett, es a korabbi sorokon nincs ott: ha itt
+     * megkovetelnenk, azok a felvitelek egy formai valtozas miatt vesznenek el.
+     */
+    return {
+      assetName: p.assetName,
+      patch: patch as UpdateAssetInput,
+      ...(p.base ? { base: p.base as QueuedAssetUpdateBase } : {}),
+    };
   } catch {
     return null;
   }
@@ -73,5 +126,17 @@ export function mergeQueuedAssetUpdate(
   return {
     assetName: next.assetName,
     patch: { ...previous.patch, ...next.patch },
+    /**
+     * AZ ALAPERTEKNEL A KORABBI NYER, ES EZ FORDITVA VAN, MINT A TORZSNEL.
+     *
+     * A torzsnel a kesobbi szandek az igaz. Az alapertek viszont nem szandek,
+     * hanem MEGFIGYELES: azt rogziti, mit LATOTT a szerelo, mielott hozzanyult.
+     * Ha a masodik szerkesztes felulirna, akkor a sajat, mar modositott ertekunk
+     * lenne az "eredeti" -- es a feloldas azt hinne, hogy a mezot senki nem
+     * bantotta.
+     */
+    ...(previous.base || next.base
+      ? { base: { ...next.base, ...previous.base } }
+      : {}),
   };
 }

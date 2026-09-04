@@ -1,3 +1,5 @@
+import type { QueuedAssetUpdateBase } from "../offline/asset-update-queue";
+
 import type {
   AssetCriticality,
   AssetStatus,
@@ -159,4 +161,35 @@ export function hasAssetChanges(
   form: AssetEditForm,
 ): boolean {
   return Object.keys(buildAssetPatch(asset, form)).length > 1;
+}
+
+/**
+ * AMIT A SZERELO LATOTT, MIELOTT ATIRTA -- csak a TORZSBEN szereplo mezokre.
+ *
+ * === MIERT PONTOSAN EZ A HALMAZ ===
+ *
+ * A feloldo keperno azt kerdezi meg mezonkent, hogy MAS is hozzanyult-e. Ehhez
+ * harom ertek kell: a latott, a beirt es a mostani. A latott ertekeket csak
+ * ITT lehet felvenni, mert csak itt van meg az az allapot, amibol a szerelo
+ * kiindult -- a sorba tetel utan mar sehol nincs meg.
+ *
+ * CSAK A TORZS MEZOIRE, es nem az egesz eszkozre: amihez a szerelo hozza sem
+ * nyult, arrol nincs mit eldonteni, es egy teljes masolat a sort duzzasztana.
+ *
+ * === A NYERS ERTEK MEGY, NEM A KIIRT SZOVEG ===
+ *
+ * A helyszinnel az AZONOSITO, nem a nev: egy atnevezett helyszin kulonben
+ * valtozasnak latszana, holott ugyanaz a helyszin.
+ */
+export function baseValuesFor(
+  asset: EditableAsset,
+  patch: UpdateAssetInput,
+): QueuedAssetUpdateBase {
+  const base: QueuedAssetUpdateBase = {};
+  if ("status" in patch) base.status = asset.status;
+  if ("criticality" in patch) base.criticality = asset.criticality;
+  if ("departmentId" in patch) base.departmentId = asset.unit?.id ?? null;
+  for (const field of TEXT_FIELDS)
+    if (field in patch) base[field] = asset[field] ?? null;
+  return base;
 }

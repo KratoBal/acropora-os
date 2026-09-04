@@ -264,6 +264,34 @@ describe("melyik sorral mit lehet kezdeni", () => {
     }
   });
 
+  it("az elakadt MÓDOSÍTÁSON feloldás van, javítás NINCS", () => {
+    /*
+      A ket gomb MAS kerdest tesz fel, es egy elakadt modositasnal a javitas
+      soha nem tudna sikerulni (a torzsben allo verzio veglegesen elavult).
+
+      MI PIROSIT: ha a `canResolve` a `canFix`-szel egyutt igaz lenne, vagy ha
+      a feloldas gomb egy felvitelen is megjelenne.
+    */
+    const [modositas] = toQueueEntries([
+      sor({
+        state: "conflict",
+        operation: "update",
+        entityId: "asset-1",
+        payloadJson: JSON.stringify({
+          assetName: "Szivattyú",
+          patch: { expectedUpdatedAt: "2026-09-04T08:00:00Z" },
+        }),
+      }),
+    ]);
+    assert.equal(modositas?.canResolve, true);
+    assert.equal(modositas?.canFix, false);
+
+    // TESTVER-KONTROLL: a FELVITELEN forditva all.
+    const [felvitel] = toQueueEntries([sor({ state: "conflict" })]);
+    assert.equal(felvitel?.canResolve, false);
+    assert.equal(felvitel?.canFix, true);
+  });
+
   it("MUNKALAP-felvitelen NINCS javítás, és ez szándékos", () => {
     /*
       IDOZITETT HATAR, nem hiany: a valodi utkozes az eszkoz-felvitelnel

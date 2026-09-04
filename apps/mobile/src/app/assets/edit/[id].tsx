@@ -12,20 +12,17 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import {
-  getAsset,
-  updateAsset,
-  type AssetCriticality,
-  type AssetDetail,
-} from "@/lib/api/assets";
+import { getAsset, updateAsset, type AssetDetail } from "@/lib/api/assets";
 import { listPartnerUnits } from "@/lib/api/partners";
 import {
   assetEditFormFrom,
+  baseValuesFor,
   buildAssetPatch,
   hasAssetChanges,
   type AssetEditForm,
   type EditableAsset,
 } from "@/lib/assets/asset-edit";
+import { ASSET_CRITICALITY_OPTIONS } from "@/lib/assets/asset-criticality";
 import { ASSET_STATUS_OPTIONS } from "@/lib/assets/asset-status";
 import { describeAssetUpdateWrite } from "@/lib/assets/offline-edit";
 import { ApiError } from "@/lib/api/client";
@@ -35,13 +32,6 @@ import { saveOrQueue, type SaveOutcome } from "@/lib/offline/save-or-queue";
 import { unitLevels } from "@/lib/partners/site-tree";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
-
-const CRITICALITY_OPTIONS: { value: AssetCriticality; label: string }[] = [
-  { value: "LOW", label: "Alacsony" },
-  { value: "NORMAL", label: "Normál" },
-  { value: "HIGH", label: "Magas" },
-  { value: "CRITICAL", label: "Kritikus" },
-];
 
 const TEXT_FIELDS: {
   key: keyof AssetEditForm & string;
@@ -159,7 +149,17 @@ export default function AssetEditScreen() {
               expectedUpdatedAt: patch.expectedUpdatedAt,
             }),
             assetId: asset.id,
-            payload: { assetName: asset.name, patch },
+            /**
+             * AZ ALAPERTEK IS BEKERUL, ES CSAK ITT LEHET FELVENNI: a feloldo
+             * keperno ebbol tudja megkulonboztetni, hogy MAS is hozzanyult-e a
+             * mezohoz, vagy egyedul a szerelo irta at. A sorba tetel utan ez az
+             * allapot mar sehol nincs meg.
+             */
+            payload: {
+              assetName: asset.name,
+              patch,
+              base: baseValuesFor(editable(asset), patch),
+            },
             createdAt: new Date().toISOString(),
           }),
         statusOf: (cause) => (cause instanceof ApiError ? cause.status : null),
@@ -324,7 +324,7 @@ export default function AssetEditScreen() {
         />
         <Choice
           label="Kritikusság"
-          options={CRITICALITY_OPTIONS}
+          options={ASSET_CRITICALITY_OPTIONS}
           value={form.criticality}
           onChange={(value) => setForm({ ...form, criticality: value })}
         />

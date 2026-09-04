@@ -1,7 +1,10 @@
 import { readQueuedAssetUpdate } from "./asset-update-queue";
 import { readPhotoPayload } from "./photo-queue";
 import { queueDiscardEligibility } from "./queue-discard";
-import { queueResendEligibility } from "./queue-resend";
+import {
+  queueResendEligibility,
+  queueResolveEligibility,
+} from "./queue-resend";
 import type { SyncEntityType, SyncOperation, SyncQueueRow } from "./sync-queue";
 import { readQueuedWorksheetLine } from "../worksheets/worksheet-line";
 
@@ -76,6 +79,15 @@ export interface QueueEntryView {
    * ugyanolyan konnyen elerheto, mint a javitas.
    */
   canDiscard: boolean;
+  /**
+   * MEGJELENJEN-E A FELOLDAS GOMB.
+   *
+   * A `canFix` PARJA, es szandekosan KIZARO: a javitas a felvitel torzsenek
+   * atirasa, a feloldas pedig mezonkenti valasztas ket ertek kozott. Egy
+   * elakadt MODOSITASNAL a javitas soha nem tudna sikerulni (az elavult verzio
+   * miatt), tehat ott a feloldas az EGYETLEN ut, ami at tud menni.
+   */
+  canResolve: boolean;
   /**
    * MIERT NINCS ITT JAVITAS GOMB -- CSAK AZ ELAKADT SOROKON.
    *
@@ -293,12 +305,18 @@ export function toQueueEntries(
       canRetry: section === "stalled",
       canFix: javitas.ok,
       canDiscard: queueDiscardEligibility(row).ok,
+      canResolve: queueResolveEligibility(row).ok,
       /**
        * A MONDAT MAR MEGVOLT, CSAK SENKI NEM OLVASTA. A `queueResendEligibility`
        * minden elutasitashoz irt egy emberi indoklast, es a keperno eddig CSAK
        * az `ok` mezot hasznalta belole -- vagyis a magyarazat keszen allt, es a
        * szerelohoz nem jutott el. Ugyanaz a szakadas-alak, mint amikor egy
        * vegpont letezik, es senki nem hivja.
+       */
+      /**
+       * A MONDAT AKKOR IS KELL, HA VAN FELOLDAS GOMB: az mondja meg, MIERT nem
+       * javitas all ott. Egy magyarazat nelkuli masik gomb ugyanolyan
+       * kerdojel, mint a hianyzo.
        */
       fixHint: section === "conflict" && !javitas.ok ? javitas.message : null,
     };

@@ -116,6 +116,12 @@ export default function QueueScreen() {
                         params: { id: entry.id },
                       })
                     }
+                    onResolve={() =>
+                      router.push({
+                        pathname: "/queue-resolve/[id]",
+                        params: { id: entry.id },
+                      })
+                    }
                     onDiscard={() => {
                       /**
                        * A MEGEROSITES SZOVEGE A TISZTA MODULBOL JON, mert ott
@@ -172,11 +178,13 @@ function Entry({
   entry,
   onRetry,
   onFix,
+  onResolve,
   onDiscard,
 }: {
   entry: QueueEntryView;
   onRetry: () => Promise<void>;
   onFix: () => void;
+  onResolve: () => void;
   onDiscard: () => void;
 }) {
   return (
@@ -223,6 +231,23 @@ function Entry({
           style={styles.retryButton}
         >
           <Text style={styles.retryText}>Javítom és újraküldöm</Text>
+        </Pressable>
+      ) : null}
+      {/*
+        A FELOLDAS GOMB AZ ELAKADT MODOSITASON, es KIZARJA a javitast.
+
+        A ket gomb MAS kerdest tesz fel. A javitas a torzset iratja at, es ugyanugy
+        kuldi ujra; egy elakadt modositasnal ez soha nem tudna sikerulni, mert a
+        torzsben allo verzio veglegesen elavult. A feloldas mezonkent kerdezi meg,
+        MELYIK ERTEK MARADJON, es a valaszbol UJ torzset epit, a FRISS verzioval.
+      */}
+      {entry.canResolve ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={onResolve}
+          style={styles.retryButton}
+        >
+          <Text style={styles.retryText}>Feloldom: melyik érték maradjon</Text>
         </Pressable>
       ) : null}
       {/*
