@@ -42,6 +42,33 @@ export function hasValidCheckDigit(value: string): boolean {
 }
 
 /**
+ * A KIADVANY-TARTOMANYOK, AMIK ERVENYESEK, DE NEM TERMEK-VONALKODOK.
+ *
+ * A GS1 harom elotagot tart fenn kiadvanyoknak: 977 (ISSN, folyoirat), 978 es
+ * 979 (ISBN es ISMN, konyv es kotta). Ezek ERVENYES ellenorzo szamjegyet
+ * viselnek, tehat a checksum-vizsgalat atengedi oket -- egy akvarisztikai
+ * katalogusban viszont nem lehetnek valodi termek-vonalkodok.
+ *
+ * MIERT KELL EZ A LISTA, ES MIERT NEM ELEG AZ EGYEDISEG: a mert adatban tobb
+ * GENERALT kod all a gyartoi cikkszam mezoben, es azok tobbsegét ma az
+ * ismetlodes-ag tartja vissza (egy 979-es kod tizenket termeken all, egy
+ * 978-as negyen). DE AZ A VEDELEM VELETLEN: nem azert maradnak bent, mert
+ * generaltak, hanem mert TOBBSZOR allnak. Egy generalt kod, ami veletlenul
+ * egyedi, atmenne -- es a mert adatban pontosan egy ilyen van
+ * (9780301379722, egy olyan termeken, aminek a sajat cikkszama ugyanez).
+ *
+ * ES EZERT NEM UGYANAZ, MINT EGY BEEGETETT ERTEK A MI ADATUNKROL. A "db"
+ * mertekegyseget nem egethetjuk a kodba, mert az a KATALOGUSUNK allapota, es
+ * holnap mas lehet. A 978-as elotag a GS1 SZABVANYE: nem attol fugg, mit
+ * tartalmaz a mi tablank, es nem avul el a katalogus valtozasaval.
+ *
+ * A 12 jegyu UPC-A alak SOSEM esik ide: azt EAN-13-kent egy vezeto NULLA
+ * egesziti ki, tehat "0"-val kezdodik. A vizsgalat ezert eleg a 13 jegyu
+ * alakra.
+ */
+const KIADVANY_ELOTAGOK = ["977", "978", "979"];
+
+/**
  * A NEGY KIMENET, ES MIERT NEM KETTO.
  *
  * A `skipped` es a `none` a keres torzsere nezve ugyanaz (egyik sem kuld
@@ -78,8 +105,17 @@ export function decideMedusaBarcode(
   if (sameValueCount > 1)
     return { kind: "skipped", field: null, value: null, duplicate: kod };
 
-  if (kod.length === 13)
+  if (kod.length === 13) {
+    /**
+     * A KIADVANY-ELOTAG KIZARASA A HOSSZ-VIZSGALAT UTAN ALL, es ez a sorrend
+     * szandekos: igy a kizart kod a `none` agba esik, nem a `skipped`-be. A
+     * ketto MAS teendot jelent -- a `skipped` a forras-oldali tisztitasra var,
+     * ez viszont soha nem lesz termek-vonalkod, tehat nincs mire varni.
+     */
+    if (KIADVANY_ELOTAGOK.some((elotag) => kod.startsWith(elotag)))
+      return { kind: "none", field: null, value: null, duplicate: null };
     return { kind: "ean", field: "ean", value: kod, duplicate: null };
+  }
   if (kod.length === 12)
     return { kind: "upc", field: "upc", value: kod, duplicate: null };
 
