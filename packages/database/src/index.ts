@@ -15,6 +15,7 @@ export type {
   DatasheetField,
   Customer,
   FeedingType,
+  MedusaImageBlockReason,
   MeretDimenzio,
   MeretKategoria,
   OriginScope,
