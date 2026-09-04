@@ -348,6 +348,33 @@ export function describeSkuLookupFailure(
  *   a keresesi kulcs elcsuszott        -> a lekepezes OTT MARAD, es a mondat
  *                                         megnyugtat
  */
+/**
+ * A REGI ES AZ UJ BOLTI CIM, EGY SORBAN -- ES `""`, HA NINCS MIT MONDANI.
+ *
+ * === MIERT A PARANCS KIMENETEN, ES NEM KULON FAJLBAN ===
+ *
+ * Az atiranyitasokhoz kell egy REGI-UJ lista, es a kisbetusites EGYIRANYU:
+ * kesobb a regi cim mar sehonnan nem all elo. A legkisebb alak, ami ezt
+ * megorzi, egy sor a kimeneten: a futast ugyis naploba iranyitja, aki
+ * futtatja, tehat a lista MAGATOL megmarad -- uj fajl-kezeles, uj jogosultsag
+ * es uj hibaag nelkul.
+ *
+ * NEM atiranyitas-kezeles. Ez a lista a FORRASA lesz, amikor az uj bolt
+ * elesedik; hogy mi olvassa fel, kulon dontes.
+ *
+ * === URES SOR, HA A KET CIM AZONOS ===
+ *
+ * Olyankor a regi cim tovabbra is mukodik, es egy onmagara mutato sor csak
+ * zaj lenne -- a mai adaton 14 termek. Aki a kimenetet szuri, ne kapjon
+ * olyan sort, amivel nincs teendo.
+ */
+export function describeCimValtozas(
+  cim: { regi: string; uj: string } | null,
+): string {
+  if (!cim) return "";
+  return `      CIM: ${cim.regi} -> ${cim.uj}\n`;
+}
+
 export function describeForgottenLink(
   productId: string,
   removedRows: number,
@@ -807,7 +834,8 @@ export async function runProjectionCli(
     }
     out.stdout(
       `${productId}: ${outcome.action} -> ${outcome.medusaProductId}\n` +
-        `      ${describePublication(outcome.publication)}\n`,
+        `      ${describePublication(outcome.publication)}\n` +
+        describeCimValtozas(outcome.cim),
     );
   }
 

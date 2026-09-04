@@ -7,6 +7,7 @@ import {
   projectRendelesiKorlatok,
   projectValtozatMezok,
   projectUnasChannelRow,
+  describeCimValtozas,
   describeForgottenLink,
   describeSkuLookupFailure,
   describePublication,
@@ -822,5 +823,36 @@ describe("projectRendelesiKorlatok", () => {
       maximumOrderQuantity: null,
       orderQuantityStep: null,
     });
+  });
+});
+
+/**
+ * A REGI-UJ CIM PAR A KIMENETEN.
+ *
+ * A kisbetusites EGYIRANYU: az uj alakbol a regit nem lehet visszafejteni. Ha
+ * ez a sor nem keszul el a futassal EGYUTT, az atiranyitasoknak kesobb nem lesz
+ * forrasa -- a lista nem "kesobb is eloall", hanem elveszik.
+ */
+describe("a bolti cim valtozasa a kimeneten", () => {
+  it("kiirja a regi es az uj cimet", () => {
+    assert.equal(
+      describeCimValtozas({
+        regi: "Aqua-Illumination-Prime-HD-LED-panel",
+        uj: "aqua-illumination-prime-hd-led-panel",
+      }),
+      "      CIM: Aqua-Illumination-Prime-HD-LED-panel -> aqua-illumination-prime-hd-led-panel\n",
+    );
+  });
+
+  it("URES sort ad, ha nincs mit atiranyitani", () => {
+    /*
+      Ket eset: nincs uj cim (a bolt a nevbol kepez), vagy a ket cim AZONOS --
+      olyankor a regi tovabbra is mukodik. A mai adaton az utobbi 14 termek.
+
+      MI PIROSIT: ha a fuggveny minden termekre adna sort. Akkor a naploban
+      olyan cimek is "valtozaskent" allnanak, amikkel nincs teendo, es a
+      szurest vegzo ember 1798 helyett 1812 sorral szamolna.
+    */
+    assert.equal(describeCimValtozas(null), "");
   });
 });

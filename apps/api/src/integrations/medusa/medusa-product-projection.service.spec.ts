@@ -230,7 +230,7 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
       description: (torzs.description ?? "").includes("Leírás"),
       descriptionLong: (torzs.description ?? "").includes("Hosszú leírás"),
       primarySku: torzs.variants[0]?.sku === "PUMP-1",
-      slug: torzs.handle === "Teszt-cim",
+      slug: torzs.handle === "teszt-cim",
       medusaCategoryIds: torzs.categories?.[0]?.id === "cat_1",
       medusaCollectionId: torzs.collection_id === "pcol_1",
       barcode: torzs.variants[0]?.ean === "4006381333931",
@@ -674,8 +674,12 @@ describe("MedusaProductProjectionService -- a bolti cim", () => {
    * szarmaztatta. Merve az 1893 termeken: a mai SefUrl-lel mindossze NEGY
    * egyezne beture, a tobbi 1809 UJ cimet kapna -- es a regi hivatkozasok
    * sehova nem vezetnenek.
+   *
+   * A CIM 2026-09-04 OTA KISBETUS, es ez nem szepites: a cel oldal KOVETELI.
+   * Az elutasitott alak nem "csunyabb" cimet adna, hanem elbuktatna a termeket
+   * -- merve, az 1813-bol 1799-et.
    */
-  it("a mai bolti cimet atviszi a letrehozasnal", async () => {
+  it("a bolti cimet kisbetusitve viszi at a letrehozasnal", async () => {
     const f = fakes({ link: null, found: [] });
     await f.service.project(
       { ...product, slug: "Aqua-Illumination-Prime-HD-LED-panel" },
@@ -683,11 +687,33 @@ describe("MedusaProductProjectionService -- a bolti cim", () => {
     );
     assert.equal(
       f.createdWith[0]?.handle,
-      "Aqua-Illumination-Prime-HD-LED-panel",
+      "aqua-illumination-prime-hd-led-panel",
     );
   });
 
-  it("a mai bolti cimet a frissitesnel is atviszi", async () => {
+  /**
+   * A PAR A KIMENETBEN IS OTT VAN, NEM CSAK A LEKEPEZESBEN.
+   *
+   * A tiszta fuggveny allitasa nem eleg: ez azt meri, hogy a vetites TOVABB IS
+   * ADJA a part -- enelkul a lista sehol nem allna elo, es a hiba nema lenne
+   * (a cim helyes, csak a regi elveszne).
+   *
+   * MI PIROSIT: ha a `cim` mezo kimarad a visszateresbol.
+   */
+  it("a regi-uj cim part a KIMENETBEN is atadja", async () => {
+    const f = fakes({ link: null, found: [] });
+    const outcome = await f.service.project(
+      { ...product, slug: "Aqua-Illumination-Prime-HD-LED-panel" },
+      now,
+    );
+    assert.equal(outcome.action, "created");
+    assert.deepEqual(outcome.action === "created" ? outcome.cim : undefined, {
+      regi: "Aqua-Illumination-Prime-HD-LED-panel",
+      uj: "aqua-illumination-prime-hd-led-panel",
+    });
+  });
+
+  it("a bolti cimet a frissitesnel is kisbetusitve viszi at", async () => {
     const f = fakes({
       link: { productId: "prod-os-1", medusaProductId: "prod_x" },
     });
@@ -697,7 +723,7 @@ describe("MedusaProductProjectionService -- a bolti cim", () => {
     );
     assert.equal(
       f.updatedWith[0]?.handle,
-      "Aqua-Illumination-Prime-HD-LED-panel",
+      "aqua-illumination-prime-hd-led-panel",
     );
   });
 
@@ -727,7 +753,7 @@ describe("MedusaProductProjectionService -- a bolti cim", () => {
     );
     assert.equal(
       f.createdWith[0]?.handle,
-      "Jebao-Sine-Wave-Pump-SLW-5-aramoltato-3000-l-h",
+      "jebao-sine-wave-pump-slw-5-aramoltato-3000-l-h",
     );
   });
 });
@@ -740,6 +766,7 @@ describe("MedusaProductProjectionService", () => {
 
     assert.deepEqual(outcome, {
       action: "created",
+      cim: null,
       medusaProductId: "prod_uj",
       publication: {
         status: "published",
@@ -822,6 +849,7 @@ describe("MedusaProductProjectionService", () => {
 
     assert.deepEqual(outcome, {
       action: "updated",
+      cim: null,
       medusaProductId: "prod_megvan",
       publication: {
         status: "published",
@@ -854,6 +882,7 @@ describe("MedusaProductProjectionService", () => {
 
     assert.deepEqual(outcome, {
       action: "relinked",
+      cim: null,
       medusaProductId: "prod_elo",
       publication: {
         status: "published",
@@ -885,6 +914,7 @@ describe("MedusaProductProjectionService", () => {
 
     assert.deepEqual(await service.project(product, now), {
       action: "relinked",
+      cim: null,
       medusaProductId: "prod_elo",
       publication: {
         status: "published",

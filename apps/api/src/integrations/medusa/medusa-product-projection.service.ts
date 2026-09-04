@@ -21,7 +21,11 @@ import {
  * futtatás MEGISMÉTELHETŐ-e. Ezért a szolgáltatás magja a döntés, nem az írás.
  */
 
-import { medusaHandleFromSlug } from "./medusa-product-handle.js";
+import {
+  medusaHandleFromSlug,
+  medusaHandleParositas,
+  type MedusaHandleParositas,
+} from "./medusa-product-handle.js";
 import { buildProductDescription } from "./product-description.js";
 
 export interface ProjectableProduct {
@@ -229,18 +233,31 @@ export type ProjectionOutcome =
       action: "created";
       medusaProductId: string;
       publication: ProjectionPublicationReport;
+      /**
+       * A REGI ES AZ UJ BOLTI CIM, HA KULONBOZNEK -- kulonben `null`.
+       *
+       * A kisbetusites EGYIRANYU: az uj alakbol nem lehet visszafejteni a
+       * regit. Ha a par nem a vetitessel EGYUTT keletkezne, kesobb mar
+       * sehonnan nem allna elo, es az atiranyitasoknak nem lenne forrasa.
+       *
+       * NEM atiranyitas-kezeles: csak a par, amit a parancs kiir, es amit a
+       * kimenet atiranyitasaval le lehet menteni.
+       */
+      cim: MedusaHandleParositas | null;
     }
   /** Volt leképezés, a meglévő terméket módosítottuk. */
   | {
       action: "updated";
       medusaProductId: string;
       publication: ProjectionPublicationReport;
+      cim: MedusaHandleParositas | null;
     }
   /** Nem volt leképezés, de a külső azonosító megtalálta az ÉLŐ terméket. */
   | {
       action: "relinked";
       medusaProductId: string;
       publication: ProjectionPublicationReport;
+      cim: MedusaHandleParositas | null;
     }
   /** Nem lehet folytatni, és megmondjuk, miért. */
   | { action: "stopped"; reason: ProjectionStopReason; details: string };
@@ -499,6 +516,11 @@ export class MedusaProductProjectionService {
      */
     const handle = medusaHandleFromSlug(product.slug);
     const handlePatch = handle ? { handle } : {};
+    /**
+     * A REGI-UJ PAR UGYANITT SZULETIK, ahol a cim maga. Egy kesobbi, kulon
+     * szamolas ugyanezt a lekepezest ismetelne meg -- es a ketto elcsuszhatna.
+     */
+    const cim = medusaHandleParositas(product.slug);
 
     /**
      * A `metadata` MEZOBE MEGY, MERT A MEDUSANAK NINCS SAJAT SEO-MEZOJE.
@@ -636,6 +658,7 @@ export class MedusaProductProjectionService {
       await this.links.link(product.id, existingLink.medusaProductId, now);
       return {
         action: "updated",
+        cim,
         medusaProductId: existingLink.medusaProductId,
         publication: report,
       };
@@ -698,7 +721,12 @@ export class MedusaProductProjectionService {
     if (live.length === 1) {
       const medusaProductId = live[0]!.id;
       await this.links.link(product.id, medusaProductId, now);
-      return { action: "relinked", medusaProductId, publication: report };
+      return {
+        action: "relinked",
+        cim,
+        medusaProductId,
+        publication: report,
+      };
     }
 
     /**
@@ -787,6 +815,7 @@ export class MedusaProductProjectionService {
     await this.links.link(product.id, created.id, now);
     return {
       action: "created",
+      cim,
       medusaProductId: created.id,
       publication: report,
     };
