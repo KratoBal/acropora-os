@@ -2,10 +2,15 @@ import {
   rowBelongsToScope,
   type PartnerScope,
 } from "../auth/partner-scope.util.js";
+import {
+  canEditWorksheetEntry,
+  describeEntryEditRefusal,
+} from "./worksheet-entry-permission.js";
 import { randomUUID } from "node:crypto";
 
 import {
   BadRequestException,
+  ForbiddenException,
   ConflictException,
   Inject,
   Injectable,
@@ -732,6 +737,108 @@ export class WorksheetsService {
         "A tételen hivatkozott eszköz nem található.",
       );
     }
+  }
+
+  /**
+   * A MUNKANAPLO EGY LAPON.
+   *
+   * BELSOS UT, ES EZ DONTES. A bejegyzes a MI munkanaplonk: arrol szol, mit
+   * csinalt a szerelo, sajat szavaival. Balazs nem mondta ki, hogy a partner
+   * lassa, es a ket tevedes ara nem egyforma -- egy elmaradt lathatosag
+   * PANASZT szul (valaki keri), egy keretlen viszont a partner ele visz belso
+   * jegyzetet, es arrol soha nem tudunk meg.
+   *
+   * Ugyanaz a szukites, mint a sor-vegpontoknal, es ugyanabban az alakban: a
+   * hatokort a hivo helyen irjuk ki, hogy latszodjon.
+   */
+  async entries(id: string, actorUserId: string) {
+    const data = await this.repository.entries(id);
+    if (!data) throw new NotFoundException("A munkalap nem található.");
+    const context = {
+      userId: actorUserId,
+      worksheetCreatedById: data.worksheetCreatedById,
+      serviceJobOpenedById: data.serviceJobOpenedById,
+    };
+    const canEdit = canEditWorksheetEntry(context);
+    const editRefusal = describeEntryEditRefusal(context);
+    return {
+      items: data.rows.map((row) => ({
+        id: row.id,
+        body: row.body,
+        authorName: row.authorName,
+        createdAt: row.createdAt.toISOString(),
+        updatedAt: row.updatedAt.toISOString(),
+        /**
+         * A JOG A LAPRA SZOL, NEM A SORRA: a szabaly a lap keszitojet es a jegy
+         * nyitojat nezi, tehat MINDEN bejegyzesre ugyanaz az eredmeny. Megis
+         * soronkent all a valaszban, mert a felulet soronkent rajzol gombot --
+         * es ha egyszer a szabaly a szerzot is bevonna, a valasz alakja nem
+         * valtozna.
+         */
+        canEdit,
+        editRefusal,
+      })),
+    };
+  }
+
+  /**
+   * UJ BEJEGYZES. A SZERZO A BEJELENTKEZETT KOLLEGA, es a hivo nem adhatja meg:
+   * egy kliens-oldali szerzo-mezo azt jelentene, hogy barki barki neveben irhat
+   * a naploba.
+   *
+   * A LAP ALLAPOTA NEM SZAMIT, es ez szandekos. Egy alairt lapra is lehet
+   * bejegyzest irni: a naplo arrol szol, mi tortent, es a tiltas NEMAN
+   * veszitene el egy jegyzetet. Az engedes LATSZIK, mert a bejegyzesen ott az
+   * idopont -- az alairas utani darabok utana allnak a listaban.
+   */
+  async addEntry(id: string, body: string, actorUserId: string) {
+    await this.requireWorksheet(id, { kind: "internal" });
+    await this.repository.addEntry({
+      worksheetId: id,
+      body: body.trim(),
+      authorId: actorUserId,
+    });
+    return this.entries(id, actorUserId);
+  }
+
+  /**
+   * EGY BEJEGYZES ATIRASA.
+   *
+   * A JOGOSULTSAG ITT DOL EL, ES NEM A KEPERNYON. A valasz `canEdit` mezoje
+   * ugyanebbol a fuggvenybol szuletik, tehat a ket oldal nem tud elcsuszni --
+   * de ha csak a kepernyo szurne, a vegpontot barki hivhatna kozvetlenul.
+   */
+  async updateEntry(
+    id: string,
+    entryId: string,
+    body: string,
+    actorUserId: string,
+  ) {
+    const data = await this.repository.entries(id);
+    if (!data) throw new NotFoundException("A munkalap nem található.");
+    const context = {
+      userId: actorUserId,
+      worksheetCreatedById: data.worksheetCreatedById,
+      serviceJobOpenedById: data.serviceJobOpenedById,
+    };
+    if (!canEditWorksheetEntry(context))
+      throw new ForbiddenException(
+        describeEntryEditRefusal(context) ??
+          "Ezt a bejegyzést nem szerkesztheted.",
+      );
+    const changed = await this.repository.updateEntry({
+      worksheetId: id,
+      entryId,
+      body: body.trim(),
+    });
+    /**
+     * A NULLA MOZDULT SOR NEM SIKER. Vagy nincs ilyen bejegyzes, vagy MASIK
+     * lapé -- a `WHERE` a lapra is szur. A ketto a hivo szamara ugyanaz a
+     * teendo: rossz azonositot adott.
+     */
+    if (changed !== 1)
+      throw new NotFoundException("Ezen a munkalapon nincs ilyen bejegyzés.");
+    return this.entries(id, actorUserId);
   }
 
   private async requireDraftVersionId(id: string): Promise<string> {

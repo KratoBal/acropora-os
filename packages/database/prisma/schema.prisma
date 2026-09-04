@@ -573,6 +573,9 @@ model User {
   createdWorksheetVersions   WorksheetVersion[]            @relation("WorksheetVersionCreatedBy")
   closedWorksheetVersions    WorksheetVersion[]            @relation("WorksheetVersionClosedBy")
   worksheetSignatures        WorksheetVersionSignature[]   @relation("WorksheetSignedBy")
+  /// A munkanaplo-bejegyzesei. `SetNull` a torleskor: a bejegyzes marad, a
+  /// szerzo neve nelkul.
+  worksheetEntries           WorksheetEntry[]              @relation("WorksheetEntryAuthor")
   deviceTokens               DeviceToken[]
   /// A torles SZANDEKOSAN Restrict, nem SetNull. SetNull mellett egy partner
   /// torlese a fiokot csendben "sajat kollegava" tenne (mindket mezo NULL),
@@ -1783,20 +1786,20 @@ model CustomerAddress {
 }
 
 model SalesOrder {
-  id                               String             @id @default(cuid())
-  orderNumber                      String             @unique
+  id                               String              @id @default(cuid())
+  orderNumber                      String              @unique
   customerId                       String?
   channel                          SalesChannel
-  status                           SalesOrderStatus   @default(DRAFT)
+  status                           SalesOrderStatus    @default(DRAFT)
   /// A bolt üzleti folyamatállapota. Kizárólag OrderBusinessStatusService
   /// módosíthatja, amely ugyanabban a tranzakcióban az eseménynaplót is írja.
   businessStatus                   OrderBusinessStatus @default(PENDING_FULFILLMENT)
-  currency                         String             @default("HUF") @db.VarChar(3)
-  totalNet                         Decimal            @default(0) @db.Decimal(19, 4)
-  totalTax                         Decimal            @default(0) @db.Decimal(19, 4)
-  totalGross                       Decimal            @default(0) @db.Decimal(19, 4)
+  currency                         String              @default("HUF") @db.VarChar(3)
+  totalNet                         Decimal             @default(0) @db.Decimal(19, 4)
+  totalTax                         Decimal             @default(0) @db.Decimal(19, 4)
+  totalGross                       Decimal             @default(0) @db.Decimal(19, 4)
   /// POS eladásnál a tételkedvezmények után, a teljes fizetendőre adott kedvezmény.
-  discountPercent                  Decimal?           @db.Decimal(5, 2)
+  discountPercent                  Decimal?            @db.Decimal(5, 2)
   /// Melyik raktárból ment/megy ki az áru (POS és UNAS webshop rendeléseknél is kitöltött).
   warehouseId                      String?
   /// A pénztárt kezelő felhasználó (POS eladásoknál).
@@ -1839,7 +1842,7 @@ model SalesOrder {
   unasExistenceCheckClaimedBy      String?
   /// Az existence-check próbálkozások száma - a backoff kiszámításához
   /// (lásd computeNextAttemptDelayMs mintáját unas-stock-sync-outbox.service.ts-ben).
-  unasExistenceCheckAttempts       Int                @default(0)
+  unasExistenceCheckAttempts       Int                 @default(0)
   /// Webshop (UNAS) rendeléseknél a vásárló neve; nincs még Customer modul,
   /// ezért csak megjelenítésre tárolt sima szöveg, nem kapcsolt entitás.
   buyerName                        String?
@@ -1866,12 +1869,12 @@ model SalesOrder {
   orderedAt                        DateTime?
   confirmedAt                      DateTime?
   completedAt                      DateTime?
-  createdAt                        DateTime           @default(now())
-  updatedAt                        DateTime           @updatedAt
+  createdAt                        DateTime            @default(now())
+  updatedAt                        DateTime            @updatedAt
 
-  customer               Customer?               @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  warehouse              Warehouse?              @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
-  soldBy                 User?                   @relation(fields: [soldById], references: [id], onDelete: SetNull)
+  customer               Customer?                  @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  warehouse              Warehouse?                 @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  soldBy                 User?                      @relation(fields: [soldById], references: [id], onDelete: SetNull)
   lines                  SalesOrderLine[]
   invoices               Invoice[]
   foxpostSettlementLines FoxpostSettlementLine[]
@@ -1888,17 +1891,17 @@ model SalesOrder {
 /// Append-only nyom az üzleti rendelésállapot változásairól. A kezdeti,
 /// migráció által létrehozott állapot is esemény, ezért ott fromStatus NULL.
 model OrderBusinessStatusEvent {
-  id         String                          @id @default(cuid())
-  orderId    String
-  fromStatus OrderBusinessStatus?
-  toStatus   OrderBusinessStatus
-  source     OrderBusinessStatusEventSource
+  id          String                         @id @default(cuid())
+  orderId     String
+  fromStatus  OrderBusinessStatus?
+  toStatus    OrderBusinessStatus
+  source      OrderBusinessStatusEventSource
   actorUserId String?
-  note       String?
-  createdAt  DateTime                        @default(now())
+  note        String?
+  createdAt   DateTime                       @default(now())
 
   order SalesOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  actor User? @relation("OrderBusinessStatusEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  actor User?      @relation("OrderBusinessStatusEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([orderId, createdAt])
   @@index([actorUserId, createdAt])
@@ -3035,6 +3038,8 @@ model Worksheet {
   serviceJobEvents ServiceJobEvent[]   @relation("ServiceJobEventWorksheet")
 
   documents WorksheetDocument[]
+  /// A MUNKANAPLO: mit csinalt a szerelo, sajat szavaival.
+  entries   WorksheetEntry[]
 
   @@index([customerId, createdAt])
   @@index([departmentId])
@@ -3166,6 +3171,48 @@ model WorksheetLine {
 
   @@unique([worksheetVersionId, position])
   @@index([assetId])
+}
+
+/// EGY BEJEGYZES A MUNKALAP MUNKANAPLOJABAN: mit csinalt a szerelo, sajat
+/// szavaival (Balazs kerese, 2026-09-03: "legyen rajta egy bejegyzes nevu gomb
+/// amire ha rakattint akkor szabadszavasan beirhatja, hogy mit csinalt").
+///
+/// === A MUNKALAPHOZ TARTOZIK, NEM A VERZIOHOZ ===
+///
+/// Az alairas a VERZIOE, mert azt egy adott tartalom igazolasa. A bejegyzes
+/// nem tartalom, hanem NAPLO: arrol szol, MI TORTENT, nem arrol, mi all a
+/// lapon. Egy uj verzio keszitese nem torolheti a munkanaplot -- ha a
+/// verziohoz kotnenk, minden modositas ujrakezdene a tortenetet.
+///
+/// === ES NEM A `ServiceJobEvent`-BE KERUL, PEDIG ELSORE ODAILLIK ===
+///
+/// Annak van `note` mezoje, aktora es idopontja, sot `worksheetId`-ja is. A
+/// kulonbseg szerkezeti: a `ServiceJobEvent` a HIBAJEGY ala van kotve,
+/// KOTELEZO `serviceJobId` mezovel es Cascade torlessel. Egy hibajegy NELKULI
+/// munkalap tehat nem tudna bejegyzest hordozni -- az pedig nem hibas eset,
+/// hanem az egyik rendes ut (a szerelo a helyszinen felveszi a lapot, es a
+/// jegy nalunk szuletik meg utolag). Oda teve a funkcio CSENDBEN nem mukodne
+/// pont azokon a lapokon, amik a telefonon keletkeznek.
+model WorksheetEntry {
+  id          String   @id @default(cuid())
+  worksheetId String
+  /// A szoveg, ahogy a szerelo beirta. Nincs formazas es nincs szerkezet: a
+  /// mezo egyetlen dolga, hogy megorizze, amit mondani akart.
+  body        String
+  /// KI IRTA. `SetNull` a felhasznalo torlesekor, es ez nem kenyelem: egy
+  /// tavozo kollega bejegyzese NEM tunhet el, mert a naplo rola szol. A
+  /// felulet KIMONDJA, hogy a szerzo ismeretlen, nem elrejti a sort.
+  authorId    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  worksheet Worksheet @relation(fields: [worksheetId], references: [id], onDelete: Cascade)
+  author    User?     @relation("WorksheetEntryAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  /// A LISTA IDOREND SZERINT MEGY, es a lap az egyetlen szuro. Az index a
+  /// parost fedi, mert a lekerdezes mindig egy lapra szol.
+  @@index([worksheetId, createdAt])
+  @@index([authorId])
 }
 
 /// Az aláírás a VERZIÓHOZ tartozik, nem a munkalaphoz. Ha egy már aláírt lap

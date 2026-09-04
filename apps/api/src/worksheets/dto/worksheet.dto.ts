@@ -195,6 +195,29 @@ export class AmendWorksheetDto extends WorksheetContentDto {
   @IsString() @MinLength(3) @MaxLength(1000) changeReason!: string;
 }
 
+/**
+ * EGY MUNKANAPLO-BEJEGYZES SZOVEGE.
+ *
+ * A felso hatar 4000 karakter, ugyanaz, mint a munkalap leirasa
+ * (`WorksheetContentDto.description`). Nem talalt szam: ha egy szerelo egy
+ * napi munkat le tud irni abban a mezoben, egy bejegyzes sem kivan tobbet.
+ *
+ * AZ ALSO HATAR 1, ES A LEVAGOTT HOSSZ SZAMIT: a csupa szokozbol allo bejegyzes
+ * pontosan annyit mond, mint a hianyzo, viszont sort foglal a listan es
+ * szerzot meg idopontot kap -- ugy nezne ki, mintha valaki dolgozott volna.
+ */
+export class WorksheetEntryBodyDto {
+  @IsString()
+  @MinLength(1, { message: "Írd le, mit csináltál." })
+  @MaxLength(4000, {
+    message: "A bejegyzés legfeljebb 4000 karakter lehet.",
+  })
+  body!: string;
+}
+
+export class CreateWorksheetEntryDto extends WorksheetEntryBodyDto {}
+export class UpdateWorksheetEntryDto extends WorksheetEntryBodyDto {}
+
 export class SignWorksheetVersionDto {
   @IsIn(WORKSHEET_SIGNATURE_DECISIONS)
   decision!: (typeof WORKSHEET_SIGNATURE_DECISIONS)[number];

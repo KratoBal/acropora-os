@@ -380,3 +380,50 @@ export function signWorksheet(
     body: JSON.stringify(input),
   });
 }
+
+/**
+ * A MUNKALAP MUNKANAPLOJA.
+ *
+ * A `canEdit` es az `editRefusal` A SZERVERTOL JON, es a telefon NEM szamolja
+ * ujra. A szabaly (a lap keszitoje vagy a jegy letrehozoja szerkeszthet)
+ * jogosultsagi szabaly, tehat a szerver a KERESt is elutasitja; ha a telefon
+ * kulon szamolna, ket masolat allna ugyanarra, es a ketto elcsuszhatna.
+ */
+export interface WorksheetEntry {
+  id: string;
+  body: string;
+  /** `null`, ha a szerzo azota torolt kollega. A keperno KIMONDJA. */
+  authorName: string | null;
+  createdAt: string;
+  updatedAt: string;
+  canEdit: boolean;
+  editRefusal: string | null;
+}
+
+export function listWorksheetEntries(id: string) {
+  return apiRequest<{ items: WorksheetEntry[] }>(
+    `${BASE}/${encodeURIComponent(id)}/entries`,
+  );
+}
+
+export function addWorksheetEntry(id: string, body: string) {
+  return apiRequest<{ items: WorksheetEntry[] }>(
+    `${BASE}/${encodeURIComponent(id)}/entries`,
+    { method: "POST", body: JSON.stringify({ body }) },
+  );
+}
+
+/**
+ * A valasz a TELJES lista, nem az egy sor: a keperno igy egy korbol frissul, es
+ * nem all elo az az allapot, amikor az atirt sor mar uj, a tobbi meg regi.
+ */
+export function updateWorksheetEntry(
+  id: string,
+  entryId: string,
+  body: string,
+) {
+  return apiRequest<{ items: WorksheetEntry[] }>(
+    `${BASE}/${encodeURIComponent(id)}/entries/${encodeURIComponent(entryId)}`,
+    { method: "PATCH", body: JSON.stringify({ body }) },
+  );
+}
