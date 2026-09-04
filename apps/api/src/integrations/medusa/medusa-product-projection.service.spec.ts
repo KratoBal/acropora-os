@@ -38,6 +38,10 @@ const product: ProjectableProduct = {
   medusaCollectionId: null,
   slug: null,
   seoRobots: null,
+  seoTitle: null,
+  seoDescription: null,
+  seoKeywords: null,
+  unasProductUrl: null,
   images: null,
   publication: {
     catalogAuthority: "ACROPORA",
@@ -147,6 +151,10 @@ const MEZO_SORSA: Record<string, "atmegy" | "szandekosan-nem"> = {
   primarySku: "atmegy", // -> a valtozat sku mezoje
   slug: "atmegy", // -> handle
   seoRobots: "atmegy", // -> metadata.seo_robots
+  seoTitle: "atmegy", // -> metadata.seo_title (ma ures, lasd a tipus melletti indokot)
+  seoDescription: "atmegy", // -> metadata.seo_description (ma ures)
+  seoKeywords: "atmegy", // -> metadata.seo_keywords (ma ures)
+  unasProductUrl: "atmegy", // -> metadata.unas_product_url
   descriptionLong: "atmegy", // -> description (osszefuzve) es metadata
   images: "atmegy", // -> images (sorrendben) es thumbnail (az elso elem)
   medusaCategoryIds: "atmegy", // -> categories, ha van teljes lista
@@ -182,6 +190,10 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
         ...product,
         slug: "Teszt-cim",
         seoRobots: "noindex, nofollow",
+        seoTitle: "Teszt cim",
+        seoDescription: "Teszt leiras",
+        seoKeywords: "teszt, kulcsszo",
+        unasProductUrl: "https://bolt.test/regi-lap",
         medusaCategoryIds: ["cat_1"],
         medusaCollectionId: "pcol_1",
         images: ["https://kep/1.jpg", "https://kep/2.jpg"],
@@ -201,6 +213,11 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
       medusaCategoryIds: torzs.categories?.[0]?.id === "cat_1",
       medusaCollectionId: torzs.collection_id === "pcol_1",
       seoRobots: torzs.metadata?.seo_robots === "noindex, nofollow",
+      seoTitle: torzs.metadata?.seo_title === "Teszt cim",
+      seoDescription: torzs.metadata?.seo_description === "Teszt leiras",
+      seoKeywords: torzs.metadata?.seo_keywords === "teszt, kulcsszo",
+      unasProductUrl:
+        torzs.metadata?.unas_product_url === "https://bolt.test/regi-lap",
       images:
         torzs.images?.[0]?.url === "https://kep/1.jpg" &&
         torzs.thumbnail === "https://kep/1.jpg",
@@ -280,6 +297,72 @@ describe("MedusaProductProjectionService -- az indexelesi tiltas", () => {
     assert.equal(torzs?.metadata?.unas_short_description, "<p>Rovid</p>");
     assert.equal(torzs?.metadata?.unas_long_description, "<p>Hosszu</p>");
     assert.ok(!("seo_robots" in (torzs?.metadata ?? {})));
+  });
+
+  /**
+   * A NEGY UJ MEZO KULON-KULON, ES NEM EGY TESZTBEN.
+   *
+   * Kulon, mert kulon ronthatok: mindegyik sajat felteteles agat kap a
+   * metaadat-osszeallitasban. Egy tesztbe irva a kalibracio ugyanazt a nevet
+   * adna vissza mindegyikre, tehat nem mondana meg, melyik ag romlott el.
+   */
+  it("a UNAS bolti cime a metaadatba megy, nem a handle-be", async () => {
+    const f = fakes({ link: null, found: [] });
+
+    await f.service.project(
+      { ...product, unasProductUrl: "https://bolt.test/regi-lap" },
+      now,
+    );
+
+    const torzs = f.createdWith[0];
+    assert.equal(
+      torzs?.metadata?.unas_product_url,
+      "https://bolt.test/regi-lap",
+    );
+    // A handle ettol fuggetlen: a slugbol jon, es itt nincs slug.
+    assert.ok(!("handle" in (torzs ?? {})));
+  });
+
+  it("a harom tovabbi SEO mezo kulon kulcsot kap a metaadatban", async () => {
+    const f = fakes({ link: null, found: [] });
+
+    await f.service.project(
+      {
+        ...product,
+        seoTitle: "Cim",
+        seoDescription: "Leiras",
+        seoKeywords: "egy, ketto",
+      },
+      now,
+    );
+
+    const torzs = f.createdWith[0];
+    assert.equal(torzs?.metadata?.seo_title, "Cim");
+    assert.equal(torzs?.metadata?.seo_description, "Leiras");
+    assert.equal(torzs?.metadata?.seo_keywords, "egy, ketto");
+  });
+
+  /**
+   * ES AZ URES MEZO KULCSA KI SEM MEGY.
+   *
+   * Nem `null`-t kuldunk, hanem semmit: a `metadata` a cel oldalon
+   * CSERE-szemantikaju, tehat egy kikuldott ures ertek felulirna azt, amit a
+   * bolt oldalan barki mas oda tett. Ez az allitas azert kell, mert a harom uj
+   * SEO mezo MA gyakorlatilag mindig ures (a UNAS-ban 1893-bol kettonek van
+   * kezzel irt Meta blokkja), tehat ez az ag fut le szinte minden termeknel.
+   */
+  it("ures SEO mezonel a kulcs ki sem kerul a metaadatba", async () => {
+    const f = fakes({ link: null, found: [] });
+
+    await f.service.project(
+      { ...product, seoRobots: "noindex", seoTitle: null, seoKeywords: null },
+      now,
+    );
+
+    const metadata = f.createdWith[0]?.metadata ?? {};
+    assert.equal(metadata.seo_robots, "noindex");
+    assert.ok(!("seo_title" in metadata));
+    assert.ok(!("seo_keywords" in metadata));
   });
 
   it("a frissitesnel is atviszi", async () => {

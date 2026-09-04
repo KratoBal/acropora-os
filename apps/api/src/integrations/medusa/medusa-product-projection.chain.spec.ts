@@ -66,6 +66,10 @@ const product: ProjectableProduct = {
   medusaCollectionId: null,
   slug: null,
   seoRobots: null,
+  seoTitle: null,
+  seoDescription: null,
+  seoKeywords: null,
+  unasProductUrl: null,
   images: null,
   publication: {
     catalogAuthority: "ACROPORA",

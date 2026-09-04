@@ -110,6 +110,33 @@ export interface ProjectableProduct {
    */
   seoRobots: string | null;
   /**
+   * A TOVABBI HAROM SEO-MEZO, ES AMIT A SZAMUK MOND ROLUK.
+   *
+   * A `seoRobots` melletti megjegyzes kimondja, hogy az 1893 termekbol
+   * MINDOSSZE KETTONEK van kezzel irt Meta blokkja, es mindkettonel csak a
+   * `Robots` mezo all benne. A tobbi AutomaticMeta, amit a UNAS a nevbol
+   * general -- es a kliens azt NEM is olvassa (a SEO-mezok a `Meta`
+   * gyerekelembol jonnek, annak hianyaban mind null).
+   *
+   * EZERT EZ A HAROM MEZO MA NULLA HATASU, es ezt kimondjuk, nem elhallgatjuk:
+   * a metaadat csak akkor kap erteket, ha van mit beletenni, tehat egy ures
+   * mezo nem kuld ki uresset. Azert all mégis itt, mert a `Meta` blokk
+   * kitoltese a bolt oldalan barmikor megtortenhet, es akkor a lekepezes mar
+   * keszen all -- nem pedig azert, mert ma barmit szallitana.
+   */
+  seoTitle: string | null;
+  seoDescription: string | null;
+  seoKeywords: string | null;
+  /**
+   * A MAI UNAS BOLTI CIM, TELJES URL-KENT, vagy `null`.
+   *
+   * NEM ugyanaz, mint a `slug`: az a cel oldali `handle` lesz, ez pedig a REGI
+   * lap cime, amit a koltozes alatt vissza lehet keresni. Ezert megy a
+   * metaadatba `unas_` elotaggal, a leirasokkal egy csoportba, es NEM a
+   * `handle`-be.
+   */
+  unasProductUrl: string | null;
+  /**
    * A TERMEK KEPEI, MAR SORRENDBEN, vagy `null`.
    *
    * A LISTA SORRENDJE MAGA AZ ADAT: az ELSO elem a fo kep, a tobbi utana a
@@ -443,11 +470,31 @@ export class MedusaProductProjectionService {
       product.descriptionLong,
     );
 
+    /**
+     * A METAADAT MINDEN DARABJA KULON FELTETELES, ES EZ NEM STILUS.
+     *
+     * Egy `null` erteket kikuldeni nem ugyanaz, mint elhagyni a kulcsot: a
+     * `metadata` a cel oldalon CSERE-szemantikaju, tehat egy kikuldott ures
+     * ertek felulirna azt, amit a bolt oldalan barki mas oda tett. Ezert
+     * minden mezo csak akkor kerul bele, ha van erteke.
+     */
+    const seoMetadata = {
+      ...(product.seoRobots ? { seo_robots: product.seoRobots } : {}),
+      ...(product.seoTitle ? { seo_title: product.seoTitle } : {}),
+      ...(product.seoDescription
+        ? { seo_description: product.seoDescription }
+        : {}),
+      ...(product.seoKeywords ? { seo_keywords: product.seoKeywords } : {}),
+      ...(product.unasProductUrl
+        ? { unas_product_url: product.unasProductUrl }
+        : {}),
+    };
     const metadataPatch =
-      product.seoRobots || Object.keys(descriptions.metadata).length > 0
+      Object.keys(seoMetadata).length > 0 ||
+      Object.keys(descriptions.metadata).length > 0
         ? {
             metadata: {
-              ...(product.seoRobots ? { seo_robots: product.seoRobots } : {}),
+              ...seoMetadata,
               ...descriptions.metadata,
             },
           }
