@@ -62,6 +62,55 @@ describe("melyik sor javítható és küldhető újra", () => {
     assert.ok(!d.ok && d.message.includes("Szándékos"), !d.ok ? d.message : "");
   });
 
+  it("munkalap-TÉTEL: szintén nem javítható, de MÁS okból és MÁS mondattal", () => {
+    /*
+      A KET OK NEM UGYANAZ, ES EGY KOZOS MONDAT ITT HAZUDNA.
+
+      A munkalapnal a hatar IDOZITETT: egyszer valaki feloldja. A tetelnel a
+      szerver merve EGYFELE 409-et adhat -- a lap mar nem piszkozat
+      (`requireDraftVersionId`, illetve a `version-gone` ag a
+      `worksheets.service.ts`-ben; 422-t ez az ut sehol nem allit elo). Lezart
+      lapra tetel EGYALTALAN nem vehet fel, tehat a torzs atirasa semmin nem
+      segitene, es egy „ezt csak az irodabol lehet feloldani" mondat olyat
+      igerne, ami nem letezik.
+
+      MI PIROSIT: egy kozos szoveg a ket fajtara. Figyeld meg, hogy a
+      `reason` mind a kettonel ugyanaz -- vagyis erre a hibara a `reason`
+      allitasa VAK, es csak a SZOVEGEK osszevetese fogja meg.
+    */
+    const tetel = queueResendEligibility({
+      ...elakadtEszkoz,
+      entityType: "worksheet-line",
+    });
+    const lap = queueResendEligibility({
+      ...elakadtEszkoz,
+      entityType: "worksheet",
+    });
+    assert.equal(tetel.ok, false);
+    assert.notEqual(!tetel.ok ? tetel.message : "", !lap.ok ? lap.message : "");
+    assert.ok(
+      !tetel.ok && tetel.message.includes("lezárult"),
+      !tetel.ok ? tetel.message : "",
+    );
+    // ES A KIJARATOT IS MEGNEVEZI: a szoveg nem csak tilt, hanem megmondja,
+    // mit lehet tenni, es hogy addig a beirt szoveg megmarad.
+    assert.ok(!tetel.ok && tetel.message.includes("elveted"));
+  });
+
+  it("ISMERETLEN fajtára nem találgat, és NEM engedi javítani", () => {
+    /*
+      Ide egy UJABB valtozat altal irt sor eshet. MI PIROSIT: ha az ismeretlen
+      fajta atesne a lekepezesen es `ok: true`-t kapna -- akkor a szerelo egy
+      olyan sort irna at, aminek a kuldesi utjat ez a verzio nem is ismeri.
+    */
+    const d = queueResendEligibility({
+      ...elakadtEszkoz,
+      entityType: "service-job",
+    });
+    assert.equal(d.ok, false);
+    assert.equal(!d.ok && d.reason, "unsupported-entity");
+  });
+
   it("a VÁRAKOZÓ fényképről az állapotát mondja, nem a fajtáját", () => {
     /*
       A SORREND MERESE. Egy varakozo fenykep-sorra MIND A KET elutasitas igaz

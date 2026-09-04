@@ -100,6 +100,20 @@ describe("a fénykép sora", () => {
     assert.doesNotMatch(forras, /DELETE FROM sync_queue WHERE operation/);
   });
 
+  it("az ismert FAJTÁK listája a közös forrásból jön, nem itt van felsorolva", () => {
+    /*
+      Ez a szures korabban sajat felsorolast vezetett (`=== "asset" ||
+      === "worksheet"`), a tipus pedig mashol allt. Egy UJ fajta igy bekerult
+      volna a tipusba, a fordito hallgatott volna, es a sorai innen CSENDBEN
+      kiestek volna -- sem a kuldesbe, sem a listaba nem jutnak be, tehat a
+      felvitel ugy tunt volna el, mintha soha nem lett volna.
+
+      MI PIROSIT: a felsorolas visszairasa ebbe a fajlba.
+    */
+    assert.match(forras, /isSyncEntityType\(row\.entity_type\)/);
+    assert.doesNotMatch(forras, /row\.entity_type === "asset"/);
+  });
+
   it("az ENTITÁST is OLVASSUK, nem állítjuk", () => {
     /*
       A beolvasas eddig minden sorra `"asset"`-et irt. Amig egyfele entitas
@@ -114,20 +128,23 @@ describe("a fénykép sora", () => {
     );
   });
 
-  it("MINDHÁROM sorfajta IDEMPOTENS beszúrással megy be", () => {
+  it("MIND A NÉGY sorfajta IDEMPOTENS beszúrással megy be", () => {
     /*
       MI PIROSIT: egyetlen sima `INSERT` barmelyik agban. Akkor a ketszer
       megnyomott gomb ket sort tenne a sorba, es ugyanaz a felvitel KETSZER
       menne fel.
 
-      A HARMAS SZAM MAGA IS ALLITAS: eszkoz, munkalap, fenykep. Ha egy negyedik
-      sorfajta jon, ez a sor pirosra valt, es akkor kell eldonteni, hogy az uj
-      ag is idempotens-e.
+      A NEGYES SZAM MAGA IS ALLITAS: eszkoz, munkalap, munkalap-tetel, fenykep.
+      Ez a szam 2026-09-04-en haromrol negyre valtozott, es a valtozas PIROSSA
+      tette ezt a sort -- pontosan ugy, ahogy az elozo valtozat kommentje
+      megigerte. A dontes ezert dontes volt, nem mellekhatas: a tetel aga is
+      `INSERT OR IGNORE`.
     */
     const beszurasok = [
       ...forras.matchAll(/INSERT( OR IGNORE)? INTO sync_queue/g),
     ].map((m) => m[0]);
     assert.deepEqual(beszurasok, [
+      "INSERT OR IGNORE INTO sync_queue",
       "INSERT OR IGNORE INTO sync_queue",
       "INSERT OR IGNORE INTO sync_queue",
       "INSERT OR IGNORE INTO sync_queue",
@@ -151,6 +168,38 @@ describe("a fénykép sora", () => {
     // MI PIROSIT: ha a munkalap `'asset'` entitassal kerulne a sorba. A
     // kuldes az entitasbol dont, tehat a lap az ESZKOZ vegpontjara menne.
     assert.match(forras, /VALUES \(\?, 'create', 'worksheet', NULL/);
+  });
+
+  it("a TÉTEL sora a GAZDA lap azonosítójával megy be, nem NULL-lal", () => {
+    /*
+      EZ A KULONBSEG A MASIK KET FELVITELHEZ KEPEST. Ott az `entity_id` NULL,
+      mert a szerver-azonosito csak a felmenetelkor keletkezik. A tetelnel a lap
+      MAR letezik, es a kuldes EBBOL tudja, melyik lap sor-vegpontjara menjen.
+
+      MI PIROSIT: ha ez az ag is `NULL`-t irna. Akkor a kiuritesnel a tetel
+      gazdatlan lenne, es SOHA nem menne fel -- nemán, mert a sor tovabbra is
+      "varakozonak" latszana.
+    */
+    assert.match(forras, /VALUES \(\?, 'create', 'worksheet-line', \?/);
+    assert.match(forras, /input\.worksheetId,/);
+  });
+
+  it("a lapra váró tételek száma a GAZDÁRA szűr, és az ELVETETTET kihagyja", () => {
+    /*
+      HAROM FELTETEL, ES MINDHAROM KELL:
+
+      - `entity_type`: enelkul a lap ala szamolodna minden sor, ami hozza
+        tartozik (peldaul egy munkalap-fenykep), es a mondat tobbet allitana.
+      - `entity_id`: enelkul MINDEN lap tetelei szamolodnanak, minden lapon.
+      - `state <> 'discarded'`: az elvetett tetel NEM fog felmenni. Egy kozos
+        szamban ugy latszana, mintha meg varna -- es a szerelo varna ra.
+
+      MI PIROSIT: barmelyik feltetel elhagyasa.
+    */
+    assert.match(
+      forras,
+      /WHERE operation = 'create' AND entity_type = 'worksheet-line'\s*\n?\s*AND entity_id = \? AND state <> 'discarded'/,
+    );
   });
 
   it("a párosítás CSAK a címzetlen fotó-sorokat érinti", () => {

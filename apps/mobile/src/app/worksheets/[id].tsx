@@ -18,14 +18,22 @@ import {
   getWorksheet,
   removeWorksheetLine,
 } from "@/lib/api/worksheets";
+import { ApiError } from "@/lib/api/client";
 import { useIsOnline } from "@/lib/offline/connectivity";
 import { describeCachedWorksheetNotice } from "@/lib/offline/offline-notice";
+import {
+  enqueueWorksheetLine,
+  queuedWorksheetLineCount,
+} from "@/lib/offline/queue-store";
+import { saveOrQueue } from "@/lib/offline/save-or-queue";
 import {
   readCachedWorksheet,
   rememberWorksheet,
 } from "@/lib/offline/worksheet-cache";
 import {
   buildWorksheetLinePayload,
+  describeQueuedWorksheetLines,
+  describeWorksheetLineQueueWrite,
   worksheetLineId,
 } from "@/lib/worksheets/worksheet-line";
 import { canSignWorksheetVersion } from "@/lib/worksheets/worksheet-signature";
@@ -65,6 +73,12 @@ export default function WorksheetDetailScreen() {
   const [quantity, setQuantity] = useState("");
   const [unit, setUnit] = useState("óra");
   const [lineError, setLineError] = useState<string | null>(null);
+  /**
+   * A SORBA KERULT TETEL UZENETE, KULON A HIBATOL. Nem hiba: a felvitel
+   * megtortent, csak meg a telefonon var. Ugyanabban a piros dobozban a
+   * szerelo elveszettnek hinne, es ujra beirna -- es akkor ketszer kerulne fel.
+   */
+  const [queued, setQueued] = useState<string | null>(null);
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { status, user } = useAuth();
@@ -98,6 +112,20 @@ export default function WorksheetDetailScreen() {
   });
 
   /**
+   * HANY TETEL VAR MEG FELTOLTESRE EHHEZ A LAPHOZ.
+   *
+   * A sorba tett tetel a lenti listan NEM jelenik meg: az a szerver valaszabol
+   * jon. A mentes utani mondat ezt kimondja, de csak EGY kepernyo-eletre: aki
+   * visszalep es ujra megnyitja a lapot, semmit nem latna belole -- es ujra
+   * beirna ugyanazt a tetelt.
+   */
+  const queuedLines = useQuery({
+    queryKey: ["worksheet-queued-lines", id],
+    queryFn: () => queuedWorksheetLineCount(id),
+    enabled: Boolean(id && status === "authenticated"),
+  });
+
+  /**
    * A HOROK A KORAI VISSZATERESEK ELOTT ALLNAK, es ez nem stilus: a React
    * szabalya szerint minden renderelesben UGYANABBAN a sorrendben kell
    * lefutniuk. Egy `Redirect` utan elhelyezve az elso jogosultsag-valtasnal
@@ -117,18 +145,71 @@ export default function WorksheetDetailScreen() {
    */
   const addLine = useMutation({
     mutationFn: async () => {
+      /**
+       * AZ AZONOSITO EGYSZER SZULETIK, ES MIND A KET UTON UGYANAZ.
+       *
+       * Ugyanez megy a szervernek a tetel `id` mezojekent ES a sor kulcsakent.
+       * A szerver erre idempotens: egy megszakadt kuldes ujrakuldese a MEGLEVO
+       * tetelt talalja meg, nem masodikat hoz letre. Ha a ket uton ket kulcsot
+       * adnank, epp ez a vedelem esne ki.
+       */
+      const lineId = worksheetLineId({
+        now: Date.now(),
+        random: Math.random(),
+      });
       const built = buildWorksheetLinePayload(
         { description, quantity, unit },
-        worksheetLineId({ now: Date.now(), random: Math.random() }),
+        lineId,
       );
       if (!built.ok) throw new Error(built.message);
-      return addWorksheetLine(id, built.payload);
+      const { id: _lineId, ...torzs } = built.payload;
+      /**
+       * MENTES: ELOSZOR A SZERVERNEK, ES CSAK HALOZATI HIBANAL A SORBA.
+       *
+       * A dontes a `lib/offline/save-or-queue.ts`-ben all, mert ott MERHETO --
+       * ebben a fajlban nincs, ami tesztelne. Ugyanaz a fuggveny fut, mint az
+       * eszkoz- es a munkalap-felvitelnel; a SZOVEG kulon, mert itt a lap
+       * LATSZIK, es a tetel megsem jelenik meg rajta.
+       *
+       * A szerver valasza (a teljes lap) itt NEM kell: a keperno amugy is
+       * ujrakerdezi. Igy a ket ag ugyanazt az alakot adja vissza.
+       */
+      return saveOrQueue({
+        save: async () => {
+          await addWorksheetLine(id, built.payload);
+          return { id: lineId };
+        },
+        enqueue: () =>
+          enqueueWorksheetLine({
+            id: lineId,
+            /** A GAZDA lap azonositoja: tetelt csak meglevo lapra lehet felvenni. */
+            worksheetId: id,
+            payload: torzs,
+            createdAt: new Date().toISOString(),
+          }),
+        statusOf: (cause) => (cause instanceof ApiError ? cause.status : null),
+        describeWrite: describeWorksheetLineQueueWrite,
+      });
     },
-    onSuccess: async () => {
+    onSuccess: async (outcome) => {
+      if (outcome.type === "rejected" || outcome.type === "lost") {
+        setLineError(outcome.message);
+        return;
+      }
+      /**
+       * A MEZOK CSAK AKKOR URULNEK KI, HA A TETEL VALAHOL LETEZIK -- a
+       * szerveren vagy a sorban. Egy `lost` kimenetnel a felvitel SEHOL nincs
+       * meg, es a beirt szoveg az EGYETLEN peldany: azt kitorolni ugyanaz a
+       * nema veszteseg, mint elvetni valamit kerdes nelkul.
+       */
       setDescription("");
       setQuantity("");
       setLineError(null);
+      setQueued(outcome.type === "queued" ? outcome.message : null);
       await queryClient.invalidateQueries({ queryKey: ["worksheet", id] });
+      await queryClient.invalidateQueries({
+        queryKey: ["worksheet-queued-lines", id],
+      });
     },
     onError: (cause) =>
       setLineError(
@@ -169,6 +250,7 @@ export default function WorksheetDetailScreen() {
         })
       : null;
   const current = data?.currentVersion;
+  const queuedLinesNotice = describeQueuedWorksheetLines(queuedLines.data ?? 0);
   const rows = data ? worksheetDetailRows(data) : [];
   const continuesFrom = data?.continues ?? null;
   const olderVersions = data?.versions.filter(
@@ -242,6 +324,18 @@ export default function WorksheetDetailScreen() {
             </Text>
 
             {/*
+              AMI MEG NEM MENT FEL, AZ NEM LATSZIK A LISTAN -- ES EZT KI KELL
+              MONDANI. A lista a szerver valaszabol jon, tehat a sorban allo
+              tetel ott NINCS ott. Enelkul a lap ugy nez ki, mintha a mentes meg
+              sem tortent volna, es a szerelo ujra beirna ugyanazt.
+            */}
+            {queuedLinesNotice ? (
+              <View style={styles.card}>
+                <Text style={styles.muted}>{queuedLinesNotice}</Text>
+              </View>
+            ) : null}
+
+            {/*
               A FELVITEL CSAK PISZKOZATON, ES CSAK IRASI JOGGAL.
               A szerver ugyanezt koveteli (a sor-vegpontok piszkozat-verziot
               kernek), es ha a gomb ott allna egy lezart lapon, azt igerne,
@@ -291,6 +385,12 @@ export default function WorksheetDetailScreen() {
                 {lineError ? (
                   <Text style={styles.lineError}>{lineError}</Text>
                 ) : null}
+                {/*
+                  A SORBA KERULES NEM HIBA, ezert nem is a piros dobozban all: a
+                  tetel megvan, csak meg a telefonon. Egy piros uzenet itt azt
+                  jelentene a szerelonek, hogy nem sikerult -- es ujra beirna.
+                */}
+                {queued ? <Text style={styles.muted}>{queued}</Text> : null}
                 <Pressable
                   disabled={addLine.isPending}
                   onPress={() => addLine.mutate()}

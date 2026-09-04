@@ -1,6 +1,10 @@
 import { initializeOfflineDatabase } from "./database";
 import { readPhotoPayload, type PhotoPayload } from "./photo-queue";
-import type { SyncQueueRow, SyncState } from "./sync-queue";
+import {
+  isSyncEntityType,
+  type SyncQueueRow,
+  type SyncState,
+} from "./sync-queue";
 
 /**
  * A SOR ÍRÁSA ÉS OLVASÁSA. Ez az a réteg, ami eddig hiányzott: a döntések
@@ -152,6 +156,54 @@ export async function enqueueWorksheetCreate(
          (id, operation, entity_type, entity_id, payload_json, created_at, attempt_count, last_error, state)
        VALUES (?, 'create', 'worksheet', NULL, ?, ?, 0, NULL, 'pending')`,
       [input.id, JSON.stringify(input.payload), input.createdAt],
+    );
+    return { ok: true, operationId: input.id };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * SORBA TESZ EGY TETELT EGY MAR LETEZO MUNKALAPRA.
+ *
+ * === AMIBEN ELTER A MASIK KETTOTOL: A GAZDA MAR MEGVAN ===
+ *
+ * Az eszkoznel es a munkalapnal az `entity_id` `NULL`, mert a szerver-oldali
+ * azonosito csak a felmenetelkor keletkezik. ITT FORDITVA: tetelt csak MEGLEVO
+ * lapra lehet felvenni, tehat a lap azonositoja mar a sorba tetelkor ismert, es
+ * a sor ezt hordozza. A kuldes ebbol tudja, MELYIK lap sor-vegpontjara menjen.
+ *
+ * === A SOR AZONOSITOJA MAGA A TETEL AZONOSITOJA ===
+ *
+ * Nem ket kulcs: a `worksheetLineId` egyszer keletkezik, es ugyanaz megy a
+ * sorba kulcskent ES a szerverre a tetel `id` mezojekent. A szerver erre
+ * IDEMPOTENS (`alreadyPresent`): ha a valasz elveszett es a sor ujrakuld, a
+ * MEGLEVO tetelt talalja meg, nem masodikat hoz letre. Ket kulon kulcs mellett
+ * epp ez a vedelem esne ki.
+ */
+export async function enqueueWorksheetLine(input: {
+  /** A tetel azonositoja, egyben a sor kulcsa. */
+  id: string;
+  /** A GAZDA lap szerver-oldali azonositoja. Mar letezik. */
+  worksheetId: string;
+  payload: unknown;
+  createdAt: string;
+}): Promise<EnqueueResult> {
+  try {
+    const db = await initializeOfflineDatabase();
+    await db.runAsync(
+      `INSERT OR IGNORE INTO sync_queue
+         (id, operation, entity_type, entity_id, payload_json, created_at, attempt_count, last_error, state)
+       VALUES (?, 'create', 'worksheet-line', ?, ?, ?, 0, NULL, 'pending')`,
+      [
+        input.id,
+        input.worksheetId,
+        JSON.stringify(input.payload),
+        input.createdAt,
+      ],
     );
     return { ok: true, operationId: input.id };
   } catch (error) {
@@ -385,6 +437,27 @@ export async function queueCounts(): Promise<{
 }
 
 /**
+ * HANY TETEL VAR MEG FELTOLTESRE EGY ADOTT LAPHOZ.
+ *
+ * A MONDAT a `worksheet-line.ts`-ben all (`describeQueuedWorksheetLines`), ez
+ * csak a szam. A `discarded` sorok KIMARADNAK: azokat a szerelo eldobta, es
+ * nem fognak felmenni -- egy kozos szamban a lapon ugy latszananak, mintha meg
+ * varnanak.
+ */
+export async function queuedWorksheetLineCount(
+  worksheetId: string,
+): Promise<number> {
+  const db = await initializeOfflineDatabase();
+  const row = await db.getFirstAsync<{ db: number }>(
+    `SELECT COUNT(*) AS db FROM sync_queue
+      WHERE operation = 'create' AND entity_type = 'worksheet-line'
+        AND entity_id = ? AND state <> 'discarded'`,
+    [worksheetId],
+  );
+  return row?.db ?? 0;
+}
+
+/**
  * CSAK AZT KULDJUK EL, AMIT ISMERUNK -- ES EZ KET MEZORE ALL.
  *
  * A muvelet nevet eddig `"create"`-re, az entitast `"asset"`-re ALLITOTTUK a
@@ -399,9 +472,16 @@ export async function queueCounts(): Promise<{
 function ismertSor(row: { operation: string; entity_type: string }): boolean {
   const muvelet =
     row.operation === "create" || row.operation === "upload-photo";
-  const entitas =
-    row.entity_type === "asset" || row.entity_type === "worksheet";
-  return muvelet && entitas;
+  /**
+   * AZ ISMERT FAJTAK LISTAJA A `sync-queue.ts`-BEN ALL, NEM ITT.
+   *
+   * Korabban ez a sor sajat felsorolast vezetett (`=== "asset" || ===
+   * "worksheet"`), es ez a szures NEMA: egy uj fajta bekerult volna a tipusba,
+   * a fordito hallgatott volna, es a sorai innen CSENDBEN kiestek volna --
+   * sem a kuldesbe, sem a listaba nem jutnak be, tehat a felvitel ugy tunt
+   * volna el, mintha soha nem is lett volna.
+   */
+  return muvelet && isSyncEntityType(row.entity_type);
 }
 
 /**

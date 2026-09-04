@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  canOwnPhotos,
   canRetryState,
   classifyFailure,
+  isSyncEntityType,
   operationId,
+  SYNC_ENTITY_TYPES,
   worksheetOperationId,
 } from "./sync-queue";
 
@@ -149,5 +152,52 @@ describe("a munkalap művelet-azonosítója", () => {
       scannedAt: "2026-09-03T10:00:00.000Z",
     });
     assert.notEqual(lap, eszkoz);
+  });
+});
+
+describe("a sor entitás-fajtái", () => {
+  it("a lista a HÁROM ismert fajtát tartalmazza, ebben a sorrendben", () => {
+    /*
+      A SZAM MAGA IS ALLITAS, ugyanabbol az okbol, mint a tarolo beszurasainal:
+      egy NEGYEDIK fajta felvetele PIROSSA teszi ezt a sort, es akkor kell
+      eldonteni, hogy a tobbi lekepezes (fajta neve, javithatosag, fenykep-gazda)
+      megkapta-e a maga mondatat. A `Record` alakok errol amugy is szolnanak, de
+      azok FORDITASI hibat adnak -- ez a sor a FUTASBAN mondja meg.
+    */
+    assert.deepEqual(
+      [...SYNC_ENTITY_TYPES],
+      ["asset", "worksheet", "worksheet-line"],
+    );
+  });
+
+  it("az ISMERETLEN fajtát nem fogadja el", () => {
+    /*
+      MI PIROSIT: egy `true`-t visszaado valtozat. Ezen a fuggvenyen all a
+      tarolo szurese, tehat egy mindenre igent mondo alak egy ismeretlen sort
+      elkuldene a szervernek -- talalgatva, melyik vegpontra.
+
+      ES A POZITIV KONTROLL, mert enelkul egy MINDENRE hamisat mondo valtozat is
+      atmenne ezen az allitason: az a valtozat viszont MINDEN felvitelt eldobna
+      a listarol es a kuldesbol.
+    */
+    assert.equal(isSyncEntityType("worksheet-line"), true);
+    assert.equal(isSyncEntityType("service-job"), false);
+    assert.equal(isSyncEntityType(""), false);
+  });
+
+  it("FÉNYKÉP csak eszközhöz és munkalaphoz tartozhat, tételhez NEM", () => {
+    /*
+      A `queue-runner.ts` ebbol donti el, hogy egy felment `create` sor
+      azonosito NELKUL baj-e. A tetel sor-vegpontja NEM ad vissza uj entitast,
+      tehat enelkul MINDEN felment tetel az "azonosito nelkul felment rogzites"
+      szamba esne, es a jelentes olyan fenykepekrol beszelne, amik nem
+      letezhetnek.
+
+      MI PIROSIT: ha a tetel is `true`-t kapna, vagy ha a masik ketto `false`-t
+      -- utobbitol a VALODI cimzetlen kepek nema esete tunne el.
+    */
+    assert.equal(canOwnPhotos("asset"), true);
+    assert.equal(canOwnPhotos("worksheet"), true);
+    assert.equal(canOwnPhotos("worksheet-line"), false);
   });
 });

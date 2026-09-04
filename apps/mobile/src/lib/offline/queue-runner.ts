@@ -1,5 +1,5 @@
 import { decideDrain } from "./queue-drain";
-import type { SyncQueueRow } from "./sync-queue";
+import { canOwnPhotos, type SyncQueueRow } from "./sync-queue";
 
 /**
  * A SOR VEGIGJARASA, ES AMI EBBEN A LEGKONNYEBBEN ELROMLIK: A JELENTES.
@@ -156,7 +156,17 @@ export async function drainQueue(
     const outcome = decideDrain({ row, httpStatus, errorMessage: error });
     switch (outcome.type) {
       case "done":
-        if (row.operation === "create") {
+        /**
+         * A PAROSITAS CSAK OTT KELL, AHOL EGYALTALAN LEHET FENYKEP.
+         *
+         * A `canOwnPhotos` az eszkozre es a munkalapra igaz, a TETELRE nem:
+         * tetelhez nem tartozik kep. Enelkul a felment tetel-sorok mind az
+         * `unresolved` szamba estek volna (a sor-vegpont nem UJ entitast ad
+         * vissza), es a jelentes azt allitotta volna, hogy "a hozzajuk keszult
+         * fenykepeket nem tudjuk feltolteni" -- olyan kepekrol, amik nem is
+         * letezhetnek.
+         */
+        if (row.operation === "create" && canOwnPhotos(row.entityType)) {
           /**
            * A PAROSITAS A TORLES ELOTT MEGY. A sor torlese utan a rogzites
            * muvelet-azonositoja mar sehol nem all, tehat a kepeket nem lehetne

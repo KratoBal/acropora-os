@@ -138,6 +138,27 @@ describe("a fénykép megkapja a szerver azonosítóját", () => {
     assert.deepEqual(naplo, ["remove:r1"]);
   });
 
+  it("egy TÉTEL sikere azonosító nélkül NEM 'cimzetlen kép'", async () => {
+    /*
+      A tetel sor-vegpontja nem UJ entitast hoz letre, tehat sosem ad vissza
+      azonositot. A fenti allitas ("azonosito NELKULI siker") viszont pont
+      ilyenkor jelezne, hogy a "hozzajuk keszult fenykepeket nem tudjuk
+      feltolteni" -- olyan kepekrol, amik tetelhez nem is tartozhatnak.
+
+      MI PIROSIT: ha a szamlalas visszaallna a puszta `operation === "create"`
+      feltetelre. Ez a valtozat a fenti KET allitason tovabbra is atmenne (azok
+      eszkoz-sorral mennek), tehat ez a sor az EGYETLEN, ami megfogja.
+    */
+    const { d, naplo } = deps(
+      [{ ...sor("t1"), entityType: "worksheet-line", entityId: "lap-1" }],
+      () => ({ httpStatus: 201, error: null, entityId: null }),
+    );
+    const r = await drainQueue(d);
+    assert.equal(r.done, 1);
+    assert.equal(r.unresolved, 0);
+    assert.deepEqual(naplo, ["remove:t1"]);
+  });
+
   it("egy FOTÓ sor sikere nem párosít semmit", async () => {
     // TESTVER-KONTROLL: egy valtozat, ami minden sikerre parosit, a fenti ket
     // allitason atmenne, es a kepek egymasra irnak az azonositot.
