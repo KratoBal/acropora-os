@@ -6,6 +6,7 @@ import {
   describeCachedDepartmentsNotice,
   describeCachedWorksheetNotice,
   describeOfflineDetailNotice,
+  describeOfflineEditNotice,
   describeOfflineNotice,
   isCacheStale,
   STALE_AFTER_HOURS,
@@ -317,5 +318,63 @@ describe("a mentett munkalap sávja", () => {
       });
       assert.equal(notice?.tone, "stale", status);
     }
+  });
+});
+
+describe("a szerkesztő képernyő sávja", () => {
+  const most = new Date("2026-09-04T18:00:00Z");
+
+  it("TÉRERŐVEL nincs sáv", () => {
+    /*
+      A sav a mentett masolatrol szol. Ha van halozat, a keperno a FRISS adatot
+      tolti be, es a sav csak zaj lenne.
+    */
+    assert.equal(
+      describeOfflineEditNotice({
+        online: true,
+        syncedAt: "2026-09-04T17:00:00Z",
+        now: most,
+      }),
+      null,
+    );
+  });
+
+  it("kimondja a KÖVETKEZMÉNYT, nem csak azt, hogy régi", () => {
+    /*
+      EZ A LEGFONTOSABB ALLITAS EBBEN A SZAKASZBAN, ES EZ KULONBOZTETI MEG AZ
+      ADATLAP SAVJATOL.
+
+      Az adatlapnal a regi masolat annyit jelent, hogy "ami azota valtozott, azt
+      nem latod". Aki SZERKESZT, azt akarja tudni, hogy amit beir, FELULIR-E
+      valamit. A valasz 2026-09-04 ota az, hogy nem irja felul csendben: ha
+      kozben mas is hozzanyult ugyanahhoz a mezohoz, a szerelo mezonkent
+      eldontheti, melyik ertek maradjon.
+
+      MI PIROSIT: ha a sav csak a kort mondja meg, mint az adatlape.
+    */
+    const sav = describeOfflineEditNotice({
+      online: false,
+      syncedAt: "2026-09-04T17:00:00Z",
+      now: most,
+    });
+
+    assert.notEqual(sav, null);
+    assert.match(sav?.message ?? "", /nem írjuk felül csendben/);
+    assert.match(sav?.message ?? "", /melyik érték maradjon/);
+  });
+
+  it("a másolat KORA is ott áll", () => {
+    /*
+      Egy elavult ertek, amirol a szerelo nem tudja, hogy elavult, rosszabb,
+      mint egy ures keperno: az uresnel tudja, hogy nincs adata.
+    */
+    const sav = describeOfflineEditNotice({
+      online: false,
+      syncedAt: "2026-09-04T17:00:00Z",
+      now: most,
+    });
+
+    assert.match(sav?.message ?? "", /mentett másolat/);
+    assert.notEqual((sav?.message ?? "").indexOf("órája"), -1);
   });
 });

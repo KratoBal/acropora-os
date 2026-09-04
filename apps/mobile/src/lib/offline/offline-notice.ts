@@ -142,6 +142,48 @@ export function describeOfflineDetailNotice(input: {
 }
 
 /**
+ * A SZERKESZTŐ KÉPERNYŐ FÖLÖTTI SÁV, ha a lap a mentett másolatból áll.
+ *
+ * === MIÉRT KÜLÖN FÜGGVÉNY, ÉS MIÉRT NEM ELÉG AZ ADATLAPÉ ===
+ *
+ * Az adatlapnál a régi másolat annyit jelent, hogy „ami azóta változott, azt
+ * nem látod". A szerkesztésnél ez KEVÉS: aki ír, azt akarja tudni, hogy amit
+ * beír, FELÜLÍR-E valamit.
+ *
+ * És a válasz 2026-09-04 óta MÁS, mint korábban lett volna. A mentett
+ * másolatból indított szerkesztés elavult alapállapotról indul -- ez délelőtt
+ * még azt jelentette volna, hogy a mentés sor-szintű ütközésbe fut és a
+ * szerelő munkája bent ragad. Ma a lánc kezeli: a szerver MEZŐNKÉNT ütköztet
+ * (#541), a sor viszi a szerkesztést (#547), és az elakadt módosításnál a
+ * szerelő mezőnként eldönti, melyik érték maradjon (#554).
+ *
+ * A sáv ezért nem ijeszt, hanem MEGMONDJA A KÖVETKEZMÉNYT: ha közben más is
+ * hozzányúlt ugyanahhoz a mezőhöz, azt nem írja felül csendben -- kérdezni fog.
+ *
+ * === AMIT VISZONT KI KELL MONDANI, MERT NEM LÁTSZIK ===
+ *
+ * A másolat KORA. Egy elavult érték, amiről a szerelő nem tudja, hogy elavult,
+ * rosszabb, mint egy üres képernyő: az üresnél tudja, hogy nincs adata.
+ */
+export function describeOfflineEditNotice(input: {
+  online: boolean;
+  syncedAt: string | null;
+  now: Date;
+}): OfflineNotice | null {
+  if (input.online) return null;
+
+  return {
+    tone: "offline",
+    title: "Nincs kapcsolat: mentett másolatot szerkesztesz",
+    message:
+      `Ez a lap ${describeCacheAge(input.syncedAt, input.now)} mentett másolat, ` +
+      "tehát régebbi értékeket látsz. A javításod a telefonon vár, és ha " +
+      "közben más is átírta ugyanazt a mezőt, nem írjuk felül csendben: " +
+      "megkérdezzük, melyik érték maradjon.",
+  };
+}
+
+/**
  * A MUNKALAP FÖLÖTTI SÁV, ha az adatlap a mentett másolatból áll.
  *
  * === MIÉRT KÜLÖN FÜGGVÉNY, ÉS MIÉRT NEM ELÉG AZ ESZKÖZÉ ===

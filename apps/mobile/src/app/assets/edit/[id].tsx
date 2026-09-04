@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -22,6 +22,13 @@ import {
   type AssetEditForm,
   type EditableAsset,
 } from "@/lib/assets/asset-edit";
+import { OfflineNoticeCard } from "@/components/offline/OfflineNoticeCard";
+import {
+  readCachedAsset,
+  rememberAssetDetail,
+} from "@/lib/offline/asset-cache";
+import { readCachedPartnerUnits } from "@/lib/offline/asset-form-cache";
+import { describeOfflineEditNotice } from "@/lib/offline/offline-notice";
 import { ASSET_CRITICALITY_OPTIONS } from "@/lib/assets/asset-criticality";
 import { ASSET_STATUS_OPTIONS } from "@/lib/assets/asset-status";
 import { describeAssetUpdateWrite } from "@/lib/assets/offline-edit";
@@ -71,6 +78,34 @@ export default function AssetEditScreen() {
     enabled: status === "authenticated" && Boolean(id),
   });
 
+  /**
+   * A MENTETT MASOLAT, ES EZ A KEPERNYO EDDIG NEM OLVASTA.
+   *
+   * === A LANC FELIG ALLT ===
+   *
+   * Az adatlap MAR eltárolja a teljes lapot (`rememberAssetDetail`), es olvassa
+   * is offline. A szerkeszto viszont CSAK a halozatot hivta: a szerelo
+   * megnyitotta az eszkozt, koppintott a Szerkesztesre, es a pinceben ez a lap
+   * nem toltott be -- pedig az adat masodpercekkel korabban rakerult a
+   * telefonra. A MENTES mar sorba ment (#547), a BETOLTES nem.
+   *
+   * === MIERT MOST BIZTONSAGOS, ES KORABBAN MIERT NEM VOLT AZ ===
+   *
+   * A masolatbol inditott szerkesztes ELAVULT alapallapotrol indul. 2026-09-04
+   * delelottjeig ez azt jelentette volna, hogy a mentes SOR-szintu utkozesbe
+   * fut, es a szerelo munkaja bent ragad. A lanc azota kezeli: a szerver
+   * MEZONKENT utkoztet (#541), a sor viszi a szerkesztest (#547), es az elakadt
+   * modositasnal a szerelo mezonkent eldonti, melyik ertek maradjon (#554).
+   *
+   * Vagyis az elavult alap ma KEZELT allapot, nem kockazat -- es ezt a sav ki
+   * is mondja a szerelonek.
+   */
+  const cached = useQuery({
+    queryKey: ["offline-asset", id],
+    queryFn: () => readCachedAsset(id!),
+    enabled: status === "authenticated" && Boolean(id),
+  });
+
   const [form, setForm] = useState<AssetEditForm | null>(null);
   /**
    * A SORBA TETEL ES A VESZTES KULON ALLAPOT, MERT KULON SZINU.
@@ -88,11 +123,41 @@ export default function AssetEditScreen() {
    * betölteni: ott a cím a pontosítás, és a szerver az alegységet el is
    * utasítja.
    */
+  /**
+   * AMIBOL A KEPERNYO DOLGOZIK: a friss lap, ha van, kulonben a mentett masolat.
+   *
+   * A SORREND NEM MINDEGY. A halozati valasz nyer, mert az a mai allapot; a
+   * masolat csak akkor lep be, ha nincs mas. Forditva egy meglevo terero
+   * mellett is regi ertekeket szerkesztenenk.
+   */
+  const betoltott = query.data ?? cached.data?.detail ?? null;
+  const masolatbol = !query.data && betoltott !== null;
+
+  /**
+   * AKI IDE ERKEZIK ELOSZOR (peldaul ertesitesbol), ANNAK IS LEGYEN MASOLATA.
+   * Az adatlap ugyanezt teszi; e nelkul a szerkesztobol indulo szerelo a
+   * kovetkezo alkalommal ures gyorsitotarat talalna.
+   */
+  useEffect(() => {
+    if (!query.data) return;
+    void rememberAssetDetail(query.data);
+  }, [query.data]);
+
   const unitsQuery = useQuery({
-    queryKey: ["partner-units", query.data?.owner.id],
-    queryFn: () => listPartnerUnits(query.data!.owner.id),
-    enabled:
-      status === "authenticated" && query.data?.owner.type === "SUPPLIER",
+    queryKey: ["partner-units", betoltott?.owner.id],
+    queryFn: () => listPartnerUnits(betoltott!.owner.id),
+    enabled: status === "authenticated" && betoltott?.owner.type === "SUPPLIER",
+  });
+
+  /**
+   * A HELYSZINEK MENTETT LISTAJA. A felviteli keperno mar hasznalja; itt a
+   * hianya NEM allitja meg a szerkesztest, csak a valaszto marad ures -- es
+   * akkor a szerelo a tobbi mezot attol meg javithatja.
+   */
+  const cachedUnits = useQuery({
+    queryKey: ["offline-partner-units", betoltott?.owner.id],
+    queryFn: () => readCachedPartnerUnits(betoltott!.owner.id),
+    enabled: status === "authenticated" && betoltott?.owner.type === "SUPPLIER",
   });
 
   // Fills the form when the asset arrives, and again when a reload brings
@@ -103,15 +168,14 @@ export default function AssetEditScreen() {
   // Keyed on `updatedAt`, so once the form is filled, editing owns it. A
   // background refetch that returns the same version will not wipe out
   // what somebody is halfway through typing.
-  if (query.data && loadedFrom !== query.data.updatedAt) {
-    setLoadedFrom(query.data.updatedAt);
-    setForm(assetEditFormFrom(editable(query.data)));
+  if (betoltott && loadedFrom !== betoltott.updatedAt) {
+    setLoadedFrom(betoltott.updatedAt);
+    setForm(assetEditFormFrom(editable(betoltott)));
   }
 
   const save = useMutation({
     mutationFn: async (): Promise<SaveOutcome> => {
-      if (!query.data || !form)
-        throw new Error("A szerkesztés nem áll készen.");
+      if (!betoltott || !form) throw new Error("A szerkesztés nem áll készen.");
       /**
        * AZ ELOZO KOR UZENETE ELTUNIK, MIELOTT AZ UJ ELINDUL. E nelkul egy
        * sikeres masodik probalkozas mellett is ott allna a „vár feltöltésre"
@@ -119,7 +183,7 @@ export default function AssetEditScreen() {
        */
       setQueued(null);
       setLost(null);
-      const asset = query.data;
+      const asset = betoltott;
       const patch = buildAssetPatch(editable(asset), form);
       /**
        * A SZERVER ELUTASITASAT AZ EREDETI HIBAVAL DOBJUK TOVABB, NEM A
@@ -209,7 +273,7 @@ export default function AssetEditScreen() {
     );
   }
 
-  if (query.isPending || !form) {
+  if ((query.isPending && !betoltott) || !form) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.card}>
@@ -220,14 +284,18 @@ export default function AssetEditScreen() {
     );
   }
 
-  if (query.isError || !query.data) {
+  /**
+   * IDE MAR CSAK AKKOR JUTUNK, HA A MASOLAT SINCS MEG. Korabban a halozati
+   * hiba maga elvitte a kepernyot, akkor is, ha a lap ott volt a telefonon.
+   */
+  if (!betoltott) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Nem sikerült betölteni</Text>
           <Text style={styles.cardText}>
             {query.error instanceof Error
-              ? query.error.message
+              ? `${query.error.message} Mentett másolat sincs erről az eszközről: nyisd meg egyszer térerővel, és utána offline is szerkeszthető.`
               : "Ismeretlen hiba."}
           </Text>
           <Pressable
@@ -242,7 +310,7 @@ export default function AssetEditScreen() {
     );
   }
 
-  const asset = query.data;
+  const asset = betoltott;
   /*
    * A MENTES GOMB IS A LEKÉPEZETT ALAKOT KAPJA. E nélkül a gomb tétlen maradna
    * akkor, amikor CSAK a helyszín változott: a fordító pontosan ezt a hívást
@@ -254,6 +322,21 @@ export default function AssetEditScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={["bottom", "left", "right"]}>
       <ScrollView contentContainerStyle={styles.container}>
+        {/*
+          A SAV A LAP TETEJEN ALL, ES NEM A DEVNOTE-BAN: a szerelo a pinceben nem
+          fog jegyzetet olvasni (acrobot kikotese, 2026-09-04). Egy elavult
+          ertek, amirol nem tudja, hogy elavult, rosszabb, mint egy ures
+          keperno -- az uresnel tudja, hogy nincs adata.
+        */}
+        {masolatbol ? (
+          <OfflineNoticeCard
+            notice={describeOfflineEditNotice({
+              online: false,
+              syncedAt: cached.data?.syncedAt ?? null,
+              now: new Date(),
+            })!}
+          />
+        ) : null}
         <View style={styles.hero}>
           <Text style={styles.assetNumber}>{asset.assetNumber}</Text>
           <Text style={styles.assetName}>{asset.name}</Text>
@@ -359,37 +442,45 @@ export default function AssetEditScreen() {
               latszik -- kulonben a beallitott helyszin nemán eltunne, es a
               mentes atirna valami masra.
             */}
-            {unitLevels(unitsQuery.data?.items ?? [], form.unitId || null).map(
-              (level, depth) =>
-                level.options.length === 0 ? null : (
-                  <View key={`szint-${depth}`} style={styles.unitLevel}>
-                    {level.options.map((option) => {
-                      const selected = level.selectedId === option.id;
-                      return (
-                        <Pressable
-                          key={option.id}
-                          disabled={!option.isActive && !selected}
-                          onPress={() =>
-                            setForm({
-                              ...form,
-                              unitId: selected ? "" : option.id,
-                            })
-                          }
-                          style={[
-                            styles.unitRow,
-                            selected && styles.unitRowOn,
-                            !option.isActive && !selected && styles.unitOff,
-                          ]}
-                        >
-                          <Text style={styles.unitText}>
-                            {option.label}
-                            {option.isActive ? "" : " (kivezetett)"}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                ),
+            {unitLevels(
+              /*
+                A MENTETT LISTA A TARTALEK, es a sorrend ugyanaz, mint az
+                eszkoznel: a halozati valasz nyer, a masolat csak akkor lep be,
+                ha nincs mas. E nelkul a valaszto URESEN allna offline, es a
+                szerelo azt hinne, hogy a partnernek nincs helyszine.
+              */
+              unitsQuery.data?.items ?? cachedUnits.data?.items ?? [],
+              form.unitId || null,
+            ).map((level, depth) =>
+              level.options.length === 0 ? null : (
+                <View key={`szint-${depth}`} style={styles.unitLevel}>
+                  {level.options.map((option) => {
+                    const selected = level.selectedId === option.id;
+                    return (
+                      <Pressable
+                        key={option.id}
+                        disabled={!option.isActive && !selected}
+                        onPress={() =>
+                          setForm({
+                            ...form,
+                            unitId: selected ? "" : option.id,
+                          })
+                        }
+                        style={[
+                          styles.unitRow,
+                          selected && styles.unitRowOn,
+                          !option.isActive && !selected && styles.unitOff,
+                        ]}
+                      >
+                        <Text style={styles.unitText}>
+                          {option.label}
+                          {option.isActive ? "" : " (kivezetett)"}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ),
             )}
           </View>
         ) : null}
