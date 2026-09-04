@@ -496,9 +496,10 @@ describe("A cikkszám-keresés két sikertelen esete", () => {
 /**
  * A HIANY-SOROK CSATORNAJA, SZERKEZETI ALLITASSAL.
  *
- * MIERT NEM VISELKEDESI: ezek a sorok a parancsok TORZSEBEN allnak, azok pedig
- * a `prisma`-t MODUL-SZINTU importbol veszik -- teszt-duplat nem lehet nekik
- * adni. Ugyanaz a korlat, ami miatt a kategoria-dontes kulon modulba kerult.
+ * MIERT NEM VISELKEDESI: ezek a sorok MINDKET parancs torzseben allnak, es a
+ * keszlet-parancs torzse tovabbra is a `prisma`-t veszi MODUL-SZINTU importbol.
+ * A vetites-parancs a `db` parameter ota merheto (2026-09-04), a keszlete nem --
+ * egy viselkedesi allitas tehat csak az egyik felet fedne.
  *
  * MIT VED: egy utemezett futast burkolo szkript gyakran a STDERR JELENLETET
  * olvassa hibanak, akkor is, ha a kilepesi kod nulla. A hianyzo lekepezes es a
@@ -645,10 +646,17 @@ describe("the product link's lookup key", () => {
 /**
  * A KEP-BEKOTES SZERKEZETI ALLITASSAL, UGYANABBOL AZ OKBOL, MINT A HIANY-SOROK.
  *
- * A parancs torzse a `prisma`-t modul-szintu importbol veszi, tehat teszt-duplat
- * nem lehet neki adni -- viselkedesi allitas igy nem irhato ra. A kalibracio ezt
- * MEG IS MUTATTA: a bekotes elvagasa (`images: publishedImageUrls && null`)
- * NULLA allitast dontott pirosra, 1982 lefutott teszt mellett.
+ * AZ INDOK ATIRVA, MERT A SAJAT VALTOZASOM TETTE HAMISSA. Ez a bekezdes
+ * korabban azt mondta, hogy a torzsnek nem lehet teszt-duplat adni, tehat
+ * viselkedesi allitas nem irhato ra. A `db` parameter (2026-09-04) ezt
+ * megszuntette.
+ *
+ * A KOVETKEZTETES VISZONT VALTOZATLAN, ES UJRAMERVE ALL: ugyanaz a rontas
+ * (`images: publishedImageUrls && null`) ma is EGYETLEN viselkedesi allitast sem
+ * dont pirosra -- csak ezt a szerkezetit (2133 lefutott teszt, 1 piros, es az a
+ * piros ez a fajl). Az ok mas: a torzs-teszt egyik esete sem VISZ KI kepet a
+ * boltba, mert a masolo es a publikalo ket kulon memoriabeli tarolot kap.
+ * (A korabbi meres 1982 lefutott teszt mellett keszult, masik bazison.)
  *
  * AMIT EZ VED: hogy a vetites a KIVITT bolti URL-eket kapja, ne `null`-t. A
  * `null` ma is helyes ertek (akkor a mezo kimarad), es epp ezert nema: egy
