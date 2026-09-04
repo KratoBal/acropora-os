@@ -10,6 +10,8 @@ import { collectUnitSubtreeIds } from "./unit-subtree.js";
 
 import { randomUUID } from "node:crypto";
 
+import { conflictingFields, intendedFields } from "./asset-field-conflict.js";
+
 import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 import type {
@@ -1273,10 +1275,46 @@ export class ServiceAssetsRepository extends Repository {
                 : undefined,
           updatedById: actorUserId,
         };
-        const changed = await tx.asset.updateMany({
-          where: { id, updatedAt: new Date(input.expectedUpdatedAt) },
-          data,
-        });
+        /**
+         * MEZO-SZINTU UTKOZES, NEM SOR-SZINTU (acrobot dontese, 2026-09-04).
+         *
+         * Eddig a sor idobelyege dontott: ket ember, aki KET KULON mezot ir at,
+         * ugyanugy utkozott, mint aki ugyanazt. A webrol ez elviselheto volt --
+         * aki elakadt, frissitett es ujra beirta. AZ OFFLINE UTON NEM: a
+         * szerelo mar nincs a helyszinen, es az adat annal a pillanatnal es
+         * annal a helynel volt, tehat utolag nem all elo.
+         *
+         * A GYORS UT ELOSZOR: ha a sor idobelyege NEM mozdult, senki nem nyult
+         * hozza, es nincs mit lekerdezni. A naplo-olvasas csak akkor fut le,
+         * amikor tenylegesen volt kozbeni valtozas.
+         */
+        const expected = new Date(input.expectedUpdatedAt);
+        if (existing.updatedAt.getTime() !== expected.getTime()) {
+          const intended = intendedFields(
+            existing as unknown as Record<string, unknown>,
+            data as unknown as Record<string, unknown>,
+          );
+          const events = await tx.assetEvent.findMany({
+            where: { assetId: id, occurredAt: { gt: expected } },
+            select: { type: true, payload: true },
+          });
+          const conflicts = conflictingFields(intended, events);
+          /**
+           * A MEZONEVEK A HIBAUZENETBE KERULNEK, es ez nem diszites: egy
+           * "valaki modositotta idokozben" mondat nem mondja meg, MIT kell
+           * megnezni. A `STALE_UPDATE` nev megmarad, hogy a szolgaltatas
+           * lekepezese ne ket helyen alljon.
+           */
+          if (conflicts.length > 0)
+            throw new Error(`FIELD_CONFLICT:${conflicts.join(",")}`);
+        }
+        /**
+         * AZ IRAS AZ AZONOSITORA MEGY, ES EZ A TRANZAKCIO MIATT BIZTONSAGOS: a
+         * blokk `Serializable` szinten fut, tehat egy kozbeeso iras a masik
+         * tranzakciot megszakitja. Egy `updatedAt` feltetel itt epp azt venne
+         * vissza, amit a mezo-szintu ellenorzes megnyert.
+         */
+        const changed = await tx.asset.updateMany({ where: { id }, data });
         if (changed.count !== 1) throw new Error("STALE_UPDATE");
 
         const updated = await tx.asset.findUniqueOrThrow({ where: { id } });
@@ -1324,13 +1362,31 @@ export class ServiceAssetsRepository extends Repository {
               to: updated.parentAssetId,
             }),
           });
-        const generalFields = Object.keys(input).filter(
+        /**
+         * A NAPLO A TENYLEGESEN VALTOZOTT MEZOKET ROGZITI, NEM A BEKULDOTTEKET.
+         *
+         * Eddig `Object.keys(input)` allt itt: a webes urlap a TELJES rekordot
+         * kuldi, tehat minden mentes azt naplozta, hogy MINDEN altalanos mezo
+         * modosult. Ket baja volt, es a masodik a sulyosabb:
+         *
+         *   1. HAMIS NYOM. Egy esemeny, ami azt allitja, hogy egy mezo
+         *      "modosult", holott nem, a naplo egesz ertelmet rontja.
+         *   2. ES A MEZO-SZINTU UTKOZES-ELLENORZES EPP EZT OLVASSA. A regi
+         *      alakkal minden parhuzamos mentes utkozott volna -- vagyis a
+         *      mezo-szintu vedelem epp olyan durva lett volna, mint a
+         *      sor-szintu, csak dragabban.
+         *
+         * Ezert ez a javitas nem mellekhatas, hanem ELOFELTETEL.
+         */
+        const generalFields = intendedFields(
+          existing as unknown as Record<string, unknown>,
+          data as unknown as Record<string, unknown>,
+        ).filter(
           (key) =>
             ![
-              "expectedUpdatedAt",
               "status",
-              "ownerType",
-              "ownerId",
+              "customerId",
+              "supplierId",
               "customerAddressId",
               "aquariumId",
               "parentAssetId",
