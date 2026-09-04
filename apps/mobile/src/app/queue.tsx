@@ -126,6 +126,7 @@ export default function QueueScreen() {
                       const kerdes = queueDiscardConfirmation({
                         kind: entry.kind,
                         title: entry.title,
+                        operation: entry.operation,
                       });
                       Alert.alert(kerdes.title, kerdes.message, [
                         { text: "Mégsem", style: "cancel" },

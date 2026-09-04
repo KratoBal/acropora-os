@@ -2,7 +2,7 @@ import { readQueuedAssetUpdate } from "./asset-update-queue";
 import { readPhotoPayload } from "./photo-queue";
 import { queueDiscardEligibility } from "./queue-discard";
 import { queueResendEligibility } from "./queue-resend";
-import type { SyncEntityType, SyncQueueRow } from "./sync-queue";
+import type { SyncEntityType, SyncOperation, SyncQueueRow } from "./sync-queue";
 import { readQueuedWorksheetLine } from "../worksheets/worksheet-line";
 
 /**
@@ -28,6 +28,15 @@ export type QueueSection = "stalled" | "conflict" | "waiting" | "discarded";
 export interface QueueEntryView {
   id: string;
   section: QueueSection;
+  /**
+   * MI EZ A SOR, GEPI ALAKBAN.
+   *
+   * A `kind` az EMBERNEK szol („Eszköz módosítás"), es szovegkent nem szabad
+   * donteni belole. Az elvetes megerosito szovege viszont muveletenkent MAS
+   * (`queueDiscardConfirmation`), tehat a kepernyonek szuksege van a muveletre
+   * magara -- kulonben a `kind` szovegere kellene illesztenie.
+   */
+  operation: SyncOperation;
   /** MI EZ: „Eszköz", „Munkalap", „Munkalap-tétel" vagy „Fénykép". */
   kind: string;
   /** MELYIK: az eszkoz neve, a lap targya, a tetel megnevezese, vagy a fajlnev. */
@@ -275,6 +284,7 @@ export function toQueueEntries(
     return {
       id: row.id,
       section,
+      operation: row.operation,
       kind,
       title,
       createdAt: row.createdAt,

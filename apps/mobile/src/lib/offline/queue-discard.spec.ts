@@ -50,6 +50,7 @@ describe("a megerősítés megnevezi, MI vész el", () => {
   const megerosites = queueDiscardConfirmation({
     kind: "Eszköz",
     title: "Szivattyú",
+    operation: "create",
   });
 
   it("a felvitel FAJTÁJA és NEVE benne áll", () => {
@@ -101,5 +102,55 @@ describe("mit változtat az elvetés a soron", () => {
       egy ures sor "elvetve" felirattal ugyanannyit mond, mint a semmi.
     */
     assert.deepEqual(Object.keys(queueDiscardPatch()), ["state"]);
+  });
+});
+
+describe("az elvetés következménye MŰVELETENKÉNT más", () => {
+  const felvitel = queueDiscardConfirmation({
+    kind: "Eszköz",
+    title: "Szivattyú",
+    operation: "create",
+  });
+  const modositas = queueDiscardConfirmation({
+    kind: "Eszköz módosítás",
+    title: "Szivattyú",
+    operation: "update",
+  });
+
+  it("a MÓDOSÍTÁS elvetése NEM azt mondja, hogy az eszköz nem fog létezni", () => {
+    /*
+      EZ A LEGFONTOSABB ALLITAS EBBEN A SZAKASZBAN.
+
+      A felvitel mondata („a szerveren nem fog létezni") egy szerkesztesrol
+      HAMIS, es ijeszto is: a szerelo azt olvashatna ki belole, hogy maga az
+      ESZKOZ tunik el. Az eszkoz ott marad, csak a javitas veszik el -- es epp
+      ezt kell tudnia annak, aki dont.
+
+      MI PIROSIT: a ket ag osszevonasa egy kozos mondatra.
+    */
+    assert.doesNotMatch(modositas.message, /nem fog létezni/);
+    assert.match(modositas.message, /Az eszköz a rendszerben megmarad/);
+    assert.match(modositas.title, /módosítást/);
+  });
+
+  it("a FELVITEL mondata változatlanul a régi marad", () => {
+    /*
+      TESTVER-KONTROLL: e nelkul egy valtozat, ami MINDEN muveletre a modositas
+      mondatat adja, atmenne a fenti alliton -- es akkor egy elveszo felvitelrol
+      mondanank, hogy „megmarad".
+    */
+    assert.match(felvitel.message, /nem fog létezni/);
+    assert.match(felvitel.title, /felvitelt/);
+  });
+
+  it("a FÉNYKÉP a rögzítést nem viszi magával", () => {
+    const kep = queueDiscardConfirmation({
+      kind: "Fénykép",
+      title: "kep.jpg",
+      operation: "upload-photo",
+    });
+
+    assert.match(kep.message, /a rögzítés a szerveren marad/);
+    assert.match(kep.title, /fényképet/);
   });
 });
