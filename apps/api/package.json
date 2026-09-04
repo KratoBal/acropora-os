@@ -19,6 +19,7 @@
     "service-token": "tsc -p tsconfig.json && node --env-file=../../.env dist/tasks/service-token.cli.js",
     "store:reconcile": "tsc -p tsconfig.json && node --env-file=../../.env dist/service-assets/document-store/store-reconciliation.cli.js",
     "medusa:categories": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-category.cli.js",
+    "medusa:brands": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-brand.cli.js",
     "medusa:project": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-projection.cli.js",
     "medusa:inventory": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-inventory.cli.js",
     "medusa:pricing": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-pricing.cli.js",
