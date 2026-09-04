@@ -29,6 +29,30 @@
  * az egyikhez, fele a masikhoz tartozna.
  */
 
+/**
+ * OLVASASI SZABALY A KIMENETHEZ: KET HASONLO NEVU GYUJTEMENY NEM ENNEK A
+ * MODULNAK A HIBAJA.
+ *
+ * Ha a boltban valaha ket gyujtemeny all ugyanarra a markara, hasonlo nevvel, a
+ * hiba NEM itt van es nem a betoltoben: az ket BRAND SOR kovetkezmenye nalunk.
+ * Ez a modul pontosan azt teszi, amit a tabla mond -- markankent egy
+ * gyujtemenyt.
+ *
+ * ES A KET SOR LETREJOTTE MERT, NEM ELMELETI (2026-09-04): a Brand.normalizedName
+ * unique megkotese CSAK azonos normalizalt nevet utkoztet, es ket kulon uton
+ * erkezo irasmod normalizalt neve kulonbozhet. A mert pelda a "Magfloat" (a
+ * marka-mezobol jovo import alakja) es a "Mag-Float" (a termek NEVEBOL dolgozo
+ * felismero alakja): normalizalva "magfloat" kontra "mag float", tehat a unique
+ * megkotes nem fogja meg oket.
+ *
+ * A JAVITAS HELYE EZERT A SZOTAR VAGY A BrandAlias, NEM EZ A MODUL. Ha a betolto
+ * elkezdene irasmodokat osszevonni, egy MASODIK, rejtett normalizalo keletkezne
+ * a meglevo mellett, es a ketto elobb-utobb szetcsuszna. A nyitott adatkerdes
+ * (osszekoti-e ma a BrandAlias a ket alakot) sajat kartyan all; a darabszamot
+ * szandekosan nem irjuk ide, mert egy szovegbe egetett szam a valosag
+ * elmozdulasakor csendben hazuggá valik.
+ */
+
 /** Egy marka nalunk, annyi mezovel, amennyi a dontesehez kell. */
 export interface OurBrand {
   id: string;
