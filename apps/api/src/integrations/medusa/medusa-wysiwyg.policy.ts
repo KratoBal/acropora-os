@@ -28,6 +28,26 @@
  * az egyik hihetonek is latszik.
  *
  * Ez a modul ezert a MI kategoria-fankbol dolgozik, nem a forras jelzoibol.
+ *
+ * === ES AMI A HELYES MUKODES JELE ELES ADATON: A NAPLOSOR, NEM AZ ALLAPOT ===
+ *
+ * Merve 2026-09-04, a teszt telepitesen, ket termeken egy futtatasban:
+ *
+ *   195-WYSIWYG (WYSIWYG termek):  backorder: tiltva (mar igy allt)
+ *   156161      (rendes termek):   backorder: engedelyezve (most allitottuk be)
+ *
+ * A WYSIWYG termeken az EREDMENY (tiltva) ONMAGABAN NEM BIZONYIT SEMMIT: a Medusa
+ * alapertelmezese egy uj valtozaton amugy is hamis, tehat ugyanez az allapot allna
+ * elo akkor is, ha ez a szabaly egyaltalan nem futott volna le.
+ *
+ * AMI BIZONYIT, AZ A KET SOR KULONBSEGE. A parancs osszeveti a DONTEST a jelenlegi
+ * bolti allapottal, es kiirja, melyik tortent (`most allitottuk be` kontra `mar igy
+ * allt`). Ha ez a szabaly hibas lenne es igazat adna, a WYSIWYG termeken is
+ * `engedelyezve (most allitottuk be)` allna -- pontosan az, ami a masikon all.
+ *
+ * EZERT ALL ITT: aki kesobb csak a Medusa-oldali erteket nezi meg, ugy fogja latni,
+ * hogy "nem tortent semmi", es abbol nem tudja eldonteni, hogy a szabaly mukodik-e.
+ * A bizonyitek helye a PARANCS KIMENETE, nem a bolt.
  */
 
 /** A fa egy csomopontja, csak azokkal a mezokkel, amiket a szabaly olvas. */
