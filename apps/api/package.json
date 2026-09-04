@@ -28,6 +28,7 @@
     "ai-search:rebuild": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/ai-product-search/ai-product-search.cli.js",
     "barcode-import": "tsc -p tsconfig.json && node --env-file=../../.env dist/products/barcode-import.cli.js",
     "unas:probe": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-readonly-probe.cli.js",
+    "unas:webshop-sellable-backfill": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-webshop-sellable-backfill.cli.js",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist test-dist"
   },
