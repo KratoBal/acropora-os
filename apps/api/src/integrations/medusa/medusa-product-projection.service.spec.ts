@@ -40,6 +40,9 @@ const product: ProjectableProduct = {
   unit: null,
   secondaryUnit: null,
   secondaryUnitFactor: null,
+  minimumOrderQuantity: null,
+  maximumOrderQuantity: null,
+  orderQuantityStep: null,
   slug: null,
   seoRobots: null,
   seoTitle: null,
@@ -167,6 +170,9 @@ const MEZO_SORSA: Record<string, "atmegy" | "szandekosan-nem"> = {
   unit: "atmegy", // -> metadata.unas_unit
   secondaryUnit: "atmegy", // -> metadata.unas_secondary_unit
   secondaryUnitFactor: "atmegy", // -> metadata.unas_secondary_unit_factor
+  minimumOrderQuantity: "atmegy", // -> metadata.unas_minimum_order_quantity
+  maximumOrderQuantity: "atmegy", // -> metadata.unas_maximum_order_quantity
+  orderQuantityStep: "atmegy", // -> metadata.unas_order_quantity_step
   /**
    * A publikacios ALLAPOT bemenet, nem mezo: belole a `status` es a
    * `sales_channels` szuletik, a szolgaltatas dontese szerint.
@@ -208,6 +214,9 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
         unit: "ml",
         secondaryUnit: "karton",
         secondaryUnitFactor: "12",
+        minimumOrderQuantity: "2",
+        maximumOrderQuantity: "50",
+        orderQuantityStep: "5",
         images: ["https://kep/1.jpg", "https://kep/2.jpg"],
         descriptionLong: "Hosszú leírás",
       },
@@ -228,6 +237,10 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
       unit: torzs.metadata?.unas_unit === "ml",
       secondaryUnit: torzs.metadata?.unas_secondary_unit === "karton",
       secondaryUnitFactor: torzs.metadata?.unas_secondary_unit_factor === "12",
+      minimumOrderQuantity: torzs.metadata?.unas_minimum_order_quantity === "2",
+      maximumOrderQuantity:
+        torzs.metadata?.unas_maximum_order_quantity === "50",
+      orderQuantityStep: torzs.metadata?.unas_order_quantity_step === "5",
       seoRobots: torzs.metadata?.seo_robots === "noindex, nofollow",
       seoTitle: torzs.metadata?.seo_title === "Teszt cim",
       seoDescription: torzs.metadata?.seo_description === "Teszt leiras",
@@ -377,6 +390,71 @@ describe("MedusaProductProjectionService -- az indexelesi tiltas", () => {
     assert.equal(metadata.unas_unit, "db");
     assert.ok(!("unas_secondary_unit" in metadata));
     assert.ok(!("unas_secondary_unit_factor" in metadata));
+  });
+
+  /**
+   * A RENDELESI KORLATOK. HAROM KULON ALLITAS, mert harom kulon sor viszi oket,
+   * es egy ciklus EGY allitas lenne: elbukna, ha barmelyik hianyzik, de nem
+   * mondana meg, MELYIK.
+   *
+   * A CEL-HELY MERT: a Medusa 2.19.0 termek- es variant-modelljen nincs
+   * rendelesi korlat mezo, tehat metaadat, `unas_` elotaggal.
+   */
+  it("a minimalis rendelheto mennyiseg a metaadatba megy", async () => {
+    const f = fakes({ link: null, found: [] });
+
+    await f.service.project({ ...product, minimumOrderQuantity: "2" }, now);
+
+    assert.equal(f.createdWith[0]?.metadata?.unas_minimum_order_quantity, "2");
+  });
+
+  it("a maximalis rendelheto mennyiseg a metaadatba megy", async () => {
+    const f = fakes({ link: null, found: [] });
+
+    await f.service.project({ ...product, maximumOrderQuantity: "50" }, now);
+
+    assert.equal(f.createdWith[0]?.metadata?.unas_maximum_order_quantity, "50");
+  });
+
+  /**
+   * A LEPESKOZ A HAROM KOZUL A LEGGYAKORIBB: merve a 09-03-as exporton, HUSZ
+   * termeken all (a maximum heten), es a husz kozul tizenhat publikalt. Foleg
+   * kimert, meroedenybol adagolt tetel -- ott csak a meroegyseg tobbszorose
+   * rendelheto.
+   */
+  it("a rendelesi lepeskoz a metaadatba megy", async () => {
+    const f = fakes({ link: null, found: [] });
+
+    await f.service.project({ ...product, orderQuantityStep: "5" }, now);
+
+    assert.equal(f.createdWith[0]?.metadata?.unas_order_quantity_step, "5");
+  });
+
+  /**
+   * ES KORLAT NELKUL A HAROM KULCS KI SEM KERUL. Ez nem szepitesi kerdes: a
+   * metaadat CSERE-szemantikaju, tehat egy kikuldott ures ertek felulirna azt,
+   * amit a bolt oldalan barki mas oda tett. A mert adatban a termekek
+   * TULNYOMO tobbsegen nincs korlat, vagyis ez az ag fut le szinte mindenhol.
+   */
+  it("rendelesi korlat nelkul a harom kulcs ki sem kerul", async () => {
+    const f = fakes({ link: null, found: [] });
+
+    await f.service.project(
+      {
+        ...product,
+        unit: "db",
+        minimumOrderQuantity: null,
+        maximumOrderQuantity: null,
+        orderQuantityStep: null,
+      },
+      now,
+    );
+
+    const metadata = f.createdWith[0]?.metadata ?? {};
+    assert.equal(metadata.unas_unit, "db");
+    assert.ok(!("unas_minimum_order_quantity" in metadata));
+    assert.ok(!("unas_maximum_order_quantity" in metadata));
+    assert.ok(!("unas_order_quantity_step" in metadata));
   });
 
   it("a vonalkod a valtozat ean mezojebe kerul", async () => {

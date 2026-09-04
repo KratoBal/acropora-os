@@ -265,6 +265,44 @@ export function projectValtozatMezok(
   };
 }
 
+/**
+ * A RENDELESI KORLATOK A TUKORBOL, MAR SZOVEGKENT.
+ *
+ * KULON, EXPORTALT TISZTA FUGGVENY, ugyanabbol az okbol, mint a valtozat-mezok
+ * es a csatorna-sor lekepezese: a parancs torzsebe irt lekepezes rontasa NULLA
+ * allitast dont pirosra, mert a `prisma` modul-szintu importja mellett a torzs
+ * eles adatbazis nelkul nem merheto.
+ *
+ * A HAROM MEZO A `UnasProductSnapshot` MODELLEN UL, nem a varianson es nem a
+ * terméken -- ezert jon MASIK relaciobol, mint a mertekegyseg.
+ *
+ * A NEGYEDIK, az `initialOrderQuantity`, SZANDEKOSAN HIANYZIK: merve az egesz
+ * fan, mindossze KET elofordulasa van (a sema es a migracio), nulla iras es
+ * nulla olvasas. A UNAS kliens ki sem bontja, tehat a tukorbe el sem jut. Nincs
+ * mit atvinni belole, es a torlese kulon dontes.
+ */
+export interface TukorKorlatok {
+  minimumOrderQuantity?: { toString(): string } | null;
+  maximumOrderQuantity?: { toString(): string } | null;
+  orderQuantityStep?: { toString(): string } | null;
+}
+
+export interface KorlatProjekcio {
+  minimumOrderQuantity: string | null;
+  maximumOrderQuantity: string | null;
+  orderQuantityStep: string | null;
+}
+
+export function projectRendelesiKorlatok(
+  snapshot: TukorKorlatok | null | undefined,
+): KorlatProjekcio {
+  return {
+    minimumOrderQuantity: snapshot?.minimumOrderQuantity?.toString() ?? null,
+    maximumOrderQuantity: snapshot?.maximumOrderQuantity?.toString() ?? null,
+    orderQuantityStep: snapshot?.orderQuantityStep?.toString() ?? null,
+  };
+}
+
 export function projectUnasChannelRow(
   row: UnasChannelRow | undefined,
 ): UnasChannelProjection {
@@ -483,6 +521,20 @@ export async function runProjectionCli(
             unit: true,
             secondaryUnit: true,
             secondaryUnitFactor: true,
+          },
+        },
+        /**
+         * A RENDELESI KORLATOK A TUKORBOL, ES CSAK A HAROM MEZO.
+         *
+         * A `unasSnapshot` a UNAS TUKRE: nem a mi torzsadatunk, hanem az, amit
+         * a forras allit. A rendelesi korlatok ott ulnek, nem a terméken es nem
+         * a varianson, ezert kell kulon relacio.
+         */
+        unasSnapshot: {
+          select: {
+            minimumOrderQuantity: true,
+            maximumOrderQuantity: true,
+            orderQuantityStep: true,
           },
         },
         categories: { select: { categoryId: true } },
@@ -719,6 +771,7 @@ export async function runProjectionCli(
          * pontossagot adja vissza, nem egy talalgatast.
          */
         ...projectValtozatMezok(product.variants[0]),
+        ...projectRendelesiKorlatok(product.unasSnapshot),
         ...projectUnasChannelRow(product.channelListings[0]),
         /**
          * A KEPEK BOLTI URL-JEI, vagy `null`.
