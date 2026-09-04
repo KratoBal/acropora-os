@@ -22,6 +22,7 @@ import {
   unasVariantSku,
 } from "../../common/unas-variant.util.js";
 import { writeSearchDocument } from "../../integrations/ai-product-search/ai-product-search.writer.js";
+import { resolveSimilarProducts } from "./unas-similar-products.mapping.js";
 import {
   describeSkipped,
   partitionByUnasAuthority,
@@ -590,6 +591,24 @@ export class UnasProductSyncRepository extends Repository {
          * új lekérdezés.
          */
         let skippedSourceChanged = 0;
+        /**
+         * AMIT A MASODIK MENET FELDOLGOZ: csak az, amit ez a futas IRT.
+         *
+         * A kihagyott (nem a mi gondozasunkban levo) es a VALTOZATLAN termekek
+         * nincsenek benne. A valtozatlanoknal ez tudatos kompromisszum, es van
+         * ara: ha egy korabban feloldatlan hivatkozas celpontja MOST jott letre,
+         * a valtozatlan forras kapcsolata nem all helyre ebben a futasban. Egy
+         * teljes osszevetes lezarja, mert ott minden termek irodik.
+         *
+         * A masik irany rosszabb lenne: minden futasban minden termek osszes
+         * kapcsolatat ujrairni akkor is, amikor a forras-adat beture ugyanaz.
+         * A kepek es a kategoriak ugyanezt a szabalyt kovetik.
+         */
+        const writtenProducts: Array<{
+          productId: string;
+          externalId: string;
+          similarProducts: CanonicalUnasProduct["similarProducts"];
+        }> = [];
         for (const diff of diffs) {
           // A kihagyott termék a számlálókba sem kerül bele: nem az történt
           // vele, hogy változatlan maradt, hanem hogy hozzá sem nyúltunk.
@@ -850,7 +869,74 @@ export class UnasProductSyncRepository extends Repository {
               occurredAt: windowEnd,
             },
           });
+          writtenProducts.push({
+            productId: product.id,
+            externalId: diff.product.externalId,
+            similarProducts: diff.product.similarProducts,
+          });
           await writeSearchDocument(transaction, product.id);
+        }
+
+        /**
+         * A HASONLO TERMEKEK KAPCSOLATAI: MASODIK MENET, ES SZANDEKOSAN AZ.
+         *
+         * Egy kapcsolat KET termeket kot ossze, tehat a forras irasakor a celpont
+         * meg nem feltetlenul letezik: ugyanabban a kotegben keletkezhet, kesobb.
+         * Ezert a kapcsolatok a termek-ciklus UTAN irodnak, amikor a tranzakcio
+         * mar minden sort lat.
+         *
+         * A TERKEP A TELJES KATALOGUSBOL EPUL, NEM A FUTASBOL, ES EZ NEM
+         * ELOVIGYAZATOSSAG. A szinkronnak van INKREMENTALIS modja: olyankor a
+         * koteg csak az ablakban valtozott termekeket hozza, a hivatkozasok
+         * celpontjai viszont tulnyomorest az ablakon KIVUL allnak. Egy terkep, ami
+         * csak a koteg termekeit ismeri, majdnem minden hivatkozast feloldatlanul
+         * hagyna -- es mivel az iras torol, mielott ujrair, a kapcsolatok
+         * ELTUNNENEK. A szamlalo nőne, es az lenne az egyetlen jel.
+         *
+         * A lekerdezes a TRANZAKCION BELUL fut, tehat a most keletkezett
+         * termekeket is latja: nem kell kulon gyujteni oket a ciklusban.
+         */
+        const productIdsByExternalId = new Map(
+          (
+            await transaction.externalReference.findMany({
+              where: { system: "UNAS", entityType: "Product" },
+              select: { externalId: true, entityId: true },
+            })
+          ).map((reference) => [reference.externalId, reference.entityId]),
+        );
+        let similarRelationsWritten = 0;
+        let similarReferencesUnresolved = 0;
+        let similarReferencesSelf = 0;
+        let similarReferencesDuplicate = 0;
+        for (const written of writtenProducts) {
+          const mapping = resolveSimilarProducts({
+            sourceExternalId: written.externalId,
+            sourceProductId: written.productId,
+            similarProducts: written.similarProducts,
+            productIdsByExternalId,
+          });
+          similarReferencesUnresolved += mapping.unresolved.length;
+          similarReferencesSelf += mapping.selfReferences;
+          similarReferencesDuplicate += mapping.duplicates;
+          await transaction.productRelation.deleteMany({
+            where: {
+              sourceProductId: written.productId,
+              relationType: "SIMILAR",
+              source: "UNAS",
+            },
+          });
+          if (mapping.targets.length === 0) continue;
+          const created = await transaction.productRelation.createMany({
+            data: mapping.targets.map((target, index) => ({
+              sourceProductId: written.productId,
+              targetProductId: target.productId,
+              relationType: "SIMILAR" as const,
+              sortOrder: index,
+              source: "UNAS",
+            })),
+            skipDuplicates: true,
+          });
+          similarRelationsWritten += created.count;
         }
 
         let missingCount = 0;
@@ -1049,6 +1135,10 @@ export class UnasProductSyncRepository extends Repository {
           missingCount,
           skippedCount: skipped.length,
           skippedSourceChangedCount: skippedSourceChanged,
+          similarRelationsWritten,
+          similarReferencesUnresolved,
+          similarReferencesSelf,
+          similarReferencesDuplicate,
           windowStart: windowStart?.toISOString() ?? null,
           windowEnd: windowEnd.toISOString(),
         };
