@@ -73,6 +73,8 @@ const product = (
   variantStocks: [],
   isPackageProduct: false,
   packageComponents: [],
+  similarProducts: [],
+  similarProductsSkipped: 0,
   productUrl: `https://sensitive.example/${externalId}`,
   sefUrl: null,
   manufacturerUrl: null,

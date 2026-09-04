@@ -78,6 +78,21 @@ export interface UnasApiProduct {
   variantStocks: UnasApiVariantStock[];
   isPackageProduct: boolean;
   packageComponents: UnasPackageComponent[];
+  /** A "hasonlo termekek" hivatkozasai, a forras sorrendjeben. */
+  similarProducts: UnasSimilarProduct[];
+  /**
+   * HANY HIVATKOZAST HAGYTUNK KI, mert nem volt azonosithato (`Id` nelkul).
+   *
+   * KULON SZAM, ES NEM CSAK ELOVIGYAZATOSSAG. Egy nemán eldobott hivatkozas
+   * pontosan ugy nez ki, mint egy termek, aminek nincs is kapcsolata -- es
+   * senki nem keresne. A szam teszi megszamolhatova, hogy a lanc vegen a
+   * "hany kapcsolat veszett el" kerdesre valasz legyen, ne becsles.
+   *
+   * MERVE: a mai exporton NULLA ilyen van (18 499 / 18 499 visel `Id`-t),
+   * tehat ez a szamlalo ma minden termeken 0. Azert all itt megis, mert a
+   * nulla a FORRAS mai allapota, nem a kod garanciaja.
+   */
+  similarProductsSkipped: number;
   productUrl: string | null;
   sefUrl: string | null;
   manufacturerUrl: string | null;
@@ -118,6 +133,29 @@ export interface UnasApiVariantStock {
 export interface UnasPackageComponent {
   sku: string;
   qty: string;
+}
+
+/**
+ * A HASONLO TERMEKEK EGY HIVATKOZASA.
+ *
+ * HAROM MEZO, ES AZ ELSO A LENYEG. A UNAS az `Id` mezoben a CELPONT sajat
+ * azonositojat kuldi -- nem cikkszamot --, tehat a feloldas nem fugg attol,
+ * hogy a cikkszam irasmodja egyezik-e.
+ *
+ * MERVE (nautilus, 2026-09-04, a 2026-09-03-i API-exporton, 1893 termek):
+ * 18 499 hivatkozas, es MIND A 18 499 visel `Id`-t ES `Sku`-t is. A cikkszam
+ * alapu feloldas ugyanezen a halmazon 336 esetben csak kis-nagybetuben egyezne
+ * -- vagyis az Id-alapu ut ezt a 336-ot eleve nem is latja problemanak.
+ *
+ * A `sku` es a `name` megis benne marad: a cikkszam az EMBERNEK szolo
+ * azonosito a jelentesekben, a nev pedig az egyetlen dolog, amibol egy
+ * gazdatlan hivatkozas utolag felismerheto.
+ */
+export interface UnasSimilarProduct {
+  /** A CELPONT UNAS-azonositoja. Ez a feloldas kulcsa. */
+  externalId: string;
+  sku: string;
+  name: string | null;
 }
 
 /** One product-level base-stock snapshot returned by UNAS getStock. */
