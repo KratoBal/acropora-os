@@ -170,18 +170,21 @@ describe("a három hiány három külön néven", () => {
   });
 });
 
-describe("az aktív akció megállít", () => {
-  it("aktív akciós árnál NEM vetítünk listaárat", () => {
+describe("az aktív akció ára megy ki", () => {
+  it("aktív akciós árnál AZ AKCIOS ar megy, nem a listaar", () => {
     /*
-      MERVE a 2026-08-27-i UNAS exporton: 1893 termekbol 95-nel van akcios sor
-      es 67-nel AKTIV. A kulonbseg nagy (peldaul 198000 helyett 130000), tehat
-      ez nem kerekitesi kerdes.
+      A DONTES: Balazs, 2026-09-04, a migracios szalon, szo szerint
+      "viszi az akciokat".
 
-      A KET TEVEDES ARA NEM EGYFORMA: a listaar vetitese egy akcios termekre
-      azt jelenti, hogy a vevo TOBBET fizet, es semmi nem szol rola. A megallas
-      hangos.
+      EZ AZ ALLITAS MEGFORDULT. Korabban azt merte, hogy az ag MEGALL -- es
+      helyesen, mert akkor a dontes nem volt meg, es a ket tevedes ara nem
+      egyforma: a listaar vetitese egy akcios termekre azt jelentette volna,
+      hogy a vevo TOBBET fizet, es semmi nem szol rola.
 
-      MI PIROSIT: ha az ag kikerul, es a listaar csendben atmegy.
+      A megallas tehat nem hiba volt, hanem egy meg nem hozott dontes helye.
+      Most a dontes megvan, es az allitas azt meri, ami helyette all.
+
+      MI PIROSIT: ha a listaar (7800) menne ki az akcios (3500) helyett.
     */
     const d = resolvePriceSource({
       authority: "UNAS",
@@ -190,10 +193,9 @@ describe("az aktív akció megállít", () => {
       now: most,
     });
 
-    assert.equal(!d.ok && d.reason, "mirror-sale-active-needs-decision");
-    // A SZAMOK IS OTT VANNAK: enelkul a megallas nem mondja meg, mekkora a tet.
-    assert.match(!d.ok ? d.details : "", /3500/);
-    assert.match(!d.ok ? d.details : "", /7800/);
+    assert.equal(d.ok, true);
+    assert.equal(d.ok && d.source, "mirror");
+    assert.equal(d.ok ? d.price.sellingGrossPrice?.toString() : null, "3500");
   });
 
   it("ISMERT POZITÍV: LEJÁRT akció mellett a listaár megy", () => {

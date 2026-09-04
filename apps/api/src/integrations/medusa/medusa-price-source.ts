@@ -65,25 +65,7 @@ export type PriceSourceRefusal =
   /** Van tükör-sor, de nincs benne bruttó ár. */
   | "mirror-price-missing"
   /** ACROPORA a gazda, és a saját ár mezőnk üres. */
-  | "own-price-missing"
-  /**
-   * A TÜKÖRBEN AKCIÓS ÁR FUT, ÉS EZ NEM VETÍTÉSI RÉSZLET.
-   *
-   * Ilyenkor a „tükör ára" kifejezés KÉT különböző számot jelenthet: a listaárat
-   * és azt, amennyiért a bolt MOST adja. A kettő nem közel van egymáshoz --
-   * mérve a 2026-08-27-i exporton, 1893 termékből 95-nél van akciós sor és
-   * 67-nél AKTÍV, és a különbség ott a legnagyobb, ahol a legdrágább a tévedés
-   * (például 198000 helyett 130000 forint).
-   *
-   * Hogy a költöző bolt ÖRÖKÖLJE-E a futó akciókat, üzleti kérdés, és nincs
-   * megválaszolva. A két tévedés ára pedig NEM egyforma: ha a listaárat
-   * vetítenénk egy akciós termékre, a vevő TÖBBET fizetne, és semmi nem szólna
-   * róla. Egy megállás hangos, és 67 terméket érint; egy néma túlárazás
-   * ugyanennyit, csak a vevő oldalán.
-   *
-   * Ha megjön a döntés, ez egy ág -- addig megáll.
-   */
-  | "mirror-sale-active-needs-decision";
+  | "own-price-missing";
 
 export type PriceSourceDecision =
   | { ok: true; source: PriceOwner; price: ProjectablePrice }
@@ -127,13 +109,32 @@ export function resolvePriceSource(input: {
     );
 
   if (isSaleActive(input.mirror, input.now))
-    return refuse(
-      "mirror-sale-active-needs-decision",
-      `a tükörben AKTÍV akciós ár áll (${input.mirror.saleGrossPrice?.toString()} ` +
-        `a listaár ${input.mirror.grossPrice?.toString() ?? "hiányzik"} mellett). ` +
-        "Hogy a költöző bolt örökölje-e a futó akciókat, üzleti döntés, és " +
-        "nincs meg. A listaár vetítése azt jelentené, hogy a vevő többet fizet.",
-    );
+    /**
+     * A FUTO AKCIO ARA MEGY KI, NEM A LISTAAR -- ES EZ MEGHOZOTT DONTES.
+     *
+     * Balazs, 2026-09-04, a migracios szalon, szo szerint: "viszi az akciokat".
+     *
+     * Ez az ag korabban MEGALLT, mert a "tukor ara" ket kulonbozo szamot
+     * jelenthetett, es a ket tevedes ara nem egyforma: a listaar vetitese egy
+     * akcios termekre azt jelentette volna, hogy a vevo TOBBET fizet, es semmi
+     * nem szolt volna rola. A megallas hangos volt, a tularazas nema lett volna.
+     *
+     * A dontes ezt eldontotte, es a megallasnak nincs tobb alapja. Az idezet
+     * azert all itt, hogy a kovetkezo olvaso ne az en itéletemet lassa a
+     * gazdaé helyett -- ha a dontes valaha megfordul, ez a sor mondja meg, mit
+     * kell megkerdezni es kitol.
+     *
+     * A `saleGrossPrice` itt biztosan nem null: az `isSaleActive` elso
+     * feltetele epp ez, tehat ez az ag csak akkor fut, ha van akcios ar.
+     */
+    return {
+      ok: true,
+      source: "mirror",
+      price: {
+        sellingGrossPrice: input.mirror.saleGrossPrice,
+        sellingPriceCurrency: input.mirror.currency,
+      },
+    };
 
   if (input.mirror.grossPrice === null)
     return refuse(
