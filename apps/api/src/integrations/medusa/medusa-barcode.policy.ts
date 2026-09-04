@@ -69,6 +69,40 @@ export function hasValidCheckDigit(value: string): boolean {
 const KIADVANY_ELOTAGOK = ["977", "978", "979"];
 
 /**
+ * A TOBBI GS1-TARTOMANY, AMI NEM TERMEKET AZONOSIT.
+ *
+ * A kiadvany-elotagok mellett a GS1 tovabbi tartomanyokat is fenntart, es ezek
+ * ugyanugy ERVENYES ellenorzo szamjegyet viselnek:
+ *
+ *   950-969   GS1 Global Office (kuponok es sajat kiosztas), NEM termek
+ *   980       refund receipt
+ *   981-984   kozos penznemu kupon
+ *   99        kupon
+ *   2         BELSO HASZNALAT: boltonkent szabadon kiosztott, valtozo sulyu
+ *             arukra. Ket kulonbozo bolt ugyanazt a kodot mas termekre adhatja,
+ *             tehat a boltunkon KIVUL semmit nem azonosit.
+ *
+ * MIERT KELL, HOLOTT MA EGYIK SEM MENNE KI: a mert adatban ket ilyen kod all
+ * (9579907673293 a GS1 Global Office tartomanyban, ket cikkszamon), es MA az
+ * ismetlodes-ag tartja vissza. DE AZ A VEDELEM VELETLEN -- pontosan ugyanaz a
+ * mondat, ami az ISBN-nel is allt: nem azert marad bent, mert kupon, hanem mert
+ * tobbszor all. Egy kupon-kod, ami veletlenul egyedi, atmegy.
+ *
+ * A 2-es elotagra a mert adatban NULLA eset van. Elore szol, nem visszamenoleg:
+ * a belso hasznalatu kodok epp attol veszelyesek, hogy barmikor keletkezhetnek.
+ */
+function nemTermekTartomany(kod: string): boolean {
+  const elso = kod.slice(0, 1);
+  const harom = kod.slice(0, 3);
+  return (
+    elso === "2" ||
+    (harom >= "950" && harom <= "969") ||
+    (harom >= "980" && harom <= "984") ||
+    harom.startsWith("99")
+  );
+}
+
+/**
  * A NEGY KIMENET, ES MIERT NEM KETTO.
  *
  * A `skipped` es a `none` a keres torzsere nezve ugyanaz (egyik sem kuld
@@ -120,7 +154,8 @@ export function decideMedusaBarcode(
    */
   const mezo =
     kod.length === 13 &&
-    !KIADVANY_ELOTAGOK.some((elotag) => kod.startsWith(elotag))
+    !KIADVANY_ELOTAGOK.some((elotag) => kod.startsWith(elotag)) &&
+    !nemTermekTartomany(kod)
       ? "ean"
       : kod.length === 12
         ? "upc"

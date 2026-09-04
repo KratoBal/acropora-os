@@ -104,6 +104,52 @@ describe("decideMedusaBarcode", () => {
   });
 
   /**
+   * A GS1 TOBBI NEM-TERMEK TARTOMANYA, UGYANAZZAL AZ INDOKKAL, MINT A KIADVANY.
+   *
+   * A mert adatban EGY ilyen kod all (9579907673293, a GS1 Global Office
+   * tartomanyaban), es MA az ismetlodes-ag tartja vissza, mert ket cikkszamon
+   * szerepel. DE AZ A VEDELEM VELETLEN: nem azert marad bent, mert kupon,
+   * hanem mert tobbszor all.
+   *
+   * EZERT ADJUK AT EGYEDIKENT (sameValueCount 1): epp azt az esetet merjuk,
+   * amit az ismetlodes-ag NEM fogna meg. Ugyanaz a szerkezet, mint az
+   * ISBN-allitasnal.
+   */
+  it("a GS1 kupon-tartomanyu kod nem megy ki, meg egyedikent sem", () => {
+    const dontes = decideMedusaBarcode("9579907673293", 1);
+
+    assert.equal(dontes.kind, "none");
+    assert.equal(dontes.duplicate, null);
+  });
+
+  /**
+   * A BELSO HASZNALATU (2-vel kezdodo) TARTOMANYRA a mert adatban NULLA eset
+   * van. Az allitas ELORE szol: ezek a kodok boltonkent szabadon kiosztottak,
+   * tehat a boltunkon KIVUL semmit nem azonositanak -- es epp attol
+   * veszelyesek, hogy barmikor keletkezhetnek.
+   */
+  it("a belso hasznalatu, 2-vel kezdodo kod sem megy ki", () => {
+    // 2123456789010 -- ervenyes ellenorzo szamjeggyel, belso tartomany.
+    // A szamjegyet KISZAMOLTAM, nem talaltam ki: az elso probam (...013) nem
+    // ment at a checksumon, es a teszt sajat allitasa fogta meg. Egy kitalalt
+    // fixtura ugyanugy hamis meres, mint egy kitalalt szam a jelentesben.
+    assert.equal(hasValidCheckDigit("2123456789010"), true);
+    assert.equal(decideMedusaBarcode("2123456789010", 1).kind, "none");
+  });
+
+  /**
+   * ISMERT POZITIV KONTROLL A HAROM KIZARASHOZ EGYUTT: egy valodi
+   * orszag-tartomanyu kod tovabbra is kimegy. Enelkul egy olyan megvalositas is
+   * atmenne, ami a 13 jegyu kodok tobbsegét elutasitja.
+   */
+  it("a valodi orszag-tartomanyu kod tovabbra is kimegy", () => {
+    // 4-es elotag: Nemetorszag. A mert adatban 210 ilyen all.
+    assert.equal(decideMedusaBarcode("4006381333931", 1).kind, "ean");
+    // 5-os elotag: Egyesult Kiralysag. 103 ilyen all a mert adatban.
+    assert.equal(decideMedusaBarcode("5060139358699", 1).kind, "ean");
+  });
+
+  /**
    * A HARMADIK ESET, AMI A KET SORRENDET MEGKULONBOZTETI.
    *
    * A masik ket kiadvany-allitas EGYEDI koddal dolgozik, tehat a sorrend nem
