@@ -7,6 +7,7 @@ import {
   type PublishDeps,
   type PublishableImage,
 } from "./product-image-publisher.js";
+import { MedusaAdminHttpError } from "./medusa-admin.client.js";
 import { productImageDocumentId } from "./product-image-storage-key.js";
 
 const MOST = new Date("2026-09-03T20:00:00.000Z");
@@ -26,6 +27,7 @@ async function deps(options: {
   tarolt?: number[];
   linkelt?: Record<string, string>;
   feltoltesDob?: boolean;
+  feltoltesHttpHiba?: { status: number; body: string };
 }) {
   const store = new InMemoryDocumentStore();
   for (const n of options.tarolt ?? [])
@@ -46,6 +48,11 @@ async function deps(options: {
     medusa: {
       // eslint-disable-next-line @typescript-eslint/require-await
       uploadFile: async (file) => {
+        if (options.feltoltesHttpHiba)
+          throw new MedusaAdminHttpError(
+            options.feltoltesHttpHiba.status,
+            options.feltoltesHttpHiba.body,
+          );
         if (options.feltoltesDob) throw new Error("a bolt nem valaszol");
         feltoltott.push({
           filename: file.filename,
@@ -188,5 +195,60 @@ describe("a termékképek kivitele a kirakatba", () => {
     await publishProductImages(PROD, [kep(7)], f.deps);
 
     assert.equal(f.feltoltott[0]?.meret, 1, "nem a tárolt bájtokat küldte");
+  });
+});
+
+/**
+ * A MEDUSA VALASZANAK TORZSE NEM KERULHET A KIMENETRE.
+ *
+ * A `blockedBy` a parancssori kimenetre kerul, es onnantol nem tudjuk, ki
+ * olvassa. A `MedusaAdminHttpError` uzenete viszont a valasz elso 500
+ * karakteret is viszi -- a `String(error)` ezt eddig atengedte.
+ *
+ * Ez NEM uj szabaly: a keszlet-vetites ugyanezt mar megoldotta, es ott minden
+ * megnevezett Medusa-hiba a `describeMedusaFailure`-on megy at. Ez a ket hely
+ * ugyanannak a javitasnak a HATOKORE volt (nautilus merese, 2026-09-04).
+ */
+describe("a feltoltes hibaja nem viszi ki a valasz torzset", () => {
+  const TITOK =
+    '{"message":"Unauthorized","echoed":"sk_test_titok123","detail":"belso reszlet"}';
+
+  it("a STATUSZ megy ki, a TORZS nem", async () => {
+    /*
+      MI PIROSIT: a `String(error)` visszaallitasa. Az a
+      `MedusaAdminHttpError: MEDUSA_ADMIN_HTTP_401: {...}` alakot adja, benne a
+      teljes torzzsel -- es a hiba NEMA, mert a sor amugy helyesnek latszik.
+    */
+    const f = await deps({
+      tarolt: [1],
+      feltoltesHttpHiba: { status: 401, body: TITOK },
+    });
+    const eredmeny = await publishProductImages(PROD, [kep(1)], f.deps);
+
+    assert.equal(
+      eredmeny.blockedBy?.includes("HTTP 401"),
+      true,
+      eredmeny.blockedBy ?? "",
+    );
+    assert.equal(eredmeny.blockedBy?.includes("sk_test_titok123"), false);
+    assert.equal(eredmeny.blockedBy?.includes("belso reszlet"), false);
+    assert.equal(eredmeny.blockedBy?.includes("MEDUSA_ADMIN_HTTP"), false);
+  });
+
+  it("a NEM HTTP hiba uzenete viszont megmarad", async () => {
+    /*
+      ISMERT POZITIV KONTROLL: a fenti allitasok akkor is teljesulnenek, ha a
+      `blockedBy` MINDEN hibaszoveget elnyelne. Egy futtatokornyezeti hiba
+      (idotullepes, nevfeloldas) NEM a Medusa valaszabol jon, tehat nem
+      visszhangozhat semmit -- annak at kell mennie.
+    */
+    const f = await deps({ tarolt: [1], feltoltesDob: true });
+    const eredmeny = await publishProductImages(PROD, [kep(1)], f.deps);
+
+    assert.equal(
+      eredmeny.blockedBy?.includes("a bolt nem valaszol"),
+      true,
+      eredmeny.blockedBy ?? "",
+    );
   });
 });

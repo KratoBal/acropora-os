@@ -16,6 +16,7 @@ import {
   medusaClientForProjection,
   runProjectionCli,
 } from "./medusa-projection.cli.js";
+import { MedusaAdminHttpError } from "./medusa-admin.client.js";
 import { MedusaCredentialCryptoService } from "./medusa-credential-crypto.service.js";
 import { MedusaCredentialProvider } from "./medusa-credential.provider.js";
 import type { MedusaConnectionRepository } from "./medusa-connection.repository.js";
@@ -899,5 +900,54 @@ describe("a mester athozasa a kimeneten", () => {
       describeKepMasolas({ copied: 0, alreadyStored: 5, failed: [] }),
       "",
     );
+  });
+});
+
+/**
+ * A TOVABBDOBOTT HTTP-HIBA IS A STATUSZT MONDJA, NEM A TORZSET.
+ *
+ * Ez volt a masodik ut, amit nautilus megtalalt (2026-09-04): a kapcsolodas
+ * catch-aga ket hibatipust ismert, es MINDEN mast tovabbdobott. A parancs
+ * belepesi pontja korul viszont nincs `try/catch`, tehat egy
+ * `MedusaAdminHttpError` KEZELETLEN kivetelkent allt meg -- es a Node a teljes
+ * stack trace-t kiirja, benne az `error.message` ertekevel, ami a valasz elso
+ * 500 karakteret is viszi.
+ *
+ * A `describeMedusaFailure` vedelme tehat allt; csak EZEN az uton nem ment at
+ * semmi.
+ */
+describe("a kapcsolodas HTTP-hibaja", () => {
+  const TITOK =
+    '{"message":"Unauthorized","echoed":"sk_test_titok123","detail":"belso reszlet"}';
+
+  function dobojProvider() {
+    const repository = {
+      getSetting: async () => {
+        throw new MedusaAdminHttpError(401, TITOK);
+      },
+    } as unknown as MedusaConnectionRepository;
+    return new MedusaCredentialProvider(
+      repository,
+      new MedusaCredentialCryptoService(),
+    );
+  }
+
+  it("HIBAKODDAL all meg, nem osszeomlassal, es a torzs nem megy ki", async () => {
+    /*
+      MI PIROSIT: az uj ag kivetele. Akkor a hivas TOVABBDOBNA, a
+      `runProjectionCli` kivetellel szallna el, es a teszt nem egy kodot kapna,
+      hanem egy dobott hibat -- a valodi futasban pedig a Node kiirna a teljes
+      stack trace-t a torzzsel egyutt.
+    */
+    const { out, stdout, stderr } = collector();
+
+    const code = await runProjectionCli(["prod_teszt"], out, dobojProvider());
+
+    assert.equal(code, 1);
+    assert.match(stderr.join(""), /HTTP 401/);
+    assert.equal(stderr.join("").includes("sk_test_titok123"), false);
+    assert.equal(stderr.join("").includes("belso reszlet"), false);
+    assert.equal(stderr.join("").includes("MEDUSA_ADMIN_HTTP"), false);
+    assert.equal(stdout.join(""), "");
   });
 });

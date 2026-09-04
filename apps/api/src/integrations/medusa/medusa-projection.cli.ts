@@ -19,6 +19,8 @@ import {
 import { isKnownCatalogAuthority } from "./medusa-publication.policy.js";
 
 import {
+  describeMedusaFailure,
+  MedusaAdminHttpError,
   MedusaConfigurationError,
   medusaClientFromEnvironment,
   type MedusaAdminClient,
@@ -521,6 +523,26 @@ export async function runProjectionCli(
       }
       if (error instanceof MedusaConfigurationError) {
         out.stderr(`${error.message}\n`);
+        return 1;
+      }
+      /**
+       * A HARMADIK AG, ES A LEGCSENDESEBB: A TOVABBDOBOTT HTTP-HIBA.
+       *
+       * Egy `MedusaAdminHttpError` eddig ITT ment tovabb, es a parancs
+       * belepesi pontja korul NINCS `try/catch` -- tehat kezeletlen
+       * kivetelkent allt meg, es a Node a TELJES stack trace-t kiirta, benne az
+       * `error.message` ertekevel. Az pedig a valasz elso 500 karakteret is
+       * viszi.
+       *
+       * Vagyis a `describeMedusaFailure` vedelme allt, csak EZEN az uton nem
+       * ment at semmi. Ugyanaz a javitas, mint a keszlet-vetitesnel: a STATUSZ
+       * megy ki, a torzs nem -- es a parancs HIBAKODDAL all meg, nem
+       * osszeomlassal.
+       */
+      if (error instanceof MedusaAdminHttpError) {
+        out.stderr(
+          `A Medusa nem fogadta a kapcsolódást: ${describeMedusaFailure(error)}\n`,
+        );
         return 1;
       }
       throw error;

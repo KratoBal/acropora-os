@@ -3,6 +3,7 @@ import type {
   MedusaAdminClient,
   MedusaUploadedFile,
 } from "./medusa-admin.client.js";
+import { describeMedusaFailure } from "./medusa-admin.client.js";
 import type { MedusaImageLinkRepository } from "./medusa-image-link.repository.js";
 import { productImageDocumentId } from "./product-image-storage-key.js";
 
@@ -123,11 +124,25 @@ export async function publishProductImages(
         contentType: image.contentType,
       });
     } catch (error) {
+      /**
+       * A STATUSZ MEGY KI, A TORZS NEM -- ES EZ NEM UJ SZABALY, HANEM EGY MAR
+       * MEGLEVO JAVITAS HATOKORE.
+       *
+       * A `MedusaAdminHttpError` uzenete a valasz elso 500 karakteret is viszi,
+       * mert a hibakeresesnel az a hasznos. Ez a szoveg viszont a `blockedBy`
+       * mezobe kerul, onnan a parancssori kimenetre, es onnantol nem tudjuk,
+       * ki olvassa. A `String(error)` epp ezt engedte at.
+       *
+       * A megoldas UGYANAZ, amit a keszlet-vetites mar hasznal
+       * (`medusa-inventory-projection.service.ts`): minden megnevezett
+       * Medusa-hiba a `describeMedusaFailure`-on megy at. Ket kulonbozo alak
+       * ugyanarra a hibara rosszabb lenne, mint egy kovetkezetes.
+       */
       return {
         urls: [],
         uploaded,
         reused,
-        blockedBy: `a feltöltés elhasalt (${image.url}): ${String(error)}`,
+        blockedBy: `a feltöltés elhasalt (${image.url}): ${describeMedusaFailure(error)}`,
       };
     }
 
