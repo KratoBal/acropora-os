@@ -2,7 +2,10 @@ import { Prisma } from "@acropora/database";
 
 import type { CatalogAuthority } from "../../products/catalog-authority.js";
 
-import type { ProjectablePrice } from "./medusa-pricing.policy.js";
+import {
+  SUPPORTED_CURRENCY,
+  type ProjectablePrice,
+} from "./medusa-pricing.policy.js";
 
 /**
  * HONNAN JÖN AZ ÁR A KÖLTÖZÉSKOR: A TÜKÖRBŐL VAGY A SAJÁTUNKBÓL.
@@ -148,13 +151,40 @@ export function resolvePriceSource(input: {
     price: {
       sellingGrossPrice: input.mirror.grossPrice,
       /**
-       * A PÉNZNEM IS A TÜKÖRBŐL JÖN, ÉS NEM ÍRJUK FELÜL.
+       * A TÜKÖR NEM HORDOZ PÉNZNEMET, ÉS EZ MÉRVE VAN -- NEM FELTEVÉS.
        *
-       * A `medusa-pricing.policy.ts` a nem támogatott pénznemre SAJÁT, néven
-       * nevezett megállást ad. Ha ide beégetnénk a HUF értéket, egy más
-       * pénznemű tükör-sor csendben forintként menne át.
+       * Az első változat a tükör `currency` mezőjét adta tovább változatlanul,
+       * azzal az indokkal, hogy egy beégetett HUF egy más pénznemű sort
+       * csendben forintként engedne át. Az indok jó, a bemenet nem: a mező
+       * MINDIG üres.
+       *
+       * MÉRVE 2026-09-04, két irányból:
+       *   - a `unas-product-sync.repository.ts` SEHOL nem ír `currency` mezőt a
+       *     pillanatképbe (nulla találat a fájlban, miközben a `grossPrice`
+       *     egyszer szerepel -- tehát a nulla a kódról szól, nem a keresésről);
+       *   - a UNAS forrás nem is küld pénznemet: a `Prices` blokk kulcsai a
+       *     2026-08-27-i exporton, 1893 terméken, kizárólag `Appearance`,
+       *     `Price` és `Vat`.
+       *
+       * A pass-through tehát nem védett volna semmit: MINDEN tükörből vett ár
+       * `currency-missing` megállásra futott volna, mind az 1894 UNAS-gazdájú
+       * terméken. Rendezett jelentés, nulla publikált ár -- pontosan az az
+       * alak, ami védelemnek néz ki és nem csinál semmit.
+       *
+       * EZÉRT A HIÁNYZÓ PÉNZNEM ITT FORINT, kimondva. A kör egyetlen pénznemet
+       * támogat (`SUPPORTED_CURRENCY`, a brief 4. és 17. pontja), és a forrás
+       * egy magyar bolt.
+       *
+       * AMI VISZONT MEGMARAD: ha a mező valaha MÉGIS kap értéket, azt
+       * változatlanul továbbadjuk, és egy idegen pénznem a policy néven
+       * nevezett megállására fut. A védelem tehát nem veszett el, csak nem a
+       * hiányra szól.
+       *
+       * MI ÉRVÉNYTELENÍTI: ha a UNAS oldalon valaha más pénznem jelenik meg. Ma
+       * a forrás nem is tud róla nyilatkozni, tehát azt a kódból nem lehet
+       * észrevenni -- az adatból igen, és akkor ez a sor változik.
        */
-      sellingPriceCurrency: input.mirror.currency,
+      sellingPriceCurrency: input.mirror.currency ?? SUPPORTED_CURRENCY,
     },
   };
 }
