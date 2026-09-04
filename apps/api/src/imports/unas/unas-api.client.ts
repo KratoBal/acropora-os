@@ -527,6 +527,39 @@ export function parseUnasProductResponse(xml: string): UnasApiProduct[] {
           throw new UnasApiError("FIELD_FORMAT_INVALID");
         return { sku: componentSku, qty: componentQty };
       });
+      /**
+       * A HASONLO TERMEKEK, ES A KIHAGYOTTAK SZAMA KULON.
+       *
+       * A MINTA A SZOMSZEDE (`PackageComponents`), a KEZELESE viszont MAS, es
+       * ez dontes: a csomag-osszetevo hianya `throw`-ot ad, mert egy hibas
+       * mennyiseg a KESZLETET vinne felre. Egy hasonlo-termek hivatkozas nem
+       * ilyen: ha egyetlen cimke rossz, attol az EGESZ import-oldal nem bukhat
+       * meg.
+       *
+       * A KERDES NEM AZ, MELYIK A VALOSZINUBB, HANEM MELYIK TEVEDES MARAD
+       * REJTVE. Egy nemán eldobott hivatkozas ugy nez ki, mint egy termek,
+       * aminek nincs is kapcsolata, es senki nem keresne. Ezert a kihagyas
+       * SZAMOLODIK -- a szam hangos, az eldobas nema lenne.
+       *
+       * A CIKKSZAM NEM KOTELEZO A KIHAGYASHOZ: az azonosito az `Id`. Egy
+       * `Sku` nelkuli, de `Id`-t viselo hivatkozas FELOLDHATO, csak emberi
+       * olvasasra lesz szegenyebb.
+       */
+      const similarNodes = children(
+        child(product, "SimilarProducts"),
+        "SimilarProduct",
+      );
+      const similarProducts = similarNodes.flatMap((similar) => {
+        const similarExternalId = value(similar, "Id") ?? "";
+        if (!similarExternalId) return [];
+        return [
+          {
+            externalId: similarExternalId,
+            sku: value(similar, "Sku") ?? "",
+            name: value(similar, "Name") ?? null,
+          },
+        ];
+      });
       const packageProductFlag = flag(value(product, "PackageProduct"));
       return {
         externalId,
@@ -579,6 +612,8 @@ export function parseUnasProductResponse(xml: string): UnasApiProduct[] {
         variantStocks,
         isPackageProduct: packageProductFlag ?? packageComponents.length > 0,
         packageComponents,
+        similarProducts,
+        similarProductsSkipped: similarNodes.length - similarProducts.length,
         productUrl: value(product, "Url") ?? null,
         sefUrl: value(product, "SefUrl") ?? null,
         manufacturerUrl: value(product, "ManufacturerUrl") ?? null,

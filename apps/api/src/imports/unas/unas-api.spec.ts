@@ -105,6 +105,72 @@ describe("UNAS API XML contract", () => {
     ]);
   });
 
+  /**
+   * A HIANYZO BLOKK URES LISTAT AD, NEM HIBAT.
+   *
+   * Ez a legkonnyebben halott allitas az egesz keszletben: a mai valasz
+   * TOBBSEGEBEN sincs `SimilarProducts` blokk, tehat egy ures lista magatol
+   * "helyesnek" latszik. Ezert all kulon, es ezert ezt rontottam el eloszor a
+   * kalibracional.
+   */
+  it("a hianyzo SimilarProducts URES listat ad, nem hibat", () => {
+    const product = parseUnasProductResponse(response)[0]!;
+
+    assert.deepEqual(product.similarProducts, []);
+    assert.equal(product.similarProductsSkipped, 0);
+  });
+
+  /**
+   * A HAROM MEZO, ES A SORREND. A sorrend allitas resze: a bolt a lista
+   * sorrendjeben jeleniti meg a hasonlo termekeket, tehat egy rendezetlen
+   * kinyeres mas kirakatot adna.
+   */
+  it("a hasonlo termekeket a forras sorrendjeben nyeri ki", () => {
+    const withSimilar = parseUnasProductResponse(
+      response.replace(
+        "<Meta>",
+        "<SimilarProducts>" +
+          "<SimilarProduct><Id>111</Id><Sku>SIM-A</Sku><Name>Elso</Name></SimilarProduct>" +
+          "<SimilarProduct><Id>222</Id><Sku>SIM-B</Sku><Name>Masodik</Name></SimilarProduct>" +
+          "</SimilarProducts><Meta>",
+      ),
+    )[0]!;
+
+    assert.deepEqual(withSimilar.similarProducts, [
+      { externalId: "111", sku: "SIM-A", name: "Elso" },
+      { externalId: "222", sku: "SIM-B", name: "Masodik" },
+    ]);
+    assert.equal(withSimilar.similarProductsSkipped, 0);
+  });
+
+  /**
+   * AZ AZONOSITO AZ `Id`, NEM A CIKKSZAM -- ES A KIHAGYAS SZAMOLODIK.
+   *
+   * Ket eset egy allitasban, mert egymas ELLENTETEI, es kulon-kulon egyik sem
+   * mondana meg, hol a hatar: egy `Id` nelkuli hivatkozas KIESIK (nincs mihez
+   * kotni), egy `Sku` nelkuli viszont BENT MARAD (az `Id` azonosit).
+   *
+   * A `skipped` szam azert all itt, mert enelkul a kiesés NEMA lenne: egy
+   * eldobott hivatkozas pontosan ugy nez ki, mint egy termek, aminek nincs is
+   * kapcsolata.
+   */
+  it("Id nelkul kiesik es szamolodik, Sku nelkul bent marad", () => {
+    const vegyes = parseUnasProductResponse(
+      response.replace(
+        "<Meta>",
+        "<SimilarProducts>" +
+          "<SimilarProduct><Sku>NINCS-ID</Sku><Name>Kiesik</Name></SimilarProduct>" +
+          "<SimilarProduct><Id>333</Id><Name>Sku nelkul</Name></SimilarProduct>" +
+          "</SimilarProducts><Meta>",
+      ),
+    )[0]!;
+
+    assert.deepEqual(vegyes.similarProducts, [
+      { externalId: "333", sku: "", name: "Sku nelkul" },
+    ]);
+    assert.equal(vegyes.similarProductsSkipped, 1);
+  });
+
   it("parses every variant-stock combination with ordered axis names", () => {
     const variantProduct = parseUnasProductResponse(
       response

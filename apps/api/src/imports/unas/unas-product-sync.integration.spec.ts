@@ -62,6 +62,8 @@ const product = (
   variantStocks: [],
   isPackageProduct: false,
   packageComponents: [],
+  similarProducts: [],
+  similarProductsSkipped: 0,
   productUrl: "https://example.test/integration-pump",
   sefUrl: "integration-pump",
   manufacturerUrl: null,

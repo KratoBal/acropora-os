@@ -44,6 +44,8 @@ const product = (externalId: string, sku: string): UnasApiProduct => ({
   variantStocks: [],
   isPackageProduct: false,
   packageComponents: [],
+  similarProducts: [],
+  similarProductsSkipped: 0,
   productUrl: null,
   sefUrl: null,
   manufacturerUrl: null,
