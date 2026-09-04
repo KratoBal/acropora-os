@@ -31,6 +31,10 @@ function controllerWith() {
       calls.push({ method: "createForReview", input });
       return { id: "uj" };
     },
+    reviseFromAgent: async (input: unknown) => {
+      calls.push({ method: "reviseFromAgent", input });
+      return { id: "c1" };
+    },
   } as unknown as ContentService;
   return { controller: new ContentAgentController(service), calls };
 }
@@ -67,5 +71,34 @@ describe("the machine entry point's wiring", () => {
     await controller.create(INPUT, AGENT);
 
     assert.equal((calls[0]!.input as { authorId: string }).authorId, "agent-1");
+  });
+
+  /**
+   * A JAVITO UT UGYANEZT A SZAKADAST ZARJA BE, ES ITT NAGYOBB A TET.
+   *
+   * Ha a `PATCH` valaha a `createForReview` metodusra kotne (elgepeles, masolt
+   * sor), a hivas SIKERES lenne, es UJ tetelt szulne -- pontosan azt a
+   * duplikatumot, ami miatt ez az ut megepult. Semmilyen tipushiba nem jonne:
+   * a ket metodus bemenete atfed.
+   */
+  it("a javito ut a JAVITO szolgaltatas-metodust hivja, nem a letrehozot", async () => {
+    const { controller, calls } = controllerWith();
+
+    await controller.revise("c1", { body: "javitott" }, AGENT);
+
+    assert.deepEqual(
+      calls.map((call) => call.method),
+      ["reviseFromAgent"],
+    );
+  });
+
+  it("a javitas az UTVONALBOL veszi a tetel azonositojat, a szerzot a hivobol", async () => {
+    const { controller, calls } = controllerWith();
+
+    await controller.revise("c1", { body: "javitott" }, AGENT);
+
+    const input = calls[0]!.input as { contentId: string; authorId: string };
+    assert.equal(input.contentId, "c1");
+    assert.equal(input.authorId, "agent-1");
   });
 });

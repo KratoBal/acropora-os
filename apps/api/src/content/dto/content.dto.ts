@@ -99,6 +99,28 @@ const CONTENT_CHANNELS = [
  * szabadon allithato allapotmezo ugyanaz a kapu-megkerules lenne, amit az
  * atmenet-tablazat fejlece mar egyszer nevesitett.
  */
+/**
+ * A GEPI JAVITAS BEMENETE, ES SZANDEKOSAN KEVESEBB, MINT EGY LETREHOZASE.
+ *
+ * Nincs benne `channel`, `imageRequired` es `plannedFor`: ez az ut a SZOVEGET
+ * javitja, nem a tetel besorolasat. Egy csatorna-valtoztatas mas dontes, es ha
+ * ide is beferne, egy elgepelt mezo csendben atsorolna a tetelt.
+ *
+ * Mind a ketto opcionalis, mert kulon-kulon is javithato -- de legalabb az
+ * egyiknek jonnie kell, es ezt a szolgaltatas ellenorzi (a DTO szintjen egy
+ * "legalabb egy" szabaly nem fejezheto ki tisztan).
+ */
+export class ContentAgentReviseDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  title?: string;
+
+  @IsOptional()
+  @IsString()
+  body?: string;
+}
+
 export class ContentCreateDto {
   @IsString()
   @MinLength(1)
