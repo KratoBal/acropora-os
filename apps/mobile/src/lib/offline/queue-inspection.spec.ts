@@ -80,6 +80,57 @@ describe("mi ez a sor", () => {
     });
   });
 
+  it("a MÓDOSÍTÁS nem felvitelként jelenik meg", () => {
+    /*
+      A ket sor TEENDOJE mas. Egy varakozo felvitelnel az eszkoz MEG NINCS a
+      rendszerben; egy varakozo modositasnal OTT VAN, csak a javitas nem ment
+      fel. Ha mind a ketto "Eszköz" neven allna, ugyanaz a cimke ket kulon
+      allapotot takarna.
+
+      MI PIROSIT: ha a fajta neve csak az `entityType`-bol jon.
+    */
+    const out = describeQueueEntry(
+      sor({
+        operation: "update",
+        entityId: "asset-1",
+        payloadJson: JSON.stringify({
+          assetName: "Keringető szivattyú",
+          patch: { expectedUpdatedAt: "2026-09-04T08:00:00Z" },
+        }),
+      }),
+    );
+    assert.deepEqual(out, {
+      kind: "Eszköz módosítás",
+      title: "Keringető szivattyú",
+    });
+  });
+
+  it("a módosítás CÍME nem a patchből jön", () => {
+    /*
+      A szervernek meno torzs CSAK a valtozott mezoket viszi: aki a helyszint
+      irta at, annak a patchben NINCS nev. Ha a cim onnan jonne, a lista
+      "név nélkül" tetelekkel telne meg -- pont azoknal, amiket a szerelo
+      keresne.
+
+      MI PIROSIT: ha a cim a `patch.name` mezot olvasna. Ez a torzs a helyszint
+      allitja at, es a nev CSAK a soron all.
+    */
+    const out = describeQueueEntry(
+      sor({
+        operation: "update",
+        entityId: "asset-1",
+        payloadJson: JSON.stringify({
+          assetName: "Szivattyú",
+          patch: {
+            expectedUpdatedAt: "2026-09-04T08:00:00Z",
+            departmentId: "unit-2",
+          },
+        }),
+      }),
+    );
+    assert.equal(out.title, "Szivattyú");
+  });
+
   it("munkalapnál a TÁRGYÁT", () => {
     const out = describeQueueEntry(
       sor({

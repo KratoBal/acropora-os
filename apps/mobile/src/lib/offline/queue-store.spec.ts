@@ -128,27 +128,59 @@ describe("a fénykép sora", () => {
     );
   });
 
-  it("MIND A NÉGY sorfajta IDEMPOTENS beszúrással megy be", () => {
+  it("MIND A NÉGY FELVITEL idempotens beszúrással megy be", () => {
     /*
-      MI PIROSIT: egyetlen sima `INSERT` barmelyik agban. Akkor a ketszer
-      megnyomott gomb ket sort tenne a sorba, es ugyanaz a felvitel KETSZER
-      menne fel.
+      MI PIROSIT: egyetlen sima `INSERT` barmelyik FELVITELI agban. Akkor a
+      ketszer megnyomott gomb ket sort tenne a sorba, es ugyanaz a felvitel
+      KETSZER menne fel.
 
       A NEGYES SZAM MAGA IS ALLITAS: eszkoz, munkalap, munkalap-tetel, fenykep.
       Ez a szam 2026-09-04-en haromrol negyre valtozott, es a valtozas PIROSSA
       tette ezt a sort -- pontosan ugy, ahogy az elozo valtozat kommentje
-      megigerte. A dontes ezert dontes volt, nem mellekhatas: a tetel aga is
-      `INSERT OR IGNORE`.
+      megigerte.
+
+      ES UGYANEZ MEGISMETLODOTT AZNAP, MASODSZOR IS, MASKEPP. Az eszkoz
+      MODOSITASA ide mar NEM fer bele, es ez nem kivetel a szabaly alol, hanem
+      egy MASIK szabaly (lasd a kovetkezo allitast). Az allitas ezert nem
+      "minden beszuras", hanem "minden FELVITEL" -- a szam addig ert valamit,
+      amig a sorban egyfajta muvelet volt.
     */
     const beszurasok = [
-      ...forras.matchAll(/INSERT( OR IGNORE)? INTO sync_queue/g),
+      ...forras.matchAll(/INSERT OR IGNORE INTO sync_queue/g),
     ].map((m) => m[0]);
-    assert.deepEqual(beszurasok, [
-      "INSERT OR IGNORE INTO sync_queue",
-      "INSERT OR IGNORE INTO sync_queue",
-      "INSERT OR IGNORE INTO sync_queue",
-      "INSERT OR IGNORE INTO sync_queue",
-    ]);
+    assert.equal(beszurasok.length, 4);
+  });
+
+  it("a MÓDOSÍTÁS nem ejti el a másodikat, hanem ÖSSZEFÉSÜLI", () => {
+    /*
+      EZ AZ EGYETLEN AG, AHOL AZ `OR IGNORE` KAR LENNE.
+
+      A felvitelnel az azonos kulcsu masodik sor ugyanaz a felvitel: az elejtes
+      a KIVANT viselkedes. A modositasnal ugyanarrol a verziorol ket
+      szerkesztes ket KULON mezot allithat at -- az `IGNORE` a masodikat
+      nyelne el, egy `REPLACE` az elsot, es MINDKETTO nema adatvesztes lenne.
+
+      MI PIROSIT: ha a modositas aga `OR IGNORE`-ra vagy `OR REPLACE`-re
+      valtozik, vagy ha az osszefesules kimarad.
+    */
+    assert.match(forras, /mergeQueuedAssetUpdate/);
+    assert.match(forras, /INSERT INTO sync_queue\n\s*\(id, operation/);
+    assert.doesNotMatch(forras, /INSERT OR REPLACE INTO sync_queue/);
+  });
+
+  it("a módosítás ÍRÁSA az ÁLLAPOTRA is szűr", () => {
+    /*
+      A kepernyo es az iras kozott a sor elindulhat egy masik kiuritessel
+      (`syncing`). Egy epp UTON LEVO torzs atirasa azt jelentene, hogy a
+      szerver a REGIT kapja meg, a keszuleken pedig az uj all -- es a ketto
+      kozul az egyik nemán elveszik.
+
+      MI PIROSIT: a `WHERE id = ?` allapot-feltetel nelkul.
+    */
+    assert.match(
+      forras,
+      /UPDATE sync_queue[\s\S]*?WHERE id = \? AND state IN \('pending', 'failed'\)/,
+    );
   });
 
   it("a FÉNYKÉP sora a KAPOTT gazdával megy be, nem beégetve", () => {

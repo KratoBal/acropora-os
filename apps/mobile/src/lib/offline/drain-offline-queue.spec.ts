@@ -73,7 +73,26 @@ describe("a sor futtatója a valódi tárolóra van kötve", () => {
   });
 });
 
-describe("a két menet", () => {
+describe("a három menet", () => {
+  it("a MÓDOSÍTÁSOKNAK is van menete, és a kettő KÖZÖTT", () => {
+    /*
+      Egy menet nelkul a modositas sora BEKERULNE a tabla ba, es SOHA nem menne
+      el -- a `batchForPass` menetenkent szur, tehat ami nem kap menetet, azt
+      semmi nem viszi. Ez a nema alak: a szerelo "vár feltöltésre" uzenetet lat,
+      es a varakozas soha nem er veget.
+
+      A HELYE IS ALLITAS. A rogzitesek ELE nem kerulhet (egy uj eszkoz az, ami
+      elveszne, ha a telefon lemerul), a kepek MOGE sem (a kepek varakozasa a
+      rogzitesekrol szol, a modositasnak ahhoz semmi koze).
+
+      MI PIROSIT: a menet elhagyasa, vagy a sorrend felcserelese.
+    */
+    const menetek = [...forras.matchAll(/egyMenet\(deps, "([a-z-]+)"\)/g)].map(
+      (m) => m[1],
+    );
+    assert.deepEqual(menetek, ["create", "update", "upload-photo"]);
+  });
+
   it("a RÖGZÍTÉSEK mennek elöl, a KÉPEK utánuk", () => {
     /*
       A ket menet MAGA a sorrend: egy kep egy MAR LETEZO szerver-oldali

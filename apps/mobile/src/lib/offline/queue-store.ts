@@ -1,3 +1,8 @@
+import {
+  mergeQueuedAssetUpdate,
+  readQueuedAssetUpdate,
+  type QueuedAssetUpdate,
+} from "./asset-update-queue";
 import { initializeOfflineDatabase } from "./database";
 import { readPhotoPayload, type PhotoPayload } from "./photo-queue";
 import {
@@ -129,6 +134,98 @@ export async function enqueueAssetCreate(
        VALUES (?, 'create', 'asset', NULL, ?, ?, 0, NULL, 'pending')`,
       [input.id, JSON.stringify(input.payload), input.createdAt],
     );
+    return { ok: true, operationId: input.id };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * SORBA TESZ EGY ESZKOZ-MODOSITAST -- ES OSSZEFESUL, HA MAR ALL OTT EGY.
+ *
+ * === MIERT NEM `INSERT OR IGNORE`, MINT A HAROM FELVITELNEL ===
+ *
+ * A felvitelnel az azonos kulcsu masodik sor ugyanaz a felvitel, tehat a
+ * csendes elejtes a KIVANT viselkedes. A modositasnal nem: ugyanarrol a
+ * verziorol ket kulon szerkesztes ket kulon MEZOT allithat at, es az `IGNORE`
+ * a masodikat nyelne el -- a szerelo "elmentve" uzenetet latna, es a javitasa
+ * sehol nem lenne. Ezert a torzsek osszefesulnek
+ * (`mergeQueuedAssetUpdate`), es a kesobbi ertek nyer mezonkent.
+ *
+ * === AZ ALLAPOT-FELTETEL AZ `UPDATE`-EN NEM OVINTEZKEDES-IZLES ===
+ *
+ * Ugyanaz az ok, mint a javitasnal es az elvetesnel: a kepernyo es ez az iras
+ * kozott a sor elindulhat egy masik kiuritessel (`syncing`). Egy epp UTON LEVO
+ * torzs atirasa azt jelentene, hogy a szerver a REGIT kapja meg, a keszuleken
+ * pedig az uj all -- es a ketto kozul az egyik nemán elveszik.
+ *
+ * Ezert ha a sor kozben elmozdult, ez a fuggveny NEM ir, hanem HIBAT AD, es a
+ * kepernyo mondja meg a szerelonek, hogy probalja ujra. Egy elmaradt mentes,
+ * amirol tud, jobb, mint egy elveszett, amirol nem.
+ */
+export async function enqueueAssetUpdate(input: {
+  /** A muvelet kulcsa: `assetUpdateOperationId`. */
+  id: string;
+  /** A MODOSITOTT eszkoz szerver-oldali azonositoja. Mar letezik. */
+  assetId: string;
+  payload: QueuedAssetUpdate;
+  createdAt: string;
+}): Promise<EnqueueResult> {
+  try {
+    const db = await initializeOfflineDatabase();
+    const letezo = await db.getFirstAsync<{
+      payload_json: string;
+      state: string;
+    }>(`SELECT payload_json, state FROM sync_queue WHERE id = ?`, [input.id]);
+
+    if (!letezo) {
+      await db.runAsync(
+        `INSERT INTO sync_queue
+           (id, operation, entity_type, entity_id, payload_json, created_at, attempt_count, last_error, state)
+         VALUES (?, 'update', 'asset', ?, ?, ?, 0, NULL, 'pending')`,
+        [
+          input.id,
+          input.assetId,
+          JSON.stringify(input.payload),
+          input.createdAt,
+        ],
+      );
+      return { ok: true, operationId: input.id };
+    }
+
+    if (letezo.state !== "pending" && letezo.state !== "failed")
+      return {
+        ok: false,
+        error: `az előző módosítás állapota most: ${letezo.state}`,
+      };
+
+    /**
+     * AZ OLVASHATATLAN ELOZO TORZS NEM VESZHET EL CSENDBEN. Ha nem tudjuk
+     * ertelmezni, nem "fesuljuk ossze" ures alapon: az pontosan az a felulras
+     * lenne, ami ellen ez az ag szol.
+     */
+    const elozo = readQueuedAssetUpdate(letezo.payload_json);
+    if (elozo === null)
+      return {
+        ok: false,
+        error: "az előző módosítás törzse olvashatatlan",
+      };
+
+    const osszefesult = mergeQueuedAssetUpdate(elozo, input.payload);
+    const result = await db.runAsync(
+      `UPDATE sync_queue
+          SET payload_json = ?, created_at = ?, state = 'pending', attempt_count = 0, last_error = NULL
+        WHERE id = ? AND state IN ('pending', 'failed')`,
+      [JSON.stringify(osszefesult), input.createdAt, input.id],
+    );
+    if (result.changes === 0)
+      return {
+        ok: false,
+        error: "az előző módosítás közben elindult a feltöltés",
+      };
     return { ok: true, operationId: input.id };
   } catch (error) {
     return {
@@ -471,7 +568,9 @@ export async function queuedWorksheetLineCount(
  */
 function ismertSor(row: { operation: string; entity_type: string }): boolean {
   const muvelet =
-    row.operation === "create" || row.operation === "upload-photo";
+    row.operation === "create" ||
+    row.operation === "update" ||
+    row.operation === "upload-photo";
   /**
    * AZ ISMERT FAJTAK LISTAJA A `sync-queue.ts`-BEN ALL, NEM ITT.
    *

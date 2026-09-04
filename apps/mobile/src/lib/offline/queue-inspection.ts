@@ -1,3 +1,4 @@
+import { readQueuedAssetUpdate } from "./asset-update-queue";
 import { readPhotoPayload } from "./photo-queue";
 import { queueDiscardEligibility } from "./queue-discard";
 import { queueResendEligibility } from "./queue-resend";
@@ -179,10 +180,46 @@ export function describeQueueEntry(row: SyncQueueRow): {
   kind: string;
   title: string;
 } {
-  if (row.operation === "upload-photo") {
-    const payload = readPhotoPayload(row.payloadJson);
-    return { kind: "Fénykép", title: payload?.name ?? "ismeretlen kép" };
+  switch (row.operation) {
+    case "upload-photo": {
+      const payload = readPhotoPayload(row.payloadJson);
+      return { kind: "Fénykép", title: payload?.name ?? "ismeretlen kép" };
+    }
+    case "update": {
+      /**
+       * A MODOSITAS NEM FELVITEL, ES EZ NEM SZOHASZNALAT.
+       *
+       * A ket sor teendoje MAS. Egy varakozo felvitelnel a szerelo tudja, hogy
+       * az eszkoz MEG NINCS a rendszerben; egy varakozo modositasnal az eszkoz
+       * OTT VAN, csak a javitas nem ment fel. Ha mind a ketto "Eszköz" neven
+       * allna a listaban, ugyanaz a cimke ket kulon allapotot takarna.
+       *
+       * A CIM AZ ESZKOZ NEVE, es azert all kulon a sor torzseben, mert a
+       * szervernek meno patch CSAK a valtozott mezoket viszi: aki a helyszint
+       * irta at, annak a torzseben nev nincs.
+       */
+      const payload = readQueuedAssetUpdate(row.payloadJson);
+      return {
+        kind: `${FAJTA_NEVE[row.entityType]} módosítás`,
+        title: payload?.assetName.trim()
+          ? payload.assetName
+          : "olvashatatlan módosítás",
+      };
+    }
+    case "create":
+      return leirasFelvitelrol(row);
   }
+}
+
+/**
+ * A FELVITEL SORANAK CIME, FAJTANKENT. Kulon fuggveny, mert a fenti `switch`
+ * kimerito -- egy NEGYEDIK muvelet felvetele igy FORDITASI HIBAT ad (a
+ * fuggveny nem ad vissza erteket minden agon), nem csendes alapertelmezest.
+ */
+function leirasFelvitelrol(row: SyncQueueRow): {
+  kind: string;
+  title: string;
+} {
   const kind = FAJTA_NEVE[row.entityType];
   if (row.entityType === "worksheet") {
     const payload = parse<WorksheetPayloadLike>(row.payloadJson);
