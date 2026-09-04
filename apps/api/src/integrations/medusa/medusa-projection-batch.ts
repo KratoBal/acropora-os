@@ -27,6 +27,19 @@ export type BatchParseResult =
   | { kind: "ok"; selection: BatchSelection }
   | { kind: "error"; message: string };
 
+/**
+ * A KÖZÖS KÖTEG-OLVASÁS MINIMÁLIS VARRATA.
+ *
+ * A termék-, ár- és készlet-vetítés ugyanazt a stabil terméklistát kéri. A
+ * három parancsnak saját `findMany`-t írni azt jelentené, hogy a következő
+ * szűkítés vagy lapozási javítás csendben csak kettőbe jut el.
+ */
+export interface BatchSelectionDatabase {
+  product: {
+    findMany(args: unknown): Promise<{ id: string }[]>;
+  };
+}
+
 const LIMIT = "--limit";
 const FROM = "--from";
 const FORGET = "--forget-link";
@@ -134,4 +147,32 @@ export function parseBatchArguments(args: string[]): BatchParseResult {
     };
 
   return { kind: "ok", selection };
+}
+
+/**
+ * A KÖTEG TERMÉKEI STABIL SORRENDBEN.
+ *
+ * A `gt` (nem `gte`) azért kell, mert a `--from` az előző menet UTOLSÓ
+ * azonosítója. A kötelező `limit` garantálja, hogy a tömeges, azonnal író
+ * parancs soha nem fut korlát nélkül.
+ */
+export async function selectBatchTargets(
+  selection: BatchSelection,
+  database: BatchSelectionDatabase,
+): Promise<string[]> {
+  if (selection.targets.length) return selection.targets;
+
+  return (
+    await database.product.findMany({
+      where: selection.from ? { id: { gt: selection.from } } : {},
+      orderBy: { id: "asc" },
+      take: selection.limit ?? undefined,
+      select: { id: true },
+    })
+  ).map((row) => row.id);
+}
+
+/** A tömeges, azonnal író menet utolsó ellenőrző sora a hálózati írás előtt. */
+export function describeBatchSize(targets: string[]): string {
+  return `A tömeges vetítés ${targets.length} terméket fog érinteni.\n`;
 }

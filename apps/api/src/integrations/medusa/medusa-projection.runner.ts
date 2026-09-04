@@ -47,7 +47,10 @@ import {
 import { storefrontSalesChannelId } from "./medusa-sales-channel.config.js";
 import { createDocumentStore } from "../../service-assets/document-store/document-store.provider.js";
 import { MedusaImageLinkRepository } from "./medusa-image-link.repository.js";
-import { parseBatchArguments } from "./medusa-projection-batch.js";
+import {
+  parseBatchArguments,
+  selectBatchTargets,
+} from "./medusa-projection-batch.js";
 import { copyProductImages } from "./product-image-copier.js";
 import { publishProductImages } from "./product-image-publisher.js";
 import {
@@ -412,7 +415,7 @@ export async function runProjectionCli(
     out.stderr(`${parsed.message}\n`);
     return 1;
   }
-  const { forgetOnly, from, limit } = parsed.selection;
+  const { forgetOnly, from } = parsed.selection;
 
   /**
    * A KOTEG STABIL RENDEZESSEL JON, es ez nem kozmetika: a `--from` egy adott
@@ -423,16 +426,7 @@ export async function runProjectionCli(
    * A `gt` (nem `gte`) azert kell, mert a `--from` a MAR MEGVOLT utolso
    * azonosito: azt nem akarjuk megegyszer.
    */
-  const targets = parsed.selection.targets.length
-    ? parsed.selection.targets
-    : (
-        await db.product.findMany({
-          where: from ? { id: { gt: from } } : {},
-          orderBy: { id: "asc" },
-          take: limit ?? undefined,
-          select: { id: true },
-        })
-      ).map((row) => row.id);
+  const targets = await selectBatchTargets(parsed.selection, db);
 
   if (!targets.length) {
     /**

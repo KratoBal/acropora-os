@@ -23,10 +23,16 @@ import {
   medusaClientForProjection,
   storedCredentialProvider,
 } from "./medusa-projection.cli.js";
+import {
+  describeBatchSize,
+  parseBatchArguments,
+  selectBatchTargets,
+} from "./medusa-projection-batch.js";
 import { storefrontSalesChannelId } from "./medusa-sales-channel.config.js";
 
 /**
- * KÉZZEL indított KÉSZLET-vetítés, cikkszámonként vagy termékazonosítónként.
+ * KÉZZEL indított KÉSZLET-vetítés, cikkszámonként, termékazonosítónként vagy
+ * korlátos termékkötegben.
  *
  * KÜLÖN PARANCS a termék-vetítéstől, és ez nem kényelmi kérdés: a brief 4.
  * pontja szerint a publikáció és a készlet KÜLÖN FELELŐSSÉG. Ha egy parancs
@@ -39,6 +45,7 @@ import { storefrontSalesChannelId } from "./medusa-sales-channel.config.js";
  * Használat:
  *   pnpm --filter @acropora/api medusa:inventory sku:teszt0001 [további...]
  *   pnpm --filter @acropora/api medusa:inventory <termékazonosító> [további...]
+ *   pnpm --filter @acropora/api medusa:inventory --limit 50 [--from <termékazonosító>]
  *
  * A `sku:` előtag nélkül a paraméter TERMÉKAZONOSÍTÓ, és a termék minden aktív
  * változatának készletét vetítjük. NEM találgatunk a két alak között.
@@ -316,10 +323,15 @@ export async function runInventoryCli(
   env: Record<string, string | undefined> = process.env,
   database: InventoryCliDatabase = prisma,
 ): Promise<number> {
-  if (!targets.length) {
-    out.stderr("Adj meg legalább egy termékazonosítót vagy sku: alakot.\n");
+  const parsed = parseBatchArguments(targets);
+  if (parsed.kind === "error") {
+    out.stderr(`${parsed.message}\n`);
     return 1;
   }
+
+  const selectedTargets = await selectBatchTargets(parsed.selection, database);
+  if (parsed.selection.limit !== null)
+    out.stdout(describeBatchSize(selectedTargets));
 
   let service: MedusaInventoryProjectionService;
   try {
@@ -343,7 +355,7 @@ export async function runInventoryCli(
   const warehouse = await ensureMainWarehouse(database);
 
   let failed = 0;
-  for (const argument of targets) {
+  for (const argument of selectedTargets) {
     const resolved = await resolveTargets(argument, warehouse.id, database);
     if ("error" in resolved) {
       out.stderr(`${resolved.error}\n`);

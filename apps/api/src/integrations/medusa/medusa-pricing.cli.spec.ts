@@ -6,6 +6,7 @@ import { Prisma } from "@acropora/database";
 import {
   describePricing,
   resolvePricingTargets,
+  runPricingCli,
   type PricingCliDatabase,
 } from "./medusa-pricing.cli.js";
 import type { PricingProjectionReport } from "./medusa-pricing-projection.service.js";
@@ -59,6 +60,17 @@ function db(options: {
 }
 
 describe("Ár-parancs: kit vetítünk", () => {
+  it("a korlát nélküli tömeges indítást elutasítja, mielőtt bármit írna", async () => {
+    const stderr: string[] = [];
+    const code = await runPricingCli([], {
+      stdout: () => undefined,
+      stderr: (value) => stderr.push(value),
+    });
+
+    assert.equal(code, 1);
+    assert.match(stderr.join(""), /kérj köteget a --limit kapcsolóval/);
+  });
+
   it("cikkszámból megtalálja a változatot és az árát", async () => {
     const resolved = await resolvePricingTargets("sku:STAGEPROOF0002", db({}));
 
