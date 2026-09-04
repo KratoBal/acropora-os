@@ -26,7 +26,7 @@
     "prisma:studio": "prisma studio",
     "prisma:seed": "prisma generate && tsx prisma/seed.ts",
     "release-evidence:record": "prisma generate && tsx prisma/record-release-evidence.ts",
-    "test": "pnpm --filter \"@acropora/database^...\" build && prisma generate && rm -rf test-dist && tsc -p tsconfig.test.json && tests=$(find test-dist -name '*.test.js') && { [ -n \"$tests\" ] || { echo 'Nem talaltam teszt fajlt - nem jelentek sikert.' >&2; exit 1; }; } && node --test $tests",
+    "test": "prisma generate && rm -rf test-dist && tsc -p tsconfig.test.json && tests=$(find test-dist -name '*.test.js') && { [ -n \"$tests\" ] || { echo 'Nem talaltam teszt fajlt - nem jelentek sikert.' >&2; exit 1; }; } && node --test $tests",
     "clean": "rm -rf dist test-dist src/generated"
   },
   "devDependencies": {

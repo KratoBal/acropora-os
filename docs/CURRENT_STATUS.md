@@ -490,7 +490,7 @@ pnpm --filter @acropora/api test:smoke
 pnpm --filter @acropora/api test:unas:connection
 pnpm --filter @acropora/api test:foxpost
 pnpm --filter @acropora/api test:assets
-pnpm --filter @acropora/web test
+pnpm test    # a belépési pont a gyökér parancs; a csomag-szintű hívás nem épít, lásd CONTRIBUTING.md
 pnpm build
 ```
 

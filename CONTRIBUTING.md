@@ -17,6 +17,20 @@ pnpm test
 pnpm build
 ```
 
+**A tesztek belépési pontja a gyökér parancs, nem a csomagé.** A `pnpm test` a
+turbón megy át, és a turbo `test` feladata már függ a buildtől (`dependsOn:
+["build", "^build"]`) -- vagyis mire egy csomag tesztje elindul, a függőségei fel
+vannak építve, EGYSZER. Egy csomag tesztjének közvetlen hívása (`pnpm --filter
+@acropora/web test`) ezért **hamis pirosat adhat**: nem épít, tehát egy elavult
+`dist` mappán mér.
+
+Ez 2026-09-04-ig fordítva volt: mind a négy csomag tesztje SAJÁT beágyazott
+buildet indított, hogy a közvetlen hívás is működjön. A turbo alatt viszont ezek
+párhuzamosan futottak, és ugyanazokat a `dist` mappákat írták -- az `api` és a
+`web` is függ a `types`-tól és a `config`-tól. Ez a legvalószínűbb magyarázata
+annak a billegésnek, ami időnként megnevezetlen feladattal állt meg, és külön
+futtatva mindig zöld volt.
+
 A `pnpm install` beállítja a `core.hooksPath` értékét a repository `.githooks` mappájára, így egy pre-commit hook visszautasítja a formázatlan fájlokat tartalmazó commitot. Ez gyors helyi jelzés, nem maga a szabály: kihagyható (`git commit --no-verify`), és csak azon a gépen létezik, ahol lefutott a telepítés. A mérvadó ellenőrzés a `pnpm format:check`, és **ezt a CI is futtatja** (korábban nem futtatta senki).
 
 **A `pnpm lint` megszűnt, és ezt érdemes tudni:** mind a hat munkaterület-csomagban a `lint` szkript `tsc --noEmit` volt, vagyis betű szerint ugyanaz, amit a `pnpm typecheck` futtat. Két név, egy ellenőrzés. A repository egyetlen valódi lintere a mobil alkalmazás ESLint-je, az viszont **nem is volt elérhető** ezen az úton: a `pnpm-workspace.yaml` kizárja az `apps/mobile` mappát a munkaterületből, tehát a `turbo run lint` sosem futtatta. **A típusellenőrzés a `pnpm typecheck`, a mobil linter a `pnpm mobile:lint`** - és mostantól nincs olyan parancs, ami mindkettőt ígéri és egyiket sem adja.
