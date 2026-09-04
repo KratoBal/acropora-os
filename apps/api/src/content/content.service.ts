@@ -15,6 +15,7 @@ import {
   type ContentViewerRole,
 } from "./content-filter.js";
 import {
+  AGENT_REVISABLE_STATES,
   contentBlockers,
   moveOptions,
   planTransition,
@@ -437,6 +438,106 @@ export class ContentService {
         : { imageRequired: input.imageRequired }),
       ...(input.plannedFor ? { plannedFor: new Date(input.plannedFor) } : {}),
     });
+  }
+
+  /**
+   * A GEPI UT JAVITASA: EGY BEADOTT TETEL SZOVEGE ATIRHATO, UJ TETEL NELKUL.
+   *
+   * === MIERT LETEZIK ===
+   *
+   * A gepi bejarat 2026-09-04-ig CSAK letrehozni tudott. Ha egy beadott
+   * szovegben hiba maradt (peldaul belso jegyzet a vevonek szant cellaban), a
+   * flotta semmilyen uton nem tudta javitani: az ujra-beadas duplikatumot csinal.
+   * Merve ugyanaznap: modosito metodus SEHOL nem allt -- sem a gepi, sem az
+   * EMBERI uton. Ez tehat az elso szoveg-modosito ut a Tartalom menuben.
+   *
+   * === MEDDIG SZABAD, ES MIERT MEGALLAS, NEM JELZES ===
+   *
+   * Az allapotletra: DRAFTING 1, AWAITING_REVISION 2, AWAITING_REVIEW 3,
+   * AWAITING_APPROVAL 4, READY_TO_SEND 5, SCHEDULED 6, SENT 7. A javitas a
+   * harmadikig megy at, folotte MEGALL.
+   *
+   * Az indok nem szimmetria, hanem az, hogy MELYIK TEVEDES MARAD REJTVE:
+   *   - felesleges megallas  -> HANGOS: a hivo hibat kap, es szol;
+   *   - csendben atirt, mar jovahagyott szoveg -> NEMA: senki nem keresi, es a
+   *     kikuldott tartalomban jelenik meg.
+   * Negyes szinttol felfele MAR EMBER mozditotta elore a tetelt, tehat amit
+   * jovahagyott, nem az lenne, ami kimegy.
+   *
+   * Az AWAITING_REVISION SZANDEKOSAN benne van: az epp az az allapot, amikor
+   * valaki VISSZAKULDTE javitasra -- ott a gepi javitas nem megkerules, hanem a
+   * kert lepes.
+   */
+  async reviseFromAgent(input: {
+    contentId: string;
+    authorId: string;
+    title?: string;
+    body?: string;
+  }) {
+    const title = input.title?.trim();
+    const body = input.body?.trim();
+    if (title === undefined && body === undefined)
+      throw new BadRequestException(
+        "Adj meg legalább egy javítandó mezőt (cím vagy törzs).",
+      );
+    if (title !== undefined && !title)
+      throw new BadRequestException("A cim nem lehet ures.");
+
+    const item = await this.repository.detail(input.contentId);
+    if (!item) throw new NotFoundException("A tartalom nem található.");
+
+    if (!AGENT_REVISABLE_STATES.includes(item.state))
+      throw new ConflictException(
+        `A tétel már a(z) ${item.state} állapotban van: gépi javítás csak ` +
+          `${AGENT_REVISABLE_STATES.join(", ")} állapotban indulhat. ` +
+          `Feljebb ember döntött róla, és azt egy gépi átírás elmosná.`,
+      );
+
+    /**
+     * A NYOM A VALTOZAS ELOTT keszul, mert a REGI ertekekre is szuksege van --
+     * es ugyanabban a tranzakcioban irodik, mint maga a javitas.
+     *
+     * HOSSZAKAT ir, nem szoveget: a teljes regi torzs ide masolva a
+     * hozzaszolas-listat olvashatatlanna tenne, es a jovahagyo ugysem a
+     * kulonbseget akarja itt elolvasni, hanem AZT TUDNI, hogy valtozott.
+     */
+    const valtozasok: string[] = [];
+    if (title !== undefined && title !== item.title)
+      valtozasok.push(`cím: "${item.title}" -> "${title}"`);
+    if (body !== undefined && body !== (item.body ?? ""))
+      valtozasok.push(
+        `törzs: ${(item.body ?? "").length} karakterről ${body.length} karakterre`,
+      );
+
+    if (!valtozasok.length)
+      throw new BadRequestException(
+        "A megadott szöveg azonos a mostanival: nincs mit javítani.",
+      );
+
+    const sikerult = await this.repository.reviseText({
+      id: input.contentId,
+      allowedStates: AGENT_REVISABLE_STATES,
+      data: {
+        ...(title === undefined ? {} : { title }),
+        ...(body === undefined ? {} : { body }),
+      },
+      note: {
+        authorId: input.authorId,
+        body: `Gépi javítás: ${valtozasok.join("; ")}.`,
+      },
+    });
+
+    /**
+     * A HAMIS VISSZATERES NEM "nem talaltuk": az allapot valtozott meg a
+     * lekerdezesunk ota. Ugyanaz a 409, mint fent -- a hivonak ugyanaz a
+     * teendoje.
+     */
+    if (!sikerult)
+      throw new ConflictException(
+        "A tétel állapota közben megváltozott, ezért a javítás nem indult el.",
+      );
+
+    return this.repository.detail(input.contentId);
   }
 
   async comment(input: { contentId: string; authorId: string; body: string }) {

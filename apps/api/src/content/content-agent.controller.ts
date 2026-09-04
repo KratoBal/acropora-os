@@ -1,11 +1,18 @@
-import { Body, Controller, Post, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from "@nestjs/common";
 import type { AuthenticatedUser } from "@acropora/types";
 
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { Public } from "../auth/decorators/public.decorator.js";
 import { ContentAgentGuard } from "./content-agent.guard.js";
 import { ContentService } from "./content.service.js";
-import { ContentCreateDto } from "./dto/content.dto.js";
+import { ContentAgentReviseDto, ContentCreateDto } from "./dto/content.dto.js";
 
 /**
  * A GÉPI ÁGENSEK BEJÁRATA. Külön vezérlő, külön őrző, ugyanaz a szolgáltatás.
@@ -48,5 +55,30 @@ export class ContentAgentController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.createForReview({ ...input, authorId: user.id });
+  }
+
+  /**
+   * EGY MAR BEADOTT TETEL SZOVEGENEK JAVITASA.
+   *
+   * MIERT `PATCH` ES NEM UJABB `POST`: a mai allapot pontosan azert fajt, mert
+   * az egyetlen gepi ut LETREHOZ. Egy javitas, ami uj tetelt szul, duplikatumot
+   * csinal -- es arrol mar kulon kartya all. A `PATCH` a szerzodesben is
+   * kimondja, hogy ugyanazt a tetelt irjuk at, nem ujat keszitunk.
+   *
+   * A SZERZO ITT IS A HIVO, ugyanabbol az okbol, mint a letrehozasnal: az orzo
+   * a tokenbol oldotta fel, es a nyom-hozzaszolas az O neveben all -- a
+   * jovahagyo igy latja, KI irta at a szoveget.
+   */
+  @Patch(":id")
+  revise(
+    @Param("id") id: string,
+    @Body() input: ContentAgentReviseDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.reviseFromAgent({
+      ...input,
+      contentId: id,
+      authorId: user.id,
+    });
   }
 }

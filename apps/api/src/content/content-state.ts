@@ -317,6 +317,27 @@ export interface ContentMoveOption {
  * állapotnak LEGFELJEBB egy elsődleges lépése van, és hogy ahol van elérhető
  * előrelépés, ott van is egy.
  */
+/**
+ * MEDDIG SZABAD EGY TETEL SZOVEGET GEPI UTON JAVITANI.
+ *
+ * A HATAR AZ, AHOL EMBER MEG NEM DONTOTT A SZOVEGROL. Negyes szinttol
+ * (`AWAITING_APPROVAL`) felfele valaki MAR elorevitte a tetelt, tehat amit
+ * jovahagyott, nem az lenne, ami kimegy.
+ *
+ * AZ `AWAITING_REVISION` SZANDEKOSAN BENNE VAN: az epp az az allapot, amikor
+ * valaki VISSZAKULDTE javitasra -- ott a gepi javitas nem megkerules, hanem a
+ * kert lepes.
+ *
+ * ITT ALL, ES NEM A SZOLGALTATASBAN, mert ez az allapotletra szabalya: ha a
+ * letra valaha valtozik, ez a lista ugyanabban a fajlban van, mint a sorrend,
+ * amibol kovetkezik.
+ */
+export const AGENT_REVISABLE_STATES: readonly ContentState[] = [
+  "DRAFTING",
+  "AWAITING_REVISION",
+  "AWAITING_REVIEW",
+];
+
 const PROGRESS_ORDER: Record<ContentState, number> = {
   DISCARDED: -1,
   IDEA: 0,

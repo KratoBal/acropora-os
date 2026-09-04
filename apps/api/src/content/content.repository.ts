@@ -132,6 +132,52 @@ export class ContentRepository {
     });
   }
 
+  /**
+   * EGY BEADOTT TETEL SZOVEGENEK JAVITASA -- ALLAPOT-ORZOVEL, EGY TRANZAKCIOBAN.
+   *
+   * === MIERT `updateMany` EGY `update` HELYETT ===
+   *
+   * Ugyanaz a minta, mint a `moveState`-nel, es ugyanabbol az okbol: a `where`
+   * feltetelbe bekerul az ALLAPOT is. Ha a hivo olvasasa ota barki elorevitte a
+   * tetelt (peldaul Balazs jovahagyta), a feltetel nem illeszkedik, es a javitas
+   * NEM tortenik meg -- ahelyett hogy rairna egy mar jovahagyott szovegre.
+   *
+   * Egy `update` id alapjan ezt nem tudna: az olvasas es az iras kozott eltelt
+   * ido pontosan az az ablak, amiben a jovahagyas beleferne.
+   *
+   * === ES MIERT UGYANABBAN A TRANZAKCIOBAN A NYOM ===
+   *
+   * A hozzaszolas nem naplo-diszlet: az az EGYETLEN hely, ahol a jovahagyo
+   * latja, hogy a szoveg megvaltozott azota, hogy elolvasta. Ha kulon irodna,
+   * letezne olyan allapot, ahol a szoveg mar mas, es nyoma nincs -- es epp az a
+   * nema feluliras, ami ellen az egesz keszul.
+   */
+  async reviseText(input: {
+    id: string;
+    allowedStates: readonly ContentState[];
+    data: { title?: string; body?: string };
+    note: { authorId: string; body: string };
+  }): Promise<boolean> {
+    return prisma.$transaction(async (tx) => {
+      const result = await tx.contentItem.updateMany({
+        where: { id: input.id, state: { in: [...input.allowedStates] } },
+        data: input.data,
+      });
+
+      if (result.count !== 1) return false;
+
+      await tx.contentComment.create({
+        data: {
+          contentId: input.id,
+          authorId: input.note.authorId,
+          body: input.note.body,
+        },
+      });
+
+      return true;
+    });
+  }
+
   addComment(input: { contentId: string; authorId: string; body: string }) {
     return prisma.contentComment.create({ data: input });
   }

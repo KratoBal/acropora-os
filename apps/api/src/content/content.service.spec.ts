@@ -15,6 +15,7 @@ function serviceWith(
     detail: ContentRepository["detail"];
     list: ContentRepository["list"];
     create: ContentRepository["create"];
+    reviseText: ContentRepository["reviseText"];
   }> = {},
 ) {
   const calls: unknown[] = [];
@@ -33,6 +34,10 @@ function serviceWith(
       calls.push(data);
       return { id: "uj" } as never;
     }) as ContentRepository["create"],
+    reviseText: (async (input: unknown) => {
+      calls.push(input);
+      return true;
+    }) as ContentRepository["reviseText"],
     ...overrides,
   } as unknown as ContentRepository;
   return { service: new ContentService(repository), calls };
@@ -834,5 +839,159 @@ describe("the shared review queue, in the query itself", () => {
       or.some((branch) => branch.reviewerId === "masik-lektor"),
       false,
     );
+  });
+});
+
+/**
+ * A GEPI JAVITAS: EGY BEADOTT TETEL SZOVEGE ATIRHATO, UJ TETEL NELKUL.
+ *
+ * A harom kikotes, amit ez a leiras merni akar:
+ *   1. ne keletkezzen UJ tetel,
+ *   2. ne mosson el emberi dontest,
+ *   3. legyen nyoma, mi valtozott.
+ */
+describe("a beadott tartalom gepi javitasa", () => {
+  function tetel(allapot: string, torzs = "regi torzs") {
+    return (async () => ({
+      id: "c1",
+      title: "Regi cim",
+      body: torzs,
+      state: allapot,
+    })) as unknown as ContentRepository["detail"];
+  }
+
+  it("atirja a torzset, es NEM hoz letre uj tetelt", async () => {
+    const { service, calls } = serviceWith({
+      detail: tetel("AWAITING_REVIEW"),
+    });
+
+    await service.reviseFromAgent({
+      contentId: "c1",
+      authorId: "agens-1",
+      body: "javitott torzs",
+    });
+
+    /**
+     * EGYETLEN iras tortent, es az a JAVITAS. Ha `create` futott volna, a
+     * hivas ugyanugy sikeres lenne -- es pontosan az a duplikatum keletkezne,
+     * ami miatt ez az ut megepult.
+     */
+    assert.equal(calls.length, 1);
+    const iras = calls[0] as { id: string; data: Record<string, unknown> };
+    assert.equal(iras.id, "c1");
+    assert.deepEqual(iras.data, { body: "javitott torzs" });
+  });
+
+  /**
+   * A NYOM NEM MELLEKES: az az EGYETLEN hely, ahol a jovahagyo latja, hogy a
+   * szoveg megvaltozott azota, hogy elolvasta.
+   */
+  it("nyomot hagy arrol, MI valtozott, a javito neveben", async () => {
+    const { service, calls } = serviceWith({
+      detail: tetel("AWAITING_REVIEW"),
+    });
+
+    await service.reviseFromAgent({
+      contentId: "c1",
+      authorId: "agens-1",
+      body: "rovidebb",
+    });
+
+    const iras = calls[0] as { note: { authorId: string; body: string } };
+    assert.equal(iras.note.authorId, "agens-1");
+    assert.match(iras.note.body, /Gépi javítás/);
+    // A REGI ES AZ UJ HOSSZ IS OTT ALL: enelkul a nyom csak annyit mondana,
+    // hogy "valami tortent".
+    assert.match(iras.note.body, /10 karakterről 8 karakterre/);
+  });
+
+  /**
+   * A HATAR FOLOTT MEGALL, ES NEM IR SEMMIT. A masodik allitas a fontosabb: egy
+   * orzot nem az bizonyit, hogy szol, hanem hogy nem tortent semmi.
+   */
+  it("a jovahagyasra varo tetelt NEM irja at, es semmit nem ir", async () => {
+    const { service, calls } = serviceWith({
+      detail: tetel("AWAITING_APPROVAL"),
+    });
+
+    await assert.rejects(
+      () =>
+        service.reviseFromAgent({
+          contentId: "c1",
+          authorId: "agens-1",
+          body: "javitott",
+        }),
+      /AWAITING_APPROVAL/,
+    );
+    assert.equal(calls.length, 0);
+  });
+
+  /**
+   * ES A MASIK IRANY, MERT EGY MINDENT ELUTASITO ORZO UGYANIGY NEZNE KI: a
+   * visszakuldott tetel epp az az eset, amikor a javitas a KERT lepes.
+   */
+  it("a javitasra visszakuldott tetelt viszont atirja", async () => {
+    const { service, calls } = serviceWith({
+      detail: tetel("AWAITING_REVISION"),
+    });
+
+    await service.reviseFromAgent({
+      contentId: "c1",
+      authorId: "agens-1",
+      body: "javitott",
+    });
+
+    assert.equal(calls.length, 1);
+  });
+
+  it("azonos szovegre nem ir semmit", async () => {
+    const { service, calls } = serviceWith({
+      detail: tetel("AWAITING_REVIEW", "ugyanaz"),
+    });
+
+    await assert.rejects(
+      () =>
+        service.reviseFromAgent({
+          contentId: "c1",
+          authorId: "agens-1",
+          body: "ugyanaz",
+        }),
+      /azonos/,
+    );
+    assert.equal(calls.length, 0);
+  });
+
+  /**
+   * A VERSENYHELYZET: az allapot a lekerdezesunk UTAN valtozott meg. A tarolo
+   * `where` feltetele ilyenkor nem illeszkedik, es hamisat ad -- a hivonak
+   * ugyanaz a teendoje, mint a fenti megallasnal, tehat ugyanaz a 409.
+   */
+  it("ha az allapot kozben valtozott, a javitas nem szuletik meg", async () => {
+    const { service } = serviceWith({
+      detail: tetel("AWAITING_REVIEW"),
+      reviseText: (async () => false) as ContentRepository["reviseText"],
+    });
+
+    await assert.rejects(
+      () =>
+        service.reviseFromAgent({
+          contentId: "c1",
+          authorId: "agens-1",
+          body: "javitott",
+        }),
+      /közben megváltozott/,
+    );
+  });
+
+  it("mezo nelkul nem indul", async () => {
+    const { service, calls } = serviceWith({
+      detail: tetel("AWAITING_REVIEW"),
+    });
+
+    await assert.rejects(
+      () => service.reviseFromAgent({ contentId: "c1", authorId: "agens-1" }),
+      /legalább egy/,
+    );
+    assert.equal(calls.length, 0);
   });
 });
