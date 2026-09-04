@@ -39,6 +39,20 @@ export interface UserDetail extends UserSummary {
    * keri), nem csendben.
    */
   supplierId: string | null;
+  /**
+   * MELYIK VEVOHOZ TARTOZIK, VAGY `null`, HA NEM VEVO-OLDALI FELHASZNALO.
+   *
+   * A PARJA A `supplierId`-NEK, es 2026-09-04-ig HIANYZOTT INNEN. A sema
+   * (`User.customerId`) mindig is ismerte, a hatokor-szamitas
+   * (`partnerScopeOf`) MINDIG IS OLVASTA -- csak a kiadott alakbol maradt ki.
+   * Vagyis a szerver tudta, melyik vevohoz tartozik a fiok, es a felulet nem.
+   *
+   * A KETTO KOZUL LEGFELJEBB AZ EGYIK LEHET KITOLTVE. Ez nem konvencio, hanem
+   * adatbazis-szintu megszoritas (`User_at_most_one_partner_check`), es a
+   * `partnerScopeOf` DOB, ha megis mind a ketto all -- egy ilyen sor tulajdonosa
+   * minden keresre hibat kapna.
+   */
+  customerId: string | null;
 }
 
 export type UserStatusFilter = "ACTIVE" | "INACTIVE" | "ALL";
@@ -59,6 +73,16 @@ export interface CreateUserInput {
   email: string;
   role: UserRole;
   password?: string;
+  /**
+   * MELYIK VEVO NEVEBEN LEP BE EZ A FIOK. Elhagyhato: a sajat kollega egyik
+   * partnerhez sem tartozik, es az a tobbseg.
+   *
+   * EZ NEM ADATMEZO, HANEM HATOKORT ADO VEZERLO. A `partnerScopeOf` ebbol
+   * szamolja, mit lat az illeto: aki kap egy `customerId` erteket, az megkapja
+   * annak a vevonek a hatokoret, es CSAK azt. Ezert all ugyanaz mogotte, mint
+   * a szerepkor mogott: a `users.manage` jog, es az auditnaplo.
+   */
+  customerId?: string | null;
 }
 
 export interface UpdateUserInput {
@@ -68,6 +92,18 @@ export interface UpdateUserInput {
   nickname?: string | null;
   email?: string;
   role?: UserRole;
+  /**
+   * MELYIK VEVOHOZ KOTJUK, VAGY `null`, HA ELVAGJUK A KOTEST.
+   *
+   * A HIANYZO ERTEK (`undefined`) VALTOZATLANUL HAGYJA, a `null` TOROLI, es a
+   * ketto kozotti kulonbseg itt nagyobb, mint a becenevnel: a TORLES ugyanis
+   * TAGITJA a hatokort. Egy vevohoz kotott fiok csak annak a vevonek a sorait
+   * latja; ha a kotes eltunik, a fiok BELSOSSE valik, es MINDENT lat.
+   *
+   * Ezert a torles legalabb annyira erzekeny muvelet, mint a beallitas, es
+   * ugyanaz a jog meg auditnaplo all mogotte.
+   */
+  customerId?: string | null;
   expectedUpdatedAt: string;
 }
 

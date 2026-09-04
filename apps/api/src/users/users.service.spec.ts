@@ -28,6 +28,16 @@ const repository = (overrides: Record<string, unknown> = {}) =>
       pagination: { page: 1, pageSize: 25, totalItems: 1, totalPages: 1 },
     }),
     detail: async () => user,
+    /**
+     * A VARRAT, ES EZERT ALL AZ ALAPERTELMEZETT DUPLABAN IS.
+     *
+     * A szolgaltatas ezt HIVJA, valahanyszor `customerId` erkezik. Ha csak
+     * azokban a tesztekben allna, amik ezt az agat meric, minden TOBBI teszt
+     * ugy menne at, hogy a metodus nem letezik -- es a hiba csak akkor jonne
+     * elo, amikor valaki egy meglevo tesztet kiegeszit egy vevovel. Amit a
+     * hivo hasznal, de a teszt nem allit, az a dupla biztos hibaja.
+     */
+    customerExists: async () => true,
     create: async () => user,
     update: async () => user,
     setPassword: async () => user,
@@ -147,5 +157,98 @@ describe("UsersService", () => {
       result.items.map((item) => item.email),
       ["reka.kovacs@acropora.hu"],
     );
+  });
+});
+
+describe("a felhasználó vevőhöz kötése", () => {
+  /*
+    EZ A MEZO NEM ADATMEZO, HANEM HATOKORT ADO VEZERLO: a `partnerScopeOf`
+    ebbol szamolja, mit lat az illeto. Ezert nem eleg, hogy „atmegy": a lenti
+    harom allitas azt koti le, hogy MIT nem enged at.
+  */
+
+  it("NEM LETEZO vevore ertheto hibat ad, nem adatbazis-hibat", async () => {
+    /*
+      A relacion idegenkulcs all, tehat enelkul is elbukna a beszuras -- de egy
+      nyers `P2003` a kepernyon ertelmezhetetlen, es nem mondja meg, MELYIK
+      mezovel van baj.
+
+      MI PIROSIT: az ellenorzes elhagyasa. Akkor a hivas eljutna a
+      repositoryig, es a dupla `create` fuggvenye csendben SIKERT adna --
+      vagyis a teszt nem csak a hibauzenetet veszitene el, hanem azt is
+      allitana, hogy a felvitel MUKODIK egy nem letezo vevovel.
+    */
+    await assert.rejects(
+      () =>
+        new UsersService(
+          repository({ customerExists: async () => false }),
+        ).create(
+          {
+            firstName: "Réka",
+            lastName: "Kovács",
+            email: "reka.kovacs@acropora.hu",
+            role: "SALES",
+            customerId: "nincs-ilyen",
+          },
+          "actor-1",
+        ),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        /vevő nem található/.test(error.message),
+    );
+  });
+
+  it("MAR SZALLITOHOZ kotott fiokot nem enged vevohoz kotni", async () => {
+    /*
+      Az adatbazisban `CHECK` all ra, tehat a masodik kotes ott ugyis elbukna.
+      A KOVETKEZMENYE viszont nem egy hibauzenet: a `partnerScopeOf` DOB, ha
+      mind a ketto ki van toltve, vagyis egy ilyen sor tulajdonosa MINDEN
+      keresre hibat kapna, es a felulet szamara ugy nezne ki, mintha a fiok
+      elromlott volna.
+
+      MI PIROSIT: az ellenorzes elhagyasa -- olyankor a `CHECK` sertes nyers
+      adatbazis-hibakent jutna ki, ha egyaltalan.
+    */
+    await assert.rejects(
+      () =>
+        new UsersService(
+          repository({
+            detail: async () => ({ ...user, supplierId: "supplier-1" }),
+          }),
+        ).update(
+          "user-1",
+          {
+            customerId: "customer-1",
+            expectedUpdatedAt: "2026-01-02T00:00:00.000Z",
+          },
+          "actor-1",
+        ),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        /szállítóhoz van kötve/.test(error.message),
+    );
+  });
+
+  it("a KOTES MEGSZUNTETESE (null) NEM esik bele a fenti ket kapuba", async () => {
+    /*
+      EZ AZ AG A LEGKONNYEBBEN ELRONTHATO, es a hibaja NEM latszana: a torles
+      TAGITJA a hatokort (partner nelkul a fiok belsos, es mindent lat). Ha egy
+      ellenorzes tulzottan szeles lenne, epp ez a muvelet akadna el -- egy
+      szallitohoz kotott fiokrol nem lehetne levenni a kotest, mert a
+      „mar partnerhez kotott" kapu ravaltana.
+
+      MI PIROSIT: ha a ket kapu barmelyike a `null` erteket is vizsgalna.
+    */
+    const updated = await new UsersService(
+      repository({
+        detail: async () => ({ ...user, supplierId: "supplier-1" }),
+        customerExists: async () => false,
+      }),
+    ).update(
+      "user-1",
+      { customerId: null, expectedUpdatedAt: "2026-01-02T00:00:00.000Z" },
+      "actor-1",
+    );
+    assert.equal(updated?.id, "user-1");
   });
 });

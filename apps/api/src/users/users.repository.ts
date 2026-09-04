@@ -5,6 +5,7 @@ import { Prisma, Repository, prisma } from "@acropora/database";
 import type { UserDetail, UserListResponse } from "@acropora/types";
 
 import { hashPassword } from "./password.util.js";
+import { userAuditMetadata } from "./user-audit.js";
 import { toUserDetail, toUserSummary } from "./user-view.js";
 import type {
   CreateUserDto,
@@ -82,11 +83,24 @@ export class UsersRepository extends Repository {
             role: input.role,
             passwordHash,
             passwordUpdatedAt: passwordHash ? new Date() : null,
+            /**
+             * Absent and null both mean "our own colleague". The column is
+             * nullable, so writing null is the same as leaving it out - the
+             * spread keeps the create payload readable when it is absent.
+             */
+            ...(input.customerId ? { customerId: input.customerId } : {}),
           },
         });
         await this.event(tx, "user.created", user.id, actorId, {
           email,
           role: input.role,
+          /**
+           * THE SCOPE GOES INTO THE TRAIL, not just the name of the field.
+           * `customerId` decides what this account can see, so an entry saying
+           * only that it was set would not answer the one question an audit is
+           * read for: set to WHICH customer.
+           */
+          customerId: input.customerId ?? null,
         });
         await tx.auditLog.create({
           data: {
@@ -105,6 +119,22 @@ export class UsersRepository extends Repository {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+  }
+
+  /**
+   * LETEZIK-E EZ A VEVO.
+   *
+   * A SZOLGALTATASBAN allna a legkezenfekvobben, de a Prisma kliens ebben a
+   * modulban CSAK itt all: egy szolgaltatas, ami kozvetlenul lekerdez, a sajat
+   * tesztjeit is adatbazishoz kotne. Igy a dontes (mit mondunk a
+   * felhasznalonak) merheto marad, a lekerdezes pedig ott van, ahol a tobbi.
+   */
+  async customerExists(id: string): Promise<boolean> {
+    const customer = await prisma.customer.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    return customer !== null;
   }
 
   update(id: string, input: UpdateUserDto, actorId: string) {
@@ -127,26 +157,36 @@ export class UsersRepository extends Repository {
               : { nickname: input.nickname.trim() || null }),
             ...(email ? { email } : {}),
             ...(input.role ? { role: input.role } : {}),
+            /**
+             * Absent leaves the tie alone; null cuts it. Same shape as the
+             * nickname, different weight: cutting the tie makes the account
+             * internal, and an internal account sees everything.
+             */
+            ...(input.customerId === undefined
+              ? {}
+              : { customerId: input.customerId || null }),
           },
         });
         if (changed.count !== 1) throw new Error("STALE_UPDATE");
         const user = await tx.user.findUniqueOrThrow({ where: { id } });
-        await this.event(tx, "user.updated", id, actorId, {
-          changedFields: Object.keys(input).filter(
-            (key) => key !== "expectedUpdatedAt",
-          ),
+        /**
+         * A NAPLO ALAKJA A `user-audit.ts`-BEN DOL EL, mert ott MERHETO: ez a
+         * fajl a Prisma klienst importalja, tehat barmi, ami itt all, csak elo
+         * adatbazissal probalhato ki.
+         */
+        const metadata = userAuditMetadata({
+          fields: input as unknown as Record<string, unknown>,
+          before: { customerId: existing.customerId },
+          after: { customerId: user.customerId },
         });
+        await this.event(tx, "user.updated", id, actorId, metadata);
         await tx.auditLog.create({
           data: {
             userId: actorId,
             action: "user.updated",
             entityType: "User",
             entityId: id,
-            metadata: {
-              changedFields: Object.keys(input).filter(
-                (key) => key !== "expectedUpdatedAt",
-              ),
-            } satisfies Prisma.JsonObject,
+            metadata: metadata satisfies Prisma.JsonObject,
           },
         });
         return toUserDetail(user);

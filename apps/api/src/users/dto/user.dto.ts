@@ -17,6 +17,16 @@ export class CreateUserDto {
   @IsEmail() email!: string;
   @IsIn(USER_ROLES) role!: UserRole;
   @IsString() @MinLength(8) @IsOptional() password?: string;
+  /**
+   * WHICH CUSTOMER THIS ACCOUNT ACTS FOR. Absent or null for our own
+   * colleagues, which is the majority.
+   *
+   * This is not a data field: `partnerScopeOf` derives what the person can see
+   * from it. The endpoint is already behind `users.manage`, the same
+   * permission that assigns roles - see the service for why that is the right
+   * gate rather than a new one.
+   */
+  @IsString() @IsOptional() customerId?: string | null;
 }
 
 export class UpdateUserDto {
@@ -27,6 +37,12 @@ export class UpdateUserDto {
   @IsString() @IsOptional() nickname?: string;
   @IsEmail() @IsOptional() email?: string;
   @IsIn(USER_ROLES) @IsOptional() role?: UserRole;
+  /**
+   * Absent leaves the tie alone; null cuts it. The difference matters more
+   * here than for the nickname: cutting the tie WIDENS the scope, because a
+   * user with no partner is internal and sees everything.
+   */
+  @IsString() @IsOptional() customerId?: string | null;
   @IsString() expectedUpdatedAt!: string;
 }
 

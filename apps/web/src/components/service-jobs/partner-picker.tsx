@@ -33,10 +33,41 @@ import { worksheetsApi } from "@/lib/api/worksheets";
  */
 export function PartnerPicker({
   id,
+  value,
   onPick,
+  onClear,
+  emptyLabel = "Válassz partnert",
 }: {
   id: string;
+  /**
+   * A KIVALASZTOTT PARTNER, HA A HIVO VEZERELNI AKARJA A MEZOT.
+   *
+   * ELHAGYHATO, ES AZ ALAPERTELMEZES A REGI VISELKEDES: ha nincs megadva, a
+   * mezo vezereletlen marad (`defaultValue=""`), ahogy a ket eredeti hivonal
+   * eddig is. Ott a valaszto egy MOST keletkezo jegyhez vagy laphoz valaszt,
+   * tehat nincs korabbi ertek, amit mutatnia kellene.
+   *
+   * A FELHASZNALO-SZERKESZTONEL VISZONT VAN: egy mar vevohoz kotott fiok
+   * lapjan a vezereletlen mezo "Valassz partnert" felirattal allna, vagyis azt
+   * mondana, hogy nincs kotes -- holott van. Ez nem kenyelmi kulonbseg, hanem
+   * egy hamis allitas a kepernyon.
+   */
+  value?: string;
   onPick: (partner: WorksheetSelectablePartner) => void;
+  /**
+   * AZ URES ERTEK VALASZTASA -- KULON, ES SZANDEKOSAN OPCIONALISAN.
+   *
+   * Az `onPick` ma CSAK akkor sul el, ha talalt partnert, tehat az ures opcio
+   * valasztasa a ket eredeti hivonal NEM csinal semmit. Ez ott helyes: egy uj
+   * jegy urlapjan nincs mit torolni.
+   *
+   * Ahol a mezo egy MEGLEVO kotest mutat, ott az ures opcio maga a muvelet (a
+   * kotes megszuntetese), es azt ki KELL tudni valasztani. Uj agkent all, nem
+   * az `onPick` kiszelesitesekent: egy `partner | null` parameter a ket
+   * eredeti hivo viselkedeset is megvaltoztatta volna, csendben.
+   */
+  onClear?: () => void;
+  emptyLabel?: string;
 }) {
   const { session } = useAuth();
   const token = session?.token ?? "";
@@ -76,15 +107,16 @@ export function PartnerPicker({
     <select
       id={id}
       className="rounded border px-2 py-1 text-sm"
-      defaultValue=""
+      {...(value === undefined ? { defaultValue: "" } : { value })}
       onChange={(event) => {
         const picked = partners.find(
           (partner) => partner.customerId === event.target.value,
         );
         if (picked) onPick(picked);
+        else onClear?.();
       }}
     >
-      <option value="">Válassz partnert</option>
+      <option value="">{emptyLabel}</option>
       {partners.map((partner) => (
         <option key={partner.customerId} value={partner.customerId}>
           {partner.name} ({partner.partnerCode})
