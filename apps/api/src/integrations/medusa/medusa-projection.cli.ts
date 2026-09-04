@@ -8,6 +8,10 @@ import {
   MEDUSA_CATEGORY_REFERENCE,
 } from "./medusa-category.policy.js";
 import {
+  decideMedusaBarcode,
+  describeSkippedBarcode,
+} from "./medusa-barcode.policy.js";
+import {
   decideMedusaBrandCollection,
   describeMissingBrandMapping,
   MEDUSA_BRAND_REFERENCE,
@@ -391,6 +395,17 @@ export async function runProjectionCli(
   }
 
   let failed = 0;
+  /**
+   * HANY VONALKODOT ZART KI AZ ISMETLODES-SZURO.
+   *
+   * A termekenkenti sor megnevezi az egyes eseteket, de egy sok szazas futasban
+   * elvesz kozottuk. Ez a szam a futas VEGEN all, es azt mondja meg, mekkora a
+   * halmaz -- egy szuro, ami sosem mond semmit, nem szuro, hanem tartalek.
+   *
+   * ES NEM A FORRAS-OLDALI MERT SZAMOT IRJUK KI: azt a MI adatunkon szamoljuk,
+   * mert a ketto elterhet, es a kulonbseg maga is lelet lenne.
+   */
+  let kihagyottVonalkod = 0;
   for (const argument of targets) {
     let productId: string;
     if (argument.startsWith("sku:")) {
@@ -427,7 +442,7 @@ export async function runProjectionCli(
         variants: {
           where: { isActive: true },
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-          select: { sku: true },
+          select: { sku: true, manufacturerPartNumber: true },
         },
         categories: { select: { categoryId: true } },
         /**
@@ -576,6 +591,44 @@ export async function runProjectionCli(
      * megy, es a vetites `null` kep-listaval fut le. Egy termek, aminek a nevet
      * javitottuk, attol meg frissuljon, hogy a kepei meg uton vannak.
      */
+    /**
+     * A VALTOZAT VONALKODJA, ES AZ ISMETLODES SZAMLALASA.
+     *
+     * A `manufacturerPartNumber` oszlop VEGYES: hol valodi gyartoi cikkszam
+     * all benne, hol vonalkod. A szetvalasztas a `medusa-barcode.policy`
+     * modulban all, adatbazis nelkul merhetoen; itt csak a LEKERDEZES van.
+     *
+     * AZ ISMETLODEST EGYEDUL A HIVO TUDJA MEGMONDANI: a vetites termekenkent
+     * fut, tehat a policy nem lathatja, hany masik valtozaton all ugyanaz a
+     * kod. Ezert szamoljuk meg itt, es adjuk at szamkent.
+     *
+     * A szamlalas AKTIV valtozatokra szol: egy inaktiv valtozat nem kerul ki a
+     * boltba, tehat nem is utkozhet ott.
+     */
+    const nyersVonalkod = product.variants[0]?.manufacturerPartNumber ?? null;
+    /**
+     * EGY lekerdezes, es a szamot MEGTARTJUK a hiany-sorhoz is. Egy masodik
+     * `count` ugyanarra az ertekre nem csak folosleges kor: ket kulonbozo
+     * pillanatban futna, tehat a dontes es a rola szolo mondat MAS szamon
+     * allhatna.
+     */
+    const azonosKodudarab = nyersVonalkod
+      ? await prisma.productVariant.count({
+          where: { manufacturerPartNumber: nyersVonalkod, isActive: true },
+        })
+      : 0;
+    const vonalkod = decideMedusaBarcode(nyersVonalkod, azonosKodudarab);
+    if (vonalkod.kind === "skipped") {
+      kihagyottVonalkod += 1;
+      out.stdout(
+        `${describeSkippedBarcode(
+          product.id,
+          vonalkod.duplicate,
+          azonosKodudarab,
+        )}\n`,
+      );
+    }
+
     const futasIdeje = new Date();
     const published = product.images.length
       ? await publishProductImages(
@@ -615,6 +668,9 @@ export async function runProjectionCli(
         primarySku: product.variants[0]?.sku ?? null,
         medusaCategoryIds: categories.medusaCategoryIds,
         medusaCollectionId: brand.medusaCollectionId,
+        barcode: vonalkod.field
+          ? { field: vonalkod.field, value: vonalkod.value }
+          : null,
         ...projectUnasChannelRow(product.channelListings[0]),
         /**
          * A KEPEK BOLTI URL-JEI, vagy `null`.
@@ -653,6 +709,19 @@ export async function runProjectionCli(
         `      ${describePublication(outcome.publication)}\n`,
     );
   }
+
+  /**
+   * A ZARO SOR CSAK AKKOR ALL KI, HA VOLT MIT KIZARNI.
+   *
+   * Egy allando "0 vonalkod kihagyva" sor minden futasban ott allna, es epp
+   * attol nem venne eszre senki, amikor NEM nulla. A nulla eset nem hallgatas:
+   * a termekenkenti sorok hianya mondja meg ugyanazt.
+   */
+  if (kihagyottVonalkod)
+    out.stdout(
+      `${kihagyottVonalkod} vonalkód maradt ki ismétlődés miatt. ` +
+        `A tisztítás helye a forrás (UNAS): ott dől el, melyik terméké a kód.\n`,
+    );
 
   return failed ? 1 : 0;
 }
