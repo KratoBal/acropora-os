@@ -214,11 +214,15 @@ describe("UnasProductSyncService", () => {
   /**
    * A torles-erzekelesnek KET aga van, es elesben csak az egyik fut.
    *
-   * A teljes osszevetes (repository.ts, `run.kind === "FULL"`) csak akkor all
-   * elo, ha nincs kurzor - a futas tipusat egyetlen hely donti el
-   * (`kind: cursor ? "INCREMENTAL" : "FULL"`), es nincs se reset, se kezi FULL
-   * inditas. Vagyis egy egyszer felallt rendszerben az az ag SOHA TOBBE nem fut
-   * le, es a torlest kizarolag ez a `state: "deleted"` lehivas hozza.
+   * A teljes osszevetes (repository.ts, `run.kind === "FULL"`) alapesetben csak
+   * akkor all elo, ha nincs kurzor. AZ ELSO KEZ NELKUL tehat egy egyszer
+   * felallt rendszerben az az ag soha tobbe nem futna le, es a torlest
+   * kizarolag ez a `state: "deleted"` lehivas hozna.
+   *
+   * 2026-09-04 OTA VAN KEZI UT IS (`teljesOsszevetes` kapcsolo, lasd a
+   * "kapcsoloval kurzor mellett is teljes osszevetest fut" allitast), de az
+   * SEHOVA NINCS BEKOTVE: nincs utemezes es nincs indulaskori futas, tehat az
+   * ELES viselkedes valtozatlanul az alabbi ag.
    *
    * Ezert all itt allitas: eddig a deleted ag nulla teszttel allt. A masik
    * teszt (`uses independent overlapped product and stock cursors`) csak azt
@@ -247,6 +251,85 @@ describe("UnasProductSyncService", () => {
     );
     return { calls, result };
   };
+
+  /**
+   * A KAPCSOLO: KURZOR MELLETT IS TELJES OSSZEVETES.
+   *
+   * A fixtura KURZORT AD, tehat a kapcsolo nelkul INCREMENTAL lenne -- epp ez
+   * teszi az allitast merhetove: ha a kapcsolo nem hat, a `kind` nem valtozik.
+   *
+   * ES A MASODIK ALLITAS A LENYEG: nem eleg, hogy a futas NEVE "FULL". A
+   * lehivasbol el kell tunnie a `timeStart` mezonek, kulonben a nev teljes
+   * osszevetest igerne, a lekerdezes viszont tovabbra is ablakra szurne. A ket
+   * allitas kulon is elromolhat.
+   */
+  it("kapcsoloval kurzor mellett is teljes osszevetest fut", async () => {
+    const { service, calls } = fixture({
+      cursor: new Date("2026-07-20T12:00:00.000Z"),
+      stockCursor: new Date("2026-07-20T11:30:00.000Z"),
+      pages: [[product("1", "SKU-LIVE")]],
+    });
+
+    await service.runIncremental(
+      "token",
+      new Date("2026-07-20T13:00:00.000Z"),
+      500,
+      true,
+    );
+
+    assert.equal(
+      (
+        calls.find((call) => call.operation === "createRun")?.input as {
+          kind: string;
+        }
+      ).kind,
+      "FULL",
+    );
+    const liveRequest = calls.find(
+      (call) =>
+        call.operation === "page" &&
+        (call.input as { state: string }).state === "live",
+    )?.input as { timeStart?: number };
+    assert.equal(liveRequest.timeStart, undefined);
+  });
+
+  /**
+   * ES A KONTROLL, AMI NELKUL A FENTI ALLITAS EGY MINDIG-TELJES VALTOZATOT IS
+   * ATENGEDNE: kapcsolo NELKUL, UGYANAZON a fixturan, a futas INCREMENTAL marad
+   * es a `timeStart` ott all. A mai viselkedes tehat valtozatlan.
+   */
+  it("kapcsolo nelkul ugyanazon a fixturan inkrementalis marad", async () => {
+    const cursor = new Date("2026-07-20T12:00:00.000Z");
+    const { service, calls } = fixture({
+      cursor,
+      stockCursor: new Date("2026-07-20T11:30:00.000Z"),
+      pages: [[product("1", "SKU-LIVE")]],
+    });
+
+    await service.runIncremental(
+      "token",
+      new Date("2026-07-20T13:00:00.000Z"),
+      500,
+    );
+
+    assert.equal(
+      (
+        calls.find((call) => call.operation === "createRun")?.input as {
+          kind: string;
+        }
+      ).kind,
+      "INCREMENTAL",
+    );
+    const liveRequest = calls.find(
+      (call) =>
+        call.operation === "page" &&
+        (call.input as { state: string }).state === "live",
+    )?.input as { timeStart?: number };
+    assert.equal(
+      liveRequest.timeStart,
+      Math.floor((cursor.getTime() - 120_000) / 1000),
+    );
+  });
 
   it("hands the deleted-state products to apply", async () => {
     const { calls } = await incrementalRunWithDeleted();
