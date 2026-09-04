@@ -48,8 +48,17 @@ import {
  * szerelő helyett -- és a helyszínen siető ember rá is nyomna a küldésre. A
  * gomb addig tétlen, amíg minden ELTÉRŐ mezőnél nincs válasz.
  *
- * Ami NEM tér el, azon nincs mit eldönteni: az a sor látszik (különben a
- * szerelő azt hinné, elfelejtette), de nem kér választ, és nem is megy el.
+ * === CSAK AZ ÜTKÖZŐ MEZŐK KÉRDEZNEK (acrobot kikötése, 2026-09-04) ===
+ *
+ * A lista nem a szerelő ÖSSZES javítását sorolja, hanem azokat, ahol MÁS is
+ * hozzányúlt ugyanahhoz a mezőhöz. A többi javítás simán átmegy, és egy
+ * összefoglaló sor mondja meg, hány ilyen van -- így a képernyő rövid marad, és
+ * a szerelő mégsem hiszi azt, hogy valamit elfelejtett.
+ *
+ * AZ ELSŐ VÁLTOZAT MINDEN ÁTÍRT MEZŐRŐL KÉRDEZETT, és az rossz kérdés volt: ha
+ * a szerelő átírta a gyártót és rajta kívül senki nem nyúlt hozzá, a friss
+ * eszközön a régi érték áll, ami eltérésnek látszik. Nincs mit eldönteni -- és
+ * ha zavarában a másikat választja, a SAJÁT javítása tűnik el csendben.
  */
 
 export default function QueueResolveScreen() {
@@ -109,8 +118,13 @@ export default function QueueResolveScreen() {
         throw new Error("Ez a módosítás nem nyitható meg.");
       const uj = rebuildResolvedPatch({
         patch: payload.patch,
+        /**
+         * A NEM ÜTKÖZŐ JAVÍTÁSOK AUTOMATIKUSAN MENNEK. Nem a szerelő
+         * hanyagsága, hogy nem döntött róluk: nincs is miről. Ha kimaradnának,
+         * a feloldás elvenné a saját javításait.
+         */
         keepMine: sorok
-          .filter((s) => s.differs && dontes[s.field] === "mine")
+          .filter((s) => !s.conflicting || dontes[s.field] === "mine")
           .map((s) => s.field),
         freshUpdatedAt: eszkoz.data.updatedAt,
       });
@@ -177,7 +191,8 @@ export default function QueueResolveScreen() {
         })
       : [];
 
-  const eldontendo = sorok.filter((s) => s.differs);
+  const eldontendo = sorok.filter((s) => s.conflicting);
+  const magatolAtmegy = sorok.filter((s) => !s.conflicting);
   const keszEnDontesem = eldontendo.every((s) => dontes[s.field] !== undefined);
 
   return (
@@ -239,53 +254,53 @@ export default function QueueResolveScreen() {
               </Text>
             </View>
 
-            {sorok.map((mezo) => (
-              <View
-                key={mezo.field}
-                style={[styles.card, !mezo.differs && styles.cardMuted]}
-              >
+            {/*
+              EGY SOR A TOBBIROL. A kepernyo rovid marad, es a szerelo megis
+              latja, hogy a javitasai nem vesztek el -- egy nema kihagyas ott
+              ugyanugy nezne ki, mint egy elfelejtett mezo.
+            */}
+            {magatolAtmegy.length > 0 ? (
+              <View style={[styles.card, styles.cardMuted]}>
+                <Text style={styles.value}>
+                  {magatolAtmegy.length === 1
+                    ? "Egy további mezőt írtál át, ahhoz más nem nyúlt: az változatlanul átmegy."
+                    : `${magatolAtmegy.length} további mezőt írtál át, azokhoz más nem nyúlt: változatlanul átmennek.`}
+                </Text>
+                <Text style={styles.muted}>
+                  {magatolAtmegy.map((mezo) => mezo.label).join(", ")}
+                </Text>
+              </View>
+            ) : null}
+
+            {eldontendo.map((mezo) => (
+              <View key={mezo.field} style={styles.card}>
                 <Text style={styles.label}>{mezo.label}</Text>
-                {mezo.differs ? (
-                  <>
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() =>
-                        setDontes({ ...dontes, [mezo.field]: "mine" })
-                      }
-                      style={[
-                        styles.choice,
-                        dontes[mezo.field] === "mine" && styles.choiceOn,
-                      ]}
-                    >
-                      <Text style={styles.choiceTitle}>Az enyém maradjon</Text>
-                      <Text style={styles.choiceValue}>{mezo.mine}</Text>
-                    </Pressable>
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() =>
-                        setDontes({ ...dontes, [mezo.field]: "theirs" })
-                      }
-                      style={[
-                        styles.choice,
-                        dontes[mezo.field] === "theirs" && styles.choiceOn,
-                      ]}
-                    >
-                      <Text style={styles.choiceTitle}>
-                        Maradjon, ami most a rendszerben van
-                      </Text>
-                      <Text style={styles.choiceValue}>{mezo.theirs}</Text>
-                    </Pressable>
-                  </>
-                ) : (
-                  /*
-                    NINCS ELTERES: nincs mit eldonteni. A sor mégis latszik,
-                    kulonben a szerelo azt hinne, hogy ezt a mezot elfelejtette
-                    atirni.
-                  */
-                  <Text style={styles.value}>
-                    {mezo.mine} (ez már így áll a rendszerben is)
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setDontes({ ...dontes, [mezo.field]: "mine" })}
+                  style={[
+                    styles.choice,
+                    dontes[mezo.field] === "mine" && styles.choiceOn,
+                  ]}
+                >
+                  <Text style={styles.choiceTitle}>Az enyém maradjon</Text>
+                  <Text style={styles.choiceValue}>{mezo.mine}</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() =>
+                    setDontes({ ...dontes, [mezo.field]: "theirs" })
+                  }
+                  style={[
+                    styles.choice,
+                    dontes[mezo.field] === "theirs" && styles.choiceOn,
+                  ]}
+                >
+                  <Text style={styles.choiceTitle}>
+                    Maradjon, ami most a rendszerben van
                   </Text>
-                )}
+                  <Text style={styles.choiceValue}>{mezo.theirs}</Text>
+                </Pressable>
               </View>
             ))}
 

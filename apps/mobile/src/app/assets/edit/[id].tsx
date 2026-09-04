@@ -16,6 +16,7 @@ import { getAsset, updateAsset, type AssetDetail } from "@/lib/api/assets";
 import { listPartnerUnits } from "@/lib/api/partners";
 import {
   assetEditFormFrom,
+  baseValuesFor,
   buildAssetPatch,
   hasAssetChanges,
   type AssetEditForm,
@@ -148,7 +149,17 @@ export default function AssetEditScreen() {
               expectedUpdatedAt: patch.expectedUpdatedAt,
             }),
             assetId: asset.id,
-            payload: { assetName: asset.name, patch },
+            /**
+             * AZ ALAPERTEK IS BEKERUL, ES CSAK ITT LEHET FELVENNI: a feloldo
+             * keperno ebbol tudja megkulonboztetni, hogy MAS is hozzanyult-e a
+             * mezohoz, vagy egyedul a szerelo irta at. A sorba tetel utan ez az
+             * allapot mar sehol nincs meg.
+             */
+            payload: {
+              assetName: asset.name,
+              patch,
+              base: baseValuesFor(editable(asset), patch),
+            },
             createdAt: new Date().toISOString(),
           }),
         statusOf: (cause) => (cause instanceof ApiError ? cause.status : null),

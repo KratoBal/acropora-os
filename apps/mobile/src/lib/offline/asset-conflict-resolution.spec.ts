@@ -63,11 +63,9 @@ describe("mi az enyém és mi a másiké", () => {
 
   it("az EGYEZŐ mező is a listán marad, csak nem tér el", () => {
     /*
-      NEM SZURJUK KI, es ez dontes: a szerelo a sajat javitasait keresi a
-      listan, es egy hianyzo sor mellett azt hinne, hogy azt a mezot
-      elfelejtette.
-
-      MI PIROSIT: egy szures, ami csak az elteroket adja vissza.
+      A MODUL MINDEN ATIRT MEZOT VISSZAAD; hogy a kepernyo melyiket KERDEZI meg,
+      azt a `conflicting` donti el, nem ez a lista. Igy a keperno tud
+      osszefoglalo sort mutatni azokrol, amik magutol atmennek.
     */
     const rows = compareQueuedUpdate({
       patch: {
@@ -79,6 +77,85 @@ describe("mi az enyém és mi a másiké", () => {
 
     assert.equal(rows.length, 1);
     assert.equal(rows[0]!.differs, false);
+  });
+
+  it("CSAK ott ütközik, ahol MÁS is hozzányúlt", () => {
+    /*
+      EZ A LEGFONTOSABB ALLITAS EBBEN A FAJLBAN, ES EGY MERT TERVEZESI HIBAT KOT
+      LE (acrobot kikotese, 2026-09-04).
+
+      Az elso valtozat a beirt es a MOSTANI erteket vetette ossze, es minden
+      atirt mezorol kerdezett. Ha a szerelo Wilorol Grundfosra irta at a gyartot
+      es RAJTA KIVUL SENKI nem nyult hozza, a friss eszkozon meg mindig Wilo
+      all: elteres van, utkozes NINCS. A regi keperno megkerdezte volna, es ha a
+      szerelo zavaraban a masikat valasztja, a SAJAT javitasa tunik el csendben.
+
+      MI PIROSIT: ha az utkozes megint a beirt es a mostani ertek kulonbsegebol
+      szuletik.
+    */
+    const rows = compareQueuedUpdate({
+      patch: torzs,
+      current: most,
+      // A szerelo Wilot latott a gyartonal, es azt latja MOST is: nem utkozes.
+      // A statuszt viszont ACTIVE-nek latta, es most IN_REPAIR all: utkozes.
+      base: { manufacturer: "Wilo", status: "ACTIVE" },
+    });
+
+    const gyarto = rows.find((r) => r.field === "manufacturer");
+    const statusz = rows.find((r) => r.field === "status");
+
+    assert.equal(gyarto?.differs, true, "a beirt ertek elter a mostanitol");
+    assert.equal(gyarto?.conflicting, false, "de mas nem nyult hozza");
+    assert.equal(statusz?.conflicting, true);
+  });
+
+  it("ALAPÉRTÉK NÉLKÜL mindent ütközőnek vesz", () => {
+    /*
+      A mezo elott sorba tett modositasokon nincs alapertek, tehat NEM TUDJUK.
+      Ilyenkor a keperno TOBBET kerdez a kelletenel -- kellemetlen, de semmit
+      nem hallgat el. A forditott alapertelmezes CSENDBEN felulirna valaki mas
+      szandekos valtoztatasat.
+
+      MI PIROSIT: ha a hianyzo alapertek "nincs utkozes"-t jelentene.
+    */
+    const rows = compareQueuedUpdate({ patch: torzs, current: most });
+
+    assert.equal(
+      rows.every((r) => r.conflicting),
+      true,
+    );
+  });
+
+  it("a HELYSZÍN ütközését az AZONOSÍTÓ dönti el, nem a név", () => {
+    /*
+      A torzs azonositot visz, a keperno nevet mutat. Ha az utkozes a NEVEN
+      dolne el, egy ATNEVEZETT helyszin valtozasnak latszana, holott ugyanaz a
+      helyszin -- es a szerelo egy nem letezo utkozest oldana fel.
+    */
+    const rows = compareQueuedUpdate({
+      patch: { expectedUpdatedAt: "x", departmentId: "unit-9" },
+      current: most,
+      unitNames: { "unit-2": "Kazánház", "unit-9": "Pince" },
+      base: { departmentId: "unit-2" },
+    });
+
+    // A nev MAS ("Kazánház" a "Gépház" helyett), az azonosito UGYANAZ.
+    assert.equal(rows[0]!.conflicting, false);
+  });
+
+  it("az ÜRES szöveg és a hiány UGYANAZ az állapot", () => {
+    /*
+      A szerver a torlest `null`-kent tarolja, egy urlap viszont ures
+      karakterlancot adhat. Ha a kettot megkulonboztetnenk, egy ures mezo
+      "valtozasnak" latszana, es a szerelo egy nem letezo utkozest oldana fel.
+    */
+    const rows = compareQueuedUpdate({
+      patch: { expectedUpdatedAt: "x", model: "X-200" },
+      current: most,
+      base: { model: "" },
+    });
+
+    assert.equal(rows[0]!.conflicting, false);
   });
 
   it("az ÜRES értéknek NEVE van, nem üres cella", () => {

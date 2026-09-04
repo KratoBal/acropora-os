@@ -1,6 +1,7 @@
 import { ASSET_CRITICALITY_LABELS } from "../assets/asset-criticality";
 import { ASSET_STATUS_LABELS } from "../assets/asset-status";
 import type { UpdateAssetInput } from "../assets/asset-fields";
+import type { QueuedAssetUpdateBase } from "./asset-update-queue";
 
 /**
  * MELYIK ÉRTÉK MARADJON: AZ ENYÉM VAGY A MÁSIKÉ.
@@ -16,17 +17,29 @@ import type { UpdateAssetInput } from "../assets/asset-fields";
  * flotta szabálya erre pontos: egy feloldhatatlan ütközésnél azt kell
  * felkínálni, MELYIK ÉRTÉK MARADJON, nem egy újraküldést.
  *
+ * === HÁROM ÉRTÉK KELL HOZZÁ, NEM KETTŐ ===
+ *
+ * Az első változat a beírt és a MOSTANI értéket vetette össze, és ez ROSSZ
+ * KÉRDÉST tett fel a sorok többségén. Ha a szerelő Wilóról Grundfosra írta át a
+ * gyártót, és rajta kívül senki nem nyúlt hozzá, a friss eszközön még mindig
+ * Wilo áll -- ez ELTÉRÉSNEK látszik, holott nincs mit eldönteni. És ha a
+ * szerelő zavarában a másikat választja, a SAJÁT javítása tűnik el csendben.
+ *
+ * A kérdés tehát csak HÁROM értékből dönthető el: amit LÁTOTT, amit BEÍRT, és
+ * ami MOST áll. Az elsőt a sor hordozza (`QueuedAssetUpdate.base`).
+ *
+ * ÜTKÖZÉS az, ahol a mostani érték eltér attól, amit a szerelő LÁTOTT: ott
+ * MÁS is hozzányúlt. Ahol nem tér el, ott a javítás simán átmegy, és a
+ * képernyőnek nincs mit kérdeznie (acrobot kikötése, 2026-09-04: csak az
+ * ütköző mezők kerüljenek a listára).
+ *
  * === MIÉRT NEM A SZERVERTŐL KÉRJÜK EL AZ ÜTKÖZŐ MEZŐKET ===
  *
- * Kézenfekvő lenne, és rosszabb. A szerelőnek nem az a kérdése, hogy a szerver
- * MELYIK mezőn talált ütközést, hanem az, hogy amit ő beírt, az MIT ÍRNA FELÜL.
- * Ez a kettő nem ugyanaz: a szerver csak a ténylegesen ütköző mezőket nevezné
- * meg, a szerelő viszont a SAJÁT javításait keresi a képernyőn -- azokat is,
- * amelyek átmennének.
- *
- * Ezért ez a modul a SORBAN ÁLLÓ TÖRZSET veti össze a FRISSEN letöltött
- * eszközzel. Mindkettő megvan a telefonon, tehát nincs se új végpont, se új
- * mező, se olyan képesség, amit senki nem hív.
+ * Mert a telefonon MEGVAN mind a három érték, tehát nincs szükség se új
+ * végpontra, se új mezőre a válaszban -- és nem keletkezik olyan képesség sem,
+ * amit senki nem hív. A szerver a saját esemény-naplójából dolgozna, ami egy
+ * oda-vissza írt mezőt is ütközésnek látna; a szerelő kérdésére a látott érték
+ * a pontosabb válasz.
  *
  * === AMIT A KIMENET NEM DÖNT EL ===
  *
@@ -65,15 +78,21 @@ export interface ConflictFieldRow {
   mine: string;
   /** Ami MOST a szerveren áll, ugyanabban az alakban. */
   theirs: string;
-  /**
-   * ELTÉR-E A KETTŐ.
-   *
-   * NEM SZŰRJÜK KI a megegyezőket, és ez döntés: a szerelő a saját javításait
-   * keresi a listán, és egy hiányzó sor mellett azt hinné, hogy azt a mezőt
-   * elfelejtette. Aminél nincs eltérés, ott nincs is mit eldönteni -- azt a
-   * képernyő halványabban mutatja, nem elrejti.
-   */
+  /** Eltér-e a beírt és a mostani érték. MEGJELENÍTÉSI adat, nem döntés. */
   differs: boolean;
+  /**
+   * HOZZÁNYÚLT-E MÁS IS EHHEZ A MEZŐHÖZ.
+   *
+   * EZ dönti el, hogy a képernyő KÉRDEZ-e. Nem a `differs`: az akkor is igaz,
+   * amikor egyedül a szerelő írt át valamit, és ott nincs mit eldönteni.
+   *
+   * HIÁNYZÓ ALAPÉRTÉKNÉL IGAZ, és ez szándékos: a 2026-09-04 délelőttjén sorba
+   * tett módosításokon nincs alapérték, tehát nem tudjuk. Ilyenkor a képernyő
+   * TÖBBET kérdez a kelleténél -- ami kellemetlen, de nem hallgat el semmit.
+   * A fordított alapértelmezés (nem kérdezünk) csendben felülírná a másik
+   * ember szándékos változtatását.
+   */
+  conflicting: boolean;
 }
 
 const MEZO_NEVE: Record<ComparableField, string> = {
@@ -109,6 +128,8 @@ export function compareQueuedUpdate(input: {
    * képernyőn nem döntést segít, hanem elbizonytalanít.
    */
   unitNames?: Record<string, string>;
+  /** Amit a szerelő LÁTOTT. Hiányozhat: a mező előtt keletkezett sorokon nincs. */
+  base?: QueuedAssetUpdateBase;
 }): ConflictFieldRow[] {
   const rows: ConflictFieldRow[] = [];
 
@@ -122,10 +143,57 @@ export function compareQueuedUpdate(input: {
       mine,
       theirs,
       differs: mine !== theirs,
+      conflicting: masIsHozzanyult(field, input.current, input.base),
     });
   }
 
   return rows;
+}
+
+/**
+ * MÁS IS HOZZÁNYÚLT-E: a MOSTANI nyers érték eltér-e attól, amit a szerelő látott.
+ *
+ * NYERS ÉRTÉKEN hasonlít, nem a kiírt szövegen: a helyszínnél a törzs
+ * azonosítót visz, a képernyő nevet mutat, és egy átnevezett helyszín így
+ * változásnak látszana, holott ugyanaz a helyszín.
+ */
+function masIsHozzanyult(
+  field: ComparableField,
+  current: CurrentAssetLike,
+  base?: QueuedAssetUpdateBase,
+): boolean {
+  if (!base || !(field in base)) return true;
+  return nyersMost(field, current) !== nyersAlap(field, base);
+}
+
+function nyersMost(
+  field: ComparableField,
+  current: CurrentAssetLike,
+): string | null {
+  if (field === "status") return current.status;
+  if (field === "criticality") return current.criticality;
+  if (field === "departmentId") return current.unit?.id ?? null;
+  return uresNull(current[field]);
+}
+
+function nyersAlap(
+  field: ComparableField,
+  base: QueuedAssetUpdateBase,
+): string | null {
+  if (field === "status") return base.status ?? null;
+  if (field === "criticality") return base.criticality ?? null;
+  if (field === "departmentId") return base.departmentId ?? null;
+  return uresNull(base[field]);
+}
+
+/**
+ * AZ ÜRES SZÖVEG ÉS A HIÁNY UGYANAZ AZ ÁLLAPOT. A szerver a törlést `null`-ként
+ * tárolja, egy űrlap viszont üres karakterláncot adhat: ha a kettőt
+ * megkülönböztetnénk, egy üres mező „változásnak" látszana.
+ */
+function uresNull(value: string | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  return value.trim() === "" ? null : value;
 }
 
 /**
