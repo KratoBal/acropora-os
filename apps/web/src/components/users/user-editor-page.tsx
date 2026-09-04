@@ -24,6 +24,7 @@ import { useReturnTo } from "@/components/navigation-history";
 import { allNavigationPages } from "@/components/navigation";
 import { ApiError } from "@/lib/api/client";
 import { usersApi } from "@/lib/api/users";
+import { PartnerPicker } from "@/components/service-jobs/partner-picker";
 import { ROLE_LABELS, ROLE_OPTIONS } from "./role-labels";
 import { UserVisibleUnits } from "./user-visible-units";
 
@@ -58,6 +59,14 @@ export function UserEditorPage({ userId }: { userId?: string }) {
   const [role, setRole] =
     useState<(typeof ROLE_OPTIONS)[number]["value"]>("VIEWER");
   const [password, setPassword] = useState("");
+  /**
+   * MELYIK VEVO NEVEBEN LEP BE EZ A FIOK. Ures sztring = sajat kollega.
+   *
+   * A `null` es az ures sztring kozotti kulonbseget a MENTES forditja le: a
+   * szerver `null` erteket var a kotes megszuntetesehez, az urlap viszont
+   * sztringgel dolgozik, mint a tobbi mezo.
+   */
+  const [customerId, setCustomerId] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [passwordNotice, setPasswordNotice] = useState<string | null>(null);
@@ -77,6 +86,7 @@ export function UserEditorPage({ userId }: { userId?: string }) {
       setNickname(next.nickname ?? "");
       setEmail(next.email);
       setRole(next.role);
+      setCustomerId(next.customerId ?? "");
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -119,6 +129,15 @@ export function UserEditorPage({ userId }: { userId?: string }) {
             nickname,
             email,
             role,
+            /**
+             * AZ URES MEZO `null`-KENT MEGY, NEM URES SZTRINGKENT. A szerver a
+             * `null` erteket olvassa a kotes megszunteteselnek; egy ures
+             * sztring egy nem letezo vevo azonositoja lenne, es a mentes
+             * "a megadott vevo nem talalhato" hibaval allna meg -- olyan
+             * hibaval, amit a felhasznalo nem tud ertelmezni, mert nem is
+             * valasztott vevot.
+             */
+            customerId: customerId || null,
             expectedUpdatedAt: user.updatedAt,
           }),
         );
@@ -129,6 +148,7 @@ export function UserEditorPage({ userId }: { userId?: string }) {
           email,
           role,
           password: password || undefined,
+          customerId: customerId || null,
         });
         router.push(`/admin/users/${created.id}`);
       }
@@ -263,6 +283,31 @@ export function UserEditorPage({ userId }: { userId?: string }) {
                 ))}
               </Select>
             </FormField>
+          </div>
+          {/*
+            A PARTNER-KOTES KULON SORBAN, A TOBBI MEZO ALATT -- ES EZ NEM
+            ELRENDEZES.
+
+            Ez a mezo nem a felhasznalo egy tulajdonsaga, mint a beceneve: ez
+            HATOKORT AD. Aki kap egy vevot, az annak a vevonek a sorait latja,
+            es CSAK azokat; aki elveszti, az BELSOSSE valik es MINDENT lat. A
+            magyarazo mondat ezert all mellette, nem a sugoban.
+          */}
+          <div className="mt-4">
+            <FormField label="Vevő nevében lép be">
+              <PartnerPicker
+                id="felhasznalo-vevo"
+                value={customerId}
+                emptyLabel="Nem partner: saját kolléga"
+                onPick={(partner) => setCustomerId(partner.customerId)}
+                onClear={() => setCustomerId("")}
+              />
+            </FormField>
+            <p className="pt-1 text-xs text-slate-500">
+              Ettől függ, mit lát: egy vevőhöz kötött fiók csak annak a vevőnek
+              a sorait látja. Partner nélkül a fiók saját kollégáé, és mindent
+              lát. Egy fiók legfeljebb egy partnerhez tartozhat.
+            </p>
           </div>
           {!user ? (
             <div className="mt-4">

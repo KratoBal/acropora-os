@@ -44,5 +44,13 @@ export function toUserDetail(user: User): UserDetail {
      * `undefined` allna itt, a mezo CSENDBEN eltunne a valaszbol.
      */
     supplierId: user.supplierId ?? null,
+    /**
+     * A PARJA, ES 2026-09-04-IG HIANYZOTT INNEN. A sema mindig is ismerte, a
+     * hatokor-szamitas mindig is olvasta -- a KIADOTT alakbol maradt ki. Pont
+     * az a hiba, amit ennek a fajlnak a fejlece leir: a mezo kiesik, a fordito
+     * hallgat (a Prisma sor tobbet tud, mint a kiadott alak), es a kepernyon
+     * ures hely latszik.
+     */
+    customerId: user.customerId ?? null,
   };
 }
