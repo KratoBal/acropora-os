@@ -131,6 +131,7 @@ export type {
   AssetProductSummary,
   AssetQrCode,
   AssetStatus,
+  AssetUnitSummary,
   CreateAssetInput,
   UpdateAssetInput,
 } from "./asset-management.js";
