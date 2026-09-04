@@ -74,6 +74,20 @@ export interface MedusaImageLink {
   lastSyncedAt: Date | null;
 }
 
+/**
+ * EGY SOR, AMIT A `toLink` NEM TUD VISSZAOLVASNI -- a szamlalo latja, a
+ * vetites nem. Nincs benne URL, mert epp az hianyzik vagy ertelmezhetetlen.
+ */
+export interface BrokenImageLinkRow {
+  entityId: string;
+  externalId: string;
+}
+
+export interface MedusaImageLinkListing {
+  links: MedusaImageLink[];
+  broken: BrokenImageLinkRow[];
+}
+
 /** Ugyanarra a kepre MAS bolti fajl all mar, vagy forditva. */
 export class MedusaImageLinkConflictError extends Error {
   constructor(
@@ -96,6 +110,7 @@ interface ExternalReferenceRow {
 export interface MedusaImageLinkDatabase {
   externalReference: {
     findUnique(args: unknown): Promise<ExternalReferenceRow | null>;
+    findMany(args: unknown): Promise<ExternalReferenceRow[]>;
     create(args: unknown): Promise<ExternalReferenceRow>;
     update(args: unknown): Promise<ExternalReferenceRow>;
   };
@@ -158,6 +173,43 @@ export class MedusaImageLinkRepository {
       },
     });
     return row ? toLink(row) : null;
+  }
+
+  /**
+   * MINDEN LEKEPEZES-SOR, OLVASASRA.
+   *
+   * === MIERT KELL, HOLOTT KET KERESO MAR VAN ===
+   *
+   * A `findByImage` es a `findByMedusaFileId` is olyan erteket VAR, amit a
+   * hivo mar ismer (termek plusz URL, illetve bolti fajl-kulcs). Amig csak ez
+   * a ketto letezett, a "hany sor all igy" alaku kerdesekre a kodban NEM volt
+   * olvaso ut -- az adat a mi adatbazisunkban allt, csak nem lehetett
+   * megkerdezni. Ez a metodus azt a rest zarja be, es semmi mast: OLVAS.
+   *
+   * === A TORT SOR NEM DOB, HANEM KULON ALL ===
+   *
+   * A `toLink` szandekosan HIBAT dob a visszaolvashatatlan soron: a vetites
+   * utjaban egy `null` URL csendben egy kep nelkuli termeket eredmenyezne. Egy
+   * SZAMLALO utjaban viszont ugyanaz a dobas azt jelentene, hogy EGY tort sor
+   * megoli az EGESZ meresent -- es epp azt nem tudnank meg, hany ilyen van.
+   *
+   * Ezert itt a tort sor nem kivetel, hanem SAJAT SZAM. A ket ut ket
+   * kulonbozo teendot szolgal ki, es ezt a kulonbseget a tipus is mutatja.
+   */
+  async listAll(): Promise<MedusaImageLinkListing> {
+    const rows = await this.database.externalReference.findMany({
+      where: { system: SYSTEM, entityType: ENTITY_TYPE },
+      orderBy: { entityId: "asc" },
+    });
+
+    const links: MedusaImageLink[] = [];
+    const broken: BrokenImageLinkRow[] = [];
+    for (const row of rows) {
+      if (row.entityId.indexOf(":") < 0 || row.externalKey === null)
+        broken.push({ entityId: row.entityId, externalId: row.externalId });
+      else links.push(toLink(row));
+    }
+    return { links, broken };
   }
 
   /** Melyik kepunk tartozik ehhez a bolti fajl-kulcshoz, ha van ilyen. */
