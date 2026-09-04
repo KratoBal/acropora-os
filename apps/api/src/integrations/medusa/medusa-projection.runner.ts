@@ -44,7 +44,10 @@ import {
   MedusaProductProjectionService,
   type ProjectionPublicationReport,
 } from "./medusa-product-projection.service.js";
-import { storefrontSalesChannelId } from "./medusa-sales-channel.config.js";
+import {
+  MEDUSA_STOREFRONT_SALES_CHANNEL_ENV,
+  storefrontSalesChannelId,
+} from "./medusa-sales-channel.config.js";
 import { createDocumentStore } from "../../service-assets/document-store/document-store.provider.js";
 import { MedusaImageLinkRepository } from "./medusa-image-link.repository.js";
 import {
@@ -416,6 +419,40 @@ export async function runProjectionCli(
     return 1;
   }
   const { forgetOnly, from } = parsed.selection;
+
+  /**
+   * A HARMADIK KORAI KILEPES: A CSATORNA-AZONOSITO HIANYA.
+   *
+   * A ket masik konfiguracios kilepes (a hitelesito adat es a cim hianya) a
+   * lenti `catch` agban all, es a komment ott ki is mondja, miert kap kulon
+   * sort a ketto: mas a teendo. Ez a harmadik pontosan oda tartozik, csak
+   * eddig NEM allt meg -- a hiany a szolgaltatasban derult ki, TERMEKENKENT.
+   *
+   * MERVE 2026-09-04: egy futasban huszonket azonos megallas keletkezett
+   * (`sales-channel-not-configured`), egyetlen okra. A vetites aznap negyszer
+   * futott, es minden korben at kellett olvasni azt a huszonketto sort, hogy
+   * megtalaljuk az EGY valodi okot. A megallas maga helyes es nevesitett --
+   * csak huszonketszer all elo ott, ahol egyszer kellene, MIELOTT barmi
+   * elindul.
+   *
+   * AMIT EZ NEM CSINAL, es ezt ki kell mondani: nem potolja a hianyzo
+   * erteket, es egy mar elindult futast nem javit meg. Csak annyit valtoztat,
+   * hogy a kovetkezo ilyen esetben EGY sorbol kiderul, mit kell beallitani.
+   *
+   * ES A TERMEKENKENTI MEGALLAS MARAD. Nem ez valtja ki: a szolgaltatast mas
+   * hivo is hasznalhatja, es egy belso orzo, amit egy kulso orzo "feleslegesse
+   * tesz", pontosan addig felesleges, amig valaki egy masodik hivot nem ir.
+   */
+  if (!forgetOnly && storefrontSalesChannelId(env) === null) {
+    out.stderr(
+      `Nincs beállítva a ${MEDUSA_STOREFRONT_SALES_CHANNEL_ENV} ` +
+        `környezeti változó, ezért egyetlen termék sem vetíthető: ` +
+        `csatorna-kötés nélkül a vetítés félkész állapotot hagyna. ` +
+        `Az érték KÖRNYEZETENKÉNT más -- a stage csatornája az élesen nem ` +
+        `létezik, tehát nem örökölhető át. Nem küldtünk semmit.\n`,
+    );
+    return 1;
+  }
 
   /**
    * A KOTEG STABIL RENDEZESSEL JON, es ez nem kozmetika: a `--from` egy adott

@@ -226,8 +226,19 @@ describe("a vetítés hitelesítő adata", () => {
   it("stops with one line when there is no key anywhere", async () => {
     const { out, stdout, stderr } = collector();
 
+    /**
+     * A CSATORNA-AZONOSITO AZERT ALL BE, MERT EZ A TESZT A KULCSROL SZOL.
+     *
+     * 2026-09-04 ota a csatorna-azonosito hianya KORABBAN allitja meg a
+     * parancsot, mint a hitelesito adate -- a legolcsobb ellenorzes elol. Ha
+     * itt egyik sincs beallitva, a csatorna uzenete nyerne, es ez a teszt a
+     * MASIK uzenetet merne. Az allitasa nem valtozott, csak a hatoköre lett
+     * pontosabb: "nincs kulcs SEHOL, de a tobbi beallitas megvan".
+     */
     const code = await withEnvironment(withoutEnvironmentKey, async () =>
-      runProjectionCli(["prod_teszt"], out, provider(environmentSetting)),
+      runProjectionCli(["prod_teszt"], out, provider(environmentSetting), {
+        MEDUSA_STOREFRONT_SALES_CHANNEL_ID: "sc_1",
+      }),
     );
 
     assert.equal(code, 1);
@@ -956,7 +967,10 @@ describe("a kapcsolodas HTTP-hibaja", () => {
     */
     const { out, stdout, stderr } = collector();
 
-    const code = await runProjectionCli(["prod_teszt"], out, dobojProvider());
+    /** Ugyanaz az ok, mint fent: ez a teszt a HTTP-hibarol szol, nem a csatornarol. */
+    const code = await runProjectionCli(["prod_teszt"], out, dobojProvider(), {
+      MEDUSA_STOREFRONT_SALES_CHANNEL_ID: "sc_1",
+    });
 
     assert.equal(code, 1);
     assert.match(stderr.join(""), /HTTP 401/);
@@ -1124,6 +1138,39 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
     );
     assert.match(stdout.join(""), /prod-1/);
     assert.equal(stderr.join(""), "");
+  });
+
+  /**
+   * A CSATORNA-AZONOSITO HIANYA A LEGOLCSOBB ELLENORZES, ES ELOL ALL.
+   *
+   * MERVE 2026-09-04: a hiany eddig a szolgaltatasban derult ki, TERMEKENKENT
+   * -- egy futasban huszonket azonos `sales-channel-not-configured` sor, egy
+   * okra. A megallas maga helyes; a HELYE volt rossz.
+   *
+   * AZ ALLITAS EROSEBB, MINT A KILEPESI KOD: az adatbazishoz EGYETLEN hivas
+   * sem megy. Egy `assert.equal(code, 1)` onmagaban akkor is zold lenne, ha a
+   * parancs vegigolvasna a katalogust, es csak a legvegen allna meg.
+   */
+  it("a csatorna-azonosito hianyaban meg sem indul: nulla adatbazis-hivas", async () => {
+    const { out, stdout, stderr } = collector();
+    const { db, hivasok } = adatbazis();
+
+    const code = await runProjectionCli(
+      ["--limit", "5"],
+      out,
+      provider(environmentSetting),
+      { MEDUSA_BACKEND_URL: "https://bolt.test" },
+      db,
+    );
+
+    assert.equal(code, 1);
+    assert.equal(
+      hivasok.length,
+      0,
+      `Adatbázis-hívások: ${hivasok.map((h) => h.metodus).join(", ")}`,
+    );
+    assert.match(stderr.join(""), /MEDUSA_STOREFRONT_SALES_CHANNEL_ID/);
+    assert.equal(stdout.join(""), "");
   });
 
   /** A bolt valasza, a ket alakkal, amit a torzs olvas: JSON es nyers bajtok. */
