@@ -571,4 +571,94 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
      */
     assert.deepEqual(report.relationReferencesByField, {});
   });
+
+  /**
+   * AZ ORZO: EGY SZEGENYEBB IMPORT NEM IRHAT FELUL EGY GAZDAGABB HALMAZT.
+   *
+   * Ket ut ir ebbe a tablaba ugyanazzal a `source` ertekkel, es nem ugyanannyit
+   * lat. A kar alakja mindig ugyanaz: torles, majd kevesebb sor vissza. Ez a
+   * feltetel a muvelet pillanataban merheto, tehat a leallas MEGELOZI a kart.
+   *
+   * A hibauzenet a KET SZAMOT viszi, mert enelkul az olvaso nem tudna
+   * eldonteni, hogy egy szandekos torlest vagy egy utkozest lat.
+   */
+  it("refuses to replace a larger relation set with a smaller one", async () => {
+    await cleanup();
+    const rich = await stageApprove(
+      await catalogFixture({
+        categoryName: "Guard category",
+        firstName: "Guard product",
+        firstImage: "https://example.test/guard.jpg",
+        secondReference: "APPLY-SKU-1",
+      }),
+      "apply-guard-rich.xlsx",
+    );
+    const first = await applyService.apply(rich, "integration-owner");
+    assert.equal(first.relationsSynchronized, 2);
+
+    const poor = await stageApprove(
+      await catalogFixture({
+        categoryName: "Guard category",
+        firstName: "Guard product",
+        firstImage: "https://example.test/guard.jpg",
+      }),
+      "apply-guard-poor.xlsx",
+    );
+
+    await assert.rejects(
+      () => applyService.apply(poor, "integration-owner"),
+      (error: Error) =>
+        error.message.startsWith("UNAS_RELATION_WRITE_WOULD_LOSE:") &&
+        error.message.endsWith(":1:0"),
+    );
+
+    /**
+     * A KONTROLL: a leallas MEGELOZTE a torlest, nem utana szolt rola.
+     *
+     * Enelkul az allitas csak annyit mondana, hogy dobott egy hibat -- azt nem,
+     * hogy a ket kapcsolat MEGVAN. A tranzakcio visszagorgetese onmagaban is
+     * ezt adna, de a ket vedelem KULON all, es ezt kulon kell merni.
+     */
+    assert.equal(
+      await prisma.productRelation.count({ where: { source: "UNAS" } }),
+      2,
+    );
+  });
+
+  /**
+   * ES A PARJA: UGYANAZ A MENET, VALTOZATLAN HALMAZZAL, ATMEGY.
+   *
+   * Enelkul az orzo lehetne olyan, ami MINDEN masodik importot megallit -- es a
+   * fenti allitas ugyanugy zold lenne.
+   */
+  it("lets a second import through when the relation set does not shrink", async () => {
+    await cleanup();
+    const rich = await stageApprove(
+      await catalogFixture({
+        categoryName: "Guard category",
+        firstName: "Guard product",
+        firstImage: "https://example.test/guard.jpg",
+        secondReference: "APPLY-SKU-1",
+      }),
+      "apply-steady-1.xlsx",
+    );
+    await applyService.apply(rich, "integration-owner");
+
+    const again = await stageApprove(
+      await catalogFixture({
+        categoryName: "Guard category",
+        firstName: "Guard product renamed",
+        firstImage: "https://example.test/guard.jpg",
+        secondReference: "APPLY-SKU-1",
+      }),
+      "apply-steady-2.xlsx",
+    );
+    const second = await applyService.apply(again, "integration-owner");
+
+    assert.equal(
+      await prisma.productRelation.count({ where: { source: "UNAS" } }),
+      2,
+    );
+    assert.equal(second.unresolvedRelationReferences, 0);
+  });
 });
