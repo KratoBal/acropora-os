@@ -52,7 +52,7 @@ export interface MirrorPriceRow {
 }
 
 /** Melyik oldalról jött az ár. A jelentés ezt írja ki. */
-export type PriceOwner = "mirror" | "own";
+export type PriceOwner = "mirror" | "mirror-sale" | "own";
 
 export type PriceSourceRefusal =
   /**
@@ -132,10 +132,23 @@ export function resolvePriceSource(input: {
      */
     return {
       ok: true,
-      source: "mirror",
+      source: "mirror-sale",
       price: {
         sellingGrossPrice: input.mirror.saleGrossPrice,
-        sellingPriceCurrency: input.mirror.currency,
+        /**
+         * A TARTALEK ITT IS KELL, ES A HIANYA EPP EZT A 67 TERMEKET ALLITANA MEG.
+         *
+         * A tukor SOHA nem hordoz penznemet: se az import nem irja, se a UNAS
+         * nem kuldi (merve a #557-ben, ket iranybol). A listaar aga ezert
+         * forintra esik vissza -- ez az ag viszont KULON visszateres, es a
+         * tartalek kimaradt belole.
+         *
+         * Kovetkezmeny a javitas elott: minden AKTIV akcios termek
+         * `currency-missing` okkal allt volna meg. Nem hiba, nem tores, csak
+         * nulla publikalt ar -- ugyanaz a nema no-op, amit a #557 mar egyszer
+         * lezart, csak az uj agon ujra elo allt.
+         */
+        sellingPriceCurrency: input.mirror.currency ?? SUPPORTED_CURRENCY,
       },
     };
 
@@ -213,7 +226,21 @@ export function isSaleActive(mirror: MirrorPriceRow, now: Date): boolean {
  * ebben az egy szóban látszik.
  */
 export function describePriceSource(source: PriceOwner): string {
-  return source === "mirror"
-    ? "UNAS tükör (UnasProductSnapshot.grossPrice) -- a termék gazdája még a UNAS"
-    : "Acropora OS (ProductVariant.sellingGrossPrice) -- a gazdaságot átvettük";
+  return FORRAS_NEVE[source];
 }
+
+/**
+ * `Record`, nem `if`-lánc: egy NEGYEDIK forrás felvétele így FORDÍTÁSI HIBA.
+ *
+ * A korábbi kétágú feltétel mellett az AKCIÓS ág magától a listaár mondatát
+ * kapta meg, és a jelentés nem mondta meg, hogy kedvezményes árat küldött --
+ * pedig acrobot kikötése épp ez volt (2026-09-04): enélkül egy későbbi olvasó
+ * nem tudja eldönteni, MIÉRT alacsonyabb egy ár, mint amit várt.
+ */
+const FORRAS_NEVE: Record<PriceOwner, string> = {
+  mirror:
+    "UNAS tükör (UnasProductSnapshot.grossPrice) -- a termék gazdája még a UNAS",
+  "mirror-sale":
+    "UNAS tükör, AKCIÓS ár (UnasProductSnapshot.saleGrossPrice) -- a boltban most is ez az ár fut",
+  own: "Acropora OS (ProductVariant.sellingGrossPrice) -- a gazdaságot átvettük",
+};
