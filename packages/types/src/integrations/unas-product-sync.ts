@@ -20,6 +20,22 @@ export interface UnasProductSyncSummary {
    * Ez viszont esemény, és a legtöbb futáson nulla.
    */
   skippedSourceChangedCount: number;
+  /**
+   * A HASONLO TERMEKEK KAPCSOLATAINAK NEGY SZAMA -- ES A VESZTES CSAK AZ EGYIK.
+   *
+   * A negy szamlalo ereje az, hogy szetvalaszt: az `unresolved` ADATVESZTES (a
+   * celpont nincs a katalogusunkban), az onhivatkozas es a duplikatum viszont
+   * szandekos kihagyas. Egyetlen "kihagyva" szam mindharmat osszemosna, es a
+   * jelentes olvasoja a legnagyobbat nezne vesztesnek.
+   *
+   * A `similarRelationsWritten` az UJONNAN letrehozott sorok szama. NEM a
+   * kapcsolatok teljes szama: az iras torol es ujrair, tehat egy valtozatlan
+   * kapcsolat is beleszamit -- viszont egy termek, amit ez a futas nem irt, nem.
+   */
+  similarRelationsWritten: number;
+  similarReferencesUnresolved: number;
+  similarReferencesSelf: number;
+  similarReferencesDuplicate: number;
   windowStart: string | null;
   windowEnd: string;
 }
