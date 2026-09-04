@@ -10,6 +10,7 @@ import type {
   WorksheetDepartmentListResponse,
   WorksheetDepartmentSummary,
   WorksheetDetail,
+  WorksheetEntryListResponse,
   WorksheetListResponse,
 } from "@acropora/types";
 
@@ -104,6 +105,48 @@ export const worksheetsApi = {
     return apiRequest<WorksheetDetail>(`${worksheetPath(id)}/continue`, token, {
       method: "POST",
     });
+  },
+  /**
+   * A MUNKALAP MUNKANAPLOJA.
+   *
+   * A `canEdit` es az `editRefusal` A SZERVERTOL JON, es a felulet NEM szamolja
+   * ujra. A szabaly (a lap keszitoje vagy a hibajegy letrehozoja szerkeszthet)
+   * jogosultsagi szabaly: a szerver a KEREST is elutasitja. Ket masolat
+   * ugyanarra a szabalyra elcsuszhatna, es a felulete lenne a hangosabb --
+   * vagyis a rosszabbik iranyba.
+   */
+  entries(token: string, id: string, signal?: AbortSignal) {
+    return apiRequest<WorksheetEntryListResponse>(
+      worksheetPath(id, "/entries"),
+      token,
+      { signal },
+    );
+  },
+  addEntry(token: string, id: string, body: string) {
+    return apiRequest<WorksheetEntryListResponse>(
+      worksheetPath(id, "/entries"),
+      token,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body }),
+      },
+    );
+  },
+  /**
+   * A valasz a TELJES lista, nem az egy sor: a felulet igy egy korbol frissul,
+   * es nem all elo az az allapot, amikor az atirt sor mar uj, a tobbi meg regi.
+   */
+  updateEntry(token: string, id: string, entryId: string, body: string) {
+    return apiRequest<WorksheetEntryListResponse>(
+      `${worksheetPath(id, "/entries")}/${encodeURIComponent(entryId)}`,
+      token,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body }),
+      },
+    );
   },
   sign(token: string, id: string, input: SignWorksheetVersionInput) {
     return apiRequest<WorksheetDetail>(worksheetPath(id, "/sign"), token, {

@@ -466,6 +466,8 @@ export type {
   WorksheetAttachableItem,
   WorksheetAttachableListResponse,
   WorksheetDetail,
+  WorksheetEntryDetail,
+  WorksheetEntryListResponse,
   WorksheetFieldChange,
   WorksheetLineDetail,
   WorksheetLineInput,
