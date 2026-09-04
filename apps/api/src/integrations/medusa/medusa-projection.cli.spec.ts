@@ -4,6 +4,7 @@ import { glob } from "node:fs/promises";
 import { describe, it } from "node:test";
 
 import {
+  projectRendelesiKorlatok,
   projectValtozatMezok,
   projectUnasChannelRow,
   describeForgottenLink,
@@ -772,6 +773,54 @@ describe("projectValtozatMezok", () => {
       unit: null,
       secondaryUnit: null,
       secondaryUnitFactor: null,
+    });
+  });
+});
+
+describe("projectRendelesiKorlatok", () => {
+  it("atviszi a harom korlatot a tukorbol", () => {
+    const eredmeny = projectRendelesiKorlatok({
+      minimumOrderQuantity: { toString: () => "2" },
+      maximumOrderQuantity: { toString: () => "50" },
+      orderQuantityStep: { toString: () => "5" },
+    });
+
+    assert.equal(eredmeny.minimumOrderQuantity, "2");
+    assert.equal(eredmeny.maximumOrderQuantity, "50");
+    assert.equal(eredmeny.orderQuantityStep, "5");
+  });
+
+  /**
+   * A TAROLT PONTOSSAG, UGYANABBOL AZ OKBOL, MINT A MASODLAGOS EGYSEG
+   * SZORZOJANAL: az oszlop `Decimal(19, 6)`, tehat HAT tizedest tart, es egy
+   * szam-konverzio csendben kerekitene. A lepeskoz epp az a mezo, ahol ez
+   * szamit: a mert adatban kimert, meroedenybol adagolt tetelek allnak rajta.
+   */
+  it("a lepeskozt a tarolt alakjaban viszi at, nem szamma alakitva", () => {
+    const eredmeny = projectRendelesiKorlatok({
+      minimumOrderQuantity: null,
+      maximumOrderQuantity: null,
+      orderQuantityStep: { toString: () => "0.250000" },
+    });
+
+    assert.equal(eredmeny.orderQuantityStep, "0.250000");
+  });
+
+  /**
+   * A TUKOR-SOR HIANYA NEM HIBA: a `unasSnapshot` relacio ELHAGYHATO, tehat egy
+   * termeknek egyszeruen nem lehet tukre. Ilyenkor mind a harom `null`, es a
+   * vetites oldalan ebbol az kovetkezik, hogy a kulcsok ki sem mennek.
+   */
+  it("tukor nelkul mind a harom ertek null", () => {
+    assert.deepEqual(projectRendelesiKorlatok(null), {
+      minimumOrderQuantity: null,
+      maximumOrderQuantity: null,
+      orderQuantityStep: null,
+    });
+    assert.deepEqual(projectRendelesiKorlatok(undefined), {
+      minimumOrderQuantity: null,
+      maximumOrderQuantity: null,
+      orderQuantityStep: null,
     });
   });
 });

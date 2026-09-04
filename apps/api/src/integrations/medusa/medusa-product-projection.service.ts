@@ -109,6 +109,39 @@ export interface ProjectableProduct {
   secondaryUnit: string | null;
   secondaryUnitFactor: string | null;
   /**
+   * A RENDELESI KORLATOK: MINIMUM, MAXIMUM ES LEPESKOZ, mar szoveggé alakitva.
+   *
+   * A Medusa 2.19.0 termek- ES variant-modelljen NINCS rendelesi korlat mezo
+   * (merve a telepitett forras modelljein: a varianson `allow_backorder`,
+   * `barcode`, `ean`, `height`, `hs_code`, `images`, `length`,
+   * `manage_inventory`, `material`, `metadata`, `mid_code`, `name`, `options`,
+   * `origin_country`, `sku`, `thumbnail`, `title`, `upc`, `variant_rank`,
+   * `weight`, `width` all -- egyik sem mennyisegi korlat), tehat mind a harom a
+   * metaadatba megy, `unas_` elotaggal, a mertekegyseg precedense szerint.
+   *
+   * ES EGY CSAPDA, AMI NEV SZERINT KERESVE PONTOSAN FORDITVA LATSZIK: a Medusa
+   * ISMER `min_quantity` es `max_quantity` mezot, tehat ugy tunhet, hogy a
+   * rendelesi korlat mar tamogatott. NEM az: azok az ARHOZ tartoznak. A sajat
+   * dokumentacioja szo szerint azt mondja roluk, hogy "the minimum quantity
+   * required to be purchased for this price to be applied" -- vagyis mennyisegi
+   * arszab, nem rendelheto mennyiseg. Ugyanaz az alak, mint a
+   * `SupplierProduct.minimumOrderQuantity`, ami a BESZERZESI oldal minimuma.
+   *
+   * AMIT EZ AZ ATVITEL NEM AD: a bolt a korlatot NEM tartja be. A store
+   * kosar-validatora a mennyisegre egyetlen feltetelt allit (`gt(0)`), es az
+   * egyetlen mennyisegi kapu a keszlet, amit az `allow_backorder` kikapcsol --
+   * es a vetites azt kifejezetten igazra allitja. A metaadat tehat ATVISZI az
+   * adatot, de sem meg nem jeleniti, sem ki nem kenyszeriti; mindketto kulon
+   * dontes, es a kirakat epitesekor merul fel.
+   *
+   * A HIVO ALAKITJA SZOVEGGE, ugyanabbol az okbol, mint a masodlagos egyseg
+   * szorzojanal: a `Decimal` a Prisma tipusa, a metaadat kulcs-ertek parokat
+   * tart, es a tizedesek szamat itt mar nem lehet eldonteni.
+   */
+  minimumOrderQuantity: string | null;
+  maximumOrderQuantity: string | null;
+  orderQuantityStep: string | null;
+  /**
    * A MAI BOLTI CIM (a UNAS SefUrl-je), vagy `null`, ha nincs.
    *
    * A `null` NEM azt jelenti, hogy a termeknek ne lenne cime a boltban: azt,
@@ -521,6 +554,15 @@ export class MedusaProductProjectionService {
         : {}),
       ...(product.secondaryUnitFactor
         ? { unas_secondary_unit_factor: product.secondaryUnitFactor }
+        : {}),
+      ...(product.minimumOrderQuantity
+        ? { unas_minimum_order_quantity: product.minimumOrderQuantity }
+        : {}),
+      ...(product.maximumOrderQuantity
+        ? { unas_maximum_order_quantity: product.maximumOrderQuantity }
+        : {}),
+      ...(product.orderQuantityStep
+        ? { unas_order_quantity_step: product.orderQuantityStep }
         : {}),
     };
     const metadataPatch =
