@@ -25,13 +25,44 @@ export class UnasProductSyncService {
     private readonly repository: UnasProductSyncRepository,
   ) {}
 
+  /**
+   * A TELJES OSSZEVETES NEM UJ MECHANIZMUS, HANEM EGY MEGLEVO AG ELERHETOVE TETELE.
+   *
+   * A `kind: cursor ? "INCREMENTAL" : "FULL"` sor ota letezik a teljes ag: ha
+   * nincs kurzor, a `windowStart` `null` lesz, es a letoltes `timeStart` nelkul
+   * megy, tehat MINDENT vegignez. Csak epp egyetlen modon allt elo, az ELSO
+   * futaskor -- egy egyszer felallt rendszerben tehat soha tobbe nem futott le.
+   *
+   * MIERT KELL, ES MIERT NEM A TORLES MIATT. A diff motor a `canonicalHash`
+   * mezot hasonlitja, es az a TELJES `UnasApiProduct` objektumbol keszul. Amikor
+   * MI MAGUNK bovitjuk a kliens kinyereset egy uj mezovel -- ami minden
+   * migracios szeletnel megtortenik --, egyszerre mozdul el MINDEN termek hash-e.
+   * A napi futas viszont csak azokat hozza be, amik az ablakba esnek: a tobbi
+   * tukor-sor REGI marad, hatarido nelkul, es a kovetkezmeny nem hibauzenet,
+   * hanem egy hihetoen kitoltott mezo, ami ervenyesnek latszik.
+   *
+   * MIERT KAPCSOLO ES NEM A KURZOR TORLESE. A kurzor-sor torlese ALLAPOT-IRAS:
+   * ha a futas kozben elhasal, a kurzor mar nincs meg, tehat a KOVETKEZO
+   * UTEMEZETT futas is teljes lenne, keretlenul. Ez a kapcsolo nem nyul a tarolt
+   * allapothoz.
+   *
+   * ES SEHOVA NINCS BEKOTVE. Nincs utemezes es nincs indulaskori futas: az
+   * alapertelmezes a mai viselkedes, es teljes futas CSAK akkor indul, ha valaki
+   * kifejezetten azt keri. A ket teves irany ara nem egyforma -- egy elmaradt
+   * teljes futas HANGOS (valaki eszreveszi, hogy regi az adat), egy keretlen
+   * viszont tobbszoros terhelest tesz az UNAS fele olyankor, amikor senki nem
+   * szamit ra.
+   */
   async runIncremental(
     token: string,
     windowEnd = new Date(),
     pageSize = DEFAULT_PAGE_SIZE,
+    teljesOsszevetes = false,
   ): Promise<UnasProductSyncSummary> {
-    const cursor = await this.repository.getCursor();
-    const stockCursor = await this.repository.getStockCursor();
+    const cursor = teljesOsszevetes ? null : await this.repository.getCursor();
+    const stockCursor = teljesOsszevetes
+      ? null
+      : await this.repository.getStockCursor();
     const windowStart = cursor ? new Date(cursor.getTime() - OVERLAP_MS) : null;
     const stockWindowStart = stockCursor
       ? new Date(stockCursor.getTime() - OVERLAP_MS)

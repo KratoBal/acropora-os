@@ -2,6 +2,7 @@ import { Controller, Get, Param, Post, Query } from "@nestjs/common";
 import { PERMISSIONS } from "@acropora/types";
 
 import { RequirePermissions } from "../../auth/decorators/require-permissions.decorator.js";
+import { UnasProductSyncQueryDto } from "./dto/unas-product-sync-query.dto.js";
 import { UnasSyncRunsQueryDto } from "./dto/unas-sync-runs-query.dto.js";
 import { UnasAuthService } from "./unas-auth.service.js";
 import { UnasProductSyncRepository } from "./unas-product-sync.repository.js";
@@ -15,11 +16,16 @@ export class UnasProductSyncController {
     private readonly repository: UnasProductSyncRepository,
   ) {}
 
+  /**
+   * A `full=true` a TELJES osszevetest keri: a szinkron figyelmen kivul hagyja a
+   * kurzort, es minden terméket vegignez. Alapertelmezesben HIANYZIK, tehat a
+   * mai viselkedes valtozatlan -- teljes futas csak kifejezett keresre indul.
+   */
   @Post("sync")
   @RequirePermissions(PERMISSIONS.PRODUCTS_MANAGE)
-  async run() {
+  async run(@Query() query: UnasProductSyncQueryDto) {
     const token = await this.auth.getToken();
-    return this.sync.runIncremental(token);
+    return this.sync.runIncremental(token, undefined, undefined, query.full);
   }
 
   @Get("sync-runs/:runId")
