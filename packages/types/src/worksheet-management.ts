@@ -513,6 +513,13 @@ export interface SignWorksheetVersionInput {
    * es akkor a lapon egy HAMIS jelzes allna.
    */
   signerUserId?: string;
+  /**
+   * AZ ALAIROKOD, amit az UGYFEL ir be. CSAK a listarol valasztott agon kell.
+   *
+   * Az "egyik sem" agon nincs, es ez NEM kiskapu: ott a lap MAGA MONDJA KI,
+   * hogy nem a partner nyilvantartott munkatarsa irta ala.
+   */
+  signatureCode?: string;
   note?: string | null;
 }
 

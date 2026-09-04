@@ -41,10 +41,20 @@ export interface WorksheetSignatureForm {
   note: string;
   /** Az "egyik sem" agon beirt nev. Ures, ha listarol valasztottak. */
   typedName?: string;
+  /**
+   * AZ ALAIROKOD, amit az UGYFEL ir be. CSAK a listarol valasztott agon kell.
+   *
+   * Az "egyik sem" agon nincs, es ez NEM kiskapu: ott a lap MAGA MONDJA KI,
+   * hogy nem a partner nyilvantartott munkatarsa irta ala. A kod hianya tehat
+   * nem rejtve marad, hanem a dokumentum resze lesz.
+   */
+  signatureCode?: string;
 }
 
 export interface WorksheetSignaturePayload {
   decision: WorksheetSignatureDecision;
+  /** A kod, ha listarol valasztott alairorol van szo. */
+  signatureCode?: string;
   /**
    * A BEIRT NEV -- CSAK az "egyik sem" agon megy fel.
    *
@@ -64,7 +74,7 @@ export interface WorksheetSignaturePayload {
   note: string | null;
 }
 
-export type WorksheetSignatureField = "signerName" | "note";
+export type WorksheetSignatureField = "signerName" | "note" | "signatureCode";
 
 export type WorksheetSignatureResult =
   | { ok: true; payload: WorksheetSignaturePayload }
@@ -119,6 +129,7 @@ export function buildWorksheetSignaturePayload(
    * kliens adja: a szerver a valasztott sorbol veszi. Egy itteni hossz-kapu
    * olyan erteket vizsgalna, ami fel sem megy.
    */
+
   if (!signerUserId) {
     if (name.length < SIGNER_NAME_MIN)
       return {
@@ -160,6 +171,31 @@ export function buildWorksheetSignaturePayload(
       message: `A megjegyzés legfeljebb ${NOTE_MAX} karakter lehet, most ${note.length}.`,
     };
 
+  /**
+   * A LISTAROL VALASZTOTT AGON A KOD KOTELEZO, ES AZ ALAKJAT ITT IS NEZZUK.
+   *
+   * A SORREND SZANDEKOS: EZ AZ UTOLSO KAPU. Az elotte allo mezoket a SZERELO
+   * tolti ki (a nev az "egyik sem" agon, az elutasitas indoka), a kodot pedig
+   * az UGYFEL -- es ertelmetlen odaadni neki a telefont azert, hogy utana a
+   * szerelo sajat hianyzo mezoje alljon meg a mentest.
+   *
+   * A szerver ugyanezt ellenorzi, es a szerveré a dontő -- ez a masolat azert
+   * all itt, hogy a szerelo a valaszt AZONNAL lassa, ne egy korut utan, az
+   * ugyfel elott allva. Negy szamjegy, a kornyezo szokoz nem szamit: a telefon
+   * billentyuzete konnyen ad egyet, es a felhasznalo szemszogebol az UGYANAZ a
+   * kod.
+   */
+  if (signerUserId) {
+    const code = (form.signatureCode ?? "").trim();
+    if (!/^\d{4}$/.test(code))
+      return {
+        ok: false,
+        field: "signatureCode",
+        message:
+          "Az aláírókód négy számjegy. Kérd meg az ügyfelet, hogy írja be.",
+      };
+  }
+
   return {
     ok: true,
     payload: {
@@ -170,7 +206,9 @@ export function buildWorksheetSignaturePayload(
        * es a kliens dontene el, melyik nyer. Igy a szerver donti el, es a
        * lapra nem kerulhet mas nev, mint akit valasztottak.
        */
-      ...(signerUserId ? { signerUserId } : { signerName: name }),
+      ...(signerUserId
+        ? { signerUserId, signatureCode: (form.signatureCode ?? "").trim() }
+        : { signerName: name }),
       note: note ? note : null,
     },
   };

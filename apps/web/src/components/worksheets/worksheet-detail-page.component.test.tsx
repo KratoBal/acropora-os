@@ -243,6 +243,9 @@ describe("WorksheetDetailPage és az aláíró", () => {
     fireEvent.change(screen.getByLabelText("Aláíró"), {
       target: { value: "kontakt-1" },
     });
+    fireEvent.change(screen.getByLabelText("Aláírókód"), {
+      target: { value: "0000" },
+    });
     api.sign.mockResolvedValue(awaitingSignature());
     fireEvent.click(screen.getByRole("button", { name: "Döntés rögzítése" }));
     await waitFor(() => expect(api.sign).toHaveBeenCalled());
@@ -252,6 +255,7 @@ describe("WorksheetDetailPage és az aláíró", () => {
       Record<string, unknown>,
     ];
     expect(input.signerUserId).toBe("kontakt-1");
+    expect(input.signatureCode).toBe("0000");
     expect("signerName" in input).toBe(false);
   });
 
@@ -327,5 +331,72 @@ describe("WorksheetDetailPage és az aláíró", () => {
     });
     render(<WorksheetDetailPage worksheetId="worksheet-1" />);
     await screen.findByText(/NEM a partner munkatársa/);
+  });
+});
+
+/**
+ * AZ ALAIROKOD A WEBEN.
+ *
+ * Ugyanaz a szerzodes, mint a telefonon: a kod CSAK a listarol valasztott agon
+ * kell, es a mentes gomb addig zarva, amig nincs meg.
+ */
+describe("WorksheetDetailPage és az aláírókód", () => {
+  beforeEach(() => {
+    auth.session = session;
+    api.detail.mockReset();
+    api.sign.mockReset();
+    api.assignableUsers.mockResolvedValue({ items: [] });
+    api.signers.mockResolvedValue({
+      items: [{ id: "kontakt-1", name: "Vevő Vilmos" }],
+      emptyReason: null,
+    });
+  });
+
+  function awaitingSignature() {
+    const alap = detail(null);
+    return {
+      ...alap,
+      currentVersion: { ...alap.currentVersion, status: "AWAITING_SIGNATURE" },
+    };
+  }
+
+  it("a kód mezője CSAK a választott ágon jön elő", async () => {
+    /*
+      Az "egyik sem" agon NINCS kod, es ez nem kiskapu: ott a lap maga mondja
+      ki, hogy nem a partner nyilvantartott munkatarsa irta ala.
+
+      MI PIROSIT: ha a mezo feltetel nelkul ott allna -- akkor a szabad
+      szoveges agon olyat kernenk, amit a szerver nem is varna.
+    */
+    api.detail.mockResolvedValue(awaitingSignature());
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+    await screen.findByLabelText("Aláíró");
+    expect(screen.queryByLabelText("Aláírókód")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Aláíró"), {
+      target: { value: "kontakt-1" },
+    });
+    await waitFor(() =>
+      expect(screen.getByLabelText("Aláírókód")).toBeTruthy(),
+    );
+  });
+
+  it("HIÁNYOS kóddal a rögzítés gomb ZÁRVA marad", async () => {
+    /*
+      A szerver ugyanezt elutasitja; ez a kapu azert all itt, hogy a hiba NE egy
+      korut utan derüljön ki. Negy szamjegy: harom nem "majdnem jo".
+
+      MI PIROSIT: a hossz-feltetel elhagyasa a gomb tiltasabol.
+    */
+    api.detail.mockResolvedValue(awaitingSignature());
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+    await screen.findByLabelText("Aláíró");
+    fireEvent.change(screen.getByLabelText("Aláíró"), {
+      target: { value: "kontakt-1" },
+    });
+    fireEvent.change(await screen.findByLabelText("Aláírókód"), {
+      target: { value: "12" },
+    });
+    const gomb = screen.getByRole("button", { name: "Döntés rögzítése" });
+    expect((gomb as HTMLButtonElement).disabled).toBe(true);
   });
 });

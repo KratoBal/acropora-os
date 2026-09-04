@@ -517,6 +517,24 @@ model User {
   lastName          String         @default("")
   passwordHash      String?
   passwordUpdatedAt DateTime?
+  /// AZ ALAIROKOD HASHE -- amit az ugyfel embere ir be a munkalap alairasakor.
+  ///
+  /// Balazs kerese, 2026-09-04: a szerelo kivalasztja az alairot a listarol, es
+  /// az ugyfel beirja a sajat negyjegyu kodjat.
+  ///
+  /// UGYANAZ A TAROLAS, MINT A JELSZONAL (`users/password.util.ts`, sozott
+  /// scrypt), es nem uj konyvtarral: a kod ugyanaz a fajta titok, csak rovidebb.
+  /// NYERSEN SEHOL nem all.
+  ///
+  /// `null`, ha a soron nincs kod. AZ ILYEN FIOK NEM TUD ALAIRNI -- a hianyzo
+  /// kod SOHA nem ervenyes. Egy "nincs kod, tehat atengedjuk" ag pontosan azt a
+  /// bizonyito erot venne el, amiert az egesz keszul.
+  ///
+  /// AMIT EZ MA NEM AD MEG, ES TUDOTT DONTES: nincs hol megvaltoztatni. Az
+  /// alapertelmezett kod `0000`, es a valtoztatas a ticketing feluleté lesz,
+  /// ami meg nem letezik. Balazs ezt szo szerint tudomasul vette -- az elso
+  /// idoszakban az alairas ettol FORMALIS, es ez nem mulasztas.
+  signatureCodeHash String?
   role              UserRole
   isActive          Boolean        @default(true)
   avatarUrl         String?

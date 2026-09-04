@@ -24,6 +24,12 @@ const row = (overrides: Partial<User> = {}): User => ({
   avatarUrl: null,
   customerId: null,
   supplierId: null,
+  /**
+   * A KOD HASHE. A fixtura a TELJES sort adja, tehat egy uj oszlop itt
+   * FORDITASI HIBAT ad -- pontosan ugy, ahogy a fajl fejlece igeri. Nem
+   * mellekhatas volt, hanem az egyetlen hely, ahol a varrat szol.
+   */
+  signatureCodeHash: null,
   createdAt: new Date("2026-01-01T00:00:00.000Z"),
   updatedAt: new Date("2026-01-02T00:00:00.000Z"),
   ...overrides,

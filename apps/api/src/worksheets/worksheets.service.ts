@@ -7,6 +7,11 @@ import {
   describeEntryEditRefusal,
 } from "./worksheet-entry-permission.js";
 import { describeEmptySignerList } from "./worksheet-signer.js";
+import {
+  describeSigningCodeFailure,
+  isWellFormedSigningCode,
+} from "./worksheet-signing-code.js";
+import { verifyPassword } from "../users/password.util.js";
 import { randomUUID } from "node:crypto";
 
 import {
@@ -805,6 +810,15 @@ export class WorksheetsService {
         throw new BadRequestException(
           "A választott aláíró nem a munkalap partnerének munkatársa, ezért nem írhatja alá.",
         );
+      /**
+       * A KOD ITT DOL EL, ES A HIANYZO TAROLT KOD SOHA NEM ENGED AT.
+       *
+       * Egy "nincs kod, tehat atengedjuk" ag pontosan azt a bizonyito erot
+       * venne el, amiert az egesz keszul -- es a lapon UGYANUGY nezne ki, mint
+       * egy ellenorzott alairas. A harom bukasi mod harom kulon mondatot kap,
+       * mert a teendojuk mas.
+       */
+      await this.requireSigningCode(picked.id, input.signatureCode);
       return {
         signerName: picked.name,
         signerUserId: picked.id,
@@ -821,6 +835,31 @@ export class WorksheetsService {
         "Válassz aláírót a listáról, vagy add meg a nevét legalább két karakterrel.",
       );
     return { signerName: typed, signerUserId: null, signerSource: "TYPED" };
+  }
+
+  /**
+   * AZ ALAIROKOD ELLENORZESE.
+   *
+   * HAROM BUKASI MOD, HAROM KULON MONDAT, mert a teendojuk MAS: az alak-hiba a
+   * beirasrol szol, a hianyzo TAROLT kod a fiokrol, az elteres pedig arrol,
+   * hogy az ott allo ember nem tudja a kodot.
+   *
+   * ZAROLAS NINCS (Balazs dontese, 2026-09-04: "nem kell zarolas"). Negy
+   * szamjegy tizezer lehetoseg, tehat ez a kapu kitalalhato -- a hianya
+   * DONTES, nem elfelejtett resz, es azert all itt kiirva, hogy a kovetkezo
+   * olvaso ne hianynak nezze.
+   */
+  private async requireSigningCode(
+    signerUserId: string,
+    code: string | undefined,
+  ): Promise<void> {
+    if (!code || !isWellFormedSigningCode(code))
+      throw new BadRequestException(describeSigningCodeFailure("malformed"));
+    const stored = await this.repository.signingCodeHash(signerUserId);
+    if (!stored)
+      throw new BadRequestException(describeSigningCodeFailure("missing-code"));
+    if (!(await verifyPassword(code.trim(), stored)))
+      throw new BadRequestException(describeSigningCodeFailure("mismatch"));
   }
 
   /**

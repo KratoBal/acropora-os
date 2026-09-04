@@ -1,0 +1,64 @@
+-- AZ ALAIROKOD HASHE A FELHASZNALO SORAN.
+--
+-- Balazs kerese, 2026-09-04: a szerelo kivalasztja az alairot a lap partnerenek
+-- munkatarsai kozul, es az UGYFEL beirja a sajat negyjegyu kodjat. A legordulo
+-- azt rogziti, KINEK mondta magat; a kod az, ami ezt bizonyitja.
+--
+-- UGYANAZ A TAROLAS, MINT A JELSZONAL: sozott scrypt (`users/password.util.ts`),
+-- uj konyvtar nelkul. A kod ugyanaz a fajta titok, csak rovidebb -- nyersen
+-- sehol nem all.
+--
+-- === A MEGLEVO SOROKAT IS FELTOLTJUK, ES EZ NEM ELNEZES ===
+--
+-- Elso valtozatban ez a migracio SZANDEKOSAN hagyta `NULL`-on a meglevo
+-- sorokat, azzal az indokkal, hogy egy kiosztott kod minden fiokra ravinne egy
+-- alairo-kepesseget, amit senki nem kert. EZ AZ INDOK TEVES VOLT, es acrobot
+-- mutatta meg, miert.
+--
+-- KET DOLOG EGYUTT ZART VOLNA BE EGY AJTOT:
+--   * az alapertelmezett kodot az alkalmazas a LETREHOZASKOR irja, tehat a mar
+--     letezo sorokra soha nem fut le;
+--   * a hianyzo kod SOHA nem ervenyes (ez szandekos, es marad is).
+-- Vagyis egy MA letezo fiok, amit kesobb kotnek egy vevohoz (a felhasznalo
+-- adatlapjan, 2026-09-04 ota lehetseges), kod nelkul maradna -- es az elso
+-- alairas a HELYSZINEN hasalna el, az ugyfel elott.
+--
+-- ES AMIERT A KIOSZTAS NEM VISZ BE UJ KOCKAZATOT: alairni csak az tud, aki a
+-- lap partnerenek munkatarsakent szerepel a valasztoban (`User.customerId`).
+-- Egy sajat kollegan a kod INERT: nincs olyan lap, ahol felkinalnank. A regi
+-- indokom tehat nagyobb veszelyt allitott, mint ami all.
+--
+-- A GYENGESEGET VISZONT KI KELL MONDANI: ezzel minden fiok kodja `0000` lesz,
+-- amig valaki at nem irja. Ez NEM uj kockazat, hanem annak a kiterjesztese,
+-- amit Balazs mar ismer es vallalt (2026-09-04, szo szerint: "tudomasul
+-- vesszuk es majd legfeljebb szolok, hogy valtoztassuk meg"). Aki ezt kesobb
+-- olvassa: ez a mondat vedi meg attol, hogy biztonsagi hibanak nezze -- a
+-- megoldas a ticketing felulet, ahol a kod atirhato lesz.
+--
+-- === MIERT ALL ITT EGY BEEGETETT HASH, ES MIERT KOZOS A SO ===
+--
+-- A hash `sozott scrypt`, ugyanabban az alakban, amit a `users/password.util.ts`
+-- eloallit (`so:szarmaztatott`, hexben) -- SQL-bol ezt kiszamolni nem lehet,
+-- ezert egy elore kiszamolt ertek all itt.
+--
+-- Minden feltoltott sor UGYANAZT a sot kapja, es ez itt vallalhato: a so dolga
+-- az, hogy ugyanaz a titok ket helyen ne adjon ugyanolyan hasht. Ezek a sorok
+-- viszont MIND ugyanazt a NYILVANOSAN ISMERT erteket (`0000`) tartalmazzak --
+-- nincs mit elrejteni egymas elol. Az UJ kodok (amiket az alkalmazas ir) mar
+-- kulon-kulon sot kapnak.
+--
+-- === ES AMI MA HIANYZIK, TUDOTT DONTESKENT ===
+--
+-- Nincs hol megvaltoztatni: a valtoztatas a ticketing feluleté lesz, ami meg
+-- nem letezik. Balazs ezt szo szerint tudomasul vette. Az elso idoszakban tehat
+-- minden uj fiok kodja `0000`, es az alairas ettol FORMALIS -- ez dontes, nem
+-- mulasztas. Aki ezt kesobb olvassa: a megoldas a ticketing felulet, nem a kod
+-- kikapcsolasa.
+
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN "signatureCodeHash" TEXT;
+
+-- A `0000` scrypt-hashe, a `users/password.util.ts` alakjaban.
+UPDATE "User"
+   SET "signatureCodeHash" = 'fca2dc31ce99c5b6be25cb863940812d:321e8e555faec36fc0ec97822548e4ee28447255426463e14429e6683c9ddb39e9f259e61100fcc51a7a851c9ed8920fc5fdffaaf27f28ca07fa9aec1fd857dd'
+ WHERE "signatureCodeHash" IS NULL;

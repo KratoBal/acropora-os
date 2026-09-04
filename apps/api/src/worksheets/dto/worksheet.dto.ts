@@ -251,6 +251,18 @@ export class SignWorksheetVersionDto {
    */
   @IsString() @IsOptional() signerUserId?: string;
   /**
+   * AZ ALAIROKOD, amit az UGYFEL ir be. CSAK a listarol valasztott agon kell.
+   *
+   * A kotelezoseget a SZOLGALTATAS mondja ki, nem ez a dekorator-sor: a szabaly
+   * KET mezot kot ossze (ha van `signerUserId`, akkor a kod kotelezo). Ugyanaz
+   * a megfontolas, mint az elutasitas indokanal.
+   *
+   * NEM `@MinLength(4)`: az alakot a `worksheet-signing-code.ts` ellenorzi,
+   * mert ott MERHETO, es mert a harom bukasi mod HAROM KULON mondatot kap --
+   * egy dekorator-uzenet mind a haromra ugyanazt mondana.
+   */
+  @IsString() @IsOptional() signatureCode?: string;
+  /**
    * Elfogadásnál megjegyzés, elutasításnál INDOK -- és akkor kötelező.
    *
    * A kötelezőséget a szolgáltatás mondja ki, nem ez a dekorátor-sor, mert a

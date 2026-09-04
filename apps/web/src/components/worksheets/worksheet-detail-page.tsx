@@ -62,6 +62,8 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
      * "egyik sem", vagyis a nevet az iroda irja be -- es a lap ezt KIMONDJA.
      */
     signerUserId: "",
+    /** Az alairokod. CSAK a listarol valasztott agon kell. */
+    signatureCode: "",
     note: "",
   });
 
@@ -462,6 +464,31 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
                 </p>
               ) : null}
             </FormField>
+            {/*
+              A KOD A VALASZTAS UTAN JON ELO, es az "egyik sem" agon NINCS --
+              ott a lap maga mondja ki, hogy nem a partner nyilvantartott
+              munkatarsa irta ala.
+            */}
+            {signature.signerUserId !== "" ? (
+              <FormField label="Aláírókód" className="md:col-span-2">
+                <Input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  aria-label="Aláírókód"
+                  value={signature.signatureCode}
+                  onChange={(event) =>
+                    setSignature((current) => ({
+                      ...current,
+                      signatureCode: event.target.value,
+                    }))
+                  }
+                />
+                <p className="pt-1 text-xs text-slate-500">
+                  Négy számjegy. Az ügyfél munkatársa adja meg.
+                </p>
+              </FormField>
+            ) : null}
             {signature.signerUserId === "" ? (
               <FormField label="Aláíró neve" className="md:col-span-2">
                 <Input
@@ -500,10 +527,16 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
              * nevet a SZERVER veszi a valasztott sorbol -- egy itteni kapu
              * olyan mezot kovetelne, ami fel sem megy.
              */
+            /**
+             * A NEV CSAK AZ "EGYIK SEM" AGON KOTELEZO, a KOD pedig CSAK a
+             * valasztott agon. A ket ag ket kulon mezot kovetel, es egyik sem
+             * kovetel a masikeval.
+             */
             disabled={
               busy ||
-              (signature.signerUserId === "" &&
-                signature.signerName.trim().length < 2)
+              (signature.signerUserId === ""
+                ? signature.signerName.trim().length < 2
+                : signature.signatureCode.trim().length !== 4)
             }
             onClick={() =>
               void run(() =>
@@ -514,7 +547,10 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
                    * szerver ket kulonbozo allitast kapna arrol, ki irta ala.
                    */
                   ...(signature.signerUserId
-                    ? { signerUserId: signature.signerUserId }
+                    ? {
+                        signerUserId: signature.signerUserId,
+                        signatureCode: signature.signatureCode.trim(),
+                      }
                     : { signerName: signature.signerName.trim() }),
                   note: signature.note.trim() ? signature.note.trim() : null,
                 }),

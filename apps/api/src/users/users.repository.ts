@@ -5,6 +5,7 @@ import { Prisma, Repository, prisma } from "@acropora/database";
 import type { UserDetail, UserListResponse } from "@acropora/types";
 
 import { hashPassword } from "./password.util.js";
+import { DEFAULT_SIGNING_CODE } from "../worksheets/worksheet-signing-code.js";
 import { userAuditMetadata } from "./user-audit.js";
 import { toUserDetail, toUserSummary } from "./user-view.js";
 import type {
@@ -83,6 +84,20 @@ export class UsersRepository extends Repository {
             role: input.role,
             passwordHash,
             passwordUpdatedAt: passwordHash ? new Date() : null,
+            /**
+             * AZ ALAIROKOD A LETREHOZASKOR KERUL RA, MINDENKIRE.
+             *
+             * Balazs kerese: a felhasznalo a felvitelekor kap egy
+             * alapertelmezett kodot. NEM szurunk arra, hogy vevohoz kotott-e:
+             * egy fiokot KESOBB is hozza lehet kotni egy vevohoz, es a
+             * "csak a vevo-oldaliaknak" szabaly epp azt a kesobbi esetet
+             * hagyna kod nelkul -- ott derulne ki, az ugyfel elott allva.
+             *
+             * A MEGLEVO fiokokon `null` marad: azokra nem osztunk kodot
+             * visszamenoleg, mert az egy alairo-kepesseget vinne ra
+             * mindenkire, amit senki nem kert.
+             */
+            signatureCodeHash: await hashPassword(DEFAULT_SIGNING_CODE),
             /**
              * Absent and null both mean "our own colleague". The column is
              * nullable, so writing null is the same as leaving it out - the
