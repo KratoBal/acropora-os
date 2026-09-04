@@ -2,6 +2,11 @@ import { pathToFileURL } from "node:url";
 
 import { prisma, type Prisma as PrismaTypes } from "@acropora/database";
 import { isKnownCatalogAuthority } from "./medusa-publication.policy.js";
+import {
+  describePriceSource,
+  resolvePriceSource,
+  type PriceOwner,
+} from "./medusa-price-source.js";
 
 import { MedusaConfigurationError } from "./medusa-admin.client.js";
 import { MedusaConnectionError } from "./medusa-connection.types.js";
@@ -63,15 +68,49 @@ export interface PricingCliDatabase {
       args: unknown,
     ): Promise<{ id: string; catalogAuthority: string | null }[]>;
   };
+  /**
+   * A TÜKÖR, ÉS AZÉRT ADATBÁZIS-PARAMÉTERKÉNT, mint a másik kettő: a
+   * forrás-választás SZABÁLY (`medusa-price-source.ts`), tehát adatbázis nélkül
+   * is mérhetőnek kell lennie.
+   */
+  unasProductSnapshot: {
+    findMany(args: unknown): Promise<
+      {
+        productId: string;
+        grossPrice: PrismaTypes.Decimal | null;
+        currency: string | null;
+        saleGrossPrice: PrismaTypes.Decimal | null;
+        saleStartsAt: Date | null;
+        saleEndsAt: Date | null;
+      }[]
+    >;
+  };
 }
 
 export interface PricingTarget {
   osProductId: string;
   sku: string;
+  /** Honnan jött az ár. A jelentés ezt írja ki, és nem a hívó találgatja. */
+  source: PriceOwner;
   price: {
     sellingGrossPrice: PrismaTypes.Decimal | null;
     sellingPriceCurrency: string | null;
   };
+}
+
+/**
+ * A FELOLDÁS EREDMÉNYE: AMI MEHET, ÉS AMI NEM -- EGYSZERRE.
+ *
+ * Korábban ez egy `PricingTarget[] | { error }` unió volt, tehát EGY változat
+ * elakadása az EGÉSZ argumentumot elvitte. A tükör-ág után ez már nem
+ * elviselhető: egy terméknek több változata van, és ha az egyiknél aktív akció
+ * fut, a többinek attól még mennie kell. A fordított hiba viszont rosszabb
+ * lenne: ha csak a mehetőket adnánk vissza, az elakadt változat NÉMÁN esne ki.
+ */
+export interface PricingTargetResolution {
+  targets: PricingTarget[];
+  /** Emberi mondatok arról, ami NEM megy. Üres, ha minden mehet. */
+  errors: string[];
 }
 
 /**
@@ -85,7 +124,7 @@ export interface PricingTarget {
  */
 export function describePricing(report: PricingProjectionReport): string {
   return [
-    `forras: Acropora OS (sellingGrossPrice)`,
+    `forras: ${describePriceSource(report.source)}`,
     `ar: ${report.sourceAmount} ${report.sourceCurrency} brutto`,
     `medusa amount: ${report.medusaAmount} ${report.medusaCurrencyCode}`,
     `ar-azonosito: ${report.priceId}`,
@@ -98,7 +137,9 @@ export function describePricing(report: PricingProjectionReport): string {
 export async function resolvePricingTargets(
   argument: string,
   database: PricingCliDatabase,
-): Promise<PricingTarget[] | { error: string }> {
+  /** A „most", kívülről: a tükör akciós árának aktivitása időfüggő. */
+  now: Date = new Date(),
+): Promise<PricingTargetResolution> {
   const select = {
     id: true,
     sku: true,
@@ -120,41 +161,81 @@ export async function resolvePricingTargets(
 
   if (!variants.length)
     return {
-      error: argument.startsWith("sku:")
-        ? `${argument}: nincs ilyen cikkszámú aktív változat`
-        : `${argument}: nincs aktív változata (vagy nincs ilyen termék)`,
+      targets: [],
+      errors: [
+        argument.startsWith("sku:")
+          ? `${argument}: nincs ilyen cikkszámú aktív változat`
+          : `${argument}: nincs aktív változata (vagy nincs ilyen termék)`,
+      ],
     };
+
+  const productIds = [...new Set(variants.map((row) => row.productId))];
 
   /**
-   * A GAZDA-ELLENŐRZÉS ITT IS MEGVAN, és itt a legfontosabb: egy UNAS-gazdájú
-   * termék ára a UNAS pillanatképben él, nem nálunk. Ha erre a parancsra
-   * ráfutna, a saját üres mezőnkből próbálnánk árat vetíteni egy olyan
-   * termékre, aminek van ára - csak nem a miénk.
+   * A GAZDA DÖNTI EL, HONNAN JÖN AZ ÁR (Balázs döntése, 2026-09-04, a (b) út).
+   *
+   * UNAS gazdánál a tükörből, ACROPORA gazdánál a sajátunkból. A SZABÁLY a
+   * `medusa-price-source.ts`-ben áll, egy helyen: itt csak a két olvasás van.
    */
   const products = await database.product.findMany({
-    where: { id: { in: [...new Set(variants.map((row) => row.productId))] } },
+    where: { id: { in: productIds } },
     select: { id: true, catalogAuthority: true },
   });
-  const foreign = products.filter(
-    (row) => !isKnownCatalogAuthority(row.catalogAuthority),
+  const authorityByProduct = new Map(
+    products.map((row) => [row.id, row.catalogAuthority]),
   );
-  if (foreign.length)
-    return {
-      error:
-        `${argument}: a törzsadat gazdája ismeretlen ` +
-        `(${foreign
-          .map((row) => `${row.id}=${row.catalogAuthority ?? "ismeretlen"}`)
-          .join(", ")}), kihagyva. Az ára sem a miénk.`,
-    };
 
-  return variants.map((variant) => ({
-    osProductId: variant.productId,
-    sku: variant.sku,
-    price: {
-      sellingGrossPrice: variant.sellingGrossPrice,
-      sellingPriceCurrency: variant.sellingPriceCurrency,
+  const snapshots = await database.unasProductSnapshot.findMany({
+    where: { productId: { in: productIds } },
+    select: {
+      productId: true,
+      grossPrice: true,
+      currency: true,
+      saleGrossPrice: true,
+      saleStartsAt: true,
+      saleEndsAt: true,
     },
-  }));
+  });
+  const mirrorByProduct = new Map(snapshots.map((row) => [row.productId, row]));
+
+  const targets: PricingTarget[] = [];
+  const errors: string[] = [];
+
+  for (const variant of variants) {
+    const authority = authorityByProduct.get(variant.productId) ?? null;
+    const decision = resolvePriceSource({
+      /**
+       * A GAZDA CSAK AKKOR GAZDA, HA ISMERJÜK A NEVÉT. Egy ismeretlen érték nem
+       * „miénk" és nem „övék": a szűrés nélkül a modul `ACROPORA`-ként kapná
+       * meg, és a saját üres mezőnkből próbálnánk árat vetíteni.
+       */
+      authority: isKnownCatalogAuthority(authority)
+        ? (authority as "UNAS" | "ACROPORA")
+        : null,
+      mirror: mirrorByProduct.get(variant.productId) ?? null,
+      own: {
+        sellingGrossPrice: variant.sellingGrossPrice,
+        sellingPriceCurrency: variant.sellingPriceCurrency,
+      },
+      now,
+    });
+
+    if (!decision.ok) {
+      errors.push(
+        `${variant.sku}: MEGÁLLT (${decision.reason}) ${decision.details}`,
+      );
+      continue;
+    }
+
+    targets.push({
+      osProductId: variant.productId,
+      sku: variant.sku,
+      source: decision.source,
+      price: decision.price,
+    });
+  }
+
+  return { targets, errors };
 }
 
 export async function runPricingCli(
@@ -197,13 +278,17 @@ export async function runPricingCli(
   let failed = 0;
   for (const argument of selectedTargets) {
     const resolved = await resolvePricingTargets(argument, database);
-    if ("error" in resolved) {
-      out.stderr(`${resolved.error}\n`);
+    /**
+     * A HIBÁK ÉS A MEHETŐK EGYÜTT JÖNNEK VISSZA, és mind a kettőt fel kell
+     * dolgozni. Egy `continue` az első hibánál azt jelentené, hogy egy termék
+     * ép változatai egy elakadt testvér miatt maradnak ki.
+     */
+    for (const uzenet of resolved.errors) {
+      out.stderr(`${uzenet}\n`);
       failed += 1;
-      continue;
     }
 
-    for (const target of resolved) {
+    for (const target of resolved.targets) {
       const outcome = await service.project(target);
       if (outcome.action === "stopped") {
         out.stderr(
