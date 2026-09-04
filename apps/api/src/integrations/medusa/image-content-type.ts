@@ -21,6 +21,31 @@
  * ES AMIT EZ A MODUL SZANDEKOSAN NEM TESZ: ha nem ismeri fel a bajtokat, NEM
  * TALAL KI tipust. Egy ismeretlen bemenetre adott `"image/jpeg"` pontosan az a
  * hiba lenne, amit javitunk -- csak egy szinttel odebb tolva.
+ *
+ * === VAN EGY TESTVERE, ES SZANDEKOSAN NEM UGYANAZ ===
+ *
+ * A `service-assets/uploaded-file-type.ts` szinten bajtokbol dolgozik, es
+ * ELOBB szuletett (2026-09-02). Utolag talaltam meg, nem elore -- a
+ * "megvan-e mar" kerdest erre a szeletre nem futtattam le, es a
+ * `scripts/mar-megvan.sh` MEGTALALTA VOLNA (a #340 PR-ben all a specje).
+ *
+ * A KETTO MEGIS KET KULONBOZO KERDESRE VALASZOL, es ezert nem vontuk ossze:
+ *
+ *   uploaded-file-type:  a BEJELENTETT tipus ES a tartalom EGYEZIK-E?
+ *                        Van bejelentett tipus (a feltolto kuldi), es a
+ *                        kerdes a ketto viszonya. Elteresre `null`.
+ *   ez a modul:          MI VAN BENNE? Nincs bejelentett tipus -- a
+ *                        `ProductImage` soron NINCS tipus-mezo --, tehat
+ *                        nincs mihez hasonlitani.
+ *
+ * ES A HATOKORUK IS MAS. A testver HAROM fajtat ismer (pdf, jpeg, png), es a
+ * WebP-t SZANDEKOSAN hagyja ki: az o bemenete szerviz-fotó telefonrol, es
+ * "egy formatum, amit soha senki nem kuld, csak a feluletet szelesiti". A mi
+ * bemenetunk a UNAS termekkepe, ahol WebP es GIF is elofordulhat.
+ *
+ * AMI KOZOS, ES AMIT EGYSZER ERDEMES LESZ OSSZEVONNI: a magikus bajt-tablak
+ * (JPEG, PNG) mindket helyen allnak. Ma ket sor duplikacio; ha egy harmadik
+ * hivo is jon, az mar egy kozos tabla esete.
  */
 
 /** A felismert tipus, vagy `null`, ha a bajtok nem mondjak meg. */
