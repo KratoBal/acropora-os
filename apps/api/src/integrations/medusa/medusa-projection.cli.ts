@@ -39,6 +39,7 @@ import { storefrontSalesChannelId } from "./medusa-sales-channel.config.js";
 import { createDocumentStore } from "../../service-assets/document-store/document-store.provider.js";
 import { MedusaImageLinkRepository } from "./medusa-image-link.repository.js";
 import { parseBatchArguments } from "./medusa-projection-batch.js";
+import { copyProductImages } from "./product-image-copier.js";
 import { publishProductImages } from "./product-image-publisher.js";
 
 /**
@@ -375,6 +376,38 @@ export function describeCimValtozas(
   return `      CIM: ${cim.regi} -> ${cim.uj}\n`;
 }
 
+/**
+ * A MESTER ATHOZASA EGY TERMEKNEL, EGY SORBAN -- ES `""`, HA NEM TORTENT SEMMI.
+ *
+ * === MIERT KELL EGYALTALAN LATNI ===
+ *
+ * A masolas NEM forditható vissza konnyen: 3426 kep athozasa utan egy rossz
+ * futast fajlonkent kellene rendezni. Ezert az ELSO futas legyen olyan, amit
+ * kozben MEG LEHET NEZNI -- nem korlatozas, hanem lathatosag (acrobot, 2026-09-04).
+ *
+ * A szamlalo termekenkent all ki, tehat a futas kozben latszik, hol tart, es
+ * egy Ctrl-C utan is tudni lehet, meddig jutott.
+ *
+ * === A BUKAS KULON SZAMBAN ALL, NEM A SIKERBE OLVASZTVA ===
+ *
+ * Egy megszunt URL vagy egy lassu valasz nem allitja meg a tobbit, es a sor
+ * VALTOZATLAN marad -- tehat a kovetkezo futas ujra probalja. Ha a bukas a
+ * sikerrel egy szamban allna, egy csendben fogyo keszlet ugy nezne ki, mint egy
+ * kesz munka.
+ */
+export function describeKepMasolas(
+  outcome: { copied: number; alreadyStored: number; failed: unknown[] } | null,
+): string {
+  if (!outcome) return "";
+  if (!outcome.copied && !outcome.failed.length) return "";
+  const reszek = [`${outcome.copied} kép áthozva`];
+  if (outcome.alreadyStored)
+    reszek.push(`${outcome.alreadyStored} már megvolt`);
+  if (outcome.failed.length)
+    reszek.push(`${outcome.failed.length} NEM sikerült (a sor változatlan)`);
+  return `      MESTER: ${reszek.join(", ")}\n`;
+}
+
 export function describeForgottenLink(
   productId: string,
   removedRows: number,
@@ -506,6 +539,8 @@ export async function runProjectionCli(
    * mert a ketto elterhet, es a kulonbseg maga is lelet lenne.
    */
   let kihagyottVonalkod = 0;
+  let masoltKepek = 0;
+  let bukottKepek = 0;
   for (const argument of targets) {
     let productId: string;
     if (argument.startsWith("sku:")) {
@@ -750,10 +785,65 @@ export async function runProjectionCli(
     }
 
     const futasIdeje = new Date();
-    const published = product.images.length
+
+    /**
+     * A MESTER ELOSZOR, A FELTOLTES UTANA -- ES A SORREND NEM CSERELHETO FEL.
+     *
+     * A `publishProductImages` `storageKey` nelkuli kepet NEM tolt fel, hanem
+     * megnevezi ("a kép még nincs áthozva a mesterbe"). Merve 2026-09-04: a
+     * masolo meg volt irva, beolvasztva, es NULLA hivoja volt -- ezert allt a
+     * mai reggeli naplo MINDEN termeknel ugyanaz a sor. Nem hiba volt: a masolo
+     * soha nem futott le.
+     *
+     * CSAK AMI HIANYZIK. Aminek mar van kulcsa, azt nem hozzuk at ujra: a
+     * masolo maga is felismeri (`alreadyStored`), de a szuressel a keres el sem
+     * indul.
+     */
+    const mesterNelkul = product.images.filter(
+      (image) => image.storageKey === null,
+    );
+    const masolas = mesterNelkul.length
+      ? await copyProductImages(
+          mesterNelkul.map((image) => ({
+            id: image.id,
+            productId: product.id,
+            url: image.url,
+          })),
+          {
+            fetchImpl: fetch,
+            store: createDocumentStore(env),
+            recordStorageKey: async (imageId, storageKey) => {
+              await prisma.productImage.update({
+                where: { id: imageId },
+                data: { storageKey },
+              });
+            },
+          },
+        )
+      : null;
+    masoltKepek += masolas?.copied ?? 0;
+    bukottKepek += masolas?.failed.length ?? 0;
+
+    /**
+     * A KULCSOKAT UJRA OLVASSUK, NEM SZAMOLJUK KI.
+     *
+     * A masolo a sorba irja a kulcsot, a memoriaban levo `product.images`
+     * viszont a masolas ELOTTI allapotot hordozza. A kulcs helyi
+     * ujraszarmaztatasa ugyanazt a lekepezest ismetelne meg egy masodik
+     * helyen -- es a ket hely elcsuszhatna. Egy lekerdezes olcsobb, mint egy
+     * nema elteres a tarolo-kulcsban.
+     */
+    const kepek = masolas
+      ? await prisma.productImage.findMany({
+          where: { id: { in: product.images.map((image) => image.id) } },
+          select: { id: true, url: true, storageKey: true, fileName: true },
+        })
+      : product.images;
+
+    const published = kepek.length
       ? await publishProductImages(
           product.id,
-          product.images.map((image) => ({
+          kepek.map((image) => ({
             id: image.id,
             url: image.url,
             storageKey: image.storageKey,
@@ -835,6 +925,7 @@ export async function runProjectionCli(
     out.stdout(
       `${productId}: ${outcome.action} -> ${outcome.medusaProductId}\n` +
         `      ${describePublication(outcome.publication)}\n` +
+        describeKepMasolas(masolas) +
         describeCimValtozas(outcome.cim),
     );
   }
@@ -846,6 +937,19 @@ export async function runProjectionCli(
    * attol nem venne eszre senki, amikor NEM nulla. A nulla eset nem hallgatas:
    * a termekenkenti sorok hianya mondja meg ugyanazt.
    */
+  /**
+   * A KEPEK ZARO SZAMA UGYANAZZAL A SZABALLYAL: csak ha volt mit mondani.
+   * A bukas KULON all, mert a teendo mas -- a sor valtozatlan maradt, tehat a
+   * kovetkezo futas ujra probalja, es addig latszania kell, hany var meg.
+   */
+  if (masoltKepek || bukottKepek)
+    out.stdout(
+      `${masoltKepek} kép mestere került át` +
+        (bukottKepek
+          ? `, ${bukottKepek} nem sikerült -- azok sora változatlan, a következő futás újra próbálja.\n`
+          : ".\n"),
+    );
+
   if (kihagyottVonalkod)
     out.stdout(
       `${kihagyottVonalkod} vonalkód maradt ki ismétlődés miatt. ` +
