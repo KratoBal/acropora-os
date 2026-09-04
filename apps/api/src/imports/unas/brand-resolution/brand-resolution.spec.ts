@@ -4,7 +4,11 @@ import { describe, it } from "node:test";
 import type { UnasProductImportRow } from "@acropora/types";
 
 import { BRAND_DICTIONARY, SOURCE_BRAND_NAMES } from "./brand-dictionary.js";
-import { containsTokenPhrase, normalizeBrandText } from "./brand-normalizer.js";
+import {
+  containsTokenPhrase,
+  normalizeBrandText,
+  startsWithTokenPhrase,
+} from "./brand-normalizer.js";
 import { BrandResolutionEngine } from "./brand-resolution.engine.js";
 import {
   BRAND_RESOLUTION_THRESHOLDS,
@@ -44,6 +48,89 @@ describe("brand normalization and dictionary", () => {
     );
     assert.equal(containsTokenPhrase("Titanium csavar", "ATI"), false);
     assert.equal(result.status, "UNRESOLVED");
+  });
+
+  /**
+   * AZ ELVALASZTO-VARIANS. A katalogus es a szotar ugyanazt a markat mas
+   * irasmoddal irja, es a normalizalas a kotojelet SZOKOZRE csereli, nem
+   * torli -- ezert a "Mag-Float" alakbol "mag float" lesz, a szotari
+   * "Magfloat" alakbol "magfloat", es a ketto sosem talalkozik.
+   *
+   * Merve a 09-03-as UNAS exporton, 1893 termeknev ellen: ot marka, 98
+   * termek all igy (Mag-Float 11, AquaMedic 34, RedSea 24, Aqualight 18,
+   * Polyplab 11).
+   *
+   * A KET IRANY KULON ALLITAS, mert kulon is el tud romlani: az egyik a
+   * kotojeles nevet meri a szotar egybeirt alakjahoz, a masik a forditottjat.
+   */
+  it("a kotojeles termeknev egyezik a szotar egybeirt aliasaval", () => {
+    assert.equal(
+      containsTokenPhrase("Mag-Float Mini mágneses algakaparó", "Magfloat"),
+      true,
+    );
+  });
+
+  it("az egybeirt termeknev egyezik a szotar szokozos aliasaval", () => {
+    assert.equal(
+      containsTokenPhrase("AquaMedic EcoDrift áramoltatóvezérlő", "Aqua Medic"),
+      true,
+    );
+  });
+
+  /**
+   * ES EZ A HATAR, AMIERT AZ OSSZEFUZES NEM TOMORITES.
+   *
+   * Ha egyszeruen elhagynank a szokozoket mindket oldalon es reszszot
+   * keresnenk, a tokenhatar elveszne. Ugyanazon a merésen az a valtozat 175
+   * talalatot ad 98 helyett, es a tobblet nagy resze pontosan ilyen: az "ATI"
+   * rasimul az "aqua illumin-ATI-on" belsejere, a "D-D" a "Jeco-DD-mp" alakra.
+   *
+   * A ket assert ugyanannak az egy szabalynak ket pelda-esete, tehat egy
+   * rontas mindkettot elviszi. Nem kulon allitas: kulon rontasuk nincs.
+   */
+  it("az osszefuzes teljes tokenekbol epul, tehat a reszszo tovabbra sem talal", () => {
+    assert.equal(
+      containsTokenPhrase("Aqua Illumination Prime HD LED panel", "ATI"),
+      false,
+    );
+    assert.equal(
+      containsTokenPhrase("Jecod DMP-30 áramoltató 15.000l/h", "D-D"),
+      false,
+    );
+  });
+
+  /**
+   * A NEV-PREFIX PONTSZAM KULON UT, ES KULON IS ROMLIK EL: a
+   * `startsWithTokenPhrase` sajat hivassal dolgozik, tehat a
+   * `containsTokenPhrase` javitasa onmagaban nem hozza magaval.
+   *
+   * A masodik assert a horgony: a prefix csak a nev ELEJEN all, kulonben egy
+   * "prefix" pontszam jarna olyan nevnek, ami nem a markaval kezdodik.
+   */
+  it("a nev-prefix ut is latja az elvalaszto-varianst, es csak az elejen", () => {
+    assert.equal(
+      startsWithTokenPhrase("Mag-Float Mini mágneses algakaparó", "Magfloat"),
+      true,
+    );
+    assert.equal(
+      startsWithTokenPhrase("algakaparó Mag-Float Mini", "Magfloat"),
+      false,
+    );
+  });
+
+  /**
+   * ES A MOTOR SZINTJEN: a mert 98 termekbol 21 olyan, aminek MA egyetlen
+   * jeloltje sincs (aqua-light 17, magfloat 4). Ezek a javitas utan
+   * REVIEW_REQUIRED allapotba kerulnek, vagyis van mit felulvizsgalni --
+   * addig az UNRESOLVED azt jelentette, hogy nincs mit.
+   */
+  it("a kotojeles termeknev a nev-agon jeloltte teszi a markat", () => {
+    const result = new BrandResolutionEngine().resolve(
+      row({ name: "Mag-Float Mini mágneses algakaparó" }),
+    );
+    assert.equal(result.candidates[0]?.brandKey, "magfloat");
+    assert.equal(result.confidence, 68);
+    assert.equal(result.status, "REVIEW_REQUIRED");
   });
 });
 
