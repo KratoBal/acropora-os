@@ -541,10 +541,12 @@ describe("which channel a missing-data line goes to", () => {
   it("reads the calls it claims to read", () => {
     const calls = missingReporterCalls();
 
-    // A NEVEZO: ket parancs, egy-egy hiany-jelzessel. Ha ez nulla lenne, a
+    // A NEVEZO: ket parancs, harom hiany-jelzessel (a vetitesben kategoria ES
+    // marka, a keszlet-parancsban a hianyzo sor). Ha ez nulla lenne, a
     // csatorna-allitas nem a kodrol szolna, hanem a sajat mintajarol.
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 3);
     assert.deepEqual(calls.map((call) => call.reporter).sort(), [
+      "describeMissingBrandMapping",
       "describeMissingCategoryMapping",
       "describeMissingStockRow",
     ]);

@@ -48,6 +48,7 @@ const product: ProjectableProduct = {
   primarySku: "PUMP-1",
   /** A fixtura NEM ad teljes kategoria-listat: a mezo igy nem kerul a torzsbe. */
   medusaCategoryIds: null,
+  medusaCollectionId: null,
   slug: null,
   seoRobots: null,
   images: null,

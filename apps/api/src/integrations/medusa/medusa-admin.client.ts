@@ -82,6 +82,16 @@ export interface MedusaProductInput {
    */
   categories?: { id: string }[];
   /**
+   * A TERMEK GYUJTEMENYE, AZAZ NALUNK A MARKAJA.
+   *
+   * Egy-egy kapcsolat: egy termek EGY gyujtemenyhez tartozhat. A mezo
+   * ELHAGYASA es a `null` NEM ugyanaz -- a `null` LEVENNE a megleveot --, ezert
+   * a hivo szabalya ugyanaz, mint a kategoriaknal es a metaadatnal: ha nincs
+   * mit kuldeni, a mezo elmarad. A dontes maga a `medusa-brand.policy.ts`
+   * modulban all, adatbazis nelkul merhetoen.
+   */
+  collection_id?: string;
+  /**
    * SZABAD KULCS-ERTEK PAROK A TERMEKEN.
    *
    * MIERT KELL: a Medusanak NINCS sajat SEO-mezoje (merve a telepitett 2.19.0

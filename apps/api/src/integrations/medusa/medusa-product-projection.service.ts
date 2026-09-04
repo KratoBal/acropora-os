@@ -72,6 +72,16 @@ export interface ProjectableProduct {
    */
   medusaCategoryIds: string[] | null;
   /**
+   * A MARKA MEDUSA-OLDALI GYUJTEMENY-AZONOSITOJA, vagy `null`.
+   *
+   * A `null` HAROM allapotot fed le a hivo oldalan (nincs markaja; van, de
+   * nincs lekepezve; nincs bekapcsolva), es a kulonbseg ITT mar nem
+   * visszafejtheto -- ugyanugy, mint a `medusaCategoryIds` eseteben. A
+   * megkulonboztetes ezert a HIVONAL lakik, ahol az adat is van; ide csak a
+   * dontes erkezik. A szabaly: `medusa-brand.policy.ts`.
+   */
+  medusaCollectionId: string | null;
+  /**
    * A MAI BOLTI CIM (a UNAS SefUrl-je), vagy `null`, ha nincs.
    *
    * A `null` NEM azt jelenti, hogy a termeknek ne lenne cime a boltban: azt,
@@ -376,6 +386,18 @@ export class MedusaProductProjectionService {
         : {};
 
     /**
+     * A MARKA GYUJTEMENYE, ES A MEZO ELHAGYASA ITT IS DONTES.
+     *
+     * Ugyanaz az alak, mint a kategoriaknal, es ugyanabbol az okbol: a
+     * `collection_id: null` LEVENNE a termekrol azt a gyujtemenyt, amit a bolt
+     * oldalan barki mas oda tett. A vetites nem a marka gazdaja, tehat amit nem
+     * tudunk megnevezni, ahhoz nem is nyulunk.
+     */
+    const collectionPatch = product.medusaCollectionId
+      ? { collection_id: product.medusaCollectionId }
+      : {};
+
+    /**
      * A `handle` MEZO ELHAGYASA ES AZ URES ERTEK NEM UGYANAZ, ugyanugy, mint a
      * kategoriaknal -- csak itt a kulonbseg MERT, nem felteves.
      *
@@ -475,6 +497,7 @@ export class MedusaProductProjectionService {
           status: publication.status,
           sales_channels: salesChannels,
           ...categoryPatch,
+          ...collectionPatch,
         });
       } catch (error) {
         return {
@@ -600,6 +623,7 @@ export class MedusaProductProjectionService {
         status: publication.status,
         sales_channels: salesChannels,
         ...categoryPatch,
+        ...collectionPatch,
         options: [
           { title: DEFAULT_OPTION_TITLE, values: [DEFAULT_OPTION_VALUE] },
         ],

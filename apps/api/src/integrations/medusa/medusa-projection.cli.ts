@@ -7,6 +7,11 @@ import {
   describeMissingCategoryMapping,
   MEDUSA_CATEGORY_REFERENCE,
 } from "./medusa-category.policy.js";
+import {
+  decideMedusaBrandCollection,
+  describeMissingBrandMapping,
+  MEDUSA_BRAND_REFERENCE,
+} from "./medusa-brand.policy.js";
 import { isKnownCatalogAuthority } from "./medusa-publication.policy.js";
 
 import {
@@ -359,6 +364,15 @@ export async function runProjectionCli(
         catalogAuthority: true,
         isActive: true,
         webshopSellable: true,
+        /**
+         * A MARKA, ES CSAK AZ AZONOSITOJA.
+         *
+         * A nevre itt nincs szukseg: a Medusa-oldali gyujtemeny NEVET az hozza
+         * letre, aki a gyujtemenyt letrehozza, nem a vetites. Innen csak azt
+         * kerdezzuk meg, MELYIK markarol van szo, hogy a lekepezest meg tudjuk
+         * keresni.
+         */
+        brandId: true,
         variants: {
           where: { isActive: true },
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -468,6 +482,35 @@ export async function runProjectionCli(
       );
 
     /**
+     * A MI MARKANK -> MEDUSA GYUJTEMENY.
+     *
+     * Ugyanaz a szerkezet, mint a kategorianal: itt csak a LEKERDEZES all, a
+     * szabaly a `medusa-brand.policy.ts` modulban, mert ez a fuggveny a
+     * `prisma`-t modul-szintu importbol veszi.
+     *
+     * A HIANY SORA A STDOUT-RA MEGY, ugyanabbol az okbol, mint a kategoriae: a
+     * hianyzo lekepezes NEM bukas. A termek kimegy, csak gyujtemeny nelkul, es
+     * amig a marka-gyujtemenyek betoltese nincs kesz, MINDEN markas termek ide
+     * esik.
+     */
+    const brand = decideMedusaBrandCollection(
+      product.brandId,
+      product.brandId
+        ? await prisma.externalReference.findMany({
+            where: {
+              ...MEDUSA_BRAND_REFERENCE,
+              entityId: product.brandId,
+            },
+            select: { entityId: true, externalId: true },
+          })
+        : [],
+    );
+    if (brand.kind === "unmapped")
+      out.stdout(
+        `${describeMissingBrandMapping(product.id, brand.missingBrandId)}\n`,
+      );
+
+    /**
      * A KEPEK KIVITELE A VETITES ELE KERUL, ES EZ A SORREND KOTOTT: a vetites
      * BOLTI URL-eket var, azok pedig csak a feltoltes utan leteznek.
      *
@@ -513,6 +556,7 @@ export async function runProjectionCli(
         descriptionLong: product.descriptionLong,
         primarySku: product.variants[0]?.sku ?? null,
         medusaCategoryIds: categories.medusaCategoryIds,
+        medusaCollectionId: brand.medusaCollectionId,
         slug: product.channelListings[0]?.slug ?? null,
         seoRobots: product.channelListings[0]?.seoRobots ?? null,
         /**
