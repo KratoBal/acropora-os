@@ -238,6 +238,29 @@ enum SalesOrderStatus {
   ON_HOLD
 }
 
+/// A rendelés bolti folyamatának állapota. Ez szándékosan nem a UNAS
+/// StatusType-jának és nem a Medusa belső állapotának másolata: a bolt
+/// számára látható teljesítési folyamatot írja le.
+enum OrderBusinessStatus {
+  PENDING_FULFILLMENT
+  CONFIRMED
+  STOCKING
+  SHIPPING
+  READY_FOR_PICKUP
+  CLOSED
+  CLOSED_UNSUCCESSFULLY
+}
+
+/// Mi indította a státuszváltást. A `USER` esetén az actorUserId mondja meg,
+/// ki lépett; a többi rendszeresemény (UNAS-szinkron vagy későbbi futár)
+/// továbbra is ugyanazon a belépési ponton halad át.
+enum OrderBusinessStatusEventSource {
+  MIGRATION
+  USER
+  UNAS_SYNC
+  CARRIER
+}
+
 enum SalesChannel {
   UNAS
   POS
@@ -533,6 +556,7 @@ model User {
   createdAssets              Asset[]                       @relation("AssetCreatedBy")
   updatedAssets              Asset[]                       @relation("AssetUpdatedBy")
   assetEvents                AssetEvent[]
+  orderBusinessStatusEvents  OrderBusinessStatusEvent[]    @relation("OrderBusinessStatusEventActor")
   uploadedAssetDocuments     AssetDocument[]               @relation("AssetDocumentUploadedBy")
   uploadedWorksheetDocuments WorksheetDocument[]           @relation("WorksheetDocumentUploadedBy")
   assignedTasks              Task[]                        @relation("TaskAssignee")
@@ -1764,6 +1788,9 @@ model SalesOrder {
   customerId                       String?
   channel                          SalesChannel
   status                           SalesOrderStatus   @default(DRAFT)
+  /// A bolt üzleti folyamatállapota. Kizárólag OrderBusinessStatusService
+  /// módosíthatja, amely ugyanabban a tranzakcióban az eseménynaplót is írja.
+  businessStatus                   OrderBusinessStatus @default(PENDING_FULFILLMENT)
   currency                         String             @default("HUF") @db.VarChar(3)
   totalNet                         Decimal            @default(0) @db.Decimal(19, 4)
   totalTax                         Decimal            @default(0) @db.Decimal(19, 4)
@@ -1848,12 +1875,33 @@ model SalesOrder {
   lines                  SalesOrderLine[]
   invoices               Invoice[]
   foxpostSettlementLines FoxpostSettlementLine[]
+  businessStatusEvents   OrderBusinessStatusEvent[]
 
   @@index([status, createdAt])
+  @@index([businessStatus, createdAt])
   @@index([customerId, createdAt])
   @@index([channel, createdAt])
   @@index([unasInvoiceStatus])
   @@index([channel, unasDeletedAt, unasExistenceCheckDueAt])
+}
+
+/// Append-only nyom az üzleti rendelésállapot változásairól. A kezdeti,
+/// migráció által létrehozott állapot is esemény, ezért ott fromStatus NULL.
+model OrderBusinessStatusEvent {
+  id         String                          @id @default(cuid())
+  orderId    String
+  fromStatus OrderBusinessStatus?
+  toStatus   OrderBusinessStatus
+  source     OrderBusinessStatusEventSource
+  actorUserId String?
+  note       String?
+  createdAt  DateTime                        @default(now())
+
+  order SalesOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  actor User? @relation("OrderBusinessStatusEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, createdAt])
+  @@index([actorUserId, createdAt])
 }
 
 model SalesOrderLine {
