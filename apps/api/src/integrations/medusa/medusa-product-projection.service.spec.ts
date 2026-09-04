@@ -35,6 +35,7 @@ const product: ProjectableProduct = {
    */
   /** A fixtura NEM ad teljes kategoria-listat: a mezo igy nem kerul a torzsbe. */
   medusaCategoryIds: null,
+  medusaCollectionId: null,
   slug: null,
   seoRobots: null,
   images: null,
@@ -149,6 +150,7 @@ const MEZO_SORSA: Record<string, "atmegy" | "szandekosan-nem"> = {
   descriptionLong: "atmegy", // -> description (osszefuzve) es metadata
   images: "atmegy", // -> images (sorrendben) es thumbnail (az elso elem)
   medusaCategoryIds: "atmegy", // -> categories, ha van teljes lista
+  medusaCollectionId: "atmegy", // -> collection_id (a marka gyujtemenye)
   /**
    * A publikacios ALLAPOT bemenet, nem mezo: belole a `status` es a
    * `sales_channels` szuletik, a szolgaltatas dontese szerint.
@@ -181,6 +183,7 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
         slug: "Teszt-cim",
         seoRobots: "noindex, nofollow",
         medusaCategoryIds: ["cat_1"],
+        medusaCollectionId: "pcol_1",
         images: ["https://kep/1.jpg", "https://kep/2.jpg"],
         descriptionLong: "Hosszú leírás",
       },
@@ -196,6 +199,7 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
       primarySku: torzs.variants[0]?.sku === "PUMP-1",
       slug: torzs.handle === "Teszt-cim",
       medusaCategoryIds: torzs.categories?.[0]?.id === "cat_1",
+      medusaCollectionId: torzs.collection_id === "pcol_1",
       seoRobots: torzs.metadata?.seo_robots === "noindex, nofollow",
       images:
         torzs.images?.[0]?.url === "https://kep/1.jpg" &&
@@ -321,6 +325,50 @@ describe("MedusaProductProjectionService -- az indexelesi tiltas", () => {
     assert.ok(torzs, "az update nem futott le");
     return torzs;
   };
+
+  /**
+   * A MARKA GYUJTEMENYKENT MEGY AT, ES A HAROM ALLITAS KULON TESZT.
+   *
+   * Kulon, mert kulon ronthatok: a create-ag, az update-ag es a mezo
+   * ELHAGYASA harom kulonbozo sor a szolgaltatasban. Egy tesztbe irva a
+   * kalibracio kimenete mindharomra ugyanazt a nevet adna vissza, tehat nem
+   * mondana meg, melyik ut romlott el.
+   */
+  it("a create-agon kimegy a marka gyujtemenye", async () => {
+    const f = fakes({ link: null, found: [] });
+
+    await f.service.project({ ...product, medusaCollectionId: "pcol_9" }, now);
+
+    assert.equal(f.createdWith[0]?.collection_id, "pcol_9");
+  });
+
+  it("az update-agon is kimegy a marka gyujtemenye", async () => {
+    const f = fakes({
+      link: { productId: "prod-os-1", medusaProductId: "prod_x" },
+    });
+
+    await f.service.project({ ...product, medusaCollectionId: "pcol_9" }, now);
+
+    assert.equal(f.updatedWith[0]?.collection_id, "pcol_9");
+  });
+
+  /**
+   * ES A HARMADIK, AMI NEM ADODIK MAGATOL: marka nelkul a mezo EL SEM MEGY.
+   *
+   * Nem `null`-t kuldunk, hanem semmit. A ketto nem ugyanaz: a `null` LEVENNE
+   * azt a gyujtemenyt, amit a bolt oldalan barki mas oda tett, es a hivas
+   * sikerrel terne vissza. Egy `assert.equal(..., null)` alaku allitas ezt a
+   * kulonbseget NEM latna, ezert a kulcs JELENLETET merjuk.
+   */
+  it("marka nelkul a gyujtemeny-mezo el sem megy a keresben", async () => {
+    const f = fakes({
+      link: { productId: "prod-os-1", medusaProductId: "prod_x" },
+    });
+
+    await f.service.project({ ...product, medusaCollectionId: null }, now);
+
+    assert.ok(!("collection_id" in (f.updatedWith[0] ?? {})));
+  });
 
   it("az update-agon a FO mezoben ott van mindket leiras", async () => {
     const torzs = await updateWithBothDescriptions();
