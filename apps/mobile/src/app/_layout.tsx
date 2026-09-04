@@ -1,6 +1,7 @@
 import "react-native-gesture-handler";
 
 import { QueryClientProvider } from "@tanstack/react-query";
+import * as Notifications from "expo-notifications";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 
@@ -8,8 +9,27 @@ import { LockedScreen } from "@/components/LockedScreen";
 import { RestoringScreen } from "@/components/RestoringScreen";
 import { environment } from "@/config/env";
 import { AuthProvider, useAuth } from "@/lib/auth/AuthProvider";
+import { foregroundNotificationBehavior } from "@/lib/notifications/push-foreground";
 import { usePushNavigation } from "@/lib/notifications/usePushNavigation";
 import { queryClient } from "@/lib/query-client";
+
+/**
+ * AZ ERTESITES AKKOR IS LATSZIK, HA AZ APP NYITVA VAN.
+ *
+ * MODUL SZINTEN, NEM A KOMPONENSBEN, es ez nem stilus: a rendszer akkor kerdez
+ * ra a viselkedesre, amikor az ertesites MEGERKEZIK. Egy `useEffect`-ben
+ * regisztralva a horog a legelso ertesitesrol lekesne -- pontosan arrol,
+ * amelyik az appot eppen eleri.
+ *
+ * A DONTES a `lib/notifications/push-foreground.ts`-ben all, mert ott MERHETO;
+ * ez a sor csak atadja. Kezelo NELKUL a konyvtar alapertelmezese az, hogy NEM
+ * mutatja meg az ertesitest (a sajat forrasa mondja ki), tehat ez a nehany sor
+ * a kulonbseg a kozott, hogy a kollega ertesul-e egy kiosztott munkalaprol,
+ * amig az appot hasznalja.
+ */
+Notifications.setNotificationHandler({
+  handleNotification: async () => foregroundNotificationBehavior(),
+});
 
 export default function RootLayout() {
   // Checked before anything else mounts. A missing or unreadable server
