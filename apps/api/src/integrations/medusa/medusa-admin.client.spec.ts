@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  describeMedusaFailure,
   EXTERNAL_ID_LOOKUP_LIMIT,
   HttpMedusaAdminClient,
+  MedusaAdminHttpError,
+  medusaFailureField,
   type MedusaFileUpload,
 } from "./medusa-admin.client.js";
 
@@ -270,5 +273,89 @@ describe("HttpMedusaAdminClient.uploadFile", () => {
     const { client } = uploadClient({ body: { files: [] } });
 
     await assert.rejects(() => client.uploadFile(KEP), /nem hozott azonosítót/);
+  });
+});
+
+/**
+ * A MEZŐ NEVE ÁTMEGY, A VÁLASZ TÖBBI RÉSZE NEM.
+ *
+ * Mérve 2026-09-04: huszonegy cikkszámból tizenkilenc elakadt HTTP 400-zal, és
+ * a naplóban ennyi állt: „a Medusa HTTP 400 választ adott". Az ok sehol. Ezek
+ * az állítások arra állnak, hogy a MEZŐ eljut a naplóig -- és hogy semmi más
+ * nem jut el vele.
+ */
+describe("a Medusa hibaüzenete megnevezi a mezőt", () => {
+  const VALODI =
+    '{"type":"invalid_data","message":"Invalid request: Field \'variants, 0, prices\' is required"}';
+
+  it("a MÉRT alakból kiemeli a mező-útvonalat", () => {
+    /*
+      A pelda a kliens sajat megjegyzesebol jon, a stage-en 2026-08-25-en merve.
+      MI PIROSIT: a mai kod. Az csak a statuszkodot adja vissza, mezot nem --
+      ez az allitas EPP AZT meri, ami ma hianyzik.
+    */
+    assert.equal(medusaFailureField(VALODI), "variants, 0, prices");
+  });
+
+  it("a leírásba is bekerül, a státusz MELLÉ", () => {
+    assert.equal(
+      describeMedusaFailure(new MedusaAdminHttpError(400, VALODI)),
+      "a Medusa HTTP 400 választ adott (a hibás mező: variants, 0, prices)",
+    );
+  });
+
+  it("a válasz TÖBBI része NEM kerül bele", () => {
+    /*
+      EZ A VEDELEM, es nem a mezo kiemelese. A `describeMedusaFailure` a
+      jelentesbe es a parancssori kimenetre kerul, es onnantol nem tudjuk, ki
+      olvassa. Amit atengedunk, az egy mezo-UTVONAL, nem ertek.
+    */
+    const kimenet = describeMedusaFailure(
+      new MedusaAdminHttpError(400, VALODI),
+    );
+    assert.equal(kimenet.includes("invalid_data"), false);
+    assert.equal(kimenet.includes("Invalid request"), false);
+    assert.equal(kimenet.includes("is required"), false);
+  });
+
+  it("egy VISSZHANGZOTT ÉRTÉK nem tud átcsúszni a mezőn", () => {
+    /*
+      A MEGENGEDO LISTA ITT MERHETO. A karakterkeszlet nem enged idezojelet,
+      kapcsos zarojelet, egyenlosegjelet -- tehat ha a Medusa valaha
+      visszhangozna egy ERTEKET a `Field '...'` alakban, az nem illeszkedne.
+
+      MI PIROSIT: a minta kiszelesitese barmilyen karakterre (peldaul `[^']+`).
+    */
+    const gyanus =
+      '{"message":"Invalid request: Field \'apiKey=sk_test_titok123\' is required"}';
+    assert.equal(medusaFailureField(gyanus), null);
+  });
+
+  it("ismeretlen alaknál a MAI viselkedés marad: csak a státusz", () => {
+    /*
+      NEM probalunk "valamit" kiirni. Egy uj Medusa-verzio uj hibaalakot hozhat,
+      es akkor ez a fuggveny annyit mond, hogy nem ismerte fel -- ez HANGOS, es
+      jobb, mint egy felig felismert szoveg.
+    */
+    assert.equal(medusaFailureField('{"message":"Unauthorized"}'), null);
+    assert.equal(
+      describeMedusaFailure(
+        new MedusaAdminHttpError(401, '{"message":"Unauthorized"}'),
+      ),
+      "a Medusa HTTP 401 választ adott",
+    );
+  });
+
+  it("a NEM HTTP hiba üzenete változatlanul megmarad", () => {
+    /*
+      ISMERT POZITIV KONTROLL: a fenti allitasok akkor is teljesulnenek, ha a
+      fuggveny MINDENT elnyelne. Ez az ag azt meri, hogy a futtatokornyezet
+      hibaja (idotullepes, nevfeloldas) tovabbra is atmegy -- az nem a Medusa
+      valaszabol jon, tehat nem visszhangozhat semmit.
+    */
+    assert.equal(
+      describeMedusaFailure(new Error("fetch failed: ETIMEDOUT")),
+      "fetch failed: ETIMEDOUT",
+    );
   });
 });
