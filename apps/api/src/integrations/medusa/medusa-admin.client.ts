@@ -282,6 +282,38 @@ export interface MedusaCategoryListResult {
 }
 
 /**
+ * Egy gyujtemeny a Medusan. NALUNK EZ A MARKA.
+ *
+ * A `handle` azert kell, mert a marka-oldal cime ebbol lesz, es ez az egyetlen
+ * termeszetes kulcs a cel oldalon. Az `external_id` a mi marka-azonositonk: ezen
+ * mulik, hogy egy mar letezo gyujtemenyrol el tudjuk-e donteni, MI hoztuk-e
+ * letre. A kettot egyutt kell lekerni, kulonben egy sajat kezzel letrehozott es
+ * egy idegen gyujtemeny megkulonboztethetetlen.
+ */
+export interface MedusaCollectionRow {
+  id: string;
+  title: string;
+  handle: string;
+  external_id: string | null;
+}
+
+export interface MedusaCollectionListResult {
+  rows: MedusaCollectionRow[];
+  /** Igaz, ha a valasz kimeritette a limitet, tehat lehet tobb is. */
+  truncated: boolean;
+}
+
+/**
+ * A gyujtemeny-lista felso hatara.
+ *
+ * A marka-szotarunk 48 ismert markat sorol, tehat az otszaz tizszeres tartalek.
+ * A limit megis KELL, es a `truncated` jelzes vele egyutt: egy csonkolt lista
+ * ugyanugy nez ki, mint egy teljes, es a terv ilyenkor olyan markakat akarna
+ * letrehozni, amik mar leteznek.
+ */
+export const COLLECTION_LIST_LIMIT = 500;
+
+/**
  * A kategoria-lista felso hatara.
  *
  * A mai fa 219 kategoria, tehat az otszaz bo ketszeres tartalek. A limit
@@ -847,6 +879,28 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
     }>(`/admin/product-categories?${params.toString()}`);
     const rows = body.product_categories ?? [];
     return { rows, truncated: rows.length >= CATEGORY_LIST_LIMIT };
+  }
+
+  /**
+   * A GYUJTEMENYEK LISTAJA.
+   *
+   * AZ UTVONAL NEM AZ, AMIT A MODELL NEVE SUGALL, es ez merve van a telepitett
+   * 2.19.0 forrasabol: a modell `ProductCollection`, a vegpont viszont
+   * `/admin/collections` -- mikozben a kategoriae `/admin/product-categories`.
+   * A ket vegpont NEM egy mintat kovet, tehat a nev alapjan tippelni hiba lenne.
+   *
+   * A valasz kulcsa ugyanebbol a forrasbol: `{ collections, count, offset, limit }`.
+   */
+  async listProductCollections(): Promise<MedusaCollectionListResult> {
+    const params = new URLSearchParams({
+      fields: "id,title,handle,external_id",
+      limit: String(COLLECTION_LIST_LIMIT),
+    });
+    const body = await this.request<{
+      collections: MedusaCollectionRow[];
+    }>(`/admin/collections?${params.toString()}`);
+    const rows = body.collections ?? [];
+    return { rows, truncated: rows.length >= COLLECTION_LIST_LIMIT };
   }
 
   async createProductCategory(
