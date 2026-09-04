@@ -27,11 +27,13 @@ import {
   AttachableWorksheetQueryDto,
   CreateWorksheetDepartmentDto,
   CreateWorksheetDto,
+  CreateWorksheetEntryDto,
   CreateWorksheetLineDto,
   SetWorksheetAssigneesDto,
   SetWorksheetPartnerCodeDto,
   SignWorksheetVersionDto,
   UpdateWorksheetDraftDto,
+  UpdateWorksheetEntryDto,
   UpdateWorksheetLineDto,
   UploadWorksheetDocumentDto,
   WorksheetListQueryDto,
@@ -189,6 +191,46 @@ export class WorksheetsController {
     @Body() input: UpdateWorksheetLineDto,
   ) {
     return this.service.updateLine(id, lineId, input);
+  }
+
+  /**
+   * A MUNKANAPLO. OLVASNI `SERVICE_VIEW`, IRNI `SERVICE_MANAGE` -- ugyanaz a
+   * paros, mint a lap tobbi reszen.
+   *
+   * A HATOKOR BELSOS, es azt a szolgaltatas mondja ki, nem ez a sor: a
+   * bejegyzes a MI munkanaplonk, es Balazs nem kerte, hogy a partner lassa.
+   */
+  @Get(":id/entries")
+  @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
+  entries(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.entries(id, user.id);
+  }
+
+  @Post(":id/entries")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  addEntry(
+    @Param("id") id: string,
+    @Body() input: CreateWorksheetEntryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.addEntry(id, input.body, user.id);
+  }
+
+  /**
+   * A SZERKESZTES JOGA A SZOLGALTATASBAN DOL EL, nem itt: a `SERVICE_MANAGE`
+   * csak azt mondja meg, hogy egyaltalan irhat-e a lapokra. Hogy EZT a
+   * bejegyzest atirhatja-e, az a lap keszitojetol es a jegy nyitojatol fugg,
+   * es azt egy dekorátor nem tudja.
+   */
+  @Patch(":id/entries/:entryId")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  updateEntry(
+    @Param("id") id: string,
+    @Param("entryId") entryId: string,
+    @Body() input: UpdateWorksheetEntryDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.updateEntry(id, entryId, input.body, user.id);
   }
 
   @Delete(":id/lines/:lineId")

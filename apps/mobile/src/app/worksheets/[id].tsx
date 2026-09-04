@@ -14,8 +14,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { OfflineNoticeCard } from "@/components/offline/OfflineNoticeCard";
 import {
+  addWorksheetEntry,
   addWorksheetLine,
   getWorksheet,
+  listWorksheetEntries,
   removeWorksheetLine,
 } from "@/lib/api/worksheets";
 import { ApiError } from "@/lib/api/client";
@@ -30,6 +32,11 @@ import {
   readCachedWorksheet,
   rememberWorksheet,
 } from "@/lib/offline/worksheet-cache";
+import {
+  buildWorksheetEntry,
+  describeEmptyEntries,
+  worksheetEntryByline,
+} from "@/lib/worksheets/worksheet-entry";
 import {
   buildWorksheetLinePayload,
   describeQueuedWorksheetLines,
@@ -79,6 +86,13 @@ export default function WorksheetDetailScreen() {
    * szerelo elveszettnek hinne, es ujra beirna -- es akkor ketszer kerulne fel.
    */
   const [queued, setQueued] = useState<string | null>(null);
+  /**
+   * A BEJEGYZES URLAPJA. `null`, amig a szerelo ra nem koppint a gombra --
+   * Balazs kerese szerint a mezo NEM all ott mindig, hanem a "Bejegyzes"
+   * gombra nyilik ki.
+   */
+  const [entryDraft, setEntryDraft] = useState<string | null>(null);
+  const [entryError, setEntryError] = useState<string | null>(null);
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { status, user } = useAuth();
@@ -119,6 +133,19 @@ export default function WorksheetDetailScreen() {
    * visszalep es ujra megnyitja a lapot, semmit nem latna belole -- es ujra
    * beirna ugyanazt a tetelt.
    */
+  /**
+   * A MUNKANAPLO. Kulon lekerdezes, nem a lap reszekent: a bejegyzesek a
+   * laptol FUGGETLENUL valtoznak (barki irhat rajuk), es egy kozos
+   * lekerdezesben minden bejegyzes-mentes ujrahuzna a teljes lapot is.
+   */
+  const entries = useQuery({
+    queryKey: ["worksheet-entries", id],
+    queryFn: () => listWorksheetEntries(id),
+    enabled: Boolean(
+      id && capabilities?.worksheetsView && status === "authenticated",
+    ),
+  });
+
   const queuedLines = useQuery({
     queryKey: ["worksheet-queued-lines", id],
     queryFn: () => queuedWorksheetLineCount(id),
@@ -214,6 +241,30 @@ export default function WorksheetDetailScreen() {
     onError: (cause) =>
       setLineError(
         cause instanceof Error ? cause.message : "A tétel nem menthető.",
+      ),
+  });
+
+  /**
+   * UJ BEJEGYZES. A SZERZO A BEJELENTKEZETT KOLLEGA, es a telefon nem is kuldi:
+   * a szerver a munkamenetbol veszi. Egy kliens-oldali szerzo-mezo azt
+   * jelentene, hogy barki barki neveben irhat a naploba.
+   */
+  const addEntry = useMutation({
+    mutationFn: async () => {
+      const built = buildWorksheetEntry(entryDraft ?? "");
+      if (!built.ok) throw new Error(built.message ?? "A bejegyzés üres.");
+      return addWorksheetEntry(id, built.body);
+    },
+    onSuccess: async () => {
+      setEntryDraft(null);
+      setEntryError(null);
+      await queryClient.invalidateQueries({
+        queryKey: ["worksheet-entries", id],
+      });
+    },
+    onError: (cause) =>
+      setEntryError(
+        cause instanceof Error ? cause.message : "A bejegyzés nem menthető.",
       ),
   });
 
@@ -502,6 +553,97 @@ export default function WorksheetDetailScreen() {
               </Pressable>
             ) : null}
 
+            {/*
+              A MUNKANAPLO. Balazs kerese, 2026-09-03: a "Bejegyzes" gombra
+              nyilik a mezo, es a "Rogzites" zarja -- a mezo NEM all ott
+              mindig, kulonben minden lapon egy ures szovegdoboz fogadna.
+
+              A LAP ALLAPOTA NEM SZAMIT: alairt lapra is lehet bejegyzest irni.
+              A naplo arrol szol, MI TORTENT, es a tiltas NEMAN veszitene el egy
+              jegyzetet; az engedes LATSZIK, mert a bejegyzesen ott az idopont.
+            */}
+            <Text style={styles.sectionTitle}>
+              Bejegyzések ({entries.data?.items.length ?? 0})
+            </Text>
+
+            {capabilities.worksheetsManage ? (
+              <View style={styles.card}>
+                {entryDraft === null ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setEntryDraft("")}
+                    style={styles.addLineButton}
+                  >
+                    <Text style={styles.addLineText}>Bejegyzés</Text>
+                  </Pressable>
+                ) : (
+                  <>
+                    <Text style={styles.label}>Mit csináltál</Text>
+                    <TextInput
+                      value={entryDraft}
+                      onChangeText={setEntryDraft}
+                      multiline
+                      placeholder="Például: szivattyú csere, a régi ment a szervizbe"
+                      placeholderTextColor="#5b7d8f"
+                      style={styles.entryInput}
+                    />
+                    {entryError ? (
+                      <Text style={styles.lineError}>{entryError}</Text>
+                    ) : null}
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={addEntry.isPending}
+                      onPress={() => addEntry.mutate()}
+                      style={[
+                        styles.addLineButton,
+                        addEntry.isPending && styles.disabled,
+                      ]}
+                    >
+                      <Text style={styles.addLineText}>
+                        {addEntry.isPending ? "Mentés…" : "Rögzítés"}
+                      </Text>
+                    </Pressable>
+                  </>
+                )}
+              </View>
+            ) : null}
+
+            {entries.data && entries.data.items.length === 0 ? (
+              <View style={styles.card}>
+                <Text style={styles.muted}>
+                  {describeEmptyEntries(capabilities.worksheetsManage)}
+                </Text>
+              </View>
+            ) : null}
+
+            {entries.data?.items.map((entry) => (
+              /*
+                A SORRA KOPPINTVA KULON LAP NYILIK (Balazs kerese). A lista
+                RESZLETET mutat, nem a teljes szoveget: egy hosszu bejegyzes
+                kulonben elnyomna a lap tobbi reszet.
+              */
+              <Pressable
+                key={entry.id}
+                accessibilityRole="button"
+                onPress={() =>
+                  router.push({
+                    pathname: "/worksheets/entries/[id]",
+                    params: { id, entryId: entry.id },
+                  })
+                }
+                style={styles.card}
+              >
+                <Text style={styles.muted}>
+                  {worksheetEntryByline(entry, (iso) =>
+                    formatWorksheetDate(iso),
+                  )}
+                </Text>
+                <Text style={styles.lineTitle} numberOfLines={3}>
+                  {entry.body}
+                </Text>
+              </Pressable>
+            ))}
+
             {current.signature ? (
               <>
                 <Text style={styles.sectionTitle}>Aláírás</Text>
@@ -634,6 +776,14 @@ const styles = StyleSheet.create({
   },
   statusText: { color: "#6de0ce", fontSize: 11, fontWeight: "800" },
   subject: { color: "#d9edf7", fontSize: 16, fontWeight: "700" },
+  entryInput: {
+    backgroundColor: "#071827",
+    borderRadius: 10,
+    color: "#f4fbff",
+    minHeight: 110,
+    padding: 12,
+    textAlignVertical: "top",
+  },
   sectionTitle: {
     color: "#f4fbff",
     fontSize: 15,

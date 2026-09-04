@@ -304,6 +304,51 @@ export interface WorksheetChainLink {
   number: string | null;
 }
 
+/**
+ * EGY BEJEGYZES A MUNKALAP MUNKANAPLOJABAN.
+ *
+ * Balazs kerese, 2026-09-03: a szerelo szabadszavasan beirja, mit csinalt, es a
+ * rendszer eltarolja, KI irta es MIKOR.
+ *
+ * A `canEdit` A SZERVERTOL JON, ES NEM KENYELEM. A szabaly (a lap keszitoje
+ * vagy a jegy letrehozoja szerkeszthet) JOGOSULTSAGI szabaly, tehat a szerver
+ * elutasitja az irast is. Ha a felulet ujraszamolna, ket masolat allna
+ * ugyanarra, es a mobil amugy sem tudna importalni a kozos fuggvenyt (az Expo
+ * app szandekosan nem huzza be a munkater csomagjait). Igy a szabaly EGY
+ * helyen all, es a valasz megmondja az eredmenyet.
+ */
+export interface WorksheetEntryDetail {
+  id: string;
+  body: string;
+  /**
+   * A SZERZO NEVE, vagy `null`, ha ismeretlen (azota torolt kollega).
+   *
+   * A `null` NEM hianyzo adat, hanem allapot: a bejegyzes megmarad, a szerzo
+   * neve nelkul. A felulet ezt KIMONDJA, nem rejti el a sort.
+   */
+  authorName: string | null;
+  createdAt: string;
+  /**
+   * MIKOR IRTAK AT UTOLJARA. A keletkezessel EGYENLO, amig nem szerkesztettek:
+   * a ketto osszevetesebol latszik, hogy a bejegyzes eredeti-e.
+   */
+  updatedAt: string;
+  /** Szerkesztheti-e EZ a kero. A szabaly a szerveren all. */
+  canEdit: boolean;
+  /**
+   * MIERT NEM, ha nem szerkesztheti. `null`, ha szerkesztheti.
+   *
+   * Ket kulon eset van, es a teendojuk MAS: van kit megkerni, vagy senki nem
+   * szerkesztheti (a lap keszitoje es a jegy nyitoja is ismeretlen). Egy
+   * magyarazat nelkul hianyzo gomb ugy nez ki, mint hiba a programban.
+   */
+  editRefusal: string | null;
+}
+
+export interface WorksheetEntryListResponse {
+  items: WorksheetEntryDetail[];
+}
+
 export interface WorksheetDetail {
   id: string;
   number: string | null;

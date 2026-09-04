@@ -1251,6 +1251,95 @@ export class WorksheetsRepository extends Repository {
     });
   }
 
+  /**
+   * A MUNKALAP MUNKANAPLOJA, IDOREND SZERINT.
+   *
+   * A szerzo neve a felhasznalo soraból jon, elo hivatkozassal -- NEM masoljuk
+   * a bejegyzesre. Ha valaki nevet valt, a naplo is a mai nevet mutatja; egy
+   * masolat ket kulon nevet adna ugyanarra az emberre, es a listan ket
+   * kulonbozo embernek latszana.
+   *
+   * A LAP KESZITOJET ES A JEGY NYITOJAT IS ELHOZZUK, mert a szerkeszthetoseg
+   * ebbol a kettobol dol el, es enelkul a hivo minden bejegyzesnel kulon
+   * kerdezne ra ugyanarra a ket azonositora.
+   */
+  async entries(worksheetId: string): Promise<{
+    worksheetCreatedById: string | null;
+    serviceJobOpenedById: string | null;
+    rows: {
+      id: string;
+      body: string;
+      authorName: string | null;
+      createdAt: Date;
+      updatedAt: Date;
+    }[];
+  } | null> {
+    const worksheet = await this.database.worksheet.findUnique({
+      where: { id: worksheetId },
+      select: {
+        createdById: true,
+        serviceJob: { select: { openedById: true } },
+        entries: {
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            body: true,
+            createdAt: true,
+            updatedAt: true,
+            author: { select: { displayName: true } },
+          },
+        },
+      },
+    });
+    if (!worksheet) return null;
+    return {
+      worksheetCreatedById: worksheet.createdById,
+      serviceJobOpenedById: worksheet.serviceJob?.openedById ?? null,
+      rows: worksheet.entries.map((row) => ({
+        id: row.id,
+        body: row.body,
+        authorName: row.author?.displayName ?? null,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      })),
+    };
+  }
+
+  /** Egy uj bejegyzes. A szerzo a bejelentkezett kollega. */
+  async addEntry(input: {
+    worksheetId: string;
+    body: string;
+    authorId: string;
+  }): Promise<void> {
+    await this.database.worksheetEntry.create({
+      data: {
+        worksheetId: input.worksheetId,
+        body: input.body,
+        authorId: input.authorId,
+      },
+    });
+  }
+
+  /**
+   * EGY BEJEGYZES SZOVEGENEK ATIRASA.
+   *
+   * A `WHERE` A LAPRA IS SZUR, nem csak a bejegyzes azonositojara. Enelkul egy
+   * masik lap bejegyzese is atirhato lenne annak, aki EZEN a lapon jogosult --
+   * es a jogosultsagot epp a LAP keszitojebol szamoljuk. A `count` mondja meg,
+   * tortent-e valami.
+   */
+  async updateEntry(input: {
+    worksheetId: string;
+    entryId: string;
+    body: string;
+  }): Promise<number> {
+    const result = await this.database.worksheetEntry.updateMany({
+      where: { id: input.entryId, worksheetId: input.worksheetId },
+      data: { body: input.body },
+    });
+    return result.count;
+  }
+
   /** A piszkozat sorai, zárolható állapotban. `null`, ha a verzió eltűnt
    * vagy már nem piszkozat - azt a hívó konfliktusnak fordítja. */
   private async draftLines(
