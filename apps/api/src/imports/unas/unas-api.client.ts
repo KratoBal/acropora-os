@@ -567,6 +567,7 @@ export function parseUnasProductResponse(xml: string): UnasApiProduct[] {
         name,
         state: value(product, "State") === "deleted" ? "deleted" : "live",
         externalStatus: baseStatus(product),
+        inquireOnly: flag(value(product, "Inquire")),
         sourceCreatedAt: unixTimestamp(value(product, "CreateTime")),
         sourceUpdatedAt: unixTimestamp(value(product, "LastModTime")),
         descriptionShort: description

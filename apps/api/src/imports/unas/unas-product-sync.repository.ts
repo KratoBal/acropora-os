@@ -9,6 +9,7 @@ import { Prisma, Repository, prisma } from "@acropora/database";
 import type {
   CanonicalUnasProduct,
   UnasApiCategory,
+  UnasApiProduct,
   UnasApiStock,
   UnasProductIdentitySnapshot,
   UnasProductSyncDiff,
@@ -90,6 +91,15 @@ const snapshotData = (product: CanonicalUnasProduct, syncedAt: Date) => ({
 });
 const ACTIVE_SYNC_KEY = "UNAS_PRODUCTS";
 const STALE_RUN_AFTER_MS = 15 * 60_000;
+
+/// OS-side import rule only: it never writes to UNAS or Medusa.
+export function webshopSellableFromUnas(
+  product: Pick<UnasApiProduct, "externalStatus" | "inquireOnly">,
+): boolean {
+  const isListedInWebshop = product.externalStatus === "1";
+  const isInquiryOnly = product.inquireOnly === true;
+  return isListedInWebshop && !isInquiryOnly;
+}
 
 async function closeRetiredVariantOutbox(
   transaction: Prisma.TransactionClient,
@@ -635,6 +645,7 @@ export class UnasProductSyncRepository extends Repository {
                     sourceUpdatedAt,
                     lastSyncedAt: windowEnd,
                     rawSourceHash: diff.product.canonicalHash,
+                    webshopSellable: webshopSellableFromUnas(diff.product),
                   },
                 })
               : await transaction.product.update({
@@ -661,6 +672,7 @@ export class UnasProductSyncRepository extends Repository {
                     lastSyncedAt: windowEnd,
                     missingSince: null,
                     rawSourceHash: diff.product.canonicalHash,
+                    webshopSellable: webshopSellableFromUnas(diff.product),
                   },
                 });
 

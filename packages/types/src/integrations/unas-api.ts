@@ -4,6 +4,8 @@ export interface UnasApiProduct {
   name: string;
   state: "live" | "deleted";
   externalStatus: string | null;
+  /** UNAS `Inquire`: listed, but only requestable for quotation. */
+  inquireOnly?: boolean | null;
   sourceCreatedAt: string | null;
   sourceUpdatedAt: string | null;
   descriptionShort: string | null;
