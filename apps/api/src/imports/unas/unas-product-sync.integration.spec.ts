@@ -733,4 +733,90 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
     assert.equal(movedLinks[0]?.categoryId, skimmers.id);
     assert.equal(movedLinks[0]?.isPrimary, true);
   });
+
+  /**
+   * A TORLES ELES AGA. A masik torles-teszt ("marks an absent full-snapshot
+   * product missing") a TELJES osszevetest meri, es ahhoz maga torli a
+   * kurzort - mert a FULL futas csak kurzor nelkul all elo
+   * (`kind: cursor ? "INCREMENTAL" : "FULL"`, egyetlen hely a szolgaltatasban,
+   * reset es kezi inditas nelkul). Vagyis egy egyszer felallt rendszerben az
+   * az ag SOHA TOBBE nem fut le.
+   *
+   * Elesben tehat a torlest kizarolag a `state: "deleted"` lehivas hozza, es az
+   * az ut eddig NULLA teszttel allt: a deletedProducts minden fixturaban ures
+   * volt.
+   */
+  it("marks a product missing from the deleted-state download alone, on an incremental run", async () => {
+    await cleanup();
+    categoryPage = [category];
+    deletedProducts = [];
+
+    liveProducts = [product("DELETED-STATE-SKU", { externalId: "900021" })];
+    const created = await service.runIncremental(
+      "integration-token",
+      new Date("2026-07-23T10:00:00.000Z"),
+      100,
+    );
+    assert.equal(created.counts.CREATE, 1);
+    const mirrored = await prisma.productVariant.findUniqueOrThrow({
+      where: { sku: "DELETED-STATE-SKU" },
+      select: { productId: true },
+    });
+
+    /**
+     * A KONTROLL, ami nelkul a teszt mast merne, mint a neve.
+     *
+     * Egy ures `live` lista onmagaban NEM tesz semmit egy inkrementalis
+     * futasban - a hianyt csak a teljes osszevetes venne eszre, es az itt nem
+     * fut. Enelkul a lepes nelkul nem lehetne megmondani, hogy a lenti MISSING
+     * a torles-listatol jott-e, vagy attol, hogy a termek kimaradt a live
+     * ablakbol.
+     */
+    liveProducts = [];
+    const quiet = await service.runIncremental(
+      "integration-token",
+      new Date("2026-07-23T11:00:00.000Z"),
+      100,
+    );
+    assert.equal(quiet.missingCount, 0);
+    assert.equal(
+      (
+        await prisma.product.findUniqueOrThrow({
+          where: { id: mirrored.productId },
+          select: { mirrorState: true },
+        })
+      ).mirrorState,
+      "ACTIVE",
+    );
+
+    // Es most ugyanaz a futas, egyetlen kulonbseggel: a termek megjelenik a
+    // torolt allapotu lehivasban.
+    deletedProducts = [product("DELETED-STATE-SKU", { externalId: "900021" })];
+    const removed = await service.runIncremental(
+      "integration-token",
+      new Date("2026-07-23T12:00:00.000Z"),
+      100,
+    );
+    assert.equal(removed.missingCount, 1);
+    const gone = await prisma.product.findUniqueOrThrow({
+      where: { id: mirrored.productId },
+      select: { mirrorState: true, missingSince: true },
+    });
+    assert.equal(gone.mirrorState, "MISSING");
+    assert.notEqual(gone.missingSince, null);
+
+    // A torles nyoma esemenykent is megjelenik, kulonben a mirrorState egy
+    // nema mezo marad, amirol utolag nem lehet megmondani, mikor es mitol
+    // valtozott.
+    const event = await prisma.domainEvent.findFirst({
+      where: {
+        eventType: "unas-product.missing",
+        aggregateId: mirrored.productId,
+      },
+      select: { id: true },
+    });
+    assert.notEqual(event, null);
+
+    deletedProducts = [];
+  });
 });

@@ -59,6 +59,7 @@ function fixture(input?: {
   cursor?: Date | null;
   stockCursor?: Date | null;
   pages?: UnasApiProduct[][];
+  deletedPages?: UnasApiProduct[][];
   stockPages?: UnasApiStock[][];
   snapshots?: Array<{
     productId: string;
@@ -69,6 +70,14 @@ function fixture(input?: {
 }) {
   const calls: Array<{ operation: string; input?: unknown }> = [];
   const pages = [...(input?.pages ?? [[product("1", "SKU-1")], []])];
+  /**
+   * A live es a deleted lehivas KET KULON lista, mert a szolgaltatas ketszer
+   * hivja ugyanazt a vegpontot, kulonbozo `state` ertekkel. Amig egyetlen
+   * kozos listabol ettek, a deleted ag mindig a maradekot kapta - vagyis
+   * uresen - es egyetlen teszt sem tudta megmondani, eljut-e az eredmenye a
+   * repositoryhoz.
+   */
+  const deletedPages = [...(input?.deletedPages ?? [[]])];
   const stockPages = [...(input?.stockPages ?? [[]])];
   const api = {
     getCategoryPage: async (_token: string, request: unknown) => {
@@ -77,7 +86,8 @@ function fixture(input?: {
     },
     getProductPage: async (_token: string, request: unknown) => {
       calls.push({ operation: "page", input: request });
-      return pages.shift() ?? [];
+      const state = (request as { state?: string }).state;
+      return (state === "deleted" ? deletedPages.shift() : pages.shift()) ?? [];
     },
     getStockPage: async (_token: string, request: unknown) => {
       calls.push({ operation: "stockPage", input: request });
@@ -101,10 +111,13 @@ function fixture(input?: {
       windowStart: Date | null,
       windowEnd: Date,
       _categories: unknown,
-      _deletedExternalIds: unknown,
+      deletedExternalIds: readonly string[],
       stocks: UnasApiStock[],
     ) => {
-      calls.push({ operation: "apply", input: { diffs, stocks } });
+      calls.push({
+        operation: "apply",
+        input: { diffs, deletedExternalIds, stocks },
+      });
       return {
         runId: "run-1",
         status: "APPLIED" as const,
@@ -196,6 +209,65 @@ describe("UnasProductSyncService", () => {
       },
     ]);
     assert.equal(calls.at(-1)?.operation, "apply");
+  });
+
+  /**
+   * A torles-erzekelesnek KET aga van, es elesben csak az egyik fut.
+   *
+   * A teljes osszevetes (repository.ts, `run.kind === "FULL"`) csak akkor all
+   * elo, ha nincs kurzor - a futas tipusat egyetlen hely donti el
+   * (`kind: cursor ? "INCREMENTAL" : "FULL"`), es nincs se reset, se kezi FULL
+   * inditas. Vagyis egy egyszer felallt rendszerben az az ag SOHA TOBBE nem fut
+   * le, es a torlest kizarolag ez a `state: "deleted"` lehivas hozza.
+   *
+   * Ezert all itt allitas: eddig a deleted ag nulla teszttel allt. A masik
+   * teszt (`uses independent overlapped product and stock cursors`) csak azt
+   * mondja ki, hogy a HIVAS megtortenik - nem azt, hogy az eredmenye eljut a
+   * repositoryhoz.
+   */
+  const incrementalRunWithDeleted = async () => {
+    const { service, calls } = fixture({
+      cursor: new Date("2026-07-20T12:00:00.000Z"),
+      pages: [[product("1", "SKU-LIVE")]],
+      deletedPages: [[product("9", "SKU-GONE")]],
+    });
+    const result = await service.runIncremental(
+      "token",
+      new Date("2026-07-20T13:00:00.000Z"),
+      500,
+    );
+    // Ez az eles ag: van kurzor, tehat INCREMENTAL. A FULL-osszevetes nem fut.
+    assert.equal(
+      (
+        calls.find((call) => call.operation === "createRun")?.input as {
+          kind: string;
+        }
+      ).kind,
+      "INCREMENTAL",
+    );
+    return { calls, result };
+  };
+
+  it("hands the deleted-state products to apply", async () => {
+    const { calls } = await incrementalRunWithDeleted();
+
+    const applyInput = calls.find((call) => call.operation === "apply")
+      ?.input as { deletedExternalIds: readonly string[] };
+    assert.deepEqual([...applyInput.deletedExternalIds], ["9"]);
+  });
+
+  /**
+   * KULON allitas, nem ugyanannak a masik fele.
+   *
+   * A fenti onmagaban ugy is teljesulne, hogy a szolgaltatas MINDEN latott
+   * termeket torolteknek ad at. Ket kulon rontas kulon-kulon dontotte pirosra
+   * a kettot, es kozben a masik zold maradt - ez mondja meg, hogy a par
+   * KULONBOZTET, nem ugyanazt allitja ketszer.
+   */
+  it("keeps the deleted-state products out of the live diff", async () => {
+    const { result } = await incrementalRunWithDeleted();
+
+    assert.equal(result.productsSeen, 1);
   });
 
   it("performs a full getStock download when no stock cursor exists", async () => {
