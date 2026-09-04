@@ -395,6 +395,17 @@ export async function runProjectionCli(
   }
 
   let failed = 0;
+  /**
+   * HANY VONALKODOT ZART KI AZ ISMETLODES-SZURO.
+   *
+   * A termekenkenti sor megnevezi az egyes eseteket, de egy sok szazas futasban
+   * elvesz kozottuk. Ez a szam a futas VEGEN all, es azt mondja meg, mekkora a
+   * halmaz -- egy szuro, ami sosem mond semmit, nem szuro, hanem tartalek.
+   *
+   * ES NEM A FORRAS-OLDALI MERT SZAMOT IRJUK KI: azt a MI adatunkon szamoljuk,
+   * mert a ketto elterhet, es a kulonbseg maga is lelet lenne.
+   */
+  let kihagyottVonalkod = 0;
   for (const argument of targets) {
     let productId: string;
     if (argument.startsWith("sku:")) {
@@ -607,7 +618,8 @@ export async function runProjectionCli(
         })
       : 0;
     const vonalkod = decideMedusaBarcode(nyersVonalkod, azonosKodudarab);
-    if (vonalkod.kind === "skipped")
+    if (vonalkod.kind === "skipped") {
+      kihagyottVonalkod += 1;
       out.stdout(
         `${describeSkippedBarcode(
           product.id,
@@ -615,6 +627,7 @@ export async function runProjectionCli(
           azonosKodudarab,
         )}\n`,
       );
+    }
 
     const futasIdeje = new Date();
     const published = product.images.length
@@ -696,6 +709,19 @@ export async function runProjectionCli(
         `      ${describePublication(outcome.publication)}\n`,
     );
   }
+
+  /**
+   * A ZARO SOR CSAK AKKOR ALL KI, HA VOLT MIT KIZARNI.
+   *
+   * Egy allando "0 vonalkod kihagyva" sor minden futasban ott allna, es epp
+   * attol nem venne eszre senki, amikor NEM nulla. A nulla eset nem hallgatas:
+   * a termekenkenti sorok hianya mondja meg ugyanazt.
+   */
+  if (kihagyottVonalkod)
+    out.stdout(
+      `${kihagyottVonalkod} vonalkód maradt ki ismétlődés miatt. ` +
+        `A tisztítás helye a forrás (UNAS): ott dől el, melyik terméké a kód.\n`,
+    );
 
   return failed ? 1 : 0;
 }
