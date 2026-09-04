@@ -28,6 +28,12 @@ const product: ProjectableProduct = {
   description: "Leírás",
   descriptionLong: null,
   primarySku: "PUMP-1",
+  /*
+    EGY VALTOZAT, UNAS KOMBINACIO NELKUL: ez a hetkoznapi termek alakja (ma
+    1884 ilyen van). A vetites ilyenkor a sajat alapertelmezett opciojat adja,
+    es EZ AZ AZ ALAK, aminek a viselkedese NEM valtozhat.
+  */
+  variantRows: [{ sku: "PUMP-1", unasVariantValues: null }],
   /**
    * Alapból ÉRTÉKESÍTHETŐ állapot, hogy a meglévő tesztek arról szóljanak,
    * amiről eddig: az azonossági láncról. A publikációs viselkedést külön
@@ -178,6 +184,13 @@ const MEZO_SORSA: Record<string, "atmegy" | "szandekosan-nem"> = {
    * `sales_channels` szuletik, a szolgaltatas dontese szerint.
    */
   publication: "atmegy",
+  /**
+   * A VALTOZAT-SOROK: ebbol szuletik az `options` blokk es a `variants` lista.
+   *
+   * Tengely nelkul a vetites a sajat alapertelmezett opciojat adja (ez ma az
+   * 1884 hetkoznapi termek alakja); tengellyel a FORRAS nevet es ertekeit.
+   */
+  variantRows: "atmegy",
 };
 
 describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
@@ -251,6 +264,13 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
         torzs.images?.[0]?.url === "https://kep/1.jpg" &&
         torzs.thumbnail === "https://kep/1.jpg",
       publication: torzs.status !== undefined,
+      /**
+       * ES A JELOLESNEK LATSZANIA IS KELL: a fixtura EGY, kombinacio nelkuli
+       * sort ad, tehat pontosan egy bolti valtozat all elo, az alapertelmezett
+       * opcioval. A `primarySku` sora ugyanezt a valtozatot meri, de a MASIK
+       * mezojet -- itt a DARABSZAM az allitas.
+       */
+      variantRows: torzs.variants.length === 1,
     };
     const hianyzo = Object.entries(MEZO_SORSA)
       .filter(([mezo, sors]) => sors === "atmegy" && !megjelenik[mezo])
@@ -1428,5 +1448,121 @@ describe("MedusaProductProjectionService -- a termek kepei", () => {
     assert.ok(torzs, "az update nem futott le");
     assert.ok(!("images" in torzs), "ures tomb ment ki, ez torolne a kepeket");
     assert.ok(!("thumbnail" in torzs), "fo kep ment ki kepek nelkul");
+  });
+});
+
+/**
+ * A TOBB VALTOZAT ATVITELE: A FORRAS TENGELYE, ES EGY BOLTI SOR SORONKENT.
+ *
+ * A csomag harom allitasa harom KULON dolgot mer, es ezt a kalibracio
+ * igazolta: az opcio-blokk nevet, a valtozatok szamat, es a vonalkod
+ * elhagyasat. Ha egy allitas mind a harmat merne, egy reszleges rontas is
+ * pirosat adna, es nem tudnank, mi romlott el.
+ */
+describe("MedusaProductProjectionService -- tobb valtozat", () => {
+  const ketValtozat = {
+    ...product,
+    barcode: { field: "ean" as const, value: "4006381333931" },
+    variantRows: [
+      {
+        sku: "RF-BLUEM-1",
+        unasVariantValues: [{ name: "Szin", value: "Fekete" }],
+      },
+      {
+        sku: "RF-BLUEM-2",
+        unasVariantValues: [{ name: "Szin", value: "Feher" }],
+      },
+    ],
+  };
+
+  it("az opcio-blokk a FORRAS tengelyet viseli, nem az alapertelmezest", async () => {
+    const f = fakes({ link: null, found: [] });
+    await f.service.project(ketValtozat, now);
+
+    const torzs = f.createdWith[0];
+    assert.ok(torzs, "a create nem futott le");
+    assert.deepEqual(torzs.options, [
+      { title: "Szin", values: ["Fekete", "Feher"] },
+    ]);
+  });
+
+  it("minden sorbol egy bolti valtozat lesz, sajat cikkszammal", async () => {
+    const f = fakes({ link: null, found: [] });
+    await f.service.project(ketValtozat, now);
+
+    const torzs = f.createdWith[0];
+    assert.ok(torzs, "a create nem futott le");
+    assert.deepEqual(
+      torzs.variants.map((valtozat) => ({
+        sku: valtozat.sku,
+        title: valtozat.title,
+        options: valtozat.options,
+      })),
+      [
+        {
+          sku: "RF-BLUEM-1",
+          title: "Fekete",
+          options: { Szin: "Fekete" },
+        },
+        {
+          sku: "RF-BLUEM-2",
+          title: "Feher",
+          options: { Szin: "Feher" },
+        },
+      ],
+    );
+  });
+
+  /**
+   * ES A VONALKOD NEM MEGY KI, HOLOTT A BEMENETBEN OTT ALL.
+   *
+   * A Medusa mind a harom vonalkod-mezore EGYEDI indexet tart, a mi
+   * szinkronunk pedig UGYANAZT a `manufacturerPartNumber` erteket irja egy
+   * termek MINDEN valtozat-soraba. Ket valtozatra ugyanaz a kod = a
+   * letrehozas elhasal.
+   *
+   * ES NEM AZ ELSORE TESSZUK: az azt allitana, hogy epp ANNAK a valtozatnak ez
+   * az EAN kodja. A hianyzo mezo lathato, egy rossz valtozathoz rendelt
+   * vonalkod nem.
+   */
+  it("tobb valtozatnal a vonalkod EGYIKRE SEM kerul ki", async () => {
+    const f = fakes({ link: null, found: [] });
+    await f.service.project(ketValtozat, now);
+
+    const torzs = f.createdWith[0];
+    assert.ok(torzs, "a create nem futott le");
+    assert.deepEqual(
+      torzs.variants.filter((valtozat) => valtozat.ean || valtozat.upc),
+      [],
+    );
+  });
+
+  /**
+   * ES EGY MEGALLAS, AMI AZELOTT ALL MEG, HOGY BARMIT IRTUNK VOLNA.
+   *
+   * Nem eleg, hogy a lekepezes elutasit: a vetitesnek MEG KELL ALLNIA, es a
+   * `create` nem futhat le. Egy felig letrehozott termek rosszabb, mint egy
+   * meg nem letezo.
+   */
+  it("ellentmondo tengelyeknel megall, es NEM ir semmit", async () => {
+    const f = fakes({ link: null, found: [] });
+    const kimenet = await f.service.project(
+      {
+        ...ketValtozat,
+        variantRows: [
+          {
+            sku: "X-1",
+            unasVariantValues: [{ name: "Szin", value: "Fekete" }],
+          },
+          { sku: "X-2", unasVariantValues: [{ name: "Meret", value: "L" }] },
+        ],
+      },
+      now,
+    );
+
+    assert.equal(kimenet.action, "stopped");
+    if (kimenet.action !== "stopped") return;
+    assert.equal(kimenet.reason, "variant-axes-inconsistent");
+    assert.deepEqual(f.createdWith, []);
   });
 });

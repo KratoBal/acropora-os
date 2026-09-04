@@ -46,6 +46,12 @@ const product: ProjectableProduct = {
   description: "Leírás",
   descriptionLong: null,
   primarySku: "PUMP-1",
+  /*
+    EGY VALTOZAT, UNAS KOMBINACIO NELKUL: ez a hetkoznapi termek alakja (ma
+    1884 ilyen van). A vetites ilyenkor a sajat alapertelmezett opciojat adja,
+    es EZ AZ AZ ALAK, aminek a viselkedese NEM valtozhat.
+  */
+  variantRows: [{ sku: "PUMP-1", unasVariantValues: null }],
   /** A fixtura NEM ad teljes kategoria-listat: a mezo igy nem kerul a torzsbe. */
   medusaCategoryIds: null,
   medusaCollectionId: null,

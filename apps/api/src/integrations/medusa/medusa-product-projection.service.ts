@@ -31,6 +31,11 @@ import {
   type MedusaHandleParositas,
 } from "./medusa-product-handle.js";
 import { buildProductDescription } from "./product-description.js";
+import {
+  projectVariantOptions,
+  type VariantOptionsRefusal,
+  type VariantRowForProjection,
+} from "./medusa-variant-options.js";
 
 export interface ProjectableProduct {
   id: string;
@@ -57,6 +62,15 @@ export interface ProjectableProduct {
    * változatok közül veszi az elsőt.
    */
   primarySku: string | null;
+  /**
+   * AZ OSSZES AKTIV VALTOZAT-SOR, a UNAS kombinaciojaval egyutt.
+   *
+   * A `primarySku` ettol meg megmarad, es nem duplikacio: azt a HIANY
+   * ellenorzesere hasznaljuk (van-e egyaltalan atviheto valtozat), es a
+   * tengely nelkuli termek egyetlen bolti valtozata is azt viseli. Ez a lista
+   * arrol szol, hogy HANY valtozat megy ki es milyen opciokkal.
+   */
+  variantRows: VariantRowForProjection[];
   /**
    * A publikációs döntés BEMENETE, nem a döntés.
    *
@@ -283,6 +297,15 @@ export interface ProjectionPublicationReport {
 
 export type ProjectionStopReason =
   /**
+   * A valtozat-kombinaciokbol NEM kepezheto konzisztens Medusa opcio-keszlet.
+   *
+   * A pontos alesetek a `medusa-variant-options.ts`-ben allnak, es a nevuk
+   * atkerul ide valtozatlanul: a jelentesnek meg kell mondania, MELYIK
+   * ellentmondas allitott meg, mert a teendo alesetenkent mas (hianyzo
+   * tengely-nev az importban javul, ket azonos kombinacio a torzsadatban).
+   */
+  | VariantOptionsRefusal
+  /**
    * A külső azonosító csak PUHÁN TÖRÖLT terméke(ke)n ül: MEGSZAKADT AZONOSSÁGI
    * LÁNC. Lásd az indoklást a `project` törzsében.
    */
@@ -432,6 +455,21 @@ export class MedusaProductProjectionService {
         action: "stopped",
         reason: "no-sku",
         details: describeMissingSku(product),
+      };
+
+    /**
+     * A VALTOZAT-KEPZES A LEGELSO LEPESEK KOZOTT ALL, ES EZ NEM SORREND-IZLES.
+     *
+     * Ha ebbol ellentmondas jon, akkor a termek NEM allithato elo helyesen a
+     * boltban -- es ezt azelott kell kimondani, hogy barmit is IRTUNK volna.
+     * Egy kesobbi megallas mar egy felig frissitett terméket hagyna maga utan.
+     */
+    const valtozatok = projectVariantOptions(product.variantRows);
+    if (!valtozatok.ok)
+      return {
+        action: "stopped",
+        reason: valtozatok.reason,
+        details: `${product.id}: ${valtozatok.details}`,
       };
 
     if (!this.storefrontSalesChannelId)
@@ -831,30 +869,59 @@ export class MedusaProductProjectionService {
         sales_channels: salesChannels,
         ...categoryPatch,
         ...collectionPatch,
-        options: [
-          { title: DEFAULT_OPTION_TITLE, values: [DEFAULT_OPTION_VALUE] },
-        ],
-        variants: [
-          {
-            title: product.name,
-            sku: product.primarySku,
-            options: { [DEFAULT_OPTION_TITLE]: DEFAULT_OPTION_VALUE },
-            /**
-             * A VONALKOD KULCSA CSAK AKKOR KERUL BE, HA VAN ERTEK. Egy ures
-             * `ean` kikuldese nem semleges: felulirna azt, amit a bolt oldalan
-             * barki mas oda tett -- ugyanaz a szabaly, mint a metaadatnal.
-             */
-            ...(product.barcode
-              ? { [product.barcode.field]: product.barcode.value }
-              : {}),
-            /**
-             * ÜRESEN, és ez állítás, nem mulasztás: nem viszünk át árat. A
-             * mező azért van itt, mert a Medusa megköveteli; a tartalma azért
-             * üres, mert az árazás nem ennek a körnek a dolga.
-             */
-            prices: [],
-          },
-        ],
+        options:
+          valtozatok.kind === "default"
+            ? [{ title: DEFAULT_OPTION_TITLE, values: [DEFAULT_OPTION_VALUE] }]
+            : valtozatok.axes,
+        variants:
+          valtozatok.kind === "default"
+            ? [
+                {
+                  title: product.name,
+                  sku: product.primarySku,
+                  options: { [DEFAULT_OPTION_TITLE]: DEFAULT_OPTION_VALUE },
+                  /**
+                   * A VONALKOD KULCSA CSAK AKKOR KERUL BE, HA VAN ERTEK. Egy
+                   * ures `ean` kikuldese nem semleges: felulirna azt, amit a
+                   * bolt oldalan barki mas oda tett -- ugyanaz a szabaly, mint
+                   * a metaadatnal.
+                   */
+                  ...(product.barcode
+                    ? { [product.barcode.field]: product.barcode.value }
+                    : {}),
+                  /**
+                   * ÜRESEN, és ez állítás, nem mulasztás: nem viszünk át árat.
+                   * A mező azért van itt, mert a Medusa megköveteli; a
+                   * tartalma azért üres, mert az árazás nem ennek a körnek a
+                   * dolga.
+                   */
+                  prices: [],
+                },
+              ]
+            : valtozatok.rows.map((row) => ({
+                title: row.title,
+                sku: row.sku,
+                options: row.options,
+                /**
+                 * TOBB VALTOZATNAL A VONALKOD NEM MEGY KI, ES EZ MERT DONTES.
+                 *
+                 * A Medusa mind a harom vonalkod-mezore EGYEDI indexet tart
+                 * (`IDX_product_variant_ean_unique`, `..._upc_unique`,
+                 * `..._barcode_unique`, merve a telepitett 2.19.0-s
+                 * `@medusajs/product` modell-fajljaban). A mi oldalunkon
+                 * viszont egy termek MINDEN valtozat-sora UGYANAZT a
+                 * `manufacturerPartNumber` erteket kapja a szinkrontol, tehat
+                 * ugyanaz a vonalkod kerulne mindegyikre -- es a letrehozas
+                 * elhasalna.
+                 *
+                 * AMIT HELYETTE NEM TESZUNK: nem tesszuk ra az ELSO
+                 * valtozatra sem. Az azt allitana, hogy epp ANNAK a
+                 * valtozatnak ez az EAN kodja, holott a forrasban a kod a
+                 * TERMEKHEZ tartozik. A hianyzo mezo lathato; egy rossz
+                 * valtozathoz rendelt vonalkod nem az.
+                 */
+                prices: [],
+              })),
       });
     } catch (error) {
       return {
