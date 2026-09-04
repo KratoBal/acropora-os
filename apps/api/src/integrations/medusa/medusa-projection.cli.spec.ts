@@ -4,6 +4,7 @@ import { glob } from "node:fs/promises";
 import { describe, it } from "node:test";
 
 import {
+  projectUnasChannelRow,
   describeForgottenLink,
   describeSkuLookupFailure,
   describePublication,
@@ -675,5 +676,65 @@ describe("a vetítés kép-mezője a kivitt URL-eket kapja", () => {
       "null",
       "a kép-bekötés el van vágva: a vetítés sosem kapna képet",
     );
+  });
+});
+
+describe("projectUnasChannelRow", () => {
+  /**
+   * A HAT MEZO NEV SZERINT, ES AZ EGYETLEN ATNEVEZES KULON ALLITASSAL.
+   *
+   * Ot mezo neve valtozatlan, a hatodike NEM: a csatorna-soron `productUrl`, a
+   * vetites bemeneten `unasProductUrl`. Egy `deepEqual` a hat mezore ezt is
+   * fedne, de nem MONDANA MEG, melyik romlott el -- ezert all az atnevezes
+   * kulon allitasban.
+   */
+  it("mind a hat mezot atviszi, nev szerint", () => {
+    const eredmeny = projectUnasChannelRow({
+      slug: "cim",
+      seoRobots: "noindex",
+      seoTitle: "Cim",
+      seoDescription: "Leiras",
+      seoKeywords: "egy, ketto",
+      productUrl: "https://bolt.test/lap",
+    });
+
+    assert.equal(eredmeny.slug, "cim");
+    assert.equal(eredmeny.seoRobots, "noindex");
+    assert.equal(eredmeny.seoTitle, "Cim");
+    assert.equal(eredmeny.seoDescription, "Leiras");
+    assert.equal(eredmeny.seoKeywords, "egy, ketto");
+  });
+
+  it("a productUrl mezobol unasProductUrl lesz, es a ket nev nem keveredik", () => {
+    const eredmeny = projectUnasChannelRow({
+      slug: null,
+      seoRobots: null,
+      seoTitle: null,
+      seoDescription: null,
+      seoKeywords: null,
+      productUrl: "https://bolt.test/lap",
+    });
+
+    assert.equal(eredmeny.unasProductUrl, "https://bolt.test/lap");
+    // A slug MAS fogalom: az lesz a cel oldali handle, ez a regi lap cime.
+    assert.equal(eredmeny.slug, null);
+  });
+
+  /**
+   * A HIANYZO SOR NEM HIBAALLAPOT: egy termeknek nem kotelezo UNAS-csatorna
+   * sora lennie. Enelkul az allitas nelkul egy kivetelt dobo valtozat is
+   * atmenne, mert a tobbi teszt mindig ad sort.
+   */
+  it("hianyzo sornal mind a hat ertek null, kivetel nelkul", () => {
+    const eredmeny = projectUnasChannelRow(undefined);
+
+    assert.deepEqual(eredmeny, {
+      slug: null,
+      seoRobots: null,
+      seoTitle: null,
+      seoDescription: null,
+      seoKeywords: null,
+      unasProductUrl: null,
+    });
   });
 });

@@ -195,6 +195,57 @@ async function resolveBySku(sku: string): Promise<SkuLookup> {
 }
 
 /** Melyik sikertelen eset áll fenn, embernek. Exportált, hogy mérhető legyen. */
+/**
+ * A CSATORNA-SOR HAT MEZOJE -> A VETITES BEMENETE, EGY TISZTA FUGGVENYBEN.
+ *
+ * KULON FUGGVENY, ES EZ MERESI KERDES, NEM STILUS. A parancs torzse a `prisma`-t
+ * MODUL-SZINTU importbol veszi, tehat ami ott all, azt csak eles adatbazissal
+ * lehetne megnezni -- ugyanaz az ok, amiert a kategoria- es a marka-szabaly is
+ * kulon modulban all. Enelkul a lekepezes elrontasara SEMMI nem szolna, es ezt
+ * nem feltetelezem: a kalibraciom megmutatta, hogy egy rontas a parancs
+ * torzseben NULLA allitast dontott pirosra.
+ *
+ * A hianyzo sor NEM hibaallapot: egy termeknek nem kotelezo UNAS-csatorna sora
+ * lennie, es akkor mind a hat ertek `null`.
+ */
+export interface UnasChannelRow {
+  slug: string | null;
+  seoRobots: string | null;
+  seoTitle: string | null;
+  seoDescription: string | null;
+  seoKeywords: string | null;
+  productUrl: string | null;
+}
+
+export interface UnasChannelProjection {
+  slug: string | null;
+  seoRobots: string | null;
+  seoTitle: string | null;
+  seoDescription: string | null;
+  seoKeywords: string | null;
+  unasProductUrl: string | null;
+}
+
+export function projectUnasChannelRow(
+  row: UnasChannelRow | undefined,
+): UnasChannelProjection {
+  return {
+    slug: row?.slug ?? null,
+    seoRobots: row?.seoRobots ?? null,
+    seoTitle: row?.seoTitle ?? null,
+    seoDescription: row?.seoDescription ?? null,
+    seoKeywords: row?.seoKeywords ?? null,
+    /**
+     * A NEV ITT VALTOZIK, es ez a fuggveny egyetlen nem trivialis lepese: a
+     * csatorna-soron `productUrl`, a vetites bemeneten `unasProductUrl`. A ket
+     * nev NEM ugyanaz a fogalom -- a masodik kimondja, MELYIK bolt cimerol van
+     * szo --, es epp az ilyen atnevezes csuszik el csendben egy select
+     * boviteskor.
+     */
+    unasProductUrl: row?.productUrl ?? null,
+  };
+}
+
 export function describeSkuLookupFailure(
   sku: string,
   reason: "no-such-sku" | "variant-inactive",
@@ -389,7 +440,14 @@ export async function runProjectionCli(
          */
         channelListings: {
           where: { channel: "UNAS" },
-          select: { slug: true, seoRobots: true },
+          select: {
+            slug: true,
+            seoRobots: true,
+            seoTitle: true,
+            seoDescription: true,
+            seoKeywords: true,
+            productUrl: true,
+          },
           take: 1,
         },
         /**
@@ -557,8 +615,7 @@ export async function runProjectionCli(
         primarySku: product.variants[0]?.sku ?? null,
         medusaCategoryIds: categories.medusaCategoryIds,
         medusaCollectionId: brand.medusaCollectionId,
-        slug: product.channelListings[0]?.slug ?? null,
-        seoRobots: product.channelListings[0]?.seoRobots ?? null,
+        ...projectUnasChannelRow(product.channelListings[0]),
         /**
          * A KEPEK BOLTI URL-JEI, vagy `null`.
          *
