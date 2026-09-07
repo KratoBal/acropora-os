@@ -30,6 +30,7 @@ import {
   medusaHandleParositas,
   type MedusaHandleParositas,
 } from "./medusa-product-handle.js";
+import { mergeProductMetadata } from "./medusa-metadata-merge.js";
 import { buildProductDescription } from "./product-description.js";
 import {
   projectVariantOptions,
@@ -93,6 +94,20 @@ export interface ProjectableProduct {
    * csak a dontes erkezik: van teljes lista, vagy nincs.
    */
   medusaCategoryIds: string[] | null;
+  /**
+   * EGY DARAB-E EZ A TERMEK (a WYSIWYG reszfa donti el).
+   *
+   * A DONTES A HIVONAL SZULETIK, itt csak az eredmenye all -- ugyanaz a
+   * szerkezet, mint a `medusaCategoryIds` eseteben: a szabaly tiszta
+   * fuggvenyben merheto (`medusa-wysiwyg.policy.ts`), a lekerdezes a
+   * futtatoban.
+   *
+   * ES KIFEJEZETTEN NEM az `allow_backorder` ertekbol szarmazik: annak a
+   * jelentese "nem rendelheto elore", nem "egy darab". A kirakat a kettot
+   * kulon olvassa, mert egy proxy egy barmilyen okbol elorendeles-mentes
+   * termek lapjara "Eladva" feliratot tenne.
+   */
+  uniquePiece: boolean;
   /**
    * A MARKA MEDUSA-OLDALI GYUJTEMENY-AZONOSITOJA, vagy `null`.
    *
@@ -269,6 +284,29 @@ export type ProjectionOutcome =
       medusaProductId: string;
       publication: ProjectionPublicationReport;
       cim: MedusaHandleParositas | null;
+      /**
+       * A METAADAT SORSA EBBEN A FUTASBAN -- mert a hallgatas itt draga.
+       *
+       * A mezo CSERE-szemantikaju a cel oldalon, tehat harom kulonbozo dolog
+       * tortenhet, es kivulrol MINDHAROM ugyanugy nez ki (a termek frissult):
+       *
+       *   "merged"      osszefesultunk: az idegen kulcsok megmaradtak
+       *   "unreadable"  a lekerdezes elhasalt, ezert NEM kuldtunk metaadatot
+       *   "skipped"     nem volt mondanivalonk, es nem volt mit elvenni
+       *
+       * A masodik a fontos: olyankor a termek TOBBI mezoje frissul, a metaadat
+       * viszont valtozatlan marad. Enelkul a jelentes "kesz"-t mondana egy
+       * felig elvegzett futasra.
+       */
+      metadata: "merged" | "unreadable" | "skipped";
+      /** A MI kulcsaink, amiket ez a futas levett a cel oldalrol. */
+      metadataRemovedKeys: string[];
+      /**
+       * A lekerdezes hibauzenete, ha `metadata: "unreadable"`. Enelkul a
+       * jelentes annyit mondana, hogy nem sikerult -- azt nem, hogy MIERT, es
+       * egy lejart kulcs meg egy halozati hiba ket kulonbozo teendo.
+       */
+      metadataError?: string;
     }
   /** Nem volt leképezés, de a külső azonosító megtalálta az ÉLŐ terméket. */
   | {
@@ -640,17 +678,27 @@ export class MedusaProductProjectionService {
       ...(product.orderQuantityStep
         ? { unas_order_quantity_step: product.orderQuantityStep }
         : {}),
+      /**
+       * A JELZO CSAK AKKOR KERUL BE, HA IGAZ -- es a hianya a "nem egyedi".
+       *
+       * Egy kikuldott `"false"` ugyanezt jelentene, de a kirakat oldalan a
+       * HIANYZO jelzo mar most is hamisat ad, tehat a ket alak kozul ez a
+       * szukebb. A kikerult termekrol pedig nem a `"false"` ertek, hanem az
+       * OSSZEFESULES veszi le a kulcsot (`medusa-metadata-merge.ts`).
+       */
+      ...(product.uniquePiece ? { unique_piece: "true" } : {}),
     };
-    const metadataPatch =
-      Object.keys(seoMetadata).length > 0 ||
-      Object.keys(descriptions.metadata).length > 0
-        ? {
-            metadata: {
-              ...seoMetadata,
-              ...descriptions.metadata,
-            },
-          }
-        : {};
+    /**
+     * AMIT MI MONDUNK. A cel oldalon allo TOBBI kulcsot a `mergeProductMetadata`
+     * orzi meg -- de csak az UPDATE agon, mert egy uj termeken nincs mit
+     * megorizni.
+     */
+    const ourMetadata: Record<string, string> = {
+      ...seoMetadata,
+      ...descriptions.metadata,
+    };
+    const createMetadataPatch =
+      Object.keys(ourMetadata).length > 0 ? { metadata: ourMetadata } : {};
 
     /**
      * A KEPEK ES A FO KEP EGYUTT MENNEK, ES A THUMBNAIL MINDIG KIIRODIK.
@@ -679,6 +727,40 @@ export class MedusaProductProjectionService {
 
     const existingLink = await this.links.findByProductId(product.id);
     if (existingLink) {
+      /**
+       * A CEL OLDALI METAADAT LEKERDEZESE, MIELOTT IRUNK.
+       *
+       * A mezo CSERE-szemantikaju: amit kikuldunk, az mindent felulir. Eddig
+       * a vetites soha nem olvasta vissza, tehat minden idegen kulcs csendben
+       * eltunt -- es a `unique_piece` jelzo bekotese ezt allandova tenne, mert
+       * a WYSIWYG termekeknel attol kezdve mindig van mondanivalonk.
+       *
+       * A BUKAS IRANYA A MEGORZES FELE ALL: ha a lekerdezes elhasal, NEM
+       * kuldunk metaadatot. Egy kimaradt frissites a kovetkezo futason
+       * potolhato; egy felulirt idegen kulcs nem.
+       */
+      let existingMetadata: Record<string, unknown> | null = null;
+      let metadataReadable = true;
+      let metadataError: string | null = null;
+      try {
+        existingMetadata = await this.medusa.fetchMetadata(
+          existingLink.medusaProductId,
+        );
+      } catch (error) {
+        /**
+         * A HIBA NEM VESZ EL, DE NEM IS ITT SZOL: az eredmeny `metadata`
+         * mezoje viszi ki (`"unreadable"`), es a futtato irja ki. Ugyanaz a
+         * szerkezet, mint a publikacios jelentesnel -- a szolgaltatas
+         * MEGALLAPIT, a parancs BESZEL.
+         */
+        metadataReadable = false;
+        metadataError = error instanceof Error ? error.message : String(error);
+      }
+      const merged = mergeProductMetadata(existingMetadata, ourMetadata);
+      const metadataPatch =
+        metadataReadable && merged.metadata
+          ? { metadata: merged.metadata }
+          : {};
       /**
        * A státusz és a csatorna EGY kérésben megy, és ez nem tömörítés.
        * Két kérésben lenne egy pillanat, amikor az egyik már átállt, a másik
@@ -755,6 +837,13 @@ export class MedusaProductProjectionService {
         cim,
         medusaProductId: existingLink.medusaProductId,
         publication: report,
+        metadata: !metadataReadable
+          ? "unreadable"
+          : merged.metadata
+            ? "merged"
+            : "skipped",
+        metadataRemovedKeys: metadataReadable ? merged.removedKeys : [],
+        ...(metadataError ? { metadataError } : {}),
       };
     }
 
@@ -863,7 +952,7 @@ export class MedusaProductProjectionService {
         description: descriptions.description,
         external_id: product.id,
         ...handlePatch,
-        ...metadataPatch,
+        ...createMetadataPatch,
         ...imagePatch,
         status: publication.status,
         sales_channels: salesChannels,

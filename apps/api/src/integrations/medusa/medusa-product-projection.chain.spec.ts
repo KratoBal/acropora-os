@@ -69,6 +69,7 @@ const product: ProjectableProduct = {
   variantRows: [{ sku: "STAGEPROOF0002", unasVariantValues: null }],
   /** A fixtura NEM ad teljes kategoria-listat: a mezo igy nem kerul a torzsbe. */
   medusaCategoryIds: null,
+  uniquePiece: false,
   medusaCollectionId: null,
   barcode: null,
   unit: null,
@@ -164,6 +165,18 @@ function fakeStore(seed: StoredProduct[] = []) {
       rows.set(created.id, created);
       return { id: created.id, deleted_at: null };
     },
+    /**
+     * A CEL OLDALI METAADAT LEKERDEZESE -- a hivo MOSTANTOL HASZNALJA.
+     *
+     * A dupla `as unknown as` varraton ul, tehat a fordito NEM kenyszeriti ki
+     * ezt a mezot: nelkule a hivas futasidoben hasalna el. Amit a hivo hasznal
+     * es a teszt nem allit, az a dupla biztos hibaja.
+     */
+    /**
+     * Ebben a hamis boltban NINCS hivas-lista: a lanc-teszt a TARTALOM
+     * valtozasat meri, nem a hivasok sorrendjet. A metaadat itt ures.
+     */
+    fetchMetadata: async () => null,
     update: async (
       id: string,
       input: Partial<MedusaProductInput>,

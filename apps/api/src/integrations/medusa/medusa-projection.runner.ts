@@ -55,6 +55,10 @@ import {
   parseBatchArguments,
   selectBatchTargets,
 } from "./medusa-projection-batch.js";
+import {
+  isWysiwygProduct,
+  wysiwygSubtreeIds,
+} from "./medusa-wysiwyg.policy.js";
 import { copyProductImages } from "./product-image-copier.js";
 import { publishProductImages } from "./product-image-publisher.js";
 import {
@@ -370,7 +374,15 @@ export function describeForgottenLink(
  */
 export type ProjectionDatabase = Pick<
   typeof prisma,
-  "product" | "externalReference" | "productVariant" | "productImage"
+  | "product"
+  | "externalReference"
+  | "productVariant"
+  | "productImage"
+  /**
+   * A KATEGORIA-FA, a WYSIWYG reszfahoz. Futasonkent EGY lekerdezes: a reszfa
+   * bejarasahoz a szulo-gyerek kapcsolatok kellenek, tehat nem szurheto.
+   */
+  | "category"
 >;
 
 export async function runProjectionCli(
@@ -572,6 +584,27 @@ export async function runProjectionCli(
   let kihagyottVonalkod = 0;
   let masoltKepek = 0;
   let bukottKepek = 0;
+  /**
+   * A WYSIWYG RESZFA, FUTASONKENT EGYSZER.
+   *
+   * A halmaz a TELJES kategoria-fabol all elo (a reszfa bejarasahoz a
+   * szulo-gyerek kapcsolatok kellenek, tehat a lekerdezes nem szurheto), es
+   * minden termekre ugyanaz. Termekenkent ujra lekerdezni egy sok szazas
+   * futasban ugyanannyi folosleges kort jelentene.
+   *
+   * A LUSTA BETOLTES SZANDEKOS: ha egyetlen termek sem jut el a vetitesig (mind
+   * elhasal a cikkszam-feloldason), ez a kerdes el sem megy.
+   */
+  let wysiwygIds: ReadonlySet<string> | null = null;
+  const wysiwygReszfa = async (): Promise<ReadonlySet<string>> => {
+    if (!wysiwygIds)
+      wysiwygIds = wysiwygSubtreeIds(
+        await db.category.findMany({
+          select: { id: true, name: true, parentId: true },
+        }),
+      );
+    return wysiwygIds;
+  };
   for (const argument of targets) {
     let productId: string;
     if (argument.startsWith("sku:")) {
@@ -967,6 +1000,13 @@ export async function runProjectionCli(
           unasVariantValues: variant.unasVariantValues,
         })),
         medusaCategoryIds: categories.medusaCategoryIds,
+        /**
+         * A JELZO A MI KATEGORIA-FANKBOL JON, nem a forras jelzoibol es nem a
+         * Medusa-oldali besorolasbol. A szabaly a `medusa-wysiwyg.policy.ts`
+         * modulban all, ugyanaz, amibol a rendelhetoseg is dol -- egy forras,
+         * ket kerdes.
+         */
+        uniquePiece: isWysiwygProduct(osCategoryIds, await wysiwygReszfa()),
         medusaCollectionId: brand.medusaCollectionId,
         barcode: vonalkod.field
           ? { field: vonalkod.field, value: vonalkod.value }

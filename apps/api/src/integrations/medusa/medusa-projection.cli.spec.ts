@@ -1112,6 +1112,22 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
           return {};
         },
       },
+      /**
+       * A KATEGORIA-FA, A WYSIWYG RESZFAHOZ.
+       *
+       * URES FA az alapertelmezes, tehat egyetlen termek sem egyedi darab --
+       * ez a mai allapot a legtobb terméknel. Aki a jelzot akarja merni, ezt
+       * `overrides`-szal csereli.
+       *
+       * A hivas a LISTABA is bekerul, mert a szama szamit: futasonkent EGY
+       * lekerdezes, nem termekenkent egy.
+       */
+      category: {
+        findMany: async (args: unknown) => {
+          hivasok.push({ metodus: "category.findMany", args });
+          return [];
+        },
+      },
       ...overrides,
     } as unknown as ProjectionDatabase;
     return { db, hivasok };
@@ -1622,17 +1638,27 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
 
   /** A bolt duplaja, ami a keres TORZSET is felirja -- ez az allitas targya. */
   function torzsetIroFetch(
-    torzsek: { ut: string; torzs: string }[],
+    torzsek: { ut: string; modszer: string; torzs: string }[],
   ): typeof fetch {
     return (async (url: unknown, init?: RequestInit) => {
       const cim = String(url);
       torzsek.push({
         ut: new URL(cim).pathname,
+        /**
+         * A MODSZER IS ROGZUL, MERT UGYANARRA AZ UTRA MOSTANTOL KETFELE HIVAS
+         * MEGY: a metaadat LEKERDEZESE (GET, ures torzs) es a FRISSITES (POST).
+         * Modszer nelkul a kereses a GET-et talalta meg elobb, es a teszt egy
+         * ures szovegen hasalt el `Unexpected end of JSON input` hibaval --
+         * ami ugy nezett ki, mintha a frissites maradt volna el.
+         */
+        modszer: String(init?.method ?? "GET"),
         torzs: String(init?.body ?? ""),
       });
       if (cim.includes("/admin/sales-channels/"))
         return valasz({ sales_channel: { id: "sc_1", name: "Bolt" } });
       if (cim.includes("/admin/products?")) return valasz({ products: [] });
+      if (cim.includes("fields=id,metadata"))
+        return valasz({ product: { id: "prod_medusa_1", metadata: null } });
       return valasz({ product: { id: "prod_medusa_1" } });
     }) as unknown as typeof fetch;
   }
@@ -1645,7 +1671,7 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
       storageKey: "product/prod-1/img-1",
       fileName: "1.jpg",
     };
-    const torzsek: { ut: string; torzs: string }[] = [];
+    const torzsek: { ut: string; modszer: string; torzs: string }[] = [];
     const { db } = valtozatlanAllapotDb(kepSor);
 
     const code = await boltiKorben(() =>
@@ -1660,7 +1686,7 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
     );
     assert.equal(code, 0, stderr.join("") + stdout.join(""));
     const frissites = torzsek.find(
-      (t) => t.ut === "/admin/products/prod_medusa_1",
+      (t) => t.ut === "/admin/products/prod_medusa_1" && t.modszer === "POST",
     );
     assert.ok(
       frissites,

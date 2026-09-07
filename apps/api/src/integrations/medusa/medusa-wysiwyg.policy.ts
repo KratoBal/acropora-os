@@ -121,5 +121,33 @@ export function decideWysiwygBackorder(
   productCategoryIds: readonly string[],
   wysiwygIds: ReadonlySet<string>,
 ): boolean {
-  return !productCategoryIds.some((id) => wysiwygIds.has(id));
+  return !isWysiwygProduct(productCategoryIds, wysiwygIds);
+}
+
+/**
+ * EGY DARAB-E EZ A TERMEK: A JELZO, AMIT A BOLT OLDALA OLVAS.
+ *
+ * === MIERT KELL, HOLOTT A BACKORDER-DONTES MAR ITT ALL ===
+ *
+ * A ket kerdes MA egybeesik, de NEM UGYANAZ, es a kirakat oldalan a kulonbseg
+ * a vevo ele kerul. Az `allow_backorder = false` jelentese "nem rendelheto
+ * elore"; a `unique_piece` jelentese "egy darab, ez a konkret peldany". Ha a
+ * kirakat az elsobol olvasna ki a masodikat, akkor egy BARMILYEN okbol
+ * elorendeles-mentes termek lapjara "Eladva" kerulne, es a vevo azt olvasna,
+ * hogy a peldany elkelt -- holott csak a raktar urult ki.
+ *
+ * Ezert kulon nev, ugyanabbol a forrasbol. A ket fuggveny egymasbol all elo,
+ * tehat egy szabaly-valtozas nem tudja a kettot szetcsuszasra vinni.
+ *
+ * === ES AMIT EZ NEM ALLIT ===
+ *
+ * Nem allitja, hogy a termek ELOALLAT. A WYSIWYG reszfa az EGYEDI DARABOT
+ * jeloli; egy hasznalt eszkoz is lehet egyedi darab anelkul, hogy elne. A
+ * ketto kulon kerdes, es a nevuk se legyen ugyanaz.
+ */
+export function isWysiwygProduct(
+  productCategoryIds: readonly string[],
+  wysiwygIds: ReadonlySet<string>,
+): boolean {
+  return productCategoryIds.some((id) => wysiwygIds.has(id));
 }
