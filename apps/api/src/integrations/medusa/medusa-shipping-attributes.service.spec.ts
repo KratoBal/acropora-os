@@ -150,3 +150,63 @@ describe("a szállítási jellemzők átvitele", () => {
     assert.deepEqual(f.kikuldott, []);
   });
 });
+
+/**
+ * A SZARMAZTATOTT BOLTI ATVETEL.
+ *
+ * A kategoria-fa MAGA a megnezes: ha a termek elo allat gyoker alatt all, akkor
+ * VAN mondanivalonk, profil-sor nelkul is. Enelkul egy elo allat futarral
+ * indulna el -- es Balazs szabalya szerint az egesz kosarra bolti atvetel jar.
+ */
+describe("a szállítási jellemzők származtatott bolti átvétele", () => {
+  it("profil nélkül is kiküldjük, ha a kategória azt mondja", async () => {
+    const f = fakes({});
+
+    const outcome = await f.service.project("prod-os-1", null, true, true);
+
+    assert.equal(outcome.action, "applied");
+    assert.deepEqual(f.kikuldott, [
+      {
+        pickup_only: true,
+        // A TOBBI HAROM ISMERETLEN, es a hianyuk NEM korlatozas.
+        foxpost_forbidden: false,
+        is_heavy: false,
+        is_frozen: false,
+      },
+    ]);
+  });
+
+  /**
+   * ES A KEZI JELOLES NEM TUDJA FELULIRNI: egy ember, aki kikapcsolja a bolti
+   * atvetelt egy korallon, nem dontest hoz, hanem elront valamit, amit a fa
+   * mond. A ket forras VAGY kapcsolatban all.
+   */
+  it("a kézi hamis NEM üti ki a származtatott igazat", async () => {
+    const f = fakes({});
+
+    await f.service.project(
+      "prod-os-1",
+      {
+        pickupOnly: false,
+        foxpostForbidden: false,
+        isHeavy: true,
+        isFrozen: false,
+      },
+      true,
+      true,
+    );
+
+    assert.equal(f.kikuldott[0]?.pickup_only, true);
+    // ES A KEZZEL JELOLT MEZO MEGMARAD: a szarmaztatas csak EGY mezot ir.
+    assert.equal(f.kikuldott[0]?.is_heavy, true);
+  });
+
+  it("sem profil, sem származtatott érték: nem történik semmi", async () => {
+    const f = fakes({});
+
+    const outcome = await f.service.project("prod-os-1", null, true, false);
+
+    assert.deepEqual(outcome, { action: "skipped", reason: "no-profile" });
+    assert.deepEqual(f.hivasok, []);
+  });
+});
