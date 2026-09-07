@@ -1465,6 +1465,83 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
    * nem javitas: a sor itt all, hogy a kovetkezo olvaso lassa.
    */
   /**
+   * AMI NEM KERULT RA: A SIKER MELLE, ES CSAK AKKOR, HA VAN MIT MONDANIA.
+   *
+   * A KET ALLITAS EGYUTT MER, es kulon-kulon egyik sem eleg: ha a sor MINDEN
+   * termeknel megjelenne, akkor nem a hianyt mondja, hanem mindig beszel -- es
+   * egy sor, ami mindig ott all, ket nap alatt lathatatlan lesz.
+   */
+  it("kiirja a siker melle, hogy a kategoria nem kerult ra", async () => {
+    const { out, stdout, stderr } = collector();
+    const { db } = adatbazis(termek({ categories: [{ categoryId: "kat-1" }] }));
+
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1"],
+        out,
+        provider(environmentSetting),
+        boltiKornyezet,
+        db,
+        boltiFetch([]),
+      ),
+    );
+
+    assert.equal(code, 0, stderr.join("") + stdout.join(""));
+    assert.match(stdout.join(""), /nem került rá: kategória/);
+  });
+
+  /**
+   * ES A MASIK IRANY: akinek NINCS kategoriaja, az nem "veszitett" semmit. Ez a
+   * kontroll arra, hogy a sor a HIANYT mondja, nem a puszta uressegt.
+   */
+  it("NEM irja ki annal a termeknel, aminek nincs is kategoriaja", async () => {
+    const { out, stdout, stderr } = collector();
+    const { db } = adatbazis(termek());
+
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1"],
+        out,
+        provider(environmentSetting),
+        boltiKornyezet,
+        db,
+        boltiFetch([]),
+      ),
+    );
+
+    assert.equal(code, 0, stderr.join("") + stdout.join(""));
+    assert.equal(stdout.join("").includes("nem került rá"), false);
+  });
+
+  /**
+   * A HATOKOR-SOR EGYSZER ALL OTT, NEM TERMEKENKENT.
+   *
+   * A darabszam maga az allitas: ket termekre futtatva is EGY sor. Egy
+   * termekenkent ismetlodo mondat ugyanazt a lathatatlansagot okozna, mint egy
+   * mindig kiirt "nem került rá".
+   */
+  it("a hatokor-sor pontosan egyszer all ott, ket termeknel is", async () => {
+    const { out, stdout, stderr } = collector();
+    const { db } = adatbazis(termek());
+
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1", "prod-2"],
+        out,
+        provider(environmentSetting),
+        boltiKornyezet,
+        db,
+        boltiFetch([]),
+      ),
+    );
+
+    assert.equal(code, 0, stderr.join("") + stdout.join(""));
+    const szoveg = stdout.join("");
+    assert.match(szoveg, /nem állít árat és készletet/);
+    assert.equal(szoveg.split("nem állít árat és készletet").length - 1, 1);
+  });
+
+  /**
    * A KEP-LISTA MINDEN UPDATE-BEN KIMEGY, AKKOR IS, HA SEMMI NEM VALTOZOTT.
    *
    * === EZ MERT VISELKEDES, NEM OHAJ ===
