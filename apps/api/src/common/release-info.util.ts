@@ -1,22 +1,9 @@
-/// The running build's own commit SHA - deliberately NOT read from `.git`
-/// (a production container image does not ship a `.git` directory, and
-/// even if it did, trusting an on-disk `.git` at runtime would be a much
-/// weaker guarantee than a value baked in at build/deploy time). Instead
-/// read from a single environment variable that a real deploy pipeline is
-/// expected to set (e.g. from CI's own `${{ github.sha }}` context) -
-/// see docs/INVENTORY-CONSISTENCY.md's "Release evidence" section for the
-/// exact deploy-time wiring this still needs.
-///
-/// Checkpoint 8: this is now ALSO baked in at Docker build time (see
-/// apps/api/Dockerfile's `RELEASE_COMMIT_SHA` build ARG, wired from CI's
-/// `${{ github.sha }}` in .github/workflows/ci.yml's docker-build jobs),
-/// so the image itself carries its own commit identity independent of
-/// whatever runtime environment variables a deploy platform (e.g.
-/// Coolify) happens to be configured to set. A runtime env var, if a
-/// deploy platform sets one too, would simply need to agree with the
-/// baked-in value - this function has no way to tell the two apart and
-/// does not need to, since both are meant to be `github.sha` for the same
-/// release.
+/// Commit SHA-k are deliberately NOT read from `.git`: a production image does
+/// not ship it, and an on-disk checkout would be weaker evidence than the
+/// image's build-time identity. `RELEASE_IMAGE_COMMIT_SHA` is set by the
+/// Dockerfile from its build ARG; `RELEASE_COMMIT_SHA` comes from the running
+/// process environment. Keeping them separate makes a deployment-platform
+/// override, omission, or disagreement observable in `/health`.
 ///
 /// Returns null, never a guessed/empty-string value, when unset OR when
 /// the value is not a well-formed full git commit SHA - callers
@@ -30,8 +17,35 @@
 const FULL_COMMIT_SHA_PATTERN = /^[0-9a-f]{40}$/;
 
 export function currentReleaseCommitSha(): string | null {
-  const value = process.env.RELEASE_COMMIT_SHA?.trim();
+  return validCommit(process.env.RELEASE_COMMIT_SHA);
+}
+
+function validCommit(value: string | undefined): string | null {
+  value = value?.trim();
   if (!value) return null;
   if (!FULL_COMMIT_SHA_PATTERN.test(value)) return null;
   return value;
+}
+
+export type ReleaseCommitSourceState =
+  "match" | "mismatch" | "image-missing" | "runtime-missing" | "both-missing";
+
+export function releaseCommitSourceState(
+  imageCommit: string | null,
+  runtimeCommit: string | null,
+): ReleaseCommitSourceState {
+  if (imageCommit === null && runtimeCommit === null) return "both-missing";
+  if (imageCommit === null) return "image-missing";
+  if (runtimeCommit === null) return "runtime-missing";
+  return imageCommit === runtimeCommit ? "match" : "mismatch";
+}
+
+export function releaseCommitSources() {
+  const imageCommit = validCommit(process.env.RELEASE_IMAGE_COMMIT_SHA);
+  const runtimeCommit = currentReleaseCommitSha();
+  const commitSourceState = releaseCommitSourceState(
+    imageCommit,
+    runtimeCommit,
+  );
+  return { imageCommit, runtimeCommit, commitSourceState } as const;
 }

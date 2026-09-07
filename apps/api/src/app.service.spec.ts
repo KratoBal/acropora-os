@@ -13,24 +13,37 @@ import { applicationHealth } from "./app.service.js";
  * kivulrol ugyanugy nez ki.
  */
 
-async function withCommitSha(value: string | undefined, run: () => void) {
-  const original = process.env.RELEASE_COMMIT_SHA;
-  if (value === undefined) delete process.env.RELEASE_COMMIT_SHA;
-  else process.env.RELEASE_COMMIT_SHA = value;
+async function withCommitShas(
+  image: string | undefined,
+  runtime: string | undefined,
+  run: () => void,
+) {
+  const originalImage = process.env.RELEASE_IMAGE_COMMIT_SHA;
+  const originalRuntime = process.env.RELEASE_COMMIT_SHA;
+  if (image === undefined) delete process.env.RELEASE_IMAGE_COMMIT_SHA;
+  else process.env.RELEASE_IMAGE_COMMIT_SHA = image;
+  if (runtime === undefined) delete process.env.RELEASE_COMMIT_SHA;
+  else process.env.RELEASE_COMMIT_SHA = runtime;
   try {
     run();
   } finally {
-    if (original === undefined) delete process.env.RELEASE_COMMIT_SHA;
-    else process.env.RELEASE_COMMIT_SHA = original;
+    if (originalImage === undefined)
+      delete process.env.RELEASE_IMAGE_COMMIT_SHA;
+    else process.env.RELEASE_IMAGE_COMMIT_SHA = originalImage;
+    if (originalRuntime === undefined) delete process.env.RELEASE_COMMIT_SHA;
+    else process.env.RELEASE_COMMIT_SHA = originalRuntime;
   }
 }
 
 const SHA = "38ea01000ecb320e852c53ee13c0206f2658f919";
 
 describe("applicationHealth", () => {
-  it("reports the commit the image was built from", async () => {
-    await withCommitSha(SHA, () => {
-      assert.equal(applicationHealth().commit, SHA);
+  it("reports absent image and runtime commits separately", async () => {
+    await withCommitShas(undefined, undefined, () => {
+      const application = applicationHealth();
+      assert.equal(application.imageCommit, null);
+      assert.equal(application.runtimeCommit, null);
+      assert.equal(application.commitSourceState, "both-missing");
     });
   });
 
@@ -44,10 +57,10 @@ describe("applicationHealth", () => {
     let first: ReturnType<typeof applicationHealth> | null = null;
     let second: ReturnType<typeof applicationHealth> | null = null;
 
-    await withCommitSha(SHA, () => {
+    await withCommitShas(SHA, SHA, () => {
       first = applicationHealth();
     });
-    await withCommitSha(other, () => {
+    await withCommitShas(other, other, () => {
       second = applicationHealth();
     });
 
@@ -56,8 +69,11 @@ describe("applicationHealth", () => {
   });
 
   it("says null rather than guessing when nothing was baked in", async () => {
-    await withCommitSha(undefined, () => {
-      assert.equal(applicationHealth().commit, null);
+    await withCommitShas(undefined, undefined, () => {
+      const application = applicationHealth();
+      assert.equal(application.imageCommit, null);
+      assert.equal(application.runtimeCommit, null);
+      assert.equal(application.commitSourceState, "both-missing");
     });
   });
 
@@ -68,14 +84,16 @@ describe("applicationHealth", () => {
    */
   it("treats a malformed value as absent, not as evidence", async () => {
     for (const bad of ["not-a-sha", "38ea0100", "UNKNOWN", SHA.toUpperCase()]) {
-      await withCommitSha(bad, () => {
-        assert.equal(applicationHealth().commit, null, bad);
+      await withCommitShas(bad, bad, () => {
+        const application = applicationHealth();
+        assert.equal(application.imageCommit, null, bad);
+        assert.equal(application.runtimeCommit, null, bad);
       });
     }
   });
 
   it("keeps the status field it always had", async () => {
-    await withCommitSha(SHA, () => {
+    await withCommitShas(SHA, SHA, () => {
       const application = applicationHealth();
 
       assert.equal(application.status, "ok");

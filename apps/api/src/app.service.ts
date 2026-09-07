@@ -2,7 +2,7 @@ import { checkDatabaseHealth } from "@acropora/database";
 import { Injectable } from "@nestjs/common";
 import type { HealthResponse } from "@acropora/types";
 
-import { currentReleaseCommitSha } from "./common/release-info.util.js";
+import { releaseCommitSources } from "./common/release-info.util.js";
 import { checkRedisHealth } from "./health/redis-health.js";
 
 /**
@@ -13,6 +13,7 @@ import { checkRedisHealth } from "./health/redis-health.js";
  * pont ez az, amit orizni kell.
  */
 export function applicationHealth(): HealthResponse["application"] {
+  const release = releaseCommitSources();
   return {
     status: "ok",
     version: "0.1.0",
@@ -22,12 +23,14 @@ export function applicationHealth(): HealthResponse["application"] {
      * hogy tortent-e telepites -- az viszont csak azt mondja meg, mikor indult a
      * folyamat, nem azt, MIT inditottak el.
      *
-     * Az ertek a kepbe beegetett kiadas-azonositobol jon, es `null`, ha nincs
-     * beallitva vagy nem ep a formaja. Kitalalt vagy ures ertek nem kerulhet
+     * Visszamenoleges kompatibilitas miatt ez a futasideju ertek; az
+     * `imageCommit`, `runtimeCommit` es `commitSourceState` egyutt mutatja meg
+     * a ket forrast es az egyezesuket. Kitalalt vagy ures ertek nem kerulhet
      * ide: egy rosszul formazott azonosito pontosan olyan felrevezeto lenne,
      * mint egy verziószam, ami sosem valtozik.
      */
-    commit: currentReleaseCommitSha(),
+    commit: release.runtimeCommit,
+    ...release,
   };
 }
 

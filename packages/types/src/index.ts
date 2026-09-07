@@ -34,7 +34,19 @@ export interface HealthResponse {
    * ertelmezze, hogy a kiadas azonossaga NEM ellenorizheto, nem ugy, hogy
    * barmelyik kiadas megfelel.
    */
-  application: DependencyHealth & { version: string; commit: string | null };
+  application: DependencyHealth & {
+    version: string;
+    /** Backwards-compatible runtime commit field. */
+    commit: string | null;
+    imageCommit: string | null;
+    runtimeCommit: string | null;
+    commitSourceState:
+      | "match"
+      | "mismatch"
+      | "image-missing"
+      | "runtime-missing"
+      | "both-missing";
+  };
   database: DependencyHealth;
   redis: DependencyHealth;
   uptime: number;

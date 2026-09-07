@@ -32,7 +32,14 @@ const COMMIT = "0f6eeb6a1b2c3d4e5f60718293a4b5c6d7e8f901";
 
 function healthWith(overrides: Partial<HealthResponse> = {}): HealthResponse {
   return {
-    application: { status: "ok", version: "0.1.0", commit: COMMIT },
+    application: {
+      status: "ok",
+      version: "0.1.0",
+      commit: COMMIT,
+      imageCommit: COMMIT,
+      runtimeCommit: COMMIT,
+      commitSourceState: "match",
+    },
     database: { status: "ok" },
     redis: { status: "ok" },
     uptime: 12,
@@ -110,7 +117,14 @@ describe("AppController.getHealth", () => {
 
   it("reports a null commit as null in the 503 body, never as a missing key", async () => {
     const health = healthWith({
-      application: { status: "ok", version: "0.1.0", commit: null },
+      application: {
+        status: "ok",
+        version: "0.1.0",
+        commit: null,
+        imageCommit: null,
+        runtimeCommit: null,
+        commitSourceState: "both-missing",
+      },
       redis: { status: "unavailable" },
     });
 
