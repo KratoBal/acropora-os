@@ -131,6 +131,52 @@ describe("a betöltő-bemenet értelmezése", () => {
     assert.match(rossz.errors[0]!, /üres kanonikus/);
   });
 
+  /**
+   * A FEJLEC-NEVEK KOZUL EGY SZAMIT, A TOBBI HAT NEM -- ES EZ MOSTANTOL ALLITAS.
+   *
+   * === MIERT KELL EZ A KET SZELET ===
+   *
+   * 2026-09-07-en a bemeneti fajl OTODIK oszlopa egy hetig `jeleoles` alakban
+   * allt, es amikor atirtuk `jeloles`-re, a kod el sem mozdult. Ezt ugy adtuk
+   * tovabb, hogy "a beolvaso nem ellenoriz a fejlec NEVEIRE". A kod olvasasa es
+   * ez a ket szelet egyutt pontositja: a MASODIKTOL a hetedikig tenyleg nem
+   * szamit a nev, az ELSO viszont igen -- a fejlecet epp arrol ismerjuk fel,
+   * hogy az elso mezoje `kanonikus`.
+   *
+   * A kulonbseg nem szormenszalhasogatas: ha valaki az ELSO oszlopot nevezi at,
+   * nem "ismeretlen fejlec" hibat kap, hanem azt, hogy a fejlec HIANYZIK, es a
+   * fejlec-sor ADATSORKENT megy at. Ezt jobb allitasban tartani, mint a
+   * felfedezesre bizni.
+   */
+  it("a második és a további oszlopok NEVE nem számít", () => {
+    const MAS_NEVEK = "kanonikus\tketto\tharom\tnegy\tjeleoles\that\thet\n";
+
+    const { rows, errors } = parseBrandMaster(
+      MAS_NEVEK + "Triton\tTRITON\t\tGYARTO\tnem_onallo\t\tmegj\n",
+    );
+
+    assert.deepEqual(errors, []);
+    assert.equal(rows.length, 1);
+    // A MEZOK A SORRENDBOL kapjak az ertelmuket, nem a fejlec szavaibol.
+    assert.equal(rows[0]!.kanonikus, "Triton");
+    assert.equal(rows[0]!.alias, "TRITON");
+    assert.equal(rows[0]!.forras, "GYARTO");
+    assert.equal(rows[0]!.jelolo, "nem_onallo");
+    assert.equal(rows[0]!.megjegyzes, "megj");
+  });
+
+  it("az ELSŐ oszlop neve viszont számít: enélkül a fejléc nem fejléc", () => {
+    const { rows, errors } = parseBrandMaster(
+      "egy\tketto\tharom\tnegy\tot\that\thet\n" +
+        "Triton\tTRITON\t\tGYARTO\t\t\t\n",
+    );
+
+    assert.match(errors.join(" "), /fejléc sor hiányzik/);
+    // ES A FEJLEC-SOR ADATKENT MEGY AT -- ezert lesz ket sor, nem egy.
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0]!.kanonikus, "egy");
+  });
+
   it("a # sorokat és az üres sorokat kihagyja", () => {
     const { rows, errors } = parseBrandMaster(
       "# fejlec-komment\n\n" + FEJLEC + "Triton\tTRITON\t\tGYARTO\t\t\tmegj\n",
