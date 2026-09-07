@@ -61,6 +61,18 @@ export const OWNED_METADATA_PREFIXES = ["seo_", "unas_"] as const;
  */
 export const OWNED_METADATA_KEYS = ["unique_piece"] as const;
 
+/**
+ * EGY PONTOSITAS A SZABALY ALAKJAHOZ (acrobot, 2026-09-07 este).
+ *
+ * A dontes ugy hangzott el, hogy "harom ELOTAG a mienk". Ketto elotag (`seo_`,
+ * `unas_`), a `unique_piece` viszont TELJES KULCS, nem elotag -- es a kulonbseg
+ * nem szormenszalhasogatas: elotagkent olvasva egy `unique_piece_valami` nevu
+ * uj kulcs a mienknek LATSZANA, holott az `isOwnedMetadataKey` idegennek venne.
+ *
+ * A ket lista ezert kulon all, es az orzo (a szolgaltatas specjeben) a
+ * FUGGVENYT hivja, nem a nevek listajat olvassa -- igy a szabaly egy helyen lakik.
+ */
+
 /** A MIENK-E EZ A KULCS. Minden mas erintetlen marad. */
 export function isOwnedMetadataKey(key: string): boolean {
   return (
