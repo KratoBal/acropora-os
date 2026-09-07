@@ -21,6 +21,7 @@ import { ViesVatModule } from "./integrations/vies/vies-vat.module.js";
 import { FoxpostSettlementModule } from "./integrations/foxpost/foxpost-settlement.module.js";
 import { InventoryModule } from "./inventory/inventory.module.js";
 import { UnasOrderSyncModule } from "./orders/unas-order-sync/unas-order-sync.module.js";
+import { CarrierShipmentModule } from "./orders/carrier-shipment/carrier-shipment.module.js";
 import { PosModule } from "./pos/pos.module.js";
 import { ProductModule } from "./products/product.module.js";
 import { PurchasingModule } from "./purchasing/purchasing.module.js";
@@ -41,6 +42,7 @@ import { WorksheetsModule } from "./worksheets/worksheets.module.js";
     InventoryModule,
     PosModule,
     UnasOrderSyncModule,
+    CarrierShipmentModule,
     CustomersModule,
     UnasCustomerSyncModule,
     AiUserContextModule,

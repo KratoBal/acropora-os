@@ -913,6 +913,7 @@ export function parseUnasOrderResponse(
       statusType: value(order, "StatusType") ?? null,
       statusId: value(order, "StatusID") ?? null,
       orderedAt: looseOrderDateTime(value(order, "Date"), shopTimeZone),
+      customerExternalId: customer ? (value(customer, "Id") ?? null) : null,
       customerName: contact ? (value(contact, "Name") ?? null) : null,
       customerEmail: customer ? (value(customer, "Email") ?? null) : null,
       // The billing name MUST come from the invoice address, not the

@@ -237,6 +237,8 @@ export interface UnasApiOrder {
   statusId: string | null;
   /** Best-effort parse of the Date field; null if the format couldn't be recognized. */
   orderedAt: string | null;
+  /** UNAS Customer.Id. Missing values are never inferred from customer data. */
+  customerExternalId: string | null;
   customerName: string | null;
   customerEmail: string | null;
   /**
