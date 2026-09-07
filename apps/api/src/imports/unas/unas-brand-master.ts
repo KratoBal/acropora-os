@@ -133,6 +133,16 @@ export function parseBrandMaster(text: string): {
 }
 
 export interface BrandMasterPlan {
+  /**
+   * Aliasok, amiket a NORMALIZALAS azonosnak lat, ezert csak az elso megy at.
+   *
+   * Nem hiba, es nem is elhallgatando: a bemenet SZANDEKOSAN sorolja fel a
+   * `REDSEA` es a `RedSea` alakot is, mert a nyers ertek barmelyik lehet. A
+   * tarolo viszont a normalizalt alakra tart egyedi megkotest, tehat ketto
+   * kozuluk egy sor.
+   */
+  mergedAliases: { name: string; normalized: string; dropped: string[] }[];
+
   /** Amit letre kell hozni: kanonikus nev plusz a sajat aliasai. */
   create: {
     name: string;
@@ -172,6 +182,7 @@ export function planBrandMaster(
     skipped: [],
     blockedValues: [],
     mixedMarkers: [],
+    mergedAliases: [],
   };
 
   /**
@@ -224,6 +235,62 @@ export function planBrandMaster(
       plan.alreadyThere.push(marka.name);
       continue;
     }
+    /**
+     * AZ ALIASOKAT A TAROLO NORMALIZALOJAVAL VONJUK OSSZE, MIELOTT ATADJUK.
+     *
+     * === A MERT BUKAS, AMI EZT KIKENYSZERITETTE ===
+     *
+     * A teszt gepen az iras `P2002`-vel elhasalt a `normalizedAlias` mezon, es
+     * RESZLEGES allapotot hagyott (18 marka es 3 alias letrejott, aztan meghalt
+     * -- a letrehozas nem egy tranzakcio).
+     *
+     * Elso gyanunk a teszt gep szennyezett allapota volt: ott 48 marka MAR allt
+     * a nyers ertekekbol. Nem az: a bemeneten belul, TISZTA adatbazison is OT
+     * marka bukna el ugyanigy. Merve a `brands.repository` sajat
+     * normalizalojaval: Aqua Light (`aqualight` ketszer), Ecotech Marine
+     * (`ecotech`), Red Sea (`redsea`), Rowa (`rowa phos`), Two Little Fishies
+     * (`two little`).
+     *
+     * === MIERT NEM LATSZOTT A BEMENET ELLENORZESEKOR ===
+     *
+     * A bemenetet keszito meres MASIK normalizalot hasznalt: az elvalasztojelet
+     * TORLI, a tarolo viszont SZOKOZRE csereli. `Red Sea` -> `redsea` az egyik
+     * szerint, `red sea` a masik szerint. Az elso alak mellett a `RedSea` alias
+     * a marka SAJAT nevevel esik egybe -- a tarolo az ilyet kiszuri --, a
+     * masodik mellett viszont ket kulonbozo aliasnak latszik, es utkozik.
+     * Ugyanaz a ket sor, ket ellentetes eredmennyel; a kulonbseg nem az adatban
+     * van, hanem abban, ki nezi.
+     *
+     * === MIERT ITT, ES NEM A TAROLOBAN ===
+     *
+     * A tarolo `create` metodusa kozos ut, minden marka-letrehozas rajta megy.
+     * Ott egy csendes osszevonas MASOKTOL is elvenne az utkozes-jelzest. Itt
+     * viszont a bemenet ismert tulajdonsagarol van szo, es a terv KI IS IRJA,
+     * melyik alakot hagyta el -- tehat nem tunik el.
+     */
+    const latott = new Map<string, string>();
+    const megtartott: string[] = [];
+    const eldobott: { normalized: string; dropped: string[] }[] = [];
+    for (const alias of marka.aliases) {
+      const kulcs = normalizeBrandName(alias);
+      const elso = latott.get(kulcs);
+      if (elso === undefined) {
+        latott.set(kulcs, alias);
+        megtartott.push(alias);
+        continue;
+      }
+      const meglevo = eldobott.find((e) => e.normalized === kulcs);
+      if (meglevo) meglevo.dropped.push(alias);
+      else eldobott.push({ normalized: kulcs, dropped: [alias] });
+    }
+    for (const e of eldobott)
+      plan.mergedAliases.push({
+        name: marka.name,
+        normalized: e.normalized,
+        dropped: e.dropped,
+      });
+    marka.aliases = megtartott;
+
     plan.create.push({
       name: marka.name,
       aliases: marka.aliases,
@@ -241,6 +308,7 @@ export function describeBrandMasterPlan(plan: BrandMasterPlan): string {
     `Kihagyva (nem márka vagy ellenőrizendő): ${plan.skipped.length}`,
     `Tiltó bejegyzés (a visszatöltés nem rendelhet hozzá): ${plan.blockedValues.length}`,
     `Ellentmondó jelölésű márka (kihagyva): ${plan.mixedMarkers.length}`,
+    `Összevont alias (a normalizálás azonosnak látja): ${plan.mergedAliases.length}`,
   ];
 
   if (plan.mixedMarkers.length) {
@@ -252,6 +320,19 @@ export function describeBrandMasterPlan(plan: BrandMasterPlan): string {
   if (plan.skipped.length) {
     sorok.push("", "Kihagyva, és MIÉRT:");
     for (const s of plan.skipped) sorok.push(`  ${s.name} -- ${s.jelolo}`);
+  }
+  if (plan.mergedAliases.length) {
+    sorok.push(
+      "",
+      "ÖSSZEVONT ALIASOK -- a tároló a normalizált alakra tart egyedi megkötést,",
+      "ezért a csoportból az ELSŐ írásmód megy át, a többi kimarad:",
+    );
+    for (const m of plan.mergedAliases)
+      sorok.push(
+        `  ${m.name} -- "${m.normalized}": kimaradt ${m.dropped
+          .map((d) => `"${d}"`)
+          .join(", ")}`,
+      );
   }
   if (plan.blockedValues.length) {
     sorok.push("", "Tiltott értékek (a visszatöltés ezekre NEM ír márkát):");
