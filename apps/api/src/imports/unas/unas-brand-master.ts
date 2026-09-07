@@ -411,7 +411,30 @@ export function planBrandMaster(
   return plan;
 }
 
-export function describeBrandMasterPlan(plan: BrandMasterPlan): string {
+/**
+ * A TERMEKSZAM ES A MERES KORULMENYEI.
+ *
+ * A tervet tiszta fuggveny allitja elo, a termekszam viszont az ADATBAZISBOL jon.
+ * Ezert nem a tervben lakik, hanem itt adjuk hozza -- igy a terv tesztelheto
+ * marad adatbazis nelkul, a jelentes pedig teljes lesz ott, ahol adatbazis van.
+ *
+ * A KET KISERO ADAT NEM DISZ:
+ *
+ *   `at`      egy termekszam a szinkronnal MOZOG. Datum nelkul a lista holnap
+ *             ugyanolyan magabiztosan hazudik, mint ma igazat mond.
+ *   `source`  a teszt gep szama NEM az eles szama, es a ket listat egymas melle
+ *             teve semmi nem kulonbozteti meg oket.
+ */
+export interface BrandMasterReportContext {
+  productCounts: Record<string, number>;
+  at: string;
+  source: string;
+}
+
+export function describeBrandMasterPlan(
+  plan: BrandMasterPlan,
+  meres?: BrandMasterReportContext,
+): string {
   const sorok = [
     `Létrehozandó márka-rekord: ${plan.create.length}`,
     `Már áll, érintetlen: ${plan.alreadyThere.length}`,
@@ -458,10 +481,23 @@ export function describeBrandMasterPlan(plan: BrandMasterPlan): string {
       "",
       "MÁS ÍRÁSMÓD, UGYANAZ A GYÁRTÓ -- az átnevezés DÖNTÉS, nem betöltés:",
     );
-    for (const n of plan.nameDifferences)
+    if (meres)
+      sorok.push(`  (termékszám mérve: ${meres.at}, forrás: ${meres.source})`);
+    for (const n of plan.nameDifferences) {
+      const db = meres?.productCounts[n.brandId];
+      /**
+       * A HIANYZO SZAM NEM NULLA, ES NEM IS SZABAD ANNAK LATSZANIA.
+       *
+       * Ha a parancs adatbazis nelkul fut, a termekszam nem ismert. Egy ures
+       * hely vagy egy `0` ugyanugy nezne ki, mint egy valodi nulla -- es epp
+       * azt a tetelt tuntetne el a dontesbol, amelyik a legolcsobb eset lenne.
+       */
+      const suly =
+        db === undefined ? " -- termékszám: NEM MÉRT" : ` -- ${db} termék`;
       sorok.push(
-        `  a táblában "${n.existingName}", a törzsben "${n.canonicalName}"`,
+        `  a táblában "${n.existingName}", a törzsben "${n.canonicalName}"${suly}`,
       );
+    }
   }
 
   if (plan.aliasTopUp.length) {

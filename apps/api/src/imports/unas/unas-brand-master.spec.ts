@@ -256,6 +256,60 @@ describe("a betöltő-terv alias-összevonása", () => {
   });
 });
 
+/**
+ * A NEV-ELTERES JELENTESE BALAZSNAK KESZUL, ES A SULYA NELKUL NEM DONTHETO EL.
+ *
+ * acrobot kerese: a termekszam alljon ott, mellette a MERES IDEJE es a FORRAS.
+ * Az elso azert, mert egy termekszam a szinkronnal mozog; a masodik azert, mert
+ * a teszt gep szama nem az eles szama, es ket lista egymas mellett semmi masban
+ * nem kulonbozik.
+ */
+describe("a név-eltérés jelentése", () => {
+  const terv = () =>
+    planBrandMaster(
+      [
+        {
+          kanonikus: "Aqua Medic",
+          alias: "AquaMedic",
+          ketertelmu: "",
+          forras: "BRAND",
+          jelolo: "",
+          feltetelesSzulo: "",
+          megjegyzes: "",
+        },
+      ],
+      [letezo("AquaMedic")],
+    );
+
+  it("a termékszám, a mérés ideje és a forrás is kiíródik", () => {
+    const szoveg = describeBrandMasterPlan(terv(), {
+      productCounts: { "brand-aquamedic": 37 },
+      at: "2026-09-07T12:00:00.000Z",
+      source: "db-teszt:5432/acropora",
+    });
+
+    assert.match(szoveg, /37 termék/);
+    assert.match(szoveg, /2026-09-07T12:00:00\.000Z/);
+    assert.match(szoveg, /db-teszt:5432\/acropora/);
+  });
+
+  /**
+   * ES A HIANYZO SZAM NEM NULLA.
+   *
+   * Adatbazis nelkul futtatva a termekszam nem ismert. Ha ilyenkor `0` allna
+   * ott, az pont azt a tetelt tuntetne el a dontesbol, amelyik a legolcsobb
+   * esetnek latszana -- es a kulonbseget senki nem venne eszre.
+   */
+  it("mérés nélkül NEM nullát ír, hanem megmondja, hogy nem mért", () => {
+    const szoveg = describeBrandMasterPlan(terv());
+
+    assert.match(szoveg, /termékszám: NEM MÉRT/);
+    assert.doesNotMatch(szoveg, /0 termék/);
+    // ES A LISTA ATTOL MEG OTT ALL: a hianyzo suly nem tunteti el a tetelt.
+    assert.match(szoveg, /a táblában "AquaMedic", a törzsben "Aqua Medic"/);
+  });
+});
+
 describe("a betöltő-bemenet értelmezése", () => {
   const FEJLEC =
     "kanonikus\talias\tketertelmu\tforras\tjeloles\tfelteteles_szulo\tmegjegyzes\n";
