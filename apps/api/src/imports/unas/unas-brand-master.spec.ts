@@ -102,7 +102,7 @@ describe("a márka-törzs betöltőjének terve", () => {
 
 describe("a betöltő-bemenet értelmezése", () => {
   const FEJLEC =
-    "kanonikus\talias\tketertelmu\tforras\tjeleoles\tfelteteles_szulo\tmegjegyzes\n";
+    "kanonikus\talias\tketertelmu\tforras\tjeloles\tfelteteles_szulo\tmegjegyzes\n";
 
   it("a hét oszloptól eltérő sor HIBA, nem figyelmeztetés", () => {
     const { rows, errors } = parseBrandMaster(

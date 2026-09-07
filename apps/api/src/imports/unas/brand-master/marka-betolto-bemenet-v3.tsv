@@ -13,7 +13,7 @@
 # === EGY ELTERES ACROBOT KERESETOL, ES MEGMONDOM, MIERT ===
 #
 # A kert oszlopsor: kanonikus | aliasok | forras | jeloles | felteteles_szulo
-# Az itteni:        kanonikus | alias | ketertelmu | forras | jeleoles | felteteles_szulo | megjegyzes
+# Az itteni:        kanonikus | alias | ketertelmu | forras | jeloles | felteteles_szulo | megjegyzes
 #
 # A KULONBSEG AZ "aliasok" ES AZ "alias" KOZOTT VAN, es nem stiluskerdes. Acrobot egy
 # korabbi uzeneteben azt kerte, hogy a ketertelmuseg egy NYERS ERTEKROL mondjon allitast
@@ -33,7 +33,7 @@
 #   alias             EGY nyers ertek, ami erre a markara mutat
 #   ketertelmu        "igen", ha maga az ERTEK ket markat takar -> a betoltes UTASITSA VISSZA
 #   forras            GYARTO, BRAND vagy NEV
-#   jeleoles          ures, vagy nem_onallo / ellenorizendo / kanonikus_meretlen / ketertelmu_ertek
+#   jeloles           ures, vagy nem_onallo / ellenorizendo / kanonikus_meretlen / ketertelmu_ertek
 #   felteteles_szulo  ha nem_onallo vagy ellenorizendo: MELYIK marka ala tartozhat.
 #                     URES, ha nincs jeloles, VAGY ha a kerdes nem ez (lasd a Gourmet-t).
 #   megjegyzes        az indok, es hogy MERT-e vagy a TORZS megjegyzese
@@ -72,7 +72,7 @@
 #   - a Jebao es a Jecod KULON, valodi markakent bent van; a ragasztott ERTEK ketertelmu
 #   - az OASE kanonikus alakja MERETLEN (ket domain, mindketto 429)
 #
-kanonikus	alias	ketertelmu	forras	jeleoles	felteteles_szulo	megjegyzes
+kanonikus	alias	ketertelmu	forras	jeloles	felteteles_szulo	megjegyzes
 AQAMAI	AQAMAI		NEV			
 ARKA	ARKA		GYARTO			
 ARKA	Arka		GYARTO			

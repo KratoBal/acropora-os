@@ -68,10 +68,11 @@ export const TILTO_JELOLO = "ketertelmu_ertek";
 /**
  * A FAJL ERTELMEZESE, ES AZ OSZLOPSZAM SZIGORU.
  *
- * A FEJLEC NEVEIRE NEM ELLENORZUNK, es ez tudatos: a mai fajl otodik oszlopa
- * `jeleoles` alakban all (egy `e`-vel tobb, mint a `jeloles`). Egy nev-alapu
- * ellenorzes ettol elhasalna, holott az adat helyes -- a SORREND es az
- * OSZLOPSZAM az, ami szamit. A nevet jeleztem, de a fajl be van fagyasztva.
+ * A FEJLEC NEVEIRE NEM ELLENORZUNK, es ez tudatos: a SORREND es az OSZLOPSZAM
+ * az, ami szamit. Merve 2026-09-07: a fajl otodik oszlopa egy ideig `jeleoles`
+ * alakban allt (egy `e`-vel tobb) -- az adat vegig helyes volt, csak a nev nem.
+ * Egy nev-alapu ellenorzes ilyenkor elhasalna azon, ami nem szamit. (A nevet
+ * azota javitottak; a szabaly ettol fuggetlenul all.)
  *
  * MERVE a mai fajlon: 126 adatsor, MIND pontosan otoszlopos (a forras-torzsben
  * 80 volt otos es 45 hatos). Egy elcsuszott oszlop csendben az aliasok helyere
