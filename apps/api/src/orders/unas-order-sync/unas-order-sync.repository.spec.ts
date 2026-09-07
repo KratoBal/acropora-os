@@ -34,6 +34,7 @@ interface FakeOrderLine {
 interface FakeOrder {
   id: string;
   orderNumber: string;
+  customerId: string | null;
   status: string;
   buyerName: string | null;
   buyerEmail: string | null;
@@ -294,6 +295,7 @@ class FakeDb implements UnasOrderSyncDatabase {
       const order: FakeOrder = {
         id: nextId("order"),
         orderNumber: args.data.orderNumber as string,
+        customerId: args.data.customerId ?? null,
         status: args.data.status as string,
         buyerName: args.data.buyerName ?? null,
         buyerEmail: args.data.buyerEmail ?? null,
@@ -584,6 +586,7 @@ function baseOrder(overrides: Partial<UnasApiOrder> = {}): UnasApiOrder {
       },
     ],
     ...overrides,
+    customerExternalId: overrides.customerExternalId ?? null,
   };
 }
 
@@ -592,6 +595,51 @@ function repositoryWith(db: FakeDb) {
 }
 
 describe("UnasOrderSyncRepository.apply", () => {
+  it("links an order only through its UNAS customer external identifier", async () => {
+    const db = new FakeDb();
+    db.warehouses.push({
+      id: "wh-1",
+      name: "Fő raktár",
+      createdAt: new Date(0),
+    });
+    db.runs.push({ id: "run-1", status: "RUNNING" });
+    db.externalReferences.push({
+      id: "customer-ref",
+      entityId: "customer-42",
+      externalId: "UNAS-CUSTOMER-42",
+      externalKey: null,
+      metadata: null,
+    });
+
+    await repositoryWith(db).apply(
+      "run-1",
+      [baseOrder({ customerExternalId: "UNAS-CUSTOMER-42" })],
+      null,
+      new Date("2026-07-20T15:00:00.000Z"),
+    );
+
+    assert.equal(db.orders[0]?.customerId, "customer-42");
+  });
+
+  it("does not guess a customer when UNAS omitted Customer.Id", async () => {
+    const db = new FakeDb();
+    db.warehouses.push({
+      id: "wh-1",
+      name: "Fő raktár",
+      createdAt: new Date(0),
+    });
+    db.runs.push({ id: "run-1", status: "RUNNING" });
+
+    await repositoryWith(db).apply(
+      "run-1",
+      [baseOrder({ customerExternalId: null })],
+      null,
+      new Date("2026-07-20T15:00:00.000Z"),
+    );
+
+    assert.equal(db.orders[0]?.customerId, null);
+  });
+
   it("creates a new order, decrements stock, and skips non-stock lines", async () => {
     const db = new FakeDb();
     db.warehouses.push({

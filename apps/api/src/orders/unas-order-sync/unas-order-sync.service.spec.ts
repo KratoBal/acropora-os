@@ -21,6 +21,7 @@ function order(key: string): UnasApiOrder {
     statusType: "open_normal",
     statusId: "1",
     orderedAt: null,
+    customerExternalId: null,
     customerName: null,
     customerEmail: null,
     buyerInvoiceName: null,

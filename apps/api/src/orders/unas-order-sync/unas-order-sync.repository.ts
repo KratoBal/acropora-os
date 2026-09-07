@@ -1083,6 +1083,7 @@ export class UnasOrderSyncRepository extends Repository {
     const newStatus = mapUnasOrderStatus(order.statusType);
     const invoiceStatusChanged =
       order.invoiceStatus !== existing.unasInvoiceStatus;
+    const customerId = await this.resolveCustomerId(transaction, order);
     const billingFields = {
       buyerName: order.buyerInvoiceName,
       buyerTaxNumber: order.buyerTaxNumber,
@@ -1092,6 +1093,10 @@ export class UnasOrderSyncRepository extends Repository {
       buyerZip: order.buyerZip,
       buyerCity: order.buyerCity,
       buyerAddress: order.buyerAddress,
+      // An absent source identifier means "unknown", not "unlink this
+      // customer". A present identifier that has no local Customer reference
+      // does explicitly clear a stale link rather than guessing a replacement.
+      ...(customerId === undefined ? {} : { customerId }),
     };
     const totals = orderTotals(order);
 
@@ -1226,6 +1231,7 @@ export class UnasOrderSyncRepository extends Repository {
           paymentStatus: order.paymentStatus,
           shippingName: order.shippingName,
           couponCode: order.couponCode,
+          customerExternalId: order.customerExternalId,
         }),
         lastSyncedAt: syncedAt,
       },
@@ -1429,6 +1435,29 @@ export class UnasOrderSyncRepository extends Repository {
     });
   }
 
+  /**
+   * Resolves solely through the UNAS Customer external identity. `undefined`
+   * preserves an existing link when UNAS omitted Customer.Id; `null` means
+   * UNAS named a customer that has not been imported locally yet.
+   */
+  private async resolveCustomerId(
+    transaction: UnasOrderSyncTransaction,
+    order: UnasApiOrder,
+  ): Promise<string | null | undefined> {
+    if (!order.customerExternalId) return undefined;
+    const reference = await transaction.externalReference.findUnique({
+      where: {
+        system_entityType_externalId: {
+          system: "UNAS",
+          entityType: "Customer",
+          externalId: order.customerExternalId,
+        },
+      },
+      select: EXTERNAL_REFERENCE_ROW_SELECT,
+    });
+    return reference?.entityId ?? null;
+  }
+
   private async createNewOrder(
     transaction: UnasOrderSyncTransaction,
     order: UnasApiOrder,
@@ -1437,6 +1466,7 @@ export class UnasOrderSyncRepository extends Repository {
     const { lineInputs } = await buildLineInputs(transaction, order);
     const totals = orderTotals(order);
     const newStatus = mapUnasOrderStatus(order.statusType);
+    const customerId = await this.resolveCustomerId(transaction, order);
 
     const orderRow = await transaction.salesOrder.create({
       data: {
@@ -1445,6 +1475,7 @@ export class UnasOrderSyncRepository extends Repository {
         status: newStatus,
         currency: order.currency ?? "HUF",
         warehouseId,
+        customerId: customerId ?? null,
         buyerName: order.buyerInvoiceName,
         buyerEmail: order.customerEmail,
         buyerTaxNumber: order.buyerTaxNumber,
@@ -1510,6 +1541,8 @@ export class UnasOrderSyncRepository extends Repository {
           paymentType: order.paymentType,
           paymentStatus: order.paymentStatus,
           shippingName: order.shippingName,
+          couponCode: order.couponCode,
+          customerExternalId: order.customerExternalId,
         }),
         lastSyncedAt: new Date(),
       },

@@ -499,7 +499,7 @@ describe("UNAS getOrder contract", () => {
 <Key>UN-1001</Key><InternalKey>internal-1</InternalKey>
 <Date>2026.07.20 14:05:00</Date>
 <Status>Feldolgozás alatt</Status><StatusType>open_normal</StatusType><StatusID>3</StatusID>
-<Customer><Email>vevo@example.com</Email><Contact><Name>Kovács Anna</Name></Contact></Customer>
+<Customer><Id>UNAS-CUSTOMER-42</Id><Email>vevo@example.com</Email><Contact><Name>Kovács Anna</Name></Contact></Customer>
 <Currency>HUF</Currency><SumPriceGross>12700</SumPriceGross>
 <Payment><Name>Bankkártya</Name><Type>bankcard</Type><Status>paid</Status></Payment>
 <Shipping><Name>GLS</Name></Shipping>
@@ -520,6 +520,7 @@ describe("UNAS getOrder contract", () => {
     // it in the shop/browser timezone shows the original 14:05 again.
     assert.equal(order.orderedAt, "2026-07-20T12:05:00.000Z");
     assert.equal(order.customerName, "Kovács Anna");
+    assert.equal(order.customerExternalId, "UNAS-CUSTOMER-42");
     assert.equal(order.customerEmail, "vevo@example.com");
     assert.equal(order.sumPriceGross, "12700");
     assert.equal(order.paymentName, "Bankkártya");
@@ -536,6 +537,14 @@ describe("UNAS getOrder contract", () => {
     ]);
     assert.equal(order.items[1]?.sku, null);
     assert.equal(order.items[1]?.id, "shipping-cost");
+  });
+
+  it("keeps a missing UNAS customer identifier unknown", () => {
+    const order = parseUnasOrderResponse(
+      orderResponse.replace("<Id>UNAS-CUSTOMER-42</Id>", ""),
+    )[0]!;
+
+    assert.equal(order.customerExternalId, null);
   });
 
   it("converts UNAS shop-local order dates with Budapest daylight-saving time", () => {

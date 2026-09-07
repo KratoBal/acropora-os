@@ -1967,6 +1967,7 @@ model SalesOrder {
   invoices               Invoice[]
   foxpostSettlementLines FoxpostSettlementLine[]
   businessStatusEvents   OrderBusinessStatusEvent[]
+  carrierShipments       CarrierShipment[]
 
   @@index([status, createdAt])
   @@index([businessStatus, createdAt])
@@ -1974,6 +1975,28 @@ model SalesOrder {
   @@index([channel, createdAt])
   @@index([unasInvoiceStatus])
   @@index([channel, unasDeletedAt, unasExistenceCheckDueAt])
+}
+
+/// A futártól kapott állapot szándékosan szabad szöveg: amíg nincs konkrét
+/// fuvarozói szerződés/API, nem találunk ki szolgáltatófüggő enumot.
+model CarrierShipment {
+  id              String    @id @default(cuid())
+  salesOrderId    String
+  carrier         String
+  /// A rendelés külső kulcsa (pl. UNAS Key), nem számlaszám. A Foxpost
+  /// elszámolás is ezt használja a rendelés feloldására.
+  orderReference  String
+  parcelNumber    String?
+  status          String
+  statusChangedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  salesOrder SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+
+  @@index([salesOrderId, createdAt])
+  @@index([carrier, parcelNumber])
+  @@index([orderReference])
 }
 
 /// Append-only nyom az üzleti rendelésállapot változásairól. A kezdeti,

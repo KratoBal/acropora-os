@@ -71,6 +71,7 @@ function baseOrder(overrides: Partial<UnasApiOrder> = {}): UnasApiOrder {
     couponCode: null,
     items: [],
     ...overrides,
+    customerExternalId: overrides.customerExternalId ?? null,
   };
 }
 
