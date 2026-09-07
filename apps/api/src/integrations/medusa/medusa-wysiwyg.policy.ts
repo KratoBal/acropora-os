@@ -80,6 +80,29 @@ export const WYSIWYG_CATEGORY_NAME = "WYSIWYG";
 export function wysiwygSubtreeIds(
   categories: readonly WysiwygCategoryNode[],
 ): Set<string> {
+  return subtreeIdsByNames(categories, [WYSIWYG_CATEGORY_NAME]);
+}
+
+/**
+ * EGY RESZFA-BEJARAS, TOBB SZABALYNAK.
+ *
+ * === MIERT KULON, ES MIERT MOST ===
+ *
+ * A "melyik termek esik egy nevesitett kategoria ALA" kerdes ma HAROM szabalynal
+ * all elo: a WYSIWYG rendelhetoseg, az elo allat szallitasi korlat, es a kirakat
+ * sotet-vilagos valtoja. Ha mindegyik SAJAT bejarast ir, akkor a kor elleni
+ * vedelem, a kis-nagybetu kezelese es a "minden besorolas szamit" szabaly harom
+ * helyen all -- es az elso nap elcsuszik.
+ *
+ * A NEVEK maradnak szabalyonkent kulon (azok tenyleg kulonboznek); a BEJARAS
+ * egy.
+ */
+export function subtreeIdsByNames(
+  categories: readonly WysiwygCategoryNode[],
+  names: readonly string[],
+): Set<string> {
+  const keresett = new Set(names.map((n) => n.trim().toLowerCase()));
+
   const gyerekek = new Map<string, string[]>();
   for (const kategoria of categories) {
     if (!kategoria.parentId) continue;
@@ -90,11 +113,7 @@ export function wysiwygSubtreeIds(
 
   const eredmeny = new Set<string>();
   const sor = categories
-    .filter(
-      (kategoria) =>
-        kategoria.name.trim().toLowerCase() ===
-        WYSIWYG_CATEGORY_NAME.toLowerCase(),
-    )
+    .filter((kategoria) => keresett.has(kategoria.name.trim().toLowerCase()))
     .map((kategoria) => kategoria.id);
 
   while (sor.length > 0) {

@@ -10,6 +10,7 @@ import {
   medusaClientForProjection,
   storedCredentialProvider,
 } from "./medusa-projection.credentials.js";
+import { liveAnimalSubtreeIds } from "./medusa-livestock.policy.js";
 import { MedusaShippingAttributesService } from "./medusa-shipping-attributes.service.js";
 
 /**
@@ -32,6 +33,18 @@ import { MedusaShippingAttributesService } from "./medusa-shipping-attributes.se
  * mik voltak.
  */
 export interface ShippingAttributesCliDatabase {
+  /** A kategoria-fa, a szarmaztatott bolti atvetelhez. Egy lekerdezes. */
+  category: {
+    findMany(
+      args: unknown,
+    ): Promise<{ id: string; name: string; parentId: string | null }[]>;
+  };
+  /** A besorolasok, CSAK az elo allat reszfara szurve. */
+  productCategory: {
+    findMany(
+      args: unknown,
+    ): Promise<{ productId: string; categoryId: string }[]>;
+  };
   productShippingProfile: {
     findMany(args: unknown): Promise<
       {
@@ -63,6 +76,34 @@ export async function runShippingAttributesCli(
   const apply = argumentumok.includes("--apply");
   const idk = argumentumok.filter((a) => !a.startsWith("--"));
 
+  /**
+   * A HALMAZ KET FORRASBOL AL OSSZE, ES A MASODIK AZ, AMI MA EGYALTALAN AD
+   * ADATOT.
+   *
+   * profil-sor:      valaki KEZZEL megvizsgalta a terméket
+   * elo allat ag:    a kategoria-fa mondja meg, hogy bolti atvetel jar
+   *
+   * A ket halmaz UNIOJA a cel. Ha csak a profil-sorokat neznenk, ma NULLA
+   * termeket vinnenk at (merve: nulla profil-sor all az adatbazisban), es a
+   * parancs helyesen mondana, hogy nincs mit tenni -- kozben 206 elo allat
+   * termek maradna jeloletlen a boltban.
+   */
+  const kategoriak = await database.category.findMany({
+    select: { id: true, name: true, parentId: true },
+  });
+  const eloAllatIds = liveAnimalSubtreeIds(kategoriak);
+
+  const besorolasok = eloAllatIds.size
+    ? await database.productCategory.findMany({
+        where: {
+          categoryId: { in: [...eloAllatIds] },
+          ...(idk.length ? { productId: { in: idk } } : {}),
+        },
+        select: { productId: true, categoryId: true },
+      })
+    : [];
+  const eloAllatTermekek = new Set(besorolasok.map((sor) => sor.productId));
+
   const profilok = await database.productShippingProfile.findMany({
     where: idk.length ? { productId: { in: idk } } : {},
     select: {
@@ -75,18 +116,28 @@ export async function runShippingAttributesCli(
     orderBy: { productId: "asc" },
   });
 
-  if (profilok.length === 0) {
+  const profilPerTermek = new Map(profilok.map((p) => [p.productId, p]));
+  const celok = [
+    ...new Set([...profilPerTermek.keys(), ...eloAllatTermekek]),
+  ].sort();
+
+  if (celok.length === 0) {
     /**
      * A NULLA NEM HIBA, DE NEM IS NEMA: megmondjuk, MIT kerdeztunk. Enelkul a
      * kimenet ugyanugy nezne ki, mint egy elhasalt lekerdezes.
      */
     out.stdout(
       idk.length
-        ? `Egyetlen megadott terméknek sincs szállítási-jellemző sora (${idk.length} azonosító).\n`
-        : "Egyetlen terméknek sincs szállítási-jellemző sora: nincs mit átvinni.\n",
+        ? `A megadott termékek közül egyiknek sincs sem szállítási-jellemző sora, sem élő állat besorolása (${idk.length} azonosító).\n`
+        : "Egyetlen terméknek sincs sem szállítási-jellemző sora, sem élő állat besorolása: nincs mit átvinni.\n",
     );
     return 0;
   }
+
+  out.stdout(
+    `${celok.length} termék: ${profilPerTermek.size} kézzel kitöltött, ` +
+      `${eloAllatTermekek.size} élő állat besorolás alapján.\n`,
+  );
 
   let futtato = service;
   if (!futtato) {
@@ -109,12 +160,18 @@ export async function runShippingAttributesCli(
   }
 
   let bukott = 0;
-  for (const profil of profilok) {
-    const outcome = await futtato.project(profil.productId, profil, apply);
+  for (const productId of celok) {
+    const profil = profilPerTermek.get(productId) ?? null;
+    const outcome = await futtato.project(
+      productId,
+      profil,
+      apply,
+      eloAllatTermekek.has(productId),
+    );
     switch (outcome.action) {
       case "skipped":
         out.stdout(
-          `${profil.productId}: kihagyva (${
+          `${productId}: kihagyva (${
             outcome.reason === "no-link"
               ? "még nincs a boltban"
               : "nincs profil-sora"
@@ -123,17 +180,17 @@ export async function runShippingAttributesCli(
         break;
       case "unchanged":
         out.stdout(
-          `${profil.productId}: már így állt -> ${outcome.medusaProductId} (${outcome.flags})\n`,
+          `${productId}: már így állt -> ${outcome.medusaProductId} (${outcome.flags})\n`,
         );
         break;
       case "planned":
         out.stdout(
-          `${profil.productId}: KIKÜLDENÉNK -> ${outcome.medusaProductId} (${outcome.flags})\n`,
+          `${productId}: KIKÜLDENÉNK -> ${outcome.medusaProductId} (${outcome.flags})\n`,
         );
         break;
       case "applied":
         out.stdout(
-          `${profil.productId}: most állítottuk be -> ${outcome.medusaProductId} (${outcome.flags})\n`,
+          `${productId}: most állítottuk be -> ${outcome.medusaProductId} (${outcome.flags})\n`,
         );
         break;
     }

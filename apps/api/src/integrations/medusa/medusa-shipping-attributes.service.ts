@@ -23,7 +23,10 @@ import {
  * synchronizes by product id", az OS-ben viszont nulla talalat volt erre.
  */
 export type ShippingAttributesOutcome =
-  /** Nincs profil-sor: senki nem vizsgalta meg a terméket. Nem irunk. */
+  /**
+   * Nincs profil-sor ES nincs szarmaztatott korlat: senki nem vizsgalta meg a
+   * terméket, es a kategoriaja sem mond rola semmit. Nem irunk.
+   */
   | { action: "skipped"; reason: "no-profile" }
   /** Nincs bolti lekepezes: a termek meg nincs kint. Nem irunk. */
   | { action: "skipped"; reason: "no-link" }
@@ -55,13 +58,40 @@ export class MedusaShippingAttributesService {
     osProductId: string,
     profile: OsShippingProfile | null,
     apply: boolean,
+    /**
+     * A KATEGORIABOL SZARMAZTATOTT BOLTI ATVETEL.
+     *
+     * === MIERT VALTOZTATJA MEG A "NINCS PROFIL -> KIHAGYJUK" SZABALYT ===
+     *
+     * A profil hianya azt jelenti, hogy SENKI NEM NEZTE MEG a terméket. A
+     * szarmaztatott ertek viszont MAGA a megnezes: a kategoria-fa megmondja,
+     * hogy elo allatrol van szo. Ilyenkor tehat VAN mondanivalonk, profil-sor
+     * nelkul is -- es ha nem irnank ki, egy elo allat futarral indulna el.
+     *
+     * A ket forras egyesitese VAGY kapcsolat: a kezi jeloles NEM tudja
+     * felulirni a szarmaztatottat. Egy ember, aki kikapcsolja a bolti atvetelt
+     * egy korallon, nem "dontest hoz", hanem elront valamit, amit a fa mond.
+     */
+    derivedPickupOnly = false,
   ): Promise<ShippingAttributesOutcome> {
-    if (!profile) return { action: "skipped", reason: "no-profile" };
+    if (!profile && !derivedPickupOnly)
+      return { action: "skipped", reason: "no-profile" };
 
     const link = await this.links.findByProductId(osProductId);
     if (!link) return { action: "skipped", reason: "no-link" };
 
-    const wanted: MedusaShippingFlags = shippingFlagsFromProfile(profile);
+    const wanted: MedusaShippingFlags = shippingFlagsFromProfile({
+      /**
+       * A HIANYZO PROFIL MEZOI HAMISAK, es ez NEM ugyanaz, mint a fenti
+       * "kihagyjuk" ag: ide csak akkor jutunk el, ha a szarmaztatott ertek
+       * IGAZ, tehat van mit mondanunk. A tobbi harom mezo ilyenkor tenyleg
+       * ismeretlen -- es a hianyuk NEM korlatozas.
+       */
+      pickupOnly: (profile?.pickupOnly ?? false) || derivedPickupOnly,
+      foxpostForbidden: profile?.foxpostForbidden ?? false,
+      isHeavy: profile?.isHeavy ?? false,
+      isFrozen: profile?.isFrozen ?? false,
+    });
     const leiras = describeShippingFlags(wanted);
 
     /**
