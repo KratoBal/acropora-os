@@ -48,6 +48,15 @@ export interface BrandMasterRow {
   ketertelmu: string;
   forras: string;
   jelolo: string;
+  /**
+   * A DONTESI TABLAT SZOLGALJA, A BETOLTOT NEM.
+   *
+   * Beolvassuk, hogy a fajl alakja teljesen le legyen irva, de VISELKEDEST NEM
+   * epitunk ra: azt a kerdest szolgalja, hogy melyik nev melyik marka
+   * termekvonala lehet, es az ember ele megy. A betolto amugy is kihagyja a
+   * `nem_onallo` sorokat, ahol ez az adat all.
+   */
+  feltetelesSzulo: string;
   megjegyzes: string;
 }
 
@@ -58,6 +67,11 @@ export const TILTO_JELOLO = "ketertelmu_ertek";
 
 /**
  * A FAJL ERTELMEZESE, ES AZ OSZLOPSZAM SZIGORU.
+ *
+ * A FEJLEC NEVEIRE NEM ELLENORZUNK, es ez tudatos: a mai fajl otodik oszlopa
+ * `jeleoles` alakban all (egy `e`-vel tobb, mint a `jeloles`). Egy nev-alapu
+ * ellenorzes ettol elhasalna, holott az adat helyes -- a SORREND es az
+ * OSZLOPSZAM az, ami szamit. A nevet jeleztem, de a fajl be van fagyasztva.
  *
  * MERVE a mai fajlon: 126 adatsor, MIND pontosan otoszlopos (a forras-torzsben
  * 80 volt otos es 45 hatos). Egy elcsuszott oszlop csendben az aliasok helyere
@@ -75,10 +89,11 @@ export function parseBrandMaster(text: string): {
     const nyers = sor.replace(/\r$/, "");
     if (!nyers.trim() || nyers.startsWith("#")) return;
     const mezok = nyers.split("\t");
-    if (mezok.length !== 6) {
+    if (mezok.length !== 7) {
       errors.push(
-        `${index + 1}. sor: ${mezok.length} oszlop, de hatot várunk ` +
-          `(kanonikus, alias, ketertelmu, forras, jelolo, megjegyzes)`,
+        `${index + 1}. sor: ${mezok.length} oszlop, de hetet várunk ` +
+          `(kanonikus, alias, ketertelmu, forras, jeloles, felteteles_szulo, ` +
+          `megjegyzes)`,
       );
       return;
     }
@@ -92,7 +107,8 @@ export function parseBrandMaster(text: string): {
       ketertelmu: mezok[2]!.trim(),
       forras: mezok[3]!.trim(),
       jelolo: mezok[4]!.trim(),
-      megjegyzes: mezok[5]!.trim(),
+      feltetelesSzulo: mezok[5]!.trim(),
+      megjegyzes: mezok[6]!.trim(),
     };
     /**
      * URES KANONIKUS CSAK TILTO SORNAL FOGADHATO EL.

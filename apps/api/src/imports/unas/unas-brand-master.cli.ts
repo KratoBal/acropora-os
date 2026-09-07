@@ -56,7 +56,7 @@ export const BRAND_MASTER_PATH = join(
   "imports",
   "unas",
   "brand-master",
-  "marka-betolto-bemenet-v2.tsv",
+  "marka-betolto-bemenet-v3.tsv",
 );
 
 export function readBrandMaster(path = BRAND_MASTER_PATH): string {

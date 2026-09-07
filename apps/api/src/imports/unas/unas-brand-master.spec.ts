@@ -25,6 +25,7 @@ const sor = (
   ketertelmu: "",
   forras,
   jelolo,
+  feltetelesSzulo: "",
   megjegyzes: "",
 });
 
@@ -100,11 +101,12 @@ describe("a márka-törzs betöltőjének terve", () => {
 });
 
 describe("a betöltő-bemenet értelmezése", () => {
-  const FEJLEC = "kanonikus\talias\tketertelmu\tforras\tjelolo\tmegjegyzes\n";
+  const FEJLEC =
+    "kanonikus\talias\tketertelmu\tforras\tjeleoles\tfelteteles_szulo\tmegjegyzes\n";
 
-  it("a hat oszloptól eltérő sor HIBA, nem figyelmeztetés", () => {
+  it("a hét oszloptól eltérő sor HIBA, nem figyelmeztetés", () => {
     const { rows, errors } = parseBrandMaster(
-      FEJLEC + "Triton\tTriton\t\tBRAND\t\t\n" + "Rossz\tsor\tcsak\tnegy\n",
+      FEJLEC + "Triton\tTriton\t\tBRAND\t\t\t\n" + "Rossz\tsor\tcsak\tnegy\n",
     );
 
     assert.equal(rows.length, 1);
@@ -119,19 +121,19 @@ describe("a betöltő-bemenet értelmezése", () => {
    */
   it("üres kanonikus név csak tiltó jelölővel fogadható el", () => {
     const jo = parseBrandMaster(
-      FEJLEC + "\tJebao/Jecod\tigen\tBRAND\tketertelmu_ertek\t\n",
+      FEJLEC + "\tJebao/Jecod\tigen\tBRAND\tketertelmu_ertek\t\t\n",
     );
     assert.deepEqual(jo.errors, []);
     assert.equal(jo.rows.length, 1);
 
-    const rossz = parseBrandMaster(FEJLEC + "\tValami\t\tBRAND\t\t\n");
+    const rossz = parseBrandMaster(FEJLEC + "\tValami\t\tBRAND\t\t\t\n");
     assert.equal(rossz.rows.length, 0);
     assert.match(rossz.errors[0]!, /üres kanonikus/);
   });
 
   it("a # sorokat és az üres sorokat kihagyja", () => {
     const { rows, errors } = parseBrandMaster(
-      "# fejlec-komment\n\n" + FEJLEC + "Triton\tTRITON\t\tGYARTO\t\tmegj\n",
+      "# fejlec-komment\n\n" + FEJLEC + "Triton\tTRITON\t\tGYARTO\t\t\tmegj\n",
     );
 
     assert.deepEqual(errors, []);

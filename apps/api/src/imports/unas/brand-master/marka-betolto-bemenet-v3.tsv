@@ -1,0 +1,256 @@
+# MARKA-BETOLTO BEMENET v3 -- 2026-09-07 12:20, barracuda
+#
+# MIBOL KESZULT:
+#   measurement/markatorzs-v1.tsv                (a torzs, VALTOZATLAN)
+#   measurement/marka-felismero-jelolesek.tsv    (a jelolesek, VALTOZATLAN)
+#   plus a 2026-09-07-i sajat meresek (683 termek tarolt brand mezoje kontra terméknev)
+#
+# A ket forras-fajl MEGMARAD, ahogy acrobot kerte. Ez a harmadik SZARMAZTATOTT, es
+# kimondottan GEPI BEMENET: egyetlen fajl, hogy a betoltonek NE kelljen joinolnia. Egy
+# join-nal egy nem illeszkedo sor CSENDBEN kimaradna -- pont az a hibafajta, amit ma
+# reggel a mezoerteknel elkerultunk.
+#
+# === EGY ELTERES ACROBOT KERESETOL, ES MEGMONDOM, MIERT ===
+#
+# A kert oszlopsor: kanonikus | aliasok | forras | jeloles | felteteles_szulo
+# Az itteni:        kanonikus | alias | ketertelmu | forras | jeleoles | felteteles_szulo | megjegyzes
+#
+# A KULONBSEG AZ "aliasok" ES AZ "alias" KOZOTT VAN, es nem stiluskerdes. Acrobot egy
+# korabbi uzeneteben azt kerte, hogy a ketertelmuseg egy NYERS ERTEKROL mondjon allitast
+# (a "Jebao/Jecod" ott IGEN, mikozben a Jebao es a Jecod marka is VALODI es bent marad).
+#
+# Egy VESSZOS LISTABAN allo egyedi ertekhez NEM lehet oszlopot kotni. Ezert itt EGY SOR
+# EGY ALIAS, es igy a "ketertelmu" oszlop tud arrol az egy ertekrol beszelni. A ket keres
+# egyutt csak ebben az alakban teljesitheto.
+#
+# Ha megis a vesszos alak kell, szoljon: akkor a ketertelmu oszlop kiesik, es a
+# Jebao/Jecod visszautasitasat mashogy kell megoldani.
+#
+# === OSZLOPOK: MINDEN SOR PONTOSAN HET ===
+#
+#   kanonikus         a marka neve, ahogy a VEVO ele kerul. URES, ha a sor nem markat ir le,
+#                     hanem egy ERTEKROL mond allitast.
+#   alias             EGY nyers ertek, ami erre a markara mutat
+#   ketertelmu        "igen", ha maga az ERTEK ket markat takar -> a betoltes UTASITSA VISSZA
+#   forras            GYARTO, BRAND vagy NEV
+#   jeleoles          ures, vagy nem_onallo / ellenorizendo / kanonikus_meretlen / ketertelmu_ertek
+#   felteteles_szulo  ha nem_onallo vagy ellenorizendo: MELYIK marka ala tartozhat.
+#                     URES, ha nincs jeloles, VAGY ha a kerdes nem ez (lasd a Gourmet-t).
+#   megjegyzes        az indok, es hogy MERT-e vagy a TORZS megjegyzese
+#
+# === MERT SZAMOK A KESZ FAJLON ===
+#
+#   181 sor, MIND HET OSZLOPOS
+#   124 kulonbozo kanonikus marka, plusz 1 ertek-szintu sor (Jebao/Jecod, ures kanonikusszal)
+#   ALIAS-UTKOZES: NULLA
+#   forras:            GYARTO 9, BRAND 42, NEV 74   (markankent szamolva, osszeg 125)
+#   felteteles_szulo:  9 sor kitoltve, 172 ures
+#
+# === A KILENC FELTETELES SZULO, ES A BIZONYITEK KET FAJTAJA ===
+#
+#   MERT 2026-09-07 (a 683 tarolt mezoerteke kontra a terméknev):
+#     biOrb -> OASE (13 termek), ClariSea -> D-D (7), easyPUMPE -> Aqua Light (2),
+#     Fishguard -> Oase (1)
+#
+#   A TORZS sajat megjegyzese, TOLEM UJ MERES NELKUL:
+#     Masstick -> Vitalis, Octo -> Reef Octopus, Alkatronic -> Focustronic,
+#     Julian's -> Julian Sprung
+#
+# A ket fajta a megjegyzes oszlopban MERT vagy TORZS elotaggal all. Ha egy listaban
+# allnanak, a kovetkezo olvaso mind a nyolcat egyformán erosnek venne.
+#
+# === A GOURMET SZANDEKOSAN NEM KAP SZULOT ===
+#
+# Ott nem az a kerdes, melyik marka ala tartozik, hanem hogy MARKA-E EGYALTALAN vagy koznev.
+# Mas kerdes, kulon sorkent megy a bc224f0d kartyara, es en NEM dontom el es nem is merem
+# tovabb -- acrobot kerese.
+#
+# === AMI VALTOZATLAN A v2-HOZ KEPEST ===
+#
+#   - a kanonikus alak a GYARTOI, ahol le van merve (Aqua Medic, Red Sea)
+#   - a "Red Sea kategoria" sor KIHAGYVA: nem marka
+#   - a Jebao es a Jecod KULON, valodi markakent bent van; a ragasztott ERTEK ketertelmu
+#   - az OASE kanonikus alakja MERETLEN (ket domain, mindketto 429)
+#
+kanonikus	alias	ketertelmu	forras	jeleoles	felteteles_szulo	megjegyzes
+AQAMAI	AQAMAI		NEV			
+ARKA	ARKA		GYARTO			
+ARKA	Arka		GYARTO			
+ATB	ATB		BRAND			
+ATI	ATI		BRAND			
+Acropora	Acropora -		NEV			
+Alkatronic	Alkatronic		NEV	ellenorizendo	Focustronic	TORZS: Focustronic termekvonala lehet, tolem UJ MERES NINCS
+Amtra	Amtra		NEV			
+Aqua Biotica	Aqua Biotica		NEV			
+Aqua Connect	AQUA CONNECT		GYARTO			
+Aqua Connect	Aqua Connect		GYARTO			
+Aqua Connect	Aqua connect		GYARTO			
+Aqua Illumination	AI -		BRAND			
+Aqua Illumination	Aqua Illumination		BRAND			
+Aqua Light	Aqua Light		GYARTO			
+Aqua Light	AquaLight		GYARTO			
+Aqua Light	Aqualight		GYARTO			
+Aqua Medic	Aqua Mdic		GYARTO			
+Aqua Medic	Aqua Medic		GYARTO			
+Aqua Medic	AquaMedic		GYARTO			
+AquaBee	AquaBee		NEV			
+AquaBee	Aquabee		NEV			
+AquaForte	AquaForte		NEV			
+Aquadeco	Aquadeco		NEV			
+Aquael	Aquael		NEV			
+Aquaforest	(Aquaforest		BRAND			
+Aquaforest	AquaForest		BRAND			
+Aquaforest	Aquaforest		BRAND			
+Aquarioom	Aquarioom		BRAND			
+Aquarium Systems	Aquarium Systems		NEV			
+Aquatic Nature	Aquatic Nature		BRAND			
+Aquavital	Aquavital		NEV			
+Aquavital	Aquavital_Stress		NEV			
+Aquili	Aquili		BRAND			
+AutoAqua	AutoAqua		BRAND			
+AutoAqua	Autoaqua		BRAND			
+Blue Life	Blue Life		BRAND			
+Blue Life	Blue life		BRAND			
+Boyu	Boyu		NEV			
+Bubble Magus	Bubble Magus		BRAND			
+Calanus	Calanus		BRAND			
+ClariSea	ClariSea		NEV	nem_onallo	D-D	MERT 2026-09-07: 7 termek a 683-bol, mindegyik tarolt brand mezoje D-D
+ClariSea	Clarisea		NEV	nem_onallo	D-D	MERT 2026-09-07: 7 termek a 683-bol, mindegyik tarolt brand mezoje D-D
+Colombo	Colombo		NEV			
+Coral Essentials	Coral Essential		BRAND			
+Coral Essentials	Coral Essentials		BRAND			
+Coral Protec	Coral Protec		NEV			
+Coral RX	Coral RX		BRAND			
+CoralBox	CoralBox		NEV			
+D-D	D-D		BRAND			
+Detaylor	Detaylor		NEV			
+Dr. Bassleer	Bassleer		GYARTO			
+Dr. Bassleer	Dr Bassleer		GYARTO			
+Dr. Bassleer	Dr. Bassleer		GYARTO			
+Dupla Marin	DUPLA MARIN		BRAND			
+Dupla Marin	Dupla Marin		BRAND			
+Dutch Reef	Dutch Reef		BRAND			
+Easy-Life	Easy-Life		BRAND			
+Easyphyt	Easyphyt		NEV			
+Ecotech Marine	EcoTech		BRAND			
+Ecotech Marine	Ecotech		BRAND			
+Ecotech Marine	Radion		BRAND			
+Ecotech Marine	Vectra		BRAND			
+Ecotech Marine	Vortech		BRAND			
+Eden	Eden		NEV			
+Eheim	EHEIM		BRAND			
+Eheim	Eheim		BRAND			
+Fauna Marin	Fauna Marin		BRAND			
+Fauna Marin	Fauna Marin-		BRAND			
+Fauna Marin	Fauna Marine		BRAND			
+First Bite	First Bite		BRAND			
+First Bite	First bite		BRAND			
+Fishguard	Fishguard		NEV	nem_onallo	Oase	MERT 2026-09-07: az egyetlen ilyen termek neve Oase FishGuard automata eteto
+Flipper	Flipper		BRAND			
+Fluval	FLUVAL		NEV			
+Fluval	Fluval		NEV			
+Frag-Stone	Frag-Stone		NEV			
+GNC	GNC		NEV			
+Giesemann	Giesemann		NEV			
+Gourmet	Gourmet		NEV	ellenorizendo		TORZS: KOZZNEV is lehet, nem marka -- mas kerdes, mint a termekvonal
+Grotech	Grotech		BRAND			
+Grotech	Groteh		BRAND			
+HIKARI	HIKARI		NEV			
+HW	HW		NEV			
+Hanna	HANNA		BRAND			
+Hanna	Hanna		BRAND			
+Hobby	Hobby		NEV			
+Hydor	Hydor		NEV			
+ITC	ITC		NEV			
+Jebao	Jebao		BRAND			
+Jecod	Jecod		BRAND			
+JoesJuice	JoesJuice		NEV			
+Julian's	Julian's		NEV	ellenorizendo	Julian Sprung	TORZS: Julian Sprung termekei lehetnek, tolem UJ MERES NINCS
+Kamoer	Kamoer		NEV			
+Kessil	Kessil		NEV			
+Korallen-Zucht	Korallen-Zucht		GYARTO			
+Korallen-Zucht	Korallen-zucht		GYARTO			
+Korallen-Zucht	Korallen-zuht		GYARTO			
+Mag-Float	Mag-Float		GYARTO			
+Mag-Float	Mag-float		GYARTO			
+Mag-Float	Magfloat		GYARTO			
+Maggie	Maggie		NEV			
+Marco	Marco		NEV			
+Marco	MarcoRock		NEV			
+Masstick	Masstick		NEV	ellenorizendo	Vitalis	TORZS: a Vitalis termekvonala lehet, tolem UJ MERES NINCS
+Maxspect	Maxspect		BRAND			
+Microbe-Lift	MICROBE-LIFT		BRAND			
+Microbe-Lift	Microbe-Lift		BRAND			
+Modern Reef	Modern Reef		BRAND			
+Mycosidol	Mycosidol		NEV			
+Mysis RS	Mysis RS		NEV			
+Nannoflakes	Nannoflakes		NEV			
+Neptune	Neptune		NEV			
+New Life Spectrum	New Life Spectrum		BRAND			
+Newa	Newa		NEV			
+Nyos	NYOS		BRAND			
+Nyos	Nyos		BRAND			
+Oase	OASE		BRAND	kanonikus_meretlen		A KANONIKUS ALAK NINCS GYARTOI FORRASBOL IGAZOLVA. 2026-09-07-en megprobaltam lemerni az oase.com es az oase-livingwater.com oldalon: MINDKETTO 429-et adott (rate limit), tehat nem meres, hanem elutasitas. A ket irasmod a boltban: OASE 13 termek, Oase 6. A darabszam NEM bizonyitek.
+Oase	Oase		BRAND	kanonikus_meretlen		A KANONIKUS ALAK NINCS GYARTOI FORRASBOL IGAZOLVA. 2026-09-07-en megprobaltam lemerni az oase.com es az oase-livingwater.com oldalon: MINDKETTO 429-et adott (rate limit), tehat nem meres, hanem elutasitas. A ket irasmod a boltban: OASE 13 termek, Oase 6. A darabszam NEM bizonyitek.
+Oceamo	Oceamo		NEV			
+Ocean Art	Ocean Art		NEV			
+Ocean Nutrition	OCEAN NUTRITION		BRAND			
+Ocean Nutrition	Ocean Nutrition		BRAND			
+Octo	Octo		NEV	ellenorizendo	Reef Octopus	TORZS: Reef Octopus lehet, tolem UJ MERES NINCS
+Odyssea	ODYSSEA		NEV			
+Odyssea	Odyssea		NEV			
+Omega	Omega		NEV			
+Orca	Orca		NEV			
+PlanktonPlus	PlanktonPlus		NEV			
+PolypLab	Polyp Lab		GYARTO			
+PolypLab	PolypLab		GYARTO			
+PolypLab	Polyplab		GYARTO			
+Preis	Preis		NEV			
+Preis	Preis-EASY		NEV			
+Prodibio	ProdiBio		NEV			
+Prodibio	Prodibio		NEV			
+Purolite	Purolite		NEV			
+Red Sea	REDSEA		GYARTO			
+Red Sea	Red Sea		GYARTO			
+Red Sea	RedSea		GYARTO			
+ReeFlowers	ReeFlowers		NEV			
+ReeFlowers	Reeflowers		NEV			
+Reef Factory	Reef Factory		BRAND			
+Rena	Rena		NEV			
+Resun	Resun		NEV			
+Ricordeafarm	Ricordeafarm		NEV			
+Rowa	Rowa		NEV			
+Rowa	Rowa Phos		NEV			
+Rowa	Rowa phos		NEV			
+Rowa	RowaPhos		NEV			
+Royal Exclusiv	Royal Exclusiv		NEV			
+Ruto	Ruto		NEV			
+SOBO	SOBO		NEV			
+Salifert	Salifert		BRAND			
+Schego	SCHEGO		NEV			
+Schego	Schego		NEV			
+Seachem	Seachem		NEV			
+Sera	SERA		NEV			
+Sera	Sera		NEV			
+Sicce	Sicce		NEV			
+Silbermann	Silbermann		NEV			
+Söll	Söll		NEV			
+Triton	Triton		BRAND			
+Tropic Creations	Tropic Creation		NEV			
+Tropic Creations	Tropic Creations		NEV			
+Tropic Marin	Tropic Marin		BRAND			
+Tunze	Tunze		BRAND			
+Two Little Fishies	Two Little		NEV			
+Two Little Fishies	Two little		NEV			
+Ultra Reef	Ultra Reef		NEV			
+VCA	VCA		BRAND			
+VeggieMag	MegaVeggieMag		NEV			
+VeggieMag	VeggieMag		NEV			
+Velda	Velda		NEV			
+Vertex	Vertex		NEV			
+Vitalis	Vitalis		BRAND			
+Xepta	XEPTA		BRAND			
+Xepta	Xepta		BRAND			
+biOrb	biOrb		NEV	nem_onallo	OASE	MERT 2026-09-07: 13 termek, mindegyik tarolt brand mezoje OASE; sajat bolti kategoriaja is van, tehat a dontes nem trivialis
+easyPUMPE	easyPUMPE		NEV	nem_onallo	Aqua Light	MERT 2026-09-07: 2 termek, mindketto tarolt brand mezoje Aqua Light, ami GYARTO-forrasu sor
+	Jebao/Jecod	igen	BRAND	ketertelmu_ertek		MERT 2026-09-07: 5 termek. Az ERTEK ket VALODI markat takar (Jebao es Jecod), tehat NEM egy sort kell kihagyni, hanem ezt az ERTEKET visszautasitani. Mindket marka onallo sorkent bent van. A termeknevbol eldontheto, melyik.
