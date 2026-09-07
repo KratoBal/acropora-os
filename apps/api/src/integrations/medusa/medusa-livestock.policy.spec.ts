@@ -38,9 +38,22 @@ describe("az élő állat részfa", () => {
   });
 
   /**
-   * MIND A HAROM NEV SZAMIT. Ma a Halak es a Gerinctelenek alatt NULLA termek
-   * all (nautilus merese, 2026-09-07), tehat ezt a ket agat valodi adaton
-   * SENKI nem tudja kiprobalni -- csak ez az allitas orzi oket.
+   * MIND A HAROM NEV SZAMIT.
+   *
+   * === EGY KORLAT, AMI HAROM ORA ALATT LEJART, ES EZERT ALL ITT MIND A KETTO ===
+   *
+   * Amikor ezt a tesztet irtam (2026-09-07 kora este), a Halak es a
+   * Gerinctelenek alatt NULLA termek allt a boltban, tehat azt a ket agat
+   * valodi adaton senki nem tudta kiprobalni -- csak ez az allitas orizte.
+   *
+   * A TELJES KATALOGUS MIGRACIOJA UTAN (ugyanaznap 20:22, acrobot merese a
+   * bolti kategoria-fan) mar 125 hal es 28 gerinctelen all bent, a harom ag
+   * unioja 161 termek. A korlat tehat nem tevedes volt, hanem LEJART.
+   *
+   * Azert marad itt mind a ketto, mert a kulonbseg hasznalhato: ez az allitas
+   * azt orzi, hogy a HAROM NEV bent van a szabalyban. Azt NEM, hogy a bolti
+   * fa tenyleg ugy all, ahogy hisszuk -- ahhoz egy VALODI termeken kell
+   * megnezni, hogy a szarmaztatas bolti atvetelre allitja-e.
    */
   it("mindhárom gyökér-név benne van a szabályban", () => {
     assert.deepEqual(
