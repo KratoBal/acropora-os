@@ -93,12 +93,20 @@ export async function runBrandBackfillCli(
   deps: {
     rows(): Promise<BrandBackfillRow[]>;
     brands(): Promise<ExistingBrand[]>;
+    actorExists(actorId: string): Promise<boolean>;
     apply(
       plan: BrandBackfillPlan,
+      actorId: string,
     ): Promise<{ created: number; assigned: number }>;
   },
 ): Promise<number> {
   const apply = argv.includes("--apply");
+  const actorIndex = argv.indexOf("--actor");
+  const actorId =
+    actorIndex >= 0 && actorIndex + 1 < argv.length
+      ? argv[actorIndex + 1]!
+      : null;
+
   const plan = planBrandBackfill(await deps.rows(), await deps.brands());
 
   out.stdout(describeBrandBackfillPlan(plan));
@@ -108,7 +116,54 @@ export async function runBrandBackfillCli(
     return 0;
   }
 
-  const eredmeny = await deps.apply(plan);
+  /**
+   * A SZEREPLO KOTELEZO AZ IRASHOZ, ES LETEZNIE KELL -- MIELOTT BARMI TORTENIK.
+   *
+   * === A MERT HIBA ===
+   *
+   * Az elso valtozat a `"unas-backfill"` SZOVEGET adta at a tarolonak
+   * `actorId` gyanant. Az az ertek a `DomainEvent.actorUserId` oszlopba megy,
+   * aminek IDEGEN KULCSA van a `User` tablara -- ilyen azonositoju felhasznalo
+   * pedig nincs. A teszt gepen az iras az ELSO markanal elhasalt (P2003); a
+   * visszagorgetes rendben volt, de a futas semmit nem vegzett el.
+   *
+   * === MIERT A HIVO ADJA AT, ES MIERT NEM NULLAZHATOVA TESSZUK A MEZOT ===
+   *
+   * A mezo nullazhatova tetele lenne a legolcsobb, es epp azt venne el, ami egy
+   * 683 soros irasnal a legfontosabb: hogy KI inditotta. Az a veszteseg NEMA es
+   * TARTOS, mert a `brands.repository.ts` KOZOS tipusa szelesedne -- onnantol
+   * minden jovobeli hivo is atadhatna nullat, csendben.
+   *
+   * Egy nevesitett rendszer-felhasznalo letrehozasa viszont uj rekord az ELES
+   * adatbazisban is, tehat maga is engedelykoteles: egy javitas, ami uj
+   * engedelyt igenyel, nem javitas.
+   *
+   * Marad a hivo: egy VALODI felhasznalo felel a 683 sorert, a hiba HANGOS, es
+   * a kozos tipusokhoz nem kell nyulni.
+   *
+   * === ES AZ ELLENORZES ELOL ALL, NEM AZ ELSO IRASNAL ===
+   *
+   * Egy nem letezo azonosito ugyanugy elhasalna, mint a szoveges ertek -- csak
+   * epp az elso marka letrehozasakor, felbehagyott futassal. A legolcsobb
+   * ellenorzes ezert elore kerul: a bukas ELOTT legyen, ne KOZBEN.
+   */
+  if (!actorId) {
+    out.stderr(
+      "Az íráshoz meg kell nevezni, KI indítja: --actor <felhasználó azonosítója>. " +
+        "Az írás naplóba kerül, és a naplónak van felelőse.\n",
+    );
+    return 1;
+  }
+  if (!(await deps.actorExists(actorId))) {
+    out.stderr(
+      `Nincs ilyen felhasználó: ${actorId}. Az írás EL SEM INDULT. ` +
+        "A napló idegen kulcsa a User táblára mutat, tehát egy nem létező " +
+        "azonosító az első márkánál hasalna el, félbehagyott futással.\n",
+    );
+    return 1;
+  }
+
+  const eredmeny = await deps.apply(plan, actorId);
   out.stdout(
     `\nLétrehozott márka-rekord: ${eredmeny.created}\n` +
       `Termék, amire márka került: ${eredmeny.assigned}\n`,
@@ -117,7 +172,7 @@ export async function runBrandBackfillCli(
 }
 
 /* c8 ignore start -- a belépési pont: a mérhető rész a `runBrandBackfillCli`. */
-async function applyPlan(plan: BrandBackfillPlan) {
+async function applyPlan(plan: BrandBackfillPlan, actorId: string) {
   const repository = new BrandsRepository();
   let created = 0;
 
@@ -135,7 +190,7 @@ async function applyPlan(plan: BrandBackfillPlan) {
      */
     const brand = await repository.create(
       { name: marka.name, aliases: [] },
-      "unas-backfill",
+      actorId,
     );
     created += 1;
     ujAzonositok.set(marka.name, brand.id);
@@ -163,6 +218,8 @@ async function main(): Promise<void> {
   process.exitCode = await runBrandBackfillCli(process.argv.slice(2), out, {
     rows: backfillRows,
     brands: existingBrands,
+    actorExists: async (actorId: string) =>
+      (await prisma.user.count({ where: { id: actorId } })) === 1,
     apply: applyPlan,
   });
 }
