@@ -165,6 +165,15 @@ describe("a repóban álló betöltő-bemenet", () => {
   it("a terv 115 márkát hozna létre, és 9 márka nem lesz", () => {
     const plan = planBrandMaster(rows, []);
 
+    /**
+     * A KOZBULSO SZAM IS ALLITAS, NEM CSAK A VEGEREDMENY: 124 - 9 = 115. Egy
+     * puszta 115 akkor is kijohetne, ha a csoportositas mast von ossze, es a
+     * kihagyas is maskent szamol -- a ket hiba kiolthatna egymast.
+     */
+    assert.equal(
+      plan.create.length + plan.skipped.length + plan.alreadyThere.length,
+      124,
+    );
     assert.equal(plan.create.length, 115);
     assert.equal(plan.skipped.length, 9);
     assert.deepEqual(plan.blockedValues, ["Jebao/Jecod"]);
