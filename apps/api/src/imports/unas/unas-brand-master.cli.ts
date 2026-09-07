@@ -148,6 +148,36 @@ export async function runBrandMasterCli(
   const plan = planBrandMaster(rows, await deps.existing());
 
   /**
+   * A MEGLEVO ADAT KETERTELMUSEGE MEGALLIT -- MEG A TERVET IS.
+   *
+   * Ha egy normalizalt kulcs KET markahoz tartozik (az egyiknek a neve, a
+   * masiknak az aliasa), akkor barmelyik alias-potlas talalgatas: nem tudjuk,
+   * melyik markarol van szo. Egy terv, ami ilyen indexre epul, mar rossz sorokat
+   * mutat, es a jovahagyo azt olvasna dontesi anyagnak.
+   *
+   * A feloldas nem itt van: ket marka osszevonasa vagy egy alias levetele, es
+   * mind a ketto adat-muvelet.
+   */
+  if (plan.existingAmbiguousKeys.length) {
+    out.stderr(
+      "\nKÉTÉRTELMŰ KULCS A MEGLÉVŐ ADATBAN: ugyanaz a normalizált alak KÉT " +
+        "márkához tartozik.\nA futás EL SEM INDULT -- ilyen állapotban minden " +
+        "alias-pótlás találgatás.\n",
+    );
+    for (const tetel of plan.existingAmbiguousKeys)
+      out.stderr(
+        `  "${tetel.key}" -> ` +
+          tetel.brands.map((b) => `"${b.name}"`).join(" és ") +
+          "\n",
+      );
+    out.stderr(
+      "A feloldás adat-művelet: a két márkát össze kell vonni, vagy az aliast " +
+        "levenni, és utána újra futtatni.\n",
+    );
+    return 1;
+  }
+
+  /**
    * A TERMEKSZAM CSAK AKKOR KERUL BELE, HA VAN MIT SZAMOLNI.
    *
    * Ha nincs nev-elteres, nem kerdezunk az adatbazistol: egy ures `IN ()`

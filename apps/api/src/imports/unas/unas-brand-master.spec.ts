@@ -355,6 +355,48 @@ describe("a betöltő-terv illesztése az aliasokon át", () => {
   });
 });
 
+/**
+ * A MEGLEVO ADAT KETERTELMUSEGE -- ES EZ MAJDNEM KIMARADT.
+ *
+ * A teszt gepen az `aquamedic` EGYSZERRE az "AquaMedic" marka NEVE es az
+ * "Aqua Medic" marka ALIASA. Az elso valtozat sima `set` hivasokkal epitette az
+ * indexet: az utolso iras felulirta az elozot, a ket marka kozul csak EGY
+ * latszott, es az osszevonas-ellenorzes CSENDBEN atengedte pontosan azt az
+ * allapotot, amit ki kellett volna szurnie.
+ */
+describe("a betöltő-terv a meglévő adat kétértelműségét is látja", () => {
+  it("egy kulcs KÉT márkánál: megnevezi mindkettőt", () => {
+    const plan = planBrandMaster(
+      [sor("Aqua Medic", "AquaMedic")],
+      [
+        letezo("AquaMedic", [], "b-aquamedic"),
+        letezo("Aqua Medic", ["aquamedic"], "b-aqua-medic"),
+      ],
+    );
+
+    assert.equal(plan.existingAmbiguousKeys.length, 1);
+    assert.equal(plan.existingAmbiguousKeys[0]!.key, "aquamedic");
+    assert.deepEqual(
+      plan.existingAmbiguousKeys[0]!.brands.map((b) => b.name).sort(),
+      ["Aqua Medic", "AquaMedic"],
+    );
+  });
+
+  /**
+   * A POZITIV KONTROLL: egy marka SAJAT neve es SAJAT aliasa ugyanarra a kulcsra
+   * NEM ketertelmu. Enelkul az orzot az is kielegitene, ha mindent megallitana.
+   */
+  it("egy márka saját neve és aliasa NEM kétértelmű", () => {
+    const plan = planBrandMaster(
+      [sor("Triton", "Triton")],
+      [letezo("Triton", ["triton"])],
+    );
+
+    assert.deepEqual(plan.existingAmbiguousKeys, []);
+    assert.deepEqual(plan.alreadyThere, ["Triton"]);
+  });
+});
+
 describe("a név-eltérés jelentése", () => {
   const terv = () =>
     planBrandMaster(

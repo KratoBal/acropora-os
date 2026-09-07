@@ -242,6 +242,18 @@ export interface BrandMasterPlan {
     canonicalName: string;
     brands: { id: string; name: string }[];
   }[];
+
+  /**
+   * A MAR MEGLEVO ADATBAN allo ketertelmu kulcs: egy normalizalt alak KET
+   * markahoz tartozik (az egyiknek a NEVE, a masiknak az ALIASA).
+   *
+   * Ez nem a torzs terve, hanem a jelen allapot leirasa -- es amig all, minden
+   * alias-potlas talalgatas. A parancs ilyenkor meg tervet sem ad.
+   */
+  existingAmbiguousKeys: {
+    key: string;
+    brands: { id: string; name: string }[];
+  }[];
 }
 
 /**
@@ -259,10 +271,42 @@ export function planBrandMaster(
   const kulcsHez = new Map<string, ExistingBrandRecord>();
   /** elvalasztojel nelkuli kulcs -> a marka. CSAK felismeresre. */
   const lazaHoz = new Map<string, ExistingBrandRecord>();
+  /**
+   * AZ INDEX EPITESE KOZBEN FIGYELJUK, HOGY EGY KULCSOT KET MARKA VISEL-E.
+   *
+   * === A MERT ALLAPOT, ES AZ, HOGY EZ MAJDNEM KIMARADT ===
+   *
+   * A teszt gepen az `aquamedic` EGYSZERRE az "AquaMedic" marka NEVE es az
+   * "Aqua Medic" marka ALIASA. Az elso valtozat sima `set` hivasokkal epitette
+   * az indexet -- az utolso iras felulirta az elozot, es a ket marka kozul csak
+   * EGY latszott. Az osszevonas-ellenorzes ezert egyetlen talalatot latott, es
+   * CSENDBEN atengedte pontosan azt az allapotot, amit ki kellett volna szurnie.
+   *
+   * Ugyanaz a hiba, mint a visszatolto indexeben -- ott mar orzo all rajta.
+   *
+   * === MIERT AZ EGESZ FUTAST ALLITJA MEG ===
+   *
+   * Egy ilyen kulcs mellett barmelyik alias-potlas talalgatas: nem tudjuk, melyik
+   * markarol van szo. A feloldas ket marka osszevonasa vagy egy alias levetele --
+   * mind a ketto adat-muvelet, es egyik sem a betoltoe.
+   */
+  const kulcsUtkozok = new Map<string, Map<string, ExistingBrandRecord>>();
+  const felvesz = (kulcs: string, marka: ExistingBrandRecord) => {
+    const eddigi = kulcsHez.get(kulcs);
+    if (eddigi && eddigi.id !== marka.id) {
+      const halmaz =
+        kulcsUtkozok.get(kulcs) ??
+        new Map<string, ExistingBrandRecord>([[eddigi.id, eddigi]]);
+      halmaz.set(marka.id, marka);
+      kulcsUtkozok.set(kulcs, halmaz);
+      return;
+    }
+    kulcsHez.set(kulcs, marka);
+  };
   for (const marka of existing) {
-    kulcsHez.set(marka.normalizedName, marka);
+    felvesz(marka.normalizedName, marka);
     lazaHoz.set(separatorlessKey(marka.name), marka);
-    for (const alias of marka.normalizedAliases) kulcsHez.set(alias, marka);
+    for (const alias of marka.normalizedAliases) felvesz(alias, marka);
   }
 
   const plan: BrandMasterPlan = {
@@ -275,6 +319,10 @@ export function planBrandMaster(
     aliasTopUp: [],
     nameDifferences: [],
     mergeCandidates: [],
+    existingAmbiguousKeys: [...kulcsUtkozok.entries()].map(([key, markak]) => ({
+      key,
+      brands: [...markak.values()].map((b) => ({ id: b.id, name: b.name })),
+    })),
   };
 
   /**
@@ -487,6 +535,7 @@ export function describeBrandMasterPlan(
     `Meglévő márka, amire alias kerül: ${plan.aliasTopUp.length}`,
     `Meglévő márka MÁS írásmóddal (döntést kér): ${plan.nameDifferences.length}`,
     `Két meglévő márkához vezet (kihagyva, ÖSSZEVONÁS kérdése): ${plan.mergeCandidates.length}`,
+    `MEGLÉVŐ kétértelmű kulcs (a futás nem indulhat): ${plan.existingAmbiguousKeys.length}`,
   ];
 
   if (plan.mixedMarkers.length) {
