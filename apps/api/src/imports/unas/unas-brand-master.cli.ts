@@ -8,6 +8,7 @@ import { BrandsRepository } from "../../brands/brands.repository.js";
 import { normalizeBrandName } from "../../brands/brands.repository.js";
 import {
   describeBrandMasterPlan,
+  type ExistingBrandRecord,
   parseBrandMaster,
   planBrandMaster,
   type BrandMasterPlan,
@@ -63,17 +64,29 @@ export function readBrandMaster(path = BRAND_MASTER_PATH): string {
   return readFileSync(path, "utf8");
 }
 
-export async function existingBrandKeys(): Promise<string[]> {
+/**
+ * A MA LETEZO MARKAK, ANNYIVAL, AMENNYI AZ ILLESZTESHEZ ES A POTLASHOZ KELL.
+ *
+ * Korabban ez csak a normalizalt KULCSOK lapos listajat adta vissza. Az eleg
+ * volt annak eldontesehez, hogy egy kanonikus nev mar all-e; ahhoz viszont nem,
+ * hogy MELYIK markara kell felvinni a hianyzo aliast, es hogy a tarolt neve
+ * elter-e a kanonikustol.
+ */
+export async function existingBrands(): Promise<ExistingBrandRecord[]> {
   const markak = await prisma.brand.findMany({
     select: {
+      id: true,
+      name: true,
       normalizedName: true,
       aliases: { select: { normalizedAlias: true } },
     },
   });
-  return markak.flatMap((m) => [
-    m.normalizedName,
-    ...m.aliases.map((a) => a.normalizedAlias),
-  ]);
+  return markak.map((m) => ({
+    id: m.id,
+    name: m.name,
+    normalizedName: m.normalizedName,
+    normalizedAliases: m.aliases.map((a) => a.normalizedAlias),
+  }));
 }
 
 export async function runBrandMasterCli(
@@ -81,9 +94,12 @@ export async function runBrandMasterCli(
   out: CliOutput,
   deps: {
     master(): string;
-    existing(): Promise<string[]>;
+    existing(): Promise<ExistingBrandRecord[]>;
     actorExists(actorId: string): Promise<boolean>;
-    apply(plan: BrandMasterPlan, actorId: string): Promise<{ created: number }>;
+    apply(
+      plan: BrandMasterPlan,
+      actorId: string,
+    ): Promise<{ created: number; aliasesAdded: number }>;
   },
 ): Promise<number> {
   const apply = argv.includes("--apply");
@@ -140,7 +156,10 @@ export async function runBrandMasterCli(
   }
 
   const eredmeny = await deps.apply(plan, actorId);
-  out.stdout(`\nLétrehozott márka-rekord: ${eredmeny.created}\n`);
+  out.stdout(
+    `\nLétrehozott márka-rekord: ${eredmeny.created}\n` +
+      `Meglévő márkára felvitt alias: ${eredmeny.aliasesAdded}\n`,
+  );
   return 0;
 }
 
@@ -148,6 +167,7 @@ export async function runBrandMasterCli(
 async function applyPlan(plan: BrandMasterPlan, actorId: string) {
   const repository = new BrandsRepository();
   let created = 0;
+  let aliasesAdded = 0;
   for (const marka of plan.create) {
     await repository.create(
       {
@@ -162,7 +182,23 @@ async function applyPlan(plan: BrandMasterPlan, actorId: string) {
     );
     created += 1;
   }
-  return { created };
+
+  /**
+   * ES A MAR LETEZO MARKAK ALIASAI. Atnevezes NINCS: a kanonikus irasmod is
+   * ALIASKENT kerul fel, ha a tarolt nev mas. Igy a lekepezes felepul, es a
+   * nev-kerdes nyitva marad annak, aki eldontheti.
+   */
+  for (const tetel of plan.aliasTopUp) {
+    for (const alias of tetel.add) {
+      await repository.addAlias(
+        tetel.brandId,
+        { alias, source: "UNAS", isPreferred: false } as never,
+        actorId,
+      );
+      aliasesAdded += 1;
+    }
+  }
+  return { created, aliasesAdded };
 }
 
 async function main(): Promise<void> {
@@ -172,7 +208,7 @@ async function main(): Promise<void> {
   };
   process.exitCode = await runBrandMasterCli(process.argv.slice(2), out, {
     master: () => readBrandMaster(),
-    existing: existingBrandKeys,
+    existing: existingBrands,
     actorExists: async (actorId: string) =>
       (await prisma.user.count({ where: { id: actorId } })) === 1,
     apply: applyPlan,

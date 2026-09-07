@@ -12,7 +12,10 @@ import {
   planBrandBackfill,
   type BrandBackfillRow,
 } from "./unas-brand-backfill.js";
-import { BRAND_MASTER_PATH } from "./unas-brand-master.cli.js";
+import {
+  BRAND_MASTER_PATH,
+  normalizeBrandName,
+} from "./unas-brand-master.cli.js";
 
 const sor = (
   kanonikus: string,
@@ -93,10 +96,80 @@ describe("a márka-törzs betöltőjének terve", () => {
    * hasznalhato parancs -- es akkor a neve is hazudna.
    */
   it("ami már áll, azt nem hozza létre újra", () => {
-    const plan = planBrandMaster([sor("Triton", "Triton")], ["triton"]);
+    const plan = planBrandMaster([sor("Triton", "Triton")], [letezo("Triton")]);
 
     assert.deepEqual(plan.create, []);
     assert.deepEqual(plan.alreadyThere, ["Triton"]);
+  });
+
+  /**
+   * A MAS IRASMOD NEM UJ MARKA, ES NEM IS ATNEVEZES.
+   *
+   * A tarolo normalizaloja az irasjelet szokozre csereli, tehat az `AquaMedic`
+   * es az `Aqua Medic` KET kulonbozo kulcs. Elvalasztojel nelkul viszont
+   * ugyanaz -- es ezt a kulcsot KIZAROLAG felismeresre hasznaljuk.
+   *
+   * A mert eset: a teszt gepen a nyers ertekekbol keletkezett egy `AquaMedic`
+   * marka, a torzsben pedig `Aqua Medic` all. Osszevonas nelkul a betolto egy
+   * MASODIK markat hozott volna letre ugyanarra a gyartora, es a kettot semmi
+   * nem kotne ossze.
+   */
+  it("más írásmóddal álló márkát FELISMER, de nem nevez át", () => {
+    const plan = planBrandMaster(
+      [sor("Aqua Medic", "AquaMedic")],
+      [letezo("AquaMedic")],
+    );
+
+    assert.deepEqual(plan.create, []);
+    assert.deepEqual(plan.nameDifferences, [
+      {
+        brandId: "brand-aquamedic",
+        existingName: "AquaMedic",
+        canonicalName: "Aqua Medic",
+      },
+    ]);
+    // ES A KANONIKUS IRASMOD ALIASKENT MEGY FEL -- ez koti ossze a kettot.
+    assert.deepEqual(plan.aliasTopUp, [
+      {
+        brandId: "brand-aquamedic",
+        brandName: "AquaMedic",
+        add: ["Aqua Medic"],
+      },
+    ]);
+  });
+
+  /**
+   * A MAR MEGLEVO ALIAST NEM VISSZUK FEL MEGEGYSZER. Enelkul a masodik futas
+   * `P2002`-vel allna meg -- vagyis a betolto egyszer hasznalhato lenne.
+   */
+  it("a meglévő aliast nem viszi fel újra", () => {
+    const plan = planBrandMaster(
+      [sor("Triton", "TRITON"), sor("Triton", "Triton Labs")],
+      [letezo("Triton", ["triton"])],
+    );
+
+    assert.deepEqual(plan.aliasTopUp, [
+      { brandId: "brand-triton", brandName: "Triton", add: ["Triton Labs"] },
+    ]);
+  });
+
+  /**
+   * ES AMI EGY MASIK MARKA NEVE, AZ NEM MEHET FEL ALIASKENT.
+   *
+   * A tarolo `addAlias` metodusa ezt `IDENTITY_CONFLICT`-tel utasitja el, es
+   * helyesen: egy normalizalt kulcs nem lehet egyszerre az egyik marka NEVE es
+   * a masik ALIASA. A terv ezert meg sem probalja, hanem megnevezi.
+   */
+  it("nem visz fel olyan aliast, ami egy MÁSIK márka neve", () => {
+    const plan = planBrandMaster(
+      [sor("Triton", "Rowa")],
+      [letezo("Triton"), letezo("Rowa")],
+    );
+
+    assert.deepEqual(plan.aliasTopUp, []);
+    assert.deepEqual(plan.aliasBlocked, [
+      { brandName: "Triton", alias: "Rowa", ownedBy: "Rowa" },
+    ]);
   });
 });
 
@@ -109,6 +182,16 @@ describe("a márka-törzs betöltőjének terve", () => {
  * ott a nyers ertekekbol). Nem az volt: a bemeneten belul, TISZTA adatbazison is
  * ot marka bukna el ugyanigy.
  */
+/** Egy MA letezo marka, a tarolo sajat kulcsaival. */
+function letezo(name: string, normalizedAliases: string[] = []) {
+  return {
+    id: "brand-" + normalizeBrandName(name).replace(/ /g, ""),
+    name,
+    normalizedName: normalizeBrandName(name),
+    normalizedAliases,
+  };
+}
+
 describe("a betöltő-terv alias-összevonása", () => {
   const sor = (
     kanonikus: string,
