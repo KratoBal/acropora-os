@@ -59,7 +59,29 @@ export const OWNED_METADATA_PREFIXES = ["seo_", "unas_"] as const;
  * hanem a MI dontesunk a kategoria-fabol. Egy `unas_` elotag azt allitana,
  * hogy a forrasbol jon, es a kovetkezo olvaso ott keresne.
  */
-export const OWNED_METADATA_KEYS = ["unique_piece"] as const;
+/**
+ * A JELZO KULCSA, EGY HELYEN.
+ *
+ * === MIERT KONSTANS, HOLOTT EGY SZO ===
+ *
+ * Ugyanez a szoveg all a BOLT oldalan is (a kirakat `uniquePieceOf` fuggvenye
+ * olvassa). A ket repo kulon el, tehat kozos konstanst NEM tudunk megosztani --
+ * a szerzodes ket helyen all, es ezt nem lehet eltuntetni, csak KIMONDANI.
+ *
+ * Amit viszont meg lehet tenni: ezen az oldalon EGY hely mondja ki. Enelkul a
+ * projekcio egy sztring-literalt ir, a tulajdonos-lista egy masikat, es egy
+ * atnevezes az egyiket ottfelejtene. A hiba NEMA lenne: a jelzo kimegy, a bolt
+ * nem talalja, es a lapon a halkabb teves allitas jelenik meg ("elfogyott" az
+ * "eladva" helyett) -- pontosan az, amire senki nem keres ra.
+ *
+ * (nautilus lelete, 2026-09-07: a stage-en MINDEN mas metaadat-kulcs `unas_`
+ * elotagot visel. Ez a kulcs SZANDEKOSAN nem: nem a forrasbol jon, hanem a MI
+ * kategoria-fankbol. A megnevezes tehat helyes, de EGYEDI -- es epp ezert kell
+ * egy helyen allnia.)
+ */
+export const UNIQUE_PIECE_KEY = "unique_piece";
+
+export const OWNED_METADATA_KEYS = [UNIQUE_PIECE_KEY] as const;
 
 /**
  * EGY PONTOSITAS A SZABALY ALAKJAHOZ (acrobot, 2026-09-07 este).

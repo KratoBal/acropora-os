@@ -6,7 +6,10 @@ import type {
   MedusaProductInput,
   MedusaProductRow,
 } from "./medusa-admin.client.js";
-import { isOwnedMetadataKey } from "./medusa-metadata-merge.js";
+import {
+  isOwnedMetadataKey,
+  UNIQUE_PIECE_KEY,
+} from "./medusa-metadata-merge.js";
 import type { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
 import {
   MedusaProductProjectionService,
@@ -338,6 +341,34 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
    * fixtura bovitesét), es a bovitett fixtura utan ez az allitas nezi meg a
    * NEVET.
    */
+  /**
+   * A SZERZODES A BOLT FELE, KIMONDVA ES MERVE.
+   *
+   * === MIERT KELL, HOLOTT A KULCS MAR KONSTANSBAN ALL ===
+   *
+   * A konstans EZT az oldalt tartja egyben. A masik oldal (a kirakat
+   * `uniquePieceOf` fuggvenye) egy MASIK REPOBAN ugyanezt a szoveget olvassa, es
+   * kozos konstanst nem tudunk megosztani. A szerzodes tehat ket helyen all --
+   * ezt nem lehet eltuntetni, csak KIMONDANI es orzot tenni ra.
+   *
+   * Amit ez az allitas ved: egy atnevezes ITT ne mehessen at csendben. Ha valaki
+   * a kulcsot `unas_unique_piece`-re irja (a tobbi kulcs mintajara, ami mind
+   * `unas_` elotagu), ez a sor pirosodik ki -- kulonben a jelzo kimenne, a bolt
+   * nem talalna meg, es a lapon a HALKABB teves allitas jelenne meg
+   * ("elfogyott" az "eladva" helyett), amire senki nem keres ra.
+   *
+   * (nautilus merese, 2026-09-07: a stage-en minden mas metaadat-kulcs `unas_`
+   * elotagot visel, tehat a mintakovetes itt VALODI kockazat, nem elmeleti.)
+   */
+  it("a jelzo kulcsa pontosan az, amit a bolt olvas", async () => {
+    const torzs = await teljesBemenetTorzse();
+
+    assert.equal(UNIQUE_PIECE_KEY, "unique_piece");
+    assert.equal(torzs.metadata?.[UNIQUE_PIECE_KEY], "true");
+    // ES A PREFIXES ALAK NEM SZEREPEL: ha valaki MELLE veszi fel, az is hiba.
+    assert.equal("unas_unique_piece" in (torzs.metadata ?? {}), false);
+  });
+
   it("minden kikuldott metaadat-kulcs a mienk", async () => {
     const torzs = await teljesBemenetTorzse();
 
