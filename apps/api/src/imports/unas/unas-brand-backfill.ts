@@ -197,8 +197,30 @@ export function planBrandBackfill(
  * siker ne olvasodjon tobbnek, mint ami.
  */
 export function describeBrandBackfillPlan(plan: BrandBackfillPlan): string {
+  /**
+   * A FOSZAM AZT MONDJA MEG, AMIT A VEGREHAJTAS TENNI FOG -- ES EZ EGY MERT
+   * HIBA JAVITASA, NEM SZEPSEGKERDES.
+   *
+   * Az elso valtozat foszama az `assign` hossza volt. A teszt gepen az URES
+   * `Brand` tabla mellett ez NULLA -- mert a 48 marka MEG NEM LETEZIK, tehat
+   * egyetlen sor sem parositható. Az `applyPlan` viszont a letrehozas UTAN
+   * ujratervez, es akkor 683 termek kap markat.
+   *
+   * Vagyis a lap teteje NULLAT allitott arra a kerdesre, aminek a valasza 683.
+   * Egy ilyen kimenet engedelykeresnek MEGTEVESZTO: a jovahagyo egy nullat
+   * olvas, es egy olyan muveletre mond igent, amirol a papir azt allitja, hogy
+   * nem csinal semmit.
+   *
+   * A terv AKKOR terv, ha a szamai OSSZEVETHETOK az iras eredmenyevel.
+   */
+  const letrehozasUtan = plan.createBrands.reduce(
+    (sum, b) => sum + b.products,
+    0,
+  );
   const sorok = [
-    `Márkát kapna: ${plan.assign.length} termék`,
+    `Márkát kapna: ${plan.assign.length + letrehozasUtan} termék`,
+    `  ebből meglévő márka-rekordhoz: ${plan.assign.length}`,
+    `  ebből a most létrehozandó rekordokhoz: ${letrehozasUtan}`,
     `Létrehozandó márka-rekord: ${plan.createBrands.length}`,
     `Már van márkája, érintetlen: ${plan.alreadySet}`,
     `Visszautasítva (NEM írunk be semmit): ${plan.refused.length} érték`,
@@ -221,9 +243,7 @@ export function describeBrandBackfillPlan(plan: BrandBackfillPlan): string {
       sorok.push(`  ${r.brandValue} -- ${r.products} termék -- ${r.reason}`);
   }
 
-  const erintett =
-    plan.assign.length +
-    plan.createBrands.reduce((sum, b) => sum + b.products, 0);
+  const erintett = plan.assign.length + letrehozasUtan;
   sorok.push(
     "",
     `AMI EBBŐL KIMARAD: ${plan.refused.reduce((sum, r) => sum + r.products, 0)} ` +

@@ -119,6 +119,25 @@ describe("a márka visszatöltés terve", () => {
     assert.match(szoveg, /2 írásmóddal: OASE, Oase/);
   });
 
+  /**
+   * A FOSZAM AZT MONDJA MEG, AMIT A VEGREHAJTAS TENNI FOG.
+   *
+   * MERT HIBA: az elso valtozat foszama az `assign` hossza volt, es URES
+   * `Brand` tabla mellett ez NULLA -- mert a markak meg nem leteznek. A
+   * vegrehajtas viszont a letrehozas UTAN ujratervez, es akkor MINDEN sor
+   * markat kap. A lap teteje nullat allitott arra a kerdesre, aminek a valasza
+   * a teljes darabszam -- engedelykeresnek megteveszto.
+   */
+  it("a főszám a létrehozás UTÁNI állapotot mondja, nem a mait", () => {
+    const szoveg = describeBrandBackfillPlan(
+      planBrandBackfill([sor("p1", "Triton"), sor("p2", "Triton")], []),
+    );
+
+    assert.match(szoveg, /Márkát kapna: 2 termék/);
+    assert.match(szoveg, /ebből meglévő márka-rekordhoz: 0/);
+    assert.match(szoveg, /ebből a most létrehozandó rekordokhoz: 2/);
+  });
+
   it("akin már van márka, ahhoz nem nyúl", () => {
     const plan = planBrandBackfill(
       [sor("p1", "Triton", "mar-all")],

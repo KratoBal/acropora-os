@@ -44,8 +44,12 @@ function cliWith(sorok: BrandBackfillRow[] = [], markak: ExistingBrand[] = []) {
       hivasok.push("brands");
       return markak;
     },
-    apply: async (plan: BrandBackfillPlan) => {
-      hivasok.push("apply");
+    actorExists: async (actorId: string) => {
+      hivasok.push("actorExists");
+      return actorId === LETEZO_FELHASZNALO;
+    },
+    apply: async (plan: BrandBackfillPlan, actorId: string) => {
+      hivasok.push("apply:" + actorId);
       return {
         created: plan.createBrands.length,
         assigned: plan.assign.length,
@@ -54,6 +58,8 @@ function cliWith(sorok: BrandBackfillRow[] = [], markak: ExistingBrand[] = []) {
   };
   return { out, deps, hivasok, szoveg: () => ki.join("") };
 }
+
+const LETEZO_FELHASZNALO = "user-1";
 
 const SOR: BrandBackfillRow = {
   productId: "p1",
@@ -81,10 +87,19 @@ describe("a márka-visszatöltés próba-alakja", () => {
   it("--apply MELLETT a végrehajtó lefut, és a számok a kimenetre kerülnek", async () => {
     const f = cliWith([SOR]);
 
-    const kod = await runBrandBackfillCli(["--apply"], f.out, f.deps);
+    const kod = await runBrandBackfillCli(
+      ["--apply", "--actor", LETEZO_FELHASZNALO],
+      f.out,
+      f.deps,
+    );
 
     assert.equal(kod, 0);
-    assert.deepEqual(f.hivasok, ["rows", "brands", "apply"]);
+    assert.deepEqual(f.hivasok, [
+      "rows",
+      "brands",
+      "actorExists",
+      "apply:" + LETEZO_FELHASZNALO,
+    ]);
     assert.match(f.szoveg(), /Létrehozott márka-rekord: 1/);
     assert.match(f.szoveg(), /Termék, amire márka került: 0/);
   });
@@ -100,5 +115,50 @@ describe("a márka-visszatöltés próba-alakja", () => {
 
     assert.match(f.szoveg(), /Létrehozandó márka-rekord: 1/);
     assert.match(f.szoveg(), /se kategóriát, se árat, se készletet/);
+  });
+});
+
+/**
+ * A SZEREPLO ORZOJE, ES MIND A KET ALLITAS AZT MERI, HOGY NEM TORTENT SEMMI.
+ *
+ * A MERT HIBA, AMIT EZ ZAR LE: az elso valtozat a `"unas-backfill"` SZOVEGET
+ * adta at `actorId` gyanant. Az ertek a `DomainEvent.actorUserId` oszlopba
+ * megy, aminek idegen kulcsa van a `User` tablara -- a teszt gepen az iras az
+ * ELSO markanal hasalt el (P2003).
+ *
+ * A tesztek addig zoldek voltak, es HELYESEN azok: a spec az `apply` helyere
+ * duplat injektal, es egy idegen kulcs KIZAROLAG az adatbazisban letezik,
+ * duplaban soha. Ez az az alak, amit a sajat lapunk ir le: egy duplat nem az
+ * minosit, hogy zold tole a teszt, hanem hogy a HIVO minden hasznalt erteket
+ * megkap-e. A hivo itt olyan erteket adott at, amit egyedul az adatbazis tud
+ * elutasitani -- ezert kerult a LETEZES-ELLENORZES a varratra.
+ */
+describe("a márka-visszatöltés szereplő-őrzője", () => {
+  it("--actor nélkül NEM ír, és megmondja, mit kér", async () => {
+    const f = cliWith([SOR]);
+
+    const kod = await runBrandBackfillCli(["--apply"], f.out, f.deps);
+
+    assert.equal(kod, 1);
+    assert.deepEqual(f.hivasok, ["rows", "brands"]);
+    assert.match(f.szoveg(), /--actor/);
+  });
+
+  /**
+   * ES A NEM LETEZO AZONOSITO IS MEGALL -- MIELOTT BARMI TORTENIK. Enelkul az
+   * elso marka letrehozasakor hasalna el, felbehagyott futassal.
+   */
+  it("nem létező --actor mellett sem ír egyetlen sort sem", async () => {
+    const f = cliWith([SOR]);
+
+    const kod = await runBrandBackfillCli(
+      ["--apply", "--actor", "nincs-ilyen"],
+      f.out,
+      f.deps,
+    );
+
+    assert.equal(kod, 1);
+    assert.deepEqual(f.hivasok, ["rows", "brands", "actorExists"]);
+    assert.match(f.szoveg(), /Az írás EL SEM INDULT/);
   });
 });
