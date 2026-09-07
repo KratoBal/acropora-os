@@ -30,7 +30,10 @@ import {
   medusaHandleParositas,
   type MedusaHandleParositas,
 } from "./medusa-product-handle.js";
-import { mergeProductMetadata } from "./medusa-metadata-merge.js";
+import {
+  mergeProductMetadata,
+  UNIQUE_PIECE_KEY,
+} from "./medusa-metadata-merge.js";
 import { buildProductDescription } from "./product-description.js";
 import {
   projectVariantOptions,
@@ -686,7 +689,7 @@ export class MedusaProductProjectionService {
        * szukebb. A kikerult termekrol pedig nem a `"false"` ertek, hanem az
        * OSSZEFESULES veszi le a kulcsot (`medusa-metadata-merge.ts`).
        */
-      ...(product.uniquePiece ? { unique_piece: "true" } : {}),
+      ...(product.uniquePiece ? { [UNIQUE_PIECE_KEY]: "true" } : {}),
     };
     /**
      * AMIT MI MONDUNK. A cel oldalon allo TOBBI kulcsot a `mergeProductMetadata`
