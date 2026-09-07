@@ -25,6 +25,7 @@ import { FilterXSS, type IFilterXSSOptions } from "xss";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { ProductAuthorityCard } from "@/components/products/product-authority-card";
+import { ProductShippingProfileCard } from "@/components/products/product-shipping-profile-card";
 import { ProductBasicsEditor } from "@/components/products/product-basics-editor";
 import { productApi } from "@/lib/api/products";
 import { BarcodeEditor } from "./barcode-editor";
@@ -749,6 +750,16 @@ export function ProductDetailPage({ productId }: { productId: string }) {
             product={product}
             canTransfer={canTransferAuthority}
             onTransferred={setProduct}
+          />
+          {/*
+            A szállítási jellemzők KÉZZEL gondozott törzsadatok: a UNAS-szinkron
+            nem ír rájuk, és ezért a gazda-állapottól függetlenül látszanak. Egy
+            UNAS-gazdájú terméknek is lehet "csak üzletben vehető át" jelzője.
+          */}
+          <ProductShippingProfileCard
+            token={token}
+            productId={product.id}
+            canManage={canManage}
           />
           {/*
             A szerkesztő csak az Acropora OS tulajdonában lévő terméken jelenik

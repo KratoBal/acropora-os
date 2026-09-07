@@ -25,6 +25,19 @@ function productQueryString(query: ProductListApiQuery): string {
   return params.toString();
 }
 
+/** A negy kezzel gondozott szallitasi jelzo. Mind kotelezo: reszleges iras nincs. */
+export interface ProductShippingProfileInput {
+  pickupOnly: boolean;
+  foxpostForbidden: boolean;
+  isHeavy: boolean;
+  isFrozen: boolean;
+}
+
+export interface ProductShippingProfileDetail extends ProductShippingProfileInput {
+  productId: string;
+  updatedAt: string;
+}
+
 export const productApi = {
   list(token: string, query: ProductListApiQuery) {
     return apiRequest<ProductListResponse>(
@@ -44,6 +57,30 @@ export const productApi = {
    * there is no decided answer yet for what should happen to local edits if
    * the product were ever handed back.
    */
+  /**
+   * A SZALLITASI PROFIL HIANYA `null`, ES A HIVO EZT LATJA.
+   *
+   * Nem negy hamisra esunk vissza: a sor hianya azt jelenti, hogy a termeket
+   * MEG SENKI NEM NEZTE MEG, es ez mas allapot, mint egy megvizsgalt termek,
+   * amelyikre egyik jelzo sem all.
+   */
+  getShippingProfile(token: string, productId: string) {
+    return apiRequest<ProductShippingProfileDetail | null>(
+      `/products/${encodeURIComponent(productId)}/shipping-profile`,
+      token,
+    );
+  },
+  saveShippingProfile(
+    token: string,
+    productId: string,
+    input: ProductShippingProfileInput,
+  ) {
+    return apiRequest<ProductShippingProfileDetail>(
+      `/products/${encodeURIComponent(productId)}/shipping-profile`,
+      token,
+      { method: "PUT", body: JSON.stringify(input) },
+    );
+  },
   takeCatalogAuthority(token: string, id: string) {
     return apiRequest<ProductDetail>(
       `/products/${encodeURIComponent(id)}/catalog-authority/acropora`,

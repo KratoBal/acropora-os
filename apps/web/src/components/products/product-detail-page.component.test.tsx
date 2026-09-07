@@ -15,6 +15,16 @@ const api = vi.hoisted(() => ({
   updateExtension: vi.fn(),
   update: vi.fn(),
   categoryOptions: vi.fn(),
+  /*
+    A SZALLITASI PROFIL LEKERESE IS A DUPLA RESZE, KULONBEN A LAP ELHASAL.
+
+    A kartya a lap betoltesekor lekeri a profilt. Egy dupla, amibol ez a
+    fuggveny hianyzik, nem "kevesebbet ad vissza", hanem `undefined`-ot, es a
+    `.then` hivas ott dob -- vagyis a HIVO minden hasznalt erteket meg kell
+    kapjon a duplatol, nem csak azt, amit a teszt allit.
+  */
+  getShippingProfile: vi.fn(async () => null),
+  saveShippingProfile: vi.fn(),
 }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 const navigation = vi.hoisted(() => ({
