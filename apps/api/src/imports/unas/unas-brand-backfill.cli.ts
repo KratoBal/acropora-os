@@ -44,6 +44,32 @@ export interface CliOutput {
   stderr(value: string): void;
 }
 
+/**
+ * A MENET KOZBEN SZAMOLT EREDMENY -- A HIVO BIRTOKOLJA, A VEGREHAJTO TOLTI.
+ *
+ * === MIERT NEM VISSZATERESI ERTEK ===
+ *
+ * Egy visszateresi ertek CSAK a sikeres futasrol tud beszelni. Ha az iras a
+ * harmadik markanal dob, a ket szam a vegrehajto belsejeben marad, es a hivo
+ * annyit lat, hogy "hiba tortent" -- azt nem, hogy MENNYI keszult el.
+ *
+ * === ES MIERT NEM MINDKETTO ===
+ *
+ * A kezenfekvo alak az lett volna, hogy a vegrehajto TOLTI ezt az objektumot
+ * ES vissza is adja a szamokat. Az ket forras ugyanarra az egy tenyre, ami
+ * elterhet -- es a siker-ag olvasna a visszateresi erteket, a bukas-ag ezt.
+ * Egy dupla, ami az objektumot nem tolti ki, a bukas-agon HALLGATNA, a
+ * siker-agon meg helyesen szamolna: pont az a fajta nema hiba, amit ez a
+ * kartya be akar zarni.
+ *
+ * Ezert MIND A KET ag ebbol az egy objektumbol ir. Ha egy dupla nem tolti ki,
+ * a MAR MEGLEVO siker-teszt is pirosra megy -- vagyis a hiba hangos lesz.
+ */
+export interface BackfillProgress {
+  created: number;
+  assigned: number;
+}
+
 /** A pillanatkeppel rendelkezo termekek, a nyers marka-ertekkel. */
 export async function backfillRows(): Promise<BrandBackfillRow[]> {
   const termekek = await prisma.product.findMany({
@@ -97,7 +123,8 @@ export async function runBrandBackfillCli(
     apply(
       plan: BrandBackfillPlan,
       actorId: string,
-    ): Promise<{ created: number; assigned: number }>;
+      progress: BackfillProgress,
+    ): Promise<void>;
   },
 ): Promise<number> {
   const apply = argv.includes("--apply");
@@ -163,18 +190,58 @@ export async function runBrandBackfillCli(
     return 1;
   }
 
-  const eredmeny = await deps.apply(plan, actorId);
+  /**
+   * A SZAMOK A BUKAS UTAN IS KIMENNEK, ES A HIBA MEGIS TOVABB MEGY.
+   *
+   * === A MERT LELET ===
+   *
+   * Az elso valtozatban a ket zaro sor az `await deps.apply(...)` UTAN allt,
+   * `try` sehol. Ha az iras kozben dobott, a hivo egy stack trace-t kapott, a
+   * ket szamot nem -- pedig epp azok mondjak meg, hol tart a felbehagyott
+   * futas.
+   *
+   * === AMIT EZ VISSZAAD, ES AMIT NEM ===
+   *
+   * KENYELMET ad vissza, nem bizonyitekot: az allapot a bukas utan is
+   * lekerdezheto (`count(*) WHERE "brandId" IS NOT NULL`). Ezert nem is
+   * blokkolo javitas. A kulonbseg azert all itt, mert "a bizonyitek elveszik"
+   * alakban tovabbadva surgossegnek latszana, es nem az.
+   *
+   * === ES A HIBA TOVABB DOBODIK ===
+   *
+   * Egy felig lefutott iras NEM sikeres futas. Ha itt elnyelnenk, a parancs
+   * nulla kilepesi koddal allna meg, es a hivo -- ember vagy szkript -- kesz
+   * munkanak olvasna. Az ujradobas a stack trace-t is megtartja: az mondja
+   * meg, MIERT allt meg, a ket szam pedig, HOL.
+   */
+  const progress: BackfillProgress = { created: 0, assigned: 0 };
+  try {
+    await deps.apply(plan, actorId, progress);
+  } catch (hiba) {
+    out.stderr(
+      `\nA futás FÉLBEHAGYVA: az írás közben hiba történt.\n` +
+        `Eddig létrehozott márka-rekord: ${progress.created}\n` +
+        `Eddig márkát kapott termék: ${progress.assigned}\n` +
+        "Az állapot helyrehozható: az újrafuttatás kihagyja azokat a sorokat, " +
+        "amiken már áll márka.\n",
+    );
+    throw hiba;
+  }
+
   out.stdout(
-    `\nLétrehozott márka-rekord: ${eredmeny.created}\n` +
-      `Termék, amire márka került: ${eredmeny.assigned}\n`,
+    `\nLétrehozott márka-rekord: ${progress.created}\n` +
+      `Termék, amire márka került: ${progress.assigned}\n`,
   );
   return 0;
 }
 
 /* c8 ignore start -- a belépési pont: a mérhető rész a `runBrandBackfillCli`. */
-async function applyPlan(plan: BrandBackfillPlan, actorId: string) {
+async function applyPlan(
+  plan: BrandBackfillPlan,
+  actorId: string,
+  progress: BackfillProgress,
+): Promise<void> {
   const repository = new BrandsRepository();
-  let created = 0;
 
   /**
    * ELOSZOR A REKORDOK, AZTAN A HOZZARENDELES, es a sorrend kotott: a
@@ -192,22 +259,20 @@ async function applyPlan(plan: BrandBackfillPlan, actorId: string) {
       { name: marka.name, aliases: [] },
       actorId,
     );
-    created += 1;
+    progress.created += 1;
     ujAzonositok.set(marka.name, brand.id);
   }
 
   const frissBrands = await existingBrands();
   const ujraTervezve = planBrandBackfill(await backfillRows(), frissBrands);
 
-  let assigned = 0;
   for (const tetel of ujraTervezve.assign) {
     await prisma.product.update({
       where: { id: tetel.productId },
       data: { brandId: tetel.brandId },
     });
-    assigned += 1;
+    progress.assigned += 1;
   }
-  return { created, assigned };
 }
 
 async function main(): Promise<void> {

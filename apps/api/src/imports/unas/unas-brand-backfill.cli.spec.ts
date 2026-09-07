@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   runBrandBackfillCli,
+  type BackfillProgress,
   type CliOutput,
 } from "./unas-brand-backfill.cli.js";
 import type {
@@ -28,7 +29,16 @@ import type {
  * KOZVETLENUL (a varraton kivul). Ez a seam szintjen a legtobb, amit merni
  * lehet; a kozvetlen irast a kod atolvasasa zarja ki, nem ez a teszt.
  */
-function cliWith(sorok: BrandBackfillRow[] = [], markak: ExistingBrand[] = []) {
+function cliWith(
+  sorok: BrandBackfillRow[] = [],
+  markak: ExistingBrand[] = [],
+  /**
+   * A BUKO VEGREHAJTO: annyit ir, amennyit a hivo ker, aztan dob. Enelkul a
+   * felbehagyott futast nem lehetne merni -- egy dupla, ami mindig sikerul,
+   * pont azt az agat nem jarja be, amirol ez a szelet szol.
+   */
+  bukasElotte: number | null = null,
+) {
   const hivasok: string[] = [];
   const ki: string[] = [];
   const out: CliOutput = {
@@ -48,12 +58,18 @@ function cliWith(sorok: BrandBackfillRow[] = [], markak: ExistingBrand[] = []) {
       hivasok.push("actorExists");
       return actorId === LETEZO_FELHASZNALO;
     },
-    apply: async (plan: BrandBackfillPlan, actorId: string) => {
+    apply: async (
+      plan: BrandBackfillPlan,
+      actorId: string,
+      progress: BackfillProgress,
+    ) => {
       hivasok.push("apply:" + actorId);
-      return {
-        created: plan.createBrands.length,
-        assigned: plan.assign.length,
-      };
+      if (bukasElotte !== null) {
+        progress.created = bukasElotte;
+        throw new Error("az adatbázis elutasította az írást");
+      }
+      progress.created = plan.createBrands.length;
+      progress.assigned = plan.assign.length;
     },
   };
   return { out, deps, hivasok, szoveg: () => ki.join("") };
@@ -160,5 +176,65 @@ describe("a márka-visszatöltés szereplő-őrzője", () => {
     assert.equal(kod, 1);
     assert.deepEqual(f.hivasok, ["rows", "brands", "actorExists"]);
     assert.match(f.szoveg(), /Az írás EL SEM INDULT/);
+  });
+});
+
+/**
+ * A FELBEHAGYOTT IRAS KIMENETE.
+ *
+ * === MIT MER, ES MIT NEM ===
+ *
+ * Azt meri, hogy a bukas utan is MEGTUDJA a hivo, hany marka es hany termek
+ * keszult el. Azt NEM meri, hogy a szamok igazak -- azt az adatbazis mondja
+ * meg. A javitas kenyelmet ad vissza, nem bizonyitekot: az allapot a bukas utan
+ * is lekerdezheto.
+ *
+ * === MIERT KELL A MASODIK ALLITAS ===
+ *
+ * Az elso onmagaban akkor is zold lenne, ha a parancs a hibat ELNYELNE es nulla
+ * kilepesi koddal allna meg -- vagyis pont a legrosszabb valtozatot engedne at.
+ * A ketto egyutt hatarolja be: a szamok kimennek, ES a futas attol meg bukott.
+ */
+describe("a márka-visszatöltés félbehagyott írása", () => {
+  it("bukás esetén is kiírja, mennyi készült el", async () => {
+    const f = cliWith([SOR], [], 1);
+
+    /**
+     * A DOBAST ITT SZANDEKOSAN ELNYELJUK, es ez nem hanyagsag.
+     *
+     * Merve: amig `assert.rejects` allt itt, ez az allitas a DOBASROL is
+     * beszelt -- es akkor az a rontas, ami a hibat elnyeli, KET tesztet dontott
+     * pirosra, nem egyet. Tobb piros a szantnal nem erosebb bizonyitek: azt
+     * mondja, hogy a ket allitas ugyanazt az utat jarja.
+     *
+     * Igy viszont ez a szelet CSAK a kiirast meri, a szomszedja CSAK a dobast,
+     * es mindket rontas pontosan a sajat tesztjet donti el.
+     */
+    await runBrandBackfillCli(
+      ["--apply", "--actor", LETEZO_FELHASZNALO],
+      f.out,
+      f.deps,
+    ).catch(() => undefined);
+
+    assert.match(f.szoveg(), /Eddig létrehozott márka-rekord: 1/);
+    assert.match(f.szoveg(), /Eddig márkát kapott termék: 0/);
+  });
+
+  it("a hiba tovább megy: a félbehagyott írás NEM sikeres futás", async () => {
+    const f = cliWith([SOR], [], 1);
+
+    await assert.rejects(
+      () =>
+        runBrandBackfillCli(
+          ["--apply", "--actor", LETEZO_FELHASZNALO],
+          f.out,
+          f.deps,
+        ),
+      /az adatbázis elutasította az írást/,
+    );
+
+    // ES A SIKER-SZOVEG NEM JELENIK MEG: egy felbehagyott futas kimenete ne
+    // legyen osszetevesztheto egy kesz futaseval.
+    assert.doesNotMatch(f.szoveg(), /^Létrehozott márka-rekord/m);
   });
 });
