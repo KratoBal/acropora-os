@@ -32,6 +32,8 @@ export interface BrandBackfillRow {
 /** Egy MA letezo marka-rekord, a parositashoz szukseges mezokkel. */
 export interface ExistingBrand {
   id: string;
+  /** A tarolt nev. Csak a JELENTESHEZ kell: az illesztes normalizalt kulcson megy. */
+  name: string;
   /** A `Brand.normalizedName` oszlop erteke. */
   normalizedName: string;
   /** A `BrandAlias.normalizedAlias` ertekek. */
@@ -50,6 +52,29 @@ export interface BrandBackfillPlan {
   refused: { brandValue: string; products: number; reason: string }[];
   /** Akin MAR all marka: nem nyulunk hozza. */
   alreadySet: number;
+  /**
+   * KETERTELMU KULCS: ugyanaz a normalizalt alak KET KULONBOZO markahoz vezet.
+   *
+   * === A MERT ALLAPOT, AMI EZT KIKENYSZERITETTE ===
+   *
+   * A teszt gepen 2026-09-07-en az `aquamedic` kulcs EGYSZERRE volt az
+   * "AquaMedic" nevu marka NEVE es az "Aqua Medic" nevu marka ALIASA.
+   *
+   * === MIERT ALLITJA MEG A FUTAST, ES NEM CSAK JELENT ===
+   *
+   * Az index a neveket ES az aliasokat ugyanabba a Map-be teszi, ket egymas
+   * utani `set` hivassal. Utkozesnel az UTOLSO nyer, es a sorrend a markak
+   * bejarasi sorrende -- vagyis egy adatbazis-lekerdezes sorrendje donti el,
+   * melyik markara kerul a termek. Nem hibazik es nem all meg: CSENDBEN a masik
+   * markahoz koti.
+   *
+   * Egy rossz marka-hozzarendeles a termeken all, es senki nem keresi. Ezert ez
+   * nem figyelmeztetes, hanem megallas.
+   */
+  ambiguousKeys: {
+    key: string;
+    brands: { id: string; name: string }[];
+  }[];
 }
 
 /**
@@ -127,10 +152,35 @@ export function planBrandBackfill(
 ): BrandBackfillPlan {
   const blockedKeys = new Set(blockedValues.map((v) => normalizeBrandName(v)));
   const index = new Map<string, string>();
+  const nevHez = new Map<string, string>();
+  for (const brand of brands) nevHez.set(brand.id, brand.name);
+
+  /**
+   * AZ INDEX EPITESE KOZBEN FIGYELJUK AZ UTKOZEST -- utana mar nem lehetne.
+   *
+   * A `Map.set` felulirja a korabbi erteket, tehat a keszre epitett indexen
+   * semmi nem arulja el, hogy volt-e utkozes. A ket marka kozul csak az utolso
+   * latszik, es a sorrend a bejarasi sorrend.
+   */
+  const utkozok = new Map<string, Set<string>>();
+  const felvesz = (kulcs: string, brandId: string) => {
+    const eddigi = index.get(kulcs);
+    if (eddigi !== undefined && eddigi !== brandId) {
+      const halmaz = utkozok.get(kulcs) ?? new Set<string>([eddigi]);
+      halmaz.add(brandId);
+      utkozok.set(kulcs, halmaz);
+      return;
+    }
+    index.set(kulcs, brandId);
+  };
   for (const brand of brands) {
-    index.set(brand.normalizedName, brand.id);
-    for (const alias of brand.normalizedAliases) index.set(alias, brand.id);
+    felvesz(brand.normalizedName, brand.id);
+    for (const alias of brand.normalizedAliases) felvesz(alias, brand.id);
   }
+  const ambiguousKeys = [...utkozok.entries()].map(([key, ids]) => ({
+    key,
+    brands: [...ids].map((id) => ({ id, name: nevHez.get(id) ?? id })),
+  }));
 
   const assign: BrandBackfillPlan["assign"] = [];
   const letrehozando = new Map<
@@ -205,6 +255,7 @@ export function planBrandBackfill(
       .map(([brandValue, adat]) => ({ brandValue, ...adat }))
       .sort(szamSzerint),
     alreadySet,
+    ambiguousKeys,
   };
 }
 

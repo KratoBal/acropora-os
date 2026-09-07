@@ -102,12 +102,14 @@ export async function existingBrands(): Promise<ExistingBrand[]> {
     where: { isActive: true },
     select: {
       id: true,
+      name: true,
       normalizedName: true,
       aliases: { select: { normalizedAlias: true } },
     },
   });
   return markak.map((marka) => ({
     id: marka.id,
+    name: marka.name,
     normalizedName: marka.normalizedName,
     normalizedAliases: marka.aliases.map((alias) => alias.normalizedAlias),
   }));
@@ -135,6 +137,36 @@ export async function runBrandBackfillCli(
       : null;
 
   const plan = planBrandBackfill(await deps.rows(), await deps.brands());
+
+  /**
+   * A KETERTELMU KULCS MEGALLITJA A FUTAST -- MEG A TERVET IS.
+   *
+   * Nem figyelmeztetes, mert a kar CSENDES: az index a neveket es az aliasokat
+   * ugyanabba a Map-be teszi, utkozesnel az utolso nyer, es a sorrend egy
+   * adatbazis-lekerdezes sorrende. A termek megkapna EGY markat -- csak nem
+   * feltetlenul a sajatjat --, es utana senki nem keresne.
+   *
+   * A terv is megall, nem csak az iras: egy terv, ami ilyen indexre epul, MAR
+   * rossz sorokat mutat, es a jovahagyo azt latna dontesi anyagnak.
+   */
+  if (plan.ambiguousKeys.length) {
+    out.stderr(
+      "\nKÉTÉRTELMŰ MÁRKA-KULCS: ugyanaz a normalizált alak KÉT márkához vezet.\n" +
+        "A futás EL SEM INDULT -- ilyen indexszel a termék csendben a MÁSIK " +
+        "márkához kerülne.\n",
+    );
+    for (const tetel of plan.ambiguousKeys)
+      out.stderr(
+        `  "${tetel.key}" -> ` +
+          tetel.brands.map((b) => `"${b.name}"`).join(" és ") +
+          "\n",
+      );
+    out.stderr(
+      "A feloldás nem itt van: a két márkát kell összevonni vagy az aliast " +
+        "levenni, és utána újra futtatni.\n",
+    );
+    return 1;
+  }
 
   out.stdout(describeBrandBackfillPlan(plan));
 
