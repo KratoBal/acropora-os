@@ -68,11 +68,20 @@ export const TILTO_JELOLO = "ketertelmu_ertek";
 /**
  * A FAJL ERTELMEZESE, ES AZ OSZLOPSZAM SZIGORU.
  *
- * A FEJLEC NEVEIRE NEM ELLENORZUNK, es ez tudatos: a SORREND es az OSZLOPSZAM
- * az, ami szamit. Merve 2026-09-07: a fajl otodik oszlopa egy ideig `jeleoles`
- * alakban allt (egy `e`-vel tobb) -- az adat vegig helyes volt, csak a nev nem.
- * Egy nev-alapu ellenorzes ilyenkor elhasalna azon, ami nem szamit. (A nevet
- * azota javitottak; a szabaly ettol fuggetlenul all.)
+ * A FEJLEC-NEVEK KOZUL PONTOSAN EGY SZAMIT: AZ ELSO. A masodiktol a hetedikig
+ * a nev nem erdekes, mert a mezok a SORRENDBOL kapjak az ertelmuket; a fejlecet
+ * viszont epp arrol ismerjuk fel, hogy az elso mezoje `kanonikus`.
+ *
+ * Merve 2026-09-07: a fajl OTODIK oszlopa egy ideig `jeleoles` alakban allt (egy
+ * `e`-vel tobb) -- az adat vegig helyes volt, csak a nev nem, es a javitasa utan
+ * a kod el sem mozdult. Egy teljes nev-ellenorzes ettol pirosra valtott volna
+ * azon, ami nem szamit.
+ *
+ * EZT A KET ALLITAST ELOSZOR EGYNEK HITTUK ("a fejlec neveire nem ellenorzunk"),
+ * es ez pontatlan volt: az ELSO oszlop atnevezese NEM "ismeretlen fejlec" hibat
+ * ad, hanem azt, hogy a fejlec HIANYZIK -- es a fejlec-sor adatsorkent megy at.
+ * Mind a ket viselkedest spec orzi, hogy a kovetkezo olvasonak ne a kod olvasasa
+ * legyen az egyetlen forras.
  *
  * MERVE a mai fajlon: 126 adatsor, MIND pontosan otoszlopos (a forras-torzsben
  * 80 volt otos es 45 hatos). Egy elcsuszott oszlop csendben az aliasok helyere
