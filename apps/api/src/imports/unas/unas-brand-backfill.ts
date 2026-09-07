@@ -85,9 +85,25 @@ export function brandValueFromParameters(parameters: unknown): string | null {
  * A visszautasitas HANGOS: a tetel a kimeneten all, nevvel es darabszammal. A
  * beiras lenne a nema.
  */
-function refusalReason(brandValue: string): string | null {
+function refusalReason(
+  brandValue: string,
+  blockedKeys: ReadonlySet<string>,
+): string | null {
   const normalizalt = normalizeBrandName(brandValue);
   if (!normalizalt) return "a normalizált alak üres";
+  /**
+   * A MASODIK TILTO FORRAS, ES SZANDEKOSAN KULON AGON.
+   *
+   * A szotar halmazai KODBOL jonnek; ez a lista a betolto-bemenet FAJLBOL, a
+   * `ketertelmu_alias` jelolesbol. Ket kulon bemenet, ket kulon ag -- ezert
+   * lehet oket KULON rontassal merni. Ha egy halmazba kerulnenek, a ket rontas
+   * ugyanazt az agat erne el, es az egyik megvedene a masikat.
+   *
+   * A SZOVEG IS MEGNEVEZI A FORRAST, mert a kimenetet olvasva a teendo mas: egy
+   * szotari tiltas a kodban valtozik, egy bemenet-alapu a fajlban.
+   */
+  if (blockedKeys.has(normalizalt))
+    return "a betöltő-bemenet kétértelmű aliasnak jelöli";
   if (AMBIGUOUS_BRAND_ALIASES.has(normalizalt))
     return "kétértelmű rövidítés a szótár szerint";
   if (GENERIC_BRAND_TERMS.has(normalizalt))
@@ -106,7 +122,10 @@ function refusalReason(brandValue: string): string | null {
 export function planBrandBackfill(
   rows: readonly BrandBackfillRow[],
   brands: readonly ExistingBrand[],
+  /** A betolto-bemenet `ketertelmu_alias` sorai, NYERS alakban. */
+  blockedValues: readonly string[] = [],
 ): BrandBackfillPlan {
+  const blockedKeys = new Set(blockedValues.map((v) => normalizeBrandName(v)));
   const index = new Map<string, string>();
   for (const brand of brands) {
     index.set(brand.normalizedName, brand.id);
@@ -130,7 +149,7 @@ export function planBrandBackfill(
       continue;
     }
 
-    const ok = refusalReason(row.brandValue);
+    const ok = refusalReason(row.brandValue, blockedKeys);
     if (ok) {
       const eddigi = visszautasitva.get(row.brandValue);
       visszautasitva.set(row.brandValue, {

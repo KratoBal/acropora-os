@@ -159,7 +159,16 @@ describe("a márka visszatöltés terve", () => {
     );
 
     assert.match(szoveg, /AMI EBBŐL KIMARAD/);
-    assert.match(szoveg, /kétértelmű/);
+    /**
+     * A VISSZAUTASITOTT TETELT NEV SZERINT keressuk, nem a "ketertelmu" szot.
+     *
+     * MERT HIBA: az elso valtozat a /ketertelmu/ mintara illesztett, es az a
+     * szo a zaro MAGYARAZO mondatban IS ott all -- vagyis az allitas akkor is
+     * zold maradt, ha EGYETLEN tetelt sem utasitottunk vissza. Egy celzott
+     * rontas (a szotari tiltas kiiktatasa) NEM pirositotta ki, es epp ez
+     * derult ki abbol, hogy a vart piros-szamot elore kiirtam.
+     */
+    assert.match(szoveg, /^ {2}AI -- 1 termék -- .*kétértelmű/m);
     assert.match(szoveg, /se kategóriát, se árat, se készletet/);
   });
 });
