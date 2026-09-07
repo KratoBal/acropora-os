@@ -760,6 +760,7 @@ model Product {
   unasSnapshot               UnasProductSnapshot?
   aiSearchDocument           AiProductSearchDocument?
   datasheet                  ProductDatasheet?
+  shippingProfile            ProductShippingProfile?
 
   @@index([brandId])
   @@index([categoryId])
@@ -3954,6 +3955,67 @@ model ServiceToken {
 /// A 2. es a 3. eddig egyforman nezett ki, es pontosan ezt szunteti meg Balazs
 /// dontese (2026-08-31 09:43). A megkulonboztetes NEM ezen a tablan all, hanem a
 /// megtagadas-tablan: itt minden ertek-oszlop egyszeruen nullazhato.
+/// A TERMEK SZALLITASI JELLEMZOI -- KEZZEL GONDOZOTT TORZSADAT, SAJAT TABLABAN.
+///
+/// === MIERT KULON TABLA, ES NEM MEZOK A `Product`-ON ===
+///
+/// A `Product` UZEMI rekord: a UNAS-szinkron irja, es a frissito ag mezonkent
+/// donti el, mihez nyul hozza. Ha ezek a mezok is ott ulnenek, a vedelmuk egy
+/// LISTA lenne -- a frissito ag felsorolasa arrol, mihez nem nyul. Az a fajta
+/// vedelem NEMA: egy uj mezot barki felvehet ugy, hogy a listat elfelejti
+/// boviteni, es semmi nem all meg, csak egy gondozott ertek eltunik egy futas
+/// utan.
+///
+/// Kulon tablaban a tulajdonjog nem szabaly, hanem ALAK: a szinkronnak nincs
+/// mit irnia rajta. (acrobot dontese, 2026-09-07.)
+///
+/// === MIERT NEM `ProductMaster` A NEVE ===
+///
+/// Mert az a nev a repoban MAR FOGLALT, es mast jelent: a
+/// `Product.catalogAuthority` az "aktualis Product Master", vagyis hogy KI a
+/// termek gazdaja. Aki a docs/PRODUCT-CATALOG.md-t olvasta, egy `ProductMaster`
+/// tabla lattan nem nezne utana, hanem a gazda-fogalomra gondolna.
+///
+/// === MIERT NINCS DEFAULT ERTEK ===
+///
+/// Mind a negy jelzo EMBERI ITELET, es a hianyzo ertek nem "nem" -- hanem "meg
+/// senki nem nezte meg". A megkulonboztetes a SOR letezese: nincs sor = nem
+/// vizsgaltuk; van sor = valaki mind a negyrol dontott. Egy `@default(false)`
+/// epp ezt tuntetne el, mert egy reszleges irasnal a ki nem toltott jelzok
+/// csendben "nem"-re allnanak.
+///
+/// === AMI NINCS ITT, ES SZANDEKOSAN ===
+///
+/// SULY: a Commerce oldali modell kommentje kimondja, hogy az `is_heavy` kezzel
+/// jelolt, SOSEM a sulybol szamolt -- es Balazs dontese szerint termek-tomeget
+/// nem viszunk fel. Nincs mit duplikalni.
+///
+/// `is_livestock`: a Commerce oldalon NEM ennek a modellnek a mezoje, hanem a
+/// `ProductType.id`-bol dol el, kornyezeti valtozobol. Vagyis nem adat, hanem
+/// konfiguracio, es masik rendszerben el.
+///
+/// A SZALLITASI OSZTALY SZAMITASA: a Commerce-ben azert el kodban es nem
+/// szabalyban, mert a Medusa szabaly-motorja a "barmelyik tetel" logikat nem
+/// tudja kifejezni. Ez az indok NALUNK NEM ALL FENN, tehat a szamitas
+/// atmasolasa nem automatikus -- ez a tabla az ADATOT hordozza, nem a dontest.
+model ProductShippingProfile {
+  id        String   @id @default(cuid())
+  productId String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Az egesz kosarat uzletben kell atvenni.
+  pickupOnly       Boolean
+  /// A Foxpost nem ajanlhato fel.
+  foxpostForbidden Boolean
+  /// Nehez aru -- KEZZEL jelolt, sosem a sulybol.
+  isHeavy          Boolean
+  /// Fagyasztott: nem szallithato, `pickupOnly`-kent viselkedik.
+  isFrozen         Boolean
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
 model ProductDatasheet {
   id        String   @id @default(cuid())
   productId String   @unique
