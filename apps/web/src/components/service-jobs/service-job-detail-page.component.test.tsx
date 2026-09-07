@@ -151,6 +151,67 @@ describe("ServiceJobDetailPage", () => {
    * sorrend megváltozna. Az összefésülés szabálya a szerveren áll, mert a
    * mobil nem éri el a közös csomagot, és ott újraíródna.
    */
+  /**
+   * A LAP NEM ALLIT ATADAS-ALLAPOTOT, AMIG NINCS, AKI IRJA.
+   *
+   * Merve 2026-09-07: a `handedOverAt` mezot SEMMI nem irja -- az API negy
+   * helyen csak olvassa, a kliensek nem hivatkoznak az adatbazis-csomagra
+   * (`apps/web` es `apps/mobile` egyarant nulla; ismert pozitiv kontroll: az
+   * `apps/api/src`-ben 189 fajl), es a mobil faban a `handedOver` szo nulla
+   * alkalommal fordul elo, mikozben 49 fajl emliti a munkalapot.
+   *
+   * Amig ez igy van, egy "Meg nalunk van" felirat nem hianyzo adat, hanem HAMIS
+   * ALLITAS: minden lapnal, mindig megjelent.
+   */
+  it("átadás nélkül NEM állítja, hogy a lap még nálunk van", async () => {
+    render(<ServiceJobDetailPage jobId="job-1" />);
+
+    // A MUNKALAPOK KARTYAJABAN kerdezunk, NEM a naploban: a lap ket helyen is
+    // felsorolja ugyanazt a munkalapot, es az atadas-felirat csak az egyiken all.
+    // Az elso valtozat a naploban keresett, es a POZITIV KONTROLL bukott el rajta
+    // -- pontosan azert van.
+    const hivatkozas = await screen.findByRole("link", {
+      name: "BIO-2026-004",
+    });
+    const sor = hivatkozas.closest("li");
+    expect(sor).toBeTruthy();
+    expect(sor?.textContent ?? "").not.toContain("Még nálunk van");
+  });
+
+  /**
+   * ES A POZITIV KONTROLL, AMI NELKUL AZ ELOZO ALLITAS URES.
+   *
+   * Egy "nincs ott" allitast egy URES lap is kielegit. Ez a szelet ugyanazzal a
+   * keresessel megtalalja a feliratot, amikor VAN atadas-datum -- tehat
+   * bizonyitja, hogy az elozo allitas kepes lenne elbukni.
+   */
+  it("átadott lapnál viszont KIÍRJA az átadást", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        timeline: [
+          {
+            kind: "worksheet",
+            at: "2026-09-02T08:00:00.000Z",
+            sortKey: "worksheet-1",
+            worksheet: {
+              id: "worksheet-1",
+              number: "BIO-2026-004",
+              createdAt: "2026-09-02T08:00:00.000Z",
+              handedOverAt: "2026-09-04T09:30:00.000Z",
+            },
+          },
+        ],
+      }),
+    );
+
+    render(<ServiceJobDetailPage jobId="job-1" />);
+
+    const hivatkozas = await screen.findByRole("link", {
+      name: "BIO-2026-004",
+    });
+    expect(hivatkozas.closest("li")?.textContent ?? "").toContain("Átadva:");
+  });
+
   it("a szerver sorrendjét rajzolja ki, nem rendezi újra", async () => {
     render(<ServiceJobDetailPage jobId="job-1" />);
 

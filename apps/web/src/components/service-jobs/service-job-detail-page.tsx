@@ -433,11 +433,32 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                 >
                   {worksheet.number ?? "Piszkozat"}
                 </Link>
-                <span className="ml-2 text-xs text-slate-500">
-                  {worksheet.handedOverAt
-                    ? `Átadva: ${formatDateTime(worksheet.handedOverAt)}`
-                    : "Még nálunk van"}
-                </span>
+                {/*
+                  ÁTADÁS-ÁLLAPOTOT CSAK AKKOR ÁLLÍTUNK, HA VAN MIRE.
+
+                  Itt korábban a hiányzó dátum ágán a "Még nálunk van" mondat
+                  állt. Mérve 2026-09-07: a `handedOverAt` mezőt SEMMI nem írja
+                  -- nincs írója az API-ban (négy helyen csak olvassa), a
+                  kliensek nem is tudnának írni (sem a web, sem a mobil nem
+                  hivatkozik az adatbázis-csomagra), és a mobil fában a
+                  `handedOver` szó nulla alkalommal fordul elő, miközben 49
+                  fájl említi a munkalapot.
+
+                  Vagyis az a mondat MINDEN munkalapnál, MINDIG megjelent, és
+                  egy állapotot állított, ami nem létezik. Ez nem hiányzó adat,
+                  hanem hamis állítás: a partner, aki azt olvassa, hogy az
+                  eszköze még nálunk van, nem fog utánakérdezni -- egy üres
+                  mező után igen.
+
+                  Ez NEM az átadás funkció eltávolítása: az soha nem létezett.
+                  Egy meg nem lévő viselkedés ÁLLÍTÁSÁT vonjuk vissza. Ha egyszer
+                  lesz írója, az alábbi ág magától megjelenik.
+                */}
+                {worksheet.handedOverAt ? (
+                  <span className="ml-2 text-xs text-slate-500">
+                    Átadva: {formatDateTime(worksheet.handedOverAt)}
+                  </span>
+                ) : null}
                 {/* A VISSZAUT OTT ALL, AHOL A HIBA LATSZIK: a lap mellett,
                     nem egy kulon felulet menujeben. Aki eszreveszi, hogy rossz
                     lapot csatolt, ugyanabban a sorban tudja levenni. */}
