@@ -18,6 +18,21 @@ import {
  * 2026-09-07, ugyanazzal az indokkal, amivel a LIVESTOCK termek-tipust
  * elvetettuk: ne legyen negyedik igazsag-forras.)
  *
+ * === MI OLDJA FEL EZT A SZABALYT: A FELTETEL, NEM CSAK AZ INDOK ===
+ *
+ * A szarmaztatott ertek attol jo, hogy nem lehet elfelejteni. Ugyanez a rossz
+ * oldala: termekenkent NEM lehet kikapcsolni. Ez ma helyes, mert elo allatot
+ * EGYALTALAN NEM adunk fel.
+ *
+ * EZ A SZABALY TEHAT ADDIG ALL, AMIG ELO ALLATOT NEM SZALLITUNK. Ha valaha lesz
+ * ra szallitasi mod (szakosodott futar, hutott csomag), akkor EZT A
+ * SZARMAZTATAST kell atirni -- NEM termekenkent kikapcsolni.
+ *
+ * Az indok nelkul a szabaly egy nap onkenyes korlatnak fog latszani, es valaki
+ * termekenkent fogja megkerulni: egy kezi `pickupOnly: false` a profil-soron,
+ * ami itt amugy sem hat (a ket forras VAGY kapcsolatban all). A hiba ekkor a
+ * RENDELESNEL derul ki, nem a kodban. (acrobot kerese, 2026-09-07.)
+ *
  * === ES AMI KEZI MARAD, ES HELYESEN ===
  *
  * Az `isHeavy` es az `isFrozen` NEM vezetheto le a kategoriabol, es a hianyuk
@@ -30,9 +45,33 @@ import {
  * masik repoban) es -- masik neven -- a WYSIWYG szabaly. A NEVEK itt allnak
  * egy helyen; a bejaras a `subtreeIdsByNames` fuggvenyben, kozosen.
  *
- * A masik repoban allo lista NEM oszthato meg konstanskent. A szerzodest ezert
- * ki kell MONDANI: ha ez a harom nev valaha valtozik, a kirakat oldalan is
- * valtozik, es a ket helyet EGYUTT kell atirni.
+ *
+ * === HOL LAKIK MEG UGYANEZ A KERDES: NEGY HELY, KET REPO ===
+ *
+ * Az "elo allat-e ez a termek" (es a rokona, az "egyedi darab-e") kerdesre MA
+ * NEGY kulonbozo szabaly valaszol, ket kulon repoban. Kozos konstanst nem lehet
+ * megosztani kozottuk, ezert a szerzodes CSAK KIMONDVA letezik:
+ *
+ *   acropora-os / medusa-wysiwyg.policy.ts
+ *       a "WYSIWYG" kategoria RESZFAJA -> egyedi darab (rendelhetoseg, jelzo)
+ *
+ *   acropora-os / medusa-livestock.policy.ts
+ *       a HAROM ELO ALLAT GYOKER (Korallok, Halak, Gerinctelenek)
+ *       -> bolti atvetel (pickup_only)
+ *
+ *   acropora-commerce / modules/products/components/lap-vaz/vilag-valto.ts
+ *       UGYANAZ A HAROM NEV -> a kirakat sotet-vilagos valtoja
+ *
+ *   acropora-commerce / workflows/utils/livestock.ts
+ *       termek-TIPUS azonositok egy kornyezeti valtozobol (MA URES)
+ *       -> a szallitasi osztaly livestock-aga
+ *
+ * A KETTO, AMI EGYUTT MOZOG: a masodik es a harmadik UGYANAZT a harom nevet
+ * tartalmazza, ket kulon repoban. Ha az egyik valtozik, a masikat AT KELL
+ * NEZNI -- kulonben az egyik oldal mar elo allatnak tart valamit, amit a masik
+ * nem, es a kulonbseg sehol nem hasal el.
+ *
+ * (acrobot kerese, 2026-09-07: "ma senki nem tudja, hogy harom van". Negy van.)
  */
 export const LIVE_ANIMAL_ROOT_NAMES = [
   "Korallok",
