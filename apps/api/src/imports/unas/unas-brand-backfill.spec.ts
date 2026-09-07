@@ -19,7 +19,9 @@ const marka = (
   id: string,
   normalizedName: string,
   normalizedAliases: string[] = [],
-): ExistingBrand => ({ id, normalizedName, normalizedAliases });
+  /** A TAROLT nev. Csak a jelentesben latszik; az illesztes a kulcson megy. */
+  name = normalizedName,
+): ExistingBrand => ({ id, name, normalizedName, normalizedAliases });
 
 describe("a márka visszatöltés terve", () => {
   it("meglévő márkához hozzárendel", () => {
@@ -195,5 +197,55 @@ describe("a brand paraméter kiolvasása a tárolt tömbből", () => {
     );
     assert.equal(brandValueFromParameters(null), null);
     assert.equal(brandValueFromParameters("nem tömb"), null);
+  });
+});
+
+/**
+ * A KETERTELMU KULCS MEGALLITJA A TERVET.
+ *
+ * === A MERT ALLAPOT ===
+ *
+ * A teszt gepen 2026-09-07-en az `aquamedic` kulcs EGYSZERRE volt az "AquaMedic"
+ * nevu marka NEVE es az "Aqua Medic" nevu marka ALIASA. Ez nem elmeleti eset:
+ * a marka-torzs betoltese hozta letre, es azota all.
+ *
+ * === MIERT MEGALLAS, ES NEM FIGYELMEZTETES ===
+ *
+ * Az index a neveket es az aliasokat ugyanabba a Map-be teszi, ket egymas utani
+ * `set` hivassal. Utkozesnel az UTOLSO nyer, es a sorrend a markak bejarasi
+ * sorrende -- vagyis egy adatbazis-lekerdezes sorrendje dontene el, melyik
+ * markara kerul a termek. A futas nem hibazik es nem all meg: CSENDBEN a masik
+ * markahoz koti, es utana senki nem keresi.
+ */
+describe("a márka visszatöltés kétértelmű kulcsai", () => {
+  it("ugyanaz a kulcs két márkánál: megnevezi mindkettőt", () => {
+    const plan = planBrandBackfill(
+      [sor("p1", "AquaMedic")],
+      [
+        marka("b1", "aquamedic", [], "AquaMedic"),
+        marka("b2", "aqua medic", ["aquamedic"], "Aqua Medic"),
+      ],
+    );
+
+    assert.equal(plan.ambiguousKeys.length, 1);
+    assert.equal(plan.ambiguousKeys[0]!.key, "aquamedic");
+    assert.deepEqual(plan.ambiguousKeys[0]!.brands.map((b) => b.name).sort(), [
+      "Aqua Medic",
+      "AquaMedic",
+    ]);
+  });
+
+  /**
+   * ES A POZITIV KONTROLL, AMI NELKUL AZ ELOZO SEMMIT NEM ER: ugyanaz a kulcs
+   * UGYANAZON a markan (nev es sajat alias) NEM ketertelmu.
+   */
+  it("egy márka saját neve és aliasa NEM kétértelmű", () => {
+    const plan = planBrandBackfill(
+      [sor("p1", "Fauna Marin")],
+      [marka("b1", "fauna marin", ["fauna marin"], "Fauna Marin")],
+    );
+
+    assert.deepEqual(plan.ambiguousKeys, []);
+    assert.equal(plan.assign.length, 1);
   });
 });

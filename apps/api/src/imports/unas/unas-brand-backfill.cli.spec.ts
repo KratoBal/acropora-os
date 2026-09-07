@@ -238,3 +238,50 @@ describe("a márka-visszatöltés félbehagyott írása", () => {
     assert.doesNotMatch(f.szoveg(), /^Létrehozott márka-rekord/m);
   });
 });
+
+/**
+ * A KETERTELMU KULCS A PARANCSOT IS MEGALLITJA -- A TERVET IS, NEM CSAK AZ IRAST.
+ *
+ * Egy terv, ami ketertelmu indexre epul, MAR rossz sorokat mutat: a jovahagyo
+ * azt olvasna dontesi anyagnak. Ezert a proba-alak sem fut le.
+ */
+describe("a márka-visszatöltés kétértelmű kulcsnál megáll", () => {
+  const KETERTELMU: ExistingBrand[] = [
+    {
+      id: "b1",
+      name: "AquaMedic",
+      normalizedName: "aquamedic",
+      normalizedAliases: [],
+    },
+    {
+      id: "b2",
+      name: "Aqua Medic",
+      normalizedName: "aqua medic",
+      normalizedAliases: ["aquamedic"],
+    },
+  ];
+
+  it("--apply NÉLKÜL sem ad tervet, és megnevezi mindkét márkát", async () => {
+    const f = cliWith([SOR], KETERTELMU);
+
+    const kod = await runBrandBackfillCli([], f.out, f.deps);
+
+    assert.equal(kod, 1);
+    assert.match(f.szoveg(), /KÉTÉRTELMŰ MÁRKA-KULCS/);
+    assert.match(f.szoveg(), /"AquaMedic"/);
+    assert.match(f.szoveg(), /"Aqua Medic"/);
+  });
+
+  /**
+   * ES A BIZONYITEK ITT IS AZ, HOGY NEM TORTENT SEMMI: a terv-szoveg ki sem
+   * irodik. A kimenet szovege onmagaban nem eleg -- egy parancs, ami kiirja a
+   * figyelmeztetest ES a tervet is, ugyanezt a sort adna.
+   */
+  it("a terv szövege meg sem jelenik", async () => {
+    const f = cliWith([SOR], KETERTELMU);
+
+    await runBrandBackfillCli([], f.out, f.deps);
+
+    assert.doesNotMatch(f.szoveg(), /Létrehozandó márka-rekord/);
+  });
+});
