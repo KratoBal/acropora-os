@@ -141,6 +141,37 @@ export function parseBrandMaster(text: string): {
   return { rows, errors };
 }
 
+/**
+ * EGY MA LETEZO MARKA, ANNYIVAL, AMENNYI AZ ILLESZTESHEZ KELL.
+ *
+ * Korabban csak a normalizalt KULCSOK listajat kaptuk. Az eleg volt annak
+ * eldontesehez, hogy egy kanonikus nev mar all-e -- ahhoz viszont nem, hogy
+ * MELYIK markarol van szo, es MI hianyzik rola.
+ */
+export interface ExistingBrandRecord {
+  id: string;
+  name: string;
+  normalizedName: string;
+  normalizedAliases: string[];
+}
+
+/**
+ * AZ ELVALASZTOJEL NELKULI KULCS -- KIZAROLAG FELISMERESRE, SOHA AZONOSITASRA.
+ *
+ * A tarolo normalizaloja az irasjelet SZOKOZRE csereli (`Red Sea` -> `red sea`),
+ * ezert az `AquaMedic` es az `Aqua Medic` KET KULONBOZO kulcs. Ez az azonossag
+ * szempontjabol helyes: a tarolo nem allithatja, hogy a ketto ugyanaz.
+ *
+ * A FELISMERESHEZ viszont pont ez a kulonbseg kell. Enelkul a betolto egy MASODIK
+ * markat hozna letre ugyanarra a gyartora, es a kettot semmi nem kotne ossze.
+ *
+ * A KET HASZNALAT KOZTI HATAR: ezzel a kulccsal SOHA nem irunk ossze ket sort
+ * automatikusan. Csak annyit mondunk, hogy GYANUS, es a dontes emberre marad.
+ */
+function separatorlessKey(value: string): string {
+  return normalizeBrandName(value).replace(/ /g, "");
+}
+
 export interface BrandMasterPlan {
   /**
    * Aliasok, amiket a NORMALIZALAS azonosnak lat, ezert csak az elso megy at.
@@ -171,6 +202,41 @@ export interface BrandMasterPlan {
    * megnevezzuk.
    */
   mixedMarkers: { name: string; jelolok: string[] }[];
+
+  /**
+   * MAR LETEZO MARKA, AMIRE A TORZS ALIASAI MEG HIANYOZNAK.
+   *
+   * A betolto ilyenkor NEM nevez at es NEM hoz letre masodik markat: csak
+   * potolja a hianyzo aliasokat. Az indok nem szimmetria, hanem az, melyik
+   * tevedes marad rejtve. Egy elmaradt alias-potlas NEMA: a lekepezes nem epul
+   * fel, es a kovetkezo szinkron ugyanugy nem talal ra a markara. Egy tevesen
+   * atnevezett marka viszont HANGOS: latszik a listan, es visszaallithato.
+   */
+  aliasTopUp: { brandId: string; brandName: string; add: string[] }[];
+
+  /**
+   * LETEZO MARKA, AMI UGYANAZ A GYARTO, DE MAS IRASMODDAL ALL A TABLABAN.
+   *
+   * Peldaul `AquaMedic` kontra `Aqua Medic`. Az atnevezes NEM a betolto dolga:
+   * a vevo azt latja, tehat Balazs donti el. A betolto annyit tesz, hogy a
+   * letezo markara felviszi a torzs aliasait (koztuk a kanonikus irasmodot is),
+   * igy a lekepezes felepul anelkul, hogy barmit atneveznenk.
+   */
+  nameDifferences: {
+    brandId: string;
+    existingName: string;
+    canonicalName: string;
+  }[];
+
+  /**
+   * ALIAS, AMIT NEM LEHET FELVINNI, MERT EGY MASIK MARKA NEVE.
+   *
+   * A tarolo `addAlias` metodusa ezt `IDENTITY_CONFLICT`-tel utasitja el, es
+   * helyesen: egy normalizalt kulcs nem lehet egyszerre az egyik marka NEVE es
+   * a masik ALIASA -- onnantol a visszatoltes nem tudna eldonteni, melyikhez
+   * tartozik. Itt nem eroltetjuk, hanem megnevezzuk.
+   */
+  aliasBlocked: { brandName: string; alias: string; ownedBy: string }[];
 }
 
 /**
@@ -182,9 +248,21 @@ export interface BrandMasterPlan {
  */
 export function planBrandMaster(
   rows: readonly BrandMasterRow[],
-  existingKeys: readonly string[],
+  existing: readonly ExistingBrandRecord[],
 ): BrandMasterPlan {
-  const megvan = new Set(existingKeys);
+  /** normalizalt kulcs (nev VAGY alias) -> a marka, amelyik viseli. */
+  const kulcsHez = new Map<string, ExistingBrandRecord>();
+  /** elvalasztojel nelkuli kulcs -> a marka. CSAK felismeresre. */
+  const lazaHoz = new Map<string, ExistingBrandRecord>();
+  /** normalizalt NEV -> a marka. Az alias-tiltas ebbol dol el. */
+  const nevHez = new Map<string, ExistingBrandRecord>();
+  for (const marka of existing) {
+    kulcsHez.set(marka.normalizedName, marka);
+    nevHez.set(marka.normalizedName, marka);
+    lazaHoz.set(separatorlessKey(marka.name), marka);
+    for (const alias of marka.normalizedAliases) kulcsHez.set(alias, marka);
+  }
+
   const plan: BrandMasterPlan = {
     create: [],
     alreadyThere: [],
@@ -192,6 +270,9 @@ export function planBrandMaster(
     blockedValues: [],
     mixedMarkers: [],
     mergedAliases: [],
+    aliasTopUp: [],
+    nameDifferences: [],
+    aliasBlocked: [],
   };
 
   /**
@@ -240,42 +321,12 @@ export function planBrandMaster(
       plan.skipped.push({ name: marka.name, jelolo });
       continue;
     }
-    if (megvan.has(normalizeBrandName(marka.name))) {
-      plan.alreadyThere.push(marka.name);
-      continue;
-    }
     /**
-     * AZ ALIASOKAT A TAROLO NORMALIZALOJAVAL VONJUK OSSZE, MIELOTT ATADJUK.
+     * AZ ALIASOKAT ELOSZOR OSSZEVONJUK, ES CSAK AZUTAN DONTUNK.
      *
-     * === A MERT BUKAS, AMI EZT KIKENYSZERITETTE ===
-     *
-     * A teszt gepen az iras `P2002`-vel elhasalt a `normalizedAlias` mezon, es
-     * RESZLEGES allapotot hagyott (18 marka es 3 alias letrejott, aztan meghalt
-     * -- a letrehozas nem egy tranzakcio).
-     *
-     * Elso gyanunk a teszt gep szennyezett allapota volt: ott 48 marka MAR allt
-     * a nyers ertekekbol. Nem az: a bemeneten belul, TISZTA adatbazison is OT
-     * marka bukna el ugyanigy. Merve a `brands.repository` sajat
-     * normalizalojaval: Aqua Light (`aqualight` ketszer), Ecotech Marine
-     * (`ecotech`), Red Sea (`redsea`), Rowa (`rowa phos`), Two Little Fishies
-     * (`two little`).
-     *
-     * === MIERT NEM LATSZOTT A BEMENET ELLENORZESEKOR ===
-     *
-     * A bemenetet keszito meres MASIK normalizalot hasznalt: az elvalasztojelet
-     * TORLI, a tarolo viszont SZOKOZRE csereli. `Red Sea` -> `redsea` az egyik
-     * szerint, `red sea` a masik szerint. Az elso alak mellett a `RedSea` alias
-     * a marka SAJAT nevevel esik egybe -- a tarolo az ilyet kiszuri --, a
-     * masodik mellett viszont ket kulonbozo aliasnak latszik, es utkozik.
-     * Ugyanaz a ket sor, ket ellentetes eredmennyel; a kulonbseg nem az adatban
-     * van, hanem abban, ki nezi.
-     *
-     * === MIERT ITT, ES NEM A TAROLOBAN ===
-     *
-     * A tarolo `create` metodusa kozos ut, minden marka-letrehozas rajta megy.
-     * Ott egy csendes osszevonas MASOKTOL is elvenne az utkozes-jelzest. Itt
-     * viszont a bemenet ismert tulajdonsagarol van szo, es a terv KI IS IRJA,
-     * melyik alakot hagyta el -- tehat nem tunik el.
+     * Korabban ez a lepes a `create` agon belul allt, tehat a MAR LETEZO
+     * markakra nem futott le. Amikor a betolto elkezdte potolni a hianyzo
+     * aliasokat, ugyanaz a `P2002` jott volna vissza, csak masik uton.
      */
     const latott = new Map<string, string>();
     const megtartott: string[] = [];
@@ -300,6 +351,56 @@ export function planBrandMaster(
       });
     marka.aliases = megtartott;
 
+    const nevKulcs = normalizeBrandName(marka.name);
+    /**
+     * KET SZINTU ILLESZTES, ES A MASODIK CSAK FELISMER.
+     *
+     * pontos    a tarolo sajat kulcsa (nev vagy alias) -- ez az AZONOSSAG
+     * laza      elvalasztojel nelkul -- ez csak GYANU, es jelentest szul
+     */
+    const pontos = kulcsHez.get(nevKulcs);
+    const laza = pontos ?? lazaHoz.get(separatorlessKey(marka.name));
+
+    if (laza) {
+      plan.alreadyThere.push(marka.name);
+      if (!pontos)
+        plan.nameDifferences.push({
+          brandId: laza.id,
+          existingName: laza.name,
+          canonicalName: marka.name,
+        });
+
+      /**
+       * A POTLANDO ALIASOK. A kanonikus irasmod IS koztuk van, ha a letezo
+       * marka mas alakban all -- epp ez koti ossze a kettot atnevezes nelkul.
+       */
+      const marVan = new Set([laza.normalizedName, ...laza.normalizedAliases]);
+      const jeloltek = pontos ? marka.aliases : [marka.name, ...marka.aliases];
+      const potlando: string[] = [];
+      for (const alias of jeloltek) {
+        const kulcs = normalizeBrandName(alias);
+        if (marVan.has(kulcs)) continue;
+        marVan.add(kulcs);
+        const masike = nevHez.get(kulcs);
+        if (masike && masike.id !== laza.id) {
+          plan.aliasBlocked.push({
+            brandName: laza.name,
+            alias,
+            ownedBy: masike.name,
+          });
+          continue;
+        }
+        potlando.push(alias);
+      }
+      if (potlando.length)
+        plan.aliasTopUp.push({
+          brandId: laza.id,
+          brandName: laza.name,
+          add: potlando,
+        });
+      continue;
+    }
+
     plan.create.push({
       name: marka.name,
       aliases: marka.aliases,
@@ -318,6 +419,9 @@ export function describeBrandMasterPlan(plan: BrandMasterPlan): string {
     `Tiltó bejegyzés (a visszatöltés nem rendelhet hozzá): ${plan.blockedValues.length}`,
     `Ellentmondó jelölésű márka (kihagyva): ${plan.mixedMarkers.length}`,
     `Összevont alias (a normalizálás azonosnak látja): ${plan.mergedAliases.length}`,
+    `Meglévő márka, amire alias kerül: ${plan.aliasTopUp.length}`,
+    `Meglévő márka MÁS írásmóddal (döntést kér): ${plan.nameDifferences.length}`,
+    `Alias, ami egy másik márka neve (nem vihető fel): ${plan.aliasBlocked.length}`,
   ];
 
   if (plan.mixedMarkers.length) {
@@ -343,6 +447,47 @@ export function describeBrandMasterPlan(plan: BrandMasterPlan): string {
           .join(", ")}`,
       );
   }
+  /**
+   * A NEV-ELTERESEK LISTAJA BALAZSNAK KESZUL, ezert a KET irasmod egymas mellett
+   * all. Az atnevezes az o dontese: a vevo azt latja. A betolto addig sem
+   * tehetetlen -- a kanonikus irasmodot ALIASKENT viszi fel, tehat a lekepezes
+   * felepul anelkul, hogy barmit atneveznenk.
+   */
+  if (plan.nameDifferences.length) {
+    sorok.push(
+      "",
+      "MÁS ÍRÁSMÓD, UGYANAZ A GYÁRTÓ -- az átnevezés DÖNTÉS, nem betöltés:",
+    );
+    for (const n of plan.nameDifferences)
+      sorok.push(
+        `  a táblában "${n.existingName}", a törzsben "${n.canonicalName}"`,
+      );
+  }
+
+  if (plan.aliasTopUp.length) {
+    sorok.push("", "MEGLÉVŐ MÁRKÁRA FELVITT ALIASOK (átnevezés nélkül):");
+    for (const t of plan.aliasTopUp)
+      sorok.push(
+        `  ${t.brandName} <- ${t.add.map((a) => `"${a}"`).join(", ")}`,
+      );
+  }
+
+  /**
+   * EZ A LISTA NEM HIBA, HANEM HATAR: egy normalizalt kulcs nem lehet egyszerre
+   * az egyik marka NEVE es a masik ALIASA. Ha eroltetnenk, a visszatoltes nem
+   * tudna eldonteni, melyikhez tartozik egy nyers ertek.
+   */
+  if (plan.aliasBlocked.length) {
+    sorok.push(
+      "",
+      "NEM VIHETŐ FEL, mert egy MÁSIK márka neve (a tároló elutasítaná):",
+    );
+    for (const b of plan.aliasBlocked)
+      sorok.push(
+        `  ${b.brandName} <- "${b.alias}" (ez ma "${b.ownedBy}" neve)`,
+      );
+  }
+
   if (plan.blockedValues.length) {
     sorok.push("", "Tiltott értékek (a visszatöltés ezekre NEM ír márkát):");
     for (const v of plan.blockedValues) sorok.push(`  ${v}`);
