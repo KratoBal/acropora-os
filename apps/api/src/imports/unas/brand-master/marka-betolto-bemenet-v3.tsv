@@ -38,6 +38,25 @@
 #                     URES, ha nincs jeloles, VAGY ha a kerdes nem ez (lasd a Gourmet-t).
 #   megjegyzes        az indok, es hogy MERT-e vagy a TORZS megjegyzese
 #
+# === FIGYELEM: AZ ELSO OSZLOP NEVE (`kanonikus`) A BEOLVASO SZAMARA SZAMIT ===
+#
+# Murena merese, 2026-09-07, es ket spec allitas fedi (PR 582):
+#
+#   az ELSO oszlop neve SZAMIT     -- a beolvaso ARROL ismeri fel, hogy ez a fejlec-sor
+#   a 2-7. oszlop neve NEM szamit  -- azok a SORRENDBOL kapjak az ertelmuket
+#
+# (Ezert nem kerult semmibe, hogy a fejlecben egy ideig "jeleoles" allt "jeloles" helyett:
+# az az OTODIK oszlop volt.)
+#
+# ES AMI TORTENIK, HA VALAKI MEGIS ATIRJA AZ ELSO OSZLOP NEVET -- ez a fontos resz, mert a
+# tiltas onmagaban felejtheto, a kovetkezmeny nem:
+#
+#   A beolvaso NEM azt mondja, hogy rossz a nev. Azt mondja, hogy NINCS FEJLEC.
+#   Es akkor a fejlec-sor ADATSORKENT megy at -- vagyis CSENDBEN keletkezik egy
+#   `kanonikus` nevu marka, `alias` nevu aliasszal.
+#
+# Nem hibauzenet lesz belole, hanem egy uj sor, ami hihetonek latszik.
+#
 # === MERT SZAMOK A KESZ FAJLON ===
 #
 #   181 sor, MIND HET OSZLOPOS
