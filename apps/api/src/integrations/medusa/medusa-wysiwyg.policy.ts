@@ -50,6 +50,35 @@
  * A bizonyitek helye a PARANCS KIMENETE, nem a bolt.
  */
 
+/**
+ * === HOL LAKIK MEG UGYANEZ A KERDES: NEGY HELY, KET REPO ===
+ *
+ * Az "elo allat-e ez a termek" (es a rokona, az "egyedi darab-e") kerdesre MA
+ * NEGY kulonbozo szabaly valaszol, ket kulon repoban. Kozos konstanst nem lehet
+ * megosztani kozottuk, ezert a szerzodes CSAK KIMONDVA letezik:
+ *
+ *   acropora-os / medusa-wysiwyg.policy.ts
+ *       a "WYSIWYG" kategoria RESZFAJA -> egyedi darab (rendelhetoseg, jelzo)
+ *
+ *   acropora-os / medusa-livestock.policy.ts
+ *       a HAROM ELO ALLAT GYOKER (Korallok, Halak, Gerinctelenek)
+ *       -> bolti atvetel (pickup_only)
+ *
+ *   acropora-commerce / modules/products/components/lap-vaz/vilag-valto.ts
+ *       UGYANAZ A HAROM NEV -> a kirakat sotet-vilagos valtoja
+ *
+ *   acropora-commerce / workflows/utils/livestock.ts
+ *       termek-TIPUS azonositok egy kornyezeti valtozobol (MA URES)
+ *       -> a szallitasi osztaly livestock-aga
+ *
+ * A KETTO, AMI EGYUTT MOZOG: a masodik es a harmadik UGYANAZT a harom nevet
+ * tartalmazza, ket kulon repoban. Ha az egyik valtozik, a masikat AT KELL
+ * NEZNI -- kulonben az egyik oldal mar elo allatnak tart valamit, amit a masik
+ * nem, es a kulonbseg sehol nem hasal el.
+ *
+ * (acrobot kerese, 2026-09-07: "ma senki nem tudja, hogy harom van". Negy van.)
+ */
+
 /** A fa egy csomopontja, csak azokkal a mezokkel, amiket a szabaly olvas. */
 export interface WysiwygCategoryNode {
   id: string;
