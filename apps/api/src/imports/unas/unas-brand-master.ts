@@ -229,14 +229,19 @@ export interface BrandMasterPlan {
   }[];
 
   /**
-   * ALIAS, AMIT NEM LEHET FELVINNI, MERT EGY MASIK MARKA NEVE.
+   * EGY KANONIKUS, AMI TOBB LETEZO MARKAHOZ VEZET.
    *
-   * A tarolo `addAlias` metodusa ezt `IDENTITY_CONFLICT`-tel utasitja el, es
-   * helyesen: egy normalizalt kulcs nem lehet egyszerre az egyik marka NEVE es
-   * a masik ALIASA -- onnantol a visszatoltes nem tudna eldonteni, melyikhez
-   * tartozik. Itt nem eroltetjuk, hanem megnevezzuk.
+   * A torzs ilyenkor KET MEGLEVO markat kotne ossze -- peldaul mert az egyik a
+   * kanonikus nevet viseli, a masik az egyik aliasat. Ket marka osszevonasa
+   * adat-muvelet: termekek mozdulnak at, es a dontes nem a betoltoe.
+   *
+   * A betolto ezert nem valaszt kozuluk es nem is hoz letre harmadikat: megall
+   * ennel a markanal, es megnevezi mind a kettot.
    */
-  aliasBlocked: { brandName: string; alias: string; ownedBy: string }[];
+  mergeCandidates: {
+    canonicalName: string;
+    brands: { id: string; name: string }[];
+  }[];
 }
 
 /**
@@ -254,11 +259,8 @@ export function planBrandMaster(
   const kulcsHez = new Map<string, ExistingBrandRecord>();
   /** elvalasztojel nelkuli kulcs -> a marka. CSAK felismeresre. */
   const lazaHoz = new Map<string, ExistingBrandRecord>();
-  /** normalizalt NEV -> a marka. Az alias-tiltas ebbol dol el. */
-  const nevHez = new Map<string, ExistingBrandRecord>();
   for (const marka of existing) {
     kulcsHez.set(marka.normalizedName, marka);
-    nevHez.set(marka.normalizedName, marka);
     lazaHoz.set(separatorlessKey(marka.name), marka);
     for (const alias of marka.normalizedAliases) kulcsHez.set(alias, marka);
   }
@@ -272,7 +274,7 @@ export function planBrandMaster(
     mergedAliases: [],
     aliasTopUp: [],
     nameDifferences: [],
-    aliasBlocked: [],
+    mergeCandidates: [],
   };
 
   /**
@@ -353,17 +355,57 @@ export function planBrandMaster(
 
     const nevKulcs = normalizeBrandName(marka.name);
     /**
-     * KET SZINTU ILLESZTES, ES A MASODIK CSAK FELISMER.
+     * AZ ILLESZTES A KANONIKUS NEVET ES AZ OSSZES ALIAST IS NEZI.
      *
-     * pontos    a tarolo sajat kulcsa (nev vagy alias) -- ez az AZONOSSAG
-     * laza      elvalasztojel nelkul -- ez csak GYANU, es jelentest szul
+     * === A MERT ESET, AMIT A KORABBI ALAK NEM FOGOTT MEG ===
+     *
+     * A teszt gepen a nyers ertekekbol keletkezett egy `AquaMedic` nevu marka.
+     * A torzsben `Aqua Medic` all kanonikusként, es `AquaMedic` az egyik
+     * ALIASA. Amig csak a kanonikus nevet neztuk, a ketto nem talalkozott
+     * (`aqua medic` kontra `aquamedic`), es a betolto egy MASODIK markat hozott
+     * volna letre ugyanarra a gyartora.
+     *
+     * Az alias viszont PONTOSAN egyezik a letezo marka nevevel. Vagyis a
+     * felismereshez nem kell heurisztika: eleg a torzs sajat aliasait is
+     * megkerdezni.
+     *
+     * === HAROM ESET, ES A HARMADIK MEGALLIT ===
+     *
+     * nulla talalat  -> uj marka (vagy a laza kulcs meg felismerheti)
+     * egy talalat    -> ugyanaz a marka: aliasokat potolunk, nevet nem
+     * TOBB talalat   -> a torzs KET letezo markat kotne ossze. Ezt nem oldjuk
+     *                   fel magunktol: ket marka osszevonasa adat-muvelet.
      */
-    const pontos = kulcsHez.get(nevKulcs);
+    const jeloltKulcsok = [
+      nevKulcs,
+      ...marka.aliases.map((a) => normalizeBrandName(a)),
+    ];
+    const talaltak = new Map<string, ExistingBrandRecord>();
+    for (const kulcs of jeloltKulcsok) {
+      const talalat = kulcsHez.get(kulcs);
+      if (talalat) talaltak.set(talalat.id, talalat);
+    }
+    if (talaltak.size > 1) {
+      plan.mergeCandidates.push({
+        canonicalName: marka.name,
+        brands: [...talaltak.values()].map((b) => ({ id: b.id, name: b.name })),
+      });
+      continue;
+    }
+    const pontos = [...talaltak.values()][0];
     const laza = pontos ?? lazaHoz.get(separatorlessKey(marka.name));
 
     if (laza) {
       plan.alreadyThere.push(marka.name);
-      if (!pontos)
+      /**
+       * A NEV-ELTERES ATTOL FUGG, HOGY MAS-E A NEV -- NEM AZ ILLESZTES MODJATOL.
+       *
+       * Az elso valtozat akkor jelentett, ha CSAK a laza kulcs talalt. Amint az
+       * illesztes az aliasokat is megkerdezte, az `AquaMedic` eset PONTOS
+       * talalatta valt -- es a jelentesbol epp az a tetel esett ki, amiert az
+       * egesz lista keszult.
+       */
+      if (laza.name !== marka.name)
         plan.nameDifferences.push({
           brandId: laza.id,
           existingName: laza.name,
@@ -375,21 +417,21 @@ export function planBrandMaster(
        * marka mas alakban all -- epp ez koti ossze a kettot atnevezes nelkul.
        */
       const marVan = new Set([laza.normalizedName, ...laza.normalizedAliases]);
-      const jeloltek = pontos ? marka.aliases : [marka.name, ...marka.aliases];
+      /**
+       * A KANONIKUS NEV MINDIG A JELOLTEK KOZOTT VAN.
+       *
+       * Az elso valtozat csak akkor vette be, ha az illesztes LAZA volt --
+       * abbol a feltevesbol, hogy pontos talalatnal a kanonikus nev MAGA
+       * egyezett. Amint az illesztes az aliasokat is megkerdezi, ez nem all: a
+       * talalat johet egy ALIASBOL is, es akkor epp a kanonikus irasmod
+       * hianyzik a markarol. Ha mar ott van, a `marVan` szures ugyis kiveszi.
+       */
+      const jeloltek = [marka.name, ...marka.aliases];
       const potlando: string[] = [];
       for (const alias of jeloltek) {
         const kulcs = normalizeBrandName(alias);
         if (marVan.has(kulcs)) continue;
         marVan.add(kulcs);
-        const masike = nevHez.get(kulcs);
-        if (masike && masike.id !== laza.id) {
-          plan.aliasBlocked.push({
-            brandName: laza.name,
-            alias,
-            ownedBy: masike.name,
-          });
-          continue;
-        }
         potlando.push(alias);
       }
       if (potlando.length)
@@ -444,7 +486,7 @@ export function describeBrandMasterPlan(
     `Összevont alias (a normalizálás azonosnak látja): ${plan.mergedAliases.length}`,
     `Meglévő márka, amire alias kerül: ${plan.aliasTopUp.length}`,
     `Meglévő márka MÁS írásmóddal (döntést kér): ${plan.nameDifferences.length}`,
-    `Alias, ami egy másik márka neve (nem vihető fel): ${plan.aliasBlocked.length}`,
+    `Két meglévő márkához vezet (kihagyva, ÖSSZEVONÁS kérdése): ${plan.mergeCandidates.length}`,
   ];
 
   if (plan.mixedMarkers.length) {
@@ -513,14 +555,20 @@ export function describeBrandMasterPlan(
    * az egyik marka NEVE es a masik ALIASA. Ha eroltetnenk, a visszatoltes nem
    * tudna eldonteni, melyikhez tartozik egy nyers ertek.
    */
-  if (plan.aliasBlocked.length) {
+  /**
+   * AZ OSSZEVONAS NEM BETOLTES. Ez a lista azt mondja meg, hol all ma ket
+   * marka-rekord ugyanarra a gyartora -- a feloldas termekeket mozgat, tehat
+   * ember donti el, nem a parancs.
+   */
+  if (plan.mergeCandidates.length) {
     sorok.push(
       "",
-      "NEM VIHETŐ FEL, mert egy MÁSIK márka neve (a tároló elutasítaná):",
+      "KÉT MEGLÉVŐ MÁRKÁHOZ VEZET -- a betöltő kihagyta, ÖSSZEVONÁS kérdése:",
     );
-    for (const b of plan.aliasBlocked)
+    for (const m of plan.mergeCandidates)
       sorok.push(
-        `  ${b.brandName} <- "${b.alias}" (ez ma "${b.ownedBy}" neve)`,
+        `  "${m.canonicalName}" -> ` +
+          m.brands.map((b) => `"${b.name}"`).join(" és "),
       );
   }
 
