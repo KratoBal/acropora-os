@@ -32,6 +32,23 @@ const CONTROLLERS = [
   "src/service-assets/service-assets.controller.ts",
   "src/worksheets/worksheets.controller.ts",
   "src/suppliers/suppliers.controller.ts",
+  /*
+    A TERMEK-MODUL VEZERLOI, 2026-09-07-tol.
+
+    Merve a felvetel elott: mind az otben az utvonalak szama MEGEGYEZIK a
+    dekoratorok szamaval (1/1, 4/4, 2/2, 6/6, 2/2), tehat ez a bovites ma nem
+    javit semmit -- a KOVETKEZO utvonalat vedi meg.
+
+    Amiert epp most kerult ide: a szallitasi profil vegpontjairol magam irtam a
+    PR torzsebe, hogy a jogosultsagi vedelem ATOLVASASON all, nem meresen. Egy
+    megnevezett res, amin a funkcio kimegy, nem megjegyzes, hanem megallasi ok --
+    es a repoban mar allt a mero, csak a fajl hianyzott a listajarol.
+  */
+  "src/products/product.controller.ts",
+  "src/products/product-barcode.controller.ts",
+  "src/products/product-extension.controller.ts",
+  "src/products/product-shipping-profile.controller.ts",
+  "src/products/catalog-options.controller.ts",
 ];
 
 const ROUTE = new RegExp(
