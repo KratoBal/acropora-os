@@ -156,9 +156,15 @@ describe("a márka-törzs betöltőjének terve", () => {
   /**
    * ES AMI EGY MASIK MARKA NEVE, AZ NEM MEHET FEL ALIASKENT.
    *
-   * A tarolo `addAlias` metodusa ezt `IDENTITY_CONFLICT`-tel utasitja el, es
-   * helyesen: egy normalizalt kulcs nem lehet egyszerre az egyik marka NEVE es
-   * a masik ALIASA. A terv ezert meg sem probalja, hanem megnevezi.
+   * A korabbi valtozat ezt kulon `aliasBlocked` listakent kezelte. Amint az
+   * illesztes az aliasokat is megkerdezi, ez az eset MAGATOL osszevonasi
+   * kerdesse valik: a kanonikus ket letezo markahoz vezet (a sajatjahoz es
+   * ahhoz, amelyiknek az alias a NEVE). A betolto ilyenkor megall.
+   *
+   * Ez erosebb, mint a korabbi alak: ott a marka egy resze meg letrejott volna,
+   * es csak egy alias maradt volna ki. Egy normalizalt kulcs nem lehet
+   * egyszerre az egyik marka NEVE es a masik ALIASA -- onnantol a visszatoltes
+   * nem tudna eldonteni, melyikhez tartozik egy nyers ertek.
    */
   it("nem visz fel olyan aliast, ami egy MÁSIK márka neve", () => {
     const plan = planBrandMaster(
@@ -167,9 +173,11 @@ describe("a márka-törzs betöltőjének terve", () => {
     );
 
     assert.deepEqual(plan.aliasTopUp, []);
-    assert.deepEqual(plan.aliasBlocked, [
-      { brandName: "Triton", alias: "Rowa", ownedBy: "Rowa" },
-    ]);
+    assert.equal(plan.mergeCandidates.length, 1);
+    assert.deepEqual(
+      plan.mergeCandidates[0]!.brands.map((b) => b.name).sort(),
+      ["Rowa", "Triton"],
+    );
   });
 });
 
@@ -182,10 +190,22 @@ describe("a márka-törzs betöltőjének terve", () => {
  * ott a nyers ertekekbol). Nem az volt: a bemeneten belul, TISZTA adatbazison is
  * ot marka bukna el ugyanigy.
  */
-/** Egy MA letezo marka, a tarolo sajat kulcsaival. */
-function letezo(name: string, normalizedAliases: string[] = []) {
+/**
+ * Egy MA letezo marka, a tarolo sajat kulcsaival.
+ *
+ * AZ AZONOSITO KULON PARAMETER, ES EZT EGY MERT HIBA HOZTA ELO: az alapertelmezes
+ * a normalizalt nevbol keszul, szokoz nelkul -- az `Aqua Medic` es az `AquaMedic`
+ * ott UGYANAZT az azonositot kapja. Egy olyan tesztben, ahol mind a ketto kulon
+ * markakent all, a fixture csendben EGY markava vonta ossze oket, es a lelet a
+ * kodra tunt.
+ */
+function letezo(
+  name: string,
+  normalizedAliases: string[] = [],
+  id = "brand-" + normalizeBrandName(name).replace(/ /g, ""),
+) {
   return {
-    id: "brand-" + normalizeBrandName(name).replace(/ /g, ""),
+    id,
     name,
     normalizedName: normalizeBrandName(name),
     normalizedAliases,
@@ -264,6 +284,119 @@ describe("a betöltő-terv alias-összevonása", () => {
  * a teszt gep szama nem az eles szama, es ket lista egymas mellett semmi masban
  * nem kulonbozik.
  */
+/**
+ * AZ ILLESZTES A TORZS SAJAT ALIASAIT IS MEGKERDEZI.
+ *
+ * A mert eset: a teszt gepen a nyers ertekekbol keletkezett egy `AquaMedic`
+ * marka. A torzsben `Aqua Medic` all kanonikuskent, `AquaMedic` pedig az egyik
+ * aliasa. Amig csak a kanonikus nevet neztuk, a ketto nem talalkozott
+ * (`aqua medic` kontra `aquamedic`) -- az alias viszont PONTOSAN egyezik.
+ */
+describe("a betöltő-terv illesztése az aliasokon át", () => {
+  const sorral = (kanonikus: string, alias: string) => ({
+    kanonikus,
+    alias,
+    ketertelmu: "",
+    forras: "BRAND",
+    jelolo: "",
+    feltetelesSzulo: "",
+    megjegyzes: "",
+  });
+
+  it("a törzs ALIASA is felismeri a meglévő márkát", () => {
+    const plan = planBrandMaster(
+      [sorral("Aqua Medic", "AquaMedic")],
+      [letezo("AquaMedic")],
+    );
+
+    assert.deepEqual(plan.create, []);
+    assert.deepEqual(plan.alreadyThere, ["Aqua Medic"]);
+  });
+
+  /**
+   * ES HA KET KULONBOZO LETEZO MARKAHOZ VEZET, A BETOLTO MEGALL.
+   *
+   * Ilyenkor a torzs KET meglevo rekordot kotne ossze. Az osszevonas
+   * adat-muvelet: termekek mozdulnak at, es a dontes nem a parancse.
+   */
+  it("két meglévő márkához vezető kanonikust KIHAGY, és megnevezi mindkettőt", () => {
+    const plan = planBrandMaster(
+      [sorral("Aqua Medic", "AquaMedic"), sorral("Aqua Medic", "Medic Aqua")],
+      [
+        letezo("Aqua Medic", [], "b-aqua-medic"),
+        letezo("AquaMedic", [], "b-aquamedic"),
+        letezo("Medic Aqua", [], "b-medic-aqua"),
+      ],
+    );
+
+    assert.deepEqual(plan.create, []);
+    assert.deepEqual(plan.alreadyThere, []);
+    assert.equal(plan.mergeCandidates.length, 1);
+    assert.equal(plan.mergeCandidates[0]!.canonicalName, "Aqua Medic");
+    assert.deepEqual(
+      plan.mergeCandidates[0]!.brands.map((b) => b.name).sort(),
+      ["Aqua Medic", "AquaMedic", "Medic Aqua"],
+    );
+  });
+
+  /**
+   * A POZITIV KONTROLL: egy alias, ami UGYANARRA a markara mutat, nem
+   * osszevonasi eset. Enelkul az orzot az is kielegitene, ha minden
+   * tobb-aliasos markat kihagyna.
+   */
+  it("ugyanahhoz a márkához vezető több alias NEM összevonási eset", () => {
+    const plan = planBrandMaster(
+      [sorral("Aqua Medic", "AquaMedic"), sorral("Aqua Medic", "Aqua Mdic")],
+      [letezo("AquaMedic", ["aqua mdic"])],
+    );
+
+    assert.deepEqual(plan.mergeCandidates, []);
+    assert.deepEqual(plan.alreadyThere, ["Aqua Medic"]);
+  });
+});
+
+/**
+ * A MEGLEVO ADAT KETERTELMUSEGE -- ES EZ MAJDNEM KIMARADT.
+ *
+ * A teszt gepen az `aquamedic` EGYSZERRE az "AquaMedic" marka NEVE es az
+ * "Aqua Medic" marka ALIASA. Az elso valtozat sima `set` hivasokkal epitette az
+ * indexet: az utolso iras felulirta az elozot, a ket marka kozul csak EGY
+ * latszott, es az osszevonas-ellenorzes CSENDBEN atengedte pontosan azt az
+ * allapotot, amit ki kellett volna szurnie.
+ */
+describe("a betöltő-terv a meglévő adat kétértelműségét is látja", () => {
+  it("egy kulcs KÉT márkánál: megnevezi mindkettőt", () => {
+    const plan = planBrandMaster(
+      [sor("Aqua Medic", "AquaMedic")],
+      [
+        letezo("AquaMedic", [], "b-aquamedic"),
+        letezo("Aqua Medic", ["aquamedic"], "b-aqua-medic"),
+      ],
+    );
+
+    assert.equal(plan.existingAmbiguousKeys.length, 1);
+    assert.equal(plan.existingAmbiguousKeys[0]!.key, "aquamedic");
+    assert.deepEqual(
+      plan.existingAmbiguousKeys[0]!.brands.map((b) => b.name).sort(),
+      ["Aqua Medic", "AquaMedic"],
+    );
+  });
+
+  /**
+   * A POZITIV KONTROLL: egy marka SAJAT neve es SAJAT aliasa ugyanarra a kulcsra
+   * NEM ketertelmu. Enelkul az orzot az is kielegitene, ha mindent megallitana.
+   */
+  it("egy márka saját neve és aliasa NEM kétértelmű", () => {
+    const plan = planBrandMaster(
+      [sor("Triton", "Triton")],
+      [letezo("Triton", ["triton"])],
+    );
+
+    assert.deepEqual(plan.existingAmbiguousKeys, []);
+    assert.deepEqual(plan.alreadyThere, ["Triton"]);
+  });
+});
+
 describe("a név-eltérés jelentése", () => {
   const terv = () =>
     planBrandMaster(
