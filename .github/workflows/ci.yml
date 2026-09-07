@@ -417,8 +417,8 @@ jobs:
       - name: Verify RELEASE_COMMIT_SHA is baked into the image
         run: |
           set -euo pipefail
-          baked=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' acropora-api:ci | grep '^RELEASE_COMMIT_SHA=' | cut -d= -f2)
-          echo "baked RELEASE_COMMIT_SHA=$baked"
+          baked=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' acropora-api:ci | grep '^RELEASE_IMAGE_COMMIT_SHA=' | cut -d= -f2)
+          echo "baked RELEASE_IMAGE_COMMIT_SHA=$baked"
           if [ "$baked" != "${{ github.sha }}" ]; then
             echo "expected ${{ github.sha }}, got '$baked'" >&2
             exit 1

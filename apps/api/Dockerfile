@@ -366,7 +366,7 @@ RUN if [ -n "$RELEASE_COMMIT_SHA" ]; then \
       echo "$RELEASE_COMMIT_SHA" | grep -Eq '^[0-9a-f]{40}$' || \
       (echo "RELEASE_COMMIT_SHA=\"$RELEASE_COMMIT_SHA\" is not a well-formed 40-char lowercase hex git commit SHA" >&2 && exit 1); \
     fi
-ENV RELEASE_COMMIT_SHA=${RELEASE_COMMIT_SHA}
+ENV RELEASE_IMAGE_COMMIT_SHA=${RELEASE_COMMIT_SHA}
 
 # The deploy output is already @acropora/api's own root (package.json,
 # dist/, node_modules/ at the top level) — no apps/api subdirectory to

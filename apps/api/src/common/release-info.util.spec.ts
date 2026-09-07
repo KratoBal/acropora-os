@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { currentReleaseCommitSha } from "./release-info.util.js";
+import {
+  currentReleaseCommitSha,
+  releaseCommitSourceState,
+  releaseCommitSources,
+} from "./release-info.util.js";
 
 async function withEnv(value: string | undefined, run: () => void) {
   const original = process.env.RELEASE_COMMIT_SHA;
@@ -67,5 +71,57 @@ describe("currentReleaseCommitSha", () => {
     await withEnv("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", () => {
       assert.equal(currentReleaseCommitSha(), null);
     });
+  });
+});
+
+describe("releaseCommitSources", () => {
+  const sha = "38ea01000ecb320e852c53ee13c0206f2658f919";
+  const other = "0000000000000000000000000000000000000001";
+  function withSources(
+    image: string | undefined,
+    runtime: string | undefined,
+    run: () => void,
+  ) {
+    const beforeImage = process.env.RELEASE_IMAGE_COMMIT_SHA;
+    const beforeRuntime = process.env.RELEASE_COMMIT_SHA;
+    if (image === undefined) delete process.env.RELEASE_IMAGE_COMMIT_SHA;
+    else process.env.RELEASE_IMAGE_COMMIT_SHA = image;
+    if (runtime === undefined) delete process.env.RELEASE_COMMIT_SHA;
+    else process.env.RELEASE_COMMIT_SHA = runtime;
+    try {
+      run();
+    } finally {
+      if (beforeImage === undefined)
+        delete process.env.RELEASE_IMAGE_COMMIT_SHA;
+      else process.env.RELEASE_IMAGE_COMMIT_SHA = beforeImage;
+      if (beforeRuntime === undefined) delete process.env.RELEASE_COMMIT_SHA;
+      else process.env.RELEASE_COMMIT_SHA = beforeRuntime;
+    }
+  }
+  it("a beégetett oldal saját környezeti változóját olvassa", () => {
+    withSources(sha, other, () =>
+      assert.equal(releaseCommitSources().imageCommit, sha),
+    );
+  });
+  it("a futásidejű oldal saját környezeti változóját olvassa", () => {
+    withSources(other, sha, () =>
+      assert.equal(releaseCommitSources().runtimeCommit, sha),
+    );
+  });
+});
+
+describe("releaseCommitSourceState", () => {
+  const sha = "38ea01000ecb320e852c53ee13c0206f2658f919";
+  const other = "0000000000000000000000000000000000000001";
+  it("az egyezést és eltérést különbözteti meg", () => {
+    assert.equal(releaseCommitSourceState(sha, sha), "match");
+    assert.equal(releaseCommitSourceState(sha, other), "mismatch");
+  });
+  it("a hiányzó képoldalt különbözteti meg", () => {
+    assert.equal(releaseCommitSourceState(null, sha), "image-missing");
+  });
+  it("a hiányzó futásidejű és mindkét oldalt különbözteti meg", () => {
+    assert.equal(releaseCommitSourceState(sha, null), "runtime-missing");
+    assert.equal(releaseCommitSourceState(null, null), "both-missing");
   });
 });
