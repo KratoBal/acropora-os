@@ -104,7 +104,16 @@ export interface MedusaProductInput {
    * `handle`-nel: egy ures `metadata` felulirna, amit a bolt oldalan barki mas
    * oda tett. A hivo szabalya: ha nincs mit kuldeni, a mezot EL KELL HAGYNI.
    */
-  metadata?: Record<string, string>;
+  /**
+   * AZ ERTEK `unknown`, ES EZ MERT DONTES, NEM LAZASAG.
+   *
+   * A mezo tartalma nem csak a mienk: az osszefesules utan idegen kulcsok is
+   * benne allnak, amiket valaki a Medusa feluleten adott hozza. Azok tipusa
+   * NEM a mi dontesunk (lehet szam, logikai ertek, beagyazott objektum), es
+   * szoveggé alakitani oket ANNYI, mint atirni valaki adatat. Amit nem mi
+   * tettunk oda, azt valtozatlanul irjuk vissza.
+   */
+  metadata?: Record<string, unknown>;
   /**
    * A TERMÉK KÉPEI, A LISTA SORRENDJÉBEN.
    *
@@ -489,6 +498,18 @@ export interface MedusaAdminClient {
     id: string,
     input: Omit<MedusaProductInput, "options" | "variants">,
   ): Promise<MedusaProductRow>;
+  /**
+   * A CEL OLDALI METAADAT, KIZAROLAG OLVASASRA.
+   *
+   * AMIERT KELL: a `metadata` mezo a cel oldalon CSERE-szemantikaju, tehat egy
+   * kikuldott objektum mindent felulir. Osszefesulni pedig csak abbol lehet,
+   * amit elobb LEKERDEZTUNK -- es a vetites eddig soha nem kerdezte le.
+   * Az osszefesules szabalya a `medusa-metadata-merge.ts` modulban all.
+   *
+   * A `fields` szukites szandekos: egy termek teljes valasza sokszorosa ennek,
+   * es ebbol a hivasbol termekenkent EGY megy el minden futasban.
+   */
+  fetchMetadata(id: string): Promise<Record<string, unknown> | null>;
   /**
    * A csatornához tartozó készlethelyek - MINDEN FUTÁSKOR, azonosító
    * beégetése nélkül.
@@ -1085,6 +1106,13 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       { method: "POST", body: JSON.stringify(input) },
     );
     return body.product;
+  }
+
+  async fetchMetadata(id: string): Promise<Record<string, unknown> | null> {
+    const body = await this.request<{
+      product: { metadata?: Record<string, unknown> | null };
+    }>(`/admin/products/${encodeURIComponent(id)}?fields=id,metadata`);
+    return body.product?.metadata ?? null;
   }
 
   async listStockLocationsForSalesChannel(

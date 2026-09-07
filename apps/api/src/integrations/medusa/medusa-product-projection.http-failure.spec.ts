@@ -54,6 +54,7 @@ const product: ProjectableProduct = {
   variantRows: [{ sku: "PUMP-1", unasVariantValues: null }],
   /** A fixtura NEM ad teljes kategoria-listat: a mezo igy nem kerul a torzsbe. */
   medusaCategoryIds: null,
+  uniquePiece: false,
   medusaCollectionId: null,
   barcode: null,
   unit: null,
@@ -113,6 +114,17 @@ function fakesFailingAt(
       calls.push("findByExternalId");
       fail("findByExternalId");
       return { rows: [], truncated: false };
+    },
+    /**
+     * A CEL OLDALI METAADAT LEKERDEZESE -- a hivo MOSTANTOL HASZNALJA.
+     *
+     * A dupla `as unknown as` varraton ul, tehat a fordito NEM kenyszeriti ki
+     * ezt a mezot: nelkule a hivas futasidoben hasalna el. Amit a hivo hasznal
+     * es a teszt nem allit, az a dupla biztos hibaja.
+     */
+    fetchMetadata: async () => {
+      calls.push("fetchMetadata");
+      return null;
     },
     update: async (_id: string, _input: Partial<MedusaProductInput>) => {
       calls.push("update");

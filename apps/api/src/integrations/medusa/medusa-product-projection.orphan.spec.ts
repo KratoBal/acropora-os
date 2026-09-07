@@ -50,6 +50,7 @@ const product: ProjectableProduct = {
   */
   variantRows: [{ sku: "PUMP-1", unasVariantValues: null }],
   medusaCategoryIds: null,
+  uniquePiece: false,
   medusaCollectionId: null,
   barcode: null,
   unit: null,
@@ -125,6 +126,15 @@ function fakes({ updateHiba, markHiba }: Fakes) {
       return { rows: [], truncated: false };
     },
     // eslint-disable-next-line @typescript-eslint/require-await
+    /**
+     * A CEL OLDALI METAADAT LEKERDEZESE -- a hivo MOSTANTOL HASZNALJA. A dupla
+     * `as unknown as` varraton ul, tehat a fordito nem kenyszeriti ki: nelkule
+     * a hivas futasidoben hasalna el.
+     */
+    async fetchMetadata() {
+      calls.push("fetchMetadata");
+      return null;
+    },
     async update(_id: string, _input: Partial<MedusaProductInput>) {
       calls.push("update");
       if (updateHiba) throw updateHiba;

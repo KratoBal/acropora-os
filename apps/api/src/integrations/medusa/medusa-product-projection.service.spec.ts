@@ -41,6 +41,7 @@ const product: ProjectableProduct = {
    */
   /** A fixtura NEM ad teljes kategoria-listat: a mezo igy nem kerul a torzsbe. */
   medusaCategoryIds: null,
+  uniquePiece: false,
   medusaCollectionId: null,
   barcode: null,
   unit: null,
@@ -72,6 +73,10 @@ function fakes(options: {
   found?: MedusaProductRow[];
   truncated?: boolean;
   channelMissing?: boolean;
+  /** A cel oldalon MAR ALLO metaadat, amit a vetitesnek meg kell oriznie. */
+  existingMetadata?: Record<string, unknown> | null;
+  /** Ha all, a metaadat-lekerdezes EZT dobja. */
+  metadataError?: unknown;
 }) {
   const calls: string[] = [];
   const linked: { productId: string; medusaProductId: string }[] = [];
@@ -115,6 +120,18 @@ function fakes(options: {
     findSalesChannel: async (id: string) => {
       calls.push("findSalesChannel");
       return options.channelMissing ? null : { id, name: "Acropora Webshop" };
+    },
+    /**
+     * A CEL OLDALI METAADAT LEKERDEZESE -- a hivo MOSTANTOL HASZNALJA.
+     *
+     * A dupla `as unknown as` varraton ul, tehat a fordito NEM kenyszeriti ki
+     * ezt a mezot: nelkule a hivas futasidoben hasalna el. Amit a hivo hasznal
+     * es a teszt nem allit, az a dupla biztos hibaja.
+     */
+    fetchMetadata: async () => {
+      calls.push("fetchMetadata");
+      if (options.metadataError) throw options.metadataError;
+      return options.existingMetadata ?? null;
     },
     update: async (_id: string, input: Partial<MedusaProductInput>) => {
       calls.push("update");
@@ -179,6 +196,7 @@ const MEZO_SORSA: Record<string, "atmegy" | "szandekosan-nem"> = {
   minimumOrderQuantity: "atmegy", // -> metadata.unas_minimum_order_quantity
   maximumOrderQuantity: "atmegy", // -> metadata.unas_maximum_order_quantity
   orderQuantityStep: "atmegy", // -> metadata.unas_order_quantity_step
+  uniquePiece: "atmegy", // -> metadata.unique_piece, csak ha igaz
   /**
    * A publikacios ALLAPOT bemenet, nem mezo: belole a `status` es a
    * `sales_channels` szuletik, a szolgaltatas dontese szerint.
@@ -230,6 +248,7 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
         minimumOrderQuantity: "2",
         maximumOrderQuantity: "50",
         orderQuantityStep: "5",
+        uniquePiece: true,
         images: ["https://kep/1.jpg", "https://kep/2.jpg"],
         descriptionLong: "Hosszú leírás",
       },
@@ -254,6 +273,7 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
       maximumOrderQuantity:
         torzs.metadata?.unas_maximum_order_quantity === "50",
       orderQuantityStep: torzs.metadata?.unas_order_quantity_step === "5",
+      uniquePiece: torzs.metadata?.unique_piece === "true",
       seoRobots: torzs.metadata?.seo_robots === "noindex, nofollow",
       seoTitle: torzs.metadata?.seo_title === "Teszt cim",
       seoDescription: torzs.metadata?.seo_description === "Teszt leiras",
@@ -877,8 +897,27 @@ describe("MedusaProductProjectionService", () => {
         reason: "értékesíthető a webshopban",
         salesChannelName: "Acropora Webshop",
       },
+      /**
+       * A METAADAT SORSA IS AZ EREDMENY RESZE, es a TELJES objektumra allitunk.
+       * Egy szukebb allitas (csak az `action`) nem venne eszre, ha egy kesobbi
+       * valtozas elhagyna ezt a mezot -- es akkor a jelentes hallgatna arrol,
+       * hogy a metaadat kimaradt-e.
+       */
+      metadata: "merged",
+      metadataRemovedKeys: [],
     });
-    assert.deepEqual(calls, ["findSalesChannel", "findLink", "update", "link"]);
+    /**
+     * A `fetchMetadata` a hivas-listaban is LATSZIK, es a sorrend szamit: a
+     * lekerdezes az IRAS ELOTT all. Forditva a merges mar a felulirt allapotot
+     * olvasna vissza.
+     */
+    assert.deepEqual(calls, [
+      "findSalesChannel",
+      "findLink",
+      "fetchMetadata",
+      "update",
+      "link",
+    ]);
     assert.ok(
       !calls.includes("create"),
       "meglévő leképezésnél nem hozunk létre",
@@ -1564,5 +1603,82 @@ describe("MedusaProductProjectionService -- tobb valtozat", () => {
     if (kimenet.action !== "stopped") return;
     assert.equal(kimenet.reason, "variant-axes-inconsistent");
     assert.deepEqual(f.createdWith, []);
+  });
+});
+
+/**
+ * A METAADAT MEGORZESE AZ UPDATE AGON.
+ *
+ * === MIERT MOST KELL, HOLOTT A RES REGOTA ALL ===
+ *
+ * A `metadata` a cel oldalon CSERE-szemantikaju, es a vetites eddig soha nem
+ * olvasta vissza: minden idegen kulcs egy futassal eltunt. Ezt eddig az fedte
+ * el, hogy a mezo CSAK AKKOR ment ki, ha volt mondanivalonk -- a `unique_piece`
+ * jelzo bekotesevel viszont a WYSIWYG termekeknel MINDIG van.
+ *
+ * === HAROM ALLITAS, MERT KETTO NEM HATAROL BE ===
+ *
+ * Az elso azt meri, hogy az idegen kulcs MEGMARAD. Onmagaban egy olyan
+ * megvalositas is atmenne rajta, ami SOHA nem kuld metaadatot.
+ * A masodik azt, hogy a mienk KIMEGY. Ez a ketto egyutt a helyes viselkedes.
+ * A harmadik a bukas iranyat: ha a lekerdezes elhasal, INKABB nem irunk --
+ * egy kimaradt frissites potolhato, egy felulirt idegen kulcs nem.
+ */
+describe("MedusaProductProjectionService -- a metaadat megőrzése", () => {
+  it("az idegen kulcs túléli a futást, a miénk frissül", async () => {
+    const f = fakes({
+      link: { productId: "prod-os-1", medusaProductId: "prod_megvan" },
+      existingMetadata: {
+        kezzel_irt: "amit valaki a Medusán adott hozzá",
+        unas_unit: "régi",
+      },
+    });
+
+    await f.service.project({ ...product, unit: "ml" }, now);
+
+    assert.deepEqual(f.updatedWith[0]?.metadata, {
+      kezzel_irt: "amit valaki a Medusán adott hozzá",
+      unas_unit: "ml",
+      unas_short_description: "Leírás",
+    });
+  });
+
+  it("a WYSIWYG jelző a metaadatba kerül, a többi mellé", async () => {
+    const f = fakes({
+      link: { productId: "prod-os-1", medusaProductId: "prod_megvan" },
+      existingMetadata: { kezzel_irt: "marad" },
+    });
+
+    await f.service.project({ ...product, uniquePiece: true }, now);
+
+    assert.equal(f.updatedWith[0]?.metadata?.unique_piece, "true");
+    assert.equal(f.updatedWith[0]?.metadata?.kezzel_irt, "marad");
+  });
+
+  /**
+   * A BUKAS IRANYA A MEGORZES FELE ALL, ES A JELENTES KIMONDJA.
+   *
+   * A ket allitas kulon dolgot ved: az elso azt, hogy NEM IRUNK metaadatot; a
+   * masodik azt, hogy a hivo MEGTUDJA. Egy nema kihagyas ugyanugy nezne ki,
+   * mint egy sikeres futas -- es a termek tobbi mezoje kozben frissul.
+   */
+  it("ha a cél oldali metaadat nem olvasható, NEM küldünk metaadatot", async () => {
+    const f = fakes({
+      link: { productId: "prod-os-1", medusaProductId: "prod_megvan" },
+      metadataError: new Error("503 Service Unavailable"),
+    });
+
+    const outcome = await f.service.project({ ...product, unit: "ml" }, now);
+
+    assert.equal("metadata" in (f.updatedWith[0] ?? {}), false);
+    assert.equal(f.updatedWith[0]?.title, "Reef Pump");
+    assert.equal(
+      outcome.action === "updated" ? outcome.metadata : null,
+      "unreadable",
+    );
+    assert.match(
+      outcome.action === "updated" ? (outcome.metadataError ?? "") : "",
+      /503/,
+    );
   });
 });
