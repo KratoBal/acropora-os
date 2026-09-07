@@ -100,6 +100,79 @@ describe("a márka-törzs betöltőjének terve", () => {
   });
 });
 
+/**
+ * AZ ALIAS-OSSZEVONAS, ES MIERT A TERVBEN.
+ *
+ * A MERT BUKAS: a teszt gepen az iras `P2002`-vel elhasalt a `normalizedAlias`
+ * mezon, es RESZLEGES allapotot hagyott -- 18 marka es 3 alias letrejott, aztan
+ * meghalt. Elso gyanunk a teszt gep szennyezett allapota volt (48 marka mar allt
+ * ott a nyers ertekekbol). Nem az volt: a bemeneten belul, TISZTA adatbazison is
+ * ot marka bukna el ugyanigy.
+ */
+describe("a betöltő-terv alias-összevonása", () => {
+  const sor = (
+    kanonikus: string,
+    alias: string,
+  ): Parameters<typeof planBrandMaster>[0][number] => ({
+    kanonikus,
+    alias,
+    ketertelmu: "",
+    forras: "BRAND",
+    jelolo: "",
+    feltetelesSzulo: "",
+    megjegyzes: "",
+  });
+
+  it("két alias, amit a normalizálás azonosnak lát, EGY aliasszá válik", () => {
+    const plan = planBrandMaster(
+      [sor("Red Sea", "REDSEA"), sor("Red Sea", "RedSea")],
+      [],
+    );
+
+    assert.equal(plan.create.length, 1);
+    assert.deepEqual(plan.create[0]!.aliases, ["REDSEA"]);
+    assert.equal(plan.mergedAliases.length, 1);
+    assert.equal(plan.mergedAliases[0]!.name, "Red Sea");
+    assert.equal(plan.mergedAliases[0]!.normalized, "redsea");
+    assert.deepEqual(plan.mergedAliases[0]!.dropped, ["RedSea"]);
+  });
+
+  /**
+   * AZ ELSO IRASMOD MARAD, ES EZ NEM IZLES KERDESE: a bemenet sorrendje a
+   * szerkeszto dontese. Ha az UTOLSO maradna, ugyanaz a fajl mas eredmenyt adna
+   * attol, hogy valaki hozzafuzott-e egy sort a vegehez.
+   */
+  it("az ELSŐ írásmód marad meg, nem az utolsó", () => {
+    const plan = planBrandMaster(
+      [
+        sor("Two Little Fishies", "Two Little"),
+        sor("Two Little Fishies", "Two little"),
+      ],
+      [],
+    );
+
+    assert.deepEqual(plan.create[0]!.aliases, ["Two Little"]);
+    assert.deepEqual(plan.mergedAliases[0]!.dropped, ["Two little"]);
+  });
+
+  /**
+   * ES AZ OSSZEVONAS A KIMENETEN IS LATSZIK. Egy csendes osszevonas ugyanaz a
+   * fajta, mint egy csendes csonkolas: a szam stimmel, es senki nem tudja, mi
+   * maradt ki.
+   */
+  it("a terv kiírja, melyik írásmód maradt ki", () => {
+    const plan = planBrandMaster(
+      [sor("Red Sea", "REDSEA"), sor("Red Sea", "RedSea")],
+      [],
+    );
+
+    const szoveg = describeBrandMasterPlan(plan);
+    assert.match(szoveg, /Összevont alias.*: 1/);
+    assert.match(szoveg, /Red Sea/);
+    assert.match(szoveg, /"RedSea"/);
+  });
+});
+
 describe("a betöltő-bemenet értelmezése", () => {
   const FEJLEC =
     "kanonikus\talias\tketertelmu\tforras\tjeloles\tfelteteles_szulo\tmegjegyzes\n";
