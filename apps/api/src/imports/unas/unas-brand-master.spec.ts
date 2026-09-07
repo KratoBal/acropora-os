@@ -16,12 +16,13 @@ import { BRAND_MASTER_PATH } from "./unas-brand-master.cli.js";
 
 const sor = (
   kanonikus: string,
-  aliasok: string[] = [],
+  alias = "",
   jelolo = "",
   forras = "BRAND",
 ): BrandMasterRow => ({
   kanonikus,
-  aliasok,
+  alias,
+  ketertelmu: "",
   forras,
   jelolo,
   megjegyzes: "",
@@ -29,12 +30,15 @@ const sor = (
 
 describe("a márka-törzs betöltőjének terve", () => {
   it("létrehozza a jelöletlen sort, az aliasaival együtt", () => {
-    const plan = planBrandMaster([sor("Aqua Medic", ["AquaMedic"])], []);
+    const plan = planBrandMaster(
+      [sor("Aqua Medic", "Aqua Medic"), sor("Aqua Medic", "AquaMedic")],
+      [],
+    );
 
     assert.deepEqual(plan.create, [
       {
         name: "Aqua Medic",
-        aliases: ["AquaMedic"],
+        aliases: ["Aqua Medic", "AquaMedic"],
         forras: "BRAND",
         jelolo: "",
       },
@@ -48,7 +52,7 @@ describe("a márka-törzs betöltőjének terve", () => {
    */
   it("a kanonikus_meretlen sor LÉTREJÖN, nem esik ki", () => {
     const plan = planBrandMaster(
-      [sor("Oase", ["OASE"], "kanonikus_meretlen")],
+      [sor("Oase", "OASE", "kanonikus_meretlen")],
       [],
     );
 
@@ -59,7 +63,10 @@ describe("a márka-törzs betöltőjének terve", () => {
 
   it("a nem_onallo és az ellenorizendo sorból NEM lesz márka", () => {
     const plan = planBrandMaster(
-      [sor("biOrb", [], "nem_onallo"), sor("Octo", [], "ellenorizendo")],
+      [
+        sor("biOrb", "biOrb", "nem_onallo"),
+        sor("Octo", "Octo", "ellenorizendo"),
+      ],
       [],
     );
 
@@ -72,7 +79,7 @@ describe("a márka-törzs betöltőjének terve", () => {
 
   it("a ketertelmu_alias sorból tiltó bejegyzés lesz, nem márka", () => {
     const plan = planBrandMaster(
-      [sor("Jebao/Jecod", [], "ketertelmu_alias")],
+      [sor("", "Jebao/Jecod", "ketertelmu_ertek")],
       [],
     );
 
@@ -85,7 +92,7 @@ describe("a márka-törzs betöltőjének terve", () => {
    * hasznalhato parancs -- es akkor a neve is hazudna.
    */
   it("ami már áll, azt nem hozza létre újra", () => {
-    const plan = planBrandMaster([sor("Triton")], ["triton"]);
+    const plan = planBrandMaster([sor("Triton", "Triton")], ["triton"]);
 
     assert.deepEqual(plan.create, []);
     assert.deepEqual(plan.alreadyThere, ["Triton"]);
@@ -93,11 +100,11 @@ describe("a márka-törzs betöltőjének terve", () => {
 });
 
 describe("a betöltő-bemenet értelmezése", () => {
-  it("az öt oszloptól eltérő sor HIBA, nem figyelmeztetés", () => {
+  const FEJLEC = "kanonikus\talias\tketertelmu\tforras\tjelolo\tmegjegyzes\n";
+
+  it("a hat oszloptól eltérő sor HIBA, nem figyelmeztetés", () => {
     const { rows, errors } = parseBrandMaster(
-      "kanonikus\taliasok\tforras\tjelolo\tmegjegyzes\n" +
-        "Triton\tTriton\tBRAND\t\t\n" +
-        "Rossz\tsor\tcsak\tnegy\n",
+      FEJLEC + "Triton\tTriton\t\tBRAND\t\t\n" + "Rossz\tsor\tcsak\tnegy\n",
     );
 
     assert.equal(rows.length, 1);
@@ -105,15 +112,31 @@ describe("a betöltő-bemenet értelmezése", () => {
     assert.match(errors[0]!, /4 oszlop/);
   });
 
+  /**
+   * AZ URES KANONIKUS CSAK TILTO SORNAL FOGADHATO EL. Enelkul egy elgepelt sor
+   * CSENDBEN tiltott ertekke valna -- a tiltas nem lehet elgepeles
+   * mellektermeke.
+   */
+  it("üres kanonikus név csak tiltó jelölővel fogadható el", () => {
+    const jo = parseBrandMaster(
+      FEJLEC + "\tJebao/Jecod\tigen\tBRAND\tketertelmu_ertek\t\n",
+    );
+    assert.deepEqual(jo.errors, []);
+    assert.equal(jo.rows.length, 1);
+
+    const rossz = parseBrandMaster(FEJLEC + "\tValami\t\tBRAND\t\t\n");
+    assert.equal(rossz.rows.length, 0);
+    assert.match(rossz.errors[0]!, /üres kanonikus/);
+  });
+
   it("a # sorokat és az üres sorokat kihagyja", () => {
     const { rows, errors } = parseBrandMaster(
-      "# fejlec-komment\n\nkanonikus\taliasok\tforras\tjelolo\tmegjegyzes\n" +
-        "Triton\tTriton, TRITON\tGYARTO\t\tmegjegyzes\n",
+      "# fejlec-komment\n\n" + FEJLEC + "Triton\tTRITON\t\tGYARTO\t\tmegj\n",
     );
 
     assert.deepEqual(errors, []);
     assert.equal(rows.length, 1);
-    assert.deepEqual(rows[0]!.aliasok, ["Triton", "TRITON"]);
+    assert.equal(rows[0]!.alias, "TRITON");
   });
 });
 
@@ -131,15 +154,21 @@ describe("a repóban álló betöltő-bemenet", () => {
 
   it("értelmezhető, hibátlan sorokkal", () => {
     assert.deepEqual(errors, []);
-    assert.equal(rows.length, 126);
+    assert.equal(rows.length, 181);
   });
 
-  it("a terv 115 márkát hozna létre, és 11 sor nem lesz márka", () => {
+  /**
+   * A SZAMOT A v2-BOL SZAMOLTAM UJRA, nem vettem at a v1-bol: 124 kulonbozo
+   * kanonikus minusz 9 kihagyando (nem_onallo vagy ellenorizendo) = 115.
+   * Ugyanaz a szam, mint a v1-nel -- a szerkezet valtozott, az eredmeny nem.
+   */
+  it("a terv 115 márkát hozna létre, és 9 márka nem lesz", () => {
     const plan = planBrandMaster(rows, []);
 
     assert.equal(plan.create.length, 115);
-    assert.equal(plan.skipped.length, 10);
+    assert.equal(plan.skipped.length, 9);
     assert.deepEqual(plan.blockedValues, ["Jebao/Jecod"]);
+    assert.deepEqual(plan.mixedMarkers, []);
   });
 
   /**

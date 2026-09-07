@@ -27,9 +27,25 @@ import { normalizeBrandName } from "../../brands/brands.repository.js";
  *                       rendelhet hozza markat
  */
 
+/**
+ * EGY SOR A BEMENETBEN -- ES A v2 OTA EGY SOR EGY ALIAS.
+ *
+ * MIERT VALTOZOTT: a v1-ben az aliasok VESSZOS listaban alltak egy cellaban, es
+ * egy listaban allo EGYEDI ertekhez nem lehet oszlopot kotni. A `ketertelmu`
+ * jelzes viszont pont egy ERTEKROL mond valamit, nem a sorrol -- ezert kellett
+ * soronkent egy alias.
+ *
+ * ES EGY UJ ESET, AMI A REGI ALAKBAN NEM LETEZETT: a `kanonikus` mezo lehet
+ * URES. Az az ERTEK-SZINTU sor (ma egy van, a `Jebao/Jecod`): nem marka, hanem
+ * egy tiltott ertek. Aki feltetelezi, hogy minden sornak van kanonikusa, az itt
+ * elhasal -- vagy ami rosszabb, letrehoz egy URES NEVU markat.
+ */
 export interface BrandMasterRow {
+  /** URES, ha a sor ERTEK-szintu (tiltott ertek, nem marka). */
   kanonikus: string;
-  aliasok: string[];
+  alias: string;
+  /** `igen`, ha ez az ERTEK ketertelmu. */
+  ketertelmu: string;
   forras: string;
   jelolo: string;
   megjegyzes: string;
@@ -38,7 +54,7 @@ export interface BrandMasterRow {
 /** A jelolok, amik NEM eredmenyeznek marka-rekordot. */
 const NEM_KELETKEZIK = new Set(["nem_onallo", "ellenorizendo"]);
 /** Ez sem marka, de MAS: tiltast eredmenyez a visszatoltesnel. */
-export const TILTO_JELOLO = "ketertelmu_alias";
+export const TILTO_JELOLO = "ketertelmu_ertek";
 
 /**
  * A FAJL ERTELMEZESE, ES AZ OSZLOPSZAM SZIGORU.
@@ -59,10 +75,10 @@ export function parseBrandMaster(text: string): {
     const nyers = sor.replace(/\r$/, "");
     if (!nyers.trim() || nyers.startsWith("#")) return;
     const mezok = nyers.split("\t");
-    if (mezok.length !== 5) {
+    if (mezok.length !== 6) {
       errors.push(
-        `${index + 1}. sor: ${mezok.length} oszlop, de ötöt várunk ` +
-          `(kanonikus, aliasok, forras, jelolo, megjegyzes)`,
+        `${index + 1}. sor: ${mezok.length} oszlop, de hatot várunk ` +
+          `(kanonikus, alias, ketertelmu, forras, jelolo, megjegyzes)`,
       );
       return;
     }
@@ -70,16 +86,29 @@ export function parseBrandMaster(text: string): {
       fejlecMegvolt = true;
       return;
     }
-    rows.push({
+    const sorObj: BrandMasterRow = {
       kanonikus: mezok[0]!.trim(),
-      aliasok: mezok[1]!
-        .split(",")
-        .map((a) => a.trim())
-        .filter(Boolean),
-      forras: mezok[2]!.trim(),
-      jelolo: mezok[3]!.trim(),
-      megjegyzes: mezok[4]!.trim(),
-    });
+      alias: mezok[1]!.trim(),
+      ketertelmu: mezok[2]!.trim(),
+      forras: mezok[3]!.trim(),
+      jelolo: mezok[4]!.trim(),
+      megjegyzes: mezok[5]!.trim(),
+    };
+    /**
+     * URES KANONIKUS CSAK TILTO SORNAL FOGADHATO EL.
+     *
+     * Enelkul egy elgepelt sor CSENDBEN tiltott ertekke valna -- vagy ami
+     * rosszabb, egy ures nevu markava. A tiltas nem lehet elgepeles
+     * mellekterméke.
+     */
+    if (!sorObj.kanonikus && sorObj.jelolo !== TILTO_JELOLO) {
+      errors.push(
+        `${index + 1}. sor: üres kanonikus név, de a jelölő nem ` +
+          `${TILTO_JELOLO} (hanem "${sorObj.jelolo}")`,
+      );
+      return;
+    }
+    rows.push(sorObj);
   });
 
   if (!fejlecMegvolt) errors.push("A fejléc sor hiányzik.");
@@ -100,6 +129,12 @@ export interface BrandMasterPlan {
   skipped: { name: string; jelolo: string }[];
   /** A visszatoltes szamara tiltott ERTEKEK (nyers alak). */
   blockedValues: string[];
+  /**
+   * Marka, aminek a sorai KULONBOZO jelolot visznek. Ma URES, es ha valaha nem
+   * az, az a BEMENET hibaja -- ilyenkor nem talalgatunk, hanem kihagyjuk es
+   * megnevezzuk.
+   */
+  mixedMarkers: { name: string; jelolok: string[] }[];
 }
 
 /**
@@ -119,26 +154,64 @@ export function planBrandMaster(
     alreadyThere: [],
     skipped: [],
     blockedValues: [],
+    mixedMarkers: [],
   };
 
+  /**
+   * A SOROKAT KANONIKUS SZERINT CSOPORTOSITJUK -- egy marka TOBB soron all.
+   *
+   * A jelolo es a forras a marka elso sorabol jon; merve a v2-n: nincs olyan
+   * marka, aminek a sorai KULONBOZO jelolot vinnenek, tehat itt ma nincs mit
+   * eldonteni. Ha valaha lenne, az a bemenet hibaja, es a betoltes ELOTT kell
+   * kiderulnie -- ezert all ra kulon ellenorzes.
+   */
+  const csoport = new Map<
+    string,
+    { name: string; aliases: string[]; forras: string; jelolok: Set<string> }
+  >();
+
   for (const row of rows) {
-    if (row.jelolo === TILTO_JELOLO) {
-      plan.blockedValues.push(row.kanonikus);
+    if (row.jelolo === TILTO_JELOLO || !row.kanonikus) {
+      /** A tiltott ERTEK az ALIAS oszlopban all, nem a kanonikusban. */
+      plan.blockedValues.push(row.alias);
       continue;
     }
-    if (NEM_KELETKEZIK.has(row.jelolo)) {
-      plan.skipped.push({ name: row.kanonikus, jelolo: row.jelolo });
+    const eddigi = csoport.get(row.kanonikus);
+    if (eddigi) {
+      if (row.alias) eddigi.aliases.push(row.alias);
+      eddigi.jelolok.add(row.jelolo);
+    } else {
+      csoport.set(row.kanonikus, {
+        name: row.kanonikus,
+        aliases: row.alias ? [row.alias] : [],
+        forras: row.forras,
+        jelolok: new Set([row.jelolo]),
+      });
+    }
+  }
+
+  for (const marka of csoport.values()) {
+    const jelolo = [...marka.jelolok][0] ?? "";
+    if (marka.jelolok.size > 1) {
+      plan.mixedMarkers.push({
+        name: marka.name,
+        jelolok: [...marka.jelolok].sort(),
+      });
       continue;
     }
-    if (megvan.has(normalizeBrandName(row.kanonikus))) {
-      plan.alreadyThere.push(row.kanonikus);
+    if (NEM_KELETKEZIK.has(jelolo)) {
+      plan.skipped.push({ name: marka.name, jelolo });
+      continue;
+    }
+    if (megvan.has(normalizeBrandName(marka.name))) {
+      plan.alreadyThere.push(marka.name);
       continue;
     }
     plan.create.push({
-      name: row.kanonikus,
-      aliases: row.aliasok,
-      forras: row.forras,
-      jelolo: row.jelolo,
+      name: marka.name,
+      aliases: marka.aliases,
+      forras: marka.forras,
+      jelolo,
     });
   }
   return plan;
@@ -150,7 +223,14 @@ export function describeBrandMasterPlan(plan: BrandMasterPlan): string {
     `Már áll, érintetlen: ${plan.alreadyThere.length}`,
     `Kihagyva (nem márka vagy ellenőrizendő): ${plan.skipped.length}`,
     `Tiltó bejegyzés (a visszatöltés nem rendelhet hozzá): ${plan.blockedValues.length}`,
+    `Ellentmondó jelölésű márka (kihagyva): ${plan.mixedMarkers.length}`,
   ];
+
+  if (plan.mixedMarkers.length) {
+    sorok.push("", "ELLENTMONDÓ JELÖLÉS, ezért kimaradt:");
+    for (const m of plan.mixedMarkers)
+      sorok.push(`  ${m.name} -- ${m.jelolok.join(", ")}`);
+  }
 
   if (plan.skipped.length) {
     sorok.push("", "Kihagyva, és MIÉRT:");
