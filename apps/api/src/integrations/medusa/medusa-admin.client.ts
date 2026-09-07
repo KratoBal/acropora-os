@@ -31,6 +31,8 @@
  * (`create`, `update`, `probe` - ott nincs `fields` szűkítés). Ha a keresés
  * egyszer több mezőt kér, ez a típus és a `fields` sor EGYÜTT változik.
  */
+import type { MedusaShippingFlags } from "./medusa-shipping-attributes.policy.js";
+
 export interface MedusaProductLookupRow {
   id: string;
   /** `null`, ha a termék él; időbélyeg, ha puhán törölték. */
@@ -41,6 +43,19 @@ export interface MedusaProductLookupRow {
 /** A teljes termék-válasz, `fields` szűkítés nélküli hívásokból. */
 export interface MedusaProductRow extends MedusaProductLookupRow {
   title?: string;
+}
+
+/**
+ * A BOLT OLDALI SZALLITASI ZASZLO-REKORD.
+ *
+ * Az `id` LEHET `null`: a vegpont akkor is valaszol, ha meg nincs rekord, es
+ * olyankor a csupa-hamis alapertelmezest adja vissza. A hivo ezt NEM
+ * kulonboztetheti meg a "letezik, es minden hamis" allapottol -- es nem is
+ * kell: mind a ketto ugyanazt jelenti, hogy nincs korlatozas.
+ */
+export interface MedusaShippingAttributeRow extends MedusaShippingFlags {
+  id: string | null;
+  product_id: string;
 }
 
 export interface MedusaProductInput {
@@ -510,6 +525,22 @@ export interface MedusaAdminClient {
    * es ebbol a hivasbol termekenkent EGY megy el minden futasban.
    */
   fetchMetadata(id: string): Promise<Record<string, unknown> | null>;
+  /**
+   * A TERMEK SZALLITASI ZASZLOI A BOLT OLDALAN, OLVASASRA.
+   *
+   * A vegpont akkor is valaszol, ha a termeknek MEG NINCS rekordja: olyankor a
+   * csupa-hamis alapertelmezest adja vissza. Ez azert szamit, mert a hivo a
+   * KULONBSEGET irja ki ("mar igy allt" kontra "most allitottuk be"), es ahhoz
+   * kell egy kiindulasi allapot.
+   */
+  fetchShippingAttributes(
+    productId: string,
+  ): Promise<MedusaShippingAttributeRow>;
+  /** A negy zaszlo kikuldese. EZ IR A BOLTI OLDALRA. */
+  setShippingAttributes(
+    productId: string,
+    flags: MedusaShippingFlags,
+  ): Promise<MedusaShippingAttributeRow>;
   /**
    * A csatornához tartozó készlethelyek - MINDEN FUTÁSKOR, azonosító
    * beégetése nélkül.
@@ -1106,6 +1137,28 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       { method: "POST", body: JSON.stringify(input) },
     );
     return body.product;
+  }
+
+  async fetchShippingAttributes(
+    productId: string,
+  ): Promise<MedusaShippingAttributeRow> {
+    const body = await this.request<{
+      shipping_attribute: MedusaShippingAttributeRow;
+    }>(`/admin/shipping-attributes/${encodeURIComponent(productId)}`);
+    return body.shipping_attribute;
+  }
+
+  async setShippingAttributes(
+    productId: string,
+    flags: MedusaShippingFlags,
+  ): Promise<MedusaShippingAttributeRow> {
+    const body = await this.request<{
+      shipping_attribute: MedusaShippingAttributeRow;
+    }>(`/admin/shipping-attributes/${encodeURIComponent(productId)}`, {
+      method: "POST",
+      body: JSON.stringify(flags),
+    });
+    return body.shipping_attribute;
   }
 
   async fetchMetadata(id: string): Promise<Record<string, unknown> | null> {
