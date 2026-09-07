@@ -1012,9 +1012,34 @@ export async function runProjectionCli(
       failed += 1;
       continue;
     }
+    /**
+     * AMI NEM KERULT RA, A SIKER MELLE -- ES CSAK AKKOR, HA VAN MIT MONDANIA.
+     *
+     * MIERT KELL: a siker-blokk utolso sora azt mondja, hogy `reason:
+     * értékesíthető a webshopban`. Az a PUBLIKACIOS dontes sajat indoka, de a
+     * kimeneten ALLITASKENT olvasodik -- es pont ott all, ahol a termek
+     * kategoria nelkul ment ki. Egy hallgatas felreolvashato; egy leirt allitas
+     * viszont atveheto mondat, es a naplot olvaso azt fogja idezni.
+     *
+     * A HIANY OKAT MAR KIIRTUK feljebb (a lekepezes-hiany sorai), de az a
+     * termek-sor ELOTT all, es kulon sorban. Ez a fel-sor a SIKER melle teszi
+     * oda, ahol a dontes olvasodik.
+     *
+     * ES CSAK AKKOR ALL OTT, HA VAN MIT MONDANIA: egy sor, ami minden termeknel
+     * megjelenik, ket nap alatt lathatatlan lesz. Ezert a MEGLEVO jelzesekre
+     * epul (`incomplete`, `unmapped`), nem arra, hogy a lista ures -- egy
+     * termek, aminek nincs is kategoriaja, nem "veszitett" semmit.
+     */
+    const kimaradt: string[] = [];
+    if (categories.kind === "incomplete") kimaradt.push("kategória");
+    if (brand.kind === "unmapped") kimaradt.push("gyűjtemény");
+
     out.stdout(
       `${productId}: ${outcome.action} -> ${outcome.medusaProductId}\n` +
         `      ${describePublication(outcome.publication)}\n` +
+        (kimaradt.length
+          ? `      nem került rá: ${kimaradt.join(", ")}\n`
+          : "") +
         describeKepMasolas(masolas) +
         describeCimValtozas(outcome.cim),
     );
@@ -1044,6 +1069,24 @@ export async function runProjectionCli(
     out.stdout(
       `${kihagyottVonalkod} vonalkód maradt ki ismétlődés miatt. ` +
         `A tisztítás helye a forrás (UNAS): ott dől el, melyik terméké a kód.\n`,
+    );
+
+  /**
+   * A FUTAS HATOKORE, EGYSZER, A VEGEN -- NEM TERMEKENKENT.
+   *
+   * Ezt a parancs termekenkent NEM tudhatja: az ar es a keszlet KULON
+   * parancsokban all, es ez a futas nem is kerdezi le oket. Amit tud, az a
+   * sajat hatokore, es azt egyszer mondja ki.
+   *
+   * MIERT KELL: egy sikeres futas ma azt jelenti, hogy a TERMEK kiment -- nem
+   * azt, hogy eladhato. A ket dolog kozotti kulonbseg eddig sehol nem allt, es
+   * a siker-blokk `reason` sora eppen az erosebb olvasat fele huz.
+   */
+  if (!forgetOnly)
+    out.stdout(
+      "Ez a parancs nem állít árat és készletet: azok külön parancsok. " +
+        "Egy sikeres futás azt jelenti, hogy a TERMÉK kiment, nem azt, hogy " +
+        "eladható.\n",
     );
 
   return failed ? 1 : 0;
