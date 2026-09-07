@@ -6,6 +6,7 @@ import type {
   MedusaProductInput,
   MedusaProductRow,
 } from "./medusa-admin.client.js";
+import { isOwnedMetadataKey } from "./medusa-metadata-merge.js";
 import type { MedusaProductLinkRepository } from "./medusa-product-link.repository.js";
 import {
   MedusaProductProjectionService,
@@ -228,7 +229,12 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
    * keres torzseben. Enelkul a tabla csak egy szandek-nyilatkozat lenne, es
    * pontosan ugy nezne ki egy bekotott es egy elfelejtett mezo.
    */
-  it("amire azt mondjuk, hogy atmegy, az tenyleg ott van a keresben", async () => {
+  /**
+   * A TELJES BEMENET, EGY HELYEN. Ket allitas dolgozik belole (a mezo-sorsa es a
+   * kulcsnev-orzo), es KET kulon fixtura ket kulon igazsagot merne: az egyik
+   * bovitese utan a masik csendben elavulna.
+   */
+  async function teljesBemenetTorzse(): Promise<MedusaProductInput> {
     const f = fakes({ link: null, found: [] });
     await f.service.project(
       {
@@ -256,6 +262,11 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
     );
     const torzs = f.createdWith[0];
     assert.ok(torzs, "a create nem futott le");
+    return torzs;
+  }
+
+  it("amire azt mondjuk, hogy atmegy, az tenyleg ott van a keresben", async () => {
+    const torzs = await teljesBemenetTorzse();
     const megjelenik: Record<string, boolean> = {
       id: torzs.external_id === "prod-os-1",
       name: torzs.title === "Reef Pump",
@@ -299,6 +310,50 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
       hianyzo,
       [],
       "a tablaban 'atmegy', a keresbol mégis hianyzik",
+    );
+  });
+
+  /**
+   * ES MINDEN KIKULDOTT METAADAT-KULCSNAK A MIENKNEK KELL LENNIE.
+   *
+   * === MIT VED, ES MIERT NEMA NELKULE ===
+   *
+   * Az osszefesules a MI kulcsainkat tartja karban: ami nem illik a `seo_` vagy
+   * `unas_` elotagra es nem szerepel az `OWNED_METADATA_KEYS` listaban, azt
+   * IDEGENNEK veszi -- idegen kulcsot pedig soha nem vesz le. Egy uj, rosszul
+   * elnevezett kulcs tehat KIMENNE (mert mi kuldjuk), es utana ORAKKE ottmaradna
+   * a cel oldalon, meg akkor is, ha kesobb abbahagyjuk a kuldeset. Semmi nem
+   * hasal el tole: a hiba nema.
+   *
+   * === MIERT KULON TESZT, ES NEM A FENTI ALLITAS MELLETT ===
+   *
+   * Merve (kalibracio, 2026-09-07): amig ugyanabban a tesztben allt, egy
+   * kulcsnev-rontas ugyanazt a NEVET adta pirosnak, mint a mezo-sorsa allitas,
+   * tehat a kimenetbol nem latszott, MELYIK vedelem sult el. Egy piros, ami nem
+   * mondja meg, mit vedett, csak annyit bizonyit, hogy valami elromlott.
+   *
+   * === A LANC, AMIERT EL FOG SULNI ===
+   *
+   * Egy uj mezo eloszor a MEZO_SORSA tablan akad fenn (az kikenyszeriti a
+   * fixtura bovitesét), es a bovitett fixtura utan ez az allitas nezi meg a
+   * NEVET.
+   */
+  it("minden kikuldott metaadat-kulcs a mienk", async () => {
+    const torzs = await teljesBemenetTorzse();
+
+    for (const kulcs of Object.keys(torzs.metadata ?? {})) {
+      assert.ok(
+        isOwnedMetadataKey(kulcs),
+        `a(z) "${kulcs}" metaadat-kulcs nem a mienk: seo_ vagy unas_ elotag ` +
+          `kell hozza, vagy fel kell venni az OWNED_METADATA_KEYS listaba. ` +
+          `Enelkul az osszefesules idegennek veszi, es soha nem tudjuk levenni.`,
+      );
+    }
+    // ISMERT POZITIV KONTROLL: ha a torzs metaadata URES lenne, a fenti ciklus
+    // nulla korben futna, es az allitas ures halmazon lenne "zold".
+    assert.ok(
+      Object.keys(torzs.metadata ?? {}).length >= 10,
+      "a fixtura nem allitott elo eleg metaadat-kulcsot: az orzo ures halmazon futna",
     );
   });
 });
