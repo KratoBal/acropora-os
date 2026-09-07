@@ -47,13 +47,46 @@ const reply = (overrides: Partial<AiChatReply> = {}): AiChatReply => ({
 });
 
 const ask = async (answer: AiChatReply = reply()) => {
-  api.ask.mockResolvedValueOnce(answer);
+  /*
+    A VALASZ EGY MAKROTASKKAL KESOBB ERKEZIK, ES EZ SZANDEKOS.
+
+    Egy `mockResolvedValueOnce` microtaskon old fel, tehat a valasz gyakorlatilag
+    a hivas utani pillanatban ott van -- a lenti varakozas ilyenkor akkor is
+    "sikerul", ha rosszul van megirva. Az orzo, ami csak gyors gepen zold, nem
+    orzo: a CI-ben epp ezen bukott el a `verify` 2026-09-07-en.
+
+    Egy `setTimeout(0)` a jelenlegi szalat elengedi, tehat a teszt a LASSU utat
+    jarja be minden futason. Ara nulla: a makrotask ugyanabban az ezredmasodpercben
+    lefut.
+  */
+  api.ask.mockImplementationOnce(
+    () => new Promise((resolve) => setTimeout(() => resolve(answer), 0)),
+  );
   fireEvent.change(screen.getByRole("textbox"), {
     target: { value: "Van-e Fauna Marin nyomelem-adalékunk?" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Kérdés elküldése" }));
   // A kérdés minden esetben megjelenik a kártyán, hibás válasznál is.
   await screen.findByText("Van-e Fauna Marin nyomelem-adalékunk?");
+  /*
+    ES A VALASZRA IS VARUNK -- A KERDES ONMAGABAN NEM ELEG.
+
+    A kerdes AZONNAL megjelenik, meg a hivas elott: a fenti varakozas tehat
+    akkor is teljesul, ha a valasz meg uton van. Az ertekelo gombok viszont
+    csak a valasz megerkezese utan kerulnek ki, es a hivo utana MAR
+    szinkron `getByRole`-lal keresi oket.
+
+    Merve 2026-09-07: a CI-ben ezen bukott el a `verify` -- "Unable to find an
+    accessible element with the role button and name Pontatlan" --, miközben
+    UGYANAZ a commit a masik esemenyen zolden ment at. A gepen gyorsabb a
+    microtask, mint a betoltott futon; a teszt tehat a gep sebessegetol fuggott.
+
+    Ez ugyanaz az alak, mint a "varakozas, ami nem tud elbukni": a kerdes
+    megjeleneset a komponens a valasztol FUGGETLENUL rendereli, tehat arra varni
+    semmit nem bizonyit. Az ertekelo gombsor viszont mind a ket agon (sikeres es
+    hibas valasz) kikerul, tehat az a helyes hatarpont.
+  */
+  await screen.findByRole("button", { name: "Helyes" });
 };
 
 /**
