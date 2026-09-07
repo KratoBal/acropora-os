@@ -95,6 +95,14 @@ export async function runBrandMasterCli(
   deps: {
     master(): string;
     existing(): Promise<ExistingBrandRecord[]>;
+    /**
+     * Hany termek log az adott markakon. A terv ezt nem tudja: adatbazisbol jon.
+     * A varraton azert all, hogy a parancs torzse adatbazis nelkul is merheto
+     * maradjon.
+     */
+    productCounts(brandIds: readonly string[]): Promise<Record<string, number>>;
+    /** Honnan szamoltuk. Nev, nem titok: se felhasznalo, se jelszo. */
+    source(): string;
     actorExists(actorId: string): Promise<boolean>;
     apply(
       plan: BrandMasterPlan,
@@ -138,7 +146,25 @@ export async function runBrandMasterCli(
   }
 
   const plan = planBrandMaster(rows, await deps.existing());
-  out.stdout(describeBrandMasterPlan(plan));
+
+  /**
+   * A TERMEKSZAM CSAK AKKOR KERUL BELE, HA VAN MIT SZAMOLNI.
+   *
+   * Ha nincs nev-elteres, nem kerdezunk az adatbazistol: egy ures `IN ()`
+   * lekerdezes nem hiba, de fölösleges, es a jelentesbe olyan meres-fejlecet
+   * irna, ami semmire nem vonatkozik.
+   */
+  const meres = plan.nameDifferences.length
+    ? {
+        productCounts: await deps.productCounts(
+          plan.nameDifferences.map((n) => n.brandId),
+        ),
+        at: new Date().toISOString(),
+        source: deps.source(),
+      }
+    : undefined;
+
+  out.stdout(describeBrandMasterPlan(plan, meres));
 
   if (!apply) {
     out.stdout("\nEz a futás semmit nem írt. A végrehajtáshoz: --apply\n");
@@ -164,6 +190,44 @@ export async function runBrandMasterCli(
 }
 
 /* c8 ignore start -- a belépési pont: a mérhető rész a `runBrandMasterCli`. */
+/**
+ * HANY TERMEK LOG EZEKEN A MARKAKON, MOST.
+ *
+ * A `groupBy` egy korben adja vissza mindet: markankent kulon lekerdezes
+ * ugyanezt a szamot adna, csak N korben, es kozben a szinkron elmozdithatna.
+ */
+async function brandProductCounts(
+  brandIds: readonly string[],
+): Promise<Record<string, number>> {
+  const sorok = await prisma.product.groupBy({
+    by: ["brandId"],
+    where: { brandId: { in: [...brandIds] } },
+    _count: { _all: true },
+  });
+  const ki: Record<string, number> = {};
+  for (const id of brandIds) ki[id] = 0;
+  for (const sor of sorok) if (sor.brandId) ki[sor.brandId] = sor._count._all;
+  return ki;
+}
+
+/**
+ * MELYIK ADATBAZISBOL SZAMOLTUNK -- NEV, NEM TITOK.
+ *
+ * A gep es az adatbazis NEVE kerul ki, a felhasznalo es a jelszo SOHA. A teszt
+ * gep szama nem az eles szama, es ket lista egymas mellett semmi masban nem
+ * kulonbozik.
+ */
+function databaseLabel(): string {
+  const nyers = process.env.DATABASE_URL;
+  if (!nyers) return "ismeretlen adatbázis (DATABASE_URL nincs beállítva)";
+  try {
+    const url = new URL(nyers);
+    return `${url.hostname}${url.port ? ":" + url.port : ""}${url.pathname}`;
+  } catch {
+    return "ismeretlen adatbázis (a DATABASE_URL nem értelmezhető)";
+  }
+}
+
 async function applyPlan(plan: BrandMasterPlan, actorId: string) {
   const repository = new BrandsRepository();
   let created = 0;
@@ -209,6 +273,8 @@ async function main(): Promise<void> {
   process.exitCode = await runBrandMasterCli(process.argv.slice(2), out, {
     master: () => readBrandMaster(),
     existing: existingBrands,
+    productCounts: brandProductCounts,
+    source: databaseLabel,
     actorExists: async (actorId: string) =>
       (await prisma.user.count({ where: { id: actorId } })) === 1,
     apply: applyPlan,
