@@ -18,6 +18,21 @@ import {
  * 2026-09-07, ugyanazzal az indokkal, amivel a LIVESTOCK termek-tipust
  * elvetettuk: ne legyen negyedik igazsag-forras.)
  *
+ * === MI OLDJA FEL EZT A SZABALYT: A FELTETEL, NEM CSAK AZ INDOK ===
+ *
+ * A szarmaztatott ertek attol jo, hogy nem lehet elfelejteni. Ugyanez a rossz
+ * oldala: termekenkent NEM lehet kikapcsolni. Ez ma helyes, mert elo allatot
+ * EGYALTALAN NEM adunk fel.
+ *
+ * EZ A SZABALY TEHAT ADDIG ALL, AMIG ELO ALLATOT NEM SZALLITUNK. Ha valaha lesz
+ * ra szallitasi mod (szakosodott futar, hutott csomag), akkor EZT A
+ * SZARMAZTATAST kell atirni -- NEM termekenkent kikapcsolni.
+ *
+ * Az indok nelkul a szabaly egy nap onkenyes korlatnak fog latszani, es valaki
+ * termekenkent fogja megkerulni: egy kezi `pickupOnly: false` a profil-soron,
+ * ami itt amugy sem hat (a ket forras VAGY kapcsolatban all). A hiba ekkor a
+ * RENDELESNEL derul ki, nem a kodban. (acrobot kerese, 2026-09-07.)
+ *
  * === ES AMI KEZI MARAD, ES HELYESEN ===
  *
  * Az `isHeavy` es az `isFrozen` NEM vezetheto le a kategoriabol, es a hianyuk
