@@ -21,6 +21,28 @@ Az eredet és az authority külön mező, mert egy ellenőrzött átvételkor az
 authority változhat, miközben a történeti eredet megmarad: egy átvett termék
 `origin` mezője továbbra is `UNAS`, tehát a származása visszakereshető marad.
 
+### A „Product Master" kifejezésnek KÉT jelentése van, és csak az egyik él a sémában
+
+Ebben a dokumentumban — és a `Product.catalogAuthority` mezőben — a **Product
+Master** azt jelenti, hogy **KI a termék gazdája**: az UNAS vagy az Acropora OS.
+Ez a jelentés a sémában él, és a fenti enum hordozza.
+
+Beszédben ugyanezt a nevet viseli egy MÁSIK dolog is: a kézzel gondozott
+**termék-törzsadat** munkája (Balázs briefjének ez a címe). Az **nem** kap
+`ProductMaster` nevű táblát, és nincs is egy közös táblája: szakaszonként külön,
+beszédes nevű modellt kap — az elsőt, a szállítási jellemzőkét,
+`ProductShippingProfile` néven.
+
+**Miért nem ugyanaz a név, és miért ez a rosszabbik irány.** Aki ezt a lapot már
+olvasta, TUDJA, mit jelent a Product Master — tehát egy `ProductMaster` nevű
+tábla láttán nem nézne utána, hanem a gazda-fogalomra gondolna. Egy ismerős szó
+rossz jelentéssel nem kérdést szül, hanem téves magabiztosságot.
+
+**És a névnél mélyebb a különbség: a két fogalom tulajdonjoga ellentétes.** A
+`catalogAuthority` épp arról szól, hogy a szinkron mihez nyúlhat hozzá; a
+termék-törzsadat lényege pedig az, hogy a szinkronnak oda **egyáltalán ne legyen
+írási útja**. Ezért kap külön sémát: ott a tulajdonjog nem szabály, hanem alak.
+
 ## A törzsadat átvétele (UNAS → ACROPORA)
 
 Az átvétel EGY IRÁNYBA működik, és külön végponton, nem az update DTO-n
