@@ -60,7 +60,30 @@
  * doboz egyszeruen nem jelenik meg, es a hiba NEMA.
  *
  * Amit ellene tehetunk: mindket oldalon EGY helyen all, es mindketto
- * megnevezi a masikat.
+ * megnevezi a masikat. (A tuloldali megnevezes 2026-09-08 ota all a kirakat
+ * fajljaban is, A SOR MELLETT -- aki atnevez, kereses-cserevel dolgozik es a
+ * talalt sort latja, nem a fajl tetejet.)
+ *
+ * ES AMIT EZ NEM AD MEG, MERT KULONBEN TOBB VEDELMET IGERNE, MINT AMENNYI ALL
+ * (nautilus merese, 2026-09-08, ket kalibracioval a kirakat oldalan):
+ *
+ *   ha CSAK az egyik konstans csuszik el (veletlen elirás)   ket teszt PIROS,
+ *     nev szerint, a `lap-vaz/valodi-tartalom.spec.tsx`-ben -- mert annak a
+ *     FIXTURE-je a literalt irja, mikozben a kod a konstanson at olvas;
+ *   ha valaki KOVETKEZETESEN nevezi at az EGYIK repoban (a konstanst ES a
+ *     sajat pinjet)                                          479 teszt fut le,
+ *     NULLA piros, es az a repo semmit nem vesz eszre.
+ *
+ * A masodik a valodi kockazat, es erre EZ A MEGJEGYZES az egyetlen, ami szol --
+ * vagyis nem orzo, hanem cimzes. Nem sul el semmire; azt eri el, hogy aki
+ * atnevez, tudja, hol a masik fele.
+ *
+ * A VALODI ORZO AZ ADAT LESZ, es azert az, mert a ket repo EGYEDUL ott
+ * talalkozik: egy ellenorzes, hogy legalabb N termek visel ilyen kulcsot,
+ * ELSUL egy tuloldali atnevezesre. Ma meg nem irhato meg: 2026-09-08-an a
+ * stage 1492 termekebol EGY viseli a `unas_similar_ids` kulcsot, es nulla a
+ * `unas_accessory_ids`-t. Egy ilyen orzo ma tobb hamis riasztast adna, mint
+ * valodit. Amint a vetites vegigfut a katalóguson, ez a lepes kovetkezik.
  *
  * Az `unas_` elotag a vetites mai konvencioja minden UNAS-bol szarmazo mezore
  * (`unas_unit`, `unas_minimum_order_quantity`, `unas_product_url`), es a
