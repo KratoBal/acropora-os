@@ -1239,6 +1239,32 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
    * A `fetchImpl` a HATODIK parameter: enelkul a kliens a globalis `fetch`-re
    * esne, es a fo ut csak valodi halozattal futna le.
    */
+  /**
+   * UGYANAZ, MINT A `boltiFetch`, DE A TORZSET IS FELIRJA.
+   *
+   * MIERT KELL: a metaadat-kulcsokrol (`unas_similar_ids`,
+   * `unas_accessory_ids`) csak a KIKULDOTT TORZSBOL lehet allitast tenni. A
+   * `boltiFetch` a cimet es a metodust orzi, tehat rajta egy hianyzo kulcs
+   * eszrevetlen marad.
+   */
+  function boltiFetchTorzzsel(
+    keresek: { url: string; method: string; body: unknown }[],
+  ): typeof fetch {
+    return (async (url: unknown, init?: RequestInit) => {
+      const cim = String(url);
+      const method = init?.method ?? "GET";
+      let body: unknown = null;
+      if (typeof init?.body === "string") body = JSON.parse(init.body);
+      keresek.push({ url: cim, method, body });
+      if (cim.includes("/admin/sales-channels/"))
+        return valasz({ sales_channel: { id: "sc_1", name: "Bolt" } });
+      if (cim.includes("/admin/products?")) return valasz({ products: [] });
+      if (cim.endsWith("/admin/products") && method === "POST")
+        return valasz({ product: { id: "prod_medusa_1" } });
+      return valasz({}, new Uint8Array([1, 2, 3]));
+    }) as unknown as typeof fetch;
+  }
+
   function boltiFetch(
     keresek: { url: string; method: string }[],
     kepBajtok?: Uint8Array,
@@ -1294,6 +1320,140 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
    * egyaltalan a cel), aztan a kulso azonosito keresese (kint van-e mar), es
    * CSAK EZUTAN a letrehozas. Egy forditott sorrend duplikatumot szulne.
    */
+  /**
+   * A KAPCSOLATOK VALODI BEMENETEN -- ES EZ A TESZT AZERT LETEZIK, MERT A
+   * MERES NELKULE NEM TUDOTT ELBUKNI.
+   *
+   * MERVE 2026-09-08: a `productRelation.findMany` duplaja MINDIG ures listat
+   * adott. Ures listan a dontes MINDIG `none`, tehat a kimenet FUGGETLEN attol,
+   * hogy a runner atadja-e a kapcsolatokat. Elrontottam a runner atadasat --
+   * eloszor a kiegeszitokre, aztan a hasonlokra a fo agon --, es MIND A KETTO
+   * NULLA PIROSAT adott, 2501, majd 2508 lefutott teszt mellett.
+   *
+   * Vagyis a #604 es a #612 zoldje ezen a varraton semmit nem jelentett. Nem a
+   * hely volt merhetetlen (a `db` be van fecskendezve), hanem a FIXTURA
+   * elfajult.
+   *
+   * KET DUPLAT KELL EGYSZERRE NEM URESRE ALLITANI, es ez maga is lelet: a
+   * kapcsolat-sorok onmagukban nem elegek, mert a celpontokat az
+   * `externalReference` oldja fel. Ha csak az egyiket allitod at, a dontes
+   * `incomplete` lesz URES listaval, es a kulcs ugyanugy nem megy ki.
+   */
+  it("a gondozott kapcsolatok KIMENNEK a metaadatban, mindket kulcson", async () => {
+    const { out, stdout, stderr } = collector();
+    const { db } = adatbazis(termek(), {
+      productRelation: {
+        findMany: async (args: unknown) => {
+          const hol = (args as { where?: { relationType?: string } }).where;
+          if (hol?.relationType === "SIMILAR")
+            return [
+              { targetProductId: "os-hasonlo-1", sortOrder: 2 },
+              { targetProductId: "os-hasonlo-2", sortOrder: 1 },
+            ];
+          return [{ targetProductId: "os-kieg-1", sortOrder: null }];
+        },
+      },
+      externalReference: {
+        findMany: async (args: unknown) => {
+          const hol = (args as { where?: { entityId?: { in?: string[] } } })
+            .where;
+          const kert = hol?.entityId?.in ?? [];
+          const terkep: Record<string, string> = {
+            "os-hasonlo-1": "m-hasonlo-1",
+            "os-hasonlo-2": "m-hasonlo-2",
+            "os-kieg-1": "m-kieg-1",
+          };
+          return kert
+            .filter((id) => terkep[id])
+            .map((id) => ({ entityId: id, externalId: terkep[id]! }));
+        },
+        findUnique: async () => null,
+        create: async () => ({
+          entityId: "prod-1",
+          externalId: "prod_medusa_1",
+          lastSyncedAt: new Date("2026-01-01T00:00:00.000Z"),
+        }),
+        deleteMany: async () => ({ count: 0 }),
+      },
+    });
+    const keresek: { url: string; method: string; body: unknown }[] = [];
+
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1"],
+        out,
+        provider(environmentSetting),
+        boltiKornyezet,
+        db,
+        boltiFetchTorzzsel(keresek),
+      ),
+    );
+
+    assert.equal(code, 0, stderr.join("") + stdout.join(""));
+
+    const letrehozas = keresek.find(
+      (k) => k.url.endsWith("/admin/products") && k.method === "POST",
+    );
+    assert.ok(letrehozas, "a termek letrehozasa nem futott le");
+    const metadata = (letrehozas.body as { metadata?: Record<string, string> })
+      .metadata;
+
+    /**
+     * A SORREND IS SZAMIT: a `sortOrder` szerint rendezunk, tehat a 2-es
+     * sorszamu celpont a MASODIK. Egy halmaz-alaku allitas egy megforditott
+     * listat is atengedne.
+     */
+    assert.equal(metadata?.unas_similar_ids, "m-hasonlo-2,m-hasonlo-1");
+    assert.equal(metadata?.unas_accessory_ids, "m-kieg-1");
+  });
+
+  /**
+   * A WYSIWYG RESZFA VALODI BEMENETEN -- ugyanaz a vak folt, masik agon.
+   *
+   * A `category.findMany` duplaja MINDIG ures listat adott, tehat a reszfa MINDIG
+   * ures volt, tehat EGYETLEN termek sem lehetett egyedi darab. A jelzo agat
+   * ezert semmi nem tudta megkulonboztetni attol, mintha ki sem lenne kotve.
+   *
+   * A KATEGORIA-SOROK A MI FANK ALAKJABAN allnak (id, parentId, name), es a
+   * termek sajat kategoriai a `termek()` fixtura `categories` mezojebol jonnek.
+   */
+  it("a WYSIWYG reszfa alatt allo termek EGYEDI DARABKENT megy ki", async () => {
+    const { out, stdout, stderr } = collector();
+    const { db } = adatbazis(
+      termek({ categories: [{ categoryId: "cat_wysiwyg" }] }),
+      {
+        category: {
+          findMany: async () => [
+            { id: "cat_korall", parentId: null, name: "Korallok" },
+            { id: "cat_wysiwyg", parentId: "cat_korall", name: "WYSIWYG" },
+          ],
+        },
+      },
+    );
+    const keresek: { url: string; method: string; body: unknown }[] = [];
+
+    const code = await boltiKorben(() =>
+      runProjectionCli(
+        ["prod-1"],
+        out,
+        provider(environmentSetting),
+        boltiKornyezet,
+        db,
+        boltiFetchTorzzsel(keresek),
+      ),
+    );
+
+    assert.equal(code, 0, stderr.join("") + stdout.join(""));
+    const letrehozas = keresek.find(
+      (k) => k.url.endsWith("/admin/products") && k.method === "POST",
+    );
+    assert.ok(letrehozas, "a termek letrehozasa nem futott le");
+    const metadata = (letrehozas.body as { metadata?: Record<string, string> })
+      .metadata;
+
+    assert.equal(metadata?.unique_piece, "true");
+  });
+
   it("a fo ut: egy termek kimegy, es a lekepezes sora megszuletik", async () => {
     const { out, stdout, stderr } = collector();
     const { db, hivasok } = adatbazis();
