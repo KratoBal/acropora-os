@@ -109,12 +109,34 @@ export type ProjectionRunner = (
 
 export type ProjectionRunOutcome = "APPLIED" | "SKIPPED" | "FAILED";
 
+/**
+ * A NAPLO IS PARAMETER, UGYANABBOL AZ OKBOL, MINT AZ ADATBAZIS ES A FUTTATO:
+ * enelkul az, HOGY MIT IR KI, nem merheto -- es epp ez a resz letezik azert,
+ * hogy kivulrol latszodjon.
+ */
+export type ProjectionSchedulerLogger = {
+  log(message: string): void;
+  warn(message: string): void;
+  error(message: string): void;
+};
+
 /** A cserelheto reszek egyben. A tesztek ezt adjak at; elesben nincs megadva. */
 export interface MedusaProjectionSchedulerDeps {
   db?: ProjectionSchedulerDatabase;
   runProjection?: ProjectionRunner;
   environment?: NodeJS.ProcessEnv;
+  logger?: ProjectionSchedulerLogger;
 }
+
+/**
+ * MINDEN HANYADIK URES KOR KAPJON SORT.
+ *
+ * Az ELSO ures kor MINDIG naplozodik (az mondja meg, hogy az utemezo el es nem
+ * talalt munkat), utana minden ennyiedik. A cel nem a naplo teleirasa, hanem
+ * hogy legyen KULSO jele a futasnak: harminc perces korrel ez naponta
+ * nagyjabol negy sor, egy oras korrel ketto.
+ */
+const URES_KOR_NAPLO_RITKITAS = 12;
 
 export const MEDUSA_PROJECTION_SCHEDULER_DEPS = Symbol(
   "MEDUSA_PROJECTION_SCHEDULER_DEPS",
@@ -131,6 +153,9 @@ export class MedusaProjectionScheduler
   private readonly db: ProjectionSchedulerDatabase;
   private readonly runProjection: ProjectionRunner;
   private readonly environment: NodeJS.ProcessEnv;
+  private readonly naplo: ProjectionSchedulerLogger;
+  /** Hany URES kor telt el egymas utan. A nem-ures kor nullazza. */
+  private egymasUtaniUresKorok = 0;
 
   /**
    * EGY OPCIONALIS FUGGOSEG-OBJEKTUM, ES EZ A REPO MINTAJA, NEM ROGTONZES: a
@@ -152,12 +177,13 @@ export class MedusaProjectionScheduler
     this.runProjection =
       deps?.runProjection ?? ((ids, out) => runProjectionCli(ids, out));
     this.environment = deps?.environment ?? process.env;
+    this.naplo = deps?.logger ?? this.logger;
   }
 
   onModuleInit(): void {
     const config = medusaProjectionScheduleConfig(this.environment);
     if (!config.enabled) return;
-    this.logger.log(
+    this.naplo.log(
       `Medusa projection scheduler enabled (${config.intervalMs / 60_000} min, ` +
         `batch ${config.batchSize})`,
     );
@@ -183,7 +209,11 @@ export class MedusaProjectionScheduler
     const esedekes = await this.esedekesAzonositok(
       config.batchSize || DEFAULT_BATCH,
     );
-    if (!esedekes.length) return "SKIPPED";
+    if (!esedekes.length) {
+      this.uresKorNaploja();
+      return "SKIPPED";
+    }
+    this.egymasUtaniUresKorok = 0;
 
     const kod = await this.runProjection(esedekes, {
       stdout: (value) => this.logNemUres(value, "log"),
@@ -246,6 +276,34 @@ export class MedusaProjectionScheduler
   }
 
   /**
+   * AZ URES KOR IS KAP SORT -- ES EZ NEM NAPLO-DISZ.
+   *
+   * MERVE 2026-09-08 este, harom agens egy oraja: az utemezo `SKIPPED` agat
+   * semmi nem naplozta, tehat egy EGESZSEGES, hatvan masodpercenkent futo
+   * utemezo, ami nem talal munkat, KIVULROL MEGKULONBOZTETHETETLEN volt egy
+   * leallt utemezotol. A kerdest a vegen kod-olvasas dontotte el, nem meres --
+   * pedig egyetlen naplo-sor megvalaszolta volna.
+   *
+   * A SOR A SZAMOT MONDJA MEG, NEM CSAK AZ ALLAPOTOT (acrobot kikotese): a
+   * "nulla esedekes" onmagaban valasz arra, hogy fut-e es talal-e munkat. Egy
+   * puszta "SKIPPED" ugyanazt a ket kerdest hagyna nyitva.
+   *
+   * ES RITKITVA, mert a masik irany is hiba: egy sor minden korben azt jelenti,
+   * hogy a valodi uzenetek elvesznek kozottuk -- ugyanaz, amiert a `logNemUres`
+   * kiszuri az ures sorokat.
+   */
+  private uresKorNaploja(): void {
+    this.egymasUtaniUresKorok += 1;
+    const elso = this.egymasUtaniUresKorok === 1;
+    if (!elso && this.egymasUtaniUresKorok % URES_KOR_NAPLO_RITKITAS !== 0)
+      return;
+    this.naplo.log(
+      `Medusa projection run: SKIPPED (0 esedekes termek, ` +
+        `${this.egymasUtaniUresKorok}. ures kor egymas utan)`,
+    );
+  }
+
+  /**
    * A FUTTATO SORVEGGEL IR, A NAPLO NEM KER BELOLE. Egy ures sor a naplóban
    * ugyanugy egy bejegyzes, tehat kiszurjuk -- kulonben minden kor tele lenne
    * ures sorokkal, es a valodi uzenetek elvesznenek kozottuk.
@@ -253,8 +311,8 @@ export class MedusaProjectionScheduler
   private logNemUres(value: string, szint: "log" | "warn"): void {
     const szoveg = value.trimEnd();
     if (!szoveg) return;
-    if (szint === "warn") this.logger.warn(szoveg);
-    else this.logger.log(szoveg);
+    if (szint === "warn") this.naplo.warn(szoveg);
+    else this.naplo.log(szoveg);
   }
 
   private schedule(delayMs: number, intervalMs: number): void {
@@ -262,10 +320,10 @@ export class MedusaProjectionScheduler
       void this.runOnce()
         .then((kimenetel) => {
           if (kimenetel !== "SKIPPED")
-            this.logger.log(`Medusa projection run: ${kimenetel}`);
+            this.naplo.log(`Medusa projection run: ${kimenetel}`);
         })
         .catch((error) => {
-          this.logger.error(
+          this.naplo.error(
             `Scheduled Medusa projection failed: ${
               error instanceof Error && /^[A-Z0-9_:.-]+$/.test(error.message)
                 ? error.message

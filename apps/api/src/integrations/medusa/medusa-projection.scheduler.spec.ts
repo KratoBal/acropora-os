@@ -54,6 +54,23 @@ function adatbazis(
   return { db, hivasok };
 }
 
+/**
+ * A NAPLO DUPLAJA. Nem "kenyelembol" parameter: az ures kor naplozasa PONTOSAN
+ * az a resz, ami azert letezik, hogy KIVULROL latszodjon -- tehat ha a naplo
+ * nem cserelheto, az az egy dolog nem merheto, amiert megirtuk.
+ */
+function naplo() {
+  const sorok: string[] = [];
+  return {
+    sorok,
+    logger: {
+      log: (uzenet: string) => sorok.push(uzenet),
+      warn: (uzenet: string) => sorok.push(uzenet),
+      error: (uzenet: string) => sorok.push(uzenet),
+    },
+  };
+}
+
 /** A futtato duplaja: felirja, mit kapott, es a megadott kodot adja vissza. */
 function futtato(kod = 0) {
   const kapott: string[][] = [];
@@ -181,5 +198,99 @@ describe("MedusaProjectionScheduler.runOnce", () => {
     });
 
     assert.equal(await scheduler.runOnce(), "FAILED");
+  });
+});
+
+/**
+ * AZ URES KOR NAPLOZASA -- ES AZ ALLITASOK NEM A NAPLOZASROL SZOLNAK, HANEM A
+ * KET HATARROL: hogy SZOL-E, es hogy NEM SZOL-E TULSAGOSAN.
+ *
+ * Egy allitas, ami csak annyit mond, hogy "ures kornel van sor", zold maradna
+ * akkor is, ha MINDEN korben ir egyet -- es akkor a valodi uzenetek elvesznenek
+ * kozottuk, vagyis a resz epp azt rontana el, amiert keszult.
+ */
+describe("MedusaProjectionScheduler ures kor naploja", () => {
+  function uresScheduler() {
+    const { db } = adatbazis(
+      [termek()],
+      [{ entityId: "prod-1", lastSyncedAt: MOST }],
+    );
+    const { run } = futtato();
+    const n = naplo();
+    return {
+      naplo: n,
+      scheduler: new MedusaProjectionScheduler({
+        db,
+        runProjection: run,
+        environment: BEKAPCSOLVA,
+        logger: n.logger,
+      }),
+    };
+  }
+
+  it("az ELSO ures kor kap sort, es a sor a SZAMOT mondja meg", async () => {
+    const { scheduler, naplo: n } = uresScheduler();
+
+    assert.equal(await scheduler.runOnce(), "SKIPPED");
+    assert.equal(n.sorok.length, 1);
+
+    /**
+     * A SZAM AZ ALLITAS LENYEGE, NEM AZ ALLAPOT. Egy puszta "SKIPPED" sor ket
+     * kerdest hagyna nyitva: fut-e, es talal-e munkat. A "0 esedekes termek"
+     * mind a kettot megvalaszolja. (acrobot kikotese, 2026-09-08.)
+     */
+    const [elso] = n.sorok;
+    assert.ok(elso, "kellett volna naplo-sor az elso ures kornel");
+    assert.match(elso, /0 esedekes termek/);
+    assert.match(elso, /SKIPPED/);
+  });
+
+  it("a kovetkezo tizenegy ures kor NEM ir sort, a tizenkettedik igen", async () => {
+    const { scheduler, naplo: n } = uresScheduler();
+
+    for (let i = 0; i < 12; i += 1) await scheduler.runOnce();
+
+    /** Az elso es a tizenkettedik: ketto, nem tizenketto. */
+    assert.equal(n.sorok.length, 2);
+    const masodik = n.sorok[1];
+    assert.ok(masodik, "kellett volna masodik sor a tizenkettedik kornel");
+    assert.match(masodik, /12\. ures kor/);
+  });
+
+  it("egy NEM URES kor nullazza a szamlalot, tehat a kovetkezo ures megint szol", async () => {
+    const { db } = adatbazis([termek()], []);
+    const { run } = futtato();
+    const n = naplo();
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      environment: BEKAPCSOLVA,
+      logger: n.logger,
+    });
+
+    /** Elso kor: van esedekes (soha nem vetitett termek), tehat APPLIED. */
+    assert.equal(await scheduler.runOnce(), "APPLIED");
+
+    /**
+     * ES MOST UGYANAZ A SCHEDULER egy olyan adatbazissal, ami mar naprakesz.
+     * A szamlalot a fenti APPLIED nullazta, tehat ez ismet ELSO ures kor.
+     */
+    const friss = adatbazis(
+      [termek()],
+      [{ entityId: "prod-1", lastSyncedAt: MOST }],
+    );
+    const ujra = new MedusaProjectionScheduler({
+      db: friss.db,
+      runProjection: run,
+      environment: BEKAPCSOLVA,
+      logger: n.logger,
+    });
+    assert.equal(await ujra.runOnce(), "SKIPPED");
+
+    const uresSorok = n.sorok.filter((sor) => sor.includes("esedekes termek"));
+    assert.equal(uresSorok.length, 1);
+    const [ujraElso] = uresSorok;
+    assert.ok(ujraElso, "kellett volna sor a nullazas utani elso ures kornel");
+    assert.match(ujraElso, /1\. ures kor/);
   });
 });
