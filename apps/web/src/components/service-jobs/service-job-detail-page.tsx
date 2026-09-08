@@ -256,7 +256,12 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
       </div>
     );
 
-  if (error)
+  // A már betöltött jegy újrakérése meghiúsulhat. Ilyenkor a képernyőn lévő
+  // adat még olvasható; csak az új állapot ismeretlen. Nem dobjuk el, hanem a
+  // hiba MELLETT tartjuk meg, különben egy átmeneti hálózati hiba elvenné a
+  // szerelő elől azt is, amit már biztosan megkapott. Első betöltéskor viszont
+  // nincs mit megtartani, ott az önálló hibaállapot és az Újrapróbálás kell.
+  if (error && !job)
     return (
       <Alert
         variant="danger"
@@ -291,6 +296,19 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
           </Link>
         }
       />
+
+      {error ? (
+        <Alert
+          variant="danger"
+          title="Betöltési hiba"
+          description={error}
+          action={
+            <Button variant="secondary" onClick={() => void load()}>
+              Újrapróbálás
+            </Button>
+          }
+        />
+      ) : null}
 
       <Card className="space-y-3 p-4">
         <div className="flex flex-wrap items-center gap-3">

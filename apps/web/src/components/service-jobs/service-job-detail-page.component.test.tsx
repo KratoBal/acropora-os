@@ -263,6 +263,23 @@ describe("ServiceJobDetailPage", () => {
     await waitFor(() => expect(api.detail).toHaveBeenCalledTimes(2));
   });
 
+  it("sikertelen újratöltéskor megtartja a már látható hibajegyet a hiba mellett", async () => {
+    api.detail
+      .mockResolvedValueOnce(detail())
+      .mockRejectedValueOnce(new Error("Nincs kapcsolat"));
+
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    await screen.findByText("A hibajegy létrejött (Új).");
+
+    fireEvent.click(screen.getByRole("button", { name: "Ütemezve" }));
+
+    expect(await screen.findByText("Betöltési hiba")).toBeTruthy();
+    expect(
+      screen.getByText("HJ-2026-001 - Cápasuli szivattyú leállt"),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Újrapróbálás" })).toBeTruthy();
+  });
+
   /**
    * AZ URES LISTA MONDATA MINDKET FELTETELT MEGNEVEZI.
    *
