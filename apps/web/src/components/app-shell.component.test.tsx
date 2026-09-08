@@ -90,6 +90,14 @@ describe("AppShell settings navigation", () => {
   });
 });
 
+describe("AppShell értesítési jelzés", () => {
+  it("nem állít olvasatlan értesítést, amíg nincs annak adatforrása", () => {
+    render(<AppShell>Oldaltartalom</AppShell>);
+
+    expect(screen.queryByRole("button", { name: "Értesítések" })).toBeNull();
+  });
+});
+
 describe("AppShell business navigation groups", () => {
   beforeEach(() => {
     auth.session = ownerSession;

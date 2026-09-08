@@ -356,15 +356,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           }
           actions={
             <>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Értesítések"
-                className="relative"
-              >
-                <Icon name="bell" size={19} />
-                <span className="absolute right-2 top-2 size-1.5 rounded-full bg-rose-500 ring-2 ring-white" />
-              </Button>
+              {/*
+                NINCS ÉRTESÍTÉS-HARANG. A szerver ma csak munkalap-kiosztási
+                push-t küld a felelős szerelőnek; nincs Notification-modell,
+                lista vagy olvasottság, amely a felületnek jelzést írhatna.
+                Egy állandó piros pont azt állítaná, hogy van olvasatlan
+                értesítés, miközben ilyen fogalomnak nincs gazdája. A lista és
+                az olvasottság külön termékdöntés lesz; addig nem mutatunk
+                működés nélküli vezérlőt.
+              */}
               <UserMenu />
             </>
           }
