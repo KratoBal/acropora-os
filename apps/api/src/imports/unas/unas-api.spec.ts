@@ -171,6 +171,91 @@ describe("UNAS API XML contract", () => {
     assert.equal(vegyes.similarProductsSkipped, 1);
   });
 
+  /**
+   * A KIEGESZITO TERMEKEK -- ES A FORRAS NEVE NEM "Accessory".
+   *
+   * Az export `AdditionalProducts` / `AdditionalProduct` neven adja. Ez nem
+   * reszletkerdes: aki az "accessory" szora keres a forrasban, NULLAT kap, es
+   * abbol azt olvasna ki, hogy az API-ut nem hordozza a kiegeszitoket. Merve a
+   * 2026-08-18-i exporton (1889 termek): 996 termek visel ilyet, osszesen
+   * 13 744 hivatkozast.
+   *
+   * KET SZOMSZEDOS MEZO NEM EZ: a `CrossSale` es az `UpSale` MEGJELENITESI
+   * beallitas (`Cart`, `CartPopup`, `Artdet`), nem termek-lista -- es
+   * MINDKETTO ott all MINDEN termeken, tehat egy darabszam-alapu kereses
+   * konnyen felrevisz.
+   */
+  it("a hianyzo AdditionalProducts URES listat ad, nem hibat", () => {
+    const product = parseUnasProductResponse(response)[0]!;
+
+    assert.deepEqual(product.accessoryProducts, []);
+    assert.equal(product.accessoryProductsSkipped, 0);
+  });
+
+  it("a kiegeszito termekeket a forras sorrendjeben nyeri ki", () => {
+    const kiegeszitovel = parseUnasProductResponse(
+      response.replace(
+        "<Meta>",
+        "<AdditionalProducts>" +
+          "<AdditionalProduct><Id>444</Id><Sku>ACC-A</Sku><Name>Elso</Name></AdditionalProduct>" +
+          "<AdditionalProduct><Id>555</Id><Sku>ACC-B</Sku><Name>Masodik</Name></AdditionalProduct>" +
+          "</AdditionalProducts><Meta>",
+      ),
+    )[0]!;
+
+    assert.deepEqual(kiegeszitovel.accessoryProducts, [
+      { externalId: "444", sku: "ACC-A", name: "Elso" },
+      { externalId: "555", sku: "ACC-B", name: "Masodik" },
+    ]);
+    assert.equal(kiegeszitovel.accessoryProductsSkipped, 0);
+  });
+
+  it("kiegeszitonel is: Id nelkul kiesik es szamolodik", () => {
+    const vegyes = parseUnasProductResponse(
+      response.replace(
+        "<Meta>",
+        "<AdditionalProducts>" +
+          "<AdditionalProduct><Sku>NINCS-ID</Sku><Name>Kiesik</Name></AdditionalProduct>" +
+          "<AdditionalProduct><Id>666</Id><Name>Sku nelkul</Name></AdditionalProduct>" +
+          "</AdditionalProducts><Meta>",
+      ),
+    )[0]!;
+
+    assert.deepEqual(vegyes.accessoryProducts, [
+      { externalId: "666", sku: "", name: "Sku nelkul" },
+    ]);
+    assert.equal(vegyes.accessoryProductsSkipped, 1);
+  });
+
+  /**
+   * A KET LISTA FUGGETLEN, ES EZ AZ EGYETLEN ALLITAS, AMI EZT MERI.
+   *
+   * Ha a kinyeres barmelyik iranyban osszekeverne a ket blokkot (ugyanarra a
+   * csomopontra keresne, vagy egyik a masik erteket adna vissza), a fenti hat
+   * allitas kozul TOBB is zold maradna: mindegyik CSAK AZ EGYIK listat nezi,
+   * es a masik blokk ott nincs is jelen.
+   */
+  it("a hasonlo es a kiegeszito lista nem keveredik", () => {
+    const mindketto = parseUnasProductResponse(
+      response.replace(
+        "<Meta>",
+        "<SimilarProducts>" +
+          "<SimilarProduct><Id>111</Id><Sku>SIM-A</Sku><Name>Hasonlo</Name></SimilarProduct>" +
+          "</SimilarProducts>" +
+          "<AdditionalProducts>" +
+          "<AdditionalProduct><Id>444</Id><Sku>ACC-A</Sku><Name>Kiegeszito</Name></AdditionalProduct>" +
+          "</AdditionalProducts><Meta>",
+      ),
+    )[0]!;
+
+    assert.deepEqual(mindketto.similarProducts, [
+      { externalId: "111", sku: "SIM-A", name: "Hasonlo" },
+    ]);
+    assert.deepEqual(mindketto.accessoryProducts, [
+      { externalId: "444", sku: "ACC-A", name: "Kiegeszito" },
+    ]);
+  });
+
   it("parses every variant-stock combination with ordered axis names", () => {
     const variantProduct = parseUnasProductResponse(
       response

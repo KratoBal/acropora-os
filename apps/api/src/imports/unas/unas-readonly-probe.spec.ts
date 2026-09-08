@@ -75,6 +75,8 @@ const product = (
   packageComponents: [],
   similarProducts: [],
   similarProductsSkipped: 0,
+  accessoryProducts: [],
+  accessoryProductsSkipped: 0,
   productUrl: `https://sensitive.example/${externalId}`,
   sefUrl: null,
   manufacturerUrl: null,

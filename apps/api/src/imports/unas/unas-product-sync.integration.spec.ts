@@ -27,6 +27,7 @@ const product = (
     description?: string;
     primaryCategoryExternalId?: string;
     similarProducts?: UnasApiProduct["similarProducts"];
+    accessoryProducts?: UnasApiProduct["accessoryProducts"];
   } = {},
 ): UnasApiProduct => ({
   externalId: overrides.externalId ?? "159850145",
@@ -65,6 +66,8 @@ const product = (
   packageComponents: [],
   similarProducts: overrides.similarProducts ?? [],
   similarProductsSkipped: 0,
+  accessoryProducts: overrides.accessoryProducts ?? [],
+  accessoryProductsSkipped: 0,
   productUrl: "https://example.test/integration-pump",
   sefUrl: "integration-pump",
   manufacturerUrl: null,
@@ -872,6 +875,120 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
     });
     assert.deepEqual(relations, [
       { targetProductId: target.productId, sortOrder: 0, source: "UNAS" },
+    ]);
+  });
+
+  /**
+   * A KIEGESZITO KAPCSOLAT SAJAT TIPUSSAL ES SAJAT SZAMLALOVAL IRODIK.
+   *
+   * A forras mezoje `AdditionalProducts`, nem "Accessory" -- a nev a
+   * kinyeresnel szamit, itt mar a kanonikus `accessoryProducts` all.
+   */
+  it("writes accessory relations under their own relation type", async () => {
+    await cleanup();
+    categoryPage = [category];
+    deletedProducts = [];
+
+    liveProducts = [
+      product("ACC-SOURCE", {
+        externalId: "910101",
+        accessoryProducts: [
+          { externalId: "910102", sku: "ACC-TARGET", name: "Target" },
+        ],
+      }),
+      product("ACC-TARGET", { externalId: "910102" }),
+    ];
+    const run = await service.runIncremental(
+      "integration-token",
+      new Date("2026-07-24T10:00:00.000Z"),
+      100,
+    );
+
+    assert.equal(run.accessoryRelationsWritten, 1);
+    assert.equal(run.accessoryReferencesUnresolved, 0);
+    /**
+     * ES A HASONLO SZAMLALO NULLA: enelkul az allitas nem tudna megmondani,
+     * hogy a kiegeszito ag irt-e, vagy a hasonlo ag irt SIMILAR helyett
+     * ACCESSORY-t.
+     */
+    assert.equal(run.similarRelationsWritten, 0);
+
+    const source = await prisma.productVariant.findUniqueOrThrow({
+      where: { sku: "ACC-SOURCE" },
+      select: { productId: true },
+    });
+    const target = await prisma.productVariant.findUniqueOrThrow({
+      where: { sku: "ACC-TARGET" },
+      select: { productId: true },
+    });
+    const relations = await prisma.productRelation.findMany({
+      where: { sourceProductId: source.productId },
+      select: { targetProductId: true, relationType: true, sortOrder: true },
+    });
+    assert.deepEqual(relations, [
+      {
+        targetProductId: target.productId,
+        relationType: "ACCESSORY",
+        sortOrder: 0,
+      },
+    ]);
+  });
+
+  /**
+   * A KET FAJTA EGYMAS MELLETT AL, ES EGYIK IRAS SEM TORLI A MASIKAT.
+   *
+   * EZ AZ AZ ALLITAS, AMIERT A KET MENET KULON ALL A KODBAN. Egy osszevont
+   * ciklus egyetlen `deleteMany` hivast igenyelne `relationType: { in: [...] }`
+   * alakban -- es akkor egy hibas felderites a MASIK fajtat is torolne.
+   * Semmi nem hibazna: a szamlalo nőne, a kapcsolat eltunne.
+   */
+  it("keeps similar and accessory relations side by side", async () => {
+    await cleanup();
+    categoryPage = [category];
+    deletedProducts = [];
+
+    liveProducts = [
+      product("BOTH-SOURCE", {
+        externalId: "910111",
+        similarProducts: [
+          { externalId: "910112", sku: "BOTH-SIMILAR", name: "Hasonlo" },
+        ],
+        accessoryProducts: [
+          { externalId: "910113", sku: "BOTH-ACCESSORY", name: "Kiegeszito" },
+        ],
+      }),
+      product("BOTH-SIMILAR", { externalId: "910112" }),
+      product("BOTH-ACCESSORY", { externalId: "910113" }),
+    ];
+    const run = await service.runIncremental(
+      "integration-token",
+      new Date("2026-07-24T10:00:00.000Z"),
+      100,
+    );
+
+    assert.equal(run.similarRelationsWritten, 1);
+    assert.equal(run.accessoryRelationsWritten, 1);
+
+    const source = await prisma.productVariant.findUniqueOrThrow({
+      where: { sku: "BOTH-SOURCE" },
+      select: { productId: true },
+    });
+    const hasonlo = await prisma.productVariant.findUniqueOrThrow({
+      where: { sku: "BOTH-SIMILAR" },
+      select: { productId: true },
+    });
+    const kiegeszito = await prisma.productVariant.findUniqueOrThrow({
+      where: { sku: "BOTH-ACCESSORY" },
+      select: { productId: true },
+    });
+    const relations = await prisma.productRelation.findMany({
+      where: { sourceProductId: source.productId },
+      select: { targetProductId: true, relationType: true },
+      orderBy: { relationType: "asc" },
+    });
+    assert.deepEqual(relations, [
+      { targetProductId: kiegeszito.productId, relationType: "ACCESSORY" },
+      { targetProductId: hasonlo.productId, relationType: "SIMILAR" },
     ]);
   });
 

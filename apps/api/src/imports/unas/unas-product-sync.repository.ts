@@ -642,6 +642,7 @@ export class UnasProductSyncRepository extends Repository {
           productId: string;
           externalId: string;
           similarProducts: CanonicalUnasProduct["similarProducts"];
+          accessoryProducts: CanonicalUnasProduct["accessoryProducts"];
         }> = [];
         for (const diff of diffs) {
           // A kihagyott termék a számlálókba sem kerül bele: nem az történt
@@ -938,6 +939,7 @@ export class UnasProductSyncRepository extends Repository {
             productId: product.id,
             externalId: diff.product.externalId,
             similarProducts: diff.product.similarProducts,
+            accessoryProducts: diff.product.accessoryProducts,
           });
           await writeSearchDocument(transaction, product.id);
         }
@@ -973,6 +975,10 @@ export class UnasProductSyncRepository extends Repository {
         let similarReferencesUnresolved = 0;
         let similarReferencesSelf = 0;
         let similarReferencesDuplicate = 0;
+        let accessoryRelationsWritten = 0;
+        let accessoryReferencesUnresolved = 0;
+        let accessoryReferencesSelf = 0;
+        let accessoryReferencesDuplicate = 0;
         for (const written of writtenProducts) {
           const mapping = resolveSimilarProducts({
             sourceExternalId: written.externalId,
@@ -1002,6 +1008,53 @@ export class UnasProductSyncRepository extends Repository {
             skipDuplicates: true,
           });
           similarRelationsWritten += created.count;
+        }
+
+        /**
+         * A KIEGESZITO KAPCSOLATOK: KULON MENET, UGYANAZZAL AZ ALAKKAL.
+         *
+         * A ket ciklus SZANDEKOSAN nincs osszevonva. Egy kozos menet egyetlen
+         * `deleteMany` hivast igenyelne `relationType: { in: [...] }` alakban
+         * -- es akkor egy hibas felderites AZ EGYIK FAJTAT is torolne a masik
+         * javitasa kozben. Kulon torles, kulon iras, kulon szamlalo: a ket
+         * kapcsolat-fajta nem tud egymason keresztul serulni.
+         *
+         * A `resolveSimilarProducts` NEVE hasonlo termeket mond, a MUNKAJA
+         * viszont hivatkozas-feloldas: kulso azonositok leforditasa a mi
+         * termek-azonositoinkra, onhivatkozas es duplikatum kiszurésével. A
+         * modul atnevezese minden importot es minden NEVRE hivatkozo halot
+         * erintene, a nyereseg pedig kozmetikai -- ezert marad a nev, es all
+         * itt ez a mondat helyette.
+         */
+        for (const written of writtenProducts) {
+          const mapping = resolveSimilarProducts({
+            sourceExternalId: written.externalId,
+            sourceProductId: written.productId,
+            similarProducts: written.accessoryProducts,
+            productIdsByExternalId,
+          });
+          accessoryReferencesUnresolved += mapping.unresolved.length;
+          accessoryReferencesSelf += mapping.selfReferences;
+          accessoryReferencesDuplicate += mapping.duplicates;
+          await transaction.productRelation.deleteMany({
+            where: {
+              sourceProductId: written.productId,
+              relationType: "ACCESSORY",
+              source: "UNAS",
+            },
+          });
+          if (mapping.targets.length === 0) continue;
+          const created = await transaction.productRelation.createMany({
+            data: mapping.targets.map((target, index) => ({
+              sourceProductId: written.productId,
+              targetProductId: target.productId,
+              relationType: "ACCESSORY" as const,
+              sortOrder: index,
+              source: "UNAS",
+            })),
+            skipDuplicates: true,
+          });
+          accessoryRelationsWritten += created.count;
         }
 
         let missingCount = 0;
@@ -1204,6 +1257,10 @@ export class UnasProductSyncRepository extends Repository {
           similarReferencesUnresolved,
           similarReferencesSelf,
           similarReferencesDuplicate,
+          accessoryRelationsWritten,
+          accessoryReferencesUnresolved,
+          accessoryReferencesSelf,
+          accessoryReferencesDuplicate,
           windowStart: windowStart?.toISOString() ?? null,
           windowEnd: windowEnd.toISOString(),
         };

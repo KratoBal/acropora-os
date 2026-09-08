@@ -95,6 +95,33 @@ export interface UnasApiProduct {
    * nulla a FORRAS mai allapota, nem a kod garanciaja.
    */
   similarProductsSkipped: number;
+  /**
+   * A "kiegeszito termekek" hivatkozasai, a forras sorrendjeben.
+   *
+   * A FORRAS NEVE NEM "Accessory", ES EZ NEM RESZLETKERDES. Az API-export
+   * `AdditionalProducts` / `AdditionalProduct` neven adja, ugyanabban az
+   * alakban, mint a hasonlo termekeket (`Id`, `Sku`, `Name`). Aki az
+   * "accessory" szora keres, NULLAT kap -- es abbol azt olvasna ki, hogy a
+   * forras nem hordozza. Ezert all a nev itt, a tipus mellett.
+   *
+   * KET SZOMSZEDOS MEZO NEM EZ: a `CrossSale` es az `UpSale` MEGJELENITESI
+   * beallitas (`Cart`, `CartPopup`, `Artdet` ertekekkel), nem termek-lista.
+   * Mind a ketto MINDEN termeken ott all, tehat egy darabszam-alapu keresest
+   * konnyen felrevisz.
+   *
+   * MERVE a 2026-08-18-i API-exporton (1889 termek): 996 termek visel
+   * kiegeszito hivatkozast, osszesen 13 744-et. Ugyanabban a mintaban a
+   * hasonlo termekek szama 1307 termek / 18 492 hivatkozas. A populacio a
+   * szam melle tartozik: ez a minta 1889 termeke, nem a mai katalogus.
+   */
+  accessoryProducts: UnasSimilarProduct[];
+  /**
+   * HANY KIEGESZITO HIVATKOZAST HAGYTUNK KI, mert nem volt azonosithato.
+   *
+   * Ugyanaz az indok, mint a hasonlo termekeknel: egy nemán eldobott
+   * hivatkozas ugy nez ki, mint egy termek, aminek nincs is kapcsolata.
+   */
+  accessoryProductsSkipped: number;
   productUrl: string | null;
   sefUrl: string | null;
   manufacturerUrl: string | null;
