@@ -52,7 +52,10 @@ import { imageBlockUpdate, NO_IMAGE_ROW_BLOCK } from "./medusa-image-block.js";
 import { createDocumentStore } from "../../service-assets/document-store/document-store.provider.js";
 import { MedusaImageLinkRepository } from "./medusa-image-link.repository.js";
 import {
+  decideMedusaAccessoryIds,
+  relationFieldsForProjection,
   decideMedusaSimilarIds,
+  describeMissingAccessoryMapping,
   describeMissingSimilarMapping,
 } from "./medusa-relations.policy.js";
 import {
@@ -1012,6 +1015,18 @@ export async function runProjectionCli(
       where: { sourceProductId: product.id, relationType: "SIMILAR" },
       select: { targetProductId: true, sortOrder: true },
     });
+    /**
+     * A KIEGESZITOK KULON LEKERDEZESSEL, ES NEM EGY `in`-nel a kettore.
+     *
+     * Egy `relationType: { in: [...] }` egyetlen kerest sporolna, es utana a
+     * ket listat NEKUNK kellene szetvalogatni -- egy tipus-cimke alapjan, amit
+     * a `select` ma nem is ker le. Ket nevesitett lekerdezes olcsobb annal,
+     * mint egy szetvalogatas, ami a hivo oldalan romolhat el csendben.
+     */
+    const accessoryRows = await db.productRelation.findMany({
+      where: { sourceProductId: product.id, relationType: "ACCESSORY" },
+      select: { targetProductId: true, sortOrder: true },
+    });
     const similar = decideMedusaSimilarIds(
       similarRows,
       similarRows.length
@@ -1040,6 +1055,27 @@ export async function runProjectionCli(
         )}\n`,
       );
 
+    const accessory = decideMedusaAccessoryIds(
+      accessoryRows,
+      accessoryRows.length
+        ? await productLinks.findManyByProductIds(
+            accessoryRows.map((row) => row.targetProductId),
+          )
+        : new Map<string, string>(),
+    );
+    /**
+     * KULON SOR A KIEGESZITOKNEK, es nem egy osszevont szam. A ket lista ket
+     * kulonbozo dolgot mond; egy osszeg elrejtene, MELYIK oldalon all a hiany.
+     */
+    if (accessory.kind === "incomplete")
+      out.stdout(
+        `${describeMissingAccessoryMapping(
+          product.id,
+          accessory.missing.length,
+          accessory.medusaSimilarIds.length + accessory.missing.length,
+        )}\n`,
+      );
+
     const outcome = await service!.project(
       {
         id: product.id,
@@ -1059,7 +1095,7 @@ export async function runProjectionCli(
           unasVariantValues: variant.unasVariantValues,
         })),
         medusaCategoryIds: categories.medusaCategoryIds,
-        medusaSimilarIds: similar.medusaSimilarIds,
+        ...relationFieldsForProjection(similar, accessory),
         /**
          * A JELZO A MI KATEGORIA-FANKBOL JON, nem a forras jelzoibol es nem a
          * Medusa-oldali besorolasbol. A szabaly a `medusa-wysiwyg.policy.ts`

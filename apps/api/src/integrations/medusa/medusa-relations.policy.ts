@@ -71,6 +71,22 @@
  */
 export const MEDUSA_SIMILAR_IDS_KEY = "unas_similar_ids";
 
+/**
+ * A KIEGESZITOK KULCSA. UGYANAZ A SZABALY, MASIK LISTA -- es a `-sotet` vegu
+ * token-nevsema hibajat itt NEM ismeteljuk meg: a ket kulcs ket KULONBOZO
+ * dolgot nevez meg, nem ugyanannak a ket valtozatat.
+ *
+ * MIERT KET KULON LISTA, ES NEM EGY: a TERV mondja meg. A lampa lapjanak bal
+ * oszlopaban a vegen KET lista all -- "Ami meg kellhet hozza" (kiegeszito) es
+ * "Hasonlo lampak" (alternativa) --, a korall lapon csak egy. Vagyis a ket
+ * doboz nem a mi tagolasunk, hanem a tervbol jon.
+ *
+ * AZ OLVASO OLDAL A MASIK REPOBAN VAN, es amig oda be nem kerul, ez a kulcs
+ * KIMEGY es SENKI NEM OLVASSA. Ez szandekos sorrend: egy ures kulcsot olvasni
+ * olcsobb, mint egy nem letezo kulcsra varni.
+ */
+export const MEDUSA_ACCESSORY_IDS_KEY = "unas_accessory_ids";
+
 /** Az elvalaszto a metaadat-sztringben. Az olvaso oldal ugyanezzel bont. */
 const ELVALASZTO = ",";
 
@@ -99,6 +115,36 @@ export type MedusaSimilarDecision =
  * (`MedusaProductLinkRepository.findManyByProductIds`).
  */
 export function decideMedusaSimilarIds(
+  relations: readonly ProductRelationRow[],
+  mapping: ReadonlyMap<string, string>,
+): MedusaSimilarDecision {
+  return decideRelationIds(relations, mapping);
+}
+
+/**
+ * A KIEGESZITOK DONTESE -- SZO SZERINT UGYANAZ A SZABALY.
+ *
+ * ES EZ NEM VELETLEN EGYBEESES, HANEM DONTES, ezert all itt kimondva:
+ *
+ *   sorrend      a `sortOrder` szerint, a null ertekuek a vegen, azonossag
+ *                eseten az azonosito szerint -- hogy ket futas UGYANAZT adja
+ *   ismetlodes   az elso elofordulas szamit, a tobbi kiesik
+ *   lekepezetlen NEM esik ki csendben: a `missing` listaba kerul, es a hivo
+ *                kiirja a szamat
+ *
+ * HA A KET SZABALY VALAHA ELTER, AZ KULON DONTES LESZ, es akkor a kozos torzs
+ * ketté valik. Amig egy fuggveny szolgalja ki mind a kettot, addig nem tudnak
+ * eszrevetlenul elcsuszni egymastol.
+ */
+export function decideMedusaAccessoryIds(
+  relations: readonly ProductRelationRow[],
+  mapping: ReadonlyMap<string, string>,
+): MedusaSimilarDecision {
+  return decideRelationIds(relations, mapping);
+}
+
+/** A kozos torzs. Csak allapot megy be, csak dontes jon ki. */
+function decideRelationIds(
   relations: readonly ProductRelationRow[],
   mapping: ReadonlyMap<string, string>,
 ): MedusaSimilarDecision {
@@ -137,11 +183,38 @@ export function decideMedusaSimilarIds(
   };
 }
 
-/** A metaadatba kerulo ertek. Ures listara ures sztring: a hivo hagyja el. */
-export function similarIdsMetadataValue(
-  medusaSimilarIds: readonly string[],
-): string {
-  return medusaSimilarIds.join(ELVALASZTO);
+/**
+ * A KET DONTES OSSZERAKASA A VETITENDO TERMEKRE.
+ *
+ * MIERT KULON FUGGVENY, HOLOTT KET SOR: mert a runner torzse NEM MERHETO. A
+ * modul-szintu `prisma` import miatt adatbazis nelkul nem fut le, tehat egy
+ * rontas ott NULLA pirosat ad -- lemertem: a kiegeszitok atadasanak elhagyasa
+ * a teljes keszletbol egyetlen allitast sem dontott el.
+ *
+ * ES AMIT EZ VALOJABAN VED, AZ NEM AZ ELHAGYAS, HANEM A FELCSERELES. A ket
+ * dontes tipusa AZONOS (`MedusaSimilarDecision`), tehat a fordito NEM szol, ha
+ * valaki a hasonlokat teszi a kiegeszito mezobe. Ez a fuggveny az egyetlen
+ * hely, ahol ez a hozzarendeles KIMONDVA all, es allitassal orizheto.
+ */
+export function relationFieldsForProjection(
+  similar: MedusaSimilarDecision,
+  accessory: MedusaSimilarDecision,
+): { medusaSimilarIds: string[]; medusaAccessoryIds: string[] } {
+  return {
+    medusaSimilarIds: similar.medusaSimilarIds,
+    medusaAccessoryIds: accessory.medusaSimilarIds,
+  };
+}
+
+/**
+ * A metaadatba kerulo ertek. Ures listara ures sztring: a hivo hagyja el.
+ *
+ * KOZOS A KET LISTARA, es ez szandekos: a ket kulcs kulonbozo, az ERTEK ALAKJA
+ * nem. Ha kulon fuggveny allna mindkettore, egy elvalaszto-csere csak az egyiket
+ * erintene, es az olvaso oldal NEMAN esne szet a masiknal.
+ */
+export function relationIdsMetadataValue(medusaIds: readonly string[]): string {
+  return medusaIds.join(ELVALASZTO);
 }
 
 /**
@@ -157,6 +230,19 @@ export function similarIdsMetadataValue(
  * MINDEN terminusnal megjelenik, es ez nem hiba. Aki a kimenetet olvassa, azt
  * nezze, hogy a szam a KOVETKEZO futasra lecsokken-e.
  */
+export function describeMissingAccessoryMapping(
+  productId: string,
+  kimaradt: number,
+  osszes: number,
+): string {
+  return (
+    `${productId}: ${kimaradt}/${osszes} kiegészítő kapcsolat célpontja még nincs ` +
+    `leképezve a Medusára, ezért kimarad. A többi kimegy. ` +
+    `Ez az első teljes vetítés alatt minden terméknél megjelenhet - ` +
+    `a következő futásban a számnak csökkennie kell.`
+  );
+}
+
 export function describeMissingSimilarMapping(
   productId: string,
   kimaradt: number,

@@ -46,6 +46,7 @@ const product: ProjectableProduct = {
   /** A fixtura NEM ad teljes kategoria-listat: a mezo igy nem kerul a torzsbe. */
   medusaCategoryIds: null,
   medusaSimilarIds: [],
+  medusaAccessoryIds: [],
   uniquePiece: false,
   medusaCollectionId: null,
   barcode: null,
@@ -194,6 +195,7 @@ const MEZO_SORSA: Record<string, "atmegy" | "szandekosan-nem"> = {
   images: "atmegy", // -> images (sorrendben) es thumbnail (az elso elem)
   medusaCategoryIds: "atmegy", // -> categories, ha van teljes lista
   medusaSimilarIds: "atmegy", // -> metadata.unas_similar_ids, ha nem ures
+  medusaAccessoryIds: "atmegy", // -> metadata.unas_accessory_ids, ha nem ures
   medusaCollectionId: "atmegy", // -> collection_id (a marka gyujtemenye)
   barcode: "atmegy", // -> a valtozat ean vagy upc mezoje, hossz szerint
   unit: "atmegy", // -> metadata.unas_unit
@@ -252,6 +254,7 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
         unasProductUrl: "https://bolt.test/regi-lap",
         medusaCategoryIds: ["cat_1"],
         medusaSimilarIds: ["prod_medusa_9", "prod_medusa_8"],
+        medusaAccessoryIds: ["prod_medusa_7", "prod_medusa_6"],
         medusaCollectionId: "pcol_1",
         barcode: { field: "ean" as const, value: "4006381333931" },
         unit: "ml",
@@ -288,6 +291,12 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
        */
       medusaSimilarIds:
         torzs.metadata?.unas_similar_ids === "prod_medusa_9,prod_medusa_8",
+      /**
+       * A KIEGESZITOK KULON KULCSON, es a sorrend itt is szamit -- ugyanabbol
+       * az okbol: a kirakat ebbol a sztringbol allitja helyre a kert sorrendet.
+       */
+      medusaAccessoryIds:
+        torzs.metadata?.unas_accessory_ids === "prod_medusa_7,prod_medusa_6",
       medusaCollectionId: torzs.collection_id === "pcol_1",
       barcode: torzs.variants[0]?.ean === "4006381333931",
       unit: torzs.metadata?.unas_unit === "ml",

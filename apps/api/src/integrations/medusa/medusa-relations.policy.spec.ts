@@ -2,10 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  decideMedusaAccessoryIds,
   decideMedusaSimilarIds,
+  describeMissingAccessoryMapping,
   describeMissingSimilarMapping,
+  MEDUSA_ACCESSORY_IDS_KEY,
   MEDUSA_SIMILAR_IDS_KEY,
-  similarIdsMetadataValue,
+  relationFieldsForProjection,
+  relationIdsMetadataValue,
   type ProductRelationRow,
 } from "./medusa-relations.policy.js";
 
@@ -152,7 +156,7 @@ describe("a hasonló kapcsolatok leképezése a vetítésben", () => {
 
 describe("a metaadatba kerülő érték", () => {
   it("vesszővel fűzi össze az azonosítókat", () => {
-    assert.equal(similarIdsMetadataValue(["m-a", "m-b"]), "m-a,m-b");
+    assert.equal(relationIdsMetadataValue(["m-a", "m-b"]), "m-a,m-b");
   });
 
   /**
@@ -175,5 +179,98 @@ describe("a hiány sora", () => {
     const sor = describeMissingSimilarMapping("prod-1", 14, 15);
 
     assert.ok(sor.includes("14/15"), `a sor nem nevezi meg az arányt: ${sor}`);
+  });
+
+  /**
+   * A KET SOR KULON MONDJA MEG, MELYIK LISTAROL VAN SZO. Egy kozos szoveg a
+   * kimeneten osszemosna a ket hianyt, es az olvaso nem tudna, MELYIK oldalon
+   * all -- pontosan az az alak, amit a jegyzeteink "egy mondat ket allapotra"
+   * neven gyujtenek.
+   */
+  it("a kiegészítő sora MÁS szót használ, mint a hasonlóé", () => {
+    const hasonlo = describeMissingSimilarMapping("prod-1", 2, 3);
+    const kiegeszito = describeMissingAccessoryMapping("prod-1", 2, 3);
+
+    assert.ok(hasonlo.includes("hasonló"));
+    assert.ok(kiegeszito.includes("kiegészítő"));
+    assert.notEqual(hasonlo, kiegeszito);
+  });
+});
+
+describe("a kiegészítők döntése", () => {
+  const LEKEPEZES = new Map([
+    ["os-a", "m-a"],
+    ["os-b", "m-b"],
+  ]);
+
+  it("a kulcs neve az, amire a kirakat majd hallgatni fog", () => {
+    assert.equal(MEDUSA_ACCESSORY_IDS_KEY, "unas_accessory_ids");
+  });
+
+  /**
+   * A KET KULCS KULONBOZO. Ez trivialisnak latszik, de epp ez az az allitas,
+   * ami egy masolas-elgepelest megfog: ha a ket konstans azonos lenne, a
+   * kiegeszitok CSENDBEN felulirnak a hasonlokat ugyanazon a kulcson.
+   */
+  it("a két kulcs nem ugyanaz", () => {
+    assert.notEqual(MEDUSA_ACCESSORY_IDS_KEY, MEDUSA_SIMILAR_IDS_KEY);
+  });
+
+  it("ugyanazt a rendezést és ismétlés-szűrést adja, mint a hasonlóké", () => {
+    const sorok = [
+      { targetProductId: "os-b", sortOrder: 2 },
+      { targetProductId: "os-a", sortOrder: 1 },
+      { targetProductId: "os-a", sortOrder: 9 },
+    ];
+
+    const kiegeszito = decideMedusaAccessoryIds(sorok, LEKEPEZES);
+    const hasonlo = decideMedusaSimilarIds(sorok, LEKEPEZES);
+
+    assert.deepEqual(kiegeszito.medusaSimilarIds, ["m-a", "m-b"]);
+    assert.deepEqual(kiegeszito, hasonlo);
+  });
+
+  it("a leképezetlen célpont a missing listába kerül, nem esik ki csendben", () => {
+    const dontes = decideMedusaAccessoryIds(
+      [
+        { targetProductId: "os-a", sortOrder: 1 },
+        { targetProductId: "os-nincs", sortOrder: 2 },
+      ],
+      LEKEPEZES,
+    );
+
+    assert.equal(dontes.kind, "incomplete");
+    assert.deepEqual(dontes.medusaSimilarIds, ["m-a"]);
+    assert.deepEqual(dontes.missing, ["os-nincs"]);
+  });
+
+  /**
+   * A FELCSERELES ELLEN. A ket dontes TIPUSA azonos, tehat a fordito nem szol,
+   * ha valaki a hasonlokat teszi a kiegeszito mezobe -- es a runner torzse nem
+   * merheto (modul-szintu `prisma`), tehat ott egy ilyen csere NULLA pirosat
+   * adna. Merve: a kiegeszitok atadasanak elhagyasa a runnerben egyetlen
+   * allitast sem dontott el, mielott ez a fuggveny letezett.
+   */
+  it("a hozzárendelés nem cserélődik fel", () => {
+    const hasonlo = decideMedusaSimilarIds(
+      [{ targetProductId: "os-a", sortOrder: 1 }],
+      LEKEPEZES,
+    );
+    const kiegeszito = decideMedusaAccessoryIds(
+      [{ targetProductId: "os-b", sortOrder: 1 }],
+      LEKEPEZES,
+    );
+
+    const mezok = relationFieldsForProjection(hasonlo, kiegeszito);
+
+    assert.deepEqual(mezok.medusaSimilarIds, ["m-a"]);
+    assert.deepEqual(mezok.medusaAccessoryIds, ["m-b"]);
+  });
+
+  it("üres bemenetre none, és a hívó elhagyja a kulcsot", () => {
+    const dontes = decideMedusaAccessoryIds([], LEKEPEZES);
+
+    assert.equal(dontes.kind, "none");
+    assert.equal(relationIdsMetadataValue(dontes.medusaSimilarIds), "");
   });
 });
