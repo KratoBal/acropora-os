@@ -35,12 +35,12 @@ hiányzik belőle.
 
 **A státuszt a sor háttérszíne hordozza**, nem csak a szöveg. A képen:
 
-| szín | státusz |
-|---|---|
-| rózsaszín / piros | Feldolgozásra vár |
-| narancs | Kiszállítás |
-| kék-lila | Megrendelés lezárva |
-| zöld | Visszaigazolva |
+| szín              | státusz                      |
+| ----------------- | ---------------------------- |
+| rózsaszín / piros | Feldolgozásra vár            |
+| narancs           | Kiszállítás                  |
+| kék-lila          | Megrendelés lezárva          |
+| zöld              | Visszaigazolva               |
 | halvány rózsaszín | Sikertelenül lezárt rendelés |
 
 Ettől a lap **olvasás nélkül is használható**: a kezelő végigfut a szemével, és látja, hol
@@ -52,7 +52,7 @@ A soronkénti ikonok (számla, csomag, teherautó, emberek, olló, zöld pipa, p
 plusz a **szolgáltató logója** (FOXPOST, GLS) és a **fizetési szolgáltatóé** (SimplePay).
 
 **Egy mért részlet, ami többet mond, mint amennyinek látszik:** az óra ikonon egérrel
-megállva ez jelenik meg: *„Státusz módosítás dátuma: 2026.08.28 10:31"*. Vagyis a lap nem
+megállva ez jelenik meg: _„Státusz módosítás dátuma: 2026.08.28 10:31"_. Vagyis a lap nem
 csak a mai állapotot mutatja, hanem azt is, **mikor** váltott — anélkül, hogy meg kellene
 nyitni a rendelést.
 
@@ -60,12 +60,12 @@ nyitni a rendelést.
 
 Balázs küldte, 2026-09-02 16:05, kérdés nélkül:
 
-| jel | jelentés |
-|---|---|
-| csillag | **új vásárló** |
+| jel                      | jelentés                                                             |
+| ------------------------ | -------------------------------------------------------------------- |
+| csillag                  | **új vásárló**                                                       |
 | lefelé fordított hüvelyk | van másik **sikertelenül lezárt** rendelése; a szám azt mondja, hány |
-| plusz jel | van másik **nyitott** rendelése |
-| áthúzott ember | **regisztráció nélkül** vásárolt |
+| plusz jel                | van másik **nyitott** rendelése                                      |
+| áthúzott ember           | **regisztráció nélkül** vásárolt                                     |
 
 **AMI EBBEN A LÉNYEG, ÉS AMIT A KÉPRŐL NEM LEHETETT VOLNA KITALÁLNI:** ezek a jelek **nem a
 rendelésről szólnak, hanem a VÁSÁRLÓRÓL** — a másik rendeléseiről, az előéletéről, a
