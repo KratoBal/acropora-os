@@ -74,16 +74,35 @@
  *     sajat pinjet)                                          479 teszt fut le,
  *     NULLA piros, es az a repo semmit nem vesz eszre.
  *
- * A masodik a valodi kockazat, es erre EZ A MEGJEGYZES az egyetlen, ami szol --
- * vagyis nem orzo, hanem cimzes. Nem sul el semmire; azt eri el, hogy aki
- * atnevez, tudja, hol a masik fele.
+ * A masodik a valodi kockazat, es erre ez a megjegyzes CIMZES: nem sul el
+ * semmire, azt eri el, hogy aki atnevez, tudja, hol a masik fele.
  *
- * A VALODI ORZO AZ ADAT LESZ, es azert az, mert a ket repo EGYEDUL ott
- * talalkozik: egy ellenorzes, hogy legalabb N termek visel ilyen kulcsot,
- * ELSUL egy tuloldali atnevezesre. Ma meg nem irhato meg: 2026-09-08-an a
- * stage 1492 termekebol EGY viseli a `unas_similar_ids` kulcsot, es nulla a
- * `unas_accessory_ids`-t. Egy ilyen orzo ma tobb hamis riasztast adna, mint
- * valodit. Amint a vetites vegigfut a katalóguson, ez a lepes kovetkezik.
+ * DE NEM EZ AZ EGYETLEN, AMI SZOL -- ES A KORABBI SZOVEG EZT ELHALLGATTA.
+ * HELYESBITVE: MAR VAN ORZO, ES A HELYESBITES SAJAT MULASZTASBOL ERED.
+ *
+ * Barracuda 2026-09-08 delelott megirta, es a kozos mappaban all:
+ *
+ *     bash /home/marveen/marveen/scripts/hasonlo-kulcs-orzo.sh
+ *
+ * A GitHub API-rol olvassa MINDKET repo fo agat -- nincs klon es nincs ref,
+ * tehat nincs mihez kepest elavulni --, es nem csak a KULCSOT veti ossze, hanem
+ * az ELVALASZTOT is: annak az elcsuszasa meg nemabb lenne, mert a doboz
+ * megjelenne, csak nulla termekkel. Harom kilepesi kod, es a harmadik a lenyeg:
+ * 0 egyezik, 1 elcsusztak (nev szerint), 2 NEM MERHETO -- mert egy atnevezett
+ * konstans NULLA talalatot ad, es a naiv osszevetes ilyenkor ZOLDET adna.
+ * Mindket irany kulon kalibralva; napi utemezesben fut.
+ *
+ * AMIT AZ ORZO MA NEM FED, ismert pozitiv kontrollal merve (a hasonlo kulcsra
+ * ot emlites all benne, a kiegeszitore nulla):
+ *
+ *   a `MEDUSA_ACCESSORY_IDS_KEY`   nincs benne
+ *   hogy az adat TENYLEGESEN atmegy-e   azt csak a bolt oldalan lehet megnezni
+ *
+ * A masodikra szant ellenorzes (legalabb N termek visel ilyen kulcsot) ma meg
+ * nem irhato meg: 2026-09-08-an a stage 1492 termekebol EGY viseli a
+ * `unas_similar_ids` kulcsot, es nulla a `unas_accessory_ids`-t. Egy ilyen orzo
+ * ma tobb hamis riasztast adna, mint valodit -- de ez KIEGESZITES a meglevo
+ * orzohoz, nem az elso vedelem.
  *
  * Az `unas_` elotag a vetites mai konvencioja minden UNAS-bol szarmazo mezore
  * (`unas_unit`, `unas_minimum_order_quantity`, `unas_product_url`), es a
