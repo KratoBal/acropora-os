@@ -104,9 +104,30 @@ export const MEDUSA_SIMILAR_IDS_KEY = "unas_similar_ids";
  * "Hasonlo lampak" (alternativa) --, a korall lapon csak egy. Vagyis a ket
  * doboz nem a mi tagolasunk, hanem a tervbol jon.
  *
- * AZ OLVASO OLDAL A MASIK REPOBAN VAN, es amig oda be nem kerul, ez a kulcs
- * KIMEGY es SENKI NEM OLVASSA. Ez szandekos sorrend: egy ures kulcsot olvasni
- * olcsobb, mint egy nem letezo kulcsra varni.
+ * AZ OLVASO OLDAL A MASIK REPOBAN VAN. Amikor ez a megjegyzes keszult, MEG NEM
+ * LETEZETT, es a szoveg ezt mondta ki: a kulcs kimegy, es senki nem olvassa.
+ * A szandekos sorrend helyes volt -- de a mondat 2026-09-08 19:44:09 ota HAMIS,
+ * es NEM elavulas tette azza, hanem ugyanannak a kéznek a kesobbi lepese
+ * (acropora-commerce #239).
+ *
+ * PAR: acropora-commerce
+ *      apps/storefront/src/modules/products/components/related-products/
+ *        gondozott-kapcsolatok.ts:101   export const KIEGESZITO_KULCS
+ *      ugyanott :176                    kiegeszitoAzonositok()
+ *      lap-vaz/valodi-tartalom.tsx:492  a vaz `kiegeszitok` doboza ezen all
+ *
+ * Ugyanaz a helyzet, mint a hasonlo kulcsnal egy bekezdessel feljebb: ket repo,
+ * kozos csomag nelkul, es ha a ket sztring elter, a doboz CSENDBEN ures marad.
+ * Ez tehat nem orzo, hanem CIMZES -- nem sul el semmire; azt eri el, hogy aki
+ * atnevez, tudja, hol a masik fele.
+ *
+ * AMI A KET KULCS KOZOTT MEGIS KULONBSEG, ES ERDEMES TUDNI: a hasonlo kulcs mar
+ * kimegy a boltba, ez meg nem. Merve 2026-09-08 19:23:05-kor a teszt bolton, a
+ * teljes katalogust vegiglapozva: 1492 termek, `unas_similar_ids` EGYEN,
+ * `unas_accessory_ids` NULLAN. Es ez NEM idozites, hanem ADAT: a vetites a
+ * kulcsot csak nem ures listara irja ki (lasd a `length > 0` feltetelt a
+ * `medusa-product-projection.service.ts`-ben), tehat ugyanaz a termek, amelyik
+ * megkapta a hasonlo kulcsot, kiegeszito kapcsolat nelkul all.
  */
 export const MEDUSA_ACCESSORY_IDS_KEY = "unas_accessory_ids";
 
