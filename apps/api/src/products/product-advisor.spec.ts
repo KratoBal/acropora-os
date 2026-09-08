@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 
 import { MissingDataProductAdvisor } from "./product-advisor.js";
 
@@ -10,6 +11,6 @@ describe("MissingDataProductAdvisor", () => {
       aquarium: { dimensions: "60×40×40", existingLighting: null, flow: null },
     });
 
-    expect(result).toEqual({ kind: "missingProductFields", fields: [] });
+    assert.deepEqual(result, { kind: "missingProductFields", fields: [] });
   });
 });
