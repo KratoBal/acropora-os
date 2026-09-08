@@ -23,6 +23,14 @@ function termek(overrides: Record<string, unknown> = {}) {
     variants: [{ updatedAt: REGEN }],
     unasSnapshot: { updatedAt: REGEN },
     channelListings: [{ updatedAt: REGEN }],
+    /**
+     * A KAPCSOLATOK IDOBELYEGE IS A DUPLA RESZE, ES NEM UDVARIASSAGBOL:
+     * a hivo `termek.sourceRelations.map(...)` alakban olvassa. Egy dupla,
+     * ami ezt kihagyja, NEM zold tesztet ad, hanem kivetelt -- es epp ezert
+     * jo, hogy kotelezo: a lapunk sajat tanulsaga szerint amit a HIVO hasznal,
+     * de a teszt nem allit, az a dupla biztos hibaja.
+     */
+    sourceRelations: [] as { updatedAt: Date }[],
     ...overrides,
   };
 }
@@ -312,5 +320,110 @@ describe("MedusaProjectionScheduler ures kor naploja", () => {
     const utolso = uresSorok[uresSorok.length - 1];
     assert.ok(utolso, "kellett volna sor a nullazas utani ures kornel");
     assert.match(utolso, /1\. ures kor/);
+  });
+});
+
+/**
+ * A KAPCSOLAT-IDOBELYEG MINT OTODIK JEL (a71496e4, 2026-09-08).
+ *
+ * A `ProductRelation` tablan 2026-09-08-ig NEM VOLT idobelyeg, tehat egy
+ * kapcsolat-valtozas SOHA nem tette esedekesse a terméket: a kapcsolatok
+ * kimentek az adatbazisba, es a boltba nem jutottak el. Nem hiba volt, hanem
+ * hianyzo jel -- egy egesz estet vitt el a kerdes, hogy megallt-e a vetites.
+ *
+ * AZ ALLITASOK NEM AZT MERIK, HOGY A MEZO LETEZIK. Azt, hogy a kapcsolat
+ * ONMAGABAN eleg -- vagyis olyan termeken, ahol MINDEN MAS forras-idobelyeg
+ * REGI. Egy termek, aminek a sajat `updatedAt`-ja is friss, akkor is esedekes
+ * lenne, ha ezt a jelet sosem vettuk volna fel.
+ */
+describe("a kapcsolatok idobelyege esedekesse tesz", () => {
+  const KOZBEN = new Date("2026-09-02T10:00:00.000Z");
+
+  it("CSAK a kapcsolat mozdult: a termek esedekes", async () => {
+    const { db } = adatbazis(
+      [
+        termek({
+          updatedAt: REGEN,
+          sourceRelations: [{ updatedAt: MOST }],
+        }),
+      ],
+      [{ entityId: "prod-1", lastSyncedAt: KOZBEN }],
+    );
+    const { run, kapott } = futtato();
+
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      environment: BEKAPCSOLVA,
+    });
+
+    assert.equal(await scheduler.runOnce(), "APPLIED");
+    assert.deepEqual(kapott, [["prod-1"]]);
+  });
+
+  /**
+   * ES A TUKORKEPE, MERT ENELKUL A FENTI ALLITAS AKKOR IS ZOLD LENNE, HA A JEL
+   * MINDIG esedekesse tenne: REGI kapcsolat mellett NEM szabad futnia.
+   */
+  it("a kapcsolat REGEBBI a vetitesnel: nem esedekes", async () => {
+    const { db } = adatbazis(
+      [
+        termek({
+          updatedAt: REGEN,
+          sourceRelations: [{ updatedAt: REGEN }],
+        }),
+      ],
+      [{ entityId: "prod-1", lastSyncedAt: KOZBEN }],
+    );
+    const { run, kapott } = futtato();
+
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      environment: BEKAPCSOLVA,
+    });
+
+    assert.equal(await scheduler.runOnce(), "SKIPPED");
+    assert.deepEqual(kapott, []);
+  });
+
+  /**
+   * A LEKERDEZES A FORRAS-OLDALT KERI, NEM A CELPONTOT -- ES EZ NEM RESZLETKERDES.
+   *
+   * A vetites a termek SAJAT metaadataba irja a kapcsolatok azonositoit. Ha B
+   * csak CELPONTJA A egyik kapcsolatanak, B sajat metaadata nem valtozik. A
+   * `targetRelations` felvetele tehat folosleges ujravetiteseket hozna -- minden
+   * celpont-termeket esedekesse tenne, valahanyszor ra mutat egy uj kapcsolat.
+   *
+   * Ezt a SELECT alakjan merjuk, mert a kimeneten nem latszik: mind a ketto
+   * ugyanugy "mukodne", csak az egyik tobbszor futna.
+   */
+  it("a lekerdezes a sourceRelations-t keri, a targetRelations-t NEM", async () => {
+    const { db, hivasok } = adatbazis(
+      [termek()],
+      [{ entityId: "prod-1", lastSyncedAt: MOST }],
+    );
+    const { run } = futtato();
+
+    const scheduler = new MedusaProjectionScheduler({
+      db,
+      runProjection: run,
+      environment: BEKAPCSOLVA,
+    });
+    await scheduler.runOnce();
+
+    const lekerdezes = hivasok.find(
+      (hivas) => hivas.metodus === "product.findMany",
+    );
+    assert.ok(lekerdezes, "kellett volna termek-lekerdezes");
+    const select = (lekerdezes.args as { select: Record<string, unknown> })
+      .select;
+
+    assert.ok(select.sourceRelations, "a sourceRelations-t kerni kell");
+    assert.equal(
+      select.targetRelations,
+      undefined,
+      "a targetRelations NEM kerulhet a lekerdezesbe",
+    );
   });
 });
