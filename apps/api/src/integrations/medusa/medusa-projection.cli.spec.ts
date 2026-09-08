@@ -566,12 +566,17 @@ describe("which channel a missing-data line goes to", () => {
   it("reads the calls it claims to read", () => {
     const calls = missingReporterCalls();
 
-    // A NEVEZO: ket parancs, NEGY hiany-jelzessel (a vetitesben kategoria,
-    // marka ES hasonlo kapcsolat, a keszlet-parancsban a hianyzo sor). Ha ez
-    // nulla lenne, a csatorna-allitas nem a kodrol szolna, hanem a sajat
+    // A NEVEZO: ket parancs, OT hiany-jelzessel (a vetitesben kategoria, marka,
+    // hasonlo ES kiegeszito kapcsolat, a keszlet-parancsban a hianyzo sor). Ha
+    // ez nulla lenne, a csatorna-allitas nem a kodrol szolna, hanem a sajat
     // mintajarol.
-    assert.equal(calls.length, 4);
+    //
+    // A SZAM BEEGETVE ALL, ES EZ SZANDEKOS: ha valaki uj hiany-jelzest vesz
+    // fel, EZ a sor pirosodik ki, es akkor kell eldontenie, melyik csatornara
+    // valo. Egy `toBeGreaterThan(0)` alaku also korlat ezt atengedne.
+    assert.equal(calls.length, 5);
     assert.deepEqual(calls.map((call) => call.reporter).sort(), [
+      "describeMissingAccessoryMapping",
       "describeMissingBrandMapping",
       "describeMissingCategoryMapping",
       "describeMissingSimilarMapping",

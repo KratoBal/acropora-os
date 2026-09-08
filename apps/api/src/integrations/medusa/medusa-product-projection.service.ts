@@ -31,8 +31,9 @@ import {
   type MedusaHandleParositas,
 } from "./medusa-product-handle.js";
 import {
+  MEDUSA_ACCESSORY_IDS_KEY,
   MEDUSA_SIMILAR_IDS_KEY,
-  similarIdsMetadataValue,
+  relationIdsMetadataValue,
 } from "./medusa-relations.policy.js";
 import {
   mergeProductMetadata,
@@ -134,6 +135,13 @@ export interface ProjectableProduct {
    * `unas_` elotagu kulcs. Ez helyes: egy megszunt kapcsolat tunjon el a boltbol.
    */
   medusaSimilarIds: string[];
+  /**
+   * A KIEGESZITOK MEDUSA-AZONOSITOI. KOTELEZO MEZO, nem elhagyhato -- ugyanabbol
+   * az okbol, mint a `medusaSimilarIds`: az ures lista DONTES (nincs kapcsolat),
+   * a hianyzo mezo pedig azt jelentene, hogy a hivo elfelejtette feltolteni. A
+   * ketto a metaadatban megkulonboztethetetlen lenne.
+   */
+  medusaAccessoryIds: string[];
   /**
    * A MARKA MEDUSA-OLDALI GYUJTEMENY-AZONOSITOJA, vagy `null`.
    *
@@ -720,8 +728,20 @@ export class MedusaProductProjectionService {
        */
       ...(product.medusaSimilarIds.length > 0
         ? {
-            [MEDUSA_SIMILAR_IDS_KEY]: similarIdsMetadataValue(
+            [MEDUSA_SIMILAR_IDS_KEY]: relationIdsMetadataValue(
               product.medusaSimilarIds,
+            ),
+          }
+        : {}),
+      /**
+       * A KIEGESZITOK UGYANIGY, KULON KULCSON. Ures listara ez a kulcs sem megy
+       * ki -- es a ket lista FUGGETLEN: egy termeknek lehet hasonlo kapcsolata
+       * kiegeszito nelkul es forditva.
+       */
+      ...(product.medusaAccessoryIds.length > 0
+        ? {
+            [MEDUSA_ACCESSORY_IDS_KEY]: relationIdsMetadataValue(
+              product.medusaAccessoryIds,
             ),
           }
         : {}),

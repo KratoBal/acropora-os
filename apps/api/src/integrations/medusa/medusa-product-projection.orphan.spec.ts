@@ -51,6 +51,7 @@ const product: ProjectableProduct = {
   variantRows: [{ sku: "PUMP-1", unasVariantValues: null }],
   medusaCategoryIds: null,
   medusaSimilarIds: [],
+  medusaAccessoryIds: [],
   uniquePiece: false,
   medusaCollectionId: null,
   barcode: null,
