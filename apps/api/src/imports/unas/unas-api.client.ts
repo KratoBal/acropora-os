@@ -643,6 +643,34 @@ export function parseUnasProductResponse(xml: string): UnasApiProduct[] {
           },
         ];
       });
+      /**
+       * A KIEGESZITO TERMEKEK -- ES A FORRAS NEVE NEM "Accessory".
+       *
+       * Az export `AdditionalProducts` / `AdditionalProduct` neven adja,
+       * BETUHIVEN ugyanabban az alakban, mint a hasonlo termekeket. Aki az
+       * "accessory" szora keres a forrasban, nullat kap.
+       *
+       * A KEZELES IS BETUHIVEN AZONOS a hasonlo termekekevel: `Id` nelkuli
+       * hivatkozas kimarad es SZAMOLODIK, mert egy nemán eldobott kapcsolat
+       * ugy nez ki, mint egy termek, aminek nincs is kapcsolata. A kihagyas
+       * itt sem `throw`: egy rossz cimke miatt nem bukhat meg az egesz
+       * import-oldal.
+       */
+      const accessoryNodes = children(
+        child(product, "AdditionalProducts"),
+        "AdditionalProduct",
+      );
+      const accessoryProducts = accessoryNodes.flatMap((accessory) => {
+        const accessoryExternalId = value(accessory, "Id") ?? "";
+        if (!accessoryExternalId) return [];
+        return [
+          {
+            externalId: accessoryExternalId,
+            sku: value(accessory, "Sku") ?? "",
+            name: value(accessory, "Name") ?? null,
+          },
+        ];
+      });
       const packageProductFlag = flag(value(product, "PackageProduct"));
       return {
         externalId,
@@ -698,6 +726,9 @@ export function parseUnasProductResponse(xml: string): UnasApiProduct[] {
         packageComponents,
         similarProducts,
         similarProductsSkipped: similarNodes.length - similarProducts.length,
+        accessoryProducts,
+        accessoryProductsSkipped:
+          accessoryNodes.length - accessoryProducts.length,
         productUrl: value(product, "Url") ?? null,
         sefUrl: value(product, "SefUrl") ?? null,
         manufacturerUrl: value(product, "ManufacturerUrl") ?? null,

@@ -36,6 +36,18 @@ export interface UnasProductSyncSummary {
   similarReferencesUnresolved: number;
   similarReferencesSelf: number;
   similarReferencesDuplicate: number;
+  /**
+   * ES UGYANAZ A NEGY SZAM A KIEGESZITO KAPCSOLATOKRA, KULON.
+   *
+   * NEM EGY OSSZEVONT SZAM, es ez ugyanaz a dontes, mint a negy szamlalo
+   * szetvalasztasa: a ket kapcsolat-fajta KET KULONBOZO dolgot mond a
+   * katalogusrol. Egy osszeg elrejtene, MELYIK oldalon all a hiany -- es a
+   * ketto forrasa is kulon mezo az exportban.
+   */
+  accessoryRelationsWritten: number;
+  accessoryReferencesUnresolved: number;
+  accessoryReferencesSelf: number;
+  accessoryReferencesDuplicate: number;
   windowStart: string | null;
   windowEnd: string;
 }
