@@ -52,6 +52,10 @@ import { imageBlockUpdate, NO_IMAGE_ROW_BLOCK } from "./medusa-image-block.js";
 import { createDocumentStore } from "../../service-assets/document-store/document-store.provider.js";
 import { MedusaImageLinkRepository } from "./medusa-image-link.repository.js";
 import {
+  decideMedusaSimilarIds,
+  describeMissingSimilarMapping,
+} from "./medusa-relations.policy.js";
+import {
   parseBatchArguments,
   selectBatchTargets,
 } from "./medusa-projection-batch.js";
@@ -383,6 +387,8 @@ export type ProjectionDatabase = Pick<
    * bejarasahoz a szulo-gyerek kapcsolatok kellenek, tehat nem szurheto.
    */
   | "category"
+  /** A gondozott termek-termek kapcsolatok (`ProductRelation`). */
+  | "productRelation"
 >;
 
 export async function runProjectionCli(
@@ -516,6 +522,19 @@ export async function runProjectionCli(
   const imageLinks = new MedusaImageLinkRepository(
     db as unknown as ConstructorParameters<typeof MedusaImageLinkRepository>[0],
   );
+  /**
+   * A TERMEK-LEKEPEZESEK TAROLOJA, KIEMELVE -- KET HELY HASZNALJA.
+   *
+   * Eddig a szolgaltatas konstruktoraban, helyben keletkezett. A ciklusnak is
+   * kell (a kapcsolatok celpontjait oldja fel tomegesen), es KET peldany
+   * ugyanarra a tablara ugyanaz az alak, mint ket literal ugyanarra a kulcsra:
+   * ma egyforman viselkednek, es semmi nem tartja oket egyutt.
+   */
+  const productLinks = new MedusaProductLinkRepository(
+    db as unknown as ConstructorParameters<
+      typeof MedusaProductLinkRepository
+    >[0],
+  );
   if (!forgetOnly) {
     try {
       imageClient = await medusaClientForProjection(
@@ -525,11 +544,7 @@ export async function runProjectionCli(
         fetchImpl,
       );
       service = new MedusaProductProjectionService(
-        new MedusaProductLinkRepository(
-          db as unknown as ConstructorParameters<
-            typeof MedusaProductLinkRepository
-          >[0],
-        ),
+        productLinks,
         imageClient,
         storefrontSalesChannelId(env),
       );
@@ -981,6 +996,50 @@ export async function runProjectionCli(
 
     const publishedImageUrls = published?.urls.length ? published.urls : null;
 
+    /**
+     * A GONDOZOTT "HASONLO" KAPCSOLATOK -> MEDUSA AZONOSITOK.
+     *
+     * Ugyanaz a szerkezet, mint a kategorianal es a markanal: itt csak a
+     * LEKERDEZES all, a szabaly (rendezes, lekepezetlen celpont kihagyasa) a
+     * `medusa-relations.policy.ts` modulban, hogy nev szerint merheto legyen.
+     *
+     * A FELOLDAS TOMEGES, ES EZ NEM KENYELMI KERDES. Termekenkent MEDIAN 15
+     * celpont all (merve az UNAS exportjan, 1421 terméken, maximum 97).
+     * Egyesevel ez nagysagrendileg huszonegyezer plusz lekerdezes egy teljes
+     * vetitesben -- nem lassulas, hanem a futasido nagysagrendi valtozasa.
+     */
+    const similarRows = await db.productRelation.findMany({
+      where: { sourceProductId: product.id, relationType: "SIMILAR" },
+      select: { targetProductId: true, sortOrder: true },
+    });
+    const similar = decideMedusaSimilarIds(
+      similarRows,
+      similarRows.length
+        ? await productLinks.findManyByProductIds(
+            similarRows.map((row) => row.targetProductId),
+          )
+        : new Map<string, string>(),
+    );
+    /**
+     * A HIANY SORA A STDOUT-RA MEGY, NEM A STDERR-RE -- ugyanabbol az okbol,
+     * mint a kategorianal: ez NEM bukas. A vetites lefut, a termek kimegy, csak
+     * kevesebb kapcsolattal. Az elso teljes vetites alatt ez minden terméknél
+     * megjelenhet, es egy egeszseges futas stderr-en riasztasnak latszana.
+     *
+     * A NEVEZO SZAMOLT, NEM A SOROK HOSSZA: a dontes ismetlodes nelkul dolgozik,
+     * es a ket szam ma csak azert egyezik, mert a sema kizarja a duplikaciot
+     * (`@@unique([sourceProductId, targetProductId, relationType])`). Egy
+     * megszorítas-valtozas eseten a hossz-alak NEMA hibava valna.
+     */
+    if (similar.kind === "incomplete")
+      out.stdout(
+        `${describeMissingSimilarMapping(
+          product.id,
+          similar.missing.length,
+          similar.medusaSimilarIds.length + similar.missing.length,
+        )}\n`,
+      );
+
     const outcome = await service!.project(
       {
         id: product.id,
@@ -1000,6 +1059,7 @@ export async function runProjectionCli(
           unasVariantValues: variant.unasVariantValues,
         })),
         medusaCategoryIds: categories.medusaCategoryIds,
+        medusaSimilarIds: similar.medusaSimilarIds,
         /**
          * A JELZO A MI KATEGORIA-FANKBOL JON, nem a forras jelzoibol es nem a
          * Medusa-oldali besorolasbol. A szabaly a `medusa-wysiwyg.policy.ts`
@@ -1073,6 +1133,8 @@ export async function runProjectionCli(
     const kimaradt: string[] = [];
     if (categories.kind === "incomplete") kimaradt.push("kategória");
     if (brand.kind === "unmapped") kimaradt.push("gyűjtemény");
+    if (similar.kind === "incomplete")
+      kimaradt.push(`${similar.missing.length} hasonló kapcsolat`);
 
     out.stdout(
       `${productId}: ${outcome.action} -> ${outcome.medusaProductId}\n` +

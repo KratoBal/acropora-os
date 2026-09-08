@@ -54,6 +54,7 @@ const product: ProjectableProduct = {
   variantRows: [{ sku: "PUMP-1", unasVariantValues: null }],
   /** A fixtura NEM ad teljes kategoria-listat: a mezo igy nem kerul a torzsbe. */
   medusaCategoryIds: null,
+  medusaSimilarIds: [],
   uniquePiece: false,
   medusaCollectionId: null,
   barcode: null,

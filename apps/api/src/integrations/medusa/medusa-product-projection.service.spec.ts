@@ -45,6 +45,7 @@ const product: ProjectableProduct = {
    */
   /** A fixtura NEM ad teljes kategoria-listat: a mezo igy nem kerul a torzsbe. */
   medusaCategoryIds: null,
+  medusaSimilarIds: [],
   uniquePiece: false,
   medusaCollectionId: null,
   barcode: null,
@@ -192,6 +193,7 @@ const MEZO_SORSA: Record<string, "atmegy" | "szandekosan-nem"> = {
   descriptionLong: "atmegy", // -> description (osszefuzve) es metadata
   images: "atmegy", // -> images (sorrendben) es thumbnail (az elso elem)
   medusaCategoryIds: "atmegy", // -> categories, ha van teljes lista
+  medusaSimilarIds: "atmegy", // -> metadata.unas_similar_ids, ha nem ures
   medusaCollectionId: "atmegy", // -> collection_id (a marka gyujtemenye)
   barcode: "atmegy", // -> a valtozat ean vagy upc mezoje, hossz szerint
   unit: "atmegy", // -> metadata.unas_unit
@@ -249,6 +251,7 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
         seoKeywords: "teszt, kulcsszo",
         unasProductUrl: "https://bolt.test/regi-lap",
         medusaCategoryIds: ["cat_1"],
+        medusaSimilarIds: ["prod_medusa_9", "prod_medusa_8"],
         medusaCollectionId: "pcol_1",
         barcode: { field: "ean" as const, value: "4006381333931" },
         unit: "ml",
@@ -278,6 +281,13 @@ describe("MedusaProductProjectionService -- nem ejt mezot csendben", () => {
       primarySku: torzs.variants[0]?.sku === "PUMP-1",
       slug: torzs.handle === "teszt-cim",
       medusaCategoryIds: torzs.categories?.[0]?.id === "cat_1",
+      /**
+       * A SORREND IS SZAMIT, NEM CSAK A JELENLET: a kirakat ezt a sztringet
+       * bontja fel, es a kert sorrendet allitja helyre belole. Egy halmaz-alaku
+       * allitas (`includes`) egy megforditott listat is atengedne.
+       */
+      medusaSimilarIds:
+        torzs.metadata?.unas_similar_ids === "prod_medusa_9,prod_medusa_8",
       medusaCollectionId: torzs.collection_id === "pcol_1",
       barcode: torzs.variants[0]?.ean === "4006381333931",
       unit: torzs.metadata?.unas_unit === "ml",

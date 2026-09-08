@@ -107,6 +107,7 @@ function orphanClearPatch(metadata: unknown): { metadata?: unknown } {
 export interface MedusaLinkDatabase {
   externalReference: {
     findUnique(args: unknown): Promise<ExternalReferenceRow | null>;
+    findMany(args: unknown): Promise<ExternalReferenceRow[]>;
     create(args: unknown): Promise<ExternalReferenceRow>;
     update(args: unknown): Promise<ExternalReferenceRow>;
   };
@@ -152,6 +153,42 @@ export class MedusaProductLinkRepository {
   async findByProductId(productId: string): Promise<MedusaProductLink | null> {
     const row = await this.findRowByProductId(productId);
     return row ? toLink(row) : null;
+  }
+
+  /**
+   * UGYANEZ, TÖMEGESEN -- és ez nem kényelmi kiegészítés.
+   *
+   * A kapcsolatok leképezése termékenként MEDIÁN 15 célpontot old fel (mérve az
+   * UNAS exportján, 1421 terméken, maximum 97). Egyesével ez nagyságrendileg
+   * huszonegyezer külön lekérdezés egy teljes vetítésben -- nem lassulás, hanem
+   * a futásidő nagyságrendi változása.
+   *
+   * A minta nem új: a `medusa-projection.runner.ts` és a
+   * `medusa-projection.scheduler.ts` már `entityId: { in: ... }` alakban kérdez.
+   *
+   * A VISSZATÉRÉSI ÉRTÉK MAP, NEM TÖMB, és ez szándékos: a hívó azonosító
+   * szerint keres benne, és egy tömbből ugyanaz az N+1 keletkezne eggyel
+   * beljebb.
+   *
+   * AMI NINCS BENNE, AZ NINCS LEKÉPEZVE. A hiányzó kulcs nem hiba: egy termék,
+   * amit még nem vetítettünk, egyszerűen nem szerepel. A hívó dolga eldönteni,
+   * mit kezd vele -- itt nem dobunk, mert egy hiányzó él nem indok arra, hogy a
+   * forrás-termék se frissüljön.
+   */
+  async findManyByProductIds(
+    productIds: readonly string[],
+  ): Promise<Map<string, string>> {
+    if (productIds.length === 0) return new Map();
+
+    const rows = await this.database.externalReference.findMany({
+      where: {
+        system: SYSTEM,
+        entityType: ENTITY_TYPE,
+        entityId: { in: [...new Set(productIds)] },
+      },
+    });
+
+    return new Map(rows.map((row) => [row.entityId, row.externalId]));
   }
 
   /**
