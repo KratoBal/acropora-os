@@ -257,8 +257,33 @@ describe("MedusaProjectionScheduler ures kor naploja", () => {
     assert.match(masodik, /12\. ures kor/);
   });
 
+  /**
+   * A NULLAZAS ALLITASA -- ES AZ ELSO VALTOZATA HALOTT VOLT.
+   *
+   * Eloszor KET KULON scheduler-peldannyal irtam meg: egy APPLIED kor az
+   * egyiken, egy SKIPPED a masikon. Az a teszt a rontasra (a nullazas
+   * kivetelere) ZOLD MARADT -- mert egy uj peldanyban a szamlalo amugy is
+   * nullarol indul, tehat semmit nem mert.
+   *
+   * A kalibracio fogta meg, nem az olvasas: a rontas EGYETLEN allitast sem
+   * dontott pirosra. Most EGY peldany all, es a sorrend a lenyeg:
+   *
+   *   ures, ures   -> az elso szol, a masodik nem  (szamlalo: 2)
+   *   APPLIED      -> nullaz
+   *   ures         -> megint ELSO, tehat szolnia KELL
+   *
+   * A nullazas nelkul az utolso kor a HARMADIK lenne egymas utan, es nema.
+   */
   it("egy NEM URES kor nullazza a szamlalot, tehat a kovetkezo ures megint szol", async () => {
-    const { db } = adatbazis([termek()], []);
+    let naprakesz = true;
+    const db = {
+      product: { findMany: async () => [termek()] },
+      externalReference: {
+        findMany: async () =>
+          naprakesz ? [{ entityId: "prod-1", lastSyncedAt: MOST }] : [],
+      },
+    } as unknown as ProjectionSchedulerDatabase;
+
     const { run } = futtato();
     const n = naplo();
     const scheduler = new MedusaProjectionScheduler({
@@ -268,29 +293,24 @@ describe("MedusaProjectionScheduler ures kor naploja", () => {
       logger: n.logger,
     });
 
-    /** Elso kor: van esedekes (soha nem vetitett termek), tehat APPLIED. */
+    assert.equal(await scheduler.runOnce(), "SKIPPED");
+    assert.equal(await scheduler.runOnce(), "SKIPPED");
+    assert.equal(n.sorok.length, 1, "a masodik ures kor nem szolhat");
+
+    naprakesz = false;
     assert.equal(await scheduler.runOnce(), "APPLIED");
 
-    /**
-     * ES MOST UGYANAZ A SCHEDULER egy olyan adatbazissal, ami mar naprakesz.
-     * A szamlalot a fenti APPLIED nullazta, tehat ez ismet ELSO ures kor.
-     */
-    const friss = adatbazis(
-      [termek()],
-      [{ entityId: "prod-1", lastSyncedAt: MOST }],
-    );
-    const ujra = new MedusaProjectionScheduler({
-      db: friss.db,
-      runProjection: run,
-      environment: BEKAPCSOLVA,
-      logger: n.logger,
-    });
-    assert.equal(await ujra.runOnce(), "SKIPPED");
+    naprakesz = true;
+    assert.equal(await scheduler.runOnce(), "SKIPPED");
 
     const uresSorok = n.sorok.filter((sor) => sor.includes("esedekes termek"));
-    assert.equal(uresSorok.length, 1);
-    const [ujraElso] = uresSorok;
-    assert.ok(ujraElso, "kellett volna sor a nullazas utani elso ures kornel");
-    assert.match(ujraElso, /1\. ures kor/);
+    assert.equal(
+      uresSorok.length,
+      2,
+      "a nullazas utani ures kornek szolnia kell",
+    );
+    const utolso = uresSorok[uresSorok.length - 1];
+    assert.ok(utolso, "kellett volna sor a nullazas utani ures kornel");
+    assert.match(utolso, /1\. ures kor/);
   });
 });
