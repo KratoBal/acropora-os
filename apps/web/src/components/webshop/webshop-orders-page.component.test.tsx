@@ -84,7 +84,7 @@ describe("WebshopOrdersPage", () => {
 
     render(createElement(WebshopOrdersPage));
 
-    expect(await screen.findByText("Törölve a UNAS-ban")).toBeInTheDocument();
+    expect(await screen.findAllByText(/Törölve a UNAS-ban/)).toHaveLength(2);
     expect(screen.queryByText("Feldolgozásra vár")).not.toBeInTheDocument();
     expect(screen.getByText("1 tétel")).toBeInTheDocument();
   });
