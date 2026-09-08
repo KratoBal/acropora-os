@@ -56,13 +56,21 @@ function memoriaDb(kezdo: Sor[] = []) {
   };
 
   const irasok: { data: Record<string, unknown> }[] = [];
+  /**
+   * A LEKERDEZESEK NAPLOJA. Ket allitas all rajta, es egyiket sem lehet a
+   * VISSZAKAPOTT terkepbol megmerni: hogy ures bemenetre EL SEM INDUL a
+   * lekerdezes, es hogy az ismetlodo azonositok EGYSZER mennek le.
+   */
+  const lekerdezesek: { where: Record<string, unknown> }[] = [];
 
   const db: MedusaLinkDatabase & {
     sorok: Sor[];
     irasok: { data: Record<string, unknown> }[];
+    lekerdezesek: { where: Record<string, unknown> }[];
   } = {
     sorok,
     irasok,
+    lekerdezesek,
     externalReference: {
       // eslint-disable-next-line @typescript-eslint/require-await
       async findUnique(args: unknown) {
@@ -76,6 +84,27 @@ function memoriaDb(kezdo: Sor[] = []) {
         const { data } = args as { data: Sor };
         sorok.push({ ...data });
         return sorok[sorok.length - 1]!;
+      },
+      // eslint-disable-next-line @typescript-eslint/require-await
+      async findMany(args: unknown) {
+        lekerdezesek.push(
+          (args as { where: Record<string, unknown> }).where
+            ? { where: (args as { where: Record<string, unknown> }).where }
+            : { where: {} },
+        );
+        const { where } = args as {
+          where: {
+            system: string;
+            entityType: string;
+            entityId: { in: string[] };
+          };
+        };
+        return sorok.filter(
+          (s) =>
+            s.system === where.system &&
+            s.entityType === where.entityType &&
+            where.entityId.in.includes(s.entityId),
+        );
       },
       // eslint-disable-next-line @typescript-eslint/require-await
       async update(args: unknown) {
@@ -217,5 +246,106 @@ describe("a jel levétele egy sikeres vetítés után", () => {
     assert.equal(db.irasok.length, 1);
     assert.equal("metadata" in db.irasok[0]!.data, false);
     assert.deepEqual(db.sorok[0]!.metadata, { seo: "marad" });
+  });
+});
+
+/**
+ * A TOMEGES FELOLDAS.
+ *
+ * A negy allitas KULON tesztben all, mert egy kalibracios rontas kimenete a
+ * TESZT nevet irja ki, nem az allitasét -- ket allitas egy tesztben tehat
+ * megkulonboztethetetlen. Az elokeszites kozos fuggveny, a nev-adas nem.
+ */
+describe("a leképezések tömeges feloldása", () => {
+  const parok: Sor[] = [
+    {
+      system: "MEDUSA",
+      entityType: "Product",
+      entityId: "prod-os-1",
+      externalId: "prod_medusa_1",
+      lastSyncedAt: MOST,
+    },
+    {
+      system: "MEDUSA",
+      entityType: "Product",
+      entityId: "prod-os-2",
+      externalId: "prod_medusa_2",
+      lastSyncedAt: MOST,
+    },
+  ];
+
+  it("visszaadja a leképezett termékek azonosítóit", async () => {
+    const repo = new MedusaProductLinkRepository(memoriaDb(parok));
+
+    const terkep = await repo.findManyByProductIds(["prod-os-1", "prod-os-2"]);
+
+    assert.equal(terkep.get("prod-os-1"), "prod_medusa_1");
+    assert.equal(terkep.get("prod-os-2"), "prod_medusa_2");
+  });
+
+  /**
+   * A LEKEPEZETLEN CELPONT KIMARAD, ES NEM DOB.
+   *
+   * Ez dontes, nem mellekhatás: egy meg nem vetitett celpont nem indok arra,
+   * hogy a FORRAS-termek se frissuljon. A hivo dolga megszamolni a kimaradokat
+   * -- ha a szam nem latszik, senki nem veszi eszre, hogy a kapcsolatok fele
+   * hianyzik.
+   */
+  it("a leképezetlen azonosító egyszerűen kimarad a térképből", async () => {
+    const repo = new MedusaProductLinkRepository(memoriaDb(parok));
+
+    const terkep = await repo.findManyByProductIds([
+      "prod-os-1",
+      "prod-os-nincs",
+    ]);
+
+    assert.equal(terkep.has("prod-os-nincs"), false);
+    assert.equal(terkep.size, 1);
+  });
+
+  /** Ures bemenetre a lekerdezes EL SEM INDUL -- nem ures terkepet kap vissza. */
+  it("üres bemenetre le sem kérdez", async () => {
+    const db = memoriaDb(parok);
+    const repo = new MedusaProductLinkRepository(db);
+
+    const terkep = await repo.findManyByProductIds([]);
+
+    assert.equal(terkep.size, 0);
+    assert.equal(db.lekerdezesek.length, 0);
+  });
+
+  /** Az ismetlodo azonosito EGYSZER megy le. */
+  it("az ismétlődő azonosítót egyszer kérdezi le", async () => {
+    const db = memoriaDb(parok);
+    const repo = new MedusaProductLinkRepository(db);
+
+    await repo.findManyByProductIds(["prod-os-1", "prod-os-1", "prod-os-2"]);
+
+    assert.equal(db.lekerdezesek.length, 1);
+    const where = db.lekerdezesek[0]!.where as { entityId: { in: string[] } };
+    assert.deepEqual(where.entityId.in, ["prod-os-1", "prod-os-2"]);
+  });
+
+  /**
+   * ES A KULCS MASIK KET MEZOJE IS SZAMIT. Az `entityType` szabad `String` a
+   * semaban, tehat egy elcsuszas NEM forditasi hiba: nulla sort adna vissza, es
+   * a kimenet ugyanaz lenne, mintha egyetlen termek sem lenne lekepezve.
+   */
+  it("a másik rendszer azonos azonosítójú sorát nem veszi be", async () => {
+    const repo = new MedusaProductLinkRepository(
+      memoriaDb([
+        {
+          system: "UNAS",
+          entityType: "Product",
+          entityId: "prod-os-1",
+          externalId: "unas-1",
+          lastSyncedAt: MOST,
+        },
+      ]),
+    );
+
+    const terkep = await repo.findManyByProductIds(["prod-os-1"]);
+
+    assert.equal(terkep.size, 0);
   });
 });

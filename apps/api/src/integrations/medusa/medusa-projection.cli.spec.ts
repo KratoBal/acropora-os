@@ -566,13 +566,15 @@ describe("which channel a missing-data line goes to", () => {
   it("reads the calls it claims to read", () => {
     const calls = missingReporterCalls();
 
-    // A NEVEZO: ket parancs, harom hiany-jelzessel (a vetitesben kategoria ES
-    // marka, a keszlet-parancsban a hianyzo sor). Ha ez nulla lenne, a
-    // csatorna-allitas nem a kodrol szolna, hanem a sajat mintajarol.
-    assert.equal(calls.length, 3);
+    // A NEVEZO: ket parancs, NEGY hiany-jelzessel (a vetitesben kategoria,
+    // marka ES hasonlo kapcsolat, a keszlet-parancsban a hianyzo sor). Ha ez
+    // nulla lenne, a csatorna-allitas nem a kodrol szolna, hanem a sajat
+    // mintajarol.
+    assert.equal(calls.length, 4);
     assert.deepEqual(calls.map((call) => call.reporter).sort(), [
       "describeMissingBrandMapping",
       "describeMissingCategoryMapping",
+      "describeMissingSimilarMapping",
       "describeMissingStockRow",
     ]);
   });
@@ -1125,6 +1127,20 @@ describe("runProjectionCli -- a torzs, adatbazis nelkul", () => {
       category: {
         findMany: async (args: unknown) => {
           hivasok.push({ metodus: "category.findMany", args });
+          return [];
+        },
+      },
+      /**
+       * A GONDOZOTT KAPCSOLATOK. URES az alapertelmezes, tehat a kapcsolat-ag
+       * nem szol bele a tobbi allitasba.
+       *
+       * A HIVAS A LISTABA IS BEKERUL, mert a SZAMA szamit: termekenkent egy
+       * lekerdezes a kapcsolatokra, es egy a celpontok TOMEGES feloldasara --
+       * nem celpontonkent egy.
+       */
+      productRelation: {
+        findMany: async (args: unknown) => {
+          hivasok.push({ metodus: "productRelation.findMany", args });
           return [];
         },
       },

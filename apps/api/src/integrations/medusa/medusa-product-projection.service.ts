@@ -31,6 +31,10 @@ import {
   type MedusaHandleParositas,
 } from "./medusa-product-handle.js";
 import {
+  MEDUSA_SIMILAR_IDS_KEY,
+  similarIdsMetadataValue,
+} from "./medusa-relations.policy.js";
+import {
   mergeProductMetadata,
   UNIQUE_PIECE_KEY,
 } from "./medusa-metadata-merge.js";
@@ -111,6 +115,25 @@ export interface ProjectableProduct {
    * termek lapjara "Eladva" feliratot tenne.
    */
   uniquePiece: boolean;
+  /**
+   * A GONDOZOTT "HASONLO" KAPCSOLATOK, MAR MEDUSA AZONOSITOKKAL.
+   *
+   * A DONTES A HIVONAL SZULETIK, ide csak az eredmenye erkezik -- ugyanaz a
+   * szerkezet, mint a `medusaCategoryIds` es a `medusaCollectionId` eseteben. A
+   * szabaly (rendezes, lekepezetlen celpont kihagyasa) tiszta fuggvenyben all:
+   * `medusa-relations.policy.ts`.
+   *
+   * ES ITT NINCS `null` ESET, ELTEROEN A KATEGORIATOL. Ott a `null` azt jelenti,
+   * hogy a hivo nem tud TELJES listat adni, es ilyenkor a mezo elmarad, mert egy
+   * reszleges lista letorolhetne a tobbit. Itt a hordozo egy `metadata` kulcs,
+   * aminek mi vagyunk a gazdaja: egy rovidebb lista nem vesz el semmit. A
+   * lekepezetlen celpont ezert KIMARAD, es a hivo szamolja meg.
+   *
+   * AZ URES TOMB JELENTESE: "nincs kapcsolat, amit ki tudnank kuldeni". Ilyenkor
+   * a kulcs NEM megy ki -- es az osszefesules LE IS VESZI a cel oldalrol, mert
+   * `unas_` elotagu kulcs. Ez helyes: egy megszunt kapcsolat tunjon el a boltbol.
+   */
+  medusaSimilarIds: string[];
   /**
    * A MARKA MEDUSA-OLDALI GYUJTEMENY-AZONOSITOJA, vagy `null`.
    *
@@ -690,6 +713,18 @@ export class MedusaProductProjectionService {
        * OSSZEFESULES veszi le a kulcsot (`medusa-metadata-merge.ts`).
        */
       ...(product.uniquePiece ? { [UNIQUE_PIECE_KEY]: "true" } : {}),
+      /**
+       * A KAPCSOLATOK EGY SZTRINGBEN, VESSZOVEL. Ures listara a kulcs KI SEM
+       * MEGY: egy ures ertek ugyanazt jelentene, mint a hianya, csak a bolt
+       * oldalan hagyna maga utan egy ertelmetlen kulcsot.
+       */
+      ...(product.medusaSimilarIds.length > 0
+        ? {
+            [MEDUSA_SIMILAR_IDS_KEY]: similarIdsMetadataValue(
+              product.medusaSimilarIds,
+            ),
+          }
+        : {}),
     };
     /**
      * AMIT MI MONDUNK. A cel oldalon allo TOBBI kulcsot a `mergeProductMetadata`
