@@ -231,6 +231,13 @@ export class MedusaProjectionScheduler
    * AMIT A JEL NEM LAT, es a `medusa-projection-due.ts` fejleceben tetelesen
    * all: a kod valtozasat, a kategoria- es kep-hozzarendelest (azokon a
    * tablakon NINCS `updatedAt` -- merve), es a bolt oldali valtozast.
+   *
+   * A KAPCSOLATOK 2026-09-08-IG UGYANEBBE A LISTABA TARTOZTAK, ES MOSTANTOL NEM.
+   * A `ProductRelation` tablan addig nem volt idobelyeg, tehat egy
+   * kapcsolat-valtozas SOHA nem tette esedekesse a terméket: a kapcsolatok
+   * kimentek az adatbazisba, es a boltba nem jutottak el. Egy egesz estet vitt
+   * el a kerdes, hogy "megallt-e a vetites" -- nem allt meg, csak nem volt MIN
+   * eszrevennie.
    */
   private async esedekesAzonositok(limit: number): Promise<string[]> {
     const termekek = await this.db.product.findMany({
@@ -243,6 +250,16 @@ export class MedusaProjectionScheduler
         variants: { select: { updatedAt: true } },
         unasSnapshot: { select: { updatedAt: true } },
         channelListings: { select: { updatedAt: true } },
+        /**
+         * A KAPCSOLATOK IDOBELYEGE -- ES A `sourceRelations`, NEM A
+         * `targetRelations`.
+         *
+         * A vetites a termek SAJAT metaadataba irja a kapcsolatok azonositoit,
+         * tehat csak azok a sorok szamitanak, ahol EZ a termek a FORRAS. Ha B
+         * csak celpontja A egyik kapcsolatanak, B sajat metaadata nem valtozik
+         * -- a `targetRelations` felvetele folosleges ujravetiteseket hozna.
+         */
+        sourceRelations: { select: { updatedAt: true } },
       },
     });
     if (!termekek.length) return [];
@@ -267,6 +284,7 @@ export class MedusaProjectionScheduler
           ...termek.variants.map((valtozat) => valtozat.updatedAt),
           termek.unasSnapshot?.updatedAt,
           ...termek.channelListings.map((sor) => sor.updatedAt),
+          ...termek.sourceRelations.map((sor) => sor.updatedAt),
         ],
       });
       if (dontes.due) esedekes.push(termek.id);

@@ -1012,6 +1012,22 @@ model ProductRelation {
   sortOrder       Int?
   source          String?
 
+  /// MIERT VAN IDOBELYEG EZEN A TABLAN (nautilus, 2026-09-08).
+  ///
+  /// A Medusa-vetites esedekessege NEGY forras-idobelyeg legkesobbijebol dol el
+  /// (Product, ProductVariant, UnasProductSnapshot, ChannelListing). Amig ezen a
+  /// tablan nem volt idobelyeg, egy kapcsolat-valtozas SOHA nem tette esedekesse
+  /// a termeket: a kapcsolatok kimentek az adatbazisba, es a boltba nem jutottak
+  /// el -- nem hiba miatt, hanem mert nem volt MIN eszrevenni.
+  ///
+  /// A migracio a MEGLEVO sorokat 1970-01-01-re allitja, NEM `now()`-ra. A `now()`
+  /// azt ALLITANA, hogy minden meglevo kapcsolat a migracio pillanataban
+  /// valtozott -- ez hamis, es minden kapcsolattal rendelkezo terméket egyszerre
+  /// tenne esedekesse. Egy soha nem vetitett termek amugy is esedekes
+  /// (NEVER_PROJECTED), tehat a konzervativ ertekkel semmi nem vesz el.
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
   sourceProduct Product @relation("ProductRelationSource", fields: [sourceProductId], references: [id], onDelete: Cascade)
   targetProduct Product @relation("ProductRelationTarget", fields: [targetProductId], references: [id], onDelete: Cascade)
 
