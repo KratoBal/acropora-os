@@ -162,7 +162,7 @@ describe("a betöltés terve", () => {
     // kategoria MAS azonositoval -- a tervnek MEGIS letre kell hoznia a mienket.
     const terv = planCategoryImport(
       rows,
-      [{ id: "pcat_masik", externalId: "999" }],
+      [{ id: "pcat_masik", externalId: "999", handle: "reg" }],
       [],
     );
     assert.deepEqual(
@@ -176,7 +176,7 @@ describe("a betöltés terve", () => {
     // mi azonositonk.
     const terv = planCategoryImport(
       rows,
-      [{ id: "pcat_gyari", externalId: null }],
+      [{ id: "pcat_gyari", externalId: null, handle: "reg" }],
       [],
     );
     assert.deepEqual(
@@ -195,7 +195,7 @@ describe("a betöltés terve", () => {
   it("ami áll a Medusában ÉS van sorunk róla: nincs teendő", () => {
     const terv = planCategoryImport(
       rows,
-      [{ id: "pcat_1", externalId: "1" }],
+      [{ id: "pcat_1", externalId: "1", handle: "reg" }],
       [{ ourId: "1", medusaId: "pcat_1" }],
     );
     assert.deepEqual(terv.skip, ["1"]);
@@ -214,7 +214,7 @@ describe("a betöltés terve", () => {
     // azonositonkat adni.
     const terv = planCategoryImport(
       rows,
-      [{ id: "pcat_1", externalId: "1" }],
+      [{ id: "pcat_1", externalId: "1", handle: "reg" }],
       [],
     );
     assert.deepEqual(terv.mapOnly, [{ ourId: "1", medusaId: "pcat_1" }]);
@@ -249,7 +249,7 @@ describe("a betöltés terve", () => {
     // felulirassal a masodik esetben elvesznenek a termek-hozzarendelesek.
     const terv = planCategoryImport(
       rows,
-      [{ id: "pcat_uj", externalId: "1" }],
+      [{ id: "pcat_uj", externalId: "1", handle: "reg" }],
       [{ ourId: "1", medusaId: "pcat_regi" }],
     );
     assert.deepEqual(terv.conflict, [
@@ -269,5 +269,82 @@ describe("a betöltés terve", () => {
     assert.deepEqual(terv.skip, []);
     assert.deepEqual(terv.mapOnly, []);
     assert.deepEqual(terv.staleMapping, []);
+  });
+});
+
+describe("a hatodik allapot: a tarolt webcim elter a szabalytol", () => {
+  const FA = [
+    { ourId: "1", parentOurId: null, name: "Termékek" },
+    { ourId: "2", parentOurId: "1", name: "Eledelek" },
+  ];
+
+  it("a REGI alaku handle frissitendo, es a par MINDKET tagja megvan", () => {
+    const terv = planCategoryImport(
+      FA,
+      [
+        { id: "pcat_1", externalId: "1", handle: "termékek" },
+        { id: "pcat_2", externalId: "2", handle: "eledelek---termékek" },
+      ],
+      [
+        { ourId: "1", medusaId: "pcat_1" },
+        { ourId: "2", medusaId: "pcat_2" },
+      ],
+    );
+    assert.deepEqual(
+      terv.handleUpdate.map((u) => [u.ourId, u.from, u.to]),
+      [
+        ["1", "termékek", "termekek"],
+        ["2", "eledelek---termékek", "eledelek-termekek"],
+      ],
+    );
+  });
+
+  it("ami MAR a szabaly szerint all, arra NEM keletkezik frissites", () => {
+    const terv = planCategoryImport(
+      FA,
+      [
+        { id: "pcat_1", externalId: "1", handle: "termekek" },
+        { id: "pcat_2", externalId: "2", handle: "eledelek-termekek" },
+      ],
+      [
+        { ourId: "1", medusaId: "pcat_1" },
+        { ourId: "2", medusaId: "pcat_2" },
+      ],
+    );
+    assert.deepEqual(terv.handleUpdate, []);
+  });
+
+  /**
+   * UTKOZESNEL NEM NYULUNK HOZZA, es ez ugyanaz a dontes, mint a tobbi againak:
+   * ott azt sem tudjuk, MELYIK sor a helyes. Egy webcim-frissites egy utkozo
+   * kategorian azt irna at, amirol epp nem tudjuk, hogy a mienk-e.
+   */
+  it("UTKOZO kategoriara nem keletkezik webcim-frissites", () => {
+    const terv = planCategoryImport(
+      FA,
+      [{ id: "pcat_1", externalId: "1", handle: "regi-cim" }],
+      [{ ourId: "1", medusaId: "pcat_MAS" }],
+    );
+    assert.equal(terv.conflict.length, 1);
+    assert.deepEqual(terv.handleUpdate, []);
+  });
+
+  /**
+   * A LEKEPEZES NELKULI (mapOnly) AGON IS FRISSITUNK. Ott a kategoria all a
+   * Medusaban es a mi azonositonkat viseli -- csak a sorunk hianyzik. A webcime
+   * ugyanugy elavult lehet, es ha ezt kihagynank, egy MASODIK nemzedek maradna
+   * fenn eszrevetlenul.
+   */
+  it("a lekepezes nelkuli agon is keletkezik frissites", () => {
+    const terv = planCategoryImport(
+      FA,
+      [{ id: "pcat_1", externalId: "1", handle: "regi-cim" }],
+      [],
+    );
+    assert.deepEqual(terv.mapOnly, [{ ourId: "1", medusaId: "pcat_1" }]);
+    assert.deepEqual(
+      terv.handleUpdate.map((u) => u.to),
+      ["termekek"],
+    );
   });
 });

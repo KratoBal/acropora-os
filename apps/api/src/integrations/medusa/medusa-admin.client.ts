@@ -236,6 +236,16 @@ export interface MedusaCategoryRow {
    * kategoria all elo ugy, hogy minden mas szam helyes.
    */
   is_active: boolean;
+  /**
+   * A TAROLT WEBCIM. Azert kerjuk le, mert enelkul nem lehet megmondani, hogy
+   * egy MAR ALLO kategoria handle-je elter-e a szabalyunktol -- es a frissites
+   * pontosan ezen a kulonbsegen all.
+   *
+   * MERVE 2026-09-08 a teszt peldanyon: a 219 tarolt handle mind GEPIESEN
+   * kepzett (kisbetusites plusz szokoz-csere, hetnel camelCase-vagas is), tehat
+   * nincs kozottuk kezzel atirt. Ha egyszer lesz, az ITT fog latszani.
+   */
+  handle: string;
 }
 
 /**
@@ -498,6 +508,10 @@ export interface MedusaAdminClient {
   listProductCategories(): Promise<MedusaCategoryListResult>;
   /** Egy kategoria letrehozasa. A valaszban jon a Medusa-azonosito. */
   createProductCategory(input: MedusaCategoryInput): Promise<MedusaCategoryRow>;
+  updateProductCategoryHandle(
+    id: string,
+    handle: string,
+  ): Promise<MedusaCategoryRow>;
   /**
    * A GYUJTEMENYEK LISTAJA. NALUNK EZ A MARKA.
    *
@@ -1068,7 +1082,7 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
 
   async listProductCategories(): Promise<MedusaCategoryListResult> {
     const params = new URLSearchParams({
-      fields: "id,name,external_id,parent_category_id,is_active",
+      fields: "id,name,external_id,parent_category_id,is_active,handle",
       limit: String(CATEGORY_LIST_LIMIT),
     });
     const body = await this.request<{
@@ -1116,6 +1130,27 @@ export class HttpMedusaAdminClient implements MedusaAdminClient {
       { method: "POST", body: JSON.stringify(input) },
     );
     return body.collection;
+  }
+
+  /**
+   * CSAK A WEBCIMET IRJA AT. Kulon tipus, nem a letrehozo `Partial`-ja: a
+   * frissites SZANDEKOSAN nem nyul a nevhez, a szulohoz es az aktiv jelolohoz.
+   *
+   * MERVE a telepitett 2.19.0 forrasabol, es ez a muvelet ezen all: az
+   * `UpdateProductCategory` sema elfogadja a `handle` mezot, es a modul
+   * frissitesi utja NEM szarmaztat belole ujat -- a `kebabCase` harom helyen
+   * all (`createProductCategories`, az upsert LETREHOZO aga, es a gyujtemeny),
+   * egyik sem a frissitesen. Vagyis amit itt kuldunk, azt tarolja el.
+   */
+  async updateProductCategoryHandle(
+    id: string,
+    handle: string,
+  ): Promise<MedusaCategoryRow> {
+    const body = await this.request<{ product_category: MedusaCategoryRow }>(
+      `/admin/product-categories/${encodeURIComponent(id)}`,
+      { method: "POST", body: JSON.stringify({ handle }) },
+    );
+    return body.product_category;
   }
 
   async createProductCategory(

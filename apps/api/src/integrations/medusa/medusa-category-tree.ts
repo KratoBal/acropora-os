@@ -1,3 +1,5 @@
+import { categoryHandle } from "./medusa-category-handle.js";
+
 /**
  * A KATEGORIAFA ATVITELE A MEDUSABA: a DONTES resze, a halozat nelkul.
  *
@@ -81,9 +83,21 @@ export interface CategoryRow {
 }
 
 /** Amit a Medusa mar tud egy kategoriarol, amikor parositunk. */
+/** Egy webcim-frissites: MELYIK kategoria, MIROL MIRE. */
+export interface CategoryHandleUpdate {
+  ourId: string;
+  medusaId: string;
+  /** A Medusaban MA tarolt webcim -- a csere utan mar sehol nem letezik. */
+  from: string;
+  /** Amit a mai szabaly ad. */
+  to: string;
+}
+
 export interface ExistingCategory {
   id: string;
   externalId: string | null;
+  /** A Medusaban MA tarolt webcim. Enelkul a hatodik allapot nem eldontheto. */
+  handle: string;
 }
 
 /** Egy mar meglevo lekepezes-sor nalunk (`ExternalReference`, MEDUSA/Category). */
@@ -141,6 +155,20 @@ export interface CategoryImportPlan {
   staleMapping: string[];
   /** Amihez ket kulonbozo Medusa-azonosito tartozik. Lasd lent. */
   conflict: CategoryMappingConflict[];
+  /**
+   * A HATODIK ALLAPOT: mar all a Medusaban, a lekepezes is helyes, DE a tarolt
+   * webcime elter attol, amit a mai szabaly adna.
+   *
+   * MIERT KELL KULON, ES MIERT NEM A `skip` RESZE: az ot korabbi allapot
+   * mindegyike a LETEZESROL szolt (van-e ott, van-e sorunk ra). Ez az elso, ami
+   * a TARTALMAROL -- es ezert az egyetlen, ami frissit, nem letrehoz.
+   *
+   * A `from` MEZO NEM DISZ. A kisbetusites es a karakter-csere EGYIRANYU: a
+   * csere utan a regi cim SEHOL nem letezik tobbe. Ha valaha kiderul, hogy egy
+   * regi cim kint van (kepernyokep, levelezes, megosztott hivatkozas), a
+   * regi-uj par az EGYETLEN, amibol atiranyitas kesziheto.
+   */
+  handleUpdate: CategoryHandleUpdate[];
 }
 
 /** A fejlec utan minden sor egy kategoria. Tab-elvalasztott. */
@@ -300,19 +328,42 @@ export function planCategoryImport(
     if (cat.externalId) medusaIdMiAzonositonkra.set(cat.externalId, cat.id);
   const sorunk = new Map(mappings.map((m) => [m.ourId, m.medusaId]));
 
+  const taroltHandle = new Map(existing.map((cat) => [cat.id, cat.handle]));
+
   const create: CategoryCreate[] = [];
   const skip: string[] = [];
   const mapOnly: CategoryMapping[] = [];
   const staleMapping: string[] = [];
   const conflict: CategoryMappingConflict[] = [];
+  const handleUpdate: CategoryHandleUpdate[] = [];
+
+  /**
+   * A HATODIK ALLAPOT FELVETELE. Csak ott, ahol a kategoria MAR ALL es a
+   * lekepezes rendben van -- utkozesnel NEM nyulunk hozza, mert ott azt sem
+   * tudjuk, melyik sor a helyes.
+   */
+  const frissitendo = (ourId: string, medusaId: string, cim: string) => {
+    const tarolt = taroltHandle.get(medusaId);
+    if (tarolt === undefined) return;
+    const kell = categoryHandle(cim);
+    if (tarolt !== kell)
+      handleUpdate.push({ ourId, medusaId, from: tarolt, to: kell });
+  };
 
   for (const sor of rows) {
     const aMedusaban = medusaIdMiAzonositonkra.get(sor.ourId) ?? null;
     const aSorunk = sorunk.get(sor.ourId) ?? null;
 
+    const cim = categoryTitle(
+      sor.name,
+      sor.parentOurId ? (nevek.get(sor.parentOurId) ?? null) : null,
+    );
+
     if (aMedusaban && aSorunk) {
-      if (aSorunk === aMedusaban) skip.push(sor.ourId);
-      else
+      if (aSorunk === aMedusaban) {
+        skip.push(sor.ourId);
+        frissitendo(sor.ourId, aMedusaban, cim);
+      } else
         conflict.push({
           ourId: sor.ourId,
           mappedMedusaId: aSorunk,
@@ -323,18 +374,16 @@ export function planCategoryImport(
 
     if (aMedusaban) {
       mapOnly.push({ ourId: sor.ourId, medusaId: aMedusaban });
+      frissitendo(sor.ourId, aMedusaban, cim);
       continue;
     }
 
     if (aSorunk) staleMapping.push(sor.ourId);
     create.push({
       ourId: sor.ourId,
-      title: categoryTitle(
-        sor.name,
-        sor.parentOurId ? (nevek.get(sor.parentOurId) ?? null) : null,
-      ),
+      title: cim,
       parentOurId: sor.parentOurId,
     });
   }
-  return { create, skip, mapOnly, staleMapping, conflict };
+  return { create, skip, mapOnly, staleMapping, conflict, handleUpdate };
 }

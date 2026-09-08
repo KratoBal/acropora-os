@@ -34,6 +34,13 @@ const URES_TERV = {
   mapOnly: [],
   staleMapping: [],
   conflict: [],
+  /**
+   * A HATODIK ALLAPOT A FIXTURABAN IS. A `terv` parametere `unknown`, tehat a
+   * fordito NEM szol, ha egy mezo hianyzik belole -- ez a laza varrat pontosan
+   * az az alak, amit a lapunk gyujt: a hivo (`describePlan`) hasznalja, a
+   * fixtura nem adja, es a hiba csak FUTASKOR jott elo.
+   */
+  handleUpdate: [],
 };
 
 function szolgaltatasDupla(

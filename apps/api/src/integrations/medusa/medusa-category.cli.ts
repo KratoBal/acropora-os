@@ -49,6 +49,7 @@ export function describePlan(plan: {
   mapOnly: unknown[];
   staleMapping: string[];
   conflict: { ourId: string }[];
+  handleUpdate: { ourId: string; from: string; to: string }[];
 }): string {
   const sorok = [
     `Létrehozandó: ${plan.create.length}`,
@@ -56,7 +57,17 @@ export function describePlan(plan: {
     `Már áll, de a leképezés hiányzik: ${plan.mapOnly.length}`,
     `Elavult leképezés (újra létrehozandó): ${plan.staleMapping.length}`,
     `Ütközés (érintetlen marad): ${plan.conflict.length}`,
+    `Webcím-frissítés (a tárolt eltér a szabálytól): ${plan.handleUpdate.length}`,
   ];
+  /**
+   * A REGI ES AZ UJ CIM EGYMAS MELLETT, TETELESEN -- nem darabszamkent.
+   *
+   * A csere EGYIRANYU: utana a regi cim sehol nem letezik tobbe. Ha valaha
+   * kiderul, hogy egy regi cim kint van (kepernyokep, levelezes, megosztott
+   * hivatkozas), ez a par az EGYETLEN, amibol atiranyitas keszitheto.
+   */
+  for (const u of plan.handleUpdate)
+    sorok.push(`  ${u.ourId}: ${u.from}  ->  ${u.to}`);
   if (plan.conflict.length)
     sorok.push(
       `Az ütköző kategóriák: ${plan.conflict.map((c) => c.ourId).join(", ")}`,

@@ -21,14 +21,14 @@ const MOST = new Date("2026-09-02T22:00:00.000Z");
 
 /** Ugyanaz, mint a `medusaDupla`, de a Medusa ELDOBJA az aktiv jelolot. */
 function medusaDuplaAmiEldobjaAzAktivat() {
-  const { client, letrehozva } = medusaDupla();
+  const { client, letrehozva, frissitve } = medusaDupla();
   const eredeti = client.createProductCategory.bind(client);
   client.createProductCategory = async (input) => {
     const sor = await eredeti(input);
     sor.is_active = false;
     return sor;
   };
-  return { client, letrehozva };
+  return { client, letrehozva, frissitve };
 }
 
 /** A mi fank: egy gyoker es ket gyerek, a masodik a masodik szinten. */
@@ -39,6 +39,7 @@ const FA: OurCategoryNode[] = [
 
 function medusaDupla(kezdo: MedusaCategoryRow[] = [], truncated = false) {
   const letrehozva: MedusaCategoryInput[] = [];
+  const frissitve: { id: string; handle: string }[] = [];
   const keletkezett: MedusaCategoryRow[] = [];
   let n = 0;
   const client = {
@@ -50,6 +51,19 @@ function medusaDupla(kezdo: MedusaCategoryRow[] = [], truncated = false) {
     // eslint-disable-next-line @typescript-eslint/require-await
     async listProductCategories() {
       return { rows: [...kezdo, ...keletkezett], truncated };
+    },
+    /**
+     * A FRISSITES A DUPLABAN IS ELVEGZI, AMIT A VALODI: atirja a tarolt
+     * handle-t. Egy no-op dupla itt azt engedne at, hogy a szolgaltatas ki sem
+     * kuldi -- es a hozza tartozo allitas nem tudna elbukni.
+     */
+    // eslint-disable-next-line @typescript-eslint/require-await
+    async updateProductCategoryHandle(id: string, handle: string) {
+      frissitve.push({ id, handle });
+      const sor = [...kezdo, ...keletkezett].find((x) => x.id === id);
+      if (!sor) throw new Error(`nincs ilyen kategoria: ${id}`);
+      sor.handle = handle;
+      return sor;
     },
     // eslint-disable-next-line @typescript-eslint/require-await
     async createProductCategory(input: MedusaCategoryInput) {
@@ -67,12 +81,14 @@ function medusaDupla(kezdo: MedusaCategoryRow[] = [], truncated = false) {
         external_id: input.external_id,
         parent_category_id: input.parent_category_id ?? null,
         is_active: input.is_active,
+        /** A dupla azt adja vissza, amit KAPOTT -- a valodi Medusa is ezt teszi. */
+        handle: input.handle,
       };
       keletkezett.push(sor);
       return sor;
     },
   } as unknown as MedusaAdminClient;
-  return { client, letrehozva };
+  return { client, letrehozva, frissitve };
 }
 
 /**
@@ -214,6 +230,7 @@ describe("a kategóriafa betöltése", () => {
         external_id: "cat_gyoker",
         parent_category_id: null,
         is_active: true,
+        handle: "reg-cat_gyoker",
       },
     ]);
     const { links, hivasok } = taroloDupla();
@@ -270,6 +287,7 @@ describe("a kategóriafa betöltése", () => {
         external_id: "cat_gyoker",
         parent_category_id: null,
         is_active: true,
+        handle: "reg-cat_gyoker",
       },
     ]);
     const { links, hivasok } = taroloDupla([
@@ -337,6 +355,40 @@ describe("a kategóriafa betöltése", () => {
       assert.equal(be.handle, categoryHandle(be.name));
       assert.match(be.handle, /^[a-z0-9]+(?:-[a-z0-9]+)*$/);
     }
+  });
+
+  /**
+   * A VARRAT A FRISSITESI UTON: a terv megmondja, MIT kellene atirni, de hogy a
+   * szolgaltatas ki is KULDI-e, azt csak az mutatja meg, amit a dupla KAPOTT.
+   */
+  it("a webcim-frissitest KIKULDI, es a riport a REGI cimet is megorzi", async () => {
+    const { client, frissitve } = medusaDupla([
+      {
+        id: "pcat_regi",
+        name: "Halak - Termékek",
+        external_id: "cat_hal",
+        parent_category_id: null,
+        is_active: true,
+        handle: "halak---termékek",
+      },
+    ]);
+    const { links } = taroloDupla([
+      {
+        categoryId: "cat_hal",
+        medusaCategoryId: "pcat_regi",
+        lastSyncedAt: MOST,
+      },
+    ]);
+    const service = new MedusaCategoryImportService(links);
+    const report = await service.run(client, FA, MOST);
+
+    assert.deepEqual(frissitve, [
+      { id: "pcat_regi", handle: "halak-termekek" },
+    ]);
+    assert.deepEqual(
+      report.handleUpdates.map((u) => [u.from, u.to]),
+      [["halak---termékek", "halak-termekek"]],
+    );
   });
 
   /**
