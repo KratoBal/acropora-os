@@ -22,6 +22,7 @@ import {
   type CategoryMapping,
   type ExistingCategory,
   type OurCategoryNode,
+  type CategoryHandleUpdate,
 } from "./medusa-category-tree.js";
 
 /**
@@ -46,7 +47,7 @@ import {
  * atnevezi a mezot, ez az egy sor pirosodik ki.
  */
 function tervAlak(row: MedusaCategoryRow): ExistingCategory {
-  return { id: row.id, externalId: row.external_id };
+  return { id: row.id, externalId: row.external_id, handle: row.handle };
 }
 
 /**
@@ -92,6 +93,15 @@ export interface CategoryImportReport {
    * kivetel tobbet rontana, mint amennyit er.
    */
   lostWords: string[];
+  /**
+   * AZ ELVEGZETT WEBCIM-FRISSITESEK, TETELESEN: melyik kategoria, MIROL MIRE.
+   *
+   * A `from` mezo a lenyeg. A csere EGYIRANYU -- utana a regi cim sehol nem
+   * letezik tobbe, sem a Medusaban, sem nalunk. Ha valaha kiderul, hogy egy
+   * regi cim kint van (kepernyokep, levelezes, megosztott hivatkozas), ez a par
+   * az EGYETLEN, amibol atiranyitas keszitheto. Ezert TETELES, nem darabszam.
+   */
+  handleUpdates: CategoryHandleUpdate[];
   /**
    * AZ ELLENORZES, AMIT KULONBEN EMLEKEZETBOL KELLENE ELVEGEZNI.
    *
@@ -184,6 +194,7 @@ export class MedusaCategoryImportService {
       conflicts: terv.conflict.map((c) => c.ourId),
       blockedByConflict: [],
       lostWords: [],
+      handleUpdates: [],
       verification: {
         carryingOurId: 0,
         activeAmongThem: 0,
@@ -267,6 +278,24 @@ export class MedusaCategoryImportService {
         await this.links.link(teendo.ourId, created.id, now);
         report.created += 1;
       }
+    }
+
+    /**
+     * A HATODIK ALLAPOT VEGREHAJTASA: csak a webcimet irja at.
+     *
+     * A NEVHEZ, A SZULOHOZ ES AZ AKTIV JELOLOHOZ NEM NYUL -- a kliens muvelete
+     * is csak a `handle` mezot kuldi. Igy a 4800 termek-kategoria hozzarendeles
+     * es a lekepezes-sorok erintetlenek maradnak: a Medusa-oldali azonosito nem
+     * valtozik, csak a cim.
+     *
+     * ES A REGI CIM A RIPORTBA KERUL, MIELOTT ELVESZNE.
+     */
+    for (const frissites of terv.handleUpdate) {
+      await client.updateProductCategoryHandle(
+        frissites.medusaId,
+        frissites.to,
+      );
+      report.handleUpdates.push(frissites);
     }
 
     /**
