@@ -64,6 +64,8 @@ export interface SalesOrderListWithRelations {
   orderedAt: Date | null;
   createdAt: Date;
   unasDeletedAt: Date | null;
+  customerId?: string | null;
+  businessStatusEvents?: Array<{ createdAt: Date }>;
   _count: { lines: number };
 }
 
@@ -147,6 +149,12 @@ export function toUnasOrderDetail(
 export function toUnasOrderListItem(
   order: SalesOrderListWithRelations,
   metadata: UnasOrderMetadata | null = null,
+  buyerSignals: UnasOrderListItem["buyerSignals"] = {
+    isNewCustomer: false,
+    otherOpenOrderCount: 0,
+    otherUnsuccessfulOrderCount: 0,
+    isRegistered: false,
+  },
 ): UnasOrderListItem {
   return {
     id: order.id,
@@ -161,6 +169,9 @@ export function toUnasOrderListItem(
     lineCount: order._count.lines,
     createdAt: order.createdAt.toISOString(),
     orderedAt: order.orderedAt?.toISOString() ?? null,
+    statusChangedAt:
+      order.businessStatusEvents?.[0]?.createdAt.toISOString() ?? null,
+    buyerSignals,
     unasDeletedAt: order.unasDeletedAt?.toISOString() ?? null,
   };
 }

@@ -26,29 +26,62 @@ function formatHuf(value: string): string {
   return `${Number(value).toLocaleString("hu-HU", { maximumFractionDigits: 2 })} Ft`;
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  DRAFT: "Piszkozat",
-  PENDING: "Függőben",
-  CONFIRMED: "Visszaigazolva",
-  PICKING: "Szedés alatt",
-  PACKED: "Csomagolva",
-  SHIPPED: "Kiszállítva",
-  COMPLETED: "Lezárva",
-  CANCELLED: "Törölve",
-  ON_HOLD: "Felfüggesztve",
-};
+const DETAILED_STATUS = {
+  "Feldolgozásra vár": { icon: "●", row: "bg-rose-50", closed: false },
+  Visszaigazolva: { icon: "✓", row: "bg-emerald-50", closed: false },
+  "Készletezés alatt": { icon: "◆", row: "bg-amber-50", closed: false },
+  Kiszállítás: { icon: "➜", row: "bg-orange-50", closed: false },
+  Átvehető: { icon: "⌂", row: "bg-sky-50", closed: false },
+  "Megrendelés lezárva": { icon: "■", row: "bg-violet-50", closed: true },
+  "Sikertelenül lezárt rendelés": {
+    icon: "×",
+    row: "bg-pink-50",
+    closed: true,
+  },
+} as const;
+
+type DetailedStatus = keyof typeof DETAILED_STATUS;
+
+function isDetailedStatus(label: string | null): label is DetailedStatus {
+  return (
+    label !== null &&
+    Object.prototype.hasOwnProperty.call(DETAILED_STATUS, label)
+  );
+}
+
+function detailedStatus(order: UnasOrderListItem) {
+  return isDetailedStatus(order.unasStatusLabel)
+    ? DETAILED_STATUS[order.unasStatusLabel]
+    : null;
+}
+
+export function formatStatusAge(
+  value: string | null,
+  now = Date.now(),
+): string {
+  if (value === null) return "Státuszváltás ideje ismeretlen";
+  const minutes = Math.max(
+    0,
+    Math.floor((now - new Date(value).getTime()) / 60_000),
+  );
+  if (minutes < 60) return `${minutes} perce`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} órája`;
+  return `${Math.floor(hours / 24)} napja`;
+}
 
 function statusVariant(
   order: UnasOrderListItem,
 ): "success" | "danger" | "neutral" {
-  if (order.unasDeletedAt || order.status === "CANCELLED") return "danger";
-  if (order.status === "COMPLETED") return "success";
+  if (order.unasDeletedAt) return "danger";
+  if (order.unasStatusLabel === "Sikertelenül lezárt rendelés") return "danger";
+  if (order.unasStatusLabel === "Megrendelés lezárva") return "success";
   return "neutral";
 }
 
 function statusLabel(order: UnasOrderListItem): string {
   if (order.unasDeletedAt) return "Törölve a UNAS-ban";
-  return order.unasStatusLabel ?? STATUS_LABEL[order.status] ?? order.status;
+  return order.unasStatusLabel ?? "Ismeretlen állapot";
 }
 
 function formatOrderDate(order: UnasOrderListItem): string {
@@ -109,6 +142,7 @@ export function WebshopOrdersPage() {
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [deletionCheck, setDeletionCheck] =
     useState<DeletionCheckState>("loading");
+  const [view, setView] = useState<"open" | "all">("open");
 
   const loadOrders = useCallback(() => {
     if (!canView) return;
@@ -177,6 +211,10 @@ export function WebshopOrdersPage() {
     );
   }
 
+  const visibleOrders = orders.filter(
+    (order) => view === "all" || detailedStatus(order)?.closed === false,
+  );
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -216,66 +254,125 @@ export function WebshopOrdersPage() {
       <Card>
         <CardHeader>
           <h2 className="text-sm font-semibold text-slate-900">Rendelések</h2>
-          <span className="text-xs text-slate-500">
-            {orders.length.toLocaleString("hu-HU")} rendelés
-          </span>
+          <label className="text-xs text-slate-500">
+            Nézet{" "}
+            <select
+              aria-label="Rendelések nézete"
+              value={view}
+              onChange={(event) =>
+                setView(event.target.value === "all" ? "all" : "open")
+              }
+            >
+              <option value="open">Nyitott</option>
+              <option value="all">Összes</option>
+            </select>
+            {" · "}
+            {visibleOrders.length.toLocaleString("hu-HU")} rendelés
+          </label>
         </CardHeader>
         <CardContent className="space-y-2">
           {loading ? <Skeleton className="h-4 w-1/3" /> : null}
-          {!loading && orders.length === 0 ? (
+          {!loading && visibleOrders.length === 0 ? (
             <p className="text-sm text-slate-500">
               Még nincs szinkronizált webshop rendelés.
             </p>
           ) : null}
-          {orders.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] border-collapse text-left">
-                <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                  <tr>
-                    <th className="px-5 py-3">Azonosító</th>
-                    <th className="px-4 py-3">Dátum</th>
-                    <th className="px-4 py-3">Vevő</th>
-                    <th className="px-4 py-3">Fizetés / szállítás</th>
-                    <th className="px-4 py-3 text-right">Összeg</th>
-                    <th className="px-5 py-3">Státusz</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
-                  {orders.map((order) => (
-                    <tr
-                      key={order.id}
-                      onClick={() => router.push(`/webshop/${order.id}`)}
-                      className="cursor-pointer transition hover:bg-slate-50"
-                    >
-                      <td className="px-5 py-3 text-sm font-medium text-slate-900">
-                        {order.orderNumber}
-                        <p className="mt-0.5 text-xs font-normal text-slate-400">
-                          {order.lineCount} tétel
-                        </p>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">
-                        {formatOrderDate(order)}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">
-                        {order.buyerName ?? "Ismeretlen vevő"}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-500">
-                        {order.paymentName ?? "—"}
-                        {order.shippingName ? ` · ${order.shippingName}` : ""}
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm font-semibold text-slate-900">
-                        {formatHuf(order.totalGross)}
-                      </td>
-                      <td className="px-5 py-3">
-                        <Badge variant={statusVariant(order)}>
-                          {statusLabel(order)}
-                        </Badge>
-                      </td>
+          {visibleOrders.length > 0 ? (
+            <>
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full min-w-[720px] border-collapse text-left">
+                  <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-5 py-3">Azonosító</th>
+                      <th className="px-4 py-3">Dátum</th>
+                      <th className="px-4 py-3">Vevő</th>
+                      <th className="px-4 py-3">Fizetés / szállítás</th>
+                      <th className="px-4 py-3 text-right">Összeg</th>
+                      <th className="px-5 py-3">Státusz</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {visibleOrders.map((order) => (
+                      <tr
+                        key={order.id}
+                        onClick={() => router.push(`/webshop/${order.id}`)}
+                        className={`cursor-pointer transition hover:bg-slate-50 ${detailedStatus(order)?.row ?? "bg-white"}`}
+                      >
+                        <td className="px-5 py-3 text-sm font-medium text-slate-900">
+                          {order.orderNumber}
+                          <p className="mt-0.5 text-xs font-normal text-slate-400">
+                            {order.lineCount} tétel
+                          </p>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-600">
+                          {formatOrderDate(order)}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-600">
+                          {order.buyerName ?? "Ismeretlen vevő"}
+                          <span
+                            className="ml-2 inline-flex gap-1 text-xs"
+                            aria-label="Vevői jelzések"
+                          >
+                            {order.buyerSignals.isNewCustomer ? (
+                              <span title="Első vásárlás">★</span>
+                            ) : null}
+                            {order.buyerSignals.otherOpenOrderCount > 0 ? (
+                              <span title="Másik nyitott rendelés">
+                                +{order.buyerSignals.otherOpenOrderCount}
+                              </span>
+                            ) : null}
+                            {order.buyerSignals.otherUnsuccessfulOrderCount >
+                            0 ? (
+                              <span title="Másik sikertelen rendelés">
+                                ×
+                                {order.buyerSignals.otherUnsuccessfulOrderCount}
+                              </span>
+                            ) : null}
+                            {!order.buyerSignals.isRegistered ? (
+                              <span title="Vendég vásárlás">♧</span>
+                            ) : null}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-500">
+                          {order.paymentName ?? "—"}
+                          {order.shippingName ? ` · ${order.shippingName}` : ""}
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm font-semibold text-slate-900">
+                          {formatHuf(order.totalGross)}
+                        </td>
+                        <td className="px-5 py-3">
+                          <Badge variant={statusVariant(order)}>
+                            {detailedStatus(order)?.icon} {statusLabel(order)}
+                          </Badge>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {formatStatusAge(order.statusChangedAt)}
+                          </p>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="space-y-2 md:hidden">
+                {visibleOrders.map((order) => (
+                  <button
+                    key={order.id}
+                    type="button"
+                    onClick={() => router.push(`/webshop/${order.id}`)}
+                    className={`w-full rounded border p-3 text-left text-sm ${detailedStatus(order)?.row ?? "bg-white"}`}
+                  >
+                    <p className="font-medium">
+                      {detailedStatus(order)?.icon} {statusLabel(order)} ·{" "}
+                      {formatStatusAge(order.statusChangedAt)}
+                    </p>
+                    <p>{order.buyerName ?? "Ismeretlen vevő"}</p>
+                    <p className="text-xs text-slate-500">
+                      {order.orderNumber}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </>
           ) : null}
         </CardContent>
       </Card>

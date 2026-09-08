@@ -42,6 +42,15 @@ export interface UnasOrderListItem {
   lineCount: number;
   createdAt: string;
   orderedAt: string | null;
+  /** When the currently mirrored detailed UNAS status was last recorded. */
+  statusChangedAt: string | null;
+  /** Facts calculated from this buyer's other UNAS orders, not guessed from this row. */
+  buyerSignals: {
+    isNewCustomer: boolean;
+    otherOpenOrderCount: number;
+    otherUnsuccessfulOrderCount: number;
+    isRegistered: boolean;
+  };
   /** Physical UNAS deletion marker. Takes display/filter precedence over the last mirrored UNAS status label. */
   unasDeletedAt: string | null;
 }

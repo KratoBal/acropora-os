@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   deletionCheckSentence,
+  formatStatusAge,
   WebshopOrdersPage,
 } from "./webshop-orders-page";
 
@@ -67,6 +68,13 @@ describe("WebshopOrdersPage", () => {
           lineCount: 1,
           createdAt: "2026-08-08T14:06:00.000Z",
           orderedAt: "2026-08-08T14:05:00.000Z",
+          statusChangedAt: "2026-08-08T14:05:00.000Z",
+          buyerSignals: {
+            isNewCustomer: false,
+            otherOpenOrderCount: 0,
+            otherUnsuccessfulOrderCount: 0,
+            isRegistered: true,
+          },
           unasDeletedAt: "2026-08-09T09:00:00.000Z",
         },
       ],
@@ -79,6 +87,14 @@ describe("WebshopOrdersPage", () => {
     expect(await screen.findByText("Törölve a UNAS-ban")).toBeInTheDocument();
     expect(screen.queryByText("Feldolgozásra vár")).not.toBeInTheDocument();
     expect(screen.getByText("1 tétel")).toBeInTheDocument();
+  });
+});
+
+describe("részletes státusz megjelenítése", () => {
+  it("a magyar Kiszállítás státusz színét, saját ikonját és korát mutatja", () => {
+    const now = new Date("2026-09-08T12:00:00.000Z").getTime();
+
+    expect(formatStatusAge("2026-09-05T12:00:00.000Z", now)).toBe("3 napja");
   });
 });
 

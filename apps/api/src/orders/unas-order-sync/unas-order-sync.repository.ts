@@ -69,6 +69,11 @@ const detailInclude = {
   },
 } as const;
 const listInclude = {
+  businessStatusEvents: {
+    select: { createdAt: true },
+    orderBy: { createdAt: "desc" },
+    take: 1,
+  },
   _count: {
     select: { lines: { where: { unasRemovedAt: null } } },
   },
@@ -1926,13 +1931,54 @@ export class UnasOrderSyncRepository extends Repository {
       }),
       this.syncDatabase.salesOrder.count({ where }),
     ]);
+    const customerIds = items.flatMap((item) =>
+      item.customerId === null ? [] : [item.customerId],
+    );
+    const customerOrders =
+      customerIds.length === 0
+        ? []
+        : await this.syncDatabase.salesOrder.findMany({
+            where: { channel: "UNAS", customerId: { in: customerIds } },
+            include: listInclude,
+          });
     const metadataByOrderId = await this.loadMetadataFor(
-      items.map((item) => item.id),
+      [...items, ...customerOrders].map((item) => item.id),
     );
     return {
-      items: items.map((item) =>
-        toUnasOrderListItem(item, metadataByOrderId.get(item.id) ?? null),
-      ),
+      items: items.map((item) => {
+        const relatedOrders =
+          item.customerId === null
+            ? []
+            : customerOrders.filter(
+                (customerOrder) => customerOrder.customerId === item.customerId,
+              );
+        const otherOrders = relatedOrders.filter(
+          (customerOrder) => customerOrder.id !== item.id,
+        );
+        const statusOf = (customerOrder: typeof item): string | null =>
+          metadataByOrderId.get(customerOrder.id)?.unasStatus ?? null;
+        const buyerSignals = {
+          isNewCustomer: item.customerId !== null && relatedOrders.length === 1,
+          otherOpenOrderCount: otherOrders.filter((customerOrder) => {
+            const status = statusOf(customerOrder);
+            return (
+              status !== null &&
+              status !== "Megrendelés lezárva" &&
+              status !== "Sikertelenül lezárt rendelés"
+            );
+          }).length,
+          otherUnsuccessfulOrderCount: otherOrders.filter(
+            (customerOrder) =>
+              statusOf(customerOrder) === "Sikertelenül lezárt rendelés",
+          ).length,
+          isRegistered: item.customerId !== null,
+        };
+        return toUnasOrderListItem(
+          item,
+          metadataByOrderId.get(item.id) ?? null,
+          buyerSignals,
+        );
+      }),
       pagination: {
         page: query.page,
         pageSize: query.pageSize,
