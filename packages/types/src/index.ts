@@ -427,6 +427,7 @@ export type {
   ProductListItem,
   ProductOrigin,
   ProductCatalogAuthority,
+  ProductAdvisorKind,
   UnasProductMirrorDetail,
   ProductListResponse,
   ProductUpdateInput,
