@@ -253,6 +253,20 @@ export interface MedusaCategoryInput {
   external_id: string;
   parent_category_id?: string | null;
   /**
+   * A WEBCIM, ES KOTELEZO -- UGYANABBOL AZ OKBOL, MINT AZ `is_active`.
+   *
+   * A Medusa a NEVBOL szarmaztat, ha nem kuldunk
+   * (`productCategory.handle ??= kebabCase(name)`), es a kategoria-agon NEM
+   * ellenorzi az ervenyesseget: az `isValidHandle` a TERMEK againban all.
+   * Merve 2026-09-08 a telepitett 2.19.0 forrasabol, es a teszt peldanyon:
+   * 219 kategoriabol 214 handle-je ervenytelen, csendben letrejove.
+   *
+   * Ezert nem elhagyhato mezo: az ertek DONTES (lasd
+   * `medusa-category-handle.ts`), es a dontest ne lehessen veletlenul
+   * kihagyni. Elhagyhatokent a hivо azt kapna, amit a Medusa talal ki.
+   */
+  handle: string;
+  /**
    * KOTELEZO, ES EZ NEM SZIGOR: az ertek DONTES, es a dontest ne lehessen
    * veletlenul elhagyni. Az indok a tipus alatt all.
    */

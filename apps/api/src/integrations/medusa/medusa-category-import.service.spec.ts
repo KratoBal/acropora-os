@@ -6,6 +6,7 @@ import type {
   MedusaCategoryInput,
   MedusaCategoryRow,
 } from "./medusa-admin.client.js";
+import { categoryHandle } from "./medusa-category-handle.js";
 import {
   MedusaCategoryImportRefusedError,
   MedusaCategoryImportService,
@@ -316,5 +317,42 @@ describe("a kategóriafa betöltése", () => {
     const report = await service.run(client, FA, MOST);
     assert.deepEqual(report.blockedByConflict, []);
     assert.equal(letrehozva.length, 2);
+  });
+
+  /**
+   * A VARRAT: a tiszta fuggveny allitasai NEM mondjak meg, hogy a szolgaltatas
+   * TENYLEG kikuldi-e a handle-t. Ezt csak az mutatja meg, amit a dupla KAPOTT.
+   *
+   * Ugyanaz a res, amibe a vilag-valto eseteben belefutottunk: mindket fel
+   * helyes volt kulon-kulon, es a KOZOTTUK levo allitas hianyzott.
+   */
+  it("a kikuldott keresben ERVENYES webcim all, a cimbol kepezve", async () => {
+    const { client, letrehozva } = medusaDupla();
+    const { links } = taroloDupla();
+    const service = new MedusaCategoryImportService(links);
+    await service.run(client, FA, MOST);
+
+    assert.equal(letrehozva.length, 2);
+    for (const be of letrehozva) {
+      assert.equal(be.handle, categoryHandle(be.name));
+      assert.match(be.handle, /^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+    }
+  });
+
+  /**
+   * ES A SZO-VESZTES ATJUT A RIPORTBA. Enelkul a `lostWords` mezo letezne, es
+   * senki nem toltene fel -- egy szakadas, amirol semmi nem szolna.
+   */
+  it("az onallo irasjel-szot a riport megnevezi", async () => {
+    const { client } = medusaDupla();
+    const { links } = taroloDupla();
+    const service = new MedusaCategoryImportService(links);
+    const report = await service.run(
+      client,
+      [{ id: "cat_plusz", parentId: null, name: 'Black Label "+" sorozat' }],
+      MOST,
+    );
+    assert.equal(report.lostWords.length, 1);
+    assert.match(report.lostWords[0]!, /"\+"/);
   });
 });
