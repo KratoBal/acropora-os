@@ -1,3 +1,8 @@
+import {
+  categoryHandle,
+  describeLostWords,
+  lostWordsInHandle,
+} from "./medusa-category-handle.js";
 import { Injectable } from "@nestjs/common";
 
 import type {
@@ -75,6 +80,18 @@ export interface CategoryImportReport {
    * Nem hiba, hanem kovetkezmeny: egy ag nem vihetо at a gyokere nelkul.
    */
   blockedByConflict: string[];
+  /**
+   * AMIKOR A WEBCIMBOL NYOM NELKUL ELTUNIK EGY SZO.
+   *
+   * A handle-kepzes minden nem megengedett karaktert kotojelre cserel, aztan
+   * osszevon. Egy vesszo ket szo kozott igy szo-hatar marad; egy ONALLO,
+   * csak irasjelbol allo szo viszont eltunik. A webcim ettol ERVENYES marad,
+   * tehat semmi mas nem jelezne.
+   *
+   * Ez a mezo a szabaly ONBEVALLASA, nem kivetel-lista: egy karakterre irt
+   * kivetel tobbet rontana, mint amennyit er.
+   */
+  lostWords: string[];
   /**
    * AZ ELLENORZES, AMIT KULONBEN EMLEKEZETBOL KELLENE ELVEGEZNI.
    *
@@ -166,6 +183,7 @@ export class MedusaCategoryImportService {
       skipped: terv.skip.length,
       conflicts: terv.conflict.map((c) => c.ourId),
       blockedByConflict: [],
+      lostWords: [],
       verification: {
         carryingOurId: 0,
         activeAmongThem: 0,
@@ -215,10 +233,19 @@ export class MedusaCategoryImportService {
         report.blockedByConflict.push(teendo.ourId);
         continue;
       }
+      const elveszett = lostWordsInHandle(teendo.title);
+      if (elveszett.length > 0)
+        report.lostWords.push(describeLostWords(teendo.title, elveszett));
       const created: MedusaCategoryRow = await client.createProductCategory({
         name: teendo.title,
         external_id: teendo.ourId,
         parent_category_id: szulo,
+        /**
+         * A WEBCIMET MI ADJUK, NEM A MEDUSA. Az indok es a szabaly a
+         * `medusa-category-handle.ts` fejlecében all; a lenyeg, hogy a CIM
+         * valtozatlan marad, tehat nincs atnevezes es nincs atiranyitas-igeny.
+         */
+        handle: categoryHandle(teendo.title),
         /**
          * MERVE: a Medusa `is_active` alapertelmezese `false`. Enelkul mind a
          * 219 kategoria inaktivan keletkezne -- egy futas, ami sikeresnek
