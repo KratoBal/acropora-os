@@ -10,6 +10,7 @@ export type {
   AssetEvent,
   Brand,
   CareDifficulty,
+  ElhelyezesiIgeny,
   Category,
   ChannelListing,
   DatasheetField,
