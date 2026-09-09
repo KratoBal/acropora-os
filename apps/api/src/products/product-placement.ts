@@ -3,13 +3,14 @@ import type { ElhelyezesiIgeny } from "@acropora/types";
 /** The customer's declared lamp technology, not a measured PAR value. */
 export type LampType = "LED" | "T5" | "VEGYES";
 export type HeightBand = "ALSO_HARMAD" | "KOZEPSO_HARMAD" | "FELSO_HARMAD";
+export type PlacementLevel = Exclude<ElhelyezesiIgeny, "NEM_ERTELMEZHETO">;
 
 export interface PlacementAdvisorInput {
   aquarium: {
     heightCm: number;
     lampWatt: number;
     lampType: LampType;
-    flow: ElhelyezesiIgeny;
+    flow: PlacementLevel;
   };
   product: {
     fenyIgeny: ElhelyezesiIgeny | null;
@@ -36,10 +37,10 @@ export type PlacementAdvisorResult =
   | {
       kind: "recommendation";
       heightBand: HeightBand;
-      flowZone: ElhelyezesiIgeny;
+      flowZone: PlacementLevel;
       flowComparison: {
-        aquariumFlow: ElhelyezesiIgeny;
-        productNeed: ElhelyezesiIgeny;
+        aquariumFlow: PlacementLevel;
+        productNeed: PlacementLevel;
         relation:
           "MATCHES" | "LOWER_THAN_PRODUCT_NEED" | "HIGHER_THAN_PRODUCT_NEED";
       };
@@ -47,13 +48,21 @@ export type PlacementAdvisorResult =
         ledReferenceWatt: number;
         bands: Record<
           HeightBand,
-          { estimatedLoad: number; estimatedNeed: ElhelyezesiIgeny }
+          { estimatedLoad: number; estimatedNeed: PlacementLevel }
         >;
       };
     }
   | {
       kind: "missingProductFields";
       fields: Array<"fenyIgeny" | "aramlasIgeny">;
+    }
+  | {
+      kind: "notApplicableProductFields";
+      fields: Array<{
+        field: "fenyIgeny" | "aramlasIgeny";
+        state: "NEM_ERTELMEZHETO";
+        reason: "A termékhez ez az elhelyezési szempont nem alkalmazható.";
+      }>;
     };
 
 const lampFactors: Record<LampType, number> = {
@@ -68,13 +77,13 @@ const bands: ReadonlyArray<{ band: HeightBand; depthRatio: number }> = [
   { band: "ALSO_HARMAD", depthRatio: 5 / 6 },
 ];
 
-const needRank: Record<ElhelyezesiIgeny, number> = {
+const needRank: Record<PlacementLevel, number> = {
   GYENGE: 0,
   KOZEPES: 1,
   EROS: 2,
 };
 
-function classifyLight(load: number): ElhelyezesiIgeny {
+function classifyLight(load: number): PlacementLevel {
   if (load < 0.4) return "GYENGE";
   if (load < 0.9) return "KOZEPES";
   return "EROS";
@@ -85,13 +94,19 @@ function round(value: number): number {
 }
 
 function compareFlow(
-  aquariumFlow: ElhelyezesiIgeny,
-  productNeed: ElhelyezesiIgeny,
+  aquariumFlow: PlacementLevel,
+  productNeed: PlacementLevel,
 ): "MATCHES" | "LOWER_THAN_PRODUCT_NEED" | "HIGHER_THAN_PRODUCT_NEED" {
   if (needRank[aquariumFlow] === needRank[productNeed]) return "MATCHES";
   return needRank[aquariumFlow] < needRank[productNeed]
     ? "LOWER_THAN_PRODUCT_NEED"
     : "HIGHER_THAN_PRODUCT_NEED";
+}
+
+function isPlacementLevel(
+  value: ElhelyezesiIgeny | null,
+): value is PlacementLevel {
+  return value !== null && value !== "NEM_ERTELMEZHETO";
 }
 
 /**
@@ -103,11 +118,35 @@ export function adviseProductPlacement(
 ): PlacementAdvisorResult {
   const missing: Array<"fenyIgeny" | "aramlasIgeny"> = [];
   const { fenyIgeny, aramlasIgeny } = input.product;
+  const notApplicable = [
+    ...(fenyIgeny === "NEM_ERTELMEZHETO"
+      ? [
+          {
+            field: "fenyIgeny" as const,
+            state: "NEM_ERTELMEZHETO" as const,
+            reason:
+              "A termékhez ez az elhelyezési szempont nem alkalmazható." as const,
+          },
+        ]
+      : []),
+    ...(aramlasIgeny === "NEM_ERTELMEZHETO"
+      ? [
+          {
+            field: "aramlasIgeny" as const,
+            state: "NEM_ERTELMEZHETO" as const,
+            reason:
+              "A termékhez ez az elhelyezési szempont nem alkalmazható." as const,
+          },
+        ]
+      : []),
+  ];
+  if (notApplicable.length > 0)
+    return { kind: "notApplicableProductFields", fields: notApplicable };
   if (fenyIgeny == null) missing.push("fenyIgeny");
   if (aramlasIgeny == null) missing.push("aramlasIgeny");
   if (missing.length > 0)
     return { kind: "missingProductFields", fields: missing };
-  if (fenyIgeny === null || aramlasIgeny === null) {
+  if (!isPlacementLevel(fenyIgeny) || !isPlacementLevel(aramlasIgeny)) {
     // TypeScript cannot infer the relation between `missing.length` and the
     // two checks above; this is unreachable at runtime.
     return { kind: "missingProductFields", fields: missing };
@@ -132,7 +171,7 @@ export function adviseProductPlacement(
     }),
   ) as Record<
     HeightBand,
-    { estimatedLoad: number; estimatedNeed: ElhelyezesiIgeny }
+    { estimatedLoad: number; estimatedNeed: PlacementLevel }
   >;
 
   const bestBand = bands.reduce((best, candidate) => {

@@ -149,7 +149,8 @@ export interface ProductListItem {
 export type ProductAdvisorKind = "PLACEMENT" | "CAPACITY";
 
 /** Katalogusadat az elhelyezesi szabalyhoz; NULL = nem szabad ajanlani. */
-export type ElhelyezesiIgeny = "GYENGE" | "KOZEPES" | "EROS";
+export type ElhelyezesiIgeny =
+  "GYENGE" | "KOZEPES" | "EROS" | "NEM_ERTELMEZHETO";
 
 /**
  * A termék üzleti mezői, amiket az Acropora OS felől szerkeszteni lehet.

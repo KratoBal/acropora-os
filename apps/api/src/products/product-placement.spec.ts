@@ -72,6 +72,47 @@ describe("adviseProductPlacement", () => {
       { kind: "missingProductFields", fields: ["fenyIgeny", "aramlasIgeny"] },
     );
   });
+
+  it("nem értelmezhető fényigénynél nem ajánl és nem mondja hiányzónak", () => {
+    assert.deepEqual(
+      adviseProductPlacement({
+        ...baseline,
+        product: { ...baseline.product, fenyIgeny: "NEM_ERTELMEZHETO" },
+      }),
+      {
+        kind: "notApplicableProductFields",
+        fields: [
+          {
+            field: "fenyIgeny",
+            state: "NEM_ERTELMEZHETO",
+            reason: "A termékhez ez az elhelyezési szempont nem alkalmazható.",
+          },
+        ],
+      },
+    );
+  });
+
+  it("nem értelmezhető áramlásigénynél a megfelelő mezőt nevezi meg", () => {
+    assert.deepEqual(
+      adviseProductPlacement({
+        ...baseline,
+        product: {
+          ...baseline.product,
+          aramlasIgeny: "NEM_ERTELMEZHETO",
+        },
+      }),
+      {
+        kind: "notApplicableProductFields",
+        fields: [
+          {
+            field: "aramlasIgeny",
+            state: "NEM_ERTELMEZHETO",
+            reason: "A termékhez ez az elhelyezési szempont nem alkalmazható.",
+          },
+        ],
+      },
+    );
+  });
 });
 
 /*
@@ -89,4 +130,7 @@ describe("adviseProductPlacement", () => {
  *    adott: ez a szándékos lelet. A számolt mélységi arány és a kimeneti képlet
  *    őrzött, a kizárólag kijelzési mondat pontos szövege viszont nincs teszttel
  *    rögzítve.
+ * 6. A `fenyIgeny === "NEM_ERTELMEZHETO"` ág rontása pontosan a hatodik teszt
+ *    deepEqual-jét döntötte pirosra; az áramlás-mező külön ágon áll, ezért
+ *    annak tesztje zöld maradt.
  */

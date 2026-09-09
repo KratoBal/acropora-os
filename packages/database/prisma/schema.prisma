@@ -59,6 +59,7 @@ enum ElhelyezesiIgeny {
   GYENGE
   KOZEPES
   EROS
+  NEM_ERTELMEZHETO
 }
 
 enum UnasProductSyncKind {
