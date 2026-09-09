@@ -50,6 +50,8 @@ const detail: ProductDetail = {
   isActive: true,
   webshopSellable: false,
   advisorKind: null,
+  fenyIgeny: null,
+  aramlasIgeny: null,
   archivedAt: null,
   brand: { id: "brand-1", name: "Acme" },
   primaryCategory: {
