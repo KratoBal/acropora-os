@@ -29,6 +29,8 @@ export default defineConfig({
       "src/lib/api/**/*.test.ts",
       "src/lib/auth/production-auth.test.ts",
       "src/lib/proxy-timeout.test.ts",
+      "src/lib/release-info.test.ts",
+      "src/app/**/*.test.ts",
       "src/lib/navigation/**/*.test.ts",
       "src/lib/partners/**/*.test.ts",
     ],

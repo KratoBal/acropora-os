@@ -283,6 +283,7 @@ jobs:
           - app: web
             build_args: |
               API_URL=http://127.0.0.1:3001
+              RELEASE_COMMIT_SHA=${{ github.sha }}
               OS_PATCH_EPOCH=${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:
@@ -309,6 +310,17 @@ jobs:
           build-args: ${{ matrix.build_args }}
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+
+      - name: Verify web RELEASE_COMMIT_SHA is baked into the image
+        if: matrix.app == 'web'
+        run: |
+          set -euo pipefail
+          baked=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' acropora-web:ci | grep '^RELEASE_IMAGE_COMMIT_SHA=' | cut -d= -f2)
+          echo "baked RELEASE_IMAGE_COMMIT_SHA=$baked"
+          if [ "$baked" != "${{ github.sha }}" ]; then
+            echo "expected ${{ github.sha }}, got '$baked'" >&2
+            exit 1
+          fi
 
       # Pinned to a commit SHA rather than a version tag on purpose:
       # aquasecurity/trivy-action (and trivy itself) suffered a real
