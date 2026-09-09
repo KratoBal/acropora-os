@@ -40,6 +40,9 @@ const productInclude = {
   channelListings: { orderBy: { channel: "asc" } },
   images: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
   unasSnapshot: true,
+  datasheet: {
+    select: { fenyIgeny: true, aramlasIgeny: true },
+  },
 } as const;
 
 const productListInclude = {
@@ -271,6 +274,8 @@ export class ProductRepository extends Repository {
         : input.categoryId;
     const primaryWasProvided =
       input.primaryCategoryId !== undefined || input.categoryId !== undefined;
+    const placementNeedsWereProvided =
+      input.fenyIgeny !== undefined || input.aramlasIgeny !== undefined;
 
     return this.productDatabase.$transaction(
       async (transaction) => {
@@ -283,6 +288,30 @@ export class ProductRepository extends Repository {
             brandId: input.brandId,
             webshopSellable: input.webshopSellable,
             advisorKind: input.advisorKind,
+            ...(placementNeedsWereProvided
+              ? {
+                  datasheet: {
+                    upsert: {
+                      create: {
+                        ...(input.fenyIgeny !== undefined
+                          ? { fenyIgeny: input.fenyIgeny }
+                          : {}),
+                        ...(input.aramlasIgeny !== undefined
+                          ? { aramlasIgeny: input.aramlasIgeny }
+                          : {}),
+                      },
+                      update: {
+                        ...(input.fenyIgeny !== undefined
+                          ? { fenyIgeny: input.fenyIgeny }
+                          : {}),
+                        ...(input.aramlasIgeny !== undefined
+                          ? { aramlasIgeny: input.aramlasIgeny }
+                          : {}),
+                      },
+                    },
+                  },
+                }
+              : {}),
             ...(primaryWasProvided ? { categoryId: primaryCategoryId } : {}),
           },
           include: productInclude,

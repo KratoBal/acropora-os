@@ -428,6 +428,7 @@ export type {
   ProductOrigin,
   ProductCatalogAuthority,
   ProductAdvisorKind,
+  ElhelyezesiIgeny,
   UnasProductMirrorDetail,
   ProductListResponse,
   ProductUpdateInput,

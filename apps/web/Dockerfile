@@ -151,6 +151,16 @@ RUN rm -rf \
 WORKDIR /app
 ENV NODE_ENV=production
 
+# The image's own build-time identity is independent from RELEASE_COMMIT_SHA
+# supplied by a deployment platform at runtime. Empty is allowed (that means
+# "cannot validate"), but any non-empty value must be a full lowercase SHA.
+ARG RELEASE_COMMIT_SHA=""
+RUN if [ -n "$RELEASE_COMMIT_SHA" ]; then \
+      echo "$RELEASE_COMMIT_SHA" | grep -Eq '^[0-9a-f]{40}$' || \
+      (echo "RELEASE_COMMIT_SHA=\"$RELEASE_COMMIT_SHA\" is not a well-formed 40-char lowercase hex git commit SHA" >&2 && exit 1); \
+    fi
+ENV RELEASE_IMAGE_COMMIT_SHA=${RELEASE_COMMIT_SHA}
+
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public

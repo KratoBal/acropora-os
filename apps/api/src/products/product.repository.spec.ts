@@ -419,6 +419,36 @@ describe("ProductRepository", () => {
     assert.equal(updateArgs.data.webshopSellable, false);
   });
 
+  it("writes placement needs only through the local datasheet upsert", async () => {
+    const { database, calls } = createDatabase();
+    const repository = new ProductRepository(database);
+    await repository.update("product-1", {
+      fenyIgeny: "EROS",
+      aramlasIgeny: "KOZEPES",
+    });
+
+    const updateArgs = calls.find(
+      (call) => call.operation === "transactionUpdate",
+    )?.args as {
+      data: {
+        datasheet?: {
+          upsert?: {
+            create?: { fenyIgeny?: string; aramlasIgeny?: string };
+            update?: { fenyIgeny?: string; aramlasIgeny?: string };
+          };
+        };
+      };
+    };
+    assert.deepEqual(updateArgs.data.datasheet?.upsert?.create, {
+      fenyIgeny: "EROS",
+      aramlasIgeny: "KOZEPES",
+    });
+    assert.deepEqual(updateArgs.data.datasheet?.upsert?.update, {
+      fenyIgeny: "EROS",
+      aramlasIgeny: "KOZEPES",
+    });
+  });
+
   it("applies pagination and catalog filters", async () => {
     const { database, calls } = createDatabase();
     const repository = new ProductRepository(database);

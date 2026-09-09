@@ -53,6 +53,15 @@ enum ProductAdvisorKind {
   CAPACITY
 }
 
+/// A termek feny- es aramlasigenye. A NULL nem "gyenge", hanem az, hogy
+/// az adatlap meg nem elegendo egy elhelyezesi javaslathoz.
+enum ElhelyezesiIgeny {
+  GYENGE
+  KOZEPES
+  EROS
+  NEM_ERTELMEZHETO
+}
+
 enum UnasProductSyncKind {
   FULL
   INCREMENTAL
@@ -4111,6 +4120,10 @@ model ProductDatasheet {
   kereskedelmiNev String?
 
   careDifficulty CareDifficulty?
+  /// Acropora-altal kitoltott szakmai adat. Az UNAS-szinkron sem nem szamolja,
+  /// sem nem irja felul; a null az advisor szamara hianyzo adat.
+  fenyIgeny      ElhelyezesiIgeny?
+  aramlasIgeny   ElhelyezesiIgeny?
   /// NEM logikai. Ot eset all az adatban (igen, nem, felteteles, allitas nelkuli,
   /// nem faj-szintu), es egy Boolean mind az otot kettore lapitana.
   reefSafe       ReefSafe?
