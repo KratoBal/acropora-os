@@ -225,14 +225,38 @@ export class WorksheetsService {
 
     if (document.content) return { ...document, bytes: document.content };
 
-    if (!document.storageKey || !this.documentStore)
-      throw new NotFoundException("A csatolmány tartalma nem érhető el.");
+    /**
+     * INNENTOL A SOR LETEZIK, ES A TARTALMA NINCS A SORBAN. Harom kulonbozo ok
+     * vezet ide, es 2026-09-09-ig MIND A HAROM ugyanazt a 404-et adta -- vagyis
+     * ugy neztek ki, mintha a csatolmany nem letezne.
+     *
+     * MA ez az ag szinte sosem fut: a `content` ott all a soron. A regi sorok
+     * TAROLORA HELYEZESE utan viszont ez lesz az EGYETLEN olvasasi ut, es akkor
+     * egy tarolo-hiba vagy egy hianyzo beallitas TOMEGES "nincs ilyen
+     * csatolmany" alakban jelenne meg. Aki azt latja, ADATOT fog keresni, nem
+     * beallitast.
+     *
+     * A feltoltesi ut ugyanezen a szolgaltatason MAR 503-at ad a be nem kotott
+     * tarolora, sajat uzenettel. A letoltes ettol tert el: ugyanaz a feltetel
+     * ott 503, itt 404 volt.
+     */
+    if (!this.documentStore)
+      throw new ServiceUnavailableException(
+        "A dokumentum-tároló nincs beállítva ebben a példányban.",
+      );
+
+    if (!document.storageKey)
+      throw new ServiceUnavailableException(
+        "A csatolmánynak nincs tartalma egyik forrásban sem.",
+      );
 
     const key = { owner: "worksheet" as const, ownerId: id, documentId };
     assertStorageKeyMatches(document.storageKey, key);
     const bytes = await this.documentStore.get(key);
     if (!bytes)
-      throw new NotFoundException("A csatolmány tartalma nem érhető el.");
+      throw new ServiceUnavailableException(
+        "A csatolmány tartalma a tárolóban nem érhető el.",
+      );
     return { ...document, bytes };
   }
 

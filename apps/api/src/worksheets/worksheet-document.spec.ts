@@ -148,3 +148,66 @@ describe("fénykép a munkalaphoz", () => {
     assert.deepEqual(await collectDocumentKeys(store.list()), []);
   });
 });
+
+/**
+ * A LETOLTES HAROM KUDARCA, ES MIERT KELL SZETVALASZTANI OKET.
+ *
+ * 2026-09-09-ig mind a harom ugyanazt a 404-et adta, vagyis ugy neztek ki,
+ * mintha a csatolmany nem letezne. Ma ez az ag szinte sosem fut (a `content`
+ * ott all a soron); a regi sorok TAROLORA HELYEZESE utan viszont ez lesz az
+ * EGYETLEN olvasasi ut -- es akkor egy hianyzo beallitas tomeges "nincs ilyen
+ * csatolmany" alakban jelenne meg, es a kereso ADATOT keresne, nem beallitast.
+ */
+describe("a munkalap-csatolmany letoltesenek kudarcai", () => {
+  const SOR = {
+    id: "doc-1",
+    fileName: "kep.jpg",
+    contentType: "image/jpeg",
+    content: null,
+    storageKey: "worksheets/worksheet-1/doc-1",
+  };
+
+  it("NEM LETEZO csatolmany: 404, mert tenyleg nincs ilyen", async () => {
+    const service = new WorksheetsService(
+      repositoryThat({ document: async () => null }),
+      undefined,
+      new InMemoryDocumentStore(),
+    );
+
+    await assert.rejects(
+      () => service.documentBytes("worksheet-1", "doc-1", { kind: "internal" }),
+      (hiba: { status?: number }) => hiba.status === 404,
+    );
+  });
+
+  it("BE NEM KOTOTT tarolo: 503, es a beallitast nevezi meg", async () => {
+    // A feltoltesi ut ugyanezen a szolgaltatason MAR igy viselkedik. A letoltes
+    // ettol tert el: ugyanaz a feltetel ott 503, itt 404 volt.
+    const service = new WorksheetsService(
+      repositoryThat({ document: async () => SOR }),
+      undefined,
+      undefined,
+    );
+
+    await assert.rejects(
+      () => service.documentBytes("worksheet-1", "doc-1", { kind: "internal" }),
+      (hiba: { status?: number; message?: string }) =>
+        hiba.status === 503 && /nincs beállítva/.test(hiba.message ?? ""),
+    );
+  });
+
+  it("URES tarolo: 503, es a TAROLOT nevezi meg, nem a beallitast", async () => {
+    const service = new WorksheetsService(
+      repositoryThat({ document: async () => SOR }),
+      undefined,
+      new InMemoryDocumentStore(),
+    );
+
+    await assert.rejects(
+      () => service.documentBytes("worksheet-1", "doc-1", { kind: "internal" }),
+      (hiba: { status?: number; message?: string }) =>
+        hiba.status === 503 &&
+        /tárolóban nem érhető el/.test(hiba.message ?? ""),
+    );
+  });
+});
