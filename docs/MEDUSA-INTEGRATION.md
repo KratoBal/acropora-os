@@ -559,6 +559,76 @@ Four things only a live run can settle:
 Items 1, 2 and 4 rest on the installed 2.19.0 source: a stronger footing than a
 guess and a weaker one than an observation.
 
+## Running a CLI inside the production container
+
+Every `medusa:*` script in `apps/api/package.json` is written for a **developer
+tree**, and the one example further up in this document says so by starting with
+a `cd` into a clone. On a developer machine those scripts are correct. In the
+**production container they do not run at all**, and it is worth stating why,
+because the failure looks like a broken command rather than a wrong environment.
+
+They all have the same shape:
+
+```
+tsc -p tsconfig.json && node --env-file=../../.env dist/…
+```
+
+Neither half survives the runtime image:
+
+- **No compiler.** The runner stage is built from `pnpm --filter @acropora/api
+deploy --prod` (see `apps/api/Dockerfile`), so devDependencies — `typescript`
+  among them — are not in the deployed tree. `tsc` fails before the CLI is ever
+  reached.
+- **No `.env` file.** The deployed tree is the working directory (`/app`); there
+  is no `../../.env`. Configuration reaches the container as environment
+  variables, set by Coolify.
+
+Do **not** "fix" the scripts for this. They are correct where they are used. The
+production form is to run the already-built entry point directly:
+
+```bash
+# 1. Find the running API container (run from the host, any directory)
+docker ps --format '{{.Names}}\t{{.Image}}\t{{.Status}}' | grep -i api
+
+# 2. Dry run — this writes nothing
+docker exec -w /app <container-name> \
+  node dist/integrations/medusa/medusa-category.cli.js
+
+# 3. This writes. Only after reading the dry run's numbers.
+docker exec -w /app <container-name> \
+  node dist/integrations/medusa/medusa-category.cli.js --apply
+```
+
+`-w /app` is redundant (the image's `WORKDIR` is already `/app`) and is kept
+deliberately, so the assumption is written down rather than implied.
+
+> **`docker exec`, never `docker run` or `compose run`.** The runner image's
+> entrypoint (`apps/api/docker-entrypoint.sh`) never references `"$@"`: it
+> applies migrations and then runs `exec node dist/main.js`. A `run`-shaped
+> invocation therefore does **not** fail — it migrates and boots the API while
+> the command you asked for never executes. That is the dangerous half: not an
+> error message, but different work than the one on the label. `docker exec`
+> starts a process inside the already-running container and bypasses the
+> entrypoint entirely. `docs/COOLIFY.md` records the same trap for a different
+> command.
+
+The credential comes from the **database** (`storedCredentialProvider`), not
+from the environment, so a container with no Medusa connection configured exits
+`1` with a sentence written for a person. The dry run therefore also measures
+whether the connection is configured at all.
+
+Exit codes for the category CLI:
+
+| Code | Meaning                                                                                     |
+| ---- | ------------------------------------------------------------------------------------------- |
+| `0`  | done                                                                                        |
+| `1`  | missing credential, or the import refused itself                                            |
+| `2`  | conflicts, or items skipped because of a parent — **not** a failure; a person has to decide |
+
+**The limit of the dry run, stated because the next reader will infer from its
+output:** `describeVerification` runs only under `--apply`. A category that is
+created but left inactive cannot be seen ahead of time — only after the write.
+
 ## Where the assertions live
 
 | Claim                                                              | Where it is asserted                          |
