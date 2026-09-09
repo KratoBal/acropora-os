@@ -46,6 +46,13 @@ enum ProductCatalogAuthority {
   ACROPORA
 }
 
+/// What kind of customer decision this product can help with. Null means no
+/// advisor is shown; it is deliberately not inferred from category or UNAS.
+enum ProductAdvisorKind {
+  PLACEMENT
+  CAPACITY
+}
+
 enum UnasProductSyncKind {
   FULL
   INCREMENTAL
@@ -714,6 +721,8 @@ model Product {
   /// Alapertelmezese HAMIS: egy termek soha ne valjon ertekesithetove
   /// azzal, hogy letrejott.
   webshopSellable  Boolean                  @default(false)
+  /// Acropora-owned manual decision. UNAS does not calculate or overwrite it.
+  advisorKind      ProductAdvisorKind?
   archivedAt       DateTime?
   origin           ProductOrigin?
   catalogAuthority ProductCatalogAuthority?

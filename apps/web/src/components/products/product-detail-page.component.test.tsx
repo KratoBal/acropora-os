@@ -49,6 +49,7 @@ const detail: ProductDetail = {
   catalogAuthority: "UNAS",
   isActive: true,
   webshopSellable: false,
+  advisorKind: null,
   archivedAt: null,
   brand: { id: "brand-1", name: "Acme" },
   primaryCategory: {

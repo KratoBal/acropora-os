@@ -145,6 +145,9 @@ export interface ProductListItem {
   stockOnHand: string | null;
 }
 
+/** The decision a product advisor helps a shopper make; null means no advisor. */
+export type ProductAdvisorKind = "PLACEMENT" | "CAPACITY";
+
 /**
  * A termék üzleti mezői, amiket az Acropora OS felől szerkeszteni lehet.
  *
@@ -166,6 +169,7 @@ export interface ProductUpdateInput {
    * nem. Ha valaha egy nevet kapnak, az a két fogalmat mossa össze.
    */
   webshopSellable?: boolean;
+  advisorKind?: ProductAdvisorKind | null;
 }
 
 export interface ProductListResponse {
@@ -190,6 +194,7 @@ export interface ProductDetail extends ProductListItem {
    * kérdést fel sem tették.
    */
   webshopSellable: boolean;
+  advisorKind: ProductAdvisorKind | null;
   categories: ProductCategorySummary[];
   variants: ProductVariantSummary[];
   images: ProductImageSummary[];

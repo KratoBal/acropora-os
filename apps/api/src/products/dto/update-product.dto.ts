@@ -49,4 +49,9 @@ export class UpdateProductDto {
   @IsOptional()
   @IsBoolean()
   webshopSellable?: boolean;
+
+  /** Acropora-owned advisor decision; deliberately absent from UNAS sync. */
+  @IsOptional()
+  @IsIn(["PLACEMENT", "CAPACITY"])
+  advisorKind?: "PLACEMENT" | "CAPACITY" | null;
 }

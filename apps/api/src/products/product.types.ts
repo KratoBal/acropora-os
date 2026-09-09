@@ -148,6 +148,7 @@ export function toProductDetail(
     ...toProductListItem(product),
     description: product.description,
     webshopSellable: product.webshopSellable,
+    advisorKind: product.advisorKind,
     categories: product.categories.map((item) => ({
       id: item.category.id,
       name: item.category.name,
