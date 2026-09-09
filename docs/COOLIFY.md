@@ -103,13 +103,32 @@ no value at all: `null` means "cannot be verified", while a wrong hash means
 "verified" — against the wrong release. Only a value the platform substitutes
 per deploy is acceptable.
 
-**Scope:** this is configured on **staging**. Production deploys are a separate
-stack, and as of **2026-08-31 it is not configured there either**: production
-`/health` answers `"commit": null`, which is exactly what an unset variable looks
-like. Nothing in this repository can close that -- the Dockerfile accepts the
-build arg, CI passes it and verifies it is baked in (checkpoint 8), and the code
-reads the runtime variable. The one missing step is the variable on the
-production application.
+**Scope:** this is configured on **staging**, and since **2026-09-09 on
+production as well**. Measured that day on both stacks: `/health` returns a
+40-character `runtimeCommit`, equal to the commit the deploy was made from.
+
+Until then this section recorded the opposite, and the record was wrong in the
+reassuring direction: it said production answered `"commit": null`, so a reader
+would have gone looking for a hole that was already closed. The variable was
+added on the production application at some point between 2026-08-31 and
+2026-09-09; the repository cannot say when, because nothing here observes it.
+
+**What stays null is `imageCommit`, and that is the design, not a gap.** The
+build argument is deliberately not passed here -- the runtime route above is the
+only one configured -- so `RELEASE_IMAGE_COMMIT_SHA` never enters a
+Coolify-built image and `commitSourceState` reports `image-missing` on every
+environment. `apps/api/Dockerfile` and CI both handle the build arg correctly
+(checkpoint 8 proves it is baked into the CI image), but Coolify builds its own
+image and is not given the argument.
+
+The consequence is worth stating, because the field looks like a check and
+currently cannot be one: `commitSourceState` can never return `match` or
+`mismatch` as configured, so the disagreement it exists to catch -- a running
+process reporting a different commit than the image it came from -- is not
+observable today. Passing the build argument in Coolify would make it work, at
+the cost of both values deriving from the same `${SOURCE_COMMIT}`, which makes
+`match` close to tautological. It would still catch a runtime variable that was
+overridden later, or an image reused across deploys.
 
 **And the test for it is NOT that the field stops being null.** A non-null value
 only proves that _something_ was set. The measure is that the returned hash
