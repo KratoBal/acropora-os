@@ -148,6 +148,9 @@ export interface ProductListItem {
 /** The decision a product advisor helps a shopper make; null means no advisor. */
 export type ProductAdvisorKind = "PLACEMENT" | "CAPACITY";
 
+/** Katalogusadat az elhelyezesi szabalyhoz; NULL = nem szabad ajanlani. */
+export type ElhelyezesiIgeny = "GYENGE" | "KOZEPES" | "EROS";
+
 /**
  * A termék üzleti mezői, amiket az Acropora OS felől szerkeszteni lehet.
  *
@@ -170,6 +173,8 @@ export interface ProductUpdateInput {
    */
   webshopSellable?: boolean;
   advisorKind?: ProductAdvisorKind | null;
+  fenyIgeny?: ElhelyezesiIgeny | null;
+  aramlasIgeny?: ElhelyezesiIgeny | null;
 }
 
 export interface ProductListResponse {
@@ -195,6 +200,8 @@ export interface ProductDetail extends ProductListItem {
    */
   webshopSellable: boolean;
   advisorKind: ProductAdvisorKind | null;
+  fenyIgeny: ElhelyezesiIgeny | null;
+  aramlasIgeny: ElhelyezesiIgeny | null;
   categories: ProductCategorySummary[];
   variants: ProductVariantSummary[];
   images: ProductImageSummary[];

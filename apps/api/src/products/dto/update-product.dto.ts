@@ -54,4 +54,14 @@ export class UpdateProductDto {
   @IsOptional()
   @IsIn(["PLACEMENT", "CAPACITY"])
   advisorKind?: "PLACEMENT" | "CAPACITY" | null;
+
+  /** Acropora-owned datasheet data; deliberately absent from UNAS sync. */
+  @IsOptional()
+  @IsIn(["GYENGE", "KOZEPES", "EROS"])
+  fenyIgeny?: "GYENGE" | "KOZEPES" | "EROS" | null;
+
+  /** Acropora-owned datasheet data; deliberately absent from UNAS sync. */
+  @IsOptional()
+  @IsIn(["GYENGE", "KOZEPES", "EROS"])
+  aramlasIgeny?: "GYENGE" | "KOZEPES" | "EROS" | null;
 }
