@@ -29,6 +29,7 @@
     "medusa:image-addresses": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/medusa/medusa-image-audit.cli.js",
     "datasheet:audit": "tsc -p tsconfig.json && node dist/products/datasheet-audit.cli.js",
     "datasheet:fill-state": "tsc -p tsconfig.json && node dist/products/datasheet-fill-state.cli.js",
+    "product-data:analyze": "tsc -p tsconfig.json && node dist/products/product-data-completeness.cli.js",
     "ai-search:rebuild": "tsc -p tsconfig.json && node --env-file=../../.env dist/integrations/ai-product-search/ai-product-search.cli.js",
     "barcode-import": "tsc -p tsconfig.json && node --env-file=../../.env dist/products/barcode-import.cli.js",
     "unas:probe": "tsc -p tsconfig.json && node --env-file=../../.env dist/imports/unas/unas-readonly-probe.cli.js",
