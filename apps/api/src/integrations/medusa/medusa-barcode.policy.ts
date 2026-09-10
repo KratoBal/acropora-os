@@ -115,7 +115,7 @@ function nemTermekTartomany(kod: string): boolean {
 }
 
 /**
- * A NEGY KIMENET, ES MIERT NEM KETTO.
+ * AZ OT KIMENET, ES MIERT NEM KETTO.
  *
  * A `skipped` es a `none` a keres torzsere nezve ugyanaz (egyik sem kuld
  * vonalkodot), a KOVETKEZMENYUK viszont ellentetes:
@@ -125,12 +125,23 @@ function nemTermekTartomany(kod: string): boolean {
  *   `skipped`   -- ERVENYES vonalkod, de tobb terméken all. HIANY: ha nem
  *                  mondjuk ki, a kod csendben elmarad, es a kimenetbol nem
  *                  lehetne megmondani, melyik eset allt fenn.
+ *   `blocked`   -- ERVENYES vonalkod, es a VETITESI SZURO tiltja: megmert,
+ *                  bizonyithatoan TEVES azonosito. Kulon allapot, mert az OKA
+ *                  mas, es a kimeneti sora is mast mond.
+ *
+ * MIERT NEM A `skipped` MASODIK JELENTESE (murena, 2026-09-10): a `skipped`
+ * MA azt allitja, hogy a kod TOBB terméken all, es a sora ezt is irja ki
+ * ("a tisztitas helye a forras: ott dol el, melyik terméke a kod"). A tiltott
+ * ertekeknel ez a mondat HAMIS lenne: ott nem az a kerdes, melyikuke, hanem az,
+ * hogy egyiküké sem. Egy harmadik ok harmadik allapotot ervényel, kulonben a
+ * naplo ugyanazzal a szoval ket kulonbozo dolgot mond.
  */
 export type MedusaBarcodeDecision =
   | { kind: "none"; field: null; value: null; duplicate: null }
   | { kind: "ean"; field: "ean"; value: string; duplicate: null }
   | { kind: "upc"; field: "upc"; value: string; duplicate: null }
-  | { kind: "skipped"; field: null; value: null; duplicate: string };
+  | { kind: "skipped"; field: null; value: null; duplicate: string }
+  | { kind: "blocked"; field: null; value: null; duplicate: null };
 
 /**
  * A DONTES. Csak allapot megy be, csak dontes jon ki.
@@ -143,10 +154,31 @@ export type MedusaBarcodeDecision =
 export function decideMedusaBarcode(
   value: string | null,
   sameValueCount: number,
+  /**
+   * A VETITESI SZURO ITELETE, A HIVOTOL -- ES EZERT PARAMETER, NEM LEKERDEZES.
+   *
+   * A tiltas nem az ERTEK tulajdonsaga, hanem a TERMEK ES AZ ERTEK PARJAE:
+   * ugyanaz a vonalkod egy masik terméken helyes lehet. A par ismereteben csak
+   * a hivo van, es a szabaly igy MERHETO marad, adatbazis nelkul -- ugyanabbol
+   * az okbol, amiert a `sameValueCount` is parameter.
+   */
+  tiltott = false,
 ): MedusaBarcodeDecision {
   const kod = (value ?? "").trim();
   if (!kod || !hasValidCheckDigit(kod))
     return { kind: "none", field: null, value: null, duplicate: null };
+
+  /**
+   * A TILTAS AZ ALAK-VIZSGALAT UTAN ES AZ ISMETLODES ELOTT ALL.
+   *
+   * Utana, mert egy nem-vonalkod ertekre a `none` a helyes valasz: nincs mit
+   * megtiltani. Elotte, mert a tiltott ertek MEGNEVEZESE fontosabb, mint hogy
+   * hany terméken all -- ha az ismetlodes fogna meg eloszor, a naplo azt
+   * allitana, hogy a tisztitas helye a forras "melyik terméké" kerdese, holott
+   * a valasz az, hogy egyiküké sem.
+   */
+  if (tiltott)
+    return { kind: "blocked", field: null, value: null, duplicate: null };
 
   /**
    * A MEZO-VALASZTAS AZ ISMETLODES-VIZSGALAT ELOTT ALL, ES EZ A SORREND MERT
@@ -209,5 +241,25 @@ export function describeSkippedBarcode(
     `áll, ezért NEM megy ki. Egy ismétlődő kód a boltban azt állítaná, hogy ` +
     `két különböző termék ugyanaz. A tisztítás helye a forrás (UNAS), nem a ` +
     `vetítés: ott dől el, melyik terméké a kód.`
+  );
+}
+
+/**
+ * A TILTOTT ERTEK SORA. MAST MOND, MINT A `describeSkippedBarcode`, ES EZ A
+ * KULONBSEG A LENYEG.
+ *
+ * Az ismetlodes-sor azt mondja, hogy a tisztitas helye a forras, mert OTT dol
+ * el, melyik terméke a kod. Itt ez a mondat hamis lenne: a lista pontosan azt
+ * rogziti, hogy ez az ertek NEM ezé a terméké, es nem is kerdés, kié.
+ */
+export function describeBlockedBarcode(
+  productId: string,
+  barcode: string,
+): string {
+  return (
+    `${productId}: a ${barcode} vonalkód a vetítési szűrőn fennakadt, ezért ` +
+    `NEM megy ki. A lista megmért, bizonyíthatóan téves értékeket tartalmaz: ` +
+    `a kód nem ezé a terméké. A javítás helye a forrás (UNAS); a szűrő addig ` +
+    `tartja vissza, amíg az érték ott meg nem változik.`
   );
 }

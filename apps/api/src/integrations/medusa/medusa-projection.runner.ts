@@ -20,8 +20,10 @@ import {
 } from "./medusa-category.policy.js";
 import {
   decideMedusaBarcode,
+  describeBlockedBarcode,
   describeSkippedBarcode,
 } from "./medusa-barcode.policy.js";
+import { betoltTiltoLista, tiltottKod } from "./medusa-vetitesi-szuro.js";
 import {
   decideMedusaBrandCollection,
   describeMissingBrandMapping,
@@ -600,6 +602,23 @@ export async function runProjectionCli(
    * mert a ketto elterhet, es a kulonbseg maga is lelet lenne.
    */
   let kihagyottVonalkod = 0;
+  /**
+   * A VETITESI SZURON FENNAKADT ERTEKEK SZAMA -- KULON A ISMETLODESTOL.
+   *
+   * Ket kulonbozo ok, ket kulonbozo teendovel: az ismetlodesnel az a kerdes,
+   * MELYIK terméké a kod; a tiltott ertekeknel az, hogy EGYIKÜKÉ SEM ezen a
+   * termeken. Egy kozos szamlalo a naploban osszemosna oket.
+   */
+  let tiltottVonalkod = 0;
+  /**
+   * A LISTA EGYSZER TOLTODIK BE, A FUTAS ELEJEN, ES KIIRJA A MERETET.
+   *
+   * Termekenkent betolteni nem csak folosleges kor lenne: a merete a
+   * NAPLOBAN mondja meg, hogy a szuro egyaltalan all-e. Egy ures lista
+   * hangosan kimondja magat -- egy csendben nem szuro szuro rosszabb a
+   * hianyzonal.
+   */
+  const tiltoIndex = betoltTiltoLista(out);
   let masoltKepek = 0;
   let bukottKepek = 0;
   /**
@@ -862,7 +881,25 @@ export async function runProjectionCli(
           where: { manufacturerPartNumber: nyersVonalkod, isActive: true },
         })
       : 0;
-    const vonalkod = decideMedusaBarcode(nyersVonalkod, azonosKodudarab);
+    /**
+     * A SZURO A CIKKSZAM ES AZ ERTEK PARJAT NEZI, NEM CSAK AZ ERTEKET.
+     *
+     * Ugyanaz a vonalkod egy masik terméken helyes lehet, es a legtobb hibas
+     * ertek egy JOGOS gazda kodja. A paros-egyezes ezert nem szigor, hanem az,
+     * ami a jogos gazdat nem nemitja el -- es ami a szurot MAGATOL lejaratja,
+     * ha a forrasban javul az ertek.
+     */
+    const vonalkod = decideMedusaBarcode(
+      nyersVonalkod,
+      azonosKodudarab,
+      tiltottKod(product.variants[0]?.sku, nyersVonalkod, tiltoIndex),
+    );
+    if (vonalkod.kind === "blocked") {
+      tiltottVonalkod += 1;
+      out.stdout(
+        `${describeBlockedBarcode(product.id, (nyersVonalkod ?? "").trim())}\n`,
+      );
+    }
     if (vonalkod.kind === "skipped") {
       kihagyottVonalkod += 1;
       out.stdout(
@@ -1201,6 +1238,21 @@ export async function runProjectionCli(
         (bukottKepek
           ? `, ${bukottKepek} nem sikerült -- azok sora változatlan, a következő futás újra próbálja.\n`
           : ".\n"),
+    );
+
+  /**
+   * A KET SOR KULON ALL, ES AKKOR IS KIIRODIK, HA A MASIK NULLA.
+   *
+   * Egy osszevont "N vonalkod maradt ki" sor ket kulonbozo teendot mosna
+   * ossze: az ismetlodesnel a forrasban azt kell eldonteni, melyik terméké a
+   * kod; a tiltottaknal a lista mar eldontotte, hogy egyiküké sem ezen a
+   * termeken, es ott a forras JAVITASA a teendo.
+   */
+  if (tiltottVonalkod)
+    out.stdout(
+      `${tiltottVonalkod} vonalkód maradt ki a vetítési szűrő miatt. ` +
+        `Ezek megmért, bizonyíthatóan téves értékek: a kód nem ezé a terméké. ` +
+        `A javítás helye a forrás (UNAS); a szűrő addig tartja vissza.\n`,
     );
 
   if (kihagyottVonalkod)
