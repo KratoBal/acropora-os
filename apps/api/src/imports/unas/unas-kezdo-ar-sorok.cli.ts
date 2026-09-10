@@ -59,10 +59,36 @@ export async function runKezdoArSorokCli(
     const most = new Date();
     let irt = 0;
     let tukorNelkul = 0;
+    /**
+     * HANY KEZDO SOR ALL URES ARRAL -- SZAMKENT, ES NEM MEGJEGYZESKENT.
+     *
+     * Egy ures aru sor azt allitja, hogy AKKOR nem ismertunk arat -- nem azt,
+     * hogy ingyen volt. Ha ez a szam nagy, akkor a tortenet ELSO PONTJA nem
+     * kiindulas, hanem hianyjelzes: az Omnibus-ablak elso napjan nincs mihez
+     * merni.
+     *
+     * Ezt MOST kell tudni, nem harminc nap mulva, amikor visszanezunk rá.
+     * (acrobot kerese, 2026-09-10.)
+     */
+    let uresArral = 0;
 
     for (const termek of termekek) {
       const tukor = termek.unasSnapshot;
       if (!tukor) tukorNelkul += 1;
+
+      /*
+        AZ URESSEG A NEGY AR-MEZORE SZOL, NEM A TUKOR MEGLETERE.
+
+        A ketto NEM ugyanaz, es ezert ket kulon szamlalo: egy termeknek lehet
+        UNAS-tukre ar NELKUL is (a tukor sor all, az ar-mezoi `null`-ok). Egy
+        kozos szam a ket esetet osszemosna, es epp a rosszabbat rejtene el.
+      */
+      const nincsAr =
+        tukor?.netPrice == null &&
+        tukor?.grossPrice == null &&
+        tukor?.saleNetPrice == null &&
+        tukor?.saleGrossPrice == null;
+      if (nincsAr) uresArral += 1;
 
       await prisma.productPriceHistory.create({
         data: {
@@ -88,11 +114,24 @@ export async function runKezdoArSorokCli(
     out.stdout(
       `${irt} kezdő ár-sor keletkezett | ${termekek.length} termék volt sor nélkül.\n`,
     );
+    /**
+     * A KET SZAM KULON ALL, ES MINDIG KIIRODIK.
+     *
+     * A `tukorNelkul` azt mondja, hogy a termeknek NINCS UNAS-tukre; az
+     * `uresArral` azt, hogy a tukor allhat, de ar nelkul. A masodik a nagyobb
+     * halmaz, es a fontosabb: a tortenet elso pontjanak hasznalhatosagat AZ
+     * mondja meg.
+     */
+    out.stdout(
+      `Ebből ${uresArral} sor ÜRES árakkal áll: ezek azt állítják, hogy AKKOR ` +
+        `nem ismertünk árat -- nem azt, hogy ingyen volt. Ha ez a szám nagy, a ` +
+        `történet első pontja nem kiindulás, hanem hiányjelzés.\n`,
+    );
     if (tukorNelkul)
       out.stdout(
-        `Ebből ${tukorNelkul} terméknek NINCS UNAS-tükre: a sor üres árakkal ` +
-          `áll, és azt állítja, hogy ekkor nem ismertünk árat -- nem azt, hogy ` +
-          `ingyen volt.\n`,
+        `Ebből ${tukorNelkul} terméknek egyáltalán NINCS UNAS-tükre -- ez a ` +
+          `fenti halmaz része, és külön áll, mert más a teendő: ott nem az ár ` +
+          `hiányzik, hanem a tükör.\n`,
       );
 
     return 0;

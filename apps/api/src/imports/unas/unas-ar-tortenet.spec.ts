@@ -142,4 +142,53 @@ describe("az ar-tortenet bekotese", () => {
     /* A tukor ideje, ha van -- nem egysegesen "most". */
     assert.equal(forras.includes("tukor?.syncedAt ?? most"), true);
   });
+
+  /**
+   * A HAROM SZAM, ES MIERT NEM KETTO.
+   *
+   * "N kezdo sor keletkezett" onmagaban nem mondja meg, hasznalhato-e a
+   * tortenet elso pontja. Egy URES aru sor azt allitja, hogy AKKOR nem
+   * ismertunk arat -- nem azt, hogy ingyen volt. Ha az a szam nagy, az elso
+   * pont hianyjelzes, nem kiindulas, es ezt a felvetelkor kell tudni.
+   *
+   * A `tukorNelkul` KULON all, es szandekosan: egy termeknek lehet UNAS-tukre
+   * ar NELKUL is. Egy kozos szam a ket esetet osszemosna, es mas a teendo --
+   * ott nem az ar hianyzik, hanem a tukor.
+   */
+  it("a kezdo-sor parancs HAROM szamot ir ki, kulon szamlalokkal", async () => {
+    const forras = await readFile(CLI, "utf-8");
+
+    assert.equal(forras.includes("let uresArral = 0;"), true);
+    assert.equal(forras.includes("let tukorNelkul = 0;"), true);
+    assert.equal(forras.includes("if (nincsAr) uresArral += 1;"), true);
+
+    /* Az uresseg a NEGY ar-mezore szol, nem a tukor meglétére. */
+    for (const mezo of [
+      "netPrice",
+      "grossPrice",
+      "saleNetPrice",
+      "saleGrossPrice",
+    ]) {
+      assert.equal(
+        forras.includes(`tukor?.${mezo} == null`),
+        true,
+        `az uresseg-vizsgalat nem nezi a ${mezo} mezot`,
+      );
+    }
+  });
+
+  /**
+   * AZ URES-ARU SOR MERLEGE FELTETEL NELKUL IROdik KI. Ha `if` moge kerulne, a
+   * NULLA eset nema lenne -- es epp a nulla az, ami megnyugtat.
+   */
+  it("az ures-aru szam akkor is kiirodik, ha nulla", async () => {
+    const forras = await readFile(CLI, "utf-8");
+
+    const sor = forras.indexOf("sor ÜRES árakkal áll");
+    assert.equal(sor > 0, true);
+
+    const elotte = forras.slice(0, sor);
+    const utolsoIf = elotte.lastIndexOf("if (uresArral)");
+    assert.equal(utolsoIf, -1);
+  });
 });
