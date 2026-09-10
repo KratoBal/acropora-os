@@ -776,6 +776,7 @@ model Product {
   sourceRelations            ProductRelation[]                  @relation("ProductRelationSource")
   targetRelations            ProductRelation[]                  @relation("ProductRelationTarget")
   unasSnapshot               UnasProductSnapshot?
+  priceHistory               ProductPriceHistory[]
   aiSearchDocument           AiProductSearchDocument?
   datasheet                  ProductDatasheet?
   shippingProfile            ProductShippingProfile?
@@ -1043,8 +1044,8 @@ model ProductRelation {
   /// valtozott -- ez hamis, es minden kapcsolattal rendelkezo terméket egyszerre
   /// tenne esedekesse. Egy soha nem vetitett termek amugy is esedekes
   /// (NEVER_PROJECTED), tehat a konzervativ ertekkel semmi nem vesz el.
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   sourceProduct Product @relation("ProductRelationSource", fields: [sourceProductId], references: [id], onDelete: Cascade)
   targetProduct Product @relation("ProductRelationTarget", fields: [targetProductId], references: [id], onDelete: Cascade)
@@ -1352,6 +1353,84 @@ model AiProductSearchDocument {
 
 /// UNAS-owned product fields mirrored for read-only operational use.
 /// Reported stock is a comparison snapshot and never the local stock ledger.
+/// A NAPI AR NYOMA -- APPEND-ONLY, MERT VISSZAMENOLEG NEM POTOLHATO.
+///
+/// === MIERT LETEZIK ===
+///
+/// A sema 96 modelljebol 14 hordoz ar-mezot, es NULLA volt tortenet-alaku
+/// (nautilus merese, 2026-09-10). A `UnasProductSnapshot.productId` UNIQUE,
+/// tehat termekenkent EGY sor all, es minden szinkron LECSERELI. A napi ar
+/// atmegy a rendszeren, es minden nap felulirjuk.
+///
+/// Az Omnibus harminc napos ablaka ("a legalacsonyabb ar az elmult 30 napban")
+/// az elso akcio pillanataban all be -- akkor viszont mar nem tudunk
+/// visszanezni. Ma elkezdeni egy lepes; visszamenoleg LEHETETLEN.
+///
+/// === MIERT SOR, ES NEM MEZO ===
+///
+/// Egy tabla, ami TUDNA tortenetet tarolni, de a kod felulirja, ugyanaz a
+/// csapda, mint a Medusa `deleted_at` oszlopa: letezik a hely, es megsem
+/// keletkezik tortenet. Ezert nincs `@unique` a `productId`-n, es nincs
+/// frissito ut: a sor beirodik, es utana nem valtozik.
+///
+/// === KET IDOPONT, ES A KETTO NEM UGYANAZ ===
+///
+/// `observedAt`  MIKOR VOLT IGAZ az ar (a szinkron ablakanak vege)
+/// `createdAt`   MIKOR IRTUK LE
+///
+/// Egy jogi kovetelmenynel a ketto szetvalasztasa nem finomkodas: ha a
+/// szinkron kesobb fut le, a ket ertek elter, es a hatarido az ELSOhoz
+/// igazodik. Egy kozos mezo csendben a masodikat allitana.
+///
+/// === MI KERUL BELE ===
+///
+/// Mind a negy ar-mezo es a penznem, mert a vevo altal fizetheto ar az akcios
+/// ar is lehet -- az Omnibus epp arrol szol. Egy sor MINDIG a teljes
+/// ar-kepet rogziti, nem csak azt, ami valtozott: egy resz-sor kesobb nem
+/// olvashato vissza ar-kent.
+///
+/// === EGY NYITOTT KERDES, AMIT NEM EN DONTOK EL ===
+///
+/// A `Cascade` azt jelenti, hogy a termek torlese a tortenetet is elviszi. Ez
+/// a sema tobbi esemeny-tablajanak a mintaja. Ha a jogi megorzesnek TULELNIE
+/// kell a termek torleset, ez `Restrict`-re valtozik -- de az mar arrol szol,
+/// hogy egy termek nem torolheto, amig ara volt, es az nem fejlesztoi dontes.
+model ProductPriceHistory {
+  id             String             @id @default(cuid())
+  productId      String
+  /// ISO 4217 harombetus kod. Azert all itt, mert a szam onmagaban nem mondja
+  /// meg magarol, mi o -- ugyanaz az indok, mint a `sellingPriceCurrency`-nel.
+  currency       String?            @db.VarChar(3)
+  netPrice       Decimal?           @db.Decimal(19, 4)
+  grossPrice     Decimal?           @db.Decimal(19, 4)
+  saleNetPrice   Decimal?           @db.Decimal(19, 4)
+  saleGrossPrice Decimal?           @db.Decimal(19, 4)
+  /// HONNAN JON A SOR. Kimondott mezo, nem kovetkeztetes: a kezdo sor es egy
+  /// szinkronbol szuletett sor kulonbozo allitas, es a kulonbseget kesobb NEM
+  /// lehetne visszafejteni az idobelyegbol.
+  source         PriceHistorySource
+  /// MIKOR VOLT IGAZ ez az ar. Lasd a modell fejlecet.
+  observedAt     DateTime
+  createdAt      DateTime           @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  /// A tortenet mindig EGY termekre, idorendben. Az Omnibus-kerdes ("mi volt a
+  /// legalacsonyabb az elmult 30 napban") pontosan ezen az indexen fut.
+  @@index([productId, observedAt])
+}
+
+/// A tortenet-sor szarmazasa.
+enum PriceHistorySource {
+  /// Az induláskor felvett KEZDO sor, a `UnasProductSnapshot` akkori
+  /// allapotabol. Minden termekre keletkezik, meg akkor is, ha az ar azota sem
+  /// mozdult -- kulonben egy harminc napig valtozatlan arnal nincs mihez merni,
+  /// es epp az a leggyakoribb eset.
+  INITIAL
+  /// A UNAS-szinkron kozben rogzitett valtozas.
+  UNAS_SYNC
+}
+
 model UnasProductSnapshot {
   id                             String    @id @default(cuid())
   productId                      String    @unique
