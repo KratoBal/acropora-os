@@ -49,7 +49,7 @@ export const TILTOTT_KOD_PAROSOK: readonly TiltottKodParos[] = [
   },
   {
     sku: "Mithrax_sculptus",
-    ertek: "alpheus_bellulus",
+    ertek: "Alpheus_bellulus",
     indok:
       "NEV-HASONLOSAG A KUSZOB (0.4) ALATT: Jaccard=0 | az ertek gazdaja: Alpheus bellulus (Tigris pisztolyrák) - szimbionta",
     mert: "2026-09-10",
