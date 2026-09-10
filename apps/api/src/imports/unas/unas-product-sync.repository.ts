@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
+import { kellUjArSor } from "./unas-ar-tortenet.js";
 import type {
   CanonicalUnasProduct,
   UnasApiCategory,
@@ -829,6 +830,53 @@ export class UnasProductSyncRepository extends Repository {
               sourceUpdatedAt,
             },
           });
+          /**
+           * AZ AR NYOMA A FELULIRAS ELE KERUL, ES EZ A SORREND KOTOTT.
+           *
+           * A `upsert` alatta LECSERELI a tukor-sort: a `UnasProductSnapshot`
+           * `productId`-je UNIQUE, tehat termekenkent EGY sor all, es minden
+           * szinkron felulirja. Ami nem hagy nyomot, az visszamenoleg NEM
+           * potolhato -- az Omnibus harminc napos ablaka pedig az elso akcio
+           * pillanataban all be.
+           *
+           * A SOR CSAK VALTOZASKOR keletkezik. Kivéve az elsot: ha meg egy sor
+           * sincs a termekhez, az `INITIAL` -- kulonben egy harminc napig
+           * valtozatlan arnal nincs mihez merni, es epp az a leggyakoribb eset.
+           *
+           * A PENZNEM MA MINDIG `null`, es ez merve van: a UNAS kanonikus
+           * termek-alakja nem hordoz penznemet (a `currency` csak a
+           * RENDELESEKEN all). Az oszlop akkor telik meg, amikor a sajat arunk
+           * taplalja a tortenetet -- addig a `null` azt mondja, amit tud.
+           */
+          const arKep = {
+            currency: null,
+            netPrice: diff.product.netPrice,
+            grossPrice: diff.product.grossPrice,
+            saleNetPrice: diff.product.saleNetPrice,
+            saleGrossPrice: diff.product.saleGrossPrice,
+          };
+          const utolsoArSor = await transaction.productPriceHistory.findFirst({
+            where: { productId: product.id },
+            orderBy: [{ observedAt: "desc" }, { createdAt: "desc" }],
+            select: {
+              currency: true,
+              netPrice: true,
+              grossPrice: true,
+              saleNetPrice: true,
+              saleGrossPrice: true,
+            },
+          });
+          if (kellUjArSor(utolsoArSor, arKep)) {
+            await transaction.productPriceHistory.create({
+              data: {
+                productId: product.id,
+                ...arKep,
+                source: utolsoArSor ? "UNAS_SYNC" : "INITIAL",
+                observedAt: windowEnd,
+              },
+            });
+          }
+
           await transaction.unasProductSnapshot.upsert({
             where: { productId: product.id },
             create: {
