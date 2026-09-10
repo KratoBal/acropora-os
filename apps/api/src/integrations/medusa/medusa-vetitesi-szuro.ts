@@ -135,3 +135,42 @@ export function betoltTiltoLista(out: {
   }
   return index;
 }
+
+/**
+ * A PAROS BARMELYIK VALTOZAT CIKKSZAMAVAL EGYEZHET -- ES EZ NEM LAZITAS.
+ *
+ * === MIERT NEM ELEG AZ ELSO VALTOZAT ===
+ *
+ * A `manufacturerPartNumber` a UNAS-ban a TERMEKHEZ tartozik, es a szinkron
+ * MINDEN valtozat-sorra ugyanazt az erteket masolja
+ * (`unas-product-sync.repository.ts`, a valtozatos ag torzse: `sku: item.sku`
+ * valtozatonkent MAS, `manufacturerPartNumber: source.manufacturerPartNumber`
+ * mindegyikre UGYANAZ).
+ *
+ * A vetites viszont az ELSO valtozat mezojet olvassa. Ha tehat a lista egy
+ * MASIK valtozat cikkszamat nevezi meg, a paros nem egyezik -- es a hibas
+ * ertek attol meg kimegy, mert a termeken mindenhol ugyanaz all.
+ *
+ * A helyes paros ezert: a termek BARMELYIK aktiv valtozatanak cikkszama, es az
+ * ertek. Ez nem tagitja a tiltast egy masik TERMEKRE (az a szabaly valtozatlan),
+ * csak azt ismeri el, hogy az ertek termek-szintu.
+ *
+ * === A MERES, AMI SZERINT EZ MA NEM SUL EL -- ES AMIERT MEGIS KELL ===
+ *
+ * A teszt adatbazison mind a 84 lista-cikkszam EGYVALTOZATOS termeken all
+ * (acrobot merese, 2026-09-10): tobb valtozatos termek nulla, "nem elso
+ * valtozat" nulla. A kontroll szerint a lekerdezes KEPES lenne tobbet talalni
+ * (a teszt katalogus 1896 termekebol 9 tobb valtozatos).
+ *
+ * TEHAT MA A KULONBSEG NEM MERHETO -- es ez pontosan az az eset, amikor egy
+ * allitas nem tud elbukni. Azert all itt megis, mert a szabaly a TESZT adatra
+ * bizonyitott, az ELES katalogusra nem: oda a flottanak ma nincs hozzaferese.
+ * Egy termek, ami elesben tobb valtozatot visel, ezen az agon akadna fenn.
+ */
+export function tiltottKodBarmelyikValtozaton(
+  skuk: readonly (string | null | undefined)[],
+  ertek: string | null | undefined,
+  index: ReadonlySet<string>,
+): boolean {
+  return skuk.some((sku) => tiltottKod(sku, ertek, index));
+}

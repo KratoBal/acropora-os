@@ -23,7 +23,10 @@ import {
   describeBlockedBarcode,
   describeSkippedBarcode,
 } from "./medusa-barcode.policy.js";
-import { betoltTiltoLista, tiltottKod } from "./medusa-vetitesi-szuro.js";
+import {
+  betoltTiltoLista,
+  tiltottKodBarmelyikValtozaton,
+} from "./medusa-vetitesi-szuro.js";
 import {
   decideMedusaBrandCollection,
   describeMissingBrandMapping,
@@ -903,7 +906,11 @@ export async function runProjectionCli(
     const vonalkod = decideMedusaBarcode(
       nyersVonalkod,
       azonosKodudarab,
-      tiltottKod(product.variants[0]?.sku, nyersVonalkod, tiltoIndex),
+      tiltottKodBarmelyikValtozaton(
+        product.variants.map((valtozat) => valtozat.sku),
+        nyersVonalkod,
+        tiltoIndex,
+      ),
     );
     if (vonalkod.kind === "blocked") {
       tiltottVonalkod += 1;
