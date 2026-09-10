@@ -619,6 +619,15 @@ export async function runProjectionCli(
    * hianyzonal.
    */
   const tiltoIndex = betoltTiltoLista(out);
+  /**
+   * HANY TERMEKET NEZETT MEG A FUTAS -- ES EZ A SZAM A SZURO SZAMA MELLE KELL.
+   *
+   * A "84 parosbol 0 illeszkedett" onmagaban ketfelet jelenthet: vagy egyetlen
+   * tiltott ertek sem all mar a katalogusban, vagy a futas KET termeket nezett
+   * meg, es egyik sem volt a listan. A ket szam egyutt eldontheto, egy magaban
+   * nem. (acrobot kikotese, 2026-09-10.)
+   */
+  let megnezettTermek = 0;
   let masoltKepek = 0;
   let bukottKepek = 0;
   /**
@@ -655,6 +664,8 @@ export async function runProjectionCli(
       }
       productId = lookup.productId;
     } else productId = argument;
+
+    megnezettTermek += 1;
 
     const product = await db.product.findUnique({
       where: { id: productId },
@@ -1248,6 +1259,24 @@ export async function runProjectionCli(
    * kod; a tiltottaknal a lista mar eldontotte, hogy egyiküké sem ezen a
    * termeken, es ott a forras JAVITASA a teendo.
    */
+  /**
+   * A SZURO MERLEGE MINDIG KIIRODIK, MEG AKKOR IS, HA NULLA ILLESZKEDETT.
+   *
+   * A tobbi sor felteteles, mert azok ESEMENYT jelentenek. Ez a sor ALLAPOTOT:
+   * azt mondja meg, hogy a szuro egyaltalan dolgozott-e. Egy halott sor a
+   * listaban (rossz kis-nagybetu, elgepelt cikkszam) SEMMILYEN esemenyt nem
+   * valt ki -- pontosan attol halott. A merleg az egyetlen hely, ahol
+   * megjelenhet.
+   *
+   * MERVE 2026-09-10: a lista egy sora sosem illeszkedett volna, mert az ertek
+   * kisbetusen allt benne. A darabszam stimmelt, a sor ott volt, es soha nem
+   * sult volna el.
+   */
+  out.stdout(
+    `A vetítési szűrő ${tiltoIndex.size} párosából ${tiltottVonalkod} ` +
+      `illeszkedett | a futás ${megnezettTermek} terméket érintett.\n`,
+  );
+
   if (tiltottVonalkod)
     out.stdout(
       `${tiltottVonalkod} vonalkód maradt ki a vetítési szűrő miatt. ` +
