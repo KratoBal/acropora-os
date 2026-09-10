@@ -147,7 +147,8 @@ describe("a kategóriafa betöltése", () => {
     );
     // A MEZO NEVE `name`, nem `title`. A Medusa szerzodese ezt varja.
     assert.equal(letrehozva[0]!.name, "Termékek");
-    assert.equal(letrehozva[1]!.name, "Halak - Termékek");
+    // EGYEDI NEV -> ROVID CIM (Balazs dontese, 2026-09-04).
+    assert.equal(letrehozva[1]!.name, "Halak");
     /*
       EZ A LENYEG. A gyerek szuloje NEM a mi azonositonk, hanem az elozo
       hivasban KELETKEZETT Medusa-azonosito. Ha a szolgaltatas a sajat
@@ -382,12 +383,10 @@ describe("a kategóriafa betöltése", () => {
     const service = new MedusaCategoryImportService(links);
     const report = await service.run(client, FA, MOST);
 
-    assert.deepEqual(frissitve, [
-      { id: "pcat_regi", handle: "halak-termekek" },
-    ]);
+    assert.deepEqual(frissitve, [{ id: "pcat_regi", handle: "halak" }]);
     assert.deepEqual(
       report.handleUpdates.map((u) => [u.from, u.to]),
-      [["halak---termékek", "halak-termekek"]],
+      [["halak---termékek", "halak"]],
     );
   });
 

@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   categoryRowsFromOurTree,
   categoryTitle,
+  utkozoNevek,
   firstOutOfOrder,
   parseCategoryTsv,
   planCategoryImport,
@@ -99,18 +100,70 @@ describe("a mi fánkból készülő sorok", () => {
   });
 });
 
-describe("a megjelenő cím", () => {
-  it("a gyökér a saját nevén áll", () => {
-    assert.equal(categoryTitle("Termékek", null), "Termékek");
+describe("az ütköző nevek halmaza", () => {
+  it("a többször előforduló nevet felveszi", () => {
+    const ki = utkozoNevek([
+      { name: "Aquaforest" },
+      { name: "Aquaforest" },
+      { name: "Lehabzók" },
+    ]);
+
+    assert.equal(ki.has("Aquaforest"), true);
   });
 
-  it("a mélyebb a szülője nevével egészül ki", () => {
-    // A HETVENHAT UTKOZO NEV MIATT. Ket kulonbozo agon allo "Nagy" itt ket
+  // A TAGADO PAR. Enelkul a fenti allitas egy olyan valtozatra is zold lenne,
+  // ami MINDEN nevet felvesz -- vagyis a halmaz letezeset merne.
+  it("az egyszer előfordulót NEM veszi fel", () => {
+    const ki = utkozoNevek([
+      { name: "Aquaforest" },
+      { name: "Aquaforest" },
+      { name: "Lehabzók" },
+    ]);
+
+    assert.equal(ki.has("Lehabzók"), false);
+    assert.equal(ki.size, 1);
+  });
+});
+
+describe("a megjelenő cím", () => {
+  it("a gyökér a saját nevén áll", () => {
+    assert.equal(categoryTitle("Termékek", null, false), "Termékek");
+  });
+
+  // EZ AZ AZ ALLITAS, AMI A 2026-09-04-I DONTEST ROGZITI: az EGYEDI nevu
+  // kategoria ROVID nevet kap, akkor is, ha van szuloje. A mai adaton ez a
+  // tobbseg: 142 a 219-bol.
+  it("egyedi név esetén NEM kerül bele a szülő", () => {
+    assert.equal(categoryTitle("Lehabzók", "Termékek", false), "Lehabzók");
+  });
+
+  it("ütköző név esetén a szülő megkülönbözteti", () => {
+    // A HETVENHET UTKOZO NEV MIATT. Ket kulonbozo agon allo "Nagy" itt ket
     // kulonbozo cimet kap.
-    assert.equal(categoryTitle("Nagy", "Halak"), "Nagy - Halak");
+    assert.equal(categoryTitle("Nagy", "Halak", true), "Nagy - Halak");
     assert.notEqual(
-      categoryTitle("Nagy", "Halak"),
-      categoryTitle("Nagy", "Korall"),
+      categoryTitle("Nagy", "Halak", true),
+      categoryTitle("Nagy", "Korall", true),
+    );
+  });
+
+  // A GYOKER AKKOR IS ROVID, HA A NEVE UTKOZIK: nincs szuloje, amit hozza
+  // lehetne fuzni. Ez nem elmeleti: egy gyoker neve utkozhet egy melyebb
+  // kategoriaeval, es akkor a MELYEBB viszi a szulot.
+  it("gyökérnél az ütközés sem ad szülőt", () => {
+    assert.equal(categoryTitle("Halak", null, true), "Halak");
+  });
+
+  // ES AMI SZANDEKOSAN NINCS: VISSZAFEJTES. A fuggveny a szulot HOZZAADJA.
+  // Egy "vagd le az utolso ' - ' utani reszt" ag EGY MEGLEVO eseten tevedne:
+  // az RKS kategoria tiszta neve maga tartalmaz " - "-t.
+  it("a nevében kötőjelet viselő kategóriát nem csonkítja", () => {
+    const nev = "RKS - Fogyáshoz igazított nyomelem rendszer";
+
+    assert.equal(categoryTitle(nev, "Modern Reef", false), nev);
+    assert.equal(
+      categoryTitle(nev, "Modern Reef", true),
+      `${nev} - Modern Reef`,
     );
   });
 });
@@ -141,13 +194,38 @@ describe("a betöltés terve", () => {
     { ourId: "2", parentOurId: "1", name: "Halak" },
   ];
 
+  /**
+   * AZ UTKOZO ESET A TERV SZINTJEN IS, NEM CSAK A `categoryTitle` EGYSEGTESZTEN.
+   *
+   * A ket "Nagy" ket kulonbozo szulo alatt all: enelkul a terv csak a ROVID
+   * agat jarna be, es egy valtozat, ami SOHA nem fuzi hozza a szulot, ugyanugy
+   * zold maradna.
+   */
+  it("ütköző néven a terv a szülőt is kiírja", () => {
+    const utkozo: CategoryRow[] = [
+      { ourId: "1", parentOurId: null, name: "Halak" },
+      { ourId: "2", parentOurId: null, name: "Korallok" },
+      { ourId: "3", parentOurId: "1", name: "Nagy" },
+      { ourId: "4", parentOurId: "2", name: "Nagy" },
+    ];
+
+    const terv = planCategoryImport(utkozo, [], []);
+
+    assert.deepEqual(
+      terv.create.map((c) => c.title),
+      ["Halak", "Korallok", "Nagy - Halak", "Nagy - Korallok"],
+    );
+  });
+
   it("üres Medusába mindet létrehozza, sorrendben", () => {
     const terv = planCategoryImport(rows, [], []);
     assert.deepEqual(
       terv.create.map((c) => [c.ourId, c.title, c.parentOurId]),
       [
         ["1", "Termékek", null],
-        ["2", "Halak - Termékek", "1"],
+        // EGYEDI NEV -> ROVID CIM (Balazs dontese, 2026-09-04). Ez a mai
+        // katalogusban a tobbseg: 142 a 219-bol.
+        ["2", "Halak", "1"],
       ],
     );
     assert.deepEqual(terv.skip, []);
@@ -290,11 +368,13 @@ describe("a hatodik allapot: a tarolt webcim elter a szabalytol", () => {
         { ourId: "2", medusaId: "pcat_2" },
       ],
     );
+    // AZ "Eledelek" EGYEDI ebben a faban, tehat a mai szabaly szerint ROVID
+    // cimet kap -- es a webcim is rovidul, nem csak az ekezetek esnek ki.
     assert.deepEqual(
       terv.handleUpdate.map((u) => [u.ourId, u.from, u.to]),
       [
         ["1", "termékek", "termekek"],
-        ["2", "eledelek---termékek", "eledelek-termekek"],
+        ["2", "eledelek---termékek", "eledelek"],
       ],
     );
   });
@@ -304,7 +384,7 @@ describe("a hatodik allapot: a tarolt webcim elter a szabalytol", () => {
       FA,
       [
         { id: "pcat_1", externalId: "1", handle: "termekek" },
-        { id: "pcat_2", externalId: "2", handle: "eledelek-termekek" },
+        { id: "pcat_2", externalId: "2", handle: "eledelek" },
       ],
       [
         { ourId: "1", medusaId: "pcat_1" },
