@@ -36,11 +36,29 @@
  * (acrobot dontese, 2026-09-10.)
  */
 
+import { TILTOTT_KOD_PAROSOK } from "./medusa-vetitesi-szuro.data.js";
+
 /** Egy sor a listabol: a mi cikkszamunk es az az ertek, ami nem az ove. */
 export type TiltottKodParos = {
   sku: string;
   /** A "Gyartoi cikkszam" mezo megmert, teves erteke. */
   ertek: string;
+  /**
+   * MIERT KERULT A LISTARA -- KOTELEZO, ES EZ SZERKEZET, NEM MEGALLAPODAS.
+   *
+   * Egy sor, ami csak az azonositokat tartalmazza, fel ev mulva
+   * megfejthetetlen, es senki nem meri majd kivenni, mert nem tudja, miert
+   * kerult be. Kotelezo mezokent egy indok nelkuli sor LE SEM FORDUL.
+   */
+  indok: string;
+  /**
+   * A MERES NAPJA (ISO), UGYANEZERT KOTELEZO.
+   *
+   * A tiltas nalunk ALLAPOT, nem tulajdonsag: a forras javulhat. A szuro
+   * magatol is lejar (a paros nem egyezik, ha az ertek megvaltozik), de az a
+   * lejarat NEMA. A datum az, ami valakit ratesz, hogy ujramerje.
+   */
+  mert: string;
 };
 
 /**
@@ -104,12 +122,13 @@ export function tiltottKod(
 export function betoltTiltoLista(out: {
   stdout: (text: string) => void;
 }): ReadonlySet<string> {
-  const sorok: readonly TiltottKodParos[] = [];
+  const sorok: readonly TiltottKodParos[] = TILTOTT_KOD_PAROSOK;
   const index = indexelTiltoLista(sorok);
   if (index.size === 0) {
     out.stdout(
       "A vetítési szűrő listája ÜRES: egyetlen érték sem lesz visszatartva. " +
-        "Ez nem hiba, hanem a mai állapot -- a lista helye még döntés alatt.\n",
+        "Ez NEM a várt állapot -- a lista a repóban áll, tehát üres index " +
+        "azt jelenti, hogy a betöltés romlott el.\n",
     );
   } else {
     out.stdout(`A vetítési szűrő listája ${index.size} párost tart.\n`);

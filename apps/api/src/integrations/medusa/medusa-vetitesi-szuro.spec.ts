@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 
+import { TILTOTT_KOD_PAROSOK } from "./medusa-vetitesi-szuro.data.js";
 import {
   indexelTiltoLista,
   tiltottKod,
@@ -17,8 +18,18 @@ import {
  */
 describe("a vetitesi szuro parosa", () => {
   const LISTA: TiltottKodParos[] = [
-    { sku: "AF_starterpack", ertek: "5902026731010" },
-    { sku: "_190496", ertek: "710270148523" },
+    {
+      sku: "AF_starterpack",
+      ertek: "5902026731010",
+      indok: "proba",
+      mert: "2026-09-10",
+    },
+    {
+      sku: "_190496",
+      ertek: "710270148523",
+      indok: "proba",
+      mert: "2026-09-10",
+    },
   ];
   const index = indexelTiltoLista(LISTA);
 
@@ -62,9 +73,14 @@ describe("a vetitesi szuro parosa", () => {
    */
   it("a hianyos sorok kimaradnak, a teljesek bent maradnak", () => {
     const vegyes = indexelTiltoLista([
-      { sku: "", ertek: "5902026731010" },
-      { sku: "_190496", ertek: "" },
-      { sku: "AF_starterpack", ertek: "5902026731010" },
+      { sku: "", ertek: "5902026731010", indok: "proba", mert: "2026-09-10" },
+      { sku: "_190496", ertek: "", indok: "proba", mert: "2026-09-10" },
+      {
+        sku: "AF_starterpack",
+        ertek: "5902026731010",
+        indok: "proba",
+        mert: "2026-09-10",
+      },
     ]);
     assert.equal(vegyes.size, 1);
     assert.equal(tiltottKod("AF_starterpack", "5902026731010", vegyes), true);
@@ -76,7 +92,9 @@ describe("a vetitesi szuro parosa", () => {
    * eszrevenni.
    */
   it("ures sor nem tilt le minden ertek nelkuli terméket", () => {
-    const uressel = indexelTiltoLista([{ sku: "", ertek: "" }]);
+    const uressel = indexelTiltoLista([
+      { sku: "", ertek: "", indok: "proba", mert: "2026-09-10" },
+    ]);
     assert.equal(tiltottKod("barmi", "", uressel), false);
     assert.equal(tiltottKod("", "", uressel), false);
   });
@@ -130,5 +148,42 @@ describe("a szuro bekotese a vetitesbe", () => {
 
     assert.equal(forras.includes("describeSkippedBarcode("), true);
     assert.equal(forras.includes("let kihagyottVonalkod = 0;"), true);
+  });
+});
+
+/**
+ * A VALODI LISTA MINOSEGE -- NEM A TARTALMA.
+ *
+ * Ezek az allitasok NEM azt merik, mi all a listan (az adat, es a katalogus
+ * valtozasaval valtozik), hanem hogy minden sor MEGFEJTHETO marad: van indoka
+ * es van meresi datuma. A tipus ezt mar kikenyszeriti forditaskor; ez a
+ * szakasz azt fogja meg, ha valaki egy URES sztringgel elegiti ki.
+ *
+ * A DARABSZAMOT SZANDEKOSAN NEM ALLITOM. Egy "84" a tesztben azt jelentene,
+ * hogy a lista minden jogos valtozasa pirosat ad -- es akkor a szam atirasa
+ * valna reflexsze, nem a lista atgondolasa.
+ */
+describe("a valodi tilto lista minosege", () => {
+  it("nem ures, es minden soron all indok es meresi datum", () => {
+    assert.equal(TILTOTT_KOD_PAROSOK.length > 0, true);
+
+    for (const sor of TILTOTT_KOD_PAROSOK) {
+      assert.equal(sor.sku.trim().length > 0, true);
+      assert.equal(sor.ertek.trim().length > 0, true);
+      assert.equal(sor.indok.trim().length > 0, true);
+      assert.match(sor.mert, /^\d{4}-\d{2}-\d{2}$/);
+    }
+  });
+
+  /**
+   * ISMETLODO PAROS NINCS. Ez a lista GENERALT, es egy ujragenaralas
+   * duplikalhat -- a szuro ettol nem romlana el, de a darabszam hazudna, es
+   * azon a szamon meruk le, mekkora a halmaz.
+   */
+  it("egy paros csak egyszer szerepel", () => {
+    const kulcsok = TILTOTT_KOD_PAROSOK.map(
+      (sor) => `${sor.sku.trim()} ${sor.ertek.trim()}`,
+    );
+    assert.equal(new Set(kulcsok).size, kulcsok.length);
   });
 });
