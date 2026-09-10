@@ -187,3 +187,45 @@ describe("a valodi tilto lista minosege", () => {
     assert.equal(new Set(kulcsok).size, kulcsok.length);
   });
 });
+
+/**
+ * A SZURO MERLEGE A KIMENETBEN -- ES MIERT KET SZAM, NEM EGY.
+ *
+ * Forras-olvaso allitasok, ugyanabban az idiomaban, mint a bekotes-szakasz: a
+ * vetites torzse ebben a repoban nem fut le tesztben.
+ *
+ * A "84 parosbol 0 illeszkedett" onmagaban ketfelet jelent: vagy nincs mar
+ * tiltott ertek a katalogusban, vagy a futas KET termeket nezett meg. A ket
+ * szam egyutt eldontheto -- ezert all rá KULON allitas, hogy a masodik szam
+ * (a megnezett termekek) ki ne essen egy kesobbi egyszerusitesben.
+ */
+describe("a szuro merlege a futas vegen", () => {
+  const UT = "src/integrations/medusa/medusa-projection.runner.ts";
+
+  it("a merleg MIND A KET szamot kiirja", async () => {
+    const forras = await readFile(UT, "utf-8");
+
+    assert.equal(forras.includes("let megnezettTermek = 0;"), true);
+    assert.equal(forras.includes("megnezettTermek += 1;"), true);
+    assert.equal(forras.includes("${tiltoIndex.size} párosából"), true);
+    assert.equal(forras.includes("${megnezettTermek} terméket érintett"), true);
+  });
+
+  /**
+   * A MERLEG NEM FELTETELES. Ez a lenyeg: a tobbi sor esemenyt jelent, ez
+   * ALLAPOTOT. Egy halott lista-sor semmilyen esemenyt nem valt ki, tehat csak
+   * itt jelenhet meg -- ha valaki `if (tiltottVonalkod)` moge teszi, a nulla
+   * eset megint nema lesz.
+   */
+  it("a merleg akkor is kiirodik, ha nulla illeszkedett", async () => {
+    const forras = await readFile(UT, "utf-8");
+
+    const merleg = forras.indexOf("A vetítési szűrő ${tiltoIndex.size}");
+    assert.equal(merleg > 0, true);
+
+    /* A merleg ELOTT allo utolso `if` nem a tiltott szamlalora szol. */
+    const elotte = forras.slice(0, merleg);
+    const utolsoIf = elotte.lastIndexOf("if (tiltottVonalkod)");
+    assert.equal(utolsoIf === -1 || merleg - utolsoIf > 400, true);
+  });
+});
