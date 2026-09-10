@@ -262,15 +262,65 @@ export function categoryRowsFromOurTree(
 }
 
 /**
+ * AZOK A NEVEK, AMIK TOBBSZOR ELOFORDULNAK A FABAN.
+ *
+ * Halmaz-szintu teny: egyetlen kategoriabol NEM eldontheto. Ezert kulon
+ * fuggveny, es ezert kapja a `categoryTitle` KIVULROL -- ha maga szamolna, a
+ * hivonak at kellene adnia a teljes fat egy olyan fuggvenynek, ami egyetlen
+ * cimet keszit.
+ *
+ * A GYOKEREK IS BENNE VANNAK a szamolasban. Nekik nincs szulojuk, tehat a
+ * cimuk ugyis rovid marad -- de ha egy gyoker neve utkozne egy melyebb
+ * kategorival, a MELYEBB viszi a szulot, es ez igy helyes.
+ */
+export function utkozoNevek(
+  rows: readonly { name: string }[],
+): ReadonlySet<string> {
+  const db = new Map<string, number>();
+  for (const sor of rows) db.set(sor.name, (db.get(sor.name) ?? 0) + 1);
+  const ki = new Set<string>();
+  for (const [nev, n] of db) if (n > 1) ki.add(nev);
+  return ki;
+}
+
+/**
  * A MEGJELENO CIM. KULON FUGGVENY, ES EZ NEM STILUS.
  *
- * A mai szabaly: `{nev} - {szulo neve}`, es polip merte, hogy ez a hetvenhat
- * utkozo nevre NULLA utkozest hagy. A SZABALY ELFOGADASA VISZONT BALAZSE, es
- * meg nem tortent meg -- ezert all egy helyen: ha mast valaszt, EZ az egy
- * fuggveny valtozik, nem a betoltes.
+ * === A SZABALY, ES HOGY KI DONTOTTE EL ===
+ *
+ * Balazs 2026-09-04-en a SZUKEBB valtozatra mondott igent (szo szerint: "ok.
+ * legyen a masodik"): a szulo neve CSAK akkor kerul a cimbe, ha a kategoria
+ * neve TOBBSZOR is elofordul a faban. Az egyedi nevu kategoriak rovid nevet
+ * kapnak.
+ *
+ * A dontes 2026-09-04-i, es 2026-09-10-ig nem epult meg, mert nem volt rola
+ * kartya (c0642418).
+ *
+ * === A MERES, AMIN A DONTES ALL, MA IS UGYANAZ ===
+ *
+ * A stage Medusa teljes listajan (219 kategoria, 2026-09-10, nautilus, a
+ * gyokerekbol lefele feloldva):
+ *
+ *     kulonbozo tiszta nev      169
+ *     tobbszor elofordulo        27      (Aquaforest 7, Red Sea 5, Fauna Marin 5)
+ *     ERINTETT (viszi a szulot)  77
+ *     EGYEDI (rovid nev)        142
+ *
+ * Beture ugyanaz a negy szam, amire a dontes epult -- csak a mai elo adatbol.
+ *
+ * === AMI NINCS ITT, ES SZANDEKOSAN NINCS: VISSZAFEJTES ===
+ *
+ * Ez a fuggveny a szulo nevet HOZZAADJA, sosem fejti vissza. Aki egyszer
+ * "vagd le az utolso ' - ' utani reszt" agat tesz ide vagy a kirakatba, EGY
+ * MEGLEVO eseten tevedne: az "RKS - Fogyashoz igazitott nyomelem rendszer"
+ * tiszta neve MAGA tartalmaz " - "-t.
  */
-export function categoryTitle(name: string, parentName: string | null): string {
-  return parentName ? `${name} - ${parentName}` : name;
+export function categoryTitle(
+  name: string,
+  parentName: string | null,
+  utkozik: boolean,
+): string {
+  return parentName && utkozik ? `${name} - ${parentName}` : name;
 }
 
 /**
@@ -337,6 +387,13 @@ export function planCategoryImport(
   const conflict: CategoryMappingConflict[] = [];
   const handleUpdate: CategoryHandleUpdate[] = [];
 
+  /*
+   * EGYSZER SZAMOLJUK KI, es a TELJES sorhalmazon -- nem soronkent. Egy
+   * soronkenti szamolas ugyanezt adna, csak N-szer, es a kovetkezo olvaso nem
+   * latna, hogy a teny a HALMAZE, nem a soré.
+   */
+  const utkozo = utkozoNevek(rows);
+
   /**
    * A HATODIK ALLAPOT FELVETELE. Csak ott, ahol a kategoria MAR ALL es a
    * lekepezes rendben van -- utkozesnel NEM nyulunk hozza, mert ott azt sem
@@ -357,6 +414,7 @@ export function planCategoryImport(
     const cim = categoryTitle(
       sor.name,
       sor.parentOurId ? (nevek.get(sor.parentOurId) ?? null) : null,
+      utkozo.has(sor.name),
     );
 
     if (aMedusaban && aSorunk) {
