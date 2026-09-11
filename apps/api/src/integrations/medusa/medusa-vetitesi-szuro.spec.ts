@@ -6,6 +6,7 @@ import { TILTOTT_KOD_PAROSOK } from "./medusa-vetitesi-szuro.data.js";
 import {
   indexelTiltoLista,
   tiltottKod,
+  tiltottKodBarmelyikValtozaton,
   type TiltottKodParos,
 } from "./medusa-vetitesi-szuro.js";
 
@@ -119,8 +120,18 @@ describe("a szuro bekotese a vetitesbe", () => {
     const forras = await readFile(UT, "utf-8");
 
     assert.equal(forras.includes("betoltTiltoLista(out)"), true);
+    /*
+      A HIVAS ALAKJA 2026-09-10-EN MEGVALTOZOTT, ES EZT AZ ALLITAS FOGTA MEG.
+
+      Eredetileg `tiltottKod(product.variants[0]?.sku, ...)` allt itt. A mezo
+      viszont TERMEK-szintu (a szinkron minden valtozat-sorra ugyanazt masolja),
+      tehat a paros barmelyik aktiv valtozat cikkszamaval egyezhet. Amikor a
+      hivast atirtam, EZ az allitas valtott pirosra -- nem a szemem vette eszre,
+      hogy a bekotes megvaltozott.
+    */
+    assert.equal(forras.includes("tiltottKodBarmelyikValtozaton("), true);
     assert.equal(
-      forras.includes("tiltottKod(product.variants[0]?.sku, nyersVonalkod"),
+      forras.includes("product.variants.map((valtozat) => valtozat.sku)"),
       true,
     );
   });
@@ -227,5 +238,83 @@ describe("a szuro merlege a futas vegen", () => {
     const elotte = forras.slice(0, merleg);
     const utolsoIf = elotte.lastIndexOf("if (tiltottVonalkod)");
     assert.equal(utolsoIf === -1 || merleg - utolsoIf > 400, true);
+  });
+});
+
+/**
+ * A PAROS BARMELYIK VALTOZAT CIKKSZAMAVAL EGYEZHET.
+ *
+ * === MIERT KELL, HOLOTT MA NEM SUL EL ===
+ *
+ * A teszt adatbazison mind a 84 lista-cikkszam EGYVALTOZATOS termeken all
+ * (acrobot merese, 2026-09-10): "tobb valtozatos termek: 0", "nem elso
+ * valtozat: 0", es a kontroll szerint a lekerdezes KEPES lenne tobbet talalni
+ * (1896 termekbol 9 tobb valtozatos).
+ *
+ * Vagyis a kulonbseg a TESZT adaton nem merheto. Az ELES katalogusra viszont
+ * nincs meresunk -- a flottanak ma nincs hozzaferese --, es a mezo
+ * TERMEK-szintu: a szinkron minden valtozat-sorra ugyanazt az erteket masolja,
+ * mikozben a vetites az ELSO valtozatet olvassa.
+ *
+ * Ezek az allitasok tehat NEM egy mert hibat zarnak be, hanem egy mert
+ * MECHANIZMUST kovetnek. Ezt kimondom, mert egy allitas, ami ma nem tud
+ * elbukni a valodi adaton, konnyen latszik feleslegesnek -- a fixtura viszont
+ * pontosan azt az esetet allitja elo, ami elesben elofordulhat.
+ */
+describe("a paros barmelyik valtozat cikkszamaval", () => {
+  const index = indexelTiltoLista([
+    {
+      sku: "MASODIK_VALTOZAT",
+      ertek: "5902026731010",
+      indok: "proba",
+      mert: "2026-09-10",
+    },
+  ]);
+
+  it("akkor is tilt, ha a lista a MASODIK valtozat cikkszamat nevezi meg", () => {
+    assert.equal(
+      tiltottKodBarmelyikValtozaton(
+        ["ELSO_VALTOZAT", "MASODIK_VALTOZAT"],
+        "5902026731010",
+        index,
+      ),
+      true,
+    );
+  });
+
+  /**
+   * ES A REGI ALAK EZT NEM FOGTA VOLNA MEG: az elso valtozat cikkszamaval
+   * kerdezve a paros nem egyezik, es a hibas ertek kimenne -- holott a termeken
+   * MINDENHOL ugyanaz all.
+   */
+  it("a regi, elso-valtozatos alak ugyanezt ATENGEDNE", () => {
+    assert.equal(tiltottKod("ELSO_VALTOZAT", "5902026731010", index), false);
+  });
+
+  /**
+   * A TAGITAS NEM LEP AT TERMEK-HATART: egy MASIK termek valtozatai nem
+   * egyeznek, barmennyi van belolük. Enelkul ez az allitas-keszlet egy
+   * mindig-igazat ado fuggvenyt is kielegitene.
+   */
+  it("masik termek cikkszamaival NEM tilt", () => {
+    assert.equal(
+      tiltottKodBarmelyikValtozaton(
+        ["IDEGEN_A", "IDEGEN_B"],
+        "5902026731010",
+        index,
+      ),
+      false,
+    );
+  });
+
+  it("ures lista es hianyzo cikkszamok eseten nem tilt", () => {
+    assert.equal(
+      tiltottKodBarmelyikValtozaton([], "5902026731010", index),
+      false,
+    );
+    assert.equal(
+      tiltottKodBarmelyikValtozaton([null, undefined], "5902026731010", index),
+      false,
+    );
   });
 });
