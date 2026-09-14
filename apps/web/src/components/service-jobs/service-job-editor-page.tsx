@@ -14,6 +14,10 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { buildSiteOptions } from "@/lib/partners/site-tree";
+import {
+  useAssignableUsers,
+  WorksheetAssigneePicker,
+} from "@/components/worksheets/worksheet-assignee-picker";
 import { JobAssetPicker } from "./job-asset-picker";
 import { PartnerPicker } from "./partner-picker";
 
@@ -57,6 +61,7 @@ export function ServiceJobEditorPage() {
   const [departmentsLoaded, setDepartmentsLoaded] = useState(false);
   const [departmentId, setDepartmentId] = useState("");
   const [assetIds, setAssetIds] = useState<string[]>([]);
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const canManage = Boolean(
@@ -132,6 +137,26 @@ export function ServiceJobEditorPage() {
     [departments],
   );
 
+  /**
+   * A DELEGALHATO KOLLEGAK, A MUNKALAP LISTAJABOL.
+   *
+   * NEM uj vegpont es nem uj valaszto: a `useAssignableUsers` es a
+   * `WorksheetAssigneePicker` mar letezik, ugyanazzal a szaballyal (aktiv
+   * kollega, akinek a szerepkore engedi a szerviz kezeleset) es ugyanazzal a
+   * partner-hatokorrel. A szerver oldalon is EGY szabaly all a ket helyen
+   * (`common/service-assignment.ts`), tehat a felajanlott es az elfogadott
+   * halmaz nem tud elcsuszni egymastol.
+   *
+   * A valaszto NEM fugg a partnertol es a helyszintol: a kollegat akkor is ki
+   * lehet adni, ha a jegynek meg nincs partnere. A tobbi mezotol eltero
+   * viselkedes szandekos, es a lapon is latszik: ez az egyetlen szakasz, ami
+   * partner nelkul is hasznalhato.
+   */
+  const { candidates, error: assigneeError } = useAssignableUsers(
+    token,
+    canManage,
+  );
+
   if (!canManage)
     return (
       <Alert
@@ -151,6 +176,7 @@ export function ServiceJobEditorPage() {
         customerId: customer?.customerId ?? null,
         departmentId: departmentId || null,
         assetIds,
+        assigneeIds,
       });
       // A FRISS JEGY LAPJÁRA VISZÜNK, nem a listára: aki most nyitotta, azt
       // akarja folytatni - munkalapot csatolni, léptetni.
@@ -297,6 +323,34 @@ export function ServiceJobEditorPage() {
             selected={assetIds}
             onChange={setAssetIds}
           />
+        </div>
+
+        <div className="space-y-1">
+          <span className="text-sm font-semibold">Szervizes kollégák</span>
+          {/*
+            A DELEGALAS A FELVITEL RESZE, EGY TRANZAKCIOBAN a jeggyel. Kulon
+            lepesre bizva a felvivo azt hinne, kiadta a munkat, kozben a jegy
+            senki listajan nem jelenne meg -- es errol semmi nem szolna, mert a
+            delegalatlan jegy nem hibas allapot.
+          */}
+          <p className="text-xs text-slate-500">
+            Aki itt szerepel, értesítést kap, és megnyithatja a munkalapot.
+          </p>
+          {assigneeError ? (
+            <p className="text-sm text-red-600">{assigneeError}</p>
+          ) : (
+            <WorksheetAssigneePicker
+              candidates={candidates}
+              selected={assigneeIds}
+              onToggle={(userId) =>
+                setAssigneeIds((elozo) =>
+                  elozo.includes(userId)
+                    ? elozo.filter((id) => id !== userId)
+                    : [...elozo, userId],
+                )
+              }
+            />
+          )}
         </div>
 
         <div className="flex gap-2">

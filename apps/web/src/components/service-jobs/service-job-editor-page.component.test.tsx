@@ -17,6 +17,7 @@ const api = vi.hoisted(() => ({ create: vi.fn() }));
 const sheets = vi.hoisted(() => ({
   selectablePartners: vi.fn(),
   departments: vi.fn(),
+  assignableUsers: vi.fn(),
 }));
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
@@ -73,6 +74,9 @@ describe("ServiceJobEditorPage", () => {
     // ures lista ott a mai valosag is. Amelyik allitas a helyszinrol szol, az
     // sajat valaszt ad.
     sheets.departments.mockReset().mockResolvedValue({ items: [] });
+    // A DELEGALHATO KOLLEGAK LISTAJA ALAPBOL URES: a legtobb allitas nem rola
+    // szol. Amelyik igen, az sajat valaszt ad.
+    sheets.assignableUsers.mockReset().mockResolvedValue({ items: [] });
     navigation.push.mockReset();
   });
 
@@ -106,6 +110,10 @@ describe("ServiceJobEditorPage", () => {
       // mibol valasztani, es a szerver a helyszin nelkuli eszkozt amugy is
       // elutasitja.
       assetIds: [],
+      // A DELEGALTAK KIMONDVA URESEK, nem elhagyva: a valaszto partner nelkul is
+      // hasznalhato (ez az egyetlen ilyen szakasz a lapon), tehat az ures lista
+      // itt SZANDEK, nem kovetkezmeny.
+      assigneeIds: [],
     });
     // A LISTÁRA VISSZAVINNI ANNYI LENNE, mint a felhasználóra hagyni, hogy
     // megkeresse, amit épp létrehozott.
@@ -181,6 +189,7 @@ describe("ServiceJobEditorPage", () => {
       customerId: "vevo-1",
       departmentId: null,
       assetIds: [],
+      assigneeIds: [],
     });
   });
 
@@ -241,6 +250,28 @@ describe("ServiceJobEditorPage", () => {
       "Helyszín",
       "Mi a baj?",
       "Részletek",
+    ]);
+
+    /*
+      A KET UTOLSO SZAKASZ FELIRATA `span`, NEM `label`, mert jelolonegyzet-
+      listara vonatkozik, nem egyetlen mezore -- egy `htmlFor` nelkuli `label`
+      csendben semmire nem mutatna. Ezert kulon merjuk, de UGYANABBAN az
+      allitasban: a kert sorrend hatodik eleme ugyanugy sorrend, mint az elso.
+    */
+    const kartya = document.querySelector(".space-y-4");
+    const szakaszok = Array.from(
+      kartya?.querySelectorAll("label, span.text-sm.font-semibold") ?? [],
+    )
+      .map((elem) => elem.textContent?.trim())
+      .filter((szoveg) => Boolean(szoveg));
+
+    expect(szakaszok).toEqual([
+      "Partner",
+      "Helyszín",
+      "Mi a baj?",
+      "Részletek",
+      "Érintett eszközök",
+      "Szervizes kollégák",
     ]);
   });
 
@@ -373,5 +404,73 @@ describe("ServiceJobEditorPage", () => {
 
     const ujHelyszin = await screen.findByLabelText("Helyszín");
     expect((ujHelyszin as HTMLSelectElement).value).toEqual("");
+  });
+  /**
+   * A DELEGALAS A FELVITEL RESZE, EGY TRANZAKCIOBAN a jeggyel. Kulon lepesre
+   * bizva a felvivo azt hinne, kiadta a munkat, kozben a jegy senki listajan
+   * nem jelenne meg -- es errol semmi nem szolna, mert a delegalatlan jegy nem
+   * hibas allapot.
+   */
+  it("a kivalasztott kollegat elkuldi a felvitellel", async () => {
+    sheets.assignableUsers.mockResolvedValue({
+      items: [
+        { id: "user-7", name: "Szerelő Sándor", role: "SERVICE" },
+        { id: "user-8", name: "Kovács Kata", role: "SERVICE" },
+      ],
+    });
+    render(<ServiceJobEditorPage />);
+
+    fireEvent.click(await screen.findByLabelText("Kovács Kata"));
+    fireEvent.change(screen.getByLabelText("Mi a baj?"), {
+      target: { value: "A hármas medence szivattyúja nem indul" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Hibajegy megnyitása" }),
+    );
+
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
+    expect(api.create.mock.calls[0]?.[1]).toMatchObject({
+      assigneeIds: ["user-8"],
+    });
+  });
+
+  /**
+   * A KALIBRACIO MASIK IRANYA: az elozo allitas akkor is zold lenne, ha a
+   * kapcsolo csak hozzaadni tudna. Ez meri, hogy le is lehet venni.
+   */
+  it("a mar kivalasztott kollegat le lehet venni", async () => {
+    sheets.assignableUsers.mockResolvedValue({
+      items: [{ id: "user-7", name: "Szerelő Sándor", role: "SERVICE" }],
+    });
+    render(<ServiceJobEditorPage />);
+
+    const jelolo = await screen.findByLabelText("Szerelő Sándor");
+    fireEvent.click(jelolo);
+    fireEvent.click(jelolo);
+    fireEvent.change(screen.getByLabelText("Mi a baj?"), {
+      target: { value: "A hármas medence szivattyúja nem indul" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Hibajegy megnyitása" }),
+    );
+
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
+    expect(api.create.mock.calls[0]?.[1]).toMatchObject({ assigneeIds: [] });
+  });
+
+  /**
+   * A DELEGALAS AZ EGYETLEN SZAKASZ, AMI PARTNER NELKUL IS HASZNALHATO. A
+   * helyszin es az eszkoz a partnertol fugg, a kollega nem: az iroda akkor is
+   * kiadhatja a munkat, ha a partner meg nincs meg. Ha ez valaha a partnerhez
+   * kotodne, ez az allitas szol.
+   */
+  it("partner nelkul is lehet kollegat valasztani", async () => {
+    sheets.assignableUsers.mockResolvedValue({
+      items: [{ id: "user-7", name: "Szerelő Sándor", role: "SERVICE" }],
+    });
+    render(<ServiceJobEditorPage />);
+
+    expect(await screen.findByLabelText("Szerelő Sándor")).toBeTruthy();
+    expect(screen.getByText(/Előbb válassz partnert/)).toBeTruthy();
   });
 });

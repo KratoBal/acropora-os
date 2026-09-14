@@ -339,6 +339,21 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
         {job.description ? (
           <p className="whitespace-pre-wrap text-sm">{job.description}</p>
         ) : null}
+        {/*
+          A DELEGALTAK A JEGY FEJLECEBEN, nem kulon kartyan. Aki a jegyet
+          megnyitja, elsore azt akarja tudni, kinel van -- egy kulon szakasz a
+          lap aljan ugyanezt az adatot ADNA, csak nem ott, ahol kerdezik.
+
+          A HIANY IS ALLITAS, ezert a "nincs kiosztva" KI VAN IRVA, nem elhagyva.
+          Egy hianyzo sor ugy nez ki, mint egy meg be nem toltott sor, es a
+          kezelo varna rea. Ez ma a jegyek TOBBSEGE: a mezo 2026-09-14-en
+          keletkezett.
+        */}
+        <p className="text-xs text-slate-500">
+          {job.assignees.length === 0
+            ? "Nincs szervizes kollégára kiosztva."
+            : `Kiosztva: ${job.assignees.map((a) => a.name).join(", ")}`}
+        </p>
       </Card>
 
       {canManage ? (

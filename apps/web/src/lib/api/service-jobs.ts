@@ -35,6 +35,8 @@ export const serviceJobsApi = {
       /** A helyszinen allo eszkozok, amikrol a jegy szol. Csak helyszinnel
        * egyutt ervenyes; a szerver a helyszin RESZFAJAT fogadja el. */
       assetIds?: string[];
+      /** A jegyre delegalt szervizes kollegak. Ertesitest kapnak rola. */
+      assigneeIds?: string[];
     },
   ) {
     return apiRequest<{ id: string; jobNumber: string }>(base, token, {

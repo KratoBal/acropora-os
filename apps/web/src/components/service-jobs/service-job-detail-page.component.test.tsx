@@ -533,4 +533,48 @@ describe("ServiceJobDetailPage", () => {
       await screen.findByText("Ez a hibajegy lezárult, nincs több lépése."),
     ).toBeTruthy();
   });
+  /**
+   * A DELEGALTAK A JEGY FEJLECEBEN LATSZANAK. Aki a jegyet megnyitja, elsore
+   * azt akarja tudni, kinel van.
+   */
+  it("kiirja, kire van kiosztva a jegy", async () => {
+    api.detail.mockResolvedValue(
+      detail({
+        assignees: [
+          {
+            userId: "user-7",
+            name: "Szerelő Sándor",
+            assignedAt: "2026-09-14T18:00:00.000Z",
+          },
+          {
+            userId: "user-8",
+            name: "Kovács Kata",
+            assignedAt: "2026-09-14T18:05:00.000Z",
+          },
+        ],
+      }),
+    );
+    render(<ServiceJobDetailPage jobId="job-1" />);
+
+    expect(
+      await screen.findByText("Kiosztva: Szerelő Sándor, Kovács Kata"),
+    ).toBeTruthy();
+  });
+
+  /**
+   * A HIANY IS ALLITAS, ES KI VAN IRVA. Egy hianyzo sor ugy nez ki, mint egy meg
+   * be nem toltott sor, es a kezelo varna rea. Ez ma a jegyek TOBBSEGE: a mezo
+   * 2026-09-14-en keletkezett.
+   *
+   * ES EZ A TESTVER-KONTROLL az elozohoz: enelkul a fenti allitas akkor is zold
+   * lenne, ha a lap MINDIG kiirna valamit.
+   */
+  it("kiosztas nelkul kimondja, hogy nincs kiosztva", async () => {
+    api.detail.mockResolvedValue(detail({ assignees: [] }));
+    render(<ServiceJobDetailPage jobId="job-1" />);
+
+    expect(
+      await screen.findByText("Nincs szervizes kollégára kiosztva."),
+    ).toBeTruthy();
+  });
 });
