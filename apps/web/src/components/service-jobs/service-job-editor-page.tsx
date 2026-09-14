@@ -16,6 +16,11 @@ import { worksheetsApi } from "@/lib/api/worksheets";
 import { buildSiteOptions } from "@/lib/partners/site-tree";
 import { JobAssetPicker } from "./job-asset-picker";
 import { PartnerPicker } from "./partner-picker";
+import {
+  toggleAssignee,
+  useAssignableUsers,
+  WorksheetAssigneePicker,
+} from "@/components/worksheets/worksheet-assignee-picker";
 
 /**
  * ÚJ HIBAJEGY, BELSŐ FELVITEL.
@@ -58,6 +63,7 @@ export function ServiceJobEditorPage() {
   const [departmentId, setDepartmentId] = useState("");
   const [assetIds, setAssetIds] = useState<string[]>([]);
   const [files, setFiles] = useState<File[]>([]);
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   /**
    * A MAR LETREJOTT JEGY, HA A CSATOLMANYOK FELTOLTESE BUKOTT EL.
    *
@@ -77,6 +83,15 @@ export function ServiceJobEditorPage() {
     session && hasPermission(session.user, PERMISSIONS.SERVICE_MANAGE),
   );
   const token = session?.token ?? "";
+
+  /**
+   * A VALASZTHATO KOLLEGAK LISTAJA. A `canManage` a kapcsolo: jogosultsag
+   * nelkul a lap amugy is elutasitja a felvitelt, tehat a lekerdezes sem indul.
+   */
+  const { candidates, error: candidatesError } = useAssignableUsers(
+    token,
+    canManage,
+  );
 
   /**
    * A PARTNER HELYSZINEI, UGYANARROL A VEGPONTROL, AMIT A MUNKALAP HASZNAL.
@@ -198,6 +213,7 @@ export function ServiceJobEditorPage() {
           customerId: customer?.customerId ?? null,
           departmentId: departmentId || null,
           assetIds,
+          assigneeIds,
         })
         .catch((cause: unknown) => {
           setError(
@@ -405,6 +421,37 @@ export function ServiceJobEditorPage() {
             {files.length
               ? `${files.length} fájl feltöltésre vár. A hibajegy megnyitása után töltjük fel.`
               : "Elhagyható. JPEG, PNG vagy PDF, fájlonként legfeljebb 10 MB."}
+          </p>
+        </div>
+
+        <div className="space-y-1">
+          {/*
+            A CIMKE ITT `span`, NEM `label` -- ugyanabbol az okbol, amiert az
+            "Érintett eszközök" felirata is az: egy jelolonegyzet-LISTA all
+            alatta, es a sajat feliratat minden sor viszi. Egy `htmlFor`
+            nelkuli `label` csendben semmire nem mutatna.
+          */}
+          <span className="text-sm font-semibold">Delegált kollégák</span>
+          <WorksheetAssigneePicker
+            candidates={candidates}
+            selected={assigneeIds}
+            onToggle={(userId) =>
+              setAssigneeIds((current) => toggleAssignee(current, userId))
+            }
+          />
+          {candidatesError ? (
+            <p className="text-xs font-medium text-rose-600">
+              {candidatesError}
+            </p>
+          ) : null}
+          {/*
+            MIERT A VEGEN: Balazs 2026-09-14-i sorrendje a HIBAT irja le, majd
+            azt, amit erint, majd a bizonyitekot. A delegalas az egyetlen mezo,
+            ami nem a hibarol szol, hanem a SZERVEZESROL -- aki a munkat
+            kiadja, a legvegen dont rola.
+          */}
+          <p className="pt-1 text-xs text-slate-500">
+            Elhagyható. A delegált kollégák értesítést kapnak a jegyről.
           </p>
         </div>
 

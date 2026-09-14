@@ -20,6 +20,7 @@ const api = vi.hoisted(() => ({
   attachWorksheet: vi.fn(),
   detachWorksheet: vi.fn(),
   setPartner: vi.fn(),
+  setAssignees: vi.fn(),
   documents: vi.fn(),
   uploadDocument: vi.fn(),
   downloadDocument: vi.fn(),
@@ -28,6 +29,7 @@ const api = vi.hoisted(() => ({
 const sheets = vi.hoisted(() => ({
   attachable: vi.fn(),
   selectablePartners: vi.fn(),
+  assignableUsers: vi.fn(),
 }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
@@ -78,8 +80,13 @@ function detail(overrides: Partial<ServiceJobDetail> = {}): ServiceJobDetail {
      * ALAPBAN URES, es ezt a szerver-oldali spec tolti fel
      * (`service-job-assignees.spec.ts`). Itt a jelenlete annyit allit, hogy egy
      * delegalatlan jegy is TELJES valaszt ad -- a felulet nem `undefined`-et
-     * kap. A delegalas FELULETE meg nem keszult el (kulon tetel, acrobot),
-     * tehat ez a mezo ma nem rajzolodik ki sehol.
+     * kap.
+     *
+     * A KORABBI VALTOZAT AZT MONDTA, hogy "ez a mezo ma nem rajzolodik ki
+     * sehol", mert a delegalas FELULETE meg nem keszult el. 2026-09-14 ota
+     * KIRAJZOLODIK: az `ServiceJobAssigneeEditor` a reszletlapon all, es az
+     * ures lista sajat mondatot kap. A mondat attol a naptol hamis lett volna,
+     * es epp az a fajta megjegyzes, amit a kovetkezo olvaso tenykent vesz at.
      */
     assignees: [],
     /**
@@ -157,6 +164,18 @@ describe("ServiceJobDetailPage", () => {
     api.uploadDocument.mockReset().mockResolvedValue([csatolmany()]);
     api.downloadDocument.mockReset().mockResolvedValue(new Blob(["x"]));
     api.deleteDocument.mockReset().mockResolvedValue({ removed: true });
+    api.setAssignees.mockReset();
+    /*
+      A VALASZTHATO KOLLEGAK MOCKJA MINDIG ALL: a `useAssignableUsers` a
+      `canManage` agon AZONNAL hiv, es egy hianyzo dupla nem "ures listat"
+      adna, hanem a komponens indulasat vinne el.
+    */
+    sheets.assignableUsers.mockReset().mockResolvedValue({
+      items: [
+        { id: "user-sanyi", name: "Sanyi" },
+        { id: "user-eva", name: "Éva" },
+      ],
+    });
     sheets.attachable.mockReset().mockResolvedValue({
       items: [
         {
@@ -645,6 +664,68 @@ describe("ServiceJobDetailPage", () => {
    * `service.manage`); ha a kepernyo kiirna a gombokat, a kattintas 403-at
    * adna, es a felhasznalo azt hinne, elromlott valami.
    */
+  /**
+   * A DELEGALAS: A VALASZ A TELJES RESZLETLAP, TEHAT NEM TOLTUNK UJRA.
+   *
+   * Ez elter a tobbi jegy-muvelettol (`move`, `attachWorksheet`,
+   * `setPartner`): azok nyugtat adnak, es ott a hivo ujratolt. Egy reflexbol
+   * beirt ujratoltes itt egy folosleges kort tenne be -- es a ket valasz
+   * kozott a jegy mar mozdulhatott volna.
+   */
+  it("a delegálás a TELJES névsort küldi, és nem tölt újra", async () => {
+    api.setAssignees.mockResolvedValue(
+      detail({
+        assignees: [
+          {
+            userId: "user-eva",
+            name: "Éva",
+            assignedAt: "2026-09-14T18:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    fireEvent.click(await screen.findByLabelText("Éva"));
+    fireEvent.click(screen.getByRole("button", { name: "Delegálás mentése" }));
+
+    await waitFor(() =>
+      expect(api.setAssignees).toHaveBeenCalledWith("token-1", "job-1", {
+        userIds: ["user-eva"],
+      }),
+    );
+    // EGY betoltes tortent, a kezdeti -- a mentes utan NEM jott meg egy masodik.
+    expect(api.detail).toHaveBeenCalledTimes(1);
+    /*
+      ES A VALASZ KI IS RAJZOLODIK, nem csak elmegy. A nev ezutan KETSZER all a
+      lapon: egyszer a delegaltak listajaban, egyszer a jelolonegyzet
+      feliratakent. Egy `getByText` itt epp azert BUKNA, mert ketto van -- es a
+      kettosseg maga a bizonyitek, hogy a valasz a listaba is bekerult.
+    */
+    await waitFor(() => expect(screen.getAllByText("Éva").length).toBe(2));
+  });
+
+  /**
+   * A MENTES GOMB CSAK VALTOZASRA EL. Egy mindig aktiv gomb azt sugallja, hogy
+   * van mit menteni -- es a felesleges hivas a szerveren egy ures naplosort
+   * hagyna.
+   */
+  it("változatlan névsornál a mentés gomb nem aktív", async () => {
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    const gomb = (await screen.findByRole("button", {
+      name: "Delegálás mentése",
+    })) as HTMLButtonElement;
+
+    expect(gomb.disabled).toBe(true);
+  });
+
+  it("delegálatlan jegyen kimondja, hogy nincs delegálva senki", async () => {
+    render(<ServiceJobDetailPage jobId="job-1" />);
+
+    expect(
+      await screen.findByText("Erre a jegyre még nincs delegálva senki."),
+    ).toBeTruthy();
+  });
+
   it("olvasó jogkörnél nincs feltöltés és nincs törlés", async () => {
     auth.session = sessionAs("VIEWER");
     render(<ServiceJobDetailPage jobId="job-1" />);
@@ -653,5 +734,11 @@ describe("ServiceJobDetailPage", () => {
     expect(screen.getByRole("button", { name: "Letöltés" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Törlés" })).toBeNull();
     expect(screen.queryByLabelText("Új csatolmány")).toBeNull();
+    // ES A DELEGALAS SEM SZERKESZTHETO -- a lista viszont latszik, mert a
+    // szerver is ket kulon jogot kulonboztet (`service.view` / `service.manage`).
+    expect(
+      screen.queryByRole("button", { name: "Delegálás mentése" }),
+    ).toBeNull();
+    expect(screen.getByText("Delegált kollégák")).toBeTruthy();
   });
 });
