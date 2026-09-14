@@ -18,6 +18,7 @@ import { listUnasOrders } from "@/lib/api/orders";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { describeOfflineSession } from "@/lib/auth/offline-session-notice";
 import { useIsOnline } from "@/lib/offline/connectivity";
+import { useFormCachePrefetch } from "@/lib/offline/use-form-cache-prefetch";
 import { useQueueBacklog } from "@/lib/offline/use-queue-backlog";
 import { useQueueDrain } from "@/lib/offline/use-queue-drain";
 import {
@@ -114,6 +115,23 @@ export default function HomeScreen() {
   );
   const capabilities = user ? getWebshopCapabilities(user.role) : null;
   const serviceCapabilities = user ? getServiceCapabilities(user.role) : null;
+  /**
+   * AZ ESZKOZ-URLAP KET LISTAJA A KESZULEKRE, AMIG MEG VAN TEREO.
+   *
+   * A sor kiuritese mellett a helye, es ugyanazert: ez az elso kepernyo, amit a
+   * kollega lat. A masolat eddig CSAK az urlap megnyitasakor keletkezett, tehat
+   * aki sosem nyitotta meg jellel, annak a pinceben ures volt a partnerlista --
+   * es a felvitelhez a partner KOTELEZO.
+   *
+   * A korai visszateres ELE kerult, a tobbi hook melle: a `status` szerinti ag
+   * kulonben kihagyna, es a hookok sorrendjenek minden renderelesben azonosnak
+   * kell lennie.
+   */
+  useFormCachePrefetch({
+    online: isOnline,
+    authenticated: status === "authenticated",
+    assetsManage: Boolean(serviceCapabilities?.assetsManage),
+  });
   const servedIds = servedTileIds(user);
   /**
    * A SZERVER DONT, ES CSAK HA HALLGAT, AKKOR A SAJAT TABLA.
