@@ -65,6 +65,7 @@ import {
   rememberAssetOwners,
   rememberPartnerUnits,
 } from "@/lib/offline/asset-form-cache";
+import { listFromCacheOrNetwork } from "@/lib/offline/list-source";
 import { describeCachedDepartmentsNotice } from "@/lib/offline/offline-notice";
 import { enqueueAssetCreate, enqueuePhoto } from "@/lib/offline/queue-store";
 import { filterOwners } from "@/lib/assets/owner-search";
@@ -223,18 +224,46 @@ export default function NewAssetScreen() {
   const ownersFromCache = ownersQuery.isError;
   const unitsFromCache = unitsQuery.isError;
 
-  const units = useMemo(
+  /**
+   * A HELYSZIN-SOROK EGY FORRASBOL, mert eddig KETTO volt, es a masodik nem
+   * ismerte a masolatot.
+   *
+   * Merve 2026-09-14, Balazs jelentese a 15 szamu buildrol: "A partnerek
+   * bejonnek de a helyszin szerintem nem." A partner-lista helyesen esett
+   * vissza a mentett masolatra, a helyszin-valaszto viszont KOZVETLENUL a
+   * halozati valaszbol epult (`unitsQuery.data`), tehat teren kivul URES
+   * tomböt kapott.
+   *
+   * ES AMIERT NEM LATSZOTT HIBANAK: az ures allapot uzenete ("Ehhez a
+   * partnerhez meg nincs felveve helyszin") a `units` listat nezi, az pedig
+   * a masolatbol MAR tele volt. Vagyis a valaszto ures maradt, es MELLETTE
+   * meg csak magyarazat sem allt.
+   *
+   * A szerkeszto kepernyo (`assets/edit/[id].tsx`) ugyanezt mar helyesen
+   * csinalta (`unitsQuery.data?.items ?? cachedUnits.data?.items ?? []`).
+   * Ket kepernyo, ket kulon megoldas ugyanarra a kerdesre: ezert all most
+   * egyetlen valtozoban, es ezert hivatkozik ra minden hasznalo.
+   */
+  const unitRows = useMemo(
     () =>
-      selectableUnitOptions(
-        unitsFromCache ? cachedUnits.items : (unitsQuery.data?.items ?? []),
-      ),
+      listFromCacheOrNetwork({
+        failed: unitsFromCache,
+        fetched: unitsQuery.data?.items,
+        cached: cachedUnits.items,
+      }),
     [unitsFromCache, cachedUnits.items, unitsQuery.data],
   );
+
+  const units = useMemo(() => selectableUnitOptions(unitRows), [unitRows]);
 
   const filteredOwners = useMemo(
     () =>
       filterOwners(
-        ownersFromCache ? cachedOwners.items : (ownersQuery.data?.items ?? []),
+        listFromCacheOrNetwork({
+          failed: ownersFromCache,
+          fetched: ownersQuery.data?.items,
+          cached: cachedOwners.items,
+        }),
         ownerSearch,
       ),
     [ownersFromCache, cachedOwners.items, ownerSearch, ownersQuery.data],
@@ -685,9 +714,8 @@ export default function NewAssetScreen() {
                   // viszont a `unitLevels`-ebol -- ket kulon szamitas ugyanarra
                   // az utra. Mostantol mindketto a `unitPickerPlan` utjat
                   // hasznalja, tehat nem tudnak elcsuszni egymastol.
-                  unitPickerPlan(
-                    unitLevels(unitsQuery.data?.items ?? [], unitId || null),
-                  ).path || "Nincs helyszín kiválasztva"
+                  unitPickerPlan(unitLevels(unitRows, unitId || null)).path ||
+                  "Nincs helyszín kiválasztva"
                 }
                 hint="Koppints a listához"
                 label="Helyszín választása"
@@ -711,7 +739,7 @@ export default function NewAssetScreen() {
                     Igy a viselkedes allitasokkal merheto, szimulator nelkul is.
                   */
                   const plan = unitPickerPlan(
-                    unitLevels(unitsQuery.data?.items ?? [], unitId || null),
+                    unitLevels(unitRows, unitId || null),
                   );
                   return (
                     <>
