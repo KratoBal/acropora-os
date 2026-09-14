@@ -289,7 +289,21 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
       <PageHeader
         eyebrow="Hibajegy"
         title={`${job.jobNumber} - ${job.title}`}
-        description={job.customerName ?? "Partner nincs megadva"}
+        /*
+          A HELYSZIN A PARTNER MELLE KERUL, es nem kulon sorba: a ketto egy
+          cimet ad ("Fovarosi Allatkert -- Nagy fokamedence / Biodom"), es a
+          jegyet epp ez azonositja a helyszinen. Kulon mezokent a lap tetejen
+          ket fel-informacio allna egymas alatt.
+
+          HELYSZIN NELKUL A PARTNER MARAD, valtozatlanul. A mai jegyek
+          MINDEGYIKE ilyen (a mezo 2026-09-14-en keletkezett), tehat ez nem
+          szelso eset, hanem a tobbseg.
+        */
+        description={
+          job.departmentName
+            ? `${job.customerName ?? "Partner nincs megadva"} - ${job.departmentName}`
+            : (job.customerName ?? "Partner nincs megadva")
+        }
         actions={
           <Link href="/szerviz/hibajegyek">
             <Button variant="secondary">Vissza a listára</Button>

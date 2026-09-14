@@ -6,11 +6,14 @@ import {
   PERMISSIONS,
   type WorksheetSelectablePartner,
 } from "@acropora/types";
+import type { WorksheetDepartmentSummary } from "@acropora/types";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
+import { worksheetsApi } from "@/lib/api/worksheets";
+import { buildSiteOptions } from "@/lib/partners/site-tree";
 import { PartnerPicker } from "./partner-picker";
 
 /**
@@ -40,12 +43,81 @@ export function ServiceJobEditorPage() {
   const [customer, setCustomer] = useState<WorksheetSelectablePartner | null>(
     null,
   );
+  const [departments, setDepartments] = useState<WorksheetDepartmentSummary[]>(
+    [],
+  );
+  /**
+   * A BETOLTOTTSEG KULON ALL AZ URES LISTATOL. Egy ures lista jelentheti azt,
+   * hogy a partnernek nincs helyszine, es azt is, hogy meg nem jott meg a
+   * valasz. A ket allapot ket kulon mondatot erdemel -- a telefonos urlapon ma
+   * pontosan ez a kulonbseg hianyzott, es egy ures valaszto ugy nezett ki,
+   * mintha a partnernek nem lenne helyszine.
+   */
+  const [departmentsLoaded, setDepartmentsLoaded] = useState(false);
+  const [departmentId, setDepartmentId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const canManage = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_MANAGE),
   );
   const token = session?.token ?? "";
+
+  /**
+   * A PARTNER HELYSZINEI, UGYANARROL A VEGPONTROL, AMIT A MUNKALAP HASZNAL.
+   *
+   * Nem uj vegpont es nem uj fa: a `WorksheetDepartment` ugyanaz a torzsadat,
+   * amit a munkalap-szerkeszto es az eszkoz-urlap is olvas. A jegy eddig CSAK a
+   * partnert tudta, tehat a lancban a legelso lepes volt a legkevesbe pontos.
+   *
+   * CSAK AZ AKTIV SOROK, ugyanugy, mint a munkalapon: archivalt egysegre ne
+   * lehessen uj jegyet nyitni. A ket helyen ugyanaz a szures all, tehat a
+   * felajanlott halmaz sem tud elcsuszni egymastol.
+   */
+  const loadDepartments = useCallback(
+    async (owner: string, signal?: AbortSignal) => {
+      if (!owner) {
+        setDepartments([]);
+        setDepartmentsLoaded(false);
+        return;
+      }
+      try {
+        const response = await worksheetsApi.departments(token, owner, signal);
+        setDepartments(response.items.filter((item) => item.isActive));
+        setDepartmentsLoaded(true);
+      } catch (cause) {
+        if (!(cause instanceof DOMException && cause.name === "AbortError"))
+          setError("A partner helyszínei nem tölthetők be.");
+      }
+    },
+    [token],
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadDepartments(customer?.customerId ?? "", controller.signal);
+    return () => controller.abort();
+  }, [customer?.customerId, loadDepartments]);
+
+  /**
+   * PARTNERVALTASKOR A HELYSZIN ELESIK. Enelkul az elozo partner egysege
+   * maradna kivalasztva, a valasztoban viszont mar nem szerepelne -- a mezo
+   * URESNEK latszana, kozben ertek allna benne, es a szerver utasitana el a
+   * felvitelt egy olyan hibaval, amit a kepernyon semmi nem magyaraz.
+   */
+  useEffect(() => {
+    setDepartmentId("");
+  }, [customer?.customerId]);
+
+  /**
+   * A VALASZTO A TELJES UTAT MUTATJA, NEM CSAK A LEVEL NEVET. A kod es a nev
+   * csak TESTVEREK kozott egyedi (ADR-010), tehat ket kulonbozo ag alatt
+   * ugyanaz a "Biodom" megengedett. Ugyanaz a `buildSiteOptions`, amit a
+   * munkalap-szerkeszto, az eszkoz-szerkeszto es az eszkoz-lista hasznal.
+   */
+  const departmentOptions = useMemo(
+    () => buildSiteOptions(departments),
+    [departments],
+  );
 
   if (!canManage)
     return (
@@ -64,6 +136,7 @@ export function ServiceJobEditorPage() {
         title: title.trim(),
         description: description.trim() || null,
         customerId: customer?.customerId ?? null,
+        departmentId: departmentId || null,
       });
       // A FRISS JEGY LAPJÁRA VISZÜNK, nem a listára: aki most nyitotta, azt
       // akarja folytatni - munkalapot csatolni, léptetni.
@@ -86,32 +159,20 @@ export function ServiceJobEditorPage() {
       {error ? (
         <Alert variant="danger" title="Nem sikerült" description={error} />
       ) : null}
+      {/*
+        A SORREND BALAZS KERESE, 2026-09-14, es nem izles kerdese: "Elso helyre
+        keruljon a Partner kivalasztasa. Ez most lejebb van es nem is szepen van
+        megoldva. Utana a Partnerhez kotodo helyszin valasztas jojjon a szokasos
+        fa strukturaban. Ez alatt a Mi a baj mezo, majd ez alatt a reszletek
+        mezo."
+
+        AMIERT A FELVITEL SORRENDJE TARTALMI KERDES: a helyszin a partnertol
+        FUGG. Ha a partner a lap aljan all, a kozbulso mezoket ugy tolti ki a
+        kezelo, hogy a helyszin-valaszto meg ures -- vissza kell lepnie, es a
+        lap ket iranyban olvashato. Elol a fuggoseg feje, alatta ami rola
+        kovetkezik.
+      */}
       <Card className="space-y-4 p-4">
-        <div className="space-y-1">
-          <label className="text-sm font-semibold" htmlFor="hibajegy-cim">
-            Mi a baj?
-          </label>
-          <Input
-            id="hibajegy-cim"
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            placeholder="Például: a hármas medence szivattyúja nem indul"
-          />
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-sm font-semibold" htmlFor="hibajegy-leiras">
-            Részletek
-          </label>
-          <textarea
-            id="hibajegy-leiras"
-            className="w-full rounded border px-2 py-1 text-sm"
-            rows={4}
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-          />
-        </div>
-
         <div className="space-y-1">
           <label className="text-sm font-semibold" htmlFor="hibajegy-partner">
             Partner
@@ -141,6 +202,72 @@ export function ServiceJobEditorPage() {
               </p>
             </>
           )}
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-sm font-semibold" htmlFor="hibajegy-helyszin">
+            Helyszín
+          </label>
+          {/*
+            HAROM KULON ALLAPOT, HAROM KULON MONDAT, es ez nem bobeszedusseg.
+            Nincs partner / meg toltunk / a partnernek nincs helyszine -- a
+            telefonos urlapon pontosan ez a kulonbseg hianyzott, es egy ures
+            valaszto ugy nezett ki, mintha a partnernek nem lenne helyszine.
+            Aki egy ures listat lat magyarazat nelkul, a rossz helyen kezd
+            keresni.
+          */}
+          {!customer ? (
+            <p className="text-sm text-slate-500">
+              Előbb válassz partnert. A helyszínek a partner saját fájából
+              jönnek.
+            </p>
+          ) : !departmentsLoaded ? (
+            <p className="text-sm text-slate-500">Helyszínek betöltése...</p>
+          ) : departmentOptions.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              Ehhez a partnerhez nincs felvéve helyszín. A jegy enélkül is
+              megnyitható.
+            </p>
+          ) : (
+            <select
+              id="hibajegy-helyszin"
+              className="w-full rounded border px-2 py-1 text-sm"
+              value={departmentId}
+              onChange={(event) => setDepartmentId(event.target.value)}
+            >
+              <option value="">Nincs megadva</option>
+              {departmentOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-sm font-semibold" htmlFor="hibajegy-cim">
+            Mi a baj?
+          </label>
+          <Input
+            id="hibajegy-cim"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="Például: a hármas medence szivattyúja nem indul"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-sm font-semibold" htmlFor="hibajegy-leiras">
+            Részletek
+          </label>
+          <textarea
+            id="hibajegy-leiras"
+            className="w-full rounded border px-2 py-1 text-sm"
+            rows={4}
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+          />
         </div>
 
         <div className="flex gap-2">

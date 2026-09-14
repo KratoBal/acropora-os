@@ -106,6 +106,23 @@ export interface ServiceJobDetail {
    * ott ugy nezne ki, mintha nem lenne mit csatolni.
    */
   customerId: string | null;
+  /**
+   * HOL VAN A BAJ: a partner helyszine a jegyen.
+   *
+   * KET MEZO, ES NEM EGY. Az azonosito szureshez es tovabbi lepesekhez kell (a
+   * munkalap ugyanezt a fat hasznalja), a nev a kepernyore. Csak az azonositot
+   * adni azt jelentene, hogy a kliens kulon lekerdezessel oldja fel -- csak a
+   * nevet adni pedig azt, hogy nem lehet ra epiteni.
+   *
+   * A nev EGY SZINT SZULOVEL jon, ha van (`Nagy fokamedence / Biodom`), mert a
+   * nev csak testverek kozott egyedi. A teljes ut nem fer ide: a fa melysege
+   * nem korlatos.
+   *
+   * Mindketto `null`, ha a jegynek nincs helyszine -- es az a mai jegyek
+   * mindegyike, mert a mezo 2026-09-14-en keletkezett.
+   */
+  departmentId: string | null;
+  departmentName: string | null;
   createdAt: string;
   /**
    * A TERVEZETT IDŐPONT MEZŐ MARAD, ÉS NEM SZÁRMAZTATOTT.

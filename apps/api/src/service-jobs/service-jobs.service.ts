@@ -50,11 +50,43 @@ export class ServiceJobsService {
     const last = await this.repository.lastNumberOfYear(
       serviceJobNumberPrefix(year),
     );
+    const customerId = input.customerId?.trim() || null;
+    const departmentId = input.departmentId?.trim() || null;
+    /**
+     * A HELYSZIN A MEGADOTT PARTNERE LEGYEN, ES EZ A SZERVEREN DOL EL.
+     *
+     * A felulet ma csak a kivalasztott partner egysegeit kinalja, tehat
+     * "normalis uton" ez nem allhat elo. De a felulet nem hataroz meg
+     * korlatot: a vegpontra barmi beirhato, es egy IDEGEN egyseghez kotott
+     * jegy a kepernyon URESNEK latszana, nem hibasnak -- a lista a sajat
+     * partner egysegeit rajzolja, es az idegen id egyszeruen nem lenne
+     * kozottuk. Nema keveredes, ami kesobb a lathatosagot is elviszi.
+     *
+     * A PARTNER NELKULI HELYSZIN KULON AG: nem "ismeretlen egyseg", hanem
+     * ertelmetlen keres. Megnevezve, mert a ket hiba mas javitast ker.
+     */
+    if (departmentId) {
+      if (!customerId) {
+        throw new BadRequestException(
+          "Helyszínt csak partnerrel együtt lehet megadni.",
+        );
+      }
+      const belongs = await this.repository.departmentBelongsToCustomer(
+        departmentId,
+        customerId,
+      );
+      if (!belongs) {
+        throw new BadRequestException(
+          "A megadott helyszín nem ehhez a partnerhez tartozik.",
+        );
+      }
+    }
     return this.repository.create({
       jobNumber: nextServiceJobNumber({ year, lastNumber: last }),
       title: input.title.trim(),
       description: input.description?.trim() || null,
-      customerId: input.customerId?.trim() || null,
+      customerId,
+      departmentId,
       actorUserId,
     });
   }
@@ -214,6 +246,14 @@ export class ServiceJobsService {
       partnerStatusLabel: partnerStatusLabel(row.status),
       customerName: row.customer?.displayName ?? null,
       customerId: row.customerId,
+      departmentId: row.departmentId,
+      // A SZULO CSAK AKKOR KERUL ELE, HA VAN. Gyokerszintu egysegnel egy vezeto
+      // elvalaszto maradna a nev elott, ami hianyzo adatnak latszik.
+      departmentName: row.department
+        ? [row.department.parent?.name, row.department.name]
+            .filter(Boolean)
+            .join(" / ")
+        : null,
       createdAt: row.createdAt.toISOString(),
       // A tábla `readonly` tömböt ad (nem írható felül kívülről); a válasz
       // sima tömb, ezért itt másolat készül róla.

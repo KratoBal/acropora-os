@@ -2547,6 +2547,24 @@ model ServiceJob {
   id             String           @id @default(cuid())
   jobNumber      String           @unique
   customerId     String?
+  /// HOL VAN A BAJ: a partner helyszine, ugyanabbol a fabol, amit a munkalap es
+  /// az eszkoz hasznal (`WorksheetDepartment`).
+  ///
+  /// Balazs kerese, 2026-09-14: a hibajegy felvitelen a partner utan rogton a
+  /// helyszin jojjon. Eddig a jegy CSAK a partnert tudta, a helyszin pedig
+  /// eloszor a munkalapon jelent meg -- vagyis a lancban a legelso lepes volt a
+  /// legkevesbe pontos, es a bejelentes utan mar senki nem tudta megmondani,
+  /// melyik egysegrol szolt.
+  ///
+  /// `String?` ES NEM KOTELEZO, ket okbol. Az egyik a meglevo sorok: a
+  /// migracio pillanataban egyetlen jegynek sincs helyszine, es egy kotelezo
+  /// mezo vagy hazudna, vagy elbukna. A masik a mai viselkedes: partner NELKUL
+  /// is lehet jegyet nyitni, es helyszine csak partnernek van.
+  ///
+  /// A KAPCSOLAT `Restrict`, nem `SetNull`: egy helyszin, amire nyitott jegy
+  /// mutat, nem torolheto ki alola. A fa amugy is archivalassal vezet ki
+  /// (`isActive`), nem torlessel -- a `Restrict` ezt teszi kimondotta.
+  departmentId   String?
   aquariumId     String?
   status         ServiceJobStatus @default(NEW)
   title          String
@@ -2609,8 +2627,9 @@ model ServiceJob {
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
-  customer   Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  aquarium   Aquarium?         @relation(fields: [aquariumId], references: [id], onDelete: SetNull)
+  customer   Customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  department WorksheetDepartment? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  aquarium   Aquarium?            @relation(fields: [aquariumId], references: [id], onDelete: SetNull)
   assets     ServiceJobAsset[]
   /// Ami a jeggyel történt, időrendben. A részletlap ebből építi a naplót.
   events     ServiceJobEvent[]
@@ -2623,6 +2642,10 @@ model ServiceJob {
   @@index([openedById])
   @@index([status, scheduledAt])
   @@index([customerId])
+  /// A HELYSZIN SZERINTI SZURES INDEXELT. Ugyanaz az ok, mint a `customerId`
+  /// eseteben: a partner-oldali lista a sajat egysegeire szur, es a `Restrict`
+  /// torles-ellenorzes is ezt az oszlopot olvassa.
+  @@index([departmentId])
 }
 
 model Aquarium {
@@ -3066,6 +3089,9 @@ model WorksheetDepartment {
   children   WorksheetDepartment[]     @relation("WorksheetDepartmentTree")
   worksheets Worksheet[]
   assets     Asset[]
+  /// A helyszinre nyitott hibajegyek. A lanc ezzel lett teljes: eddig csak a
+  /// munkalap es az eszkoz tudta, hol van, a BEJELENTES nem.
+  serviceJobs ServiceJob[]
   /// Kik latjak ezt az alegyseget (es vele a reszfajat).
   assignees  UserWorksheetDepartment[]
 

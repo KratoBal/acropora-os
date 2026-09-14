@@ -38,6 +38,11 @@ function row(overrides: Partial<NonNullable<DetailRow>> = {}) {
     completedAt: new Date("2026-09-04T08:00:00.000Z"),
     customerId: "cust-1",
     customer: { displayName: "Fővárosi Állat- És Növénykert" },
+    // A HELYSZIN ALAPBOL NINCS a fixture-on: a mezo 2026-09-14-en keletkezett,
+    // tehat minden korabbi jegyen `null`. Az az ALAPESET, nem a kivetel -- aki
+    // a helyszines agat meri, az `overrides`-szal allitja be.
+    departmentId: null,
+    department: null,
     events: [
       {
         id: "event-1",
