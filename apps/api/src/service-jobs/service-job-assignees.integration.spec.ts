@@ -129,9 +129,30 @@ describe(
       await assert.rejects(
         () => prisma.serviceJobAssignee.create({ data }),
         (error: unknown) => {
-          // A megkotes NEVE is szamit: egy masik egyediseg ugyanigy
-          // elutasitana, es akkor ez az allitas mast bizonyitana.
-          assert.match(String(error), /ServiceJobAssignee/);
+          /**
+           * A MEZO-PAROSRA MERUNK, NEM A TABLA NEVERE -- ES EZT A CI JAVITOTTA
+           * KI RAJTAM (2026-09-14, run 34877414701).
+           *
+           * Elso alakja a `/ServiceJobAssignee/` mintara ment. A megkotes
+           * MUKODOTT, az allitas bukott el: a Prisma uzenete a modellt
+           * KISBETUVEL kezdi (`prisma.serviceJobAssignee.create()`), a
+           * mintam viszont nagybetus volt. Egy jo javitasrol mondott pirosat,
+           * es ez a legrosszabb fajta: konnyu belole azt olvasni, hogy a
+           * megkotes nem all.
+           *
+           * A MEZO-PAROS JOBB MERCE A NEVNEL: pontosan azt a ket oszlopot
+           * nevezi meg, amitol a paros az azonossag. Ha a tablara valaha kerul
+           * egy MASIK egyediseg (peldaul [serviceJobId, assignedById]), az
+           * ugyanugy elutasitana -- es ez az allitas akkor NEM lenne zold,
+           * mert a `userId` hianyozna belole.
+           *
+           * A mintat a CI VALODI hibaszovegen kalibraltam, harom iranyban: a
+           * regi minta nem talal, az uj mindket mezore talal, es egy masik
+           * megkotes uzenete NEM elegiti ki.
+           */
+          const szoveg = String(error);
+          assert.match(szoveg, /serviceJobId/);
+          assert.match(szoveg, /userId/);
           return true;
         },
       );
