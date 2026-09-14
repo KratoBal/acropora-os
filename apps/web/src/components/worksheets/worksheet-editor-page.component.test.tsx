@@ -538,7 +538,7 @@ describe("WorksheetEditorPage assignees", () => {
   });
 
   /**
-   * ARCHIVALT HELYSZIN: KIMONDVA, ES AZ ERTEK IS ELTUNIK.
+   * ARCHIVALT HELYSZIN: KIMONDVA, ES AZ ALLAPOTBOL IS ELTUNIK.
    *
    * A valaszto-lista AKTIVRA szur. Ha a jegy helyszinet idokozben archivaltak,
    * a beallitott ertekhez nem tartozik `option`, es a `Select` a helykitoltore
@@ -547,8 +547,13 @@ describe("WorksheetEditorPage assignees", () => {
    * A MASODIK ALLITAS A SULYOSABB: az allapotbol is ki kell kerulnie. Egy mezo,
    * ami MAST mutat, mint amit KULD, rosszabb a nemanal -- a felhasznalo egy
    * LATHATATLAN erteket menne el.
+   *
+   * ES EPP EZERT NEM A VALASZTO ERTEKEN MERUNK. A `Select` DOM-erteke akkor is
+   * ures, ha az ALLAPOT az archivalt azonositot hordozza (nincs hozza opcio),
+   * tehat egy arra tett allitas a rontasra is ZOLD maradt -- kalibralva. A
+   * MENTES GOMB viszont az allapotbol szamol, es az elarulja.
    */
-  it("archivált jegy-helyszínt megnevez, és nem is küldi el", async () => {
+  it("archivált jegy-helyszínt megnevez, és a mentést sem engedi vele", async () => {
     jegyHelyszinnel("archivalt-egyseg", "Régi medence");
     const user = userEvent.setup();
     render(<WorksheetEditorPage />);
@@ -559,19 +564,48 @@ describe("WorksheetEditorPage assignees", () => {
       ),
     ).toBeTruthy();
 
-    const alegyseg = (await screen.findByLabelText(
-      "Alegység",
-    )) as HTMLSelectElement;
-    await waitFor(() => expect(alegyseg.value).toBe(""));
+    /*
+      A MENTES GOMBON MERUNK, NEM A VALASZTO ERTEKEN -- ES EZT EGY KALIBRACIO
+      TANITOTTA MEG.
 
-    await user.selectOptions(alegyseg, "department-1");
+      Az elso valtozat azt allitotta, hogy a valaszto erteke ures. Az a rontasra
+      is ZOLD maradt: a `Select` DOM-erteke akkor is ures, ha az ALLAPOT az
+      archivalt azonositot hordozza, mert nincs hozza `option`. Vagyis a DOM epp
+      azt fedte el, amit merni akartam.
+
+      A mentes gomb viszont az ALLAPOTBOL szamol (`canSubmit`): ha az archivalt
+      ertek bent maradna, a gomb AKTIV lenne, es a felhasznalo egy LATHATATLAN
+      erteket kuldene el.
+    */
+    const mentes = screen.getByRole("button", {
+      name: "Mentés",
+    }) as HTMLButtonElement;
     await user.type(screen.getByLabelText("Tárgy"), "Szivattyú csere");
-    await user.click(screen.getByRole("button", { name: "Mentés" }));
+    await waitFor(() => expect(mentes.disabled).toBe(true));
+    expect(worksheets.create).not.toHaveBeenCalled();
 
-    await waitFor(() => expect(worksheets.create).toHaveBeenCalledTimes(1));
-    expect(worksheets.create.mock.calls[0]?.[1]).toMatchObject({
-      departmentId: "department-1",
-    });
+    // ES EGY AKTIV EGYSEGGEL MAR MEHET: enelkul a fenti allitas akkor is zold
+    // lenne, ha a gomb SOHA nem aktivalodna.
+    await user.selectOptions(screen.getByLabelText("Alegység"), "department-1");
+    await waitFor(() => expect(mentes.disabled).toBe(false));
+  });
+
+  /**
+   * ES AZ "ARCHIVALT" MONDAT CSAK AKKOR JAR, HA VAN MIBOL VALASZTANI.
+   *
+   * URES lista mellett a jegy helyszine nem archivalt -- a partnernek egyaltalan
+   * nincs alegysege, es arra MAS mondat all, MAS teendovel. A szukites nelkul
+   * ez az eset az archivalt-mondatot kapna, es a kezelot rossz iranyba kuldene.
+   */
+  it("üres alegység-listánál a helyszínes jegy is a partner-mondatot kapja", async () => {
+    jegyHelyszinnel("department-1", "Biotóp");
+    worksheets.departments.mockResolvedValue({ items: [] });
+    render(<WorksheetEditorPage />);
+
+    expect(
+      await screen.findByText(/Ehhez a partnerhez még nincs alegység/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/archivált/)).toBeNull();
   });
 
   /**
