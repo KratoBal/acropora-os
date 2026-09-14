@@ -28,6 +28,7 @@ import type {
 } from "@acropora/types";
 import { normalizeAssetLabelCode, randomAssetLabelCode } from "@acropora/types";
 
+import { sumDocumentBytesInUse } from "../documents/document-bytes-in-use.js";
 import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
 import { withUniqueCode } from "../common/unique-code.util.js";
 import { buildUnitPaths } from "./unit-path.js";
@@ -1471,12 +1472,13 @@ export class ServiceAssetsRepository extends Repository {
      * VISELKEDES-VALTOZAS AZ ESZKOZ-UTON IS, es ezt kimondom: a keret mostantol
      * hamarabb telik be, mint eddig. Ez a helyes irany (a kevesbe latszo hiba a
      * csendes tullepes lenne), de nem mellekhatas: dontes.
+     *
+     * MAGA AZ OSSZEG 2026-09-14 OTA KOZOS FUGGVENYBEN ALL. Addig ugyanez a ket
+     * tag KET repositoryban allt kulon, es a HARMADIK gazda (a hibajegy)
+     * felvetelekor mindkettot boviteni kellett volna -- a lemarado ag csendben
+     * a sajat, kisebb osszeget latta volna a hatar alatt.
      */
-    const [eszkoz, munkalap] = await Promise.all([
-      prisma.assetDocument.aggregate({ _sum: { sizeBytes: true } }),
-      prisma.worksheetDocument.aggregate({ _sum: { sizeBytes: true } }),
-    ]);
-    return (eszkoz._sum.sizeBytes ?? 0) + (munkalap._sum.sizeBytes ?? 0);
+    return sumDocumentBytesInUse();
   }
 
   /**

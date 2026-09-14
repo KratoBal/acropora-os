@@ -1,0 +1,128 @@
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Header,
+  Param,
+  Post,
+  StreamableFile,
+  UploadedFiles,
+  UseInterceptors,
+} from "@nestjs/common";
+import { FilesInterceptor } from "@nestjs/platform-express";
+import { memoryStorage } from "multer";
+import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
+
+import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
+import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
+import {
+  MAX_SERVICE_JOB_DOCUMENTS_PER_UPLOAD,
+  UploadServiceJobDocumentDto,
+} from "./service-job-documents.dto.js";
+import { ServiceJobDocumentsService } from "./service-job-documents.service.js";
+
+/**
+ * A HIBAJEGY CSATOLMANYAI.
+ *
+ * === MIERT KULON KONTROLLER, UGYANAZON AZ UTVONAL-ELOTAGON ===
+ *
+ * A `ServiceJobsController` a jegy ELETUTJAT viszi (lista, reszletlap,
+ * allapotvaltas, munkalap-csatolas). Ez a negy vegpont bajtokat mozgat:
+ * multipart-feldolgozas, letoltes-fejlecek, tarolo-hibak. A ketto kulon
+ * romlik el, es kulon is olvashato.
+ *
+ * AZ UTVONALAK NEM UTKOZNEK: a `@Get(":id")` EGY szegmens, ezek KETTO vagy
+ * HAROM. A Nest az elso illeszkedo utat valasztja, es ilyen nincs.
+ *
+ * === A JOGOSULTSAG A JEGYE, NEM KULON DOKUMENTUM-JOG ===
+ *
+ * Aki a jegyet latja, a csatolmanyait is latja (`service.view`); aki a jegyet
+ * viszi, tolthet fel es torolhet (`service.manage`). Egy kulon jogkor ma csak
+ * azt jelentene, hogy valakinel elfelejtjuk bekapcsolni -- ugyanaz az indok,
+ * amit a jegy kontrollere mar kimond a sajat fejlecében.
+ */
+@Controller("service/jobs")
+export class ServiceJobDocumentsController {
+  constructor(private readonly service: ServiceJobDocumentsService) {}
+
+  /**
+   * EGGYEL TOBBET ENGEDUNK BE, MINT AMENNYIT ELFOGADUNK: a multer a sajat
+   * korlatjat a stream szintjen vagja el, es a hibajat semmi nem alakitja at --
+   * a hivo 500-at kapna, holott csak tul sok fajlt jelolt ki.
+   */
+  @Post(":id/documents")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  @UseInterceptors(
+    FilesInterceptor("file", MAX_SERVICE_JOB_DOCUMENTS_PER_UPLOAD + 1, {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  async uploadDocument(
+    @Param("id") id: string,
+    @Body() input: UploadServiceJobDocumentDto,
+    @UploadedFiles() files: Express.Multer.File[] | undefined,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (!files?.length)
+      throw new BadRequestException("A feltöltendő fájl kötelező.");
+    if (files.length > MAX_SERVICE_JOB_DOCUMENTS_PER_UPLOAD)
+      throw new BadRequestException(
+        `Egyszerre legfeljebb ${MAX_SERVICE_JOB_DOCUMENTS_PER_UPLOAD} fájl tölthető fel.`,
+      );
+
+    // EGYESEVEL, SORBAN, NEM PARHUZAMOSAN: a keret-ellenorzes a mar felhasznalt
+    // helyet olvassa a tablabol, es parhuzamos irasoknal mindegyik ugyanazt a
+    // regi osszeget latna.
+    const created = [];
+    for (const file of files) {
+      created.push(
+        await this.service.addDocument(id, input.type ?? "PHOTO", file, user),
+      );
+    }
+    // MINDIG LISTA, EGY FAJLNAL IS: egy valasz, aminek a TIPUSA a bemenettol
+    // fugg, minden hivot arra kenyszerit, hogy kitalalja, melyik agon jar.
+    return created;
+  }
+
+  @Get(":id/documents")
+  @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
+  documents(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.documents(id, user);
+  }
+
+  /**
+   * A LETOLTES NEM VOLT A KERESBEN, ES MEGIS ITT ALL.
+   *
+   * Enelkul a lista ONMAGABAN hasznalhatatlan: nevek es meretek latszananak,
+   * de egyetlen kepet sem lehetne megnyitni. A masik ket gazdanal ugyanez a
+   * harom vegpont all egyutt.
+   */
+  @Get(":id/documents/:documentId")
+  @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
+  @Header("Cache-Control", "private, no-store")
+  async downloadDocument(
+    @Param("id") id: string,
+    @Param("documentId") documentId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const document = await this.service.documentBytes(id, documentId, user);
+    return new StreamableFile(document.bytes, {
+      type: document.contentType,
+      length: document.bytes.length,
+      disposition: `attachment; filename*=UTF-8''${encodeURIComponent(document.fileName)}`,
+    });
+  }
+
+  @Delete(":id/documents/:documentId")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  deleteDocument(
+    @Param("id") id: string,
+    @Param("documentId") documentId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.deleteDocument(id, documentId, user);
+  }
+}

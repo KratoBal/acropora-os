@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 
 import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
+import { sumDocumentBytesInUse } from "../documents/document-bytes-in-use.js";
 import {
   personDisplayName,
   type WorksheetAssignableUserListResponse,
@@ -1549,18 +1550,18 @@ export class WorksheetsRepository extends Repository {
   }
 
   /**
-   * A KERET SZAMITASA: MINDEN DOKUMENTUM, MINDKET TABLABOL.
+   * A KERET SZAMITASA: MINDEN DOKUMENTUM, MINDHAROM TABLABOL.
    *
    * UGYANAZ A SZAM, mint az eszkoz-oldalon, es szandekosan: a hatar EGY
    * kotetrol szol. Ha a ket ut ket kulon osszeget hasznalna, mindketto a
    * sajatjat latna alatta maradni, mikozben a lemez betelik.
+   *
+   * 2026-09-14 OTA A KOZOS FUGGVENY ADJA. Addig ugyanaz a ket tag allt itt is
+   * es az eszkoz-repositoryban is, kezzel -- es a harmadik gazda (a hibajegy)
+   * felvetelekor az egyik lemaradasa NEMA hiba lett volna.
    */
   async documentBytesInUse(): Promise<number> {
-    const [eszkoz, munkalap] = await Promise.all([
-      this.database.assetDocument.aggregate({ _sum: { sizeBytes: true } }),
-      this.database.worksheetDocument.aggregate({ _sum: { sizeBytes: true } }),
-    ]);
-    return (eszkoz._sum.sizeBytes ?? 0) + (munkalap._sum.sizeBytes ?? 0);
+    return sumDocumentBytesInUse();
   }
 
   /** Egy csatolmany sora, a bajtokkal vagy a tarolo-kulccsal egyutt. */

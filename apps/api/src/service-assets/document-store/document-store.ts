@@ -20,7 +20,12 @@
  * ami rosszabb -- egyaltalan nem latna, mert a bejaras csak az ismert
  * gyokereket jarja be. Egy nem letezo halmazbol nem lehet elgepelni.
  */
-export const DOCUMENT_OWNERS = ["asset", "worksheet", "product"] as const;
+export const DOCUMENT_OWNERS = [
+  "asset",
+  "worksheet",
+  "product",
+  "service-job",
+] as const;
 export type DocumentOwner = (typeof DOCUMENT_OWNERS)[number];
 
 /**
@@ -59,6 +64,7 @@ const OWNER_DIRECTORIES: Record<DocumentOwner, string> = {
   asset: "assets",
   worksheet: "worksheets",
   product: "products",
+  "service-job": "service-jobs",
 };
 
 export function ownerDirectory(owner: DocumentOwner): string {
