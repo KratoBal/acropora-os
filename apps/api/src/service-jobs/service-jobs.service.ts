@@ -81,12 +81,43 @@ export class ServiceJobsService {
         );
       }
     }
+    /**
+     * AZ ESZKOZOK A VALASZTOTT HELYSZINEN ALLJANAK, A RESZFAT IS BELEERTVE.
+     *
+     * A HELYSZIN NELKULI ESZKOZ-LISTA SAJAT AG, sajat uzenettel: nem
+     * "ismeretlen eszkoz", hanem hianyzo helyszin. A ket hiba mas teendot ker
+     * attol, aki belefut.
+     *
+     * A DUPLA AZONOSITO NEM HIBA, csak zaj: a kapcsolotablan `@@unique`
+     * ([serviceJobId, assetId]) all, tehat ket azonos sor amugy is elhasalna --
+     * itt egyszeruen kiszurjuk, mielott a tarolohoz erne.
+     */
+    const assetIds = [...new Set(input.assetIds ?? [])].filter(
+      (id) => id.trim() !== "",
+    );
+    if (assetIds.length > 0) {
+      if (!departmentId) {
+        throw new BadRequestException(
+          "Eszközt csak helyszínnel együtt lehet megadni.",
+        );
+      }
+      const missing = await this.repository.assetsOutsideDepartment(
+        assetIds,
+        departmentId,
+      );
+      if (missing.length > 0) {
+        throw new BadRequestException(
+          `Ez a ${missing.length} eszköz nem a megadott helyszínen áll.`,
+        );
+      }
+    }
     return this.repository.create({
       jobNumber: nextServiceJobNumber({ year, lastNumber: last }),
       title: input.title.trim(),
       description: input.description?.trim() || null,
       customerId,
       departmentId,
+      assetIds,
       actorUserId,
     });
   }

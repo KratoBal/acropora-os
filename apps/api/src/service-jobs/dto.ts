@@ -1,4 +1,6 @@
 import {
+  ArrayMaxSize,
+  IsArray,
   IsIn,
   IsOptional,
   IsString,
@@ -28,6 +30,26 @@ export class CreateServiceJobDto {
    * egy idegen egyseg ott egyszeruen URESKENT jelenne meg.
    */
   @IsString() @IsOptional() departmentId?: string | null;
+  /**
+   * A HELYSZINEN ALLO ESZKOZOK, AMIKROL A JEGY SZOL. Tobb is lehet.
+   *
+   * Balazs kerese, 2026-09-14: "a partner helyszinehez kapcsolod eszkozok kozul
+   * lehessen kivalasztani, akar tobbet is."
+   *
+   * CSAK HELYSZINNEL EGYUTT ERVENYES, es ez nem technikai kenyszer: a kert
+   * halmaz maga a HELYSZIN eszkozeibol all. Helyszin nelkul a partner OSSZES
+   * eszkoze jonne szoba, amibol a bejelento nem tud valasztani -- es a szerver
+   * sem tudna megmondani, melyik tartozik a bejelenteshez.
+   *
+   * A RESZFA SZAMIT, NEM A PONTOS EGYEZES: az eszkoz a fa barmelyik
+   * csomopontjahoz kotheto, tehat a "Biodom" alatti medencen logo eszkoz IS a
+   * Biodom eszkoze. A pontos egyezes itt nema hibat adna.
+   */
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayMaxSize(50)
+  @IsOptional()
+  assetIds?: string[];
 }
 
 export const SERVICE_JOB_LIST_SCOPES = ["open", "all"] as const;

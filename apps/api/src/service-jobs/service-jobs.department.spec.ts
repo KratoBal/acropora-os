@@ -22,14 +22,20 @@ type CreateArg = Parameters<ServiceJobsRepository["create"]>[0];
 
 function serviceWith(options: {
   belongs: boolean;
+  /** Amit a taroló "nincs ezen a helyszinen" valaszkent ad vissza. */
+  kivul?: string[];
   onCreate?: (input: CreateArg) => void;
 }) {
   const repository: Pick<
     ServiceJobsRepository,
-    "create" | "lastNumberOfYear" | "departmentBelongsToCustomer"
+    | "create"
+    | "lastNumberOfYear"
+    | "departmentBelongsToCustomer"
+    | "assetsOutsideDepartment"
   > = {
     lastNumberOfYear: async () => null,
     departmentBelongsToCustomer: async () => options.belongs,
+    assetsOutsideDepartment: async () => options.kivul ?? [],
     create: async (input) => {
       options.onCreate?.(input);
       return { id: "job-1", jobNumber: input.jobNumber };
@@ -159,5 +165,135 @@ describe("a hibajegy helyszine a felvitelen", () => {
     );
 
     assert.equal(kapott!.departmentId, null);
+  });
+});
+
+/**
+ * AZ ESZKOZOK A JEGYEN: MI MEGY AT, ES MI AKAD EL.
+ *
+ * Balazs kerese (2026-09-14): "a partner helyszinehez kapcsolod eszkozok kozul
+ * lehessen kivalasztani, akar tobbet is."
+ */
+describe("a hibajegy eszkozei a felvitelen", () => {
+  it("a valasztott eszkozoket atadja a tarolonak", async () => {
+    let kapott: CreateArg | null = null;
+    const service = serviceWith({
+      belongs: true,
+      onCreate: (input) => {
+        kapott = input;
+      },
+    });
+
+    await service.create(
+      {
+        title: "Szivattyú leállt",
+        customerId: "cust-1",
+        departmentId: "unit-9",
+        assetIds: ["esz-1", "esz-2"],
+      },
+      "user-1",
+      MOST,
+    );
+
+    assert.deepEqual([...kapott!.assetIds], ["esz-1", "esz-2"]);
+  });
+
+  /**
+   * A KALIBRACIO MASIK IRANYA: a fenti allitas akkor is zold lenne, ha a
+   * szerver MINDEN eszkozt atengedne.
+   */
+  it("a helyszinen kivuli eszkozt elutasitja, es megmondja hanyat", async () => {
+    let hivtak = false;
+    const service = serviceWith({
+      belongs: true,
+      kivul: ["esz-idegen", "esz-masik"],
+      onCreate: () => {
+        hivtak = true;
+      },
+    });
+
+    await assert.rejects(
+      () =>
+        service.create(
+          {
+            title: "Szivattyú leállt",
+            customerId: "cust-1",
+            departmentId: "unit-9",
+            assetIds: ["esz-1", "esz-idegen", "esz-masik"],
+          },
+          "user-1",
+          MOST,
+        ),
+      /Ez a 2 eszköz nem a megadott helyszínen áll/,
+    );
+    assert.equal(hivtak, false);
+  });
+
+  /**
+   * HELYSZIN NELKULI ESZKOZ-LISTA: SAJAT AG, SAJAT UZENET. Nem "ismeretlen
+   * eszkoz", hanem hianyzo helyszin -- mas a teendo.
+   */
+  it("helyszin nelkul megadott eszkozt elutasit, sajat uzenettel", async () => {
+    const service = serviceWith({ belongs: true });
+
+    await assert.rejects(
+      () =>
+        service.create(
+          {
+            title: "Szivattyú leállt",
+            customerId: "cust-1",
+            assetIds: ["esz-1"],
+          },
+          "user-1",
+          MOST,
+        ),
+      /csak helyszínnel együtt/,
+    );
+  });
+
+  /**
+   * A KETSZER MEGADOTT ESZKOZ EGYSZER KERUL FEL. A kapcsolotablan `@@unique`
+   * all, tehat a duplikatum amugy is elhasalna -- de egy adatbazis-hiba a
+   * felhasznalonak semmit nem mond arrol, mi tortent.
+   */
+  it("a duplan megadott eszkozt egyszer adja tovabb", async () => {
+    let kapott: CreateArg | null = null;
+    const service = serviceWith({
+      belongs: true,
+      onCreate: (input) => {
+        kapott = input;
+      },
+    });
+
+    await service.create(
+      {
+        title: "Szivattyú leállt",
+        customerId: "cust-1",
+        departmentId: "unit-9",
+        assetIds: ["esz-1", "esz-1", "esz-2"],
+      },
+      "user-1",
+      MOST,
+    );
+
+    assert.deepEqual([...kapott!.assetIds], ["esz-1", "esz-2"]);
+  });
+
+  /**
+   * ESZKOZ NELKUL A FELVITEL VALTOZATLAN, es a taroló URES tombot kap, nem
+   * `undefined`-et: a hivo ne kelljen, hogy megkulonboztesse a ketto kozott.
+   */
+  it("eszkoz nelkul ures listat ad a tarolonak", async () => {
+    let kapott: CreateArg | null = null;
+    const service = serviceWith({
+      belongs: true,
+      onCreate: (input) => {
+        kapott = input;
+      },
+    });
+
+    await service.create({ title: "Szivattyú leállt" }, "user-1", MOST);
+
+    assert.deepEqual([...kapott!.assetIds], []);
   });
 });

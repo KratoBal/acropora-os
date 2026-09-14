@@ -32,6 +32,9 @@ export const serviceJobsApi = {
       /** A partner helyszine. Csak partnerrel egyutt ervenyes; a szerver
        * ellenorzi, hogy az egyseg tenyleg a megadott partnere. */
       departmentId?: string | null;
+      /** A helyszinen allo eszkozok, amikrol a jegy szol. Csak helyszinnel
+       * egyutt ervenyes; a szerver a helyszin RESZFAJAT fogadja el. */
+      assetIds?: string[];
     },
   ) {
     return apiRequest<{ id: string; jobNumber: string }>(base, token, {
