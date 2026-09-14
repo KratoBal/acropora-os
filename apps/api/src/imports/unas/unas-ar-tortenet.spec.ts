@@ -225,6 +225,33 @@ describe("az ar-tortenet bekotese", () => {
  *    `forras.includes("tukor?.syncedAt ?? most")`. Egy forras-szovegre mero
  *    allitas azt tudja megmondani, hogy a szoveg OTT VAN -- azt nem, hogy a
  *    mezo LETEZIK. Igy a hiba ORZOTTNEK latszott.
+ *
+ * === KALIBRACIO (2026-09-14, fej 3e8c7f1; alap 2636 lefutott teszt) ===
+ *
+ *   a CLI megint `syncedAt`-et valaszt (updatedAt HELYETT)   NEM FORDUL LE
+ *   ugyanaz, de az `updatedAt` MARAD (igy lefordul)          1 piros, nev szerint
+ *   a fuggveny mindig a `most`-ot adja                        1 piros
+ *   a fuggveny mindig a tukor erteket adja                    1 piros
+ *   a CLI nem a mert fuggvenyt hivja                          NEM FORDUL LE
+ *   a mezo-kiolvaso regex elromlik                            a POZITIV KONTROLL sul el
+ *
+ * AZ ELSO A LEGJOBB HIR: a `kezdoSorIdopontja` TIPUSOS parametere miatt a
+ * rossz mezonev MA MAR FORDITASI HIBA. Korabban nem volt az -- a kifejezes a
+ * `create` blokkba folyt, es ott semmi nem allitotta meg. A refaktor tehat nem
+ * csak olvashatobb lett, hanem KAPUT is csinalt oda, ahol nem volt.
+ *
+ * ES KET DOLOG A MERESROL, AMIT ERDEMES TUDNI (ezen a suite-on merve):
+ *
+ * 1. HA EGY `describe` TORZSE DOB, a futas MEGIS zold: `not ok` sor keletkezik
+ *    `type: 'suite'` jelzessel, de a `# fail` NULLA MARAD, es a KILEPESI KOD 0.
+ *    Sajat magamon mertem: az elso alakom `import.meta.url`-bol szamolta a
+ *    forras utjat, az futasidoben a `test-dist` mappara mutat, ott `.ts` nincs,
+ *    es a suite ENOENT-tel elszallt -- a `npm test` pedig SIKERT jelentett.
+ *
+ * 2. AMI EZT MEGIS ELARULJA: a LEFUTOTT TESZTEK SZAMA. A hibas suite tesztjei
+ *    nem futnak le, tehat a szam CSOKKEN (itt 2636 -> 2633). A `# fail` nem
+ *    mozdul, a `# tests` igen. Ezert all a kalibracios lapon a szam, es nem a
+ *    pirosak darabszama.
  */
 describe("a kezdo sor idopontja", () => {
   it("a tukor updatedAt erteket veszi, ha van", () => {
