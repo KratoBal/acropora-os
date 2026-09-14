@@ -10,7 +10,10 @@ import {
   Optional,
   ServiceUnavailableException,
 } from "@nestjs/common";
-import type { AuthenticatedUser } from "@acropora/types";
+import type {
+  AuthenticatedUser,
+  ServiceJobDocumentSummary,
+} from "@acropora/types";
 
 import {
   discardStoredDocument,
@@ -94,12 +97,19 @@ export class ServiceJobDocumentsService {
     return found;
   }
 
+  /**
+   * A VISSZATERESI TIPUS KI VAN IRVA, ES EZ NEM DISZITES.
+   *
+   * A felulet ugyanezt a tipust importalja a kozos csomagbol. Kiiras nelkul a
+   * szerver alakja elmozdulhatna (egy atnevezett mezo MINDKET oldalon
+   * lefordul), es a kepernyon `undefined` jelenne meg, hibauzenet nelkul.
+   */
   async addDocument(
     id: string,
     type: "PHOTO" | "OTHER",
     file: Express.Multer.File,
     user: AuthenticatedUser,
-  ) {
+  ): Promise<ServiceJobDocumentSummary> {
     await this.requireVisibleJob(id, user);
 
     if (!this.documentStore)
@@ -157,7 +167,10 @@ export class ServiceJobDocumentsService {
   }
 
   /** Egy jegy csatolmanyai, tartalom nelkul. */
-  async documents(id: string, user: AuthenticatedUser) {
+  async documents(
+    id: string,
+    user: AuthenticatedUser,
+  ): Promise<{ items: ServiceJobDocumentSummary[] }> {
     await this.requireVisibleJob(id, user);
     return { items: await this.repository.documents(id) };
   }

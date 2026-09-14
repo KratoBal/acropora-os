@@ -132,6 +132,27 @@ describe("AssetDetailPage megerősítései", () => {
     expect(api.deleteDocument).not.toHaveBeenCalled();
   });
 
+  /**
+   * A MERET KIIRASAT SEMMI NEM MERTE, ES EZT EGY KALIBRACIO TALALTA MEG.
+   *
+   * A `formatFileSize` 2026-09-14 ota KOZOS fuggveny (`lib/format/file-size`),
+   * mert a hibajegy csatolmanyainak ugyanez kellett. A kozos alakot egy
+   * kalibracio igazolta volna: a kerekites elrontasakor MINDKET kepernyo
+   * allitasanak pirosra kellene valtania.
+   *
+   * MERVE: csak az EGYIK valtott (a hibajegye). Ez a lap a `sizeBytes: 12345`
+   * erteket MAR a fixturaban hordozta, de a KIIRT alakrol nem allitott semmit
+   * -- vagyis a kozos fuggveny itteni hasznalata meretlen volt. Egy elmozdulo
+   * kerekites ezen a kepernyon csendben valtoztatott volna.
+   *
+   * 12345 / 1024 = 12.06, kerekitve 12.
+   */
+  it("shows the file size in the shared format", async () => {
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    expect(await screen.findByText(/12 kB/)).toBeTruthy();
+  });
+
   it("does nothing when the answer is no", async () => {
     await openDocumentConfirm();
 

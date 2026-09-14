@@ -87,6 +87,39 @@ export interface ServiceJobAssignee {
   assignedAt: string;
 }
 
+/** Fénykép vagy egyéb fájl a jegyen. */
+export type ServiceJobDocumentType = "PHOTO" | "OTHER";
+
+/**
+ * EGY CSATOLMÁNY A JEGYEN, TARTALOM NÉLKÜL.
+ *
+ * KÜLÖN TÍPUS, NEM AZ `AssetDocumentSummary` ÚJRAHASZNÁLÁSA, és ugyanabból az
+ * okból, amit a `ServiceJobAssignee` már kimond: a kettő KÜLÖN VÁLASZBAN
+ * utazik. Egy közös típus a két végpontot egymáshoz kötné, és egy eszköz-oldali
+ * mező-bővítés a jegy válaszát is elmozdítaná, anélkül hogy bárki kérte volna.
+ *
+ * A `contentType` UNIÓ, NEM `string`, és ez mért tanulság, nem ízlés. Az
+ * `AssetDocumentSummary`-ben egykor a rögzített `"application/pdf"` literál
+ * állt, és igaz is volt addig, amíg a végpont csak PDF-et fogadott -- a képek
+ * befogadása után csendben hazudni kezdett. A három érték itt azért van
+ * kiírva, mert a szerver oldalán pontosan ennyit ismer a tartalom-felismerés
+ * (`canonicalMimetypeFor`), és egy negyedik formátum felvétele ITT is
+ * átvezetést kíván.
+ *
+ * ÉS A SZERVER IS EZT A TÍPUST ÍRJA KI a válaszában. Ha csak a kliens
+ * deklarálná, a két oldal külön mozdulhatna el: egy elgépelt mezőnév
+ * `undefined` alakban jelenne meg a képernyőn, hibaüzenet nélkül.
+ */
+export interface ServiceJobDocumentSummary {
+  id: string;
+  type: ServiceJobDocumentType;
+  fileName: string;
+  contentType: "application/pdf" | "image/jpeg" | "image/png";
+  sizeBytes: number;
+  sha256: string;
+  createdAt: string;
+}
+
 /**
  * A RÉSZLETLAP VÁLASZA: EGY ÖSSZEFÉSÜLT SOR, A SZERVER RENDEZI.
  *

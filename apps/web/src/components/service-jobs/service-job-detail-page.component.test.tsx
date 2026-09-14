@@ -5,7 +5,11 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import type { ServiceJobDetail, Session } from "@acropora/types";
+import type {
+  ServiceJobDetail,
+  ServiceJobDocumentSummary,
+  Session,
+} from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ServiceJobDetailPage } from "./service-job-detail-page";
@@ -16,6 +20,10 @@ const api = vi.hoisted(() => ({
   attachWorksheet: vi.fn(),
   detachWorksheet: vi.fn(),
   setPartner: vi.fn(),
+  documents: vi.fn(),
+  uploadDocument: vi.fn(),
+  downloadDocument: vi.fn(),
+  deleteDocument: vi.fn(),
 }));
 const sheets = vi.hoisted(() => ({
   attachable: vi.fn(),
@@ -122,6 +130,21 @@ function detail(overrides: Partial<ServiceJobDetail> = {}): ServiceJobDetail {
   };
 }
 
+function csatolmany(
+  overrides: Partial<ServiceJobDocumentSummary> = {},
+): ServiceJobDocumentSummary {
+  return {
+    id: "doc-1",
+    type: "PHOTO",
+    fileName: "szivattyu.jpg",
+    contentType: "image/jpeg",
+    sizeBytes: 204800,
+    sha256: "a".repeat(64),
+    createdAt: "2026-09-01T09:00:00.000Z",
+    ...overrides,
+  };
+}
+
 describe("ServiceJobDetailPage", () => {
   beforeEach(() => {
     auth.session = sessionAs("SERVICE");
@@ -130,6 +153,10 @@ describe("ServiceJobDetailPage", () => {
     api.attachWorksheet.mockReset().mockResolvedValue({ ok: true });
     api.detachWorksheet.mockReset().mockResolvedValue({ ok: true });
     api.setPartner.mockReset().mockResolvedValue({ ok: true });
+    api.documents.mockReset().mockResolvedValue({ items: [csatolmany()] });
+    api.uploadDocument.mockReset().mockResolvedValue([csatolmany()]);
+    api.downloadDocument.mockReset().mockResolvedValue(new Blob(["x"]));
+    api.deleteDocument.mockReset().mockResolvedValue({ removed: true });
     sheets.attachable.mockReset().mockResolvedValue({
       items: [
         {
@@ -532,5 +559,99 @@ describe("ServiceJobDetailPage", () => {
     expect(
       await screen.findByText("Ez a hibajegy lezárult, nincs több lépése."),
     ).toBeTruthy();
+  });
+
+  /**
+   * A CSATOLMANYOK: KULON HIVAS, ES A HIBAJA NEM VISZI EL A LAPOT.
+   *
+   * A negy allitas kozul a MASODIK a lenyeg, es azert kellett kulon megirni,
+   * mert a KOZOS HALO NEM LATJA: a `confirm-usage.component.test.ts`
+   * FAJL-szinten mer, es ebben a fajlban mar all egy `ConfirmDialog` (a
+   * munkalap-levalasztase). Vagyis a halo AKKOR IS zold maradna, ha a
+   * csatolmany-torles kerdes nelkul menne.
+   */
+  it("kiírja a csatolmány nevét és méretét", async () => {
+    render(<ServiceJobDetailPage jobId="job-1" />);
+
+    expect(await screen.findByText("szivattyu.jpg")).toBeTruthy();
+    // 204800 bajt = 200 kB. A szam a KOZOS formazobol jon, nem a komponensbol.
+    expect(screen.getByText(/200 kB/)).toBeTruthy();
+  });
+
+  it("a törlés ELŐBB kérdez, és csak a megerősítés után hív", async () => {
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Törlés" }));
+
+    // A KERDES MEGJELENT, ES A HIVAS MEG NEM TORTENT MEG.
+    expect(await screen.findByText("Törlöd ezt a csatolmányt?")).toBeTruthy();
+    expect(api.deleteDocument).not.toHaveBeenCalled();
+
+    // ES A VISSZAUT HIANYA KI VAN MONDVA: ez a torles vegleges.
+    expect(
+      screen.getByText(/csak úgy kerül vissza, ha újra feltöltöd/),
+    ).toBeTruthy();
+
+    const dialogus = screen.getByRole("dialog");
+    fireEvent.click(within(dialogus).getByRole("button", { name: "Törlés" }));
+    await waitFor(() =>
+      expect(api.deleteDocument).toHaveBeenCalledWith(
+        "token-1",
+        "job-1",
+        "doc-1",
+      ),
+    );
+  });
+
+  /**
+   * A KEP ES AZ EGYEB FAJL KET KULON KERESBEN MEGY, mert a `type` mezo
+   * keresenkent EGY ertek. Ha a komponens mindent egy hivasba tenne, a PDF
+   * `PHOTO` besorolast kapna -- nem hibazna, csak hazudna a listaban.
+   */
+  it("a képet és a PDF-et külön kérésben tölti fel", async () => {
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    const valaszto = (await screen.findByLabelText(
+      "Új csatolmány",
+    )) as HTMLInputElement;
+
+    fireEvent.change(valaszto, {
+      target: {
+        files: [
+          new File(["a"], "kep.jpg", { type: "image/jpeg" }),
+          new File(["b"], "szamla.pdf", { type: "application/pdf" }),
+        ],
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Feltöltés/ }));
+
+    await waitFor(() => expect(api.uploadDocument).toHaveBeenCalledTimes(2));
+    const fajtak = api.uploadDocument.mock.calls.map((hivas) => hivas[2]);
+    expect(fajtak).toEqual(["PHOTO", "OTHER"]);
+  });
+
+  it("a csatolmányok hibája nem viszi el a naplót", async () => {
+    api.documents.mockRejectedValue(new Error("A tároló nem érhető el."));
+    render(<ServiceJobDetailPage jobId="job-1" />);
+
+    // A HIBA OTT LATSZIK, AHOL KELETKEZETT...
+    expect(await screen.findByText("A tároló nem érhető el.")).toBeTruthy();
+    // ...ES A LAP TOBBI RESZE OLVASHATO MARAD.
+    expect(screen.getByText("A hibajegy létrejött (Új).")).toBeTruthy();
+  });
+
+  /**
+   * AKI CSAK OLVAS, LAT ES LETOLT -- DE NEM TOLT FEL ES NEM TOROL.
+   *
+   * A szerver ugyanezt a ket jogot kulonbozteti meg (`service.view` kontra
+   * `service.manage`); ha a kepernyo kiirna a gombokat, a kattintas 403-at
+   * adna, es a felhasznalo azt hinne, elromlott valami.
+   */
+  it("olvasó jogkörnél nincs feltöltés és nincs törlés", async () => {
+    auth.session = sessionAs("VIEWER");
+    render(<ServiceJobDetailPage jobId="job-1" />);
+
+    expect(await screen.findByText("szivattyu.jpg")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Letöltés" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Törlés" })).toBeNull();
+    expect(screen.queryByLabelText("Új csatolmány")).toBeNull();
   });
 });

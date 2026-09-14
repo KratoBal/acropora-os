@@ -1,10 +1,13 @@
 import type {
   ServiceJobDetail,
+  ServiceJobDocumentSummary,
+  ServiceJobDocumentType,
   ServiceJobListResponse,
   ServiceJobStatusValue,
 } from "@acropora/types";
 
-import { apiRequest } from "./client";
+import { apiAuthHeaders, apiRequest } from "./client";
+import { API_PREFIX } from "./api-prefix";
 
 const base = "/service/jobs";
 
@@ -130,6 +133,79 @@ export const serviceJobsApi = {
   unassignUnit(token: string, userId: string, departmentId: string) {
     return apiRequest<{ ok: true }>(
       `${base}/visibility/${encodeURIComponent(userId)}/${encodeURIComponent(departmentId)}`,
+      token,
+      { method: "DELETE" },
+    );
+  },
+  /**
+   * A JEGY CSATOLMANYAI. KULON HIVAS, nem a reszletlap resze.
+   *
+   * MIERT NEM A `ServiceJobDetail`-BEN: az eszkoznel a dokumentumok a
+   * reszletlap valaszaban utaznak, itt nem. A jegy reszletlapja HAROM listat
+   * fesul ossze egy naploba (allapotvaltas, munkalap, eszkoz), es a csatolmany
+   * nem naplo-elem -- egy kesobb erkezo fenykep nem esemeny a jegy eleteben,
+   * hanem allomany rajta. Kulon hivas mellett a lista FRISSITHETO feltoltes
+   * utan anelkul, hogy a teljes reszletlapot (es vele a naplot) ujra le kellene
+   * kerni.
+   */
+  documents(token: string, id: string, signal?: AbortSignal) {
+    return apiRequest<{ items: ServiceJobDocumentSummary[] }>(
+      jobPath(id, "/documents"),
+      token,
+      { signal },
+    );
+  },
+  /**
+   * FELTOLTES. LISTAT AD VISSZA, EGY FAJLNAL IS.
+   *
+   * A vegpont tobb fajlt fogad ugyanezen a mezonéven (`file`), es MINDIG
+   * listaval valaszol. Egy valasz, aminek a TIPUSA a bemenettol fugg, minden
+   * hivot arra kenyszeritene, hogy kitalalja, melyik agon jar.
+   */
+  uploadDocument(
+    token: string,
+    id: string,
+    type: ServiceJobDocumentType,
+    files: File[],
+  ) {
+    const body = new FormData();
+    body.append("type", type);
+    // UGYANAZ A MEZONEV MINDEN FAJLHOZ: a szerver `FilesInterceptor("file")`
+    // alakban olvassa, tehat a tobbes szam a MEZO ISMETLESE, nem egy `file[]`
+    // nevu mezo.
+    for (const file of files) body.append("file", file);
+    return apiRequest<ServiceJobDocumentSummary[]>(
+      jobPath(id, "/documents"),
+      token,
+      { method: "POST", body },
+    );
+  },
+  /**
+   * LETOLTES. NYERS `fetch`, NEM `apiRequest`: a valasz BAJT, nem JSON.
+   *
+   * Ugyanaz az alak, amit az eszkoz-oldal hasznal. A `credentials` es a fejlec
+   * kezzel kerul ra, mert az `apiRequest` a valaszt JSON-kent olvasna.
+   */
+  async downloadDocument(token: string, id: string, documentId: string) {
+    const response = await fetch(
+      /*
+        A CIM ITT KIIRVA ALL, NEM a `jobPath` helperrel osszerakva -- es ez
+        MERT megkotes, nem stilus. A repo hasonlosag-meroje
+        (`mobile-api-routes.spec.ts`) a kliens-fajlokbol olvassa ki a hivott
+        cimeket, es a helper-hivast egy sablonon BELUL nem tudja feloldani: a
+        kimenete egy ertelmetlen ut lett, es a mero pirosra valtott. Szandekosan
+        szuk, tehat a helyes valasz nem a mero tagitasa, hanem a kiirt alak --
+        ugyanaz, amit az eszkoz-oldali letoltes is hasznal.
+      */
+      `${API_PREFIX}/service/jobs/${encodeURIComponent(id)}/documents/${encodeURIComponent(documentId)}`,
+      { credentials: "same-origin", headers: apiAuthHeaders(token) },
+    );
+    if (!response.ok) throw new Error("A csatolmány nem tölthető le.");
+    return response.blob();
+  },
+  deleteDocument(token: string, id: string, documentId: string) {
+    return apiRequest<{ removed: true }>(
+      jobPath(id, `/documents/${encodeURIComponent(documentId)}`),
       token,
       { method: "DELETE" },
     );
