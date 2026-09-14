@@ -24,6 +24,27 @@ import { integrationDatabaseGate } from "../common/integration-database.js";
  *
  * A suite sorokat hoz letre es torol, ezert csak tesztelesre megnevezett
  * adatbazison fut; lasd `integrationDatabaseGate`.
+ *
+ * === A HELYI ZOLD ES A CI PIROS KULONBSEGE ITT NEM MEGBIZHATATLANSAG ===
+ *
+ * Ez a fajl a helyi `pnpm test` futasban NEM fut le, es KET FUGGETLEN okbol
+ * sem -- mind a kettot lemertem (2026-09-14):
+ *
+ *     a szkript NEV SZERINT kizarja      `find ... ! -name '*.integration.spec.js'`
+ *     es a kapu amugy is `skip` modban    RUN_DB_INTEGRATION nincs beallitva
+ *
+ * Vagyis a helyi zold NEM allit semmit errol a suite-rol -- nem tevedett, hanem
+ * NEM SZOLALT MEG.
+ *
+ * ES EZ MEG IS TORTENT, 2026-09-14-en: a fenti allitasok kozul az egyik a CI-ben
+ * bukott el, miutan helyben minden zold volt. A kulonbseg pontosan a fentebb
+ * megnevezett korlat MUKODESE volt (nincs postgres a fejlesztoi konteneben),
+ * nem a helyi futas hibaja.
+ *
+ * AMIT EBBOL A KOVETKEZO OLVASONAK TUDNIA KELL: ennel a fajlnal a "megirtam" es
+ * a "lefutott" koze EGY CI-KOR esik. Aki itt allitast ir vagy modosit, annak a
+ * meresere varnia kell -- es NEM szabad abbol, hogy helyben zold, arra
+ * kovetkeztetni, hogy az allitas egyaltalan elsult valaha.
  */
 const gate = integrationDatabaseGate(process.env);
 
@@ -149,6 +170,14 @@ describe(
            * A mintat a CI VALODI hibaszovegen kalibraltam, harom iranyban: a
            * regi minta nem talal, az uj mindket mezore talal, es egy masik
            * megkotes uzenete NEM elegiti ki.
+           *
+           * KET KULON ILLESZTES, NEM EGY `/serviceJobId.*userId/` ALAKU MINTA.
+           * Ugyanazt a ket mezot koveteli meg, de a sorrendjuket NEM: egy
+           * pontozott minta akkor is pirosodna, ha a Prisma egyszer felcsereli
+           * a mezoket az uzenetben, vagy sort tor kozejuk (a `.` alapbol nem
+           * illeszkedik ujsorra). Az allitas a KET MEZO EGYUTTALLASAROL szol,
+           * nem a felsorolasuk rendjerol -- es egy orzo, ami egy idegen
+           * formazasi reszleten is elsul, elobb-utobb atlepett pirosat ad.
            */
           const szoveg = String(error);
           assert.match(szoveg, /serviceJobId/);
