@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import type { AuthenticatedUser } from "@acropora/types";
 import { describe, it } from "node:test";
 
 import type { ServiceJobsRepository } from "./service-jobs.repository.js";
@@ -32,11 +33,20 @@ function serviceWith(behaviour: {
   };
 }
 
+/**
+ * A HIVO HATOKORE MOSTANTOL ARGUMENTUM, ES EZ NEM DISZITES.
+ *
+ * Az irasi utak 2026-09-14 ota a hivo hatokoret nezik, MIELOTT irnanak.
+ * Ezek az allitasok a BELSO agat merik -- a partner-hatokor sajat
+ * fajlban all (`service-jobs.write-scope.spec.ts`).
+ */
+const BELSOS = { id: "user-1" } as AuthenticatedUser;
+
 describe("partner egy még partner nélküli hibajegyre", () => {
   it("a partner nélküli jegyre beállítja, és megnevezi mindkét oldalt", async () => {
     const { service, calls } = serviceWith({ job: { customerId: null } });
 
-    await service.setPartner("job-1", "vevo-1");
+    await service.setPartner("job-1", "vevo-1", BELSOS);
 
     assert.deepEqual(calls, [{ id: "job-1", customerId: "vevo-1" }]);
   });
@@ -54,7 +64,7 @@ describe("partner egy még partner nélküli hibajegyre", () => {
     const { service, calls } = serviceWith({ job: { customerId: "vevo-1" } });
 
     await assert.rejects(
-      () => service.setPartner("job-1", "MASIK-vevo"),
+      () => service.setPartner("job-1", "MASIK-vevo", BELSOS),
       /átsorolás/,
     );
     assert.equal(calls.length, 0);
@@ -64,7 +74,7 @@ describe("partner egy még partner nélküli hibajegyre", () => {
     const { service } = serviceWith({ job: null });
 
     await assert.rejects(
-      () => service.setPartner("nincs-ilyen", "vevo-1"),
+      () => service.setPartner("nincs-ilyen", "vevo-1", BELSOS),
       /hibajegy nem található/,
     );
   });
@@ -81,7 +91,7 @@ describe("partner egy még partner nélküli hibajegyre", () => {
     });
 
     await assert.rejects(
-      () => service.setPartner("job-1", "nincs-ilyen-vevo"),
+      () => service.setPartner("job-1", "nincs-ilyen-vevo", BELSOS),
       /partner nem található/,
     );
     assert.equal(calls.length, 0);
@@ -94,7 +104,7 @@ describe("partner egy még partner nélküli hibajegyre", () => {
     });
 
     await assert.rejects(
-      () => service.setPartner("job-1", "vevo-1"),
+      () => service.setPartner("job-1", "vevo-1", BELSOS),
       /időközben partnert kapott/,
     );
   });

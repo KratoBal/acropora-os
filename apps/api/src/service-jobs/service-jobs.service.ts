@@ -10,6 +10,7 @@ import type { AuthenticatedUser } from "@acropora/types";
 
 import { partnerScopeOf } from "../auth/partner-scope.util.js";
 import { serviceJobVisibilityWhere } from "./service-job-visibility.js";
+import { mayWriteServiceJob } from "./service-job-write-scope.js";
 import { mayAssignUnit } from "./visibility-assignment.js";
 
 import {
@@ -191,6 +192,7 @@ export class ServiceJobsService {
     input: SetServiceJobAssigneesDto,
     user: AuthenticatedUser,
   ): Promise<ServiceJobDetail> {
+    this.requireWriteScope(user);
     const userIds = normalizeAssigneeIds(input.userIds);
     await this.requireAssignableUsers(userIds);
 
@@ -250,6 +252,23 @@ export class ServiceJobsService {
    * aztan a szuro. Belsos hivonal a masodik lepes ures objektumot ad, tehat az
    * elso lekerdezest sem inditjuk el feleslegesen.
    */
+  /**
+   * AZ IRAS KAPUJA, ES AZ IRAS ELOTT.
+   *
+   * MINDEN IRASI UT ELSO SORA, es szandekosan EGY helyen: ha az ot ut
+   * kulon-kulon dontene, negy helyes es egy tagabb valtozat is eloallhatna --
+   * es epp ez tortent 2026-09-14-ig, csak akkor mind az ot volt tagabb.
+   *
+   * A HELYE A LENYEG, NEM A MEGLETE. A `setAssignees` eddig is adott 404-et egy
+   * partner-hatokoru hivonak, csak KESON: a valasz osszeallitasakor, amikor az
+   * iras a tranzakcioban MAR megtortent. Egy hatokor-ellenorzes a valasz
+   * oldalan nem hatokor-ellenorzes, hanem elfedes.
+   */
+  private requireWriteScope(user: AuthenticatedUser): void {
+    if (!mayWriteServiceJob(partnerScopeOf(user)))
+      throw new NotFoundException("A hibajegy nem található.");
+  }
+
   private async visibilityFor(
     user: AuthenticatedUser,
   ): Promise<Prisma.ServiceJobWhereInput> {
@@ -466,7 +485,12 @@ export class ServiceJobsService {
    * A MASODIKAT azert nem nyeljuk el: aki csatolni akar, es a lap mar mashol
    * van, annak nem az a kerdese, hogy "sikerult-e", hanem hogy HOL van.
    */
-  async attachWorksheet(jobId: string, worksheetId: string) {
+  async attachWorksheet(
+    jobId: string,
+    worksheetId: string,
+    user: AuthenticatedUser,
+  ) {
+    this.requireWriteScope(user);
     const job = await this.repository.jobAttachState(jobId);
     if (job === null) throw new NotFoundException("A hibajegy nem található.");
 
@@ -558,7 +582,8 @@ export class ServiceJobsService {
    * muvelet. A megengedo irany NEMA lenne: ket partner egy jegyen, es senki
    * nem keresi.
    */
-  async setPartner(jobId: string, customerId: string) {
+  async setPartner(jobId: string, customerId: string, user: AuthenticatedUser) {
+    this.requireWriteScope(user);
     const job = await this.repository.jobAttachState(jobId);
     if (job === null) throw new NotFoundException("A hibajegy nem található.");
     if (job.customerId !== null)
@@ -595,7 +620,12 @@ export class ServiceJobsService {
    * nelkul. Az atsorolas ezzel szemben uj kerdeseket nyitna (mi legyen a regi
    * jegy naplojaval, mit lat a partner), es azokra ma nincs dontes.
    */
-  async detachWorksheet(jobId: string, worksheetId: string) {
+  async detachWorksheet(
+    jobId: string,
+    worksheetId: string,
+    user: AuthenticatedUser,
+  ) {
+    this.requireWriteScope(user);
     // A LEVALASZTAS NEM NEZI A PARTNERT, es ez nem feledekenyseg: a partner-
     // egyezes a BEKERULES feltetele. Egy mar csatolt lapot levenni akkor is
     // szabad kell hogy legyen, ha a partner idokozben elmozdult -- kulonben
@@ -635,7 +665,13 @@ export class ServiceJobsService {
    * arra kényszerítené a felhasználót, hogy sorra próbálgassa a gombokat -
    * és a válasz úgyis a szerveren áll, tehát olcsóbb kimondani.
    */
-  async move(id: string, input: MoveServiceJobDto, actorUserId: string) {
+  async move(
+    id: string,
+    input: MoveServiceJobDto,
+    actorUserId: string,
+    user: AuthenticatedUser,
+  ) {
+    this.requireWriteScope(user);
     const from = await this.repository.statusOf(id);
     if (from === null) throw new NotFoundException("A hibajegy nem található.");
 

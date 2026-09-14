@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import type { AuthenticatedUser } from "@acropora/types";
 import { describe, it } from "node:test";
 
 import type { ServiceJobStatus } from "@acropora/database";
@@ -31,11 +32,20 @@ function serviceWith(behaviour: {
   };
 }
 
+/**
+ * A HIVO HATOKORE MOSTANTOL ARGUMENTUM, ES EZ NEM DISZITES.
+ *
+ * Az irasi utak 2026-09-14 ota a hivo hatokoret nezik, MIELOTT irnanak.
+ * Ezek az allitasok a BELSO agat merik -- a partner-hatokor sajat
+ * fajlban all (`service-jobs.write-scope.spec.ts`).
+ */
+const BELSOS = { id: "user-1" } as AuthenticatedUser;
+
 describe("egy lépés a hibajegyen", () => {
   it("a megengedett lépés átmegy, és a naplóhoz továbbadja, honnan hova", async () => {
     const { service, calls } = serviceWith({ status: "NEW" });
 
-    await service.move("job-1", { to: "TRIAGED" }, "user-1");
+    await service.move("job-1", { to: "TRIAGED" }, "user-1", BELSOS);
 
     assert.equal(calls.length, 1);
     assert.deepEqual(calls[0], {
@@ -60,7 +70,7 @@ describe("egy lépés a hibajegyen", () => {
     const { service, calls } = serviceWith({ status: "NEW" });
 
     await assert.rejects(
-      () => service.move("job-1", { to: "COMPLETED" }, "user-1"),
+      () => service.move("job-1", { to: "COMPLETED" }, "user-1", BELSOS),
       /TRIAGED/,
     );
     assert.equal(calls.length, 0);
@@ -70,7 +80,7 @@ describe("egy lépés a hibajegyen", () => {
     const { service } = serviceWith({ status: "CANCELLED" });
 
     await assert.rejects(
-      () => service.move("job-1", { to: "NEW" }, "user-1"),
+      () => service.move("job-1", { to: "NEW" }, "user-1", BELSOS),
       /nincs több lépése/,
     );
   });
@@ -84,7 +94,7 @@ describe("egy lépés a hibajegyen", () => {
     const { service } = serviceWith({ status: "NEW", moved: false });
 
     await assert.rejects(
-      () => service.move("job-1", { to: "TRIAGED" }, "user-1"),
+      () => service.move("job-1", { to: "TRIAGED" }, "user-1", BELSOS),
       /időközben/,
     );
   });
@@ -101,7 +111,12 @@ describe("egy lépés a hibajegyen", () => {
   it("a csupa szóközből álló megjegyzés null-ként megy át, a lépés nem akad el", async () => {
     const { service, calls } = serviceWith({ status: "NEW" });
 
-    await service.move("job-1", { to: "CANCELLED", note: "   " }, "user-1");
+    await service.move(
+      "job-1",
+      { to: "CANCELLED", note: "   " },
+      "user-1",
+      BELSOS,
+    );
 
     assert.equal(calls.length, 1);
     assert.deepEqual(calls[0], {
@@ -122,7 +137,7 @@ describe("egy lépés a hibajegyen", () => {
   it("végállapotba megjegyzés nélkül is lehet lépni", async () => {
     const { service, calls } = serviceWith({ status: "TRIAGED" });
 
-    await service.move("job-1", { to: "CANCELLED" }, "user-1");
+    await service.move("job-1", { to: "CANCELLED" }, "user-1", BELSOS);
 
     assert.equal(calls.length, 1);
     assert.equal((calls[0] as { note: unknown }).note, null);
@@ -135,6 +150,7 @@ describe("egy lépés a hibajegyen", () => {
       "job-1",
       { to: "WAITING_FOR_PARTS", note: "  Szivattyú, hétfőre ígérik.  " },
       "user-1",
+      BELSOS,
     );
 
     assert.equal(calls.length, 1);
@@ -151,7 +167,7 @@ describe("egy lépés a hibajegyen", () => {
     const { service } = serviceWith({ status: null });
 
     await assert.rejects(
-      () => service.move("hianyzik", { to: "TRIAGED" }, "user-1"),
+      () => service.move("hianyzik", { to: "TRIAGED" }, "user-1", BELSOS),
       /nem található/,
     );
   });
