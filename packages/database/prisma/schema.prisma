@@ -611,6 +611,8 @@ model User {
   orderBusinessStatusEvents  OrderBusinessStatusEvent[]    @relation("OrderBusinessStatusEventActor")
   uploadedAssetDocuments     AssetDocument[]               @relation("AssetDocumentUploadedBy")
   uploadedWorksheetDocuments WorksheetDocument[]           @relation("WorksheetDocumentUploadedBy")
+  /// A hibajegyekhez (ServiceJob) feltöltött csatolmányok.
+  uploadedJobDocuments       ServiceJobDocument[]          @relation("ServiceJobDocumentUploadedBy")
   assignedTasks              Task[]                        @relation("TaskAssignee")
   createdTasks               Task[]                        @relation("TaskCreatedBy")
   closedTasks                Task[]                        @relation("TaskClosedBy")
@@ -2641,6 +2643,8 @@ model ServiceJob {
   worksheets Worksheet[]
   /// A jegyre delegált szervizes kollégák.
   assignees  ServiceJobAssignee[]
+  /// A jegyhez csatolt fénykép és egyéb fájl.
+  documents  ServiceJobDocument[]
 
   /// A NYITO SZERINTI SZURES INDEXELT. A lathatosag minden partner-oldali
   /// lekerdezesnel ezen az oszlopon szur, tehat ez nem "hatha" index.
@@ -3020,6 +3024,76 @@ model WorksheetDocument {
   @@index([sha256])
 }
 
+enum ServiceJobDocumentType {
+  PHOTO
+  OTHER
+}
+
+/// HIBAJEGYHEZ CSATOLT FENYKEP VAGY EGYEB FAJL.
+///
+/// Balazs kerese (2026-09-14 19:41, Discord, Szerviz ticketing szal, szo
+/// szerint): „Ami meg kellene a foto feltoltesi lehetoseg. Hibajegy rogzitesekor
+/// lehessen fotot illetve egyeb fajlokat is csatolni"
+///
+/// === MIERT SAJAT TABLA, ES MIERT NEM A MUNKALAPE ===
+///
+/// A kezenfekvo rovidites az lenne, hogy a kep a jegy ala csatolt MUNKALAPRA
+/// megy, es akkor nem kell uj tabla. Ez ket okbol nem all:
+///
+/// 1. A JEGYNEK NEM KELL MUNKALAPJA. A `Worksheet.serviceJobId` nullazhato, es a
+///    jegy-felvitel egyetlen utja (`ServiceJobsService.create`) nem hoz letre
+///    lapot. A hiba BEJELENTESEKOR tehat tipikusan NINCS mire csatolni.
+/// 2. A KETTO MAST BIZONYIT. A munkalap kepe az ELVEGZETT munkarol szol, a jegye
+///    a BEJELENTETT hibarol. Ha egy helyen allnanak, a jegy megnyitasakor
+///    feltoltott kep utolag ugy latszana, mintha a szerelo keszitette volna.
+///
+/// === MIERT UGYANAZ AZ ALAK, MINT A `WorksheetDocument` ===
+///
+/// Mezore es kulcsra egyezoen, es ez nem masolas kenyelembol: a feltoltes
+/// SZABALYAI kozos modulban allnak (`documents/document-intake.ts`), es a sor
+/// alakja az a szerzodes, amit az a modul kitolt. Egy harmadik alak ugyanarra a
+/// fogalomra azt jelentene, hogy minden kesobbi valtozast haromszor kell
+/// megcsinalni, es a harmadik mindig lemarad.
+///
+/// === A TARTALOM KET HELYEN ALLHAT, ES PONTOSAN AZ EGYIKEN ===
+///
+/// A megkotest adatbazis-szintu CHECK orzi
+/// (`ServiceJobDocument_content_or_storage_key`), nem csak a kod: egy
+/// hattermunka vagy egy kesobbi vegpont nem orokli az alkalmazas
+/// ellenorzeseit, a tabla megkoteset viszont igen.
+///
+/// === AMI ITT NINCS: A LATHATOSAG ===
+///
+/// Azt, hogy KI lathatja egy jegy csatolmanyait, ez a tabla nem mondja meg, es
+/// nem is mondhatja: a jegy lathatosaga ket tengelyen all
+/// (`service-job-visibility.ts`), es a szuro a JEGYRE vonatkozik, nem a
+/// csatolmanyra. A vegpontnak tehat ELOSZOR a jegyet kell megtalalnia a hivo
+/// hatokorevel -- egy dokumentum-vegpont, ami tagabb, mint a jegy sajat
+/// lathatosaga, a jegy LETEZESET szivarogtatna ki.
+model ServiceJobDocument {
+  id           String                 @id @default(cuid())
+  serviceJobId String
+  type         ServiceJobDocumentType @default(PHOTO)
+  fileName     String
+  contentType  String
+  sizeBytes    Int
+  sha256       String                 @db.VarChar(64)
+  content      Bytes?
+  storageKey   String?
+  uploadedById String?
+  /// A CSATOLMANY SAJAT IDEJE. Nem a jegye: a bizonyitek gyakran keson erkezik,
+  /// es utolag ebbol latszik, mikor.
+  createdAt    DateTime               @default(now())
+
+  serviceJob ServiceJob @relation(fields: [serviceJobId], references: [id], onDelete: Cascade)
+  uploadedBy User?      @relation("ServiceJobDocumentUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([serviceJobId, createdAt])
+  /// A TAROLO-EGYEZTETES ES A DUPLIKATUM-KERESES UTJA, ugyanugy, mint a masik
+  /// ket dokumentum-tablan.
+  @@index([sha256])
+}
+
 model AssetEvent {
   id          String         @id @default(cuid())
   assetId     String
@@ -3130,16 +3204,16 @@ model WorksheetDepartment {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  customer   Customer                  @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  parent     WorksheetDepartment?      @relation("WorksheetDepartmentTree", fields: [parentId], references: [id], onDelete: Restrict)
-  children   WorksheetDepartment[]     @relation("WorksheetDepartmentTree")
-  worksheets Worksheet[]
-  assets     Asset[]
+  customer    Customer                  @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  parent      WorksheetDepartment?      @relation("WorksheetDepartmentTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children    WorksheetDepartment[]     @relation("WorksheetDepartmentTree")
+  worksheets  Worksheet[]
+  assets      Asset[]
   /// A helyszinre nyitott hibajegyek. A lanc ezzel lett teljes: eddig csak a
   /// munkalap es az eszkoz tudta, hol van, a BEJELENTES nem.
   serviceJobs ServiceJob[]
   /// Kik latjak ezt az alegyseget (es vele a reszfajat).
-  assignees  UserWorksheetDepartment[]
+  assignees   UserWorksheetDepartment[]
 
   /// TESTVEREK KOZOTT EGYEDI A KOD. Ket kulonbozo ag alatt ugyanaz a kod
   /// (`BIO`) megengedett es termeszetes, egy szulon belul viszont nem.

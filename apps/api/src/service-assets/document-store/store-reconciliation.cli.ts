@@ -121,6 +121,20 @@ const OWNER_QUERIES: Record<DocumentOwner, () => Promise<RowWithSize[]>> = {
       },
       sizeBytes: sor.sizeBytes,
     })),
+  "service-job": async () =>
+    (
+      await prisma.serviceJobDocument.findMany({
+        where: { storageKey: { not: null } },
+        select: { serviceJobId: true, id: true, sizeBytes: true },
+      })
+    ).map((sor) => ({
+      key: {
+        owner: "service-job" as const,
+        ownerId: sor.serviceJobId,
+        documentId: sor.id,
+      },
+      sizeBytes: sor.sizeBytes,
+    })),
   /**
    * A TERMEKKEPEK MERET NELKUL JONNEK, es a kulcs a TAROLT `storageKey`-bol
    * olvasodik vissza, nem az URL-bol szamolodik ujra.
