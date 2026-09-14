@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 
 import { expandAssignedUnits } from "./assigned-units.js";
+import { collectUnitSubtreeIds } from "../service-assets/unit-subtree.js";
 import { prisma, type Prisma, type ServiceJobStatus } from "@acropora/database";
 
 /**
@@ -41,12 +42,56 @@ export class ServiceJobsRepository {
     return found !== null;
   }
 
+  /**
+   * MELYIK MEGADOTT ESZKOZ NEM ALL A HELYSZIN RESZFAJABAN.
+   *
+   * A VALASZ A HIANYZOK LISTAJA, NEM EGY IGEN-NEM. Aki elutasitast kap, azt
+   * akarja tudni, HANY eszkoz esett ki -- egy puszta "nem jo" ugyanolyan
+   * hasznalhatatlan, mint a nema elfogadas.
+   *
+   * KET LEPES, mert a fa melysege nem korlatos, es a Prisma rekurziv
+   * lekerdezest nem tud kifejezni: egy koteg sor, majd egy tiszta bejaras
+   * (`collectUnitSubtreeIds`). Ugyanaz a minta, amit az eszkoz-lista szuroje
+   * hasznal -- a ket helyen ugyanaz a fuggveny jar be, tehat a felajanlott es
+   * az elfogadott halmaz nem tud elcsuszni egymastol.
+   *
+   * A NEM LETEZO HELYSZIN ONMAGARA SZUKUL, es akkor minden eszkoz "kivul" lesz.
+   * Ez a helyes irany: a hivas elutasit, ahelyett hogy egy elgepelt azonositora
+   * BARMIT atengedne.
+   */
+  async assetsOutsideDepartment(
+    assetIds: readonly string[],
+    departmentId: string,
+  ): Promise<string[]> {
+    const root = await this.database.worksheetDepartment.findUnique({
+      where: { id: departmentId },
+      select: { customerId: true },
+    });
+    const units = root
+      ? await this.database.worksheetDepartment.findMany({
+          where: { customerId: root.customerId },
+          select: { id: true, name: true, parentId: true },
+        })
+      : [];
+    const subtree = root
+      ? collectUnitSubtreeIds(units, departmentId)
+      : [departmentId];
+
+    const found = await this.database.asset.findMany({
+      where: { id: { in: [...assetIds] }, departmentId: { in: subtree } },
+      select: { id: true },
+    });
+    const ok = new Set(found.map((row) => row.id));
+    return assetIds.filter((id) => !ok.has(id));
+  }
+
   async create(input: {
     jobNumber: string;
     title: string;
     description: string | null;
     customerId: string | null;
     departmentId: string | null;
+    assetIds: readonly string[];
     actorUserId: string;
   }) {
     // A KELETKEZÉS IS ESEMÉNY, és a naplóba is bekerül - egy tranzakcióban.
@@ -70,6 +115,13 @@ export class ServiceJobsRepository {
             toStatus: "NEW",
             actorUserId: input.actorUserId,
           },
+        },
+        // AZ ESZKOZOK UGYANEBBEN A TRANZAKCIOBAN. Kulon irva a ketto
+        // szetcsuszhatna: egy jegy, aminek a kapcsolt eszkozei csak masodpercek
+        // mulva jelennek meg, ugy nez ki, mintha nelkuluk nyitottak volna --
+        // es egy megszakadt masodik iras eszrevetlenul hagyna a jegyet urest.
+        assets: {
+          create: input.assetIds.map((assetId) => ({ assetId })),
         },
       },
       select: { id: true, jobNumber: true },

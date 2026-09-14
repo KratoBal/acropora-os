@@ -102,6 +102,10 @@ describe("ServiceJobEditorPage", () => {
       // eltunne -- egy elhagyott mezo es egy szandekosan ures mezo a
       // halozati kepen ugyanugy nez ki.
       departmentId: null,
+      // AZ ESZKOZ-LISTA KIMONDVA URES, nem elhagyva: helyszin nelkul nincs
+      // mibol valasztani, es a szerver a helyszin nelkuli eszkozt amugy is
+      // elutasitja.
+      assetIds: [],
     });
     // A LISTÁRA VISSZAVINNI ANNYI LENNE, mint a felhasználóra hagyni, hogy
     // megkeresse, amit épp létrehozott.
@@ -176,6 +180,7 @@ describe("ServiceJobEditorPage", () => {
       description: null,
       customerId: "vevo-1",
       departmentId: null,
+      assetIds: [],
     });
   });
 

@@ -14,6 +14,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { buildSiteOptions } from "@/lib/partners/site-tree";
+import { JobAssetPicker } from "./job-asset-picker";
 import { PartnerPicker } from "./partner-picker";
 
 /**
@@ -55,6 +56,7 @@ export function ServiceJobEditorPage() {
    */
   const [departmentsLoaded, setDepartmentsLoaded] = useState(false);
   const [departmentId, setDepartmentId] = useState("");
+  const [assetIds, setAssetIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const canManage = Boolean(
@@ -109,6 +111,17 @@ export function ServiceJobEditorPage() {
   }, [customer?.customerId]);
 
   /**
+   * HELYSZINVALTASKOR AZ ESZKOZOK IS ELESNEK, ugyanabbol az okbol, amiert a
+   * helyszin esik el partnervaltaskor: az elozo helyszin eszkoze a listaban
+   * mar nem szerepel, tehat a valasztas LATHATATLANNA valna -- kozben elmenne
+   * a szerverre, ami elutasitana, egy olyan hibaval, amit a kepernyon semmi
+   * nem magyaraz.
+   */
+  useEffect(() => {
+    setAssetIds([]);
+  }, [departmentId]);
+
+  /**
    * A VALASZTO A TELJES UTAT MUTATJA, NEM CSAK A LEVEL NEVET. A kod es a nev
    * csak TESTVEREK kozott egyedi (ADR-010), tehat ket kulonbozo ag alatt
    * ugyanaz a "Biodom" megengedett. Ugyanaz a `buildSiteOptions`, amit a
@@ -137,6 +150,7 @@ export function ServiceJobEditorPage() {
         description: description.trim() || null,
         customerId: customer?.customerId ?? null,
         departmentId: departmentId || null,
+        assetIds,
       });
       // A FRISS JEGY LAPJÁRA VISZÜNK, nem a listára: aki most nyitotta, azt
       // akarja folytatni - munkalapot csatolni, léptetni.
@@ -267,6 +281,21 @@ export function ServiceJobEditorPage() {
             rows={4}
             value={description}
             onChange={(event) => setDescription(event.target.value)}
+          />
+        </div>
+
+        <div className="space-y-1">
+          <span className="text-sm font-semibold">Érintett eszközök</span>
+          {/*
+            A CIMKE ITT `span`, NEM `label`. Egy `label` egyetlen mezohoz
+            tartozik, itt viszont egy JELOLONEGYZET-LISTA all: a felirat a
+            csoportra vonatkozik, es a sajat feliratat minden sor viszi. Egy
+            `htmlFor` nelkuli `label` csendben semmire nem mutatna.
+          */}
+          <JobAssetPicker
+            departmentId={departmentId}
+            selected={assetIds}
+            onChange={setAssetIds}
           />
         </div>
 
