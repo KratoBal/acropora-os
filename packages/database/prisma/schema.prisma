@@ -622,6 +622,9 @@ model User {
   serviceJobEvents           ServiceJobEvent[]             @relation("ServiceJobEventActor")
   assignedWorksheets         WorksheetAssignee[]           @relation("WorksheetAssignee")
   worksheetAssignmentsMade   WorksheetAssignee[]           @relation("WorksheetAssignedBy")
+  /// A hibajegyek, amikre ezt a kollegat delegaltak.
+  assignedServiceJobs        ServiceJobAssignee[]          @relation("ServiceJobAssignee")
+  serviceJobAssignmentsMade  ServiceJobAssignee[]          @relation("ServiceJobAssignedBy")
   createdWorksheetVersions   WorksheetVersion[]            @relation("WorksheetVersionCreatedBy")
   closedWorksheetVersions    WorksheetVersion[]            @relation("WorksheetVersionClosedBy")
   worksheetSignatures        WorksheetVersionSignature[]   @relation("WorksheetSignedBy")
@@ -2636,6 +2639,8 @@ model ServiceJob {
   /// A hibajegy mögött álló munkalapok. Több is lehet, és van, amelyik
   /// hamarabb keletkezett, mint maga a hibajegy.
   worksheets Worksheet[]
+  /// A jegyre delegált szervizes kollégák.
+  assignees  ServiceJobAssignee[]
 
   /// A NYITO SZERINTI SZURES INDEXELT. A lathatosag minden partner-oldali
   /// lekerdezesnel ezen az oszlopon szur, tehat ez nem "hatha" index.
@@ -2646,6 +2651,47 @@ model ServiceJob {
   /// eseteben: a partner-oldali lista a sajat egysegeire szur, es a `Restrict`
   /// torles-ellenorzes is ezt az oszlopot olvassa.
   @@index([departmentId])
+}
+
+/// KI DOLGOZIK A HIBAJEGYEN. Kapcsolótábla, nem oszlop a jegyen.
+///
+/// Balázs kérése (2026-09-14 18:10, Discord, Szerviz ticketing szál, szó
+/// szerint): „Majd ez alatt a szervizes kollegakat lehessen delegalni akik
+/// errol ertesitest kapnak es meg tudjak nyitni a munkalapot." Több kolléga,
+/// tehát a páros a tábla, nem egy azonosító a jegyen.
+///
+/// A `WorksheetAssignee` MINTÁJÁRA, mezőre és kulcsra egyezően, és ez nem
+/// másolás kényelemből: a hibajegy és a munkalap ugyanannak a munkának a két
+/// oldala, és aki az egyik láncot ismeri, a másikat is olvasni fogja. Egy
+/// harmadik alak ugyanarra a fogalomra pontosan azt a zavart szülné, amit a
+/// séma máshol (`departmentId`) már egyszer megnevezett.
+///
+/// === A JEGYEN ÁLLÓ `assignedUserId` VÁLTOZATLAN MARAD, ÉS EZ MÉRÉS ===
+///
+/// A mező 2026-09-14-én a teljes TypeScript fában NULLA helyen szerepel: se
+/// író, se olvasó (`grep` az `apps` és `packages` fákon, `dist` és `.d.ts`
+/// nélkül; pozitív kontroll ugyanazzal a kereséssel: `openedById` 15 találat).
+/// Vagyis nem két írót kapunk egy tényre -- a régi oszlop ma nem ír semmit.
+///
+/// Azért MARAD, mert az eldobása külön döntés és külön migráció: adatot venne
+/// el visszafordíthatatlanul, és a mérésem a KÓDRÓL szól, nem az adatbázis
+/// tartalmáról. Amíg ez a megjegyzés itt áll, a következő olvasó nem hiszi
+/// azt, hogy a két hely két egyenrangú igazság.
+model ServiceJobAssignee {
+  serviceJobId String
+  userId       String
+  assignedAt   DateTime @default(now())
+  assignedById String?
+
+  serviceJob ServiceJob @relation(fields: [serviceJobId], references: [id], onDelete: Cascade)
+  user       User       @relation("ServiceJobAssignee", fields: [userId], references: [id], onDelete: Cascade)
+  assignedBy User?      @relation("ServiceJobAssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  /// A páros maga az azonosság, ezért nincs külön `id`: egy pótkulcs mellett
+  /// ugyanaz az ember kétszer is felkerülhetne ugyanarra a jegyre.
+  @@id([serviceJobId, userId])
+  /// A szervizes saját jegyeinek listája ezen az indexen fut.
+  @@index([userId, assignedAt])
 }
 
 model Aquarium {

@@ -2,13 +2,38 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 
 import { APNS_SENDING, type ApnsSending } from "./apns.sender.js";
 import { DeviceTokenRepository } from "./device-token.repository.js";
-import { NotificationLogRepository } from "./notification-log.repository.js";
+import {
+  NotificationLogRepository,
+  type NotificationAttempt,
+} from "./notification-log.repository.js";
+
+/** Hany ertesites ment ki, hany eszkoz-token evult el, es hany bukott el. */
+export interface AssignmentSummary {
+  sent: number;
+  retired: number;
+  failed: number;
+}
 
 export interface WorksheetAssignmentNotice {
   worksheetId: string;
   /** What the sheet is about, as the technician will read it on the lock screen. */
   subject: string;
   /** The colleagues now responsible for the sheet. */
+  userIds: readonly string[];
+}
+
+/**
+ * A HIBAJEGY DELEGALASANAK ERTESITESE.
+ *
+ * Balazs kerese (2026-09-14 18:10): a jegyre delegalt szervizesek ertesitest
+ * kapjanak. Ugyanaz a ut, mint a munkalapnal -- nincs masodik kuldo, nincs
+ * masodik sor -- csak masik CELPONT es masik cim.
+ */
+export interface ServiceJobAssignmentNotice {
+  serviceJobId: string;
+  /** What the ticket is about, as the technician will read it on the lock screen. */
+  subject: string;
+  /** The colleagues now delegated to the ticket. */
   userIds: readonly string[];
 }
 
@@ -51,6 +76,17 @@ export class NotificationsService {
     });
   }
 
+  /** Ugyanaz, hibajegyre: a hívó válasza nem függhet a telefontól. */
+  notifyServiceJobAssignment(notice: ServiceJobAssignmentNotice): void {
+    void this.deliverServiceJobAssignment(notice).catch((cause: unknown) => {
+      this.logger.warn(
+        `A hibajegy-értesítés küldése nem sikerült (${notice.serviceJobId}): ${
+          cause instanceof Error ? cause.message : "ismeretlen hiba"
+        }`,
+      );
+    });
+  }
+
   /**
    * The same work as `notifyWorksheetAssignment`, awaited, so the tests can
    * observe the outcome.
@@ -64,12 +100,115 @@ export class NotificationsService {
    */
   async deliverWorksheetAssignment(
     notice: WorksheetAssignmentNotice,
-  ): Promise<{ sent: number; retired: number; failed: number }> {
-    const empty = { sent: 0, retired: 0, failed: 0 };
-    if (notice.userIds.length === 0) return empty;
+  ): Promise<AssignmentSummary> {
+    return this.deliver({
+      userIds: notice.userIds,
+      title: "Új munkalap került hozzád",
+      body: notice.subject,
+      /**
+       * A CELPONT TIPUSSAL EGYUTT MEGY, ES EZ MA EGY ELAGAZAS KET AGGAL.
+       *
+       * Balazs kerese (2026-09-03 20:20): hibajegy-keperno akkor meg nem volt a
+       * telefonon, tehat oda nem lehetett vinni senkit -- de az ALAK legyen
+       * olyan, hogy a masodik tipus ne kivanjon atirast. Ez a masodik tipus,
+       * es az alak tartotta: a kuldes kozos, csak a `data` ter el.
+       *
+       * A REGI `worksheetId` MEZO IS MEGY, es ez nem masolas: az ertesitesi
+       * kozpontban MA is allhat bontatlan ertesites, ami csak azt hordozza.
+       * Egy koppintas rajta a frissites UTAN tortenne, es tipus nelkul sehova
+       * nem vinne. A telefon ezert visszaesik ra -- de CSAK ha tipus nincs,
+       * ismeretlen tipusnal nem (lasd `push-target.ts`).
+       *
+       * MIKOR HAGYHATO EL: ha egyszer biztosak vagyunk benne, hogy egyetlen
+       * keszuleken sem all bontatlan, tipus nelkuli ertesites. Addig a ket mezo
+       * egyutt megy, es a masodik nem kerul semmibe.
+       */
+      data: {
+        targetType: "worksheet",
+        targetId: notice.worksheetId,
+        worksheetId: notice.worksheetId,
+      },
+      record: (attempts) =>
+        this.log.recordWorksheetAssignment({
+          worksheetId: notice.worksheetId,
+          attempts,
+        }),
+      failureLine: (summary) =>
+        `Munkalap-értesítés: ${summary.sent} kiment, ${summary.failed} nem sikerült, ${summary.retired} eszköz-token elévült (${notice.worksheetId}).`,
+    });
+  }
+
+  /**
+   * UGYANEZ, HIBAJEGYRE.
+   *
+   * === A `worksheetId` VISSZAESES ITT NEM MEGY, ES EZ A LENYEG ===
+   *
+   * A munkalap-ertesites a regi mezot is viszi, hogy egy tipus nelkuli, regi
+   * ertesitesbol meg lehessen nyitni a lapot. Egy JEGY ertesitesebe ugyanaz a
+   * mezo HAZUGSAG lenne: a telefon munkalap-azonositokent olvasna, es egy
+   * letezo lap helyett egy jegy azonositojaval nyitna meg egy kepernyot -- vagy
+   * ami rosszabb, egy VELETLENUL letezo masik lapot.
+   *
+   * === AMIT EZ MA NEM TUD, ES KIMONDOM ===
+   *
+   * A telefon `PUSH_TARGET_TYPES` listaja ma CSAK a `worksheet` erteket ismeri
+   * (`apps/mobile/src/lib/notifications/push-target.ts`, merve 2026-09-14).
+   * Egy `serviceJob` tipusu ertesites tehat MEGJELENIK a zarolt kepernyon, de a
+   * koppintas SEHOVA nem visz -- a telefon szandekosan inkabb nem navigal, mint
+   * rosszul.
+   *
+   * EZ NEM HIANYZO RESZ EBBOL A MUNKABOL, hanem a mobil oldal kulon tetele: a
+   * tipus felvetele ott csak akkor helyes, amikor a hibajegy-keperno LETEZIK.
+   * Addig felvenni annyit tenne, hogy a koppintas egy ures utvonalra visz, es
+   * az rosszabb a mai allapotnal.
+   */
+  async deliverServiceJobAssignment(
+    notice: ServiceJobAssignmentNotice,
+  ): Promise<AssignmentSummary> {
+    return this.deliver({
+      userIds: notice.userIds,
+      title: "Új hibajegy került hozzád",
+      body: notice.subject,
+      data: {
+        targetType: "serviceJob",
+        targetId: notice.serviceJobId,
+      },
+      record: (attempts) =>
+        this.log.recordServiceJobAssignment({
+          serviceJobId: notice.serviceJobId,
+          attempts,
+        }),
+      failureLine: (summary) =>
+        `Hibajegy-értesítés: ${summary.sent} kiment, ${summary.failed} nem sikerült, ${summary.retired} eszköz-token elévült (${notice.serviceJobId}).`,
+    });
+  }
+
+  /**
+   * A KOZOS TORZS: kinek kuldunk, mi tortenik a lejart eszkozzel, mi kerul a
+   * naploba.
+   *
+   * KIEMELVE, NEM MASOLVA. A ket kiosztas ugyanazt a harom szabalyt hordozza (a
+   * sor nelkuli kuldes, az elavult token nyugdijazasa, es hogy a naplo akkor is
+   * ir, ha nem sikerult), es ezek NEM a munkalaprol vagy a jegyrol szolnak,
+   * hanem a kuldesrol. Ket masolatban a harom szabaly harom helyen csuszna szet
+   * -- es a kulonbseg nem hibazna, csak maskepp viselkedne.
+   *
+   * AMI ELTER, AZ A PARAMETEREKBEN ALL, es pontosan negy dolog: a cim, a
+   * torzs, a `data` celpont, es hogy melyik naplo-bejegyzes keszul.
+   */
+  private async deliver(input: {
+    userIds: readonly string[];
+    title: string;
+    body: string;
+    data: Record<string, string>;
+    record: (attempts: NotificationAttempt[]) => Promise<void>;
+    failureLine: (summary: AssignmentSummary) => string;
+  }): Promise<AssignmentSummary> {
+    const empty: AssignmentSummary = { sent: 0, retired: 0, failed: 0 };
+    if (input.userIds.length === 0) return empty;
     if (!this.sender.configured()) return empty;
 
-    const recipients = await this.deviceTokens.recipients(notice.userIds);
+    const recipients = await this.deviceTokens.recipients(input.userIds);
     if (recipients.length === 0) return empty;
 
     const results = await Promise.all(
@@ -77,32 +216,9 @@ export class NotificationsService {
         const result = await this.sender.send({
           deviceToken: recipient.token,
           bundleId: recipient.bundleId,
-          title: "Új munkalap került hozzád",
-          body: notice.subject,
-          /**
-           * A CELPONT TIPUSSAL EGYUTT MEGY, ES EZ MA EGY ELAGAZAS EGY AGGAL.
-           *
-           * Balazs kerese (2026-09-03 20:20): hibajegy-keperno ma nincs a
-           * telefonon, tehat oda nem lehet vinni senkit -- de az ALAK legyen
-           * olyan, hogy a masodik tipus ne kivanjon atirast. Egy tipus-mezo ma
-           * egy sor, kesobb migracio: a mar kikuldott ertesitesek nem
-           * ertelmezhetok ujra visszamenoleg.
-           *
-           * A REGI `worksheetId` MEZO IS MEGY, es ez nem masolas: az ertesitesi
-           * kozpontban MA is allhat bontatlan ertesites, ami csak azt hordozza.
-           * Egy koppintas rajta a frissites UTAN tortenne, es tipus nelkul
-           * sehova nem vinne. A telefon ezert visszaesik ra -- de CSAK ha tipus
-           * nincs, ismeretlen tipusnal nem (lasd `push-target.ts`).
-           *
-           * MIKOR HAGYHATO EL: ha egyszer biztosak vagyunk benne, hogy egyetlen
-           * keszuleken sem all bontatlan, tipus nelkuli ertesites. Addig a ket
-           * mezo egyutt megy, es a masodik nem kerul semmibe.
-           */
-          data: {
-            targetType: "worksheet",
-            targetId: notice.worksheetId,
-            worksheetId: notice.worksheetId,
-          },
+          title: input.title,
+          body: input.body,
+          data: input.data,
         });
         if (!result.ok && result.retired)
           await this.deviceTokens.retire(recipient.token);
@@ -110,7 +226,7 @@ export class NotificationsService {
       }),
     );
 
-    const summary = results.reduce(
+    const summary = results.reduce<AssignmentSummary>(
       (totals, { result }) => ({
         sent: totals.sent + (result.ok ? 1 : 0),
         retired: totals.retired + (!result.ok && result.retired ? 1 : 0),
@@ -122,21 +238,17 @@ export class NotificationsService {
     // Written down whether it went well or not. A log line answers the
     // question while somebody is watching; this answers it tomorrow, when
     // somebody asks whether the technician was told at all.
-    await this.log.recordWorksheetAssignment({
-      worksheetId: notice.worksheetId,
-      attempts: results.map(({ recipient, result }) => ({
+    await input.record(
+      results.map(({ recipient, result }) => ({
         userId: recipient.userId,
         delivered: result.ok,
         ...(result.ok
           ? {}
           : { reason: result.reason, retired: result.retired }),
       })),
-    });
+    );
 
-    if (summary.failed > 0)
-      this.logger.warn(
-        `Munkalap-értesítés: ${summary.sent} kiment, ${summary.failed} nem sikerült, ${summary.retired} eszköz-token elévült (${notice.worksheetId}).`,
-      );
+    if (summary.failed > 0) this.logger.warn(input.failureLine(summary));
 
     return summary;
   }

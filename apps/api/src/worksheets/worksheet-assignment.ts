@@ -1,33 +1,19 @@
-import {
-  hasPermission,
-  PERMISSIONS,
-  USER_ROLES,
-  type UserRole,
-} from "@acropora/types";
+import { SERVICE_ASSIGNABLE_ROLES } from "../common/service-assignment.js";
+import type { UserRole } from "@acropora/types";
 
 /**
- * Kit lehet felelősnek kiosztani.
+ * Kit lehet a munkalap felelősének kiosztani.
  *
- * A szabály nem a szerepkörök felsorolása, hanem a jogosultságból számolt
- * következmény: felelős az lehet, aki a munkalapot írni is tudja. Egy
- * felsorolt lista némán elavulna, amint egy szerepkör megkapja vagy
- * elveszíti a `service.manage` jogot - a kiosztás pedig attól még
- * megtörténne, és a kolléga a lapot megnyitva nem tudná szerkeszteni.
+ * A SZABÁLY 2026-09-14 ÓTA A KÖZÖS MAPPÁBAN ÁLL
+ * (`common/service-assignment.ts`), mert a hibajegy-delegálás ugyanezt a
+ * kérdést teszi fel, ugyanabból az okból -- az indoklás ott olvasható.
  *
- * A `service.view` szándékosan kevés lenne: a VIEWER látja a lapot, de nem
- * ír rá, tehát felelősnek kiosztva néma zsákutcába kerülne.
+ * A NÉV ITT MARADT, és ez nem kényelem: a munkalap-oldali hívók és a rájuk
+ * álló őrző (`worksheet-assignment.spec.ts`) ezen a néven ismerik. Egy
+ * átnevezés a szabály költözésével EGY körben két dolgot mozdított volna, és a
+ * spec zöldje nem mondta volna meg, melyik miatt zöld.
  */
 export const WORKSHEET_ASSIGNABLE_ROLES: readonly UserRole[] =
-  USER_ROLES.filter((role) => hasPermission(role, PERMISSIONS.SERVICE_MANAGE));
+  SERVICE_ASSIGNABLE_ROLES;
 
-/**
- * A beküldött felelős-lista rendbetétele: üres elemek el, ismétlődés
- * összevonva.
- *
- * Az ismétlődés nem elméleti: a felületen egy nevet kétszer kiválasztva a
- * kapcsolótábla egyedi kulcsa hibát dobna, pedig a szándék egyértelmű, és
- * az eredmény ugyanaz a lap.
- */
-export function normalizeAssigneeIds(userIds: readonly string[]): string[] {
-  return [...new Set(userIds.map((userId) => userId.trim()).filter(Boolean))];
-}
+export { normalizeAssigneeIds } from "../common/service-assignment.js";

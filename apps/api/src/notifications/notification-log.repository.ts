@@ -17,6 +17,12 @@ export interface NotificationOutcome {
   attempts: NotificationAttempt[];
 }
 
+/** Ugyanaz a kimenetel, hibajegyre. */
+export interface ServiceJobNotificationOutcome {
+  serviceJobId: string;
+  attempts: NotificationAttempt[];
+}
+
 /**
  * Writes down who was reached and who was not.
  *
@@ -37,17 +43,56 @@ export class NotificationLogRepository extends Repository {
   }
 
   async recordWorksheetAssignment(outcome: NotificationOutcome): Promise<void> {
-    if (outcome.attempts.length === 0) return;
+    await this.record({
+      eventType: "worksheet.assignment.notified",
+      aggregateType: "Worksheet",
+      aggregateId: outcome.worksheetId,
+      attempts: outcome.attempts,
+    });
+  }
 
-    const delivered = outcome.attempts.filter((attempt) => attempt.delivered);
-    const failed = outcome.attempts.filter((attempt) => !attempt.delivered);
+  /**
+   * UGYANAZ A KERDES, HIBAJEGYRE -- ES KULON ESEMENY-TIPUSSAL.
+   *
+   * Nem ugyanaz a sor mas azonositoval: a `DomainEvent` a MAGA aggregatuma
+   * szerint kereshető, es egy "worksheet.assignment.notified" tipusu sor egy
+   * hibajegy azonositojaval a napló olvasójat vinne felre -- a munkalapok
+   * esemenyeit kerdezve egy jegy-esemenyt kapna vissza.
+   */
+  async recordServiceJobAssignment(
+    outcome: ServiceJobNotificationOutcome,
+  ): Promise<void> {
+    await this.record({
+      eventType: "serviceJob.assignment.notified",
+      aggregateType: "ServiceJob",
+      aggregateId: outcome.serviceJobId,
+      attempts: outcome.attempts,
+    });
+  }
+
+  /**
+   * A KOZOS TORZS. A ket bejegyzes alakja beture azonos, es ez SZANDEKOS: aki a
+   * munkalap-ertesitesek naplojat olvasni tudja, a jegyet is tudja, atirás
+   * nelkul. Egy masodik alak ugyanarra a tenyre csak azt jelentene, hogy az
+   * egyik olvasot elfelejtettuk karbantartani.
+   */
+  private async record(input: {
+    eventType: string;
+    aggregateType: string;
+    aggregateId: string;
+    attempts: NotificationAttempt[];
+  }): Promise<void> {
+    if (input.attempts.length === 0) return;
+
+    const delivered = input.attempts.filter((attempt) => attempt.delivered);
+    const failed = input.attempts.filter((attempt) => !attempt.delivered);
 
     await this.database.domainEvent.create({
       data: {
         id: randomUUID(),
-        eventType: "worksheet.assignment.notified",
-        aggregateType: "Worksheet",
-        aggregateId: outcome.worksheetId,
+        eventType: input.eventType,
+        aggregateType: input.aggregateType,
+        aggregateId: input.aggregateId,
         occurredAt: new Date(),
         schemaVersion: 1,
         payload: {

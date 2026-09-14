@@ -67,6 +67,14 @@ function detail(overrides: Partial<ServiceJobDetail> = {}): ServiceJobDetail {
     completedAt: null,
     allowedSteps: ["SCHEDULED", "CANCELLED"],
     /**
+     * ALAPBAN URES, es ezt a szerver-oldali spec tolti fel
+     * (`service-job-assignees.spec.ts`). Itt a jelenlete annyit allit, hogy egy
+     * delegalatlan jegy is TELJES valaszt ad -- a felulet nem `undefined`-et
+     * kap. A delegalas FELULETE meg nem keszult el (kulon tetel, acrobot),
+     * tehat ez a mezo ma nem rajzolodik ki sehol.
+     */
+    assignees: [],
+    /**
      * A SORRENDET A SZERVER ADJA, ÉS EZ A MINTA SZÁNDÉKOSAN NEM DÁTUM SZERINT
      * ÁLL: ha a komponens újrarendezné, ez a sorrend megváltozna a képernyőn.
      * Így az állítás azt méri, hogy a kliens RAJZOL, nem dönt.

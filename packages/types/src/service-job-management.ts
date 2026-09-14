@@ -72,6 +72,22 @@ export interface ServiceJobAssetLink {
 }
 
 /**
+ * A JEGYRE DELEGÁLT SZERVIZES KOLLÉGA.
+ *
+ * Alakra azonos a `WorksheetAssignee`-vel, és ez nem véletlen egyezés: a
+ * hibajegy és a munkalap ugyanannak a munkának a két oldala, a kiosztás pedig
+ * ugyanaz a fogalom. KÜLÖN TÍPUS mégis, mert a kettő KÜLÖN VÁLASZBAN utazik:
+ * egy közös típus a két végpontot egymáshoz kötné, és egy munkalap-oldali
+ * mező-bővítés a jegy válaszát is elmozdítaná, anélkül hogy bárki kérte volna.
+ */
+export interface ServiceJobAssignee {
+  userId: string;
+  /** A felületre szánt név: a becenév, ha van (lásd `personDisplayName`). */
+  name: string;
+  assignedAt: string;
+}
+
+/**
  * A RÉSZLETLAP VÁLASZA: EGY ÖSSZEFÉSÜLT SOR, A SZERVER RENDEZI.
  *
  * NEM három lista, és ezt megmértük, nem elvből döntöttük el. Az összefésülés
@@ -151,6 +167,15 @@ export interface ServiceJobDetail {
   allowedSteps: ServiceJobStatusValue[];
   /** A három forrás egy időrendben, legújabb felül. A szerver rendezte. */
   timeline: ServiceJobTimelineEntry[];
+  /**
+   * AKIKRE A JEGYET DELEGÁLTÁK, a kiosztás sorrendjében (a régebbi elöl).
+   *
+   * ÜRES LISTA IS ÉRVÉNYES VÁLASZ, és nem hiba: egy jegy megszülethet
+   * delegálás nélkül, és az iroda később osztja ki. A mező attól van mindig
+   * jelen, hogy egy hiányzó kulcs a felületen `undefined`-ként csendes hibát
+   * adna -- egy üres tömb viszont pontosan azt mondja, amit jelent.
+   */
+  assignees: ServiceJobAssignee[];
 }
 
 export type ServiceJobTimelineEntry =

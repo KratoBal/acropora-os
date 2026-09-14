@@ -2,6 +2,7 @@ export { personDisplayName, personLegalName } from "./person-name.js";
 export { serviceJobTimeline } from "./service-job-management.js";
 export type {
   ServiceJobAssetLink,
+  ServiceJobAssignee,
   ServiceJobDetail,
   ServiceJobListItem,
   ServiceJobListResponse,
