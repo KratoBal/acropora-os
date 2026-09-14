@@ -38,6 +38,16 @@ export const serviceJobsApi = {
       /** A helyszinen allo eszkozok, amikrol a jegy szol. Csak helyszinnel
        * egyutt ervenyes; a szerver a helyszin RESZFAJAT fogadja el. */
       assetIds?: string[];
+      /**
+       * A JEGYRE DELEGALT KOLLEGAK, MAR A FELVITELKOR.
+       *
+       * Az iroda nyitja a jegyet a szervizesnek: a delegalas abban a
+       * pillanatban ismert, amikor a jegy megszuletik. Kulon lepesre bizva a
+       * felvivo azt hiszi, kiadta a munkat, kozben a jegy senki listajan nem
+       * jelenik meg -- es errol semmi nem szol, mert a delegalatlan jegy nem
+       * hibas allapot.
+       */
+      assigneeIds?: string[];
     },
   ) {
     return apiRequest<{ id: string; jobNumber: string }>(base, token, {
@@ -136,6 +146,27 @@ export const serviceJobsApi = {
       token,
       { method: "DELETE" },
     );
+  },
+  /**
+   * A JEGYRE DELEGALT KOLLEGAK TELJES NEVSORA.
+   *
+   * A VALASZ A TELJES RESZLETLAP, NEM NYUGTA, es ez elter a tobbi
+   * jegy-muvelettol (`move`, `attachWorksheet`, `setPartner`). Azok utan a hivo
+   * ujratolt; itt NEM kell, mert a szerver ugyanazt a sort adja vissza, amit a
+   * kepernyo rajzol. Egy reflexbol beirt ujratoltes itt egy folosleges kort
+   * tenne be.
+   *
+   * A MEZO NEVE `userIds`, nem `assigneeIds` -- a KET vegpont ket kulon DTO-t
+   * hasznal, es a felvitelkori mezo hivjak `assigneeIds`-nek. Lemerve a
+   * `SetServiceJobAssigneesDto`-n: egy elgepelt nev itt nem forditasi hiba
+   * lenne, hanem 400-as valasz a kepernyon.
+   */
+  setAssignees(token: string, id: string, input: { userIds: string[] }) {
+    return apiRequest<ServiceJobDetail>(jobPath(id, "/assignees"), token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
   },
   /**
    * A JEGY CSATOLMANYAI. KULON HIVAS, nem a reszletlap resze.
