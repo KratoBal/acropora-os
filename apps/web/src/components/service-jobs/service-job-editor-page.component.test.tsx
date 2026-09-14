@@ -563,6 +563,34 @@ describe("ServiceJobEditorPage", () => {
     });
   });
 
+  /**
+   * A DELEGALAS AZ EGYETLEN SZAKASZ AZ URLAPON, AMI PARTNER NELKUL IS MUKODIK.
+   *
+   * A helyszin es az eszkoz a partnertol fugg; a kollega nem. Az iroda akkor is
+   * kiadhatja a munkat, ha a partner meg nincs meg -- es ez nem veletlen
+   * kovetkezmeny, hanem a szakasz letenek az oka.
+   *
+   * SAJAT ALLITAST KAP, PEDIG MA MAR IGAZ. A fenti "a kivalasztott kollegakat a
+   * felvitellel egyutt kuldi" eset partner nelkul fut, tehat a tulajdonsagot
+   * MELLESLEG bizonyitja -- de a NEVE mast mond, es ha valaki egyszer partnert
+   * tesz abba a fixturaba, a tulajdonsag csendben merhetetlenne valik. Merve
+   * (2026-09-15): ma egyetlen allitas neve sem mondja ki.
+   *
+   * ES A KET FELE EGYUTT ALL, EGY TESZTBEN: ugyanabban a pillanatban a
+   * helyszin-szakasz partnert KOVETEL, a kollega-valaszto pedig MUKODIK. Ket
+   * kulon tesztben ugyanez ket allapotrol szolna, es a szembeallitas -- ami
+   * maga a lelet -- elveszne.
+   */
+  it("partner nélkül is lehet kollégát választani, miközben a helyszín partnert követel", async () => {
+    render(<ServiceJobEditorPage />);
+
+    expect(await screen.findByText(/Előbb válassz partnert/)).toBeTruthy();
+
+    const eva = await screen.findByLabelText("Éva");
+    fireEvent.click(eva);
+    expect((eva as HTMLInputElement).checked).toBe(true);
+  });
+
   it("fájl nélkül nem hív feltöltést", async () => {
     render(<ServiceJobEditorPage />);
     fireEvent.change(await screen.findByLabelText("Mi a baj?"), {
