@@ -30,6 +30,7 @@ import { worksheetsApi } from "@/lib/api/worksheets";
 import { formatDateTime } from "@/components/worksheets/worksheet-labels";
 import { formatFileSize } from "@/lib/format/file-size";
 import { PartnerPicker } from "./partner-picker";
+import { ServiceJobAssigneeEditor } from "./service-job-assignee-editor";
 import {
   serviceJobNoteDescription,
   serviceJobStatusLabel,
@@ -576,6 +577,25 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
           />
         )}
       </Card>
+
+      {/*
+        A DELEGALAS A CSATOLMANYOK ELOTT ALL, es a sorrend indoka ugyanaz, mint
+        a felviteli urlapon: a lap a HIBAT irja le, majd azt, amit erint, majd
+        a bizonyitekot. Aki a munkat KIADJA, az a jegy tetejen dont rola --
+        tehat a delegalas a naplo utan, a fajlok elott kerul.
+      */}
+      <ServiceJobAssigneeEditor
+        jobId={jobId}
+        token={token}
+        assignees={job.assignees}
+        canManage={canManage}
+        /*
+          A SZERVER VALASZAT TESSZUK BE, NEM TOLTUNK UJRA. A vegpont a TELJES
+          reszletlapot adja vissza -- ez elter a tobbi jegy-muvelettol, amik
+          nyugtat adnak, es ott a hivo ujratolt.
+        */
+        onSaved={setJob}
+      />
 
       {/*
         A CSATOLMANYOK A NAPLO UTAN ES A MUNKALAPOK ELOTT ALLNAK.

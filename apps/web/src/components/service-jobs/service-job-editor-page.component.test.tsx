@@ -17,6 +17,7 @@ const api = vi.hoisted(() => ({ create: vi.fn(), uploadDocument: vi.fn() }));
 const sheets = vi.hoisted(() => ({
   selectablePartners: vi.fn(),
   departments: vi.fn(),
+  assignableUsers: vi.fn(),
 }));
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
@@ -65,6 +66,18 @@ describe("ServiceJobEditorPage", () => {
   beforeEach(() => {
     auth.session = sessionAs("SERVICE");
     api.uploadDocument.mockReset().mockResolvedValue([]);
+    /*
+      A VALASZTHATO KOLLEGAK MOCKJA MINDIG ALL, akkor is, ha az adott allitas
+      nem delegal. A `useAssignableUsers` a `canManage` agon AZONNAL hiv, es
+      egy hianyzo dupla nem "ures listat" adna, hanem a komponens indulasat
+      vinne el.
+    */
+    sheets.assignableUsers.mockReset().mockResolvedValue({
+      items: [
+        { id: "user-sanyi", name: "Sanyi" },
+        { id: "user-eva", name: "Éva" },
+      ],
+    });
     api.create.mockReset().mockResolvedValue({
       id: "job-uj",
       jobNumber: "HJ-2026-009",
@@ -107,6 +120,10 @@ describe("ServiceJobEditorPage", () => {
       // mibol valasztani, es a szerver a helyszin nelkuli eszkozt amugy is
       // elutasitja.
       assetIds: [],
+      // AZ UJ MEZO URESEN IS ELMEGY, es ez szandekos: a szerver DTO-ja
+      // elhagyhatonak veszi, de egy ures tomb KIMONDJA, hogy a felvivo nem
+      // delegalt -- egy hianyzo mezo ugyanugy nezne ki, mint egy elveszett.
+      assigneeIds: [],
     });
     // A LISTÁRA VISSZAVINNI ANNYI LENNE, mint a felhasználóra hagyni, hogy
     // megkeresse, amit épp létrehozott.
@@ -182,6 +199,10 @@ describe("ServiceJobEditorPage", () => {
       customerId: "vevo-1",
       departmentId: null,
       assetIds: [],
+      // AZ UJ MEZO URESEN IS ELMEGY, es ez szandekos: a szerver DTO-ja
+      // elhagyhatonak veszi, de egy ures tomb KIMONDJA, hogy a felvivo nem
+      // delegalt -- egy hianyzo mezo ugyanugy nezne ki, mint egy elveszett.
+      assigneeIds: [],
     });
   });
 
@@ -247,12 +268,24 @@ describe("ServiceJobEditorPage", () => {
       sorrend vegen all -- Balazs 2026-09-14-i listaja szerint a bizonyitek a
       hiba leirasa es az erintett eszkozok UTAN jon.
     */
+    /*
+      AZ UTOLSO KET ELEM NEM MEZO-FELIRAT, HANEM A DELEGALAS SORAI. A
+      jelolonegyzeteket a `WorksheetAssigneePicker` rajzolja, es mindegyik a
+      SAJAT feliratat viszi -- a csoport felirata ("Delegált kollégák") `span`,
+      ugyanugy, mint az "Érintett eszközök"-e.
+
+      ES EPP EZERT MER EZ TOBBET: a ket nev jelenlete a lista VEGEN azt
+      bizonyitja, hogy a delegalas tenyleg a sorrend vegen all -- Balazs
+      2026-09-14-i listaja szerint.
+    */
     expect(feliratok).toEqual([
       "Partner",
       "Helyszín",
       "Mi a baj?",
       "Részletek",
       "Fényképek és fájlok",
+      "Sanyi",
+      "Éva",
     ]);
   });
 
@@ -485,6 +518,29 @@ describe("ServiceJobEditorPage", () => {
    * szerveren 400-at adna ("A feltöltendő fájl kötelező."), es a kezelo egy
    * hibauzenetet latna egy urlapon, ahol nem is valasztott fajlt.
    */
+  /**
+   * A DELEGALAS A FELVITEL RESZE, EGY TRANZAKCIOBAN.
+   *
+   * Kulon lepesre bizva a felvivo azt hinne, kiadta a munkat, kozben a jegy
+   * senki listajan nem jelenne meg -- es errol semmi nem szolna, mert a
+   * delegalatlan jegy NEM hibas allapot.
+   */
+  it("a kiválasztott kollégákat a felvitellel együtt küldi", async () => {
+    render(<ServiceJobEditorPage />);
+    fireEvent.change(await screen.findByLabelText("Mi a baj?"), {
+      target: { value: "Nem indul a szivattyú" },
+    });
+    fireEvent.click(await screen.findByLabelText("Éva"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Hibajegy megnyitása" }),
+    );
+
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
+    expect(api.create.mock.calls[0]?.[1]).toMatchObject({
+      assigneeIds: ["user-eva"],
+    });
+  });
+
   it("fájl nélkül nem hív feltöltést", async () => {
     render(<ServiceJobEditorPage />);
     fireEvent.change(await screen.findByLabelText("Mi a baj?"), {
