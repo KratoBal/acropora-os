@@ -4,6 +4,8 @@ export type {
   ServiceJobAssetLink,
   ServiceJobAssignee,
   ServiceJobDetail,
+  ServiceJobDocumentSummary,
+  ServiceJobDocumentType,
   ServiceJobListItem,
   ServiceJobListResponse,
   ServiceJobPartnerStatus,

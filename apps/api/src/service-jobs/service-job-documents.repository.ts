@@ -1,6 +1,47 @@
 import { Injectable } from "@nestjs/common";
 
 import { prisma, type Prisma } from "@acropora/database";
+import type { ServiceJobDocumentSummary } from "@acropora/types";
+
+import { documentedContentType } from "../service-assets/service-assets.repository.js";
+
+/**
+ * A SOR -> VALASZ LEKEPEZES, EGY HELYEN.
+ *
+ * KET MEZO NEM MEHET AT NYERSEN, es mindketto MAS okbol:
+ *
+ *   createdAt    a tablaban `Date`, a valaszban ISO szoveg. A JSON amugy is
+ *                szoveggé alakitana, csak akkor a TIPUS hazudna rola.
+ *   contentType  a tablaban `string`, a szerzodesben HAROM ertek uniója. A
+ *                szukites nem kozmetika: az `AssetDocumentSummary` egykor
+ *                rogzitett literalt mondott, es a kepek befogadasa utan
+ *                CSENDBEN hazudott, mert a beiras oldalan `string` all.
+ *
+ * A `documentedContentType` AZ ESZKOZ-REPOSITORYBOL JON, es nem masolat: a
+ * szabaly UGYANAZ (amit a feltolto tenylegesen ismer, `canonicalMimetypeFor`),
+ * es egy masodik peldany egyszer szetcsuszna. A HELYE vitathato -- a
+ * `documents/` mappa kozelebb allna --, de az athelyezes az eszkoz-utat is
+ * mozditana, tehat kulon dontes.
+ */
+function toSummary(sor: {
+  id: string;
+  type: ServiceJobDocumentSummary["type"];
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  sha256: string;
+  createdAt: Date;
+}): ServiceJobDocumentSummary {
+  return {
+    id: sor.id,
+    type: sor.type,
+    fileName: sor.fileName,
+    contentType: documentedContentType(sor.contentType),
+    sizeBytes: sor.sizeBytes,
+    sha256: sor.sha256,
+    createdAt: sor.createdAt.toISOString(),
+  };
+}
 
 /**
  * A HIBAJEGY CSATOLMANYAINAK SORAI.
@@ -66,52 +107,56 @@ export class ServiceJobDocumentsRepository {
     content: Buffer | null;
     storageKey?: string | null;
     actorUserId: string;
-  }) {
-    return this.database.serviceJobDocument.create({
-      data: {
-        id: input.id,
-        serviceJobId: input.serviceJobId,
-        type: input.type,
-        fileName: input.fileName,
-        contentType: input.contentType,
-        sizeBytes: input.sizeBytes,
-        sha256: input.sha256,
-        /**
-         * A BAJTOK MASOLVA MENNEK BE, ugyanugy, mint a masik ket gazdanal: a
-         * Prisma `Uint8Array`-t var, es a `Buffer` alosztaly -- a ket tipus nem
-         * cserelheto fel szigoru ellenorzes mellett.
-         */
-        content: input.content ? Uint8Array.from(input.content) : null,
-        storageKey: input.storageKey ?? null,
-        uploadedById: input.actorUserId,
-      },
-      select: {
-        id: true,
-        type: true,
-        fileName: true,
-        contentType: true,
-        sizeBytes: true,
-        sha256: true,
-        createdAt: true,
-      },
-    });
+  }): Promise<ServiceJobDocumentSummary> {
+    return this.database.serviceJobDocument
+      .create({
+        data: {
+          id: input.id,
+          serviceJobId: input.serviceJobId,
+          type: input.type,
+          fileName: input.fileName,
+          contentType: input.contentType,
+          sizeBytes: input.sizeBytes,
+          sha256: input.sha256,
+          /**
+           * A BAJTOK MASOLVA MENNEK BE, ugyanugy, mint a masik ket gazdanal: a
+           * Prisma `Uint8Array`-t var, es a `Buffer` alosztaly -- a ket tipus nem
+           * cserelheto fel szigoru ellenorzes mellett.
+           */
+          content: input.content ? Uint8Array.from(input.content) : null,
+          storageKey: input.storageKey ?? null,
+          uploadedById: input.actorUserId,
+        },
+        select: {
+          id: true,
+          type: true,
+          fileName: true,
+          contentType: true,
+          sizeBytes: true,
+          sha256: true,
+          createdAt: true,
+        },
+      })
+      .then(toSummary);
   }
 
   /** Egy jegy csatolmanyai, TARTALOM NELKUL: a lista nem tolt le bajtokat. */
-  async documents(serviceJobId: string) {
-    return this.database.serviceJobDocument.findMany({
-      where: { serviceJobId },
-      orderBy: { createdAt: "asc" },
-      select: {
-        id: true,
-        type: true,
-        fileName: true,
-        contentType: true,
-        sizeBytes: true,
-        sha256: true,
-        createdAt: true,
-      },
-    });
+  async documents(serviceJobId: string): Promise<ServiceJobDocumentSummary[]> {
+    return this.database.serviceJobDocument
+      .findMany({
+        where: { serviceJobId },
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          type: true,
+          fileName: true,
+          contentType: true,
+          sizeBytes: true,
+          sha256: true,
+          createdAt: true,
+        },
+      })
+      .then((sorok) => sorok.map(toSummary));
   }
 
   /** Egy csatolmany sora, a bajtokkal vagy a tarolo-kulccsal egyutt. */

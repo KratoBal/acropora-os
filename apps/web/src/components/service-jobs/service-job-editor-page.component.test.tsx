@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ServiceJobEditorPage } from "./service-job-editor-page";
 
-const api = vi.hoisted(() => ({ create: vi.fn() }));
+const api = vi.hoisted(() => ({ create: vi.fn(), uploadDocument: vi.fn() }));
 const sheets = vi.hoisted(() => ({
   selectablePartners: vi.fn(),
   departments: vi.fn(),
@@ -64,6 +64,7 @@ const partnerList: WorksheetSelectablePartnerListResponse = {
 describe("ServiceJobEditorPage", () => {
   beforeEach(() => {
     auth.session = sessionAs("SERVICE");
+    api.uploadDocument.mockReset().mockResolvedValue([]);
     api.create.mockReset().mockResolvedValue({
       id: "job-uj",
       jobNumber: "HJ-2026-009",
@@ -223,7 +224,7 @@ describe("ServiceJobEditorPage", () => {
    * A MERES A DOM SORRENDJEBOL JON, nem a forras szovegebol: az szamit, amit a
    * kezelo lat.
    */
-  it("a mezok a kert sorrendben allnak: partner, helyszin, mi a baj, reszletek", async () => {
+  it("a mezok a kert sorrendben allnak, a csatolmany-valasztoval a vegen", async () => {
     render(<ServiceJobEditorPage />);
     await waitFor(() =>
       expect(sheets.selectablePartners).toHaveBeenCalledTimes(1),
@@ -236,11 +237,22 @@ describe("ServiceJobEditorPage", () => {
       .map((elem) => elem.textContent?.trim())
       .filter((szoveg) => Boolean(szoveg));
 
+    /*
+      AZ "Érintett eszközök" NINCS A LISTABAN, es ez nem hiany: az a felirat
+      `span`, nem `label` -- egy jelolonegyzet-listahoz tartozik, es a sajat
+      feliratat minden sor viszi. Egy `htmlFor` nelkuli `label` csendben
+      semmire nem mutatna.
+
+      A "Fényképek és fájlok" viszont EGY mezohoz tartozik, tehat `label`, es a
+      sorrend vegen all -- Balazs 2026-09-14-i listaja szerint a bizonyitek a
+      hiba leirasa es az erintett eszkozok UTAN jon.
+    */
     expect(feliratok).toEqual([
       "Partner",
       "Helyszín",
       "Mi a baj?",
       "Részletek",
+      "Fényképek és fájlok",
     ]);
   });
 
@@ -373,5 +385,116 @@ describe("ServiceJobEditorPage", () => {
 
     const ujHelyszin = await screen.findByLabelText("Helyszín");
     expect((ujHelyszin as HTMLSelectElement).value).toEqual("");
+  });
+
+  /**
+   * A CSATOLMANY A JEGY LETREJOTTE UTAN MEGY FEL.
+   *
+   * A jegy a mentes pillanataban meg NEM LETEZIK, tehat nincs mihez kotni a
+   * fajlt. Ez az allitas a SORRENDET meri: a feltoltes az `create` valaszabol
+   * kapott azonositora megy, nem valami elore kitalalt ertekre.
+   */
+  async function urlapKitoltve(fajlok: File[]) {
+    render(<ServiceJobEditorPage />);
+    fireEvent.change(await screen.findByLabelText("Mi a baj?"), {
+      target: { value: "Nem indul a szivattyú" },
+    });
+    fireEvent.change(screen.getByLabelText("Fényképek és fájlok"), {
+      target: { files: fajlok },
+    });
+  }
+
+  it("a fájlokat a LÉTREJÖTT jegy azonosítójára tölti fel", async () => {
+    await urlapKitoltve([new File(["a"], "kep.jpg", { type: "image/jpeg" })]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Hibajegy megnyitása" }),
+    );
+
+    await waitFor(() => expect(api.uploadDocument).toHaveBeenCalledTimes(1));
+    expect(api.uploadDocument).toHaveBeenCalledWith(
+      "token-1",
+      "job-uj",
+      "PHOTO",
+      [expect.any(File)],
+    );
+    // ES CSAK AZUTAN VISZ TOVABB: a lapra, amin a feltoltott kep mar latszik.
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith(
+        "/szerviz/hibajegyek/job-uj",
+      ),
+    );
+  });
+
+  /**
+   * A KIVALASZTOTT FAJL NEM CSENDBEN VAR: a lap kimondja, hogy MENNYI van, es
+   * hogy MIKOR megy fel. Enelkul egy lassu feltoltes ugy nezne ki, mintha a
+   * felvitel akadt volna el.
+   */
+  it("kimondja, hogy a fájlok a megnyitás után mennek fel", async () => {
+    await urlapKitoltve([
+      new File(["a"], "kep.jpg", { type: "image/jpeg" }),
+      new File(["b"], "szamla.pdf", { type: "application/pdf" }),
+    ]);
+
+    expect(
+      await screen.findByText(
+        "2 fájl feltöltésre vár. A hibajegy megnyitása után töltjük fel.",
+      ),
+    ).toBeTruthy();
+  });
+
+  /**
+   * A RESZLEGES SIKER A LEGDRAGABB CSEND.
+   *
+   * Ha a jegy letrejott es a feltoltes bukott, es a kepernyo csak annyit
+   * mondana, hogy "nem sikerult", a kezelo ujra megnyomna a gombot -- es egy
+   * MASODIK jegy szuletne ugyanarrol a hibarol. Ez az allitas HARMAT mer
+   * egyszerre: hogy a jegy SZAMA elhangzik, hogy NEM viszunk tovabb, es hogy a
+   * masodik nyomas mar NEM felvitel.
+   */
+  it("a feltöltés bukásakor megnevezi a létrejött jegyet, és nem nyit másodikat", async () => {
+    api.uploadDocument.mockRejectedValue(new Error("A tároló nem érhető el."));
+    await urlapKitoltve([new File(["a"], "kep.jpg", { type: "image/jpeg" })]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Hibajegy megnyitása" }),
+    );
+
+    expect(
+      await screen.findByText(/HJ-2026-009 hibajegy LÉTREJÖTT/),
+    ).toBeTruthy();
+    expect(navigation.push).not.toHaveBeenCalled();
+    expect(api.create).toHaveBeenCalledTimes(1);
+
+    // A GOMB MOSTANTOL UJRAPROBALAS, ES EGY MASODIK NYOMAS NEM NYIT JEGYET.
+    const ujra = await screen.findByRole("button", {
+      name: "Csatolmányok feltöltése újra",
+    });
+    api.uploadDocument.mockResolvedValue([]);
+    fireEvent.click(ujra);
+
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith(
+        "/szerviz/hibajegyek/job-uj",
+      ),
+    );
+    expect(api.create).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * FAJL NELKUL EGYETLEN FELTOLTO HIVAS SEM MEGY EL. Egy ures keres a
+   * szerveren 400-at adna ("A feltöltendő fájl kötelező."), es a kezelo egy
+   * hibauzenetet latna egy urlapon, ahol nem is valasztott fajlt.
+   */
+  it("fájl nélkül nem hív feltöltést", async () => {
+    render(<ServiceJobEditorPage />);
+    fireEvent.change(await screen.findByLabelText("Mi a baj?"), {
+      target: { value: "Nem indul a szivattyú" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Hibajegy megnyitása" }),
+    );
+
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
+    expect(api.uploadDocument).not.toHaveBeenCalled();
   });
 });

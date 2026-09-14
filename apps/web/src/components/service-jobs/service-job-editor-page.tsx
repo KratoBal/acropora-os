@@ -57,6 +57,20 @@ export function ServiceJobEditorPage() {
   const [departmentsLoaded, setDepartmentsLoaded] = useState(false);
   const [departmentId, setDepartmentId] = useState("");
   const [assetIds, setAssetIds] = useState<string[]>([]);
+  const [files, setFiles] = useState<File[]>([]);
+  /**
+   * A MAR LETREJOTT JEGY, HA A CSATOLMANYOK FELTOLTESE BUKOTT EL.
+   *
+   * KET LEPES, KET KIMENET, ES A MASODIK BUKASA NEM TESZI SEMMISSE AZ ELSOT.
+   * A jegy ilyenkor LETEZIK -- ha a kepernyo csak annyit mondana, hogy "nem
+   * sikerult", a kezelo ujra megnyomna a gombot, es egy MASODIK jegy szuletne
+   * ugyanarrol a hibarol. Ezert a gomb ettol a pillanattol nem felvitel, hanem
+   * UJRAPROBALAS a csatolmanyokra.
+   */
+  const [created, setCreated] = useState<{
+    id: string;
+    jobNumber: string;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const canManage = Boolean(
@@ -141,26 +155,89 @@ export function ServiceJobEditorPage() {
       />
     );
 
+  /**
+   * A CSATOLMANYOK A JEGY LETREJOTTE UTAN MENNEK FEL.
+   *
+   * === MIERT NEM EGYUTT A FELVITELLEL ===
+   *
+   * Balazs kerese szo szerint "hibajegy rogzitesekor" csatolast mond -- a jegy
+   * viszont a mentes pillanataban MEG NEM LETEZIK, tehat nincs mihez kotni a
+   * fajlt. A fajlt ezert a mentes ELOTT valasztjuk ki, es a rekord letrejotte
+   * UTAN toltjuk fel. Ugyanez a sorrend all a mobil eszkoz- es
+   * munkalap-urlapjan (`planPhotosAfterRecord`), es ott mar bevalt.
+   *
+   * === A KEPEK ES AZ EGYEB FAJLOK KET KERESBEN MENNEK ===
+   *
+   * A `type` mezo keresenkent EGY ertek, a besorolas viszont a tartalombol
+   * kovetkezik. Sorban, nem parhuzamosan: a szerver keret-ellenorzese a mar
+   * felhasznalt helyet olvassa a tablabol, es parhuzamos irasoknal mindketto
+   * ugyanazt a regi osszeget latna.
+   */
+  const uploadFiles = async (jobId: string) => {
+    const kepek = files.filter((file) => file.type.startsWith("image/"));
+    const egyeb = files.filter((file) => !file.type.startsWith("image/"));
+    if (kepek.length)
+      await serviceJobsApi.uploadDocument(token, jobId, "PHOTO", kepek);
+    if (egyeb.length)
+      await serviceJobsApi.uploadDocument(token, jobId, "OTHER", egyeb);
+  };
+
   const submit = async () => {
     setSaving(true);
     setError(null);
-    try {
-      const created = await serviceJobsApi.create(token, {
-        title: title.trim(),
-        description: description.trim() || null,
-        customerId: customer?.customerId ?? null,
-        departmentId: departmentId || null,
-        assetIds,
-      });
-      // A FRISS JEGY LAPJÁRA VISZÜNK, nem a listára: aki most nyitotta, azt
-      // akarja folytatni - munkalapot csatolni, léptetni.
-      router.push(`/szerviz/hibajegyek/${created.id}`);
-    } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "A hibajegy nem jött létre.",
-      );
+    /**
+     * A MAR LETREJOTT JEGYRE NEM NYITUNK MASIKAT. Ha az elso kor a feltoltesen
+     * bukott el, ez a gomb UJRAPROBALAS -- a felvitelt nem szabad megismetelni.
+     */
+    const job =
+      created ??
+      (await serviceJobsApi
+        .create(token, {
+          title: title.trim(),
+          description: description.trim() || null,
+          customerId: customer?.customerId ?? null,
+          departmentId: departmentId || null,
+          assetIds,
+        })
+        .catch((cause: unknown) => {
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "A hibajegy nem jött létre.",
+          );
+          return null;
+        }));
+    if (!job) {
       setSaving(false);
+      return;
     }
+    setCreated(job);
+
+    if (files.length) {
+      try {
+        await uploadFiles(job.id);
+      } catch (cause) {
+        /**
+         * A RESZLEGES SIKER KIMONDVA, ES A JEGY SZAMAVAL EGYUTT.
+         *
+         * Ha csak annyit mondanank, hogy "nem sikerult", a kezelo azt hinne, a
+         * jegy sem jott letre -- es vagy ujra felvinne, vagy elmenne, es a
+         * fenykepek CSENDBEN elvesznenek. A szam azert kell, mert enelkul a
+         * jegyet meg kellene keresnie a listaban.
+         */
+        setError(
+          `A(z) ${job.jobNumber} hibajegy LÉTREJÖTT, de a csatolmányok feltöltése nem sikerült: ` +
+            (cause instanceof Error ? cause.message : "ismeretlen hiba") +
+            ". A fájlok kiválasztva maradtak, a gombbal újrapróbálhatod, vagy a jegy lapján is feltöltheted.",
+        );
+        setSaving(false);
+        return;
+      }
+    }
+
+    // A FRISS JEGY LAPJÁRA VISZÜNK, nem a listára: aki most nyitotta, azt
+    // akarja folytatni - munkalapot csatolni, léptetni.
+    router.push(`/szerviz/hibajegyek/${job.id}`);
   };
 
   return (
@@ -299,12 +376,44 @@ export function ServiceJobEditorPage() {
           />
         </div>
 
+        {/*
+          A SORREND BALAZS 2026-09-14-I LISTAJAT KOVETI, es a ket uj mezo a
+          VEGERE megy: a lista a HIBAT irja le, majd azt, amit erint, majd a
+          bizonyitekot.
+        */}
+        <div className="space-y-1">
+          <label
+            className="block text-sm font-semibold"
+            htmlFor="hibajegy-fajlok"
+          >
+            Fényképek és fájlok
+          </label>
+          <input
+            id="hibajegy-fajlok"
+            type="file"
+            multiple
+            accept="image/jpeg,image/png,application/pdf"
+            className="text-sm"
+            onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
+          />
+          {/*
+            A SORRENDET KI KELL MONDANI. A fajl a jegy LETREJOTTE UTAN megy fel,
+            mert addig nincs mihez kotni -- es ha errol hallgatnank, egy lassu
+            feltoltes ugy nezne ki, mintha a felvitel akadt volna el.
+          */}
+          <p className="pt-1 text-xs text-slate-500">
+            {files.length
+              ? `${files.length} fájl feltöltésre vár. A hibajegy megnyitása után töltjük fel.`
+              : "Elhagyható. JPEG, PNG vagy PDF, fájlonként legfeljebb 10 MB."}
+          </p>
+        </div>
+
         <div className="flex gap-2">
           <Button
-            disabled={!title.trim() || saving}
+            disabled={(!created && !title.trim()) || saving}
             onClick={() => void submit()}
           >
-            Hibajegy megnyitása
+            {created ? "Csatolmányok feltöltése újra" : "Hibajegy megnyitása"}
           </Button>
         </div>
       </Card>

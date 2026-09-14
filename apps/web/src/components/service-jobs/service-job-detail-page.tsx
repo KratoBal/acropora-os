@@ -16,6 +16,7 @@ import {
   hasPermission,
   PERMISSIONS,
   type ServiceJobDetail,
+  type ServiceJobDocumentSummary,
   type ServiceJobStatusValue,
   type ServiceJobTimelineEntry,
   type WorksheetAttachableItem,
@@ -27,6 +28,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { formatDateTime } from "@/components/worksheets/worksheet-labels";
+import { formatFileSize } from "@/lib/format/file-size";
 import { PartnerPicker } from "./partner-picker";
 import {
   serviceJobNoteDescription,
@@ -79,6 +81,12 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
   const [attaching, setAttaching] = useState(false);
   const [sheetToDetach, setSheetToDetach] = useState<string | null>(null);
   const [partnerError, setPartnerError] = useState<string | null>(null);
+  const [documents, setDocuments] = useState<ServiceJobDocumentSummary[]>([]);
+  const [documentsError, setDocumentsError] = useState<string | null>(null);
+  const [documentFiles, setDocumentFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [documentToDelete, setDocumentToDelete] =
+    useState<ServiceJobDocumentSummary | null>(null);
   const canView = Boolean(
     session && hasPermission(session.user, PERMISSIONS.SERVICE_VIEW),
   );
@@ -198,6 +206,122 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
         cause instanceof Error
           ? cause.message
           : "A partner beállítása nem sikerült.",
+      );
+    }
+  };
+
+  /**
+   * A CSATOLMANYOK KULON TOLTODNEK, ES A HIBAJUK NEM ALLITJA MEG AZ OLDALT.
+   *
+   * Ugyanaz az indok, amiert a csatolhato lapok listaja is kulon jon: a jegy
+   * ELOLVASASAHOZ nincs szukseg rajuk. Ha a hivas elbukik, a naplo, a lepesek
+   * es a lapok attol meg olvashatok -- es a hiba OTT latszik, ahol keletkezett,
+   * nem a lap tetejen.
+   */
+  const loadDocuments = useCallback(
+    async (signal?: AbortSignal) => {
+      if (!canView) return;
+      try {
+        const response = await serviceJobsApi.documents(token, jobId, signal);
+        setDocuments(response.items);
+        setDocumentsError(null);
+      } catch (cause) {
+        if (cause instanceof DOMException && cause.name === "AbortError")
+          return;
+        setDocumentsError(
+          cause instanceof Error
+            ? cause.message
+            : "A csatolmányok nem tölthetők be.",
+        );
+      }
+    },
+    [canView, jobId, token],
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadDocuments(controller.signal);
+    return () => controller.abort();
+  }, [loadDocuments]);
+
+  /**
+   * FELTOLTES. A VALASZT NEM HASZNALJUK FEL A LISTA EPITESERE.
+   *
+   * A vegpont visszaadja a letrejott sorokat, es kesertes lenne hozzafuzni oket
+   * a mai listahoz. Nem tesszuk: kozben MAS is tolthetett fel ugyanarra a
+   * jegyre, es akkor a kepernyo egy olyan listat mutatna, ami sehol nem letezik.
+   * Az ujratoltes egy korrel tobb, es a valoditat mutatja.
+   */
+  const uploadDocuments = async () => {
+    if (documentFiles.length === 0 || uploading) return;
+    setUploading(true);
+    setDocumentsError(null);
+    try {
+      /**
+       * A FAJTA A TARTALOMBOL KOVETKEZIK, NEM A FELHASZNALOTOL KERDEZZUK.
+       *
+       * Balazs kerese ket dolgot mond ("fotot illetve egyeb fajlokat is"), es a
+       * ketto kozott a KEP a gyakori eset. Egy kotelezo legordulo itt minden
+       * feltoltesnel egy kattintassal tobb lenne, es a valasz a fajl tipusabol
+       * amugy is latszik. A szerver a TARTALMAT ismeri fel, tehat a `type` mezo
+       * csak a besorolast mondja meg -- a kep `PHOTO`, minden mas `OTHER`.
+       */
+      const kepek = documentFiles.filter((file) =>
+        file.type.startsWith("image/"),
+      );
+      const egyeb = documentFiles.filter(
+        (file) => !file.type.startsWith("image/"),
+      );
+      // KET HIVAS, MERT A `type` MEZO KERESENKENT EGY. Sorban, nem
+      // parhuzamosan: a keret-ellenorzes a mar felhasznalt helyet olvassa, es
+      // parhuzamos irasoknal mindketto ugyanazt a regi osszeget latna.
+      if (kepek.length)
+        await serviceJobsApi.uploadDocument(token, jobId, "PHOTO", kepek);
+      if (egyeb.length)
+        await serviceJobsApi.uploadDocument(token, jobId, "OTHER", egyeb);
+      setDocumentFiles([]);
+      await loadDocuments();
+    } catch (cause) {
+      setDocumentsError(
+        cause instanceof Error ? cause.message : "A feltöltés nem sikerült.",
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  /**
+   * LETOLTES. A BONGESZO SAJAT MENTESI UTJAN, ugyanugy, mint az eszkoz-lapon:
+   * a valasz `Content-Disposition` fejlece csatolmanykent jeloli, es a fajlnev
+   * is onnan jon -- de a horgony `download` attributuma az, ami a MI nevunket
+   * teszi ra, ha a fejlec valaha elveszne.
+   */
+  const downloadDocument = async (item: ServiceJobDocumentSummary) => {
+    setDocumentsError(null);
+    try {
+      const blob = await serviceJobsApi.downloadDocument(token, jobId, item.id);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = item.fileName;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (cause) {
+      setDocumentsError(
+        cause instanceof Error ? cause.message : "A letöltés nem sikerült.",
+      );
+    }
+  };
+
+  const deleteDocument = async (documentId: string) => {
+    setDocumentToDelete(null);
+    setDocumentsError(null);
+    try {
+      await serviceJobsApi.deleteDocument(token, jobId, documentId);
+      await loadDocuments();
+    } catch (cause) {
+      setDocumentsError(
+        cause instanceof Error ? cause.message : "A törlés nem sikerült.",
       );
     }
   };
@@ -453,6 +577,105 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
         )}
       </Card>
 
+      {/*
+        A CSATOLMANYOK A NAPLO UTAN ES A MUNKALAPOK ELOTT ALLNAK.
+
+        Nem izles: a fenykep a BEJELENTETT hibarol szol, a munkalap arrol, amit
+        TETTUNK vele. A lap igy ugyanabban a sorrendben olvashato, ahogy a munka
+        tortenik -- mi a baj, mi a bizonyiteka, mit csinaltunk.
+      */}
+      <Card className="space-y-3 p-4">
+        <h2 className="text-sm font-semibold">Fényképek és fájlok</h2>
+        <p className="text-xs text-slate-500">
+          A bejelentett hibáról. JPEG, PNG vagy PDF, fájlonként legfeljebb 10
+          MB.
+        </p>
+        {documentsError ? (
+          <Alert
+            variant="danger"
+            title="A csatolmányokkal baj van"
+            description={documentsError}
+          />
+        ) : null}
+        {documents.length ? (
+          <ul className="divide-y rounded border text-sm">
+            {documents.map((item) => (
+              <li
+                key={item.id}
+                className="flex flex-wrap items-center justify-between gap-3 px-3 py-2"
+              >
+                <div>
+                  <p className="font-medium">{item.fileName}</p>
+                  <p className="text-xs text-slate-500">
+                    {formatFileSize(item.sizeBytes)} ·{" "}
+                    {formatDateTime(item.createdAt)}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => void downloadDocument(item)}
+                  >
+                    Letöltés
+                  </Button>
+                  {canManage ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setDocumentToDelete(item)}
+                    >
+                      Törlés
+                    </Button>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          /* A HIANY IS ALLITAS: egy ures doboz betoltesi hibanak latszik, es a
+             kezelo megvarja. Ez a mondat kimondja, hogy nincs mire varni. */
+          <p className="text-sm text-slate-500">
+            Ehhez a jegyhez még nincs fénykép vagy fájl csatolva.
+          </p>
+        )}
+        {canManage ? (
+          <div className="flex flex-wrap items-end gap-2 border-t pt-3">
+            <div className="space-y-1">
+              <label
+                className="block text-sm font-semibold"
+                htmlFor="hibajegy-csatolmany"
+              >
+                Új csatolmány
+              </label>
+              {/*
+                TOBB FAJL EGYSZERRE. A helyszinen ritkan keszul egyetlen kep, es
+                egy egyesevel valaszto urlap ugyanazt a kort futtatna otször.
+                A szerver egy keresben legfeljebb tizet fogad.
+              */}
+              <input
+                id="hibajegy-csatolmany"
+                type="file"
+                multiple
+                accept="image/jpeg,image/png,application/pdf"
+                className="text-sm"
+                onChange={(event) =>
+                  setDocumentFiles(Array.from(event.target.files ?? []))
+                }
+              />
+            </div>
+            <Button
+              disabled={documentFiles.length === 0 || uploading}
+              onClick={() => void uploadDocuments()}
+            >
+              {documentFiles.length > 1
+                ? `Feltöltés (${documentFiles.length} fájl)`
+                : "Feltöltés"}
+            </Button>
+          </div>
+        ) : null}
+      </Card>
+
       <Card className="space-y-3 p-4">
         <h2 className="text-sm font-semibold">Munkalapok a jegy mögött</h2>
         {worksheets.length ? (
@@ -618,6 +841,37 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
           if (sheetToDetach !== null) void detach(sheetToDetach);
         }}
         onCancel={() => setSheetToDetach(null)}
+      />
+      {/*
+        A HARMADIK MEZO ITT NEM VIGASZ, HANEM A LENYEG: ez a torles
+        VISSZAFORDITHATATLAN. A bajtok elmennek a tarolobol is, es a
+        "visszatehato" helyen az all, hogy UJRA FEL KELL TOLTENI -- ha a fajl
+        mar nincs meg a gepen, akkor sehogy.
+
+        ES KULON KERDES, NEM A MUNKALAP-LEVALASZTASE. A ket muveletnek MAS a
+        visszautja (az egyik visszacsatolhato, a masik nem), es egy kozos
+        szoveg az egyiknel biztosan hazudna.
+
+        AMIT A KOZOS HALO ERROL NEM MOND MEG: a `confirm-usage.component.test.ts`
+        FAJL-szinten mer -- ha a fajlban BARHOL all `ConfirmDialog`, a torlo
+        hivast rendben levonek latja. Ebben a fajlban mar allt egy (a
+        levalasztase), tehat a halo AKKOR IS zold maradna, ha ez a kerdes
+        hianyozna. Ezert all ra sajat allitas a komponens-tesztben.
+      */}
+      <ConfirmDialog
+        open={documentToDelete !== null}
+        title="Törlöd ezt a csatolmányt?"
+        consequence={
+          documentToDelete
+            ? `A(z) ${documentToDelete.fileName} végleg törlődik a hibajegyről.`
+            : ""
+        }
+        recovery="Nem állítható vissza: csak úgy kerül vissza, ha újra feltöltöd."
+        confirmLabel="Törlés"
+        onConfirm={() => {
+          if (documentToDelete) void deleteDocument(documentToDelete.id);
+        }}
+        onCancel={() => setDocumentToDelete(null)}
       />
     </div>
   );
