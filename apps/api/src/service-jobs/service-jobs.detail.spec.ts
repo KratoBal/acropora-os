@@ -69,6 +69,10 @@ function row(overrides: Partial<NonNullable<DetailRow>> = {}) {
         asset: { assetNumber: "ESZ-0007", name: "Szivattyú" },
       },
     ],
+    // ALAPBAN URES, es ezt a delegalas sajat specje tolti fel
+    // (`service-job-assignees.spec.ts`). Itt a jelenlete annyit allit, hogy egy
+    // delegalatlan jegy reszletlapja TELJES valaszt ad -- nem `undefined`-et.
+    assignees: [],
     ...overrides,
   } satisfies NonNullable<DetailRow>;
 }

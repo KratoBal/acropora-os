@@ -50,6 +50,46 @@ export class CreateServiceJobDto {
   @ArrayMaxSize(50)
   @IsOptional()
   assetIds?: string[];
+  /**
+   * A DELEGÁLT KOLLÉGÁK MÁR A FELVITELKOR, opcionálisan.
+   *
+   * Az iroda nyitja a jegyet a szervizesnek: a delegálás abban a pillanatban
+   * ismert, amikor a jegy megszületik. Külön lépésre bízva a felvivő azt hiszi,
+   * kiadta a munkát, közben a jegy senki listáján nem jelenik meg -- és erről
+   * semmi nem szól, mert a delegálatlan jegy nem hibás állapot.
+   *
+   * A mező LISTÁT vesz át, nem egyetlen azonosítót. Balázs kérése többes
+   * számban szól („a szervizes kollegakat"), és egy felvitelkori „csak egyet
+   * lehet" később kivehetetlen szűkítés lenne.
+   *
+   * UGYANAZ A KORLÁT, mint a külön végponton (`ArrayMaxSize(20)`): két
+   * különböző határ ugyanarra a listára csak azt jelentené, hogy az egyiket
+   * elfelejtettük karbantartani.
+   */
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @IsOptional()
+  assigneeIds?: string[];
+}
+
+/**
+ * A JEGYRE DELEGÁLT KOLLÉGÁK TELJES LISTÁJA.
+ *
+ * A beküldött lista a jegy TELJES névsora: aki nincs rajta, lekerül. Nem
+ * hozzáadás, mert egy „vedd le X-et" művelethez a felületnek tudnia kellene,
+ * ki van fent -- és akkor is a teljes listát küldi, csak eggyel kevesebbet.
+ *
+ * A mező KÖTELEZŐ, alapértelmezett üres lista nélkül: egy elgépelt vagy
+ * kimaradt mezőnek nem szabad csendben leszedni mindenkit a jegyről. Üres
+ * listát küldeni viszont szabad -- az kimondott szándék.
+ */
+export class SetServiceJobAssigneesDto {
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @MinLength(1, { each: true })
+  userIds!: string[];
 }
 
 export const SERVICE_JOB_LIST_SCOPES = ["open", "all"] as const;

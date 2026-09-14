@@ -16,6 +16,7 @@ import {
   CreateServiceJobDto,
   MoveServiceJobDto,
   ServiceJobListQueryDto,
+  SetServiceJobAssigneesDto,
   SetServiceJobPartnerDto,
   AssignVisibilityUnitDto,
 } from "./dto.js";
@@ -154,6 +155,33 @@ export class ServiceJobsController {
     @Param("worksheetId") worksheetId: string,
   ) {
     return this.service.detachWorksheet(id, worksheetId);
+  }
+
+  /**
+   * A DELEGALAS SAJAT VEGPONT, `SERVICE_MANAGE` ALATT.
+   *
+   * UGYANAZ A JOG, mint a jegy tobbi irasae: aki a jegyet kezeli, az adja ki a
+   * munkat. Kulon jogkor ma csak azt jelentene, hogy valakinel elfelejtjuk
+   * bekapcsolni -- ugyanaz az erveles, amit a fajl fejlece a hibajegy-jogrol
+   * mar kimond.
+   *
+   * ES NEM A LATHATOSAGI JOG (`service.visibility.assign`): az azt szabalyozza,
+   * KI MIT LAT, ez pedig azt, KI DOLGOZIK a jegyen. A kettot osszevonva egy
+   * szervizvezeto, aki munkat oszt, egyuttal a partner-oldali lathatosagot is
+   * atirhatna.
+   *
+   * A VALASZ A TELJES RESZLETLAP, nem nyugta: a felulet ugyanazt a sort rajzolja
+   * ujra, tehat egy `{ ok: true }` utan MEG egy lekerdezest kellene inditania --
+   * es a ket valasz kozott a jegy mar mozdulhatott.
+   */
+  @Post(":id/assignees")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  setAssignees(
+    @Param("id") id: string,
+    @Body() input: SetServiceJobAssigneesDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.setAssignees(id, input, user);
   }
 
   /**

@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 
 import { expandAssignedUnits } from "./assigned-units.js";
 import { collectUnitSubtreeIds } from "../service-assets/unit-subtree.js";
+import { SERVICE_ASSIGNABLE_ROLES } from "../common/service-assignment.js";
 import { prisma, type Prisma, type ServiceJobStatus } from "@acropora/database";
 
 /**
@@ -93,6 +94,7 @@ export class ServiceJobsRepository {
     departmentId: string | null;
     assetIds: readonly string[];
     actorUserId: string;
+    assigneeIds: readonly string[];
   }) {
     // A KELETKEZÉS IS ESEMÉNY, és a naplóba is bekerül - egy tranzakcióban.
     // Külön írva a kettő szétcsúszhatna: egy jegy, aminek nincs első sora a
@@ -123,8 +125,101 @@ export class ServiceJobsRepository {
         assets: {
           create: input.assetIds.map((assetId) => ({ assetId })),
         },
+        // A DELEGALAS UGYANEBBEN A TRANZAKCIOBAN, ugyanabbol az okbol, amiert
+        // a naplo elso sora is itt keletkezik: kulon hivaskent a masodik fele
+        // elbukhatna (halozat, jogosultsag, elgepelt azonosito), es epp az a
+        // delegalatlan jegy maradna, amit a felvivo mar kiadottnak hisz.
+        assignees: {
+          create: input.assigneeIds.map((userId) => ({
+            userId,
+            assignedById: input.actorUserId,
+          })),
+        },
       },
       select: { id: true, jobNumber: true },
+    });
+  }
+
+  /**
+   * KIT LEHET A JEGYRE DELEGALNI -- a bekuldott halmazbol azok, akik szabad.
+   *
+   * A szabaly nem itt all, hanem a `common/service-assignment.js` fajlban,
+   * ugyanaz, amit a munkalap felelos-kiosztasa hasznal. Ket felteteltol fugg:
+   * a kollega AKTIV legyen, es a szerepkore engedje a szerviz kezeleset.
+   *
+   * URES BEMENETRE URES HALMAZ, lekerdezes NELKUL: egy `in: []` szuro minden
+   * sort kizarna, tehat ugyanaz jonne vissza -- csak egy felesleges korrel.
+   */
+  async assignableUserIds(ids: readonly string[]): Promise<Set<string>> {
+    if (ids.length === 0) return new Set();
+    const rows = await this.database.user.findMany({
+      where: {
+        id: { in: [...ids] },
+        isActive: true,
+        role: { in: [...SERVICE_ASSIGNABLE_ROLES] },
+      },
+      select: { id: true },
+    });
+    return new Set(rows.map((row) => row.id));
+  }
+
+  /**
+   * A JEGY DELEGALTJAINAK BEALLITASA. A bekuldott lista a teljes nevsor: aki
+   * nincs rajta, lekerul.
+   *
+   * A MAR FENT LEVO SOROKHOZ NEM NYULUNK (`skipDuplicates`), es ez nem
+   * takarekossag: az `assignedAt` az egyetlen jel arrol, ki KERULT UJONNAN a
+   * jegyre. Ha minden mentes ujrairna az osszes sort, az ertesites ("uj
+   * hibajegyed van") minden szerkesztesnel mindenkinek ujra kimenne.
+   *
+   * AZT JELENTI VISSZA, KI UJ A JEGYEN, nem azt, ki all rajta. A hivo ez
+   * alapjan ertesit, es a kulonbseg dont arrol, hallgat-e a telefon: ugyanazt a
+   * jegyet ketszer mentve, vagy egy masodik kollegat hozzaadva nem szabad
+   * megrezegtetni azt, aki mar rajta volt. Az osszevetes a TRANZAKCION BELUL
+   * tortenik, az iras elotti sorokhoz kepest.
+   */
+  async setAssignees(input: {
+    serviceJobId: string;
+    userIds: readonly string[];
+    actorUserId: string;
+  }): Promise<{ ok: boolean; added: string[] }> {
+    return this.database.$transaction(async (transaction) => {
+      const job = await transaction.serviceJob.findUnique({
+        where: { id: input.serviceJobId },
+        select: { id: true },
+      });
+      if (!job) return { ok: false, added: [] };
+
+      const before = await transaction.serviceJobAssignee.findMany({
+        where: { serviceJobId: input.serviceJobId },
+        select: { userId: true },
+      });
+      const alreadyAssigned = new Set(before.map((row) => row.userId));
+
+      await transaction.serviceJobAssignee.deleteMany({
+        where: {
+          serviceJobId: input.serviceJobId,
+          ...(input.userIds.length > 0
+            ? { userId: { notIn: [...input.userIds] } }
+            : {}),
+        },
+      });
+
+      if (input.userIds.length > 0) {
+        await transaction.serviceJobAssignee.createMany({
+          data: input.userIds.map((userId) => ({
+            serviceJobId: input.serviceJobId,
+            userId,
+            assignedById: input.actorUserId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+
+      return {
+        ok: true,
+        added: input.userIds.filter((userId) => !alreadyAssigned.has(userId)),
+      };
     });
   }
 
@@ -449,6 +544,19 @@ export class ServiceJobsRepository {
             assetId: true,
             createdAt: true,
             asset: { select: { assetNumber: true, name: true } },
+          },
+        },
+        // A DELEGALTAK A KIOSZTAS SORRENDJEBEN, a regebbi elol -- forditva,
+        // mint a naplo es a lapok. Ez nem elnezes: ott a LEGUJABB esemeny a
+        // kerdes, itt viszont egy NEVSOR, aminek a sorrendje ne ugraljon
+        // amiatt, hogy kit vettek fel utoljara. A masodik rendezo a `userId`,
+        // mert egy tranzakcioban felvitt sorok `assignedAt` erteke azonos.
+        assignees: {
+          orderBy: [{ assignedAt: "asc" }, { userId: "asc" }],
+          select: {
+            userId: true,
+            assignedAt: true,
+            user: { select: { displayName: true, nickname: true } },
           },
         },
       },

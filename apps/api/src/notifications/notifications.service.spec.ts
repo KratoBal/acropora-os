@@ -7,6 +7,7 @@ import type { DeviceTokenRepository } from "./device-token.repository.js";
 import type {
   NotificationLogRepository,
   NotificationOutcome,
+  ServiceJobNotificationOutcome,
 } from "./notification-log.repository.js";
 import { NotificationsService } from "./notifications.service.js";
 
@@ -27,12 +28,18 @@ function sender(
 
 function log() {
   const written: NotificationOutcome[] = [];
+  const jobs: ServiceJobNotificationOutcome[] = [];
   const value = {
     recordWorksheetAssignment: async (outcome: NotificationOutcome) => {
       written.push(outcome);
     },
+    recordServiceJobAssignment: async (
+      outcome: ServiceJobNotificationOutcome,
+    ) => {
+      jobs.push(outcome);
+    },
   } as unknown as NotificationLogRepository;
-  return { log: value, written };
+  return { log: value, written, jobs };
 }
 
 function tokens(
@@ -234,5 +241,114 @@ describe("worksheet assignment notifications", () => {
       false,
       "a device token must never reach the event log",
     );
+  });
+});
+
+/**
+ * A HIBAJEGY DELEGALASANAK ERTESITESE.
+ *
+ * A KOZOS TORZSET (kinek kuldunk, lejart token, naplo) a fenti munkalap-blokk
+ * meri, es az itt POZITIV KONTROLL is: ha a kiemeles elrontotta volna a kuldest,
+ * azok a szeletek pirosodnanak elsokent. Ez a blokk azt meri, ami KULONBOZIK.
+ */
+describe("a hibajegy delegálásának értesítése", () => {
+  const jobNotice = {
+    serviceJobId: "job-1",
+    subject: "Nem indul a szivattyú",
+    userIds: ["user-2"],
+  };
+
+  function serviceFor(written: ReturnType<typeof log>) {
+    const { sender: apns, sent } = sender();
+    return {
+      sent,
+      service: new NotificationsService(
+        tokens([
+          {
+            userId: "user-2",
+            token: "cc".repeat(32),
+            bundleId: "hu.acropora.os",
+          },
+        ]),
+        apns,
+        written.log,
+      ),
+    };
+  }
+
+  it("a jegy címét viszi a zárolt képernyőre, saját címmel", async () => {
+    const written = log();
+    const { service, sent } = serviceFor(written);
+
+    const summary = await service.deliverServiceJobAssignment(jobNotice);
+
+    assert.equal(summary.sent, 1);
+    assert.equal(sent[0]?.title, "Új hibajegy került hozzád");
+    assert.equal(sent[0]?.body, "Nem indul a szivattyú");
+  });
+
+  it("a célpont a jegy, típussal együtt", async () => {
+    const written = log();
+    const { service, sent } = serviceFor(written);
+
+    await service.deliverServiceJobAssignment(jobNotice);
+
+    assert.equal(sent[0]?.data?.targetType, "serviceJob");
+    assert.equal(sent[0]?.data?.targetId, "job-1");
+  });
+
+  /**
+   * A LÉNYEGI TAGADÁS: a jegy értesítése NEM viheti a `worksheetId` mezőt.
+   *
+   * A telefon a típus NÉLKÜLI, régi értesítéseknél visszaesik erre a mezőre, és
+   * munkalap-azonosítóként olvassa (`push-target.ts`). Egy jegy azonosítójával
+   * kitöltve vagy sehova nem vinne, vagy -- rosszabb -- egy véletlenül létező
+   * MÁSIK munkalapot nyitna meg az ügyfél előtt.
+   *
+   * A MELLETTE ÁLLÓ POZITÍV KONTROLL a fenti munkalap-blokk „sends one
+   * notification per device" szelete: ugyanez a mező OTT megvan. Enélkül ez az
+   * állítás akkor is zöld lenne, ha a `data` egyáltalán nem érkezne meg.
+   */
+  it("a régi munkalap-mezőt NEM viszi, mert az hazugság lenne", async () => {
+    const written = log();
+    const { service, sent } = serviceFor(written);
+
+    await service.deliverServiceJobAssignment(jobNotice);
+
+    assert.equal(sent[0]?.data?.worksheetId, undefined);
+  });
+
+  /**
+   * A NAPLÓ A JEGY SAJÁT ESEMÉNYE. Egy munkalap-esemény egy jegy
+   * azonosítójával a napló olvasóját vinné félre: a munkalapok eseményeit
+   * kérdezve egy jegy-eseményt kapna vissza.
+   */
+  it("a jegy naplóbejegyzését írja, nem a munkalapét", async () => {
+    const written = log();
+    const { service } = serviceFor(written);
+
+    await service.deliverServiceJobAssignment(jobNotice);
+
+    assert.equal(written.written.length, 0);
+    assert.deepEqual(written.jobs, [
+      {
+        serviceJobId: "job-1",
+        attempts: [{ userId: "user-2", delivered: true }],
+      },
+    ]);
+  });
+
+  it("üres címzett-listára nem küld és nem naplóz", async () => {
+    const written = log();
+    const { service, sent } = serviceFor(written);
+
+    const summary = await service.deliverServiceJobAssignment({
+      ...jobNotice,
+      userIds: [],
+    });
+
+    assert.deepEqual(summary, { sent: 0, retired: 0, failed: 0 });
+    assert.equal(sent.length, 0);
+    assert.equal(written.jobs.length, 0);
   });
 });

@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import type { Prisma } from "@acropora/database";
 import type { AuthenticatedUser } from "@acropora/types";
@@ -12,6 +13,7 @@ import { serviceJobVisibilityWhere } from "./service-job-visibility.js";
 import { mayAssignUnit } from "./visibility-assignment.js";
 
 import {
+  personDisplayName,
   serviceJobTimeline,
   type ServiceJobDetail,
   type ServiceJobListResponse,
@@ -21,7 +23,10 @@ import type {
   CreateServiceJobDto,
   MoveServiceJobDto,
   ServiceJobListQueryDto,
+  SetServiceJobAssigneesDto,
 } from "./dto.js";
+import { normalizeAssigneeIds } from "../common/service-assignment.js";
+import { NotificationsService } from "../notifications/notifications.service.js";
 import {
   nextServiceJobNumber,
   serviceJobNumberPrefix,
@@ -39,13 +44,43 @@ import { ServiceJobsRepository } from "./service-jobs.repository.js";
 
 @Injectable()
 export class ServiceJobsService {
-  constructor(private readonly repository: ServiceJobsRepository) {}
+  constructor(
+    private readonly repository: ServiceJobsRepository,
+    /**
+     * AZ ERTESITO ELHAGYHATO, ugyanazzal az indokkal, mint a munkalapnal: a
+     * modul hat meglevo specje allitja elo ezt a szolgaltatast, es egyik sem
+     * kuld ertesitest. Kotelezove teve mind a hatot at kellene irni, holott
+     * egyikuk targya sem ez.
+     *
+     * AMI VISZONT NEM MARADT KIMONDATLAN: egy elhagyhato fuggoseg NEMA. Ha a
+     * modul elfelejtene bekotni, a delegalas lefutna, ertesites nelkul, es
+     * semmi nem szolna rola. Ezert all ra kulon allitas
+     * (`service-job-assignees.spec.ts`, "a modul bekoti az ertesitot"), ami a
+     * modul metaadatat olvassa -- nem azt, hogy a mezo letezik.
+     */
+    @Optional() private readonly notifications?: NotificationsService,
+  ) {}
 
+  /**
+   * A DELEGALTAK MAR ITT KIOSZTHATOK, es ez nem kenyelmi rovidites.
+   *
+   * Az iroda nyitja a jegyet a szervizesnek: a delegalas abban a pillanatban
+   * ismert, amikor a jegy megszuletik. Kulon lepesre bizva a felvivo azt hiszi,
+   * kiadta a munkat, kozben a jegy senki listajan nem jelenik meg -- es errol
+   * semmi nem szol, mert a delegalatlan jegy nem hibas allapot.
+   *
+   * A KOLLEGAK ELLENORZESE A LETREHOZAS ELOTT FUT: egy ismeretlen azonosito igy
+   * NEM hoz letre semmit, ahelyett hogy egy mar megszuletett jegyet hagyna
+   * delegalatlanul. Ugyanaz a sorrend, mint a munkalapnal.
+   */
   async create(
     input: CreateServiceJobDto,
     actorUserId: string,
     now: Date = new Date(),
   ) {
+    const assigneeIds = normalizeAssigneeIds(input.assigneeIds ?? []);
+    await this.requireAssignableUsers(assigneeIds);
+
     const year = now.getFullYear();
     const last = await this.repository.lastNumberOfYear(
       serviceJobNumberPrefix(year),
@@ -111,15 +146,87 @@ export class ServiceJobsService {
         );
       }
     }
-    return this.repository.create({
+    const title = input.title.trim();
+    const created = await this.repository.create({
       jobNumber: nextServiceJobNumber({ year, lastNumber: last }),
-      title: input.title.trim(),
+      title,
       description: input.description?.trim() || null,
       customerId,
       departmentId,
       assetIds,
       actorUserId,
+      assigneeIds,
     });
+
+    // ERTESITES CSAK AZUTAN, hogy a jegy tarolva van. Felvitelkor minden
+    // delegalt uj, tehat a lista maga a kulonbseg.
+    if (assigneeIds.length > 0)
+      this.notifications?.notifyServiceJobAssignment({
+        serviceJobId: created.id,
+        subject: title,
+        userIds: assigneeIds,
+      });
+
+    return created;
+  }
+
+  /**
+   * A JEGY DELEGALTJAINAK BEALLITASA, A FELVITEL UTAN.
+   *
+   * KET UT KELL, es nem az egyik a masik rovidítese: a felvitelkor az iroda mar
+   * tudja, kinek adja, kesobb viszont ATSZERVEZ -- valaki szabadsagra megy,
+   * valaki besegit. Egy jegy elete alatt a nevsor tobbszor valtozik, es az
+   * ujranyitas nem valasz ra.
+   *
+   * A BEKULDOTT LISTA A TELJES NEVSOR: aki nincs rajta, lekerul. Ures listat
+   * kuldeni szabad -- az kimondott szandek, nem elgepeles (a mezo maga
+   * kotelezo, epp ezert).
+   *
+   * ERTESITEST CSAK AZ UJAK KAPNAK. Aki mar a jegyen allt, annak a telefonja
+   * hallgat: egy masodik kollega hozzaadasa nem hir annak, aki mar dolgozik
+   * rajta.
+   */
+  async setAssignees(
+    id: string,
+    input: SetServiceJobAssigneesDto,
+    user: AuthenticatedUser,
+  ): Promise<ServiceJobDetail> {
+    const userIds = normalizeAssigneeIds(input.userIds);
+    await this.requireAssignableUsers(userIds);
+
+    const updated = await this.repository.setAssignees({
+      serviceJobId: id,
+      userIds,
+      actorUserId: user.id,
+    });
+    if (!updated.ok) throw new NotFoundException("A hibajegy nem található.");
+
+    const detail = await this.detail(id, user);
+
+    if (updated.added.length > 0)
+      this.notifications?.notifyServiceJobAssignment({
+        serviceJobId: id,
+        subject: detail.title,
+        userIds: updated.added,
+      });
+
+    return detail;
+  }
+
+  /**
+   * KIT LEHET DELEGALNI. A hibauzenet EGY mondat a ket okra (nincs ilyen
+   * kollega / a szerepkore nem engedi), es ez szandekos: a kettot
+   * szetvalasztva a valasz elarulna, letezik-e egy adott azonosito.
+   */
+  private async requireAssignableUsers(userIds: readonly string[]) {
+    if (userIds.length === 0) return;
+    const assignable = await this.repository.assignableUserIds(userIds);
+    const rejected = userIds.filter((userId) => !assignable.has(userId));
+    if (rejected.length > 0) {
+      throw new BadRequestException(
+        "A delegált kolléga nem található, vagy a szerepköre nem engedi a szerviz-munka kezelését.",
+      );
+    }
   }
 
   /**
@@ -332,6 +439,14 @@ export class ServiceJobsService {
           attachedAt: link.createdAt.toISOString(),
         })),
       }),
+      // A DELEGALT A BECENEVEN SZEREPEL, nem a hivatalos neven: a delegalas
+      // belso munkaszervezes, nem dokumentum-tartalom. Ugyanaz a valasztas,
+      // mint a munkalap felelosenel.
+      assignees: row.assignees.map((assignee) => ({
+        userId: assignee.userId,
+        name: personDisplayName(assignee.user),
+        assignedAt: assignee.assignedAt.toISOString(),
+      })),
     };
   }
 
