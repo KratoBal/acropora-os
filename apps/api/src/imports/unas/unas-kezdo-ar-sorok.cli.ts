@@ -2,6 +2,8 @@ import { pathToFileURL } from "node:url";
 
 import { prisma } from "@acropora/database";
 
+import { kezdoSorIdopontja } from "./unas-ar-tortenet.js";
+
 /**
  * A KEZDO AR-SOROK FELVETELE -- EGYSZER, MINDEN TERMEKRE.
  *
@@ -23,10 +25,15 @@ import { prisma } from "@acropora/database";
  *
  * === AZ IDOPONT, AMIT A KEZDO SOR VISEL ===
  *
- * A `UnasProductSnapshot.syncedAt` erteke, ha van: AKKOR volt igaz az az ar. Ha
- * nincs, a futas ideje -- es akkor a sor annyit allit, hogy "ekkor mar ez volt".
- * A ketto kulonbsege nem elhanyagolhato egy hatarido-szamitasnal, ezert nem
- * irunk egysegesen "most"-ot.
+ * A dontest a `kezdoSorIdopontja` hozza, es az INDOKA ott all: a tukor-sor
+ * `updatedAt` erteke, ha van, kulonben a futas ideje.
+ *
+ * ITT KORABBAN `syncedAt` ALLT, ES AZ A MEZO NEM LETEZIK. A parancs ezert soha
+ * nem futott le (`Unknown field \`syncedAt\``), es a kezdo sorok felvetele el
+ * sem kezdodott. A tipusellenorzes NEM fogta meg -- a `select` blokk ismeretlen
+ * kulcsait a Prisma tipusai nem utasitjak el --, es egy forras-szovegre mero
+ * allitas meg ROGZITETTE is a hibas nevet. Mind a kettore orzo all ma
+ * (`unas-ar-tortenet.spec.ts`).
  *
  * KILEPESI KODOK
  *   0  lefutott (akar nulla uj sorral)
@@ -50,7 +57,7 @@ export async function runKezdoArSorokCli(
             grossPrice: true,
             saleNetPrice: true,
             saleGrossPrice: true,
-            syncedAt: true,
+            updatedAt: true,
           },
         },
       },
@@ -99,7 +106,7 @@ export async function runKezdoArSorokCli(
           saleNetPrice: tukor?.saleNetPrice ?? null,
           saleGrossPrice: tukor?.saleGrossPrice ?? null,
           source: "INITIAL",
-          observedAt: tukor?.syncedAt ?? most,
+          observedAt: kezdoSorIdopontja(tukor, most),
         },
       });
       irt += 1;

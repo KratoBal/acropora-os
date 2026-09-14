@@ -1,8 +1,16 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 
-import { arKepAlakja, kellUjArSor, type ArKep } from "./unas-ar-tortenet.js";
+import { Prisma } from "@acropora/database";
+
+import {
+  arKepAlakja,
+  kellUjArSor,
+  kezdoSorIdopontja,
+  type ArKep,
+} from "./unas-ar-tortenet.js";
 
 const KEP = (reszlet: Partial<ArKep> = {}): ArKep => ({
   currency: "HUF",
@@ -140,7 +148,7 @@ describe("az ar-tortenet bekotese", () => {
     assert.equal(forras.includes("priceHistory: { none: {} }"), true);
     assert.equal(forras.includes('source: "INITIAL"'), true);
     /* A tukor ideje, ha van -- nem egysegesen "most". */
-    assert.equal(forras.includes("tukor?.syncedAt ?? most"), true);
+    assert.equal(forras.includes("kezdoSorIdopontja(tukor, most)"), true);
   });
 
   /**
@@ -190,5 +198,139 @@ describe("az ar-tortenet bekotese", () => {
     const elotte = forras.slice(0, sor);
     const utolsoIf = elotte.lastIndexOf("if (uresArral)");
     assert.equal(utolsoIf, -1);
+  });
+});
+
+/**
+ * A KEZDO SOR IDOPONTJA, ES A MEZO, AMI NEM LETEZETT.
+ *
+ * === A MERT HIBA ===
+ *
+ * A CLI a `UnasProductSnapshot.syncedAt` mezot valasztotta ki -- az a semaban
+ * NINCS. A parancs ezert soha nem futott le (`Unknown field \`syncedAt\``), es
+ * 1864 termek maradt kezdo sor nelkul.
+ *
+ * KET ORZO HIANYZOTT, ES MIND A KETTOT KIMONDOM:
+ *
+ * 1. A TIPUSELLENORZES NEM FOGJA MEG. Megmertem: a Prisma tipusai a `select`
+ *    blokk ISMERETLEN kulcsait ELFOGADJAK -- egy `NEMLETEZIK: true` ugyanugy
+ *    atmegy. Amit VISZONT megfognak: az ismeretlen FELSO SZINTU argumentum
+ *    (`whereee` -> TS2561) es a rossz TIPUS egy letezo mezon (`where: { id:
+ *    123 }` -> TS2322). A kapu tehat nem vak, csak epp EZT az egy alakot nem
+ *    latja.
+ *
+ * 2. ES EGY ALLITAS ROGZITETTE A HIBAS NEVET. Itt korabban ez allt:
+ *    `forras.includes("tukor?.syncedAt ?? most")`. Egy forras-szovegre mero
+ *    allitas azt tudja megmondani, hogy a szoveg OTT VAN -- azt nem, hogy a
+ *    mezo LETEZIK. Igy a hiba ORZOTTNEK latszott.
+ *
+ * === KALIBRACIO (2026-09-14, fej 3e8c7f1; alap 2636 lefutott teszt) ===
+ *
+ *   a CLI megint `syncedAt`-et valaszt (updatedAt HELYETT)   NEM FORDUL LE
+ *   ugyanaz, de az `updatedAt` MARAD (igy lefordul)          1 piros, nev szerint
+ *   a fuggveny mindig a `most`-ot adja                        1 piros
+ *   a fuggveny mindig a tukor erteket adja                    1 piros
+ *   a CLI nem a mert fuggvenyt hivja                          NEM FORDUL LE
+ *   a mezo-kiolvaso regex elromlik                            a POZITIV KONTROLL sul el
+ *
+ * AZ ELSO A LEGJOBB HIR: a `kezdoSorIdopontja` TIPUSOS parametere miatt a
+ * rossz mezonev MA MAR FORDITASI HIBA. Korabban nem volt az -- a kifejezes a
+ * `create` blokkba folyt, es ott semmi nem allitotta meg. A refaktor tehat nem
+ * csak olvashatobb lett, hanem KAPUT is csinalt oda, ahol nem volt.
+ *
+ * ES KET DOLOG A MERESROL, AMIT ERDEMES TUDNI (ezen a suite-on merve):
+ *
+ * 1. HA EGY `describe` TORZSE DOB, a futas MEGIS zold: `not ok` sor keletkezik
+ *    `type: 'suite'` jelzessel, de a `# fail` NULLA MARAD, es a KILEPESI KOD 0.
+ *    Sajat magamon mertem: az elso alakom `import.meta.url`-bol szamolta a
+ *    forras utjat, az futasidoben a `test-dist` mappara mutat, ott `.ts` nincs,
+ *    es a suite ENOENT-tel elszallt -- a `npm test` pedig SIKERT jelentett.
+ *
+ * 2. AMI EZT MEGIS ELARULJA: a LEFUTOTT TESZTEK SZAMA. A hibas suite tesztjei
+ *    nem futnak le, tehat a szam CSOKKEN (itt 2636 -> 2633). A `# fail` nem
+ *    mozdul, a `# tests` igen. Ezert all a kalibracios lapon a szam, es nem a
+ *    pirosak darabszama.
+ */
+describe("a kezdo sor idopontja", () => {
+  it("a tukor updatedAt erteket veszi, ha van", () => {
+    const mikor = new Date("2026-09-01T10:00:00.000Z");
+    const most = new Date("2026-09-14T21:00:00.000Z");
+    assert.equal(
+      kezdoSorIdopontja({ updatedAt: mikor }, most).toISOString(),
+      mikor.toISOString(),
+    );
+  });
+
+  /**
+   * ISMERT POZITIV KONTROLL a lenti tagadasokhoz: tukor NELKUL a futas ideje
+   * all a helyen. Enelkul a fenti allitast egy olyan valtozat is kielegitene,
+   * ami MINDIG az elso argumentumot adja vissza.
+   */
+  it("tukor nelkul a futas ideje all a helyen", () => {
+    const most = new Date("2026-09-14T21:00:00.000Z");
+    assert.equal(kezdoSorIdopontja(null, most), most);
+    assert.equal(kezdoSorIdopontja(undefined, most), most);
+    assert.equal(kezdoSorIdopontja({ updatedAt: null }, most), most);
+  });
+});
+
+/**
+ * A KIVALASZTOTT MEZOK LETEZNEK-E -- A GENERALT SEMA SZERINT.
+ *
+ * EZ AZ AZ ORZO, AMI HIANYZOTT. Nem a szoveget meri, hanem a NEVEKET veti ossze
+ * a Prisma GENERALT mezo-felsorolasaval (`ScalarFieldEnum`), ami a semabol
+ * keletkezik. Egy nem letezo mezonev igy nev szerint pirosodik -- akkor is, ha a
+ * tipusellenorzes atengedi.
+ */
+describe("a CLI a tukorbol csak letezo mezoket valaszt ki", () => {
+  /*
+    A REPO-GYOKERHEZ KEPEST, ahogy a fenti szeletek is (`CLI` konstans). Elso
+    alakom `import.meta.url`-bol szamolt, az viszont FUTASIDOBEN a `test-dist`
+    mappara mutat, ahol `.ts` fajl nincs -- a `describe` torzse ENOENT-tel
+    elszallt, a suite NEM futott le, es a futas MEGIS zold volt.
+  */
+  const forras = readFileSync(
+    "src/imports/unas/unas-kezdo-ar-sorok.cli.ts",
+    "utf8",
+  );
+
+  /** A `unasSnapshot: { select: { ... } }` blokk kulcsai. */
+  const kivalasztott = (() => {
+    const blokk = forras.match(
+      /unasSnapshot:\s*\{\s*select:\s*\{([\s\S]*?)\}\s*,?\s*\}/,
+    );
+    assert.ok(blokk, "a tukor select blokkja nem talalhato a forrasban");
+    return [
+      ...(blokk[1] ?? "").matchAll(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:/gm),
+    ].map((m) => m[1] as string);
+  })();
+
+  /** ISMERT POZITIV KONTROLL: talaltunk EGYALTALAN mezoket. */
+  it("a select blokk mezoi kiolvashatok", () => {
+    assert.ok(
+      kivalasztott.length >= 5,
+      `kiolvasott mezok: ${kivalasztott.length}`,
+    );
+    assert.ok(kivalasztott.includes("netPrice"));
+  });
+
+  it("minden kivalasztott mezo szerepel a generalt sema-felsorolasban", () => {
+    const letezo = new Set(
+      Object.keys(Prisma.UnasProductSnapshotScalarFieldEnum),
+    );
+    const hianyzo = kivalasztott.filter((mezo) => !letezo.has(mezo));
+    assert.deepEqual(hianyzo, []);
+  });
+
+  /**
+   * ES A MASIK IRANY: a felsorolas TENYLEG megfog egy nem letezo nevet. Enelkul
+   * a fenti allitas akkor is zold lenne, ha a halmaz mindent tartalmazna.
+   */
+  it("a felsorolas egy nem letezo nevet elutasit", () => {
+    const letezo = new Set(
+      Object.keys(Prisma.UnasProductSnapshotScalarFieldEnum),
+    );
+    assert.equal(letezo.has("syncedAt"), false);
+    assert.equal(letezo.has("updatedAt"), true);
   });
 });
