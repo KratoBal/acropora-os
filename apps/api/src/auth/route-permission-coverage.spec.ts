@@ -49,6 +49,20 @@ const CONTROLLERS = [
   "src/products/product-extension.controller.ts",
   "src/products/product-shipping-profile.controller.ts",
   "src/products/catalog-options.controller.ts",
+  /*
+    A HIBAJEGY-MODUL VEZERLOI, 2026-09-14-tol.
+
+    Merve a felvetel elott: a `service-jobs.controller.ts`-ben 11 utvonal es 11
+    dekorator all, a `service-job-documents.controller.ts`-ben 4 es 4 -- tehat
+    ez a bovites ma sem javit semmit, a KOVETKEZO utvonalat vedi meg.
+
+    Amiert epp most kerul ide: a jegy csatolmany-vegpontjai a jegy sajat
+    lathatosagi szabalyat hasznaljak, es egy jog nelkul maradt uj vegpont ott a
+    jegy LETEZESET szivarogtatna ki -- nem adatot, hanem azt, hogy van ilyen.
+    Az a fajta res NEM hibazik, tehat csak mero talalja meg.
+  */
+  "src/service-jobs/service-jobs.controller.ts",
+  "src/service-jobs/service-job-documents.controller.ts",
 ];
 
 const ROUTE = new RegExp(
