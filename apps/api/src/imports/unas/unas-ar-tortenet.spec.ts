@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
-import { fileURLToPath } from "node:url";
 
 import { Prisma } from "@acropora/database";
 
@@ -285,8 +283,14 @@ describe("a kezdo sor idopontja", () => {
  * tipusellenorzes atengedi.
  */
 describe("a CLI a tukorbol csak letezo mezoket valaszt ki", () => {
+  /*
+    A REPO-GYOKERHEZ KEPEST, ahogy a fenti szeletek is (`CLI` konstans). Elso
+    alakom `import.meta.url`-bol szamolt, az viszont FUTASIDOBEN a `test-dist`
+    mappara mutat, ahol `.ts` fajl nincs -- a `describe` torzse ENOENT-tel
+    elszallt, a suite NEM futott le, es a futas MEGIS zold volt.
+  */
   const forras = readFileSync(
-    join(dirname(fileURLToPath(import.meta.url)), "unas-kezdo-ar-sorok.cli.ts"),
+    "src/imports/unas/unas-kezdo-ar-sorok.cli.ts",
     "utf8",
   );
 
