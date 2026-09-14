@@ -23,11 +23,30 @@ export interface ServiceJobRow {
 export class ServiceJobsRepository {
   private readonly database = prisma;
 
+  /**
+   * A HELYSZIN A PARTNERE-E. Egy sor, egy kerdes: a `WorksheetDepartment`
+   * `customerId` mezoje KOTELEZO, tehat a talalat hianya vagy azt jelenti,
+   * hogy az egyseg nem letezik, vagy azt, hogy mas partnere. A ket eset a
+   * hivonak ugyanaz a valasz, es szandekosan: a letezes sem szivaroghat ki egy
+   * masik partner egysegerol.
+   */
+  async departmentBelongsToCustomer(
+    departmentId: string,
+    customerId: string,
+  ): Promise<boolean> {
+    const found = await this.database.worksheetDepartment.findFirst({
+      where: { id: departmentId, customerId },
+      select: { id: true },
+    });
+    return found !== null;
+  }
+
   async create(input: {
     jobNumber: string;
     title: string;
     description: string | null;
     customerId: string | null;
+    departmentId: string | null;
     actorUserId: string;
   }) {
     // A KELETKEZÉS IS ESEMÉNY, és a naplóba is bekerül - egy tranzakcióban.
@@ -39,6 +58,7 @@ export class ServiceJobsRepository {
         title: input.title,
         description: input.description,
         customerId: input.customerId,
+        departmentId: input.departmentId,
         // A NYITO A JEGYEN, NEM CSAK A NAPLOBAN. Ugyanaz az aktor kerul mindket
         // helyre, egy tranzakcioban -- de a naplo aktora `SetNull` egy kesobbi
         // felhasznalo-torlesnel, ez a mezo pedig megmarad. A ketto tehat nem
@@ -323,6 +343,25 @@ export class ServiceJobsRepository {
         // feluletnek az AZONOSITO kell.
         customerId: true,
         customer: { select: { displayName: true } },
+        /**
+         * A HELYSZIN NEVE A RESZLETLAPRA. A `departmentId` onmagaban tarolas,
+         * nem megjelenites: egy azonosito a kepernyon semmit nem mond, es a
+         * kliens sem tudna feloldani egy kulon lekerdezes nelkul.
+         *
+         * A SZULO IS KELL, egy szinttel: a kod es a nev csak TESTVEREK kozott
+         * egyedi, tehat "Biodom" onmagaban ket kulonbozo helyet is jelenthet. A
+         * TELJES ut itt nem fer el (tetszoleges melyseg, rekurziv lekerdezes
+         * lenne), de az egy szint mar megkulonboztet -- es a felvitelen amugy is
+         * a teljes utas valaszto all.
+         */
+        departmentId: true,
+        department: {
+          select: {
+            name: true,
+            code: true,
+            parent: { select: { name: true } },
+          },
+        },
         events: {
           // CSAK AZ ALLAPOTVALTASOK, KIMONDVA (ADR-013). A naplo tablaja
           // 2026-09-02 ota tobbfajta sort hordoz, es ennek az olvasonak az

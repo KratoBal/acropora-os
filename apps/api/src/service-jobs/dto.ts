@@ -17,6 +17,17 @@ export class CreateServiceJobDto {
   @IsString() @MinLength(1) @MaxLength(300) title!: string;
   @IsString() @MaxLength(4000) @IsOptional() description?: string | null;
   @IsString() @IsOptional() customerId?: string | null;
+  /**
+   * HOL VAN A BAJ: a partner helyszine, ugyanabbol a fabol, amit a munkalap es
+   * az eszkoz hasznal.
+   *
+   * ELHAGYHATO, DE NEM SZABADON: ha meg van adva, a szerver ELLENORZI, hogy a
+   * helyszin a megadott partnere-e. Enelkul egy elgepelt vagy atmasolt
+   * azonosito MAS partner egysegere akasztana ra a jegyet, es a felulet ezt
+   * soha nem mutatna meg -- a lista a sajat partnere egysegeit rajzolja, tehat
+   * egy idegen egyseg ott egyszeruen URESKENT jelenne meg.
+   */
+  @IsString() @IsOptional() departmentId?: string | null;
 }
 
 export const SERVICE_JOB_LIST_SCOPES = ["open", "all"] as const;

@@ -29,6 +29,9 @@ export const serviceJobsApi = {
       title: string;
       description?: string | null;
       customerId?: string | null;
+      /** A partner helyszine. Csak partnerrel egyutt ervenyes; a szerver
+       * ellenorzi, hogy az egyseg tenyleg a megadott partnere. */
+      departmentId?: string | null;
     },
   ) {
     return apiRequest<{ id: string; jobNumber: string }>(base, token, {

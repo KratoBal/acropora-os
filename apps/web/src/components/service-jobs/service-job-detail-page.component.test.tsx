@@ -57,6 +57,10 @@ function detail(overrides: Partial<ServiceJobDetail> = {}): ServiceJobDetail {
     partnerStatusLabel: "Feldolgozás alatt",
     customerName: "Fővárosi Állat- És Növénykert",
     customerId: "cust-1",
+    // A HELYSZIN ALAPBOL NINCS: a mezo 2026-09-14-en keletkezett, tehat minden
+    // korabbi jegyen `null`. Ez az alapeset, nem a kivetel.
+    departmentId: null,
+    departmentName: null,
     createdAt: "2026-09-01T08:00:00.000Z",
     scheduledAt: null,
     startedAt: null,
