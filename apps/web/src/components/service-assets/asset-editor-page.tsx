@@ -26,6 +26,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ServiceBackLink } from "@/components/service/service-detail-chrome";
 import { ServiceListHeader } from "@/components/service/service-list-chrome";
+import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
 import { useReturnTo } from "@/components/navigation-history";
 import { assetsApi } from "@/lib/api/assets";
 import { suppliersApi } from "@/lib/api/suppliers";
@@ -289,6 +290,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
 
   return (
     <div className="space-y-6">
+      <ServiceOfflineNotice />
       <ServiceBackLink href={backToList.href}>
         {backToList.fromWithinApp ? "Vissza" : "Eszközök"}
       </ServiceBackLink>

@@ -25,6 +25,7 @@ import {
   type ServiceStatTile,
 } from "@/components/service/service-list-stats";
 import { sv } from "@/components/service/service-theme";
+import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import {
   formatAmount,
@@ -211,6 +212,7 @@ export function WorksheetListPage() {
 
   return (
     <div>
+      <ServiceOfflineNotice />
       <ServiceListHeader
         eyebrow="Szerviz / munkatér"
         title="Munkalapok"

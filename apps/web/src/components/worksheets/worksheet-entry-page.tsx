@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ServiceBackLink } from "@/components/service/service-detail-chrome";
 import { ServiceListHeader } from "@/components/service/service-list-chrome";
+import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
 import { worksheetsApi } from "@/lib/api/worksheets";
 
 import { worksheetEntryByline } from "./worksheet-entry-presentation";
@@ -95,6 +96,7 @@ export function WorksheetEntryPage({
         visszalepese nem helyettesiti: aki kozvetlen linkbol erkezik, annak
         nincs hova visszalepnie.
       */}
+      <ServiceOfflineNotice />
       <ServiceBackLink href={`/szerviz/munkalapok/${worksheetId}`}>
         Vissza a munkalapra
       </ServiceBackLink>

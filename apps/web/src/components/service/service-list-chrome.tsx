@@ -50,6 +50,14 @@ const iconPaths = {
     </>
   ),
   arrowLeft: <path d="M20 12H4m6-6-6 6 6 6" />,
+  /**
+   * `offline` -- athuzott wifi-iv. A prototipus `app.js`-ebol, beture.
+   * Az athuzas (`m3 3 18 18`) az elso alalak: az iveket onmagukban a gyenge
+   * jel ikonjanak is lehetne olvasni, es a sav epp az ellenkezojet allitja.
+   */
+  offline: (
+    <path d="m3 3 18 18M2 8a16 16 0 0 1 4-2m5-1a16 16 0 0 1 11 3M5 12a11 11 0 0 1 4-2m6 0a11 11 0 0 1 4 2m-11 4a6 6 0 0 1 8 0m-4 4h.01" />
+  ),
   users: (
     <>
       <circle cx="9" cy="7" r="3" />
