@@ -404,6 +404,16 @@ export class ServiceJobsService {
     );
     if (row === null) throw new NotFoundException("A hibajegy nem található.");
 
+    /**
+     * A TOROLT CSATOLMANYOK NYOMA -- A LATHATOSAG UTAN, NEM ELOTTE.
+     *
+     * A sorrend nem izles: ha a jegy nem lathato a hivonak, a fenti `null` mar
+     * kivetelt dobott, tehat ide csak olyan azonositoval jutunk el, amit a
+     * hivo LATHAT. Igy a naplo-lekerdezes nem kaphat sajat lathatosagi szurot
+     * -- es nem is kell neki egy MASIK, amit kulon karban kellene tartani.
+     */
+    const removals = await this.repository.documentRemovals(row.id);
+
     return {
       id: row.id,
       jobNumber: row.jobNumber,
@@ -468,6 +478,29 @@ export class ServiceJobsService {
           assetName: link.asset.name,
           attachedAt: link.createdAt.toISOString(),
         })),
+        /**
+         * A FAJLNEV A NAPLO SAJAT MASOLATABOL JON, es nem lehet mashonnan: a
+         * dokumentum sora a torleskor megszunt. A `metadata` szabad alaku
+         * JSON, tehat a kiolvasas OVATOS -- egy hianyzo vagy mas tipusu mezo
+         * nem donthet el egy reszletlapot, ezert nevesitett helyettesitest kap.
+         */
+        documentRemovals: removals.map((removal) => {
+          const meta =
+            removal.metadata &&
+            typeof removal.metadata === "object" &&
+            !Array.isArray(removal.metadata)
+              ? (removal.metadata as Record<string, unknown>)
+              : {};
+          return {
+            id: removal.id,
+            fileName:
+              typeof meta.fileName === "string"
+                ? meta.fileName
+                : "ismeretlen fájl",
+            actorName: removal.user?.displayName ?? null,
+            removedAt: removal.createdAt.toISOString(),
+          };
+        }),
       }),
       /**
        * ES UGYANEZ SAJAT LISTAKENT IS. NEM duplikacio: a naplo az IDORENDET

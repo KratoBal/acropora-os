@@ -19,9 +19,14 @@ type DetailRow = Awaited<ReturnType<ServiceJobsRepository["detail"]>>;
  * elmozdul a duplától, a fordító szóljon, ne a képernyő.
  */
 function serviceWith(row: DetailRow) {
-  const repository: Pick<ServiceJobsRepository, "detail"> = {
-    detail: async () => row,
-  };
+  const repository: Pick<ServiceJobsRepository, "detail" | "documentRemovals"> =
+    {
+      detail: async () => row,
+      /* A TOROLT CSATOLMANYOK KULON LEKERDEZESBOL JONNEK (az AuditLog nem all
+       relacioban a jeggyel), tehat a duplanak ezt is tudnia kell. Ures lista =
+       "ezen a jegyen nem toroltek csatolmanyt", ami ervenyes valasz. */
+      documentRemovals: async () => [],
+    };
   return new ServiceJobsService(repository as ServiceJobsRepository);
 }
 

@@ -63,6 +63,19 @@ function timelineLine(entry: ServiceJobTimelineEntry): string {
   }
   if (entry.kind === "worksheet")
     return `Munkalap a jegy alatt: ${entry.worksheet.number ?? "piszkozat"}`;
+  /*
+    A TÖRÖLT CSATOLMÁNY SORA MEGNEVEZI, KI VETTE LE. Az állapotváltásnál a nevet
+    a sor alatti másodperc-sor hozza; itt a MONDATBAN áll, mert ez az egyetlen
+    naplósor, ami egy VISSZAFORDÍTHATATLAN törlésről szól, és ott a „ki" nem
+    kísérőadat.
+
+    Név nélkül is olvasható marad: egy azóta törölt felhasználó nem viszi
+    magával a naplót, ugyanúgy, ahogy az állapotváltásoknál sem.
+  */
+  if (entry.kind === "document")
+    return entry.removal.actorName
+      ? `${entry.removal.actorName} törölte ezt a csatolmányt: ${entry.removal.fileName}`
+      : `Törölt csatolmány: ${entry.removal.fileName}`;
   return `Eszköz a jegyen: ${entry.asset.assetNumber} (${entry.asset.assetName})`;
 }
 

@@ -6,6 +6,16 @@ import type { ServiceJobDocumentSummary } from "@acropora/types";
 import { documentedContentType } from "../service-assets/service-assets.repository.js";
 
 /**
+ * A TORLES NAPLO-CIMKEJE, EGY HELYEN.
+ *
+ * KET oldal hasznalja: az IRAS (ez a fajl) es az OLVASAS (a reszletlap
+ * lekerdezese). Ha ket helyen allna, egy elgepeles NEM hibazna -- a torles
+ * beirodna, a naplo pedig sosem talalna meg --, es a hiany pontosan ugy nezne
+ * ki, mintha soha senki nem torolt volna semmit.
+ */
+export const DOCUMENT_DELETED_ACTION = "service_job.document.deleted";
+
+/**
  * A SOR -> VALASZ LEKEPEZES, EGY HELYEN.
  *
  * KET MEZO NEM MEHET AT NYERSEN, es mindketto MAS okbol:
@@ -185,7 +195,11 @@ export class ServiceJobDocumentsRepository {
    * torolne, ha valaki a sajat jegyenek utjara irja egy idegen dokumentum
    * azonositojat.
    */
-  async deleteDocument(serviceJobId: string, documentId: string) {
+  async deleteDocument(
+    serviceJobId: string,
+    documentId: string,
+    actorUserId: string | null,
+  ) {
     return this.database.$transaction(async (transaction) => {
       const document = await transaction.serviceJobDocument.findFirst({
         where: { id: documentId, serviceJobId },
@@ -194,6 +208,32 @@ export class ServiceJobDocumentsRepository {
       if (!document) return null;
       await transaction.serviceJobDocument.deleteMany({
         where: { id: documentId, serviceJobId },
+      });
+      /**
+       * A NYOM UGYANABBAN A TRANZAKCIOBAN KELETKEZIK, MINT A TORLES.
+       *
+       * Kulon hivasban ket rossz kimenet allna elo, es MIND A KETTO nemán: a
+       * fajl eltunne naplo nelkul (epp az, amit ez a sor megelozni hivatott),
+       * vagy a naplo allitana egy torlest, ami meg sem tortent. Egy
+       * tranzakcioban a ketto egyutt all vagy egyutt bukik.
+       *
+       * AZ `entityId` A JEGY, NEM A DOKUMENTUM -- es ez a lenyeg, nem reszlet.
+       * A dokumentum sora ezutan mar NINCS, tehat ra hivatkozva a naplot nem
+       * lehetne visszakeresni. A jegyre hivatkozva viszont a meglevo
+       * `@@index([entityType, entityId, createdAt])` epp ezt a lekerdezest
+       * szolgalja ki: "mi tortent ezzel a jeggyel, idorendben".
+       */
+      await transaction.auditLog.create({
+        data: {
+          userId: actorUserId,
+          action: DOCUMENT_DELETED_ACTION,
+          entityType: "ServiceJob",
+          entityId: serviceJobId,
+          metadata: {
+            documentId: document.id,
+            fileName: document.fileName,
+          } satisfies Prisma.JsonObject,
+        },
       });
       return document;
     });

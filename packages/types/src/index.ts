@@ -4,6 +4,7 @@ export type {
   ServiceJobAssetLink,
   ServiceJobAssignee,
   ServiceJobDetail,
+  ServiceJobDocumentRemoval,
   ServiceJobDocumentSummary,
   ServiceJobDocumentType,
   ServiceJobListItem,

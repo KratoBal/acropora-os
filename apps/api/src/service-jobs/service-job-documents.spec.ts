@@ -344,6 +344,35 @@ describe("a hibajegy-csatolmány törlése", () => {
     );
   });
 
+  /**
+   * A TÖRLŐ SZEMÉLYE ELJUT A TÁROLÓIG.
+   *
+   * A nyom AZ `AuditLog` sorban keletkezik, a törléssel EGY tranzakcióban - de
+   * a tároló csak akkor tud nevet írni bele, ha a szolgáltatás átadja neki. Ez
+   * a bekötés KÜLÖN tud elmaradni, és ha elmarad, a törlés ATTÓL MÉG SIKERÜL:
+   * a fájl eltűnik, a napló pedig „ismeretlen" törlőt rögzít. Semmi nem hibázik.
+   *
+   * AZ AZONOSÍTÓRA MÉRÜNK, NEM A HÍVÁS ALAKJÁRA: nem az a kérdés, hány
+   * argumentummal hívjuk a tárolót, hanem hogy a HÍVÓ személye megérkezik-e.
+   */
+  it("a törlő azonosítója eljut a tárolóig", async () => {
+    let kapott: string | null | undefined = undefined;
+    const service = serviceWith({
+      deleteDocument: async (
+        _jobId: string,
+        _documentId: string,
+        actorUserId: string | null,
+      ) => {
+        kapott = actorUserId;
+        return { id: "doc-1", fileName: "kep.jpg", storageKey: null };
+      },
+    });
+
+    await service.deleteDocument("job-1", "doc-1", BELSOS);
+
+    assert.equal(kapott, BELSOS.id);
+  });
+
   it("NEM LÉTEZŐ csatolmány: 404", async () => {
     await assert.rejects(
       () => serviceWith().deleteDocument("job-1", "doc-1", BELSOS),
