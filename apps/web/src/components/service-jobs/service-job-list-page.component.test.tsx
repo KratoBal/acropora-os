@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ServiceJobListResponse, Session } from "@acropora/types";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ServiceJobListPage } from "./service-job-list-page";
 
@@ -11,6 +11,21 @@ vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session: auth.session }),
 }));
 vi.mock("@/lib/api/service-jobs", () => ({ serviceJobsApi: api }));
+
+/**
+ * A KAPCSOLAT ALLAPOTAT A `navigator.onLine` MONDJA MEG, es a jsdom
+ * alapertelmezese `true` -- tehat a sav ki sem rajzolodna. Ez a ket sor
+ * allitja at, az `afterEach` pedig visszaadja, hogy a tobbi allitas ne egy
+ * halozat nelkuli vilagban fusson.
+ */
+function setOnLine(value: boolean) {
+  Object.defineProperty(window.navigator, "onLine", {
+    value,
+    configurable: true,
+  });
+}
+
+afterEach(() => setOnLine(true));
 
 const session: Session = {
   id: "session-1",
@@ -160,5 +175,34 @@ describe("ServiceJobListPage", () => {
         "Nyitott hibajegy jelenleg nincs. A lezártakat a fenti füleken nézheted meg.",
       ),
     ).toBeTruthy();
+  });
+
+  /**
+   * A SAV A LAP ALLAPOTAROL BESZEL, NEM A KAPCSOLATROL -- ES EZT KET ALLITAS
+   * MERI, NEM EGY.
+   *
+   * A komponens tipusa CSAK azt kenyszeriti ki, hogy a lap VALASSZON a harom
+   * mondat kozul; azt nem, hogy JOL valasszon. Egy lap, ami allandoan
+   * `loaded`-ot ad, a tipusellenorzesen atmegy -- es hideg betolteskor azt
+   * allitana, hogy "a legutobb betoltott adatokat latod", holott a kepernyo
+   * ures. A ket allitas EGYUTT fogja meg: az egyik rogzul-`loaded`-re, a masik
+   * rogzul-`empty`-re pirosodik.
+   */
+  it("kapcsolat nélkül, betöltött lista mellett a frissítésről beszél", async () => {
+    setOnLine(false);
+    render(<ServiceJobListPage />);
+    await screen.findByText("Alkatrészre vár");
+
+    expect(await screen.findByText(/legutóbb betöltött/)).toBeTruthy();
+  });
+
+  it("kapcsolat nélkül, üres képernyőn azt mondja, hogy ezért nincs adat", async () => {
+    // SOHA NEM TELJESULO valasz: a lap a "meg semmi nem toltodott be"
+    // allapotban marad, vagyis pont abban, amirol a masodik mondat szol.
+    api.list.mockReturnValue(new Promise(() => {}));
+    setOnLine(false);
+    render(<ServiceJobListPage />);
+
+    expect(await screen.findByText(/nem tudtuk betölteni/)).toBeTruthy();
   });
 });

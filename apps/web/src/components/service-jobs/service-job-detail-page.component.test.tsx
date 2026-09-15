@@ -10,7 +10,7 @@ import type {
   ServiceJobDocumentSummary,
   Session,
 } from "@acropora/types";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ServiceJobDetailPage } from "./service-job-detail-page";
 
@@ -38,6 +38,21 @@ vi.mock("@/components/auth/auth-provider", () => ({
 }));
 vi.mock("@/lib/api/service-jobs", () => ({ serviceJobsApi: api }));
 vi.mock("@/lib/api/worksheets", () => ({ worksheetsApi: sheets }));
+
+/**
+ * A KAPCSOLAT ALLAPOTAT A `navigator.onLine` MONDJA MEG, es a jsdom
+ * alapertelmezese `true` -- tehat a sav ki sem rajzolodna. Ez a ket sor
+ * allitja at, az `afterEach` pedig visszaadja, hogy a tobbi allitas ne egy
+ * halozat nelkuli vilagban fusson.
+ */
+function setOnLine(value: boolean) {
+  Object.defineProperty(window.navigator, "onLine", {
+    value,
+    configurable: true,
+  });
+}
+
+afterEach(() => setOnLine(true));
 
 function sessionAs(role: Session["user"]["role"]): Session {
   return {
@@ -749,5 +764,31 @@ describe("ServiceJobDetailPage", () => {
       screen.queryByRole("button", { name: "Delegálás mentése" }),
     ).toBeNull();
     expect(screen.getByText("Delegált kollégák")).toBeTruthy();
+  });
+
+  /**
+   * A SAV A LAP ALLAPOTAROL BESZEL -- ES A RESZLETLAPON EZ KULON MERENDO,
+   * MERT A KET ALLAPOT KET KULONBOZO VISSZATERESBEN AL.
+   *
+   * A kesz jegy es a csontvaz NEM ugyanabbol az agbol rajzolodik ki: a lap a
+   * betoltes alatt korabban visszater. Ha a sav csak a lenti agon allna, hideg
+   * betolteskor -- epp amikor a kepernyo ures -- meg sem jelenne.
+   */
+  it("kapcsolat nélkül, betöltött jegy mellett a frissítésről beszél", async () => {
+    setOnLine(false);
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    await screen.findByText("Cápasuli szivattyú leállt");
+
+    expect(await screen.findByText(/legutóbb betöltött/)).toBeTruthy();
+  });
+
+  it("kapcsolat nélkül, betöltés közben azt mondja, hogy ezért üres a lap", async () => {
+    // SOHA NEM TELJESULO valasz: a lap a csontvaz-agon marad.
+    api.detail.mockReturnValue(new Promise(() => {}));
+    setOnLine(false);
+    render(<ServiceJobDetailPage jobId="job-1" />);
+
+    expect(await screen.findByText(/nem tudtuk betölteni/)).toBeTruthy();
+    expect(screen.getByLabelText("Hibajegy betöltése")).toBeTruthy();
   });
 });

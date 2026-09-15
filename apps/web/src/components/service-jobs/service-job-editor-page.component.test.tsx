@@ -9,7 +9,7 @@ import type {
   Session,
   WorksheetSelectablePartnerListResponse,
 } from "@acropora/types";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ServiceJobEditorPage } from "./service-job-editor-page";
 
@@ -28,6 +28,21 @@ vi.mock("@/components/auth/auth-provider", () => ({
 }));
 vi.mock("@/lib/api/service-jobs", () => ({ serviceJobsApi: api }));
 vi.mock("@/lib/api/worksheets", () => ({ worksheetsApi: sheets }));
+
+/**
+ * A KAPCSOLAT ALLAPOTAT A `navigator.onLine` MONDJA MEG, es a jsdom
+ * alapertelmezese `true` -- tehat a sav ki sem rajzolodna. Ez a ket sor
+ * allitja at, az `afterEach` pedig visszaadja, hogy a tobbi allitas ne egy
+ * halozat nelkuli vilagban fusson.
+ */
+function setOnLine(value: boolean) {
+  Object.defineProperty(window.navigator, "onLine", {
+    value,
+    configurable: true,
+  });
+}
+
+afterEach(() => setOnLine(true));
 
 function sessionAs(role: Session["user"]["role"]): Session {
   return {
@@ -602,5 +617,20 @@ describe("ServiceJobEditorPage", () => {
 
     await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
     expect(api.uploadDocument).not.toHaveBeenCalled();
+  });
+
+  /**
+   * AZ URLAPON A TET NEM A FRISSITES, HANEM A MENTES.
+   *
+   * Itt nincs "betoltott adat", amit a felhasznalo nezhetne: egy ures urlap
+   * all. A ket megjelenito lap mondata (hogy a legutobb betoltott adatokat
+   * latod) ezen a lapon MINDIG hamis lenne, kapcsolattal is. Ez az allitas
+   * pontosan azt a tevesztest fogja meg.
+   */
+  it("kapcsolat nélkül az űrlapon a mentésről beszél, nem a frissítésről", async () => {
+    setOnLine(false);
+    render(<ServiceJobEditorPage />);
+
+    expect(await screen.findByText(/mentés csak akkor megy át/)).toBeTruthy();
   });
 });
