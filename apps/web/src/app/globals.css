@@ -1,10 +1,145 @@
 @import "tailwindcss";
 @source "../../../../packages/ui/src";
 
+/**
+ * AZ ACROPORA OS VIZUALIS ARCULATA, Balazs 2026-09-15-i prototipusa szerint
+ * (exchange/service-redesign-2026-09). Ez a fajl a valtozas EGESZE: a
+ * betutipusok, a szinek es a sarok-meret innen szolnak mind az 56 belso
+ * oldalra.
+ *
+ * ===================================================================
+ * MIERT A KET MEGLEVO SKALA CELPONTJAT IRJUK AT, ES NEM A HIVASI HELYEKET
+ * ===================================================================
+ *
+ * A felulet ma NEVEZETT Tailwind-skalakkal szinez: merve 875 `slate-*` es
+ * `teal-*` elofordulas az apps/web-ben, plusz 71 a packages/ui-ban es 24 a
+ * hejban -- kozel het­ven fajlban, amibol a tobbseg egyetlen most futo
+ * munkahoz sem tartozik.
+ *
+ * Harom uton lehetne atallni, es a masodik ketto rosszabb:
+ *
+ *   a skalak CELPONTJAT irjuk at (ez)   egy fajl, egy sorral visszavonhato,
+ *                                       es EGYETLEN nyitott aggal sem utkozik
+ *   minden hivasi helyet atirunk        ~970 sor hetven fajlban, es minden
+ *                                       nyitott PR-rel konfliktusba kerul
+ *   parhuzamos osztalyneveket vezetunk  a ket keszlet egymas mellett el, es
+ *   be, es fokozatosan allunk at        az atmenet kozben kevert a felulet
+ *
+ * Balazs azt kerte, hogy a valtozas KULON legyen visszavonhato a rajta epulo
+ * munkatol. Ez az alak teszi azza: ha a lila nem tetszik, ez a blokk kikerul,
+ * es minden oldal visszaall, anelkul hogy barmi mas elveszne.
+ *
+ * AMIT EZ KOSTOL, KIMONDVA: a `teal-*` innentol NEM turkiz, a `slate-*` pedig
+ * nem a Tailwind hideg szurkeje. A NEV HAZUDIK, es ez valodi ar -- aki uj kodot
+ * ir, `teal-700`-t latva turkizre szamitana. Ezert all lentebb a KET UJ,
+ * IGAZ NEVU keszlet (`brand-*`, `ink`, `nav`, `paper`, `line`, `coral`): UJ
+ * KODBAN AZOKAT HASZNALD. A regi nevek atnevezese kulon, mechanikus kor lesz,
+ * es nem ebbe a PR-be valo: ott a diff hetven fajlra nyulna, es pont azt a
+ * visszavonhatosagot venne el, amiert ez az alak keszult.
+ */
+@theme {
+  /* ---- A SEMLEGES RAMPA. A prototipus szurkei lilaba hajlanak, nem kekbe:
+     a `--paper` (#f6f5f8) es az `--ink` (#26233b) kozott interpolalt sor. ---- */
+  --color-slate-50: #f6f5f8;
+  --color-slate-100: #eeecf3;
+  --color-slate-200: #e5e2eb;
+  --color-slate-300: #d3cfdd;
+  --color-slate-400: #9a95a8;
+  --color-slate-500: #686477;
+  --color-slate-600: #565269;
+  --color-slate-700: #454155;
+  --color-slate-800: #373347;
+  --color-slate-900: #2f2b40;
+  --color-slate-950: #26233b;
+
+  /* ---- A KIEMELO SZIN. A prototipus `--purple`-je (#6150bd) a 700-as
+     fokozaton all, mert a felulet azt hasznalja a legtobbet (28 hely). ---- */
+  --color-teal-50: #f4f1fb;
+  --color-teal-100: #ede8ff;
+  --color-teal-200: #ded5fa;
+  --color-teal-300: #c3b5ee;
+  --color-teal-400: #9e80e8;
+  --color-teal-500: #7a68cc;
+  --color-teal-600: #6f5cc7;
+  --color-teal-700: #6150bd;
+  --color-teal-800: #4d3e9c;
+  --color-teal-900: #3f3280;
+  --color-teal-950: #292346;
+
+  /* ---- AZ ALLAPOT-SZINEK. A prototipus part ad mindegyikhez (hatter es
+     szoveg); a kozbenso fokozatok azokbol szarmaznak. Csak a TENYLEG
+     HASZNALT fokozatok allnak itt: egy kitalalt teljes rampa olyasmit
+     allitana, amit senki nem mert le. ---- */
+  --color-emerald-50: #e5f3eb;
+  --color-emerald-200: #cde4d7;
+  --color-emerald-600: #2f7a5c;
+  --color-emerald-700: #26664d;
+  --color-emerald-800: #1f5440;
+  --color-emerald-900: #194433;
+
+  --color-amber-50: #fff1db;
+  --color-amber-200: #f3ddba;
+  --color-amber-500: #a36522;
+  --color-amber-600: #955c1f;
+  --color-amber-700: #86521b;
+  --color-amber-800: #6d4216;
+
+  --color-rose-50: #fce9ec;
+  --color-rose-200: #f1ccd3;
+  --color-rose-500: #b93b51;
+  --color-rose-600: #ae364a;
+  --color-rose-700: #a33145;
+  --color-rose-900: #732231;
+
+  --color-sky-50: #e9f0ff;
+  --color-sky-100: #dbe6fb;
+  --color-sky-200: #c8d7f3;
+  --color-sky-600: #3c68ab;
+  --color-sky-700: #355e9a;
+  --color-sky-800: #2c4e80;
+  --color-sky-900: #233f67;
+
+  /* ---- AZ IGAZ NEVU KESZLET. UJ KOD EZEKET HASZNALJA. ---- */
+  --color-brand-50: #f4f1fb;
+  --color-brand-100: #ede8ff;
+  --color-brand-200: #ded5fa;
+  --color-brand-300: #c3b5ee;
+  --color-brand-400: #9e80e8;
+  --color-brand-500: #7a68cc;
+  --color-brand-600: #6f5cc7;
+  --color-brand-700: #6150bd;
+  --color-brand-800: #4d3e9c;
+  --color-brand-900: #3f3280;
+
+  /** A szoveg legsotetebb arnyalata. */
+  --color-ink: #26233b;
+  /** A halvany, masodlagos szoveg. */
+  --color-muted: #686477;
+  /** Az oldalsav hattere. */
+  --color-nav: #292346;
+  /** Az oldalsav halvany szovege -- sotet alapon a `muted` olvashatatlan. */
+  --color-nav-muted: #b8b1cf;
+  /** A lapok hattere a hej belsejeben. */
+  --color-paper: #f6f5f8;
+  /** A keretek es elvalasztok. */
+  --color-line: #e5e2eb;
+  /** A masodlagos kiemelo szin: csak hangsulyra, nem allapotra. */
+  --color-coral: #f2a78d;
+  --color-coral-ink: #663525;
+
+  /* ---- A SAROK. A prototipus paneljei 16 pixelesek; a `Card` `rounded-xl`-t
+     hasznal, tehat a token atallitasa eleg. ---- */
+  --radius-xl: 16px;
+
+  --font-sans: var(--font-dm-sans), Arial, Helvetica, sans-serif;
+  /** A cimek betutipusa. A prototipusban a h1/h2/h3 Manrope. */
+  --font-display: var(--font-manrope), Arial, Helvetica, sans-serif;
+}
+
 :root {
   color-scheme: light;
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  --background: #f6f5f8;
+  --foreground: #26233b;
 }
 
 * {
@@ -15,8 +150,23 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-inter), Arial, Helvetica, sans-serif;
+  font-family: var(--font-dm-sans), Arial, Helvetica, sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/**
+ * A CIMEK MANROPE-PAL, ELEM-SZABALLYAL.
+ *
+ * A felulet cimei `text-2xl font-bold` alakban allnak, betutipus-osztaly
+ * nelkul -- egy `font-display` osztalyt 56 oldalon kellene elhelyezni, es a
+ * kimaradt helyek csendben a torzs betujevel maradnanak. Egy elem-szabaly
+ * mindet eltalalja, es aki mast akar, felulirja egy osztallyal.
+ */
+h1,
+h2,
+h3 {
+  font-family: var(--font-manrope), Arial, Helvetica, sans-serif;
+  letter-spacing: -0.02em;
 }
 
 button,
@@ -25,6 +175,6 @@ input {
 }
 
 ::selection {
-  background: #ccfbf1;
-  color: #134e4a;
+  background: #ede8ff;
+  color: #3f3280;
 }
