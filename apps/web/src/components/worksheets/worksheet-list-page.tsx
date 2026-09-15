@@ -134,6 +134,16 @@ export function WorksheetListPage() {
    * Egyideju modositas mellett a csempek es a sorok elterhetnek egy tetellel,
    * es a kovetkezo betoltesnel helyreall. Ha ez valaha nem elfogadhato, a
    * megoldas egy kozos tranzakcio, nem egy ujabb komment.
+   *
+   * ES A HATAR, AMI EZT ELDONTI -- NEM AZ EZREDMASODPERC, HANEM A SZAM SZEREPE
+   * (acrobot dontese, 2026-09-15): amig a szam CSAK TAJEKOZTAT, ez a
+   * kulonbseg nem szamit. Ha a szambol valaha MUVELET lesz -- "kijelolom mind
+   * a szazhuszonhetet", vagy export, aminek a fejlecebe beirjuk, hogy ennyi
+   * van --, AKKOR kell a kozos pillanat, mert akkor a szam IGERETTE valik.
+   *
+   * Ez feltetel, nem elvi allaspont. E nelkul a kovetkezo olvaso ugy erti,
+   * hogy a kozos tranzakcio ELVBOL nem kell, es nem fogja eszrevenni, amikor
+   * a feltetel megfordul alatta.
    */
   useEffect(() => {
     const timer = window.setTimeout(() => {
