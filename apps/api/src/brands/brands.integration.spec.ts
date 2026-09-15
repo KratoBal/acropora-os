@@ -39,6 +39,20 @@ const FEJLESZTOI_EMAIL = "owner@acropora.local";
 /** A suite indulasa: a seedelt felhasznalo sorai kozul ez valasztja ki a mieinket. */
 const SUITE_KEZDET = new Date();
 
+/**
+ * A SUITE SAJAT MARKAI, EGY HELYEN -- mert ket kerdes epul ra, es ha ketfele
+ * allna, a ketto elcsuszna. A torles hasznalja, ES az esemenyeik kiolvasasa.
+ */
+const SAJAT_MARKAK: Prisma.BrandWhereInput = {
+  OR: [
+    { slug: { startsWith: "brand-test" } },
+    { slug: { startsWith: "m1-test" } },
+    {
+      normalizedName: { in: ["quendorium", "vexalune", "qzxvoria", "zorblax"] },
+    },
+  ],
+};
+
 async function cleanup() {
   const batches = await prisma.catalogImportBatch.findMany({
     where: { sourceFileName: assistantFile },
@@ -50,34 +64,45 @@ async function cleanup() {
   await prisma.catalogImportBatch.deleteMany({
     where: { sourceFileName: assistantFile },
   });
-  await prisma.domainEvent.deleteMany({
-    where: {
-      aggregateType: "Brand",
-      OR: [
-        { actorUserId: actorId },
-        { payload: { path: ["name"], equals: "M1 Test Auth Actor" } },
-      ],
-    },
+  /**
+   * A MARKA-ESEMENYEK A MARKA AZONOSITOJA SZERINT MENNEK, NEM AKTOR ES NEM NEV
+   * SZERINT.
+   *
+   * ITT ALLT KET FELSOROLT FELTETEL (`actorUserId: actorId`, illetve a
+   * `payload.name` egyetlen nevre), es MERVE hagyott bent egy sort (verify run
+   * 34981069257, a CI adatbazisan): egy `brand.created` esemenyt, aminek az
+   * aktora a FEJLESZTOI felhasznalo feloldott azonositoja, a markaja pedig nem
+   * az az egy nev. Ket teszt jelentkezik be ezzel az identitassal; az egyiket a
+   * nev-feltetel elkapta, a masikat semmi.
+   *
+   * AZ AZONOSITO-ALAPU SZURES A KETTOT HELYETTESITI, es a mercéje MERT: a
+   * `Brand` tabla sor-kulonbsege ugyanabban a futasban NULLA volt, vagyis a
+   * `SAJAT_MARKAK` feltetel a suite MINDEN markajat lefedi. Ami azokra a
+   * sorokra hivatkozik, az tehat szinten teljes -- egy harmadik nev-literal
+   * viszont megint csak a KOVETKEZO tesztig tartana.
+   *
+   * ES ELOSZOR OLVASUNK, AZTAN TORLUNK: a `DomainEvent.aggregateId` sima
+   * szoveg, nem kulso kulcs, tehat a markak torlese utan mar semmi nem mondana
+   * meg, melyik esemeny volt a mienk.
+   */
+  const sajatMarkak = await prisma.brand.findMany({
+    where: SAJAT_MARKAK,
+    select: { id: true },
   });
+  if (sajatMarkak.length > 0)
+    await prisma.domainEvent.deleteMany({
+      where: {
+        aggregateType: "Brand",
+        aggregateId: { in: sajatMarkak.map((marka) => marka.id) },
+      },
+    });
   await prisma.externalReference.deleteMany({
     where: { entityType: "BRAND", externalId: { startsWith: "BRAND-TEST" } },
   });
   await prisma.product.deleteMany({
     where: { name: { startsWith: "Brand test" } },
   });
-  await prisma.brand.deleteMany({
-    where: {
-      OR: [
-        { slug: { startsWith: "brand-test" } },
-        { slug: { startsWith: "m1-test" } },
-        {
-          normalizedName: {
-            in: ["quendorium", "vexalune", "qzxvoria", "zorblax"],
-          },
-        },
-      ],
-    },
-  });
+  await prisma.brand.deleteMany({ where: SAJAT_MARKAK });
   await prisma.user.deleteMany({ where: { id: actorId } });
 
   /**

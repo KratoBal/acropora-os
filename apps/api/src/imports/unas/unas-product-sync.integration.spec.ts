@@ -193,6 +193,31 @@ async function cleanup() {
     .filter((sor) => sor.entityType === "Category")
     .map((sor) => sor.entityId);
 
+  /**
+   * A SAJAT TERMEKEINK ESEMENYEI, AZONOSITO SZERINT -- MERT A FENTI
+   * `correlationId` SZURO SZERKEZETILEG NEM LATJA OKET.
+   *
+   * MERVE, NEM KOVETKEZTETVE (verify run 34981069257, a CI adatbazisan, a
+   * futas elotti es utani azonosito-halmaz kulonbsegebol): harom
+   * `product.catalog-authority.transferred` sor maradt bent, mindharom
+   * `correlationId` ES `actorUserId` nelkul. A suite pontosan HAROMSZOR hivja
+   * a `takeCatalogAuthority`-t, mindannyiszor aktor nelkul, es az a fuggveny
+   * nem ad `correlationId`-t -- tehat a `{ correlationId: { not: null } }`
+   * feltetel nem "kihagyta" oket, hanem nem is illeszkedhetett rajuk.
+   *
+   * A TERMEK-AZONOSITOKAT NEM KEZZEL SOROLOM: ugyanaz a `termekIdk`, amibol a
+   * termekek torlese is megy. Egy kezzel irt lista pontosan a KOVETKEZO
+   * esemenyt hagyna ki -- azt, amiert ez a sor letezik.
+   *
+   * ES A TORLES ELOBB VAN, MINT A TERMEKEKE: a `DomainEvent.aggregateId` sima
+   * szoveg, nem kulso kulcs. Ha a termekek elobb mennek el, az esemenyek
+   * ottmaradnak, es semmi nem mondja meg tobbe, melyek voltak a mieink.
+   */
+  if (termekIdk.length > 0)
+    await prisma.domainEvent.deleteMany({
+      where: { aggregateType: "Product", aggregateId: { in: termekIdk } },
+    });
+
   await prisma.externalReference.deleteMany({ where: { system: "UNAS" } });
   if (termekIdk.length > 0)
     await prisma.product.deleteMany({ where: { id: { in: termekIdk } } });
