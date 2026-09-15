@@ -400,3 +400,60 @@ describe("WorksheetDetailPage és az aláírókód", () => {
     expect((gomb as HTMLButtonElement).disabled).toBe(true);
   });
 });
+
+/**
+ * AZ ADATLAP UJ SZERKEZETE, Balazs 2026-09-15-i designjabol.
+ *
+ * Ket dolgot merunk, es mind a ketto olyan, aminek az elromlasa NEMA lenne: az
+ * osszegek egy MASIK helyre kerultek (a tablazat lababol a jobb hasabba), es a
+ * fejlecben megcserelodott a sorszam es a targy.
+ */
+describe("WorksheetDetailPage adatlap-szerkezet", () => {
+  beforeEach(() => {
+    auth.session = session;
+    api.detail.mockReset().mockResolvedValue(detail(null));
+    api.assignableUsers.mockResolvedValue({ items: [] });
+    api.signers.mockResolvedValue({ items: [], emptyReason: null });
+  });
+
+  /**
+   * AZ OSSZEGEK A HELYUKON, ES NEM FELCSERELVE.
+   *
+   * Harom szam, harom cimke, egymas alatt -- a csere (nettot irni a brutto
+   * helyere) semmilyen hibat nem okoz, es egy pillantasra helyesnek latszik.
+   * Az allitas ezert a CIMKEHEZ koti az erteket, nem csak azt nezi, hogy a
+   * szamok megjelennek valahol a lapon.
+   */
+  it("az összesítésben a nettó, az áfa és a bruttó a saját sorában áll", async () => {
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+    await screen.findByText("Összesítés");
+
+    const sorErteke = (cimke: string) => {
+      const label = screen.getByText(cimke);
+      // A cimke es az ertek EGY sorban all, testverkent: a szulo szovege
+      // ezert a ketto osszege, es az ertek az, ami a cimke utan marad.
+      return (label.parentElement?.textContent ?? "").replace(cimke, "").trim();
+    };
+
+    const szam = (value: string) => value.replace(/\D/g, "");
+    expect(szam(sorErteke("Nettó összeg"))).toBe("30000");
+    expect(szam(sorErteke("ÁFA"))).toBe("8100");
+    expect(szam(sorErteke("Bruttó összeg"))).toBe("38100");
+  });
+
+  /**
+   * A FEJLECBEN A TARGY A CIM, A SORSZAM A FOLOTTE ALLO KIS SOR.
+   *
+   * Forditva volt, es a prototipus forditja meg: a kollega a munka TARGYARA
+   * emlekszik. Az allitas a SZEREPRE megy (`heading`), nem arra, hogy a szoveg
+   * valahol megjelenik a lapon -- a sorszam ugyanis tovabbra is ott all, csak
+   * nem cimkent.
+   */
+  it("a lap címe a munka tárgya, nem a munkalapszám", async () => {
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+
+    const cim = await screen.findByRole("heading", { level: 1 });
+    expect(cim.textContent).toBe("Kompresszorok bevizsgálása");
+    expect(screen.getByText("BIO-2026-001/1")).toBeTruthy();
+  });
+});
