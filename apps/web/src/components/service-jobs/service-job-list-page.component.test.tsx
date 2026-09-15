@@ -2,6 +2,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ServiceJobListResponse, Session } from "@acropora/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  ServiceOfflineNotice,
+  type ServiceOfflineState,
+} from "@/components/service/service-offline-notice";
 import { ServiceJobListPage } from "./service-job-list-page";
 
 const api = vi.hoisted(() => ({ list: vi.fn() }));
@@ -26,6 +30,30 @@ function setOnLine(value: boolean) {
 }
 
 afterEach(() => setOnLine(true));
+
+/**
+ * A VART MONDATOT A KOMPONENSTOL KERDEZEM MEG, NEM BEGEPELEM.
+ *
+ * Ez a lap allitasa arrol szol, hogy a lap JOL VALASZT a harom allapot kozul
+ * -- nem arrol, hogy mi a mondat szovege. A szoveg a save, es sajat tesztje
+ * van ra, ami azt is allitja, hogy a harom mondat KULONBOZIK. Ha ide beirnam
+ * a mondatot, ket helyen allna ugyanaz az igazsag, es a lap tesztje pirosodna
+ * egy PUSZTA ATFOGALMAZASTOL.
+ *
+ * MERVE, NEM FELTEVES (2026-09-15): a #693 pontosan ezt tette -- az urlap
+ * mondatat atirta, a `form` kindhez nem nyult --, es a begepelt valtozat
+ * azonnal pirosra valtott a friss fo agon, holott a lapok viselkedese nem
+ * valtozott.
+ */
+function savSzovege(kind: ServiceOfflineState["kind"]): string {
+  setOnLine(false);
+  const { container, unmount } = render(
+    <ServiceOfflineNotice state={{ kind }} />,
+  );
+  const szoveg = container.textContent ?? "";
+  unmount();
+  return szoveg;
+}
 
 const session: Session = {
   id: "session-1",
@@ -189,20 +217,20 @@ describe("ServiceJobListPage", () => {
    * rogzul-`empty`-re pirosodik.
    */
   it("kapcsolat nélkül, betöltött lista mellett a frissítésről beszél", async () => {
-    setOnLine(false);
+    const vart = savSzovege("loaded");
     render(<ServiceJobListPage />);
     await screen.findByText("Alkatrészre vár");
 
-    expect(await screen.findByText(/legutóbb betöltött/)).toBeTruthy();
+    expect(await screen.findByText(vart)).toBeTruthy();
   });
 
   it("kapcsolat nélkül, üres képernyőn azt mondja, hogy ezért nincs adat", async () => {
     // SOHA NEM TELJESULO valasz: a lap a "meg semmi nem toltodott be"
     // allapotban marad, vagyis pont abban, amirol a masodik mondat szol.
+    const vart = savSzovege("empty");
     api.list.mockReturnValue(new Promise(() => {}));
-    setOnLine(false);
     render(<ServiceJobListPage />);
 
-    expect(await screen.findByText(/nem tudtuk betölteni/)).toBeTruthy();
+    expect(await screen.findByText(vart)).toBeTruthy();
   });
 });
