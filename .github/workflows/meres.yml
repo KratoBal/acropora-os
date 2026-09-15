@@ -1,0 +1,125 @@
+name: Meres
+
+# A MERES-AGAK SAJAT KAPUJA -- ES A SZIN IRANYA ITT MEGFORDUL.
+#
+# Egy meres-kor SZANDEKOSAN ront el valamit, tehat a rendes CI-ben piros. A piros
+# viszont kifele megkulonboztethetetlen egy elromlott fejlesztestol: a GitHub
+# ertesito email targyat NEM MI IRJUK ("Run failed: CI - <ag> (<sha>)"), es
+# semmilyen cimke, ag-nev vagy commit-cim nem tudja atirni. Merve 2026-09-15:
+# Balazs pontosan ezt a levelet kapta a meres/mind-az-otvenhat-2 korrol, es harom
+# meres-futast "3 piros PR"-kent olvasott -- holott egyiken sem volt PR, es negy
+# kulon jel mondta, hogy szandekos.
+#
+# AMIT EZ NEM CSINAL: nem rejti el a futast. Ha a meres-agon egyaltalan nem futna
+# CI, nem lenne level -- de NAPLO sem, es a naplora epult az, hogy a meres-agakat
+# torolni lehet (2026-09-15: harmat toroltunk ugy, hogy a bizonyitek a futasban
+# maradt). A futas tehat megmarad, csak a VERDIKTJE fordul meg.
+#
+#     ZOLD  = a szandekos rontas elsult, a kor MERT valamit
+#     PIROS = a kor NEM mert semmit -- ez az igazi baj, es errol JOJJON level
+#
+# A ZOLD FELTETELE NEM "ELBUKOTT", hanem hogy a VART NYOMOK megjelentek. Ez a
+# kulonbseg tartja meressé: egy "a bukas a vart eredmeny" alaku kapu barmilyen
+# osszeomlast sikernek olvasna. Az agnak sajat `meres-vart.txt`-t kell vinnie;
+# enelkul a kapu megall (exit 2), nem enged at.
+
+on:
+  push:
+    branches:
+      - "meres/**"
+
+permissions:
+  contents: read
+
+env:
+  DATABASE_URL: postgresql://acropora:acropora@localhost:5432/acropora_ci?schema=public
+  REDIS_URL: redis://localhost:6379
+  API_URL: http://127.0.0.1:3001
+
+jobs:
+  meres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: acropora_ci
+          POSTGRES_USER: acropora
+          POSTGRES_PASSWORD: acropora
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U acropora -d acropora_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install mobile dependencies
+        run: npm --prefix apps/mobile ci --ignore-scripts --no-audit --no-fund
+
+      - name: Generate Prisma Client
+        run: pnpm prisma:generate
+
+      - name: Deploy migrations to empty PostgreSQL
+        run: pnpm prisma:deploy
+
+      - name: Seed development reference data
+        run: pnpm prisma:seed
+
+      # A CSOMAGOK EPITESE, ES EZ NEM MASOLASI HIBA VOLT, HANEM MERT LELET.
+      #
+      # Az elso valtozatom a `ci.yml` beallito lepeseit vette at a seedig, es ott
+      # megallt -- a rendes kapuban ugyanis a `pnpm test` (turbo) epiti fel a
+      # csomagokat, mielott az integracios lepes sorra kerul. Itt az a lepes
+      # nincs, tehat a `@acropora/database` `dist`-je nem letezett, es MIND a
+      # huszonkilenc integracios spec ugyanazzal a hibaval allt meg:
+      #
+      #     Cannot find module '.../packages/database/dist/index.js'
+      #
+      # A kapu ezt HELYESEN pirosnak olvasta (a vart nyomok nem jelentek meg),
+      # de a valodi ok nem a meres volt, hanem a hianyzo epites. Merve a
+      # meres/bekotes-proba agon, futas 35010209274.
+      - name: Build workspace packages
+        run: pnpm build
+
+      # A KET PARANCS UGYANUGY FUT, MINT A RENDES KAPUBAN, ES A BUKASUK ITT NEM
+      # VERDIKT: a meres-koron epp az a dolguk, hogy elbukjanak. A verdiktet
+      # egyedul a lenti kapu mondja ki.
+      - name: Integration suites (a bukas itt VARHATO)
+        run: |
+          set -o pipefail
+          naplo="$RUNNER_TEMP/meres-tap.log"
+          pnpm --filter @acropora/api test:integration 2>&1 | tee "$naplo" || true
+          pnpm --filter @acropora/api test:brands:integration 2>&1 | tee -a "$naplo" || true
+
+      - name: A kor MERT-e valamit
+        run: node scripts/meres-kapu.mjs "$RUNNER_TEMP/meres-tap.log" meres-vart.txt

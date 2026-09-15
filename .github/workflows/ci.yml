@@ -1,7 +1,17 @@
 name: CI
 
 on:
+  # A MERES-AGAK KIMARADNAK, ES HELYETTUK A `meres.yml` FUT.
+  #
+  # Nem elrejtes: ott is fut CI, ugyanazokkal a suite-okkal, es a naplo ugyanugy
+  # megmarad a GitHubon (arra epult, hogy a meres-agakat torolni lehet). Ami
+  # elter, az a VERDIKT IRANYA: azon az agon a szandekos rontas ELSULESE a zold,
+  # es a "nem mert semmit" a piros. Enelkul minden meres-kor egy "Run failed"
+  # levelet kuld, amit kivulrol nem lehet megkulonboztetni egy elromlott
+  # fejlesztestol -- a targyat a GitHub irja, es semmilyen cimke nem irja at.
   push:
+    branches-ignore:
+      - "meres/**"
   pull_request:
 
 permissions:

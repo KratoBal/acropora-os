@@ -1,0 +1,8 @@
+> @acropora/api@0.1.0 test:integration /home/runner/work/acropora-os/acropora-os/apps/api
+> tsc -p tsconfig.test.json && specs=$(find test-dist -name '*.integration.spec.js' ! -name 'brands.integration.spec.js') && { [ -n "$specs" ] || { echo 'Nem talaltam integracios spec fajlt - nem jelentek sikert.' >&2; exit 1; }; } && RUN_DB_INTEGRATION=1 node --test --test-concurrency=1 $specs
+
+TAP version 13
+# Subtest: AuthUserResolver.resolveByEmailAndPassword integration
+    # Subtest: resolves an active user with the correct password
+    ok 1 - resolves an active user with the correct password
+      ---
