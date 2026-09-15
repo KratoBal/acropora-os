@@ -23,6 +23,13 @@ const gate = integrationDatabaseGate(process.env);
 const TEST_EMAIL_DOMAIN = "ingest-integration.invalid";
 const TEST_SLUG_PREFIX = "ingest-integration-";
 
+// When this suite started. The audit rows it writes carry no prefix of their
+// own - the ingest stamps them with the task's id - so the only axis left for
+// counting them independently of the id list the cleanup works from is time.
+// Safe here because the integration specs run one at a time
+// (`--test-concurrency=1`), so no other suite is writing while this one does.
+const SUITE_KEZDET = new Date();
+
 describe("Task ingest integration", { skip: gate.mode === "skip" }, () => {
   const suffix = Date.now();
   const tokens = new ServiceTokenRepository();
@@ -66,6 +73,35 @@ describe("Task ingest integration", { skip: gate.mode === "skip" }, () => {
   after(async () => {
     if (gate.mode !== "run") return;
     await removeLeftovers();
+    /**
+     * AND THE CLEANUP'S RESULT IS MEASURED. `removeLeftovers` skips its whole
+     * inner block when it finds no users, and every delete in it succeeds on
+     * zero rows - so a drifted domain or slug prefix looks exactly like a
+     * clean run.
+     *
+     * NEITHER COUNT USES THE LISTS THE DELETES WORK FROM. The audit rows go by
+     * action and start time rather than by the task ids, because the cleanup
+     * collects those ids through `assigneeId`: a row written for a task
+     * assigned elsewhere is precisely what it would miss, and counting the same
+     * ids back would miss it too.
+     *
+     * `Task` is not counted: `assigneeId` is required and `Cascade`, so a task
+     * cannot outlive the user it hangs from.
+     */
+    assert.equal(
+      await prisma.auditLog.count({
+        where: { action: "task.ingested", createdAt: { gte: SUITE_KEZDET } },
+      }),
+      0,
+      "the suite's audit rows survived the cleanup",
+    );
+    assert.equal(
+      await prisma.user.count({
+        where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
+      }),
+      0,
+      "the suite's users survived the cleanup",
+    );
   });
 
   /**
