@@ -18,6 +18,27 @@ import {
 import { ServiceJobEditorPage } from "./service-job-editor-page";
 
 const api = vi.hoisted(() => ({ create: vi.fn(), uploadDocument: vi.fn() }));
+/**
+ * AZ ESZKOZ-VEGPONT IS MOCKOT KAP, ES EZ NEM TELJESSEG-KEDVEERT VAN.
+ *
+ * A lap az eszkoz-valasztot a `JobAssetPicker`-en at rajzolja, az pedig a
+ * `@/lib/api/assets`-et hivja -- egy MASIK modult, mint amit a lap maga
+ * importal. Mock nelkul a hivas VALODI `fetch` lett, a relativ `/api` elotag
+ * pedig a futtato dokumentum-cimehez oldodik fel.
+ *
+ * MERVE 2026-09-15: `document.location.href` = `http://localhost:3000/`, tehat
+ * a keres cime `http://localhost:3000/api/assets` -- A NEXT DEV SZERVER PORTJA.
+ *
+ * Ket kovetkezmenye volt, es a masodik a rosszabb:
+ *   - ahol semmi nem figyel (CI, es a legtobb gep), a hivas ECONNREFUSED-del
+ *     elhal, a valaszto a HIBA-agara esik, es minden ilyen futas egy
+ *     elromlott valasztot rajzol -- csendben, mert egyik allitas sem nezi;
+ *   - ahol viszont EPP FUT a `pnpm dev`, ott VALODI keres megy a fejleszto
+ *     sajat szerverere. A teszt viselkedese igy nem a kodtol fugg, hanem
+ *     attol, mi fut meg a gepen.
+ */
+const assets = vi.hoisted(() => ({ list: vi.fn() }));
+
 const sheets = vi.hoisted(() => ({
   selectablePartners: vi.fn(),
   departments: vi.fn(),
@@ -32,6 +53,7 @@ vi.mock("@/components/auth/auth-provider", () => ({
 }));
 vi.mock("@/lib/api/service-jobs", () => ({ serviceJobsApi: api }));
 vi.mock("@/lib/api/worksheets", () => ({ worksheetsApi: sheets }));
+vi.mock("@/lib/api/assets", () => ({ assetsApi: assets }));
 
 function sessionAs(role: Session["user"]["role"]): Session {
   return {
@@ -70,6 +92,17 @@ describe("ServiceJobEditorPage", () => {
   beforeEach(() => {
     auth.session = sessionAs("SERVICE");
     api.uploadDocument.mockReset().mockResolvedValue([]);
+    /*
+      AZ ESZKOZ-LISTA ALAPBOL URES, DE LETEZIK. A valaszto csak helyszin
+      valasztasa utan hiv; ha a dupla nem adna valaszt, a `response.items`
+      dobna, es a valaszto ugyanugy a HIBA-agara esne, mint mock nelkul --
+      csak akkor mar csendben, halozati zaj nelkul. Az az allapot rosszabb
+      lenne a mainal, mert semmi nem arulna el.
+    */
+    assets.list.mockReset().mockResolvedValue({
+      items: [],
+      pagination: { page: 1, pageSize: 100, totalItems: 0, totalPages: 0 },
+    });
     /*
       A VALASZTHATO KOLLEGAK MOCKJA MINDIG ALL, akkor is, ha az adott allitas
       nem delegal. A `useAssignableUsers` a `canManage` agon AZONNAL hiv, es
@@ -352,6 +385,55 @@ describe("ServiceJobEditorPage", () => {
    * kulonbozo ag alatt ugyanaz a "Biodom" megengedett, es a kezelo a rosszat
    * valasztana.
    */
+  /**
+   * A POZITIV KONTROLL A MOCKRA -- ES NEM DISZ.
+   *
+   * A tobbi allitas ures eszkoz-listaval fut, es egy URES lista UGYANUGY NEZ
+   * KI, mint egy elhalt hivas: mindket esetben nincs jelolonegyzet a lapon.
+   * Vagyis ha a dupla holnap csendben megszunne (atnevezes, elirt modulnev),
+   * egyetlen meglevo allitas sem venne eszre.
+   *
+   * Ez az egy allitas koveteli meg, hogy a valaszto TENYLEG BETOLTSON: kiirja
+   * a helyszin egy eszkozet, nev es leltari szam szerint. Ha a hivas elhal, a
+   * lap a "nem tolthetok be" mondatra esik, es ez pirosodik ki.
+   */
+  it("helyszín választása után kiírja a helyszín eszközeit", async () => {
+    sheets.departments.mockResolvedValue({
+      items: [
+        {
+          id: "unit-1",
+          parentId: null,
+          code: "BIO",
+          name: "Biodóm",
+          isActive: true,
+        },
+      ],
+    });
+    assets.list.mockResolvedValue({
+      items: [
+        {
+          id: "asset-1",
+          assetNumber: "ESZK-000123",
+          name: "Cápasuli kompresszor",
+        },
+      ],
+      pagination: { page: 1, pageSize: 100, totalItems: 1, totalPages: 1 },
+    });
+
+    render(<ServiceJobEditorPage />);
+    fireEvent.change(await screen.findByLabelText("Partner"), {
+      target: { value: "vevo-1" },
+    });
+    fireEvent.change(await screen.findByLabelText("Helyszín"), {
+      target: { value: "unit-1" },
+    });
+
+    expect(await screen.findByText("Cápasuli kompresszor")).toBeTruthy();
+    expect(screen.getByText("ESZK-000123")).toBeTruthy();
+    // ES NEM A HIBA-AGON ALL: a ket mondat kozul pontosan az egyik igaz.
+    expect(screen.queryByText(/nem tölthetők be/)).toBeNull();
+  });
+
   it("a kivalasztott helyszint elkuldi, es teljes uttal kinalja", async () => {
     sheets.departments.mockResolvedValue({
       items: [
