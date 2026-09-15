@@ -864,7 +864,14 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                       </>
                     ) : (
                       /* A LEZÁRT JEGYEN NEM ÜRES A DOBOZ, hanem meg van mondva, miért.
-                 Egy eltűnt gombsor úgy néz ki, mint egy betöltési hiba. */
+                 Egy eltűnt gombsor úgy néz ki, mint egy betöltési hiba.
+
+                 ÉS A SZÍN ITT SZÁNDÉKOSAN NYERS, NEM SÖPRENDŐ TOKENRE: a
+                 `#635578` a kiemelt panel saját leíró-szövegének a színe
+                 (`service-detail-chrome.tsx`, `ServiceNextAction`), és NINCS
+                 hozzá token - lemérve a globals.css hatvanöt tokenje ellen. Egy
+                 „majdnem ugyanaz" megfeleltetés csendben megváltoztatná a szöveg
+                 színét a levendula háttéren. */
                       <p className="text-xs text-[#635578]">
                         Ez a hibajegy lezárult, nincs több lépése.
                       </p>
