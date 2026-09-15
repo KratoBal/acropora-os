@@ -225,23 +225,29 @@ export class ServiceJobDocumentsRepository {
         where: { id: documentId, serviceJobId },
       });
       /**
-       * A TORLES NAPLOBA KERUL, A FELTOLTES NEM -- ES EZ NEM HIANYOSSAG.
+       * A FELTOLTESNEK NINCS SAJAT SORA, MERT AMIG A FAJL FENT VAN, LATSZIK A
+       * LISTAN -- AMIKOR PEDIG ELTUNIK, A TORLES SORA VISZI MAGAVAL, AMIT ROLA
+       * TUDNI KELL.
        *
-       * Amig a csatolmany MEGVAN, a letezese a sajat nyoma: ott all a listan,
-       * letoltheto, latszik a merete. Egy torolt fajl viszont nyomtalanul
-       * eltunik, a taroloból is, es onnantol EZ a sor az egyetlen hely, ahol
-       * megmarad, hogy VOLT, es hogy ki vette le.
+       * ES A KET FELE KOZOTT EPP AZ A PILLANAT VAN, AMIERT A NAPLO LETEZIK. A
+       * "van sajat nyoma" pontosan abban az egy esetben hamis, amikor valaki a
+       * naplot OLVASSA: a fajl akkor mar nincs a listan, tehat a lista epp azt
+       * nem mutatja, amirol a kerdes szol.
        *
-       * ES AZ INDOK EGY LEPESSEL TOVABB MEGY, MINT "a lista a nyom": a feltoltes
-       * nyoma nem a lista, hanem MAGA A SOR -- az `uploadedById` es a
-       * `createdAt` mezovel egyutt. Vagyis a feltoltes MA IS naplozva van, csak
-       * nem a naploban. Ha viszont a sort toroljuk, ezzel egyutt a FELTOLTES
-       * nyoma is eltunik.
+       * Ha a sor csak annyit mondana, hogy "X torolt egy fajlt", a ket
+       * kerdes, amit ilyenkor feltesznek -- MENNYI IDEIG volt fent, es KI tette
+       * fel --, megvalaszolatlan maradna. Ezert veszi at a bejegyzes a torolt
+       * sor tartalmat.
        *
-       * EZERT VESZI AT EZ A BEJEGYZES A SOR TELJES MONDANIVALOJAT (nev, tipus,
-       * feltolto, feltoltes ideje): igy semmi nem vesz el, es epp ezert nem
-       * kell ketszer naplozni. Aki ezt "befejezi" egy feltoltes-naploval, nem
-       * hianyt potol, hanem megketszerezi azt, ami mar latszik.
+       * EZ AZ UTOLSO PILLANAT, AMIKOR EZ AZ ADAT LETEZIK. Az `uploadedById` es a
+       * `createdAt` a torles utan MEGSZUNIK -- ami csak a valtozas ELOTT all
+       * fenn, azt a valtozas idejen kell rogziteni, vagy soha.
+       *
+       * ES EGY SOR, NEM KETTO: egy kulon feltoltes-naplo megketszerezne a
+       * forgalmat azert, hogy osszeparositva ugyanezt mondja -- a parositas
+       * pedig elromolhat, egy sor viszont nem tud elcsuszni onmagatol.
+       *
+       * Aki ezt "befejezi" egy feltoltes-naploval, nem hianyt potol.
        *
        * A NYOM UGYANABBAN A TRANZAKCIOBAN KELETKEZIK, MINT A TORLES.
        *
