@@ -50,6 +50,14 @@ const gate = integrationDatabaseGate(process.env);
 
 const TEST_EMAIL_DOMAIN = "service-job-assignees-integration.invalid";
 
+/**
+ * A SUITE SAJAT HIBAJEGYEINEK ELOTAGJA. Nevet kap, mert a takaritas ES az
+ * allitas is olvassa -- ket helyen allo szoveg-literal eloszor egyezik, aztan
+ * az egyiket valaki atirja, es a takaritas nem hibazna tole, csak nem talalna
+ * semmit.
+ */
+const TEST_JOB_PREFIX = "HJ-INT-";
+
 describe(
   "ServiceJobAssignee integration",
   { skip: gate.mode === "skip" },
@@ -96,6 +104,34 @@ describe(
 
     after(async () => {
       await removeLeftovers();
+      /**
+       * ES A TAKARITAS EREDMENYET MEG IS MERJUK: mindharom `deleteMany` nulla
+       * sorra is sikeres, tehat egy elcsuszott elotag vagy domain pontosan ugy
+       * nez ki, mint egy tiszta futas.
+       *
+       * A `ServiceJobAssignee` NEM SZEREPEL: a `serviceJobId` ES a `userId` is
+       * `Cascade`, tehat barmelyik oldal torlese elviszi.
+       *
+       * A JEGY ES A FELHASZNALO VISZONT KULON ALL, es nem csak mas
+       * `onDelete` miatt: a `ServiceJob.openedById` NEM IDEGEN KULCS, hanem egy
+       * indexelt, nullazhato szoveg-oszlop. A felhasznalo torlese tehat sem el
+       * nem viszi a jegyet, sem ki nem nullazza a mezot -- az ertek ott marad
+       * egy mar nem letezo sorra mutatva. Ezert kap mindketto sajat szamlalot.
+       */
+      assert.equal(
+        await prisma.serviceJob.count({
+          where: { jobNumber: { startsWith: TEST_JOB_PREFIX } },
+        }),
+        0,
+        "a suite hibajegyei bent maradtak a takaritas utan",
+      );
+      assert.equal(
+        await prisma.user.count({
+          where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
+        }),
+        0,
+        "a suite felhasznaloi bent maradtak a takaritas utan",
+      );
     });
 
     async function newJob(number: string) {
@@ -266,10 +302,10 @@ describe(
 
     async function removeLeftovers() {
       await prisma.serviceJobAssignee.deleteMany({
-        where: { serviceJob: { jobNumber: { startsWith: "HJ-INT-" } } },
+        where: { serviceJob: { jobNumber: { startsWith: TEST_JOB_PREFIX } } },
       });
       await prisma.serviceJob.deleteMany({
-        where: { jobNumber: { startsWith: "HJ-INT-" } },
+        where: { jobNumber: { startsWith: TEST_JOB_PREFIX } },
       });
       await prisma.user.deleteMany({
         where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },

@@ -31,6 +31,15 @@ const actorId = "brand-test-owner";
 const assistantFile = "brand-test-m1-assistant.xlsx";
 
 /**
+ * A SUITE SAJAT SORAINAK ELOTAGJAI. Nevet kapnak, mert a takaritas ES a
+ * takaritas-allitas is olvassa oket -- ket helyen allo szoveg-literal eloszor
+ * egyezik, aztan az egyiket valaki atirja, es a takaritas nem hibazna tole,
+ * csak nem talalna semmit.
+ */
+const TEST_MAPPING_PREFIX = "BRAND-TEST";
+const TEST_PRODUCT_PREFIX = "Brand test";
+
+/**
  * A FEJLESZTOI IDENTITAS, amivel ez a suite ketszer bejelentkezik. SEEDELT sor:
  * a takaritas a sessionjeit viszi, magat a felhasznalot SOHA.
  */
@@ -97,10 +106,13 @@ async function cleanup() {
       },
     });
   await prisma.externalReference.deleteMany({
-    where: { entityType: "BRAND", externalId: { startsWith: "BRAND-TEST" } },
+    where: {
+      entityType: "BRAND",
+      externalId: { startsWith: TEST_MAPPING_PREFIX },
+    },
   });
   await prisma.product.deleteMany({
-    where: { name: { startsWith: "Brand test" } },
+    where: { name: { startsWith: TEST_PRODUCT_PREFIX } },
   });
   await prisma.brand.deleteMany({ where: SAJAT_MARKAK });
   await prisma.user.deleteMany({ where: { id: actorId } });
@@ -145,6 +157,69 @@ describe("Brand database integration", { skip: !enabled }, () => {
   });
   after(async () => {
     await cleanup();
+    /**
+     * ES A TAKARITAS EREDMENYET MEG IS MERJUK.
+     *
+     * A DOMAINEVENT SZAMLALOJA A LENYEG, es sajat mert elozmenye van. Ebbol a
+     * suite-bol maradt bent EGY `brand.created` sor (verify run 34981069257, a
+     * CI adatbazisan megnevezve): a takaritas akkor ket felsorolt feltetelt
+     * nezett, a fejlesztoi identitassal letrehozott masodik marka pedig egyikre
+     * sem illett. AZ IDO ITT VALODI MASODIK TENGELY: a torles a markak
+     * AZONOSITOJA szerint megy, ez a szamlalo viszont attol fuggetlenul lat
+     * minden `Brand` esemenyt, ami a suite indulasa ota keletkezett -- vagyis
+     * pontosan azt, ami akkor atcsuszott.
+     *
+     * A TOBBI OT SZAMLALO UGYANAZT A SZUROT NEZI, MINT A TORLESE (elotag,
+     * fajlnev, azonosito), tehat azok egy ELMARADT vagy elhasalt torlest
+     * fognak meg, nem egy elirt szurot -- ezt jobb kimondani, mint tobbet
+     * allitani roluk.
+     *
+     * A `Session` es a fejlesztoi `User` NEM SZEREPEL: a felhasznalo SEEDELT
+     * referencia-sor, amit ez a suite szandekosan nem torol, a sessionjeibol
+     * pedig csak a sajat ket bejelentkezese a miénk. Egy nulla-szamlalo
+     * barmelyiken azt kovetelne meg, hogy mas sorai is tunjenek el.
+     */
+    assert.equal(
+      await prisma.domainEvent.count({
+        where: { aggregateType: "Brand", createdAt: { gte: SUITE_KEZDET } },
+      }),
+      0,
+      "a suite marka-esemenyei bent maradtak a takaritas utan",
+    );
+    assert.equal(
+      await prisma.brand.count({ where: SAJAT_MARKAK }),
+      0,
+      "a suite markai bent maradtak a takaritas utan",
+    );
+    assert.equal(
+      await prisma.externalReference.count({
+        where: {
+          entityType: "BRAND",
+          externalId: { startsWith: TEST_MAPPING_PREFIX },
+        },
+      }),
+      0,
+      "a suite lekepezesei bent maradtak a takaritas utan",
+    );
+    assert.equal(
+      await prisma.product.count({
+        where: { name: { startsWith: TEST_PRODUCT_PREFIX } },
+      }),
+      0,
+      "a suite termekei bent maradtak a takaritas utan",
+    );
+    assert.equal(
+      await prisma.catalogImportBatch.count({
+        where: { sourceFileName: assistantFile },
+      }),
+      0,
+      "a suite import-kotegei bent maradtak a takaritas utan",
+    );
+    assert.equal(
+      await prisma.user.count({ where: { id: actorId } }),
+      0,
+      "a suite szinesze bent maradt a takaritas utan",
+    );
     await prisma.$disconnect();
   });
 

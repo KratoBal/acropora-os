@@ -87,6 +87,22 @@ describe(
 
     after(async () => {
       await removeLeftovers();
+      /**
+       * ES A TAKARITAS EREDMENYET MEG IS MERJUK -- mert egy elirt szuro
+       * NULLA sorra illeszkedik, es a `deleteMany` errol semmit nem mond.
+       *
+       * CSAK A `User` SORT SZAMOLJUK: a `DeviceToken.userId` `Cascade`, tehat
+       * a felhasznalo torlese magaval viszi a tokeneket. Ha nulla felhasznalo
+       * maradt, token sem maradhatott -- egy kulon szamlalo ugyanazt az egy
+       * allitast mondana ketszer.
+       */
+      assert.equal(
+        await prisma.user.count({
+          where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
+        }),
+        0,
+        "a suite felhasznaloi bent maradtak a takaritas utan",
+      );
     });
 
     it("cannot take off a device that belongs to somebody else", async () => {

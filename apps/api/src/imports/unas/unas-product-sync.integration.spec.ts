@@ -256,6 +256,48 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
 
   after(async () => {
     await cleanup();
+    /**
+     * ES A TAKARITAS EREDMENYET MEG IS MERJUK.
+     *
+     * A HAROM SZAMLALO UGYANAZT A SZUROT NEZI, MINT A TORLESE -- itt nincs
+     * masodik tengely: a suite sorait nem elotag azonositja, hanem az IDO
+     * (`SUITE_KEZDET`), a kulso hivatkozas rendszere, es a termek-azonositok.
+     * Ezek tehat egy ELMARADT vagy elhasalt torlest fognak meg, nem egy elirt
+     * szurot, es jobb ezt kimondani, mint tobbet allitani roluk.
+     *
+     * A `DomainEvent` SORA KULON INDOKOT ERDEMEL. Ebbol a suite-bol maradt
+     * bent harom `product.catalog-authority.transferred` sor (verify run
+     * 34981069257, a CI adatbazisan megnevezve): a `takeCatalogAuthority`
+     * harom hivasa aktor nelkul megy, es az a fuggveny nem ad
+     * `correlationId`-t, tehat a takaritas `correlationId` szerinti aga
+     * SZERKEZETILEG nem is illeszkedhetett rajuk. A javitas ota a termekek
+     * azonositoja szerint is torlunk; ez a szamlalo az, ami szolni fog, ha
+     * valaha megint keletkezik olyan esemeny, amit egyik ag sem lat.
+     *
+     * A `Product` ES A `Category` nem kap szamlalot: azokat a kulso
+     * hivatkozasokon AT azonositjuk, tehat egy hivatkozas nelkul letrejott sort
+     * ugyanugy nem latna a szamlalo, ahogy a torles sem. Egy szamlalo, ami
+     * ugyanott vak, ahol a torles, nem ellenorzes, hanem diszlet.
+     */
+    assert.equal(
+      await prisma.unasProductSyncRun.count({
+        where: { createdAt: { gte: SUITE_KEZDET } },
+      }),
+      0,
+      "a suite futasai bent maradtak a takaritas utan",
+    );
+    assert.equal(
+      await prisma.domainEvent.count({
+        where: { createdAt: { gte: SUITE_KEZDET } },
+      }),
+      0,
+      "a suite esemenyei bent maradtak a takaritas utan",
+    );
+    assert.equal(
+      await prisma.externalReference.count({ where: { system: "UNAS" } }),
+      0,
+      "UNAS kulso hivatkozasok maradtak bent a takaritas utan",
+    );
     await prisma.$disconnect();
   });
 

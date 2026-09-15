@@ -11,6 +11,18 @@ import { integrationDatabaseGate } from "../../common/integration-database.js";
 const gate = integrationDatabaseGate(process.env);
 const runIntegration = gate.mode !== "skip";
 
+/**
+ * A SUITE SAJAT SORAINAK ELOTAGJAI ES INDULASI IDEJE.
+ *
+ * Nevet kapnak, mert a takaritas-allitas MAS tengelyen szamol, mint amin a
+ * torles szur: a torles azonosito-listakbol dolgozik (`productIds`, `runIds`,
+ * `warehouseId`), es azok a listak URESEN is atmennek. Egy elotag vagy egy
+ * idobelyeg fuggetlen attol, hogy a lista feltoltodott-e.
+ */
+const TEST_WAREHOUSE_PREFIX = "LOCK-TEST-";
+const TEST_PRODUCT_PREFIX = "Lock test product ";
+const SUITE_KEZDET = new Date();
+
 /// The checkpoint-3 unit tests in unas-order-sync.repository.spec.ts prove
 /// the DELTA MATH is correct against a FakeDb - but FakeDb's `$executeRaw`
 /// is a no-op stub, so it cannot prove the actual concurrency guarantee
@@ -120,14 +132,17 @@ describe(
     before(async () => {
       if (gate.mode === "refuse") throw new Error(gate.reason);
       const warehouse = await prisma.warehouse.create({
-        data: { code: `LOCK-TEST-${Date.now()}`, name: "Lock test warehouse" },
+        data: {
+          code: `${TEST_WAREHOUSE_PREFIX}${Date.now()}`,
+          name: "Lock test warehouse",
+        },
       });
       warehouseId = warehouse.id;
 
       const skus = [`LOCK-SKU-A-${Date.now()}`, `LOCK-SKU-B-${Date.now()}`];
       for (const sku of skus) {
         const product = await prisma.product.create({
-          data: { name: `Lock test product ${sku}` },
+          data: { name: `${TEST_PRODUCT_PREFIX}${sku}` },
         });
         productIds.push(product.id);
         const variant = await prisma.productVariant.create({
@@ -188,6 +203,54 @@ describe(
       });
       await prisma.product.deleteMany({ where: { id: { in: productIds } } });
       await prisma.warehouse.delete({ where: { id: warehouseId } });
+      /**
+       * ES A TAKARITAS EREDMENYET MEG IS MERJUK, MAS TENGELYEN, MINT AMIN A
+       * TORLES SZUR.
+       *
+       * A fenti hivasok tobbsege azonosito-LISTABOL dolgozik (`productIds`,
+       * `runIds`, `variantIds`). Egy `{ id: { in: [] } }` feltetel nulla sorra
+       * illeszkedik, es sikeresen le is fut -- vagyis ha a `before` barhol
+       * elhasal a listak feltoltese elott, az egesz takaritas csendben nem
+       * csinal semmit. Ugyanazokra a listakra visszaszamolva az allitas is zold
+       * lenne; ezert megy a termek NEV szerint, a raktar KOD szerint, a futasok
+       * pedig IDO szerint.
+       *
+       * A `ProductVariant`, a `SalesOrderLine`, a `StockItem` es a
+       * `StockMovement*` nem kap szamlalot: mind `Cascade` egy olyan sorrol,
+       * amit ez a takaritas kifejezetten torol (a valtozat a termekrol, a
+       * rendeles-sorok a rendelesrol, a keszlet-sorok a raktarrol).
+       *
+       * A kurzor-szamlalo ugyanazt a ket mezot nezi, mint a torlese -- ott
+       * nincs masodik tengely --, tehat az egy ELMARADT torlest fog meg.
+       */
+      assert.equal(
+        await prisma.product.count({
+          where: { name: { startsWith: TEST_PRODUCT_PREFIX } },
+        }),
+        0,
+        "a suite termekei bent maradtak a takaritas utan",
+      );
+      assert.equal(
+        await prisma.warehouse.count({
+          where: { code: { startsWith: TEST_WAREHOUSE_PREFIX } },
+        }),
+        0,
+        "a suite raktara bent maradt a takaritas utan",
+      );
+      assert.equal(
+        await prisma.unasOrderSyncRun.count({
+          where: { createdAt: { gte: SUITE_KEZDET } },
+        }),
+        0,
+        "a suite szinkron-futasai bent maradtak a takaritas utan",
+      );
+      assert.equal(
+        await prisma.integrationCursor.count({
+          where: { provider: "UNAS", stream: "ORDERS" },
+        }),
+        0,
+        "a suite kurzora bent maradt a takaritas utan",
+      );
       await prisma.$disconnect();
     });
 

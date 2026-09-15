@@ -50,6 +50,26 @@ describe("TasksRepository integration", { skip: gate.mode === "skip" }, () => {
   after(async () => {
     if (gate.mode !== "run") return;
     await removeLeftovers();
+    /**
+     * AND THE CLEANUP'S RESULT IS MEASURED. `removeLeftovers` returns early
+     * when it finds no users, and every delete inside it succeeds on zero
+     * rows - so a drifted e-mail domain would look exactly like a clean run.
+     *
+     * The count goes by the domain rather than by the `ids` list, which is
+     * local to the helper: counting that list back would repeat the delete's
+     * own input and stay green on an empty one.
+     *
+     * Only `User` is counted. `Task.assigneeId` is required and `Cascade`, and
+     * the helper deletes the tasks explicitly before the users anyway, so a
+     * surviving task would need a surviving user to hang from.
+     */
+    assert.equal(
+      await prisma.user.count({
+        where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
+      }),
+      0,
+      "the suite's users survived the cleanup",
+    );
   });
 
   /**

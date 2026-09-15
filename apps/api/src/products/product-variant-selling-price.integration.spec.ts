@@ -80,6 +80,23 @@ describe(
         where: { productId: `${PREFIX}-product` },
       });
       await prisma.product.deleteMany({ where: { id: `${PREFIX}-product` } });
+      /**
+       * AND THE CLEANUP'S RESULT IS MEASURED, by NAME rather than by id.
+       *
+       * The deletes above filter on the id, so counting the id back would
+       * repeat their own input: if the literal ever drifted from what `before`
+       * creates, both would miss the row and the assertion would still be
+       * green. The name is a different column, written from the same constant,
+       * and that is what makes it a second axis rather than an echo.
+       *
+       * Only `Product` is counted: `ProductVariant.productId` is `Cascade`, so
+       * the variants cannot outlive it.
+       */
+      assert.equal(
+        await prisma.product.count({ where: { name: { startsWith: PREFIX } } }),
+        0,
+        "the suite's product survived the cleanup",
+      );
       await prisma.$disconnect();
     });
 

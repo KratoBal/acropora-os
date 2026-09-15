@@ -48,6 +48,24 @@ async function cleanup() {
     where: { system: "MEDUSA", entityType: "Product", entityId: { in: ids } },
   });
   await prisma.product.deleteMany({ where: { id: { in: ids } } });
+  /**
+   * A LEKEPEZES-SOROKAT MEG ITT BENT SZAMOLJUK MEG, amig az `ids` lista meg
+   * jelent valamit. Az `ExternalReference.entityId` sima szoveg, nem idegen
+   * kulcs: a termek torlese NEM viszi el a hozza tartozo sort, tehat ez az
+   * egyetlen tabla, ami csendben tullelheti a takaritast.
+   *
+   * AMIT EZ FOG, ES AMIT NEM: ugyanazt a listat szamolja, amibol a torles is
+   * dolgozott, tehat egy ELMARADT torlest fog meg, nem egy elirt szurot. Az
+   * utobbira a `Product` szamlalo valaszol odalent, nev szerint -- es az a
+   * lista-alapu ag teljes kihagyasat is latja.
+   */
+  assert.equal(
+    await prisma.externalReference.count({
+      where: { system: "MEDUSA", entityType: "Product", entityId: { in: ids } },
+    }),
+    0,
+    "a suite lekepezes-sorai bent maradtak a takaritas utan",
+  );
 }
 
 describe(
@@ -64,6 +82,16 @@ describe(
 
     after(async () => {
       await cleanup();
+      /**
+       * ES A TERMEKEKET NEV SZERINT, mert a `cleanup` a lista URESSEGEKOR
+       * koran visszater -- az a kihagyas csendes, es pontosan ugy nez ki, mint
+       * egy tiszta futas.
+       */
+      assert.equal(
+        await prisma.product.count({ where: { name: { startsWith: PREFIX } } }),
+        0,
+        "a suite termekei bent maradtak a takaritas utan",
+      );
       await prisma.$disconnect();
     });
 

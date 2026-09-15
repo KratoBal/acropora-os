@@ -238,6 +238,38 @@ describe(
       if (gate.mode !== "run") return;
       if (app) await app.close();
       await removeLeftovers();
+      /**
+       * ES A TAKARITAS EREDMENYET MEG IS MERJUK: minden `deleteMany` nulla
+       * sorra is sikeres, tehat egy elcsuszott elotag vagy domain pontosan ugy
+       * nez ki, mint egy tiszta futas.
+       *
+       * A `Session` NEM SZEREPEL: a `userId` `Cascade`, tehat a fiok torlese
+       * elviszi -- a takaritas sajat sora gyorsitas, nem vedelem. A masik
+       * harom viszont kulon all, mert az `Asset.customerId` es a
+       * `User.customerId` is `Restrict`: ott nem a torles VISZI a masikat,
+       * hanem a sorrendjuk kotott.
+       */
+      assert.equal(
+        await prisma.asset.count({
+          where: { assetNumber: { startsWith: TEST_ASSET_PREFIX } },
+        }),
+        0,
+        "a suite eszkozei bent maradtak a takaritas utan",
+      );
+      assert.equal(
+        await prisma.user.count({
+          where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
+        }),
+        0,
+        "a suite fiokjai bent maradtak a takaritas utan",
+      );
+      assert.equal(
+        await prisma.customer.count({
+          where: { customerNumber: { startsWith: TEST_CUSTOMER_PREFIX } },
+        }),
+        0,
+        "a suite vevoi bent maradtak a takaritas utan",
+      );
     });
 
     async function removeLeftovers() {
