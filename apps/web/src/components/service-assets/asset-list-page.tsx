@@ -339,7 +339,7 @@ export function AssetListPage() {
                       ) : null}
                     </td>
                     <td className={sv.tableCell}>
-                      <div className="text-xs font-medium text-[#26233b]">
+                      <div className="text-xs font-medium text-ink">
                         {asset.owner.displayName}
                       </div>
                       {/* AZ ALEGYSEG A VALASZTOTT HELY, a cim a VISSZAESES.
@@ -358,7 +358,7 @@ export function AssetListPage() {
                             : (asset.address?.formatted ?? "Nincs pontosítva.")}
                       </div>
                     </td>
-                    <td className={`${sv.tableCell} text-xs text-[#26233b]`}>
+                    <td className={`${sv.tableCell} text-xs text-ink`}>
                       {asset.parent ? (
                         <span>
                           Része: <strong>{asset.parent.name}</strong>
@@ -447,7 +447,7 @@ export function AssetListPage() {
               behuzas a fa melysege, a szurés pedig a RESZFARA szol -- az
               alatta logo eszkozok is bejonnek. */}
           <aside>
-            <h2 className="mb-2 px-[11px] text-[13px] font-bold text-[#26233b]">
+            <h2 className="mb-2 px-[11px] text-[13px] font-bold text-ink">
               Helyszínek
             </h2>
             <button

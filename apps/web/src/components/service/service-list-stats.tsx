@@ -16,9 +16,9 @@ import { ServiceIcon, type ServiceIconName } from "./service-list-chrome";
  */
 
 const toneClass = {
-  purple: "bg-[#ede8ff] text-[#6150bd]",
-  amber: "bg-[#fff1db] text-[#86521b]",
-  green: "bg-[#e5f3eb] text-[#26664d]",
+  purple: "bg-brand-100 text-brand-700",
+  amber: "bg-amber-50 text-amber-700",
+  green: "bg-emerald-50 text-emerald-700",
 } as const;
 
 export interface ServiceStatTile {
@@ -62,7 +62,7 @@ export function ServiceListStats({
             type="button"
             aria-pressed={on}
             onClick={() => onSelect(tile.key)}
-            className={`flex items-center gap-3.5 rounded-2xl border border-[#e5e2eb] bg-white px-5 py-[18px] text-left transition-colors hover:border-[#b6a5db] ${
+            className={`flex items-center gap-3.5 rounded-2xl border border-line bg-white px-5 py-[18px] text-left transition-colors hover:border-[#b6a5db] ${
               on ? "ring-2 ring-[#b6a5db]" : ""
             }`}
           >
@@ -73,11 +73,11 @@ export function ServiceListStats({
             </span>
             <span className="min-w-0">
               <span className="mb-1 flex items-baseline">
-                <strong className="text-[25px] font-extrabold leading-tight tracking-tight text-[#26233b]">
+                <strong className="text-[25px] font-extrabold leading-tight tracking-tight text-ink">
                   {tile.count === null ? "—" : tile.count}
                 </strong>
               </span>
-              <span className="block text-xs text-[#686477]">{tile.label}</span>
+              <span className="block text-xs text-muted">{tile.label}</span>
             </span>
           </button>
         );
