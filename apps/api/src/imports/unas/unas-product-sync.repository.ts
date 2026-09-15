@@ -24,6 +24,15 @@ import {
 } from "../../common/unas-variant.util.js";
 import { writeSearchDocument } from "../../integrations/ai-product-search/ai-product-search.writer.js";
 import { resolveSimilarProducts } from "./unas-similar-products.mapping.js";
+
+/**
+ * HANY FELOLDATLAN HIVATKOZAST NEVEZUNK MEG A NAPLOBAN.
+ *
+ * A TELJES szam a szamlalobol megy ki; ez a lista csak MINTA. Egy tizezres
+ * felsorolas ugyanaz, mint a nulla: senki nem olvassa el, es a valodi jel
+ * elvesz benne. Tiz eleg ahhoz, hogy valaki a UNAS feluleten megnezze, MI az.
+ */
+const UNRESOLVED_MINTA = 10;
 import {
   describeSkipped,
   partitionByUnasAuthority,
@@ -1021,10 +1030,25 @@ export class UnasProductSyncRepository extends Repository {
         );
         let similarRelationsWritten = 0;
         let similarReferencesUnresolved = 0;
+        /**
+         * A FELOLDATLANOK MAGUK, NEM CSAK A SZAMUK -- ES CSAK EZ A HAROMBOL.
+         *
+         * A `resolveSimilarProducts` harom okot szamol kulon, es a sajat
+         * fejlece mondja ki, hogy `unresolved` az EGYETLEN, ami ADATVESZTES:
+         * az onhivatkozas es a duplikatum szandekos kihagyas. Egy naplosor,
+         * ami mind a harmat "elveszett"-kent mutatna, epp a valodit rejtene
+         * el a zajban.
+         *
+         * A LISTA KORLATOS (`UNRESOLVED_MINTA`), mert egy tizezres felsorolas
+         * ugyanaz, mint a nulla: senki nem olvassa el. A TELJES szam a
+         * szamlalobol megy ki mellette.
+         */
+        const similarUnresolvedMinta: string[] = [];
         let similarReferencesSelf = 0;
         let similarReferencesDuplicate = 0;
         let accessoryRelationsWritten = 0;
         let accessoryReferencesUnresolved = 0;
+        const accessoryUnresolvedMinta: string[] = [];
         let accessoryReferencesSelf = 0;
         let accessoryReferencesDuplicate = 0;
         for (const written of writtenProducts) {
@@ -1035,6 +1059,11 @@ export class UnasProductSyncRepository extends Repository {
             productIdsByExternalId,
           });
           similarReferencesUnresolved += mapping.unresolved.length;
+          for (const hianyzo of mapping.unresolved)
+            if (similarUnresolvedMinta.length < UNRESOLVED_MINTA)
+              similarUnresolvedMinta.push(
+                `${written.externalId}->${hianyzo.externalId} (${hianyzo.sku})`,
+              );
           similarReferencesSelf += mapping.selfReferences;
           similarReferencesDuplicate += mapping.duplicates;
           await transaction.productRelation.deleteMany({
@@ -1082,6 +1111,11 @@ export class UnasProductSyncRepository extends Repository {
             productIdsByExternalId,
           });
           accessoryReferencesUnresolved += mapping.unresolved.length;
+          for (const hianyzo of mapping.unresolved)
+            if (accessoryUnresolvedMinta.length < UNRESOLVED_MINTA)
+              accessoryUnresolvedMinta.push(
+                `${written.externalId}->${hianyzo.externalId} (${hianyzo.sku})`,
+              );
           accessoryReferencesSelf += mapping.selfReferences;
           accessoryReferencesDuplicate += mapping.duplicates;
           await transaction.productRelation.deleteMany({
@@ -1293,6 +1327,43 @@ export class UnasProductSyncRepository extends Repository {
               `${skippedSourceChanged} olyan, aminél a forrás is változott ` +
               `(run ${runId}). ${describeSkipped(skipped)}`,
           );
+        /**
+         * AZ ELVESZETT HIVATKOZAS NEM NEMA -- UGYANAZ AZ ALAK, MINT A
+         * KIHAGYOTT TERMEKEKNEL, ES UGYANAZZAL AZ INDOKKAL.
+         *
+         * A szamok EDDIG IS eljutottak a hivohoz (a valaszban es a kozos
+         * tipusban, integracios teszttel). A RES A FUTAS UTAN VOLT: az
+         * `UnasProductSyncRun` sor EGYETLEN relacio-szamlalot sem tarol, es az
+         * UTEMEZO -- ami tizenot percenkent fut -- eldobja az eredmenyt. Vagyis
+         * a napi futasok vesztesegei sehol nem maradtak meg.
+         *
+         * CSAK A FELOLDATLANT NAPLOZZUK. Az onhivatkozas es a duplikatum a
+         * `resolveSimilarProducts` sajat fejlece szerint SZANDEKOS kihagyas,
+         * nem adatvesztes -- egy sor, ami mind a harmat egyben mutatna, a
+         * valodit rejtene el.
+         *
+         * ES A SZAM MELLE AZONOSITO IS MEGY, mert egy szam nem mondja meg,
+         * MELYIK veszett el. A lista korlatos; a teljes szam a mondat elejen
+         * all.
+         *
+         * AMIT EZ NEM OLD MEG: a tartos nyilvantartast. Egy naplosor
+         * visszakeresheto, amig a naplo el -- egy masnapi kerdesre ("mennyi
+         * veszett el a heten?") a futas SORABA irt mezo valaszolna. Az sema-
+         * valtozas es migracio, tehat kulon dontes.
+         */
+        if (similarReferencesUnresolved > 0)
+          console.warn(
+            `[UnasProductSync] ${similarReferencesUnresolved} hasonló-hivatkozás ` +
+              `feloldatlan (run ${runId}). Minta: ` +
+              `${similarUnresolvedMinta.join(", ")}`,
+          );
+        if (accessoryReferencesUnresolved > 0)
+          console.warn(
+            `[UnasProductSync] ${accessoryReferencesUnresolved} kiegészítő-hivatkozás ` +
+              `feloldatlan (run ${runId}). Minta: ` +
+              `${accessoryUnresolvedMinta.join(", ")}`,
+          );
+
         return {
           runId,
           status: "APPLIED",
