@@ -160,3 +160,24 @@ describe("AssetEditorPage tulajdonos-listája", () => {
     expect(api.detail).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * A KIUT AZ URLAP VEGEN, Balazs 2026-09-15-i designjabol.
+ *
+ * A kilepes eddig CSAK a lap tetejen allt, gombkent a cim mellett. A cim fole
+ * kerult hivatkozaskent -- de az urlap vegen, a kitoltes utan az ember a mentes
+ * MELLETT keresi, amikor meggondolja magat, es a leggorgetett allapotbol a lap
+ * teteje nem latszik. Ezert all most mind a ket helyen.
+ *
+ * AZ ALLITAS A CELT IS MERI, NEM CSAK A LETEZEST: egy "Megsem" felirat, ami
+ * sehova nem visz, pontosan ugyanugy nez ki, mint egy mukodo.
+ */
+describe("AssetEditorPage kiút", () => {
+  it("a mentés mellett is van kiút, és oda visz, ahonnan jöttünk", async () => {
+    api.owners.mockResolvedValue({ items: [] });
+    render(<AssetEditorPage />);
+
+    const megsem = await screen.findByRole("link", { name: "Mégsem" });
+    expect(megsem.getAttribute("href")).toBe("/szerviz/eszkozok");
+  });
+});
