@@ -6,7 +6,6 @@ import {
   Card,
   FormField,
   Input,
-  PageHeader,
   Select,
   Textarea,
 } from "@acropora/ui";
@@ -25,6 +24,10 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import {
+  ServiceBackLink,
+  ServiceDetailHeader,
+} from "@/components/service/service-detail-chrome";
 import { useReturnTo } from "@/components/navigation-history";
 import { assetsApi } from "@/lib/api/assets";
 import { suppliersApi } from "@/lib/api/suppliers";
@@ -288,17 +291,13 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Szerviz / Eszköznyilvántartás"
+      <ServiceBackLink href={backToList.href}>
+        {backToList.fromWithinApp ? "Vissza" : "Eszközök"}
+      </ServiceBackLink>
+      <ServiceDetailHeader
+        eyebrow="Szerviz / munkatér"
         title={assetId ? "Eszköz módosítása" : "Új eszköz"}
-        description="Önálló berendezés vagy egy meglévő rendszer részegységének rögzítése."
-        actions={
-          <Link href={backToList.href}>
-            <Button variant="secondary">
-              {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
-            </Button>
-          </Link>
-        }
+        lead="Önálló berendezés vagy egy meglévő rendszer részegységének rögzítése."
       />
       {error ? (
         <Alert
@@ -309,7 +308,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
       ) : null}
       <form className="space-y-6" onSubmit={submit}>
         <Card className="p-6">
-          <h2 className="font-semibold text-slate-950">Hozzárendelés</h2>
+          <h2 className="text-[16px] font-bold text-ink">Hozzárendelés</h2>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <FormField label="Partner">
               <Select
@@ -428,7 +427,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
         </Card>
 
         <Card className="p-6">
-          <h2 className="font-semibold text-slate-950">Azonosítás</h2>
+          <h2 className="text-[16px] font-bold text-ink">Azonosítás</h2>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <FormField label="Eszköz neve">
               <Input
@@ -502,7 +501,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
         </Card>
 
         <Card className="p-6">
-          <h2 className="font-semibold text-slate-950">Karbantartás</h2>
+          <h2 className="text-[16px] font-bold text-ink">Karbantartás</h2>
           <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <FormField label="Telepítés dátuma">
               <Input
@@ -549,7 +548,15 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
           </FormField>
         </Card>
 
-        <div className="flex justify-end">
+        {/* A "MEGSEM" A MENTES MELLE KERULT: a kilepes a cim folott is ott
+            all, de az urlap vegen, a kitoltes utan ott keresik. Ugyanaz az ut,
+            a masodik helyen, ahol szukseg van ra. */}
+        <div className="flex justify-end gap-2">
+          <Link href={backToList.href}>
+            <Button type="button" variant="secondary" disabled={busy}>
+              Mégsem
+            </Button>
+          </Link>
           <Button type="submit" disabled={busy || loadingOptions}>
             {busy
               ? "Mentés…"

@@ -6,7 +6,6 @@ import {
   Card,
   FormField,
   Input,
-  PageHeader,
   Select,
   Skeleton,
   Textarea,
@@ -24,6 +23,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import {
+  ServiceBackLink,
+  ServiceDetailHeader,
+} from "@/components/service/service-detail-chrome";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { JobAssetPicker } from "@/components/service-jobs/job-asset-picker";
@@ -530,24 +533,25 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Szerviz"
+      {/* A KILEPES A CIM FOLOTT ALL, NEM A MUVELETEK KOZOTT. Az urlapon a
+          "Megsem" a mentes MELLETT allt, ugyanolyan sulyunak latszva -- pedig
+          az egyik ir, a masik elhagyja a lapot. */}
+      <ServiceBackLink
+        href={
+          worksheetId
+            ? `/szerviz/munkalapok/${worksheetId}`
+            : "/szerviz/munkalapok"
+        }
+      >
+        {worksheetId ? "Vissza a munkalapra" : "Munkalapok"}
+      </ServiceBackLink>
+      <ServiceDetailHeader
+        eyebrow="Szerviz / munkatér"
         title={worksheetId ? "Munkalap szerkesztése" : "Új munkalap"}
-        description={
+        lead={
           worksheetId
             ? "A piszkozat teljes tartalma cserélődik a mentéskor."
             : "A sorszám a lezáráskor keletkezik, a piszkozatnak nincs száma."
-        }
-        actions={
-          <Link
-            href={
-              worksheetId
-                ? `/szerviz/munkalapok/${worksheetId}`
-                : "/szerviz/munkalapok"
-            }
-          >
-            <Button variant="secondary">Mégsem</Button>
-          </Link>
         }
       />
       {error ? (
@@ -796,7 +800,27 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
         disabled={saving}
       />
 
-      <div className="flex justify-end">
+      {/*
+        A "MEGSEM" A MENTES MELLE KERULT, ES NEM A LAP TETEJEN MARADT.
+
+        A kilepes maga a cim folotti hivatkozas -- de az urlap VEGEN, a kitoltes
+        utan az ember a mentes mellett keresi, amikor meggondolja magat. Eddig
+        csak a lap tetejen allt, vagyis a leggorgetett allapotbol nem latszott.
+        Ugyanoda visz, mint a felso hivatkozas; ez nem masodik ut, hanem
+        ugyanaz az ut a masodik helyen, ahol keresik.
+      */}
+      <div className="flex justify-end gap-2">
+        <Link
+          href={
+            worksheetId
+              ? `/szerviz/munkalapok/${worksheetId}`
+              : "/szerviz/munkalapok"
+          }
+        >
+          <Button variant="secondary" disabled={saving}>
+            Mégsem
+          </Button>
+        </Link>
         <Button disabled={!canSubmit || saving} onClick={() => void submit()}>
           {saving ? "Mentés..." : "Mentés"}
         </Button>
