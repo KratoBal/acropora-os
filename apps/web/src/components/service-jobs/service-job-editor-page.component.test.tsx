@@ -95,6 +95,28 @@ describe("ServiceJobEditorPage", () => {
    * meglévő lapból születik, aminek van partnere. Ha itt kötelező lenne, épp
    * azt az utat nehezítenénk, amit az owner leírt.
    */
+  /**
+   * A KÉT KIÚT KÜLÖN ÁLL, ÉS NEM HELYETTESÍTIK EGYMÁST.
+   *
+   * A láblécben álló „Mégsem" akkor kell, ha valaki végigolvasta az űrlapot; a
+   * cím fölötti hivatkozás akkor, ha rossz lapra jött, és nem akar végiggörgetni
+   * a mezők mellett. Egy állítás, ami csak az egyiket méri, zöld maradna akkor
+   * is, ha a másik eltűnik - és a hiányt épp az venné észre, akinek kellett
+   * volna.
+   */
+  it("a cím fölött és a láblécben is van kiút, és nem ugyanaz", async () => {
+    render(<ServiceJobEditorPage />);
+    await screen.findByText("Partner és helyszín");
+
+    const fentre = screen.getByRole("link", { name: "Hibajegyek" });
+    const megsem = screen.getByRole("link", { name: "Mégsem" });
+
+    expect(fentre.getAttribute("href")).toBe("/szerviz/hibajegyek");
+    expect(megsem.getAttribute("href")).toBe("/szerviz/hibajegyek");
+    // KÉT KÜLÖN ELEM: ugyanoda visznek, de nem egy elem kétszer megtalálva.
+    expect(fentre).not.toBe(megsem);
+  });
+
   it("partner nélkül is megnyitja a jegyet, és a friss lapjára visz", async () => {
     render(<ServiceJobEditorPage />);
 

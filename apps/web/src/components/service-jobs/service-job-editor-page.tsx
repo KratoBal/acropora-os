@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { ServiceListHeader } from "@/components/service/service-list-chrome";
+import { ServiceBackLink } from "@/components/service/service-detail-chrome";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { buildSiteOptions } from "@/lib/partners/site-tree";
@@ -261,6 +262,22 @@ export function ServiceJobEditorPage() {
 
   return (
     <div className="space-y-6">
+      {/*
+        A KILÉPÉS A CÍM FÖLÖTT ÁLL, ÉS NEM HELYETTESÍTI A „MÉGSEM"-ET.
+
+        A kettő MÁS HELYZETRE VALÓ, és a prototípus is mind a kettőt kiteszi: a
+        láblécben álló „Mégsem" akkor, ha végigolvastad az űrlapot és úgy döntesz,
+        hogy nem viszed végig; ez itt akkor, ha rossz lapra jöttél, és azonnal
+        kilépnél - anélkül, hogy a mezők mellett végig kellene görgetned.
+
+        FIX CÉL, NEM `useReturnTo`. A ház mindkét mintát ismeri, de ide a fix
+        cím illik: erre a lapra EGYETLEN helyről lehet eljutni (a lista „Új
+        hibajegy" gombjáról - lemérve, egy hivatkozás az egész alkalmazásban),
+        tehát az előzmény ma ugyanoda vezetne. Egy menekülő-útnak pedig
+        KISZÁMÍTHATÓNAK kell lennie: ugyanaz a link ugyanoda vigyen, ne attól
+        függjön, honnan érkeztél. A hibajegy ADATLAPJA is így áll.
+      */}
+      <ServiceBackLink href="/szerviz/hibajegyek">Hibajegyek</ServiceBackLink>
       <ServiceListHeader
         eyebrow="Új bejegyzés"
         title="Új hibajegy"
