@@ -32,6 +32,9 @@ const TEST_CUSTOMER_PREFIX = "WS-INT-";
  */
 const TEST_JOB_PREFIX = "HJ-WS-INT-";
 
+/** Ugyanezert kap nevet a suite sajat eszkozeinek elotagja is. */
+const TEST_ASSET_PREFIX = "ESZK-WS-INT-";
+
 describe(
   "WorksheetsRepository integration",
   { skip: gate.mode === "skip" },
@@ -111,7 +114,67 @@ describe(
     after(async () => {
       if (gate.mode !== "run") return;
       await removeLeftovers();
+      await assertNoLeftovers();
     });
+
+    /**
+     * ES A TAKARITAS EREDMENYET MEG IS MERJUK -- mert a `deleteMany` nulla
+     * sorra is sikeres, es a `removeLeftovers` TELJES belso blokkja kimarad,
+     * ha a vevo-lekerdezes nem talal semmit. Az a kihagyas csendes: a hibajegy-
+     * es az eszkoz-torles vele egyutt marad el.
+     *
+     * AZ ESZKOZOKET SAJAT ELOTAG SZAMOLJA, nem a vevo azonositoja: a takaritas
+     * `customerId` szerint torol, tehat ugyanarra szamolni a sajat bemenetet
+     * ismetelne. A hibajegyeknel es a felhasznaloknal ilyen masodik tengely
+     * nincs (a gazdatlan jegyet mar semmi nem koti ide), ott tehat ez a
+     * szamlalo a KIMARADT torlest fogja meg, nem az elirt elotagot -- es ezt
+     * jobb kimondani, mint tobbet allitani rola.
+     *
+     * AMI SZANDEKOSAN BENT MARAD, ES NEM SZIVARGAS: a
+     * `WorksheetYearSequence` egyetlen sora. Az evenkenti munkalap-szamozas
+     * foglaloja, nem adatsor -- egy suite, ami torli, nem takarit, hanem
+     * visszaallitja a szamozast mindenki masnak. A CI sor-pillanatkepeiben
+     * ezert all rajta tartosan `plusz 1`, es ez VART: a sor-darabszam
+     * kulonbsege nem azonos a szemettel. (A partner-kodhoz kotott
+     * `WorksheetNumberSequence` MAS: azt a takaritas a sajat kodjaira szurve
+     * elviszi, mert az a suite sajat sorozata.)
+     *
+     * ES AHOL KERESNI KELL, HA VALAKI MEGIS UTANANEZ: a sort NEM a Prisma
+     * kliens irja, hanem NYERS SQL (`worksheets.repository.ts`, `INSERT INTO
+     * "WorksheetYearSequence" ... ON CONFLICT ... "lastValue" + 1`). Egy
+     * `prisma.worksheetYearSequence` alakra keresve NULLA talalat jon, es abbol
+     * konnyu arra jutni, hogy a tablat nem hasznalja senki.
+     */
+    async function assertNoLeftovers() {
+      assert.equal(
+        await prisma.customer.count({
+          where: { customerNumber: { startsWith: TEST_CUSTOMER_PREFIX } },
+        }),
+        0,
+        "a suite vevoi bent maradtak a takaritas utan",
+      );
+      assert.equal(
+        await prisma.serviceJob.count({
+          where: { jobNumber: { startsWith: TEST_JOB_PREFIX } },
+        }),
+        0,
+        "a suite hibajegyei bent maradtak a takaritas utan",
+      );
+      assert.equal(
+        await prisma.asset.count({
+          where: { assetNumber: { startsWith: TEST_ASSET_PREFIX } },
+        }),
+        0,
+        "a suite eszkozei bent maradtak a takaritas utan",
+      );
+      assert.equal(
+        await prisma.user.count({
+          where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
+        }),
+        0,
+        "a suite felhasznaloi bent maradtak a takaritas utan",
+      );
+    }
 
     async function removeLeftovers() {
       const customers = await prisma.customer.findMany({
@@ -862,7 +925,7 @@ describe(
       const asset = await prisma.asset.create({
         data: {
           customerId,
-          assetNumber: `ESZK-WS-INT-${suffix}`,
+          assetNumber: `${TEST_ASSET_PREFIX}${suffix}`,
           name: "Cápasuli kompresszor",
           inventoryNumber: "LT-4711",
         },
