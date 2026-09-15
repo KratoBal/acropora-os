@@ -195,37 +195,55 @@ export function ServiceListTabs({
 }
 
 /**
- * A LISTA LABLECE: hany talalat van, es hogy a lista VEGE-e ez.
+ * MI ALL A LABLEC JOBB OLDALAN: LAPOZAS VAGY HATAR.
  *
- * A prototipus itt mindig azt irja, hogy "A lista vegere ertel". Nalunk a
- * lista LAPOZOTT, tehat ez csak az utolso lapon igaz -- a kozbenso lapokon
- * hazugsag lenne, es epp azt a kerdest hagyna megvalaszolatlanul, amiert
- * valaki a lap aljara nez. Ezert all itt a lapszam helyette.
+ * KET KULONBOZO DOLOG, ES EZERT KET AG, NEM KET SZAM PLUSZ EGY FELULIRAS.
+ *
+ * A munkalap- es az eszkoz-lista LAPOZ: ott van ertelme lapszamnak, es az
+ * utolso lapon igaz, hogy a vegere ertel. A hibajegy-lista NEM lapoz: a
+ * szerver egy hataron belul ad sorokat, es kulon megmondja, ha tobb van.
+ *
+ * KORABBAN EZ EGY `page` + `totalPages` + elhagyhato `note` harmas volt. Az
+ * mukodott, de a nem lapozo hivonak KET ERTELMETLEN SZAMOT kellett atadnia
+ * (`page={1} totalPages={1}`), es utana felulirnia a kovetkezmenyuket. A
+ * kovetkezo ilyen hivo, aki elfelejti a felulirast, ezt kapja egy VAGOTT lista
+ * alja ala: "A lista vegere ertel" -- magabiztos, hamis, es epp az az egy
+ * mondat, amiert valaki odanez. A tipusrendszer ehhez meg segit is: az
+ * `1`/`1` teljesen szabalyos.
+ *
+ * IGY VISZONT A HAMIS ALLITAS NEM KIFEJEZHETO. Nem azert nem mondjuk ki, mert
+ * valaki emlekszik ra, hanem mert nincs hozza ag.
+ */
+export type ServiceListTail =
+  | { kind: "paged"; page: number; totalPages: number }
+  /**
+   * `truncated`: a szerver mondta meg, hogy van tobb. A HATAR SZAMA
+   * SZANDEKOSAN nem szerepel -- az a szerver lekerdezeseben all, es ha itt is
+   * allna, egyszer elcsuszna tole.
+   */
+  | { kind: "capped"; truncated: boolean };
+
+function tailText(tail: ServiceListTail): string {
+  if (tail.kind === "capped")
+    return tail.truncated
+      ? "A legfrissebbek látszanak, és van több"
+      : "A lista végére értél";
+  return tail.totalPages <= 1
+    ? "A lista végére értél"
+    : `${tail.page} / ${tail.totalPages}. lap`;
+}
+
+/**
+ * A LISTA LABLECE: hany talalat van, es mi all a lista vegen.
  */
 export function ServiceListFooter({
   shown,
   totalItems,
-  page,
-  totalPages,
-  note,
+  tail,
 }: {
   shown: number;
   totalItems: number;
-  page: number;
-  totalPages: number;
-  /**
-   * A JOBB OLDALI SZOVEG FELULIRASA, LAPOZATLAN LISTAKHOZ.
-   *
-   * BOVITES, 2026-09-15 (nautilus): a hibajegy-lista NEM lapoz -- a szerver egy
-   * hataron belul ad vissza sorokat, es KULON megmondja, ha tobb van. Ott a
-   * `totalPages` mindig 1, tehat ez a lablec "A lista vegere ertel" szoveget
-   * irna egy VAGOTT lista ala is. Az nem stilus-kerdes: ez az egyetlen mondat,
-   * amiert valaki a lap aljara nez.
-   *
-   * ELHAGYHATO, ES NELKULE MINDEN VALTOZATLAN: a munkalap- es az eszkoz-lista
-   * lapoz, tehat nem adja at, es a kimenetuk beture ugyanaz marad.
-   */
-  note?: string;
+  tail: ServiceListTail;
 }) {
   return (
     <div className={sv.tableFooter}>
@@ -233,12 +251,7 @@ export function ServiceListFooter({
         {totalItems} találat
         {totalItems > shown ? `, ebből ${shown} ezen a lapon` : ""}
       </span>
-      <span>
-        {note ??
-          (totalPages <= 1
-            ? "A lista végére értél"
-            : `${page} / ${totalPages}. lap`)}
-      </span>
+      <span>{tailText(tail)}</span>
     </div>
   );
 }
