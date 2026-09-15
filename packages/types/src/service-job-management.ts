@@ -201,6 +201,24 @@ export interface ServiceJobDetail {
   /** A három forrás egy időrendben, legújabb felül. A szerver rendezte. */
   timeline: ServiceJobTimelineEntry[];
   /**
+   * A JEGY ALTAL ERINTETT ESZKOZOK, SAJAT LISTAKENT.
+   *
+   * === MIERT KULON MEZO, HA A `timeline` MAR TARTALMAZZA OKET ===
+   *
+   * A naplo az esemenyek IDORENDJE: ott az eszkoz egy BEJEGYZES, a sorrendje a
+   * fesules szabalya szerint all, es a lista barmikor szukulhet (szures,
+   * lapozas) anelkul, hogy az ESZKOZOK halmaza valtozna.
+   *
+   * A hibajegybol nyitott munkalap ezt a halmazt orokli (2026-09-15). Ha azt a
+   * naplobol olvasnank ki, a felvitel egy MEGJELENITESI dontestol fuggne -- es
+   * a veszteseg NEMA lenne: a lap egyszer csak kevesebb eszkozzel indulna, es
+   * senki nem keresne a naplo szurojenel.
+   *
+   * URES TOMB ERVENYES VALASZ, nem hiba: a jegy keletkezhet eszkoz megnevezese
+   * nelkul.
+   */
+  assets: ServiceJobAssetLink[];
+  /**
    * AKIKRE A JEGYET DELEGÁLTÁK, a kiosztás sorrendjében (a régebbi elöl).
    *
    * ÜRES LISTA IS ÉRVÉNYES VÁLASZ, és nem hiba: egy jegy megszülethet

@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 
 import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
+import { assetsOutsideDepartment } from "../common/assets-in-department.js";
 import { sumDocumentBytesInUse } from "../documents/document-bytes-in-use.js";
 import {
   personDisplayName,
@@ -695,6 +696,22 @@ export class WorksheetsRepository extends Repository {
     return row ?? undefined;
   }
 
+  /**
+   * MELYIK MEGNEVEZETT ESZKOZ ESIK KIVUL A LAP HELYSZINEN.
+   *
+   * A SZABALY KOZOS FUGGVENYBEN ALL (`common/assets-in-department.ts`), mert a
+   * hibajegy felvitele is ugyanezt kerdezi. Itt azert van metodus, es nem
+   * kozvetlen hivas a szolgaltatasban, mert igy a dontes MERHETO: egy hamis
+   * tarolo meg tudja mutatni, hogy a `createDraft` el sem indult -- egy
+   * modul-szintu hivast a szolgaltatas-teszt nem tudna elvalasztani.
+   */
+  async assetsOutsideDepartment(
+    assetIds: readonly string[],
+    departmentId: string,
+  ): Promise<string[]> {
+    return assetsOutsideDepartment(assetIds, departmentId);
+  }
+
   async createDraft(input: {
     customerId: string;
     departmentId: string;
@@ -702,6 +719,14 @@ export class WorksheetsRepository extends Repository {
     actorUserId: string;
     /** A lap felelősei, a lappal EGY tranzakcióban. Üres lista megengedett. */
     assigneeIds?: readonly string[];
+    /**
+     * A lap altal erintett eszkozok, a lappal EGY tranzakcioban.
+     *
+     * A HIBAJEGYBOL NYITOTT LAP A JEGY ESZKOZEIVEL INDUL, de a mezo nem a
+     * jegyhez kot: onnantol a lap sajat adata. Ures lista megengedett -- a lap
+     * keletkezhet eszkoz megnevezese nelkul.
+     */
+    assetIds?: readonly string[];
     /** A hibajegy, ami alá a lap kerül. `null`, ha jegy nélkül keletkezik. */
     serviceJobId?: string | null;
     /**
@@ -758,6 +783,7 @@ export class WorksheetsRepository extends Repository {
     content: NormalizedWorksheetContent;
     actorUserId: string;
     assigneeIds?: readonly string[];
+    assetIds?: readonly string[];
     serviceJobId?: string | null;
     clientOperationId?: string;
   }): Promise<string> {
@@ -792,6 +818,19 @@ export class WorksheetsRepository extends Repository {
       const versionId = worksheet.versions[0]?.id;
       if (!versionId) throw new Error("WORKSHEET_VERSION_NOT_CREATED");
       await this.writeLines(transaction, versionId, input.content);
+
+      /**
+       * AZ ESZKOZOK UGYANABBAN A TRANZAKCIOBAN, ugyanabbol az okbol, mint a
+       * felelosok: egy kulon hivas elbukhatna, es epp az a lap keletkezne,
+       * amirol a szerelo azt hinne, hogy tudja, mit kell megneznie.
+       */
+      if (input.assetIds && input.assetIds.length > 0)
+        await transaction.worksheetAsset.createMany({
+          data: input.assetIds.map((assetId) => ({
+            worksheetId: worksheet.id,
+            assetId,
+          })),
+        });
 
       // A felelősök ugyanabban a tranzakcióban: egy létrejött, de
       // kiosztatlanul maradt lap némán eltűnne a szerelő listájáról.

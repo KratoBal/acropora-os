@@ -2818,6 +2818,7 @@ model Asset {
   updatedBy       User?                @relation("AssetUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   events          AssetEvent[]
   serviceJobs     ServiceJobAsset[]
+  worksheets      WorksheetAsset[]
   documents       AssetDocument[]
   worksheetLines  WorksheetLine[]
   label           AssetLabel?
@@ -3181,6 +3182,52 @@ model ServiceJobAsset {
   @@index([assetId, createdAt])
 }
 
+/// A MUNKALAP ALTAL ERINTETT ESZKOZOK.
+///
+/// Balazs kerese (2026-09-15 10:11, Discord, Szerviz ticketing szal, szo
+/// szerint): „Ugyanugy ha mar a hibajegynel kivalasztok eszkozt az se jelenik
+/// meg a munkalap nyitasnal"
+///
+/// === EZ NEM ELOTOLTESI HIBA VOLT, HANEM HIANYZO KAPCSOLAT ===
+///
+/// A kerdes ugy hangzott, mintha a felulet felejtene el egy erteket. Merve
+/// (2026-09-15): a `Worksheet` modellnek EGYALTALAN nem volt eszkoz-kapcsolata
+/// -- nem elveszett, hanem nem is letezett. A jegyen viszont tobb eszkoz all
+/// (`ServiceJobAsset`), tehat a ket oldal kozott nem volt mit atvezetni.
+///
+/// === A LAP SAJAT ADATA, NEM A JEGY TUKRE ===
+///
+/// A kapcsolotabla a LAPE, es ez donti el a torles iranyat is: ha a lapot
+/// LEVALASZTJAK a jegyrol, az itt allo sorok MARADNAK. A jegy eszkozei csak az
+/// INDULO ERTEKET adjak; onnantol a lapon levehetok es tovabbiak felvehetok.
+/// Egy tukor-megoldas (mindig a jegybol olvasni) epp ezt venne el, es egy
+/// levalasztas csendben kiuritene a lapot.
+///
+/// === MIERT A `ServiceJobAsset` ALAKJA, MEZORE EGYEZOEN ===
+///
+/// Ugyanaz a fogalom (egy munkadarab es az altala erintett eszkozok), es a ket
+/// oldal ugyanabban a menetben olvasodik. Egy harmadik alak ugyanarra a
+/// fogalomra azt jelentene, hogy minden kesobbi valtozast ketszer kell
+/// megcsinalni, es a masodik mindig lemarad.
+///
+/// A `notes` mezo SZANDEKOSAN nincs itt: a jegyen sem ir bele ma semmi (merve),
+/// es egy mezo, amit senki nem tolt, a kovetkezo olvasot arra kesztetne, hogy
+/// megkeresse, hol vesz el a tartalma.
+model WorksheetAsset {
+  id          String   @id @default(cuid())
+  worksheetId String
+  assetId     String
+  createdAt   DateTime @default(now())
+
+  worksheet Worksheet @relation(fields: [worksheetId], references: [id], onDelete: Cascade)
+  /// `Restrict`, ugyanugy, mint a jegynel: egy eszkoz torlese nem viheti
+  /// magaval a munkalap tortenetet. Ami megtortent, megtortent.
+  asset     Asset     @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@unique([worksheetId, assetId])
+  @@index([assetId, createdAt])
+}
+
 /// A partner egy alegysége (pl. a Fánk „PP Üzemeltetés" vagy „Biodóm"
 /// egysége). Ez EGY fogalom, nem kettő: ugyanaz a sor adja a munkalap-szám
 /// első tagját (`BIO`) és a lapon megjelenő szöveget (`Biodóm`) is
@@ -3407,6 +3454,9 @@ model Worksheet {
   continuedBy      Worksheet[]         @relation("WorksheetContinuation")
   /// A jegy naploja, ahol EZ a lap szerepel (csatolas es levalasztas).
   serviceJobEvents ServiceJobEvent[]   @relation("ServiceJobEventWorksheet")
+  /// A lap által érintett eszközök. A hibajegyből nyitott lap a jegyéivel
+  /// indul; onnantól a lap saját adata.
+  assets           WorksheetAsset[]
 
   documents WorksheetDocument[]
   /// A MUNKANAPLO: mit csinalt a szerelo, sajat szavaival.

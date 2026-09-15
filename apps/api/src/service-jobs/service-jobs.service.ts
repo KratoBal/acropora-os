@@ -458,6 +458,19 @@ export class ServiceJobsService {
           attachedAt: link.createdAt.toISOString(),
         })),
       }),
+      /**
+       * ES UGYANEZ SAJAT LISTAKENT IS. NEM duplikacio: a naplo az IDORENDET
+       * mondja meg, ez a HALMAZT -- es a hibajegybol nyitott munkalap ezt a
+       * halmazt orokli. A naplobol kiolvasva a felvitel egy megjelenitesi
+       * dontestol fuggne.
+       */
+      assets: row.assets.map((link) => ({
+        id: link.id,
+        assetId: link.assetId,
+        assetNumber: link.asset.assetNumber,
+        assetName: link.asset.name,
+        attachedAt: link.createdAt.toISOString(),
+      })),
       // A DELEGALT A BECENEVEN SZEREPEL, nem a hivatalos neven: a delegalas
       // belso munkaszervezes, nem dokumentum-tartalom. Ugyanaz a valasztas,
       // mint a munkalap felelosenel.

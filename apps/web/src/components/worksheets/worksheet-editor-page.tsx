@@ -26,6 +26,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
+import { JobAssetPicker } from "@/components/service-jobs/job-asset-picker";
 import { buildSiteOptions } from "@/lib/partners/site-tree";
 import {
   toggleAssignee,
@@ -136,6 +137,11 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
     name: "",
   });
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
+  /**
+   * A LAP ALTAL ERINTETT ESZKOZOK. A jegybol nyitott lap a jegy eszkozeivel
+   * INDUL -- elotoltes, nem kotes: levehetok, es tovabbiak felvehetok.
+   */
+  const [assetIds, setAssetIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(Boolean(worksheetId));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -339,6 +345,14 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
         setTicketDepartmentId(job.departmentId ?? null);
         setTicketDepartmentName(job.departmentName ?? null);
         if (job.departmentId) setDepartmentId(job.departmentId);
+        /**
+         * AZ ESZKOZOK UGYANEBBOL A VALASZBOL JONNEK, masodik lekeres nelkul:
+         * a jegy reszletlapja mar hordozza oket (`ServiceJobDetail.assets`).
+         * Az urlapnak az `assetId` kell, nem a kapcsolat sajat azonositoja --
+         * a ketto konnyen felcserelheto, es a csere NEM hibazna, csak
+         * ismeretlen eszkozoket kuldene el.
+         */
+        setAssetIds(job.assets.map((link) => link.assetId));
       })
       .catch((cause: unknown) => {
         setTicketError(
@@ -437,6 +451,7 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
             customerId,
             departmentId,
             assigneeIds,
+            assetIds,
             // EGY TRANZAKCIOBAN a lappal: ket hivasban a masodik fele
             // elbukhatna, es epp az a jegy nelkuli lap keletkezne, amit senki
             // nem keresne a jegy alatt.
@@ -684,6 +699,29 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
                 </p>
               ) : null}
             </div>
+          </FormField>
+        ) : null}
+        {!worksheetId ? (
+          <FormField
+            label="Érintett eszközök"
+            className="md:col-span-2"
+            description={
+              departmentId
+                ? "Elhagyható. A hibajegyből nyitott lap a jegy eszközeivel indul; itt levehetők és továbbiak felvehetők."
+                : "Előbb válassz alegységet: az eszközök a helyszín részfájából jönnek."
+            }
+          >
+            {/*
+              UGYANAZ A VALASZTO, AMIT A JEGY-FELVITEL HASZNAL, es nem masolat:
+              a `JobAssetPicker` harom bemenetet vesz (helyszin, kivalasztottak,
+              visszahivas), es semmi jegy-specifikus nincs benne. A szurese a
+              helyszin RESZFAJARA megy, ugyanugy, ahogy a szerver ellenoriz.
+            */}
+            <JobAssetPicker
+              departmentId={departmentId}
+              selected={assetIds}
+              onChange={setAssetIds}
+            />
           </FormField>
         ) : null}
         <FormField label="Tárgy" className="md:col-span-2">

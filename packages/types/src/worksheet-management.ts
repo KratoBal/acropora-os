@@ -482,6 +482,23 @@ export interface CreateWorksheetInput extends WorksheetContentInput {
    * és a felvivő azt hinné, kiosztotta.
    */
   assigneeIds?: string[];
+  /**
+   * A LAP ALTAL ERINTETT ESZKOZOK, MAR A FELVITELKOR.
+   *
+   * Balazs kerese (2026-09-15): a hibajegynel kivalasztott eszkozok jelenjenek
+   * meg a belole nyitott lapon is. A jegybol nyitott lap ezekkel INDUL --
+   * ELOTOLTESKENT, nem kotesként: a lapon levehetok es tovabbiak felvehetok.
+   *
+   * Elhagyhato: a lap keletkezhet eszkoz megnevezese nelkul. Ha meg van adva, a
+   * felvitellel EGY tranzakcioban irodik -- ugyanaz az indok, mint a
+   * feleloskenel: egy kulon hivas elbukhatna, es epp az a lap keletkezne,
+   * amirol a szerelo azt hinne, hogy tudja, mit kell megneznie.
+   *
+   * A SZERVER A HELYSZINRE ELLENORIZ (`assets-in-department.ts`): a megnevezett
+   * eszkozoknek a lap helyszinenek RESZFAJA alatt kell allniuk, kulonben a
+   * felvitel 400-zal all meg.
+   */
+  assetIds?: string[];
 }
 
 export type UpdateWorksheetDraftInput = WorksheetContentInput;

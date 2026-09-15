@@ -490,6 +490,43 @@ export class WorksheetsService {
    * ellenőrzése ezért a létrehozás ELŐTT fut: egy ismeretlen azonosító így nem
    * hoz létre semmit, ahelyett hogy egy már meglévő lapot hagyna félkészen.
    */
+  /**
+   * A MEGNEVEZETT ESZKOZOK A LAP HELYSZINE ALATT ALLNAK-E.
+   *
+   * UGYANAZ A SZABALY, AMIT A JEGY FELVITELE HASZNAL, es 2026-09-15 ota
+   * UGYANAZ A FUGGVENY (`common/assets-in-department.ts`) -- nem masolat. Enelkul
+   * egy IDEGEN partner eszkoze kerulhetne a lapra: a felulet a helyszin
+   * reszfajara szur, de a vegpontot barmi hivhatja.
+   *
+   * A HIBAUZENET MEGNEVEZI A DARABSZAMOT, nem csak elutasit. Egy puszta "nem
+   * lehet" arra kenyszeritene a felhasznalot, hogy egyesevel probalgassa.
+   *
+   * AZ ISMETLODES ITT ESIK KI, nem az adatbazisban: a `@@unique` megfogna, de
+   * hibaval -- a felulet tobbszoros valasztast enged, es egy ketszer bekuldott
+   * azonosito nem a felhasznalo hibaja.
+   */
+  private async requireAssetsInDepartment(
+    requested: readonly string[] | undefined,
+    departmentId: string,
+  ): Promise<string[]> {
+    const assetIds = [...new Set(requested ?? [])]
+      .map((id) => id.trim())
+      .filter(Boolean);
+    if (assetIds.length === 0) return [];
+
+    const missing = await this.repository.assetsOutsideDepartment(
+      assetIds,
+      departmentId,
+    );
+    if (missing.length > 0)
+      throw new BadRequestException(
+        missing.length === 1
+          ? "A megadott eszköz nem ezen a helyszínen áll."
+          : `${missing.length} megadott eszköz nem ezen a helyszínen áll.`,
+      );
+    return assetIds;
+  }
+
   async create(
     input: CreateWorksheetDto,
     actorUserId: string,
@@ -506,6 +543,10 @@ export class WorksheetsService {
     await this.requireAssets(content);
     const assigneeIds = normalizeAssigneeIds(input.assigneeIds ?? []);
     await this.requireAssignableUsers(assigneeIds);
+    const assetIds = await this.requireAssetsInDepartment(
+      input.assetIds,
+      input.departmentId,
+    );
 
     const id = await this.repository.createDraft({
       customerId: input.customerId,
@@ -513,6 +554,7 @@ export class WorksheetsService {
       content,
       actorUserId,
       assigneeIds,
+      assetIds,
       serviceJobId,
       clientOperationId: input.clientOperationId,
     });

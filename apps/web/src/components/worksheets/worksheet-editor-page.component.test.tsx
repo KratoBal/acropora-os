@@ -17,6 +17,14 @@ const worksheets = vi.hoisted(() => ({
   assignableUsers: vi.fn(),
 }));
 const jobs = vi.hoisted(() => ({ detail: vi.fn() }));
+/**
+ * AZ ESZKOZ-LISTA MOCKJA KELL, ES EZ 2026-09-15 OTA IGAZ.
+ *
+ * A `JobAssetPicker` CSAK akkor hiv, ha van helyszin -- es a jegybol nyitott
+ * lapon a helyszin a #647 ota ELOTOLTVE all. E nelkul a dupla nelkul a valaszto
+ * valodi halozati hivast inditana a teszt alatt.
+ */
+const assets = vi.hoisted(() => ({ list: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
 /**
@@ -36,6 +44,7 @@ vi.mock("@/components/auth/auth-provider", () => ({
 vi.mock("@/lib/api/customers", () => ({ customersApi: customers }));
 vi.mock("@/lib/api/service-jobs", () => ({ serviceJobsApi: jobs }));
 vi.mock("@/lib/api/worksheets", () => ({ worksheetsApi: worksheets }));
+vi.mock("@/lib/api/assets", () => ({ assetsApi: assets }));
 
 const session: Session = {
   id: "session-1",
@@ -64,6 +73,13 @@ describe("WorksheetEditorPage partner picker", () => {
     // A CIM ALAPHELYZETBEN URES: a felvitel tobbsege NEM jegy alol indul, es
     // egy ottfelejtett parameter minden mas allitast is elmozditana.
     query.params = new URLSearchParams();
+    assets.list.mockReset().mockResolvedValue({
+      items: [
+        { id: "asset-1", assetNumber: "ESZ-0001", name: "Szivattyú" },
+        { id: "asset-2", assetNumber: "ESZ-0002", name: "Szűrő" },
+      ],
+      total: 2,
+    });
     jobs.detail.mockReset().mockResolvedValue({
       id: "job-1",
       customerId: "customer-42",
@@ -72,6 +88,9 @@ describe("WorksheetEditorPage partner picker", () => {
       // az ALAPESET. A helyszines agat a sajat allitasai allitjak be.
       departmentId: null,
       departmentName: null,
+      // ALAPBOL URES: a jegy keletkezhet eszkoz megnevezese nelkul, tehat ez az
+      // ALAPESET. Az eszkozos agat a sajat allitasai allitjak be.
+      assets: [],
     });
   });
 
@@ -442,7 +461,11 @@ describe("WorksheetEditorPage assignees", () => {
    * mint amit a keres mond. A kulonbseg csak akkor latszik, amikor valaki mast
    * akar valasztani, tehat kulon allitas meri.
    */
-  function jegyHelyszinnel(departmentId: string | null, name: string | null) {
+  function jegyHelyszinnel(
+    departmentId: string | null,
+    name: string | null,
+    assets: { id: string; assetId: string }[] = [],
+  ) {
     query.params = new URLSearchParams("hibajegy=job-1");
     jobs.detail.mockResolvedValue({
       id: "job-1",
@@ -450,6 +473,12 @@ describe("WorksheetEditorPage assignees", () => {
       customerName: "Fankó Kft.",
       departmentId,
       departmentName: name,
+      assets: assets.map((link) => ({
+        ...link,
+        assetNumber: "ESZ-0001",
+        assetName: "Szivattyú",
+        attachedAt: "2026-09-15T08:00:00.000Z",
+      })),
     });
     worksheets.selectablePartners.mockResolvedValue({
       items: [
@@ -588,6 +617,76 @@ describe("WorksheetEditorPage assignees", () => {
     // lenne, ha a gomb SOHA nem aktivalodna.
     await user.selectOptions(screen.getByLabelText("Alegység"), "department-1");
     await waitFor(() => expect(mentes.disabled).toBe(false));
+  });
+
+  /**
+   * A JEGY ESZKOZEI IS OROKLODNEK -- BALAZS KERESE, 2026-09-15 10:11.
+   *
+   * HAROM ALLITAS, ES A HARMADIK UGYANAZ A SZETVALASZTAS, mint a helyszinnel:
+   * az elotoltes nem kotes. A ket elso zold lehetne ugy is, hogy a listat
+   * rogzitettre csinaltuk volna.
+   */
+  it("a jegy eszközei előtöltve állnak, és a felvitel viszi őket", async () => {
+    jegyHelyszinnel("department-1", "Biotóp", [
+      { id: "link-1", assetId: "asset-1" },
+    ]);
+    const user = userEvent.setup();
+    render(<WorksheetEditorPage />);
+
+    const eszkoz = await screen.findByLabelText(/ESZ-0001/);
+    await waitFor(() =>
+      expect((eszkoz as HTMLInputElement).checked).toBe(true),
+    );
+
+    await user.type(screen.getByLabelText("Tárgy"), "Szivattyú csere");
+    await user.click(screen.getByRole("button", { name: "Mentés" }));
+
+    await waitFor(() => expect(worksheets.create).toHaveBeenCalledTimes(1));
+    expect(worksheets.create.mock.calls[0]?.[1]).toMatchObject({
+      assetIds: ["asset-1"],
+    });
+  });
+
+  /**
+   * ESZKOZ NELKULI JEGYNEL NEM TALALUNK KI SEMMIT. A jegy keletkezhet eszkoz
+   * megnevezese nelkul, es a lap is -- a lista ures marad, nem kulon ag.
+   */
+  it("eszköz nélküli jegynél üres listával indul", async () => {
+    jegyHelyszinnel("department-1", "Biotóp", []);
+    render(<WorksheetEditorPage />);
+
+    const eszkoz = await screen.findByLabelText(/ESZ-0001/);
+    expect((eszkoz as HTMLInputElement).checked).toBe(false);
+  });
+
+  /**
+   * AZ OROKOLT HALMAZ FELULIRHATO -- ELOTOLTES, NEM KOTES.
+   *
+   * Ugyanaz a szabaly, amit a helyszinnel Balazs elfogadott, es ugyanaz az
+   * indok: a lapon LEVEHETO es TOVABBI eszkoz felveheto. Egy rogzitett lista
+   * tobb lenne, mint amit kert -- es a kulonbseg csak ITT latszik.
+   */
+  it("az örökölt eszköz levehető, és másik felvehető", async () => {
+    jegyHelyszinnel("department-1", "Biotóp", [
+      { id: "link-1", assetId: "asset-1" },
+    ]);
+    const user = userEvent.setup();
+    render(<WorksheetEditorPage />);
+
+    const orokolt = (await screen.findByLabelText(
+      /ESZ-0001/,
+    )) as HTMLInputElement;
+    await waitFor(() => expect(orokolt.checked).toBe(true));
+
+    await user.click(orokolt);
+    await user.click(screen.getByLabelText(/ESZ-0002/));
+    await user.type(screen.getByLabelText("Tárgy"), "Szivattyú csere");
+    await user.click(screen.getByRole("button", { name: "Mentés" }));
+
+    await waitFor(() => expect(worksheets.create).toHaveBeenCalledTimes(1));
+    expect(worksheets.create.mock.calls[0]?.[1]).toMatchObject({
+      assetIds: ["asset-2"],
+    });
   });
 
   /**

@@ -186,6 +186,26 @@ export class CreateWorksheetDto extends WorksheetContentDto {
   @IsString({ each: true })
   @IsOptional()
   assigneeIds?: string[];
+  /**
+   * A LAP ALTAL ERINTETT ESZKOZOK, MAR A FELVITELKOR.
+   *
+   * Balazs kerese (2026-09-15): a hibajegynel kivalasztott eszkozok jelenjenek
+   * meg a belole nyitott lapon is. A jegybol nyitott lap ezekkel INDUL -- de a
+   * mezo nem a jegyhez kot: egy jegy nelkuli lapra is fel lehet venni oket.
+   *
+   * ELHAGYHATO, es ez nem lazasag: a lap keletkezhet eszkoz megnevezese nelkul
+   * (karbantartas kozben felvett lap), es egy kotelezo mezo epp azt az utat
+   * nehezitene.
+   *
+   * UGYANAZ A KORLAT, mint a jegy oldalan (`ArrayMaxSize(50)`): ket kulonbozo
+   * hatar ugyanarra a listara csak azt jelentene, hogy az egyiket elfelejtettuk
+   * karbantartani.
+   */
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @IsOptional()
+  assetIds?: string[];
 }
 
 export class UpdateWorksheetDraftDto extends WorksheetContentDto {}
