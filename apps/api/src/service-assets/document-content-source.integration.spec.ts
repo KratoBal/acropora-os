@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, describe, it } from "node:test";
 
+import { nincsMaradek } from "../common/takaritas-leltar.js";
+
 import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
@@ -117,20 +119,20 @@ describe(
        * vedelem. A vevo viszont KULON all: az `Asset.customerId` `Restrict`,
        * vagyis a ket tabla egyike sem mond semmit a masikrol.
        */
-      assert.equal(
-        await prisma.asset.count({
-          where: { assetNumber: { startsWith: PREFIX } },
-        }),
-        0,
-        "a suite eszkozei bent maradtak a takaritas utan",
-      );
-      assert.equal(
-        await prisma.customer.count({
-          where: { customerNumber: { startsWith: PREFIX } },
-        }),
-        0,
-        "a suite vevoi bent maradtak a takaritas utan",
-      );
+      nincsMaradek([
+        {
+          nev: "a suite eszkozei bent maradtak a takaritas utan",
+          darab: await prisma.asset.count({
+            where: { assetNumber: { startsWith: PREFIX } },
+          }),
+        },
+        {
+          nev: "a suite vevoi bent maradtak a takaritas utan",
+          darab: await prisma.customer.count({
+            where: { customerNumber: { startsWith: PREFIX } },
+          }),
+        },
+      ]);
     });
 
     it("rejects a row with neither content nor storage key", async () => {

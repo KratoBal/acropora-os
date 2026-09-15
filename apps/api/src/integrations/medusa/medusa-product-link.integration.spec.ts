@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
+import { nincsMaradek } from "../../common/takaritas-leltar.js";
+
 import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../../common/integration-database.js";
@@ -25,8 +27,18 @@ const runIntegration = gate.mode !== "skip";
 
 const PREFIX = `medusa-link-${Date.now()}`;
 
+/**
+ * AMIT A SUITE LETREHOZOTT -- ES NEM AZ, AMIT A TAKARITAS MEGTALAL.
+ *
+ * A ket lista NEM ugyanaz, es epp a kulonbsegukben lakik a hiba, amit a
+ * szamlalo keresne: a takaritas nev-elotagra kerdez, tehat ha az a szuro
+ * elcsuszik, a sajat merceje is vele csuszik el. Ez a lista a LETREHOZASKOR
+ * keletkezik, egy helyrol, es a takaritas semelyik agatol nem fugg.
+ */
+const LETREHOZOTT: string[] = [];
+
 async function makeProduct(suffix: string) {
-  return prisma.product.create({
+  const product = await prisma.product.create({
     data: {
       name: `${PREFIX} ${suffix}`,
       type: "PHYSICAL",
@@ -34,6 +46,8 @@ async function makeProduct(suffix: string) {
       catalogAuthority: "ACROPORA",
     },
   });
+  LETREHOZOTT.push(product.id);
+  return product;
 }
 
 /** Csak a saját sorait takarítja, névelőtag szerint. */
@@ -48,24 +62,6 @@ async function cleanup() {
     where: { system: "MEDUSA", entityType: "Product", entityId: { in: ids } },
   });
   await prisma.product.deleteMany({ where: { id: { in: ids } } });
-  /**
-   * A LEKEPEZES-SOROKAT MEG ITT BENT SZAMOLJUK MEG, amig az `ids` lista meg
-   * jelent valamit. Az `ExternalReference.entityId` sima szoveg, nem idegen
-   * kulcs: a termek torlese NEM viszi el a hozza tartozo sort, tehat ez az
-   * egyetlen tabla, ami csendben tullelheti a takaritast.
-   *
-   * AMIT EZ FOG, ES AMIT NEM: ugyanazt a listat szamolja, amibol a torles is
-   * dolgozott, tehat egy ELMARADT torlest fog meg, nem egy elirt szurot. Az
-   * utobbira a `Product` szamlalo valaszol odalent, nev szerint -- es az a
-   * lista-alapu ag teljes kihagyasat is latja.
-   */
-  assert.equal(
-    await prisma.externalReference.count({
-      where: { system: "MEDUSA", entityType: "Product", entityId: { in: ids } },
-    }),
-    0,
-    "a suite lekepezes-sorai bent maradtak a takaritas utan",
-  );
 }
 
 describe(
@@ -87,11 +83,41 @@ describe(
        * koran visszater -- az a kihagyas csendes, es pontosan ugy nez ki, mint
        * egy tiszta futas.
        */
-      assert.equal(
-        await prisma.product.count({ where: { name: { startsWith: PREFIX } } }),
-        0,
-        "a suite termekei bent maradtak a takaritas utan",
-      );
+      nincsMaradek([
+        {
+          nev: "a suite termekei bent maradtak a takaritas utan",
+          darab: await prisma.product.count({
+            where: { name: { startsWith: PREFIX } },
+          }),
+        },
+        /**
+         * A LEKEPEZES-SOR A TABLAK KOZUL AZ EGYETLEN, AMI CSENDBEN TULELHETI A
+         * TAKARITAST: az `ExternalReference.entityId` sima szoveg, nem idegen
+         * kulcs, tehat a termek torlese NEM viszi el a hozza tartozo sort.
+         *
+         * EZ A SZAMLALO KORABBAN A `cleanup()` TORZSEBEN ALLT, es 2026-09-15-en
+         * meressel derult ki, hogy NEM TUD MEGSZOLALNI. Ket okbol: a fuggveny
+         * `if (!ids.length) return` agan a vezerles elmegy mellette, es a
+         * szamlalt halmazt ugyanabbol a listabol vette, amibol a torles
+         * dolgozott -- tehat egy elcsuszott nev-szuro a sajat mercejet is
+         * elvitte volna. A visszaolvaso korben az 56 nevbol epp ez az egy NEM
+         * jelent meg a naploban.
+         *
+         * Most a `LETREHOZOTT` lista ellen szamol, ami a letrehozaskor
+         * keletkezik: fuggetlen a takaritas barmelyik agatol, es akkor is
+         * megszolal, ha a takaritas el sem indult.
+         */
+        {
+          nev: "a suite lekepezes-sorai bent maradtak a takaritas utan",
+          darab: await prisma.externalReference.count({
+            where: {
+              system: "MEDUSA",
+              entityType: "Product",
+              entityId: { in: LETREHOZOTT },
+            },
+          }),
+        },
+      ]);
       await prisma.$disconnect();
     });
 

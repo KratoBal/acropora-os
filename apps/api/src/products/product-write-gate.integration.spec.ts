@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
+import { nincsMaradek } from "../common/takaritas-leltar.js";
+
 import { ConflictException } from "@nestjs/common";
 import { prisma } from "@acropora/database";
 
@@ -104,18 +106,20 @@ describe(
        * ugy eltunni, hogy a kapcsolosor bent maradjon. A ket vegpont viszont
        * KULON all, ezert mindketto kap sajat szamlalot.
        */
-      assert.equal(
-        await prisma.product.count({ where: { name: { startsWith: PREFIX } } }),
-        0,
-        "a suite termekei bent maradtak a takaritas utan",
-      );
-      assert.equal(
-        await prisma.category.count({
-          where: { name: { startsWith: PREFIX } },
-        }),
-        0,
-        "a suite kategoriai bent maradtak a takaritas utan",
-      );
+      nincsMaradek([
+        {
+          nev: "a suite termekei bent maradtak a takaritas utan",
+          darab: await prisma.product.count({
+            where: { name: { startsWith: PREFIX } },
+          }),
+        },
+        {
+          nev: "a suite kategoriai bent maradtak a takaritas utan",
+          darab: await prisma.category.count({
+            where: { name: { startsWith: PREFIX } },
+          }),
+        },
+      ]);
       await prisma.$disconnect();
     });
 

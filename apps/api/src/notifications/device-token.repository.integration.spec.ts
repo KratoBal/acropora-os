@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
+import { nincsMaradek } from "../common/takaritas-leltar.js";
+
 import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
@@ -96,13 +98,14 @@ describe(
        * maradt, token sem maradhatott -- egy kulon szamlalo ugyanazt az egy
        * allitast mondana ketszer.
        */
-      assert.equal(
-        await prisma.user.count({
-          where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
-        }),
-        0,
-        "a suite felhasznaloi bent maradtak a takaritas utan",
-      );
+      nincsMaradek([
+        {
+          nev: "a suite felhasznaloi bent maradtak a takaritas utan",
+          darab: await prisma.user.count({
+            where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
+          }),
+        },
+      ]);
     });
 
     it("cannot take off a device that belongs to somebody else", async () => {

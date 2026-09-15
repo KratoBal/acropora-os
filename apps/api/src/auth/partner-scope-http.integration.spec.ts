@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import { after, before, describe, it } from "node:test";
 
+import { nincsMaradek } from "../common/takaritas-leltar.js";
+
 import { prisma } from "@acropora/database";
 import { NestFactory } from "@nestjs/core";
 import type { INestApplication } from "@nestjs/common";
@@ -249,27 +251,26 @@ describe(
        * `User.customerId` is `Restrict`: ott nem a torles VISZI a masikat,
        * hanem a sorrendjuk kotott.
        */
-      assert.equal(
-        await prisma.asset.count({
-          where: { assetNumber: { startsWith: TEST_ASSET_PREFIX } },
-        }),
-        0,
-        "a suite eszkozei bent maradtak a takaritas utan",
-      );
-      assert.equal(
-        await prisma.user.count({
-          where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
-        }),
-        0,
-        "a suite fiokjai bent maradtak a takaritas utan",
-      );
-      assert.equal(
-        await prisma.customer.count({
-          where: { customerNumber: { startsWith: TEST_CUSTOMER_PREFIX } },
-        }),
-        0,
-        "a suite vevoi bent maradtak a takaritas utan",
-      );
+      nincsMaradek([
+        {
+          nev: "a suite eszkozei bent maradtak a takaritas utan",
+          darab: await prisma.asset.count({
+            where: { assetNumber: { startsWith: TEST_ASSET_PREFIX } },
+          }),
+        },
+        {
+          nev: "a suite fiokjai bent maradtak a takaritas utan",
+          darab: await prisma.user.count({
+            where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
+          }),
+        },
+        {
+          nev: "a suite vevoi bent maradtak a takaritas utan",
+          darab: await prisma.customer.count({
+            where: { customerNumber: { startsWith: TEST_CUSTOMER_PREFIX } },
+          }),
+        },
+      ]);
     });
 
     async function removeLeftovers() {

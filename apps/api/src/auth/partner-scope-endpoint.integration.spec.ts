@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { InMemoryDocumentStore } from "../service-assets/document-store/in-memory-document-store.js";
 import { after, before, describe, it } from "node:test";
 
+import { nincsMaradek } from "../common/takaritas-leltar.js";
+
 import { NotFoundException } from "@nestjs/common";
 import { prisma } from "@acropora/database";
 import type { AuthenticatedUser } from "@acropora/types";
@@ -539,34 +541,32 @@ describe(
        * elviszi a masikat, hanem hogy a SORRENDJUK kotott. Egy bent maradt sor
        * barmelyik tablaban kulon eset.
        */
-      assert.equal(
-        await prisma.asset.count({
-          where: { assetNumber: { startsWith: TEST_ASSET_PREFIX } },
-        }),
-        0,
-        "a suite eszkozei bent maradtak a takaritas utan",
-      );
-      assert.equal(
-        await prisma.user.count({
-          where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
-        }),
-        0,
-        "a suite fiokjai bent maradtak a takaritas utan",
-      );
-      assert.equal(
-        await prisma.supplier.count({
-          where: { code: { startsWith: TEST_SUPPLIER_PREFIX } },
-        }),
-        0,
-        "a suite szallitoi bent maradtak a takaritas utan",
-      );
-      assert.equal(
-        await prisma.customer.count({
-          where: { customerNumber: { startsWith: TEST_CUSTOMER_PREFIX } },
-        }),
-        0,
-        "a suite vevoi bent maradtak a takaritas utan",
-      );
+      nincsMaradek([
+        {
+          nev: "a suite eszkozei bent maradtak a takaritas utan",
+          darab: await prisma.asset.count({
+            where: { assetNumber: { startsWith: TEST_ASSET_PREFIX } },
+          }),
+        },
+        {
+          nev: "a suite fiokjai bent maradtak a takaritas utan",
+          darab: await prisma.user.count({
+            where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
+          }),
+        },
+        {
+          nev: "a suite szallitoi bent maradtak a takaritas utan",
+          darab: await prisma.supplier.count({
+            where: { code: { startsWith: TEST_SUPPLIER_PREFIX } },
+          }),
+        },
+        {
+          nev: "a suite vevoi bent maradtak a takaritas utan",
+          darab: await prisma.customer.count({
+            where: { customerNumber: { startsWith: TEST_CUSTOMER_PREFIX } },
+          }),
+        },
+      ]);
     });
 
     async function removeLeftovers() {
