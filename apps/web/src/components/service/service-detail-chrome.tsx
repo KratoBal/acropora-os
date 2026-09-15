@@ -20,11 +20,16 @@ import { sv } from "./service-theme";
  * szinre -- ha a tokenben modosul a lila, ez a fajl nem kovetne, es senki nem
  * szolna rola.
  *
- * NEGY ERTEK MEGIS NYERSEN ALL a szerviz ket uj fajljaban, es ez szandekos: a
- * prototipus hasznal nehany KOZBENSO arnyalatot (`#8679aa` az adat-ikonokra,
- * `#ded4f5` es `#635578` a kiemelt panelen, `#555062` a leiro szovegen),
- * amikhez ma nincs token. Egy "majdnem ugyanaz" megfeleltetes csendben
- * megvaltoztatna a szint, es a diffbol nem latszana, hogy az dontes volt.
+ * NEHANY ERTEK MEGIS NYERSEN ALL, es ez szandekos: a prototipus hasznal
+ * KOZBENSO arnyalatokat (`#8679aa` az adat-ikonokra, `#ded4f5` a kiemelt panel
+ * keretere, `#555062` a leiro szovegen), amikhez ma nincs token. Egy "majdnem
+ * ugyanaz" megfeleltetes csendben megvaltoztatna a szint, es a diffbol nem
+ * latszana, hogy az dontes volt.
+ *
+ * A KIEMELT PANEL SZOVEGE VISZONT MAR TOKEN (`brand-muted`), mert MASODSZOR is
+ * kellett -- a hibajegy-adatlap lezart-mondata ugyanezt a szint hasznalja.
+ * Ez a felsorolas korabban ot erteket sorolt; egy megjegyzes, ami egy megszunt
+ * allapotot ir le, rosszabb a hianyzonal.
  */
 
 /**
@@ -192,7 +197,7 @@ export function ServiceNextAction({
       </p>
       <h2 className="text-[16px] font-bold text-ink">{title}</h2>
       {children ? (
-        <p className="my-2 mb-4 text-xs leading-relaxed text-[#635578]">
+        <p className="my-2 mb-4 text-xs leading-relaxed text-brand-muted">
           {children}
         </p>
       ) : null}
