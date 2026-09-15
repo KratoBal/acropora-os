@@ -1,6 +1,6 @@
 import { pathToFileURL } from "node:url";
 
-import { prisma } from "@acropora/database";
+import { Prisma, prisma } from "@acropora/database";
 
 import { kezdoSorIdopontja } from "./unas-ar-tortenet.js";
 
@@ -39,29 +39,69 @@ import { kezdoSorIdopontja } from "./unas-ar-tortenet.js";
  *   0  lefutott (akar nulla uj sorral)
  *   1  a futas hibara futott
  */
+export interface CliOutput {
+  stdout: (t: string) => void;
+  stderr: (t: string) => void;
+}
+
+/** Egy termek, ahogy a parancs latja: az azonosito es a tukor ar-kepe. */
+export interface KezdoSorJelolt {
+  id: string;
+  unasSnapshot: {
+    currency: string | null;
+    netPrice: Prisma.Decimal | null;
+    grossPrice: Prisma.Decimal | null;
+    saleNetPrice: Prisma.Decimal | null;
+    saleGrossPrice: Prisma.Decimal | null;
+    updatedAt: Date;
+  } | null;
+}
+
+export interface KezdoSorDeps {
+  /** A sor nelkuli termekek, EGY pillanatban. */
+  jeloltek(): Promise<KezdoSorJelolt[]>;
+  /**
+   * VAN-E MAR SORA -- KOZVETLENUL AZ IRAS ELOTT, TERMEKENKENT.
+   *
+   * A `jeloltek()` PILLANATKEPET vesz. Az eles szinkron tizenot percenkent ir,
+   * es egy nagy futas percekig tart: ha kozben sor keletkezik, a parancs
+   * INITIAL-t tenne egy MAR TORTENETTEL BIRO termekre.
+   *
+   * A HATARA KIMONDVA: ez SZUKITI az ablakot a teljes futasrol egy termekere,
+   * NEM ZARJA BE. Teljes kizarashoz reszleges egyedi index kell a semaban
+   * (`WHERE source = 'INITIAL'`), az viszont migracio es kulon dontes.
+   */
+  vanMarSora(productId: string): Promise<boolean>;
+  /** A tenyleges iras. CSAK `--apply` mellett hivodik. */
+  ir(sor: {
+    productId: string;
+    currency: string | null;
+    netPrice: Prisma.Decimal | null;
+    grossPrice: Prisma.Decimal | null;
+    saleNetPrice: Prisma.Decimal | null;
+    saleGrossPrice: Prisma.Decimal | null;
+    source: "INITIAL";
+    observedAt: Date;
+  }): Promise<void>;
+}
+
 export async function runKezdoArSorokCli(
-  out: { stdout: (t: string) => void; stderr: (t: string) => void } = {
-    stdout: (t) => process.stdout.write(t),
-    stderr: (t) => process.stderr.write(t),
-  },
+  argv: readonly string[],
+  out: CliOutput,
+  deps: KezdoSorDeps,
 ): Promise<number> {
+  /**
+   * TERV ALAPBOL, IRAS CSAK KERESRE -- a repo bevett alakja (lasd a marka- es
+   * a kategoria-parancsot).
+   *
+   * ES ITT KULONOSEN INDOKOLT: ez a parancs ELES ar-tortenetbe ir, egy olyan
+   * tabla melle, ahova tizenot percenkent egy szinkron is ir. Egy elso futas,
+   * amit nem lehet elotte megnezni, olyan allitast tenne veglegesse, amit
+   * senki nem olvasott el.
+   */
+  const apply = argv.includes("--apply");
   try {
-    const termekek = await prisma.product.findMany({
-      where: { priceHistory: { none: {} } },
-      select: {
-        id: true,
-        unasSnapshot: {
-          select: {
-            currency: true,
-            netPrice: true,
-            grossPrice: true,
-            saleNetPrice: true,
-            saleGrossPrice: true,
-            updatedAt: true,
-          },
-        },
-      },
-    });
+    const termekek = await deps.jeloltek();
 
     const most = new Date();
     let irt = 0;
@@ -78,6 +118,13 @@ export async function runKezdoArSorokCli(
      * (acrobot kerese, 2026-09-10.)
      */
     let uresArral = 0;
+    /**
+     * HANY TERMEK KAPOTT SORT A LEKERDEZES OTA -- vagyis hanyszor fogott meg
+     * valamit az iras elotti ujraellenorzes. Nulla a varhato ertek; ha nem az,
+     * akkor a futas alatt irt valaki mas, es EZ a szam mondja meg, hany sort
+     * NEM irtunk fole.
+     */
+    let kozbenKapott = 0;
 
     for (const termek of termekek) {
       const tukor = termek.unasSnapshot;
@@ -97,8 +144,18 @@ export async function runKezdoArSorokCli(
         tukor?.saleGrossPrice == null;
       if (nincsAr) uresArral += 1;
 
-      await prisma.productPriceHistory.create({
-        data: {
+      /*
+        AZ UJRAELLENORZES A TERV-FUTASBAN IS LEFUT, es ez szandekos: a terv
+        szama kulonben TOBBET igerne, mint amennyit egy kesobbi `--apply`
+        tenyleg irna, es a ketto kozotti elteres ugy nezne ki, mint hiba.
+      */
+      if (await deps.vanMarSora(termek.id)) {
+        kozbenKapott += 1;
+        continue;
+      }
+
+      if (apply) {
+        await deps.ir({
           productId: termek.id,
           currency: tukor?.currency ?? null,
           netPrice: tukor?.netPrice ?? null,
@@ -107,8 +164,8 @@ export async function runKezdoArSorokCli(
           saleGrossPrice: tukor?.saleGrossPrice ?? null,
           source: "INITIAL",
           observedAt: kezdoSorIdopontja(tukor, most),
-        },
-      });
+        });
+      }
       irt += 1;
     }
 
@@ -119,8 +176,15 @@ export async function runKezdoArSorokCli(
      * lekerdezes nem talalt termeket. A ket szam egyutt eldontheto.
      */
     out.stdout(
-      `${irt} kezdő ár-sor keletkezett | ${termekek.length} termék volt sor nélkül.\n`,
+      apply
+        ? `${irt} kezdő ár-sor keletkezett | ${termekek.length} termék volt sor nélkül.\n`
+        : `${irt} kezdő ár-sor KELETKEZNE | ${termekek.length} termék volt sor nélkül.\n`,
     );
+    if (kozbenKapott)
+      out.stdout(
+        `${kozbenKapott} termék a lekérdezés ÓTA kapott sort, ezeket kihagytuk. ` +
+          `Ha ez a szám nem nulla, a futás alatt írt más is.\n`,
+      );
     /**
      * A KET SZAM KULON ALL, ES MINDIG KIIRODIK.
      *
@@ -152,7 +216,49 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
-  const code = await runKezdoArSorokCli();
+  /**
+   * ITT KOTODIK OSSZE A PARANCS A VALODI ADATBAZISSAL, es CSAK itt.
+   *
+   * A torzs semmit nem tud a Prismarol: ezert lehet fixture-on merni, es
+   * ezert bizonyithato, hogy `--apply` nelkul nem ir -- az `ir` varratot nem
+   * hivjuk meg. A stage-en ezt NEM lehetne bizonyitani: ott a celhalmaz ma
+   * URES, tehat egy "nulla sort irnek" kiiras akkor is helyesnek latszana, ha
+   * a terv-ag maga hibas. (acrobot merese, 2026-09-15.)
+   */
+  const code = await runKezdoArSorokCli(
+    process.argv.slice(2),
+    {
+      stdout: (t) => process.stdout.write(t),
+      stderr: (t) => process.stderr.write(t),
+    },
+    {
+      jeloltek: () =>
+        prisma.product.findMany({
+          where: { priceHistory: { none: {} } },
+          select: {
+            id: true,
+            unasSnapshot: {
+              select: {
+                currency: true,
+                netPrice: true,
+                grossPrice: true,
+                saleNetPrice: true,
+                saleGrossPrice: true,
+                updatedAt: true,
+              },
+            },
+          },
+        }),
+      vanMarSora: async (productId) =>
+        (await prisma.productPriceHistory.count({
+          where: { productId },
+          take: 1,
+        })) > 0,
+      ir: async (sor) => {
+        await prisma.productPriceHistory.create({ data: sor });
+      },
+    },
+  );
   await prisma.$disconnect();
   process.exit(code);
 }
