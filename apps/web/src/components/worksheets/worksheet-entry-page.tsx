@@ -5,10 +5,8 @@ import type { WorksheetEntryDetail } from "@acropora/types";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
-import {
-  ServiceBackLink,
-  ServiceDetailHeader,
-} from "@/components/service/service-detail-chrome";
+import { ServiceBackLink } from "@/components/service/service-detail-chrome";
+import { ServiceListHeader } from "@/components/service/service-list-chrome";
 import { worksheetsApi } from "@/lib/api/worksheets";
 
 import { worksheetEntryByline } from "./worksheet-entry-presentation";
@@ -100,7 +98,17 @@ export function WorksheetEntryPage({
       <ServiceBackLink href={`/szerviz/munkalapok/${worksheetId}`}>
         Vissza a munkalapra
       </ServiceBackLink>
-      <ServiceDetailHeader eyebrow="Szerviz / munkanapló" title="Bejegyzés" />
+      {/* A PROTOTIPUS EYEBROW-JA ITT A MUNKALAP SZAMA LENNE -- es NEM veszem at,
+          mert ez a lap szandekosan CSAK a bejegyzes-listat keri le, hogy hideg
+          inditasbol is felalljon (lasd a fajl fejlecet). A valaszban nincs
+          munkalapszam, tehat egy masodik hivas kellene hozza: egy morzsaert
+          feladnank a lap egyik tulajdonsagat. Helyette azt mondjuk meg, MI EZ
+          A LAP -- ugyanaz a szabaly, mint a ket szerkeszton. */}
+      <ServiceListHeader
+        eyebrow="Munkanapló"
+        title="Bejegyzés"
+        lead="A munkalap naplójának egy bejegyzése. A szerzőt és az időpontot a rendszer rögzíti."
+      />
 
       {error ? <Alert variant="danger" title={error} /> : null}
       {entries === null ? <Skeleton className="h-24" /> : null}

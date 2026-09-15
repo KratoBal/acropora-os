@@ -58,7 +58,6 @@ export function ServiceDetailHeader({
   title,
   badge,
   sub,
-  lead,
   actions,
 }: {
   /** A sorszam vagy az allapot neve -- a CIM folott, kis nagybetus sorban. */
@@ -68,34 +67,18 @@ export function ServiceDetailHeader({
   badge?: ReactNode;
   /** A cim alatti egy sor: partner, helyszin, ami a tajekozodashoz kell. */
   sub?: ReactNode;
-  /**
-   * EGY MONDAT A CIM ALATT, es NEM ugyanaz, mint a `sub`.
-   *
-   * A `sub` AZONOSIT (melyik partner, milyen allapot) -- egy sorban all a
-   * jelvennyel, es rovid. Ez MAGYARAZ: az urlapok itt mondjak ki, mi tortenik
-   * mentesnel. A kettot egy mezobe vonva az azonosito adat es a magyarazo
-   * mondat egymas melle kerulne, es a sor ket kulonbozo dolgot allitana.
-   */
-  lead?: ReactNode;
   actions?: ReactNode;
 }) {
   return (
     <header className="mb-6 flex flex-col items-start justify-between gap-5 sm:flex-row sm:items-start">
       <div className="min-w-0">
         <p className={sv.eyebrow}>{eyebrow}</p>
-        <h1 className="max-w-[700px] text-[29px] font-extrabold leading-[1.25] tracking-[-0.03em] text-ink">
-          {title}
-        </h1>
+        <h1 className={sv.detailTitle}>{title}</h1>
         {badge || sub ? (
           <div className="mt-3 flex flex-wrap items-center gap-3">
             {badge}
             {sub ? <span className="text-xs text-muted">{sub}</span> : null}
           </div>
-        ) : null}
-        {lead ? (
-          <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-muted">
-            {lead}
-          </p>
         ) : null}
       </div>
       {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
