@@ -25,6 +25,7 @@ import type {
   AssetListResponse,
   AssetOwnerListResponse,
   AssetOwnerType,
+  AssetStatus,
 } from "@acropora/types";
 import { normalizeAssetLabelCode, randomAssetLabelCode } from "@acropora/types";
 
@@ -251,6 +252,84 @@ function jsonPayload(value: Record<string, unknown>): Prisma.InputJsonObject {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonObject;
 }
 
+/**
+ * A SZAMLALO KIINDULOPONTJA: MINDEN ALLAPOT NULLAN.
+ *
+ * KET DOLGOT CSINAL EGYSZERRE, es ezert nem tomb:
+ *
+ * 1. A NULLAS ALLAPOT IS SZEREPEL. A `groupBy` csak a LETEZO sorokat adja
+ *    vissza, tehat egy ma ures allapot kulcs NELKUL erkezne -- a kliensen a
+ *    hianyzo kulcs pontosan ugy nez ki, mint a nulla, csak eppen nem az: a
+ *    csempe gondolatjelet mutatna "0" helyett.
+ *
+ * 2. A FORDITO KENYSZERITI A TELJESSEGET. `Record<AssetStatus, 0>` alakban egy
+ *    UJ allapot ide is kell, kulonben a forditas all meg, nev szerint. Egy
+ *    felsorolo TOMB ezt nem tudja: abbol csendben kimaradhat egy ertek, es a
+ *    csempek egy letezo allapotot nem is emlitenenek.
+ */
+/**
+ * AZ ESZKOZ-LISTA KET `where`-JE, EGY HIVASBOL -- ES EZ MAGA AZ ORZO.
+ *
+ * A fuggveny MIND A KETTOT visszaadja, ugyanabbol a `visibility` valtozobol.
+ * Igy a jogosultsagi ag nem tud CSAK AZ EGYIKBOL kimaradni: nincs hova
+ * "elfelejteni" odatenni, mert egyszer all ott.
+ *
+ * ELOSZOR KET KULON HIVAS VOLT, es a kalibracio megfogta, hogy az KEVES: a
+ * hivasi helyen le lehetett cserelni a szamlalo feltetelet a jogosultsag
+ * nelkulire, es SEM az itteni egyseg-teszt, SEM a forras-szintu
+ * placement-orzo nem szolt. Az elso a fuggvenyt meri, a masodik azt, hogy a
+ * MEGLEVO hivasok jo helyen allnak -- egyik sem azt, hogy a szamlalo
+ * egyaltalan hasznalja-e. Egy orzo, ami a sajat hibajara nem tud elbukni,
+ * nem orzo.
+ *
+ * MIERT KELL EZ KIMONDVA: a hibajegyeknel a mintat ugy irtak le, hogy a
+ * szamlalo "szandekosan nem kap scope-ot". OTT a `scope` a felhasznalo sajat
+ * szukitese. ITT a `PartnerScope` a LATHATOSAGI hatar: az dönti el, hogy egy
+ * vevo- vagy szallito-felhasznalo latja-e egyaltalan a sort. Elhagyva a
+ * csempek IDEGEN PARTNER eszkozeit szamolnak meg -- nem kenyelmi kerdes,
+ * hanem adatszivargas.
+ *
+ * A JOGOSULTSAGI SZURO `AND` AGKENT ALL, SOHA NEM KULCSKENT: a felhasznaloi
+ * szuro `customerId` / `supplierId` kulcson spreadel es felso szintu `OR`-t is
+ * tartalmaz (kereses), barmelyik hatastalanitana egy szinten.
+ */
+export function assetListWheres(
+  scope: PartnerScope,
+  userWhereWithoutStatus: Prisma.AssetWhereInput,
+  statusWhere: Prisma.AssetWhereInput,
+): { list: Prisma.AssetWhereInput; counts: Prisma.AssetWhereInput } {
+  /**
+   * A HIVAS MIND A KET AGBAN KIIRVA ALL, es NEM egy kozos valtozobol jon.
+   *
+   * Egy kozos valtozoba kiemelve olvashatobb lenne, de a
+   * `auth/partner-scope-and-branch.spec.ts` a FORRAST olvassa, es azt nezi,
+   * hogy minden hatokor-segedhivas `AND` tombon BELUL all.
+   * Valtozoba tett hivast statikusan nem tud kovetni -- ki is bukott rajta,
+   * amikor igy irtam meg. Az az orzo MINDEN hivasi helyet nezi, az enyem egyet:
+   * az erosebbhez igazodom, nem forditva.
+   *
+   * ES A SEGEDFUGGVENY NEVET SEM IRJUK IDE KI HIVAS-ALAKBAN: az orzo a fajl
+   * SZOVEGET nezi, tehat egy magyarazo komment, ami idezi a hivast, HAMIS
+   * bukast okoz. Elso korben pont ez tortent.
+   */
+  return {
+    list: {
+      AND: [
+        scopeWhereForAndBranch(scope),
+        { ...userWhereWithoutStatus, ...statusWhere },
+      ],
+    },
+    counts: { AND: [scopeWhereForAndBranch(scope), userWhereWithoutStatus] },
+  };
+}
+
+const ZERO_PER_STATUS: Record<AssetStatus, 0> = {
+  ACTIVE: 0,
+  OUT_OF_SERVICE: 0,
+  IN_REPAIR: 0,
+  RETIRED: 0,
+};
+
 @Injectable()
 export class ServiceAssetsRepository extends Repository {
   constructor() {
@@ -319,9 +398,17 @@ export class ServiceAssetsRepository extends Repository {
     // szurot `customerId` / `supplierId` KULCSON spreadeli, es felso szintu
     // `OR`-t is tartalmaz (kereses); barmelyik hatastalanitana a jogosultsagot,
     // ha egy szintre kerulne vele.
-    const userWhere: Prisma.AssetWhereInput = {
+    /**
+     * A FELHASZNALOI SZURO AZ ALLAPOT NELKUL. A csempek EZT a halmazt bontjak
+     * allapotokra, tehat a sajat dimenziojuk nem lehet benne -- kulonben a
+     * "javitas alatt" csempe a MAR javitas alatt szurt listat szamolna meg, es
+     * mindig a lista hosszat mutatna.
+     *
+     * Minden MAS szuro viszont benne marad (kereses, tipus, tulajdonos,
+     * helyszin): a csempek es a lista igy ugyanarrol a halmazrol beszelnek.
+     */
+    const userWhereWithoutStatus: Prisma.AssetWhereInput = {
       ...assetOwnerScopeWhere(query.ownerScope),
-      ...(query.status === "ALL" ? {} : { status: query.status }),
       ...(query.kind ? { kind: query.kind } : {}),
       ...(query.ownerType === "CUSTOMER" && query.ownerId
         ? { customerId: query.ownerId }
@@ -375,10 +462,12 @@ export class ServiceAssetsRepository extends Repository {
           }
         : {}),
     };
-    const where: Prisma.AssetWhereInput = {
-      AND: [scopeWhereForAndBranch(scope), userWhere],
-    };
-    const [rows, totalItems] = await Promise.all([
+    const { list: where, counts: countsWhere } = assetListWheres(
+      scope,
+      userWhereWithoutStatus,
+      query.status === "ALL" ? {} : { status: query.status },
+    );
+    const [rows, totalItems, counts] = await Promise.all([
       prisma.asset.findMany({
         where,
         include: assetSummaryInclude,
@@ -387,6 +476,7 @@ export class ServiceAssetsRepository extends Repository {
         take: query.pageSize,
       }),
       prisma.asset.count({ where }),
+      this.countsByStatus(countsWhere),
     ]);
     const paths = await this.unitPaths(rows);
     return {
@@ -397,7 +487,27 @@ export class ServiceAssetsRepository extends Repository {
         totalItems,
         totalPages: Math.ceil(totalItems / query.pageSize),
       },
+      counts,
     };
+  }
+
+  /**
+   * ALLAPOTONKENTI DARABSZAM, EGY LEKERDEZESBOL.
+   *
+   * A `groupBy` a LAPOZASTOL FUGGETLEN: a csempek a teljes szurt halmazrol
+   * szolnak, nem az epp latszo lapról.
+   */
+  private async countsByStatus(
+    where: Prisma.AssetWhereInput,
+  ): Promise<Record<AssetStatus, number>> {
+    const rows = await prisma.asset.groupBy({
+      by: ["status"],
+      where,
+      _count: { _all: true },
+    });
+    const counts: Record<AssetStatus, number> = { ...ZERO_PER_STATUS };
+    for (const row of rows) counts[row.status] = row._count._all;
+    return counts;
   }
 
   /**

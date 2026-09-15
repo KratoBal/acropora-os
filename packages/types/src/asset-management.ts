@@ -227,6 +227,18 @@ export interface AssetListResponse {
     totalItems: number;
     totalPages: number;
   };
+  /**
+   * ALLAPOTONKENTI DARABSZAM, A LISTA SAJAT VALASZAN.
+   *
+   * MIERT ITT, ES NEM KULON VEGPONTON: a szamok es a lista UGYANARROL a
+   * halmazrol szolnak, es ha ket hivasbol jonnenek, a ketto elcsuszhatna --
+   * a felulet a talalatok folott mas szamot mutatna, mint ami alattuk all.
+   * Egy valasz, egy pillanat.
+   *
+   * MINDEN ALLAPOT SZEREPEL, A NULLAS IS: egy hianyzo kulcs a kliensen
+   * pontosan ugy nez ki, mint a nulla, csak eppen nem az.
+   */
+  counts: Record<AssetStatus, number>;
 }
 
 export interface CreateAssetInput {

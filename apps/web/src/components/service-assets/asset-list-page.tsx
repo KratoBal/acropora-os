@@ -32,21 +32,12 @@ import {
   type ServiceStatTile,
 } from "@/components/service/service-list-stats";
 import { sv } from "@/components/service/service-theme";
-import { useServiceStatusCounts } from "@/components/service/use-service-status-counts";
 import { assetsApi } from "@/lib/api/assets";
 import {
   assetKindLabel,
   assetStatusLabel,
   assetStatusTone,
 } from "./asset-labels";
-
-/**
- * AZ "ALL" NEM ALLAPOT, HANEM A SZURO HIANYA, es a szerver igy is erti
- * (`AssetListQueryDto.status` alapertelmezese `ACTIVE`, kulon `"ALL"` ertekkel).
- * Ezert all itt a harom kozott: a csempe "Nyilvantartott eszkoz" szama a
- * TELJES halmaze, nem egy allapote.
- */
-const COUNTED_STATUSES = ["ALL", "IN_REPAIR", "ACTIVE"] as const;
 
 const TABS = [
   { key: "ALL", label: "Összes" },
@@ -108,36 +99,17 @@ export function AssetListPage() {
   }, [load]);
 
   /**
-   * A CSEMPEK SZAMAI A TOBBI SZUROT KOVETIK (kereses, tipus, tulajdonos,
-   * helyszin), csak az ALLAPOTOT nem -- azt maga a csempe adja meg. Enelkul a
-   * harom szam egy masik halmazrol szolna, mint a lista alattuk.
+   * A CSEMPEK SZAMAI A LISTA SAJAT VALASZAN ERKEZNEK.
+   *
+   * Eddig harom KULON lista-hivas adta oket (a legkisebb lapmerettel, csak a
+   * `pagination.totalItems` erdekelt) -- a sajat hookom fejlecebe magam irtam
+   * oda, hogy ez nem a vegso alak. Mostantol a szerver egyetlen `groupBy`-jal
+   * szamolja, ugyanabban a valaszban: harom keresbol nulla lett.
+   *
+   * ES NEM CSAK OLCSOBB, HANEM PONTOSABB IS. A harom kulon hivas harom
+   * KULONBOZO pillanatot latott: ha kozben barki mozdított egy eszkozon, a
+   * csempek egymassal is ellentmondhattak. Egy valasz, egy pillanat.
    */
-  const countBase = useMemo(() => {
-    const value = new URLSearchParams(params.toString());
-    value.delete("status");
-    value.delete("page");
-    value.set("page", "1");
-    value.set("pageSize", "10");
-    return value;
-  }, [params]);
-
-  const fetchCount = useCallback(
-    async (status: string, signal: AbortSignal) => {
-      const value = new URLSearchParams(countBase.toString());
-      value.set("status", status);
-      const response = await assetsApi.list(token, value, signal);
-      return response.pagination.totalItems;
-    },
-    [countBase, token],
-  );
-
-  const counts = useServiceStatusCounts({
-    enabled: canView,
-    cacheKey: `${token}|${countBase}`,
-    statuses: COUNTED_STATUSES,
-    fetchCount,
-  });
-
   useEffect(() => {
     const timer = window.setTimeout(() => {
       if (search === (params.get("search") ?? "")) return;
@@ -234,27 +206,36 @@ export function AssetListPage() {
       />
     );
 
+  const counts = data?.counts ?? null;
+  /**
+   * AZ "OSSZES" A NEGY ALLAPOT OSSZEGE, es nem egy kulon szam a szerverrol.
+   * Igy nem tud elcsuszni: ha egyszer egy uj allapot kerul a rendszerbe, az
+   * osszeg magatol tartalmazza, es nem marad ki egy elfelejtett sorbol.
+   */
+  const total = counts
+    ? Object.values(counts).reduce((sum, value) => sum + value, 0)
+    : null;
   const tiles: ServiceStatTile[] = [
     {
       key: "ALL",
       icon: "box",
       tone: "purple",
       label: "Nyilvántartott eszköz",
-      count: counts.ALL ?? null,
+      count: total,
     },
     {
       key: "IN_REPAIR",
       icon: "wrench",
       tone: "amber",
       label: "Javítás alatt",
-      count: counts.IN_REPAIR ?? null,
+      count: counts?.IN_REPAIR ?? null,
     },
     {
       key: "ACTIVE",
       icon: "checkCircle",
       tone: "green",
       label: "Aktívan üzemel",
-      count: counts.ACTIVE ?? null,
+      count: counts?.ACTIVE ?? null,
     },
   ];
 
