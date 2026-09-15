@@ -8,7 +8,6 @@ import {
   ConfirmDialog,
   FormField,
   Input,
-  PageHeader,
   Select,
   Skeleton,
   Textarea,
@@ -27,6 +26,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { formatFileSize } from "@/lib/format/file-size";
 import { useReturnTo } from "@/components/navigation-history";
+import {
+  ServiceBackLink,
+  ServiceDataItem,
+  ServiceDetailHeader,
+} from "@/components/service/service-detail-chrome";
 import { ServiceStatusBadge } from "@/components/service/service-list-chrome";
 import { assetsApi } from "@/lib/api/assets";
 import {
@@ -320,23 +324,31 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
         A modositas gombja is elmarad: egy torolt eszkozt nincs mit szerkeszteni,
         es a link egy mar nem letezo rekordra vinne.
       */}
-      <PageHeader
-        eyebrow="Szerviz / Eszköznyilvántartás"
+      {/* A VISSZA-UT A CIM FOLOTT ALL, NEM A MUVELETEK KOZOTT: kilepes a
+          lapbol, nem muvelet rajta -- a "modositas" mellett allva ugyanolyan
+          sulyunak latszott, pedig az egyetlen, ami nem valtoztat semmin. */}
+      <ServiceBackLink href={backToList.href}>
+        {backToList.fromWithinApp ? "Vissza" : "Eszközök"}
+      </ServiceBackLink>
+      <ServiceDetailHeader
+        eyebrow={
+          deleted ? "Szerviz / Eszköznyilvántartás" : (asset?.assetNumber ?? "")
+        }
         title={deleted ? "Eszköz törölve" : (asset?.name ?? "Eszköz adatlap")}
-        description={deleted ? undefined : asset?.assetNumber}
+        badge={
+          asset && !deleted ? (
+            <ServiceStatusBadge tone={assetStatusTone[asset.status]}>
+              {assetStatusLabel[asset.status]}
+            </ServiceStatusBadge>
+          ) : undefined
+        }
+        sub={asset && !deleted ? asset.owner.displayName : undefined}
         actions={
-          <div className="flex gap-2">
-            {canManage && asset && !deleted ? (
-              <Link href={`/szerviz/eszkozok/${asset.id}/szerkesztes`}>
-                <Button>Eszköz módosítása</Button>
-              </Link>
-            ) : null}
-            <Link href={backToList.href}>
-              <Button variant="secondary">
-                {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
-              </Button>
+          canManage && asset && !deleted ? (
+            <Link href={`/szerviz/eszkozok/${asset.id}/szerkesztes`}>
+              <Button>Eszköz módosítása</Button>
             </Link>
-          </div>
+          ) : undefined
         }
       />
       {error ? (
@@ -375,16 +387,16 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
       */}
       {asset && !deleted ? (
         <>
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
+          <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_288px]">
             <div className="space-y-6">
               <Card className="p-6">
+                {/* AZ ALLAPOT A FEJLECBE KERULT, ES ITT NEM MARAD MEG.
+                    Ugyanaz a jelveny ket helyen egy kepernyon nem megerosites:
+                    ha az egyik valaha mas forrasbol dolgozna, a ketto
+                    ellentmondana egymasnak, es senki nem tudna, melyik az
+                    igaz. A FAJTA es a KRITIKUSSAG marad, mert azok nem
+                    szerepelnek a fejlecben. */}
                 <div className="flex flex-wrap items-center gap-2">
-                  {/* AZ ALLAPOT SZINE A KOZOS `assetStatusTone`-bol jon, nem
-                      egy helyi lekepezesbol: ugyanaz a szabaly allt itt es a
-                      listan, ket kulon fuggvenyben, beture azonos torzzsel. */}
-                  <ServiceStatusBadge tone={assetStatusTone[asset.status]}>
-                    {assetStatusLabel[asset.status]}
-                  </ServiceStatusBadge>
                   <Badge variant="info">{assetKindLabel[asset.kind]}</Badge>
                   <Badge>{assetCriticalityLabel[asset.criticality]}</Badge>
                 </div>
@@ -448,7 +460,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
 
               {(asset.ancestors.length > 0 || asset.children.length > 0) && (
                 <Card className="p-6">
-                  <h2 className="font-semibold text-slate-950">
+                  <h2 className="text-[16px] font-bold text-ink">
                     Eszközhierarchia
                   </h2>
                   {asset.ancestors.length > 0 ? (
@@ -494,7 +506,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
               )}
 
               <Card className="p-6">
-                <h2 className="font-semibold text-slate-950">Dokumentumok</h2>
+                <h2 className="text-[16px] font-bold text-ink">Dokumentumok</h2>
                 <p className="mt-1 text-sm text-slate-500">
                   Számla, garanciajegy és használati utasítás PDF formátumban,
                   legfeljebb 10 MB méretben.
@@ -595,7 +607,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
               </Card>
 
               <Card className="p-6">
-                <h2 className="font-semibold text-slate-950">Előzmények</h2>
+                <h2 className="text-[16px] font-bold text-ink">Előzmények</h2>
                 <div className="mt-4 divide-y">
                   {asset.events.map((event) => (
                     <div key={event.id} className="flex gap-4 py-3 first:pt-0">
@@ -617,7 +629,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
 
             <div className="space-y-6">
               <Card className="p-6">
-                <h2 className="font-semibold text-slate-950">QR-azonosító</h2>
+                <h2 className="text-[16px] font-bold text-ink">QR-azonosító</h2>
                 <p className="mt-1 text-sm leading-6 text-slate-500">
                   A matrica leolvasása az Acropora OS mobilalkalmazásban nyitja
                   meg ezt az eszközt.
@@ -647,7 +659,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
 
               {canManage ? (
                 <Card className="p-6">
-                  <h2 className="font-semibold text-slate-950">
+                  <h2 className="text-[16px] font-bold text-ink">
                     Helyszíni állapot
                   </h2>
                   <div className="mt-4 space-y-4">
@@ -717,7 +729,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
             ami nem az: a ketto nem egyenrangu, es a felulet ne allitsa, hogy az.
             A torles ezert egy lepessel bentebb all, a megerosito ablakban.
           */}
-          <h2 className="text-base font-medium">Eszköz kivezetése</h2>
+          <h2 className="text-[16px] font-bold text-ink">Eszköz kivezetése</h2>
           <p className="mt-1 text-sm">
             A kivezetett eszköz megmarad a nyilvántartásban a teljes
             történetével együtt, csak az aktív listákból kerül ki.
@@ -837,17 +849,14 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
   );
 }
 
+/**
+ * EGY ADAT A MUSZAKI RACSBAN. A megjelenitest a kozos `ServiceDataItem` adja --
+ * ez a burkolat annyit tesz hozza, amit az adatlap MINDEN mezojere vallal: a
+ * hianyzo ertek helyen gondolatjel all, nem ures hely. Az ures cella
+ * megkulonboztethetetlen egy elcsuszott elrendezestol.
+ */
 function Data({ label, value }: { label: string; value?: string }) {
-  return (
-    <div>
-      <dt className="text-xs font-bold uppercase tracking-wide text-slate-400">
-        {label}
-      </dt>
-      <dd className="mt-1 text-sm font-medium text-slate-800">
-        {value ?? "—"}
-      </dd>
-    </div>
-  );
+  return <ServiceDataItem label={label}>{value ?? "—"}</ServiceDataItem>;
 }
 
 function formatDate(value?: string) {

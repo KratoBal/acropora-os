@@ -197,3 +197,47 @@ describe("AssetDetailPage megerősítései", () => {
     expect(api.rotateQr).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * AZ ADATLAP FEJLECE, Balazs 2026-09-15-i designjabol.
+ *
+ * Ket dolgot merunk, es mind a ketto olyan, aminek az elromlasa NEMA lenne.
+ */
+describe("AssetDetailPage fejléc", () => {
+  /**
+   * A LAP CIME AZ ESZKOZ NEVE, a szama a folotte allo kis sor. Forditva volt.
+   * Az allitas a SZEREPRE megy (`heading`), nem arra, hogy a szoveg valahol
+   * megjelenik: az eszkozszam tovabbra is ott all, csak nem cimkent.
+   */
+  it("a lap címe az eszköz neve, az eszközszám a fölötte álló sor", async () => {
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    const cim = await screen.findByRole("heading", { level: 1 });
+    expect(cim.textContent).toBe("Cápasuli kompresszor");
+    expect(screen.getAllByText("ESZ-0001").length).toBeGreaterThan(0);
+  });
+
+  /**
+   * AZ ALLAPOT-JELVENY PONTOSAN EGYSZER all a lapon.
+   *
+   * A fejlecbe kerult, es a lenti kartyabol ezert ki kellett venni. Ket jelveny
+   * egy kepernyon nem hiba, amig ugyanabbol a mezobol jon -- de ha az egyik
+   * valaha mas forrasra allna at, a ketto ellentmondana egymasnak, es semmi nem
+   * szolna rola.
+   *
+   * A VALASZTO SORAIT KI KELL HAGYNI, ES EZ NEM A MERES GYENGITESE. Az
+   * allapot-allito legordulo felsorolja MIND A NEGY allapotot, koztuk az
+   * aktualisat -- az egy MASIK dolog: nem azt mondja, mi az eszkoz allapota,
+   * hanem azt, mire lehet allitani. Az elso valtozatom ezt is beleszamolta, es
+   * ezert bukott el egy helyes lapon.
+   */
+  it("az állapot-jelvény pontosan egyszer szerepel a lapon", async () => {
+    render(<AssetDetailPage assetId="asset-1" />);
+    await screen.findByRole("heading", { level: 1 });
+
+    const jelvenyek = screen
+      .getAllByText("Aktív")
+      .filter((elem) => elem.tagName !== "OPTION");
+    expect(jelvenyek).toHaveLength(1);
+  });
+});
