@@ -256,7 +256,7 @@ export function ServiceSearchField({
 }) {
   return (
     <label className={sv.search}>
-      <ServiceIcon name="search" className="size-[17px] text-[#686477]" />
+      <ServiceIcon name="search" className="size-[17px] text-muted" />
       <span className="sr-only">{label}</span>
       <input
         type="search"

@@ -357,7 +357,7 @@ export function WorksheetListPage() {
                         </span>
                       </td>
                       <td className={sv.tableCell}>
-                        <div className="text-xs font-medium text-[#26233b]">
+                        <div className="text-xs font-medium text-ink">
                           {worksheet.customerName}
                         </div>
                         <div className={sv.rowMeta}>
@@ -370,9 +370,9 @@ export function WorksheetListPage() {
                             <Avatar
                               size="sm"
                               name={worksheet.assigneeNames[0]}
-                              className="bg-[#ede8ff] text-[#5b469e] ring-0"
+                              className="bg-brand-100 text-[#5b469e] ring-0"
                             />
-                            <span className="text-xs text-[#26233b]">
+                            <span className="text-xs text-ink">
                               {worksheet.assigneeNames.join(", ")}
                             </span>
                           </span>
@@ -396,7 +396,7 @@ export function WorksheetListPage() {
                           lista viszont nem kapja meg oket. Kitalalni nem
                           szabad: a kartyan kulon tetel, es a vegpont donti el. */}
                       <td
-                        className={`${sv.tableCell} whitespace-nowrap text-right tabular-nums text-[#26233b]`}
+                        className={`${sv.tableCell} whitespace-nowrap text-right tabular-nums text-ink`}
                       >
                         {formatAmount(worksheet.grossAmount)}
                       </td>
