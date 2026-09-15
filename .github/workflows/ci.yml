@@ -148,9 +148,16 @@ jobs:
         #
         # The tolerance exists so the steps BETWEEN the two can run: the release
         # evidence recorder writes FAILURE just as much as SUCCESS, and stopping
-        # here would leave no trace of exactly the run that most needs one. It
-        # also lets the second command in this step matter, which an immediate
-        # stop on the first would not.
+        # here would leave no trace of exactly the run that most needs one.
+        #
+        # WHAT IT DOES NOT DO, and this line used to claim it did: it does not
+        # make the second command in this step run. `continue-on-error` is a
+        # STEP-level tolerance - it lets the JOB go on past a failed step. The
+        # shell inside the step is still `bash -e`, which aborts at the first
+        # failing command. MEASURED on run 35001520746 (2026-09-15): the first
+        # pnpm call exited 1, the second never started, and the `Brand database
+        # integration` suite was absent from the log. The suite gate below is
+        # what said so, by name. The body now collects both statuses instead.
         #
         # This comment is here because a hundred lines separate the two steps,
         # and reading only this one leads to the opposite conclusion - which is
@@ -171,8 +178,15 @@ jobs:
         run: |
           set -o pipefail
           naplo="$RUNNER_TEMP/integration-tap.log"
-          pnpm --filter @acropora/api test:integration 2>&1 | tee "$naplo"
-          pnpm --filter @acropora/api test:brands:integration 2>&1 | tee -a "$naplo"
+          # EACH COMMAND RUNS, AND THE STEP STILL FAILS IF ANY OF THEM DID.
+          # `bash -e` would stop at the first non-zero, which is exactly how the
+          # brands suite went missing from run 35001520746 while everything else
+          # reported normally. `statusz` keeps the verdict; the `exit` at the
+          # bottom hands it back, so the guards downstream read what they always
+          # read.
+          statusz=0
+          pnpm --filter @acropora/api test:integration 2>&1 | tee "$naplo" || statusz=1
+          pnpm --filter @acropora/api test:brands:integration 2>&1 | tee -a "$naplo" || statusz=1
           # AND THE EXIT CODE IS NOT THE WHOLE STORY, measured on this very
           # workflow (run 34950778936, 2026-09-15): an `after` hook threw, the
           # TAP stream said `not ok 24 ... failureType: hookFailed`, `# fail`
@@ -180,7 +194,8 @@ jobs:
           # "Fail the job if the database integration tests failed" below was
           # SKIPPED. The script reads what the exit code left out. Its own
           # negative control is that same run's log; see its header.
-          node scripts/tap-stream-gate.mjs "$naplo"
+          node scripts/tap-stream-gate.mjs "$naplo" || statusz=1
+          exit $statusz
 
       # A ZOLD FUTAS NEM MONDJA MEG, HOGY A SUITE-OK LE IS FUTOTTAK-E.
       #
