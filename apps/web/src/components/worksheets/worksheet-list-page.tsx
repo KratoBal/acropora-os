@@ -342,7 +342,7 @@ export function WorksheetListPage() {
                             <Avatar
                               size="sm"
                               name={worksheet.assigneeNames[0]}
-                              className="bg-brand-100 text-[#5b469e] ring-0"
+                              className="bg-brand-100 text-brand-ink ring-0"
                             />
                             <span className="text-xs text-ink">
                               {worksheet.assigneeNames.join(", ")}

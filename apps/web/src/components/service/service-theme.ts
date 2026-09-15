@@ -78,7 +78,18 @@ export const sv = {
     "block text-[13px] font-semibold leading-[1.45] text-ink hover:text-brand-700",
   /** `.row-meta` -- a cim alatti halvany masodsor. */
   rowMeta: "text-[11px] leading-[1.5] text-muted",
-  /** `.tag` -- kis lila pirula egy azonositonak. */
+  /**
+   * `.tag` -- kis lila pirula egy azonositonak.
+   *
+   * A SZOVEG SZINE NYERSEN ALL, PEDIG BETURE AZONOS A `brand-muted`-tel -- es ez
+   * NEM elmaradt sopres. Az a token a KIEMELT PANEL leiro szovege, `brand-100`
+   * hatteren; ez egy PIRULA szovege, `brand-50`-en. Ket kulonbozo dontes,
+   * ugyanazzal a mai ertekkel.
+   *
+   * Egy tokenbe huzva azt allitanank, hogy egyek, es a kovetkezo, aki a panel
+   * szoveget hangolja, ezt is elvinne -- egy MASIK hatteren, ahol a kontraszt
+   * mas. Ha ennek is kell egyszer nev, sajat nevet kap.
+   */
   tag: "inline-flex items-center gap-1.5 rounded-md bg-brand-50 px-2 py-[5px] text-[11px] text-[#635578]",
   /** `.table-footer` -- a talalatszam a lista alatt. */
   tableFooter:
@@ -103,7 +114,7 @@ export type ServiceTone =
 
 export const serviceToneClass: Record<ServiceTone, string> = {
   neutral: "bg-slate-100 text-[#635e72]",
-  purple: "bg-brand-100 text-[#5b469e]",
+  purple: "bg-brand-100 text-brand-ink",
   green: "bg-emerald-50 text-emerald-700",
   amber: "bg-amber-50 text-amber-700",
   red: "bg-rose-50 text-rose-700",

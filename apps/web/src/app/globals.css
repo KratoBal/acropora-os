@@ -123,6 +123,25 @@
   --color-paper: #f6f5f8;
   /** A keretek es elvalasztok. */
   --color-line: #e5e2eb;
+  /**
+   * SZOVEG A LEVENDULA HATTEREN, KET SULYBAN.
+   *
+   * Ugyanaz a par, mint az `ink` / `muted` a feher lapon, csak `brand-100`-on:
+   * az elso a cimke es a monogram, a masodik a kiemelt panel leiro szovege.
+   *
+   * MIERT TOKEN, ES MIERT MOST: mindketto MASODSZOR is kellett (a
+   * `serviceToneClass` es az avatar; illetve a `ServiceNextAction` es a
+   * hibajegy-adatlap lezart-mondata). A `service-theme.ts` sajat szabalya
+   * szerint "ha valamelyik masodszor is kell valahol, akkor lesz belole token
+   * -- akkor, es nem elore". Ez most tortent meg.
+   *
+   * ES AMI NEM KERUL IDE: a `sv.tag` pirula-szovege, ami BETURE ugyanaz az
+   * ertek, mint a `brand-muted` -- de MAS DOLOG (pirula `brand-50`-en, nem a
+   * kiemelt panel). Egy tokenbe huzva azt allitanank, hogy egyek, es a
+   * kovetkezo szin-valtoztatas mind a kettot vinne.
+   */
+  --color-brand-ink: #5b469e;
+  --color-brand-muted: #635578;
   /** A masodlagos kiemelo szin: csak hangsulyra, nem allapotra. */
   --color-coral: #f2a78d;
   --color-coral-ink: #663525;
