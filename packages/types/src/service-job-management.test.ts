@@ -45,6 +45,8 @@ function removal(id: string, removedAt: string) {
     documentType: "PHOTO" as const,
     actorName: "Kiss Eszter",
     removedAt,
+    uploadedByName: "Nagy Dániel",
+    uploadedAt: "2026-09-14T08:00:00.000Z",
   };
 }
 
@@ -166,5 +168,10 @@ describe("serviceJobTimeline", () => {
     /* A TIPUS IS ATJUT: enelkul a naplo azt mondana, hogy egy FAJL tunt el, de
        nem azt, hogy a bizonyito fenykep volt-e. */
     assert.equal(entry.removal.documentType, "PHOTO");
+    /* ES A FELTOLTES ADATAI IS: a torles a dokumentum SORAT viszi el, amiben
+       eddig ez allt. Ha a bejegyzes nem venne at, egy torles ket dolgot
+       semmisitene meg -- a fajlt es azt, hogy ki hozta. */
+    assert.equal(entry.removal.uploadedByName, "Nagy Dániel");
+    assert.equal(entry.removal.uploadedAt, "2026-09-14T08:00:00.000Z");
   });
 });

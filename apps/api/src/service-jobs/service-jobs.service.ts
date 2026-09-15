@@ -506,6 +506,18 @@ export class ServiceJobsService {
             documentType: meta.documentType === "PHOTO" ? "PHOTO" : "OTHER",
             actorName: removal.user?.displayName ?? null,
             removedAt: removal.createdAt.toISOString(),
+            /*
+              A FELTOLTES ADATAI A NAPLO SAJAT MASOLATABOL -- mashonnan nem is
+              jöhetnenek: a dokumentum sora, ami ezeket hordozta, a torleskor
+              megszunt. A `null` itt azt mondja, hogy NEM TUDJUK (regebbi
+              bejegyzes), nem azt, hogy nem volt feltoltve.
+            */
+            uploadedByName:
+              typeof meta.uploadedByName === "string"
+                ? meta.uploadedByName
+                : null,
+            uploadedAt:
+              typeof meta.uploadedAt === "string" ? meta.uploadedAt : null,
           } as const;
         }),
       }),

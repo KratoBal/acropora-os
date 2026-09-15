@@ -208,6 +208,16 @@ export class ServiceJobDocumentsRepository {
           fileName: true,
           type: true,
           storageKey: true,
+          /**
+           * A FELTOLTES ADATAI IS -- MERT EZ A SOR VISZI OKET.
+           *
+           * A feltoltes MA IS naplozva van, csak nem a naploban: a csatolmany
+           * sora hordozza, KI toltotte fel es MIKOR. Ha a sort toroljuk, ez a
+           * nyom is eltunik vele. Ezert veszi at a torles-bejegyzes -- kulonben
+           * egy torles KET dolgot semmisitene meg, nem egyet.
+           */
+          createdAt: true,
+          uploadedBy: { select: { displayName: true } },
         },
       });
       if (!document) return null;
@@ -222,8 +232,16 @@ export class ServiceJobDocumentsRepository {
        * eltunik, a taroloból is, es onnantol EZ a sor az egyetlen hely, ahol
        * megmarad, hogy VOLT, es hogy ki vette le.
        *
-       * Aki ezt "befejezi" egy feltoltes-naploval, nem hianyt potol, hanem
-       * megketszerezi azt, ami mar latszik.
+       * ES AZ INDOK EGY LEPESSEL TOVABB MEGY, MINT "a lista a nyom": a feltoltes
+       * nyoma nem a lista, hanem MAGA A SOR -- az `uploadedById` es a
+       * `createdAt` mezovel egyutt. Vagyis a feltoltes MA IS naplozva van, csak
+       * nem a naploban. Ha viszont a sort toroljuk, ezzel egyutt a FELTOLTES
+       * nyoma is eltunik.
+       *
+       * EZERT VESZI AT EZ A BEJEGYZES A SOR TELJES MONDANIVALOJAT (nev, tipus,
+       * feltolto, feltoltes ideje): igy semmi nem vesz el, es epp ezert nem
+       * kell ketszer naplozni. Aki ezt "befejezi" egy feltoltes-naploval, nem
+       * hianyt potol, hanem megketszerezi azt, ami mar latszik.
        *
        * A NYOM UGYANABBAN A TRANZAKCIOBAN KELETKEZIK, MINT A TORLES.
        *
@@ -263,6 +281,8 @@ export class ServiceJobDocumentsRepository {
              */
             fileName: document.fileName,
             documentType: document.type,
+            uploadedByName: document.uploadedBy?.displayName ?? null,
+            uploadedAt: document.createdAt.toISOString(),
           } satisfies Prisma.JsonObject,
         },
       });

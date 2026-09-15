@@ -534,6 +534,25 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                           ? ` · ${entry.event.actorName}`
                           : ""}
                       </div>
+                      {/*
+                        A TÖRÖLT CSATOLMÁNY SORA ALATT AZ ÁLL, AMIT A TÖRLÉS
+                        ELVITT VOLNA: ki töltötte fel, és mikor. A fájl sora
+                        addigra nincs meg, tehát ez az egyetlen hely, ahol ez
+                        látszik - ha itt sem írnánk ki, a megőrzött adat
+                        megvolna, csak nem tudna róla senki.
+
+                        Régebbi bejegyzésnél `null`, és olyankor nem írunk
+                        semmit: a „nem tudjuk" nem ugyanaz, mint a „nem volt".
+                      */}
+                      {entry.kind === "document" &&
+                      entry.removal.uploadedAt !== null ? (
+                        <div className="mt-0.5 text-xs text-slate-500">
+                          Feltöltve: {formatDateTime(entry.removal.uploadedAt)}
+                          {entry.removal.uploadedByName
+                            ? ` · ${entry.removal.uploadedByName}`
+                            : ""}
+                        </div>
+                      ) : null}
                       {entry.kind === "status" && entry.event.note ? (
                         <div className="mt-1 whitespace-pre-wrap text-sm">
                           {entry.event.note}

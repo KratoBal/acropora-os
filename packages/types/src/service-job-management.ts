@@ -274,8 +274,26 @@ export interface ServiceJobDocumentRemoval {
    * azt, MILYEN.
    */
   documentType: ServiceJobDocumentType;
+  /**
+   * AKI TOROLTE, ES AMIKOR. Az `actorName` elhagyhato: egy azota torolt
+   * felhasznalo nem viszi magaval a naplot, ahogy az allapotvaltasoknal sem.
+   */
   actorName: string | null;
   removedAt: string;
+  /**
+   * ES AKI FELTOLTOTTE, ES AMIKOR -- A TOROLT SORBOL ATVEVE.
+   *
+   * A feltoltes MA IS rogzitve van, csak nem a naploban: a csatolmany sora
+   * hordozza. A torles viszont AZT A SORT viszi el, tehat a feltoltes nyoma
+   * vele egyutt tunne el. Ez a ket mezo azert all itt, hogy egy torles EGY
+   * dolgot semmisitsen meg, ne kettot.
+   *
+   * Az `uploadedAt` a regebbi bejegyzeseknel `null`: a mezo 2026-09-15-en
+   * keletkezett, es a korabbi sorok nem hordozzak. A `null` itt azt mondja,
+   * hogy NEM TUDJUK -- nem azt, hogy nem volt feltoltve.
+   */
+  uploadedByName: string | null;
+  uploadedAt: string | null;
 }
 
 export type ServiceJobTimelineEntry =
