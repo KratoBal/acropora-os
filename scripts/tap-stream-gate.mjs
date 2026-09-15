@@ -52,9 +52,16 @@
  *
  *   - a run that produces NO summary at all (the runner never started). That
  *     shape already exits non-zero, so the existing gate sees it.
- *   - a suite that was never discovered. Nothing in the output mentions it, so
- *     no scan of the output can find it; that needs a count against an expected
- *     number, which is a different measurement.
+ *   - a suite that was never discovered, or one that ran with `# SKIP`. Nothing
+ *     in this gate's output scan can find the first: it is absent. THAT HOLE IS
+ *     NOW CLOSED BY `integration-suite-gate.mjs`, which reads the expected suite
+ *     NAMES from the sources and reports which one is missing.
+ *
+ *     This paragraph used to say the fix "needs a count against an expected
+ *     number". Measured since, and the count would have been the weaker tool in
+ *     both directions: a skipped suite KEEPS the suite count (node reports
+ *     `ok N - <name> # SKIP` and still counts the suite), and a number can only
+ *     say that one is missing, never which.
  *
  * THE OPTIONAL PREFIXES ARE NOT DECORATION. Two real forms carry one:
  *

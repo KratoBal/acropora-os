@@ -182,6 +182,23 @@ jobs:
           # negative control is that same run's log; see its header.
           node scripts/tap-stream-gate.mjs "$naplo"
 
+      # A ZOLD FUTAS NEM MONDJA MEG, HOGY A SUITE-OK LE IS FUTOTTAK-E.
+      #
+      # A fenti kapu azt fogja meg, ha valami ELBUKOTT ugy, hogy a kilepesi kod
+      # hallgat rola. Ez a masodik azt, ha semmi nem TORTENT: minden integracios
+      # suite `describe(nev, { skip: !enabled })` alakban all, tehat PostgreSQL
+      # nelkul a futas zolden vegigmegy, es a `# skipped` szamlalo NULLA marad --
+      # az a mezo a kihagyott TESZTEKET szamolja, nem a kihagyott SUITE-okat
+      # (merve node v22.23.2-n, mindket alakkal egy futasban; a kalibracio a
+      # `integration-suite-gate.spec.ts`-ben all, es ott is ez az elso allitas).
+      #
+      # KULON LEPES, NEM a fenti vegen: az a lepes `continue-on-error`, tehat egy
+      # bukas ott csak egy kesobbi lepes olvasatan at latszik. Ez itt kozvetlenul
+      # megallitja a futast, es a sajat sorat adja a checklistan.
+      - name: Fail the job if the integration suites did not actually run
+        if: always()
+        run: node scripts/integration-suite-gate.mjs "$RUNNER_TEMP/integration-tap.log"
+
       # Checkpoint 9: the recorded databaseEngineVersion must be machine-
       # queried from the actual running server, never a hardcoded literal
       # that could silently drift from what the service container is
