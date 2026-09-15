@@ -121,13 +121,38 @@ describe("integrációs kapu lefedettsége", () => {
       `Csak ${specs.length} integrációs spec fájlt találtam. Ez a keresés hibája.`,
     );
 
+    /**
+     * HÁROM ALAK, NEM KETTŐ, és a harmadik ma még nem fordul elő - épp ezért
+     * kell. A `deleteMany()`, a `deleteMany({})` és a `deleteMany({ where: {} })`
+     * ugyanazt teszi: üres feltétel, teljes tábla. Az első kettőt egy mai mérés
+     * hozta elő; a harmadikra acrobot kérdezett rá, és a mintám vak volt rá. Egy
+     * őrző, ami csak a MA előforduló alakokat ismeri, a holnap írt sort engedi át.
+     *
+     * A KOMMENTEKET KI KELL HAGYNI, és ez sem elméleti: a javított specek
+     * LEÍRJÁK a tiltott alakot, mert enélkül a következő olvasó nem tudja, mit
+     * ne csináljon. Egy őrző, ami a saját dokumentációjától pirosodik, arra
+     * tanít, hogy ne írjunk magyarázatot - és az drágább, mint amit véd.
+     */
+    const uresFeltetel =
+      /prisma\.(\w+)\.deleteMany\(\s*(?:\{\s*(?:where\s*:\s*\{\s*\}\s*,?\s*)?\}\s*)?\)/;
+
     const unfiltered: string[] = [];
     for (const file of specs) {
       const source = readFileSync(file, "utf8");
-      for (const [index, line] of source.split("\n").entries()) {
-        const hit = /prisma\.(\w+)\.deleteMany\(\s*(?:\{\s*\})?\s*\)/.exec(
-          line,
-        );
+      let blokkKommentben = false;
+      for (const [index, raw] of source.split("\n").entries()) {
+        const line = raw.trim();
+        if (blokkKommentben) {
+          if (line.includes("*/")) blokkKommentben = false;
+          continue;
+        }
+        if (line.startsWith("/*")) {
+          if (!line.includes("*/")) blokkKommentben = true;
+          continue;
+        }
+        if (line.startsWith("//") || line.startsWith("*")) continue;
+
+        const hit = uresFeltetel.exec(line);
         if (hit) unfiltered.push(`${file}:${index + 1} (${hit[1]})`);
       }
     }
