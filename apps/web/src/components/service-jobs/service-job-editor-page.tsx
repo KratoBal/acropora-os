@@ -1,12 +1,13 @@
 "use client";
 
-import { Alert, Button, Card, Input, PageHeader } from "@acropora/ui";
+import { Alert, Button, Input } from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
   type WorksheetSelectablePartner,
 } from "@acropora/types";
 import type { WorksheetDepartmentSummary } from "@acropora/types";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -16,6 +17,10 @@ import { worksheetsApi } from "@/lib/api/worksheets";
 import { buildSiteOptions } from "@/lib/partners/site-tree";
 import { JobAssetPicker } from "./job-asset-picker";
 import { PartnerPicker } from "./partner-picker";
+import {
+  ServiceJobPageHeader,
+  ServiceJobStepCard,
+} from "./service-job-page-chrome";
 import {
   toggleAssignee,
   useAssignableUsers,
@@ -258,8 +263,8 @@ export function ServiceJobEditorPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Szerviz"
+      <ServiceJobPageHeader
+        eyebrow="Új bejegyzés"
         title="Új hibajegy"
         description="A hibajegy a lánc első eleme. A munkalapokat utólag lehet alá csatolni - a lap keletkezhet előbb is, mint a jegy."
       />
@@ -279,43 +284,59 @@ export function ServiceJobEditorPage() {
         lap ket iranyban olvashato. Elol a fuggoseg feje, alatta ami rola
         kovetkezik.
       */}
-      <Card className="space-y-4 p-4">
-        <div className="space-y-1">
-          <label className="text-sm font-semibold" htmlFor="hibajegy-partner">
-            Partner
-          </label>
-          {customer ? (
-            <div className="flex items-center gap-2 text-sm">
-              <span className="font-medium">{customer.name}</span>
-              <button
-                type="button"
-                className="text-xs text-slate-500 underline"
-                onClick={() => setCustomer(null)}
+      {/*
+        KET HASAB, ES A JOBB OLDALON NINCS MEZO.
+
+        A felvitel MARAD egy oszlopban: egy urlap, aminek a mezoi ket hasabra
+        szakadnak, ket kulonbozo olvasasi sorrendet kinal, es epp a sorrend az,
+        ami itt tartalmi kerdes. A jobb hasab ezert csak ELMONDJA, mi kovetkezik
+        -- nem kertez.
+      */}
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-6">
+          <ServiceJobStepCard number="01" title="Partner és helyszín">
+            <div className="space-y-1">
+              <label
+                className="block text-sm font-semibold"
+                htmlFor="hibajegy-partner"
               >
-                Másik partner
-              </button>
-            </div>
-          ) : (
-            <>
-              <PartnerPicker id="hibajegy-partner" onPick={setCustomer} />
-              {/*
+                Partner
+              </label>
+              {customer ? (
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="font-medium">{customer.name}</span>
+                  <button
+                    type="button"
+                    className="text-xs text-slate-500 underline"
+                    onClick={() => setCustomer(null)}
+                  >
+                    Másik partner
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <PartnerPicker id="hibajegy-partner" onPick={setCustomer} />
+                  {/*
                 A HIÁNY IS ÁLLÍTÁS: a partner elhagyható, és ezt ki kell mondani,
                 különben a felhasználó keresni fog valamit, ami nem hiányzik.
                 A következménye viszont ott áll mellette, mert az MA korlátoz.
               */}
-              <p className="pt-1 text-xs text-slate-500">
-                Elhagyható. Partner nélkül a jegy megnyílik, de munkalapot csak
-                azután lehet alá csatolni, hogy a partnere megvan.
-              </p>
-            </>
-          )}
-        </div>
+                  <p className="pt-1 text-xs text-slate-500">
+                    Elhagyható. Partner nélkül a jegy megnyílik, de munkalapot
+                    csak azután lehet alá csatolni, hogy a partnere megvan.
+                  </p>
+                </>
+              )}
+            </div>
 
-        <div className="space-y-1">
-          <label className="text-sm font-semibold" htmlFor="hibajegy-helyszin">
-            Helyszín
-          </label>
-          {/*
+            <div className="space-y-1">
+              <label
+                className="block text-sm font-semibold"
+                htmlFor="hibajegy-helyszin"
+              >
+                Helyszín
+              </label>
+              {/*
             HAROM KULON ALLAPOT, HAROM KULON MONDAT, es ez nem bobeszedusseg.
             Nincs partner / meg toltunk / a partnernek nincs helyszine -- a
             telefonos urlapon pontosan ez a kulonbseg hianyzott, es egy ures
@@ -323,147 +344,217 @@ export function ServiceJobEditorPage() {
             Aki egy ures listat lat magyarazat nelkul, a rossz helyen kezd
             keresni.
           */}
-          {!customer ? (
-            <p className="text-sm text-slate-500">
-              Előbb válassz partnert. A helyszínek a partner saját fájából
-              jönnek.
-            </p>
-          ) : !departmentsLoaded ? (
-            <p className="text-sm text-slate-500">Helyszínek betöltése...</p>
-          ) : departmentOptions.length === 0 ? (
-            <p className="text-sm text-slate-500">
-              Ehhez a partnerhez nincs felvéve helyszín. A jegy enélkül is
-              megnyitható.
-            </p>
-          ) : (
-            <select
-              id="hibajegy-helyszin"
-              className="w-full rounded border px-2 py-1 text-sm"
-              value={departmentId}
-              onChange={(event) => setDepartmentId(event.target.value)}
-            >
-              <option value="">Nincs megadva</option>
-              {departmentOptions.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
+              {!customer ? (
+                <p className="text-sm text-slate-500">
+                  Előbb válassz partnert. A helyszínek a partner saját fájából
+                  jönnek.
+                </p>
+              ) : !departmentsLoaded ? (
+                <p className="text-sm text-slate-500">
+                  Helyszínek betöltése...
+                </p>
+              ) : departmentOptions.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  Ehhez a partnerhez nincs felvéve helyszín. A jegy enélkül is
+                  megnyitható.
+                </p>
+              ) : (
+                <select
+                  id="hibajegy-helyszin"
+                  className="w-full rounded border px-2 py-1 text-sm"
+                  value={departmentId}
+                  onChange={(event) => setDepartmentId(event.target.value)}
+                >
+                  <option value="">Nincs megadva</option>
+                  {departmentOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </ServiceJobStepCard>
 
-        <div className="space-y-1">
-          <label className="text-sm font-semibold" htmlFor="hibajegy-cim">
-            Mi a baj?
-          </label>
-          <Input
-            id="hibajegy-cim"
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            placeholder="Például: a hármas medence szivattyúja nem indul"
-          />
-        </div>
+          <ServiceJobStepCard number="02" title="A hiba leírása">
+            <div className="space-y-1">
+              <label className="text-sm font-semibold" htmlFor="hibajegy-cim">
+                Mi a baj?
+              </label>
+              <Input
+                id="hibajegy-cim"
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="Például: a hármas medence szivattyúja nem indul"
+              />
+            </div>
 
-        <div className="space-y-1">
-          <label className="text-sm font-semibold" htmlFor="hibajegy-leiras">
-            Részletek
-          </label>
-          <textarea
-            id="hibajegy-leiras"
-            className="w-full rounded border px-2 py-1 text-sm"
-            rows={4}
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-          />
-        </div>
+            <div className="space-y-1">
+              <label
+                className="text-sm font-semibold"
+                htmlFor="hibajegy-leiras"
+              >
+                Részletek
+              </label>
+              <textarea
+                id="hibajegy-leiras"
+                className="w-full rounded border px-2 py-1 text-sm"
+                rows={4}
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+              />
+            </div>
 
-        <div className="space-y-1">
-          <span className="text-sm font-semibold">Érintett eszközök</span>
-          {/*
+            <div className="space-y-1">
+              <span className="text-sm font-semibold">Érintett eszközök</span>
+              {/*
             A CIMKE ITT `span`, NEM `label`. Egy `label` egyetlen mezohoz
             tartozik, itt viszont egy JELOLONEGYZET-LISTA all: a felirat a
             csoportra vonatkozik, es a sajat feliratat minden sor viszi. Egy
             `htmlFor` nelkuli `label` csendben semmire nem mutatna.
           */}
-          <JobAssetPicker
-            departmentId={departmentId}
-            selected={assetIds}
-            onChange={setAssetIds}
-          />
-        </div>
+              <JobAssetPicker
+                departmentId={departmentId}
+                selected={assetIds}
+                onChange={setAssetIds}
+              />
+            </div>
+          </ServiceJobStepCard>
 
-        {/*
+          {/*
           A SORREND BALAZS 2026-09-14-I LISTAJAT KOVETI, es a ket uj mezo a
           VEGERE megy: a lista a HIBAT irja le, majd azt, amit erint, majd a
-          bizonyitekot.
+          bizonyitekot. A harmadik lepes EZT a ket mezot fogja ossze.
         */}
-        <div className="space-y-1">
-          <label
-            className="block text-sm font-semibold"
-            htmlFor="hibajegy-fajlok"
-          >
-            Fényképek és fájlok
-          </label>
-          <input
-            id="hibajegy-fajlok"
-            type="file"
-            multiple
-            accept="image/jpeg,image/png,application/pdf"
-            className="text-sm"
-            onChange={(event) => setFiles(Array.from(event.target.files ?? []))}
-          />
-          {/*
+          <ServiceJobStepCard number="03" title="Fájlok és delegálás">
+            <div className="space-y-1">
+              <label
+                className="block text-sm font-semibold"
+                htmlFor="hibajegy-fajlok"
+              >
+                Fényképek és fájlok
+              </label>
+              {/* A SZAGGATOTT KERET A TERVBOL JON, es CSAK keret: a mezo
+                  maga valtozatlan, az azonositoja es a felirata is. A kettot
+                  nem szabad osszekotni -- egy "szebb" sajat gomb elvenne a
+                  bongeszo sajat fajlvalasztojat, es azzal a billentyuzetes
+                  utat is. */}
+              <div className="rounded-xl border border-dashed border-violet-200 bg-violet-50/40 px-4 py-5">
+                <input
+                  id="hibajegy-fajlok"
+                  type="file"
+                  multiple
+                  accept="image/jpeg,image/png,application/pdf"
+                  className="text-sm"
+                  onChange={(event) =>
+                    setFiles(Array.from(event.target.files ?? []))
+                  }
+                />
+              </div>
+              {/*
             A SORRENDET KI KELL MONDANI. A fajl a jegy LETREJOTTE UTAN megy fel,
             mert addig nincs mihez kotni -- es ha errol hallgatnank, egy lassu
             feltoltes ugy nezne ki, mintha a felvitel akadt volna el.
           */}
-          <p className="pt-1 text-xs text-slate-500">
-            {files.length
-              ? `${files.length} fájl feltöltésre vár. A hibajegy megnyitása után töltjük fel.`
-              : "Elhagyható. JPEG, PNG vagy PDF, fájlonként legfeljebb 10 MB."}
-          </p>
-        </div>
+              <p className="pt-1 text-xs text-slate-500">
+                {files.length
+                  ? `${files.length} fájl feltöltésre vár. A hibajegy megnyitása után töltjük fel.`
+                  : "Elhagyható. JPEG, PNG vagy PDF, fájlonként legfeljebb 10 MB."}
+              </p>
+            </div>
 
-        <div className="space-y-1">
-          {/*
+            <div className="space-y-1">
+              {/*
             A CIMKE ITT `span`, NEM `label` -- ugyanabbol az okbol, amiert az
             "Érintett eszközök" felirata is az: egy jelolonegyzet-LISTA all
             alatta, es a sajat feliratat minden sor viszi. Egy `htmlFor`
             nelkuli `label` csendben semmire nem mutatna.
           */}
-          <span className="text-sm font-semibold">Delegált kollégák</span>
-          <WorksheetAssigneePicker
-            candidates={candidates}
-            selected={assigneeIds}
-            onToggle={(userId) =>
-              setAssigneeIds((current) => toggleAssignee(current, userId))
-            }
-          />
-          {candidatesError ? (
-            <p className="text-xs font-medium text-rose-600">
-              {candidatesError}
-            </p>
-          ) : null}
-          {/*
+              <span className="text-sm font-semibold">Delegált kollégák</span>
+              <WorksheetAssigneePicker
+                candidates={candidates}
+                selected={assigneeIds}
+                onToggle={(userId) =>
+                  setAssigneeIds((current) => toggleAssignee(current, userId))
+                }
+              />
+              {candidatesError ? (
+                <p className="text-xs font-medium text-rose-600">
+                  {candidatesError}
+                </p>
+              ) : null}
+              {/*
             MIERT A VEGEN: Balazs 2026-09-14-i sorrendje a HIBAT irja le, majd
             azt, amit erint, majd a bizonyitekot. A delegalas az egyetlen mezo,
             ami nem a hibarol szol, hanem a SZERVEZESROL -- aki a munkat
             kiadja, a legvegen dont rola.
           */}
-          <p className="pt-1 text-xs text-slate-500">
-            Elhagyható. A delegált kollégák értesítést kapnak a jegyről.
-          </p>
+              <p className="pt-1 text-xs text-slate-500">
+                Elhagyható. A delegált kollégák értesítést kapnak a jegyről.
+              </p>
+            </div>
+          </ServiceJobStepCard>
+
+          {/*
+            A ZARO SAV KULON DOBOZ, NEM AZ UTOLSO LEPES ALJA.
+
+            A gomb az EGESZ urlapra vonatkozik, nem a fajlokra es a delegalasra
+            -- az utolso lepesen belul viszont pont ugy nezne ki, mintha csak
+            azt mentene. A "Megsem" is ide tartozik: eddig SEHOL nem allt kiut
+            a lapon, es a bongeszo vissza-gombja nem ugyanaz, mert a felvitt
+            szoveg sorsarol semmit nem mond.
+          */}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+            <p className="text-xs text-slate-500">
+              A „Mi a baj?” mező kötelező, a többi elhagyható.
+            </p>
+            <div className="flex items-center gap-2">
+              <Link href="/szerviz/hibajegyek">
+                <Button variant="secondary">Mégsem</Button>
+              </Link>
+              <Button
+                disabled={(!created && !title.trim()) || saving}
+                onClick={() => void submit()}
+              >
+                {created
+                  ? "Csatolmányok feltöltése újra"
+                  : "Hibajegy megnyitása"}
+              </Button>
+            </div>
+          </div>
         </div>
 
-        <div className="flex gap-2">
-          <Button
-            disabled={(!created && !title.trim()) || saving}
-            onClick={() => void submit()}
-          >
-            {created ? "Csatolmányok feltöltése újra" : "Hibajegy megnyitása"}
-          </Button>
-        </div>
-      </Card>
+        {/*
+          A JOBB HASAB NEM ISMETLI A MEZOKET, HANEM A MENETET MONDJA EL.
+
+          Harom sor, ugyanaz a harom lepes, ami balra all. Nem dísz: a felvitel
+          sorrendje itt fuggosegi kerdes (a helyszin a partnertol jon), es ez az
+          egyetlen hely, ahol ez SZOVEGBEN is ki van mondva.
+        */}
+        <aside className="space-y-3 rounded-xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+          <h2 className="text-base font-bold tracking-tight text-slate-950">
+            Rövid út a kész feladatig
+          </h2>
+          <p className="text-sm leading-6 text-slate-500">
+            A hibajegy összefogja a bejelentést, az eszközöket és a
+            munkalapokat.
+          </p>
+          <ol className="space-y-2 text-sm text-slate-600">
+            <li className="flex gap-2">
+              <span className="font-semibold text-violet-700">1.</span>
+              Partner és pontos helyszín
+            </li>
+            <li className="flex gap-2">
+              <span className="font-semibold text-violet-700">2.</span>
+              Rövid, felismerhető leírás
+            </li>
+            <li className="flex gap-2">
+              <span className="font-semibold text-violet-700">3.</span>A munka
+              kiosztása a csapatnak
+            </li>
+          </ol>
+        </aside>
+      </div>
     </div>
   );
 }
