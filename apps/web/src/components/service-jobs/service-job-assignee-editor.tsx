@@ -1,6 +1,11 @@
 "use client";
 
-import { Button, Card } from "@acropora/ui";
+import { Button } from "@acropora/ui";
+
+import {
+  ServicePanel,
+  ServicePanelHeading,
+} from "@/components/service/service-detail-chrome";
 import type { ServiceJobAssignee, ServiceJobDetail } from "@acropora/types";
 import { useEffect, useState } from "react";
 
@@ -105,8 +110,8 @@ export function ServiceJobAssigneeEditor({
     selected.some((userId) => !current.includes(userId));
 
   return (
-    <Card className="space-y-3 p-4">
-      <h2 className="text-sm font-semibold">Delegált kollégák</h2>
+    <ServicePanel className="space-y-3">
+      <ServicePanelHeading title="Delegált kollégák" />
       {assignees.length ? (
         <ul className="text-sm">
           {assignees.map((assignee) => (
@@ -143,6 +148,6 @@ export function ServiceJobAssigneeEditor({
           </Button>
         </>
       ) : null}
-    </Card>
+    </ServicePanel>
   );
 }
