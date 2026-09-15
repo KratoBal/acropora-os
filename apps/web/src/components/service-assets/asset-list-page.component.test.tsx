@@ -69,6 +69,8 @@ function response(page: number): AssetListResponse {
       },
     ],
     pagination: { page, pageSize: 25, totalItems: 60, totalPages: 3 },
+    // MINDEN ALLAPOT SZEREPEL, A NULLAS IS: a szerver igy adja vissza.
+    counts: { ACTIVE: 40, OUT_OF_SERVICE: 6, IN_REPAIR: 12, RETIRED: 3 },
   };
 }
 
@@ -282,5 +284,47 @@ describe("AssetListPage állapot-csempék", () => {
 
     await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
     expect(lastTarget().get("status")).toBe("IN_REPAIR");
+  });
+});
+
+/**
+ * A CSEMPEK SZAMAI A SZERVER VALASZABOL JONNEK, NEM A LAPBOL.
+ *
+ * Korabban harom kulon lista-hivas adta oket; mostantol a lista sajat valasza
+ * hozza (`counts`). Az allitas azt meri, hogy tenyleg ONNAN, es nem valamelyik
+ * kezreeso masik szambol.
+ *
+ * A FIXTURE SZANDEKOSAN UGY ALL, hogy a negy allapot osszege (61) NE egyezzen a
+ * `pagination.totalItems`-szel (60). Egyezo szamokkal az allitas akkor is zold
+ * lenne, ha a csempe a lapozas osszdarabszamat mutatna -- vagyis nem
+ * kulonboztetne meg a ket forrast, es pont azt nem merne, amiert megirtam.
+ */
+describe("AssetListPage csempe-számok", () => {
+  beforeEach(() => {
+    auth.session = session;
+    navigation.params = new URLSearchParams();
+    navigation.replace.mockReset();
+    api.list.mockReset().mockResolvedValue(response(1));
+  });
+
+  it("a csempék a válasz counts mezőjéből olvasnak", async () => {
+    render(<AssetListPage />);
+    await screen.findByText("Cápasuli kompresszor");
+
+    // Javítás alatt: 12, Aktívan üzemel: 40 -- kozvetlenul a valaszbol.
+    expect(screen.getByText("12")).toBeTruthy();
+    expect(screen.getByText("40")).toBeTruthy();
+  });
+
+  /**
+   * AZ "OSSZES" A NEGY ALLAPOT OSSZEGE. Igy egy jovobeli uj allapot magatol
+   * beleszamit, es nem marad ki egy elfelejtett szerver-mezobol.
+   */
+  it("az Összes csempe a négy állapot összegét mutatja, nem a lapozás számát", async () => {
+    render(<AssetListPage />);
+    await screen.findByText("Cápasuli kompresszor");
+
+    expect(screen.getByText("61")).toBeTruthy();
+    expect(screen.queryByText("60")).toBeNull();
   });
 });
