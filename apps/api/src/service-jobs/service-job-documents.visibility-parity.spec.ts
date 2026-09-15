@@ -52,12 +52,25 @@ async function szolgaltatasSzuroje(
   user: AuthenticatedUser,
 ): Promise<Prisma.ServiceJobWhereInput | undefined> {
   let kapott: Prisma.ServiceJobWhereInput | undefined;
-  const repository: Pick<ServiceJobsRepository, "list" | "assignedUnitIds"> = {
+  const repository: Pick<
+    ServiceJobsRepository,
+    "list" | "assignedUnitIds" | "countsByStatus"
+  > = {
     assignedUnitIds: async () => EGYSEGEK,
     list: async (_scope, visibility) => {
       kapott = visibility;
-      return [];
+      return { rows: [], truncated: false };
     },
+    countsByStatus: async () => ({
+      NEW: 0,
+      TRIAGED: 0,
+      SCHEDULED: 0,
+      IN_PROGRESS: 0,
+      WAITING_FOR_PARTS: 0,
+      WAITING_FOR_CUSTOMER: 0,
+      COMPLETED: 0,
+      CANCELLED: 0,
+    }),
   };
   await new ServiceJobsService(repository as ServiceJobsRepository).list(
     {},

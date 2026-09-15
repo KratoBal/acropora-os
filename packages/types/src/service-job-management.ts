@@ -34,8 +34,30 @@ export interface ServiceJobListItem {
   createdAt: string;
 }
 
+/**
+ * HANY JEGY ALL EGY-EGY ALLAPOTBAN.
+ *
+ * A SZAMOK A TELJES LATHATO HALMAZBOL JONNEK, NEM A VISSZAADOTT LAPBOL, es ez
+ * a lenyegük. Az `items` legfeljebb ketszaz sort hoz; egy lapbol szamolt
+ * osszesito ugyanugy nezne ki, es CSENDBEN mast jelentene, amint a
+ * ketszazadik jegy megszuletik. A `groupBy` UGYANAZT a lathatosagi szurot
+ * hasznalja, mint a lista, tehat egy partner sajat magat szamolja, nem a hazat.
+ *
+ * Minden allapot szerepel benne, a nullas is: egy hianyzo kulcs a kliensen
+ * `undefined`, es az osszeadasban csendben eltunik.
+ */
+export type ServiceJobStatusCounts = Record<ServiceJobStatusValue, number>;
+
 export interface ServiceJobListResponse {
   items: ServiceJobListItem[];
+  counts: ServiceJobStatusCounts;
+  /**
+   * IGAZ, HA A LISTA A HATARBA UTKOZOTT, tehat van tobb sor, ami nem fert bele.
+   * A SZERVER mondja meg, nem a kliens szamolja: a hatar a lekerdezese, es egy
+   * kliensoldali "pont ketszaz jott" osszehasonlitas nemán avulna el, amint a
+   * hatar valaha valtozik.
+   */
+  truncated: boolean;
 }
 
 /**

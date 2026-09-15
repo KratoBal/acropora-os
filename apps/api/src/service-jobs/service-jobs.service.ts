@@ -349,11 +349,22 @@ export class ServiceJobsService {
     query: ServiceJobListQueryDto,
     user: AuthenticatedUser,
   ): Promise<ServiceJobListResponse> {
-    const rows = await this.repository.list(
-      query.scope ?? "open",
-      await this.visibilityFor(user),
-    );
+    /**
+     * EGY LATHATOSAGI SZURO, KET LEKERDEZES.
+     *
+     * A szamlalok UGYANAZT a szurot kapjak, mint a lista -- kulonben egy
+     * partner a HAZ osszesitojet latna a sajatja helyett, es a szam nem is
+     * nezne ki hibasnak. Ezert all egy valtozoban: ket kulon hivas ket kulon
+     * helyen elobb-utobb elcsuszna.
+     */
+    const visibility = await this.visibilityFor(user);
+    const [{ rows, truncated }, counts] = await Promise.all([
+      this.repository.list(query.scope ?? "open", visibility),
+      this.repository.countsByStatus(visibility),
+    ]);
     return {
+      counts,
+      truncated,
       items: rows.map((row) => ({
         id: row.id,
         jobNumber: row.jobNumber,
