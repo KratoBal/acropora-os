@@ -89,6 +89,33 @@ describe(
 
     after(async () => {
       await cleanup();
+      /**
+       * ES A TAKARITAS EREDMENYET MEG IS MERJUK. A `cleanup` a termek-lista
+       * URESSEGEKOR kihagyja a sajat belso blokkjat, es minden `deleteMany`
+       * nulla sorra is sikeres -- vagyis a kihagyas es a tiszta futas
+       * megkulonboztethetetlen.
+       *
+       * A TERMEKEK NEV SZERINT, nem a lista szerint, amibol a torles dolgozik:
+       * ugyanarra a listara szamolva az allitas ures listanal is zold lenne,
+       * tehat epp a kihagyast nem latna.
+       *
+       * A `ProductCategory` NEM SZEREPEL: MINDKET oldala (`productId` es
+       * `categoryId`) `Cascade`, tehat sem a termek, sem a kategoria nem tud
+       * ugy eltunni, hogy a kapcsolosor bent maradjon. A ket vegpont viszont
+       * KULON all, ezert mindketto kap sajat szamlalot.
+       */
+      assert.equal(
+        await prisma.product.count({ where: { name: { startsWith: PREFIX } } }),
+        0,
+        "a suite termekei bent maradtak a takaritas utan",
+      );
+      assert.equal(
+        await prisma.category.count({
+          where: { name: { startsWith: PREFIX } },
+        }),
+        0,
+        "a suite kategoriai bent maradtak a takaritas utan",
+      );
       await prisma.$disconnect();
     });
 

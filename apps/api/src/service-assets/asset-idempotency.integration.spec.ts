@@ -88,6 +88,41 @@ describe(
 
     after(async () => {
       await removeLeftovers();
+      /**
+       * ES A TAKARITAS EREDMENYET MEG IS MERJUK.
+       *
+       * AZ ESZKOZOKET A NEVUK SZAMOLJA, es ez az egyetlen igazi masodik
+       * tengely ebben a fajlban: a ket torles a `clientOperationId` ket ismert
+       * kulcsara, illetve a VEVON AT szur, a nevet egyik sem nezi.
+       *
+       * ES EPP ITT KELL: az `Asset.customerId` `Restrict`, DE ELHAGYHATO. Egy
+       * vevo nelkul letrehozott eszkozt a relacios szuro nem talal meg, a vevo
+       * torlese pedig nem akad el rajta -- vagyis csendben tullel. Ha a
+       * megkotes kotelezo mezon allna, a vevo torlese HANGOSAN hasalna el, es
+       * ez a szamlalo felesleges lenne.
+       *
+       * A vevo es a fiok szamlaloja ugyanazt az elotagot nezi, mint a torlesuk:
+       * azok tehat a KIMARADT torlest fogjak meg, nem az elirt elotagot.
+       */
+      assert.equal(
+        await prisma.asset.count({ where: { name: { startsWith: PREFIX } } }),
+        0,
+        "a suite eszkozei bent maradtak a takaritas utan",
+      );
+      assert.equal(
+        await prisma.customer.count({
+          where: { customerNumber: { startsWith: PREFIX } },
+        }),
+        0,
+        "a suite vevoje bent maradt a takaritas utan",
+      );
+      assert.equal(
+        await prisma.user.count({
+          where: { email: { startsWith: PREFIX.toLowerCase() } },
+        }),
+        0,
+        "a suite aktora bent maradt a takaritas utan",
+      );
       await prisma.$disconnect();
     });
 

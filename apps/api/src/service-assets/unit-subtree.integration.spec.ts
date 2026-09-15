@@ -173,6 +173,37 @@ describe(
 
     after(async () => {
       await removeLeftovers();
+      /**
+       * ES A TAKARITAS EREDMENYET MEG IS MERJUK: minden `deleteMany` nulla
+       * sorra is sikeres, tehat egy elcsuszott elotag pontosan ugy nez ki,
+       * mint egy tiszta futas.
+       *
+       * A HELYSZIN-FA NEM KAP SZAMLALOT, ES EZ NEM MULASZTAS: a
+       * `WorksheetDepartment.customerId` `Restrict` egy KOTELEZO mezon, tehat
+       * egy bent maradt csomopont nem csendben marad ott -- a lenti
+       * vevo-torles HANGOSAN elhasal rajta. (A level-bejaro `break` aga epp
+       * ilyenkor sul el: ha kor keletkezne a faban, ott allna meg.) Egy
+       * szamlalo ugyanazt mondana, csak kesobb.
+       *
+       * AZ ESZKOZOKNEL NINCS MASODIK TENGELY: a nev es a szam ugyanazt az
+       * elotagot viseli, amire a torles is megy. Ez a szamlalo tehat a
+       * KIMARADT torlest fogja meg, nem az elirt elotagot -- es ezt jobb
+       * kimondani, mint tobbet allitani rola.
+       */
+      assert.equal(
+        await prisma.asset.count({
+          where: { assetNumber: { startsWith: PREFIX } },
+        }),
+        0,
+        "a suite eszkozei bent maradtak a takaritas utan",
+      );
+      assert.equal(
+        await prisma.customer.count({
+          where: { customerNumber: { startsWith: PREFIX } },
+        }),
+        0,
+        "a suite vevoje bent maradt a takaritas utan",
+      );
       await prisma.$disconnect();
     });
 

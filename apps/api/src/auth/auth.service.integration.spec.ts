@@ -49,6 +49,21 @@ describe(
       userId = user.id;
     });
 
+    /**
+     * NO SEPARATE LEFTOVER COUNT HERE, AND THAT IS A DECISION, NOT AN
+     * OVERSIGHT - the same one the sibling session.repository suite carries.
+     *
+     * This suite creates exactly ONE row of its own (a `User`; the sessions
+     * come from the service under test), and the cleanup removes it with
+     * `delete` BY ID rather than `deleteMany`. The two are not the same: a
+     * `deleteMany` succeeds on zero rows and says nothing, while `delete`
+     * THROWS when the row is not there (P2025). The cleanup IS the assertion,
+     * and a failing `after` hook is red now rather than silent.
+     *
+     * `Session.userId` is `Cascade`, so deleting the user takes the sessions
+     * with it - the `deleteMany` above is a shortcut, not a guard. A counter
+     * would state the same single fact twice, and the copy is what drifts.
+     */
     after(async () => {
       await prisma.session.deleteMany({ where: { userId } });
       await prisma.user.delete({ where: { id: userId } });
