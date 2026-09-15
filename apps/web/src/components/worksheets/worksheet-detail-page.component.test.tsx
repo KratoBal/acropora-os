@@ -456,4 +456,73 @@ describe("WorksheetDetailPage adatlap-szerkezet", () => {
     expect(cim.textContent).toBe("Kompresszorok bevizsgálása");
     expect(screen.getByText("BIO-2026-001/1")).toBeTruthy();
   });
+
+  /**
+   * A BETOLTESI HIBA AGA MEGMONDJA, HOGY NINCS HALOZAT -- ES EDDIG NEM MONDTA.
+   *
+   * Ez az az ag, ami HIDEG betoltesnel, kapcsolat nelkul lefut. A savot eddig
+   * csak a FO visszateres hordozta, ide viszont sosem jutunk el: a `state`
+   * ternary `empty` fele HOLT ag volt. A felhasznalo annyit latott, hogy
+   * "nem tolthetó be / Ismeretlen hiba", es semmit arrol, hogy MIERT.
+   *
+   * ES EZ AZ ALLITAS EDDIG MEG CSAK NEM IS LETEZHETETT: nem azert hianyzott,
+   * mert elfelejtettuk, hanem mert az allapot nem allt elo. Nautilus nevezte
+   * meg ezt kulon okkent (20188): a rontas utani zold NEGYEDIK oka az, hogy
+   * az allapot nem all elo -- es azt a legkonnyebb osszekeverni a halott
+   * allitassal.
+   */
+  /**
+   * ES A PAR MASIK FELE: A BETOLTOTT LAP NEM MONDHATJA, HOGY NEM TOLTOTT BE.
+   *
+   * A ket allitas EGYUTT kulonboztet, kulon egyik sem. Ezt merve tanultam meg
+   * ezen a lapon: a fenti allitas ZOLD MARAD akkor is, ha a FO visszateres
+   * allandoan `empty`-t ad -- vagyis ha egy betoltott munkalap folott az all,
+   * hogy "nem tudtuk betolteni". Egyedul a fenti nem fogja meg.
+   *
+   * A lap KET allapotba tud kerulni, KET kulon kodutonn (a korai hiba-ag es a
+   * fo visszateres), ezert kell ide ketto. Ahol csak egy allapot all elo, ott
+   * egy a helyes szam -- a masodik allitas ott nem szigor, hanem disz.
+   * (nautilus, 20188.)
+   */
+  it("betöltött lapon nem állítja, hogy nem sikerült betölteni", async () => {
+    Object.defineProperty(window.navigator, "onLine", {
+      value: false,
+      configurable: true,
+    });
+    api.detail.mockResolvedValue(detail(null));
+
+    render(<WorksheetDetailPage worksheetId="ml-1" />);
+
+    expect(
+      await screen.findByText(/legutóbb betöltött adatokat látod/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/nem tudtuk betölteni/)).toBeNull();
+
+    Object.defineProperty(window.navigator, "onLine", {
+      value: true,
+      configurable: true,
+    });
+  });
+
+  it("betöltési hibánál kimondja, hogy nincs hálózat", async () => {
+    Object.defineProperty(window.navigator, "onLine", {
+      value: false,
+      configurable: true,
+    });
+    api.detail.mockRejectedValue(new Error("hálózati hiba"));
+
+    render(<WorksheetDetailPage worksheetId="ml-1" />);
+
+    // A HIBA ES AZ OKA EGYUTT: a hibauzenet onmagaban nem mondja meg, miert.
+    expect(await screen.findByText("A munkalap nem tölthető be")).toBeTruthy();
+    expect(screen.getByText(/nem tudtuk betölteni/)).toBeTruthy();
+
+    // ES NEM AZT ALLITJA, HOGY REGI ADATOKAT LATSZ -- a lap URES.
+    expect(screen.queryByText(/legutóbb betöltött adatokat látod/)).toBeNull();
+
+    Object.defineProperty(window.navigator, "onLine", {
+      value: true,
+      configurable: true,
+    });
+  });
 });

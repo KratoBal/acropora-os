@@ -156,12 +156,29 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
     );
 
   if (!worksheet)
+    /*
+      A SAV IDE IS KELL, ES EPP IDE A LEGINKABB.
+
+      Ez az az ag, ami HIDEG betoltesnel kapcsolat nelkul lefut -- es eddig a
+      felhasznalo csak annyit latott, hogy "nem tolthetó be / Ismeretlen hiba".
+      A savot a fo visszateres hordozta, ami ide SOHA nem jut el: a `state`
+      ternary `empty` fele HOLT ag volt, es a `Nincs internet. Ezert nem tudtuk
+      betolteni az adatokat.` mondat -- amit epp erre az esetre irtunk -- sosem
+      jelent meg.
+
+      Nautilus merte ezt a sajat reszletlapjan (20188), es ugyanigy oldotta meg:
+      a savot a korai agak FOLE kell emelni, kulonben egy allitas rola nem
+      halott teszt, hanem nem letezo allapot.
+    */
     return (
-      <Alert
-        variant="danger"
-        title="A munkalap nem tölthető be"
-        description={error ?? "Ismeretlen hiba."}
-      />
+      <>
+        <ServiceOfflineNotice state={{ kind: "empty" }} />
+        <Alert
+          variant="danger"
+          title="A munkalap nem tölthető be"
+          description={error ?? "Ismeretlen hiba."}
+        />
+      </>
     );
 
   const current = worksheet.currentVersion;
@@ -581,9 +598,13 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
 
   return (
     <div>
-      <ServiceOfflineNotice
-        state={worksheet ? { kind: "loaded" } : { kind: "empty" }}
-      />
+      {/*
+        IDE CSAK BETOLTOTT LAPPAL JUTUNK EL: a `!worksheet` ag fentebb kilep.
+        Ezert `loaded` all itt allandoan, es NEM ternary -- egy ternary itt azt
+        allitana, hogy a masik ag is elofordulhat, es egy rola szolo allitas
+        orokre zold maradna. Az ures eset a KORAI agon all, sajat savval.
+      */}
+      <ServiceOfflineNotice state={{ kind: "loaded" }} />
       <ServiceBackLink href={backToList.href}>
         {backToList.fromWithinApp ? "Vissza" : "Munkalapok"}
       </ServiceBackLink>
