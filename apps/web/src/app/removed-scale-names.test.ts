@@ -24,6 +24,20 @@ import { describe, expect, it } from "vitest";
  */
 const MEGSZUNT = ["teal"];
 
+/**
+ * A HATOKORE `apps/web/src`, ES EZT KI KELL MONDANI, MERT SZUKEBB, MINT A NEVE.
+ *
+ * A `packages/ui` hat komponense is hasznalta a regi nevet, es azok is
+ * atalltak -- de ez a teszt oda NEM lat el. Egy visszaszivargas ONNAN ugyanugy
+ * nema volna, es ez az orzo nem szolna rola.
+ *
+ * Nem "majd megcsinaljuk": azert all igy, mert egy webes egyseg-teszt, ami egy
+ * masik CSOMAG forrasat olvassa, olyan fuggoseget kepez, ami a csomagok
+ * hatarat mossa el. Ha a `packages/ui` is kap ilyet, az ODA valo, sajat
+ * tesztkent. Addig ez a megjegyzes az, ami megakadalyozza, hogy valaki
+ * TELJESNEK olvassa ezt a lefedest.
+ */
+
 function kodSzoveg(forras: string): string {
   return forras
     .replace(/\/\*[\s\S]*?\*\//g, " ")
