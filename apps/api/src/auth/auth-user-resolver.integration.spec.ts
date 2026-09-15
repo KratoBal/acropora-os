@@ -66,6 +66,25 @@ describe(
 
     after(async () => {
       await prisma.user.deleteMany({ where: { id: { in: createdIds } } });
+      /**
+       * AND THE CLEANUP'S RESULT IS MEASURED, not assumed: a `deleteMany`
+       * succeeds on zero rows and reports nothing about it.
+       *
+       * THE COUNT GOES BY EMAIL, NOT BY THE `createdIds` LIST. Counting the
+       * very list the delete works from would stay green on an empty list -
+       * that is, it would skip exactly the case it exists for. The three
+       * addresses are this file's own constants, so they are an independent
+       * axis.
+       */
+      assert.equal(
+        await prisma.user.count({
+          where: {
+            email: { in: [activeEmail, inactiveEmail, noPasswordEmail] },
+          },
+        }),
+        0,
+        "the suite's users survived the cleanup",
+      );
     });
 
     it("resolves an active user with the correct password", async () => {

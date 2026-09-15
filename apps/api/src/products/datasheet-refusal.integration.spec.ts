@@ -60,6 +60,24 @@ describe(
       await prisma.product.deleteMany({
         where: { id: { in: sheets.map((row) => row.productId) } },
       });
+      /**
+       * AND THE CLEANUP'S RESULT IS MEASURED, by NAME rather than by the
+       * `sheets` list it works from.
+       *
+       * The list is built from products that HAVE a datasheet, so a product
+       * whose sheet never got created is not in it - and counting the same
+       * list back would stay green on exactly that row. The name prefix is
+       * this file's own constant, so it sees the product either way.
+       *
+       * Only `Product` is counted: `ProductDatasheet.productId` and
+       * `ProductDatasheetFieldRefusal.datasheetId` are both `Cascade`, so if no
+       * product is left, nothing below it can be either.
+       */
+      assert.equal(
+        await prisma.product.count({ where: { name: { startsWith: PREFIX } } }),
+        0,
+        "the suite's products survived the cleanup",
+      );
       await prisma.$disconnect();
     });
 

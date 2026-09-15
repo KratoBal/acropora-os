@@ -34,6 +34,21 @@ describe("SessionRepository integration", { skip: !runIntegration }, () => {
     userId = user.id;
   });
 
+  /**
+   * NO SEPARATE LEFTOVER COUNT HERE, AND THAT IS A DECISION, NOT AN OVERSIGHT.
+   *
+   * This suite creates exactly ONE row of its own (a `User`; the `Session`
+   * rows are written by the repository under test), and the cleanup removes it
+   * with `delete` BY ID, not `deleteMany`. The two are not the same: a
+   * `deleteMany` succeeds on zero rows and says nothing, while `delete` THROWS
+   * when the row is not there (P2025). The cleanup IS the assertion, and its
+   * failure is red now rather than a silent hook.
+   *
+   * `Session.userId` is `Cascade`, so deleting the user takes the sessions with
+   * it - the `deleteMany` above is a shortcut, not a guard. A separate counter
+   * would state the same single fact twice, and if the two forms ever drifted,
+   * the second one would be the one keeping quiet about it.
+   */
   after(async () => {
     await prisma.session.deleteMany({ where: { userId } });
     await prisma.user.delete({ where: { id: userId } });
