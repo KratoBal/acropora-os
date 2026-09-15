@@ -120,8 +120,19 @@ export function WorksheetListPage() {
    * Eddig harom KULON lista-hivas adta oket, es a sajat hookom fejlecebe magam
    * irtam oda, hogy ez nem a vegso alak. Mostantol a szerver szamolja,
    * ugyanabban a valaszban -- es ott a munkalap allapota a LEGUTOLSO VERZIOE,
-   * ugyanaz a szabaly, ami a sorokat is valogatja. Ket kulon hivasbol a ketto
-   * elcsuszhatott: harom kulonbozo pillanatot lattak.
+   * ugyanaz a szabaly, ami a sorokat is valogatja.
+   *
+   * AMI VALTOZOTT, PONTOSAN: harom egymas utani korbol egy keresen beluli
+   * parhuzamos futas lett, tehat az ablak masodpercekbol ezredmasodpercekre
+   * szukult, es a HAROM CSEMPE mar nem tud egymasnak ellentmondani (egy
+   * lekerdezesbol jonnek).
+   *
+   * AMI NEM VALTOZOTT: ez NEM egy adatbazis-pillanatkep. A lista es a
+   * szamlalo kulon lekerdezes, sajat pillanatkeppel -- sot a szamlalo maga is
+   * KETTO (a szurt azonositok, majd a legutolso verziok csoportositasa).
+   * Egyideju modositas mellett a csempek es a sorok elterhetnek egy tetellel,
+   * es a kovetkezo betoltesnel helyreall. Ha ez valaha nem elfogadhato, a
+   * megoldas egy kozos tranzakcio, nem egy ujabb komment.
    */
   useEffect(() => {
     const timer = window.setTimeout(() => {
