@@ -42,6 +42,7 @@ function removal(id: string, removedAt: string) {
   return {
     id,
     fileName: "szivattyu.jpg",
+    documentType: "PHOTO" as const,
     actorName: "Kiss Eszter",
     removedAt,
   };
@@ -162,5 +163,8 @@ describe("serviceJobTimeline", () => {
     if (entry?.kind !== "document") return;
     assert.equal(entry.removal.fileName, "szivattyu.jpg");
     assert.equal(entry.removal.actorName, "Kiss Eszter");
+    /* A TIPUS IS ATJUT: enelkul a naplo azt mondana, hogy egy FAJL tunt el, de
+       nem azt, hogy a bizonyito fenykep volt-e. */
+    assert.equal(entry.removal.documentType, "PHOTO");
   });
 });

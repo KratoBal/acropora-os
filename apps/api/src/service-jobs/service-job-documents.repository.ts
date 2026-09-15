@@ -203,13 +203,28 @@ export class ServiceJobDocumentsRepository {
     return this.database.$transaction(async (transaction) => {
       const document = await transaction.serviceJobDocument.findFirst({
         where: { id: documentId, serviceJobId },
-        select: { id: true, fileName: true, storageKey: true },
+        select: {
+          id: true,
+          fileName: true,
+          type: true,
+          storageKey: true,
+        },
       });
       if (!document) return null;
       await transaction.serviceJobDocument.deleteMany({
         where: { id: documentId, serviceJobId },
       });
       /**
+       * A TORLES NAPLOBA KERUL, A FELTOLTES NEM -- ES EZ NEM HIANYOSSAG.
+       *
+       * Amig a csatolmany MEGVAN, a letezese a sajat nyoma: ott all a listan,
+       * letoltheto, latszik a merete. Egy torolt fajl viszont nyomtalanul
+       * eltunik, a taroloból is, es onnantol EZ a sor az egyetlen hely, ahol
+       * megmarad, hogy VOLT, es hogy ki vette le.
+       *
+       * Aki ezt "befejezi" egy feltoltes-naploval, nem hianyt potol, hanem
+       * megketszerezi azt, ami mar latszik.
+       *
        * A NYOM UGYANABBAN A TRANZAKCIOBAN KELETKEZIK, MINT A TORLES.
        *
        * Kulon hivasban ket rossz kimenet allna elo, es MIND A KETTO nemán: a
@@ -231,7 +246,23 @@ export class ServiceJobDocumentsRepository {
           entityId: serviceJobId,
           metadata: {
             documentId: document.id,
+            /**
+             * A NEV ES A TIPUS MASOLATBAN. A dokumentum sora ezutan mar nincs
+             * meg, tehat a naplo CSAK azt tudja, amit magaval visz.
+             *
+             * A TIPUS NEM UGYANAZ, MINT A KITERJESZTES: a `type` a mi
+             * besorolasunk (fenykep vagy dokumentum), a fajlnev vege pedig
+             * barmi lehet. Nev nelkul a naplo azt mondana, hogy "torles
+             * tortent"; tipus nelkul azt, hogy egy FAJL tunt el -- de nem azt,
+             * hogy a bizonyito fenykep-e vagy egy melleklet.
+             *
+             * A MERET ES A LENYOMAT SZANDEKOSAN KIMARAD. Azok egy MASIK
+             * kerdesre valaszolnanak (ugyanaz a fajl kerult-e vissza), amit
+             * senki nem tett fel, es egy megsemmisitett tartalom ujjlenyomatat
+             * nem tartjuk meg anelkul, hogy kellene.
+             */
             fileName: document.fileName,
+            documentType: document.type,
           } satisfies Prisma.JsonObject,
         },
       });

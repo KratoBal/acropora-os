@@ -72,10 +72,15 @@ function timelineLine(entry: ServiceJobTimelineEntry): string {
     Név nélkül is olvasható marad: egy azóta törölt felhasználó nem viszi
     magával a naplót, ugyanúgy, ahogy az állapotváltásoknál sem.
   */
-  if (entry.kind === "document")
+  if (entry.kind === "document") {
+    const mi =
+      entry.removal.documentType === "PHOTO"
+        ? `fényképet (${entry.removal.fileName})`
+        : `csatolmányt (${entry.removal.fileName})`;
     return entry.removal.actorName
-      ? `${entry.removal.actorName} törölte ezt a csatolmányt: ${entry.removal.fileName}`
-      : `Törölt csatolmány: ${entry.removal.fileName}`;
+      ? `${entry.removal.actorName} törölt egy ${mi}`
+      : `Törölt ${mi}`;
+  }
   return `Eszköz a jegyen: ${entry.asset.assetNumber} (${entry.asset.assetName})`;
 }
 

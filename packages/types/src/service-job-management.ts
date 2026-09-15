@@ -268,6 +268,12 @@ export interface ServiceJobDetail {
 export interface ServiceJobDocumentRemoval {
   id: string;
   fileName: string;
+  /**
+   * A MI BESOROLASUNK, nem a fajlnev vege: egy `.pdf` lehet bizonyito fenykep
+   * scannelve is. Nelkule a naplo azt mondana, hogy egy FAJL tunt el, de nem
+   * azt, MILYEN.
+   */
+  documentType: ServiceJobDocumentType;
   actorName: string | null;
   removedAt: string;
 }

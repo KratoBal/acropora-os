@@ -497,9 +497,16 @@ export class ServiceJobsService {
               typeof meta.fileName === "string"
                 ? meta.fileName
                 : "ismeretlen fájl",
+            /*
+              A TIPUS VISSZAESESE `OTHER`, NEM `PHOTO`. A regebbi naplo-sorokban
+              (a mai valtozas elottrol) nincs `documentType`, es egy hianyzo
+              mezobol nem szabad fenykepet allitani -- az tobbet mondana, mint
+              amit tudunk. Az `OTHER` az az ertek, ami nem allit semmit.
+            */
+            documentType: meta.documentType === "PHOTO" ? "PHOTO" : "OTHER",
             actorName: removal.user?.displayName ?? null,
             removedAt: removal.createdAt.toISOString(),
-          };
+          } as const;
         }),
       }),
       /**
