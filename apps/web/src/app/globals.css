@@ -145,7 +145,7 @@
    *
    *     `text-ink`        44 hely, MIND szoveg
    *     `bg-ink`           0 hely
-   *     ugyanez az ertek `slate-950` neven:  9 szoveg + 8 HATTER
+   *     ugyanez az ertek `dusk-950` neven:   9 szoveg + 8 HATTER
    *
    * Vagyis a token maga csak szoveget szinez, es a fenti mondat rola all. Az
    * ERTEK viszont MASODIK szerepben is all, es az teljes egeszeben a MASIK
@@ -154,7 +154,19 @@
    * A NYOLC HATTER-HELY. SORSZAM HELYETT KERESES, mert egy sorszam a kovetkezo
    * szerkesztesnel elavul, es egy elavult hivatkozas rosszabb a hianyzonal:
    *
-   *     grep -rn "bg-slate-950" apps/web/src --include="*.tsx"
+   *     grep -rn "bg-dusk-950" apps/web/src --include="*.tsx"
+   *
+   * ES EZ A MEGJEGYZES MAR EGYSZER ELAVULT, UGYANAZON A NAPON: eredetileg a
+   * `slate-950` nevet idezte, mert akkor az allt itt. Par oraval kesobb a
+   * skala `dusk` lett, es ettol a fenti kereses NULLAT adott, mikozben a
+   * megjegyzes NYOLCAT allitott. Nem utkozott semmivel -- ket kulon PR nyult
+   * ugyanehhez a fajlhoz, es a masodik a NEVET vitte el a nyolc hely alol.
+   *
+   * Amit ebbol tudni kell: egy megjegyzes, ami NEVEKET idez, ugyanolyan
+   * karbantartando, mint a kod, es a `removed-scale-names` orzo NEM fogja meg
+   * -- az szandekosan a KODRA mer, tehat a kommentben allo nevet atengedi.
+   * Ha ez a bekezdes megint elavul, a jele ugyanez lesz: a lenti kereses
+   * szama nem egyezik a fenti szammal.
    *
    * AZ `--include` NEM DISZ: e nelkul a kereses KILENCET ad, mert EZ A
    * MEGJEGYZES is talalat lesz -- a sajat magyarazatunk beleszamol abba, amit
