@@ -489,7 +489,7 @@ describe("WorksheetDetailPage adatlap-szerkezet", () => {
       value: false,
       configurable: true,
     });
-    api.detail.mockResolvedValue(detail());
+    api.detail.mockResolvedValue(detail(null));
 
     render(<WorksheetDetailPage worksheetId="ml-1" />);
 
