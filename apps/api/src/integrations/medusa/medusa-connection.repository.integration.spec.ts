@@ -21,6 +21,12 @@ import { integrationDatabaseGate } from "../../common/integration-database.js";
 const gate = integrationDatabaseGate(process.env);
 const runIntegration = gate.mode !== "skip";
 
+/**
+ * A SUITE SAJAT SZINESZENEK ELOTAGJA. Nevet kap, mert ket helyen kell: a
+ * letrehozasban es a takaritas-allitasban.
+ */
+const TEST_ACTOR_PREFIX = "medusa-connection-";
+
 const masterKeyEnvironment = {
   MEDUSA_CREDENTIAL_ACTIVE_KEY_VERSION: "1",
   MEDUSA_CREDENTIAL_MASTER_KEY_V1: Buffer.alloc(32, 5).toString("base64"),
@@ -37,7 +43,7 @@ describe(
       if (gate.mode === "refuse") throw new Error(gate.reason);
       const actor = await prisma.user.create({
         data: {
-          email: `medusa-connection-${Date.now()}@example.invalid`,
+          email: `${TEST_ACTOR_PREFIX}${Date.now()}@example.invalid`,
           displayName: "Medusa connection integration actor",
           role: "ADMIN",
         },
@@ -92,6 +98,37 @@ describe(
         },
       });
       if (actorId) await prisma.user.delete({ where: { id: actorId } });
+      /**
+       * ES A TAKARITAS EREDMENYET MEG IS MERJUK.
+       *
+       * A FELHASZNALO ELOTAG SZERINT, NEM AZONOSITO SZERINT: a torles az
+       * `actorId` ertekere van kotve ES egy `if` mogott all, tehat ha az
+       * ertek valamiert ures marad, a sor csendben bent marad -- es ugyanarra
+       * az azonositora szamolva az allitas is zold lenne.
+       *
+       * A NAPLOSOROK UGYANARRA A TIPUSRA, MINT A TORLES: itt nincs masodik
+       * tengely (a sorok a beallitas szingleton azonositojara mutatnak), tehat
+       * ez a szamlalo egy ELMARADT torlest fog meg, nem egy elirt szurot. Jobb
+       * kimondani, mint tobbet allitani rola.
+       *
+       * A `MedusaConnectionSetting` MAGA nem szerepel: seedelt szingleton sor,
+       * amit a takaritas VISSZAALLIT, nem torol -- egy nulla-szamlalo rajta azt
+       * kovetelne meg, hogy eltunjon, ami epp a rossz viselkedes lenne.
+       */
+      assert.equal(
+        await prisma.auditLog.count({
+          where: { entityType: "MedusaConnectionSetting" },
+        }),
+        0,
+        "a suite naplosorai bent maradtak a takaritas utan",
+      );
+      assert.equal(
+        await prisma.user.count({
+          where: { email: { startsWith: TEST_ACTOR_PREFIX } },
+        }),
+        0,
+        "a suite szinesze bent maradt a takaritas utan",
+      );
     });
 
     it("stores the envelope in bytes, and gives back exactly what went in", async () => {
