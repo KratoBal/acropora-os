@@ -182,7 +182,7 @@ export function UserListPage() {
                     <tr key={item.id} className="border-b last:border-0">
                       <td className="p-3">
                         <Link
-                          className="font-semibold text-teal-700"
+                          className="font-semibold text-brand-700"
                           href={`/admin/users/${item.id}`}
                         >
                           {personDisplayName(item)}

@@ -455,7 +455,7 @@ function ProductExtensionEditor({
                   onChange={(event) =>
                     toggle(field as keyof ExtensionForm, event.target.checked)
                   }
-                  className="size-4 rounded border-slate-300 text-teal-700"
+                  className="size-4 rounded border-slate-300 text-brand-700"
                 />
                 {label}
               </label>
@@ -775,8 +775,8 @@ export function ProductDetailPage({ productId }: { productId: string }) {
             />
           ) : null}
           {product.unasMirror ? (
-            <Card className="border-teal-200">
-              <CardHeader className="bg-teal-50/70">
+            <Card className="border-brand-200">
+              <CardHeader className="bg-brand-50/70">
                 <div>
                   <h2 className="text-sm font-semibold text-slate-900">
                     UNAS terméktükör
@@ -1096,7 +1096,7 @@ export function ProductDetailPage({ productId }: { productId: string }) {
               {product.description ? (
                 <div
                   data-testid="product-description"
-                  className="max-w-none text-sm text-slate-700 [&_a]:text-teal-700 [&_a]:underline [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_img]:max-w-full [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_table]:w-full [&_td]:border [&_td]:border-slate-200 [&_td]:p-2 [&_th]:border [&_th]:border-slate-200 [&_th]:p-2 [&_ul]:list-disc [&_ul]:pl-5"
+                  className="max-w-none text-sm text-slate-700 [&_a]:text-brand-700 [&_a]:underline [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_img]:max-w-full [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_table]:w-full [&_td]:border [&_td]:border-slate-200 [&_td]:p-2 [&_th]:border [&_th]:border-slate-200 [&_th]:p-2 [&_ul]:list-disc [&_ul]:pl-5"
                   dangerouslySetInnerHTML={{
                     __html: descriptionHtml,
                   }}
@@ -1198,7 +1198,7 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                         href={listing.productUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="mt-2 inline-block text-xs font-semibold text-teal-700 hover:underline"
+                        className="mt-2 inline-block text-xs font-semibold text-brand-700 hover:underline"
                       >
                         Webshop oldal megnyitása
                       </a>

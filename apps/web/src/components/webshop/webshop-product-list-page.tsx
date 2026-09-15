@@ -217,7 +217,7 @@ export function WebshopProductListPage() {
                             href={item.unasListing.productUrl}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-teal-700 hover:underline"
+                            className="text-brand-700 hover:underline"
                           >
                             Webshopban
                           </a>

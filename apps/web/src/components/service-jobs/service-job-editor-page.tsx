@@ -454,7 +454,7 @@ export function ServiceJobEditorPage() {
                   nem szabad osszekotni -- egy "szebb" sajat gomb elvenne a
                   bongeszo sajat fajlvalasztojat, es azzal a billentyuzetes
                   utat is. */}
-              <div className="rounded-xl border border-dashed border-teal-200 bg-teal-50/40 px-4 py-5">
+              <div className="rounded-xl border border-dashed border-brand-200 bg-brand-50/40 px-4 py-5">
                 <input
                   id="hibajegy-fajlok"
                   type="file"
@@ -556,15 +556,15 @@ export function ServiceJobEditorPage() {
           </p>
           <ol className="space-y-2 text-sm text-slate-600">
             <li className="flex gap-2">
-              <span className="font-semibold text-teal-700">1.</span>
+              <span className="font-semibold text-brand-700">1.</span>
               Partner és pontos helyszín
             </li>
             <li className="flex gap-2">
-              <span className="font-semibold text-teal-700">2.</span>
+              <span className="font-semibold text-brand-700">2.</span>
               Rövid, felismerhető leírás
             </li>
             <li className="flex gap-2">
-              <span className="font-semibold text-teal-700">3.</span>A munka
+              <span className="font-semibold text-brand-700">3.</span>A munka
               kiosztása a csapatnak
             </li>
           </ol>

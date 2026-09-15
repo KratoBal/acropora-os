@@ -27,7 +27,7 @@ export function PageHeader({
     >
       <div>
         {eyebrow ? (
-          <p className="mb-1 text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+          <p className="mb-1 text-xs font-bold uppercase tracking-[0.16em] text-brand-700">
             {eyebrow}
           </p>
         ) : null}

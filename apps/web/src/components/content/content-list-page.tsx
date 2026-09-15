@@ -187,7 +187,7 @@ export function ContentListPage() {
           canCreate ? (
             <Link
               href="/tartalom/uj"
-              className="text-sm font-medium text-teal-700 underline-offset-4 hover:underline"
+              className="text-sm font-medium text-brand-700 underline-offset-4 hover:underline"
             >
               Új tétel felvitele →
             </Link>

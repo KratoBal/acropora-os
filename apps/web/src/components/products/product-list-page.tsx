@@ -301,7 +301,7 @@ export function ProductListPage() {
       </Card>
 
       {refreshing ? (
-        <p className="text-xs font-medium text-teal-700" role="status">
+        <p className="text-xs font-medium text-brand-700" role="status">
           Lista frissítése…
         </p>
       ) : null}
@@ -415,7 +415,7 @@ export function ProductListPage() {
                   <tr
                     key={product.id}
                     tabIndex={0}
-                    className="cursor-pointer transition hover:bg-slate-50 focus:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-500"
+                    className="cursor-pointer transition hover:bg-slate-50 focus:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500"
                     onClick={() => router.push(detailHref(product.id))}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {

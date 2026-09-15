@@ -475,7 +475,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                           <Link
                             key={ancestor.id}
                             href={`/szerviz/eszkozok/${ancestor.id}`}
-                            className="rounded-md bg-slate-100 px-2.5 py-1.5 font-medium text-slate-700 hover:bg-teal-50 hover:text-teal-800"
+                            className="rounded-md bg-slate-100 px-2.5 py-1.5 font-medium text-slate-700 hover:bg-brand-50 hover:text-brand-800"
                           >
                             {ancestor.name}
                           </Link>
@@ -613,7 +613,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                 <div className="mt-4 divide-y">
                   {asset.events.map((event) => (
                     <div key={event.id} className="flex gap-4 py-3 first:pt-0">
-                      <span className="mt-1 size-2 shrink-0 rounded-full bg-teal-600" />
+                      <span className="mt-1 size-2 shrink-0 rounded-full bg-brand-600" />
                       <div>
                         <p className="text-sm font-medium text-slate-800">
                           {assetEventLabel[event.type]}
