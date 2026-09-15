@@ -6,7 +6,6 @@ import {
   PERMISSIONS,
   type WorksheetListResponse,
   type WorksheetSelectablePartner,
-  type WorksheetVersionStatus,
 } from "@acropora/types";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -26,7 +25,6 @@ import {
   type ServiceStatTile,
 } from "@/components/service/service-list-stats";
 import { sv } from "@/components/service/service-theme";
-import { useServiceStatusCounts } from "@/components/service/use-service-status-counts";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import {
   formatAmount,
@@ -35,17 +33,6 @@ import {
   worksheetStatusLabel,
   worksheetStatusTone,
 } from "./worksheet-labels";
-
-/**
- * A CSEMPEKEN MERT ALLAPOTOK. Ugyanaz a harom, amit Balazs designja mutat, es
- * ugyanaz a harom, ami a fulekre is felkerul -- a csempe es a ful UGYANAZT a
- * valasztast irja, csak mashogy nez ki.
- */
-const COUNTED_STATUSES = [
-  "DRAFT",
-  "AWAITING_SIGNATURE",
-  "SIGNED",
-] as const satisfies readonly WorksheetVersionStatus[];
 
 const TABS = [
   { key: "all", label: "Összes" },
@@ -128,41 +115,14 @@ export function WorksheetListPage() {
   }, [canView, token]);
 
   /**
-   * A CSEMPEK SZAMAI A LISTA SAJAT SZUROIT IS KOVETIK (kereses, partner,
-   * "ram osztva"), csak az ALLAPOT-szurot nem -- azt maga a csempe adja. Enelkul
-   * a harom szam egy masik halmazrol szolna, mint a lista alatta, es a kettot
-   * egymas mellett latva senki nem venne eszre, hogy nem ugyanarrol beszelnek.
+   * A CSEMPEK SZAMAI A LISTA SAJAT VALASZAN ERKEZNEK.
+   *
+   * Eddig harom KULON lista-hivas adta oket, es a sajat hookom fejlecebe magam
+   * irtam oda, hogy ez nem a vegso alak. Mostantol a szerver szamolja,
+   * ugyanabban a valaszban -- es ott a munkalap allapota a LEGUTOLSO VERZIOE,
+   * ugyanaz a szabaly, ami a sorokat is valogatja. Ket kulon hivasbol a ketto
+   * elcsuszhatott: harom kulonbozo pillanatot lattak.
    */
-  const countBase = useMemo(() => {
-    const value = new URLSearchParams();
-    const search = params.get("search");
-    const customerId = params.get("customerId");
-    const assigneeId = params.get("assigneeId");
-    if (search) value.set("search", search);
-    if (customerId) value.set("customerId", customerId);
-    if (assigneeId) value.set("assigneeId", assigneeId);
-    value.set("page", "1");
-    value.set("pageSize", "10");
-    return value;
-  }, [params]);
-
-  const fetchCount = useCallback(
-    async (status: string, signal: AbortSignal) => {
-      const value = new URLSearchParams(countBase.toString());
-      value.set("status", status);
-      const response = await worksheetsApi.list(token, value, signal);
-      return response.pagination.totalItems;
-    },
-    [countBase, token],
-  );
-
-  const counts = useServiceStatusCounts({
-    enabled: canView,
-    cacheKey: `${token}|${countBase}`,
-    statuses: COUNTED_STATUSES,
-    fetchCount,
-  });
-
   useEffect(() => {
     const timer = window.setTimeout(() => {
       if (search === (params.get("search") ?? "")) return;
@@ -213,27 +173,28 @@ export function WorksheetListPage() {
       />
     );
 
+  const counts = data?.counts ?? null;
   const tiles: ServiceStatTile[] = [
     {
       key: "DRAFT",
       icon: "edit",
       tone: "purple",
       label: "Szerkesztés alatt",
-      count: counts.DRAFT ?? null,
+      count: counts?.DRAFT ?? null,
     },
     {
       key: "AWAITING_SIGNATURE",
       icon: "clock",
       tone: "amber",
       label: "Aláírásra vár",
-      count: counts.AWAITING_SIGNATURE ?? null,
+      count: counts?.AWAITING_SIGNATURE ?? null,
     },
     {
       key: "SIGNED",
       icon: "checkCircle",
       tone: "green",
       label: "Aláírt munkalap",
-      count: counts.SIGNED ?? null,
+      count: counts?.SIGNED ?? null,
     },
   ];
 

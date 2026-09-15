@@ -97,6 +97,10 @@ function response(
       },
     ],
     pagination: { page: 1, pageSize: 25, totalItems: 40, totalPages: 2 },
+    // A NEGY SZAM OSSZEGE (33) SZANDEKOSAN NEM EGYEZIK a totalItems-szel (40):
+    // igy az allitas meg tudja kulonboztetni, melyikbol dolgozik a csempe. Egyezo
+    // szamokkal akkor is zold lenne, ha a csempe a lapozas szamat mutatna.
+    counts: { DRAFT: 7, AWAITING_SIGNATURE: 3, SIGNED: 11, REJECTED: 12 },
     ...overrides,
   };
 }
@@ -232,27 +236,31 @@ describe("WorksheetListPage állapot-csempék", () => {
   });
 
   /**
-   * A SZAMLALAS UGYANAZT A HALMAZT NEZI, MINT A LISTA.
+   * A CSEMPEK A VALASZ `counts` MEZOJEBOL OLVASNAK.
    *
-   * Ha a csempek szamai a szuretlen halmazrol szolnanak, a ket szam egymas
-   * mellett allna a kepernyon, es semmi nem arulna el, hogy nem ugyanarrol
-   * beszelnek. Merve: ha a kereses kimarad a szamlalas alapjabol, ez az
-   * allitas pirosra valt.
+   * ITT KORABBAN MAS ALLT, es a csere nem fedettseg-vesztes, hanem
+   * hataratrakas. A regi allitas azt merte, hogy a KLIENS harom kulon
+   * lista-hivast kuld, es azok viszik a kereses szurojet -- vagyis hogy a
+   * csempek ugyanarrol a halmazrol szolnak, mint a lista.
+   *
+   * Az a mechanizmus MEGSZUNT: a szamokat a szerver adja, ugyanabban a
+   * valaszban. A tulajdonsag megmaradt, csak mar NEM A KLIENSEN dol el --
+   * kliens-oldalrol nincs is mit allitani rola, mert egy valaszbol jon a ketto.
+   * A szerver oldalan a `worksheets/worksheet-list-scope.spec.ts` meri, hogy a
+   * szamlalo feltetele a listaeval EGY fuggvenybol szuletik, es hogy pontosan
+   * az allapottal ter el tole.
+   *
+   * AMI ITT MARAD MERHETO: hogy a felulet tenyleg a valasz `counts` mezojet
+   * mutatja, es nem valamelyik kezreeso masik szamot.
    */
-  it("a számlálás viszi a lista többi szűrőjét is", async () => {
-    navigation.params = new URLSearchParams("search=szivattyú");
+  it("a csempék a válasz counts mezőjéből olvasnak", async () => {
     render(<WorksheetListPage />);
     await screen.findByText("Sanyi, Kiss Péter");
 
-    await waitFor(() =>
-      expect(
-        api.list.mock.calls.some(
-          (call) =>
-            (call[1] as URLSearchParams).get("status") === "DRAFT" &&
-            (call[1] as URLSearchParams).get("search") === "szivattyú",
-        ),
-      ).toBe(true),
-    );
+    // A fixture negy szama kulonbozik egymastol ES a totalItems-tol is.
+    expect(screen.getByText("7")).toBeTruthy();
+    expect(screen.getByText("3")).toBeTruthy();
+    expect(screen.getByText("11")).toBeTruthy();
   });
 
   /**

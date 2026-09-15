@@ -458,6 +458,17 @@ export interface WorksheetListResponse {
     totalItems: number;
     totalPages: number;
   };
+  /**
+   * ALLAPOTONKENTI DARABSZAM, A LISTA SAJAT VALASZAN.
+   *
+   * Az allapot a LEGUTOLSO VERZIOE, ugyanugy, mint a lista soraiban -- tehat a
+   * csempek es a sorok ugyanazt a szabalyt kovetik. Ket kulon hivasbol a ketto
+   * elcsuszhatna, es a felulet a talalatok folott mas szamot mutatna.
+   *
+   * MINDEN ALLAPOT SZEREPEL, A NULLAS IS: egy hianyzo kulcs a kliensen
+   * pontosan ugy nez ki, mint a nulla, csak eppen nem az.
+   */
+  counts: Record<WorksheetVersionStatus, number>;
 }
 
 export interface WorksheetContentInput {

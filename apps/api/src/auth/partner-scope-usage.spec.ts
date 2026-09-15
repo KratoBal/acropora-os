@@ -47,6 +47,25 @@ const HELPERS = [
   "rowIsScopeOwner",
   "scopeMaySeeDocumentType",
   "assetOwnerScopeWhere",
+  /**
+   * A KET LISTA-`where`-EPITO. Mind a ketto a hatokort MAGA teszi bele a
+   * feltetelbe, es EGYSZERRE adja a lista es az allapot-szamlalo feltetelet --
+   * epp azert, hogy a hatokor ne tudjon csak az egyikbol kimaradni. Egy
+   * metodus, ami ezeket hivja, hasznalja a hatokort.
+   *
+   * MIERT KELLETT FELVENNI: az allapot-csempek szamlalojanak bevezetesekor a
+   * `list` mar nem hivja kozvetlenul a `scopeWhereForAndBranch`-et, hanem
+   * ezeknek adja at a hatokort. Enelkul a teszt ugy latna, hogy a `list`
+   * elfelejtette -- holott epp szigorubb lett.
+   *
+   * ES EGY LELET, AMI EBBOL JOTT: az eszkoz-lista `list` metodusa a
+   * `assetOwnerScopeWhere` miatt AKKOR IS atment volna ezen a teszten, ha a
+   * hatokort tenyleg elveszti -- az a hivas a TULAJDONOS-TIPUS szurore szol,
+   * nem a `PartnerScope`-ra, csak a nev hasonlit. A fedettseg ott veletlen
+   * volt; ezzel a ket nevvel mar a valodi okbol all fenn.
+   */
+  "assetListWheres",
+  "worksheetListWheres",
 ];
 
 /**
