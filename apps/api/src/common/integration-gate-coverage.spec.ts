@@ -7,9 +7,20 @@ import { describe, it } from "node:test";
  * Minden adatbázisos integrációs spec kérdezze meg a kaput.
  *
  * A szabály eddig is létezett és dokumentálva volt, csak nem mindenhol futott
- * le: tizenhárom spec fájlból három hívta a kaput, tíz nem, és a tíz között
- * volt kilenc szűrés nélküli `deleteMany()`. Egy kapu, amit egy fájl nem hív
- * meg, nem hibázik: csendben nem véd.
+ * le: 2026-09-04-én tizenhárom spec fájlból három hívta a kaput, tíz nem, és a
+ * tíz között volt kilenc szűrés nélküli `deleteMany()`. Egy kapu, amit egy fájl
+ * nem hív meg, nem hibázik: csendben nem véd.
+ *
+ * AZ ELŐZŐ BEKEZDÉS SZÁMAI TÖRTÉNETIEK, ÉS 2026-09-15 ÓTA ÁLL MELLETTÜK A
+ * DÁTUM. Enélkül jelen időben olvasódtak, és pontosan ez történt: aznap egy
+ * független mérés is kilenc szűretlen hívást talált - egy MÁSIK kilencet, három
+ * fájlban, harminc spec között. A két szám véletlenül egyezett, és aki a
+ * kommentből veszi át, ma is kilencet mondana. A valódi akkori szám tíz volt: a
+ * tizedik `deleteMany({})` alakban állt, üres objektummal, és a keresési minta
+ * nem látta. A számot a minta döntötte el, nem a világ.
+ *
+ * Ezért kap az alábbi harmadik állítás SAJÁT keresést, és ezért nem áll benne
+ * darabszám: amit számolni kell, azt a futás számolja.
  *
  * Ez a teszt ezért nem a kapu LOGIKÁJÁT méri (arra saját tesztje van), hanem a
  * LEFEDETTSÉGÉT. Egy tizennegyedik spec fájl, ami holnap születik és
@@ -72,6 +83,63 @@ describe("integrációs kapu lefedettsége", () => {
       [],
       "Ezek a specek lekérik a kaput, de nem dobják el az elutasítást: " +
         ignoring.join(", "),
+    );
+  });
+
+  /**
+   * EGY INTEGRÁCIÓS SPEC NE ÜRÍTSEN TÁBLÁT.
+   *
+   * A HARMADIK HIBAFAJTA, ÉS EGYIK MEGLÉVŐ ŐRZŐNK SEM LÁTJA. A CI kapuja
+   * (`scripts/tap-stream-gate.mjs`) azt fogja meg, ha egy takarítás DOB; a
+   * specek végén álló leftover-állítás azt, ha csendben NEM CSINÁL SEMMIT. Ez
+   * a harmadik kérdés: nem vitt-e el valaki TÖBBET a sajátjánál.
+   *
+   * MÉRVE 2026-09-15 (verify job 104337824776, két pontos sor-pillanatkép az
+   * integrációs futás körül): a `Category` tábla ÖT sorral kevesebb lett, mint
+   * amennyivel indult - a seedelt referencia-sorok. Az ok tíz szűretlen hívás
+   * négy specben, hat táblát ürítve.
+   *
+   * AMI NEM KOCKÁZAT, és mondjuk is ki: az `integrationDatabaseGate` miatt ez
+   * csak `_test` vagy `_ci` végű adatbázison tud lefutni. Éles adat nem forgott
+   * kockán. A kár határon belül volt: egyik suite a másik adatát vitte el - és
+   * mivel a futtató `--test-concurrency=1`, a sorrendet pedig a `find` adja, egy
+   * suite, ami ma a törlés előtt fut, holnap utána futhat.
+   *
+   * MINDKÉT ALAK TILOS, ÉS EZ NEM SZŐRSZÁLHASOGATÁS: a `deleteMany()` és a
+   * `deleteMany({})` ugyanazt teszi, de az első mintára keresve a második
+   * láthatatlan. Pontosan így maradt ki egy negyedik fájl az első seprésemből.
+   *
+   * HA EGY SPEC JOGOSAN ÜRÍT SAJÁT TÁBLÁT, ez az állítás pirosra vált - és az a
+   * helyes irány. A kivétel akkor kerülhet be, ha INDOKOLVA van: melyik tábla,
+   * és miért az övé az egész. Egy indoklás nélkül felvett kivételről két hónap
+   * múlva senki nem tudja, döntés volt-e vagy kényelem.
+   */
+  it("egyetlen integrációs spec sem ürít táblát szűrés nélkül", async () => {
+    const specs = await integrationSpecs();
+    assert.ok(
+      specs.length >= 10,
+      `Csak ${specs.length} integrációs spec fájlt találtam. Ez a keresés hibája.`,
+    );
+
+    const unfiltered: string[] = [];
+    for (const file of specs) {
+      const source = readFileSync(file, "utf8");
+      for (const [index, line] of source.split("\n").entries()) {
+        const hit = /prisma\.(\w+)\.deleteMany\(\s*(?:\{\s*\})?\s*\)/.exec(
+          line,
+        );
+        if (hit) unfiltered.push(`${file}:${index + 1} (${hit[1]})`);
+      }
+    }
+
+    assert.deepEqual(
+      unfiltered,
+      [],
+      "Ezek a hívások a TELJES táblát ürítik, nem csak a spec saját sorait. " +
+        "Szűrj a fixtúra saját ismérvére (előtag, azonosító-lista, vagy a suite " +
+        "indulási időbélyege), vagy - ha a törlés jogos - vedd fel ide " +
+        "kivételként, INDOKLÁSSAL: " +
+        unfiltered.join(", "),
     );
   });
 });
