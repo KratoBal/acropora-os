@@ -50,7 +50,28 @@ describe("megszűnt skálanevek", () => {
     .filter((nev) => /\.(ts|tsx|css)$/.test(nev) && !/\.test\.tsx?$/.test(nev))
     .map((nev) => join(gyoker, nev));
 
+  /**
+   * A FAJLLISTA MAGA IS ALLITAS, ES EDDIG NEM VOLT AZ.
+   *
+   * Ez a teszt korabban azt IRTA MAGAROL, hogy egy ures fajllista mellett is
+   * zold lenne -- es a "pozitiv kontroll" nevu masodik allitas EGY SZTRINGEN
+   * mert, nem a listan. Vagyis megnevezte a kockazatot, amit nem zart le.
+   * Acrobot vette eszre a beolvasztas elott.
+   *
+   * ES A MECHANIZMUS KONKRET, NEM ELMELETI: a `readdirSync` `recursive`
+   * kapcsoloja Node 18.17 elott nem letezik, es NEM HIBAZIK -- csak a legfelso
+   * szintet adja vissza. Lemerve: az `apps/web/src` legfelso szintjen NULLA
+   * fajl van (csupa mappa), tehat a szuro utan ures lista maradna, es mind a
+   * ket allitas zold lenne. Egy Node-csere a CI kepfajlban NEMAN uritené ki
+   * ezt az orzot -- ugyanabban az alakban, amirol az orzo maga szol.
+   *
+   * MA ez nem all fenn (a CI Node 22-n fut), tehat ez LATENS res volt, nem
+   * elo hiba. Az also hatar 50, a mai szam 187: a kulonbseg azert ekkora, hogy
+   * egy valodi fajl-torles ne vigye pirosra, egy KIURULES viszont igen.
+   */
   it("a forrás egyetlen helyen sem hívja őket", () => {
+    expect(fajlok.length).toBeGreaterThan(50);
+
     const talalatok: string[] = [];
     for (const f of fajlok) {
       const kod = kodSzoveg(readFileSync(f, "utf8"));
@@ -63,11 +84,24 @@ describe("megszűnt skálanevek", () => {
   });
 
   /**
-   * POZITIV KONTROLL. A fenti allitas egy URES FAJLLISTA mellett is zold
-   * lenne -- ez bizonyitja, hogy a kereses lat, es hogy a komment-kiszedes
-   * nem eszi meg a valodi kodot is.
+   * POZITIV KONTROLL A TELJES UTRA, NEM CSAK A REGEXPRE.
+   *
+   * A korabbi valtozat egy SZTRING-LITERALON mert: az bizonyitotta, hogy a
+   * `kodSzoveg` es a minta egyutt mukodik, de SEMMIT nem mondott arrol, hogy a
+   * VALODI fajlokon is vegigfut. Ez az allitas ugyanazt a lancot jaratja meg a
+   * lemezen levo fajlokon: ha barmelyik lepes (olvasas, komment-kiszedes,
+   * illesztes) elnemulna, itt derulne ki -- nem a hianyt merve, hanem egy
+   * ISMERT JELENLETET.
    */
-  it("a keresés megtalálja a nevet, amikor tényleg kódban áll", () => {
+  it("ugyanez a keresés megtalál egy nevet, amelyik tényleg ott van", () => {
+    let talalt = 0;
+    for (const f of fajlok) {
+      if (/\bbrand-700\b/.test(kodSzoveg(readFileSync(f, "utf8")))) talalt += 1;
+    }
+    expect(talalt).toBeGreaterThan(5);
+  });
+
+  it("a komment-kiszedés nem eszi meg a valódi kódot", () => {
     const kod = kodSzoveg(
       `/* magyarazat: a teal-700 megszunt */\nconst a = "text-teal-700";`,
     );
