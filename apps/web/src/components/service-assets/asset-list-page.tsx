@@ -106,9 +106,22 @@ export function AssetListPage() {
    * oda, hogy ez nem a vegso alak. Mostantol a szerver egyetlen `groupBy`-jal
    * szamolja, ugyanabban a valaszban: harom keresbol nulla lett.
    *
-   * ES NEM CSAK OLCSOBB, HANEM PONTOSABB IS. A harom kulon hivas harom
-   * KULONBOZO pillanatot latott: ha kozben barki mozdított egy eszkozon, a
-   * csempek egymassal is ellentmondhattak. Egy valasz, egy pillanat.
+   * ES NEM CSAK OLCSOBB, HANEM PONTOSABB IS -- de PONTOSAN ANNYIVAL, AMENNYIVEL.
+   * A harom kulon hivas harom EGYMAS UTANI korben futott: a csempek kozott
+   * masodpercek is elteltek, es ha kozben barki mozdított egy eszkozon, ket
+   * csempe egymasnak is ellentmondhatott.
+   *
+   * AMIT EZ NEM AD MEG, ES KORABBAN TULALLITOTTAM ITT: ez NEM egy
+   * adatbazis-pillanatkep. A lista, a darabszam es a csempek harom KULON
+   * lekerdezes, `Promise.all`-lal -- egy keresen belul, de sajat
+   * pillanatkeppel. Egyideju modositas mellett a csempek es a sorok tovabbra
+   * is elterhetnek egy tetellel, es a kovetkezo betoltesnel helyreall.
+   *
+   * AMI VALTOZOTT: az ablak MERETE. Harom egymas utani korbol egy keresen
+   * beluli parhuzamos futasra szukult -- masodpercekbol ezredmasodpercekre.
+   * Az eltunt, hogy a KET CSEMPE egymasnak ellentmondjon (azok most egy
+   * `groupBy`-bol jonnek); ami megmaradt, az a csempek es a sorok kozotti,
+   * atmeneti egy-tetelnyi elteres.
    */
   useEffect(() => {
     const timer = window.setTimeout(() => {
