@@ -128,8 +128,12 @@ export class ServiceJobsController {
    */
   @Post(":id/partner")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
-  setPartner(@Param("id") id: string, @Body() input: SetServiceJobPartnerDto) {
-    return this.service.setPartner(id, input.customerId);
+  setPartner(
+    @Param("id") id: string,
+    @Body() input: SetServiceJobPartnerDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.setPartner(id, input.customerId, user);
   }
 
   /**
@@ -140,8 +144,12 @@ export class ServiceJobsController {
    */
   @Post(":id/worksheets")
   @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
-  attachWorksheet(@Param("id") id: string, @Body() input: AttachWorksheetDto) {
-    return this.service.attachWorksheet(id, input.worksheetId);
+  attachWorksheet(
+    @Param("id") id: string,
+    @Body() input: AttachWorksheetDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.attachWorksheet(id, input.worksheetId, user);
   }
 
   /**
@@ -153,8 +161,9 @@ export class ServiceJobsController {
   detachWorksheet(
     @Param("id") id: string,
     @Param("worksheetId") worksheetId: string,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.detachWorksheet(id, worksheetId);
+    return this.service.detachWorksheet(id, worksheetId, user);
   }
 
   /**
@@ -198,6 +207,6 @@ export class ServiceJobsController {
     @Body() input: MoveServiceJobDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.move(id, input, user.id);
+    return this.service.move(id, input, user.id, user);
   }
 }

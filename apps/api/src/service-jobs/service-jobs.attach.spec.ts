@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import type { AuthenticatedUser } from "@acropora/types";
 import { describe, it } from "node:test";
 
 import type { ServiceJobsRepository } from "./service-jobs.repository.js";
@@ -41,6 +42,15 @@ function serviceWith(behaviour: {
   };
 }
 
+/**
+ * A HIVO HATOKORE MOSTANTOL ARGUMENTUM, ES EZ NEM DISZITES.
+ *
+ * Az irasi utak 2026-09-14 ota a hivo hatokoret nezik, MIELOTT irnanak.
+ * Ezek az allitasok a BELSO agat merik -- a partner-hatokor sajat
+ * fajlban all (`service-jobs.write-scope.spec.ts`).
+ */
+const BELSOS = { id: "user-1" } as AuthenticatedUser;
+
 describe("egy meglévő munkalap a hibajegy alá", () => {
   it("a szabad lapot csatolja, és megnevezi mindkét oldalt", async () => {
     const { service, calls } = serviceWith({
@@ -48,7 +58,7 @@ describe("egy meglévő munkalap a hibajegy alá", () => {
       sheet: { serviceJobId: null, customerId: "vevo-1" },
     });
 
-    await service.attachWorksheet("job-1", "worksheet-1");
+    await service.attachWorksheet("job-1", "worksheet-1", BELSOS);
 
     assert.deepEqual(calls, [
       { serviceJobId: "job-1", worksheetId: "worksheet-1" },
@@ -66,7 +76,7 @@ describe("egy meglévő munkalap a hibajegy alá", () => {
       sheet: { serviceJobId: null, customerId: "vevo-1" },
     });
 
-    await service.attachWorksheet("job-1", "egy-regen-lezart-lap");
+    await service.attachWorksheet("job-1", "egy-regen-lezart-lap", BELSOS);
 
     assert.equal(calls.length, 1);
   });
@@ -86,7 +96,7 @@ describe("egy meglévő munkalap a hibajegy alá", () => {
     });
 
     await assert.rejects(
-      () => service.attachWorksheet("job-1", "worksheet-1"),
+      () => service.attachWorksheet("job-1", "worksheet-1", BELSOS),
       /másik hibajegyhez/,
     );
     assert.equal(calls.length, 0);
@@ -99,7 +109,7 @@ describe("egy meglévő munkalap a hibajegy alá", () => {
     });
 
     await assert.rejects(
-      () => service.attachWorksheet("job-1", "worksheet-1"),
+      () => service.attachWorksheet("job-1", "worksheet-1", BELSOS),
       /már ehhez a hibajegyhez/,
     );
   });
@@ -108,7 +118,7 @@ describe("egy meglévő munkalap a hibajegy alá", () => {
     const { service } = serviceWith({ job: null, sheet: null });
 
     await assert.rejects(
-      () => service.attachWorksheet("nincs-ilyen", "worksheet-1"),
+      () => service.attachWorksheet("nincs-ilyen", "worksheet-1", BELSOS),
       /hibajegy nem található/,
     );
   });
@@ -120,7 +130,7 @@ describe("egy meglévő munkalap a hibajegy alá", () => {
     });
 
     await assert.rejects(
-      () => service.attachWorksheet("job-1", "nincs-ilyen"),
+      () => service.attachWorksheet("job-1", "nincs-ilyen", BELSOS),
       /munkalap nem található/,
     );
   });
@@ -140,7 +150,7 @@ describe("egy meglévő munkalap a hibajegy alá", () => {
     });
 
     await assert.rejects(
-      () => service.attachWorksheet("job-1", "worksheet-1"),
+      () => service.attachWorksheet("job-1", "worksheet-1", BELSOS),
       /másik partnerhez tartozik/,
     );
     assert.equal(calls.length, 0);
@@ -159,7 +169,7 @@ describe("egy meglévő munkalap a hibajegy alá", () => {
     });
 
     await assert.rejects(
-      () => service.attachWorksheet("job-1", "worksheet-1"),
+      () => service.attachWorksheet("job-1", "worksheet-1", BELSOS),
       /Először állítsd be a hibajegy partnerét/,
     );
     assert.equal(calls.length, 0);
@@ -177,7 +187,7 @@ describe("egy meglévő munkalap a hibajegy alá", () => {
     });
 
     await assert.rejects(
-      () => service.attachWorksheet("job-1", "worksheet-1"),
+      () => service.attachWorksheet("job-1", "worksheet-1", BELSOS),
       /időközben/,
     );
   });
@@ -190,7 +200,7 @@ describe("a munkalap leválasztása a hibajegyről", () => {
       sheet: { serviceJobId: "job-1", customerId: "vevo-1" },
     });
 
-    await service.detachWorksheet("job-1", "worksheet-1");
+    await service.detachWorksheet("job-1", "worksheet-1", BELSOS);
 
     assert.deepEqual(calls, [
       { serviceJobId: "job-1", worksheetId: "worksheet-1" },
@@ -211,7 +221,7 @@ describe("a munkalap leválasztása a hibajegyről", () => {
     });
 
     await assert.rejects(
-      () => service.detachWorksheet("job-1", "worksheet-1"),
+      () => service.detachWorksheet("job-1", "worksheet-1", BELSOS),
       /másik hibajegyhez/,
     );
     assert.equal(calls.length, 0);
@@ -224,7 +234,7 @@ describe("a munkalap leválasztása a hibajegyről", () => {
     });
 
     await assert.rejects(
-      () => service.detachWorksheet("job-1", "worksheet-1"),
+      () => service.detachWorksheet("job-1", "worksheet-1", BELSOS),
       /nem tartozik hibajegyhez/,
     );
     assert.equal(calls.length, 0);
@@ -238,7 +248,7 @@ describe("a munkalap leválasztása a hibajegyről", () => {
     });
 
     await assert.rejects(
-      () => service.detachWorksheet("job-1", "worksheet-1"),
+      () => service.detachWorksheet("job-1", "worksheet-1", BELSOS),
       /időközben elmozdult/,
     );
   });
@@ -257,7 +267,7 @@ describe("a munkalap leválasztása a hibajegyről", () => {
       sheet: { serviceJobId: "job-1", customerId: "vevo-1" },
     });
 
-    await service.detachWorksheet("job-1", "worksheet-1");
+    await service.detachWorksheet("job-1", "worksheet-1", BELSOS);
 
     assert.equal(calls.length, 1);
   });
