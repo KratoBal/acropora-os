@@ -137,7 +137,45 @@
   --color-brand-800: #4d3e9c;
   --color-brand-900: #3f3280;
 
-  /** A szoveg legsotetebb arnyalata. */
+  /**
+   * A szoveg legsotetebb arnyalata.
+   *
+   * EZ A MONDAT A TOKENRE IGAZ, DE AZ ERTEKRE NEM -- ES A KETTOT KONNYU
+   * OSSZEMOSNI. Merve 2026-09-15:
+   *
+   *     `text-ink`        44 hely, MIND szoveg
+   *     `bg-ink`           0 hely
+   *     ugyanez az ertek `slate-950` neven:  9 szoveg + 8 HATTER
+   *
+   * Vagyis a token maga csak szoveget szinez, es a fenti mondat rola all. Az
+   * ERTEK viszont MASODIK szerepben is all, es az teljes egeszeben a MASIK
+   * neven fut -- tehat errol a sorrol nezve LATHATATLAN.
+   *
+   * A NYOLC HATTER-HELY. SORSZAM HELYETT KERESES, mert egy sorszam a kovetkezo
+   * szerkesztesnel elavul, es egy elavult hivatkozas rosszabb a hianyzonal:
+   *
+   *     grep -rn "bg-slate-950" apps/web/src --include="*.tsx"
+   *
+   * AZ `--include` NEM DISZ: e nelkul a kereses KILENCET ad, mert EZ A
+   * MEGJEGYZES is talalat lesz -- a sajat magyarazatunk beleszamol abba, amit
+   * magyaraz. Ugyanaz a csapda, ami miatt a `removed-scale-names` orzo a
+   * KODRA mer, nem a fajl szovegere.
+   *
+   * A fajlok: `app-shell` (a mobil menu fatyla), `brand-editor-page`,
+   * `brand-import-assistant-page` (ketszer), `unas-brand-review-page`
+   * (haromszor) es `user-editor-page`.
+   *
+   * HETTO KOZULUK FATYOL, egy tomor felulet. A fatyol nem is "egy felulet
+   * szine": sotetito reteg, aminek a LATSZO erteke a mogotte levotol fugg.
+   * Ezert nem ugyanaz a dontes, mint a szoveg szine -- csak ugyanaz a szam.
+   *
+   * AMI EBBOL KOVETKEZIK, ES AMI NEM:
+   * NEM kovetkezik, hogy ezt a tokent at kell nevezni -- a neve pontos arra,
+   * amit jelol. Az viszont igen, hogy a fatyol-szerepnek MA NINCS NEVE, es
+   * amikor a `slate` skala igaz nevet kap, az a nyolc hely az UJ skalanevet
+   * fogja viselni, tovabbra is megnevezetlen szerepben. A szetvalasztas
+   * kulon tetel, es latvany-kockazattal jar (a fatyol sotetsege lathato).
+   */
   --color-ink: #26233b;
   /** A halvany, masodlagos szoveg. */
   --color-muted: #686477;
