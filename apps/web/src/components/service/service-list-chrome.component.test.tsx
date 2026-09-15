@@ -18,6 +18,25 @@ import { ServiceListFooter } from "./service-list-chrome";
  */
 describe("ServiceListFooter", () => {
   /**
+   * EGY ALLITAS, EGY TULAJDONSAG -- ES EZT NEM OLVASAS DONTOTTE EL, HANEM MERES.
+   *
+   * A kovetkezo ket teszt hasonlonak latszik: mind a ketto a lablec jobb
+   * oldalat nezi egy `capped` agon, es kezenfekvo volna osszevonni oket. Nem
+   * szabad, mert MAS TULAJDONSAGOT oriznek.
+   *
+   *   az elso   -- a vagott lista NEM hallgat arrol, hogy van tobb
+   *   a masodik -- a ket AG EGYETERT, amikor mindketto teljes listat jelent
+   *
+   * A kulonbseg egy TUL TAG JOSLATBOL derult ki: azt vartam, hogy a `capped`
+   * ag elrontasa MIND A KETTOT pirosra viszi. Egyet vitt. A masodik allitas
+   * nem banja, MI a szoveg -- csak azt, hogy a ket ag UGYANAZT mondja, tehat
+   * egy olyan rontas, ami mind a ketton egyformán valtoztat, nem banthatja.
+   *
+   * Osszevonva a kapott egyetlen teszt a ket tulajdonsag kozul pontosan az
+   * egyiket merne, es nem latszana, melyiket. Ket hasonlo teszt nem
+   * ismetles, ha ket kulonbozo modon tud elbukni.
+   */
+  /**
    * A VAGOTT LISTA NEM HALLGATHAT. A "vegere ertel" mondat egy vagott halmaz
    * alatt hazugsag -- es epp ez az egy mondat, amiert valaki a lap aljara nez.
    */
