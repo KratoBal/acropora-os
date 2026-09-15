@@ -9,11 +9,33 @@ export const worksheetStatusLabel: Record<WorksheetVersionStatus, string> = {
   REJECTED: "Elutasítva",
 };
 
+/**
+ * AZ ALLAPOT MEGITELESE: jo, rossz, varakozo vagy semleges. EGY helyen.
+ *
+ * TABLAZAT, NEM FELTETEL-LANC, ES EZ A LENYEGE. A korabbi alak harom `if`-bol
+ * allt es egy `return "neutral"`-lal zart -- vagyis egy UJ allapot CSENDBEN
+ * semlegesnek latszott volna, es semmi nem szolt volna rola. Nem elmeleti
+ * kockazat: a szerver DTO-ja maga mondja ki, hogy "amig a vitatott (ala nem
+ * irt) lap sorsa nyitott, a lekepezes sem rogzitheto" -- tehat egy otodik
+ * ertekkel SZAMOLUNK.
+ *
+ * `Record<WorksheetVersionStatus, ...>` alakban a fordito kenyszeriti ki a
+ * teljesseget: egy uj allapot nem a felulten jelenik meg szurken, hanem a
+ * forditasnal, nev szerint. A masik ket szerviz-szotar (`assetStatusTone`,
+ * `JOB_STATUS_TONE`) mar igy all; ez a harmadik volt hatra.
+ */
+const WORKSHEET_STATUS_VARIANT: Record<
+  WorksheetVersionStatus,
+  "success" | "warning" | "danger" | "neutral"
+> = {
+  DRAFT: "neutral",
+  AWAITING_SIGNATURE: "warning",
+  SIGNED: "success",
+  REJECTED: "danger",
+};
+
 export function worksheetStatusVariant(status: WorksheetVersionStatus) {
-  if (status === "SIGNED") return "success" as const;
-  if (status === "REJECTED") return "danger" as const;
-  if (status === "AWAITING_SIGNATURE") return "warning" as const;
-  return "neutral" as const;
+  return WORKSHEET_STATUS_VARIANT[status];
 }
 
 /**
@@ -88,12 +110,18 @@ export function formatDateTime(value: string | null): string {
  * ez a fuggveny csak leforditja az uj paletta nevere. Ket egymas mellett allo,
  * fuggetlen leiras eloszor egyezik, aztan az egyiket valaki modositja.
  */
+const VARIANT_TONE: Record<
+  ReturnType<typeof worksheetStatusVariant>,
+  ServiceTone
+> = {
+  success: "green",
+  warning: "amber",
+  danger: "red",
+  neutral: "neutral",
+};
+
 export function worksheetStatusTone(
   status: WorksheetVersionStatus,
 ): ServiceTone {
-  const variant = worksheetStatusVariant(status);
-  if (variant === "success") return "green";
-  if (variant === "warning") return "amber";
-  if (variant === "danger") return "red";
-  return "neutral";
+  return VARIANT_TONE[worksheetStatusVariant(status)];
 }
