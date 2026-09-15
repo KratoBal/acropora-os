@@ -39,7 +39,31 @@ const FILES = [
   "src/suppliers/suppliers.repository.ts",
 ];
 
-/** Amit a where-agban hivni lehet. */
+/**
+ * AMIT A WHERE-AGBAN HIVNI LEHET -- ES AMIT EZ A LISTA NEM TUD.
+ *
+ * A teszt azt nezi, hogy egy hatokort atvevo metodus hivja-e valamelyiket. Ebbol
+ * kovetkezik a hatara: **A NEV HASONLOSAGA NEM FEDETTSEG.** Ha egy metodus egy
+ * ITT SZEREPLO nevet hiv valami MASERT, a teszt zold lesz akkor is, ha a
+ * hatokort kozben teljesen elvesztette.
+ *
+ * EGY ZOLD TESZT HAROM OKBOL ALLHAT, es a harmadik a legrosszabb:
+ *
+ *     a tulajdonsag fennall            ez a jo eset
+ *     a teszt nem meri                 ezt eszre lehet venni
+ *     VELETLENUL meri, nev-egyezesen   pontosan ugy nez ki, mint az elso
+ *
+ * MERT ESET, ES NEM ELMELET (2026-09-15): az eszkoz-lista `list` metodusa
+ * atment ezen a teszten, mert hivja az `assetOwnerScopeWhere`-t -- csakhogy az
+ * a TULAJDONOS-TIPUS szurore szol, nem a `PartnerScope`-ra. Csak a nev
+ * hasonlit. Az a `list` elveszithette volna a hatokort UGY, hogy ez a teszt
+ * vegig zold marad.
+ *
+ * EZERT, MIELOTT UJ NEVET VESZEL FEL IDE: nezd meg, hogy az a fuggveny a
+ * `PartnerScope`-ot teszi-e a feltetelbe, vagy csak hasonlo a neve. Ha a hivoja
+ * mast szurne vele, a nev ide NEM valo -- kulonben minden metodus, ami azt a
+ * fuggvenyt barmiert hivja, orizetlenul is zoldet kap.
+ */
 const HELPERS = [
   "scopeWhereForAndBranch",
   "scopeOwnWhereForAndBranch",
@@ -58,11 +82,9 @@ const HELPERS = [
    * ezeknek adja at a hatokort. Enelkul a teszt ugy latna, hogy a `list`
    * elfelejtette -- holott epp szigorubb lett.
    *
-   * ES EGY LELET, AMI EBBOL JOTT: az eszkoz-lista `list` metodusa a
-   * `assetOwnerScopeWhere` miatt AKKOR IS atment volna ezen a teszten, ha a
-   * hatokort tenyleg elveszti -- az a hivas a TULAJDONOS-TIPUS szurore szol,
-   * nem a `PartnerScope`-ra, csak a nev hasonlit. A fedettseg ott veletlen
-   * volt; ezzel a ket nevvel mar a valodi okbol all fenn.
+   * (A `assetOwnerScopeWhere` nev-hasonlosagarol szolo lelet a lista FOLOTT
+   * all, mert nem errol a ket nevrol szol, hanem arrol, hogyan kell uj nevet
+   * felvenni ide.)
    */
   "assetListWheres",
   "worksheetListWheres",
