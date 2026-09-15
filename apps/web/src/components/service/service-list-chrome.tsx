@@ -259,7 +259,7 @@ export function ServiceListFooter({
         {totalItems} találat
         {totalItems > shown ? `, ebből ${shown} ezen a lapon` : ""}
       </span>
-      <span>{tailText(tail)}</span>
+      <span data-testid="lablec-zaro">{tailText(tail)}</span>
     </div>
   );
 }

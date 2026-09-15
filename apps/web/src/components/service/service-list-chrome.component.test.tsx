@@ -18,6 +18,25 @@ import { ServiceListFooter } from "./service-list-chrome";
  */
 describe("ServiceListFooter", () => {
   /**
+   * EGY ALLITAS, EGY TULAJDONSAG -- ES EZT NEM OLVASAS DONTOTTE EL, HANEM MERES.
+   *
+   * A kovetkezo ket teszt hasonlonak latszik: mind a ketto a lablec jobb
+   * oldalat nezi egy `capped` agon, es kezenfekvo volna osszevonni oket. Nem
+   * szabad, mert MAS TULAJDONSAGOT oriznek.
+   *
+   *   az elso   -- a vagott lista NEM hallgat arrol, hogy van tobb
+   *   a masodik -- a ket AG EGYETERT, amikor mindketto teljes listat jelent
+   *
+   * A kulonbseg egy TUL TAG JOSLATBOL derult ki: azt vartam, hogy a `capped`
+   * ag elrontasa MIND A KETTOT pirosra viszi. Egyet vitt. A masodik allitas
+   * nem banja, MI a szoveg -- csak azt, hogy a ket ag UGYANAZT mondja, tehat
+   * egy olyan rontas, ami mind a ketton egyformán valtoztat, nem banthatja.
+   *
+   * Osszevonva a kapott egyetlen teszt a ket tulajdonsag kozul pontosan az
+   * egyiket merne, es nem latszana, melyiket. Ket hasonlo teszt nem
+   * ismetles, ha ket kulonbozo modon tud elbukni.
+   */
+  /**
    * A VAGOTT LISTA NEM HALLGATHAT. A "vegere ertel" mondat egy vagott halmaz
    * alatt hazugsag -- es epp ez az egy mondat, amiert valaki a lap aljara nez.
    */
@@ -73,6 +92,15 @@ describe("ServiceListFooter", () => {
    *
    * SZAMJEGYRE MER, NEM A KETSZAZRA: igy egy masik hatar bemasolasa is elbukna,
    * nem csak a mai szam.
+   *
+   * ES A JOBB OLDALT HORGONY AZONOSITJA, NEM POZICIO -- nautilus vette eszre,
+   * es MA meg nem hiba: a lablecben ket TESTVER span all, tehat a
+   * `span:last-of-type` pontosan a jobb oldalit adta. Csakhogy azt kodolta,
+   * hogy a jobb oldal az UTOLSO span. Ha valaha egy harmadik kerul a VEGERE,
+   * a lekerdezes csendben ATVALT ra, es a `toBeTruthy` ezt nem venne eszre,
+   * mert az uj span sem ures -- az allitas tovabbra is zold lenne, csak MAST
+   * merne. Ugyanaz a csalad, mint amikor egy kereses tul szuk: nem hibazik,
+   * elteved.
    */
   it("a jobb oldali mondatban nincs szám", () => {
     const { container } = render(
@@ -82,7 +110,7 @@ describe("ServiceListFooter", () => {
         tail={{ kind: "capped", truncated: true }}
       />,
     );
-    const jobbOldal = container.querySelector("span:last-of-type");
+    const jobbOldal = container.querySelector('[data-testid="lablec-zaro"]');
     expect(jobbOldal?.textContent).toBeTruthy();
     expect(jobbOldal?.textContent ?? "").not.toMatch(/\d/);
   });
