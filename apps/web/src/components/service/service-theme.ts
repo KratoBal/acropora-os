@@ -17,6 +17,19 @@
  * legkozelebbi tokenre: egy "majdnem ugyanaz" megfeleltetes megvaltoztatna a
  * szint, es a diffbol nem latszana, hogy az dontes volt. Ha valamelyik masodszor
  * is kell valahol, akkor lesz belole token -- akkor, es nem elore.
+ *
+ * ES AMIT A "MASODSZOR" MER, mert a szabaly maga jo volt, a merese viszont
+ * alulhatarozott: HASZNALATOT szamol, nem ELOFORDULAST. Egy ertek, ami
+ * masodszor csak egy magyarazo megjegyzesben all, egyszer hasznalt. Ha a
+ * komment-emlites tokent szulne, a sajat dokumentacionk hatarozna meg a kod
+ * alakjat -- es a kereses, ami ezt szamolja, epp azt nem tudja megkulonboztetni.
+ *
+ * ES AZONOS ERTEK MEG NEM AZONOS DONTES. Ha ket hely ugyanazt a szamot irja le,
+ * de KULONBOZO kerdesre valaszol vele (mas hatter, mas szerep), akkor ket dontes
+ * all ott, ami MA egybeesik. Egy nev ala huzva a kovetkezo hangolas mind a kettot
+ * elvinne, holott csak az egyiket akartak -- vagyis a token pont azt tenne
+ * lehetetlenne, amiert letezik: hogy EGY helyen at lehessen allitani. Elo pelda
+ * lentebb a `tag`, aminek a szovegszine beture egyezik egy tokennel, es megsem az.
  */
 
 export const sv = {
