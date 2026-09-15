@@ -54,6 +54,17 @@ import { ServiceIcon } from "./service-list-chrome";
  * ertekkel azt jelentene, hogy aki elfelejti atadni, CSENDBEN a rossz mondatot
  * kapja -- vagyis ugyanaz a hiba allna elo ujra, csak nehezebben eszrevehetoen.
  * Igy a fordito kerdezi meg minden laptol, amit a sav allit rola.
+ *
+ * ES A HATARA, MERT KULONBEN TOBBET IGER, MINT AMIT AD: a fordito azt
+ * kenyszeriti ki, hogy a lap VALASSZON, nem azt, hogy JOL valasszon. Egy lap,
+ * ami allandoan `loaded`-ot ad, holott lehet ures, ugyanugy hazudna -- es ezt
+ * LEMERTEM: a tipusellenorzes atengedi, mert a `loaded` ervenyes ertek, es
+ * egyetlen teszt sem fogja meg. Az a hiba a kod olvasasakor latszik, nem
+ * kapun.
+ *
+ * Amit a kotelezoseg TENYLEG ad: nincs nema alapertelmezes. A valasztas
+ * lathato a hivasi helyen, tehat van MIT elolvasni -- egy elhagyott prop
+ * eseten nem lenne.
  */
 export type ServiceOfflineState =
   /** Van mar betoltott tartalom a kepernyon: az LATSZIK, csak nem frissul. */
