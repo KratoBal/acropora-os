@@ -191,6 +191,47 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
   beforeEach(cleanup);
   after(async () => {
     await cleanup();
+    /**
+     * ES A TAKARITAS EREDMENYET MEG IS MERJUK.
+     *
+     * A HAROM SZAMLALO UGYANAZT A SZUROT NEZI, MINT A TORLESE, es ezt ki kell
+     * mondani: itt NINCS masodik tengely. A suite sorait nem elotag azonositja,
+     * hanem az IDO (`SUITE_KEZDET`) es a kulso hivatkozas rendszere -- masik
+     * oszlop, amire szurni lehetne, nem all rendelkezesre. Ezek a szamlalok
+     * tehat egy ELMARADT vagy ELHASALT torlest fognak meg, nem egy elirt
+     * szurot.
+     *
+     * ES EPP EZERT NEM FELESLEGESEK: a `domainEvent` sora azoknak a
+     * takaritasoknak az egyike, amik a CI sor-pillanatkepein a `DomainEvent`
+     * kulonbseget adtak (verify run 34981069257). Ha ez a hivas barmiert
+     * kimarad, a kovetkezo suite mar egy szennyezett tablan indul, es a nyom
+     * addigra masra fog mutatni.
+     *
+     * A `Product` ES A `Category` NEM KAP SZAMLALOT, es ez a fajl sajat
+     * korlatja: azokat a kulso hivatkozasokon AT azonositjuk, tehat egy
+     * hivatkozas nelkul letrejott sort semmilyen szamlalo nem talalna meg --
+     * ugyanaz a vaksag, ami magat a torlest is jellemzi. Egy szamlalo, ami
+     * ugyanott vak, ahol a torles, nem ellenorzes, hanem diszlet.
+     */
+    assert.equal(
+      await prisma.catalogImportBatch.count({
+        where: { createdAt: { gte: SUITE_KEZDET } },
+      }),
+      0,
+      "a suite import-kotegei bent maradtak a takaritas utan",
+    );
+    assert.equal(
+      await prisma.domainEvent.count({
+        where: { createdAt: { gte: SUITE_KEZDET } },
+      }),
+      0,
+      "a suite esemenyei bent maradtak a takaritas utan",
+    );
+    assert.equal(
+      await prisma.externalReference.count({ where: { system: "UNAS" } }),
+      0,
+      "UNAS kulso hivatkozasok maradtak bent a takaritas utan",
+    );
     await prisma.$disconnect();
   });
 
