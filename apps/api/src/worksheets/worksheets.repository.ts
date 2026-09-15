@@ -196,6 +196,45 @@ function lineData(content: NormalizedWorksheetContent, versionId: string) {
   }));
 }
 
+/**
+ * A MUNKALAP-LISTA KET `where`-JE, EGY HIVASBOL.
+ *
+ * A lista es az allapot-szamlalo UGYANITT szuletik, tehat a jogosultsagi ag nem
+ * tud CSAK az egyikbol kimaradni. A `PartnerScope` itt LATHATOSAGI hatar (ki
+ * latja egyaltalan a sort), nem a felhasznalo szukitese -- a szamlalo ezert
+ * megkapja. Elhagyva a csempek idegen partner lapjait szamolnak meg.
+ */
+export function worksheetListWheres(
+  scope: PartnerScope,
+  userWhereWithoutStatus: Prisma.WorksheetWhereInput,
+  statusWhere: Prisma.WorksheetWhereInput,
+): { list: Prisma.WorksheetWhereInput; counts: Prisma.WorksheetWhereInput } {
+  return {
+    list: {
+      AND: [
+        scopeWhereForAndBranch(scope),
+        { ...userWhereWithoutStatus, ...statusWhere },
+      ],
+    },
+    counts: { AND: [scopeWhereForAndBranch(scope), userWhereWithoutStatus] },
+  };
+}
+
+/**
+ * A SZAMLALO KIINDULOPONTJA: MINDEN ALLAPOT NULLAN.
+ *
+ * `Record<WorksheetVersionStatus, 0>` alakban KET dolgot csinal: a nullas
+ * allapot is bekerul a valaszba (a csoportositas csak a letezo sorokat adja,
+ * es a hianyzo kulcs a kliensen ugy nez ki, mint a nulla), ES egy UJ allapot
+ * ide is kell, kulonben a forditas all meg, nev szerint.
+ */
+const ZERO_PER_WORKSHEET_STATUS: Record<WorksheetVersionStatus, 0> = {
+  DRAFT: 0,
+  AWAITING_SIGNATURE: 0,
+  SIGNED: 0,
+  REJECTED: 0,
+};
+
 @Injectable()
 export class WorksheetsRepository extends Repository {
   constructor() {
@@ -600,8 +639,12 @@ export class WorksheetsRepository extends Repository {
       ? await this.worksheetIdsByLatestStatus(query.status)
       : null;
 
-    const userWhere: Prisma.WorksheetWhereInput = {
-      ...(latestStatusIds ? { id: { in: latestStatusIds } } : {}),
+    /**
+     * A FELHASZNALOI SZURO AZ ALLAPOT NELKUL. A csempek EZT a halmazt bontjak
+     * allapotokra, tehat a sajat dimenziojuk nem lehet benne -- kulonben az
+     * "alairasra var" csempe a MAR arra szurt listat szamolna meg.
+     */
+    const userWhereWithoutStatus: Prisma.WorksheetWhereInput = {
       ...(query.customerId ? { customerId: query.customerId } : {}),
       ...(query.departmentId ? { departmentId: query.departmentId } : {}),
       ...(query.assigneeId
@@ -630,11 +673,17 @@ export class WorksheetsRepository extends Repository {
 
     // A JOGOSULTSAGI SZURO `AND` AGKENT, SOHA NEM KULCSKENT -- a fenti objektum
     // felhasznaloi szurot spreadel es felso szintu `OR`-t is tartalmaz.
-    const where: Prisma.WorksheetWhereInput = {
-      AND: [scopeWhereForAndBranch(scope), userWhere],
-    };
+    //
+    // A KET FELTETEL EGY HIVASBOL SZULETIK, es ez nem stilus: igy a
+    // lathatosagi ag nem tud CSAK az egyikbol kimaradni. A szamlalo feltetele
+    // pontosan annyival ter el, hogy az ALLAPOT nincs benne.
+    const { list: where, counts: countsWhere } = worksheetListWheres(
+      scope,
+      userWhereWithoutStatus,
+      latestStatusIds ? { id: { in: latestStatusIds } } : {},
+    );
 
-    const [rows, totalItems] = await Promise.all([
+    const [rows, totalItems, counts] = await Promise.all([
       this.database.worksheet.findMany({
         where,
         include: worksheetSummaryInclude,
@@ -643,6 +692,7 @@ export class WorksheetsRepository extends Repository {
         take: query.pageSize,
       }),
       this.database.worksheet.count({ where }),
+      this.countsByLatestStatus(countsWhere),
     ]);
 
     return {
@@ -653,7 +703,65 @@ export class WorksheetsRepository extends Repository {
         totalItems,
         totalPages: Math.max(1, Math.ceil(totalItems / query.pageSize)),
       },
+      counts,
     };
+  }
+
+  /**
+   * ALLAPOTONKENTI DARABSZAM -- ES EZ NEM AZ ESZKOZ-LISTA MINTAJANAK A MASOLATA.
+   *
+   * Az eszkoznel az allapot a SORON all, tehat egy `groupBy` eleg. A munkalap
+   * allapota viszont a LEGUTOLSO VERZIOJE: a `Worksheet` soron nincs ilyen
+   * oszlop, es a `WorksheetVersion` tablan tobb sor tartozik egy laphoz. Egy
+   * naiv `groupBy` a VERZIOKAT szamolna meg, nem a lapokat -- egy haromszor
+   * atirt lap haromszor szerepelne, kulonbozo allapotokban.
+   *
+   * EZERT KET LEPES, ES A SORREND SZAMIT:
+   *
+   * 1. Prisma adja a SZURT lapok azonositoit. A szuro (lathatosag, kereses,
+   *    partner, felelos) igy EGY helyen marad, a lista `where`-jevel kozos
+   *    fuggvenybol -- nem irjuk ujra SQL-ben, ahol elcsuszhatna tole.
+   * 2. Egy nyers lekerdezes a `DISTINCT ON`-nal kivalasztott legutolso verzio
+   *    allapota szerint csoportosit, CSAK ezekre az azonositokra.
+   *
+   * AZ ARA, KIMONDVA: a szurt azonosito-halmaz a memorian megy at. Ugyanaz a
+   * kompromisszum, amit a `worksheetIdsByLatestStatus` jegyzete mar felvallalt
+   * (nehany ezer lapig nem merheto); ha egyszer tizezres nagysagrend lesz, mind
+   * a ketto helye egy karbantartott oszlop a `Worksheet` soron.
+   */
+  private async countsByLatestStatus(
+    where: Prisma.WorksheetWhereInput,
+  ): Promise<Record<WorksheetVersionStatus, number>> {
+    const rows = await this.database.worksheet.findMany({
+      where,
+      select: { id: true },
+    });
+    const counts: Record<WorksheetVersionStatus, number> = {
+      ...ZERO_PER_WORKSHEET_STATUS,
+    };
+    if (rows.length === 0) return counts;
+
+    const ids = rows.map((row) => row.id);
+    const grouped = await this.database.$queryRaw<
+      { status: WorksheetVersionStatus; count: bigint }[]
+    >`
+      SELECT latest."status", COUNT(*) AS count
+      FROM (
+        SELECT DISTINCT ON ("worksheetId") "worksheetId", "status"
+        FROM "WorksheetVersion"
+        WHERE "worksheetId" = ANY(${ids})
+        ORDER BY "worksheetId", "version" DESC
+      ) AS latest
+      GROUP BY latest."status"
+    `;
+    /**
+     * A `COUNT(*)` BIGINT-KENT JON VISSZA, es a `Number` ide szandekos: a
+     * darabszam nagysagrendje a lapok szama, ami a `Number.MAX_SAFE_INTEGER`
+     * kozeleben sincs. Nyersen hagyva a JSON-valasz `1n` alaku erteket adna,
+     * amin a `JSON.stringify` eldobna a keres.
+     */
+    for (const row of grouped) counts[row.status] = Number(row.count);
+    return counts;
   }
 
   /**
