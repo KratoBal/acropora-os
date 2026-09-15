@@ -49,6 +49,31 @@ const iconPaths = {
       <circle cx="12" cy="10" r="2.5" />
     </>
   ),
+  arrowLeft: <path d="M20 12H4m6-6-6 6 6 6" />,
+  users: (
+    <>
+      <circle cx="9" cy="7" r="3" />
+      <path d="M3 21v-3a6 6 0 0 1 12 0v3M17 4a3 3 0 0 1 0 6m2 11v-3a6 6 0 0 0-2-4" />
+    </>
+  ),
+  ticket: (
+    <>
+      <path d="M3 5h18v5a2 2 0 0 0 0 4v5H3v-5a2 2 0 0 0 0-4z" />
+      <path d="M8 5v3m0 3v2m0 3v3" />
+    </>
+  ),
+  eye: (
+    <>
+      <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  info: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v6m0-10h.01" />
+    </>
+  ),
   sheet: (
     <>
       <path d="M14 3H5v18h14V8z" />
