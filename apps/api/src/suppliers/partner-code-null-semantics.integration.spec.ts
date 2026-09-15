@@ -84,7 +84,33 @@ describe(
       mirrorlessSupplierId = supplier.id;
     });
 
-    after(removeLeftovers);
+    after(async () => {
+      await removeLeftovers();
+      /**
+       * ÉS A TAKARÍTÁS EREDMÉNYÉT MEG IS MÉRJÜK: a `deleteMany` nulla sorra is
+       * sikeres, tehát egy elcsúszott előtag pontosan úgy néz ki, mint egy
+       * tiszta futás.
+       *
+       * MIND A KETTŐT SZÁMOLJUK, mert a két tábla között NINCS idegen kulcs:
+       * a vevő és a szállító külön áll, tehát az egyik törlése semmit nem mond
+       * a másikról. Ahol `Cascade` tartja őket össze, ott egy számláló elég;
+       * itt nem tartja semmi.
+       */
+      assert.equal(
+        await prisma.customer.count({
+          where: { customerNumber: { startsWith: PREFIX } },
+        }),
+        0,
+        "a suite vevői bent maradtak a takarítás után",
+      );
+      assert.equal(
+        await prisma.supplier.count({
+          where: { code: { startsWith: PREFIX } },
+        }),
+        0,
+        "a suite szállítói bent maradtak a takarítás után",
+      );
+    });
 
     /**
      * A MI KÓDUNK, valódi adatbázison. Az `assertPartnerCodeFree` a vevő-oldalt
