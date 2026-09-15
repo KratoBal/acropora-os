@@ -29,13 +29,28 @@
  * munkatol. Ez az alak teszi azza: ha a lila nem tetszik, ez a blokk kikerul,
  * es minden oldal visszaall, anelkul hogy barmi mas elveszne.
  *
- * AMIT EZ KOSTOL, KIMONDVA: a `teal-*` innentol NEM turkiz, a `slate-*` pedig
- * nem a Tailwind hideg szurkeje. A NEV HAZUDIK, es ez valodi ar -- aki uj kodot
- * ir, `teal-700`-t latva turkizre szamitana. Ezert all lentebb a KET UJ,
- * IGAZ NEVU keszlet (`brand-*`, `ink`, `nav`, `paper`, `line`, `coral`): UJ
- * KODBAN AZOKAT HASZNALD. A regi nevek atnevezese kulon, mechanikus kor lesz,
- * es nem ebbe a PR-be valo: ott a diff hetven fajlra nyulna, es pont azt a
- * visszavonhatosagot venne el, amiert ez az alak keszult.
+ * AMIT EZ KOSTOLT, KIMONDVA: a nevek HAZUDTAK. Aki uj kodot irt, `teal-700`-t
+ * latva turkizre szamitott. Ezert allt melle a KET UJ, IGAZ NEVU keszlet
+ * (`brand-*`, `ink`, `nav`, `paper`, `line`, `coral`).
+ *
+ * A `teal-*` FELE 2026-09-15-EN LEZARULT: mind az 52 hivasi hely atallt
+ * `brand-*`-ra, es a `teal-*` masolat kikerult. Ez bizonyithatoan pixelre
+ * azonos volt, nem velemeny: a hasznalt tiz fokozat mindegyikenek letezett
+ * BETURE AZONOS erteku `brand-*` parja, a `teal-950`-nek pedig NULLA hivoja
+ * volt (az egyetlen talalat maga a definicio).
+ *
+ * A `slate-*` FELE VISZONT NEM MECHANIKUS, es ezert all meg mindig itt. Merve
+ * ugyanaznap, az apps/web-ben 774 hivasi hely:
+ *
+ *     331 helynek VAN azonos erteku igaz nevu tokenje (paper, line, muted, ink)
+ *     443 helynek NINCS SEMMILYEN uj neve -- a tizenegy fokozatbol HETNEK
+ *         (100, 300, 400, 600, 700, 800, 900) nincs igaz neve egyaltalan
+ *
+ * Vagyis az a fele nem atnevezes, hanem eloszor ELNEVEZES, es az tervezoi
+ * dontes. Es a 331 "lekepezheto" hely sem gepies: a `paper` azt JELENTI, hogy
+ * a lap hattere -- egy sor hover-hattere ugyanazzal az ertekkel MAS dontes.
+ * Azonos ertek meg nem azonos dontes; ugyanaz a szabaly, ami a
+ * `service/service-theme.ts` fejlecen all.
  */
 @theme {
   /* ---- A SEMLEGES RAMPA. A prototipus szurkei lilaba hajlanak, nem kekbe:
@@ -51,20 +66,6 @@
   --color-slate-800: #373347;
   --color-slate-900: #2f2b40;
   --color-slate-950: #26233b;
-
-  /* ---- A KIEMELO SZIN. A prototipus `--purple`-je (#6150bd) a 700-as
-     fokozaton all, mert a felulet azt hasznalja a legtobbet (28 hely). ---- */
-  --color-teal-50: #f4f1fb;
-  --color-teal-100: #ede8ff;
-  --color-teal-200: #ded5fa;
-  --color-teal-300: #c3b5ee;
-  --color-teal-400: #9e80e8;
-  --color-teal-500: #7a68cc;
-  --color-teal-600: #6f5cc7;
-  --color-teal-700: #6150bd;
-  --color-teal-800: #4d3e9c;
-  --color-teal-900: #3f3280;
-  --color-teal-950: #292346;
 
   /* ---- AZ ALLAPOT-SZINEK. A prototipus part ad mindegyikhez (hatter es
      szoveg); a kozbenso fokozatok azokbol szarmaznak. Csak a TENYLEG
@@ -99,7 +100,15 @@
   --color-sky-800: #2c4e80;
   --color-sky-900: #233f67;
 
-  /* ---- AZ IGAZ NEVU KESZLET. UJ KOD EZEKET HASZNALJA. ---- */
+  /* ---- A KIEMELO SZIN, IGAZ NEVEN. A prototipus `--purple`-je (#6150bd) a
+     700-as fokozaton all, mert a felulet azt hasznalja a legtobbet.
+
+     EZ A SKALA KORABBAN KETSZER ALLT ITT: egyszer `teal-*` neven (a
+     visszavonhatosag miatt, amig a hivasi helyek at nem alltak), egyszer
+     igy. A hivasi helyek 2026-09-15-en atalltak, tehat a `teal-*` masolat
+     kikerult -- nem azert, mert felesleges volt, hanem mert BETOLTOTTE a
+     szerepet. Egy ket helyen allo szinertek pontosan az, ami ellen ez a
+     fajl kulon figyelmeztet. ---- */
   --color-brand-50: #f4f1fb;
   --color-brand-100: #ede8ff;
   --color-brand-200: #ded5fa;

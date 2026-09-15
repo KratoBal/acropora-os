@@ -191,7 +191,7 @@ export function UnasImportWizard() {
               onClick={() => setStep(number)}
               className={`rounded-lg border px-3 py-3 text-left text-xs font-semibold transition ${
                 step === number
-                  ? "border-teal-500 bg-teal-50 text-teal-800"
+                  ? "border-brand-500 bg-brand-50 text-brand-800"
                   : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
               } disabled:cursor-not-allowed disabled:opacity-50`}
             >
@@ -227,7 +227,7 @@ export function UnasImportWizard() {
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-slate-100">
             <div
-              className="h-full bg-teal-600 transition-all"
+              className="h-full bg-brand-600 transition-all"
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -253,12 +253,12 @@ export function UnasImportWizard() {
               }}
               className={`flex min-h-72 flex-col items-center justify-center rounded-xl border-2 border-dashed p-8 text-center transition ${
                 dragging
-                  ? "border-teal-500 bg-teal-50"
+                  ? "border-brand-500 bg-brand-50"
                   : "border-slate-300 bg-slate-50"
               }`}
               aria-label="UNAS XLSX feltöltési terület"
             >
-              <span className="mb-4 flex size-12 items-center justify-center rounded-xl bg-white text-teal-700 shadow-sm">
+              <span className="mb-4 flex size-12 items-center justify-center rounded-xl bg-white text-brand-700 shadow-sm">
                 <Icon name="package" />
               </span>
               <h2 className="font-semibold text-slate-950">
@@ -473,7 +473,7 @@ export function UnasImportWizard() {
               ) ? (
                 <Link
                   href={`/admin/imports/unas/${encodeURIComponent(report.batchId)}/review`}
-                  className="inline-flex h-9 items-center rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white hover:bg-teal-800"
+                  className="inline-flex h-9 items-center rounded-lg bg-brand-700 px-4 text-sm font-semibold text-white hover:bg-brand-800"
                 >
                   Brandek ellenőrzése
                 </Link>

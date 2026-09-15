@@ -695,7 +695,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                     <li key={worksheet.id}>
                       <Link
                         href={`/szerviz/munkalapok/${worksheet.id}`}
-                        className="font-medium hover:text-teal-700"
+                        className="font-medium hover:text-brand-700"
                       >
                         {worksheet.number ?? "Piszkozat"}
                       </Link>
@@ -731,7 +731,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                       {canManage ? (
                         <button
                           type="button"
-                          className="ml-2 text-xs text-slate-500 underline hover:text-teal-700"
+                          className="ml-2 text-xs text-slate-500 underline hover:text-brand-700"
                           disabled={attaching}
                           onClick={() => setSheetToDetach(worksheet.id)}
                         >

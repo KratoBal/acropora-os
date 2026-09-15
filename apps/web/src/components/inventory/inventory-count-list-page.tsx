@@ -213,7 +213,7 @@ export function InventoryCountListPage() {
                   <tr
                     key={count.id}
                     tabIndex={0}
-                    className="cursor-pointer transition hover:bg-slate-50 focus:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-teal-500"
+                    className="cursor-pointer transition hover:bg-slate-50 focus:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500"
                     onClick={() => router.push(`/raktar/${count.id}`)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {

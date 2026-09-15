@@ -237,7 +237,7 @@ export function SettingsOverviewPage() {
                         <li key={link.href}>
                           <Link
                             href={link.href}
-                            className="block rounded-md border border-slate-200 px-3 py-2 transition hover:border-teal-500 hover:bg-slate-50"
+                            className="block rounded-md border border-slate-200 px-3 py-2 transition hover:border-brand-500 hover:bg-slate-50"
                           >
                             <span className="block text-sm font-medium text-slate-900">
                               {link.label}

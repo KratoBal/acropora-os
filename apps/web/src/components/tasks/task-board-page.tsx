@@ -233,7 +233,7 @@ function TaskCard({
               href={task.linkUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded underline-offset-4 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/40"
+              className="rounded underline-offset-4 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40"
             >
               {task.title}
             </a>
@@ -281,7 +281,7 @@ function TaskCard({
             href={task.linkUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="font-semibold text-teal-700 underline-offset-4 hover:underline"
+            className="font-semibold text-brand-700 underline-offset-4 hover:underline"
           >
             Beszélgetés megnyitása
           </a>

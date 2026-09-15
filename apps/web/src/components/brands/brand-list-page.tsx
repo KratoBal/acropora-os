@@ -197,7 +197,7 @@ export function BrandListPage() {
                     <tr key={brand.id} className="border-b last:border-0">
                       <td className="p-3">
                         <Link
-                          className="font-semibold text-teal-700"
+                          className="font-semibold text-brand-700"
                           href={`/admin/brands/${brand.id}`}
                         >
                           {brand.name}

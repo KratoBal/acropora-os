@@ -150,7 +150,7 @@ export function WorksheetEntries({
               {entry.body}
             </p>
             <Link
-              className="text-xs font-semibold text-teal-700 underline"
+              className="text-xs font-semibold text-brand-700 underline"
               href={`/szerviz/munkalapok/${worksheetId}/bejegyzesek/${entry.id}`}
             >
               Megnyitom

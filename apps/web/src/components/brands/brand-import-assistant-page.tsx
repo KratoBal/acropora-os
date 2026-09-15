@@ -338,7 +338,7 @@ export function BrandImportAssistantPage() {
             </div>
           </Card>
           {canManage && selected.size ? (
-            <Card className="border-teal-200 bg-teal-50 p-4">
+            <Card className="border-brand-200 bg-brand-50 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <strong>{selected.size} márka kijelölve</strong>
                 <div className="flex gap-2">
