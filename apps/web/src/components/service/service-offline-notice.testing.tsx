@@ -101,9 +101,25 @@ export function savSzovege(kind: ServiceOfflineState["kind"]): string {
  * EZ NEM ELMELETI: megepitettem. A savot `<div className="hidden">`-be csomagolva
  * a szerviz teljes lap-teszt-keszlete ZOLD MARAD, mert a futtato NEM tolt be
  * stiluslapot -- a Tailwind `hidden` osztaly szamara csak egy szo. (A HTML
- * `hidden` ATTRIBUTUM mas eset: azt a `toBeVisible` is elkapja.) A `hidden` es a
- * reszponzív rejto osztalyok ma 30 helyen allnak az `apps/web` fajaban, tehat
- * ez az alak elerheto tavolsagban van, nem kitalalt.
+ * `hidden` ATTRIBUTUM mas eset: azt a `toBeVisible` is elkapja.)
+ *
+ * AZ ALAK ELERHETO TAVOLSAGBAN VAN, NEM KITALALT -- de a szam, ami itt allt,
+ * ROSSZ VOLT, es ezt kimondom, mert magam irtam ide. "30 helyen" allt, laza
+ * mintabol: az `apps/web` fajaban a `hidden`-t TARTALMAZO szavak tenyleg
+ * negyvenotszor allnak, csakhogy ebbol 18 az `overflow-hidden` (az nem rejt el
+ * elemet, csak vag) es 6 az `aria-hidden`.
+ *
+ * UJRAMERVE 2026-09-15, a KODRA (kommentek kiszedve, barmely string-literal,
+ * tehat a konstansba vagy `cn()`-be zart alak is beleszamitva), a sajat ket
+ * orzo-fajlom nelkul:
+ *
+ *     rejto osztaly-token   9   ebbol reszponziv 4, sima 5
+ *     erintett termek-fajl  4   (app-shell, user-menu, webshop-orders,
+ *                                worksheet-line-editor)
+ *
+ * Kilenc hely negy lapon, es kozottuk a fo navigacio: a `lg:hidden` epp az a
+ * fajta, ami egy sav fole is odakerulhet. A kovetkeztetes tehat all, a
+ * nagysagrend viszont HARMADA annak, amit ide irtam.
  *
  * A HATARA, KIMONDVA -- ez PADLO, nem garancia:
  *   - csak az OSZTALYT nezi. Egy `style="display:none"`, egy nulla magassagu
