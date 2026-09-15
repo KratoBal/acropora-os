@@ -30,6 +30,15 @@ const assistant = new BrandImportAssistantService();
 const actorId = "brand-test-owner";
 const assistantFile = "brand-test-m1-assistant.xlsx";
 
+/**
+ * A FEJLESZTOI IDENTITAS, amivel ez a suite ketszer bejelentkezik. SEEDELT sor:
+ * a takaritas a sessionjeit viszi, magat a felhasznalot SOHA.
+ */
+const FEJLESZTOI_EMAIL = "owner@acropora.local";
+
+/** A suite indulasa: a seedelt felhasznalo sorai kozul ez valasztja ki a mieinket. */
+const SUITE_KEZDET = new Date();
+
 async function cleanup() {
   const batches = await prisma.catalogImportBatch.findMany({
     where: { sourceFileName: assistantFile },
@@ -70,6 +79,30 @@ async function cleanup() {
     },
   });
   await prisma.user.deleteMany({ where: { id: actorId } });
+
+  /**
+   * A SAJAT BEJELENTKEZESEI, DE A FELHASZNALOT NEM.
+   *
+   * Ez a suite ketszer jelentkezik be a fejlesztoi identitassal, es minden
+   * bejelentkezes egy `Session` sort ir. Merve (verify job 104359092423, ket
+   * sor-pillanatkep az integracios futas korul): `Session +2`, pontosan a ket
+   * bejelentkezes.
+   *
+   * A FELHASZNALOT NEM SZABAD TOROLNI, es ez a lenyeg: az identitas SEEDELT
+   * referencia-sor, nem ezé a suite-é. A torlese ugyanaz a hiba lenne, mint amit
+   * ma a `Category` ot elveszett soranal javitottunk -- egy suite, ami a sajatjan
+   * TUL is visz. A `Session.userId` raadasul `Cascade`, tehat a felhasznalo
+   * torlese csendben vinne minden MAS sessiont is.
+   *
+   * EZERT AZ IDO A HATOKOR: a seedelt felhasznalo sorai kozul csak azok a
+   * mieink, amik a suite indulasa OTA keletkeztek.
+   */
+  await prisma.session.deleteMany({
+    where: {
+      user: { email: FEJLESZTOI_EMAIL },
+      createdAt: { gte: SUITE_KEZDET },
+    },
+  });
 }
 
 describe("Brand database integration", { skip: !enabled }, () => {
@@ -113,7 +146,7 @@ describe("Brand database integration", { skip: !enabled }, () => {
     const session = await new AuthService(
       new AuthUserResolver(),
       new SessionRepository(),
-    ).loginWithDevelopmentUser("owner@acropora.local");
+    ).loginWithDevelopmentUser(FEJLESZTOI_EMAIL);
     const persisted = await prisma.user.findUnique({
       where: { id: session.user.id },
     });
@@ -363,7 +396,7 @@ describe("Brand database integration", { skip: !enabled }, () => {
     const session = await new AuthService(
       new AuthUserResolver(),
       new SessionRepository(),
-    ).loginWithDevelopmentUser("owner@acropora.local");
+    ).loginWithDevelopmentUser(FEJLESZTOI_EMAIL);
     const listed = await assistant.rows(batch.id, {
       page: 1,
       pageSize: 25,
