@@ -92,6 +92,13 @@ describe("ServiceOfflineNotice", () => {
     const text = container.textContent ?? "";
     expect(text).toMatch(/mentés/);
     expect(text).not.toMatch(/betöltött adatokat látod/);
+
+    // ES NEM IGER VARAKOZO MENTEST. A "csak akkor megy at, ha visszajon" alak
+    // ugy olvashato, hogy a mentes var -- a weben nincs mogotte sem sor, sem
+    // ujraprobalkozas. A pozitiv kontroll a fenti `mentés` egyezes: ha a sav
+    // ures lenne, ez a ket hianyt-mero allitas ures vilagon is zold maradna.
+    expect(text).not.toMatch(/megy át/);
+    expect(text).not.toMatch(/feltölt/);
   });
 
   it("a munka közben megszakadó kapcsolatra is megjelenik, és vissza is tűnik", () => {
