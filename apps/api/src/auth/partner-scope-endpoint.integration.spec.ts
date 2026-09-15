@@ -528,6 +528,45 @@ describe(
     after(async () => {
       if (gate.mode !== "run") return;
       await removeLeftovers();
+      /**
+       * ES A TAKARITAS EREDMENYET MEG IS MERJUK: minden `deleteMany` nulla
+       * sorra is sikeres, tehat egy elcsuszott elotag vagy domain pontosan ugy
+       * nez ki, mint egy tiszta futas.
+       *
+       * MIND A NEGY TABLA KULON SZAMLALOT KAP, mert egyik sem `Cascade` a
+       * masikrol: a `User.customerId` es a `User.supplierId` `Restrict`, az
+       * `Asset.customerId` szinten -- vagyis nem az van, hogy az egyik torlese
+       * elviszi a masikat, hanem hogy a SORRENDJUK kotott. Egy bent maradt sor
+       * barmelyik tablaban kulon eset.
+       */
+      assert.equal(
+        await prisma.asset.count({
+          where: { assetNumber: { startsWith: TEST_ASSET_PREFIX } },
+        }),
+        0,
+        "a suite eszkozei bent maradtak a takaritas utan",
+      );
+      assert.equal(
+        await prisma.user.count({
+          where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
+        }),
+        0,
+        "a suite fiokjai bent maradtak a takaritas utan",
+      );
+      assert.equal(
+        await prisma.supplier.count({
+          where: { code: { startsWith: TEST_SUPPLIER_PREFIX } },
+        }),
+        0,
+        "a suite szallitoi bent maradtak a takaritas utan",
+      );
+      assert.equal(
+        await prisma.customer.count({
+          where: { customerNumber: { startsWith: TEST_CUSTOMER_PREFIX } },
+        }),
+        0,
+        "a suite vevoi bent maradtak a takaritas utan",
+      );
     });
 
     async function removeLeftovers() {

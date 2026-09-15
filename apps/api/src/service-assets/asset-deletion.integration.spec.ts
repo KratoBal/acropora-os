@@ -136,6 +136,37 @@ describe("Eszköz törlése", { skip: gate.mode === "skip" }, () => {
   after(async () => {
     if (gate.mode !== "run") return;
     await removeLeftovers();
+    /**
+     * ES A TAKARITAS EREDMENYET MEG IS MERJUK: minden `deleteMany` nulla sorra
+     * is sikeres, es a vevo-alapu blokk egeszben kimarad, ha a lekerdezes nem
+     * talal semmit.
+     *
+     * A HAROM TABLA KULON ALL: az `Asset.customerId` `Restrict` (a sorrend
+     * kotott, de az egyik nem viszi a masikat), a `ServiceJob.customerId`
+     * pedig `SetNull` -- vagyis a jegy TULELI a vevot, csak gazdatlanul, es
+     * epp ezert kell sajat, elotag-alapu szamlalot kapnia.
+     */
+    assert.equal(
+      await prisma.asset.count({
+        where: { assetNumber: { startsWith: PREFIX } },
+      }),
+      0,
+      "a suite eszkozei bent maradtak a takaritas utan",
+    );
+    assert.equal(
+      await prisma.serviceJob.count({
+        where: { jobNumber: { startsWith: PREFIX } },
+      }),
+      0,
+      "a suite hibajegyei bent maradtak a takaritas utan",
+    );
+    assert.equal(
+      await prisma.customer.count({
+        where: { customerNumber: { startsWith: PREFIX } },
+      }),
+      0,
+      "a suite vevoi bent maradtak a takaritas utan",
+    );
   });
 
   async function removeLeftovers() {
@@ -146,13 +177,26 @@ describe("Eszköz törlése", { skip: gate.mode === "skip" }, () => {
     const ids = customers.map((customer) => customer.id);
     if (ids.length > 0) {
       await prisma.worksheet.deleteMany({ where: { customerId: { in: ids } } });
-      await prisma.serviceJob.deleteMany({
-        where: { customerId: { in: ids } },
-      });
       await prisma.worksheetDepartment.deleteMany({
         where: { customerId: { in: ids } },
       });
     }
+    /**
+     * A HIBAJEGYEK ELOTAGRA SZURVE, ES A VEVO-BLOKKON KIVUL.
+     *
+     * ITT `customerId` SZERINT MENT, es az a `SetNull` miatt kevés: a vevo
+     * torlese nem viszi el a jegyet, csak GAZDATLANNA teszi -- egy elozo
+     * futasbol ittmaradt jegyet tehat a vevo-alapu szuro epp nem talalja meg.
+     * Ugyanez a hiany adta a CI sor-pillanatkepein a `ServiceJob plusz 1`-et a
+     * munkalap-suite-ban (verify run 34981069257 kore); ott is elotagra
+     * szurunk azota.
+     *
+     * A VEVO-BLOKKON KIVUL all, mert az elotag nem igenyel vevo-azonositot: ha
+     * a vevo-lekerdezes nem talal semmit, ez a sor akkor is lefut.
+     */
+    await prisma.serviceJob.deleteMany({
+      where: { jobNumber: { startsWith: PREFIX } },
+    });
     // A gyerek ELOSZOR, mert a szulore mutato hivatkozas `SetNull`, de a
     // torlesi sorrend igy olvashato marad.
     await prisma.asset.deleteMany({
