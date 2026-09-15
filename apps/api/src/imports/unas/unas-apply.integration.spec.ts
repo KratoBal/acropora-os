@@ -110,12 +110,57 @@ async function catalogFixture(options: {
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
+/**
+ * A SUITE INDULASA. A koteg- es a naplo-tablanak nincs megkulonbozteto mezoje (a
+ * fixtura fajlneve valtozo), tehat az IDO a hatokoruk: ami ez utan keletkezett,
+ * az ezé a suite-é. A `beforeEach(cleanup)` mellett is helyes -- minden korben
+ * azt viszi, amit a suite addig letrehozott.
+ */
+const SUITE_KEZDET = new Date();
+
+/**
+ * A TAKARITAS A SAJAT SORAIRA SZUR, ES 2026-09-15 ELOTT NEM TETTE.
+ *
+ * Negy hivas allt itt argumentum nelkul (`catalogImportBatch`, `domainEvent`,
+ * `product`, `category`), vagyis a TELJES tablat uritette. A `Category` es a
+ * `Product` seedelt referencia-sorai is elmentek: a sor-pillanatkep (verify job
+ * 104337824776) ezert mutatott `Category -5`-ot, es a `DomainEvent +4` is ezert
+ * volt ertelmezhetetlen -- a szam egy nullazas UTAN irt sorokrol szolt.
+ *
+ * AMI NEM KOCKAZAT, es mondjuk is ki: az `integrationDatabaseGate` miatt ez CSAK
+ * `_test` vagy `_ci` vegu adatbazison fut. Eles adat nem forgott kockan; a kar
+ * hataron belul volt, egyik suite a masik adatat vitte el.
+ *
+ * A TERMEK ES A KATEGORIA A KULSO HIVATKOZASOKON AT AZONOSITHATO, es azokat
+ * ELOSZOR ki kell olvasni: a `Category` modellen nincs kulso azonosito, a
+ * UNAS-kotest az `ExternalReference` tartja, es a torlese elvagja az egyetlen
+ * szalat, ami megmondja, mely sorok a mieink. Ugyanaz az alak, mint a
+ * matrica-kotegnel (`AssetLabel.batchId` SetNull).
+ */
 async function cleanup() {
-  await prisma.catalogImportBatch.deleteMany();
-  await prisma.domainEvent.deleteMany();
+  await prisma.catalogImportBatch.deleteMany({
+    where: { createdAt: { gte: SUITE_KEZDET } },
+  });
+  await prisma.domainEvent.deleteMany({
+    where: { createdAt: { gte: SUITE_KEZDET } },
+  });
+
+  const hivatkozasok = await prisma.externalReference.findMany({
+    where: { system: "UNAS", entityType: { in: ["Product", "Category"] } },
+    select: { entityType: true, entityId: true },
+  });
+  const termekIdk = hivatkozasok
+    .filter((sor) => sor.entityType === "Product")
+    .map((sor) => sor.entityId);
+  const kategoriaIdk = hivatkozasok
+    .filter((sor) => sor.entityType === "Category")
+    .map((sor) => sor.entityId);
+
   await prisma.externalReference.deleteMany({ where: { system: "UNAS" } });
-  await prisma.product.deleteMany();
-  await prisma.category.deleteMany();
+  if (termekIdk.length > 0)
+    await prisma.product.deleteMany({ where: { id: { in: termekIdk } } });
+  if (kategoriaIdk.length > 0)
+    await prisma.category.deleteMany({ where: { id: { in: kategoriaIdk } } });
 }
 
 describe("UNAS Apply Import database integration", { skip: !enabled }, () => {

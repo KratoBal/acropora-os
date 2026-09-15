@@ -137,6 +137,34 @@ const liveChildOfDeletedParent: UnasApiCategory = {
   rawPayload: { Id: "11", Name: "Integration pumps (sub)" },
 };
 
+/**
+ * A SUITE INDULASA. A futas-tablanak nincs megkulonbozteto mezoje, tehat az
+ * IDO a hatokore: ami ez utan keletkezett, az ezé a suite-é.
+ */
+const SUITE_KEZDET = new Date();
+
+/**
+ * A TAKARITAS A SAJAT SORAIRA SZUR, ES 2026-09-15 ELOTT NEM TETTE.
+ *
+ * Harom hivas allt itt argumentum nelkul (`unasProductSyncRun`, `product`,
+ * `category`), vagyis a TELJES tablat uritette. A `Category` es a `Product`
+ * seedelt referencia-sorai is elmentek: a sor-pillanatkep (verify job
+ * 104337824776) ezert mutatott `Category -5`-ot.
+ *
+ * AMI NEM KOCKAZAT, es mondjuk is ki: az `integrationDatabaseGate` miatt ez CSAK
+ * `_test` vagy `_ci` vegu adatbazison fut. Eles adat nem forgott kockan; a kar
+ * hataron belul volt, egyik suite a masik adatat vitte el.
+ *
+ * ES A SZUKITES NEM NEV SZERINT MEGY, hanem a KULSO HIVATKOZASOKON at. A
+ * `Category` modellen nincs kulso azonosito: a UNAS-kotest az
+ * `ExternalReference` (system UNAS) tartja. Ezert kell a hivatkozasokat ELOSZOR
+ * kiolvasni, es csak azutan torolni -- kulonben a torlesuk elvagja az egyetlen
+ * szalat, ami megmondja, mely sorok a mieink. Ugyanaz az alak, mint a
+ * matrica-kotegnel (`AssetLabel.batchId` SetNull).
+ *
+ * A fixtura-neveket SZANDEKOSAN nem irtam at: a "Discontinued line" kategoriara
+ * allitas epul (a szulo neve), es egy elotag-atnevezes azt is elmozditana.
+ */
 async function cleanup() {
   await prisma.auditLog.deleteMany({
     where: { entityType: "ProductExtension" },
@@ -147,10 +175,29 @@ async function cleanup() {
   await prisma.integrationCursor.deleteMany({
     where: { provider: "UNAS", stream: { in: ["PRODUCTS", "STOCKS"] } },
   });
-  await prisma.unasProductSyncRun.deleteMany();
+  // `createdAt` ES NEM `startedAt`: az utobbi NULLAZHATO, tehat egy el sem
+  // indult futas kimaradna a szuresbol, es csendben bent maradna. A `createdAt`
+  // kotelezo, `@default(now())`.
+  await prisma.unasProductSyncRun.deleteMany({
+    where: { createdAt: { gte: SUITE_KEZDET } },
+  });
+
+  const hivatkozasok = await prisma.externalReference.findMany({
+    where: { system: "UNAS", entityType: { in: ["Product", "Category"] } },
+    select: { entityType: true, entityId: true },
+  });
+  const termekIdk = hivatkozasok
+    .filter((sor) => sor.entityType === "Product")
+    .map((sor) => sor.entityId);
+  const kategoriaIdk = hivatkozasok
+    .filter((sor) => sor.entityType === "Category")
+    .map((sor) => sor.entityId);
+
   await prisma.externalReference.deleteMany({ where: { system: "UNAS" } });
-  await prisma.product.deleteMany();
-  await prisma.category.deleteMany();
+  if (termekIdk.length > 0)
+    await prisma.product.deleteMany({ where: { id: { in: termekIdk } } });
+  if (kategoriaIdk.length > 0)
+    await prisma.category.deleteMany({ where: { id: { in: kategoriaIdk } } });
 }
 
 describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
