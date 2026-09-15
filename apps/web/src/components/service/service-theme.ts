@@ -23,9 +23,30 @@ export const sv = {
   /** `.eyebrow` -- a lapcim folotti kis nagybetus sor. */
   eyebrow:
     "mb-2 text-[10px] font-bold uppercase tracking-[0.17em] text-brand-700",
-  /** `h1` a prototipusban: Manrope 800. Nalunk Inter, tehat a suly visz. */
+  /**
+   * A LAP CIME. A prototipusban `h1{font-size:32px}`, es a betutipus 2026-09-15
+   * ota nalunk is Manrope: az arculat (#660) `h1,h2,h3` elem-szabalya adja. A
+   * korabbi megjegyzes meg azt mondta, hogy "nalunk Inter, tehat a suly visz" --
+   * az a mondat az arculat beolvasztasaval elavult.
+   *
+   * EZ A LISTAK ES AZ URLAPOK MERETE. Az adatlapoke kisebb, lentebb.
+   */
   pageTitle:
     "text-[32px] font-extrabold leading-[1.25] tracking-[-0.03em] text-ink",
+  /**
+   * AZ ADATLAP CIME, 29 pixel -- es ez nem masik meret, hanem MODOSITO.
+   *
+   * A prototipus `styles.css`-eben `.detail-head h1{max-width:700px;font-size:29px}`
+   * all, vagyis a 32 pixel felulirasa, KIZAROLAG a harom adatlapon. Az urlapok
+   * es a listak sima `page-head`-et kapnak, tehat 32-t.
+   *
+   * MIERT ITT ALL, ES NEM A KOMPONENSBEN: eddig a 32 tokenben volt, a 29 pedig
+   * kezzel a `service-detail-chrome.tsx`-ben -- ugyanarra a dologra ket forras.
+   * Pontosan az, amire ennek a fajlnak a fejlec-megjegyzese figyelmeztet a
+   * szineknel.
+   */
+  detailTitle:
+    "max-w-[700px] text-[29px] font-extrabold leading-[1.25] tracking-[-0.03em] text-ink",
   pageLead: "mt-2 text-[13px] leading-relaxed text-muted",
 
   /** `.panel` -- a feher, keretes doboz, ami a listat tartja. */

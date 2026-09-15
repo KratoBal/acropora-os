@@ -24,10 +24,8 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
-import {
-  ServiceBackLink,
-  ServiceDetailHeader,
-} from "@/components/service/service-detail-chrome";
+import { ServiceBackLink } from "@/components/service/service-detail-chrome";
+import { ServiceListHeader } from "@/components/service/service-list-chrome";
 import { useReturnTo } from "@/components/navigation-history";
 import { assetsApi } from "@/lib/api/assets";
 import { suppliersApi } from "@/lib/api/suppliers";
@@ -294,8 +292,11 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
       <ServiceBackLink href={backToList.href}>
         {backToList.fromWithinApp ? "Vissza" : "Eszközök"}
       </ServiceBackLink>
-      <ServiceDetailHeader
-        eyebrow="Szerviz / munkatér"
+      {/* URLAP-FEJLEC: a prototipus a 29 pixeles cimet MODOSITOKENT
+          (`.detail-head`) csak az adatlapokra teszi, az urlapokra nem. Az
+          eyebrow itt azt mondja meg, MI EZ A LAP, nem azt, hol allunk. */}
+      <ServiceListHeader
+        eyebrow={assetId ? "Eszközadatok" : "Új bejegyzés"}
         title={assetId ? "Eszköz módosítása" : "Új eszköz"}
         lead="Önálló berendezés vagy egy meglévő rendszer részegységének rögzítése."
       />

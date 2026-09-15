@@ -23,10 +23,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
-import {
-  ServiceBackLink,
-  ServiceDetailHeader,
-} from "@/components/service/service-detail-chrome";
+import { ServiceBackLink } from "@/components/service/service-detail-chrome";
+import { ServiceListHeader } from "@/components/service/service-list-chrome";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { JobAssetPicker } from "@/components/service-jobs/job-asset-picker";
@@ -545,8 +543,14 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
       >
         {worksheetId ? "Vissza a munkalapra" : "Munkalapok"}
       </ServiceBackLink>
-      <ServiceDetailHeader
-        eyebrow="Szerviz / munkatér"
+      {/* URLAP-FEJLEC, NEM ADATLAP-FEJLEC, es ezt a prototipus dontotte el, nem
+          megitelés: a `styles.css`-ben a 29 pixel egy MODOSITO
+          (`.detail-head h1`), amit az app.js kizarolag a harom ADATLAPRA tesz
+          ra -- az urlap-rajzolo sima `page-head`-et ad ki, tehat 32 pixelt.
+          Az EYEBROW is masra valo itt: a listakon morzsa ("Szerviz / munkater"),
+          az urlapokon az, hogy MI EZ A LAP. */}
+      <ServiceListHeader
+        eyebrow={worksheetId ? "Munkalap adatai" : "Új bejegyzés"}
         title={worksheetId ? "Munkalap szerkesztése" : "Új munkalap"}
         lead={
           worksheetId
