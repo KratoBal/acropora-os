@@ -262,7 +262,7 @@ export function AssetLabelBatchesPage() {
           A FORMÁTUM-ÍGÉRET KÜLÖN SOR, NEM A GOMB SZÖVEGÉBEN: a gomb a
           cselekvést nevezi meg, ez pedig azt, mit kap a felhasználó.
         */}
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-dusk-500">
           A fájl ugyanabban a formátumban készül, mint a legutóbbi köteg.
         </p>
       </Card>
@@ -277,7 +277,7 @@ export function AssetLabelBatchesPage() {
         <h2 className="text-sm font-semibold">
           Már kinyomtatott kódok betöltése
         </h2>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-dusk-500">
           Soronként vagy vesszővel elválasztva. Megismételhető: a már felvett
           kódok nem duplikálódnak, és a válasz megmondja, melyek voltak azok.
         </p>
@@ -372,7 +372,7 @@ export function AssetLabelBatchesPage() {
                   <span className="font-medium">
                     {batchTimestampLabel(batch.createdAt)}
                   </span>
-                  <span className="text-slate-600">
+                  <span className="text-dusk-600">
                     {batchSummaryLine(batch)}
                   </span>
                   {azonosPerc ? (
@@ -417,7 +417,7 @@ export function AssetLabelBatchesPage() {
         {freeCodes === null ? (
           <Skeleton className="h-10 w-full" />
         ) : freeCodes.length === 0 ? (
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-dusk-500">
             Nincs szabad kód: minden kiadott matrica eszközhöz van rendelve.
           </p>
         ) : (
@@ -432,7 +432,7 @@ export function AssetLabelBatchesPage() {
                 ? `${freeCodes.length} szabad kód.`
                 : `Legalább ${FREE_LIMIT} szabad kód (ennyit kértünk le, lehet több is).`}
             </p>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-dusk-500">
               A legrégebben kiadottak elöl:{" "}
               {freeCodes
                 .slice(0, 12)

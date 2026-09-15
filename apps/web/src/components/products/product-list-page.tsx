@@ -60,10 +60,10 @@ function provenanceBadge(origin: "UNAS" | "LOCAL" | null): {
 function ProductTableSkeleton() {
   return (
     <Card className="overflow-hidden" aria-label="Terméklista betöltése">
-      <div className="border-b border-slate-200 bg-slate-50 px-5 py-3">
+      <div className="border-b border-dusk-200 bg-dusk-50 px-5 py-3">
         <Skeleton className="h-4 w-48" />
       </div>
-      <div className="divide-y divide-slate-100">
+      <div className="divide-y divide-dusk-100">
         {Array.from({ length: 8 }, (_, index) => (
           <div key={index} className="flex items-center gap-4 px-5 py-4">
             <Skeleton className="size-10 shrink-0" />
@@ -362,9 +362,9 @@ export function ProductListPage() {
 
       {viewState === "populated" && data ? (
         <Card className="overflow-hidden">
-          <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-slate-600">
-              <span className="font-semibold text-slate-900">
+          <div className="flex flex-col gap-3 border-b border-dusk-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-dusk-600">
+              <span className="font-semibold text-dusk-900">
                 {data.pagination.totalItems.toLocaleString("hu-HU")}
               </span>{" "}
               termék
@@ -372,7 +372,7 @@ export function ProductListPage() {
             <div className="flex items-center gap-2">
               <label
                 htmlFor="product-page-size"
-                className="text-xs text-slate-500"
+                className="text-xs text-dusk-500"
               >
                 Sorok száma
               </label>
@@ -399,7 +399,7 @@ export function ProductListPage() {
 
           <div className="overflow-x-auto">
             <table className="w-full min-w-[900px] border-collapse text-left">
-              <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <thead className="bg-dusk-50 text-[11px] font-bold uppercase tracking-wide text-dusk-500">
                 <tr>
                   <th className="px-5 py-3">Termék</th>
                   <th className="px-4 py-3">SKU</th>
@@ -410,12 +410,12 @@ export function ProductListPage() {
                   <th className="px-5 py-3 text-right">Művelet</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
+              <tbody className="divide-y divide-dusk-100 bg-white">
                 {data.items.map((product) => (
                   <tr
                     key={product.id}
                     tabIndex={0}
-                    className="cursor-pointer transition hover:bg-slate-50 focus:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500"
+                    className="cursor-pointer transition hover:bg-dusk-50 focus:bg-dusk-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500"
                     onClick={() => router.push(detailHref(product.id))}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
@@ -430,15 +430,15 @@ export function ProductListPage() {
                           <img
                             src={product.thumbnail.url}
                             alt={product.thumbnail.altText ?? ""}
-                            className="size-10 rounded-lg border border-slate-200 object-cover"
+                            className="size-10 rounded-lg border border-dusk-200 object-cover"
                           />
                         ) : (
-                          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-400">
+                          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-dusk-100 text-dusk-400">
                             <Icon name="package" size={17} />
                           </span>
                         )}
                         <div className="min-w-0 space-y-1">
-                          <span className="block truncate text-sm font-semibold text-slate-900">
+                          <span className="block truncate text-sm font-semibold text-dusk-900">
                             {product.name}
                           </span>
                           <Badge
@@ -449,10 +449,10 @@ export function ProductListPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3.5 font-mono text-xs text-slate-600">
+                    <td className="px-4 py-3.5 font-mono text-xs text-dusk-600">
                       {product.primarySku ?? "—"}
                     </td>
-                    <td className="px-4 py-3.5 text-right text-sm text-slate-600">
+                    <td className="px-4 py-3.5 text-right text-sm text-dusk-600">
                       {formatHuf(product.grossPrice)}
                     </td>
                     <td className="px-4 py-3.5 text-right text-sm font-semibold text-rose-600">
@@ -460,7 +460,7 @@ export function ProductListPage() {
                         ? formatHuf(product.saleGrossPrice)
                         : "—"}
                     </td>
-                    <td className="px-4 py-3.5 text-right text-sm text-slate-600">
+                    <td className="px-4 py-3.5 text-right text-sm text-dusk-600">
                       {formatStock(product.stockOnHand)}
                     </td>
                     <td className="px-4 py-3.5">
@@ -486,7 +486,7 @@ export function ProductListPage() {
             </table>
           </div>
 
-          <div className="flex justify-center border-t border-slate-200 px-5 py-4 sm:justify-end">
+          <div className="flex justify-center border-t border-dusk-200 px-5 py-4 sm:justify-end">
             <Pagination
               page={data.pagination.page}
               totalPages={data.pagination.totalPages}

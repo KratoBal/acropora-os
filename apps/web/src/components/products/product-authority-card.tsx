@@ -52,7 +52,7 @@ export function ProductAuthorityCard({
   return (
     <Card className="space-y-3 p-4">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-slate-900">
+        <h2 className="text-sm font-semibold text-dusk-900">
           A törzsadat gazdája
         </h2>
         <Badge variant={authority === "ACROPORA" ? "success" : "info"}>
@@ -65,7 +65,7 @@ export function ProductAuthorityCard({
       </div>
 
       {authority === "ACROPORA" ? (
-        <p className="text-sm text-slate-700">
+        <p className="text-sm text-dusk-700">
           A nevet és a leírást itt szerkesztjük. A webshop-szinkron ezt a
           terméket kihagyja, tehát egy UNAS oldali módosítás nem írja felül,
           amit itt beírunk.
@@ -73,14 +73,14 @@ export function ProductAuthorityCard({
       ) : null}
 
       {authority === "UNAS" ? (
-        <p className="text-sm text-slate-700">
+        <p className="text-sm text-dusk-700">
           A nevet és a leírást a webshop szinkronja gondozza, ezért itt nem
           szerkeszthető.
         </p>
       ) : null}
 
       {authority === null ? (
-        <p className="text-sm text-slate-700">
+        <p className="text-sm text-dusk-700">
           Erről a termékről nem tudjuk, ki a törzsadat gazdája, ezért sem
           szerkeszteni, sem átvenni nem lehet. Ez adatállapot, nem jogosultsági
           kérdés.
@@ -104,13 +104,13 @@ export function ProductAuthorityCard({
             nem fog hibaüzenetként jelentkezni.
           */
           <div className="space-y-3 rounded-md border border-amber-200 bg-amber-50/70 p-3">
-            <p className="text-sm text-slate-800">
+            <p className="text-sm text-dusk-800">
               Az átvétel után a webshop-szinkron <strong>nem írja</strong> ennek
               a terméknek a nevét és leírását. Ha valaki a UNAS felületén
               javítja őket, az a javítás ide már nem érkezik meg, és erről nem
               kapunk értesítést.
             </p>
-            <p className="text-sm text-slate-800">
+            <p className="text-sm text-dusk-800">
               Visszaadni egyelőre nem lehet.
             </p>
             <div className="flex gap-2">

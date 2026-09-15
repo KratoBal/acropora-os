@@ -121,7 +121,7 @@ export function ServiceJobAssigneeEditor({
       ) : (
         /* A HIANY IS ALLITAS: egy ures doboz betoltesi hibanak latszik, es a
            kezelo megvarja. Ez a mondat kimondja, hogy nincs mire varni. */
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-dusk-500">
           Erre a jegyre még nincs delegálva senki.
         </p>
       )}

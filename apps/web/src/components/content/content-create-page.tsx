@@ -155,13 +155,13 @@ export function ContentCreatePage() {
               className={
                 selected
                   ? "rounded-lg border-2 border-brand-600 bg-brand-50 p-4 text-left"
-                  : "rounded-lg border border-slate-200 bg-white p-4 text-left hover:border-slate-300"
+                  : "rounded-lg border border-dusk-200 bg-white p-4 text-left hover:border-dusk-300"
               }
             >
-              <span className="block text-sm font-semibold text-slate-900">
+              <span className="block text-sm font-semibold text-dusk-900">
                 {option.title}
               </span>
-              <span className="mt-1 block text-xs text-slate-500">
+              <span className="mt-1 block text-xs text-dusk-500">
                 {option.description}
               </span>
             </button>
@@ -229,7 +229,7 @@ export function ContentCreatePage() {
                   />
                 </FormField>
 
-                <label className="flex items-center gap-2 text-sm text-slate-700">
+                <label className="flex items-center gap-2 text-sm text-dusk-700">
                   <input
                     type="checkbox"
                     checked={imageRequired}

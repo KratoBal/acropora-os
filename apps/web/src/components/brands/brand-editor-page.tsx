@@ -207,7 +207,7 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
               <Badge variant={brand.isActive ? "success" : "neutral"}>
                 {brand.isActive ? "Aktív" : "Archivált"}
               </Badge>
-              <span className="text-xs text-slate-500">
+              <span className="text-xs text-dusk-500">
                 Normalizált kulcs: {brand.normalizedName}
               </span>
             </div>
@@ -312,7 +312,7 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
           </Card>
           <Card className="p-6">
             <h2 className="font-semibold">Audit</h2>
-            <p className="mt-2 text-sm text-slate-500">
+            <p className="mt-2 text-sm text-dusk-500">
               Létrehozva: {new Date(brand.createdAt).toLocaleString("hu-HU")} ·
               Frissítve: {new Date(brand.updatedAt).toLocaleString("hu-HU")}
               {brand.archivedAt
@@ -336,7 +336,7 @@ export function BrandEditorPage({ brandId }: { brandId?: string }) {
           role="dialog"
           aria-modal="true"
           aria-labelledby="archive-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-dusk-950/40 p-4"
         >
           <Card className="max-w-lg p-6">
             <h2 id="archive-title" className="font-semibold">

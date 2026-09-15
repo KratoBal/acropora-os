@@ -452,10 +452,10 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                 </dl>
                 {asset.description ? (
                   <div className="mt-6 border-t pt-5">
-                    <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                    <p className="text-xs font-bold uppercase tracking-wide text-dusk-400">
                       Leírás
                     </p>
-                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-dusk-700">
                       {asset.description}
                     </p>
                   </div>
@@ -469,7 +469,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                   </h2>
                   {asset.ancestors.length > 0 ? (
                     <div className="mt-4">
-                      <p className="text-xs font-bold uppercase text-slate-400">
+                      <p className="text-xs font-bold uppercase text-dusk-400">
                         Főegységek
                       </p>
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
@@ -477,7 +477,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                           <Link
                             key={ancestor.id}
                             href={`/szerviz/eszkozok/${ancestor.id}`}
-                            className="rounded-md bg-slate-100 px-2.5 py-1.5 font-medium text-slate-700 hover:bg-brand-50 hover:text-brand-800"
+                            className="rounded-md bg-dusk-100 px-2.5 py-1.5 font-medium text-dusk-700 hover:bg-brand-50 hover:text-brand-800"
                           >
                             {ancestor.name}
                           </Link>
@@ -487,7 +487,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                   ) : null}
                   {asset.children.length > 0 ? (
                     <div className="mt-5">
-                      <p className="text-xs font-bold uppercase text-slate-400">
+                      <p className="text-xs font-bold uppercase text-dusk-400">
                         Részegységek
                       </p>
                       <div className="mt-2 divide-y rounded-lg border">
@@ -495,10 +495,10 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                           <Link
                             key={child.id}
                             href={`/szerviz/eszkozok/${child.id}`}
-                            className="flex items-center justify-between px-3 py-2.5 hover:bg-slate-50"
+                            className="flex items-center justify-between px-3 py-2.5 hover:bg-dusk-50"
                           >
                             <span className="font-medium">{child.name}</span>
-                            <span className="font-mono text-xs text-slate-500">
+                            <span className="font-mono text-xs text-dusk-500">
                               {child.assetNumber}
                             </span>
                           </Link>
@@ -511,7 +511,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
 
               <Card className="p-6">
                 <h2 className="text-[16px] font-bold text-ink">Dokumentumok</h2>
-                <p className="mt-1 text-sm text-slate-500">
+                <p className="mt-1 text-sm text-dusk-500">
                   Számla, garanciajegy és használati utasítás PDF formátumban,
                   legfeljebb 10 MB méretben.
                 </p>
@@ -523,10 +523,10 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                         className="flex flex-wrap items-center justify-between gap-3 px-3 py-3"
                       >
                         <div>
-                          <p className="text-sm font-semibold text-slate-800">
+                          <p className="text-sm font-semibold text-dusk-800">
                             {documentTypeLabel[item.type]} · {item.fileName}
                           </p>
-                          <p className="mt-0.5 text-xs text-slate-500">
+                          <p className="mt-0.5 text-xs text-dusk-500">
                             {formatFileSize(item.sizeBytes)} ·{" "}
                             {formatDateTime(item.createdAt)}
                             {item.uploadedBy
@@ -565,7 +565,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                     ))}
                   </div>
                 ) : (
-                  <p className="mt-4 text-sm text-slate-500">
+                  <p className="mt-4 text-sm text-dusk-500">
                     Ehhez az eszközhöz még nincs dokumentum feltöltve.
                   </p>
                 )}
@@ -617,10 +617,10 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                     <div key={event.id} className="flex gap-4 py-3 first:pt-0">
                       <span className="mt-1 size-2 shrink-0 rounded-full bg-brand-600" />
                       <div>
-                        <p className="text-sm font-medium text-slate-800">
+                        <p className="text-sm font-medium text-dusk-800">
                           {assetEventLabel[event.type]}
                         </p>
-                        <p className="mt-0.5 text-xs text-slate-500">
+                        <p className="mt-0.5 text-xs text-dusk-500">
                           {formatDateTime(event.occurredAt)}
                           {event.actor ? ` · ${event.actor.displayName}` : ""}
                         </p>
@@ -634,7 +634,7 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
             <div className="space-y-6">
               <Card className="p-6">
                 <h2 className="text-[16px] font-bold text-ink">QR-azonosító</h2>
-                <p className="mt-1 text-sm leading-6 text-slate-500">
+                <p className="mt-1 text-sm leading-6 text-dusk-500">
                   A matrica leolvasása az Acropora OS mobilalkalmazásban nyitja
                   meg ezt az eszközt.
                 </p>

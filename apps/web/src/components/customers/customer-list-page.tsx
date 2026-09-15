@@ -168,7 +168,7 @@ export function CustomerListPage() {
           {data.items.length ? (
             <Card className="overflow-x-auto">
               <table className="w-full min-w-[800px] text-left text-sm">
-                <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
+                <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
                   <tr>
                     <th className="p-3">Partnerkód</th>
                     <th>Név</th>
@@ -179,13 +179,13 @@ export function CustomerListPage() {
                 <tbody>
                   {data.items.map((item) => (
                     <tr key={item.id} className="border-b last:border-0">
-                      <td className="p-3 font-mono text-xs text-slate-600">
+                      <td className="p-3 font-mono text-xs text-dusk-600">
                         {item.partnerCode}
                       </td>
-                      <td className="font-semibold text-slate-900">
+                      <td className="font-semibold text-dusk-900">
                         {item.displayName}
                         {item.companyName ? (
-                          <div className="text-xs font-normal text-slate-500">
+                          <div className="text-xs font-normal text-dusk-500">
                             {item.companyName}
                           </div>
                         ) : null}

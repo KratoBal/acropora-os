@@ -197,7 +197,7 @@ export function NavIncomingInvoiceListPage() {
           {data.items.length ? (
             <Card className="overflow-x-auto">
               <table className="w-full min-w-[820px] text-left text-sm">
-                <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
+                <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
                   <tr>
                     <th className="p-3">Számlaszám</th>
                     <th>Beszállító</th>
@@ -210,15 +210,15 @@ export function NavIncomingInvoiceListPage() {
                   {data.items.map((item) => (
                     <tr
                       key={item.id}
-                      className="cursor-pointer border-b last:border-0 hover:bg-slate-50"
+                      className="cursor-pointer border-b last:border-0 hover:bg-dusk-50"
                       onClick={() =>
                         router.push(`/beszerzes/nav-szamlak/${item.id}`)
                       }
                     >
-                      <td className="p-3 font-mono text-xs text-slate-600">
+                      <td className="p-3 font-mono text-xs text-dusk-600">
                         {item.navInvoiceNumber}
                       </td>
-                      <td className="font-semibold text-slate-900">
+                      <td className="font-semibold text-dusk-900">
                         {item.supplierName}
                       </td>
                       <td>

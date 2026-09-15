@@ -96,7 +96,7 @@ export function WorksheetEntries({
 
   return (
     <Card className="space-y-3 p-4">
-      <h2 className="text-sm font-semibold text-slate-800">
+      <h2 className="text-sm font-semibold text-dusk-800">
         Bejegyzések{entries ? ` (${entries.length})` : ""}
       </h2>
 
@@ -139,14 +139,14 @@ export function WorksheetEntries({
       <ul className="space-y-2">
         {entries?.map((entry) => (
           <li key={entry.id} className="rounded border p-3">
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-dusk-500">
               {worksheetEntryByline(entry)}
             </p>
             {/*
               A SOR EGY RESZLETET MUTAT, es a teljes szoveg a kulon lapon all --
               egy hosszu bejegyzes kulonben elnyomna a lap tobbi reszet.
             */}
-            <p className="line-clamp-3 whitespace-pre-wrap text-sm text-slate-800">
+            <p className="line-clamp-3 whitespace-pre-wrap text-sm text-dusk-800">
               {entry.body}
             </p>
             <Link

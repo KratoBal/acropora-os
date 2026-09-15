@@ -106,10 +106,10 @@ export function ProductBasicsEditor({
 
   return (
     <Card className="p-4">
-      <h2 className="text-sm font-semibold text-slate-900">
+      <h2 className="text-sm font-semibold text-dusk-900">
         Alapadatok szerkesztése
       </h2>
-      <p className="mt-1 text-xs text-slate-500">
+      <p className="mt-1 text-xs text-dusk-500">
         A név, a leírás és a kategória az Acropora OS tulajdona ezen a terméken.
       </p>
 

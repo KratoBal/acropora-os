@@ -27,7 +27,7 @@ import { describe, expect, it } from "vitest";
  * Ha uj sajat csalad szuletik, IDE is fel kell venni -- amig nincs itt, a
  * teszt hallgat rola. Ez a lista tehat a lefedes HATARA, nem dekoracio.
  */
-const CSALAD = ["nav", "brand"]; // fokozatos: `brand-700`, `nav-muted`
+const CSALAD = ["nav", "brand", "dusk"]; // fokozatos: `brand-700`, `dusk-500`
 const ONALLO = ["ink", "muted", "paper", "line", "coral"]; // nincs fokozatuk
 
 /**

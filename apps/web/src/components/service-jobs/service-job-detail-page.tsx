@@ -505,14 +505,14 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
             <ServicePanel className="space-y-3">
               <ServicePanelHeading title="A bejelentés" />
               {job.description ? (
-                <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                <p className="whitespace-pre-wrap text-sm leading-6 text-dusk-700">
                   {job.description}
                 </p>
               ) : (
                 /* AZ URES LEIRAS KIMONDVA. Egy hianyzo bekezdes ugyanugy nez ki, mint
              egy betoltesi hiba -- es a kulonbseget csak az mondja meg, aki a
              jegyet felvitte. */
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-dusk-500">
                   A bejelentéshez nem írtak leírást.
                 </p>
               )}
@@ -528,7 +528,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                       className="border-b pb-2 text-sm last:border-0"
                     >
                       <div>{timelineLine(entry)}</div>
-                      <div className="mt-0.5 text-xs text-slate-500">
+                      <div className="mt-0.5 text-xs text-dusk-500">
                         {formatDateTime(entry.at)}
                         {entry.kind === "status" && entry.event.actorName
                           ? ` · ${entry.event.actorName}`
@@ -546,7 +546,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                       */}
                       {entry.kind === "document" &&
                       entry.removal.uploadedAt !== null ? (
-                        <div className="mt-0.5 text-xs text-slate-500">
+                        <div className="mt-0.5 text-xs text-dusk-500">
                           Feltöltve: {formatDateTime(entry.removal.uploadedAt)}
                           {entry.removal.uploadedByName
                             ? ` · ${entry.removal.uploadedByName}`
@@ -597,7 +597,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
       */}
             <ServicePanel className="space-y-3">
               <ServicePanelHeading title="Fényképek és fájlok" />
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-dusk-500">
                 A bejelentett hibáról. JPEG, PNG vagy PDF, fájlonként legfeljebb
                 10 MB.
               </p>
@@ -617,7 +617,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                     >
                       <div>
                         <p className="font-medium">{item.fileName}</p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-xs text-dusk-500">
                           {formatFileSize(item.sizeBytes)} ·{" "}
                           {formatDateTime(item.createdAt)}
                         </p>
@@ -646,7 +646,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
               ) : (
                 /* A HIANY IS ALLITAS: egy ures doboz betoltesi hibanak latszik, es a
              kezelo megvarja. Ez a mondat kimondja, hogy nincs mire varni. */
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-dusk-500">
                   Ehhez a jegyhez még nincs fénykép vagy fájl csatolva.
                 </p>
               )}
@@ -721,7 +721,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                   lesz írója, az alábbi ág magától megjelenik.
                 */}
                       {worksheet.handedOverAt ? (
-                        <span className="ml-2 text-xs text-slate-500">
+                        <span className="ml-2 text-xs text-dusk-500">
                           Átadva: {formatDateTime(worksheet.handedOverAt)}
                         </span>
                       ) : null}
@@ -731,7 +731,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                       {canManage ? (
                         <button
                           type="button"
-                          className="ml-2 text-xs text-slate-500 underline hover:text-brand-700"
+                          className="ml-2 text-xs text-dusk-500 underline hover:text-brand-700"
                           disabled={attaching}
                           onClick={() => setSheetToDetach(worksheet.id)}
                         >
@@ -742,7 +742,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-dusk-500">
                   Ehhez a jegyhez még nem tartozik munkalap.
                 </p>
               )}
@@ -827,7 +827,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                  lenne: lehet szabad lap boven, csak MAS partnere. Egy mondat,
                  ami ket kulonbozo allapotbol is elohivhato, a kettot osszemossa
                  -- es a felhasznalo azt hinne, egyaltalan nincs szabad lap. */
-                    <p className="text-sm text-slate-500">
+                    <p className="text-sm text-dusk-500">
                       Ehhez a partnerhez nincs olyan munkalap, ami még egyik
                       hibajegyhez sem tartozik.
                     </p>
@@ -966,7 +966,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                 >
                   Partner beállítása
                 </label>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-dusk-500">
                   Ehhez a hibajegyhez még nincs partner, ezért munkalapot sem
                   lehet alá csatolni.
                 </p>

@@ -245,7 +245,7 @@ export function NavConnectionSettingsPage() {
       {view ? (
         <Card>
           <CardHeader>
-            <p className="text-sm font-semibold text-slate-800">Állapot</p>
+            <p className="text-sm font-semibold text-dusk-800">Állapot</p>
             <Badge variant={view.configured ? "success" : "neutral"}>
               {view.configured ? "Beállítva" : "Nincs beállítva"}
             </Badge>
@@ -253,23 +253,23 @@ export function NavConnectionSettingsPage() {
           <CardContent className="space-y-4">
             <dl className="grid gap-4 sm:grid-cols-2">
               <div>
-                <dt className="text-xs font-semibold uppercase text-slate-500">
+                <dt className="text-xs font-semibold uppercase text-dusk-500">
                   Hitelesítőadat-csomag
                 </dt>
-                <dd className="mt-1 font-mono text-sm text-slate-900">
+                <dd className="mt-1 font-mono text-sm text-dusk-900">
                   {view.masked ?? "—"}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs font-semibold uppercase text-slate-500">
+                <dt className="text-xs font-semibold uppercase text-dusk-500">
                   Utolsó módosítás
                 </dt>
-                <dd className="mt-1 text-sm text-slate-900">
+                <dd className="mt-1 text-sm text-dusk-900">
                   {dateTime(view.modifiedAt)}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs font-semibold uppercase text-slate-500">
+                <dt className="text-xs font-semibold uppercase text-dusk-500">
                   Ellenőrzés állapota
                 </dt>
                 <dd className="mt-1">
@@ -279,10 +279,10 @@ export function NavConnectionSettingsPage() {
                 </dd>
               </div>
               <div>
-                <dt className="text-xs font-semibold uppercase text-slate-500">
+                <dt className="text-xs font-semibold uppercase text-dusk-500">
                   Utolsó ellenőrzés
                 </dt>
-                <dd className="mt-1 text-sm text-slate-900">
+                <dd className="mt-1 text-sm text-dusk-900">
                   {dateTime(view.verification.checkedAt)}
                 </dd>
               </div>
@@ -292,7 +292,7 @@ export function NavConnectionSettingsPage() {
                 {view.verification.code}
               </p>
             ) : null}
-            <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4">
+            <div className="flex flex-wrap gap-2 border-t border-dusk-100 pt-4">
               <Button
                 variant="secondary"
                 disabled={!view.configured || testing}
@@ -315,10 +315,10 @@ export function NavConnectionSettingsPage() {
       <Card>
         <CardHeader>
           <div>
-            <p className="text-sm font-semibold text-slate-800">
+            <p className="text-sm font-semibold text-dusk-800">
               Technikai felhasználó és szoftveradatok
             </p>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-dusk-500">
               Mentéskor a rendszer valódi bejövő számla digest-lekérdezéssel
               ellenőrzi a hitelesítést és a Számla lekérdezés jogosultságot.
               Cserekulcs ehhez a funkcióhoz nem szükséges.
@@ -385,7 +385,7 @@ export function NavConnectionSettingsPage() {
               </FormField>
             </div>
 
-            <div className="grid gap-4 border-t border-slate-100 pt-6 md:grid-cols-2">
+            <div className="grid gap-4 border-t border-dusk-100 pt-6 md:grid-cols-2">
               <FormField
                 label="Szoftverazonosító"
                 htmlFor="nav-software-id"

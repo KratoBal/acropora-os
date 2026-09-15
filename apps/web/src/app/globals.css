@@ -8,13 +8,19 @@
  * oldalra.
  *
  * ===================================================================
- * MIERT A KET MEGLEVO SKALA CELPONTJAT IRJUK AT, ES NEM A HIVASI HELYEKET
+ * MIERT A KET MEGLEVO SKALA CELPONTJAT IRTUK AT, ES NEM A HIVASI HELYEKET
  * ===================================================================
  *
- * A felulet ma NEVEZETT Tailwind-skalakkal szinez: merve 875 `slate-*` es
- * `teal-*` elofordulas az apps/web-ben, plusz 71 a packages/ui-ban es 24 a
- * hejban -- kozel het­ven fajlban, amibol a tobbseg egyetlen most futo
- * munkahoz sem tartozik.
+ * EZ A SZAKASZ AZT IRJA LE, MIERT IGY KEZDODOTT -- es a "ma" azota elmult:
+ * 2026-09-15-en mind a ket skala megkapta az igaz nevet (`teal` -> `brand`,
+ * `slate` -> `dusk`), tehat a nevek MA MAR NEM hazudnak. A szakasz azert marad
+ * itt, mert a DONTES indoka tulel: ha legkozelebb egy egesz rampa cserel
+ * erteket, ugyanez a harom ut all majd, ugyanezekkel az arakkal.
+ *
+ * AKKOR, a kezdetkor: a felulet nevezett Tailwind-skalakkal szinezett, merve
+ * 875 `slate-*` es `teal-*` elofordulas az apps/web-ben, plusz 71 a
+ * packages/ui-ban es 24 a hejban -- kozel hetven fajlban, amibol a tobbseg
+ * egyetlen akkor futo munkahoz sem tartozott.
  *
  * Harom uton lehetne atallni, es a masodik ketto rosszabb:
  *
@@ -39,33 +45,44 @@
  * BETURE AZONOS erteku `brand-*` parja, a `teal-950`-nek pedig NULLA hivoja
  * volt (az egyetlen talalat maga a definicio).
  *
- * A `slate-*` FELE VISZONT NEM MECHANIKUS, es ezert all meg mindig itt. Merve
- * ugyanaznap, az apps/web-ben 774 hivasi hely:
+ * A SEMLEGES RAMPA 2026-09-15-EN `dusk` LETT, es a nev MERESEN all, nem
+ * benyomason:
  *
- *     331 helynek VAN azonos erteku igaz nevu tokenje (paper, line, muted, ink)
- *     443 helynek NINCS SEMMILYEN uj neve -- a tizenegy fokozatbol HETNEK
- *         (100, 300, 400, 600, 700, 800, 900) nincs igaz neve egyaltalan
+ *     a rampa    248-260 fok arnyalat, 9-25 szazalek telitettseg  (mind a 11 fokozat)
+ *     a Tailwind sajat slate-je    210-229 fok
  *
- * Vagyis az a fele nem atnevezes, hanem eloszor ELNEVEZES, es az tervezoi
- * dontes. Es a 331 "lekepezheto" hely sem gepies: a `paper` azt JELENTI, hogy
- * a lap hattere -- egy sor hover-hattere ugyanazzal az ertekkel MAS dontes.
- * Azonos ertek meg nem azonos dontes; ugyanaz a szabaly, ami a
- * `service/service-theme.ts` fejlecen all.
+ * A ket rampa tehat NEM cserelheto fel: a mienk IBOLYA fele huz, a Tailwinde
+ * KEK fele, 38-50 fok kulonbseggel a vilagos es a kozepso fokozatokon. Itt
+ * korabban az allt, hogy a skala "nem a Tailwind hideg szurkeje" -- az ALLITAS
+ * volt, amit senki nem mert le, es evekig igaznak latszott volna. A meres
+ * napja azert all itt, mert datum nelkul fel ev mulva ujra csak allitas lenne.
+ *
+ * MIERT `dusk` ES NEM `ash` (acrobot dontese, 2026-09-15): az `ash` nem
+ * hallgat az arnyalatrol, hanem azt allitja, hogy SEMLEGES szurke -- es a
+ * fenti meres szerint a rampa nem az. Ugyanabba az iranyba tevedne, mint a
+ * `slate`, csak halkabban, es a meglepetes okat nehezebb volna megtalalni.
+ *
+ * A FELTETEL, AMI A NEVHEZ TARTOZIK: ha a lila valaha kikerul az arculatbol,
+ * akkor a `dusk` ugyanugy hazudni fog. Olyankor a NEVCSERE UGYANABBA A
+ * VALTOZASBA MEGY, MINT AZ ERTEKEK -- kulon commitban nem. Az ara gepies
+ * (a fokozatszamok valtozatlanok, a feloldott ertekek hivasonkent azonosak,
+ * lasd a `teal` cseret), a rossz neve viszont MINDEN olvasot terhelne,
+ * folyamatosan.
  */
 @theme {
   /* ---- A SEMLEGES RAMPA. A prototipus szurkei lilaba hajlanak, nem kekbe:
      a `--paper` (#f6f5f8) es az `--ink` (#26233b) kozott interpolalt sor. ---- */
-  --color-slate-50: #f6f5f8;
-  --color-slate-100: #eeecf3;
-  --color-slate-200: #e5e2eb;
-  --color-slate-300: #d3cfdd;
-  --color-slate-400: #9a95a8;
-  --color-slate-500: #686477;
-  --color-slate-600: #565269;
-  --color-slate-700: #454155;
-  --color-slate-800: #373347;
-  --color-slate-900: #2f2b40;
-  --color-slate-950: #26233b;
+  --color-dusk-50: #f6f5f8;
+  --color-dusk-100: #eeecf3;
+  --color-dusk-200: #e5e2eb;
+  --color-dusk-300: #d3cfdd;
+  --color-dusk-400: #9a95a8;
+  --color-dusk-500: #686477;
+  --color-dusk-600: #565269;
+  --color-dusk-700: #454155;
+  --color-dusk-800: #373347;
+  --color-dusk-900: #2f2b40;
+  --color-dusk-950: #26233b;
 
   /* ---- AZ ALLAPOT-SZINEK. A prototipus part ad mindegyikhez (hatter es
      szoveg); a kozbenso fokozatok azokbol szarmaznak. Csak a TENYLEG

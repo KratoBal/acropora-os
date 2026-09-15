@@ -164,7 +164,7 @@ export function TaskBoardPage() {
           </Button>
         ))}
         {data ? (
-          <span className="ml-auto text-sm text-slate-600">
+          <span className="ml-auto text-sm text-dusk-600">
             {data.openCount} nyitott, {data.doneCount} lezárt
           </span>
         ) : null}
@@ -227,7 +227,7 @@ function TaskCard({
   return (
     <Card className="p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <h2 className="text-base font-semibold text-slate-900">
+        <h2 className="text-base font-semibold text-dusk-900">
           {task.linkUrl ? (
             <a
               href={task.linkUrl}
@@ -257,12 +257,12 @@ function TaskCard({
         rather than as a faint footnote under the heading.
       */}
       {task.description ? (
-        <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-slate-700">
+        <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-dusk-700">
           {task.description}
         </p>
       ) : null}
 
-      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500">
+      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-dusk-500">
         <span>Felvéve: {formatTaskDate(task.createdAt)}</span>
         <span>
           Kérte:{" "}
@@ -342,7 +342,7 @@ function TaskForm({
 
   return (
     <Card className="space-y-4 p-5">
-      <h2 className="font-semibold text-slate-900">Új feladat</h2>
+      <h2 className="font-semibold text-dusk-900">Új feladat</h2>
       {error ? (
         <Alert variant="danger" title="Hiba" description={error} />
       ) : null}

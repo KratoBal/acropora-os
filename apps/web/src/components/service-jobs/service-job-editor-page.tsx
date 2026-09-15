@@ -322,7 +322,7 @@ export function ServiceJobEditorPage() {
                   <span className="font-medium">{customer.name}</span>
                   <button
                     type="button"
-                    className="text-xs text-slate-500 underline"
+                    className="text-xs text-dusk-500 underline"
                     onClick={() => setCustomer(null)}
                   >
                     Másik partner
@@ -336,7 +336,7 @@ export function ServiceJobEditorPage() {
                 különben a felhasználó keresni fog valamit, ami nem hiányzik.
                 A következménye viszont ott áll mellette, mert az MA korlátoz.
               */}
-                  <p className="pt-1 text-xs text-slate-500">
+                  <p className="pt-1 text-xs text-dusk-500">
                     Elhagyható. Partner nélkül a jegy megnyílik, de munkalapot
                     csak azután lehet alá csatolni, hogy a partnere megvan.
                   </p>
@@ -360,16 +360,14 @@ export function ServiceJobEditorPage() {
             keresni.
           */}
               {!customer ? (
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-dusk-500">
                   Előbb válassz partnert. A helyszínek a partner saját fájából
                   jönnek.
                 </p>
               ) : !departmentsLoaded ? (
-                <p className="text-sm text-slate-500">
-                  Helyszínek betöltése...
-                </p>
+                <p className="text-sm text-dusk-500">Helyszínek betöltése...</p>
               ) : departmentOptions.length === 0 ? (
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-dusk-500">
                   Ehhez a partnerhez nincs felvéve helyszín. A jegy enélkül is
                   megnyitható.
                 </p>
@@ -471,7 +469,7 @@ export function ServiceJobEditorPage() {
             mert addig nincs mihez kotni -- es ha errol hallgatnank, egy lassu
             feltoltes ugy nezne ki, mintha a felvitel akadt volna el.
           */}
-              <p className="pt-1 text-xs text-slate-500">
+              <p className="pt-1 text-xs text-dusk-500">
                 {files.length
                   ? `${files.length} fájl feltöltésre vár. A hibajegy megnyitása után töltjük fel.`
                   : "Elhagyható. JPEG, PNG vagy PDF, fájlonként legfeljebb 10 MB."}
@@ -504,7 +502,7 @@ export function ServiceJobEditorPage() {
             ami nem a hibarol szol, hanem a SZERVEZESROL -- aki a munkat
             kiadja, a legvegen dont rola.
           */}
-              <p className="pt-1 text-xs text-slate-500">
+              <p className="pt-1 text-xs text-dusk-500">
                 Elhagyható. A delegált kollégák értesítést kapnak a jegyről.
               </p>
             </div>
@@ -519,8 +517,8 @@ export function ServiceJobEditorPage() {
             a lapon, es a bongeszo vissza-gombja nem ugyanaz, mert a felvitt
             szoveg sorsarol semmit nem mond.
           */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
-            <p className="text-xs text-slate-500">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dusk-200/80 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+            <p className="text-xs text-dusk-500">
               A „Mi a baj?” mező kötelező, a többi elhagyható.
             </p>
             <div className="flex items-center gap-2">
@@ -546,15 +544,15 @@ export function ServiceJobEditorPage() {
           sorrendje itt fuggosegi kerdes (a helyszin a partnertol jon), es ez az
           egyetlen hely, ahol ez SZOVEGBEN is ki van mondva.
         */}
-        <aside className="space-y-3 rounded-xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
-          <h2 className="text-base font-bold tracking-tight text-slate-950">
+        <aside className="space-y-3 rounded-xl border border-dusk-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+          <h2 className="text-base font-bold tracking-tight text-dusk-950">
             Rövid út a kész feladatig
           </h2>
-          <p className="text-sm leading-6 text-slate-500">
+          <p className="text-sm leading-6 text-dusk-500">
             A hibajegy összefogja a bejelentést, az eszközöket és a
             munkalapokat.
           </p>
-          <ol className="space-y-2 text-sm text-slate-600">
+          <ol className="space-y-2 text-sm text-dusk-600">
             <li className="flex gap-2">
               <span className="font-semibold text-brand-700">1.</span>
               Partner és pontos helyszín

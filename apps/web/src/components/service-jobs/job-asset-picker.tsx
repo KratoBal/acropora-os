@@ -106,7 +106,7 @@ export function JobAssetPicker({
 
   if (!departmentId)
     return (
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-dusk-500">
         Előbb válassz helyszínt. Az eszközök a helyszínhez és az alatta lévő
         egységekhez tartoznak.
       </p>
@@ -115,11 +115,11 @@ export function JobAssetPicker({
   if (error) return <p className="text-sm text-red-600">{error}</p>;
 
   if (!loaded)
-    return <p className="text-sm text-slate-500">Eszközök betöltése...</p>;
+    return <p className="text-sm text-dusk-500">Eszközök betöltése...</p>;
 
   if (assets.length === 0)
     return (
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-dusk-500">
         Ezen a helyszínen nincs nyilvántartott eszköz. A jegy enélkül is
         megnyitható.
       </p>
@@ -143,7 +143,7 @@ export function JobAssetPicker({
                   helyszinen teljesen normalis, es a nev onmagaban akkor sem
                   megkulonbozteto, ha ma veletlenul az.
                 */}
-                <span className="pl-2 text-xs text-slate-500">
+                <span className="pl-2 text-xs text-dusk-500">
                   {asset.assetNumber}
                 </span>
               </span>

@@ -183,8 +183,8 @@ export function SettingsOverviewPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-slate-900">Beállítások</h1>
-        <p className="mt-1 text-sm text-slate-600">
+        <h1 className="text-xl font-semibold text-dusk-900">Beállítások</h1>
+        <p className="mt-1 text-sm text-dusk-600">
           A rendszer beállítható területei. Minden hivatkozás egy meglévő
           oldalra visz.
         </p>
@@ -208,8 +208,8 @@ export function SettingsOverviewPage() {
       <div className="grid gap-4 sm:grid-cols-2">
         {areas.map((area) => {
           const cim = (
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-              <Icon name={area.icon} className="size-4 text-slate-400" />
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-dusk-900">
+              <Icon name={area.icon} className="size-4 text-dusk-400" />
               {area.title}
             </h2>
           );
@@ -219,11 +219,11 @@ export function SettingsOverviewPage() {
               {egyetlen ? (
                 <Link
                   href={egyetlen.href}
-                  className="block rounded-lg transition hover:bg-slate-50"
+                  className="block rounded-lg transition hover:bg-dusk-50"
                 >
                   <CardHeader>{cim}</CardHeader>
                   <CardContent>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-dusk-500">
                       {egyetlen.description}
                     </p>
                   </CardContent>
@@ -237,12 +237,12 @@ export function SettingsOverviewPage() {
                         <li key={link.href}>
                           <Link
                             href={link.href}
-                            className="block rounded-md border border-slate-200 px-3 py-2 transition hover:border-brand-500 hover:bg-slate-50"
+                            className="block rounded-md border border-dusk-200 px-3 py-2 transition hover:border-brand-500 hover:bg-dusk-50"
                           >
-                            <span className="block text-sm font-medium text-slate-900">
+                            <span className="block text-sm font-medium text-dusk-900">
                               {link.label}
                             </span>
-                            <span className="block text-xs text-slate-500">
+                            <span className="block text-xs text-dusk-500">
                               {link.description}
                             </span>
                           </Link>

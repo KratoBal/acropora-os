@@ -242,8 +242,8 @@ export function ContentListPage() {
         a küldőknek ez a belépési pontjuk -- de nem az első dolog, amit egy
         jóváhagyónak látnia kell.
       */}
-      <label className="block space-y-1 border-t border-slate-200 pt-4">
-        <span className="text-sm text-slate-500">Kinek a szemével</span>
+      <label className="block space-y-1 border-t border-dusk-200 pt-4">
+        <span className="text-sm text-dusk-500">Kinek a szemével</span>
         <Select
           value={view}
           onChange={(event) => setView(event.target.value as ContentView)}
@@ -263,7 +263,7 @@ export function ContentListPage() {
         hiányzik valami, a hiányzót nem létezőnek hiszi.
       */}
       {view === "mine" && notCovered.length > 0 ? (
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-dusk-500">
           {notCovered.map((entry) => entry.reason).join(" ")}
         </p>
       ) : null}
@@ -361,7 +361,7 @@ function StaleSummary({ items }: { items: ContentListItem[] | null }) {
         className={
           oldest.stale
             ? "size-2.5 shrink-0 rounded-full bg-amber-500"
-            : "size-2.5 shrink-0 rounded-full bg-slate-300"
+            : "size-2.5 shrink-0 rounded-full bg-dusk-300"
         }
       />
       <p className="text-sm">

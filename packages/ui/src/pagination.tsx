@@ -31,7 +31,7 @@ export function Pagination({
       >
         Előző
       </Button>
-      <span className="min-w-24 text-center text-sm text-slate-600">
+      <span className="min-w-24 text-center text-sm text-dusk-600">
         {page}. / {safeTotal} oldal
       </span>
       <Button

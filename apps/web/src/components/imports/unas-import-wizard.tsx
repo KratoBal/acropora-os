@@ -192,10 +192,10 @@ export function UnasImportWizard() {
               className={`rounded-lg border px-3 py-3 text-left text-xs font-semibold transition ${
                 step === number
                   ? "border-brand-500 bg-brand-50 text-brand-800"
-                  : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                  : "border-dusk-200 bg-white text-dusk-500 hover:bg-dusk-50"
               } disabled:cursor-not-allowed disabled:opacity-50`}
             >
-              <span className="mr-2 text-slate-400">{number}.</span>
+              <span className="mr-2 text-dusk-400">{number}.</span>
               {label}
             </button>
           );
@@ -220,12 +220,12 @@ export function UnasImportWizard() {
       {loading ? (
         <Card className="space-y-4 p-6" aria-label="Import feldolgozása">
           <div className="flex items-center justify-between text-sm">
-            <span className="font-semibold text-slate-900">
+            <span className="font-semibold text-dusk-900">
               {file ? "Feltöltés és feldolgozás" : "Riport betöltése"}
             </span>
             {file ? <span>{progress}%</span> : null}
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+          <div className="h-2 overflow-hidden rounded-full bg-dusk-100">
             <div
               className="h-full bg-brand-600 transition-all"
               style={{ width: `${progress}%` }}
@@ -254,21 +254,21 @@ export function UnasImportWizard() {
               className={`flex min-h-72 flex-col items-center justify-center rounded-xl border-2 border-dashed p-8 text-center transition ${
                 dragging
                   ? "border-brand-500 bg-brand-50"
-                  : "border-slate-300 bg-slate-50"
+                  : "border-dusk-300 bg-dusk-50"
               }`}
               aria-label="UNAS XLSX feltöltési terület"
             >
               <span className="mb-4 flex size-12 items-center justify-center rounded-xl bg-white text-brand-700 shadow-sm">
                 <Icon name="package" />
               </span>
-              <h2 className="font-semibold text-slate-950">
+              <h2 className="font-semibold text-dusk-950">
                 Húzd ide az UNAS XLSX exportot
               </h2>
-              <p className="mt-2 text-sm text-slate-500">
+              <p className="mt-2 text-sm text-dusk-500">
                 vagy válaszd ki a számítógépedről
               </p>
               <label className="mt-5">
-                <span className="inline-flex h-9 cursor-pointer items-center rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white">
+                <span className="inline-flex h-9 cursor-pointer items-center rounded-lg bg-dusk-900 px-4 text-sm font-semibold text-white">
                   Fájl kiválasztása
                 </span>
                 <input
@@ -281,16 +281,16 @@ export function UnasImportWizard() {
                   }}
                 />
               </label>
-              <p className="mt-4 text-xs text-slate-400">
+              <p className="mt-4 text-xs text-dusk-400">
                 Csak XLSX · maximum 25 MiB
               </p>
             </div>
           </Card>
           <Card className="p-6">
-            <h2 className="font-semibold text-slate-950">
+            <h2 className="font-semibold text-dusk-950">
               Korábbi riport megnyitása
             </h2>
-            <p className="mt-2 text-sm text-slate-500">
+            <p className="mt-2 text-sm text-dusk-500">
               Add meg a staging batch azonosítóját.
             </p>
             <Input
@@ -397,12 +397,12 @@ export function UnasImportWizard() {
                   key={`${product.sourceRowNumber}-${product.sku}`}
                   className="overflow-hidden"
                 >
-                  <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+                  <div className="flex items-center justify-between border-b border-dusk-200 px-5 py-4">
                     <div>
-                      <h2 className="font-semibold text-slate-950">
+                      <h2 className="font-semibold text-dusk-950">
                         {product.productName || "Névtelen termék"}
                       </h2>
-                      <p className="mt-1 font-mono text-xs text-slate-500">
+                      <p className="mt-1 font-mono text-xs text-dusk-500">
                         {product.sku || "Nincs SKU"}
                       </p>
                     </div>
@@ -411,23 +411,23 @@ export function UnasImportWizard() {
                     </Badge>
                   </div>
                   <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                    <thead className="bg-dusk-50 text-xs uppercase text-dusk-500">
                       <tr>
                         <th className="px-5 py-3">Mező</th>
                         <th className="px-5 py-3">Jelenlegi</th>
                         <th className="px-5 py-3">UNAS érték</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-dusk-100">
                       {product.changes.map((change) => (
                         <tr key={change.field}>
                           <td className="px-5 py-3 font-semibold">
                             {DIFF_LABELS[change.field]}
                           </td>
-                          <td className="max-w-md bg-rose-50/50 px-5 py-3 text-slate-600">
+                          <td className="max-w-md bg-rose-50/50 px-5 py-3 text-dusk-600">
                             {printable(change.before)}
                           </td>
-                          <td className="max-w-md bg-emerald-50/50 px-5 py-3 text-slate-900">
+                          <td className="max-w-md bg-emerald-50/50 px-5 py-3 text-dusk-900">
                             {printable(change.after)}
                           </td>
                         </tr>
@@ -450,13 +450,13 @@ export function UnasImportWizard() {
         <Card className="p-6">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <p className="text-xs font-semibold uppercase tracking-wide text-dusk-400">
                 Batch ID
               </p>
-              <code className="mt-2 block rounded-md bg-slate-100 px-3 py-2 text-sm">
+              <code className="mt-2 block rounded-md bg-dusk-100 px-3 py-2 text-sm">
                 {report.batchId}
               </code>
-              <p className="mt-3 text-xs text-slate-500">
+              <p className="mt-3 text-xs text-dusk-500">
                 Létrehozva:{" "}
                 {new Date(report.generatedAt).toLocaleString("hu-HU")}
               </p>
@@ -464,7 +464,7 @@ export function UnasImportWizard() {
             <div className="flex gap-2">
               <Link
                 href={`/admin/brands/import-assistant?batchId=${encodeURIComponent(report.batchId)}&returnTo=${encodeURIComponent(`/admin/imports/unas?batchId=${report.batchId}`)}`}
-                className="inline-flex h-9 items-center rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="inline-flex h-9 items-center rounded-lg border border-dusk-300 px-4 text-sm font-semibold text-dusk-700 hover:bg-dusk-50"
               >
                 Márkaimport asszisztens
               </Link>
@@ -537,7 +537,7 @@ function ValidationTable({
   return (
     <Card className="overflow-hidden">
       <table className="w-full text-left text-sm">
-        <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+        <thead className="bg-dusk-50 text-xs uppercase text-dusk-500">
           <tr>
             <th className="px-4 py-3">Forrássor</th>
             <th className="px-4 py-3">Entitás</th>
@@ -546,7 +546,7 @@ function ValidationTable({
             <th className="px-4 py-3">Üzenet</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">
+        <tbody className="divide-y divide-dusk-100">
           {issues.map((issue, index) => {
             const product = report.products.find(
               (row) => row.sourceRowNumber === issue.sourceRowNumber,
@@ -563,7 +563,7 @@ function ValidationTable({
                   <span className="block font-mono text-xs">
                     {product?.sku || "—"}
                   </span>
-                  <span className="text-slate-500">
+                  <span className="text-dusk-500">
                     {product?.productName || "—"}
                   </span>
                 </td>
@@ -574,7 +574,7 @@ function ValidationTable({
                     {issue.code}
                   </Badge>
                 </td>
-                <td className="px-4 py-3 text-slate-600">{issue.message}</td>
+                <td className="px-4 py-3 text-dusk-600">{issue.message}</td>
               </tr>
             );
           })}

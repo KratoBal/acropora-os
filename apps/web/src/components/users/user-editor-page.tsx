@@ -303,7 +303,7 @@ export function UserEditorPage({ userId }: { userId?: string }) {
                 onClear={() => setCustomerId("")}
               />
             </FormField>
-            <p className="pt-1 text-xs text-slate-500">
+            <p className="pt-1 text-xs text-dusk-500">
               Ettől függ, mit lát: egy vevőhöz kötött fiók csak annak a vevőnek
               a sorait látja. Partner nélkül a fiók saját kollégáé, és mindent
               lát. Egy fiók legfeljebb egy partnerhez tartozhat.
@@ -327,7 +327,7 @@ export function UserEditorPage({ userId }: { userId?: string }) {
               <Badge variant={user.isActive ? "success" : "neutral"}>
                 {user.isActive ? "Aktív" : "Inaktív"}
               </Badge>
-              <span className="text-xs text-slate-500">
+              <span className="text-xs text-dusk-500">
                 {user.hasPassword
                   ? "Jelszó beállítva"
                   : "Nincs beállított jelszó"}
@@ -337,7 +337,7 @@ export function UserEditorPage({ userId }: { userId?: string }) {
         </Card>
         <Card className="p-6">
           <h2 className="font-semibold">Elérhető menüpontok</h2>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-dusk-500">
             A(z) {ROLE_LABELS[role]} szerepkör jelenleg ezekhez a menüpontokhoz
             biztosít hozzáférést.
           </p>
@@ -347,7 +347,7 @@ export function UserEditorPage({ userId }: { userId?: string }) {
                 <Badge key={item.href}>{item.label}</Badge>
               ))
             ) : (
-              <span className="text-sm text-slate-500">
+              <span className="text-sm text-dusk-500">
                 Ehhez a szerepkörhöz nincs elérhető menüpont.
               </span>
             )}
@@ -369,7 +369,7 @@ export function UserEditorPage({ userId }: { userId?: string }) {
         <>
           <Card className="p-6">
             <h2 className="font-semibold">Jelszó módosítása</h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-dusk-500">
               A jelenlegi jelszó nem jeleníthető meg. Az admin új jelszót
               állíthat be a felhasználónak.
             </p>
@@ -390,12 +390,12 @@ export function UserEditorPage({ userId }: { userId?: string }) {
               </Button>
             </div>
             {passwordNotice ? (
-              <p className="mt-2 text-sm text-slate-500">{passwordNotice}</p>
+              <p className="mt-2 text-sm text-dusk-500">{passwordNotice}</p>
             ) : null}
           </Card>
           <Card className="p-6">
             <h2 className="font-semibold">Audit</h2>
-            <p className="mt-2 text-sm text-slate-500">
+            <p className="mt-2 text-sm text-dusk-500">
               Létrehozva: {new Date(user.createdAt).toLocaleString("hu-HU")} ·
               Frissítve: {new Date(user.updatedAt).toLocaleString("hu-HU")}
               {user.passwordUpdatedAt
@@ -423,7 +423,7 @@ export function UserEditorPage({ userId }: { userId?: string }) {
           role="dialog"
           aria-modal="true"
           aria-labelledby="deactivate-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-dusk-950/40 p-4"
         >
           <Card className="max-w-lg p-6">
             <h2 id="deactivate-title" className="font-semibold">

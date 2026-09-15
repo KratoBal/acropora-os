@@ -8,7 +8,7 @@ export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
       className={cn(
         // A PROTOTIPUS PANELJE LAPOS: keret tartja, nem arnyek. A korabbi 3%-os
         // arnyek egy MASIK semleges szinbol keszult (a Tailwind hideg
-        // slate-950-ebol, kezzel beirva), tehat a rampa atallitasat nem is
+        // dusk-950-ebol, kezzel beirva), tehat a rampa atallitasat nem is
         // kovette volna -- egy arnyek, ami mashonnan szarmazik, mint a keret.
         "rounded-xl border border-line bg-white",
         className,

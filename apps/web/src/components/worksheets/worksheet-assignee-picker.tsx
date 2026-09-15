@@ -58,7 +58,7 @@ export function WorksheetAssigneePicker({
    */
   if (candidates.length === 0)
     return (
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-dusk-500">
         Nincs olyan kolléga, akire a lap kiosztható lenne.
       </p>
     );

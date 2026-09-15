@@ -280,24 +280,24 @@ export function FoxpostSettlementsPage() {
 
       <Card>
         <CardHeader>
-          <h2 className="text-sm font-semibold text-slate-900">
+          <h2 className="text-sm font-semibold text-dusk-900">
             Havi könyvelési fájlok
           </h2>
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-dusk-500">
             Valódi dátum- és számértékekkel
           </span>
         </CardHeader>
         <CardContent>
           {loading ? <Skeleton className="h-20" /> : null}
           {!loading && reports.length === 0 ? (
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-dusk-500">
               Még nincs feldolgozott havi Foxpost riport.
             </p>
           ) : null}
           {reports.length ? (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1040px] text-left text-sm">
-                <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
+                <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
                   <tr>
                     <th className="p-3">Hónap</th>
                     <th>Hetek / számlák</th>
@@ -310,7 +310,7 @@ export function FoxpostSettlementsPage() {
                 <tbody>
                   {reports.map((report) => (
                     <tr key={report.id} className="border-b last:border-0">
-                      <td className="p-3 font-semibold text-slate-900">
+                      <td className="p-3 font-semibold text-dusk-900">
                         {report.year}. {String(report.month).padStart(2, "0")}.
                       </td>
                       <td>
@@ -357,10 +357,10 @@ export function FoxpostSettlementsPage() {
 
       <Card>
         <CardHeader>
-          <h2 className="text-sm font-semibold text-slate-900">
+          <h2 className="text-sm font-semibold text-dusk-900">
             Beolvasott heti elszámolások
           </h2>
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-dusk-500">
             {data?.pagination.totalItems ?? 0} elszámolás
           </span>
         </CardHeader>
@@ -375,7 +375,7 @@ export function FoxpostSettlementsPage() {
           {data?.items.length ? (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[860px] text-left text-sm">
-                <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
+                <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
                   <tr>
                     <th className="p-3">Kelte</th>
                     <th>Elszámolás</th>
@@ -389,7 +389,7 @@ export function FoxpostSettlementsPage() {
                   {data.items.map((item) => (
                     <tr
                       key={item.id}
-                      className="cursor-pointer border-b last:border-0 hover:bg-slate-50"
+                      className="cursor-pointer border-b last:border-0 hover:bg-dusk-50"
                       onClick={() => void openDetail(item.id)}
                     >
                       <td className="p-3">
@@ -421,10 +421,10 @@ export function FoxpostSettlementsPage() {
         <Card>
           <CardHeader>
             <div>
-              <h2 className="text-sm font-semibold text-slate-900">
+              <h2 className="text-sm font-semibold text-dusk-900">
                 {selected.settlementCode ?? "Ismeretlen elszámolás"} részletei
               </h2>
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1 text-xs text-dusk-500">
                 {selected.xlsxFileName} + {selected.pdfFileName}
               </p>
             </div>
@@ -451,23 +451,23 @@ export function FoxpostSettlementsPage() {
             ) : null}
             <div className="grid gap-3 text-sm sm:grid-cols-3">
               <div>
-                <span className="text-slate-500">Időszak:</span>{" "}
+                <span className="text-dusk-500">Időszak:</span>{" "}
                 {formatDate(selected.periodStart)} –{" "}
                 {formatDate(selected.periodEnd)}
               </div>
               <div>
-                <span className="text-slate-500">Beszedett:</span>{" "}
+                <span className="text-dusk-500">Beszedett:</span>{" "}
                 {formatAmount(selected.collectedAmount)}
               </div>
               <div>
-                <span className="text-slate-500">Foxpost számla:</span>{" "}
+                <span className="text-dusk-500">Foxpost számla:</span>{" "}
                 {selected.invoiceNumber ?? "—"} (
                 {formatAmount(selected.invoiceGrossAmount)})
               </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1040px] text-left text-sm">
-                <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
+                <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
                   <tr>
                     <th className="p-3">Referencia kód</th>
                     <th>Címzett</th>
@@ -492,7 +492,7 @@ export function FoxpostSettlementsPage() {
                           <div className="flex min-w-[290px] items-center gap-2">
                             <input
                               aria-label={`Számlaszám – ${line.referenceCode}`}
-                              className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                              className="min-w-0 flex-1 rounded-md border border-dusk-300 bg-white px-2 py-1.5 font-mono text-xs text-dusk-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                               value={invoiceDrafts[line.id] ?? ""}
                               placeholder={line.referenceCode}
                               maxLength={100}
@@ -520,7 +520,7 @@ export function FoxpostSettlementsPage() {
                               {line.invoiceNumber ?? "—"}
                             </span>
                             {line.manualApprovedByDisplayName ? (
-                              <p className="mt-1 text-xs text-slate-500">
+                              <p className="mt-1 text-xs text-dusk-500">
                                 {line.manualApprovedByDisplayName} ·{" "}
                                 {formatDate(line.manualApprovedAt)}
                               </p>

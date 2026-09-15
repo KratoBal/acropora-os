@@ -9,10 +9,10 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variants = {
-  primary: "bg-slate-900 text-white shadow-sm hover:bg-slate-800",
+  primary: "bg-dusk-900 text-white shadow-sm hover:bg-dusk-800",
   secondary:
-    "border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50",
-  ghost: "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+    "border border-dusk-200 bg-white text-dusk-700 shadow-sm hover:bg-dusk-50",
+  ghost: "text-dusk-600 hover:bg-dusk-100 hover:text-dusk-900",
   danger: "bg-rose-600 text-white shadow-sm hover:bg-rose-700",
 };
 

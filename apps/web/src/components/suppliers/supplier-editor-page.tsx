@@ -462,7 +462,7 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
                   </Button>
                 ) : null}
               </div>
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1 text-xs text-dusk-500">
                 Az Ország mezőt az adószám alapján automatikusan kitöltjük;
                 szükség esetén felülírható.
               </p>
@@ -480,7 +480,7 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
                     </Badge>
                     {viesResult.valid &&
                     (viesResult.name || viesResult.address) ? (
-                      <span className="text-xs text-slate-500">
+                      <span className="text-xs text-dusk-500">
                         {[viesResult.name, viesResult.address]
                           .filter(Boolean)
                           .join(" - ")}
@@ -569,7 +569,7 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
         {supplier && isService ? (
           <Card className="p-6">
             <h2 className="font-semibold">Alegységek</h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-dusk-500">
               Az alegység kódja a munkalapszám első tagja (például a BIO a
               BIO-2026-001 számban).
             </p>
@@ -587,7 +587,7 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
                     // elore megirt osztalylista a negyedik szinten elfogyna.
                     style={{ paddingLeft: `${depth * 1.25}rem` }}
                   >
-                    <span className="font-mono text-xs text-slate-600">
+                    <span className="font-mono text-xs text-dusk-600">
                       {unit.code}
                     </span>
                     {editingUnitId === unit.id ? (
@@ -630,7 +630,7 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
                             gyerekei szulo nelkul maradnanak a kepernyon, es a
                             felhasznalo nem tudna visszaallitani sem. */}
                         {unit.isActive ? null : (
-                          <span className="text-xs text-slate-500">
+                          <span className="text-xs text-dusk-500">
                             · archivált
                           </span>
                         )}
@@ -673,7 +673,7 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
                 ))}
               </ul>
             ) : (
-              <p className="mt-4 text-sm text-slate-500">
+              <p className="mt-4 text-sm text-dusk-500">
                 Ehhez a partnerhez még nincs alegység.
               </p>
             )}
@@ -684,7 +684,7 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
                     gyakori eset. */}
                 <select
                   aria-label="Szülő helyszín"
-                  className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
+                  className="h-10 w-full rounded-md border border-dusk-300 bg-white px-3 text-sm"
                   value={newUnit.parentId}
                   onChange={(event) =>
                     setNewUnit((current) => ({
@@ -774,7 +774,7 @@ export function SupplierEditorPage({ supplierId }: { supplierId?: string }) {
         {isSupplier ? (
           <Card className="p-6">
             <h2 className="font-semibold">Bankszámla</h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-dusk-500">
               {isEu
                 ? "EU-n belüli beszállítónál nemzetközi átutaláshoz IBAN és SWIFT/BIC szükséges."
                 : "Belföldi beszállítónál a hazai formátumú bankszámlaszám."}

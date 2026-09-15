@@ -16,8 +16,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   if (isLoading || !session) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-50">
-        <p className="text-sm font-medium text-slate-500">
+      <main className="flex min-h-screen items-center justify-center bg-dusk-50">
+        <p className="text-sm font-medium text-dusk-500">
           Munkamenet ellenőrzése…
         </p>
       </main>

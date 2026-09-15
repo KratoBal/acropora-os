@@ -74,9 +74,9 @@ export function ContentDetailPanel({ id }: { id: string }) {
   if (!detail) return null;
 
   return (
-    <div className="w-full space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+    <div className="w-full space-y-3 rounded-lg border border-dusk-200 bg-dusk-50 p-3">
       <section>
-        <h4 className="text-xs font-semibold uppercase text-slate-500">
+        <h4 className="text-xs font-semibold uppercase text-dusk-500">
           A szöveg
         </h4>
         {detail.body?.trim() ? (
@@ -85,23 +85,23 @@ export function ContentDetailPanel({ id }: { id: string }) {
           // a szöveget kell valakinek jóváhagynia.
           <p className="whitespace-pre-wrap text-sm">{detail.body}</p>
         ) : (
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-dusk-500">
             Ehhez a tételhez még nincs szöveg.
           </p>
         )}
       </section>
 
       <section>
-        <h4 className="text-xs font-semibold uppercase text-slate-500">
+        <h4 className="text-xs font-semibold uppercase text-dusk-500">
           Beszélgetés ({detail.comments.length})
         </h4>
         {detail.comments.length === 0 ? (
-          <p className="text-sm text-slate-500">Még nincs hozzászólás.</p>
+          <p className="text-sm text-dusk-500">Még nincs hozzászólás.</p>
         ) : (
           <ul className="space-y-2">
             {detail.comments.map((comment) => (
               <li key={comment.id} className="text-sm">
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-dusk-500">
                   {new Date(comment.createdAt).toLocaleString("hu-HU")}
                 </span>
                 {/*
@@ -120,9 +120,7 @@ export function ContentDetailPanel({ id }: { id: string }) {
 
       {detail.imageRequired ? (
         <section>
-          <h4 className="text-xs font-semibold uppercase text-slate-500">
-            Kép
-          </h4>
+          <h4 className="text-xs font-semibold uppercase text-dusk-500">Kép</h4>
           <p className="text-sm">
             {detail.imageAttachedAt
               ? `Megvan (${new Date(detail.imageAttachedAt).toLocaleDateString("hu-HU")})`

@@ -97,7 +97,7 @@ export function PosSaleDetailPage({ saleId }: { saleId: string }) {
         <>
           <Card>
             <CardHeader>
-              <h2 className="text-sm font-semibold text-slate-900">
+              <h2 className="text-sm font-semibold text-dusk-900">
                 Áttekintés
               </h2>
               <Badge variant="success">{detail.status}</Badge>
@@ -105,56 +105,56 @@ export function PosSaleDetailPage({ saleId }: { saleId: string }) {
             <CardContent>
               <dl className="grid gap-3 text-xs sm:grid-cols-4">
                 <div>
-                  <dt className="text-slate-400">Fizetési mód</dt>
-                  <dd className="mt-1 text-slate-700">
+                  <dt className="text-dusk-400">Fizetési mód</dt>
+                  <dd className="mt-1 text-dusk-700">
                     {detail.paymentMethod
                       ? PAYMENT_METHOD_LABEL[detail.paymentMethod]
                       : "—"}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-slate-400">Vevő</dt>
-                  <dd className="mt-1 text-slate-700">
+                  <dt className="text-dusk-400">Vevő</dt>
+                  <dd className="mt-1 text-dusk-700">
                     {detail.customerName ?? "Anonim vásárló"}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-slate-400">Pénztáros</dt>
-                  <dd className="mt-1 text-slate-700">
+                  <dt className="text-dusk-400">Pénztáros</dt>
+                  <dd className="mt-1 text-dusk-700">
                     {detail.soldByName ?? "—"}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-slate-400">Időpont</dt>
-                  <dd className="mt-1 text-slate-700">
+                  <dt className="text-dusk-400">Időpont</dt>
+                  <dd className="mt-1 text-dusk-700">
                     {new Date(detail.createdAt).toLocaleString("hu-HU")}
                   </dd>
                 </div>
               </dl>
-              <div className="mt-4 flex justify-end gap-6 border-t border-slate-100 pt-4 text-sm">
+              <div className="mt-4 flex justify-end gap-6 border-t border-dusk-100 pt-4 text-sm">
                 {detail.discountPercent ? (
                   <div className="text-right">
-                    <p className="text-slate-400">Végösszeg kedvezmény</p>
-                    <p className="font-semibold text-slate-700">
+                    <p className="text-dusk-400">Végösszeg kedvezmény</p>
+                    <p className="font-semibold text-dusk-700">
                       {detail.discountPercent}%
                     </p>
                   </div>
                 ) : null}
                 <div className="text-right">
-                  <p className="text-slate-400">Nettó</p>
-                  <p className="font-semibold text-slate-700">
+                  <p className="text-dusk-400">Nettó</p>
+                  <p className="font-semibold text-dusk-700">
                     {formatHuf(detail.totalNet)}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-slate-400">ÁFA</p>
-                  <p className="font-semibold text-slate-700">
+                  <p className="text-dusk-400">ÁFA</p>
+                  <p className="font-semibold text-dusk-700">
                     {formatHuf(detail.totalTax)}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-slate-400">Bruttó</p>
-                  <p className="text-lg font-bold text-slate-900">
+                  <p className="text-dusk-400">Bruttó</p>
+                  <p className="text-lg font-bold text-dusk-900">
                     {formatHuf(detail.totalGross)}
                   </p>
                 </div>
@@ -164,14 +164,14 @@ export function PosSaleDetailPage({ saleId }: { saleId: string }) {
 
           <Card className="overflow-hidden">
             <CardHeader>
-              <h2 className="text-sm font-semibold text-slate-900">Tételek</h2>
-              <span className="text-xs text-slate-500">
+              <h2 className="text-sm font-semibold text-dusk-900">Tételek</h2>
+              <span className="text-xs text-dusk-500">
                 {detail.lines.length.toLocaleString("hu-HU")} tétel
               </span>
             </CardHeader>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[640px] border-collapse text-left">
-                <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                <thead className="bg-dusk-50 text-[11px] font-bold uppercase tracking-wide text-dusk-500">
                   <tr>
                     <th className="px-5 py-3">Cikkszám</th>
                     <th className="px-4 py-3">Termék</th>
@@ -183,30 +183,30 @@ export function PosSaleDetailPage({ saleId }: { saleId: string }) {
                     <th className="px-5 py-3">UNAS szinkron</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
+                <tbody className="divide-y divide-dusk-100 bg-white">
                   {detail.lines.map((line) => (
                     <tr key={line.id}>
-                      <td className="px-5 py-3 font-mono text-xs text-slate-700">
+                      <td className="px-5 py-3 font-mono text-xs text-dusk-700">
                         {line.sku}
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">
+                      <td className="px-4 py-3 text-sm text-dusk-600">
                         {line.productName}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm text-slate-600">
+                      <td className="px-4 py-3 text-right text-sm text-dusk-600">
                         {line.quantity} {line.unit}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm text-slate-600">
+                      <td className="px-4 py-3 text-right text-sm text-dusk-600">
                         {formatHuf(line.unitNet)}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm text-slate-600">
+                      <td className="px-4 py-3 text-right text-sm text-dusk-600">
                         {line.taxRate}%
                       </td>
-                      <td className="px-4 py-3 text-right text-sm text-slate-600">
+                      <td className="px-4 py-3 text-right text-sm text-dusk-600">
                         {line.discountPercent
                           ? `${line.discountPercent}%`
                           : "—"}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm font-semibold text-slate-900">
+                      <td className="px-4 py-3 text-right text-sm font-semibold text-dusk-900">
                         {formatHuf(line.lineGross)}
                       </td>
                       <td className="px-5 py-3">

@@ -107,7 +107,7 @@ const COLUMNS = "md:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]";
 /** A keskeny nézet felirata. Széles nézetben a fejlécsor mondja ugyanezt. */
 function NarrowLabel({ children }: { children: string }) {
   return (
-    <span className="text-xs font-medium text-slate-500 md:hidden">
+    <span className="text-xs font-medium text-dusk-500 md:hidden">
       {children}
     </span>
   );
@@ -129,7 +129,7 @@ function Suffixed({
   return (
     <div className="flex items-center gap-1">
       <div className="min-w-0 flex-1">{children}</div>
-      <span className="shrink-0 text-xs text-slate-500">{suffix}</span>
+      <span className="shrink-0 text-xs text-dusk-500">{suffix}</span>
     </div>
   );
 }
@@ -150,7 +150,7 @@ export function WorksheetLineEditor({
   return (
     <Card className="space-y-3 p-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-slate-800">Tételek</h2>
+        <h2 className="text-sm font-semibold text-dusk-800">Tételek</h2>
         <Button
           type="button"
           variant="secondary"
@@ -161,13 +161,13 @@ export function WorksheetLineEditor({
         </Button>
       </div>
       {lines.length === 0 ? (
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-dusk-500">
           Még nincs tétel. Tétel nélküli munkalap nem zárható le.
         </p>
       ) : null}
       {lines.length ? (
         <div
-          className={`hidden gap-2 text-xs font-medium text-slate-500 md:grid ${COLUMNS}`}
+          className={`hidden gap-2 text-xs font-medium text-dusk-500 md:grid ${COLUMNS}`}
           aria-hidden="true"
         >
           <span>Megnevezés</span>
@@ -272,7 +272,7 @@ export function WorksheetLineEditor({
         ))}
       </div>
       {lines.length ? (
-        <p className="text-right text-sm text-slate-600">
+        <p className="text-right text-sm text-dusk-600">
           Nettó összesen (előnézet):{" "}
           <strong className="tabular-nums">
             {formatAmount(String(linesNetTotal(lines)))}

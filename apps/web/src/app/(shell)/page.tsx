@@ -157,10 +157,10 @@ export default function DashboardPage() {
         <Card>
           <CardHeader>
             <div>
-              <h2 className="text-sm font-semibold text-slate-900">
+              <h2 className="text-sm font-semibold text-dusk-900">
                 Mai feladatok
               </h2>
-              <p className="mt-0.5 text-xs text-slate-400">
+              <p className="mt-0.5 text-xs text-dusk-400">
                 4 feladat vár rád ma
               </p>
             </div>
@@ -168,18 +168,18 @@ export default function DashboardPage() {
               Összes megnyitása
             </Button>
           </CardHeader>
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-dusk-100">
             {tasks.map((task) => (
               <div
                 key={task.title}
                 className="flex items-center gap-3 px-5 py-3.5"
               >
-                <span className="size-4 shrink-0 rounded-full border-2 border-slate-300" />
+                <span className="size-4 shrink-0 rounded-full border-2 border-dusk-300" />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-slate-800">
+                  <p className="truncate text-sm font-medium text-dusk-800">
                     {task.title}
                   </p>
-                  <p className="mt-0.5 text-xs text-slate-400">{task.meta}</p>
+                  <p className="mt-0.5 text-xs text-dusk-400">{task.meta}</p>
                 </div>
                 {task.urgent ? <Badge variant="danger">Sürgős</Badge> : null}
               </div>
@@ -190,10 +190,10 @@ export default function DashboardPage() {
         <Card>
           <CardHeader>
             <div>
-              <h2 className="text-sm font-semibold text-slate-900">
+              <h2 className="text-sm font-semibold text-dusk-900">
                 Készletfigyelő
               </h2>
-              <p className="mt-0.5 text-xs text-slate-400">
+              <p className="mt-0.5 text-xs text-dusk-400">
                 Minimumszint alatti tételek
               </p>
             </div>
@@ -201,7 +201,7 @@ export default function DashboardPage() {
               Készlet megnyitása
             </Button>
           </CardHeader>
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-dusk-100">
             {inventoryAlerts.map((item) => (
               <div
                 key={item.sku}
@@ -211,10 +211,10 @@ export default function DashboardPage() {
                   <Icon name="box" size={17} />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-slate-800">
+                  <p className="truncate text-sm font-medium text-dusk-800">
                     {item.product}
                   </p>
-                  <p className="mt-0.5 text-xs text-slate-400">
+                  <p className="mt-0.5 text-xs text-dusk-400">
                     {item.sku} · {item.stock} db
                   </p>
                 </div>
@@ -232,10 +232,10 @@ export default function DashboardPage() {
       <Card>
         <CardHeader>
           <div>
-            <h2 className="text-sm font-semibold text-slate-900">
+            <h2 className="text-sm font-semibold text-dusk-900">
               Legutóbbi aktivitások
             </h2>
-            <p className="mt-0.5 text-xs text-slate-400">
+            <p className="mt-0.5 text-xs text-dusk-400">
               A csapat és a rendszer legfrissebb műveletei
             </p>
           </div>
@@ -251,13 +251,13 @@ export default function DashboardPage() {
             >
               <Avatar name={activity.initials} size="sm" />
               <div className="min-w-0">
-                <p className="text-sm leading-5 text-slate-600">
-                  <span className="font-semibold text-slate-800">
+                <p className="text-sm leading-5 text-dusk-600">
+                  <span className="font-semibold text-dusk-800">
                     {activity.name}
                   </span>{" "}
                   {activity.action}
                 </p>
-                <p className="mt-0.5 text-xs text-slate-400">{activity.time}</p>
+                <p className="mt-0.5 text-xs text-dusk-400">{activity.time}</p>
               </div>
             </div>
           ))}

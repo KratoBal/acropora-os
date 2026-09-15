@@ -76,17 +76,17 @@ export function StockItemReconciliationSection() {
   return (
     <Card>
       <CardHeader>
-        <h2 className="text-sm font-semibold text-slate-900">
+        <h2 className="text-sm font-semibold text-dusk-900">
           Tételes összevetés a főkönyvvel
         </h2>
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-dusk-500">
           {summary
             ? `${summary.checkedCount} ellenőrzött sor, ${new Date(summary.checkedAt).toLocaleString("hu-HU")}`
             : ""}
         </span>
       </CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-dusk-500">
           Ez a fenti riporttól KÜLÖN kérdés: itt soronként egy variáns és egy
           raktár áll, a főkönyvből levezetett várt értékkel együtt. A fenti az
           UNAS-rendelések felől néz.
@@ -108,7 +108,7 @@ export function StockItemReconciliationSection() {
         ) : null}
 
         {!loading && !error && page && page.items.length === 0 ? (
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-dusk-500">
             Nincs tételes eltérés. (Ez azt jelenti, hogy a lekérdezés lefutott
             és üres, nem azt, hogy nem néztük meg.)
           </p>
@@ -117,7 +117,7 @@ export function StockItemReconciliationSection() {
         {!error && page && page.items.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] border-collapse text-left">
-              <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <thead className="bg-dusk-50 text-[11px] font-bold uppercase tracking-wide text-dusk-500">
                 <tr>
                   <th className="px-5 py-3">Cikkszám</th>
                   <th className="px-4 py-3">Raktár</th>
@@ -127,16 +127,16 @@ export function StockItemReconciliationSection() {
                   <th className="px-4 py-3">Állapot</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
+              <tbody className="divide-y divide-dusk-100 bg-white">
                 {page.items.map((row) => (
                   <tr key={`${row.variantId}-${row.warehouseId}`}>
-                    <td className="px-5 py-3 font-mono text-xs text-slate-700">
+                    <td className="px-5 py-3 font-mono text-xs text-dusk-700">
                       {row.sku}
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-600">
+                    <td className="px-4 py-3 text-sm text-dusk-600">
                       {row.warehouseCode}
                     </td>
-                    <td className="px-4 py-3 text-right text-sm text-slate-600">
+                    <td className="px-4 py-3 text-right text-sm text-dusk-600">
                       {row.localOnHand ?? "nincs sor"}
                     </td>
                     {/*
@@ -145,15 +145,15 @@ export function StockItemReconciliationSection() {
                       és azt ki kell írni, mert egy üres cella tévedésből
                       egyezésnek látszik.
                     */}
-                    <td className="px-4 py-3 text-right text-sm text-slate-600">
+                    <td className="px-4 py-3 text-right text-sm text-dusk-600">
                       {row.ledgerProvable
                         ? (row.ledgerExpectedOnHand ?? "-")
                         : "nem bizonyítható"}
                     </td>
-                    <td className="px-4 py-3 text-right text-sm text-slate-600">
+                    <td className="px-4 py-3 text-right text-sm text-dusk-600">
                       {row.unasOnHand ?? "nincs kapcsolat"}
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-600">
+                    <td className="px-4 py-3 text-xs text-dusk-600">
                       {row.status}
                     </td>
                   </tr>
@@ -161,7 +161,7 @@ export function StockItemReconciliationSection() {
               </tbody>
             </table>
             {page.totalPages > 1 ? (
-              <p className="px-5 py-3 text-xs text-slate-500">
+              <p className="px-5 py-3 text-xs text-dusk-500">
                 Az első {page.items.length} sor látszik a {page.totalItems}-ből.
                 A lapozás és a javítás a következő kör.
               </p>
