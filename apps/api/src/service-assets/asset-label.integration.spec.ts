@@ -46,10 +46,53 @@ function createInput(over: Partial<CreateAssetDto> = {}): CreateAssetDto {
   } as CreateAssetDto;
 }
 
+/**
+ * A SUITE ALTAL LETREHOZOTT KOTEGEK, HOGY A TAKARITAS MEG TUDJA NEVEZNI OKET.
+ *
+ * MIERT KELL NYILVANTARTAS, ES MIERT NEM ELEG EGY ELOTAG: a `AssetLabelBatch`
+ * soron nincs semmilyen megkulonbozteto mezo (se kod, se nev) -- csak az
+ * idopont es a kert darabszam. Egyedul a hozza tartozo CIMKEK kotik ide, es
+ * azok a takaritas elso lepesekent eltunnek.
+ */
+const letrehozottKotegek: string[] = [];
+
 async function removeLeftovers() {
+  /**
+   * A KOTEGEK A CIMKEK UTAN, DE AZ AZONOSITOIKAT A CIMKEK ELOTT KELL BESZEDNI.
+   *
+   * MERVE 2026-09-15 (verify job 104337824776, ket sor-pillanatkep a takaritas
+   * elott es utan): ez a suite EGY `AssetLabelBatch` sort hagyott maga utan
+   * minden futasban. A ket koteget letrehozo teszt a sajat vegen takarit; a
+   * harmadik -- a szabad keszletet mero, `importBatch([CODE_B, CODE_C])` --
+   * nem, es nem is tudna: a koteg azonositojat el sem tette.
+   *
+   * ES AMIERT NEM VESZI ESZRE SENKI: az `AssetLabel.batchId` `SetNull`, tehat
+   * a cimkek torlese nem viszi a koteget, hanem ARVAN hagyja. Semmi nem hibazik,
+   * a suite zold marad, es a sor orokre ott all.
+   */
+  const kotegek = await prisma.assetLabel.findMany({
+    where: { code: { in: [CODE_A, CODE_B, CODE_C] } },
+    select: { batchId: true },
+  });
+  const kotegIdk = [
+    ...new Set(
+      [...kotegek.map((sor) => sor.batchId), ...letrehozottKotegek].filter(
+        (id): id is string => Boolean(id),
+      ),
+    ),
+  ];
+
   await prisma.assetLabel.deleteMany({
     where: { code: { in: [CODE_A, CODE_B, CODE_C] } },
   });
+
+  // CSAK AZ ARVAKAT, es ez nem ovatoskodas: ha egy koteghez idegen cimke is
+  // tartozna, a torlese azt is elvinne. A `labels: { none: {} }` feltetel a
+  // sajat sorainkra szukit anelkul, hogy a kotegrol barmit feltetelezne.
+  if (kotegIdk.length > 0)
+    await prisma.assetLabelBatch.deleteMany({
+      where: { id: { in: kotegIdk }, labels: { none: {} } },
+    });
   await prisma.asset.deleteMany({
     where: { assetNumber: { startsWith: PREFIX } },
   });
@@ -156,7 +199,9 @@ describe(
       // A NULL nem egyenlő önmagával, ezért az `assetId` egyedi indexe a szabad
       // sorokra nem korlátoz -- ez a viselkedés a készlet MŰKÖDÉSI feltétele,
       // nem mellékhatás, ezért áll itt állításként.
-      await repository.importBatch([CODE_B, CODE_C]);
+      letrehozottKotegek.push(
+        (await repository.importBatch([CODE_B, CODE_C])).batchId,
+      );
       const free = await repository.listFreeLabels(100);
       const codes = free.map((row) => row.code);
       assert.ok(codes.includes(CODE_B));
@@ -307,6 +352,7 @@ describe(
     it("a generálás új kódokat ad, és a lista számolja a szabadokat", async () => {
       const elotte = await repository.listLabelBatches(50);
       const batch = await repository.issueBatch(5);
+      letrehozottKotegek.push(batch.batchId);
       assert.equal(batch.codes.length, 5);
       assert.equal(new Set(batch.codes).size, 5, "a kódok nem ismétlődhetnek");
 
@@ -347,10 +393,66 @@ describe(
      */
     it("a felvitel idempotens, és megmondja, mi állt már ott", async () => {
       const result = await repository.importBatch([CODE_A, "Z9010"]);
+      letrehozottKotegek.push(result.batchId);
       assert.deepEqual(result.alreadyExisted, [CODE_A]);
       assert.deepEqual(result.imported, ["Z9010"]);
       await prisma.assetLabel.deleteMany({ where: { code: "Z9010" } });
       await prisma.assetLabelBatch.delete({ where: { id: result.batchId } });
+    });
+
+    /**
+     * A TAKARITAS TENYLEG LEFUT-E. Ugyanaz a par, mint a jegy- es a
+     * munkalap-specben: a CI-kapu (`scripts/tap-stream-gate.mjs`) azt fogja
+     * meg, ha a takaritas DOB, ez pedig azt, ha CSENDBEN NEM CSINAL SEMMIT.
+     *
+     * A KOTEG AZERT SZEREPEL KULON, es nem azert, mert "biztos, ami biztos":
+     * a 2026-09-15-i sor-pillanatkep (verify job 104337824776) szerint ez a
+     * suite EGY `AssetLabelBatch` sort hagyott maga utan minden futasban, es a
+     * takaritas addig nem is emlitette ezt a tablat. A tobbi szamlalo a sema
+     * FK-grafjabol jon: ami `Restrict` vagy `Cascade` KOTELEZO mezovel mutat
+     * egy mar szamolt gyokerre, azt a gyoker nulla szama bizonyitja.
+     *
+     * EZ AZ UTOLSO TESZT A FAJLBAN, ES ANNAK IS KELL MARADNIA: elviszi a
+     * fixtura-sorokat.
+     */
+    it("a takarítás tényleg lefut: nem marad sor a teszt előtaggal", async () => {
+      await removeLeftovers();
+
+      assert.equal(
+        await prisma.assetLabelBatch.count({
+          where: { id: { in: letrehozottKotegek } },
+        }),
+        0,
+        "maradt matrica-köteg a suite után",
+      );
+      assert.equal(
+        await prisma.assetLabel.count({
+          where: { code: { in: [CODE_A, CODE_B, CODE_C] } },
+        }),
+        0,
+        "maradt matrica a teszt kódokkal",
+      );
+      assert.equal(
+        await prisma.asset.count({
+          where: { assetNumber: { startsWith: PREFIX } },
+        }),
+        0,
+        "maradt eszköz a teszt előtaggal",
+      );
+      assert.equal(
+        await prisma.customer.count({
+          where: { customerNumber: { startsWith: PREFIX } },
+        }),
+        0,
+        "maradt vevő a teszt előtaggal",
+      );
+      assert.equal(
+        await prisma.user.count({
+          where: { email: { startsWith: PREFIX.toLowerCase() } },
+        }),
+        0,
+        "maradt felhasználó a teszt előtaggal",
+      );
     });
   },
 );
