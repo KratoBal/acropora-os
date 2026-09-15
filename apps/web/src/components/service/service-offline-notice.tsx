@@ -37,7 +37,55 @@ import { ServiceIcon } from "./service-list-chrome";
  * A ket hiba ara nem egyforma: egy elmaradt sav mellett a felhasznalo a sajat
  * szemevel latja, hogy nem tortenik semmi; egy hamis sav mellett elhiszi.
  */
-export function ServiceOfflineNotice() {
+/**
+ * A LAP HAROM KULONBOZO DOLGOT MUTATHAT, ES A SAVNAK MIND A HAROMRA IGAZAT
+ * KELL MONDANIA -- EZERT KOTELEZO, ES EZERT NEM ELHAGYHATO.
+ *
+ * Az elso valtozat egyetlen mondatot mondott: "a legutobb betoltott adatokat
+ * latod". Nautilus merte vissza, hogy HIDEG betoltesnel ez HAMIS: ha meg semmi
+ * nem toltodott be, a lap URES, es a sav azt allitja, hogy a regi adatokat
+ * nezed. Ez pontosan az a hiba, ami ellen a sav keszult.
+ *
+ * ES TAGABB, MINT AMIT O LATOTT: a ket URLAP-lapon a mondat MINDIG hamis volt,
+ * kapcsolattal is -- ott nincs "betoltott adat", ott egy urlap all, es a tet
+ * nem a frissites, hanem a MENTES.
+ *
+ * A prop KOTELEZO, es ez szandekos. Egy elhagyhato jelzes alapertelmezett
+ * ertekkel azt jelentene, hogy aki elfelejti atadni, CSENDBEN a rossz mondatot
+ * kapja -- vagyis ugyanaz a hiba allna elo ujra, csak nehezebben eszrevehetoen.
+ * Igy a fordito kerdezi meg minden laptol, amit a sav allit rola.
+ *
+ * ES A HATARA, MERT KULONBEN TOBBET IGER, MINT AMIT AD: a fordito azt
+ * kenyszeriti ki, hogy a lap VALASSZON, nem azt, hogy JOL valasszon. Egy lap,
+ * ami allandoan `loaded`-ot ad, holott lehet ures, ugyanugy hazudna -- es ezt
+ * LEMERTEM: a tipusellenorzes atengedi, mert a `loaded` ervenyes ertek, es
+ * egyetlen teszt sem fogja meg. Az a hiba a kod olvasasakor latszik, nem
+ * kapun.
+ *
+ * Amit a kotelezoseg TENYLEG ad: nincs nema alapertelmezes. A valasztas
+ * lathato a hivasi helyen, tehat van MIT elolvasni -- egy elhagyott prop
+ * eseten nem lenne.
+ */
+export type ServiceOfflineState =
+  /** Van mar betoltott tartalom a kepernyon: az LATSZIK, csak nem frissul. */
+  | { kind: "loaded" }
+  /** Meg semmi nem toltodott be: a lap ures, es EZ az oka. */
+  | { kind: "empty" }
+  /** Urlap: nincs mit frissiteni, a tet a mentes. */
+  | { kind: "form" };
+
+const SZOVEG: Record<ServiceOfflineState["kind"], string> = {
+  loaded:
+    "Nincs internet. A legutóbb betöltött adatokat látod, frissíteni csak kapcsolat után tudjuk.",
+  empty: "Nincs internet. Ezért nem tudtuk betölteni az adatokat.",
+  form: "Nincs internet. A mentés csak akkor megy át, ha a kapcsolat visszajön.",
+};
+
+export function ServiceOfflineNotice({
+  state,
+}: {
+  state: ServiceOfflineState;
+}) {
   /**
    * A KIINDULAS MINDIG "ONLINE", ES EZ NEM OVATOSSAG, HANEM KENYSZER: a
    * kiszolgalon nincs `navigator`, tehat az elso rajzolas nem tudhatja az
@@ -65,10 +113,7 @@ export function ServiceOfflineNotice() {
       className="mb-5 flex items-center gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700"
     >
       <ServiceIcon name="offline" className="size-4 shrink-0" />
-      <span>
-        Nincs internet. A legutóbb betöltött adatokat látod, frissíteni csak
-        kapcsolat után tudjuk.
-      </span>
+      <span>{SZOVEG[state.kind]}</span>
     </div>
   );
 }

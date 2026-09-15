@@ -290,7 +290,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
 
   return (
     <div className="space-y-6">
-      <ServiceOfflineNotice />
+      <ServiceOfflineNotice state={{ kind: "form" }} />
       <ServiceBackLink href={backToList.href}>
         {backToList.fromWithinApp ? "Vissza" : "Eszközök"}
       </ServiceBackLink>

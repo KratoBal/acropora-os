@@ -412,7 +412,9 @@ export function AssetListPage() {
 
   return (
     <div>
-      <ServiceOfflineNotice />
+      <ServiceOfflineNotice
+        state={data ? { kind: "loaded" } : { kind: "empty" }}
+      />
       <ServiceListHeader
         eyebrow="Szerviz / munkatér"
         title="Eszköznyilvántartás"
