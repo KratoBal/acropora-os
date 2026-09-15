@@ -27,7 +27,7 @@ export function NavItem({
         // esne szet.
         "group flex h-9 items-center gap-3 rounded-[10px] px-3 text-sm font-medium transition-colors",
         active
-          ? "bg-[#7462bd] text-white shadow-[0_4px_12px_rgba(0,0,0,0.1)]"
+          ? "bg-nav-active text-white shadow-[0_4px_12px_rgba(0,0,0,0.1)]"
           : "text-nav-muted hover:bg-white/5 hover:text-white",
         className,
       )}

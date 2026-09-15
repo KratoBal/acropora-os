@@ -71,14 +71,25 @@ export type ServiceOfflineState =
   | { kind: "loaded" }
   /** Meg semmi nem toltodott be: a lap ures, es EZ az oka. */
   | { kind: "empty" }
-  /** Urlap: nincs mit frissiteni, a tet a mentes. */
+  /**
+   * Urlap: nincs mit frissiteni, a tet a mentes.
+   *
+   * ES A MONDATA NEM IGERHET VARAKOZO MENTEST. Az elso valtozat azt mondta,
+   * hogy "a mentes csak akkor MEGY AT, ha a kapcsolat visszajon" -- az ugy
+   * olvashato, hogy a mentes VAR es majd atmegy. Nem var: a weben nulla
+   * ujraprobalkozas es nulla helyi sor all a mentes mogott, lemerve.
+   *
+   * Ugyanaz az igeret volt, amit a prototipus "N modositas feltoltesre var"
+   * mondatabol KIVETTUNK -- csak masik allapotba bujva. A szabaly a fajl
+   * tetején all, es megsem allitotta meg magat masodszor sem.
+   */
   | { kind: "form" };
 
 const SZOVEG: Record<ServiceOfflineState["kind"], string> = {
   loaded:
     "Nincs internet. A legutóbb betöltött adatokat látod, frissíteni csak kapcsolat után tudjuk.",
   empty: "Nincs internet. Ezért nem tudtuk betölteni az adatokat.",
-  form: "Nincs internet. A mentés csak akkor megy át, ha a kapcsolat visszajön.",
+  form: "Nincs internet. Amíg vissza nem jön, a mentés nem sikerül.",
 };
 
 export function ServiceOfflineNotice({
