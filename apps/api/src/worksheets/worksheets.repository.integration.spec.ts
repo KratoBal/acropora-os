@@ -23,6 +23,15 @@ const gate = integrationDatabaseGate(process.env);
 const TEST_EMAIL_DOMAIN = "worksheets-integration.invalid";
 const TEST_CUSTOMER_PREFIX = "WS-INT-";
 
+/**
+ * A SUITE SAJAT HIBAJEGYEINEK ELOTAGJA.
+ *
+ * NEVET KAPOTT, MERT KET HELYEN KELL: a letrehozasban es a takaritasban. Ket
+ * helyen allo szoveg-literal eloszor egyezik, aztan az egyiket valaki
+ * atirja -- es a takaritas NEM hibazna tole, csak nem talalna semmit.
+ */
+const TEST_JOB_PREFIX = "HJ-WS-INT-";
+
 describe(
   "WorksheetsRepository integration",
   { skip: gate.mode === "skip" },
@@ -125,6 +134,26 @@ describe(
         }
         await prisma.worksheet.deleteMany({
           where: { customerId: { in: customerIds } },
+        });
+        /**
+         * A SAJAT HIBAJEGYEK, ELOTAGRA SZURVE -- ES EZ A SOR EDDIG HIANYZOTT.
+         *
+         * Merve (verify job 104359092423, ket sor-pillanatkep az integracios
+         * futas korul): a `ServiceJob` EGY sorral tobb maradt, mint amennyi a
+         * futas elott volt, es ez a suite az egyetlen, ami jegyet hoz letre es
+         * egyet sem visz el.
+         *
+         * A VEVO TORLESE NEM VISZI, ES EPP EZ A CSAPDA: a `ServiceJob.customerId`
+         * `SetNull`, nem `Cascade` -- a jegy tullel, csak gazdatlanul. Egy
+         * `Cascade` mellett ez a sor felesleges lenne, `SetNull` mellett
+         * kotelezo, es a ket eset a kodbol semmiben nem kulonbozik.
+         *
+         * ELOTAGRA SZURUNK, NEM A VEVORE: a gazdatlanna valt jegyet a
+         * `customerId` mar nem koti ide, tehat egy vevo-alapu szuro epp azokat
+         * hagyna ott, amiket ez a sor takaritani hivatott.
+         */
+        await prisma.serviceJob.deleteMany({
+          where: { jobNumber: { startsWith: TEST_JOB_PREFIX } },
         });
         // AZ ESZKÖZÖK A MUNKALAPOK UTÁN, DE A HELYSZÍNEK ÉS A VEVŐ ELŐTT: az
         // `Asset.customerId` és az `Asset.departmentId` is `Restrict`, tehát
@@ -787,7 +816,7 @@ describe(
     it("writes the ticket onto the sheet in the same transaction", async () => {
       const job = await prisma.serviceJob.create({
         data: {
-          jobNumber: `HJ-WS-INT-${suffix}`,
+          jobNumber: `${TEST_JOB_PREFIX}${suffix}`,
           title: "Cápasuli szivattyú",
           customerId,
         },
