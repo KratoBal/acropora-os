@@ -12,9 +12,9 @@ import type {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  ServiceOfflineNotice,
-  type ServiceOfflineState,
-} from "@/components/service/service-offline-notice";
+  savotMond,
+  setOnLine,
+} from "@/components/service/service-offline-notice.testing";
 import { ServiceJobEditorPage } from "./service-job-editor-page";
 
 const api = vi.hoisted(() => ({ create: vi.fn(), uploadDocument: vi.fn() }));
@@ -32,45 +32,6 @@ vi.mock("@/components/auth/auth-provider", () => ({
 }));
 vi.mock("@/lib/api/service-jobs", () => ({ serviceJobsApi: api }));
 vi.mock("@/lib/api/worksheets", () => ({ worksheetsApi: sheets }));
-
-/**
- * A KAPCSOLAT ALLAPOTAT A `navigator.onLine` MONDJA MEG, es a jsdom
- * alapertelmezese `true` -- tehat a sav ki sem rajzolodna. Ez a ket sor
- * allitja at, az `afterEach` pedig visszaadja, hogy a tobbi allitas ne egy
- * halozat nelkuli vilagban fusson.
- */
-function setOnLine(value: boolean) {
-  Object.defineProperty(window.navigator, "onLine", {
-    value,
-    configurable: true,
-  });
-}
-
-afterEach(() => setOnLine(true));
-
-/**
- * A VART MONDATOT A KOMPONENSTOL KERDEZEM MEG, NEM BEGEPELEM.
- *
- * Ez a lap allitasa arrol szol, hogy a lap JOL VALASZT a harom allapot kozul
- * -- nem arrol, hogy mi a mondat szovege. A szoveg a save, es sajat tesztje
- * van ra, ami azt is allitja, hogy a harom mondat KULONBOZIK. Ha ide beirnam
- * a mondatot, ket helyen allna ugyanaz az igazsag, es a lap tesztje pirosodna
- * egy PUSZTA ATFOGALMAZASTOL.
- *
- * MERVE, NEM FELTEVES (2026-09-15): a #693 pontosan ezt tette -- az urlap
- * mondatat atirta, a `form` kindhez nem nyult --, es a begepelt valtozat
- * azonnal pirosra valtott a friss fo agon, holott a lapok viselkedese nem
- * valtozott.
- */
-function savSzovege(kind: ServiceOfflineState["kind"]): string {
-  setOnLine(false);
-  const { container, unmount } = render(
-    <ServiceOfflineNotice state={{ kind }} />,
-  );
-  const szoveg = container.textContent ?? "";
-  unmount();
-  return szoveg;
-}
 
 function sessionAs(role: Session["user"]["role"]): Session {
   return {
@@ -656,9 +617,20 @@ describe("ServiceJobEditorPage", () => {
    * pontosan azt a tevesztest fogja meg.
    */
   it("kapcsolat nélkül az űrlapon a mentésről beszél, nem a frissítésről", async () => {
-    const vart = savSzovege("form");
+    setOnLine(false);
     render(<ServiceJobEditorPage />);
 
-    expect(await screen.findByText(vart)).toBeTruthy();
+    expect(await savotMond("form")).toBeTruthy();
   });
 });
+
+/**
+ * A KAPCSOLATOT VISSZA KELL ADNI, PEDIG A FAJL UTOLSO TESZTJEI OFFLINE FUTNAK.
+ *
+ * MERVE 2026-09-15: amikor ez a sor egy atalakitas kozben kiesett, a keszlet
+ * ZOLD MARADT -- mert az offline tesztek eppen a fajl vegen allnak, tehat nem
+ * fut utanuk semmi. A lyuk nem ma latszana, hanem annak, aki ide egy uj
+ * tesztet ir: az halozat nelkuli vilagban indulna, es a pirosa nem arrol
+ * szolna, amit megirt.
+ */
+afterEach(() => setOnLine(true));

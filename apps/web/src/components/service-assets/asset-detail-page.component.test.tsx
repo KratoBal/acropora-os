@@ -1,7 +1,11 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { AssetDetail, AssetQrCode, Session } from "@acropora/types";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  savotMond,
+  setOnLine,
+} from "@/components/service/service-offline-notice.testing";
 import { AssetDetailPage } from "./asset-detail-page";
 
 /**
@@ -239,5 +243,37 @@ describe("AssetDetailPage fejléc", () => {
       .getAllByText("Aktív")
       .filter((elem) => elem.tagName !== "OPTION");
     expect(jelvenyek).toHaveLength(1);
+  });
+});
+
+/**
+ * A SAV A LAP ALLAPOTAROL BESZEL, NEM A KAPCSOLATROL -- ES A HELYES SZAM NEM
+ * EGY, HANEM ANNYI, AHANY ALLAPOTBA A LAP BE TUD KERULNI.
+ *
+ * Ez a lap kettobe: `asset ? loaded : empty`. A ket allitas EGYUTT fogja meg a
+ * rogzult valasztast; kulon-kulon egyik sem. Egy adatlap, ami mindig
+ * `loaded`-ot ad, a tipusellenorzesen ES az elso allitason is atmegy, es hideg
+ * betolteskor azt mondana, hogy "a legutobb betoltott adatokat latod",
+ * miközben a kepernyo ures.
+ */
+describe("AssetDetailPage kapcsolat nélkül", () => {
+  beforeEach(() => setOnLine(false));
+
+  afterEach(() => setOnLine(true));
+
+  it("betöltött eszközlapon a frissítésről beszél", async () => {
+    render(<AssetDetailPage assetId="asset-1" />);
+    await screen.findByText("Cápasuli kompresszor");
+
+    expect(await savotMond("loaded")).toBeTruthy();
+  });
+
+  it("üres képernyőn azt mondja, hogy ezért nincs adat", async () => {
+    // SOHA NEM TELJESULO valasz: a lap a "meg semmi nem toltodott be"
+    // allapotban marad, vagyis pont abban, amirol a masodik mondat szol.
+    api.detail.mockReturnValue(new Promise(() => {}));
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    expect(await savotMond("empty")).toBeTruthy();
   });
 });

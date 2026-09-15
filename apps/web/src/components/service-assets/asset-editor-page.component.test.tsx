@@ -4,7 +4,12 @@ import type {
   AssetOwnerListResponse,
   Session,
 } from "@acropora/types";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import {
+  savotMond,
+  setOnLine,
+} from "@/components/service/service-offline-notice.testing";
 
 import { AssetEditorPage } from "./asset-editor-page";
 
@@ -179,5 +184,28 @@ describe("AssetEditorPage kiút", () => {
 
     const megsem = await screen.findByRole("link", { name: "Mégsem" });
     expect(megsem.getAttribute("href")).toBe("/szerviz/eszkozok");
+  });
+});
+
+/**
+ * AZ URLAP EGYETLEN ALLAPOTBA TUD KERULNI, TEHAT ITT EGY ALLITAS A HELYES SZAM.
+ *
+ * A lista- es adatlapoknal ketto all (`loaded` es `empty`), mert azok ket
+ * allapotba kerulhetnek. Itt a sav feltetel nelkul `form`-ot kap -- egy
+ * masodik allitas nem szigor lenne, hanem DISZ: nem tudna elbukni.
+ *
+ * Amit ez MEGIS mer, es amiert nem elhagyhato: a `savotMond` a masik ket
+ * mondat HIANYAT is allitja, tehat egy rogzult vagy elcsuszott valasztas
+ * (peldaul ha valaki a lista alakjat masolna ide) ITT pirosodik ki.
+ */
+describe("AssetEditorPage kapcsolat nélkül", () => {
+  beforeEach(() => setOnLine(false));
+
+  afterEach(() => setOnLine(true));
+
+  it("az űrlapon kimondja, hogy a mentés nem fog sikerülni", async () => {
+    render(<AssetEditorPage />);
+
+    expect(await savotMond("form")).toBeTruthy();
   });
 });

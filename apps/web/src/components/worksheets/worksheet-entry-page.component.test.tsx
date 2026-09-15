@@ -1,7 +1,11 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { Session, WorksheetEntryDetail } from "@acropora/types";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  savotMond,
+  setOnLine,
+} from "@/components/service/service-offline-notice.testing";
 import { WorksheetEntryPage } from "./worksheet-entry-page";
 
 const api = vi.hoisted(() => ({ entries: vi.fn(), updateEntry: vi.fn() }));
@@ -119,4 +123,34 @@ describe("egy bejegyzés saját lapja", () => {
     render(<WorksheetEntryPage worksheetId="w-1" entryId="nincs" />);
     await waitFor(() => screen.getByText(/nem találjuk ezen a munkalapon/));
   });
+
+  /**
+   * A SAV A LAP ALLAPOTAROL BESZEL, NEM A KAPCSOLATROL -- ES A HELYES SZAM NEM
+   * EGY, HANEM ANNYI, AHANY ALLAPOTBA A LAP BE TUD KERULNI.
+   *
+   * Ez a lap kettobe: `entries ? loaded : empty`. A ket allitas EGYUTT fogja
+   * meg a rogzult valasztast -- kulon-kulon egyik sem. Egy lap, ami mindig
+   * `loaded`-ot ad, a tipusellenorzesen ES az elso allitason is atmegy, es
+   * hideg betolteskor azt mondana, hogy "a legutobb betoltott adatokat latod",
+   * miközben a kepernyo ures.
+   */
+  it("kapcsolat nélkül, betöltött bejegyzésnél a frissítésről beszél", async () => {
+    setOnLine(false);
+    render(<WorksheetEntryPage worksheetId="w-1" entryId="entry-1" />);
+    await screen.findByText("Szivattyú csere");
+
+    expect(await savotMond("loaded")).toBeTruthy();
+  });
+
+  it("kapcsolat nélkül, üres képernyőn azt mondja, hogy ezért nincs adat", async () => {
+    // SOHA NEM TELJESULO valasz: a lap a "meg semmi nem toltodott be"
+    // allapotban marad, vagyis pont abban, amirol a masodik mondat szol.
+    setOnLine(false);
+    api.entries.mockReturnValue(new Promise(() => {}));
+    render(<WorksheetEntryPage worksheetId="w-1" entryId="entry-1" />);
+
+    expect(await savotMond("empty")).toBeTruthy();
+  });
 });
+
+afterEach(() => setOnLine(true));
