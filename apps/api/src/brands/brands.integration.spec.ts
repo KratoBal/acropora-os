@@ -9,6 +9,8 @@ import { BrandsRepository } from "./brands.repository.js";
 import { BrandImportAssistantService } from "./brand-import-assistant.service.js";
 import { integrationDatabaseGate } from "../common/integration-database.js";
 
+import { nincsMaradek } from "../common/takaritas-leltar.js";
+
 const enabled = process.env.RUN_BRAND_INTEGRATION === "1";
 
 /**
@@ -179,47 +181,43 @@ describe("Brand database integration", { skip: !enabled }, () => {
      * pedig csak a sajat ket bejelentkezese a miénk. Egy nulla-szamlalo
      * barmelyiken azt kovetelne meg, hogy mas sorai is tunjenek el.
      */
-    assert.equal(
-      await prisma.domainEvent.count({
-        where: { aggregateType: "Brand", createdAt: { gte: SUITE_KEZDET } },
-      }),
-      0,
-      "a suite marka-esemenyei bent maradtak a takaritas utan",
-    );
-    assert.equal(
-      await prisma.brand.count({ where: SAJAT_MARKAK }),
-      0,
-      "a suite markai bent maradtak a takaritas utan",
-    );
-    assert.equal(
-      await prisma.externalReference.count({
-        where: {
-          entityType: "BRAND",
-          externalId: { startsWith: TEST_MAPPING_PREFIX },
-        },
-      }),
-      0,
-      "a suite lekepezesei bent maradtak a takaritas utan",
-    );
-    assert.equal(
-      await prisma.product.count({
-        where: { name: { startsWith: TEST_PRODUCT_PREFIX } },
-      }),
-      0,
-      "a suite termekei bent maradtak a takaritas utan",
-    );
-    assert.equal(
-      await prisma.catalogImportBatch.count({
-        where: { sourceFileName: assistantFile },
-      }),
-      0,
-      "a suite import-kotegei bent maradtak a takaritas utan",
-    );
-    assert.equal(
-      await prisma.user.count({ where: { id: actorId } }),
-      0,
-      "a suite szinesze bent maradt a takaritas utan",
-    );
+    nincsMaradek([
+      {
+        nev: "a suite marka-esemenyei bent maradtak a takaritas utan",
+        darab: await prisma.domainEvent.count({
+          where: { aggregateType: "Brand", createdAt: { gte: SUITE_KEZDET } },
+        }),
+      },
+      {
+        nev: "a suite markai bent maradtak a takaritas utan",
+        darab: await prisma.brand.count({ where: SAJAT_MARKAK }),
+      },
+      {
+        nev: "a suite lekepezesei bent maradtak a takaritas utan",
+        darab: await prisma.externalReference.count({
+          where: {
+            entityType: "BRAND",
+            externalId: { startsWith: TEST_MAPPING_PREFIX },
+          },
+        }),
+      },
+      {
+        nev: "a suite termekei bent maradtak a takaritas utan",
+        darab: await prisma.product.count({
+          where: { name: { startsWith: TEST_PRODUCT_PREFIX } },
+        }),
+      },
+      {
+        nev: "a suite import-kotegei bent maradtak a takaritas utan",
+        darab: await prisma.catalogImportBatch.count({
+          where: { sourceFileName: assistantFile },
+        }),
+      },
+      {
+        nev: "a suite szinesze bent maradt a takaritas utan",
+        darab: await prisma.user.count({ where: { id: actorId } }),
+      },
+    ]);
     await prisma.$disconnect();
   });
 

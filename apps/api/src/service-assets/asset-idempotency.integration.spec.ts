@@ -3,6 +3,8 @@ import "reflect-metadata";
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
+import { nincsMaradek } from "../common/takaritas-leltar.js";
+
 import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
@@ -104,25 +106,26 @@ describe(
        * A vevo es a fiok szamlaloja ugyanazt az elotagot nezi, mint a torlesuk:
        * azok tehat a KIMARADT torlest fogjak meg, nem az elirt elotagot.
        */
-      assert.equal(
-        await prisma.asset.count({ where: { name: { startsWith: PREFIX } } }),
-        0,
-        "a suite eszkozei bent maradtak a takaritas utan",
-      );
-      assert.equal(
-        await prisma.customer.count({
-          where: { customerNumber: { startsWith: PREFIX } },
-        }),
-        0,
-        "a suite vevoje bent maradt a takaritas utan",
-      );
-      assert.equal(
-        await prisma.user.count({
-          where: { email: { startsWith: PREFIX.toLowerCase() } },
-        }),
-        0,
-        "a suite aktora bent maradt a takaritas utan",
-      );
+      nincsMaradek([
+        {
+          nev: "a suite eszkozei bent maradtak a takaritas utan",
+          darab: await prisma.asset.count({
+            where: { name: { startsWith: PREFIX } },
+          }),
+        },
+        {
+          nev: "a suite vevoje bent maradt a takaritas utan",
+          darab: await prisma.customer.count({
+            where: { customerNumber: { startsWith: PREFIX } },
+          }),
+        },
+        {
+          nev: "a suite aktora bent maradt a takaritas utan",
+          darab: await prisma.user.count({
+            where: { email: { startsWith: PREFIX.toLowerCase() } },
+          }),
+        },
+      ]);
       await prisma.$disconnect();
     });
 

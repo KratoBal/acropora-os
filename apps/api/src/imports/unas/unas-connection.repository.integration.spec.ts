@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { prisma } from "@acropora/database";
 
+import { nincsMaradek } from "../../common/takaritas-leltar.js";
+
 import { UnasConnectionRepository } from "./unas-connection.repository.js";
 import { integrationDatabaseGate } from "../../common/integration-database.js";
 
@@ -92,20 +94,20 @@ describe(
        * takaritas VISSZAALLIT, nem torol -- egy nulla-szamlalo rajta azt
        * kovetelne, hogy tunjon el, ami epp a rossz viselkedes lenne.
        */
-      assert.equal(
-        await prisma.auditLog.count({
-          where: { entityType: "UnasConnectionSetting", entityId: "unas" },
-        }),
-        0,
-        "a suite naplosorai bent maradtak a takaritas utan",
-      );
-      assert.equal(
-        await prisma.user.count({
-          where: { email: { startsWith: TEST_ACTOR_PREFIX } },
-        }),
-        0,
-        "a suite szinesze bent maradt a takaritas utan",
-      );
+      nincsMaradek([
+        {
+          nev: "a suite naplosorai bent maradtak a takaritas utan",
+          darab: await prisma.auditLog.count({
+            where: { entityType: "UnasConnectionSetting", entityId: "unas" },
+          }),
+        },
+        {
+          nev: "a suite szinesze bent maradt a takaritas utan",
+          darab: await prisma.user.count({
+            where: { email: { startsWith: TEST_ACTOR_PREFIX } },
+          }),
+        },
+      ]);
       await prisma.$disconnect();
     });
 

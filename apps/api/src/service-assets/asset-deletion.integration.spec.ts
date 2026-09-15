@@ -1,6 +1,8 @@
 import "reflect-metadata";
 import { InMemoryDocumentStore } from "./document-store/in-memory-document-store.js";
 
+import { nincsMaradek } from "../common/takaritas-leltar.js";
+
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
@@ -146,27 +148,26 @@ describe("Eszköz törlése", { skip: gate.mode === "skip" }, () => {
      * pedig `SetNull` -- vagyis a jegy TULELI a vevot, csak gazdatlanul, es
      * epp ezert kell sajat, elotag-alapu szamlalot kapnia.
      */
-    assert.equal(
-      await prisma.asset.count({
-        where: { assetNumber: { startsWith: PREFIX } },
-      }),
-      0,
-      "a suite eszkozei bent maradtak a takaritas utan",
-    );
-    assert.equal(
-      await prisma.serviceJob.count({
-        where: { jobNumber: { startsWith: PREFIX } },
-      }),
-      0,
-      "a suite hibajegyei bent maradtak a takaritas utan",
-    );
-    assert.equal(
-      await prisma.customer.count({
-        where: { customerNumber: { startsWith: PREFIX } },
-      }),
-      0,
-      "a suite vevoi bent maradtak a takaritas utan",
-    );
+    nincsMaradek([
+      {
+        nev: "a suite eszkozei bent maradtak a takaritas utan",
+        darab: await prisma.asset.count({
+          where: { assetNumber: { startsWith: PREFIX } },
+        }),
+      },
+      {
+        nev: "a suite hibajegyei bent maradtak a takaritas utan",
+        darab: await prisma.serviceJob.count({
+          where: { jobNumber: { startsWith: PREFIX } },
+        }),
+      },
+      {
+        nev: "a suite vevoi bent maradtak a takaritas utan",
+        darab: await prisma.customer.count({
+          where: { customerNumber: { startsWith: PREFIX } },
+        }),
+      },
+    ]);
   });
 
   async function removeLeftovers() {

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { prisma } from "@acropora/database";
 
+import { nincsMaradek } from "../common/takaritas-leltar.js";
+
 import { hashSessionToken } from "../auth/session-token.util.js";
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { ServiceTokenGuard } from "./service-token.guard.js";
@@ -88,20 +90,20 @@ describe("Task ingest integration", { skip: gate.mode === "skip" }, () => {
      * `Task` is not counted: `assigneeId` is required and `Cascade`, so a task
      * cannot outlive the user it hangs from.
      */
-    assert.equal(
-      await prisma.auditLog.count({
-        where: { action: "task.ingested", createdAt: { gte: SUITE_KEZDET } },
-      }),
-      0,
-      "the suite's audit rows survived the cleanup",
-    );
-    assert.equal(
-      await prisma.user.count({
-        where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
-      }),
-      0,
-      "the suite's users survived the cleanup",
-    );
+    nincsMaradek([
+      {
+        nev: "the suite's audit rows survived the cleanup",
+        darab: await prisma.auditLog.count({
+          where: { action: "task.ingested", createdAt: { gte: SUITE_KEZDET } },
+        }),
+      },
+      {
+        nev: "the suite's users survived the cleanup",
+        darab: await prisma.user.count({
+          where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
+        }),
+      },
+    ]);
   });
 
   /**
