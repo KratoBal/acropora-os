@@ -284,17 +284,28 @@ export function AppShell({ children }: { children: ReactNode }) {
   const brand = (
     <a href="/" className="flex items-center gap-2.5" aria-label="Acropora OS">
       {/*
-        A MAI JEL MARAD A HELYEN, CSAK A SOTET SAVHOZ IGAZODIK. Vektoros logo
-        ma nincs, es kitalalni vagy kepbol kivagni egyet nem szabad (acrobot
-        hatarozata, 2026-09-15). A prototipus sajat negyzet-jele ezert NEM
-        kerult at: az mar egy MASIK jel lenne, nem a mienk uj szinben.
+        A VALODI JEL, SOTET HATTERRE SZANT VALTOZATBAN. Balazs kuldte
+        2026-09-15-en, es o hagyta jova a feher feliratot: a jel eredeti,
+        majdnem fekete felirata ezen a savon 1,38 : 1 kontrasztot adott, a
+        3 : 1 minimum alatt. A ket szines iv valtozatlan.
+
+        A MERET NEM DISZ: a jel szelesebb, mint magas (kb. 1,81 : 1), es a
+        felirat a magassaganak a 36 szazaleka. 40 pixel magasan a felirat
+        15 pixel korul van, tehat olvashato, es a 64 pixeles marka-sor
+        valtozatlan marad. A `width`/`height` kiirva all, hogy a betoltes
+        ne mozdítsa el a sort.
+
+        Az `alt` SZANDEKOSAN URES: a hivatkozas maga hordozza a nevet az
+        `aria-label`-jeben, es a ketto egyutt ketszer mondana ki.
       */}
-      <span className="flex size-8 items-center justify-center rounded-lg bg-[#7462bd] text-sm font-black text-white">
-        A
-      </span>
-      <span className="text-[15px] font-bold tracking-tight text-white">
-        Acropora <span className="text-coral">OS</span>
-      </span>
+      {/* eslint-disable-next-line @next/next/no-img-element -- statikus SVG, a next/image nem optimalizalja */}
+      <img
+        src="/acropora-logo-dark-bg.svg"
+        alt=""
+        width={72}
+        height={40}
+        className="h-10 w-auto"
+      />
     </a>
   );
 
