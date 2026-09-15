@@ -58,17 +58,18 @@ function NavigationGroup({
         className={[
           "group flex h-9 w-full items-center gap-3 rounded-lg text-sm font-medium transition-colors",
           level === 1 ? "px-2" : "px-3",
+          // UGYANAZ A KEZELES, MINT A `NavItem`-nel: a menu sotet savban all.
           active
-            ? "bg-white text-slate-950 shadow-sm ring-1 ring-slate-200/80"
-            : "text-slate-600 hover:bg-white/70 hover:text-slate-950",
+            ? "bg-[#7462bd] text-white shadow-[0_4px_12px_rgba(0,0,0,0.1)]"
+            : "text-nav-muted hover:bg-white/5 hover:text-white",
         ].join(" ")}
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
       >
         <span
           className={[
-            "text-slate-400 transition-colors group-hover:text-slate-600",
-            active ? "text-teal-700" : "",
+            "text-white/55 transition-colors group-hover:text-white/85",
+            active ? "text-white" : "",
           ].join(" ")}
         >
           {icon}
@@ -78,7 +79,7 @@ function NavigationGroup({
           name="chevron-down"
           size={16}
           className={[
-            "text-slate-400 transition-transform",
+            "text-white/55 transition-transform",
             open ? "rotate-180" : "",
           ].join(" ")}
         />
@@ -147,7 +148,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         icon={<Icon name={entry.icon} />}
         active={visibleChildren.some((item) => isActive(item))}
       >
-        <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-2">
+        <div className="ml-4 mt-1 space-y-1 border-l border-white/12 pl-2">
           {visibleChildren.map((item) => renderItem(item, true))}
         </div>
       </NavigationGroup>
@@ -176,7 +177,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         ))}
       </div>
 
-      <p className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+      <p className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-white/55">
         Működés
       </p>
       <div className="space-y-1">{businessNavigation.map(renderEntry)}</div>
@@ -188,7 +189,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       */}
       {contentNavigation.filter(canAccess).length > 0 ? (
         <>
-          <p className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+          <p className="mb-2 mt-6 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-white/55">
             Tartalom
           </p>
           <div className="space-y-1">
@@ -206,7 +207,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </>
       ) : null}
 
-      <div className="mt-6 space-y-1 border-t border-slate-200 pt-4">
+      <div className="mt-6 space-y-1 border-t border-white/12 pt-4">
         {secondaryNavigation.filter(canAccess).map((item) => (
           <NavItem
             key={item.href}
@@ -224,7 +225,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             icon={<Icon name="settings" />}
             active={settingsActive}
           >
-            <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-2">
+            <div className="ml-4 mt-1 space-y-1 border-l border-white/12 pl-2">
               {visibleSettingsNavigation
                 .filter((item) => item.href === "/beallitasok")
                 .map((item) => (
@@ -245,7 +246,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   active={unasActive}
                   level={1}
                 >
-                  <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-2">
+                  <div className="ml-4 mt-1 space-y-1 border-l border-white/12 pl-2">
                     {visibleUnasNavigation.map((item) => (
                       <NavItem
                         key={item.href}
@@ -282,29 +283,35 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const brand = (
     <a href="/" className="flex items-center gap-2.5" aria-label="Acropora OS">
-      <span className="flex size-8 items-center justify-center rounded-lg bg-teal-700 text-sm font-black text-white shadow-sm">
+      {/*
+        A MAI JEL MARAD A HELYEN, CSAK A SOTET SAVHOZ IGAZODIK. Vektoros logo
+        ma nincs, es kitalalni vagy kepbol kivagni egyet nem szabad (acrobot
+        hatarozata, 2026-09-15). A prototipus sajat negyzet-jele ezert NEM
+        kerult at: az mar egy MASIK jel lenne, nem a mienk uj szinben.
+      */}
+      <span className="flex size-8 items-center justify-center rounded-lg bg-[#7462bd] text-sm font-black text-white">
         A
       </span>
-      <span className="text-[15px] font-bold tracking-tight text-slate-950">
-        Acropora <span className="text-teal-700">OS</span>
+      <span className="text-[15px] font-bold tracking-tight text-white">
+        Acropora <span className="text-coral">OS</span>
       </span>
     </a>
   );
 
   const footer = (
-    <div className="rounded-lg border border-slate-200 bg-white p-3">
+    <div className="rounded-xl border border-white/10 bg-white/5 p-3">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-semibold text-slate-700">Rendszerállapot</p>
+        <p className="text-xs font-semibold text-white">Rendszerállapot</p>
         <Badge variant="success">Online</Badge>
       </div>
-      <p className="mt-1 text-[11px] text-slate-400">
+      <p className="mt-1 text-[11px] text-nav-muted">
         Minden szolgáltatás elérhető
       </p>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-paper">
       <Sidebar brand={brand} footer={footer}>
         {navigation}
       </Sidebar>
