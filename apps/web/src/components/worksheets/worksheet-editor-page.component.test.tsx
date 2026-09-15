@@ -68,6 +68,10 @@ describe("WorksheetEditorPage partner picker", () => {
       id: "job-1",
       customerId: "customer-42",
       customerName: "Fankó Kft.",
+      // A HELYSZIN ALAPBOL NINCS: a jegyen `departmentId` NULLAZHATO, tehat az
+      // az ALAPESET. A helyszines agat a sajat allitasai allitjak be.
+      departmentId: null,
+      departmentName: null,
     });
   });
 
@@ -428,6 +432,180 @@ describe("WorksheetEditorPage assignees", () => {
     expect(
       await screen.findByText(/a partnere nem szerviz partnerként van felvéve/),
     ).toBeTruthy();
+  });
+
+  /**
+   * A JEGY HELYSZINE ELOTOLTVE -- BALAZS KERESE, 2026-09-14 22:20.
+   *
+   * NEGY ALLITAS, ES A HARMADIK A LENYEG. Az elso harom kozul barmelyik zold
+   * lehetne ugy is, hogy a mezot KOTOTTRE csinaltuk volna -- es az TOBB lenne,
+   * mint amit a keres mond. A kulonbseg csak akkor latszik, amikor valaki mast
+   * akar valasztani, tehat kulon allitas meri.
+   */
+  function jegyHelyszinnel(departmentId: string | null, name: string | null) {
+    query.params = new URLSearchParams("hibajegy=job-1");
+    jobs.detail.mockResolvedValue({
+      id: "job-1",
+      customerId: "customer-42",
+      customerName: "Fankó Kft.",
+      departmentId,
+      departmentName: name,
+    });
+    worksheets.selectablePartners.mockResolvedValue({
+      items: [
+        { customerId: "customer-42", name: "Fankó Kft.", partnerCode: "FANK" },
+      ],
+    });
+    worksheets.departments.mockResolvedValue({
+      items: [
+        {
+          id: "department-1",
+          name: "Biotóp",
+          code: "BIO",
+          parentId: null,
+          isActive: true,
+        },
+        {
+          id: "department-2",
+          name: "Fókamedence",
+          code: "FOK",
+          parentId: null,
+          isActive: true,
+        },
+      ],
+    });
+  }
+
+  it("a jegy helyszíne előtöltve áll az alegység-választóban", async () => {
+    jegyHelyszinnel("department-1", "Biotóp");
+    render(<WorksheetEditorPage />);
+
+    const alegyseg = (await screen.findByLabelText(
+      "Alegység",
+    )) as HTMLSelectElement;
+    await waitFor(() => expect(alegyseg.value).toBe("department-1"));
+  });
+
+  /**
+   * HELYSZIN NELKULI JEGYNEL NEM TALALUNK KI SEMMIT.
+   *
+   * A jegyen a helyszin NULLAZHATO, a LAPON viszont KOTELEZO
+   * (`Worksheet.departmentId`). A hiany tehat nem kulon ag: a valaszto ures
+   * marad, es a felhasznalo valaszt -- pontosan ugy, ahogy ma is teszi.
+   */
+  it("helyszín nélküli jegynél a választó üres marad", async () => {
+    jegyHelyszinnel(null, null);
+    render(<WorksheetEditorPage />);
+
+    const alegyseg = (await screen.findByLabelText(
+      "Alegység",
+    )) as HTMLSelectElement;
+    await waitFor(() =>
+      expect(
+        within(alegyseg).getByRole("option", { name: /Biotóp/ }),
+      ).toBeTruthy(),
+    );
+    expect(alegyseg.value).toBe("");
+  });
+
+  /**
+   * AZ ELOTOLTES NEM KOTES -- ES EZ AZ AZ ALLITAS, AMI A KETTOT SZETVALASZTJA.
+   *
+   * MERVE a szerveroldalon: a `mayWorksheetJoinTicket` KIZAROLAG a PARTNERT
+   * vizsgalja, a helyszinrol semmit nem mond. Vagyis egy MASIK egysegre nyitott
+   * lap ma is ervenyes a jegy alatt, es egy zart valaszto tobb lenne, mint amit
+   * Balazs kert.
+   */
+  it("az előtöltött helyszín felülírható, és a felvitel a VÁLASZTOTTAT viszi", async () => {
+    jegyHelyszinnel("department-1", "Biotóp");
+    const user = userEvent.setup();
+    render(<WorksheetEditorPage />);
+
+    const alegyseg = (await screen.findByLabelText(
+      "Alegység",
+    )) as HTMLSelectElement;
+    await waitFor(() => expect(alegyseg.value).toBe("department-1"));
+    expect(alegyseg.disabled).toBe(false);
+
+    await user.selectOptions(alegyseg, "department-2");
+    await user.type(screen.getByLabelText("Tárgy"), "Szivattyú csere");
+    await user.click(screen.getByRole("button", { name: "Mentés" }));
+
+    await waitFor(() => expect(worksheets.create).toHaveBeenCalledTimes(1));
+    expect(worksheets.create.mock.calls[0]?.[1]).toMatchObject({
+      departmentId: "department-2",
+    });
+  });
+
+  /**
+   * ARCHIVALT HELYSZIN: KIMONDVA, ES AZ ALLAPOTBOL IS ELTUNIK.
+   *
+   * A valaszto-lista AKTIVRA szur. Ha a jegy helyszinet idokozben archivaltak,
+   * a beallitott ertekhez nem tartozik `option`, es a `Select` a helykitoltore
+   * esne vissza -- a kepernyon URES mezo, magyarazat nelkul.
+   *
+   * A MASODIK ALLITAS A SULYOSABB: az allapotbol is ki kell kerulnie. Egy mezo,
+   * ami MAST mutat, mint amit KULD, rosszabb a nemanal -- a felhasznalo egy
+   * LATHATATLAN erteket menne el.
+   *
+   * ES EPP EZERT NEM A VALASZTO ERTEKEN MERUNK. A `Select` DOM-erteke akkor is
+   * ures, ha az ALLAPOT az archivalt azonositot hordozza (nincs hozza opcio),
+   * tehat egy arra tett allitas a rontasra is ZOLD maradt -- kalibralva. A
+   * MENTES GOMB viszont az allapotbol szamol, es az elarulja.
+   */
+  it("archivált jegy-helyszínt megnevez, és a mentést sem engedi vele", async () => {
+    jegyHelyszinnel("archivalt-egyseg", "Régi medence");
+    const user = userEvent.setup();
+    render(<WorksheetEditorPage />);
+
+    expect(
+      await screen.findByText(
+        /A hibajegy helyszíne \(Régi medence\) archivált/,
+      ),
+    ).toBeTruthy();
+
+    /*
+      A MENTES GOMBON MERUNK, NEM A VALASZTO ERTEKEN -- ES EZT EGY KALIBRACIO
+      TANITOTTA MEG.
+
+      Az elso valtozat azt allitotta, hogy a valaszto erteke ures. Az a rontasra
+      is ZOLD maradt: a `Select` DOM-erteke akkor is ures, ha az ALLAPOT az
+      archivalt azonositot hordozza, mert nincs hozza `option`. Vagyis a DOM epp
+      azt fedte el, amit merni akartam.
+
+      A mentes gomb viszont az ALLAPOTBOL szamol (`canSubmit`): ha az archivalt
+      ertek bent maradna, a gomb AKTIV lenne, es a felhasznalo egy LATHATATLAN
+      erteket kuldene el.
+    */
+    const mentes = screen.getByRole("button", {
+      name: "Mentés",
+    }) as HTMLButtonElement;
+    await user.type(screen.getByLabelText("Tárgy"), "Szivattyú csere");
+    await waitFor(() => expect(mentes.disabled).toBe(true));
+    expect(worksheets.create).not.toHaveBeenCalled();
+
+    // ES EGY AKTIV EGYSEGGEL MAR MEHET: enelkul a fenti allitas akkor is zold
+    // lenne, ha a gomb SOHA nem aktivalodna.
+    await user.selectOptions(screen.getByLabelText("Alegység"), "department-1");
+    await waitFor(() => expect(mentes.disabled).toBe(false));
+  });
+
+  /**
+   * ES AZ "ARCHIVALT" MONDAT CSAK AKKOR JAR, HA VAN MIBOL VALASZTANI.
+   *
+   * URES lista mellett a jegy helyszine nem archivalt -- a partnernek egyaltalan
+   * nincs alegysege, es arra MAS mondat all, MAS teendovel. A szukites nelkul
+   * ez az eset az archivalt-mondatot kapna, es a kezelot rossz iranyba kuldene.
+   */
+  it("üres alegység-listánál a helyszínes jegy is a partner-mondatot kapja", async () => {
+    jegyHelyszinnel("department-1", "Biotóp");
+    worksheets.departments.mockResolvedValue({ items: [] });
+    render(<WorksheetEditorPage />);
+
+    expect(
+      await screen.findByText(/Ehhez a partnerhez még nincs alegység/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/archivált/)).toBeNull();
   });
 
   /**

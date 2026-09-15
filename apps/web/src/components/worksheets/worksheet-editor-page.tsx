@@ -148,6 +148,31 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
    * csatolo listanal is megszuntettunk.
    */
   const [ticketCustomerId, setTicketCustomerId] = useState<string | null>(null);
+  /**
+   * A JEGY HELYSZINE, HA JEGY ALA KESZUL A LAP -- ELOTOLTESKENT, NEM KOTESKENT.
+   *
+   * Balazs kerese (2026-09-14 22:20, szo szerint): „Ha uj munkalapot nyitok a
+   * hibajegybol akkor jo lenne ha a heyszin automatikusan az lenne ami a
+   * hibajegybol jon".
+   *
+   * ELOTOLTES ES NEM ROGZITES, es a kulonbseg MERT, nem ovatossag: a
+   * szerveroldali szabaly (`mayWorksheetJoinTicket`) KIZAROLAG a PARTNERT
+   * vizsgalja -- a helyszinrol semmit nem mond. Vagyis a lapot ma is szabad egy
+   * MASIK egysegre nyitni a jegy alatt, es egy zart valaszto TOBB lenne, mint
+   * amit a keres mond. A mezo ezert nyitva marad; a jegy erteke csak az
+   * alapertelmezes.
+   *
+   * KULON ALLAPOT, ES NEM ELEG A `departmentId`: ha a jegy helyszine idokozben
+   * ARCHIVALT lett, a valaszto-lista (ami aktivra szur) nem tartalmazza, es a
+   * beallitott ertek CSENDBEN visszaesne a helykitoltore. Ahhoz, hogy ezt ki
+   * lehessen mondani, tudni kell, MI VOLT a jegy erteke.
+   */
+  const [ticketDepartmentId, setTicketDepartmentId] = useState<string | null>(
+    null,
+  );
+  const [ticketDepartmentName, setTicketDepartmentName] = useState<
+    string | null
+  >(null);
   const [ticketError, setTicketError] = useState<string | null>(null);
   /*
    * A FELELŐSÖK CSAK A FELVITELNÉL kerülnek ide. Egy meglévő lapon a kiosztást a
@@ -224,6 +249,45 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
     [departments],
   );
 
+  /**
+   * A JEGY HELYSZINE ELOTOLTVE ALL, DE A VALASZTOBAN NINCS BENNE.
+   *
+   * EGY ALLAPOT, AMI KULONBEN NEMA LENNE. A valaszto-lista AKTIVRA szur, a jegy
+   * helyszine viszont idokozben archivalhattak. Ilyenkor a beallitott ertekhez
+   * nem tartozik `option`, es a `Select` a helykitoltore esik vissza -- a
+   * kepernyon egy URES helyszin-mezo latszik, magyarazat nelkul, es a
+   * felhasznalo azt hinne, az elotoltes nem mukodott.
+   *
+   * A MONDAT MEGNEVEZI, MI TORTENT ES MI A TEENDO. Nem hiba: egy archivalt
+   * egysegre uj lapot nyitni amugy sem szabad (a jegy-felvitel is aktivra szur).
+   */
+  const ticketUnitArchived =
+    !worksheetId &&
+    ticketDepartmentId !== null &&
+    departmentsLoaded &&
+    /*
+      URES LISTANAL NEM EZ A MONDAT JAR, ES EZT KET MEGLEVO ALLITAS MERTE VISSZA.
+
+      Ha a partnernek EGYALTALAN nincs alegysege, akkor a jegy helyszine nem
+      "archivalt" -- a ket meglevo mondat (nincs meg alegysege / a partnere nem
+      szerviz partner) MAS teendot ad, es azok a helyesek. Az archivalas akkor
+      all, ha VAN mibol valasztani, csak epp a jegy erteke nincs kozte.
+    */
+    departmentOptions.length > 0 &&
+    !departmentOptions.some((option) => option.id === ticketDepartmentId);
+
+  /**
+   * AZ ARCHIVALT ELOTOLTES NEM MARADHAT AZ ALLAPOTBAN.
+   *
+   * A felirat kimondja, hogy nem toltheto elo -- de a `departmentId` addig meg
+   * a jegy (archivalt) erteket hordozna, es a `Select` csak a helykitoltot
+   * MUTATNA. Egy olyan mezo, ami masat mutat, mint amit KULD, a legrosszabb
+   * alak: a felhasznalo egy lathatatlan erteket menne el.
+   */
+  useEffect(() => {
+    if (ticketUnitArchived) setDepartmentId("");
+  }, [ticketUnitArchived]);
+
   useEffect(() => {
     const controller = new AbortController();
     void loadDepartments(customerId, controller.signal);
@@ -256,6 +320,25 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
         }
         setTicketCustomerId(job.customerId);
         setCustomerId(job.customerId);
+        /**
+         * A HELYSZIN UGYANABBOL A VALASZBOL JON, nem kulon lekeresbol: a jegy
+         * reszletlapja mar hordozza. Egy masodik hivas ugyanazert az egy
+         * mezoert folosleges kor lenne.
+         *
+         * A JEGYNEK NEM KELL HELYSZIN (`departmentId` nullazhato), a LAPNAK
+         * VISZONT IGEN (`Worksheet.departmentId` kotelezo). Ezert a hianyzo
+         * ertek NEM kulon ag: a valaszto ures marad, es a felhasznalo valaszt
+         * -- pontosan ugy, ahogy ma is teszi.
+         */
+        /*
+          A `?? null` NEM FOLOSLEGES. A tipus `string | null`, de egy hianyos
+          valasz (regi kliens, csonka dupla) `undefined`-ot ad -- es az
+          `undefined !== null` IGAZ, tehat a lenti archivalas-ag TEVESEN
+          elsulne egy olyan jegyen, aminek nincs is helyszine.
+        */
+        setTicketDepartmentId(job.departmentId ?? null);
+        setTicketDepartmentName(job.departmentName ?? null);
+        if (job.departmentId) setDepartmentId(job.departmentId);
       })
       .catch((cause: unknown) => {
         setTicketError(
@@ -503,11 +586,13 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
         <FormField
           label="Alegység"
           description={
-            noSelectableUnits
-              ? ticketPartnerIsMirror
-                ? "Ehhez a partnerhez még nincs alegység. Vegyél fel egyet lent -- a kódja lesz a munkalapszám első tagja."
-                : "Ehhez a hibajegyhez nem tartozhat alegység: a partnere nem szerviz partnerként van felvéve. A jegy partnerét kell rendbe tenni, alegységet felvenni itt nem segít."
-              : "A munkalapszám első tagja is ebből lesz."
+            ticketUnitArchived
+              ? `A hibajegy helyszíne (${ticketDepartmentName ?? "ismeretlen"}) archivált, ezért nem tölthető elő. Válassz aktív alegységet.`
+              : noSelectableUnits
+                ? ticketPartnerIsMirror
+                  ? "Ehhez a partnerhez még nincs alegység. Vegyél fel egyet lent -- a kódja lesz a munkalapszám első tagja."
+                  : "Ehhez a hibajegyhez nem tartozhat alegység: a partnere nem szerviz partnerként van felvéve. A jegy partnerét kell rendbe tenni, alegységet felvenni itt nem segít."
+                : "A munkalapszám első tagja is ebből lesz."
           }
         >
           <Select
