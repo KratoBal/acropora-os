@@ -59,8 +59,13 @@ function NavigationGroup({
           "group flex h-9 w-full items-center gap-3 rounded-lg text-sm font-medium transition-colors",
           level === 1 ? "px-2" : "px-3",
           // UGYANAZ A KEZELES, MINT A `NavItem`-nel: a menu sotet savban all.
+          // A KIEMELES MAR NEM MASOLAT: a `nav-active` token koti ossze a
+          // kettot, tehat ez a mondat leiras, nem igeret. Korabban ugyanaz a
+          // nyers ertek allt itt es a `packages/ui` NavItem-jeben, es csak ez
+          // a megjegyzes szolt rola -- egy megjegyzes viszont nem allitja at
+          // a masik csomagot, ha valaki a menu szinet hangolja.
           active
-            ? "bg-[#7462bd] text-white shadow-[0_4px_12px_rgba(0,0,0,0.1)]"
+            ? "bg-nav-active text-white shadow-[0_4px_12px_rgba(0,0,0,0.1)]"
             : "text-nav-muted hover:bg-white/5 hover:text-white",
         ].join(" ")}
         aria-expanded={open}

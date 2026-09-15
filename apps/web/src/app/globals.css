@@ -128,6 +128,23 @@
   --color-nav: #292346;
   /** Az oldalsav halvany szovege -- sotet alapon a `muted` olvashatatlan. */
   --color-nav-muted: #b8b1cf;
+  /**
+   * AZ AKTIV MENUSOR HATTERE.
+   *
+   * MASODSZOR IS KELLETT, EZERT LETT BELOLE NEV -- es ket KULON CSOMAGBAN
+   * allt ugyanaz az ertek: a `packages/ui` `NavItem`-jeben es a webes
+   * `app-shell` osszecsukhato csoport-gombjaban. A ket hely teljes
+   * osztalysora BETURE azonos volt, es az egyikben ott is allt a megjegyzes,
+   * hogy "ugyanaz a kezeles, mint a NavItem-nel".
+   *
+   * Egy megjegyzes viszont nem koti ossze oket: aki a menu kiemeleset
+   * hangolja, az egyiket atallitja, a masik CSENDBEN elter -- ket csomag
+   * hatarán at, ahol meg a diff sem mutatja egymas mellett.
+   *
+   * ES A SOR MASIK FELE MAR TOKENT HASZNALT (`text-nav-muted`), tehat a nyers
+   * ertek egyetlen soron belul volt kovetkezetlen.
+   */
+  --color-nav-active: #7462bd;
   /** A lapok hattere a hej belsejeben. */
   --color-paper: #f6f5f8;
   /** A keretek es elvalasztok. */
