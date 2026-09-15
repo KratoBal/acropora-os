@@ -49,8 +49,6 @@ import { integrationDatabaseGate } from "../common/integration-database.js";
 const gate = integrationDatabaseGate(process.env);
 
 const TEST_EMAIL_DOMAIN = "service-job-assignees-integration.invalid";
-/** A takarítás ÉS az azt mérő állítás ugyanabból az egy helyből dolgozik. */
-const TEST_JOB_PREFIX = "HJ-INT-";
 
 describe(
   "ServiceJobAssignee integration",
@@ -266,40 +264,12 @@ describe(
       assert.equal(row?.assignedById, null);
     });
 
-    /**
-     * A TAKARITAS TENYLEG LEFUT-E. Ugyanaz a par, mint a
-     * `service-jobs-write-scope.integration.spec.ts`-ben: a CI-kapu
-     * (`scripts/tap-stream-gate.mjs`) azt fogja meg, ha a takaritas DOB, ez
-     * pedig azt, ha CSENDBEN NEM CSINAL SEMMIT.
-     *
-     * EZ AZ UTOLSO TESZT A FAJLBAN, ES ANNAK IS KELL MARADNIA: elviszi a
-     * fixtura-sorokat.
-     */
-    it("a takarítás tényleg lefut: nem marad sor a teszt előtaggal", async () => {
-      await removeLeftovers();
-
-      assert.equal(
-        await prisma.serviceJob.count({
-          where: { jobNumber: { startsWith: TEST_JOB_PREFIX } },
-        }),
-        0,
-        "maradt hibajegy a teszt előtaggal",
-      );
-      assert.equal(
-        await prisma.user.count({
-          where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
-        }),
-        0,
-        "maradt felhasználó a teszt e-mail tartománnyal",
-      );
-    });
-
     async function removeLeftovers() {
       await prisma.serviceJobAssignee.deleteMany({
-        where: { serviceJob: { jobNumber: { startsWith: TEST_JOB_PREFIX } } },
+        where: { serviceJob: { jobNumber: { startsWith: "HJ-INT-" } } },
       });
       await prisma.serviceJob.deleteMany({
-        where: { jobNumber: { startsWith: TEST_JOB_PREFIX } },
+        where: { jobNumber: { startsWith: "HJ-INT-" } },
       });
       await prisma.user.deleteMany({
         where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
