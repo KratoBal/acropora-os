@@ -156,9 +156,31 @@ jobs:
         # and reading only this one leads to the opposite conclusion - which is
         # what happened on 2026-08-26 before anyone read the outcome data.
         continue-on-error: true
+        # `set -o pipefail` IS LOAD-BEARING HERE, not tidiness. The default
+        # shell for a `run` block on Linux is `bash -e {0}`, WITHOUT pipefail,
+        # so `cmd | tee log` reports tee's exit code and a genuinely failing
+        # suite comes back as zero. Piping into tee without this line would
+        # have quietly disabled the gate that already works - while adding one.
+        #
+        # MEASURED, not assumed (2026-09-15, this exact step body with the two
+        # pnpm calls replaced by a stand-in): a command that exits 1 and writes
+        # NO `not ok` line - a compile error, or "no spec files found" - gives
+        # exit 1 WITH pipefail and exit 0 WITHOUT it. That shape is the one the
+        # script below cannot cover, because there is nothing in the output to
+        # find; the two guards are not redundant.
         run: |
-          pnpm --filter @acropora/api test:integration
-          pnpm --filter @acropora/api test:brands:integration
+          set -o pipefail
+          naplo="$RUNNER_TEMP/integration-tap.log"
+          pnpm --filter @acropora/api test:integration 2>&1 | tee "$naplo"
+          pnpm --filter @acropora/api test:brands:integration 2>&1 | tee -a "$naplo"
+          # AND THE EXIT CODE IS NOT THE WHOLE STORY, measured on this very
+          # workflow (run 34950778936, 2026-09-15): an `after` hook threw, the
+          # TAP stream said `not ok 24 ... failureType: hookFailed`, `# fail`
+          # stayed 0, the command exited ZERO, and this step went green - so
+          # "Fail the job if the database integration tests failed" below was
+          # SKIPPED. The script reads what the exit code left out. Its own
+          # negative control is that same run's log; see its header.
+          node scripts/tap-stream-gate.mjs "$naplo"
 
       # Checkpoint 9: the recorded databaseEngineVersion must be machine-
       # queried from the actual running server, never a hardcoded literal

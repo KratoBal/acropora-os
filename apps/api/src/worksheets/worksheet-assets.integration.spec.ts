@@ -281,6 +281,48 @@ describe(
       );
     });
 
+    /**
+     * A TAKARITAS TENYLEG LEFUTOTT-E. A teljes indoklas a parjaban all
+     * (`service-jobs-write-scope.integration.spec.ts`); roviden: a CI-kapu
+     * (`scripts/tap-stream-gate.mjs`) azt fogja meg, ha a takaritas DOB, ez
+     * pedig azt, ha CSENDBEN NEM CSINAL SEMMIT -- egy elirt elotag mellett a
+     * `deleteMany` nulla sorra illeszkedik, nem dob, es a kapunak nincs mit
+     * megfognia.
+     *
+     * EZ AZ UTOLSO TESZT A FAJLBAN, ES ANNAK IS KELL MARADNIA: elviszi a
+     * fixtura-sorokat, tehat egy utana felvett eset a hivatkozott
+     * azonositoknal hasalna el.
+     *
+     * AZ ESZKOZ KULON SZAMOL, ES NEM REDUNDANCIA: a `WorksheetAsset.assetId`
+     * `Restrict`, tehat egy bent maradt kapcsolatsor epp az eszkoz torleset
+     * allitana meg -- ez a szam mondja meg, hogy a lapok tenyleg elmentek.
+     */
+    it("a takarítás tényleg lefut: nem marad sor a teszt előtaggal", async () => {
+      await removeLeftovers();
+
+      assert.equal(
+        await prisma.asset.count({
+          where: { assetNumber: { startsWith: TEST_CUSTOMER_PREFIX } },
+        }),
+        0,
+        "maradt eszköz a teszt előtaggal",
+      );
+      assert.equal(
+        await prisma.customer.count({
+          where: { customerNumber: { startsWith: TEST_CUSTOMER_PREFIX } },
+        }),
+        0,
+        "maradt vevő a teszt előtaggal",
+      );
+      assert.equal(
+        await prisma.user.count({
+          where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
+        }),
+        0,
+        "maradt felhasználó a teszt e-mail tartománnyal",
+      );
+    });
+
     async function removeLeftovers() {
       const customers = await prisma.customer.findMany({
         where: { customerNumber: { startsWith: TEST_CUSTOMER_PREFIX } },
