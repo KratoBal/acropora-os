@@ -19,14 +19,17 @@ import { ServiceJobsService } from "./service-jobs.service.js";
 function serviceWith(kapott: {
   where?: Prisma.ServiceJobWhereInput;
   szamlaloWhere?: Prisma.ServiceJobWhereInput;
+  listaKereses?: string;
+  szamlaloKereses?: string;
 }) {
   const repository: Pick<
     ServiceJobsRepository,
     "list" | "assignedUnitIds" | "countsByStatus"
   > = {
     assignedUnitIds: async () => ["u1"],
-    list: async (_scope, visibility) => {
+    list: async (_scope, visibility, search) => {
       kapott.where = visibility;
+      kapott.listaKereses = search;
       return { rows: [], truncated: false };
     },
     /**
@@ -34,8 +37,9 @@ function serviceWith(kapott: {
      * a kerdesre, es a masodik bekotese kulon tud elromlani -- akkor a partner
      * a sajat listaja folott a HAZ osszesitojet latna.
      */
-    countsByStatus: async (visibility) => {
+    countsByStatus: async (visibility, search) => {
       kapott.szamlaloWhere = visibility;
+      kapott.szamlaloKereses = search;
       return {
         NEW: 0,
         TRIAGED: 0,
@@ -94,6 +98,44 @@ describe("a láthatóság eljut a lekérdezésig", () => {
    * ilyen-meg-olyan, hanem hogy UGYANAZ, mint a listae. Igy az allitas akkor
    * sem avul el, ha a lathatosagi szabaly maga valtozik.
    */
+  /**
+   * A KERESES MIND A KET LEKERDEZESBE ELJUT.
+   *
+   * A lista es a csempek KET kulon lekerdezes, es a kereses bekotese kulon tud
+   * elmaradni. Ha a szamlalobol marad ki, a talalatok FOLOTT a keresestol
+   * fuggetlen szam allna -- a lista harom sort mutatna, a csempe hatvanat, es
+   * egyik sem nezne ki hibasnak.
+   *
+   * A SZOVEGRE MERUNK, NEM A FELTETEL ALAKJARA: hogy a `contains` hany mezore
+   * megy, azt a taroló dönti el. Ez az allitas arrol szol, hogy a felhasznalo
+   * szava EGYALTALAN eljut odaig.
+   */
+  it("a keresés mindkét lekérdezésbe eljut", async () => {
+    const kapott: {
+      listaKereses?: string;
+      szamlaloKereses?: string;
+    } = {};
+    await serviceWith(kapott).list({ search: "szivattyú" }, belsos);
+    assert.equal(kapott.listaKereses, "szivattyú");
+    assert.equal(kapott.szamlaloKereses, "szivattyú");
+  });
+
+  /**
+   * ES KERESES NELKUL EGYIK SEM KAP SZUROT. Enelkul a fenti allitas egy olyan
+   * megvalositasnal is zold lenne, ami MINDIG atad valamit -- peldaul ures
+   * sztringet --, es akkor a taroló oldalan kellene kitalalni, hogy az ures
+   * szo nem szures.
+   */
+  it("keresés nélkül nem megy le szűrő", async () => {
+    const kapott: {
+      listaKereses?: string;
+      szamlaloKereses?: string;
+    } = {};
+    await serviceWith(kapott).list({}, belsos);
+    assert.equal(kapott.listaKereses, undefined);
+    assert.equal(kapott.szamlaloKereses, undefined);
+  });
+
   it("a számláló ugyanazt a szűrőt kapja, mint a lista", async () => {
     const kapott: {
       where?: Prisma.ServiceJobWhereInput;

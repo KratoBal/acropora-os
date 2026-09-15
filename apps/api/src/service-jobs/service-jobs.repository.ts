@@ -19,6 +19,33 @@ const FINISHED: ServiceJobStatus[] = ["COMPLETED", "CANCELLED"];
  */
 const LIST_LIMIT = 200;
 
+/**
+ * A SZABAD SZAVAS KERESES FELTETELE.
+ *
+ * KULON FUGGVENY, mert KET lekerdezes hasznalja: a lista es a szamlalo. Ha a
+ * ketto kulon-kulon epitene fel, egyszer elcsuszna -- es a kulonbseg NEMA
+ * lenne: a lista harom sort adna, a csempek folotte mast mondananak, es egyik
+ * sem nezne ki hibasnak.
+ *
+ * A HAROM MEZO UGYANAZ, MINT A MUNKALAP-LISTAN: azonosito, partner neve, es a
+ * sajat szoveg (ott a targy, itt a cim). Ket szerviz-lista, egy szabaly.
+ */
+function searchWhere(search: string | undefined): Prisma.ServiceJobWhereInput {
+  const trimmed = search?.trim();
+  if (!trimmed) return {};
+  return {
+    OR: [
+      { jobNumber: { contains: trimmed, mode: "insensitive" } },
+      { title: { contains: trimmed, mode: "insensitive" } },
+      {
+        customer: {
+          displayName: { contains: trimmed, mode: "insensitive" },
+        },
+      },
+    ],
+  };
+}
+
 export interface ServiceJobRow {
   id: string;
   jobNumber: string;
@@ -359,6 +386,7 @@ export class ServiceJobsRepository {
   async list(
     scope: "open" | "all",
     visibility: Prisma.ServiceJobWhereInput,
+    search?: string,
   ): Promise<{ rows: ServiceJobRow[]; truncated: boolean }> {
     /**
      * A LATHATOSAGI SZURO `AND` AGBAN ALL, nem kulcskent. Ugyanaz az indok, mint
@@ -371,6 +399,7 @@ export class ServiceJobsRepository {
       AND: [
         visibility,
         scope === "open" ? { status: { notIn: FINISHED } } : {},
+        searchWhere(search),
       ],
     };
 
@@ -426,10 +455,20 @@ export class ServiceJobsRepository {
    */
   async countsByStatus(
     visibility: Prisma.ServiceJobWhereInput,
+    search?: string,
   ): Promise<Record<ServiceJobStatus, number>> {
+    /**
+     * A KERESES BESZAMIT, A SCOPE NEM -- ES A KETTO KULONBSEGE SZANDEKOS.
+     *
+     * A csempek azt mondjak meg, mi van a SCOPE-on kivul is (ezert latszik a
+     * "lezart ugy" szam egy nyitott listan). A KERESES viszont a felhasznalo
+     * sajat szukitese: ha az nem szamitana bele, a csempek a keresestol
+     * fuggetlen szamot mutatnanak a talalatok folott, es a ketto ellentmondana
+     * egymasnak a kepernyon.
+     */
     const rows = await this.database.serviceJob.groupBy({
       by: ["status"],
-      where: visibility,
+      where: { AND: [visibility, searchWhere(search)] },
       _count: { _all: true },
     });
 
