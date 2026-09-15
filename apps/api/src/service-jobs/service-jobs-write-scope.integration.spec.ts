@@ -390,6 +390,34 @@ describe(
         where: { jobNumber: { startsWith: TEST_JOB_PREFIX } },
       });
 
+      /**
+       * A FELHASZNALOK A VEVO ELOTT, ES EZT A CI JAVITOTTA KI RAJTAM
+       * (2026-09-15, run 34950778936).
+       *
+       * A partner-hatokoru fiok `customerId` mezoje IDEGENKULCS
+       * (`User_customerId_fkey`), tehat a vevo torlese addig nem megy, amig egy
+       * felhasznalo ra mutat. A masik integracios suite (`worksheet-assets`)
+       * ugyanezt a sorrendet hasznalja es ATMEGY -- ott egyetlen felhasznalo sem
+       * visel `customerId`-t, tehat a megkotes elo sem all. A ket fajl
+       * kulonbsege epp az, amirol EZ a suite szol.
+       *
+       * ES AMIERT KULON BEKEZDEST KAP: a bukas az `after` hookban tortent, es
+       * EGYETLEN MAI KAPUNKON SEM AKADT FENN -- a CI lepes ZOLD maradt. Merve
+       * (node v22.23.2, ismert pozitiv kontrollal):
+       *
+       *   after hook bukik    not ok <n> - <suite>, failureType: hookFailed,
+       *                       DE `# fail 0` es a kilepesi kod NULLA
+       *   valodi teszt bukik  `# fail 1`, kilepesi kod 1
+       *   before hook bukik   `# cancelled 1`, kilepesi kod 1
+       *
+       * Vagyis egyedul az `after` nema: se a CI lepes, se a `kalibracio.sh` nem
+       * latja. Aki itt takaritast ir, NE a zold futasbol vezesse le, hogy a
+       * takaritas lefutott.
+       */
+      await prisma.user.deleteMany({
+        where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
+      });
+
       if (customerIds.length > 0) {
         // A HELYSZINEK FAT ALKOTNAK, es a szulore `Restrict` all: levelrol a
         // gyoker fele haladunk, amig fogy a fa.
@@ -403,10 +431,6 @@ describe(
           where: { id: { in: customerIds } },
         });
       }
-
-      await prisma.user.deleteMany({
-        where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
-      });
     }
   },
 );
