@@ -84,7 +84,7 @@ export function ConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-dusk-900/40 p-4"
       onClick={onCancel}
     >
       <div
@@ -96,9 +96,9 @@ export function ConfirmDialog({
         )}
         onClick={(event) => event.stopPropagation()}
       >
-        <p className="text-sm font-semibold text-slate-900">{title}</p>
-        <p className="text-sm text-slate-700">{consequence}</p>
-        <p className="text-sm text-slate-500">{recovery}</p>
+        <p className="text-sm font-semibold text-dusk-900">{title}</p>
+        <p className="text-sm text-dusk-700">{consequence}</p>
+        <p className="text-sm text-dusk-500">{recovery}</p>
         <div className="flex gap-2">
           <Button
             autoFocus

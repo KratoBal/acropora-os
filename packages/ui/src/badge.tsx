@@ -7,7 +7,7 @@ export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
 }
 
 const variants = {
-  neutral: "bg-slate-100 text-slate-600 ring-slate-200",
+  neutral: "bg-dusk-100 text-dusk-600 ring-dusk-200",
   success: "bg-emerald-50 text-emerald-700 ring-emerald-200",
   warning: "bg-amber-50 text-amber-700 ring-amber-200",
   danger: "bg-rose-50 text-rose-700 ring-rose-200",

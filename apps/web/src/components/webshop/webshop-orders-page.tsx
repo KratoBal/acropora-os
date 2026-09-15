@@ -238,7 +238,7 @@ export function WebshopOrdersPage() {
         alert's weight.
       */}
       {deletionCheckSentence(deletionCheck) ? (
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-dusk-500">
           {deletionCheckSentence(deletionCheck)}
         </p>
       ) : null}
@@ -253,8 +253,8 @@ export function WebshopOrdersPage() {
 
       <Card>
         <CardHeader>
-          <h2 className="text-sm font-semibold text-slate-900">Rendelések</h2>
-          <label className="text-xs text-slate-500">
+          <h2 className="text-sm font-semibold text-dusk-900">Rendelések</h2>
+          <label className="text-xs text-dusk-500">
             Nézet{" "}
             <select
               aria-label="Rendelések nézete"
@@ -273,7 +273,7 @@ export function WebshopOrdersPage() {
         <CardContent className="space-y-2">
           {loading ? <Skeleton className="h-4 w-1/3" /> : null}
           {!loading && visibleOrders.length === 0 ? (
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-dusk-500">
               Még nincs szinkronizált webshop rendelés.
             </p>
           ) : null}
@@ -281,7 +281,7 @@ export function WebshopOrdersPage() {
             <>
               <div className="hidden overflow-x-auto md:block">
                 <table className="w-full min-w-[720px] border-collapse text-left">
-                  <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                  <thead className="bg-dusk-50 text-[11px] font-bold uppercase tracking-wide text-dusk-500">
                     <tr>
                       <th className="px-5 py-3">Azonosító</th>
                       <th className="px-4 py-3">Dátum</th>
@@ -291,23 +291,23 @@ export function WebshopOrdersPage() {
                       <th className="px-5 py-3">Státusz</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 bg-white">
+                  <tbody className="divide-y divide-dusk-100 bg-white">
                     {visibleOrders.map((order) => (
                       <tr
                         key={order.id}
                         onClick={() => router.push(`/webshop/${order.id}`)}
-                        className={`cursor-pointer transition hover:bg-slate-50 ${detailedStatus(order)?.row ?? "bg-white"}`}
+                        className={`cursor-pointer transition hover:bg-dusk-50 ${detailedStatus(order)?.row ?? "bg-white"}`}
                       >
-                        <td className="px-5 py-3 text-sm font-medium text-slate-900">
+                        <td className="px-5 py-3 text-sm font-medium text-dusk-900">
                           {order.orderNumber}
-                          <p className="mt-0.5 text-xs font-normal text-slate-400">
+                          <p className="mt-0.5 text-xs font-normal text-dusk-400">
                             {order.lineCount} tétel
                           </p>
                         </td>
-                        <td className="px-4 py-3 text-sm text-slate-600">
+                        <td className="px-4 py-3 text-sm text-dusk-600">
                           {formatOrderDate(order)}
                         </td>
-                        <td className="px-4 py-3 text-sm text-slate-600">
+                        <td className="px-4 py-3 text-sm text-dusk-600">
                           {order.buyerName ?? "Ismeretlen vevő"}
                           <span
                             className="ml-2 inline-flex gap-1 text-xs"
@@ -333,18 +333,18 @@ export function WebshopOrdersPage() {
                             ) : null}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-xs text-slate-500">
+                        <td className="px-4 py-3 text-xs text-dusk-500">
                           {order.paymentName ?? "—"}
                           {order.shippingName ? ` · ${order.shippingName}` : ""}
                         </td>
-                        <td className="px-4 py-3 text-right text-sm font-semibold text-slate-900">
+                        <td className="px-4 py-3 text-right text-sm font-semibold text-dusk-900">
                           {formatHuf(order.totalGross)}
                         </td>
                         <td className="px-5 py-3">
                           <Badge variant={statusVariant(order)}>
                             {detailedStatus(order)?.icon} {statusLabel(order)}
                           </Badge>
-                          <p className="mt-1 text-xs text-slate-500">
+                          <p className="mt-1 text-xs text-dusk-500">
                             {formatStatusAge(order.statusChangedAt)}
                           </p>
                         </td>
@@ -366,9 +366,7 @@ export function WebshopOrdersPage() {
                       {formatStatusAge(order.statusChangedAt)}
                     </p>
                     <p>{order.buyerName ?? "Ismeretlen vevő"}</p>
-                    <p className="text-xs text-slate-500">
-                      {order.orderNumber}
-                    </p>
+                    <p className="text-xs text-dusk-500">{order.orderNumber}</p>
                   </button>
                 ))}
               </div>

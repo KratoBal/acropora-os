@@ -226,7 +226,7 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
         <>
           <Card>
             <CardHeader>
-              <h2 className="text-sm font-semibold text-slate-900">Állapot</h2>
+              <h2 className="text-sm font-semibold text-dusk-900">Állapot</h2>
               <Badge variant={STATUS_BADGE[detail.status]}>
                 {STATUS_LABEL[detail.status]}
               </Badge>
@@ -234,20 +234,20 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
             <CardContent className="space-y-4">
               <dl className="grid gap-3 text-xs sm:grid-cols-3">
                 <div>
-                  <dt className="text-slate-400">Indította</dt>
-                  <dd className="mt-1 text-slate-700">
+                  <dt className="text-dusk-400">Indította</dt>
+                  <dd className="mt-1 text-dusk-700">
                     {detail.startedByName ?? "—"}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-slate-400">Létrehozva</dt>
-                  <dd className="mt-1 text-slate-700">
+                  <dt className="text-dusk-400">Létrehozva</dt>
+                  <dd className="mt-1 text-dusk-700">
                     {new Date(detail.createdAt).toLocaleString("hu-HU")}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-slate-400">Feltöltve</dt>
-                  <dd className="mt-1 text-slate-700">
+                  <dt className="text-dusk-400">Feltöltve</dt>
+                  <dd className="mt-1 text-dusk-700">
                     {detail.uploadedAt
                       ? new Date(detail.uploadedAt).toLocaleString("hu-HU")
                       : "—"}
@@ -256,9 +256,9 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
               </dl>
 
               {detail.status !== "CORRECTED" && canManage ? (
-                <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="space-y-1 text-xs text-slate-600">
-                    <p className="font-semibold text-slate-800">
+                <div className="flex flex-col gap-3 rounded-lg border border-dusk-200 bg-dusk-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="space-y-1 text-xs text-dusk-600">
+                    <p className="font-semibold text-dusk-800">
                       1. Töltsd le az Excel sablont, majd írd be a leltározott
                       mennyiségeket.
                     </p>
@@ -290,7 +290,7 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
                         }
                       />
                       {selectedFileName ? (
-                        <span className="text-xs text-slate-500">
+                        <span className="text-xs text-dusk-500">
                           Kiválasztva: {selectedFileName}
                         </span>
                       ) : null}
@@ -341,14 +341,14 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
 
           <Card className="overflow-hidden">
             <CardHeader>
-              <h2 className="text-sm font-semibold text-slate-900">Tételek</h2>
-              <span className="text-xs text-slate-500">
+              <h2 className="text-sm font-semibold text-dusk-900">Tételek</h2>
+              <span className="text-xs text-dusk-500">
                 {detail.lines.length.toLocaleString("hu-HU")} tétel
               </span>
             </CardHeader>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] border-collapse text-left">
-                <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                <thead className="bg-dusk-50 text-[11px] font-bold uppercase tracking-wide text-dusk-500">
                   <tr>
                     {detail.status !== "DRAFT" ? (
                       <th className="px-5 py-3">Figyelem</th>
@@ -363,7 +363,7 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
                     ) : null}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
+                <tbody className="divide-y divide-dusk-100 bg-white">
                   {detail.lines.map((line) => {
                     const pending =
                       detail.status !== "DRAFT" && line.countedQty === null;
@@ -396,16 +396,16 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
                             ) : null}
                           </td>
                         ) : null}
-                        <td className="px-5 py-3 font-mono text-xs text-slate-700">
+                        <td className="px-5 py-3 font-mono text-xs text-dusk-700">
                           {line.sku}
                         </td>
-                        <td className="px-4 py-3 text-sm text-slate-600">
+                        <td className="px-4 py-3 text-sm text-dusk-600">
                           {line.productName}
                         </td>
-                        <td className="px-4 py-3 text-right text-sm text-slate-600">
+                        <td className="px-4 py-3 text-right text-sm text-dusk-600">
                           {line.expectedQty}
                         </td>
-                        <td className="px-4 py-3 text-right text-sm text-slate-600">
+                        <td className="px-4 py-3 text-right text-sm text-dusk-600">
                           {pending && canManage ? (
                             <div className="flex flex-col items-end gap-1">
                               <input
@@ -413,7 +413,7 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
                                 inputMode="decimal"
                                 step="any"
                                 aria-label={`Leltározott mennyiség – ${line.sku}`}
-                                className="w-24 rounded border border-slate-300 px-2 py-1 text-right text-sm"
+                                className="w-24 rounded border border-dusk-300 px-2 py-1 text-right text-sm"
                                 value={draft ?? ""}
                                 disabled={savingLineId === line.id}
                                 onChange={(event) =>
@@ -432,7 +432,7 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
                                 }}
                               />
                               {savingLineId === line.id ? (
-                                <span className="text-[11px] text-slate-400">
+                                <span className="text-[11px] text-dusk-400">
                                   Mentés…
                                 </span>
                               ) : null}
@@ -447,7 +447,7 @@ export function InventoryCountDetailPage({ countId }: { countId: string }) {
                               ? "text-emerald-600"
                               : difference < 0
                                 ? "text-rose-600"
-                                : "text-slate-400"
+                                : "text-dusk-400"
                           }`}
                         >
                           {differenceLabel}

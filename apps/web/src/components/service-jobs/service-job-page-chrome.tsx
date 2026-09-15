@@ -30,7 +30,7 @@ export function ServiceJobStepCard({
   title: string;
 }) {
   return (
-    <section className="space-y-4 rounded-xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+    <section className="space-y-4 rounded-xl border border-dusk-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
       <div className="flex items-center gap-3">
         <span
           aria-hidden="true"
@@ -38,7 +38,7 @@ export function ServiceJobStepCard({
         >
           {number}
         </span>
-        <h2 className="text-base font-bold tracking-tight text-slate-950">
+        <h2 className="text-base font-bold tracking-tight text-dusk-950">
           {title}
         </h2>
       </div>

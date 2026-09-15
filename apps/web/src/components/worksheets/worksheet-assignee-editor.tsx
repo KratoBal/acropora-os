@@ -80,15 +80,15 @@ export function WorksheetAssigneeEditor({
 
   return (
     <Card className="space-y-3 p-4">
-      <h2 className="text-sm font-semibold text-slate-800">Felelősök</h2>
+      <h2 className="text-sm font-semibold text-dusk-800">Felelősök</h2>
       {assignees.length ? (
-        <ul className="text-sm text-slate-700">
+        <ul className="text-sm text-dusk-700">
           {assignees.map((assignee) => (
             <li key={assignee.userId}>{assignee.name}</li>
           ))}
         </ul>
       ) : (
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-dusk-500">
           Erre a munkalapra még nincs kiosztva senki.
         </p>
       )}

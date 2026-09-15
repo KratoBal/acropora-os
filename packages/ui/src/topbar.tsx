@@ -18,7 +18,7 @@ export function Topbar({
   return (
     <header
       className={cn(
-        "sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-slate-200 bg-white/90 px-4 backdrop-blur-md sm:px-6 lg:px-8",
+        "sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-dusk-200 bg-white/90 px-4 backdrop-blur-md sm:px-6 lg:px-8",
         className,
       )}
       {...props}

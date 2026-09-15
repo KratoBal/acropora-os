@@ -200,7 +200,7 @@ export function ContentRowActions({
       </div>
 
       {asking ? (
-        <div className="flex w-full flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:w-72">
+        <div className="flex w-full flex-col gap-2 rounded-lg border border-dusk-200 bg-dusk-50 p-3 sm:w-72">
           <Textarea
             aria-label={asking.note!.label}
             placeholder={asking.note!.label}
@@ -235,7 +235,7 @@ export function ContentRowActions({
       ) : null}
 
       {commenting ? (
-        <div className="flex w-full flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:w-72">
+        <div className="flex w-full flex-col gap-2 rounded-lg border border-dusk-200 bg-dusk-50 p-3 sm:w-72">
           <Textarea
             aria-label="Hozzászólás"
             placeholder="Mit kell tudni erről a tételről?"

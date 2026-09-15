@@ -132,11 +132,9 @@ export function WorksheetEntryPage({
 
       {entry ? (
         <Card className="space-y-3 p-4">
-          <p className="text-xs text-slate-500">
-            {worksheetEntryByline(entry)}
-          </p>
+          <p className="text-xs text-dusk-500">{worksheetEntryByline(entry)}</p>
           {draft === null ? (
-            <p className="whitespace-pre-wrap text-sm text-slate-800">
+            <p className="whitespace-pre-wrap text-sm text-dusk-800">
               {entry.body}
             </p>
           ) : (
@@ -164,7 +162,7 @@ export function WorksheetEntryPage({
               kit megkerni, vagy senki nem szerkesztheti. Magyarazat nelkul a
               hianyzo gomb ugy nez ki, mint hiba a programban.
             */
-            <p className="text-xs text-slate-500">{entry.editRefusal}</p>
+            <p className="text-xs text-dusk-500">{entry.editRefusal}</p>
           )}
         </Card>
       ) : null}

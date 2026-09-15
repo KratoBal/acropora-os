@@ -45,7 +45,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12">
+    <main className="flex min-h-screen items-center justify-center bg-dusk-50 px-4 py-12">
       <div className="w-full max-w-md">
         {/*
           UGYANAZ A JEL, MASIK VALTOZATBAN. Ez a lap vilagos hatteru, tehat az
@@ -72,10 +72,10 @@ export default function LoginPage() {
           {isProduction ? (
             <>
               <div className="mb-6 text-center">
-                <h1 className="text-2xl font-bold tracking-tight text-slate-950">
+                <h1 className="text-2xl font-bold tracking-tight text-dusk-950">
                   Bejelentkezés
                 </h1>
-                <p className="mt-2 text-sm leading-6 text-slate-500">
+                <p className="mt-2 text-sm leading-6 text-dusk-500">
                   Add meg az e-mail címed és a jelszavad.
                 </p>
               </div>
@@ -125,10 +125,10 @@ export default function LoginPage() {
             <>
               <div className="mb-6 text-center">
                 <Badge variant="warning">Development mód</Badge>
-                <h1 className="mt-4 text-2xl font-bold tracking-tight text-slate-950">
+                <h1 className="mt-4 text-2xl font-bold tracking-tight text-dusk-950">
                   Bejelentkezés
                 </h1>
-                <p className="mt-2 text-sm leading-6 text-slate-500">
+                <p className="mt-2 text-sm leading-6 text-dusk-500">
                   Válassz egy fejlesztési felhasználót. Jelszókezelés ebben a
                   módban nincs.
                 </p>

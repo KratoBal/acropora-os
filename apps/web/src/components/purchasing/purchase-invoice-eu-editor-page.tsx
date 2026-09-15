@@ -827,12 +827,12 @@ export function PurchaseInvoiceEuEditorPage() {
         <Card className="p-6">
           <h2 className="font-semibold">Beszállító</h2>
           {selectedSupplier ? (
-            <div className="mt-3 flex items-center justify-between rounded-lg border border-slate-200 p-3">
+            <div className="mt-3 flex items-center justify-between rounded-lg border border-dusk-200 p-3">
               <div>
-                <p className="text-sm font-semibold text-slate-900">
+                <p className="text-sm font-semibold text-dusk-900">
                   {selectedSupplier.name}
                 </p>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-dusk-500">
                   {selectedSupplier.code}
                   {selectedSupplier.taxNumber
                     ? ` · ${selectedSupplier.taxNumber}`
@@ -858,7 +858,7 @@ export function PurchaseInvoiceEuEditorPage() {
                 leadingIcon={<Icon name="search" size={17} />}
               />
               {supplierResults.length > 0 ? (
-                <Card className="divide-y divide-slate-100 overflow-hidden">
+                <Card className="divide-y divide-dusk-100 overflow-hidden">
                   {supplierResults.map((supplier) => (
                     <button
                       key={supplier.id}
@@ -867,12 +867,12 @@ export function PurchaseInvoiceEuEditorPage() {
                         setSelectedSupplier(supplier);
                         setSupplierResults([]);
                       }}
-                      className="flex w-full items-center justify-between px-4 py-2 text-left text-sm hover:bg-slate-50"
+                      className="flex w-full items-center justify-between px-4 py-2 text-left text-sm hover:bg-dusk-50"
                     >
-                      <span className="font-medium text-slate-900">
+                      <span className="font-medium text-dusk-900">
                         {supplier.name}
                       </span>
-                      <span className="text-xs text-slate-500">
+                      <span className="text-xs text-dusk-500">
                         {supplier.country}
                       </span>
                     </button>
@@ -888,7 +888,7 @@ export function PurchaseInvoiceEuEditorPage() {
                   Új beszállító létrehozása
                 </Button>
               ) : (
-                <div className="space-y-3 rounded-lg border border-slate-200 p-3">
+                <div className="space-y-3 rounded-lg border border-dusk-200 p-3">
                   <div className="grid gap-3 sm:grid-cols-2">
                     <FormField label="Név">
                       <Input
@@ -946,7 +946,7 @@ export function PurchaseInvoiceEuEditorPage() {
                             </Badge>
                             {viesResult.valid &&
                             (viesResult.name || viesResult.address) ? (
-                              <span className="text-xs text-slate-500">
+                              <span className="text-xs text-dusk-500">
                                 {[viesResult.name, viesResult.address]
                                   .filter(Boolean)
                                   .join(" - ")}
@@ -1093,11 +1093,11 @@ export function PurchaseInvoiceEuEditorPage() {
                   }
                 />
                 {rateLoading ? (
-                  <p className="mt-1 text-xs text-slate-500">
+                  <p className="mt-1 text-xs text-dusk-500">
                     Árfolyam lekérdezése…
                   </p>
                 ) : rateNotice ? (
-                  <p className="mt-1 text-xs text-slate-500">{rateNotice}</p>
+                  <p className="mt-1 text-xs text-dusk-500">{rateNotice}</p>
                 ) : null}
               </FormField>
             )}
@@ -1149,17 +1149,17 @@ export function PurchaseInvoiceEuEditorPage() {
 
         <Card className="p-6">
           <h2 className="font-semibold">Tételek</h2>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-dusk-500">
             Keresd meg a saját termékedet a számlán szereplő tétel alapján
             (cikkszám vagy terméknév). Egy ismeretlen sor meglévő termékhez
             kapcsolható, vagy készletezett helyi Acropora OS-termékként
             létrehozható.
           </p>
-          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <p className="text-sm font-semibold text-slate-900">
+          <div className="mt-4 rounded-lg border border-dusk-200 bg-dusk-50 p-3">
+            <p className="text-sm font-semibold text-dusk-900">
               Projektkészlet
             </p>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-dusk-500">
               A projekthez rendelt mennyiség fizikailag készleten marad, de
               azonnal foglalt lesz: nem számít eladható készletnek, és az UNAS
               felé sem jelenik meg szabad mennyiségként.
@@ -1207,17 +1207,17 @@ export function PurchaseInvoiceEuEditorPage() {
             />
             {searchingProducts ? <Skeleton className="mt-2 h-4 w-1/3" /> : null}
             {productResults.length > 0 ? (
-              <Card className="mt-2 divide-y divide-slate-100 overflow-hidden">
+              <Card className="mt-2 divide-y divide-dusk-100 overflow-hidden">
                 {productResults.map((product) => (
                   <button
                     key={product.variantId}
                     type="button"
                     onClick={() => addLine(product)}
-                    className="flex w-full items-center justify-between px-4 py-2 text-left text-sm hover:bg-slate-50"
+                    className="flex w-full items-center justify-between px-4 py-2 text-left text-sm hover:bg-dusk-50"
                   >
                     <div>
                       <div className="flex items-center gap-2">
-                        <p className="font-medium text-slate-900">
+                        <p className="font-medium text-dusk-900">
                           {product.productName}
                         </p>
                         <Badge
@@ -1232,11 +1232,11 @@ export function PurchaseInvoiceEuEditorPage() {
                               : "Ismeretlen eredet"}
                         </Badge>
                       </div>
-                      <p className="font-mono text-xs text-slate-500">
+                      <p className="font-mono text-xs text-dusk-500">
                         {product.sku}
                       </p>
                     </div>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-dusk-500">
                       Készlet: {product.currentStock} {product.unit}
                     </p>
                   </button>
@@ -1254,7 +1254,7 @@ export function PurchaseInvoiceEuEditorPage() {
           </div>
 
           {lines.length === 0 ? (
-            <p className="mt-4 text-sm text-slate-500">
+            <p className="mt-4 text-sm text-dusk-500">
               Még nincs felvett tétel. Keress rá egy termékre, vagy vegyél fel
               egy kézi tételt.
             </p>
@@ -1263,13 +1263,13 @@ export function PurchaseInvoiceEuEditorPage() {
               {lines.map((line) => (
                 <div
                   key={line.key}
-                  className="rounded-lg border border-slate-200 p-3"
+                  className="rounded-lg border border-dusk-200 p-3"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       {line.createLocalProduct ? (
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-semibold text-slate-900">
+                          <p className="text-sm font-semibold text-dusk-900">
                             {line.createLocalProduct.name ||
                               line.sourceDescription ||
                               "Új helyi termék"}
@@ -1280,16 +1280,16 @@ export function PurchaseInvoiceEuEditorPage() {
                         </div>
                       ) : line.variantId ? (
                         <>
-                          <p className="text-sm font-semibold text-slate-900">
+                          <p className="text-sm font-semibold text-dusk-900">
                             {line.productName}
                           </p>
-                          <p className="font-mono text-xs text-slate-500">
+                          <p className="font-mono text-xs text-dusk-500">
                             {line.sku}
                           </p>
                         </>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-semibold text-slate-900">
+                          <p className="text-sm font-semibold text-dusk-900">
                             {line.sourceDescription || "Kézi tétel"}
                           </p>
                           <Badge variant="warning">Nincs terméktörzsben</Badge>
@@ -1325,7 +1325,7 @@ export function PurchaseInvoiceEuEditorPage() {
                   {line.createLocalProduct ? (
                     <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 p-3">
                       <div className="grid gap-3 sm:grid-cols-2">
-                        <label className="text-xs text-slate-600">
+                        <label className="text-xs text-dusk-600">
                           Terméknév
                           <input
                             aria-label="Új helyi termék neve"
@@ -1338,10 +1338,10 @@ export function PurchaseInvoiceEuEditorPage() {
                                 },
                               })
                             }
-                            className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                            className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 text-sm"
                           />
                         </label>
-                        <label className="text-xs text-slate-600">
+                        <label className="text-xs text-dusk-600">
                           Kategória (opcionális)
                           <select
                             aria-label="Új helyi termék kategóriája"
@@ -1354,7 +1354,7 @@ export function PurchaseInvoiceEuEditorPage() {
                                 },
                               })
                             }
-                            className="mt-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm"
+                            className="mt-1 h-9 w-full rounded-lg border border-dusk-200 bg-white px-2 text-sm"
                           >
                             <option value="">Nincs kategória</option>
                             {categoryOptions.map((option) => (
@@ -1365,7 +1365,7 @@ export function PurchaseInvoiceEuEditorPage() {
                           </select>
                         </label>
                       </div>
-                      <p className="mt-2 text-xs text-slate-500">
+                      <p className="mt-2 text-xs text-dusk-500">
                         A belső cikkszámot az Acropora OS automatikusan
                         generálja mentéskor.
                       </p>
@@ -1376,7 +1376,7 @@ export function PurchaseInvoiceEuEditorPage() {
                         </p>
                         <button
                           type="button"
-                          className="text-xs font-semibold text-slate-600 hover:underline"
+                          className="text-xs font-semibold text-dusk-600 hover:underline"
                           onClick={() =>
                             updateLine(line.key, {
                               createLocalProduct: null,
@@ -1487,7 +1487,7 @@ export function PurchaseInvoiceEuEditorPage() {
                     </div>
                   ) : null}
                   <div className="mt-2">
-                    <label className="text-xs text-slate-500">
+                    <label className="text-xs text-dusk-500">
                       Megnevezés a számlán
                       {line.variantId || line.createLocalProduct
                         ? " (opcionális)"
@@ -1499,12 +1499,12 @@ export function PurchaseInvoiceEuEditorPage() {
                             sourceDescription: event.target.value,
                           })
                         }
-                        className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                        className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 text-sm"
                       />
                     </label>
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
-                    <label className="text-xs text-slate-500">
+                    <label className="text-xs text-dusk-500">
                       Rendelt ({line.unit})
                       <input
                         type="number"
@@ -1517,10 +1517,10 @@ export function PurchaseInvoiceEuEditorPage() {
                             Number(event.target.value),
                           )
                         }
-                        className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                        className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 text-sm"
                       />
                     </label>
-                    <label className="text-xs text-slate-500">
+                    <label className="text-xs text-dusk-500">
                       Tényleges ({line.unit})
                       <input
                         type="number"
@@ -1532,20 +1532,20 @@ export function PurchaseInvoiceEuEditorPage() {
                             actualQuantity: Number(event.target.value),
                           })
                         }
-                        className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                        className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 text-sm"
                       />
                     </label>
-                    <label className="text-xs text-slate-500">
+                    <label className="text-xs text-dusk-500">
                       Egység
                       <input
                         value={line.unit}
                         onChange={(event) =>
                           updateLine(line.key, { unit: event.target.value })
                         }
-                        className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                        className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 text-sm"
                       />
                     </label>
-                    <label className="text-xs text-slate-500">
+                    <label className="text-xs text-dusk-500">
                       Egységár ({effectiveCurrency || "—"})
                       <input
                         type="number"
@@ -1557,10 +1557,10 @@ export function PurchaseInvoiceEuEditorPage() {
                             unitNet: Number(event.target.value),
                           })
                         }
-                        className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                        className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 text-sm"
                       />
                     </label>
-                    <label className="text-xs text-slate-500">
+                    <label className="text-xs text-dusk-500">
                       Kedvezmény (%)
                       <input
                         type="number"
@@ -1576,11 +1576,11 @@ export function PurchaseInvoiceEuEditorPage() {
                                 : Number(event.target.value),
                           })
                         }
-                        className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                        className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 text-sm"
                       />
                     </label>
                   </div>
-                  <p className="mt-2 text-right text-sm font-semibold text-slate-900">
+                  <p className="mt-2 text-right text-sm font-semibold text-dusk-900">
                     {formatMoney(lineNet(line), effectiveCurrency)}
                   </p>
                 </div>
@@ -1588,10 +1588,10 @@ export function PurchaseInvoiceEuEditorPage() {
             </div>
           )}
 
-          <div className="mt-4 flex justify-end border-t border-slate-100 pt-4 text-sm">
+          <div className="mt-4 flex justify-end border-t border-dusk-100 pt-4 text-sm">
             <div className="text-right">
-              <p className="text-slate-400">Nettó összeg</p>
-              <p className="text-lg font-bold text-slate-900">
+              <p className="text-dusk-400">Nettó összeg</p>
+              <p className="text-lg font-bold text-dusk-900">
                 {formatMoney(totalNet, effectiveCurrency)}
               </p>
             </div>

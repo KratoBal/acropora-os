@@ -149,7 +149,7 @@ export function UserVisibleUnits({
         a partner-oldali fiók MELYIK hibajegyeket látja -- egy üres lista nem
         "nincs beállítva", hanem "csak a sajátjait".
       */}
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-dusk-500">
         Ezeknek az alegységeknek a hibajegyeit látja a fiók. Üres listával csak
         a saját nyitott jegyeit.
       </p>
@@ -202,7 +202,7 @@ export function UserVisibleUnits({
           tükör alatt nincs alegység. A mondat ezért a FELTÉTELT nevezi meg, nem
           azt állítja, hogy hiba történt.
         */
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-dusk-500">
           Ehhez a fiókhoz nincs választható alegység. Alegység akkor jelenik meg
           itt, ha a fiók egy szerviz partnerhez tartozik, annak van tükör-vevő
           sora, és az alatt aktív alegység áll.
@@ -240,7 +240,7 @@ export function UserVisibleUnits({
         fiók. Aki csak az egyiket látja, a másikat fogja hibásnak hinni.
       */}
       {role ? (
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-dusk-500">
           A hozzárendelés a hatókört szűkíti; hogy mit tehet a fiók, azt a
           szerepköre dönti el.
         </p>

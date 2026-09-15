@@ -76,7 +76,7 @@ export const sv = {
   search:
     "flex min-w-[170px] flex-1 items-center gap-2 rounded-[9px] border border-line bg-paper px-[11px] sm:max-w-[330px]",
   searchInput:
-    "h-[38px] w-full min-w-0 border-0 bg-transparent text-xs text-ink outline-none placeholder:text-slate-400",
+    "h-[38px] w-full min-w-0 border-0 bg-transparent text-xs text-ink outline-none placeholder:text-dusk-400",
   /** A toolbar jobb oldalan allo valasztok. */
   select:
     "h-[38px] rounded-[9px] border border-line bg-white px-2.5 text-xs text-ink",
@@ -126,7 +126,7 @@ export type ServiceTone =
   "neutral" | "purple" | "green" | "amber" | "red" | "blue";
 
 export const serviceToneClass: Record<ServiceTone, string> = {
-  neutral: "bg-slate-100 text-[#635e72]",
+  neutral: "bg-dusk-100 text-[#635e72]",
   purple: "bg-brand-100 text-brand-ink",
   green: "bg-emerald-50 text-emerald-700",
   amber: "bg-amber-50 text-amber-700",

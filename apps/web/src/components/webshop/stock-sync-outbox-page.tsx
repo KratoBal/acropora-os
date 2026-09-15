@@ -339,7 +339,7 @@ export function StockSyncOutboxPage() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold text-slate-900">
+            <h2 className="text-sm font-semibold text-dusk-900">
               A kiküldő állapota
             </h2>
             {canManage ? (
@@ -390,19 +390,19 @@ export function StockSyncOutboxPage() {
               <dl className="grid grid-cols-2 gap-3 sm:grid-cols-5">
                 {STATUS_ORDER.map((status) => (
                   <div key={status} className="rounded-md border p-3">
-                    <dt className="text-xs text-slate-500">
+                    <dt className="text-xs text-dusk-500">
                       {STATUS_LABELS[status]}
                     </dt>
-                    <dd className="text-lg font-semibold text-slate-900">
+                    <dd className="text-lg font-semibold text-dusk-900">
                       {summary.counts[status] ?? 0}
                     </dd>
                   </div>
                 ))}
               </dl>
 
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-dusk-500">
                 Utoljára kiment készlet:{" "}
-                <span className="font-medium text-slate-700">
+                <span className="font-medium text-dusk-700">
                   {formatLastPublish(summary.lastSuccessfulPublishAt)}
                 </span>
               </p>
@@ -413,10 +413,8 @@ export function StockSyncOutboxPage() {
 
       <Card>
         <CardHeader>
-          <h2 className="text-sm font-semibold text-slate-900">
-            A sor tételei
-          </h2>
-          <label className="text-xs text-slate-500">
+          <h2 className="text-sm font-semibold text-dusk-900">A sor tételei</h2>
+          <label className="text-xs text-dusk-500">
             Állapot:{" "}
             <select
               aria-label="Állapot szűrő"
@@ -454,8 +452,8 @@ export function StockSyncOutboxPage() {
              * es MILYEN szurovel -- ugyanaz a szabaly, amit a nulla talalatnal
              * meresre alkalmazunk, csak most a felhasznalo fele.
              */
-            <div className="space-y-1 text-sm text-slate-600">
-              <p className="font-medium text-slate-900">Nincs találat.</p>
+            <div className="space-y-1 text-sm text-dusk-600">
+              <p className="font-medium text-dusk-900">Nincs találat.</p>
               <p className="text-xs">
                 {status
                   ? `A szűrő: ${STATUS_LABELS[status]} állapotú tételek, a legutóbbi 50. Más állapotban lehetnek tételek — válts az "összes" nézetre.`
@@ -465,7 +463,7 @@ export function StockSyncOutboxPage() {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="text-slate-500">
+                <thead className="text-dusk-500">
                   <tr>
                     <th className="py-1 pr-3">Cikkszám</th>
                     <th className="py-1 pr-3">Állapot</th>
@@ -479,7 +477,7 @@ export function StockSyncOutboxPage() {
                 <tbody>
                   {rows.map((row) => (
                     <tr key={row.id} className="border-t">
-                      <td className="py-1 pr-3 font-medium text-slate-900">
+                      <td className="py-1 pr-3 font-medium text-dusk-900">
                         {row.sku}
                       </td>
                       <td className="py-1 pr-3">{STATUS_LABELS[row.status]}</td>
@@ -493,7 +491,7 @@ export function StockSyncOutboxPage() {
                         csonkolt UNAS-hibauzenetbol nem lehet eldonteni, ugyanaz
                         a hiba ismetlodik-e, vagy egy masik jott.
                       */}
-                      <td className="py-1 pr-3 text-slate-600">
+                      <td className="py-1 pr-3 text-dusk-600">
                         {row.lastError ?? "-"}
                       </td>
                       {canManage ? (
@@ -518,7 +516,7 @@ export function StockSyncOutboxPage() {
                                 : "Újra"}
                             </Button>
                           ) : (
-                            <span className="text-slate-400">-</span>
+                            <span className="text-dusk-400">-</span>
                           )}
                         </td>
                       ) : null}

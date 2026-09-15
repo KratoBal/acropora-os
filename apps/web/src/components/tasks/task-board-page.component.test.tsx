@@ -76,7 +76,7 @@ describe("TaskBoardPage", () => {
     // The reasoning is at least body size and darker than the metadata row,
     // which is the whole point of the tile.
     expect(description.className).toContain("text-sm");
-    expect(description.className).toContain("text-slate-700");
+    expect(description.className).toContain("text-dusk-700");
   });
 
   it("links the title to the originating thread, safely", async () => {

@@ -138,7 +138,7 @@ export function ProductShippingProfileCard({
   return (
     <Card className="space-y-3 p-4">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-slate-900">
+        <h2 className="text-sm font-semibold text-dusk-900">
           Szállítási jellemzők
         </h2>
         {canManage && !draft && loaded ? (
@@ -153,13 +153,13 @@ export function ProductShippingProfileCard({
       ) : null}
 
       {!loaded ? (
-        <p className="text-sm text-slate-500">Betöltés…</p>
+        <p className="text-sm text-dusk-500">Betöltés…</p>
       ) : draft ? (
         <div className="space-y-2">
           {JELZOK.map((jelzo) => (
             <label
               key={jelzo.key}
-              className="flex items-start gap-2 text-sm text-slate-700"
+              className="flex items-start gap-2 text-sm text-dusk-700"
             >
               <input
                 type="checkbox"
@@ -171,7 +171,7 @@ export function ProductShippingProfileCard({
               />
               <span>
                 <span className="font-medium">{jelzo.label}</span>
-                <span className="block text-xs text-slate-500">
+                <span className="block text-xs text-dusk-500">
                   {jelzo.hint}
                 </span>
               </span>
@@ -191,7 +191,7 @@ export function ProductShippingProfileCard({
           </div>
         </div>
       ) : profile ? (
-        <ul className="space-y-1 text-sm text-slate-700">
+        <ul className="space-y-1 text-sm text-dusk-700">
           {JELZOK.map((jelzo) => (
             <li key={jelzo.key}>
               {jelzo.label}: {profile[jelzo.key] ? "igen" : "nem"}
@@ -204,7 +204,7 @@ export function ProductShippingProfileCard({
           Egy "minden nem" latszat itt hamis allitas lenne: azt sugallna, hogy
           valaki megnezte a terméket es ugy dontott, hogy egyik jelzo sem all ra.
         */
-        <p className="text-sm text-slate-500">
+        <p className="text-sm text-dusk-500">
           Még senki nem vizsgálta meg ezt a terméket.
         </p>
       )}

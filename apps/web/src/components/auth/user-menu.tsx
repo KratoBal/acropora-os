@@ -28,30 +28,30 @@ export function UserMenu() {
           size="sm"
         />
         <span className="hidden sm:block">
-          <span className="block text-xs font-semibold text-slate-800">
+          <span className="block text-xs font-semibold text-dusk-800">
             {personDisplayName(user)}
           </span>
-          <span className="block text-[10px] text-slate-400">{user.role}</span>
+          <span className="block text-[10px] text-dusk-400">{user.role}</span>
         </span>
         <Icon
           name="chevron-down"
           size={14}
-          className="hidden text-slate-400 sm:block"
+          className="hidden text-dusk-400 sm:block"
         />
       </Button>
 
       {open ? (
         <Card className="absolute right-0 top-12 z-50 w-72 p-3 shadow-xl">
-          <div className="flex items-start gap-3 border-b border-slate-100 px-1 pb-3">
+          <div className="flex items-start gap-3 border-b border-dusk-100 px-1 pb-3">
             <Avatar
               name={personDisplayName(user)}
               src={user.avatarUrl ?? undefined}
             />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-slate-900">
+              <p className="truncate text-sm font-semibold text-dusk-900">
                 {personDisplayName(user)}
               </p>
-              <p className="truncate text-xs text-slate-500">{user.email}</p>
+              <p className="truncate text-xs text-dusk-500">{user.email}</p>
               <Badge className="mt-2" variant="info">
                 {user.role}
               </Badge>

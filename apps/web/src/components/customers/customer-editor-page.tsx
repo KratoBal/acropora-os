@@ -344,7 +344,7 @@ export function CustomerEditorPage() {
                   </Button>
                 </div>
                 {navLookupNotice ? (
-                  <p className="mt-1 text-xs text-slate-500">
+                  <p className="mt-1 text-xs text-dusk-500">
                     {navLookupNotice}
                   </p>
                 ) : null}
@@ -417,7 +417,7 @@ export function CustomerEditorPage() {
         </Card>
         <Card className="p-6">
           <h2 className="font-semibold">Számlázási cím</h2>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-dusk-500">
             Opcionális; ha kitöltöd, az irányítószám, a város és az utca
             kötelező.
           </p>

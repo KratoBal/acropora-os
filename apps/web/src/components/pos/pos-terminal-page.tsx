@@ -290,33 +290,33 @@ export function PosTerminalPage() {
           ) : null}
 
           {!searching && searchTerm.trim() && searchResults.length === 0 ? (
-            <Card className="p-5 text-sm text-slate-500">Nincs találat.</Card>
+            <Card className="p-5 text-sm text-dusk-500">Nincs találat.</Card>
           ) : null}
 
           {searchResults.length > 0 ? (
-            <Card className="divide-y divide-slate-100 overflow-hidden">
+            <Card className="divide-y divide-dusk-100 overflow-hidden">
               {searchResults.map((product) => (
                 <button
                   key={product.variantId}
                   type="button"
                   onClick={() => addToCart(product)}
-                  className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition hover:bg-slate-50"
+                  className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition hover:bg-dusk-50"
                 >
                   <div>
-                    <p className="text-sm font-semibold text-slate-900">
+                    <p className="text-sm font-semibold text-dusk-900">
                       {product.productName}
                     </p>
-                    <p className="font-mono text-xs text-slate-500">
+                    <p className="font-mono text-xs text-dusk-500">
                       {product.sku}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-semibold text-slate-900">
+                    <p className="text-sm font-semibold text-dusk-900">
                       {product.grossPrice
                         ? formatHuf(Number(product.grossPrice))
                         : "Nincs ár"}
                     </p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-dusk-500">
                       Készlet: {product.currentStock} {product.unit}
                     </p>
                   </div>
@@ -327,14 +327,14 @@ export function PosTerminalPage() {
 
           <Card>
             <CardHeader>
-              <h2 className="text-sm font-semibold text-slate-900">
+              <h2 className="text-sm font-semibold text-dusk-900">
                 Mai eladások
               </h2>
             </CardHeader>
             <CardContent className="space-y-2">
               {loadingRecent ? <Skeleton className="h-4 w-1/3" /> : null}
               {!loadingRecent && recentSales.length === 0 ? (
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-dusk-500">
                   Ma még nem történt eladás.
                 </p>
               ) : null}
@@ -343,13 +343,13 @@ export function PosTerminalPage() {
                   key={sale.id}
                   type="button"
                   onClick={() => router.push(`/pos/${sale.id}`)}
-                  className="flex w-full items-center justify-between rounded-lg border border-slate-100 px-3 py-2 text-left text-sm transition hover:bg-slate-50"
+                  className="flex w-full items-center justify-between rounded-lg border border-dusk-100 px-3 py-2 text-left text-sm transition hover:bg-dusk-50"
                 >
                   <div>
-                    <p className="font-medium text-slate-900">
+                    <p className="font-medium text-dusk-900">
                       {sale.orderNumber}
                     </p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-dusk-500">
                       {new Date(sale.createdAt).toLocaleTimeString("hu-HU")} ·{" "}
                       {sale.paymentMethod
                         ? PAYMENT_METHOD_LABEL[sale.paymentMethod]
@@ -357,7 +357,7 @@ export function PosTerminalPage() {
                       · {sale.lineCount} tétel
                     </p>
                   </div>
-                  <p className="font-semibold text-slate-900">
+                  <p className="font-semibold text-dusk-900">
                     {formatHuf(Number(sale.totalGross))}
                   </p>
                 </button>
@@ -369,14 +369,14 @@ export function PosTerminalPage() {
         <div className="lg:sticky lg:top-4 lg:self-start">
           <Card>
             <CardHeader>
-              <h2 className="text-sm font-semibold text-slate-900">Kosár</h2>
-              <span className="text-xs text-slate-500">
+              <h2 className="text-sm font-semibold text-dusk-900">Kosár</h2>
+              <span className="text-xs text-dusk-500">
                 {cart.length.toLocaleString("hu-HU")} tétel
               </span>
             </CardHeader>
             <CardContent className="space-y-3">
               {cart.length === 0 ? (
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-dusk-500">
                   A kosár üres. Keress rá egy termékre a hozzáadáshoz.
                 </p>
               ) : (
@@ -384,14 +384,14 @@ export function PosTerminalPage() {
                   {cart.map((line) => (
                     <div
                       key={line.variantId}
-                      className="rounded-lg border border-slate-100 p-3"
+                      className="rounded-lg border border-dusk-100 p-3"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <p className="text-sm font-semibold text-slate-900">
+                          <p className="text-sm font-semibold text-dusk-900">
                             {line.productName}
                           </p>
-                          <p className="font-mono text-xs text-slate-500">
+                          <p className="font-mono text-xs text-dusk-500">
                             {line.sku}
                           </p>
                         </div>
@@ -404,7 +404,7 @@ export function PosTerminalPage() {
                         </button>
                       </div>
                       <div className="mt-2 grid grid-cols-3 gap-2">
-                        <label className="text-xs text-slate-500">
+                        <label className="text-xs text-dusk-500">
                           Mennyiség ({line.unit})
                           <input
                             type="number"
@@ -417,10 +417,10 @@ export function PosTerminalPage() {
                                 Number(event.target.value),
                               )
                             }
-                            className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                            className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 text-sm"
                           />
                         </label>
-                        <label className="text-xs text-slate-500">
+                        <label className="text-xs text-dusk-500">
                           Egységár (Ft, bruttó)
                           <input
                             type="number"
@@ -433,10 +433,10 @@ export function PosTerminalPage() {
                                 Number(event.target.value),
                               )
                             }
-                            className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                            className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 text-sm"
                           />
                         </label>
-                        <label className="text-xs text-slate-500">
+                        <label className="text-xs text-dusk-500">
                           Kedvezmény (%)
                           <input
                             type="number"
@@ -451,11 +451,11 @@ export function PosTerminalPage() {
                               )
                             }
                             aria-label={`${line.productName} kedvezmény`}
-                            className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                            className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 text-sm"
                           />
                         </label>
                       </div>
-                      <p className="mt-2 text-right text-sm font-semibold text-slate-900">
+                      <p className="mt-2 text-right text-sm font-semibold text-dusk-900">
                         {formatHuf(
                           line.unitGross *
                             line.quantity *
@@ -467,8 +467,8 @@ export function PosTerminalPage() {
                 </div>
               )}
 
-              <div className="border-t border-slate-100 pt-3">
-                <label className="mb-3 block text-xs text-slate-500">
+              <div className="border-t border-dusk-100 pt-3">
+                <label className="mb-3 block text-xs text-dusk-500">
                   Végösszeg kedvezmény (%)
                   <input
                     type="number"
@@ -482,19 +482,19 @@ export function PosTerminalPage() {
                       )
                     }
                     aria-label="Végösszeg kedvezmény"
-                    className="mt-1 h-9 w-full rounded-lg border border-slate-200 px-2 text-sm"
+                    className="mt-1 h-9 w-full rounded-lg border border-dusk-200 px-2 text-sm"
                   />
                 </label>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-500">Fizetendő</span>
-                  <span className="text-lg font-bold text-slate-900">
+                  <span className="text-dusk-500">Fizetendő</span>
+                  <span className="text-lg font-bold text-dusk-900">
                     {formatHuf(totalGross)}
                   </span>
                 </div>
               </div>
 
               <div>
-                <p className="mb-1 text-xs text-slate-500">Fizetési mód</p>
+                <p className="mb-1 text-xs text-dusk-500">Fizetési mód</p>
                 <Select
                   value={paymentMethod}
                   onChange={(event) =>

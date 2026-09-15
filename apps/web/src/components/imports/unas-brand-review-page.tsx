@@ -255,7 +255,7 @@ export function UnasBrandReviewPage({ batchId }: { batchId: string }) {
                 <p className="font-semibold">
                   Review készültség: {data.summary.completionPercent}%
                 </p>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-dusk-500">
                   Batch állapot: {data.summary.batchStatus} · analysis:{" "}
                   {data.summary.analysisVersion}
                 </p>
@@ -268,7 +268,7 @@ export function UnasBrandReviewPage({ batchId }: { batchId: string }) {
                   : "Még nem hagyható jóvá"}
               </Badge>
             </div>
-            <div className="mt-3 h-2 overflow-hidden rounded bg-slate-100">
+            <div className="mt-3 h-2 overflow-hidden rounded bg-dusk-100">
               <div
                 className="h-full bg-brand-500"
                 style={{ width: `${data.summary.completionPercent}%` }}
@@ -400,7 +400,7 @@ export function UnasBrandReviewPage({ batchId }: { batchId: string }) {
           </div>
           <Card className="p-5">
             <h2 className="font-semibold">Jóváhagyás és alkalmazás</h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-dusk-500">
               A jóváhagyás nem alkalmazza az importot. Az Apply külön,
               megerősített művelet.
             </p>
@@ -484,7 +484,7 @@ function ReviewTable({
   return (
     <Card className="overflow-x-auto">
       <table className="w-full min-w-[960px] text-left text-sm">
-        <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
+        <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
           <tr>
             <th className="p-3">
               <input
@@ -524,7 +524,7 @@ function ReviewTable({
               </td>
               <td>
                 <strong>{item.productName}</strong>
-                <div className="text-xs text-slate-500">
+                <div className="text-xs text-dusk-500">
                   {item.sku} · sor {item.sourceRowNumber}
                 </div>
               </td>
@@ -589,7 +589,7 @@ function ReviewTable({
                         </>
                       ) : (
                         <Link
-                          className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-brand-700"
+                          className="rounded-lg border border-dusk-200 px-3 py-2 text-xs font-semibold text-brand-700"
                           href={`/admin/brands/new?name=${encodeURIComponent(candidate.brandName)}&sourceName=${encodeURIComponent(candidate.brandName)}&source=UNAS&returnTo=${encodeURIComponent(`/admin/imports/unas/${batchId}/review`)}`}
                         >
                           Márka létrehozása
@@ -637,7 +637,7 @@ function EvidenceDialog({
       role="dialog"
       aria-modal="true"
       aria-labelledby="evidence-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-dusk-950/40 p-4"
     >
       <Card className="max-h-[85vh] w-full max-w-3xl overflow-auto p-6">
         <div className="flex justify-between">
@@ -682,14 +682,14 @@ function EvidenceDialog({
                   <div key={`${evidence.source}-${index}`} className="text-sm">
                     <Badge>{evidence.source}</Badge> {evidence.rawValue} →{" "}
                     {evidence.matchedPattern} ({evidence.score})
-                    <p className="text-slate-500">{evidence.reason}</p>
+                    <p className="text-dusk-500">{evidence.reason}</p>
                   </div>
                 ))}
               </div>
             </div>
           ))
         ) : (
-          <p className="mt-2 text-sm text-slate-500">
+          <p className="mt-2 text-sm text-dusk-500">
             Nincs mentett brand jelölt.
           </p>
         )}
@@ -725,7 +725,7 @@ function ConfirmDialog({
       role="dialog"
       aria-modal="true"
       aria-labelledby="confirm-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-dusk-950/40 p-4"
     >
       <Card className="w-full max-w-lg p-6">
         <h2 id="confirm-title" className="text-lg font-semibold">
@@ -735,7 +735,7 @@ function ConfirmDialog({
               ? "Import alkalmazása"
               : `${count} kijelölt sor módosítása`}
         </h2>
-        <p className="mt-2 text-sm text-slate-600">
+        <p className="mt-2 text-sm text-dusk-600">
           {kind === "apply"
             ? "Ez adatbázisba ír. Hálózati bizonytalanságnál ellenőrizd a riportot újrapróbálás előtt."
             : kind.startsWith("bulk")
@@ -792,12 +792,12 @@ function ApplyReport({ result }: { result: UnasApplySummary }) {
   return (
     <Card className="p-5">
       <h2 className="text-lg font-semibold">Apply riport</h2>
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-dusk-500">
         Időtartam: szinkron végrehajtás; alkalmazva:{" "}
         {new Date(result.appliedAt).toLocaleString("hu-HU")}. StockMovement nem
         változott.
       </p>
-      <pre className="mt-3 overflow-auto rounded bg-slate-950 p-4 text-xs text-white">
+      <pre className="mt-3 overflow-auto rounded bg-dusk-950 p-4 text-xs text-white">
         {summary}
       </pre>
       <div className="mt-4 flex gap-2">

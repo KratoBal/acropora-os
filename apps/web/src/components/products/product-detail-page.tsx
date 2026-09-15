@@ -359,7 +359,7 @@ function ProductExtensionEditor({
               ["reorderPoint", "Újrarendelési pont", "0"],
               ["safetyStock", "Biztonsági készlet", "0"],
             ].map(([field, label, placeholder]) => (
-              <div key={field} className="text-xs font-medium text-slate-600">
+              <div key={field} className="text-xs font-medium text-dusk-600">
                 <span>{label}</span>
                 <Input
                   aria-label={label}
@@ -380,13 +380,13 @@ function ProductExtensionEditor({
             ))}
           </div>
 
-          <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-2 lg:grid-cols-4">
-            <p className="text-xs font-bold uppercase tracking-wide text-slate-500 sm:col-span-2 lg:col-span-4">
+          <div className="grid gap-3 rounded-lg border border-dusk-200 bg-white p-3 sm:grid-cols-2 lg:grid-cols-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-dusk-500 sm:col-span-2 lg:col-span-4">
               Utolsó beszerzés
             </p>
             {formIsHuf ? (
               <>
-                <div className="text-xs font-medium text-slate-600">
+                <div className="text-xs font-medium text-dusk-600">
                   <span>Utolsó beszerzési nettó ár</span>
                   <Input
                     aria-label="Utolsó beszerzési nettó ár"
@@ -399,7 +399,7 @@ function ProductExtensionEditor({
                     }
                   />
                 </div>
-                <div className="text-xs font-medium text-slate-600">
+                <div className="text-xs font-medium text-dusk-600">
                   <span>Utolsó beszerzési ÁFA (%)</span>
                   <Input
                     aria-label="Utolsó beszerzési ÁFA"
@@ -412,15 +412,15 @@ function ProductExtensionEditor({
                     }
                   />
                 </div>
-                <div className="text-xs font-medium text-slate-600">
+                <div className="text-xs font-medium text-dusk-600">
                   <span>Bruttó ár</span>
-                  <p className="mt-1 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                  <p className="mt-1 rounded-lg border border-dusk-100 bg-dusk-50 px-3 py-2 text-sm text-dusk-700">
                     {formGrossPrice ?? "—"} HUF
                   </p>
                 </div>
               </>
             ) : (
-              <div className="text-xs font-medium text-slate-600">
+              <div className="text-xs font-medium text-dusk-600">
                 <span>
                   Utolsó beszerzési ár
                   {form.defaultPurchaseCurrency
@@ -441,7 +441,7 @@ function ProductExtensionEditor({
             )}
           </div>
 
-          <div className="grid gap-2 text-xs text-slate-700 sm:grid-cols-2">
+          <div className="grid gap-2 text-xs text-dusk-700 sm:grid-cols-2">
             {[
               ["stockTrackingEnabled", "Készletkövetés engedélyezve"],
               ["autoReorderEnabled", "Automatikus újrarendelés"],
@@ -455,13 +455,13 @@ function ProductExtensionEditor({
                   onChange={(event) =>
                     toggle(field as keyof ExtensionForm, event.target.checked)
                   }
-                  className="size-4 rounded border-slate-300 text-brand-700"
+                  className="size-4 rounded border-dusk-300 text-brand-700"
                 />
                 {label}
               </label>
             ))}
           </div>
-          <label className="block text-xs font-medium text-slate-600">
+          <label className="block text-xs font-medium text-dusk-600">
             Belső megjegyzés
             <Textarea
               className="mt-1 min-h-24"
@@ -492,39 +492,37 @@ function ProductExtensionEditor({
       ) : (
         <>
           {!extension ? (
-            <p className="mt-2 text-xs text-slate-500">
+            <p className="mt-2 text-xs text-dusk-500">
               Ehhez a változathoz még nincs mentett saját beállítás — az alábbi
               mezők üresek.
             </p>
           ) : null}
           <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-3">
             <div>
-              <dt className="text-slate-400">Beszerzési deviza</dt>
-              <dd className="mt-1 text-slate-700">
+              <dt className="text-dusk-400">Beszerzési deviza</dt>
+              <dd className="mt-1 text-dusk-700">
                 {value(extension?.defaultPurchaseCurrency)}
               </dd>
             </div>
             {isHufCurrency(extension?.defaultPurchaseCurrency) ? (
               <>
                 <div>
-                  <dt className="text-slate-400">Utolsó beszerzési nettó ár</dt>
-                  <dd className="mt-1 text-slate-700">
+                  <dt className="text-dusk-400">Utolsó beszerzési nettó ár</dt>
+                  <dd className="mt-1 text-dusk-700">
                     {value(extension?.lastPurchaseNetPrice)}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-slate-400">Utolsó beszerzési ÁFA</dt>
-                  <dd className="mt-1 text-slate-700">
+                  <dt className="text-dusk-400">Utolsó beszerzési ÁFA</dt>
+                  <dd className="mt-1 text-dusk-700">
                     {extension?.lastPurchaseVatRate
                       ? `${extension.lastPurchaseVatRate}%`
                       : "—"}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-slate-400">
-                    Utolsó beszerzési bruttó ár
-                  </dt>
-                  <dd className="mt-1 text-slate-700">
+                  <dt className="text-dusk-400">Utolsó beszerzési bruttó ár</dt>
+                  <dd className="mt-1 text-dusk-700">
                     {value(
                       computeGrossPrice(
                         extension?.lastPurchaseNetPrice,
@@ -536,69 +534,69 @@ function ProductExtensionEditor({
               </>
             ) : (
               <div>
-                <dt className="text-slate-400">
+                <dt className="text-dusk-400">
                   Utolsó beszerzési ár
                   {extension?.defaultPurchaseCurrency
                     ? ` (${extension.defaultPurchaseCurrency})`
                     : ""}
                 </dt>
-                <dd className="mt-1 text-slate-700">
+                <dd className="mt-1 text-dusk-700">
                   {value(extension?.lastPurchaseNetPrice)}
                 </dd>
               </div>
             )}
             <div>
-              <dt className="text-slate-400">Minimumkészlet</dt>
-              <dd className="mt-1 text-slate-700">
+              <dt className="text-dusk-400">Minimumkészlet</dt>
+              <dd className="mt-1 text-dusk-700">
                 {value(extension?.minimumStock)}
               </dd>
             </div>
             <div>
-              <dt className="text-slate-400">Optimális készlet</dt>
-              <dd className="mt-1 text-slate-700">
+              <dt className="text-dusk-400">Optimális készlet</dt>
+              <dd className="mt-1 text-dusk-700">
                 {value(extension?.optimalStock)}
               </dd>
             </div>
             <div>
-              <dt className="text-slate-400">Újrarendelési pont</dt>
-              <dd className="mt-1 text-slate-700">
+              <dt className="text-dusk-400">Újrarendelési pont</dt>
+              <dd className="mt-1 text-dusk-700">
                 {value(extension?.reorderPoint)}
               </dd>
             </div>
             <div>
-              <dt className="text-slate-400">Biztonsági készlet</dt>
-              <dd className="mt-1 text-slate-700">
+              <dt className="text-dusk-400">Biztonsági készlet</dt>
+              <dd className="mt-1 text-dusk-700">
                 {value(extension?.safetyStock)}
               </dd>
             </div>
             <div>
-              <dt className="text-slate-400">Készletkövetés</dt>
-              <dd className="mt-1 text-slate-700">
+              <dt className="text-dusk-400">Készletkövetés</dt>
+              <dd className="mt-1 text-dusk-700">
                 {flag(extension?.stockTrackingEnabled)}
               </dd>
             </div>
             <div>
-              <dt className="text-slate-400">Automatikus újrarendelés</dt>
-              <dd className="mt-1 text-slate-700">
+              <dt className="text-dusk-400">Automatikus újrarendelés</dt>
+              <dd className="mt-1 text-dusk-700">
                 {flag(extension?.autoReorderEnabled)}
               </dd>
             </div>
             <div>
-              <dt className="text-slate-400">Beszerzésből kizárva</dt>
-              <dd className="mt-1 text-slate-700">
+              <dt className="text-dusk-400">Beszerzésből kizárva</dt>
+              <dd className="mt-1 text-dusk-700">
                 {flag(extension?.purchasingDisabled)}
               </dd>
             </div>
             <div>
-              <dt className="text-slate-400">Kifutó termék</dt>
-              <dd className="mt-1 text-slate-700">
+              <dt className="text-dusk-400">Kifutó termék</dt>
+              <dd className="mt-1 text-dusk-700">
                 {flag(extension?.phaseOut)}
               </dd>
             </div>
             {extension?.internalNote ? (
               <div className="sm:col-span-3">
-                <dt className="text-slate-400">Belső megjegyzés</dt>
-                <dd className="mt-1 whitespace-pre-wrap text-slate-700">
+                <dt className="text-dusk-400">Belső megjegyzés</dt>
+                <dd className="mt-1 whitespace-pre-wrap text-dusk-700">
                   {extension.internalNote}
                 </dd>
               </div>
@@ -778,10 +776,10 @@ export function ProductDetailPage({ productId }: { productId: string }) {
             <Card className="border-brand-200">
               <CardHeader className="bg-brand-50/70">
                 <div>
-                  <h2 className="text-sm font-semibold text-slate-900">
+                  <h2 className="text-sm font-semibold text-dusk-900">
                     UNAS terméktükör
                   </h2>
-                  <p className="mt-1 text-xs text-slate-500">
+                  <p className="mt-1 text-xs text-dusk-500">
                     Product Master adatok · csak olvasható
                   </p>
                 </div>
@@ -811,74 +809,74 @@ export function ProductDetailPage({ productId }: { productId: string }) {
               <CardContent className="space-y-5">
                 <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
                   <div>
-                    <dt className="text-xs font-medium text-slate-400">
+                    <dt className="text-xs font-medium text-dusk-400">
                       UNAS Product ID
                     </dt>
-                    <dd className="mt-1 font-mono text-slate-800">
+                    <dd className="mt-1 font-mono text-dusk-800">
                       {value(product.unasMirror.externalId)}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-medium text-slate-400">
+                    <dt className="text-xs font-medium text-dusk-400">
                       Utolsó forrásmódosítás
                     </dt>
-                    <dd className="mt-1 text-slate-800">
+                    <dd className="mt-1 text-dusk-800">
                       {dateTime(product.unasMirror.sourceUpdatedAt)}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-medium text-slate-400">
+                    <dt className="text-xs font-medium text-dusk-400">
                       Utolsó szinkron
                     </dt>
-                    <dd className="mt-1 text-slate-800">
+                    <dd className="mt-1 text-dusk-800">
                       {dateTime(product.unasMirror.lastSyncedAt)}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-medium text-slate-400">
+                    <dt className="text-xs font-medium text-dusk-400">
                       Hiány kezdete
                     </dt>
-                    <dd className="mt-1 text-slate-800">
+                    <dd className="mt-1 text-dusk-800">
                       {dateTime(product.unasMirror.missingSince)}
                     </dd>
                   </div>
                 </dl>
 
-                <div className="border-t border-slate-100 pt-5">
-                  <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                <div className="border-t border-dusk-100 pt-5">
+                  <h3 className="text-xs font-bold uppercase tracking-wide text-dusk-500">
                     UNAS értékesítési adatok
                   </h3>
                   <dl className="mt-3 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
                     <div>
-                      <dt className="text-xs text-slate-400">Nettó ár</dt>
-                      <dd className="mt-1 font-semibold text-slate-800">
+                      <dt className="text-xs text-dusk-400">Nettó ár</dt>
+                      <dd className="mt-1 font-semibold text-dusk-800">
                         {value(product.unasMirror.netPrice)}{" "}
                         {product.unasMirror.currency ?? ""}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-xs text-slate-400">Bruttó ár</dt>
-                      <dd className="mt-1 font-semibold text-slate-800">
+                      <dt className="text-xs text-dusk-400">Bruttó ár</dt>
+                      <dd className="mt-1 font-semibold text-dusk-800">
                         {value(product.unasMirror.grossPrice)}{" "}
                         {product.unasMirror.currency ?? ""}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-xs text-slate-400">
+                      <dt className="text-xs text-dusk-400">
                         Akciós bruttó ár
                       </dt>
-                      <dd className="mt-1 text-slate-800">
+                      <dd className="mt-1 text-dusk-800">
                         {value(product.unasMirror.saleGrossPrice)}{" "}
                         {product.unasMirror.currency ?? ""}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-xs text-slate-400">
+                      <dt className="text-xs text-dusk-400">
                         {product.unasMirror.isPackageProduct
                           ? "UNAS számított csomagkészlet"
                           : "UNAS jelentett készlet"}
                       </dt>
-                      <dd className="mt-1 font-semibold text-slate-800">
+                      <dd className="mt-1 font-semibold text-dusk-800">
                         {value(product.unasMirror.reportedStock)}
                       </dd>
                       <p className="mt-1 text-[11px] text-amber-700">
@@ -886,10 +884,8 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                       </p>
                     </div>
                     <div>
-                      <dt className="text-xs text-slate-400">
-                        Utolsó beszerár
-                      </dt>
-                      <dd className="mt-1 text-slate-800">
+                      <dt className="text-xs text-dusk-400">Utolsó beszerár</dt>
+                      <dd className="mt-1 text-dusk-800">
                         {formatMoney(
                           primaryPurchaseExtension?.lastPurchaseNetPrice,
                           primaryPurchaseExtension?.defaultPurchaseCurrency,
@@ -897,28 +893,28 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-xs text-slate-400">
+                      <dt className="text-xs text-dusk-400">
                         Acropora OS készlet
                       </dt>
-                      <dd className="mt-1 font-semibold text-slate-800">
+                      <dd className="mt-1 font-semibold text-dusk-800">
                         {product.unasMirror.isPackageProduct
                           ? "Nincs önálló készlet"
                           : formatStock(product.stockOnHand)}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-xs text-slate-400">
+                      <dt className="text-xs text-dusk-400">
                         Vásárolható készlet nélkül
                       </dt>
-                      <dd className="mt-1 text-slate-800">
+                      <dd className="mt-1 text-dusk-800">
                         {flag(product.unasMirror.backorderAllowed)}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-xs text-slate-400">
+                      <dt className="text-xs text-dusk-400">
                         Készlet snapshot ideje
                       </dt>
-                      <dd className="mt-1 text-slate-800">
+                      <dd className="mt-1 text-dusk-800">
                         {dateTime(product.unasMirror.reportedStockSyncedAt)}
                       </dd>
                     </div>
@@ -934,26 +930,26 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                       kerdese, es kulon dontes.
                     */}
                     <div>
-                      <dt className="text-xs text-slate-400">
+                      <dt className="text-xs text-dusk-400">
                         Minimális rendelhető mennyiség
                       </dt>
-                      <dd className="mt-1 text-slate-800">
+                      <dd className="mt-1 text-dusk-800">
                         {value(product.unasMirror.minimumOrderQuantity)}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-xs text-slate-400">
+                      <dt className="text-xs text-dusk-400">
                         Maximális rendelhető mennyiség
                       </dt>
-                      <dd className="mt-1 text-slate-800">
+                      <dd className="mt-1 text-dusk-800">
                         {value(product.unasMirror.maximumOrderQuantity)}
                       </dd>
                     </div>
                     <div>
-                      <dt className="text-xs text-slate-400">
+                      <dt className="text-xs text-dusk-400">
                         Rendelési lépésköz
                       </dt>
-                      <dd className="mt-1 text-slate-800">
+                      <dd className="mt-1 text-dusk-800">
                         {value(product.unasMirror.orderQuantityStep)}
                       </dd>
                     </div>
@@ -975,10 +971,10 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                               key={`${component.sku}:${component.qty}`}
                               className="flex items-center justify-between rounded-md bg-white px-3 py-2"
                             >
-                              <span className="font-mono text-xs text-slate-700">
+                              <span className="font-mono text-xs text-dusk-700">
                                 {component.sku}
                               </span>
-                              <span className="font-semibold text-slate-800">
+                              <span className="font-semibold text-dusk-800">
                                 {component.qty} db
                               </span>
                             </li>
@@ -999,20 +995,20 @@ export function ProductDetailPage({ productId }: { productId: string }) {
 
           <Card>
             <CardHeader>
-              <h2 className="text-sm font-semibold text-slate-900">
+              <h2 className="text-sm font-semibold text-dusk-900">
                 Változatok és SKU-k
               </h2>
             </CardHeader>
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-dusk-100">
               {product.variants.length ? (
                 product.variants.map((variant) => (
                   <div key={variant.id} className="px-5 py-4">
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <p className="text-sm font-semibold text-slate-800">
+                        <p className="text-sm font-semibold text-dusk-800">
                           {variant.name ?? product.name}
                         </p>
-                        <p className="mt-0.5 font-mono text-xs text-slate-500">
+                        <p className="mt-0.5 font-mono text-xs text-dusk-500">
                           {variant.unasBaseSku ?? variant.sku}
                         </p>
                       </div>
@@ -1023,8 +1019,8 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                     <dl className="mt-4 grid gap-3 text-xs sm:grid-cols-4">
                       {variant.unasVariantValues ? (
                         <div>
-                          <dt className="text-slate-400">UNAS-változat</dt>
-                          <dd className="mt-1 text-slate-700">
+                          <dt className="text-dusk-400">UNAS-változat</dt>
+                          <dd className="mt-1 text-dusk-700">
                             {variant.unasVariantValues
                               .map((item) => `${item.name}: ${item.value}`)
                               .join(", ")}
@@ -1032,24 +1028,24 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                         </div>
                       ) : null}
                       <div>
-                        <dt className="text-slate-400">UNAS készlet</dt>
-                        <dd className="mt-1 text-slate-700">
+                        <dt className="text-dusk-400">UNAS készlet</dt>
+                        <dd className="mt-1 text-dusk-700">
                           {value(variant.unasReportedStock)}
                         </dd>
                       </div>
                       <div>
-                        <dt className="text-slate-400">Egység</dt>
-                        <dd className="mt-1 text-slate-700">{variant.unit}</dd>
+                        <dt className="text-dusk-400">Egység</dt>
+                        <dd className="mt-1 text-dusk-700">{variant.unit}</dd>
                       </div>
                       <div>
-                        <dt className="text-slate-400">Gyártói cikkszám</dt>
-                        <dd className="mt-1 text-slate-700">
+                        <dt className="text-dusk-400">Gyártói cikkszám</dt>
+                        <dd className="mt-1 text-dusk-700">
                           {value(variant.manufacturerPartNumber)}
                         </dd>
                       </div>
                       <div>
-                        <dt className="text-slate-400">Másodlagos egység</dt>
-                        <dd className="mt-1 text-slate-700">
+                        <dt className="text-dusk-400">Másodlagos egység</dt>
+                        <dd className="mt-1 text-dusk-700">
                           {variant.secondaryUnit
                             ? `${variant.secondaryUnit} × ${value(variant.secondaryUnitFactor)}`
                             : "—"}
@@ -1079,7 +1075,7 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                   </div>
                 ))
               ) : (
-                <p className="px-5 py-5 text-sm text-slate-500">
+                <p className="px-5 py-5 text-sm text-dusk-500">
                   Nincs rögzített változat.
                 </p>
               )}
@@ -1088,7 +1084,7 @@ export function ProductDetailPage({ productId }: { productId: string }) {
 
           <Card>
             <CardHeader>
-              <h2 className="text-sm font-semibold text-slate-900">
+              <h2 className="text-sm font-semibold text-dusk-900">
                 Termékleírás
               </h2>
             </CardHeader>
@@ -1096,13 +1092,13 @@ export function ProductDetailPage({ productId }: { productId: string }) {
               {product.description ? (
                 <div
                   data-testid="product-description"
-                  className="max-w-none text-sm text-slate-700 [&_a]:text-brand-700 [&_a]:underline [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_img]:max-w-full [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_table]:w-full [&_td]:border [&_td]:border-slate-200 [&_td]:p-2 [&_th]:border [&_th]:border-slate-200 [&_th]:p-2 [&_ul]:list-disc [&_ul]:pl-5"
+                  className="max-w-none text-sm text-dusk-700 [&_a]:text-brand-700 [&_a]:underline [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_img]:max-w-full [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_table]:w-full [&_td]:border [&_td]:border-dusk-200 [&_td]:p-2 [&_th]:border [&_th]:border-dusk-200 [&_th]:p-2 [&_ul]:list-disc [&_ul]:pl-5"
                   dangerouslySetInnerHTML={{
                     __html: descriptionHtml,
                   }}
                 />
               ) : (
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-dusk-500">
                   Ehhez a termékhez nincs leírás.
                 </p>
               )}
@@ -1111,7 +1107,7 @@ export function ProductDetailPage({ productId }: { productId: string }) {
 
           <Card>
             <CardHeader>
-              <h2 className="text-sm font-semibold text-slate-900">Képek</h2>
+              <h2 className="text-sm font-semibold text-dusk-900">Képek</h2>
             </CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {product.images.length ? (
@@ -1120,17 +1116,17 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                     <img
                       src={image.url}
                       alt={image.altText ?? product.name}
-                      className="aspect-square w-full rounded-xl border border-slate-200 object-cover"
+                      className="aspect-square w-full rounded-xl border border-dusk-200 object-cover"
                     />
                     {image.title ? (
-                      <figcaption className="mt-2 text-xs text-slate-500">
+                      <figcaption className="mt-2 text-xs text-dusk-500">
                         {image.title}
                       </figcaption>
                     ) : null}
                   </figure>
                 ))
               ) : (
-                <p className="text-sm text-slate-500">Nincs termékkép.</p>
+                <p className="text-sm text-dusk-500">Nincs termékkép.</p>
               )}
             </CardContent>
           </Card>
@@ -1139,7 +1135,7 @@ export function ProductDetailPage({ productId }: { productId: string }) {
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <h2 className="text-sm font-semibold text-slate-900">
+              <h2 className="text-sm font-semibold text-dusk-900">
                 Alapadatok
               </h2>
               <Badge variant={product.isActive ? "success" : "neutral"}>
@@ -1148,13 +1144,13 @@ export function ProductDetailPage({ productId }: { productId: string }) {
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
               <div>
-                <p className="text-xs font-medium text-slate-400">Márka</p>
-                <p className="mt-1 text-slate-800">
+                <p className="text-xs font-medium text-dusk-400">Márka</p>
+                <p className="mt-1 text-dusk-800">
                   {product.brand?.name ?? "—"}
                 </p>
               </div>
               <div>
-                <p className="text-xs font-medium text-slate-400">Kategóriák</p>
+                <p className="text-xs font-medium text-dusk-400">Kategóriák</p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {product.categories.length ? (
                     product.categories.map((category) => (
@@ -1167,7 +1163,7 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                       </Badge>
                     ))
                   ) : (
-                    <span className="text-slate-500">—</span>
+                    <span className="text-dusk-500">—</span>
                   )}
                 </div>
               </div>
@@ -1176,21 +1172,19 @@ export function ProductDetailPage({ productId }: { productId: string }) {
 
           <Card>
             <CardHeader>
-              <h2 className="text-sm font-semibold text-slate-900">
-                Csatornák
-              </h2>
+              <h2 className="text-sm font-semibold text-dusk-900">Csatornák</h2>
             </CardHeader>
             <CardContent className="space-y-3">
               {product.channelListings.length ? (
                 product.channelListings.map((listing) => (
                   <div
                     key={listing.channel}
-                    className="rounded-lg border border-slate-200 p-3"
+                    className="rounded-lg border border-dusk-200 p-3"
                   >
-                    <p className="text-sm font-semibold text-slate-800">
+                    <p className="text-sm font-semibold text-dusk-800">
                       {listing.channel}
                     </p>
-                    <p className="mt-1 text-xs text-slate-500">
+                    <p className="mt-1 text-xs text-dusk-500">
                       Nyers külső státusz: {listing.externalStatus ?? "—"}
                     </p>
                     {listing.productUrl ? (
@@ -1206,7 +1200,7 @@ export function ProductDetailPage({ productId }: { productId: string }) {
                   </div>
                 ))
               ) : (
-                <p className="text-sm text-slate-500">Nincs csatornalisting.</p>
+                <p className="text-sm text-dusk-500">Nincs csatornalisting.</p>
               )}
             </CardContent>
           </Card>

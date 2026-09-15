@@ -168,7 +168,7 @@ export function UserListPage() {
           {data.items.length ? (
             <Card className="overflow-x-auto">
               <table className="w-full min-w-[700px] text-left text-sm">
-                <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
+                <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
                   <tr>
                     <th className="p-3">Név</th>
                     <th>E-mail</th>

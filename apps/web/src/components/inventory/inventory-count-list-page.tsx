@@ -42,10 +42,10 @@ const STATUS_BADGE: Record<
 function InventoryCountTableSkeleton() {
   return (
     <Card className="overflow-hidden" aria-label="Leltárak betöltése">
-      <div className="border-b border-slate-200 bg-slate-50 px-5 py-3">
+      <div className="border-b border-dusk-200 bg-dusk-50 px-5 py-3">
         <Skeleton className="h-4 w-48" />
       </div>
-      <div className="divide-y divide-slate-100">
+      <div className="divide-y divide-dusk-100">
         {Array.from({ length: 5 }, (_, index) => (
           <div key={index} className="flex items-center gap-4 px-5 py-4">
             <Skeleton className="h-4 w-1/4" />
@@ -197,7 +197,7 @@ export function InventoryCountListPage() {
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[800px] border-collapse text-left">
-              <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+              <thead className="bg-dusk-50 text-[11px] font-bold uppercase tracking-wide text-dusk-500">
                 <tr>
                   <th className="px-5 py-3">Leltárszám</th>
                   <th className="px-4 py-3">Raktár</th>
@@ -208,12 +208,12 @@ export function InventoryCountListPage() {
                   <th className="px-5 py-3 text-right">Művelet</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
+              <tbody className="divide-y divide-dusk-100 bg-white">
                 {data.items.map((count) => (
                   <tr
                     key={count.id}
                     tabIndex={0}
-                    className="cursor-pointer transition hover:bg-slate-50 focus:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500"
+                    className="cursor-pointer transition hover:bg-dusk-50 focus:bg-dusk-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500"
                     onClick={() => router.push(`/raktar/${count.id}`)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
@@ -222,19 +222,19 @@ export function InventoryCountListPage() {
                       }
                     }}
                   >
-                    <td className="px-5 py-3.5 font-mono text-xs text-slate-700">
+                    <td className="px-5 py-3.5 font-mono text-xs text-dusk-700">
                       {count.countNumber}
                     </td>
-                    <td className="px-4 py-3.5 text-sm text-slate-600">
+                    <td className="px-4 py-3.5 text-sm text-dusk-600">
                       {count.warehouseName}
                     </td>
-                    <td className="px-4 py-3.5 text-sm text-slate-600">
+                    <td className="px-4 py-3.5 text-sm text-dusk-600">
                       {count.startedByName ?? "—"}
                     </td>
-                    <td className="px-4 py-3.5 text-sm text-slate-600">
+                    <td className="px-4 py-3.5 text-sm text-dusk-600">
                       {new Date(count.createdAt).toLocaleString("hu-HU")}
                     </td>
-                    <td className="px-4 py-3.5 text-sm text-slate-600">
+                    <td className="px-4 py-3.5 text-sm text-dusk-600">
                       {count.lineCount.toLocaleString("hu-HU")}
                     </td>
                     <td className="px-4 py-3.5">
@@ -260,7 +260,7 @@ export function InventoryCountListPage() {
             </table>
           </div>
 
-          <div className="flex justify-center border-t border-slate-200 px-5 py-4 sm:justify-end">
+          <div className="flex justify-center border-t border-dusk-200 px-5 py-4 sm:justify-end">
             <Pagination
               page={data.pagination.page}
               totalPages={data.pagination.totalPages}

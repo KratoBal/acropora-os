@@ -6,11 +6,23 @@ import { describe, expect, it } from "vitest";
 /**
  * A MEGSZUNT SKALA NEVE NEM SZIVAROGHAT VISSZA.
  *
- * A `teal-*` tokenek 2026-09-15-en kikerultek a `globals.css`-bol, mert a
- * hivasi helyek atalltak `brand-*`-ra. Ettol egy visszakerulo `text-teal-700`
- * NEM HIBAZIK: a Tailwind egyszeruen nem general hozza szabalyt, tehat az
- * elem szintelen marad. Nincs piros, nincs figyelmeztetes, csak egy elveszett
- * szin egy lapon, amit senki nem nez meg aznap.
+ * A `teal-*` es a `slate-*` tokenek 2026-09-15-en kikerultek a
+ * `globals.css`-bol, mert a hivasi helyek atalltak `brand-*`-ra, illetve
+ * `dusk-*`-ra.
+ *
+ * ES ITT KORABBAN HAMIS INDOK ALLT, A SAJAT KEZEMTOL: azt irtam, hogy egy
+ * visszakerulo `text-teal-700` "szintelen" marad, mert a Tailwind nem general
+ * hozza szabalyt. NEM IGY VAN, es a kulonbseg rosszabb, nem jobb. Mind a ket
+ * nev a Tailwind SAJAT keszletenek a resze (lemerve a telepitett 4.3.3
+ * `theme.css`-eben: 11-11 fokozat). A mi `@theme` blokkunk csak FELULIRTA
+ * oket. Ha a felulirás eltunik, a nev NEM szunik meg -- VISSZAESIK a Tailwind
+ * sajat ertekere:
+ *
+ *     a mi slate-500-unk volt   #686477   (ibolya fele, 253 fok)
+ *     a Tailwind slate-500-a    oklch(55.4% 0.046 257.417)   (kek fele, 215 fok)
+ *
+ * Vagyis egy visszaszivargo nev nem hianyzo szint ad, hanem MASIKAT -- es az
+ * meg mindig nema minden kapunak, mert egy osztalynev sima sztring.
  *
  * EZ AZ ORZO AZERT LETEZIK, MERT PONTOSAN EZ TORTENT VELEM az atnevezes
  * kozben: egy fajl kimaradt, es a `format:check`, a `typecheck`, a `test` es
@@ -22,7 +34,7 @@ import { describe, expect, it } from "vitest";
  * kereses ezen elbukna -- es akkor a sajat magyarazatunk tiltana meg, hogy
  * elmagyarazzuk a dolgot.
  */
-const MEGSZUNT = ["teal"];
+const MEGSZUNT = ["teal", "slate"];
 
 /**
  * A HATOKORE `apps/web/src`, ES EZT KI KELL MONDANI, MERT SZUKEBB, MINT A NEVE.

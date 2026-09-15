@@ -230,7 +230,7 @@ export function UnasProductSyncPage() {
           {runs.length ? (
             <Card className="overflow-x-auto">
               <table className="w-full min-w-[1050px] text-left text-sm">
-                <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
+                <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
                   <tr>
                     <th className="p-3">Állapot</th>
                     <th>Típus</th>
@@ -253,7 +253,7 @@ export function UnasProductSyncPage() {
                         <Badge variant={STATUS_VARIANT[run.status]}>
                           {STATUS_LABEL[run.status]}
                         </Badge>
-                        <div className="mt-1 font-mono text-[10px] text-slate-400">
+                        <div className="mt-1 font-mono text-[10px] text-dusk-400">
                           {run.id}
                         </div>
                       </td>
@@ -275,7 +275,7 @@ export function UnasProductSyncPage() {
                         className={
                           run.skippedSourceChangedCount > 0
                             ? "font-semibold text-amber-700"
-                            : "text-slate-400"
+                            : "text-dusk-400"
                         }
                       >
                         {run.skippedSourceChangedCount}

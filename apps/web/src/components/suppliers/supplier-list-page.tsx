@@ -172,7 +172,7 @@ export function SupplierListPage() {
           {data.items.length ? (
             <Card className="overflow-x-auto">
               <table className="w-full min-w-[900px] text-left text-sm">
-                <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
+                <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
                   <tr>
                     <th className="p-3">Kód</th>
                     <th>Név</th>
@@ -186,7 +186,7 @@ export function SupplierListPage() {
                   {data.items.map((item) => (
                     <tr
                       key={item.id}
-                      className="cursor-pointer border-b last:border-0 hover:bg-slate-50"
+                      className="cursor-pointer border-b last:border-0 hover:bg-dusk-50"
                       onClick={() => router.push(`/partnerek/${item.id}`)}
                     >
                       {/* The four-character code, not the internal
@@ -199,7 +199,7 @@ export function SupplierListPage() {
                           it has a code, so the gap is a task somebody has to
                           finish, and a blank cell says nothing about that. A
                           partner we only buy from needs no code at all. */}
-                      <td className="p-3 font-mono text-xs text-slate-600">
+                      <td className="p-3 font-mono text-xs text-dusk-600">
                         {item.worksheetPartnerCode ??
                           (item.isService ? (
                             <Badge variant="warning">Nincs kód</Badge>
@@ -207,7 +207,7 @@ export function SupplierListPage() {
                             "—"
                           ))}
                       </td>
-                      <td className="font-semibold text-slate-900">
+                      <td className="font-semibold text-dusk-900">
                         <span className="flex flex-wrap items-center gap-2">
                           {/* The name keeps an element of its own: next to the
                               labels a bare text node would merge with them, and
@@ -225,7 +225,7 @@ export function SupplierListPage() {
                           ) : null}
                         </span>
                         {item.taxNumber ? (
-                          <div className="text-xs font-normal text-slate-500">
+                          <div className="text-xs font-normal text-dusk-500">
                             {item.taxNumber}
                           </div>
                         ) : null}
@@ -233,7 +233,7 @@ export function SupplierListPage() {
                       <td>
                         {item.country}
                         {item.city ? (
-                          <div className="text-xs font-normal text-slate-500">
+                          <div className="text-xs font-normal text-dusk-500">
                             {item.city}
                           </div>
                         ) : null}

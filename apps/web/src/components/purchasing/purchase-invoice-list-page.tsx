@@ -148,7 +148,7 @@ export function PurchaseInvoiceListPage() {
           {data.items.length ? (
             <Card className="overflow-x-auto">
               <table className="w-full min-w-[800px] text-left text-sm">
-                <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
+                <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
                   <tr>
                     <th className="p-3">Bizonylatszám</th>
                     <th>Beszállító</th>
@@ -163,13 +163,13 @@ export function PurchaseInvoiceListPage() {
                   {data.items.map((item) => (
                     <tr
                       key={item.id}
-                      className="cursor-pointer border-b last:border-0 hover:bg-slate-50"
+                      className="cursor-pointer border-b last:border-0 hover:bg-dusk-50"
                       onClick={() => router.push(`/beszerzes/${item.id}`)}
                     >
-                      <td className="p-3 font-mono text-xs text-slate-600">
+                      <td className="p-3 font-mono text-xs text-dusk-600">
                         {item.documentNumber}
                       </td>
-                      <td className="font-semibold text-slate-900">
+                      <td className="font-semibold text-dusk-900">
                         {item.supplierName}
                       </td>
                       <td>{item.supplierInvoiceNumber}</td>

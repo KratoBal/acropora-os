@@ -164,7 +164,7 @@ export function WebshopProductListPage() {
           {data.items.length ? (
             <Card className="overflow-x-auto">
               <table className="w-full min-w-[800px] text-left text-sm">
-                <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
+                <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
                   <tr>
                     <th className="p-3">Név</th>
                     <th>Cikkszám</th>
@@ -177,7 +177,7 @@ export function WebshopProductListPage() {
                 <tbody>
                   {data.items.map((item) => (
                     <tr key={item.id} className="border-b last:border-0">
-                      <td className="p-3 font-semibold text-slate-900">
+                      <td className="p-3 font-semibold text-dusk-900">
                         <Link
                           href={`/products/${item.id}`}
                           className="hover:underline"
@@ -190,13 +190,13 @@ export function WebshopProductListPage() {
                           </Badge>
                         )}
                       </td>
-                      <td className="font-mono text-xs text-slate-600">
+                      <td className="font-mono text-xs text-dusk-600">
                         {item.primarySku ?? "—"}
                       </td>
                       <td>
                         {formatHuf(item.saleGrossPrice ?? item.grossPrice)}
                         {item.saleGrossPrice ? (
-                          <span className="ml-2 text-xs text-slate-400 line-through">
+                          <span className="ml-2 text-xs text-dusk-400 line-through">
                             {formatHuf(item.grossPrice)}
                           </span>
                         ) : null}
@@ -208,7 +208,7 @@ export function WebshopProductListPage() {
                         page shows the same value the same way. A label
                         invented here would read as fact.
                       */}
-                      <td className="font-mono text-xs text-slate-600">
+                      <td className="font-mono text-xs text-dusk-600">
                         {item.unasListing?.externalStatus ?? "—"}
                       </td>
                       <td>

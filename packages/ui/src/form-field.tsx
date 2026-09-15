@@ -23,12 +23,12 @@ export function FormField({
     <div className={cn("space-y-1.5", className)} {...props}>
       <label
         htmlFor={htmlFor}
-        className="block text-sm font-semibold text-slate-800"
+        className="block text-sm font-semibold text-dusk-800"
       >
         {label}
       </label>
       {description ? (
-        <p className="text-xs text-slate-500">{description}</p>
+        <p className="text-xs text-dusk-500">{description}</p>
       ) : null}
       {children}
       {error ? (

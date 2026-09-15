@@ -358,7 +358,7 @@ export function BrandImportAssistantPage() {
           {data.items.length ? (
             <Card className="overflow-x-auto">
               <table className="w-full min-w-[1050px] text-left text-sm">
-                <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
+                <thead className="border-b bg-dusk-50 text-xs uppercase text-dusk-500">
                   <tr>
                     <th className="p-3">
                       <input
@@ -403,7 +403,7 @@ export function BrandImportAssistantPage() {
                       </td>
                       <td>
                         <strong>{row.sourceValue}</strong>
-                        <div className="text-xs text-slate-500">
+                        <div className="text-xs text-dusk-500">
                           {row.normalizedSourceValue}
                         </div>
                       </td>
@@ -525,11 +525,11 @@ export function BrandImportAssistantPage() {
           role="dialog"
           aria-modal="true"
           aria-label="Forrásmárka részletei"
-          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4"
+          className="fixed inset-0 z-50 grid place-items-center bg-dusk-950/40 p-4"
         >
           <Card className="max-h-[85vh] w-full max-w-2xl overflow-auto p-6">
             <h2 className="text-lg font-semibold">{detail.sourceValue}</h2>
-            <p className="mt-2 text-sm text-slate-500">
+            <p className="mt-2 text-sm text-dusk-500">
               {detail.normalizedSourceValue} · {labels[detail.classification]}
             </p>
             <h3 className="mt-5 font-semibold">Indoklás</h3>
@@ -547,7 +547,7 @@ export function BrandImportAssistantPage() {
                 )
                 .join(", ") || "Nincs"}
             </p>
-            <p className="mt-5 text-xs text-slate-500">
+            <p className="mt-5 text-xs text-dusk-500">
               Resolver: {detail.resolverVersion} · config:{" "}
               {detail.configVersion}
             </p>
@@ -566,7 +566,7 @@ export function BrandImportAssistantPage() {
           role="dialog"
           aria-modal="true"
           aria-label="Márkaegyeztetési művelet"
-          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4"
+          className="fixed inset-0 z-50 grid place-items-center bg-dusk-950/40 p-4"
         >
           <Card className="w-full max-w-xl space-y-4 p-6">
             <h2 className="text-lg font-semibold">
@@ -583,7 +583,7 @@ export function BrandImportAssistantPage() {
                   value={canonicalName}
                   onChange={(e) => setCanonicalName(e.target.value)}
                 />
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-dusk-500">
                   Az UNAS forrásérték alias lesz, ha eltér a kanonikus névtől.
                   Külső azonosító nem készül display névből.
                 </p>

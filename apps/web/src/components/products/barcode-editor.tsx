@@ -68,11 +68,11 @@ export function BarcodeEditor({
   };
 
   return (
-    <div className="mt-4 border-t border-slate-100 pt-4">
+    <div className="mt-4 border-t border-dusk-100 pt-4">
       <div className="flex items-center justify-between">
-        <h4 className="text-xs font-semibold text-slate-800">Vonalkódok</h4>
+        <h4 className="text-xs font-semibold text-dusk-800">Vonalkódok</h4>
         {barcodes.length === 0 ? (
-          <span className="text-xs text-slate-400">Nincs rögzítve</span>
+          <span className="text-xs text-dusk-400">Nincs rögzítve</span>
         ) : null}
       </div>
 
@@ -92,7 +92,7 @@ export function BarcodeEditor({
               key={barcode.id}
               className="flex flex-wrap items-center gap-2 text-xs"
             >
-              <span className="font-mono text-slate-700">{barcode.code}</span>
+              <span className="font-mono text-dusk-700">{barcode.code}</span>
               {barcode.isPrimary ? (
                 <Badge variant="info">Elsődleges</Badge>
               ) : canManage ? (

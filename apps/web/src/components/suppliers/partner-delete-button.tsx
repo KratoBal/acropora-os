@@ -106,21 +106,21 @@ export function PartnerDeleteButton({
         />
       ) : null}
 
-      <p className="text-sm font-semibold text-slate-900">
+      <p className="text-sm font-semibold text-dusk-900">
         {physical
           ? `Véglegesen törlöd: ${partnerName}?`
           : `${partnerName} nem törölhető véglegesen`}
       </p>
 
       {physical ? (
-        <p className="text-sm text-slate-700">
+        <p className="text-sm text-dusk-700">
           {plan.alsoRemoved.length > 0
             ? `Semmilyen bejegyzés nem hivatkozik rá, ezért a sora törlődik. Vele együtt törlődik: ${list(plan.alsoRemoved)}.`
             : "Semmilyen bejegyzés nem hivatkozik rá, ezért a sora törlődik."}{" "}
           Ez nem vonható vissza.
         </p>
       ) : (
-        <p className="text-sm text-slate-700">
+        <p className="text-sm text-dusk-700">
           Hivatkozik rá: {list(plan.blockedBy)}. Ezért a partner töröltre lesz
           jelölve: eltűnik a listákból és a választókból, de a régi
           bejegyzéseken továbbra is látszik a neve.

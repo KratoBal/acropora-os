@@ -336,7 +336,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <>
           <button
             type="button"
-            className="fixed inset-0 z-40 bg-slate-950/30 backdrop-blur-[2px] lg:hidden"
+            className="fixed inset-0 z-40 bg-dusk-950/30 backdrop-blur-[2px] lg:hidden"
             aria-label="Navigáció bezárása"
             onClick={() => setMobileNavigationOpen(false)}
           />
@@ -362,7 +362,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               >
                 <Icon name="menu" size={20} />
               </Button>
-              <span className="hidden text-sm font-bold text-slate-900 sm:inline">
+              <span className="hidden text-sm font-bold text-dusk-900 sm:inline">
                 Acropora OS
               </span>
             </div>
@@ -373,7 +373,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 leadingIcon={<Icon name="search" size={17} />}
                 placeholder="Keresés az Acropora OS-ben…"
                 aria-label="Keresés"
-                className="border-transparent bg-slate-100 shadow-none focus:bg-white"
+                className="border-transparent bg-dusk-100 shadow-none focus:bg-white"
               />
             </div>
           }

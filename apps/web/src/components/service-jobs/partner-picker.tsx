@@ -96,7 +96,7 @@ export function PartnerPicker({
      * tudná, hogy a partner nem hiányzik, hanem nem felel meg.
      */
     return (
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-dusk-500">
         Nincs kiválasztható szervizpartner. Egy partner akkor jelenik meg itt,
         ha szerviz partnerként aktív, és fel van véve a munkalap-rövidítése.
       </p>

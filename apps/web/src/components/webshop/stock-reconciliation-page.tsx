@@ -70,10 +70,10 @@ export function StockReconciliationPage() {
 
       <Card>
         <CardHeader>
-          <h2 className="text-sm font-semibold text-slate-900">
+          <h2 className="text-sm font-semibold text-dusk-900">
             Eltérések az UNAS-rendelések felől
           </h2>
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-dusk-500">
             {report
               ? `${report.mismatches.length} eltérés / ${report.checkedCount} ellenőrzött termék`
               : ""}
@@ -82,14 +82,14 @@ export function StockReconciliationPage() {
         <CardContent className="space-y-2">
           {loading ? <Skeleton className="h-4 w-1/3" /> : null}
           {!loading && report && report.mismatches.length === 0 ? (
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-dusk-500">
               Nincs eltérés a helyi és a UNAS-os készlet között.
             </p>
           ) : null}
           {report && report.mismatches.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[560px] border-collapse text-left">
-                <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                <thead className="bg-dusk-50 text-[11px] font-bold uppercase tracking-wide text-dusk-500">
                   <tr>
                     <th className="px-5 py-3">Cikkszám</th>
                     <th className="px-4 py-3">Termék</th>
@@ -98,19 +98,19 @@ export function StockReconciliationPage() {
                     <th className="px-4 py-3 text-right">Eltérés</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
+                <tbody className="divide-y divide-dusk-100 bg-white">
                   {report.mismatches.map((mismatch) => (
                     <tr key={mismatch.variantId}>
-                      <td className="px-5 py-3 font-mono text-xs text-slate-700">
+                      <td className="px-5 py-3 font-mono text-xs text-dusk-700">
                         {mismatch.sku}
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">
+                      <td className="px-4 py-3 text-sm text-dusk-600">
                         {mismatch.productName}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm text-slate-600">
+                      <td className="px-4 py-3 text-right text-sm text-dusk-600">
                         {mismatch.localOnHand}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm text-slate-600">
+                      <td className="px-4 py-3 text-right text-sm text-dusk-600">
                         {mismatch.unasReportedStock}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-semibold text-rose-600">

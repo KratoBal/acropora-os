@@ -94,7 +94,7 @@ export function PurchaseInvoiceDetailPage({
         <>
           <Card>
             <CardHeader>
-              <h2 className="text-sm font-semibold text-slate-900">
+              <h2 className="text-sm font-semibold text-dusk-900">
                 Áttekintés
               </h2>
               <Badge variant={detail.source === "EU" ? "info" : "neutral"}>
@@ -104,42 +104,42 @@ export function PurchaseInvoiceDetailPage({
             <CardContent>
               <dl className="grid gap-3 text-xs sm:grid-cols-4">
                 <div>
-                  <dt className="text-slate-400">Beszállító</dt>
-                  <dd className="mt-1 text-slate-700">{detail.supplierName}</dd>
+                  <dt className="text-dusk-400">Beszállító</dt>
+                  <dd className="mt-1 text-dusk-700">{detail.supplierName}</dd>
                 </div>
                 <div>
-                  <dt className="text-slate-400">Számlaszám</dt>
-                  <dd className="mt-1 text-slate-700">
+                  <dt className="text-dusk-400">Számlaszám</dt>
+                  <dd className="mt-1 text-dusk-700">
                     {detail.supplierInvoiceNumber}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-slate-400">Számla kelte</dt>
-                  <dd className="mt-1 text-slate-700">
+                  <dt className="text-dusk-400">Számla kelte</dt>
+                  <dd className="mt-1 text-dusk-700">
                     {new Date(detail.invoiceDate).toLocaleDateString("hu-HU")}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-slate-400">Fizetési határidő</dt>
-                  <dd className="mt-1 text-slate-700">
+                  <dt className="text-dusk-400">Fizetési határidő</dt>
+                  <dd className="mt-1 text-dusk-700">
                     {detail.dueDate
                       ? new Date(detail.dueDate).toLocaleDateString("hu-HU")
                       : "—"}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-slate-400">Pénznem</dt>
-                  <dd className="mt-1 text-slate-700">{detail.currency}</dd>
+                  <dt className="text-dusk-400">Pénznem</dt>
+                  <dd className="mt-1 text-dusk-700">{detail.currency}</dd>
                 </div>
                 <div>
-                  <dt className="text-slate-400">MNB árfolyam</dt>
-                  <dd className="mt-1 text-slate-700">
+                  <dt className="text-dusk-400">MNB árfolyam</dt>
+                  <dd className="mt-1 text-dusk-700">
                     {detail.exchangeRate ?? "—"}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-slate-400">Fizetve</dt>
-                  <dd className="mt-1 text-slate-700">
+                  <dt className="text-dusk-400">Fizetve</dt>
+                  <dd className="mt-1 text-dusk-700">
                     <Badge variant={detail.isPaid ? "success" : "neutral"}>
                       {detail.isPaid
                         ? `Igen (${
@@ -154,21 +154,21 @@ export function PurchaseInvoiceDetailPage({
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-slate-400">Rögzítve</dt>
-                  <dd className="mt-1 text-slate-700">
+                  <dt className="text-dusk-400">Rögzítve</dt>
+                  <dd className="mt-1 text-dusk-700">
                     {new Date(detail.createdAt).toLocaleString("hu-HU")}
                   </dd>
                 </div>
               </dl>
               {detail.note ? (
-                <p className="mt-4 border-t border-slate-100 pt-3 text-sm text-slate-600">
+                <p className="mt-4 border-t border-dusk-100 pt-3 text-sm text-dusk-600">
                   {detail.note}
                 </p>
               ) : null}
-              <div className="mt-4 flex justify-end border-t border-slate-100 pt-4 text-sm">
+              <div className="mt-4 flex justify-end border-t border-dusk-100 pt-4 text-sm">
                 <div className="text-right">
-                  <p className="text-slate-400">Nettó összeg</p>
-                  <p className="text-lg font-bold text-slate-900">
+                  <p className="text-dusk-400">Nettó összeg</p>
+                  <p className="text-lg font-bold text-dusk-900">
                     {formatMoney(detail.totalNet, detail.currency)}
                   </p>
                 </div>
@@ -178,14 +178,14 @@ export function PurchaseInvoiceDetailPage({
 
           <Card className="overflow-hidden">
             <CardHeader>
-              <h2 className="text-sm font-semibold text-slate-900">Tételek</h2>
-              <span className="text-xs text-slate-500">
+              <h2 className="text-sm font-semibold text-dusk-900">Tételek</h2>
+              <span className="text-xs text-dusk-500">
                 {detail.lines.length.toLocaleString("hu-HU")} tétel
               </span>
             </CardHeader>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1040px] border-collapse text-left">
-                <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                <thead className="bg-dusk-50 text-[11px] font-bold uppercase tracking-wide text-dusk-500">
                   <tr>
                     <th className="px-5 py-3">Cikkszám</th>
                     <th className="px-4 py-3">Termék</th>
@@ -198,18 +198,18 @@ export function PurchaseInvoiceDetailPage({
                     <th className="px-5 py-3">UNAS szinkron</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
+                <tbody className="divide-y divide-dusk-100 bg-white">
                   {detail.lines.map((line) => (
                     <tr key={line.id}>
-                      <td className="px-5 py-3 font-mono text-xs text-slate-700">
+                      <td className="px-5 py-3 font-mono text-xs text-dusk-700">
                         {line.sku ?? "—"}
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">
+                      <td className="px-4 py-3 text-sm text-dusk-600">
                         {line.variantId ? (
                           <>
                             {line.productName}
                             {line.sourceDescription ? (
-                              <div className="text-xs text-slate-400">
+                              <div className="text-xs text-dusk-400">
                                 Számlán: {line.sourceDescription}
                               </div>
                             ) : null}
@@ -223,45 +223,45 @@ export function PurchaseInvoiceDetailPage({
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm text-slate-600">
+                      <td className="px-4 py-3 text-right text-sm text-dusk-600">
                         {line.orderedQuantity} {line.unit}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm text-slate-600">
+                      <td className="px-4 py-3 text-right text-sm text-dusk-600">
                         {line.actualQuantity} {line.unit}
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-600">
+                      <td className="px-4 py-3 text-sm text-dusk-600">
                         {line.projectAllocations.length > 0 ? (
                           <div className="space-y-1">
                             {line.projectAllocations.map((allocation) => (
                               <div key={allocation.id}>
-                                <span className="font-medium text-slate-800">
+                                <span className="font-medium text-dusk-800">
                                   {allocation.projectNumber} ·{" "}
                                   {allocation.projectName}
                                 </span>
-                                <span className="ml-1 text-xs text-slate-500">
+                                <span className="ml-1 text-xs text-dusk-500">
                                   {allocation.quantity} {line.unit}
                                 </span>
                               </div>
                             ))}
-                            <p className="text-xs text-slate-400">
+                            <p className="text-xs text-dusk-400">
                               Raktári: {line.warehouseQuantity} {line.unit}
                             </p>
                           </div>
                         ) : (
-                          <span className="text-slate-400">
+                          <span className="text-dusk-400">
                             Raktári: {line.warehouseQuantity} {line.unit}
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm text-slate-600">
+                      <td className="px-4 py-3 text-right text-sm text-dusk-600">
                         {formatMoney(line.unitNet, detail.currency)}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm text-slate-600">
+                      <td className="px-4 py-3 text-right text-sm text-dusk-600">
                         {line.discountPercent
                           ? `${line.discountPercent}%`
                           : "—"}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm font-semibold text-slate-900">
+                      <td className="px-4 py-3 text-right text-sm font-semibold text-dusk-900">
                         {formatMoney(line.lineNet, detail.currency)}
                       </td>
                       <td className="px-5 py-3">
