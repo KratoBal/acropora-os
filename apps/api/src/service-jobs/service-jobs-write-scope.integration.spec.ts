@@ -370,6 +370,64 @@ describe(
       });
     }
 
+    /**
+     * A TAKARITAS TENYLEG LEFUTOTT-E -- ES EZ MIERT TESZT, NEM HOOK.
+     *
+     * === A MASIK HIBAFAJTA, AMIT A CI-KAPU SOHA NEM FOG MEGFOGNI ===
+     *
+     * A `scripts/tap-stream-gate.mjs` (2026-09-15 ota) azt az esetet fogja meg,
+     * amikor a takaritas DOB: az `after` hook hibaja onmagaban nulla kilepesi
+     * kodot ad, tehat a lepes zold maradna.
+     *
+     * Ez az allitas a MASIKAT: amikor a takaritas CSENDBEN NEM CSINAL SEMMIT.
+     * Egy elirt elotag, egy elmozdult mezonev, egy `startsWith` ott, ahol
+     * `endsWith` kellene -- a `deleteMany` mind a haromra nulla sorra
+     * illeszkedik, NEM dob, es a kapunak nincs mit megfognia. Ket kulon
+     * hibafajta, ket kulon orzo, es a masodikat semmi mas nem latja.
+     *
+     * === MIERT TESZT ES NEM AZ `after` HOOK RESZE ===
+     *
+     * Mert az `after`-ben allo allitas pontosan abba a nemasagba esne vissza,
+     * ami miatt ez a fajl letezik. Tesztkent NEVE van, es a pirosa a `# fail`
+     * szamba is beleszamit.
+     *
+     * === EZ AZ UTOLSO TESZT A FAJLBAN, ES ANNAK IS KELL MARADNIA ===
+     *
+     * Elviszi a fixtura-sorokat (a felhasznalokat es a vevoket is), tehat egy
+     * utana felvett eset a `keszit()` hivasanal hasalna el. Uj eset ELE kerul,
+     * ne moge.
+     *
+     * A VEVO NULLA SZAMA TOBBET MOND, MINT AMENNYINEK LATSZIK: a lapok, a
+     * helyszinek es az eszkozok `Restrict`-tel allnak a vevon, tehat ha
+     * BARMELYIK bent maradt volna, a vevo torlese el sem ment volna. A nulla
+     * vevo igy a fa egeszere allitas, nem csak a vevo-sorra.
+     */
+    it("a takarítás tényleg lefut: nem marad sor a teszt előtaggal", async () => {
+      await removeLeftovers();
+
+      assert.equal(
+        await prisma.serviceJob.count({
+          where: { jobNumber: { startsWith: TEST_JOB_PREFIX } },
+        }),
+        0,
+        "maradt hibajegy a teszt előtaggal",
+      );
+      assert.equal(
+        await prisma.customer.count({
+          where: { customerNumber: { startsWith: TEST_CUSTOMER_PREFIX } },
+        }),
+        0,
+        "maradt vevő a teszt előtaggal",
+      );
+      assert.equal(
+        await prisma.user.count({
+          where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
+        }),
+        0,
+        "maradt felhasználó a teszt e-mail tartománnyal",
+      );
+    });
+
     async function removeLeftovers() {
       const customers = await prisma.customer.findMany({
         where: { customerNumber: { startsWith: TEST_CUSTOMER_PREFIX } },
