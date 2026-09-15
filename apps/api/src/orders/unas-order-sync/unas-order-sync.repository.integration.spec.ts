@@ -146,7 +146,18 @@ describe(
       });
       await prisma.unasStockSyncOutbox.deleteMany({ where: { warehouseId } });
       await prisma.stockItem.deleteMany({ where: { warehouseId } });
-      await prisma.salesOrderLine.deleteMany({});
+      /**
+       * A SOROKAT A RENDELES TORLESE VISZI (`SalesOrderLine.orderId` Cascade),
+       * ezert itt NINCS kulon hivas.
+       *
+       * 2026-09-15-ig `salesOrderLine.deleteMany({})` allt itt, argumentum
+       * nelkul -- vagyis a TELJES tablat uritette, nem csak ennek a suite-nak a
+       * sorait. Nem is volt szukseg ra: a lenti `salesOrder.deleteMany({ where:
+       * { warehouseId } })` amugy is cascade-del viszi oket, es meg a
+       * `productVariant` torlese ELOTT fut, tehat a sorrend sem valtozik.
+       *
+       * A szuretlen alak nem csak tul tag volt: FOLOSLEGES is.
+       */
       await prisma.externalReference.deleteMany({
         where: { system: "UNAS", entityType: "SalesOrder" },
       });

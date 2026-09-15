@@ -17,6 +17,15 @@ import { integrationDatabaseGate } from "../../common/integration-database.js";
 const gate = integrationDatabaseGate(process.env);
 const enabled = gate.mode !== "skip";
 
+/**
+ * A FIXTURA FAJLNEVE, ES EZ A TAKARITAS HATOKORE IS.
+ *
+ * EGY HELYEN ALL, mert a ketto UGYANAZ a halmaz: amit ez a suite feltolt, azt
+ * kell eltakaritania. Ket kulon leirt szoveg eseten az egyik peldany egyszer
+ * elcsuszna, es a takaritas onnantol nulla sorra illeszkedne -- csendben.
+ */
+const FIXTURA_FAJLNEV = "synthetic-unas-catalog.xlsx";
+
 async function fixture() {
   const source = new ExcelJS.Workbook();
   const products = source.addWorksheet("Products");
@@ -38,13 +47,36 @@ describe("UNAS database integration", { skip: !enabled }, () => {
     new BrandResolutionEngine(),
   );
 
+  /**
+   * A TAKARITAS A SAJAT SORAIRA SZUR, ES 2026-09-15 ELOTT NEM TETTE.
+   *
+   * A ket hivas `deleteMany()` alakban allt, argumentum NELKUL -- vagyis a
+   * TELJES `CatalogImportBatch` tablat uritette, nem csak azt, amit ez a suite
+   * toltott fel. Merve (verify job 104337824776, ket sor-pillanatkep a futas
+   * korul): negy spec torolt igy, hat tablat erintve; a `Category` es a
+   * `Product` seedelt referencia-sorai is elmentek.
+   *
+   * AMI NEM KOCKAZAT, es mondjuk is ki: az `integrationDatabaseGate` miatt ez
+   * CSAK `_test` vagy `_ci` vegu adatbazison tud lefutni. Eles adat nem forgott
+   * kockan. A kar hataron belul volt: egyik suite a masik adatat vitte el.
+   *
+   * ES AMIERT EZ NEM CSAK RENDETLENSEG: a futtato `--test-concurrency=1`, a
+   * fajlok sorban futnak, es a sorrendet a `find` adja. Egy suite, ami ma a
+   * torles ELOTT fut, holnap UTANA futhat -- es akkor mas vilagot lat.
+   */
+  async function removeLeftovers() {
+    await prisma.catalogImportBatch.deleteMany({
+      where: { sourceFileName: FIXTURA_FAJLNEV },
+    });
+  }
+
   before(async () => {
     if (gate.mode === "refuse") throw new Error(gate.reason);
-    await prisma.catalogImportBatch.deleteMany();
+    await removeLeftovers();
   });
 
   after(async () => {
-    await prisma.catalogImportBatch.deleteMany();
+    await removeLeftovers();
     await prisma.$disconnect();
   });
 
@@ -55,7 +87,7 @@ describe("UNAS database integration", { skip: !enabled }, () => {
       prisma.stockMovement.count(),
     ]);
     const file = {
-      originalname: "synthetic-unas-catalog.xlsx",
+      originalname: FIXTURA_FAJLNEV,
       buffer,
     } as Express.Multer.File;
 
@@ -144,6 +176,29 @@ describe("UNAS database integration", { skip: !enabled }, () => {
         where: { batchId: batch.id },
       }),
       beforeReviews,
+    );
+  });
+
+  /**
+   * A TAKARITAS TENYLEG LEFUT-E. A CI-kapu (`scripts/tap-stream-gate.mjs`) azt
+   * fogja meg, ha a takaritas DOB; ez azt, ha CSENDBEN NEM CSINAL SEMMIT --
+   * peldaul mert a fajlnev elcsuszik, es a `deleteMany` nulla sorra illeszkedik.
+   *
+   * A `CatalogImportRow` es a `BrandResolutionReview` NEM kap kulon szamlalot:
+   * mindketto `Cascade`-del fugg a kotegtol, tehat a koteg nulla szama
+   * bizonyitja oket is.
+   *
+   * EZ AZ UTOLSO TESZT A FAJLBAN, ES ANNAK IS KELL MARADNIA.
+   */
+  it("a takarítás tényleg lefut: nem marad sor a fixtúra fájlnevével", async () => {
+    await removeLeftovers();
+
+    assert.equal(
+      await prisma.catalogImportBatch.count({
+        where: { sourceFileName: FIXTURA_FAJLNEV },
+      }),
+      0,
+      "maradt import-köteg a fixtúra fájlnevével",
     );
   });
 });
