@@ -596,25 +596,6 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
             </ServicePanel>
 
             {/*
-        A DELEGALAS A CSATOLMANYOK ELOTT ALL, es a sorrend indoka ugyanaz, mint
-        a felviteli urlapon: a lap a HIBAT irja le, majd azt, amit erint, majd
-        a bizonyitekot. Aki a munkat KIADJA, az a jegy tetejen dont rola --
-        tehat a delegalas a naplo utan, a fajlok elott kerul.
-      */}
-            <ServiceJobAssigneeEditor
-              jobId={jobId}
-              token={token}
-              assignees={job.assignees}
-              canManage={canManage}
-              /*
-          A SZERVER VALASZAT TESSZUK BE, NEM TOLTUNK UJRA. A vegpont a TELJES
-          reszletlapot adja vissza -- ez elter a tobbi jegy-muvelettol, amik
-          nyugtat adnak, es ott a hivo ujratolt.
-        */
-              onSaved={setJob}
-            />
-
-            {/*
         A CSATOLMANYOK A NAPLO UTAN ES A MUNKALAPOK ELOTT ALLNAK.
 
         Nem izles: a fenykep a BEJELENTETT hibarol szol, a munkalap arrol, amit
@@ -938,11 +919,45 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
             ) : null}
 
             {/*
+              A DELEGALTAK A JOBB HASABBAN ALLNAK, A "KOVETKEZO LEPES" ALATT.
+
+              Ket erv allt szemben, es a dontes EGYIKET SEM valasztotta, hanem
+              feloldotta oket (acrobot, 2026-09-15):
+
+                a fejlecbe        aki megnyitja a jegyet, elsore azt akarja
+                                  tudni, KINEL VAN -- gorgetes nelkul
+                a naplo utan      a bal hasab olvasasi rendje ne toorjon meg
+                                  (mi a baj -> mi a bizonyiteka -> mit tettunk)
+
+              A DONTO RESZLET, AMIT EGYIK JAVASLAT SEM VETT SZAMBA: ez nem
+              kiirt adat, hanem SZERKESZTO, sajat mentes-gombbal. Egy
+              szerkeszto a cim-savban azt igerne, hogy a lap teteje
+              allapot-osszefoglalo, kozben egy MUVELETET tenne oda.
+
+              Itt mind a harom feltetel teljesul: gorgetes nelkul latszik,
+              kinel van; a bal hasab rendje erintetlen; es a gombja ott all,
+              ahol a tobbi teendo.
+            */}
+            <ServiceJobAssigneeEditor
+              jobId={jobId}
+              token={token}
+              assignees={job.assignees}
+              canManage={canManage}
+              /*
+                A SZERVER VALASZAT TESSZUK BE, NEM TOLTUNK UJRA. A vegpont a
+                TELJES reszletlapot adja vissza -- ez elter a tobbi
+                jegy-muvelettol, amik nyugtat adnak, es ott a hivo ujratolt.
+              */
+              onSaved={setJob}
+            />
+
+            {/*
             AZ UGY ADATAI: AMI A JEGYET AZONOSITJA A HELYSZINEN.
 
             NEM ISMETLI A DELEGALTAKAT, holott a terv itt mutatja oket. Annak a
-            doboznak sajat szerkesztoje van a bal hasabban, es ket helyen allo
-            nev egyszer elcsuszik -- a masodik peldany pedig nem hibazna, csak
+            doboznak sajat szerkesztoje van KOZVETLENUL EZ FOLOTT (2026-09-15-ig
+            a bal hasabban allt), es ket helyen allo nev egyszer elcsuszik -- a
+            masodik peldany pedig nem hibazna, csak
             mast mondana.
           */}
             <ServicePanel className="space-y-3">
