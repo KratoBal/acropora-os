@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 
 import { expandAssignedUnits } from "./assigned-units.js";
-import { collectUnitSubtreeIds } from "../service-assets/unit-subtree.js";
+import { assetsOutsideDepartment } from "../common/assets-in-department.js";
 import { SERVICE_ASSIGNABLE_ROLES } from "../common/service-assignment.js";
 import { prisma, type Prisma, type ServiceJobStatus } from "@acropora/database";
 
@@ -60,30 +60,17 @@ export class ServiceJobsRepository {
    * Ez a helyes irany: a hivas elutasit, ahelyett hogy egy elgepelt azonositora
    * BARMIT atengedne.
    */
+  /**
+   * A SZABALY 2026-09-15 OTA KOZOS FUGGVENYBEN ALL
+   * (`common/assets-in-department.ts`), mert a MUNKALAP felvitele is ugyanezt
+   * kerdezi. Ez a metodus megmarad, hogy a hivoi ne valtozzanak -- de a
+   * szabalybol csak EGY peldany van.
+   */
   async assetsOutsideDepartment(
     assetIds: readonly string[],
     departmentId: string,
   ): Promise<string[]> {
-    const root = await this.database.worksheetDepartment.findUnique({
-      where: { id: departmentId },
-      select: { customerId: true },
-    });
-    const units = root
-      ? await this.database.worksheetDepartment.findMany({
-          where: { customerId: root.customerId },
-          select: { id: true, name: true, parentId: true },
-        })
-      : [];
-    const subtree = root
-      ? collectUnitSubtreeIds(units, departmentId)
-      : [departmentId];
-
-    const found = await this.database.asset.findMany({
-      where: { id: { in: [...assetIds] }, departmentId: { in: subtree } },
-      select: { id: true },
-    });
-    const ok = new Set(found.map((row) => row.id));
-    return assetIds.filter((id) => !ok.has(id));
+    return assetsOutsideDepartment(assetIds, departmentId);
   }
 
   async create(input: {

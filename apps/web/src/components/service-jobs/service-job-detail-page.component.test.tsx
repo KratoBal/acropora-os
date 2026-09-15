@@ -88,6 +88,12 @@ function detail(overrides: Partial<ServiceJobDetail> = {}): ServiceJobDetail {
      * ures lista sajat mondatot kap. A mondat attol a naptol hamis lett volna,
      * es epp az a fajta megjegyzes, amit a kovetkezo olvaso tenykent vesz at.
      */
+    /**
+     * ALAPBOL URES, ES EZ AZ ALAPESET: a jegy keletkezhet eszkoz megnevezese
+     * nelkul. A mezo 2026-09-15 ota KOTELEZO a valaszban (a naplo mellett sajat
+     * listakent is), mert a hibajegybol nyitott munkalap ezt a halmazt orokli.
+     */
+    assets: [],
     assignees: [],
     /**
      * A SORRENDET A SZERVER ADJA, ÉS EZ A MINTA SZÁNDÉKOSAN NEM DÁTUM SZERINT
