@@ -27,12 +27,14 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { formatFileSize } from "@/lib/format/file-size";
 import { useReturnTo } from "@/components/navigation-history";
+import { ServiceStatusBadge } from "@/components/service/service-list-chrome";
 import { assetsApi } from "@/lib/api/assets";
 import {
   assetCriticalityLabel,
   assetEventLabel,
   assetKindLabel,
   assetStatusLabel,
+  assetStatusTone,
 } from "./asset-labels";
 
 /**
@@ -47,12 +49,6 @@ type PendingConfirm =
 
 const inputDate = (value?: string) => (value ? value.slice(0, 10) : "");
 const isoDate = (value: string) => (value ? `${value}T00:00:00.000Z` : null);
-
-function statusVariant(status: AssetStatus) {
-  if (status === "ACTIVE") return "success" as const;
-  if (status === "RETIRED") return "neutral" as const;
-  return "warning" as const;
-}
 
 const documentTypeLabel: Record<AssetDocumentType, string> = {
   INVOICE: "Számla",
@@ -383,9 +379,12 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
             <div className="space-y-6">
               <Card className="p-6">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant={statusVariant(asset.status)}>
+                  {/* AZ ALLAPOT SZINE A KOZOS `assetStatusTone`-bol jon, nem
+                      egy helyi lekepezesbol: ugyanaz a szabaly allt itt es a
+                      listan, ket kulon fuggvenyben, beture azonos torzzsel. */}
+                  <ServiceStatusBadge tone={assetStatusTone[asset.status]}>
                     {assetStatusLabel[asset.status]}
-                  </Badge>
+                  </ServiceStatusBadge>
                   <Badge variant="info">{assetKindLabel[asset.kind]}</Badge>
                   <Badge>{assetCriticalityLabel[asset.criticality]}</Badge>
                 </div>

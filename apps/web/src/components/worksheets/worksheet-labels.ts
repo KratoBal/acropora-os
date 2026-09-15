@@ -1,5 +1,7 @@
 import type { WorksheetVersionStatus } from "@acropora/types";
 
+import type { ServiceTone } from "@/components/service/service-theme";
+
 export const worksheetStatusLabel: Record<WorksheetVersionStatus, string> = {
   DRAFT: "Piszkozat",
   AWAITING_SIGNATURE: "Aláírásra vár",
@@ -76,4 +78,22 @@ export function formatDateTime(value: string | null): string {
     dateStyle: "short",
     timeStyle: "short",
   });
+}
+
+/**
+ * A MUNKALAP-ALLAPOT SZINE Balazs 2026-09-15-i szerviz-designjaban.
+ *
+ * A VALTOZATBOL SZARMAZIK, nem mellette all: a "melyik allapot szamit jonak,
+ * rossznak, varakozonak" szabaly EGY helyen van (`worksheetStatusVariant`), es
+ * ez a fuggveny csak leforditja az uj paletta nevere. Ket egymas mellett allo,
+ * fuggetlen leiras eloszor egyezik, aztan az egyiket valaki modositja.
+ */
+export function worksheetStatusTone(
+  status: WorksheetVersionStatus,
+): ServiceTone {
+  const variant = worksheetStatusVariant(status);
+  if (variant === "success") return "green";
+  if (variant === "warning") return "amber";
+  if (variant === "danger") return "red";
+  return "neutral";
 }

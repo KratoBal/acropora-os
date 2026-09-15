@@ -191,13 +191,15 @@ describe("AssetListPage paging", () => {
 
   // A szűrő viszont HELYESEN ugrik vissza az elsőre: egy másik szűrő
   // negyedik oldala jellemzően nem is létezik.
+  //
+  // A STÁTUSZ-VÁLASZTÓBÓL FÜL LETT (Balázs 2026-09-15-i designja), az állítás
+  // viszont változatlan: nem a vezérlő fajtájáról szól, hanem arról, hogy a
+  // státusz váltása visszaviszi a lapozást az elsőre.
   it("still returns to the first page when a filter changes", async () => {
     render(<AssetListPage />);
     await screen.findByText("Cápasuli kompresszor");
 
-    fireEvent.change(screen.getByLabelText("Státusz"), {
-      target: { value: "RETIRED" },
-    });
+    fireEvent.click(screen.getByRole("tab", { name: "Kivezetett" }));
 
     await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
     expect(lastTarget().get("page")).toBe("1");
@@ -240,5 +242,45 @@ describe("AssetListPage es az ugyfel sajat kodja", () => {
 
     expect(await screen.findByText("ESZ-0001")).toBeTruthy();
     expect(screen.queryByText(/Leltári szám/)).toBeNull();
+  });
+});
+
+/**
+ * AZ "OSSZES" CSEMPE VISSZAKAPCSOLASA, es ez a lap legcsendesebb csapdaja.
+ *
+ * A szerveren a `status` ALAPERTELMEZESE `ACTIVE` (`AssetListQueryDto`), nem az
+ * "osszes". Egy kikapcsolt csempe tehat NEM hagyhatja el a parametert: aki
+ * masodszor is ranyom az "Összes"-re, csendben az aktiv eszkozok listajat
+ * kapna vissza -- ugyanaz a kepernyo, keszebb lista, semmi jelzes.
+ */
+describe("AssetListPage állapot-csempék", () => {
+  beforeEach(() => {
+    auth.session = session;
+    navigation.replace.mockReset();
+    api.list.mockReset().mockResolvedValue(response(1));
+  });
+
+  it("a kiválasztott csempe második kattintásra ALL-t ír, nem üreset", async () => {
+    navigation.params = new URLSearchParams("status=ALL");
+    render(<AssetListPage />);
+    await screen.findByText("Cápasuli kompresszor");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /Nyilvántartott eszköz/ }),
+    );
+
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
+    expect(lastTarget().get("status")).toBe("ALL");
+  });
+
+  it("a csempe kattintásra a saját állapotára szűr", async () => {
+    navigation.params = new URLSearchParams();
+    render(<AssetListPage />);
+    await screen.findByText("Cápasuli kompresszor");
+
+    fireEvent.click(screen.getByRole("button", { name: /Javítás alatt/ }));
+
+    await waitFor(() => expect(navigation.replace).toHaveBeenCalled());
+    expect(lastTarget().get("status")).toBe("IN_REPAIR");
   });
 });

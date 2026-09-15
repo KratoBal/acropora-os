@@ -136,7 +136,19 @@ describe("AssetListPage helyszín-szűrő", () => {
     expect(suppliers.units).not.toHaveBeenCalled();
   });
 
-  it("szerviz-partner tulajdonosnál a helyszínek TELJES ÚTTAL jelennek meg", async () => {
+  /**
+   * A TELJES UT A HOZZAFERHETO NEVBEN ALL, NEM A LATHATO SZOVEGBEN.
+   *
+   * Balazs 2026-09-15-i designjaban a helyszinekbol FA lett: a hierarchiat a
+   * behuzas mutatja, a lathato szoveg ezert csak a csomopont neve. A GARANCIA
+   * viszont valtozatlan -- a kod es a nev csak TESTVEREK kozott egyedi
+   * (`site-tree.ts`), tehat ket tavoli "Biodóm" kulonben megkulonboztethetetlen
+   * lenne. Aki lat, a behuzasbol tudja; aki felolvasoval hasznalja, az innen.
+   *
+   * AZ ALLITAS EZERT A LABEL-RE MEGY, ES A LATHATO SZOVEGRE IS: enelkul egy
+   * ures gomb is atmenne, aminek csak az `aria-label`-je helyes.
+   */
+  it("szerviz-partner tulajdonosnál a teljes út a gomb hozzáférhető nevében áll", async () => {
     await renderWith("ownerType=SUPPLIER&ownerId=supplier-1");
     await waitFor(() =>
       expect(suppliers.units).toHaveBeenCalledWith(
@@ -145,8 +157,9 @@ describe("AssetListPage helyszín-szűrő", () => {
         expect.anything(),
       ),
     );
-    expect(await screen.findByText("Biodóm (BIO)")).toBeTruthy();
-    expect(screen.getByText("Biodóm / Fókamedence (FOK)")).toBeTruthy();
+    expect(await screen.findByLabelText("Biodóm (BIO)")).toBeTruthy();
+    expect(screen.getByLabelText("Biodóm / Fókamedence (FOK)")).toBeTruthy();
+    expect(screen.getByText("Fókamedence")).toBeTruthy();
   });
 
   /**
@@ -171,9 +184,11 @@ describe("AssetListPage helyszín-szűrő", () => {
 
     await renderWith("ownerType=SUPPLIER&ownerId=supplier-1");
 
-    expect(
-      await screen.findByText("Régi szárny (REG) · archivált"),
-    ).toBeTruthy();
+    // A JELOLO MIND A KET HELYEN OTT VAN: a lathato szovegben (a nev mellett)
+    // es a hozzaferheto nevben (a teljes ut mellett). Csak az egyiket merve egy
+    // olyan alak is atmenne, ahol a felolvaso nem mondja ki, hogy archivalt.
+    expect(await screen.findByText("Régi szárny · archivált")).toBeTruthy();
+    expect(screen.getByLabelText("Régi szárny (REG) · archivált")).toBeTruthy();
   });
 
   it("a jelölőnégyzet a CÍMSORBA ír, és visszaállítja a lapozást", async () => {

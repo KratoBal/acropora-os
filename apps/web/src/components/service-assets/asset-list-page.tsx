@@ -1,27 +1,16 @@
 "use client";
 
-import {
-  Alert,
-  Badge,
-  Button,
-  Card,
-  EmptyState,
-  Input,
-  PageHeader,
-  Select,
-  Skeleton,
-} from "@acropora/ui";
+import { Alert, Button, EmptyState, Skeleton } from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
   type AssetListResponse,
-  type AssetStatus,
 } from "@acropora/types";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { buildSiteOptions } from "@/lib/partners/site-tree";
+import { buildSiteOptions, buildSiteTree } from "@/lib/partners/site-tree";
 import { suppliersApi } from "@/lib/api/suppliers";
 import {
   readUnitFilter,
@@ -30,14 +19,42 @@ import {
 } from "@/lib/partners/unit-filter";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import {
+  ServiceIcon,
+  ServiceListFooter,
+  ServiceListHeader,
+  ServiceListTabs,
+  ServiceSearchField,
+  ServiceStatusBadge,
+} from "@/components/service/service-list-chrome";
+import {
+  ServiceListStats,
+  type ServiceStatTile,
+} from "@/components/service/service-list-stats";
+import { sv } from "@/components/service/service-theme";
+import { useServiceStatusCounts } from "@/components/service/use-service-status-counts";
 import { assetsApi } from "@/lib/api/assets";
-import { assetKindLabel, assetStatusLabel } from "./asset-labels";
+import {
+  assetKindLabel,
+  assetStatusLabel,
+  assetStatusTone,
+} from "./asset-labels";
 
-function statusVariant(status: AssetStatus) {
-  if (status === "ACTIVE") return "success" as const;
-  if (status === "RETIRED") return "neutral" as const;
-  return "warning" as const;
-}
+/**
+ * AZ "ALL" NEM ALLAPOT, HANEM A SZURO HIANYA, es a szerver igy is erti
+ * (`AssetListQueryDto.status` alapertelmezese `ACTIVE`, kulon `"ALL"` ertekkel).
+ * Ezert all itt a harom kozott: a csempe "Nyilvantartott eszkoz" szama a
+ * TELJES halmaze, nem egy allapote.
+ */
+const COUNTED_STATUSES = ["ALL", "IN_REPAIR", "ACTIVE"] as const;
+
+const TABS = [
+  { key: "ALL", label: "Összes" },
+  { key: "ACTIVE", label: "Aktív" },
+  { key: "IN_REPAIR", label: "Javítás alatt" },
+  { key: "OUT_OF_SERVICE", label: "Nem üzemel" },
+  { key: "RETIRED", label: "Kivezetett" },
+];
 
 export function AssetListPage() {
   const { session } = useAuth();
@@ -55,6 +72,8 @@ export function AssetListPage() {
     session && hasPermission(session.user, PERMISSIONS.SERVICE_MANAGE),
   );
   const token = session?.token ?? "";
+  /** A szerver alapertelmezese `ACTIVE`, tehat a hianyzo parameter NEM "osszes". */
+  const activeStatus = params.get("status") ?? "ACTIVE";
   const query = useMemo(() => {
     const value = new URLSearchParams(params.toString());
     if (!value.has("page")) value.set("page", "1");
@@ -87,6 +106,38 @@ export function AssetListPage() {
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  /**
+   * A CSEMPEK SZAMAI A TOBBI SZUROT KOVETIK (kereses, tipus, tulajdonos,
+   * helyszin), csak az ALLAPOTOT nem -- azt maga a csempe adja meg. Enelkul a
+   * harom szam egy masik halmazrol szolna, mint a lista alattuk.
+   */
+  const countBase = useMemo(() => {
+    const value = new URLSearchParams(params.toString());
+    value.delete("status");
+    value.delete("page");
+    value.set("page", "1");
+    value.set("pageSize", "10");
+    return value;
+  }, [params]);
+
+  const fetchCount = useCallback(
+    async (status: string, signal: AbortSignal) => {
+      const value = new URLSearchParams(countBase.toString());
+      value.set("status", status);
+      const response = await assetsApi.list(token, value, signal);
+      return response.pagination.totalItems;
+    },
+    [countBase, token],
+  );
+
+  const counts = useServiceStatusCounts({
+    enabled: canView,
+    cacheKey: `${token}|${countBase}`,
+    statuses: COUNTED_STATUSES,
+    fetchCount,
+  });
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       if (search === (params.get("search") ?? "")) return;
@@ -124,13 +175,42 @@ export function AssetListPage() {
     return () => controller.abort();
   }, [canView, token, unitsOwnerId]);
   const selectedUnits = useMemo(() => readUnitFilter(params), [params]);
-  const unitOptions = useMemo(() => buildSiteOptions(units), [units]);
+  /**
+   * A FA SORAI, MELYSEGGEL ES TELJES UTTAL EGYUTT.
+   *
+   * A LATHATO szoveg csak a csomopont NEVE, mert a hierarchiat a behuzas
+   * mutatja -- egy 190 pixeles oszlopban a teljes ut ugyis levagodna. A teljes
+   * ut viszont NEM veszhet el: a kod es a nev csak TESTVEREK kozott egyedi
+   * (`site-tree.ts`), tehat ket tavoli ag alatt allhat ket "Biodóm". Ezert a
+   * gomb HOZZAFERHETO NEVE (`aria-label`) es a hover-szovege a teljes ut. Aki
+   * lat, a behuzasbol tudja; aki nem, a felolvasottbol.
+   */
+  const unitRows = useMemo(() => {
+    const pathById = new Map(
+      buildSiteOptions(units).map((option) => [option.id, option.label]),
+    );
+    return buildSiteTree(units).map(({ unit, depth }) => ({
+      unit,
+      depth,
+      path: pathById.get(unit.id) ?? unit.name,
+    }));
+  }, [units]);
 
   const filter = (key: string, value: string) => {
     const next = new URLSearchParams(params.toString());
     value ? next.set(key, value) : next.delete(key);
     next.set("page", "1");
     router.replace(`${pathname}?${next}`);
+  };
+
+  /**
+   * A CSEMPE ES A FUL UGYANAZT IRJA. Az "ures" ITT NEM jo visszakapcsolt
+   * allapot: parameter nelkul a szerver `ACTIVE`-ra szur, tehat egy kikapcsolt
+   * csempe csendben az "Aktiv" listat adna vissza. Ezert a visszakapcsolas
+   * kifejezetten `ALL`-t ir.
+   */
+  const selectStatus = (key: string) => {
+    filter("status", key === activeStatus ? "ALL" : key);
   };
 
   /**
@@ -154,22 +234,194 @@ export function AssetListPage() {
       />
     );
 
+  const tiles: ServiceStatTile[] = [
+    {
+      key: "ALL",
+      icon: "box",
+      tone: "purple",
+      label: "Nyilvántartott eszköz",
+      count: counts.ALL ?? null,
+    },
+    {
+      key: "IN_REPAIR",
+      icon: "wrench",
+      tone: "amber",
+      label: "Javítás alatt",
+      count: counts.IN_REPAIR ?? null,
+    },
+    {
+      key: "ACTIVE",
+      icon: "checkCircle",
+      tone: "green",
+      label: "Aktívan üzemel",
+      count: counts.ACTIVE ?? null,
+    },
+  ];
+
+  const panel = (
+    <section className={sv.panel}>
+      <ServiceListTabs
+        tabs={TABS}
+        active={activeStatus}
+        onSelect={selectStatus}
+        label="Eszközök szűrése státusz szerint"
+      />
+      <div className={sv.toolbar}>
+        <ServiceSearchField
+          label="Eszköz keresése"
+          placeholder="Név, eszközszám, gyártó, modell, sorozatszám"
+          value={search}
+          onChange={setSearch}
+        />
+        <div className="flex flex-wrap items-center gap-2.5">
+          <label>
+            <span className="sr-only">Eszköztípus</span>
+            <select
+              className={sv.select}
+              value={params.get("kind") ?? ""}
+              onChange={(event) => filter("kind", event.target.value)}
+            >
+              <option value="">Minden típus</option>
+              {Object.entries(assetKindLabel).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </div>
+      {loading && !data ? (
+        <div className="space-y-3 p-5" aria-label="Eszközök betöltése">
+          <Skeleton className="h-16" />
+          <Skeleton className="h-64" />
+        </div>
+      ) : null}
+      {data?.items.length ? (
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[980px] border-collapse text-left">
+              <thead>
+                <tr>
+                  <th className={sv.tableHead}>Eszköz</th>
+                  <th className={sv.tableHead}>Elhelyezés</th>
+                  <th className={sv.tableHead}>Hierarchia</th>
+                  <th className={sv.tableHead}>Műszaki azonosító</th>
+                  <th className={sv.tableHead}>Státusz</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.items.map((asset) => (
+                  <tr key={asset.id} className={sv.tableRow}>
+                    <td className={sv.tableCell}>
+                      <Link
+                        href={`/szerviz/eszkozok/${asset.id}`}
+                        className={sv.rowTitle}
+                      >
+                        {asset.name}
+                      </Link>
+                      <span className={`mt-1 block font-mono ${sv.rowMeta}`}>
+                        {asset.assetNumber}
+                      </span>
+                      {/* AZ UGYFEL SAJAT KODJA, csak ha VAN. A kereses eddig is
+                          nezte, a sor viszont nem mutatta: az ugyfel felolvasta a
+                          sajat kodjat, a talalat feljott, es semmi nem arulta el,
+                          MIRE illeszkedett. A felirat azert kell melle, hogy ne
+                          legyen osszekeverheto a mi eszkozszamunkkal -- az all
+                          folotte, ugyanabban a betutipusban. */}
+                      {asset.inventoryNumber ? (
+                        <span className={`mt-1 block ${sv.rowMeta}`}>
+                          Leltári szám:{" "}
+                          <span className="font-mono">
+                            {asset.inventoryNumber}
+                          </span>
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className={sv.tableCell}>
+                      <div className="text-xs font-medium text-[#26233b]">
+                        {asset.owner.displayName}
+                      </div>
+                      {/* AZ ALEGYSEG A VALASZTOTT HELY, a cim a VISSZAESES.
+                          Partner-tulajdonosnal a cim mindig a partner sajat
+                          postai cime, tehat alegyseg nelkul ez nem valasztas
+                          eredmenye -- es a listaban ez latszik a legkevesbe, mert
+                          egy sorban minden helynek ugyanugy nez ki. Ezert all itt
+                          is a jeloles, nem csak az adatlapon. */}
+                      <div className={sv.rowMeta}>
+                        {asset.unit
+                          ? `${asset.unit.path.join(" / ")} (${asset.unit.code})`
+                          : asset.owner.type === "SUPPLIER"
+                            ? asset.address?.formatted
+                              ? `Nincs pontosítva. ${asset.address.formatted}`
+                              : "Nincs pontosítva."
+                            : (asset.address?.formatted ?? "Nincs pontosítva.")}
+                      </div>
+                    </td>
+                    <td className={`${sv.tableCell} text-xs text-[#26233b]`}>
+                      {asset.parent ? (
+                        <span>
+                          Része: <strong>{asset.parent.name}</strong>
+                        </span>
+                      ) : asset.childCount ? (
+                        `${asset.childCount} részegység`
+                      ) : (
+                        "Önálló eszköz"
+                      )}
+                    </td>
+                    <td className={sv.tableCell}>
+                      {[asset.manufacturer, asset.model, asset.serialNumber]
+                        .filter(Boolean)
+                        .join(" · ") || "—"}
+                    </td>
+                    <td className={sv.tableCell}>
+                      <ServiceStatusBadge tone={assetStatusTone[asset.status]}>
+                        {assetStatusLabel[asset.status]}
+                      </ServiceStatusBadge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <ServiceListFooter
+            shown={data.items.length}
+            totalItems={data.pagination.totalItems}
+            page={data.pagination.page}
+            totalPages={data.pagination.totalPages}
+          />
+        </>
+      ) : data ? (
+        <div className="p-5">
+          <EmptyState
+            title="Nincs találat"
+            description="Módosítsd a szűrőket vagy rögzíts új partnereszközt."
+          />
+        </div>
+      ) : null}
+    </section>
+  );
+
   return (
-    <div className="space-y-6">
-      <PageHeader
-        eyebrow="Szerviz"
+    <div>
+      <ServiceListHeader
+        eyebrow="Szerviz / munkatér"
         title="Eszköznyilvántartás"
-        description="Partnerekhez rendelt rendszerek, berendezések és részegységek QR-azonosítással."
-        actions={
+        lead="Tudd, mi hol van, és milyen állapotban. Partnerekhez rendelt rendszerek, berendezések és részegységek QR-azonosítással."
+        action={
           canManage ? (
             <Link href="/szerviz/eszkozok/uj">
-              <Button>Új eszköz</Button>
+              <Button>
+                <ServiceIcon name="plus" className="mr-1.5 size-[17px]" />
+                Új eszköz
+              </Button>
             </Link>
           ) : undefined
         }
       />
       {error ? (
         <Alert
+          className="mb-6"
           variant="danger"
           title="Betöltési hiba"
           description={error}
@@ -180,186 +432,79 @@ export function AssetListPage() {
           }
         />
       ) : null}
-      <Card className="p-4">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Input
-            aria-label="Eszköz keresése"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Név, eszközszám, gyártó, modell, sorozatszám"
-          />
-          <Select
-            aria-label="Eszköztípus"
-            value={params.get("kind") ?? ""}
-            onChange={(event) => filter("kind", event.target.value)}
-          >
-            <option value="">Minden típus</option>
-            {Object.entries(assetKindLabel).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </Select>
-          <Select
-            aria-label="Státusz"
-            value={params.get("status") ?? "ACTIVE"}
-            onChange={(event) => filter("status", event.target.value)}
-          >
-            <option value="ACTIVE">Aktív</option>
-            <option value="OUT_OF_SERVICE">Nem üzemel</option>
-            <option value="IN_REPAIR">Javítás alatt</option>
-            <option value="RETIRED">Kivezetett</option>
-            <option value="ALL">Minden státusz</option>
-          </Select>
+      <ServiceListStats
+        tiles={tiles}
+        active={activeStatus}
+        onSelect={selectStatus}
+        label="Eszközök státusz szerint"
+      />
+      {unitRows.length > 0 ? (
+        <div className="grid gap-[18px] lg:grid-cols-[190px_minmax(0,1fr)]">
+          {/* A HELYSZINFA TOBBSZOROS VALASZTAST ENGED, es ez nem a design
+              egyszerusitese: Balazs dontese szerint egy emberhez TOBB
+              csomopont is rendelheto, tehat egy egy-ertekű valaszto kesobb
+              nem bovulne, hanem ujraírasra szorulna (`unit-filter.ts`). A
+              behuzas a fa melysege, a szurés pedig a RESZFARA szol -- az
+              alatta logo eszkozok is bejonnek. */}
+          <aside>
+            <h2 className="mb-2 px-[11px] text-[13px] font-bold text-[#26233b]">
+              Helyszínek
+            </h2>
+            <button
+              type="button"
+              onClick={() =>
+                router.replace(`${pathname}?${writeUnitFilter(params, [])}`)
+              }
+              className={`${sv.treeItem} ${
+                selectedUnits.length === 0 ? sv.treeItemActive : ""
+              }`}
+            >
+              <ServiceIcon name="building" className="size-4" />
+              Minden helyszín
+            </button>
+            {unitRows.map(({ unit, depth, path }) => {
+              const on = selectedUnits.includes(unit.id);
+              /* AZ ARCHIVALT HELYSZIN IS OTT MARAD A VALASZTOBAN (acrobot
+                 dontese, 2026-09-02 21:13): egy eszkoz allhat archivalt
+                 helyszinen, es a listat is akarhatja valaki epp arra szurni. A
+                 jeloles viszont kell, kulonben a felhasznalo nem erti, miert
+                 nem ajanljuk ugyanezt a helyszint az uj munkanal. A jelolo a
+                 HOZZAFERHETO NEVBEN is ott van, nem csak a lathato szovegben. */
+              const marked = unit.isActive ? path : `${path} · archivált`;
+              return (
+                <button
+                  key={unit.id}
+                  type="button"
+                  aria-pressed={on}
+                  aria-label={marked}
+                  title={marked}
+                  style={{ paddingLeft: 11 + depth * 19 }}
+                  onClick={() =>
+                    router.replace(
+                      `${pathname}?${writeUnitFilter(
+                        params,
+                        toggleUnitFilter(selectedUnits, unit.id),
+                      )}`,
+                    )
+                  }
+                  className={`${sv.treeItem} ${on ? sv.treeItemActive : ""}`}
+                >
+                  <ServiceIcon name="location" className="size-4" />
+                  <span className="truncate">
+                    {unit.name}
+                    {unit.isActive ? "" : " · archivált"}
+                  </span>
+                </button>
+              );
+            })}
+          </aside>
+          {panel}
         </div>
-        {unitsOwnerId && unitOptions.length > 0 ? (
-          <div className="mt-3 space-y-2">
-            <p className="text-sm font-medium">Helyszínek</p>
-            <div className="flex flex-wrap gap-2">
-              {unitOptions.map((option) => {
-                const on = selectedUnits.includes(option.id);
-                return (
-                  <label
-                    key={option.id}
-                    className="flex items-center gap-2 rounded border px-2 py-1 text-sm"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={on}
-                      onChange={() =>
-                        router.replace(
-                          `${pathname}?${writeUnitFilter(
-                            params,
-                            toggleUnitFilter(selectedUnits, option.id),
-                          )}`,
-                        )
-                      }
-                    />
-                    {/* JELOLUNK, DE NEM SZURUNK (acrobot dontese, 2026-09-02
-                        21:13). Egy eszkoz allhat archivalt helyszinen, es a
-                        listat is akarhatja valaki epp arra szurni -- a
-                        valasztas itt nem hoz letre semmit. A jeloles viszont
-                        kell, kulonben a felhasznalo nem erti, miert nem
-                        ajanljuk ugyanezt a helyszint az uj munkanal. */}
-                    <span>
-                      {option.label}
-                      {option.isActive ? "" : " · archivált"}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-            {selectedUnits.length > 0 ? (
-              <Button
-                variant="secondary"
-                onClick={() =>
-                  router.replace(`${pathname}?${writeUnitFilter(params, [])}`)
-                }
-              >
-                Helyszín-szűrés törlése
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
-      </Card>
-      {loading && !data ? (
-        <div className="space-y-3" aria-label="Eszközök betöltése">
-          <Skeleton className="h-16" />
-          <Skeleton className="h-64" />
-        </div>
-      ) : null}
-      {data?.items.length ? (
-        <Card className="overflow-x-auto">
-          <table className="w-full min-w-[980px] text-left text-sm">
-            <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
-              <tr>
-                <th className="p-3">Eszköz</th>
-                <th>Partner / hely</th>
-                <th>Hierarchia</th>
-                <th>Műszaki azonosító</th>
-                <th>Státusz</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.items.map((asset) => (
-                <tr key={asset.id} className="border-b last:border-0">
-                  <td className="p-3">
-                    <Link
-                      href={`/szerviz/eszkozok/${asset.id}`}
-                      className="font-semibold text-slate-950 hover:text-teal-700"
-                    >
-                      {asset.name}
-                    </Link>
-                    <div className="mt-0.5 font-mono text-xs text-slate-500">
-                      {asset.assetNumber}
-                    </div>
-                    {/* AZ UGYFEL SAJAT KODJA, csak ha VAN. A kereses eddig is
-                        nezte, a sor viszont nem mutatta: az ugyfel felolvasta a
-                        sajat kodjat, a talalat feljott, es semmi nem arulta el,
-                        MIRE illeszkedett. A felirat azert kell melle, hogy ne
-                        legyen osszekeverheto a mi eszkozszamunkkal -- az all
-                        folotte, ugyanabban a betutipusban. */}
-                    {asset.inventoryNumber ? (
-                      <div className="mt-0.5 text-xs text-slate-500">
-                        Leltári szám:{" "}
-                        <span className="font-mono">
-                          {asset.inventoryNumber}
-                        </span>
-                      </div>
-                    ) : null}
-                  </td>
-                  <td>
-                    <div className="font-medium">{asset.owner.displayName}</div>
-                    {/* AZ ALEGYSEG A VALASZTOTT HELY, a cim a VISSZAESES.
-                        Partner-tulajdonosnal a cim mindig a partner sajat
-                        postai cime, tehat alegyseg nelkul ez nem valasztas
-                        eredmenye -- es a listaban ez latszik a legkevesbe, mert
-                        egy sorban minden helynek ugyanugy nez ki. Ezert all itt
-                        is a jeloles, nem csak az adatlapon. */}
-                    <div className="text-xs text-slate-500">
-                      {asset.unit
-                        ? `${asset.unit.path.join(" / ")} (${asset.unit.code})`
-                        : asset.owner.type === "SUPPLIER"
-                          ? asset.address?.formatted
-                            ? `Nincs pontosítva. ${asset.address.formatted}`
-                            : "Nincs pontosítva."
-                          : (asset.address?.formatted ?? "Nincs pontosítva.")}
-                    </div>
-                  </td>
-                  <td>
-                    {asset.parent ? (
-                      <span>
-                        Része: <strong>{asset.parent.name}</strong>
-                      </span>
-                    ) : asset.childCount ? (
-                      `${asset.childCount} részegység`
-                    ) : (
-                      "Önálló eszköz"
-                    )}
-                  </td>
-                  <td>
-                    {[asset.manufacturer, asset.model, asset.serialNumber]
-                      .filter(Boolean)
-                      .join(" · ") || "—"}
-                  </td>
-                  <td>
-                    <Badge variant={statusVariant(asset.status)}>
-                      {assetStatusLabel[asset.status]}
-                    </Badge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
-      ) : data ? (
-        <EmptyState
-          title="Nincs találat"
-          description="Módosítsd a szűrőket vagy rögzíts új partnereszközt."
-        />
-      ) : null}
+      ) : (
+        panel
+      )}
       {data ? (
-        <div className="flex justify-end gap-2">
+        <div className="mt-6 flex justify-end gap-2">
           <Button
             variant="secondary"
             disabled={data.pagination.page <= 1}
