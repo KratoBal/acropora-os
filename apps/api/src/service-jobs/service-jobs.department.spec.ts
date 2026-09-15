@@ -112,7 +112,13 @@ describe("a hibajegy helyszine a felvitelen", () => {
    * egy uzenet ala vonni oket.
    */
   it("partner nelkul megadott helyszint elutasit, sajat uzenettel", async () => {
-    const service = serviceWith({ belongs: true });
+    let hivtak = false;
+    const service = serviceWith({
+      belongs: true,
+      onCreate: () => {
+        hivtak = true;
+      },
+    });
 
     await assert.rejects(
       () =>
@@ -122,6 +128,23 @@ describe("a hibajegy helyszine a felvitelen", () => {
           MOST,
         ),
       /csak partnerrel együtt/,
+    );
+    /*
+      AZ UZENET ONMAGABAN KEVES. Murena vette eszre (2026-09-14): a negy
+      elutasito szeletbol ketto csak a SZOVEGET merte, ketto a nem-irast is. A
+      kulonbsegnek nem volt indoka -- es a POZITIV KONTROLL, hogy ugyanez a
+      `hivtak` mechanizmus ugyanebben a fajlban ket helyen mukodik, tehat a
+      hiany a fajle volt, nem a keresesee.
+
+      MA SZERKEZETILEG NEM IS TUDNA IRNI (a dobas minden tarolo-hivas elott
+      all). Az allitas arra az esetre szol, amikor valaki ezt az ellenorzest a
+      `create` ALA viszi: akkor a szoveg valtozatlan maradna, es semmi nem
+      szolna a fel-kesz jegyrol.
+    */
+    assert.equal(
+      hivtak,
+      false,
+      "Az elutasitott jegy nem keletkezhet meg fel-kesz allapotban.",
     );
   });
 
@@ -234,7 +257,13 @@ describe("a hibajegy eszkozei a felvitelen", () => {
    * eszkoz", hanem hianyzo helyszin -- mas a teendo.
    */
   it("helyszin nelkul megadott eszkozt elutasit, sajat uzenettel", async () => {
-    const service = serviceWith({ belongs: true });
+    let hivtak = false;
+    const service = serviceWith({
+      belongs: true,
+      onCreate: () => {
+        hivtak = true;
+      },
+    });
 
     await assert.rejects(
       () =>
@@ -248,6 +277,12 @@ describe("a hibajegy eszkozei a felvitelen", () => {
           MOST,
         ),
       /csak helyszínnel együtt/,
+    );
+    // Ugyanaz az orzo, ugyanabbol az okbol, mint a partner nelkuli helyszinnel.
+    assert.equal(
+      hivtak,
+      false,
+      "Az elutasitott jegy nem keletkezhet meg fel-kesz allapotban.",
     );
   });
 
