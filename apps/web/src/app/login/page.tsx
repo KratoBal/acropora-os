@@ -47,13 +47,25 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12">
       <div className="w-full max-w-md">
-        <div className="mb-8 flex items-center justify-center gap-3">
-          <span className="flex size-10 items-center justify-center rounded-xl bg-teal-700 text-lg font-black text-white shadow-sm">
-            A
-          </span>
-          <span className="text-xl font-bold tracking-tight text-slate-950">
-            Acropora <span className="text-teal-700">OS</span>
-          </span>
+        {/*
+          UGYANAZ A JEL, MASIK VALTOZATBAN. Ez a lap vilagos hatteru, tehat az
+          EREDETI, sotet feliratu valtozat valo ide -- a savba szant feher
+          feliratos itt olvashatatlan lenne.
+
+          MIERT UGYANABBAN A KORBEN, MINT A HEJ: a ket hely egyutt a
+          "belepes" -- ha csak az oldalsav kapna meg a valodi jelet, a
+          bejelentkezes utan a felhasznalo ket kulonbozo markat latna
+          egymas utan, ket masodperc kulonbseggel.
+        */}
+        <div className="mb-8 flex items-center justify-center">
+          {/* eslint-disable-next-line @next/next/no-img-element -- statikus SVG, a next/image nem optimalizalja */}
+          <img
+            src="/acropora-logo.svg"
+            alt="Acropora OS"
+            width={108}
+            height={60}
+            className="h-15 w-auto"
+          />
         </div>
 
         <Card className="p-6 sm:p-8">
