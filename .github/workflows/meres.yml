@@ -95,6 +95,22 @@ jobs:
       - name: Seed development reference data
         run: pnpm prisma:seed
 
+      # A CSOMAGOK EPITESE, ES EZ NEM MASOLASI HIBA VOLT, HANEM MERT LELET.
+      #
+      # Az elso valtozatom a `ci.yml` beallito lepeseit vette at a seedig, es ott
+      # megallt -- a rendes kapuban ugyanis a `pnpm test` (turbo) epiti fel a
+      # csomagokat, mielott az integracios lepes sorra kerul. Itt az a lepes
+      # nincs, tehat a `@acropora/database` `dist`-je nem letezett, es MIND a
+      # huszonkilenc integracios spec ugyanazzal a hibaval allt meg:
+      #
+      #     Cannot find module '.../packages/database/dist/index.js'
+      #
+      # A kapu ezt HELYESEN pirosnak olvasta (a vart nyomok nem jelentek meg),
+      # de a valodi ok nem a meres volt, hanem a hianyzo epites. Merve a
+      # meres/bekotes-proba agon, futas 35010209274.
+      - name: Build workspace packages
+        run: pnpm build
+
       # A KET PARANCS UGYANUGY FUT, MINT A RENDES KAPUBAN, ES A BUKASUK ITT NEM
       # VERDIKT: a meres-koron epp az a dolguk, hogy elbukjanak. A verdiktet
       # egyedul a lenti kapu mondja ki.

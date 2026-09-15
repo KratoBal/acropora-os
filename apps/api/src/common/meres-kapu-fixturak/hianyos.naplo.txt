@@ -1,0 +1,5 @@
+    A takaritas utan 1 tablaban maradtak sorok:
+      - the suite's users survived the cleanup: 3
+    A takaritas utan 1 tablaban maradtak sorok:
+      - a suite termekei bent maradtak a takaritas utan: 7
+  code: 'ERR_TEST_FAILURE'

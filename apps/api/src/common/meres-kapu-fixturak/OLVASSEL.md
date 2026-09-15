@@ -3,11 +3,11 @@
 Egyik sem kitalalt TAP-szoveg. Mindharom egy megnevezett GitHub-futas naplojabol
 van kivagva, es a futas a branch torlese utan is lehivhato:
 
-| fajl          | futas       | mit mutat                                                                        |
-| ------------- | ----------- | -------------------------------------------------------------------------------- |
-| `teljes.log`  | 35003588230 | a masodik visszaolvaso kor: a brands blokk ES a medusa masodik neve is megjelent |
-| `hianyos.log` | 35001520746 | az elso kor: a brands suite EL SEM INDULT, a medusa masodik neve hianyzik        |
-| `zold.log`    | 35000681174 | rendes, zold futas a fo agon: egyetlen takaritas-szamlalo sem sult el            |
+| fajl                | futas       | mit mutat                                                                        |
+| ------------------- | ----------- | -------------------------------------------------------------------------------- |
+| `teljes.naplo.txt`  | 35003588230 | a masodik visszaolvaso kor: a brands blokk ES a medusa masodik neve is megjelent |
+| `hianyos.naplo.txt` | 35001520746 | az elso kor: a brands suite EL SEM INDULT, a medusa masodik neve hianyzik        |
+| `zold.naplo.txt`    | 35000681174 | rendes, zold futas a fo agon: egyetlen takaritas-szamlalo sem sult el            |
 
 A harom kozti KULONBSEG a lenyeg, nem a meretuk. Az elso kivagasom a ket
 meres-korbol BETURE AZONOS reszletet adott (mindketto ugyanugy kezdodik), tehat

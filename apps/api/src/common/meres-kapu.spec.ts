@@ -53,7 +53,7 @@ const VART = [
 
 describe("meres-kapu", () => {
   it("a teljes kor naplojan ZOLD: minden vart nyom megjelent", () => {
-    assert.equal(futtat(join(FIXTURAK, "teljes.log"), VART), 0);
+    assert.equal(futtat(join(FIXTURAK, "teljes.naplo.txt"), VART), 0);
   });
 
   /**
@@ -63,7 +63,7 @@ describe("meres-kapu", () => {
    * level volt; itt a kapu MEGNEVEZI, mi hianyzik.
    */
   it("a hianyos koron PIROS, mert a vart nyomok egy resze hianyzik", () => {
-    assert.equal(futtat(join(FIXTURAK, "hianyos.log"), VART), 1);
+    assert.equal(futtat(join(FIXTURAK, "hianyos.naplo.txt"), VART), 1);
   });
 
   /**
@@ -72,21 +72,21 @@ describe("meres-kapu", () => {
    * ures kor is "sikeres meresnek" latszana.
    */
   it("egy rendes ZOLD futas naplojan PIROS: az a kor nem mert semmit", () => {
-    assert.equal(futtat(join(FIXTURAK, "zold.log"), VART), 1);
+    assert.equal(futtat(join(FIXTURAK, "zold.naplo.txt"), VART), 1);
   });
 
   it("vart-fajl nelkul MEGALL (2), nem enged at", () => {
-    assert.equal(futtat(join(FIXTURAK, "teljes.log"), null), 2);
+    assert.equal(futtat(join(FIXTURAK, "teljes.naplo.txt"), null), 2);
   });
 
   it("ures vart-fajlnal is MEGALL (2)", () => {
     assert.equal(
-      futtat(join(FIXTURAK, "teljes.log"), ["# csak megjegyzes", ""]),
+      futtat(join(FIXTURAK, "teljes.naplo.txt"), ["# csak megjegyzes", ""]),
       2,
     );
   });
 
   it("olvashatatlan naplonal sajat kodot ad (3), nem pirosat", () => {
-    assert.equal(futtat(join(FIXTURAK, "nincs-ilyen.log"), VART), 3);
+    assert.equal(futtat(join(FIXTURAK, "nincs-ilyen.naplo.txt"), VART), 3);
   });
 });
