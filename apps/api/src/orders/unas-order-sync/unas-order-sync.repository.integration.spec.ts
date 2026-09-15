@@ -165,6 +165,24 @@ describe(
       await prisma.unasOrderSyncRun.deleteMany({
         where: { id: { in: runIds } },
       });
+      /**
+       * A SAJAT KURZORA, AMIT EDDIG SENKI NEM VITT EL.
+       *
+       * A `unas-order-sync.repository.ts` a szinkron vegen felir egy
+       * `IntegrationCursor` sort (`provider: "UNAS", stream: "ORDERS"`), ez a
+       * spec viszont a tablat MEG SEM EMLITETTE -- tehat a sor minden futas utan
+       * ott maradt. Merve (verify job 104337824776, ket sor-pillanatkep az
+       * integracios futas korul): `IntegrationCursor +1`.
+       *
+       * ES A GAZDAT ELOSZOR ROSSZ HELYEN KERESTUK. A `unas-product-sync` spec
+       * torol kurzort, tehat kezenfekvo volt ra gondolni -- csakhogy az a torles
+       * `stream: { in: ["PRODUCTS", "STOCKS"] }` hatokoru, es az "ORDERS" KIVUL
+       * ESIK rajta. Aki a tabla NEVERE keres a specekben, ott all meg; a valasz
+       * arra a kerdesre jott elo, hogy MI IRJA a sort.
+       */
+      await prisma.integrationCursor.deleteMany({
+        where: { provider: "UNAS", stream: "ORDERS" },
+      });
       await prisma.productVariant.deleteMany({
         where: { id: { in: variantIds } },
       });
