@@ -581,7 +581,9 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
 
   return (
     <div>
-      <ServiceOfflineNotice />
+      <ServiceOfflineNotice
+        state={worksheet ? { kind: "loaded" } : { kind: "empty" }}
+      />
       <ServiceBackLink href={backToList.href}>
         {backToList.fromWithinApp ? "Vissza" : "Munkalapok"}
       </ServiceBackLink>

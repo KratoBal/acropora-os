@@ -535,7 +535,7 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
       {/* A KILEPES A CIM FOLOTT ALL, NEM A MUVELETEK KOZOTT. Az urlapon a
           "Megsem" a mentes MELLETT allt, ugyanolyan sulyunak latszva -- pedig
           az egyik ir, a masik elhagyja a lapot. */}
-      <ServiceOfflineNotice />
+      <ServiceOfflineNotice state={{ kind: "form" }} />
       <ServiceBackLink
         href={
           worksheetId

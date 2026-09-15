@@ -222,7 +222,9 @@ export function WorksheetListPage() {
 
   return (
     <div>
-      <ServiceOfflineNotice />
+      <ServiceOfflineNotice
+        state={data ? { kind: "loaded" } : { kind: "empty" }}
+      />
       <ServiceListHeader
         eyebrow="Szerviz / munkatér"
         title="Munkalapok"

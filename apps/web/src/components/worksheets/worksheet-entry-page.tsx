@@ -96,7 +96,9 @@ export function WorksheetEntryPage({
         visszalepese nem helyettesiti: aki kozvetlen linkbol erkezik, annak
         nincs hova visszalepnie.
       */}
-      <ServiceOfflineNotice />
+      <ServiceOfflineNotice
+        state={entries ? { kind: "loaded" } : { kind: "empty" }}
+      />
       <ServiceBackLink href={`/szerviz/munkalapok/${worksheetId}`}>
         Vissza a munkalapra
       </ServiceBackLink>

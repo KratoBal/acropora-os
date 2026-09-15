@@ -328,7 +328,9 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
       {/* A VISSZA-UT A CIM FOLOTT ALL, NEM A MUVELETEK KOZOTT: kilepes a
           lapbol, nem muvelet rajta -- a "modositas" mellett allva ugyanolyan
           sulyunak latszott, pedig az egyetlen, ami nem valtoztat semmin. */}
-      <ServiceOfflineNotice />
+      <ServiceOfflineNotice
+        state={asset ? { kind: "loaded" } : { kind: "empty" }}
+      />
       <ServiceBackLink href={backToList.href}>
         {backToList.fromWithinApp ? "Vissza" : "Eszközök"}
       </ServiceBackLink>
