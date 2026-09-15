@@ -70,6 +70,7 @@ function setup(
       return { ok: true, added: [...(input.userIds as string[])] };
     },
     detail: async () => detailRow(),
+    documentRemovals: async () => [],
     ...overrides,
   } as unknown as ServiceJobsRepository;
 

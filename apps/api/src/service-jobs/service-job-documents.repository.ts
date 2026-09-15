@@ -6,6 +6,16 @@ import type { ServiceJobDocumentSummary } from "@acropora/types";
 import { documentedContentType } from "../service-assets/service-assets.repository.js";
 
 /**
+ * A TORLES NAPLO-CIMKEJE, EGY HELYEN.
+ *
+ * KET oldal hasznalja: az IRAS (ez a fajl) es az OLVASAS (a reszletlap
+ * lekerdezese). Ha ket helyen allna, egy elgepeles NEM hibazna -- a torles
+ * beirodna, a naplo pedig sosem talalna meg --, es a hiany pontosan ugy nezne
+ * ki, mintha soha senki nem torolt volna semmit.
+ */
+export const DOCUMENT_DELETED_ACTION = "service_job.document.deleted";
+
+/**
  * A SOR -> VALASZ LEKEPEZES, EGY HELYEN.
  *
  * KET MEZO NEM MEHET AT NYERSEN, es mindketto MAS okbol:
@@ -185,15 +195,102 @@ export class ServiceJobDocumentsRepository {
    * torolne, ha valaki a sajat jegyenek utjara irja egy idegen dokumentum
    * azonositojat.
    */
-  async deleteDocument(serviceJobId: string, documentId: string) {
+  async deleteDocument(
+    serviceJobId: string,
+    documentId: string,
+    actorUserId: string | null,
+  ) {
     return this.database.$transaction(async (transaction) => {
       const document = await transaction.serviceJobDocument.findFirst({
         where: { id: documentId, serviceJobId },
-        select: { id: true, fileName: true, storageKey: true },
+        select: {
+          id: true,
+          fileName: true,
+          type: true,
+          storageKey: true,
+          /**
+           * A FELTOLTES ADATAI IS -- MERT EZ A SOR VISZI OKET.
+           *
+           * A feltoltes MA IS naplozva van, csak nem a naploban: a csatolmany
+           * sora hordozza, KI toltotte fel es MIKOR. Ha a sort toroljuk, ez a
+           * nyom is eltunik vele. Ezert veszi at a torles-bejegyzes -- kulonben
+           * egy torles KET dolgot semmisitene meg, nem egyet.
+           */
+          createdAt: true,
+          uploadedBy: { select: { displayName: true } },
+        },
       });
       if (!document) return null;
       await transaction.serviceJobDocument.deleteMany({
         where: { id: documentId, serviceJobId },
+      });
+      /**
+       * A FELTOLTESNEK NINCS SAJAT SORA, MERT AMIG A FAJL FENT VAN, LATSZIK A
+       * LISTAN -- AMIKOR PEDIG ELTUNIK, A TORLES SORA VISZI MAGAVAL, AMIT ROLA
+       * TUDNI KELL.
+       *
+       * ES A KET FELE KOZOTT EPP AZ A PILLANAT VAN, AMIERT A NAPLO LETEZIK. A
+       * "van sajat nyoma" pontosan abban az egy esetben hamis, amikor valaki a
+       * naplot OLVASSA: a fajl akkor mar nincs a listan, tehat a lista epp azt
+       * nem mutatja, amirol a kerdes szol.
+       *
+       * Ha a sor csak annyit mondana, hogy "X torolt egy fajlt", a ket
+       * kerdes, amit ilyenkor feltesznek -- MENNYI IDEIG volt fent, es KI tette
+       * fel --, megvalaszolatlan maradna. Ezert veszi at a bejegyzes a torolt
+       * sor tartalmat.
+       *
+       * EZ AZ UTOLSO PILLANAT, AMIKOR EZ AZ ADAT LETEZIK. Az `uploadedById` es a
+       * `createdAt` a torles utan MEGSZUNIK -- ami csak a valtozas ELOTT all
+       * fenn, azt a valtozas idejen kell rogziteni, vagy soha.
+       *
+       * ES EGY SOR, NEM KETTO: egy kulon feltoltes-naplo megketszerezne a
+       * forgalmat azert, hogy osszeparositva ugyanezt mondja -- a parositas
+       * pedig elromolhat, egy sor viszont nem tud elcsuszni onmagatol.
+       *
+       * Aki ezt "befejezi" egy feltoltes-naploval, nem hianyt potol.
+       *
+       * A NYOM UGYANABBAN A TRANZAKCIOBAN KELETKEZIK, MINT A TORLES.
+       *
+       * Kulon hivasban ket rossz kimenet allna elo, es MIND A KETTO nemán: a
+       * fajl eltunne naplo nelkul (epp az, amit ez a sor megelozni hivatott),
+       * vagy a naplo allitana egy torlest, ami meg sem tortent. Egy
+       * tranzakcioban a ketto egyutt all vagy egyutt bukik.
+       *
+       * AZ `entityId` A JEGY, NEM A DOKUMENTUM -- es ez a lenyeg, nem reszlet.
+       * A dokumentum sora ezutan mar NINCS, tehat ra hivatkozva a naplot nem
+       * lehetne visszakeresni. A jegyre hivatkozva viszont a meglevo
+       * `@@index([entityType, entityId, createdAt])` epp ezt a lekerdezest
+       * szolgalja ki: "mi tortent ezzel a jeggyel, idorendben".
+       */
+      await transaction.auditLog.create({
+        data: {
+          userId: actorUserId,
+          action: DOCUMENT_DELETED_ACTION,
+          entityType: "ServiceJob",
+          entityId: serviceJobId,
+          metadata: {
+            documentId: document.id,
+            /**
+             * A NEV ES A TIPUS MASOLATBAN. A dokumentum sora ezutan mar nincs
+             * meg, tehat a naplo CSAK azt tudja, amit magaval visz.
+             *
+             * A TIPUS NEM UGYANAZ, MINT A KITERJESZTES: a `type` a mi
+             * besorolasunk (fenykep vagy dokumentum), a fajlnev vege pedig
+             * barmi lehet. Nev nelkul a naplo azt mondana, hogy "torles
+             * tortent"; tipus nelkul azt, hogy egy FAJL tunt el -- de nem azt,
+             * hogy a bizonyito fenykep-e vagy egy melleklet.
+             *
+             * A MERET ES A LENYOMAT SZANDEKOSAN KIMARAD. Azok egy MASIK
+             * kerdesre valaszolnanak (ugyanaz a fajl kerult-e vissza), amit
+             * senki nem tett fel, es egy megsemmisitett tartalom ujjlenyomatat
+             * nem tartjuk meg anelkul, hogy kellene.
+             */
+            fileName: document.fileName,
+            documentType: document.type,
+            uploadedByName: document.uploadedBy?.displayName ?? null,
+            uploadedAt: document.createdAt.toISOString(),
+          } satisfies Prisma.JsonObject,
+        },
       });
       return document;
     });

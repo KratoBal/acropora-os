@@ -251,6 +251,51 @@ export interface ServiceJobDetail {
   assignees: ServiceJobAssignee[];
 }
 
+/**
+ * EGY TÖRÖLT CSATOLMÁNY NYOMA.
+ *
+ * A SOR AKKOR KELETKEZIK, AMIKOR A FÁJL MEGSZŰNIK, és ez a lényege: amíg a
+ * csatolmány megvan, a saját létezése a nyoma - ott áll a listán, letölthető,
+ * látszik a mérete. Egy törölt fájl viszont nyomtalanul eltűnik, a tárolóból is,
+ * és onnantól ez az egyetlen hely, ahol megmarad, hogy VOLT, és hogy KI vette le.
+ *
+ * Ezért nem szimmetrikus a naplózás: a feltöltés nem kerül bele, a törlés igen.
+ *
+ * A `fileName` MÁSOLAT, nem hivatkozás - a dokumentum sora addigra nincs meg.
+ * Az `actorName` elhagyható: egy azóta törölt felhasználó nem viszi magával a
+ * naplót, ahogy az állapotváltásoknál sem.
+ */
+export interface ServiceJobDocumentRemoval {
+  id: string;
+  fileName: string;
+  /**
+   * A MI BESOROLASUNK, nem a fajlnev vege: egy `.pdf` lehet bizonyito fenykep
+   * scannelve is. Nelkule a naplo azt mondana, hogy egy FAJL tunt el, de nem
+   * azt, MILYEN.
+   */
+  documentType: ServiceJobDocumentType;
+  /**
+   * AKI TOROLTE, ES AMIKOR. Az `actorName` elhagyhato: egy azota torolt
+   * felhasznalo nem viszi magaval a naplot, ahogy az allapotvaltasoknal sem.
+   */
+  actorName: string | null;
+  removedAt: string;
+  /**
+   * ES AKI FELTOLTOTTE, ES AMIKOR -- A TOROLT SORBOL ATVEVE.
+   *
+   * A feltoltes MA IS rogzitve van, csak nem a naploban: a csatolmany sora
+   * hordozza. A torles viszont AZT A SORT viszi el, tehat a feltoltes nyoma
+   * vele egyutt tunne el. Ez a ket mezo azert all itt, hogy egy torles EGY
+   * dolgot semmisitsen meg, ne kettot.
+   *
+   * Az `uploadedAt` a regebbi bejegyzeseknel `null`: a mezo 2026-09-15-en
+   * keletkezett, es a korabbi sorok nem hordozzak. A `null` itt azt mondja,
+   * hogy NEM TUDJUK -- nem azt, hogy nem volt feltoltve.
+   */
+  uploadedByName: string | null;
+  uploadedAt: string | null;
+}
+
 export type ServiceJobTimelineEntry =
   | {
       kind: "status";
@@ -264,7 +309,13 @@ export type ServiceJobTimelineEntry =
       sortKey: string;
       worksheet: ServiceJobWorksheetLink;
     }
-  | { kind: "asset"; at: string; sortKey: string; asset: ServiceJobAssetLink };
+  | { kind: "asset"; at: string; sortKey: string; asset: ServiceJobAssetLink }
+  | {
+      kind: "document";
+      at: string;
+      sortKey: string;
+      removal: ServiceJobDocumentRemoval;
+    };
 
 /**
  * A HÁROM FORRÁS EGY IDŐRENDI NAPLÓVÁ, LEGÚJABB FELÜL (Balázs, 2026-09-02).
@@ -279,6 +330,14 @@ export function serviceJobTimeline(detail: {
   events: ServiceJobStatusEvent[];
   worksheets: ServiceJobWorksheetLink[];
   assets: ServiceJobAssetLink[];
+  /**
+   * KÖTELEZŐ MEZŐ, NEM ELHAGYHATÓ - ÉS EZ SZÁNDÉKOS.
+   *
+   * Egy `?` itt azt jelentené, hogy aki elfelejti átadni, ÜRES naplót kap a
+   * törlésekről, és a hiány pontosan úgy nézne ki, mintha soha nem törölt volna
+   * senki semmit. Kötelezőként a fordító kérdezi meg a hívót, nem a felhasználó.
+   */
+  documentRemovals: ServiceJobDocumentRemoval[];
 }): ServiceJobTimelineEntry[] {
   const entries: ServiceJobTimelineEntry[] = [
     ...detail.events.map((event): ServiceJobTimelineEntry => ({
@@ -298,6 +357,12 @@ export function serviceJobTimeline(detail: {
       at: asset.attachedAt,
       sortKey: asset.id,
       asset,
+    })),
+    ...detail.documentRemovals.map((removal): ServiceJobTimelineEntry => ({
+      kind: "document",
+      at: removal.removedAt,
+      sortKey: removal.id,
+      removal,
     })),
   ];
 

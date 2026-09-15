@@ -3,6 +3,7 @@ import { Injectable } from "@nestjs/common";
 import { expandAssignedUnits } from "./assigned-units.js";
 import { assetsOutsideDepartment } from "../common/assets-in-department.js";
 import { SERVICE_ASSIGNABLE_ROLES } from "../common/service-assignment.js";
+import { DOCUMENT_DELETED_ACTION } from "./service-job-documents.repository.js";
 import { ALL_SERVICE_JOB_STATUSES } from "./service-job-status.js";
 import { prisma, type Prisma, type ServiceJobStatus } from "@acropora/database";
 
@@ -550,6 +551,37 @@ export class ServiceJobsRepository {
    * `findFirst` es nem `findUnique`: az utobbi csak egyedi kulcsra szur, tehat a
    * hatokort nem lehetne melle tenni.
    */
+  /**
+   * A JEGYROL TOROLT CSATOLMANYOK, IDORENDBEN.
+   *
+   * KULON LEKERDEZES, es nem a `detail` `select`-jenek a resze: az `AuditLog`
+   * nem all relacioban a jeggyel -- altalanos tabla, `entityType` es `entityId`
+   * parossal hivatkozik barmire. Prisma `include` tehat nincs ra, es ez nem
+   * hianyossag: epp ettol tud egyetlen tabla minden modell nyomat vinni.
+   *
+   * A MEGLEVO `@@index([entityType, entityId, createdAt])` szolgalja ki, tehat
+   * nem kell uj index sem.
+   *
+   * A `fileName` a `metadata`-bol jon, es NEM a dokumentum sorabol -- az
+   * addigra nincs meg. Ez a masolat a lenyeg, nem keruloút.
+   */
+  async documentRemovals(serviceJobId: string) {
+    return this.database.auditLog.findMany({
+      where: {
+        entityType: "ServiceJob",
+        entityId: serviceJobId,
+        action: DOCUMENT_DELETED_ACTION,
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: {
+        id: true,
+        createdAt: true,
+        metadata: true,
+        user: { select: { displayName: true } },
+      },
+    });
+  }
+
   async detail(id: string, visibility: Prisma.ServiceJobWhereInput) {
     return this.database.serviceJob.findFirst({
       where: { AND: [{ id }, visibility] },

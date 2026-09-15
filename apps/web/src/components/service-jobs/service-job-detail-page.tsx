@@ -63,6 +63,24 @@ function timelineLine(entry: ServiceJobTimelineEntry): string {
   }
   if (entry.kind === "worksheet")
     return `Munkalap a jegy alatt: ${entry.worksheet.number ?? "piszkozat"}`;
+  /*
+    A TÖRÖLT CSATOLMÁNY SORA MEGNEVEZI, KI VETTE LE. Az állapotváltásnál a nevet
+    a sor alatti másodperc-sor hozza; itt a MONDATBAN áll, mert ez az egyetlen
+    naplósor, ami egy VISSZAFORDÍTHATATLAN törlésről szól, és ott a „ki" nem
+    kísérőadat.
+
+    Név nélkül is olvasható marad: egy azóta törölt felhasználó nem viszi
+    magával a naplót, ugyanúgy, ahogy az állapotváltásoknál sem.
+  */
+  if (entry.kind === "document") {
+    const mi =
+      entry.removal.documentType === "PHOTO"
+        ? `fényképet (${entry.removal.fileName})`
+        : `csatolmányt (${entry.removal.fileName})`;
+    return entry.removal.actorName
+      ? `${entry.removal.actorName} törölt egy ${mi}`
+      : `Törölt ${mi}`;
+  }
   return `Eszköz a jegyen: ${entry.asset.assetNumber} (${entry.asset.assetName})`;
 }
 
@@ -516,6 +534,25 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                           ? ` · ${entry.event.actorName}`
                           : ""}
                       </div>
+                      {/*
+                        A TÖRÖLT CSATOLMÁNY SORA ALATT AZ ÁLL, AMIT A TÖRLÉS
+                        ELVITT VOLNA: ki töltötte fel, és mikor. A fájl sora
+                        addigra nincs meg, tehát ez az egyetlen hely, ahol ez
+                        látszik - ha itt sem írnánk ki, a megőrzött adat
+                        megvolna, csak nem tudna róla senki.
+
+                        Régebbi bejegyzésnél `null`, és olyankor nem írunk
+                        semmit: a „nem tudjuk" nem ugyanaz, mint a „nem volt".
+                      */}
+                      {entry.kind === "document" &&
+                      entry.removal.uploadedAt !== null ? (
+                        <div className="mt-0.5 text-xs text-slate-500">
+                          Feltöltve: {formatDateTime(entry.removal.uploadedAt)}
+                          {entry.removal.uploadedByName
+                            ? ` · ${entry.removal.uploadedByName}`
+                            : ""}
+                        </div>
+                      ) : null}
                       {entry.kind === "status" && entry.event.note ? (
                         <div className="mt-1 whitespace-pre-wrap text-sm">
                           {entry.event.note}

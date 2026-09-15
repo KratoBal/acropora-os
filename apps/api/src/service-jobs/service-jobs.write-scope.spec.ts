@@ -73,6 +73,7 @@ function serviceWith(overrides: Partial<ServiceJobsRepository> = {}) {
   const irasok: string[] = [];
   const repository: Partial<ServiceJobsRepository> = {
     detail: async () => RESZLETLAP,
+    documentRemovals: async () => [],
     statusOf: async () => "NEW",
     jobAttachState: async () => ({ customerId: "vevo-1" }),
     worksheetAttachState: async () => ({

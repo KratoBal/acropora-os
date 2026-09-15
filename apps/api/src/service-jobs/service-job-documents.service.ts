@@ -236,7 +236,11 @@ export class ServiceJobDocumentsService {
   ) {
     await this.requireVisibleJob(id, user);
 
-    const removed = await this.repository.deleteDocument(id, documentId);
+    const removed = await this.repository.deleteDocument(
+      id,
+      documentId,
+      user.id,
+    );
     if (!removed) throw new NotFoundException("A csatolmány nem található.");
 
     if (removed.storageKey && this.documentStore)

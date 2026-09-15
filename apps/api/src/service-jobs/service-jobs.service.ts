@@ -404,6 +404,16 @@ export class ServiceJobsService {
     );
     if (row === null) throw new NotFoundException("A hibajegy nem található.");
 
+    /**
+     * A TOROLT CSATOLMANYOK NYOMA -- A LATHATOSAG UTAN, NEM ELOTTE.
+     *
+     * A sorrend nem izles: ha a jegy nem lathato a hivonak, a fenti `null` mar
+     * kivetelt dobott, tehat ide csak olyan azonositoval jutunk el, amit a
+     * hivo LATHAT. Igy a naplo-lekerdezes nem kaphat sajat lathatosagi szurot
+     * -- es nem is kell neki egy MASIK, amit kulon karban kellene tartani.
+     */
+    const removals = await this.repository.documentRemovals(row.id);
+
     return {
       id: row.id,
       jobNumber: row.jobNumber,
@@ -468,6 +478,48 @@ export class ServiceJobsService {
           assetName: link.asset.name,
           attachedAt: link.createdAt.toISOString(),
         })),
+        /**
+         * A FAJLNEV A NAPLO SAJAT MASOLATABOL JON, es nem lehet mashonnan: a
+         * dokumentum sora a torleskor megszunt. A `metadata` szabad alaku
+         * JSON, tehat a kiolvasas OVATOS -- egy hianyzo vagy mas tipusu mezo
+         * nem donthet el egy reszletlapot, ezert nevesitett helyettesitest kap.
+         */
+        documentRemovals: removals.map((removal) => {
+          const meta =
+            removal.metadata &&
+            typeof removal.metadata === "object" &&
+            !Array.isArray(removal.metadata)
+              ? (removal.metadata as Record<string, unknown>)
+              : {};
+          return {
+            id: removal.id,
+            fileName:
+              typeof meta.fileName === "string"
+                ? meta.fileName
+                : "ismeretlen fájl",
+            /*
+              A TIPUS VISSZAESESE `OTHER`, NEM `PHOTO`. A regebbi naplo-sorokban
+              (a mai valtozas elottrol) nincs `documentType`, es egy hianyzo
+              mezobol nem szabad fenykepet allitani -- az tobbet mondana, mint
+              amit tudunk. Az `OTHER` az az ertek, ami nem allit semmit.
+            */
+            documentType: meta.documentType === "PHOTO" ? "PHOTO" : "OTHER",
+            actorName: removal.user?.displayName ?? null,
+            removedAt: removal.createdAt.toISOString(),
+            /*
+              A FELTOLTES ADATAI A NAPLO SAJAT MASOLATABOL -- mashonnan nem is
+              jöhetnenek: a dokumentum sora, ami ezeket hordozta, a torleskor
+              megszunt. A `null` itt azt mondja, hogy NEM TUDJUK (regebbi
+              bejegyzes), nem azt, hogy nem volt feltoltve.
+            */
+            uploadedByName:
+              typeof meta.uploadedByName === "string"
+                ? meta.uploadedByName
+                : null,
+            uploadedAt:
+              typeof meta.uploadedAt === "string" ? meta.uploadedAt : null,
+          } as const;
+        }),
       }),
       /**
        * ES UGYANEZ SAJAT LISTAKENT IS. NEM duplikacio: a naplo az IDORENDET
