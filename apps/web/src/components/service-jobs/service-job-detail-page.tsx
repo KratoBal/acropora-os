@@ -29,6 +29,7 @@ import { formatDateTime } from "@/components/worksheets/worksheet-labels";
 import { formatFileSize } from "@/lib/format/file-size";
 import { PartnerPicker } from "./partner-picker";
 import { ServiceStatusBadge } from "@/components/service/service-list-chrome";
+import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
 import {
   ServiceBackLink,
   ServiceContextRow,
@@ -392,6 +393,24 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
     }
   };
 
+  /**
+   * A SAV A KORAI AGAKON IS KELL, ES EZ NEM DISZ.
+   *
+   * A lap NEGY kulonbozo dolgot adhat vissza (csontvaz, hibauzenet, ures, es a
+   * kesz jegy). A HAROM ELSO epp az, amikor a magyarazat a legtobbet er: ures
+   * kepernyo all ott. Ha a sav csak a lenti, "kesz jegy" agon allna, az
+   * `{ kind: "empty" }` SOSEM allna elo -- oda mar csak `job`-bal jut el a
+   * vezerles --, tehat egy olyan mondatot adnank at, amit senki nem olvashat.
+   *
+   * A `!canView` ag KIMARAD belole: ott nincs mit betolteni, a lap a
+   * jogosultsagrol szol, es a sav csak zaj lenne mellette.
+   */
+  const offlineSav = (
+    <ServiceOfflineNotice
+      state={job ? { kind: "loaded" } : { kind: "empty" }}
+    />
+  );
+
   if (!canView)
     return (
       <Alert
@@ -403,10 +422,13 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
 
   if (loading && !job)
     return (
-      <div className="space-y-3" aria-label="Hibajegy betöltése">
-        <Skeleton className="h-16" />
-        <Skeleton className="h-64" />
-      </div>
+      <>
+        {offlineSav}
+        <div className="space-y-3" aria-label="Hibajegy betöltése">
+          <Skeleton className="h-16" />
+          <Skeleton className="h-64" />
+        </div>
+      </>
     );
 
   // A már betöltött jegy újrakérése meghiúsulhat. Ilyenkor a képernyőn lévő
@@ -416,19 +438,22 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
   // nincs mit megtartani, ott az önálló hibaállapot és az Újrapróbálás kell.
   if (error && !job)
     return (
-      <Alert
-        variant="danger"
-        title="Betöltési hiba"
-        description={error}
-        action={
-          <Button variant="secondary" onClick={() => void load()}>
-            Újrapróbálás
-          </Button>
-        }
-      />
+      <>
+        {offlineSav}
+        <Alert
+          variant="danger"
+          title="Betöltési hiba"
+          description={error}
+          action={
+            <Button variant="secondary" onClick={() => void load()}>
+              Újrapróbálás
+            </Button>
+          }
+        />
+      </>
     );
 
-  if (!job) return null;
+  if (!job) return offlineSav;
 
   // A MUNKALAP-SZAKASZ A NAPLÓBÓL SZŰR, nem külön listából: a végpont egy
   // időrendet ad, és ez a doboz csak MÁS NÉZETE ugyanannak. Egy második lista
@@ -439,6 +464,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
 
   return (
     <div>
+      {offlineSav}
       {/*
         A "VISSZA" NEM MUVELET, ES EZERT KERUL A LAP FOLE.
 

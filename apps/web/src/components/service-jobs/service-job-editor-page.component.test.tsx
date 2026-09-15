@@ -9,8 +9,12 @@ import type {
   Session,
   WorksheetSelectablePartnerListResponse,
 } from "@acropora/types";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  ServiceOfflineNotice,
+  type ServiceOfflineState,
+} from "@/components/service/service-offline-notice";
 import { ServiceJobEditorPage } from "./service-job-editor-page";
 
 const api = vi.hoisted(() => ({ create: vi.fn(), uploadDocument: vi.fn() }));
@@ -28,6 +32,45 @@ vi.mock("@/components/auth/auth-provider", () => ({
 }));
 vi.mock("@/lib/api/service-jobs", () => ({ serviceJobsApi: api }));
 vi.mock("@/lib/api/worksheets", () => ({ worksheetsApi: sheets }));
+
+/**
+ * A KAPCSOLAT ALLAPOTAT A `navigator.onLine` MONDJA MEG, es a jsdom
+ * alapertelmezese `true` -- tehat a sav ki sem rajzolodna. Ez a ket sor
+ * allitja at, az `afterEach` pedig visszaadja, hogy a tobbi allitas ne egy
+ * halozat nelkuli vilagban fusson.
+ */
+function setOnLine(value: boolean) {
+  Object.defineProperty(window.navigator, "onLine", {
+    value,
+    configurable: true,
+  });
+}
+
+afterEach(() => setOnLine(true));
+
+/**
+ * A VART MONDATOT A KOMPONENSTOL KERDEZEM MEG, NEM BEGEPELEM.
+ *
+ * Ez a lap allitasa arrol szol, hogy a lap JOL VALASZT a harom allapot kozul
+ * -- nem arrol, hogy mi a mondat szovege. A szoveg a save, es sajat tesztje
+ * van ra, ami azt is allitja, hogy a harom mondat KULONBOZIK. Ha ide beirnam
+ * a mondatot, ket helyen allna ugyanaz az igazsag, es a lap tesztje pirosodna
+ * egy PUSZTA ATFOGALMAZASTOL.
+ *
+ * MERVE, NEM FELTEVES (2026-09-15): a #693 pontosan ezt tette -- az urlap
+ * mondatat atirta, a `form` kindhez nem nyult --, es a begepelt valtozat
+ * azonnal pirosra valtott a friss fo agon, holott a lapok viselkedese nem
+ * valtozott.
+ */
+function savSzovege(kind: ServiceOfflineState["kind"]): string {
+  setOnLine(false);
+  const { container, unmount } = render(
+    <ServiceOfflineNotice state={{ kind }} />,
+  );
+  const szoveg = container.textContent ?? "";
+  unmount();
+  return szoveg;
+}
 
 function sessionAs(role: Session["user"]["role"]): Session {
   return {
@@ -602,5 +645,20 @@ describe("ServiceJobEditorPage", () => {
 
     await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
     expect(api.uploadDocument).not.toHaveBeenCalled();
+  });
+
+  /**
+   * AZ URLAPON A TET NEM A FRISSITES, HANEM A MENTES.
+   *
+   * Itt nincs "betoltott adat", amit a felhasznalo nezhetne: egy ures urlap
+   * all. A ket megjelenito lap mondata (hogy a legutobb betoltott adatokat
+   * latod) ezen a lapon MINDIG hamis lenne, kapcsolattal is. Ez az allitas
+   * pontosan azt a tevesztest fogja meg.
+   */
+  it("kapcsolat nélkül az űrlapon a mentésről beszél, nem a frissítésről", async () => {
+    const vart = savSzovege("form");
+    render(<ServiceJobEditorPage />);
+
+    expect(await screen.findByText(vart)).toBeTruthy();
   });
 });

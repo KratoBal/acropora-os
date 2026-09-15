@@ -18,6 +18,7 @@ import {
   ServiceSearchField,
   ServiceStatusBadge,
 } from "@/components/service/service-list-chrome";
+import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
 import {
   ServiceListStats,
   type ServiceStatTile,
@@ -152,6 +153,9 @@ export function ServiceJobListPage() {
 
   return (
     <div>
+      <ServiceOfflineNotice
+        state={data ? { kind: "loaded" } : { kind: "empty" }}
+      />
       <ServiceListHeader
         eyebrow="Szerviz / Munkatér"
         title="Hibajegyek"

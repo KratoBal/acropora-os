@@ -10,8 +10,12 @@ import type {
   ServiceJobDocumentSummary,
   Session,
 } from "@acropora/types";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  ServiceOfflineNotice,
+  type ServiceOfflineState,
+} from "@/components/service/service-offline-notice";
 import { ServiceJobDetailPage } from "./service-job-detail-page";
 
 const api = vi.hoisted(() => ({
@@ -38,6 +42,45 @@ vi.mock("@/components/auth/auth-provider", () => ({
 }));
 vi.mock("@/lib/api/service-jobs", () => ({ serviceJobsApi: api }));
 vi.mock("@/lib/api/worksheets", () => ({ worksheetsApi: sheets }));
+
+/**
+ * A KAPCSOLAT ALLAPOTAT A `navigator.onLine` MONDJA MEG, es a jsdom
+ * alapertelmezese `true` -- tehat a sav ki sem rajzolodna. Ez a ket sor
+ * allitja at, az `afterEach` pedig visszaadja, hogy a tobbi allitas ne egy
+ * halozat nelkuli vilagban fusson.
+ */
+function setOnLine(value: boolean) {
+  Object.defineProperty(window.navigator, "onLine", {
+    value,
+    configurable: true,
+  });
+}
+
+afterEach(() => setOnLine(true));
+
+/**
+ * A VART MONDATOT A KOMPONENSTOL KERDEZEM MEG, NEM BEGEPELEM.
+ *
+ * Ez a lap allitasa arrol szol, hogy a lap JOL VALASZT a harom allapot kozul
+ * -- nem arrol, hogy mi a mondat szovege. A szoveg a save, es sajat tesztje
+ * van ra, ami azt is allitja, hogy a harom mondat KULONBOZIK. Ha ide beirnam
+ * a mondatot, ket helyen allna ugyanaz az igazsag, es a lap tesztje pirosodna
+ * egy PUSZTA ATFOGALMAZASTOL.
+ *
+ * MERVE, NEM FELTEVES (2026-09-15): a #693 pontosan ezt tette -- az urlap
+ * mondatat atirta, a `form` kindhez nem nyult --, es a begepelt valtozat
+ * azonnal pirosra valtott a friss fo agon, holott a lapok viselkedese nem
+ * valtozott.
+ */
+function savSzovege(kind: ServiceOfflineState["kind"]): string {
+  setOnLine(false);
+  const { container, unmount } = render(
+    <ServiceOfflineNotice state={{ kind }} />,
+  );
+  const szoveg = container.textContent ?? "";
+  unmount();
+  return szoveg;
+}
 
 function sessionAs(role: Session["user"]["role"]): Session {
   return {
@@ -749,5 +792,31 @@ describe("ServiceJobDetailPage", () => {
       screen.queryByRole("button", { name: "Delegálás mentése" }),
     ).toBeNull();
     expect(screen.getByText("Delegált kollégák")).toBeTruthy();
+  });
+
+  /**
+   * A SAV A LAP ALLAPOTAROL BESZEL -- ES A RESZLETLAPON EZ KULON MERENDO,
+   * MERT A KET ALLAPOT KET KULONBOZO VISSZATERESBEN AL.
+   *
+   * A kesz jegy es a csontvaz NEM ugyanabbol az agbol rajzolodik ki: a lap a
+   * betoltes alatt korabban visszater. Ha a sav csak a lenti agon allna, hideg
+   * betolteskor -- epp amikor a kepernyo ures -- meg sem jelenne.
+   */
+  it("kapcsolat nélkül, betöltött jegy mellett a frissítésről beszél", async () => {
+    const vart = savSzovege("loaded");
+    render(<ServiceJobDetailPage jobId="job-1" />);
+    await screen.findByText("Cápasuli szivattyú leállt");
+
+    expect(await screen.findByText(vart)).toBeTruthy();
+  });
+
+  it("kapcsolat nélkül, betöltés közben azt mondja, hogy ezért üres a lap", async () => {
+    // SOHA NEM TELJESULO valasz: a lap a csontvaz-agon marad.
+    const vart = savSzovege("empty");
+    api.detail.mockReturnValue(new Promise(() => {}));
+    render(<ServiceJobDetailPage jobId="job-1" />);
+
+    expect(await screen.findByText(vart)).toBeTruthy();
+    expect(screen.getByLabelText("Hibajegy betöltése")).toBeTruthy();
   });
 });

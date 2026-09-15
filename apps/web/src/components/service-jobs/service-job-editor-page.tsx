@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { ServiceListHeader } from "@/components/service/service-list-chrome";
+import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
 import { ServiceBackLink } from "@/components/service/service-detail-chrome";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
@@ -262,6 +263,7 @@ export function ServiceJobEditorPage() {
 
   return (
     <div className="space-y-6">
+      <ServiceOfflineNotice state={{ kind: "form" }} />
       {/*
         A KILÉPÉS A CÍM FÖLÖTT ÁLL, ÉS NEM HELYETTESÍTI A „MÉGSEM"-ET.
 
