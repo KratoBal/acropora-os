@@ -20,10 +20,15 @@ export function NavItem({
   return (
     <a
       className={cn(
-        "group flex h-9 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors",
+        // A MENU A SOTET OLDALSAVBAN AL, tehat a szinek ODA szolnak: a
+        // `slate-*` rampa vilagos lapra keszult, es sotet alapon a halvany
+        // fokozatai olvashatatlanok. Az aktiv sor a prototipus vilagosabb
+        // lilaja, nem feher lap -- feher hattertol a menu ket kulon savra
+        // esne szet.
+        "group flex h-9 items-center gap-3 rounded-[10px] px-3 text-sm font-medium transition-colors",
         active
-          ? "bg-white text-slate-950 shadow-sm ring-1 ring-slate-200/80"
-          : "text-slate-600 hover:bg-white/70 hover:text-slate-950",
+          ? "bg-[#7462bd] text-white shadow-[0_4px_12px_rgba(0,0,0,0.1)]"
+          : "text-nav-muted hover:bg-white/5 hover:text-white",
         className,
       )}
       aria-current={active ? "page" : undefined}
@@ -32,8 +37,8 @@ export function NavItem({
       {icon ? (
         <span
           className={cn(
-            "text-slate-400 transition-colors group-hover:text-slate-600",
-            active && "text-teal-700",
+            "text-white/55 transition-colors group-hover:text-white/85",
+            active && "text-white",
           )}
         >
           {icon}
