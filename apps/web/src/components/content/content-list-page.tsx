@@ -402,7 +402,7 @@ function ContentRow({
     <Card className="flex flex-col items-stretch gap-2 p-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
       <div className="min-w-0">
         <p className="truncate font-medium">{item.title}</p>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-muted">
           {CONTENT_STATE_LABELS[item.state]} &middot; vár:{" "}
           {CONTENT_WAITS_ON_LABELS[item.state]}
         </p>

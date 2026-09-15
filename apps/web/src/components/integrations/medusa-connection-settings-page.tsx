@@ -208,12 +208,12 @@ export function MedusaConnectionSettingsPage() {
           <CardContent className="space-y-4">
             <dl className="grid gap-2 text-sm">
               <div className="flex justify-between gap-4">
-                <dt className="text-muted-foreground">Tárolt kulcs</dt>
+                <dt className="text-muted">Tárolt kulcs</dt>
                 <dd>{view.masked ?? "nincs"}</dd>
               </div>
               {view.modifiedAt ? (
                 <div className="flex justify-between gap-4">
-                  <dt className="text-muted-foreground">Utoljára módosítva</dt>
+                  <dt className="text-muted">Utoljára módosítva</dt>
                   <dd>{new Date(view.modifiedAt).toLocaleString("hu-HU")}</dd>
                 </div>
               ) : null}
@@ -227,7 +227,7 @@ export function MedusaConnectionSettingsPage() {
                 leletként neveztünk meg.
               */}
               <div className="flex justify-between gap-4">
-                <dt className="text-muted-foreground">Utolsó ellenőrzés</dt>
+                <dt className="text-muted">Utolsó ellenőrzés</dt>
                 <dd>
                   {view.verification.checkedAt
                     ? new Date(view.verification.checkedAt).toLocaleString(
@@ -315,7 +315,7 @@ export function MedusaConnectionSettingsPage() {
                 onChange={(event) => setApiKey(event.target.value)}
               />
             </FormField>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted">
               A beállított kulcs soha nem olvasható vissza: csak felülírni,
               ellenőrizni vagy letiltani lehet.
             </p>

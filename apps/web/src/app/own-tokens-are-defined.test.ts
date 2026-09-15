@@ -37,13 +37,21 @@ const ONALLO = ["ink", "muted", "paper", "line", "coral"]; // nincs fokozatuk
  * utotagot. Ettol a `text-muted-foreground` a MI `muted` tokenunknek latszott,
  * es tizenharom hamis talalatot adott. Az a nev nem a mienk: shadcn-konvencio.
  *
- * ES AMIT A HAMIS TALALAT KOZBEN MEGIS MEGTALALT, azt kulon jelentettem: a
- * `muted-foreground` SEHOL nincs definialva (a `globals.css` az egyetlen CSS a
- * repoban), tehat az a tizenharom hely tenyleg szintelen. De az nem EZ a
- * kerdes: annak a javitasa LATHATO valtozas olyan lapokon, amik nem az enyeim.
- * Egy orzo, ami tul tagra huzza a sajat hatokoret, ilyenkor vagy hamisan bukik,
- * vagy ra kenyszerit egy idegen dontest -- mind a ketto rosszabb, mint a
- * kimondott hatar.
+ * A SZUKITES AZONBAN CSAK ATMENETI VOLT, ES A MINTA MA UJRA TAG. Az `ONALLO`
+ * nevek megint vehetnek utotagot -- mert a tizenharom talalat NEM ZAJ VOLT:
+ * a `muted-foreground` sehol nem volt definialva, tehat az a tizenharom hely
+ * tenyleg szintelen volt. Azota atallt `text-muted`-ra, ugyanebben a korben.
+ *
+ * ES EZERT KELL A TAG ALAK: egy szukitett minta pont azt a tizenharmat NEM
+ * venne eszre, ha visszaszivarog. Azert szukitettem, mert a talalat zajnak
+ * LATSZOTT -- es az orzo hatokoret nem szabad ahhoz igazitani, amit epp nem
+ * akarunk latni. (acrobot kikotese, 2026-09-15: eloszor a tizenharom hely,
+ * AZUTAN a tag minta.)
+ *
+ * AMI A TAG ALAKKAL EGYUTT SEM LESZ HAMIS: a `text-brand-ink` es a
+ * `text-brand-muted` a CSALAD agra illeszkedik, es mind a ketto DEFINIALT --
+ * lemerve, ezen kivul nincs mas olyan nev a faban, ami a mi neveinkkel
+ * kezdodne es ne lenne a mienk.
  */
 
 function themeBlokk(css: string): string {
@@ -63,7 +71,7 @@ function themeBlokk(css: string): string {
 const ELOTAG =
   "bg|text|border|ring|divide|from|to|via|fill|stroke|outline|accent|placeholder|decoration";
 const HASZNALAT = new RegExp(
-  `\\b(?:${ELOTAG})-((?:(?:${CSALAD.join("|")})-[a-z0-9]+)|(?:${ONALLO.join("|")}))(?![a-z0-9-])`,
+  `\\b(?:${ELOTAG})-((?:(?:${CSALAD.join("|")})-[a-z0-9]+)|(?:(?:${ONALLO.join("|")})(?:-[a-z0-9]+)?))(?![a-z0-9-])`,
   "g",
 );
 
