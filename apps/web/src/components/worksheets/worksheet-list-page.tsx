@@ -372,8 +372,11 @@ export function WorksheetListPage() {
             <ServiceListFooter
               shown={data.items.length}
               totalItems={data.pagination.totalItems}
-              page={data.pagination.page}
-              totalPages={data.pagination.totalPages}
+              tail={{
+                kind: "paged",
+                page: data.pagination.page,
+                totalPages: data.pagination.totalPages,
+              }}
             />
           </>
         ) : data ? (

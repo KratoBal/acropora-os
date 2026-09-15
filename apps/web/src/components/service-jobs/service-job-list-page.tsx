@@ -33,7 +33,6 @@ import {
 } from "./service-job-labels";
 import {
   itemsForTab,
-  listFooterNote,
   listSummary,
   SERVICE_JOB_TABS,
   type ServiceJobTab,
@@ -271,12 +270,17 @@ export function ServiceJobListPage() {
                 </tbody>
               </table>
             </div>
+            {/*
+              NEM LAPOZO LISTA: a szerver egy hataron belul ad sorokat, es a
+              `truncated` mondja meg, ha van tobb. Korabban ide ket ertelmetlen
+              szam kerult (lapszam es osszes lap, mindketto egy), plusz egy
+              szoveg-felulíras. A `tail` a ket allapotot kulon agra teszi, tehat
+              a "vegere ertel" mondat ezen a listan ki sem mondhato.
+            */}
             <ServiceListFooter
               shown={items.length}
               totalItems={totalForTab(data.counts, tab)}
-              page={1}
-              totalPages={1}
-              note={listFooterNote(data.truncated)}
+              tail={{ kind: "capped", truncated: data.truncated }}
             />
           </>
         ) : null}

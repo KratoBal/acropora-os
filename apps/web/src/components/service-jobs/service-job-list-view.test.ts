@@ -6,7 +6,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   itemsForTab,
-  listFooterNote,
   listSummary,
   totalForTab,
   SERVICE_JOB_TABS,
@@ -153,31 +152,5 @@ describe("a fülhöz tartozó teljes darabszám", () => {
     const c = counts({ NEW: 2, COMPLETED: 3, CANCELLED: 1 });
     expect(totalForTab(c, "all")).toBe(6);
     expect(totalForTab(c, "open")).toBe(2);
-  });
-});
-
-describe("a lábléc jobb oldala", () => {
-  /**
-   * A VÁGOTT LISTA NEM HALLGATHAT. A közös lábléc alapból azt írja ki, hogy "A
-   * lista végére értél" - ez a mi listánkon egy vágott halmaz alatt hazugság
-   * lenne, mert nem lapozunk.
-   */
-  it("vágott listánál kimondja, hogy van több", () => {
-    const note = listFooterNote(true);
-    expect(note).toBeTruthy();
-    expect(note).toContain("van több");
-  });
-
-  /**
-   * ÉS TELJES LISTÁNÁL ÁTENGEDI A KÖZÖS MONDATOT. Enélkül a fenti állítás egy
-   * olyan megvalósításnál is zöld lenne, ami MINDIG felülírja a láblécet - és
-   * akkor a három szerviz-lista két különböző mondatot adna ugyanarra.
-   */
-  it("teljes listánál nem ír felül semmit", () => {
-    expect(listFooterNote(false)).toBeUndefined();
-  });
-
-  it("a határ számát sehol nem írja ki", () => {
-    expect(listFooterNote(true)).not.toContain("200");
   });
 });

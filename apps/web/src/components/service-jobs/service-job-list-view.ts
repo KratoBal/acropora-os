@@ -102,18 +102,3 @@ export function totalForTab(
     .filter((status) => !statuses || statuses.includes(status))
     .reduce((sum, status) => sum + counts[status], 0);
 }
-
-/**
- * A LÁBLÉC JOBB OLDALA, HA A LISTA VÁGOTT.
- *
- * `undefined`, amikor a lista teljes - olyankor a közös lábléc saját mondata
- * áll ott ("A lista végére értél"), és az igaz is.
- *
- * A HATÁR SZÁMÁT NEM ÍRJA KI, ÉS EZ SZÁNDÉKOS: a kétszáz a szerver
- * lekérdezésében áll, és ha itt is állna, egyszer elcsúszna. A szerver a
- * `truncated` mezővel megmondja, hogy van több; a kliens dolga csak annyi,
- * hogy ezt ne hallgassa el.
- */
-export function listFooterNote(truncated: boolean): string | undefined {
-  return truncated ? "A legfrissebbek látszanak, és van több" : undefined;
-}
