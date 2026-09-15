@@ -31,6 +31,7 @@ import {
 } from "@/components/service/service-detail-chrome";
 import { ServiceStatusBadge } from "@/components/service/service-list-chrome";
 import { sv } from "@/components/service/service-theme";
+import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
 import { useReturnTo } from "@/components/navigation-history";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { WorksheetEntries } from "./worksheet-entries";
@@ -580,6 +581,7 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
 
   return (
     <div>
+      <ServiceOfflineNotice />
       <ServiceBackLink href={backToList.href}>
         {backToList.fromWithinApp ? "Vissza" : "Munkalapok"}
       </ServiceBackLink>

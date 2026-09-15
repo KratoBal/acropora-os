@@ -32,6 +32,7 @@ import {
   type ServiceStatTile,
 } from "@/components/service/service-list-stats";
 import { sv } from "@/components/service/service-theme";
+import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
 import { assetsApi } from "@/lib/api/assets";
 import {
   assetKindLabel,
@@ -401,6 +402,7 @@ export function AssetListPage() {
 
   return (
     <div>
+      <ServiceOfflineNotice />
       <ServiceListHeader
         eyebrow="Szerviz / munkatér"
         title="Eszköznyilvántartás"

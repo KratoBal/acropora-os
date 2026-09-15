@@ -25,6 +25,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ServiceBackLink } from "@/components/service/service-detail-chrome";
 import { ServiceListHeader } from "@/components/service/service-list-chrome";
+import { ServiceOfflineNotice } from "@/components/service/service-offline-notice";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { JobAssetPicker } from "@/components/service-jobs/job-asset-picker";
@@ -534,6 +535,7 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
       {/* A KILEPES A CIM FOLOTT ALL, NEM A MUVELETEK KOZOTT. Az urlapon a
           "Megsem" a mentes MELLETT allt, ugyanolyan sulyunak latszva -- pedig
           az egyik ir, a masik elhagyja a lapot. */}
+      <ServiceOfflineNotice />
       <ServiceBackLink
         href={
           worksheetId
