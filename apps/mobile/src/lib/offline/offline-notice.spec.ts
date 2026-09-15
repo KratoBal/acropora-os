@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   describeCacheAge,
   describeCachedDepartmentsNotice,
+  describeCachedOwnersNotice,
   describeCachedWorksheetNotice,
   describeOfflineDetailNotice,
   describeOfflineEditNotice,
@@ -194,6 +195,59 @@ describe("a mentett helyszínek sávja", () => {
         online: true,
         count: 3,
         syncedAt: "2026-09-03T06:00:00.000Z",
+        now: most,
+      }),
+      null,
+    );
+  });
+
+  /**
+   * A PARTNER-SAV NEM A HELYSZINROL BESZEL.
+   *
+   * A regresszio, amit ez a harom allitas ki: a partner-valaszto a HELYSZIN-
+   * fuggvenyt hasznalta, es ures listanal azt mondta, hogy „Ehhez a partnerhez
+   * nincs mentett helyszín" -- miközben a felhasznalo meg nem valasztott
+   * partnert, es epp a PARTNER-lista volt ures.
+   */
+  it("partnerlista nelkul a PARTNERT nevezi meg, nem a helyszint", () => {
+    const notice = describeCachedOwnersNotice({
+      online: false,
+      count: 0,
+      syncedAt: null,
+      now: most,
+    });
+
+    assert.match(notice?.title ?? "", /partnerlista/);
+    assert.doesNotMatch(notice?.title ?? "", /helyszín/);
+    assert.doesNotMatch(notice?.message ?? "", /helyszín/);
+    // A tanacs arra a lepesre mutasson, ami EBBEN az allapotban elvegezheto:
+    // a partner meg nincs kivalasztva, tehat „nyisd meg a partnert" nem az.
+    assert.match(notice?.message ?? "", /kezdőképernyő/);
+  });
+
+  /**
+   * A KOR AZ, AMI A HIANYT ERTELMEZHETOVE TESZI. A partner kotelezo mezo: ha a
+   * szerelo nem talalja a listaban, az jelentheti, hogy nincs ilyen partner,
+   * VAGY hogy a lista regebbi nala. A ketto kozott egyedul a kor dont.
+   */
+  it("mentett partnerlistanal kiirja a DARABSZAMOT es a KORT", () => {
+    const notice = describeCachedOwnersNotice({
+      online: false,
+      count: 2,
+      syncedAt: "2026-09-03T06:00:00.000Z",
+      now: most,
+    });
+
+    assert.match(notice?.message ?? "", /2 partner/);
+    assert.match(notice?.message ?? "", /órája|napja|az imént/);
+  });
+
+  it("kapcsolat mellett a partner-sav sem szolal meg", () => {
+    assert.equal(
+      describeCachedOwnersNotice({
+        online: true,
+        count: 0,
+        syncedAt: null,
         now: most,
       }),
       null,

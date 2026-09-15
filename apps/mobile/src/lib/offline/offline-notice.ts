@@ -246,6 +246,55 @@ export function describeCachedWorksheetNotice(input: {
  * `null`, ha van kapcsolat: olyankor a friss lista jön, és egy sáv csak elvenné
  * a helyet.
  */
+/**
+ * A MENTETT PARTNERLISTA SAVJA -- SAJAT FUGGVENY, ES EZ NEM SZIMMETRIA-KERDES.
+ *
+ * Eddig a partner-valaszto a HELYSZIN-fuggvenyt hasznalta
+ * (`describeCachedDepartmentsNotice`), es az ures ag szo szerint ezt mondta:
+ * „Ehhez a partnerhez nincs mentett helyszín… nyisd meg egyszer a partnert".
+ * A „Szerviz partner keresése" doboz folott tehat egy MASIK dologrol szolt a
+ * mondat, ES olyan lepest javasolt, ami abban az allapotban nem ertelmezheto:
+ * a felhasznalo meg nem valasztott partnert, es epp a PARTNER-lista az, ami
+ * ures. (Merve 2026-09-15 a fo agon; ez az a kepernyo, amit Balazs nem tudott
+ * hasznalni 09-14-en.)
+ *
+ * A ket fuggveny KULON marad. Egy kozos, parameterezett fonevu valtozat epp azt
+ * a ket mondatot mosna ossze, amit szet kell tartani.
+ *
+ * === MIERT ALL A KOR A NEM-URES AGON ===
+ *
+ * A partner KOTELEZO mezo. Ha a szerelo nem talalja a listaban, az ket dolgot
+ * jelenthet: nincs ilyen partner, VAGY a lista regebbi, mint a partner. A ketto
+ * kozott egyedul a KOR dont. Kor nelkul a hianybol azt olvasna ki, hogy a
+ * partner nem letezik -- es azt a hamis kovetkeztetest mi adnank a kezebe.
+ * (acrobot dontese, 2026-09-15.)
+ */
+export function describeCachedOwnersNotice(input: {
+  online: boolean;
+  count: number;
+  syncedAt: string | null;
+  now: Date;
+}): OfflineNotice | null {
+  if (input.online) return null;
+
+  if (input.count === 0)
+    return {
+      tone: "empty",
+      title: "Nincs kapcsolat: nincs mentett partnerlista",
+      message:
+        "Nincs mentett partnerlista a telefonon, és a partner kötelező. " +
+        "A lista a kezdőképernyőn töltődik le: indítsd el egyszer az " +
+        "alkalmazást térerő mellett, és utána offline is választhatsz.",
+    };
+
+  const age = describeCacheAge(input.syncedAt, input.now);
+  return {
+    tone: "offline",
+    title: "Nincs kapcsolat: mentett partnerlista",
+    message: `${input.count} partner a telefonról, ${age} mentve. Ami azóta változott vagy megszűnt, azt itt nem látod.`,
+  };
+}
+
 export function describeCachedDepartmentsNotice(input: {
   online: boolean;
   count: number;
