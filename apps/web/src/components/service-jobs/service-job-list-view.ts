@@ -77,26 +77,43 @@ export function listSummary(counts: ServiceJobStatusCounts) {
 }
 
 /**
- * A LISTA ALJÁN ÁLLÓ MONDAT: HÁNY SOR LÁTSZIK, ÉS VAN-E TÖBB.
+ * HÁNY JEGY TARTOZIK EGY FÜLHÖZ - A TELJES HALMAZBÓL.
+ *
+ * A lábléc bal oldalán ez áll, nem a kirajzolt sorok száma: egy vágott listán a
+ * kettő ELTÉR, és épp az az eltérés a kérdés, amiért valaki a lap aljára néz.
+ */
+export function totalForTab(
+  counts: ServiceJobStatusCounts,
+  tab: ServiceJobTab,
+): number {
+  /**
+   * KÉT SZŰRÉS, NEM EGY - ÉS EZT EGY TESZT DERÍTETTE KI, NEM AZ OLVASÁS.
+   *
+   * Az első változat csak a kliensoldali `statuses`-t nézte, és a `Nyitott`
+   * fülön az EGÉSZ halmazt adta össze: a lábléc hatot mondott volna kettő sor
+   * fölött. A hatókör ugyanúgy szűkít, csak a szerveren - itt mind a kettőt
+   * meg kell ismételni, különben a szám nem arról a halmazról szól, amit a
+   * felhasználó lát.
+   */
+  const { scope, statuses } = tabDefinition(tab);
+  const keys = Object.keys(counts) as ServiceJobStatusValue[];
+  return keys
+    .filter((status) => scope !== "open" || !FINISHED.includes(status))
+    .filter((status) => !statuses || statuses.includes(status))
+    .reduce((sum, status) => sum + counts[status], 0);
+}
+
+/**
+ * A LÁBLÉC JOBB OLDALA, HA A LISTA VÁGOTT.
+ *
+ * `undefined`, amikor a lista teljes - olyankor a közös lábléc saját mondata
+ * áll ott ("A lista végére értél"), és az igaz is.
  *
  * A HATÁR SZÁMÁT NEM ÍRJA KI, ÉS EZ SZÁNDÉKOS: a kétszáz a szerver
  * lekérdezésében áll, és ha itt is állna, egyszer elcsúszna. A szerver a
- * `truncated` mezővel MEGMONDJA, hogy van több; a kliens dolga csak annyi,
+ * `truncated` mezővel megmondja, hogy van több; a kliens dolga csak annyi,
  * hogy ezt ne hallgassa el.
- *
- * A SZŰRT FÜLEKNÉL KÜLÖN MONDAT JÁR. Ott a szám a betöltött lapon belüli
- * válogatás eredménye, tehát egy vágott listán a "hét találat" azt jelentené,
- * hogy összesen hét ilyen van - és az nem igaz. A fenti három szám ilyenkor is
- * pontos, mert azok a teljes halmazból jönnek.
  */
-export function listFooterLine(input: {
-  shown: number;
-  truncated: boolean;
-  filtered: boolean;
-}): string {
-  const count = `${input.shown} találat`;
-  if (!input.truncated) return `${count} · a lista végére értél`;
-  if (input.filtered)
-    return `${count} a betöltött legfrissebbek közül · a teljes számot a fenti dobozok mondják meg`;
-  return `${count} · a legfrissebbek látszanak, és van több`;
+export function listFooterNote(truncated: boolean): string | undefined {
+  return truncated ? "A legfrissebbek látszanak, és van több" : undefined;
 }

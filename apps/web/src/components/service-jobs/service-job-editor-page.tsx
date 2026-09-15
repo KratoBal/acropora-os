@@ -12,15 +12,13 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import { ServiceListHeader } from "@/components/service/service-list-chrome";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { buildSiteOptions } from "@/lib/partners/site-tree";
 import { JobAssetPicker } from "./job-asset-picker";
 import { PartnerPicker } from "./partner-picker";
-import {
-  ServiceJobPageHeader,
-  ServiceJobStepCard,
-} from "./service-job-page-chrome";
+import { ServiceJobStepCard } from "./service-job-page-chrome";
 import {
   toggleAssignee,
   useAssignableUsers,
@@ -263,10 +261,10 @@ export function ServiceJobEditorPage() {
 
   return (
     <div className="space-y-6">
-      <ServiceJobPageHeader
+      <ServiceListHeader
         eyebrow="Új bejegyzés"
         title="Új hibajegy"
-        description="A hibajegy a lánc első eleme. A munkalapokat utólag lehet alá csatolni - a lap keletkezhet előbb is, mint a jegy."
+        lead="A hibajegy a lánc első eleme. A munkalapokat utólag lehet alá csatolni - a lap keletkezhet előbb is, mint a jegy."
       />
       {error ? (
         <Alert variant="danger" title="Nem sikerült" description={error} />

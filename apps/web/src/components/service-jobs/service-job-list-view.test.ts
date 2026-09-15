@@ -6,8 +6,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   itemsForTab,
-  listFooterLine,
+  listFooterNote,
   listSummary,
+  totalForTab,
   SERVICE_JOB_TABS,
   tabDefinition,
 } from "./service-job-list-view";
@@ -125,47 +126,58 @@ describe("a három szám a lista fölött", () => {
   });
 });
 
-describe("a lista alján álló mondat", () => {
-  it("teljes listánál kimondja, hogy vége", () => {
-    expect(
-      listFooterLine({ shown: 8, truncated: false, filtered: false }),
-    ).toBe("8 találat · a lista végére értél");
-  });
-
+describe("a fülhöz tartozó teljes darabszám", () => {
   /**
-   * A VÁGOTT LISTA NEM HALLGATHAT. Enélkül a "200 találat" pontosan úgy nézne
-   * ki, mint egy teljes lista - és a kezelő azt hinné, ennyi van.
+   * A LÁBLÉC BAL OLDALA A TELJES HALMAZBÓL SZÁMOL, nem a kirajzolt sorokból.
+   * Egy vágott listán a kettő eltér, és épp az az eltérés a kérdés.
    */
-  it("vágott listánál megmondja, hogy van több", () => {
-    const line = listFooterLine({
-      shown: 200,
-      truncated: true,
-      filtered: false,
+  it("a szűrt fül csak a saját állapotait adja össze", () => {
+    const c = counts({
+      WAITING_FOR_PARTS: 2,
+      WAITING_FOR_CUSTOMER: 3,
+      NEW: 10,
     });
-    expect(line).toContain("van több");
+    expect(totalForTab(c, "waiting")).toBe(5);
+    expect(totalForTab(c, "closed")).toBe(0);
   });
 
   /**
-   * ÉS SZŰRT FÜLÖN MÁS A MONDAT, mert ott a szám a betöltött lapon belüli
-   * válogatás eredménye. Ha ugyanaz a mondat állna ott, a hét találat azt
-   * jelentené, hogy összesen hét ilyen van.
+   * A HATÓKÖR UGYANÚGY SZŰKÍT, MINT A FÜL - CSAK A SZERVEREN.
+   *
+   * EZ AZ ÁLLÍTÁS TALÁLT EGY VALÓDI HIBÁT: az első változat csak a
+   * kliensoldali szűrőt nézte, és a `Nyitott` fülön az egész halmazt adta
+   * össze. A lábléc hatot mondott volna két sor fölött, és semmi nem hibázott
+   * volna tőle.
    */
-  it("vágott és szűrt listánál a teljes számért a dobozokhoz küld", () => {
-    const line = listFooterLine({ shown: 7, truncated: true, filtered: true });
-    expect(line).toContain("betöltött");
-    expect(line).toContain("dobozok");
+  it("a nyitott fül kihagyja a végállapotokat, az összes nem", () => {
+    const c = counts({ NEW: 2, COMPLETED: 3, CANCELLED: 1 });
+    expect(totalForTab(c, "all")).toBe(6);
+    expect(totalForTab(c, "open")).toBe(2);
+  });
+});
+
+describe("a lábléc jobb oldala", () => {
+  /**
+   * A VÁGOTT LISTA NEM HALLGATHAT. A közös lábléc alapból azt írja ki, hogy "A
+   * lista végére értél" - ez a mi listánkon egy vágott halmaz alatt hazugság
+   * lenne, mert nem lapozunk.
+   */
+  it("vágott listánál kimondja, hogy van több", () => {
+    const note = listFooterNote(true);
+    expect(note).toBeTruthy();
+    expect(note).toContain("van több");
   });
 
   /**
-   * A HATÁR SZÁMA NEM KERÜL A SZÖVEGBE. A kétszáz a szerver lekérdezésében áll;
-   * ha itt is állna, a két hely egyszer elcsúszna, és a felület magabiztosan
-   * mondana rossz számot. A bemenet szándékosan HÉT, hogy a talált "200" csak
-   * beégetett érték lehessen.
+   * ÉS TELJES LISTÁNÁL ÁTENGEDI A KÖZÖS MONDATOT. Enélkül a fenti állítás egy
+   * olyan megvalósításnál is zöld lenne, ami MINDIG felülírja a láblécet - és
+   * akkor a három szerviz-lista két különböző mondatot adna ugyanarra.
    */
+  it("teljes listánál nem ír felül semmit", () => {
+    expect(listFooterNote(false)).toBeUndefined();
+  });
+
   it("a határ számát sehol nem írja ki", () => {
-    for (const filtered of [true, false])
-      expect(
-        listFooterLine({ shown: 7, truncated: true, filtered }),
-      ).not.toContain("200");
+    expect(listFooterNote(true)).not.toContain("200");
   });
 });

@@ -29,12 +29,16 @@ import { worksheetsApi } from "@/lib/api/worksheets";
 import { formatDateTime } from "@/components/worksheets/worksheet-labels";
 import { formatFileSize } from "@/lib/format/file-size";
 import { PartnerPicker } from "./partner-picker";
+import {
+  ServiceListHeader,
+  ServiceStatusBadge,
+} from "@/components/service/service-list-chrome";
 import { ServiceJobAssigneeEditor } from "./service-job-assignee-editor";
-import { ServiceJobPageHeader } from "./service-job-page-chrome";
-import { ServiceJobStatusBadge } from "./service-job-status-badge";
+
 import {
   serviceJobNoteDescription,
   serviceJobStatusLabel,
+  serviceJobStatusTone,
   serviceJobStatusVariant,
 } from "./service-job-labels";
 
@@ -420,9 +424,10 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
         szam kicsi es halvany a cim folott, a cim pedig akkora, hogy egy
         pillantasbol olvashato legyen. Ugyanaz az adat, mas sulyozassal.
       */}
-      <ServiceJobPageHeader
+      <ServiceListHeader
         eyebrow={job.jobNumber}
         title={job.title}
+        lead="A bejelentés, ami mögött a munka áll. A partner és a helyszín a jobb hasábban."
         /*
           A PARTNER ES A HELYSZIN INNEN ATKERULT A JOBB HASABBA.
 
@@ -437,7 +442,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
           jegyetol -- de csak akkor, ha van (a mezo 2026-09-14-en keletkezett,
           tehat a mai jegyek tobbsegen nincs).
         */
-        actions={
+        action={
           <Link href="/szerviz/hibajegyek">
             <Button variant="secondary">Vissza a listára</Button>
           </Link>
@@ -466,7 +471,9 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
         listan is egyutt olvasunk.
       */}
       <div className="flex flex-wrap items-center gap-3">
-        <ServiceJobStatusBadge status={job.status} />
+        <ServiceStatusBadge tone={serviceJobStatusTone(job.status)}>
+          {serviceJobStatusLabel[job.status]}
+        </ServiceStatusBadge>
         {job.departmentName ? (
           <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
             {job.departmentName}
