@@ -471,6 +471,39 @@ describe("WorksheetDetailPage adatlap-szerkezet", () => {
    * az allapot nem all elo -- es azt a legkonnyebb osszekeverni a halott
    * allitassal.
    */
+  /**
+   * ES A PAR MASIK FELE: A BETOLTOTT LAP NEM MONDHATJA, HOGY NEM TOLTOTT BE.
+   *
+   * A ket allitas EGYUTT kulonboztet, kulon egyik sem. Ezt merve tanultam meg
+   * ezen a lapon: a fenti allitas ZOLD MARAD akkor is, ha a FO visszateres
+   * allandoan `empty`-t ad -- vagyis ha egy betoltott munkalap folott az all,
+   * hogy "nem tudtuk betolteni". Egyedul a fenti nem fogja meg.
+   *
+   * A lap KET allapotba tud kerulni, KET kulon kodutonn (a korai hiba-ag es a
+   * fo visszateres), ezert kell ide ketto. Ahol csak egy allapot all elo, ott
+   * egy a helyes szam -- a masodik allitas ott nem szigor, hanem disz.
+   * (nautilus, 20188.)
+   */
+  it("betöltött lapon nem állítja, hogy nem sikerült betölteni", async () => {
+    Object.defineProperty(window.navigator, "onLine", {
+      value: false,
+      configurable: true,
+    });
+    api.detail.mockResolvedValue(detail());
+
+    render(<WorksheetDetailPage worksheetId="ml-1" />);
+
+    expect(
+      await screen.findByText(/legutóbb betöltött adatokat látod/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/nem tudtuk betölteni/)).toBeNull();
+
+    Object.defineProperty(window.navigator, "onLine", {
+      value: true,
+      configurable: true,
+    });
+  });
+
   it("betöltési hibánál kimondja, hogy nincs hálózat", async () => {
     Object.defineProperty(window.navigator, "onLine", {
       value: false,
