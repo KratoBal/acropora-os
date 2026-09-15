@@ -8,7 +8,6 @@ import {
   ConfirmDialog,
   EmptyState,
   FormField,
-  PageHeader,
   Skeleton,
   Textarea,
 } from "@acropora/ui";
@@ -30,10 +29,16 @@ import { worksheetsApi } from "@/lib/api/worksheets";
 import { formatDateTime } from "@/components/worksheets/worksheet-labels";
 import { formatFileSize } from "@/lib/format/file-size";
 import { PartnerPicker } from "./partner-picker";
+import {
+  ServiceListHeader,
+  ServiceStatusBadge,
+} from "@/components/service/service-list-chrome";
 import { ServiceJobAssigneeEditor } from "./service-job-assignee-editor";
+
 import {
   serviceJobNoteDescription,
   serviceJobStatusLabel,
+  serviceJobStatusTone,
   serviceJobStatusVariant,
 } from "./service-job-labels";
 
@@ -411,25 +416,33 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="Hibajegy"
-        title={`${job.jobNumber} - ${job.title}`}
-        /*
-          A HELYSZIN A PARTNER MELLE KERUL, es nem kulon sorba: a ketto egy
-          cimet ad ("Fovarosi Allatkert -- Nagy fokamedence / Biodom"), es a
-          jegyet epp ez azonositja a helyszinen. Kulon mezokent a lap tetejen
-          ket fel-informacio allna egymas alatt.
+      {/*
+        A SZAM A CIM FOLE KERUL, NEM ELE.
 
-          HELYSZIN NELKUL A PARTNER MARAD, valtozatlanul. A mai jegyek
-          MINDEGYIKE ilyen (a mezo 2026-09-14-en keletkezett), tehat ez nem
-          szelso eset, hanem a tobbseg.
+        Eddig egy sorban allt a ketto (`HJ-2026-001 - Cim`), es a cim -- amirol
+        a lap SZOL -- egy azonosito mogul indult. A terv szetvalasztja oket: a
+        szam kicsi es halvany a cim folott, a cim pedig akkora, hogy egy
+        pillantasbol olvashato legyen. Ugyanaz az adat, mas sulyozassal.
+      */}
+      <ServiceListHeader
+        eyebrow={job.jobNumber}
+        title={job.title}
+        lead="A bejelentés, ami mögött a munka áll. A partner és a helyszín a jobb hasábban."
+        /*
+          A PARTNER ES A HELYSZIN INNEN ATKERULT A JOBB HASABBA.
+
+          Amig a lap EGY oszlop volt, a ketto egy cimkent allt a fejlecben, es
+          az volt a helyes: kulon mezokent ket fel-informacio allt volna egymas
+          alatt. A jobb hasab ota viszont ugyanaz az adat NEVESITETT mezokben
+          all ("Partner", "Helyszin"), es egy cimsorban megismetelve harom
+          helyen szerepelne ugyanaz a szo.
+
+          A HELYSZIN EGY CIMKEBEN MEGIS OTT MARAD a jelvenysorban, mert az
+          kulonbozteti meg EZT a jegyet ugyanannak a partnernek a tobbi
+          jegyetol -- de csak akkor, ha van (a mezo 2026-09-14-en keletkezett,
+          tehat a mai jegyek tobbsegen nincs).
         */
-        description={
-          job.departmentName
-            ? `${job.customerName ?? "Partner nincs megadva"} - ${job.departmentName}`
-            : (job.customerName ?? "Partner nincs megadva")
-        }
-        actions={
+        action={
           <Link href="/szerviz/hibajegyek">
             <Button variant="secondary">Vissza a listára</Button>
           </Link>
@@ -449,266 +462,218 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
         />
       ) : null}
 
-      <Card className="space-y-3 p-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <Badge variant={serviceJobStatusVariant(job.partnerStatus)}>
-            {serviceJobStatusLabel[job.status]}
-          </Badge>
-          <span className="text-xs text-slate-500">
-            A partner ezt látja: {job.partnerStatusLabel}
-          </span>
-          <span className="text-xs text-slate-500">
-            Létrehozva: {formatDateTime(job.createdAt)}
-          </span>
-        </div>
-        {job.description ? (
-          <p className="whitespace-pre-wrap text-sm">{job.description}</p>
-        ) : null}
-      </Card>
-
-      {canManage ? (
-        <Card className="space-y-3 p-4">
-          <h2 className="text-sm font-semibold">Következő lépés</h2>
-          {stepError ? (
-            <Alert
-              variant="danger"
-              title="A lépés nem ment"
-              description={stepError}
-            />
-          ) : null}
-          {job.allowedSteps.length ? (
-            <>
-              <FormField
-                label="Megjegyzés"
-                description={serviceJobNoteDescription(job.allowedSteps)}
-              >
-                <Textarea
-                  aria-label="Megjegyzés a lépéshez"
-                  rows={3}
-                  value={note}
-                  onChange={(event) => setNote(event.target.value)}
-                  maxLength={2000}
-                />
-              </FormField>
-              {/*
-                EGYETLEN GOMB SEM VAR SZOVEGRE. A megjegyzes minden atmenetnel
-                elhagyhato (Balazs dontese, 2026-09-03), tehat a `disabled`
-                egyedul a folyamatban levo hivasrol szol.
-              */}
-              <div className="flex flex-wrap gap-2">
-                {job.allowedSteps.map((to) => (
-                  <Button
-                    key={to}
-                    variant="secondary"
-                    disabled={stepping}
-                    onClick={() => void step(to)}
-                  >
-                    {serviceJobStatusLabel[to]}
-                  </Button>
-                ))}
-              </div>
-            </>
-          ) : (
-            /* A LEZÁRT JEGYEN NEM ÜRES A DOBOZ, hanem meg van mondva, miért.
-               Egy eltűnt gombsor úgy néz ki, mint egy betöltési hiba. */
-            <p className="text-sm text-slate-500">
-              Ez a hibajegy lezárult, nincs több lépése.
-            </p>
-          )}
-        </Card>
-      ) : null}
-
       {/*
-        A HIANY MELLE A KIUT. Egy partner nelkuli jegy ma nem tud lapot fogadni,
-        es enelkul a doboz nelkul ezt csak a csatolasnal tudna meg a felhasznalo
-        -- egy masik kepernyon, es kiut nelkul.
+        AZ ALLAPOT A CIM ALA KERUL, NEM EGY DOBOZBA LEJJEBB.
+
+        Ez az egyetlen adat, amit a lap megnyitasakor MINDENKI keres, es eddig
+        egy kartya tetejen allt, harom masik apro szoveg tarsasagaban. A terv a
+        cim ala teszi, a partner neve melle -- ugyanaz a ket dolog, amit a
+        listan is egyutt olvasunk.
       */}
-      {canManage && job.customerName === null ? (
-        <Card className="space-y-2 p-4">
-          <label className="block text-sm font-semibold" htmlFor="jegy-partner">
-            Partner beállítása
-          </label>
-          <p className="text-xs text-slate-500">
-            Ehhez a hibajegyhez még nincs partner, ezért munkalapot sem lehet
-            alá csatolni.
-          </p>
-          {partnerError ? (
-            <Alert
-              variant="danger"
-              title="Nem sikerült"
-              description={partnerError}
-            />
-          ) : null}
-          <PartnerPicker
-            id="jegy-partner"
-            onPick={(picked) => void setPartner(picked.customerId)}
-          />
-        </Card>
-      ) : null}
-
-      <Card className="space-y-3 p-4">
-        <h2 className="text-sm font-semibold">Ami történt</h2>
-        {job.timeline.length ? (
-          <ol className="space-y-2" aria-label="A hibajegy naplója">
-            {job.timeline.map((entry) => (
-              <li
-                key={`${entry.kind}-${entry.sortKey}`}
-                className="border-b pb-2 text-sm last:border-0"
-              >
-                <div>{timelineLine(entry)}</div>
-                <div className="mt-0.5 text-xs text-slate-500">
-                  {formatDateTime(entry.at)}
-                  {entry.kind === "status" && entry.event.actorName
-                    ? ` · ${entry.event.actorName}`
-                    : ""}
-                </div>
-                {entry.kind === "status" && entry.event.note ? (
-                  <div className="mt-1 whitespace-pre-wrap text-sm">
-                    {entry.event.note}
-                  </div>
-                ) : null}
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <EmptyState
-            title="Nincs bejegyzés"
-            description="Ezen a jegyen még nem történt semmi."
-          />
-        )}
-      </Card>
+      <div className="flex flex-wrap items-center gap-3">
+        <ServiceStatusBadge tone={serviceJobStatusTone(job.status)}>
+          {serviceJobStatusLabel[job.status]}
+        </ServiceStatusBadge>
+        {job.departmentName ? (
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+            {job.departmentName}
+          </span>
+        ) : null}
+      </div>
 
       {/*
+        KET HASAB: BALRA AZ UGY, JOBBRA A TEENDO.
+
+        A lap eddig EGY oszlop volt, es a "Kovetkezo lepes" doboz a naplo es a
+        munkalapok koze szorult -- vagyis az egyetlen dolog, amiert a kezelo
+        megnyitja a lapot, gorgetes utan jott elo. A terv a teendot a jobb
+        szelre teszi, ahol a szem a cim utan eloszor jar.
+
+        A HASABOK CSAK NAGY KEPERNYON VALNAK SZET (`lg:`): ez alatt a rendes
+        egymas ala kerules marad, es a sorrend ilyenkor is a fenti -- a
+        bejelentes, aztan a teendo.
+      */}
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="space-y-6">
+          <Card className="space-y-3 p-4">
+            <h2 className="text-sm font-semibold">A bejelentés</h2>
+            {job.description ? (
+              <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                {job.description}
+              </p>
+            ) : (
+              /* AZ URES LEIRAS KIMONDVA. Egy hianyzo bekezdes ugyanugy nez ki, mint
+             egy betoltesi hiba -- es a kulonbseget csak az mondja meg, aki a
+             jegyet felvitte. */
+              <p className="text-sm text-slate-500">
+                A bejelentéshez nem írtak leírást.
+              </p>
+            )}
+          </Card>
+
+          <Card className="space-y-3 p-4">
+            <h2 className="text-sm font-semibold">Ami történt</h2>
+            {job.timeline.length ? (
+              <ol className="space-y-2" aria-label="A hibajegy naplója">
+                {job.timeline.map((entry) => (
+                  <li
+                    key={`${entry.kind}-${entry.sortKey}`}
+                    className="border-b pb-2 text-sm last:border-0"
+                  >
+                    <div>{timelineLine(entry)}</div>
+                    <div className="mt-0.5 text-xs text-slate-500">
+                      {formatDateTime(entry.at)}
+                      {entry.kind === "status" && entry.event.actorName
+                        ? ` · ${entry.event.actorName}`
+                        : ""}
+                    </div>
+                    {entry.kind === "status" && entry.event.note ? (
+                      <div className="mt-1 whitespace-pre-wrap text-sm">
+                        {entry.event.note}
+                      </div>
+                    ) : null}
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <EmptyState
+                title="Nincs bejegyzés"
+                description="Ezen a jegyen még nem történt semmi."
+              />
+            )}
+          </Card>
+
+          {/*
         A DELEGALAS A CSATOLMANYOK ELOTT ALL, es a sorrend indoka ugyanaz, mint
         a felviteli urlapon: a lap a HIBAT irja le, majd azt, amit erint, majd
         a bizonyitekot. Aki a munkat KIADJA, az a jegy tetejen dont rola --
         tehat a delegalas a naplo utan, a fajlok elott kerul.
       */}
-      <ServiceJobAssigneeEditor
-        jobId={jobId}
-        token={token}
-        assignees={job.assignees}
-        canManage={canManage}
-        /*
+          <ServiceJobAssigneeEditor
+            jobId={jobId}
+            token={token}
+            assignees={job.assignees}
+            canManage={canManage}
+            /*
           A SZERVER VALASZAT TESSZUK BE, NEM TOLTUNK UJRA. A vegpont a TELJES
           reszletlapot adja vissza -- ez elter a tobbi jegy-muvelettol, amik
           nyugtat adnak, es ott a hivo ujratolt.
         */
-        onSaved={setJob}
-      />
+            onSaved={setJob}
+          />
 
-      {/*
+          {/*
         A CSATOLMANYOK A NAPLO UTAN ES A MUNKALAPOK ELOTT ALLNAK.
 
         Nem izles: a fenykep a BEJELENTETT hibarol szol, a munkalap arrol, amit
         TETTUNK vele. A lap igy ugyanabban a sorrendben olvashato, ahogy a munka
         tortenik -- mi a baj, mi a bizonyiteka, mit csinaltunk.
       */}
-      <Card className="space-y-3 p-4">
-        <h2 className="text-sm font-semibold">Fényképek és fájlok</h2>
-        <p className="text-xs text-slate-500">
-          A bejelentett hibáról. JPEG, PNG vagy PDF, fájlonként legfeljebb 10
-          MB.
-        </p>
-        {documentsError ? (
-          <Alert
-            variant="danger"
-            title="A csatolmányokkal baj van"
-            description={documentsError}
-          />
-        ) : null}
-        {documents.length ? (
-          <ul className="divide-y rounded border text-sm">
-            {documents.map((item) => (
-              <li
-                key={item.id}
-                className="flex flex-wrap items-center justify-between gap-3 px-3 py-2"
-              >
-                <div>
-                  <p className="font-medium">{item.fileName}</p>
-                  <p className="text-xs text-slate-500">
-                    {formatFileSize(item.sizeBytes)} ·{" "}
-                    {formatDateTime(item.createdAt)}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => void downloadDocument(item)}
+          <Card className="space-y-3 p-4">
+            <h2 className="text-sm font-semibold">Fényképek és fájlok</h2>
+            <p className="text-xs text-slate-500">
+              A bejelentett hibáról. JPEG, PNG vagy PDF, fájlonként legfeljebb
+              10 MB.
+            </p>
+            {documentsError ? (
+              <Alert
+                variant="danger"
+                title="A csatolmányokkal baj van"
+                description={documentsError}
+              />
+            ) : null}
+            {documents.length ? (
+              <ul className="divide-y rounded border text-sm">
+                {documents.map((item) => (
+                  <li
+                    key={item.id}
+                    className="flex flex-wrap items-center justify-between gap-3 px-3 py-2"
                   >
-                    Letöltés
-                  </Button>
-                  {canManage ? (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => setDocumentToDelete(item)}
-                    >
-                      Törlés
-                    </Button>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          /* A HIANY IS ALLITAS: egy ures doboz betoltesi hibanak latszik, es a
+                    <div>
+                      <p className="font-medium">{item.fileName}</p>
+                      <p className="text-xs text-slate-500">
+                        {formatFileSize(item.sizeBytes)} ·{" "}
+                        {formatDateTime(item.createdAt)}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => void downloadDocument(item)}
+                      >
+                        Letöltés
+                      </Button>
+                      {canManage ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setDocumentToDelete(item)}
+                        >
+                          Törlés
+                        </Button>
+                      ) : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              /* A HIANY IS ALLITAS: egy ures doboz betoltesi hibanak latszik, es a
              kezelo megvarja. Ez a mondat kimondja, hogy nincs mire varni. */
-          <p className="text-sm text-slate-500">
-            Ehhez a jegyhez még nincs fénykép vagy fájl csatolva.
-          </p>
-        )}
-        {canManage ? (
-          <div className="flex flex-wrap items-end gap-2 border-t pt-3">
-            <div className="space-y-1">
-              <label
-                className="block text-sm font-semibold"
-                htmlFor="hibajegy-csatolmany"
-              >
-                Új csatolmány
-              </label>
-              {/*
+              <p className="text-sm text-slate-500">
+                Ehhez a jegyhez még nincs fénykép vagy fájl csatolva.
+              </p>
+            )}
+            {canManage ? (
+              <div className="flex flex-wrap items-end gap-2 border-t pt-3">
+                <div className="space-y-1">
+                  <label
+                    className="block text-sm font-semibold"
+                    htmlFor="hibajegy-csatolmany"
+                  >
+                    Új csatolmány
+                  </label>
+                  {/*
                 TOBB FAJL EGYSZERRE. A helyszinen ritkan keszul egyetlen kep, es
                 egy egyesevel valaszto urlap ugyanazt a kort futtatna otször.
                 A szerver egy keresben legfeljebb tizet fogad.
               */}
-              <input
-                id="hibajegy-csatolmany"
-                type="file"
-                multiple
-                accept="image/jpeg,image/png,application/pdf"
-                className="text-sm"
-                onChange={(event) =>
-                  setDocumentFiles(Array.from(event.target.files ?? []))
-                }
-              />
-            </div>
-            <Button
-              disabled={documentFiles.length === 0 || uploading}
-              onClick={() => void uploadDocuments()}
-            >
-              {documentFiles.length > 1
-                ? `Feltöltés (${documentFiles.length} fájl)`
-                : "Feltöltés"}
-            </Button>
-          </div>
-        ) : null}
-      </Card>
-
-      <Card className="space-y-3 p-4">
-        <h2 className="text-sm font-semibold">Munkalapok a jegy mögött</h2>
-        {worksheets.length ? (
-          <ul className="space-y-1 text-sm">
-            {worksheets.map((worksheet) => (
-              <li key={worksheet.id}>
-                <Link
-                  href={`/szerviz/munkalapok/${worksheet.id}`}
-                  className="font-medium hover:text-teal-700"
+                  <input
+                    id="hibajegy-csatolmany"
+                    type="file"
+                    multiple
+                    accept="image/jpeg,image/png,application/pdf"
+                    className="text-sm"
+                    onChange={(event) =>
+                      setDocumentFiles(Array.from(event.target.files ?? []))
+                    }
+                  />
+                </div>
+                <Button
+                  disabled={documentFiles.length === 0 || uploading}
+                  onClick={() => void uploadDocuments()}
                 >
-                  {worksheet.number ?? "Piszkozat"}
-                </Link>
-                {/*
+                  {documentFiles.length > 1
+                    ? `Feltöltés (${documentFiles.length} fájl)`
+                    : "Feltöltés"}
+                </Button>
+              </div>
+            ) : null}
+          </Card>
+
+          <Card className="space-y-3 p-4">
+            <h2 className="text-sm font-semibold">Munkalapok a jegy mögött</h2>
+            {worksheets.length ? (
+              <ul className="space-y-1 text-sm">
+                {worksheets.map((worksheet) => (
+                  <li key={worksheet.id}>
+                    <Link
+                      href={`/szerviz/munkalapok/${worksheet.id}`}
+                      className="font-medium hover:text-teal-700"
+                    >
+                      {worksheet.number ?? "Piszkozat"}
+                    </Link>
+                    {/*
                   ÁTADÁS-ÁLLAPOTOT CSAK AKKOR ÁLLÍTUNK, HA VAN MIRE.
 
                   Itt korábban a hiányzó dátum ágán a "Még nálunk van" mondat
@@ -729,34 +694,34 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                   Egy meg nem lévő viselkedés ÁLLÍTÁSÁT vonjuk vissza. Ha egyszer
                   lesz írója, az alábbi ág magától megjelenik.
                 */}
-                {worksheet.handedOverAt ? (
-                  <span className="ml-2 text-xs text-slate-500">
-                    Átadva: {formatDateTime(worksheet.handedOverAt)}
-                  </span>
-                ) : null}
-                {/* A VISSZAUT OTT ALL, AHOL A HIBA LATSZIK: a lap mellett,
+                    {worksheet.handedOverAt ? (
+                      <span className="ml-2 text-xs text-slate-500">
+                        Átadva: {formatDateTime(worksheet.handedOverAt)}
+                      </span>
+                    ) : null}
+                    {/* A VISSZAUT OTT ALL, AHOL A HIBA LATSZIK: a lap mellett,
                     nem egy kulon felulet menujeben. Aki eszreveszi, hogy rossz
                     lapot csatolt, ugyanabban a sorban tudja levenni. */}
-                {canManage ? (
-                  <button
-                    type="button"
-                    className="ml-2 text-xs text-slate-500 underline hover:text-teal-700"
-                    disabled={attaching}
-                    onClick={() => setSheetToDetach(worksheet.id)}
-                  >
-                    Leválasztás
-                  </button>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-slate-500">
-            Ehhez a jegyhez még nem tartozik munkalap.
-          </p>
-        )}
+                    {canManage ? (
+                      <button
+                        type="button"
+                        className="ml-2 text-xs text-slate-500 underline hover:text-teal-700"
+                        disabled={attaching}
+                        onClick={() => setSheetToDetach(worksheet.id)}
+                      >
+                        Leválasztás
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-slate-500">
+                Ehhez a jegyhez még nem tartozik munkalap.
+              </p>
+            )}
 
-        {/*
+            {/*
           A CSATOLAS A JEGY OLDALAN VAN, mert a folyamat is innen nez ki igy: a
           szerelo helyben felveszi a lapot, atadja, es a jegy NALUNK szuletik meg
           utolag - a felelos akkor veszi hozza a mar meglevo lapot.
@@ -765,7 +730,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
           semmilyen allapot szerint nem szur: a lezart lap is csatolhato, mert a
           lezaras a DOKUMENTUMROL szol, a csatolas a BESOROLASROL.
         */}
-        {/*
+            {/*
           AZ UJ LAP NYITASA A FELVITELI LAPRA VISZ, NEM SAJAT URLAPPAL.
           A felviteli lap mar tud mindent (partner, alegyseg, targy, sorok,
           felelosok); egy masodik urlap ITT duplikalna, es a ketto egyszer
@@ -776,58 +741,58 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
           PARTNER NELKULI JEGYNEL NEM ALL OTT: a lap ugyis elutasitana, es egy
           gomb, ami biztosan hibara visz, rosszabb a hianyanal.
         */}
-        {canManage && job.customerId !== null ? (
-          <div className="border-t pt-3">
-            <Link
-              href={`/szerviz/munkalapok/uj?hibajegy=${encodeURIComponent(jobId)}`}
-            >
-              <Button variant="secondary">
-                Új munkalap nyitása a jegy alá
-              </Button>
-            </Link>
-          </div>
-        ) : null}
-        {canManage ? (
-          <div className="space-y-2 border-t pt-3">
-            <label
-              className="block text-sm font-semibold"
-              htmlFor="csatolando-munkalap"
-            >
-              Meglévő munkalap csatolása
-            </label>
-            {attachError ? (
-              <Alert
-                variant="danger"
-                title="A csatolás nem ment"
-                description={attachError}
-              />
-            ) : null}
-            {attachable.length ? (
-              <div className="flex flex-wrap gap-2">
-                <select
-                  id="csatolando-munkalap"
-                  className="rounded border px-2 py-1 text-sm"
-                  value={chosenSheet}
-                  onChange={(event) => setChosenSheet(event.target.value)}
+            {canManage && job.customerId !== null ? (
+              <div className="border-t pt-3">
+                <Link
+                  href={`/szerviz/munkalapok/uj?hibajegy=${encodeURIComponent(jobId)}`}
                 >
-                  <option value="">Válassz munkalapot</option>
-                  {attachable.map((sheet) => (
-                    <option key={sheet.id} value={sheet.id}>
-                      {sheet.number ?? "Piszkozat"} - {sheet.customerName} -{" "}
-                      {sheet.subject}
-                    </option>
-                  ))}
-                </select>
-                <Button
-                  variant="secondary"
-                  disabled={!chosenSheet || attaching}
-                  onClick={() => void attach()}
-                >
-                  Csatolás
-                </Button>
+                  <Button variant="secondary">
+                    Új munkalap nyitása a jegy alá
+                  </Button>
+                </Link>
               </div>
-            ) : (
-              /* A HIANY IS ALLITAS: egy eltunt valaszto ugy nezne ki, mint egy
+            ) : null}
+            {canManage ? (
+              <div className="space-y-2 border-t pt-3">
+                <label
+                  className="block text-sm font-semibold"
+                  htmlFor="csatolando-munkalap"
+                >
+                  Meglévő munkalap csatolása
+                </label>
+                {attachError ? (
+                  <Alert
+                    variant="danger"
+                    title="A csatolás nem ment"
+                    description={attachError}
+                  />
+                ) : null}
+                {attachable.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    <select
+                      id="csatolando-munkalap"
+                      className="rounded border px-2 py-1 text-sm"
+                      value={chosenSheet}
+                      onChange={(event) => setChosenSheet(event.target.value)}
+                    >
+                      <option value="">Válassz munkalapot</option>
+                      {attachable.map((sheet) => (
+                        <option key={sheet.id} value={sheet.id}>
+                          {sheet.number ?? "Piszkozat"} - {sheet.customerName} -{" "}
+                          {sheet.subject}
+                        </option>
+                      ))}
+                    </select>
+                    <Button
+                      variant="secondary"
+                      disabled={!chosenSheet || attaching}
+                      onClick={() => void attach()}
+                    >
+                      Csatolás
+                    </Button>
+                  </div>
+                ) : (
+                  /* A HIANY IS ALLITAS: egy eltunt valaszto ugy nezne ki, mint egy
                  betoltesi hiba.
 
                  ES A MONDAT MINDKET FELTETELT MEGNEVEZI. A lista MA ket dologra
@@ -836,14 +801,144 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                  lenne: lehet szabad lap boven, csak MAS partnere. Egy mondat,
                  ami ket kulonbozo allapotbol is elohivhato, a kettot osszemossa
                  -- es a felhasznalo azt hinne, egyaltalan nincs szabad lap. */
-              <p className="text-sm text-slate-500">
-                Ehhez a partnerhez nincs olyan munkalap, ami még egyik
-                hibajegyhez sem tartozik.
+                  <p className="text-sm text-slate-500">
+                    Ehhez a partnerhez nincs olyan munkalap, ami még egyik
+                    hibajegyhez sem tartozik.
+                  </p>
+                )}
+              </div>
+            ) : null}
+          </Card>
+        </div>
+        <div className="space-y-6">
+          {/*
+            AZ UGY ADATAI: AMI A JEGYET AZONOSITJA A HELYSZINEN.
+
+            NEM ISMETLI A DELEGALTAKAT, holott a terv itt mutatja oket. Annak a
+            doboznak sajat szerkesztoje van a bal hasabban, es ket helyen allo
+            nev egyszer elcsuszik -- a masodik peldany pedig nem hibazna, csak
+            mast mondana.
+          */}
+          <Card className="space-y-3 p-4">
+            <h2 className="text-sm font-semibold">Az ügy adatai</h2>
+            <dl className="space-y-3 text-sm">
+              <div>
+                <dt className="text-xs text-slate-500">Partner</dt>
+                <dd className="font-medium text-slate-900">
+                  {job.customerName ?? "Nincs megadva"}
+                </dd>
+              </div>
+              {job.departmentName ? (
+                <div>
+                  <dt className="text-xs text-slate-500">Helyszín</dt>
+                  <dd className="font-medium text-slate-900">
+                    {job.departmentName}
+                  </dd>
+                </div>
+              ) : null}
+              <div>
+                <dt className="text-xs text-slate-500">Létrehozva</dt>
+                <dd className="font-medium text-slate-900">
+                  {formatDateTime(job.createdAt)}
+                </dd>
+              </div>
+              {/* A PARTNER MAST LAT, es ez a lapon is latszik: a belso allapot
+                  a cim alatt all, a partnere itt. Enelkul a kezelo nem tudja,
+                  mit olvas a masik fel. */}
+              <div>
+                <dt className="text-xs text-slate-500">A partner ezt látja</dt>
+                <dd>
+                  <Badge variant={serviceJobStatusVariant(job.partnerStatus)}>
+                    {job.partnerStatusLabel}
+                  </Badge>
+                </dd>
+              </div>
+            </dl>
+          </Card>
+          {canManage ? (
+            <Card className="space-y-3 p-4">
+              <h2 className="text-sm font-semibold">Következő lépés</h2>
+              {stepError ? (
+                <Alert
+                  variant="danger"
+                  title="A lépés nem ment"
+                  description={stepError}
+                />
+              ) : null}
+              {job.allowedSteps.length ? (
+                <>
+                  <FormField
+                    label="Megjegyzés"
+                    description={serviceJobNoteDescription(job.allowedSteps)}
+                  >
+                    <Textarea
+                      aria-label="Megjegyzés a lépéshez"
+                      rows={3}
+                      value={note}
+                      onChange={(event) => setNote(event.target.value)}
+                      maxLength={2000}
+                    />
+                  </FormField>
+                  {/*
+                  EGYETLEN GOMB SEM VAR SZOVEGRE. A megjegyzes minden atmenetnel
+                  elhagyhato (Balazs dontese, 2026-09-03), tehat a `disabled`
+                  egyedul a folyamatban levo hivasrol szol.
+                */}
+                  <div className="flex flex-wrap gap-2">
+                    {job.allowedSteps.map((to) => (
+                      <Button
+                        key={to}
+                        variant="secondary"
+                        disabled={stepping}
+                        onClick={() => void step(to)}
+                      >
+                        {serviceJobStatusLabel[to]}
+                      </Button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                /* A LEZÁRT JEGYEN NEM ÜRES A DOBOZ, hanem meg van mondva, miért.
+                 Egy eltűnt gombsor úgy néz ki, mint egy betöltési hiba. */
+                <p className="text-sm text-slate-500">
+                  Ez a hibajegy lezárult, nincs több lépése.
+                </p>
+              )}
+            </Card>
+          ) : null}
+
+          {/*
+          A HIANY MELLE A KIUT. Egy partner nelkuli jegy ma nem tud lapot fogadni,
+          es enelkul a doboz nelkul ezt csak a csatolasnal tudna meg a felhasznalo
+          -- egy masik kepernyon, es kiut nelkul.
+        */}
+          {canManage && job.customerName === null ? (
+            <Card className="space-y-2 p-4">
+              <label
+                className="block text-sm font-semibold"
+                htmlFor="jegy-partner"
+              >
+                Partner beállítása
+              </label>
+              <p className="text-xs text-slate-500">
+                Ehhez a hibajegyhez még nincs partner, ezért munkalapot sem
+                lehet alá csatolni.
               </p>
-            )}
-          </div>
-        ) : null}
-      </Card>
+              {partnerError ? (
+                <Alert
+                  variant="danger"
+                  title="Nem sikerült"
+                  description={partnerError}
+                />
+              ) : null}
+              <PartnerPicker
+                id="jegy-partner"
+                onPick={(picked) => void setPartner(picked.customerId)}
+              />
+            </Card>
+          ) : null}
+        </div>
+      </div>
       {/*
         A KERDES HAROM RESZE, ES A HARMADIK ITT NEM UDVARIASSAG: a levalasztas
         VISSZAFORDITHATO, es ezt ki kell mondani. Egy kerdes, ami nem mondja

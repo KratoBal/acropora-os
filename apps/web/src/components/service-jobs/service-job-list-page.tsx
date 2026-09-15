@@ -1,43 +1,62 @@
 "use client";
 
-import {
-  Alert,
-  Badge,
-  Button,
-  Card,
-  EmptyState,
-  PageHeader,
-  Skeleton,
-} from "@acropora/ui";
+import { Alert, Button } from "@acropora/ui";
 import {
   hasPermission,
   PERMISSIONS,
   type ServiceJobListResponse,
 } from "@acropora/types";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import {
+  ServiceIcon,
+  ServiceListFooter,
+  ServiceListHeader,
+  ServiceListTabs,
+  ServiceSearchField,
+  ServiceStatusBadge,
+} from "@/components/service/service-list-chrome";
+import {
+  ServiceListStats,
+  type ServiceStatTile,
+} from "@/components/service/service-list-stats";
+import { sv } from "@/components/service/service-theme";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
 // A dátumformázó a munkalapoknál él. Nem másolom ide: két formázó egy
 // felületen előbb-utóbb két különböző alakot ad ugyanarra az időpontra.
 import { formatDateTime } from "@/components/worksheets/worksheet-labels";
 import {
   serviceJobStatusLabel,
-  serviceJobStatusVariant,
+  serviceJobStatusTone,
 } from "./service-job-labels";
+import {
+  itemsForTab,
+  listFooterNote,
+  listSummary,
+  SERVICE_JOB_TABS,
+  type ServiceJobTab,
+  tabDefinition,
+  totalForTab,
+} from "./service-job-list-view";
 
 /**
- * A HIBAJEGYEK LISTÁJA.
+ * A HIBAJEGYEK LISTÁJA, A KÖZÖS SZERVIZ-KÜLSŐVEL.
  *
- * KERESŐMEZŐ NINCS, ÉS EZ NEM HIÁNY: a szerver ma csak a `scope` szűrőt
- * ismeri. Egy kliensoldali kereső azt ígérné, hogy az egész halmazban keres,
- * holott csak a betöltött kétszáz soron - egy szűrő, ami csendben mást
- * jelent, rosszabb, mint a hiánya.
+ * A FEJLÉC, A FÜLEK, A CSEMPÉK, A JELVÉNY ÉS A LÁBLÉC A `components/service/`
+ * alól jön, ugyanabból, amit a munkalap- és az eszköz-lista használ. Ez a fájl
+ * a saját változatait EL IS DOBTA: három szerviz-lista, egy külső - és a
+ * márkaszín egyetlen fájlban áll, nem háromban.
+ *
+ * AMI ITT MARAD, MERT A HIBAJEGYÉ: hogy melyik fül mit kér a szervertől, és
+ * hogy a számok honnan jönnek.
  */
 export function ServiceJobListPage() {
   const { session } = useAuth();
-  const [scope, setScope] = useState<"open" | "all">("open");
+  const [tab, setTab] = useState<ServiceJobTab>("open");
+  const [search, setSearch] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
   const [data, setData] = useState<ServiceJobListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,6 +67,17 @@ export function ServiceJobListPage() {
     session && hasPermission(session.user, PERMISSIONS.SERVICE_MANAGE),
   );
   const token = session?.token ?? "";
+  const { scope } = tabDefinition(tab);
+
+  /*
+    A GÉPELÉS NEM KÉRÉSENKÉNT MEGY LE. A keresés a SZERVEREN szűr, tehát minden
+    leütés egy lekérdezés lenne - a késleltetés nem szépészet, hanem az, hogy a
+    lista ne villogjon félig begépelt szavakra.
+  */
+  useEffect(() => {
+    const timer = setTimeout(() => setAppliedSearch(search), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -55,7 +85,7 @@ export function ServiceJobListPage() {
       setLoading(true);
       setError(null);
       try {
-        setData(await serviceJobsApi.list(token, scope, signal));
+        setData(await serviceJobsApi.list(token, scope, signal, appliedSearch));
       } catch (cause) {
         if (!(cause instanceof DOMException && cause.name === "AbortError"))
           setError(
@@ -67,7 +97,7 @@ export function ServiceJobListPage() {
         if (!signal?.aborted) setLoading(false);
       }
     },
-    [canView, scope, token],
+    [appliedSearch, canView, scope, token],
   );
 
   useEffect(() => {
@@ -75,6 +105,42 @@ export function ServiceJobListPage() {
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  const items = useMemo(
+    () => (data ? itemsForTab(data.items, tab) : []),
+    [data, tab],
+  );
+  const summary = data ? listSummary(data.counts) : null;
+
+  /**
+   * A HÁROM CSEMPE SZÁMA A TELJES HALMAZBÓL JÖN, nem a betöltött lapból - ezért
+   * ad a szerver állapotonkénti darabszámot. Amíg nincs válasz, `null` áll
+   * bennük: egy nulla azt állítaná, hogy nincs ilyen jegy, és aki ezt látja,
+   * nem keres tovább.
+   */
+  const tiles: ServiceStatTile[] = [
+    {
+      key: "open",
+      icon: "wrench",
+      tone: "purple",
+      label: "Nyitott hibajegy",
+      count: summary?.open ?? null,
+    },
+    {
+      key: "waiting",
+      icon: "clock",
+      tone: "amber",
+      label: "Válaszra vagy alkatrészre vár",
+      count: summary?.waiting ?? null,
+    },
+    {
+      key: "closed",
+      icon: "sheet",
+      tone: "green",
+      label: "Lezárt ügy",
+      count: summary?.closed ?? null,
+    },
+  ];
 
   if (!canView)
     return (
@@ -86,102 +152,144 @@ export function ServiceJobListPage() {
     );
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        eyebrow="Szerviz"
+    <div>
+      <ServiceListHeader
+        eyebrow="Szerviz / Munkatér"
         title="Hibajegyek"
-        description="A hibajegy a lánc első eleme: mögötte állnak a munkalapok. Egy jegyhez több lap tartozhat, és a lap keletkezhet előbb is, mint a jegy."
-        actions={
+        lead="Minden bejelentésnek legyen következő lépése. A hibajegy a lánc első eleme: mögötte állnak a munkalapok."
+        action={
           canManage ? (
             <Link href="/szerviz/hibajegyek/uj">
-              <Button>Új hibajegy</Button>
+              <Button>
+                <ServiceIcon name="plus" className="mr-1.5 size-[17px]" />
+                Új hibajegy
+              </Button>
             </Link>
           ) : undefined
         }
       />
       {error ? (
-        <Alert
-          variant="danger"
-          title="Betöltési hiba"
-          description={error}
-          action={
-            <Button variant="secondary" onClick={() => void load()}>
-              Újrapróbálás
-            </Button>
-          }
-        />
-      ) : null}
-      <Card className="p-4">
-        <Button
-          variant={scope === "all" ? "primary" : "secondary"}
-          onClick={() => setScope(scope === "all" ? "open" : "all")}
-        >
-          {scope === "all" ? "Csak a nyitottak" : "A lezártak is"}
-        </Button>
-      </Card>
-      {loading && !data ? (
-        <div className="space-y-3" aria-label="Hibajegyek betöltése">
-          <Skeleton className="h-16" />
-          <Skeleton className="h-64" />
+        <div className="mb-6">
+          <Alert
+            variant="danger"
+            title="Betöltési hiba"
+            description={error}
+            action={
+              <Button variant="secondary" onClick={() => void load()}>
+                Újrapróbálás
+              </Button>
+            }
+          />
         </div>
       ) : null}
-      {data?.items.length ? (
-        <Card className="overflow-x-auto">
-          <table className="w-full min-w-[860px] text-left text-sm">
-            <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
-              <tr>
-                <th className="p-3">Hibajegy</th>
-                <th>Partner</th>
-                <th>Állapot</th>
-                <th>Munkalap</th>
-                <th className="p-3">Létrehozva</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.items.map((job) => (
-                <tr key={job.id} className="border-b last:border-0">
-                  <td className="p-3">
-                    <Link
-                      href={`/szerviz/hibajegyek/${job.id}`}
-                      className="font-semibold text-slate-950 hover:text-teal-700"
-                    >
-                      {job.jobNumber}
-                    </Link>
-                    <div className="mt-0.5 text-xs text-slate-500">
-                      {job.title}
-                    </div>
-                  </td>
-                  <td>{job.customerName ?? "Nincs megadva"}</td>
-                  <td>
-                    <Badge variant={serviceJobStatusVariant(job.partnerStatus)}>
-                      {serviceJobStatusLabel[job.status]}
-                    </Badge>
-                    {/* A PARTNER MÁST LÁT, és ez itt is látszik: a belső
-                        állapot a jelvényen, a partneré alatta. Enélkül a
-                        kezelő nem tudja, mit olvas a másik fél. */}
-                    <div className="mt-0.5 text-xs text-slate-500">
-                      A partner ezt látja: {job.partnerStatusLabel}
-                    </div>
-                  </td>
-                  <td className="tabular-nums">{job.worksheetCount}</td>
-                  <td className="p-3 text-xs text-slate-500">
-                    {formatDateTime(job.createdAt)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
-      ) : data ? (
-        <EmptyState
-          title="Nincs hibajegy"
-          description={
-            scope === "open"
-              ? "Nyitott hibajegy jelenleg nincs. A lezártakat a fenti gombbal nézheted meg."
-              : "Még egy hibajegy sem keletkezett."
-          }
+      <ServiceListStats
+        tiles={tiles}
+        active={tab}
+        onSelect={(key) => setTab(key as ServiceJobTab)}
+        label="Hibajegyek állapot szerint"
+      />
+      <div className={sv.panel}>
+        <ServiceListTabs
+          tabs={SERVICE_JOB_TABS.map((entry) => ({
+            key: entry.id,
+            label: entry.label,
+          }))}
+          active={tab}
+          onSelect={(key) => setTab(key as ServiceJobTab)}
+          label="Hibajegyek szűrése"
         />
-      ) : null}
+        <div className={sv.toolbar}>
+          <ServiceSearchField
+            label="Hibajegy keresése"
+            placeholder="Hibajegyszám, partner vagy hiba"
+            value={search}
+            onChange={setSearch}
+          />
+        </div>
+        {loading && !data ? (
+          <p className="px-5 py-8 text-xs text-[#686477]">
+            Hibajegyek betöltése...
+          </p>
+        ) : null}
+        {data && items.length ? (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[860px] text-left">
+                <thead>
+                  <tr>
+                    <th className={sv.tableHead}>Hibajegy</th>
+                    <th className={sv.tableHead}>Partner</th>
+                    <th className={sv.tableHead}>Állapot</th>
+                    <th className={sv.tableHead}>Munkalap</th>
+                    <th className={sv.tableHead}>Létrehozva</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((job) => (
+                    <tr key={job.id} className={sv.tableRow}>
+                      <td className={sv.tableCell}>
+                        <Link
+                          href={`/szerviz/hibajegyek/${job.id}`}
+                          className={sv.rowTitle}
+                        >
+                          {job.title}
+                        </Link>
+                        <div className={sv.rowMeta}>{job.jobNumber}</div>
+                      </td>
+                      <td className={sv.tableCell}>
+                        {job.customerName ?? "Nincs megadva"}
+                      </td>
+                      <td className={sv.tableCell}>
+                        <ServiceStatusBadge
+                          tone={serviceJobStatusTone(job.status)}
+                        >
+                          {serviceJobStatusLabel[job.status]}
+                        </ServiceStatusBadge>
+                        {/* A PARTNER MÁST LÁT, és ez itt is látszik: a belső
+                            állapot a jelvényen, a partneré alatta. Enélkül a
+                            kezelő nem tudja, mit olvas a másik fél. */}
+                        <div className={`mt-1 ${sv.rowMeta}`}>
+                          A partner ezt látja: {job.partnerStatusLabel}
+                        </div>
+                      </td>
+                      <td className={sv.tableCell}>
+                        <span className={sv.tag}>
+                          <ServiceIcon
+                            name="sheet"
+                            className="size-[13px] shrink-0"
+                          />
+                          {job.worksheetCount} munkalap
+                        </span>
+                      </td>
+                      <td className={sv.tableCell}>
+                        <span className={sv.rowMeta}>
+                          {formatDateTime(job.createdAt)}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <ServiceListFooter
+              shown={items.length}
+              totalItems={totalForTab(data.counts, tab)}
+              page={1}
+              totalPages={1}
+              note={listFooterNote(data.truncated)}
+            />
+          </>
+        ) : null}
+        {data && !items.length ? (
+          <p className="px-5 py-10 text-center text-xs text-[#686477]">
+            {appliedSearch
+              ? "Erre a keresésre nincs hibajegy ezen a fülön."
+              : tab === "open"
+                ? "Nyitott hibajegy jelenleg nincs. A lezártakat a fenti füleken nézheted meg."
+                : "Ezen a fülön most nincs hibajegy."}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }

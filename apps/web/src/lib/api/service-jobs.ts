@@ -16,8 +16,21 @@ function jobPath(id: string, suffix = "") {
 }
 
 export const serviceJobsApi = {
-  list(token: string, scope: "open" | "all", signal?: AbortSignal) {
-    return apiRequest<ServiceJobListResponse>(`${base}?scope=${scope}`, token, {
+  /**
+   * A KERESES A SZERVERRE MEGY, nem a betoltott lapon szur. Ket szerviz-lista
+   * (munkalap, hibajegy), egy szabaly -- es egy kliensoldali szuro azt igerne,
+   * hogy az egesz halmazban keres, holott csak a visszaadott ketszaz soron.
+   */
+  list(
+    token: string,
+    scope: "open" | "all",
+    signal?: AbortSignal,
+    search?: string,
+  ) {
+    const query = new URLSearchParams({ scope });
+    const trimmed = search?.trim();
+    if (trimmed) query.set("search", trimmed);
+    return apiRequest<ServiceJobListResponse>(`${base}?${query}`, token, {
       signal,
     });
   },

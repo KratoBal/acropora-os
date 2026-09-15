@@ -207,11 +207,25 @@ export function ServiceListFooter({
   totalItems,
   page,
   totalPages,
+  note,
 }: {
   shown: number;
   totalItems: number;
   page: number;
   totalPages: number;
+  /**
+   * A JOBB OLDALI SZOVEG FELULIRASA, LAPOZATLAN LISTAKHOZ.
+   *
+   * BOVITES, 2026-09-15 (nautilus): a hibajegy-lista NEM lapoz -- a szerver egy
+   * hataron belul ad vissza sorokat, es KULON megmondja, ha tobb van. Ott a
+   * `totalPages` mindig 1, tehat ez a lablec "A lista vegere ertel" szoveget
+   * irna egy VAGOTT lista ala is. Az nem stilus-kerdes: ez az egyetlen mondat,
+   * amiert valaki a lap aljara nez.
+   *
+   * ELHAGYHATO, ES NELKULE MINDEN VALTOZATLAN: a munkalap- es az eszkoz-lista
+   * lapoz, tehat nem adja at, es a kimenetuk beture ugyanaz marad.
+   */
+  note?: string;
 }) {
   return (
     <div className={sv.tableFooter}>
@@ -220,9 +234,10 @@ export function ServiceListFooter({
         {totalItems > shown ? `, ebből ${shown} ezen a lapon` : ""}
       </span>
       <span>
-        {totalPages <= 1
-          ? "A lista végére értél"
-          : `${page} / ${totalPages}. lap`}
+        {note ??
+          (totalPages <= 1
+            ? "A lista végére értél"
+            : `${page} / ${totalPages}. lap`)}
       </span>
     </div>
   );

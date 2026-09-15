@@ -8,6 +8,7 @@ export type {
   ServiceJobDocumentType,
   ServiceJobListItem,
   ServiceJobListResponse,
+  ServiceJobStatusCounts,
   ServiceJobPartnerStatus,
   ServiceJobStatusEvent,
   ServiceJobStatusValue,

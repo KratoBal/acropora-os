@@ -339,7 +339,10 @@ describe("ServiceJobDetailPage", () => {
 
     expect(await screen.findByText("Betöltési hiba")).toBeTruthy();
     expect(
-      screen.getByText("HJ-2026-001 - Cápasuli szivattyú leállt"),
+      // A SZAM ES A CIM KET KULON SOR a fejlecben (a jegyszam a cim folott,
+      // halvanyabban). Itt a CIM a horgony: az mondja meg, hogy a mar betoltott
+      // jegy a kepernyon maradt.
+      screen.getByText("Cápasuli szivattyú leállt"),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Újrapróbálás" })).toBeTruthy();
   });

@@ -105,6 +105,27 @@ export class ServiceJobListQueryDto {
   @IsIn(SERVICE_JOB_LIST_SCOPES)
   @IsOptional()
   scope?: (typeof SERVICE_JOB_LIST_SCOPES)[number];
+
+  /**
+   * SZABAD SZAVAS KERESES, A SZERVEREN.
+   *
+   * A MUNKALAP-LISTA MAR IGY MUKODIK (worksheets.repository.ts), es ugyanaz a
+   * minta all itt: harom mezo `OR`-ban, kis-nagybetutol fuggetlenul. A
+   * hibajegy-lista eddig CSAK `scope`-ot ismert -- es egy kliensoldali kereso
+   * azt igerne, hogy az egesz halmazban keres, holott csak a visszaadott
+   * ketszaz soron. Ezert nem rajzoltuk ki a mezot addig, amig ez nem volt meg.
+   *
+   * AMIT EZ NEM KEZEL, ES KI KELL MONDANI: az EKEZETET. A `contains` +
+   * `insensitive` ILIKE-ra fordul, tehat a "szivattyu" nem talalja meg a
+   * "szivattyú"-t. Az adatbazisban VAN `unaccent` kiterjesztes (a
+   * 20260828124000 migracio tette fel a termek-keresohoz), de azt ez az ut nem
+   * hasznalja -- ahhoz sajat oszlop vagy nyers SQL kellene. Ma tehat a kereses
+   * kis-nagybetuben elnezo, ekezetben szigoru, es ez a munkalap-listaval
+   * AZONOS viselkedes: ket szerviz-lista, egy szabaly.
+   */
+  @IsString()
+  @IsOptional()
+  search?: string;
 }
 
 /**

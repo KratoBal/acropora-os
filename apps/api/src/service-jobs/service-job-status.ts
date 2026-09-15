@@ -54,6 +54,23 @@ const PARTNER_STATUS: Record<ServiceJobStatus, PartnerVisibleStatus> = {
   CANCELLED: "CLOSED",
 };
 
+/**
+ * A NYOLC ALLAPOT, FUTASIDOBEN -- ES NEM KEZZEL IRT LISTAKENT.
+ *
+ * A `PARTNER_STATUS` tipusa `Record<ServiceJobStatus, ...>`, tehat a FORDITO
+ * koveteli meg, hogy minden allapot szerepeljen benne. A kulcsai igy egy
+ * TELJES felsorolast adnak, ami egy kilencedik allapot felvetelekor magatol
+ * bovul -- egy kulon, kezzel irt tomb epp az uj esetet hagyna ki, es nem
+ * szolna rola semmi.
+ *
+ * (A Prisma enum futasidoben nem all rendelkezesre: a `@acropora/database`
+ * csak TIPUSKENT exportalja, tehat `Object.values(ServiceJobStatus)` nem
+ * fordul le. Ez a lista a legkozelebbi dolog a generalthoz, ami itt van.)
+ */
+export const ALL_SERVICE_JOB_STATUSES = Object.keys(
+  PARTNER_STATUS,
+) as ServiceJobStatus[];
+
 export function partnerVisibleStatus(
   status: ServiceJobStatus,
 ): PartnerVisibleStatus {

@@ -3,6 +3,8 @@ import type {
   ServiceJobStatusValue,
 } from "@acropora/types";
 
+import type { ServiceTone } from "@/components/service/service-theme";
+
 /**
  * A NYOLC BELSŐ ÁLLAPOT MAGYARUL.
  *
@@ -70,4 +72,39 @@ export function serviceJobStatusVariant(
   if (status === "COMPLETED") return "success";
   if (status === "NEW") return "neutral";
   return "info";
+}
+
+/**
+ * A HIBAJEGY BELSŐ ÁLLAPOTÁNAK SZÍNE, Balázs 2026-09-15-i szerviz-designjában.
+ *
+ * SAJÁT TÁBLA, ÉS NEM A `serviceJobStatusVariant`-BÓL SZÁRMAZIK - a munkalapnál
+ * fordítva helyes, itt pedig épp ez lenne a hiba. Az a függvény a PARTNER által
+ * látott négy állapotot színezi; ez a nyolc BELSŐ állapotot. Két különböző
+ * kérdés, két különböző bemenettel - ha ebből származtatnánk, a nyolcból három
+ * maradna, és épp az veszne el, amiért a részletezés létezik: hogy az
+ * alkatrészre váró jegy ne ugyanúgy nézzen ki, mint az ütemezett.
+ *
+ * A CSOPORTOSÍTÁS A PROTOTÍPUSBÓL VAN ÁTVÉVE (app.js, `statuses`), a színnevek
+ * viszont a közös palettáéi: a terv ugyanazt a nyolc nevet használja, amit a
+ * sémánk, tehát kész besorolás. Öt hang a hatból - `red` itt nem fordul elő, az
+ * elállt jegy nem hiba, hanem lezárt ügy.
+ *
+ * `Record`, nem `switch`: egy kilencedik állapot a sémában fordítási hibát ad,
+ * nem csendben `undefined` színt.
+ */
+const JOB_STATUS_TONE: Record<ServiceJobStatusValue, ServiceTone> = {
+  NEW: "blue",
+  TRIAGED: "purple",
+  SCHEDULED: "purple",
+  IN_PROGRESS: "purple",
+  WAITING_FOR_PARTS: "amber",
+  WAITING_FOR_CUSTOMER: "amber",
+  COMPLETED: "green",
+  CANCELLED: "neutral",
+};
+
+export function serviceJobStatusTone(
+  status: ServiceJobStatusValue,
+): ServiceTone {
+  return JOB_STATUS_TONE[status];
 }

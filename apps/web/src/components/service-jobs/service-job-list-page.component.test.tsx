@@ -46,6 +46,25 @@ function response(
         createdAt: "2026-09-01T08:00:00.000Z",
       },
     ],
+    /**
+     * A SZÁMOK SZÁNDÉKOSAN NAGYOBBAK, MINT AMENNYI SOR JÖN.
+     *
+     * Egy sor érkezik, és a számlálók tizenhármat mondanak. Ha a felület a
+     * betöltött lapból számolna, mindhárom doboz egyest vagy nullát mutatna -
+     * vagyis ez a fixtúra megkülönbözteti a két számolást. Egyforma számokkal a
+     * lapból számoló változat is zöld maradna.
+     */
+    counts: {
+      NEW: 3,
+      TRIAGED: 0,
+      SCHEDULED: 1,
+      IN_PROGRESS: 2,
+      WAITING_FOR_PARTS: 1,
+      WAITING_FOR_CUSTOMER: 2,
+      COMPLETED: 3,
+      CANCELLED: 1,
+    },
+    truncated: false,
     ...overrides,
   };
 }
@@ -70,14 +89,66 @@ describe("ServiceJobListPage", () => {
     ).toBeTruthy();
   });
 
-  it("a lezártakat külön kell kérni, és akkor a szervertől kéri", async () => {
+  /**
+   * A LEZÁRTAKAT A SZERVERTŐL KELL KÉRNI, NEM A BETÖLTÖTTBŐL KISZŰRNI.
+   *
+   * A `Nyitott` hatókör épp a lezártakat hagyja ki, tehát egy kliensoldali
+   * szűrés ezen a fülön MINDIG üres listát adna - és az üres lista nem
+   * hibaüzenet, hanem szabályos válasznak látszik.
+   */
+  it("a lezárt fül a teljes halmazt kéri a szervertől", async () => {
     render(<ServiceJobListPage />);
     await screen.findByText("Alkatrészre vár");
     expect(api.list.mock.calls.at(-1)?.[1]).toBe("open");
 
-    fireEvent.click(screen.getByRole("button", { name: "A lezártak is" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Lezárt" }));
 
     await waitFor(() => expect(api.list.mock.calls.at(-1)?.[1]).toBe("all"));
+  });
+
+  /**
+   * ÉS A PÁRJA: A VÁRAKOZÓ FÜL NEM KÉR ÚJAT. A váró jegyek a nyitottak
+   * részhalmaza, tehát a már betöltött válaszban benne állnak. Enélkül az előző
+   * állítás egy olyan megvalósításnál is zöld lenne, ami minden fülváltásnál
+   * újratölt - és a fülváltás lassabb lenne, mint a lista.
+   */
+  it("a várakozó fül nem tölt újra, mert a nyitottak között áll", async () => {
+    render(<ServiceJobListPage />);
+    await screen.findByText("Alkatrészre vár");
+    const hivasok = api.list.mock.calls.length;
+
+    fireEvent.click(screen.getByRole("tab", { name: "Várakozik" }));
+
+    await screen.findByText("Alkatrészre vár");
+    expect(api.list.mock.calls.length).toBe(hivasok);
+  });
+
+  /**
+   * A HÁROM SZÁM A TELJES HALMAZBÓL JÖN, NEM A BETÖLTÖTT LAPBÓL.
+   *
+   * Egyetlen sor érkezik, és a dobozoknak mégis a számlálók összegét kell
+   * mutatniuk. Ez a különbség a lényeg: egy lapból számoló felület ugyanígy
+   * nézne ki, amíg a lista rövid, és csendben kezdene hazudni, amint hosszú.
+   */
+  it("a dobozok a szerver számlálóit mutatják, nem a sorok számát", async () => {
+    render(<ServiceJobListPage />);
+    await screen.findByText("Alkatrészre vár");
+
+    // nyitott: 3 + 1 + 2 + 1 + 2 = 9, várakozó: 1 + 2 = 3, lezárt: 3 + 1 = 4
+    expect(screen.getByText("9")).toBeTruthy();
+    expect(screen.getByText("3")).toBeTruthy();
+    expect(screen.getByText("4")).toBeTruthy();
+  });
+
+  /**
+   * A VÁGOTT LISTA NEM HALLGAT. A `truncated` a szervertől jön; ha a felület
+   * elhallgatná, a kétszáz sor pontosan úgy nézne ki, mint a teljes lista.
+   */
+  it("vágott listánál kimondja, hogy van több", async () => {
+    api.list.mockResolvedValue(response({ truncated: true }));
+    render(<ServiceJobListPage />);
+
+    expect(await screen.findByText(/van több/)).toBeTruthy();
   });
 
   it("üres listán megmondja, hogy a lezártak külön kérhetők", async () => {
@@ -86,7 +157,7 @@ describe("ServiceJobListPage", () => {
 
     expect(
       await screen.findByText(
-        "Nyitott hibajegy jelenleg nincs. A lezártakat a fenti gombbal nézheted meg.",
+        "Nyitott hibajegy jelenleg nincs. A lezártakat a fenti füleken nézheted meg.",
       ),
     ).toBeTruthy();
   });

@@ -3,6 +3,7 @@ import { Injectable } from "@nestjs/common";
 import { expandAssignedUnits } from "./assigned-units.js";
 import { assetsOutsideDepartment } from "../common/assets-in-department.js";
 import { SERVICE_ASSIGNABLE_ROLES } from "../common/service-assignment.js";
+import { ALL_SERVICE_JOB_STATUSES } from "./service-job-status.js";
 import { prisma, type Prisma, type ServiceJobStatus } from "@acropora/database";
 
 /**
@@ -10,6 +11,40 @@ import { prisma, type Prisma, type ServiceJobStatus } from "@acropora/database";
  * új záró állapot keletkezik, itt kell felvenni, nem a lekérdezésben.
  */
 const FINISHED: ServiceJobStatus[] = ["COMPLETED", "CANCELLED"];
+
+/**
+ * A LISTA HATARA. Nevet kapott, mert ket helyen kell: a lekerdezesben es abban
+ * a valaszban, ami megmondja, hogy a lista vagott-e. Ket helyen allo szam
+ * elobb-utobb elcsuszik, es a kulonbseg itt NEMA lenne.
+ */
+const LIST_LIMIT = 200;
+
+/**
+ * A SZABAD SZAVAS KERESES FELTETELE.
+ *
+ * KULON FUGGVENY, mert KET lekerdezes hasznalja: a lista es a szamlalo. Ha a
+ * ketto kulon-kulon epitene fel, egyszer elcsuszna -- es a kulonbseg NEMA
+ * lenne: a lista harom sort adna, a csempek folotte mast mondananak, es egyik
+ * sem nezne ki hibasnak.
+ *
+ * A HAROM MEZO UGYANAZ, MINT A MUNKALAP-LISTAN: azonosito, partner neve, es a
+ * sajat szoveg (ott a targy, itt a cim). Ket szerviz-lista, egy szabaly.
+ */
+function searchWhere(search: string | undefined): Prisma.ServiceJobWhereInput {
+  const trimmed = search?.trim();
+  if (!trimmed) return {};
+  return {
+    OR: [
+      { jobNumber: { contains: trimmed, mode: "insensitive" } },
+      { title: { contains: trimmed, mode: "insensitive" } },
+      {
+        customer: {
+          displayName: { contains: trimmed, mode: "insensitive" },
+        },
+      },
+    ],
+  };
+}
 
 export interface ServiceJobRow {
   id: string;
@@ -351,7 +386,8 @@ export class ServiceJobsRepository {
   async list(
     scope: "open" | "all",
     visibility: Prisma.ServiceJobWhereInput,
-  ): Promise<ServiceJobRow[]> {
+    search?: string,
+  ): Promise<{ rows: ServiceJobRow[]; truncated: boolean }> {
     /**
      * A LATHATOSAGI SZURO `AND` AGBAN ALL, nem kulcskent. Ugyanaz az indok, mint
      * a partner-hatokornel: a felso szintu objektum implicit ES, es egy kesobbi
@@ -363,13 +399,22 @@ export class ServiceJobsRepository {
       AND: [
         visibility,
         scope === "open" ? { status: { notIn: FINISHED } } : {},
+        searchWhere(search),
       ],
     };
 
+    /**
+     * EGGYEL TOBBET KERUNK, MINT AMENNYIT ADUNK.
+     *
+     * Igy a "van-e tobb" kerdesre nem talalgatni kell: ha a hatar+1-edik sor
+     * megjott, akkor van tobb. A pontosan hatarnyi talalatot ez
+     * megkulonbozteti a levagott listatol -- egy sima `length === LIMIT`
+     * osszehasonlitas a ket esetet EGYFORMAN vagottnak mondana.
+     */
     const rows = await this.database.serviceJob.findMany({
       where,
       orderBy: { createdAt: "desc" },
-      take: 200,
+      take: LIST_LIMIT + 1,
       select: {
         id: true,
         jobNumber: true,
@@ -383,15 +428,61 @@ export class ServiceJobsRepository {
       },
     });
 
-    return rows.map((row) => ({
-      id: row.id,
-      jobNumber: row.jobNumber,
-      title: row.title,
-      status: row.status,
-      customerName: row.customer?.displayName ?? null,
-      createdAt: row.createdAt,
-      worksheetCount: row._count.worksheets,
-    }));
+    return {
+      rows: rows.slice(0, LIST_LIMIT).map((row) => ({
+        id: row.id,
+        jobNumber: row.jobNumber,
+        title: row.title,
+        status: row.status,
+        customerName: row.customer?.displayName ?? null,
+        createdAt: row.createdAt,
+        worksheetCount: row._count.worksheets,
+      })),
+      truncated: rows.length > LIST_LIMIT,
+    };
+  }
+
+  /**
+   * ALLAPOTONKENTI DARABSZAM, A TELJES LATHATO HALMAZBOL.
+   *
+   * UGYANAZT a lathatosagi szurot kapja, mint a lista, es SZANDEKOSAN nem kap
+   * `scope`-ot: a szamlalok epp azt mondjak meg, mi van a scope-on KIVUL is.
+   * Ha a scope ide is beszivarogna, a "lezart ugy" doboz nullat mutatna egy
+   * nyitott listan -- ugy, mintha nem lenne lezart jegy.
+   *
+   * A `groupBy` a HATARTOL FUGGETLEN: a ketszazas vagas a lapozasra vonatkozik,
+   * nem a szamolasra.
+   */
+  async countsByStatus(
+    visibility: Prisma.ServiceJobWhereInput,
+    search?: string,
+  ): Promise<Record<ServiceJobStatus, number>> {
+    /**
+     * A KERESES BESZAMIT, A SCOPE NEM -- ES A KETTO KULONBSEGE SZANDEKOS.
+     *
+     * A csempek azt mondjak meg, mi van a SCOPE-on kivul is (ezert latszik a
+     * "lezart ugy" szam egy nyitott listan). A KERESES viszont a felhasznalo
+     * sajat szukitese: ha az nem szamitana bele, a csempek a keresestol
+     * fuggetlen szamot mutatnanak a talalatok folott, es a ketto ellentmondana
+     * egymasnak a kepernyon.
+     */
+    const rows = await this.database.serviceJob.groupBy({
+      by: ["status"],
+      where: { AND: [visibility, searchWhere(search)] },
+      _count: { _all: true },
+    });
+
+    /**
+     * MINDEN ALLAPOT SZEREPEL, A NULLAS IS. A `groupBy` csak a letezo sorokat
+     * adja vissza, tehat egy ma ures allapot KULCS NELKUL erkezne -- a kliensen
+     * az `undefined` az osszeadasban csendben eltunne, es a hianyzo kulcs
+     * pontosan ugy nezne ki, mint a nulla.
+     */
+    const counts = Object.fromEntries(
+      ALL_SERVICE_JOB_STATUSES.map((status) => [status, 0]),
+    ) as Record<ServiceJobStatus, number>;
+    for (const row of rows) counts[row.status] = row._count._all;
+    return counts;
   }
 
   /** Az idei legnagyobb sorszám, a következő szám kiosztásához. */
