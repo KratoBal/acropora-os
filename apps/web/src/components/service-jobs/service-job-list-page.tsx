@@ -207,7 +207,7 @@ export function ServiceJobListPage() {
           />
         </div>
         {loading && !data ? (
-          <p className="px-5 py-8 text-xs text-[#686477]">
+          <p className="px-5 py-8 text-xs text-muted">
             Hibajegyek betöltése...
           </p>
         ) : null}
@@ -281,7 +281,7 @@ export function ServiceJobListPage() {
           </>
         ) : null}
         {data && !items.length ? (
-          <p className="px-5 py-10 text-center text-xs text-[#686477]">
+          <p className="px-5 py-10 text-center text-xs text-muted">
             {appliedSearch
               ? "Erre a keresésre nincs hibajegy ezen a fülön."
               : tab === "open"

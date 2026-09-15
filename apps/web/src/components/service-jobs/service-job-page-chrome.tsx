@@ -34,7 +34,7 @@ export function ServiceJobStepCard({
       <div className="flex items-center gap-3">
         <span
           aria-hidden="true"
-          className="flex h-6 items-center rounded-md bg-[#ede8ff] px-2 text-[11px] font-bold tracking-[0.08em] text-[#6150bd]"
+          className="flex h-6 items-center rounded-md bg-brand-100 px-2 text-[11px] font-bold tracking-[0.08em] text-brand-700"
         >
           {number}
         </span>
