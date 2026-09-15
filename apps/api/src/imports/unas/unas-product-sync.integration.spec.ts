@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
+import { nincsMaradek } from "../../common/takaritas-leltar.js";
+
 import { ConflictException } from "@nestjs/common";
 import { prisma } from "@acropora/database";
 import type { UnasApiCategory, UnasApiProduct } from "@acropora/types";
@@ -279,25 +281,26 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
      * ugyanugy nem latna a szamlalo, ahogy a torles sem. Egy szamlalo, ami
      * ugyanott vak, ahol a torles, nem ellenorzes, hanem diszlet.
      */
-    assert.equal(
-      await prisma.unasProductSyncRun.count({
-        where: { createdAt: { gte: SUITE_KEZDET } },
-      }),
-      0,
-      "a suite futasai bent maradtak a takaritas utan",
-    );
-    assert.equal(
-      await prisma.domainEvent.count({
-        where: { createdAt: { gte: SUITE_KEZDET } },
-      }),
-      0,
-      "a suite esemenyei bent maradtak a takaritas utan",
-    );
-    assert.equal(
-      await prisma.externalReference.count({ where: { system: "UNAS" } }),
-      0,
-      "UNAS kulso hivatkozasok maradtak bent a takaritas utan",
-    );
+    nincsMaradek([
+      {
+        nev: "a suite futasai bent maradtak a takaritas utan",
+        darab: await prisma.unasProductSyncRun.count({
+          where: { createdAt: { gte: SUITE_KEZDET } },
+        }),
+      },
+      {
+        nev: "a suite esemenyei bent maradtak a takaritas utan",
+        darab: await prisma.domainEvent.count({
+          where: { createdAt: { gte: SUITE_KEZDET } },
+        }),
+      },
+      {
+        nev: "UNAS kulso hivatkozasok maradtak bent a takaritas utan",
+        darab: await prisma.externalReference.count({
+          where: { system: "UNAS" },
+        }),
+      },
+    ]);
     await prisma.$disconnect();
   });
 

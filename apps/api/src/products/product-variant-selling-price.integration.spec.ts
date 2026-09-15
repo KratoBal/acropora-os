@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
+import { nincsMaradek } from "../common/takaritas-leltar.js";
+
 import { Prisma, prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
@@ -92,11 +94,14 @@ describe(
        * Only `Product` is counted: `ProductVariant.productId` is `Cascade`, so
        * the variants cannot outlive it.
        */
-      assert.equal(
-        await prisma.product.count({ where: { name: { startsWith: PREFIX } } }),
-        0,
-        "the suite's product survived the cleanup",
-      );
+      nincsMaradek([
+        {
+          nev: "the suite's product survived the cleanup",
+          darab: await prisma.product.count({
+            where: { name: { startsWith: PREFIX } },
+          }),
+        },
+      ]);
       await prisma.$disconnect();
     });
 

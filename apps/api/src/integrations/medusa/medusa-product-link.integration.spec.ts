@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
+import { nincsMaradek } from "../../common/takaritas-leltar.js";
+
 import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../../common/integration-database.js";
@@ -59,13 +61,18 @@ async function cleanup() {
    * utobbira a `Product` szamlalo valaszol odalent, nev szerint -- es az a
    * lista-alapu ag teljes kihagyasat is latja.
    */
-  assert.equal(
-    await prisma.externalReference.count({
-      where: { system: "MEDUSA", entityType: "Product", entityId: { in: ids } },
-    }),
-    0,
-    "a suite lekepezes-sorai bent maradtak a takaritas utan",
-  );
+  nincsMaradek([
+    {
+      nev: "a suite lekepezes-sorai bent maradtak a takaritas utan",
+      darab: await prisma.externalReference.count({
+        where: {
+          system: "MEDUSA",
+          entityType: "Product",
+          entityId: { in: ids },
+        },
+      }),
+    },
+  ]);
 }
 
 describe(
@@ -87,11 +94,14 @@ describe(
        * koran visszater -- az a kihagyas csendes, es pontosan ugy nez ki, mint
        * egy tiszta futas.
        */
-      assert.equal(
-        await prisma.product.count({ where: { name: { startsWith: PREFIX } } }),
-        0,
-        "a suite termekei bent maradtak a takaritas utan",
-      );
+      nincsMaradek([
+        {
+          nev: "a suite termekei bent maradtak a takaritas utan",
+          darab: await prisma.product.count({
+            where: { name: { startsWith: PREFIX } },
+          }),
+        },
+      ]);
       await prisma.$disconnect();
     });
 

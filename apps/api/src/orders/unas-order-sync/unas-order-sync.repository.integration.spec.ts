@@ -3,6 +3,8 @@ import { after, before, describe, it } from "node:test";
 import { prisma } from "@acropora/database";
 import type { UnasApiOrder } from "@acropora/types";
 
+import { nincsMaradek } from "../../common/takaritas-leltar.js";
+
 import { UnasOrderSyncRepository } from "./unas-order-sync.repository.js";
 import { integrationDatabaseGate } from "../../common/integration-database.js";
 
@@ -223,34 +225,32 @@ describe(
        * A kurzor-szamlalo ugyanazt a ket mezot nezi, mint a torlese -- ott
        * nincs masodik tengely --, tehat az egy ELMARADT torlest fog meg.
        */
-      assert.equal(
-        await prisma.product.count({
-          where: { name: { startsWith: TEST_PRODUCT_PREFIX } },
-        }),
-        0,
-        "a suite termekei bent maradtak a takaritas utan",
-      );
-      assert.equal(
-        await prisma.warehouse.count({
-          where: { code: { startsWith: TEST_WAREHOUSE_PREFIX } },
-        }),
-        0,
-        "a suite raktara bent maradt a takaritas utan",
-      );
-      assert.equal(
-        await prisma.unasOrderSyncRun.count({
-          where: { createdAt: { gte: SUITE_KEZDET } },
-        }),
-        0,
-        "a suite szinkron-futasai bent maradtak a takaritas utan",
-      );
-      assert.equal(
-        await prisma.integrationCursor.count({
-          where: { provider: "UNAS", stream: "ORDERS" },
-        }),
-        0,
-        "a suite kurzora bent maradt a takaritas utan",
-      );
+      nincsMaradek([
+        {
+          nev: "a suite termekei bent maradtak a takaritas utan",
+          darab: await prisma.product.count({
+            where: { name: { startsWith: TEST_PRODUCT_PREFIX } },
+          }),
+        },
+        {
+          nev: "a suite raktara bent maradt a takaritas utan",
+          darab: await prisma.warehouse.count({
+            where: { code: { startsWith: TEST_WAREHOUSE_PREFIX } },
+          }),
+        },
+        {
+          nev: "a suite szinkron-futasai bent maradtak a takaritas utan",
+          darab: await prisma.unasOrderSyncRun.count({
+            where: { createdAt: { gte: SUITE_KEZDET } },
+          }),
+        },
+        {
+          nev: "a suite kurzora bent maradt a takaritas utan",
+          darab: await prisma.integrationCursor.count({
+            where: { provider: "UNAS", stream: "ORDERS" },
+          }),
+        },
+      ]);
       await prisma.$disconnect();
     });
 

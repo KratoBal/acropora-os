@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
 
+import { nincsMaradek } from "../../common/takaritas-leltar.js";
+
 import ExcelJS from "exceljs";
 import { prisma } from "@acropora/database";
 
@@ -213,25 +215,26 @@ describe("UNAS Apply Import database integration", { skip: !enabled }, () => {
      * ugyanaz a vaksag, ami magat a torlest is jellemzi. Egy szamlalo, ami
      * ugyanott vak, ahol a torles, nem ellenorzes, hanem diszlet.
      */
-    assert.equal(
-      await prisma.catalogImportBatch.count({
-        where: { createdAt: { gte: SUITE_KEZDET } },
-      }),
-      0,
-      "a suite import-kotegei bent maradtak a takaritas utan",
-    );
-    assert.equal(
-      await prisma.domainEvent.count({
-        where: { createdAt: { gte: SUITE_KEZDET } },
-      }),
-      0,
-      "a suite esemenyei bent maradtak a takaritas utan",
-    );
-    assert.equal(
-      await prisma.externalReference.count({ where: { system: "UNAS" } }),
-      0,
-      "UNAS kulso hivatkozasok maradtak bent a takaritas utan",
-    );
+    nincsMaradek([
+      {
+        nev: "a suite import-kotegei bent maradtak a takaritas utan",
+        darab: await prisma.catalogImportBatch.count({
+          where: { createdAt: { gte: SUITE_KEZDET } },
+        }),
+      },
+      {
+        nev: "a suite esemenyei bent maradtak a takaritas utan",
+        darab: await prisma.domainEvent.count({
+          where: { createdAt: { gte: SUITE_KEZDET } },
+        }),
+      },
+      {
+        nev: "UNAS kulso hivatkozasok maradtak bent a takaritas utan",
+        darab: await prisma.externalReference.count({
+          where: { system: "UNAS" },
+        }),
+      },
+    ]);
     await prisma.$disconnect();
   });
 

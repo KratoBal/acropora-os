@@ -3,6 +3,8 @@ import { after, before, describe, it } from "node:test";
 import { UnauthorizedException } from "@nestjs/common";
 import { prisma } from "@acropora/database";
 
+import { nincsMaradek } from "../common/takaritas-leltar.js";
+
 import { AuthUserResolver } from "./auth-user-resolver.js";
 import { hashPassword } from "../users/password.util.js";
 import { integrationDatabaseGate } from "../common/integration-database.js";
@@ -76,15 +78,16 @@ describe(
        * addresses are this file's own constants, so they are an independent
        * axis.
        */
-      assert.equal(
-        await prisma.user.count({
-          where: {
-            email: { in: [activeEmail, inactiveEmail, noPasswordEmail] },
-          },
-        }),
-        0,
-        "the suite's users survived the cleanup",
-      );
+      nincsMaradek([
+        {
+          nev: "the suite's users survived the cleanup",
+          darab: await prisma.user.count({
+            where: {
+              email: { in: [activeEmail, inactiveEmail, noPasswordEmail] },
+            },
+          }),
+        },
+      ]);
     });
 
     it("resolves an active user with the correct password", async () => {

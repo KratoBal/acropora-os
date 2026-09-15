@@ -3,6 +3,8 @@
 // a sornak a DTO behuzasa ELOTT kell allnia, kulonben a fajl betoltesekor dob.
 import "reflect-metadata";
 
+import { nincsMaradek } from "../common/takaritas-leltar.js";
+
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
@@ -190,20 +192,20 @@ describe(
        * KIMARADT torlest fogja meg, nem az elirt elotagot -- es ezt jobb
        * kimondani, mint tobbet allitani rola.
        */
-      assert.equal(
-        await prisma.asset.count({
-          where: { assetNumber: { startsWith: PREFIX } },
-        }),
-        0,
-        "a suite eszkozei bent maradtak a takaritas utan",
-      );
-      assert.equal(
-        await prisma.customer.count({
-          where: { customerNumber: { startsWith: PREFIX } },
-        }),
-        0,
-        "a suite vevoje bent maradt a takaritas utan",
-      );
+      nincsMaradek([
+        {
+          nev: "a suite eszkozei bent maradtak a takaritas utan",
+          darab: await prisma.asset.count({
+            where: { assetNumber: { startsWith: PREFIX } },
+          }),
+        },
+        {
+          nev: "a suite vevoje bent maradt a takaritas utan",
+          darab: await prisma.customer.count({
+            where: { customerNumber: { startsWith: PREFIX } },
+          }),
+        },
+      ]);
       await prisma.$disconnect();
     });
 

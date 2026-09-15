@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { Prisma, prisma } from "@acropora/database";
 
+import { nincsMaradek } from "../common/takaritas-leltar.js";
+
 import { UnasStockSyncOutboxRepository } from "./unas-stock-sync-outbox.repository.js";
 import { integrationDatabaseGate } from "../common/integration-database.js";
 
@@ -86,18 +88,20 @@ describe(
        * torles egy-egy `if` mogott all: ha a `before` elhasalt, egyik sem fut
        * le, es ugyanazokra az azonositokra szamolva az allitas is zold lenne.
        */
-      assert.equal(
-        await prisma.product.count({ where: { name: { startsWith: PREFIX } } }),
-        0,
-        "a suite termeke bent maradt a takaritas utan",
-      );
-      assert.equal(
-        await prisma.warehouse.count({
-          where: { code: { startsWith: PREFIX } },
-        }),
-        0,
-        "a suite raktara bent maradt a takaritas utan",
-      );
+      nincsMaradek([
+        {
+          nev: "a suite termeke bent maradt a takaritas utan",
+          darab: await prisma.product.count({
+            where: { name: { startsWith: PREFIX } },
+          }),
+        },
+        {
+          nev: "a suite raktara bent maradt a takaritas utan",
+          darab: await prisma.warehouse.count({
+            where: { code: { startsWith: PREFIX } },
+          }),
+        },
+      ]);
       await prisma.$disconnect();
     });
 

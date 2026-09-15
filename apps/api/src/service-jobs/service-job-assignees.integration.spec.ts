@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
+import { nincsMaradek } from "../common/takaritas-leltar.js";
+
 import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
@@ -118,20 +120,20 @@ describe(
        * nem viszi a jegyet, sem ki nem nullazza a mezot -- az ertek ott marad
        * egy mar nem letezo sorra mutatva. Ezert kap mindketto sajat szamlalot.
        */
-      assert.equal(
-        await prisma.serviceJob.count({
-          where: { jobNumber: { startsWith: TEST_JOB_PREFIX } },
-        }),
-        0,
-        "a suite hibajegyei bent maradtak a takaritas utan",
-      );
-      assert.equal(
-        await prisma.user.count({
-          where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
-        }),
-        0,
-        "a suite felhasznaloi bent maradtak a takaritas utan",
-      );
+      nincsMaradek([
+        {
+          nev: "a suite hibajegyei bent maradtak a takaritas utan",
+          darab: await prisma.serviceJob.count({
+            where: { jobNumber: { startsWith: TEST_JOB_PREFIX } },
+          }),
+        },
+        {
+          nev: "a suite felhasznaloi bent maradtak a takaritas utan",
+          darab: await prisma.user.count({
+            where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
+          }),
+        },
+      ]);
     });
 
     async function newJob(number: string) {

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { Prisma, prisma } from "@acropora/database";
 
+import { nincsMaradek } from "../common/takaritas-leltar.js";
+
 import { integrationDatabaseGate } from "../common/integration-database.js";
 import { TasksRepository } from "./tasks.repository.js";
 
@@ -63,13 +65,14 @@ describe("TasksRepository integration", { skip: gate.mode === "skip" }, () => {
      * the helper deletes the tasks explicitly before the users anyway, so a
      * surviving task would need a surviving user to hang from.
      */
-    assert.equal(
-      await prisma.user.count({
-        where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
-      }),
-      0,
-      "the suite's users survived the cleanup",
-    );
+    nincsMaradek([
+      {
+        nev: "the suite's users survived the cleanup",
+        darab: await prisma.user.count({
+          where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
+        }),
+      },
+    ]);
   });
 
   /**

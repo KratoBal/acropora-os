@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
+import { nincsMaradek } from "../common/takaritas-leltar.js";
+
 import { prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
@@ -146,34 +148,32 @@ describe(
      * konnyu arra jutni, hogy a tablat nem hasznalja senki.
      */
     async function assertNoLeftovers() {
-      assert.equal(
-        await prisma.customer.count({
-          where: { customerNumber: { startsWith: TEST_CUSTOMER_PREFIX } },
-        }),
-        0,
-        "a suite vevoi bent maradtak a takaritas utan",
-      );
-      assert.equal(
-        await prisma.serviceJob.count({
-          where: { jobNumber: { startsWith: TEST_JOB_PREFIX } },
-        }),
-        0,
-        "a suite hibajegyei bent maradtak a takaritas utan",
-      );
-      assert.equal(
-        await prisma.asset.count({
-          where: { assetNumber: { startsWith: TEST_ASSET_PREFIX } },
-        }),
-        0,
-        "a suite eszkozei bent maradtak a takaritas utan",
-      );
-      assert.equal(
-        await prisma.user.count({
-          where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
-        }),
-        0,
-        "a suite felhasznaloi bent maradtak a takaritas utan",
-      );
+      nincsMaradek([
+        {
+          nev: "a suite vevoi bent maradtak a takaritas utan",
+          darab: await prisma.customer.count({
+            where: { customerNumber: { startsWith: TEST_CUSTOMER_PREFIX } },
+          }),
+        },
+        {
+          nev: "a suite hibajegyei bent maradtak a takaritas utan",
+          darab: await prisma.serviceJob.count({
+            where: { jobNumber: { startsWith: TEST_JOB_PREFIX } },
+          }),
+        },
+        {
+          nev: "a suite eszkozei bent maradtak a takaritas utan",
+          darab: await prisma.asset.count({
+            where: { assetNumber: { startsWith: TEST_ASSET_PREFIX } },
+          }),
+        },
+        {
+          nev: "a suite felhasznaloi bent maradtak a takaritas utan",
+          darab: await prisma.user.count({
+            where: { email: { endsWith: `@${TEST_EMAIL_DOMAIN}` } },
+          }),
+        },
+      ]);
     }
 
     async function removeLeftovers() {

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { prisma } from "@acropora/database";
 
+import { nincsMaradek } from "../../common/takaritas-leltar.js";
+
 import { MedusaConnectionRepository } from "./medusa-connection.repository.js";
 import { encryptMedusaCredential } from "./medusa-credential-crypto.service.js";
 import { integrationDatabaseGate } from "../../common/integration-database.js";
@@ -115,20 +117,20 @@ describe(
        * amit a takaritas VISSZAALLIT, nem torol -- egy nulla-szamlalo rajta azt
        * kovetelne meg, hogy eltunjon, ami epp a rossz viselkedes lenne.
        */
-      assert.equal(
-        await prisma.auditLog.count({
-          where: { entityType: "MedusaConnectionSetting" },
-        }),
-        0,
-        "a suite naplosorai bent maradtak a takaritas utan",
-      );
-      assert.equal(
-        await prisma.user.count({
-          where: { email: { startsWith: TEST_ACTOR_PREFIX } },
-        }),
-        0,
-        "a suite szinesze bent maradt a takaritas utan",
-      );
+      nincsMaradek([
+        {
+          nev: "a suite naplosorai bent maradtak a takaritas utan",
+          darab: await prisma.auditLog.count({
+            where: { entityType: "MedusaConnectionSetting" },
+          }),
+        },
+        {
+          nev: "a suite szinesze bent maradt a takaritas utan",
+          darab: await prisma.user.count({
+            where: { email: { startsWith: TEST_ACTOR_PREFIX } },
+          }),
+        },
+      ]);
     });
 
     it("stores the envelope in bytes, and gives back exactly what went in", async () => {
