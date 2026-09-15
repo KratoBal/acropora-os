@@ -22,10 +22,7 @@ import { serviceJobsApi } from "@/lib/api/service-jobs";
 // A dátumformázó a munkalapoknál él. Nem másolom ide: két formázó egy
 // felületen előbb-utóbb két különböző alakot ad ugyanarra az időpontra.
 import { formatDateTime } from "@/components/worksheets/worksheet-labels";
-import {
-  ServiceJobPageHeader,
-  ServiceJobPrimaryLink,
-} from "./service-job-page-chrome";
+import { ServiceJobPageHeader } from "./service-job-page-chrome";
 import { ServiceJobStatusBadge } from "./service-job-status-badge";
 import {
   itemsForTab,
@@ -151,9 +148,9 @@ export function ServiceJobListPage() {
         description="Minden bejelentésnek legyen következő lépése. A hibajegy a lánc első eleme: mögötte állnak a munkalapok."
         actions={
           canManage ? (
-            <ServiceJobPrimaryLink href="/szerviz/hibajegyek/uj">
-              Új hibajegy
-            </ServiceJobPrimaryLink>
+            <Link href="/szerviz/hibajegyek/uj">
+              <Button>Új hibajegy</Button>
+            </Link>
           ) : undefined
         }
       />
@@ -174,7 +171,7 @@ export function ServiceJobListPage() {
           <SummaryTile
             icon="service"
             label="Nyitott hibajegy"
-            tone="bg-violet-50 text-violet-700"
+            tone="bg-teal-50 text-teal-700"
             value={summary.open}
           />
           <SummaryTile
@@ -209,7 +206,7 @@ export function ServiceJobListPage() {
                 className={[
                   "-mb-px border-b-2 px-3 py-2.5 text-sm font-semibold transition-colors",
                   active
-                    ? "border-violet-600 text-violet-700"
+                    ? "border-teal-600 text-teal-700"
                     : "border-transparent text-slate-500 hover:text-slate-900",
                 ].join(" ")}
               >
@@ -246,7 +243,7 @@ export function ServiceJobListPage() {
                       <td className="px-5 py-4">
                         <Link
                           href={`/szerviz/hibajegyek/${job.id}`}
-                          className="font-semibold text-slate-950 hover:text-violet-700"
+                          className="font-semibold text-slate-950 hover:text-teal-700"
                         >
                           {job.title}
                         </Link>

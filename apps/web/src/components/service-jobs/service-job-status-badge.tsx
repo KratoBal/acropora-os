@@ -7,22 +7,30 @@ import { serviceJobStatusLabel } from "./service-job-labels";
  *
  * SAJÁT JELVÉNY, NEM A KÖZÖS `Badge`. Két oka van, és egyik sem ízlés:
  *
- * A terv a nyolc állapotot ÖT hangra képezi le, köztük egy lilára, ami a közös
- * jelvényben nincs - és a közös `Badge` bővítése minden oldalra kihatna, ez a
- * kör viszont a hibajegy-oldalakra szól. A másik a PONT a szöveg előtt: a terv
- * ezzel különbözteti meg az állapotot a többi kis címkétől (partner, munkalap),
- * amikből egy soron belül több is áll.
+ * A közös `Badge` a nyolc állapotot HÁROM hangra vonja össze
+ * (`serviceJobStatusVariant`), a terv ÖTRE - és az öt többet mond: az
+ * alkatrészre váró jegy nem ugyanaz, mint az ütemezett. A bővítése minden
+ * oldalra kihatna, ez a kör viszont a hibajegy-oldalakra szól. A másik ok a
+ * PONT a szöveg előtt: a terv ezzel különbözteti meg az állapotot a többi kis
+ * címkétől (partner, munkalap), amikből egy soron belül több is áll.
  *
- * A LEKÉPEZÉS A PROTOTÍPUSBÓL VAN ÁTVÉVE, nem újra kitalálva (app.js,
+ * A CSOPORTOSÍTÁS A PROTOTÍPUSBÓL VAN ÁTVÉVE, nem újra kitalálva (app.js,
  * `statuses`): a terv ugyanazt a nyolc nevet használja, amit a sémánk, tehát
- * kész fordítási tábla. Két helyen kitalálva a két szín egyszer elcsúszna, és
- * a különbség némán utazna a felületre.
+ * kész besorolás. Öt hang, nem nyolc - a két váró állapot egy hang, a két
+ * végállapot kettő.
+ *
+ * A SZÍNEK VISZONT A MAIAK, NEM A TERVÉI. A terv a folyamatban lévő családot a
+ * márkaszínnel emeli ki, és a márkaszín az arculat-ágon dől el (`#6150bd`).
+ * Ha ide beírnám a hozzá legközelebbi Tailwind-lilát, az MÁS lila lenne, és a
+ * hibajegy-sorok ütnének el minden más oldaltól anélkül, hogy bármi hibázna.
+ * Ezért az a család a mai hangsúlyt viseli; az arculat-ág után magától a
+ * márkaszínt fogja.
  */
 const TONE: Record<ServiceJobStatusValue, string> = {
   NEW: "bg-sky-50 text-sky-700 ring-sky-200/70",
-  TRIAGED: "bg-violet-50 text-violet-700 ring-violet-200/70",
-  SCHEDULED: "bg-violet-50 text-violet-700 ring-violet-200/70",
-  IN_PROGRESS: "bg-violet-50 text-violet-700 ring-violet-200/70",
+  TRIAGED: "bg-teal-50 text-teal-700 ring-teal-200/70",
+  SCHEDULED: "bg-teal-50 text-teal-700 ring-teal-200/70",
+  IN_PROGRESS: "bg-teal-50 text-teal-700 ring-teal-200/70",
   WAITING_FOR_PARTS: "bg-amber-50 text-amber-700 ring-amber-200/70",
   WAITING_FOR_CUSTOMER: "bg-amber-50 text-amber-700 ring-amber-200/70",
   COMPLETED: "bg-emerald-50 text-emerald-700 ring-emerald-200/70",

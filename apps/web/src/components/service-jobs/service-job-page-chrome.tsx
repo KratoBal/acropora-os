@@ -1,28 +1,23 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 
 /**
- * A HIBAJEGY-OLDALAK FEJLÉCE ÉS ELSŐDLEGES GOMBJA.
+ * A HIBAJEGY-OLDALAK FEJLÉCE.
  *
- * MIÉRT NEM A KÖZÖS `PageHeader` ÉS `Button`, ÉS MIÉRT NEM IS AZOKAT ÍRTAM ÁT:
+ * CSAK SZERKEZET, SEMMILYEN SAJÁT SZÍN. A terv nagyobb címet és levegősebb
+ * fejlécet ad, mint a közös `PageHeader` - ez az egy dolog marad itt. A
+ * hangsúly színe a MAI tokenből jön, ugyanabból, amit a közös fejléc használ.
  *
- * A terv hangsúlya LILA, a mai felületé pedig türkiz (a `PageHeader` felső
- * sora) és sötét (a `Button` elsődleges alakja). Ez a kör SZÁNDÉKOSAN csak a
- * hibajegy-oldalakra szól, tehát a közös komponensek átírása tizennégy másik
- * oldalt is elmozdítana - olyanokat, amiket ebben a körben senki nem néz meg.
+ * MIÉRT NEM A TERV LILÁJA, HOLOTT ELŐSZÖR AZ ÁLLT ITT. Az arculat (betűtípus,
+ * márkaszín, sötét oldalsáv) KÜLÖN ágon készül, és az mozdítja a közös
+ * fájlokat - a márkaszín ott `#6150bd`. Amit ide beírtam, az a Tailwind
+ * `teal-600`, vagyis `#7c3aed`: szintén lila, és MÁS lila. Két különböző
+ * lila egymás mellett semmilyen hibát nem adna, csak a hibajegy-oldalak
+ * ütnének el minden más oldaltól - pontosan az a néma eltérés, aminek a
+ * megelőzésére egy megosztott token létezik.
  *
- * A MÁSIK IRÁNY VISZONT ROSSZABB: ha a közös fejlécet hagynám itt, EGY OLDALON
- * BELÜL állna kétféle hangsúly - türkiz felső sor lila fülek fölött. Az nem
- * félkész tervnek látszik, hanem hibának, és épp azt a kérdést fedné el, amire
- * ebben a körben választ várunk.
- *
- * Tehát a varrat OLDALAK KÖZÖTT húzódik, nem oldalon belül. Amikor a terv a
- * többi oldalra is átkerül, ezek a komponensek NEM maradnak: a közös
- * `PageHeader` és `Button` veszi át a szerepüket, egyszer, mindenhol.
- *
- * (A `cn` a közös csomagban egyszerű összefűzés, nem tailwind-merge: egy
- * `className`-mel felülírt `bg-slate-900` a stíluslap sorrendjén múlna. Ezért
- * itt saját elem áll, nem a közös gomb felülstílusozása.)
+ * Tehát a szín EGY helyen dől el, és az nem itt van. Amikor az arculat-ág bent
+ * lesz, ezek az oldalak magukkal viszik a márkaszínt, és ehhez a fájlhoz nem
+ * kell hozzányúlni.
  */
 export function ServiceJobPageHeader({
   actions,
@@ -38,7 +33,7 @@ export function ServiceJobPageHeader({
   return (
     <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div>
-        <p className="mb-1 text-xs font-bold uppercase tracking-[0.16em] text-violet-700">
+        <p className="mb-1 text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
           {eyebrow}
         </p>
         <h1 className="text-3xl font-bold tracking-tight text-slate-950">
@@ -57,25 +52,11 @@ export function ServiceJobPageHeader({
   );
 }
 
-export function ServiceJobPrimaryLink({
-  children,
-  href,
-}: {
-  children: ReactNode;
-  href: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2"
-    >
-      {children}
-    </Link>
-  );
-}
-
 /**
  * EGY SZAMOZOTT LEPES A FELVITELI URLAPON.
+ *
+ * A SZAM SZINE ITT IS A MAI TOKENBOL JON, nem a tervebol -- lasd a fenti
+ * fejlec indoklasat: a markaszin az arculat-agon dol el, egy helyen.
  *
  * A LEPESEK SZAMA NEM A MEZOKET FOGYASZTJA, HANEM A SORRENDET MONDJA KI. A
  * felvitel sorrendje itt TARTALMI kerdes (a helyszin a partnertol fugg), es
@@ -100,7 +81,7 @@ export function ServiceJobStepCard({
       <div className="flex items-center gap-3">
         <span
           aria-hidden="true"
-          className="flex h-6 items-center rounded-md bg-violet-50 px-2 text-[11px] font-bold tracking-[0.08em] text-violet-700"
+          className="flex h-6 items-center rounded-md bg-teal-50 px-2 text-[11px] font-bold tracking-[0.08em] text-teal-700"
         >
           {number}
         </span>
