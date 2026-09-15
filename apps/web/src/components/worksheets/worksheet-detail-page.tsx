@@ -2,12 +2,9 @@
 
 import {
   Alert,
-  Badge,
   Button,
-  Card,
   FormField,
   Input,
-  PageHeader,
   Select,
   Skeleton,
   Textarea,
@@ -24,6 +21,16 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import {
+  ServiceBackLink,
+  ServiceContextRow,
+  ServiceDetailHeader,
+  ServiceDetailSplit,
+  ServicePanel,
+  ServicePanelHeading,
+} from "@/components/service/service-detail-chrome";
+import { ServiceStatusBadge } from "@/components/service/service-list-chrome";
+import { sv } from "@/components/service/service-theme";
 import { useReturnTo } from "@/components/navigation-history";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { WorksheetEntries } from "./worksheet-entries";
@@ -35,7 +42,7 @@ import {
   formatDateTime,
   worksheetLabelOrDraft,
   worksheetStatusLabel,
-  worksheetStatusVariant,
+  worksheetStatusTone,
 } from "./worksheet-labels";
 
 export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
@@ -160,19 +167,433 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
   const isDraft = current.status === "DRAFT";
   const isSigned = current.status === "SIGNED";
 
+  /**
+   * A HASABOK TARTALMA KULON ALL, MERT KET HELYEN KELL. A `ServiceDetailSplit`
+   * ket oszlopot kap, es egy 600 soros JSX-kifejezesbe agyazva a ketto hatara
+   * olvashatatlan lenne -- ez a valtozat megmondja, mi melyik oszlopba tartozik.
+   */
+  const lineRows = (
+    <section className={sv.panel}>
+      <div className="flex items-center justify-between gap-3 border-b border-line px-[22px] py-[18px]">
+        <h2 className="text-[16px] font-bold text-ink">
+          Elvégzett munka és anyagok
+        </h2>
+        {canManage && isDraft ? (
+          <Link href={`/szerviz/munkalapok/${worksheet.id}/szerkesztes`}>
+            <Button variant="secondary">Tételek szerkesztése</Button>
+          </Link>
+        ) : null}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[860px] border-collapse text-left">
+          <thead>
+            <tr>
+              <th className={sv.tableHead}>#</th>
+              <th className={sv.tableHead}>Megnevezés</th>
+              <th className={`${sv.tableHead} text-right`}>Mennyiség</th>
+              <th className={sv.tableHead}>Egység</th>
+              <th className={`${sv.tableHead} text-right`}>Egységár</th>
+              <th className={`${sv.tableHead} text-right`}>ÁFA %</th>
+              <th className={`${sv.tableHead} text-right`}>Nettó</th>
+            </tr>
+          </thead>
+          <tbody>
+            {current.lines.map((line) => (
+              <tr key={line.id} className={sv.tableRow}>
+                <td className={`${sv.tableCell} ${sv.rowMeta}`}>
+                  {line.position}
+                </td>
+                <td className={sv.tableCell}>
+                  <div className="text-[13px] font-semibold text-ink">
+                    {line.description}
+                  </div>
+                  {line.detail ? (
+                    <div className={sv.rowMeta}>{line.detail}</div>
+                  ) : null}
+                  {line.assetNumber ? (
+                    <div className={`font-mono ${sv.rowMeta}`}>
+                      {line.assetNumber}
+                    </div>
+                  ) : null}
+                  {/* AZ UGYFEL SAJAT KODJA, csak ha van, es FELIRATTAL. A
+                      felette allo eszkozszam a MIENK, ez pedig az ugyfele:
+                      ket csupasz kod egymas alatt pont azt a keveredest
+                      hozna, ami ellen a mezo kulon nevet kapott. */}
+                  {line.inventoryNumber ? (
+                    <div className={sv.rowMeta}>
+                      Leltári szám:{" "}
+                      <span className="font-mono">{line.inventoryNumber}</span>
+                    </div>
+                  ) : null}
+                </td>
+                <td
+                  className={`${sv.tableCell} text-right tabular-nums text-ink`}
+                >
+                  {line.quantity}
+                </td>
+                <td className={`${sv.tableCell} text-ink`}>{line.unit}</td>
+                <td
+                  className={`${sv.tableCell} text-right tabular-nums text-ink`}
+                >
+                  {formatAmount(line.unitNet, current.currency)}
+                </td>
+                <td
+                  className={`${sv.tableCell} text-right tabular-nums text-ink`}
+                >
+                  {line.vatRatePercent ?? MISSING_AMOUNT}
+                </td>
+                <td
+                  className={`${sv.tableCell} text-right tabular-nums text-ink`}
+                >
+                  {formatAmount(line.netAmount, current.currency)}
+                </td>
+              </tr>
+            ))}
+            {current.lines.length === 0 ? (
+              <tr>
+                <td className={`${sv.tableCell} ${sv.rowMeta}`} colSpan={7}>
+                  Nincs tétel. Tétel nélküli munkalap nem zárható le.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+
+  const signatureForm =
+    canManage && current.status === "AWAITING_SIGNATURE" ? (
+      <ServicePanel>
+        <ServicePanelHeading title="Ügyfél döntésének rögzítése" />
+        <p className="-mt-3 mb-4 text-xs text-muted">
+          Ez a belső rögzítés. Az e-mailes aláírás-lánc külön szelet, itt most
+          az ügyfél döntését jegyezzük fel.
+        </p>
+        <div className="grid gap-3 md:grid-cols-3">
+          <FormField label="Döntés">
+            <Select
+              aria-label="Döntés"
+              value={signature.decision}
+              onChange={(event) =>
+                setSignature((current) => ({
+                  ...current,
+                  decision: event.target.value as WorksheetSignatureDecision,
+                }))
+              }
+            >
+              <option value="ACCEPTED">Elfogadta</option>
+              <option value="REJECTED">Elutasította</option>
+            </Select>
+          </FormField>
+          {/*
+            AZ ALAIRO A LISTAROL VALASZTHATO (Balazs, 2026-09-04), es a
+            szabad szoveg az "egyik sem" ag -- amit a lap KIMOND.
+
+            A LISTA UGYANABBOL A VEGPONTBOL JON, mint a telefonon, es az
+            `emptyReason` is: ket kulonbozo ok van arra, hogy ures, es a
+            teendojuk MAS.
+          */}
+          <FormField label="Aláíró" className="md:col-span-2">
+            <Select
+              aria-label="Aláíró"
+              value={signature.signerUserId}
+              onChange={(event) =>
+                setSignature((current) => ({
+                  ...current,
+                  signerUserId: event.target.value,
+                }))
+              }
+            >
+              <option value="">Egyik sem (a nevet beírom)</option>
+              {signers?.items.map((jelolt) => (
+                <option key={jelolt.id} value={jelolt.id}>
+                  {jelolt.name}
+                </option>
+              ))}
+            </Select>
+            {signers?.emptyReason ? (
+              <p className="pt-1 text-xs text-muted">{signers.emptyReason}</p>
+            ) : null}
+          </FormField>
+          {/*
+            A KOD A VALASZTAS UTAN JON ELO, es az "egyik sem" agon NINCS --
+            ott a lap maga mondja ki, hogy nem a partner nyilvantartott
+            munkatarsa irta ala.
+          */}
+          {signature.signerUserId !== "" ? (
+            <FormField label="Aláírókód" className="md:col-span-2">
+              <Input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                aria-label="Aláírókód"
+                value={signature.signatureCode}
+                onChange={(event) =>
+                  setSignature((current) => ({
+                    ...current,
+                    signatureCode: event.target.value,
+                  }))
+                }
+              />
+              <p className="pt-1 text-xs text-muted">
+                Négy számjegy. Az ügyfél munkatársa adja meg.
+              </p>
+            </FormField>
+          ) : null}
+          {signature.signerUserId === "" ? (
+            <FormField label="Aláíró neve" className="md:col-span-2">
+              <Input
+                aria-label="Aláíró neve"
+                value={signature.signerName}
+                onChange={(event) =>
+                  setSignature((current) => ({
+                    ...current,
+                    signerName: event.target.value,
+                  }))
+                }
+              />
+              <p className="pt-1 text-xs text-muted">
+                A lapon látszani fog, hogy a nevet te írtad be, és nem a partner
+                nyilvántartott munkatársa írta alá.
+              </p>
+            </FormField>
+          ) : null}
+          <FormField label="Megjegyzés" className="md:col-span-3">
+            <Textarea
+              aria-label="Aláírás megjegyzése"
+              rows={2}
+              value={signature.note}
+              onChange={(event) =>
+                setSignature((current) => ({
+                  ...current,
+                  note: event.target.value,
+                }))
+              }
+            />
+          </FormField>
+        </div>
+        <Button
+          className="mt-4"
+          /**
+           * A NEV CSAK AZ "EGYIK SEM" AGON KOTELEZO, a KOD pedig CSAK a
+           * valasztott agon. A ket ag ket kulon mezot kovetel, es egyik sem
+           * kovetel a masikeval.
+           */
+          disabled={
+            busy ||
+            (signature.signerUserId === ""
+              ? signature.signerName.trim().length < 2
+              : signature.signatureCode.trim().length !== 4)
+          }
+          onClick={() =>
+            void run(() =>
+              worksheetsApi.sign(token, worksheet.id, {
+                decision: signature.decision,
+                /**
+                 * CSAK AZ EGYIK MEZO MEGY FEL. Ha mind a ketto ott allna, a
+                 * szerver ket kulonbozo allitast kapna arrol, ki irta ala.
+                 */
+                ...(signature.signerUserId
+                  ? {
+                      signerUserId: signature.signerUserId,
+                      signatureCode: signature.signatureCode.trim(),
+                    }
+                  : { signerName: signature.signerName.trim() }),
+                note: signature.note.trim() ? signature.note.trim() : null,
+              }),
+            )
+          }
+        >
+          Döntés rögzítése
+        </Button>
+      </ServicePanel>
+    ) : null;
+
+  const versionRows = (
+    <section className={sv.panel}>
+      <div className="border-b border-line px-[22px] py-[18px]">
+        <h2 className="text-[16px] font-bold text-ink">Verziók</h2>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] border-collapse text-left">
+          <thead>
+            <tr>
+              <th className={sv.tableHead}>Verzió</th>
+              <th className={sv.tableHead}>Állapot</th>
+              <th className={sv.tableHead}>Készítette</th>
+              <th className={sv.tableHead}>Lezárta</th>
+              <th className={sv.tableHead}>Indoklás</th>
+              <th className={sv.tableHead}>Aláírás</th>
+            </tr>
+          </thead>
+          <tbody>
+            {worksheet.versions.map((version) => (
+              <tr key={version.id} className={sv.tableRow}>
+                <td className={`${sv.tableCell} text-ink`}>
+                  {version.label ?? `${version.version}. verzió`}
+                </td>
+                <td className={sv.tableCell}>
+                  <ServiceStatusBadge
+                    tone={worksheetStatusTone(version.status)}
+                  >
+                    {worksheetStatusLabel[version.status]}
+                  </ServiceStatusBadge>
+                </td>
+                <td className={`${sv.tableCell} text-ink`}>
+                  {version.createdByName ?? "—"}
+                  <div className={sv.rowMeta}>
+                    {formatDateTime(version.createdAt)}
+                  </div>
+                </td>
+                <td className={`${sv.tableCell} text-ink`}>
+                  {version.closedByName ?? "—"}
+                  <div className={sv.rowMeta}>
+                    {formatDateTime(version.closedAt)}
+                  </div>
+                </td>
+                <td
+                  className={`${sv.tableCell} max-w-xs whitespace-pre-line text-ink`}
+                >
+                  {version.changeReason ?? "—"}
+                </td>
+                <td className={`${sv.tableCell} text-ink`}>
+                  {version.signature ? (
+                    <>
+                      {`${version.signature.signerName} (${
+                        version.signature.decision === "ACCEPTED"
+                          ? "elfogadta"
+                          : "elutasította"
+                      })`}
+                      {/*
+                        A JELZES A SZERVERTOL JON, a TAROLT allapotbol -- nem
+                        abbol, hogy a nev "ugy nez ki", mintha ugyfele lenne.
+                        Harom eset van: listarol valasztott (nincs mondat), a
+                        nevet beirtak (a lap kimondja), es a 2026-09-04 elotti
+                        sorok (azokrol nem allitunk semmit).
+                      */}
+                      {version.signature.signerNotice ? (
+                        <span className={`block pt-1 ${sv.rowMeta}`}>
+                          {version.signature.signerNotice}
+                        </span>
+                      ) : null}
+                    </>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+
+  /**
+   * AZ OSSZESITES A JOBB HASABBAN, ES NEM A TABLAZAT LABABAN.
+   *
+   * A prototipus itt hozza elore: a vegosszeg az, amiert az iroda megnyitja a
+   * lapot, es a tablazat lababan addig nem latszik, amig valaki vegig nem
+   * gordul a teteleken. A tablazat lableceben ezert MAR NEM all -- ket helyen
+   * allo osszeg kesobb elcsuszna, es a masodikat senki nem javitana.
+   */
+  const summary = (
+    <ServicePanel>
+      <ServicePanelHeading title="Összesítés" />
+      <div className="flex items-center justify-between border-b border-line py-2.5 text-xs">
+        <span className="text-muted">Nettó összeg</span>
+        <span className="font-semibold tabular-nums text-ink">
+          {formatAmount(current.netAmount, current.currency)}
+        </span>
+      </div>
+      <div className="flex items-center justify-between border-b border-line py-2.5 text-xs">
+        <span className="text-muted">ÁFA</span>
+        <span className="tabular-nums text-ink">
+          {formatAmount(current.vatAmount, current.currency)}
+        </span>
+      </div>
+      <div className="flex items-center justify-between py-2.5 text-[13px]">
+        <span className="font-semibold text-ink">Bruttó összeg</span>
+        <strong className="tabular-nums text-ink">
+          {formatAmount(current.grossAmount, current.currency)}
+        </strong>
+      </div>
+    </ServicePanel>
+  );
+
+  const facts = (
+    <ServicePanel>
+      <ServicePanelHeading title="Munkalap adatai" />
+      <ServiceContextRow icon="building" label="Partner">
+        {worksheet.customer.displayName}
+      </ServiceContextRow>
+      <ServiceContextRow icon="location" label="Alegység">
+        {worksheet.department.code} — {current.unitName ?? "—"}
+      </ServiceContextRow>
+      <ServiceContextRow icon="ticket" label="Hibajegy">
+        {/*
+          A HIÁNY IS ÁLLÍTÁS, ezért nem gondolatjel áll itt, mint a többi
+          üres mezőnél: a lap keletkezhet hibajegy nélkül, és az nem
+          hiányzó ADAT, hanem a folyamat egyik rendes állapota. Egy „—"
+          azt sugallná, hogy valamit nem töltöttek ki.
+
+          ÉS AMIÉRT ITT VAN EGYÁLTALÁN: hibajegy nélkül a lap nem
+          zárható le - a felhasználó eddig csak azt látta, hogy nem megy,
+          azt nem, hogy mi hiányzik hozzá.
+        */}
+        {worksheet.serviceJob ? (
+          <Link
+            href={`/szerviz/hibajegyek/${worksheet.serviceJob.id}`}
+            className="hover:text-brand-700"
+          >
+            {worksheet.serviceJob.jobNumber}
+          </Link>
+        ) : (
+          <span className="font-normal text-muted">Nincs mögötte hibajegy</span>
+        )}
+      </ServiceContextRow>
+      <ServiceContextRow icon="clock" label="Keltezés">
+        {formatDate(current.issueDate)}
+      </ServiceContextRow>
+      <ServiceContextRow icon="checkCircle" label="Teljesítés">
+        {formatDate(current.fulfillmentDate)}
+      </ServiceContextRow>
+      <ServiceContextRow icon="clock" label="Határidő">
+        {formatDate(current.dueDate)}
+      </ServiceContextRow>
+      <ServiceContextRow icon="users" label="Felvette">
+        {worksheet.createdByName ?? "—"}
+      </ServiceContextRow>
+      {/* A SORSZAM A FEJLECBEN ALL, ITT A HANYADIK. Korabban a cimke allt itt
+          is, es a fejlecben is -- ugyanaz a szoveg ketszer egy lapon nem
+          megerosites, hanem zaj, es a kerdesre ("hanyadik verzio ez, es hany
+          van osszesen") egyik sem valaszol. */}
+      <ServiceContextRow icon="sheet" label="Verzió">
+        {`${current.version}. verzió`}
+        {worksheet.versions.length > 1
+          ? ` · összesen ${worksheet.versions.length}`
+          : ""}
+      </ServiceContextRow>
+    </ServicePanel>
+  );
+
   return (
-    <div className="space-y-6">
-      <PageHeader
-        eyebrow="Szerviz / Munkalap"
-        title={worksheetLabelOrDraft(current.label)}
-        description={current.subject}
+    <div>
+      <ServiceBackLink href={backToList.href}>
+        {backToList.fromWithinApp ? "Vissza" : "Munkalapok"}
+      </ServiceBackLink>
+      <ServiceDetailHeader
+        eyebrow={worksheetLabelOrDraft(current.label)}
+        title={current.subject}
+        badge={
+          <ServiceStatusBadge tone={worksheetStatusTone(current.status)}>
+            {worksheetStatusLabel[current.status]}
+          </ServiceStatusBadge>
+        }
+        sub={worksheet.customer.displayName}
         actions={
-          <div className="flex gap-2">
-            <Link href={backToList.href}>
-              <Button variant="secondary">
-                {backToList.fromWithinApp ? "Vissza" : "Vissza a listához"}
-              </Button>
-            </Link>
+          <>
             {canManage && isDraft ? (
               <Link href={`/szerviz/munkalapok/${worksheet.id}/szerkesztes`}>
                 <Button variant="secondary">Szerkesztés</Button>
@@ -211,11 +632,16 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
                 Folytatás új munkalapon
               </Button>
             ) : null}
-          </div>
+          </>
         }
       />
       {error ? (
-        <Alert variant="danger" title="Hiba" description={error} />
+        <Alert
+          className="mb-5"
+          variant="danger"
+          title="Hiba"
+          description={error}
+        />
       ) : null}
 
       {/* Both ends of the chain, and the one pointing FORWARD is the reason
@@ -223,6 +649,7 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
           the work went, not just the other way round. */}
       {worksheet.continues ? (
         <Alert
+          className="mb-5"
           variant="info"
           title="Ez a lap egy korábbi munkalap folytatása"
           description={
@@ -237,6 +664,7 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
       ) : null}
       {worksheet.continuedBy.length ? (
         <Alert
+          className="mb-5"
           variant="info"
           title="Ennek a lapnak van folytatása"
           description={worksheet.continuedBy
@@ -250,397 +678,46 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
         />
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-        <Card className="space-y-3 p-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={worksheetStatusVariant(current.status)}>
-              {worksheetStatusLabel[current.status]}
-            </Badge>
-            <span className="text-sm text-slate-500">
-              {worksheet.versions.length} verzió
-            </span>
-          </div>
-          <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="text-slate-500">Partner</dt>
-              <dd className="font-medium">{worksheet.customer.displayName}</dd>
-            </div>
-            <div>
-              <dt className="text-slate-500">Alegység</dt>
-              <dd className="font-medium">
-                {worksheet.department.code} — {current.unitName ?? "—"}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-slate-500">Keltezés</dt>
-              <dd>{formatDate(current.issueDate)}</dd>
-            </div>
-            <div>
-              <dt className="text-slate-500">Teljesítés</dt>
-              <dd>{formatDate(current.fulfillmentDate)}</dd>
-            </div>
-            <div>
-              <dt className="text-slate-500">Határidő</dt>
-              <dd>{formatDate(current.dueDate)}</dd>
-            </div>
-            <div>
-              <dt className="text-slate-500">Felvette</dt>
-              <dd>{worksheet.createdByName ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-slate-500">Hibajegy</dt>
-              {/*
-                A HIÁNY IS ÁLLÍTÁS, ezért nem gondolatjel áll itt, mint a többi
-                üres mezőnél: a lap keletkezhet hibajegy nélkül, és az nem
-                hiányzó ADAT, hanem a folyamat egyik rendes állapota. Egy „—"
-                azt sugallná, hogy valamit nem töltöttek ki.
-
-                ÉS AMIÉRT ITT VAN EGYÁLTALÁN: hibajegy nélkül a lap nem
-                zárható le - a felhasználó eddig csak azt látta, hogy nem megy,
-                azt nem, hogy mi hiányzik hozzá.
-              */}
-              <dd className="font-medium">
-                {worksheet.serviceJob ? (
-                  <Link
-                    href={`/szerviz/hibajegyek/${worksheet.serviceJob.id}`}
-                    className="hover:text-teal-700"
-                  >
-                    {worksheet.serviceJob.jobNumber}
-                  </Link>
-                ) : (
-                  <span className="font-normal text-slate-500">
-                    Nincs mögötte hibajegy
-                  </span>
-                )}
-              </dd>
-            </div>
-          </dl>
-          {current.description ? (
-            <p className="whitespace-pre-line text-sm text-slate-700">
-              {current.description}
-            </p>
-          ) : null}
-        </Card>
-
-        <WorksheetAssigneeEditor
-          worksheetId={worksheet.id}
-          token={token}
-          assignees={worksheet.assignees}
-          canManage={canManage}
-          onSaved={setWorksheet}
-        />
-      </div>
-
-      <Card className="overflow-x-auto">
-        <table className="w-full min-w-[860px] text-left text-sm">
-          <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
-            <tr>
-              <th className="p-3">#</th>
-              <th>Megnevezés</th>
-              <th className="text-right">Mennyiség</th>
-              <th>Egység</th>
-              <th className="text-right">Egységár</th>
-              <th className="text-right">ÁFA %</th>
-              <th className="p-3 text-right">Nettó</th>
-            </tr>
-          </thead>
-          <tbody>
-            {current.lines.map((line) => (
-              <tr key={line.id} className="border-b last:border-0">
-                <td className="p-3">{line.position}</td>
-                <td>
-                  <div className="font-medium">{line.description}</div>
-                  {line.detail ? (
-                    <div className="text-xs text-slate-500">{line.detail}</div>
-                  ) : null}
-                  {line.assetNumber ? (
-                    <div className="font-mono text-xs text-slate-500">
-                      {line.assetNumber}
-                    </div>
-                  ) : null}
-                  {/* AZ UGYFEL SAJAT KODJA, csak ha van, es FELIRATTAL. A
-                      felette allo eszkozszam a MIENK, ez pedig az ugyfele:
-                      ket csupasz kod egymas alatt pont azt a keveredest
-                      hozna, ami ellen a mezo kulon nevet kapott. */}
-                  {line.inventoryNumber ? (
-                    <div className="text-xs text-slate-500">
-                      Leltári szám:{" "}
-                      <span className="font-mono">{line.inventoryNumber}</span>
-                    </div>
-                  ) : null}
-                </td>
-                <td className="text-right tabular-nums">{line.quantity}</td>
-                <td>{line.unit}</td>
-                <td className="text-right tabular-nums">
-                  {formatAmount(line.unitNet, current.currency)}
-                </td>
-                <td className="text-right tabular-nums">
-                  {line.vatRatePercent ?? MISSING_AMOUNT}
-                </td>
-                <td className="p-3 text-right tabular-nums">
-                  {formatAmount(line.netAmount, current.currency)}
-                </td>
-              </tr>
-            ))}
-            {current.lines.length === 0 ? (
-              <tr>
-                <td className="p-3 text-slate-500" colSpan={7}>
-                  Nincs tétel. Tétel nélküli munkalap nem zárható le.
-                </td>
-              </tr>
+      <ServiceDetailSplit
+        main={
+          <>
+            {current.description ? (
+              <ServicePanel>
+                <ServicePanelHeading title="A munka leírása" />
+                <p className="whitespace-pre-line text-sm leading-[1.8] text-[#555062]">
+                  {current.description}
+                </p>
+              </ServicePanel>
             ) : null}
-          </tbody>
-          <tfoot className="border-t bg-slate-50 text-sm">
-            <tr>
-              <td className="p-3" colSpan={6}>
-                Nettó / ÁFA / Bruttó
-              </td>
-              <td className="p-3 text-right tabular-nums">
-                {formatAmount(current.netAmount, current.currency)} /{" "}
-                {formatAmount(current.vatAmount, current.currency)} /{" "}
-                <strong>
-                  {formatAmount(current.grossAmount, current.currency)}
-                </strong>
-              </td>
-            </tr>
-          </tfoot>
-        </table>
-      </Card>
-
-      {canManage && current.status === "AWAITING_SIGNATURE" ? (
-        <Card className="space-y-3 p-4">
-          <h2 className="text-sm font-semibold text-slate-800">
-            Ügyfél döntésének rögzítése
-          </h2>
-          <p className="text-xs text-slate-500">
-            Ez a belső rögzítés. Az e-mailes aláírás-lánc külön szelet, itt most
-            az ügyfél döntését jegyezzük fel.
-          </p>
-          <div className="grid gap-3 md:grid-cols-3">
-            <FormField label="Döntés">
-              <Select
-                aria-label="Döntés"
-                value={signature.decision}
-                onChange={(event) =>
-                  setSignature((current) => ({
-                    ...current,
-                    decision: event.target.value as WorksheetSignatureDecision,
-                  }))
-                }
-              >
-                <option value="ACCEPTED">Elfogadta</option>
-                <option value="REJECTED">Elutasította</option>
-              </Select>
-            </FormField>
+            {lineRows}
+            {signatureForm}
             {/*
-              AZ ALAIRO A LISTAROL VALASZTHATO (Balazs, 2026-09-04), es a
-              szabad szoveg az "egyik sem" ag -- amit a lap KIMOND.
+              A MUNKANAPLO. Ugyanazok a funkciok, mint a telefonon (Balazs kerese,
+              2026-09-03: "Ugyanezek a funkciok kellene a webes feluletre is"), es
+              ugyanabbol a vegpontbol -- a ket felulet nem tud elcsuszni egymastol.
 
-              A LISTA UGYANABBOL A VEGPONTBOL JON, mint a telefonon, es az
-              `emptyReason` is: ket kulonbozo ok van arra, hogy ures, es a
-              teendojuk MAS.
+              A LAP ALLAPOTA NEM SZAMIT: alairt lapra is lehet bejegyzest irni. A
+              naplo arrol szol, MI TORTENT, es a tiltas NEMAN veszitene el egy
+              jegyzetet; az engedes LATSZIK, mert a bejegyzesen ott az idopont.
             */}
-            <FormField label="Aláíró" className="md:col-span-2">
-              <Select
-                aria-label="Aláíró"
-                value={signature.signerUserId}
-                onChange={(event) =>
-                  setSignature((current) => ({
-                    ...current,
-                    signerUserId: event.target.value,
-                  }))
-                }
-              >
-                <option value="">Egyik sem (a nevet beírom)</option>
-                {signers?.items.map((jelolt) => (
-                  <option key={jelolt.id} value={jelolt.id}>
-                    {jelolt.name}
-                  </option>
-                ))}
-              </Select>
-              {signers?.emptyReason ? (
-                <p className="pt-1 text-xs text-slate-500">
-                  {signers.emptyReason}
-                </p>
-              ) : null}
-            </FormField>
-            {/*
-              A KOD A VALASZTAS UTAN JON ELO, es az "egyik sem" agon NINCS --
-              ott a lap maga mondja ki, hogy nem a partner nyilvantartott
-              munkatarsa irta ala.
-            */}
-            {signature.signerUserId !== "" ? (
-              <FormField label="Aláírókód" className="md:col-span-2">
-                <Input
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={4}
-                  aria-label="Aláírókód"
-                  value={signature.signatureCode}
-                  onChange={(event) =>
-                    setSignature((current) => ({
-                      ...current,
-                      signatureCode: event.target.value,
-                    }))
-                  }
-                />
-                <p className="pt-1 text-xs text-slate-500">
-                  Négy számjegy. Az ügyfél munkatársa adja meg.
-                </p>
-              </FormField>
-            ) : null}
-            {signature.signerUserId === "" ? (
-              <FormField label="Aláíró neve" className="md:col-span-2">
-                <Input
-                  aria-label="Aláíró neve"
-                  value={signature.signerName}
-                  onChange={(event) =>
-                    setSignature((current) => ({
-                      ...current,
-                      signerName: event.target.value,
-                    }))
-                  }
-                />
-                <p className="pt-1 text-xs text-slate-500">
-                  A lapon látszani fog, hogy a nevet te írtad be, és nem a
-                  partner nyilvántartott munkatársa írta alá.
-                </p>
-              </FormField>
-            ) : null}
-            <FormField label="Megjegyzés" className="md:col-span-3">
-              <Textarea
-                aria-label="Aláírás megjegyzése"
-                rows={2}
-                value={signature.note}
-                onChange={(event) =>
-                  setSignature((current) => ({
-                    ...current,
-                    note: event.target.value,
-                  }))
-                }
-              />
-            </FormField>
-          </div>
-          <Button
-            /**
-             * A NEV CSAK AZ "EGYIK SEM" AGON KOTELEZO. Listarol valasztva a
-             * nevet a SZERVER veszi a valasztott sorbol -- egy itteni kapu
-             * olyan mezot kovetelne, ami fel sem megy.
-             */
-            /**
-             * A NEV CSAK AZ "EGYIK SEM" AGON KOTELEZO, a KOD pedig CSAK a
-             * valasztott agon. A ket ag ket kulon mezot kovetel, es egyik sem
-             * kovetel a masikeval.
-             */
-            disabled={
-              busy ||
-              (signature.signerUserId === ""
-                ? signature.signerName.trim().length < 2
-                : signature.signatureCode.trim().length !== 4)
-            }
-            onClick={() =>
-              void run(() =>
-                worksheetsApi.sign(token, worksheet.id, {
-                  decision: signature.decision,
-                  /**
-                   * CSAK AZ EGYIK MEZO MEGY FEL. Ha mind a ketto ott allna, a
-                   * szerver ket kulonbozo allitast kapna arrol, ki irta ala.
-                   */
-                  ...(signature.signerUserId
-                    ? {
-                        signerUserId: signature.signerUserId,
-                        signatureCode: signature.signatureCode.trim(),
-                      }
-                    : { signerName: signature.signerName.trim() }),
-                  note: signature.note.trim() ? signature.note.trim() : null,
-                }),
-              )
-            }
-          >
-            Döntés rögzítése
-          </Button>
-        </Card>
-      ) : null}
-
-      {/*
-        A MUNKANAPLO. Ugyanazok a funkciok, mint a telefonon (Balazs kerese,
-        2026-09-03: "Ugyanezek a funkciok kellene a webes feluletre is"), es
-        ugyanabbol a vegpontbol -- a ket felulet nem tud elcsuszni egymastol.
-
-        A LAP ALLAPOTA NEM SZAMIT: alairt lapra is lehet bejegyzest irni. A
-        naplo arrol szol, MI TORTENT, es a tiltas NEMAN veszitene el egy
-        jegyzetet; az engedes LATSZIK, mert a bejegyzesen ott az idopont.
-      */}
-      <WorksheetEntries worksheetId={worksheet.id} canWrite={canManage} />
-
-      <Card className="overflow-x-auto">
-        <table className="w-full min-w-[720px] text-left text-sm">
-          <thead className="border-b bg-slate-50 text-xs uppercase text-slate-500">
-            <tr>
-              <th className="p-3">Verzió</th>
-              <th>Állapot</th>
-              <th>Készítette</th>
-              <th>Lezárta</th>
-              <th>Indoklás</th>
-              <th className="p-3">Aláírás</th>
-            </tr>
-          </thead>
-          <tbody>
-            {worksheet.versions.map((version) => (
-              <tr key={version.id} className="border-b last:border-0">
-                <td className="p-3">
-                  {version.label ?? `${version.version}. verzió`}
-                </td>
-                <td>
-                  <Badge variant={worksheetStatusVariant(version.status)}>
-                    {worksheetStatusLabel[version.status]}
-                  </Badge>
-                </td>
-                <td>
-                  {version.createdByName ?? "—"}
-                  <div className="text-xs text-slate-500">
-                    {formatDateTime(version.createdAt)}
-                  </div>
-                </td>
-                <td>
-                  {version.closedByName ?? "—"}
-                  <div className="text-xs text-slate-500">
-                    {formatDateTime(version.closedAt)}
-                  </div>
-                </td>
-                <td className="max-w-xs whitespace-pre-line">
-                  {version.changeReason ?? "—"}
-                </td>
-                <td className="p-3">
-                  {version.signature ? (
-                    <>
-                      {`${version.signature.signerName} (${
-                        version.signature.decision === "ACCEPTED"
-                          ? "elfogadta"
-                          : "elutasította"
-                      })`}
-                      {/*
-                        A JELZES A SZERVERTOL JON, a TAROLT allapotbol -- nem
-                        abbol, hogy a nev "ugy nez ki", mintha ugyfele lenne.
-                        Harom eset van: listarol valasztott (nincs mondat), a
-                        nevet beirtak (a lap kimondja), es a 2026-09-04 elotti
-                        sorok (azokrol nem allitunk semmit).
-                      */}
-                      {version.signature.signerNotice ? (
-                        <span className="block pt-1 text-xs text-slate-500">
-                          {version.signature.signerNotice}
-                        </span>
-                      ) : null}
-                    </>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
+            <WorksheetEntries worksheetId={worksheet.id} canWrite={canManage} />
+            {versionRows}
+          </>
+        }
+        side={
+          <>
+            {summary}
+            {facts}
+            <WorksheetAssigneeEditor
+              worksheetId={worksheet.id}
+              token={token}
+              assignees={worksheet.assignees}
+              canManage={canManage}
+              onSaved={setWorksheet}
+            />
+          </>
+        }
+      />
     </div>
   );
 }
