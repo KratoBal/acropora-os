@@ -1,8 +1,12 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { AssetListResponse, Session } from "@acropora/types";
 import { useSyncExternalStore } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  savotMond,
+  setOnLine,
+} from "@/components/service/service-offline-notice.testing";
 import { AssetListPage } from "./asset-list-page";
 
 const navigation = vi.hoisted(() => ({
@@ -326,5 +330,43 @@ describe("AssetListPage csempe-számok", () => {
 
     expect(screen.getByText("61")).toBeTruthy();
     expect(screen.queryByText("60")).toBeNull();
+  });
+});
+
+/**
+ * A SAV A LAP ALLAPOTAROL BESZEL, NEM A KAPCSOLATROL -- ES A HELYES SZAM NEM
+ * EGY, HANEM ANNYI, AHANY ALLAPOTBA A LAP BE TUD KERULNI.
+ *
+ * Ez a lap kettobe: `data ? loaded : empty`. A ket allitas EGYUTT fogja meg a
+ * rogzult valasztast; kulon-kulon egyik sem. Egy lap, ami mindig `loaded`-ot
+ * ad, a tipusellenorzesen ES az elso allitason is atmegy, es hideg
+ * betolteskor azt mondana, hogy "a legutobb betoltott adatokat latod",
+ * miközben a kepernyo ures.
+ */
+describe("AssetListPage kapcsolat nélkül", () => {
+  beforeEach(() => {
+    auth.session = session;
+    navigation.params = new URLSearchParams();
+    navigation.replace.mockReset();
+    api.list.mockReset().mockResolvedValue(response(1));
+    setOnLine(false);
+  });
+
+  afterEach(() => setOnLine(true));
+
+  it("betöltött listánál a frissítésről beszél", async () => {
+    render(<AssetListPage />);
+    await screen.findByText("Cápasuli kompresszor");
+
+    expect(await savotMond("loaded")).toBeTruthy();
+  });
+
+  it("üres képernyőn azt mondja, hogy ezért nincs adat", async () => {
+    // SOHA NEM TELJESULO valasz: a lap a "meg semmi nem toltodott be"
+    // allapotban marad, vagyis pont abban, amirol a masodik mondat szol.
+    api.list.mockReset().mockReturnValue(new Promise(() => {}));
+    render(<AssetListPage />);
+
+    expect(await savotMond("empty")).toBeTruthy();
   });
 });
