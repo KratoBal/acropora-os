@@ -632,8 +632,30 @@ export class UnasProductSyncRepository extends Repository {
          * A kihagyott (nem a mi gondozasunkban levo) es a VALTOZATLAN termekek
          * nincsenek benne. A valtozatlanoknal ez tudatos kompromisszum, es van
          * ara: ha egy korabban feloldatlan hivatkozas celpontja MOST jott letre,
-         * a valtozatlan forras kapcsolata nem all helyre ebben a futasban. Egy
-         * teljes osszevetes lezarja, mert ott minden termek irodik.
+         * a valtozatlan forras kapcsolata nem all helyre ebben a futasban.
+         *
+         * ITT KORABBAN AZ ALLT, HOGY "egy teljes osszevetes lezarja, mert ott
+         * minden termek irodik". EZ HAMIS VOLT, ES MERVE (2026-09-15):
+         *
+         *   a fenti `if (diff.action === "UNCHANGED") { ...; continue; }`
+         *   MODFUGGETLEN -- a `run.kind` az EGESZ fajlban egyetlen helyen
+         *   szerepel, es ott a HIANYZO (exportbol kiesett) termekek
+         *   torles-felismereset kapcsolja, nem azt, hogy a valtozatlanok
+         *   irodjanak.
+         *
+         * Vagyis a FULL futas sem irja ujra a valtozatlan termekek kapcsolatait.
+         * MA NINCS olyan futasi mod, ami ezt a hianyt lezarna.
+         *
+         * ES EZ ROSSZABB VOLT A HIANYNAL MAGANAL: aki a mondatot elolvasta, azt
+         * hitte, van kiutunk, es nem keresett tovabb. A hiany nagysagrendje
+         * ebbol all elo -- a stage-en 1310 forras-termekbol 56-nak van
+         * kapcsolat-sora (acrobot merese).
+         *
+         * A FELOLDAS IRANYA (acrobot dontese, 2026-09-15): NEM a napi szinkron
+         * felnagyitasa, hanem egy KULON, kezzel inditott teljes
+         * kapcsolat-ujraepites. Egy EGYSZERI adossagot egyszeri futassal kell
+         * torleszteni. Amig az nincs meg, ez a bekezdes HIANYT ir le, nem
+         * megoldast.
          *
          * A masik irany rosszabb lenne: minden futasban minden termek osszes
          * kapcsolatat ujrairni akkor is, amikor a forras-adat beture ugyanaz.
