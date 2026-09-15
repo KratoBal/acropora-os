@@ -278,11 +278,11 @@ export function AiTestPage() {
 
             <dl className="grid grid-cols-2 gap-2 text-sm md:grid-cols-3">
               <div>
-                <dt className="text-muted-foreground">Beszélgetés</dt>
+                <dt className="text-muted">Beszélgetés</dt>
                 <dd>{exchange.reply.conversationId ?? "-"}</dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Mód</dt>
+                <dt className="text-muted">Mód</dt>
                 <dd>
                   {exchange.reply.customerContextStatus
                     ? (MODE_LABELS[exchange.reply.customerContextStatus] ??
@@ -291,21 +291,19 @@ export function AiTestPage() {
                 </dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Modell</dt>
+                <dt className="text-muted">Modell</dt>
                 <dd>{exchange.reply.model ?? "-"}</dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Válaszidő</dt>
+                <dt className="text-muted">Válaszidő</dt>
                 <dd>{formatMs(exchange.reply.elapsedMs)}</dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Hibakód</dt>
+                <dt className="text-muted">Hibakód</dt>
                 <dd>{exchange.reply.errorCode ?? "-"}</dd>
               </div>
               <div className="col-span-2 md:col-span-3">
-                <dt className="text-muted-foreground">
-                  Termék- és tudáskontextus
-                </dt>
+                <dt className="text-muted">Termék- és tudáskontextus</dt>
                 {/*
                   A mondatot a szerver állítja elő abból, amit az AI jelentett
                   a kereséséről -- és a "nincs termékkontextus" ágon Balázs
@@ -324,7 +322,7 @@ export function AiTestPage() {
             </dl>
 
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm text-muted-foreground">Értékelés:</span>
+              <span className="text-sm text-muted">Értékelés:</span>
               {AI_ACCURACY_RATINGS.map((rating) => (
                 <Button
                   key={rating}
@@ -349,7 +347,7 @@ export function AiTestPage() {
                 <Badge>Elmentve: {ACCURACY_LABELS[exchange.rating]}</Badge>
               ) : null}
               {exchange.ratingPending ? (
-                <span className="text-sm text-muted-foreground">Mentés...</span>
+                <span className="text-sm text-muted">Mentés...</span>
               ) : null}
             </div>
             {exchange.ratingError ? (
