@@ -1,7 +1,15 @@
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { ServiceOfflineNotice } from "./service-offline-notice";
+import {
+  ServiceOfflineNotice,
+  SZOVEG,
+  type ServiceOfflineState,
+} from "./service-offline-notice";
+
+/** MINDEN allapot, a forrasbol -- nem kezzel felsorolva, hogy egy uj `kind`
+ *  automatikusan bekeruljon minden alabbi allitasba. */
+const MINDEN_ALLAPOT = Object.keys(SZOVEG) as ServiceOfflineState["kind"][];
 
 /**
  * A SAV CSAK AZT ALLITHATJA, AMI MOGOTT MECHANIZMUS VAN -- ES AMIT A LAP
@@ -29,6 +37,47 @@ function setOnLine(value: boolean) {
 afterEach(() => setOnLine(true));
 
 describe("ServiceOfflineNotice", () => {
+  /**
+   * EGYETLEN ALLAPOT SEM IGERHET MECHANIZMUST -- ES EZ NEM A MAI HAROM
+   * MONDATRA SZOL, HANEM A KULCSOK HALMAZARA.
+   *
+   * A szabaly ("a sav ne allitson olyat, ami mogott nincs gepezet") a
+   * komponens fejlecen all, sajat kezzel irva, es KETSZER nem allitotta meg
+   * magat: eloszor a prototipus sor-mondatanal, masodszor a `form`
+   * varakozo-mentes alakjanal. Egy NEGYEDIK `kind`, amit valaki fel ev mulva
+   * felvesz, ugyanugy or nelkul szuletne.
+   *
+   * EZERT A HALMAZ A FORRASBOL JON (`Object.keys(SZOVEG)`), A MERCE VISZONT
+   * KIVULROL. Ez NEM az onmagat jaro ciklus hibaja: ott a teszt a VART
+   * erteket is a targybol venne, itt csak azt, hogy MIT kell megvizsgalni.
+   *
+   * A HATARA, KIMONDVA: a szolista ZART. Egy uj megfogalmazas ("amint
+   * helyreall", "hamarosan atmegy") atcsuszik rajta. Ez PADLO, nem garancia --
+   * azt zarja ki, hogy egy uj allapot a MAR ISMERT alakokban igerjen.
+   */
+  it("egyetlen állapot szövege sem ígér mechanizmust", () => {
+    const IGERET = [
+      /\bvár/i, // "feltöltésre vár", "várakozik"
+      /feltölt/i, // "N módosítás feltöltésre vár"
+      /\bújra/i, // "újrapróbálja"
+      /\bmajd\b/i, // "majd átmegy"
+      /automatikus/i,
+      /szinkroniz/i, // egy nem letezo Szinkronizalas-lapra utalna
+      /\bamint\b/i, // "amint visszajön, elküldjük"
+    ];
+
+    // POZITIV KONTROLL: a halmaz nem ures, es a mercek TUDNAK illeszkedni.
+    expect(MINDEN_ALLAPOT.length).toBeGreaterThan(2);
+    expect(IGERET.some((r) => r.test("3 módosítás feltöltésre vár"))).toBe(
+      true,
+    );
+
+    for (const kind of MINDEN_ALLAPOT) {
+      const talalt = IGERET.filter((r) => r.test(SZOVEG[kind])).map(String);
+      expect({ kind, talalt }).toEqual({ kind, talalt: [] });
+    }
+  });
+
   it("kapcsolat mellett semmit nem rajzol ki", () => {
     setOnLine(true);
     const { container } = render(
@@ -47,7 +96,7 @@ describe("ServiceOfflineNotice", () => {
    */
   it("mind a három állapot mást mond", () => {
     setOnLine(false);
-    const szovegek = (["loaded", "empty", "form"] as const).map((kind) => {
+    const szovegek = MINDEN_ALLAPOT.map((kind) => {
       const { container, unmount } = render(
         <ServiceOfflineNotice state={{ kind }} />,
       );
@@ -55,7 +104,12 @@ describe("ServiceOfflineNotice", () => {
       unmount();
       return s;
     });
-    expect(new Set(szovegek).size).toBe(3);
+    // A VART SZAM A HALMAZBOL JON, NEM KEZZEL IRT HARMAS. Kulonben egy JOGOS
+    // negyedik allapot is pirosra vinne ezt a tesztet -- egy orzo, amit egy
+    // helyes valtozas dont el, elobb-utobb "javitva" lesz, es akkor a valodi
+    // hibat sem fogja meg. A kalibracio mutatta meg: a negyedik `kind`
+    // felvetesekor ez a sor bukott, holott csak a SZOVEGE volt hibas.
+    expect(new Set(szovegek).size).toBe(MINDEN_ALLAPOT.length);
     szovegek.forEach((s) => expect(s).toMatch(/Nincs internet/));
   });
 
@@ -128,7 +182,7 @@ describe("ServiceOfflineNotice", () => {
    */
   it("egyik állapot sem beszél feltöltésre váró módosításról, sem időpontról", () => {
     setOnLine(false);
-    for (const kind of ["loaded", "empty", "form"] as const) {
+    for (const kind of MINDEN_ALLAPOT) {
       const { container, unmount } = render(
         <ServiceOfflineNotice state={{ kind }} />,
       );

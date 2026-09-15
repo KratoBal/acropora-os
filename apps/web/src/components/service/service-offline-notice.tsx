@@ -85,7 +85,15 @@ export type ServiceOfflineState =
    */
   | { kind: "form" };
 
-const SZOVEG: Record<ServiceOfflineState["kind"], string> = {
+/**
+ * EXPORTALT, ES NEM KENYELEMBOL: az orzoje a KULCSAIT jarja vegig.
+ *
+ * Igy egy UJ `kind` a felvetele napjan kap ort, nem akkor, amikor valaki
+ * eszreveszi. A harmadik allapot (`form`) ugy szuletett, hogy a szabaly a fajl
+ * tetejen allt es megsem allitotta meg magat -- a negyedik ugyanigy szuletne.
+ * (acrobot javaslata, 2026-09-15.)
+ */
+export const SZOVEG: Record<ServiceOfflineState["kind"], string> = {
   loaded:
     "Nincs internet. A legutóbb betöltött adatokat látod, frissíteni csak kapcsolat után tudjuk.",
   empty: "Nincs internet. Ezért nem tudtuk betölteni az adatokat.",
