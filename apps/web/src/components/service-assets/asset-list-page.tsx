@@ -123,6 +123,16 @@ export function AssetListPage() {
    * Az eltunt, hogy a KET CSEMPE egymasnak ellentmondjon (azok most egy
    * `groupBy`-bol jonnek); ami megmaradt, az a csempek es a sorok kozotti,
    * atmeneti egy-tetelnyi elteres.
+   *
+   * ES A HATAR, AMI EZT ELDONTI -- NEM AZ EZREDMASODPERC, HANEM A SZAM SZEREPE
+   * (acrobot dontese, 2026-09-15): amig a szam CSAK TAJEKOZTAT, ez a
+   * kulonbseg nem szamit. Ha a szambol valaha MUVELET lesz -- "kijelolom mind
+   * a szazhuszonhetet", vagy export, aminek a fejlecebe beirjuk, hogy ennyi
+   * van --, AKKOR kell a kozos pillanat, mert akkor a szam IGERETTE valik.
+   *
+   * Ez feltetel, nem elvi allaspont. E nelkul a kovetkezo olvaso ugy erti,
+   * hogy a kozos tranzakcio ELVBOL nem kell, es nem fogja eszrevenni, amikor
+   * a feltetel megfordul alatta.
    */
   useEffect(() => {
     const timer = window.setTimeout(() => {
