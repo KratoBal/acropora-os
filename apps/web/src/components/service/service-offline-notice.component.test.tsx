@@ -104,7 +104,12 @@ describe("ServiceOfflineNotice", () => {
       unmount();
       return s;
     });
-    expect(new Set(szovegek).size).toBe(3);
+    // A VART SZAM A HALMAZBOL JON, NEM KEZZEL IRT HARMAS. Kulonben egy JOGOS
+    // negyedik allapot is pirosra vinne ezt a tesztet -- egy orzo, amit egy
+    // helyes valtozas dont el, elobb-utobb "javitva" lesz, es akkor a valodi
+    // hibat sem fogja meg. A kalibracio mutatta meg: a negyedik `kind`
+    // felvetesekor ez a sor bukott, holott csak a SZOVEGE volt hibas.
+    expect(new Set(szovegek).size).toBe(MINDEN_ALLAPOT.length);
     szovegek.forEach((s) => expect(s).toMatch(/Nincs internet/));
   });
 
