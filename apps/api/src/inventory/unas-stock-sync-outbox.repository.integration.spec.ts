@@ -10,6 +10,12 @@ import { integrationDatabaseGate } from "../common/integration-database.js";
 const gate = integrationDatabaseGate(process.env);
 const runIntegration = gate.mode !== "skip";
 
+/**
+ * A SUITE SAJAT SORAINAK ELOTAGJA -- raktar-kod, termeknev es cikkszam
+ * egyarant. Nevet kap, mert a letrehozas ES a takaritas-allitas is olvassa.
+ */
+const PREFIX = "STOCK-OUTBOX-INT-";
+
 /// These two guarantees are, by construction, not verifiable against an
 /// in-memory fake - they depend on real Postgres row-locking semantics
 /// (`FOR UPDATE SKIP LOCKED`) and real wall-clock comparisons
@@ -26,27 +32,29 @@ describe(
   () => {
     const repository = new UnasStockSyncOutboxRepository();
     let warehouseId = "";
+    let productId = "";
     let variantIds: string[] = [];
 
     before(async () => {
       if (gate.mode === "refuse") throw new Error(gate.reason);
       const warehouse = await prisma.warehouse.create({
         data: {
-          code: `TEST-${Date.now()}`,
-          name: "Integration test warehouse",
+          code: `${PREFIX}${Date.now()}`,
+          name: `${PREFIX}warehouse`,
         },
       });
       warehouseId = warehouse.id;
 
       const product = await prisma.product.create({
-        data: { name: "Integration test product" },
+        data: { name: `${PREFIX}product` },
       });
+      productId = product.id;
       const variants = await Promise.all(
         Array.from({ length: 6 }, (_, index) =>
           prisma.productVariant.create({
             data: {
               productId: product.id,
-              sku: `INTEGRATION-SKU-${Date.now()}-${index}`,
+              sku: `${PREFIX}${Date.now()}-${index}`,
             },
           }),
         ),
@@ -55,16 +63,41 @@ describe(
     });
 
     after(async () => {
-      await prisma.unasStockSyncOutbox.deleteMany({
-        where: { warehouseId },
-      });
-      await prisma.productVariant.deleteMany({
-        where: { id: { in: variantIds } },
-      });
-      await prisma.product.deleteMany({
-        where: { variants: { every: { id: { in: variantIds } } } },
-      });
-      await prisma.warehouse.delete({ where: { id: warehouseId } });
+      /**
+       * AZONOSITO SZERINT TORLUNK, ES NEM A VALTOZAT-LISTAN AT.
+       *
+       * ITT EGY `every` FELTETEL ALLT (`variants: { every: { id: { in:
+       * variantIds } } }`), es az URES listara IS illeszkedik -- egy ures
+       * halmazra minden allitas igaz --, tehat MINDEN VALTOZAT NELKULI
+       * TERMEKRE. Ha a `before` barhol elhasal a valtozatok letrehozasa elott,
+       * ez a sor a seedelt katalogus valtozat nelkuli termekeit vitte volna el,
+       * csendben. Egy takaritas, ami masok sorait torli, rosszabb annal, mint
+       * ha a sajatjait hagyna ott.
+       *
+       * A KET `Cascade` MIATT KET TORLES ELEG: az `UnasStockSyncOutbox` a
+       * raktarrol ES a valtozatrol is `Cascade`, a `ProductVariant` pedig a
+       * termekrol -- tehat a raktar es a termek elvisz mindent, ami alattuk all.
+       */
+      if (warehouseId)
+        await prisma.warehouse.delete({ where: { id: warehouseId } });
+      if (productId) await prisma.product.delete({ where: { id: productId } });
+      /**
+       * ES A TAKARITAS EREDMENYET MEG IS MERJUK, ELOTAG SZERINT -- mert a ket
+       * torles egy-egy `if` mogott all: ha a `before` elhasalt, egyik sem fut
+       * le, es ugyanazokra az azonositokra szamolva az allitas is zold lenne.
+       */
+      assert.equal(
+        await prisma.product.count({ where: { name: { startsWith: PREFIX } } }),
+        0,
+        "a suite termeke bent maradt a takaritas utan",
+      );
+      assert.equal(
+        await prisma.warehouse.count({
+          where: { code: { startsWith: PREFIX } },
+        }),
+        0,
+        "a suite raktara bent maradt a takaritas utan",
+      );
       await prisma.$disconnect();
     });
 

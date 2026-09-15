@@ -107,6 +107,30 @@ describe(
 
     after(async () => {
       await removeLeftovers();
+      /**
+       * ES A TAKARITAS EREDMENYET MEG IS MERJUK: a `deleteMany` nulla sorra is
+       * sikeres, tehat egy elcsuszott elotag pontosan ugy nez ki, mint egy
+       * tiszta futas.
+       *
+       * AZ `AssetDocument` NEM SZEREPEL: az `assetId` `Cascade`, tehat az
+       * eszkoz torlese elviszi -- a takaritas sajat sora gyorsitas, nem
+       * vedelem. A vevo viszont KULON all: az `Asset.customerId` `Restrict`,
+       * vagyis a ket tabla egyike sem mond semmit a masikrol.
+       */
+      assert.equal(
+        await prisma.asset.count({
+          where: { assetNumber: { startsWith: PREFIX } },
+        }),
+        0,
+        "a suite eszkozei bent maradtak a takaritas utan",
+      );
+      assert.equal(
+        await prisma.customer.count({
+          where: { customerNumber: { startsWith: PREFIX } },
+        }),
+        0,
+        "a suite vevoi bent maradtak a takaritas utan",
+      );
     });
 
     it("rejects a row with neither content nor storage key", async () => {
