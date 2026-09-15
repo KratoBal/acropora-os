@@ -1,18 +1,14 @@
 "use client";
 
-import {
-  Alert,
-  Button,
-  Card,
-  PageHeader,
-  Skeleton,
-  Textarea,
-} from "@acropora/ui";
+import { Alert, Button, Card, Skeleton, Textarea } from "@acropora/ui";
 import type { WorksheetEntryDetail } from "@acropora/types";
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/auth-provider";
+import {
+  ServiceBackLink,
+  ServiceDetailHeader,
+} from "@/components/service/service-detail-chrome";
 import { worksheetsApi } from "@/lib/api/worksheets";
 
 import { worksheetEntryByline } from "./worksheet-entry-presentation";
@@ -101,13 +97,10 @@ export function WorksheetEntryPage({
         visszalepese nem helyettesiti: aki kozvetlen linkbol erkezik, annak
         nincs hova visszalepnie.
       */}
-      <Link
-        className="text-sm font-semibold text-teal-700 underline"
-        href={`/szerviz/munkalapok/${worksheetId}`}
-      >
-        ← Vissza a munkalapra
-      </Link>
-      <PageHeader title="Bejegyzés" />
+      <ServiceBackLink href={`/szerviz/munkalapok/${worksheetId}`}>
+        Vissza a munkalapra
+      </ServiceBackLink>
+      <ServiceDetailHeader eyebrow="Szerviz / munkanapló" title="Bejegyzés" />
 
       {error ? <Alert variant="danger" title={error} /> : null}
       {entries === null ? <Skeleton className="h-24" /> : null}

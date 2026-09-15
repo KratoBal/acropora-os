@@ -58,6 +58,7 @@ export function ServiceDetailHeader({
   title,
   badge,
   sub,
+  lead,
   actions,
 }: {
   /** A sorszam vagy az allapot neve -- a CIM folott, kis nagybetus sorban. */
@@ -67,6 +68,15 @@ export function ServiceDetailHeader({
   badge?: ReactNode;
   /** A cim alatti egy sor: partner, helyszin, ami a tajekozodashoz kell. */
   sub?: ReactNode;
+  /**
+   * EGY MONDAT A CIM ALATT, es NEM ugyanaz, mint a `sub`.
+   *
+   * A `sub` AZONOSIT (melyik partner, milyen allapot) -- egy sorban all a
+   * jelvennyel, es rovid. Ez MAGYARAZ: az urlapok itt mondjak ki, mi tortenik
+   * mentesnel. A kettot egy mezobe vonva az azonosito adat es a magyarazo
+   * mondat egymas melle kerulne, es a sor ket kulonbozo dolgot allitana.
+   */
+  lead?: ReactNode;
   actions?: ReactNode;
 }) {
   return (
@@ -81,6 +91,11 @@ export function ServiceDetailHeader({
             {badge}
             {sub ? <span className="text-xs text-muted">{sub}</span> : null}
           </div>
+        ) : null}
+        {lead ? (
+          <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-muted">
+            {lead}
+          </p>
         ) : null}
       </div>
       {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}

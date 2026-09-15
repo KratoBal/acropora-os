@@ -23,7 +23,14 @@ export const sv = {
   /** `.eyebrow` -- a lapcim folotti kis nagybetus sor. */
   eyebrow:
     "mb-2 text-[10px] font-bold uppercase tracking-[0.17em] text-brand-700",
-  /** `h1` a prototipusban: Manrope 800. Nalunk Inter, tehat a suly visz. */
+  /**
+   * `h1` a prototipusban: Manrope 800 -- es 2026-09-15 ota NALUNK IS az, mert
+   * az arculat (#660) betutipus-szabalya a h1/h2/h3 elemekre szol. A korabbi
+   * megjegyzes meg azt mondta, hogy "nalunk Inter, tehat a suly visz": az a
+   * mondat az arculat beolvasztasaval elavult, es egy elavult megjegyzes
+   * rosszabb a hianyzonal -- a kovetkezo olvaso a sulyt allitgatna olyasmi
+   * miatt, ami mar nem all fenn.
+   */
   pageTitle:
     "text-[32px] font-extrabold leading-[1.25] tracking-[-0.03em] text-ink",
   pageLead: "mt-2 text-[13px] leading-relaxed text-muted",

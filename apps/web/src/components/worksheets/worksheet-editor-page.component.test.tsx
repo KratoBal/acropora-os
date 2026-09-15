@@ -1006,3 +1006,64 @@ describe("WorksheetEditorPage: archived units in the two pickers", () => {
     expect(offered.some((text) => text.includes("Régi szárny"))).toBe(false);
   });
 });
+
+/**
+ * A KIUT AZ URLAP VEGEN, Balazs 2026-09-15-i designjabol.
+ *
+ * A "Megsem" eddig a lap TETEJEN allt, a cim mellett. A kilepes oda kerult a
+ * cim FOLE, hivatkozaskent -- de az urlap vegen, a kitoltes utan az ember a
+ * mentes MELLETT keresi, es a leggorgetett allapotbol a lap teteje nem latszik.
+ *
+ * AZ ALLITAS A CELT IS MERI: egy "Megsem" felirat, ami sehova nem visz,
+ * pontosan ugyanugy nez ki, mint egy mukodo. Es KET UTAT mer, mert a ketto MAS:
+ * uj lapnal a listahoz kell vinnie, meglevonel magahoz a laphoz -- egy
+ * felreirt href ugyanolyan zold lenne az egyik agon.
+ */
+describe("WorksheetEditorPage kiút", () => {
+  beforeEach(() => {
+    auth.session = session;
+    query.params = new URLSearchParams();
+    customers.list.mockReset().mockResolvedValue({ items: [] });
+    worksheets.departments.mockReset().mockResolvedValue({ items: [] });
+    worksheets.selectablePartners.mockReset().mockResolvedValue({ items: [] });
+    worksheets.assignableUsers.mockReset().mockResolvedValue({ items: [] });
+    worksheets.detail.mockReset();
+    assets.list.mockReset().mockResolvedValue({
+      items: [],
+      pagination: { page: 1, pageSize: 25, totalItems: 0, totalPages: 1 },
+    });
+  });
+
+  it("új munkalapnál a mentés melletti kiút a listához visz", async () => {
+    render(<WorksheetEditorPage />);
+
+    const megsem = await screen.findByRole("link", { name: "Mégsem" });
+    expect(megsem.getAttribute("href")).toBe("/szerviz/munkalapok");
+  });
+
+  it("meglévő munkalapnál magához a laphoz visz, nem a listához", async () => {
+    worksheets.detail.mockResolvedValue({
+      id: "ws-1",
+      customer: {
+        id: "customer-42",
+        customerNumber: "V-0042",
+        displayName: "Fankó Kft.",
+        worksheetPartnerCode: "FANK",
+      },
+      department: { id: "dep-1", code: "BIO", name: "Bio", isActive: true },
+      currentVersion: {
+        subject: "Szivattyú csere",
+        description: null,
+        issueDate: null,
+        fulfillmentDate: null,
+        dueDate: null,
+        lines: [],
+      },
+    });
+
+    render(<WorksheetEditorPage worksheetId="ws-1" />);
+
+    const megsem = await screen.findByRole("link", { name: "Mégsem" });
+    expect(megsem.getAttribute("href")).toBe("/szerviz/munkalapok/ws-1");
+  });
+});
