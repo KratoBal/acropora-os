@@ -110,6 +110,13 @@ function serviceWith(overrides: Partial<ServiceJobsRepository> = {}) {
     // a hatokorrol szolna.
     departmentBelongsToCustomer: async () => true,
     assetsOutsideDepartment: async () => [],
+    /*
+      A HIVO MOSTANTOL LEKERDEZI A JEGYHEZ KOTOTT LAPOKAT IS (a helyszin
+      atvezetesehez). A varrat laza (`as unknown as`), tehat a hianyzo metodusrol
+      a fordito nem szol -- a szolgaltatas viszont HASZNALJA. Ures lista: ezek az
+      esetek nem lapokrol szolnak.
+    */
+    worksheetsForPlacement: async () => [],
     setPlacement: async () => {
       irasok.push("setPlacement");
       return true;

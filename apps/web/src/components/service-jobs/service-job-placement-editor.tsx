@@ -4,6 +4,7 @@ import { Button, ConfirmDialog } from "@acropora/ui";
 import type {
   ServiceJobAssetLink,
   ServiceJobDetail,
+  ServiceJobWorksheetLink,
   WorksheetDepartmentSummary,
 } from "@acropora/types";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -13,6 +14,7 @@ import {
   ServicePanelHeading,
 } from "@/components/service/service-detail-chrome";
 import { buildSiteOptions } from "@/lib/partners/site-tree";
+import { ApiError } from "@/lib/api/client";
 import { serviceJobsApi } from "@/lib/api/service-jobs";
 import { worksheetsApi } from "@/lib/api/worksheets";
 
@@ -55,6 +57,8 @@ export interface ServiceJobPlacementEditorProps {
   departmentId: string | null;
   departmentPath: string[] | null;
   assets: ServiceJobAssetLink[];
+  /** A jegyhez kotott munkalapok. A SZAMOZOTTAK nem koveti a helyszint. */
+  worksheets: ServiceJobWorksheetLink[];
   canManage: boolean;
   onSaved: (detail: ServiceJobDetail) => void;
 }
@@ -66,6 +70,7 @@ export function ServiceJobPlacementEditor({
   departmentId,
   departmentPath,
   assets,
+  worksheets,
   canManage,
   onSaved,
 }: ServiceJobPlacementEditorProps) {
@@ -80,6 +85,16 @@ export function ServiceJobPlacementEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  /**
+   * AMIT A SZERVER NEVEZETT MEG: melyik kotott lapon melyik eszkoz esne az uj
+   * helyszinen kivulre, es hol all ma.
+   *
+   * A MONDATOK A SZERVERTOL JONNEK, NEM ITT EPULNEK: a kotott lapokat es az
+   * eszkozeiket a felulet nem is latja (a jegy reszletlapja a lapok SZAMAT es
+   * TARGYAT hozza, az eszkozeiket nem). Egy itteni valtozat masodik peldany
+   * lenne ugyanarra a szabalyra -- es epp az a fajta, ami csendben elcsuszik.
+   */
+  const [lapUtkozesek, setLapUtkozesek] = useState<string[] | null>(null);
 
   /**
    * A KEPERNYO A SZERVER VALASZAT KOVETI, nem a sajat elozo allapotat. Ha
@@ -153,10 +168,11 @@ export function ServiceJobPlacementEditor({
     assetIds.length !== assets.length ||
     assets.some((asset) => !assetIds.includes(asset.assetId));
 
-  const save = async () => {
+  const save = async (acceptOutside = false) => {
     setSaving(true);
     setError(null);
     setConfirming(false);
+    setLapUtkozesek(null);
     try {
       /**
        * A VALASZ A TELJES RESZLETLAP, TEHAT NEM TOLTUNK UJRA -- ugyanaz az
@@ -167,9 +183,25 @@ export function ServiceJobPlacementEditor({
         await serviceJobsApi.setPlacement(token, jobId, {
           departmentId: unit,
           assetIds,
+          ...(acceptOutside ? { acceptWorksheetAssetsOutsideSite: true } : {}),
         }),
       );
     } catch (cause) {
+      /**
+       * A 409 NEM HIBA, HANEM KERDES.
+       *
+       * A szerver ilyenkor nem elutasit, hanem MEGNEVEZI, mi tortenne: melyik
+       * kotott lapon melyik eszkoz esne az uj helyszinen kivulre. A mondatokat
+       * valtozatlanul mutatjuk meg -- egy "nehany eszkoz kivul esne" osszegzes
+       * ugyanannyit erne, mint a csend.
+       *
+       * PIROS UZENETKENT KIIRVA rossz lenne: a felhasznalo azt hinne, elromlott
+       * valami, holott egy dontes var ra.
+       */
+      if (cause instanceof ApiError && cause.status === 409) {
+        setLapUtkozesek(cause.message.split("\n").filter(Boolean));
+        return;
+      }
       setError(
         cause instanceof Error
           ? cause.message
@@ -277,6 +309,26 @@ export function ServiceJobPlacementEditor({
                   onChange={setAssetIds}
                 />
               </div>
+              {/*
+                A SZAMOZOTT LAPOK NEM KOVETIK A HELYSZINT, ES EZT KIMONDJUK.
+
+                A munkalap-szamot a lezaras osztja ki, es az ELSO TAGJA a
+                helyszin kodja (`BIO-2026-001`). Egy mar szamozott lapot ezert
+                nem mozgatunk: a szama olyan helyszint nevezne meg, ahol a lap
+                mar nem all.
+
+                A NEMA KIHAGYAS ITT ROSSZABB LENNE, MINT A MONDAT: aki atallitja
+                a jegy helyszinet, joggal hiszi, hogy a lapok kovetik -- es
+                pontosan ezt jelezte vissza Balazs 2026-09-16-an a masik
+                iranybol ("a mar hozzakotott munkalapnal nem valtozott meg").
+              */}
+              {worksheets.some((lap) => lap.number !== null) ? (
+                <p className="text-xs text-dusk-500">
+                  {worksheets.filter((lap) => lap.number !== null).length}{" "}
+                  lezárt munkalap a saját helyszínén marad: a számuk tartalmazza
+                  a helyszín kódját. A még le nem zárt lapok követik a jegyet.
+                </p>
+              ) : null}
               {error ? (
                 <p className="text-xs font-medium text-rose-600">{error}</p>
               ) : null}
@@ -319,6 +371,26 @@ export function ServiceJobPlacementEditor({
         busy={saving}
         onConfirm={() => void save()}
         onCancel={() => setConfirming(false)}
+      />
+
+      {/*
+        A MASODIK KERDES MAS, MINT AZ ELSO, ES EZERT KULON ALL.
+
+        Az elso arrol szol, amit a felhasznalo MAGA vett le a jegyrol. Ez arrol,
+        ami a KOTOTT LAPOKON marad -- oda o nem nyult, es ott nem is all senki,
+        aki dontene. A ket kerdes visszautja is mas: az elso muvelete
+        visszateheto ugyanitt, ez pedig nem "visszavonhato", hanem egy allapot,
+        amit a lapon utolag rendbe kell tenni.
+      */}
+      <ConfirmDialog
+        open={lapUtkozesek !== null}
+        title="A kötött munkalapokon kívül eső eszköz marad"
+        consequence={(lapUtkozesek ?? []).join(" ")}
+        recovery="Az eszközök a lapokon maradnak, nem vesznek el. A lap saját adatlapján bármikor levehetők vagy kicserélhetők."
+        confirmLabel="Rendben, mentés"
+        busy={saving}
+        onConfirm={() => void save(true)}
+        onCancel={() => setLapUtkozesek(null)}
       />
     </ServicePanel>
   );

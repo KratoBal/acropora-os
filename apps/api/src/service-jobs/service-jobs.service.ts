@@ -284,6 +284,74 @@ export class ServiceJobsService {
   }
 
   /**
+   * MELYIK KOTOTT LAPON MELYIK ESZKOZ ESNE AZ UJ HELYSZINEN KIVULRE.
+   *
+   * A VALASZ MONDATOK LISTAJA, NEM DARABSZAM. Egy "nehany eszkoz kivul esne"
+   * mondat ugyanannyit er, mint a csend: a felhasznalo nem tud donteni belole.
+   * Ezert all mindegyikben, hogy MELYIK LAP, MELYIK ESZKOZ, es HOL ALL MA.
+   *
+   * A lap megnevezese a SZAMA, ha van -- de itt definicio szerint nincs (csak
+   * szam nelkuli lapot mozgatunk), tehat a TARGYA all ott. Ha az sincs, a
+   * szoveg akkor is megmondja, hany lapról van szo, nem hallgat el egy sort.
+   */
+  private async worksheetAssetsOutsideSite(
+    sheets: {
+      id: string;
+      number: string | null;
+      subject: string | null;
+      assets: {
+        assetId: string;
+        assetNumber: string;
+        assetName: string;
+        assetDepartmentId: string | null;
+      }[];
+    }[],
+    departmentId: string,
+  ): Promise<string[]> {
+    const mind = [
+      ...new Set(
+        sheets.flatMap((sheet) => sheet.assets.map((eszkoz) => eszkoz.assetId)),
+      ),
+    ];
+    if (mind.length === 0) return [];
+
+    const kivul = new Set(
+      await this.repository.assetsOutsideDepartment(mind, departmentId),
+    );
+    if (kivul.size === 0) return [];
+
+    // AZ UTAK KOTEGBEN JONNEK, nem eszkozonkent: egy hivas, akarhany sor.
+    const utak = await this.repository.unitPathsOf(
+      sheets.flatMap((sheet) =>
+        sheet.assets.map((eszkoz) => eszkoz.assetDepartmentId),
+      ),
+    );
+
+    const mondatok: string[] = [];
+    for (const sheet of sheets) {
+      const lap = sheet.number ?? sheet.subject ?? "Névtelen munkalap";
+      for (const eszkoz of sheet.assets) {
+        if (!kivul.has(eszkoz.assetId)) continue;
+        const ut = eszkoz.assetDepartmentId
+          ? utak.get(eszkoz.assetDepartmentId)
+          : null;
+        /**
+         * A HELY HIANYA SAJAT MONDATOT KAP. A "nincs megadva" nem ugyanaz,
+         * mint egy ismert, de masik egyseg -- es a ket esetben a felhasznalo
+         * teendoje is mas.
+         */
+        const hol = ut?.length
+          ? `a(z) ${ut.join(" / ")} egységen áll`
+          : "helyszín nélkül áll";
+        mondatok.push(
+          `${lap}: ${eszkoz.assetName} (${eszkoz.assetNumber}) ${hol}, ami az új helyszínen kívül esik. A lapon marad.`,
+        );
+      }
+    }
+    return mondatok;
+  }
+
+  /**
    * A JEGY HELYSZINE ES AZ OTT ALLO ESZKOZOK, A FELVITEL UTAN.
    *
    * Balazs kerese, 2026-09-16: a meglevo jegyhez is lehessen eszkozt adni, es a
@@ -331,10 +399,47 @@ export class ServiceJobsService {
     if (assetIds.length > 0)
       await this.requireAssetsOnDepartment(assetIds, departmentId);
 
+    /**
+     * A HELYSZIN A KOTOTT LAPOKRA IS ATMEGY -- DE CSAK ARRA, AMINEK NINCS SZAMA.
+     *
+     * Balazs merese, 2026-09-16: "a hibajegynel meg tudtam valtoztatni a
+     * helyszint. de a mar hozzakotott munkalapnal nem valtozott meg".
+     *
+     * A HATAR A SZAM, NEM AZ ALLAPOT-NEV: a munkalap-szamot a lezaras osztja
+     * ki, es az elso tagja a HELYSZIN KODJA. Egy mar szamozott lap mozgatasa
+     * olyan szamot hagyna hatra, ami mas helyszint nevez meg, mint ahol a lap
+     * all -- es a szam a lap azonossaga, kinyomtatva es atadva.
+     */
+    const sheets = await this.repository.worksheetsForPlacement(id);
+    const movable = sheets.filter((sheet) => sheet.number === null);
+
+    /**
+     * ES HA EGY MOZGATOTT LAPON OLYAN ESZKOZ ALL, AMI AZ UJ REszfan KIVUL ESIK,
+     * A MUVELET MEGALL, ES MEGNEVEZI.
+     *
+     * Acrobot dontese (2026-09-16) a harom alak kozul: az eszkozok a lapon
+     * MARADNAK, de a valtas nem mehet at csendben. Az a) (maradnak, szo nelkul)
+     * csendben sertene azt a szabalyt, amit a lap felvitele kikenyszerit; a b)
+     * (lekerulnek) csendben vinne el a szerelo munkajat. A megallas az egyetlen,
+     * ahol a dontes ott szuletik, ahol EMBER all.
+     *
+     * ES CSAK AKKOR ALL MEG, HA VAN MIROL DONTENI. Egy megerosito kerdes, ami
+     * minden mentesnel feljon, ket het alatt reflexbol elkattintott ablakka
+     * valik -- es akkor a valodi utkozest sem olvassa el senki.
+     */
+    if (!input.acceptWorksheetAssetsOutsideSite) {
+      const utkozesek = await this.worksheetAssetsOutsideSite(
+        movable,
+        departmentId,
+      );
+      if (utkozesek.length > 0) throw new ConflictException(utkozesek);
+    }
+
     const ok = await this.repository.setPlacement({
       serviceJobId: id,
       departmentId,
       assetIds,
+      worksheetIds: movable.map((sheet) => sheet.id),
     });
     if (!ok) throw new NotFoundException("A hibajegy nem található.");
 

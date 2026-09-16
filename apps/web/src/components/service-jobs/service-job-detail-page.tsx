@@ -975,6 +975,13 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
               departmentId={job.departmentId}
               departmentPath={job.departmentPath}
               assets={job.assets}
+              /*
+                A LAPOK A NAPLOBOL JONNEK, nem kulon mezobol: a `ServiceJobDetail`
+                NEM hordoz `worksheets` listat (merve 2026-09-16) -- a vegpont
+                egy idorendet ad, es a munkalap-doboz is abbol szur. Ugyanaz a
+                `worksheets` valtozo all itt, amit az a doboz hasznal.
+              */
+              worksheets={worksheets}
               canManage={canManage}
               onSaved={setJob}
             />

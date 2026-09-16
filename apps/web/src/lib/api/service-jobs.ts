@@ -197,7 +197,17 @@ export const serviceJobsApi = {
   setPlacement(
     token: string,
     id: string,
-    input: { departmentId: string; assetIds: string[] },
+    input: {
+      departmentId: string;
+      assetIds: string[];
+      /**
+       * A KOTOTT LAPOKON MARADO, KIVUL ESO ESZKOZOK TUDOMASULVETELE.
+       *
+       * A szerver ELSO korben MEGNEVEZI oket (409, mondatokkal), es csak a
+       * masodik, kimondott korben ir. Elhagyva a felhasznalo nem mondott igent.
+       */
+      acceptWorksheetAssetsOutsideSite?: boolean;
+    },
   ) {
     return apiRequest<ServiceJobDetail>(jobPath(id, "/placement"), token, {
       method: "POST",
