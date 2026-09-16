@@ -203,6 +203,42 @@ describe("a sor kiürítése és a tétel", () => {
     );
   });
 
+  /**
+   * UGYANAZ A CSAPDA, EGY FUGGVENNYEL LEJJEBB -- ES EZT A FENTI ALLITAS NEM
+   * FOGTA MEG.
+   *
+   * A felviteli ag 2026-09-16-ban lett kimerito, a FENYKEP-ag viszont ugyanazon
+   * a napon meg `if`-lanc volt: "ami nem munkalap, az eszkoz". Amint az elso
+   * JEGY-kep sorba kerul, az az ESZKOZ-dokumentum vegpontra ment volna, egy
+   * jegy azonositojaval -- es a hiba akar 201-et is adhatna, ha az azonosito
+   * veletlenul letezo eszkoze.
+   *
+   * A ket ag KULON allitast kap, mert egyutt merve az egyik javitasa elfedne a
+   * masik hianyat.
+   */
+  it("a JEGY képe a jegy végpontjára megy, nem az eszközére", () => {
+    /*
+      MI PIROSIT: a `service-job` ag torlese a kep-dispatcherbol, vagy a
+      kimerito alak visszabontasa `else`-re.
+    */
+    assert.match(
+      drainForras,
+      /case "service-job":\s*\n\s*await uploadServiceJobPhotos\(row\.entityId, files\);/,
+    );
+  });
+
+  it("MINDKÉT szétosztás kimerítő, nem csak az egyik", () => {
+    /*
+      A SZAM A BIZONYITEK, NEM A TALALAT. Egyetlen `assert.match` a
+      `never`-allitasra akkor is zold, ha csak az EGYIK switch maradt kimerito
+      -- pont az a helyzet, ami 2026-09-16 delutanjan fennallt.
+
+      MI PIROSIT: barmelyik ag visszabontasa if-lancca vagy `else`-re.
+    */
+    const kimerito = drainForras.match(/const soha: never = row\.entityType;/g);
+    assert.equal(kimerito?.length, 2);
+  });
+
   it("a küldés a SOR kulcsát viszi tételazonosítóként, nem a payloadét", () => {
     /*
       A szerver EPP ERRE idempotens: ugyanaz a kulcs ujrakuldve a MEGLEVO

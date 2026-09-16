@@ -14,6 +14,7 @@ import {
 } from "@/lib/api/worksheets";
 import {
   createServiceJob,
+  uploadServiceJobPhotos,
   type CreateServiceJobInput,
 } from "@/lib/api/service-jobs";
 import { readQueuedWorksheetLine } from "@/lib/worksheets/worksheet-line";
@@ -177,15 +178,49 @@ async function kepetKuld(row: SyncQueueRow): Promise<{
      * es a ket ut igy nem tud elcsuszni egymastol: egy munkalap-kep sosem
      * kerulhet egy eszkoz ala.
      */
-    if (row.entityType === "worksheet") {
-      await uploadWorksheetDocuments(row.entityId, { files });
-    } else {
-      await uploadAssetDocuments(row.entityId, {
-        // A SZAMLA ES A GARANCIALEVEL AZ IRODABOL KERUL FEL; a helyszini kep
-        // az eszkoznel OTHER, a munkalapnal PHOTO (a szerver alapertelmezese).
-        type: "OTHER",
-        files,
-      });
+    /**
+     * A FAJTAK KIMERITOEN, NEM VISSZAESESSEL -- UGYANAZ A CSAPDA, MINT A
+     * FELVITELEKNEL, EGY FUGGVENNYEL LEJJEBB.
+     *
+     * 2026-09-16-ig itt `if`-lanc allt: ami nem munkalap, az ESZKOZKENT ment
+     * fel. A `service-job` sorok felvetele utan ez azt jelentette volna, hogy
+     * egy JEGY azonositojaval hivjuk az eszkoz-dokumentum vegpontot -- es a
+     * hiba nema lett volna (letezo eszkoz azonositojara akar sikerulhetne is).
+     *
+     * A `switch` + `never` alak ugyanugy forditasi hibava teszi a kovetkezo
+     * fajta felvetelet, mint a felviteli agon.
+     */
+    switch (row.entityType) {
+      case "worksheet":
+        await uploadWorksheetDocuments(row.entityId, { files });
+        break;
+      case "service-job":
+        await uploadServiceJobPhotos(row.entityId, files);
+        break;
+      case "asset":
+        await uploadAssetDocuments(row.entityId, {
+          // A SZAMLA ES A GARANCIALEVEL AZ IRODABOL KERUL FEL; a helyszini kep
+          // az eszkoznel OTHER, a munkalapnal PHOTO (a szerver alapertelmezese).
+          type: "OTHER",
+          files,
+        });
+        break;
+      case "worksheet-line":
+        /**
+         * TETEL ALA NEM MEGY KEP, ES EZ NEM MULASZTAS: a fenykep a
+         * MUNKALAPHOZ tartozik, nem egy soranak. Ilyen sort ma semmi nem tesz
+         * a sorba -- ha megis keletkezne, az hiba, es 422-kent EMBERRE var.
+         * Az eszkoz-vegpontra kuldeni csendben rossz helyre vinne.
+         */
+        return {
+          httpStatus: 422,
+          error:
+            "A munkalap tétele alá nem tehető fénykép, ezért ezt a sort nem küldjük el.",
+        };
+      default: {
+        const soha: never = row.entityType;
+        throw new Error(`Ismeretlen kép-gazda: ${String(soha)}`);
+      }
     }
     return { httpStatus: 201, error: null };
   } catch (cause) {
