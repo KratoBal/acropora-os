@@ -1,4 +1,4 @@
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
   IsBoolean,
   IsIn,
@@ -11,6 +11,8 @@ import {
 } from "class-validator";
 
 import { UNIT_OF_MEASURE_KINDS } from "@acropora/types";
+
+import { optionalQueryBoolean } from "../../common/query-boolean.util.js";
 
 /**
  * A LISTA SZURESE. A `kind` KOTELEZO, es ez nem kenyelmetlenseg.
@@ -27,8 +29,17 @@ export class UnitOfMeasureListQueryDto {
    * A KIVEZETETTEK IS KELLENEK, DE CSAK KERESRE. A valaszto az aktivakat
    * kinalja; a Beallitasok szerkesztoje viszont latni akarja a kivezetetteket
    * is, kulonben ugy tunik, hogy eltuntek.
+   *
+   * ES NEM `@Type(() => Boolean)` ALL ITT. Az a lekerdezesi sor SZOVEGEN
+   * `Boolean(...)`-t hiv, tehat a `?includeInactive=false` IGAZAT adna --
+   * hibauzenet nelkul. A csapda iranya a rosszabbik: aki azt keri, hogy NE
+   * mutassuk a kivezetetteket, epp azokat latna. Merve a sajat DTO-n, a
+   * `query-boolean.util.ts` fejlece hordozza a tablazatot.
    */
-  @Type(() => Boolean) @IsBoolean() @IsOptional() includeInactive?: boolean;
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => optionalQueryBoolean(value))
+  @IsBoolean()
+  includeInactive?: boolean;
 }
 
 export class CreateUnitOfMeasureDto {
