@@ -130,6 +130,26 @@ export const assetsApi = {
       { signal },
     );
   },
+  /**
+   * ESZKOZ A MATRICAKODROL, A HATOKORON BELUL.
+   *
+   * MIRE VALO ES MIRE NEM: a kod -> eszkoz lekepezest oldja fel. Azt NEM
+   * mondja meg, hogy a talalat egy valasztott helyszin RESZFAJAN all-e -- a
+   * valaszban allo `unit.path` neveket hordoz, nem azonositokat. Aki ezt akarja
+   * tudni, a listat kerdezze a `labelCode` szurovel.
+   *
+   * A NEM LETEZO ES A NEM LATHATO KOD UGYANAZT A 404-et adja, es ez a szerver
+   * szandekos dontese (`detailByLabelCode` jegyzete): ha a ketto kulonbozne, a
+   * valaszokbol felterkepezheto lenne, mely kodok vannak kiadva es kihez
+   * tartoznak. A hivo tehat a ket esetet EGY mondattal mondja ki.
+   */
+  scanLabel(token: string, code: string, signal?: AbortSignal) {
+    return apiRequest<AssetDetail>(
+      `/service/assets/scan-label/${encodeURIComponent(code)}`,
+      token,
+      { signal },
+    );
+  },
   create(token: string, input: CreateAssetInput) {
     return apiRequest<AssetDetail>("/service/assets", token, {
       method: "POST",

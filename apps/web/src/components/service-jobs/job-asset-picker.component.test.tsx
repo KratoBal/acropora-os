@@ -1,10 +1,12 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { Session } from "@acropora/types";
+import type { AssetStatus, Session } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { ApiError } from "@/lib/api/client";
 
 import { JobAssetPicker } from "./job-asset-picker";
 
-const assets = vi.hoisted(() => ({ list: vi.fn() }));
+const assets = vi.hoisted(() => ({ list: vi.fn(), scanLabel: vi.fn() }));
 const auth = vi.hoisted(() => ({ session: null as Session | null }));
 
 vi.mock("@/lib/api/assets", () => ({ assetsApi: assets }));
@@ -35,9 +37,27 @@ function asset(id: string, name: string, assetNumber: string) {
     assetNumber,
     name,
     kind: "EQUIPMENT" as const,
-    status: "ACTIVE" as const,
+    /*
+      AZ ALLAPOT A TIPUS SZERINT SZELES, NEM `as const`. A kivezetett eszkoz
+      sajat aga van a kodrol valo hozzaadasnal, tehat a duplanak tudnia kell
+      MAS allapotot is felvenni -- egy szukebb literal itt a TESZTET vagna el,
+      nem a kodot.
+    */
+    status: "ACTIVE" as AssetStatus,
     criticality: "NORMAL" as const,
-    owner: { type: "SUPPLIER" as const, id: "sup-1", name: "Partner Kft." },
+    /*
+      A TULAJDONOS A VALODI MEZONEVEKET VISZI (`AssetOwnerSummary`): a
+      matricakodrol talalt, MAS helyszinen allo eszkoz uzenete a
+      `displayName` mezobol epul. Egy `name` nevu mezo itt zolden atmenne, es
+      a kepernyon `undefined` latszana -- a dupla akkor hibas, ha a HIVO
+      hasznal olyan erteket, amit a teszt nem allit.
+    */
+    owner: {
+      type: "SUPPLIER" as const,
+      id: "sup-1",
+      code: "P-001",
+      displayName: "Partner Kft.",
+    },
   };
 }
 
@@ -57,6 +77,7 @@ describe("JobAssetPicker", () => {
   beforeEach(() => {
     auth.session = session();
     assets.list.mockReset().mockResolvedValue(valasz([]));
+    assets.scanLabel.mockReset();
   });
 
   /**
@@ -268,5 +289,283 @@ describe("JobAssetPicker", () => {
     expect(
       await screen.findByText(/A helyszín eszközei nem tölthetők be/),
     ).toBeTruthy();
+  });
+
+  /**
+   * === A MATRICAKOD BEIRASA (Balazs kerese, 2026-09-16) ===
+   *
+   * Szo szerint: "a lista felett jo lenne ha a qr kod szamanak beirasara is
+   * lehetoseg. termeszetesen valahogy ugy, hogy tobb eszkozt is be lehessen
+   * vonni mint a checkboxos megoldasnal."
+   */
+  describe("matricakod", () => {
+    async function beir(kod: string) {
+      fireEvent.change(await screen.findByLabelText("Matricakód"), {
+        target: { value: kod },
+      });
+      fireEvent.click(screen.getByText("Hozzáadás"));
+    }
+
+    function reszletek(
+      over: Partial<ReturnType<typeof asset>> & Record<string, unknown> = {},
+    ) {
+      return {
+        ...asset("esz-77", "Adagolószivattyú", "ESZ-0077"),
+        unit: {
+          id: "unit-4",
+          code: "MED3",
+          name: "Medence 3",
+          path: ["Biodóm", "Medence 3"],
+        },
+        ...over,
+      };
+    }
+
+    /**
+     * A LISTAT KERDEZI, NEM A `scan-label` VEGPONTOT, ES A SZURO A HELYSZINRE
+     * IS SZOL.
+     *
+     * Ez a lenyeg, es merven dolt el: a `scan-label` a kod -> eszkoz
+     * lekepezest oldja fel, a RESZFA-TAGSAGOT nem (a valaszaban allo
+     * `unit.path` NEVEKET hordoz, nem azonositokat). Ha a komponens csak azt
+     * hivna, egy MASIK helyszin eszkozet is hozzaadna a jegyhez, es a mentes
+     * bukna el -- akkor, amikor a felvivo mar keszen hiszi magat.
+     */
+    it("a kodot a helyszinre szurve, tarolhato alakban kerdezi le", async () => {
+      render(
+        <JobAssetPicker
+          departmentId="unit-9"
+          selected={[]}
+          onChange={() => {}}
+        />,
+      );
+      await waitFor(() => expect(assets.list).toHaveBeenCalledTimes(1));
+
+      await beir("v2196");
+
+      await waitFor(() => expect(assets.list).toHaveBeenCalledTimes(2));
+      const query = assets.list.mock.calls[1]?.[1] as URLSearchParams;
+      // A KISBETUS ALAK FELFELE NORMALIZALVA MEGY KI. A leolvaso es a
+      // billentyuzet mast adhat; a tarolt alak egyfele.
+      expect(query.get("labelCode")).toEqual("V2196");
+      expect(query.get("departmentId")).toEqual("unit-9");
+      expect(query.get("status")).toEqual("IN_PLACE");
+      // A VEGPONT ALSO HATARA TIZ (`@Min(10)`): egy `pageSize=1` hivas 400-zal
+      // szallna el, es a felhasznalo egy ertelmetlen hibauzenetet latna.
+      expect(Number(query.get("pageSize"))).toBeGreaterThanOrEqual(10);
+    });
+
+    /**
+     * A KODROL TALALT ESZKOZ LATSZIK IS, NEM CSAK BEKERUL.
+     *
+     * EZ A LEGFONTOSABB ALLITAS EBBEN A KESZLETBEN. A lista SZAZ sornal
+     * megall, es a kod-mezo EPP AZERT letezik, mert egy helyszinen ennel tobb
+     * eszkoz allhat. Ha a talalat csak a kivalasztottak koze kerulne, a
+     * jelolonegyzetes lista NEM mutatna meg -- a felvivo egy lathatatlan
+     * valasztast vinne a jegyre, es semmi nem mondana meg neki, mit ad be.
+     */
+    it("a kodrol talalt eszkozt hozzaadja ES ki is irja, ha a lapon nincs rajta", async () => {
+      assets.list
+        .mockResolvedValueOnce(
+          valasz([asset("esz-1", "Szivattyú", "ESZ-0007")]),
+        )
+        .mockResolvedValueOnce(valasz([reszletek()]));
+      const valasztas: string[][] = [];
+      render(
+        <JobAssetPicker
+          departmentId="unit-9"
+          selected={[]}
+          onChange={(ids) => valasztas.push(ids)}
+        />,
+      );
+      await screen.findByLabelText(/Szivattyú/);
+
+      await beir("V2196");
+
+      expect(await screen.findByLabelText(/Adagolószivattyú/)).toBeTruthy();
+      await waitFor(() => expect(valasztas[0]).toEqual(["esz-77"]));
+      // A KORABBI SOR A HELYEN MARAD: a kod HOZZAAD, nem cserel.
+      expect(screen.getByLabelText(/Szivattyú/)).toBeTruthy();
+    });
+
+    /**
+     * AZ ENTER UGYANAZT TESZI, MINT A GOMB.
+     *
+     * Aki egy kodot begepel, Entert fog utni. Enelkul a billentyuzet nema
+     * marad, es egy kesobbi urlapba helyezve az Enter CSENDBEN a felvitelt
+     * inditana el -- fel jeggyel, egyetlen beirt kod utan.
+     */
+    it("az Enter is hozzaad", async () => {
+      assets.list
+        .mockResolvedValueOnce(valasz([]))
+        .mockResolvedValueOnce(valasz([reszletek()]));
+      const valasztas: string[][] = [];
+      render(
+        <JobAssetPicker
+          departmentId="unit-9"
+          selected={[]}
+          onChange={(ids) => valasztas.push(ids)}
+        />,
+      );
+      await waitFor(() => expect(assets.list).toHaveBeenCalledTimes(1));
+
+      const mezo = await screen.findByLabelText("Matricakód");
+      fireEvent.change(mezo, { target: { value: "V2196" } });
+      fireEvent.keyDown(mezo, { key: "Enter" });
+
+      await waitFor(() => expect(valasztas[0]).toEqual(["esz-77"]));
+    });
+
+    /**
+     * A ROSSZ ALAKU KOD MEG SEM INDUL EL A HALOZATON.
+     *
+     * A szerver ugyanezt mondana (`ASSET_LABEL_CODE_SHAPE_MESSAGE`, kozos
+     * konstans), csak egy korrel kesobb. A mondat ugyanaz -- ket kulon leirt
+     * szoveg pontosan ott csuszna el, ahol senki nem nezi.
+     */
+    it("rossz alaku kodnal meg sem kerdez, es megnevezi az alakot", async () => {
+      render(
+        <JobAssetPicker
+          departmentId="unit-9"
+          selected={[]}
+          onChange={() => {}}
+        />,
+      );
+      await waitFor(() => expect(assets.list).toHaveBeenCalledTimes(1));
+
+      await beir("V219");
+
+      expect(await screen.findByText(/egy betű és négy szám/)).toBeTruthy();
+      // A HALOZAT NEM MOZDULT: a lista-hivas szama valtozatlan.
+      expect(assets.list).toHaveBeenCalledTimes(1);
+      expect(assets.scanLabel).not.toHaveBeenCalled();
+    });
+
+    /**
+     * A MAS HELYSZINEN ALLO ESZKOZ: NEM ADJUK HOZZA, ES KIMONDJUK, HOL ALL.
+     *
+     * A "nem talaltam" mondat itt HAZUGSAG lenne: az eszkoz letezik, es latjuk
+     * is. A TELJES UT megy ki, nem az egyseg neve: a nev csak TESTVEREK kozott
+     * egyedi, tehat ket tavoli ag alatt ugyanaz a "Biodom" megengedett -- a
+     * puszta nev azt a kepet adna, hogy a szerelo jo helyen jar.
+     */
+    it("mas helyszinen allo eszkozt nem ad hozza, es megnevezi a helyet", async () => {
+      assets.list.mockResolvedValue(valasz([]));
+      assets.scanLabel.mockResolvedValue(reszletek());
+      const valasztas: string[][] = [];
+      render(
+        <JobAssetPicker
+          departmentId="unit-9"
+          selected={[]}
+          onChange={(ids) => valasztas.push(ids)}
+        />,
+      );
+      await waitFor(() => expect(assets.list).toHaveBeenCalledTimes(1));
+
+      await beir("V2196");
+
+      const uzenet = await screen.findByText(/MÁS helyszínen áll/);
+      expect(uzenet.textContent).toContain("Partner Kft.");
+      expect(uzenet.textContent).toContain("Biodóm / Medence 3");
+      expect(valasztas).toEqual([]);
+      expect(screen.queryByLabelText(/Adagolószivattyú/)).toBeNull();
+    });
+
+    /**
+     * A KIVEZETETT ESZKOZ SAJAT MONDATOT KAP.
+     *
+     * KULON AG, es nem szorszalhasogatas: a teendo MAS. A kivezetett eszkoz
+     * mar fizikailag sincs a helyszinen, tehat uj hibajegyet nem kaphat -- a
+     * masik helyszinen allora viszont OTT kell jegyet nyitni. Egy kozos mondat
+     * a ket esetet osszemosna, es a helyszin-uzenet raadasul HAMIS lenne, ha az
+     * eszkoz epp ITT all, csak kivezetve.
+     */
+    it("kivezetett eszkozre azt mondja, hogy kivezetett", async () => {
+      assets.list.mockResolvedValue(valasz([]));
+      assets.scanLabel.mockResolvedValue(reszletek({ status: "RETIRED" }));
+      const valasztas: string[][] = [];
+      render(
+        <JobAssetPicker
+          departmentId="unit-9"
+          selected={[]}
+          onChange={(ids) => valasztas.push(ids)}
+        />,
+      );
+      await waitFor(() => expect(assets.list).toHaveBeenCalledTimes(1));
+
+      await beir("V2196");
+
+      expect(await screen.findByText(/ki van vezetve/)).toBeTruthy();
+      // ES NEM ALLITJA, HOGY MASHOL ALLNA: a ket ag kulonbozik.
+      expect(screen.queryByText(/MÁS helyszínen áll/)).toBeNull();
+      expect(valasztas).toEqual([]);
+    });
+
+    /**
+     * A NEM LETEZO ES A NEM LATHATO KOD EGY MONDATOT KAP.
+     *
+     * A szerver sem kulonbozteti meg oket (`detailByLabelCode`): ha a ket
+     * valasz eltérne, a valaszokbol felterkepezheto lenne, mely kodok vannak
+     * kiadva es kihez tartoznak. Az olvasonak amugy is ugyanaz a teendoje.
+     */
+    it("ismeretlen kodra egy mondatot ad, es nem talalgat helyet", async () => {
+      assets.list.mockResolvedValue(valasz([]));
+      assets.scanLabel.mockRejectedValue(
+        new ApiError(
+          "Ehhez a matricakódhoz nem tartozik elérhető eszköz.",
+          404,
+        ),
+      );
+      render(
+        <JobAssetPicker
+          departmentId="unit-9"
+          selected={[]}
+          onChange={() => {}}
+        />,
+      );
+      await waitFor(() => expect(assets.list).toHaveBeenCalledTimes(1));
+
+      await beir("V2196");
+
+      expect(
+        await screen.findByText(/nem tartozik elérhető eszköz/),
+      ).toBeTruthy();
+      expect(screen.queryByText(/MÁS helyszínen áll/)).toBeNull();
+    });
+
+    /**
+     * A HELYSZIN VALTASA ELVISZI A KODROL HOZZAADOTT SORT.
+     *
+     * Enelkul egy masik helyszin listaja folott allna egy eszkoz, ami ott nincs
+     * -- es a felvivo azt hinne, hogy ott is valaszthato.
+     */
+    it("helyszin valtasakor a kodrol hozzaadott sor eltunik", async () => {
+      assets.list
+        .mockResolvedValueOnce(valasz([]))
+        .mockResolvedValueOnce(valasz([reszletek()]))
+        .mockResolvedValue(valasz([]));
+      const { rerender } = render(
+        <JobAssetPicker
+          departmentId="unit-9"
+          selected={[]}
+          onChange={() => {}}
+        />,
+      );
+      await waitFor(() => expect(assets.list).toHaveBeenCalledTimes(1));
+      await beir("V2196");
+      await screen.findByLabelText(/Adagolószivattyú/);
+
+      rerender(
+        <JobAssetPicker
+          departmentId="unit-5"
+          selected={[]}
+          onChange={() => {}}
+        />,
+      );
+
+      await waitFor(() =>
+        expect(screen.queryByLabelText(/Adagolószivattyú/)).toBeNull(),
+      );
+    });
   });
 });

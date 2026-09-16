@@ -22,6 +22,21 @@ const ASSET_LABEL_CODE_PATTERN = /^[A-Za-z][0-9]{4}$/;
 export const ASSET_LABEL_CODE_STORED_PATTERN = /^[A-Z][0-9]{4}$/;
 
 /**
+ * AMIT A ROSSZ ALAKRA VALASZOLUNK, EGY HELYEN.
+ *
+ * KET HELY MONDJA KI UGYANEZT: a `scan-label` vegpont (ott a felhasznalo egy
+ * BEGEPELT kodot kuld) es az eszkoz-lista `labelCode` szuroje. A ket szoveg
+ * kulon-kulon leirva pontosan ott csuszna el, ahol senki nem nezi -- a
+ * felhasznalo ugyanarra a hibara ket kulonbozo mondatot kapna, es azt hinne,
+ * ket kulonbozo hibarol van szo.
+ *
+ * A PELDA BENNE VAN, ES EZ NEM DISZ: a "egy betu es negy szam" onmagaban
+ * megengedi a "V 2196" es a "V-2196" alakot is annak, aki olvassa.
+ */
+export const ASSET_LABEL_CODE_SHAPE_MESSAGE =
+  "A matricakód alakja egy betű és négy szám (például V2196).";
+
+/**
  * A beolvasott vagy begépelt kód tárolható alakja, vagy `null`, ha nem az.
  *
  * A `null` NEM hibaüzenet: a hívó dolga eldönteni, mit mond róla. Egy dobott

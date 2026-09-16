@@ -172,6 +172,7 @@ export {
   randomAssetLabelCode,
 } from "./asset-label-batch.js";
 export {
+  ASSET_LABEL_CODE_SHAPE_MESSAGE,
   ASSET_LABEL_CODE_STORED_PATTERN,
   ASSET_LABEL_REQUIRED_ON_CREATE,
   assetLabelCreateProblem,

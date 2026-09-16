@@ -1,4 +1,10 @@
-import { ASSET_LABEL_BATCH_MAX, ASSET_LABEL_BATCH_MIN } from "@acropora/types";
+import {
+  ASSET_LABEL_BATCH_MAX,
+  ASSET_LABEL_BATCH_MIN,
+  ASSET_LABEL_CODE_SHAPE_MESSAGE,
+  ASSET_LABEL_CODE_STORED_PATTERN,
+  normalizeAssetLabelCode,
+} from "@acropora/types";
 
 import {
   ASSET_LIST_STATUS_FILTERS,
@@ -67,6 +73,25 @@ export function toIdList(value: unknown): string[] | undefined {
   return ids.length > 0 ? ids : undefined;
 }
 
+/**
+ * A QUERY-BOL ERKEZO MATRICAKOD TAROLHATO ALAKJA.
+ *
+ * A BEMENET MEGENGEDOBB, MINT A TAROLT ALAK: a leolvaso es a billentyuzet
+ * egyarant adhat kisbetut, es az EMBER ugyanannak a matricanak latja. A
+ * felfele normalizalas ezt hozza egy alakra, ugyanazzal a fuggvennyel, amit a
+ * `scan-label` vegpont hasznal -- nem egy masodik peldannyal.
+ *
+ * A ROSSZ ALAKOT VALTOZATLANUL ENGEDI TOVABB, ES EZ A LENYEGE. Ha `undefined`
+ * lenne belole, a szuro CSENDBEN eltunne, es egy elgepelt kodra a valasz a
+ * helyszin OSSZES eszkoze lenne -- egy hivo, aki az elso sort veszi, MASIK
+ * eszkozt kapna, es semmi nem szolna. Igy viszont a `@Matches` utasitja el,
+ * megnevezve, mi a baj.
+ */
+export function toStoredLabelCode(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  return normalizeAssetLabelCode(value) ?? value;
+}
+
 export class AssetListQueryDto {
   @Type(() => Number) @IsInt() @Min(1) @IsOptional() page = 1;
   @Type(() => Number) @IsInt() @Min(10) @Max(100) @IsOptional() pageSize = 25;
@@ -90,6 +115,30 @@ export class AssetListQueryDto {
   @IsIn(["with", "without"])
   @IsOptional()
   label?: "with" | "without";
+  /**
+   * EGY KONKRET MATRICAKOD, PONTOS EGYEZESSEL.
+   *
+   * MIERT KULON A `search` MEZOTOL, HOLOTT AZ IS MEGTALALNA. A `search` EMBERI
+   * mezo: reszleteket keres tobb oszlopban (`contains`), tehat egy otkarakteres
+   * kodra MAS sor is illeszkedhet -- egy leltari szam, ami tartalmazza. Ez a
+   * szuro viszont GEPI: a felulet azt kerdezi vele, hogy EZ A MATRICA ezen a
+   * helyszinen all-e, es egy masik sor itt nem "kozeli talalat", hanem hibas
+   * valasz. Ha a ketto egy mezo lenne, a `search` barmely kesobbi tagitasa
+   * csendben megvaltoztatna a kod-alapu hozzaadas jelenteset.
+   *
+   * MIERT NEM ELEG HELYETTE A `scan-label` VEGPONT (merve 2026-09-16): az a kod
+   * -> eszkoz lekepezest oldja fel, a RESZFA-TAGSAGOT nem. A valaszaban allo
+   * `unit.path` NEVEKET hordoz, nem azonositokat, tehat a hivo nem tudja
+   * eldonteni, hogy a talalat a valasztott helyszin ALATT all-e. A lista
+   * viszont eppen azt tudja, es ugyanazt a reszfa-szabalyt hasznalja, mint a
+   * mentes ellenorzese.
+   */
+  @Transform(({ value }) => toStoredLabelCode(value))
+  @Matches(ASSET_LABEL_CODE_STORED_PATTERN, {
+    message: ASSET_LABEL_CODE_SHAPE_MESSAGE,
+  })
+  @IsOptional()
+  labelCode?: string;
   /**
    * A tulajdonos FAJTÁJA szerinti szűkítés, egyetlen értékkel: csak azok az
    * eszközök, amiknek a gazdája aktív, SZERVIZ-jelölt partner. Ugyanaz a
