@@ -36,7 +36,8 @@ const ASSET_KINDS = [
 ] as const;
 const ASSET_STATUSES = [
   "ACTIVE",
-  "OUT_OF_SERVICE",
+  "WARM_STANDBY",
+  "COLD_STANDBY",
   "IN_REPAIR",
   "RETIRED",
 ] as const;

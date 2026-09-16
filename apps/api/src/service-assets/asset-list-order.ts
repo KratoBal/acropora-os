@@ -46,10 +46,11 @@ export function assetListOrderBy(
      * A Postgres az enum ertekeket a DEKLARACIO sorrendjeben rendezi, es az
      * `AssetStatus` deklaracioja ertelmes utat ir le:
      *
-     *     ACTIVE -> OUT_OF_SERVICE -> IN_REPAIR -> RETIRED
-     *     (mukodik, nem mukodik, javitas alatt, kivezetve)
+     *     ACTIVE -> WARM_STANDBY -> COLD_STANDBY -> IN_REPAIR -> RETIRED
+     *     (uzemel, azonnal beallithato, tartalek, javitas alatt, kivezetve)
      *
-     * Beturendben ez `ACTIVE, IN_REPAIR, OUT_OF_SERVICE, RETIRED` lenne, ami
+     * Beturendben ez `ACTIVE, COLD_STANDBY, IN_REPAIR, RETIRED, WARM_STANDBY`
+     * lenne, ami
      * semmit nem mond. A magyar cimkek szerinti betűrend pedig egy HARMADIK
      * sorrend, es az a kliensen sem all elo, mert a szerver rendez.
      *
