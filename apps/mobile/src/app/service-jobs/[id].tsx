@@ -35,6 +35,8 @@ import { OFFLINE_COPY_NOTICE } from "@/lib/service-jobs/offline-copy-notice";
 import {
   serviceJobStatusLabel,
   shortPath,
+  worksheetLineLabel,
+  worksheetsOf,
 } from "@/lib/service-jobs/service-job-status";
 
 /**
@@ -242,12 +244,14 @@ export default function ServiceJobDetailScreen() {
               <Pressable
                 key={asset.id}
                 accessibilityRole="button"
-                accessibilityLabel={`${asset.assetNumber} ${asset.name}`}
-                onPress={() => router.push(`/assets/${asset.id}`)}
+                accessibilityLabel={`${asset.assetNumber} ${asset.assetName}`}
+                // AZ `assetId`, NEM AZ `id`: az utobbi a CSATOLAS sora, es egy
+                // nem letezo eszkoz-lapra vinne.
+                onPress={() => router.push(`/assets/${asset.assetId}`)}
                 style={styles.row}
               >
                 <Text style={styles.rowText}>
-                  {asset.assetNumber} -- {asset.name}
+                  {asset.assetNumber} -- {asset.assetName}
                 </Text>
               </Pressable>
             ))}
@@ -256,18 +260,23 @@ export default function ServiceJobDetailScreen() {
 
         <View style={styles.block}>
           <Text style={styles.sectionTitle}>Munkalapok</Text>
-          {detail.worksheets.length === 0 ? (
+          {/*
+            A MUNKALAPOK AZ IDOVONALBOL JONNEK, nem egy `worksheets` mezobol: a
+            valaszban olyan kulcs NINCS. Az elso alakom azt olvasta, es a lap
+            `undefined.length`-en omlott ossze, MEGNYITASKOR.
+          */}
+          {worksheetsOf(detail.timeline).length === 0 ? (
             <Text style={styles.meta}>Még nincs munkalap ezen a jegyen.</Text>
           ) : (
-            detail.worksheets.map((sheet) => (
+            worksheetsOf(detail.timeline).map((sheet) => (
               <Pressable
                 key={sheet.id}
                 accessibilityRole="button"
-                accessibilityLabel={`Munkalap ${sheet.worksheetNumber}`}
+                accessibilityLabel={`Munkalap: ${worksheetLineLabel(sheet)}`}
                 onPress={() => router.push(`/worksheets/${sheet.id}`)}
                 style={styles.row}
               >
-                <Text style={styles.rowText}>{sheet.worksheetNumber}</Text>
+                <Text style={styles.rowText}>{worksheetLineLabel(sheet)}</Text>
               </Pressable>
             ))
           )}

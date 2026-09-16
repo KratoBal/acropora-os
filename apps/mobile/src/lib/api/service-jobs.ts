@@ -1,5 +1,22 @@
 import { apiRequest } from "./client";
 import { buildDocumentUpload, type PickedFile } from "./document-upload";
+import type {
+  ServiceJobDetail,
+  ServiceJobDocumentSummary,
+  ServiceJobListResponse,
+  ServiceJobStatusValue,
+} from "../service-jobs/types";
+
+export type {
+  ServiceJobAssetLink,
+  ServiceJobDetail,
+  ServiceJobDocumentSummary,
+  ServiceJobListItem,
+  ServiceJobListResponse,
+  ServiceJobStatusValue,
+  ServiceJobTimelineEntry,
+  ServiceJobWorksheetLink,
+} from "../service-jobs/types";
 
 /**
  * A HIBAJEGYEK KLIENSE -- ÉS SZŰKEBB, MINT A WEBÉ, SZÁNDÉKOSAN.
@@ -41,72 +58,6 @@ import { buildDocumentUpload, type PickedFile } from "./document-upload";
  * listakent vagy egy meg nem nevezett hibakent a helyszinen.
  */
 const BASE = "/service/jobs";
-
-export type ServiceJobStatusValue =
-  | "NEW"
-  | "TRIAGED"
-  | "SCHEDULED"
-  | "IN_PROGRESS"
-  | "WAITING_FOR_PARTS"
-  | "WAITING_FOR_CUSTOMER"
-  | "COMPLETED"
-  | "CANCELLED";
-
-export interface ServiceJobListItem {
-  id: string;
-  jobNumber: string;
-  title: string;
-  status: ServiceJobStatusValue;
-  partnerStatusLabel: string;
-  customerName: string | null;
-  /** A helyszín teljes útja, a gyökértől lefelé. `null`, ha nincs helyszín. */
-  departmentPath: string[] | null;
-  worksheetCount: number;
-  createdAt: string;
-}
-
-export interface ServiceJobListResponse {
-  items: ServiceJobListItem[];
-}
-
-export interface ServiceJobWorksheetLink {
-  id: string;
-  worksheetNumber: string;
-  status: string;
-}
-
-export interface ServiceJobAssetLink {
-  id: string;
-  assetNumber: string;
-  name: string;
-}
-
-export interface ServiceJobDocumentSummary {
-  id: string;
-  fileName: string;
-  contentType: string;
-  sizeBytes: number;
-  createdAt: string;
-}
-
-export interface ServiceJobDetail extends ServiceJobListItem {
-  description: string | null;
-  departmentName: string | null;
-  scheduledAt: string | null;
-  startedAt: string | null;
-  completedAt: string | null;
-  /**
-   * MIT LÉPHET INNEN -- ÉS EZT A SZERVER MONDJA MEG, NEM EGY TÜKÖR.
-   *
-   * Az átmenet-szabály tiszta függvényként áll az API-ban, és a telefon nem
-   * húzhatja be a munkatér csomagjait. Egy MÁSOLAT kellett volna ide -- a
-   * negyedik a matricakód, a teljesítmény-alak és a jogosultság után --, ha a
-   * válasz nem hozná magával a listát. Hozza, tehát nincs mit elcsúsztatni.
-   */
-  allowedSteps: ServiceJobStatusValue[];
-  worksheets: ServiceJobWorksheetLink[];
-  assets: ServiceJobAssetLink[];
-}
 
 /**
  * A NYITOTT JEGYEK, VAGY MIND.
