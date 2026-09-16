@@ -66,6 +66,15 @@ async function removeLeftovers() {
  * ugy nezett ki, mintha a CHECK nem mukodne. A testver-kontroll ("a ket mezo
  * EGYUTT rendben van") mondta meg a kulonbseget: az is elbukott, tehat nem a
  * megkotes volt a baj, hanem a beszuras.
+ *
+ * ES AMI A KEZENFEKVO JAVITAS LENNE, DE NEM MUKODIK: kihagyni a `qrToken`
+ * oszlopot, mert a semaban `@default(uuid())` all. A `@default(...)` a PRISMA
+ * KLIENS oldalan generál, NEM az oszlopon -- a `20260815143000` migracio
+ * `"qrToken" UUID NOT NULL`-t ir, default nelkul. Nyers SQL-lel a kihagyas
+ * tehat `NOT NULL` sertessel bukna el, es ugyanugy fixture-hibanak latszana.
+ *
+ * Ezt a valtozatot acrobot javasolta a napló alapjan, jóhiszemuen -- a
+ * kulonbseg a semabol NEM latszik, csak a migraciobol. Ezert all itt.
  */
 async function eszkozt(
   performance: string | null,
