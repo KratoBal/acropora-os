@@ -192,6 +192,15 @@ const JAVITAS_ELUTASITAS: Record<SyncEntityType, string | null> = {
     "Ezt a felvitelt egyelőre csak az irodából lehet feloldani. Szándékos szűkítés: ma az eszköz-felvitel javítható a telefonon.",
   "worksheet-line":
     "Ezt a tételt nem a szövege miatt utasította el a szerver, hanem azért, mert a munkalap időközben lezárult, és lezárt lapra tétel nem vehető fel. Átírni tehát nincs mit rajta: vagy az irodában nyitnak új verziót a lapból, vagy elveted. Amit beírtál, addig itt marad.",
+  /**
+   * A JEGY EGYELORE NEM JAVITHATO A TELEFONON, es ez SZUKITES, nem hiany.
+   *
+   * A javitas ugyanazt az urlapot igenyelne, ami a felvitelt viszi -- azt a
+   * kovetkezo korben lehet ide kotni. Addig a mondat MEGMONDJA, mi a teendo,
+   * nem csak azt, hogy nem megy.
+   */
+  "service-job":
+    "Ezt a hibajegyet egyelőre csak az irodából lehet feloldani. Szándékos szűkítés: ma az eszköz-felvitel javítható a telefonon. Amit beírtál, addig itt marad.",
 };
 
 /** Amit az ujrakuldes a soron megvaltoztat. */

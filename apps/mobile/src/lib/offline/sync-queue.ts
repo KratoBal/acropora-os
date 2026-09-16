@@ -86,6 +86,7 @@ export function backoffMs(attemptCount: number): number {
  *   asset           uj eszkoz felvitele a helyszinen
  *   worksheet       uj munkalap megnyitasa a helyszinen
  *   worksheet-line  tetel egy MAR LETEZO munkalap piszkozatara
+ *   service-job     uj hibajegy, amit a szerelo a gepnel nyitott
  */
 /**
  * A SOR HAROM MUVELETET ISMER, ES UGYANAZERT LISTA, MINT A FAJTAKNAL.
@@ -111,6 +112,7 @@ export const SYNC_ENTITY_TYPES = [
   "asset",
   "worksheet",
   "worksheet-line",
+  "service-job",
 ] as const;
 
 export type SyncEntityType = (typeof SYNC_ENTITY_TYPES)[number];
@@ -138,6 +140,12 @@ const FENYKEP_GAZDA: Record<SyncEntityType, boolean> = {
   asset: true,
   worksheet: true,
   "worksheet-line": false,
+  /**
+   * A HIBAJEGYHEZ TARTOZHAT KEP, es epp ezert IGEN: a szerelo a gepnel nyitja
+   * a jegyet, es a fenykep az elso dolog, amit ala tesz. A jegy azonositoja
+   * nelkul azt a kepet mar semmi nem tudna megcimezni.
+   */
+  "service-job": true,
 };
 
 export function canOwnPhotos(entityType: SyncEntityType): boolean {

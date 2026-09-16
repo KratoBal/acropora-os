@@ -358,6 +358,34 @@ export default function AssetDetailScreen() {
             </Section>
 
             {/*
+              A HIBAJEGY A KIVÉTEL A KÖVETKEZŐ SZAKASZ SZABÁLYA ALÓL, ÉS EZ
+              SZÁNDÉKOS.
+
+              A szerkesztés és a fénykép szervert kíván, ezért mentett lapon
+              eltűnik. A jegynyitás NEM: hálózati hibánál a sorba kerül, és a
+              képernyő KIMONDJA, hogy oda került. Balázs kérése pont ez volt --
+              „siman lehet hogy terero nelkul a pinceben eszrevesz egy hibat,
+              meg akarja nyitni a hibajegyet".
+
+              Ezért itt NINCS `!fromCache` feltétel. Aki később „egységesítené"
+              a három szakaszt, pont azt az utat venné el, amiért a sor épült.
+            */}
+            {capabilities?.serviceJobsManage ? (
+              <Section title="Hibajegy">
+                <AssetLink
+                  label="Hibajegy nyitása erről a gépről"
+                  meta="A partner és a helyszín a gépből következik"
+                  onPress={() =>
+                    router.push({
+                      pathname: "/service-jobs/new",
+                      params: { assetId: asset.id },
+                    })
+                  }
+                />
+              </Section>
+            ) : null}
+
+            {/*
               A SZERKESZTÉS ÉS A CÍMKENYOMTATÁS SZERVERT KÍVÁN, tehát mentett
               lapon nem jelenik meg. A gomb, ami offline nem csinál semmit,
               rosszabb, mint a hiányzó gomb: a szerelő azt hiszi, elmentette.

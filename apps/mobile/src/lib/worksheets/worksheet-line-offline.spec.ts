@@ -176,18 +176,27 @@ describe("a sor kiürítése és a tétel", () => {
 
   it("a TÉTEL a saját végpontjára megy, nem esik át az eszköz-ágra", () => {
     /*
-      A `send` egy IF-LANC, aminek az UTOLSO aga alapertelmezes: ami nem
-      fenykep es nem munkalap, azt ESZKOZKENT kuldi el. Ha a tetel aga
-      hianyozna, a tetel torzsevel hivnank a felviteli vegpontot -- es a hiba a
-      SZERVEREN jelenne meg, ertelmetlen elutasitaskent.
+      A VESZELY UGYANAZ, A VEDELME MAS -- ES EZERT ALL ITT UJ ALAK.
 
-      MI PIROSIT: a tetel-ag torlese vagy a sorrend olyan atirasa, hogy a lanc
-      elobb erje el az eszkoz-agat.
+      Amikor ez az allitas keszult, a `send` egy IF-LANC volt, aminek az UTOLSO
+      aga ALAPERTELMEZES: ami nem fenykep es nem munkalap, azt ESZKOZKENT
+      kuldte el. Egy hianyzo ag NEMAN a rossz vegpontra vitte volna a sort.
+
+      2026-09-16 ota `switch` all ott, `never`-re futo `default` againal: egy
+      UJ fajta felvetele mostantol FORDITASI hiba, nem csendes visszaeses. (A
+      `service-job` felvetelekor ez a szerkezet epult meg -- enelkul a jegyek az
+      eszkoz-vegpontra mentek volna.)
+
+      MI PIROSIT: a tetel againak torlese, VAGY a kimerito alak visszabontasa
+      alapertelmezesre. A masodikat a `never`-re allitas fogja meg.
     */
     assert.match(
       drainForras,
-      /if \(row\.entityType === "worksheet-line"\) return tetelKuld\(row\);/,
+      /case "worksheet-line":\s*\n\s*return tetelKuld\(row\);/,
     );
+    // ES A SZERKEZET MAGA: e nelkul az elso allitas akkor is zold lenne, ha
+    // valaki a `switch`-et visszaalakitana if-lancca alapertelmezessel.
+    assert.match(drainForras, /const soha: never = row\.entityType;/);
     assert.match(
       drainForras,
       /addWorksheetLine\(row\.entityId, \{ id: row\.id/,
