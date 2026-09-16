@@ -1,8 +1,5 @@
 import { apiRequest } from "./client";
-import {
-  buildAssetDocumentUpload,
-  type PickedFile,
-} from "./asset-document-upload";
+import { buildDocumentUpload, type PickedFile } from "./document-upload";
 
 // Declared in lib/assets/asset-fields.ts so the logic that reasons about
 // them does not have to import this module, which reaches SecureStore and
@@ -291,7 +288,7 @@ export interface AssetDocumentSummary {
 /**
  * DOKUMENTUM- ÉS FÉNYKÉP-FELTÖLTÉS EGY ESZKÖZHÖZ.
  *
- * A törzset a `buildAssetDocumentUpload` állítja össze, és a hibát MÉG A
+ * A törzset a `buildDocumentUpload` állítja össze, és a hibát MÉG A
  * KÜLDÉS ELŐTT megnevezi. Itt csak az marad, ami hálózatot igényel.
  *
  * A válasz LISTA, egyetlen fájlnál is: a végpont mindig azzal felel.
@@ -300,7 +297,7 @@ export async function uploadAssetDocuments(
   id: string,
   input: { type: AssetDocumentType; files: readonly PickedFile[] },
 ): Promise<AssetDocumentSummary[]> {
-  const built = buildAssetDocumentUpload(input);
+  const built = buildDocumentUpload(input);
   if (!built.ok) throw new Error(built.reason);
 
   return apiRequest<AssetDocumentSummary[]>(

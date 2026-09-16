@@ -14,7 +14,7 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { getAsset, uploadAssetDocuments } from "@/lib/api/assets";
-import { MAX_FILES_PER_UPLOAD } from "@/lib/api/asset-document-upload";
+import { MAX_FILES_PER_UPLOAD } from "@/lib/api/document-upload";
 import { photoPermissionDeniedNotice } from "@/lib/api/photo-permission-notice";
 import { toPickedImages } from "@/lib/api/picked-image";
 import { ASSET_STATUS_LABELS } from "@/lib/assets/asset-status";

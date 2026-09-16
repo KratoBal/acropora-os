@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
-  buildAssetDocumentUpload,
+  buildDocumentUpload,
   MAX_FILES_PER_UPLOAD,
   UPLOAD_FIELD_NAME,
-} from "./asset-document-upload";
+} from "./document-upload";
 
 function file(name: string, type = "image/jpeg") {
   return { uri: `file:///tmp/${name}`, name, type };
@@ -13,7 +13,7 @@ function file(name: string, type = "image/jpeg") {
 
 describe("a feltöltés törzsének összeállítása", () => {
   it("minden fájl ugyanazt a mezőnevet kapja, és a típus külön mezőben megy", () => {
-    const result = buildAssetDocumentUpload({
+    const result = buildDocumentUpload({
       type: "OTHER",
       files: [file("elso.jpg"), file("masodik.jpg")],
     });
@@ -32,7 +32,7 @@ describe("a feltöltés törzsének összeállítása", () => {
    * nézné egy olyan hibáért, amit a telefon már tudott.
    */
   it("üres válogatásra nem épít törzset", () => {
-    const result = buildAssetDocumentUpload({ type: "OTHER", files: [] });
+    const result = buildDocumentUpload({ type: "OTHER", files: [] });
 
     assert.equal(result.ok, false);
     if (result.ok) return;
@@ -44,7 +44,7 @@ describe("a feltöltés törzsének összeállítása", () => {
       file(`kep-${i}.jpg`),
     );
 
-    const result = buildAssetDocumentUpload({ type: "OTHER", files });
+    const result = buildDocumentUpload({ type: "OTHER", files });
 
     assert.equal(result.ok, false);
     if (result.ok) return;
@@ -56,7 +56,7 @@ describe("a feltöltés törzsének összeállítása", () => {
       file(`kep-${i}.jpg`),
     );
 
-    const result = buildAssetDocumentUpload({ type: "OTHER", files });
+    const result = buildDocumentUpload({ type: "OTHER", files });
 
     assert.equal(result.ok, true);
   });
