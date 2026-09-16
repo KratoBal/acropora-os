@@ -33,7 +33,42 @@ export interface OfflineNoticeInput {
   itemCount: number;
   /** A mérés pillanata. Paraméter, nem `Date.now()`: lásd a fenti indoklást. */
   now: Date;
+  /**
+   * MIRŐL SZÓL EZ A LISTA -- ÉS KÖTELEZŐ, NEM ELHAGYHATÓ.
+   *
+   * A mondatok eddig „az eszközlista" alakot írtak, mert egyetlen lista volt.
+   * A hibajegyekkel kettő lett, és egy ALAPÉRTELMEZÉS itt azt jelentené, hogy
+   * a jegy-képernyő sávja az eszközökről beszél -- a szerelő pedig azt olvasná,
+   * hogy „nem volt letöltve az eszközlista", miközben a jegyeket nézi.
+   *
+   * Kötelezőként a fordító kérdezi meg minden új listától, hogy minek hívja
+   * magát. Egy elhagyható mező ugyanezt ÍGÉRNÉ, és csendben nem tartaná be.
+   */
+  subject: OfflineNoticeSubject;
 }
+
+/**
+ * A LISTA NEVE, AHOGY A MONDATBAN ÁLL: névelővel, alanyesetben.
+ *
+ * EGY MEZŐ, NEM TÖBB ALAK. Kezdetben tárgyesetet is ideírtam, holott egyetlen
+ * mondat sem használja -- ugyanaz a spekulatív bővítés, ami egy nem hívott
+ * segédfüggvényt szül. Ha egy második rag valaha kell, akkor kerül ide, akkor
+ * is kiírva: a magyar toldalékolás a szó végétől függ, és egy félig működő
+ * ragozó pont a ritka szavakon hibázna.
+ */
+export interface OfflineNoticeSubject {
+  listName: string;
+}
+
+/** Az eszközlista neve. Egy helyen, hogy a két képernyő ne térjen el. */
+export const ASSET_NOTICE_SUBJECT: OfflineNoticeSubject = {
+  listName: "az eszközlista",
+};
+
+/** A hibajegylista neve. */
+export const SERVICE_JOB_NOTICE_SUBJECT: OfflineNoticeSubject = {
+  listName: "a hibajegylista",
+};
 
 /** Egy nap fölött a másolat kora már nem részlet, hanem figyelmeztetés. */
 export const STALE_AFTER_HOURS = 24;
@@ -98,14 +133,13 @@ export function isCacheStale(
 export function describeOfflineNotice(
   input: OfflineNoticeInput,
 ): OfflineNotice | null {
-  const { online, syncedAt, itemCount, now } = input;
+  const { online, syncedAt, itemCount, now, subject } = input;
 
   if (!online && itemCount === 0)
     return {
       tone: "empty",
       title: "Nincs kapcsolat, és nincs mentett másolat",
-      message:
-        "Ezen a készüléken még nem volt letöltve az eszközlista. Térerőnél nyisd meg egyszer, és onnantól offline is megvan.",
+      message: `Ezen a készüléken még nem volt letöltve ${subject.listName}. Térerőnél nyisd meg egyszer, és onnantól offline is megvan.`,
     };
 
   if (!online)

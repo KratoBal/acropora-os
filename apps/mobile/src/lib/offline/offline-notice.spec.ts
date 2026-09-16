@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  ASSET_NOTICE_SUBJECT,
   describeCacheAge,
   describeCachedDepartmentsNotice,
   describeCachedOwnersNotice,
@@ -98,6 +99,7 @@ describe("describeOfflineNotice", () => {
         syncedAt: anHourAgo,
         itemCount: 12,
         now,
+        subject: ASSET_NOTICE_SUBJECT,
       }),
       null,
     );
@@ -109,6 +111,7 @@ describe("describeOfflineNotice", () => {
       syncedAt: yesterday,
       itemCount: 12,
       now,
+      subject: ASSET_NOTICE_SUBJECT,
     });
 
     assert.equal(notice?.tone, "offline");
@@ -128,6 +131,7 @@ describe("describeOfflineNotice", () => {
       syncedAt: null,
       itemCount: 0,
       now,
+      subject: ASSET_NOTICE_SUBJECT,
     });
 
     assert.equal(notice?.tone, "empty");
@@ -145,6 +149,7 @@ describe("describeOfflineNotice", () => {
       syncedAt: "2026-08-20T12:00:00.000Z",
       itemCount: 12,
       now,
+      subject: ASSET_NOTICE_SUBJECT,
     });
 
     assert.equal(notice?.tone, "stale");
@@ -165,6 +170,7 @@ describe("describeOfflineNotice", () => {
       syncedAt: null,
       itemCount: 0,
       now,
+      subject: ASSET_NOTICE_SUBJECT,
     });
 
     assert.equal(notice?.tone, "stale");
@@ -186,6 +192,7 @@ describe("describeOfflineNotice", () => {
       syncedAt: null,
       itemCount: 40,
       now,
+      subject: ASSET_NOTICE_SUBJECT,
     });
 
     assert.equal(notice?.tone, "stale");

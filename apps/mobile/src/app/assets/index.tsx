@@ -28,7 +28,10 @@ import {
   type OfflineSyncResult,
 } from "@/lib/offline/asset-sync";
 import { useIsOnline } from "@/lib/offline/connectivity";
-import { describeOfflineNotice } from "@/lib/offline/offline-notice";
+import {
+  ASSET_NOTICE_SUBJECT,
+  describeOfflineNotice,
+} from "@/lib/offline/offline-notice";
 
 const PAGE_SIZE = 50;
 const OFFLINE_CACHE_KEY = ["offline-assets"] as const;
@@ -115,6 +118,7 @@ export default function AssetListScreen() {
     syncedAt: cached.data?.syncedAt ?? null,
     itemCount: cachedItems.length,
     now: new Date(),
+    subject: ASSET_NOTICE_SUBJECT,
   });
 
   return (
