@@ -324,6 +324,24 @@ describe(
     describe("utólagos felvitel a szerkesztő ágon", () => {
       let eszkozId = "";
 
+      /**
+       * A SAJAT KODOK A KESZLETBE -- ES EZ A CI DERITETTE KI, NEM A HELYI FUTAS.
+       *
+       * Eloszor csak a KONSTANSOKAT vettem fel (`CODE_D`, `CODE_E`), es azt
+       * hittem, ettol leteznek. Nem: ebben a suite-ban a kodok MAS TESZTEK
+       * MELLEKHATASAKENT kerulnek a keszletbe (a `CODE_A` nyers SQL-lel egy
+       * megkotes-allitasban, a `CODE_B`/`CODE_C` egy `importBatch` hivassal).
+       * Az enyemek sehogy -- a sor nem letezett, es az elso allitasom
+       * `undefined`-ot kapott `null` helyett.
+       *
+       * Ezert a sajat blokk a SAJAT bemenetet allitja elo, nem egy masik teszt
+       * mellekhatasara tamaszkodik.
+       */
+      before(async () => {
+        const { batchId } = await repository.importBatch([CODE_D, CODE_E]);
+        letrehozottKotegek.push(batchId);
+      });
+
       /** A friss verzio-belyeg: minden mentes elmozditja. */
       async function frissBelyeg(id: string): Promise<string> {
         const sor = await prisma.asset.findUniqueOrThrow({
@@ -355,7 +373,13 @@ describe(
           where: { code: CODE_D },
           select: { assetId: true },
         });
-        assert.equal(elotte?.assetId, null, "a kód induláskor szabad");
+        // A KET ALLITAS KULON, ES EZT IS A CI TANITOTTA MEG. Eloszor
+        // `elotte?.assetId` allt itt egyetlen sorban -- egy HIANYZO sor
+        // (`elotte === null`) ettol `undefined`-ot ad, ami "nincs
+        // hozzarendelve"-nek latszik. A ket eset TEENDOJE mas: az egyikben a
+        // kodot kell felvenni a keszletbe, a masikban a foglalast megnezni.
+        assert.ok(elotte, "a kód létezik a készletben");
+        assert.equal(elotte.assetId, null, "a kód induláskor szabad");
         assert.equal(
           await prisma.assetLabel.count({ where: { assetId: eszkozId } }),
           0,
