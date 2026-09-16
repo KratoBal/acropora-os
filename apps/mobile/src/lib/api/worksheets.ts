@@ -286,6 +286,20 @@ export interface CreateWorksheetInput {
    * halozati hiba utani ujraprobalas a normalis ut.
    */
   clientOperationId?: string;
+  /**
+   * A HIBAJEGY, AMI ALA A LAP KERUL.
+   *
+   * ELHAGYHATO, es a szerver is annak veszi (`CreateWorksheetDto.serviceJobId`):
+   * a lap KELETKEZHET jegy nelkul is -- karbantartas kozben derul ki, hogy
+   * valami elromlott.
+   *
+   * ES AMIT A SZERVER ELLENORIZ, MERT A KEPERNYONEK ELORE KI KELL MONDANIA:
+   * a jegy PARTNERENEK egyeznie kell a lapevel. Partner NELKULI jegy ala nem
+   * megy lap (`mayWorksheetJoinTicket` -> `ticket-has-no-partner`), es ez a
+   * telefonon valos eset: szallitoi gepnel a jegy tukor-sor hianyaban partner
+   * nelkul szuletik.
+   */
+  serviceJobId?: string;
 }
 
 /**

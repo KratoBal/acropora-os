@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Redirect, useRouter } from "expo-router";
+import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -45,6 +45,11 @@ import {
   enqueueWorksheetCreate,
 } from "@/lib/offline/queue-store";
 import { saveOrQueue } from "@/lib/offline/save-or-queue";
+import {
+  mustQueue,
+  ticketLinkFromParams,
+  ticketNotice,
+} from "@/lib/worksheets/worksheet-under-ticket";
 import { worksheetOperationId } from "@/lib/offline/sync-queue";
 import {
   buildWorksheetCreatePayload,
@@ -74,6 +79,17 @@ import {
  */
 export default function NewWorksheetScreen() {
   const router = useRouter();
+  /**
+   * A HIBAJEGY, AMI ALA A LAP KERUL -- KET ALAKBAN JOHET, ES A KETTO NEM
+   * CSEREHETO FEL. A dontes a `lib/worksheets/worksheet-under-ticket.ts`-ben
+   * all, mert ott MERHETO; ide csak az atadas kerul.
+   */
+  const jegy = ticketLinkFromParams(
+    useLocalSearchParams<{
+      serviceJobId?: string;
+      serviceJobOperationId?: string;
+    }>(),
+  );
   const { status, user } = useAuth();
   const capabilities = user ? getServiceCapabilities(user.role) : null;
 
@@ -263,9 +279,27 @@ export default function NewWorksheetScreen() {
     mutationFn: async (payload: WorksheetCreatePayload) => {
       const nyitas = new Date().toISOString();
       const outcome = await saveOrQueue({
-        save: () => createWorksheet(payload),
+        /**
+         * A SORBAN ALLO JEGY ALATT A SZERVERT MEG SEM PROBALJUK. A hivas
+         * sikerulne -- csak `serviceJobId` nelkul, es a lap soha nem kerulne a
+         * jegy ala. Se hiba, se uzenet.
+         */
+        queueOnly: mustQueue(jegy),
+        save: () =>
+          createWorksheet(
+            jegy.kind === "server"
+              ? { ...payload, serviceJobId: jegy.serviceJobId }
+              : payload,
+          ),
         enqueue: () =>
           enqueueWorksheetCreate({
+            /**
+             * A FELMENT JEGY AZONOSITOJA A TORZSBE MEGY; a sorban alloe MEG NEM
+             * LETEZIK, tehat ott a sor a jegy MUVELET-azonositojara var, es az
+             * ertek a feloldaskor kerul a payloadba.
+             */
+            dependsOnServiceJobOperationId:
+              jegy.kind === "queued" ? jegy.operationId : null,
             /**
              * A KULCS A TARTALOMBOL SZULETIK, es UGYANEZ megy fel a szervernek
              * `clientOperationId` neven: egy megszakadt kuldes ujrakuldese a
@@ -275,7 +309,10 @@ export default function NewWorksheetScreen() {
               customerId: payload.customerId,
               startedAt: nyitas,
             }),
-            payload,
+            payload:
+              jegy.kind === "server"
+                ? { ...payload, serviceJobId: jegy.serviceJobId }
+                : payload,
             createdAt: nyitas,
           }),
         statusOf: (cause) => (cause instanceof ApiError ? cause.status : null),
@@ -353,6 +390,21 @@ export default function NewWorksheetScreen() {
             A helyszínen nyitott lapra a tételek és az ár később, az irodából
             kerülnek fel.
           </Text>
+
+          {/*
+            A JEGY MONDATA ELORE ALL, NEM A KULDES UTAN.
+
+            A szerver a jegy partneret a lapehoz meri (mayWorksheetJoinTicket),
+            es elteres eseten elutasit. Ha ezt csak a kuldes utan mondanank el,
+            a szerelo egy kesz lapot latna elakadva a sorban, orakkal kesobb, a
+            helyszintol tavol -- es a partner-valasztas addigra mar megtortent.
+          */}
+          {ticketNotice(jegy) ? (
+            <View style={styles.notice}>
+              <Text style={styles.noticeTitle}>Hibajegy alá kerül</Text>
+              <Text style={styles.noticeBody}>{ticketNotice(jegy)}</Text>
+            </View>
+          ) : null}
 
           <Section title="Partner">
             <Pressable
