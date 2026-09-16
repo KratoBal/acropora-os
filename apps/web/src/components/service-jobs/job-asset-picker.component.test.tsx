@@ -97,6 +97,18 @@ describe("JobAssetPicker", () => {
     // A LAPMERET KIMONDVA: alapbol 25 sor jonne, es egy csendben levagott lista
     // itt a legrosszabb fajta hiba.
     expect(query.get("pageSize")).toEqual("100");
+    /**
+     * AZ ALLAPOT IS KIMONDVA, ES EZ EGY MERT HIBA ORZOJE.
+     *
+     * A parameter NELKUL a vegpont `ACTIVE`-ra szur, tehat a valaszto CSAK a
+     * mukodo eszkozoket kinalta: a javitas alatt allo es a nem uzemelo
+     * hianyzott, ES UGY, MINTHA NEM IS LETEZNE -- se ures lista, se hibauzenet.
+     * Balazs merte vissza 2026-09-16-an.
+     *
+     * A NEGATIV FELE IS ALLITAS: ha valaki `ALL`-ra allitana, a KIVEZETETT
+     * eszkozok is bejonnenek, es azokra uj hibajegyet nyitni ertelmetlen.
+     */
+    expect(query.get("status")).toEqual("IN_PLACE");
   });
 
   it("ures helyszinnel megmondja, hogy nincs nyilvantartott eszkoz", async () => {
