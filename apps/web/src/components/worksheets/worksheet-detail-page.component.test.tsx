@@ -1,6 +1,11 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { Session, WorksheetDetail } from "@acropora/types";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import {
+  savotMond,
+  setOnLine,
+} from "@/components/service/service-offline-notice.testing";
 
 import { WorksheetDetailPage } from "./worksheet-detail-page";
 
@@ -76,6 +81,12 @@ function detail(inventoryNumber: string | null): WorksheetDetail {
     },
     createdByName: "Szerelő Sándor",
     assignees: [],
+    /*
+      A MEZO KOTELEZO, NEM ELHAGYHATO -- es epp ezert szolt a fordito, amikor
+      bekerult. Elhagyhatokent a lap CSENDBEN `undefined`-ot kapott volna, es a
+      hiba a kepernyon jelent volna meg, nem itt.
+    */
+    assets: [],
     createdAt: "2026-08-27T08:00:00.000Z",
     updatedAt: "2026-08-27T08:00:00.000Z",
     continues: null,
@@ -485,44 +496,85 @@ describe("WorksheetDetailPage adatlap-szerkezet", () => {
    * (nautilus, 20188.)
    */
   it("betöltött lapon nem állítja, hogy nem sikerült betölteni", async () => {
-    Object.defineProperty(window.navigator, "onLine", {
-      value: false,
-      configurable: true,
-    });
+    setOnLine(false);
     api.detail.mockResolvedValue(detail(null));
 
     render(<WorksheetDetailPage worksheetId="ml-1" />);
 
-    expect(
-      await screen.findByText(/legutóbb betöltött adatokat látod/),
-    ).toBeTruthy();
-    expect(screen.queryByText(/nem tudtuk betölteni/)).toBeNull();
-
-    Object.defineProperty(window.navigator, "onLine", {
-      value: true,
-      configurable: true,
-    });
+    expect(await savotMond("loaded")).toBeTruthy();
   });
 
+  /**
+   * A MASODIK ALLITAS VARJA MEG A SAVOT -- ES EZ EGY MERT BILLEGES JAVITASA.
+   *
+   * A korabbi alak egy MASIK elemet vart be (a hibauzenetet), majd SZINKRON
+   * `getByText`-tel kereste a savot. A sav viszont a sajat effektjeben all elo
+   * (`navigator.onLine` olvasasa a felallas UTAN), tehat egy utemmel kesobb is
+   * landolhat -- es akkor a szinkron kereses ures kepernyore nez.
+   *
+   * MERVE 2026-09-15, a FO AGON, tehat nem ebben a korben keletkezett:
+   * 2 bukas 36 futasbol (kb. 5 szazalek). A CI-ben a #709-en sult el eloszor.
+   * A `savotMond` var, ezert a billeges megszunik -- de az allitas NEM gyengul:
+   * ha a sav soha nem jelenik meg, ugyanugy elbukik, csak nem veletlenszeruen.
+   */
   it("betöltési hibánál kimondja, hogy nincs hálózat", async () => {
-    Object.defineProperty(window.navigator, "onLine", {
-      value: false,
-      configurable: true,
-    });
+    setOnLine(false);
     api.detail.mockRejectedValue(new Error("hálózati hiba"));
 
     render(<WorksheetDetailPage worksheetId="ml-1" />);
 
     // A HIBA ES AZ OKA EGYUTT: a hibauzenet onmagaban nem mondja meg, miert.
     expect(await screen.findByText("A munkalap nem tölthető be")).toBeTruthy();
-    expect(screen.getByText(/nem tudtuk betölteni/)).toBeTruthy();
+    expect(await savotMond("empty")).toBeTruthy();
+  });
+});
 
-    // ES NEM AZT ALLITJA, HOGY REGI ADATOKAT LATSZ -- a lap URES.
-    expect(screen.queryByText(/legutóbb betöltött adatokat látod/)).toBeNull();
+afterEach(() => setOnLine(true));
 
-    Object.defineProperty(window.navigator, "onLine", {
-      value: true,
-      configurable: true,
+/**
+ * AZ ALEGYSEG TELJES UTJA AZ ADATLAPON.
+ *
+ * Balazs merte vissza 2026-09-16-an: itt `NMD — Nagymedence` allt, es abbol nem
+ * derul ki, MELYIK medencerol van szo. A kod es a nev csak TESTVEREK kozott
+ * egyedi, tehat ket tavoli ag alatt ugyanaz a "Biodóm (BIO)" megengedett.
+ *
+ * KET ALLITAS, ES A MASODIK A FONTOSABB: az elso azt meri, hogy az utat KIIRJA,
+ * a masodik azt, hogy a mezo HIANYABAN a regi alak marad -- a mezo elhagyhato,
+ * es egy regebbi valasz nem hordozza.
+ */
+describe("WorksheetDetailPage alegység-útja", () => {
+  beforeEach(() => {
+    auth.session = session;
+    api.detail.mockReset();
+  });
+
+  it("a teljes utat írja ki, ha a szerver küldi", async () => {
+    const alap = detail(null);
+    api.detail.mockResolvedValue({
+      ...alap,
+      department: {
+        ...alap.department,
+        path: ["Biodóm", "Fókamedence", "Fóka nagymedence"],
+      },
     });
+
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+
+    expect(
+      await screen.findByText("Biodóm / Fókamedence / Fóka nagymedence"),
+    ).toBeTruthy();
+  });
+
+  /**
+   * A VISSZAESES NEM URES SOR. Ha az allitas csak a fenti esetet merne, egy
+   * elrontott visszaeses (ures cella) eszrevetlen maradna -- es epp az a
+   * helyzet, ami a REGI valaszoknal all elo.
+   */
+  it("a mező hiánya nem üríti ki a sort", async () => {
+    api.detail.mockResolvedValue(detail(null));
+
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+
+    expect(await screen.findByText(/BIO —/)).toBeTruthy();
   });
 });

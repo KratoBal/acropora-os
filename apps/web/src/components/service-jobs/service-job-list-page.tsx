@@ -240,7 +240,26 @@ export function ServiceJobListPage() {
                         <div className={sv.rowMeta}>{job.jobNumber}</div>
                       </td>
                       <td className={sv.tableCell}>
-                        {job.customerName ?? "Nincs megadva"}
+                        <div>{job.customerName ?? "Nincs megadva"}</div>
+                        {/*
+                          A HELYSZIN TELJES UTJA A PARTNER ALA.
+
+                          Ez a lista eddig SEMMIT nem mondott a helyszinrol.
+                          Ugyanannal a partnernel ket jegy tehat
+                          megkulonboztethetetlen volt pont azon a kepernyon,
+                          ahol valasztani kell kozuluk. Balazs 2026-09-16-an a
+                          munkalap-listara kerte a teljes utat, es ugyanabban a
+                          mondatban ide is.
+
+                          NINCS SOR, HA NINCS UT. Egy "Nincs helyszin" felirat
+                          tobbet allitana, mint amit tudunk: a jegynek lehet
+                          helyszine ugy is, hogy az utat nem tudjuk felepiteni.
+                        */}
+                        {job.departmentPath?.length ? (
+                          <div className={sv.rowMeta}>
+                            {job.departmentPath.join(" / ")}
+                          </div>
+                        ) : null}
                       </td>
                       <td className={sv.tableCell}>
                         <ServiceStatusBadge

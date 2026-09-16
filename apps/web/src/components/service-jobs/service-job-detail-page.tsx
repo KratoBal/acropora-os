@@ -40,12 +40,14 @@ import {
   ServicePanelHeading,
 } from "@/components/service/service-detail-chrome";
 import { ServiceJobAssigneeEditor } from "./service-job-assignee-editor";
+import { ServiceJobPlacementEditor } from "./service-job-placement-editor";
 
 import {
   serviceJobNoteDescription,
   serviceJobStatusLabel,
   serviceJobStatusTone,
   serviceJobStatusVariant,
+  serviceJobWorksheetLabel,
 } from "./service-job-labels";
 
 /**
@@ -63,7 +65,10 @@ function timelineLine(entry: ServiceJobTimelineEntry): string {
     return `${from} → ${to}`;
   }
   if (entry.kind === "worksheet")
-    return `Munkalap a jegy alatt: ${entry.worksheet.number ?? "piszkozat"}`;
+    // UGYANAZ A CIMKE, MINT A LISTAN: nev, es zarojelben ami azonositja. Ha a
+    // ket helyen ket kulonbozo alak allna, ugyanaz a lap ketfelekeppen nezne ki
+    // EGY lapon belul.
+    return `Munkalap a jegy alatt: ${serviceJobWorksheetLabel(entry.worksheet)}`;
   /*
     A TÖRÖLT CSATOLMÁNY SORA MEGNEVEZI, KI VETTE LE. Az állapotváltásnál a nevet
     a sor alatti másodperc-sor hozza; itt a MONDATBAN áll, mert ez az egyetlen
@@ -704,7 +709,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                         href={`/szerviz/munkalapok/${worksheet.id}`}
                         className="font-medium hover:text-brand-700"
                       >
-                        {worksheet.number ?? "Piszkozat"}
+                        {serviceJobWorksheetLabel(worksheet)}
                       </Link>
                       {/*
                   ÁTADÁS-ÁLLAPOTOT CSAK AKKOR ÁLLÍTUNK, HA VAN MIRE.
@@ -952,6 +957,29 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
             />
 
             {/*
+              A HELYSZIN ES AZ ESZKOZOK, KOZVETLENUL A DELEGALAS ALATT.
+
+              A HELYE NEM IZLES: a jobb hasab "Az ugy adatai" doboza KIIRJA a
+              helyszint, es ez a doboz azt SZERKESZTI. Ket egymastol tavol allo
+              hely ugyanarrol az adatrol azt eri el, hogy a kezelo elolvassa az
+              egyiket, es nem talalja meg a masikat.
+
+              ES AMIT EZ A DOBOZ ELOSZOR MUTAT MEG: a jegy ESZKOZEIT egyben. Ma
+              azok CSAK a naploban jelennek meg, esemenykent -- egy lista, amit
+              nem lehet atnezni, csak visszaolvasni.
+            */}
+            <ServiceJobPlacementEditor
+              jobId={jobId}
+              token={token}
+              customerId={job.customerId}
+              departmentId={job.departmentId}
+              departmentPath={job.departmentPath}
+              assets={job.assets}
+              canManage={canManage}
+              onSaved={setJob}
+            />
+
+            {/*
             AZ UGY ADATAI: AMI A JEGYET AZONOSITJA A HELYSZINEN.
 
             NEM ISMETLI A DELEGALTAKAT, holott a terv itt mutatja oket. Annak a
@@ -977,7 +1005,16 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                 </ServiceContextRow>
                 {job.departmentName ? (
                   <ServiceContextRow icon="location" label="Helyszín">
-                    {job.departmentName}
+                    {/*
+                      A TOMB AZ ELSODLEGES, a szoveg a visszaeses. A szerver
+                      mind a kettot kuldi, es ugyanabbol az utbol -- de a tomb
+                      MEGMONDJA, hany szint van, a szoveg csak mutatja. Ha egy
+                      kesobbi kepernyo szintenkent akar valamit (rovidites,
+                      tordeles), ott mar nem kell visszafejtenie.
+                    */}
+                    {job.departmentPath?.length
+                      ? job.departmentPath.join(" / ")
+                      : job.departmentName}
                   </ServiceContextRow>
                 ) : null}
                 <ServiceContextRow icon="clock" label="Létrehozva">

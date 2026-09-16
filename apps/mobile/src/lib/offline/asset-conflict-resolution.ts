@@ -60,6 +60,38 @@ export interface CurrentAssetLike {
   inventoryNumber?: string | null;
   description?: string | null;
   notes?: string | null;
+  /**
+   * AZ ESZKOZON MOST ALLO MATRICA KODJA.
+   *
+   * MIERT KERULT BE IDE IS: a `ComparableField` a `UpdateAssetInput` kulcsaibol
+   * szarmazik, tehat a matricakod felvetelevel AUTOMATIKUSAN osszehasonlithato
+   * mezo lett -- a fordito koveteli meg, hogy legyen mihez hasonlitani. Ez jol
+   * van igy: ha a sorban allo modositas matricat ir, a szerelo lassa, mi all
+   * MOST az eszkozon.
+   *
+   * ES AMIT EZ NEM CSINAL: a SZERVER nem jelez matrica-utkozest. A
+   * `conflictingFields` az `Asset` OSZLOPAIT hasonlitja, a matrica pedig nem
+   * oszlop, hanem masik tabla sora -- oda soha nem kerul be. Ez a sor tehat
+   * akkor latszik, ha a valasz MAS mezo miatt lett utkozes. Szandekos:
+   * a leszakadt szerelo a FIZIKAI matricat latja a gepen, tehat az o erteke a
+   * valoszinubb, es a felszabadult kod visszakerul a keszletbe -- nem vesz el.
+   */
+  labelCode?: string | null;
+  /**
+   * A MOSTANI TELJESITMENY ES A MERTEKEGYSEGE.
+   *
+   * UGYANAZ AZ OK, MINT A MATRICANAL: a `ComparableField` a
+   * `UpdateAssetInput` kulcsaibol szarmazik, tehat a par felvetelevel
+   * AUTOMATIKUSAN osszehasonlithato mezo lett -- a fordito koveteli meg, hogy
+   * legyen mihez hasonlitani. Ez jol van igy: ha a sorban allo modositas
+   * teljesitmenyt ir, a szerelo lassa, mi all MOST az eszkozon.
+   *
+   * AZ EGYSEG OBJEKTUMKENT jon a szervertol (`performanceUnit`), a torzs
+   * viszont AZONOSITOT visz -- ezert kell kulon leképezes, ugyanugy, mint a
+   * helyszinnel.
+   */
+  performance?: string | null;
+  performanceUnit?: { id: string; code: string } | null;
   /** A mostani helyszín, ha van. A NEVE kell, nem az azonosítója. */
   unit?: { id: string; name: string } | null;
 }
@@ -105,6 +137,9 @@ const MEZO_NEVE: Record<ComparableField, string> = {
   inventoryNumber: "Partner azonosítója",
   description: "Leírás",
   notes: "Megjegyzés",
+  labelCode: "Matrica kódja",
+  performance: "Teljesítmény",
+  performanceUnitId: "Teljesítmény mértékegysége",
 };
 
 /** Az üres érték NEVE. Egy üres cella nem mondja meg, hogy törlésről van szó. */
@@ -173,6 +208,8 @@ function nyersMost(
   if (field === "status") return current.status;
   if (field === "criticality") return current.criticality;
   if (field === "departmentId") return current.unit?.id ?? null;
+  // A PAR EGYSEG-FELE OBJEKTUMKENT all a valaszban, azonositokent a torzsben.
+  if (field === "performanceUnitId") return current.performanceUnit?.id ?? null;
   return uresNull(current[field]);
 }
 
@@ -306,6 +343,16 @@ function ovek(
     return current.unit
       ? (unitNames?.[current.unit.id] ?? current.unit.name)
       : URES;
+  /**
+   * A MERTEKEGYSEGNEL A JEL LATSZIK, NEM AZ AZONOSITO.
+   *
+   * Egy `uom_01M...` alaku karakterlanc a kepernyon nem dontest segit, hanem
+   * elbizonytalanit -- ugyanaz, amiert a helyszinnel a nev all. Ha a jel
+   * valamiert hianyzik, az azonosito az utolso mentsvar: egy ures cella azt
+   * allitana, hogy nincs egyseg, holott van.
+   */
+  if (field === "performanceUnitId")
+    return current.performanceUnit ? current.performanceUnit.code : URES;
   return ures(current[field]);
 }
 

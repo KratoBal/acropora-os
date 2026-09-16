@@ -6,7 +6,10 @@ import { BadRequestException, ConflictException } from "@nestjs/common";
 import type { AssetDetail } from "@acropora/types";
 
 import type { PartnerScope } from "../auth/partner-scope.util.js";
-import { AssetLabelUnavailableError } from "./service-assets.repository.js";
+import {
+  AssetLabelUnavailableError,
+  AssetPerformancePairError,
+} from "./service-assets.repository.js";
 import type { ServiceAssetsRepository } from "./service-assets.repository.js";
 import { ServiceAssetsService } from "./service-assets.service.js";
 import {
@@ -374,6 +377,78 @@ test("a belsős felhasználó megtudja, melyik eset áll fenn", async () => {
   );
 });
 
+/**
+ * A SZERKESZTO AG IS A BELSOS UZENETET KAPJA.
+ *
+ * A vegpont `SERVICE_MANAGE` jog alatt all, tehat aki ide eljut, LATJA a
+ * kiadott kodok listajat -- neki a ket eset kulonvalasztasa ("nincs kiadva"
+ * kontra "mas eszkozon all") hasznos, nem szivargas.
+ *
+ * MIERT KELL RA ALLITAS: a `map` a hatokort OPCIONALIS parameterkent veszi, es
+ * ha elhagyjuk, CSENDBEN a partnernek szant, osszevont mondatot adja. Semmi nem
+ * hibazik tole: a hivo 409-et kap, csak kevesebbet tud meg, mint amennyi jar
+ * neki. Pontosan ez volt a hiba, amit ez az allitas megfog.
+ */
+test("a szerkesztő ág a BELSŐS üzenetet adja, nem a partnerét", async () => {
+  const service = new ServiceAssetsService(
+    repository({
+      update: async () => {
+        throw new AssetLabelUnavailableError("V2196");
+      },
+    }),
+    new InMemoryDocumentStore(),
+  );
+  await assert.rejects(
+    () =>
+      service.update(
+        "asset-1",
+        { labelCode: "V2196", expectedUpdatedAt: asset.updatedAt },
+        "user-1",
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof ConflictException);
+      assert.match(String(error.message), /nincs kiadva/);
+      return true;
+    },
+  );
+});
+
+/**
+ * ES AZ ALAK-HIBA A SZERKESZTO AGON IS 400, NEM 409.
+ *
+ * A ket eset TEENDOJE mas: egy rossz alakot a KERESEN kell javitani, egy
+ * foglalt kodnal viszont masik matricat kell olvasni. A tarolo mind a kettot
+ * ugyanazon az osztalyon adja vissza (a nyers koddal), es a szetvalasztas a
+ * `map`-ben tortenik -- ez az allitas azt orzi, hogy a szerkeszto ut is
+ * ATMEGY ezen a szetvalasztason, nem csak a felvitel.
+ */
+test("a szerkesztő ágon a rossz ALAK 400-at ad, nem 409-et", async () => {
+  const service = new ServiceAssetsService(
+    repository({
+      update: async () => {
+        throw new AssetLabelUnavailableError("nem-jo-alak");
+      },
+    }),
+    new InMemoryDocumentStore(),
+  );
+  await assert.rejects(
+    () =>
+      service.update(
+        "asset-1",
+        { labelCode: "nem-jo-alak", expectedUpdatedAt: asset.updatedAt },
+        "user-1",
+      ),
+    (error: unknown) => {
+      assert.ok(
+        error instanceof BadRequestException,
+        "alak-hibára a kérésen kell javítani, tehát 400",
+      );
+      assert.match(String(error.message), /egy betű és négy szám/);
+      return true;
+    },
+  );
+});
+
 test("a partner az összevont üzenetet kapja", async () => {
   const service = new ServiceAssetsService(
     repository({
@@ -404,6 +479,91 @@ test("a partner az összevont üzenetet kapja", async () => {
         "a partner NEM tudhatja meg, hogy a kód ki van-e adva",
       );
       assert.match(String(error.message), /nem köthető/);
+      return true;
+    },
+  );
+});
+
+/**
+ * A FEL TELJESITMENY-PAR 400-AT AD, ES A MONDAT MEGNEVEZI A HIANYZO FELET.
+ *
+ * MIERT KELL ERRE ALLITAS, HOLOTT A TAROLO MAR DOB: mert a ket dontes KET
+ * HELYEN all. A tarolo azt mondja meg, MI nem all; a szolgaltatas azt, KINEK
+ * szol a mondat es milyen valaszkoddal. Ha ez a leképezes kimaradna, a hiba a
+ * `map` vegen levo `throw error`-ig futna, es 500 lenne belole -- pontosan az
+ * az alak, ami a matricakod `null` eseteben mar egyszer elofordult.
+ *
+ * ES A 400 NEM UGYANAZ, MINT A MATRICAE (409): ott a keres alakja jo volt es a
+ * VILAG allapota nem allt (a kod mason ul), itt maga a keres hianyos.
+ */
+test("a fél teljesítmény-pár 400-at ad, és megnevezi a hiányzó felet", async () => {
+  const service = new ServiceAssetsService(
+    repository({
+      create: async () => {
+        throw new AssetPerformancePairError("unit");
+      },
+    }),
+    new InMemoryDocumentStore(),
+  );
+  await assert.rejects(
+    () =>
+      service.create(
+        {
+          ownerType: "CUSTOMER",
+          ownerId: "customer-1",
+          kind: "COMPONENT",
+          name: "Szivattyú",
+          performance: "500",
+        },
+        "user-1",
+        { kind: "internal" },
+      ),
+    (error: unknown) => {
+      // A VALASZKOD: 400, nem 409 es nem 500.
+      assert.ok(
+        error instanceof BadRequestException,
+        `400-at vartam, ez jott: ${String(error)}`,
+      );
+      // ES A MONDAT: a kezelonek tudnia kell, MELYIK oldal ures -- a ket eset
+      // KET kulon teendo (legordulot valasztani kontra szamot irni).
+      assert.match(String(error.message), /mértékegységet is kell választani/);
+      return true;
+    },
+  );
+});
+
+/**
+ * A TESTVER-ALLITAS A MASIK FELRE.
+ *
+ * Enelkul a fenti akkor is zold lenne, ha a leképezes MINDIG ugyanazt a
+ * mondatot adna -- es akkor a kezelo a hianyzo SZAM eseten is azt olvasna,
+ * hogy mertekegyseget kell valasztani.
+ */
+test("a másik fél hiányára a MÁSIK mondat jön", async () => {
+  const service = new ServiceAssetsService(
+    repository({
+      create: async () => {
+        throw new AssetPerformancePairError("szam");
+      },
+    }),
+    new InMemoryDocumentStore(),
+  );
+  await assert.rejects(
+    () =>
+      service.create(
+        {
+          ownerType: "CUSTOMER",
+          ownerId: "customer-1",
+          kind: "COMPONENT",
+          name: "Szivattyú",
+          performanceUnitId: "uom-1",
+        },
+        "user-1",
+        { kind: "internal" },
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof BadRequestException);
+      assert.match(String(error.message), /teljesítmény-értéket is kell írni/);
       return true;
     },
   );

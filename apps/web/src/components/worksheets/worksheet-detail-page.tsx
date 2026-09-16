@@ -35,6 +35,7 @@ import { ServiceOfflineNotice } from "@/components/service/service-offline-notic
 import { useReturnTo } from "@/components/navigation-history";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { WorksheetEntries } from "./worksheet-entries";
+import { WorksheetAssetEditor } from "./worksheet-asset-editor";
 import { WorksheetAssigneeEditor } from "./worksheet-assignee-editor";
 import {
   formatAmount,
@@ -547,7 +548,20 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
         {worksheet.customer.displayName}
       </ServiceContextRow>
       <ServiceContextRow icon="location" label="Alegység">
-        {worksheet.department.code} — {current.unitName ?? "—"}
+        {/*
+          A TELJES UT, HA A SZERVER KULDI. A level neve onmagaban nem mondja
+          meg, melyik agrol van szo: a kod es a nev csak TESTVEREK kozott
+          egyedi, tehat ket tavoli ag alatt ugyanaz a "Biodóm (BIO)"
+          megengedett. Balazs merte vissza 2026-09-16-an: itt `NMD —
+          Nagymedence` allt, es abbol nem derult ki, melyik medence.
+
+          A VISSZAESES A REGI ALAK, nem ures sor: a mezo elhagyhato, es egy
+          regebbi valasz (vagy egy sorba tett, offline mentett lap) nem
+          hordozza. Olyankor ugyanaz latszik, mint eddig.
+        */}
+        {worksheet.department.path?.length
+          ? worksheet.department.path.join(" / ")
+          : `${worksheet.department.code} — ${current.unitName ?? "—"}`}
       </ServiceContextRow>
       <ServiceContextRow icon="ticket" label="Hibajegy">
         {/*
@@ -737,6 +751,26 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
               worksheetId={worksheet.id}
               token={token}
               assignees={worksheet.assignees}
+              canManage={canManage}
+              onSaved={setWorksheet}
+            />
+            {/*
+              AZ ESZKOZOK A FELELOSOK ALATT, ES UGYANABBAN AZ ALAKBAN.
+
+              A KETTO UGYANAZ A FAJTA ADAT: a MUNKALAP azonossagahoz tartozik,
+              nem a verziohoz -- lezart lapon is javithato, es a
+              verzio-eltéresben nem jelenik meg. Ket kulonbozo helyre teve a
+              kezelo az egyiket megtalalna, a masikat nem.
+
+              ES AMIT EZ A DOBOZ ELOSZOR MUTAT MEG: magat a listat. A csatolt
+              eszkozok 2026-09-15 ota bekerultek az adatbazisba, es SEHOL nem
+              latszottak -- meg a sajat lapjukon sem.
+            */}
+            <WorksheetAssetEditor
+              worksheetId={worksheet.id}
+              token={token}
+              departmentId={worksheet.department.id}
+              assets={worksheet.assets}
               canManage={canManage}
               onSaved={setWorksheet}
             />

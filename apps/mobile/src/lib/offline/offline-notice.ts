@@ -33,7 +33,42 @@ export interface OfflineNoticeInput {
   itemCount: number;
   /** A mérés pillanata. Paraméter, nem `Date.now()`: lásd a fenti indoklást. */
   now: Date;
+  /**
+   * MIRŐL SZÓL EZ A LISTA -- ÉS KÖTELEZŐ, NEM ELHAGYHATÓ.
+   *
+   * A mondatok eddig „az eszközlista" alakot írtak, mert egyetlen lista volt.
+   * A hibajegyekkel kettő lett, és egy ALAPÉRTELMEZÉS itt azt jelentené, hogy
+   * a jegy-képernyő sávja az eszközökről beszél -- a szerelő pedig azt olvasná,
+   * hogy „nem volt letöltve az eszközlista", miközben a jegyeket nézi.
+   *
+   * Kötelezőként a fordító kérdezi meg minden új listától, hogy minek hívja
+   * magát. Egy elhagyható mező ugyanezt ÍGÉRNÉ, és csendben nem tartaná be.
+   */
+  subject: OfflineNoticeSubject;
 }
+
+/**
+ * A LISTA NEVE, AHOGY A MONDATBAN ÁLL: névelővel, alanyesetben.
+ *
+ * EGY MEZŐ, NEM TÖBB ALAK. Kezdetben tárgyesetet is ideírtam, holott egyetlen
+ * mondat sem használja -- ugyanaz a spekulatív bővítés, ami egy nem hívott
+ * segédfüggvényt szül. Ha egy második rag valaha kell, akkor kerül ide, akkor
+ * is kiírva: a magyar toldalékolás a szó végétől függ, és egy félig működő
+ * ragozó pont a ritka szavakon hibázna.
+ */
+export interface OfflineNoticeSubject {
+  listName: string;
+}
+
+/** Az eszközlista neve. Egy helyen, hogy a két képernyő ne térjen el. */
+export const ASSET_NOTICE_SUBJECT: OfflineNoticeSubject = {
+  listName: "az eszközlista",
+};
+
+/** A hibajegylista neve. */
+export const SERVICE_JOB_NOTICE_SUBJECT: OfflineNoticeSubject = {
+  listName: "a hibajegylista",
+};
 
 /** Egy nap fölött a másolat kora már nem részlet, hanem figyelmeztetés. */
 export const STALE_AFTER_HOURS = 24;
@@ -46,9 +81,29 @@ const HOUR_IN_MS = 60 * 60 * 1000;
  * Nem abszolút időpontot ad, hanem eltelt időt: a helyszínen az számít, hogy
  * „ma reggel" vagy „négy napja", nem az, hogy 09:12. Az abszolút időpont
  * ráadásul időzóna-kérdést nyitna a készüléken, az eltelt idő nem.
+ *
+ * === EZ A FÜGGVÉNY TÖREDÉKET AD, NEM MONDATOT, ÉS EBBŐL KÖVETKEZIK A `null` ÁGA ===
+ *
+ * A visszatérő érték MINDIG beépül egy hosszabb mondatba: „… frissült",
+ * „… mentve", „… rögzítve", „Ez a lap … mentett másolat". Ezért a töredéknek
+ * mind a négy alakban nyelvtanilag helyesnek kell lennie.
+ *
+ * A `null` ága korábban „még soha" volt, és EGYETLEN mondatba sem illett bele:
+ * „A helyszíni másolat még soha frissült", „Ez a lap még soha mentett másolat",
+ * „40 partner a telefonról, még soha mentve". Balázs a telefonján pont az
+ * elsőt fotózta le (2026-09-16), és ő mondta ki, mi hiányzik belőle: egy „nem".
+ *
+ * A javítás viszont NEM a hiányzó szó beírása, mert a „még soha nem" a másik
+ * három mondatban ugyanúgy értelmetlen. A „mióta" kérdésre időtartam a válasz,
+ * a „soha" pedig nem az: az egy MÁSIK állítás, és oda tartozik, ahol a hívó
+ * maga fogalmaz. Ahol a töredék áll, ott mindig VAN másolat, csak a kora
+ * ismeretlen, tehát ugyanaz az ág jár neki, mint az olvashatatlan bélyegnek.
+ *
+ * Ahol a „soha" tényleg számít (a lista fölötti sáv), ott a hívó külön
+ * mondattal áll elő, lásd `describeOfflineNotice`.
  */
 export function describeCacheAge(syncedAt: string | null, now: Date): string {
-  if (!syncedAt) return "még soha";
+  if (!syncedAt) return "ismeretlen ideje";
   const saved = new Date(syncedAt).getTime();
   if (!Number.isFinite(saved)) return "ismeretlen ideje";
 
@@ -78,14 +133,13 @@ export function isCacheStale(
 export function describeOfflineNotice(
   input: OfflineNoticeInput,
 ): OfflineNotice | null {
-  const { online, syncedAt, itemCount, now } = input;
+  const { online, syncedAt, itemCount, now, subject } = input;
 
   if (!online && itemCount === 0)
     return {
       tone: "empty",
       title: "Nincs kapcsolat, és nincs mentett másolat",
-      message:
-        "Ezen a készüléken még nem volt letöltve az eszközlista. Térerőnél nyisd meg egyszer, és onnantól offline is megvan.",
+      message: `Ezen a készüléken még nem volt letöltve ${subject.listName}. Térerőnél nyisd meg egyszer, és onnantól offline is megvan.`,
     };
 
   if (!online)
@@ -98,12 +152,26 @@ export function describeOfflineNotice(
   // Online, de a másolat régi: ilyenkor a képernyő a szerverről frissül, tehát
   // a sáv nem az adatról szól, hanem arról, hogy a készülék készen áll-e a
   // következő térerő nélküli munkára.
-  if (isCacheStale(syncedAt, now))
+  //
+  // KÉT KÜLÖNBÖZŐ ÁLLÍTÁS, ÉS A SZERELŐNEK NEM MINDEGY, MELYIK IGAZ RÁ.
+  // Ha még soha nem mentettünk, akkor térerő nélkül NINCS MIT megnyitnia. Ha
+  // van másolat, csak régi, akkor van mit, csak nem a mai állapot. Az első egy
+  // hiány, a második egy kockázat, és a teendő is más súlyú.
+  if (isCacheStale(syncedAt, now)) {
+    if (syncedAt === null && itemCount === 0)
+      return {
+        tone: "stale",
+        title: "Még nincs helyszíni másolat",
+        message:
+          "Ezen a készüléken még soha nem frissült a helyszíni másolat. Amíg van térerő, görgesd végig a listát, hogy offline is meglegyen.",
+      };
+
     return {
       tone: "stale",
       title: "A készülékre mentett másolat régi",
       message: `A helyszíni másolat ${describeCacheAge(syncedAt, now)} frissült. Amíg van térerő, görgesd végig a listát, hogy offline is naprakész legyen.`,
     };
+  }
 
   return null;
 }
@@ -246,6 +314,55 @@ export function describeCachedWorksheetNotice(input: {
  * `null`, ha van kapcsolat: olyankor a friss lista jön, és egy sáv csak elvenné
  * a helyet.
  */
+/**
+ * A MENTETT PARTNERLISTA SAVJA -- SAJAT FUGGVENY, ES EZ NEM SZIMMETRIA-KERDES.
+ *
+ * Eddig a partner-valaszto a HELYSZIN-fuggvenyt hasznalta
+ * (`describeCachedDepartmentsNotice`), es az ures ag szo szerint ezt mondta:
+ * „Ehhez a partnerhez nincs mentett helyszín… nyisd meg egyszer a partnert".
+ * A „Szerviz partner keresése" doboz folott tehat egy MASIK dologrol szolt a
+ * mondat, ES olyan lepest javasolt, ami abban az allapotban nem ertelmezheto:
+ * a felhasznalo meg nem valasztott partnert, es epp a PARTNER-lista az, ami
+ * ures. (Merve 2026-09-15 a fo agon; ez az a kepernyo, amit Balazs nem tudott
+ * hasznalni 09-14-en.)
+ *
+ * A ket fuggveny KULON marad. Egy kozos, parameterezett fonevu valtozat epp azt
+ * a ket mondatot mosna ossze, amit szet kell tartani.
+ *
+ * === MIERT ALL A KOR A NEM-URES AGON ===
+ *
+ * A partner KOTELEZO mezo. Ha a szerelo nem talalja a listaban, az ket dolgot
+ * jelenthet: nincs ilyen partner, VAGY a lista regebbi, mint a partner. A ketto
+ * kozott egyedul a KOR dont. Kor nelkul a hianybol azt olvasna ki, hogy a
+ * partner nem letezik -- es azt a hamis kovetkeztetest mi adnank a kezebe.
+ * (acrobot dontese, 2026-09-15.)
+ */
+export function describeCachedOwnersNotice(input: {
+  online: boolean;
+  count: number;
+  syncedAt: string | null;
+  now: Date;
+}): OfflineNotice | null {
+  if (input.online) return null;
+
+  if (input.count === 0)
+    return {
+      tone: "empty",
+      title: "Nincs kapcsolat: nincs mentett partnerlista",
+      message:
+        "Nincs mentett partnerlista a telefonon, és a partner kötelező. " +
+        "A lista a kezdőképernyőn töltődik le: indítsd el egyszer az " +
+        "alkalmazást térerő mellett, és utána offline is választhatsz.",
+    };
+
+  const age = describeCacheAge(input.syncedAt, input.now);
+  return {
+    tone: "offline",
+    title: "Nincs kapcsolat: mentett partnerlista",
+    message: `${input.count} partner a telefonról, ${age} mentve. Ami azóta változott vagy megszűnt, azt itt nem látod.`,
+  };
+}
+
 export function describeCachedDepartmentsNotice(input: {
   online: boolean;
   count: number;

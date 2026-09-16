@@ -208,7 +208,23 @@ export class NotificationsService {
     if (input.userIds.length === 0) return empty;
     if (!this.sender.configured()) return empty;
 
-    const recipients = await this.deviceTokens.recipients(input.userIds);
+    /**
+     * `IOS`, MERT EZ AZ APPLE KULDO -- es a platform itt all, nem a taroloban.
+     *
+     * A `sender` ebben az osztalyban az APNs kliens, tehat a kerdes, amire ez a
+     * sor valaszol, nem az, hogy "kit lehet elerni", hanem hogy "kit lehet
+     * elerni EZEN AZ UTON". Egy androidos token a valaszban azt jelentene, hogy
+     * egy Google-tokent kuldunk az Apple-nek: az elutasitana, a lenti `retired`
+     * ag pedig TOROLNE a sort -- vagyis a telefon csendben lekerulne az
+     * ertesitesekrol, anelkul hogy valaha kaphatott volna egyet.
+     *
+     * AMIKOR A MASODIK KULDO MEGJON (Google fele), az NEM ezt a sort irja at,
+     * hanem sajat `deliver` hivassal jon, sajat platformmal. A ket kuldot
+     * ugyanaz a harom szabaly koti (sor nelkuli kuldes, elavult token
+     * nyugdijazasa, naplozas bukas eseten is), es azok mar ebben a kozos
+     * torzsben allnak.
+     */
+    const recipients = await this.deviceTokens.recipients(input.userIds, "IOS");
     if (recipients.length === 0) return empty;
 
     const results = await Promise.all(

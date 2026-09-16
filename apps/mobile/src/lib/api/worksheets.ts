@@ -1,8 +1,5 @@
 import { apiRequest } from "./client";
-import {
-  buildAssetDocumentUpload,
-  type PickedFile,
-} from "./asset-document-upload";
+import { buildDocumentUpload, type PickedFile } from "./document-upload";
 
 /**
  * A végpont előtagja EGY HELYEN. Ez a fájl korábban 3-szer írta le ugyanezt, és
@@ -308,7 +305,7 @@ export function createWorksheet(input: CreateWorksheetInput) {
  * FENYKEP A MUNKALAPHOZ.
  *
  * UGYANAZ AZ ALAK, MINT AZ ESZKOZNEL (`uploadAssetDocuments`): a torzset a
- * kozos `buildAssetDocumentUpload` allitja ossze, mert a szerver mindket
+ * kozos `buildDocumentUpload` allitja ossze, mert a szerver mindket
  * vegponton ugyanazt a mezonevet es ugyanazt a darabszam-hatart varja. Ket
  * kulon osszerako ket helyen romlana el.
  */
@@ -316,7 +313,7 @@ export async function uploadWorksheetDocuments(
   id: string,
   input: { files: readonly PickedFile[] },
 ): Promise<{ id: string; fileName: string }[]> {
-  const built = buildAssetDocumentUpload({ type: "PHOTO", files: input.files });
+  const built = buildDocumentUpload({ type: "PHOTO", files: input.files });
   if (!built.ok) throw new Error(built.reason);
 
   return apiRequest<{ id: string; fileName: string }[]>(

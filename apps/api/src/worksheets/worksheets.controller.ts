@@ -29,6 +29,8 @@ import {
   CreateWorksheetDto,
   CreateWorksheetEntryDto,
   CreateWorksheetLineDto,
+  MAX_WORKSHEET_DOCUMENTS_PER_UPLOAD,
+  SetWorksheetAssetsDto,
   SetWorksheetAssigneesDto,
   SetWorksheetPartnerCodeDto,
   SignWorksheetVersionDto,
@@ -37,7 +39,6 @@ import {
   UpdateWorksheetLineDto,
   UploadWorksheetDocumentDto,
   WorksheetListQueryDto,
-  MAX_WORKSHEET_DOCUMENTS_PER_UPLOAD,
 } from "./dto/worksheet.dto.js";
 import { WorksheetsService } from "./worksheets.service.js";
 
@@ -264,6 +265,22 @@ export class WorksheetsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.setAssignees(id, input, user.id);
+  }
+
+  /**
+   * A LAP ESZKOZEI, teljes listakent. `PUT`, ugyanabbol az okbol, amiert a
+   * felelosoknel: a bekuldott lista a lap eszkozeinek TELJES allapota, nem egy
+   * hozzaadas.
+   *
+   * AZ ALLAPOT NEM SZAMIT, ES EZ A MODELLBOL KOVETKEZIK: a `WorksheetAsset` a
+   * MUNKALAPHOZ kotodik, nem a verziohoz -- ugyanugy, mint a felelosok, akiket
+   * a `setAssignees` ma is enged barmilyen allapotu lapon. Nem verziozott
+   * tartalom, tehat nem az amend jogkor ala tartozik.
+   */
+  @Put(":id/assets")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  setAssets(@Param("id") id: string, @Body() input: SetWorksheetAssetsDto) {
+    return this.service.setAssets(id, input);
   }
 
   /**

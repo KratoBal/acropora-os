@@ -15,12 +15,14 @@ import {
 import { Prisma } from "@acropora/database";
 import type { AssetQrCode } from "@acropora/types";
 import {
+  ASSET_LABEL_CODE_SHAPE_MESSAGE,
   assetLabelCreateProblem,
   normalizeAssetLabelCode,
 } from "@acropora/types";
 import {
   AssetLabelPoolExhaustedError,
   AssetLabelUnavailableError,
+  AssetPerformancePairError,
 } from "./service-assets.repository.js";
 
 import {
@@ -181,9 +183,7 @@ export class ServiceAssetsService {
   async scanLabel(rawCode: string, scope: PartnerScope) {
     const code = normalizeAssetLabelCode(rawCode);
     if (code === null)
-      throw new BadRequestException(
-        "A matricakód alakja egy betű és négy szám (például V2196).",
-      );
+      throw new BadRequestException(ASSET_LABEL_CODE_SHAPE_MESSAGE);
     const asset = await this.repository.detailByLabelCode(code, scope);
     if (!asset)
       throw new NotFoundException(
@@ -290,7 +290,14 @@ export class ServiceAssetsService {
     try {
       return await this.repository.update(id, input, actorUserId);
     } catch (error) {
-      this.map(error);
+      /**
+       * A HATOKOR KIMONDVA `internal`, mert a vegpont `SERVICE_MANAGE` jog
+       * alatt all (a kontroller 193. sora). Enelkul a `map` a PARTNER-nek
+       * szant, OSSZEVONT mondatot adna vissza egy belsos kezelonek -- aki
+       * viszont latja a kiadott kodok listajat, tehat neki a ket eset
+       * kulonvalasztasa hasznos es nem szivargas.
+       */
+      this.map(error, { kind: "internal" });
     }
   }
 
@@ -626,6 +633,14 @@ export class ServiceAssetsService {
           : MATRICA_UZENET_PARTNER,
       );
     }
+    /**
+     * A FEL PAR 400: A KERES HIANYOS, NEM A VILAG ALLAPOTA.
+     *
+     * A hiba MAGA hordozza a mondatot, mert az a tarolo dolga: ott dol el,
+     * MELYIK fele hianyzik. Itt csak a valaszkod dol el.
+     */
+    if (error instanceof AssetPerformancePairError)
+      throw new BadRequestException(error.message);
     if (error instanceof Error && error.message === "ASSET_HIERARCHY_CYCLE")
       throw new BadRequestException(
         "Az eszközhierarchia nem tartalmazhat önmagába visszatérő kapcsolatot.",

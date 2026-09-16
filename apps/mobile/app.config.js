@@ -85,9 +85,64 @@ module.exports = ({ config }) => {
     },
     android: {
       package: selected.bundleIdentifier,
+      /**
+       * A FIREBASE BEALLITOFAJL, ES EGY FAJL MIND A HAROM VALTOZATNAK.
+       *
+       * Androidon MINDEN push a Google uzenetkuldo szolgaltatasan megy at, es a
+       * kliens ebbol a fajlbol tudja meg, melyik projekthez tartozik. Enelkul az
+       * `expo-notifications` androidos aga nem tud tokent kerni.
+       *
+       * MIERT EGY FAJL, HOLOTT HAROM CSOMAGNEVUNK VAN (merve 2026-09-16): a
+       * Firebase egy projekten BELUL tobb androidos alkalmazast tart, es a
+       * letoltott fajl MINDEGYIKET tartalmazza -- ebben a peldanyban mind a
+       * harmat (`hu.acropora.os`, `.dev`, `.preview`). A build a sajat
+       * csomagnevehez tartozo blokkot valasztja ki belole.
+       *
+       * A FAJL NEM A TARHAZBAN ALL, HANEM EAS TITOKKENT, es ezt egy ORZO dontotte
+       * el, nem izles. A commit-kapu elutasitotta a fajlt: harom `current_key`
+       * ertek all benne, Google API kulcs alakban.
+       *
+       * ES A KAPUNAK IGAZA VAN, holott a Firebase dokumentacioja szerint ez a
+       * fajl "nem titok". Az allitas CSAK AKKOR igaz, ha a kulcs korlatozva van
+       * a csomagnevre es az alairo tanusitvanyra -- egy FRISSEN letrehozott
+       * projekt kulcsa viszont korlatozas NELKUL is szulethet, es akkor a
+       * projekt szamlajara barmelyik Google API hivhato vele. Innen nem tudom
+       * megnezni, melyik allapot all: az a Google konzolon latszik.
+       *
+       * Ezert a fajl EAS titokkent megy (`GOOGLE_SERVICES_JSON`, file tipus): a
+       * build gepen megjelenik, a tarhazba nem kerul be, es az orzo ep marad.
+       * Ha valaki egyszer visszateszi a fajlt a repoba, eloszb a kulcs
+       * korlatozasat kell megnezni a konzolon.
+       *
+       * A VISSZAESES (`./google-services.json`) NEM kenyelmi lehetoseg: a fajlnak
+       * OTT KELL LENNIE helyben is, amikor EAS buildet inditasz. Ezt egy bukott
+       * build tanitotta meg (2026-09-16, e00087a9):
+       *
+       *   Runtime version mismatch
+       *   - helyi gepen szamolva:  6cd8381293a6...
+       *   - az EAS-en szamolva:    488f3697ea16...
+       *
+       * Az `expo-updates` ujjlenyomat-alapu runtime verziot hasznal, es a
+       * kulonbseg EGYETLEN tetel volt: az EAS oldalan a titok-fajl MEGJELENT a
+       * forrasok kozott, a helyi gepen viszont NEM LETEZETT semmilyen uton.
+       *
+       * ES AMIT KULON LEMERTEM, mert ez donti el a javitast: az ujjlenyomat a
+       * fajl TARTALMAT nezi, az UTJAT nem. Ket kulonbozo helyen allo azonos
+       * fajl BETURE ugyanazt a lenyomatot adja (`e5d020ca...` mind a kettore).
+       * Tehat nem a titok-ut a gond, hanem a HIANY.
+       *
+       * A fajl ezert a `.gitignore`-ban all, es a build elott a helyere kell
+       * masolni. A VALODI titok egyik esetben sem ez, hanem a szolgaltatasfiok
+       * kulcsa, ami a SZERVER oldalan kell.
+       */
+      googleServicesFile:
+        process.env.GOOGLE_SERVICES_JSON ?? "./google-services.json",
       predictiveBackGestureEnabled: false,
       adaptiveIcon: {
-        backgroundColor: "#071827",
+        // A HATTER FEHER, MERT AZ IKON FEHER. Balazs rajza feher lapon all
+        // (2026-09-16), tehat a ket reteg kozotti kulonbseg kulonben egy
+        // sotet keretkent latszana a kerek maszk szelen.
+        backgroundColor: "#ffffff",
         foregroundImage: "./assets/images/android-icon-foreground.png",
         backgroundImage: "./assets/images/android-icon-background.png",
         monochromeImage: "./assets/images/android-icon-monochrome.png",
@@ -146,7 +201,11 @@ module.exports = ({ config }) => {
       [
         "expo-splash-screen",
         {
-          backgroundColor: "#071827",
+          // UGYANAZ A FEHER, MINT AZ IKONON. Az alkalmazas sajat hattere sotet,
+          // tehat az inditokep utan egy valtas jon -- ez tudatos: a jel egy
+          // vilagos lapra keszult, es egy sotet inditokepen a kek resze
+          // majdnem eltunne.
+          backgroundColor: "#ffffff",
           image: "./assets/images/splash-icon.png",
           imageWidth: 96,
         },

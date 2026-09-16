@@ -6,6 +6,7 @@ import { SERVICE_ASSIGNABLE_ROLES } from "../common/service-assignment.js";
 import { DOCUMENT_DELETED_ACTION } from "./service-job-documents.repository.js";
 import { ALL_SERVICE_JOB_STATUSES } from "./service-job-status.js";
 import { prisma, type Prisma, type ServiceJobStatus } from "@acropora/database";
+import { unitPathFor, unitPathsFor } from "../common/unit-path-lookup.js";
 
 /**
  * A LEZÁRT ÁLLAPOTOK, EGY HELYEN. A lista alapból ezeket hagyja ki - és ha egy
@@ -53,6 +54,8 @@ export interface ServiceJobRow {
   title: string;
   status: ServiceJobStatus;
   customerName: string | null;
+  /** A helyszin TELJES utja, a gyokertol lefele. `null`, ha nincs vagy nem epithető. */
+  departmentPath: string[] | null;
   createdAt: Date;
   worksheetCount: number;
 }
@@ -247,6 +250,71 @@ export class ServiceJobsRepository {
   }
 
   /**
+   * A JEGY HELYSZINE ES AZ OTT ALLO ESZKOZOK, EGY TRANZAKCIOBAN.
+   *
+   * === MIERT EGY TRANZAKCIO, ES NEM KET IRAS ===
+   *
+   * A ketto kozott a jegy egy OLYAN allapotban allna, amit a felvitel sosem
+   * enged meg: uj helyszin a regi eszkozokkel (vagy forditva). Ha a masodik
+   * iras elhasal (halozat, egyedi kulcs, leallas), az az allapot ITT MARAD --
+   * es semmi nem hibas rajta ranezesre, tehat senki nem keresne.
+   *
+   * === A MAR FENT LEVO SOROKHOZ NEM NYULUNK (`skipDuplicates`) ===
+   *
+   * Ugyanaz az indok, mint a delegalasnal: a `createdAt` az egyetlen jel arrol,
+   * mikor KERULT a jegyre egy eszkoz, es azt a felulet ki is irja
+   * (`attachedAt`). Ha minden mentes ujrairna az osszes sort, minden
+   * helyszin-modositas "ma csatoltnak" mutatna egy honapja rajta allo eszkozt.
+   *
+   * === A BEKULDOTT LISTA A TELJES HALMAZ ===
+   *
+   * Aki nincs rajta, lekerul. Ures listat kuldeni SZABAD -- az kimondott
+   * szandek (a `notIn` ilyenkor elmarad, tehat MINDET leveszi).
+   *
+   * A HIANYZO JEGY `false`-t ad, nem kivetelt: a hivo dolga eldonteni, mit mond
+   * rola -- es a szolgaltatas ugyanazt a 404-et adja, mint a tobbi uton.
+   */
+  async setPlacement(input: {
+    serviceJobId: string;
+    departmentId: string;
+    assetIds: readonly string[];
+  }): Promise<boolean> {
+    return this.database.$transaction(async (transaction) => {
+      const job = await transaction.serviceJob.findUnique({
+        where: { id: input.serviceJobId },
+        select: { id: true },
+      });
+      if (!job) return false;
+
+      await transaction.serviceJob.update({
+        where: { id: input.serviceJobId },
+        data: { departmentId: input.departmentId },
+      });
+
+      await transaction.serviceJobAsset.deleteMany({
+        where: {
+          serviceJobId: input.serviceJobId,
+          ...(input.assetIds.length > 0
+            ? { assetId: { notIn: [...input.assetIds] } }
+            : {}),
+        },
+      });
+
+      if (input.assetIds.length > 0) {
+        await transaction.serviceJobAsset.createMany({
+          data: input.assetIds.map((assetId) => ({
+            serviceJobId: input.serviceJobId,
+            assetId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+
+      return true;
+    });
+  }
+
+  /**
    * EGY FELHASZNALO LATHATOSAGI EGYSEGEI, A RESZFAVAL EGYUTT.
    *
    * KET LEPES, es a masodik tiszta fuggveny: a Prisma rekurziv lekerdezest nem
@@ -423,19 +491,37 @@ export class ServiceJobsRepository {
         status: true,
         createdAt: true,
         customer: { select: { displayName: true } },
+        // A HELYSZIN AZONOSITOJA A LISTARA IS. A nevet nem kerjuk el: a listan
+        // a TELJES ut all majd, azt pedig egy kotegelt lekerdezes epiti fel,
+        // nem ez a `select`.
+        departmentId: true,
         // A DARABSZÁM A LISTÁN LÁTSZIK, mert a jegy értéke abból derül ki,
         // hány munka áll mögötte. Egy külön lekérdezés soronként N+1 lenne.
         _count: { select: { worksheets: true } },
       },
     });
 
+    const lap = rows.slice(0, LIST_LIMIT);
+    /**
+     * A TELJES UTAK EGY KOTEGBEN. Ket lekerdezes, fuggetlenul attol, hany sor
+     * jott: a `unitPathFor` soronkent ketto lenne, ami ezen a listan
+     * negyszazat is jelenthet.
+     */
+    const utak = await unitPathsFor(
+      this.database,
+      lap.map((row) => row.departmentId),
+    );
+
     return {
-      rows: rows.slice(0, LIST_LIMIT).map((row) => ({
+      rows: lap.map((row) => ({
         id: row.id,
         jobNumber: row.jobNumber,
         title: row.title,
         status: row.status,
         customerName: row.customer?.displayName ?? null,
+        departmentPath: row.departmentId
+          ? (utak.get(row.departmentId) ?? null)
+          : null,
         createdAt: row.createdAt,
         worksheetCount: row._count.worksheets,
       })),
@@ -582,7 +668,29 @@ export class ServiceJobsRepository {
     });
   }
 
+  /**
+   * A JEGY ADATLAPJA, ES VELE A HELYSZIN TELJES UTJA.
+   *
+   * AZ UT KULON LEKERDEZESBOL JON, nem az `select` melyitesevel: a helyszin-fa
+   * melysege NEM korlatos, tehat egy `parent: { parent: { ... } }` lanc mindig
+   * csak addig latna, ameddig valaki megirta -- es a hianyzo szint CSENDBEN
+   * maradna ki, ugyanugy helyesnek latszo eredmennyel.
+   *
+   * ES ITT, A TAROLOBAN, nem a szolgaltatasban: a szolgaltatasok hamis
+   * tarolokkal futnak az egyseg-tesztekben, tehat egy ottani adatbazis-hivas
+   * kivezetne oket a fedes alol. (Merve: huszonhat teszt bukott el, amikor
+   * eloszb odatettem.)
+   */
   async detail(id: string, visibility: Prisma.ServiceJobWhereInput) {
+    const sor = await this.detailRow(id, visibility);
+    if (!sor) return sor;
+    return {
+      ...sor,
+      departmentPath: await unitPathFor(this.database, sor.departmentId),
+    };
+  }
+
+  private async detailRow(id: string, visibility: Prisma.ServiceJobWhereInput) {
     return this.database.serviceJob.findFirst({
       where: { AND: [{ id }, visibility] },
       select: {
@@ -645,6 +753,15 @@ export class ServiceJobsRepository {
             number: true,
             createdAt: true,
             handedOverAt: true,
+            // A LAP NEVE A LEGFRISSEBB VERZIOJAROL JON, ugyanugy, ahogy a
+            // csatolo valaszto is veszi (`attachableWorksheets`). A nev a
+            // verzion lakik, nem a lapon: egy javitott targy uj verziot ir, es
+            // a jegy alatt a MAI nevnek kell allnia, nem az elsonek.
+            versions: {
+              orderBy: { version: "desc" },
+              take: 1,
+              select: { subject: true },
+            },
           },
         },
         assets: {

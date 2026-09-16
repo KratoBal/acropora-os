@@ -375,6 +375,33 @@ export class SetWorksheetAssigneesDto {
   userIds!: string[];
 }
 
+/**
+ * A LAP ESZKOZEI, TELJES LISTAKENT.
+ *
+ * Balazs kerese, 2026-09-16: "munkalapnal is jo lenne ha lehetne a helyszinhez
+ * rogzitett eszkozoket csatolni".
+ *
+ * `PUT`, ES A BEKULDOTT LISTA A TELJES ALLAPOT, nem hozzaadas -- ugyanaz az
+ * alak, mint a felelosoknel, es ugyanabbol az okbol: egy "vedd le X-et"
+ * muvelethez a feluletnek ugyis tudnia kellene, mi all fent, es akkor is a
+ * teljes listat kuldene, csak eggyel kevesebbet.
+ *
+ * A MEZO KOTELEZO, alapertelmezett ures lista nelkul: egy elgepelt vagy
+ * kimaradt mezonek nem szabad csendben leszedni mindent. Ures listat kuldeni
+ * viszont SZABAD -- az kimondott szandek.
+ *
+ * A HELYSZIN NEM SZEREPEL ITT, ES EZ ELTER A HIBAJEGYTOL: a lap helyszine a
+ * FELVITELKOR dol el es utana nem valtozik, tehat nincs mihez kepest elcsuszni.
+ * A szerver a lap SAJAT helyszinere ellenoriz.
+ */
+export class SetWorksheetAssetsDto {
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @MinLength(1, { each: true })
+  assetIds!: string[];
+}
+
 export class SetWorksheetPartnerCodeDto {
   @Matches(/^[A-Za-z][A-Za-z0-9]{1,7}$/, {
     message:

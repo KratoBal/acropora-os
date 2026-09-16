@@ -10,7 +10,10 @@ import {
   Textarea,
 } from "@acropora/ui";
 import {
+  assetLabelCreateProblem,
   hasPermission,
+  normalizeAssetLabelCode,
+  normalizePerformanceValue,
   PERMISSIONS,
   type AssetCriticality,
   type AssetKind,
@@ -18,6 +21,7 @@ import {
   type AssetOwnerOption,
   type AssetOwnerType,
   type AssetStatus,
+  type UnitOfMeasure,
 } from "@acropora/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -30,6 +34,12 @@ import { ServiceOfflineNotice } from "@/components/service/service-offline-notic
 import { useReturnTo } from "@/components/navigation-history";
 import { assetsApi } from "@/lib/api/assets";
 import { suppliersApi } from "@/lib/api/suppliers";
+import { unitsOfMeasureApi } from "@/lib/api/units-of-measure";
+import {
+  PERFORMANCE_PROBLEM_MESSAGES,
+  performancePairProblem,
+  performanceUnitOptions,
+} from "./asset-performance-field";
 import { buildSiteOptions, type SiteOption } from "@/lib/partners/site-tree";
 import {
   assetCriticalityLabel,
@@ -67,6 +77,50 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
   const [model, setModel] = useState("");
   const [serialNumber, setSerialNumber] = useState("");
   const [inventoryNumber, setInventoryNumber] = useState("");
+  /**
+   * AZ ELORE NYOMTATOTT MATRICA KODJA, CSAK FELVITELNEL.
+   *
+   * KET KULONBOZO AZONOSITO VAN, ES A LAP EDDIG CSAK AZ EGYIKET ISMERTE. Az
+   * `Asset.qrToken` az ADATBAZIS alapertelmezese (`@default(uuid())`), tehat
+   * minden eszkoz kap egyet, barhonnan is viszik fel -- abbol keszul az adatlap
+   * letoltheto QR kepe, es az a beolvasas kulcsa. Az `AssetLabel` ettol
+   * fuggetlen: az elore KINYOMTATOTT matricak keszlete (`V2196` alak).
+   *
+   * BALAZS EZT MERTE VISSZA 2026-09-16 10:32-kor (Discord, Acropora OS szal),
+   * szo szerint: "automatikusan egy qr kodot is hzzarendel. de ez igy nem jo,
+   * mert nem a qr kod torzsbol veszi". Igaza volt: a szerver oldal es a MOBIL
+   * urlap ota kesz, a webes urlapon viszont EGYALTALAN nem volt mezo ra, tehat
+   * webrol felvitt eszkozhoz nyomtatott matricat semmilyen uton nem lehetett
+   * rendelni.
+   *
+   * BEIRHATO MEZO, NEM LEGORDULO A SZABAD KODOKBOL. Balazs dontese ugyanabban a
+   * korben (10:35): "beirnám kézzel". A `labels/free` vegpont letezik, tehat a
+   * legordulo megepitheto lenne -- nem azert nincs, mert nem megy.
+   */
+  const [labelCode, setLabelCode] = useState("");
+  /**
+   * A TELJESITMENY ES A MERTEKEGYSEGE -- KET MEZO, EGY ADAT.
+   *
+   * A ketto EGYUTT mozog: a tablan CHECK all rajta, tehat fel par nem
+   * menthetó. Az urlap ezt a szabalyt MEGISMETLI (a mondat a mezo mellett
+   * jelenik meg), nem helyettesiti.
+   *
+   * MIERT SZOVEG A SZAM: a tarolt alak `decimal(19,6)`. Szamma alakitva a
+   * bongeszo lebegopontos tipusan menne at, es egy 0,1-es lepeskoz mar
+   * `0.30000000000000004` alakban jonne vissza a kezelonek.
+   */
+  const [performance, setPerformance] = useState("");
+  const [performanceUnitId, setPerformanceUnitId] = useState("");
+  const [performanceUnits, setPerformanceUnits] = useState<UnitOfMeasure[]>([]);
+  /**
+   * AZ ESZKOZON MA ALLO EGYSEG, KULON -- MERT LEHET, HOGY MAR KIVEZETTEK.
+   *
+   * A valaszto az AKTIVAKAT kinalja. Ha az eszkozon egy azota kivezetett
+   * egyseg all, es csak az aktivak lennenek a listaban, a legordulo az ELSO
+   * elemre esne vissza: a kezelo megnyitja a lapot, egy szot sem ir, ment --
+   * es a mertekegyseg megvaltozik. Nemán.
+   */
+  const [currentUnit, setCurrentUnit] = useState<UnitOfMeasure | undefined>();
   const [installedAt, setInstalledAt] = useState("");
   const [warrantyExpiresAt, setWarrantyExpiresAt] = useState("");
   const [serviceIntervalDays, setServiceIntervalDays] = useState("");
@@ -125,6 +179,21 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
         setModel(asset.model ?? "");
         setSerialNumber(asset.serialNumber ?? "");
         setInventoryNumber(asset.inventoryNumber ?? "");
+        setLabelCode(asset.labelCode ?? "");
+        setPerformance(asset.performance ?? "");
+        setPerformanceUnitId(asset.performanceUnit?.id ?? "");
+        // A MOSTANI EGYSEG A VALASZBOL JON, nem a listabol: ha kozben
+        // kivezettek, a lista nem tartalmazza, az eszkozon viszont ott all.
+        setCurrentUnit(
+          asset.performanceUnit
+            ? {
+                ...asset.performanceUnit,
+                kind: "PERFORMANCE",
+                isActive: true,
+                sortOrder: 0,
+              }
+            : undefined,
+        );
         setInstalledAt(inputDate(asset.installedAt));
         setWarrantyExpiresAt(inputDate(asset.warrantyExpiresAt));
         setServiceIntervalDays(asset.serviceIntervalDays?.toString() ?? "");
@@ -165,6 +234,28 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
       });
     return () => controller.abort();
   }, [owner, token]);
+
+  /**
+   * A TELJESITMENY-EGYSEGEK, EGYSZER.
+   *
+   * CSAK AZ AKTIVAK jonnek: a kivezetett egyseg a valasztobol esik ki. Az
+   * eszkozon MAR allo egyseget ettol fuggetlenul mutatjuk (lasd
+   * `performanceUnitOptions`) -- a kivezetes a valasztekot szukiti, nem a
+   * multat irja at.
+   *
+   * A HIBA ITT NEM ALLITJA MEG A LAPOT. Ha a torzsadat nem tolthető be, a
+   * tobbi mezo akkor is szerkeszthető marad; a teljesitmeny legordulojen ez
+   * annyit jelent, hogy ures. Egy egesz urlapot elvenni egy MELLEKES lista
+   * miatt nagyobb kar, mint a hianyzo valaszto.
+   */
+  useEffect(() => {
+    const controller = new AbortController();
+    void unitsOfMeasureApi
+      .list(token, "PERFORMANCE", { signal: controller.signal })
+      .then((result) => setPerformanceUnits(result.items))
+      .catch(() => setPerformanceUnits([]));
+    return () => controller.abort();
+  }, [token]);
 
   useEffect(() => {
     setParentAssets([]);
@@ -229,6 +320,49 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
       setError("A karbantartási intervallum legalább 1 nap legyen.");
       return;
     }
+    /**
+     * A MATRICA-SZABALY UGYANABBOL A FUGGVENYBOL JON, MINT A SZERVERE ES A
+     * TELEFONE. Egy harmadik minta itt pontosan ott csuszna el, ahol senki nem
+     * nezi: az urlap atengedne, a mentes meg elutasitana.
+     *
+     * MOSTANTOL MIND A KET AGON FUT. Korabban csak felvitelnel, mert a szerver
+     * `UpdateAssetDto`-ja nem ismert `labelCode` mezot -- Balazs 2026-09-16-i
+     * kerese ezt megszuntette, tehat a feltetellel egyutt az INDOKA is elavult.
+     *
+     * ES UGYANEZ A FUGGVENY JO MIND A KETTORE, nem veletlenul: az URES szovegre
+     * `null`-t ad (nincs mit ellenorizni), a rossz alakra `malformed`-ot. A
+     * felvitelen az ures azt jelenti, hogy nincs matrica; a szerkeszton azt,
+     * hogy nem nyultak hozza. A KERDES ugyanaz -- "jo-e, amit beirtak" --, a
+     * ket valasz kulonbsege pedig a kuldesnel dol el, nem itt.
+     */
+    const labelProblem = assetLabelCreateProblem(labelCode);
+    if (labelProblem === "missing") {
+      setError("Írd be a matrica kódját.");
+      return;
+    }
+    if (labelProblem === "malformed") {
+      setError("A matrica kódja egy betű és négy szám, például V2196.");
+      return;
+    }
+    /**
+     * A TELJESITMENY-PAR UGYANAZT A SZABALYT MONDJA, MINT A SZERVER ES A TABLA.
+     *
+     * Harom rétegben all ugyanaz, es ez NEM duplikacio: itt a visszajelzes
+     * gyorsasaga (a kezelo a mezo mellett latja), a szerveren a szabaly, a
+     * tablan pedig az, amit semmilyen uj vegpont nem tud megkerulni.
+     *
+     * A SORREND SZAMIT: az alak-hiba elobb all a hianyzo egysegnel. Egy
+     * "otszaz" beirasara a "valassz mertekegyseget" mondat felrevezeto lenne.
+     */
+    const performanceProblem = performancePairProblem(
+      performance,
+      performanceUnitId,
+      normalizePerformanceValue(performance) === null,
+    );
+    if (performanceProblem) {
+      setError(PERFORMANCE_PROBLEM_MESSAGES[performanceProblem]);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -254,6 +388,16 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             nextServiceAt: toIsoDate(nextServiceAt) ?? null,
             description: description.trim() || null,
             notes: notes.trim() || null,
+            // A NORMALIZALT ALAK MEGY EL, es URES MEZONEL EL SEM MEGY -- a
+            // tobbi mezovel ellentetben, ahol az ures ertek `null`-kent
+            // TORLEST jelent. A matricat ezen az uton nem lehet leszedni (a
+            // szerver `string`-et var), es a mezo leirasa ki is mondja.
+            labelCode: normalizeAssetLabelCode(labelCode) ?? undefined,
+            // A `null` ITT TORLES, a matricaval ELLENTETBEN -- es a ketto
+            // egyutt megy: a szerver a PART nezi, nem a mezot. Ket `null`
+            // leszedi a teljesitmenyt, egy `null` elbukik.
+            performance: normalizePerformanceValue(performance),
+            performanceUnitId: performanceUnitId || null,
             expectedUpdatedAt: updatedAt,
           })
         : await assetsApi.create(token, {
@@ -271,6 +415,15 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             model: model.trim() || undefined,
             serialNumber: serialNumber.trim() || undefined,
             inventoryNumber: inventoryNumber.trim() || undefined,
+            // A NORMALIZALT ALAK MEGY EL, nem a begepelt: a tabla megkotese
+            // (`AssetLabel_code_shape_check`) csak nagybetut enged, a bemenet
+            // viszont szandekosan megengedobb. Ures mezonel a kulcs EL SEM
+            // MEGY -- az ures szoveg nem "nincs matrica", hanem ervenytelen kod.
+            labelCode: normalizeAssetLabelCode(labelCode) ?? undefined,
+            // FELVITELNEL `undefined`, nem `null`: itt nincs mit torolni, es a
+            // ket kulcs EGYUTT marad el, kulonben a szerver fel part latna.
+            performance: normalizePerformanceValue(performance) ?? undefined,
+            performanceUnitId: performanceUnitId || undefined,
             installedAt: toIsoDate(installedAt),
             warrantyExpiresAt: toIsoDate(warrantyExpiresAt),
             serviceIntervalDays: interval,
@@ -470,11 +623,83 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
                 onChange={(event) => setSerialNumber(event.target.value)}
               />
             </FormField>
+            {/*
+              A KET SZAM, AMI UGYANARROL AZ ESZKOZROL SZOL, DE NEM A MIENK:
+              a gyarto sorozatszama es a partner leltari szama. Egymas mellett
+              allnak, mert a kezelo rendszerint mind a kettot ugyanarrol a
+              tablarol masolja le.
+            */}
             <FormField label="Leltári szám">
               <Input
                 aria-label="Leltári szám"
                 value={inventoryNumber}
                 onChange={(event) => setInventoryNumber(event.target.value)}
+              />
+            </FormField>
+            {/*
+              A TELJESITMENY ES A MERTEKEGYSEGE EGYMAS MELLETT ALL, es ez nem
+              elrendezesi kerdes: a ketto EGY adat. Egy "500" mertekegyseg
+              nelkul nem informacio, hanem talalgatasra hivas -- es a mentes
+              is elutasitja. Ket kulon helyen allva a kezelo nem latna, hogy
+              osszetartoznak.
+
+              EZ A MONDAT 2026-09-16-IG TULLOTT A VALOSAGON, ES BALAZS LATTA
+              MEG. A ket mezo a forrasban egymas utan allt, a ketoszlopos racs
+              viszont KET KULONBOZO SORBA tette oket, mert a "Leltari szam"
+              koztuk volt. A komment tehat igazat allitott a sorrendrol es
+              hamisat a kepernyorol. A sorrend most mar azt adja, amit a
+              mondat igér.
+            */}
+            <FormField
+              label="Teljesítmény"
+              description="Tizedesvesszővel is írható (például 0,5)."
+            >
+              <Input
+                aria-label="Teljesítmény"
+                inputMode="decimal"
+                value={performance}
+                onChange={(event) => setPerformance(event.target.value)}
+                placeholder="pl. 500"
+              />
+            </FormField>
+            <FormField label="Mértékegység">
+              <Select
+                aria-label="Mértékegység"
+                value={performanceUnitId}
+                onChange={(event) => setPerformanceUnitId(event.target.value)}
+              >
+                <option value="">Nincs megadva</option>
+                {performanceUnitOptions(performanceUnits, currentUnit).map(
+                  (unit) => (
+                    <option key={unit.id} value={unit.id}>
+                      {unit.code} -- {unit.name}
+                    </option>
+                  ),
+                )}
+              </Select>
+            </FormField>
+            {/*
+              A MI MATRICANK, NEM A PARTNERE. A fenti mezo a partner sajat
+              szama; ez az altalunk elore kinyomtatott kod.
+
+              CSAK FELVITELNEL LATSZIK, es a mondat ki is mondja, miert: a
+              szerver meglevo eszkozon nem fogad matricakodot. Egy mezo, ami
+              szerkeszteskor is ott allna, de mentesnel csendben elveszne,
+              rosszabb a hianyzo mezonel.
+            */}
+            <FormField
+              label="Matrica kódja"
+              description={
+                assetId
+                  ? "Az előre nyomtatott matricáról, egy betű és négy szám (például V2196). Ha már áll rajta kód, az itt látszik: másikat beírva a régi visszakerül a szabad készletbe. A mező kiürítése nem szedi le a matricát."
+                  : "Az előre nyomtatott matricáról, egy betű és négy szám (például V2196). Elhagyható, és utólag ezen a lapon is pótolható."
+              }
+            >
+              <Input
+                aria-label="Matrica kódja"
+                value={labelCode}
+                onChange={(event) => setLabelCode(event.target.value)}
+                placeholder="V2196"
               />
             </FormField>
             <FormField label="Kritikusság">

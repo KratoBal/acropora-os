@@ -9,14 +9,10 @@ import {
   Min,
 } from "class-validator";
 
+import { optionalQueryBoolean } from "../../common/query-boolean.util.js";
+
 /** The sales channels a product can be listed on. One, for now. */
 const CATALOG_CHANNELS = ["UNAS"] as const;
-
-function optionalBoolean(value: unknown): unknown {
-  if (value === "true") return true;
-  if (value === "false") return false;
-  return value;
-}
 
 export class ProductListQueryDto {
   @IsOptional()
@@ -37,7 +33,7 @@ export class ProductListQueryDto {
   search?: string;
 
   @IsOptional()
-  @Transform(({ value }: { value: unknown }) => optionalBoolean(value))
+  @Transform(({ value }: { value: unknown }) => optionalQueryBoolean(value))
   @IsBoolean()
   active?: boolean;
 

@@ -1,8 +1,5 @@
 import { apiRequest } from "./client";
-import {
-  buildAssetDocumentUpload,
-  type PickedFile,
-} from "./asset-document-upload";
+import { buildDocumentUpload, type PickedFile } from "./document-upload";
 
 // Declared in lib/assets/asset-fields.ts so the logic that reasons about
 // them does not have to import this module, which reaches SecureStore and
@@ -88,6 +85,22 @@ export interface AssetListItem extends AssetHierarchyItem {
 
 export interface AssetDetail extends AssetListItem {
   category?: string;
+  /**
+   * AZ ESZKOZON ALLO MATRICA KODJA, HA VAN. A szerkeszto urlap EBBOL tolti elo
+   * a mezot: egy ures doboz azt allitana, hogy nincs matrica, es a szerelo egy
+   * mukodo kodot irna felul anelkul, hogy latna.
+   */
+  labelCode?: string;
+  /**
+   * A TELJESITMENY ES A KIIRT MERTEKEGYSEGE.
+   *
+   * AZ EGYSEG KIIRVA JON, nem csak azonositokent: a telefonnak `500 W`-ot kell
+   * mutatnia, es tereró nelkul nem tudna egy masodik hivassal utananezni a
+   * torzsadatban. A kivezetett egyseg is idejon -- a kivezetes a VALASZTOT
+   * szukiti, nem a mar rogzitett erteket.
+   */
+  performance?: string;
+  performanceUnit?: { id: string; code: string; name: string };
   description?: string;
   installedAt?: string;
   warrantyExpiresAt?: string;
@@ -275,7 +288,7 @@ export interface AssetDocumentSummary {
 /**
  * DOKUMENTUM- ÉS FÉNYKÉP-FELTÖLTÉS EGY ESZKÖZHÖZ.
  *
- * A törzset a `buildAssetDocumentUpload` állítja össze, és a hibát MÉG A
+ * A törzset a `buildDocumentUpload` állítja össze, és a hibát MÉG A
  * KÜLDÉS ELŐTT megnevezi. Itt csak az marad, ami hálózatot igényel.
  *
  * A válasz LISTA, egyetlen fájlnál is: a végpont mindig azzal felel.
@@ -284,7 +297,7 @@ export async function uploadAssetDocuments(
   id: string,
   input: { type: AssetDocumentType; files: readonly PickedFile[] },
 ): Promise<AssetDocumentSummary[]> {
-  const built = buildAssetDocumentUpload(input);
+  const built = buildDocumentUpload(input);
   if (!built.ok) throw new Error(built.reason);
 
   return apiRequest<AssetDocumentSummary[]>(

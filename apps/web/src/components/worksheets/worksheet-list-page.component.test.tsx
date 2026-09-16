@@ -1,8 +1,12 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { Session, WorksheetListResponse } from "@acropora/types";
 import { useSyncExternalStore } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  savotMond,
+  setOnLine,
+} from "@/components/service/service-offline-notice.testing";
 import { WorksheetListPage } from "./worksheet-list-page";
 
 const navigation = vi.hoisted(() => ({
@@ -73,6 +77,9 @@ function response(
         label: "FANK-BIO-2026-001",
         customerName: "Fővárosi Állat- És Növénykert",
         departmentCode: "BIO",
+        // A KET SOR SZANDEKOSAN KULONBOZIK: ez ITT hozza a teljes utat, a
+        // masodik NEM. Igy egy futasban merheto a fo ag es a visszaeses is.
+        departmentPath: ["Biodóm", "Fókamedence", "Fóka nagymedence"],
         subject: "Cápasuli kompresszorok bevizsgálása",
         status: "AWAITING_SIGNATURE",
         version: 1,
@@ -87,6 +94,7 @@ function response(
         label: null,
         customerName: "Fővárosi Állat- És Növénykert",
         departmentCode: "PPU",
+        departmentPath: null,
         subject: "Szivattyú csere",
         status: "DRAFT",
         version: 1,
@@ -120,6 +128,30 @@ describe("WorksheetListPage", () => {
     expect(await screen.findByText("Sanyi, Kiss Péter")).toBeTruthy();
     // Az üres cella hibának látszana; a "nincs kiosztva" szabály.
     expect(screen.getByText("Nincs kiosztva")).toBeTruthy();
+  });
+
+  /**
+   * A HELYSZIN TELJES UTJA A PARTNER ALATT, ES A VISSZAESES UGYANABBAN A
+   * FUTASBAN.
+   *
+   * Balazs 2026-09-16-an fotozta le ezt a listat: a partner alatt `NMD` allt
+   * magaban. A kod csak TESTVEREK kozott egyedi, tehat ket tavoli ag alatt
+   * ugyanaz a kod megengedett -- a listan pedig epp egymas ala kerulhet ket
+   * ilyen sor.
+   *
+   * A MASODIK ALLITAS NEM DISZ: ha a szerver nem tudja felepiteni az utat, a
+   * regi alaknak kell latszania, nem ures cellanak. A ket sor a mintaban
+   * szandekosan kulonbozik, hogy mind a ketto egy futasban merodjon.
+   */
+  it("kiírja a helyszín teljes útját, és visszaesik a kódra, ha nincs út", async () => {
+    render(<WorksheetListPage />);
+
+    expect(
+      await screen.findByText("Biodóm / Fókamedence / Fóka nagymedence"),
+    ).toBeTruthy();
+    expect(screen.getByText("PPU")).toBeTruthy();
+    // A teljes utat hozo sornal a puszta kod mar NEM latszik: azt valtotta fel.
+    expect(screen.queryByText("BIO")).toBeNull();
   });
 
   // A piszkozatnak nincs száma, mert a sorszám a lezáráskor keletkezik. Ha
@@ -274,5 +306,44 @@ describe("WorksheetListPage állapot-csempék", () => {
     expect(
       await screen.findByText("40 találat, ebből 2 ezen a lapon"),
     ).toBeTruthy();
+  });
+});
+
+/**
+ * A SAV A LAP ALLAPOTAROL BESZEL, NEM A KAPCSOLATROL -- ES A HELYES SZAM NEM
+ * EGY, HANEM ANNYI, AHANY ALLAPOTBA A LAP BE TUD KERULNI.
+ *
+ * Ez a lap kettobe: `data ? loaded : empty`. A ket allitas EGYUTT fogja meg a
+ * rogzult valasztast; kulon-kulon egyik sem. Egy lap, ami mindig `loaded`-ot
+ * ad, a tipusellenorzesen ES az elso allitason is atmegy, es hideg
+ * betolteskor azt mondana, hogy "a legutobb betoltott adatokat latod",
+ * miközben a kepernyo ures.
+ */
+describe("WorksheetListPage kapcsolat nélkül", () => {
+  beforeEach(() => {
+    auth.session = session;
+    navigation.params = new URLSearchParams();
+    navigation.replace.mockReset();
+    api.list.mockReset().mockResolvedValue(response());
+    api.selectablePartners.mockReset().mockResolvedValue({ items: [] });
+    setOnLine(false);
+  });
+
+  afterEach(() => setOnLine(true));
+
+  it("betöltött listánál a frissítésről beszél", async () => {
+    render(<WorksheetListPage />);
+    await screen.findByText("Sanyi, Kiss Péter");
+
+    expect(await savotMond("loaded")).toBeTruthy();
+  });
+
+  it("üres képernyőn azt mondja, hogy ezért nincs adat", async () => {
+    // SOHA NEM TELJESULO valasz: a lap a "meg semmi nem toltodott be"
+    // allapotban marad, vagyis pont abban, amirol a masodik mondat szol.
+    api.list.mockReset().mockReturnValue(new Promise(() => {}));
+    render(<WorksheetListPage />);
+
+    expect(await savotMond("empty")).toBeTruthy();
   });
 });

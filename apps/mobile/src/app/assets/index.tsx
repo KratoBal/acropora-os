@@ -28,7 +28,10 @@ import {
   type OfflineSyncResult,
 } from "@/lib/offline/asset-sync";
 import { useIsOnline } from "@/lib/offline/connectivity";
-import { describeOfflineNotice } from "@/lib/offline/offline-notice";
+import {
+  ASSET_NOTICE_SUBJECT,
+  describeOfflineNotice,
+} from "@/lib/offline/offline-notice";
 
 const PAGE_SIZE = 50;
 const OFFLINE_CACHE_KEY = ["offline-assets"] as const;
@@ -72,8 +75,20 @@ export default function AssetListScreen() {
         fetchPage: (page) => listAssets(page, PAGE_SIZE),
         remember: rememberAssets,
       });
-      setSync(result);
+      /*
+       * ELŐBB A MÁSOLAT OLVASÁSA FRISSÜL, UTÁNA ÍRJUK KI A SZÁMOT. A két sor
+       * ugyanarról a másolatról beszél, de két különböző forrásból: a szám
+       * innen jön, a fölötte lévő sáv kora a mentett sorokból. Fordított
+       * sorrendben van egy pillanat, amikor a szám már azt mondja, hogy „40
+       * eszköz mentve", a sáv pedig még azt, hogy soha nem frissült -- és ezt
+       * Balázs le is fotózta 2026-09-16-án a telefonján.
+       *
+       * A sáv szövege külön javítva (`describeOfflineNotice`); ez a sorrend
+       * viszont attól függetlenül kell, mert két igaz állítás is mondhat
+       * egymásnak ellent, ha nem ugyanabban a pillanatban mérik őket.
+       */
       await queryClient.invalidateQueries({ queryKey: OFFLINE_CACHE_KEY });
+      setSync(result);
     })();
   }, [query.data, queryClient]);
 
@@ -103,6 +118,7 @@ export default function AssetListScreen() {
     syncedAt: cached.data?.syncedAt ?? null,
     itemCount: cachedItems.length,
     now: new Date(),
+    subject: ASSET_NOTICE_SUBJECT,
   });
 
   return (

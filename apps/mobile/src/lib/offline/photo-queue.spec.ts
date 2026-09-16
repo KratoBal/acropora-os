@@ -18,6 +18,10 @@ import type { SyncQueueRow } from "./sync-queue";
  * latszik: a sor kiurult a rogzitesektol, a jelentes zold, es a kep nincs sehol.
  */
 
+/**
+ * EGY ROGZITES: SENKIRE NEM VAR. A ket fuggoseg-mezo `null` -- ez a szabad sor
+ * alakja, es a `nextBatch` ezekbol valogat elso korben.
+ */
 const rogzites = (id: string): SyncQueueRow => ({
   id,
   operation: "create",
@@ -29,6 +33,8 @@ const rogzites = (id: string): SyncQueueRow => ({
   lastError: null,
   lastAttemptAt: null,
   state: "pending",
+  dependsOnOperationId: null,
+  dependsOnTarget: null,
 });
 
 const modositas = (id: string): SyncQueueRow => ({
@@ -247,6 +253,91 @@ describe("egy menet sorai", () => {
     assert.deepEqual(
       batchForPass([rogzites("r2"), cimzett], "upload-photo").map((r) => r.id),
       [],
+    );
+  });
+});
+
+/**
+ * AMIERT AZ EGESZ KOR VAN: EGY `create` MEGVARHAT EGY MASIK `create`-ET.
+ *
+ * Eddig a `nextBatch` MINDEN `create` sort egyszerre engedett el, sorrend es
+ * fuggoseg nelkul -- a szabaly a MUVELET TIPUSAHOZ volt kotve. Egy harmadik
+ * szint (munkalap a JEGY alatt, ahol mind a ketto `create`) igy nem mukodhetett:
+ * a munkalap a meg nem letezo jegyre hivatkozott volna, es a szerver utasitotta
+ * volna el -- orakkal kesobb, amikor a szerelo mar nincs a helyszinen.
+ */
+describe("egy sorban álló művelet megvárhat egy másikat", () => {
+  const varo = (id: string, mire: string): SyncQueueRow => ({
+    ...rogzites(id),
+    dependsOnOperationId: mire,
+    dependsOnTarget: "serviceJobId",
+  });
+
+  it("a VÁRÓ sor nem megy el, amíg amire vár, a sorban áll", () => {
+    const sorok = [rogzites("jegy"), varo("lap", "jegy")];
+
+    assert.deepEqual(
+      nextBatch(sorok, new Set()).map((r) => r.id),
+      ["jegy"],
+    );
+  });
+
+  /**
+   * ES A MASODIK MENETBEN MAR MEGY. A `felmentRogzitesek` azokat tartalmazza,
+   * amiket a szerver NYUGTAZOTT -- vagyis amik mar nincsenek a sorban.
+   */
+  it("a nyugtázás után a váró sor elindul", () => {
+    assert.deepEqual(
+      nextBatch([varo("lap", "jegy")], new Set(["jegy"])).map((r) => r.id),
+      ["lap"],
+    );
+  });
+
+  /**
+   * A GAZDATLAN VARO SOR NEM MEGY EL -- ugyanaz a szabaly, mint a gazdatlan
+   * kepnel. Ha amire var, sem nyugtazva nincs, sem a sorban, akkor valami
+   * elveszett, es az elkuldese a szerveren hibat adna.
+   */
+  it("a GAZDÁTLAN váró sor sem megy el", () => {
+    assert.deepEqual(nextBatch([varo("lap", "eltunt")], new Set()), []);
+  });
+
+  /**
+   * TESTVER-KONTROLL: EGY SOR, AMI SENKIRE NEM VAR, VALTOZATLANUL MEGY.
+   *
+   * Enelkul a fenti harom allitas akkor is zold lenne, ha a `nextBatch` MINDENT
+   * visszatartana -- es akkor a sor SOHA nem urulne ki.
+   */
+  it("a független sor változatlanul elsőként megy", () => {
+    assert.deepEqual(
+      nextBatch([rogzites("onallo")], new Set()).map((r) => r.id),
+      ["onallo"],
+    );
+  });
+
+  /**
+   * A REGI FOTO-SOR FUGGOSEGE A PAYLOADBAN ALL, ES ARRA IS ALL A SZABALY.
+   *
+   * A keszuleken mar sorban allo kepeken az OSZLOP `null`. Ha a `null`-t
+   * "nincs fuggoseg"-nek vennenk, ezek a kepek a rogzitesuk ELOTT indulnanak
+   * el -- es a szerver utasitana el oket.
+   */
+  it("a RÉGI fotó-sor a payloadból kapja a függőségét", () => {
+    const regi: SyncQueueRow = {
+      ...rogzites("regi-kep"),
+      operation: "upload-photo",
+      payloadJson: JSON.stringify({
+        uri: "file:///kep.jpg",
+        recordingOperationId: "rogzites-1",
+      }),
+      dependsOnOperationId: null,
+      dependsOnTarget: null,
+    };
+
+    assert.deepEqual(nextBatch([regi], new Set()), []);
+    assert.deepEqual(
+      nextBatch([regi], new Set(["rogzites-1"])).map((r) => r.id),
+      ["regi-kep"],
     );
   });
 });

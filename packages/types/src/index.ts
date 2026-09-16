@@ -153,6 +153,17 @@ export type {
   UpdateAssetInput,
 } from "./asset-management.js";
 export type { AssetLabel, AssetLabelIssueResult } from "./asset-label.js";
+export type {
+  UnitOfMeasure,
+  UnitOfMeasureKind,
+  UnitOfMeasureListResponse,
+} from "./unit-of-measure.js";
+export {
+  normalizePerformanceValue,
+  performanceValueProblem,
+  UNIT_OF_MEASURE_KINDS,
+  unitOfMeasureKindLabel,
+} from "./unit-of-measure.js";
 export type { AssetLabelBatchSummary } from "./asset-label-batch.js";
 export {
   ASSET_LABEL_BATCH_MAX,
@@ -161,6 +172,7 @@ export {
   randomAssetLabelCode,
 } from "./asset-label-batch.js";
 export {
+  ASSET_LABEL_CODE_SHAPE_MESSAGE,
   ASSET_LABEL_CODE_STORED_PATTERN,
   ASSET_LABEL_REQUIRED_ON_CREATE,
   assetLabelCreateProblem,
@@ -477,6 +489,7 @@ export type {
   SetWorksheetAssigneesInput,
   SignWorksheetVersionInput,
   UpdateWorksheetDraftInput,
+  WorksheetAssetLink,
   WorksheetAssignableUser,
   WorksheetAssignableUserListResponse,
   WorksheetAssignee,

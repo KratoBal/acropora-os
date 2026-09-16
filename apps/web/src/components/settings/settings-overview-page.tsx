@@ -155,6 +155,19 @@ export const SETTINGS_AREAS: SettingsArea[] = [
       },
     ],
   },
+  {
+    title: "Mértékegységek",
+    icon: "settings",
+    links: [
+      {
+        label: "Mértékegységek",
+        description:
+          "A karbantartott mértékegység-lista: teljesítmény, mennyiség, mérés.",
+        href: "/beallitasok/mertekegysegek",
+        entryId: "units-of-measure",
+      },
+    ],
+  },
 ];
 
 export function SettingsOverviewPage() {

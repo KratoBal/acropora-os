@@ -1,7 +1,16 @@
 export type AssetKind =
   "SYSTEM" | "EQUIPMENT" | "COMPONENT" | "SENSOR" | "OTHER";
 
-export type AssetStatus = "ACTIVE" | "OUT_OF_SERVICE" | "IN_REPAIR" | "RETIRED";
+/**
+ * AZ ESZKÖZ ÁLLAPOTA. A sorrend a séma enum-sorrendjét követi, mert az a
+ * LISTA RENDEZÉSE is (`assetListOrderBy`): csökkenő rendelkezésre állás.
+ *
+ * A két tartalék a régi `OUT_OF_SERVICE` helyére jött (Balázs kérése,
+ * 2026-09-16). A régi érték egyetlen dolgot mondott -- hogy nem üzemel --, és
+ * azt is a HIÁNYÁVAL; a két új azt mondja meg, MIRE számíthat a szerelő.
+ */
+export type AssetStatus =
+  "ACTIVE" | "WARM_STANDBY" | "COLD_STANDBY" | "IN_REPAIR" | "RETIRED";
 
 export type AssetCriticality = "LOW" | "NORMAL" | "HIGH" | "CRITICAL";
 
@@ -191,6 +200,42 @@ export interface AssetEventSummary {
 }
 
 export interface AssetDetail extends AssetListItem {
+  /**
+   * AZ ESZKOZON ALLO ELORE NYOMTATOTT MATRICA KODJA, HA VAN.
+   *
+   * MIERT KERULT BE (2026-09-16): a kodot eddig CSAK IRNI lehetett -- egyetlen
+   * felulet sem mutatta meg, melyik matrica all egy eszkozon. Amig a kod csak
+   * FELVITELKOR volt megadhato, ez nem latszott hianynak. Az utolagos felvitel
+   * viszont CSERET is megenged, es egy csere, amit a szerelo nem lat, egy
+   * MUKODO matricat ir felul nemán: az urlap ures mezot mutatna, o beirna egy
+   * kodot, es a regi visszakerulne a keszletbe anelkul, hogy barki tudna rola.
+   *
+   * Ezert a szerkeszto urlap ebbol tolti elo a mezot: ami ott all, az a
+   * VALOSAG, nem egy ures hely.
+   */
+  labelCode?: string;
+  /**
+   * A TELJESÍTMÉNY, SZÖVEGKÉNT -- ÉS EZ NEM KÉNYELMETLENSÉG, HANEM A PONTOSSÁG.
+   *
+   * A tárolt alak `decimal(19,6)`. Ha ezt `number`-ré alakítanánk, a JavaScript
+   * lebegőpontos számán át menne, és egy `0.1`-es lépésköz máris `0.30000000000000004`
+   * alakban jönne vissza a kezelőnek. A szám itt NEM számolunk vele: leírjuk és
+   * megmutatjuk, tehát a szöveg a hűbb alak.
+   */
+  performance?: string;
+  /**
+   * AZ EGYSÉG KIÍRVA JÖN, NEM CSAK AZ AZONOSÍTÓJA.
+   *
+   * Az adatlapnak `500 W`-ot kell mutatnia. Ha csak az azonosító jönne, minden
+   * felület (web, mobil) KÜLÖN hívná le a törzsadatot, hogy egyetlen jelet
+   * kiírhasson -- és a mobil ezt térerő nélkül nem tudná megtenni. A kivezetett
+   * egység ugyanígy jön: a múltat nem írjuk át.
+   */
+  performanceUnit?: {
+    id: string;
+    code: string;
+    name: string;
+  };
   category?: string;
   description?: string;
   installedAt?: string;
@@ -277,6 +322,16 @@ export interface CreateAssetInput {
    * matrica hozzá van rendelve.
    */
   labelCode?: string;
+  /**
+   * A TELJESÍTMÉNY ÉS A MÉRTÉKEGYSÉGE -- A KETTŐ EGYÜTT MEGY, VAGY EGYIK SEM.
+   *
+   * Egy „500" mértékegység nélkül nem adat, hanem találgatásra hívás (watt?
+   * liter per óra?), a fordítottja ugyanígy. A megkötés a TÁBLÁN áll
+   * (`Asset_performance_pairing_check`), tehát nem lehet megkerülni egy új
+   * végponttal vagy egy háttéranyaggal -- a típus itt csak KIMONDJA.
+   */
+  performance?: string;
+  performanceUnitId?: string;
 }
 
 export interface UpdateAssetInput {
@@ -306,6 +361,28 @@ export interface UpdateAssetInput {
   nextServiceAt?: string | null;
   notes?: string | null;
   expectedUpdatedAt: string;
+  /**
+   * AZ ELORE NYOMTATOTT MATRICA KODJA, UTOLAG IS.
+   *
+   * ES ITT NINCS `| null`, holott a tobbi mezon ott van -- nem feledekenysegbol:
+   * a szerver `UpdateAssetDto`-ja is `string`-et var. A matrica LESZEDESE ma
+   * nem letezik (az esemeny-naploban nincs neve, lasd a szerver oldali
+   * dontest), tehat egy `null` 400-zal bukna el. A tipus igy MAR ITT
+   * megmondja, ami a szerveren is all.
+   */
+  labelCode?: string;
+  /**
+   * ÉS ITT VAN `| null`, A `labelCode`-dal ELLENTÉTBEN -- a két ellentétes alak
+   * ugyanabból a szabályból jön: a `null` TÖRLÉST jelent, és a teljesítménynél
+   * a törlés LÉTEZIK (a matricánál nem).
+   *
+   * A PÁRT FRISSÍTÉSKOR AZ EREDMÉNY DÖNTI EL, NEM A BEKÜLDÖTT MEZŐ. Ha az
+   * egység már áll az eszközön, a szám EGYEDÜL is átírható; a törléshez
+   * viszont mind a kettőt `null`-ra kell állítani, mert egy fél pár a táblán
+   * sem állhat meg.
+   */
+  performance?: string | null;
+  performanceUnitId?: string | null;
 }
 
 export interface AssetQrCode {

@@ -27,6 +27,8 @@ const sor = (over: Partial<SyncQueueRow> = {}): SyncQueueRow => ({
   lastError: null,
   lastAttemptAt: null,
   state: "pending",
+  dependsOnOperationId: null,
+  dependsOnTarget: null,
   ...over,
 });
 

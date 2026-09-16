@@ -1,8 +1,12 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { AssetListResponse, Session } from "@acropora/types";
 import { useSyncExternalStore } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  savotMond,
+  setOnLine,
+} from "@/components/service/service-offline-notice.testing";
 import { AssetListPage } from "./asset-list-page";
 
 const navigation = vi.hoisted(() => ({
@@ -70,7 +74,13 @@ function response(page: number): AssetListResponse {
     ],
     pagination: { page, pageSize: 25, totalItems: 60, totalPages: 3 },
     // MINDEN ALLAPOT SZEREPEL, A NULLAS IS: a szerver igy adja vissza.
-    counts: { ACTIVE: 40, OUT_OF_SERVICE: 6, IN_REPAIR: 12, RETIRED: 3 },
+    counts: {
+      ACTIVE: 40,
+      WARM_STANDBY: 4,
+      COLD_STANDBY: 2,
+      IN_REPAIR: 12,
+      RETIRED: 3,
+    },
   };
 }
 
@@ -326,5 +336,243 @@ describe("AssetListPage csempe-számok", () => {
 
     expect(screen.getByText("61")).toBeTruthy();
     expect(screen.queryByText("60")).toBeNull();
+  });
+});
+
+/**
+ * A SAV A LAP ALLAPOTAROL BESZEL, NEM A KAPCSOLATROL -- ES A HELYES SZAM NEM
+ * EGY, HANEM ANNYI, AHANY ALLAPOTBA A LAP BE TUD KERULNI.
+ *
+ * Ez a lap kettobe: `data ? loaded : empty`. A ket allitas EGYUTT fogja meg a
+ * rogzult valasztast; kulon-kulon egyik sem. Egy lap, ami mindig `loaded`-ot
+ * ad, a tipusellenorzesen ES az elso allitason is atmegy, es hideg
+ * betolteskor azt mondana, hogy "a legutobb betoltott adatokat latod",
+ * miközben a kepernyo ures.
+ */
+describe("AssetListPage kapcsolat nélkül", () => {
+  beforeEach(() => {
+    auth.session = session;
+    navigation.params = new URLSearchParams();
+    navigation.replace.mockReset();
+    api.list.mockReset().mockResolvedValue(response(1));
+    setOnLine(false);
+  });
+
+  afterEach(() => setOnLine(true));
+
+  it("betöltött listánál a frissítésről beszél", async () => {
+    render(<AssetListPage />);
+    await screen.findByText("Cápasuli kompresszor");
+
+    expect(await savotMond("loaded")).toBeTruthy();
+  });
+
+  it("üres képernyőn azt mondja, hogy ezért nincs adat", async () => {
+    // SOHA NEM TELJESULO valasz: a lap a "meg semmi nem toltodott be"
+    // allapotban marad, vagyis pont abban, amirol a masodik mondat szol.
+    api.list.mockReset().mockReturnValue(new Promise(() => {}));
+    render(<AssetListPage />);
+
+    expect(await savotMond("empty")).toBeTruthy();
+  });
+});
+
+/**
+ * AZ OSZLOPOK SZERINTI RENDEZES (Balazs kerese, 2026-09-16).
+ *
+ * === MIT MER EZ A FAJL, ES MIT NEM ===
+ *
+ * Azt meri, hogy a KATTINTAS a CIMBE ir, es hogy mit ir. Hogy a szerver ettol
+ * tenyleg maskepp rendez, az az `asset-list-order.spec.ts` es az adatbazis
+ * dolga. A ketto kozott az a kapocs, hogy a lap a `params` tartalmat ADJA
+ * TOVABB a lekerdezesnek -- ezt egy kulon allitas meri lent.
+ *
+ * === MIERT A CIMBE, ES NEM KOMPONENS-ALLAPOTBA ===
+ *
+ * Mert a lista LAPOZVA jon. Egy komponens-allapotban tartott rendezes az epp
+ * betoltott huszonot sort rendezne, es ugy nezne ki, mintha az egeszet tenne.
+ */
+describe("AssetListPage rendezés", () => {
+  beforeEach(() => {
+    auth.session = session;
+    navigation.params = new URLSearchParams();
+    navigation.replace.mockReset();
+    api.list.mockReset();
+    api.list.mockResolvedValue(response(1));
+  });
+
+  it("első kattintásra növekvő sorrendet kér, és az első lapra ugrik", async () => {
+    render(<AssetListPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Eszköz/ }));
+
+    const cim = lastTarget();
+    expect(cim.get("sort")).toBe("name");
+    expect(cim.get("direction")).toBe("asc");
+    // MAS RENDEZES MAS SOROKAT TESZ A HARMADIK LAPRA: a regi lapszamot
+    // megtartva a felhasznalo a lista kozepere esne, latszolag veletlen
+    // tartalomra.
+    expect(cim.get("page")).toBe("1");
+  });
+
+  it("másodszorra megfordítja az irányt", async () => {
+    navigation.params = new URLSearchParams("sort=name&direction=asc");
+    render(<AssetListPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Eszköz/ }));
+
+    expect(lastTarget().get("direction")).toBe("desc");
+  });
+
+  /**
+   * A HARMADIK KATTINTAS VISSZAAD AZ ALAPERTELMEZESRE, es ez nem kenyelmi
+   * reszlet: enelkul NINCS UT VISSZA. Aki egyszer rendezett, annak a lap
+   * onnantol csak a ket sajat iranya kozott valtana, es az eredeti sorrend
+   * csak kezi cim-szerkesztessel lenne elerheto.
+   */
+  it("harmadszorra elengedi a rendezést", async () => {
+    navigation.params = new URLSearchParams("sort=name&direction=desc");
+    render(<AssetListPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Eszköz/ }));
+
+    const cim = lastTarget();
+    expect(cim.has("sort")).toBe(false);
+    expect(cim.has("direction")).toBe(false);
+  });
+
+  /**
+   * A KAPOCS A SZERVER FELE. Ez az allitas koti ossze a cimet a lekerdezessel:
+   * enelkul mind a harom fenti allitas zold lenne akkor is, ha a rendezes
+   * SOHA nem jutna el a szerverig -- a cim szepen valtozna, a lista nem.
+   */
+  it("a címben álló rendezést továbbadja a szervernek", async () => {
+    navigation.params = new URLSearchParams("sort=status&direction=desc");
+    render(<AssetListPage />);
+
+    await waitFor(() => expect(api.list).toHaveBeenCalled());
+    const kuldott = api.list.mock.calls.at(-1)?.[1] as URLSearchParams;
+    expect(kuldott.get("sort")).toBe("status");
+    expect(kuldott.get("direction")).toBe("desc");
+  });
+
+  /**
+   * A KET OSSZETETT OSZLOP SZANDEKOSAN NEM KATTINTHATO.
+   *
+   * Egyik sem EGY adat (a "Hierarchia" a szulo neve vagy a reszegysegek szama,
+   * a "Muszaki azonosito" harom mezo osszefuzve), tehat eloszb el kell donteni,
+   * MIT jelent a rendezes. Egy kattinthato fejlec addig olyan sorrendet adna,
+   * ami mukodonek latszik, de olvashatatlan.
+   *
+   * ES EZ AZ ALLITAS ORZI, hogy valaki "teljesseg kedveert" fel ne tegye oket
+   * dontes nelkul.
+   */
+  it("az összetett oszlopok nem kattinthatók", async () => {
+    render(<AssetListPage />);
+
+    await screen.findByRole("button", { name: /Eszköz/ });
+    expect(screen.queryByRole("button", { name: /Hierarchia/ })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Műszaki azonosító/ }),
+    ).toBeNull();
+  });
+
+  /**
+   * AZ ALLAPOT LATSZIK IS, NEM CSAK MUKODIK. Egy nyil nelkuli kattinthato
+   * fejlec ugyanugy nez ki rendezes elott es utan.
+   */
+  it("a rendezett oszlop megjelöli magát", async () => {
+    navigation.params = new URLSearchParams("sort=placement&direction=desc");
+    render(<AssetListPage />);
+
+    const fejlec = (await screen.findByText("Elhelyezés")).closest("th");
+    expect(fejlec?.getAttribute("aria-sort")).toBe("descending");
+    // TESTVER-KONTROLL: a TOBBI oszlop NEM jeloli magat. Enelkul az allitas
+    // akkor is zold lenne, ha minden fejlec ugyanazt mondana.
+    expect(
+      (await screen.findByText("Eszköz"))
+        .closest("th")
+        ?.getAttribute("aria-sort"),
+    ).toBe("none");
+  });
+});
+
+/**
+ * A BEEPITETT FUL: minden, KIVEVE a kivezetetteket.
+ *
+ * Balazs kerese, 2026-09-16: "ide szeretnek egy Beepitett opciot meg amiben
+ * minden benne van kiveve a kivezetett eszkozok".
+ *
+ * AMIT EZ MER, ES AMIT NEM: hogy a ful letezik es a HELYES erteket teszi a
+ * cimbe. Hogy a szerver ettol tenyleg a kivezetetteket hagyja ki, azt az
+ * `asset-status-filter.spec.ts` meri -- ott all a tagadas alakja is.
+ */
+describe("AssetListPage Beépített szűrő", () => {
+  beforeEach(() => {
+    auth.session = session;
+    navigation.params = new URLSearchParams();
+    navigation.replace.mockReset();
+    api.list.mockReset();
+    api.list.mockResolvedValue(response(1));
+  });
+
+  it("a fül az IN_PLACE értéket teszi a címbe", async () => {
+    render(<AssetListPage />);
+
+    fireEvent.click(await screen.findByRole("tab", { name: "Beépített" }));
+
+    expect(lastTarget().get("status")).toBe("IN_PLACE");
+  });
+
+  /**
+   * TESTVER-KONTROLL: a szuro ELJUT a szerverig. Az elso allitas akkor is zold
+   * lenne, ha a cimbe irt ertek sehova nem menne tovabb.
+   */
+  it("a címben álló szűrőt továbbadja a szervernek", async () => {
+    navigation.params = new URLSearchParams("status=IN_PLACE");
+    render(<AssetListPage />);
+
+    await waitFor(() => expect(api.list).toHaveBeenCalled());
+    const kuldott = api.list.mock.calls.at(-1)?.[1] as URLSearchParams;
+    expect(kuldott.get("status")).toBe("IN_PLACE");
+  });
+
+  /**
+   * ES A MEGLEVO FULEK NEM MOZDULTAK. Egy uj ful beszurasa a legkonnyebben ugy
+   * ront el valamit, hogy egy masikat kiszorit vagy atnevez -- ezt semmi nem
+   * jelezné, mert mindegyik ugyanugy nez ki.
+   *
+   * 2026-09-16: a "Nem uzemel" ful HELYERE ket ful lepett ("Meleg tartalek",
+   * "Hideg tartalek"), Balazs kerese szerint. Ez az allitas pirosra fordult, es
+   * ez a HELYES viselkedes: a regi felirat eltunese pontosan az a valtozas,
+   * amit ennek az allitasnak eszre kell vennie.
+   */
+  it("a többi fül változatlanul ott van", async () => {
+    render(<AssetListPage />);
+
+    for (const nev of [
+      "Összes",
+      "Beépített",
+      "Aktív",
+      "Javítás alatt",
+      "Meleg tartalék",
+      "Hideg tartalék",
+      "Kivezetett",
+    ])
+      expect(await screen.findByRole("tab", { name: nev })).toBeTruthy();
+  });
+
+  /**
+   * ES A REGI FELIRAT TENYLEG ELTUNT -- TESTVER-KONTROLL A FENTIHEZ.
+   *
+   * A fenti allitas csak azt meri, hogy a het felirat OTT VAN. Egy nyolcadik,
+   * ottfelejtett "Nem uzemel" ful mellett is zold maradna -- es a felhasznalo
+   * ket olyan fulet latna, amik kozul az egyik egy mar nem letezo allapotra
+   * szurne, ures listat adva.
+   */
+  it("a régi „Nem üzemel\u201d fül NINCS többé", () => {
+    render(<AssetListPage />);
+
+    expect(screen.queryByRole("tab", { name: "Nem üzemel" })).toBeNull();
   });
 });

@@ -75,7 +75,13 @@ const session: Session = {
 const emptyList: AssetListResponse = {
   items: [],
   pagination: { page: 1, pageSize: 25, totalItems: 0, totalPages: 1 },
-  counts: { ACTIVE: 0, OUT_OF_SERVICE: 0, IN_REPAIR: 0, RETIRED: 0 },
+  counts: {
+    ACTIVE: 0,
+    WARM_STANDBY: 0,
+    COLD_STANDBY: 0,
+    IN_REPAIR: 0,
+    RETIRED: 0,
+  },
 };
 
 const units: WorksheetDepartmentListResponse = {
@@ -125,7 +131,7 @@ describe("AssetListPage helyszín-szűrő", () => {
   /**
    * VEVO-TULAJDONOSNAL SEM, ES EZ MAS ESET, MINT A FENTI.
    *
-   * A tulajdonos NELKULI eset akkor is atmenne, ha a felteteл csak az
+   * A tulajdonos NELKULI eset akkor is atmenne, ha a feltetel csak az
    * azonositot nezne -- merve: a tipus-ellenorzest kivéve a fenti allitas
    * VALTOZATLANUL zold marad, mert ott nincs azonosito sem. Ez az allitas az,
    * ami a TIPUST meri: vevo-tulajdonosnal az alegyseg nem ertelmezheto (ott a

@@ -115,7 +115,7 @@ describe(
       });
 
       assert.equal(removed, 0);
-      const stillThere = await repository.recipients([strangerId]);
+      const stillThere = await repository.recipients([strangerId], "IOS");
       assert.deepEqual(
         stillThere.map((row) => row.token),
         [otherToken],
@@ -123,7 +123,7 @@ describe(
     });
 
     it("removes the device, so the sender has nowhere to send", async () => {
-      const before = await repository.recipients([ownerId]);
+      const before = await repository.recipients([ownerId], "IOS");
       assert.deepEqual(
         before.map((row) => row.token),
         [ownToken],
@@ -135,7 +135,7 @@ describe(
       });
 
       assert.equal(removed, 1);
-      assert.deepEqual(await repository.recipients([ownerId]), []);
+      assert.deepEqual(await repository.recipients([ownerId], "IOS"), []);
     });
 
     /**

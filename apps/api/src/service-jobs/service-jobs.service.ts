@@ -25,7 +25,9 @@ import type {
   MoveServiceJobDto,
   ServiceJobListQueryDto,
   SetServiceJobAssigneesDto,
+  SetServiceJobPlacementDto,
 } from "./dto.js";
+import { normalizeAssetIds } from "../common/assets-in-department.js";
 import { normalizeAssigneeIds } from "../common/service-assignment.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
 import {
@@ -128,24 +130,14 @@ export class ServiceJobsService {
      * ([serviceJobId, assetId]) all, tehat ket azonos sor amugy is elhasalna --
      * itt egyszeruen kiszurjuk, mielott a tarolohoz erne.
      */
-    const assetIds = [...new Set(input.assetIds ?? [])].filter(
-      (id) => id.trim() !== "",
-    );
+    const assetIds = normalizeAssetIds(input.assetIds);
     if (assetIds.length > 0) {
       if (!departmentId) {
         throw new BadRequestException(
           "Eszközt csak helyszínnel együtt lehet megadni.",
         );
       }
-      const missing = await this.repository.assetsOutsideDepartment(
-        assetIds,
-        departmentId,
-      );
-      if (missing.length > 0) {
-        throw new BadRequestException(
-          `Ez a ${missing.length} eszköz nem a megadott helyszínen áll.`,
-        );
-      }
+      await this.requireAssetsOnDepartment(assetIds, departmentId);
     }
     const title = input.title.trim();
     const created = await this.repository.create({
@@ -229,6 +221,91 @@ export class ServiceJobsService {
         "A delegált kolléga nem található, vagy a szerepköre nem engedi a szerviz-munka kezelését.",
       );
     }
+  }
+
+  /**
+   * AZ ESZKOZOK A MEGADOTT HELYSZIN RESZFAJAN ALLJANAK.
+   *
+   * KOZOS METODUS, mert KET ut kerdezi ugyanezt: a felvitel es a
+   * `setPlacement`. Ket kulon leirt valtozat addig egyezne, amig valaki az
+   * egyiket javitja -- es a kulonbseg NEMA lenne: az egyik uton bejutna a
+   * jegyre egy idegen helyszinen allo eszkoz.
+   *
+   * A HIBAUZENET A DARABSZAMOT MONDJA, NEM AZ AZONOSITOKAT: egy azonosito-lista
+   * a kepernyon semmit nem jelent annak, aki olvassa, es kozben elarulna, hany
+   * eszkoz letezik egyaltalan.
+   */
+  private async requireAssetsOnDepartment(
+    assetIds: readonly string[],
+    departmentId: string,
+  ): Promise<void> {
+    const missing = await this.repository.assetsOutsideDepartment(
+      assetIds,
+      departmentId,
+    );
+    if (missing.length > 0) {
+      throw new BadRequestException(
+        `Ez a ${missing.length} eszköz nem a megadott helyszínen áll.`,
+      );
+    }
+  }
+
+  /**
+   * A JEGY HELYSZINE ES AZ OTT ALLO ESZKOZOK, A FELVITEL UTAN.
+   *
+   * Balazs kerese, 2026-09-16: a meglevo jegyhez is lehessen eszkozt adni, es a
+   * helyszint is lehessen modositani.
+   *
+   * EGY MUVELET A KETTORE, es az indok a DTO jegyzeteben all. Ami itt szamit: a
+   * bekuldott eszkoz-lista a TELJES halmaz, es az uj helyszinre kell
+   * ervenyesnek lennie. Helyszin-valtaskor tehat a felulet MEGNEVEZI, melyik
+   * eszkoz esne le, es amit a felhasznalo jovahagy, az utazik a keresben --
+   * a szerver soha nem szed le olyat, amit o nem latott.
+   *
+   * A PARTNER-ELLENORZES UGYANAZ, MINT A FELVITELEN: a helyszin a jegy
+   * partnerehez tartozzon. Enelkul egy elgepelt vagy atmasolt azonosito MAS
+   * partner egysegere akasztana ra a jegyet, es a felulet ezt soha nem mutatna
+   * meg -- a lista a sajat partnere egysegeit rajzolja, tehat egy idegen egyseg
+   * ott egyszeruen URESKENT jelenne meg.
+   *
+   * A PARTNER NELKULI JEGY SAJAT AGAT KAP: nem "ismeretlen egyseg", hanem
+   * ertelmetlen keres, es a teendo is mas (elobb partnert kell allitani).
+   */
+  async setPlacement(
+    id: string,
+    input: SetServiceJobPlacementDto,
+    user: AuthenticatedUser,
+  ): Promise<ServiceJobDetail> {
+    this.requireWriteScope(user);
+    const job = await this.repository.jobAttachState(id);
+    if (!job) throw new NotFoundException("A hibajegy nem található.");
+    if (!job.customerId)
+      throw new BadRequestException(
+        "Helyszínt csak partnerrel együtt lehet megadni.",
+      );
+
+    const departmentId = input.departmentId.trim();
+    const belongs = await this.repository.departmentBelongsToCustomer(
+      departmentId,
+      job.customerId,
+    );
+    if (!belongs)
+      throw new BadRequestException(
+        "A megadott helyszín nem ehhez a partnerhez tartozik.",
+      );
+
+    const assetIds = normalizeAssetIds(input.assetIds);
+    if (assetIds.length > 0)
+      await this.requireAssetsOnDepartment(assetIds, departmentId);
+
+    const ok = await this.repository.setPlacement({
+      serviceJobId: id,
+      departmentId,
+      assetIds,
+    });
+    if (!ok) throw new NotFoundException("A hibajegy nem található.");
+
+    return this.detail(id, user);
   }
 
   /**
@@ -373,6 +450,7 @@ export class ServiceJobsService {
         partnerStatus: partnerVisibleStatus(row.status),
         partnerStatusLabel: partnerStatusLabel(row.status),
         customerName: row.customerName,
+        departmentPath: row.departmentPath,
         worksheetCount: row.worksheetCount,
         createdAt: row.createdAt.toISOString(),
       })),
@@ -413,6 +491,8 @@ export class ServiceJobsService {
      * -- es nem is kell neki egy MASIK, amit kulon karban kellene tartani.
      */
     const removals = await this.repository.documentRemovals(row.id);
+    // AZ UT A SORRAL EGYUTT ERKEZIK a tarolobol -- lasd ott az indokot.
+    const ut = row.departmentPath ?? null;
 
     return {
       id: row.id,
@@ -425,13 +505,16 @@ export class ServiceJobsService {
       customerName: row.customer?.displayName ?? null,
       customerId: row.customerId,
       departmentId: row.departmentId,
-      // A SZULO CSAK AKKOR KERUL ELE, HA VAN. Gyokerszintu egysegnel egy vezeto
-      // elvalaszto maradna a nev elott, ami hianyzo adatnak latszik.
-      departmentName: row.department
-        ? [row.department.parent?.name, row.department.name]
-            .filter(Boolean)
-            .join(" / ")
-        : null,
+      /**
+       * A TELJES UT, NEM CSAK A SZULO. Ez a mezo korabban EGY szintet fuzott a
+       * nev ele -- harom szintnel viszont ugyanugy nem mondja meg, melyik agrol
+       * van szo, es a ket eset kivulrol egyforman nez ki.
+       */
+      departmentPath: ut,
+      // A REGI MEZO MARAD, es most az UT osszefuzott alakja. A mobil csomag
+      // sajat tipusdeklaraciokat tart, tehat ott a tomb nem jelenik meg
+      // magatol -- ez a sor az, ami ott is javul.
+      departmentName: ut ? ut.join(" / ") : null,
       createdAt: row.createdAt.toISOString(),
       // A tábla `readonly` tömböt ad (nem írható felül kívülről); a válasz
       // sima tömb, ezért itt másolat készül róla.
@@ -468,6 +551,15 @@ export class ServiceJobsService {
         worksheets: row.worksheets.map((worksheet) => ({
           id: worksheet.id,
           number: worksheet.number,
+          /*
+            AZ URES STRING ITT NEM NEVTELENSEGET ALLIT, hanem azt, hogy a
+            laphoz nem tartozik verzio, tehat nincs honnan tudni a nevet. A
+            rajzolo ezt a ket esetet egyforman kezeli (visszaesik a szamra),
+            de a null helyett azert all ures string, mert a mezo NEM
+            elhagyhato: egy `null` a kliensekben kulon agat nyitna arra, ami
+            ugyanaz a hiany.
+          */
+          subject: worksheet.versions[0]?.subject ?? "",
           createdAt: worksheet.createdAt.toISOString(),
           handedOverAt: worksheet.handedOverAt?.toISOString() ?? null,
         })),

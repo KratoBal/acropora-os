@@ -29,6 +29,8 @@ const sor = (id: string): SyncQueueRow => ({
   lastError: null,
   lastAttemptAt: null,
   state: "pending",
+  dependsOnOperationId: null,
+  dependsOnTarget: null,
 });
 
 function deps(

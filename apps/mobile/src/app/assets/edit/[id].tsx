@@ -15,10 +15,17 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { getAsset, updateAsset, type AssetDetail } from "@/lib/api/assets";
 import { listPartnerUnits } from "@/lib/api/partners";
 import {
+  listPerformanceUnits,
+  type UnitOfMeasureRow,
+} from "@/lib/api/units-of-measure";
+import {
   assetEditFormFrom,
   baseValuesFor,
   buildAssetPatch,
+  assetLabelEditProblem,
+  assetPerformanceEditProblem,
   hasAssetChanges,
+  PERFORMANCE_PROBLEM_MESSAGES,
   type AssetEditForm,
   type EditableAsset,
 } from "@/lib/assets/asset-edit";
@@ -31,12 +38,18 @@ import { readCachedPartnerUnits } from "@/lib/offline/asset-form-cache";
 import { describeOfflineEditNotice } from "@/lib/offline/offline-notice";
 import { ASSET_CRITICALITY_OPTIONS } from "@/lib/assets/asset-criticality";
 import { ASSET_STATUS_OPTIONS } from "@/lib/assets/asset-status";
+import { MATRICA_ALAK_UZENET } from "@/lib/assets/asset-create";
 import { describeAssetUpdateWrite } from "@/lib/assets/offline-edit";
 import { ApiError } from "@/lib/api/client";
 import { assetUpdateOperationId } from "@/lib/offline/sync-queue";
 import { enqueueAssetUpdate } from "@/lib/offline/queue-store";
 import { saveOrQueue, type SaveOutcome } from "@/lib/offline/save-or-queue";
-import { unitLevels } from "@/lib/partners/site-tree";
+import { UnitPicker } from "@/components/assets/unit-picker";
+import {
+  LabelCodeField,
+  useLabelScanner,
+} from "@/components/assets/label-code-field";
+import { PerformanceField } from "@/components/assets/performance-field";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 
@@ -117,6 +130,27 @@ export default function AssetEditScreen() {
   const [queued, setQueued] = useState<string | null>(null);
   const [lost, setLost] = useState<string | null>(null);
   const [loadedFrom, setLoadedFrom] = useState<string | null>(null);
+  /**
+   * A HELYSZIN-VALASZTO NYITVA VAN-E.
+   *
+   * CSUKOTTAN INDUL, ugyanugy, mint a felviteli urlapon: a szerkeszto tobbsege
+   * NEM a helyszint jon javitani, es egy mindig nyitott fa lenyomja a tobbi
+   * mezot a kepernyo alja ala. A csukott sor kiirja a teljes utat, tehat aki
+   * csak ellenorizni akarta, azonnal latja.
+   */
+  const [unitPickerOpen, setUnitPickerOpen] = useState(false);
+  /**
+   * A BEOLVASO UGYANAZ, MINT A FELVITELI KEPERNYON, es ez nem kenyelem: Balazs
+   * kifejezetten a BEFOTOZAST kerte a telefonra (2026-09-16 10:42), a webre
+   * pedig csak a beirast. A kozos allvany azt zarja ki, hogy a ket kepernyo
+   * kulon romoljon el.
+   *
+   * A `setForm` ag a `form` meglete miatt ovatos: a kepernyo a betoltes elott
+   * `null`-lal all, es egy beolvasas ilyenkor nem irhat bele.
+   */
+  const scanner = useLabelScanner((kod) =>
+    setForm((elozo) => (elozo ? { ...elozo, labelCode: kod } : elozo)),
+  );
 
   /*
    * A HELYSZÍNEK CSAK SZERVIZ PARTNER ESZKÖZÉNÉL. Vevő tulajdonosnál nincs mit
@@ -154,6 +188,18 @@ export default function AssetEditScreen() {
    * hianya NEM allitja meg a szerkesztest, csak a valaszto marad ures -- es
    * akkor a szerelo a tobbi mezot attol meg javithatja.
    */
+  /**
+   * A TELJESITMENY-EGYSEGEK. Csak az AKTIVAK jonnek a listaban -- az eszkozon
+   * MAR allo egyseget a valasz hozza magaval (`performanceUnit`), es alabb
+   * hozzatesszuk. Enelkul egy kivezetett egyseg eltunne a valasztobol, a
+   * szerelo pedig nem latna, mi all a gepen.
+   */
+  const performanceUnitsQuery = useQuery({
+    queryKey: ["performance-units"],
+    queryFn: listPerformanceUnits,
+    enabled: status === "authenticated",
+  });
+
   const cachedUnits = useQuery({
     queryKey: ["offline-partner-units", betoltott?.owner.id],
     queryFn: () => readCachedPartnerUnits(betoltott!.owner.id),
@@ -183,6 +229,27 @@ export default function AssetEditScreen() {
        */
       setQueued(null);
       setLost(null);
+      /**
+       * A ROSSZ ALAK ITT AKAD EL, NEM A SZERVEREN -- ES EZ AZ OFFLINE SOR MIATT SZAMIT.
+       *
+       * Kapcsolat nelkul a mentes SORBA kerul, nem a szerverhez: egy hibas kod
+       * igy csak a sor kiuritesekor bukna el, akar orakkal kesobb, amikor a
+       * szerelo mar nincs a gepnel. A felviteli kepernyo eddig is itt, a keres
+       * ELOTT dontott -- ugyanazzal a kozos fuggvennyel es ugyanezzel a
+       * mondattal.
+       */
+      if (assetLabelEditProblem(form)) throw new Error(MATRICA_ALAK_UZENET);
+      /**
+       * A TELJESITMENY-PAR UGYANITT, ES UGYANAZERT: offline a mentes SORBA
+       * kerul, tehat egy fel par csak a sor kiuritesekor bukna el -- orakkal
+       * kesobb, amikor a szerelo mar nincs a gepnel.
+       *
+       * A MONDAT MEGNEVEZI A HIANYZO FELET: a ket eset ket kulon teendo
+       * (egyseget valasztani kontra szamot irni).
+       */
+      const teljesitmenyBaj = assetPerformanceEditProblem(form);
+      if (teljesitmenyBaj)
+        throw new Error(PERFORMANCE_PROBLEM_MESSAGES[teljesitmenyBaj]);
       const asset = betoltott;
       const patch = buildAssetPatch(editable(asset), form);
       /**
@@ -429,59 +496,26 @@ export default function AssetEditScreen() {
                 A partner helyszínei nem tölthetők be. A többi mező menthető.
               </Text>
             ) : null}
-            <Pressable
-              onPress={() => setForm({ ...form, unitId: "" })}
-              style={[styles.unitRow, form.unitId === "" && styles.unitRowOn]}
-            >
-              <Text style={styles.unitText}>Nincs megadva</Text>
-            </Pressable>
             {/*
-              LEPCSOS VALASZTO, ugyanaz a szabaly, mint a felviteli urlapon.
-              ITT SZAMIT IGAZAN a kivezetett helyszin kezelese: ha a szerkesztett
-              eszkoz epp ilyenen all, a lanc atmegy rajta, es a sor VALASZTVA
-              latszik -- kulonben a beallitott helyszin nemán eltunne, es a
-              mentes atirna valami masra.
+              UGYANAZ A VALASZTO, MINT A FELVITELI URLAPON, es mostantol
+              ugyanaz a PELDANY is. Itt korabban a regi alak allt: MINDEN
+              szintet egyszerre kiteritve, teljes szelessegu sorokkent -- egy
+              par szintes fanal ez egy egesz kepernyo, es valasztas kozben nem
+              latszik, hol tart az ember. Balazs kepernyofotokon mutatta meg a
+              kulonbseget (2026-09-16 10:41, Discord, mobilalkalmazas szal).
+
+              A "NINCS MEGADVA" SOR ELTUNT, ES EZ NEM VESZTESEG: a lepcsos
+              valaszton a legfelso mar eldontott lepesre koppintva ures lesz a
+              helyszin, tehat a torles utja megvan -- csak nem egy kulon sor
+              viszi.
             */}
-            {unitLevels(
-              /*
-                A MENTETT LISTA A TARTALEK, es a sorrend ugyanaz, mint az
-                eszkoznel: a halozati valasz nyer, a masolat csak akkor lep be,
-                ha nincs mas. E nelkul a valaszto URESEN allna offline, es a
-                szerelo azt hinne, hogy a partnernek nincs helyszine.
-              */
-              unitsQuery.data?.items ?? cachedUnits.data?.items ?? [],
-              form.unitId || null,
-            ).map((level, depth) =>
-              level.options.length === 0 ? null : (
-                <View key={`szint-${depth}`} style={styles.unitLevel}>
-                  {level.options.map((option) => {
-                    const selected = level.selectedId === option.id;
-                    return (
-                      <Pressable
-                        key={option.id}
-                        disabled={!option.isActive && !selected}
-                        onPress={() =>
-                          setForm({
-                            ...form,
-                            unitId: selected ? "" : option.id,
-                          })
-                        }
-                        style={[
-                          styles.unitRow,
-                          selected && styles.unitRowOn,
-                          !option.isActive && !selected && styles.unitOff,
-                        ]}
-                      >
-                        <Text style={styles.unitText}>
-                          {option.label}
-                          {option.isActive ? "" : " (kivezetett)"}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              ),
-            )}
+            <UnitPicker
+              rows={unitsQuery.data?.items ?? cachedUnits.data?.items ?? []}
+              value={form.unitId}
+              onChange={(unitId) => setForm({ ...form, unitId })}
+              open={unitPickerOpen}
+              onToggle={() => setUnitPickerOpen((nyitva) => !nyitva)}
+            />
           </View>
         ) : null}
 
@@ -501,9 +535,42 @@ export default function AssetEditScreen() {
           </View>
         ))}
 
+        {/*
+          A VALASZTHATO EGYSEGEK KOZE BEKERUL AZ IS, AMI MAR AZ ESZKOZON ALL.
+          A valaszto az AKTIVAKAT kinalja; ha az eszkozon egy azota KIVEZETETT
+          egyseg all, es a lista nem tartalmazna, a szerelo ures valasztot
+          latna egy kitoltott mezo mellett -- es a mentes elbukna, latszolag
+          ok nelkul.
+        */}
+        <PerformanceField
+          value={form.performance}
+          unitId={form.performanceUnitId}
+          units={teljesitmenyEgysegek(
+            performanceUnitsQuery.data?.items ?? [],
+            betoltott?.performanceUnit,
+          )}
+          onChangeValue={(value) => setForm({ ...form, performance: value })}
+          onChangeUnit={(unitId) =>
+            setForm({ ...form, performanceUnitId: unitId })
+          }
+          editable={!save.isPending}
+        />
+
+        <LabelCodeField
+          value={form.labelCode}
+          onChange={(value) => setForm({ ...form, labelCode: value })}
+          scanner={scanner}
+          editable={!save.isPending}
+        >
+          <Text style={styles.hint}>
+            A MI matricánk, nem a partneré. Ha már áll rajta kód, az itt
+            látszik: másikat beírva a régi visszakerül a szabad készletbe. A
+            mező kiürítése nem szedi le a matricát.
+          </Text>
+        </LabelCodeField>
+
         <Text style={styles.hint}>
-          A partner, a helyszín és a szülőeszköz módosítása a webes felületen
-          történik.
+          A partner és a szülőeszköz módosítása a webes felületen történik.
         </Text>
 
         <Pressable
@@ -526,6 +593,7 @@ export default function AssetEditScreen() {
           )}
         </Pressable>
       </ScrollView>
+      {scanner.overlay}
     </SafeAreaView>
   );
 }
@@ -730,3 +798,19 @@ const styles = StyleSheet.create({
   errorTitle: { color: "#ffd0ca", fontSize: 15, fontWeight: "800" },
   errorText: { color: "#dbaea9", fontSize: 13, lineHeight: 20 },
 });
+
+/**
+ * A VALASZTHATO EGYSEGEK: AZ AKTIVAK, PLUSZ AMI MAR AZ ESZKOZON ALL.
+ *
+ * A kivezetes a VALASZTEKOT szukiti, nem a MULTAT irja at. Ha a mostani egyseg
+ * kiesne a listabol, a szerelo egy kitoltott szam mellett ures egyseget latna,
+ * es a mentes fel parkent bukna el -- latszolag ok nelkul.
+ */
+function teljesitmenyEgysegek(
+  aktivak: UnitOfMeasureRow[],
+  mostani: { id: string; code: string; name: string } | undefined,
+): UnitOfMeasureRow[] {
+  if (!mostani) return aktivak;
+  if (aktivak.some((unit) => unit.id === mostani.id)) return aktivak;
+  return [...aktivak, { ...mostani, isActive: false, sortOrder: 0 }];
+}

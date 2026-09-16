@@ -1,8 +1,12 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Session } from "@acropora/types";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  savotMond,
+  setOnLine,
+} from "@/components/service/service-offline-notice.testing";
 import { WorksheetEditorPage } from "./worksheet-editor-page";
 
 const navigation = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
@@ -1065,5 +1069,34 @@ describe("WorksheetEditorPage kiút", () => {
 
     const megsem = await screen.findByRole("link", { name: "Mégsem" });
     expect(megsem.getAttribute("href")).toBe("/szerviz/munkalapok/ws-1");
+  });
+});
+
+/**
+ * AZ URLAP EGYETLEN ALLAPOTBA TUD KERULNI, TEHAT ITT EGY ALLITAS A HELYES SZAM.
+ *
+ * A lista- es adatlapoknal ketto all (`loaded` es `empty`), mert azok ket
+ * allapotba kerulhetnek. Itt a sav feltetel nelkul `form`-ot kap -- egy
+ * masodik allitas nem szigor lenne, hanem DISZ: nem tudna elbukni.
+ *
+ * Amit ez MEGIS mer, es amiert nem elhagyhato: a `savotMond` a masik ket
+ * mondat HIANYAT is allitja, tehat egy rogzult vagy elcsuszott valasztas
+ * (peldaul ha valaki a lista alakjat masolna ide) ITT pirosodik ki.
+ */
+describe("WorksheetEditorPage kapcsolat nélkül", () => {
+  beforeEach(() => {
+    auth.session = session;
+    worksheets.departments.mockReset().mockResolvedValue({ items: [] });
+    worksheets.selectablePartners.mockReset().mockResolvedValue({ items: [] });
+    worksheets.assignableUsers.mockReset().mockResolvedValue({ items: [] });
+    setOnLine(false);
+  });
+
+  afterEach(() => setOnLine(true));
+
+  it("az űrlapon kimondja, hogy a mentés nem fog sikerülni", async () => {
+    render(<WorksheetEditorPage />);
+
+    expect(await savotMond("form")).toBeTruthy();
   });
 });

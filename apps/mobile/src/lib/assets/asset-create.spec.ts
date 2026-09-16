@@ -29,6 +29,8 @@ const form: AssetCreateForm = {
   serialNumber: " SN-1 ",
   inventoryNumber: "",
   labelCode: "",
+  performance: "",
+  performanceUnitId: "",
   installedAt: "",
   interval: "",
 };
@@ -296,5 +298,63 @@ describe("a matricakód a felvitelkor", () => {
     const result = buildAssetCreatePayload({ ...form, labelCode: "ROSSZ" });
     assert.equal(result.ok, false);
     assert.equal(!result.ok && result.field, "labelCode");
+  });
+});
+
+/**
+ * A TELJESITMENY ES A MERTEKEGYSEGE EGYUTT MEGY, VAGY EGYIK SEM.
+ *
+ * MIERT ITT, A TELEFONON IS, HOLOTT A SZERVER ES A TABLA IS ELDONTI: offline a
+ * mentes SORBA kerul, es a szerver valasza orakkal kesobb erkezik meg. Egy fel
+ * par akkor derulne ki, amikor a szerelo mar reg nincs a helyszinen -- az adat
+ * pedig ott es akkor volt.
+ */
+describe("a teljesítmény és a mértékegysége", () => {
+  it("a teljes pár átmegy, és a vessző pontra fordul", () => {
+    const result = buildAssetCreatePayload({
+      ...form,
+      performance: "0,5",
+      performanceUnitId: "uom-w",
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.ok && result.payload.performance, "0.5");
+    assert.equal(result.ok && result.payload.performanceUnitId, "uom-w");
+  });
+
+  it("az üres pár rendben van: a két kulcs EL SEM MEGY", () => {
+    const result = buildAssetCreatePayload(form);
+    assert.equal(result.ok, true);
+    // NEM `null`, hanem HIANYZO kulcs: felvitelnel nincs mit torolni, es egy
+    // `null` par a szerveren ugyanugy fel parkent latszana.
+    assert.equal(result.ok && result.payload.performance, undefined);
+    assert.equal(result.ok && result.payload.performanceUnitId, undefined);
+  });
+
+  it("szám mértékegység nélkül ELBUKIK, és a mezőre mutat", () => {
+    const result = buildAssetCreatePayload({ ...form, performance: "500" });
+    assert.equal(result.ok, false);
+    assert.equal(!result.ok && result.field, "performance");
+    assert.match(!result.ok ? result.message : "", /Válassz mértékegységet/);
+  });
+
+  it("mértékegység szám nélkül szintén ELBUKIK", () => {
+    const result = buildAssetCreatePayload({
+      ...form,
+      performanceUnitId: "uom-w",
+    });
+    assert.equal(result.ok, false);
+    assert.match(!result.ok ? result.message : "", /teljesítmény-értéket/);
+  });
+
+  /**
+   * AZ ALAK-HIBA ELOBB ALL A HIANYZO EGYSEGNEL.
+   *
+   * Egy "otszaz" beirasara a "valassz mertekegyseget" mondat felrevezeto
+   * lenne, hiszen a SZAM a baj. A sorrend tehat nem izlés kerdese.
+   */
+  it("az elgépelt szám alak-hibát ad, nem hiányzó mértékegységet", () => {
+    const result = buildAssetCreatePayload({ ...form, performance: "ötszáz" });
+    assert.equal(result.ok, false);
+    assert.match(!result.ok ? result.message : "", /csak szám lehet/);
   });
 });

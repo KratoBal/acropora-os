@@ -92,6 +92,18 @@ export interface WorksheetDepartmentSummary {
   parentId: string | null;
   code: string;
   name: string;
+  /**
+   * A TELJES UT, a gyokertol lefele -- CSAK az adatlapon toltjuk ki.
+   *
+   * A kod es a nev csak TESTVEREK kozott egyedi, tehat a level neve onmagaban
+   * nem mondja meg, melyik agrol van szo. A LISTAKON ez nem all elo (ott a
+   * valaszto epiti a fat a `parentId` mezobol), az ADATLAPON viszont egyetlen
+   * sor all, es annak magaban kell megallnia.
+   *
+   * ELHAGYHATO, es ez szandekos: a mezot a meglevo hivok nem ismerik, es a
+   * hianya nem hiba -- a felulet ilyenkor a rovid nevre esik vissza.
+   */
+  path?: string[];
   isActive: boolean;
 }
 
@@ -393,6 +405,24 @@ export interface WorksheetEntryListResponse {
   items: WorksheetEntryDetail[];
 }
 
+/**
+ * EGY ESZKOZ, AMIROL A MUNKALAP SZOL.
+ *
+ * ALAKRA AZONOS A `ServiceJobAssetLink`-KEL, es ez nem veletlen egyezes: a
+ * hibajegy es a munkalap ugyanannak a munkanak a ket oldala, a csatolt eszkoz
+ * pedig ugyanaz a fogalom. KULON TIPUS megis, ugyanabbol az okbol, amiert a ket
+ * felelos-tipus is kulon all: a ketto KULON VALASZBAN utazik, es egy kozos
+ * tipus a ket vegpontot egymashoz kotne -- egy munkalap-oldali mezo-bovites a
+ * jegy valaszat is elmozditana, anelkul hogy barki kerte volna.
+ */
+export interface WorksheetAssetLink {
+  id: string;
+  assetId: string;
+  assetNumber: string;
+  assetName: string;
+  attachedAt: string;
+}
+
 export interface WorksheetDetail {
   id: string;
   number: string | null;
@@ -416,6 +446,22 @@ export interface WorksheetDetail {
    * lezárt lapon is javítható, és nem jelenik meg a verzió-eltérésben.
    */
   assignees: WorksheetAssignee[];
+  /**
+   * AZ ESZKOZOK, AMIKROL A LAP SZOL.
+   *
+   * UGYANOTT AL, AHOL A FELELOSOK: a MUNKALAP azonossagahoz tartozik, nem a
+   * verziohoz. A kapcsolotabla (`WorksheetAsset`) a lapra mutat, nem a
+   * verziora, tehat lezart lapon is javithato, es a verzio-eltéresben nem
+   * jelenik meg.
+   *
+   * MIERT KERULT BE (merve 2026-09-16): a sorokat 2026-09-15 ota IRJUK, es
+   * SEMMI nem olvasta vissza -- se a reszletlap, se a felulet. Aki felvitelkor
+   * eszkozt csatolt, azt sehol nem latta viszont.
+   *
+   * URES TOMB ERVENYES VALASZ, nem hiba: a lap keletkezhet eszkoz megnevezese
+   * nelkul.
+   */
+  assets: WorksheetAssetLink[];
   createdAt: string;
   updatedAt: string;
   /**
@@ -440,6 +486,20 @@ export interface WorksheetListItem {
   label: string | null;
   customerName: string;
   departmentCode: string;
+  /**
+   * A HELYSZIN TELJES UTJA A LISTAN IS, a gyokertol lefele.
+   *
+   * EZ A MEZO EGY SAJAT KORABBI ALLITASOMAT VONJA VISSZA. A `path` mezo mellett
+   * (adatlap) ez all: "A LISTAKON ez nem all elo (ott a valaszto epiti a fat a
+   * `parentId` mezobol)". Igaz volt a VALASZTORA, de a munkalap-lista nem
+   * valaszto: ott egyetlen sor all a partner alatt, es annak ugyanugy magaban
+   * kell megallnia, mint az adatlapon. Balazs 2026-09-16-an fotozta le, hogy
+   * ott `NMD` all magaban.
+   *
+   * `null`, ha az utat nem tudjuk felepiteni. URES TOMB SOHA: az azt allitana,
+   * hogy az ut ismert es nulla hosszu. A felulet ilyenkor a kodra esik vissza.
+   */
+  departmentPath: string[] | null;
   subject: string;
   status: WorksheetVersionStatus;
   version: number;

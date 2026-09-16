@@ -133,3 +133,122 @@ describe("a munkalap eszközei és a helyszín", () => {
     assert.deepEqual(hivasok[0]?.assetIds, []);
   });
 });
+
+/**
+ * === ES A FELVITEL UTAN: A LAP ESZKOZEINEK BEALLITASA ===
+ *
+ * Balazs kerese (2026-09-16): "munkalapnal is jo lenne ha lehetne a helyszinhez
+ * rogzitett eszkozoket csatolni". A felvitelen mar ment; egy MEGLEVO lapon nem
+ * volt ut ra.
+ *
+ * A HELYSZINT A LAP ADJA, NEM A KERES: a lape a felvitelkor eldolt, es nincs
+ * ut, ami megvaltoztatna. Ez elter a hibajegytol, ahol a helyszin ES az
+ * eszkozok EGY muveletben mozognak -- epp azert, mert ott a helyszin valtozhat.
+ */
+function beallitoServiceWith(kieso: string[], lapHelyszine = "unit-1") {
+  const hivasok: { worksheetId: string; assetIds: readonly string[] }[] = [];
+  const kerdezettHelyszinek: string[] = [];
+  const repository = {
+    detail: async () => ({
+      id: "worksheet-1",
+      departmentId: lapHelyszine,
+      versions: [{ status: "DRAFT" }],
+    }),
+    assetsOutsideDepartment: async (
+      _assetIds: readonly string[],
+      departmentId: string,
+    ) => {
+      kerdezettHelyszinek.push(departmentId);
+      return kieso;
+    },
+    setAssets: async (input: {
+      worksheetId: string;
+      assetIds: readonly string[];
+    }) => {
+      hivasok.push(input);
+      return true;
+    },
+  } as unknown as WorksheetsRepository;
+  const service = new WorksheetsService(repository);
+  return { service, hivasok, kerdezettHelyszinek };
+}
+
+/**
+ * A BEALLITAS ELINDITASA, A VISSZAOLVASAS NELKUL -- ugyanaz az alak, mint a
+ * `felvitel` fent, es ugyanazzal a kikotessel: a `catch` NEM "hatha atmegy",
+ * mert a kovetkezo sor mindig egy KIMONDOTT allitas a `hivasok` tartalmarol.
+ */
+async function beallitas(
+  service: WorksheetsService,
+  assetIds: string[],
+): Promise<void> {
+  try {
+    await service.setAssets("worksheet-1", { assetIds });
+  } catch {
+    // a visszaolvasashoz teljes reszletlap-sor kellene; lasd a `felvitel`-t
+  }
+}
+
+describe("a meglévő munkalap eszközei", () => {
+  it("a LAP saját helyszínére ellenőriz, nem a kérésből vett értékre", async () => {
+    const { service, kerdezettHelyszinek } = beallitoServiceWith(
+      [],
+      "unit-lape",
+    );
+
+    await beallitas(service, ["asset-1"]);
+
+    // EZ A LENYEG: a hivo NEM tud masik helyszint megadni -- a mezo nincs is a
+    // DTO-ban --, es a szerver a lap sajatjat kerdezi.
+    assert.deepEqual(kerdezettHelyszinek, ["unit-lape"]);
+  });
+
+  it("idegen helyszín eszközénél EL SEM INDUL az írás", async () => {
+    const { service, hivasok } = beallitoServiceWith(["asset-idegen"]);
+
+    await assert.rejects(
+      () => service.setAssets("worksheet-1", { assetIds: ["asset-idegen"] }),
+      (hiba: { status?: number; message?: string }) =>
+        hiba.status === 400 && /nem ezen a helyszínen/.test(hiba.message ?? ""),
+    );
+    // Nem a 400 a lenyeg: a tarolohoz el sem jutott a keres.
+    assert.deepEqual(hivasok, []);
+  });
+
+  /**
+   * A KONTROLL. Enelkul a fenti tagadas akkor is zold lenne, ha a hamis tarolo
+   * SOHA nem hivna -- vagyis ha a mero maga romlott el.
+   */
+  it("a helyszínen álló eszközök eljutnak a tárolóig", async () => {
+    const { service, hivasok } = beallitoServiceWith([]);
+
+    await beallitas(service, ["asset-1", "asset-2"]);
+
+    assert.equal(hivasok.length, 1);
+    assert.deepEqual(hivasok[0]?.assetIds, ["asset-1", "asset-2"]);
+  });
+
+  /**
+   * URES LISTA SZABAD: az a "mindet leveszem" szandek, nem elgepeles -- es a
+   * DTO mezoje epp ezert kotelezo.
+   *
+   * ES EZ EGYBEN ISMERT POZITIV KONTROLL a fenti elutasitashoz: enelkul az az
+   * allitas akkor is zold lenne, ha a vegpont MINDEN listat elutasitana.
+   */
+  it("üres listával is lemegy, és mindent levesz", async () => {
+    const { service, hivasok } = beallitoServiceWith([]);
+
+    await beallitas(service, []);
+
+    assert.equal(hivasok.length, 1);
+    assert.deepEqual(hivasok[0]?.assetIds, []);
+  });
+
+  it("az ismétlődő azonosító egyszer megy tovább", async () => {
+    const { service, hivasok } = beallitoServiceWith([]);
+
+    await beallitas(service, ["asset-1", "asset-1"]);
+
+    assert.deepEqual(hivasok[0]?.assetIds, ["asset-1"]);
+  });
+});

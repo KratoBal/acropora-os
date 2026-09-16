@@ -47,6 +47,13 @@ const SERVER_PAIR: Record<string, string | null> = {
   // egyetlen jogosultság-párral védi, a telefonon viszont két csempe áll rajta.
   worksheetsView: PERMISSIONS.SERVICE_VIEW,
   worksheetsManage: PERMISSIONS.SERVICE_MANAGE,
+  // A HIBAJEGY IS UGYANAZT A KET JOGOT KAPJA (2026-09-16). Harmadik csempe
+  // ugyanazon a szerver-oldali paron: a szerviz modul EGY jogosultsag-par, a
+  // telefonon viszont harom kulon belepesi pont. A kulcsok azert kulonboznek,
+  // mert a csempe kapuja azt nevezze meg, amit MEGNYIT -- es ha a szerver
+  // egyszer szetvalasztja a modult, a valtozas ITT landol, egy helyen.
+  serviceJobsView: PERMISSIONS.SERVICE_VIEW,
+  serviceJobsManage: PERMISSIONS.SERVICE_MANAGE,
 };
 
 const ROLE_MIRROR = "../mobile/src/lib/auth/types.ts";

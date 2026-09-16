@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  ASSET_NOTICE_SUBJECT,
   describeCacheAge,
   describeCachedDepartmentsNotice,
+  describeCachedOwnersNotice,
   describeCachedWorksheetNotice,
   describeOfflineDetailNotice,
   describeOfflineEditNotice,
@@ -30,8 +32,20 @@ const anHourAgo = "2026-08-27T11:10:00.000Z";
 const yesterday = "2026-08-26T08:00:00.000Z";
 
 describe("describeCacheAge", () => {
-  it("says it never happened when there is no copy", () => {
-    assert.equal(describeCacheAge(null, now), "még soha");
+  /**
+   * EZ AZ ÁLLÍTÁS MEGFORDULT, ÉS AZ INDOKA FONTOSABB AZ ÉRTÉKNÉL.
+   *
+   * A régi alak `"még soha"` volt, és ez a teszt ZÖLDEN állt hetekig, miközben
+   * a belőle épülő MONDATOK mind hibásak voltak: „A helyszíni másolat még soha
+   * frissült", „Ez a lap még soha mentett másolat". A töredéket mértük, a
+   * mondatot nem -- vagyis a teszt pont azt nem nézte, amit a szerelő olvas.
+   *
+   * Ezért áll alább a `describeOfflineNotice` blokkban a hiányzó bélyegre egy
+   * TELJES MONDATOT ellenőrző állítás is: a töredék helyessége önmagában nem
+   * bizonyít semmit.
+   */
+  it("reports an unknown age, not 'never', because the caller builds a sentence", () => {
+    assert.equal(describeCacheAge(null, now), "ismeretlen ideje");
   });
 
   it("keeps the last hour vague on purpose", () => {
@@ -85,6 +99,7 @@ describe("describeOfflineNotice", () => {
         syncedAt: anHourAgo,
         itemCount: 12,
         now,
+        subject: ASSET_NOTICE_SUBJECT,
       }),
       null,
     );
@@ -96,6 +111,7 @@ describe("describeOfflineNotice", () => {
       syncedAt: yesterday,
       itemCount: 12,
       now,
+      subject: ASSET_NOTICE_SUBJECT,
     });
 
     assert.equal(notice?.tone, "offline");
@@ -115,6 +131,7 @@ describe("describeOfflineNotice", () => {
       syncedAt: null,
       itemCount: 0,
       now,
+      subject: ASSET_NOTICE_SUBJECT,
     });
 
     assert.equal(notice?.tone, "empty");
@@ -132,10 +149,55 @@ describe("describeOfflineNotice", () => {
       syncedAt: "2026-08-20T12:00:00.000Z",
       itemCount: 12,
       now,
+      subject: ASSET_NOTICE_SUBJECT,
     });
 
     assert.equal(notice?.tone, "stale");
     assert.match(notice!.message, /7 napja/);
+  });
+
+  /**
+   * A MONDAT, AMIT BALÁZS LEFOTÓZOTT, 2026-09-16. A telefonján ez állt:
+   * „A helyszíni másolat még soha frissült." Ő nevezte meg, mi hiányzik belőle.
+   *
+   * Ez az az eset, ami MINDEN friss telepítésnél elő is jön: van térerő, a
+   * másolat még nem épült fel, tehát a kor hiányzik. Az alábbi két állítás nem
+   * a töredéket nézi, hanem a KIÍRT MONDATOT, mert a hiba ott keletkezett.
+   */
+  it("writes a whole sentence when the copy has never been built", () => {
+    const notice = describeOfflineNotice({
+      online: true,
+      syncedAt: null,
+      itemCount: 0,
+      now,
+      subject: ASSET_NOTICE_SUBJECT,
+    });
+
+    assert.equal(notice?.tone, "stale");
+    assert.match(notice!.message, /még soha nem frissült/);
+    assert.doesNotMatch(notice!.message, /még soha frissült/);
+  });
+
+  /**
+   * ÉS A MÁSIK FELE: HA VAN MÁSOLAT, A „SOHA" HAZUGSÁG LENNE.
+   *
+   * Hiányzó bélyeg mellett is állhat sor a készüléken (épp most mentettük, de
+   * a bélyeget még nem olvastuk vissza). Ilyenkor a kor ISMERETLEN, nem nulla,
+   * és a mondatnak ezt kell mondania -- különben a sáv ellentmond a közvetlenül
+   * alatta álló „N eszköz mentve" sornak.
+   */
+  it("calls the age unknown, not never, while rows are already on the phone", () => {
+    const notice = describeOfflineNotice({
+      online: true,
+      syncedAt: null,
+      itemCount: 40,
+      now,
+      subject: ASSET_NOTICE_SUBJECT,
+    });
+
+    assert.equal(notice?.tone, "stale");
+    assert.match(notice!.message, /ismeretlen ideje frissült/);
+    assert.doesNotMatch(notice!.message, /soha/);
   });
 });
 
@@ -194,6 +256,59 @@ describe("a mentett helyszínek sávja", () => {
         online: true,
         count: 3,
         syncedAt: "2026-09-03T06:00:00.000Z",
+        now: most,
+      }),
+      null,
+    );
+  });
+
+  /**
+   * A PARTNER-SAV NEM A HELYSZINROL BESZEL.
+   *
+   * A regresszio, amit ez a harom allitas ki: a partner-valaszto a HELYSZIN-
+   * fuggvenyt hasznalta, es ures listanal azt mondta, hogy „Ehhez a partnerhez
+   * nincs mentett helyszín" -- miközben a felhasznalo meg nem valasztott
+   * partnert, es epp a PARTNER-lista volt ures.
+   */
+  it("partnerlista nelkul a PARTNERT nevezi meg, nem a helyszint", () => {
+    const notice = describeCachedOwnersNotice({
+      online: false,
+      count: 0,
+      syncedAt: null,
+      now: most,
+    });
+
+    assert.match(notice?.title ?? "", /partnerlista/);
+    assert.doesNotMatch(notice?.title ?? "", /helyszín/);
+    assert.doesNotMatch(notice?.message ?? "", /helyszín/);
+    // A tanacs arra a lepesre mutasson, ami EBBEN az allapotban elvegezheto:
+    // a partner meg nincs kivalasztva, tehat „nyisd meg a partnert" nem az.
+    assert.match(notice?.message ?? "", /kezdőképernyő/);
+  });
+
+  /**
+   * A KOR AZ, AMI A HIANYT ERTELMEZHETOVE TESZI. A partner kotelezo mezo: ha a
+   * szerelo nem talalja a listaban, az jelentheti, hogy nincs ilyen partner,
+   * VAGY hogy a lista regebbi nala. A ketto kozott egyedul a kor dont.
+   */
+  it("mentett partnerlistanal kiirja a DARABSZAMOT es a KORT", () => {
+    const notice = describeCachedOwnersNotice({
+      online: false,
+      count: 2,
+      syncedAt: "2026-09-03T06:00:00.000Z",
+      now: most,
+    });
+
+    assert.match(notice?.message ?? "", /2 partner/);
+    assert.match(notice?.message ?? "", /órája|napja|az imént/);
+  });
+
+  it("kapcsolat mellett a partner-sav sem szolal meg", () => {
+    assert.equal(
+      describeCachedOwnersNotice({
+        online: true,
+        count: 0,
+        syncedAt: null,
         now: most,
       }),
       null,

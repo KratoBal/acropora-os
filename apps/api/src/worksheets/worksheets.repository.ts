@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 import { assetsOutsideDepartment } from "../common/assets-in-department.js";
+import { unitPathFor, unitPathsFor } from "../common/unit-path-lookup.js";
 import { sumDocumentBytesInUse } from "../documents/document-bytes-in-use.js";
 import {
   personDisplayName,
@@ -533,6 +534,54 @@ export class WorksheetsRepository extends Repository {
     };
   }
 
+  /**
+   * A LAP ESZKOZEI, TELJES LISTAKENT.
+   *
+   * A MAR FENT LEVO SOROKHOZ NEM NYULUNK (`skipDuplicates`), es ez nem
+   * takarekossag: a `createdAt` az egyetlen jel arrol, MIKOR kerult egy eszkoz
+   * a lapra, es a felulet ki is irja. Ha minden mentes ujrairna az osszes sort,
+   * egy honapja rajta allo eszkoz "ma csatoltnak" latszana.
+   *
+   * URES LISTA MINDET LEVESZI -- a `notIn` ilyenkor elmarad --, es ez kimondott
+   * szandek, nem elgepeles: a DTO mezoje kotelezo.
+   *
+   * A HIANYZO LAP `false`-t ad, nem kivetelt: a hivo dolga eldonteni, mit mond
+   * rola, es ugyanazt a 404-et adja, mint a tobbi uton.
+   */
+  async setAssets(input: {
+    worksheetId: string;
+    assetIds: readonly string[];
+  }): Promise<boolean> {
+    return this.database.$transaction(async (transaction) => {
+      const worksheet = await transaction.worksheet.findUnique({
+        where: { id: input.worksheetId },
+        select: { id: true },
+      });
+      if (!worksheet) return false;
+
+      await transaction.worksheetAsset.deleteMany({
+        where: {
+          worksheetId: input.worksheetId,
+          ...(input.assetIds.length > 0
+            ? { assetId: { notIn: [...input.assetIds] } }
+            : {}),
+        },
+      });
+
+      if (input.assetIds.length > 0) {
+        await transaction.worksheetAsset.createMany({
+          data: input.assetIds.map((assetId) => ({
+            worksheetId: input.worksheetId,
+            assetId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+
+      return true;
+    });
+  }
+
   async setAssignees(input: {
     worksheetId: string;
     userIds: readonly string[];
@@ -695,8 +744,21 @@ export class WorksheetsRepository extends Repository {
       this.countsByLatestStatus(countsWhere),
     ]);
 
+    /**
+     * A TELJES UTAK EGY KOTEGBEN, A LAP LEKERESE UTAN.
+     *
+     * Nem a `Promise.all` agaba kerult, es ez szandekos: a kert azonositokat
+     * csak a visszakapott sorokbol tudjuk. Cserebe ket lekerdezes all itt,
+     * fuggetlenul attol, hany sor jott -- soronkent ket kerdes egy otvenes
+     * lapon szazat jelentene.
+     */
+    const departmentPaths = await unitPathsFor(
+      this.database,
+      rows.map((row) => row.department.id),
+    );
+
     return {
-      items: rows.map(toWorksheetListItem),
+      items: rows.map((row) => toWorksheetListItem(row, departmentPaths)),
       pagination: {
         page: query.page,
         pageSize: query.pageSize,
@@ -781,7 +843,28 @@ export class WorksheetsRepository extends Repository {
     return rowBelongsToScope(row, scope) ? row : null;
   }
 
-  private detailRow(id: string): Promise<WorksheetDetailRow | null> {
+  /**
+   * A LAP SORA, ES VELE A HELYSZIN TELJES UTJA.
+   *
+   * AZ UT KULON LEKERDEZESBOL JON, nem az `include` melyitesevel: a helyszin-fa
+   * melysege NEM korlatos, tehat egy `parent: { parent: { ... } }` lanc mindig
+   * csak addig latna, ameddig valaki megirta -- es a hianyzo szint CSENDBEN
+   * maradna ki.
+   *
+   * ES A TAROLOBAN, nem a szolgaltatasban: a szolgaltatas egyseg-tesztjei hamis
+   * tarolot kapnak, tehat egy ottani adatbazis-hivas kivezetne oket a fedes
+   * alol. (Merve: huszonhat teszt bukott el, amikor eloszb odatettem.)
+   */
+  private async detailRow(id: string): Promise<WorksheetDetailRow | null> {
+    const sor = await this.detailRowInner(id);
+    if (!sor) return sor;
+    return {
+      ...sor,
+      departmentPath: await unitPathFor(this.database, sor.department.id),
+    };
+  }
+
+  private detailRowInner(id: string): Promise<WorksheetDetailRow | null> {
     return this.database.worksheet.findUnique({
       where: { id },
       include: worksheetDetailInclude,

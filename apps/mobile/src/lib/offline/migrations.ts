@@ -66,6 +66,70 @@ export const MIGRATIONS: readonly Migration[] = [
     name: "a sync_queue sorai megjegyzik az utolso kiserlet idejet",
     sql: `ALTER TABLE sync_queue ADD COLUMN last_attempt_at TEXT;`,
   },
+  {
+    version: 4,
+    /**
+     * A HIBAJEGYEK MENTETT MASOLATA -- CSAK OLVASASRA.
+     *
+     * Ket tabla, ugyanabban az alakban, mint az eszkoze: a LISTASOR minden
+     * lehuzott jegyrol megvan, a TELJES lap csak arrol, amit valaki megnyitott
+     * tererovel. A ketto kulon all, mert a lista sokrol tud keveset, a lap
+     * egyrol sokat -- egy tablaba gyurva minden lista-frissites eldobna a
+     * reszleteket.
+     *
+     * AMI IDE NEM KERUL: sor a LEPTETESHEZ. A szerver a LATOTT allapotra ir
+     * feltetelesen, tehat egy sorba tett lepes a kiuriteskor bukna el, orakkal
+     * kesobb, amikor a szerelo mar nincs a gepnel. Amig ehhez nincs feloldo
+     * keperno (az eszkoznek van), a jegy offline CSAK OLVASHATO -- es ezt a
+     * sav ki is mondja.
+     */
+    name: "a hibajegyek mentett masolata",
+    sql: `
+      CREATE TABLE IF NOT EXISTS cached_service_jobs (
+        id TEXT PRIMARY KEY,
+        payload_json TEXT NOT NULL,
+        synced_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS cached_service_job_details (
+        id TEXT PRIMARY KEY,
+        payload_json TEXT NOT NULL,
+        synced_at TEXT NOT NULL
+      );
+    `,
+  },
+  {
+    version: 5,
+    /**
+     * EGY SOR MEGVARHAT EGY MASIKAT -- ES EZ MA CSAK A KEPEKRE IGAZ, KEZZEL.
+     *
+     * A kep ma a rogzitesere var, de a szabaly a MUVELET TIPUSAHOZ van kotve
+     * (`upload-photo` var `create`-re), es a varas tenye a payloadban all
+     * (`recordingOperationId`). Egy harmadik szint -- munkalap a JEGY alatt,
+     * ahol MIND A KETTO `create` -- ebbe nem fer bele: a `nextBatch` ma minden
+     * `create` sort EGYUTT enged el, sorrend es fuggoseg nelkul.
+     *
+     * KET OSZLOP, NEM EGY. Az elso azt mondja meg, MIRE var; a masodik azt,
+     * HOVA kerul a szulo szerver-azonositoja, amikor megjon:
+     *
+     *     `entityId`        -- a sor sajat cel-mezojebe (ma a kepek igy)
+     *     barmi mas         -- a payload EZEN a kulcsan (a jovo jegy-lanca)
+     *
+     * MIERT NEM UL RA AZ `entity_id` OSZLOPRA: az MUVELETENKENT MAST JELENT --
+     * a `worksheet-line` soron a SZULO azonositoja (indulaskor kitoltve), a
+     * kepen a CEL azonositoja (utolag irja be a nyugtazas). Egy harmadik
+     * jelentes ugyanoda csendben osszecsusztatna oket.
+     *
+     * A REGI SOROKON MIND A KETTO `NULL` MARAD, es ezt a `nextBatch` NEM veheti
+     * "nincs fuggoseg"-nek: a keszuleken MAR sorban allo kepek a rogzitesuk
+     * ELOTT indulnanak el. A kod ezert a payloadbol olvas vissza, amig ilyen
+     * sor letezhet -- nevesitve, nem csendben.
+     */
+    name: "egy sorban allo muvelet megvarhat egy masikat",
+    sql: `
+      ALTER TABLE sync_queue ADD COLUMN depends_on_operation_id TEXT;
+      ALTER TABLE sync_queue ADD COLUMN depends_on_target TEXT;
+    `,
+  },
 ];
 
 /** A legmagasabb sorszam, amire a mai kod szamit. */

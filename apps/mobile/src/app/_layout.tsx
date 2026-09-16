@@ -143,6 +143,16 @@ function RootNavigator() {
         name="queue-resolve/[id]"
         options={{ title: "Elakadt módosítás" }}
       />
+      {/*
+        A CIM ITT ALL, NEM A KEPERNYON: a fejlec a navigatore. Regisztralas
+        nelkul az expo-router a FAJL NEVET tenne a fejlecbe ("service-jobs"),
+        ami a szerelonek semmit nem mond.
+      */}
+      <Stack.Screen
+        name="service-jobs/index"
+        options={{ title: "Hibajegyek" }}
+      />
+      <Stack.Screen name="service-jobs/[id]" options={{ title: "Hibajegy" }} />
       <Stack.Screen name="worksheets/index" options={{ title: "Munkalapok" }} />
       <Stack.Screen name="worksheets/new" options={{ title: "Új munkalap" }} />
       <Stack.Screen name="worksheets/[id]" options={{ title: "Munkalap" }} />

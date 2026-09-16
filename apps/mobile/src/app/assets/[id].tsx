@@ -14,7 +14,7 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { getAsset, uploadAssetDocuments } from "@/lib/api/assets";
-import { MAX_FILES_PER_UPLOAD } from "@/lib/api/asset-document-upload";
+import { MAX_FILES_PER_UPLOAD } from "@/lib/api/document-upload";
 import { photoPermissionDeniedNotice } from "@/lib/api/photo-permission-notice";
 import { toPickedImages } from "@/lib/api/picked-image";
 import { ASSET_STATUS_LABELS } from "@/lib/assets/asset-status";
@@ -311,6 +311,28 @@ export default function AssetDetailScreen() {
               <Info label="Modell" value={asset.model} />
               <Info label="Sorozatszám" value={asset.serialNumber} />
               <Info label="Partner azonosítója" value={asset.inventoryNumber} />
+              {/*
+                A TELJESITMENY EGY MEZOBEN, az ertekevel es a jelevel. A
+                szerkeszto ket mezobe keri be, mert ott ket dolgot kell
+                megadni; itt EGY adat all, es ket sorra bontva a szam
+                elszakadna a jeletol.
+
+                A MERTEKEGYSEG A VALASZBAN JON, kiirva -- nem az azonositoja.
+                Ez nem veletlen: kulonben a telefonnak kulon le kellene kernie
+                a torzsadatot egyetlen jel kiirasahoz, es TERERO NELKUL ezt nem
+                tudna megtenni. A mentett masolatbol allo lap ilyenkor szam
+                melle ures helyet mutatna.
+              */}
+              <Info
+                label="Teljesítmény"
+                value={
+                  asset.performance
+                    ? asset.performanceUnit
+                      ? `${asset.performance} ${asset.performanceUnit.code}`
+                      : asset.performance
+                    : undefined
+                }
+              />
               <Info label="Termék" value={asset.product?.name} />
               <Info label="Leírás" value={asset.description} />
             </Section>

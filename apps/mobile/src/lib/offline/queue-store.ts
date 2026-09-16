@@ -336,14 +336,27 @@ export async function enqueuePhoto(input: {
   try {
     const db = await initializeOfflineDatabase();
     await db.runAsync(
+      /**
+       * A FUGGOSEG MOSTANTOL OSZLOPBAN ALL, NEM CSAK A PAYLOADBAN.
+       *
+       * A `recordingOperationId` a payloadban MARAD (a regi sorok is abbol
+       * dolgoznak, es a kep-azonosito kepzese is hasznalja), de az UJ sorok
+       * kiirjak az oszlopba is. Igy a `nextBatch` altalanos szabalya mar rajuk
+       * is all, es a payload-olvasas csak a REGI sorok miatt kell.
+       *
+       * A cel `entityId`: a kep a sajat `entity_id` mezojebe kapja a rogzites
+       * szerver-azonositojat -- ez az a mezo, amibol a kuldes tudja, HOVA megy.
+       */
       `INSERT OR IGNORE INTO sync_queue
-         (id, operation, entity_type, entity_id, payload_json, created_at, attempt_count, last_error, state)
-       VALUES (?, 'upload-photo', ?, NULL, ?, ?, 0, NULL, 'pending')`,
+         (id, operation, entity_type, entity_id, payload_json, created_at, attempt_count, last_error, state,
+          depends_on_operation_id, depends_on_target)
+       VALUES (?, 'upload-photo', ?, NULL, ?, ?, 0, NULL, 'pending', ?, 'entityId')`,
       [
         input.id,
         input.entityType,
         JSON.stringify(input.payload),
         input.createdAt,
+        input.payload.recordingOperationId,
       ],
     );
     return { ok: true, operationId: input.id };
@@ -375,18 +388,78 @@ export async function attachRecordingResult(
   assetId: string,
 ): Promise<number> {
   const db = await initializeOfflineDatabase();
-  const rows = await db.getAllAsync<{ id: string; payload_json: string }>(
-    `SELECT id, payload_json FROM sync_queue
-      WHERE operation = 'upload-photo' AND entity_id IS NULL`,
+  /**
+   * A KERESES MOSTANTOL A FUGGOSEGRE MEGY, NEM A MUVELET TIPUSARA.
+   *
+   * Eddig `operation = 'upload-photo'` allt itt, tehat a visszairas a KEPEKRE
+   * volt kotve. Egy munkalap, ami egy epp most felment JEGYRE var, ugyanigy
+   * potolando -- es a regi alak ra sem nezett volna.
+   *
+   * A REGI SOROKAT A MASODIK FELTETEL HOZZA: azokon az oszlop `NULL`, es a
+   * fuggoseg a payloadban all. Amig ilyen sor letezhet, ez az ag kell.
+   *
+   * AZ `entity_id IS NULL` MIND A KET AGON OTT ALL, ES EZT EGY MEGLEVO ALLITAS
+   * KOVETELTE VISSZA: enelkul egy MAR CIMZETT sorra ujabb azonosito kerulne. Az
+   * elso alakom csak a regi agon orizte -- a szurest altalanositottam, de ezt a
+   * feltetelt kozben elejtettem rola. A varo sorok `entity_id`-je amugy is
+   * `NULL` (meg nem letezik, amire varnak), tehat a feltetel nem szukit semmit,
+   * amit meg kellene engednunk.
+   */
+  const rows = await db.getAllAsync<{
+    id: string;
+    payload_json: string;
+    depends_on_operation_id: string | null;
+    depends_on_target: string | null;
+    operation: string;
+  }>(
+    `SELECT id, payload_json, depends_on_operation_id, depends_on_target, operation
+       FROM sync_queue
+      WHERE (depends_on_operation_id = ? AND entity_id IS NULL)
+         OR (depends_on_operation_id IS NULL AND operation = 'upload-photo' AND entity_id IS NULL)`,
+    [recordingOperationId],
   );
   let erintett = 0;
   for (const row of rows) {
-    const payload = readPhotoPayload(row.payload_json);
-    if (payload?.recordingOperationId !== recordingOperationId) continue;
-    await db.runAsync(`UPDATE sync_queue SET entity_id = ? WHERE id = ?`, [
-      assetId,
-      row.id,
-    ]);
+    const fuggoseg =
+      row.depends_on_operation_id ??
+      readPhotoPayload(row.payload_json)?.recordingOperationId ??
+      null;
+    if (fuggoseg !== recordingOperationId) continue;
+
+    /**
+     * HOVA KERUL AZ AZONOSITO: a sor mondja meg.
+     *
+     * `entityId` -- a sajat cel-mezojebe (a kepek igy, es a REGI sorok is, mert
+     * ott a cel hianyzik, es ez volt az egyetlen viselkedes).
+     * barmi mas  -- a payload EZEN a kulcsan, mert a hivasnak a TORZSBEN kell
+     * vinnie a szulot (egy munkalap a jegy azonositojat a torzsben kuldi).
+     */
+    const cel = row.depends_on_target ?? "entityId";
+    if (cel === "entityId") {
+      await db.runAsync(`UPDATE sync_queue SET entity_id = ? WHERE id = ?`, [
+        assetId,
+        row.id,
+      ]);
+    } else {
+      /**
+       * A PAYLOAD JS-BEN EPUL UJRA, NEM SQL-BEN. A `json_set` a SQLite JSON1
+       * kiterjeszteseto fuggene, es ezt a fuggest a modul mashol is kerui --
+       * nehany varakozo sorrol van szo, tehat az olvasas ara elhanyagolhato.
+       */
+      let payload: Record<string, unknown>;
+      try {
+        payload = JSON.parse(row.payload_json) as Record<string, unknown>;
+      } catch {
+        // SERULT SOR: nem irunk bele. A kuldes ugyis elbukik rajta, es ott
+        // legalabb megnevezett hibat ad, nem egy felig atirt torzset.
+        continue;
+      }
+      payload[cel] = assetId;
+      await db.runAsync(`UPDATE sync_queue SET payload_json = ? WHERE id = ?`, [
+        JSON.stringify(payload),
+        row.id,
+      ]);
+    }
     erintett += 1;
   }
   return erintett;
@@ -406,6 +479,8 @@ export async function pendingQueueRows(): Promise<SyncQueueRow[]> {
     last_error: string | null;
     last_attempt_at: string | null;
     state: string;
+    depends_on_operation_id: string | null;
+    depends_on_target: string | null;
   }>(
     `SELECT * FROM sync_queue
       WHERE state IN (${KULDHETO.map(() => "?").join(", ")})
@@ -423,6 +498,14 @@ export async function pendingQueueRows(): Promise<SyncQueueRow[]> {
     lastError: r.last_error,
     lastAttemptAt: r.last_attempt_at,
     state: r.state as SyncState,
+    /**
+     * A REGI SOROKON EZ `undefined`, NEM `null`: az oszlop a sor keletkezese
+     * UTAN kerult a tablaba, es a `SELECT *` ilyenkor is ad mezot -- de a
+     * `??` kell ahhoz, hogy a tipus `null` legyen, ne `undefined`. A kettot a
+     * `dependencyOf` nem kulonbozteti meg, de a tipus igen.
+     */
+    dependsOnOperationId: r.depends_on_operation_id ?? null,
+    dependsOnTarget: r.depends_on_target ?? null,
   }));
 }
 
@@ -661,6 +744,8 @@ export async function allQueueRows(): Promise<SyncQueueRow[]> {
     last_error: string | null;
     last_attempt_at: string | null;
     state: string;
+    depends_on_operation_id: string | null;
+    depends_on_target: string | null;
   }>(`SELECT * FROM sync_queue ORDER BY created_at ASC`);
   return rows.filter(ismertSor).map((r) => ({
     id: r.id,
@@ -673,6 +758,14 @@ export async function allQueueRows(): Promise<SyncQueueRow[]> {
     lastError: r.last_error,
     lastAttemptAt: r.last_attempt_at,
     state: r.state as SyncState,
+    /**
+     * A REGI SOROKON EZ `undefined`, NEM `null`: az oszlop a sor keletkezese
+     * UTAN kerult a tablaba, es a `SELECT *` ilyenkor is ad mezot -- de a
+     * `??` kell ahhoz, hogy a tipus `null` legyen, ne `undefined`. A kettot a
+     * `dependencyOf` nem kulonbozteti meg, de a tipus igen.
+     */
+    dependsOnOperationId: r.depends_on_operation_id ?? null,
+    dependsOnTarget: r.depends_on_target ?? null,
   }));
 }
 

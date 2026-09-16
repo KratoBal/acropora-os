@@ -89,6 +89,29 @@ export const worksheetDetailInclude = {
     select: { id: true, number: true },
     orderBy: { createdAt: "asc" as const },
   },
+  /**
+   * AZ ESZKOZOK, AMIKROL A LAP SZOL.
+   *
+   * MIERT KERULT BE (merve 2026-09-16): a `WorksheetAsset` sorokat 2026-09-15
+   * ota IRJUK, es SEMMI nem olvasta vissza. Egyetlen `createMany` all a
+   * taroloban, a reszletlap includeja nem tartalmazta, a kozos tipusban nem
+   * volt mezo, es a webes munkalap-mappa nulla helyen hivatkozott ra. Aki tehat
+   * felvitelkor eszkozt csatolt egy laphoz, azt SEHOL nem latta viszont -- meg
+   * a sajat lapjan sem.
+   *
+   * A `createdAt` IS KIMEGY, nem csak a nev: egy honapja csatolt es egy ma
+   * csatolt eszkoz kozott a kezelonek latnia kell a kulonbseget, kulonben nem
+   * tudja megitelni, hogy a lista a mai munkarol szol-e.
+   */
+  assets: {
+    select: {
+      id: true,
+      assetId: true,
+      createdAt: true,
+      asset: { select: { assetNumber: true, name: true } },
+    },
+    orderBy: { createdAt: "asc" as const },
+  },
   versions: {
     include: worksheetVersionInclude,
     orderBy: { version: "desc" as const },
@@ -98,7 +121,10 @@ export const worksheetDetailInclude = {
 export const worksheetSummaryInclude = {
   ...worksheetAssigneeInclude,
   customer: { select: { displayName: true } },
-  department: { select: { code: true } },
+  // AZ AZONOSITO A KOD MELLE: a teljes utat a lista egyetlen kotegben kerdezi
+  // le (`unitPathsFor`), es ahhoz az azonosito kell, nem a kod. A kod
+  // megmarad, mert az az, amire a felulet visszaesik, ha nincs ut.
+  department: { select: { id: true, code: true } },
   versions: {
     select: {
       version: true,
@@ -114,7 +140,20 @@ export const worksheetSummaryInclude = {
 
 export type WorksheetDetailRow = Prisma.WorksheetGetPayload<{
   include: typeof worksheetDetailInclude;
-}>;
+}> & {
+  /**
+   * A HELYSZIN TELJES UTJA, a tarolo teszi melle -- NEM a Prisma `include`
+   * eredmenye.
+   *
+   * MIERT NEM AZ: a helyszin-fa melysege NEM korlatos, tehat egy
+   * `parent: { parent: { ... } }` lanc mindig csak addig latna, ameddig valaki
+   * megirta, es a hianyzo szint CSENDBEN maradna ki.
+   *
+   * ELHAGYHATO, es ez szandekos: a leképezés tiszta fuggveny marad, es a
+   * meglevo hivok (tesztek hamis sorai) valtozatlanul ervenyesek.
+   */
+  departmentPath?: string[] | null;
+};
 
 export type WorksheetSummaryRow = Prisma.WorksheetGetPayload<{
   include: typeof worksheetSummaryInclude;
@@ -245,6 +284,9 @@ export function toWorksheetDetail(row: WorksheetDetailRow): WorksheetDetail {
       parentId: row.department.parentId,
       code: row.department.code,
       name: row.department.name,
+      // A TELJES UT, HA A TAROLO MELLETETTE. A mezo elhagyhato, es a
+      // leképezés tiszta marad: a betoltes a tarolo dolga.
+      ...(row.departmentPath ? { path: row.departmentPath } : {}),
       isActive: row.department.isActive,
     },
     createdByName: row.createdBy?.displayName ?? null,
@@ -252,6 +294,13 @@ export function toWorksheetDetail(row: WorksheetDetailRow): WorksheetDetail {
       ? { id: row.serviceJob.id, jobNumber: row.serviceJob.jobNumber }
       : null,
     assignees: row.assignees.map(toAssignee),
+    assets: row.assets.map((link) => ({
+      id: link.id,
+      assetId: link.assetId,
+      assetNumber: link.asset.assetNumber,
+      assetName: link.asset.name,
+      attachedAt: link.createdAt.toISOString(),
+    })),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     continues: row.continues ?? null,
@@ -263,8 +312,17 @@ export function toWorksheetDetail(row: WorksheetDetailRow): WorksheetDetail {
   };
 }
 
+/**
+ * A TELJES UT PARAMETER, NEM LEKERDEZES -- es ez ugyanaz a reteg-rend, ami az
+ * `unitPathFor` kliens-parametereben all. A leado egy KOTEGBEN kerdezi le az
+ * egesz oldal utjait, ez a fuggveny pedig tiszta marad: sor be, sor ki.
+ *
+ * Ha az ut hianyzik a terkepbol, `null` kerul a mezobe, nem ures tomb. A
+ * felulet ilyenkor a kodra esik vissza, es az a viselkedes ugyanaz, mint a mai.
+ */
 export function toWorksheetListItem(
   row: WorksheetSummaryRow,
+  departmentPaths?: Map<string, string[]>,
 ): WorksheetListItem {
   const current = row.versions[0];
   if (!current) throw new Error("WORKSHEET_WITHOUT_VERSION");
@@ -274,6 +332,7 @@ export function toWorksheetListItem(
     label: formatWorksheetVersionLabel(row.number, current.version),
     customerName: row.customer.displayName,
     departmentCode: row.department.code,
+    departmentPath: departmentPaths?.get(row.department.id) ?? null,
     subject: current.subject,
     status: current.status,
     version: current.version,

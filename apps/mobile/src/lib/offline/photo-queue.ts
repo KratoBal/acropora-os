@@ -1,6 +1,18 @@
 import type { SyncQueueRow } from "./sync-queue";
 
 /**
+ * EZ A MODUL MAR NEM CSAK A FOTOKROL SZOL, ES A NEVE EZT NEM MONDJA MEG.
+ *
+ * 2026-09-16 ota a `nextBatch` ALTALANOS szabalyt hordoz: barmelyik sor varhat
+ * barmelyik masikra (`dependsOnOperationId`), es a foto ennek a SPECIALIS
+ * ESETE. A fajl neve viszont `photo-queue.ts` maradt -- vagyis aki a sor
+ * fuggoseg-szabalyat keresi, nem itt fogja keresni.
+ *
+ * AZ ATNEVEZES TUDATOSAN MARADT KI EBBOL A KORBOL: tizenegy hivatkozast
+ * mozgatna, ugyanabban a valtozasban, ami a sor VISELKEDESET irja at -- es a
+ * ket fajta diff egymast fedne el pont akkor, amikor az atnezes a legtobbet
+ * er. Kulon kartyan all.
+ *
  * A FOTO A ROGZITES UTAN MEGY -- ES EZ NEM SORREND-IZLES, HANEM FUGGOSEG.
  *
  * Balazs dontese (2026-09-03): "Elmehet a munkalap elobb de menjen utana a foto
@@ -63,6 +75,32 @@ export function photoOperationId(input: {
  * hianyzas azt is jelentheti, hogy a rogzites SOSEM letezett -- es epp az a
  * gazdatlan kep, amit vissza kell tartani.
  */
+/**
+ * MIRE VAR EZ A SOR -- AZ OSZLOPBOL, VAGY A PAYLOADBOL, HA A SOR REGI.
+ *
+ * === MIERT KET FORRAS, ES MIERT NEM CSAK AZ OSZLOP ===
+ *
+ * A `depends_on_operation_id` oszlop 2026-09-16-tol letezik. A keszuleken MAR
+ * sorban allo kepeken `null` -- es egy `null`-t "nincs fuggoseg"-nek venni azt
+ * jelentene, hogy azok a kepek a rogzitesuk ELOTT indulnanak el. A szerver
+ * elutasitana oket, a sor konfliktusnak sorolna, es a kep OROKRE elakadna.
+ *
+ * Ez FORDITOTT eset, mint a `last_attempt_at`-e: ott a hianyzo ertek helyes
+ * alapertelmezese az "esedekes" volt, mert a varakoztatas hianya csak korabbi
+ * inditast jelent. Itt a fuggoseg hianya ROSSZ iranyba enged.
+ *
+ * === MEDDIG KELL ===
+ *
+ * Amig letezhet olyan sor, ami a migracio ELOTT keletkezett. Ha egyszer
+ * biztosak vagyunk benne, hogy nincs (a sor kiurult mindenhol), ez az ag
+ * elhagyhato -- de addig NEM csendben all itt, hanem kiirva.
+ */
+export function dependencyOf(row: SyncQueueRow): string | null {
+  if (row.dependsOnOperationId) return row.dependsOnOperationId;
+  if (row.operation !== "upload-photo") return null;
+  return readPhotoPayload(row.payloadJson)?.recordingOperationId ?? null;
+}
+
 export function acknowledgedRecordings(
   rows: readonly SyncQueueRow[],
 ): Set<string> {
@@ -102,29 +140,38 @@ export function nextBatch(
    * rogzites tartana fel oket. Egyik sem igaz rola.
    */
   const modositasok = rows.filter((r) => r.operation === "update");
-  const rogzitesek = rows.filter((r) => r.operation === "create");
-  if (rogzitesek.length > 0) {
+  /**
+   * AMI SENKIRE NEM VAR, AZ MEHET -- ES EZ MOSTANTOL A MUVELET TIPUSATOL
+   * FUGGETLEN.
+   *
+   * Eddig itt `operation === "create"` allt, es a szabaly igy a TIPUSHOZ volt
+   * kotve. Egy harmadik szint (munkalap a JEGY alatt, ahol mind a ketto
+   * `create`) ebbe nem fert bele: a regi alak MIND A KETTOT elengedte volna
+   * ugyanabban a menetben, es a munkalap a meg nem letezo jegyre hivatkozott
+   * volna.
+   */
+  const szabadok = rows.filter(
+    (r) => r.operation !== "update" && dependencyOf(r) === null,
+  );
+  if (szabadok.length > 0) {
     /**
-     * AMIG VAN FEL NEM MENT ROGZITES, A FOTOK VARNAK. Nem azert, mert lassuk --
-     * hanem mert egy kep, aminek a rogzitese meg a sorban all, nem tud hova
-     * felkerulni.
+     * AMIG VAN FEL NEM MENT, FUGGETLEN SOR, A VAROK VARNAK. Nem azert, mert
+     * lassuk -- hanem mert amire varnak, az meg a sorban all.
      */
-    return [...rogzitesek, ...modositasok];
+    return [...szabadok, ...modositasok];
   }
-  const kepek = rows.filter((r) => {
-    if (r.operation !== "upload-photo") return false;
-    const payload = readPhotoPayload(r.payloadJson);
+  const varok = rows.filter((r) => {
+    if (r.operation === "update") return false;
+    const fuggoseg = dependencyOf(r);
     /**
-     * A GAZDATLAN KEP NEM MEGY EL. Ha a hozza tartozo rogzites nincs a
-     * felmentek kozott ES nincs a sorban sem, akkor valami elveszett -- es egy
-     * ilyen kep feltoltese a szerveren hibat adna, amit a sor konfliktusnak
-     * sorolna, es a kep orokre elakadna.
+     * A GAZDATLAN SOR NEM MEGY EL. Ha amire var, az nincs a felmentek kozott
+     * ES nincs a sorban sem, akkor valami elveszett -- es egy ilyen sor
+     * elkuldese a szerveren hibat adna, amit a sor konfliktusnak sorolna, es
+     * orokre elakadna.
      */
-    return (
-      payload !== null && felmentRogzitesek.has(payload.recordingOperationId)
-    );
+    return fuggoseg !== null && felmentRogzitesek.has(fuggoseg);
   });
-  return [...modositasok, ...kepek];
+  return [...modositasok, ...varok];
 }
 
 /** A sor payloadja fotokent, vagy `null`, ha nem az. */

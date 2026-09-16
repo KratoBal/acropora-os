@@ -9,7 +9,8 @@
 
 export type AssetKind =
   "SYSTEM" | "EQUIPMENT" | "COMPONENT" | "SENSOR" | "OTHER";
-export type AssetStatus = "ACTIVE" | "OUT_OF_SERVICE" | "IN_REPAIR" | "RETIRED";
+export type AssetStatus =
+  "ACTIVE" | "WARM_STANDBY" | "COLD_STANDBY" | "IN_REPAIR" | "RETIRED";
 export type AssetCriticality = "LOW" | "NORMAL" | "HIGH" | "CRITICAL";
 export type AssetOwnerType = "CUSTOMER" | "SUPPLIER";
 
@@ -37,4 +38,23 @@ export interface UpdateAssetInput {
   inventoryNumber?: string | null;
   description?: string | null;
   notes?: string | null;
+  /**
+   * AZ ELORE NYOMTATOTT MATRICA KODJA, UTOLAG IS.
+   *
+   * ES ITT NINCS `| null`, holott a tobbi mezon ott van -- nem feledekenysegbol:
+   * a szerver `UpdateAssetDto`-ja is `string`-et var. A matrica LESZEDESE ma
+   * nem letezik (az esemeny-naploban nincs neve), tehat egy `null` 400-zal
+   * bukna el. A tipus igy MAR ITT megmondja, ami a szerveren is all.
+   */
+  labelCode?: string;
+  /**
+   * A TELJESITMENY ES A MERTEKEGYSEGE -- ES ITT VAN `| null`, A MATRICAVAL
+   * ELLENTETBEN.
+   *
+   * A ket ellentetes alak ugyanabbol a szabalybol jon: a `null` TORLEST
+   * jelent, es a teljesitmenynel a torles LETEZIK. Csak EGYUTT megy: fel par
+   * a tablan sem allhat meg (`Asset_performance_pairing_check`).
+   */
+  performance?: string | null;
+  performanceUnitId?: string | null;
 }

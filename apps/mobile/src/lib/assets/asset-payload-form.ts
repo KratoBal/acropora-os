@@ -64,6 +64,8 @@ export function assetFormFromPayload(payload: unknown): AssetCreateForm | null {
     serialNumber: szoveg(row.serialNumber),
     inventoryNumber: szoveg(row.inventoryNumber),
     labelCode: szoveg(row.labelCode),
+    performance: szoveg(row.performance),
+    performanceUnitId: szoveg(row.performanceUnitId),
     installedAt: szoveg(row.installedAt),
     interval,
   };

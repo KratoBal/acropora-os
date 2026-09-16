@@ -148,7 +148,17 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
      * ketszer dontse el ugyanazt.
      */
     id: "service-jobs",
-    surfaces: ["web"],
+    /**
+     * A MOBIL 2026-09-16-TOL, es ezt a sor folotti megjegyzes maga jelolte ki:
+     * "a hibajegy-kepernyo elkeszulte a mobil alkalmazasban. Akkor ez a sor
+     * bovul." A kepernyo elkeszult, tehat a sor bovul.
+     *
+     * A CSEMPE UGYANEBBEN A KORBEN KERULT BE (`TILE_ENTRY.HJ`). Kulon-kulon
+     * egyik sem csinal semmit: e nelkul a sor nelkul a csempe rejtve maradna,
+     * a csempe nelkul pedig ez a sor egy nem letezo belepesi pontot engedne.
+     * A fel megoldas NEMA -- ezert megy a ketto egyutt.
+     */
+    surfaces: ["web", "mobile"],
     visibility: permission(PERMISSIONS.SERVICE_VIEW),
   },
   {
@@ -302,6 +312,24 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
      * egy szabaly ket helyen, es csak az egyik helyen javul.
      */
     id: "asset-labels",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
+  },
+  {
+    /**
+     * A MÉRTÉKEGYSÉGEK KARBANTARTÁSA.
+     *
+     * A JOG `SETTINGS_MANAGE`, nem `SERVICE_MANAGE` -- ez törzsadat-gondozás,
+     * ugyanaz a fajta, mint a matricakiadás. A szerelő HASZNÁLJA a listát (az
+     * eszköz-szerkesztő legördülője `SERVICE_VIEW` alatt olvassa), de nem
+     * ÍRJA: ha bárki felvihetne egységet, a lista három nap alatt ötféle
+     * „óra" változatot tartalmazna.
+     *
+     * A MENÜPONT ÉS A VÉGPONT UGYANAZT A JOGOT KAPJA. Ha kettévállnának, vagy
+     * látszana a gomb annak, aki nem hívhatja meg, vagy hívhatná az, aki nem
+     * látja -- és a kettő közül csak az első hangos.
+     */
+    id: "units-of-measure",
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
   },

@@ -13,9 +13,9 @@ import type {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  ServiceOfflineNotice,
-  type ServiceOfflineState,
-} from "@/components/service/service-offline-notice";
+  savotMond,
+  setOnLine,
+} from "@/components/service/service-offline-notice.testing";
 import { ServiceJobDetailPage } from "./service-job-detail-page";
 
 const api = vi.hoisted(() => ({
@@ -42,45 +42,6 @@ vi.mock("@/components/auth/auth-provider", () => ({
 }));
 vi.mock("@/lib/api/service-jobs", () => ({ serviceJobsApi: api }));
 vi.mock("@/lib/api/worksheets", () => ({ worksheetsApi: sheets }));
-
-/**
- * A KAPCSOLAT ALLAPOTAT A `navigator.onLine` MONDJA MEG, es a jsdom
- * alapertelmezese `true` -- tehat a sav ki sem rajzolodna. Ez a ket sor
- * allitja at, az `afterEach` pedig visszaadja, hogy a tobbi allitas ne egy
- * halozat nelkuli vilagban fusson.
- */
-function setOnLine(value: boolean) {
-  Object.defineProperty(window.navigator, "onLine", {
-    value,
-    configurable: true,
-  });
-}
-
-afterEach(() => setOnLine(true));
-
-/**
- * A VART MONDATOT A KOMPONENSTOL KERDEZEM MEG, NEM BEGEPELEM.
- *
- * Ez a lap allitasa arrol szol, hogy a lap JOL VALASZT a harom allapot kozul
- * -- nem arrol, hogy mi a mondat szovege. A szoveg a save, es sajat tesztje
- * van ra, ami azt is allitja, hogy a harom mondat KULONBOZIK. Ha ide beirnam
- * a mondatot, ket helyen allna ugyanaz az igazsag, es a lap tesztje pirosodna
- * egy PUSZTA ATFOGALMAZASTOL.
- *
- * MERVE, NEM FELTEVES (2026-09-15): a #693 pontosan ezt tette -- az urlap
- * mondatat atirta, a `form` kindhez nem nyult --, es a begepelt valtozat
- * azonnal pirosra valtott a friss fo agon, holott a lapok viselkedese nem
- * valtozott.
- */
-function savSzovege(kind: ServiceOfflineState["kind"]): string {
-  setOnLine(false);
-  const { container, unmount } = render(
-    <ServiceOfflineNotice state={{ kind }} />,
-  );
-  const szoveg = container.textContent ?? "";
-  unmount();
-  return szoveg;
-}
 
 function sessionAs(role: Session["user"]["role"]): Session {
   return {
@@ -114,6 +75,7 @@ function detail(overrides: Partial<ServiceJobDetail> = {}): ServiceJobDetail {
     // korabbi jegyen `null`. Ez az alapeset, nem a kivetel.
     departmentId: null,
     departmentName: null,
+    departmentPath: null,
     createdAt: "2026-09-01T08:00:00.000Z",
     scheduledAt: null,
     startedAt: null,
@@ -164,6 +126,7 @@ function detail(overrides: Partial<ServiceJobDetail> = {}): ServiceJobDetail {
         worksheet: {
           id: "worksheet-1",
           number: "BIO-2026-004",
+          subject: "Szivattyú csere",
           createdAt: "2026-09-02T08:00:00.000Z",
           handedOverAt: null,
         },
@@ -278,7 +241,7 @@ describe("ServiceJobDetailPage", () => {
     // Az elso valtozat a naploban keresett, es a POZITIV KONTROLL bukott el rajta
     // -- pontosan azert van.
     const hivatkozas = await screen.findByRole("link", {
-      name: "BIO-2026-004",
+      name: "Szivattyú csere (BIO-2026-004)",
     });
     const sor = hivatkozas.closest("li");
     expect(sor).toBeTruthy();
@@ -303,6 +266,7 @@ describe("ServiceJobDetailPage", () => {
             worksheet: {
               id: "worksheet-1",
               number: "BIO-2026-004",
+              subject: "Szivattyú csere",
               createdAt: "2026-09-02T08:00:00.000Z",
               handedOverAt: "2026-09-04T09:30:00.000Z",
             },
@@ -314,7 +278,7 @@ describe("ServiceJobDetailPage", () => {
     render(<ServiceJobDetailPage jobId="job-1" />);
 
     const hivatkozas = await screen.findByRole("link", {
-      name: "BIO-2026-004",
+      name: "Szivattyú csere (BIO-2026-004)",
     });
     expect(hivatkozas.closest("li")?.textContent ?? "").toContain("Átadva:");
   });
@@ -330,7 +294,9 @@ describe("ServiceJobDetailPage", () => {
       (row) => row.textContent ?? "",
     );
     expect(text[0]).toContain("Új → Felmérve");
-    expect(text[1]).toContain("Munkalap a jegy alatt: BIO-2026-004");
+    expect(text[1]).toContain(
+      "Munkalap a jegy alatt: Szivattyú csere (BIO-2026-004)",
+    );
     expect(text[2]).toContain("A hibajegy létrejött");
   });
 
@@ -803,20 +769,31 @@ describe("ServiceJobDetailPage", () => {
    * betolteskor -- epp amikor a kepernyo ures -- meg sem jelenne.
    */
   it("kapcsolat nélkül, betöltött jegy mellett a frissítésről beszél", async () => {
-    const vart = savSzovege("loaded");
+    setOnLine(false);
     render(<ServiceJobDetailPage jobId="job-1" />);
     await screen.findByText("Cápasuli szivattyú leállt");
 
-    expect(await screen.findByText(vart)).toBeTruthy();
+    expect(await savotMond("loaded")).toBeTruthy();
   });
 
   it("kapcsolat nélkül, betöltés közben azt mondja, hogy ezért üres a lap", async () => {
     // SOHA NEM TELJESULO valasz: a lap a csontvaz-agon marad.
-    const vart = savSzovege("empty");
+    setOnLine(false);
     api.detail.mockReturnValue(new Promise(() => {}));
     render(<ServiceJobDetailPage jobId="job-1" />);
 
-    expect(await screen.findByText(vart)).toBeTruthy();
+    expect(await savotMond("empty")).toBeTruthy();
     expect(screen.getByLabelText("Hibajegy betöltése")).toBeTruthy();
   });
 });
+
+/**
+ * A KAPCSOLATOT VISSZA KELL ADNI, PEDIG A FAJL UTOLSO TESZTJEI OFFLINE FUTNAK.
+ *
+ * MERVE 2026-09-15: amikor ez a sor egy atalakitas kozben kiesett, a keszlet
+ * ZOLD MARADT -- mert az offline tesztek eppen a fajl vegen allnak, tehat nem
+ * fut utanuk semmi. A lyuk nem ma latszana, hanem annak, aki ide egy uj
+ * tesztet ir: az halozat nelkuli vilagban indulna, es a pirosa nem arrol
+ * szolna, amit megirt.
+ */
+afterEach(() => setOnLine(true));

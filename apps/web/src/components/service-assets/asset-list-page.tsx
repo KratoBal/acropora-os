@@ -8,7 +8,13 @@ import {
 } from "@acropora/types";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import { buildSiteOptions, buildSiteTree } from "@/lib/partners/site-tree";
 import { suppliersApi } from "@/lib/api/suppliers";
@@ -42,9 +48,21 @@ import {
 
 const TABS = [
   { key: "ALL", label: "Összes" },
+  /**
+   * A BEEPITETT: minden, KIVEVE a kivezetetteket. Balazs kerese, 2026-09-16,
+   * szo szerint: "ide szeretnek egy Beepitett opciot meg amiben minden benne
+   * van kiveve a kivezetett eszkozok".
+   *
+   * AZ OSSZES UTAN ALL, ES NEM A SOR VEGEN: a ketto ugyanazt a kerdest
+   * valaszolja meg ("mit latok egyszerre"), csak masik hatarral -- egymas
+   * mellett a kulonbseguk latszik, a sor vegen egy negyedik allapot-szuronek
+   * nezne ki.
+   */
+  { key: "IN_PLACE", label: "Beépített" },
   { key: "ACTIVE", label: "Aktív" },
   { key: "IN_REPAIR", label: "Javítás alatt" },
-  { key: "OUT_OF_SERVICE", label: "Nem üzemel" },
+  { key: "WARM_STANDBY", label: "Meleg tartalék" },
+  { key: "COLD_STANDBY", label: "Hideg tartalék" },
   { key: "RETIRED", label: "Kivezetett" },
 ];
 
@@ -151,6 +169,41 @@ export function AssetListPage() {
    * viszont tobb tulajdonos eszkozeit mutatja, tehat tulajdonos nelkul a valaszto
    * nem tudna mit felkinalni. Merve 2026-08-31.
    */
+  /**
+   * A RENDEZES A CIMBEN LAKIK, mint a tobbi szuro -- es ez nem stilus: a lap
+   * a `params` tartalmat ADJA TOVABB a szervernek (lasd a `query` memot),
+   * tehat ami a cimbe kerul, az magatol eljut a lekerdezesig. Igy a rendezett
+   * lista MEGOSZTHATO es visszatolthetó, nem egy elveszo komponens-allapot.
+   *
+   * A HARMADIK KOPPINTAS VISSZAAD AZ ALAPERTELMEZESRE, nem egy harmadik
+   * iranyt ad. Enelkul nincs UT VISSZA: aki egyszer rendezett, annak a lap
+   * onnantol csak a ket sajat iranya kozott valtana, es a "ahogy eredetileg
+   * volt" allapot csak kezi cim-szerkesztessel lenne elerheto.
+   *
+   * A LAPOZAS MINDIG AZ ELSORE ALL VISSZA. Egy masik rendezes MAS sorokat tesz
+   * a harmadik lapra; a regi lapszamot megtartva a felhasznalo a lista
+   * kozepere esne, latszolag veletlenszeru tartalomra.
+   */
+  const setSort = useCallback(
+    (sort: string) => {
+      const next = new URLSearchParams(params.toString());
+      const jelenlegi = params.get("sort");
+      const irany = params.get("direction") ?? "asc";
+      if (jelenlegi !== sort) {
+        next.set("sort", sort);
+        next.set("direction", "asc");
+      } else if (irany === "asc") {
+        next.set("direction", "desc");
+      } else {
+        next.delete("sort");
+        next.delete("direction");
+      }
+      next.set("page", "1");
+      router.replace(`${pathname}?${next}`);
+    },
+    [params, pathname, router],
+  );
+
   const ownerId = params.get("ownerId") ?? "";
   const unitsOwnerId = params.get("ownerType") === "SUPPLIER" ? ownerId : "";
   const [units, setUnits] = useState<
@@ -308,11 +361,34 @@ export function AssetListPage() {
             <table className="w-full min-w-[980px] border-collapse text-left">
               <thead>
                 <tr>
-                  <th className={sv.tableHead}>Eszköz</th>
-                  <th className={sv.tableHead}>Elhelyezés</th>
+                  <SortableHead sort="name" params={params} onSort={setSort}>
+                    Eszköz
+                  </SortableHead>
+                  <SortableHead
+                    sort="placement"
+                    params={params}
+                    onSort={setSort}
+                  >
+                    Elhelyezés
+                  </SortableHead>
+                  {/*
+                    A KET KOZEPSO OSZLOP NEM RENDEZHETO, ES EZ NEM KIHAGYAS.
+                    Egyik sem EGY adat: a "Hierarchia" a szulo neve VAGY a
+                    reszegysegek szama VAGY az, hogy onallo; a "Muszaki
+                    azonosito" pedig harom mezo osszefuzve. Mindkettonel eloszb
+                    el kell donteni, MIT jelent a rendezes, es az nem fejlesztoi
+                    dontes -- a kerdes Balazsnal all (2026-09-16).
+
+                    ES AMIERT NEM ADTUNK NEKIK "valamilyen" rendezest: egy
+                    kattinthato fejlec, ami a harom mezo OSSZEFUZOTT szoveget
+                    rendezi, mukodonek latszik, es olyan sorrendet ad, amit
+                    senki nem tud elolvasni.
+                  */}
                   <th className={sv.tableHead}>Hierarchia</th>
                   <th className={sv.tableHead}>Műszaki azonosító</th>
-                  <th className={sv.tableHead}>Státusz</th>
+                  <SortableHead sort="status" params={params} onSort={setSort}>
+                    Státusz
+                  </SortableHead>
                 </tr>
               </thead>
               <tbody>
@@ -536,5 +612,57 @@ export function AssetListPage() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * EGY RENDEZHETO OSZLOPFEJLEC.
+ *
+ * Balazs kerese, 2026-09-16: "jo lenne ha kattintassal lehetne rendezni az
+ * adatokat".
+ *
+ * A HAROM ALLAPOT LATSZIK IS, nem csak mukodik: rendezetlen, novekvo, csokkeno.
+ * Egy nyil nelkuli kattinthato fejlec ugyanugy nez ki rendezes elott es utan,
+ * es a felhasznalo a LISTAT hiszi rossznak, nem a sajat emlekezetet.
+ *
+ * AZ `aria-sort` A `th` ELEMEN ALL, nem a gombon, mert a szabvany szerint az
+ * oszlop a rendezett dolog, nem a kapcsolo. Felolvaso nelkul ez nem latszik,
+ * es epp ezert csuszik el csendben.
+ */
+function SortableHead({
+  sort,
+  params,
+  onSort,
+  children,
+}: {
+  sort: string;
+  params: URLSearchParams;
+  onSort(sort: string): void;
+  children: ReactNode;
+}) {
+  const aktiv = params.get("sort") === sort;
+  const csokkeno = aktiv && params.get("direction") === "desc";
+  return (
+    <th
+      className={sv.tableHead}
+      aria-sort={aktiv ? (csokkeno ? "descending" : "ascending") : "none"}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(sort)}
+        className="inline-flex items-center gap-1 uppercase tracking-[0.07em] hover:text-ink"
+      >
+        {children}
+        {/*
+          A JELOLES KET DOLGOT MOND EGYSZERRE: hogy ez az oszlop RENDEZHETO
+          (halvany kettos nyil), es ha rendez, hogy MERRE. A `aria-hidden` azert
+          all rajta, mert a felolvaso mar megkapta ugyanezt az `aria-sort`
+          ertekbol -- ketszer elmondva zaj lenne.
+        */}
+        <span aria-hidden className={aktiv ? "text-ink" : "text-muted/50"}>
+          {aktiv ? (csokkeno ? "↓" : "↑") : "⇅"}
+        </span>
+      </button>
+    </th>
   );
 }

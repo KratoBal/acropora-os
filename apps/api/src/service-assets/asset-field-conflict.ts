@@ -141,6 +141,8 @@ const FIELD_LABELS: Record<string, string> = {
   customerAddressId: "helyszín",
   aquariumId: "akvárium",
   parentAssetId: "fölérendelt eszköz",
+  performance: "teljesítmény",
+  performanceUnitId: "teljesítmény mértékegysége",
 };
 
 /**

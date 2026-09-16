@@ -1,11 +1,19 @@
 import { Injectable } from "@nestjs/common";
 import { Repository, prisma } from "@acropora/database";
 
+/**
+ * A KESZULEK PLATFORMJA. Ugyanaz a ket ertek, ami a semaban
+ * (`DevicePlatform`), de sajat nev alatt: a regisztracio ES a cimzett-szures
+ * ugyanabbol a halmazbol dolgozik, tehat egy harmadik platform felvetele
+ * MINDKET helyen fordito-hibat ad, nem csak az egyiken.
+ */
+export type DevicePlatformName = "IOS" | "ANDROID";
+
 export interface DeviceTokenRegistration {
   userId: string;
   token: string;
   bundleId: string;
-  platform: "IOS" | "ANDROID";
+  platform: DevicePlatformName;
 }
 
 export interface DeviceTokenRecipient {
@@ -64,13 +72,40 @@ export class DeviceTokenRepository extends Repository {
     return { firstTime: existing === null };
   }
 
-  /** Every device the given colleagues can be reached on. */
+  /**
+   * Every device the given colleagues can be reached on THROUGH THIS CHANNEL.
+   *
+   * === A PLATFORM NEM SZUKITES, HANEM A KERDES RESZE ===
+   *
+   * A hivo egy KONKRET csatornan kuld: ma egyedul az Apple fele
+   * (`apns.sender.ts`), es ez az egyetlen kuldo, ami letezik. Egy androidos
+   * token viszont MA IS eltarolhato: a `DevicePlatform` enum tartalmazza az
+   * `ANDROID` erteket, es a regisztralo vegpont el is fogadja.
+   *
+   * SZURES NELKUL a lanc igy allna ossze, es egyik lepese sem hibazna:
+   *
+   *   1. egy androidos telefon sikeresen regisztral
+   *   2. a sor eltarolodik, `platform: ANDROID` ertekkel
+   *   3. kiosztaskor ez a lekerdezes VISSZAADJA
+   *   4. az Apple kuldo egy Google-tokent probal Apple fele kezbesiteni
+   *   5. az Apple elutasitja, es a hivo `retire` aga TOROLNE a sort
+   *
+   * Vagyis nem csak elmaradna egy ertesites: a regisztracio CSENDBEN es
+   * ISMETLODOEN torlodne, a tunet pedig "neha nem jon a push" alakban
+   * jelentkezne -- azon a telefonon, ami soha nem is kaphatott volna.
+   *
+   * EZERT KOTELEZO A PARAMETER, es nem alapertelmezett `IOS`. Egy
+   * alapertelmezes pont azt a hivot vedene meg, aki figyel; a MASODIK kuldo
+   * (Google fele), amikor megirjuk, epp attol lenne veszelyes, hogy elfelejtik
+   * atallitani. Kotelezoen a fordito kerdezi meg.
+   */
   async recipients(
     userIds: readonly string[],
+    platform: DevicePlatformName,
   ): Promise<DeviceTokenRecipient[]> {
     if (userIds.length === 0) return [];
     return this.database.deviceToken.findMany({
-      where: { userId: { in: [...userIds] } },
+      where: { userId: { in: [...userIds] }, platform },
       select: { userId: true, token: true, bundleId: true },
     });
   }

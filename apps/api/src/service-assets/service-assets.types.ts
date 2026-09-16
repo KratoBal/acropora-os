@@ -120,6 +120,27 @@ export const assetDetailInclude = {
     select: assetDocumentSummarySelect,
     orderBy: { createdAt: "desc" as const },
   },
+  /**
+   * A MATRICA, HOGY A SZERKESZTO MEG TUDJA MUTATNI, MI ALL AZ ESZKOZON.
+   *
+   * EGYES SZAMBAN, ES EZT A SEMA DONTI EL, NEM EN: az `AssetLabel.assetId`
+   * EGYEDI, ezert a Prisma egy-az-egyhez kapcsolatot general (`label`), nem
+   * listat. Eloszor `labels`-t irtam ide -- a fordito javitott ki, es jol tette:
+   * egy lista azt allitotta volna, hogy egy eszkozon TOBB matrica is allhat.
+   */
+  label: { select: { code: true } },
+  /**
+   * A TELJESITMENY EGYSEGE KIIRVA, NEM CSAK AZONOSITOKENT.
+   *
+   * Az adatlapnak `500 W`-ot kell mutatnia. Az azonositoval a web es a mobil
+   * KULON hivna le a torzsadatot egyetlen jel kiirasahoz -- a mobil pedig
+   * terero nelkul nem tudna.
+   *
+   * ES A KIVEZETETT EGYSEG IS IDEJON: nincs `isActive` szures. A kivezetes a
+   * VALASZTOT szukiti, nem a mar rogzitett erteket tunteti el; egy szures itt
+   * azt jelentene, hogy egy regi eszkoz teljesitmenye egy nap eltunik a lapjarol.
+   */
+  performanceUnit: { select: { id: true, code: true, name: true } },
 } satisfies Prisma.AssetInclude;
 
 export type AssetSummaryRow = Prisma.AssetGetPayload<{

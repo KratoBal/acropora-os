@@ -52,7 +52,19 @@ export type BuildUploadResult =
  * vagy tizenegy fájl a szerverig is elmenne, csak lassabban és drágábban, és a
  * szerelő addig a töltés-jelzőt nézné.
  */
-export function buildAssetDocumentUpload(input: {
+/**
+ * A NEVE NEM MOND TOBBET, MINT AMIT CSINAL -- ES EZ MA MAR NEM VOLT IGAZ.
+ *
+ * `buildAssetDocumentUpload` volt, holott a torzse a `type` mezot SZOVEGKENT
+ * veszi at, es semmit nem tud az eszkozrol. A munkalap-feltoltes MAR MA is ezt
+ * hivta (`worksheets.ts`), tehat a nev nem elmeletben, hanem a gyakorlatban
+ * vezetett felre: aki harmadik feltoltot ir, es "Asset"-et lat a neven, MASOLNI
+ * fog ahelyett, hogy hasznalna.
+ *
+ * Az atnevezes ezert nem takaritas volt, hanem annak a kerulese, hogy a
+ * hibajegy legyen a harmadik hivo egy olyan nev alatt, ami kizarja.
+ */
+export function buildDocumentUpload(input: {
   type: string;
   files: readonly PickedFile[];
 }): BuildUploadResult {

@@ -3,6 +3,7 @@ import {
   assetLabelCreateProblem,
   normalizeAssetLabelCode,
 } from "./asset-label-mirror";
+import { normalizePerformanceValue } from "./performance-mirror";
 
 /**
  * Az ÚJ ESZKÖZ űrlap logikája, a képernyőtől külön.
@@ -18,6 +19,17 @@ import {
  * ahonnan a mentés gomb már régen kigörgött. A felhasználó ebből annyit látott,
  * hogy a gomb NEM CSINÁL SEMMIT.
  */
+
+/**
+ * A ROSSZ ALAK MONDATA, EGY HELYEN -- ES MOSTANTOL KET KEPERNYONEK.
+ *
+ * A felvitel eddig is ezt mondta; a SZERKESZTO kepernyo 2026-09-16 ota
+ * ugyanezt a kerdest teszi fel (utolag felvitt matricakod), tehat ugyanezt a
+ * mondatot kell mondania. Ket begepelt valtozat ket kepernyon ugyanarra a
+ * hibara maga is hiba: a szerelo azt hinne, ket kulonbozo dologrol van szo.
+ */
+export const MATRICA_ALAK_UZENET =
+  "A matrica kódja egy betű és négy szám, például V2196.";
 
 export interface AssetCreateForm {
   owner: { type: AssetOwnerType; id: string } | null;
@@ -42,6 +54,20 @@ export interface AssetCreateForm {
    * kérdez.
    */
   labelCode: string;
+  /**
+   * A TELJESÍTMÉNY ÉS A MÉRTÉKEGYSÉGE -- KÉT MEZŐ, EGY ADAT.
+   *
+   * A kettő EGYÜTT megy, vagy egyik sem: a táblán CHECK áll rajta. Egy „500"
+   * mértékegység nélkül nem információ, hanem találgatásra hívás (watt? liter
+   * per óra?), és a szerelő a helyszínen épp azt nem tudja utólag pótolni.
+   *
+   * SZÖVEGKÉNT, nem számként: a tárolt alak `decimal(19,6)`, és számmá
+   * alakítva a lebegőpontos típuson menne át. A tizedesvesszőt a közös
+   * `normalizePerformanceValue` fordítja pontra -- a telefon magyar.
+   */
+  performance: string;
+  /** A választott mértékegység azonosítója, vagy üres. */
+  performanceUnitId: string;
   /** Amit a felhasználó beírt vagy a választóból kapott. Üres is lehet. */
   installedAt: string;
   /** Karbantartási intervallum napban, szövegként. Üres is lehet. */
@@ -61,6 +87,9 @@ export interface AssetCreatePayload {
   inventoryNumber?: string;
   /** A MI előre nyomtatott matricánk kódja, normalizálva (pl. `V2196`). */
   labelCode?: string;
+  /** A normalizált teljesítmény-érték (`0,5` -> `0.5`). A párjával együtt. */
+  performance?: string;
+  performanceUnitId?: string;
   installedAt?: string;
   serviceIntervalDays?: number;
 }
@@ -71,7 +100,7 @@ export type AssetCreateResult =
   | { ok: false; field: AssetCreateField; message: string };
 
 export type AssetCreateField =
-  "owner" | "name" | "labelCode" | "installedAt" | "interval";
+  "owner" | "name" | "labelCode" | "performance" | "installedAt" | "interval";
 
 const DATE_SEPARATORS = /[.\-/\s]+/;
 
@@ -228,7 +257,39 @@ export function buildAssetCreatePayload(
     return {
       ok: false,
       field: "labelCode",
-      message: "A matrica kódja egy betű és négy szám, például V2196.",
+      message: MATRICA_ALAK_UZENET,
+    };
+
+  /**
+   * A TELJESÍTMÉNY-PÁR, A MENTÉS ELŐTT -- ÉS A SORREND SZÁMÍT.
+   *
+   * Az alak-hiba ELŐBB áll a hiányzó mértékegységnél: egy „ötszáz" beírására a
+   * „válassz mértékegységet" mondat félrevezető lenne, hiszen a szám a baj.
+   *
+   * ÉS MIÉRT ITT, A TELEFONON IS: offline a mentés SORBA kerül, és a szerver
+   * válasza órákkal később érkezik meg. Egy fél pár akkor derülne ki, amikor a
+   * szerelő már rég nincs a helyszínen -- az adat pedig ott és akkor volt.
+   */
+  const performanceText = form.performance.trim();
+  const performanceValue = normalizePerformanceValue(form.performance);
+  if (performanceText !== "" && performanceValue === null)
+    return {
+      ok: false,
+      field: "performance",
+      message:
+        "A teljesítmény csak szám lehet, legfeljebb hat tizedesjeggyel (például 0,5 vagy 500).",
+    };
+  if (performanceValue !== null && form.performanceUnitId.trim() === "")
+    return {
+      ok: false,
+      field: "performance",
+      message: "Válassz mértékegységet a teljesítmény mellé.",
+    };
+  if (performanceValue === null && form.performanceUnitId.trim() !== "")
+    return {
+      ok: false,
+      field: "performance",
+      message: "Írj teljesítmény-értéket a mértékegység mellé.",
     };
 
   const intervalText = form.interval.trim();
@@ -286,6 +347,12 @@ export function buildAssetCreatePayload(
        * ellenorizte, tehat a ketto nem tud elcsuszni.
        */
       labelCode: normalizeAssetLabelCode(form.labelCode) ?? undefined,
+      // A KET KULCS EGYUTT marad el, ha nincs ertek: fel par a szerveren
+      // 400-at adna, es a telefonon az offline sorban allna meg.
+      performance: performanceValue ?? undefined,
+      performanceUnitId: performanceValue
+        ? form.performanceUnitId.trim()
+        : undefined,
       /**
        * A nap KEZDETE, UTC-ben. A telepítés dátuma nap-pontosságú adat: az
        * időpont-rész nem mérés, hanem a formátum ára, ezért nulla.

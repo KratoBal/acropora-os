@@ -119,6 +119,9 @@ function worksheetRow(
     },
     createdBy: { displayName: "Teszt Elek" },
     assignees: [],
+    // A MEZO KOTELEZO A SOR TIPUSABAN: elhagyhatokent a lekepezes CSENDBEN
+    // `undefined`-ot adna a kozos tipusnak, es a hiba a kepernyon jelenne meg.
+    assets: [],
     versions: [versionRow()],
     ...overrides,
   };

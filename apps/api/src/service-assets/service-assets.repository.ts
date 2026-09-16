@@ -11,6 +11,9 @@ import { collectUnitSubtreeIds } from "./unit-subtree.js";
 import { randomUUID } from "node:crypto";
 
 import { conflictingFields, intendedFields } from "./asset-field-conflict.js";
+import { assetListOrderBy } from "./asset-list-order.js";
+import { assetLabelWhere } from "./asset-label-filter.js";
+import { assetStatusWhere } from "./asset-status-filter.js";
 
 import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
@@ -28,6 +31,7 @@ import type {
   AssetStatus,
 } from "@acropora/types";
 import { normalizeAssetLabelCode, randomAssetLabelCode } from "@acropora/types";
+import { teljesitmenyEredmenye } from "./asset-performance.js";
 
 import { sumDocumentBytesInUse } from "../documents/document-bytes-in-use.js";
 import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
@@ -164,6 +168,30 @@ export class AssetLabelPoolExhaustedError extends Error {
 export class AssetLabelUnavailableError extends Error {
   constructor(readonly code: string) {
     super(`A(z) ${code} matricakód nem köthető ehhez az eszközhöz.`);
+  }
+}
+
+/**
+ * A TELJESITMENY FEL PARJA -- ES A MONDAT MEGNEVEZI A HIANYZO FELET.
+ *
+ * Egy "hibas teljesitmeny" uzenetbol a kezelo nem tudja, mit tegyen. A ket
+ * eset KET KULON teendo: az egyikben a legordulot kell kivalasztani, a
+ * masikban szamot kell irni. Ezert hordozza a hiba, MELYIK oldal ures.
+ *
+ * ES EZ A SZOLGALTATAS FELE 400, NEM 409, a matricakoddal ELLENTETBEN: ott a
+ * keres alakja jo volt es a VILAG allapota nem allt (a kod mason ul), itt
+ * maga a keres hianyos. A megkulonboztetes nem stilus: a 409 azt mondja
+ * "probald ujra maskepp", a 400 azt, hogy "javitsd ki, amit kuldtel".
+ */
+export class AssetPerformancePairError extends Error {
+  constructor(readonly hiany: "unit" | "szam" | "alak") {
+    super(
+      hiany === "unit"
+        ? "A teljesítményhez mértékegységet is kell választani."
+        : hiany === "szam"
+          ? "A mértékegység mellé teljesítmény-értéket is kell írni."
+          : "A teljesítmény csak szám lehet, legfeljebb hat tizedesjeggyel (például 0,5 vagy 500).",
+    );
   }
 }
 
@@ -325,7 +353,8 @@ export function assetListWheres(
 
 const ZERO_PER_STATUS: Record<AssetStatus, 0> = {
   ACTIVE: 0,
-  OUT_OF_SERVICE: 0,
+  WARM_STANDBY: 0,
+  COLD_STANDBY: 0,
   IN_REPAIR: 0,
   RETIRED: 0,
 };
@@ -418,18 +447,18 @@ export class ServiceAssetsRepository extends Repository {
       ...(departmentIds ? { departmentId: { in: departmentIds } } : {}),
       ...(query.aquariumId ? { aquariumId: query.aquariumId } : {}),
       /**
-       * MATRICA SZERINTI SZUKITES. A `label: null` alak a Prisma egy-az-egyhez
-       * kapcsolatan azt jelenti, hogy NINCS kapcsolt sor -- ez teszi
-       * megtalalhatova a matrica nelkul felvitt eszkozoket.
+       * A KET MATRICA-SZURO EGY HELYEN EPUL OSSZE (`assetLabelWhere`).
        *
-       * A `isNot: null` a masik irany. A ketto NEM ugyanaz, mint a
-       * `label: { code: ... }`: az mar egy KONKRET kodra szur.
+       * NEM KET SPREAD: mindketto ugyanarra a `label` kulcsra ir, tehat a
+       * masodik NEMAN felulirna az elsot. A fuggveny jegyzete leirja a mert
+       * esetet; a lenyeg, hogy a hiba nem ures listat adott volna, hanem egy
+       * ertelmes, nem ures valaszt a MASIK kerdesre.
+       *
+       * A DTO MAR NORMALIZALT KODOT AD (`toStoredLabelCode`), es a rossz
+       * alakut ELUTASITJA -- ide tehat vagy egy tarolhato kod erkezik, vagy
+       * semmi.
        */
-      ...(query.label === "without"
-        ? { label: null }
-        : query.label === "with"
-          ? { label: { isNot: null } }
-          : {}),
+      ...assetLabelWhere(query.label, query.labelCode),
       ...(query.parentAssetId ? { parentAssetId: query.parentAssetId } : {}),
       ...(query.dueBefore
         ? { nextServiceAt: { lte: new Date(query.dueBefore) } }
@@ -465,13 +494,19 @@ export class ServiceAssetsRepository extends Repository {
     const { list: where, counts: countsWhere } = assetListWheres(
       scope,
       userWhereWithoutStatus,
-      query.status === "ALL" ? {} : { status: query.status },
+      // A HAROM AG (egy allapot / minden / minden a kivezetetten kivul) egy
+      // helyen all, tiszta fuggvenyben -- adatbazis nelkul merheto.
+      assetStatusWhere(query.status),
     );
     const [rows, totalItems, counts] = await Promise.all([
       prisma.asset.findMany({
         where,
         include: assetSummaryInclude,
-        orderBy: [{ name: "asc" }, { id: "asc" }],
+        // A SORREND A LEKERDEZESBOL JON, nem a kliensbol: a lista lapozva megy
+        // ki, tehat egy bongeszo-oldali rendezes csak az epp latszo lapot
+        // rendezne. A parameter nelkuli hivas a ma is ervenyes nev szerinti
+        // sorrendet kapja, beture valtozatlanul.
+        orderBy: assetListOrderBy(query.sort, query.direction),
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
       }),
@@ -865,6 +900,20 @@ export class ServiceAssetsRepository extends Repository {
       throw new AssetLabelUnavailableError(input.labelCode);
 
     /**
+     * A TELJESITMENY PARJA, UGYANITT ES UGYANEZERT: nem ir, tehat nincs
+     * keresnivaloja a tranzakcion belul.
+     *
+     * A TABLAN ALLO CHECK a vegso vedelem, ez a sor NEM helyettesiti -- azert
+     * all elotte, hogy a kezelo MONDATOT kapjon, ne egy megkotes nevet.
+     */
+    const teljesitmeny = teljesitmenyEredmenye(
+      { performance: null, unitId: null },
+      input,
+    );
+    if (!teljesitmeny.rendben)
+      throw new AssetPerformancePairError(teljesitmeny.hiany);
+
+    /**
      * A HELYSZINI ROGZITES IDEMPOTENCIA-KULCSA, A LETREHOZAS ELOTT.
      *
      * A telefon terero nelkul sorba teszi a felvitelt, es a sor a halozati
@@ -962,6 +1011,8 @@ export class ServiceAssetsRepository extends Repository {
                         )
                       : undefined),
                   notes: optionalText(input.notes),
+                  performance: teljesitmeny.performance,
+                  performanceUnitId: teljesitmeny.unitId,
                   clientOperationId: input.clientOperationId ?? null,
                   archivedAt:
                     input.status === "RETIRED" ? new Date() : undefined,
@@ -1294,6 +1345,24 @@ export class ServiceAssetsRepository extends Repository {
     input: UpdateAssetDto,
     actorUserId: string,
   ): Promise<AssetDetail> {
+    /**
+     * A KOD ALAKJA A TRANZAKCION KIVUL DOL EL, ugyanugy, mint a felvitelnel:
+     * egy alak-ellenorzes nem ir, tehat nincs keresnivaloja odabent.
+     *
+     * A HAROM ALLAPOT KULON: `undefined` = a mezot el sem kuldtek, tehat a
+     * meglevo matrica MARAD; ervenyes kod = felvitel vagy csere; barmi mas
+     * (ures szoveg, rossz alak) = HIBA. Az `AssetLabelUnavailableError` a NYERS
+     * koddal megy, mert a szolgaltatas `map` fuggvenye abbol ismeri fel, hogy
+     * alak-hibarol van szo, es 400-at ad 409 helyett.
+     */
+    let labelCode: string | undefined;
+    if (input.labelCode !== undefined) {
+      const normalizalt = normalizeAssetLabelCode(input.labelCode);
+      if (normalizalt === null)
+        throw new AssetLabelUnavailableError(input.labelCode);
+      labelCode = normalizalt;
+    }
+
     const updatedId = await prisma.$transaction(
       async (tx) => {
         if (input.parentAssetId) {
@@ -1332,6 +1401,25 @@ export class ServiceAssetsRepository extends Repository {
             ? existing.installedAt
             : optionalDate(input.installedAt);
         const baseDate = lastServicedAt ?? installedAt ?? new Date();
+        /**
+         * A TELJESITMENY PARJAT AZ EREDMENY DONTI EL, NEM A BEKULDOTT MEZO --
+         * ES EZERT ALL EZ ITT BENT, A `labelCode`-dal ELLENTETBEN.
+         *
+         * A kliens kuldheti kulon a ketto egyiket: egy "csak a szamot irom at"
+         * keres TELJESEN ervenyes, ha az egyseg mar all az eszkozon. A
+         * felallapotot tehat csak a MEGLEVO sor ismereteben lehet megitelni,
+         * az pedig a tranzakcion belul all (`existing`) -- kivul egy masodik
+         * olvasas kellene hozza, ami kozben elavulhat.
+         */
+        const teljesitmeny = teljesitmenyEredmenye(
+          {
+            performance: existing.performance?.toString() ?? null,
+            unitId: existing.performanceUnitId,
+          },
+          input,
+        );
+        if (!teljesitmeny.rendben)
+          throw new AssetPerformancePairError(teljesitmeny.hiany);
         const data: Prisma.AssetUncheckedUpdateManyInput = {
           customerId:
             input.ownerType === undefined
@@ -1378,6 +1466,8 @@ export class ServiceAssetsRepository extends Repository {
                   : null
                 : undefined,
           notes: optionalText(input.notes),
+          performance: teljesitmeny.performance,
+          performanceUnitId: teljesitmeny.unitId,
           archivedAt:
             input.status === "RETIRED"
               ? (existing.archivedAt ?? new Date())
@@ -1434,7 +1524,8 @@ export class ServiceAssetsRepository extends Repository {
             | "UPDATED"
             | "PLACEMENT_CHANGED"
             | "PARENT_CHANGED"
-            | "STATUS_CHANGED";
+            | "STATUS_CHANGED"
+            | "LABEL_ASSIGNED";
           payload: Prisma.InputJsonObject;
         }> = [];
         if (existing.status !== updated.status)
@@ -1473,6 +1564,57 @@ export class ServiceAssetsRepository extends Repository {
               to: updated.parentAssetId,
             }),
           });
+        /**
+         * A MATRICA UTOLAGOS FELVITELE ES CSEREJE, UGYANEBBEN A TRANZAKCIOBAN.
+         *
+         * MIERT ITT: ha a felszabaditas es a foglalas kulon menne, egy bukott
+         * masodik lepes utan az eszkoz matrica NELKUL maradna ugy, hogy a regi
+         * kodja mar szabad -- vagyis ket eszkoz kozott elveszne egy fizikai
+         * matrica. A blokk `Serializable` szinten fut, mint a felvitel.
+         *
+         * A FELTETELES `updateMany` A VEDELEM, NEM AZ ELOZETES OLVASAS. Az
+         * alabbi `findFirst` CSAK azt dönti el, kell-e egyaltalan csinalni
+         * valamit (es mi volt a regi kod a naplohoz); a FOGLALAS maga tovabbra
+         * is `assetId: null` feltetellel megy, tehat ket parhuzamos keres
+         * ugyanarra a kodra nem tud mindketto atmenni.
+         *
+         * A CSERE MEGENGEDETT (acrobot dontese, 2026-09-16): a matrica FIZIKAI,
+         * es egy elgepelt kod utan a cserenek mennie kell -- kulonben az eszkoz
+         * orokre rossz kodon all, es a kod sem adhato ki masnak.
+         *
+         * AZ AZONOS KOD NEM ESEMENY: ha ugyanazt a kodot kuldik ujra (a webes
+         * urlap a teljes rekordot kuldi), nem szabaditunk fel es nem foglalunk
+         * ujra. Enelkul minden mentes irna egy `LABEL_ASSIGNED` sort, es a
+         * naplo harom nap alatt olvashatatlanna valna.
+         */
+        if (labelCode !== undefined) {
+          const jelenlegi = await tx.assetLabel.findFirst({
+            where: { assetId: id },
+            select: { code: true },
+          });
+          if (jelenlegi?.code !== labelCode) {
+            if (jelenlegi)
+              await tx.assetLabel.updateMany({
+                where: { assetId: id },
+                data: { assetId: null, assignedAt: null },
+              });
+            const claimed = await tx.assetLabel.updateMany({
+              where: { code: labelCode, assetId: null },
+              data: { assetId: id, assignedAt: new Date() },
+            });
+            if (claimed.count !== 1)
+              throw new AssetLabelUnavailableError(labelCode);
+            events.push({
+              type: "LABEL_ASSIGNED",
+              payload: jsonPayload({
+                code: labelCode,
+                // A REGI KOD IS A NAPLOBA: egy csere utan enelkul nem lehetne
+                // megmondani, melyik matrica kerult vissza a keszletbe.
+                previousCode: jelenlegi?.code ?? null,
+              }),
+            });
+          }
+        }
         /**
          * A NAPLO A TENYLEGESEN VALTOZOTT MEZOKET ROGZITI, NEM A BEKULDOTTEKET.
          *
@@ -1876,6 +2018,9 @@ export class ServiceAssetsRepository extends Repository {
       ...this.toListItem(row, paths),
       category: row.category ?? undefined,
       description: row.description ?? undefined,
+      labelCode: row.label?.code,
+      performance: row.performance?.toString(),
+      performanceUnit: row.performanceUnit ?? undefined,
       installedAt: row.installedAt?.toISOString(),
       purchasedAt: row.purchasedAt?.toISOString(),
       warrantyExpiresAt: row.warrantyExpiresAt?.toISOString(),

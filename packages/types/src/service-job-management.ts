@@ -30,6 +30,20 @@ export interface ServiceJobListItem {
   partnerStatus: ServiceJobPartnerStatus;
   partnerStatusLabel: string;
   customerName: string | null;
+  /**
+   * A HELYSZIN TELJES UTJA, a partner neve ala.
+   *
+   * A JEGY-LISTA EDDIG SEMMIT nem mondott a helyszinrol, csak a partnert. Ket
+   * jegy ugyanannal a partnernel tehat megkulonboztethetetlen volt azon a
+   * kepernyon, ahol a szerelo valaszt kozuluk. Balazs 2026-09-16-an a
+   * munkalap-listara kerte a teljes utat, es ugyanabban a mondatban ide is.
+   *
+   * `null`, ha a jegynek nincs helyszine VAGY az utat nem tudjuk felepiteni.
+   * A ketto a listan ugyanugy nez ki, es ez rendben van: ott nincs mit tenni
+   * egyikkel sem. Az adatlap `departmentPath` mezoje ugyanezt a szabalyt
+   * koveti. URES TOMB SOHA.
+   */
+  departmentPath: string[] | null;
   worksheetCount: number;
   createdAt: string;
 }
@@ -76,10 +90,23 @@ export interface ServiceJobStatusEvent {
   createdAt: string;
 }
 
-/** Egy munkalap a jegy mögött. A szám `null`, amíg a lap piszkozat. */
+/**
+ * Egy munkalap a jegy mögött. A szám `null`, amíg a lap piszkozat.
+ *
+ * A `subject` A LAP NEVE, ÉS A LEGFRISSEBB VERZIÓJÁRÓL JÖN -- ugyanonnan,
+ * ahonnan a csatoló választó is veszi. Azért kell a linknek is, mert a jegy
+ * alatt eddig CSAK a szám állt, és piszkozatnál az sincs: a felhasználó egy
+ * "Piszkozat" feliratot látott, ami minden számozatlan lapnál ugyanaz. Két
+ * piszkozat a jegy alatt megkülönböztethetetlen volt.
+ *
+ * ÜRES STRING LEHET (verzió nélküli lap), és a `""` itt NEM a név hiányát
+ * állítja, hanem azt, hogy nem tudjuk -- a rajzoló ezért esik vissza a
+ * korábbi alakra, ahelyett hogy üres zárójelet írna ki.
+ */
 export interface ServiceJobWorksheetLink {
   id: string;
   number: string | null;
+  subject: string;
   createdAt: string;
   handedOverAt: string | null;
 }
@@ -193,6 +220,22 @@ export interface ServiceJobDetail {
    * mindegyike, mert a mezo 2026-09-14-en keletkezett.
    */
   departmentId: string | null;
+  /**
+   * A HELYSZIN TELJES UTJA, a gyokertol lefele, egy-egy elemmel szintenkent.
+   *
+   * MIERT NEM ELEG A NEV, ES MIERT NEM ELEG A SZULO SEM: a kod es a nev csak
+   * TESTVEREK kozott egyedi, tehat ket TAVOLI ag alatt ugyanaz a "Biodóm (BIO)"
+   * megengedett es termeszetes. Ez a mezo korabban a szulot es a nevet fuzte
+   * ossze -- az EGY szinttel tobb, de harom szintnel meg mindig nem mondja meg,
+   * melyik agrol van szo.
+   *
+   * Balazs merte vissza 2026-09-16-an: a munkalap adatlapjan `NMD —
+   * Nagymedence` allt, es abbol nem derul ki, melyik medencerol.
+   *
+   * `null`, ha a jegynek nincs helyszine. URES TOMB SOHA: az azt allitana, hogy
+   * az ut ismert es nulla hosszu.
+   */
+  departmentPath: string[] | null;
   departmentName: string | null;
   createdAt: string;
   /**

@@ -48,6 +48,25 @@ import { WorksheetsService } from "./worksheets.service.js";
  * negy allitas ket KULON dolgot mer (az irast es a sorrendet), nem ugyanazt
  * negyszer.
  *
+ * === ES A FELVITEL UTANI BEALLITAS (2026-09-16), HAROM TOVABBI ALLITASSAL ===
+ *
+ *   e) a bekuldott lista LECSERELI a sorokat              -- a `notIn` + a csere
+ *   f) idegen helyszinnel a MEGLEVO sorok nem mozdulnak   -- a sorrend
+ *   g) a MARADO sor `createdAt`-ja nem irodik ujra        -- `skipDuplicates`
+ *
+ * A g) az, amit MOCKKAL NEM lehet bizonyitani, es egyben a legcsendesebb: ha
+ * minden mentes ujrairna az osszes sort, egy honapja csatolt eszkoz "ma
+ * csatoltnak" latszana a feluleten -- semmi nem hibazna tole.
+ *
+ * A VARHATO KALIBRACIO ERRE A HAROMRA:
+ *
+ *   a `skipDuplicates` elhagyasa a `setAssets` taroloban
+ *       -> g) piros (az egyedi kulcs miatt el is hasalna); e) es f) zold
+ *   a `assetsOutsideDepartment` elhagyasa a `setAssets` szolgaltatasban
+ *       -> f) piros; e) es g) zold
+ *   a `deleteMany` elhagyasa a `setAssets` taroloban
+ *       -> e) piros; f) es g) zold
+ *
  * === ITT NEM FUT ===
  *
  * Ebben a konteneben nincs postgres. A "megirtam" es a "lefutott" koze EGY
@@ -181,6 +200,19 @@ describe(
       return rows.map((row) => row.assetId).sort();
     }
 
+    /**
+     * A CSATOLASI IDOK, eszkozonkent. Kulon all az `assetIdsOf`-tol, mert MAS
+     * kerdesre valaszol: az a HALMAZT meri, ez azt, hogy a mar fent levo sorhoz
+     * hozzanyultunk-e.
+     */
+    async function csatolasiIdok(worksheetId: string) {
+      const rows = await prisma.worksheetAsset.findMany({
+        where: { worksheetId },
+        select: { assetId: true, createdAt: true },
+      });
+      return new Map(rows.map((row) => [row.assetId, row.createdAt.getTime()]));
+    }
+
     function lapokSzama() {
       return prisma.worksheet.count({ where: { customerId } });
     }
@@ -297,6 +329,84 @@ describe(
      * `Restrict`, tehat egy bent maradt kapcsolatsor epp az eszkoz torleset
      * allitana meg -- ez a szam mondja meg, hogy a lapok tenyleg elmentek.
      */
+    /**
+     * e) A FELVITEL UTANI BEALLITAS: A BEKULDOTT LISTA A TELJES HALMAZ.
+     *
+     * A `worksheet-assets.service.spec.ts` a `setAssets` BEMENETET meri (mi
+     * jutott el a taroloig); ez a TABLA-IRAST. A ketto nem helyettesiti
+     * egymast: az elso a sorrendet bizonyitja, ez azt, hogy a sorok tenyleg
+     * kicserelodnek.
+     */
+    it("a meglévő lapon a beküldött lista lecseréli a sorokat", async () => {
+      const detail = await service.create(
+        input([eszkozHelyszinen]),
+        actorUserId,
+      );
+
+      await service.setAssets(detail.id, {
+        assetIds: [eszkozAlcsomoponton],
+      });
+
+      assert.deepEqual(await assetIdsOf(detail.id), [eszkozAlcsomoponton]);
+    });
+
+    /**
+     * f) IDEGEN HELYSZIN ESZKOZENEL A MEGLEVO SOROK ERINTETLENUL MARADNAK.
+     *
+     * Nem a valaszkodra all az allitas: egy 400-at mero teszt akkor is zold
+     * lenne, ha a torles MAR megtortent volna, es a hiba csak utana derulne ki.
+     */
+    it("idegen helyszín eszközénél a meglévő sorok nem mozdulnak", async () => {
+      const detail = await service.create(
+        input([eszkozHelyszinen]),
+        actorUserId,
+      );
+
+      await assert.rejects(
+        () => service.setAssets(detail.id, { assetIds: [idegenEszkoz] }),
+        /nem ezen a helyszínen/,
+      );
+
+      assert.deepEqual(await assetIdsOf(detail.id), [eszkozHelyszinen]);
+    });
+
+    /**
+     * g) A MARADO SOR CSATOLASI IDEJE VALTOZATLAN.
+     *
+     * A `createdAt` az EGYETLEN jel arrol, mikor kerult egy eszkoz a lapra, es a
+     * felulet ki is irja (`attachedAt`). Ha minden mentes ujrairna az osszes
+     * sort, egy honapja rajta allo eszkoz "ma csatoltnak" latszana -- es semmi
+     * nem hibazna tole. MOCKKAL EZ NEM BIZONYITHATO.
+     *
+     * A HOZZAADOTT SOR KULON ALL: enelkul a meres akkor is zold lenne, ha a
+     * masodik hivas SEMMIT nem csinalt volna.
+     */
+    it("a maradó eszköz csatolási ideje változatlan, az újé friss", async () => {
+      const detail = await service.create(
+        input([eszkozHelyszinen]),
+        actorUserId,
+      );
+      const eredeti = await csatolasiIdok(detail.id);
+      const eredetiIdo = eredeti.get(eszkozHelyszinen);
+      assert.ok(eredetiIdo, "a felvitel nem írt sort");
+
+      await service.setAssets(detail.id, {
+        assetIds: [eszkozHelyszinen, eszkozAlcsomoponton],
+      });
+
+      const utana = await csatolasiIdok(detail.id);
+      assert.deepEqual(
+        [...utana.keys()].sort(),
+        [eszkozHelyszinen, eszkozAlcsomoponton].sort(),
+        "a második hívás nem adta hozzá az új eszközt",
+      );
+      assert.equal(
+        utana.get(eszkozHelyszinen),
+        eredetiIdo,
+        "a már fent lévő sor csatolási ideje újraíródott",
+      );
+    });
+
     it("a takarítás tényleg lefut: nem marad sor a teszt előtaggal", async () => {
       await removeLeftovers();
 
