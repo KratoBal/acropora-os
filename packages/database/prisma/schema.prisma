@@ -2792,6 +2792,19 @@ model Asset {
   model               String?
   serialNumber        String?
   inventoryNumber     String?
+  /// A BERENDEZES TELJESITMENYE, a `performanceUnit` mertekegysegeben.
+  ///
+  /// A KET MEZO EGYUTT MOZOG, es ezt CHECK is orzi a tablan: egy "500" onmagaban
+  /// nem informacio, hanem talalgatasra hivas (watt? liter per ora?). Ugyanaz az
+  /// alak, mint a matrica `assignment_pairing_check`-je.
+  performance         Decimal?  @db.Decimal(19, 6)
+  /// A mezo neve NEM `unitId`: az MAR FOGLALT ezen a modellen, es a HELYSZINT
+  /// jelenti (`Asset.unitId` -> `PartnerUnit`). Lasd a `UnitOfMeasure` fejlecet.
+  performanceUnitId   String?
+  /// `Restrict`, nem `SetNull`: ha egy mertekegyseget valaki torolni akar,
+  /// amire eszkozok hivatkoznak, az NEM csendben uritse ki a mezoket -- a
+  /// kivezetes utja az `isActive = false`, ami a valasztobol veszi ki.
+  performanceUnit     UnitOfMeasure? @relation("AssetPerformanceUnit", fields: [performanceUnitId], references: [id], onDelete: Restrict)
   description         String?
   installedAt         DateTime?
   purchasedAt         DateTime?
@@ -2909,6 +2922,61 @@ model AssetLabelBatch {
   labels         AssetLabel[]
 
   @@index([createdAt])
+}
+
+/// A MERTEKEGYSEG FAJTAJA -- ES EZ NEM CIMKE, HANEM A VALASZTOK SZUROJE.
+///
+/// A rendszerben ma TIZ szabad szoveges mertekegyseg-mezo all, es azok LEGALABB
+/// ket, egymassal nem keverheto vilagbol valok: a MENNYISEGEK (db, ora, ml --
+/// termek, rendeles, szamla, munkalap) es a MERESEK (mg/l, °C, µg/l -- akvarium,
+/// ICP). Az eszkoz TELJESITMENYE egy harmadik.
+///
+/// Egy lapos, fajta nelkuli lista MUKODNE, es pont hasznalat kozben lenne rossz:
+/// egy munkalap-tetelsor felkinalna a µg/l-t. A fajta ezert a tablan all, nem a
+/// valasztokban -- ott ugyanis minden uj felulet ujra eldontene, mit mutat, es a
+/// tizedik valaszto mar biztosan maskepp dontene.
+enum UnitOfMeasureKind {
+  /// Amiben MENNYISEGET merunk: db, ora, kg, l. A munkalap es a szamla vilaga.
+  QUANTITY
+  /// Amiben MERESI EREDMENYT adunk meg: mg/l, °C, µg/l, dKH.
+  MEASUREMENT
+  /// Amiben egy BERENDEZES kepesseget adjuk meg: W, l/h, m3/h.
+  PERFORMANCE
+}
+
+/// KARBANTARTOTT MERTEKEGYSEG-LISTA (Balazs kerese, 2026-09-16).
+///
+/// A NEVE SZANDEKOSAN `UnitOfMeasure` ES NEM `Unit`. A semaban a "unit" szo MA
+/// HAROM dolgot jelent: mertekegyseg, SZERVEZETI EGYSEG (helyszin) es EGYSEGAR.
+/// A masodik foglalja a kodbazist: az `Asset.unitId` a HELYSZIN, a felulet
+/// `UnitPicker`-rel valasztja, es tizennegy ag neve kezdodik igy. Egy `Unit`
+/// nevu tabla mellett az `asset.unitId` es az `asset.unitId` kozott semmi nem
+/// mondana meg a kulonbseget -- es az olvasaskor nem latszik, csak hasznalatkor.
+model UnitOfMeasure {
+  id        String            @id @default(cuid())
+  /// A rovid jel, ahogy a feluleten all: `db`, `óra`, `W`, `mg/l`.
+  code      String
+  /// A teljes nev, ami a listaban segit valasztani: "watt", "liter per óra".
+  name      String
+  kind      UnitOfMeasureKind
+  /// A kivezetett mertekegyseg NEM torlodik: sorok hivatkoznak ra. A
+  /// valasztokbol esik ki, a MEGLEVO ertekek mellett viszont olvashato marad.
+  isActive  Boolean           @default(true)
+  /// A felkinalas sorrendje. A gyakori egysegek elore kerulnek, mert egy
+  /// betűrendes lista a `db`-t a lista kozepere teszi.
+  sortOrder Int               @default(0)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  performanceAssets Asset[] @relation("AssetPerformanceUnit")
+
+  /// A KOD A FAJTAJAN BELUL EGYEDI, nem globalisan. Egy jel ket vilagban is
+  /// allhat (a `l` mennyiseg is, meres is lehet), es egy globalis egyediseg
+  /// ilyenkor az egyiket ZARNA KI -- olyan dontest hozva, amit ma semmi nem
+  /// indokol. Visszafele viszont barmikor szukitheto.
+  @@unique([kind, code])
+  /// A valaszto lekerdezese: fajtara szurve, aktivak, sorrendben.
+  @@index([kind, isActive, sortOrder])
 }
 
 model AssetLabel {

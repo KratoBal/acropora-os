@@ -547,3 +547,66 @@ mezők listája**, akkor a fajták már nem egy táblába valók.
 `WORKSHEET_DETACHED`) egyelőre semmi nem ÍRJA. A séma hordozza őket, az írási út
 külön szelet. Ez nem elfelejtett bekötés: a megjelenítés és az írás előtt az
 adat alakjának kell állnia.
+
+## A mértékegység törzsadat, fajtával — és nem `Unit` a neve (2026-09-16)
+
+**A KÉRÉS.** Balázs: az eszközön legyen teljesítmény mező (szám) és mellé
+mértékegység legördülő; a mértékegységek a Beállítások alá kerüljenek, saját
+menübe. Globális lista, nem partnerenkénti. acrobot kikötése: „két párhuzamos
+mértékegység-lista utólag nem vonható össze", tehát a modell úgy készüljön, hogy
+a munkalap később ugyanezt használhassa.
+
+**A MÉRÉS, AMIBŐL A DÖNTÉS KÖVETKEZIK.** A sémában ma **tíz** szabad szöveges
+mértékegység-mező áll, és azok **legalább két, egymással nem keverhető
+világból** valók:
+
+    MENNYISÉG   db, óra, ml      ProductVariant (+secondaryUnit), StockMovementLine,
+                                 SalesOrderLine, PurchaseOrderLine,
+                                 PurchaseInvoiceLine, InvoiceLine, WorksheetLine
+    MÉRÉS       mg/l, °C, µg/l   AquariumMeasurement, IcpResult
+
+A `WorksheetLine` saját sémakommentje ki is mondja: „Mértékegység (db, óra) --
+soronként változik, ma szabad szöveg". Az eszköz teljesítménye (W, l/h) egy
+harmadik fajta.
+
+**A DÖNTÉS.** Egy tábla (`UnitOfMeasure`), **fajta-oszloppal**
+(`QUANTITY | MEASUREMENT | PERFORMANCE`). Egy karbantartott lista, egy menü; a
+választók a fajtájukra szűrnek.
+
+**AZ ELVETETT ALTERNATÍVÁK:**
+
+1. **Egy lapos lista, fajta nélkül.** Ez pontosan az, amit a kérés szó szerint
+   leír, és működne — a baja használat közben látszik meg: egy munkalap-tételsor
+   felkínálná a `µg/l`-t, egy teljesítmény-mező a `db`-t. A hiba nem hangos:
+   rossz értéket lehet választani, és a sor utólag helyesnek látszik.
+2. **Fajtánként külön tábla.** Erősebb elhatárolás, de három tábla, három CRUD,
+   három menü — és a kikötés („ne legyen két párhuzamos lista") épp ez ellen
+   szól. A közös tábla ára egy enum-oszlop.
+3. **A fajta a választókban, nem a táblán.** A legkisebb szerkesztés, és ez a
+   baja: minden új felület ÚJRA eldöntené, mit mutat, és a tizedik választó már
+   biztosan másképp döntene. A szabály ilyenkor annyi helyen él, ahány olvasó.
+
+**MIÉRT MOST, ÉS NEM KÉSŐBB.** A megkülönböztető oszlop ma egy enum-mező.
+Később azt jelentené, hogy a már felvitt sorokra vissza kell **találgatni** a
+fajtát, miközben minden addigi választó úgy van megírva, hogy egy lista létezik.
+
+**A NÉV NEM `Unit`, ÉS EZ IS MÉRÉSEN ÁLL.** A sémában a „unit" szó **három**
+dolgot jelent: mértékegység, **szervezeti egység (helyszín)** és **egységár**
+(`unitNet`, hatszor). A második foglalja a kódbázist: az `Asset.unitId` a
+HELYSZÍN, a felület `UnitPicker`-rel választja, és tizennégy ág neve kezdődik
+így. Egy `Unit` nevű tábla mellett az `asset.unitId` és az `asset.unitId` között
+semmi nem mondaná meg a különbséget — és az olvasáskor nem látszik, csak
+használatkor. Ezért `UnitOfMeasure`, és az eszközön `performanceUnitId`.
+
+**A KÉT MEZŐ EGYÜTT MOZOG,** CHECK-kel a táblán
+(`Asset_performance_pairing_check`). Egy „500" önmagában nem információ, hanem
+találgatásra hívás. Ugyanaz az alak, mint a matrica `assignment_pairing_check`-je.
+
+**MI FORDÍTANÁ MEG.** Ha kiderülne, hogy a három fajta között rendszeresen kell
+**átjárás** (ugyanaz a sor mennyiségként és mérésként is kell), akkor a fajta
+nem egy érték a soron, hanem egy kapcsolótábla — és akkor ez a modell szűk. Ma
+egyetlen ilyen esetet sem mértünk: a tíz meglévő mező mind egyetlen világban áll.
+
+**AMIHEZ EZ A KÖR NEM NYÚL:** a tíz meglévő szabad szöveges mező egyikéhez sem.
+Azok átállítása külön döntés és külön migráció. A tábla úgy készült, hogy oda is
+használható legyen (`kind = QUANTITY`), tehát második lista nem fog kelleni.
