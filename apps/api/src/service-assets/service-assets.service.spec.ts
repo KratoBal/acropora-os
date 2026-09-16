@@ -6,7 +6,10 @@ import { BadRequestException, ConflictException } from "@nestjs/common";
 import type { AssetDetail } from "@acropora/types";
 
 import type { PartnerScope } from "../auth/partner-scope.util.js";
-import { AssetLabelUnavailableError } from "./service-assets.repository.js";
+import {
+  AssetLabelUnavailableError,
+  AssetPerformancePairError,
+} from "./service-assets.repository.js";
 import type { ServiceAssetsRepository } from "./service-assets.repository.js";
 import { ServiceAssetsService } from "./service-assets.service.js";
 import {
@@ -476,6 +479,91 @@ test("a partner az összevont üzenetet kapja", async () => {
         "a partner NEM tudhatja meg, hogy a kód ki van-e adva",
       );
       assert.match(String(error.message), /nem köthető/);
+      return true;
+    },
+  );
+});
+
+/**
+ * A FEL TELJESITMENY-PAR 400-AT AD, ES A MONDAT MEGNEVEZI A HIANYZO FELET.
+ *
+ * MIERT KELL ERRE ALLITAS, HOLOTT A TAROLO MAR DOB: mert a ket dontes KET
+ * HELYEN all. A tarolo azt mondja meg, MI nem all; a szolgaltatas azt, KINEK
+ * szol a mondat es milyen valaszkoddal. Ha ez a leképezes kimaradna, a hiba a
+ * `map` vegen levo `throw error`-ig futna, es 500 lenne belole -- pontosan az
+ * az alak, ami a matricakod `null` eseteben mar egyszer elofordult.
+ *
+ * ES A 400 NEM UGYANAZ, MINT A MATRICAE (409): ott a keres alakja jo volt es a
+ * VILAG allapota nem allt (a kod mason ul), itt maga a keres hianyos.
+ */
+test("a fél teljesítmény-pár 400-at ad, és megnevezi a hiányzó felet", async () => {
+  const service = new ServiceAssetsService(
+    repository({
+      create: async () => {
+        throw new AssetPerformancePairError("unit");
+      },
+    }),
+    new InMemoryDocumentStore(),
+  );
+  await assert.rejects(
+    () =>
+      service.create(
+        {
+          ownerType: "CUSTOMER",
+          ownerId: "customer-1",
+          kind: "COMPONENT",
+          name: "Szivattyú",
+          performance: "500",
+        },
+        "user-1",
+        { kind: "internal" },
+      ),
+    (error: unknown) => {
+      // A VALASZKOD: 400, nem 409 es nem 500.
+      assert.ok(
+        error instanceof BadRequestException,
+        `400-at vartam, ez jott: ${String(error)}`,
+      );
+      // ES A MONDAT: a kezelonek tudnia kell, MELYIK oldal ures -- a ket eset
+      // KET kulon teendo (legordulot valasztani kontra szamot irni).
+      assert.match(String(error.message), /mértékegységet is kell választani/);
+      return true;
+    },
+  );
+});
+
+/**
+ * A TESTVER-ALLITAS A MASIK FELRE.
+ *
+ * Enelkul a fenti akkor is zold lenne, ha a leképezes MINDIG ugyanazt a
+ * mondatot adna -- es akkor a kezelo a hianyzo SZAM eseten is azt olvasna,
+ * hogy mertekegyseget kell valasztani.
+ */
+test("a másik fél hiányára a MÁSIK mondat jön", async () => {
+  const service = new ServiceAssetsService(
+    repository({
+      create: async () => {
+        throw new AssetPerformancePairError("szam");
+      },
+    }),
+    new InMemoryDocumentStore(),
+  );
+  await assert.rejects(
+    () =>
+      service.create(
+        {
+          ownerType: "CUSTOMER",
+          ownerId: "customer-1",
+          kind: "COMPONENT",
+          name: "Szivattyú",
+          performanceUnitId: "uom-1",
+        },
+        "user-1",
+        { kind: "internal" },
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof BadRequestException);
+      assert.match(String(error.message), /teljesítmény-értéket is kell írni/);
       return true;
     },
   );
