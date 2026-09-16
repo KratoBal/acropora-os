@@ -85,6 +85,41 @@ module.exports = ({ config }) => {
     },
     android: {
       package: selected.bundleIdentifier,
+      /**
+       * A FIREBASE BEALLITOFAJL, ES EGY FAJL MIND A HAROM VALTOZATNAK.
+       *
+       * Androidon MINDEN push a Google uzenetkuldo szolgaltatasan megy at, es a
+       * kliens ebbol a fajlbol tudja meg, melyik projekthez tartozik. Enelkul az
+       * `expo-notifications` androidos aga nem tud tokent kerni.
+       *
+       * MIERT EGY FAJL, HOLOTT HAROM CSOMAGNEVUNK VAN (merve 2026-09-16): a
+       * Firebase egy projekten BELUL tobb androidos alkalmazast tart, es a
+       * letoltott fajl MINDEGYIKET tartalmazza -- ebben a peldanyban mind a
+       * harmat (`hu.acropora.os`, `.dev`, `.preview`). A build a sajat
+       * csomagnevehez tartozo blokkot valasztja ki belole.
+       *
+       * A FAJL NEM A TARHAZBAN ALL, HANEM EAS TITOKKENT, es ezt egy ORZO dontotte
+       * el, nem izles. A commit-kapu elutasitotta a fajlt: harom `current_key`
+       * ertek all benne, Google API kulcs alakban.
+       *
+       * ES A KAPUNAK IGAZA VAN, holott a Firebase dokumentacioja szerint ez a
+       * fajl "nem titok". Az allitas CSAK AKKOR igaz, ha a kulcs korlatozva van
+       * a csomagnevre es az alairo tanusitvanyra -- egy FRISSEN letrehozott
+       * projekt kulcsa viszont korlatozas NELKUL is szulethet, es akkor a
+       * projekt szamlajara barmelyik Google API hivhato vele. Innen nem tudom
+       * megnezni, melyik allapot all: az a Google konzolon latszik.
+       *
+       * Ezert a fajl EAS titokkent megy (`GOOGLE_SERVICES_JSON`, file tipus): a
+       * build gepen megjelenik, a tarhazba nem kerul be, es az orzo ep marad.
+       * Ha valaki egyszer visszateszi a fajlt a repoba, eloszb a kulcs
+       * korlatozasat kell megnezni a konzolon.
+       *
+       * A VISSZAESES (`./google-services.json`) a helyi futtatashoz van, ahol a
+       * fajlt a fejleszto maga teszi oda. A VALODI titok egyik esetben sem ez,
+       * hanem a szolgaltatasfiok kulcsa, ami a SZERVER oldalan kell.
+       */
+      googleServicesFile:
+        process.env.GOOGLE_SERVICES_JSON ?? "./google-services.json",
       predictiveBackGestureEnabled: false,
       adaptiveIcon: {
         backgroundColor: "#071827",
