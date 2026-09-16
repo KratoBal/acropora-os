@@ -16,7 +16,17 @@ import { describe, it } from "node:test";
  */
 
 const KEPERNYO = "src/app/assets/new.tsx";
+/**
+ * A HELYSZIN-VALASZTO 2026-09-16 OTA KOZOS KOMPONENS, ES AZ ALLITASOK VELE
+ * MENTEK. A specek sajat kikotese ez volt: "Ha a kepernyo atalakult, ezt az
+ * allitast is at kell irni, nem torolni." Ez tortent -- a MONDANIVALO ugyanaz,
+ * csak mar ket fajlra szol, mert a kod ket kepernyot szolgal ki.
+ */
+const VALASZTO = "src/components/assets/unit-picker.tsx";
+const SZERKESZTO = "src/app/assets/edit/[id].tsx";
 const forras = () => readFileSync(KEPERNYO, "utf8");
+const valaszto = () => readFileSync(VALASZTO, "utf8");
+const szerkeszto = () => readFileSync(SZERKESZTO, "utf8");
 
 describe("az új eszköz űrlapjának választói", () => {
   it("megtalálja a képernyőt, amiről állít valamit", () => {
@@ -32,10 +42,12 @@ describe("az új eszköz űrlapjának választói", () => {
   it("mind a három választó ugyanabban az alakban áll", () => {
     const s = forras();
 
-    // A partner sajat, korabbi alakja (ownerPickerOpen), a masik ketto a kozos
-    // `CollapsedPicker` komponensben. A szam azert all itt, hogy egy NEGYEDIK valaszto
+    // A partner sajat, korabbi alakja (ownerPickerOpen); a TIPUS a kozos
+    // `CollapsedPicker`-ben all, a HELYSZIN pedig a `UnitPicker`-ben, ami maga
+    // is azt hasznalja. A szam azert all itt, hogy egy NEGYEDIK valaszto
     // felvetele ne csusszon at csendben a regi, mindig nyitott alakban.
-    assert.equal((s.match(/<CollapsedPicker/g) ?? []).length, 2);
+    assert.equal((s.match(/<CollapsedPicker/g) ?? []).length, 1);
+    assert.equal((s.match(/<UnitPicker/g) ?? []).length, 1);
 
     // A KET CIMKE A SAJAT ELEMEN BELUL ALLJON. A prop neve `label`, ami az
     // urlapon mashol is szerepel (`Field label=...`), tehat a puszta
@@ -48,8 +60,11 @@ describe("az új eszköz űrlapjának választói", () => {
       s,
       /<CollapsedPicker(?:(?!<\/?CollapsedPicker)[\s\S])*?label="Típus választása"/,
     );
+    // A HELYSZIN CIMKEJE A KOZOS KOMPONENSBEN ALL, nem itt: a kepernyo mar
+    // csak atadja a sorokat. Ha valaki visszamasolna ide egy sajat valasztot, a
+    // fenti `<CollapsedPicker` darabszam pirosodna ki.
     assert.match(
-      s,
+      valaszto(),
       /<CollapsedPicker(?:(?!<\/?CollapsedPicker)[\s\S])*?label="Helyszín választása"/,
     );
     assert.match(s, /setOwnerPickerOpen\(\(open\) => !open\)/);
@@ -67,14 +82,28 @@ describe("az új eszköz űrlapjának választói", () => {
    * `unitLevels(...).map(` alak NINCS ott, azt egy ures fajl is kielegitene.
    */
   it("a helyszín-választó a tervből rajzol, egy szintet egyszerre", () => {
-    const s = forras();
+    assert.match(valaszto(), /unitPickerPlan\(/);
 
-    assert.match(s, /unitPickerPlan\(/);
-    assert.equal(
-      /unitLevels\([^)]*\)\.map\(/.test(s),
-      false,
-      "a képernyő nem listázhatja ki egyszerre az összes szintet",
-    );
+    /**
+     * A TAGADAS MOSTANTOL MIND A HAROM FAJLRA SZOL, ES EZ A LENYEG.
+     *
+     * A szerkeszto kepernyo 2026-09-16-ig PONTOSAN azt csinalta, amit ez az
+     * allitas tilt: `unitLevels(...).map(` -- minden szintet egyszerre. Az
+     * allitas viszont csak a felviteli urlapot nezte, tehat zold maradt vegig.
+     * Ez ugyanaz a csalad, mint amit a `list-source-wiring` sajat fejlece
+     * kimond: egy ellenorzes, ami a hibat nem tudja pirosra valtani, nem
+     * ellenorzes.
+     */
+    for (const [nev, szoveg] of [
+      [KEPERNYO, forras()],
+      [SZERKESZTO, szerkeszto()],
+      [VALASZTO, valaszto()],
+    ] as const)
+      assert.equal(
+        /unitLevels\([^)]*\)\.map\(/.test(szoveg),
+        false,
+        `${nev}: nem listázhatja ki egyszerre az összes szintet`,
+      );
   });
 
   /**
@@ -95,8 +124,14 @@ describe("az új eszköz űrlapjának választói", () => {
       s,
       /setKind\(item\.value\);\s*\n\s*setKindPickerOpen\(false\);/,
     );
+    // A HELYSZIN VALASZTASA A KOZOS KOMPONENSBEN TORTENIK (`onChange`), tehat
+    // a becsukas is ott csuszhatna be. Mindket helyen tiltjuk.
     assert.equal(
       /setUnitId\([^)]*\);\s*\n\s*setUnitPickerOpen\(false\)/.test(s),
+      false,
+    );
+    assert.equal(
+      /onChange\([^)]*\);\s*\n\s*onToggle\(\)/.test(valaszto()),
       false,
     );
   });

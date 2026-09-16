@@ -27,6 +27,14 @@ import { describe, it } from "node:test";
  * A mintat az `apps/api/src/mobile/mobile-api-routes.spec.ts` hasznalja mar.
  */
 const SCREEN = "src/app/assets/new.tsx";
+/**
+ * A HELYSZIN-VALASZTO 2026-09-16 OTA KOZOS KOMPONENS (a szerkeszto kepernyo is
+ * ezt hasznalja). A `unitLevels` hivas ezzel ATKERULT oda, tehat a hivas
+ * ARGUMENTUMAT mar nem itt lehet merni -- de a KERDES valtozatlan: a valaszto a
+ * kozos, masolatra visszaeso sorokbol epuljon-e. Az allitas ezert a valaszto
+ * BEMENETET meri, nem a belsejet.
+ */
+const PICKER = "src/components/assets/unit-picker.tsx";
 
 describe("az uj eszkoz urlap listai", () => {
   const source = readFileSync(SCREEN, "utf8");
@@ -39,20 +47,27 @@ describe("az uj eszkoz urlap listai", () => {
    * epuljon belole.
    */
   it("a helyszin-valaszto a kozos sorokbol epul, nem a halozati valaszbol", () => {
-    const hivasok = [...source.matchAll(/unitLevels\(\s*([^,]+?)\s*,/g)].map(
-      (match) => match[1]!.trim(),
+    const rows = [
+      ...source.matchAll(/<UnitPicker[\s\S]*?rows=\{([^}]+)\}/g),
+    ].map((match) => match[1]!.trim());
+    assert.equal(
+      rows.length,
+      1,
+      `Egy helyszin-valasztot vartam a ${SCREEN} fajlban, ennyit talaltam: ${rows.length}. Ha a kepernyo atalakult, ezt az allitast is at kell irni, nem torolni.`,
     );
-    assert.ok(
-      hivasok.length >= 2,
-      `Legalabb ket unitLevels hivast vartam a ${SCREEN} fajlban, ennyit talaltam: ${hivasok.length}. Ha a kepernyo atalakult, ezt az allitast is at kell irni, nem torolni.`,
+    assert.equal(
+      rows[0],
+      "unitRows",
+      `A helyszin-valaszto ${rows[0]} ertekbol epul. Ez volt a 2026-09-14-i hiba: a masolat megvolt, csak nem kerdezte meg senki. A kozos valtozo neve: unitRows.`,
     );
-    for (const argumentum of hivasok) {
-      assert.equal(
-        argumentum,
-        "unitRows",
-        `A helyszin-valaszto ${argumentum} ertekbol epul. Ez volt a 2026-09-14-i hiba: a masolat megvolt, csak nem kerdezte meg senki. A kozos valtozo neve: unitRows.`,
-      );
-    }
+
+    /**
+     * POZITIV KONTROLL A KOMPONENSRE: a `unitLevels` hivas tenyleg ATKERULT, nem
+     * eltunt. Enelkul a fenti allitas akkor is zold lenne, ha a valaszto belseje
+     * kiurult volna -- es epp az a kerdes, hogy a kapott sorokbol epul-e a fa.
+     */
+    const valaszto = readFileSync(PICKER, "utf8");
+    assert.match(valaszto, /unitLevels\(rows,/);
   });
 
   /**
