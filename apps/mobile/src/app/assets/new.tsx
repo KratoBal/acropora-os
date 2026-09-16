@@ -33,11 +33,8 @@ import {
   queuePhotosForRecording,
 } from "@/lib/assets/photo-after-record";
 import { listPartnerUnits, type PartnerUnit } from "@/lib/api/partners";
-import {
-  selectableUnitOptions,
-  unitLevels,
-  unitPickerPlan,
-} from "@/lib/partners/site-tree";
+import { selectableUnitOptions } from "@/lib/partners/site-tree";
+import { CollapsedPicker, UnitPicker } from "@/components/assets/unit-picker";
 import DateTimePicker, {
   type DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
@@ -710,104 +707,23 @@ export default function NewAssetScreen() {
                 beallitott helyszin nemán eltunne. Uj eszkoznel ez nem all elo,
                 de a ket urlap ugyanazt a szabalyt kovesse.
               */}
-              <CollapsedPicker
-                summary={
-                  // A TELJES UT, EGY FORRASBOL. Korabban ez a sor a
-                  // `selectableUnitOptions` cimkejebol jott, a lenti lepcso
-                  // viszont a `unitLevels`-ebol -- ket kulon szamitas ugyanarra
-                  // az utra. Mostantol mindketto a `unitPickerPlan` utjat
-                  // hasznalja, tehat nem tudnak elcsuszni egymastol.
-                  unitPickerPlan(unitLevels(unitRows, unitId || null)).path ||
-                  "Nincs helyszín kiválasztva"
-                }
-                hint="Koppints a listához"
-                label="Helyszín választása"
+              {/*
+                LEPCSOS VALASZTO: egy szint egy sor. A teljes utas lista a
+                telefonon hosszu, es valasztas kozben nem latszik, hol tart az
+                ember -- itt minden szinten csak nehany testver all.
+
+                KOZOS PELDANY A SZERKESZTO KEPERNYOVEL (2026-09-16). Korabban
+                ez a blokk CSAK itt allt, es a szerkeszton a regi, mindent
+                egyszerre kiterito alak maradt.
+              */}
+              <UnitPicker
+                rows={unitRows}
+                value={unitId}
+                onChange={setUnitId}
                 open={unitPickerOpen}
                 onToggle={() => setUnitPickerOpen((open) => !open)}
-              >
-                {/*
-                  LEGORDULO A LEPCSOS LISTA FOLE. Itt a partner INDOKA all, szo
-                  szerint: a helyszin-fa melysege nem korlatos, es a mindig
-                  nyitott lista lenyomja a tobbi mezot a kepernyo alja ala.
-
-                  ES AMI ITT MAS, MINT A TIPUSNAL: valasztaskor NEM csukodik be.
-                  A lepcsos valasztonal egy koppintas egyben LEFELE LEPES is (a
-                  kovetkezo szint a valasztott elem gyermekeibol all), tehat a
-                  becsukas epp a lefuras kozben venne el a listat.
-                */}
-                {(() => {
-                  /*
-                    EGY SZINT LATSZIK EGYSZERRE. A dontest a `unitPickerPlan`
-                    hozza, nem ez a blokk: itt csak kirajzoljuk, amit az mond.
-                    Igy a viselkedes allitasokkal merheto, szimulator nelkul is.
-                  */
-                  const plan = unitPickerPlan(
-                    unitLevels(unitRows, unitId || null),
-                  );
-                  return (
-                    <>
-                      {plan.steps.map((step) => (
-                        /*
-                          A BECSUKOTT SZINT VISSZANYITHATO. Enelkul egy rossz
-                          koppintas zsakutca lenne: a valasztott elem eltunik a
-                          listabol, es nincs mibol mast valasztani.
-
-                          A VISSZANYITAS a SZULOIG lep vissza, mert a szint
-                          listaja a szulo gyermekeibol all. A gyokeren ez az
-                          ures valasztas.
-                        */
-                        <Pressable
-                          key={`lepes-${step.depth}`}
-                          onPress={() =>
-                            setUnitId(
-                              step.depth === 0
-                                ? ""
-                                : (plan.steps[step.depth - 1]?.option.id ?? ""),
-                            )
-                          }
-                          style={[styles.ownerRow, styles.ownerSelected]}
-                        >
-                          <Text style={styles.ownerName}>
-                            {step.option.label}
-                          </Text>
-                          <Text style={styles.ownerMeta}>
-                            Koppints a módosításhoz
-                          </Text>
-                        </Pressable>
-                      ))}
-                      {plan.open === null ? null : (
-                        <View style={styles.unitLevel}>
-                          {plan.open.options.map((option) => (
-                            <Pressable
-                              key={option.id}
-                              disabled={!option.isActive}
-                              onPress={() => setUnitId(option.id)}
-                              style={[
-                                styles.ownerRow,
-                                !option.isActive && styles.unitOff,
-                              ]}
-                            >
-                              <Text style={styles.ownerName}>
-                                {option.label}
-                                {option.isActive ? "" : " (kivezetett)"}
-                              </Text>
-                            </Pressable>
-                          ))}
-                        </View>
-                      )}
-                    </>
-                  );
-                })()}
-                {/*
-                  A KIHAGYÁS NEM NÉMA. Aki tudja, hogy annak a partnernek hat
-                  helyszíne van, és négyet lát, a listát hiszi hibásnak.
-                */}
-                {units.hiddenCount > 0 ? (
-                  <Text style={styles.hint}>
-                    {units.hiddenCount} kivezetett helyszín nem választható.
-                  </Text>
-                ) : null}
-              </CollapsedPicker>
+                hiddenCount={units.hiddenCount}
+              />
             </Section>
           ) : null}
 
@@ -1145,37 +1061,6 @@ function Field(props: {
  * lefele lepes is, tehat nyitva marad. Egy komponens, ami ezt magatol dontene el,
  * a ket eset kozul az egyiket elrontana.
  */
-function CollapsedPicker({
-  summary,
-  hint,
-  label,
-  open,
-  onToggle,
-  children,
-}: {
-  summary: string;
-  hint: string;
-  label: string;
-  open: boolean;
-  onToggle(): void;
-  children: ReactNode;
-}) {
-  return (
-    <>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${label}: ${summary}. Koppints a módosításhoz.`}
-        onPress={onToggle}
-        style={styles.ownerRow}
-      >
-        <Text style={styles.ownerName}>{summary}</Text>
-        <Text style={styles.ownerMeta}>{hint}</Text>
-      </Pressable>
-      {open ? children : null}
-    </>
-  );
-}
-
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#071827" },
   flex: { flex: 1 },

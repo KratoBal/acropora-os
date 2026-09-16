@@ -36,7 +36,7 @@ import { ApiError } from "@/lib/api/client";
 import { assetUpdateOperationId } from "@/lib/offline/sync-queue";
 import { enqueueAssetUpdate } from "@/lib/offline/queue-store";
 import { saveOrQueue, type SaveOutcome } from "@/lib/offline/save-or-queue";
-import { unitLevels } from "@/lib/partners/site-tree";
+import { UnitPicker } from "@/components/assets/unit-picker";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 
@@ -117,6 +117,15 @@ export default function AssetEditScreen() {
   const [queued, setQueued] = useState<string | null>(null);
   const [lost, setLost] = useState<string | null>(null);
   const [loadedFrom, setLoadedFrom] = useState<string | null>(null);
+  /**
+   * A HELYSZIN-VALASZTO NYITVA VAN-E.
+   *
+   * CSUKOTTAN INDUL, ugyanugy, mint a felviteli urlapon: a szerkeszto tobbsege
+   * NEM a helyszint jon javitani, es egy mindig nyitott fa lenyomja a tobbi
+   * mezot a kepernyo alja ala. A csukott sor kiirja a teljes utat, tehat aki
+   * csak ellenorizni akarta, azonnal latja.
+   */
+  const [unitPickerOpen, setUnitPickerOpen] = useState(false);
 
   /*
    * A HELYSZÍNEK CSAK SZERVIZ PARTNER ESZKÖZÉNÉL. Vevő tulajdonosnál nincs mit
@@ -429,59 +438,26 @@ export default function AssetEditScreen() {
                 A partner helyszínei nem tölthetők be. A többi mező menthető.
               </Text>
             ) : null}
-            <Pressable
-              onPress={() => setForm({ ...form, unitId: "" })}
-              style={[styles.unitRow, form.unitId === "" && styles.unitRowOn]}
-            >
-              <Text style={styles.unitText}>Nincs megadva</Text>
-            </Pressable>
             {/*
-              LEPCSOS VALASZTO, ugyanaz a szabaly, mint a felviteli urlapon.
-              ITT SZAMIT IGAZAN a kivezetett helyszin kezelese: ha a szerkesztett
-              eszkoz epp ilyenen all, a lanc atmegy rajta, es a sor VALASZTVA
-              latszik -- kulonben a beallitott helyszin nemán eltunne, es a
-              mentes atirna valami masra.
+              UGYANAZ A VALASZTO, MINT A FELVITELI URLAPON, es mostantol
+              ugyanaz a PELDANY is. Itt korabban a regi alak allt: MINDEN
+              szintet egyszerre kiteritve, teljes szelessegu sorokkent -- egy
+              par szintes fanal ez egy egesz kepernyo, es valasztas kozben nem
+              latszik, hol tart az ember. Balazs kepernyofotokon mutatta meg a
+              kulonbseget (2026-09-16 10:41, Discord, mobilalkalmazas szal).
+
+              A "NINCS MEGADVA" SOR ELTUNT, ES EZ NEM VESZTESEG: a lepcsos
+              valaszton a legfelso mar eldontott lepesre koppintva ures lesz a
+              helyszin, tehat a torles utja megvan -- csak nem egy kulon sor
+              viszi.
             */}
-            {unitLevels(
-              /*
-                A MENTETT LISTA A TARTALEK, es a sorrend ugyanaz, mint az
-                eszkoznel: a halozati valasz nyer, a masolat csak akkor lep be,
-                ha nincs mas. E nelkul a valaszto URESEN allna offline, es a
-                szerelo azt hinne, hogy a partnernek nincs helyszine.
-              */
-              unitsQuery.data?.items ?? cachedUnits.data?.items ?? [],
-              form.unitId || null,
-            ).map((level, depth) =>
-              level.options.length === 0 ? null : (
-                <View key={`szint-${depth}`} style={styles.unitLevel}>
-                  {level.options.map((option) => {
-                    const selected = level.selectedId === option.id;
-                    return (
-                      <Pressable
-                        key={option.id}
-                        disabled={!option.isActive && !selected}
-                        onPress={() =>
-                          setForm({
-                            ...form,
-                            unitId: selected ? "" : option.id,
-                          })
-                        }
-                        style={[
-                          styles.unitRow,
-                          selected && styles.unitRowOn,
-                          !option.isActive && !selected && styles.unitOff,
-                        ]}
-                      >
-                        <Text style={styles.unitText}>
-                          {option.label}
-                          {option.isActive ? "" : " (kivezetett)"}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              ),
-            )}
+            <UnitPicker
+              rows={unitsQuery.data?.items ?? cachedUnits.data?.items ?? []}
+              value={form.unitId}
+              onChange={(unitId) => setForm({ ...form, unitId })}
+              open={unitPickerOpen}
+              onToggle={() => setUnitPickerOpen((nyitva) => !nyitva)}
+            />
           </View>
         ) : null}
 
@@ -502,8 +478,7 @@ export default function AssetEditScreen() {
         ))}
 
         <Text style={styles.hint}>
-          A partner, a helyszín és a szülőeszköz módosítása a webes felületen
-          történik.
+          A partner és a szülőeszköz módosítása a webes felületen történik.
         </Text>
 
         <Pressable
