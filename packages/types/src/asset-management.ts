@@ -205,6 +205,28 @@ export interface AssetDetail extends AssetListItem {
    * VALOSAG, nem egy ures hely.
    */
   labelCode?: string;
+  /**
+   * A TELJESÍTMÉNY, SZÖVEGKÉNT -- ÉS EZ NEM KÉNYELMETLENSÉG, HANEM A PONTOSSÁG.
+   *
+   * A tárolt alak `decimal(19,6)`. Ha ezt `number`-ré alakítanánk, a JavaScript
+   * lebegőpontos számán át menne, és egy `0.1`-es lépésköz máris `0.30000000000000004`
+   * alakban jönne vissza a kezelőnek. A szám itt NEM számolunk vele: leírjuk és
+   * megmutatjuk, tehát a szöveg a hűbb alak.
+   */
+  performance?: string;
+  /**
+   * AZ EGYSÉG KIÍRVA JÖN, NEM CSAK AZ AZONOSÍTÓJA.
+   *
+   * Az adatlapnak `500 W`-ot kell mutatnia. Ha csak az azonosító jönne, minden
+   * felület (web, mobil) KÜLÖN hívná le a törzsadatot, hogy egyetlen jelet
+   * kiírhasson -- és a mobil ezt térerő nélkül nem tudná megtenni. A kivezetett
+   * egység ugyanígy jön: a múltat nem írjuk át.
+   */
+  performanceUnit?: {
+    id: string;
+    code: string;
+    name: string;
+  };
   category?: string;
   description?: string;
   installedAt?: string;
@@ -291,6 +313,16 @@ export interface CreateAssetInput {
    * matrica hozzá van rendelve.
    */
   labelCode?: string;
+  /**
+   * A TELJESÍTMÉNY ÉS A MÉRTÉKEGYSÉGE -- A KETTŐ EGYÜTT MEGY, VAGY EGYIK SEM.
+   *
+   * Egy „500" mértékegység nélkül nem adat, hanem találgatásra hívás (watt?
+   * liter per óra?), a fordítottja ugyanígy. A megkötés a TÁBLÁN áll
+   * (`Asset_performance_pairing_check`), tehát nem lehet megkerülni egy új
+   * végponttal vagy egy háttéranyaggal -- a típus itt csak KIMONDJA.
+   */
+  performance?: string;
+  performanceUnitId?: string;
 }
 
 export interface UpdateAssetInput {
@@ -330,6 +362,18 @@ export interface UpdateAssetInput {
    * megmondja, ami a szerveren is all.
    */
   labelCode?: string;
+  /**
+   * ÉS ITT VAN `| null`, A `labelCode`-dal ELLENTÉTBEN -- a két ellentétes alak
+   * ugyanabból a szabályból jön: a `null` TÖRLÉST jelent, és a teljesítménynél
+   * a törlés LÉTEZIK (a matricánál nem).
+   *
+   * A PÁRT FRISSÍTÉSKOR AZ EREDMÉNY DÖNTI EL, NEM A BEKÜLDÖTT MEZŐ. Ha az
+   * egység már áll az eszközön, a szám EGYEDÜL is átírható; a törléshez
+   * viszont mind a kettőt `null`-ra kell állítani, mert egy fél pár a táblán
+   * sem állhat meg.
+   */
+  performance?: string | null;
+  performanceUnitId?: string | null;
 }
 
 export interface AssetQrCode {

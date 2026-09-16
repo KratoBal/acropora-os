@@ -211,6 +211,25 @@ export class CreateAssetDto {
    * függvénnyel, nem itt egy második mintával: két minta két helyen pontosan
    * ott csúszna el, ahol senki nem nézi. */
   @IsString() @IsOptional() labelCode?: string;
+  /**
+   * A BERENDEZES TELJESITMENYE, ES A MERTEKEGYSEGE.
+   *
+   * A KETTO EGYUTT MOZOG, es ezt a TABLA is orzi
+   * (`Asset_performance_pairing_check`): egy "500" onmagaban nem informacio,
+   * hanem talalgatasra hivas -- watt? liter per ora? A felallapotot a
+   * szolgaltatas utasitja el, sajat mondattal, MIELOTT a CHECK uzenete
+   * eljutna a felhasznalohoz.
+   *
+   * A szam SZOVEGKENT erkezik, es ez szandekos: a `number` a JSON-ban
+   * lebegopontos, tehat egy `0.1`-es lepteku ertek mar az uton elcsuszhatna.
+   * A `Decimal` oszlop pontosan azt tarolja, amit a kezelo beirt.
+   */
+  @IsString() @IsOptional() performance?: string;
+  /**
+   * A mezo neve NEM `unitId`: az MAR FOGLALT ezen a modellen, es a HELYSZINT
+   * jelenti. Lasd a `UnitOfMeasure` sema-fejlecet.
+   */
+  @IsString() @IsOptional() performanceUnitId?: string;
   @IsString() @IsOptional() description?: string;
   @IsISO8601() @IsOptional() installedAt?: string;
   @IsISO8601() @IsOptional() purchasedAt?: string;
@@ -293,6 +312,39 @@ export class UpdateAssetDto {
   @ValidateIf((_object, value) => value !== undefined)
   @IsString()
   labelCode?: string;
+  /**
+   * A BERENDEZES TELJESITMENYE, ES A MERTEKEGYSEGE.
+   *
+   * A KETTO EGYUTT MOZOG, es ezt a TABLA is orzi
+   * (`Asset_performance_pairing_check`): egy "500" onmagaban nem informacio,
+   * hanem talalgatasra hivas -- watt? liter per ora? A felallapotot a
+   * szolgaltatas utasitja el, sajat mondattal, MIELOTT a CHECK uzenete
+   * eljutna a felhasznalohoz.
+   *
+   * A `null` MIND A KET mezon a TORLEST jelenti, a tobbi mezovel egyezoen --
+   * es a ketto CSAK EGYUTT torolheto, ugyanabbol az okbol.
+   *
+   * A szam SZOVEGKENT erkezik, es ez szandekos: a `number` a JSON-ban
+   * lebegopontos, tehat egy `0.1`-es lepteku ertek mar az uton elcsuszhatna.
+   * A `Decimal` oszlop pontosan azt tarolja, amit a kezelo beirt.
+   */
+  /**
+   * A SZURO A `null`-T ATENGEDI, A `labelCode`-dal ELLENTETBEN -- es a ket
+   * ellentetes alak ugyanabbol a szabalybol jon: a `null` ezen az osztalyon
+   * TORLEST jelent, es itt a torles LETEZIK (a matricanal nem). Ezert a
+   * feltetel `undefined` ES `null` eseten hagyja ki az ellenorzest, nem csak
+   * `undefined`-nal.
+   */
+  @ValidateIf((_object, value) => value !== undefined && value !== null)
+  @IsString()
+  performance?: string | null;
+  /**
+   * A mezo neve NEM `unitId`: az MAR FOGLALT ezen a modellen, es a HELYSZINT
+   * jelenti. Lasd a `UnitOfMeasure` sema-fejlecet.
+   */
+  @ValidateIf((_object, value) => value !== undefined && value !== null)
+  @IsString()
+  performanceUnitId?: string | null;
   @IsString() @IsOptional() description?: string | null;
   @IsISO8601() @IsOptional() installedAt?: string | null;
   @IsISO8601() @IsOptional() purchasedAt?: string | null;

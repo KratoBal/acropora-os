@@ -153,6 +153,15 @@ export type {
   UpdateAssetInput,
 } from "./asset-management.js";
 export type { AssetLabel, AssetLabelIssueResult } from "./asset-label.js";
+export type {
+  UnitOfMeasure,
+  UnitOfMeasureKind,
+  UnitOfMeasureListResponse,
+} from "./unit-of-measure.js";
+export {
+  UNIT_OF_MEASURE_KINDS,
+  unitOfMeasureKindLabel,
+} from "./unit-of-measure.js";
 export type { AssetLabelBatchSummary } from "./asset-label-batch.js";
 export {
   ASSET_LABEL_BATCH_MAX,

@@ -30,6 +30,7 @@ import type {
   AssetStatus,
 } from "@acropora/types";
 import { normalizeAssetLabelCode, randomAssetLabelCode } from "@acropora/types";
+import { teljesitmenyEredmenye } from "./asset-performance.js";
 
 import { sumDocumentBytesInUse } from "../documents/document-bytes-in-use.js";
 import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
@@ -166,6 +167,28 @@ export class AssetLabelPoolExhaustedError extends Error {
 export class AssetLabelUnavailableError extends Error {
   constructor(readonly code: string) {
     super(`A(z) ${code} matricakód nem köthető ehhez az eszközhöz.`);
+  }
+}
+
+/**
+ * A TELJESITMENY FEL PARJA -- ES A MONDAT MEGNEVEZI A HIANYZO FELET.
+ *
+ * Egy "hibas teljesitmeny" uzenetbol a kezelo nem tudja, mit tegyen. A ket
+ * eset KET KULON teendo: az egyikben a legordulot kell kivalasztani, a
+ * masikban szamot kell irni. Ezert hordozza a hiba, MELYIK oldal ures.
+ *
+ * ES EZ A SZOLGALTATAS FELE 400, NEM 409, a matricakoddal ELLENTETBEN: ott a
+ * keres alakja jo volt es a VILAG allapota nem allt (a kod mason ul), itt
+ * maga a keres hianyos. A megkulonboztetes nem stilus: a 409 azt mondja
+ * "probald ujra maskepp", a 400 azt, hogy "javitsd ki, amit kuldtel".
+ */
+export class AssetPerformancePairError extends Error {
+  constructor(readonly hiany: "unit" | "szam") {
+    super(
+      hiany === "unit"
+        ? "A teljesítményhez mértékegységet is kell választani."
+        : "A mértékegység mellé teljesítmény-értéket is kell írni.",
+    );
   }
 }
 
@@ -873,6 +896,20 @@ export class ServiceAssetsRepository extends Repository {
       throw new AssetLabelUnavailableError(input.labelCode);
 
     /**
+     * A TELJESITMENY PARJA, UGYANITT ES UGYANEZERT: nem ir, tehat nincs
+     * keresnivaloja a tranzakcion belul.
+     *
+     * A TABLAN ALLO CHECK a vegso vedelem, ez a sor NEM helyettesiti -- azert
+     * all elotte, hogy a kezelo MONDATOT kapjon, ne egy megkotes nevet.
+     */
+    const teljesitmeny = teljesitmenyEredmenye(
+      { performance: null, unitId: null },
+      input,
+    );
+    if (!teljesitmeny.rendben)
+      throw new AssetPerformancePairError(teljesitmeny.hiany);
+
+    /**
      * A HELYSZINI ROGZITES IDEMPOTENCIA-KULCSA, A LETREHOZAS ELOTT.
      *
      * A telefon terero nelkul sorba teszi a felvitelt, es a sor a halozati
@@ -970,6 +1007,8 @@ export class ServiceAssetsRepository extends Repository {
                         )
                       : undefined),
                   notes: optionalText(input.notes),
+                  performance: teljesitmeny.performance,
+                  performanceUnitId: teljesitmeny.unitId,
                   clientOperationId: input.clientOperationId ?? null,
                   archivedAt:
                     input.status === "RETIRED" ? new Date() : undefined,
@@ -1358,6 +1397,25 @@ export class ServiceAssetsRepository extends Repository {
             ? existing.installedAt
             : optionalDate(input.installedAt);
         const baseDate = lastServicedAt ?? installedAt ?? new Date();
+        /**
+         * A TELJESITMENY PARJAT AZ EREDMENY DONTI EL, NEM A BEKULDOTT MEZO --
+         * ES EZERT ALL EZ ITT BENT, A `labelCode`-dal ELLENTETBEN.
+         *
+         * A kliens kuldheti kulon a ketto egyiket: egy "csak a szamot irom at"
+         * keres TELJESEN ervenyes, ha az egyseg mar all az eszkozon. A
+         * felallapotot tehat csak a MEGLEVO sor ismereteben lehet megitelni,
+         * az pedig a tranzakcion belul all (`existing`) -- kivul egy masodik
+         * olvasas kellene hozza, ami kozben elavulhat.
+         */
+        const teljesitmeny = teljesitmenyEredmenye(
+          {
+            performance: existing.performance?.toString() ?? null,
+            unitId: existing.performanceUnitId,
+          },
+          input,
+        );
+        if (!teljesitmeny.rendben)
+          throw new AssetPerformancePairError(teljesitmeny.hiany);
         const data: Prisma.AssetUncheckedUpdateManyInput = {
           customerId:
             input.ownerType === undefined
@@ -1404,6 +1462,8 @@ export class ServiceAssetsRepository extends Repository {
                   : null
                 : undefined,
           notes: optionalText(input.notes),
+          performance: teljesitmeny.performance,
+          performanceUnitId: teljesitmeny.unitId,
           archivedAt:
             input.status === "RETIRED"
               ? (existing.archivedAt ?? new Date())
@@ -1955,6 +2015,8 @@ export class ServiceAssetsRepository extends Repository {
       category: row.category ?? undefined,
       description: row.description ?? undefined,
       labelCode: row.label?.code,
+      performance: row.performance?.toString(),
+      performanceUnit: row.performanceUnit ?? undefined,
       installedAt: row.installedAt?.toISOString(),
       purchasedAt: row.purchasedAt?.toISOString(),
       warrantyExpiresAt: row.warrantyExpiresAt?.toISOString(),

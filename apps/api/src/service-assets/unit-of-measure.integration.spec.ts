@@ -6,6 +6,11 @@ import { after, before, describe, it } from "node:test";
 import { Prisma, prisma } from "@acropora/database";
 
 import { integrationDatabaseGate } from "../common/integration-database.js";
+import {
+  AssetPerformancePairError,
+  ServiceAssetsRepository,
+} from "./service-assets.repository.js";
+import type { CreateAssetDto, UpdateAssetDto } from "./dto/asset.dto.js";
 
 /**
  * A MERTEKEGYSEG-TORZSADAT, ADATBAZISON.
@@ -23,10 +28,12 @@ import { integrationDatabaseGate } from "../common/integration-database.js";
 const gate = integrationDatabaseGate(process.env);
 
 const PREFIX = "ITUOM";
+const repository = new ServiceAssetsRepository();
 
 let customerId = "";
 let actorUserId = "";
 let egysegId = "";
+let masikEgysegId = "";
 
 async function removeLeftovers() {
   await prisma.asset.deleteMany({
@@ -97,6 +104,15 @@ describe("mértékegység törzsadat", { skip: gate.mode === "skip" }, () => {
       select: { id: true },
     });
     egysegId = egyseg.id;
+    const masik = await prisma.unitOfMeasure.create({
+      data: {
+        code: `${PREFIX}-kW`,
+        name: `${PREFIX} kilowatt`,
+        kind: "PERFORMANCE",
+      },
+      select: { id: true },
+    });
+    masikEgysegId = masik.id;
   });
 
   after(async () => {
@@ -227,5 +243,170 @@ describe("mértékegység törzsadat", { skip: gate.mode === "skip" }, () => {
       }),
       0,
     );
+  });
+
+  /**
+   * ES MOST A MASIK OLDAL: AZ ALKALMAZASON AT, AHOGY A KEZELO HASZNALJA.
+   *
+   * A fenti allitasok a TABLAT merik, szandekosan az alkalmazas mogott. Ez a
+   * blokk pont a forditottja, es NEM ugyanaz a kerdes: a `pairing_check` a
+   * VEGEREDMENYT nezi, a szolgaltatas pedig azt dönti el, mit KAP a kezelo --
+   * mondatot vagy egy megkotes nevet.
+   *
+   * ES ITT VAN A KOR VALODI FINOMSAGA: frissiteskor a part az EREDMENY dönti
+   * el, nem a bekuldott mezo. Egy "csak a szamot irom at" keres teljesen
+   * ervenyes, ha az egyseg mar all az eszkozon -- es ezt EGYETLEN tablan allo
+   * megkotes sem tudja megmondani, mert az a kesz sort latja, nem a kerest.
+   */
+  describe("az alkalmazáson át", () => {
+    /** A friss verzio-belyeg: minden mentes elmozditja. */
+    async function frissBelyeg(id: string): Promise<string> {
+      const sor = await prisma.asset.findUniqueOrThrow({
+        where: { id },
+        select: { updatedAt: true },
+      });
+      return sor.updatedAt.toISOString();
+    }
+
+    async function mentes(
+      id: string,
+      mezok: Omit<UpdateAssetDto, "expectedUpdatedAt">,
+    ) {
+      return repository.update(
+        id,
+        { ...mezok, expectedUpdatedAt: await frissBelyeg(id) },
+        actorUserId,
+      );
+    }
+
+    function felvitel(over: Partial<CreateAssetDto> = {}): CreateAssetDto {
+      return {
+        ownerType: "CUSTOMER",
+        ownerId: customerId,
+        kind: "EQUIPMENT",
+        name: `${PREFIX} teszteszköz`,
+        ...over,
+      } as CreateAssetDto;
+    }
+
+    it("a felvitt pár az ADATLAPON kiírva jön vissza, nem azonosítóként", async () => {
+      const eszkoz = await repository.create(
+        felvitel({ performance: "500", performanceUnitId: egysegId }),
+        actorUserId,
+      );
+      assert.equal(eszkoz.performance, "500");
+      // A LENYEG: az adatlap `500 W`-ot tud mutatni EGY hivasbol. Ha csak az
+      // azonosito jonne, a mobil terero nelkul nem tudna kiirni a jelet.
+      assert.equal(eszkoz.performanceUnit?.id, egysegId);
+      assert.equal(eszkoz.performanceUnit?.code, `${PREFIX}-W`);
+    });
+
+    it("felvitelkor a szám EGYEDÜL mondatot kap, nem megkötés-nevet", async () => {
+      await assert.rejects(
+        () => repository.create(felvitel({ performance: "500" }), actorUserId),
+        (error: unknown) => {
+          assert.ok(error instanceof AssetPerformancePairError);
+          assert.equal(error.hiany, "unit");
+          return true;
+        },
+      );
+    });
+
+    /**
+     * EZ AZ AZ ALLITAS, AMIERT A `teljesitmenyEredmenye` LETEZIK.
+     *
+     * A bekuldott mezokbol itelve ez a keres FEL PAR (csak szam jott), tehat
+     * elbukna -- holott a vegeredmeny ep, mert az egyseg mar ott all.
+     */
+    it("meglévő egység mellett a szám EGYEDÜL is átírható", async () => {
+      const eszkoz = await repository.create(
+        felvitel({ performance: "500", performanceUnitId: egysegId }),
+        actorUserId,
+      );
+      const utana = await mentes(eszkoz.id, { performance: "750" });
+      assert.equal(utana.performance, "750");
+      assert.equal(utana.performanceUnit?.id, egysegId);
+    });
+
+    it("meglévő szám mellett az egység EGYEDÜL is átírható", async () => {
+      const eszkoz = await repository.create(
+        felvitel({ performance: "500", performanceUnitId: egysegId }),
+        actorUserId,
+      );
+      const utana = await mentes(eszkoz.id, {
+        performanceUnitId: masikEgysegId,
+      });
+      assert.equal(utana.performance, "500");
+      assert.equal(utana.performanceUnit?.id, masikEgysegId);
+    });
+
+    /**
+     * A TORLES CSAK EGYUTT MEGY -- ES A MASODIK ALLITAS A TESTVER-KONTROLL.
+     *
+     * Az elso onmagaban akkor is zold lenne, ha a tarolo MINDEN felallapotot
+     * elutasitana, a teljes torlest is. Akkor viszont a mezot soha nem
+     * lehetne leszedni, es azt semmi nem mondana meg.
+     */
+    it("a két mező EGYÜTT törölhető", async () => {
+      const eszkoz = await repository.create(
+        felvitel({ performance: "500", performanceUnitId: egysegId }),
+        actorUserId,
+      );
+      const utana = await mentes(eszkoz.id, {
+        performance: null,
+        performanceUnitId: null,
+      });
+      assert.equal(utana.performance, undefined);
+      assert.equal(utana.performanceUnit, undefined);
+    });
+
+    it("CSAK az egyik törlése ELBUKIK, és megnevezi a hiányzó felet", async () => {
+      const eszkoz = await repository.create(
+        felvitel({ performance: "500", performanceUnitId: egysegId }),
+        actorUserId,
+      );
+      await assert.rejects(
+        () => mentes(eszkoz.id, { performanceUnitId: null }),
+        (error: unknown) => {
+          assert.ok(error instanceof AssetPerformancePairError);
+          assert.equal(error.hiany, "unit");
+          return true;
+        },
+      );
+      // ES A SOR VALTOZATLAN MARADT. Egy elbukott mentes utan a felallapot
+      // nem allhat elo reszben: enelkul az allitas csak azt mondana, hogy a
+      // hivo hibat kapott, nem azt, hogy az eszkoz ep maradt.
+      const sor = await prisma.asset.findUniqueOrThrow({
+        where: { id: eszkoz.id },
+        select: { performance: true, performanceUnitId: true },
+      });
+      assert.equal(sor.performance?.toString(), "500");
+      assert.equal(sor.performanceUnitId, egysegId);
+    });
+
+    /**
+     * A KIVEZETETT EGYSEG AZ ADATLAPON OLVASHATO MARAD.
+     *
+     * A tabla oldalarol ezt mar merjuk (az `performanceUnitId` megmarad). Ez
+     * az allitas MAST mond: hogy a VALASZ is hozza, tehat a kezelo latja, mi
+     * all az eszkozon. Ha az `include` valaha `isActive: true`-ra szukulne, a
+     * mezo csendben eltunne a lapról, es a tablat mero allitas zold maradna.
+     */
+    it("a kivezetett egység az adatlapon OLVASHATÓ marad", async () => {
+      const eszkoz = await repository.create(
+        felvitel({ performance: "500", performanceUnitId: masikEgysegId }),
+        actorUserId,
+      );
+      await prisma.unitOfMeasure.update({
+        where: { id: masikEgysegId },
+        data: { isActive: false },
+      });
+      const lap = await repository.detail(eszkoz.id, { kind: "internal" });
+      assert.equal(lap?.performanceUnit?.id, masikEgysegId);
+      await prisma.unitOfMeasure.update({
+        where: { id: masikEgysegId },
+        data: { isActive: true },
+      });
+    });
   });
 });

@@ -21,6 +21,7 @@ import {
 import {
   AssetLabelPoolExhaustedError,
   AssetLabelUnavailableError,
+  AssetPerformancePairError,
 } from "./service-assets.repository.js";
 
 import {
@@ -633,6 +634,14 @@ export class ServiceAssetsService {
           : MATRICA_UZENET_PARTNER,
       );
     }
+    /**
+     * A FEL PAR 400: A KERES HIANYOS, NEM A VILAG ALLAPOTA.
+     *
+     * A hiba MAGA hordozza a mondatot, mert az a tarolo dolga: ott dol el,
+     * MELYIK fele hianyzik. Itt csak a valaszkod dol el.
+     */
+    if (error instanceof AssetPerformancePairError)
+      throw new BadRequestException(error.message);
     if (error instanceof Error && error.message === "ASSET_HIERARCHY_CYCLE")
       throw new BadRequestException(
         "Az eszközhierarchia nem tartalmazhat önmagába visszatérő kapcsolatot.",
