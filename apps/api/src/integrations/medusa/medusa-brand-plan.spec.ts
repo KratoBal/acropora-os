@@ -133,6 +133,51 @@ describe("planBrandImport", () => {
    * Medusan. Ha a terv a HANDLE alapjan kotne ossze, atvennenk valaki mas
    * munkajat -- ezert kizarolag a kulso azonosito szamit.
    */
+  /**
+   * A MERT ELSO FUTAS ALAKJA -- ES A MERCE, AMIHEZ MAJD HASONLITUNK.
+   *
+   * A tobbi allitas EGY-EGY markan mutatja meg az osztalyozast. Ez az egyetlen,
+   * ami az OSSZEGET rogziti, mert a kartya merceje osszeg: a stage adatbazison
+   * merve (acrobot, 2026-09-15) 66 marka all, ebbol 65 aktiv es nem archivalt, es
+   * a Medusan NULLA gyujtemeny van. Az elso valodi futasnak tehat ezt kell adnia:
+   *
+   *     create 65, skipArchived 1, minden mas ures
+   *
+   * AMIERT EZ NEM AZ EGYES ESETEK ISMETLESE: a 66-bol kieso EGYETLEN marka
+   * EGYSZERRE inaktiv ES archivalt. A ket oszlopbol kivonassal KETTO jonne ki
+   * (1 inaktiv + 1 archivalt), holott ugyanaz a rekord. A `skipArchived` ezert
+   * EGY, nem ketto -- es ezt egyetlen korabbi allitas sem rogziti.
+   *
+   * IGY, HA A VALODI FUTAS MAST MOND, A KULONBSEG AZ ADATRA MUTAT, NEM A
+   * LOGIKARA: a logika itt le van szogezve.
+   */
+  it("a mert kiindulo allapotra 65 letrehozast es 1 kihagyast ad", () => {
+    const markak: OurBrand[] = [];
+    for (let i = 1; i <= 65; i++)
+      markak.push(
+        brand({ id: `brand-${i}`, name: `Marka ${i}`, slug: `marka-${i}` }),
+      );
+    // A HATVANHATODIK: egyszerre inaktiv ES archivalt -- ez a mert eset.
+    markak.push(
+      brand({
+        id: "brand-66",
+        name: "Megszunt",
+        slug: "megszunt",
+        isActive: false,
+        archivedAt: new Date("2026-01-01T00:00:00.000Z"),
+      }),
+    );
+
+    const terv = planBrandImport(markak, [], []);
+
+    assert.equal(terv.create.length, 65);
+    assert.deepEqual(terv.skipArchived, ["brand-66"]);
+    assert.deepEqual(terv.mapOnly, []);
+    assert.deepEqual(terv.skip, []);
+    assert.deepEqual(terv.staleMapping, []);
+    assert.deepEqual(terv.conflict, []);
+  });
+
   it("nem koti ossze a mi markankat egy idegen, azonos nevu gyujtemennyel", () => {
     const terv = planBrandImport(
       [brand()],
