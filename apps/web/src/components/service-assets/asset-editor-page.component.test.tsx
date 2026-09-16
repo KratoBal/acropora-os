@@ -479,6 +479,39 @@ describe("AssetEditorPage matricakód", () => {
  * legkulso is all.
  */
 describe("AssetEditorPage teljesítmény-mezője", () => {
+  /**
+   * A MEZOK SORRENDJE, AHOGY BALAZS KERTE 2026-09-16-AN.
+   *
+   * MIERT ALLITAS ES NEM IZLES: az urlap KETOSZLOPOS racs, tehat a forrasbeli
+   * sorrend donti el, mi all EGYMAS MELLETT a kepernyon. A `Leltari szam`
+   * korabban a `Teljesitmeny` es a `Mertekegyseg` KOZOTT allt, es ezzel ket
+   * kulonbozo sorba tolta a ket mezot, amik EGY adatot alkotnak. A forrasban
+   * levo komment kozben vegig azt allitotta, hogy egymas mellett vannak.
+   *
+   * Egy szem nelkuli olvasonak (es egy kesobbi atrendezesnek) ez a sorrend
+   * lathatatlan. Ezert all itt a DOM-beli sorrendre allitas: egy uj mezo
+   * bekozekelese ezt pirosra viszi, a kepernyot pedig senki nem nezi meg
+   * minden PR utan.
+   */
+  it("a sorozatszám mellett a leltári szám áll, a teljesítmény mellett a mértékegység", async () => {
+    api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
+    render(<AssetEditorPage assetId="asset-1" />);
+    await screen.findByLabelText("Sorozatszám");
+
+    const sorrend = [
+      "Sorozatszám",
+      "Leltári szám",
+      "Teljesítmény",
+      "Mértékegység",
+    ].map((nev) => screen.getByLabelText(nev));
+
+    for (let i = 1; i < sorrend.length; i += 1)
+      expect(
+        sorrend[i - 1].compareDocumentPosition(sorrend[i]) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+  });
+
   it("a meglévő pár BETÖLTŐDIK, nem üres mezőt mutat", async () => {
     api.detail.mockResolvedValue({
       ...asset,

@@ -244,6 +244,43 @@ describe("AssetDetailPage fejléc", () => {
       .filter((elem) => elem.tagName !== "OPTION");
     expect(jelvenyek).toHaveLength(1);
   });
+
+  /**
+   * A TELJESITMENY AZ ADATLAPON, A MERTEKEGYSEGEVEL EGYUTT (Balazs kerese,
+   * 2026-09-16). A mezo eddig csak a SZERKESZTOBEN letezett: be lehetett irni,
+   * es utana sehol nem latszott.
+   *
+   * EGY MEZO, NEM KETTO: az ertek es a jele egy adat. Ket kulon soron a szam
+   * elszakadna a jeletol, es egy "500" onmagaban talalgatasra hivas.
+   */
+  it("kiírja a teljesítményt a mértékegységével, egy mezőben", async () => {
+    api.detail.mockResolvedValue({
+      ...asset,
+      performance: "500",
+      performanceUnit: { id: "uom-1", code: "m3/h", name: "köbméter per óra" },
+    });
+
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    expect(await screen.findByText("500 m3/h")).toBeTruthy();
+  });
+
+  /**
+   * ES A MERTEKEGYSEG NELKULI ERTEK NEM ESIK EL.
+   *
+   * A tablan parositasi feltetel all, tehat ez a kombinacio ma nem tud
+   * keletkezni -- egy regebbi sor vagy egy kozvetlen adatbazis-iras viszont
+   * eloallithatja. Olyankor a puszta szam TOBBET er a gondolatjelnel: a kezelo
+   * legalabb latja, hogy van ertek, es hogy hianyos. Az elnyelt adat csendben
+   * tunne el, es epp azt nem venne eszre senki.
+   */
+  it("a mértékegység nélküli értéket is kiírja, nem nyeli el", async () => {
+    api.detail.mockResolvedValue({ ...asset, performance: "500" });
+
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    expect(await screen.findByText("500")).toBeTruthy();
+  });
 });
 
 /**

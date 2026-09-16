@@ -432,6 +432,21 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                   <Data label="Modell" value={asset.model} />
                   <Data label="Sorozatszám" value={asset.serialNumber} />
                   <Data label="Leltári szám" value={asset.inventoryNumber} />
+                  {/*
+                    A TELJESITMENY AZ ERTEKEVEL ES A MERTEKEGYSEGEVEL EGYUTT,
+                    EGY MEZOBEN. A szerkeszto ket mezobe keri be, mert ott ket
+                    dolgot kell megadni; az adatlapon viszont EGY adat all, es
+                    ket kulon sorra bontva a szam es a jele elszakadna
+                    egymastol -- epp azt a hibat okozva, ami ellen a
+                    szerkesztoben egymas melle kerultek.
+                  */}
+                  <Data
+                    label="Teljesítmény"
+                    value={performanceText(
+                      asset.performance,
+                      asset.performanceUnit?.code,
+                    )}
+                  />
                   <Data label="Terméktörzs" value={asset.product?.name} />
                   <Data
                     label="Telepítés"
@@ -861,6 +876,24 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
  */
 function Data({ label, value }: { label: string; value?: string }) {
   return <ServiceDataItem label={label}>{value ?? "—"}</ServiceDataItem>;
+}
+
+/**
+ * A TELJESITMENY EGY MEZOBEN: ERTEK ES MERTEKEGYSEG.
+ *
+ * `undefined`, ha nincs ertek -- a `Data` ilyenkor gondolatjelet ir, ugyanugy,
+ * mint minden mas kitoltetlen mezonel.
+ *
+ * ES A MERTEKEGYSEG NELKULI ERTEK NEM ESIK EL. A semaban parositasi feltetel
+ * all (`Asset_performance_pairing_check`), tehat ez a kombinacio ma nem tud
+ * keletkezni. Egy regebbi sor, egy kesobbi migracio vagy egy kozvetlen
+ * adatbazis-iras viszont eloallithatja, es olyankor a puszta szam TOBBET er a
+ * gondolatjelnel: a kezelo legalabb latja, hogy van ertek, es hogy hianyos.
+ * Az elnyelt adat csendben tunne el.
+ */
+function performanceText(value?: string, unitCode?: string) {
+  if (!value) return undefined;
+  return unitCode ? `${value} ${unitCode}` : value;
 }
 
 function formatDate(value?: string) {
