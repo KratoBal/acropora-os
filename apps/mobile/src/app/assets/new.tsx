@@ -1,4 +1,3 @@
-import * as ImagePicker from "expo-image-picker";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
@@ -23,9 +22,6 @@ import {
   type AssetKind,
   type AssetOwnerOption,
 } from "@/lib/api/assets";
-import { MAX_FILES_PER_UPLOAD } from "@/lib/api/document-upload";
-import { photoPermissionDeniedNotice } from "@/lib/api/photo-permission-notice";
-import { toPickedImages, type PickedFile } from "@/lib/api/picked-image";
 import {
   describePhotoQueueing,
   planPhotosAfterRecord,
@@ -55,6 +51,7 @@ import {
   describeQueueWrite,
 } from "@/lib/assets/offline-record";
 import { saveOrQueue, type SaveOutcome } from "@/lib/offline/save-or-queue";
+import { usePhotoAttachments } from "@/lib/photos/use-photo-attachments";
 import { ApiError } from "@/lib/api/client";
 import {
   readCachedAssetByToken,
@@ -165,9 +162,19 @@ export default function NewAssetScreen() {
    * letezik, tehat nincs az a keperno, ahol a szerelo utolag ratenne a kepet.
    * Ha itt nem lehet fenykepezni, akkor a helyszinen SEHOL nem lehet.
    */
-  const [photos, setPhotos] = useState<PickedFile[]>([]);
+  /**
+   * A KEP-VALASZTAS KOZOS HOROGBAN ALL (`lib/photos/use-photo-attachments.ts`).
+   * Ugyanez a nehany kezelo harom kepernyon allt volna beture azonosan.
+   */
+  const {
+    photos,
+    notice: photoNotice,
+    setNotice: setPhotoNotice,
+    clear: kepeketTorol,
+    takePhoto: kepetKeszit,
+    pickPhotos: kepetValaszt,
+  } = usePhotoAttachments();
   /** Amit a kepekrol mondunk: kihagyott formatum, jog, sorba tetel eredmenye. */
-  const [photoNotice, setPhotoNotice] = useState<string | null>(null);
 
   /*
    * A PARTNER HELYSZÍNEI. Csak szerviz partnernél van mit betölteni: vevő
@@ -488,53 +495,6 @@ export default function NewAssetScreen() {
    * masodik: a szerelo a helyszinen MOST keszit kepet, nem regit keres
    * (Balazs, 2026-09-02). Ugyanaz a sorrend, mint az eszkoz lapjan.
    */
-  const kepeketFelvesz = (assets: ImagePicker.ImagePickerAsset[]) => {
-    const { files, skipped } = toPickedImages(assets);
-    setPhotos((elozo) => {
-      /**
-       * UGYANAZ A FAJL KETSZER NEM KET KEP. A valaszto ugyanazt az `uri`-t
-       * adja vissza, es ket azonos sor a sorban ket feltoltes lenne.
-       */
-      const utak = new Set(elozo.map((f) => f.uri));
-      return [...elozo, ...files.filter((f) => !utak.has(f.uri))];
-    });
-    setPhotoNotice(
-      skipped.length > 0
-        ? `Kimaradt (csak JPEG és PNG megy): ${skipped.join(", ")}.`
-        : null,
-    );
-  };
-
-  const kepetKeszit = async () => {
-    setPhotoNotice(null);
-    const jog = await ImagePicker.requestCameraPermissionsAsync();
-    if (!jog.granted) {
-      setPhotoNotice(photoPermissionDeniedNotice("camera"));
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ["images"],
-    });
-    if (result.canceled) return;
-    kepeketFelvesz(result.assets);
-  };
-
-  const kepetValaszt = async () => {
-    setPhotoNotice(null);
-    const jog = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!jog.granted) {
-      setPhotoNotice(photoPermissionDeniedNotice("library"));
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsMultipleSelection: true,
-      selectionLimit: MAX_FILES_PER_UPLOAD,
-    });
-    if (result.canceled) return;
-    kepeketFelvesz(result.assets);
-  };
-
   const submit = () => {
     setError(null);
     /**
@@ -925,7 +885,7 @@ export default function NewAssetScreen() {
                 <Text style={styles.dateValue}>
                   {photos.length} fénykép a felvitelhez
                 </Text>
-                <Pressable onPress={() => setPhotos([])}>
+                <Pressable onPress={kepeketTorol}>
                   <Text style={styles.clearDate}>Képek törlése</Text>
                 </Pressable>
               </View>

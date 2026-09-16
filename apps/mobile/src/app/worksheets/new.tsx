@@ -28,16 +28,13 @@ import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 // hivas TENYLEG elhasalt, nem akkor, ha a keszulek offline-nak mondja magat.
 // Ugyanaz a szabaly, mint a `connectivity.ts` fejleceben.
 import { describeCachedDepartmentsNotice } from "@/lib/offline/offline-notice";
+import { usePhotoAttachments } from "@/lib/photos/use-photo-attachments";
 import {
   readCachedWorksheetDepartments,
   rememberWorksheetDepartments,
 } from "@/lib/offline/worksheet-department-cache";
-import * as ImagePicker from "expo-image-picker";
 
-import { MAX_FILES_PER_UPLOAD } from "@/lib/api/document-upload";
 import { ApiError } from "@/lib/api/client";
-import { photoPermissionDeniedNotice } from "@/lib/api/photo-permission-notice";
-import { toPickedImages, type PickedFile } from "@/lib/api/picked-image";
 import {
   describePhotoQueueing,
   planPhotosAfterRecord,
@@ -104,8 +101,18 @@ export default function NewWorksheetScreen() {
    * sehova (a lap a sorba kerul, es az adatlapja meg nem letezik), tehat nincs
    * az a keperno, ahol a szerelo utolag ratenne a kepet.
    */
-  const [photos, setPhotos] = useState<PickedFile[]>([]);
-  const [photoNotice, setPhotoNotice] = useState<string | null>(null);
+  /**
+   * A KEP-VALASZTAS KOZOS HOROGBAN ALL (`lib/photos/use-photo-attachments.ts`).
+   * Ugyanez a nehany kezelo harom kepernyon allt volna beture azonosan.
+   */
+  const {
+    photos,
+    notice: photoNotice,
+    setNotice: setPhotoNotice,
+    clear: kepeketTorol,
+    takePhoto: kepetKeszit,
+    pickPhotos: kepetValaszt,
+  } = usePhotoAttachments();
 
   const partnersQuery = useQuery({
     queryKey: ["worksheet-partners"],
@@ -250,50 +257,6 @@ export default function NewWorksheetScreen() {
         }),
       ),
     };
-  };
-
-  const kepeketFelvesz = (assets: ImagePicker.ImagePickerAsset[]) => {
-    const { files, skipped } = toPickedImages(assets);
-    setPhotos((elozo) => {
-      // UGYANAZ A FAJL KETSZER NEM KET KEP: a valaszto ugyanazt az `uri`-t adja.
-      const utak = new Set(elozo.map((f) => f.uri));
-      return [...elozo, ...files.filter((f) => !utak.has(f.uri))];
-    });
-    setPhotoNotice(
-      skipped.length > 0
-        ? `Kimaradt (csak JPEG és PNG megy): ${skipped.join(", ")}.`
-        : null,
-    );
-  };
-
-  const kepetKeszit = async () => {
-    setPhotoNotice(null);
-    const jog = await ImagePicker.requestCameraPermissionsAsync();
-    if (!jog.granted) {
-      setPhotoNotice(photoPermissionDeniedNotice("camera"));
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ["images"],
-    });
-    if (result.canceled) return;
-    kepeketFelvesz(result.assets);
-  };
-
-  const kepetValaszt = async () => {
-    setPhotoNotice(null);
-    const jog = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!jog.granted) {
-      setPhotoNotice(photoPermissionDeniedNotice("library"));
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsMultipleSelection: true,
-      selectionLimit: MAX_FILES_PER_UPLOAD,
-    });
-    if (result.canceled) return;
-    kepeketFelvesz(result.assets);
   };
 
   const mutation = useMutation({
@@ -545,7 +508,7 @@ export default function NewWorksheetScreen() {
                 <Text style={styles.pickerName}>
                   {photos.length} fénykép a munkalaphoz
                 </Text>
-                <Pressable onPress={() => setPhotos([])}>
+                <Pressable onPress={kepeketTorol}>
                   <Text style={styles.clearPhotos}>Képek törlése</Text>
                 </Pressable>
               </View>

@@ -13,13 +13,25 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { getAsset } from "@/lib/api/assets";
-import { createServiceJob } from "@/lib/api/service-jobs";
+import {
+  createServiceJob,
+  uploadServiceJobPhotos,
+} from "@/lib/api/service-jobs";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import { ApiError } from "@/lib/api/client";
+import {
+  describePhotoQueueing,
+  planPhotosAfterRecord,
+  queuePhotosForRecording,
+} from "@/lib/assets/photo-after-record";
 import { readCachedAsset } from "@/lib/offline/asset-cache";
-import { enqueueServiceJobCreate } from "@/lib/offline/queue-store";
+import {
+  enqueuePhoto,
+  enqueueServiceJobCreate,
+} from "@/lib/offline/queue-store";
 import { saveOrQueue, type SaveOutcome } from "@/lib/offline/save-or-queue";
+import { usePhotoAttachments } from "@/lib/photos/use-photo-attachments";
 import {
   newServiceJobProblem,
   placementNotice,
@@ -60,6 +72,18 @@ export default function NewServiceJobScreen() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  /**
+   * A KEP-VALASZTAS KOZOS HOROGBAN ALL. Balazs kerese szo szerint: "meg akarja
+   * nyitni a hibajegyet es fotot is alar hozza rogziteni" -- terero nelkul is.
+   */
+  const {
+    photos,
+    notice: photoNotice,
+    setNotice: setPhotoNotice,
+    clear: kepeketTorol,
+    takePhoto: kepetKeszit,
+    pickPhotos: kepetValaszt,
+  } = usePhotoAttachments();
 
   /**
    * AZ ESZKÖZ A SZERVERRŐL, VAGY A MENTETT MÁSOLATBÓL.
@@ -83,7 +107,7 @@ export default function NewServiceJobScreen() {
     query.data ?? cached.data?.detail ?? cached.data?.summary ?? null;
 
   const save = useMutation({
-    mutationFn: async (): Promise<SaveOutcome> => {
+    mutationFn: async () => {
       const openedAt = new Date().toISOString();
       const operationId = serviceJobOperationId({
         originAssetId: assetId!,
@@ -94,7 +118,7 @@ export default function NewServiceJobScreen() {
         description: description.trim() || undefined,
         originAssetId: assetId!,
       };
-      return saveOrQueue({
+      const outcome = await saveOrQueue({
         save: () =>
           createServiceJob({ ...payload, clientOperationId: operationId }),
         enqueue: () =>
@@ -122,8 +146,26 @@ export default function NewServiceJobScreen() {
                 message: `A hibajegyet nem sikerült elmenteni a készülékre: ${result.error}`,
               },
       });
+      /**
+       * A KEP SORSA A JEGY KIMENETELEBOL KOVETKEZIK, es a dontes a
+       * `lib/assets/photo-after-record.ts`-ben all, mert ott MERHETO (nincs
+       * benne halozat es adatbazis). Ide csak a VEGREHAJTAS kerul.
+       */
+      return { outcome, photo: await kepeketElintez(outcome, openedAt) };
     },
-    onSuccess: async (outcome) => {
+    onSuccess: async ({ outcome, photo }) => {
+      /**
+       * A KEPEKROL SZOLO MONDAT AKKOR IS MEGJELENIK, HA A JEGY SIKERULT. Egy
+       * kimaradt kep kulon hir: a jegy attol meg fent van.
+       */
+      setPhotoNotice(photo.message);
+      /**
+       * EGY ELBUKOTT KEP-FELTOLTES ITT TART MINKET. A `saved` ag kulonben
+       * azonnal atlep a jegy lapjara, es a fenti mondat egy mar elhagyott
+       * kepernyore kerulne -- a szerelo semmit nem latna abbol, hogy a
+       * fenykepe sehol nincs.
+       */
+      if (outcome.type === "saved" && photo.maradjunk) return;
       if (outcome.type === "saved") {
         await queryClient.invalidateQueries({ queryKey: ["service-jobs"] });
         router.replace(`/service-jobs/${outcome.id}`);
@@ -137,6 +179,7 @@ export default function NewServiceJobScreen() {
       if (outcome.type === "queued") {
         setTitle("");
         setDescription("");
+        kepeketTorol();
       }
     },
     onError: (error: unknown) =>
@@ -146,6 +189,64 @@ export default function NewServiceJobScreen() {
           : "A hibajegy nyitása nem sikerült.",
       ),
   });
+
+  /**
+   * A TERV VEGREHAJTASA. Harom eset, harom kulon valasz -- es a `dropped` a
+   * legfontosabb: ott a kep a kezunkben marad, es ha hallgatnank rola, a
+   * szerelo azt hinne, felment.
+   */
+  const kepeketElintez = async (
+    outcome: SaveOutcome,
+    keszult: string,
+  ): Promise<{ maradjunk: boolean; message: string | null }> => {
+    const terv = planPhotosAfterRecord(outcome, photos);
+    if (terv.type === "none") return { maradjunk: false, message: null };
+    if (terv.type === "dropped")
+      return { maradjunk: false, message: terv.message };
+
+    if (terv.type === "upload") {
+      try {
+        const feltoltve = await uploadServiceJobPhotos(
+          terv.ownerId,
+          terv.files,
+        );
+        return {
+          maradjunk: false,
+          message: `${feltoltve.length} fénykép feltöltve.`,
+        };
+      } catch (cause) {
+        /**
+         * A JEGY MAR FENT VAN, tehat ez nem elveszett bejelentes -- de a kep
+         * NEM ment fel, es ezen a kepernyon KELL maradnunk.
+         */
+        return {
+          maradjunk: true,
+          message:
+            cause instanceof Error
+              ? `A hibajegy felment, a fénykép viszont nem: ${cause.message}. A képek megmaradtak, próbáld újra.`
+              : "A hibajegy felment, a fénykép viszont nem. A képek megmaradtak, próbáld újra.",
+        };
+      }
+    }
+
+    return {
+      maradjunk: false,
+      message: describePhotoQueueing(
+        await queuePhotosForRecording({
+          recordingOperationId: terv.recordingOperationId,
+          files: terv.files,
+          createdAt: keszult,
+          /**
+           * A KEP A JEGYHEZ TARTOZIK. A sor a gazdabol tudja, melyik vegpontra
+           * kuldje, tehat egy jegy-kep sosem kerulhet egy eszkoz ala -- a
+           * szetosztas kimerito, `never`-re futo agsal (`use-queue-drain.ts`).
+           */
+          enqueue: (input) =>
+            enqueuePhoto({ ...input, entityType: "service-job" }),
+        }),
+      ),
+    };
+  };
 
   if (status === "unauthenticated") return <Redirect href="/login" />;
   if (status === "authenticated" && !capabilities?.serviceJobsManage)
@@ -225,6 +326,45 @@ export default function NewServiceJobScreen() {
           />
         </View>
 
+        {/*
+          A FENYKEP ITT KESZUL, A JEGY MELLE -- ES OFFLINE IS.
+
+          Balazs kerese szo szerint: "siman lehet hogy terero nelkul a
+          pinceben eszrevesz egy hibat, meg akarja nyitni a hibajegyet es fotot
+          is alar hozza rogziteni". A kep sorsa a jegy sorsat koveti: ha a jegy
+          felment, a kep is; ha a jegy a sorba kerult, a kep MOGE all a
+          sorban, es csak azutan megy fel, hogy a jegy megkapta az
+          azonositojat.
+        */}
+        <View style={styles.block}>
+          <Text style={styles.sectionTitle}>Fénykép</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Fénykép készítése"
+            onPress={() => void kepetKeszit()}
+            style={styles.secondary}
+          >
+            <Text style={styles.secondaryText}>Fénykép készítése</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Kép választása"
+            onPress={() => void kepetValaszt()}
+            style={styles.secondary}
+          >
+            <Text style={styles.secondaryText}>Kép választása</Text>
+          </Pressable>
+          {photos.length > 0 ? (
+            <View style={styles.photoRow}>
+              <Text style={styles.meta}>{photos.length} fénykép a jegyhez</Text>
+              <Pressable accessibilityRole="button" onPress={kepeketTorol}>
+                <Text style={styles.clear}>Mind eldobása</Text>
+              </Pressable>
+            </View>
+          ) : null}
+          {photoNotice ? <Text style={styles.meta}>{photoNotice}</Text> : null}
+        </View>
+
         {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
         <Pressable
@@ -275,6 +415,19 @@ const styles = StyleSheet.create({
   },
   actionText: { color: "#eaf4fa", textAlign: "center" },
   notice: { color: "#eaf4fa", lineHeight: 20 },
+  secondary: {
+    backgroundColor: "#0b3247",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  secondaryText: { color: "#cfe8f4", textAlign: "center" },
+  photoRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  clear: { color: "#f0c674", fontSize: 13 },
   loading: { marginTop: 32 },
   empty: { color: "#9fc4d8", marginTop: 32, padding: 16, textAlign: "center" },
 });
