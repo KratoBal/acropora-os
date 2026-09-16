@@ -20,6 +20,24 @@ export class CreateServiceJobDto {
   @IsString() @MaxLength(4000) @IsOptional() description?: string | null;
   @IsString() @IsOptional() customerId?: string | null;
   /**
+   * HONNAN NYITOTTAK A JEGYET -- ES EZ A TELEFON UTJA.
+   *
+   * A webes urlapon a partnert, a helyszint es az eszkozoket A SEMMIBOL kell
+   * kivalasztani, ezert all ott harom valaszto. A helyszinen viszont a szerelo
+   * EGY eszkoz elott all (beolvasta a matricajat, vagy a listabol nyitotta meg)
+   * -- es abbol a harom mar KOVETKEZIK.
+   *
+   * A SZERVER VEZETI LE, NEM A KLIENS (acrobot dontese, 2026-09-16). Az
+   * alternativa az lett volna, hogy a szallitoi eszkoz tukor-sorat beleirjuk az
+   * eszkoz valaszaba -- de az a partner BELSO reszlete (a sema kommentje is ezt
+   * mondja), es kliens-szerzodesse teve nem lehetne megvaltoztatni anelkul,
+   * hogy a telefon elromoljon.
+   *
+   * AMIT FELULIR: semmit. Ha a hivo megadja a partnert vagy a helyszint, az
+   * ové az elsobbseg -- ez a mezo csak azt potolja, ami hianyzik.
+   */
+  @IsString() @IsOptional() originAssetId?: string | null;
+  /**
    * HOL VAN A BAJ: a partner helyszine, ugyanabbol a fabol, amit a munkalap es
    * az eszkoz hasznal.
    *
