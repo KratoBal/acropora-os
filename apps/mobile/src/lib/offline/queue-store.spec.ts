@@ -234,15 +234,29 @@ describe("a fénykép sora", () => {
     );
   });
 
-  it("a párosítás CSAK a címzetlen fotó-sorokat érinti", () => {
+  it("a párosítás CSAK a CÍMZETLEN, VÁRAKOZÓ sorokat érinti", () => {
     /*
-      MI PIROSIT: ha a lekerdezes elhagyna az `entity_id IS NULL` feltetelt vagy
-      a muvelet szurest. Az elso egy MASIK eszkozhoz mar hozzarendelt kepre irna
-      ra egy ujabb azonositot; a masodik a rogzites sorat modositana.
+      A KET VESZELY VALTOZATLAN, A HATOKOR TAGULT -- es ezert all itt uj alak.
+
+      Eddig a lekerdezes a MUVELET TIPUSARA szurt (`operation = 'upload-photo'`),
+      mert csak kep varhatott masra. Mostantol barmelyik sor varhat, tehat a
+      szures a FUGGOSEGRE megy. A ket veszely viszont ugyanaz maradt, es az
+      allitas MIND A KETTOT kulon koti le:
+
+      - `entity_id IS NULL`: enelkul egy MAR CIMZETT sorra ujabb azonosito
+        kerulne. (Ez a feltetel az elso altalanositasombol KIESETT, es ez az
+        allitas hozta vissza -- pontosan azt tette, amiert megirtak.)
+      - a fuggoseg-egyezes: enelkul olyan sor is atirodna, ami MAS muveletre
+        var. A regi alakban ezt a muvelet-szures adta.
+
+      MI PIROSIT: barmelyik ket feltetel elhagyasa.
     */
+    assert.match(forras, /depends_on_operation_id = \? AND entity_id IS NULL/);
+    // ES A REGI SOROK AGA: azokon az oszlop meg `NULL`, a fuggoseg a
+    // payloadban all. Amig ilyen sor letezhet, ez a feltetel is kell.
     assert.match(
       forras,
-      /WHERE operation = 'upload-photo' AND entity_id IS NULL/,
+      /depends_on_operation_id IS NULL AND operation = 'upload-photo' AND entity_id IS NULL/,
     );
     assert.match(forras, /UPDATE sync_queue SET entity_id = \? WHERE id = \?/);
   });

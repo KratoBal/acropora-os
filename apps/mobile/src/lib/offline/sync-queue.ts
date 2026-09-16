@@ -194,6 +194,30 @@ export interface SyncQueueRow {
    */
   lastAttemptAt: string | null;
   state: SyncState;
+  /**
+   * MELYIK MUVELET NYUGTAZASARA VAR EZ A SOR. `null`, ha senkire.
+   *
+   * A kep ma a rogzitesere var; a szabaly eddig a MUVELET TIPUSAHOZ volt kotve
+   * (`upload-photo` var `create`-re), es a varas tenye a payloadban allt. Egy
+   * harmadik szint -- munkalap a JEGY alatt, ahol mind a ketto `create` -- ebbe
+   * nem fer bele, mert a `nextBatch` minden `create` sort EGYUTT enged el.
+   *
+   * A REGI SOROKON `null`, ES EZ NEM JELENTI, HOGY NINCS FUGGOSEG. A keszuleken
+   * mar sorban allo kepek fuggosege a payloadban all -- a `dependencyOf`
+   * fuggveny ezert olvas oda vissza, amig ilyen sor letezhet.
+   */
+  dependsOnOperationId: string | null;
+  /**
+   * HOVA KERUL A SZULO SZERVER-AZONOSITOJA, AMIKOR MEGJON.
+   *
+   *     "entityId"   -- a sor sajat `entityId` mezojebe (ma a kepek igy)
+   *     barmi mas    -- a payload EZEN a kulcsan
+   *
+   * KULON MEZO, MERT A KETTO KET KULON KERDES: az egyik azt mondja meg, MIKOR
+   * mehet a sor, a masik azt, MIT kell elotte beleirni. Egy mezobe gyurva a
+   * "var valakire, de nincs mit atvennie" eset kifejezhetetlen lenne.
+   */
+  dependsOnTarget: string | null;
 }
 
 /**
