@@ -620,3 +620,43 @@ egyetlen ilyen esetet sem mértünk: a tíz meglévő mező mind egyetlen világ
 **AMIHEZ EZ A KÖR NEM NYÚL:** a tíz meglévő szabad szöveges mező egyikéhez sem.
 Azok átállítása külön döntés és külön migráció. A tábla úgy készült, hogy oda is
 használható legyen (`kind = QUANTITY`), tehát második lista nem fog kelleni.
+
+**FRISSÍTÉSKOR A PÁRT AZ EREDMÉNY DÖNTI EL, NEM A BEKÜLDÖTT MEZŐ (2026-09-16,
+a szerver oldallal együtt).** A kliens KÜLÖN is küldheti a kettő egyikét, és egy
+„csak a számot írom át" kérés **teljesen érvényes**, ha az egység már áll az
+eszközön. Ha a félállapotot a beküldött mezőkből ítélnénk meg, pontosan ezt
+utasítanánk el: a kezelő azt látná, hogy a mentés hibás, holott a végeredmény ép.
+Ezért a pár egy tiszta függvényben oldódik fel (`teljesitmenyEredmenye`), és az
+ellenőrzés az EREDMÉNYEN fut. Felvitelnél a „meglévő" üres, ezért ugyanaz a
+függvény szolgálja ki mindkét utat. A tárolóban a frissítési ág a tranzakción
+BELÜL kérdez (ott áll a már betöltött sor), a felviteli ág kívül — eltérően a
+matricakódtól, aminek az alak-ellenőrzése sosem igényli a meglévő sort.
+
+**A `null` ITT TÖRLÉS — A MATRICAKÓD ELLENTÉTE, UGYANABBÓL A SZABÁLYBÓL.** Nem
+következetlenség: a `null` törlést jelent, és a teljesítménynél a törlés
+LÉTEZIK (a matricát ezen az úton nem lehet leszedni). Törölni csak MIND A KETTŐT
+lehet, mert fél pár a táblán sem állhat meg.
+
+**A FÉL PÁR 400, NEM 409 — a matricával ellentétben.** Ott a kérés alakja jó
+volt, és a VILÁG állapota nem állt (a kód máson ül); itt maga a kérés hiányos. A
+mondat megnevezi, MELYIK fele hiányzik, mert a két eset két külön teendő:
+legördülőt választani, vagy számot írni.
+
+**A VÁLASZTÓ KÍNÁLATA SZŰKEBB, MINT AMIT MEGMUTAT — ÉS EZ NEM KÉNYELEM.** A
+legördülő az AKTÍV egységeket kínálja, de az eszközön MÁR álló egység akkor is
+bekerül, ha közben kivezették. Enélkül a böngésző (és a telefonon a választó) az
+ELSŐ elemre esik vissza: a kezelő megnyitja az adatlapot, egy szót sem ír, ment
+— és a mértékegység megváltozik. Némán, és pont azon az úton, ahol senki nem
+keresi. A kivezetés a VÁLASZTÉKOT szűkíti, nem a MÚLTAT írja át; ugyanezért jön
+vissza a kivezetett egység az eszköz adatlapján is, szűrés nélkül.
+
+**A TIZEDESVESSZŐT ÁTVESSZÜK, NEM ELUTASÍTJUK.** Mérve a valódi
+`Prisma.Decimal`-on (2026-09-16): a `"0,5"` DOB, és az a hiba a szolgáltatás
+`map` függvényének a végéig fut — 500 lenne belőle, nem 400. A felület magyar,
+tehát ez a SZOKÁSOS bemenet, nem a ritka. A normalizálás a `packages/types`-ban
+áll, mert ugyanez a kérdés három helyen áll (szerver, web, telefon); a mobil
+tükröt a `performance-mirror.spec.ts` veti össze a forrással.
+
+**AZ ELGÉPELT SZÁM NEM ESIK EGY ÁGRA AZ ÜRES MEZŐVEL,** holott a normalizálás
+mind a kettőre `null`-t ad. A kettő MÁST jelent (törlés kontra elgépelés), és
+egy ágon egy elgépelt szám CSENDBEN törölné a mezőt.
