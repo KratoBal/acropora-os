@@ -12,6 +12,7 @@ import { randomUUID } from "node:crypto";
 
 import { conflictingFields, intendedFields } from "./asset-field-conflict.js";
 import { assetListOrderBy } from "./asset-list-order.js";
+import { assetStatusWhere } from "./asset-status-filter.js";
 
 import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
@@ -466,7 +467,9 @@ export class ServiceAssetsRepository extends Repository {
     const { list: where, counts: countsWhere } = assetListWheres(
       scope,
       userWhereWithoutStatus,
-      query.status === "ALL" ? {} : { status: query.status },
+      // A HAROM AG (egy allapot / minden / minden a kivezetetten kivul) egy
+      // helyen all, tiszta fuggvenyben -- adatbazis nelkul merheto.
+      assetStatusWhere(query.status),
     );
     const [rows, totalItems, counts] = await Promise.all([
       prisma.asset.findMany({
