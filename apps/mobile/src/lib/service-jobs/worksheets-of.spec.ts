@@ -102,6 +102,28 @@ describe("a munkalap sora a képernyőn", () => {
    * hiba. A "Piszkozat" ugyanaz a szo, amit a web hasznal -- a szerelo es az
    * irodas ugyanarrol a lapról beszel.
    */
+  /**
+   * AZ URES NEV ELOL A ZAROJEL IS ELMARAD -- a web `serviceJobWorksheetLabel`
+   * fuggvenye betu szerint ezt teszi. Az elso alakom " (Piszkozat)"-ot adott,
+   * vezeto szokozzel: egy zarojel egy semmi elott tobbet allit, mint amit
+   * tudunk.
+   */
+  it("üres névnél CSAK az azonosító áll, zárójel nélkül", () => {
+    assert.equal(worksheetLineLabel(lap("3", { subject: "" })), "MUNKA-3");
+    assert.equal(
+      worksheetLineLabel(lap("4", { subject: "", number: null })),
+      "Piszkozat",
+    );
+  });
+
+  /**
+   * A CSUPA SZOKOZ UGYANAZ, MINT A SEMMI. A hosszabol itelve "van" nev, es a
+   * kepernyon harom szokoz allna a szam elott. A web is `trim()`-el.
+   */
+  it("a csupa szóközből álló név ugyanaz, mint az üres", () => {
+    assert.equal(worksheetLineLabel(lap("5", { subject: "   " })), "MUNKA-5");
+  });
+
   it("a szám nélküli lap „Piszkozat”-ot mutat", () => {
     assert.equal(
       worksheetLineLabel(lap("2", { number: null, subject: "Kiszállás" })),

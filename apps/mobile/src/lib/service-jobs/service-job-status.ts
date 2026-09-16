@@ -97,5 +97,21 @@ export function worksheetsOf(
  * és az irodás ugyanarról a lapról beszél.
  */
 export function worksheetLineLabel(sheet: ServiceJobWorksheetLink): string {
-  return `${sheet.subject} (${sheet.number ?? "Piszkozat"})`;
+  const azonosito = sheet.number ?? "Piszkozat";
+  /**
+   * AZ ÜRES NÉV ELŐL A ZÁRÓJEL IS ELMARAD -- ÉS EZ A WEB SZABÁLYA, BETŰRE.
+   *
+   * Az első alakom `${subject} (${azonosito})` volt, tehát üres névnél
+   * " (Piszkozat)" jött ki, vezető szóközzel: egy zárójel egy semmi előtt
+   * TÖBBET állít, mint amit tudunk -- úgy néz ki, mintha a név helye üresen
+   * maradt volna, holott nincs név.
+   *
+   * A `trim()` sem dísz: egy csupa szóközből álló név ugyanúgy „van" a
+   * hosszából ítélve, és a képernyőn három szóköz állna a szám előtt.
+   *
+   * KÉT FELÜLET, UGYANAZ A SZABÁLY (`serviceJobWorksheetLabel` a weben): a
+   * szerelő és az irodás ugyanarról a lapról beszél, tehát ugyanazt is lássa.
+   */
+  const nev = sheet.subject.trim();
+  return nev ? `${nev} (${azonosito})` : azonosito;
 }
