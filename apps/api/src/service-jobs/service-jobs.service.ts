@@ -25,7 +25,9 @@ import type {
   MoveServiceJobDto,
   ServiceJobListQueryDto,
   SetServiceJobAssigneesDto,
+  SetServiceJobPlacementDto,
 } from "./dto.js";
+import { normalizeAssetIds } from "../common/assets-in-department.js";
 import { normalizeAssigneeIds } from "../common/service-assignment.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
 import {
@@ -128,24 +130,14 @@ export class ServiceJobsService {
      * ([serviceJobId, assetId]) all, tehat ket azonos sor amugy is elhasalna --
      * itt egyszeruen kiszurjuk, mielott a tarolohoz erne.
      */
-    const assetIds = [...new Set(input.assetIds ?? [])].filter(
-      (id) => id.trim() !== "",
-    );
+    const assetIds = normalizeAssetIds(input.assetIds);
     if (assetIds.length > 0) {
       if (!departmentId) {
         throw new BadRequestException(
           "Eszközt csak helyszínnel együtt lehet megadni.",
         );
       }
-      const missing = await this.repository.assetsOutsideDepartment(
-        assetIds,
-        departmentId,
-      );
-      if (missing.length > 0) {
-        throw new BadRequestException(
-          `Ez a ${missing.length} eszköz nem a megadott helyszínen áll.`,
-        );
-      }
+      await this.requireAssetsOnDepartment(assetIds, departmentId);
     }
     const title = input.title.trim();
     const created = await this.repository.create({
@@ -229,6 +221,91 @@ export class ServiceJobsService {
         "A delegált kolléga nem található, vagy a szerepköre nem engedi a szerviz-munka kezelését.",
       );
     }
+  }
+
+  /**
+   * AZ ESZKOZOK A MEGADOTT HELYSZIN RESZFAJAN ALLJANAK.
+   *
+   * KOZOS METODUS, mert KET ut kerdezi ugyanezt: a felvitel es a
+   * `setPlacement`. Ket kulon leirt valtozat addig egyezne, amig valaki az
+   * egyiket javitja -- es a kulonbseg NEMA lenne: az egyik uton bejutna a
+   * jegyre egy idegen helyszinen allo eszkoz.
+   *
+   * A HIBAUZENET A DARABSZAMOT MONDJA, NEM AZ AZONOSITOKAT: egy azonosito-lista
+   * a kepernyon semmit nem jelent annak, aki olvassa, es kozben elarulna, hany
+   * eszkoz letezik egyaltalan.
+   */
+  private async requireAssetsOnDepartment(
+    assetIds: readonly string[],
+    departmentId: string,
+  ): Promise<void> {
+    const missing = await this.repository.assetsOutsideDepartment(
+      assetIds,
+      departmentId,
+    );
+    if (missing.length > 0) {
+      throw new BadRequestException(
+        `Ez a ${missing.length} eszköz nem a megadott helyszínen áll.`,
+      );
+    }
+  }
+
+  /**
+   * A JEGY HELYSZINE ES AZ OTT ALLO ESZKOZOK, A FELVITEL UTAN.
+   *
+   * Balazs kerese, 2026-09-16: a meglevo jegyhez is lehessen eszkozt adni, es a
+   * helyszint is lehessen modositani.
+   *
+   * EGY MUVELET A KETTORE, es az indok a DTO jegyzeteben all. Ami itt szamit: a
+   * bekuldott eszkoz-lista a TELJES halmaz, es az uj helyszinre kell
+   * ervenyesnek lennie. Helyszin-valtaskor tehat a felulet MEGNEVEZI, melyik
+   * eszkoz esne le, es amit a felhasznalo jovahagy, az utazik a keresben --
+   * a szerver soha nem szed le olyat, amit o nem latott.
+   *
+   * A PARTNER-ELLENORZES UGYANAZ, MINT A FELVITELEN: a helyszin a jegy
+   * partnerehez tartozzon. Enelkul egy elgepelt vagy atmasolt azonosito MAS
+   * partner egysegere akasztana ra a jegyet, es a felulet ezt soha nem mutatna
+   * meg -- a lista a sajat partnere egysegeit rajzolja, tehat egy idegen egyseg
+   * ott egyszeruen URESKENT jelenne meg.
+   *
+   * A PARTNER NELKULI JEGY SAJAT AGAT KAP: nem "ismeretlen egyseg", hanem
+   * ertelmetlen keres, es a teendo is mas (elobb partnert kell allitani).
+   */
+  async setPlacement(
+    id: string,
+    input: SetServiceJobPlacementDto,
+    user: AuthenticatedUser,
+  ): Promise<ServiceJobDetail> {
+    this.requireWriteScope(user);
+    const job = await this.repository.jobAttachState(id);
+    if (!job) throw new NotFoundException("A hibajegy nem található.");
+    if (!job.customerId)
+      throw new BadRequestException(
+        "Helyszínt csak partnerrel együtt lehet megadni.",
+      );
+
+    const departmentId = input.departmentId.trim();
+    const belongs = await this.repository.departmentBelongsToCustomer(
+      departmentId,
+      job.customerId,
+    );
+    if (!belongs)
+      throw new BadRequestException(
+        "A megadott helyszín nem ehhez a partnerhez tartozik.",
+      );
+
+    const assetIds = normalizeAssetIds(input.assetIds);
+    if (assetIds.length > 0)
+      await this.requireAssetsOnDepartment(assetIds, departmentId);
+
+    const ok = await this.repository.setPlacement({
+      serviceJobId: id,
+      departmentId,
+      assetIds,
+    });
+    if (!ok) throw new NotFoundException("A hibajegy nem található.");
+
+    return this.detail(id, user);
   }
 
   /**

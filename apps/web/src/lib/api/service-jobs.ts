@@ -182,6 +182,30 @@ export const serviceJobsApi = {
     });
   },
   /**
+   * A JEGY HELYSZINE ES AZ OTT ALLO ESZKOZOK, EGY HIVASBAN.
+   *
+   * EGY VEGPONT A KETTORE, es nem kenyelem: a felvitelen is EGY szabaly koti
+   * ossze oket (eszkozt csak helyszinnel egyutt, es a helyszin RESZFAJAROL).
+   * Ket kulon hivas sorrend-fuggo kozbenso allapotot engedne: uj helyszin a
+   * regi eszkozokkel, vagy forditva -- es ha a masodik elhasal, az az allapot
+   * ITT MARAD, ranezesre hibatlanul.
+   *
+   * AZ `assetIds` A TELJES HALMAZ: aki nincs rajta, lekerul. Helyszin-valtaskor
+   * EZ a megerosites helye -- a felulet megnevezi a leeso eszkozoket, es amit a
+   * felhasznalo jovahagy, az utazik itt.
+   */
+  setPlacement(
+    token: string,
+    id: string,
+    input: { departmentId: string; assetIds: string[] },
+  ) {
+    return apiRequest<ServiceJobDetail>(jobPath(id, "/placement"), token, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  },
+  /**
    * A JEGY CSATOLMANYAI. KULON HIVAS, nem a reszletlap resze.
    *
    * MIERT NEM A `ServiceJobDetail`-BEN: az eszkoznel a dokumentumok a

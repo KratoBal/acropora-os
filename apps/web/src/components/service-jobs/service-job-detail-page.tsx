@@ -40,6 +40,7 @@ import {
   ServicePanelHeading,
 } from "@/components/service/service-detail-chrome";
 import { ServiceJobAssigneeEditor } from "./service-job-assignee-editor";
+import { ServiceJobPlacementEditor } from "./service-job-placement-editor";
 
 import {
   serviceJobNoteDescription,
@@ -952,6 +953,29 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                 TELJES reszletlapot adja vissza -- ez elter a tobbi
                 jegy-muvelettol, amik nyugtat adnak, es ott a hivo ujratolt.
               */
+              onSaved={setJob}
+            />
+
+            {/*
+              A HELYSZIN ES AZ ESZKOZOK, KOZVETLENUL A DELEGALAS ALATT.
+
+              A HELYE NEM IZLES: a jobb hasab "Az ugy adatai" doboza KIIRJA a
+              helyszint, es ez a doboz azt SZERKESZTI. Ket egymastol tavol allo
+              hely ugyanarrol az adatrol azt eri el, hogy a kezelo elolvassa az
+              egyiket, es nem talalja meg a masikat.
+
+              ES AMIT EZ A DOBOZ ELOSZOR MUTAT MEG: a jegy ESZKOZEIT egyben. Ma
+              azok CSAK a naploban jelennek meg, esemenykent -- egy lista, amit
+              nem lehet atnezni, csak visszaolvasni.
+            */}
+            <ServiceJobPlacementEditor
+              jobId={jobId}
+              token={token}
+              customerId={job.customerId}
+              departmentId={job.departmentId}
+              departmentPath={job.departmentPath}
+              assets={job.assets}
+              canManage={canManage}
               onSaved={setJob}
             />
 

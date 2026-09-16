@@ -250,6 +250,71 @@ export class ServiceJobsRepository {
   }
 
   /**
+   * A JEGY HELYSZINE ES AZ OTT ALLO ESZKOZOK, EGY TRANZAKCIOBAN.
+   *
+   * === MIERT EGY TRANZAKCIO, ES NEM KET IRAS ===
+   *
+   * A ketto kozott a jegy egy OLYAN allapotban allna, amit a felvitel sosem
+   * enged meg: uj helyszin a regi eszkozokkel (vagy forditva). Ha a masodik
+   * iras elhasal (halozat, egyedi kulcs, leallas), az az allapot ITT MARAD --
+   * es semmi nem hibas rajta ranezesre, tehat senki nem keresne.
+   *
+   * === A MAR FENT LEVO SOROKHOZ NEM NYULUNK (`skipDuplicates`) ===
+   *
+   * Ugyanaz az indok, mint a delegalasnal: a `createdAt` az egyetlen jel arrol,
+   * mikor KERULT a jegyre egy eszkoz, es azt a felulet ki is irja
+   * (`attachedAt`). Ha minden mentes ujrairna az osszes sort, minden
+   * helyszin-modositas "ma csatoltnak" mutatna egy honapja rajta allo eszkozt.
+   *
+   * === A BEKULDOTT LISTA A TELJES HALMAZ ===
+   *
+   * Aki nincs rajta, lekerul. Ures listat kuldeni SZABAD -- az kimondott
+   * szandek (a `notIn` ilyenkor elmarad, tehat MINDET leveszi).
+   *
+   * A HIANYZO JEGY `false`-t ad, nem kivetelt: a hivo dolga eldonteni, mit mond
+   * rola -- es a szolgaltatas ugyanazt a 404-et adja, mint a tobbi uton.
+   */
+  async setPlacement(input: {
+    serviceJobId: string;
+    departmentId: string;
+    assetIds: readonly string[];
+  }): Promise<boolean> {
+    return this.database.$transaction(async (transaction) => {
+      const job = await transaction.serviceJob.findUnique({
+        where: { id: input.serviceJobId },
+        select: { id: true },
+      });
+      if (!job) return false;
+
+      await transaction.serviceJob.update({
+        where: { id: input.serviceJobId },
+        data: { departmentId: input.departmentId },
+      });
+
+      await transaction.serviceJobAsset.deleteMany({
+        where: {
+          serviceJobId: input.serviceJobId,
+          ...(input.assetIds.length > 0
+            ? { assetId: { notIn: [...input.assetIds] } }
+            : {}),
+        },
+      });
+
+      if (input.assetIds.length > 0) {
+        await transaction.serviceJobAsset.createMany({
+          data: input.assetIds.map((assetId) => ({
+            serviceJobId: input.serviceJobId,
+            assetId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+
+      return true;
+    });
+  }
+
+  /**
    * EGY FELHASZNALO LATHATOSAGI EGYSEGEI, A RESZFAVAL EGYUTT.
    *
    * KET LEPES, es a masodik tiszta fuggveny: a Prisma rekurziv lekerdezest nem

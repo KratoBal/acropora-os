@@ -12,13 +12,14 @@ import { PERMISSIONS, type AuthenticatedUser } from "@acropora/types";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import {
+  AssignVisibilityUnitDto,
   AttachWorksheetDto,
   CreateServiceJobDto,
   MoveServiceJobDto,
   ServiceJobListQueryDto,
   SetServiceJobAssigneesDto,
   SetServiceJobPartnerDto,
-  AssignVisibilityUnitDto,
+  SetServiceJobPlacementDto,
 } from "./dto.js";
 import { ServiceJobsService } from "./service-jobs.service.js";
 
@@ -191,6 +192,29 @@ export class ServiceJobsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.setAssignees(id, input, user);
+  }
+
+  /**
+   * A HELYSZIN ES AZ OTT ALLO ESZKOZOK, A FELVITEL UTAN. `SERVICE_MANAGE`.
+   *
+   * EGY VEGPONT A KETTORE, es nem kenyelem: a felvitelen is EGY szabaly koti
+   * ossze oket (eszkozt csak helyszinnel egyutt, es a helyszin RESZFAJAROL).
+   * Ket kulon ut ugyanazt a szabalyt ket helyen mondana ki, es sorrend-fuggo
+   * kozbenso allapotot engedne -- a DTO jegyzete leirja, melyiket.
+   *
+   * A VALASZ A TELJES RESZLETLAP, nem nyugta, ugyanabbol az okbol, amit a
+   * `setAssignees` folott mar kimondtunk: egy `{ ok: true }` utan a felulet
+   * MEG egy lekerdezest inditana, es a ket valasz kozott a jegy mar
+   * mozdulhatott.
+   */
+  @Post(":id/placement")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  setPlacement(
+    @Param("id") id: string,
+    @Body() input: SetServiceJobPlacementDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.setPlacement(id, input, user);
   }
 
   /**
