@@ -31,6 +31,7 @@ import {
   readCachedServiceJob,
   rememberServiceJobDetail,
 } from "@/lib/offline/service-job-cache";
+import { OFFLINE_COPY_NOTICE } from "@/lib/service-jobs/offline-copy-notice";
 import {
   serviceJobStatusLabel,
   shortPath,
@@ -289,10 +290,7 @@ export default function ServiceJobDetailScreen() {
           <View style={styles.block}>
             <Text style={styles.sectionTitle}>Állapot léptetése</Text>
             {masolatbol ? (
-              <Text style={styles.meta}>
-                Mentett másolatot nézel, ezért a léptetés most nem megy. A jegy
-                állapotát térerőnél tudod átírni.
-              </Text>
+              <Text style={styles.meta}>{OFFLINE_COPY_NOTICE.step}</Text>
             ) : lephet.length === 0 ? (
               <Text style={styles.meta}>
                 Ebből az állapotból nincs több lépés.
@@ -328,24 +326,37 @@ export default function ServiceJobDetailScreen() {
           </View>
         ) : null}
 
-        {capabilities?.serviceJobsManage && !masolatbol ? (
+        {capabilities?.serviceJobsManage ? (
+          /*
+            A SZAKASZ OFFLINE IS ITT ALL, A GOMBOK TILTVA -- NEM TUNIK EL.
+            Az elso alakjaban `!masolatbol` mellett a TELJES szakasz kiesett,
+            egyetlen szo nelkul, mikozben a leptetes KIMONDTA, miert nem megy.
+            Ket kihagyas egy kepernyon, ket kulonbozo viselkedessel -- es a
+            sajat szabalyunk (a mentett masolat soha nem nema) az elsore allt,
+            a masodikra nem.
+          */
           <View style={styles.block}>
             <Text style={styles.sectionTitle}>Fénykép</Text>
+            {masolatbol ? (
+              <Text style={styles.meta}>{OFFLINE_COPY_NOTICE.photo}</Text>
+            ) : null}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Fénykép készítése"
-              disabled={uploading}
+              accessibilityState={{ disabled: uploading || masolatbol }}
+              disabled={uploading || masolatbol}
               onPress={() => void takePhoto()}
-              style={styles.action}
+              style={[styles.action, masolatbol && styles.actionDisabled]}
             >
               <Text style={styles.actionText}>Fénykép készítése</Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Kép választása a galériából"
-              disabled={uploading}
+              accessibilityState={{ disabled: uploading || masolatbol }}
+              disabled={uploading || masolatbol}
               onPress={() => void pickPhotos()}
-              style={styles.action}
+              style={[styles.action, masolatbol && styles.actionDisabled]}
             >
               <Text style={styles.actionText}>Kép a galériából</Text>
             </Pressable>
@@ -386,6 +397,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   actionText: { color: "#eaf4fa", textAlign: "center" },
+  /** A tiltott gomb LATSZIK, csak halvanyabb: a hianyzo gomb nem magyaraz. */
+  actionDisabled: { opacity: 0.45 },
   input: {
     backgroundColor: "#06202e",
     borderRadius: 10,
