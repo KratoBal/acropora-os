@@ -505,11 +505,16 @@ describe("AssetEditorPage teljesítmény-mezője", () => {
       "Mértékegység",
     ].map((nev) => screen.getByLabelText(nev));
 
-    for (let i = 1; i < sorrend.length; i += 1)
+    // `reduce` kezdoertek NELKUL: igy a ket osszehasonlitott elem tipusa nem
+    // `T | undefined`, tehat a `noUncheckedIndexedAccess` nem ker felkialtojelet
+    // egy olyan indexre, amirol a ciklus maga garantalja, hogy letezik.
+    sorrend.reduce((elozo, kovetkezo) => {
       expect(
-        sorrend[i - 1].compareDocumentPosition(sorrend[i]) &
+        elozo.compareDocumentPosition(kovetkezo) &
           Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
+      return kovetkezo;
+    });
   });
 
   it("a meglévő pár BETÖLTŐDIK, nem üres mezőt mutat", async () => {
