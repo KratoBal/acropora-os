@@ -250,13 +250,32 @@ describe(
      * `number` a DONTO mezo: ha van, a lap mar lezarult, es a szama a REGI
      * helyszin kodjat viseli.
      */
-    async function newSheet(jel: string, over: { number?: string } = {}) {
+    async function newSheet(
+      jel: string,
+      over: { number?: string; sequence?: number } = {},
+    ) {
       const lap = await prisma.worksheet.create({
         data: {
           customerId,
           departmentId: helyszin,
           createdById: actor.id,
-          ...(over.number ? { number: over.number } : {}),
+          /**
+           * A SZAM HAROM MEZOBOL ALL, ES A TABLA EGYUTT KOVETELI OKET.
+           *
+           * `Worksheet_number_parts_check`: a `number`, a `numberYear` es a
+           * `sequence` vagy MIND null, vagy MIND kitoltott (plusz
+           * `sequence >= 1`). Ezt MOCKKAL NEM lehet megtudni -- az elso
+           * valtozatom csak a `number` mezot allitotta, es a CI-ben bukott el
+           * (23514, 2026-09-16). A fixtura igy nem csak atmegy, hanem HU is:
+           * egy szamozott lap a valosagban is mindharmat viseli.
+           */
+          ...(over.number
+            ? {
+                number: over.number,
+                numberYear: 2026,
+                sequence: over.sequence ?? 1,
+              }
+            : {}),
           versions: {
             create: {
               version: 1,
