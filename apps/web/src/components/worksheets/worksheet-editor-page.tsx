@@ -733,7 +733,30 @@ export function WorksheetEditorPage({ worksheetId }: WorksheetEditorPageProps) {
               onChange={setAssetIds}
             />
           </FormField>
-        ) : null}
+        ) : (
+          /*
+            MEGLEVO LAPON A SZAKASZ NEM TUNIK EL, HANEM MEGMONDJA, HOL VAN.
+
+            A ket mezo KULON UTON mentodik, es ez nem kenyelmi dontes: a
+            tartalmat a `PATCH :id` viszi, ami CSAK piszkozaton megy, az
+            eszkozok viszont a MUNKALAPHOZ kotodnek, nem a verziohoz -- lezart
+            lapon is javithatok. Egy kozos mentes-gomb a ket szabaly szukebbikere
+            huzna ossze oket, es egy lezart lapon csendben elvenne azt, ami
+            szabad.
+            ES AMIERT NEM ELEG EGYSZERUEN ELREJTENI: egy hianyzo szakasz nem
+            mond semmit. Aki itt keresi, azt hinne, hogy meglevo lapon nem lehet
+            eszkozt csatolni -- holott lehet, csak masik kepernyon.
+          */
+          <FormField
+            label="Érintett eszközök"
+            className="md:col-span-2"
+            description="A lap eszközei a munkalap adatlapján szerkeszthetők, saját mentéssel: azok a laphoz tartoznak, nem a verzióhoz, tehát lezárt lapon is javíthatók."
+          >
+            <p className="text-sm text-dusk-500">
+              Mentés után az adatlapon vehetők fel és le.
+            </p>
+          </FormField>
+        )}
         <FormField label="Tárgy" className="md:col-span-2">
           <Input
             aria-label="Tárgy"

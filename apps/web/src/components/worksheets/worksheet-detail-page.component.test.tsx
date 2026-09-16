@@ -81,6 +81,12 @@ function detail(inventoryNumber: string | null): WorksheetDetail {
     },
     createdByName: "Szerelő Sándor",
     assignees: [],
+    /*
+      A MEZO KOTELEZO, NEM ELHAGYHATO -- es epp ezert szolt a fordito, amikor
+      bekerult. Elhagyhatokent a lap CSENDBEN `undefined`-ot kapott volna, es a
+      hiba a kepernyon jelent volna meg, nem itt.
+    */
+    assets: [],
     createdAt: "2026-08-27T08:00:00.000Z",
     updatedAt: "2026-08-27T08:00:00.000Z",
     continues: null,

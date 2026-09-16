@@ -78,6 +78,12 @@ function worksheetRow(
     },
     createdBy: { displayName: "Teszt Elek" },
     assignees: [],
+    /*
+      A VARRAT LAZA (`as unknown as`), tehat a HIANYZO mezorol a fordito nem
+      szol -- a lekepezes viszont HASZNALJA. Ez a sor azert all itt, mert amit
+      a hivo hasznal, de a dupla nem ad meg, az a dupla biztos hibaja.
+    */
+    assets: [],
     versions: [versionRow()],
     ...overrides,
   } as WorksheetDetailRow;

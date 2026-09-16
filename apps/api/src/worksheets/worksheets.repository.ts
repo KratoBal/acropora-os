@@ -534,6 +534,54 @@ export class WorksheetsRepository extends Repository {
     };
   }
 
+  /**
+   * A LAP ESZKOZEI, TELJES LISTAKENT.
+   *
+   * A MAR FENT LEVO SOROKHOZ NEM NYULUNK (`skipDuplicates`), es ez nem
+   * takarekossag: a `createdAt` az egyetlen jel arrol, MIKOR kerult egy eszkoz
+   * a lapra, es a felulet ki is irja. Ha minden mentes ujrairna az osszes sort,
+   * egy honapja rajta allo eszkoz "ma csatoltnak" latszana.
+   *
+   * URES LISTA MINDET LEVESZI -- a `notIn` ilyenkor elmarad --, es ez kimondott
+   * szandek, nem elgepeles: a DTO mezoje kotelezo.
+   *
+   * A HIANYZO LAP `false`-t ad, nem kivetelt: a hivo dolga eldonteni, mit mond
+   * rola, es ugyanazt a 404-et adja, mint a tobbi uton.
+   */
+  async setAssets(input: {
+    worksheetId: string;
+    assetIds: readonly string[];
+  }): Promise<boolean> {
+    return this.database.$transaction(async (transaction) => {
+      const worksheet = await transaction.worksheet.findUnique({
+        where: { id: input.worksheetId },
+        select: { id: true },
+      });
+      if (!worksheet) return false;
+
+      await transaction.worksheetAsset.deleteMany({
+        where: {
+          worksheetId: input.worksheetId,
+          ...(input.assetIds.length > 0
+            ? { assetId: { notIn: [...input.assetIds] } }
+            : {}),
+        },
+      });
+
+      if (input.assetIds.length > 0) {
+        await transaction.worksheetAsset.createMany({
+          data: input.assetIds.map((assetId) => ({
+            worksheetId: input.worksheetId,
+            assetId,
+          })),
+          skipDuplicates: true,
+        });
+      }
+
+      return true;
+    });
+  }
+
   async setAssignees(input: {
     worksheetId: string;
     userIds: readonly string[];

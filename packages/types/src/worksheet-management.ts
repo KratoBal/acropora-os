@@ -405,6 +405,24 @@ export interface WorksheetEntryListResponse {
   items: WorksheetEntryDetail[];
 }
 
+/**
+ * EGY ESZKOZ, AMIROL A MUNKALAP SZOL.
+ *
+ * ALAKRA AZONOS A `ServiceJobAssetLink`-KEL, es ez nem veletlen egyezes: a
+ * hibajegy es a munkalap ugyanannak a munkanak a ket oldala, a csatolt eszkoz
+ * pedig ugyanaz a fogalom. KULON TIPUS megis, ugyanabbol az okbol, amiert a ket
+ * felelos-tipus is kulon all: a ketto KULON VALASZBAN utazik, es egy kozos
+ * tipus a ket vegpontot egymashoz kotne -- egy munkalap-oldali mezo-bovites a
+ * jegy valaszat is elmozditana, anelkul hogy barki kerte volna.
+ */
+export interface WorksheetAssetLink {
+  id: string;
+  assetId: string;
+  assetNumber: string;
+  assetName: string;
+  attachedAt: string;
+}
+
 export interface WorksheetDetail {
   id: string;
   number: string | null;
@@ -428,6 +446,22 @@ export interface WorksheetDetail {
    * lezárt lapon is javítható, és nem jelenik meg a verzió-eltérésben.
    */
   assignees: WorksheetAssignee[];
+  /**
+   * AZ ESZKOZOK, AMIKROL A LAP SZOL.
+   *
+   * UGYANOTT AL, AHOL A FELELOSOK: a MUNKALAP azonossagahoz tartozik, nem a
+   * verziohoz. A kapcsolotabla (`WorksheetAsset`) a lapra mutat, nem a
+   * verziora, tehat lezart lapon is javithato, es a verzio-eltéresben nem
+   * jelenik meg.
+   *
+   * MIERT KERULT BE (merve 2026-09-16): a sorokat 2026-09-15 ota IRJUK, es
+   * SEMMI nem olvasta vissza -- se a reszletlap, se a felulet. Aki felvitelkor
+   * eszkozt csatolt, azt sehol nem latta viszont.
+   *
+   * URES TOMB ERVENYES VALASZ, nem hiba: a lap keletkezhet eszkoz megnevezese
+   * nelkul.
+   */
+  assets: WorksheetAssetLink[];
   createdAt: string;
   updatedAt: string;
   /**
