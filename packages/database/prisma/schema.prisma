@@ -2924,7 +2924,25 @@ model AssetLabelBatch {
   @@index([createdAt])
 }
 
-/// A MERTEKEGYSEG FAJTAJA -- ES EZ NEM CIMKE, HANEM A VALASZTOK SZUROJE.
+/// A MERTEKEGYSEG FAJTAJA: AZT MONDJA MEG, MIT MER AZ EGYSEG -- NEM AZT, HOL
+/// VALASZTHATO.
+///
+/// EZ A MONDAT A LEGFONTOSABB EZEN A MEZON, es acrobot kerte ide (2026-09-16),
+/// mert ez a fajta oszlop ket szerepet szokott osszecsusztatni:
+///
+///     amit JELENT                 az ertek FAJTAJA (mennyiseg / meres / teljesitmeny)
+///     amit FELVENNE eszrevetlenul hogy MELYIK KEPERNYON valaszthato
+///
+/// A ketto MA egybeesik, es epp ezert nem latszik. Elvalik abban a percben,
+/// amikor egy egyseg KET helyen is ertelmes lesz -- a `l/h` peldaul
+/// teljesitmeny IS, es egy tetelsoron mennyiseg IS lehet.
+///
+/// AKKOR NEM EZT A MEZOT KELL TAGITANI, es nem a szuroket "javitani": akkor a
+/// HASZNALATI HELY kulon fogalom (egy kapcsolotabla vagy egy lista a soron), es
+/// ez a mezo marad az, ami: a mert mennyiseg fajtaja. Aki a szuroket igazitja,
+/// a modellt hagyja rosszul.
+///
+/// === MIERT LETEZIK EGYALTALAN ===
 ///
 /// A rendszerben ma TIZ szabad szoveges mertekegyseg-mezo all, es azok LEGALABB
 /// ket, egymassal nem keverheto vilagbol valok: a MENNYISEGEK (db, ora, ml --
@@ -2932,15 +2950,15 @@ model AssetLabelBatch {
 /// ICP). Az eszkoz TELJESITMENYE egy harmadik.
 ///
 /// Egy lapos, fajta nelkuli lista MUKODNE, es pont hasznalat kozben lenne rossz:
-/// egy munkalap-tetelsor felkinalna a µg/l-t. A fajta ezert a tablan all, nem a
-/// valasztokban -- ott ugyanis minden uj felulet ujra eldontene, mit mutat, es a
-/// tizedik valaszto mar biztosan maskepp dontene.
+/// egy munkalap-tetelsor felkinalna a µg/l-t. A fajta ezert a TABLAN all: a
+/// valasztokban minden uj felulet ujra eldontene, mit mutat, es a tizedik
+/// valaszto mar biztosan maskepp dontene.
 enum UnitOfMeasureKind {
-  /// Amiben MENNYISEGET merunk: db, ora, kg, l. A munkalap es a szamla vilaga.
+  /// Amiben MENNYISEGET merunk: db, ora, kg, l.
   QUANTITY
   /// Amiben MERESI EREDMENYT adunk meg: mg/l, °C, µg/l, dKH.
   MEASUREMENT
-  /// Amiben egy BERENDEZES kepesseget adjuk meg: W, l/h, m3/h.
+  /// Amiben egy BERENDEZES kepesseget merjuk: W, l/h, m3/h.
   PERFORMANCE
 }
 

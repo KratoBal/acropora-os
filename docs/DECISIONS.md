@@ -602,6 +602,16 @@ használatkor. Ezért `UnitOfMeasure`, és az eszközön `performanceUnitId`.
 (`Asset_performance_pairing_check`). Egy „500" önmagában nem információ, hanem
 találgatásra hívás. Ugyanaz az alak, mint a matrica `assignment_pairing_check`-je.
 
+**A FAJTA AZT MONDJA MEG, MIT MÉR AZ EGYSÉG — NEM AZT, HOL VÁLASZTHATÓ.**
+acrobot kérte ezt a mondatot a séma fejlécébe (2026-09-16), mert ez a fajta
+oszlop két szerepet szokott összecsúsztatni: az érték fajtáját, és azt, hogy
+melyik képernyőn kínálják fel. A kettő **ma egybeesik, és épp ezért nem
+látszik**. Elválik abban a percben, amikor egy egység két helyen is értelmes lesz
+— a `l/h` teljesítmény is, és egy tételsoron mennyiség is lehet. **Akkor nem ezt
+a mezőt kell tágítani és nem a szűrőket „javítani":** akkor a használati hely
+külön fogalom, és ez az oszlop marad az, ami. Aki a szűrőket igazítja, a modellt
+hagyja rosszul.
+
 **MI FORDÍTANÁ MEG.** Ha kiderülne, hogy a három fajta között rendszeresen kell
 **átjárás** (ugyanaz a sor mennyiségként és mérésként is kell), akkor a fajta
 nem egy érték a soron, hanem egy kapcsolótábla — és akkor ez a modell szűk. Ma

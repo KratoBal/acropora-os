@@ -13,6 +13,12 @@
 -- Egy lapos, fajta nelkuli lista mukodne, es pont HASZNALAT kozben lenne rossz:
 -- egy munkalap-tetelsor felkinalna a mikrogramm/l-t. A fajta ezert a TABLAN all.
 --
+-- ES A FAJTA AZT MONDJA MEG, MIT MER AZ EGYSEG -- NEM AZT, HOL VALASZTHATO.
+-- A ketto ma egybeesik, es epp ezert nem latszik. Elvalik abban a percben,
+-- amikor egy egyseg ket helyen is ertelmes lesz (a `l/h` teljesitmeny IS, es egy
+-- tetelsoron mennyiseg IS lehet). Akkor a HASZNALATI HELY kulon fogalom lesz, es
+-- ez az oszlop marad az, ami. Reszletesen a sema `UnitOfMeasureKind` fejlecen.
+--
 -- Es azert MOST: egy megkulonbozteto oszlop ma egy enum-mezo. Kesobb azt
 -- jelentene, hogy a mar felvitt sorokra vissza kell TALALGATNI a fajtat,
 -- mikozben minden addigi valaszto ugy van megirva, hogy EGY lista letezik.
