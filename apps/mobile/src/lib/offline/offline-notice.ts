@@ -46,9 +46,29 @@ const HOUR_IN_MS = 60 * 60 * 1000;
  * Nem abszolút időpontot ad, hanem eltelt időt: a helyszínen az számít, hogy
  * „ma reggel" vagy „négy napja", nem az, hogy 09:12. Az abszolút időpont
  * ráadásul időzóna-kérdést nyitna a készüléken, az eltelt idő nem.
+ *
+ * === EZ A FÜGGVÉNY TÖREDÉKET AD, NEM MONDATOT, ÉS EBBŐL KÖVETKEZIK A `null` ÁGA ===
+ *
+ * A visszatérő érték MINDIG beépül egy hosszabb mondatba: „… frissült",
+ * „… mentve", „… rögzítve", „Ez a lap … mentett másolat". Ezért a töredéknek
+ * mind a négy alakban nyelvtanilag helyesnek kell lennie.
+ *
+ * A `null` ága korábban „még soha" volt, és EGYETLEN mondatba sem illett bele:
+ * „A helyszíni másolat még soha frissült", „Ez a lap még soha mentett másolat",
+ * „40 partner a telefonról, még soha mentve". Balázs a telefonján pont az
+ * elsőt fotózta le (2026-09-16), és ő mondta ki, mi hiányzik belőle: egy „nem".
+ *
+ * A javítás viszont NEM a hiányzó szó beírása, mert a „még soha nem" a másik
+ * három mondatban ugyanúgy értelmetlen. A „mióta" kérdésre időtartam a válasz,
+ * a „soha" pedig nem az: az egy MÁSIK állítás, és oda tartozik, ahol a hívó
+ * maga fogalmaz. Ahol a töredék áll, ott mindig VAN másolat, csak a kora
+ * ismeretlen, tehát ugyanaz az ág jár neki, mint az olvashatatlan bélyegnek.
+ *
+ * Ahol a „soha" tényleg számít (a lista fölötti sáv), ott a hívó külön
+ * mondattal áll elő, lásd `describeOfflineNotice`.
  */
 export function describeCacheAge(syncedAt: string | null, now: Date): string {
-  if (!syncedAt) return "még soha";
+  if (!syncedAt) return "ismeretlen ideje";
   const saved = new Date(syncedAt).getTime();
   if (!Number.isFinite(saved)) return "ismeretlen ideje";
 
@@ -98,12 +118,26 @@ export function describeOfflineNotice(
   // Online, de a másolat régi: ilyenkor a képernyő a szerverről frissül, tehát
   // a sáv nem az adatról szól, hanem arról, hogy a készülék készen áll-e a
   // következő térerő nélküli munkára.
-  if (isCacheStale(syncedAt, now))
+  //
+  // KÉT KÜLÖNBÖZŐ ÁLLÍTÁS, ÉS A SZERELŐNEK NEM MINDEGY, MELYIK IGAZ RÁ.
+  // Ha még soha nem mentettünk, akkor térerő nélkül NINCS MIT megnyitnia. Ha
+  // van másolat, csak régi, akkor van mit, csak nem a mai állapot. Az első egy
+  // hiány, a második egy kockázat, és a teendő is más súlyú.
+  if (isCacheStale(syncedAt, now)) {
+    if (syncedAt === null && itemCount === 0)
+      return {
+        tone: "stale",
+        title: "Még nincs helyszíni másolat",
+        message:
+          "Ezen a készüléken még soha nem frissült a helyszíni másolat. Amíg van térerő, görgesd végig a listát, hogy offline is meglegyen.",
+      };
+
     return {
       tone: "stale",
       title: "A készülékre mentett másolat régi",
       message: `A helyszíni másolat ${describeCacheAge(syncedAt, now)} frissült. Amíg van térerő, görgesd végig a listát, hogy offline is naprakész legyen.`,
     };
+  }
 
   return null;
 }
