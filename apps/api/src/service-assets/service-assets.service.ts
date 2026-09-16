@@ -290,7 +290,14 @@ export class ServiceAssetsService {
     try {
       return await this.repository.update(id, input, actorUserId);
     } catch (error) {
-      this.map(error);
+      /**
+       * A HATOKOR KIMONDVA `internal`, mert a vegpont `SERVICE_MANAGE` jog
+       * alatt all (a kontroller 193. sora). Enelkul a `map` a PARTNER-nek
+       * szant, OSSZEVONT mondatot adna vissza egy belsos kezelonek -- aki
+       * viszont latja a kiadott kodok listajat, tehat neki a ket eset
+       * kulonvalasztasa hasznos es nem szivargas.
+       */
+      this.map(error, { kind: "internal" });
     }
   }
 

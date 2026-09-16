@@ -1294,6 +1294,24 @@ export class ServiceAssetsRepository extends Repository {
     input: UpdateAssetDto,
     actorUserId: string,
   ): Promise<AssetDetail> {
+    /**
+     * A KOD ALAKJA A TRANZAKCION KIVUL DOL EL, ugyanugy, mint a felvitelnel:
+     * egy alak-ellenorzes nem ir, tehat nincs keresnivaloja odabent.
+     *
+     * A HAROM ALLAPOT KULON: `undefined` = a mezot el sem kuldtek, tehat a
+     * meglevo matrica MARAD; ervenyes kod = felvitel vagy csere; barmi mas
+     * (ures szoveg, rossz alak) = HIBA. Az `AssetLabelUnavailableError` a NYERS
+     * koddal megy, mert a szolgaltatas `map` fuggvenye abbol ismeri fel, hogy
+     * alak-hibarol van szo, es 400-at ad 409 helyett.
+     */
+    let labelCode: string | undefined;
+    if (input.labelCode !== undefined) {
+      const normalizalt = normalizeAssetLabelCode(input.labelCode);
+      if (normalizalt === null)
+        throw new AssetLabelUnavailableError(input.labelCode);
+      labelCode = normalizalt;
+    }
+
     const updatedId = await prisma.$transaction(
       async (tx) => {
         if (input.parentAssetId) {
@@ -1434,7 +1452,8 @@ export class ServiceAssetsRepository extends Repository {
             | "UPDATED"
             | "PLACEMENT_CHANGED"
             | "PARENT_CHANGED"
-            | "STATUS_CHANGED";
+            | "STATUS_CHANGED"
+            | "LABEL_ASSIGNED";
           payload: Prisma.InputJsonObject;
         }> = [];
         if (existing.status !== updated.status)
@@ -1473,6 +1492,57 @@ export class ServiceAssetsRepository extends Repository {
               to: updated.parentAssetId,
             }),
           });
+        /**
+         * A MATRICA UTOLAGOS FELVITELE ES CSEREJE, UGYANEBBEN A TRANZAKCIOBAN.
+         *
+         * MIERT ITT: ha a felszabaditas es a foglalas kulon menne, egy bukott
+         * masodik lepes utan az eszkoz matrica NELKUL maradna ugy, hogy a regi
+         * kodja mar szabad -- vagyis ket eszkoz kozott elveszne egy fizikai
+         * matrica. A blokk `Serializable` szinten fut, mint a felvitel.
+         *
+         * A FELTETELES `updateMany` A VEDELEM, NEM AZ ELOZETES OLVASAS. Az
+         * alabbi `findFirst` CSAK azt dönti el, kell-e egyaltalan csinalni
+         * valamit (es mi volt a regi kod a naplohoz); a FOGLALAS maga tovabbra
+         * is `assetId: null` feltetellel megy, tehat ket parhuzamos keres
+         * ugyanarra a kodra nem tud mindketto atmenni.
+         *
+         * A CSERE MEGENGEDETT (acrobot dontese, 2026-09-16): a matrica FIZIKAI,
+         * es egy elgepelt kod utan a cserenek mennie kell -- kulonben az eszkoz
+         * orokre rossz kodon all, es a kod sem adhato ki masnak.
+         *
+         * AZ AZONOS KOD NEM ESEMENY: ha ugyanazt a kodot kuldik ujra (a webes
+         * urlap a teljes rekordot kuldi), nem szabaditunk fel es nem foglalunk
+         * ujra. Enelkul minden mentes irna egy `LABEL_ASSIGNED` sort, es a
+         * naplo harom nap alatt olvashatatlanna valna.
+         */
+        if (labelCode !== undefined) {
+          const jelenlegi = await tx.assetLabel.findFirst({
+            where: { assetId: id },
+            select: { code: true },
+          });
+          if (jelenlegi?.code !== labelCode) {
+            if (jelenlegi)
+              await tx.assetLabel.updateMany({
+                where: { assetId: id },
+                data: { assetId: null, assignedAt: null },
+              });
+            const claimed = await tx.assetLabel.updateMany({
+              where: { code: labelCode, assetId: null },
+              data: { assetId: id, assignedAt: new Date() },
+            });
+            if (claimed.count !== 1)
+              throw new AssetLabelUnavailableError(labelCode);
+            events.push({
+              type: "LABEL_ASSIGNED",
+              payload: jsonPayload({
+                code: labelCode,
+                // A REGI KOD IS A NAPLOBA: egy csere utan enelkul nem lehetne
+                // megmondani, melyik matrica kerult vissza a keszletbe.
+                previousCode: jelenlegi?.code ?? null,
+              }),
+            });
+          }
+        }
         /**
          * A NAPLO A TENYLEGESEN VALTOZOTT MEZOKET ROGZITI, NEM A BEKULDOTTEKET.
          *

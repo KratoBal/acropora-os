@@ -217,6 +217,24 @@ export class UpdateAssetDto {
   @IsString() @IsOptional() model?: string | null;
   @IsString() @IsOptional() serialNumber?: string | null;
   @IsString() @IsOptional() inventoryNumber?: string | null;
+  /**
+   * Előre nyomtatott matrica kódja, UTÓLAG is. Az ALAKOT a szolgáltatás
+   * ellenőrzi a közös `normalizeAssetLabelCode` függvénnyel, nem itt egy
+   * második mintával -- ugyanaz az indok, mint a `CreateAssetDto`-nál.
+   *
+   * A MEZŐ ELHAGYÁSA ÉRINTETLENÜL HAGYJA a meglévő matricát. Egy ÜRES SZÖVEG
+   * viszont NEM azt jelenti, hogy "nincs matrica", hanem hogy érvénytelen kód:
+   * a felvitelnél ugyanez a szabály áll a webes űrlapon.
+   *
+   * ÉS ITT SZÁNDÉKOSAN NINCS `| null`, holott a többi mezőn ott van. A `null`
+   * ezen az osztályon azt jelenti, hogy "töröld a kötést" -- a matrica
+   * LESZEDÉSE viszont ebben a körben nem készült el, és az ok nem a mechanika:
+   * az esemény-naplónak NINCS NEVE rá. Az egyetlen létező típus a
+   * `LABEL_ASSIGNED`, ami épp az ellenkezőjét mondja, egy `LABEL_RELEASED`
+   * felvétele pedig séma-migráció. Egy `null` így HANGOSAN elbukik a
+   * validáción, ahelyett hogy csendben nem csinálna semmit.
+   */
+  @IsString() @IsOptional() labelCode?: string;
   @IsString() @IsOptional() description?: string | null;
   @IsISO8601() @IsOptional() installedAt?: string | null;
   @IsISO8601() @IsOptional() purchasedAt?: string | null;
