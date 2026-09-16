@@ -370,3 +370,123 @@ describe("AssetListPage kapcsolat nélkül", () => {
     expect(await savotMond("empty")).toBeTruthy();
   });
 });
+
+/**
+ * AZ OSZLOPOK SZERINTI RENDEZES (Balazs kerese, 2026-09-16).
+ *
+ * === MIT MER EZ A FAJL, ES MIT NEM ===
+ *
+ * Azt meri, hogy a KATTINTAS a CIMBE ir, es hogy mit ir. Hogy a szerver ettol
+ * tenyleg maskepp rendez, az az `asset-list-order.spec.ts` es az adatbazis
+ * dolga. A ketto kozott az a kapocs, hogy a lap a `params` tartalmat ADJA
+ * TOVABB a lekerdezesnek -- ezt egy kulon allitas meri lent.
+ *
+ * === MIERT A CIMBE, ES NEM KOMPONENS-ALLAPOTBA ===
+ *
+ * Mert a lista LAPOZVA jon. Egy komponens-allapotban tartott rendezes az epp
+ * betoltott huszonot sort rendezne, es ugy nezne ki, mintha az egeszet tenne.
+ */
+describe("AssetListPage rendezés", () => {
+  beforeEach(() => {
+    auth.session = session;
+    navigation.params = new URLSearchParams();
+    navigation.replace.mockReset();
+    api.list.mockReset();
+    api.list.mockResolvedValue(response(1));
+  });
+
+  it("első kattintásra növekvő sorrendet kér, és az első lapra ugrik", async () => {
+    render(<AssetListPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Eszköz/ }));
+
+    const cim = lastTarget();
+    expect(cim.get("sort")).toBe("name");
+    expect(cim.get("direction")).toBe("asc");
+    // MAS RENDEZES MAS SOROKAT TESZ A HARMADIK LAPRA: a regi lapszamot
+    // megtartva a felhasznalo a lista kozepere esne, latszolag veletlen
+    // tartalomra.
+    expect(cim.get("page")).toBe("1");
+  });
+
+  it("másodszorra megfordítja az irányt", async () => {
+    navigation.params = new URLSearchParams("sort=name&direction=asc");
+    render(<AssetListPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Eszköz/ }));
+
+    expect(lastTarget().get("direction")).toBe("desc");
+  });
+
+  /**
+   * A HARMADIK KATTINTAS VISSZAAD AZ ALAPERTELMEZESRE, es ez nem kenyelmi
+   * reszlet: enelkul NINCS UT VISSZA. Aki egyszer rendezett, annak a lap
+   * onnantol csak a ket sajat iranya kozott valtana, es az eredeti sorrend
+   * csak kezi cim-szerkesztessel lenne elerheto.
+   */
+  it("harmadszorra elengedi a rendezést", async () => {
+    navigation.params = new URLSearchParams("sort=name&direction=desc");
+    render(<AssetListPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Eszköz/ }));
+
+    const cim = lastTarget();
+    expect(cim.has("sort")).toBe(false);
+    expect(cim.has("direction")).toBe(false);
+  });
+
+  /**
+   * A KAPOCS A SZERVER FELE. Ez az allitas koti ossze a cimet a lekerdezessel:
+   * enelkul mind a harom fenti allitas zold lenne akkor is, ha a rendezes
+   * SOHA nem jutna el a szerverig -- a cim szepen valtozna, a lista nem.
+   */
+  it("a címben álló rendezést továbbadja a szervernek", async () => {
+    navigation.params = new URLSearchParams("sort=status&direction=desc");
+    render(<AssetListPage />);
+
+    await waitFor(() => expect(api.list).toHaveBeenCalled());
+    const kuldott = api.list.mock.calls.at(-1)?.[1] as URLSearchParams;
+    expect(kuldott.get("sort")).toBe("status");
+    expect(kuldott.get("direction")).toBe("desc");
+  });
+
+  /**
+   * A KET OSSZETETT OSZLOP SZANDEKOSAN NEM KATTINTHATO.
+   *
+   * Egyik sem EGY adat (a "Hierarchia" a szulo neve vagy a reszegysegek szama,
+   * a "Muszaki azonosito" harom mezo osszefuzve), tehat eloszb el kell donteni,
+   * MIT jelent a rendezes. Egy kattinthato fejlec addig olyan sorrendet adna,
+   * ami mukodonek latszik, de olvashatatlan.
+   *
+   * ES EZ AZ ALLITAS ORZI, hogy valaki "teljesseg kedveert" fel ne tegye oket
+   * dontes nelkul.
+   */
+  it("az összetett oszlopok nem kattinthatók", async () => {
+    render(<AssetListPage />);
+
+    await screen.findByRole("button", { name: /Eszköz/ });
+    expect(screen.queryByRole("button", { name: /Hierarchia/ })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Műszaki azonosító/ }),
+    ).toBeNull();
+  });
+
+  /**
+   * AZ ALLAPOT LATSZIK IS, NEM CSAK MUKODIK. Egy nyil nelkuli kattinthato
+   * fejlec ugyanugy nez ki rendezes elott es utan.
+   */
+  it("a rendezett oszlop megjelöli magát", async () => {
+    navigation.params = new URLSearchParams("sort=placement&direction=desc");
+    render(<AssetListPage />);
+
+    const fejlec = (await screen.findByText("Elhelyezés")).closest("th");
+    expect(fejlec?.getAttribute("aria-sort")).toBe("descending");
+    // TESTVER-KONTROLL: a TOBBI oszlop NEM jeloli magat. Enelkul az allitas
+    // akkor is zold lenne, ha minden fejlec ugyanazt mondana.
+    expect(
+      (await screen.findByText("Eszköz"))
+        .closest("th")
+        ?.getAttribute("aria-sort"),
+    ).toBe("none");
+  });
+});

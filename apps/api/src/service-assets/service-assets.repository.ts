@@ -11,6 +11,7 @@ import { collectUnitSubtreeIds } from "./unit-subtree.js";
 import { randomUUID } from "node:crypto";
 
 import { conflictingFields, intendedFields } from "./asset-field-conflict.js";
+import { assetListOrderBy } from "./asset-list-order.js";
 
 import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
@@ -471,7 +472,11 @@ export class ServiceAssetsRepository extends Repository {
       prisma.asset.findMany({
         where,
         include: assetSummaryInclude,
-        orderBy: [{ name: "asc" }, { id: "asc" }],
+        // A SORREND A LEKERDEZESBOL JON, nem a kliensbol: a lista lapozva megy
+        // ki, tehat egy bongeszo-oldali rendezes csak az epp latszo lapot
+        // rendezne. A parameter nelkuli hivas a ma is ervenyes nev szerinti
+        // sorrendet kapja, beture valtozatlanul.
+        orderBy: assetListOrderBy(query.sort, query.direction),
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
       }),
