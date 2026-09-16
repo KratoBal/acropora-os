@@ -1,6 +1,7 @@
 import "reflect-metadata";
 
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { after, before, describe, it } from "node:test";
 
 import { Prisma, prisma } from "@acropora/database";
@@ -53,7 +54,19 @@ async function removeLeftovers() {
   });
 }
 
-/** Egy eszkoz-sor nyers SQL-lel, hogy a CHECK-et az ALKALMAZAS MOGOTT merjuk. */
+/**
+ * Egy eszkoz-sor nyers SQL-lel, hogy a CHECK-et az ALKALMAZAS MOGOTT merjuk.
+ *
+ * A `qrToken` VALODI UUID-t kap `::uuid` castolassal, NEM a sajat
+ * azonositomat: az oszlop `@db.Uuid`, es egy szoveg oda `42804`-gyel hasal el
+ * (`column "qrToken" is of type uuid but expression is of type text`). Ezt a
+ * CI merte meg, az elso futason -- helyben nincs postgres.
+ *
+ * ES AMIERT EZ ITT ALL: a hiba a ROGZITOBEN volt, nem a termekben, es pontosan
+ * ugy nezett ki, mintha a CHECK nem mukodne. A testver-kontroll ("a ket mezo
+ * EGYUTT rendben van") mondta meg a kulonbseget: az is elbukott, tehat nem a
+ * megkotes volt a baj, hanem a beszuras.
+ */
 async function eszkozt(
   performance: string | null,
   performanceUnitId: string | null,
@@ -64,7 +77,8 @@ async function eszkozt(
                          "criticality", "qrToken", "customerId", "createdById",
                          "performance", "performanceUnitId", "updatedAt")
     VALUES (${id}, ${`${PREFIX}-${id.slice(-6)}`}, ${`${PREFIX} eszköz`},
-            'EQUIPMENT', 'ACTIVE', 'NORMAL', ${id}, ${customerId},
+            'EQUIPMENT', 'ACTIVE', 'NORMAL', ${randomUUID()}::uuid,
+            ${customerId},
             ${actorUserId}, ${performance}::decimal, ${performanceUnitId},
             CURRENT_TIMESTAMP)`;
   return id;
