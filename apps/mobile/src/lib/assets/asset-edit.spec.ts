@@ -110,13 +110,13 @@ describe("buildAssetPatch", () => {
       ...assetEditFormFrom(asset),
       model: "2080",
       notes: "Cserélt tömítés.",
-      status: "OUT_OF_SERVICE" as const,
+      status: "COLD_STANDBY" as const,
     };
     assert.deepEqual(buildAssetPatch(asset, form), {
       expectedUpdatedAt: asset.updatedAt,
       model: "2080",
       notes: "Cserélt tömítés.",
-      status: "OUT_OF_SERVICE",
+      status: "COLD_STANDBY",
     });
   });
 });

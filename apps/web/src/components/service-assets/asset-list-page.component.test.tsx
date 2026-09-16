@@ -74,7 +74,13 @@ function response(page: number): AssetListResponse {
     ],
     pagination: { page, pageSize: 25, totalItems: 60, totalPages: 3 },
     // MINDEN ALLAPOT SZEREPEL, A NULLAS IS: a szerver igy adja vissza.
-    counts: { ACTIVE: 40, OUT_OF_SERVICE: 6, IN_REPAIR: 12, RETIRED: 3 },
+    counts: {
+      ACTIVE: 40,
+      WARM_STANDBY: 4,
+      COLD_STANDBY: 2,
+      IN_REPAIR: 12,
+      RETIRED: 3,
+    },
   };
 }
 
@@ -535,6 +541,11 @@ describe("AssetListPage Beépített szűrő", () => {
    * ES A MEGLEVO FULEK NEM MOZDULTAK. Egy uj ful beszurasa a legkonnyebben ugy
    * ront el valamit, hogy egy masikat kiszorit vagy atnevez -- ezt semmi nem
    * jelezné, mert mindegyik ugyanugy nez ki.
+   *
+   * 2026-09-16: a "Nem uzemel" ful HELYERE ket ful lepett ("Meleg tartalek",
+   * "Hideg tartalek"), Balazs kerese szerint. Ez az allitas pirosra fordult, es
+   * ez a HELYES viselkedes: a regi felirat eltunese pontosan az a valtozas,
+   * amit ennek az allitasnak eszre kell vennie.
    */
   it("a többi fül változatlanul ott van", async () => {
     render(<AssetListPage />);
@@ -544,9 +555,24 @@ describe("AssetListPage Beépített szűrő", () => {
       "Beépített",
       "Aktív",
       "Javítás alatt",
-      "Nem üzemel",
+      "Meleg tartalék",
+      "Hideg tartalék",
       "Kivezetett",
     ])
       expect(await screen.findByRole("tab", { name: nev })).toBeTruthy();
+  });
+
+  /**
+   * ES A REGI FELIRAT TENYLEG ELTUNT -- TESTVER-KONTROLL A FENTIHEZ.
+   *
+   * A fenti allitas csak azt meri, hogy a het felirat OTT VAN. Egy nyolcadik,
+   * ottfelejtett "Nem uzemel" ful mellett is zold maradna -- es a felhasznalo
+   * ket olyan fulet latna, amik kozul az egyik egy mar nem letezo allapotra
+   * szurne, ures listat adva.
+   */
+  it("a régi „Nem üzemel\u201d fül NINCS többé", () => {
+    render(<AssetListPage />);
+
+    expect(screen.queryByRole("tab", { name: "Nem üzemel" })).toBeNull();
   });
 });

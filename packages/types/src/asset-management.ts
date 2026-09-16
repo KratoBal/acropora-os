@@ -1,7 +1,16 @@
 export type AssetKind =
   "SYSTEM" | "EQUIPMENT" | "COMPONENT" | "SENSOR" | "OTHER";
 
-export type AssetStatus = "ACTIVE" | "OUT_OF_SERVICE" | "IN_REPAIR" | "RETIRED";
+/**
+ * AZ ESZKÖZ ÁLLAPOTA. A sorrend a séma enum-sorrendjét követi, mert az a
+ * LISTA RENDEZÉSE is (`assetListOrderBy`): csökkenő rendelkezésre állás.
+ *
+ * A két tartalék a régi `OUT_OF_SERVICE` helyére jött (Balázs kérése,
+ * 2026-09-16). A régi érték egyetlen dolgot mondott -- hogy nem üzemel --, és
+ * azt is a HIÁNYÁVAL; a két új azt mondja meg, MIRE számíthat a szerelő.
+ */
+export type AssetStatus =
+  "ACTIVE" | "WARM_STANDBY" | "COLD_STANDBY" | "IN_REPAIR" | "RETIRED";
 
 export type AssetCriticality = "LOW" | "NORMAL" | "HIGH" | "CRITICAL";
 

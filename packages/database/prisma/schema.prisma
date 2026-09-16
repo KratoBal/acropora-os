@@ -352,9 +352,28 @@ enum AssetKind {
   OTHER
 }
 
+/// AZ ESZKÖZ ÁLLAPOTA -- ÉS A SORREND ITT NEM DÍSZ, HANEM ADAT.
+///
+/// A Postgres az enum értékeket a DEKLARÁCIÓ sorrendjében rendezi, és a lista
+/// állapot szerinti rendezése EBBŐL dolgozik (`assetListOrderBy`). A sor
+/// csökkenő rendelkezésre állást ír le:
+///
+///     ACTIVE -> WARM_STANDBY -> COLD_STANDBY -> IN_REPAIR -> RETIRED
+///     (üzemel, azonnal beállítható, tartalék, javítás alatt, kivezetve)
+///
+/// A MELEG ELŐBB ÁLL, MINT A HIDEG, mert többet állít: egy meleg tartalék
+/// azonnal a helyére állítható, egy hideg nem. Betűrendben a `COLD` előzné meg
+/// a `WARM`-ot, és a lista elejére kerülne a kevésbé elérhető eszköz.
+///
+/// A KÉT TARTALÉK A RÉGI `OUT_OF_SERVICE` HELYÉRE JÖTT (Balázs kérése,
+/// 2026-09-16 14:22, Discord: „szerintem kellene a nem uzemel helyett ket
+/// statusz: hideg tartalek, meleg tartalek"). A régi érték egyetlen dolgot
+/// mondott -- hogy nem üzemel --, és azt is a HIÁNYÁVAL. A két új érték azt
+/// mondja meg, MIRE számíthat a szerelő, ha oda kell nyúlnia.
 enum AssetStatus {
   ACTIVE
-  OUT_OF_SERVICE
+  WARM_STANDBY
+  COLD_STANDBY
   IN_REPAIR
   RETIRED
 }

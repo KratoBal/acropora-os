@@ -73,6 +73,17 @@ describe("az eszköz-lista rendezése", () => {
     // A MASODIK FELE AZ, AMI TENYLEG OR: az elso allitas akkor is zold marad,
     // ha valaki uj allapotot vesz fel az enum KOZEPERE, es ettol a lista
     // sorrendje csendben megvaltozik.
+    //
+    // ES EZ MEG IS TORTENT, 2026-09-16: a `OUT_OF_SERVICE` helyere KET ertek
+    // lepett, epp az enum kozepere. Ez az allitas pirosra fordult, es a helyuk
+    // TUDATOS dontes lett, nem a beirasuk sorrendje:
+    //
+    //   a MELEG ELOBB ALL, MINT A HIDEG, mert tobbet allit -- egy meleg
+    //   tartalek azonnal a helyere allithato, egy hideg nem. A sor igy tovabbra
+    //   is csokkeno rendelkezesre allast ir le, ahogy a regi negy ertek.
+    //
+    // Beturendben a `COLD` elozne meg a `WARM`-ot, tehat a lista elejere a
+    // KEVESBE elerheto eszkoz kerulne -- pontosan az, amit ez a rendezes kerul.
     const sema = readFileSync(SEMA, "utf8");
     const blokk = /enum AssetStatus \{([^}]*)\}/.exec(sema);
     assert.ok(blokk, "nem találtam az AssetStatus enumot a sémában");
@@ -81,7 +92,7 @@ describe("az eszköz-lista rendezése", () => {
         .split("\n")
         .map((sor) => sor.trim())
         .filter(Boolean),
-      ["ACTIVE", "OUT_OF_SERVICE", "IN_REPAIR", "RETIRED"],
+      ["ACTIVE", "WARM_STANDBY", "COLD_STANDBY", "IN_REPAIR", "RETIRED"],
       "az állapotok sorrendje a sémában adja a lista sorrendjét, és megváltozott",
     );
   });

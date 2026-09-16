@@ -40,6 +40,22 @@ describe("az eszköz-lista állapot-szűrője", () => {
    * Ezert ez az allitas azt rogziti, HANY allapot letezik. Ha valaki uj
    * allapotot vesz fel, ez pirosodik ki, es akkor el KELL donteni, hogy az uj
    * ertek beepitettnek szamit-e.
+   *
+   * === ES EZ MEG IS TORTENT, 2026-09-16 ===
+   *
+   * A `OUT_OF_SERVICE` helyere ket tartalek-allapot lepett (`WARM_STANDBY`,
+   * `COLD_STANDBY`). Ez az allitas pirosra fordult, ahogy kellett, es a
+   * dontest MEGHOZTUK, nem csak a listat irtuk at:
+   *
+   * MIND A KETTO BEEPITETTNEK SZAMIT. Egy tartalek eszkoz FIZIKAILAG OTT VAN
+   * a helyszinen -- ez a kulonbseg a kivezetetthez kepest, ami mar nincs ott.
+   * Balazs epp ezert kerte a ket allapotot: tartalek eszkozre is kell tudni
+   * hibajegyet nyitni, es a hibajegy eszkoz-valasztoja ugyanezzel az
+   * `IN_PLACE` szurovel dolgozik.
+   *
+   * A SZURO MAGA NEM VALTOZOTT, es ez a tagadas erdeme: `not: RETIRED`. Ha
+   * felsorolas allna ott, MOST kellett volna ket erteket hozzaadni -- es ha
+   * valaki elfelejti, a ket tartalek CSENDBEN kiesne a "Beepitett" listabol.
    */
   it("a séma állapotai: ha új jön, ezt a döntést újra kell hozni", () => {
     const sema = readFileSync(SEMA, "utf8");
@@ -50,7 +66,7 @@ describe("az eszköz-lista állapot-szűrője", () => {
         .split("\n")
         .map((sor) => sor.trim())
         .filter(Boolean),
-      ["ACTIVE", "OUT_OF_SERVICE", "IN_REPAIR", "RETIRED"],
+      ["ACTIVE", "WARM_STANDBY", "COLD_STANDBY", "IN_REPAIR", "RETIRED"],
       "új állapot került a sémába: döntsd el, beleszámít-e a Beépített szűrőbe",
     );
   });

@@ -9,7 +9,8 @@
 
 export type AssetKind =
   "SYSTEM" | "EQUIPMENT" | "COMPONENT" | "SENSOR" | "OTHER";
-export type AssetStatus = "ACTIVE" | "OUT_OF_SERVICE" | "IN_REPAIR" | "RETIRED";
+export type AssetStatus =
+  "ACTIVE" | "WARM_STANDBY" | "COLD_STANDBY" | "IN_REPAIR" | "RETIRED";
 export type AssetCriticality = "LOW" | "NORMAL" | "HIGH" | "CRITICAL";
 export type AssetOwnerType = "CUSTOMER" | "SUPPLIER";
 

@@ -75,7 +75,13 @@ const session: Session = {
 const emptyList: AssetListResponse = {
   items: [],
   pagination: { page: 1, pageSize: 25, totalItems: 0, totalPages: 1 },
-  counts: { ACTIVE: 0, OUT_OF_SERVICE: 0, IN_REPAIR: 0, RETIRED: 0 },
+  counts: {
+    ACTIVE: 0,
+    WARM_STANDBY: 0,
+    COLD_STANDBY: 0,
+    IN_REPAIR: 0,
+    RETIRED: 0,
+  },
 };
 
 const units: WorksheetDepartmentListResponse = {
