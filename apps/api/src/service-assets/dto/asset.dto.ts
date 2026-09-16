@@ -1,4 +1,11 @@
 import { ASSET_LABEL_BATCH_MAX, ASSET_LABEL_BATCH_MIN } from "@acropora/types";
+
+import {
+  ASSET_LIST_DIRECTIONS,
+  ASSET_LIST_SORTS,
+  type AssetListDirection,
+  type AssetListSort,
+} from "../asset-list-order.js";
 import { Transform, Type } from "class-transformer";
 import {
   ArrayMaxSize,
@@ -88,6 +95,18 @@ export class AssetListQueryDto {
    * változatlan marad -- a webes nyilvántartásnak a teljesség az értéke.
    */
   @IsIn(["SERVICE_PARTNER"]) @IsOptional() ownerScope?: "SERVICE_PARTNER";
+  /**
+   * A RENDEZES OSZLOPA ES IRANYA (Balazs kerese, 2026-09-16).
+   *
+   * A LISTA LAPOZVA JON, tehat a rendezes NEM lehet a bongeszoben: az az epp
+   * latszo huszonot sort rendezne, es ugy nezne ki, mintha az egeszet tenne.
+   * Ezert all a parameter itt, a lekerdezesen.
+   *
+   * ELHAGYVA a lista a ma is ervenyes alapertelmezest kapja (nev szerint
+   * novekvo), tehat egy regi hivas beture ugyanazt adja.
+   */
+  @IsIn(ASSET_LIST_SORTS) @IsOptional() sort?: AssetListSort;
+  @IsIn(ASSET_LIST_DIRECTIONS) @IsOptional() direction?: AssetListDirection;
   /**
    * A PARTNER ALEGYSÉGE, ÉS A SZŰRÉS A RÉSZFÁRA SZÓL, nem csak a megnevezett
    * csomópontra: a „Biodóm" alatti medencéken lógó eszközök is benne vannak.
