@@ -588,10 +588,25 @@ export class WorksheetsService {
    * nem jelenik meg. A `setAssignees` ma is enged barmilyen allapotu lapon, es
    * ez a kettonek KOZOS szabalya, nem ketto.
    *
-   * Ha ez valaha megfordul -- mert a nyomtatott, alairt lapra rakerul az
-   * eszkoz-lista --, akkor nem ez a metodus valtozik elsokent, hanem a MODELL:
-   * a kapcsolatnak a verziohoz kell kotodnie. Addig egy allapot-ellenorzes itt
-   * olyat orizne, amit a tarolas nem tamogat.
+   * === ES A DONTES LEJARATA, KIMONDVA (acrobot merese, 2026-09-16) ===
+   *
+   * A mai allapot HAROM mert tenyen all:
+   *   - az alairas a VERZION ul (`WorksheetVersionSignature`), es a verzio
+   *     tartalma a targy, a leiras, a datumok, a sorok es az osszegek;
+   *   - a `WorksheetAsset` NEM ott ul, hanem a `Worksheet`-hez kotodik, mint a
+   *     `WorksheetAssignee` es a `WorksheetEntry`;
+   *   - nyomtathato munkalap NINCS: a repoban nulla lap-generalo ut all (a
+   *     "worksheet-document" a FELTOLTOTT allomany, nem general lapot).
+   *
+   * Vagyis amit a partner alair, szerkezetileg nem tartalmazza az
+   * eszkoz-listat, es nincs olyan papir sem, amire raszaladna.
+   *
+   * EZ A DONTES UJRA KELL, HA valaha generalunk nyomtathato vagy a partnernek
+   * atadott munkalapot, ES azon az eszkoz-lista is rajta van. Nem azert, mert a
+   * modell megvaltozik, hanem mert onnantol egy LAP-SZINTU adat egy ALAIRT
+   * dokumentumban jelenik meg -- es az alairas utani valtozas ott CSENDES.
+   * Egy megjegyzes, ami csak a mai allapotot indokolja, a kovetkezo olvasonak
+   * mar hamis biztonsag.
    *
    * === A HELYSZIN A LAPE, NEM A KERESE ===
    *
