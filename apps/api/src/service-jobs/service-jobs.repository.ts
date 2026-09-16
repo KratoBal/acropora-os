@@ -250,6 +250,92 @@ export class ServiceJobsRepository {
   }
 
   /**
+   * EGYSEGEK TELJES UTJA, KOTEGBEN.
+   *
+   * Azert kell, mert egy utkozes-uzenet csak akkor hasznalhato, ha MEGMONDJA,
+   * hol all ma az eszkoz -- a puszta egyseg-nev ket tavoli ag alatt ugyanaz
+   * lehet (ADR-010). Egy kozos hivas, nem eszkozonkent egy.
+   */
+  async unitPathsOf(
+    departmentIds: (string | null | undefined)[],
+  ): Promise<Map<string, string[]>> {
+    return unitPathsFor(this.database, departmentIds);
+  }
+
+  /**
+   * A JEGYHEZ KOTOTT MUNKALAPOK, A HELYSZIN ATVEZETESEHEZ.
+   *
+   * MIERT KELL A `number`, ES MIERT AZ A HATAR: a munkalap-szamot a lezaras
+   * osztja ki, es az ELSO TAGJA A HELYSZIN KODJA (`buildWorksheetNumber`; a
+   * sema jegyzete szerint "csak lezart lapnal"). Egy MAR SZAMOZOTT lapot tehat
+   * nem mozgathatunk: a szama olyan helyszint nevezne meg, ahol a lap mar nem
+   * all -- es a szam a lap azonossaga, kinyomtatva es atadva.
+   *
+   * A hatar ezert ADAT (van-e szam), nem ALLAPOT-nev. Az elso valtozat a
+   * SIGNED verziora szurt volna; az az AWAITING_SIGNATURE es a REJECTED lapokat
+   * mozgatta volna, holott azok mar szamozottak (merve 2026-09-16).
+   *
+   * AZ ESZKOZ SAJAT HELYSZINE IS JON: enelkul a hivo eszkozonkent kerdezne
+   * vissza, hogy MEGNEVEZHESSE, hol all ma az, ami az uj reszfan kivul esne.
+   */
+  async worksheetsForPlacement(serviceJobId: string): Promise<
+    {
+      id: string;
+      number: string | null;
+      subject: string | null;
+      departmentId: string;
+      assets: {
+        assetId: string;
+        assetNumber: string;
+        assetName: string;
+        assetDepartmentId: string | null;
+      }[];
+    }[]
+  > {
+    const rows = await this.database.worksheet.findMany({
+      where: { serviceJobId },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        number: true,
+        departmentId: true,
+        // A LAP NEVE A LEGFRISSEBB VERZIOJAROL JON, ugyanugy, ahogy a jegy
+        // reszletlapjan: a nev a verzion lakik, nem a lapon.
+        versions: {
+          orderBy: { version: "desc" },
+          take: 1,
+          select: { subject: true },
+        },
+        assets: {
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          select: {
+            assetId: true,
+            asset: {
+              select: {
+                assetNumber: true,
+                name: true,
+                departmentId: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      number: row.number,
+      subject: row.versions[0]?.subject ?? null,
+      departmentId: row.departmentId,
+      assets: row.assets.map((link) => ({
+        assetId: link.assetId,
+        assetNumber: link.asset.assetNumber,
+        assetName: link.asset.name,
+        assetDepartmentId: link.asset.departmentId,
+      })),
+    }));
+  }
+
+  /**
    * A JEGY HELYSZINE ES AZ OTT ALLO ESZKOZOK, EGY TRANZAKCIOBAN.
    *
    * === MIERT EGY TRANZAKCIO, ES NEM KET IRAS ===
@@ -278,6 +364,15 @@ export class ServiceJobsRepository {
     serviceJobId: string;
     departmentId: string;
     assetIds: readonly string[];
+    /**
+     * A JEGYHEZ KOTOTT, MOZGATHATO LAPOK -- azok, amiknek MEG NINCS SZAMUK.
+     *
+     * A hivo valogatja ki oket (`worksheetsForPlacement`), es nem ez a metodus:
+     * a hatar indoka ott all leirva, es egy masodik peldany ITT pontosan ott
+     * csuszna el, ahol senki nem nezi. Ures lista ervenyes: a jegynek nem kell
+     * lapja.
+     */
+    worksheetIds: readonly string[];
   }): Promise<boolean> {
     return this.database.$transaction(async (transaction) => {
       const job = await transaction.serviceJob.findUnique({
@@ -308,6 +403,45 @@ export class ServiceJobsRepository {
           })),
           skipDuplicates: true,
         });
+      }
+
+      /**
+       * ES A HELYSZIN ATMEGY A MOZGATHATO LAPOKRA IS, UGYANEBBEN A
+       * TRANZAKCIOBAN.
+       *
+       * Balazs merese, 2026-09-16: "a hibajegynel meg tudtam valtoztatni a
+       * helyszint. de a mar hozzakotott munkalapnal nem valtozott meg".
+       *
+       * KET IRAS, ES A MASODIK NEM ELHAGYHATO: a lap `departmentId` mezoje
+       * MELLETT a PISZKOZAT-VERZIO `unitName` mezoje is atall. Az a nev a
+       * verzio KIIRASAKOR fagy be (lasd `versionContentData` jegyzetet), tehat
+       * egyedul a mezot atirva a lap UJ helyszinen allna, REGI helyszin-nevvel
+       * a lapjan -- es ez a mezo a verzio-elteresben is szerepel ("Egyseg"),
+       * vagyis a kovetkezo verzio ugy mutatna valtozast, hogy senki nem irt at
+       * semmit.
+       *
+       * CSAK A DRAFT VERZIOKAT irjuk at. Egy szam nelkuli lapnak ma csak ilyen
+       * verzioja lehet (a szamot a lezaras osztja), de a szures ITT all, nem a
+       * hivo bizalmaban.
+       */
+      if (input.worksheetIds.length > 0) {
+        const egyseg = await transaction.worksheetDepartment.findUnique({
+          where: { id: input.departmentId },
+          select: { name: true },
+        });
+        await transaction.worksheet.updateMany({
+          where: { id: { in: [...input.worksheetIds] } },
+          data: { departmentId: input.departmentId },
+        });
+        if (egyseg) {
+          await transaction.worksheetVersion.updateMany({
+            where: {
+              worksheetId: { in: [...input.worksheetIds] },
+              status: "DRAFT",
+            },
+            data: { unitName: egyseg.name },
+          });
+        }
       }
 
       return true;

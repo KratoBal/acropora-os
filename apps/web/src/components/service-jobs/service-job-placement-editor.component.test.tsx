@@ -2,6 +2,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ServiceJobAssetLink } from "@acropora/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "@/lib/api/client";
+
 import { ServiceJobPlacementEditor } from "./service-job-placement-editor";
 
 const jobs = vi.hoisted(() => ({ setPlacement: vi.fn() }));
@@ -73,6 +75,7 @@ function alap(over: Record<string, unknown> = {}) {
     departmentId: "unit-9",
     departmentPath: ["Biodóm", "Nagy medence"],
     assets: [eszkoz("esz-1", "Szivattyú", "ESZ-0007")],
+    worksheets: [],
     canManage: true,
     onSaved: () => {},
     ...over,
@@ -233,6 +236,122 @@ describe("ServiceJobPlacementEditor", () => {
       assetIds: ["esz-1", "esz-9"],
     });
     expect(screen.queryByText(/Az új helyszínen nem áll/)).toBeNull();
+  });
+
+  /**
+   * === A KOTOTT LAPOKON MARADO, KIVUL ESO ESZKOZOK (Balazs merese, 2026-09-16) ===
+   *
+   * A 409 NEM HIBA, HANEM KERDES: a szerver megnevezi, melyik lapon melyik
+   * eszkoz esne az uj helyszinen kivulre, es a felhasznalo dont. Piros
+   * uzenetkent kiirva a felhasznalo azt hinne, elromlott valami.
+   */
+  it("a szerver 409-es mondatait kérdésként mutatja, nem hibaként", async () => {
+    jobs.setPlacement.mockRejectedValue(
+      new ApiError(
+        "Szivattyú csere: Szivattyú (ESZ-0007) a(z) Biodóm / Nagy medence egységen áll, ami az új helyszínen kívül esik. A lapon marad.",
+        409,
+      ),
+    );
+    render(<ServiceJobPlacementEditor {...alap()} />);
+    await screen.findByLabelText("Helyszín");
+
+    fireEvent.change(screen.getByLabelText("Helyszín"), {
+      target: { value: "unit-5" },
+    });
+    fireEvent.click(screen.getByText(/Helyszín és eszközök mentése/));
+
+    expect(await screen.findByText(/kívül eső eszköz marad/)).toBeTruthy();
+    // A MONDAT VALTOZATLANUL LATSZIK: a lap, az eszkoz es a HELY is.
+    expect(document.body.textContent).toContain("Szivattyú csere");
+    expect(document.body.textContent).toContain("Biodóm / Nagy medence");
+  });
+
+  /**
+   * ES A TUDOMASULVETEL UTAN UGYANAZ A KERES ELMEGY, A KAPCSOLOVAL.
+   *
+   * Egy allitas, ami csak a kerdes MEGJELENESET meri, akkor is zold lenne, ha a
+   * megerosites gombja semmit nem csinalna.
+   */
+  it("tudomásulvétel után újraküldi, a kapcsolóval", async () => {
+    jobs.setPlacement
+      .mockRejectedValueOnce(new ApiError("Lap: eszköz kívül esik.", 409))
+      .mockResolvedValueOnce({ id: "job-1" });
+    render(<ServiceJobPlacementEditor {...alap()} />);
+    await screen.findByLabelText("Helyszín");
+
+    fireEvent.change(screen.getByLabelText("Helyszín"), {
+      target: { value: "unit-5" },
+    });
+    fireEvent.click(screen.getByText(/Helyszín és eszközök mentése/));
+    fireEvent.click(await screen.findByText("Rendben, mentés"));
+
+    await waitFor(() => expect(jobs.setPlacement).toHaveBeenCalledTimes(2));
+    expect(jobs.setPlacement.mock.calls[1]?.[2]).toEqual({
+      departmentId: "unit-5",
+      assetIds: ["esz-1"],
+      acceptWorksheetAssetsOutsideSite: true,
+    });
+    // ES AZ ELSO KOR NEM KULDTE A KAPCSOLOT: aki nem latta a mondatot, nem
+    // mondott igent.
+    expect(jobs.setPlacement.mock.calls[0]?.[2]).not.toHaveProperty(
+      "acceptWorksheetAssetsOutsideSite",
+    );
+  });
+
+  /**
+   * A SZAMOZOTT LAPOK NEM KOVETIK A HELYSZINT, ES A DOBOZ KIMONDJA.
+   *
+   * A nema kihagyas itt rosszabb lenne, mint a mondat: aki atallitja a jegy
+   * helyszinet, joggal hiszi, hogy a lapok kovetik.
+   */
+  it("számozott lapnál kimondja, hogy az a saját helyszínén marad", async () => {
+    render(
+      <ServiceJobPlacementEditor
+        {...alap({
+          worksheets: [
+            {
+              id: "lap-1",
+              number: "BIO-2026-001",
+              subject: "Szivattyú csere",
+              createdAt: "2026-09-15T08:00:00.000Z",
+              handedOverAt: null,
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(
+      await screen.findByText(/lezárt munkalap a saját helyszínén marad/),
+    ).toBeTruthy();
+  });
+
+  /**
+   * ES A TESTVER-KONTROLL: szam NELKULI lapnal NEM mondja. Enelkul az elozo
+   * allitas akkor is zold lenne, ha a mondat MINDIG ott allna -- es akkor egy
+   * olyan jegynel is riasztana, ahol minden lap koveti a helyszint.
+   */
+  it("szám nélküli lapnál nem állítja, hogy bármi a helyén maradna", async () => {
+    render(
+      <ServiceJobPlacementEditor
+        {...alap({
+          worksheets: [
+            {
+              id: "lap-1",
+              number: null,
+              subject: "Szivattyú csere",
+              createdAt: "2026-09-15T08:00:00.000Z",
+              handedOverAt: null,
+            },
+          ],
+        })}
+      />,
+    );
+    await screen.findByLabelText("Helyszín");
+
+    expect(
+      screen.queryByText(/lezárt munkalap a saját helyszínén marad/),
+    ).toBeNull();
   });
 
   /**

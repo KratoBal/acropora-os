@@ -1,5 +1,6 @@
 import {
   ArrayMaxSize,
+  IsBoolean,
   IsArray,
   IsIn,
   IsOptional,
@@ -138,6 +139,26 @@ export class SetServiceJobPlacementDto {
   @IsString({ each: true })
   @MinLength(1, { each: true })
   assetIds!: string[];
+  /**
+   * A FELHASZNALO TUDOMASUL VETTE, HOGY A KOTOTT LAPOKON MARAD OLYAN ESZKOZ,
+   * AMI AZ UJ HELYSZINEN KIVUL ALL.
+   *
+   * MIERT KAPCSOLO, ES MIERT NEM LISTA: a jegy sajat eszkozeinel a megerosites
+   * MAGA A LISTA -- ott a felhasznalo azt kuldi vissza, amit meghagyott. Itt
+   * nincs mit visszakuldeni: az eszkozok a LAPON MARADNAK (acrobot dontese,
+   * 2026-09-16), tehat a felhasznalo nem valogat, hanem TUDOMASUL VESZ.
+   *
+   * ELHAGYHATO, ES HAMIS AZ ALAPERTELMEZES: aki nem kuldi, az nem mondott
+   * igent. A szerver ilyenkor MEGNEVEZI, melyik lapon melyik eszkoz esne kivul
+   * es hol all ma -- es csak a masodik, kimondott korben ir.
+   *
+   * ES CSAK AKKOR SZAMIT, HA VAN UTKOZES. Ha egyetlen eszkoz sem esne kivul (ez
+   * a gyakori eset), a valtas ugyanugy megy at, mint eddig: a megallas az
+   * UTKOZESRE szol, nem a muveletre.
+   */
+  @IsBoolean()
+  @IsOptional()
+  acceptWorksheetAssetsOutsideSite?: boolean;
 }
 
 export const SERVICE_JOB_LIST_SCOPES = ["open", "all"] as const;

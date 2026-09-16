@@ -167,6 +167,14 @@ describe(
           }),
         },
         {
+          nev: "a suite munkalapjai bent maradtak a takaritas utan",
+          darab: await prisma.worksheet.count({
+            where: {
+              customer: { customerNumber: { startsWith: TEST_PREFIX } },
+            },
+          }),
+        },
+        {
           nev: "a suite eszkozei bent maradtak a takaritas utan",
           darab: await prisma.asset.count({
             where: { assetNumber: { startsWith: TEST_PREFIX } },
@@ -232,6 +240,80 @@ describe(
           rows.map((row) => [row.assetId, row.createdAt.getTime()]),
         ),
       };
+    }
+
+    /**
+     * EGY MUNKALAP A JEGY ALATT, NYERS SORKENT.
+     *
+     * A szolgaltatason at felvinni tobb elofeltetelt kerne (partner-kod,
+     * tartalom, felelosok), es egyik sem arrol szol, amit itt merunk. A
+     * `number` a DONTO mezo: ha van, a lap mar lezarult, es a szama a REGI
+     * helyszin kodjat viseli.
+     */
+    async function newSheet(
+      jel: string,
+      over: { number?: string; sequence?: number } = {},
+    ) {
+      const lap = await prisma.worksheet.create({
+        data: {
+          customerId,
+          departmentId: helyszin,
+          createdById: actor.id,
+          /**
+           * A SZAM HAROM MEZOBOL ALL, ES A TABLA EGYUTT KOVETELI OKET.
+           *
+           * `Worksheet_number_parts_check`: a `number`, a `numberYear` es a
+           * `sequence` vagy MIND null, vagy MIND kitoltott (plusz
+           * `sequence >= 1`). Ezt MOCKKAL NEM lehet megtudni -- az elso
+           * valtozatom csak a `number` mezot allitotta, es a CI-ben bukott el
+           * (23514, 2026-09-16). A fixtura igy nem csak atmegy, hanem HU is:
+           * egy szamozott lap a valosagban is mindharmat viseli.
+           */
+          ...(over.number
+            ? {
+                number: over.number,
+                numberYear: 2026,
+                sequence: over.sequence ?? 1,
+              }
+            : {}),
+          versions: {
+            create: {
+              version: 1,
+              status: "DRAFT",
+              subject: `Szivattyu csere ${jel}`,
+              // A HELYSZIN NEVE BEFAGYASZTVA: ezt kell a mozgatasnak
+              // atvezetnie, kulonben a lap uj helyszinen allna, regi nevvel.
+              unitName: "Biodóm",
+            },
+          },
+        },
+        select: { id: true },
+      });
+      return lap.id;
+    }
+
+    async function sheetState(worksheetId: string) {
+      const row = await prisma.worksheet.findUnique({
+        where: { id: worksheetId },
+        select: {
+          departmentId: true,
+          versions: {
+            select: { unitName: true },
+            orderBy: { version: "desc" },
+          },
+        },
+      });
+      return {
+        departmentId: row?.departmentId ?? null,
+        unitName: row?.versions[0]?.unitName ?? null,
+      };
+    }
+
+    async function attach(worksheetId: string, serviceJobId: string) {
+      await prisma.worksheet.update({
+        where: { id: worksheetId },
+        data: { serviceJobId },
+      });
     }
 
     /**
@@ -364,7 +446,81 @@ describe(
       );
     });
 
+    /**
+     * e) A SZAM NELKULI LAP HELYSZINE ES A PISZKOZAT NEVE IS ATALL.
+     *
+     * A KETTO EGYUTT MER: a mezo atirasa onmagaban ugy hagyna a lapot, hogy uj
+     * helyszinen all, de a lapjan a REGI helyszin neve olvashato -- es az a nev
+     * a verzio-elteresben is szerepel ("Egyseg"), tehat a kovetkezo verzio ugy
+     * mutatna valtozast, hogy senki nem irt at semmit.
+     *
+     * ES A TRANZAKCIO: ha a ket iras kulon menetben allna, egy megszakadas
+     * pontosan ezt a fel-kesz allapotot hagyna itt -- amin ranezesre semmi nem
+     * hibas.
+     */
+    it("a szám nélküli lap helyszíne és a piszkozat neve is átáll", async () => {
+      const jobId = await newJob();
+      const lapId = await newSheet("e");
+      await attach(lapId, jobId);
+      const elotte = await sheetState(lapId);
+      assert.equal(elotte.departmentId, helyszin);
+      assert.equal(elotte.unitName, "Biodóm");
+
+      await service.setPlacement(
+        jobId,
+        { departmentId: masikHelyszin, assetIds: [] },
+        actor,
+      );
+
+      const utana = await sheetState(lapId);
+      assert.equal(utana.departmentId, masikHelyszin);
+      assert.equal(
+        utana.unitName,
+        "PP Üzemeltetés",
+        "a piszkozat a RÉGI helyszín nevét viszi tovább",
+      );
+    });
+
+    /**
+     * f) A SZAMOZOTT LAP SORA TENYLEGESEN VALTOZATLAN.
+     *
+     * NEM a szolgaltatas visszateresi erteken all az allitas, hanem az ADATON:
+     * egy hivas, ami a valaszban kihagyja a lapot, de a tablaban megis atirja,
+     * a visszateresi erteket mero tesztnel zolden atmenne.
+     *
+     * A PAR MASIK FELE (e) EGYUTT MER VELE: onmagaban ez akkor is zold lenne,
+     * ha EGYETLEN lapot sem mozgatnank -- ezert all a vegen a kontroll.
+     */
+    it("a SZÁMOZOTT lap sora érintetlen marad", async () => {
+      const jobId = await newJob();
+      const szamozott = await newSheet("f1", {
+        number: `${TEST_PREFIX}${suffix}-SZAM`,
+      });
+      const szamNelkuli = await newSheet("f2");
+      await attach(szamozott, jobId);
+      await attach(szamNelkuli, jobId);
+
+      await service.setPlacement(
+        jobId,
+        { departmentId: masikHelyszin, assetIds: [] },
+        actor,
+      );
+
+      const zart = await sheetState(szamozott);
+      assert.equal(zart.departmentId, helyszin, "a számozott lap elmozdult");
+      assert.equal(zart.unitName, "Biodóm", "a számozott lap neve átíródott");
+      // ES A KONTROLL: a szam nelkuli UGYANEBBEN a hivasban ATALLT, tehat a
+      // fenti ket allitas nem attol zold, hogy a muvelet le sem futott.
+      const nyitott = await sheetState(szamNelkuli);
+      assert.equal(nyitott.departmentId, masikHelyszin);
+    });
+
     async function removeLeftovers() {
+      // A LAPOK ELOSZOR: a partner torlese elakadna, amig lap all rajta; a
+      // `WorksheetVersion` a lapra `Cascade`, tehat a verziokat a lap viszi.
+      await prisma.worksheet.deleteMany({
+        where: { customer: { customerNumber: { startsWith: TEST_PREFIX } } },
+      });
       // A SORREND KOTOTT: a `ServiceJobAsset.assetId` `Restrict`, tehat az
       // eszkoz torlese elhasalna, amig a jegy (es vele a kapcsolatsor) all.
       await prisma.serviceJob.deleteMany({
