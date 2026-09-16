@@ -77,6 +77,25 @@ export function JobAssetPicker({
         const query = new URLSearchParams({
           departmentId: unit,
           pageSize: "100",
+          /**
+           * AZ ALLAPOT KIMONDVA, ES EZ EGY MERT HIBA JAVITASA.
+           *
+           * A parameter NELKUL a vegpont `ACTIVE`-ra szur (a `AssetListQueryDto`
+           * alapertelmezese), tehat ez a valaszto CSAK a mukodo eszkozoket
+           * kinalta -- a javitas alatt allot es a nem uzemelot NEM. Balazs mérte
+           * vissza 2026-09-16-an, szo szerint: "egy olyan eszkozt akarok
+           * csatolni ami javitas alatt van az nem jelenik meg".
+           *
+           * AMIERT EZ A LEGROSSZABB FAJTA HIBA VOLT ITT: a hianyzo eszkoz
+           * pontosan ugy nezett ki, mintha nem letezne. Se ures lista, se
+           * hibauzenet -- a bejelento mast valasztott volna helyette.
+           *
+           * ES AMIERT `IN_PLACE`, NEM `ALL`: a KIVEZETETT eszkoz mar fizikailag
+           * sincs a helyszinen, tehat uj hibajegyet nem kaphat. Minden mas igen:
+           * a javitas alatt allo (masodik hiba ugyanazon a gepen) es a nem
+           * uzemelo is (Balazs szavaival: "az lehet hideg vagy meleg tartalek").
+           */
+          status: "IN_PLACE",
         });
         const response = await assetsApi.list(token, query, signal);
         setAssets(response.items);
