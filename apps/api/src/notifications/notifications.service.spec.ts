@@ -46,13 +46,24 @@ function tokens(
   rows: Array<{ userId: string; token: string; bundleId: string }>,
   onRetire?: (token: string) => void,
 ) {
-  return {
-    recipients: async () => rows,
+  /**
+   * A KERT PLATFORMOT IS ROGZITJUK, mert ez az egyetlen hely, ahol egyseg
+   * szinten merheto: a valodi szures az adatbazisban tortenik.
+   */
+  const kertPlatformok: string[] = [];
+  const value = {
+    recipients: async (_userIds: readonly string[], platform: string) => {
+      kertPlatformok.push(platform);
+      return rows;
+    },
     retire: async (token: string) => {
       onRetire?.(token);
       return { count: 1 };
     },
   } as unknown as DeviceTokenRepository;
+  return Object.assign(value, { kertPlatformok }) as DeviceTokenRepository & {
+    kertPlatformok: string[];
+  };
 }
 
 const notice = {
@@ -350,5 +361,64 @@ describe("a hibajegy delegálásának értesítése", () => {
     assert.deepEqual(summary, { sent: 0, retired: 0, failed: 0 });
     assert.equal(sent.length, 0);
     assert.equal(written.jobs.length, 0);
+  });
+});
+
+/**
+ * A KULDO A SAJAT PLATFORMJARA KER CIMZETTET.
+ *
+ * === A MERT HELYZET, AMI EZT KIKENYSZERITETTE (2026-09-16) ===
+ *
+ * A `DevicePlatform` enum MA IS tartalmazza az `ANDROID` erteket, es a
+ * regisztralo vegpont el is fogadja -- kuldo viszont egyedul az Apple fele van.
+ * A cimzett-lekerdezes platformra nem szurt, tehat egy androidos telefon
+ * sikeresen regisztralt volna, a Google-tokenjet az Apple-nek kuldtuk volna, az
+ * elutasitja, es a `retired` ag TORLI a sort. Nem elmaradt ertesites: csendes,
+ * ismetlodo regisztracio-vesztes egy telefonon, ami soha nem is kaphatott
+ * volna.
+ *
+ * === MIT MER EZ, ES MIT NEM ===
+ *
+ * A VALODI szures az adatbazisban tortenik, azt az integracios spec meri. Itt
+ * az all, hogy a kuldo egyaltalan MEGMONDJA, melyik platformot keri -- ez az a
+ * fele, ami adatbazis nelkul is merheto, es ez az a fele, ami egy masodik kuldo
+ * megirasakor elfelejtheto.
+ */
+describe("a küldő a saját platformjára kér címzettet", () => {
+  // A jegy-ertesites mintaja a szomszed blokkban HELYI valtozo, tehat ide sajat
+  // pelda kell -- masolas helyett a KET mezo, amit a fuggveny tenylegesen olvas.
+  const jegyErtesites = {
+    serviceJobId: "job-1",
+    subject: "Szivattyú nem indul",
+    userIds: ["user-2"],
+  };
+  const eszkozok = () =>
+    tokens([
+      { userId: "user-2", token: "aa".repeat(32), bundleId: "hu.acropora.os" },
+    ]);
+
+  it("munkalap-kiosztásnál IOS tokeneket kér", async () => {
+    const { sender: apns } = sender();
+    const store = eszkozok();
+    const service = new NotificationsService(store, apns, log().log);
+
+    await service.deliverWorksheetAssignment(notice);
+
+    assert.deepEqual(store.kertPlatformok, ["IOS"]);
+  });
+
+  /**
+   * A MASODIK UT KULON ALL, es nem disz: a ket kiosztas ket kulon fuggveny, es
+   * a kozos torzs ELE mindketto sajat sorokat tesz. Egy masolt, de atirni
+   * elfelejtett platform pontosan itt csuszna at.
+   */
+  it("hibajegy-kiosztásnál is IOS tokeneket kér", async () => {
+    const { sender: apns } = sender();
+    const store = eszkozok();
+    const service = new NotificationsService(store, apns, log().log);
+
+    await service.deliverServiceJobAssignment(jegyErtesites);
+
+    assert.deepEqual(store.kertPlatformok, ["IOS"]);
   });
 });
