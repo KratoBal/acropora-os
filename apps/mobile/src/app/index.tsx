@@ -249,14 +249,24 @@ export default function HomeScreen() {
               <Text style={styles.sectionHint}>Jogosultságod szerint</Text>
             </View>
 
+            {/*
+              A SORREND BALÁZS KÉRÉSE (2026-09-16): szervizes jogosultsággal
+              Hibajegyek, Munkalapok, Eszközök, Partnerek.
+
+              ÉS NEM SZEREPKÖRÖNKÉNT MÁS SORREND: a csempék RÖGZÍTETT sora
+              változik meg úgy, hogy ez a négy ebben a rendben álljon, a többi
+              mögöttük. A szervizes úgyis csak ezt a négyet látja, tehát a kért
+              sorrendet megkapja -- egy szerepkörönként újrarendezett képernyő
+              viszont követhetetlen lenne annak, aki több szerepet lát.
+            */}
             <View style={styles.modules}>
               <ModuleCard
-                code="ES"
-                title="Eszközök"
-                description="Partnereszközök, QR-azonosítás és hierarchia"
-                available={tileVisible("ES")}
+                code="HJ"
+                title="Hibajegyek"
+                description="Nyitott jegyek, léptetés és fénykép a helyszínen"
+                available={tileVisible("HJ")}
                 enabled
-                onPress={() => router.push("/assets")}
+                onPress={() => router.push("/service-jobs")}
               />
               <ModuleCard
                 code="MU"
@@ -265,6 +275,14 @@ export default function HomeScreen() {
                 available={tileVisible("MU")}
                 enabled
                 onPress={() => router.push("/worksheets")}
+              />
+              <ModuleCard
+                code="ES"
+                title="Eszközök"
+                description="Partnereszközök, QR-azonosítás és hierarchia"
+                available={tileVisible("ES")}
+                enabled
+                onPress={() => router.push("/assets")}
               />
               <ModuleCard
                 code="RE"

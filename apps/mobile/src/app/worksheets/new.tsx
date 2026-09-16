@@ -34,7 +34,7 @@ import {
 } from "@/lib/offline/worksheet-department-cache";
 import * as ImagePicker from "expo-image-picker";
 
-import { MAX_FILES_PER_UPLOAD } from "@/lib/api/asset-document-upload";
+import { MAX_FILES_PER_UPLOAD } from "@/lib/api/document-upload";
 import { ApiError } from "@/lib/api/client";
 import { photoPermissionDeniedNotice } from "@/lib/api/photo-permission-notice";
 import { toPickedImages, type PickedFile } from "@/lib/api/picked-image";

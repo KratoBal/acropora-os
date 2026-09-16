@@ -148,7 +148,17 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
      * ketszer dontse el ugyanazt.
      */
     id: "service-jobs",
-    surfaces: ["web"],
+    /**
+     * A MOBIL 2026-09-16-TOL, es ezt a sor folotti megjegyzes maga jelolte ki:
+     * "a hibajegy-kepernyo elkeszulte a mobil alkalmazasban. Akkor ez a sor
+     * bovul." A kepernyo elkeszult, tehat a sor bovul.
+     *
+     * A CSEMPE UGYANEBBEN A KORBEN KERULT BE (`TILE_ENTRY.HJ`). Kulon-kulon
+     * egyik sem csinal semmit: e nelkul a sor nelkul a csempe rejtve maradna,
+     * a csempe nelkul pedig ez a sor egy nem letezo belepesi pontot engedne.
+     * A fel megoldas NEMA -- ezert megy a ketto egyutt.
+     */
+    surfaces: ["web", "mobile"],
     visibility: permission(PERMISSIONS.SERVICE_VIEW),
   },
   {

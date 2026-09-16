@@ -19,6 +19,7 @@ import type { AuthenticatedUser } from "./types";
  * kiadott menut hasznalja" rontas NULLA tesztet dontott pirosra.
  */
 export const TILE_ENTRY = {
+  HJ: "service-jobs",
   ES: "service-assets",
   MU: "worksheets",
   RE: "webshop-orders",
