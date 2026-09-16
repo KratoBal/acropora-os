@@ -193,6 +193,22 @@ export interface ServiceJobDetail {
    * mindegyike, mert a mezo 2026-09-14-en keletkezett.
    */
   departmentId: string | null;
+  /**
+   * A HELYSZIN TELJES UTJA, a gyokertol lefele, egy-egy elemmel szintenkent.
+   *
+   * MIERT NEM ELEG A NEV, ES MIERT NEM ELEG A SZULO SEM: a kod es a nev csak
+   * TESTVEREK kozott egyedi, tehat ket TAVOLI ag alatt ugyanaz a "Biodóm (BIO)"
+   * megengedett es termeszetes. Ez a mezo korabban a szulot es a nevet fuzte
+   * ossze -- az EGY szinttel tobb, de harom szintnel meg mindig nem mondja meg,
+   * melyik agrol van szo.
+   *
+   * Balazs merte vissza 2026-09-16-an: a munkalap adatlapjan `NMD —
+   * Nagymedence` allt, es abbol nem derul ki, melyik medencerol.
+   *
+   * `null`, ha a jegynek nincs helyszine. URES TOMB SOHA: az azt allitana, hogy
+   * az ut ismert es nulla hosszu.
+   */
+  departmentPath: string[] | null;
   departmentName: string | null;
   createdAt: string;
   /**

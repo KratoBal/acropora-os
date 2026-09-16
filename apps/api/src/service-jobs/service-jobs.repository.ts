@@ -6,6 +6,7 @@ import { SERVICE_ASSIGNABLE_ROLES } from "../common/service-assignment.js";
 import { DOCUMENT_DELETED_ACTION } from "./service-job-documents.repository.js";
 import { ALL_SERVICE_JOB_STATUSES } from "./service-job-status.js";
 import { prisma, type Prisma, type ServiceJobStatus } from "@acropora/database";
+import { unitPathFor } from "../common/unit-path-lookup.js";
 
 /**
  * A LEZÁRT ÁLLAPOTOK, EGY HELYEN. A lista alapból ezeket hagyja ki - és ha egy
@@ -582,7 +583,29 @@ export class ServiceJobsRepository {
     });
   }
 
+  /**
+   * A JEGY ADATLAPJA, ES VELE A HELYSZIN TELJES UTJA.
+   *
+   * AZ UT KULON LEKERDEZESBOL JON, nem az `select` melyitesevel: a helyszin-fa
+   * melysege NEM korlatos, tehat egy `parent: { parent: { ... } }` lanc mindig
+   * csak addig latna, ameddig valaki megirta -- es a hianyzo szint CSENDBEN
+   * maradna ki, ugyanugy helyesnek latszo eredmennyel.
+   *
+   * ES ITT, A TAROLOBAN, nem a szolgaltatasban: a szolgaltatasok hamis
+   * tarolokkal futnak az egyseg-tesztekben, tehat egy ottani adatbazis-hivas
+   * kivezetne oket a fedes alol. (Merve: huszonhat teszt bukott el, amikor
+   * eloszb odatettem.)
+   */
   async detail(id: string, visibility: Prisma.ServiceJobWhereInput) {
+    const sor = await this.detailRow(id, visibility);
+    if (!sor) return sor;
+    return {
+      ...sor,
+      departmentPath: await unitPathFor(this.database, sor.departmentId),
+    };
+  }
+
+  private async detailRow(id: string, visibility: Prisma.ServiceJobWhereInput) {
     return this.database.serviceJob.findFirst({
       where: { AND: [{ id }, visibility] },
       select: {

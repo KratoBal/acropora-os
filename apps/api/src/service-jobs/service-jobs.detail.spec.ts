@@ -78,6 +78,12 @@ function row(overrides: Partial<NonNullable<DetailRow>> = {}) {
     // (`service-job-assignees.spec.ts`). Itt a jelenlete annyit allit, hogy egy
     // delegalatlan jegy reszletlapja TELJES valaszt ad -- nem `undefined`-et.
     assignees: [],
+    /**
+     * A HELYSZIN UTJA ALAPBAN `null`, es ez nem kitolto ertek: a mai jegyek
+     * TOBBSEGENEK nincs helyszine (a mezo 2026-09-14-en keletkezett), tehat ez
+     * a gyakori eset. Ami az utat MERI, az a sajat esetenel allitja be.
+     */
+    departmentPath: null,
     ...overrides,
   } satisfies NonNullable<DetailRow>;
 }

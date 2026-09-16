@@ -413,6 +413,8 @@ export class ServiceJobsService {
      * -- es nem is kell neki egy MASIK, amit kulon karban kellene tartani.
      */
     const removals = await this.repository.documentRemovals(row.id);
+    // AZ UT A SORRAL EGYUTT ERKEZIK a tarolobol -- lasd ott az indokot.
+    const ut = row.departmentPath ?? null;
 
     return {
       id: row.id,
@@ -425,13 +427,16 @@ export class ServiceJobsService {
       customerName: row.customer?.displayName ?? null,
       customerId: row.customerId,
       departmentId: row.departmentId,
-      // A SZULO CSAK AKKOR KERUL ELE, HA VAN. Gyokerszintu egysegnel egy vezeto
-      // elvalaszto maradna a nev elott, ami hianyzo adatnak latszik.
-      departmentName: row.department
-        ? [row.department.parent?.name, row.department.name]
-            .filter(Boolean)
-            .join(" / ")
-        : null,
+      /**
+       * A TELJES UT, NEM CSAK A SZULO. Ez a mezo korabban EGY szintet fuzott a
+       * nev ele -- harom szintnel viszont ugyanugy nem mondja meg, melyik agrol
+       * van szo, es a ket eset kivulrol egyforman nez ki.
+       */
+      departmentPath: ut,
+      // A REGI MEZO MARAD, es most az UT osszefuzott alakja. A mobil csomag
+      // sajat tipusdeklaraciokat tart, tehat ott a tomb nem jelenik meg
+      // magatol -- ez a sor az, ami ott is javul.
+      departmentName: ut ? ut.join(" / ") : null,
       createdAt: row.createdAt.toISOString(),
       // A tábla `readonly` tömböt ad (nem írható felül kívülről); a válasz
       // sima tömb, ezért itt másolat készül róla.

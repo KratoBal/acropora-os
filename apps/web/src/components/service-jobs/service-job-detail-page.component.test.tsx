@@ -75,6 +75,7 @@ function detail(overrides: Partial<ServiceJobDetail> = {}): ServiceJobDetail {
     // korabbi jegyen `null`. Ez az alapeset, nem a kivetel.
     departmentId: null,
     departmentName: null,
+    departmentPath: null,
     createdAt: "2026-09-01T08:00:00.000Z",
     scheduledAt: null,
     startedAt: null,

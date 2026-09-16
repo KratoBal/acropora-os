@@ -114,7 +114,20 @@ export const worksheetSummaryInclude = {
 
 export type WorksheetDetailRow = Prisma.WorksheetGetPayload<{
   include: typeof worksheetDetailInclude;
-}>;
+}> & {
+  /**
+   * A HELYSZIN TELJES UTJA, a tarolo teszi melle -- NEM a Prisma `include`
+   * eredmenye.
+   *
+   * MIERT NEM AZ: a helyszin-fa melysege NEM korlatos, tehat egy
+   * `parent: { parent: { ... } }` lanc mindig csak addig latna, ameddig valaki
+   * megirta, es a hianyzo szint CSENDBEN maradna ki.
+   *
+   * ELHAGYHATO, es ez szandekos: a leképezés tiszta fuggveny marad, es a
+   * meglevo hivok (tesztek hamis sorai) valtozatlanul ervenyesek.
+   */
+  departmentPath?: string[] | null;
+};
 
 export type WorksheetSummaryRow = Prisma.WorksheetGetPayload<{
   include: typeof worksheetSummaryInclude;
@@ -245,6 +258,9 @@ export function toWorksheetDetail(row: WorksheetDetailRow): WorksheetDetail {
       parentId: row.department.parentId,
       code: row.department.code,
       name: row.department.name,
+      // A TELJES UT, HA A TAROLO MELLETETTE. A mezo elhagyhato, es a
+      // leképezés tiszta marad: a betoltes a tarolo dolga.
+      ...(row.departmentPath ? { path: row.departmentPath } : {}),
       isActive: row.department.isActive,
     },
     createdByName: row.createdBy?.displayName ?? null,
