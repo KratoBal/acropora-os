@@ -206,11 +206,35 @@ export class CreateAssetDto {
   @IsString() @IsOptional() model?: string;
   @IsString() @IsOptional() serialNumber?: string;
   @IsString() @IsOptional() inventoryNumber?: string;
-  /** Előre nyomtatott matrica kódja (egy betű és négy szám, pl. V2196). Az
+  /**
+   * Előre nyomtatott matrica kódja (egy betű és négy szám, pl. V2196). Az
    * ALAKOT a szolgáltatás ellenőrzi a közös `normalizeAssetLabelCode`
    * függvénnyel, nem itt egy második mintával: két minta két helyen pontosan
-   * ott csúszna el, ahol senki nem nézi. */
-  @IsString() @IsOptional() labelCode?: string;
+   * ott csúszna el, ahol senki nem nézi.
+   *
+   * A SZŰRŐ `@ValidateIf`, NEM `@IsOptional()` -- UGYANAZ A RÉS, AMIT acrobot
+   * A MÓDOSÍTÓ OSZTÁLYON MEGTALÁLT (2026-09-16), CSAK A FELVITELI ÁGON.
+   *
+   * Az `@IsOptional()` a `null`-t ugyanúgy kihagyja, mint az `undefined`-ot.
+   * A `null` így eljutott a tárolóig, ahol `input.labelCode === undefined`
+   * HAMIS rá, a `normalizeAssetLabelCode` pedig `raw.trim()`-et hív rajta.
+   * Mérve ezen az osztályon, 2026-09-16: nulla validációs hiba, majd
+   * `TypeError: Cannot read properties of null (reading 'trim')` -- amit a
+   * szolgáltatás `map` függvénye a végén továbbdob, tehát **500 lett volna,
+   * nem 400**.
+   *
+   * ÉLES TÖRÉS NEM VOLT: a webes és a mobil kliens is `?? undefined` alakban
+   * küldi. A határ viszont nyitva állt, és a módosító osztály megjegyzése azt
+   * sugallta, hogy a csapda kezelve van -- egy zárnak látszó nyitott ajtó
+   * rosszabb a nyilván nyitottnál.
+   *
+   * ÉS A TESTVÉREI (`model`, `serialNumber`) MARADNAK `@IsOptional()`-ön:
+   * azokat az `optionalText` nyeli el, ami a `null`-t kezeli. A matrica azért
+   * más, mert a normalizálója nem.
+   */
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  labelCode?: string;
   /**
    * A BERENDEZES TELJESITMENYE, ES A MERTEKEGYSEGE.
    *
