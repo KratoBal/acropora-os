@@ -114,9 +114,26 @@ module.exports = ({ config }) => {
        * Ha valaki egyszer visszateszi a fajlt a repoba, eloszb a kulcs
        * korlatozasat kell megnezni a konzolon.
        *
-       * A VISSZAESES (`./google-services.json`) a helyi futtatashoz van, ahol a
-       * fajlt a fejleszto maga teszi oda. A VALODI titok egyik esetben sem ez,
-       * hanem a szolgaltatasfiok kulcsa, ami a SZERVER oldalan kell.
+       * A VISSZAESES (`./google-services.json`) NEM kenyelmi lehetoseg: a fajlnak
+       * OTT KELL LENNIE helyben is, amikor EAS buildet inditasz. Ezt egy bukott
+       * build tanitotta meg (2026-09-16, e00087a9):
+       *
+       *   Runtime version mismatch
+       *   - helyi gepen szamolva:  6cd8381293a6...
+       *   - az EAS-en szamolva:    488f3697ea16...
+       *
+       * Az `expo-updates` ujjlenyomat-alapu runtime verziot hasznal, es a
+       * kulonbseg EGYETLEN tetel volt: az EAS oldalan a titok-fajl MEGJELENT a
+       * forrasok kozott, a helyi gepen viszont NEM LETEZETT semmilyen uton.
+       *
+       * ES AMIT KULON LEMERTEM, mert ez donti el a javitast: az ujjlenyomat a
+       * fajl TARTALMAT nezi, az UTJAT nem. Ket kulonbozo helyen allo azonos
+       * fajl BETURE ugyanazt a lenyomatot adja (`e5d020ca...` mind a kettore).
+       * Tehat nem a titok-ut a gond, hanem a HIANY.
+       *
+       * A fajl ezert a `.gitignore`-ban all, es a build elott a helyere kell
+       * masolni. A VALODI titok egyik esetben sem ez, hanem a szolgaltatasfiok
+       * kulcsa, ami a SZERVER oldalan kell.
        */
       googleServicesFile:
         process.env.GOOGLE_SERVICES_JSON ?? "./google-services.json",
