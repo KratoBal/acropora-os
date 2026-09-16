@@ -12,6 +12,7 @@ import { randomUUID } from "node:crypto";
 
 import { conflictingFields, intendedFields } from "./asset-field-conflict.js";
 import { assetListOrderBy } from "./asset-list-order.js";
+import { assetLabelWhere } from "./asset-label-filter.js";
 import { assetStatusWhere } from "./asset-status-filter.js";
 
 import { Injectable } from "@nestjs/common";
@@ -446,28 +447,18 @@ export class ServiceAssetsRepository extends Repository {
       ...(departmentIds ? { departmentId: { in: departmentIds } } : {}),
       ...(query.aquariumId ? { aquariumId: query.aquariumId } : {}),
       /**
-       * MATRICA SZERINTI SZUKITES. A `label: null` alak a Prisma egy-az-egyhez
-       * kapcsolatan azt jelenti, hogy NINCS kapcsolt sor -- ez teszi
-       * megtalalhatova a matrica nelkul felvitt eszkozoket.
+       * A KET MATRICA-SZURO EGY HELYEN EPUL OSSZE (`assetLabelWhere`).
        *
-       * A `isNot: null` a masik irany. A ketto NEM ugyanaz, mint a
-       * `label: { code: ... }`: az mar egy KONKRET kodra szur.
-       */
-      ...(query.label === "without"
-        ? { label: null }
-        : query.label === "with"
-          ? { label: { isNot: null } }
-          : {}),
-      /**
-       * EGY KONKRET MATRICAKOD. A `label: { code }` alak a kapcsolt soron
-       * szur, tehat a matrica NELKULI eszkozok magatol kiesnek.
+       * NEM KET SPREAD: mindketto ugyanarra a `label` kulcsra ir, tehat a
+       * masodik NEMAN felulirna az elsot. A fuggveny jegyzete leirja a mert
+       * esetet; a lenyeg, hogy a hiba nem ures listat adott volna, hanem egy
+       * ertelmes, nem ures valaszt a MASIK kerdesre.
        *
-       * A DTO MAR NORMALIZALT ALAKOT AD (`toStoredLabelCode`), es a rossz
+       * A DTO MAR NORMALIZALT KODOT AD (`toStoredLabelCode`), es a rossz
        * alakut ELUTASITJA -- ide tehat vagy egy tarolhato kod erkezik, vagy
-       * semmi. Egy csendben eldobott szuro itt a helyszin OSSZES eszkozet adna
-       * vissza, ami a hivo szemszogebol nem ures valasz, hanem ROSSZ talalat.
+       * semmi.
        */
-      ...(query.labelCode ? { label: { code: query.labelCode } } : {}),
+      ...assetLabelWhere(query.label, query.labelCode),
       ...(query.parentAssetId ? { parentAssetId: query.parentAssetId } : {}),
       ...(query.dueBefore
         ? { nextServiceAt: { lte: new Date(query.dueBefore) } }
