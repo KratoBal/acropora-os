@@ -83,4 +83,71 @@ describe("az uj eszkoz urlap listai", () => {
       `Ket listat vartam a kozos donteshozon at (tulajdonosok es helyszinek), ennyi van: ${talalat.length}.`,
     );
   });
+  /**
+   * A PARTNER-SAV A PARTNER-MONDATOT KAPJA, NEM A HELYSZINET.
+   *
+   * === A MERT HIBA (2026-09-16, a 710-ben javitva) ===
+   *
+   * A partner-valaszto folott a HELYSZIN-fuggveny szovege allt, es ures
+   * gyorsitotarnal ezt mondta: "Ehhez a partnerhez nincs mentett helyszin ...
+   * nyisd meg egyszer a partnert". A felhasznalo MEG NEM valasztott partnert,
+   * es epp a PARTNER-lista volt ures -- a mondat masrol beszelt, es olyan
+   * lepest javasolt, ami abbol az allapotbol nem elvegezheto.
+   *
+   * === MIERT KELL ORZO A HIVOHELYRE, HOLOTT A FUGGVENY MAR MERVE VAN ===
+   *
+   * Mert lemertem: a partner-savot visszamutatva a helyszin-fuggvenyre MINDEN
+   * teszt zold maradt (749 lefutott, 0 piros). A FUGGVENY vedve volt, a
+   * HIVOHELY nem -- es a hiba epp a hivohelyen allt. Egy ellenorzes, ami a
+   * hibat nem tudja pirosra valtani, nem ellenorzes.
+   *
+   * A HATARA UGYANAZ, mint a fajl tobbi allitasae: a SZERKEZETET meri, nem azt,
+   * hogy a mondat jol hangzik. Ha egyszer lesz kepernyo-renderelo, ezt
+   * VISELKEDESRE kell cserelni, nem melle tenni.
+   */
+  it("a partner-sav a partner-mondatot kapja, a helyszin-sav a helyszinet", () => {
+    const ownersFrom = source.indexOf("const ownersNotice");
+    const unitsFrom = source.indexOf("const unitsNotice");
+    // A KONTROLL A KERESESRE: ket horgony nelkul az alabbi ket szelet URES
+    // lenne, es minden allitas zolden menne at rajta.
+    assert.ok(ownersFrom > -1, "nincs `ownersNotice` a képernyőn");
+    assert.ok(
+      unitsFrom > ownersFrom,
+      "nincs `unitsNotice` az `ownersNotice` után",
+    );
+
+    const ownersBlock = source.slice(ownersFrom, unitsFrom);
+    const unitsBlock = source.slice(unitsFrom, unitsFrom + ownersBlock.length);
+
+    assert.match(ownersBlock, /describeCachedOwnersNotice/);
+    assert.doesNotMatch(
+      ownersBlock,
+      /describeCachedDepartmentsNotice/,
+      "a partner-sáv a HELYSZÍN mondatát kapja",
+    );
+    // ES A TULSO IRANY: a helyszin-sav se csusszon at a partner-mondatra.
+    assert.match(unitsBlock, /describeCachedDepartmentsNotice/);
+    assert.doesNotMatch(
+      unitsBlock,
+      /describeCachedOwnersNotice/,
+      "a helyszín-sáv a PARTNER mondatát kapja",
+    );
+  });
+
+  /**
+   * ES A SZAMLALO IS A SAJAT LISTAJABOL JON.
+   *
+   * Nem szorszalhasogatas: a mondat KET allapotot valaszt szet a `count`
+   * alapjan ("nincs mentett sor" kontra "mentett sorokbol"). Ha a partner-sav a
+   * HELYSZIN listajanak hosszat kapna, ures partner-lista mellett is azt
+   * allitana, hogy van mibol valasztani.
+   */
+  it("mindkét sáv a SAJÁT listájának hosszát adja át", () => {
+    const ownersFrom = source.indexOf("const ownersNotice");
+    const unitsFrom = source.indexOf("const unitsNotice");
+    const ownersBlock = source.slice(ownersFrom, unitsFrom);
+
+    assert.match(ownersBlock, /count: cachedOwners\.items\.length/);
+    assert.doesNotMatch(ownersBlock, /cachedUnits/);
+  });
 });
