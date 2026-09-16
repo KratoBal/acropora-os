@@ -101,14 +101,56 @@ export function dependencyOf(row: SyncQueueRow): string | null {
   return readPhotoPayload(row.payloadJson)?.recordingOperationId ?? null;
 }
 
+/**
+ * MEGKAPTA-E MAR EZ A SOR AZT AZ AZONOSITOT, AMIRE VART.
+ *
+ * A VALASZ HELYE A SORON ALL, NEM A FAJTAJAN. Az `attachRecordingResult` ket
+ * helyre tud irni, es a sor `depends_on_target` mezoje mondja meg, melyikbe:
+ *
+ *   entityId (vagy hianyzik)  -> a sor SAJAT `entity_id` mezojebe. A kepek igy,
+ *                               es a REGI sorok is, ahol a cel meg nem letezett.
+ *   barmi mas                 -> a payload EZEN a kulcsan, mert a hivasnak a
+ *                               TORZSBEN kell vinnie a szulot (egy munkalap a
+ *                               jegy azonositojat a torzsben kuldi).
+ */
+export function dependencyResolved(row: SyncQueueRow): boolean {
+  const cel = row.dependsOnTarget ?? "entityId";
+  if (cel === "entityId") return row.entityId !== null;
+  try {
+    const payload = JSON.parse(row.payloadJson) as Record<string, unknown>;
+    const ertek = payload[cel];
+    return typeof ertek === "string" && ertek.length > 0;
+  } catch {
+    // SERULT SOR: nem nyugtazott. A kuldes ugyis elbukna rajta, es ott
+    // legalabb megnevezett hibat ad.
+    return false;
+  }
+}
+
+/**
+ * AMIRE MAR NEM KELL VARNI.
+ *
+ * === MIERT NEM CSAK A FOTOKAT NEZI (2026-09-17) ===
+ *
+ * Eddig ez a fuggveny `upload-photo` sorokat keresett, kitoltott `entity_id`
+ * mezovel -- vagyis a NYUGTAZAS JELE a fajtahoz volt kotve. A munkalap a jegy
+ * alatt MASHOVA kapja az azonositot (a payload `serviceJobId` kulcsara), tehat
+ * a regi alak szerint a jegy SOHA nem szamitott volna nyugtazottnak.
+ *
+ * ES EZ A BUKAS NEM HANGOS: a sor nem hibazik es nem utasitja el senki -- csak
+ * nem urul ki soha, a jelentes pedig azt mondja, hogy varakozik. Ami igaz is.
+ *
+ * A jel mostantol az, hogy a sor MEGKAPTA-E az azonositot (`dependencyResolved`),
+ * fuggetlenul attol, melyik mezobe. A fotokra ez beture ugyanazt a halmazt adja.
+ */
 export function acknowledgedRecordings(
   rows: readonly SyncQueueRow[],
 ): Set<string> {
   const halmaz = new Set<string>();
   for (const row of rows) {
-    if (row.operation !== "upload-photo" || row.entityId === null) continue;
-    const payload = readPhotoPayload(row.payloadJson);
-    if (payload !== null) halmaz.add(payload.recordingOperationId);
+    const fuggoseg = dependencyOf(row);
+    if (fuggoseg === null) continue;
+    if (dependencyResolved(row)) halmaz.add(fuggoseg);
   }
   return halmaz;
 }

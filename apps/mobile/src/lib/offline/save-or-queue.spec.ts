@@ -88,3 +88,64 @@ describe("mentés vagy sorba tétel", () => {
     assert.match(out.type === "lost" ? out.message : "", /elveszett/);
   });
 });
+
+/**
+ * A `queueOnly` AG: AMIKOR A SZERVERREL KEZDENI CSENDBEN ROSSZAT TENNE.
+ *
+ * Nem a halozatrol szol. Ha a felvitel egy MASIK, meg sorban allo felvitelre
+ * hivatkozik (munkalap egy sorban allo hibajegy alatt), a szulo azonositoja MEG
+ * NEM LETEZIK. A kuldes ilyenkor SIKERULNE -- csak a hivatkozas nelkul: a lap
+ * letrejonne, es soha nem kerulne a jegy ala. Se hiba, se uzenet.
+ */
+describe("a sorba tétel, amit nem a hálózat kényszerít", () => {
+  it("queueOnly mellett a szervert MEG SEM PRÓBÁLJA", async () => {
+    let hivott = false;
+    const outcome = await saveOrQueue({
+      ...alap,
+      queueOnly: true,
+      save: async () => {
+        hivott = true;
+        return { id: "sosem" };
+      },
+      enqueue: async () => ({ ok: true as const, operationId: "op-1" }),
+    });
+
+    /*
+      A LENYEG AZ ELSO ALLITAS. A masodik nelkul egy valtozat, ami a mentest
+      elvegzi ES UTANA sorba is tesz, atmenne ezen a teszten.
+    */
+    assert.equal(hivott, false, "a szerver-hivas nem futhatott le");
+    assert.equal(outcome.type, "queued");
+  });
+
+  it("queueOnly mellett a sorba tétel bukása ugyanúgy LOST", async () => {
+    const outcome = await saveOrQueue({
+      ...alap,
+      queueOnly: true,
+      save: async () => ({ id: "sosem" }),
+      enqueue: async () => ({ ok: false as const, error: "tele a lemez" }),
+    });
+
+    assert.equal(outcome.type, "lost");
+  });
+
+  /**
+   * TESTVER-KONTROLL: A KAPCSOLO NELKUL A RENDES UT VALTOZATLAN. Enelkul a
+   * fenti ket allitas akkor is zold lenne, ha a fuggveny MINDIG a sorba tenne
+   * -- es akkor terero mellett SEMMI nem menne fel azonnal.
+   */
+  it("kapcsoló nélkül változatlanul a szerverrel kezd", async () => {
+    let hivott = false;
+    const outcome = await saveOrQueue({
+      ...alap,
+      save: async () => {
+        hivott = true;
+        return { id: "szerver-1" };
+      },
+      enqueue: async () => ({ ok: true as const, operationId: "op-1" }),
+    });
+
+    assert.equal(hivott, true);
+    assert.deepEqual(outcome, { type: "saved", id: "szerver-1" });
+  });
+});

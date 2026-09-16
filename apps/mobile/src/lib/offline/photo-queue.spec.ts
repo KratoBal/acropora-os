@@ -322,6 +322,67 @@ describe("egy sorban álló művelet megvárhat egy másikat", () => {
    * "nincs fuggoseg"-nek vennenk, ezek a kepek a rogzitesuk ELOTT indulnanak
    * el -- es a szerver utasitana el oket.
    */
+  /**
+   * ES ITT A LANC UTOLSO SZEME, AMI EDDIG HIANYZOTT: KI MONDJA MEG, HOGY A
+   * FUGGOSEG MAR TELJESULT.
+   *
+   * A `nextBatch` masodik parametere azoknak a muvelet-azonositoit tartalmazza,
+   * amikre mar NEM kell varni -- de azt a halmazt az `acknowledgedRecordings`
+   * allitja elo, es az EDDIG CSAK A FOTOKAT nezte (`upload-photo` sorok, amiknek
+   * az `entity_id` mezoje ki van toltve).
+   *
+   * A munkalap MASHOVA kapja az azonositot: a `depends_on_target` nala
+   * `serviceJobId`, tehat az ertek a PAYLOADBA kerul, nem az `entity_id`-be.
+   * A regi alak szerint tehat a jegy SOHA nem szamitott nyugtazottnak, es a
+   * munkalap ORORKE a sorban maradt volna.
+   *
+   * ES EZ A LEGROSSZABB FAJTA BUKAS: nem hiba, nem elutasitas. A sor egyszeruen
+   * nem urul ki, a jelentes pedig azt mondja, hogy varakozik -- ami igaz is.
+   */
+  it("a payloadba írt függőség is NYUGTÁZÁSNAK számít", () => {
+    const megkapta: SyncQueueRow = {
+      ...varo("lap", "jegy"),
+      payloadJson: JSON.stringify({
+        subject: "Szivattyú csere",
+        customerId: "c1",
+        departmentId: "d1",
+        // EZT AZ `attachRecordingResult` IRTA BE, miutan a jegy felment.
+        serviceJobId: "sj-999",
+      }),
+    };
+
+    assert.deepEqual(
+      [...acknowledgedRecordings([megkapta])],
+      ["jegy"],
+      "a kitöltött cél-mező a nyugtázás jele",
+    );
+    assert.deepEqual(
+      batchForPass([megkapta], "create").map((r) => r.id),
+      ["lap"],
+    );
+  });
+
+  /**
+   * ES A TAGADASA, MERT ENELKUL A FENTI ALLITAS AKKOR IS ZOLD LENNE, HA AZ
+   * `acknowledgedRecordings` MINDEN VARO SORT NYUGTAZOTTNAK VENNE.
+   *
+   * Amig a cel-mezo URES, a jegy meg nem ment fel -- es a munkalapot elkuldeni
+   * ilyenkor azt jelentene, hogy egy NEM LETEZO jegyre hivatkozunk.
+   */
+  it("a kitöltetlen cél-mező NEM nyugtázás", () => {
+    const meg_nem: SyncQueueRow = {
+      ...varo("lap", "jegy"),
+      payloadJson: JSON.stringify({
+        subject: "Szivattyú csere",
+        customerId: "c1",
+        departmentId: "d1",
+      }),
+    };
+
+    assert.deepEqual([...acknowledgedRecordings([meg_nem])], []);
+    assert.deepEqual(batchForPass([meg_nem], "create"), []);
+  });
+
   it("a RÉGI fotó-sor a payloadból kapja a függőségét", () => {
     const regi: SyncQueueRow = {
       ...rogzites("regi-kep"),

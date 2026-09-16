@@ -64,9 +64,41 @@ export interface SaveDeps {
   describeWrite(
     result: { ok: true; operationId: string } | { ok: false; error: string },
   ): QueueWriteOutcome;
+  /**
+   * NE IS PROBALJA A SZERVERT: EGYENESEN A SORBA.
+   *
+   * Elhagyhato, es alapertelmezesben hamis -- a rendes ut tovabbra is az, hogy
+   * eloszor a szervernek kuldunk. Egyetlen okbol all be: ha a felvitel egy
+   * MASIK, meg sorban allo felvitelre hivatkozik, es a hivatkozas azonositoja
+   * ezert meg nem letezik. Reszletek a `saveOrQueue` torzseben.
+   */
+  queueOnly?: boolean;
 }
 
 export async function saveOrQueue(deps: SaveDeps): Promise<SaveOutcome> {
+  /**
+   * EGY ESET, AHOL A SZERVERREL KEZDENI ROSSZ VOLNA -- ES EZ NEM A HALOZATROL
+   * SZOL.
+   *
+   * Ha a felvitel egy MASIK, MEG SORBAN ALLO felvitelre hivatkozik (munkalap
+   * egy sorban allo hibajegy alatt), akkor a szulo azonositoja MEG NEM LETEZIK.
+   * A kuldes ilyenkor SIKERULNE -- csak epp a hivatkozas nelkul: a lap
+   * letrejonne, es soha nem kerulne a jegy ala. Se hiba, se uzenet.
+   *
+   * A sor viszont MEG TUDJA VARNI a szulot, es a fuggoseg feloldasa utan a
+   * torzs mar a valodi azonositot viszi.
+   */
+  if (deps.queueOnly) {
+    const written = await deps.enqueue();
+    const outcome = deps.describeWrite(written);
+    return outcome.type === "queued"
+      ? {
+          type: "queued",
+          operationId: outcome.operationId,
+          message: outcome.message,
+        }
+      : { type: "lost", message: outcome.message };
+  }
   try {
     const created = await deps.save();
     return { type: "saved", id: created.id };

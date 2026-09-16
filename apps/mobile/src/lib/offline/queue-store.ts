@@ -244,15 +244,43 @@ export async function enqueueAssetUpdate(input: {
  * MEGLEVO lapot adja vissza, nem masodikat hoz letre.
  */
 export async function enqueueWorksheetCreate(
-  input: EnqueueInput,
+  input: EnqueueInput & {
+    /**
+     * A JEGY, AMI ALA A LAP KERUL -- HA AZ MAGA IS A SORBAN ALL.
+     *
+     * Elhagyhato, es a ket eset KULONBOZIK. Ha a jegy mar fent van, az
+     * azonositoja a payloadban all (`serviceJobId`), es ez a mezo ures marad.
+     * Ha a jegy MEG A SORBAN van, akkor az azonositoja MEG NEM LETEZIK: a sor
+     * a jegy MUVELET-azonositojara var, es az `attachRecordingResult` irja be a
+     * payload `serviceJobId` kulcsara, amint a jegy felment.
+     *
+     * A CEL A PAYLOAD, NEM AZ `entity_id`, es ez nem izles: a lap felvitele a
+     * jegyet a TORZSBEN kuldi. Az `entity_id` azt mondana meg, MELYIK MAR
+     * LETEZO rekordot modositjuk -- itt viszont uj lap keletkezik.
+     */
+    dependsOnServiceJobOperationId?: string | null;
+  },
 ): Promise<EnqueueResult> {
   try {
     const db = await initializeOfflineDatabase();
+    const fuggoseg = input.dependsOnServiceJobOperationId?.trim() || null;
     await db.runAsync(
       `INSERT OR IGNORE INTO sync_queue
-         (id, operation, entity_type, entity_id, payload_json, created_at, attempt_count, last_error, state)
-       VALUES (?, 'create', 'worksheet', NULL, ?, ?, 0, NULL, 'pending')`,
-      [input.id, JSON.stringify(input.payload), input.createdAt],
+         (id, operation, entity_type, entity_id, payload_json, created_at, attempt_count, last_error, state,
+          depends_on_operation_id, depends_on_target)
+       VALUES (?, 'create', 'worksheet', NULL, ?, ?, 0, NULL, 'pending', ?, ?)`,
+      [
+        input.id,
+        JSON.stringify(input.payload),
+        input.createdAt,
+        fuggoseg,
+        /**
+         * A CEL CSAK AKKOR ALL A SORON, HA VAN MIRE VARNI. Fuggoseg nelkul egy
+         * kitoltott cel-mezo azt allitana, hogy a sor var valamire -- es a
+         * `dependencyResolved` egy soha ki nem toltendo kulcsot nezne.
+         */
+        fuggoseg === null ? null : "serviceJobId",
+      ],
     );
     return { ok: true, operationId: input.id };
   } catch (error) {

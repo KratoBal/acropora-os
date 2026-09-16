@@ -73,6 +73,15 @@ export default function NewServiceJobScreen() {
   const [description, setDescription] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   /**
+   * A SORBA TETT JEGY MUVELET-AZONOSITOJA -- EBBOL LESZ A KOVETKEZO LEPES.
+   *
+   * Balazs kerese szo szerint: "Sot lehet, hogy munkalapot is nyitna rogton."
+   * A jegynek meg nincs szerver-oldali azonositoja, tehat a lap CSAK erre a
+   * kulcsra tud hivatkozni -- a valodi azonositot a sor irja be, amint a jegy
+   * felment.
+   */
+  const [sorbanAlloJegy, setSorbanAlloJegy] = useState<string | null>(null);
+  /**
    * A KEP-VALASZTAS KOZOS HOROGBAN ALL. Balazs kerese szo szerint: "meg akarja
    * nyitni a hibajegyet es fotot is alar hozza rogziteni" -- terero nelkul is.
    */
@@ -177,6 +186,7 @@ export default function NewServiceJobScreen() {
        */
       setNotice(outcome.message);
       if (outcome.type === "queued") {
+        setSorbanAlloJegy(outcome.operationId);
         setTitle("");
         setDescription("");
         kepeketTorol();
@@ -366,6 +376,36 @@ export default function NewServiceJobScreen() {
         </View>
 
         {notice ? <Text style={styles.notice}>{notice}</Text> : null}
+
+        {/*
+          A LANC HARMADIK SZEME: MUNKALAP A SORBAN ALLO JEGY ALA.
+
+          Balazs kerese szo szerint: "Sot lehet, hogy munkalapot is nyitna
+          rogton." A jegynek MEG NINCS szerver-oldali azonositoja, ezert a lap a
+          jegy MUVELET-azonositojara hivatkozik, es a sor oldja fel, amint a jegy
+          felment.
+
+          CSAK A SORBA TETT JEGY UTAN LATSZIK: ha a jegy felment, a kepernyo mar
+          atlepett a jegy adatlapjara, es ott all ugyanez a gomb -- a szerver
+          azonositojaval.
+        */}
+        {sorbanAlloJegy ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Munkalap nyitása ehhez a jegyhez"
+            onPress={() =>
+              router.push({
+                pathname: "/worksheets/new",
+                params: { serviceJobOperationId: sorbanAlloJegy },
+              })
+            }
+            style={styles.secondary}
+          >
+            <Text style={styles.secondaryText}>
+              Munkalap nyitása ehhez a jegyhez
+            </Text>
+          </Pressable>
+        ) : null}
 
         <Pressable
           accessibilityRole="button"

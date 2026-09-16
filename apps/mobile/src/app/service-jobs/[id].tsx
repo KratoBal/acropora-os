@@ -284,11 +284,22 @@ export default function ServiceJobDetailScreen() {
             AZ ÚJ MUNKALAP A MEGLÉVŐ KÉPERNYŐRE VISZ, nem ide épül újra: a
             felvitel ott már kész, offline sorral együtt. Egy második űrlap
             KÜLÖN romlana el.
+
+            A JEGY AZONOSÍTÓJA MOSTANTÓL ÁTMEGY, és ez egy néma hiányt zár be:
+            a gomb címkéje eddig is azt ígérte, hogy „ehhez a jegyhez", a
+            navigáció viszont üres űrlapot nyitott, és a lap a jegy NÉLKÜL jött
+            létre. A hiba nem hibázott: a lap felkerült, csak sehol nem
+            hivatkozott a bejelentésre.
           */}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Új munkalap ehhez a jegyhez"
-            onPress={() => router.push("/worksheets/new")}
+            onPress={() =>
+              router.push({
+                pathname: "/worksheets/new",
+                params: { serviceJobId: id },
+              })
+            }
             style={styles.action}
           >
             <Text style={styles.actionText}>Új munkalap</Text>
