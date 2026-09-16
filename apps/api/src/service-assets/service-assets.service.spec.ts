@@ -374,6 +374,78 @@ test("a belsős felhasználó megtudja, melyik eset áll fenn", async () => {
   );
 });
 
+/**
+ * A SZERKESZTO AG IS A BELSOS UZENETET KAPJA.
+ *
+ * A vegpont `SERVICE_MANAGE` jog alatt all, tehat aki ide eljut, LATJA a
+ * kiadott kodok listajat -- neki a ket eset kulonvalasztasa ("nincs kiadva"
+ * kontra "mas eszkozon all") hasznos, nem szivargas.
+ *
+ * MIERT KELL RA ALLITAS: a `map` a hatokort OPCIONALIS parameterkent veszi, es
+ * ha elhagyjuk, CSENDBEN a partnernek szant, osszevont mondatot adja. Semmi nem
+ * hibazik tole: a hivo 409-et kap, csak kevesebbet tud meg, mint amennyi jar
+ * neki. Pontosan ez volt a hiba, amit ez az allitas megfog.
+ */
+test("a szerkesztő ág a BELSŐS üzenetet adja, nem a partnerét", async () => {
+  const service = new ServiceAssetsService(
+    repository({
+      update: async () => {
+        throw new AssetLabelUnavailableError("V2196");
+      },
+    }),
+    new InMemoryDocumentStore(),
+  );
+  await assert.rejects(
+    () =>
+      service.update(
+        "asset-1",
+        { labelCode: "V2196", expectedUpdatedAt: asset.updatedAt },
+        "user-1",
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof ConflictException);
+      assert.match(String(error.message), /nincs kiadva/);
+      return true;
+    },
+  );
+});
+
+/**
+ * ES AZ ALAK-HIBA A SZERKESZTO AGON IS 400, NEM 409.
+ *
+ * A ket eset TEENDOJE mas: egy rossz alakot a KERESEN kell javitani, egy
+ * foglalt kodnal viszont masik matricat kell olvasni. A tarolo mind a kettot
+ * ugyanazon az osztalyon adja vissza (a nyers koddal), es a szetvalasztas a
+ * `map`-ben tortenik -- ez az allitas azt orzi, hogy a szerkeszto ut is
+ * ATMEGY ezen a szetvalasztason, nem csak a felvitel.
+ */
+test("a szerkesztő ágon a rossz ALAK 400-at ad, nem 409-et", async () => {
+  const service = new ServiceAssetsService(
+    repository({
+      update: async () => {
+        throw new AssetLabelUnavailableError("nem-jo-alak");
+      },
+    }),
+    new InMemoryDocumentStore(),
+  );
+  await assert.rejects(
+    () =>
+      service.update(
+        "asset-1",
+        { labelCode: "nem-jo-alak", expectedUpdatedAt: asset.updatedAt },
+        "user-1",
+      ),
+    (error: unknown) => {
+      assert.ok(
+        error instanceof BadRequestException,
+        "alak-hibára a kérésen kell javítani, tehát 400",
+      );
+      assert.match(String(error.message), /egy betű és négy szám/);
+      return true;
+    },
+  );
+});
+
 test("a partner az összevont üzenetet kapja", async () => {
   const service = new ServiceAssetsService(
     repository({

@@ -9,7 +9,7 @@ import { integrationDatabaseGate } from "../common/integration-database.js";
 import { AssetLabelUnavailableError } from "./service-assets.repository.js";
 import { ServiceAssetsRepository } from "./service-assets.repository.js";
 import { AssetListQueryDto } from "./dto/asset.dto.js";
-import type { CreateAssetDto } from "./dto/asset.dto.js";
+import type { CreateAssetDto, UpdateAssetDto } from "./dto/asset.dto.js";
 
 /**
  * AZ ELŐRE NYOMTATOTT MATRICÁK KÉSZLETE, ADATBÁZISON.
@@ -32,6 +32,14 @@ const repository = new ServiceAssetsRepository();
 const CODE_A = "Z9001";
 const CODE_B = "Z9002";
 const CODE_C = "Z9003";
+/**
+ * AZ UTOLAGOS FELVITELHEZ KET SAJAT KOD, es ez nem ovatoskodas: a fenti harom
+ * allapota a suite-on BELUL valtozik (a `CODE_C` peldaul lefoglaltta valik, es
+ * egy kesobbi allitas EPP arra epul, hogy nem szabad). Ha az utolagos felvitel
+ * ugyanazokat mozgatna, a ket teszt-csoport egymas merceit irna at.
+ */
+const CODE_D = "Z9004";
+const CODE_E = "Z9005";
 
 let customerId = "";
 let actorUserId = "";
@@ -71,7 +79,7 @@ async function removeLeftovers() {
    * a suite zold marad, es a sor orokre ott all.
    */
   const kotegek = await prisma.assetLabel.findMany({
-    where: { code: { in: [CODE_A, CODE_B, CODE_C] } },
+    where: { code: { in: [CODE_A, CODE_B, CODE_C, CODE_D, CODE_E] } },
     select: { batchId: true },
   });
   const kotegIdk = [
@@ -83,7 +91,7 @@ async function removeLeftovers() {
   ];
 
   await prisma.assetLabel.deleteMany({
-    where: { code: { in: [CODE_A, CODE_B, CODE_C] } },
+    where: { code: { in: [CODE_A, CODE_B, CODE_C, CODE_D, CODE_E] } },
   });
 
   // CSAK AZ ARVAKAT, es ez nem ovatoskodas: ha egy koteghez idegen cimke is
@@ -304,6 +312,204 @@ describe(
      * CSENDBEN halmozodik, ha semmi nem tudja megkerdezni. Ez az allitas azt
      * meri, hogy meg lehet.
      */
+    /**
+     * A MATRICAKOD UTOLAG IS FELVIHETO (Balazs kerese, 2026-09-16).
+     *
+     * MIERT ITT, ES NEM UJ FAJLBAN: ennek a suite-nak a SZANDEKA az, hogy a
+     * matrica-keszlet allapotat ADATBAZISON merje, nem a kodon. Az utolagos
+     * felvitel ugyanazt a ket sort mozgatja, ugyanazokkal a megkotesekkel --
+     * egy kulon fajl ugyanazt allitana, csak masik nevvel, es a ket helyet
+     * kesobb kulon kellene karbantartani.
+     */
+    describe("utólagos felvitel a szerkesztő ágon", () => {
+      let eszkozId = "";
+
+      /**
+       * A SAJAT KODOK A KESZLETBE -- ES EZ A CI DERITETTE KI, NEM A HELYI FUTAS.
+       *
+       * Eloszor csak a KONSTANSOKAT vettem fel (`CODE_D`, `CODE_E`), es azt
+       * hittem, ettol leteznek. Nem: ebben a suite-ban a kodok MAS TESZTEK
+       * MELLEKHATASAKENT kerulnek a keszletbe (a `CODE_A` nyers SQL-lel egy
+       * megkotes-allitasban, a `CODE_B`/`CODE_C` egy `importBatch` hivassal).
+       * Az enyemek sehogy -- a sor nem letezett, es az elso allitasom
+       * `undefined`-ot kapott `null` helyett.
+       *
+       * Ezert a sajat blokk a SAJAT bemenetet allitja elo, nem egy masik teszt
+       * mellekhatasara tamaszkodik.
+       */
+      before(async () => {
+        const { batchId } = await repository.importBatch([CODE_D, CODE_E]);
+        letrehozottKotegek.push(batchId);
+      });
+
+      /** A friss verzio-belyeg: minden mentes elmozditja. */
+      async function frissBelyeg(id: string): Promise<string> {
+        const sor = await prisma.asset.findUniqueOrThrow({
+          where: { id },
+          select: { updatedAt: true },
+        });
+        return sor.updatedAt.toISOString();
+      }
+
+      async function mentes(
+        id: string,
+        mezok: Omit<UpdateAssetDto, "expectedUpdatedAt">,
+      ) {
+        return repository.update(
+          id,
+          { ...mezok, expectedUpdatedAt: await frissBelyeg(id) },
+          actorUserId,
+        );
+      }
+
+      it("matrica NÉLKÜL felvitt eszközre utólag felkerül a kód", async () => {
+        const eszkoz = await repository.create(createInput(), actorUserId);
+        eszkozId = eszkoz.id;
+
+        // POZITÍV KONTROLL A KIINDULÁSRA: a kód TÉNYLEG szabad volt, és az
+        // eszközön TÉNYLEG nem állt matrica. Enélkül a lenti állítás attól is
+        // teljesülne, hogy a kód eleve ezen az eszközön állt.
+        const elotte = await prisma.assetLabel.findUnique({
+          where: { code: CODE_D },
+          select: { assetId: true },
+        });
+        // A KET ALLITAS KULON, ES EZT IS A CI TANITOTTA MEG. Eloszor
+        // `elotte?.assetId` allt itt egyetlen sorban -- egy HIANYZO sor
+        // (`elotte === null`) ettol `undefined`-ot ad, ami "nincs
+        // hozzarendelve"-nek latszik. A ket eset TEENDOJE mas: az egyikben a
+        // kodot kell felvenni a keszletbe, a masikban a foglalast megnezni.
+        assert.ok(elotte, "a kód létezik a készletben");
+        assert.equal(elotte.assetId, null, "a kód induláskor szabad");
+        assert.equal(
+          await prisma.assetLabel.count({ where: { assetId: eszkozId } }),
+          0,
+          "az eszközön induláskor nincs matrica",
+        );
+
+        await mentes(eszkozId, { labelCode: CODE_D });
+
+        const utana = await prisma.assetLabel.findUnique({
+          where: { code: CODE_D },
+          select: { assetId: true, assignedAt: true },
+        });
+        assert.equal(utana?.assetId, eszkozId);
+        // AZ IDOPONT IS: a `AssetLabel_assignment_pairing_check` a fel
+        // hozzarendelest amugy is elutasitana, de ha a megkotes valaha
+        // lekerul, ez az allitas MEG mindig megfogja.
+        assert.ok(utana?.assignedAt, "a hozzárendelés ideje is kitöltődik");
+      });
+
+      /**
+       * AZ ADATLAP MEGMUTATJA, MELYIK MATRICA ALL AZ ESZKOZON.
+       *
+       * MIERT TARTOZIK EHHEZ A KORHOZ: a kodot eddig csak IRNI lehetett, egy
+       * felulet sem mutatta meg. Amig csak felvitelkor lehetett megadni, ez nem
+       * latszott hianynak -- az utolagos felvitel viszont CSERET is megenged,
+       * es egy csere, amit a szerelo nem lat, egy MUKODO matricat ir felul
+       * nemán. A szerkeszto urlap EBBOL tolti elo a mezot.
+       */
+      it("az adatlap visszaadja a felvitt kódot", async () => {
+        const lap = await repository.detail(eszkozId, { kind: "internal" });
+        assert.equal(lap?.labelCode, CODE_D);
+      });
+
+      it("matrica nélküli eszközön a mező ÜRESEN marad, nem hibázik", async () => {
+        // TESTVER-KONTROLL A FENTIHEZ: egy mindig kitoltott mezo ugyanugy
+        // atmenne a fenti alliteson. Ez mondja ki, hogy a hianyt is jol adja
+        // vissza -- es hogy a lekerdezes nem hasal el matrica nelkul.
+        const masik = await repository.create(createInput(), actorUserId);
+        const lap = await repository.detail(masik.id, { kind: "internal" });
+        assert.equal(lap?.labelCode, undefined);
+      });
+
+      it("másik kódra CSERÉL, és a régi visszakerül a szabad készletbe", async () => {
+        await mentes(eszkozId, { labelCode: CODE_E });
+
+        const regi = await prisma.assetLabel.findUnique({
+          where: { code: CODE_D },
+          select: { assetId: true, assignedAt: true },
+        });
+        const uj = await prisma.assetLabel.findUnique({
+          where: { code: CODE_E },
+          select: { assetId: true },
+        });
+        assert.equal(regi?.assetId, null, "a régi kód újra kiadható");
+        assert.equal(
+          regi?.assignedAt,
+          null,
+          "a felszabadításnál az időpont is törlődik, különben fél sor marad",
+        );
+        assert.equal(uj?.assetId, eszkozId);
+        // EGY ESZKOZON EGY MATRICA: ha a felszabaditas elmaradna, ez KETTOT
+        // adna -- es az `AssetLabel.assetId` egyedi indexe csak azt orzi, hogy
+        // egy KOD ne kerulhessen ket eszkozre, ezt nem.
+        assert.equal(
+          await prisma.assetLabel.count({ where: { assetId: eszkozId } }),
+          1,
+        );
+      });
+
+      /**
+       * A TESTVER-KONTROLL, ES ENELKUL A FENTI KETTO SEMMIT NEM ER.
+       *
+       * Egy mentes, ami MINDEN alkalommal leszedne a matricat, atmenne a fenti
+       * ket alliteson is (ott mindig kuldunk kodot). Ez az egy allitas mondja
+       * ki, hogy a HIANYZO mezo nem URES mezo.
+       */
+      it("a labelCode elhagyása ÉRINTETLENÜL hagyja a meglévő matricát", async () => {
+        await mentes(eszkozId, { name: `${PREFIX} átnevezve` });
+
+        const sor = await prisma.assetLabel.findUnique({
+          where: { code: CODE_E },
+          select: { assetId: true },
+        });
+        assert.equal(sor?.assetId, eszkozId, "a matrica a mentés után is áll");
+      });
+
+      /**
+       * ES A LEGFONTOSABB: A FELSZABADITAS VISSZAGORDUL.
+       *
+       * A csere ket lepes (a regi elengedese, az uj foglalasa). Ha a masodik
+       * elbukik es az elso MEGIS bent marad, az eszkoz matrica NELKUL all ugy,
+       * hogy a regi kodja mar szabad -- vagyis egy fizikai matrica elveszik ket
+       * eszkoz kozott, es errol semmi nem szol. Ezt csak az adatbazis tudja
+       * megmutatni: a tranzakcio hatarat nem lehet egysegteszttel merni.
+       */
+      it("foglalt kódra a csere elbukik, és a régi matrica MARAD az eszközön", async () => {
+        const masik = await repository.create(
+          createInput({ labelCode: CODE_D }),
+          actorUserId,
+        );
+
+        await assert.rejects(
+          () => mentes(eszkozId, { labelCode: CODE_D }),
+          AssetLabelUnavailableError,
+        );
+
+        const sajat = await prisma.assetLabel.findUnique({
+          where: { code: CODE_E },
+          select: { assetId: true },
+        });
+        assert.equal(
+          sajat?.assetId,
+          eszkozId,
+          "a bukott csere után a régi matrica ott maradt",
+        );
+        const foglalt = await prisma.assetLabel.findUnique({
+          where: { code: CODE_D },
+          select: { assetId: true },
+        });
+        assert.equal(foglalt?.assetId, masik.id, "a másik eszközé érintetlen");
+      });
+
+      it("rossz ALAKÚ kódot a szerkesztő ág is elutasít", async () => {
+        await assert.rejects(
+          () => mentes(eszkozId, { labelCode: "nem-jo-alak" }),
+          AssetLabelUnavailableError,
+        );
+      });
+    });
+
     it("a matrica nélkül felvitt eszköz lekérdezhető", async () => {
       const matrica_nelkul = await repository.create(
         createInput({ name: `${PREFIX} matrica nélkül` }),
@@ -427,7 +633,7 @@ describe(
       );
       assert.equal(
         await prisma.assetLabel.count({
-          where: { code: { in: [CODE_A, CODE_B, CODE_C] } },
+          where: { code: { in: [CODE_A, CODE_B, CODE_C, CODE_D, CODE_E] } },
         }),
         0,
         "maradt matrica a teszt kódokkal",
