@@ -46,6 +46,7 @@ import type {
   CreateWorksheetDepartmentDto,
   CreateWorksheetDto,
   CreateWorksheetLineDto,
+  SetWorksheetAssetsDto,
   SetWorksheetAssigneesDto,
   SetWorksheetPartnerCodeDto,
   SignWorksheetVersionDto,
@@ -571,6 +572,55 @@ export class WorksheetsService {
       });
 
     return detail;
+  }
+
+  /**
+   * A LAP ESZKOZEI, A FELVITEL UTAN.
+   *
+   * Balazs kerese, 2026-09-16: "munkalapnal is jo lenne ha lehetne a
+   * helyszinhez rogzitett eszkozoket csatolni".
+   *
+   * === MIERT NEM SZAMIT A LAP ALLAPOTA ===
+   *
+   * Mert a `WorksheetAsset` a MUNKALAPHOZ kotodik, nem a VERZIOHOZ (a
+   * kapcsolotabla a lapra mutat). Ugyanaz a fajta adat, mint a felelosok: a lap
+   * AZONOSSAGAHOZ tartozik, lezart lapon is javithato, es a verzio-eltéresben
+   * nem jelenik meg. A `setAssignees` ma is enged barmilyen allapotu lapon, es
+   * ez a kettonek KOZOS szabalya, nem ketto.
+   *
+   * Ha ez valaha megfordul -- mert a nyomtatott, alairt lapra rakerul az
+   * eszkoz-lista --, akkor nem ez a metodus valtozik elsokent, hanem a MODELL:
+   * a kapcsolatnak a verziohoz kell kotodnie. Addig egy allapot-ellenorzes itt
+   * olyat orizne, amit a tarolas nem tamogat.
+   *
+   * === A HELYSZIN A LAPE, NEM A KERESE ===
+   *
+   * A bekuldott eszkozoknek a LAP SAJAT helyszinenek reszfajan kell allniuk. A
+   * hivo nem adhat meg masik helyszint: a lape a felvitelkor eldolt, es nincs
+   * ra ut, hogy megvaltozzon. Ez elter a hibajegytol, ahol a helyszin es az
+   * eszkozok EGY muveletben mozognak, epp azert, mert ott a helyszin valtozhat.
+   */
+  async setAssets(
+    id: string,
+    input: SetWorksheetAssetsDto,
+  ): Promise<WorksheetDetail> {
+    const worksheet = await this.requireWorksheet(id, {
+      // BELSOS UT: a vegpont SERVICE_MANAGE jog alatt all, amit partner-oldali
+      // felhasznalo nem kap meg.
+      kind: "internal",
+    });
+    const assetIds = await this.requireAssetsInDepartment(
+      input.assetIds,
+      worksheet.departmentId,
+    );
+
+    const ok = await this.repository.setAssets({
+      worksheetId: id,
+      assetIds,
+    });
+    if (!ok) throw new NotFoundException("A munkalap nem található.");
+
+    return this.detailAfterWrite(id);
   }
 
   async updateDraft(

@@ -489,6 +489,7 @@ export type {
   SetWorksheetAssigneesInput,
   SignWorksheetVersionInput,
   UpdateWorksheetDraftInput,
+  WorksheetAssetLink,
   WorksheetAssignableUser,
   WorksheetAssignableUserListResponse,
   WorksheetAssignee,

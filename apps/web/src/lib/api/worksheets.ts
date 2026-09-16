@@ -97,6 +97,23 @@ export const worksheetsApi = {
       body: JSON.stringify(input),
     });
   },
+  /**
+   * A LAP ESZKOZEI, TELJES LISTAKENT.
+   *
+   * `PUT`, ugyanabbol az okbol, amiert a felelosoknel: a bekuldott lista a lap
+   * eszkozeinek TELJES allapota, nem hozzaadas.
+   *
+   * HELYSZIN NINCS A TORZSBEN, ES EZ ELTER A HIBAJEGYTOL: a lap helyszine a
+   * felvitelkor eldolt es nincs ut, ami megvaltoztatna -- a szerver a lap SAJAT
+   * helyszinere ellenoriz.
+   */
+  setAssets(token: string, id: string, input: { assetIds: string[] }) {
+    return apiRequest<WorksheetDetail>(worksheetPath(id, "/assets"), token, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  },
   close(token: string, id: string) {
     return apiRequest<WorksheetDetail>(worksheetPath(id, "/close"), token, {
       method: "POST",

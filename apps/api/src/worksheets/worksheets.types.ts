@@ -89,6 +89,29 @@ export const worksheetDetailInclude = {
     select: { id: true, number: true },
     orderBy: { createdAt: "asc" as const },
   },
+  /**
+   * AZ ESZKOZOK, AMIKROL A LAP SZOL.
+   *
+   * MIERT KERULT BE (merve 2026-09-16): a `WorksheetAsset` sorokat 2026-09-15
+   * ota IRJUK, es SEMMI nem olvasta vissza. Egyetlen `createMany` all a
+   * taroloban, a reszletlap includeja nem tartalmazta, a kozos tipusban nem
+   * volt mezo, es a webes munkalap-mappa nulla helyen hivatkozott ra. Aki tehat
+   * felvitelkor eszkozt csatolt egy laphoz, azt SEHOL nem latta viszont -- meg
+   * a sajat lapjan sem.
+   *
+   * A `createdAt` IS KIMEGY, nem csak a nev: egy honapja csatolt es egy ma
+   * csatolt eszkoz kozott a kezelonek latnia kell a kulonbseget, kulonben nem
+   * tudja megitelni, hogy a lista a mai munkarol szol-e.
+   */
+  assets: {
+    select: {
+      id: true,
+      assetId: true,
+      createdAt: true,
+      asset: { select: { assetNumber: true, name: true } },
+    },
+    orderBy: { createdAt: "asc" as const },
+  },
   versions: {
     include: worksheetVersionInclude,
     orderBy: { version: "desc" as const },
@@ -271,6 +294,13 @@ export function toWorksheetDetail(row: WorksheetDetailRow): WorksheetDetail {
       ? { id: row.serviceJob.id, jobNumber: row.serviceJob.jobNumber }
       : null,
     assignees: row.assignees.map(toAssignee),
+    assets: row.assets.map((link) => ({
+      id: link.id,
+      assetId: link.assetId,
+      assetNumber: link.asset.assetNumber,
+      assetName: link.asset.name,
+      attachedAt: link.createdAt.toISOString(),
+    })),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     continues: row.continues ?? null,

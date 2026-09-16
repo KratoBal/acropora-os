@@ -35,6 +35,7 @@ import { ServiceOfflineNotice } from "@/components/service/service-offline-notic
 import { useReturnTo } from "@/components/navigation-history";
 import { worksheetsApi } from "@/lib/api/worksheets";
 import { WorksheetEntries } from "./worksheet-entries";
+import { WorksheetAssetEditor } from "./worksheet-asset-editor";
 import { WorksheetAssigneeEditor } from "./worksheet-assignee-editor";
 import {
   formatAmount,
@@ -750,6 +751,26 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
               worksheetId={worksheet.id}
               token={token}
               assignees={worksheet.assignees}
+              canManage={canManage}
+              onSaved={setWorksheet}
+            />
+            {/*
+              AZ ESZKOZOK A FELELOSOK ALATT, ES UGYANABBAN AZ ALAKBAN.
+
+              A KETTO UGYANAZ A FAJTA ADAT: a MUNKALAP azonossagahoz tartozik,
+              nem a verziohoz -- lezart lapon is javithato, es a
+              verzio-eltéresben nem jelenik meg. Ket kulonbozo helyre teve a
+              kezelo az egyiket megtalalna, a masikat nem.
+
+              ES AMIT EZ A DOBOZ ELOSZOR MUTAT MEG: magat a listat. A csatolt
+              eszkozok 2026-09-15 ota bekerultek az adatbazisba, es SEHOL nem
+              latszottak -- meg a sajat lapjukon sem.
+            */}
+            <WorksheetAssetEditor
+              worksheetId={worksheet.id}
+              token={token}
+              departmentId={worksheet.department.id}
+              assets={worksheet.assets}
               canManage={canManage}
               onSaved={setWorksheet}
             />
