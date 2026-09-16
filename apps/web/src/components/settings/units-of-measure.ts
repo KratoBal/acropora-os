@@ -57,16 +57,3 @@ export function sortUnits(units: readonly UnitOfMeasure[]): UnitOfMeasure[] {
     (a, b) => a.sortOrder - b.sortOrder || a.code.localeCompare(b.code, "hu"),
   );
 }
-
-/**
- * MI LÁTSZIK A VÁLASZTÓBAN, ÉS MI A KARBANTARTÓ LISTÁJÁBAN.
- *
- * A kettő SZÁNDÉKOSAN nem ugyanaz. A karbantartó látja a kivezetetteket is --
- * különben azt hinné, törlődtek, és újra felvinné ugyanazt a kódot, amit az
- * egyediség aztán elutasít, látszólag ok nélkül.
- */
-export function pickableUnits(
-  units: readonly UnitOfMeasure[],
-): UnitOfMeasure[] {
-  return sortUnits(units.filter((unit) => unit.isActive));
-}
