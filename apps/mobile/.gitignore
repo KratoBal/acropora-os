@@ -41,3 +41,18 @@ example
 # generated native folders
 /ios
 /android
+
+# A FIREBASE BEALLITOFAJL NEM A TARHAZBAN LAKIK.
+#
+# Harom `current_key` ertek all benne, es a commit-kapu joggal utasitja el:
+# MERVE 2026-09-16, a kulcs NINCS androidos alkalmazasra korlatozva (egy
+# szerver oldali hivas atment vele). Amig ez igy van, a fajl titok.
+#
+# A build az EAS `GOOGLE_SERVICES_JSON` fajl-titokbol kapja meg.
+#
+# DE HELYBEN IS OTT KELL LENNIE, amikor EAS buildet inditasz -- kulonben az
+# `expo-updates` runtime verzio elter a ket oldalon, es a build ELBUKIK a
+# CONFIGURE_EXPO_UPDATES szakaszban. Merve: az ujjlenyomat a fajl TARTALMAT
+# nezi, az utjat nem (ket kulonbozo uton allo azonos fajl ugyanazt a
+# lenyomatot adja), tehat a hianya a gond, nem a helye.
+google-services.json
