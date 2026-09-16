@@ -505,6 +505,31 @@ jobs:
             exit 1
           fi
 
+      # Checkpoint 9: proves the embedded PDF font actually reached the image.
+      #
+      # WHY IT NEEDS ITS OWN STEP. The font is a `.ttf`, and `tsconfig` compiles
+      # `src/**/*.ts` only - so the file does not travel with the compiled code,
+      # it travels with `pnpm deploy --prod`. That it does was measured locally
+      # on the deploy output; that it survives into the IMAGE can only be
+      # measured here.
+      #
+      # WHY IT RUNS THE REAL RESOLVER instead of checking a path by hand: a
+      # hand-written path would assert its own assumption. If the resolver ever
+      # looks somewhere else, a path check would stay green on an image where
+      # the font is unreachable. This calls the same function the production
+      # path calls, with the image's own layout.
+      #
+      # WHY NOT AT STARTUP. A missing font must not keep the API from booting:
+      # it serves one side feature, and a failed boot is an outage. The check
+      # belongs to the build, not to the runtime. (And a log-only check would
+      # pass silently here, because this job asserts /health answering - nothing
+      # reads the container logs back.)
+      - name: The embedded PDF font resolves inside the image
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint node acropora-api:ci \
+            dist/documents/pdf/pdf-font.cli.js
+
       - name: Start container and verify /health
         run: |
           set -euo pipefail
