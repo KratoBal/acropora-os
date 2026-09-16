@@ -66,6 +66,37 @@ export const MIGRATIONS: readonly Migration[] = [
     name: "a sync_queue sorai megjegyzik az utolso kiserlet idejet",
     sql: `ALTER TABLE sync_queue ADD COLUMN last_attempt_at TEXT;`,
   },
+  {
+    version: 4,
+    /**
+     * A HIBAJEGYEK MENTETT MASOLATA -- CSAK OLVASASRA.
+     *
+     * Ket tabla, ugyanabban az alakban, mint az eszkoze: a LISTASOR minden
+     * lehuzott jegyrol megvan, a TELJES lap csak arrol, amit valaki megnyitott
+     * tererovel. A ketto kulon all, mert a lista sokrol tud keveset, a lap
+     * egyrol sokat -- egy tablaba gyurva minden lista-frissites eldobna a
+     * reszleteket.
+     *
+     * AMI IDE NEM KERUL: sor a LEPTETESHEZ. A szerver a LATOTT allapotra ir
+     * feltetelesen, tehat egy sorba tett lepes a kiuriteskor bukna el, orakkal
+     * kesobb, amikor a szerelo mar nincs a gepnel. Amig ehhez nincs feloldo
+     * keperno (az eszkoznek van), a jegy offline CSAK OLVASHATO -- es ezt a
+     * sav ki is mondja.
+     */
+    name: "a hibajegyek mentett masolata",
+    sql: `
+      CREATE TABLE IF NOT EXISTS cached_service_jobs (
+        id TEXT PRIMARY KEY,
+        payload_json TEXT NOT NULL,
+        synced_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS cached_service_job_details (
+        id TEXT PRIMARY KEY,
+        payload_json TEXT NOT NULL,
+        synced_at TEXT NOT NULL
+      );
+    `,
+  },
 ];
 
 /** A legmagasabb sorszam, amire a mai kod szamit. */

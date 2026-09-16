@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -84,6 +84,50 @@ describe("kijelentkezéskor a másolat MEGY", () => {
     */
     assert.match(forget, /forgetOfflineAssets\(\)/);
     assert.match(forget, /forgetWorksheetDepartments\(\)/);
+  });
+
+  /**
+   * ES A FENTI KETTO KEVESEBB, MINT AMIT A SAJAT KOMMENTJE IGER.
+   *
+   * "MI PIROSIT: ha az uj masolat kimarad a takaritasbol" -- csakhogy a fenti
+   * allitas KET nevet rogzit, a takaritas viszont OTOT hiv. Merve 2026-09-16:
+   * a `forgetCachedWorksheets` es a `forgetAssetFormCache` mar ma sem allt
+   * benne, es a hibajegy-masolat lett volna a harmadik, amit nem fog meg.
+   *
+   * EZ AZ ALLITAS EZERT A FORRASBOL DOLGOZIK, nem kezzel tartott listabol: az
+   * `offline` mappa MINDEN `forget*` fuggvenye bekerul. Egy negyedik masolat,
+   * amit valaki fel ev mulva ir, MAGATOL bekerul a mercebe -- egy kezzel
+   * tartott lista pont akkor maradna el, amikor a legjobban kellene.
+   */
+  it("MINDEN mentett másolat takarítója le van hívva", () => {
+    // UGYANAZ A GYOKER, AMIT A FAJL TOBBI ALLITASA HASZNAL: az `olvas` a
+    // forrasfat olvassa, nem a leforditott kimenetet -- a kimenetben a
+    // kommentek es a fuggvenynevek is masok lehetnek.
+    const mappa = join(GYOKER, "offline");
+    const takaritok = readdirSync(mappa)
+      .filter((nev) => nev.endsWith(".ts") && !nev.includes(".spec."))
+      .filter((nev) => nev !== "forget-offline-data.ts")
+      .flatMap((nev) =>
+        [
+          ...olvas(join("offline", nev)).matchAll(
+            /^export (?:async )?function (forget\w+)/gm,
+          ),
+        ].map((talalat) => talalat[1]!),
+      );
+
+    // A KONTROLL A KIOLVASASRA: ha a minta elromlik, ures listan menne vegig,
+    // es az allitas ZOLDEN mondana, hogy minden takaritó le van hivva.
+    assert.ok(
+      takaritok.length >= 4,
+      `gyanúsan kevés takarítót találtam: ${takaritok.join(", ")}`,
+    );
+
+    const hianyzo = takaritok.filter((nev) => !forget.includes(`${nev}()`));
+    assert.deepEqual(
+      hianyzo,
+      [],
+      `ezek a másolatok a készüléken maradnának kijelentkezés után: ${hianyzo.join(", ")}`,
+    );
   });
 
   it("a SORT nem törli, és ez kimondva áll", () => {
