@@ -122,7 +122,10 @@ module.exports = ({ config }) => {
         process.env.GOOGLE_SERVICES_JSON ?? "./google-services.json",
       predictiveBackGestureEnabled: false,
       adaptiveIcon: {
-        backgroundColor: "#071827",
+        // A HATTER FEHER, MERT AZ IKON FEHER. Balazs rajza feher lapon all
+        // (2026-09-16), tehat a ket reteg kozotti kulonbseg kulonben egy
+        // sotet keretkent latszana a kerek maszk szelen.
+        backgroundColor: "#ffffff",
         foregroundImage: "./assets/images/android-icon-foreground.png",
         backgroundImage: "./assets/images/android-icon-background.png",
         monochromeImage: "./assets/images/android-icon-monochrome.png",
@@ -181,7 +184,11 @@ module.exports = ({ config }) => {
       [
         "expo-splash-screen",
         {
-          backgroundColor: "#071827",
+          // UGYANAZ A FEHER, MINT AZ IKONON. Az alkalmazas sajat hattere sotet,
+          // tehat az inditokep utan egy valtas jon -- ez tudatos: a jel egy
+          // vilagos lapra keszult, es egy sotet inditokepen a kek resze
+          // majdnem eltunne.
+          backgroundColor: "#ffffff",
           image: "./assets/images/splash-icon.png",
           imageWidth: 96,
         },
