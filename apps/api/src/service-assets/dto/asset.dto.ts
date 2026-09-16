@@ -11,15 +11,16 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsISO8601,
   IsIn,
   IsInt,
-  IsISO8601,
   IsOptional,
   IsString,
   Matches,
   Max,
   Min,
   MinLength,
+  ValidateIf,
 } from "class-validator";
 
 const ASSET_KINDS = [
@@ -250,10 +251,37 @@ export class UpdateAssetDto {
    * LESZEDÉSE viszont ebben a körben nem készült el, és az ok nem a mechanika:
    * az esemény-naplónak NINCS NEVE rá. Az egyetlen létező típus a
    * `LABEL_ASSIGNED`, ami épp az ellenkezőjét mondja, egy `LABEL_RELEASED`
-   * felvétele pedig séma-migráció. Egy `null` így HANGOSAN elbukik a
-   * validáción, ahelyett hogy csendben nem csinálna semmit.
+   * felvétele pedig séma-migráció.
+   *
+   * === A `@ValidateIf` NEM DÍSZ, ÉS AZ `@IsOptional()` NEM HELYETTESÍTI ===
+   *
+   * Itt korábban `@IsString() @IsOptional()` állt, a megjegyzés pedig azt
+   * ígérte, hogy egy `null` "hangosan elbukik a validáción". NEM BUKOTT EL: az
+   * `@IsOptional()` dokumentált viselkedése, hogy a `null` értéket UGYANÚGY
+   * kihagyja, mint az `undefined`-ot.
+   *
+   * MÉRVE ezen az osztályon (class-validator 0.15.1): a hiányzó mező, az
+   * `undefined`, a `null`, az üres szöveg és a `V2196` MIND átment; egyedül
+   * egy szám bukott el ("labelCode must be a string").
+   *
+   * A következménye nem elméleti volt. A `null` így eljutott a tárolóig, ahol
+   * `input.labelCode !== undefined` IGAZ rá, és a `normalizeAssetLabelCode`
+   * `raw.trim()` hívása `TypeError`-t dobott -- amit a szolgáltatás `map`
+   * függvénye a végén továbbdob, tehát **500 lett belőle, nem 400**. És a
+   * `null` nem kitalált eset: ezen az osztályon MINDEN testvér `string | null`,
+   * és a webes szerkesztő minden szöveges mezőre ezt az alakot küldi.
+   *
+   * A `@ValidateIf` az `undefined`-ra kapcsolja KI az ellenőrzést, a `null`-ra
+   * nem -- így a mező azt csinálja, amit a fenti bekezdés ígér. Aki ezt valaha
+   * "egyszerűsítené" vissza `@IsOptional()`-ra, csendben újranyitja a rést;
+   * ezért áll mellette állítás is (`asset-update-dto.spec.ts`).
+   *
+   * (acrobot mérése, 2026-09-16, a #715 átvételekor. Visszamértem ezen az
+   * osztályon: a táblázata betűre kijött.)
    */
-  @IsString() @IsOptional() labelCode?: string;
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  labelCode?: string;
   @IsString() @IsOptional() description?: string | null;
   @IsISO8601() @IsOptional() installedAt?: string | null;
   @IsISO8601() @IsOptional() purchasedAt?: string | null;
