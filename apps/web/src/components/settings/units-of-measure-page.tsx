@@ -7,6 +7,7 @@ import {
   Card,
   CardContent,
   CardHeader,
+  ConfirmDialog,
   EmptyState,
   FormField,
   Input,
@@ -74,6 +75,15 @@ export function UnitsOfMeasurePage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  /**
+   * A TORLES KERDEZ, ES A KERDES A KOZOS KOMPONENSE.
+   *
+   * Nem stilus: a torles VEGLEGES, es a `recovery` mezo letezese az, ami a
+   * kerdest feltetette velem -- van-e visszaut. Itt nincs, es a kivezetes az,
+   * ami ugyanazt a hatast eri el visszafordithatoan. Ezert a kerdes SZOVEGE a
+   * kivezetesre mutat, nem csak figyelmeztet.
+   */
+  const [torlendo, setTorlendo] = useState<UnitOfMeasure | null>(null);
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -154,6 +164,7 @@ export function UnitsOfMeasurePage() {
   }
 
   async function torles(unit: UnitOfMeasure) {
+    setTorlendo(null);
     setBusyId(unit.id);
     setRowError(null);
     try {
@@ -315,7 +326,7 @@ export function UnitsOfMeasurePage() {
                       <Button
                         variant="ghost"
                         disabled={busyId === unit.id}
-                        onClick={() => void torles(unit)}
+                        onClick={() => setTorlendo(unit)}
                       >
                         Törlés
                       </Button>
@@ -327,6 +338,19 @@ export function UnitsOfMeasurePage() {
           )}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={torlendo !== null}
+        title={`Törlöd a(z) „${torlendo?.code ?? ""}" mértékegységet?`}
+        consequence="A mértékegység eltűnik a listából, és nem lesz többé választható. Ha bármelyik eszközön már szerepel, a törlést a rendszer elutasítja."
+        recovery="Nincs visszaút: a törölt mértékegységet újra fel kell vinni. Ha csak azt szeretnéd, hogy ne legyen választható, vezesd ki helyette -- akkor a meglévő értékek mellett olvasható marad."
+        confirmLabel="Végleges törlés"
+        busy={busyId !== null}
+        onConfirm={() => {
+          if (torlendo) void torles(torlendo);
+        }}
+        onCancel={() => setTorlendo(null)}
+      />
     </div>
   );
 }

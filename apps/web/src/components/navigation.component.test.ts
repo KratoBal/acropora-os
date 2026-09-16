@@ -392,6 +392,9 @@ describe("navigation", () => {
     // amit a szervizes nem lat. Balazs, 2026-09-02 21:00:53: "Nem kell hogy
     // lassa".
     "/beallitasok/matricak": "settings.manage",
+    // A mertekegyseg-torzsadat ugyanoda tartozik: a szerelo HASZNALJA a listat
+    // (az eszkoz-szerkeszto legordulojet `service.view` olvassa), de nem IRJA.
+    "/beallitasok/mertekegysegek": "settings.manage",
   };
 
   it("reproduces, for every role, exactly what the hard-coded keys produced", () => {

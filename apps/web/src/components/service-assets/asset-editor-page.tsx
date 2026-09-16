@@ -13,6 +13,7 @@ import {
   assetLabelCreateProblem,
   hasPermission,
   normalizeAssetLabelCode,
+  normalizePerformanceValue,
   PERMISSIONS,
   type AssetCriticality,
   type AssetKind,
@@ -20,6 +21,7 @@ import {
   type AssetOwnerOption,
   type AssetOwnerType,
   type AssetStatus,
+  type UnitOfMeasure,
 } from "@acropora/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -32,6 +34,12 @@ import { ServiceOfflineNotice } from "@/components/service/service-offline-notic
 import { useReturnTo } from "@/components/navigation-history";
 import { assetsApi } from "@/lib/api/assets";
 import { suppliersApi } from "@/lib/api/suppliers";
+import { unitsOfMeasureApi } from "@/lib/api/units-of-measure";
+import {
+  PERFORMANCE_PROBLEM_MESSAGES,
+  performancePairProblem,
+  performanceUnitOptions,
+} from "./asset-performance-field";
 import { buildSiteOptions, type SiteOption } from "@/lib/partners/site-tree";
 import {
   assetCriticalityLabel,
@@ -90,6 +98,29 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
    * legordulo megepitheto lenne -- nem azert nincs, mert nem megy.
    */
   const [labelCode, setLabelCode] = useState("");
+  /**
+   * A TELJESITMENY ES A MERTEKEGYSEGE -- KET MEZO, EGY ADAT.
+   *
+   * A ketto EGYUTT mozog: a tablan CHECK all rajta, tehat fel par nem
+   * menthetó. Az urlap ezt a szabalyt MEGISMETLI (a mondat a mezo mellett
+   * jelenik meg), nem helyettesiti.
+   *
+   * MIERT SZOVEG A SZAM: a tarolt alak `decimal(19,6)`. Szamma alakitva a
+   * bongeszo lebegopontos tipusan menne at, es egy 0,1-es lepeskoz mar
+   * `0.30000000000000004` alakban jonne vissza a kezelonek.
+   */
+  const [performance, setPerformance] = useState("");
+  const [performanceUnitId, setPerformanceUnitId] = useState("");
+  const [performanceUnits, setPerformanceUnits] = useState<UnitOfMeasure[]>([]);
+  /**
+   * AZ ESZKOZON MA ALLO EGYSEG, KULON -- MERT LEHET, HOGY MAR KIVEZETTEK.
+   *
+   * A valaszto az AKTIVAKAT kinalja. Ha az eszkozon egy azota kivezetett
+   * egyseg all, es csak az aktivak lennenek a listaban, a legordulo az ELSO
+   * elemre esne vissza: a kezelo megnyitja a lapot, egy szot sem ir, ment --
+   * es a mertekegyseg megvaltozik. Nemán.
+   */
+  const [currentUnit, setCurrentUnit] = useState<UnitOfMeasure | undefined>();
   const [installedAt, setInstalledAt] = useState("");
   const [warrantyExpiresAt, setWarrantyExpiresAt] = useState("");
   const [serviceIntervalDays, setServiceIntervalDays] = useState("");
@@ -149,6 +180,20 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
         setSerialNumber(asset.serialNumber ?? "");
         setInventoryNumber(asset.inventoryNumber ?? "");
         setLabelCode(asset.labelCode ?? "");
+        setPerformance(asset.performance ?? "");
+        setPerformanceUnitId(asset.performanceUnit?.id ?? "");
+        // A MOSTANI EGYSEG A VALASZBOL JON, nem a listabol: ha kozben
+        // kivezettek, a lista nem tartalmazza, az eszkozon viszont ott all.
+        setCurrentUnit(
+          asset.performanceUnit
+            ? {
+                ...asset.performanceUnit,
+                kind: "PERFORMANCE",
+                isActive: true,
+                sortOrder: 0,
+              }
+            : undefined,
+        );
         setInstalledAt(inputDate(asset.installedAt));
         setWarrantyExpiresAt(inputDate(asset.warrantyExpiresAt));
         setServiceIntervalDays(asset.serviceIntervalDays?.toString() ?? "");
@@ -189,6 +234,28 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
       });
     return () => controller.abort();
   }, [owner, token]);
+
+  /**
+   * A TELJESITMENY-EGYSEGEK, EGYSZER.
+   *
+   * CSAK AZ AKTIVAK jonnek: a kivezetett egyseg a valasztobol esik ki. Az
+   * eszkozon MAR allo egyseget ettol fuggetlenul mutatjuk (lasd
+   * `performanceUnitOptions`) -- a kivezetes a valasztekot szukiti, nem a
+   * multat irja at.
+   *
+   * A HIBA ITT NEM ALLITJA MEG A LAPOT. Ha a torzsadat nem tolthető be, a
+   * tobbi mezo akkor is szerkeszthető marad; a teljesitmeny legordulojen ez
+   * annyit jelent, hogy ures. Egy egesz urlapot elvenni egy MELLEKES lista
+   * miatt nagyobb kar, mint a hianyzo valaszto.
+   */
+  useEffect(() => {
+    const controller = new AbortController();
+    void unitsOfMeasureApi
+      .list(token, "PERFORMANCE", { signal: controller.signal })
+      .then((result) => setPerformanceUnits(result.items))
+      .catch(() => setPerformanceUnits([]));
+    return () => controller.abort();
+  }, [token]);
 
   useEffect(() => {
     setParentAssets([]);
@@ -277,6 +344,25 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
       setError("A matrica kódja egy betű és négy szám, például V2196.");
       return;
     }
+    /**
+     * A TELJESITMENY-PAR UGYANAZT A SZABALYT MONDJA, MINT A SZERVER ES A TABLA.
+     *
+     * Harom rétegben all ugyanaz, es ez NEM duplikacio: itt a visszajelzes
+     * gyorsasaga (a kezelo a mezo mellett latja), a szerveren a szabaly, a
+     * tablan pedig az, amit semmilyen uj vegpont nem tud megkerulni.
+     *
+     * A SORREND SZAMIT: az alak-hiba elobb all a hianyzo egysegnel. Egy
+     * "otszaz" beirasara a "valassz mertekegyseget" mondat felrevezeto lenne.
+     */
+    const performanceProblem = performancePairProblem(
+      performance,
+      performanceUnitId,
+      normalizePerformanceValue(performance) === null,
+    );
+    if (performanceProblem) {
+      setError(PERFORMANCE_PROBLEM_MESSAGES[performanceProblem]);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -307,6 +393,11 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             // TORLEST jelent. A matricat ezen az uton nem lehet leszedni (a
             // szerver `string`-et var), es a mezo leirasa ki is mondja.
             labelCode: normalizeAssetLabelCode(labelCode) ?? undefined,
+            // A `null` ITT TORLES, a matricaval ELLENTETBEN -- es a ketto
+            // egyutt megy: a szerver a PART nezi, nem a mezot. Ket `null`
+            // leszedi a teljesitmenyt, egy `null` elbukik.
+            performance: normalizePerformanceValue(performance),
+            performanceUnitId: performanceUnitId || null,
             expectedUpdatedAt: updatedAt,
           })
         : await assetsApi.create(token, {
@@ -329,6 +420,10 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             // viszont szandekosan megengedobb. Ures mezonel a kulcs EL SEM
             // MEGY -- az ures szoveg nem "nincs matrica", hanem ervenytelen kod.
             labelCode: normalizeAssetLabelCode(labelCode) ?? undefined,
+            // FELVITELNEL `undefined`, nem `null`: itt nincs mit torolni, es a
+            // ket kulcs EGYUTT marad el, kulonben a szerver fel part latna.
+            performance: normalizePerformanceValue(performance) ?? undefined,
+            performanceUnitId: performanceUnitId || undefined,
             installedAt: toIsoDate(installedAt),
             warrantyExpiresAt: toIsoDate(warrantyExpiresAt),
             serviceIntervalDays: interval,
@@ -527,6 +622,41 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
                 value={serialNumber}
                 onChange={(event) => setSerialNumber(event.target.value)}
               />
+            </FormField>
+            {/*
+              A TELJESITMENY ES A MERTEKEGYSEGE EGYMAS MELLETT ALL, es ez nem
+              elrendezesi kerdes: a ketto EGY adat. Egy "500" mertekegyseg
+              nelkul nem informacio, hanem talalgatasra hivas -- es a mentes
+              is elutasitja. Ket kulon helyen allva a kezelo nem latna, hogy
+              osszetartoznak.
+            */}
+            <FormField
+              label="Teljesítmény"
+              description="Tizedesvesszővel is írható (például 0,5)."
+            >
+              <Input
+                aria-label="Teljesítmény"
+                inputMode="decimal"
+                value={performance}
+                onChange={(event) => setPerformance(event.target.value)}
+                placeholder="pl. 500"
+              />
+            </FormField>
+            <FormField label="Mértékegység">
+              <Select
+                aria-label="Mértékegység"
+                value={performanceUnitId}
+                onChange={(event) => setPerformanceUnitId(event.target.value)}
+              >
+                <option value="">Nincs megadva</option>
+                {performanceUnitOptions(performanceUnits, currentUnit).map(
+                  (unit) => (
+                    <option key={unit.id} value={unit.id}>
+                      {unit.code} -- {unit.name}
+                    </option>
+                  ),
+                )}
+              </Select>
             </FormField>
             <FormField label="Leltári szám">
               <Input
