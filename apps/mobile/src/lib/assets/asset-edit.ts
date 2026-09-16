@@ -6,6 +6,7 @@ import type {
   UpdateAssetInput,
 } from "./asset-fields";
 import { normalizeAssetLabelCode } from "./asset-label-mirror";
+import { normalizePerformanceValue } from "./performance-mirror";
 
 /**
  * The part of an asset this module reasons about. Structural on purpose:
@@ -32,6 +33,16 @@ export interface EditableAsset {
   labelCode?: string;
   /** A partner alegysége, ahol az eszköz áll. Hiányzik, ha nincs megadva. */
   unit?: { id: string };
+  /**
+   * A TELJESÍTMÉNY, AHOGY A SZERVER ADJA -- SZÖVEGKÉNT.
+   *
+   * A tárolt alak `decimal(19,6)`. Számmá alakítva a lebegőpontos típuson
+   * menne át, és egy `0,1`-es lépésköz `0.30000000000000004` alakban jönne
+   * vissza a szerelőnek.
+   */
+  performance?: string;
+  /** A teljesítmény mértékegysége. A pár másik fele. */
+  performanceUnit?: { id: string };
   status: AssetStatus;
   criticality: AssetCriticality;
   manufacturer?: string;
@@ -87,6 +98,14 @@ export interface AssetEditForm {
    * Enelkul egy meglevo matricat lehetne vakon felulirni.
    */
   labelCode: string;
+  /**
+   * A TELJESÍTMÉNY ÉS A MÉRTÉKEGYSÉGE -- KÉT MEZŐ, EGY ADAT.
+   *
+   * A kettő EGYÜTT mozog: a táblán CHECK áll rajta. Az üres pár azt jelenti,
+   * hogy nincs megadva; fél pár nem menthető, sem itt, sem a szerveren.
+   */
+  performance: string;
+  performanceUnitId: string;
 }
 
 const TEXT_FIELDS = [
@@ -111,6 +130,8 @@ export function assetEditFormFrom(asset: EditableAsset): AssetEditForm {
     description: asset.description ?? "",
     notes: asset.notes ?? "",
     labelCode: asset.labelCode ?? "",
+    performance: asset.performance ?? "",
+    performanceUnitId: asset.performanceUnit?.id ?? "",
   };
 }
 
@@ -173,6 +194,26 @@ export function buildAssetPatch(
   if (kod !== "" && kod !== (asset.labelCode ?? "").trim().toUpperCase())
     patch.labelCode = kod;
 
+  /**
+   * A TELJESÍTMÉNY-PÁR: MINDEN OLDALT KÜLÖN KÜLDÜNK, AMI VÁLTOZOTT.
+   *
+   * ÉS EZ NEM UGYANAZ, MINT A SZÖVEGES MEZŐK SZABÁLYA: ott a kiürítés `null`,
+   * és az önmagában rendben van. Itt a `null` is TÖRLÉS, de a pár MÁSIK
+   * felének is mennie kell vele, különben a szerver fél párt kapna.
+   *
+   * A szerver az EREDMÉNYT nézi, nem a beküldött mezőt, tehát a „csak a
+   * számot írtam át" eset egyetlen kulccsal is átmegy. Amit itt el kell
+   * kerülni, az a fél TÖRLÉS: egy kiürített szám mellett álló mértékegység.
+   * Azt az `assetPerformanceEditProblem` fogja meg, a sorba tétel ELŐTT.
+   */
+  const ertek = normalizePerformanceValue(form.performance);
+  const regiErtek = asset.performance ?? null;
+  const egyseg = form.performanceUnitId.trim();
+  const regiEgyseg = asset.performanceUnit?.id ?? "";
+  if (ertek !== regiErtek) patch.performance = ertek;
+  if (egyseg !== regiEgyseg)
+    patch.performanceUnitId = egyseg === "" ? null : egyseg;
+
   if (asset.ownerType === "SUPPLIER") {
     const chosen = form.unitId.trim();
     const current = asset.unit?.id ?? "";
@@ -229,6 +270,41 @@ export function assetLabelEditProblem(form: AssetEditForm): "malformed" | null {
   return normalizeAssetLabelCode(kod) === null ? "malformed" : null;
 }
 
+/**
+ * A TELJESÍTMÉNY-PÁR BAJA, A MENTÉS ELŐTT -- ÉS EZ AZ OFFLINE SOR MIATT KELL.
+ *
+ * Kapcsolat nélkül a mentés SORBA kerül, nem a szerverhez: egy fél pár így
+ * csak a sor kiürítésekor bukna el, akár órákkal később, amikor a szerelő már
+ * nincs a gépnél. Az adat pedig ott és akkor volt.
+ *
+ * AZ EREDMÉNYT NÉZI, NEM A BEÍRT MEZŐT -- ugyanúgy, ahogy a szerver. Ez a
+ * kettő ugyanaz a szabály két helyen, és szándékosan: az egyik a visszajelzés
+ * gyorsasága, a másik a szabály.
+ */
+export function assetPerformanceEditProblem(
+  form: AssetEditForm,
+): "malformed" | "missing-unit" | "missing-value" | null {
+  const beirt = form.performance.trim();
+  const ertek = normalizePerformanceValue(form.performance);
+  if (beirt !== "" && ertek === null) return "malformed";
+  const egyseg = form.performanceUnitId.trim();
+  if (ertek !== null && egyseg === "") return "missing-unit";
+  if (ertek === null && egyseg !== "") return "missing-value";
+  return null;
+}
+
+/** A mondat, amit a szerelő lát. Egy helyen, mert két képernyő olvassa. */
+export const PERFORMANCE_PROBLEM_MESSAGES: Record<
+  "malformed" | "missing-unit" | "missing-value",
+  string
+> = {
+  malformed:
+    "A teljesítmény csak szám lehet, legfeljebb hat tizedesjeggyel (például 0,5 vagy 500).",
+  "missing-unit": "Válassz mértékegységet a teljesítmény mellé.",
+  "missing-value":
+    "Írj teljesítmény-értéket a mértékegység mellé, vagy töröld a mértékegységet is.",
+};
+
 export function baseValuesFor(
   asset: EditableAsset,
   patch: UpdateAssetInput,
@@ -237,6 +313,20 @@ export function baseValuesFor(
   if ("status" in patch) base.status = asset.status;
   if ("criticality" in patch) base.criticality = asset.criticality;
   if ("departmentId" in patch) base.departmentId = asset.unit?.id ?? null;
+  /**
+   * A TELJESITMENY-PAR IS BEKERUL A SORBA, ES A KET FELE KULON.
+   *
+   * MIERT KELL: a pinceben beirt teljesitmeny kulonben CSENDBEN elveszne -- a
+   * sor torzse vinne ugyan a valtozast, de az utkozes-feloldas nem tudna,
+   * MIHEZ kepest keszult, es a szerelo nem latna, hogy kozben az iroda irt ra
+   * masikat.
+   *
+   * KET KULON SOR, mert a ket fele kulon is valtozhat: aki csak a szamot irja
+   * at, arra az egyseg alapertekre nincs szukseg.
+   */
+  if ("performance" in patch) base.performance = asset.performance ?? null;
+  if ("performanceUnitId" in patch)
+    base.performanceUnitId = asset.performanceUnit?.id ?? null;
   for (const field of TEXT_FIELDS)
     if (field in patch) base[field] = asset[field] ?? null;
   /**

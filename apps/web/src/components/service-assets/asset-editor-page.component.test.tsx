@@ -34,6 +34,8 @@ const api = vi.hoisted(() => ({
   create: vi.fn(),
   update: vi.fn(),
 }));
+const suppliers = vi.hoisted(() => ({ units: vi.fn() }));
+const unitsOfMeasure = vi.hoisted(() => ({ list: vi.fn() }));
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/szerviz/eszkozok/uj",
@@ -47,6 +49,23 @@ vi.mock("@/components/auth/auth-provider", () => ({
   useAuth: () => ({ session }),
 }));
 vi.mock("@/lib/api/assets", () => ({ assetsApi: api }));
+/**
+ * A KET MASIK KLIENS IS MOCKOLVA -- ES EZ NEM OVATOSSAG, HANEM MERT VALODI
+ * HIVAS MENT EL.
+ *
+ * Merve 2026-09-16: ez a spec HAROM `ECONNREFUSED 127.0.0.1:3000` hibat
+ * hagyott maga utan, mert a `suppliersApi` nem volt mockolva. A relativ
+ * `/api/...` ut a teszt-kornyezetben a `localhost:3000`-re oldodik fel: aki
+ * kozben `pnpm dev`-et futtat, annak a SAJAT szerverere megy a keres.
+ *
+ * ES A ZOLD NEM MONDTA MEG. A hivas eredmenye egy elnyelt `catch`-be fut, a
+ * teszt pedig a MEGHIUSULT hivas utani allapotot merte -- vagyis nem azt, amit
+ * hitt: egy ures partnerlista ugyanugy nez ki, mint egy halott hivas.
+ */
+vi.mock("@/lib/api/suppliers", () => ({ suppliersApi: suppliers }));
+vi.mock("@/lib/api/units-of-measure", () => ({
+  unitsOfMeasureApi: unitsOfMeasure,
+}));
 
 const session: Session = {
   id: "session-1",
@@ -114,7 +133,20 @@ beforeEach(() => {
     items: [],
     pagination: { page: 1, pageSize: 100, totalItems: 0, totalPages: 0 },
   });
+  suppliers.units.mockResolvedValue({ items: [] });
+  unitsOfMeasure.list.mockResolvedValue({ items: [WATT, KILOWATT] });
 });
+
+/** A ket teljesitmeny-egyseg, amit a valaszto kinal. */
+const WATT = {
+  id: "uom-w",
+  code: "W",
+  name: "watt",
+  kind: "PERFORMANCE" as const,
+  isActive: true,
+  sortOrder: 0,
+};
+const KILOWATT = { ...WATT, id: "uom-kw", code: "kW", name: "kilowatt" };
 
 describe("AssetEditorPage tulajdonos-listája", () => {
   it("asks the server to keep the owner the asset already has", async () => {
@@ -436,5 +468,129 @@ describe("AssetEditorPage matricakód", () => {
       await screen.findByText(/^A matrica kódja egy betű és négy szám/),
     ).toBeTruthy();
     expect(api.update).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * A TELJESITMENY ES A MERTEKEGYSEGE EGY ADAT, KET MEZOBEN.
+ *
+ * A tablan CHECK all rajta, a szerver mondatot ad, az urlap pedig a mezo
+ * mellett szol. Harom reteg ugyanarra a szabalyra -- es itt azt merjuk, hogy a
+ * legkulso is all.
+ */
+describe("AssetEditorPage teljesítmény-mezője", () => {
+  it("a meglévő pár BETÖLTŐDIK, nem üres mezőt mutat", async () => {
+    api.detail.mockResolvedValue({
+      ...asset,
+      performance: "500",
+      performanceUnit: { id: "uom-w", code: "W", name: "watt" },
+    });
+    api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
+
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    const mezo = await screen.findByLabelText("Teljesítmény");
+    await waitFor(() => expect((mezo as HTMLInputElement).value).toBe("500"));
+    const egyseg = screen.getByLabelText("Mértékegység") as HTMLSelectElement;
+    expect(egyseg.value).toBe("uom-w");
+  });
+
+  /**
+   * EZ AZ AZ ALLITAS, AMIERT A `performanceUnitOptions` LETEZIK.
+   *
+   * A valaszto az AKTIVAKAT kinalja. Ha az eszkozon egy azota KIVEZETETT
+   * egyseg all, es a lista nem tartalmazza, a legordulo az elso elemre esne
+   * vissza: a kezelo megnyitja a lapot, egy szot sem ir, ment -- es a
+   * mertekegyseg megvaltozik. Nemán, es pont azon az uton, ahol senki nem
+   * keresi.
+   */
+  it("a KIVEZETETT egység is látszik, ha az eszközön az áll", async () => {
+    api.detail.mockResolvedValue({
+      ...asset,
+      performance: "500",
+      performanceUnit: { id: "uom-regi", code: "LE", name: "lóerő" },
+    });
+    api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
+    // A LISTA SZANDEKOSAN NEM TARTALMAZZA: ezt meri az allitas.
+    unitsOfMeasure.list.mockResolvedValue({ items: [WATT, KILOWATT] });
+
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    const egyseg = (await screen.findByLabelText(
+      "Mértékegység",
+    )) as HTMLSelectElement;
+    await waitFor(() => expect(egyseg.value).toBe("uom-regi"));
+    expect([...egyseg.options].map((option) => option.value)).toContain(
+      "uom-regi",
+    );
+  });
+
+  it("szám mértékegység nélkül NEM megy el, és megmondja, miért", async () => {
+    api.detail.mockResolvedValue(asset);
+    api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
+
+    const user = userEvent.setup();
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    await user.type(await screen.findByLabelText("Teljesítmény"), "500");
+    await user.click(
+      screen.getByRole("button", { name: "Módosítások mentése" }),
+    );
+
+    await screen.findByText(/Válassz mértékegységet/);
+    // A LENYEG A MASODIK ALLITAS: nem elég, hogy szol -- NEM is szabad
+    // elkuldenie. Egy orzo, ami szol de atengedi a mentest, nem orzo.
+    expect(api.update).not.toHaveBeenCalled();
+  });
+
+  it("a tizedesvesszőt pontra fordítva küldi el", async () => {
+    api.detail.mockResolvedValue(asset);
+    api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
+    api.update.mockResolvedValue({ ...asset, id: "asset-1" });
+
+    const user = userEvent.setup();
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    await user.type(await screen.findByLabelText("Teljesítmény"), "0,5");
+    await user.selectOptions(screen.getByLabelText("Mértékegység"), "uom-w");
+    await user.click(
+      screen.getByRole("button", { name: "Módosítások mentése" }),
+    );
+
+    await waitFor(() => expect(api.update).toHaveBeenCalled());
+    // MERVE a valodi `Prisma.Decimal`-on: a `"0,5"` DOB, es abbol 500 lenne.
+    expect(api.update.mock.calls[0]?.[2]).toMatchObject({
+      performance: "0.5",
+      performanceUnitId: "uom-w",
+    });
+  });
+
+  /**
+   * A TORLES CSAK EGYUTT MEGY -- es a `null` ITT torlest jelent, a
+   * matricakoddal ELLENTETBEN.
+   */
+  it("a két mező kiürítve EGYÜTT törli a párt", async () => {
+    api.detail.mockResolvedValue({
+      ...asset,
+      performance: "500",
+      performanceUnit: { id: "uom-w", code: "W", name: "watt" },
+    });
+    api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
+    api.update.mockResolvedValue({ ...asset, id: "asset-1" });
+
+    const user = userEvent.setup();
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    await user.clear(await screen.findByLabelText("Teljesítmény"));
+    await user.selectOptions(screen.getByLabelText("Mértékegység"), "");
+    await user.click(
+      screen.getByRole("button", { name: "Módosítások mentése" }),
+    );
+
+    await waitFor(() => expect(api.update).toHaveBeenCalled());
+    expect(api.update.mock.calls[0]?.[2]).toMatchObject({
+      performance: null,
+      performanceUnitId: null,
+    });
   });
 });

@@ -28,6 +28,17 @@ import { normalizeAssetLabelCode } from "@/lib/assets/asset-label-mirror";
  *
  * Egy `Modal` megoldana a helyezest, de a mobil alkalmazasban ma EGYETLEN
  * `Modal` sincs (merve 2026-09-16), tehat az uj minta lenne, nem a meglevo.
+ *
+ * ES HA VALAHA MEGIS KELL `Modal`: az KULON DONTES, es MIND A HAROM HELY
+ * EGYSZERRE valt at ra (a mezo, a felviteli es a szerkeszto keperno). Egy
+ * felig atallitott ratet rosszabb a mainal: ket kulonbozo helyezesi szabaly
+ * allna egymas mellett, es a masodikat senki nem merne -- pontosan az az alak,
+ * amit ez a fajl azzal kerult el, hogy egy peldanyban all.
+ *
+ * A FELTETEL, AMI A DONTEST KIVALTJA, es ezert all itt szamszeruen: ha a
+ * fenti meres (`Modal` elofordulasa az appban) egyszer nem NULLA, akkor a
+ * "uj minta lenne" indok elavult -- ilyenkor ez a bekezdes is valtozik,
+ * ugyanabban a korben.
  */
 
 export interface LabelScanner {

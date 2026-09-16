@@ -310,6 +310,20 @@ export const settingsNavigation: AppNavigationItem[] = [
     icon: "settings",
     entryId: "asset-labels",
   },
+  {
+    /**
+     * SAJAT MENUPONT, ES EZ BALAZS KERESE VOLT: a mertekegysegek torzsadatkent
+     * allnak a Beallitasok alatt, nem egy masik lap belsejeben elrejtve.
+     *
+     * A MATRICAK UTAN AlL, mert a ketto ugyanaz a fajta tetel: nem kulso
+     * rendszer kulcsa es nem jogosultsag-kezeles, hanem sajat, uzemeltetesi
+     * torzsadat.
+     */
+    href: "/beallitasok/mertekegysegek",
+    label: "Mértékegységek",
+    icon: "settings",
+    entryId: "units-of-measure",
+  },
 ];
 
 export const allSettingsNavigation: AppNavigationItem[] = [

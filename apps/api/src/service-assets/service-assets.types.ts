@@ -129,6 +129,18 @@ export const assetDetailInclude = {
    * egy lista azt allitotta volna, hogy egy eszkozon TOBB matrica is allhat.
    */
   label: { select: { code: true } },
+  /**
+   * A TELJESITMENY EGYSEGE KIIRVA, NEM CSAK AZONOSITOKENT.
+   *
+   * Az adatlapnak `500 W`-ot kell mutatnia. Az azonositoval a web es a mobil
+   * KULON hivna le a torzsadatot egyetlen jel kiirasahoz -- a mobil pedig
+   * terero nelkul nem tudna.
+   *
+   * ES A KIVEZETETT EGYSEG IS IDEJON: nincs `isActive` szures. A kivezetes a
+   * VALASZTOT szukiti, nem a mar rogzitett erteket tunteti el; egy szures itt
+   * azt jelentene, hogy egy regi eszkoz teljesitmenye egy nap eltunik a lapjarol.
+   */
+  performanceUnit: { select: { id: true, code: true, name: true } },
 } satisfies Prisma.AssetInclude;
 
 export type AssetSummaryRow = Prisma.AssetGetPayload<{
