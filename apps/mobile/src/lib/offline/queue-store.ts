@@ -281,6 +281,38 @@ export async function enqueueWorksheetCreate(
  * MEGLEVO tetelt talalja meg, nem masodikat hoz letre. Ket kulon kulcs mellett
  * epp ez a vedelem esne ki.
  */
+/**
+ * UJ HIBAJEGY A SORBA -- ES A SOR AZONOSITOJA A SZERVER IDEMPOTENCIA-KULCSA.
+ *
+ * A kulcs a TARTALOMBOL szuletik (`serviceJobOperationId`), nem veletlenbol: egy
+ * ketszer megnyomott gomb kulonben KET jegyet nyitna ugyanarrol a hibarol, es a
+ * szerelo a listan ketszer latna ugyanazt.
+ *
+ * A FUGGOSEG MEZOI ITT MEG URESEK: a jegy senkire nem var, O az, akire varni
+ * fognak (a fenykep es a munkalap a kovetkezo darabban).
+ */
+export async function enqueueServiceJobCreate(input: {
+  id: string;
+  payload: unknown;
+  createdAt: string;
+}): Promise<EnqueueResult> {
+  try {
+    const db = await initializeOfflineDatabase();
+    await db.runAsync(
+      `INSERT OR IGNORE INTO sync_queue
+         (id, operation, entity_type, entity_id, payload_json, created_at, attempt_count, last_error, state)
+       VALUES (?, 'create', 'service-job', NULL, ?, ?, 0, NULL, 'pending')`,
+      [input.id, JSON.stringify(input.payload), input.createdAt],
+    );
+    return { ok: true, operationId: input.id };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export async function enqueueWorksheetLine(input: {
   /** A tetel azonositoja, egyben a sor kulcsa. */
   id: string;

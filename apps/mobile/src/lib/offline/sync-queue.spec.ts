@@ -156,17 +156,23 @@ describe("a munkalap művelet-azonosítója", () => {
 });
 
 describe("a sor entitás-fajtái", () => {
-  it("a lista a HÁROM ismert fajtát tartalmazza, ebben a sorrendben", () => {
+  it("a lista a NÉGY ismert fajtát tartalmazza, ebben a sorrendben", () => {
     /*
       A SZAM MAGA IS ALLITAS, ugyanabbol az okbol, mint a tarolo beszurasainal:
-      egy NEGYEDIK fajta felvetele PIROSSA teszi ezt a sort, es akkor kell
-      eldonteni, hogy a tobbi lekepezes (fajta neve, javithatosag, fenykep-gazda)
-      megkapta-e a maga mondatat. A `Record` alakok errol amugy is szolnanak, de
-      azok FORDITASI hibat adnak -- ez a sor a FUTASBAN mondja meg.
+      egy UJ fajta felvetele PIROSSA teszi ezt a sort, es akkor kell eldonteni,
+      hogy a tobbi lekepezes (fajta neve, javithatosag, fenykep-gazda) megkapta-e
+      a maga mondatat. A `Record` alakok errol amugy is szolnanak, de azok
+      FORDITASI hibat adnak -- ez a sor a FUTASBAN mondja meg.
+
+      2026-09-16: haromrol NEGYRE nott a `service-job`-bal, es a sor ELSULT --
+      pontosan ugy, ahogy kell. A harom lekepezes mind megkapta a maga
+      mondatat, es a KULDESI elagazas is: az `if`-lanc alapertelmezese helyett
+      most `switch` all ott, `never`-re futo aggal, mert enelkul az uj fajta
+      CSENDBEN az eszkoz-vegpontra ment volna.
     */
     assert.deepEqual(
       [...SYNC_ENTITY_TYPES],
-      ["asset", "worksheet", "worksheet-line"],
+      ["asset", "worksheet", "worksheet-line", "service-job"],
     );
   });
 
@@ -181,7 +187,18 @@ describe("a sor entitás-fajtái", () => {
       a listarol es a kuldesbol.
     */
     assert.equal(isSyncEntityType("worksheet-line"), true);
-    assert.equal(isSyncEntityType("service-job"), false);
+    /*
+      A PELDA NEM LEHET EGY HIHETO JOVOBELI NEV -- ES EZT EGY MERT ESET IRTA IDE.
+
+      Eddig itt a `"service-job"` allt, mint "nyilvan nem letezo fajta". Az
+      2026-09-16-an VALODI fajta lett (a telefonos jegy-nyitassal), es ez az
+      allitas elbukott -- nem azert, mert a kod romlott el, hanem mert a
+      NEGATIV KONTROLL peldaja igazza valt.
+
+      Egy negativ kontroll peldaja ezert legyen olyan, ami nem valhat valodiva:
+      nem egy masik modul fogalma, hanem egy alak, ami a listara soha nem kerul.
+    */
+    assert.equal(isSyncEntityType("nincs-ilyen-fajta"), false);
     assert.equal(isSyncEntityType(""), false);
   });
 

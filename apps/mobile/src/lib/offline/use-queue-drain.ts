@@ -12,6 +12,10 @@ import {
   uploadWorksheetDocuments,
   type CreateWorksheetInput,
 } from "@/lib/api/worksheets";
+import {
+  createServiceJob,
+  type CreateServiceJobInput,
+} from "@/lib/api/service-jobs";
 import { readQueuedWorksheetLine } from "@/lib/worksheets/worksheet-line";
 import { ApiError } from "@/lib/api/client";
 
@@ -54,8 +58,33 @@ export function useQueueDrain(isOnline: boolean): string | null {
           send: async (row) => {
             if (row.operation === "upload-photo") return kepetKuld(row);
             if (row.operation === "update") return modositastKuld(row);
-            if (row.entityType === "worksheet") return munkalapotKuld(row);
-            if (row.entityType === "worksheet-line") return tetelKuld(row);
+            /**
+             * A FAJTAK KIMERITOEN, NEM VISSZAESESSEL -- ES EZ EGY CSAPDAT ZAR BE.
+             *
+             * Eddig `if`-lanc allt itt, a vegen orizetlen visszaeses: "minden
+             * mas eszkoz-felvitel". Egy UJ fajta felvetele a listara (most epp
+             * a `service-job`) igy CSENDBEN az eszkoz-vegpontra kuldte volna a
+             * sorait -- a szerver egy jegy torzsebol probalt volna eszkozt
+             * csinalni.
+             *
+             * A `switch` + `never` alak ezt FORDITASI hibava teszi: aki a
+             * kovetkezo fajtat felveszi, a fordítótól kapja meg a kerdest,
+             * nem a szerelotol a helyszinen.
+             */
+            switch (row.entityType) {
+              case "worksheet":
+                return munkalapotKuld(row);
+              case "worksheet-line":
+                return tetelKuld(row);
+              case "service-job":
+                return jegyetKuld(row);
+              case "asset":
+                break;
+              default: {
+                const soha: never = row.entityType;
+                throw new Error(`Ismeretlen sor-fajta: ${String(soha)}`);
+              }
+            }
             try {
               const letrejott = await createAsset({
                 ...(JSON.parse(row.payloadJson) as CreateAssetInput),
@@ -259,6 +288,39 @@ async function munkalapotKuld(row: SyncQueueRow): Promise<{
      * a keres el sem jutott a szerverig -- azt a sor ujraprobalja. Egy
      * valaszolt 4xx viszont NEM: azt a `decideDrain` konfliktusnak sorolja.
      */
+    return {
+      httpStatus: cause instanceof ApiError ? cause.status : null,
+      error: cause instanceof Error ? cause.message : String(cause),
+    };
+  }
+}
+
+/**
+ * EGY HIBAJEGY FELKULDESE A SORBOL.
+ *
+ * UGYANAZ AZ ALAK, MINT A MUNKALAPE, es ez nem veletlen: mind a ketto UJ
+ * entitast hoz letre, tehat a szerver azonositoja itt lep at a varraton. A jegy
+ * ala kerulo fenykep (a kovetkezo darab) epp erre var -- ha az `entityId`-t
+ * eldobnank, azt a kepet semmi nem tudna megcimezni, es a hiba NEMA lenne: a
+ * sor kiurul, a jelentes zold.
+ *
+ * A TORZSBEN AZ `originAssetId` UTAZIK, nem a partner es a helyszin: azokat a
+ * SZERVER vezeti le az eszkozbol. A telefon nem is tudna helyesen kitolteni --
+ * szallitoi eszkoznel a jegy partnere a szallito TUKOR-sora, ami a partner
+ * belso reszlete.
+ */
+async function jegyetKuld(row: SyncQueueRow): Promise<{
+  httpStatus: number | null;
+  error: string | null;
+  entityId?: string | null;
+}> {
+  try {
+    const letrejott = await createServiceJob({
+      ...(JSON.parse(row.payloadJson) as CreateServiceJobInput),
+      clientOperationId: row.id,
+    });
+    return { httpStatus: 201, error: null, entityId: letrejott.id };
+  } catch (cause) {
     return {
       httpStatus: cause instanceof ApiError ? cause.status : null,
       error: cause instanceof Error ? cause.message : String(cause),

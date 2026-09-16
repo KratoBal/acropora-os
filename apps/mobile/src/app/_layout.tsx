@@ -153,6 +153,10 @@ function RootNavigator() {
         options={{ title: "Hibajegyek" }}
       />
       <Stack.Screen name="service-jobs/[id]" options={{ title: "Hibajegy" }} />
+      <Stack.Screen
+        name="service-jobs/new"
+        options={{ title: "Új hibajegy" }}
+      />
       <Stack.Screen name="worksheets/index" options={{ title: "Munkalapok" }} />
       <Stack.Screen name="worksheets/new" options={{ title: "Új munkalap" }} />
       <Stack.Screen name="worksheets/[id]" options={{ title: "Munkalap" }} />

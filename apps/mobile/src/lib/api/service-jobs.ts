@@ -1,6 +1,7 @@
 import { apiRequest } from "./client";
 import { buildDocumentUpload, type PickedFile } from "./document-upload";
 import type {
+  CreateServiceJobInput,
   ServiceJobDetail,
   ServiceJobDocumentSummary,
   ServiceJobListResponse,
@@ -8,6 +9,7 @@ import type {
 } from "../service-jobs/types";
 
 export type {
+  CreateServiceJobInput,
   ServiceJobAssetLink,
   ServiceJobDetail,
   ServiceJobDocumentSummary,
@@ -70,6 +72,20 @@ export function listServiceJobs(scope: "open" | "all" = "open") {
   return apiRequest<ServiceJobListResponse>(
     `${BASE}?${new URLSearchParams({ scope })}`,
   );
+}
+
+/**
+ * UJ HIBAJEGY A HELYSZINROL.
+ *
+ * A torzs harom mezot visz: cim, leiras, es az ESZKOZ, aminel nyitottak. A
+ * partnert es a helyszint a szerver vezeti le -- lasd a `CreateServiceJobInput`
+ * fejlecet.
+ */
+export function createServiceJob(input: CreateServiceJobInput) {
+  return apiRequest<ServiceJobDetail>(BASE, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
 export function getServiceJob(id: string) {

@@ -117,8 +117,10 @@ export default function ServiceJobListScreen() {
             */}
             <Text style={styles.hint}>
               A nyitott hibajegyek. Telefonon a jegy olvasható, léptethető, és
-              fényképet lehet rátenni; új jegyet nyitni, partnert váltani és
-              delegálni a webes felületen lehet.
+              fényképet lehet rátenni. Új jegyet a gép adatlapjáról nyithatsz
+              (Eszközök, majd Hibajegy nyitása), így a partner és a helyszín a
+              gépből következik. Partnert váltani és delegálni a webes felületen
+              lehet.
             </Text>
           </View>
         }

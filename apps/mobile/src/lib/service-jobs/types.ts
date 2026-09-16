@@ -128,3 +128,45 @@ export interface ServiceJobDetail extends ServiceJobListItem {
   timeline: ServiceJobTimelineEntry[];
   assets: ServiceJobAssetLink[];
 }
+
+/**
+ * AMIT A TELEFON KULD EGY UJ JEGYHEZ -- ES EZ SZUKEBB, MINT A WEBE.
+ *
+ * A webes urlap partnert, helyszint es eszkozoket valasztat. A helyszinen a
+ * szerelo EGY gep elott all, es abbol a harom KOVETKEZIK: az `originAssetId`-bol
+ * a SZERVER vezeti le oket (`placementOfAsset`).
+ *
+ * MIERT NEM A TELEFON VEZETI LE: szallitoi eszkoznel a jegy partnere a szallito
+ * TUKOR-sora (`Supplier.customerId`), ami a partner BELSO reszlete. Kliens-
+ * szerzodesse teve nem lehetne megvaltoztatni anelkul, hogy a telefon elromoljon.
+ */
+export interface CreateServiceJobInput {
+  title: string;
+  description?: string;
+  /** Melyik eszkoznel nyitottak. Ebbol jon a partner es a helyszin. */
+  originAssetId: string;
+  /**
+   * A SOR AZONOSITOJA, ami a szerver IDEMPOTENCIA-KULCSA is. A sor a halozati
+   * hibat SZANDEKOSAN ujraprobalja, es epp ott lehet, hogy a szerver mar
+   * letrehozta a jegyet, csak a valasz veszett el.
+   */
+  clientOperationId?: string;
+}
+
+/**
+ * A MŰVELET-AZONOSÍTÓ A TARTALOMBÓL SZÜLETIK, NEM VÉLETLENBŐL.
+ *
+ * Egy kétszer megnyomott gomb különben KÉT jegyet nyitna ugyanarról a hibáról,
+ * és a szerelő a listán kétszer látná ugyanazt -- offline ráadásul úgy, hogy
+ * mind a kettő fel is megy.
+ *
+ * AZ IDŐBÉLYEG BENNE VAN, ÉS EZ SZÁNDÉKOS: ugyanarról a gépről KÉT külön hibát
+ * is be lehet jelenteni, akár ugyanazzal a címmel („zúg"). Az időpont az, ami
+ * két valódi bejelentést megkülönböztet -- e nélkül a másodikat elnyelnénk.
+ */
+export function serviceJobOperationId(input: {
+  originAssetId: string;
+  openedAt: string;
+}): string {
+  return `service-job:${input.originAssetId}:${input.openedAt}`;
+}

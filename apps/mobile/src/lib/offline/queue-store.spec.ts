@@ -128,16 +128,18 @@ describe("a fénykép sora", () => {
     );
   });
 
-  it("MIND A NÉGY FELVITEL idempotens beszúrással megy be", () => {
+  it("MIND AZ ÖT FELVITEL idempotens beszúrással megy be", () => {
     /*
       MI PIROSIT: egyetlen sima `INSERT` barmelyik FELVITELI agban. Akkor a
       ketszer megnyomott gomb ket sort tenne a sorba, es ugyanaz a felvitel
       KETSZER menne fel.
 
-      A NEGYES SZAM MAGA IS ALLITAS: eszkoz, munkalap, munkalap-tetel, fenykep.
-      Ez a szam 2026-09-04-en haromrol negyre valtozott, es a valtozas PIROSSA
-      tette ezt a sort -- pontosan ugy, ahogy az elozo valtozat kommentje
-      megigerte.
+      AZ OTOS SZAM MAGA IS ALLITAS: eszkoz, munkalap, munkalap-tetel, fenykep,
+      hibajegy. Ez a szam 2026-09-04-en haromrol negyre valtozott, 2026-09-16-an
+      pedig negyrol OTRE (a telefonos jegy-nyitassal) -- es MIND A KETSZER
+      pirossa tette ezt a sort, pontosan ugy, ahogy az elozo valtozat kommentje
+      megigerte. Ez a masodik alkalom, hogy ez az allitas a sajat igeretet
+      beteljesitette.
 
       ES UGYANEZ MEGISMETLODOTT AZNAP, MASODSZOR IS, MASKEPP. Az eszkoz
       MODOSITASA ide mar NEM fer bele, es ez nem kivetel a szabaly alol, hanem
@@ -148,7 +150,7 @@ describe("a fénykép sora", () => {
     const beszurasok = [
       ...forras.matchAll(/INSERT OR IGNORE INTO sync_queue/g),
     ].map((m) => m[0]);
-    assert.equal(beszurasok.length, 4);
+    assert.equal(beszurasok.length, 5);
   });
 
   it("a MÓDOSÍTÁS nem ejti el a másodikat, hanem ÖSSZEFÉSÜLI", () => {

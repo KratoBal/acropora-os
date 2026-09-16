@@ -184,6 +184,7 @@ const FAJTA_NEVE: Record<SyncEntityType, string> = {
   asset: "Eszköz",
   worksheet: "Munkalap",
   "worksheet-line": "Munkalap-tétel",
+  "service-job": "Hibajegy",
 };
 
 /**

@@ -85,6 +85,14 @@ describe("a jegy az eredet-eszközből veszi az elhelyezését", () => {
       assetIds: ["asset-1"],
       actorUserId: "user-1",
       assigneeIds: [],
+      /*
+        A HELYSZINI BEJELENTES KULCSA, ITT `null`: ez a fixture nem kuld ilyet
+        (a webes felvitel sem kuld). A mezo MEGIS itt all, mert a teljes
+        objektum-egyezes a lenyeg -- a tarolo ezt az erteket irja a jegyre, es
+        egy kihagyott mezo eppen azt a fajta csuszast engedne at, amit a
+        `mobile-request-body.spec.ts` ma este megfogott.
+      */
+      clientOperationId: null,
     });
   });
 

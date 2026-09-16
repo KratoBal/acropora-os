@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 
 import { expandAssignedUnits } from "./assigned-units.js";
 import { assetsOutsideDepartment } from "../common/assets-in-department.js";
+import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
 import { SERVICE_ASSIGNABLE_ROLES } from "../common/service-assignment.js";
 import { DOCUMENT_DELETED_ACTION } from "./service-job-documents.repository.js";
 import { ALL_SERVICE_JOB_STATUSES } from "./service-job-status.js";
@@ -145,6 +146,20 @@ export class ServiceJobsRepository {
     return assetsOutsideDepartment(assetIds, departmentId);
   }
 
+  /**
+   * A MAR LETREJOTT JEGY, A HELYSZINI BEJELENTES KULCSA ALAPJAN.
+   *
+   * Ugyanazt az alakot adja vissza, mint a `create`, mert a hivo szamara a ket
+   * eset UGYANAZ: a bejelentes EGY jegyet jelent, akkor is, ha ketszer erkezett
+   * meg.
+   */
+  async byClientOperationId(clientOperationId: string) {
+    return this.database.serviceJob.findUnique({
+      where: { clientOperationId },
+      select: { id: true, jobNumber: true },
+    });
+  }
+
   async create(input: {
     jobNumber: string;
     title: string;
@@ -154,13 +169,53 @@ export class ServiceJobsRepository {
     assetIds: readonly string[];
     actorUserId: string;
     assigneeIds: readonly string[];
+    /** A helyszini bejelentes idempotencia-kulcsa; a weben nincs ilyen. */
+    clientOperationId?: string | null;
   }) {
     // A KELETKEZÉS IS ESEMÉNY, és a naplóba is bekerül - egy tranzakcióban.
     // Külön írva a kettő szétcsúszhatna: egy jegy, aminek nincs első sora a
     // naplóban, úgy néz ki, mintha a semmiből lépett volna tovább.
+    try {
+      return await this.insert(input);
+    } catch (error) {
+      /**
+       * A KET PARHUZAMOS KERES ESETE, ES EZ NEM HIBA.
+       *
+       * A szolgaltatas eloszor RAKERES a kulcsra; a kereses es ez a beszuras
+       * kozott viszont eltelik ido. Ha ugyanaz a bejelentes ketszer erkezik
+       * egyszerre, a masodik itt hasal el az EGYEDI INDEXEN -- es ilyenkor a
+       * hivo ugyanazt a valaszt kapja, mint az elso.
+       *
+       * A SZURES SZUK: kizarolag a `clientOperationId` utkozese. Egy
+       * JEGYSZAM-utkozes VALODI hiba (ket kerés ugyanarra a sorszamra), es
+       * hangosan kell elbuknia -- azt ez az ag nem nyeli el.
+       */
+      if (
+        input.clientOperationId &&
+        isPrismaUniqueConstraintViolation(error, "clientOperationId")
+      ) {
+        const meglevo = await this.byClientOperationId(input.clientOperationId);
+        if (meglevo) return meglevo;
+      }
+      throw error;
+    }
+  }
+
+  private insert(input: {
+    jobNumber: string;
+    title: string;
+    description: string | null;
+    customerId: string | null;
+    departmentId: string | null;
+    assetIds: readonly string[];
+    actorUserId: string;
+    assigneeIds: readonly string[];
+    clientOperationId?: string | null;
+  }) {
     return this.database.serviceJob.create({
       data: {
         jobNumber: input.jobNumber,
+        clientOperationId: input.clientOperationId ?? null,
         title: input.title,
         description: input.description,
         customerId: input.customerId,

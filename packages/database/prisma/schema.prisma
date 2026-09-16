@@ -2568,9 +2568,26 @@ model InvoiceLine {
 }
 
 model ServiceJob {
-  id             String           @id @default(cuid())
-  jobNumber      String           @unique
-  customerId     String?
+  id                String           @id @default(cuid())
+  jobNumber         String           @unique
+  /// A HELYSZÍNI BEJELENTÉS IDEMPOTENCIA-KULCSA -- UGYANAZ A MINTA, MINT AZ
+  /// `Asset.clientOperationId` ÉS A `Worksheet.clientOperationId` MEZŐNÉL.
+  ///
+  /// A telefon térerő nélkül sorba teszi a jegyet, és a sor a hálózati hibát
+  /// SZÁNDÉKOSAN újrapróbálja -- offline az a normális állapot. Épp ott lehet
+  /// viszont, hogy a létrehozás MÁR lefutott, és csak a válasz veszett el.
+  /// Kulcs nélkül az újraküldés MÁSODIK jegyet nyitna ugyanarról a hibáról, és
+  /// a szerelő a listán kétszer látná ugyanazt.
+  ///
+  /// EGYEDI: ez maga a védelem. A létrehozás előtt a kulcsra keresünk, és
+  /// találat esetén a MEGLÉVŐ jegyet adjuk vissza; az egyediség pedig azt is
+  /// elvágja, amit két párhuzamos kérés csúsztatna át a keresés és a beszúrás
+  /// között.
+  ///
+  /// A NULL nem egyenlő önmagával, tehát a kulcs nélküli sorok (minden mai sor
+  /// és minden webes felvitel) korlátlanul állhatnak egymás mellett.
+  clientOperationId String?          @unique
+  customerId        String?
   /// HOL VAN A BAJ: a partner helyszine, ugyanabbol a fabol, amit a munkalap es
   /// az eszkoz hasznal (`WorksheetDepartment`).
   ///
@@ -2588,12 +2605,12 @@ model ServiceJob {
   /// A KAPCSOLAT `Restrict`, nem `SetNull`: egy helyszin, amire nyitott jegy
   /// mutat, nem torolheto ki alola. A fa amugy is archivalassal vezet ki
   /// (`isActive`), nem torlessel -- a `Restrict` ezt teszi kimondotta.
-  departmentId   String?
-  aquariumId     String?
-  status         ServiceJobStatus @default(NEW)
-  title          String
-  description    String?
-  assignedUserId String?
+  departmentId      String?
+  aquariumId        String?
+  status            ServiceJobStatus @default(NEW)
+  title             String
+  description       String?
+  assignedUserId    String?
   /// KI NYITOTTA A JEGYET. Állítás a jegyen, nem következtetés a naplóból.
   ///
   /// A napló első sorából (`toStatus: NEW`) ez eddig is kiolvasható volt, és a
@@ -2627,11 +2644,11 @@ model ServiceJob {
   /// pontosan azt a veszteséget hozná vissza, ami elől a mező kitér -- a törölt
   /// kolléga jegye újra elveszítené a nyitóját. Az azonosító így megmarad akkor
   /// is, ha a felhasználó sora eltűnik.
-  openedById     String?
+  openedById        String?
   /// TERV, NEM ESEMÉNY: valaki BEÁLLÍTJA, jövőbeli időpontra. A naplóból soha
   /// nem vezethető le, mert nem történt meg semmi. MA MÉG SENKI NEM ÍRJA:
   /// ütemezési felület nincs, tehát minden jegyen `null`.
-  scheduledAt    DateTime?
+  scheduledAt       DateTime?
   /// MA EGYIKET SEM ÍRJA SENKI, ÉS EZ SZÁNDÉKOS - a jegy időpontjainak
   /// FORRÁSA a `ServiceJobEvent` napló: abból derül ki, mikor lépett a jegy
   /// `IN_PROGRESS`-be és mikor `COMPLETED`-be. Ez a két mező ma minden jegyen
@@ -2646,10 +2663,10 @@ model ServiceJob {
   /// HA MÉGIS: a lépés írja őket, a naplósorral EGY tranzakcióban és ugyanabból
   /// az időbélyegből, és a napló marad az igazság - eltérés esetén a napló nyer,
   /// az eltérés pedig HIBA, nem két egyenrangú igazság.
-  startedAt      DateTime?
-  completedAt    DateTime?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
   customer   Customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
   department WorksheetDepartment? @relation(fields: [departmentId], references: [id], onDelete: Restrict)
@@ -2816,14 +2833,14 @@ model Asset {
   /// A KET MEZO EGYUTT MOZOG, es ezt CHECK is orzi a tablan: egy "500" onmagaban
   /// nem informacio, hanem talalgatasra hivas (watt? liter per ora?). Ugyanaz az
   /// alak, mint a matrica `assignment_pairing_check`-je.
-  performance         Decimal?  @db.Decimal(19, 6)
+  performance         Decimal?         @db.Decimal(19, 6)
   /// A mezo neve NEM `unitId`: az MAR FOGLALT ezen a modellen, es a HELYSZINT
   /// jelenti (`Asset.unitId` -> `PartnerUnit`). Lasd a `UnitOfMeasure` fejlecet.
   performanceUnitId   String?
   /// `Restrict`, nem `SetNull`: ha egy mertekegyseget valaki torolni akar,
   /// amire eszkozok hivatkoznak, az NEM csendben uritse ki a mezoket -- a
   /// kivezetes utja az `isActive = false`, ami a valasztobol veszi ki.
-  performanceUnit     UnitOfMeasure? @relation("AssetPerformanceUnit", fields: [performanceUnitId], references: [id], onDelete: Restrict)
+  performanceUnit     UnitOfMeasure?   @relation("AssetPerformanceUnit", fields: [performanceUnitId], references: [id], onDelete: Restrict)
   description         String?
   installedAt         DateTime?
   purchasedAt         DateTime?
