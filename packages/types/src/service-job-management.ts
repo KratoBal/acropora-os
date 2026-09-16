@@ -90,10 +90,23 @@ export interface ServiceJobStatusEvent {
   createdAt: string;
 }
 
-/** Egy munkalap a jegy mögött. A szám `null`, amíg a lap piszkozat. */
+/**
+ * Egy munkalap a jegy mögött. A szám `null`, amíg a lap piszkozat.
+ *
+ * A `subject` A LAP NEVE, ÉS A LEGFRISSEBB VERZIÓJÁRÓL JÖN -- ugyanonnan,
+ * ahonnan a csatoló választó is veszi. Azért kell a linknek is, mert a jegy
+ * alatt eddig CSAK a szám állt, és piszkozatnál az sincs: a felhasználó egy
+ * "Piszkozat" feliratot látott, ami minden számozatlan lapnál ugyanaz. Két
+ * piszkozat a jegy alatt megkülönböztethetetlen volt.
+ *
+ * ÜRES STRING LEHET (verzió nélküli lap), és a `""` itt NEM a név hiányát
+ * állítja, hanem azt, hogy nem tudjuk -- a rajzoló ezért esik vissza a
+ * korábbi alakra, ahelyett hogy üres zárójelet írna ki.
+ */
 export interface ServiceJobWorksheetLink {
   id: string;
   number: string | null;
+  subject: string;
   createdAt: string;
   handedOverAt: string | null;
 }

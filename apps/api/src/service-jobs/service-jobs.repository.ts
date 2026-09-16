@@ -688,6 +688,15 @@ export class ServiceJobsRepository {
             number: true,
             createdAt: true,
             handedOverAt: true,
+            // A LAP NEVE A LEGFRISSEBB VERZIOJAROL JON, ugyanugy, ahogy a
+            // csatolo valaszto is veszi (`attachableWorksheets`). A nev a
+            // verzion lakik, nem a lapon: egy javitott targy uj verziot ir, es
+            // a jegy alatt a MAI nevnek kell allnia, nem az elsonek.
+            versions: {
+              orderBy: { version: "desc" },
+              take: 1,
+              select: { subject: true },
+            },
           },
         },
         assets: {

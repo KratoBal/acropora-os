@@ -108,3 +108,28 @@ export function serviceJobStatusTone(
 ): ServiceTone {
   return JOB_STATUS_TONE[status];
 }
+
+/**
+ * EGY MUNKALAP NEVE A JEGY ALATT: NÉV, ÉS ZÁRÓJELBEN AMI AZONOSÍTJA.
+ *
+ * Balázs kérése, 2026-09-16: a jegy alatt eddig CSAK a szám állt, piszkozatnál
+ * pedig a "Piszkozat" szó. Az utóbbi MINDEN számozatlan lapnál ugyanaz, tehát
+ * két piszkozat a jegy alatt megkülönböztethetetlen volt, és a lista nem
+ * mondta meg, miről szól a lap - csak azt, hogy van.
+ *
+ * A NÉV ELŐRE KERÜL, A ZÁRÓJELBE AZ, AMI EDDIG OTT ÁLLT. Lezárt lapnál ez a
+ * szám, piszkozatnál a szó. Így a sor akkor is olvasható marad, ha valaki a
+ * számot keresi - csak már nem az az első, amit lát.
+ *
+ * NÉV NÉLKÜL A RÉGI ALAK MARAD, üres zárójel nélkül: a `""` azt jelenti, hogy
+ * nem tudjuk a nevet (a laphoz nincs verzió), és egy "(Piszkozat)" felirat egy
+ * hiányzó név előtt többet állítana, mint amit tudunk.
+ */
+export function serviceJobWorksheetLabel(worksheet: {
+  number: string | null;
+  subject: string;
+}): string {
+  const azonosito = worksheet.number ?? "Piszkozat";
+  const nev = worksheet.subject.trim();
+  return nev ? `${nev} (${azonosito})` : azonosito;
+}

@@ -64,6 +64,9 @@ function row(overrides: Partial<NonNullable<DetailRow>> = {}) {
         number: null,
         createdAt: new Date("2026-09-02T08:00:00.000Z"),
         handedOverAt: null,
+        // A NEV A LEGFRISSEBB VERZION LAKIK, ezert all itt tombkent: a
+        // lekerdezes `take: 1`-gyel a legmagasabb verziot huzza le.
+        versions: [{ subject: "Szivattyú csere" }],
       },
     ],
     assets: [
@@ -115,6 +118,22 @@ describe("a hibajegy részletlapja", () => {
       detail.timeline.map((entry) => entry.kind),
       ["asset", "worksheet", "status"],
     );
+  });
+
+  /**
+   * A LAP NEVE IS ÁTMEGY A NAPLÓSORBA, NEM CSAK A SZÁMA.
+   *
+   * A név a lap LEGFRISSEBB VERZIÓJÁN lakik, tehát egy relációból jön -- ha a
+   * lekérdezés kihagyná, itt `undefined` állna, a felületen pedig üres
+   * zárójel. Az állítás a VÉGPONT válaszát méri, nem a lekérdezést: a kettő
+   * közé a leképezés is beleesik.
+   */
+  it("a munkalap nevét is kiadja, a legfrissebb verzióról", async () => {
+    const detail = await serviceWith(row()).detail("job-1", BELSOS);
+
+    const sor = detail.timeline.find((entry) => entry.kind === "worksheet");
+    assert.ok(sor?.kind === "worksheet");
+    assert.equal(sor.worksheet.subject, "Szivattyú csere");
   });
 
   /**
