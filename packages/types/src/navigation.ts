@@ -305,6 +305,24 @@ export const NAVIGATION_ENTRIES: readonly NavigationEntry[] = [
     surfaces: ["web"],
     visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
   },
+  {
+    /**
+     * A MÉRTÉKEGYSÉGEK KARBANTARTÁSA.
+     *
+     * A JOG `SETTINGS_MANAGE`, nem `SERVICE_MANAGE` -- ez törzsadat-gondozás,
+     * ugyanaz a fajta, mint a matricakiadás. A szerelő HASZNÁLJA a listát (az
+     * eszköz-szerkesztő legördülője `SERVICE_VIEW` alatt olvassa), de nem
+     * ÍRJA: ha bárki felvihetne egységet, a lista három nap alatt ötféle
+     * „óra" változatot tartalmazna.
+     *
+     * A MENÜPONT ÉS A VÉGPONT UGYANAZT A JOGOT KAPJA. Ha kettévállnának, vagy
+     * látszana a gomb annak, aki nem hívhatja meg, vagy hívhatná az, aki nem
+     * látja -- és a kettő közül csak az első hangos.
+     */
+    id: "units-of-measure",
+    surfaces: ["web"],
+    visibility: permission(PERMISSIONS.SETTINGS_MANAGE),
+  },
   NAV_TILE,
 ];
 

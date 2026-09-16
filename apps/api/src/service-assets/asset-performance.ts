@@ -1,3 +1,5 @@
+import { normalizePerformanceValue } from "@acropora/types";
+
 /**
  * A TELJESITMENY ES A MERTEKEGYSEGE EGYUTT MOZOG -- ES FRISSITESKOR AZ EREDMENYT
  * KELL NEZNI, NEM A BEKULDOTT MEZOT.
@@ -16,7 +18,7 @@
  */
 export type TeljesitmenyAllapot =
   | { rendben: true; performance: string | null; unitId: string | null }
-  | { rendben: false; hiany: "unit" | "szam" };
+  | { rendben: false; hiany: "unit" | "szam" | "alak" };
 
 export function teljesitmenyEredmenye(
   /** Ami MA all az eszkozon. Felvitelnel mind a ketto `null`. */
@@ -27,6 +29,27 @@ export function teljesitmenyEredmenye(
     performanceUnitId?: string | null;
   },
 ): TeljesitmenyAllapot {
+  /**
+   * AZ ALAK-HIBA KULON AG, ES A PAR ELOTT ALL.
+   *
+   * MERVE a valodi `Prisma.Decimal`-on, 2026-09-16: a `"0,5"` DOB
+   * (`[DecimalError] Invalid argument`), es az a hiba a tarolobol a
+   * szolgaltatas `map` fuggvenyenek a vegeig fut, ahol `throw error` all --
+   * **500 lenne belole, nem 400**. A magyar felulet kezeloje pedig
+   * tizedesvesszot ir, tehat ez nem ritka eset.
+   *
+   * ES NEM AZ URES SZOVEGGEL EGY AGON: a `normalizePerformanceValue` mind a
+   * kettore `null`-t ad, de a ketto MAST jelent (torles kontra elgepeles). Ha
+   * egy agon allnanak, egy elgepelt szam CSENDBEN torolne a mezot.
+   */
+  if (
+    bekuldott.performance !== undefined &&
+    bekuldott.performance !== null &&
+    bekuldott.performance.trim() !== "" &&
+    normalizePerformanceValue(bekuldott.performance) === null
+  )
+    return { rendben: false, hiany: "alak" };
+
   const performance =
     bekuldott.performance === undefined
       ? meglevo.performance
@@ -40,7 +63,17 @@ export function teljesitmenyEredmenye(
     return { rendben: false, hiany: "unit" };
   if (performance === null && unitId !== null)
     return { rendben: false, hiany: "szam" };
-  return { rendben: true, performance, unitId };
+  /**
+   * A NORMALIZALT ALAK MEGY TOVABB, NEM A BEGEPELT. A meglevo ertek mar
+   * normalizalt (a tarolobol jon), tehat a ketszeres hivas artalmatlan -- es a
+   * fuggveny igy EGYETLEN alakot ad vissza, barmelyik uton jott az ertek.
+   */
+  return {
+    rendben: true,
+    performance:
+      performance === null ? null : normalizePerformanceValue(performance),
+    unitId,
+  };
 }
 
 /**

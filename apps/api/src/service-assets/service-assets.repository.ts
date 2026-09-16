@@ -183,11 +183,13 @@ export class AssetLabelUnavailableError extends Error {
  * "probald ujra maskepp", a 400 azt, hogy "javitsd ki, amit kuldtel".
  */
 export class AssetPerformancePairError extends Error {
-  constructor(readonly hiany: "unit" | "szam") {
+  constructor(readonly hiany: "unit" | "szam" | "alak") {
     super(
       hiany === "unit"
         ? "A teljesítményhez mértékegységet is kell választani."
-        : "A mértékegység mellé teljesítmény-értéket is kell írni.",
+        : hiany === "szam"
+          ? "A mértékegység mellé teljesítmény-értéket is kell írni."
+          : "A teljesítmény csak szám lehet, legfeljebb hat tizedesjeggyel (például 0,5 vagy 500).",
     );
   }
 }

@@ -105,6 +105,48 @@ describe("a teljesítmény és a mértékegysége együtt mozog", () => {
     );
   });
 
+  /**
+   * AZ ALAK-HIBA SAJAT AGA -- ES A MERES SZERINT ENELKUL 500 LENNE.
+   *
+   * A `Prisma.Decimal` a `"0,5"` alakra DOBOTT (merve a valodi osztalyon), es
+   * az a hiba a szolgaltatas `map` fuggvenyenek a vegeig fut. A magyar
+   * felulet kezeloje pedig tizedesvesszot ir.
+   */
+  it("a tizedesvessző ÁTMEGY, és pontra fordul", () => {
+    assert.deepEqual(
+      teljesitmenyEredmenye(URES, {
+        performance: "0,5",
+        performanceUnitId: "uom_perf_w",
+      }),
+      { rendben: true, performance: "0.5", unitId: "uom_perf_w" },
+    );
+  });
+
+  it("az elgépelt szám ELBUKIK, nem törli némán a mezőt", () => {
+    assert.deepEqual(
+      teljesitmenyEredmenye(MEGLEVO, { performance: "ötszáz" }),
+      {
+        rendben: false,
+        hiany: "alak",
+      },
+    );
+  });
+
+  /**
+   * A TESTVER-KONTROLL AZ ELOZOHOZ. Az ures szoveg UGYANUGY `null`-t ad a
+   * normalizalastol, megis MAST jelent: torlest. Ha a ketto egy agon allna,
+   * egy elgepelt szam csendben leszedne a teljesitmenyt az eszkozrol.
+   */
+  it("az üres szöveg viszont TÖRLÉS marad, nem alak-hiba", () => {
+    assert.deepEqual(
+      teljesitmenyEredmenye(MEGLEVO, {
+        performance: "",
+        performanceUnitId: "",
+      }),
+      { rendben: true, performance: null, unitId: null },
+    );
+  });
+
   it("a szám körüli szóköz nem számít értéknek, de a szám igen", () => {
     assert.deepEqual(teljesitmenyEredmenye(MEGLEVO, { performance: " 750 " }), {
       rendben: true,

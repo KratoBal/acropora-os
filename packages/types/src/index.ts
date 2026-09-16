@@ -159,6 +159,8 @@ export type {
   UnitOfMeasureListResponse,
 } from "./unit-of-measure.js";
 export {
+  normalizePerformanceValue,
+  performanceValueProblem,
   UNIT_OF_MEASURE_KINDS,
   unitOfMeasureKindLabel,
 } from "./unit-of-measure.js";
