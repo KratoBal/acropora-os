@@ -105,6 +105,39 @@ export class ServiceJobsRepository {
    * kerdezi. Ez a metodus megmarad, hogy a hivoi ne valtozzanak -- de a
    * szabalybol csak EGY peldany van.
    */
+  /**
+   * HONNAN NYITOTTAK A JEGYET: az eszkoz elhelyezese, egy lekerdezessel.
+   *
+   * A SZALLITO TULAJDONOSNAL A TUKOR-SORT ADJA VISSZA, nem a szallito
+   * azonositojat. A jegy partnere `Customer`, az eszkozé lehet `Supplier` -- es
+   * a ketto kozott a `Supplier.customerId` tukor-sor all, amit a rendszer maga
+   * tart szinkronban (`syncWorksheetMirror`). Ha a kliens a szallito
+   * azonositojat kapna es azt kuldene vissza, egy NEM LETEZO partnerre nyitna
+   * jegyet -- es a hiba csak a mentesnel latszana.
+   *
+   * A TUKOR HIANYOZHAT: csak szerviz-jelolt partnerre keletkezik. A `null` itt
+   * nem hiba, hanem valasz: a jegy partner nelkul szuletik, es a felulet ezt ki
+   * is mondja.
+   */
+  async placementOfAsset(assetId: string): Promise<{
+    customerId: string | null;
+    departmentId: string | null;
+  } | null> {
+    const asset = await prisma.asset.findUnique({
+      where: { id: assetId },
+      select: {
+        customerId: true,
+        departmentId: true,
+        supplier: { select: { customerId: true } },
+      },
+    });
+    if (!asset) return null;
+    return {
+      customerId: asset.customerId ?? asset.supplier?.customerId ?? null,
+      departmentId: asset.departmentId,
+    };
+  }
+
   async assetsOutsideDepartment(
     assetIds: readonly string[],
     departmentId: string,

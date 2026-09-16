@@ -88,8 +88,24 @@ export class ServiceJobsService {
     const last = await this.repository.lastNumberOfYear(
       serviceJobNumberPrefix(year),
     );
-    const customerId = input.customerId?.trim() || null;
-    const departmentId = input.departmentId?.trim() || null;
+    /**
+     * AMIT A TELEFON NEM TUD MEGADNI, AZT AZ ESZKOZBOL VEZETJUK LE.
+     *
+     * A helyszinen a szerelo EGY eszkoz elott all, es abbol a partner es a
+     * helyszin mar kovetkezik. A megadott ertek viszont ELSOBBSEGET elvez: ez
+     * a mezo POTOL, nem felulir.
+     */
+    const honnan = input.originAssetId?.trim() || null;
+    const eredet = honnan
+      ? await this.repository.placementOfAsset(honnan)
+      : null;
+    if (honnan && !eredet)
+      throw new BadRequestException(
+        "A megadott eszköz nem található, ezért nem tudom, hova tartozik a jegy.",
+      );
+    const customerId = input.customerId?.trim() || eredet?.customerId || null;
+    const departmentId =
+      input.departmentId?.trim() || eredet?.departmentId || null;
     /**
      * A HELYSZIN A MEGADOTT PARTNERE LEGYEN, ES EZ A SZERVEREN DOL EL.
      *
@@ -130,15 +146,32 @@ export class ServiceJobsService {
      * ([serviceJobId, assetId]) all, tehat ket azonos sor amugy is elhasalna --
      * itt egyszeruen kiszurjuk, mielott a tarolohoz erne.
      */
-    const assetIds = normalizeAssetIds(input.assetIds);
-    if (assetIds.length > 0) {
+    const valasztott = normalizeAssetIds(input.assetIds);
+    if (valasztott.length > 0) {
       if (!departmentId) {
         throw new BadRequestException(
           "Eszközt csak helyszínnel együtt lehet megadni.",
         );
       }
-      await this.requireAssetsOnDepartment(assetIds, departmentId);
+      await this.requireAssetsOnDepartment(valasztott, departmentId);
     }
+    /**
+     * AZ EREDET-ESZKOZ AKKOR IS FELKERUL, HA NINCS HELYSZINE -- ES EZ ELTER A
+     * VALASZTOTT ESZKOZOK SZABALYATOL, SZANDEKOSAN.
+     *
+     * A "csak helyszinnel egyutt" szabaly oka az, hogy a VALASZTHATO halmaz
+     * maga a helyszin eszkozeibol all: helyszin nelkul a felhasznalo nem tudna
+     * mibol valasztani. Az eredet-eszkoznel nincs halmaz -- a szerelo MEGNEVEZI
+     * azt az egyet, ami elott all.
+     *
+     * ES A HELYSZIN NELKULI ESZKOZ NEM ELMELETI: az `Asset.departmentId`
+     * opcionalis. Ha ilyenkor elutasitanank, a szerelo epp arrol a gepről nem
+     * tudna jegyet nyitni, aminek meg nincs rogzitve a helye -- vagy nyitna
+     * egyet, ami CSENDBEN nem emliti az eszkozt. A masodik a rosszabb.
+     */
+    const assetIds = honnan
+      ? [...new Set([...valasztott, honnan])]
+      : valasztott;
     const title = input.title.trim();
     const created = await this.repository.create({
       jobNumber: nextServiceJobNumber({ year, lastNumber: last }),
@@ -797,7 +830,7 @@ export class ServiceJobsService {
      * MI NYITNA MEG: ha a partner nelkuli jegy GYAKORINAK bizonyul elesben, es
      * a plusz lepes zavaro. Akkor sem a csendes atvetel jonne, hanem egy
      * KIMONDOTT alak: a csatolas felajanlja a jegy partnerenek beallitasat, es
-     * a felhasznalo megerositi. Ez ma nem donthetо el maskepp: nulla adatunk
+     * a felhasznalo megerositi. Ez ma nem dontheto el maskepp: nulla adatunk
      * van rola, mert a modul meg nem all elesben.
      */
     /**
