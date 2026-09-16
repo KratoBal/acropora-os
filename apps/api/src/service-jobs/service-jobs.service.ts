@@ -81,6 +81,31 @@ export class ServiceJobsService {
     actorUserId: string,
     now: Date = new Date(),
   ) {
+    /**
+     * A HELYSZINI BEJELENTES KULCSA A LEGELSO KERDES, MINDEN MAS ELOTT.
+     *
+     * A telefon terero nelkul sorba teszi a jegyet, es a sor a halozati hibat
+     * SZANDEKOSAN ujraprobalja -- offline az a normalis allapot. Epp ott lehet
+     * viszont, hogy ez a metodus MAR lefutott, es csak a valasz veszett el.
+     * Kulcs nelkul az ujrakuldes MASODIK jegyet nyitna ugyanarrol a hibarol.
+     *
+     * ES MIERT ITT, NEM A TARBAN (az eszkoznel ott all): harom dolog tortenne
+     * meg fololegesen, es a HARMADIK nem is artalmatlan.
+     *   - a delegaltak ujra-ellenorzese: egy felesleges kor,
+     *   - egy JEGYSZAM elhasznalasa: a sorszam a kereses utan tovabb lep,
+     *   - ES UJABB ERTESITES a delegaltaknak ugyanarrol a jegyrol. Az mar a
+     *     kollega telefonjan csorren meg masodszor, ugyanarra a munkara.
+     *
+     * A KERESES NEM ONMAGABAN A VEDELEM: ket parhuzamos keres a kereses es a
+     * beszuras kozott elcsuszhat. Azt az esetet az EGYEDI INDEX vagja el, es a
+     * tar `create` metodusa forditja vissza ugyanarra a valaszra.
+     */
+    const kulcs = input.clientOperationId?.trim() || null;
+    if (kulcs) {
+      const meglevo = await this.repository.byClientOperationId(kulcs);
+      if (meglevo) return meglevo;
+    }
+
     const assigneeIds = normalizeAssigneeIds(input.assigneeIds ?? []);
     await this.requireAssignableUsers(assigneeIds);
 
@@ -182,6 +207,7 @@ export class ServiceJobsService {
       assetIds,
       actorUserId,
       assigneeIds,
+      clientOperationId: kulcs,
     });
 
     // ERTESITES CSAK AZUTAN, hogy a jegy tarolva van. Felvitelkor minden

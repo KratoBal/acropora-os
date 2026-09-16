@@ -155,7 +155,19 @@ describe("a keletkezési út beírja a nyitót", () => {
       -1,
       "nem találtam a serviceJob.create hívást -- a minta KEZDETE romlott el, nem a kód",
     );
-    const veg = kommentNelkul.indexOf("select: { id: true, jobNumber: true }");
+    /**
+     * A VEG-HORGONY A KEZDET UTAN KERES, ES EZT EGY VALODI PIROS KERTE (2026-09-17).
+     *
+     * A tarba bekerult egy `byClientOperationId` metodus -- a bejelentes
+     * idempotencia-kulcsara --, ami UGYANEZT a `select` sort hasznalja, es a
+     * fajlban ELOBB all. A nulladik karaktertol keresve a veg a KEZDET ELE
+     * esett, a kivagott resz ures lett, es az orzo elbukott. Helyesen: nem a
+     * kod romlott el, hanem a horgony volt tul tag.
+     */
+    const veg = kommentNelkul.indexOf(
+      "select: { id: true, jobNumber: true }",
+      kezdet,
+    );
     assert.notEqual(
       veg,
       -1,

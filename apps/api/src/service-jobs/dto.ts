@@ -5,6 +5,7 @@ import {
   IsIn,
   IsOptional,
   IsString,
+  Matches,
   MaxLength,
   MinLength,
 } from "class-validator";
@@ -90,6 +91,31 @@ export class CreateServiceJobDto {
   @IsString({ each: true })
   @IsOptional()
   assigneeIds?: string[];
+  /**
+   * A HELYSZINI BEJELENTES IDEMPOTENCIA-KULCSA.
+   *
+   * A telefon terero nelkul SORBA teszi a jegyet, es a sor a halozati hibat
+   * SZANDEKOSAN ujraprobalja. Epp ott lehet viszont, hogy a letrehozas MAR
+   * lefutott, es csak a valasz veszett el -- kulcs nelkul az ujrakuldes MASODIK
+   * jegyet nyitna ugyanarrol a hibarol.
+   *
+   * ELHAGYHATO: a webes urlap nem kuld kulcsot, es terero mellett a felvitel
+   * nem is all sorba, tehat nincs mit ujrakuldeni.
+   *
+   * ES MIERT NEM ELEG A DTO: a mezo ONMAGABAN csak atengedne a kerest. A
+   * vedelmet a `ServiceJob.clientOperationId` EGYEDI oszlopa adja, plusz a
+   * letrehozas ket aga (elozetes kereses, es a unique-utkozes elkapasa).
+   *
+   * UGYANAZ AZ ALAK, MINT AZ ESZKOZNEL ES A MUNKALAPNAL, es ez szandekos: a
+   * telefonon egy sor viszi mind a hármat, es harom kulonbozo minta abban a
+   * sorban a legrosszabb hely.
+   */
+  @Matches(/^[A-Za-z0-9_.:-]{8,128}$/, {
+    message:
+      "A művelet-azonosító 8-128 karakter lehet: betű, szám, kötőjel, aláhúzás, pont és kettőspont.",
+  })
+  @IsOptional()
+  clientOperationId?: string;
 }
 
 /**
