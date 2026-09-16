@@ -30,6 +30,28 @@ import { collectUnitSubtreeIds } from "../service-assets/unit-subtree.js";
  * MELYIK eszkozzel van baj -- egy puszta elutasitas arra kenyszeritene a
  * felhasznalot, hogy egyesevel probalgassa.
  */
+/**
+ * A BEKULDOTT ESZKOZ-LISTA RENDBETETELE: ures elemek el, ismetlodes osszevonva.
+ *
+ * UGYANAZ AZ ALAK, MINT A `normalizeAssigneeIds`-nel, es ugyanabbol az okbol:
+ * a kapcsolotablan `@@unique([serviceJobId, assetId])` all, tehat ket azonos
+ * sor amugy is elhasalna -- pedig a szandek egyertelmu, es az eredmeny ugyanaz
+ * a jegy.
+ *
+ * A LEVAGAS A HALMAZ-KEPZES ELOTT TORTENIK, es ez nem szorszalhasogatas: ket
+ * azonos azonosito, ami csak szokozben ter el, kulon elemkent eli tul a
+ * `Set`-et, es a tranzakcio a masodiknal hasal el az egyedi kulcson.
+ *
+ * KOZOS FUGGVENY, mert ket ut hasznalja: a jegy FELVITELE es a helyszin-eszkoz
+ * beallitas (`placement`) a felvitel utan. Ket peldany addig egyezne, amig
+ * valaki az egyiket javitja.
+ */
+export function normalizeAssetIds(
+  assetIds: readonly string[] | undefined,
+): string[] {
+  return [...new Set((assetIds ?? []).map((id) => id.trim()).filter(Boolean))];
+}
+
 export async function assetsOutsideDepartment(
   assetIds: readonly string[],
   departmentId: string,

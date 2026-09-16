@@ -92,6 +92,54 @@ export class SetServiceJobAssigneesDto {
   userIds!: string[];
 }
 
+/**
+ * A JEGY HELYSZINE ES AZ OTT ALLO ESZKOZOK, EGYUTT, A FELVITEL UTAN.
+ *
+ * Balazs kerese, 2026-09-16: "Meglevo hibajegynel ugyanigy jo lenne ha hozza
+ * lehetne adni eszkozt. illetve a helyszint is jo lenne ha leehtne modositani".
+ *
+ * === MIERT EGY DTO ES EGY VEGPONT, ES NEM KETTO ===
+ *
+ * Mert a felvitelen is EGY szabaly koti ossze oket: eszkozt csak helyszinnel
+ * egyutt lehet megadni, es az eszkozoknek a helyszin RESZFAJAN kell allniuk.
+ * Ket kulon vegpont ugyanazt a szabalyt ket helyen mondana ki, es
+ * SORREND-FUGGOSEGET szulne: aki eloszor a helyszint valtja, annak a jegyen
+ * allo eszkozok abban a pillanatban ervenytelenek; aki eloszor az eszkozt veszi
+ * le, az elveszti oket akkor is, ha a helyszin-valtas utana elhasal.
+ *
+ * === AZ ESZKOZ-LISTA A TELJES HALMAZ, ES A MEZO KOTELEZO ===
+ *
+ * Ugyanaz az alak, mint a `SetServiceJobAssigneesDto`-nal, es ugyanabbol az
+ * okbol: aki nincs rajta, lekerul, es egy elgepelt vagy kimaradt mezonek nem
+ * szabad csendben leszedni mindent. Ures listat kuldeni SZABAD -- az kimondott
+ * szandek.
+ *
+ * ES EZ EGYBEN A MEGEROSITES HELYE: helyszin-valtaskor a felulet megnevezi,
+ * melyik eszkoz esne le az uj helyszin reszfajarol, es a felhasznalo dont. Az o
+ * dontese IGY UTAZIK a keresben -- a szerver tehat soha nem tud leszedni olyat,
+ * amit a felhasznalo nem latott.
+ *
+ * === A HELYSZIN NEM URITHETO ===
+ *
+ * A mezo kotelezo, es nem vesz fel `null` erteket. Egy ures helyszin az OSSZES
+ * eszkozt leszedne a jegyrol, es erre nincs keres. Ami viszont van: a felvitelen
+ * a helyszin ELHAGYHATO, tehat letezik helyszin NELKULI jegy -- azon ez a
+ * vegpont az ELSO beallitast vegzi, es ott nincs leeso eszkoz.
+ */
+export class SetServiceJobPlacementDto {
+  @IsString() @MinLength(1) @MaxLength(64) departmentId!: string;
+  /**
+   * UGYANAZ A FELSO HATAR, mint a felvitelen (`ArrayMaxSize(50)`): ket
+   * kulonbozo hatar ugyanarra a listara csak azt jelentene, hogy az egyiket
+   * elfelejtettuk karbantartani.
+   */
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @MinLength(1, { each: true })
+  assetIds!: string[];
+}
+
 export const SERVICE_JOB_LIST_SCOPES = ["open", "all"] as const;
 
 /**

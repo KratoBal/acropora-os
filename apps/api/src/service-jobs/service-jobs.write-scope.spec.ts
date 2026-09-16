@@ -104,6 +104,16 @@ function serviceWith(overrides: Partial<ServiceJobsRepository> = {}) {
       irasok.push("setAssignees");
       return { ok: true, added: [] };
     },
+    // A HELYSZIN-ES-ESZKOZ UT SAJAT ELOFELTETELEI: a helyszin a jegy
+    // partnereé, es a bekuldott eszkozok a reszfajan allnak. Enelkul a
+    // KONTROLL (belsos hivo) a sajat ellenorzesein hasalna el, es a pirosa nem
+    // a hatokorrol szolna.
+    departmentBelongsToCustomer: async () => true,
+    assetsOutsideDepartment: async () => [],
+    setPlacement: async () => {
+      irasok.push("setPlacement");
+      return true;
+    },
     ...overrides,
   } as unknown as Partial<ServiceJobsRepository>;
   return {
@@ -160,6 +170,15 @@ const UTAK: {
     nev: "setAssignees",
     hivas: (service, user) =>
       service.setAssignees("job-1", { userIds: [] }, user),
+  },
+  {
+    nev: "setPlacement",
+    hivas: (service, user) =>
+      service.setPlacement(
+        "job-1",
+        { departmentId: "unit-9", assetIds: [] },
+        user,
+      ),
   },
 ];
 
@@ -269,6 +288,15 @@ describe("a kontroller atadja a hivot, es a partner igy sem ir", () => {
         controller.setAssignees(
           "job-1",
           { userIds: [] },
+          user,
+        ) as Promise<unknown>,
+    },
+    {
+      nev: "setPlacement",
+      hivas: (controller, user) =>
+        controller.setPlacement(
+          "job-1",
+          { departmentId: "unit-9", assetIds: [] },
           user,
         ) as Promise<unknown>,
     },
