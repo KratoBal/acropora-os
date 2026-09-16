@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type {
   AssetDetail,
   AssetOwnerListResponse,
@@ -207,5 +208,118 @@ describe("AssetEditorPage kapcsolat nélkül", () => {
     render(<AssetEditorPage />);
 
     expect(await savotMond("form")).toBeTruthy();
+  });
+});
+
+/**
+ * A MATRICAKOD A WEBES URLAPON.
+ *
+ * MIERT KELLETT, ES MIT NEM MER EZ A FAJL. Ket kulonbozo azonosito van: az
+ * `Asset.qrToken` az ADATBAZIS alapertelmezese, tehat minden eszkoz kap egyet,
+ * barhonnan is viszik fel -- az `AssetLabel` ezzel szemben az elore KINYOMTATOTT
+ * matricak keszlete. A szerver oldal es a MOBIL urlap ota kesz, a webes urlapon
+ * viszont egyaltalan nem volt mezo ra (merve 2026-09-16: a `labelCode` mintara
+ * az `apps/web` fa alatt nulla talalat), tehat webrol felvitt eszkozhoz
+ * nyomtatott matricat semmilyen uton nem lehetett rendelni.
+ *
+ * AZ ITTENI ALLITASOK A HIVAS TARTALMARA SZOLNAK, NEM A FOGLALASRA. Hogy a kod
+ * tenyleg lefoglalodik es ketszer nem oszthato ki, azt az
+ * `asset-label.integration.spec.ts` meri az adatbazison. Ha csak az allna, a mai
+ * hiba akkor is zold maradna: ott a kod ELMEGY a szerverig, itt eppen az volt a
+ * baj, hogy el sem indult.
+ */
+describe("AssetEditorPage matricakód", () => {
+  beforeEach(() => {
+    api.owners.mockResolvedValue(owners([servicePartner]));
+    api.create.mockResolvedValue({ ...asset, id: "asset-uj" });
+  });
+
+  /** A TAROLT ALAK NAGYBETUS (`AssetLabel_code_shape_check`), a bemenet
+   * szandekosan megengedobb. Ha a lap a begepelt alakot kuldene, a mentes a
+   * tablan bukna el, es a kezelo egy ertelmezhetetlen hibat latna. */
+  it("a begépelt kódot normalizálva küldi el", async () => {
+    const user = userEvent.setup();
+    render(<AssetEditorPage />);
+
+    await user.selectOptions(
+      await screen.findByLabelText("Partner"),
+      "SUPPLIER:supplier-1",
+    );
+    await user.type(screen.getByLabelText("Eszköz neve"), "Kompresszor");
+    await user.type(screen.getByLabelText("Matrica kódja"), " v2196 ");
+    await user.click(
+      screen.getByRole("button", { name: "Eszköz létrehozása" }),
+    );
+
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
+    expect(api.create.mock.calls[0]?.[1]?.labelCode).toBe("V2196");
+  });
+
+  /**
+   * TESTVER-KONTROLL, ES NEM DISZ: az elso allitas AKKOR IS zold lenne, ha a
+   * mezot MINDIG elkuldenenk. Az ures szoveg viszont nem "nincs matrica", hanem
+   * ervenytelen kod -- a szerver `normalizeAssetLabelCode` hivasa `null`-t adna
+   * ra, es a felvitel elbukna azon, hogy a kezelo NEM adott meg kodot. A
+   * matrica pedig szandekosan elhagyhato (`ASSET_LABEL_REQUIRED_ON_CREATE`).
+   */
+  it("üres mezőnél a kulcs el sem megy", async () => {
+    const user = userEvent.setup();
+    render(<AssetEditorPage />);
+
+    await user.selectOptions(
+      await screen.findByLabelText("Partner"),
+      "SUPPLIER:supplier-1",
+    );
+    await user.type(screen.getByLabelText("Eszköz neve"), "Kompresszor");
+    await user.click(
+      screen.getByRole("button", { name: "Eszköz létrehozása" }),
+    );
+
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(1));
+    expect(api.create.mock.calls[0]?.[1]?.labelCode).toBeUndefined();
+  });
+
+  /** A ROSSZ ALAK ITT All MEG, NEM A SZERVERNEL: ugyanabbol a fuggvenybol, mint
+   * a telefone es a szervere. Az allitas a MENTES ELMARADASAT is meri, nem csak
+   * a mondatot -- egy hibauzenet, ami mellett a hivas megis elmegy, rosszabb a
+   * semminel. */
+  it("a rossz alakú kód megállítja a mentést, és megnevezi az alakot", async () => {
+    const user = userEvent.setup();
+    render(<AssetEditorPage />);
+
+    await user.selectOptions(
+      await screen.findByLabelText("Partner"),
+      "SUPPLIER:supplier-1",
+    );
+    await user.type(screen.getByLabelText("Eszköz neve"), "Kompresszor");
+    await user.type(screen.getByLabelText("Matrica kódja"), "ROSSZ");
+    await user.click(
+      screen.getByRole("button", { name: "Eszköz létrehozása" }),
+    );
+
+    /**
+     * A MEZO LEIRASA IS TARTALMAZZA AZ ALAKOT, tehat egy tag minta KET elemet
+     * talal, es a `findByText` ilyenkor HIBAT dob -- nem azert, mert a
+     * hibauzenet hianyzik. Merve: ez a sor elobb tag mintaval allt, es ugy
+     * bukott el, hogy a javitando viselkedes kozben rendben volt.
+     */
+    expect(
+      await screen.findByText(/^A matrica kódja egy betű és négy szám/),
+    ).toBeTruthy();
+    expect(api.create).not.toHaveBeenCalled();
+  });
+
+  /**
+   * MEGLEVO ESZKOZON A MEZO NINCS OTT, es ez nem szepseg-dontes: a szerver
+   * `UpdateAssetDto`-ja NEM ismer `labelCode` mezot (merve 2026-09-16), tehat
+   * egy szerkeszteskor kitoltott mezo CSENDBEN elveszne. A kezelo azt hinne,
+   * hozzarendelte a matricat.
+   */
+  it("meglévő eszköz szerkesztésekor nincs matrica mező", async () => {
+    api.detail.mockResolvedValue(asset);
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    await waitFor(() => expect(api.detail).toHaveBeenCalled());
+    expect(screen.queryByLabelText("Matrica kódja")).toBeNull();
   });
 });
