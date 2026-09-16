@@ -624,11 +624,31 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
               />
             </FormField>
             {/*
+              A KET SZAM, AMI UGYANARROL AZ ESZKOZROL SZOL, DE NEM A MIENK:
+              a gyarto sorozatszama es a partner leltari szama. Egymas mellett
+              allnak, mert a kezelo rendszerint mind a kettot ugyanarrol a
+              tablarol masolja le.
+            */}
+            <FormField label="Leltári szám">
+              <Input
+                aria-label="Leltári szám"
+                value={inventoryNumber}
+                onChange={(event) => setInventoryNumber(event.target.value)}
+              />
+            </FormField>
+            {/*
               A TELJESITMENY ES A MERTEKEGYSEGE EGYMAS MELLETT ALL, es ez nem
               elrendezesi kerdes: a ketto EGY adat. Egy "500" mertekegyseg
               nelkul nem informacio, hanem talalgatasra hivas -- es a mentes
               is elutasitja. Ket kulon helyen allva a kezelo nem latna, hogy
               osszetartoznak.
+
+              EZ A MONDAT 2026-09-16-IG TULLOTT A VALOSAGON, ES BALAZS LATTA
+              MEG. A ket mezo a forrasban egymas utan allt, a ketoszlopos racs
+              viszont KET KULONBOZO SORBA tette oket, mert a "Leltari szam"
+              koztuk volt. A komment tehat igazat allitott a sorrendrol es
+              hamisat a kepernyorol. A sorrend most mar azt adja, amit a
+              mondat igér.
             */}
             <FormField
               label="Teljesítmény"
@@ -657,13 +677,6 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
                   ),
                 )}
               </Select>
-            </FormField>
-            <FormField label="Leltári szám">
-              <Input
-                aria-label="Leltári szám"
-                value={inventoryNumber}
-                onChange={(event) => setInventoryNumber(event.target.value)}
-              />
             </FormField>
             {/*
               A MI MATRICANK, NEM A PARTNERE. A fenti mezo a partner sajat
