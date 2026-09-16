@@ -19,6 +19,17 @@ import {
  * hogy a gomb NEM CSINÁL SEMMIT.
  */
 
+/**
+ * A ROSSZ ALAK MONDATA, EGY HELYEN -- ES MOSTANTOL KET KEPERNYONEK.
+ *
+ * A felvitel eddig is ezt mondta; a SZERKESZTO kepernyo 2026-09-16 ota
+ * ugyanezt a kerdest teszi fel (utolag felvitt matricakod), tehat ugyanezt a
+ * mondatot kell mondania. Ket begepelt valtozat ket kepernyon ugyanarra a
+ * hibara maga is hiba: a szerelo azt hinne, ket kulonbozo dologrol van szo.
+ */
+export const MATRICA_ALAK_UZENET =
+  "A matrica kódja egy betű és négy szám, például V2196.";
+
 export interface AssetCreateForm {
   owner: { type: AssetOwnerType; id: string } | null;
   /**
@@ -228,7 +239,7 @@ export function buildAssetCreatePayload(
     return {
       ok: false,
       field: "labelCode",
-      message: "A matrica kódja egy betű és négy szám, például V2196.",
+      message: MATRICA_ALAK_UZENET,
     };
 
   const intervalText = form.interval.trim();

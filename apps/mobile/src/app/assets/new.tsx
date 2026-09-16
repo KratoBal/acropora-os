@@ -1,4 +1,3 @@
-import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
@@ -35,6 +34,10 @@ import {
 import { listPartnerUnits, type PartnerUnit } from "@/lib/api/partners";
 import { selectableUnitOptions } from "@/lib/partners/site-tree";
 import { CollapsedPicker, UnitPicker } from "@/components/assets/unit-picker";
+import {
+  LabelCodeField,
+  useLabelScanner,
+} from "@/components/assets/label-code-field";
 import DateTimePicker, {
   type DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
@@ -45,7 +48,6 @@ import {
   dateInputValue,
   type AssetCreateField,
 } from "@/lib/assets/asset-create";
-import { normalizeAssetLabelCode } from "@/lib/assets/asset-label-mirror";
 import {
   decideOfflineRecord,
   describeQueueWrite,
@@ -100,17 +102,9 @@ export default function NewAssetScreen() {
   const [serialNumber, setSerialNumber] = useState("");
   const [inventoryNumber, setInventoryNumber] = useState("");
   const [labelCode, setLabelCode] = useState("");
-  /**
-   * A BEOLVASAS UGYANEZEN A KEPERNYON TORTENIK, NEM MASIKON.
-   *
-   * Egy kulon leolvaso-kepernyore navigalva vissza kellene hozni az erteket --
-   * es kozben az urlap TOBBI mezoje elveszne, mert a kepernyo ujra epulne. A
-   * szerelo a helyszinen mar kitoltotte oket. Ezert a kamera itt, ratetkent
-   * nyilik: navigacio nincs, allapot nem vesz el.
-   */
-  const [scanOpen, setScanOpen] = useState(false);
-  const [scanMessage, setScanMessage] = useState("");
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  // A BEOLVASO A KOZOS ALLVANYBOL JON, ugyanabbol, amit a szerkeszto kepernyo
+  // is hasznal. Az indoklas (miert ratet, es miert nem masik kepernyo) ott all.
+  const scanner = useLabelScanner(setLabelCode);
   const [installedAt, setInstalledAt] = useState("");
   const [interval, setInterval] = useState("");
   const [datePickerOpen, setDatePickerOpen] = useState(false);
@@ -792,42 +786,17 @@ export default function NewAssetScreen() {
               value={inventoryNumber}
               onChangeText={setInventoryNumber}
             />
-            {/*
-              A MI MATRICANK, NEM A PARTNERE. A fenti mezo a partner sajat
-              azonositoja; ez az elore nyomtatott, altalunk kiadott kod. A
-              regi, generalt QR-token nem ez, es nem is keruel vissza: az
-              tovabbra is a beolvasas kulcsa marad (Balazs, 2026-09-02 16:27).
-            */}
-            <Field
-              label="Matrica kódja"
+            <LabelCodeField
               value={labelCode}
-              onChangeText={setLabelCode}
-              autoCapitalize="characters"
-            />
-            <FieldError error={error} field="labelCode" />
-            <Pressable
-              style={styles.scanButton}
-              onPress={async () => {
-                setScanMessage("");
-                if (!cameraPermission?.granted) {
-                  const kapott = await requestCameraPermission();
-                  if (!kapott.granted) {
-                    // A MEGTAGADAS NEM NEMA. Enelkul a gomb ugy nezne ki,
-                    // mintha elromlott volna: megnyomod, es nem tortenik semmi.
-                    setScanMessage(
-                      "A kamerához nincs engedély. Írd be a kódot kézzel.",
-                    );
-                    return;
-                  }
-                }
-                setScanOpen(true);
-              }}
+              onChange={setLabelCode}
+              scanner={scanner}
             >
-              <Text style={styles.scanButtonText}>Matrica beolvasása</Text>
-            </Pressable>
-            {scanMessage ? (
-              <Text style={styles.fieldError}>{scanMessage}</Text>
-            ) : null}
+              <Text style={styles.scanNote}>
+                A MI matricánk, nem a partneré. A fenti mező a partner saját
+                azonosítója; ez az előre nyomtatott, általunk kiadott kód.
+              </Text>
+            </LabelCodeField>
+            <FieldError error={error} field="labelCode" />
             {/*
               A RENDSZER SAJÁT DÁTUMVÁLASZTÓJA (Balázs döntése, 2026-08-25).
               A mező mögött ugyanaz az `ÉÉÉÉ-HH-NN` szöveg marad, amit a kérés
@@ -954,48 +923,7 @@ export default function NewAssetScreen() {
         A KAMERA RATETKENT, AZ URLAP FOLOTT. Nincs navigacio, tehat a mar
         kitoltott mezok megmaradnak -- ez volt az egesz alak indoka.
       */}
-      {scanOpen ? (
-        <View style={styles.scanOverlay}>
-          <CameraView
-            style={StyleSheet.absoluteFill}
-            facing="back"
-            barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-            onBarcodeScanned={({ data }) => {
-              /*
-                AMIT A MATRICA HORDOZ, AZT NEM TALALJUK KI. A kod alakjat
-                ismerjuk (egy betu es negy szam), a QR TARTALMANAK formajat
-                nem: sehol nincs leirva, hogy a matrica a puszta kodot viszi-e
-                vagy valami koré csomagolva. Ezert a beolvasott szoveget
-                UGYANAZON az alak-ellenorzesen engedjuk at, ami a kezi
-                bevitelt is meri -- ha nem illik ra, megmondjuk, es a kezi
-                mezo mindig ott marad mellette.
-              */
-              const kod = normalizeAssetLabelCode(data);
-              if (!kod) {
-                setScanMessage(
-                  "Ez nem matricakód. Írd be kézzel, vagy olvass be másikat.",
-                );
-                setScanOpen(false);
-                return;
-              }
-              setLabelCode(kod);
-              setScanMessage("");
-              setScanOpen(false);
-            }}
-          />
-          <SafeAreaView style={styles.scanPanel}>
-            <Text style={styles.scanText}>
-              Tartsd a matrica kódját a kamera elé.
-            </Text>
-            <Pressable
-              style={styles.scanButton}
-              onPress={() => setScanOpen(false)}
-            >
-              <Text style={styles.scanButtonText}>Mégsem</Text>
-            </Pressable>
-          </SafeAreaView>
-        </View>
-      ) : null}
+      {scanner.overlay}
     </SafeAreaView>
   );
 }
@@ -1065,6 +993,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#071827" },
   flex: { flex: 1 },
   fieldError: { color: "#fecaca", fontSize: 12, fontWeight: "700" },
+  scanNote: { color: "#789cad", fontSize: 12, lineHeight: 17 },
   scanButton: {
     backgroundColor: "#0f3346",
     borderRadius: 10,
@@ -1072,16 +1001,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   scanButtonText: { color: "#52d6c7", fontWeight: "800" },
-  scanOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "#000",
-  },
-  scanPanel: { flex: 1, justifyContent: "flex-end", padding: 24, gap: 12 },
-  scanText: { color: "#f4fbff", fontWeight: "700", textAlign: "center" },
   dateValue: { color: "#f4fbff" },
   datePrompt: { color: "#668798" },
   clearDate: { color: "#52d6c7", fontSize: 12, fontWeight: "800" },

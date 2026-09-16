@@ -18,6 +18,7 @@ import {
   assetEditFormFrom,
   baseValuesFor,
   buildAssetPatch,
+  assetLabelEditProblem,
   hasAssetChanges,
   type AssetEditForm,
   type EditableAsset,
@@ -31,12 +32,17 @@ import { readCachedPartnerUnits } from "@/lib/offline/asset-form-cache";
 import { describeOfflineEditNotice } from "@/lib/offline/offline-notice";
 import { ASSET_CRITICALITY_OPTIONS } from "@/lib/assets/asset-criticality";
 import { ASSET_STATUS_OPTIONS } from "@/lib/assets/asset-status";
+import { MATRICA_ALAK_UZENET } from "@/lib/assets/asset-create";
 import { describeAssetUpdateWrite } from "@/lib/assets/offline-edit";
 import { ApiError } from "@/lib/api/client";
 import { assetUpdateOperationId } from "@/lib/offline/sync-queue";
 import { enqueueAssetUpdate } from "@/lib/offline/queue-store";
 import { saveOrQueue, type SaveOutcome } from "@/lib/offline/save-or-queue";
 import { UnitPicker } from "@/components/assets/unit-picker";
+import {
+  LabelCodeField,
+  useLabelScanner,
+} from "@/components/assets/label-code-field";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 
@@ -126,6 +132,18 @@ export default function AssetEditScreen() {
    * csak ellenorizni akarta, azonnal latja.
    */
   const [unitPickerOpen, setUnitPickerOpen] = useState(false);
+  /**
+   * A BEOLVASO UGYANAZ, MINT A FELVITELI KEPERNYON, es ez nem kenyelem: Balazs
+   * kifejezetten a BEFOTOZAST kerte a telefonra (2026-09-16 10:42), a webre
+   * pedig csak a beirast. A kozos allvany azt zarja ki, hogy a ket kepernyo
+   * kulon romoljon el.
+   *
+   * A `setForm` ag a `form` meglete miatt ovatos: a kepernyo a betoltes elott
+   * `null`-lal all, es egy beolvasas ilyenkor nem irhat bele.
+   */
+  const scanner = useLabelScanner((kod) =>
+    setForm((elozo) => (elozo ? { ...elozo, labelCode: kod } : elozo)),
+  );
 
   /*
    * A HELYSZÍNEK CSAK SZERVIZ PARTNER ESZKÖZÉNÉL. Vevő tulajdonosnál nincs mit
@@ -192,6 +210,16 @@ export default function AssetEditScreen() {
        */
       setQueued(null);
       setLost(null);
+      /**
+       * A ROSSZ ALAK ITT AKAD EL, NEM A SZERVEREN -- ES EZ AZ OFFLINE SOR MIATT SZAMIT.
+       *
+       * Kapcsolat nelkul a mentes SORBA kerul, nem a szerverhez: egy hibas kod
+       * igy csak a sor kiuritesekor bukna el, akar orakkal kesobb, amikor a
+       * szerelo mar nincs a gepnel. A felviteli kepernyo eddig is itt, a keres
+       * ELOTT dontott -- ugyanazzal a kozos fuggvennyel es ugyanezzel a
+       * mondattal.
+       */
+      if (assetLabelEditProblem(form)) throw new Error(MATRICA_ALAK_UZENET);
       const asset = betoltott;
       const patch = buildAssetPatch(editable(asset), form);
       /**
@@ -477,6 +505,19 @@ export default function AssetEditScreen() {
           </View>
         ))}
 
+        <LabelCodeField
+          value={form.labelCode}
+          onChange={(value) => setForm({ ...form, labelCode: value })}
+          scanner={scanner}
+          editable={!save.isPending}
+        >
+          <Text style={styles.hint}>
+            A MI matricánk, nem a partneré. Ha már áll rajta kód, az itt
+            látszik: másikat beírva a régi visszakerül a szabad készletbe. A
+            mező kiürítése nem szedi le a matricát.
+          </Text>
+        </LabelCodeField>
+
         <Text style={styles.hint}>
           A partner és a szülőeszköz módosítása a webes felületen történik.
         </Text>
@@ -501,6 +542,7 @@ export default function AssetEditScreen() {
           )}
         </Pressable>
       </ScrollView>
+      {scanner.overlay}
     </SafeAreaView>
   );
 }

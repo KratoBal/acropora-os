@@ -60,6 +60,23 @@ export interface CurrentAssetLike {
   inventoryNumber?: string | null;
   description?: string | null;
   notes?: string | null;
+  /**
+   * AZ ESZKOZON MOST ALLO MATRICA KODJA.
+   *
+   * MIERT KERULT BE IDE IS: a `ComparableField` a `UpdateAssetInput` kulcsaibol
+   * szarmazik, tehat a matricakod felvetelevel AUTOMATIKUSAN osszehasonlithato
+   * mezo lett -- a fordito koveteli meg, hogy legyen mihez hasonlitani. Ez jol
+   * van igy: ha a sorban allo modositas matricat ir, a szerelo lassa, mi all
+   * MOST az eszkozon.
+   *
+   * ES AMIT EZ NEM CSINAL: a SZERVER nem jelez matrica-utkozest. A
+   * `conflictingFields` az `Asset` OSZLOPAIT hasonlitja, a matrica pedig nem
+   * oszlop, hanem masik tabla sora -- oda soha nem kerul be. Ez a sor tehat
+   * akkor latszik, ha a valasz MAS mezo miatt lett utkozes. Szandekos:
+   * a leszakadt szerelo a FIZIKAI matricat latja a gepen, tehat az o erteke a
+   * valoszinubb, es a felszabadult kod visszakerul a keszletbe -- nem vesz el.
+   */
+  labelCode?: string | null;
   /** A mostani helyszín, ha van. A NEVE kell, nem az azonosítója. */
   unit?: { id: string; name: string } | null;
 }
@@ -105,6 +122,7 @@ const MEZO_NEVE: Record<ComparableField, string> = {
   inventoryNumber: "Partner azonosítója",
   description: "Leírás",
   notes: "Megjegyzés",
+  labelCode: "Matrica kódja",
 };
 
 /** Az üres érték NEVE. Egy üres cella nem mondja meg, hogy törlésről van szó. */
