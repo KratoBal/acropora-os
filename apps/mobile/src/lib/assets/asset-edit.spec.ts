@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   assetEditFormFrom,
+  assetPerformanceEditProblem,
   buildAssetPatch,
   assetLabelEditProblem,
   baseValuesFor,
@@ -299,5 +300,77 @@ describe("buildAssetPatch es az alegyseg", () => {
   it("counts a unit change as a change worth saving", () => {
     const form = { ...assetEditFormFrom(partnerAsset), unitId: "unit-2" };
     assert.equal(hasAssetChanges(partnerAsset, form), true);
+  });
+});
+
+/**
+ * A TELJESITMENY-PAR A SZERKESZTON -- ES ITT AZ EREDMENY DONT, NEM A MEZO.
+ *
+ * Ugyanaz a szabaly, mint a szerveren: egy "csak a szamot irom at" keres
+ * ervenyes, ha az egyseg mar all az eszkozon. Amit el kell kerulni, az a fel
+ * TORLES -- es offline az csak orakkal kesobb bukna el.
+ */
+describe("a teljesítmény-pár a szerkesztőn", () => {
+  const eszkoz: EditableAsset = {
+    ...asset,
+    performance: "500",
+    performanceUnit: { id: "uom-w" },
+  };
+
+  it("a meglévő pár BETÖLTŐDIK az űrlapba", () => {
+    const form = assetEditFormFrom(eszkoz);
+    assert.equal(form.performance, "500");
+    assert.equal(form.performanceUnitId, "uom-w");
+  });
+
+  it("csak a szám átírása EGYETLEN kulcsot küld", () => {
+    const form = { ...assetEditFormFrom(eszkoz), performance: "750" };
+    const patch = buildAssetPatch(eszkoz, form);
+    assert.equal(patch.performance, "750");
+    // A MASIK FEL NEM MEGY EL: a szerver a MEGLEVO egyseget hasznalja. Ha
+    // menne, egy kozben atirt egyseget irnank felul a regivel.
+    assert.equal("performanceUnitId" in patch, false);
+  });
+
+  it("a vessző pontra fordul a törzsben is", () => {
+    const form = { ...assetEditFormFrom(eszkoz), performance: "0,5" };
+    assert.equal(buildAssetPatch(eszkoz, form).performance, "0.5");
+  });
+
+  it("a két mező kiürítve EGYÜTT törli a párt", () => {
+    const form = {
+      ...assetEditFormFrom(eszkoz),
+      performance: "",
+      performanceUnitId: "",
+    };
+    const patch = buildAssetPatch(eszkoz, form);
+    assert.equal(patch.performance, null);
+    assert.equal(patch.performanceUnitId, null);
+  });
+
+  it("a fél törlés a MENTÉS ELŐTT elbukik", () => {
+    const form = { ...assetEditFormFrom(eszkoz), performance: "" };
+    assert.equal(assetPerformanceEditProblem(form), "missing-value");
+  });
+
+  it("az érintetlen pár semmit nem küld", () => {
+    assert.equal(
+      hasAssetChanges(eszkoz, assetEditFormFrom(eszkoz)),
+      false,
+      "egy változatlan űrlap mentése is elmozdítaná az időbélyeget",
+    );
+  });
+
+  /**
+   * A SORBA IS BEKERUL AZ ALAPERTEK -- ES CSAK ARRA A FELERE, AMI VALTOZOTT.
+   *
+   * Enelkul a pinceben beirt teljesitmeny CSENDBEN elveszne: a sor torzse
+   * vinne a valtozast, de az utkozes-feloldas nem tudna, MIHEZ kepest keszult.
+   */
+  it("a sor alapértéke csak a változott felét viszi", () => {
+    const form = { ...assetEditFormFrom(eszkoz), performance: "750" };
+    const base = baseValuesFor(eszkoz, buildAssetPatch(eszkoz, form));
+    assert.equal(base.performance, "500");
+    assert.equal("performanceUnitId" in base, false);
   });
 });

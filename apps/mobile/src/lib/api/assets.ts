@@ -94,6 +94,16 @@ export interface AssetDetail extends AssetListItem {
    * mukodo kodot irna felul anelkul, hogy latna.
    */
   labelCode?: string;
+  /**
+   * A TELJESITMENY ES A KIIRT MERTEKEGYSEGE.
+   *
+   * AZ EGYSEG KIIRVA JON, nem csak azonositokent: a telefonnak `500 W`-ot kell
+   * mutatnia, es tereró nelkul nem tudna egy masodik hivassal utananezni a
+   * torzsadatban. A kivezetett egyseg is idejon -- a kivezetes a VALASZTOT
+   * szukiti, nem a mar rogzitett erteket.
+   */
+  performance?: string;
+  performanceUnit?: { id: string; code: string; name: string };
   description?: string;
   installedAt?: string;
   warrantyExpiresAt?: string;

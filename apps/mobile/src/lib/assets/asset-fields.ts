@@ -46,4 +46,14 @@ export interface UpdateAssetInput {
    * bukna el. A tipus igy MAR ITT megmondja, ami a szerveren is all.
    */
   labelCode?: string;
+  /**
+   * A TELJESITMENY ES A MERTEKEGYSEGE -- ES ITT VAN `| null`, A MATRICAVAL
+   * ELLENTETBEN.
+   *
+   * A ket ellentetes alak ugyanabbol a szabalybol jon: a `null` TORLEST
+   * jelent, es a teljesitmenynel a torles LETEZIK. Csak EGYUTT megy: fel par
+   * a tablan sem allhat meg (`Asset_performance_pairing_check`).
+   */
+  performance?: string | null;
+  performanceUnitId?: string | null;
 }

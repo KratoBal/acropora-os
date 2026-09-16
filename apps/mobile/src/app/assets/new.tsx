@@ -32,12 +32,14 @@ import {
   queuePhotosForRecording,
 } from "@/lib/assets/photo-after-record";
 import { listPartnerUnits, type PartnerUnit } from "@/lib/api/partners";
+import { listPerformanceUnits } from "@/lib/api/units-of-measure";
 import { selectableUnitOptions } from "@/lib/partners/site-tree";
 import { CollapsedPicker, UnitPicker } from "@/components/assets/unit-picker";
 import {
   LabelCodeField,
   useLabelScanner,
 } from "@/components/assets/label-code-field";
+import { PerformanceField } from "@/components/assets/performance-field";
 import DateTimePicker, {
   type DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
@@ -86,6 +88,21 @@ export default function NewAssetScreen() {
   const router = useRouter();
   const { status, user } = useAuth();
   const capabilities = user ? getServiceCapabilities(user.role) : null;
+  /**
+   * A TELJESITMENY-EGYSEGEK. Csak az AKTIVAK jonnek: a kivezetett egyseg a
+   * valasztobol esik ki.
+   *
+   * A HIBA NEM ALLITJA MEG AZ URLAPOT: ha a torzsadat nem tolthető be, a tobbi
+   * mezo akkor is kitoltheto, a teljesitmeny-valaszto pedig ures. Egy egesz
+   * felvitelt elvenni egy MELLEKES lista miatt nagyobb kar, mint a hianyzo
+   * valaszto -- a szerelo a helyszinen all.
+   */
+  const performanceUnitsQuery = useQuery({
+    queryKey: ["performance-units"],
+    queryFn: listPerformanceUnits,
+    enabled: status === "authenticated",
+  });
+
   const ownersQuery = useQuery({
     queryKey: ["asset-owners"],
     queryFn: listAssetOwners,
@@ -102,6 +119,15 @@ export default function NewAssetScreen() {
   const [serialNumber, setSerialNumber] = useState("");
   const [inventoryNumber, setInventoryNumber] = useState("");
   const [labelCode, setLabelCode] = useState("");
+  /**
+   * A TELJESITMENY ES A MERTEKEGYSEGE -- KET MEZO, EGY ADAT.
+   *
+   * A ketto EGYUTT megy, vagy egyik sem: a tablan CHECK all rajta. A dontest a
+   * `buildAssetCreatePayload` hozza, mert ott MERHETO -- ebben a fajlban nincs,
+   * ami tesztelne.
+   */
+  const [performance, setPerformance] = useState("");
+  const [performanceUnitId, setPerformanceUnitId] = useState("");
   // A BEOLVASO A KOZOS ALLVANYBOL JON, ugyanabbol, amit a szerkeszto kepernyo
   // is hasznal. Az indoklas (miert ratet, es miert nem masik kepernyo) ott all.
   const scanner = useLabelScanner(setLabelCode);
@@ -526,6 +552,8 @@ export default function NewAssetScreen() {
       serialNumber,
       inventoryNumber,
       labelCode,
+      performance,
+      performanceUnitId,
       installedAt,
       interval,
     });
@@ -785,6 +813,13 @@ export default function NewAssetScreen() {
               label="Partner azonosítója"
               value={inventoryNumber}
               onChangeText={setInventoryNumber}
+            />
+            <PerformanceField
+              value={performance}
+              unitId={performanceUnitId}
+              units={performanceUnitsQuery.data?.items ?? []}
+              onChangeValue={setPerformance}
+              onChangeUnit={setPerformanceUnitId}
             />
             <LabelCodeField
               value={labelCode}

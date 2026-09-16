@@ -68,6 +68,19 @@ export interface QueuedAssetUpdateBase {
   description?: string | null;
   notes?: string | null;
   /**
+   * A TELJESITMENY ES A MERTEKEGYSEGE, AHOGY A SZERKESZTES KEZDETEKOR ALLT.
+   *
+   * KET KULON MEZO, holott EGY adat: a ket fele kulon is valtozhat. Aki csak
+   * a szamot irja at, annak az egyseg alapertekere nincs szukseg -- es egy
+   * felesleges alapertek a feloldo kepernyot kerdezteti olyasmirol, amihez
+   * senki nem nyult.
+   *
+   * A MERTEKEGYSEGNEL AZ AZONOSITO all, nem a jel: egy atnevezett egyseg
+   * kulonben valtozasnak latszana, holott ugyanaz az egyseg.
+   */
+  performance?: string | null;
+  performanceUnitId?: string | null;
+  /**
    * A MATRICAKOD, AHOGY A SZERKESZTES KEZDETEKOR ALLT.
    *
    * MIERT KELL A SORBA IS: a pinceben beirt kod kulonben CSENDBEN elveszne --
