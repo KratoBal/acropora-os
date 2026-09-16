@@ -67,6 +67,15 @@ export interface QueuedAssetUpdateBase {
   inventoryNumber?: string | null;
   description?: string | null;
   notes?: string | null;
+  /**
+   * A MATRICAKOD, AHOGY A SZERKESZTES KEZDETEKOR ALLT.
+   *
+   * MIERT KELL A SORBA IS: a pinceben beirt kod kulonben CSENDBEN elveszne --
+   * a sor torzse vinne ugyan a valtozast, de az utkozes-feloldas nem tudna,
+   * MIHEZ kepest keszult, es a szerelo nem latna, hogy kozben mas irt ra
+   * matricat.
+   */
+  labelCode?: string | null;
 }
 
 /**

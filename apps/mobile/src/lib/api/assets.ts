@@ -88,6 +88,12 @@ export interface AssetListItem extends AssetHierarchyItem {
 
 export interface AssetDetail extends AssetListItem {
   category?: string;
+  /**
+   * AZ ESZKOZON ALLO MATRICA KODJA, HA VAN. A szerkeszto urlap EBBOL tolti elo
+   * a mezot: egy ures doboz azt allitana, hogy nincs matrica, es a szerelo egy
+   * mukodo kodot irna felul anelkul, hogy latna.
+   */
+  labelCode?: string;
   description?: string;
   installedAt?: string;
   warrantyExpiresAt?: string;

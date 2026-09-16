@@ -5,6 +5,7 @@ import type {
   AssetStatus,
   UpdateAssetInput,
 } from "./asset-fields";
+import { normalizeAssetLabelCode } from "./asset-label-mirror";
 
 /**
  * The part of an asset this module reasons about. Structural on purpose:
@@ -23,6 +24,12 @@ export interface EditableAsset {
    * Kötelezőként a fordító kényszeríti ki a leképezést a hívás helyén.
    */
   ownerType: "CUSTOMER" | "SUPPLIER";
+  /**
+   * AZ ESZKOZON MOST ALLO MATRICA KODJA, HA VAN. Ebbol tolt elo a szerkeszto
+   * mezo -- egy ures doboz azt allitana, hogy nincs matrica, es a szerelo egy
+   * mukodo kodot irna felul anelkul, hogy latna.
+   */
+  labelCode?: string;
   /** A partner alegysége, ahol az eszköz áll. Hiányzik, ha nincs megadva. */
   unit?: { id: string };
   status: AssetStatus;
@@ -74,6 +81,12 @@ export interface AssetEditForm {
   inventoryNumber: string;
   description: string;
   notes: string;
+  /**
+   * AZ ELORE NYOMTATOTT MATRICA KODJA. A mezo a SZERVER szerinti jelenlegi
+   * kodbol toltodik fel, nem uresen indul: amit a szerelo lat, az a valosag.
+   * Enelkul egy meglevo matricat lehetne vakon felulirni.
+   */
+  labelCode: string;
 }
 
 const TEXT_FIELDS = [
@@ -97,6 +110,7 @@ export function assetEditFormFrom(asset: EditableAsset): AssetEditForm {
     inventoryNumber: asset.inventoryNumber ?? "",
     description: asset.description ?? "",
     notes: asset.notes ?? "",
+    labelCode: asset.labelCode ?? "",
   };
 }
 
@@ -142,6 +156,23 @@ export function buildAssetPatch(
    * de a formban ottmaradhat egy korábbi érték -- a TULAJDONOS TÍPUSA dönt,
    * nem az, hogy van-e érték.
    */
+  /**
+   * A MATRICAKOD NEM A SZOVEGES MEZOK SZABALYAT KOVETI, ES EZ SZANDEKOS.
+   *
+   * A `textPatchValue` egy kiuritett mezore `null`-t kuld, ami a szerveren
+   * "toroljed" jelentessel bir. A matricanal ez ma NEM letezik: az
+   * `UpdateAssetDto` szandekosan `string`-et var, nem `string | null`, mert a
+   * leszedesnek nincs neve az esemeny-naploban (lasd a szerver oldali
+   * dontest). Egy `null` ott 400-zal bukna el.
+   *
+   * EZERT HAROM AG HELYETT KETTO ALL ITT: valtozott es nem ures -> megy;
+   * minden mas -> nem megy. A kiuritest a kepernyo mondja ki szoban, nem egy
+   * nema keres, ami ugyis elbukna.
+   */
+  const kod = form.labelCode.trim().toUpperCase();
+  if (kod !== "" && kod !== (asset.labelCode ?? "").trim().toUpperCase())
+    patch.labelCode = kod;
+
   if (asset.ownerType === "SUPPLIER") {
     const chosen = form.unitId.trim();
     const current = asset.unit?.id ?? "";
@@ -181,6 +212,23 @@ export function hasAssetChanges(
  * A helyszinnel az AZONOSITO, nem a nev: egy atnevezett helyszin kulonben
  * valtozasnak latszana, holott ugyanaz a helyszin.
  */
+/**
+ * A MATRICAKOD ALAKJA, A MENTES ELOTT -- ES EZ AZ OFFLINE SOR MIATT KELL.
+ *
+ * Kapcsolat nelkul a mentes SORBA kerul, nem a szerverhez: egy rossz alaku kod
+ * igy csak a sor kiuritesekor bukna el, akar orakkal kesobb, amikor a szerelo
+ * mar nincs a gepnel. A felviteli ut eddig is a keres ELOTT dontott
+ * (`buildAssetCreatePayload`), ugyanezzel a kozos fuggvennyel.
+ *
+ * AZ URES MEZO NEM HIBA: az azt jelenti, hogy nem nyultak hozza. A leszedes
+ * ezen az uton nem letezik (lasd a `buildAssetPatch` megjegyzeset).
+ */
+export function assetLabelEditProblem(form: AssetEditForm): "malformed" | null {
+  const kod = form.labelCode.trim();
+  if (kod === "") return null;
+  return normalizeAssetLabelCode(kod) === null ? "malformed" : null;
+}
+
 export function baseValuesFor(
   asset: EditableAsset,
   patch: UpdateAssetInput,
@@ -191,5 +239,15 @@ export function baseValuesFor(
   if ("departmentId" in patch) base.departmentId = asset.unit?.id ?? null;
   for (const field of TEXT_FIELDS)
     if (field in patch) base[field] = asset[field] ?? null;
+  /**
+   * A MATRICAKOD KULON SOR, MERT NINCS A `TEXT_FIELDS` KOZOTT.
+   *
+   * Es ez a fajta kihagyas NEM BUKIK EL MAGATOL: a `QueuedAssetUpdateBase`
+   * minden mezoje opcionalis, tehat a fordito hallgatna, a sor felmenne, es a
+   * feloldo kepernyo csak annyit tudna, hogy "nincs alapertek" -- amire a sajat
+   * szabalya szerint TOBBET kerdez a kelleténel. Nem hibazna: csak zajosabb
+   * lenne, es senki nem tudna, miert.
+   */
+  if ("labelCode" in patch) base.labelCode = asset.labelCode ?? null;
   return base;
 }

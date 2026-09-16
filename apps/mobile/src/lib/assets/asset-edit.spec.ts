@@ -4,6 +4,8 @@ import { describe, it } from "node:test";
 import {
   assetEditFormFrom,
   buildAssetPatch,
+  assetLabelEditProblem,
+  baseValuesFor,
   hasAssetChanges,
   type EditableAsset,
 } from "./asset-edit";
@@ -115,6 +117,121 @@ describe("buildAssetPatch", () => {
       notes: "Cserélt tömítés.",
       status: "OUT_OF_SERVICE",
     });
+  });
+});
+
+/**
+ * A MATRICAKOD HAROM AGA -- ES A HARMADIK TER EL A TOBBI MEZOTOL.
+ *
+ * A szoveges mezoknel a kiuritett ertek `null`-kent megy fel, ami a szerveren
+ * "toroljed". A matricanal ez NEM letezik: a `UpdateAssetDto` `string`-et var,
+ * mert a leszedesnek nincs neve az esemeny-naploban. Egy `null` ott 400-zal
+ * bukna el, tehat a kiuritest a kepernyo mondja ki szoban, nem egy nema keres.
+ */
+describe("buildAssetPatch és a matricakód", () => {
+  const matricas: EditableAsset = { ...asset, labelCode: "V2196" };
+
+  it("a VALTOZATLAN kódot nem küldi fel", () => {
+    assert.deepEqual(buildAssetPatch(matricas, assetEditFormFrom(matricas)), {
+      expectedUpdatedAt: matricas.updatedAt,
+    });
+  });
+
+  it("matrica NÉLKÜLI eszközre felviszi az újat, nagybetűsen", () => {
+    const form = { ...assetEditFormFrom(asset), labelCode: " v2196 " };
+    assert.deepEqual(buildAssetPatch(asset, form), {
+      expectedUpdatedAt: asset.updatedAt,
+      labelCode: "V2196",
+    });
+  });
+
+  it("meglévő kódot MÁSIKRA cserél", () => {
+    const form = { ...assetEditFormFrom(matricas), labelCode: "Z9001" };
+    assert.equal(buildAssetPatch(matricas, form).labelCode, "Z9001");
+  });
+
+  /**
+   * A TESTVER-KONTROLL: a fenti harom allitas atmenne akkor is, ha a kiuritett
+   * mezo `null`-t kuldene -- ott mindig van ertek. Ez az egy mondja ki, hogy a
+   * kiuritessel NEM lehet leszedni a matricat.
+   */
+  it("a kiürített mező NEM küld törlést, ahogy a szöveges mezők tennék", () => {
+    const form = { ...assetEditFormFrom(matricas), labelCode: "   " };
+    const patch = buildAssetPatch(matricas, form);
+    assert.equal(
+      "labelCode" in patch,
+      false,
+      "a kiürítés nem mehet fel: a szerver 400-zal utasítaná el",
+    );
+    // ES A KONTRASZT, UGYANEBBEN AZ ALLITASBAN: egy szoveges mezo ugyanattol
+    // a mozdulattol IGENIS torlest kuld. Ha ez a ket sor valaha egyet mondana,
+    // az azt jelentene, hogy a ket szabaly osszecsuszott.
+    const szoveges = { ...assetEditFormFrom(matricas), serialNumber: "  " };
+    assert.equal(buildAssetPatch(matricas, szoveges).serialNumber, null);
+  });
+
+  /**
+   * ES AZ OFFLINE SOR IS VIGYE AZ ALAPERTEKET.
+   *
+   * A `baseValuesFor` a `TEXT_FIELDS` listajan megy vegig, es a matricakod
+   * SZANDEKOSAN nincs benne. A kihagyas nem bukna el magatol: a
+   * `QueuedAssetUpdateBase` minden mezoje opcionalis, tehat a fordito hallgat,
+   * a sor felmegy, es a feloldo kepernyo csak annyit tud, hogy "nincs
+   * alapertek".
+   */
+  it("a sorba tett módosítás VISZI, mi állt az eszközön", () => {
+    const form = { ...assetEditFormFrom(matricas), labelCode: "Z9001" };
+    const patch = buildAssetPatch(matricas, form);
+    assert.equal(baseValuesFor(matricas, patch).labelCode, "V2196");
+  });
+
+  it("matrica nélkül indulva az alapérték null, nem hiányzó", () => {
+    const form = { ...assetEditFormFrom(asset), labelCode: "Z9001" };
+    const patch = buildAssetPatch(asset, form);
+    const base = baseValuesFor(asset, patch);
+    // A KULONBSEG SZAMIT: a `null` azt mondja, hogy NEM VOLT matrica; a
+    // hianyzo mezo azt, hogy NEM TUDJUK. A feloldo kepernyo a masodikra
+    // tobbet kerdez, mint amennyi indokolt.
+    assert.equal("labelCode" in base, true);
+    assert.equal(base.labelCode, null);
+  });
+});
+
+/**
+ * A ROSSZ ALAK A MENTES ELOTT AKAD EL, ES EZ AZ OFFLINE SOR MIATT SZAMIT.
+ *
+ * Kapcsolat nelkul a mentes SORBA kerul: egy hibas kod igy csak a sor
+ * kiuritesekor bukna el, akar orakkal kesobb, amikor a szerelo mar nincs a
+ * gepnel. A szerver ugyanezt a kerest 400-zal utasitana el -- csak sokkal
+ * kesobb, es mashol.
+ */
+describe("assetLabelEditProblem", () => {
+  it("a jó alakot átengedi, kisbetűsen is", () => {
+    for (const kod of ["V2196", " v2196 "])
+      assert.equal(
+        assetLabelEditProblem({ ...assetEditFormFrom(asset), labelCode: kod }),
+        null,
+        kod,
+      );
+  });
+
+  it("az ÜRES mező nem hiba: azt jelenti, nem nyúltak hozzá", () => {
+    for (const kod of ["", "   "])
+      assert.equal(
+        assetLabelEditProblem({ ...assetEditFormFrom(asset), labelCode: kod }),
+        null,
+      );
+  });
+
+  it("a rossz alakot MEGFOGJA", () => {
+    // ISMERT POZITIV KONTROLL a ket fenti tagadashoz: ha a fuggveny MINDIG
+    // `null`-t adna, azok is zoldek lennenek.
+    for (const kod of ["ROSSZ", "V219", "V21966", "2196V"])
+      assert.equal(
+        assetLabelEditProblem({ ...assetEditFormFrom(asset), labelCode: kod }),
+        "malformed",
+        kod,
+      );
   });
 });
 
