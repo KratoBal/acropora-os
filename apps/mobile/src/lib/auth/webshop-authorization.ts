@@ -28,6 +28,19 @@ export interface ServiceCapabilities {
    */
   worksheetsView: boolean;
   worksheetsManage: boolean;
+  /**
+   * A HIBAJEGY UGYANAZT A KET SZERVER-JOGOT KAPJA, mint az eszkoz es a
+   * munkalap (`service.view` es `service.manage`) -- es ugyanabbol az okbol
+   * kap megis sajat kulcsot, mint a munkalap: a telefonon KULON csempe, es a
+   * csempe kapuja azt nevezze meg, amit MEGNYIT.
+   *
+   * ES ITT A KETTO SZETVALASZTASA NEM ELMELETI: a jegy OLVASASA es a jegy
+   * LEPTETESE ket kulonbozo dolog a helyszinen. Aki csak nezi, annak a
+   * leptetes-gombok sem valok -- egy nem mukodo gomb ugyanugy nez ki, mint egy
+   * elromlott.
+   */
+  serviceJobsView: boolean;
+  serviceJobsManage: boolean;
 }
 
 const FULL_ACCESS: WebshopCapabilities = {
@@ -150,6 +163,8 @@ export function getServiceCapabilities(role: UserRole): ServiceCapabilities {
     assetsManage: canManage,
     worksheetsView: canView,
     worksheetsManage: canManage,
+    serviceJobsView: canView,
+    serviceJobsManage: canManage,
   };
 }
 
