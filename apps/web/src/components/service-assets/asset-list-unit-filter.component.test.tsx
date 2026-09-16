@@ -125,7 +125,7 @@ describe("AssetListPage helyszín-szűrő", () => {
   /**
    * VEVO-TULAJDONOSNAL SEM, ES EZ MAS ESET, MINT A FENTI.
    *
-   * A tulajdonos NELKULI eset akkor is atmenne, ha a felteteл csak az
+   * A tulajdonos NELKULI eset akkor is atmenne, ha a feltetel csak az
    * azonositot nezne -- merve: a tipus-ellenorzest kivéve a fenti allitas
    * VALTOZATLANUL zold marad, mert ott nincs azonosito sem. Ez az allitas az,
    * ami a TIPUST meri: vevo-tulajdonosnal az alegyseg nem ertelmezheto (ott a
