@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 /**
@@ -62,6 +62,14 @@ const PAROK = [
     dto: "src/service-assets/dto/asset.dto.ts",
     dtoNev: "CreateAssetDto",
     kontroll: ["name", "ownerType"],
+  },
+  {
+    mit: "eszköz módosítása",
+    mobil: "../mobile/src/lib/assets/asset-fields.ts",
+    mobilNev: "UpdateAssetInput",
+    dto: "src/service-assets/dto/asset.dto.ts",
+    dtoNev: "UpdateAssetDto",
+    kontroll: ["ownerType", "expectedUpdatedAt"],
   },
   {
     mit: "munkalap felvitele",
@@ -154,7 +162,47 @@ function dtoMezok(s: string, nev: string): Set<string> {
   return osszes;
 }
 
+/**
+ * AMIT EZ AZ ORZO NEM FED LE, KIMONDVA -- ES EGY SZAM, AMI SZOL, HA NO A LISTA.
+ *
+ * A fenti parok NEVESITETT tipusokat vetnek ossze. A telefon nehany irasa
+ * viszont HELYBEN megirt objektum-tipussal megy (`{ to, note }`, `{ body }`,
+ * `{ id, description, quantity, unit }`), es azoknak nincs mihez kotni a
+ * nevuket. Ezeket ma nem meri semmi.
+ *
+ * A LISTA NEM MARADHAT CSENDBEN: ha egy UJ iras-hivas keletkezik, ez a szam
+ * elmozdul, es a teszt megnevezi, hogy dontesre var -- vagy par lesz belole
+ * fent, vagy tudatosan itt marad. Enelkul a kovetkezo uj mezo pontosan ugyanigy
+ * menne at nyolc zold kapun, mint 2026-09-17-en a `clientOperationId`.
+ *
+ * MIERT A SZAM ES NEM A NEVEK: egy nev-lista karbantartasa maga is elavul, es a
+ * hianyat semmi nem jelzi. Egy szam viszont NEM tud csendben elavulni.
+ */
+const IRAS_HIVASOK_MA = 11;
+
 describe("a mobil kérés-törzsei a szerver DTO-ihoz mérve", () => {
+  it(`ma pontosan ${IRAS_HIVASOK_MA} JSON-törzset küld a telefon`, () => {
+    const konyvtar = "../mobile/src/lib/api";
+    const fajlok = readdirSync(konyvtar).filter(
+      (f) => f.endsWith(".ts") && !f.endsWith(".spec.ts"),
+    );
+    // POZITIV KONTROLL: rossz konyvtarnal a szamlalas nullat adna, es egy
+    // nullara allitott varakozas mellett ez zolden atmenne.
+    assert.ok(fajlok.length >= 4, `gyanúsan kevés fájl: ${fajlok.join(", ")}`);
+    let db = 0;
+    for (const f of fajlok) {
+      const t = kodSzoveg(readFileSync(`${konyvtar}/${f}`, "utf8"));
+      db += t.split("body: JSON.stringify").length - 1;
+    }
+    assert.equal(
+      db,
+      IRAS_HIVASOK_MA,
+      "a telefon írás-hívásainak száma megváltozott. Ha ÚJ hívás született, " +
+        "döntsd el, hogy bekerül-e a fenti párok közé (nevesített típusnál igen), " +
+        "és csak azután írd át ezt a számot.",
+    );
+  });
+
   for (const par of PAROK) {
     it(`POZITÍV KONTROLL: a(z) ${par.mit} két halmaza nem üres`, () => {
       const mobilMezok = mezok(forras(par.mobil), par.mobilNev);
