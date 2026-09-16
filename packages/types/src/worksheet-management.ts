@@ -92,6 +92,18 @@ export interface WorksheetDepartmentSummary {
   parentId: string | null;
   code: string;
   name: string;
+  /**
+   * A TELJES UT, a gyokertol lefele -- CSAK az adatlapon toltjuk ki.
+   *
+   * A kod es a nev csak TESTVEREK kozott egyedi, tehat a level neve onmagaban
+   * nem mondja meg, melyik agrol van szo. A LISTAKON ez nem all elo (ott a
+   * valaszto epiti a fat a `parentId` mezobol), az ADATLAPON viszont egyetlen
+   * sor all, es annak magaban kell megallnia.
+   *
+   * ELHAGYHATO, es ez szandekos: a mezot a meglevo hivok nem ismerik, es a
+   * hianya nem hiba -- a felulet ilyenkor a rovid nevre esik vissza.
+   */
+  path?: string[];
   isActive: boolean;
 }
 

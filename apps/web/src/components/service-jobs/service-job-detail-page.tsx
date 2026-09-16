@@ -977,7 +977,16 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                 </ServiceContextRow>
                 {job.departmentName ? (
                   <ServiceContextRow icon="location" label="Helyszín">
-                    {job.departmentName}
+                    {/*
+                      A TOMB AZ ELSODLEGES, a szoveg a visszaeses. A szerver
+                      mind a kettot kuldi, es ugyanabbol az utbol -- de a tomb
+                      MEGMONDJA, hany szint van, a szoveg csak mutatja. Ha egy
+                      kesobbi kepernyo szintenkent akar valamit (rovidites,
+                      tordeles), ott mar nem kell visszafejtenie.
+                    */}
+                    {job.departmentPath?.length
+                      ? job.departmentPath.join(" / ")
+                      : job.departmentName}
                   </ServiceContextRow>
                 ) : null}
                 <ServiceContextRow icon="clock" label="Létrehozva">

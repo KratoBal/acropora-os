@@ -49,6 +49,8 @@ type DetailRow = Awaited<ReturnType<ServiceJobsRepository["detail"]>>;
  * epp az az egy ellenorzes, amit egy kenyelmi cast kikapcsolna.
  */
 const RESZLETLAP: DetailRow = {
+  // A helyszin utja: ennek a sornak nincs helyszine, tehat nincs ut sem.
+  departmentPath: null,
   id: "job-1",
   jobNumber: "HJ-2026-001",
   title: "Szivattyú leállt",

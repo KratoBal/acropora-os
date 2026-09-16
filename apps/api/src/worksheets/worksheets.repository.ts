@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 import { assetsOutsideDepartment } from "../common/assets-in-department.js";
+import { unitPathFor } from "../common/unit-path-lookup.js";
 import { sumDocumentBytesInUse } from "../documents/document-bytes-in-use.js";
 import {
   personDisplayName,
@@ -781,7 +782,28 @@ export class WorksheetsRepository extends Repository {
     return rowBelongsToScope(row, scope) ? row : null;
   }
 
-  private detailRow(id: string): Promise<WorksheetDetailRow | null> {
+  /**
+   * A LAP SORA, ES VELE A HELYSZIN TELJES UTJA.
+   *
+   * AZ UT KULON LEKERDEZESBOL JON, nem az `include` melyitesevel: a helyszin-fa
+   * melysege NEM korlatos, tehat egy `parent: { parent: { ... } }` lanc mindig
+   * csak addig latna, ameddig valaki megirta -- es a hianyzo szint CSENDBEN
+   * maradna ki.
+   *
+   * ES A TAROLOBAN, nem a szolgaltatasban: a szolgaltatas egyseg-tesztjei hamis
+   * tarolot kapnak, tehat egy ottani adatbazis-hivas kivezetne oket a fedes
+   * alol. (Merve: huszonhat teszt bukott el, amikor eloszb odatettem.)
+   */
+  private async detailRow(id: string): Promise<WorksheetDetailRow | null> {
+    const sor = await this.detailRowInner(id);
+    if (!sor) return sor;
+    return {
+      ...sor,
+      departmentPath: await unitPathFor(this.database, sor.department.id),
+    };
+  }
+
+  private detailRowInner(id: string): Promise<WorksheetDetailRow | null> {
     return this.database.worksheet.findUnique({
       where: { id },
       include: worksheetDetailInclude,

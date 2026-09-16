@@ -524,3 +524,51 @@ describe("WorksheetDetailPage adatlap-szerkezet", () => {
 });
 
 afterEach(() => setOnLine(true));
+
+/**
+ * AZ ALEGYSEG TELJES UTJA AZ ADATLAPON.
+ *
+ * Balazs merte vissza 2026-09-16-an: itt `NMD — Nagymedence` allt, es abbol nem
+ * derul ki, MELYIK medencerol van szo. A kod es a nev csak TESTVEREK kozott
+ * egyedi, tehat ket tavoli ag alatt ugyanaz a "Biodóm (BIO)" megengedett.
+ *
+ * KET ALLITAS, ES A MASODIK A FONTOSABB: az elso azt meri, hogy az utat KIIRJA,
+ * a masodik azt, hogy a mezo HIANYABAN a regi alak marad -- a mezo elhagyhato,
+ * es egy regebbi valasz nem hordozza.
+ */
+describe("WorksheetDetailPage alegység-útja", () => {
+  beforeEach(() => {
+    auth.session = session;
+    api.detail.mockReset();
+  });
+
+  it("a teljes utat írja ki, ha a szerver küldi", async () => {
+    const alap = detail(null);
+    api.detail.mockResolvedValue({
+      ...alap,
+      department: {
+        ...alap.department,
+        path: ["Biodóm", "Fókamedence", "Fóka nagymedence"],
+      },
+    });
+
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+
+    expect(
+      await screen.findByText("Biodóm / Fókamedence / Fóka nagymedence"),
+    ).toBeTruthy();
+  });
+
+  /**
+   * A VISSZAESES NEM URES SOR. Ha az allitas csak a fenti esetet merne, egy
+   * elrontott visszaeses (ures cella) eszrevetlen maradna -- es epp az a
+   * helyzet, ami a REGI valaszoknal all elo.
+   */
+  it("a mező hiánya nem üríti ki a sort", async () => {
+    api.detail.mockResolvedValue(detail(null));
+
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+
+    expect(await screen.findByText(/BIO —/)).toBeTruthy();
+  });
+});

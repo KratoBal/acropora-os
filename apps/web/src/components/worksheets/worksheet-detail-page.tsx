@@ -547,7 +547,20 @@ export function WorksheetDetailPage({ worksheetId }: { worksheetId: string }) {
         {worksheet.customer.displayName}
       </ServiceContextRow>
       <ServiceContextRow icon="location" label="Alegység">
-        {worksheet.department.code} — {current.unitName ?? "—"}
+        {/*
+          A TELJES UT, HA A SZERVER KULDI. A level neve onmagaban nem mondja
+          meg, melyik agrol van szo: a kod es a nev csak TESTVEREK kozott
+          egyedi, tehat ket tavoli ag alatt ugyanaz a "Biodóm (BIO)"
+          megengedett. Balazs merte vissza 2026-09-16-an: itt `NMD —
+          Nagymedence` allt, es abbol nem derult ki, melyik medence.
+
+          A VISSZAESES A REGI ALAK, nem ures sor: a mezo elhagyhato, es egy
+          regebbi valasz (vagy egy sorba tett, offline mentett lap) nem
+          hordozza. Olyankor ugyanaz latszik, mint eddig.
+        */}
+        {worksheet.department.path?.length
+          ? worksheet.department.path.join(" / ")
+          : `${worksheet.department.code} — ${current.unitName ?? "—"}`}
       </ServiceContextRow>
       <ServiceContextRow icon="ticket" label="Hibajegy">
         {/*
