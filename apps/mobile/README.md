@@ -62,3 +62,26 @@ pnpm mobile:doctor
 See [`../../docs/MOBILE-DEVELOPMENT.md`](../../docs/MOBILE-DEVELOPMENT.md) for
 EAS development builds, environment management, the offline model and current
 authentication boundary.
+
+## Az androidos build profiljai, es melyik MIT LAT
+
+Balazs kerdezte 2026-09-16-an, es a valasz nem volt nyilvanvalo a profilok nevebol:
+
+| profil           | API, amit lat                             | mi jon ki belole           |
+| ---------------- | ----------------------------------------- | -------------------------- |
+| `preview`        | `https://api-staging.acropora.hu` (TESZT) | telepitheto APK            |
+| `production`     | `https://api.acropora.hu` (ELES)          | Play Aruhaz formatum (AAB) |
+| `production-apk` | `https://api.acropora.hu` (ELES)          | telepitheto APK            |
+
+A `production-apk` azert keszult, mert a ket tulajdonsag -- ELES ADAT es KOZVETLENUL
+TELEPITHETO -- eddig nem allt egy profilban. Aki APK-t kert, teszt adatot kapott; aki
+eles adatot kert, nem tudta feltenni a telefonjara. A hiany egyik profil nevebol sem
+latszott.
+
+Az `extends: "production"` szandekos: igy az eles kornyezet (API cim, csatorna,
+verziozas) EGY helyen all, es a ket profil nem tud elcsuszni egymastol. Csak a
+terjesztes modja ter el.
+
+EGY KIKOTES, AMI KONNYEN ELVESZIK: az `hu.acropora.os` csomagnak SAJAT kulcstara lesz,
+mas ujjlenyomattal, mint a preview valtozatnak. A Google API kulcs korlatozasaban
+MINDKETTOT fel kell venni, kulonben az eles alkalmazas nem tud tokent kerni.
