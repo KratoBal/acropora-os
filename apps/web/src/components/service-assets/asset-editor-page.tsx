@@ -10,7 +10,9 @@ import {
   Textarea,
 } from "@acropora/ui";
 import {
+  assetLabelCreateProblem,
   hasPermission,
+  normalizeAssetLabelCode,
   PERMISSIONS,
   type AssetCriticality,
   type AssetKind,
@@ -67,6 +69,27 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
   const [model, setModel] = useState("");
   const [serialNumber, setSerialNumber] = useState("");
   const [inventoryNumber, setInventoryNumber] = useState("");
+  /**
+   * AZ ELORE NYOMTATOTT MATRICA KODJA, CSAK FELVITELNEL.
+   *
+   * KET KULONBOZO AZONOSITO VAN, ES A LAP EDDIG CSAK AZ EGYIKET ISMERTE. Az
+   * `Asset.qrToken` az ADATBAZIS alapertelmezese (`@default(uuid())`), tehat
+   * minden eszkoz kap egyet, barhonnan is viszik fel -- abbol keszul az adatlap
+   * letoltheto QR kepe, es az a beolvasas kulcsa. Az `AssetLabel` ettol
+   * fuggetlen: az elore KINYOMTATOTT matricak keszlete (`V2196` alak).
+   *
+   * BALAZS EZT MERTE VISSZA 2026-09-16 10:32-kor (Discord, Acropora OS szal),
+   * szo szerint: "automatikusan egy qr kodot is hzzarendel. de ez igy nem jo,
+   * mert nem a qr kod torzsbol veszi". Igaza volt: a szerver oldal es a MOBIL
+   * urlap ota kesz, a webes urlapon viszont EGYALTALAN nem volt mezo ra, tehat
+   * webrol felvitt eszkozhoz nyomtatott matricat semmilyen uton nem lehetett
+   * rendelni.
+   *
+   * BEIRHATO MEZO, NEM LEGORDULO A SZABAD KODOKBOL. Balazs dontese ugyanabban a
+   * korben (10:35): "beirnám kézzel". A `labels/free` vegpont letezik, tehat a
+   * legordulo megepitheto lenne -- nem azert nincs, mert nem megy.
+   */
+  const [labelCode, setLabelCode] = useState("");
   const [installedAt, setInstalledAt] = useState("");
   const [warrantyExpiresAt, setWarrantyExpiresAt] = useState("");
   const [serviceIntervalDays, setServiceIntervalDays] = useState("");
@@ -229,6 +252,26 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
       setError("A karbantartási intervallum legalább 1 nap legyen.");
       return;
     }
+    /**
+     * A MATRICA-SZABALY UGYANABBOL A FUGGVENYBOL JON, MINT A SZERVERE ES A
+     * TELEFONE. Egy harmadik minta itt pontosan ott csuszna el, ahol senki nem
+     * nezi: az urlap atengedne, a mentes meg elutasitana.
+     *
+     * CSAK FELVITELNEL FUT LE, es ez nem ovatossag: a szerver `UpdateAssetDto`
+     * NEM ismer `labelCode` mezot, tehat meglevo eszkozhoz ezen az uton nem
+     * kerul matrica. A mezo ezert meg sem jelenik szerkeszteskor.
+     */
+    if (!assetId) {
+      const labelProblem = assetLabelCreateProblem(labelCode);
+      if (labelProblem === "missing") {
+        setError("Írd be a matrica kódját.");
+        return;
+      }
+      if (labelProblem === "malformed") {
+        setError("A matrica kódja egy betű és négy szám, például V2196.");
+        return;
+      }
+    }
     setBusy(true);
     setError(null);
     try {
@@ -271,6 +314,11 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             model: model.trim() || undefined,
             serialNumber: serialNumber.trim() || undefined,
             inventoryNumber: inventoryNumber.trim() || undefined,
+            // A NORMALIZALT ALAK MEGY EL, nem a begepelt: a tabla megkotese
+            // (`AssetLabel_code_shape_check`) csak nagybetut enged, a bemenet
+            // viszont szandekosan megengedobb. Ures mezonel a kulcs EL SEM
+            // MEGY -- az ures szoveg nem "nincs matrica", hanem ervenytelen kod.
+            labelCode: normalizeAssetLabelCode(labelCode) ?? undefined,
             installedAt: toIsoDate(installedAt),
             warrantyExpiresAt: toIsoDate(warrantyExpiresAt),
             serviceIntervalDays: interval,
@@ -477,6 +525,28 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
                 onChange={(event) => setInventoryNumber(event.target.value)}
               />
             </FormField>
+            {/*
+              A MI MATRICANK, NEM A PARTNERE. A fenti mezo a partner sajat
+              szama; ez az altalunk elore kinyomtatott kod.
+
+              CSAK FELVITELNEL LATSZIK, es a mondat ki is mondja, miert: a
+              szerver meglevo eszkozon nem fogad matricakodot. Egy mezo, ami
+              szerkeszteskor is ott allna, de mentesnel csendben elveszne,
+              rosszabb a hianyzo mezonel.
+            */}
+            {!assetId ? (
+              <FormField
+                label="Matrica kódja"
+                description="Az előre nyomtatott matricáról, egy betű és négy szám (például V2196). Elhagyható, de utólag ezen a lapon már nem pótolható."
+              >
+                <Input
+                  aria-label="Matrica kódja"
+                  value={labelCode}
+                  onChange={(event) => setLabelCode(event.target.value)}
+                  placeholder="V2196"
+                />
+              </FormField>
+            ) : null}
             <FormField label="Kritikusság">
               <Select
                 aria-label="Kritikusság"
