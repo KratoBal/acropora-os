@@ -46,8 +46,17 @@ describe("a matricakód mezője és beolvasója egy példányban", () => {
       assert.ok(olvas(ut).length > 500, `${ut}: üres vagy hiányzó fájl`);
   });
 
+  /**
+   * A MINTA SZOHATARHOZ KOTVE, ES EZT A KALIBRACIO DERITETTE KI.
+   *
+   * Eloszor `/<LabelCodeField/` allt itt. Atneveztem a hivast
+   * `<LabelCodeFieldXX`-re, hogy lassam pirosodni -- es ZOLD MARADT: a minta
+   * RESZSZOKENT is illeszkedik. Egy allitas, ami egy atnevezest nem vesz eszre,
+   * nem a bekotest meri, hanem azt, hogy a betuk valahol ott vannak.
+   */
   it("mindkét képernyő a közös mezőt használja", () => {
-    for (const ut of KEPERNYOK) assert.match(olvas(ut), /<LabelCodeField/, ut);
+    for (const ut of KEPERNYOK)
+      assert.match(olvas(ut), /<LabelCodeField[\s/>]/, ut);
   });
 
   it("mindkét képernyő kiteszi a beolvasó rátétjét", () => {
