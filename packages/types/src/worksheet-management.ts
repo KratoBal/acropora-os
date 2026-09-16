@@ -452,6 +452,20 @@ export interface WorksheetListItem {
   label: string | null;
   customerName: string;
   departmentCode: string;
+  /**
+   * A HELYSZIN TELJES UTJA A LISTAN IS, a gyokertol lefele.
+   *
+   * EZ A MEZO EGY SAJAT KORABBI ALLITASOMAT VONJA VISSZA. A `path` mezo mellett
+   * (adatlap) ez all: "A LISTAKON ez nem all elo (ott a valaszto epiti a fat a
+   * `parentId` mezobol)". Igaz volt a VALASZTORA, de a munkalap-lista nem
+   * valaszto: ott egyetlen sor all a partner alatt, es annak ugyanugy magaban
+   * kell megallnia, mint az adatlapon. Balazs 2026-09-16-an fotozta le, hogy
+   * ott `NMD` all magaban.
+   *
+   * `null`, ha az utat nem tudjuk felepiteni. URES TOMB SOHA: az azt allitana,
+   * hogy az ut ismert es nulla hosszu. A felulet ilyenkor a kodra esik vissza.
+   */
+  departmentPath: string[] | null;
   subject: string;
   status: WorksheetVersionStatus;
   version: number;

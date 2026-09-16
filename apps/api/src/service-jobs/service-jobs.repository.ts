@@ -6,7 +6,7 @@ import { SERVICE_ASSIGNABLE_ROLES } from "../common/service-assignment.js";
 import { DOCUMENT_DELETED_ACTION } from "./service-job-documents.repository.js";
 import { ALL_SERVICE_JOB_STATUSES } from "./service-job-status.js";
 import { prisma, type Prisma, type ServiceJobStatus } from "@acropora/database";
-import { unitPathFor } from "../common/unit-path-lookup.js";
+import { unitPathFor, unitPathsFor } from "../common/unit-path-lookup.js";
 
 /**
  * A LEZÁRT ÁLLAPOTOK, EGY HELYEN. A lista alapból ezeket hagyja ki - és ha egy
@@ -54,6 +54,8 @@ export interface ServiceJobRow {
   title: string;
   status: ServiceJobStatus;
   customerName: string | null;
+  /** A helyszin TELJES utja, a gyokertol lefele. `null`, ha nincs vagy nem epithető. */
+  departmentPath: string[] | null;
   createdAt: Date;
   worksheetCount: number;
 }
@@ -424,19 +426,37 @@ export class ServiceJobsRepository {
         status: true,
         createdAt: true,
         customer: { select: { displayName: true } },
+        // A HELYSZIN AZONOSITOJA A LISTARA IS. A nevet nem kerjuk el: a listan
+        // a TELJES ut all majd, azt pedig egy kotegelt lekerdezes epiti fel,
+        // nem ez a `select`.
+        departmentId: true,
         // A DARABSZÁM A LISTÁN LÁTSZIK, mert a jegy értéke abból derül ki,
         // hány munka áll mögötte. Egy külön lekérdezés soronként N+1 lenne.
         _count: { select: { worksheets: true } },
       },
     });
 
+    const lap = rows.slice(0, LIST_LIMIT);
+    /**
+     * A TELJES UTAK EGY KOTEGBEN. Ket lekerdezes, fuggetlenul attol, hany sor
+     * jott: a `unitPathFor` soronkent ketto lenne, ami ezen a listan
+     * negyszazat is jelenthet.
+     */
+    const utak = await unitPathsFor(
+      this.database,
+      lap.map((row) => row.departmentId),
+    );
+
     return {
-      rows: rows.slice(0, LIST_LIMIT).map((row) => ({
+      rows: lap.map((row) => ({
         id: row.id,
         jobNumber: row.jobNumber,
         title: row.title,
         status: row.status,
         customerName: row.customer?.displayName ?? null,
+        departmentPath: row.departmentId
+          ? (utak.get(row.departmentId) ?? null)
+          : null,
         createdAt: row.createdAt,
         worksheetCount: row._count.worksheets,
       })),

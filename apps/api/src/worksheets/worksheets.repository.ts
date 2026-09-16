@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import { Prisma, Repository, prisma } from "@acropora/database";
 import { assetsOutsideDepartment } from "../common/assets-in-department.js";
-import { unitPathFor } from "../common/unit-path-lookup.js";
+import { unitPathFor, unitPathsFor } from "../common/unit-path-lookup.js";
 import { sumDocumentBytesInUse } from "../documents/document-bytes-in-use.js";
 import {
   personDisplayName,
@@ -696,8 +696,21 @@ export class WorksheetsRepository extends Repository {
       this.countsByLatestStatus(countsWhere),
     ]);
 
+    /**
+     * A TELJES UTAK EGY KOTEGBEN, A LAP LEKERESE UTAN.
+     *
+     * Nem a `Promise.all` agaba kerult, es ez szandekos: a kert azonositokat
+     * csak a visszakapott sorokbol tudjuk. Cserebe ket lekerdezes all itt,
+     * fuggetlenul attol, hany sor jott -- soronkent ket kerdes egy otvenes
+     * lapon szazat jelentene.
+     */
+    const departmentPaths = await unitPathsFor(
+      this.database,
+      rows.map((row) => row.department.id),
+    );
+
     return {
-      items: rows.map(toWorksheetListItem),
+      items: rows.map((row) => toWorksheetListItem(row, departmentPaths)),
       pagination: {
         page: query.page,
         pageSize: query.pageSize,

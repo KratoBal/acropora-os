@@ -346,8 +346,22 @@ export function WorksheetListPage() {
                         <div className="text-xs font-medium text-ink">
                           {worksheet.customerName}
                         </div>
+                        {/*
+                          A TELJES UT, HA A SZERVER KULDI, KULONBEN A KOD.
+
+                          Eddig itt a kod allt magaban (`NMD`), es Balazs pont
+                          ezt fotozta le 2026-09-16-an. A kod csak TESTVEREK
+                          kozott egyedi, tehat ket tavoli ag alatt ugyanaz a
+                          `NMD` megengedett -- a listan pedig egymas ala kerul
+                          ket olyan sor, amit igy nem lehet megkulonboztetni.
+
+                          A VISSZAESES A REGI ALAK, nem ures cella: ha az utat
+                          nem tudjuk felepiteni, ugyanaz latszik, mint eddig.
+                        */}
                         <div className={sv.rowMeta}>
-                          {worksheet.departmentCode}
+                          {worksheet.departmentPath?.length
+                            ? worksheet.departmentPath.join(" / ")
+                            : worksheet.departmentCode}
                         </div>
                       </td>
                       <td className={sv.tableCell}>

@@ -77,6 +77,9 @@ function response(
         label: "FANK-BIO-2026-001",
         customerName: "Fővárosi Állat- És Növénykert",
         departmentCode: "BIO",
+        // A KET SOR SZANDEKOSAN KULONBOZIK: ez ITT hozza a teljes utat, a
+        // masodik NEM. Igy egy futasban merheto a fo ag es a visszaeses is.
+        departmentPath: ["Biodóm", "Fókamedence", "Fóka nagymedence"],
         subject: "Cápasuli kompresszorok bevizsgálása",
         status: "AWAITING_SIGNATURE",
         version: 1,
@@ -91,6 +94,7 @@ function response(
         label: null,
         customerName: "Fővárosi Állat- És Növénykert",
         departmentCode: "PPU",
+        departmentPath: null,
         subject: "Szivattyú csere",
         status: "DRAFT",
         version: 1,
@@ -124,6 +128,30 @@ describe("WorksheetListPage", () => {
     expect(await screen.findByText("Sanyi, Kiss Péter")).toBeTruthy();
     // Az üres cella hibának látszana; a "nincs kiosztva" szabály.
     expect(screen.getByText("Nincs kiosztva")).toBeTruthy();
+  });
+
+  /**
+   * A HELYSZIN TELJES UTJA A PARTNER ALATT, ES A VISSZAESES UGYANABBAN A
+   * FUTASBAN.
+   *
+   * Balazs 2026-09-16-an fotozta le ezt a listat: a partner alatt `NMD` allt
+   * magaban. A kod csak TESTVEREK kozott egyedi, tehat ket tavoli ag alatt
+   * ugyanaz a kod megengedett -- a listan pedig epp egymas ala kerulhet ket
+   * ilyen sor.
+   *
+   * A MASODIK ALLITAS NEM DISZ: ha a szerver nem tudja felepiteni az utat, a
+   * regi alaknak kell latszania, nem ures cellanak. A ket sor a mintaban
+   * szandekosan kulonbozik, hogy mind a ketto egy futasban merodjon.
+   */
+  it("kiírja a helyszín teljes útját, és visszaesik a kódra, ha nincs út", async () => {
+    render(<WorksheetListPage />);
+
+    expect(
+      await screen.findByText("Biodóm / Fókamedence / Fóka nagymedence"),
+    ).toBeTruthy();
+    expect(screen.getByText("PPU")).toBeTruthy();
+    // A teljes utat hozo sornal a puszta kod mar NEM latszik: azt valtotta fel.
+    expect(screen.queryByText("BIO")).toBeNull();
   });
 
   // A piszkozatnak nincs száma, mert a sorszám a lezáráskor keletkezik. Ha

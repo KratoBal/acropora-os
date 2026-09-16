@@ -30,6 +30,20 @@ export interface ServiceJobListItem {
   partnerStatus: ServiceJobPartnerStatus;
   partnerStatusLabel: string;
   customerName: string | null;
+  /**
+   * A HELYSZIN TELJES UTJA, a partner neve ala.
+   *
+   * A JEGY-LISTA EDDIG SEMMIT nem mondott a helyszinrol, csak a partnert. Ket
+   * jegy ugyanannal a partnernel tehat megkulonboztethetetlen volt azon a
+   * kepernyon, ahol a szerelo valaszt kozuluk. Balazs 2026-09-16-an a
+   * munkalap-listara kerte a teljes utat, es ugyanabban a mondatban ide is.
+   *
+   * `null`, ha a jegynek nincs helyszine VAGY az utat nem tudjuk felepiteni.
+   * A ketto a listan ugyanugy nez ki, es ez rendben van: ott nincs mit tenni
+   * egyikkel sem. Az adatlap `departmentPath` mezoje ugyanezt a szabalyt
+   * koveti. URES TOMB SOHA.
+   */
+  departmentPath: string[] | null;
   worksheetCount: number;
   createdAt: string;
 }
