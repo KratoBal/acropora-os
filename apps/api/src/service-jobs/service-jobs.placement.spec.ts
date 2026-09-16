@@ -60,6 +60,36 @@ const RESZLETLAP: DetailRow = {
 };
 
 type PlacementArg = Parameters<ServiceJobsRepository["setPlacement"]>[0];
+type Lap = Awaited<
+  ReturnType<ServiceJobsRepository["worksheetsForPlacement"]>
+>[number];
+
+/**
+ * EGY JEGYHEZ KOTOTT MUNKALAP.
+ *
+ * A `number` a DONTO mezo: a munkalap-szamot a lezaras osztja ki, es az ELSO
+ * TAGJA a helyszin kodja -- egy mar szamozott lapot ezert nem mozgatunk.
+ */
+function lap(over: Partial<Lap> = {}): Lap {
+  return {
+    id: "lap-1",
+    number: null,
+    subject: "Szivattyú csere",
+    departmentId: "unit-9",
+    assets: [],
+    ...over,
+  };
+}
+
+function lapEszkoz(over: Partial<Lap["assets"][number]> = {}) {
+  return {
+    assetId: "esz-7",
+    assetNumber: "ESZ-0007",
+    assetName: "Szivattyú",
+    assetDepartmentId: "unit-9",
+    ...over,
+  };
+}
 
 function setup(
   options: {
@@ -68,6 +98,8 @@ function setup(
     /** Amit a tarolo "nincs ezen a helyszinen" valaszkent ad vissza. */
     kivul?: string[];
     letezik?: boolean;
+    /** A jegyhez kotott lapok, ahogy a tarolo adna vissza oket. */
+    lapok?: Lap[];
   } = {},
 ) {
   const irasok: PlacementArg[] = [];
@@ -90,6 +122,14 @@ function setup(
           },
     departmentBelongsToCustomer: async () => options.belongs ?? true,
     assetsOutsideDepartment: async () => options.kivul ?? [],
+    /*
+      A HIVO MOSTANTOL LEKERDEZI A JEGYHEZ KOTOTT LAPOKAT IS (a helyszin
+      atvezetesehez). A varrat laza (`as unknown as`), tehat a hianyzo metodusrol
+      a fordito nem szol -- a szolgaltatas viszont HASZNALJA. Ures lista: ezek az
+      esetek nem lapokrol szolnak.
+    */
+    worksheetsForPlacement: async () => options.lapok ?? [],
+    unitPathsOf: async () => new Map([["unit-9", ["Biodóm", "Nagy medence"]]]),
     setPlacement: async (input) => {
       irasok.push(input);
       return true;
@@ -216,6 +256,158 @@ describe("a hibajegy helyszine és eszközei a felvitel után", () => {
     );
 
     assert.deepEqual(irasok[0]?.assetIds, ["esz-1", "esz-2"]);
+  });
+
+  /**
+   * === A HELYSZIN ATVEZETESE A KOTOTT LAPOKRA (Balazs merese, 2026-09-16) ===
+   *
+   * Szo szerint: "a hibajegynel meg tudtam valtoztatni a helyszint. de a mar
+   * hozzakotott munkalapnal nem valtozott meg".
+   *
+   * A KET ALLITAS EGYUTT MER, KULON-KULON NEM: az elso azt mondja, hogy a szam
+   * nelkuli lap MEGY, a masodik azt, hogy a szamozott NEM. Onmagaban az elso
+   * akkor is zold lenne, ha MINDEN lapot mozgatnank; a masodik akkor is, ha
+   * EGYET SEM.
+   */
+  it("a szám nélküli lap azonosítója lemegy a tárolóhoz", async () => {
+    const { service, irasok } = setup({ lapok: [lap({ id: "lap-1" })] });
+
+    await service.setPlacement(
+      "job-1",
+      { departmentId: "unit-9", assetIds: [] },
+      BELSOS,
+    );
+
+    assert.deepEqual(irasok[0]?.worksheetIds, ["lap-1"]);
+  });
+
+  /**
+   * A PAR MASIK FELE, ES A HATAR INDOKA: a munkalap-szamot a lezaras osztja ki,
+   * es az ELSO TAGJA A HELYSZIN KODJA (`BIO-2026-001`). Egy mar szamozott lapot
+   * mozgatva a szama olyan helyszint nevezne meg, ahol a lap mar nem all -- es
+   * a szam a lap azonossaga, kinyomtatva es atadva.
+   */
+  it("a SZÁMOZOTT lap azonosítója NEM megy le", async () => {
+    const { service, irasok } = setup({
+      lapok: [
+        lap({ id: "lap-1" }),
+        lap({ id: "lap-2", number: "BIO-2026-001" }),
+      ],
+    });
+
+    await service.setPlacement(
+      "job-1",
+      { departmentId: "unit-9", assetIds: [] },
+      BELSOS,
+    );
+
+    /*
+      A TAGADASRA ALLITUNK, NEM A TELJES LISTARA -- es ez nem szorszalhasogatas.
+      Egy `deepEqual(["lap-1"])` akkor is elbukna, ha a szolgaltatas EGY lapot
+      sem mozgatna, vagyis ugyanazt merne, mint a par masik fele. Igy a ket
+      allitas KULON-KULON egy-egy rontasra pirosodik: "mindet mozgatja" csak
+      ezt, "egyet sem mozgat" csak a masikat.
+    */
+    assert.equal(irasok.length, 1);
+    assert.ok(
+      !irasok[0]?.worksheetIds.includes("lap-2"),
+      "a számozott lap nem mozdulhat",
+    );
+  });
+
+  /**
+   * EGY MOZGATOTT LAPON KIVUL ESO ESZKOZ: A MUVELET MEGALL, ES MEGNEVEZI.
+   *
+   * Nem a valaszkodra all az allitas, hanem a tarolora: egy 409-et mero teszt
+   * akkor is zold lenne, ha az iras kozben mar megtortent. Es az UZENETRE is,
+   * mert egy "nehany eszkoz kivul esne" mondat ugyanannyit er, mint a csend.
+   */
+  it("kívül eső lap-eszköznél megáll, és megnevezi a lapot, az eszközt és a helyét", async () => {
+    const { service, irasok } = setup({
+      kivul: ["esz-7"],
+      lapok: [lap({ subject: "Szivattyú csere", assets: [lapEszkoz()] })],
+    });
+
+    await assert.rejects(
+      () =>
+        service.setPlacement(
+          "job-1",
+          { departmentId: "unit-5", assetIds: [] },
+          BELSOS,
+        ),
+      (hiba: { status?: number; getResponse?: () => unknown }) => {
+        /**
+         * A MONDATOK A VALASZ TORZSEBEN VANNAK, NEM A `message` MEZOBEN -- es
+         * ezt lemertem, nem feltetelezem (2026-09-16): egy tombbel hivott
+         * `ConflictException` sajat `message` erteke a keretrendszer
+         * alapertelmezese ("Conflict Exception"), a tomb pedig a
+         * `getResponse().message` alatt all. Egy `.message`-re epulo allitas
+         * tehat nem a szoveget merne, hanem a keret alapertelmezeset -- es
+         * zolden allna akkor is, ha egyetlen mondatot sem kuldenenk ki.
+         *
+         * A FELULETRE IGY IS ELJUT: a webes kliens a valasz `message` mezojet
+         * olvassa, es a tombot ujsorokkal fuzi ossze.
+         */
+        const valasz = hiba.getResponse?.() as { message?: unknown };
+        const szoveg = Array.isArray(valasz?.message)
+          ? valasz.message.join("\n")
+          : String(valasz?.message ?? "");
+        assert.equal(hiba.status, 409);
+        assert.match(szoveg, /Szivattyú csere/);
+        assert.match(szoveg, /Szivattyú \(ESZ-0007\)/);
+        assert.match(szoveg, /Biodóm \/ Nagy medence/);
+        assert.match(szoveg, /A lapon marad/);
+        return true;
+      },
+    );
+    assert.deepEqual(irasok, []);
+  });
+
+  /**
+   * ES A MASODIK, KIMONDOTT KORBEN ATMEGY. Enelkul az elozo allitas akkor is
+   * zold lenne, ha a vegpont MINDEN ilyen kerest elutasitana -- vagyis ha a
+   * dontes nem a felhasznaloe lenne, hanem a szerveré.
+   */
+  it("tudomásulvétellel ugyanaz a kérés átmegy", async () => {
+    const { service, irasok } = setup({
+      kivul: ["esz-7"],
+      lapok: [lap({ assets: [lapEszkoz()] })],
+    });
+
+    await service.setPlacement(
+      "job-1",
+      {
+        departmentId: "unit-5",
+        assetIds: [],
+        acceptWorksheetAssetsOutsideSite: true,
+      },
+      BELSOS,
+    );
+
+    assert.equal(irasok.length, 1);
+    assert.deepEqual(irasok[0]?.worksheetIds, ["lap-1"]);
+  });
+
+  /**
+   * HA NINCS MIROL DONTENI, NE KERDEZZEN.
+   *
+   * Ez a gyakori eset, es sajat allitast erdemel: egy megerosito kerdes, ami
+   * minden mentesnel feljon, ket het alatt reflexbol elkattintott ablakka
+   * valik -- es akkor a valodi utkozest sem olvassa el senki.
+   */
+  it("ütköző eszköz nélkül nem kérdez, hanem átmegy", async () => {
+    const { service, irasok } = setup({
+      kivul: [],
+      lapok: [lap({ assets: [lapEszkoz()] })],
+    });
+
+    await service.setPlacement(
+      "job-1",
+      { departmentId: "unit-9", assetIds: [] },
+      BELSOS,
+    );
+
+    assert.equal(irasok.length, 1);
   });
 
   it("nem létező jegyre 404-et ad, és nem ír", async () => {
