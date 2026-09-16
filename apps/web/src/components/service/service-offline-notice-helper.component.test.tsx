@@ -74,6 +74,57 @@ describe("a szerviz-sav allvanya", () => {
     await expect(savotMond("empty")).rejects.toThrow(/sm:hidden/);
   });
 
+  /**
+   * A `!` FONTOSSAG-JELZOT IS ELKAPJA -- ES EZT AZ ALLITAST A REGI KOD NEM
+   * TELJESITETTE.
+   *
+   * A korabbi alak `endsWith(":hidden")`-t nezett, a `lg:!hidden` token viszont
+   * `:!hidden`-re vegzodik. Nem elmeleti hiany: ez az alak OTT ALL a fo
+   * navigacioban (`app-shell.tsx`), tehat epp az a fajta os, ami egy sav fole
+   * is odakerulhet.
+   */
+  it("a `!` fontosság-jelzős rejtő osztályt is elkapja", async () => {
+    setOnLine(false);
+    render(
+      <div className="lg:!hidden">
+        <ServiceOfflineNotice state={{ kind: "empty" }} />
+      </div>,
+    );
+
+    await expect(savotMond("empty")).rejects.toThrow(/lg:!hidden/);
+  });
+
+  it("a jelző önmagában, prefix nélkül is rejt", async () => {
+    setOnLine(false);
+    render(
+      <div className="!hidden">
+        <ServiceOfflineNotice state={{ kind: "empty" }} />
+      </div>,
+    );
+
+    await expect(savotMond("empty")).rejects.toThrow(/!hidden/);
+  });
+
+  /**
+   * TESTVER-KONTROLL: AMI VAG, NEM REJT.
+   *
+   * A minta a TELJES tokent koti, tehat az `overflow-hidden` kimarad. Enelkul
+   * a fenti ket allitas akkor is zold lenne, ha a minta MINDENT rejtonek
+   * mondana, amiben szerepel a szo -- es akkor minden gorgetheto doboz
+   * hamisan bukna el.
+   */
+  it("az `overflow-hidden` NEM számít rejtőnek", () => {
+    setOnLine(false);
+    const { container } = render(
+      <div className="overflow-hidden rounded-xl">
+        <ServiceOfflineNotice state={{ kind: "form" }} />
+      </div>,
+    );
+    const sav = container.querySelector("[role=status]") as HTMLElement;
+
+    expect(osztallyalRejtve(sav)).toBeNull();
+  });
+
   it("elbukik, ha két mondat áll egyszerre", async () => {
     setOnLine(false);
     render(

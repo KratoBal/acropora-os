@@ -101,9 +101,36 @@ export function savSzovege(kind: ServiceOfflineState["kind"]): string {
  * EZ NEM ELMELETI: megepitettem. A savot `<div className="hidden">`-be csomagolva
  * a szerviz teljes lap-teszt-keszlete ZOLD MARAD, mert a futtato NEM tolt be
  * stiluslapot -- a Tailwind `hidden` osztaly szamara csak egy szo. (A HTML
- * `hidden` ATTRIBUTUM mas eset: azt a `toBeVisible` is elkapja.) A `hidden` es a
- * reszponzív rejto osztalyok ma 30 helyen allnak az `apps/web` fajaban, tehat
- * ez az alak elerheto tavolsagban van, nem kitalalt.
+ * `hidden` ATTRIBUTUM mas eset: azt a `toBeVisible` is elkapja.)
+ *
+ * AZ ALAK ELERHETO TAVOLSAGBAN VAN, NEM KITALALT -- de a szam, ami itt allt,
+ * ROSSZ VOLT, es ezt kimondom, mert magam irtam ide. "30 helyen" allt, laza
+ * mintabol: az `apps/web` fajaban a `hidden`-t TARTALMAZO szavak tenyleg
+ * negyvenotszor allnak, csakhogy ebbol 18 az `overflow-hidden` (az nem rejt el
+ * elemet, csak vag) es 6 az `aria-hidden`.
+ *
+ * UJRAMERVE 2026-09-15, a KODRA (kommentek kiszedve, barmely string-literal,
+ * tehat a konstansba vagy `cn()`-be zart alak is beleszamitva), a sajat ket
+ * orzo-fajlom nelkul:
+ *
+ *     rejto osztaly-token  10   ebbol reszponziv 5, sima 5
+ *     erintett termek-fajl  4   (app-shell, user-menu, webshop-orders,
+ *                                worksheet-line-editor)
+ *
+ * Tiz hely negy lapon, es kozottuk a fo navigacio: a `lg:hidden` epp az a
+ * fajta, ami egy sav fole is odakerulhet. A kovetkeztetes tehat all, a
+ * nagysagrend viszont HARMADA annak, amit ide irtam.
+ *
+ * ES A KILENC IS EGGYEL KEVES VOLT -- acrobot merte vissza (2026-09-16), en
+ * pedig fuggetlenul megismeteltem, es beture ugyanezt kaptam. A kimaradt
+ * tizedik a `lg:!hidden` az `app-shell.tsx`-ben: a Tailwind fontossag-jelzoje
+ * a PREFIX UTAN es a NEV ELE kerul, ezert esik ki minden olyan mintabol, ami a
+ * token elejen csak betut es ketospontot enged meg.
+ *
+ * AZ ELSO SZAM HARMADARA CSOKKENT EGY LAZA MINTATOL, A MASODIK EGGYEL NOTT EGY
+ * TUL SZUK MINTATOL. Ugyanaz a hiba ket iranyban, es a masodik a csendesebb:
+ * egy tul tag kereses hihetetlenul nagy szamot ad, egy tul szuk viszont
+ * HIHETO, kisebb szamot -- azt pedig senki nem nezi meg.
  *
  * A HATARA, KIMONDVA -- ez PADLO, nem garancia:
  *   - csak az OSZTALYT nezi. Egy `style="display:none"`, egy nulla magassagu
@@ -114,10 +141,31 @@ export function savSzovege(kind: ServiceOfflineState["kind"]): string {
  *     engedekenyseg NEMA -- egy lathatatlan sav ugy nez ki, mint egy lap,
  *     aminek nincs is mondanivaloja.
  */
+/**
+ * A REJTO OSZTALY ALAKJA -- ES A `!` FONTOSSAG-JELZO A PREFIX UTAN ALL.
+ *
+ * A korabbi alak (`=== "hidden" || endsWith(":hidden")`) a Tailwind
+ * fontossag-jelzojet NEM ismerte fel: a `lg:!hidden` token `:!hidden`-re
+ * vegzodik, tehat mind a ket feltetel hamis ra. Merve 2026-09-16:
+ *
+ *     hidden      lg:hidden   felismerte
+ *     !hidden     lg:!hidden  NEM ismerte fel
+ *
+ * EZ NEM ELMELETI HIANY: a `lg:!hidden` OTT ALL a fo navigacioban
+ * (`app-shell.tsx`), tehat pontosan az a fajta os, ami egy sav fole is
+ * odakerulhet -- es az orzo ZOLD maradt volna alatta. Egy orzo, ami a
+ * legvalószinubb alakot nem ismeri, nem szigorubb a semminel, hanem
+ * MEGNYUGTAT.
+ *
+ * A minta a teljes tokent koti (`^...$`), ezert az `overflow-hidden` es a
+ * `hidden-valami` tovabbra is kimarad: az elso vag, nem rejt.
+ */
+const REJTO_OSZTALY = /^(?:[a-z0-9-]+:)*!?hidden$/;
+
 export function osztallyalRejtve(elem: HTMLElement): string | null {
   for (let csomopont: HTMLElement | null = elem; csomopont;) {
-    const rejto = [...csomopont.classList].find(
-      (osztaly) => osztaly === "hidden" || osztaly.endsWith(":hidden"),
+    const rejto = [...csomopont.classList].find((osztaly) =>
+      REJTO_OSZTALY.test(osztaly),
     );
     if (rejto) return rejto;
     csomopont = csomopont.parentElement;
