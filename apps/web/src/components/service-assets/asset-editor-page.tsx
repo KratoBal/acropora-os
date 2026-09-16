@@ -148,6 +148,7 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
         setModel(asset.model ?? "");
         setSerialNumber(asset.serialNumber ?? "");
         setInventoryNumber(asset.inventoryNumber ?? "");
+        setLabelCode(asset.labelCode ?? "");
         setInstalledAt(inputDate(asset.installedAt));
         setWarrantyExpiresAt(inputDate(asset.warrantyExpiresAt));
         setServiceIntervalDays(asset.serviceIntervalDays?.toString() ?? "");
@@ -257,20 +258,24 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
      * TELEFONE. Egy harmadik minta itt pontosan ott csuszna el, ahol senki nem
      * nezi: az urlap atengedne, a mentes meg elutasitana.
      *
-     * CSAK FELVITELNEL FUT LE, es ez nem ovatossag: a szerver `UpdateAssetDto`
-     * NEM ismer `labelCode` mezot, tehat meglevo eszkozhoz ezen az uton nem
-     * kerul matrica. A mezo ezert meg sem jelenik szerkeszteskor.
+     * MOSTANTOL MIND A KET AGON FUT. Korabban csak felvitelnel, mert a szerver
+     * `UpdateAssetDto`-ja nem ismert `labelCode` mezot -- Balazs 2026-09-16-i
+     * kerese ezt megszuntette, tehat a feltetellel egyutt az INDOKA is elavult.
+     *
+     * ES UGYANEZ A FUGGVENY JO MIND A KETTORE, nem veletlenul: az URES szovegre
+     * `null`-t ad (nincs mit ellenorizni), a rossz alakra `malformed`-ot. A
+     * felvitelen az ures azt jelenti, hogy nincs matrica; a szerkeszton azt,
+     * hogy nem nyultak hozza. A KERDES ugyanaz -- "jo-e, amit beirtak" --, a
+     * ket valasz kulonbsege pedig a kuldesnel dol el, nem itt.
      */
-    if (!assetId) {
-      const labelProblem = assetLabelCreateProblem(labelCode);
-      if (labelProblem === "missing") {
-        setError("Írd be a matrica kódját.");
-        return;
-      }
-      if (labelProblem === "malformed") {
-        setError("A matrica kódja egy betű és négy szám, például V2196.");
-        return;
-      }
+    const labelProblem = assetLabelCreateProblem(labelCode);
+    if (labelProblem === "missing") {
+      setError("Írd be a matrica kódját.");
+      return;
+    }
+    if (labelProblem === "malformed") {
+      setError("A matrica kódja egy betű és négy szám, például V2196.");
+      return;
     }
     setBusy(true);
     setError(null);
@@ -297,6 +302,11 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
             nextServiceAt: toIsoDate(nextServiceAt) ?? null,
             description: description.trim() || null,
             notes: notes.trim() || null,
+            // A NORMALIZALT ALAK MEGY EL, es URES MEZONEL EL SEM MEGY -- a
+            // tobbi mezovel ellentetben, ahol az ures ertek `null`-kent
+            // TORLEST jelent. A matricat ezen az uton nem lehet leszedni (a
+            // szerver `string`-et var), es a mezo leirasa ki is mondja.
+            labelCode: normalizeAssetLabelCode(labelCode) ?? undefined,
             expectedUpdatedAt: updatedAt,
           })
         : await assetsApi.create(token, {
@@ -534,19 +544,21 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
               szerkeszteskor is ott allna, de mentesnel csendben elveszne,
               rosszabb a hianyzo mezonel.
             */}
-            {!assetId ? (
-              <FormField
-                label="Matrica kódja"
-                description="Az előre nyomtatott matricáról, egy betű és négy szám (például V2196). Elhagyható, de utólag ezen a lapon már nem pótolható."
-              >
-                <Input
-                  aria-label="Matrica kódja"
-                  value={labelCode}
-                  onChange={(event) => setLabelCode(event.target.value)}
-                  placeholder="V2196"
-                />
-              </FormField>
-            ) : null}
+            <FormField
+              label="Matrica kódja"
+              description={
+                assetId
+                  ? "Az előre nyomtatott matricáról, egy betű és négy szám (például V2196). Ha már áll rajta kód, az itt látszik: másikat beírva a régi visszakerül a szabad készletbe. A mező kiürítése nem szedi le a matricát."
+                  : "Az előre nyomtatott matricáról, egy betű és négy szám (például V2196). Elhagyható, és utólag ezen a lapon is pótolható."
+              }
+            >
+              <Input
+                aria-label="Matrica kódja"
+                value={labelCode}
+                onChange={(event) => setLabelCode(event.target.value)}
+                placeholder="V2196"
+              />
+            </FormField>
             <FormField label="Kritikusság">
               <Select
                 aria-label="Kritikusság"

@@ -320,6 +320,16 @@ export interface UpdateAssetInput {
   nextServiceAt?: string | null;
   notes?: string | null;
   expectedUpdatedAt: string;
+  /**
+   * AZ ELORE NYOMTATOTT MATRICA KODJA, UTOLAG IS.
+   *
+   * ES ITT NINCS `| null`, holott a tobbi mezon ott van -- nem feledekenysegbol:
+   * a szerver `UpdateAssetDto`-ja is `string`-et var. A matrica LESZEDESE ma
+   * nem letezik (az esemeny-naploban nincs neve, lasd a szerver oldali
+   * dontest), tehat egy `null` 400-zal bukna el. A tipus igy MAR ITT
+   * megmondja, ami a szerveren is all.
+   */
+  labelCode?: string;
 }
 
 export interface AssetQrCode {

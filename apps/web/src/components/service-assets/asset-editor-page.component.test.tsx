@@ -310,16 +310,131 @@ describe("AssetEditorPage matricakód", () => {
   });
 
   /**
-   * MEGLEVO ESZKOZON A MEZO NINCS OTT, es ez nem szepseg-dontes: a szerver
-   * `UpdateAssetDto`-ja NEM ismer `labelCode` mezot (merve 2026-09-16), tehat
-   * egy szerkeszteskor kitoltott mezo CSENDBEN elveszne. A kezelo azt hinne,
-   * hozzarendelte a matricat.
+   * MEGLEVO ESZKOZON IS OTT A MEZO -- ES EZ AZ ALLITAS AZ ELLENKEZOJET MONDTA.
+   *
+   * Itt korabban az allt, hogy a mezo szerkeszteskor NINCS ott, es az INDOKA is
+   * ki volt irva: a szerver `UpdateAssetDto`-ja nem ismert `labelCode` mezot,
+   * tehat a kitoltott mezo csendben elveszett volna. Az indok Balazs 2026-09-16-i
+   * kerese nyoman megszunt, tehat az allitas is atirodik -- nem torlodik.
+   *
+   * Azert atiras es nem torles, mert a KERDES ugyanaz maradt: mi tortenik a
+   * matricaval a szerkeszto lapon. Egy torolt allitas helyen senki nem latna,
+   * hogy ezt valaha vegiggondoltuk.
    */
-  it("meglévő eszköz szerkesztésekor nincs matrica mező", async () => {
+  it("meglévő eszköz szerkesztésekor OTT a mező, a MOSTANI kóddal", async () => {
+    api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
+    api.detail.mockResolvedValue({ ...asset, labelCode: "V2196" });
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    const mezo = await screen.findByLabelText("Matrica kódja");
+    // AZ ELOTOLTES A LENYEG, nem a mezo letezese: egy URES doboz azt allitana,
+    // hogy nincs matrica, es a kezelo egy MUKODO kodot irna felul anelkul,
+    // hogy latna. A szerver ezt cserekent vegre is hajtana.
+    expect((mezo as HTMLInputElement).value).toBe("V2196");
+  });
+
+  /**
+   * A LAP KIMONDJA, AMIT A MEZO NEM TUD MEGTENNI.
+   *
+   * A kiurites nem szedi le a matricat (a szerver `string`-et var, nem
+   * `string | null`). Ha ezt a leiras elhallgatna, a kezelo kiurítene a mezot,
+   * mentene, es azt hinne, leszedte -- kozben semmi nem tortenne. Egy nema
+   * no-op rosszabb egy hibauzenetnel.
+   *
+   * ES A KET AG MAST MOND: a felvitelen nincs mit leszedni, ott a mondat arrol
+   * szol, hogy UTOLAG is potolhato. Korabban epp az ellenkezojet allitotta
+   * ("utolag ezen a lapon mar nem potolhato") -- az a mondat Balazs
+   * 2026-09-16-i keresevel elavult.
+   */
+  it("a szerkesztő leírása kimondja, hogy a kiürítés nem szedi le", async () => {
+    api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
+    api.detail.mockResolvedValue({ ...asset, labelCode: "V2196" });
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    await screen.findByLabelText("Matrica kódja");
+    expect(screen.getByText(/kiürítése nem szedi le/)).toBeTruthy();
+    // TESTVER-KONTROLL: a FELVITELI ag NEM ezt mondja, es nem is mondhatja --
+    // ott nincs mit leszedni. Ha a ket mondat valaha egy lenne, ez pirosodik.
+    expect(
+      screen.queryByText(/utólag ezen a lapon már nem pótolható/),
+    ).toBeNull();
+  });
+
+  it("a szerkesztő mentése FELVISZI a beírt kódot", async () => {
+    api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
+    api.detail.mockResolvedValue(asset);
+    api.update.mockResolvedValue({ ...asset, labelCode: "V2196" });
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText("Matrica kódja"), " v2196 ");
+    await user.click(
+      screen.getByRole("button", { name: "Módosítások mentése" }),
+    );
+
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+    // A NORMALIZALT ALAK MEGY EL, nem a begepelt: a tabla megkotese csak
+    // nagybetut enged, a bemenet viszont szandekosan megengedobb.
+    expect(api.update.mock.calls[0]?.[2]?.labelCode).toBe("V2196");
+  });
+
+  /**
+   * A TESTVER-KONTROLL, ES ENELKUL A FENTI ALLITAS SEMMIT NEM ER.
+   *
+   * Egy mentes, ami MINDIG kuldene a mezot, a fentin is atmenne. Ez az egy
+   * mondja ki, hogy az URES mezo nem torlest jelent: a matricat ezen az uton
+   * nem lehet leszedni, es egy `null` a szerveren 400-zal bukna el.
+   */
+  it("üres mezőnél a kulcs EL SEM megy, nem törlést küld", async () => {
+    api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
+    api.detail.mockResolvedValue({ ...asset, labelCode: "V2196" });
+    api.update.mockResolvedValue(asset);
+    render(<AssetEditorPage assetId="asset-1" />);
+
+    const user = userEvent.setup();
+    await user.clear(await screen.findByLabelText("Matrica kódja"));
+    await user.click(
+      screen.getByRole("button", { name: "Módosítások mentése" }),
+    );
+
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
+    /**
+     * A DROTON MERUNK, NEM AZ OBJEKTUMON -- ES EZT A TESZT TANITOTTA MEG.
+     *
+     * Eloszor `"labelCode" in kuldott` allt itt, es PIROS lett: az
+     * objektum-literal a kulcsot MINDIG kiirja, `undefined` ertekkel. A
+     * `JSON.stringify` viszont eldobja, tehat a szerver NEM latja -- a
+     * viselkedes helyes volt, az allitasom mert rosszat.
+     *
+     * A szerializalt alak a helyes merce, mert az `undefined` (kulcs eltunik)
+     * es a `null` (TORLES megy fel) kozotti kulonbseg pontosan itt dol el. A
+     * felviteli ut tesztje `.toBeUndefined()`-et hasznal, ami MIND A KETTOT
+     * atengedi -- ez a sor szigorubb nala.
+     */
+    const kuldott = JSON.parse(
+      JSON.stringify(api.update.mock.calls[0]?.[2] ?? {}),
+    );
+    expect("labelCode" in kuldott).toBe(false);
+    // ES A KONTRASZT UGYANITT: egy SZOVEGES mezo ugyanattol a mozdulattol
+    // `null`-t kuld. Ha ez a ket sor valaha egyet mondana, a ket szabaly
+    // osszecsuszott.
+    expect(kuldott.notes).toBe(null);
+  });
+
+  it("a rossz ALAK a szerkesztő ágon is megállítja a mentést", async () => {
+    api.owners.mockResolvedValue(owners([servicePartner, inheritedCustomer]));
     api.detail.mockResolvedValue(asset);
     render(<AssetEditorPage assetId="asset-1" />);
 
-    await waitFor(() => expect(api.detail).toHaveBeenCalled());
-    expect(screen.queryByLabelText("Matrica kódja")).toBeNull();
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText("Matrica kódja"), "ROSSZ");
+    await user.click(
+      screen.getByRole("button", { name: "Módosítások mentése" }),
+    );
+
+    expect(
+      await screen.findByText(/^A matrica kódja egy betű és négy szám/),
+    ).toBeTruthy();
+    expect(api.update).not.toHaveBeenCalled();
   });
 });
