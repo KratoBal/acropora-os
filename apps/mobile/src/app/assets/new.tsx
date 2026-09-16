@@ -66,7 +66,10 @@ import {
   rememberPartnerUnits,
 } from "@/lib/offline/asset-form-cache";
 import { listFromCacheOrNetwork } from "@/lib/offline/list-source";
-import { describeCachedDepartmentsNotice } from "@/lib/offline/offline-notice";
+import {
+  describeCachedDepartmentsNotice,
+  describeCachedOwnersNotice,
+} from "@/lib/offline/offline-notice";
 import { enqueueAssetCreate, enqueuePhoto } from "@/lib/offline/queue-store";
 import { filterOwners } from "@/lib/assets/owner-search";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -275,7 +278,7 @@ export default function NewAssetScreen() {
    * felvitel a szerveren bukna el, jóval kesobb.
    */
   const ownersNotice = ownersFromCache
-    ? describeCachedDepartmentsNotice({
+    ? describeCachedOwnersNotice({
         online: false,
         count: cachedOwners.items.length,
         syncedAt: cachedOwners.syncedAt,
