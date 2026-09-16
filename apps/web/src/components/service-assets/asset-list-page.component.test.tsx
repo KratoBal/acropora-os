@@ -490,3 +490,63 @@ describe("AssetListPage rendezés", () => {
     ).toBe("none");
   });
 });
+
+/**
+ * A BEEPITETT FUL: minden, KIVEVE a kivezetetteket.
+ *
+ * Balazs kerese, 2026-09-16: "ide szeretnek egy Beepitett opciot meg amiben
+ * minden benne van kiveve a kivezetett eszkozok".
+ *
+ * AMIT EZ MER, ES AMIT NEM: hogy a ful letezik es a HELYES erteket teszi a
+ * cimbe. Hogy a szerver ettol tenyleg a kivezetetteket hagyja ki, azt az
+ * `asset-status-filter.spec.ts` meri -- ott all a tagadas alakja is.
+ */
+describe("AssetListPage Beépített szűrő", () => {
+  beforeEach(() => {
+    auth.session = session;
+    navigation.params = new URLSearchParams();
+    navigation.replace.mockReset();
+    api.list.mockReset();
+    api.list.mockResolvedValue(response(1));
+  });
+
+  it("a fül az IN_PLACE értéket teszi a címbe", async () => {
+    render(<AssetListPage />);
+
+    fireEvent.click(await screen.findByRole("tab", { name: "Beépített" }));
+
+    expect(lastTarget().get("status")).toBe("IN_PLACE");
+  });
+
+  /**
+   * TESTVER-KONTROLL: a szuro ELJUT a szerverig. Az elso allitas akkor is zold
+   * lenne, ha a cimbe irt ertek sehova nem menne tovabb.
+   */
+  it("a címben álló szűrőt továbbadja a szervernek", async () => {
+    navigation.params = new URLSearchParams("status=IN_PLACE");
+    render(<AssetListPage />);
+
+    await waitFor(() => expect(api.list).toHaveBeenCalled());
+    const kuldott = api.list.mock.calls.at(-1)?.[1] as URLSearchParams;
+    expect(kuldott.get("status")).toBe("IN_PLACE");
+  });
+
+  /**
+   * ES A MEGLEVO FULEK NEM MOZDULTAK. Egy uj ful beszurasa a legkonnyebben ugy
+   * ront el valamit, hogy egy masikat kiszorit vagy atnevez -- ezt semmi nem
+   * jelezné, mert mindegyik ugyanugy nez ki.
+   */
+  it("a többi fül változatlanul ott van", async () => {
+    render(<AssetListPage />);
+
+    for (const nev of [
+      "Összes",
+      "Beépített",
+      "Aktív",
+      "Javítás alatt",
+      "Nem üzemel",
+      "Kivezetett",
+    ])
+      expect(await screen.findByRole("tab", { name: nev })).toBeTruthy();
+  });
+});

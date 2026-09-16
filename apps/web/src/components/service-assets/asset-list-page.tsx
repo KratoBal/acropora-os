@@ -48,6 +48,17 @@ import {
 
 const TABS = [
   { key: "ALL", label: "Összes" },
+  /**
+   * A BEEPITETT: minden, KIVEVE a kivezetetteket. Balazs kerese, 2026-09-16,
+   * szo szerint: "ide szeretnek egy Beepitett opciot meg amiben minden benne
+   * van kiveve a kivezetett eszkozok".
+   *
+   * AZ OSSZES UTAN ALL, ES NEM A SOR VEGEN: a ketto ugyanazt a kerdest
+   * valaszolja meg ("mit latok egyszerre"), csak masik hatarral -- egymas
+   * mellett a kulonbseguk latszik, a sor vegen egy negyedik allapot-szuronek
+   * nezne ki.
+   */
+  { key: "IN_PLACE", label: "Beépített" },
   { key: "ACTIVE", label: "Aktív" },
   { key: "IN_REPAIR", label: "Javítás alatt" },
   { key: "OUT_OF_SERVICE", label: "Nem üzemel" },

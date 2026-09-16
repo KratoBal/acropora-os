@@ -1,6 +1,10 @@
 import { ASSET_LABEL_BATCH_MAX, ASSET_LABEL_BATCH_MIN } from "@acropora/types";
 
 import {
+  ASSET_LIST_STATUS_FILTERS,
+  type AssetListStatusFilter,
+} from "../asset-status-filter.js";
+import {
   ASSET_LIST_DIRECTIONS,
   ASSET_LIST_SORTS,
   type AssetListDirection,
@@ -136,8 +140,15 @@ export class AssetListQueryDto {
   departmentIds?: string[];
   @IsString() @IsOptional() aquariumId?: string;
   @IsString() @IsOptional() parentAssetId?: string;
-  @IsIn([...ASSET_STATUSES, "ALL"]) @IsOptional() status:
-    (typeof ASSET_STATUSES)[number] | "ALL" = "ACTIVE";
+  /**
+   * AZ ALLAPOT-SZURO HAROM FAJTA ERTEKET VESZ FEL: egy konkret allapotot, az
+   * `ALL` erteket, vagy az `IN_PLACE` erteket (minden, KIVEVE a kivezetettet --
+   * a feluleten "Beepitett", Balazs kerese 2026-09-16). A jelentesuk az
+   * `asset-status-filter.ts` fajlban all, egy helyen.
+   */
+  @IsIn([...ASSET_STATUSES, ...ASSET_LIST_STATUS_FILTERS])
+  @IsOptional()
+  status: (typeof ASSET_STATUSES)[number] | AssetListStatusFilter = "ACTIVE";
   @IsIn(ASSET_KINDS) @IsOptional() kind?: (typeof ASSET_KINDS)[number];
   @IsISO8601() @IsOptional() dueBefore?: string;
 }
