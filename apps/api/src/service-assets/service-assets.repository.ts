@@ -458,6 +458,16 @@ export class ServiceAssetsRepository extends Repository {
         : query.label === "with"
           ? { label: { isNot: null } }
           : {}),
+      /**
+       * EGY KONKRET MATRICAKOD. A `label: { code }` alak a kapcsolt soron
+       * szur, tehat a matrica NELKULI eszkozok magatol kiesnek.
+       *
+       * A DTO MAR NORMALIZALT ALAKOT AD (`toStoredLabelCode`), es a rossz
+       * alakut ELUTASITJA -- ide tehat vagy egy tarolhato kod erkezik, vagy
+       * semmi. Egy csendben eldobott szuro itt a helyszin OSSZES eszkozet adna
+       * vissza, ami a hivo szemszogebol nem ures valasz, hanem ROSSZ talalat.
+       */
+      ...(query.labelCode ? { label: { code: query.labelCode } } : {}),
       ...(query.parentAssetId ? { parentAssetId: query.parentAssetId } : {}),
       ...(query.dueBefore
         ? { nextServiceAt: { lte: new Date(query.dueBefore) } }

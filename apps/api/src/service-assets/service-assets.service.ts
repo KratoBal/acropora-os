@@ -15,6 +15,7 @@ import {
 import { Prisma } from "@acropora/database";
 import type { AssetQrCode } from "@acropora/types";
 import {
+  ASSET_LABEL_CODE_SHAPE_MESSAGE,
   assetLabelCreateProblem,
   normalizeAssetLabelCode,
 } from "@acropora/types";
@@ -182,9 +183,7 @@ export class ServiceAssetsService {
   async scanLabel(rawCode: string, scope: PartnerScope) {
     const code = normalizeAssetLabelCode(rawCode);
     if (code === null)
-      throw new BadRequestException(
-        "A matricakód alakja egy betű és négy szám (például V2196).",
-      );
+      throw new BadRequestException(ASSET_LABEL_CODE_SHAPE_MESSAGE);
     const asset = await this.repository.detailByLabelCode(code, scope);
     if (!asset)
       throw new NotFoundException(

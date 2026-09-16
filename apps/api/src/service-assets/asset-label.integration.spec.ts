@@ -549,6 +549,63 @@ describe(
     });
 
     /**
+     * A KONKRET KODRA SZURO LISTA, ADATBAZISON.
+     *
+     * EZ AZ A LEKERDEZES, AMIT A HIBAJEGY ESZKOZ-VALASZTOJA HIV, amikor valaki
+     * beirja a matricakodot: azt kerdezi, hogy EZ A MATRICA a valasztott
+     * halmazban all-e. Egysegtesztbol nem merheto, mert a valasz a kapcsolt
+     * `AssetLabel` soron dol el.
+     *
+     * HAROM ALLITAS KELL HOZZA, ES A MASODIK-HARMADIK NEM DISZ:
+     *  - a szurt lista PONTOSAN a matricas eszkozt adja;
+     *  - szuro NELKUL ugyanaz a lekerdezes TOBB sort ad (ismert pozitiv
+     *    kontroll: enelkul egy amugy is egyelemu lista ugyanigy zold lenne);
+     *  - egy SZABAD (eszkozhoz nem rendelt) kodra NULLA sor jon. Ez utobbi a
+     *    legfontosabb: ha a szuro valaha "nincs szuro"-re esne vissza, a valasz
+     *    a TELJES lista lenne, es a hivo -- aki egyetlen sort var -- egy MASIK
+     *    eszkozt adna hozza a jegyhez.
+     */
+    it("a labelCode szűrő pontosan a matricás eszközt adja", async () => {
+      const label = await prisma.assetLabel.findUnique({
+        where: { code: CODE_C },
+        select: { assetId: true },
+      });
+      assert.ok(label?.assetId, "a próba előfeltétele: a kód eszközön áll");
+
+      function lekerdezes(over: Record<string, unknown>) {
+        return repository.list(
+          Object.assign(new AssetListQueryDto(), {
+            ownerId: customerId,
+            ownerType: "CUSTOMER" as const,
+            status: "ALL" as const,
+            ...over,
+          }),
+          { kind: "internal" },
+        );
+      }
+
+      const szurve = await lekerdezes({ labelCode: CODE_C });
+      assert.deepEqual(
+        szurve.items.map((item) => item.id),
+        [label.assetId],
+        "a szűrt lista egyetlen sora a matricás eszköz",
+      );
+
+      const szuretlen = await lekerdezes({});
+      assert.ok(
+        szuretlen.items.length > 1,
+        "a szűrő nélküli lista több sort ad, tehát a fenti szűkítés mért valamit",
+      );
+
+      const szabadra = await lekerdezes({ labelCode: CODE_A });
+      assert.equal(
+        szabadra.items.length,
+        0,
+        "szabad kódra nulla sor jön, nem a teljes lista",
+      );
+    });
+
+    /**
      * A GENERALAS ES A LISTA, ADATBAZISON.
      *
      * Ket dolog merheto csak itt: hogy a generalt kodok TENYLEG uj, nem letezo
