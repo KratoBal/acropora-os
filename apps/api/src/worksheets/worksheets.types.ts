@@ -98,7 +98,10 @@ export const worksheetDetailInclude = {
 export const worksheetSummaryInclude = {
   ...worksheetAssigneeInclude,
   customer: { select: { displayName: true } },
-  department: { select: { code: true } },
+  // AZ AZONOSITO A KOD MELLE: a teljes utat a lista egyetlen kotegben kerdezi
+  // le (`unitPathsFor`), es ahhoz az azonosito kell, nem a kod. A kod
+  // megmarad, mert az az, amire a felulet visszaesik, ha nincs ut.
+  department: { select: { id: true, code: true } },
   versions: {
     select: {
       version: true,
@@ -279,8 +282,17 @@ export function toWorksheetDetail(row: WorksheetDetailRow): WorksheetDetail {
   };
 }
 
+/**
+ * A TELJES UT PARAMETER, NEM LEKERDEZES -- es ez ugyanaz a reteg-rend, ami az
+ * `unitPathFor` kliens-parametereben all. A leado egy KOTEGBEN kerdezi le az
+ * egesz oldal utjait, ez a fuggveny pedig tiszta marad: sor be, sor ki.
+ *
+ * Ha az ut hianyzik a terkepbol, `null` kerul a mezobe, nem ures tomb. A
+ * felulet ilyenkor a kodra esik vissza, es az a viselkedes ugyanaz, mint a mai.
+ */
 export function toWorksheetListItem(
   row: WorksheetSummaryRow,
+  departmentPaths?: Map<string, string[]>,
 ): WorksheetListItem {
   const current = row.versions[0];
   if (!current) throw new Error("WORKSHEET_WITHOUT_VERSION");
@@ -290,6 +302,7 @@ export function toWorksheetListItem(
     label: formatWorksheetVersionLabel(row.number, current.version),
     customerName: row.customer.displayName,
     departmentCode: row.department.code,
+    departmentPath: departmentPaths?.get(row.department.id) ?? null,
     subject: current.subject,
     status: current.status,
     version: current.version,

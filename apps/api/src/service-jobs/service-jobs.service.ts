@@ -373,6 +373,7 @@ export class ServiceJobsService {
         partnerStatus: partnerVisibleStatus(row.status),
         partnerStatusLabel: partnerStatusLabel(row.status),
         customerName: row.customerName,
+        departmentPath: row.departmentPath,
         worksheetCount: row.worksheetCount,
         createdAt: row.createdAt.toISOString(),
       })),

@@ -38,6 +38,38 @@ export interface UnitPathClient {
   };
 }
 
+/**
+ * A LISTAS ALAK KLIENSE -- EGY ALAIRAS, NEM KETTO, ES EZ MERESBOL KOVETKEZIK.
+ *
+ * Elsore ket tulterhelessel irtam meg (kulon a gazda-kereses, kulon a fa), es a
+ * fordito elutasitotta: a Prisma `findMany` egy GENERIKUS fuggveny, a
+ * tulterhelt alakra pedig nem illeszkedik ra. A mezok ezert elhagyhatok, es a
+ * ket hivas kozul mindegyik a sajat reszet tolti ki.
+ *
+ * A LAZASAG ARA, hogy a TIPUS nem mondja meg, melyik hivas mit ad vissza -- ezt
+ * a fuggveny torzse tartja rendben, ket egymast koveto lepesben.
+ */
+export interface UnitPathListClient {
+  worksheetDepartment: {
+    findMany(args: {
+      where: { id?: { in: string[] }; customerId?: { in: string[] } };
+      select: {
+        id: true;
+        customerId?: true;
+        name?: true;
+        parentId?: true;
+      };
+    }): Promise<
+      {
+        id: string;
+        customerId?: string;
+        name?: string;
+        parentId?: string | null;
+      }[]
+    >;
+  };
+}
+
 export async function unitPathFor(
   client: UnitPathClient,
   departmentId: string | null | undefined,
@@ -61,4 +93,87 @@ export async function unitPathFor(
    * hogy nem tudjuk. A felulet a masodikra visszaeshet a rovid nevre.
    */
   return buildUnitPaths(sorok).get(departmentId) ?? null;
+}
+
+/**
+ * UGYANAZ EGY EGESZ OLDALRA, KET LEKERDEZESBOL -- ES A DARABSZAM NEM SZAMIT.
+ *
+ * MIERT NEM AZ `unitPathFor` SORONKENT: az egy alegysegre KET kerdest tesz fel
+ * az adatbazisnak. Egy otvenes listan az szaz kerdes, es epp az a kepernyo
+ * lassulna be tole, amit olvashatobba akarunk tenni. Ez a valtozat ketto marad
+ * akkor is, ha ketszaz sor jon.
+ *
+ * A KET LEPES: eloszor a kert egysegek GAZDAJA (`customerId`) all elo, mert a
+ * fa partnerenkent kulon all; utana egyszerre jon le mindegyik erintett partner
+ * teljes faja. A `buildUnitPaths` ezutan EGYSZER fut, az osszes soron -- hogy
+ * ez miert biztonsagos tobb partner mellett, az a torzsben all megindokolva.
+ *
+ * A VISSZAADOTT TERKEP CSAK AZT TARTALMAZZA, AMIRE UT EPITHETO. Ami hianyzik
+ * belole, arrol nem azt allitjuk, hogy nulla hosszu az utja, hanem hogy nem
+ * tudjuk -- a hivo ilyenkor a rovid nevre esik vissza. Ugyanaz a kulonbseg,
+ * mint az `unitPathFor` `null` erteke es egy ures tomb kozott.
+ */
+export async function unitPathsFor(
+  client: UnitPathListClient,
+  departmentIds: (string | null | undefined)[],
+): Promise<Map<string, string[]>> {
+  const kertek = [
+    ...new Set(departmentIds.filter((id): id is string => Boolean(id))),
+  ];
+  if (kertek.length === 0) return new Map();
+
+  const gazdak = await client.worksheetDepartment.findMany({
+    where: { id: { in: kertek } },
+    select: { id: true, customerId: true },
+  });
+  const customerIds = [
+    ...new Set(
+      gazdak
+        .map((sor) => sor.customerId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  if (customerIds.length === 0) return new Map();
+
+  const nyers = await client.worksheetDepartment.findMany({
+    where: { customerId: { in: customerIds } },
+    select: { id: true, name: true, parentId: true },
+  });
+  /**
+   * A NEV NELKULI SOR KIMARAD, NEM URES NEVVEL KERUL BE. A kliens felulete
+   * elhagyhatonak irja le a mezot (lasd fent, miert), a valosagban viszont
+   * kotelezo -- egy ures nevvel beengedett sor CSENDBEN rovidebb utat adna.
+   */
+  const sorok = nyers
+    .filter(
+      (sor): sor is { id: string; name: string; parentId: string | null } =>
+        typeof sor.name === "string",
+    )
+    .map((sor) => ({
+      id: sor.id,
+      name: sor.name,
+      parentId: sor.parentId ?? null,
+    }));
+
+  /**
+   * TOBB PARTNER FAJA EGY HIVASBAN: BIZTONSAGOS, ES EZT MEG KELL INDOKOLNI.
+   *
+   * A `buildUnitPaths` AZONOSITO szerint lepked felfele, az azonosito pedig az
+   * egesz tablan egyedi -- egy lanc tehat nem tud atsetalni egy masik partner
+   * faiba, akkor sem, ha a ket fa azonos NEVEKET hasznal. Epp az azonos nevek
+   * miatt letezik ez a mezo, ezert a kerdes jogos, es a valasz nem "nyilvan
+   * jo", hanem az egyediseg.
+   *
+   * Amit viszont NEM szabad: partnerre szukiteni a `parentId` lancot. A gyoker
+   * fele vezeto uton minden szint UGYANAHHOZ a partnerhez tartozik, tehat a
+   * szukites nem adna semmit, csak egy tovabbi feltetelt, ami elromolhat.
+   */
+  const utak = buildUnitPaths(sorok);
+
+  const eredmeny = new Map<string, string[]>();
+  for (const id of kertek) {
+    const ut = utak.get(id);
+    if (ut) eredmeny.set(id, ut);
+  }
+  return eredmeny;
 }

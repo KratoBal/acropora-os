@@ -46,6 +46,7 @@ function response(
         partnerStatus: "IN_PROGRESS",
         partnerStatusLabel: "Feldolgozás alatt",
         customerName: "Fővárosi Állat- És Növénykert",
+        departmentPath: ["Biodóm", "Fókamedence", "Fóka nagymedence"],
         worksheetCount: 2,
         createdAt: "2026-09-01T08:00:00.000Z",
       },
@@ -90,6 +91,22 @@ describe("ServiceJobListPage", () => {
     expect(await screen.findByText("Alkatrészre vár")).toBeTruthy();
     expect(
       screen.getByText("A partner ezt látja: Feldolgozás alatt"),
+    ).toBeTruthy();
+  });
+
+  /**
+   * A HELYSZIN TELJES UTJA A PARTNER ALA.
+   *
+   * EZ A LISTA EDDIG SEMMIT nem mondott a helyszinrol, csak a partnert. Ket
+   * jegy ugyanannal a partnernel tehat megkulonboztethetetlen volt pont azon a
+   * kepernyon, ahol valasztani kell kozuluk. Balazs 2026-09-16-an a
+   * munkalap-listara kerte a teljes utat, es ugyanabban a mondatban ide is.
+   */
+  it("a partner alá kiírja a helyszín teljes útját", async () => {
+    render(<ServiceJobListPage />);
+
+    expect(
+      await screen.findByText("Biodóm / Fókamedence / Fóka nagymedence"),
     ).toBeTruthy();
   });
 
