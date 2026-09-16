@@ -46,6 +46,7 @@ import {
   serviceJobStatusLabel,
   serviceJobStatusTone,
   serviceJobStatusVariant,
+  serviceJobWorksheetLabel,
 } from "./service-job-labels";
 
 /**
@@ -63,7 +64,10 @@ function timelineLine(entry: ServiceJobTimelineEntry): string {
     return `${from} → ${to}`;
   }
   if (entry.kind === "worksheet")
-    return `Munkalap a jegy alatt: ${entry.worksheet.number ?? "piszkozat"}`;
+    // UGYANAZ A CIMKE, MINT A LISTAN: nev, es zarojelben ami azonositja. Ha a
+    // ket helyen ket kulonbozo alak allna, ugyanaz a lap ketfelekeppen nezne ki
+    // EGY lapon belul.
+    return `Munkalap a jegy alatt: ${serviceJobWorksheetLabel(entry.worksheet)}`;
   /*
     A TÖRÖLT CSATOLMÁNY SORA MEGNEVEZI, KI VETTE LE. Az állapotváltásnál a nevet
     a sor alatti másodperc-sor hozza; itt a MONDATBAN áll, mert ez az egyetlen
@@ -704,7 +708,7 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
                         href={`/szerviz/munkalapok/${worksheet.id}`}
                         className="font-medium hover:text-brand-700"
                       >
-                        {worksheet.number ?? "Piszkozat"}
+                        {serviceJobWorksheetLabel(worksheet)}
                       </Link>
                       {/*
                   ÁTADÁS-ÁLLAPOTOT CSAK AKKOR ÁLLÍTUNK, HA VAN MIRE.

@@ -126,6 +126,7 @@ function detail(overrides: Partial<ServiceJobDetail> = {}): ServiceJobDetail {
         worksheet: {
           id: "worksheet-1",
           number: "BIO-2026-004",
+          subject: "Szivattyú csere",
           createdAt: "2026-09-02T08:00:00.000Z",
           handedOverAt: null,
         },
@@ -240,7 +241,7 @@ describe("ServiceJobDetailPage", () => {
     // Az elso valtozat a naploban keresett, es a POZITIV KONTROLL bukott el rajta
     // -- pontosan azert van.
     const hivatkozas = await screen.findByRole("link", {
-      name: "BIO-2026-004",
+      name: "Szivattyú csere (BIO-2026-004)",
     });
     const sor = hivatkozas.closest("li");
     expect(sor).toBeTruthy();
@@ -265,6 +266,7 @@ describe("ServiceJobDetailPage", () => {
             worksheet: {
               id: "worksheet-1",
               number: "BIO-2026-004",
+              subject: "Szivattyú csere",
               createdAt: "2026-09-02T08:00:00.000Z",
               handedOverAt: "2026-09-04T09:30:00.000Z",
             },
@@ -276,7 +278,7 @@ describe("ServiceJobDetailPage", () => {
     render(<ServiceJobDetailPage jobId="job-1" />);
 
     const hivatkozas = await screen.findByRole("link", {
-      name: "BIO-2026-004",
+      name: "Szivattyú csere (BIO-2026-004)",
     });
     expect(hivatkozas.closest("li")?.textContent ?? "").toContain("Átadva:");
   });
@@ -292,7 +294,9 @@ describe("ServiceJobDetailPage", () => {
       (row) => row.textContent ?? "",
     );
     expect(text[0]).toContain("Új → Felmérve");
-    expect(text[1]).toContain("Munkalap a jegy alatt: BIO-2026-004");
+    expect(text[1]).toContain(
+      "Munkalap a jegy alatt: Szivattyú csere (BIO-2026-004)",
+    );
     expect(text[2]).toContain("A hibajegy létrejött");
   });
 

@@ -474,6 +474,15 @@ export class ServiceJobsService {
         worksheets: row.worksheets.map((worksheet) => ({
           id: worksheet.id,
           number: worksheet.number,
+          /*
+            AZ URES STRING ITT NEM NEVTELENSEGET ALLIT, hanem azt, hogy a
+            laphoz nem tartozik verzio, tehat nincs honnan tudni a nevet. A
+            rajzolo ezt a ket esetet egyforman kezeli (visszaesik a szamra),
+            de a null helyett azert all ures string, mert a mezo NEM
+            elhagyhato: egy `null` a kliensekben kulon agat nyitna arra, ami
+            ugyanaz a hiany.
+          */
+          subject: worksheet.versions[0]?.subject ?? "",
           createdAt: worksheet.createdAt.toISOString(),
           handedOverAt: worksheet.handedOverAt?.toISOString() ?? null,
         })),

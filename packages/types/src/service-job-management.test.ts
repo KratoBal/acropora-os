@@ -25,7 +25,13 @@ function event(
 }
 
 function worksheet(id: string, createdAt: string): ServiceJobWorksheetLink {
-  return { id, number: null, createdAt, handedOverAt: null };
+  return {
+    id,
+    number: null,
+    subject: `targy-${id}`,
+    createdAt,
+    handedOverAt: null,
+  };
 }
 
 function asset(id: string, attachedAt: string): ServiceJobAssetLink {

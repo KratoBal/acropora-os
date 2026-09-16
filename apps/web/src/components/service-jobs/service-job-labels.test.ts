@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { serviceJobNoteDescription } from "./service-job-labels";
+import {
+  serviceJobNoteDescription,
+  serviceJobWorksheetLabel,
+} from "./service-job-labels";
 
 /**
  * A MEZO LEIRASA AZ ADOTT JEGY LEPESEIHEZ SZABOTT.
@@ -58,5 +61,43 @@ describe("serviceJobNoteDescription", () => {
    */
   it("üres lépéslistára az alapmondatot adja", () => {
     expect(serviceJobNoteDescription([])).toContain("Elhagyható.");
+  });
+});
+
+/**
+ * A LAP NEVE A JEGY ALATT (Balázs kérése, 2026-09-16).
+ *
+ * A KÉT ÁG KÜLÖN ÁLLÍTÁST KAP, mert a hiba pont a kettő között lakott: a
+ * számozott lap MINDIG olvasható volt, a piszkozat SOHA. Egyetlen minta, ami
+ * csak a számozottat méri, ugyanúgy zöld maradna, mint ma.
+ */
+describe("serviceJobWorksheetLabel", () => {
+  it("a nevet írja ki, és zárójelben a lap számát", () => {
+    expect(
+      serviceJobWorksheetLabel({
+        number: "BIO-2026-004",
+        subject: "Szivattyú csere",
+      }),
+    ).toBe("Szivattyú csere (BIO-2026-004)");
+  });
+
+  it("piszkozatnál a név mellett a Piszkozat szó áll", () => {
+    expect(
+      serviceJobWorksheetLabel({ number: null, subject: "Szivattyú csere" }),
+    ).toBe("Szivattyú csere (Piszkozat)");
+  });
+
+  /*
+    NEV NELKUL NINCS URES ZAROJEL. A `""` azt jelenti, hogy a laphoz nincs
+    verzio, tehat a nevet NEM TUDJUK -- egy "(Piszkozat)" felirat egy hianyzo
+    nev elott ugy nezne ki, mintha a lapnak nem VOLNA neve.
+  */
+  it("név nélkül a régi alak marad, üres zárójel nélkül", () => {
+    expect(serviceJobWorksheetLabel({ number: null, subject: "" })).toBe(
+      "Piszkozat",
+    );
+    expect(
+      serviceJobWorksheetLabel({ number: "BIO-2026-004", subject: "   " }),
+    ).toBe("BIO-2026-004");
   });
 });
