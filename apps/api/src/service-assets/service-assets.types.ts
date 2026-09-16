@@ -120,6 +120,15 @@ export const assetDetailInclude = {
     select: assetDocumentSummarySelect,
     orderBy: { createdAt: "desc" as const },
   },
+  /**
+   * A MATRICA, HOGY A SZERKESZTO MEG TUDJA MUTATNI, MI ALL AZ ESZKOZON.
+   *
+   * EGYES SZAMBAN, ES EZT A SEMA DONTI EL, NEM EN: az `AssetLabel.assetId`
+   * EGYEDI, ezert a Prisma egy-az-egyhez kapcsolatot general (`label`), nem
+   * listat. Eloszor `labels`-t irtam ide -- a fordito javitott ki, es jol tette:
+   * egy lista azt allitotta volna, hogy egy eszkozon TOBB matrica is allhat.
+   */
+  label: { select: { code: true } },
 } satisfies Prisma.AssetInclude;
 
 export type AssetSummaryRow = Prisma.AssetGetPayload<{

@@ -375,6 +375,29 @@ describe(
         assert.ok(utana?.assignedAt, "a hozzárendelés ideje is kitöltődik");
       });
 
+      /**
+       * AZ ADATLAP MEGMUTATJA, MELYIK MATRICA ALL AZ ESZKOZON.
+       *
+       * MIERT TARTOZIK EHHEZ A KORHOZ: a kodot eddig csak IRNI lehetett, egy
+       * felulet sem mutatta meg. Amig csak felvitelkor lehetett megadni, ez nem
+       * latszott hianynak -- az utolagos felvitel viszont CSERET is megenged,
+       * es egy csere, amit a szerelo nem lat, egy MUKODO matricat ir felul
+       * nemán. A szerkeszto urlap EBBOL tolti elo a mezot.
+       */
+      it("az adatlap visszaadja a felvitt kódot", async () => {
+        const lap = await repository.detail(eszkozId, { kind: "internal" });
+        assert.equal(lap?.labelCode, CODE_D);
+      });
+
+      it("matrica nélküli eszközön a mező ÜRESEN marad, nem hibázik", async () => {
+        // TESTVER-KONTROLL A FENTIHEZ: egy mindig kitoltott mezo ugyanugy
+        // atmenne a fenti alliteson. Ez mondja ki, hogy a hianyt is jol adja
+        // vissza -- es hogy a lekerdezes nem hasal el matrica nelkul.
+        const masik = await repository.create(createInput(), actorUserId);
+        const lap = await repository.detail(masik.id, { kind: "internal" });
+        assert.equal(lap?.labelCode, undefined);
+      });
+
       it("másik kódra CSERÉL, és a régi visszakerül a szabad készletbe", async () => {
         await mentes(eszkozId, { labelCode: CODE_E });
 

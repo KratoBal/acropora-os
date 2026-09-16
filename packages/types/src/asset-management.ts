@@ -191,6 +191,20 @@ export interface AssetEventSummary {
 }
 
 export interface AssetDetail extends AssetListItem {
+  /**
+   * AZ ESZKOZON ALLO ELORE NYOMTATOTT MATRICA KODJA, HA VAN.
+   *
+   * MIERT KERULT BE (2026-09-16): a kodot eddig CSAK IRNI lehetett -- egyetlen
+   * felulet sem mutatta meg, melyik matrica all egy eszkozon. Amig a kod csak
+   * FELVITELKOR volt megadhato, ez nem latszott hianynak. Az utolagos felvitel
+   * viszont CSERET is megenged, es egy csere, amit a szerelo nem lat, egy
+   * MUKODO matricat ir felul nemán: az urlap ures mezot mutatna, o beirna egy
+   * kodot, es a regi visszakerulne a keszletbe anelkul, hogy barki tudna rola.
+   *
+   * Ezert a szerkeszto urlap ebbol tolti elo a mezot: ami ott all, az a
+   * VALOSAG, nem egy ures hely.
+   */
+  labelCode?: string;
   category?: string;
   description?: string;
   installedAt?: string;

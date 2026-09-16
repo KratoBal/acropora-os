@@ -1946,6 +1946,7 @@ export class ServiceAssetsRepository extends Repository {
       ...this.toListItem(row, paths),
       category: row.category ?? undefined,
       description: row.description ?? undefined,
+      labelCode: row.label?.code,
       installedAt: row.installedAt?.toISOString(),
       purchasedAt: row.purchasedAt?.toISOString(),
       warrantyExpiresAt: row.warrantyExpiresAt?.toISOString(),
