@@ -94,7 +94,7 @@ describe("a csatolmany feliratanak szabalya", () => {
         "database",
         "prisma",
         "migrations",
-        "20260917103000_document_caption",
+        "20260917113000_document_caption",
         "migration.sql",
       ),
       "utf8",
