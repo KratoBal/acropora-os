@@ -20,9 +20,11 @@ import {
   type QueueEntryView,
 } from "@/lib/offline/queue-inspection";
 import { queueDiscardConfirmation } from "@/lib/offline/queue-discard";
+import { describeAttemptCount } from "@/lib/offline/queue-drain";
 import {
   allQueueRows,
   discardQueueRow,
+  ISMETLODO_HIBA_HATAR,
   retryQueueRow,
 } from "@/lib/offline/queue-store";
 
@@ -187,6 +189,14 @@ function Entry({
   onResolve: () => void;
   onDiscard: () => void;
 }) {
+  /**
+   * A HATART A SZAMOLOTOL KERJUK EL, NEM IRJUK BE UJRA. Ha valaha harom
+   * helyett negy lesz, ez a sor magatol koveti -- egy masolt hármas nem.
+   */
+  const kiserletek = describeAttemptCount(
+    entry.attemptCount,
+    ISMETLODO_HIBA_HATAR,
+  );
   return (
     <View style={styles.row}>
       <Text style={styles.rowTitle}>
@@ -194,9 +204,7 @@ function Entry({
       </Text>
       <Text style={styles.rowMeta}>
         {describeCacheAge(entry.createdAt, new Date())} rögzítve
-        {entry.attemptCount > 0
-          ? ` · ${entry.attemptCount} feltöltési kísérlet`
-          : ""}
+        {kiserletek ? ` · ${kiserletek}` : ""}
       </Text>
       {entry.error.message ? (
         <Text style={styles.rowError}>{entry.error.message}</Text>
