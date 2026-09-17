@@ -842,6 +842,57 @@ describe(
         );
       });
 
+      /**
+       * A BELSŐS ÚT IS MÉRVE VAN, ÉS EZT A JAVÍTÁS TETTE SZÜKSÉGESSÉ.
+       *
+       * A felirat lekérdezése két ÚJ feltételt kapott: egy beágyazott
+       * kapcsolat-szűrőt (`asset: { AND: [...] }`) és egy fajta-listát
+       * (`type: { in: ... }`). Belsős hívóra mindkettőnek MINDENT engednie
+       * kell -- ha valamelyik üresre szűkülne, az `updateMany` nulla sort
+       * érintene, abból 404 lenne, és a saját kollégáink feliratai NÉMÁN
+       * elvesznének. Éppen az az út, amit a legtöbben használnak.
+       *
+       * SZÁMLÁN mérjük, mert az a fajta, amit egy partner NEM lát: így az
+       * állítás a fajta-lista belsős ágát is kipróbálja, nem csak a
+       * tulajdonosét.
+       *
+       * A sor a teszt végén eltűnik, hogy a többi állítás ne találjon rá.
+       */
+      it("belsős hívó a számla feliratát is átírhatja", async () => {
+        const feltoltve = await assets.uploadDocument(
+          assetForWrites,
+          Object.assign(new UploadAssetDocumentDto(), { type: "INVOICE" }),
+          [pdf(`${shared}-belsos-szamla.pdf`)],
+          asInternal,
+        );
+
+        assert.deepEqual(
+          await assets.setDocumentCaption(
+            assetForWrites,
+            feltoltve[0]!.id,
+            Object.assign(new UpdateAssetDocumentCaptionDto(), {
+              caption: "belsős felirat",
+            }),
+            asInternal,
+          ),
+          { ok: true },
+        );
+
+        // ES A SORBAN IS OTT ALL: a `{ ok: true }` annyit mond, hogy erintett
+        // sort -- azt nem, hogy a HELYESET.
+        const sor = await prisma.assetDocument.findUniqueOrThrow({
+          where: { id: feltoltve[0]!.id },
+          select: { caption: true },
+        });
+        assert.equal(sor.caption, "belsős felirat");
+
+        await assets.deleteDocument(
+          assetForWrites,
+          feltoltve[0]!.id,
+          asInternal,
+        );
+      });
+
       it("idegen vevő eszközére nem tölthet fel", async () => {
         await assert.rejects(
           () =>
