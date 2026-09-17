@@ -108,25 +108,106 @@ const GYOKER = "src";
 /**
  * AMIT A MINTA LAT, ES AMIT NEM -- PADLO, NEM GARANCIA.
  *
- * A `prisma.<modell>.<muvelet>({` alakra illeszkedik, tehat a `this.prisma.x`
+ * A `<kliens>.<modell>.<muvelet>({` alakra illeszkedik, tehat a `this.prisma.x`
  * es a `const { prisma } = ...; prisma.x` alakot is megfogja (reszsztringkent).
- * NEM fogja meg a tranzakcios `tx.x` alakot es a valtozoba tett klienst.
+ * NEM fogja meg azt, amikor a kliens egy TETSZOLEGES valtozoba kerul es a neve
+ * sehol nem derul ki a fajlbol.
  *
  * Ezt KIMONDVA hagyom itt, mert egy orzo, aminek a hatokorét nem ismerjuk,
  * pont annyira veszelyes, mint egy hianyzo: teljesnek latszik.
  */
-const HIVAS_MINTA = /prisma\.(\w+)\.\w+\(\s*\{/;
 
 /**
- * UGYANAZ A MINTA SZURI A FAJLOKAT ES OLVASSA A HIVASOKAT -- KET KULON PELDANY
- * ITT HIBA VOLT, ES A SAJAT SZAMOLASOM FOGTA MEG (2026-09-17).
+ * A KLIENST NEM A NEVEROL ISMERJUK FEL, HANEM A HIVAS ALAKJAROL.
  *
- * Az elso alakban a szuro `\(\{` volt, az olvaso `\(\s*\{`: a szuro SZUKEBB
- * volt, mint az olvaso. Egy fajl, ahol minden hivas ujsorral nyit
- * (`findMany(\n  {`), ki sem kerult a bejarasba -- holott az olvaso elolvasta
- * volna. Harom fajl esett igy ki, es semmi nem szolt rola: a kimenet egy
- * ROVIDEBB lista volt, ami pontosan ugy nez ki, mint egy teljes.
+ * === AZ ELSO KET ALAK, ES MIERT NEM VOLT ELEG ===
+ *
+ * Eloszor `prisma.` volt a minta. acrobot lemerte (2026-09-17), hogy egy nem
+ * letezo mezo a `worksheets.repository.ts` fajlban ZOLD marad: az a fajl a
+ * TRANZAKCIOS kliensen dolgozik (`transaction.supplier.findFirst`), es epp azt
+ * a fajlt bovitette aznap a #806. Egy orzo, ami a LEGFRISSEBB kodot hagyja ki,
+ * rosszabb a hianyzonal.
+ *
+ * A masodik alak a kliens NEVET olvasta ki a forrasbol (a `$transaction`
+ * visszahivas parameterebol es a `Prisma.TransactionClient` tipusu
+ * parameterekbol). Ez tizenot fajlt behozott -- ES HUSZONOTOT MEG MINDIG
+ * KIHAGYOTT. Azok sajat tipus-aliason at kapjak a klienst:
+ * `database: StockItemWriterDatabase`, `db: ProjectionSchedulerDatabase`,
+ * `searchDatabase: PosProductSearchDatabase` -- mind `Pick<typeof prisma, ...>`
+ * alakok, kulon fajlokban is.
+ *
+ * A nev-kiolvasas tehat ugyanabba a csapdaba setalt vissza, csak egy szinttel
+ * feljebb: EGY HALMAZT probalt osszegyujteni, es a halmaz nyitott volt.
+ *
+ * === A MAI ALAK: KET MERVADO FORRAS DONT, NEV SEHOL ===
+ *
+ * Egy hivas akkor Prisma-hivas, ha
+ *
+ *     <barmi>.<modell>.<muvelet>({    ahol a MODELL all a semaban
+ *                                     es a MUVELET a Prisma sajat API-ja
+ *
+ * A valtozo neve nem szamit, es nem is kell tudnunk. Merve: igy husz kulonbozo
+ * kliens-nev jon elo (`transaction`, `prisma`, `tx`, `database`, `syncDatabase`,
+ * `countDatabase`, `outboxDatabase`, `stockLookup` es meg tizenketto) -- ezek
+ * egyiket sem tudtam volna listazni.
+ *
+ * FEDES: 31 fajl (`prisma.`) -> 46 (nev-kiolvasas) -> 67 (ez).
+ *
+ * === AMI IGY IS KIVUL MARAD, ES MIERT NEM BAJ ===
+ *
+ * Negy fajl, mind `*.types.ts`: ezek `Prisma.<Modell>Select` TIPUSOKAT
+ * definialnak, nem hivnak semmit. Nincs bennuk mit merni. Ez a `KIVUL` lista,
+ * es pontos allitas all rajta: ha egy OTODIK fajl kerul bele, az mar nem
+ * tipus-definicio, hanem valami, amit nem latunk.
+ *
+ * === A MUVELET-LISTA KEZZEL IRT, ES EZ TUDATOS ===
+ *
+ * Ez a fajl ketszer is megnevezte, hogy a kezzel irt halmaz veszelyes. A
+ * kulonbseg: a Prisma muvelet-neveinek halmaza NEM a mi kodunk tulajdonsaga,
+ * hanem egy rogzitett, dokumentalt API-feluleted. Nem no attol, hogy irunk egy
+ * uj tarolot -- csak attol, ha a Prisma ad uj muveletet, es az verziofrissites,
+ * nem napi munka.
  */
+const PRISMA_MUVELETEK = [
+  "findMany",
+  "findFirst",
+  "findFirstOrThrow",
+  "findUnique",
+  "findUniqueOrThrow",
+  "create",
+  "createMany",
+  "createManyAndReturn",
+  "update",
+  "updateMany",
+  "upsert",
+  "delete",
+  "deleteMany",
+  "count",
+  "aggregate",
+  "groupBy",
+] as const;
+
+const HIVAS_MINTA = new RegExp(
+  `(\\w+)\\.(\\w+)\\.(?:${PRISMA_MUVELETEK.join("|")})\\(\\s*\\{`,
+  "g",
+);
+
+/** A semaban allo modellek, a Prisma kliens kisbetus alakjaval parositva. */
+function semaModellek(sema: string): Map<string, string> {
+  return new Map(
+    [...sema.matchAll(/^model (\w+) \{/gm)].map((m) => [
+      m[1]![0]!.toLowerCase() + m[1]!.slice(1),
+      m[1]!,
+    ]),
+  );
+}
+
+/** Van-e a fajlban legalabb egy valodi Prisma-hivas. */
+function vanHivas(kod: string, modellek: Map<string, string>): boolean {
+  for (const m of kod.matchAll(HIVAS_MINTA))
+    if (modellek.has(m[2]!)) return true;
+  return false;
+}
 
 function forrasFajlok(konyvtar: string, gyujto: string[] = []): string[] {
   for (const bejegyzes of readdirSync(konyvtar, { withFileTypes: true })) {
@@ -142,11 +223,11 @@ function forrasFajlok(konyvtar: string, gyujto: string[] = []): string[] {
 }
 
 /** Azok a forrasfajlok, amikben van Prisma-hivas ES `select` blokk. */
-function vizsgaltFajlok(): string[] {
+function vizsgaltFajlok(modellek: Map<string, string>): string[] {
   return forrasFajlok(GYOKER)
     .filter((ut) => {
       const kod = readFileSync(ut, "utf8");
-      return HIVAS_MINTA.test(kod) && kod.includes("select:");
+      return kod.includes("select:") && vanHivas(kod, modellek);
     })
     .sort();
 }
@@ -207,14 +288,19 @@ interface SelectAg {
  * A NYITO `{` PAROS ZAROJELE. Stringeket es kommenteket atugorja, mert egy
  * `"}"` egy hibauzenetben ugyanugy `}` karakter.
  */
+const PAROK: Record<string, string> = { "{": "}", "[": "]", "(": ")" };
+
 function blokkVege(kod: string, nyito: number): number {
+  const nyitoJel = kod[nyito]!;
+  const zaroJel = PAROK[nyitoJel];
+  if (!zaroJel) return -1;
   let melyseg = 0;
   for (let i = nyito; i < kod.length; i += 1) {
     const c = kod[i]!;
     if (c === '"' || c === "'" || c === "`") {
-      const zaroJel = c;
+      const idezet = c;
       i += 1;
-      while (i < kod.length && kod[i] !== zaroJel) {
+      while (i < kod.length && kod[i] !== idezet) {
         if (kod[i] === "\\") i += 1;
         i += 1;
       }
@@ -231,8 +317,8 @@ function blokkVege(kod: string, nyito: number): number {
       i += 1;
       continue;
     }
-    if (c === "{") melyseg += 1;
-    else if (c === "}") {
+    if (c === nyitoJel) melyseg += 1;
+    else if (c === zaroJel) {
       melyseg -= 1;
       if (melyseg === 0) return i;
     }
@@ -240,7 +326,26 @@ function blokkVege(kod: string, nyito: number): number {
   return -1;
 }
 
-/** Egy objektum-literal FELSO SZINTU kulcsai: a nev es az ertek kezdete. */
+/**
+ * EGY OBJEKTUM-LITERAL FELSO SZINTU KULCSAI: a nev es az ertek kezdete.
+ *
+ * === EGY KULCS CSAK `{` VAGY `,` UTAN KEZDODHET, ES EZT HAROM HAMIS PIROS
+ * TANITOTTA MEG (2026-09-17) ===
+ *
+ * Az elso alak barhol elfogadta a `nev:` mintat a blokkon belul. Egy HAROMTAGU
+ * FELTETEL erteke viszont ugyanigy nez ki:
+ *
+ *     valamiMezo: feltetel ? null : { ... }
+ *                            ^^^^^^ a scanner ezt `null` NEVU kulcsnak latta
+ *
+ * Harom fajlon jelentett `null` nevu "mezot", ket masikon pedig a kornyezo kod
+ * helyi valtozoneveit. Egyik sem volt valodi hiba -- es epp ez a veszelyes:
+ * ot hamis piros utan az elso reakcio az orzo kikapcsolasa.
+ *
+ * A megkotes ezert szerkezeti: a kulcsot MEGELOZO jelentos karakter csak a
+ * blokk nyitasa vagy egy vesszo lehet. Ez a haromtagu feltetel ket agat es a
+ * cimke-szeru alakokat egyarant kizarja, es nem kell hozza kivetel-lista.
+ */
 function felsoKulcsok(
   kod: string,
   nyito: number,
@@ -248,24 +353,30 @@ function felsoKulcsok(
   const zaro = blokkVege(kod, nyito);
   if (zaro === -1) return [];
   const kulcsok: Array<{ nev: string; ertekKezd: number }> = [];
+  /** Az utolso JELENTOS karakter: ebbol derul ki, hogy kulcs kovetkezhet-e. */
+  let elozo = "{";
   let i = nyito + 1;
   while (i < zaro) {
     const c = kod[i]!;
+    if (/\s/.test(c)) {
+      i += 1;
+      continue;
+    }
     if (c === "{" || c === "[" || c === "(") {
-      const belsoZaro =
-        c === "{" ? blokkVege(kod, i) : kod.indexOf(c === "[" ? "]" : ")", i);
+      const belsoZaro = blokkVege(kod, i);
       if (belsoZaro === -1) return kulcsok;
       i = belsoZaro + 1;
+      elozo = "}";
       continue;
     }
     if (c === '"' || c === "'" || c === "`") {
-      const zaroJel = c;
       i += 1;
-      while (i < zaro && kod[i] !== zaroJel) {
+      while (i < zaro && kod[i] !== c) {
         if (kod[i] === "\\") i += 1;
         i += 1;
       }
       i += 1;
+      elozo = "s";
       continue;
     }
     if (c === "/" && kod[i + 1] === "/") {
@@ -278,12 +389,33 @@ function felsoKulcsok(
       i = vege === -1 ? zaro : vege + 2;
       continue;
     }
-    const m = /^(\w+)\s*:\s*/.exec(kod.slice(i, i + 80));
-    if (m) {
-      kulcsok.push({ nev: m[1]!, ertekKezd: i + m[0]!.length });
-      i += m[0]!.length;
+    if (c === ",") {
+      elozo = ",";
+      i += 1;
       continue;
     }
+    const m = /^(\w+)\s*:\s*/.exec(kod.slice(i, i + 80));
+    if (m && (elozo === "{" || elozo === ",")) {
+      kulcsok.push({ nev: m[1]!, ertekKezd: i + m[0]!.length });
+      i += m[0]!.length;
+      elozo = ":";
+      continue;
+    }
+    /*
+      ROVIDITETT TULAJDONSAG (`{ where, select }`). A `select` itt kulcskent
+      SEHOL nem all kettosponttal, tehat a fenti minta nem latja -- es egy egesz
+      fajl igy esett ki a meresbol (`ai-product-search.repository.ts`). Az
+      "erteke" ugyanaz az azonosito, tehat a konstans-felolvasas ugyanugy
+      elvegzi a tobbit.
+    */
+    const rov = /^(\w+)\s*(?=[,}])/.exec(kod.slice(i, i + 80));
+    if (rov && (elozo === "{" || elozo === ",")) {
+      kulcsok.push({ nev: rov[1]!, ertekKezd: i });
+      i += rov[0]!.length;
+      elozo = "s";
+      continue;
+    }
+    elozo = c;
     i += 1;
   }
   return kulcsok;
@@ -308,7 +440,20 @@ function selectAgak(
   for (const kulcs of felsoKulcsok(kod, selectErtekKezd)) {
     if (PRISMA_META.has(kulcs.nev)) continue;
     mezok.push(kulcs.nev);
-    if (kod[kulcs.ertekKezd] !== "{") continue;
+    /*
+      A RELACIO ERTEKE IS ALLHAT KONSTANSBAN, ES EZT EGY ROSSZ JOSLATOM TALALTA
+      MEG. A `tasks.repository.ts` igy epul fel:
+
+          const personSelect = { select: { id: true, ... } } as const;
+          const taskInclude = { assignee: personSelect, ... };
+
+      Vagyis KET UGRAS van: a hivas egy konstansra mutat, azon belul a relacio
+      erteke MEGINT egy konstans. Az elso ugrast mar feloldottuk, a masodikat
+      nem -- es emiatt egy szandekosan elrontott mezo ZOLD maradt a
+      kalibracioban.
+    */
+    const relacioBlokk = agKezdete(kod, kulcs.ertekKezd);
+    if (relacioBlokk === null) continue;
     /*
       BEAGYAZOTT AG: a relacio TIPUSA a semabol jon, nem a nev alakjabol. Ha a
       mezo nem all a seman, NEM itt szolunk -- a kulso allitas amugy is jelzi,
@@ -316,7 +461,7 @@ function selectAgak(
     */
     const relacio = semaMezokTipussal(sema, modell).get(kulcs.nev);
     if (!relacio || !sema.includes(`model ${relacio} {`)) continue;
-    const belso = felsoKulcsok(kod, kulcs.ertekKezd).find(
+    const belso = felsoKulcsok(kod, relacioBlokk).find(
       (k) => k.nev === "select" || k.nev === "include",
     );
     const belsoBlokk = belso ? agKezdete(kod, belso.ertekKezd) : null;
@@ -384,9 +529,10 @@ function agKezdete(kod: string, ertekKezd: number): number | null {
  */
 function selectMezok(kod: string, sema: string): Map<string, Set<string>> {
   const talalt = new Map<string, Set<string>>();
-  for (const m of kod.matchAll(new RegExp(HIVAS_MINTA.source, "g"))) {
-    const modell = m[1]![0]!.toUpperCase() + m[1]!.slice(1);
-    if (!sema.includes(`model ${modell} {`)) continue;
+  const modellek = semaModellek(sema);
+  for (const m of kod.matchAll(HIVAS_MINTA)) {
+    const modell = modellek.get(m[2]!);
+    if (!modell) continue;
     const argKezd = kod.indexOf("{", m.index!);
     const agak: SelectAg[] = [];
     for (const kulcs of felsoKulcsok(kod, argKezd)) {
@@ -429,7 +575,7 @@ function selectMezok(kod: string, sema: string): Map<string, Set<string>> {
 describe("a parancsok select-mezői léteznek a sémán", () => {
   const sema = forras(SEMA);
 
-  const FAJLOK = vizsgaltFajlok();
+  const FAJLOK = vizsgaltFajlok(semaModellek(sema));
 
   it("POZITÍV KONTROLL: a kiolvasás talál modellt és mezőt", () => {
     // Ket ISMERT mezo, ket kulonbozo modellrol: ha a sema-olvaso romlik el, ez
@@ -454,30 +600,94 @@ describe("a parancsok select-mezői léteznek a sémán", () => {
       mezok.size >= 1,
       `gyanúsan kevés select-blokkot találtam: ${[...mezok.keys()].join(", ")}`,
     );
+
+    /*
+      ES A FELISMERESNEK IS KELL ISMERT POZITIV ESET, KET IRANYBAN.
+
+      Ha a minta visszaszukul (peldaul valaki `prisma\.`-ra koti vissza, vagy a
+      muvelet-lista elromlik), az NEM hibazna: csendben kevesebb fajlt huzna be,
+      es a maradekon zold maradna. Kevesebb allitas ugyanugy nez ki, mint egy
+      tiszta futas.
+
+      Ezert ket also korlat all itt. Egyik sem pontos ertek -- a felfele mozgas
+      rendben van, a LEFELE az, ami jelez.
+    */
+    const hivoNevek = new Set(
+      FAJLOK.flatMap((ut) =>
+        [...forras(ut).matchAll(HIVAS_MINTA)]
+          .filter((m) => semaModellek(sema).has(m[2]!))
+          .map((m) => m[1]!),
+      ),
+    );
+    assert.ok(
+      hivoNevek.size >= 5,
+      `gyanúsan kevés kliens-néven látok hívást: ${[...hivoNevek].join(", ")}`,
+    );
+    assert.ok(
+      [...hivoNevek].some((nev) => nev !== "prisma"),
+      "csak a `prisma` néven látok hívást -- a felismerés visszaszűkült",
+    );
   });
 
   /**
-   * AMIT A BEJARAS BEHUZ, DE AZ OLVASO NEM LAT -- NEVVEL, ES OKKAL.
+   * AMIT A BEJARAS BEHUZ, DE AZ OLVASO NEM LAT -- ES MA EZ A LISTA URES.
    *
-   * EZ NEM KIVETEL-LISTA, HANEM MERT VAKFOLT. Ket kulonbozo dolog, es a
-   * kulonbseg az, hogy ez a lista KOTELEZOEN PONTOS: ha egy uj fajl kerul bele
-   * (mert olyan alakban ir, amit az olvaso nem lat), a teszt PIROS lesz, es
-   * valakinek el kell dontenie, hogy az olvasot bovitjuk-e vagy tudomasul
-   * vesszuk. Enelkul a vakfolt csendben nohetne.
+   * EZ NEM KIVETEL-LISTA, HANEM MERT VAKFOLT, es KOTELEZOEN PONTOS: ha egy uj
+   * fajl kerul bele (mert olyan alakban ir, amit az olvaso nem lat), a teszt
+   * PIROS lesz, es valakinek el kell dontenie, hogy az olvasot bovitjuk-e vagy
+   * tudomasul vesszuk.
    *
-   *   brands.repository.ts   az egyetlen olvasasa egy `include` konstanson megy,
-   *                          amiben csak `_count` es egy relacio all -- tehat
-   *                          nincs is ellenorizheto mezoneve --, az irasai
-   *                          pedig a TRANZAKCIOS kliensen (`tx.<modell>`)
+   * HOGY LETT URES: ket lepesben. A `data` blokk beemelese elvitte az egyik
+   * fajlt, a TRANZAKCIOS KLIENS bevonasa a masikat (`brands.repository.ts`
+   * minden irasa `tx.<modell>` alakban megy). Vagyis a lista nem attol urult
+   * ki, hogy engedtunk a mercebol, hanem attol, hogy az olvaso tobbet lat.
    *
-   * A TRANZAKCIOS KLIENS A TAGABB FAJTA, es kulon kerdes: ott a modell neve
-   * ugyanugy ott van, de a valtozo neve nem rogzitett (`tx`, `trx`, barmi).
-   *
-   * EGY FAJL KIKERULT EBBOL A LISTABOL, amikor az iro oldal is bekerult
-   * (`nav-incoming-invoice.repository.ts`): a `data` blokkjai lathatova valtak.
-   * Ez a lista tehat nem allando -- epp ezert all rajta pontos allitas.
+   * ES AZ URES LISTA IS ALLITAS, sot a legerosebb alakja: ma MINDEN behuzott
+   * fajlon tenylegesen merunk valamit. Az elso fajl, amelyik ebbol kiesik,
+   * pirosra viszi ezt a sort.
    */
-  const LATATLAN = ["src/brands/brands.repository.ts"];
+  const LATATLAN: string[] = [];
+
+  /**
+   * ES EGY HARMADIK KATEGORIA, AMIT acrobot NEVEZETT MEG (2026-09-17): a fajl
+   * be sem KERUL a bejarasba.
+   *
+   * A `LATATLAN` lista azokrol szol, amiket behuzunk, de nem latunk. Van egy
+   * csendesebb halmaz is: amiben van `select:`, de nincs benne felismert
+   * Prisma-hivas, tehat a bejaras sem veszi fel. Az ilyen fajl a vakfolt-
+   * allitasban SEM jelenik meg -- szo szerint sehol.
+   *
+   * Ma ez negy `*.types.ts` fajl: `Prisma.<Modell>Select` TIPUSOKAT
+   * definialnak, nem hivnak semmit, tehat nincs bennuk mit merni.
+   *
+   * ES AZ OTODIK MAR NEM AZ LESZ. Ezert all rajta pontos allitas: ha egy nem
+   * tipus-definicios fajl kerul ide, az azt jelenti, hogy olyan alakban hiv,
+   * amit a felismeres nem lat -- es akkor a felismerest kell bovíteni, nem a
+   * listat.
+   */
+  const KIVUL = [
+    "src/products/product.types.ts",
+    "src/purchasing/purchase-invoice.types.ts",
+    "src/service-assets/service-assets.types.ts",
+    "src/worksheets/worksheets.types.ts",
+  ];
+
+  it("ami select-et tartalmaz, de a bejárásba sem kerül: pontosan négy típusfájl", () => {
+    const modellek = semaModellek(sema);
+    const kivul = forrasFajlok(GYOKER)
+      .filter((ut) => {
+        const kod = readFileSync(ut, "utf8");
+        return kod.includes("select:") && !vanHivas(kod, modellek);
+      })
+      .sort();
+    assert.deepEqual(
+      kivul,
+      [...KIVUL].sort(),
+      "megváltozott azoknak a fájloknak a köre, amik `select`-et írnak, de a " +
+        "felismerés nem lát bennük hívást -- ha ez nem típusdefiníció, a " +
+        "felismerést kell bővíteni",
+    );
+  });
 
   it("a vakfolt listája pontos: se több, se kevesebb", () => {
     const uresek = FAJLOK.filter(
