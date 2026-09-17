@@ -75,7 +75,9 @@ describe("UserVisibleUnits", () => {
   });
 
   it("kilistázza a hozzárendelt alegységeket", async () => {
-    render(<UserVisibleUnits userId="target-1" role="SERVICE" />);
+    render(
+      <UserVisibleUnits userId="target-1" role="SERVICE" binding="supplier" />,
+    );
 
     expect(await listaSora("BIO - Biotóp")).toBeTruthy();
   });
@@ -89,7 +91,9 @@ describe("UserVisibleUnits", () => {
    * Az elso nelkul a masodik akkor is zold lenne, ha a legordulo URES.
    */
   it("csak a még nem hozzárendelt alegységeket kínálja", async () => {
-    render(<UserVisibleUnits userId="target-1" role="SERVICE" />);
+    render(
+      <UserVisibleUnits userId="target-1" role="SERVICE" binding="supplier" />,
+    );
     const valaszto = await screen.findByLabelText("Alegység hozzáadása");
 
     expect(screen.getByRole("option", { name: "PPU - Pingvin" })).toBeTruthy();
@@ -108,7 +112,7 @@ describe("UserVisibleUnits", () => {
   it("a jogosultság nélküli nézőnek meg sem jelenik, és nem is kérdez", () => {
     auth.session = sessionAs("MANAGER");
     const { container } = render(
-      <UserVisibleUnits userId="target-1" role="SERVICE" />,
+      <UserVisibleUnits userId="target-1" role="SERVICE" binding="supplier" />,
     );
 
     expect(container.textContent).toBe("");
@@ -116,7 +120,9 @@ describe("UserVisibleUnits", () => {
   });
 
   it("hozzáad egy alegységet, és utána újratölt", async () => {
-    render(<UserVisibleUnits userId="target-1" role="SERVICE" />);
+    render(
+      <UserVisibleUnits userId="target-1" role="SERVICE" binding="supplier" />,
+    );
     await listaSora("BIO - Biotóp");
     expect(jobs.visibilityAssignments).toHaveBeenCalledTimes(1);
 
@@ -141,7 +147,9 @@ describe("UserVisibleUnits", () => {
    * jelenti, hogy a fiok latokore nem szukult.
    */
   it("levétel előtt kérdez, és addig nem hív", async () => {
-    render(<UserVisibleUnits userId="target-1" role="SERVICE" />);
+    render(
+      <UserVisibleUnits userId="target-1" role="SERVICE" binding="supplier" />,
+    );
     await listaSora("BIO - Biotóp");
 
     fireEvent.click(screen.getByRole("button", { name: "Levétel" }));
@@ -158,7 +166,9 @@ describe("UserVisibleUnits", () => {
    * veglegesnel.
    */
   it("a kérdés kimondja, hogy visszatehető", async () => {
-    render(<UserVisibleUnits userId="target-1" role="SERVICE" />);
+    render(
+      <UserVisibleUnits userId="target-1" role="SERVICE" binding="supplier" />,
+    );
     await listaSora("BIO - Biotóp");
 
     fireEvent.click(screen.getByRole("button", { name: "Levétel" }));
@@ -177,7 +187,9 @@ describe("UserVisibleUnits", () => {
     jobs.assignUnit.mockRejectedValue(
       new Error("Ez az alegység másik partnerhez tartozik."),
     );
-    render(<UserVisibleUnits userId="target-1" role="SERVICE" />);
+    render(
+      <UserVisibleUnits userId="target-1" role="SERVICE" binding="supplier" />,
+    );
     await listaSora("BIO - Biotóp");
 
     fireEvent.change(screen.getByLabelText("Alegység hozzáadása"), {
@@ -202,7 +214,9 @@ describe("UserVisibleUnits", () => {
     jobs.visibilityAssignments.mockRejectedValue(
       new Error("A szerver nem válaszol."),
     );
-    render(<UserVisibleUnits userId="target-1" role="SERVICE" />);
+    render(
+      <UserVisibleUnits userId="target-1" role="SERVICE" binding="supplier" />,
+    );
 
     expect(await screen.findByText("Nem tölthető be")).toBeTruthy();
     expect(screen.queryByText("Nincs hozzárendelt alegység")).toBeNull();
@@ -210,19 +224,82 @@ describe("UserVisibleUnits", () => {
 
   /**
    * TESTVER-KONTROLL: A VALODI URES ALLAPOT MAS MONDATOT KAP, es a valaszto
-   * uressegehez ODAIRJA A FELTETELT. Harom kulonbozo, RENDES ok adhat ures
-   * listat (belsos fiok, nincs tukor-sor, nincs alegyseg) -- a mondat ezert nem
-   * hibat allit, hanem megmondja, mitol jelenne meg alegyseg.
+   * uressegehez ODAIRJA A FELTETELT. Tobbfele, RENDES ok adhat ures listat, es a
+   * mondat ezert nem hibat allit, hanem megmondja, mitol jelenne meg alegyseg.
+   *
+   * A FELTETEL SZOVEGE 2026-09-17 OTA A FIOK ALAKJATOL FUGG (lasd a lenti
+   * szakaszt); ez az allitas azt meri, hogy a mondat OTT VAN es nem hibat
+   * mond -- a HAROM alak kulonbsegét a masik szakasz meri.
    */
   it("üres listánál a feltételt mondja ki, nem hibát", async () => {
     jobs.visibilityAssignments.mockResolvedValue([]);
     jobs.selectableUnits.mockResolvedValue({ items: [] });
-    render(<UserVisibleUnits userId="target-1" role="SERVICE" />);
+    render(
+      <UserVisibleUnits userId="target-1" role="SERVICE" binding="supplier" />,
+    );
 
     expect(await screen.findByText("Nincs hozzárendelt alegység")).toBeTruthy();
     expect(
-      screen.getByText(/Alegység akkor jelenik meg itt, ha a fiók egy szerviz/),
+      screen.getByText(/Alegység akkor jelenik meg itt, ha a fiók szerviz/),
     ).toBeTruthy();
     expect(screen.queryByText("Nem tölthető be")).toBeNull();
+  });
+});
+
+/**
+ * AZ URES VALASZTO MONDATA A FIOK ALAKJAHOZ BESZELJEN.
+ *
+ * A MERT AKADALY (2026-09-17, Balazs eles partner-bevezetese): a szoveg MINDIG
+ * a szallitos lancot sorolta fel -- szerviz partner, tukor-vevo sor, aktiv
+ * alegyseg --, holott a mai partner-fiokok TOBBSEGE vevohoz kotott. Annak a
+ * tulajdonosa harom olyan feltetelt olvasott, amibol EGY SEM rola szolt.
+ *
+ * Szo szerint ezt valtotta ki: "miert kellenek ezek a baromsagok hogy tukor
+ * vevo meg mit tudom en".
+ */
+describe("UserVisibleUnits: az üres választó mondata", () => {
+  beforeEach(() => {
+    auth.session = sessionAs("OWNER");
+    jobs.visibilityAssignments.mockReset().mockResolvedValue([]);
+    jobs.selectableUnits.mockReset().mockResolvedValue({ items: [] });
+  });
+
+  it("vevőhöz kötött fióknál a saját vevőjéről beszél, nem tükör-vevőről", async () => {
+    render(
+      <UserVisibleUnits userId="target-1" role="SERVICE" binding="customer" />,
+    );
+
+    const mondat = await screen.findByText(/nincs választható alegység/);
+    expect(mondat.textContent).toContain("a fiók vevője alatt");
+    // MI PIROSIT: a regi, mindenre egyforma szoveg. A "tukor-vevo" egy vevohoz
+    // kotott fioknal ertelmetlen szo.
+    expect(mondat.textContent).not.toContain("tükör-vevő");
+  });
+
+  /**
+   * POZITIV KONTROLL A MASIK AGRA: a szallitos fioknal a tukor-vevo TOVABBRA IS
+   * ott all. Enelkul a fenti tagadas akkor is teljesulne, ha a szot egyszeruen
+   * kivettuk volna mindenhonnan -- es akkor a szallitos fiok tulajdonosa
+   * veszitene el a feltetelt, amire varnia kell.
+   */
+  it("szállítóhoz kötött fióknál továbbra is a tükör-vevő sorról beszél", async () => {
+    render(
+      <UserVisibleUnits userId="target-1" role="SERVICE" binding="supplier" />,
+    );
+
+    const mondat = await screen.findByText(/nincs választható alegység/);
+    expect(mondat.textContent).toContain("tükör-vevő");
+  });
+
+  /**
+   * A BELSOS FIOK NEM "URES VALASZTO", HANEM MAS ALLAPOT: nincs mit szukiteni.
+   * A korabbi szoveg ot is a partner-lancra kuldte volna.
+   */
+  it("belsős fióknál kimondja, hogy nincs mit szűkíteni", async () => {
+    render(
+      <UserVisibleUnits userId="target-1" role="SERVICE" binding="internal" />,
+    );
+
+    expect(await screen.findByText(/nincs mit szűkíteni/)).toBeTruthy();
   });
 });

@@ -581,7 +581,9 @@ export class ServiceJobsRepository {
     const [user, unit] = await Promise.all([
       this.database.user.findUnique({
         where: { id: userId },
-        select: { supplierId: true },
+        // A VEVO-KOTES IS KELL: a mai partner-fiokok tobbsege vevohoz kotott,
+        // es az orzo azon az agon dont.
+        select: { supplierId: true, customerId: true },
       }),
       this.database.worksheetDepartment.findUnique({
         where: { id: departmentId },
@@ -597,6 +599,7 @@ export class ServiceJobsRepository {
       : null;
     return {
       userSupplierId: user.supplierId,
+      userCustomerId: user.customerId,
       supplierMirrorCustomerId: supplier?.customerId ?? null,
       unitCustomerId: unit.customerId,
     };
@@ -623,9 +626,33 @@ export class ServiceJobsRepository {
   async selectableUnits(userId: string) {
     const user = await this.database.user.findUnique({
       where: { id: userId },
-      select: { supplierId: true },
+      select: { supplierId: true, customerId: true },
     });
     if (!user) return null;
+
+    /**
+     * A VEVOHOZ KOTOTT FIOK A SAJAT VEVOJE ALEGYSEGEIT VALASZTHATJA -- EGY
+     * LEPESBEN, TUKOR NELKUL.
+     *
+     * MIERT KELL KULON AG: a mai partner-fiokok TOBBSEGE ilyen. A
+     * `PARTNER_SERVICE` szerepkor kikotese a `customerId` mezore all, tehat az
+     * ujonnan felvett partner-fiokok `supplierId` mezoje NULL -- es a lenti
+     * szallitos lancnak EZ az elso feltetele. A valaszto ezert SOHA nem kinalt
+     * semmit egy partner-fioknak, akarhany aktiv alegyseg allt a vevo alatt.
+     * (Merve 2026-09-17, eles akadaskent: a kepernyo azt irta, hogy "Ehhez a
+     * fiokhoz nincs valaszthato alegyseg", miközben a fiok neve mellett ott
+     * allt a partner.)
+     *
+     * A TUKOR-VEVO IT NEM KELL, es ez nem rovidites: a szallitos ag azert jar
+     * be harom lepest, mert ott a felhasznalo egy SZALLITOHOZ kotodik, es az
+     * alegysegek egy VEVO alatt allnak -- a tukor-sor koti ossze a kettot. Itt
+     * a felhasznalo MAR a vevohoz kotodik, tehat nincs mit athidalni.
+     *
+     * A KET KOTES KIZARJA EGYMAST (`User_at_most_one_partner_check`), tehat ez
+     * az ag nem vesz el semmit a szallitostol.
+     */
+    if (user.customerId !== null) return this.activeUnitsOf(user.customerId);
+
     if (user.supplierId === null) return [];
 
     const supplier = await this.database.supplier.findUnique({
@@ -634,8 +661,20 @@ export class ServiceJobsRepository {
     });
     if (!supplier?.customerId) return [];
 
+    return this.activeUnitsOf(supplier.customerId);
+  }
+
+  /**
+   * EGY VEVO AKTIV ALEGYSEGEI, EGY HELYEN.
+   *
+   * KET AG hasznalja (a vevohoz kotott es a szallitohoz kotott fiok), es a
+   * KERDES ugyanaz: mi all ez alatt a vevo alatt. Ket masolat eloszor egyezne,
+   * aztan az egyikbe bekerulne egy szures, a masikba nem -- es a ket
+   * partner-fajta CSENDBEN mast latna.
+   */
+  private activeUnitsOf(customerId: string) {
     return this.database.worksheetDepartment.findMany({
-      where: { customerId: supplier.customerId, isActive: true },
+      where: { customerId, isActive: true },
       orderBy: [{ parentId: "asc" }, { code: "asc" }],
       select: { id: true, name: true, code: true, parentId: true },
     });

@@ -383,7 +383,21 @@ export function UserEditorPage({ userId }: { userId?: string }) {
         szepseghiba: a hozzarendeles a fiok AZONOSITOJAHOZ kotodik, ami a
         felvitel elott meg nem letezik.
       */}
-      {user ? <UserVisibleUnits userId={user.id} role={user.role} /> : null}
+      {user ? (
+        <UserVisibleUnits
+          userId={user.id}
+          role={user.role}
+          /* A KET KOTES KIZARJA EGYMAST (`User_at_most_one_partner_check`),
+             tehat ez harom allapot, nem negy. */
+          binding={
+            user.customerId
+              ? "customer"
+              : user.supplierId
+                ? "supplier"
+                : "internal"
+          }
+        />
+      ) : null}
       {user ? (
         <>
           <Card className="p-6">

@@ -42,9 +42,21 @@ interface Unit {
 export function UserVisibleUnits({
   userId,
   role,
+  binding,
 }: {
   userId: string;
   role: UserRole | undefined;
+  /**
+   * MIHEZ VAN KOTVE A FIOK -- ES EZ CSAK AZ URES ESET MONDATAHOZ KELL.
+   *
+   * A VALASZTHATO LISTAT tovabbra is a szerver adja; ez a mezo nem szur es nem
+   * dont. Az URES eset viszont HAROMFELE, es a ket kotes MAS mondatot kivan:
+   * egy vevohoz kotott fiok tulajdonosanak a "tukor-vevo sor" ertelmetlen szo.
+   *
+   * A KET KOTES KIZARJA EGYMAST (`User_at_most_one_partner_check`), tehat ez
+   * harom allapot, nem negy.
+   */
+  binding: "customer" | "supplier" | "internal";
 }) {
   const { session } = useAuth();
   const token = session?.token ?? "";
@@ -197,15 +209,22 @@ export function UserVisibleUnits({
 
       {units.length === 0 && !loading && !loadError ? (
         /*
-          AZ ÜRES VÁLASZTÓ HÁROM KÜLÖNBÖZŐ, RENDES ÁLLAPOTBÓL JÖHET: a fiók
-          belsős (nincs szállítója), a partnernek nincs tükör-vevő sora, vagy a
-          tükör alatt nincs alegység. A mondat ezért a FELTÉTELT nevezi meg, nem
-          azt állítja, hogy hiba történt.
+          AZ URES VALASZTO RENDES ALLAPOTBOL JON, nem hibabol -- a mondat ezert
+          a FELTETELT nevezi meg.
+
+          ES A FELTETEL A FIOK ALAKJATOL FUGG. A korabbi szoveg MINDIG a
+          szallitos lancot sorolta fel (szerviz partner, tukor-vevo sor, aktiv
+          alegyseg), holott a mai partner-fiokok TOBBSEGE vevohoz kotott. Annak
+          a tulajdonosa harom olyan feltetelt olvasott, amibol egy sem rola
+          szolt -- es joggal hitte, hogy a mondat ertelmetlen.
+          (Merve 2026-09-17, eles akadaskent.)
         */
         <p className="text-xs text-dusk-500">
-          Ehhez a fiókhoz nincs választható alegység. Alegység akkor jelenik meg
-          itt, ha a fiók egy szerviz partnerhez tartozik, annak van tükör-vevő
-          sora, és az alatt aktív alegység áll.
+          {binding === "customer"
+            ? "Ehhez a fiókhoz nincs választható alegység. Alegység akkor jelenik meg itt, ha a fiók vevője alatt aktív alegység áll."
+            : binding === "supplier"
+              ? "Ehhez a fiókhoz nincs választható alegység. Alegység akkor jelenik meg itt, ha a fiók szerviz partneréhez tartozik tükör-vevő sor, és az alatt aktív alegység áll."
+              : "Ez a fiók nem partnerhez kötött, ezért nincs mit szűkíteni: belső hatókörrel amúgy is minden hibajegyet lát."}
         </p>
       ) : null}
 
