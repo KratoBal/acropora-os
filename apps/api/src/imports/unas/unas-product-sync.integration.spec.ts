@@ -978,6 +978,25 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
 
     assert.equal(run.similarRelationsWritten, 1);
     assert.equal(run.similarReferencesUnresolved, 0);
+
+    /**
+     * ES A FUTAS SORA UGYANEZT A KET SZAMOT HORDOZZA.
+     *
+     * A valasz csak a futas PERCEIBEN letezik; a naplo a kontener indulasakor
+     * kezdodik (merve 2026-09-15), tehat egy ujratelepites utan a tegnapi
+     * veszteseg mar sehol nincs meg. A masnapi kerdesre ("mennyi veszett el a
+     * heten?") EGYEDUL ez a sor tud valaszolni.
+     */
+    const sor = await prisma.unasProductSyncRun.findUniqueOrThrow({
+      where: { id: run.runId },
+      select: {
+        similarRelationsWritten: true,
+        similarReferencesUnresolved: true,
+      },
+    });
+    assert.equal(sor.similarRelationsWritten, 1);
+    assert.equal(sor.similarReferencesUnresolved, 0);
+
     const source = await prisma.productVariant.findUniqueOrThrow({
       where: { sku: "SIMILAR-SOURCE" },
       select: { productId: true },
@@ -1029,6 +1048,23 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
      * ACCESSORY-t.
      */
     assert.equal(run.similarRelationsWritten, 0);
+
+    /**
+     * ES A SORBAN IS -- MIND A NEGY SZAM, mert a ket ag KULON tud elromlani.
+     * 2026-09-08-an a forrasban 13854 kiegeszito kapcsolat allt, az OS-ben
+     * nulla, mikozben a hasonlo agon het termek atment.
+     */
+    const sor = await prisma.unasProductSyncRun.findUniqueOrThrow({
+      where: { id: run.runId },
+      select: {
+        accessoryRelationsWritten: true,
+        accessoryReferencesUnresolved: true,
+        similarRelationsWritten: true,
+      },
+    });
+    assert.equal(sor.accessoryRelationsWritten, 1);
+    assert.equal(sor.accessoryReferencesUnresolved, 0);
+    assert.equal(sor.similarRelationsWritten, 0);
 
     const source = await prisma.productVariant.findUniqueOrThrow({
       where: { sku: "ACC-SOURCE" },
@@ -1192,6 +1228,24 @@ describe("UNAS Product Sync database integration", { skip: !enabled }, () => {
 
     assert.equal(run.similarReferencesUnresolved, 1);
     assert.equal(run.similarRelationsWritten, 0);
+
+    /**
+     * EZ AZ AZ ALLITAS, AMIERT AZ OSZLOPOK BEKERULTEK.
+     *
+     * A VESZTESEG maga -- nem a siker -- az, amire masnap rakerdeznek. A
+     * valaszban ott all, de a valasz elmulik; a naplo a kontener indulasakor
+     * kezdodik, tehat egy ujratelepites utan mar nincs meg. Ez a sor marad.
+     */
+    const sor = await prisma.unasProductSyncRun.findUniqueOrThrow({
+      where: { id: run.runId },
+      select: {
+        similarReferencesUnresolved: true,
+        similarRelationsWritten: true,
+      },
+    });
+    assert.equal(sor.similarReferencesUnresolved, 1);
+    assert.equal(sor.similarRelationsWritten, 0);
+
     const source = await prisma.productVariant.findUniqueOrThrow({
       where: { sku: "SIMILAR-LONE" },
       select: { productId: true },

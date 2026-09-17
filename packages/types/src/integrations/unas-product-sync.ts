@@ -81,5 +81,22 @@ export interface UnasProductSyncRun {
    * átvett termék szövege megváltozott a boltban, és nem jött át.
    */
   skippedSourceChangedCount: number;
+  /**
+   * A KAPCSOLAT-IRAS NEGY SZAMA A FUTAS SORABOL -- ES NEM MIND A NYOLC.
+   *
+   * A valasz (`UnasProductSyncSummary`) tipusonkent NEGYET ad; ide az
+   * ADATVESZTES kerult (`unresolved`) es melle a NEVEZO (`written`). Az
+   * onhivatkozas es a duplikatum szandekos kihagyas, azok a naplosorban
+   * maradnak: egy oszlop, ami minden futasnal ugyanazt a szamot hozza, nem
+   * jelzes, hanem alapzaj.
+   *
+   * MIERT KERULT A SORBA (2026-09-17): a naplo a kontener indulasakor
+   * kezdodik, tehat egy ujratelepites utan a tegnapi futas vesztesege mar
+   * sehol nincs meg -- es epp az a kerdes, ami masnap merul fel.
+   */
+  similarRelationsWritten: number;
+  similarReferencesUnresolved: number;
+  accessoryRelationsWritten: number;
+  accessoryReferencesUnresolved: number;
   errorCode: string | null;
 }
