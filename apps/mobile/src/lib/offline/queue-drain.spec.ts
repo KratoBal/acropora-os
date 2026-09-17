@@ -6,6 +6,7 @@ import {
   isDueForRetry,
   describeQueueBacklog,
   describeQueueState,
+  describeAttemptCount,
   describeRepeatedFailures,
 } from "./queue-drain";
 
@@ -204,6 +205,61 @@ describe("ami ISMÉTELTEN elbukik", () => {
     assert.match(s ?? "", /2 felvitel/);
     assert.match(s ?? "", /7 alkalommal/);
     assert.match(s ?? "", /nem maradt meg/);
+  });
+});
+
+describe("egy SOR kísérlet-száma, a határhoz mérve", () => {
+  /**
+   * A HATART ITT SZAMKENT ADJUK AT, ES EZ NEM HANYAGSAG.
+   *
+   * A `ISMETLODO_HIBA_HATAR` a `queue-store.ts`-ben all, az viszont
+   * `expo-sqlite`-ot importal -- es azon keresztul a react-native GLOBALIS
+   * tipusait. Merve 2026-09-17: ettol egy ERINTETLEN spec allt meg
+   * (`document-upload.spec.ts`, TS2339 a `FormData.get`-en), mert a `FormData`
+   * tipusa felulirodott. Ugyanaz a csapda, mint a #772-ben.
+   *
+   * A fuggveny EPP EZERT vesz parametert: a hatart a HIVO adja. Hogy a kepernyo
+   * a KONSTANST adja at es nem egy masolt harmast, azt egy forras-olvaso
+   * allitas meri (`queue-row-wiring.spec.ts`) -- ott a nev olvasasa nem huz be
+   * futasideju fuggoseget.
+   */
+  it("nulla kísérletnél hallgat", () => {
+    // ISMERT POZITIV KONTROLL: e nelkul egy "mindig ir valamit" valtozat is
+    // atmenne a lentieken, es minden friss soron ott ulne egy felesleges szam.
+    assert.equal(describeAttemptCount(0, 3), null);
+  });
+
+  it("a határ ALATT csak a számot mondja, minősítés nélkül", () => {
+    /*
+      MI PIROSIT: ha a fuggveny MINDEN kiserletre ismetlodo hibat kialtana. Egy
+      masodik probalkozas meg terero-kerdes is lehet, es egy korai riasztas
+      pontosan azt az uzenetet ertektelenitene el, amiert ez letezik.
+    */
+    const s = describeAttemptCount(2, 3);
+    assert.match(s ?? "", /2 feltöltési kísérlet/);
+    assert.doesNotMatch(s ?? "", /ismétlődő/);
+  });
+
+  it("a határt ELÉRVE kimondja, hogy ez már ismétlődő hiba", () => {
+    /*
+      EZ AZ ALLITAS A BEKOTES OKA. A sor-kepernyo 2026-09-17-ig a puszta szamot
+      irta ki ("3 feltöltési kísérlet"), es abbol a szerelo nem tudta, hogy sok-e.
+      A hatar MAR LETEZETT es a kezdolap MAR hasznalta -- soronkent viszont
+      sehol nem latszott.
+
+      A `>=` es nem `>`: a harmadik bukas MAR ismetlodes, ugyanaz a hatar, amit
+      az osszesito hasznal.
+    */
+    const s = describeAttemptCount(3, 3);
+    assert.match(s ?? "", /3 feltöltési kísérlet/);
+    assert.match(s ?? "", /ismétlődő hiba/);
+    assert.match(s ?? "", /magától nem fog megoldódni/);
+  });
+
+  it("a határ FÖLÖTT is minősít, nem csak pontosan rajta", () => {
+    // MI PIROSIT: egy `===` alaku osszehasonlitas. A negyedik bukas ugyanugy
+    // ismetlodes, es epp a legrosszabb esetben nemulna el a jelzes.
+    assert.match(describeAttemptCount(9, 3) ?? "", /ismétlődő hiba/);
   });
 });
 

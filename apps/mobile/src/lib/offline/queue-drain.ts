@@ -236,3 +236,39 @@ export function describeRepeatedFailures(input: {
     " Ez magától nem fog megoldódni: szólj, ha ismétlődik."
   );
 }
+
+/**
+ * EGY SOR KISERLET-SZAMA, A HATARHOZ MERVE.
+ *
+ * === MIERT NEM ELEG A PUSZTA SZAM, AMI MA OTT ALL ===
+ *
+ * A sor-kepernyo ma ennyit ir ki: "3 feltoltesi kiserlet". Ez SEMLEGES adat, es
+ * a szerelo nem tudja rola, hogy sok-e. A `ISMETLODO_HIBA_HATAR` viszont MAR
+ * LETEZIK (harom probanal all), es a `repeatedFailures` ki is szamolja a
+ * kezdolapnak -- csak SORONKENT nem latszott sehol.
+ *
+ * A kulonbseg a szerelo szamara ugyanaz, mint a kezdolapi mondatnal: az egyikre
+ * VARNI kell, a masikkal KEZDENI kell valamit. Egy "var feltoltesre" felirat a
+ * VEGLEGES kudarcot varakozasnak alcazza.
+ *
+ * === MIERT TISZTA FUGGVENY, ES NEM A KEPERNYON ALL ===
+ *
+ * Ebben a csomagban nincs komponens-teszt. Ami a kepernyore kerul, azt csak a
+ * forras szovegebol lehet merni; ami tiszta fuggvenyben all, azt VISELKEDESBEN.
+ * Ugyanaz a felosztas, mint a `describeRepeatedFailures`-nel.
+ *
+ * `null`, ha meg egy kiserlet sem tortent: olyankor a sor nem ir ki semmit.
+ */
+export function describeAttemptCount(
+  attemptCount: number,
+  threshold: number,
+): string | null {
+  if (attemptCount <= 0) return null;
+  const alap = `${attemptCount} feltöltési kísérlet`;
+  // A HATART ELERO SOR KIMONDJA, HOGY NEM VARAKOZASROL VAN SZO. A `>=` es nem
+  // `>`: a harmadik bukas MAR ismetlodes, ugyanaz a hatar, amit a kezdolapi
+  // osszesito hasznal.
+  return attemptCount >= threshold
+    ? `${alap}, ismétlődő hiba: magától nem fog megoldódni`
+    : alap;
+}
