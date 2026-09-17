@@ -166,6 +166,14 @@ export interface ServiceJobDocumentSummary {
   contentType: "application/pdf" | "image/jpeg" | "image/png";
   sizeBytes: number;
   sha256: string;
+  /**
+   * A CSATOLMANY FELIRATA -- MIT LATUNK A KEPEN. `null`, ha nincs.
+   *
+   * A HIANY EGYFELE ALAKBAN ALL (`null`, nem ures string): kulonben a "nincs
+   * felirat" es a "szandekosan ures felirat" megkulonboztethetetlen lenne, es
+   * a rajzolonak ket agat kellene nyitnia ugyanarra a hianyra.
+   */
+  caption: string | null;
   createdAt: string;
 }
 

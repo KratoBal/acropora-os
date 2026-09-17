@@ -1752,6 +1752,7 @@ export class ServiceAssetsRepository extends Repository {
     sizeBytes: number;
     sha256: string;
     contentType: string;
+    caption: string | null;
     actorUserId: string;
   }): Promise<AssetDocumentSummary> {
     const id = input.id ?? randomUUID();
@@ -1768,6 +1769,7 @@ export class ServiceAssetsRepository extends Repository {
           sha256,
           content: input.content ? Uint8Array.from(input.content) : null,
           storageKey: input.storageKey ?? null,
+          caption: input.caption,
           uploadedById: input.actorUserId,
         },
       });
@@ -2058,6 +2060,29 @@ export class ServiceAssetsRepository extends Repository {
     };
   }
 
+  /**
+   * A FELIRAT ATIRASA -- ES AZ ESZKOZ AZONOSITOJA IS FELTETEL.
+   *
+   * `updateMany` es nem `update`: igy az eszkoz azonositoja a feltetel resze
+   * lehet. Egy `update({ where: { id } })` egy MASIK eszkoz csatolmanyat is
+   * atirna, ha valaki a sajat eszkoze utjara ir egy idegen
+   * dokumentum-azonositot.
+   *
+   * A VISSZATERES A TALALATOK SZAMA: egy `updateMany`, ami nulla sort erint,
+   * NEM hibazik -- es a hiba nema lenne.
+   */
+  async setDocumentCaption(
+    assetId: string,
+    documentId: string,
+    caption: string | null,
+  ): Promise<number> {
+    const result = await prisma.assetDocument.updateMany({
+      where: { id: documentId, assetId },
+      data: { caption },
+    });
+    return result.count;
+  }
+
   private toDocumentSummary(document: {
     id: string;
     type: AssetDocumentSummary["type"];
@@ -2065,6 +2090,7 @@ export class ServiceAssetsRepository extends Repository {
     contentType: string;
     sizeBytes: number;
     sha256: string;
+    caption: string | null;
     createdAt: Date;
     uploadedBy: { id: string; displayName: string } | null;
   }): AssetDocumentSummary {
@@ -2075,6 +2101,7 @@ export class ServiceAssetsRepository extends Repository {
       contentType: documentedContentType(document.contentType),
       sizeBytes: document.sizeBytes,
       sha256: document.sha256,
+      caption: document.caption,
       uploadedBy: document.uploadedBy
         ? {
             id: document.uploadedBy.id,

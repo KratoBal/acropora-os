@@ -29,6 +29,7 @@ import {
   IssueAssetLabelsDto,
   CreateAssetDto,
   UpdateAssetDto,
+  UpdateAssetDocumentCaptionDto,
   UploadAssetDocumentDto,
 } from "./dto/asset.dto.js";
 import { ServiceAssetsService } from "./service-assets.service.js";
@@ -251,7 +252,13 @@ export class ServiceAssetsController {
     const created = [];
     for (const file of files) {
       created.push(
-        await this.service.addDocument(id, input.type, file, user.id),
+        await this.service.addDocument(
+          id,
+          input.type,
+          file,
+          user.id,
+          input.caption,
+        ),
       );
     }
 
@@ -298,6 +305,21 @@ export class ServiceAssetsController {
   @RequirePermissions(PERMISSIONS.SERVICE_ASSET_DELETE)
   remove(@Param("id") id: string) {
     return this.service.remove(id);
+  }
+
+  /**
+   * A FELIRAT ATIRASA. `PATCH`, mert a sornak EGY mezojet mozditja -- a
+   * csatolmany tobbi adata (fajl, meret, lenyomat) a feltoltes pillanatabol
+   * valo, es nem is irhato felul.
+   */
+  @Patch(":id/documents/:documentId")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  setDocumentCaption(
+    @Param("id") id: string,
+    @Param("documentId") documentId: string,
+    @Body() input: UpdateAssetDocumentCaptionDto,
+  ) {
+    return this.service.setDocumentCaption(id, documentId, input.caption);
   }
 
   @Delete(":id/documents/:documentId")

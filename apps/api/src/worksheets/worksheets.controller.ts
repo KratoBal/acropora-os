@@ -37,6 +37,7 @@ import {
   UpdateWorksheetDraftDto,
   UpdateWorksheetEntryDto,
   UpdateWorksheetLineDto,
+  UpdateWorksheetDocumentCaptionDto,
   UploadWorksheetDocumentDto,
   WorksheetListQueryDto,
 } from "./dto/worksheet.dto.js";
@@ -371,6 +372,7 @@ export class WorksheetsController {
           file,
           user.id,
           partnerScopeOf(user),
+          input.caption,
         ),
       );
     }
@@ -383,6 +385,27 @@ export class WorksheetsController {
   @RequirePermissions(PERMISSIONS.SERVICE_VIEW)
   documents(@Param("id") id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.service.documents(id, partnerScopeOf(user));
+  }
+
+  /**
+   * A FELIRAT ATIRASA. `PATCH`, mert a sornak EGY mezojet mozditja -- a
+   * csatolmany tobbi adata (fajl, meret, lenyomat) a feltoltes pillanatabol
+   * valo, es nem is irhato felul.
+   */
+  @Patch(":id/documents/:documentId")
+  @RequirePermissions(PERMISSIONS.SERVICE_MANAGE)
+  setDocumentCaption(
+    @Param("id") id: string,
+    @Param("documentId") documentId: string,
+    @Body() input: UpdateWorksheetDocumentCaptionDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.setDocumentCaption(
+      id,
+      documentId,
+      input.caption,
+      partnerScopeOf(user),
+    );
   }
 
   @Get(":id/documents/:documentId")

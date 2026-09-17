@@ -3081,6 +3081,11 @@ model AssetDocument {
   content      Bytes?
   storageKey   String?
   uploadedById String?
+  /// A CSATOLMANY FELIRATA -- MIT LATUNK A KEPEN. Elhagyhato, es utolag is
+  /// irhato. A teljes indoklas a `ServiceJobDocument.caption` fejlecen all; a
+  /// harom dokumentum-tabla alakja SZANDEKOSAN azonos, tehat a mezo mind a
+  /// haromon ugyanugy szerepel.
+  caption      String?           @db.VarChar(500)
   createdAt    DateTime          @default(now())
 
   asset      Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
@@ -3136,6 +3141,11 @@ model WorksheetDocument {
   content      Bytes?
   storageKey   String?
   uploadedById String?
+  /// A CSATOLMANY FELIRATA -- MIT LATUNK A KEPEN. Elhagyhato, es utolag is
+  /// irhato. A teljes indoklas a `ServiceJobDocument.caption` fejlecen all; a
+  /// harom dokumentum-tabla alakja SZANDEKOSAN azonos, tehat a mezo mind a
+  /// haromon ugyanugy szerepel.
+  caption      String?               @db.VarChar(500)
   /// A KEP SAJAT IDEJE. Nem a lap ideje es nem a verzioe: utolag ebbol latszik,
   /// melyik napi munkahoz keszult.
   createdAt    DateTime              @default(now())
@@ -3204,6 +3214,27 @@ model ServiceJobDocument {
   content      Bytes?
   storageKey   String?
   uploadedById String?
+  /// A CSATOLMANY FELIRATA -- MIT LATUNK A KEPEN.
+  ///
+  /// Balazs kerese (2026-09-17, Discord, szo szerint): „jo lenne valami galeria
+  /// szeru, akar ugy, higy megjegyzest lehessen irni a kephez akar mar a
+  /// feltoltesnel is"
+  ///
+  /// ELHAGYHATO, ES EZ NEM KENYELEM. Kotelezove teve ket rossz valasztas
+  /// maradna: vagy a MAR MEGLEVO sorokra kellene kitalalni egy szoveget (az
+  /// hazudna arrol, hogy valaki leirta), vagy a migracio hasalna el rajtuk. A
+  /// hiany itt ERVENYES allapot: egy kep magaert beszelhet.
+  ///
+  /// A FELIRAT UTOLAG IS IRHATO, nem csak feltolteskor: a bizonyitek gyakran
+  /// elobb keszul el, mint a magyarazata -- a szerelo fenykepez, es az iroda
+  /// nevezi meg, mit latunk rajta.
+  ///
+  /// MIND A HAROM DOKUMENTUM-TABLAN UGYANIGY ALL, mert a harom alak
+  /// SZANDEKOSAN azonos (lasd a `ServiceJobDocument` fejlecet): a feltoltes
+  /// szabalyai kozos modulban allnak, es egy harmadik alak azt jelentene, hogy
+  /// minden kesobbi valtozast haromszor kell megcsinalni -- a harmadik pedig
+  /// mindig lemarad.
+  caption      String?                @db.VarChar(500)
   /// A CSATOLMANY SAJAT IDEJE. Nem a jegye: a bizonyitek gyakran keson erkezik,
   /// es utolag ebbol latszik, mikor.
   createdAt    DateTime               @default(now())

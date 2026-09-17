@@ -184,6 +184,13 @@ export interface AssetDocumentSummary {
   contentType: "application/pdf" | "image/jpeg" | "image/png";
   sizeBytes: number;
   sha256: string;
+  /**
+   * A CSATOLMANY FELIRATA -- MIT LATUNK A KEPEN. `null`, ha nincs.
+   *
+   * A HIANY EGYFELE ALAKBAN ALL (`null`, nem ures string): kulonben a "nincs
+   * felirat" es a "szandekosan ures felirat" megkulonboztethetetlen lenne.
+   */
+  caption: string | null;
   uploadedBy?: { id: string; displayName: string };
   createdAt: string;
 }

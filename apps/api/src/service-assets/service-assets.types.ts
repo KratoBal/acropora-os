@@ -103,6 +103,7 @@ export const assetDocumentSummarySelect = {
   contentType: true,
   sizeBytes: true,
   sha256: true,
+  caption: true,
   createdAt: true,
   uploadedBy: { select: { id: true, displayName: true } },
 } satisfies Prisma.AssetDocumentSelect;
