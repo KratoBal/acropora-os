@@ -660,6 +660,7 @@ describe(
           assetB,
           assetSupplierA,
           assetForDeletes,
+          assetForWrites,
           assetSupplierAOther,
           assetSupplierB,
         ].sort(),
