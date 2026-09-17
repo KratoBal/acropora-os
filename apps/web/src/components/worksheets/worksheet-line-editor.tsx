@@ -96,7 +96,25 @@ export interface WorksheetLineEditorProps {
  *  - mezőnkénti felirat a keskeny nézetben (ott úgyis egymás alatt vannak,
  *    tehát a felirat nem vesz el helyet a sorból).
  */
-const COLUMNS = "md:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]";
+/**
+ * A FEJLEC ES A RACS EGY FORRASBOL, MERT KETTO ELCSUSZOTT (merve 2026-09-17).
+ *
+ * A #811-ben kikerult az egysegar es az AFA beviteli mezoje, es a FEJLECSOR
+ * ottmaradt: hat cimke allt negy cella folott. Rendereelve merve: a "Torles"
+ * gomb az "Egysegar" oszlop ala esett, ket cimke pedig a semmi fole.
+ *
+ * NEM A FIGYELMEM HIANYZOTT: ugyanaz a szabaly KET helyen allt (a racs-osztaly
+ * es a fejlec felsorolasa), es amikor az egyiket atirtam, a masik nem szolt.
+ * Es a sajat tesztem ORIZTE a hibat: nev szerint allitotta, hogy az "Egysegar"
+ * cimke ott van.
+ *
+ * Mostantol a fejlec EBBOL a tombbol keletkezik. A racs-osztaly Tailwind miatt
+ * literal marad (a JIT nem lat osszefuzott osztalynevet) -- azt a komponens
+ * teszt koti ossze: a racs oszlopainak szama legyen `MEZO_FEJLECEK.length + 1`.
+ */
+const MEZO_FEJLECEK = ["Megnevezés", "Mennyiség", "Mértékegység"] as const;
+
+const COLUMNS = "md:grid-cols-[2fr_1fr_1fr_auto]";
 
 /** A keskeny nézet felirata. Széles nézetben a fejlécsor mondja ugyanezt. */
 function NarrowLabel({ children }: { children: string }) {
@@ -150,11 +168,10 @@ export function WorksheetLineEditor({
           className={`hidden gap-2 text-xs font-medium text-dusk-500 md:grid ${COLUMNS}`}
           aria-hidden="true"
         >
-          <span>Megnevezés</span>
-          <span>Mennyiség</span>
-          <span>Mértékegység</span>
-          <span>Egységár</span>
-          <span>ÁFA</span>
+          {MEZO_FEJLECEK.map((fejlec) => (
+            <span key={fejlec}>{fejlec}</span>
+          ))}
+          {/* A törlés gomb oszlopa: fejléc nélkül, de a rácsban helyet foglal. */}
           <span />
         </div>
       ) : null}
