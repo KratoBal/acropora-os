@@ -3,6 +3,10 @@ import { describe, it } from "node:test";
 
 import type { ServiceJobsRepository } from "./service-jobs.repository.js";
 import { ServiceJobsService } from "./service-jobs.service.js";
+import {
+  serviceJobDetailRow as row,
+  type ServiceJobDetailRow,
+} from "../testing/service-job-detail-row.fixture.js";
 
 /**
  * BELSOS HIVO: a reszletlap tartalmarol szolo allitasok NEM a hatokorrol
@@ -11,84 +15,21 @@ import { ServiceJobsService } from "./service-jobs.service.js";
  */
 const BELSOS = { id: "user-1", customerId: null, supplierId: null } as never;
 
-type DetailRow = Awaited<ReturnType<ServiceJobsRepository["detail"]>>;
-
 /**
  * A VARRAT A VALÓDI SZERZŐDÉS TÍPUSÁT KAPJA (`Pick<...>`), nem `unknown`-t: a
  * részletlap alakja a felület szerződése, és ha a tároló visszatérése
  * elmozdul a duplától, a fordító szóljon, ne a képernyő.
  */
-function serviceWith(row: DetailRow) {
+function serviceWith(detailRow: ServiceJobDetailRow) {
   const repository: Pick<ServiceJobsRepository, "detail" | "documentRemovals"> =
     {
-      detail: async () => row,
+      detail: async () => detailRow,
       /* A TOROLT CSATOLMANYOK KULON LEKERDEZESBOL JONNEK (az AuditLog nem all
        relacioban a jeggyel), tehat a duplanak ezt is tudnia kell. Ures lista =
        "ezen a jegyen nem toroltek csatolmanyt", ami ervenyes valasz. */
       documentRemovals: async () => [],
     };
   return new ServiceJobsService(repository as ServiceJobsRepository);
-}
-
-function row(overrides: Partial<NonNullable<DetailRow>> = {}) {
-  return {
-    id: "job-1",
-    jobNumber: "HJ-2026-001",
-    title: "Szivattyú leállt",
-    description: null,
-    status: "TRIAGED" as const,
-    createdAt: new Date("2026-09-01T08:00:00.000Z"),
-    scheduledAt: null,
-    startedAt: null,
-    completedAt: new Date("2026-09-04T08:00:00.000Z"),
-    customerId: "cust-1",
-    customer: { displayName: "Fővárosi Állat- És Növénykert" },
-    // A HELYSZIN ALAPBOL NINCS a fixture-on: a mezo 2026-09-14-en keletkezett,
-    // tehat minden korabbi jegyen `null`. Az az ALAPESET, nem a kivetel -- aki
-    // a helyszines agat meri, az `overrides`-szal allitja be.
-    departmentId: null,
-    department: null,
-    events: [
-      {
-        id: "event-1",
-        fromStatus: null,
-        toStatus: "NEW" as const,
-        note: null,
-        createdAt: new Date("2026-09-01T08:00:00.000Z"),
-        actor: { displayName: "Szerelő Sándor" },
-      },
-    ],
-    worksheets: [
-      {
-        id: "worksheet-1",
-        number: null,
-        createdAt: new Date("2026-09-02T08:00:00.000Z"),
-        handedOverAt: null,
-        // A NEV A LEGFRISSEBB VERZION LAKIK, ezert all itt tombkent: a
-        // lekerdezes `take: 1`-gyel a legmagasabb verziot huzza le.
-        versions: [{ subject: "Szivattyú csere" }],
-      },
-    ],
-    assets: [
-      {
-        id: "link-1",
-        assetId: "asset-1",
-        createdAt: new Date("2026-09-02T09:00:00.000Z"),
-        asset: { assetNumber: "ESZ-0007", name: "Szivattyú" },
-      },
-    ],
-    // ALAPBAN URES, es ezt a delegalas sajat specje tolti fel
-    // (`service-job-assignees.spec.ts`). Itt a jelenlete annyit allit, hogy egy
-    // delegalatlan jegy reszletlapja TELJES valaszt ad -- nem `undefined`-et.
-    assignees: [],
-    /**
-     * A HELYSZIN UTJA ALAPBAN `null`, es ez nem kitolto ertek: a mai jegyek
-     * TOBBSEGENEK nincs helyszine (a mezo 2026-09-14-en keletkezett), tehat ez
-     * a gyakori eset. Ami az utat MERI, az a sajat esetenel allitja be.
-     */
-    departmentPath: null,
-    ...overrides,
-  } satisfies NonNullable<DetailRow>;
 }
 
 describe("a hibajegy részletlapja", () => {
