@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // A PARTNER CSOMAG TESZT-FORDITASA.
+  //
+  // === MIERT LETT EZ A FAJL, ES MI ALLT A HELYEN ===
+  //
+  // A csomag `test` scriptje 2026-09-17-ig `tsc --noEmit` volt -- beture ugyanaz,
+  // mint a `typecheck`. Vagyis a teszt-kapu ZOLDET adott ugy, hogy NULLA tesztet
+  // futtatott, es ezt semmi nem mondta meg. Ez rosszabb, mint egy hianyzo
+  // script: az feltunik, egy alcazott zold nem.
+  //
+  // A tipusellenorzes NEM VESZ EL: a CI kulon futtat `pnpm typecheck`-et, es a
+  // csomag `typecheck` scriptje valtozatlan.
+  //
+  // === MIERT `node --test`, ES NEM VITEST ===
+  //
+  // A webes csomag vitestet hasznal, hat teszt-fuggoseggel (vitest, happy-dom,
+  // harom testing-library csomag, a react plugin). Az RENDERELNI tud -- es a
+  // most kert harom allitas kozul EGYIKHEZ SEM kell renderelni: mindharom a
+  // forras szoveget olvassa. Egy renderelo bevezetese tehat nem ehhez a
+  // munkahoz kellene, hanem egy KOVETKEZOHOZ, amit meg senki nem kert.
+  //
+  // A HATAR EZZEL EGYUTT KIMONDVA: ezek az allitasok azt merik, hogy a felulet
+  // a HELYES HIVASOKAT irja le, nem azt, hogy a partner LATJA a kepernyot. Ha
+  // egyszer renderelo kell, azt VISELKEDESRE kell cserelni, nem melle tenni --
+  // ugyanaz a kikotes, ami a mobil forras-olvaso specjeiben all.
+  //
+  // A `paths` bejegyzes SZANDEKOSAN hianyzik (a mobil teszt-konfigja meri ki,
+  // miert): a `tsc` a kibocsatott specifikatort nem irja at, tehat egy `@/`
+  // alak a lefordult kodban megmaradna, es a futas hasalna el rajta. A specek
+  // relativ utat hasznalnak.
+  "extends": "../../packages/config/base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    // ESM, ES NEM CommonJS -- ES EZ MERESBOL JON. A csomag `package.json`-ja
+    // `"type": "module"`, tehat egy CommonJS kimenet `ReferenceError: exports
+    // is not defined in ES module scope` hibaval hasal el FUTASKOR. A mobil
+    // teszt-konfigja azert all commonjs-en, mert AZ a csomag nem ESM.
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "ignoreDeprecations": "6.0",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "types": ["node"],
+    "outDir": "./test-dist",
+    "rootDir": "./src"
+  },
+  "include": ["src/**/*.spec.ts"]
+}
