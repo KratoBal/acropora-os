@@ -28,10 +28,13 @@ import {
   IsString,
   Matches,
   Max,
+  MaxLength,
   Min,
   MinLength,
   ValidateIf,
 } from "class-validator";
+
+import { DOCUMENT_CAPTION_MAX_LENGTH } from "../../documents/document-caption.js";
 
 const ASSET_KINDS = [
   "SYSTEM",
@@ -438,6 +441,34 @@ export class UpdateAssetDto {
 export class UploadAssetDocumentDto {
   @IsIn(ASSET_DOCUMENT_TYPES)
   type!: (typeof ASSET_DOCUMENT_TYPES)[number];
+
+  /**
+   * A FELIRAT MAR A FELTOLTESKOR MEGADHATO.
+   *
+   * EGY KERESRE EGY FELIRAT: a vegpont egyszerre tiz fajlt fogad, es ez az egy
+   * szoveg MINDEGYIKRE rakerul. Aki darabonkent mast ir, a szerkeszto uton
+   * teszi (`PATCH`), vagy egyesevel tolt fel. A fajlonkenti, tomb-alaku felirat
+   * SZANDEKOSAN nem szerepel: a multipart mezok sorrendje nem garantalja az
+   * igazitast a fajlokhoz, es egy elcsuszott felirat NEM hibazna -- csak rossz
+   * fajlra kerulne.
+   */
+  @IsString()
+  @MaxLength(DOCUMENT_CAPTION_MAX_LENGTH)
+  @IsOptional()
+  caption?: string;
+}
+
+/**
+ * A FELIRAT UTOLAGOS ATIRASA EGY ESZKOZ-CSATOLMANYON.
+ *
+ * A HIANYZO MEZO ES A `null` UGYANAZT JELENTI: toroljem a feliratot. Ez a
+ * vegpont EGY mezot ir, tehat nincs mit megkulonboztetni.
+ */
+export class UpdateAssetDocumentCaptionDto {
+  @ValidateIf((_, ertek) => ertek !== null && ertek !== undefined)
+  @IsString()
+  @MaxLength(DOCUMENT_CAPTION_MAX_LENGTH)
+  caption?: string | null;
 }
 
 /**

@@ -1758,6 +1758,7 @@ export class WorksheetsRepository extends Repository {
     sha256: string;
     content: Buffer | null;
     storageKey?: string | null;
+    caption: string | null;
     actorUserId: string;
   }) {
     return this.database.worksheetDocument.create({
@@ -1776,6 +1777,7 @@ export class WorksheetsRepository extends Repository {
          */
         content: input.content ? Uint8Array.from(input.content) : null,
         storageKey: input.storageKey ?? null,
+        caption: input.caption,
         uploadedById: input.actorUserId,
       },
       select: {
@@ -1785,6 +1787,7 @@ export class WorksheetsRepository extends Repository {
         contentType: true,
         sizeBytes: true,
         sha256: true,
+        caption: true,
         createdAt: true,
       },
     });
@@ -1832,8 +1835,31 @@ export class WorksheetsRepository extends Repository {
         contentType: true,
         sizeBytes: true,
         sha256: true,
+        caption: true,
         createdAt: true,
       },
     });
+  }
+
+  /**
+   * A FELIRAT ATIRASA -- ES A LAP AZONOSITOJA IS FELTETEL.
+   *
+   * `updateMany` es nem `update`: igy a lap azonositoja a feltetel resze lehet.
+   * Egy `update({ where: { id } })` egy MASIK lap csatolmanyat is atirna, ha
+   * valaki a sajat lapja utjara ir egy idegen dokumentum-azonositot.
+   *
+   * A VISSZATERES A TALALATOK SZAMA: egy `updateMany`, ami nulla sort erint,
+   * NEM hibazik -- es a hiba nema lenne.
+   */
+  async setDocumentCaption(
+    worksheetId: string,
+    documentId: string,
+    caption: string | null,
+  ): Promise<number> {
+    const result = await this.database.worksheetDocument.updateMany({
+      where: { id: documentId, worksheetId },
+      data: { caption },
+    });
+    return result.count;
   }
 }

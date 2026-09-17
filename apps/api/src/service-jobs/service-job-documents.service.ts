@@ -22,6 +22,7 @@ import {
   prepareDocument,
 } from "../documents/document-intake.js";
 import { sumDocumentBytesInUse } from "../documents/document-bytes-in-use.js";
+import { normalizeDocumentCaption } from "../documents/document-caption.js";
 import { assertStorageKeyMatches } from "../service-assets/document-store/document-storage-key.js";
 import type { DocumentStore } from "../service-assets/document-store/document-store.js";
 import { DOCUMENT_STORE } from "../service-assets/document-store/document-store.provider.js";
@@ -109,8 +110,11 @@ export class ServiceJobDocumentsService {
     type: "PHOTO" | "OTHER",
     file: Express.Multer.File,
     user: AuthenticatedUser,
+    caption?: string | null,
   ): Promise<ServiceJobDocumentSummary> {
     await this.requireVisibleJob(id, user);
+    // A HIANY EGYFELE ALAKBAN ALL, es a szabaly KOZOS a harom gazdan.
+    const felirat = normalizeDocumentCaption(caption);
 
     if (!this.documentStore)
       throw new ServiceUnavailableException(
@@ -143,6 +147,7 @@ export class ServiceJobDocumentsService {
         ...prepared.common,
         serviceJobId: id,
         type,
+        caption: felirat,
         actorUserId: user.id,
         content: prepared.content,
       });
@@ -152,6 +157,7 @@ export class ServiceJobDocumentsService {
         ...prepared.common,
         serviceJobId: id,
         type,
+        caption: felirat,
         actorUserId: user.id,
         content: null,
         storageKey: prepared.storageKey,
@@ -164,6 +170,40 @@ export class ServiceJobDocumentsService {
       );
       throw error;
     }
+  }
+
+  /**
+   * A FELIRAT ATIRASA EGY MAR FELTOLTOTT CSATOLMANYON.
+   *
+   * MIERT KELL A FELTOLTESKORI MELLE: a bizonyitek gyakran elobb keszul el,
+   * mint a magyarazata. A szerelo a helyszinen fenykepez -- gyakran kesztyuben,
+   * egy kezzel --, es az iroda az, aki utolag megnevezi, mit latunk.
+   * Feltoltes-kori felirat ONMAGABAN azt jelentene, hogy egy elgepeles vagy egy
+   * kesobb megertett reszlet soha nem javithato.
+   *
+   * A JOGKOR A `SERVICE_MANAGE`, ugyanaz, mint a feltoltese es a torlese: a
+   * felirat a jegy tartalma, nem megjegyzes a margon.
+   */
+  async setDocumentCaption(
+    id: string,
+    documentId: string,
+    caption: string | null | undefined,
+    user: AuthenticatedUser,
+  ): Promise<{ ok: true }> {
+    await this.requireVisibleJob(id, user);
+    const erintett = await this.repository.setCaption(
+      id,
+      documentId,
+      normalizeDocumentCaption(caption),
+    );
+    /**
+     * A NULLA ERINTETT SOR NEM SIKER. Egy `updateMany`, ami semmit nem talalt,
+     * NEM hibazik -- es a hiba nema lenne: a felulet a sajat begepelt szoveget
+     * mutatna tovabb, mintha mentve lenne.
+     */
+    if (erintett === 0)
+      throw new NotFoundException("A csatolmány nem található.");
+    return { ok: true };
   }
 
   /** Egy jegy csatolmanyai, tartalom nelkul. */

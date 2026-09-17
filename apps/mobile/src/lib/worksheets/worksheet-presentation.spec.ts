@@ -359,6 +359,7 @@ describe("worksheetListStartsMineOnly", () => {
     SALES: true,
     WAREHOUSE: true,
     SERVICE: true,
+    PARTNER_SERVICE: true,
     VIEWER: true,
   };
   const MIND = Object.keys(MIND_TABLA) as UserRole[];

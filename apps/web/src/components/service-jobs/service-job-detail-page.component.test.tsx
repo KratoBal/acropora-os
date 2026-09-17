@@ -159,6 +159,9 @@ function csatolmany(
     contentType: "image/jpeg",
     sizeBytes: 204800,
     sha256: "a".repeat(64),
+    // A FELIRAT ALAPBOL NINCS: a mezo 2026-09-17-en keletkezett, tehat minden
+    // korabbi csatolmanyon `null`. Az az ALAPESET, nem a kivetel.
+    caption: null,
     createdAt: "2026-09-01T09:00:00.000Z",
     ...overrides,
   };

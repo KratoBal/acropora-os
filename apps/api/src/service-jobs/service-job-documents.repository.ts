@@ -40,6 +40,7 @@ function toSummary(sor: {
   contentType: string;
   sizeBytes: number;
   sha256: string;
+  caption: string | null;
   createdAt: Date;
 }): ServiceJobDocumentSummary {
   return {
@@ -49,6 +50,7 @@ function toSummary(sor: {
     contentType: documentedContentType(sor.contentType),
     sizeBytes: sor.sizeBytes,
     sha256: sor.sha256,
+    caption: sor.caption,
     createdAt: sor.createdAt.toISOString(),
   };
 }
@@ -116,6 +118,7 @@ export class ServiceJobDocumentsRepository {
     sha256: string;
     content: Buffer | null;
     storageKey?: string | null;
+    caption: string | null;
     actorUserId: string;
   }): Promise<ServiceJobDocumentSummary> {
     return this.database.serviceJobDocument
@@ -135,6 +138,7 @@ export class ServiceJobDocumentsRepository {
            */
           content: input.content ? Uint8Array.from(input.content) : null,
           storageKey: input.storageKey ?? null,
+          caption: input.caption,
           uploadedById: input.actorUserId,
         },
         select: {
@@ -144,6 +148,7 @@ export class ServiceJobDocumentsRepository {
           contentType: true,
           sizeBytes: true,
           sha256: true,
+          caption: true,
           createdAt: true,
         },
       })
@@ -163,10 +168,36 @@ export class ServiceJobDocumentsRepository {
           contentType: true,
           sizeBytes: true,
           sha256: true,
+          caption: true,
           createdAt: true,
         },
       })
       .then((sorok) => sorok.map(toSummary));
+  }
+
+  /**
+   * A FELIRAT ATIRASA -- ES A JEGY AZONOSITOJA IS FELTETEL.
+   *
+   * `updateMany` es nem `update`, ugyanabbol az okbol, amiert a torles is
+   * `deleteMany`: igy a jegy azonositoja a feltetel resze lehet. Egy
+   * `update({ where: { id } })` egy MASIK jegy csatolmanyat is atirna, ha
+   * valaki a sajat jegyenek utjara ir egy idegen dokumentum-azonositot.
+   *
+   * A VISSZATERES A TALALATOK SZAMA, nem a sor: a hivo ebbol tudja
+   * megkulonboztetni a "nincs ilyen csatolmany" esetet a sikertol. Egy
+   * `updateMany`, ami nulla sort erint, NEM hibazik -- es a hiba nema lenne: a
+   * felulet a sajat begepelt szoveget mutatna tovabb, mintha mentve lenne.
+   */
+  async setCaption(
+    serviceJobId: string,
+    documentId: string,
+    caption: string | null,
+  ): Promise<number> {
+    const result = await this.database.serviceJobDocument.updateMany({
+      where: { id: documentId, serviceJobId },
+      data: { caption },
+    });
+    return result.count;
   }
 
   /** Egy csatolmany sora, a bajtokkal vagy a tarolo-kulccsal egyutt. */

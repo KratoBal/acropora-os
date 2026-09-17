@@ -57,6 +57,7 @@ import type {
   WorksheetListQueryDto,
 } from "./dto/worksheet.dto.js";
 import { mayWorksheetJoinTicket } from "../common/worksheet-under-ticket.js";
+import { normalizeDocumentCaption } from "../documents/document-caption.js";
 import { NotificationsService } from "../notifications/notifications.service.js";
 import { normalizeAssigneeIds } from "./worksheet-assignment.js";
 import {
@@ -143,11 +144,14 @@ export class WorksheetsService {
     file: Express.Multer.File,
     actorUserId: string,
     scope: PartnerScope,
+    caption?: string | null,
   ) {
     // A JOGOSULTSAG ITT DOL EL, nem a magban: a lap sajat hatokor-szabalya
     // vonatkozik ra, es azt egy kozos modul nem ismerheti.
     const lap = await this.repository.detail(id, scope);
     if (!lap) throw new NotFoundException("A munkalap nem található.");
+    // A HIANY EGYFELE ALAKBAN ALL, es a szabaly KOZOS a harom gazdan.
+    const felirat = normalizeDocumentCaption(caption);
 
     if (!this.documentStore)
       throw new ServiceUnavailableException(
@@ -180,6 +184,7 @@ export class WorksheetsService {
         ...prepared.common,
         worksheetId: id,
         type,
+        caption: felirat,
         actorUserId,
         content: prepared.content,
       });
@@ -189,6 +194,7 @@ export class WorksheetsService {
         ...prepared.common,
         worksheetId: id,
         type,
+        caption: felirat,
         actorUserId,
         content: null,
         storageKey: prepared.storageKey,
@@ -201,6 +207,36 @@ export class WorksheetsService {
       );
       throw error;
     }
+  }
+
+  /**
+   * A FELIRAT ATIRASA EGY MAR FELTOLTOTT CSATOLMANYON.
+   *
+   * MIERT KELL A FELTOLTESKORI MELLE: a bizonyitek gyakran elobb keszul el,
+   * mint a magyarazata. A szerelo a helyszinen fenykepez, es az iroda az, aki
+   * utolag megnevezi, mit latunk rajta.
+   *
+   * UGYANAZ A HATOKOR-SZABALY, mint a feltoltesnel: a lapot eloszor a hivo
+   * hatokorevel kell megtalalni.
+   */
+  async setDocumentCaption(
+    id: string,
+    documentId: string,
+    caption: string | null | undefined,
+    scope: PartnerScope,
+  ): Promise<{ ok: true }> {
+    const lap = await this.repository.detail(id, scope);
+    if (!lap) throw new NotFoundException("A munkalap nem található.");
+    const erintett = await this.repository.setDocumentCaption(
+      id,
+      documentId,
+      normalizeDocumentCaption(caption),
+    );
+    // A NULLA ERINTETT SOR NEM SIKER: a felulet a sajat begepelt szoveget
+    // mutatna tovabb, mintha mentve lenne.
+    if (erintett === 0)
+      throw new NotFoundException("A csatolmány nem található.");
+    return { ok: true };
   }
 
   /** Egy lap csatolmanyai, tartalom nelkul. */

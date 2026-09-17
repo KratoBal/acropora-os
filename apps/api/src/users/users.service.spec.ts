@@ -198,6 +198,75 @@ describe("a felhasználó vevőhöz kötése", () => {
     );
   });
 
+  it("partnerhez kötött fiókot csak a szűk partner szerviz szereppel hoz létre", async () => {
+    let createCalled = false;
+    await assert.rejects(
+      () =>
+        new UsersService(
+          repository({
+            create: async () => {
+              createCalled = true;
+              return user;
+            },
+          }),
+        ).create(
+          {
+            firstName: "Réka",
+            lastName: "Kovács",
+            email: "reka.kovacs@acropora.hu",
+            role: "SERVICE",
+            customerId: "customer-1",
+          },
+          "actor-1",
+        ),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        /csak a Partner szerviz/.test(error.message),
+    );
+    assert.equal(createCalled, false);
+  });
+
+  it("partnerhez kötött fiók frissítésekor a megmaradó szerepet is ellenőrzi", async () => {
+    let updateCalled = false;
+    await assert.rejects(
+      () =>
+        new UsersService(
+          repository({
+            detail: async () => ({ ...user, customerId: "customer-1" }),
+            update: async () => {
+              updateCalled = true;
+              return user;
+            },
+          }),
+        ).update(
+          "user-1",
+          { lastName: "Kovács", expectedUpdatedAt: user.updatedAt },
+          "actor-1",
+        ),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        /csak a Partner szerviz/.test(error.message),
+    );
+    assert.equal(updateCalled, false);
+  });
+
+  it("partnerhez kötött fiók a szűk szerepet megtarthatja", async () => {
+    const updated = await new UsersService(
+      repository({
+        detail: async () => ({
+          ...user,
+          role: "PARTNER_SERVICE" as const,
+          customerId: "customer-1",
+        }),
+      }),
+    ).update(
+      "user-1",
+      { lastName: "Kovács", expectedUpdatedAt: user.updatedAt },
+      "actor-1",
+    );
+    assert.equal(updated.id, "user-1");
+  });
+
   it("MAR SZALLITOHOZ kotott fiokot nem enged vevohoz kotni", async () => {
     /*
       Az adatbazisban `CHECK` all ra, tehat a masodik kotes ott ugyis elbukna.

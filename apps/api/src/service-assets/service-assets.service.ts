@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { PartnerScope } from "../auth/partner-scope.util.js";
 import { assetDeletionRefusal } from "./asset-deletion.js";
+import { normalizeDocumentCaption } from "../documents/document-caption.js";
 import { describeFieldConflict } from "./asset-field-conflict.js";
 import {
   BadRequestException,
@@ -334,7 +335,10 @@ export class ServiceAssetsService {
     type: "INVOICE" | "WARRANTY" | "MANUAL" | "OTHER",
     file: Express.Multer.File,
     actorUserId: string,
+    caption?: string | null,
   ) {
+    // A HIANY EGYFELE ALAKBAN ALL, es a szabaly KOZOS a harom gazdan.
+    const felirat = normalizeDocumentCaption(caption);
     await this.detail(id, {
       // BELSOS UT: a vegpont SERVICE_MANAGE jog alatt all (QR-forgatas,
       // dokumentum-feltoltes), amit partner-oldali felhasznalo nem kap meg.
@@ -384,6 +388,7 @@ export class ServiceAssetsService {
         ...prepared.common,
         assetId: id,
         type,
+        caption: felirat,
         actorUserId,
         content: prepared.content,
       });
@@ -393,6 +398,7 @@ export class ServiceAssetsService {
         ...prepared.common,
         assetId: id,
         type,
+        caption: felirat,
         actorUserId,
         content: null,
         storageKey: prepared.storageKey,
@@ -407,6 +413,34 @@ export class ServiceAssetsService {
       );
       throw error;
     }
+  }
+
+  /**
+   * A FELIRAT ATIRASA EGY MAR FELTOLTOTT CSATOLMANYON.
+   *
+   * MIERT KELL A FELTOLTESKORI MELLE: a bizonyitek gyakran elobb keszul el,
+   * mint a magyarazata -- egy szamla vagy egy garancialevel kepe utolag kap
+   * nevet attol, aki iktatja.
+   *
+   * BELSOS UT, ugyanugy, mint a feltoltes: a `detail` hivasa `internal`
+   * hatokorrel szuri, es a vegpont `SERVICE_MANAGE` alatt all.
+   */
+  async setDocumentCaption(
+    id: string,
+    documentId: string,
+    caption: string | null | undefined,
+  ): Promise<{ ok: true }> {
+    await this.detail(id, { kind: "internal" });
+    const erintett = await this.repository.setDocumentCaption(
+      id,
+      documentId,
+      normalizeDocumentCaption(caption),
+    );
+    // A NULLA ERINTETT SOR NEM SIKER: a felulet a sajat begepelt szoveget
+    // mutatna tovabb, mintha mentve lenne.
+    if (erintett === 0)
+      throw new NotFoundException("A csatolmány nem található.");
+    return { ok: true };
   }
 
   /**
