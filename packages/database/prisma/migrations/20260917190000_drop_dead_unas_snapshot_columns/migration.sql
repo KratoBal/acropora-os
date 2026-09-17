@@ -1,0 +1,46 @@
+-- Két soha nem használt oszlop eldobása az UnasProductSnapshot tábláról.
+-- A migráció CSAK EJT: nem nevez át, nem alakít, nem tölt fel semmit.
+--
+-- === MIT MÉRTÜNK, ÉS MIÉRT NEM ELÉG A NÉV SZERINTI KERESÉS ===
+--
+-- Egy "senki nem hivatkozik rá" állítást a puszta névkeresés nem tud
+-- alátámasztani: aki `select` nélkül kér le egy sort, MINDEN oszlopot
+-- megkap anélkül, hogy a mezőnevet leírná. Ezért a mérés a HOZZÁFÉRÉS
+-- MÓDJÁRA ment, három úton, 1496 forrásfájlon (node_modules, dist és
+-- test-dist nélkül), 2026-09-17-én az aa2982de főágon:
+--
+--   1. a generált kliens        5 hívás a modellre, ebből 3 olvasó
+--                               (findMany), és MINDHÁROM `select`-tel megy.
+--                               `select` nélküli olvasás: NULLA.
+--   2. nyers SQL ($queryRaw)    NULLA fájl érinti ezt a táblát.
+--   3. a két oszlopnév a kódban EGY találat, és az is egy KOMMENT
+--                               (medusa-projection.runner.ts).
+--
+-- Az író oldal ugyanígy: az egyetlen `upsert` create/update blokkja
+-- egyik oszlopot sem tölti ki.
+--
+-- KONTROLL, hogy a fenti nullák ne a kérdés tulajdonságai legyenek:
+-- ugyanezzel a méréssel a `reportedStockSyncedAt` 19 fájlt ad, az ismerten
+-- írt mezők pedig 5 találatot ugyanabban az upsert-blokkban. A mérő lát.
+--
+-- === AMI SZÁNDÉKOSAN NEM MEGY ===
+--
+-- A `currency` oszlopot ugyanez a kör hozta elő mint harmadik, amit az író
+-- nem tölt ki -- de azt OLVASSÁK, tehát marad. "Nem írja senki" és "nem
+-- olvassa senki" két külön állítás, és csak a második enged eldobni.
+--
+-- És az `initialOrderQuantity` a minimum/maximum/step család tagja: a másik
+-- HÁROM használatban van (a rendelési lépésköz és a maximum épp most került
+-- a kirakatra). Ez az egy különbözik, nem a család.
+--
+-- === VISSZAFORDÍTHATÓSÁG, KIMONDVA ===
+--
+-- A projekt előre-irányú: 116 migráció mellett NULLA down/rollback fájl áll.
+-- Ennek a visszavonása tehát nem rollback, hanem egy ÚJ migráció, ami
+-- visszateszi a két oszlopot -- de az ADAT nem jön vissza, és mivel ma
+-- senki nem írja őket, semmi nem tudja újra előállítani.
+--
+-- AlterTable
+ALTER TABLE "UnasProductSnapshot"
+    DROP COLUMN "propertiesHtml",
+    DROP COLUMN "initialOrderQuantity";

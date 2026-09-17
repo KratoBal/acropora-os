@@ -1485,9 +1485,7 @@ model UnasProductSnapshot {
   sefUrl                         String?
   manufacturerUrl                String?
   vatRate                        Decimal?  @db.Decimal(5, 2)
-  propertiesHtml                 String?
   minimumOrderQuantity           Decimal?  @db.Decimal(19, 6)
-  initialOrderQuantity           Decimal?  @db.Decimal(19, 6)
   maximumOrderQuantity           Decimal?  @db.Decimal(19, 6)
   orderQuantityStep              Decimal?  @db.Decimal(19, 6)
   /// A FORRÁS ÁLLÍTÁSA, ÉS RÁADÁSUL ÁTNEVEZVE. A UNAS `StockStatus.Empty`
