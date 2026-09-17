@@ -90,6 +90,40 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
+  apps/partner:
+    dependencies:
+      '@acropora/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+      next:
+        specifier: ^16.3.3
+        version: 16.3.4(@types/node@26.1.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      react:
+        specifier: ^19.2.7
+        version: 19.2.7
+      react-dom:
+        specifier: ^19.2.7
+        version: 19.2.7(react@19.2.7)
+      sharp:
+        specifier: 0.35.4
+        version: 0.35.4(@types/node@26.1.1)
+    devDependencies:
+      '@acropora/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.1.1
+      '@types/react':
+        specifier: ^19.2.17
+        version: 19.2.17
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.3(@types/react@19.2.17)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
   apps/web:
     dependencies:
       '@acropora/types':

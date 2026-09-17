@@ -78,9 +78,14 @@ export class ServiceJobsService {
    */
   async create(
     input: CreateServiceJobDto,
-    actorUserId: string,
+    actor: AuthenticatedUser | string,
     now: Date = new Date(),
   ) {
+    const actorUserId = typeof actor === "string" ? actor : actor.id;
+    const partnerScope =
+      typeof actor === "string"
+        ? { kind: "internal" as const }
+        : partnerScopeOf(actor);
     /**
      * A HELYSZINI BEJELENTES KULCSA A LEGELSO KERDES, MINDEN MAS ELOTT.
      *
@@ -124,11 +129,26 @@ export class ServiceJobsService {
     const eredet = honnan
       ? await this.repository.placementOfAsset(honnan)
       : null;
-    if (honnan && !eredet)
+    if (honnan && !eredet) {
+      if (partnerScope.kind === "customer") {
+        throw new BadRequestException(
+          "Hibajegyet csak a saját cégéhez lehet nyitni.",
+        );
+      }
       throw new BadRequestException(
         "A megadott eszköz nem található, ezért nem tudom, hova tartozik a jegy.",
       );
-    const customerId = input.customerId?.trim() || eredet?.customerId || null;
+    }
+    let customerId = input.customerId?.trim() || eredet?.customerId || null;
+    if (partnerScope.kind === "customer") {
+      if (customerId !== null && customerId !== partnerScope.customerId)
+        throw new BadRequestException(
+          "Hibajegyet csak a saját cégéhez lehet nyitni.",
+        );
+      customerId = partnerScope.customerId;
+    }
+    if (partnerScope.kind === "supplier")
+      throw new NotFoundException("A hibajegy nem található.");
     const departmentId =
       input.departmentId?.trim() || eredet?.departmentId || null;
     /**

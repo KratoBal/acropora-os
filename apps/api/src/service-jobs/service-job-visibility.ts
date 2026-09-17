@@ -69,7 +69,10 @@ export function serviceJobVisibilityWhere(input: {
     openedById: input.userId,
   };
 
-  if (input.unitIds.length === 0) return nyitoTengely;
+  if (input.unitIds.length === 0)
+    return input.scope.kind === "customer"
+      ? { AND: [{ customerId: input.scope.customerId }, nyitoTengely] }
+      : nyitoTengely;
 
   const egysegTengely: Prisma.ServiceJobWhereInput = {
     customer: {
@@ -77,5 +80,10 @@ export function serviceJobVisibilityWhere(input: {
     },
   };
 
-  return { OR: [nyitoTengely, egysegTengely] };
+  const visibleThroughUserOrUnit = { OR: [nyitoTengely, egysegTengely] };
+  return input.scope.kind === "customer"
+    ? {
+        AND: [{ customerId: input.scope.customerId }, visibleThroughUserOrUnit],
+      }
+    : visibleThroughUserOrUnit;
 }
