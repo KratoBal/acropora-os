@@ -230,4 +230,32 @@ export const assetsApi = {
       { method: "DELETE" },
     );
   },
+  /**
+   * A FELIRAT ATIRASA EGY MAR FELTOLTOTT CSATOLMANYON.
+   *
+   * A VEGPONT 2026-09-17 OTA ALL (a #762 vitte be, a semaval egyutt), es
+   * eddig CSAK a hibajegy oldalarol volt hivva. Az eszkoz adatlapja ugyanazt a
+   * galeriat rajzolja, tehat ugyanezt az utat hasznalja -- egy masodik alak
+   * ugyanarra a mezore ket kulon viselkedest jelentene.
+   *
+   * A `null` a TORLES, nem az ures string: a szerver ugyanezt a szabalyt
+   * mondja ki, es ket alak mellett a "nincs felirat" es a "szandekosan ures
+   * felirat" megkulonboztethetetlen lenne.
+   */
+  setDocumentCaption(
+    token: string,
+    id: string,
+    documentId: string,
+    caption: string | null,
+  ) {
+    return apiRequest<{ ok: true }>(
+      `/service/assets/${encodeURIComponent(id)}/documents/${encodeURIComponent(documentId)}`,
+      token,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caption }),
+      },
+    );
+  },
 };

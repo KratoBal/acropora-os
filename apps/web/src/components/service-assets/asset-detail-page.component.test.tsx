@@ -28,6 +28,8 @@ const api = vi.hoisted(() => ({
   deleteDocument: vi.fn(),
   uploadDocument: vi.fn(),
   documentUrl: vi.fn(),
+  downloadDocument: vi.fn(),
+  setDocumentCaption: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -104,6 +106,98 @@ beforeEach(() => {
   api.detail.mockResolvedValue(asset);
   api.qr.mockResolvedValue(qr);
   api.documentUrl.mockReturnValue("https://pelda.invalid/doc-1");
+  api.downloadDocument.mockResolvedValue(new Blob(["kep"]));
+  api.setDocumentCaption.mockResolvedValue({ ok: true });
+});
+
+/**
+ * A FENYKEP KEPKENT, A PDF LETOLTHETOKENT.
+ *
+ * Balazs kerese (2026-09-17): a feltoltott fenykepeket sehol nem lehet
+ * megnezni. Ezen a lapon eddig egy `Letoltes` gomb allt minden csatolmany
+ * mellett -- a telefonrol feltoltott fenykepet csak letoltes utan lehetett
+ * megnezni.
+ *
+ * A KETTOT EGY FIXTURABAN merjuk, mert a hiba pont a SZETVALASZTASBAN lenne:
+ * ha a lap mindenre kepet rajzolna, a PDF-bol torott csempe lenne (ami ugyanugy
+ * nez ki, mint egy be nem toltott fenykep); ha semmire, akkor nincs galeria.
+ */
+const ketCsatolmany = {
+  ...asset,
+  documents: [
+    {
+      id: "doc-2",
+      type: "OTHER",
+      fileName: "medence.jpg",
+      contentType: "image/jpeg",
+      sizeBytes: 204800,
+      sha256: "def",
+      caption: null,
+      createdAt: "2026-09-17T09:00:00.000Z",
+    },
+    ...(asset.documents ?? []),
+  ],
+} as unknown as AssetDetail;
+
+describe("AssetDetailPage csatolmány-galéria", () => {
+  it("a fénykép képként látszik, a PDF letölthető marad", async () => {
+    api.detail.mockResolvedValue(ketCsatolmany);
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    const kep = await screen.findByAltText("medence.jpg");
+    expect(kep.getAttribute("src")).toMatch(/^blob:/);
+    // A PDF-BOL NEM LESZ KEP...
+    expect(screen.queryByAltText("szamla-2026-08.pdf")).toBeNull();
+    // ...ES A NEVEN MEGTALALHATO MARAD.
+    expect(screen.getByText("szamla-2026-08.pdf")).toBeTruthy();
+  });
+
+  /**
+   * A FAJTA NEM TUNHET EL A GALERIAVAL.
+   *
+   * A korabbi, kezzel rajzolt lista kiirta (`Szamla · szamla-2026-08.pdf`), es
+   * az eszkozon NEGY fajta all: a fajlnev nem kulonbozteti meg oket. Egy szamla
+   * es egy garancialevel ugyanugy `szamla-2026.pdf` lehet.
+   */
+  it("a dokumentum fajtája a galériában is kiírva marad", async () => {
+    api.detail.mockResolvedValue(ketCsatolmany);
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    await screen.findByAltText("medence.jpg");
+    expect(screen.getByText(/Számla ·/)).toBeTruthy();
+    // A MASIK CSATOLMANY FAJTAJA IS, a kep-csempen.
+    expect(screen.getByText(/Egyéb ·/)).toBeTruthy();
+  });
+
+  /**
+   * A FELIRAT A SZERVERRE MEGY, ES A LAP UTANA UJRATOLT.
+   *
+   * MIERT A UJRATOLTES IS ALLITAS: a csempe a SZERVER szerinti allapotot
+   * mutassa. Ha csak a helyi allapotot irnank at, egy elutasitott mentes utan a
+   * kepernyo a begepelt szoveget mutatna tovabb, mintha mentve lenne.
+   */
+  it("a felirat mentése a szerverre megy, és utána újratölt", async () => {
+    api.detail.mockResolvedValue(ketCsatolmany);
+    render(<AssetDetailPage assetId="asset-1" />);
+    await screen.findByAltText("medence.jpg");
+    expect(api.detail).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Felirat" }));
+    fireEvent.change(screen.getByPlaceholderText("Mit látunk a képen?"), {
+      target: { value: "A hármas medence" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
+
+    await waitFor(() =>
+      expect(api.setDocumentCaption).toHaveBeenCalledWith(
+        "token-1",
+        "asset-1",
+        "doc-2",
+        "A hármas medence",
+      ),
+    );
+    await waitFor(() => expect(api.detail).toHaveBeenCalledTimes(2));
+  });
 });
 
 async function openDocumentConfirm() {
