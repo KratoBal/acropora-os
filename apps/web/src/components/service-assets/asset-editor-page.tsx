@@ -682,10 +682,30 @@ export function AssetEditorPage({ assetId }: { assetId?: string }) {
               A MI MATRICANK, NEM A PARTNERE. A fenti mezo a partner sajat
               szama; ez az altalunk elore kinyomtatott kod.
 
-              CSAK FELVITELNEL LATSZIK, es a mondat ki is mondja, miert: a
-              szerver meglevo eszkozon nem fogad matricakodot. Egy mezo, ami
-              szerkeszteskor is ott allna, de mentesnel csendben elveszne,
-              rosszabb a hianyzo mezonel.
+              A MEZO MIND A KET UTON LATSZIK: felvitelnel es szerkeszteskor is.
+              A ket eset csak a LEIRASBAN ter el (lentebb), mert a szerkesztes
+              CSERET is megenged, es azt ki kell mondani.
+
+              === EZ A MEGJEGYZES 2026-09-17-IG AZ ELLENKEZOJET ALLITOTTA ===
+
+              Azt irta, hogy a mezo "CSAK FELVITELNEL LATSZIK", mert "a szerver
+              meglevo eszkozon nem fogad matricakodot". Egyik fele sem igaz mar,
+              es a kod KET helyen cafolja (merve 2026-09-17, a fo agon):
+
+                asset.dto.ts, `UpdateAssetDto`
+                  ISMERI a `labelCode` mezot
+                service-assets.repository.ts, a frissito ut
+                  normalizalja a kapott kodot, es ki is irja
+
+              (SZIMBOLUMRA hivatkozom, nem sorszamra: a sorszam elavul, a nev
+              nem.)
+
+              A megkotes a #715-tel szunt meg ("A printed code can be added to an
+              asset that already exists"). A megjegyzes viszont ott maradt,
+              es egy elavult korlat ROSSZABB a hianyzonal: megnyugtat. Aki ezt
+              olvassa, azt hiszi, hogy a szerkesztes-kori matricakod egy meg nem
+              megoldott kerdes -- holott mukodik, es teszt is all rajta
+              (`asset-editor-page.component.test.tsx`, a `labelCode` allitasok).
             */}
             <FormField
               label="Matrica kódja"
