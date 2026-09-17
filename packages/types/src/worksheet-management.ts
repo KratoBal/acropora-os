@@ -650,3 +650,42 @@ export interface WorksheetAttachableItem {
 export interface WorksheetAttachableListResponse {
   items: WorksheetAttachableItem[];
 }
+
+/**
+ * A MUNKALAP CSATOLMÁNYÁNAK FAJTÁJA.
+ *
+ * A szerver alapértelmezése a `PHOTO`: a helyszínről érkező kép az, ami a lapra
+ * kerül. A többi az irodából jön.
+ */
+export type WorksheetDocumentType =
+  "PHOTO" | "INVOICE" | "WARRANTY" | "MANUAL" | "OTHER";
+
+/**
+ * EGY CSATOLMÁNY A MUNKALAPON -- a leíró adat, a bájtok nélkül.
+ *
+ * A `contentType` LITERÁL UNIÓ, és ez nem szűkítés: a tárolt érték a
+ * `canonicalMimetypeFor` kimenete (`uploaded-file-type.ts`), tehát a szerver
+ * MINDIG ezek egyikét írja be, függetlenül attól, mit jelentett be a kliens.
+ * Ugyanaz az alak, mint a `ServiceJobDocumentSummary`-n, és ugyanabból az okból.
+ */
+export interface WorksheetDocumentSummary {
+  id: string;
+  type: WorksheetDocumentType;
+  fileName: string;
+  contentType: "application/pdf" | "image/jpeg" | "image/png";
+  sizeBytes: number;
+  sha256: string;
+  /**
+   * A CSATOLMÁNY FELIRATA -- MIT LÁTUNK A KÉPEN. `null`, ha nincs.
+   *
+   * A hiány EGYFÉLE alakban áll (`null`, nem üres string), ugyanúgy, mint a
+   * hibajegynél: különben a „nincs felirat" és a „szándékosan üres felirat"
+   * megkülönböztethetetlen lenne.
+   */
+  caption: string | null;
+  createdAt: string;
+}
+
+export interface WorksheetDocumentListResponse {
+  items: WorksheetDocumentSummary[];
+}

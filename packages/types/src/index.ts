@@ -519,4 +519,7 @@ export type {
   WorksheetVersionDiff,
   WorksheetVersionStatus,
   WorksheetVersionSummary,
+  WorksheetDocumentListResponse,
+  WorksheetDocumentSummary,
+  WorksheetDocumentType,
 } from "./worksheet-management.js";
