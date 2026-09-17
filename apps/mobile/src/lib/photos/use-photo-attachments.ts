@@ -1,9 +1,8 @@
-import * as ImagePicker from "expo-image-picker";
+import type * as ImagePicker from "expo-image-picker";
 import { useCallback, useState } from "react";
 
-import { MAX_FILES_PER_UPLOAD } from "@/lib/api/document-upload";
-import { photoPermissionDeniedNotice } from "@/lib/api/photo-permission-notice";
 import { toPickedImages, type PickedFile } from "@/lib/api/picked-image";
+import { pickPhotosFromLibrary, takePhotoFromCamera } from "./pick-photos";
 
 /**
  * A HELYSZINEN KESZULT KEPEK GYUJTESE EGY URLAPON.
@@ -59,35 +58,32 @@ export function usePhotoAttachments(): PhotoAttachments {
     );
   }, []);
 
+  /**
+   * A KESZULEK FELE NEZO RESZ A `pick-photos.ts`-BEN ALL, ES ITT CSAK A
+   * GYUJTES MARAD. A megszakitas NEM tol uzenetet -- a szerelo tudja, hogy o
+   * lepett vissza --, a megtagadas viszont IGEN.
+   */
+  const felvesz2 = useCallback(
+    (eredmeny: Awaited<ReturnType<typeof takePhotoFromCamera>>) => {
+      if (eredmeny.kind === "denied") {
+        setNotice(eredmeny.notice);
+        return;
+      }
+      if (eredmeny.kind === "cancelled") return;
+      felvesz(eredmeny.assets);
+    },
+    [felvesz],
+  );
+
   const takePhoto = useCallback(async () => {
     setNotice(null);
-    const jog = await ImagePicker.requestCameraPermissionsAsync();
-    if (!jog.granted) {
-      setNotice(photoPermissionDeniedNotice("camera"));
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ["images"],
-    });
-    if (result.canceled) return;
-    felvesz(result.assets);
-  }, [felvesz]);
+    felvesz2(await takePhotoFromCamera());
+  }, [felvesz2]);
 
   const pickPhotos = useCallback(async () => {
     setNotice(null);
-    const jog = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!jog.granted) {
-      setNotice(photoPermissionDeniedNotice("library"));
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsMultipleSelection: true,
-      selectionLimit: MAX_FILES_PER_UPLOAD,
-    });
-    if (result.canceled) return;
-    felvesz(result.assets);
-  }, [felvesz]);
+    felvesz2(await pickPhotosFromLibrary());
+  }, [felvesz2]);
 
   const clear = useCallback(() => setPhotos([]), []);
 

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import * as ImagePicker from "expo-image-picker";
+import type * as ImagePicker from "expo-image-picker";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import {
   ActivityIndicator,
@@ -15,8 +15,12 @@ import type { ReactNode } from "react";
 
 import { getAsset, uploadAssetDocuments } from "@/lib/api/assets";
 import { MAX_FILES_PER_UPLOAD } from "@/lib/api/document-upload";
-import { photoPermissionDeniedNotice } from "@/lib/api/photo-permission-notice";
 import { toPickedImages } from "@/lib/api/picked-image";
+import {
+  pickPhotosFromLibrary,
+  takePhotoFromCamera,
+  type PhotoPickResult,
+} from "@/lib/photos/pick-photos";
 import { describeUploadFailure } from "@/lib/api/network-failure";
 import { ApiNetworkError } from "@/lib/api/client";
 import { ASSET_STATUS_LABELS } from "@/lib/assets/asset-status";
@@ -139,41 +143,33 @@ export default function AssetDetailScreen() {
    * gombra), akkor nem egy hibaüzenetet kap és semmi mást: az üzenet
    * megmondja, hol állítható, ÉS ott marad a galéria mint járható út.
    */
+  /**
+   * A HAROM ALLAPOT SZETVALASZTVA, ES EZ NEM KOZMETIKA.
+   *
+   * A megszakitas NEM uzenet: a szerelo tudja, hogy o lepett vissza. A
+   * megtagadas viszont IGEN, mert kulonben egy letiltott kamera ugyanugy nez
+   * ki, mint a sajat visszalepese -- semmi nem tortenik.
+   */
+  const feltoltAValasztasbol = async (eredmeny: PhotoPickResult) => {
+    if (eredmeny.kind === "denied") {
+      setUploadNotice(eredmeny.notice);
+      return;
+    }
+    if (eredmeny.kind === "cancelled") return;
+    await uploadPicked(eredmeny.assets);
+  };
+
   const takeAndUploadPhoto = async () => {
     if (!query.data || uploading) return;
     setUploadNotice(null);
-
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      setUploadNotice(photoPermissionDeniedNotice("camera"));
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ["images"],
-    });
-    if (result.canceled) return;
-    await uploadPicked(result.assets);
+    await feltoltAValasztasbol(await takePhotoFromCamera());
   };
 
   /** A MÁSODIK ÚT: egy korábban készült kép a galériából. */
   const pickAndUploadPhotos = async () => {
     if (!query.data || uploading) return;
     setUploadNotice(null);
-
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      setUploadNotice(photoPermissionDeniedNotice("library"));
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsMultipleSelection: true,
-      selectionLimit: MAX_FILES_PER_UPLOAD,
-    });
-    if (result.canceled) return;
-    await uploadPicked(result.assets);
+    await feltoltAValasztasbol(await pickPhotosFromLibrary());
   };
 
   if (status !== "authenticated" || !user) return <Redirect href="/login" />;
