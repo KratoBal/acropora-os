@@ -88,6 +88,17 @@ const HELPERS = [
    */
   "assetListWheres",
   "worksheetListWheres",
+  /**
+   * A FAJTA-SZURES LISTA ALAKJA (2026-09-17).
+   *
+   * A `scopeMaySeeDocumentType` egy MAR BETOLTOTT sorrol dont; ez a valtozata a
+   * hatokorbol ALLIT ELO felsorolast, es azt teszi a `where`-be. Ugyanaz a
+   * szabaly, masik alakban -- tehat aki ezt hivja, hasznalja a hatokort.
+   *
+   * A fenti figyelmeztetes szerint merve: a fuggveny a `PartnerScope`-bol
+   * szarmaztatja az erteket es a feltetelbe kerul, nem csak a neve hasonlit.
+   */
+  "scopeVisibleDocumentTypes",
 ];
 
 /**
@@ -174,8 +185,22 @@ describe("minden hatókört átvevő metódus használja is", () => {
     // egyet sem tur el, tehat a szorosabb korlattal EGYUTT jar a kotelezettseg,
     // hogy az uzenet megmondja, mi a teendo. Szoros korlat nema utmutatassal a
     // legrosszabb parositas: hangosan bukik, es rossz iranyba kuld.
+    /**
+     * A KORLAT 2026-09-17-EN 14-ROL 16-RA NOTT, es a ket uj nev:
+     * `setDocumentCaption` es `deleteDocument` az eszkoz-tarolobol.
+     *
+     * ES EZ A LENYEGES RESZ: nem azert nem voltak itt, mert elfelejtettek a
+     * hatokort -- hanem mert SOHA NEM VETTEK AT. Ez az orzo azt meri, hogy
+     * amelyik metodus hatokort VESZ AT, az hasznalja is; ami sosem vett at, az
+     * a latoteren KIVUL allt. Ket iro ut ment igy hatokor nelkul, es az orzo
+     * vegig zold volt.
+     *
+     * A tanulsag a szamnal tagabb: egy hianyzo PARAMETER ezt az orzot nem
+     * pirositja. Amikor uj iro utat irsz egy partner-adatot erinto taroloba,
+     * a kerdes nem az, hogy "hasznalja-e a hatokort", hanem hogy "ATVESZI-E".
+     */
     assert.ok(
-      metodusok.length >= 14,
+      metodusok.length >= 16,
       `csak ${metodusok.length} hatóköröt átvevő metódust találtam`,
     );
   });

@@ -282,6 +282,7 @@ export class ServiceAssetsController {
           input.type,
           file,
           user.id,
+          partnerScopeOf(user),
           input.caption,
         ),
       );
@@ -343,8 +344,14 @@ export class ServiceAssetsController {
     @Param("id") id: string,
     @Param("documentId") documentId: string,
     @Body() input: UpdateAssetDocumentCaptionDto,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.setDocumentCaption(id, documentId, input.caption);
+    return this.service.setDocumentCaption(
+      id,
+      documentId,
+      input.caption,
+      partnerScopeOf(user),
+    );
   }
 
   @Delete(":id/documents/:documentId")
@@ -354,7 +361,12 @@ export class ServiceAssetsController {
     @Param("documentId") documentId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    await this.service.deleteDocument(id, documentId, user.id);
+    await this.service.deleteDocument(
+      id,
+      documentId,
+      user.id,
+      partnerScopeOf(user),
+    );
     return { ok: true as const };
   }
 }

@@ -12,9 +12,17 @@ import {
 } from "./document-store/filesystem-document-store.js";
 import { InMemoryDocumentStore } from "./document-store/in-memory-document-store.js";
 import { ServiceAssetsService } from "./service-assets.service.js";
+import type { PartnerScope } from "../auth/partner-scope.util.js";
 import type { ServiceAssetsRepository } from "./service-assets.repository.js";
 
 const ASSET = "asset-1";
+/**
+ * BELSOS HATOKOR, KIIRVA. Ez a suite a feltoltes DONTESEIT meri (hova mennek a
+ * bajtok, mi marad hatra egy elhasalt irasnal), nem a jogosultsagot -- azt a
+ * `asset-document-write-scope.spec.ts` es a partner-hatokor integracios suite
+ * meri. A hatokor 2026-09-17 ota KOTELEZO parameter, tehat ki kell irni.
+ */
+const BELSOS: PartnerScope = { kind: "internal" };
 const PDF = Buffer.concat([Buffer.from("%PDF-"), Buffer.from([1, 2, 3])]);
 const JPEG = Buffer.concat([
   Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
@@ -69,7 +77,7 @@ describe("where an uploaded document's bytes go", () => {
       store,
     );
 
-    await service.addDocument(ASSET, "INVOICE", upload(), "user-1");
+    await service.addDocument(ASSET, "INVOICE", upload(), "user-1", BELSOS);
 
     const call = written as { content: Buffer | null; storageKey?: unknown };
     assert.ok(call.content);
@@ -104,7 +112,7 @@ describe("where an uploaded document's bytes go", () => {
     );
 
     try {
-      await service.addDocument(ASSET, "INVOICE", upload(), "user-1");
+      await service.addDocument(ASSET, "INVOICE", upload(), "user-1", BELSOS);
     } finally {
       delete process.env.DOCUMENT_STORE_ROOT;
     }
@@ -136,7 +144,7 @@ describe("where an uploaded document's bytes go", () => {
 
     try {
       await assert.rejects(
-        () => service.addDocument(ASSET, "INVOICE", upload(), "user-1"),
+        () => service.addDocument(ASSET, "INVOICE", upload(), "user-1", BELSOS),
         /a sor beírása elhasalt/,
       );
       assert.deepEqual(
@@ -175,7 +183,7 @@ describe("where an uploaded document's bytes go", () => {
 
     try {
       await assert.rejects(
-        () => service.addDocument(ASSET, "INVOICE", upload(), "user-1"),
+        () => service.addDocument(ASSET, "INVOICE", upload(), "user-1", BELSOS),
         /Betelt a fotó-tárhely/,
       );
 
@@ -222,7 +230,7 @@ describe("where an uploaded document's bytes go", () => {
     );
 
     try {
-      await service.addDocument(ASSET, "INVOICE", upload(), "user-1");
+      await service.addDocument(ASSET, "INVOICE", upload(), "user-1", BELSOS);
 
       assert.ok(written, "a sornak létre kell jönnie");
       assert.ok(
@@ -273,7 +281,7 @@ describe("where an uploaded document's bytes go", () => {
     );
 
     try {
-      await service.addDocument(ASSET, "INVOICE", upload(), "user-1");
+      await service.addDocument(ASSET, "INVOICE", upload(), "user-1", BELSOS);
 
       assert.ok(written, "a sornak létre kell jönnie");
       assert.ok(
@@ -306,7 +314,7 @@ describe("where an uploaded document's bytes go", () => {
       new InMemoryDocumentStore(),
     );
 
-    await service.addDocument(ASSET, "INVOICE", upload(), "user-1");
+    await service.addDocument(ASSET, "INVOICE", upload(), "user-1", BELSOS);
 
     assert.equal(rowsWritten, 1);
   });
@@ -345,6 +353,7 @@ describe("what the stored row says the file is", () => {
       "OTHER",
       upload(JPEG, "image/jpeg", "fenykep.jpg"),
       "user-1",
+      BELSOS,
     );
 
     assert.equal(written.length, 1);
@@ -355,7 +364,7 @@ describe("what the stored row says the file is", () => {
     delete process.env.DOCUMENT_STORE_ROOT;
     const { service, written } = capture();
 
-    await service.addDocument(ASSET, "INVOICE", upload(), "user-1");
+    await service.addDocument(ASSET, "INVOICE", upload(), "user-1", BELSOS);
 
     assert.equal(written[0]!.contentType, "application/pdf");
   });
@@ -374,6 +383,7 @@ describe("what the stored row says the file is", () => {
       "OTHER",
       upload(JPEG, "image/jpg", "fenykep.jpg"),
       "user-1",
+      BELSOS,
     );
 
     assert.equal(written[0]!.contentType, "image/jpeg");
@@ -390,6 +400,7 @@ describe("what the stored row says the file is", () => {
           "OTHER",
           upload(PDF, "image/png", "alcazott.png"),
           "user-1",
+          BELSOS,
         ),
       /PDF, JPEG vagy PNG/,
     );
@@ -434,6 +445,7 @@ describe("more than one file in a single request", () => {
         "OTHER",
         upload(buffer, mimetype, name),
         "user-1",
+        BELSOS,
       );
     }
 
@@ -465,6 +477,7 @@ describe("more than one file in a single request", () => {
       "OTHER",
       upload(JPEG, "image/jpeg", "jo.jpg"),
       "user-1",
+      BELSOS,
     );
     await assert.rejects(() =>
       service.addDocument(
@@ -472,6 +485,7 @@ describe("more than one file in a single request", () => {
         "OTHER",
         upload(PDF, "image/png", "alcazott.png"),
         "user-1",
+        BELSOS,
       ),
     );
 
