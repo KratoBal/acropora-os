@@ -12,6 +12,7 @@ import {
   worksheetListSubtitle,
   worksheetStatusLabel,
   worksheetFilterSummary,
+  worksheetListStartsMineOnly,
   worksheetVersionNote,
   WORKSHEET_STATUS_FILTERS,
 } from "./worksheet-presentation";
@@ -20,6 +21,7 @@ import type {
   WorksheetLineLike,
   WorksheetListLike,
 } from "./worksheet-presentation";
+import type { UserRole } from "../auth/types";
 
 /**
  * A KIMONDOTT HIÁNY A TÉT.
@@ -333,5 +335,49 @@ describe("worksheetFilterSummary", () => {
       }),
       "Minden munkalap",
     );
+  });
+});
+
+describe("worksheetListStartsMineOnly", () => {
+  /**
+   * BALÁZS KÉRÉSE, 2026-09-17: „a szűrésnél a minden munkalap legyen az
+   * alapértelmezett". Előtte a `SERVICE` szerepkör a saját lapjaival indult.
+   *
+   * MINDEN SZEREPKÖR FELSOROLVA, NEM CSAK A `SERVICE`. Ha csak azt az egyet
+   * néznénk, egy MÁSIK szerepkörre visszaírt szűkítés csendben átmenne -- és
+   * pont az a fajta, amit senki nem próbál ki a telefonon.
+   *
+   * A LISTA A FORDÍTÓTÓL JÖN, NEM KÉZBŐL: a `Record<UserRole, true>` alak
+   * miatt egy ÚJ szerepkör felvétele fordítási hibát ad itt, nem pedig
+   * csendben kimarad a körből. (Ugyanaz az idióma, mint a
+   * `webshop-authorization.ts` `ROLE_CAPABILITIES` táblája.)
+   */
+  const MIND_TABLA: Record<UserRole, true> = {
+    OWNER: true,
+    ADMIN: true,
+    MANAGER: true,
+    SALES: true,
+    WAREHOUSE: true,
+    SERVICE: true,
+    VIEWER: true,
+  };
+  const MIND = Object.keys(MIND_TABLA) as UserRole[];
+
+  it("opens with the whole set in every role", () => {
+    for (const role of MIND) {
+      assert.equal(
+        worksheetListStartsMineOnly(role),
+        false,
+        `${role} szerepkörben szűkebb halmazzal indul a lista`,
+      );
+    }
+  });
+
+  /**
+   * A BEJELENTKEZÉS ELŐTTI PILLANAT IS IDETARTOZIK: a képernyő a szerepkört a
+   * felhasználóból veszi, ami lehet még `undefined`. Ott sem szűkít.
+   */
+  it("opens with the whole set before the role is known", () => {
+    assert.equal(worksheetListStartsMineOnly(undefined), false);
   });
 });
