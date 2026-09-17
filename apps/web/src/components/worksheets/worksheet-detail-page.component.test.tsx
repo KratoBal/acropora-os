@@ -119,6 +119,8 @@ function detail(inventoryNumber: string | null): WorksheetDetail {
       fulfillmentDate: "2026-08-27",
       dueDate: null,
       currency: "HUF",
+      // A lenti egyetlen sor 2 munkaórát ad (2 óra, egy ember).
+      laborHours: "2",
       lines: [
         {
           id: "line-1",
@@ -130,6 +132,11 @@ function detail(inventoryNumber: string | null): WorksheetDetail {
           inventoryNumber,
           quantity: "2",
           unit: "óra",
+          // ÓRA-tétel, egy emberrel: 2 * 1 = 2 munkaóra. A fixtúra így a
+          // munkaóra-megjelenítésen is mér valamit, nem csak nullát ad.
+          kind: "LABOR" as const,
+          workerCount: 1,
+          laborHours: "2",
           unitNet: "15000",
           vatRatePercent: "27",
           netAmount: "30000",
@@ -439,28 +446,87 @@ describe("WorksheetDetailPage adatlap-szerkezet", () => {
   });
 
   /**
-   * AZ OSSZEGEK A HELYUKON, ES NEM FELCSERELVE.
+   * AZ ÖSSZEGEK 2026-09-17 ÓTA NEM JELENNEK MEG -- ÉS EZ BALÁZS DÖNTÉSE.
    *
-   * Harom szam, harom cimke, egymas alatt -- a csere (nettot irni a brutto
-   * helyere) semmilyen hibat nem okoz, es egy pillantasra helyesnek latszik.
-   * Az allitas ezert a CIMKEHEZ koti az erteket, nem csak azt nezi, hogy a
-   * szamok megjelennek valahol a lapon.
+   * Itt korábban az állt, hogy a nettó, az áfa és a bruttó a SAJÁT sorában áll,
+   * címkéhez kötve (a csere semmilyen hibát nem okozna, és egy pillantásra
+   * helyesnek látszana). Az az állítás tárgytalan lett: az "Összesítés" panel
+   * kikerült, mert mind a három sora ár volt.
+   *
+   * MIÉRT NEM TÖRÖLTEM, HANEM MEGFORDÍTOTTAM: egy törölt teszt után semmi nem
+   * mondaná meg, hogy a viselkedés MEGVÁLTOZOTT, és nem elfelejtettük.
+   *
+   * ÉS A PANEL HELYE NEM MARAD ÜRESEN: a #806-tal megjött az összesített
+   * munkaóra, és Balázs ugyanabban a kérésében azt kérte a lap végére. Az a
+   * következő szelet, külön PR-ben -- ez a teszt akkor ismét megfordul, és a
+   * MUNKAÓRÁT fogja a címkéjéhez kötni.
    */
-  it("az összesítésben a nettó, az áfa és a bruttó a saját sorában áll", async () => {
+  it("az árak és az Összesítés panel NEM jelenik meg a lapon", async () => {
     render(<WorksheetDetailPage worksheetId="worksheet-1" />);
-    await screen.findByText("Összesítés");
 
-    const sorErteke = (cimke: string) => {
-      const label = screen.getByText(cimke);
-      // A cimke es az ertek EGY sorban all, testverkent: a szulo szovege
-      // ezert a ketto osszege, es az ertek az, ami a cimke utan marad.
-      return (label.parentElement?.textContent ?? "").replace(cimke, "").trim();
-    };
+    /*
+      ISMERT POZITÍV KONTROLL ELŐSZÖR, ÉS EZ NÉLKÜLÖZHETETLEN: a lap
+      ASZINKRON töltődik. Ha csak a hiányt állítanám, a teszt akkor is zöld
+      lenne, ha a lap MÉG SEMMIT nem rajzolt ki -- és akkor nem az elrejtést
+      mérném, hanem a betöltés lassúságát.
+    */
+    await screen.findByText("Kompresszor bevizsgálás");
 
-    const szam = (value: string) => value.replace(/\D/g, "");
-    expect(szam(sorErteke("Nettó összeg"))).toBe("30000");
-    expect(szam(sorErteke("ÁFA"))).toBe("8100");
-    expect(szam(sorErteke("Bruttó összeg"))).toBe("38100");
+    /*
+      AZ "ÖSSZESÍTÉS" PANEL 2026-09-17 ESTE VISSZATÉRT -- MÁS TARTALOMMAL.
+
+      Itt korábban az állt, hogy a panel SEHOL nem jelenik meg. Az akkor igaz
+      volt: mind a három sora ár volt. Ugyanaznap este ugyanabba a helyre került
+      az ÖSSZES MUNKAÓRA (Balázs ugyanannak a kérésnek a másik fele).
+
+      Ezért a panel LÉTE már nem mérce; a mérce az, hogy ÁR nem áll benne. A
+      három ár-sor állítása változatlanul itt van, név szerint.
+    */
+    expect(screen.queryByText("Nettó összeg")).toBeNull();
+    expect(screen.queryByText("Bruttó összeg")).toBeNull();
+    expect(screen.queryByText("Egységár")).toBeNull();
+  });
+
+  /**
+   * A MUNKAÓRA A LAP VÉGÉN ÉS TÉTELENKÉNT (2026-09-17, Balázs kérése).
+   *
+   * Szó szerint: "a végén legyen egy össz munkaóra ami automatikusan számol
+   * tételenként és az összes tétel esetben is".
+   */
+  it("az összes munkaóra a lap végén áll", async () => {
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+    await screen.findByText("Kompresszor bevizsgálás");
+
+    expect(screen.getByText("Összesítés")).toBeTruthy();
+    expect(screen.getByText("Összes munkaóra")).toBeTruthy();
+    expect(screen.getByText("2 óra")).toBeTruthy();
+  });
+
+  it("a tétel sorában is ott a saját munkaórája", async () => {
+    render(<WorksheetDetailPage worksheetId="worksheet-1" />);
+    const sor = (await screen.findByText("Kompresszor bevizsgálás")).closest(
+      "tr",
+    );
+
+    /*
+      AZ ÁLLÍTÁS A CELLÁRA MEGY, NEM A SOR SZÖVEGÉRE -- ÉS EZT A KALIBRÁCIÓ
+      TANÍTOTTA MEG.
+
+      Az első változatom `sor.textContent` tartalmazza-e a "2" karaktert
+      alakban állt. Az ZÖLD MARADT akkor is, amikor a munkaóra-cellát ÜRESRE
+      rontottam: a sorban a MENNYISÉG is "2". Az állítás neve a munkaóráról
+      szólt, a mérés pedig a mennyiséget találta meg.
+    */
+    const cellak = Array.from(sor?.querySelectorAll("td") ?? []);
+
+    // ISMERT POZITÍV KONTROLL: a sor egyáltalán felépült, öt cellával.
+    expect(cellak.length).toBe(5);
+    expect(cellak[1]?.textContent).toContain("Kompresszor bevizsgálás");
+
+    // A fejléc NEVEZI el az oszlopot, a cella HORDOZZA az értéket. Külön-külön
+    // egyik sem elég: egy fejléc üres oszlop fölött is állhat.
+    expect(screen.getByText("Munkaóra")).toBeTruthy();
+    expect(cellak[4]?.textContent).toBe("2");
   });
 
   /**

@@ -52,6 +52,14 @@ const line: WorksheetLineLike = {
   quantity: "2.000000",
   unit: "db",
   grossAmount: "38100.0000",
+  /*
+    A PROBAADAT NEM-MUNKA TETEL, es ez SZANDEKOS: az egysege "db", tehat a
+    munkaora rajta ertelmetlen lenne. Igy a lenti allitasok a mennyiseg-sort
+    merik, nem a munkaorat -- arra kulon fixturak allnak.
+  */
+  kind: "OTHER",
+  workerCount: 1,
+  laborHours: "0",
 };
 
 const listItem: WorksheetListLike = {
@@ -194,8 +202,91 @@ describe("formatWorksheetDate", () => {
 });
 
 describe("worksheetLineSummary", () => {
-  it("shows what was done in what quantity, and what it costs", () => {
-    assert.equal(spaces(worksheetLineSummary(line)), "2 db · 38 100 Ft");
+  /**
+   * A BRUTTO OSSZEG 2026-09-17 OTA NINCS A SORBAN -- es ez Balazs dontese.
+   *
+   * Itt korabban az allt, hogy a sor megmondja, "mit vegeztek, mennyit, es
+   * mennyibe kerul". Az ar-resz targytalan lett: a mezok sehol nem jelennek
+   * meg, sem a weben, sem az appban.
+   *
+   * MIERT NEM TOROLTEM, HANEM MEGFORDITOTTAM: egy torolt teszt utan semmi nem
+   * mondana meg, hogy a viselkedes MEGVALTOZOTT, es nem elfelejtettuk.
+   */
+  it("megmondja, mit vegeztek es mennyit -- arat NEM", () => {
+    assert.equal(spaces(worksheetLineSummary(line)), "2 db");
+  });
+
+  /**
+   * ES A TILTO ALLITAS KULON, NEV SZERINT. Az elozo allitas egy URES
+   * visszateres mellett is teljesulne ("2 db" helyett semmi), tehat az
+   * onmagaban nem mondja meg, hogy epp az AR tunt el.
+   */
+  it("a brutto osszeg SEHOL nem all a sorban", () => {
+    const sor = worksheetLineSummary(line);
+
+    assert.equal(sor.includes("38"), false, `ar-nyom a sorban: ${sor}`);
+    assert.equal(sor.includes("Ft"), false, `penznem a sorban: ${sor}`);
+    // ISMERT POZITIV KONTROLL: a sor egyaltalan nem ures.
+    assert.ok(sor.length > 0, "a sor ures -- akkor nem az arat mertuk");
+  });
+
+  /**
+   * A MUNKAORA A SORBAN (2026-09-17, Balazs kerese).
+   *
+   * Szo szerint: "ha egy tetel 0.5 ora de ketten dolgoztak rajta akkor az 1
+   * ora". A ket allitas EZT a mondatot meri, ket iranyban.
+   */
+  const munka = {
+    quantity: "0.500000",
+    unit: "óra",
+    grossAmount: "0",
+    kind: "LABOR" as const,
+  };
+
+  it("KETTEN dolgoztak rajta: kiírja a létszámot és a munkaórát", () => {
+    assert.equal(
+      spaces(
+        worksheetLineSummary({ ...munka, workerCount: 2, laborHours: "1" }),
+      ),
+      "0,5 óra · 2 fő · 1 munkaóra",
+    );
+  });
+
+  it("EGY fő esetén NEM ismétli meg ugyanazt a számot", () => {
+    /*
+      MI PIROSIT: egy olyan valtozat, ami mindig kiirja a munkaorat. Akkor a
+      sor "0,5 óra · 0,5 munkaóra" lenne -- ugyanaz a szam ketszer, ket
+      kulonbozo nevvel, es az olvaso azt kerdezne, mi a kulonbseg.
+
+      ES A FELTETEL NEM A KEPLETRE EPUL (hogy egy fonel a ketto egyenlo), hanem
+      a ket ERTEK osszevetesere: ha a szerver keplete valaha valtozik, ez a sor
+      magatol kiirja a kulonbseget.
+    */
+    assert.equal(
+      spaces(
+        worksheetLineSummary({ ...munka, workerCount: 1, laborHours: "0.5" }),
+      ),
+      "0,5 óra",
+    );
+  });
+
+  it("a NEM-munka tételnél munkaóra SEHOL nem áll", () => {
+    /*
+      A szerver az `OTHER` tetelre "0"-t kuld (a hiany es a nulla igy nem
+      keveredik a szamolasban). A SORBAN viszont a "0 munkaóra" allitasnak
+      latszana: ugy nezne ki, mintha valaki nulla orat dolgozott volna rajta.
+    */
+    const sor = worksheetLineSummary({
+      quantity: "2.000000",
+      unit: "db",
+      grossAmount: "0",
+      kind: "OTHER",
+      workerCount: 3,
+      laborHours: "0",
+    });
+
+    assert.equal(spaces(sor), "2 db");
+    assert.equal(sor.includes("fő"), false, `letszam a sorban: ${sor}`);
   });
 });
 

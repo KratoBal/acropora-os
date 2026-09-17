@@ -5,6 +5,7 @@ import {
   meglevoKulcs,
   runKapcsolatUjraepitesCli,
   type UjraepitesDeps,
+  type UjraepitesFutas,
   type UjraepitesJelolt,
 } from "./unas-kapcsolat-ujraepites.cli.js";
 
@@ -40,11 +41,21 @@ function deps(
   terkepbol: readonly string[],
   /** A MAR MEGLEVO sorok: `${productId}|${fajta}` -> darab. */
   meglevo: Record<string, number> = {},
-): { deps: UjraepitesDeps; irasok: unknown[] } {
+): {
+  deps: UjraepitesDeps;
+  irasok: unknown[];
+  /** A rogzitett futas-sorok. Ures lista is allitas: akkor NEM jegyeztunk fel. */
+  futasok: UjraepitesFutas[];
+} {
   const irasok: unknown[] = [];
+  const futasok: UjraepitesFutas[] = [];
   return {
     irasok,
+    futasok,
     deps: {
+      rogzit: async (sor) => {
+        futasok.push(sor);
+      },
       jeloltek: async () => jeloltek,
       terkep: async () =>
         new Map(terkepbol.map((externalId) => [externalId, `p-${externalId}`])),
@@ -224,8 +235,15 @@ describe("kapcsolat-újraépítés", () => {
    * kapcsolat nalunk is eltunik.
    */
   it("a forrásból eltűnt kapcsolat sorait eltávolítja", async () => {
+    /*
+       A MASIK TERMEK SORAI AZERT ALLNAK ITT, hogy a NAGY VALTOZAS hatara ne
+       szoljon bele: harom sor eltavolitasa egy harom soros allomanyban szaz
+       szazalek, es a parancs -- helyesen -- megallna. Az a hatar kulon
+       tesztben all; ez a teszt a TORLEST meri.
+     */
     const { deps: d, irasok } = deps([jelolt("1", [])], ["1"], {
       [meglevoKulcs("p-1", "SIMILAR")]: 3,
+      [meglevoKulcs("p-9", "SIMILAR")]: 40,
     });
     const { out, sorok } = kimenet();
 
@@ -246,6 +264,7 @@ describe("kapcsolat-újraépítés", () => {
   it("terv módban megmondja, hány sor tűnne el, és nem ír", async () => {
     const { deps: d, irasok } = deps([jelolt("1", [])], ["1"], {
       [meglevoKulcs("p-1", "SIMILAR")]: 3,
+      [meglevoKulcs("p-9", "SIMILAR")]: 40,
     });
     const { out, sorok } = kimenet();
 
@@ -302,6 +321,134 @@ describe("kapcsolat-újraépítés", () => {
   });
 
   /**
+   * A NAGY VALTOZAS MEGALLIT -- ES EZ A KAPCSOLO NELKUL NEM KERULHETO MEG.
+   *
+   * acrobot kikotese (2026-09-17), es az indoka nem elmeleti: egy ISMETLODO
+   * futasnal nem lesz ott senki, aki eszreveszi, ha egyszer csak minden
+   * kapcsolat eltunik. A ket eset, amit ez szetvalaszt: egy hirtelen nagy
+   * valtozas vagy VALODI, vagy egy elromlott pillanatkep-kinyeres jele.
+   */
+  it("nagy változásnál megáll, és nem ír semmit", async () => {
+    const { deps: d, irasok } = deps([jelolt("1", [])], ["1"], {
+      [meglevoKulcs("p-1", "SIMILAR")]: 30,
+    });
+    const { out, sorok } = kimenet();
+
+    // A KILEPESI KOD KULON ERTEK: a 2 nem hiba (az az 1), hanem MEGALLAS.
+    assert.equal(await runKapcsolatUjraepitesCli(["--apply"], out, d), 2);
+    assert.deepEqual(irasok, []);
+    const szoveg = sorok.join("");
+    assert.match(szoveg, /MEGÁLLTAM/);
+    // ES MEGMONDJA, MIT KELL TENNI ANNAK, AKI SZAMITOTT RA.
+    assert.match(szoveg, /--nagy-valtozas-is/);
+  });
+
+  /**
+   * ES A KAPCSOLOVAL ATMEGY. Enelkul a fenti allitas egy olyan parancstol is
+   * zold lenne, ami MINDIG megall -- es akkor az elso eles futas sem indulna el.
+   */
+  it("kontroll: a kapcsolóval a nagy változás is lefut", async () => {
+    const { deps: d, irasok } = deps([jelolt("1", [])], ["1"], {
+      [meglevoKulcs("p-1", "SIMILAR")]: 30,
+    });
+    const { out } = kimenet();
+
+    assert.equal(
+      await runKapcsolatUjraepitesCli(
+        ["--apply", "--nagy-valtozas-is"],
+        out,
+        d,
+      ),
+      0,
+    );
+    assert.deepEqual(irasok, [
+      { sourceProductId: "p-1", fajta: "SIMILAR", celProductIdk: [] },
+    ]);
+  });
+
+  /**
+   * A TERV-AG SOHA NEM ALL MEG A HATARON: ott nincs mit megallitani, es epp az
+   * a dolga, hogy MEGMUTASSA a nagy valtozast, mielott barki dontene rola.
+   */
+  it("terv módban a nagy változás nem megállás, hanem kiírás", async () => {
+    const { deps: d, irasok } = deps([jelolt("1", [])], ["1"], {
+      [meglevoKulcs("p-1", "SIMILAR")]: 30,
+    });
+    const { out, sorok } = kimenet();
+
+    assert.equal(await runKapcsolatUjraepitesCli([], out, d), 0);
+    assert.deepEqual(irasok, []);
+    assert.match(sorok.join(""), /Összesen: 30 sor ma, 0 a futás után/);
+  });
+
+  /**
+   * A FUTAS SORA MINDEN AGON LETREJON -- ES A MEGALLASON A LEGFONTOSABB.
+   *
+   * acrobot kikotese (2026-09-17): "az a legerdekesebb futas, amit rogziteni
+   * lehet -- es ha epp az nem hagy nyomot, akkor a tabla pont azt nem tudja,
+   * amiert megepult". A megallas TENYE es a TERVEZETT szamok kerulnek bele.
+   */
+  it("a megállt futás is sort ír, a tervezett számokkal", async () => {
+    const {
+      deps: d,
+      irasok,
+      futasok,
+    } = deps([jelolt("1", [])], ["1"], {
+      [meglevoKulcs("p-1", "SIMILAR")]: 30,
+    });
+    const { out } = kimenet();
+
+    assert.equal(await runKapcsolatUjraepitesCli(["--apply"], out, d), 2);
+
+    assert.deepEqual(irasok, []);
+    assert.equal(futasok.length, 1);
+    const sor = futasok[0]!;
+    assert.equal(sor.stopped, true);
+    // AZ `applied` HAMIS: a futas ugyan `--apply`-jal indult, de NEM irt. Egy
+    // igaz ertek itt azt allitana, hogy az allomany megvaltozott.
+    assert.equal(sor.applied, false);
+    assert.equal(sor.rowsBefore, 30);
+    assert.equal(sor.rowsPlanned, 0);
+  });
+
+  /**
+   * A TERV-FUTAS IS SOR, es `applied: false`. Enelkul a tabla csak az irasokrol
+   * tudna, es a "mikor neztuk meg utoljara" kerdesre nem lenne valasz.
+   */
+  it("a terv-futás is sort ír, applied nélkül", async () => {
+    const { deps: d, futasok } = deps([jelolt("1", ["2"])], ["1", "2"]);
+    const { out } = kimenet();
+
+    await runKapcsolatUjraepitesCli([], out, d);
+
+    assert.equal(futasok.length, 1);
+    assert.equal(futasok[0]!.applied, false);
+    assert.equal(futasok[0]!.stopped, false);
+    assert.equal(futasok[0]!.similarRelationsPlanned, 1);
+    // ES AMIT A TAROLO IRT: nulla, mert nem irtunk. A TERV es a MEGIRT kulon
+    // mezo, epp azert, hogy a ketto elterese lathato legyen.
+    assert.equal(futasok[0]!.similarRelationsWritten, 0);
+  });
+
+  /**
+   * ES AZ IRO FUTAS SORABAN A TAROLO SZAMAI ALLNAK, nem a terve.
+   */
+  it("az író futás sorába a tároló számai kerülnek", async () => {
+    const { deps: d, futasok } = deps(
+      [jelolt("1", ["2", "3"])],
+      ["1", "2", "3"],
+    );
+    const { out } = kimenet();
+
+    await runKapcsolatUjraepitesCli(["--apply"], out, d);
+
+    assert.equal(futasok.length, 1);
+    assert.equal(futasok[0]!.applied, true);
+    assert.equal(futasok[0]!.similarRelationsPlanned, 2);
+    assert.equal(futasok[0]!.similarRelationsWritten, 2);
+  });
+
+  /**
    * A HIBA NEM CSENDES: a parancs 1-gyel ter vissza, es kimondja, mi tortent.
    */
   it("a hibát megnevezi, és nem nulla kóddal tér vissza", async () => {
@@ -313,9 +460,79 @@ describe("kapcsolat-újraépítés", () => {
       terkep: async () => new Map(),
       meglevoKapcsolatok: async () => new Map(),
       ir: async () => ({ torolt: 0, irt: 0 }),
+      rogzit: async () => {},
     });
 
     assert.equal(code, 1);
     assert.match(sorok.join(""), /a tükör-tábla nem olvasható/);
+  });
+
+  /**
+   * AZ ELHASALT FUTAS IS SORT IR -- ES EZ NEM A TELJESSEG KEDVEERT VAN.
+   *
+   * A napi utemezo az egy-kor-egy-nap szabalyt az UTOLSO FUTAS KEZDETEBOL
+   * szamolja. Ha az elhasalt kor nem hagyna nyomot, egy tartos hiba az
+   * ablakon belul negyedorankent ujraprobalna, csendben.
+   */
+  it("az elhasalt futás is sort ír, hibakóddal", async () => {
+    const futasok: UjraepitesFutas[] = [];
+    const { out } = kimenet();
+    const code = await runKapcsolatUjraepitesCli([], out, {
+      jeloltek: async () => {
+        throw new Error("a tükör-tábla nem olvasható");
+      },
+      terkep: async () => new Map(),
+      meglevoKapcsolatok: async () => new Map(),
+      ir: async () => ({ torolt: 0, irt: 0 }),
+      rogzit: async (sor) => {
+        futasok.push(sor);
+      },
+    });
+
+    assert.equal(code, 1);
+    assert.equal(futasok.length, 1);
+    // A HIBA SZOVEGE NEM MEGY BE: egy Prisma-hiba uzenete kapcsolati adatot is
+    // hordozhat. Az oszlopba allando kod kerul.
+    assert.equal(futasok[0]!.errorCode, "UNAS_RELATION_REBUILD_FAILED");
+    assert.equal(futasok[0]!.applied, false);
+    assert.equal(futasok[0]!.stopped, false);
+  });
+
+  /**
+   * ES A SIKERES FUTAS SORABAN NINCS HIBAKOD. Enelkul a fenti allitas attol is
+   * zold lenne, ha MINDEN sor hibakodot kapna.
+   */
+  it("a sikeres futás sorában nincs hibakód", async () => {
+    const { deps: d, futasok } = deps([jelolt("1", ["2"])], ["1", "2"]);
+    const { out } = kimenet();
+
+    await runKapcsolatUjraepitesCli([], out, d);
+
+    assert.equal(futasok.length, 1);
+    assert.equal(futasok[0]!.errorCode, null);
+  });
+
+  /**
+   * A ROGZITES HIBAJA NEM FEDHETI EL AZ EREDETI HIBAT. A leggyakoribb ok,
+   * amiert idaig jutunk, epp az, hogy az adatbazis nem erheto el -- olyankor a
+   * feljegyzes is elhasal.
+   */
+  it("a feljegyzés hibája nem nyeli el az eredeti hibát", async () => {
+    const { out, sorok } = kimenet();
+    const code = await runKapcsolatUjraepitesCli([], out, {
+      jeloltek: async () => {
+        throw new Error("a tükör-tábla nem olvasható");
+      },
+      terkep: async () => new Map(),
+      meglevoKapcsolatok: async () => new Map(),
+      ir: async () => ({ torolt: 0, irt: 0 }),
+      rogzit: async () => {
+        throw new Error("a futás-tábla sem érhető el");
+      },
+    });
+
+    assert.equal(code, 1);
+    assert.match(sorok.join(""), /a tükör-tábla nem olvasható/);
+    assert.match(sorok.join(""), /A futás sorát sem sikerült feljegyezni/);
   });
 });

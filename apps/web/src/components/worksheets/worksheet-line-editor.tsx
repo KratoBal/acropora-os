@@ -1,17 +1,29 @@
 "use client";
 
 import { Button, Card, Input } from "@acropora/ui";
-import type { ReactNode } from "react";
 
-import type { WorksheetLineInput } from "@acropora/types";
-
-import { currencySuffix, formatAmount } from "./worksheet-labels";
+import type {
+  WorksheetLineInput,
+  WorksheetLineKindValue,
+} from "@acropora/types";
 
 export interface WorksheetLineDraft {
   description: string;
   detail: string;
   quantity: string;
   unit: string;
+  /**
+   * A TETEL FAJTAJA. Ez donti el, beleszamit-e az osszesitett munkaoraba -- a
+   * `unit` szovege NEM (egy elgepelt "ora" csendben kimaradna).
+   *
+   * KOTELEZO MEZO, NEM ELHAGYHATO, es ez szandekos: igy a fordito kiirja
+   * annak a helynek a nevet, ahol egy meglevo lap sorai draftta alakulnak
+   * (`worksheet-editor-page.tsx`). Egy elhagyhato mezo ott CSENDBEN hianyozna,
+   * es minden szerkesztes atallitana a sorok fajtajat.
+   */
+  kind: WorksheetLineKindValue;
+  /** Hanyan dolgoztak a tetelen. Ures mezo = a szerver alapertelmezese (1). */
+  workerCount: string;
   unitNet: string;
   vatRatePercent: string;
 }
@@ -21,6 +33,23 @@ export function emptyLine(): WorksheetLineDraft {
     description: "",
     detail: "",
     quantity: "1",
+    /*
+      AZ UJ SOR ALAPERTELMEZESBEN MUNKAORA -- ES EZ NEM UGYANAZ A KERDES, MINT
+      A SEMA ALAPERTELMEZESE.
+
+      A semaban az `OTHER` all, mert a MAR MEGLEVO sorokrol senki nem mondta,
+      hogy munkaorak voltak. Itt viszont arrol van szo, mit rogzit MOST a
+      szerelo, es arra van meresunk: az egyseg alapertelmezese ezen a lapon es
+      a telefonon is "óra".
+
+      ES A KET TEVEDES ARA NEM EGYFORMA. Ha egy anyag-tetel bent marad
+      munkaorakent, az osszeg TUL MAGAS lesz, es a lapon ott all a sor, ami
+      okozza -- lathato. Ha egy munka-tetel marad ki, az osszeg TUL ALACSONY,
+      es a hianyzo ora semmilyen nyomot nem hagy. A hangosabb tevedest
+      valasztjuk.
+    */
+    kind: "LABOR",
+    workerCount: "1",
     unit: "óra",
     unitNet: "0",
     vatRatePercent: "27",
@@ -56,26 +85,34 @@ export function toLineInput(line: WorksheetLineDraft): WorksheetLineInput {
     detail: line.detail.trim() ? line.detail.trim() : null,
     quantity: Number(line.quantity),
     unit: line.unit.trim(),
+    kind: line.kind,
+    /*
+      AZ URES LETSZAM-MEZO NEM NULLA ES NEM HIBA, hanem hiany: a szerver
+      alapertelmezese (1) all a helyere. Ugyanaz a dontes, mint az arnal --
+      csak itt a hianynak VAN ertelmes alapertelmezese, az arnal nincs.
+
+      Ami NEM megy at: egy elgepelt ertek. Azt a szerver utasitja el nev
+      szerint (`@IsInt() @Min(1) @Max(999)`), es ez szandekos: egy csendben
+      1-re javitott "11" a lap osszeget rontana el, hangtalanul.
+    */
+    workerCount: optionalNumber(line.workerCount),
     unitNet: optionalNumber(line.unitNet),
     vatRatePercent: optionalNumber(line.vatRatePercent),
   };
 }
 
-/**
- * A sor nettója. Csak megjelenítés: a lapra kerülő összeget a szerver
- * számolja a sorokból, a kliens értékét nem veszi át. Ha a két szám
- * eltérne, a szerveré az igaz.
- */
-function lineNet(line: WorksheetLineDraft): number {
-  const quantity = Number(line.quantity);
-  const unitNet = Number(line.unitNet);
-  if (!Number.isFinite(quantity) || !Number.isFinite(unitNet)) return 0;
-  return quantity * unitNet;
-}
+/*
+  A `lineNet` ÉS A `linesNetTotal` 2026-09-17-ÉN KIKERÜLT.
 
-export function linesNetTotal(lines: readonly WorksheetLineDraft[]): number {
-  return lines.reduce((total, line) => total + lineNet(line), 0);
-}
+  Mind a kettő a megjelenített összeget számolta, és az összeg már nem látszik
+  (Balázs döntése). Mérve, mielőtt kivettem: a `linesNetTotal` exportált volt, és
+  NULLA hívója állt más fájlban -- a szerkesztő-oldal és a komponens-teszt is
+  csak az `emptyLine`, a `toLineInput`, a `WorksheetLineEditor` és a
+  `WorksheetLineDraft` nevet importálja innen.
+
+  A `purchasing` modulban is áll egy `lineNet`, de az SAJÁT függvénye
+  (`InvoiceLineState` bemenettel), nem ez -- ezért nem lett belőle árva hívás.
+*/
 
 export interface WorksheetLineEditorProps {
   lines: WorksheetLineDraft[];
@@ -102,7 +139,31 @@ export interface WorksheetLineEditorProps {
  *  - mezőnkénti felirat a keskeny nézetben (ott úgyis egymás alatt vannak,
  *    tehát a felirat nem vesz el helyet a sorból).
  */
-const COLUMNS = "md:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]";
+/**
+ * A FEJLEC ES A RACS EGY FORRASBOL, MERT KETTO ELCSUSZOTT (merve 2026-09-17).
+ *
+ * A #811-ben kikerult az egysegar es az AFA beviteli mezoje, es a FEJLECSOR
+ * ottmaradt: hat cimke allt negy cella folott. Rendereelve merve: a "Torles"
+ * gomb az "Egysegar" oszlop ala esett, ket cimke pedig a semmi fole.
+ *
+ * NEM A FIGYELMEM HIANYZOTT: ugyanaz a szabaly KET helyen allt (a racs-osztaly
+ * es a fejlec felsorolasa), es amikor az egyiket atirtam, a masik nem szolt.
+ * Es a sajat tesztem ORIZTE a hibat: nev szerint allitotta, hogy az "Egysegar"
+ * cimke ott van.
+ *
+ * Mostantol a fejlec EBBOL a tombbol keletkezik. A racs-osztaly Tailwind miatt
+ * literal marad (a JIT nem lat osszefuzott osztalynevet) -- azt a komponens
+ * teszt koti ossze: a racs oszlopainak szama legyen `MEZO_FEJLECEK.length + 1`.
+ */
+const MEZO_FEJLECEK = [
+  "Megnevezés",
+  "Mennyiség",
+  "Mértékegység",
+  "Munkaóra",
+  "Hányan",
+] as const;
+
+const COLUMNS = "md:grid-cols-[2fr_1fr_1fr_auto_1fr_auto]";
 
 /** A keskeny nézet felirata. Széles nézetben a fejlécsor mondja ugyanezt. */
 function NarrowLabel({ children }: { children: string }) {
@@ -119,20 +180,6 @@ function NarrowLabel({ children }: { children: string }) {
  * Ha a mező tartalma `27 %` lenne, azt vissza kellene fejteni számmá, és az
  * első elgépelésnél elszállna. Az érték szám marad; a jel a szeme mellett áll.
  */
-function Suffixed({
-  suffix,
-  children,
-}: {
-  suffix: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex items-center gap-1">
-      <div className="min-w-0 flex-1">{children}</div>
-      <span className="shrink-0 text-xs text-dusk-500">{suffix}</span>
-    </div>
-  );
-}
 
 export function WorksheetLineEditor({
   lines,
@@ -170,11 +217,10 @@ export function WorksheetLineEditor({
           className={`hidden gap-2 text-xs font-medium text-dusk-500 md:grid ${COLUMNS}`}
           aria-hidden="true"
         >
-          <span>Megnevezés</span>
-          <span>Mennyiség</span>
-          <span>Mértékegység</span>
-          <span>Egységár</span>
-          <span>ÁFA</span>
+          {MEZO_FEJLECEK.map((fejlec) => (
+            <span key={fejlec}>{fejlec}</span>
+          ))}
+          {/* A törlés gomb oszlopa: fejléc nélkül, de a rácsban helyet foglal. */}
           <span />
         </div>
       ) : null}
@@ -230,33 +276,75 @@ export function WorksheetLineEditor({
               />
             </div>
             <div className="space-y-1">
-              <NarrowLabel>Egységár</NarrowLabel>
-              <Suffixed suffix={currencySuffix()}>
-                <Input
-                  aria-label={`${index + 1}. tétel egységára`}
-                  value={line.unitNet}
+              {/*
+                A FAJTA JELOLONEGYZET, NEM LENYILO. Ket ertek van, es a
+                legordulonel egy kattintas helyett ketto kellene -- a
+                szerkeszto pedig SORONKENT ismetlodik. Nyers `input` all itt,
+                nem keszlet-komponens: a keszletben nincs jelolonegyzet, es a
+                webes fan tizenket helyen all mar ugyanez a nyers alak (koztuk
+                a szomszed `worksheet-assignee-picker.tsx`).
+              */}
+              <NarrowLabel>Munkaóra</NarrowLabel>
+              <label className="flex h-10 items-center gap-2 text-sm text-dusk-700">
+                <input
+                  type="checkbox"
+                  aria-label={`${index + 1}. tétel munkaóra`}
+                  checked={line.kind === "LABOR"}
                   disabled={disabled}
-                  inputMode="decimal"
+                  className="size-4 rounded border-dusk-300"
                   onChange={(event) =>
-                    update(index, { unitNet: event.target.value })
+                    update(index, {
+                      kind: event.target.checked ? "LABOR" : "OTHER",
+                    })
                   }
                 />
-              </Suffixed>
+                <span className="md:hidden">Munkaóra</span>
+              </label>
             </div>
             <div className="space-y-1">
-              <NarrowLabel>ÁFA</NarrowLabel>
-              <Suffixed suffix="%">
-                <Input
-                  aria-label={`${index + 1}. tétel ÁFA-kulcsa`}
-                  value={line.vatRatePercent}
-                  disabled={disabled}
-                  inputMode="decimal"
-                  onChange={(event) =>
-                    update(index, { vatRatePercent: event.target.value })
-                  }
-                />
-              </Suffixed>
+              {/*
+                A LETSZAM MEZO NEM TUNIK EL A NEM-MUNKA TETELNEL, HANEM TILTOTT.
+
+                Ha kikapcsolaskor ELTUNNE, a sor cellainak szama valtozna, es a
+                racs alatta elcsuszna -- pontosan az a hiba, amit ez a fajl ma
+                mar egyszer elszenvedett. A tiltott mezo ezen kivul MEGMONDJA,
+                miert nem irhato: a fajta donti el, nem o.
+              */}
+              <NarrowLabel>Hányan</NarrowLabel>
+              <Input
+                aria-label={`${index + 1}. tételen hányan dolgoztak`}
+                value={line.workerCount}
+                disabled={disabled || line.kind !== "LABOR"}
+                inputMode="numeric"
+                title={
+                  line.kind === "LABOR"
+                    ? "Hányan dolgoztak ezen a tételen"
+                    : "Csak munkaóra-tételnél adható meg"
+                }
+                onChange={(event) =>
+                  update(index, { workerCount: event.target.value })
+                }
+              />
             </div>
+            {/*
+              AZ EGYSÉGÁR ÉS AZ ÁFA BEVITELE 2026-09-17-ÉN KIKERÜLT INNEN.
+
+              Balázs kérése: a nettó, bruttó és áfa mezők ne jelenjenek meg sem
+              a weben, sem az appban. Két utat tettünk elé, és a "B"-t
+              választotta: tűnjenek el mindenhonnan, és akkor a lezárásból is ki
+              kell venni az ár-feltételt (#809, beolvadt).
+
+              AMI SZÁNDÉKOSAN NEM VÁLTOZOTT: a `WorksheetLineDraft` továbbra is
+              TARTJA a `unitNet` és `vatRatePercent` értéket, a betöltés kiolvassa
+              a szerverről, és a `toLineInput` VISSZAKÜLDI. Balázs kifejezetten
+              azt kérte, hogy "ne töröljük ezeket" -- és egy szerkesztés, ami a
+              mezőt nem küldi vissza, NÉMÁN törölné a meglévő árat: a lap
+              tartalma teljes, a mentés sikeres, és az érték eltűnik.
+
+              EZT EGY ŐRZŐ MÉRI (`worksheet-line-price-megorzes.component.test.tsx`).
+              Ha valaki egyszer "takarítja" a draftot -- jó szándékkal, mert a
+              mező már nem látszik --, az a teszt pirosodik ki.
+            */}
             <Button
               type="button"
               variant="ghost"
@@ -271,14 +359,10 @@ export function WorksheetLineEditor({
           </div>
         ))}
       </div>
-      {lines.length ? (
-        <p className="text-right text-sm text-dusk-600">
-          Nettó összesen (előnézet):{" "}
-          <strong className="tabular-nums">
-            {formatAmount(String(linesNetTotal(lines)))}
-          </strong>
-        </p>
-      ) : null}
+      {/*
+        A "Nettó összesen (előnézet)" sor ugyanabban a körben került ki: az ár
+        nem látszik, tehát egy belőle számolt összeg sem.
+      */}
     </Card>
   );
 }

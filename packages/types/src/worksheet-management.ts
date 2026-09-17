@@ -232,6 +232,19 @@ export interface WorksheetLineDetail {
   inventoryNumber: string | null;
   quantity: string;
   unit: string;
+  /** A tétel fajtája. Ez dönti el, beleszámít-e az összesített munkaórába. */
+  kind: WorksheetLineKindValue;
+  /** Hányan dolgoztak a tételen. A séma alapértelmezése és a hiány is 1. */
+  workerCount: number;
+  /**
+   * A TÉTEL MUNKAÓRÁJA, MÁR KISZÁMOLVA: `quantity * workerCount`, de csak
+   * `LABOR` fajtánál -- egyébként `"0"`.
+   *
+   * MIÉRT SZÁMOLVA MEGY, ÉS NEM A FELÜLETEN SZOROZZUK: két felület (web és
+   * telefon) ugyanazt a szabályt két helyen mondaná ki, és a kettő elcsúszása
+   * néma lenne -- a lapon két különböző összeg állna ugyanarra a munkára.
+   */
+  laborHours: string;
   /**
    * AZ ÁR ÉS A BELŐLE SZÁMOLT ÖSSZEGEK HIÁNYOZHATNAK.
    *
@@ -241,8 +254,10 @@ export interface WorksheetLineDetail {
    * összemosása azt a csendet hozná vissza, amit ez a megkülönböztetés
    * elkerül - egy nulla forintos tétel a lapon ÉRTÉKNEK látszik.
    *
-   * Ár nélküli tétellel a lap nem zárható le, tehát a hiány nem marad
-   * észrevétlen.
+   * AZ ÁR HIÁNYA 2026-09-17 ÓTA NEM AKADÁLY a lezárásnál: Balázs döntése
+   * szerint a nettó, bruttó és áfa mezők sehol nem jelennek meg, és ezért a
+   * lezárási feltétel is kikerült. Az adat megmarad, ár továbbra is
+   * rendelhető -- csak a hiánya nem állít meg semmit.
    */
   unitNet: string | null;
   vatRatePercent: string | null;
@@ -251,6 +266,21 @@ export interface WorksheetLineDetail {
   grossAmount: string | null;
 }
 
+/**
+ * EGY MUNKALAP-TÉTEL FAJTÁJA.
+ *
+ * A `LABOR` az, ami beleszámít az összesített munkaórába -- NEM a `unit`
+ * szövege, mert az szabad szöveg (db, óra, km, alkalom), és egy elgépelt "ora"
+ * csendben kimaradna az összegből.
+ *
+ * MIÉRT ÁLL ITT LITERÁL-UNIÓ ÉS NEM A PRISMA-ENUM: ez a csomag szándékosan nem
+ * függ az adatbázistól, tehát a két oldal ugyanazt a halmazt KÜLÖN mondja ki.
+ * A szerver oldalán a `WORKSHEET_LINE_KINDS` lista `satisfies
+ * Record<WorksheetLineKind, true>` alakban a sémához van kötve, tehát ha a séma
+ * bővül, OTT fordítási hiba lesz -- ez a sor az, ami utána átvezetésre vár.
+ */
+export type WorksheetLineKindValue = "LABOR" | "OTHER";
+
 export interface WorksheetLineInput {
   description: string;
   detail?: string | null;
@@ -258,12 +288,21 @@ export interface WorksheetLineInput {
   quantity: number;
   unit: string;
   /**
+   * A TÉTEL FAJTÁJA, ELHAGYHATÓ. A hiánya `OTHER` -- ugyanaz, mint a séma
+   * alapértelmezése --, tehát a mai hívók változatlanul küldhetnek tételt.
+   */
+  kind?: WorksheetLineKindValue;
+  /** Hányan dolgoztak rajta. Elhagyható, a hiánya 1. Legalább 1. */
+  workerCount?: number;
+  /**
    * AZ ÁR ELHAGYHATÓ: a helyszínen rögzített tétel ár nélkül keletkezik, és az
    * irodában egészül ki. A hiány a `undefined`, NEM a nulla - egy nulla
    * forintos tétel a lapon értéknek látszik, nem hiánynak.
    *
-   * Ár nélküli tétellel a lap nem zárható le, tehát a hiány nem marad
-   * észrevétlen.
+   * AZ ÁR HIÁNYA 2026-09-17 ÓTA NEM AKADÁLY a lezárásnál: Balázs döntése
+   * szerint a nettó, bruttó és áfa mezők sehol nem jelennek meg, és ezért a
+   * lezárási feltétel is kikerült. Az adat megmarad, ár továbbra is
+   * rendelhető -- csak a hiánya nem állít meg semmit.
    */
   unitNet?: number;
   vatRatePercent?: number;
@@ -335,6 +374,15 @@ export interface WorksheetVersionSummary {
   netAmount: string;
   vatAmount: string;
   grossAmount: string;
+  /**
+   * A LAP ÖSSZESÍTETT MUNKAÓRÁJA: a LABOR fajtájú tételek `quantity *
+   * workerCount` értékeinek összege, soronként kerekítve.
+   *
+   * Balázs kérése és egyben a mérce (2026-09-17): "ha egy tétel 0,5 óra de
+   * ketten dolgoztak rajta akkor az 1 óra és ha három ilyen tétel van akkor
+   * összesen 3 óra".
+   */
+  laborHours: string;
   signature: WorksheetSignatureDetail | null;
 }
 

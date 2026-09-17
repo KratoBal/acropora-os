@@ -6,8 +6,10 @@ import {
   describeQueuedWorksheetLines,
   describeWorksheetLineQueueWrite,
   parseQuantity,
+  parseWorkerCount,
   readQueuedWorksheetLine,
   worksheetLineId,
+  type WorksheetLineForm,
 } from "./worksheet-line";
 
 /**
@@ -16,7 +18,18 @@ import {
  * A telefon billentyuzete VESSZOT ad tizedesjelnek, a szerver `number`-t var.
  */
 
-const ALAP = { description: "Szivattyú csere", quantity: "1,5", unit: "óra" };
+/*
+  A FIXTURA A VALODI SZERZODES TIPUSAT VISELI, nem a kikovetkeztetettet. Igy egy
+  uj mezo EGY helyen bukik el (itt), nem az osszes hivasnal -- es nem lehet
+  csendben kihagyni.
+*/
+const ALAP: WorksheetLineForm = {
+  description: "Szivattyú csere",
+  quantity: "1,5",
+  unit: "óra",
+  kind: "LABOR",
+  workerCount: "1",
+};
 
 describe("a mennyiség olvasása", () => {
   it("a MAGYAR alakot (vesszővel) elfogadja", () => {
@@ -64,7 +77,13 @@ describe("a sor azonosítója", () => {
 });
 
 describe("a tétel összeállítása", () => {
-  it("a HÁROM mezővel átmegy, és nem küld többet", () => {
+  /*
+    A NEV 2026-09-17-EN "HAROM"-ROL "OT"-RE VALTOZOTT: megjott a tetel FAJTAJA
+    es a LETSZAM (Balazs munkaora-kerese). A teszt szandeka valtozatlan -- a
+    payload TELJES alakjat rogziti, hogy egy uj mezo ne tudjon csendben
+    felkerulni a halozatra --, csak a mert halmaz nott.
+  */
+  it("az ÖT mezővel átmegy, és nem küld többet", () => {
     const r = buildWorksheetLinePayload(ALAP, "line-abc12345");
     assert.equal(r.ok, true);
     assert.deepEqual(r.ok ? r.payload : null, {
@@ -72,6 +91,8 @@ describe("a tétel összeállítása", () => {
       description: "Szivattyú csere",
       quantity: 1.5,
       unit: "óra",
+      kind: "LABOR",
+      workerCount: 1,
     });
   });
 
@@ -85,7 +106,14 @@ describe("a tétel összeállítása", () => {
     */
     const r = buildWorksheetLinePayload(ALAP, "line-abc12345");
     const kulcsok = r.ok ? Object.keys(r.payload).sort() : [];
-    assert.deepEqual(kulcsok, ["description", "id", "quantity", "unit"]);
+    assert.deepEqual(kulcsok, [
+      "description",
+      "id",
+      "kind",
+      "quantity",
+      "unit",
+      "workerCount",
+    ]);
   });
 
   it("üres megnevezésnél a MEGNEVEZÉS mezőnél áll meg", () => {
@@ -111,12 +139,23 @@ describe("a tétel összeállítása", () => {
 });
 
 describe("a sorba tett tétel törzse", () => {
-  it("kiolvassa a HÁROM mezőt", () => {
+  it("kiolvassa a mezőket, és a régi sort is elfogadja", () => {
+    /*
+      A BEMENET SZANDEKOSAN A REGI, HAROM MEZOS ALAK: pontosan ilyen sorok
+      allhatnak MA a telefonokon, a fajta es a letszam bevezetese elottrol. A
+      visszaolvasas nem dobhatja el oket -- a reszletes indok a fuggvenynel.
+    */
     assert.deepEqual(
       readQueuedWorksheetLine(
         JSON.stringify({ description: "Csere", quantity: 1.5, unit: "óra" }),
       ),
-      { description: "Csere", quantity: 1.5, unit: "óra" },
+      {
+        description: "Csere",
+        quantity: 1.5,
+        unit: "óra",
+        kind: "OTHER",
+        workerCount: 1,
+      },
     );
   });
 
@@ -140,8 +179,10 @@ describe("a sorba tett tétel törzse", () => {
     );
     assert.deepEqual(Object.keys(out ?? {}).sort(), [
       "description",
+      "kind",
       "quantity",
       "unit",
+      "workerCount",
     ]);
   });
 
@@ -223,5 +264,134 @@ describe("hány tétel vár még feltöltésre a lapon", () => {
 
   it("TÖBBNÉL a számot mondja", () => {
     assert.match(describeQueuedWorksheetLines(3) ?? "", /^3 tétel/);
+  });
+});
+
+/**
+ * A LETSZAM, ES AMI RAJTA A LEGKONNYEBBEN ELROMLIK: AZ URES MEZO.
+ *
+ * Balazs kerese es egyben a merce (2026-09-17, szo szerint): "ha egy tetel 0.5
+ * ora de ketten dolgoztak rajta akkor az 1 ora".
+ */
+describe("a létszám olvasása", () => {
+  it("az ÜRES mező egy fő, nem hiba és nem nulla", () => {
+    /*
+      MI PIROSIT: egy csupasz `Number()` hivas. A `Number("")` erteke NULLA,
+      nem `NaN` -- vagyis egy uresen hagyott mezo CSENDBEN nulla fore allitana
+      a tetelt, es a lap munkaoraja nulla lenne egy elvegzett munkara.
+    */
+    assert.deepEqual(parseWorkerCount(""), { ok: true, value: 1 });
+    assert.deepEqual(parseWorkerCount("   "), { ok: true, value: 1 });
+  });
+
+  it("az egész számot elfogadja", () => {
+    assert.deepEqual(parseWorkerCount("2"), { ok: true, value: 2 });
+    assert.deepEqual(parseWorkerCount("999"), { ok: true, value: 999 });
+  });
+
+  it("a TIZEDES alakot elutasítja", () => {
+    /*
+      Fel ember nem dolgozik egy tetelen. A MENNYISEGNEL a vesszo megengedett
+      (`1,5 óra` ertelmes), itt nem -- es a telefon billentyuzete mindkettonel
+      ugyanaz, tehat a ket mezo kozott ez a kulonbseg MERT allitas kell hogy
+      legyen, nem remeny.
+    */
+    assert.deepEqual(parseWorkerCount("1,5"), { ok: false });
+    assert.deepEqual(parseWorkerCount("1.5"), { ok: false });
+  });
+
+  it("a nullát, a negatívat és a határon túlit elutasítja", () => {
+    assert.deepEqual(parseWorkerCount("0"), { ok: false });
+    assert.deepEqual(parseWorkerCount("-1"), { ok: false });
+    assert.deepEqual(parseWorkerCount("1000"), { ok: false });
+  });
+
+  it("a szöveget elutasítja, nem alakítja egy főre", () => {
+    assert.deepEqual(parseWorkerCount("ketten"), { ok: false });
+    assert.deepEqual(parseWorkerCount("2 fő"), { ok: false });
+  });
+});
+
+describe("a tétel törzse a fajtát és a létszámot is viszi", () => {
+  it("a munkaóra-tétel a beírt létszámmal megy", () => {
+    const r = buildWorksheetLinePayload(
+      { ...ALAP, workerCount: "2" },
+      "line-abc12345",
+    );
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+    assert.equal(r.payload.kind, "LABOR");
+    assert.equal(r.payload.workerCount, 2);
+  });
+
+  it("a NEM-munka tétel is visz létszámot, egyet", () => {
+    /*
+      MIERT NEM HAGYJUK EL: a szerver a `kind` alapjan szamol, tehat `OTHER`
+      mellett a letszam ugysem valtoztat semmin. Egy elhagyhato mezo viszont KET
+      alakot adna ugyanannak a tetelnek, es a kesobbi olvaso azt kerdezne, mit
+      jelent a hianya.
+    */
+    const r = buildWorksheetLinePayload(
+      { ...ALAP, kind: "OTHER", workerCount: "" },
+      "line-abc12345",
+    );
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+    assert.equal(r.payload.kind, "OTHER");
+    assert.equal(r.payload.workerCount, 1);
+  });
+
+  it("a hibás létszám a LÉTSZÁM mezőre mutat, nem a mennyiségre", () => {
+    /*
+      A MEZO NEVE AZ, AMI A KEPERNYON A HIBAT A HELYERE TESZI. Ha a hiba a
+      mennyisegre mutatna, a szerelo azt a mezot javitgatna, ami jo.
+    */
+    const r = buildWorksheetLinePayload(
+      { ...ALAP, workerCount: "ketten" },
+      "line-abc12345",
+    );
+    assert.equal(r.ok, false);
+    if (r.ok) return;
+    assert.equal(r.field, "workerCount");
+  });
+});
+
+describe("a sorban álló tétel visszaolvasása", () => {
+  it("a RÉGI sor (fajta és létszám nélkül) NEM vész el", () => {
+    /*
+      MI PIROSIT: ha a ket uj mezot kotelezove tennenk az olvasoban. Akkor egy
+      MAR SORBAN ALLO tetel -- amit a mezok bevezetese ELOTT irtak be --
+      "nem ertelmes tetel"-kent csendben eltunne. Egy mar elvegzett munka,
+      amirol a szerelo azt hiszi, hogy fel fog menni.
+    */
+    const regi = JSON.stringify({
+      description: "Szivattyú csere",
+      quantity: 1.5,
+      unit: "óra",
+    });
+    assert.deepEqual(readQueuedWorksheetLine(regi), {
+      description: "Szivattyú csere",
+      quantity: 1.5,
+      unit: "óra",
+      kind: "OTHER",
+      workerCount: 1,
+    });
+  });
+
+  it("az ÚJ sor a beírt fajtát és létszámot hozza vissza", () => {
+    const uj = JSON.stringify({
+      description: "Szivattyú csere",
+      quantity: 1.5,
+      unit: "óra",
+      kind: "LABOR",
+      workerCount: 2,
+    });
+    assert.deepEqual(readQueuedWorksheetLine(uj), {
+      description: "Szivattyú csere",
+      quantity: 1.5,
+      unit: "óra",
+      kind: "LABOR",
+      workerCount: 2,
+    });
   });
 });

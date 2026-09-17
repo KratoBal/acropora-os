@@ -15,6 +15,7 @@ import { UnasAuthService } from "./unas-auth.service.js";
 import { UnasProductCanonicalizer } from "./unas-product-canonicalizer.js";
 import { UnasProductSyncDiffEngine } from "./unas-product-sync-diff.engine.js";
 import { UnasProductSyncRepository } from "./unas-product-sync.repository.js";
+import { UnasKapcsolatUjraepitesScheduler } from "./unas-kapcsolat-ujraepites.scheduler.js";
 import { UnasProductSyncScheduler } from "./unas-product-sync.scheduler.js";
 import { UnasProductSyncService } from "./unas-product-sync.service.js";
 import { UnasProductSyncController } from "./unas-product-sync.controller.js";
@@ -46,6 +47,7 @@ import { UnasClock } from "./unas-login-expiry.js";
     UnasProductCanonicalizer,
     UnasProductSyncDiffEngine,
     UnasProductSyncRepository,
+    UnasKapcsolatUjraepitesScheduler,
     UnasProductSyncScheduler,
     UnasProductSyncService,
     UnasImportValidator,

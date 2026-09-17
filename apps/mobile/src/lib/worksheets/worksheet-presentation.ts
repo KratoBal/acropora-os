@@ -1,6 +1,7 @@
 // RELATÍV ÚT, NEM `@/`: a teszt-fordító nem ismeri az aliast
 // (`tsconfig.test.json`-ban szándékosan nincs `paths`).
 import type { UserRole } from "../auth/types";
+import type { WorksheetLineKind } from "./worksheet-line-kind";
 
 /**
  * Amit a munkalapról a TELEFONON látni kell, és ami hiányzik.
@@ -58,6 +59,12 @@ export interface WorksheetLineLike {
   quantity: string;
   unit: string;
   grossAmount: string;
+  /** A tetel fajtaja. Csak a `LABOR` visel munkaorat. */
+  kind: WorksheetLineKind;
+  /** Hanyan dolgoztak rajta. A szerver mindig kuldi, a hianya ott 1. */
+  workerCount: number;
+  /** A tetel munkaoraja, MAR KISZAMOLVA a szerveren. */
+  laborHours: string;
 }
 
 export interface WorksheetDetailLike {
@@ -232,22 +239,48 @@ export function worksheetDetailRows(
 }
 
 /**
- * EGY TÉTEL EGY SORBAN: mennyiség, egység és a bruttó összeg.
+ * EGY TÉTEL EGY SORBAN: mennyiség, egység, és munkaóránál a létszám.
  *
- * A nettó egységár szándékosan nincs benne. A szerelő azt magyarázza el a
- * helyszínen, amit a partner is lát az aláírandó lapon, és ott a tétel VÉGE a
- * kérdés. A bontás a webes lapon és a nyomtatott példányon megvan.
+ * A BRUTTÓ ÖSSZEG 2026-09-17-ÉN KIKERÜLT INNEN. Balázs döntése ("B") szerint az
+ * ár-mezők sehol nem jelennek meg, sem a weben, sem az appban.
+ *
+ * ÉS EZT A HELYET A SAJÁT MÉRÉSEM ELŐSZÖR KIHAGYTA: a felületi hatókört
+ * `.tsx` fájlokra szűkítve mértem, ez pedig `.ts`. A fordító nevezte meg,
+ * amikor a három képernyőről kivett formázó itt MÉG hívva maradt -- vagyis egy
+ * árva import mutatott rá, nem a keresésem.
+ *
+ * A currency paraméter szándékosan MEGMARAD a szignatúrában: a hívók ma is
+ * átadják.
+ *
+ * ÉS AZ INDOKA 2026-09-17 ESTE MEGDŐLT: azt írtam ide, hogy "a pénznem a
+ * következő körben (munkaóra-felület) még kellhet". Az a kör megjött, és a
+ * munkaóra NEM pénz -- a paraméterre semmi szükség nem lett. A mondat azért
+ * áll itt javítva és nem törölve, mert a MEGTARTÁS indoka változott meg: ma
+ * kizárólag az tartja bent, hogy a hívók átadják, és egy szűkítés az ő
+ * átírásukat is jelentené.
+ *
+ * === A MUNKAÓRA CSAK AKKOR ÁLL KI KÜLÖN, HA MÁST MOND, MINT A MENNYISÉG ===
+ *
+ * Egy "1,5 óra · 1,5 munkaóra" sor ugyanazt a számot mondja kétszer. A
+ * feltétel viszont NEM a képletre épül (hogy egy fő esetén a kettő egyenlő),
+ * hanem a két ÉRTÉK összevetésére: ha a szerver képlete valaha változik, ez a
+ * sor magától kiírja a különbséget, ahelyett hogy a mennyiséget mutatná
+ * munkaóraként.
  */
 export function worksheetLineSummary(
   line: WorksheetLineLike,
-  currency = "HUF",
+  _currency = "HUF",
 ): string {
-  return [
-    `${formatWorksheetQuantity(line.quantity)} ${clean(line.unit)}`.trim(),
-    formatWorksheetAmount(line.grossAmount, currency),
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const mennyiseg = formatWorksheetQuantity(line.quantity);
+  const darabok = [`${mennyiseg} ${clean(line.unit)}`.trim()];
+
+  if (line.kind === "LABOR") {
+    if (line.workerCount > 1) darabok.push(`${line.workerCount} fő`);
+    const orak = formatWorksheetQuantity(line.laborHours);
+    if (orak !== mennyiseg) darabok.push(`${orak} munkaóra`);
+  }
+
+  return darabok.filter(Boolean).join(" · ");
 }
 
 /**

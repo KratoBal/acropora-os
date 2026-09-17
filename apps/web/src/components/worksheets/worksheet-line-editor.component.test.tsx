@@ -1,9 +1,10 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import {
   WorksheetLineEditor,
   emptyLine,
+  toLineInput,
   type WorksheetLineDraft,
 } from "./worksheet-line-editor";
 
@@ -23,42 +24,93 @@ describe("WorksheetLineEditor feliratai", () => {
 
     // A feliratok a DOM-ban állnak; hogy MELYIK nézetben látszanak, az a
     // CSS dolga. Ami itt mérhető: hogy egyáltalán ott vannak-e.
-    for (const label of ["Mennyiség", "Mértékegység", "Egységár", "ÁFA"])
+    for (const label of ["Mennyiség", "Mértékegység"])
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
+
+    /*
+      ES A KET AR-CIMKE MAR NEM ALLHAT ITT. 2026-09-17-ig a fenti felsorolas
+      NEVEN NEVEZVE kovetelte az "Egysegar" es az "AFA" cimket -- azutan is,
+      hogy a ket beviteli mezo kikerult. Az allitas zold volt, es epp a hibat
+      orizte: hat cimke allt negy cella folott.
+    */
+    expect(screen.queryByText("Egységár")).toBeNull();
+    expect(screen.queryByText("ÁFA")).toBeNull();
   });
 
   /**
-   * A LÉNYEGI ÁLLÍTÁS, és ez Acrobot kikötése: a jel NEM az érték része.
+   * A FEJLEC ANNYI CELLA, AMENNYI A SOR -- ES ENNYI OSZLOPA VAN A RACSNAK.
    *
-   * Ha a mező tartalma `27 %` lenne, azt vissza kellene fejteni számmá, és az
-   * első elgépelésnél elszállna. A jel a mező MELLETT áll, az érték szám marad.
+   * === A MERT ESET, AMI EZT KIVALTOTTA (2026-09-17) ===
+   *
+   * A #811 kivette az egysegar es az AFA mezojet a SORBOL, a fejlecet es a
+   * racs-osztalyt viszont nem. Renderelve merve: fejlec 6 cella, sor 4, racs 6
+   * oszlop -- vagyis a "Torles" gomb az "Egysegar" cimke ala esett.
+   *
+   * SEMMI NEM SZOLT ROLA: a fordito nem latja, hogy ket lista osszetartozik, a
+   * lint sem, es a komponens-teszt a cimkeket NEV SZERINT kovetelte, tehat epp
+   * a hibas allapotot rogzitette helyesnek.
+   *
+   * === MIERT A DOM-BOL MEREM, ES NEM A KONSTANSOKBOL ===
+   *
+   * A konstansokat osszevetni annyit bizonyitana, hogy ket szam egyezik a
+   * forrasban. Ami elromlott, az a MEGJELENITETT szerkezet volt: harom kulon
+   * hely (racs-osztaly, fejlec, sor-cellak) csak a renderelt lapon talalkozik.
    */
-  it("a jelet a mező mellé teszi, nem az értékbe", () => {
-    const onChange = vi.fn();
+  it("a fejléc, a sor és a rács oszlopszáma együtt mozog", () => {
+    const { container } = render(
+      <WorksheetLineEditor lines={[line()]} onChange={vi.fn()} />,
+    );
+
+    /*
+      A HAROM HORGONY, ES MINDEGYIK HIANYA DOBAS, NEM ZOLD. Ha barmelyik
+      elcsuszna (atirt osztalynev, mas elrendezes), az osszehasonlitasok ket
+      nullat vetnenek ossze -- es a teszt pont akkor hallgatna, amikor a
+      szerkezet megvaltozott.
+    */
+    const fejlec = container.querySelector('[aria-hidden="true"]');
+    if (!fejlec) throw new Error("nincs fejlécsor a szerkesztőben");
+    const sor = container.querySelector("div.grid.gap-2.border-b");
+    if (!sor) throw new Error("nincs tétel-sor a szerkesztőben");
+    const oszlopok = /md:grid-cols-\[([^\]]+)\]/.exec(sor.className)?.[1];
+    if (!oszlopok)
+      throw new Error(`a rács oszlop-osztálya nem olvasható: ${sor.className}`);
+
+    const fejlecCellak = fejlec.children.length;
+    expect(fejlecCellak).toBeGreaterThan(1);
+    expect(sor.children.length).toBe(fejlecCellak);
+    expect(oszlopok.split("_").length).toBe(fejlecCellak);
+  });
+
+  /**
+   * AZ ÁR-MEZŐK 2026-09-17 ÓTA NEM JELENNEK MEG -- ÉS EZ BALÁZS DÖNTÉSE.
+   *
+   * Itt korábban az a teszt állt, hogy a `%` és a `Ft` jel a mező MELLETT áll,
+   * nem az értékben. Az az állítás tárgytalan lett: a két beviteli mező
+   * kikerült a szerkesztőből.
+   *
+   * MIÉRT NEM TÖRÖLTEM, HANEM MEGFORDÍTOTTAM: egy törölt teszt után semmi nem
+   * mondaná meg, hogy a viselkedés MEGVÁLTOZOTT, és nem elfelejtettük. Ha
+   * valaki visszateszi a mezőket -- jó szándékkal, mert az adat ott van --, EZ
+   * pirosodik ki, és a neve megmondja, hogy döntés volt.
+   */
+  it("az egységár és az ÁFA beviteli mezője NEM jelenik meg", () => {
     render(
       <WorksheetLineEditor
         lines={[line({ vatRatePercent: "27", unitNet: "12000" })]}
-        onChange={onChange}
+        onChange={vi.fn()}
       />,
     );
 
-    const vat = screen.getByLabelText(
-      "1. tétel ÁFA-kulcsa",
-    ) as HTMLInputElement;
-    const price = screen.getByLabelText(
-      "1. tétel egységára",
-    ) as HTMLInputElement;
+    expect(screen.queryByLabelText("1. tétel egységára")).toBeNull();
+    expect(screen.queryByLabelText("1. tétel ÁFA-kulcsa")).toBeNull();
 
-    expect(vat.value).toBe("27");
-    expect(price.value).toBe("12000");
-    expect(screen.getByText("%")).toBeTruthy();
-    expect(screen.getByText("Ft")).toBeTruthy();
-
-    // És gépelés után is szám marad: a jel nem kerül bele.
-    fireEvent.change(vat, { target: { value: "5" } });
-    expect(onChange).toHaveBeenCalledWith([
-      expect.objectContaining({ vatRatePercent: "5" }),
-    ]);
+    /*
+      ÉS A KONTROLL, AMI NÉLKÜL EZ A KÉT NULLA SEMMIT NEM MOND: egy mező, ami
+      MEGMARADT. Ha a komponens egyáltalán nem renderelne (üres lista, hibás
+      fixtúra), a fenti két állítás ugyanígy teljesülne -- és akkor nem az
+      elrejtést mérnénk, hanem a semmit.
+    */
+    expect(screen.getByLabelText("1. tétel megnevezése")).toBeTruthy();
   });
 
   /**
@@ -71,5 +123,66 @@ describe("WorksheetLineEditor feliratai", () => {
 
     expect(screen.queryByText("Mértékegység")).toBeNull();
     expect(screen.getByText(/Még nincs tétel/)).toBeTruthy();
+  });
+});
+
+/**
+ * A MUNKAÓRA BEVITELE (2026-09-17, Balázs kérése).
+ *
+ * Szó szerint: "hogyha rögzíti a szervizes a tételt akkor meg tudja adni, hogy
+ * az adott tételen hányan dolgoztak".
+ */
+describe("WorksheetLineEditor munkaóra-mezői", () => {
+  it("az új tétel MUNKAÓRA, egy fővel", () => {
+    /*
+      ÉS EZ NEM UGYANAZ, MINT A SÉMA ALAPÉRTELMEZÉSE. A sémában `OTHER` áll,
+      mert a MÁR MEGLÉVŐ sorokról senki nem mondta, hogy munkaórák voltak. Itt
+      arról van szó, mit rögzít MOST a felhasználó -- és a mértékegység
+      alapértelmezése ugyanezen a lapon "óra".
+    */
+    expect(emptyLine().kind).toBe("LABOR");
+    expect(emptyLine().workerCount).toBe("1");
+  });
+
+  it("a beírt létszám és a fajta ÁTMEGY a mentésbe", () => {
+    const input = toLineInput(
+      line({ kind: "LABOR", workerCount: "2", quantity: "0,5" }),
+    );
+
+    expect(input.kind).toBe("LABOR");
+    expect(input.workerCount).toBe(2);
+  });
+
+  it("az ÜRES létszám nem nulla, hanem hiány", () => {
+    /*
+      MI PIROSÍT: egy csupasz `Number()` hívás. A `Number("")` értéke NULLA, nem
+      `NaN` -- vagyis egy üresen hagyott mező CSENDBEN nulla főre állítaná a
+      tételt, és a lap munkaórája nulla lenne egy elvégzett munkára. Az
+      `undefined` a szerver alapértelmezését (1) hagyja érvényesülni.
+    */
+    expect(toLineInput(line({ workerCount: "" })).workerCount).toBeUndefined();
+  });
+
+  it("a NEM-munka tételnél a létszám mezője TILTOTT, de OTT MARAD", () => {
+    /*
+      Ha eltűnne, a sor celláinak száma változna, és a rács alatta elcsúszna --
+      pontosan az a hiba, amit ez a fájl ma már egyszer elszenvedett (#813).
+    */
+    render(
+      <WorksheetLineEditor
+        lines={[line({ kind: "OTHER" })]}
+        onChange={vi.fn()}
+      />,
+    );
+
+    const mezo = screen.getByLabelText("1. tételen hányan dolgoztak");
+    expect(mezo).toBeTruthy();
+    expect((mezo as HTMLInputElement).disabled).toBe(true);
+
+    // ISMERT POZITÍV KONTROLL: munkaóránál ugyanaz a mező ÍRHATÓ. Enélkül a
+    // fenti állítás akkor is teljesülne, ha a mező mindig tiltott lenne.
+    expect(
+      (screen.getByLabelText("1. tétel munkaóra") as HTMLInputElement).checked,
+    ).toBe(false);
   });
 });

@@ -52,10 +52,18 @@ export interface CliOutput {
   stderr: (t: string) => void;
 }
 
-/** Egy termek, ahogy a parancs latja: az azonositoi es a tarolt pillanatkep. */
+/**
+ * EGY TERMEK, AHOGY A PARANCS LATJA.
+ *
+ * A `externalId` LEHET `null`, es ez nem elovigyazatossag: a kulso azonosito NEM
+ * a pillanatkepen all, hanem az `ExternalReference` tablan. Egy pillanatkep,
+ * amihez nincs hivatkozas-sor, nem kihagyhato CSENDBEN -- az a termek
+ * onhivatkozaskent sem lenne felismerheto, tehat a sajat kapcsolatai kozott
+ * megjelenhetne.
+ */
 export interface UjraepitesJelolt {
   productId: string;
-  externalId: string;
+  externalId: string | null;
   rawPayload: unknown;
 }
 
@@ -94,6 +102,50 @@ export interface UjraepitesDeps {
     fajta: KapcsolatFajta;
     celProductIdk: readonly string[];
   }): Promise<{ torolt: number; irt: number }>;
+  /**
+   * A FUTAS SORANAK ROGZITESE -- MINDEN AGON, A MEGALLASON IS.
+   *
+   * MIERT KELL, HOLOTT A SZAMOK A KIMENETEN IS OTT ALLNAK: mert egy napi
+   * futasnal az egyetlen kerdes, amit fel fognak tenni, az az, hogy mi tortent
+   * a kapcsolatokkal az elmult ket hetben. A kimenet ezt nem tudja
+   * megvalaszolni -- egy ujratelepites utan a tegnapi futas szamai sehol
+   * nincsenek meg. (Ugyanezt a kerdest mertuk meg a #796-nal, ugyanebben a
+   * temaban.)
+   *
+   * ES A MEGALLT FUTAS IS SOR: az a legerdekesebb, amit rogziteni lehet. Ha
+   * epp az nem hagyna nyomot, a tabla pont azt nem tudna, amiert megepult.
+   */
+  rogzit(sor: UjraepitesFutas): Promise<void>;
+}
+
+/** Amit egy futasrol feljegyzunk. A mezonevek a sema oszlopaival egyeznek. */
+export interface UjraepitesFutas {
+  applied: boolean;
+  stopped: boolean;
+  /**
+   * A HIBA KODJA, vagy `null`, ha a futas nem hasalt el.
+   *
+   * MIERT KELL AZ ELHASALT FUTASNAK IS SOR: mert az utemezo a napi egy kort az
+   * UTOLSO FUTAS KEZDETEBOL szamolja. Ha az elhasalt kor nem hagyna nyomot, a
+   * kovetkezo ebredes ujra elindulna, es egy tartos hiba az ablakon belul
+   * negyedorankent ujraprobalna -- csendben, mert a kimenetet senki nem nezi.
+   * A sor tehat nem naplo-dísz: ez zarja le a hurkot.
+   */
+  errorCode: string | null;
+  rowsBefore: number;
+  rowsPlanned: number;
+  similarProductsWithReferences: number;
+  similarRelationsPlanned: number;
+  similarRelationsWritten: number;
+  similarRelationsRemoved: number;
+  similarReferencesUnresolved: number;
+  accessoryProductsWithReferences: number;
+  accessoryRelationsPlanned: number;
+  accessoryRelationsWritten: number;
+  accessoryRelationsRemoved: number;
+  accessoryReferencesUnresolved: number;
+  unreadableSnapshots: number;
+  withoutExternalId: number;
 }
 
 /** A terkep kulcsa: egy termek egy kapcsolat-fajtaja. */
@@ -140,11 +192,28 @@ export interface UjraepitesSzamok {
    * egy hibas terkep miatt veszitenenk el olyan kapcsolatot, ami helyes.
    */
   csakFeloldatlan: number;
+  /**
+   * AMIT A TAROLO TENYLEG IRT ES TOROLT -- a TERV szamai mellett, kulon.
+   *
+   * A ketto elterhet, es az elteres INFORMACIO: a `skipDuplicates` miatt egy
+   * mar letezo sor nem keletkezik ujra, es a torles is csak azt viszi, ami ott
+   * van. Egy kozos szam ezt elfedne.
+   */
+  irtMert: number;
+  eltavolitottMert: number;
 }
 
 const FAJTAK: readonly KapcsolatFajta[] = ["SIMILAR", "ACCESSORY"];
 /** Ennyi feloldatlan hivatkozast sorolunk fel nevvel; a TELJES szam mellette áll. */
 const MINTA = 10;
+/**
+ * ENNEL NAGYOBB NETTO VALTOZASNAL MEGALLUNK.
+ *
+ * Tiz szazalek: acrobot kikotese. A szam maga kevesbe fontos, mint az, hogy
+ * VAN hatar -- egy ismetlodo futasnal nem lesz ott senki, aki eszreveszi, ha
+ * egyszer csak minden kapcsolat eltunik.
+ */
+const NAGY_VALTOZAS_ARANY = 0.1;
 
 export async function runKapcsolatUjraepitesCli(
   argv: readonly string[],
@@ -159,6 +228,12 @@ export async function runKapcsolatUjraepitesCli(
    * irt -- es a terv-ag epp azt mutatja meg, hogy a helyukre ugyanaz kerulne-e.
    */
   const apply = argv.includes("--apply");
+  /**
+   * A NAGY VALTOZAS TUDATOS ATENGEDESE. Kulon kapcsolo, es nem az `--apply`
+   * resze: az elso futas SZAMIT nagynak, es epp azt akarjuk, hogy valaki
+   * kimondja, hogy szamitott ra.
+   */
+  const nagyValtozasIs = argv.includes("--nagy-valtozas-is");
   try {
     const [jeloltek, terkep, meglevo] = await Promise.all([
       deps.jeloltek(),
@@ -175,7 +250,39 @@ export async function runKapcsolatUjraepitesCli(
       ACCESSORY: [],
     };
 
+    /**
+     * A TELJES TERV, MIELOTT BARMIT IRNANK.
+     *
+     * KET MENET, ES EZ 2026-09-17 OTA IGY VAN. Az elso alak menet kozben irt,
+     * tehat a "mennyit valtozik osszesen" kerdesre CSAK A VEGEN lehetett volna
+     * valaszolni -- amikor mar minden sor a helyen van. Egy biztonsagi hatar
+     * ilyenkor nem hatar, hanem utolagos jelentes.
+     *
+     * Mellekhatasa is van, es az is jo: a terv- es az iras-ag ugyanabbol a
+     * listabol dolgozik, tehat a ket szam SZERKEZETILEG nem tud elterni.
+     */
+    const terv: Array<{
+      sourceProductId: string;
+      fajta: KapcsolatFajta;
+      celProductIdk: string[];
+      meglevoDb: number;
+    }> = [];
+    let kulsoAzonositoNelkul = 0;
     for (const jelolt of jeloltek) {
+      /**
+       * KULSO AZONOSITO NELKUL NEM DOLGOZUNK FEL -- ES NEM CSENDBEN.
+       *
+       * A feloldas SAJAT azonositoval szamol: az onhivatkozast abbol ismeri fel
+       * (`reference.externalId === sourceExternalId`). Enelkul egy termek a
+       * SAJAT kapcsolatai koze kerulhetne.
+       *
+       * A szam a fejlecben all, nem fajtankent: ez a termek tulajdonsaga, nem a
+       * kapcsolate.
+       */
+      if (jelolt.externalId === null) {
+        kulsoAzonositoNelkul += 1;
+        continue;
+      }
       for (const fajta of FAJTAK) {
         const szam = szamok[fajta];
         szam.termek += 1;
@@ -205,14 +312,13 @@ export async function runKapcsolatUjraepitesCli(
           }
           const meglevoDb = meglevo.get(meglevoKulcs(jelolt.productId, fajta));
           if (!meglevoDb) continue;
-          if (apply) {
-            const eredmeny = await deps.ir({
-              sourceProductId: jelolt.productId,
-              fajta,
-              celProductIdk: [],
-            });
-            szam.eltavolitott += eredmeny.torolt;
-          } else szam.eltavolitott += meglevoDb;
+          terv.push({
+            sourceProductId: jelolt.productId,
+            fajta,
+            celProductIdk: [],
+            meglevoDb,
+          });
+          szam.eltavolitott += meglevoDb;
           szam.eltavolitottTermek += 1;
           continue;
         }
@@ -254,20 +360,20 @@ export async function runKapcsolatUjraepitesCli(
           continue;
         }
         szam.kapcsolatotKapott += 1;
-        if (apply) {
-          const eredmeny = await deps.ir({
-            sourceProductId: jelolt.productId,
-            fajta,
-            celProductIdk: mapping.targets.map((cel) => cel.productId),
-          });
-          szam.irhatoKapcsolat += eredmeny.irt;
-        } else szam.irhatoKapcsolat += mapping.targets.length;
+        terv.push({
+          sourceProductId: jelolt.productId,
+          fajta,
+          celProductIdk: mapping.targets.map((cel) => cel.productId),
+          meglevoDb: meglevo.get(meglevoKulcs(jelolt.productId, fajta)) ?? 0,
+        });
+        szam.irhatoKapcsolat += mapping.targets.length;
       }
     }
 
     out.stdout(
       `${apply ? "Megírva" : "Terv"}: ${jeloltek.length} termék, ` +
-        `${terkep.size} külső azonosító a térképen.\n`,
+        `${terkep.size} külső azonosító a térképen; ` +
+        `külső azonosító nélkül kihagyva ${kulsoAzonositoNelkul}.\n`,
     );
     for (const fajta of FAJTAK) {
       const szam = szamok[fajta];
@@ -295,16 +401,170 @@ export async function runKapcsolatUjraepitesCli(
       if (minta[fajta].length > 0)
         out.stdout(`    minta: ${minta[fajta].join(", ")}\n`);
     }
-    if (!apply)
+    /**
+     * A NAGY VALTOZAS MEGALLIT -- ES EZ NEM OVATOSSAG, HANEM MERT KIKOTES.
+     *
+     * acrobot kerese (2026-09-17), es az indoka a mai napbol jon: ketszer
+     * szamolt aranyt torzitott mintabol, es mind a ketszer tevedett. Egy
+     * ISMETLODO futasnal nem lesz ott senki, aki eszreveszi.
+     *
+     * A KET ESET, AMIT EZ SZETVALASZT: egy hirtelen nagy valtozas vagy VALODI
+     * (es akkor tudni akarunk rola), vagy egy elromlott pillanatkep-kinyeres
+     * jele. Mind a kettonel jobb, ha szol, mint ha vegigviszi.
+     *
+     * A HATAR A NETTO VALTOZASRA SZOL, nem a mozgasra: az ujraepites amugy is
+     * torol es ujrair minden erintett terméknél, tehat a "megmozgatott sorok"
+     * szama majdnem mindig a teljes allomany.
+     *
+     * ES AZ ELSO FUTAS TUDATOSAN AT FOG AKADNI RAJTA: a stage-en 1165 sorrol
+     * 32196-ra ment. Ez helyes viselkedes -- olyankor a `--nagy-valtozas-is`
+     * kapcsolo kell hozza, vagyis valaki KIMONDJA, hogy szamitott ra.
+     */
+    const jelenlegiOsszes = [...meglevo.values()].reduce((a, b) => a + b, 0);
+    /**
+     * A SOR OSSZEALLITASA EGY HELYEN, hogy a megallas es a rendes vege UGYANAZT
+     * a mezokeszletet irja -- ket kulon osszeallitas eloszor-utoljara egyezne.
+     */
+    const futasSor = (megallt: boolean): UjraepitesFutas => ({
+      applied: apply && !megallt,
+      stopped: megallt,
+      errorCode: null,
+      rowsBefore: jelenlegiOsszes,
+      rowsPlanned: tervezettOsszes,
+      similarProductsWithReferences: szamok.SIMILAR.hivatkozastVisel,
+      similarRelationsPlanned: szamok.SIMILAR.irhatoKapcsolat,
+      similarRelationsWritten: szamok.SIMILAR.irtMert,
+      similarRelationsRemoved: szamok.SIMILAR.eltavolitottMert,
+      similarReferencesUnresolved: szamok.SIMILAR.feloldatlan,
+      accessoryProductsWithReferences: szamok.ACCESSORY.hivatkozastVisel,
+      accessoryRelationsPlanned: szamok.ACCESSORY.irhatoKapcsolat,
+      accessoryRelationsWritten: szamok.ACCESSORY.irtMert,
+      accessoryRelationsRemoved: szamok.ACCESSORY.eltavolitottMert,
+      accessoryReferencesUnresolved: szamok.ACCESSORY.feloldatlan,
+      unreadableSnapshots:
+        szamok.SIMILAR.olvashatatlan + szamok.ACCESSORY.olvashatatlan,
+      withoutExternalId: kulsoAzonositoNelkul,
+    });
+    const tervezettOsszes =
+      jelenlegiOsszes +
+      terv.reduce(
+        (osszeg, tetel) =>
+          osszeg + tetel.celProductIdk.length - tetel.meglevoDb,
+        0,
+      );
+    const valtozas = Math.abs(tervezettOsszes - jelenlegiOsszes);
+    const hatar = Math.ceil(jelenlegiOsszes * NAGY_VALTOZAS_ARANY);
+    out.stdout(
+      `Összesen: ${jelenlegiOsszes} sor ma, ${tervezettOsszes} a futás után ` +
+        `(változás ${valtozas}, határ ${hatar}).\n`,
+    );
+
+    if (apply && jelenlegiOsszes > 0 && valtozas > hatar && !nagyValtozasIs) {
+      /*
+        A MEGALLT FUTAS IS SOR. A TERVEZETT szamok mennek bele -- azok mondjak
+        meg, MIT allitottunk meg, es enelkul a kovetkezo olvaso csak annyit
+        latna, hogy "nem tortent semmi".
+      */
+      await deps.rogzit(futasSor(true));
+      out.stderr(
+        `MEGÁLLTAM: a futás ${valtozas} sorral változtatná az állományt, ` +
+          `ami több, mint a mai ${jelenlegiOsszes} sor ` +
+          `${Math.round(NAGY_VALTOZAS_ARANY * 100)} százaléka (${hatar}). ` +
+          `Ez vagy valódi változás, vagy egy elromlott pillanatkép-kinyerés ` +
+          `jele -- mind a kettőről tudni akarunk. Ha számítottál rá, ` +
+          `a \`--nagy-valtozas-is\` kapcsolóval fut le.\n`,
+      );
+      return 2;
+    }
+
+    if (apply) {
+      for (const tetel of terv) {
+        /*
+          A `meglevoDb` a TERV konyvelese, nem az irase: a varrat csak azt kapja
+          meg, amit az iras hasznal. Egy tobblet-mezo a szerzodesben azt
+          allitana, hogy az irasnak tudnia kell a mai allapotrol -- nem kell.
+        */
+        const eredmeny = await deps.ir({
+          sourceProductId: tetel.sourceProductId,
+          fajta: tetel.fajta,
+          celProductIdk: tetel.celProductIdk,
+        });
+        const szam = szamok[tetel.fajta];
+        if (tetel.celProductIdk.length === 0)
+          szam.eltavolitottMert += eredmeny.torolt;
+        else szam.irtMert += eredmeny.irt;
+      }
+      out.stdout(
+        `  megírva: ${szamok.SIMILAR.irtMert + szamok.ACCESSORY.irtMert} sor, ` +
+          `eltávolítva ${szamok.SIMILAR.eltavolitottMert + szamok.ACCESSORY.eltavolitottMert} sor ` +
+          `(a tároló szerint, nem a terv szerint).\n`,
+      );
+    } else
       out.stdout(
         "Nem írtam semmit. Az `--apply` kapcsolóval fut le élesben.\n",
       );
 
+    await deps.rogzit(futasSor(false));
     return 0;
   } catch (error) {
     out.stderr(`A kapcsolat-újraépítés elhasalt: ${String(error)}\n`);
+    /*
+      A FELJEGYZES SAJAT `try`-BAN ALL: ha a rogzites maga hasal el (peldaul
+      mert epp az adatbazis nem erheto el, ami a leggyakoribb oka annak, hogy
+      idaig jutottunk), az EREDETI hibat nem szabad elfednie. Ilyenkor a kor
+      nyom nelkul marad -- az rosszabb, de nem tudjuk jobban.
+    */
+    try {
+      await deps.rogzit({
+        ...uresFutas(),
+        errorCode: hibaKod(error),
+      });
+    } catch {
+      out.stderr("A futás sorát sem sikerült feljegyezni.\n");
+    }
     return 1;
   }
+}
+
+/**
+ * EGY URES FUTAS-SOR. A hiba-ag hasznalja: ott meg nincsenek szamaink, mert a
+ * hiba a lekerdezesnel is jöhetett. NULLA HELYETT SEM irunk becslest -- egy
+ * kitalált szam rosszabb, mint egy nulla, amirol az `errorCode` megmondja,
+ * miert nulla.
+ */
+function uresFutas(): UjraepitesFutas {
+  return {
+    applied: false,
+    stopped: false,
+    errorCode: null,
+    rowsBefore: 0,
+    rowsPlanned: 0,
+    similarProductsWithReferences: 0,
+    similarRelationsPlanned: 0,
+    similarRelationsWritten: 0,
+    similarRelationsRemoved: 0,
+    similarReferencesUnresolved: 0,
+    accessoryProductsWithReferences: 0,
+    accessoryRelationsPlanned: 0,
+    accessoryRelationsWritten: 0,
+    accessoryRelationsRemoved: 0,
+    accessoryReferencesUnresolved: 0,
+    unreadableSnapshots: 0,
+    withoutExternalId: 0,
+  };
+}
+
+/**
+ * A HIBA KODJA, NEM A HIBA SZOVEGE.
+ *
+ * Egy Prisma- vagy halozati hiba uzenete tobb szaz karakter, es KAPCSOLATI
+ * ADATOT is tartalmazhat (gazdanev, felhasznalo). Az oszlopba ezert csak az
+ * megy be, ami mar eleve kod alaku; minden mas egyetlen allando erteket kap.
+ */
+function hibaKod(error: unknown): string {
+  return error instanceof Error && /^[A-Z0-9_:.-]+$/.test(error.message)
+    ? error.message.slice(0, 200)
+    : "UNAS_RELATION_REBUILD_FAILED";
 }
 
 function uresSzamok(): UjraepitesSzamok {
@@ -321,93 +581,29 @@ function uresSzamok(): UjraepitesSzamok {
     eltavolitottTermek: 0,
     olvashatatlan: 0,
     csakFeloldatlan: 0,
+    irtMert: 0,
+    eltavolitottMert: 0,
   };
 }
 
+/**
+ * A PARANCSSORI ALAK. A VALODI ADATBAZIS-BEKOTES A FUTTATOBAN ALL
+ * (`unas-kapcsolat-ujraepites.runner.ts`), mert az utemezonek is ugyanaz kell.
+ *
+ * A torzs (`runKapcsolatUjraepitesCli`) tovabbra sem tud a Prismarol: ezert
+ * lehet fixture-on merni, es ezert bizonyithato, hogy `--apply` nelkul nem ir
+ * -- az `ir` varratot nem hivjuk.
+ */
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
-  /**
-   * ITT KOTODIK OSSZE A PARANCS A VALODI ADATBAZISSAL, es CSAK itt.
-   *
-   * A torzs semmit nem tud a Prismarol: ezert lehet fixture-on merni, es ezert
-   * bizonyithato, hogy `--apply` nelkul nem ir -- az `ir` varratot nem hivjuk.
-   */
-  const code = await runKapcsolatUjraepitesCli(
-    process.argv.slice(2),
-    {
-      stdout: (t) => process.stdout.write(t),
-      stderr: (t) => process.stderr.write(t),
-    },
-    {
-      jeloltek: async () =>
-        (
-          await prisma.unasProductSnapshot.findMany({
-            select: { productId: true, externalId: true, rawPayload: true },
-          })
-        ).map((sor) => ({
-          productId: sor.productId,
-          externalId: sor.externalId,
-          rawPayload: sor.rawPayload,
-        })),
-      terkep: async () =>
-        new Map(
-          (
-            await prisma.externalReference.findMany({
-              where: { system: "UNAS", entityType: "Product" },
-              select: { externalId: true, entityId: true },
-            })
-          ).map((sor) => [sor.externalId, sor.entityId]),
-        ),
-      /*
-        EGY OSSZESITES, NEM TERMEKENKENTI LEKERDEZES: ketezer termeknel a
-        masodik alak negyezer kort jelentene, es a parancs epp azert letezik,
-        hogy EGYSZER fusson le.
-      */
-      meglevoKapcsolatok: async () =>
-        new Map(
-          (
-            await prisma.productRelation.groupBy({
-              by: ["sourceProductId", "relationType"],
-              where: { source: "UNAS" },
-              _count: { _all: true },
-            })
-          ).map((sor) => [
-            meglevoKulcs(
-              sor.sourceProductId,
-              sor.relationType as KapcsolatFajta,
-            ),
-            sor._count._all,
-          ]),
-        ),
-      ir: async ({ sourceProductId, fajta, celProductIdk }) =>
-        prisma.$transaction(async (tx) => {
-          /**
-           * TOROL, MAJD UJRAIR -- ugyanaz a sorrend, amit a szinkron hasznal.
-           *
-           * A torles a SAJAT forrasunkra szukit (`source: "UNAS"`): egy kezzel
-           * felvett kapcsolatot nem viszunk el.
-           */
-          const torolt = await tx.productRelation.deleteMany({
-            where: { sourceProductId, relationType: fajta, source: "UNAS" },
-          });
-          if (celProductIdk.length === 0)
-            return { torolt: torolt.count, irt: 0 };
-          const created = await tx.productRelation.createMany({
-            data: celProductIdk.map((targetProductId, index) => ({
-              sourceProductId,
-              targetProductId,
-              relationType: fajta,
-              sortOrder: index,
-              source: "UNAS",
-            })),
-            skipDuplicates: true,
-          });
-          return { torolt: torolt.count, irt: created.count };
-        }),
-    },
-  );
+  const { runKapcsolatUjraepites } =
+    await import("./unas-kapcsolat-ujraepites.runner.js");
+  const code = await runKapcsolatUjraepites(process.argv.slice(2), {
+    stdout: (t) => process.stdout.write(t),
+    stderr: (t) => process.stderr.write(t),
+  });
   await prisma.$disconnect();
   process.exit(code);
 }

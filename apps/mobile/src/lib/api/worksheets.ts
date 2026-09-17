@@ -1,6 +1,19 @@
 import { apiRequest } from "./client";
 import type { ServiceDocumentSummary } from "@/lib/documents/document-view";
 import { buildDocumentUpload, type PickedFile } from "./document-upload";
+import type { WorksheetLineKind } from "../worksheets/worksheet-line-kind";
+
+/*
+  A FAJTA TIPUSA FUGGOSEG NELKULI MODULBOL JON, es ez a fajl csak
+  UJRA-EXPORTALJA. Az indok ott all leirva: a teszt-forditas nem oldja fel a
+  `@/` aliast, tehat ami a teszt ala eso modulokba is kell, az nem szarmazhat
+  innen.
+
+  AZ IMPORT A TOBBI KOZOTT ALL, NEM A FAJL TORZSEBEN: az `import/first` szabaly
+  kulonben figyelmeztet -- es a mobil lintje az EGYETLEN valodi linter a
+  repoban, tehat ott egy figyelmeztetes sem maradhat.
+*/
+export type { WorksheetLineKind };
 
 /**
  * A végpont előtagja EGY HELYEN. Ez a fájl korábban 3-szer írta le ugyanezt, és
@@ -96,6 +109,23 @@ export interface WorksheetLineDetail {
   inventoryNumber: string | null;
   quantity: string;
   unit: string;
+  /**
+   * A TETEL FAJTAJA. Csak a `LABOR` szamit bele az osszesitett munkaoraba -- a
+   * `unit` szovege NEM, mert az szabad szoveg.
+   */
+  kind: WorksheetLineKind;
+  /** Hanyan dolgoztak a tetelen. A szerver mindig kuldi, a hianya ott 1. */
+  workerCount: number;
+  /**
+   * A TETEL MUNKAORAJA, MAR KISZAMOLVA: `quantity * workerCount`, de csak
+   * `LABOR` fajtanal -- egyebkent `"0"`.
+   *
+   * A SZAMOLAS A SZERVEREN ALL, es ez nem kenyelmi kerdes: ha a telefon
+   * szorozna, ugyanaz a szabaly KET feluleten allna (itt es a weben), es a
+   * ketto elcsuszasa NEMA lenne -- ugyanarra a munkara ket kulonbozo ora
+   * latszana ket kepernyon.
+   */
+  laborHours: string;
   unitNet: string;
   vatRatePercent: string;
   netAmount: string;
@@ -135,6 +165,15 @@ export interface WorksheetVersionDetail extends WorksheetVersionSummary {
   fulfillmentDate: string | null;
   dueDate: string | null;
   currency: string;
+  /**
+   * A LAP OSSZESITETT MUNKAORAJA, a szerveren kiszamolva: a `LABOR` fajtaju
+   * tetelek `quantity * workerCount` ertekeinek osszege.
+   *
+   * Balazs kerese es egyben a merce (2026-09-17, szo szerint): "ha egy tetel
+   * 0.5 ora de ketten dolgoztak rajta akkor az 1 ora es ha harom ilyen tetel
+   * van akkor osszesen 3 ora".
+   */
+  laborHours: string;
   lines: WorksheetLineDetail[];
 }
 

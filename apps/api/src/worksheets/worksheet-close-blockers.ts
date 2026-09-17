@@ -7,9 +7,23 @@ import {
  * MI AKADÁLYOZZA A MUNKALAP LEZÁRÁSÁT, EGY HELYEN FELSOROLVA.
  *
  * MIÉRT KÜLÖN FÜGGVÉNY, ÉS NEM EGYMÁS UTÁNI `if`-ek a tranzakcióban: a
- * lezárás az a pont, ahol a feltételek ÖSSZEGYŰLNEK, és a lista NŐNI FOG. Ma
- * három tétel áll benne (állapot, tétel, ár), és tudjuk, hogy jön a negyedik:
- * hibajegy nélküli lap nem zárható le és nem írható alá (Balázs, 2026-09-02).
+ * lezárás az a pont, ahol a feltételek ÖSSZEGYŰLNEK. Ma két tétel áll benne
+ * (állapot, tétel), és tudjuk, hogy jön a következő: hibajegy nélküli lap nem
+ * zárható le és nem írható alá (Balázs, 2026-09-02).
+ *
+ * AZ ÁR-FELTÉTEL 2026-09-17-IG ITT ÁLLT, ÉS BALÁZS DÖNTÉSE VETTE KI. A kérése
+ * az volt, hogy a nettó, bruttó és áfa mezők ne jelenjenek meg sem a weben, sem
+ * az appban; két utat tettünk elé, és a "B"-t választotta: tűnjön el
+ * mindenhonnan, és akkor a lezárásból is ki kell venni az ár-feltételt.
+ *
+ * MIÉRT NEM MARADHATOTT: ha az ár sehol nem látszik, nincs hol megadni -- egy
+ * megmaradó feltétel mellett EGYETLEN lapot sem lehetett volna lezárni. Ez a
+ * díszlet-mérés tükörképe: egy őrző, amit senki nem tud kielégíteni, nem
+ * szigor, hanem leállás.
+ *
+ * AMI EBBŐL KÖVETKEZIK, ÉS KI KELL MONDANI: a számlázási alap innentől NEM a
+ * munkalapról jön. Az ár-oszlopok MEGMARADNAK (Balázs: "ne töröljük ezeket"),
+ * csak nem látszanak, és a hiányuk nem állít meg semmit.
  *
  * Egy beágyazott `if` mellett minden új feltétel a tranzakció közepét írná át.
  * Így egy sor.
@@ -43,21 +57,13 @@ import {
  * amihez tranzakció kell.
  */
 export type WorksheetCloseBlocker =
-  "NOT_DRAFT" | "NO_LINES" | "LINE_PRICE_MISSING" | WorksheetNumberIssue;
+  "NOT_DRAFT" | "NO_LINES" | WorksheetNumberIssue;
 
 export interface WorksheetCloseState {
   /** A lap MAI verziójának állapota. */
   status: string;
   /** Hány tétel van a verzión. */
   lineCount: number;
-  /**
-   * Hány tételen hiányzik az ár.
-   *
-   * Az ár azért hiányozhat, mert a szerelő a helyszínen azt rögzíti, mit
-   * csinált és mennyit; az árat az iroda adja meg. A hiány tehát MEGENGEDETT
-   * állapot, csak nem VÉGSŐ - itt derül ki, ha valaki elfelejtette kitölteni.
-   */
-  linesWithoutPrice: number;
   /** A vevő munkalap-rövidítése, a lapszámhoz. */
   partnerCode: string | null | undefined;
   /** Az alegység kódja, a lapszámhoz. */
@@ -78,7 +84,6 @@ export function worksheetCloseBlocker(
 ): WorksheetCloseBlocker | null {
   if (state.status !== "DRAFT") return "NOT_DRAFT";
   if (state.lineCount === 0) return "NO_LINES";
-  if (state.linesWithoutPrice > 0) return "LINE_PRICE_MISSING";
 
   // A SZÁM FELTÉTELEI CSAK AKKOR, HA MÉG NINCS SZÁMA. Egy már megszámozott
   // lap újralezárásánál a rövidítés hiánya nem akadály: a szám megvan, és

@@ -22,7 +22,6 @@ import {
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getServiceCapabilities } from "@/lib/auth/webshop-authorization";
 import {
-  formatWorksheetAmount,
   worksheetAssigneeLine,
   worksheetFilterSummary,
   worksheetLabelOrDraft,
@@ -381,9 +380,8 @@ export default function WorksheetsScreen() {
                 <Text style={styles.rowAssignee}>
                   {worksheetAssigneeLine(item.assigneeNames)}
                 </Text>
-                <Text style={styles.rowAmount}>
-                  {formatWorksheetAmount(item.grossAmount)}
-                </Text>
+                {/* A brutto osszeg 2026-09-17-en kikerult a listabol:
+                    Balazs dontese ("B") szerint az ar sehol nem jelenik meg. */}
               </View>
               {versionNote ? (
                 <Text style={styles.rowVersion}>{versionNote}</Text>
