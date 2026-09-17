@@ -98,7 +98,16 @@ describe("a mentett másolat kimondja, mi nem megy", () => {
    */
   it("a képernyő a közös fénykép-horgot használja, nem saját másolatot", () => {
     const forras = kepernyo();
-    assert.match(forras, /usePhotoAttachments/);
+    /**
+     * A HIVAS ALAKJARA, NEM A NEVRE -- es ezt egy SOPRES talalta meg, nem a
+     * kalibracio (2026-09-17).
+     *
+     * A puszta nev KETSZER all a kepernyon: az `import` sorban ES a hivasban.
+     * Vagyis ha valaki a hivast kivenné es sajat valaszto-menetet irna, az
+     * import ITT TARTANA ZOLDEN az allitast -- pontosan az a diszlet, amit ez
+     * a teszt meg akar elozni.
+     */
+    assert.match(forras, /\} = usePhotoAttachments\(\)/);
     assert.doesNotMatch(
       forras,
       /ImagePicker\.(launchCamera|launchImageLibrary|requestCamera|requestMediaLibrary)/,
