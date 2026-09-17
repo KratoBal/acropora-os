@@ -3,7 +3,7 @@ import { Injectable } from "@nestjs/common";
 import { expandAssignedUnits } from "./assigned-units.js";
 import { assetsOutsideDepartment } from "../common/assets-in-department.js";
 import { isPrismaUniqueConstraintViolation } from "../common/prisma-error.util.js";
-import { SERVICE_ASSIGNABLE_ROLES } from "../common/service-assignment.js";
+import { assignableUserWhere } from "../common/service-assignment.js";
 import { DOCUMENT_DELETED_ACTION } from "./service-job-documents.repository.js";
 import {
   serviceJobScopeWhere,
@@ -265,11 +265,7 @@ export class ServiceJobsRepository {
   async assignableUserIds(ids: readonly string[]): Promise<Set<string>> {
     if (ids.length === 0) return new Set();
     const rows = await this.database.user.findMany({
-      where: {
-        id: { in: [...ids] },
-        isActive: true,
-        role: { in: [...SERVICE_ASSIGNABLE_ROLES] },
-      },
+      where: { id: { in: [...ids] }, ...assignableUserWhere() },
       select: { id: true },
     });
     return new Set(rows.map((row) => row.id));

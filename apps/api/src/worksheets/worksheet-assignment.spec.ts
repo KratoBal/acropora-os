@@ -9,7 +9,17 @@ import {
 } from "./worksheet-assignment.js";
 
 describe("WORKSHEET_ASSIGNABLE_ROLES", () => {
-  it("lists exactly the roles that may edit a worksheet", () => {
+  /**
+   * A NEV 2026-09-17-EN MEGVALTOZOTT, ES EZ NEM KOZMETIKA. Az allitas eddig azt
+   * hivta magat, hogy "exactly the roles that may edit a worksheet" -- a lista
+   * viszont MAR NEM az: a `PARTNER_SERVICE` szerepnek megvan a joga, es MEGSEM
+   * kioszthato, mert nem a mi kollegank. Egy nev, ami tobbet allit, mint amit a
+   * teszt mer, ugyanugy megteveszt, mint egy elirt darabszam.
+   *
+   * A SZUKITES INDOKA es a partner-kizaras merese a kozos modul sajat
+   * spec-jeben all (`common/service-assignment.spec.ts`).
+   */
+  it("minden listázott szerep tud is dolgozni a lapon", () => {
     for (const role of WORKSHEET_ASSIGNABLE_ROLES) {
       assert.equal(hasPermission(role, PERMISSIONS.SERVICE_MANAGE), true);
     }

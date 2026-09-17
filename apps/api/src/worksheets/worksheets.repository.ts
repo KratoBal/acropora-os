@@ -33,7 +33,7 @@ import type {
 } from "./dto/worksheet.dto.js";
 import { amendRefusal } from "./worksheet-amendment.js";
 import { sumWorksheetAmounts } from "./worksheet-amounts.js";
-import { WORKSHEET_ASSIGNABLE_ROLES } from "./worksheet-assignment.js";
+import { assignableUserWhere } from "../common/service-assignment.js";
 import type {
   NormalizedWorksheetContent,
   NormalizedWorksheetLine,
@@ -431,7 +431,7 @@ export class WorksheetsRepository extends Repository {
   ): Promise<WorksheetAssignableUserListResponse> {
     if (scope.kind !== "internal") return { items: [] };
     const rows = await this.database.user.findMany({
-      where: { isActive: true, role: { in: [...WORKSHEET_ASSIGNABLE_ROLES] } },
+      where: assignableUserWhere(),
       select: { id: true, displayName: true, nickname: true, role: true },
     });
     const items = rows
@@ -448,11 +448,7 @@ export class WorksheetsRepository extends Repository {
   async assignableUserIds(ids: readonly string[]): Promise<Set<string>> {
     if (ids.length === 0) return new Set();
     const rows = await this.database.user.findMany({
-      where: {
-        id: { in: [...ids] },
-        isActive: true,
-        role: { in: [...WORKSHEET_ASSIGNABLE_ROLES] },
-      },
+      where: { id: { in: [...ids] }, ...assignableUserWhere() },
       select: { id: true },
     });
     return new Set(rows.map((row) => row.id));
