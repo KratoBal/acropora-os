@@ -177,7 +177,18 @@ describe("AssetDetailPage csatolmány-galéria", () => {
    * kepernyo a begepelt szoveget mutatna tovabb, mintha mentve lenne.
    */
   it("a felirat mentése a szerverre megy, és utána újratölt", async () => {
-    api.detail.mockResolvedValue(ketCsatolmany);
+    /**
+     * CSAK A FENYKEP ALL A FIXTURABAN, ES EZT EGY KALIBRACIO KENYSZERITETTE KI.
+     *
+     * A ket csatolmanyos fixturaval ez az allitas AKKOR IS pirosra valtott,
+     * amikor a kep/nem-kep szetvalasztast rontottam el: ott a PDF-bol is csempe
+     * lett, tehat KET "Felirat" gomb allt a lapon, es a valaszto ezen hasalt el.
+     * Egy allitas, ami MAS hibatol is pirosodik, nem mondja meg, mit mert.
+     */
+    api.detail.mockResolvedValue({
+      ...asset,
+      documents: [ketCsatolmany.documents[0]],
+    } as unknown as AssetDetail);
     render(<AssetDetailPage assetId="asset-1" />);
     await screen.findByAltText("medence.jpg");
     expect(api.detail).toHaveBeenCalledTimes(1);
