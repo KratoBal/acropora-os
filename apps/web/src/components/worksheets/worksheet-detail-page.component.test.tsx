@@ -119,6 +119,8 @@ function detail(inventoryNumber: string | null): WorksheetDetail {
       fulfillmentDate: "2026-08-27",
       dueDate: null,
       currency: "HUF",
+      // A lenti egyetlen sor 2 munkaórát ad (2 óra, egy ember).
+      laborHours: "2",
       lines: [
         {
           id: "line-1",
@@ -130,6 +132,11 @@ function detail(inventoryNumber: string | null): WorksheetDetail {
           inventoryNumber,
           quantity: "2",
           unit: "óra",
+          // ÓRA-tétel, egy emberrel: 2 * 1 = 2 munkaóra. A fixtúra így a
+          // munkaóra-megjelenítésen is mér valamit, nem csak nullát ad.
+          kind: "LABOR" as const,
+          workerCount: 1,
+          laborHours: "2",
           unitNet: "15000",
           vatRatePercent: "27",
           netAmount: "30000",

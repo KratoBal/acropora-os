@@ -507,6 +507,7 @@ export type {
   WorksheetFieldChange,
   WorksheetLineDetail,
   WorksheetLineInput,
+  WorksheetLineKindValue,
   WorksheetListItem,
   WorksheetListResponse,
   WorksheetChainLink,

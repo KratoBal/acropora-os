@@ -72,6 +72,7 @@ export type {
   ServiceJobStatus,
   WorksheetDepartment,
   WorksheetLine,
+  WorksheetLineKind,
   WorksheetNumberSequence,
   WorksheetSignatureDecision,
   WorksheetVersion,
