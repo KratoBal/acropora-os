@@ -11,7 +11,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useEffect } from "react";
 
-import { scanAsset } from "@/lib/api/assets";
+import { scanAsset, scanAssetByLabel } from "@/lib/api/assets";
 import { describeScanFailure } from "@/lib/assets/scan-failure";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import {
@@ -20,12 +20,24 @@ import {
 } from "@/lib/offline/asset-cache";
 
 export default function AssetScanScreen() {
-  const params = useLocalSearchParams<{ token: string | string[] }>();
+  const params = useLocalSearchParams<{
+    token: string | string[];
+    kind?: string | string[];
+  }>();
   const token = Array.isArray(params.token) ? params.token[0] : params.token;
+  /**
+   * MELYIK AZONOSITOT KAPTUK. A beolvaso mar eldontotte; ez a kepernyo csak
+   * annyit tesz, hogy a MASIK vegpontot hivja.
+   *
+   * A DONTES NEM ITT ISMETLODIK MEG, es ez szandekos: ha itt is dontenenk,
+   * a ket hely kulon csuszhatna el -- es a masodikat semmi nem merne.
+   */
+  const kindParam = Array.isArray(params.kind) ? params.kind[0] : params.kind;
+  const label = kindParam === "label";
   const { status } = useAuth();
   const query = useQuery({
-    queryKey: ["service-asset-scan", token],
-    queryFn: () => scanAsset(token!),
+    queryKey: ["service-asset-scan", label ? "label" : "qr", token],
+    queryFn: () => (label ? scanAssetByLabel(token!) : scanAsset(token!)),
     enabled: status === "authenticated" && Boolean(token),
     retry: false,
   });
@@ -38,10 +50,21 @@ export default function AssetScanScreen() {
    * meg tudjuk mondani, melyik eszköz az. A keresés CSAK akkor indul, ha a
    * szerverhez fordulás elhasalt: amíg van válasz, az a friss.
    */
+  /**
+   * A MATRICAKODRA MA NINCS OFFLINE FELOLDAS, ES EZT KIMONDOM.
+   *
+   * A mentett masolat `qr_token` oszlopon keresi ki az eszkozt; matricakod
+   * oszlop nincs a helyi tablan. Vagyis terero nelkul a QR-kod feloldodik, a
+   * matrica NEM -- es ez nem elnezes, hanem a mai hatar.
+   *
+   * A FELOLDASA NEM DRAGA (a `labelCode` ott all a mentett sor torzseben,
+   * tehat egy JS-oldali vegigolvasas eldontene), de KULON kor: ez a valtozas
+   * az ELES akadalyt bontja el, es egy helyi sema-kerdest nem keverek bele.
+   */
   const cached = useQuery({
     queryKey: ["offline-scan", token],
     queryFn: () => readCachedAssetByToken(token!),
-    enabled: query.isError && Boolean(token),
+    enabled: query.isError && Boolean(token) && !label,
   });
 
   // Amit a matricáról nyitottak meg, az legyen meg a következő alkalomra is.
@@ -89,7 +112,9 @@ export default function AssetScanScreen() {
             <ActivityIndicator color="#52d6c7" size="large" />
             <Text style={styles.title}>Eszköz azonosítása…</Text>
             <Text style={styles.text}>
-              A QR-kódot biztonságosan ellenőrizzük az Acropora OS-ben.
+              {label
+                ? "A matrica kódjához keressük az eszközt az Acropora OS-ben."
+                : "A QR-kódot biztonságosan ellenőrizzük az Acropora OS-ben."}
             </Text>
           </>
         )}

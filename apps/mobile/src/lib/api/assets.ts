@@ -231,6 +231,26 @@ export function scanAsset(qrToken: string) {
   return apiRequest<AssetDetail>(`${BASE}/scan/${encodeURIComponent(qrToken)}`);
 }
 
+/**
+ * ESZKOZ A MATRICAKODROL.
+ *
+ * MASIK UT, MINT A `scanAsset`, ES EZ NEM MASOLAS. A ket azonosito EROSSEGE
+ * kulonbozik: a `qrToken` 128 bites veletlen, a matricakod ot karakter
+ * (260 ezer lehetoseg). Ezert a szerveren a matricas ut TULAJDONT IS
+ * ELLENORIZ, a qrToken-es nem -- a jogosultsagi szintjuk azonos, a
+ * lathatosaguk nem.
+ *
+ * A TELEFON 2026-09-17-IG SOHA NEM HIVTA. A vegpont 2026-09-02 ota all, es
+ * egyetlen hivoja a webes felulet volt. Vagyis egy elore nyomtatott matricaval
+ * nem lehetett megtalalni a gepet, amire fel van ragasztva -- holott a matrica
+ * pont ezert kerul ra.
+ */
+export function scanAssetByLabel(code: string) {
+  return apiRequest<AssetDetail>(
+    `${BASE}/scan-label/${encodeURIComponent(code)}`,
+  );
+}
+
 export function listAssetOwners() {
   return apiRequest<{ items: AssetOwnerOption[] }>(`${BASE}/owners`);
 }
