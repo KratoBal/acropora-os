@@ -23,7 +23,17 @@
 export const OFFLINE_COPY_NOTICE = {
   /** A léptetés kiesik: a szerver a LÁTOTT állapotra ír feltételesen. */
   step: "Mentett másolatot nézel, ezért a léptetés most nem megy. A jegy állapotát térerőnél tudod átírni.",
-  /** A feltöltés kiesik: a kép a szerverre megy, nem a másolatba. */
+  /**
+   * EZ A MONDAT AT VAN IRVA (2026-09-17), ES A FENTI BEKEZDES ELORE MEGMONDTA.
+   *
+   * Korabban azt allt itt, hogy a fenykep "most nem tölthető fel", es hogy
+   * terero kell hozza. A fejlec kimondta, hogy ez a JELEN allapotrol szol, es
+   * "akkor ez az ág egyszerűen nem áll elő többé", amikor a kepesseg megjon.
+   *
+   * A KEPESSEG MEGJOTT, AZ AG VISZONT ELOALL: a mentett masolat allapota
+   * megmarad. Ezert nem a feltetelt vettuk ki, hanem a MONDATOT irtuk at --
+   * kulonben epp azt tiltana, amiert a sor keszult.
+   */
   photo:
-    "Mentett másolatot nézel, ezért a fénykép most nem tölthető fel. Térerőnél tudsz képet tenni a jegyre.",
+    "Mentett másolatot nézel. A fénykép így is felvehető: a telefonon vár, és magától felmegy, amint visszajön a hálózat.",
 } as const;

@@ -17,6 +17,13 @@ import { getAsset, uploadAssetDocuments } from "@/lib/api/assets";
 import { MAX_FILES_PER_UPLOAD } from "@/lib/api/document-upload";
 import { photoPermissionDeniedNotice } from "@/lib/api/photo-permission-notice";
 import { toPickedImages } from "@/lib/api/picked-image";
+import { ApiError } from "@/lib/api/client";
+import { enqueuePhoto } from "@/lib/offline/queue-store";
+import {
+  describePhotoSend,
+  ownerPhotoQueueEntry,
+  uploadOrQueuePhotos,
+} from "@/lib/offline/photo-upload-or-queue";
 import { ASSET_STATUS_LABELS } from "@/lib/assets/asset-status";
 import { assetPlacementDetail } from "@/lib/assets/asset-placement";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -96,21 +103,61 @@ export default function AssetDetailScreen() {
       return;
     }
     if (!query.data) return;
+    const eszkozId = query.data.id;
 
     setUploading(true);
     try {
-      const created = await uploadAssetDocuments(query.data.id, {
-        type: "OTHER",
+      /**
+       * TERERO NELKUL A KEP A SORBA MEGY, NEM VESZIK EL.
+       *
+       * EZ A KEPERNYO 2026-09-17-IG ELVESZTETTE: a halozati hiba egyenesen a
+       * felhasznalohoz jutott ("A szerver jelenleg nem erheto el"), a
+       * kivalasztott kep pedig SEHOL nem maradt meg. Balazs elesben pont ezt
+       * jelentette, KET kepernyorol -- es a masik ugyanez a jegy lapjan.
+       *
+       * A NEGY UJ-FELVITELI kepernyon ez sosem latszott, mert ott a kep a
+       * rogzites sorara akaszkodik. A KULONBSEG tehat nem a halozatban volt,
+       * hanem abban, hogy ennek a ketto kepernyonek NEM VOLT sora.
+       *
+       * A dontes a `lib/offline/photo-upload-or-queue.ts`-ben all, ahol
+       * MERHETO: ebben a csomagban nincs komponens-teszt.
+       */
+      const eredmeny = await uploadOrQueuePhotos({
         files,
+        upload: async (kuldendo) => {
+          const created = await uploadAssetDocuments(eszkozId, {
+            // A SZAMLA ES A GARANCIALEVEL AZ IRODABOL KERUL FEL; a helyszini
+            // kep az eszkoznel OTHER. A sor kiuritese UGYANEZT a tipust
+            // hasznalja -- a ket ut nem tud elcsuszni egymastol.
+            type: "OTHER",
+            files: kuldendo,
+          });
+          return { count: created.length };
+        },
+        enqueue: async (file) => {
+          const r = await enqueuePhoto(
+            ownerPhotoQueueEntry({
+              entityType: "asset",
+              ownerId: eszkozId,
+              file,
+              createdAt: new Date().toISOString(),
+            }),
+          );
+          return r.ok;
+        },
+        statusOf: (cause) => (cause instanceof ApiError ? cause.status : null),
+        describeRejection: (cause) =>
+          cause instanceof Error
+            ? cause.message
+            : "A feltöltés nem sikerült. Próbáld újra.",
       });
+
       // A KIHAGYOTTAKAT AKKOR IS KIMONDJUK, HA A TÖBBI SIKERÜLT. Egy néma
       // részleges siker azt a hitet hagyná, hogy mind a kép fent van.
-      setUploadNotice(
-        skipped.length > 0
-          ? `${created.length} kép feltöltve. Kimaradt: ${skipped.join(", ")}.`
-          : `${created.length} kép feltöltve.`,
-      );
-      void query.refetch();
+      setUploadNotice(describePhotoSend(eredmeny, skipped));
+      // CSAK A FELMENT KEPNEL TOLTUNK UJRA: a sorba tett kep meg NINCS a
+      // szerveren, tehat a lista valtozatlan lenne.
+      if (eredmeny.type === "uploaded") void query.refetch();
     } catch (error) {
       setUploadNotice(
         error instanceof Error

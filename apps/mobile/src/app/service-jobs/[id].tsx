@@ -17,6 +17,13 @@ import { OfflineNoticeCard } from "@/components/offline/OfflineNoticeCard";
 import { MAX_FILES_PER_UPLOAD } from "@/lib/api/document-upload";
 import { photoPermissionDeniedNotice } from "@/lib/api/photo-permission-notice";
 import { toPickedImages } from "@/lib/api/picked-image";
+import { ApiError } from "@/lib/api/client";
+import { enqueuePhoto } from "@/lib/offline/queue-store";
+import {
+  describePhotoSend,
+  ownerPhotoQueueEntry,
+  uploadOrQueuePhotos,
+} from "@/lib/offline/photo-upload-or-queue";
 import {
   getServiceJob,
   moveServiceJob,
@@ -129,14 +136,45 @@ export default function ServiceJobDetailScreen() {
 
     setUploading(true);
     try {
-      const created = await uploadServiceJobPhotos(id, files);
+      /**
+       * TERERO NELKUL A KEP A SORBA MEGY, NEM VESZIK EL.
+       *
+       * EZ A KEPERNYO 2026-09-17-IG ELVESZTETTE: a halozati hiba egyenesen a
+       * felhasznalohoz jutott ("A szerver jelenleg nem erheto el"), a
+       * kivalasztott kep pedig SEHOL nem maradt meg. Balazs elesben pont ezt
+       * jelentette, KET kepernyorol -- a masik az eszkoz adatlapja.
+       *
+       * A NEGY UJ-FELVITELI kepernyon ez sosem latszott, mert ott a kep a
+       * rogzites sorara akaszkodik. A KULONBSEG tehat nem a halozatban volt,
+       * hanem abban, hogy ennek a ketto kepernyonek NEM VOLT sora.
+       */
+      const eredmeny = await uploadOrQueuePhotos({
+        files,
+        upload: async (kuldendo) => {
+          const created = await uploadServiceJobPhotos(id, kuldendo);
+          return { count: created.length };
+        },
+        enqueue: async (file) => {
+          const r = await enqueuePhoto(
+            ownerPhotoQueueEntry({
+              entityType: "service-job",
+              ownerId: id,
+              file,
+              createdAt: new Date().toISOString(),
+            }),
+          );
+          return r.ok;
+        },
+        statusOf: (cause) => (cause instanceof ApiError ? cause.status : null),
+        describeRejection: (cause) =>
+          cause instanceof Error
+            ? cause.message
+            : "A feltöltés nem sikerült. Próbáld újra.",
+      });
+
       // A KIHAGYOTTAKAT AKKOR IS KIMONDJUK, ha a többi sikerült: egy néma
       // részleges siker azt a hitet hagyná, hogy minden kép fent van.
-      setNotice(
-        skipped.length > 0
-          ? `${created.length} kép feltöltve. Kimaradt: ${skipped.join(", ")}.`
-          : `${created.length} kép feltöltve.`,
-      );
+      setNotice(describePhotoSend(eredmeny, skipped));
     } catch (error) {
       setNotice(
         error instanceof Error
@@ -348,12 +386,18 @@ export default function ServiceJobDetailScreen() {
 
         {capabilities?.serviceJobsManage ? (
           /*
-            A SZAKASZ OFFLINE IS ITT ALL, A GOMBOK TILTVA -- NEM TUNIK EL.
+            A SZAKASZ OFFLINE IS ITT ALL -- ES A GOMBOK 2026-09-17 OTA MENNEK.
             Az elso alakjaban `!masolatbol` mellett a TELJES szakasz kiesett,
             egyetlen szo nelkul, mikozben a leptetes KIMONDTA, miert nem megy.
             Ket kihagyas egy kepernyon, ket kulonbozo viselkedessel -- es a
             sajat szabalyunk (a mentett masolat soha nem nema) az elsore allt,
             a masodikra nem.
+
+            A GOMBOK TILTASA IS MEGSZUNT, es ez nem lazitas: a kep mostantol a
+            SORBA megy, ha nincs halozat. A terero NELKULI helyszin epp az,
+            amiert a sor letezik -- egy tiltott gomb pontosan akkor venne el a
+            kepesseget, amikor a legtobbet erne. A LEPTETES tiltva MARAD: az a
+            szerveren a LATOTT allapotra ir feltetelesen, tehat nem sorbol valo.
           */
           <View style={styles.block}>
             <Text style={styles.sectionTitle}>Fénykép</Text>
@@ -363,20 +407,20 @@ export default function ServiceJobDetailScreen() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Fénykép készítése"
-              accessibilityState={{ disabled: uploading || masolatbol }}
-              disabled={uploading || masolatbol}
+              accessibilityState={{ disabled: uploading }}
+              disabled={uploading}
               onPress={() => void takePhoto()}
-              style={[styles.action, masolatbol && styles.actionDisabled]}
+              style={styles.action}
             >
               <Text style={styles.actionText}>Fénykép készítése</Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Kép választása a galériából"
-              accessibilityState={{ disabled: uploading || masolatbol }}
-              disabled={uploading || masolatbol}
+              accessibilityState={{ disabled: uploading }}
+              disabled={uploading}
               onPress={() => void pickPhotos()}
-              style={[styles.action, masolatbol && styles.actionDisabled]}
+              style={styles.action}
             >
               <Text style={styles.actionText}>Kép a galériából</Text>
             </Pressable>

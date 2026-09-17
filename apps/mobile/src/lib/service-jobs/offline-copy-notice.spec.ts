@@ -94,19 +94,40 @@ describe("a mentett másolat kimondja, mi nem megy", () => {
    * a mondat HAZUDNI kezdene. Ezért mind a kettő azzal kezdődik, hogy MIT nézel
    * most -- az az állítás akkor is igaz marad, amikor ez az ág már elő sem áll.
    */
-  it("a mondatok a mentett másolatra hivatkoznak, nem általános tiltásra", () => {
+  /**
+   * A KET MONDAT SZABALYA 2026-09-17 OTA KULONBOZIK, ES EZ NEM LAZITAS.
+   *
+   * Korabban mindkettore ugyanaz allt: "most nem" megy, es "tereronel" fog. A
+   * FENYKEP viszont azota SORBA KERUL terero nelkul is, tehat az a kikotes
+   * epp a helyes mondatot utasitotta volna el -- a regi allitas pirosa
+   * BIZONYITEK volt, nem javitando hiba.
+   *
+   * A LEPTETESRE VALTOZATLANUL ALL: az a szerveren a LATOTT allapotra ir
+   * feltetelesen, tehat NEM sorbol valo, es terero nelkul tenylegesen nem megy.
+   *
+   * AMI MIND A KETTOBEN KOZOS, es ezert maradt kozos allitas: a mondat a JELEN
+   * allapotrol szoljon (mentett masolatot nezel), ne altalanos tiltasrol -- es
+   * mondja meg a TEENDOT, kulonben csak kozli a kudarcot.
+   */
+  it("mind a két mondat a mentett másolatra hivatkozik, nem általános tiltásra", () => {
     for (const szoveg of Object.values(OFFLINE_COPY_NOTICE)) {
       assert.match(szoveg, /Mentett másolatot nézel/);
-      assert.match(szoveg, /most nem/);
-      // ÁLTALÁNOS TILTÁST NE ÁLLÍTSON: az elavulna egy új képességgel.
       assert.doesNotMatch(szoveg, /nem lehet|soha|egyáltalán/);
     }
   });
 
-  it("mind a két mondat megmondja, MIKOR megy", () => {
-    // A TEENDŐ NÉLKÜL a mondat csak közli a kudarcot. A "térerőnél" az az egy
-    // szó, amiből a szerelő tudja, mit kezdjen magával.
-    for (const szoveg of Object.values(OFFLINE_COPY_NOTICE))
-      assert.match(szoveg, /érerőnél/);
+  it("a léptetés megmondja, hogy térerőnél megy", () => {
+    assert.match(OFFLINE_COPY_NOTICE.step, /most nem/);
+    assert.match(OFFLINE_COPY_NOTICE.step, /érerőnél/);
+  });
+
+  /**
+   * A FENYKEP VISZONT NEM TILTOTT, ES EZT KI IS KELL MONDANI: ha csak annyit
+   * mondanank, hogy "mentett masolatot nezel", a szerelo azt hinne, hogy a kep
+   * NEM megy -- es nem is probalna meg, epp ott, ahol a sor a legtobbet erne.
+   */
+  it("a fénykép mondata megmondja, hogy a kép magától felmegy", () => {
+    assert.match(OFFLINE_COPY_NOTICE.photo, /magától felmegy/);
+    assert.doesNotMatch(OFFLINE_COPY_NOTICE.photo, /nem tölthető/);
   });
 });

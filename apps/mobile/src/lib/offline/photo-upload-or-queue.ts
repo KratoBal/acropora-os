@@ -1,5 +1,7 @@
 // RELATIV UT, NEM `@/`: a teszt-fordito nem ismeri az aliast.
 import type { PickedFile } from "../api/picked-image";
+import { ownerPhotoOperationId } from "./photo-queue";
+import type { SyncEntityType } from "./sync-queue";
 
 /**
  * FENYKEP EGY MAR LETEZO GAZDAHOZ: ELOSZOR A SZERVERNEK, ES CSAK HALOZATI
@@ -39,6 +41,54 @@ export type PhotoSendOutcome =
   | { type: "rejected"; message: string }
   /** Nem volt mit kuldeni. */
   | { type: "none" };
+
+/**
+ * EGY SORBA TEENDO KEP BEJEGYZESE EGY MAR LETEZO GAZDAHOZ.
+ *
+ * === MIERT KULON FUGGVENY, HOLOTT TIZENOT SOR ===
+ *
+ * Mert HAROM kepernyo irja ugyanezt (munkalap, eszkoz es hibajegy
+ * reszletlapja), es ebben az appban a fenykep-menet MAR EGYSZER negyszer
+ * masolodott le, mielott valaki kiemelte. Ket dolog all benne, amit elrontani
+ * NEMA hiba:
+ *
+ *   a KULCS a tartalombol szuletik -- kulonben a ketszer megnyomott gomb ket
+ *     sort ad, es ugyanaz a kep KETSZER megy fel;
+ *   a GAZDA azonositoja MOST kerul a sorra -- kulonben a kep gazdatlan lenne,
+ *     es SOHA nem menne fel, ugy, hogy a sor tovabbra is varakozonak latszik.
+ *
+ * A `recordingOperationId` SZANDEKOSAN HIANYZIK: egy mar letezo gazdahoz
+ * tartozo kep senkire nem var, es egy kitalalt azonosito ott azt jelentene,
+ * hogy a sor orokre var valamire, ami soha nem jon.
+ */
+export function ownerPhotoQueueEntry(input: {
+  entityType: SyncEntityType;
+  ownerId: string;
+  file: PickedFile;
+  createdAt: string;
+}): {
+  id: string;
+  payload: { uri: string; name: string; type: string };
+  createdAt: string;
+  entityType: SyncEntityType;
+  ownerId: string;
+} {
+  return {
+    id: ownerPhotoOperationId({
+      entityType: input.entityType,
+      ownerId: input.ownerId,
+      uri: input.file.uri,
+    }),
+    payload: {
+      uri: input.file.uri,
+      name: input.file.name,
+      type: input.file.type,
+    },
+    createdAt: input.createdAt,
+    entityType: input.entityType,
+    ownerId: input.ownerId,
+  };
+}
 
 export interface PhotoSendDeps {
   files: readonly PickedFile[];
