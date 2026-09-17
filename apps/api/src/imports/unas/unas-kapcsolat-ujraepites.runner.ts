@@ -6,7 +6,7 @@ import {
   meglevoKulcs,
   type CliOutput,
   type UjraepitesDeps,
-} from "./unas-kapcsolat-ujraepites.cli.js";
+} from "./unas-kapcsolat-ujraepites.mag.js";
 
 /**
  * A KAPCSOLAT-UJRAEPITES VALODI ADATBAZIS-BEKOTESE, EGY HELYEN.

@@ -7,7 +7,7 @@ import {
   type UjraepitesDeps,
   type UjraepitesFutas,
   type UjraepitesJelolt,
-} from "./unas-kapcsolat-ujraepites.cli.js";
+} from "./unas-kapcsolat-ujraepites.mag.js";
 
 /**
  * A KAPCSOLAT-UJRAEPITES -- FIXTURE-ON MERVE, ADATBAZIS NELKUL.
