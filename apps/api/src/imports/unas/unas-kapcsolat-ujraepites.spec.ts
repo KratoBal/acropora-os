@@ -5,6 +5,7 @@ import {
   meglevoKulcs,
   runKapcsolatUjraepitesCli,
   type UjraepitesDeps,
+  type UjraepitesFutas,
   type UjraepitesJelolt,
 } from "./unas-kapcsolat-ujraepites.cli.js";
 
@@ -40,11 +41,21 @@ function deps(
   terkepbol: readonly string[],
   /** A MAR MEGLEVO sorok: `${productId}|${fajta}` -> darab. */
   meglevo: Record<string, number> = {},
-): { deps: UjraepitesDeps; irasok: unknown[] } {
+): {
+  deps: UjraepitesDeps;
+  irasok: unknown[];
+  /** A rogzitett futas-sorok. Ures lista is allitas: akkor NEM jegyeztunk fel. */
+  futasok: UjraepitesFutas[];
+} {
   const irasok: unknown[] = [];
+  const futasok: UjraepitesFutas[] = [];
   return {
     irasok,
+    futasok,
     deps: {
+      rogzit: async (sor) => {
+        futasok.push(sor);
+      },
       jeloltek: async () => jeloltek,
       terkep: async () =>
         new Map(terkepbol.map((externalId) => [externalId, `p-${externalId}`])),
@@ -371,6 +382,73 @@ describe("kapcsolat-újraépítés", () => {
   });
 
   /**
+   * A FUTAS SORA MINDEN AGON LETREJON -- ES A MEGALLASON A LEGFONTOSABB.
+   *
+   * acrobot kikotese (2026-09-17): "az a legerdekesebb futas, amit rogziteni
+   * lehet -- es ha epp az nem hagy nyomot, akkor a tabla pont azt nem tudja,
+   * amiert megepult". A megallas TENYE es a TERVEZETT szamok kerulnek bele.
+   */
+  it("a megállt futás is sort ír, a tervezett számokkal", async () => {
+    const {
+      deps: d,
+      irasok,
+      futasok,
+    } = deps([jelolt("1", [])], ["1"], {
+      [meglevoKulcs("p-1", "SIMILAR")]: 30,
+    });
+    const { out } = kimenet();
+
+    assert.equal(await runKapcsolatUjraepitesCli(["--apply"], out, d), 2);
+
+    assert.deepEqual(irasok, []);
+    assert.equal(futasok.length, 1);
+    const sor = futasok[0]!;
+    assert.equal(sor.stopped, true);
+    // AZ `applied` HAMIS: a futas ugyan `--apply`-jal indult, de NEM irt. Egy
+    // igaz ertek itt azt allitana, hogy az allomany megvaltozott.
+    assert.equal(sor.applied, false);
+    assert.equal(sor.rowsBefore, 30);
+    assert.equal(sor.rowsPlanned, 0);
+  });
+
+  /**
+   * A TERV-FUTAS IS SOR, es `applied: false`. Enelkul a tabla csak az irasokrol
+   * tudna, es a "mikor neztuk meg utoljara" kerdesre nem lenne valasz.
+   */
+  it("a terv-futás is sort ír, applied nélkül", async () => {
+    const { deps: d, futasok } = deps([jelolt("1", ["2"])], ["1", "2"]);
+    const { out } = kimenet();
+
+    await runKapcsolatUjraepitesCli([], out, d);
+
+    assert.equal(futasok.length, 1);
+    assert.equal(futasok[0]!.applied, false);
+    assert.equal(futasok[0]!.stopped, false);
+    assert.equal(futasok[0]!.similarRelationsPlanned, 1);
+    // ES AMIT A TAROLO IRT: nulla, mert nem irtunk. A TERV es a MEGIRT kulon
+    // mezo, epp azert, hogy a ketto elterese lathato legyen.
+    assert.equal(futasok[0]!.similarRelationsWritten, 0);
+  });
+
+  /**
+   * ES AZ IRO FUTAS SORABAN A TAROLO SZAMAI ALLNAK, nem a terve.
+   */
+  it("az író futás sorába a tároló számai kerülnek", async () => {
+    const { deps: d, futasok } = deps(
+      [jelolt("1", ["2", "3"])],
+      ["1", "2", "3"],
+    );
+    const { out } = kimenet();
+
+    await runKapcsolatUjraepitesCli(["--apply"], out, d);
+
+    assert.equal(futasok.length, 1);
+    assert.equal(futasok[0]!.applied, true);
+    assert.equal(futasok[0]!.similarRelationsPlanned, 2);
+    assert.equal(futasok[0]!.similarRelationsWritten, 2);
+  });
+
+  /**
    * A HIBA NEM CSENDES: a parancs 1-gyel ter vissza, es kimondja, mi tortent.
    */
   it("a hibát megnevezi, és nem nulla kóddal tér vissza", async () => {
@@ -382,6 +460,7 @@ describe("kapcsolat-újraépítés", () => {
       terkep: async () => new Map(),
       meglevoKapcsolatok: async () => new Map(),
       ir: async () => ({ torolt: 0, irt: 0 }),
+      rogzit: async () => {},
     });
 
     assert.equal(code, 1);

@@ -102,6 +102,40 @@ export interface UjraepitesDeps {
     fajta: KapcsolatFajta;
     celProductIdk: readonly string[];
   }): Promise<{ torolt: number; irt: number }>;
+  /**
+   * A FUTAS SORANAK ROGZITESE -- MINDEN AGON, A MEGALLASON IS.
+   *
+   * MIERT KELL, HOLOTT A SZAMOK A KIMENETEN IS OTT ALLNAK: mert egy napi
+   * futasnal az egyetlen kerdes, amit fel fognak tenni, az az, hogy mi tortent
+   * a kapcsolatokkal az elmult ket hetben. A kimenet ezt nem tudja
+   * megvalaszolni -- egy ujratelepites utan a tegnapi futas szamai sehol
+   * nincsenek meg. (Ugyanezt a kerdest mertuk meg a #796-nal, ugyanebben a
+   * temaban.)
+   *
+   * ES A MEGALLT FUTAS IS SOR: az a legerdekesebb, amit rogziteni lehet. Ha
+   * epp az nem hagyna nyomot, a tabla pont azt nem tudna, amiert megepult.
+   */
+  rogzit(sor: UjraepitesFutas): Promise<void>;
+}
+
+/** Amit egy futasrol feljegyzunk. A mezonevek a sema oszlopaival egyeznek. */
+export interface UjraepitesFutas {
+  applied: boolean;
+  stopped: boolean;
+  rowsBefore: number;
+  rowsPlanned: number;
+  similarProductsWithReferences: number;
+  similarRelationsPlanned: number;
+  similarRelationsWritten: number;
+  similarRelationsRemoved: number;
+  similarReferencesUnresolved: number;
+  accessoryProductsWithReferences: number;
+  accessoryRelationsPlanned: number;
+  accessoryRelationsWritten: number;
+  accessoryRelationsRemoved: number;
+  accessoryReferencesUnresolved: number;
+  unreadableSnapshots: number;
+  withoutExternalId: number;
 }
 
 /** A terkep kulcsa: egy termek egy kapcsolat-fajtaja. */
@@ -377,6 +411,29 @@ export async function runKapcsolatUjraepitesCli(
      * kapcsolo kell hozza, vagyis valaki KIMONDJA, hogy szamitott ra.
      */
     const jelenlegiOsszes = [...meglevo.values()].reduce((a, b) => a + b, 0);
+    /**
+     * A SOR OSSZEALLITASA EGY HELYEN, hogy a megallas es a rendes vege UGYANAZT
+     * a mezokeszletet irja -- ket kulon osszeallitas eloszor-utoljara egyezne.
+     */
+    const futasSor = (megallt: boolean): UjraepitesFutas => ({
+      applied: apply && !megallt,
+      stopped: megallt,
+      rowsBefore: jelenlegiOsszes,
+      rowsPlanned: tervezettOsszes,
+      similarProductsWithReferences: szamok.SIMILAR.hivatkozastVisel,
+      similarRelationsPlanned: szamok.SIMILAR.irhatoKapcsolat,
+      similarRelationsWritten: szamok.SIMILAR.irtMert,
+      similarRelationsRemoved: szamok.SIMILAR.eltavolitottMert,
+      similarReferencesUnresolved: szamok.SIMILAR.feloldatlan,
+      accessoryProductsWithReferences: szamok.ACCESSORY.hivatkozastVisel,
+      accessoryRelationsPlanned: szamok.ACCESSORY.irhatoKapcsolat,
+      accessoryRelationsWritten: szamok.ACCESSORY.irtMert,
+      accessoryRelationsRemoved: szamok.ACCESSORY.eltavolitottMert,
+      accessoryReferencesUnresolved: szamok.ACCESSORY.feloldatlan,
+      unreadableSnapshots:
+        szamok.SIMILAR.olvashatatlan + szamok.ACCESSORY.olvashatatlan,
+      withoutExternalId: kulsoAzonositoNelkul,
+    });
     const tervezettOsszes =
       jelenlegiOsszes +
       terv.reduce(
@@ -392,6 +449,12 @@ export async function runKapcsolatUjraepitesCli(
     );
 
     if (apply && jelenlegiOsszes > 0 && valtozas > hatar && !nagyValtozasIs) {
+      /*
+        A MEGALLT FUTAS IS SOR. A TERVEZETT szamok mennek bele -- azok mondjak
+        meg, MIT allitottunk meg, es enelkul a kovetkezo olvaso csak annyit
+        latna, hogy "nem tortent semmi".
+      */
+      await deps.rogzit(futasSor(true));
       out.stderr(
         `MEGÁLLTAM: a futás ${valtozas} sorral változtatná az állományt, ` +
           `ami több, mint a mai ${jelenlegiOsszes} sor ` +
@@ -430,6 +493,7 @@ export async function runKapcsolatUjraepitesCli(
         "Nem írtam semmit. Az `--apply` kapcsolóval fut le élesben.\n",
       );
 
+    await deps.rogzit(futasSor(false));
     return 0;
   } catch (error) {
     out.stderr(`A kapcsolat-újraépítés elhasalt: ${String(error)}\n`);
@@ -545,6 +609,11 @@ if (
             sor._count._all,
           ]),
         ),
+      rogzit: async (sor) => {
+        await prisma.unasRelationRebuildRun.create({
+          data: { ...sor, completedAt: new Date() },
+        });
+      },
       ir: async ({ sourceProductId, fajta, celProductIdk }) =>
         prisma.$transaction(async (tx) => {
           /**
