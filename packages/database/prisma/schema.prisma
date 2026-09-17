@@ -4167,6 +4167,13 @@ model UnasRelationRebuildRun {
   /// Ez a legerdekesebb futas, amit rogziteni lehet: ha epp az nem hagyna
   /// nyomot, a tabla pont azt nem tudna, amiert megepult. A megallas TENYE es a
   /// TERVEZETT szamok kerulnek bele. (acrobot kikotese.)
+  ///
+  /// ES AMIT EBBOL MEG KI KELL OLVASNI: a `stopped = true` egyben azt is
+  /// jelenti, hogy a futas IRNI AKART. A hatar csak `--apply` mellett all fel,
+  /// terv-modban a CLI sosem all meg rajta. Tehat egy megallt sor nem egy
+  /// ovatos terv nyoma, hanem egy visszafogott IRAS-e. Enelkul a kovetkezo
+  /// olvaso ezt a levezetest nem fogja megtenni, es az `applied = false`
+  /// alapjan probalkozasnak nezi. (acrobot kikotese, 2026-09-17.)
   stopped     Boolean  @default(false)
   /// Az osszes UNAS kapcsolat-sor a futas ELOTT, es amennyi a TERV szerint utana
   /// allna. A ketto kulonbsege az, amin a hatar all.
