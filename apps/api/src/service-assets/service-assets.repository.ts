@@ -487,6 +487,30 @@ export class ServiceAssetsRepository extends Repository {
                   name: { contains: query.search, mode: "insensitive" },
                 },
               },
+              /**
+               * A MATRICAKOD IS KERESHETO -- ES EZ NEM UGYANAZ, MINT A
+               * `labelCode` SZURO.
+               *
+               * MIERT KELL: Balazs ma kezdi az eszkozoket elore nyomtatott
+               * matricakkal rogziteni. Ha a kodot beirja a KERESOBE, ma nulla
+               * talalatot kap, holott a kod a rendszerben ott all.
+               *
+               * MIERT NEM VONHATO OSSZE A `labelCode` PARAMETERREL (#739): az
+               * GEPI szuro, PONTOS egyezessel, a jegy eszkoz-valasztojanak.
+               * Ez EMBERI kereso, ami RESZLETRE keres -- aki a matrica felet
+               * latja a cimken, annak is talalnia kell. A ketto osszevonasa
+               * vagy a gepi utat tenne pontatlanna, vagy ezt hasznalhatatlanna.
+               *
+               * A HATOKORT EZ NEM TAGITJA: az `OR` a `where` objektum EGYIK
+               * kulcsa, a hatokor-feltetelek pedig a TESTVEREI -- a Prisma a
+               * testvér kulcsokat ES-sel koti. Vagyis a kereso legfeljebb
+               * SZUKIT azon belul, amit a nezo amugy is lathat.
+               */
+              {
+                label: {
+                  code: { contains: query.search, mode: "insensitive" },
+                },
+              },
             ],
           }
         : {}),

@@ -41,6 +41,14 @@ const CODE_C = "Z9003";
 const CODE_D = "Z9004";
 const CODE_E = "Z9005";
 
+/**
+ * A KERESO ALLITASANAK SAJAT KODJA, UGYANABBOL AZ OKBOL, amit a fenti jegyzet
+ * kimond: a `CODE_D` allapota a suite-on BELUL valtozik (lefoglalttá valik), es
+ * ha a kereso-allitas ugyanazt mozgatna, a ket teszt-csoport egymas merceit
+ * irna at.
+ */
+const CODE_F = "Q7431";
+
 let customerId = "";
 let actorUserId = "";
 
@@ -79,7 +87,7 @@ async function removeLeftovers() {
    * a suite zold marad, es a sor orokre ott all.
    */
   const kotegek = await prisma.assetLabel.findMany({
-    where: { code: { in: [CODE_A, CODE_B, CODE_C, CODE_D, CODE_E] } },
+    where: { code: { in: [CODE_A, CODE_B, CODE_C, CODE_D, CODE_E, CODE_F] } },
     select: { batchId: true },
   });
   const kotegIdk = [
@@ -91,7 +99,7 @@ async function removeLeftovers() {
   ];
 
   await prisma.assetLabel.deleteMany({
-    where: { code: { in: [CODE_A, CODE_B, CODE_C, CODE_D, CODE_E] } },
+    where: { code: { in: [CODE_A, CODE_B, CODE_C, CODE_D, CODE_E, CODE_F] } },
   });
 
   // CSAK AZ ARVAKAT, es ez nem ovatoskodas: ha egy koteghez idegen cimke is
@@ -678,6 +686,81 @@ describe(
      * EZ AZ UTOLSO TESZT A FAJLBAN, ES ANNAK IS KELL MARADNIA: elviszi a
      * fixtura-sorokat.
      */
+    /**
+     * A SZABAD SZAVAS KERESO IS MEGTALALJA A MATRICAKODOT.
+     *
+     * A MERT HIANY (2026-09-17): a kereso `OR`-aga NYOLC oszlopot nezett, es a
+     * `label.code` nem volt kozottuk. Balazs ma kezdi a rogzitest matricakkal;
+     * ha a kodot a KERESOBE irja, nulla talalatot kapott volna.
+     *
+     * ES EZ NEM UGYANAZ, MINT A `labelCode` SZURO: az GEPI ut, PONTOS
+     * egyezessel. Ez EMBERI kereso, ami RESZLETRE keres -- ezert mer itt a
+     * kod egy DARABJA, nem az egesze.
+     */
+    it("a szabad szavas kereső megtalálja az eszközt a matricakód RÉSZLETÉRŐL", async () => {
+      // A KODNAK ELOBB LETEZNIE KELL a keszletben: a felvitel egy NEM LETEZO
+      // kodot elutasit (lasd fentebb), tehat enelkul nem a kereso bukna el,
+      // hanem a fixture -- es a piros MAST mondana, mint amit merni akarok.
+      await repository.importBatch([CODE_F]);
+      const matricas = await repository.create(
+        createInput({ name: `${PREFIX} keresett`, labelCode: CODE_F }),
+        actorUserId,
+      );
+
+      // A KOD EGY DARABJA, nem az egesze: a cimken a szerelo a felet is
+      // lathatja, es a gepi szuro (`labelCode`) pont ezt nem engedne.
+      /**
+       * A KERESETT RESZLET BETUT IS TARTALMAZ, ES EZ NEM ONKENY.
+       *
+       * A kereso KILENC oszlopot nez. Ha csak SZAMJEGYEKRE keresnenk (peldaul
+       * "006"), az allitas MAS oszlopon is teljesulhetne: a generalt
+       * `assetNumber` alakja `ESZ-0006`, tehat egy harom szamjegyu reszlet
+       * BENNE LEHET -- es akkor a teszt zold lenne az UJ ag nelkul is.
+       *
+       * A `Q74` viszont a fixture EGYETLEN oszlopaban sem fordulhat elo: az
+       * `assetNumber` elotagja `ESZ-`, a nev es a vevo neve a suite
+       * elotagjabol jon, a gyarto/modell/sorozatszam/leltari szam pedig nincs
+       * beallitva. Marad a matricakod.
+       */
+      const resz = CODE_F.slice(0, 3);
+      const talalat = await repository.list(
+        Object.assign(new AssetListQueryDto(), {
+          search: resz,
+          ownerId: customerId,
+          ownerType: "CUSTOMER" as const,
+          status: "ALL" as const,
+        }),
+        { kind: "internal" },
+      );
+
+      assert.ok(
+        talalat.items.map((item) => item.id).includes(matricas.id),
+        `a ${resz} reszletre meg kell talalnia a ${CODE_F} matricas eszkozt`,
+      );
+    });
+
+    /**
+     * ES A NEGATIV PARJA: EGY NEM LETEZO KOD-RESZLET NEM HOZ BE MINDENT.
+     *
+     * MI PIROSIT: ha a kilencedik ag ugy kerulne be, hogy a feltetel MINDIG
+     * igaz (peldaul ures `contains`). Akkor a fenti allitas ZOLD maradna, es a
+     * kereso minden sort visszaadna -- ami kivulrol "sok talalat"-nak latszik,
+     * nem hibanak.
+     */
+    it("nem létező kód-részletre nem ad vissza eszközt", async () => {
+      const talalat = await repository.list(
+        Object.assign(new AssetListQueryDto(), {
+          search: "ZZZ999",
+          ownerId: customerId,
+          ownerType: "CUSTOMER" as const,
+          status: "ALL" as const,
+        }),
+        { kind: "internal" },
+      );
+
+      assert.deepEqual(talalat.items, []);
+    });
+
     it("a takarítás tényleg lefut: nem marad sor a teszt előtaggal", async () => {
       await removeLeftovers();
 
@@ -690,7 +773,9 @@ describe(
       );
       assert.equal(
         await prisma.assetLabel.count({
-          where: { code: { in: [CODE_A, CODE_B, CODE_C, CODE_D, CODE_E] } },
+          where: {
+            code: { in: [CODE_A, CODE_B, CODE_C, CODE_D, CODE_E, CODE_F] },
+          },
         }),
         0,
         "maradt matrica a teszt kódokkal",
