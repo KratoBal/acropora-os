@@ -1038,6 +1038,24 @@ export class ServiceJobsService {
       throw new ConflictException(
         "A hibajegy időközben másik állapotba került. Töltsd újra, és nézd meg, mi történt.",
       );
-    return { ok: true };
+
+    /**
+     * A VÁLASZ A TELJES RÉSZLETLAP, NEM NYUGTA -- ÉS EZ ÉLES HIBÁBÓL JÖN.
+     *
+     * 2026-09-17-ig `{ ok: true }` ment vissza, a telefon kliense viszont
+     * `ServiceJobDetail` típusúnak DEKLARÁLTA ugyanezt a választ. A fordító
+     * ezt nem láthatta: az Expo app nem húzhatja be a munkatér csomagjait,
+     * tehát a válasz típusait MÁSOLJA, és egy másolat önmagával konzisztens.
+     * A képernyő a nyugtát tette a gyorsítótárba, a következő kirajzolás
+     * pedig `detail.assets.length` értéken állt meg -- React Native-ben ez
+     * nem hibaüzenet, hanem KILÉPÉS. Balázs jelentése: „a hibajegynél ha
+     * allapotot leptetek kilep az alkalmazas".
+     *
+     * UGYANAZ AZ ALAK, mint a `setAssignees` és a `setPlacement` fölött:
+     * nyugta után a felület MÉG egy lekérdezést indítana, és a két válasz
+     * között a jegy már mozdulhatott. Egy körből friss lap jön, és a napló
+     * új sora -- a lépés bizonyítéka -- rajta van.
+     */
+    return this.detail(id, user);
   }
 }

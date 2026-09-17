@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 
 import type { ServiceJobStatus } from "@acropora/database";
 
+import { serviceJobDetailRow } from "../testing/service-job-detail-row.fixture.js";
 import type { ServiceJobsRepository } from "./service-jobs.repository.js";
 import { ServiceJobsService } from "./service-jobs.service.js";
 
@@ -14,17 +15,32 @@ import { ServiceJobsService } from "./service-jobs.service.js";
 function serviceWith(behaviour: {
   status: ServiceJobStatus | null;
   moved?: boolean;
+  /** A LEPES UTANI allapot, ahogy a tarolo mar latja. */
+  utana?: ServiceJobStatus;
 }) {
   const calls: unknown[] = [];
   // A VARRAT A VALODI SZERZODES TIPUSAT KAPJA, nem `unknown`-t: igy a fordito
   // szol, ha a repository szignaturaja elmozdul a duplatol. Egy `as unknown as`
   // eppen azt az egy ellenorzest kapcsolna ki, amiert a dupla letezik.
-  const repository: Pick<ServiceJobsRepository, "statusOf" | "move"> = {
+  //
+  // A `detail` ES A `documentRemovals` AZERT SZEREPEL ITT, mert a lepes
+  // valasza 2026-09-17 ota a TELJES reszletlap: a metodus a sajat `detail()`
+  // hivasan megy tovabb. Enelkul a dupla pont azt nem adna meg, amit a HIVO
+  // hasznal -- a sajat allitasai attol meg zoldek maradnanak.
+  const repository: Pick<
+    ServiceJobsRepository,
+    "statusOf" | "move" | "detail" | "documentRemovals"
+  > = {
     statusOf: async () => behaviour.status,
     move: async (input) => {
       calls.push(input);
       return behaviour.moved === false ? { ok: false } : { ok: true };
     },
+    detail: async () =>
+      serviceJobDetailRow(
+        behaviour.utana === undefined ? {} : { status: behaviour.utana },
+      ),
+    documentRemovals: async () => [],
   };
   return {
     service: new ServiceJobsService(repository as ServiceJobsRepository),
@@ -170,5 +186,43 @@ describe("egy lépés a hibajegyen", () => {
       () => service.move("hianyzik", { to: "TRIAGED" }, "user-1", BELSOS),
       /nem található/,
     );
+  });
+
+  /**
+   * A VÁLASZ A TELJES RÉSZLETLAP, NEM NYUGTA.
+   *
+   * MÉRT HIBA, 2026-09-17 (Balázs jelentése): a telefonon a léptetés KILÉPTETTE
+   * az alkalmazást. A kliens `ServiceJobDetail` típusúnak deklarálta a választ,
+   * a szerver viszont `{ ok: true }`-t küldött; a képernyő ezt tette a
+   * gyorsítótárba, és a következő kirajzolás `detail.assets.length` értéken
+   * állt meg. React Native-ben ez nem hibaüzenet, hanem kilépés.
+   *
+   * MI PIROSÍT: bármilyen visszatérés, ami nem a részletlap. Egy nyugtán a
+   * `timeline` és az `allowedSteps` nem is létezik, tehát az alábbi három
+   * állítás közül mindhárom elbukik rajta.
+   *
+   * MIÉRT NEM ELÉG AZ, HOGY A `detail()` SAJÁT SPECJE ZÖLD: az a metódust
+   * méri, ezt a BEKÖTÉST. A kettő között pontosan az a lépés áll, ami élesben
+   * hiányzott.
+   */
+  it("a lépés a friss részletlapot adja vissza, nem nyugtát", async () => {
+    const { service } = serviceWith({ status: "NEW", utana: "TRIAGED" });
+
+    const valasz = await service.move(
+      "job-1",
+      { to: "TRIAGED" },
+      "user-1",
+      BELSOS,
+    );
+
+    // A LEPES UTANI ALLAPOT: a valasz a tarolotol frissen olvasott sorbol
+    // epul, nem a keresben kuldott cel-allapotbol. Enelkul egy valasz, ami
+    // egyszeruen visszatukrozi a bemenetet, ugyanigy zold lenne.
+    assert.equal(valasz.status, "TRIAGED");
+    // A NAPLO A LEPES BIZONYITEKA, es a telefon ebbol rajzolja a lap aljat.
+    assert.ok(valasz.timeline.length > 0);
+    // A KOVETKEZO LEPESEKET IS VISZI: enelkul a kepernyo gombjai a lepes utan
+    // egy ujabb lekerdezesig a REGI allapot szerint allnanak.
+    assert.ok(Array.isArray(valasz.allowedSteps));
   });
 });

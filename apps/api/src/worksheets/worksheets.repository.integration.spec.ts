@@ -1001,6 +1001,97 @@ describe(
     });
 
     /**
+     * A TÖRLÉS UTÁNI ÚJRASZÁMOZÁS ADATBÁZIS-SZINTŰ ÍGÉRET.
+     *
+     * Két megkötés áll a `WorksheetLine.position` mezőn, és MINDKETTŐ csak
+     * valódi adatbázisban sül el: a (verzió, sorszám) páros EGYEDI, és a
+     * sorszámra CHECK feltétel áll (`position >= 1`). Egy mockolt Prisma
+     * mind a kettőt átengedi, tehát ez a spec nem kényelemből fut
+     * adatbázison: mockon ZÖLD lenne az a kód is, ami élesben 500-at ad.
+     */
+    it("renumbers the remaining lines after a delete", async () => {
+      /*
+        MI PIROSÍT, ÉS KÉT IRÁNYBAN:
+        (1) bármilyen ideiglenes sorszám, ami megsérti a CHECK feltételt.
+            A 2026-09-17 előtti kód negatívat írt, és a tranzakció ezen
+            hasalt el: a szerelő 500-at kapott a törlésre.
+        (2) bármilyen sorrend, ami két sort ugyanarra a sorszámra vinne --
+            azt az EGYEDI index vágja el.
+      */
+      const worksheetId = await repository.createDraft({
+        customerId,
+        departmentId: bioDepartmentId,
+        content: content({
+          lines: [
+            {
+              description: "Első tétel",
+              quantity: 1,
+              unit: "db",
+              unitNet: 1000,
+              vatRatePercent: 27,
+            },
+            {
+              description: "Második tétel",
+              quantity: 1,
+              unit: "db",
+              unitNet: 2000,
+              vatRatePercent: 27,
+            },
+            {
+              description: "Harmadik tétel",
+              quantity: 1,
+              unit: "db",
+              unitNet: 3000,
+              vatRatePercent: 27,
+            },
+          ],
+        }),
+        actorUserId,
+      });
+
+      const version = await prisma.worksheetVersion.findFirstOrThrow({
+        where: { worksheetId, status: "DRAFT" },
+        select: { id: true },
+      });
+
+      // POZITÍV KONTROLL: a kiindulás maga is állítás. Enélkül egy üresen
+      // vagy másképp számozott lapon a záró állítás mást bizonyítana, mint
+      // amit ide írtunk.
+      const linesBefore = await prisma.worksheetLine.findMany({
+        where: { worksheetVersionId: version.id },
+        orderBy: { position: "asc" },
+        select: { id: true, position: true, description: true },
+      });
+      assert.deepEqual(
+        linesBefore.map((line) => [line.description, line.position]),
+        [
+          ["Első tétel", 1],
+          ["Második tétel", 2],
+          ["Harmadik tétel", 3],
+        ],
+      );
+
+      const removed = await repository.removeLine({
+        versionId: version.id,
+        lineId: linesBefore[1]!.id,
+      });
+      assert.deepEqual(removed, { outcome: "ok", alreadyPresent: false });
+
+      const linesAfter = await prisma.worksheetLine.findMany({
+        where: { worksheetVersionId: version.id },
+        orderBy: { position: "asc" },
+        select: { position: true, description: true },
+      });
+      assert.deepEqual(
+        linesAfter.map((line) => [line.description, line.position]),
+        [
+          ["Első tétel", 1],
+          ["Harmadik tétel", 2],
+        ],
+      );
+    });
+
+    /**
      * A HELYSZÍNI RÖGZÍTÉS IDEMPOTENCIÁJA.
      *
      * A telefon térerő nélkül sorba teszi a lapot, és a sor a hálózati hibát

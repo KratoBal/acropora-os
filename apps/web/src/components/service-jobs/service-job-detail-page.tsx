@@ -182,8 +182,11 @@ export function ServiceJobDetailPage({ jobId }: { jobId: string }) {
   /**
    * A LÉPÉS UTÁN ÚJRATÖLTÜNK, nem a válaszból építünk.
    *
-   * A `move` csak nyugtát ad. Ha a képernyőt abból raknánk össze, a napló új
-   * sora hiányozna róla - és épp az a sor a bizonyíték, hogy a lépés megtörtént.
+   * ÉS EZ MÁR NEM KÉNYSZER, HANEM VÁLASZTÁS: a `move` 2026-09-17 óta a friss
+   * részletlapot adja (ugyanazt, amit a `load()` elhoz), tehát a képernyő
+   * felépíthető lenne belőle, egy kör megspórolásával. Az a csere viszont a
+   * WEBES viselkedést mozdítaná el, a mai javítás pedig a TELEFONOS kilépésről
+   * szól -- ezért marad, ahogy van. Külön lépésnek való, nem ennek.
    */
   const step = async (to: ServiceJobStatusValue) => {
     setStepping(true);

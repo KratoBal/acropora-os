@@ -1463,17 +1463,28 @@ export class WorksheetsRepository extends Repository {
       const remaining = claimable.lines
         .filter((line) => line.id !== input.lineId)
         .sort((a, b) => a.position - b.position);
-      // Ideiglenes negatív sorszámokon át, mert a (verzió, sorszám) páros
-      // egyedi: közvetlenül lefelé tolva a második sor beleütközne az
-      // elsőbe, mielőtt az elmozdulna.
-      for (const [index, line] of remaining.entries()) {
-        if (line.position !== index + 1) {
-          await transaction.worksheetLine.update({
-            where: { id: line.id },
-            data: { position: -(index + 1) },
-          });
-        }
-      }
+      // EGY MENETBEN, NÖVEKVŐ SORSZÁM SZERINT, ÉS EZ NEM ÍZLÉS KÉRDÉSE.
+      //
+      // A (verzió, sorszám) páros EGYEDI, tehát a sorrend számít: rossz
+      // sorrendben a második sor beleütközne az elsőbe, mielőtt az
+      // elmozdulna. Ez a menet viszont soha nem ütközik, és az indoklás nem
+      // a mai adatokon áll, hanem az indexen magán:
+      //
+      //   A sorszámok KÜLÖNBÖZŐ POZITÍV EGÉSZEK (az egyedi index és a
+      //   `position >= 1` CHECK feltétel miatt), és növekvő rendben állnak.
+      //   Ebből következik, hogy az index-edik sor sorszáma legalább
+      //   index + 1 -- vagyis MINDEN sor célja legfeljebb akkora, mint ahol
+      //   most áll. Amikor pedig az index-edik sor a maga index + 1 helyére
+      //   lép, az a hely már üres: a nála korábbiak a saját, KISEBB helyükre
+      //   mentek, a nála későbbiek pedig még a saját, NAGYOBB helyükön
+      //   állnak.
+      //
+      // 2026-09-17 ELŐTT ez két menetben ment, ideiglenes NEGATÍV
+      // sorszámokon át -- azokat viszont a `WorksheetLine_position_check`
+      // feltétel visszautasítja (PostgresError 23514). A tranzakció
+      // elhasalt, és a szerelő minden tételtörlésre 500-at kapott, iOS-en és
+      // Androidon egyaránt. A feltétel helyes: nulla vagy negatív sorszám
+      // egy kinyomtatott lapon nem létezik. A kód volt a hibás.
       for (const [index, line] of remaining.entries()) {
         if (line.position !== index + 1) {
           await transaction.worksheetLine.update({

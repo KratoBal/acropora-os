@@ -1,3 +1,7 @@
+// RELATÍV ÚT, NEM `@/`: a teszt-fordító nem ismeri az aliast
+// (`tsconfig.test.json`-ban szándékosan nincs `paths`).
+import type { UserRole } from "../auth/types";
+
 /**
  * Amit a munkalapról a TELEFONON látni kell, és ami hiányzik.
  *
@@ -296,4 +300,34 @@ export function worksheetFilterSummary(input: {
   const search = input.search?.trim();
   if (search) parts.push(`„${search}" keresésre`);
   return parts.join(" · ");
+}
+
+/**
+ * MELYIK HALMAZZAL NYÍLJON A LISTA -- és miért nem a szerepkör dönti el.
+ *
+ * BALÁZS KÉRÉSE, 2026-09-17 (Discord, szó szerint): „a szűrésnél a minden
+ * munkalap legyen az alapértelmezett". A kapcsoló megmarad, csak a kiindulási
+ * állapota fordul: MINDEN szerepkörben a teljes halmaz jön elsőre.
+ *
+ * AMI ELŐTTE ÁLLT, ÉS MIÉRT NEM ÁLL TÖBBÉ: a képernyő `SERVICE` szerepkörben
+ * a „Csak az enyém" halmazzal indult, azzal az indoklással, hogy a szerelőnek
+ * alapból a saját lapjai kellenek. A telefont használó szerelő viszont épp azt
+ * jelezte, hogy ez fordítva van: egy szűkebb kezdőhalmaz úgy néz ki, mintha
+ * kevesebb munka lenne, és a másra kiosztott lapot senki nem keresi meg.
+ *
+ * EZÉRT KÜLÖN FÜGGVÉNY, HOLOTT MA KONSTANS: a képernyő törzsére nincs
+ * komponens-teszt ebben az appban, tehát egy `useState(false)` visszaírását
+ * SEMMI nem mérné. Így viszont egy állítás áll rajta, név szerint, és MIND A
+ * HÉT szerepkörre lefut -- vagyis a szerepkör visszahozása pirosra vált.
+ *
+ * ÉS EZÉRT VESZ ÁT SZEREPKÖRT, HOLOTT NEM HASZNÁLJA. Paraméter nélkül a
+ * hívás helye nem mondaná meg, hogy itt egy szerepkör-függő döntés SZŰNT MEG;
+ * így a képernyőn látszik, mi az, amit szándékosan nem nézünk. A határa
+ * kimondva: a függvény megkerülését (megint `useState(...)` a törzsben) ez sem
+ * fogja meg -- azt ebben az appban semmi nem méri.
+ */
+export function worksheetListStartsMineOnly(
+  _role: UserRole | undefined,
+): boolean {
+  return false;
 }

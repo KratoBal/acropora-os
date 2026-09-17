@@ -21,6 +21,7 @@ import {
   listWorksheetEntries,
   removeWorksheetLine,
   setWorksheetAssignees,
+  uploadWorksheetDocuments,
 } from "@/lib/api/worksheets";
 import { ApiError } from "@/lib/api/client";
 import { useIsOnline } from "@/lib/offline/connectivity";
@@ -39,6 +40,11 @@ import {
   describeEmptyEntries,
   worksheetEntryByline,
 } from "@/lib/worksheets/worksheet-entry";
+import { usePhotoAttachments } from "@/lib/photos/use-photo-attachments";
+import {
+  describeWorksheetPhotoUpload,
+  WORKSHEET_PHOTO_NOTICE,
+} from "@/lib/worksheets/worksheet-photo";
 import {
   describeAssignableUsers,
   describeAssigneeReadOnly,
@@ -114,6 +120,40 @@ export default function WorksheetDetailScreen() {
   const [assigneeDraft, setAssigneeDraft] = useState<string[] | null>(null);
   const [assigneeError, setAssigneeError] = useState<string | null>(null);
   const [assigneeSaving, setAssigneeSaving] = useState(false);
+
+  /**
+   * A FENYKEP ALLAPOTA.
+   *
+   * A VALASZTO FELE A KOZOS HOROG (`lib/photos/use-photo-attachments.ts`):
+   * engedelykeres, valaszto, a mar kivalasztott kep kiszurese, es a
+   * formatum miatt kimaradt fajlok kimondasa. Nem irom ujra -- ez a kod
+   * 2026-09-16 ota EGY helyen all, harom kepernyo hasznalja.
+   *
+   * AMI VISZONT MAS ITT, MINT A HAROM HIVONAL: azok UJ FELVITELI urlapok,
+   * ahol a rekord MEG NEM LETEZIK, tehat gyujtik a kepeket, es a sorsuk a
+   * mentes utan dol el. Ez a lap MAR LETEZIK, es van azonositoja: a kep
+   * AZONNAL felmehet, sajat gombbal.
+   *
+   * MIERT KULON "Feltoltes" GOMB, ES NEM AZONNALI KULDES A VALASZTAS UTAN
+   * (ahogy a hibajegy reszletlapja csinalja): a horog nem ad visszahivast, csak
+   * allapotot gyujt, tehat az azonnali kuldeshez egy `photos`-ra allo
+   * mellekhatas kellene. Az a BUKASNAL romlik el: egy sikertelen feltoltes utan
+   * a kepek bent maradnak, es a kovetkezo valasztas MEGINT elkuldene oket -- a
+   * lapra ket peldany kerulne ugyanabbol a kepbol. Igy a bukas utan a kepek
+   * egyszeruen ott allnak, es a gomb ujra megnyomhato.
+   *
+   * A KET KEPERNYO IGY ELTER EGYMASTOL, es ez KIMONDVA all, nem elnezes. Az
+   * egysegesites kulon kartya: ahhoz a hibajegy lapjahoz kellene hozzanyulni.
+   */
+  const [uploading, setUploading] = useState(false);
+  const [photoNotice, setPhotoNotice] = useState<string | null>(null);
+  const {
+    photos,
+    notice: photoPickNotice,
+    clear: clearPhotos,
+    takePhoto,
+    pickPhotos,
+  } = usePhotoAttachments();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { status, user } = useAuth();
@@ -233,6 +273,46 @@ export default function WorksheetDetailScreen() {
       ),
     onSettled: () => setAssigneeSaving(false),
   });
+
+  /**
+   * A KIVALASZTOTT KEPEK FELKULDESE.
+   *
+   * A MONDATOKAT NEM ITT RAKOM OSSZE, hanem a `worksheet-photo.ts`-ben: ott
+   * MERHETO, itt nem. Ebben a csomagban nincs komponens-teszt eszkoz.
+   *
+   * A KEPEK CSAK SIKER UTAN URULNEK KI. Egy hibanal a kivalasztott kep az
+   * EGYETLEN peldany a kezunkben, es eldobni ugyanaz a nema veszteseg, mint
+   * elvetni egy beirt tetelt kerdes nelkul.
+   */
+  const feltolt = async () => {
+    if (photos.length === 0 || uploading || !id) return;
+    setPhotoNotice(null);
+    setUploading(true);
+    try {
+      const created = await uploadWorksheetDocuments(id, { files: photos });
+      clearPhotos();
+      setPhotoNotice(
+        describeWorksheetPhotoUpload({
+          uploaded: created.length,
+          /*
+           * A KIMARADT FAJLOKAT A HOROG SAJAT UZENETE HORDOZZA, es azt a
+           * kepernyo kulon kiirja. Ide nem masolom at: ket helyen allo szoveg
+           * ket kulonbozo halmazrol beszelne ugyanabban a percben.
+           */
+          skipped: [],
+        }),
+      );
+      await queryClient.invalidateQueries({ queryKey: ["worksheet", id] });
+    } catch (cause) {
+      setPhotoNotice(
+        cause instanceof Error
+          ? cause.message
+          : "A feltöltés nem sikerült. Próbáld újra.",
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
 
   /**
    * TETEL HOZZAADASA -- SOR-SZINTU MUVELET, NEM TELJES CSERE.
@@ -598,6 +678,109 @@ export default function WorksheetDetailScreen() {
                 </>
               ) : null}
             </View>
+
+            {/*
+              A FENYKEP-SZAKASZ A MASOLAT-ALLAPOTTOL FUGGETLENUL ITT ALL, csak a
+              gombok vannak tiltva. Meresbol jovo szabaly: a hibajegy lapjan ez
+              a szakasz elso alakjaban EGYETLEN SZO NELKUL tunt el terero
+              nelkul, es egy hianyzo gomb ugyanugy nez ki, mint egy elromlott.
+
+              A JOGOSULTSAG UGYANAZ, MINT A SZERVEREN: a feltoltes SERVICE_MANAGE
+              alatt all (`worksheets.controller.ts`, `POST :id/documents`). Aki
+              csak nezhet, annak a gomb nem igerhetne olyat, amit a keres
+              ugyanabban a percben elutasitana.
+
+              ALLAPOT-FELTETEL NINCS: a tetel-felvitellel ellentetben a fenykep
+              NEM piszkozat-fuggo -- a szerver sem koti allapothoz. Egy alairt
+              lapra is kerulhet kep.
+            */}
+            {capabilities.worksheetsManage ? (
+              <>
+                <Text style={styles.sectionTitle}>Fénykép</Text>
+                <View style={styles.card}>
+                  {fromCache ? (
+                    <Text style={styles.muted}>
+                      {WORKSHEET_PHOTO_NOTICE.offlineCopy}
+                    </Text>
+                  ) : null}
+                  <View style={styles.lineRow}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Fénykép készítése"
+                      accessibilityState={{ disabled: uploading || fromCache }}
+                      disabled={uploading || fromCache}
+                      onPress={() => void takePhoto()}
+                      style={({ pressed }) => [
+                        styles.photoButton,
+                        (uploading || fromCache) && styles.disabled,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={styles.photoButtonText}>Fényképezés</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Kép választása a galériából"
+                      accessibilityState={{ disabled: uploading || fromCache }}
+                      disabled={uploading || fromCache}
+                      onPress={() => void pickPhotos()}
+                      style={({ pressed }) => [
+                        styles.photoButton,
+                        (uploading || fromCache) && styles.disabled,
+                        pressed && styles.pressed,
+                      ]}
+                    >
+                      <Text style={styles.photoButtonText}>Galéria</Text>
+                    </Pressable>
+                  </View>
+
+                  {/*
+                    A HOROG SAJAT UZENETE: a formatum miatt kimaradt fajlok.
+                    Egy csendben eldobott HEIC ugyanugy nez ki, mint egy
+                    sikeres valasztas.
+                  */}
+                  {photoPickNotice ? (
+                    <Text style={styles.muted}>{photoPickNotice}</Text>
+                  ) : null}
+
+                  {/*
+                    A KIVALASZTOTT KEPEK MEG NINCSENEK FENT, ES EZT KI KELL
+                    MONDANI. Enelkul a szerelo a valasztas utan azt hinne, hogy
+                    a kep mar a lapon van, es elmenne a helyszinrol.
+                  */}
+                  {photos.length > 0 ? (
+                    <>
+                      <Text style={styles.muted}>
+                        {photos.length} kép vár feltöltésre. Még egyik sincs a
+                        lapon.
+                      </Text>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Kiválasztott képek feltöltése"
+                        accessibilityState={{
+                          disabled: uploading || fromCache,
+                        }}
+                        disabled={uploading || fromCache}
+                        onPress={() => void feltolt()}
+                        style={({ pressed }) => [
+                          styles.addLineButton,
+                          (uploading || fromCache) && styles.disabled,
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <Text style={styles.addLineText}>
+                          {uploading ? "Feltöltés..." : "Feltöltés"}
+                        </Text>
+                      </Pressable>
+                    </>
+                  ) : null}
+
+                  {photoNotice ? (
+                    <Text style={styles.muted}>{photoNotice}</Text>
+                  ) : null}
+                </View>
+              </>
+            ) : null}
 
             {current.description ? (
               <>
@@ -1126,6 +1309,19 @@ const styles = StyleSheet.create({
   assigneeRowOn: { borderColor: "#52d6c7" },
   assigneeName: { color: "#f4fbff", fontSize: 14 },
   assigneeCheck: { color: "#6de0ce", fontSize: 12, fontWeight: "800" },
+  photoButton: {
+    backgroundColor: "#12415c",
+    borderColor: "#1c4963",
+    borderRadius: 10,
+    borderWidth: 1,
+    flex: 1,
+    padding: 12,
+  },
+  photoButtonText: {
+    color: "#f4fbff",
+    fontWeight: "800",
+    textAlign: "center",
+  },
   disabled: { opacity: 0.55 },
   pressed: { opacity: 0.75 },
 });

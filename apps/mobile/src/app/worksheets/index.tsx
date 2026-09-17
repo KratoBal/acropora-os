@@ -26,6 +26,7 @@ import {
   worksheetAssigneeLine,
   worksheetFilterSummary,
   worksheetLabelOrDraft,
+  worksheetListStartsMineOnly,
   worksheetListSubtitle,
   worksheetStatusLabel,
   worksheetVersionNote,
@@ -45,10 +46,17 @@ const PAGE_SIZE = 25;
  * huszonöt sor helyett hármat mutatni egy oldalon, miközben a darabszám a
  * többit is beleszámolja.
  *
- * A SZŰRŐ ÁLLAPOTA LÁTSZIK, és ez nem díszítés. A szerelőnek alapból a saját
- * lapjai kellenek, az irodai szerepköröknek viszont mind -- de egyik oldalon
- * sem szabad, hogy a lista CSENDBEN legyen szűkebb, mint amit a felirata ígér.
- * Ezért a kapcsoló mindig kiírja, épp melyik halmazt mutatja.
+ * A LISTA MINDEN SZEREPKÖRBEN A TELJES HALMAZZAL NYÍLIK (Balázs kérése,
+ * 2026-09-17: „a szűrésnél a minden munkalap legyen az alapértelmezett").
+ * Korábban itt az állt, hogy a szerelőnek alapból a saját lapjai kellenek, és a
+ * képernyő `SERVICE` szerepkörben szűkítve indult -- a telefont használó
+ * szerelő épp ezt kérte meg fordítani. A kiindulási állapot a
+ * `worksheetListStartsMineOnly` függvényben áll, mert a képernyő törzsére
+ * nincs komponens-teszt: ott egy visszaírt szűkítést semmi nem mérne.
+ *
+ * A SZŰRŐ ÁLLAPOTA LÁTSZIK, és ez nem díszítés: nem szabad, hogy a lista
+ * CSENDBEN legyen szűkebb, mint amit a felirata ígér. Ezért a kapcsoló mindig
+ * kiírja, épp melyik halmazt mutatja.
  */
 export default function WorksheetsScreen() {
   const router = useRouter();
@@ -56,7 +64,9 @@ export default function WorksheetsScreen() {
   const capabilities = user ? getServiceCapabilities(user.role) : null;
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [mineOnly, setMineOnly] = useState(user?.role === "SERVICE");
+  const [mineOnly, setMineOnly] = useState(
+    worksheetListStartsMineOnly(user?.role),
+  );
   const [partner, setPartner] = useState<WorksheetSelectablePartner | null>(
     null,
   );
