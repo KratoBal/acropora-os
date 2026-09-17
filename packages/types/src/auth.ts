@@ -58,6 +58,34 @@ export const HUMAN_ROLES: readonly UserRole[] = USER_ROLES.filter(
   (role) => !isMachineRole(role),
 );
 
+/**
+ * AMELYIK SZEREP CSAK PARTNER-FIOKE -- ES EZ NEM A JOGAIBOL LATSZIK.
+ *
+ * A `PARTNER_SERVICE` megkapja a `service.manage` jogot, mert a sajat
+ * hatokoreben ISMERNIE es KEZELNIE kell a munkat. Ettol viszont minden olyan
+ * szabaly, ami a "ki a mi emberunk" kerdesre a JOGBOL valaszol, becsuszasra
+ * nyitva all: a ket halmaz addig esett egybe, amig minden `service.manage`
+ * jogu felhasznalo a sajat kollegank volt.
+ *
+ * MERT ESET (2026-09-17): a munkalap felelos-valasztojaban megjelent a
+ * partner-fiok, ES ki is lehetett osztani ra a lapot -- mert az iro ut
+ * ugyanabbol a jog-alapu listabol ellenorzott. A szabaly nem tevedett: MASRA
+ * kerdezett.
+ *
+ * EZERT ALL ITT, A SZEREP-TABLA MELLETT, es nem egy modul belsejeben: egy uj
+ * partner-szerep felvetele igy LATHATO dontes lesz ezen a lapon, nem egy
+ * elfelejtett kiegeszites valahol.
+ */
+export const PARTNER_ROLES: readonly UserRole[] = ["PARTNER_SERVICE"];
+
+/**
+ * A SAJAT KOLLEGAINK SZEREPEI. A partner-szerepek KIVONASA, nem egy masodik
+ * felsorolas: egy kezzel irt lista neman elavulna a kovetkezo szerepnel.
+ */
+export const INTERNAL_ROLES: readonly UserRole[] = USER_ROLES.filter(
+  (role) => !PARTNER_ROLES.includes(role),
+);
+
 export const PERMISSIONS = {
   DASHBOARD_VIEW: "dashboard.view",
   TASKS_VIEW: "tasks.view",

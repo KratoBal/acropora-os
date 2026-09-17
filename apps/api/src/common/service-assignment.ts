@@ -1,7 +1,8 @@
+import type { Prisma } from "@acropora/database";
 import {
   hasPermission,
+  INTERNAL_ROLES,
   PERMISSIONS,
-  USER_ROLES,
   type UserRole,
 } from "@acropora/types";
 
@@ -37,9 +38,53 @@ import {
  * (`WORKSHEET_ASSIGNABLE_ROLES`) megmaradt, ugyanarra az értékre mutatva, hogy
  * a meglévő hívók és az őrzőjük változatlanul álljanak.
  */
-export const SERVICE_ASSIGNABLE_ROLES: readonly UserRole[] = USER_ROLES.filter(
-  (role) => hasPermission(role, PERMISSIONS.SERVICE_MANAGE),
-);
+/**
+ * === ES AMIERT A JOG ONMAGABAN KEVES (2026-09-17) ===
+ *
+ * A lista 2026-09-17-ig CSAK a jogbol szamolt, es a `PARTNER_SERVICE` szerep
+ * megkapja a `service.manage` jogot -- a sajat hatokoreben joggal. Vagyis a
+ * partner-fiok megjelent a felelos-valasztoban, ES ki is lehetett osztani ra a
+ * lapot, mert az IRO ut ugyanebbol a listabol ellenorzott.
+ *
+ * A SZABALY NEM TEVEDETT, HANEM MASRA KERDEZETT: a "ki KAPHAT munkalapot"
+ * kerdesre a "kinek van JOGA munkalapot irni" valasz ment. A ketto addig esett
+ * egybe, amig minden `service.manage` jogu felhasznalo a sajat kollegank volt;
+ * a `PARTNER_SERVICE` bevezetesevel szetvalt, es a szabaly a sajat
+ * megfogalmazasaban IGAZ maradt -- csak mar nem azt jelentette.
+ *
+ * KET FELTETEL ALL RAJTA, es ez nem ovatoskodas: az egyik a SZEREPROL szol
+ * (belsos-e), a masik a JOGROL (tud-e vele dolgozni). Egyik sem helyettesiti a
+ * masikat -- a VIEWER belsos, de nem ir; a partner ir, de nem a mi emberunk.
+ */
+export const SERVICE_ASSIGNABLE_ROLES: readonly UserRole[] =
+  INTERNAL_ROLES.filter((role) =>
+    hasPermission(role, PERMISSIONS.SERVICE_MANAGE),
+  );
+
+/**
+ * A KIOSZTHATO FELHASZNALO TELJES FELTETELE, EGY HELYEN.
+ *
+ * MIERT NEM ELEG A SZEREP-LISTA, ES MIERT EGY `where` DARAB: a kioszthatosag
+ * KET tengelyen all. A szerep TIPUS-szintu teny (belsos-e, tud-e irni); a
+ * PARTNER-KOTES viszont a SOR tulajdonsaga (`customerId`, `supplierId`). A
+ * ketto ma egybeesik -- egy kotott fiok kotelezoen `PARTNER_SERVICE`, es
+ * kotes nelkul ez a szerep nem is letezhet (`users.service.ts`, 2026-09-17) --,
+ * de KET KULON mechanizmus tartja igy. Ha az egyik valaha enged, a masik
+ * meg all.
+ *
+ * EGY FUGGVENY, ES NEM HAROM MASOLAT: ma harom lekerdezes hasznalja (a
+ * valaszto listaja, a munkalap-mentes ellenorzese, es a hibajegy-delegalas). Ha
+ * a feltetel harom helyen allna, egy negyedik hivo a szerep-szurot orokolne, a
+ * kotes-szurot nem -- es az elteres NEM hibazna, csak tobbet engedne.
+ */
+export function assignableUserWhere(): Prisma.UserWhereInput {
+  return {
+    isActive: true,
+    role: { in: [...SERVICE_ASSIGNABLE_ROLES] },
+    customerId: null,
+    supplierId: null,
+  };
+}
 
 /**
  * A beküldött kiosztás-lista rendbetétele: üres elemek el, ismétlődés
