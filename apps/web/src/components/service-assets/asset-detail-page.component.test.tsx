@@ -314,3 +314,79 @@ describe("AssetDetailPage kapcsolat nélkül", () => {
     expect(await savotMond("empty")).toBeTruthy();
   });
 });
+
+/**
+ * A MATRICAKOD LATSZIK AZ ADATLAPON.
+ *
+ * A MERT HIANY (nautilus, 2026-09-17): a matricat FEL lehetett vinni -- a
+ * szerkesztoben van mezo, es a mentes el is kuldi --, de aki ranezett egy gepre,
+ * amin ott a matrica, a rendszerben NEM tudta szemre visszakeresni. Egyetlen
+ * adatlapon sem jelent meg. Beolvasassal mar mukodott, szemre nem.
+ *
+ * EZ NEM DONTES VOLT, HANEM HIANY: nem kepzelheto olyan olvasat, amiben
+ * szandekos, hogy egy felvitt azonosito sehol nem latszik.
+ */
+describe("az eszköz matricakódja az adatlapon", () => {
+  it("kiírja a matricakódot a többi azonosító közé", async () => {
+    api.detail.mockResolvedValue({
+      ...asset,
+      labelCode: "V2196",
+    } as unknown as AssetDetail);
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    expect(await screen.findByText("Matricakód")).toBeTruthy();
+    expect(screen.getByText("V2196")).toBeTruthy();
+  });
+
+  /**
+   * MATRICA NELKUL A MEZO OTT MARAD, GONDOLATJELLEL.
+   *
+   * MI PIROSIT: ha a mezot csak akkor rajzolnank ki, amikor van erteke. Az
+   * ELREJTES ugyanugy nez ki, mint a mai hiba: a kezelo nem tudna megmondani,
+   * hogy ezen a gepen NINCS matrica, vagy a lap nem mutatja. A tobbi
+   * kitoltetlen mezo (sorozatszam, leltari szam) is gondolatjelet ir.
+   */
+  it("matrica nélkül a mező ott marad, gondolatjellel", async () => {
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    expect(await screen.findByText("Matricakód")).toBeTruthy();
+    // A FIXTURE-ON NINCS `labelCode`, tehat a mezo erteke gondolatjel. Tobb
+    // kitoltetlen mezo is van a lapon, ezert a DARABSZAMRA nem allitunk -- a
+    // mezo LETEZESE az allitas.
+    const cimke = screen.getByText("Matricakód");
+    expect(cimke.nextElementSibling?.textContent).toBe("—");
+  });
+
+  /**
+   * A QR-PANEL A SAJAT KODJAT MUTATJA, NEM A MATRICAKODOT.
+   *
+   * A lapon KET kod all. A QR a `qrToken`-en (128 bit), a matricakod egy kiadott
+   * keszletbol jon -- 260 ezer lehetoseg, amit egy belepett partner
+   * vegigprobalhatna. Ezert nem cserelheto fel a ketto.
+   *
+   * MI PIROSIT: ha valaki a QR-panelbe teszi ki a matricakodot, vagy a
+   * kirajzolt kodot arra csereli. Kivulrol mind a ketto ugy nez ki, mintha a
+   * lap rendben lenne.
+   *
+   * === ES AZ ELSO VALTOZATA HALOTT VOLT, EZERT ALL ITT MASKEPP ===
+   *
+   * Eloszor a `assetsApi.qr(...)` ARGUMENTUMAIRA allitottam, hogy a matricakod
+   * nem megy at. Lemertem: a QR-hivas AKKOR indul, amikor az eszkoz MEG NINCS
+   * betoltve, tehat ott a matricakod nem is letezik -- egy szandekos "szivarogtato"
+   * rontas is `undefined`-ot adott volna at, es az allitas ZOLD maradt. Nem a
+   * kod volt jo: az allitas nem tudott elbukni.
+   */
+  it("a QR-panel a saját kódját mutatja, nem a matricakódot", async () => {
+    api.detail.mockResolvedValue({
+      ...asset,
+      labelCode: "V2196",
+    } as unknown as AssetDetail);
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    const panel = await screen.findByLabelText("ESZ-0001 QR-kódja");
+    // POZITIV KONTROLL: a panel a VEGPONT valaszat rajzolja ki. Enelkul az alabbi
+    // tagadas egy URES panelre is teljesulne.
+    expect(panel.querySelector("svg")).toBeTruthy();
+    expect(panel.textContent).not.toContain("V2196");
+  });
+});
