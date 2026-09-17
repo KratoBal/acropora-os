@@ -120,7 +120,7 @@ export class ServiceJobsController {
     @Body() input: CreateServiceJobDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.service.create(input, user.id);
+    return this.service.create(input, user);
   }
 
   /**

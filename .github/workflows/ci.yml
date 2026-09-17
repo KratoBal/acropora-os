@@ -349,6 +349,11 @@ jobs:
               API_URL=http://127.0.0.1:3001
               RELEASE_COMMIT_SHA=${{ github.sha }}
               OS_PATCH_EPOCH=${{ github.run_id }}-${{ github.run_attempt }}
+          - app: partner
+            build_args: |
+              API_URL=http://127.0.0.1:3001
+              RELEASE_COMMIT_SHA=${{ github.sha }}
+              OS_PATCH_EPOCH=${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:
       - name: Checkout

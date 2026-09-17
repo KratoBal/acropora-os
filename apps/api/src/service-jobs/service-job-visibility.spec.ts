@@ -9,6 +9,20 @@ import { allowedServiceJobSteps } from "./service-job-transitions.js";
 const partner = { kind: "supplier", supplierId: "sup-1" } as const;
 
 describe("a hibajegy-láthatóság két tengelye", () => {
+  it("a vevőpartner nem látja a másik partner hibajegysorait", () => {
+    const where = serviceJobVisibilityWhere({
+      scope: { kind: "customer", customerId: "customer-a" },
+      userId: "user-a",
+      unitIds: [],
+    });
+
+    assert.deepEqual(
+      where,
+      { AND: [{ customerId: "customer-a" }, { openedById: "user-a" }] },
+      "A partner nem láthatja a másik partner hibajegysorait.",
+    );
+  });
+
   /**
    * A LEGFONTOSABB ALLITAS: URES EGYSEG-HALMAZ MELLETT NEM MINDENT ENGED.
    *
