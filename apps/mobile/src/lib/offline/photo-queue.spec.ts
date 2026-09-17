@@ -4,8 +4,10 @@ import { describe, it } from "node:test";
 import {
   acknowledgedRecordings,
   batchForPass,
+  dependencyOf,
   describePhotoBacklog,
   nextBatch,
+  ownerPhotoOperationId,
   photoOperationId,
 } from "./photo-queue";
 import type { SyncQueueRow } from "./sync-queue";
@@ -399,6 +401,149 @@ describe("egy sorban álló művelet megvárhat egy másikat", () => {
     assert.deepEqual(
       nextBatch([regi], new Set(["rogzites-1"])).map((r) => r.id),
       ["regi-kep"],
+    );
+  });
+});
+
+describe("egy MÁR LÉTEZŐ gazdához tartozó kép senkire nem vár", () => {
+  /**
+   * A MÉRT HIÁNY, 2026-09-17: a munkalap részletlapjáról feltöltött fénykép
+   * térerő nélkül sehova nem került. A kiürítő oldal MÁR tudta volna (a
+   * kép-küldő ág ismeri a munkalap fajtát); a sorba tétel nem: a payload
+   * KÖTELEZŐNEK vette a rögzítés műveletazonosítóját, amiből egy már létező
+   * lapnál nincs.
+   */
+  const gazdas = (id: string): SyncQueueRow => ({
+    ...rogzites(id),
+    operation: "upload-photo",
+    entityType: "worksheet",
+    /** A gazda MÁR LÉTEZIK: az azonosító a sorba tételkor bekerült. */
+    entityId: "ws-1",
+    payloadJson: JSON.stringify({
+      uri: "file:///kep.jpg",
+      name: "kep.jpg",
+      type: "image/jpeg",
+    }),
+  });
+
+  it("nincs függősége, tehát az első menetben mehet", () => {
+    const sor = gazdas("kep-1");
+    assert.equal(dependencyOf(sor), null);
+    assert.deepEqual(
+      nextBatch([sor], new Set()).map((r) => r.id),
+      ["kep-1"],
+    );
+  });
+
+  /**
+   * ÉS EZ A LÉNYEG: NEM BLOKKOLJA A VÁRAKOZÓ KÉPEKET.
+   *
+   * A régi kapu úgy szólt, hogy amíg van függőség nélküli, el nem küldött sor,
+   * a várók VÁRNAK. Egy már létező gazdához tartozó kép ebbe a halmazba esne --
+   * holott RÁ SENKI nem vár. Egy ismételten elbukó ilyen sor feltartana MINDEN
+   * olyan képet, ami a saját rögzítésére vár, némán: a sor nem hibázik, csak
+   * nem ürül ki.
+   */
+  it("nem tartja fel azt a képet, ami a rögzítésére vár", () => {
+    const szabad = gazdas("kep-szabad");
+    const varo: SyncQueueRow = {
+      ...rogzites("kep-varo"),
+      operation: "upload-photo",
+      entityType: "asset",
+      entityId: "a-1",
+      payloadJson: JSON.stringify({
+        uri: "file:///masik.jpg",
+        name: "masik.jpg",
+        type: "image/jpeg",
+        recordingOperationId: "rogzites-1",
+      }),
+    };
+
+    assert.deepEqual(
+      nextBatch([szabad, varo], new Set(["rogzites-1"]))
+        .map((r) => r.id)
+        .sort(),
+      ["kep-szabad", "kep-varo"],
+    );
+  });
+
+  /**
+   * A FELVITEL VISZONT TOVÁBBRA IS VÁRAKOZTAT, és ez a kontroll: ha a
+   * szűkítésem túl széles lenne, ez az állítás is zöldre váltana -- és akkor
+   * egy kép a rögzítése ELŐTT indulna el.
+   */
+  it("egy fel nem ment FELVITEL továbbra is várakoztat", () => {
+    const felvitel = rogzites("felvitel-1");
+    const varo: SyncQueueRow = {
+      ...rogzites("kep-varo"),
+      operation: "upload-photo",
+      entityId: null,
+      payloadJson: JSON.stringify({
+        uri: "file:///kep.jpg",
+        name: "kep.jpg",
+        type: "image/jpeg",
+        recordingOperationId: "felvitel-1",
+      }),
+    };
+
+    assert.deepEqual(
+      nextBatch([felvitel, varo], new Set()).map((r) => r.id),
+      ["felvitel-1"],
+    );
+  });
+});
+
+describe("ownerPhotoOperationId", () => {
+  /**
+   * A KULCS A TARTALOMBÓL SZÜLETIK, ugyanabból az okból, mint a rögzítésénél: a
+   * kétszer megnyomott gomb ugyanazt a sort adja, nem kettőt.
+   */
+  it("the same file on the same owner gives the same key", () => {
+    const a = ownerPhotoOperationId({
+      entityType: "worksheet",
+      ownerId: "ws-1",
+      uri: "file:///kep.jpg",
+    });
+    const b = ownerPhotoOperationId({
+      entityType: "worksheet",
+      ownerId: "ws-1",
+      uri: "file:///kep.jpg",
+    });
+    assert.equal(a, b);
+  });
+
+  /**
+   * A GAZDA FAJTÁJA IS BENNE VAN. Két különböző fajta azonosítója elvben
+   * egyezhet (külön táblák, külön kulcsterek), és akkor ugyanaz a fájl két
+   * külön feltöltése EGYETLEN sorra esne össze -- a második csendben elesne.
+   */
+  it("the same id under a different kind is a different key", () => {
+    assert.notEqual(
+      ownerPhotoOperationId({
+        entityType: "worksheet",
+        ownerId: "x",
+        uri: "file:///k.jpg",
+      }),
+      ownerPhotoOperationId({
+        entityType: "service-job",
+        ownerId: "x",
+        uri: "file:///k.jpg",
+      }),
+    );
+  });
+
+  it("two different files on the same owner are two keys", () => {
+    assert.notEqual(
+      ownerPhotoOperationId({
+        entityType: "worksheet",
+        ownerId: "ws-1",
+        uri: "file:///a.jpg",
+      }),
+      ownerPhotoOperationId({
+        entityType: "worksheet",
+        ownerId: "ws-1",
+        uri: "file:///b.jpg",
+      }),
     );
   });
 });

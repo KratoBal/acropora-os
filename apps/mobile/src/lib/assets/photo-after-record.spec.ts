@@ -129,7 +129,16 @@ describe("a képek sorba tétele", () => {
       enqueue: async (input) => {
         sorok.push({
           id: input.id,
-          recording: input.payload.recordingOperationId,
+          /**
+           * A MEZO 2026-09-17 OTA ELHAGYHATO A TIPUSON (egy MAR LETEZO
+           * gazdahoz tartozo kep senkire nem var), EZEN AZ UTON VISZONT
+           * KOTELEZO: itt a rogzites MEG NEM ment fel.
+           *
+           * NEM `!`-tal hallgattatom el a fordítót: a hianyzo ertek IGY
+           * LATSZANA az alabbi osszevetesben, nev szerint -- egy felkialtojel
+           * ugyanezt csendben atengedne.
+           */
+          recording: input.payload.recordingOperationId ?? "(HIÁNYZIK)",
         });
         return { ok: true, operationId: input.id };
       },

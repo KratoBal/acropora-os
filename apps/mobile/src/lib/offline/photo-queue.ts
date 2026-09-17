@@ -42,8 +42,15 @@ export interface PhotoPayload {
    * NEM a szerver-oldali eszkoz-azonosito: az a felvitel felmenetelekor
    * keletkezik, es a kep sorba tetelekor MEG NEM LETEZIK. Ez a mezo koti ossze
    * a kettot, amig a szerver-azonosito meg nincs meg.
+   *
+   * ELHAGYHATO 2026-09-17 OTA, ES EZ NEM LAZITAS. Egy MAR LETEZO gazdahoz
+   * (munkalap, hibajegy, eszkoz) tartozo kep SENKIRE NEM VAR: a szerver-oldali
+   * azonosito a sorba tetelkor mar megvan, es a sor `entity_id` mezojebe
+   * kerul. Ott ez a mezo nem hianyzik, hanem ERTELMETLEN -- es ha kotelezo
+   * maradna, a kitoltese HAZUGSAG lenne: egy nem letezo rogzitesre hivatkozna,
+   * amire a sor aztan OROKRE varna.
    */
-  recordingOperationId: string;
+  recordingOperationId?: string;
 }
 
 /**
@@ -61,6 +68,25 @@ export function photoOperationId(input: {
   uri: string;
 }): string {
   return `asset-photo:${input.recordingOperationId}:${input.uri}`;
+}
+
+/**
+ * EGY MAR LETEZO GAZDAHOZ TARTOZO KEP SOR-AZONOSITOJA.
+ *
+ * UGYANAZ AZ ELV, MAS A HORGONY: ott a rogzites muvelet-azonositoja koti meg a
+ * kulcsot, itt a gazda SZERVER-oldali azonositoja -- mert az mar letezik.
+ *
+ * A GAZDA FAJTAJA IS BENNE VAN, nem csak az azonosito. Ket kulonbozo fajta
+ * azonositoja elvben egyezhet (kulon tablak, kulon kulcsterek), es akkor
+ * ugyanaz a fajl ket kulon feltoltese egyetlen sorra esne ossze -- a masodik
+ * csendben elesne.
+ */
+export function ownerPhotoOperationId(input: {
+  entityType: string;
+  ownerId: string;
+  uri: string;
+}): string {
+  return `owner-photo:${input.entityType}:${input.ownerId}:${input.uri}`;
 }
 
 /**
@@ -98,7 +124,36 @@ export function photoOperationId(input: {
 export function dependencyOf(row: SyncQueueRow): string | null {
   if (row.dependsOnOperationId) return row.dependsOnOperationId;
   if (row.operation !== "upload-photo") return null;
-  return readPhotoPayload(row.payloadJson)?.recordingOperationId ?? null;
+  return regiFotoFuggoseg(row.payloadJson);
+}
+
+/**
+ * A REGI SOR FUGGOSEGE, A KULDES-ALAKTOL FUGGETLENUL.
+ *
+ * KULON OLVASO, ES EZT EGY PIROS TESZT KERTE (2026-09-17). Eloszor a
+ * `readPhotoPayload`-ot hasznaltam ide, es amikor azt SZIGORITOTTAM (a kuldes
+ * a `name` es a `type` mezot is igenyli), ez a fuggveny CSENDBEN elvesztette a
+ * fuggoseget egy olyan sornal, aminek csak az `uri`-ja es a rogzitese volt meg.
+ *
+ * ES A KAR NEM ELMELETI: fuggoseg nelkul a sor SZABADNAK latszana, tehat a
+ * rogzitese ELOTT indulna el -- a szerver elutasitana, a sor konfliktusnak
+ * sorolna, es a kep OROKRE elakadna.
+ *
+ * A KETTO KET KULON KERDES: mire var ez a sor (csak a rogzites-azonosito
+ * kell hozza), es elkuldheto-e (ahhoz a teljes fajl-alak kell). Egy olvaso
+ * mind a kettore azt jelenti, hogy a szigoritas az egyiken a masikat is
+ * elmozditja.
+ */
+function regiFotoFuggoseg(json: string): string | null {
+  try {
+    const p = JSON.parse(json) as { recordingOperationId?: unknown };
+    return typeof p.recordingOperationId === "string" &&
+      p.recordingOperationId.length > 0
+      ? p.recordingOperationId
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -195,10 +250,33 @@ export function nextBatch(
   const szabadok = rows.filter(
     (r) => r.operation !== "update" && dependencyOf(r) === null,
   );
-  if (szabadok.length > 0) {
+  /**
+   * AMI BLOKKOL, AZ NEM UGYANAZ, MINT AMI SZABAD -- ES EZ A KULONBSEG
+   * 2026-09-17 OTA ALL ITT.
+   *
+   * A varakoztatas oka a FUGGOSEG: a kep a rogzitesere var, mert amig az fel
+   * nem ment, nincs hova kerulnie. Ebbol az kovetkezik, hogy csak az
+   * varakoztathat, amire VALAKI VARHAT -- es egy `upload-photo` sorra SOHA
+   * senki nem var: a sorban semmi nem hivatkozik egy kep muvelet-azonositojara.
+   *
+   * MIERT KELLETT: egy MAR LETEZO munkalaphoz tartozo kep fuggoseg nelkuli
+   * sor, tehat a regi alak szerint a `szabadok` halmazba esett volna -- es amig
+   * ott all (peldaul mert a halozat ismetelten elbukik rajta), MINDEN olyan
+   * kep varna, ami a sajat rogzitesere var. Nema karral: a sor nem hibazik,
+   * csak nem urul ki.
+   *
+   * A REGI VISELKEDES VALTOZATLAN minden mas sorra: egy fel nem ment FELVITEL
+   * tovabbra is varakoztat, mert arra tenylegesen varnak a kepei.
+   */
+  const blokkolok = szabadok.filter((r) => r.operation !== "upload-photo");
+  const szabadKepek = szabadok.filter((r) => r.operation === "upload-photo");
+  if (blokkolok.length > 0) {
     /**
-     * AMIG VAN FEL NEM MENT, FUGGETLEN SOR, A VAROK VARNAK. Nem azert, mert
-     * lassuk -- hanem mert amire varnak, az meg a sorban all.
+     * AMIG VAN FEL NEM MENT, FUGGETLEN ROGZITES, A VAROK VARNAK. Nem azert,
+     * mert lassuk -- hanem mert amire varnak, az meg a sorban all.
+     *
+     * A fuggoseg nelkuli KEPEK viszont mehetnek ugyanebben a menetben: rajuk
+     * senki nem var, es ok sem varnak senkire.
      */
     return [...szabadok, ...modositasok];
   }
@@ -213,15 +291,36 @@ export function nextBatch(
      */
     return fuggoseg !== null && felmentRogzitesek.has(fuggoseg);
   });
-  return [...modositasok, ...varok];
+  /**
+   * A SZABAD KEPEK ITT IS MENNEK -- ES EZT EGY SAJAT PIROS TESZT KERTE.
+   *
+   * Az elso alakomban ez a sor csak a modositasokat es a varokat adta vissza,
+   * a fuggoseg nelkuli kepeket viszont EGYIK ag sem: a felso agat a
+   * `blokkolok` ures halmaza zarta ki, az alsobol pedig kimaradtak, mert nem
+   * varnak senkire. Vagyis a szukiteesem epp azt a sort tuntette volna el,
+   * amiert keszult.
+   *
+   * A hiba NEM volt hangos: a sor nem hibazik es nem akad el, csak SOHA nem
+   * urul ki -- pontosan az az alak, amit ez a modul mashol mar gyujt.
+   */
+  return [...modositasok, ...szabadKepek, ...varok];
 }
 
 /** A sor payloadja fotokent, vagy `null`, ha nem az. */
 export function readPhotoPayload(json: string): PhotoPayload | null {
   try {
     const p = JSON.parse(json) as Partial<PhotoPayload>;
+    /**
+     * A ROGZITES-AZONOSITO MAR NEM KOTELEZO, A FAJL UTJA IGEN.
+     *
+     * Ami a KULDESHEZ kell, az az `uri`, a `name` es a `type` -- a
+     * rogzites-azonosito csak a VARAKOZASHOZ. Egy mar letezo gazdahoz tartozo
+     * kepnel nincs mire varni, tehat a kotelezove tetele epp a helyes sort
+     * utasitana el, 422-vel, "ertelmezhetetlen payload" cimen.
+     */
     return typeof p.uri === "string" &&
-      typeof p.recordingOperationId === "string"
+      typeof p.name === "string" &&
+      typeof p.type === "string"
       ? (p as PhotoPayload)
       : null;
   } catch {

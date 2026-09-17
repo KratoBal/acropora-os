@@ -194,8 +194,29 @@ describe("a fénykép sora", () => {
 
       MI PIROSIT: a parameter visszairasa literalra.
     */
-    assert.match(forras, /VALUES \(\?, 'upload-photo', \?, NULL/);
+    assert.match(forras, /VALUES \(\?, 'upload-photo', \?, \?/);
     assert.match(forras, /input\.entityType,/);
+  });
+
+  it("a FÉNYKÉP gazdája is paraméter, nem beégetett NULL", () => {
+    /*
+      EZ AZ ALLITAS 2026-09-17-EN VALTOZOTT, ES A REGI PIROSA BIZONYITEK VOLT.
+
+      Korabban itt `VALUES (?, 'upload-photo', ?, NULL` allt, es a `NULL` egy
+      VALODI szabalyt rogzitett: egy UJ felvitel kepenek a sorba tetelkor meg
+      NINCS szerver-oldali gazdaja, azt a rogzites felmenetele adja meg.
+
+      AZ A SZABALY MA IS ALL -- csak nem az EGYETLEN eset. Egy MAR LETEZO
+      munkalaphoz (vagy jegyhez, eszkozhoz) tartozo kepnek a gazdaja MOST
+      megvan, es ha `NULL`-t irnank be, a kiuritesnel a kep gazdatlan lenne:
+      SOHA nem menne fel, nemán, mert a sor tovabbra is "varakozonak" latszana.
+
+      MI PIROSIT: ha barmelyik ag visszaterne a beegetett `NULL`-hoz, vagy ha a
+      fuggoseg NEM lenne felteteles (egy kitalalt rogzites-azonosito azt
+      jelentene, hogy a sor orokre var valamire, ami soha nem jon).
+    */
+    assert.match(forras, /input\.ownerId \?\? null,/);
+    assert.match(forras, /input\.payload\.recordingOperationId \?\? null,/);
   });
 
   it("a MUNKALAP sora munkalap entitással megy be", () => {

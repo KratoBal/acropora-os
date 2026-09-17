@@ -29,36 +29,18 @@
  * a mondat csak közli a kudarcot.
  */
 export const WORKSHEET_PHOTO_NOTICE = {
-  /** A feltöltés kiesik: a kép a szerverre menne, nem a mentett másolatba. */
-  offlineCopy:
-    "Mentett másolatot nézel, ezért a fénykép most nem tölthető fel. Térerőnél tudsz képet tenni a lapra.",
-} as const;
-
-/**
- * A FELTÖLTÉS EREDMÉNYE, EMBERI ALAKBAN.
- *
- * `uploaded` a szerver által visszaadott dokumentumok száma (nem az, amennyit
- * küldeni akartunk: az utóbbi akkor is tízet mondana, ha a szerver kettőt
- * fogadott el). `skipped` azoknak a fájloknak a NEVE, amiket a választó adott,
- * de a formátumuk miatt el sem indultak.
- *
- * `null`, ha nincs mit mondani -- se feltöltött, se kihagyott kép.
- */
-export function describeWorksheetPhotoUpload(input: {
-  uploaded: number;
-  skipped: readonly string[];
-}): string | null {
-  const { uploaded, skipped } = input;
-  if (uploaded === 0 && skipped.length === 0) return null;
-  if (uploaded === 0) {
-    return `Egyik kiválasztott kép sem tölthető fel: csak JPEG és PNG megy. Kimaradt: ${skipped.join(", ")}.`;
-  }
-  const alap = `${uploaded} kép a laphoz került.`;
   /**
-   * A RÉSZLEGES SIKER KÜLÖN MONDATOT KAP, nem egy zárójeles megjegyzést: a
-   * kihagyott fájl az, amiről hallgatni a legdrágább.
+   * EZ A MONDAT AT VAN IRVA (2026-09-17), ES A SAJAT KOMMENTJE ELORE MEGMONDTA.
+   *
+   * Korabban azt allt itt, hogy a fenykep „most nem tölthető fel", es hogy
+   * terero kell hozza. A mellette allo indoklas kimondta, hogy ez a mondat a
+   * JELEN allapotrol szol, es „akkor ez az ág egyszerűen nem áll elő többé",
+   * amikor a sorba tetel elkeszul.
+   *
+   * A SORBA TETEL ELKESZULT, AZ AG VISZONT ELOALL: a mentett masolat allapota
+   * megmarad. Ezert nem a feltetelt vettem ki, hanem a MONDATOT irtam at --
+   * kulonben epp azt tiltana, amiert a sor keszult.
    */
-  return skipped.length === 0
-    ? alap
-    : `${alap} Kimaradt (csak JPEG és PNG megy): ${skipped.join(", ")}.`;
-}
+  offlineCopy:
+    "Mentett másolatot nézel. A fénykép így is felvehető: a telefonon vár, és magától felmegy, amint visszajön a hálózat.",
+} as const;
