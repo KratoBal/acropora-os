@@ -240,14 +240,24 @@ export const serviceJobsApi = {
    * listaval valaszol. Egy valasz, aminek a TIPUSA a bemenettol fugg, minden
    * hivot arra kenyszeritene, hogy kitalalja, melyik agon jar.
    */
+  /**
+   * A `caption` EGY KERESRE EGY FELIRAT, es ez a szerver alakja, nem itteni
+   * egyszerusites: a vegpont tiz fajlt fogad, es ez az egy szoveg MINDEGYIKRE
+   * rakerul. Kepenkent mast a `setDocumentCaption` ir.
+   */
   uploadDocument(
     token: string,
     id: string,
     type: ServiceJobDocumentType,
     files: File[],
+    caption?: string,
   ) {
     const body = new FormData();
     body.append("type", type);
+    // CSAK AKKOR MEGY EL, HA VAN: egy ures mezo `""` erteket kuldene, amit a
+    // szerver ugyan semminek vesz, de a keresben akkor is ott allna mint
+    // kitoltott mezo.
+    if (caption?.trim()) body.append("caption", caption.trim());
     // UGYANAZ A MEZONEV MINDEN FAJLHOZ: a szerver `FilesInterceptor("file")`
     // alakban olvassa, tehat a tobbes szam a MEZO ISMETLESE, nem egy `file[]`
     // nevu mezo.
@@ -280,6 +290,30 @@ export const serviceJobsApi = {
     );
     if (!response.ok) throw new Error("A csatolmány nem tölthető le.");
     return response.blob();
+  },
+  /**
+   * A FELIRAT ATIRASA EGY MAR FELTOLTOTT CSATOLMANYON.
+   *
+   * A `null` a TORLES, es ez nem kenyelmi alak: a szerver a hianyt EGYFELE
+   * alakban tarolja, tehat az ures szoveg is `null`-kent er le. Ha a kliens
+   * ures stringet kuldene, a "nincs felirat" es a "szandekosan ures felirat"
+   * ket allapota egyformanak tunne.
+   */
+  setDocumentCaption(
+    token: string,
+    id: string,
+    documentId: string,
+    caption: string | null,
+  ) {
+    return apiRequest<{ ok: true }>(
+      jobPath(id, `/documents/${encodeURIComponent(documentId)}`),
+      token,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caption }),
+      },
+    );
   },
   deleteDocument(token: string, id: string, documentId: string) {
     return apiRequest<{ removed: true }>(

@@ -14,6 +14,9 @@ function doku(
     fileName: "szivattyu.jpg",
     contentType: "image/jpeg",
     sizeBytes: 204800,
+    // A FELIRAT ALAPBOL NINCS: a mezo 2026-09-17-en keletkezett, tehat minden
+    // korabbi csatolmanyon `null`. Az az ALAPESET, nem a kivetel.
+    caption: null,
     createdAt: "2026-09-01T09:00:00.000Z",
     ...overrides,
   };
@@ -234,6 +237,157 @@ describe("ServiceDocumentGallery", () => {
     );
     await screen.findByAltText("szivattyu.jpg");
     expect(letoltes).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * A FELIRAT AZ, AMIT A KEZELO KERES -- ES A FAJLNEV FOLOTT ALL.
+   *
+   * Balazs kerese (2026-09-17): "jo lenne ... megjegyzest lehessen irni a
+   * kephez". A fajlnev csak azt mondja meg, minek nevezte el a telefon.
+   */
+  it("a feliratot kiírja a csempén, a fájlnév mellett", async () => {
+    render(
+      <ServiceDocumentGallery
+        items={[doku({ caption: "A hármas medence szivattyúja" })]}
+        loadBlob={vi.fn().mockResolvedValue(new Blob(["kep"]))}
+        onDownload={vi.fn()}
+        emptyText="nincs"
+      />,
+    );
+
+    expect(
+      await screen.findByText("A hármas medence szivattyúja"),
+    ).toBeTruthy();
+    // A FAJLNEV NEM TUNIK EL: a ketto MAST mond, es a letoltott fajlt a nevén
+    // kell megtalalni a gepen.
+    expect(screen.getByText("szivattyu.jpg")).toBeTruthy();
+  });
+
+  /**
+   * A FELIRAT OLVASHATO ANNAK IS, AKI NEM IRHATJA.
+   *
+   * POZITIV KONTROLL MELLETTE: a `onSaveCaption` megadasaval a gomb OTT VAN.
+   * Enelkul ez az allitas akkor is teljesulne, ha a gomb sosem rajzolodna ki.
+   */
+  it("szerkesztő gomb csak akkor van, ha van hozzá függvény", async () => {
+    const { unmount } = render(
+      <ServiceDocumentGallery
+        items={[doku({ caption: "Szivattyú" })]}
+        loadBlob={vi.fn().mockResolvedValue(new Blob(["kep"]))}
+        onDownload={vi.fn()}
+        emptyText="nincs"
+      />,
+    );
+    expect(await screen.findByText("Szivattyú")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Felirat/ })).toBeNull();
+    unmount();
+
+    render(
+      <ServiceDocumentGallery
+        items={[doku({ caption: "Szivattyú" })]}
+        loadBlob={vi.fn().mockResolvedValue(new Blob(["kep"]))}
+        onDownload={vi.fn()}
+        onSaveCaption={vi.fn().mockResolvedValue(undefined)}
+        emptyText="nincs"
+      />,
+    );
+    expect(await screen.findByText("Szivattyú")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Felirat átírása" }),
+    ).toBeTruthy();
+  });
+
+  /**
+   * A MENTES A TISZTITOTT SZOVEGET VISZI, es a mezo UTANA zar be.
+   */
+  it("a felirat mentése a tisztított szöveget adja át", async () => {
+    const onSaveCaption = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ServiceDocumentGallery
+        items={[doku()]}
+        loadBlob={vi.fn().mockResolvedValue(new Blob(["kep"]))}
+        onDownload={vi.fn()}
+        onSaveCaption={onSaveCaption}
+        emptyText="nincs"
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Felirat" }));
+    fireEvent.change(screen.getByPlaceholderText("Mit látunk a képen?"), {
+      target: { value: "  A kompresszor tömítése  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
+
+    await waitFor(() => expect(onSaveCaption).toHaveBeenCalledTimes(1));
+    expect(onSaveCaption.mock.calls[0]?.[0]?.id).toBe("doc-1");
+    expect(onSaveCaption.mock.calls[0]?.[1]).toBe("A kompresszor tömítése");
+    // A MEZO SIKER UTAN BEZAR.
+    await waitFor(() =>
+      expect(screen.queryByPlaceholderText("Mit látunk a képen?")).toBeNull(),
+    );
+  });
+
+  /**
+   * AZ URES MEZO TORLEST JELENT, ES `null`-KENT MEGY LE.
+   *
+   * MI PIROSIT: ha ures stringet kuldenenk. Akkor a "nincs felirat" es a
+   * "szandekosan ures felirat" ket allapota egyformanak tunne, es senki nem
+   * tudna megmondani, melyiket jelenti.
+   */
+  it("a felirat kitörlése null-ként megy le", async () => {
+    const onSaveCaption = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ServiceDocumentGallery
+        items={[doku({ caption: "Szivattyú" })]}
+        loadBlob={vi.fn().mockResolvedValue(new Blob(["kep"]))}
+        onDownload={vi.fn()}
+        onSaveCaption={onSaveCaption}
+        emptyText="nincs"
+      />,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Felirat átírása" }),
+    );
+    fireEvent.change(screen.getByPlaceholderText("Mit látunk a képen?"), {
+      target: { value: "   " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
+
+    await waitFor(() => expect(onSaveCaption).toHaveBeenCalledTimes(1));
+    expect(onSaveCaption.mock.calls[0]?.[1]).toBeNull();
+  });
+
+  /**
+   * ELHASALT MENTES UTAN A BEGEPELT SZOVEG OTTMARAD.
+   *
+   * MI PIROSIT: ha a mezo a hiba utan is bezarna. Akkor a felhasznalo szovege
+   * ELVESZNE, es a masodik nekifutas ugyanolyan hosszu lenne, mint az elso --
+   * miutan mar egyszer leirta.
+   */
+  it("elhasalt mentés után a szöveg ottmarad, és kimondja a hibát", async () => {
+    const onSaveCaption = vi
+      .fn()
+      .mockRejectedValue(new Error("A tároló nem érhető el."));
+    render(
+      <ServiceDocumentGallery
+        items={[doku()]}
+        loadBlob={vi.fn().mockResolvedValue(new Blob(["kep"]))}
+        onDownload={vi.fn()}
+        onSaveCaption={onSaveCaption}
+        emptyText="nincs"
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Felirat" }));
+    fireEvent.change(screen.getByPlaceholderText("Mit látunk a képen?"), {
+      target: { value: "Tömítés" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Mentés" }));
+
+    expect(await screen.findByText("A tároló nem érhető el.")).toBeTruthy();
+    const mezo = screen.getByPlaceholderText("Mit látunk a képen?");
+    expect((mezo as HTMLInputElement).value).toBe("Tömítés");
   });
 
   /** A HIANY IS ALLITAS: egy ures doboz betoltesi hibanak latszik. */
