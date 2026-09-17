@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { WorksheetDepartmentSummary } from "@acropora/types";
 
@@ -158,17 +159,18 @@ export function Worksheets() {
         <div>
           <p className="eyebrow">SZERVIZMUNKA</p>
           <h1>Munkalapok</h1>
-          <p>
-            A saját munkalapok itt olvashatók. Aláírás ebben a portálkörben még
-            nem érhető el.
-          </p>
+          <p>A saját munkalapok itt olvashatók, fényképekkel és aláírással.</p>
         </div>
       </header>
       {error ? <Message tone="error" text={error} /> : null}
       {data?.items.length ? (
         <div className="card-list">
           {data.items.map((sheet) => (
-            <article className="reference-card" key={sheet.id}>
+            <Link
+              className="reference-card"
+              key={sheet.id}
+              href={`/munkalapok/${sheet.id}`}
+            >
               <div>
                 <p className="ticket-number">{sheet.number ?? "Piszkozat"}</p>
                 <h2>{sheet.subject}</h2>
@@ -184,7 +186,7 @@ export function Worksheets() {
                   }).format(new Date(sheet.updatedAt))}
                 </time>
               </div>
-            </article>
+            </Link>
           ))}
         </div>
       ) : (

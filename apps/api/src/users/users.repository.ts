@@ -66,6 +66,58 @@ export class UsersRepository extends Repository {
     return user ? toUserDetail(user) : null;
   }
 
+  async passwordHash(id: string): Promise<string | null> {
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: { passwordHash: true },
+    });
+    return user?.passwordHash ?? null;
+  }
+
+  async changeOwnPassword(id: string, password: string) {
+    const passwordHash = await hashPassword(password);
+    await this.changeOwnCredential(
+      id,
+      { passwordHash },
+      "user.password-changed",
+      ["password"],
+    );
+  }
+
+  async changeOwnSigningCode(id: string, signingCode: string) {
+    const signatureCodeHash = await hashPassword(signingCode);
+    await this.changeOwnCredential(
+      id,
+      { signatureCodeHash },
+      "user.signing-code-changed",
+      ["signatureCode"],
+    );
+  }
+
+  private async changeOwnCredential(
+    id: string,
+    data: Prisma.UserUpdateInput,
+    action: string,
+    changedFields: string[],
+  ) {
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id }, data });
+      await this.event(tx, action, id, id, {});
+      await tx.auditLog.create({
+        data: {
+          userId: id,
+          action,
+          entityType: "User",
+          entityId: id,
+          metadata: {
+            changedFields,
+            selfService: true,
+          } satisfies Prisma.JsonObject,
+        },
+      });
+    });
+  }
+
   create(input: CreateUserDto, actorId: string) {
     const firstName = input.firstName.trim();
     const lastName = input.lastName.trim();

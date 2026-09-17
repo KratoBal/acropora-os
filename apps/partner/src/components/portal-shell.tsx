@@ -11,6 +11,7 @@ const navigation = [
   { href: "/munkalapok", label: "Munkalapok" },
   { href: "/helyszinek", label: "Helyszínek" },
   { href: "/eszkozok", label: "Eszközök" },
+  { href: "/beallitasok", label: "Beállítások" },
 ];
 
 export function PortalShell({ children }: { children: ReactNode }) {
