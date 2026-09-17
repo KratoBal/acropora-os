@@ -392,6 +392,17 @@ export async function enqueuePhoto(input: {
    * a sor mar hordozza a gazdat, es ket helyen tarolva a ketto elcsuszhatna.
    */
   entityType: SyncQueueRow["entityType"];
+  /**
+   * A GAZDA SZERVER-AZONOSITOJA, HA MAR LETEZIK.
+   *
+   * KET UT VAN, es a kulonbseguk nem kenyelmi: egy UJ felvitel kepe a rogzites
+   * felmenetelekor kapja meg az azonositot (`attachRecordingResult`), egy MAR
+   * LETEZO gazdae viszont MOST, a sorba tetelkor. A masodik esetben a sor
+   * SENKIRE NEM VAR, tehat fuggoseg sem kerul ra -- egy kitalalt
+   * rogzites-azonosito ott azt jelentene, hogy a sor orokre var valamire, ami
+   * soha nem jon.
+   */
+  ownerId?: string;
 }): Promise<EnqueueResult> {
   try {
     const db = await initializeOfflineDatabase();
@@ -410,13 +421,23 @@ export async function enqueuePhoto(input: {
       `INSERT OR IGNORE INTO sync_queue
          (id, operation, entity_type, entity_id, payload_json, created_at, attempt_count, last_error, state,
           depends_on_operation_id, depends_on_target)
-       VALUES (?, 'upload-photo', ?, NULL, ?, ?, 0, NULL, 'pending', ?, 'entityId')`,
+       VALUES (?, 'upload-photo', ?, ?, ?, ?, 0, NULL, 'pending', ?, 'entityId')`,
       [
         input.id,
         input.entityType,
+        /**
+         * A MAR LETEZO GAZDA AZONOSITOJA MOST KERUL BE, nem a rogzites
+         * felmenetelekor -- es ettol a `kepetKuld` mar az elso menetben tudja,
+         * HOVA kuldje a kepet.
+         */
+        input.ownerId ?? null,
         JSON.stringify(input.payload),
         input.createdAt,
-        input.payload.recordingOperationId,
+        /**
+         * FUGGOSEG CSAK AKKOR, HA TENYLEG VAN MIRE VARNI. A ketto egyutt jar:
+         * ahol a gazda mar letezik, ott nincs rogzites-azonosito, es forditva.
+         */
+        input.payload.recordingOperationId ?? null,
       ],
     );
     return { ok: true, operationId: input.id };

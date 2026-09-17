@@ -27,9 +27,15 @@ import { ApiError } from "@/lib/api/client";
 import { useIsOnline } from "@/lib/offline/connectivity";
 import { describeCachedWorksheetNotice } from "@/lib/offline/offline-notice";
 import {
+  enqueuePhoto,
   enqueueWorksheetLine,
   queuedWorksheetLineCount,
 } from "@/lib/offline/queue-store";
+import { ownerPhotoOperationId } from "@/lib/offline/photo-queue";
+import {
+  describePhotoSend,
+  uploadOrQueuePhotos,
+} from "@/lib/offline/photo-upload-or-queue";
 import { saveOrQueue } from "@/lib/offline/save-or-queue";
 import {
   readCachedWorksheet,
@@ -41,10 +47,7 @@ import {
   worksheetEntryByline,
 } from "@/lib/worksheets/worksheet-entry";
 import { usePhotoAttachments } from "@/lib/photos/use-photo-attachments";
-import {
-  describeWorksheetPhotoUpload,
-  WORKSHEET_PHOTO_NOTICE,
-} from "@/lib/worksheets/worksheet-photo";
+import { WORKSHEET_PHOTO_NOTICE } from "@/lib/worksheets/worksheet-photo";
 import {
   describeAssignableUsers,
   describeAssigneeReadOnly,
@@ -289,20 +292,73 @@ export default function WorksheetDetailScreen() {
     setPhotoNotice(null);
     setUploading(true);
     try {
-      const created = await uploadWorksheetDocuments(id, { files: photos });
-      clearPhotos();
-      setPhotoNotice(
-        describeWorksheetPhotoUpload({
-          uploaded: created.length,
-          /*
-           * A KIMARADT FAJLOKAT A HOROG SAJAT UZENETE HORDOZZA, es azt a
-           * kepernyo kulon kiirja. Ide nem masolom at: ket helyen allo szoveg
-           * ket kulonbozo halmazrol beszelne ugyanabban a percben.
-           */
-          skipped: [],
-        }),
-      );
-      await queryClient.invalidateQueries({ queryKey: ["worksheet", id] });
+      /**
+       * A DONTES A `lib/offline/photo-upload-or-queue.ts`-BEN ALL, mert ott
+       * MERHETO: ebben a csomagban nincs komponens-teszt, es epp ezt a reszt a
+       * legdragabb ugy probalni, ahogy a szerelo talalkozik vele -- a
+       * pinceben, terero nelkul.
+       */
+      const eredmeny = await uploadOrQueuePhotos({
+        files: photos,
+        upload: async (files) => {
+          const created = await uploadWorksheetDocuments(id, { files });
+          /** A SZERVER SZAMA MEGY TOVABB, nem amit kuldtunk. */
+          return { count: created.length };
+        },
+        enqueue: async (file) => {
+          const r = await enqueuePhoto({
+            /**
+             * A KULCS A TARTALOMBOL SZULETIK: a ketszer megnyomott gomb
+             * ugyanazt a sort adja, nem kettot.
+             */
+            id: ownerPhotoOperationId({
+              entityType: "worksheet",
+              ownerId: id,
+              uri: file.uri,
+            }),
+            payload: { uri: file.uri, name: file.name, type: file.type },
+            createdAt: new Date().toISOString(),
+            entityType: "worksheet",
+            /**
+             * A GAZDA MAR LETEZIK, tehat az azonosito MOST kerul a sorba -- a
+             * kep nem var senkire, es nem is varakoztat senkit.
+             */
+            ownerId: id,
+          });
+          return r.ok;
+        },
+        statusOf: (cause) => (cause instanceof ApiError ? cause.status : null),
+        describeRejection: (cause) =>
+          cause instanceof Error
+            ? cause.message
+            : "A feltöltés nem sikerült. Próbáld újra.",
+      });
+
+      /**
+       * A KEPEK CSAK AKKOR URULNEK KI, HA VALAHOL LETEZNEK -- a szerveren vagy
+       * a sorban. Egy elutasitasnal a kivalasztott kep az EGYETLEN peldany a
+       * kezunkben, es eldobni ugyanaz a nema veszteseg, mint elvetni egy beirt
+       * tetelt kerdes nelkul.
+       */
+      if (eredmeny.type === "uploaded" || eredmeny.type === "queued")
+        clearPhotos();
+
+      setPhotoNotice(describePhotoSend(eredmeny, []));
+
+      if (eredmeny.type === "uploaded") {
+        await queryClient.invalidateQueries({ queryKey: ["worksheet", id] });
+        /**
+         * A GALERIA IS FRISSUL, NEM CSAK A LAP. Enelkul a most feltoltott kep
+         * NEM jelenne meg a szakaszban -- vagyis a szerelo ugyanazt latna,
+         * amit a mai hianynal: feltoltott, es nincs sehol.
+         *
+         * A SORBA TETT KEPNEL NEM frissitunk: az meg NINCS a szerveren, tehat
+         * a lista valtozatlan lenne, es egy folosleges kor menne el ra.
+         */
+        await queryClient.invalidateQueries({
+          queryKey: ["worksheet-documents", id],
+        });
+      }
     } catch (cause) {
       setPhotoNotice(
         cause instanceof Error
@@ -693,6 +749,12 @@ export default function WorksheetDetailScreen() {
               ALLAPOT-FELTETEL NINCS: a tetel-felvitellel ellentetben a fenykep
               NEM piszkozat-fuggo -- a szerver sem koti allapothoz. Egy alairt
               lapra is kerulhet kep.
+
+              ES A GOMBOK MASOLATBOL IS MENNEK (2026-09-17). Korabban a mentett
+              masolat allapotaban TILTVA voltak, mert a kep csak a szerverre
+              mehetett. A sorba tetel ota epp forditva all: a terero NELKULI
+              helyszin az, amiert a sor letezik -- egy tiltott gomb pontosan
+              akkor venne el a kepesseget, amikor a legtobbet erne.
             */}
             {capabilities.worksheetsManage ? (
               <>
@@ -707,12 +769,12 @@ export default function WorksheetDetailScreen() {
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel="Fénykép készítése"
-                      accessibilityState={{ disabled: uploading || fromCache }}
-                      disabled={uploading || fromCache}
+                      accessibilityState={{ disabled: uploading }}
+                      disabled={uploading}
                       onPress={() => void takePhoto()}
                       style={({ pressed }) => [
                         styles.photoButton,
-                        (uploading || fromCache) && styles.disabled,
+                        uploading && styles.disabled,
                         pressed && styles.pressed,
                       ]}
                     >
@@ -721,12 +783,12 @@ export default function WorksheetDetailScreen() {
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel="Kép választása a galériából"
-                      accessibilityState={{ disabled: uploading || fromCache }}
-                      disabled={uploading || fromCache}
+                      accessibilityState={{ disabled: uploading }}
+                      disabled={uploading}
                       onPress={() => void pickPhotos()}
                       style={({ pressed }) => [
                         styles.photoButton,
-                        (uploading || fromCache) && styles.disabled,
+                        uploading && styles.disabled,
                         pressed && styles.pressed,
                       ]}
                     >
@@ -758,13 +820,13 @@ export default function WorksheetDetailScreen() {
                         accessibilityRole="button"
                         accessibilityLabel="Kiválasztott képek feltöltése"
                         accessibilityState={{
-                          disabled: uploading || fromCache,
+                          disabled: uploading,
                         }}
-                        disabled={uploading || fromCache}
+                        disabled={uploading}
                         onPress={() => void feltolt()}
                         style={({ pressed }) => [
                           styles.addLineButton,
-                          (uploading || fromCache) && styles.disabled,
+                          uploading && styles.disabled,
                           pressed && styles.pressed,
                         ]}
                       >
