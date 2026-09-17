@@ -67,12 +67,37 @@ echo "--- mobil-frissites | valtozat=$VALTOZAT kornyezet=$KORNYEZET csatorna=$CS
 FP="$MOBIL/node_modules/@expo/fingerprint/bin/cli.js"
 if [ -f "$FP" ]; then
   for p in ios android; do
-    h=$(cd "$MOBIL" && APP_VARIANT="$VALTOZAT" node "$FP" fingerprint:generate . --platform "$p" 2>/dev/null \
-        | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).hash)}catch{console.log('(nem olvashato)')}})")
+    # A HIBAT NEM NYELJUK EL. Az elso alakom `2>/dev/null`-lal ment, es a
+    # kimenet csak annyit mondott, hogy "(nem olvashato)" -- holott a valodi ok
+    # egy megnevezett `EACCES` volt a titok-fajlon. Egy elnyelt hibaüzenet
+    # ugyanolyan nema, mint a hiany, csak magabiztosabbnak latszik.
+    nyers=$(cd "$MOBIL" && APP_VARIANT="$VALTOZAT" node "$FP" fingerprint:generate . --platform "$p" 2>&1)
+    h=$(printf '%s' "$nyers" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).hash)}catch{console.log('')}})")
+    if [ -z "$h" ]; then
+      h="(nem szamolhato) $(printf '%s' "$nyers" | tail -1)"
+    fi
     printf "  vart runtimeVersion  %-8s %s\n" "$p" "$h"
   done
-  echo "  (android: a google-services.json a fingerprint resze, es gitignore alatt all --"
-  echo "   fejlesztoi gepen ezert MAS szamot ad, mint a build gepen. Az ios a mervado innen.)"
+  # AZ ANDROID SZAM AKKOR MERVADO, HA A TITOK OLVASHATO -- ES EZT MEGMERJUK,
+  # NEM FELTETELEZZUK.
+  #
+  # Az elso alakom azt irta ide, hogy "fejlesztoi gepen mas szamot ad". Ez rossz
+  # okot nevezett meg: a kulonbseg nem a gepen mulik, hanem azon, hogy a futtato
+  # felhasznalo OLVASSA-E a titkot. Ugyanezen a gepen, masik felhasznalo alatt a
+  # szkript a HELYES android erteket adta (merve 2026-09-17), mig itt nem -- a
+  # fajl modja `-rw-------`.
+  #
+  # Amiert ez nem szorszalhasogatas: a regi mondat azt uzente a kovetkezo
+  # olvasonak, hogy hagyja figyelmen kivul az android szamot. Ha az valojaban
+  # helyes, azzal epp azt az ellenorzest dobjuk el, amivel az android kiadas
+  # utolag igazolhato.
+  TITOK="${GOOGLE_SERVICES_JSON:-$MOBIL/google-services.json}"
+  if [ -r "$TITOK" ]; then
+    echo "  (android: a google-services.json OLVASHATO ($TITOK), tehat az android szam is mervado)"
+  else
+    echo "  (android: a google-services.json NEM olvashato innen ($TITOK) -- a fingerprint"
+    echo "   resze, tehat az android szam MAS, mint ott, ahol a titok elerheto. Az ios a mervado.)"
+  fi
 else
   echo "  vart runtimeVersion: NEM MERHETO (nincs @expo/fingerprint; futtass npm ci-t a mobil csomagban)"
 fi
