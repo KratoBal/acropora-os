@@ -35,11 +35,13 @@ describe("a beolvasó a matricát is ismeri", () => {
   });
 
   it("a kliens hívja a matricás végpontot", () => {
-    assert.match(olvas(KLIENS), /scan-label\//);
+    // AZ UTVONAL-EPITES ALAKJARA: a puszta nev a fejlec-kommentben is allhat.
+    assert.match(olvas(KLIENS), /\$\{BASE\}\/scan-label\//);
   });
 
   it("a beolvasó a közös kinyerőt használja, nem saját mintát", () => {
-    assert.match(olvas(BEOLVASO), /extractAssetLabelCode/);
+    // A HIVAS ALAKJARA, nem a nevre: az import-sor kulonben zolden tartana.
+    assert.match(olvas(BEOLVASO), /extractAssetLabelCode\(data\)/);
   });
 
   /**
@@ -69,7 +71,14 @@ describe("a beolvasó a matricát is ismeri", () => {
    * hogy megtudjuk, mi áll rajta.
    */
   it("az elutasítás kiírja, mit olvasott", () => {
-    assert.match(olvas(BEOLVASO), /describeLabelScanFailure/);
+    /**
+     * A HÍVÁS ALAKJÁRA ÁLL, NEM A PUSZTA NÉVRE -- és ez mérésből jön.
+     * Az első alakja a `describeLabelScanFailure` névre illeszkedett, és a
+     * kalibráció NULLA pirosat adott, amikor a hívást visszacseréltem a régi
+     * néma mondatra: az IMPORT-sor ott maradt, tehát a név megvolt. Az az
+     * állítás a saját import-listám létezését mérte.
+     */
+    assert.match(olvas(BEOLVASO), /describeLabelScanFailure\(data, cimke\)/);
   });
 
   /**
@@ -94,8 +103,9 @@ describe("a beolvasó a matricát is ismeri", () => {
    */
   it("a feloldó a kapott fajta szerint hívja a két végpontot", () => {
     const s = olvas(FELOLDO);
-    assert.match(s, /scanAssetByLabel/);
-    assert.match(s, /scanAsset\(/);
+    // HIVAS-ALAKOK, nem nevek: a kozos import-sor mind a kettot tartalmazza.
+    assert.match(s, /scanAssetByLabel\(token!\)/);
+    assert.match(s, /scanAsset\(token!\)/);
     assert.doesNotMatch(
       s,
       /extractAssetLabelCode/,
