@@ -146,15 +146,24 @@ describe("AssetLabelBatchesPage", () => {
   });
 
   /**
-   * A SZABAD DARABSZAM ELO SZAM, ES A LAP KIMONDJA. A szam a megnyitaskor
-   * szamolodik, tehat SOHA nem no -- egy statikusnak latszo mezo mellett a
-   * kezelo elakadtnak hinne a rendszert.
+   * A SZABAD DARABSZAM ELO SZAM, ES A LAP KIMONDJA -- DE KOTEGENKENT, ES A
+   * HATOKOR A LENYEG.
+   *
+   * A szam a megnyitaskor szamolodik, tehat egy KOTEGEN BELUL soha nem no; egy
+   * statikusnak latszo mezo mellett a kezelo elakadtnak hinne a rendszert.
+   *
+   * A "kotegenkent" szo NELKUL viszont a mondat a TELJES keszletrol allitana
+   * ugyanezt, ami HAMIS: a keszlet no, valahanyszor generalunk. Balazs
+   * 2026-09-03-an jelezte, hogy nem erti a mondatot, es igaza volt.
+   *
+   * AZ ALLITAS EZERT A HATOKORRE IS KERDEZ, nem csak a mondat letere: enelkul
+   * a regi, felrevezeto alak ugyanugy zolden allna.
    */
-  it("kimondja, hogy a szabad darabszám soha nem nő", async () => {
+  it("kötegenként mondja ki, hogy a szabad darabszám soha nem nő", async () => {
     render(<AssetLabelBatchesPage />);
 
     expect(
-      await screen.findByText(/soha nem nő, csak csökkenhet/),
+      await screen.findByText(/kötegenként: a szabad darabszám soha nem nő/),
     ).toBeTruthy();
   });
 
