@@ -1,0 +1,74 @@
+-- Két soha nem használt oszlop eldobása az UnasProductSnapshot tábláról.
+-- A migráció CSAK EJT: nem nevez át, nem alakít, nem tölt fel semmit.
+--
+-- === MIT MÉRTÜNK, ÉS MIÉRT NEM ELÉG A NÉV SZERINTI KERESÉS ===
+--
+-- Egy "senki nem hivatkozik rá" állítást a puszta névkeresés nem tud
+-- alátámasztani: aki `select` nélkül kér le egy sort, MINDEN oszlopot
+-- megkap anélkül, hogy a mezőnevet leírná. Ezért a mérés a HOZZÁFÉRÉS
+-- MÓDJÁRA ment, három úton, 1496 forrásfájlon (node_modules, dist és
+-- test-dist nélkül), 2026-09-17-én az aa2982de főágon:
+--
+--   1. a generált kliens        5 hívás a modellre, ebből 3 olvasó
+--                               (findMany), és MINDHÁROM `select`-tel megy.
+--                               `select` nélküli olvasás: NULLA.
+--   2. nyers SQL ($queryRaw)    NULLA fájl érinti ezt a táblát.
+--   3. a két oszlopnév a kódban EGY találat, és az is egy KOMMENT
+--                               (medusa-projection.runner.ts).
+--
+-- Az író oldal ugyanígy: az egyetlen `upsert` create/update blokkja
+-- egyik oszlopot sem tölti ki.
+--
+-- === ÉS A MÁSODIK MÉRÉS, AMI NEM A KÓDRÓL SZÓL: MAGA AZ ADAT ===
+--
+-- A fenti mérés arra válaszol, hogy HOZZÁFÉR-e valaki az oszlophoz. Azt NEM
+-- mondja meg, hogy VAN-E BENNE ADAT -- az a kérdés nem a kódban lakik, hanem az
+-- adatbázisban, és külön kellett megmérni.
+--
+-- Acrobot mérése, 2026-09-17 22:28, az ÉLES acropora adatbázison:
+--
+--   összes sor a UnasProductSnapshot táblában      1901
+--   propertiesHtml         nem NULL                   0
+--   initialOrderQuantity   nem NULL                   0
+--   propertiesHtml         nem üres szöveg            0
+--
+-- A harmadik sor külön mérés, és nem szőrszálhasogatás: a `count(oszlop)` csak a
+-- NULL-t hagyja ki, tehát egy üres szöveg ott ÉRTÉKNEK számítana. Mind a kettő
+-- nulla.
+--
+-- AZ ADATBÁZIS AZONOSSÁGA IS MÉRVE, NEM FELTÉTELEZVE: ugyanazon a gépen áll egy
+-- MÁSIK postgres is, azonos `POSTGRES_DB` és `POSTGRES_USER` értékkel
+-- (`acropora` / `acropora`) -- azon a `Worksheet` tábla nem is létezik. Egy
+-- sikeres kapcsolódás tehát semmit nem mond arról, melyik adatbázisban vagyunk.
+-- Az éleset a tartalma azonosítja: 6 felhasználó, 8 munkalap, 1901 pillanatkép,
+-- és az utolsó lefutott migráció a 20260917170000_sync_run_relation_counters
+-- (konténer: iwm34jaqp9xmwb72qkrqkwhy).
+--
+-- Fél év múlva senki nem fogja tudni visszakeresni, hogy megmértük-e -- hacsak
+-- itt nem áll.
+--
+-- KONTROLL, hogy a fenti nullák ne a kérdés tulajdonságai legyenek:
+-- ugyanezzel a méréssel a `reportedStockSyncedAt` 19 fájlt ad, az ismerten
+-- írt mezők pedig 5 találatot ugyanabban az upsert-blokkban. A mérő lát.
+--
+-- === AMI SZÁNDÉKOSAN NEM MEGY ===
+--
+-- A `currency` oszlopot ugyanez a kör hozta elő mint harmadik, amit az író
+-- nem tölt ki -- de azt OLVASSÁK, tehát marad. "Nem írja senki" és "nem
+-- olvassa senki" két külön állítás, és csak a második enged eldobni.
+--
+-- És az `initialOrderQuantity` a minimum/maximum/step család tagja: a másik
+-- HÁROM használatban van (a rendelési lépésköz és a maximum épp most került
+-- a kirakatra). Ez az egy különbözik, nem a család.
+--
+-- === VISSZAFORDÍTHATÓSÁG, KIMONDVA ===
+--
+-- A projekt előre-irányú: 116 migráció mellett NULLA down/rollback fájl áll.
+-- Ennek a visszavonása tehát nem rollback, hanem egy ÚJ migráció, ami
+-- visszateszi a két oszlopot -- de az ADAT nem jön vissza, és mivel ma
+-- senki nem írja őket, semmi nem tudja újra előállítani.
+--
+-- AlterTable
+ALTER TABLE "UnasProductSnapshot"
+    DROP COLUMN "propertiesHtml",
+    DROP COLUMN "initialOrderQuantity";
