@@ -63,14 +63,30 @@ describe("a munkalap csatolmány-szakasza", () => {
   });
 
   /**
-   * A KÉP HITELESÍTETT FORRÁSBÓL JÖN. Egy csupasz `uri` a végponton 401-et
-   * kapna, a képernyőn pedig ÜRES CSEMPEKÉNT jelenne meg -- vagyis pontosan
-   * úgy, mint a mai hiány.
+   * A KÉP HITELESÍTETT FORRÁSBÓL JÖN -- MIND A KÉT NÉZETBEN.
+   *
+   * Egy csupasz `uri` a végponton 401-et kapna, a képernyőn pedig ÜRES
+   * CSEMPEKÉNT jelenne meg -- vagyis pontosan úgy, mint a szakasz előtti hiány.
+   *
+   * A DARABSZÁM MÉRÉSBŐL KERÜLT IDE, ÉS AZ IKERSPECBŐL. A képernyőn KÉT
+   * `<Image>` áll: a listában a CSEMPE (859. sor) és rákoppintásra a NAGY KÉP
+   * rátéte (1386.). Egy pusztán jelenlétre illesztő állítás -- ez volt az első
+   * alakja -- ZÖLDEN átengedné, ha az egyik csupasz `uri`-ra váltana: a másik
+   * előfordulás tartaná életben.
+   *
+   * A hibajegy ikerspecjében ugyanez a sor állt, és ott 2026-09-17-én javítottuk
+   * (#784). Ez a kör a MÁSIK hívóhely: egy mintát nem elég ott javítani, ahol
+   * megtaláltuk.
    */
-  it("a kép a hitelesített forrásból jön, nem csupasz címről", () => {
+  it("a kép a hitelesített forrásból jön, mind a két nézetben", () => {
     const s = olvas(KEPERNYO);
     assert.match(s, /useDocumentImageSource\(/);
-    assert.match(s, /source=\{forras\}/);
+    const db = s.split("source={forras}").length - 1;
+    assert.equal(
+      db,
+      2,
+      `a hitelesített forrás ${db} helyen áll; a csempe ÉS a nagy kép rátéte kell, különben az egyik nézet üresen maradna`,
+    );
   });
 
   /**
