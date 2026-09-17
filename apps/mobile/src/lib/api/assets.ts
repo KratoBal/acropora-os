@@ -86,6 +86,20 @@ export interface AssetListItem extends AssetHierarchyItem {
 export interface AssetDetail extends AssetListItem {
   category?: string;
   /**
+   * A CSATOLMANYOK -- ES EZ A MEZO MINDIG IS JOTT A SZERVERTOL.
+   *
+   * A kozos `packages/types` `AssetDetail`-je hordozza (`documents:
+   * AssetDocumentSummary[]`), a szerver `detail()` valasza tartalmazza, es a
+   * WEBES lap mar hasznalja is. Csak EBBOL a masolatbol hianyzott.
+   *
+   * A mobil SZANDEKOSAN sajat tipus-masolatot tart (nincs kozos csomagja),
+   * tehat a ket oldal kozott nincs fordito-szintu kapcsolat: az adat NEV
+   * NELKUL is atjott, es a hianya nem hibazott -- csak megfosztott attol, hogy
+   * hivatkozni lehessen ra. Ezert allt a telefonon nulla kep egy olyan
+   * valaszban, ami a listat vegig tartalmazta.
+   */
+  documents: AssetDocumentSummary[];
+  /**
    * AZ ESZKOZON ALLO MATRICA KODJA, HA VAN. A szerkeszto urlap EBBOL tolti elo
    * a mezot: egy ures doboz azt allitana, hogy nincs matrica, es a szerelo egy
    * mukodo kodot irna felul anelkul, hogy latna.
