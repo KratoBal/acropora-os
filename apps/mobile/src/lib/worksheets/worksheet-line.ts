@@ -4,7 +4,8 @@
  * === HAROM MEZO, NEM HAT ===
  *
  * A szerelo azt rogziti, MIT csinalt es MENNYIT; az ARAT az iroda adja meg
- * (Balazs dontese, 2026-09-02). Egy ar nelkuli tetellel a lap nem zarhato le,
+ * (Balazs dontese, 2026-09-02). 2026-09-17 ota az ar hianya NEM akadaly a
+ * lezarasnal -- Balazs ugy dontott, hogy az ar-mezok sehol nem jelennek meg,
  * tehat a hiany nem marad eszrevetlen -- egy kotelezo ar viszont azt jelentene,
  * hogy a telefon talalomra kuld egy szamot, es a kezenfekvo nulla a lapon
  * ERTEKKENT allna: aki ranez, nem tudja megkulonboztetni az ingyenes munkatol.

@@ -11,7 +11,6 @@ function closable(): WorksheetCloseState {
   return {
     status: "DRAFT",
     lineCount: 2,
-    linesWithoutPrice: 0,
     partnerCode: "BIO",
     // Az alegység kódja legfeljebb három NAGYBETŰ lehet - az első
     // fixture-öm "01" volt, és a teszt fogta meg, nem az olvasás.
@@ -26,15 +25,45 @@ describe("mi akadályozza a munkalap lezárását", () => {
   });
 
   /**
-   * AZ ÁR HIÁNYA MEGENGEDETT ÁLLAPOT, DE NEM VÉGSŐ. A szerelő a helyszínen
-   * azt rögzíti, mit csinált és mennyit; itt derül ki, ha az irodában valaki
-   * elfelejtette kitölteni az árat.
+   * AZ ÁR HIÁNYA 2026-09-17 ÓTA NEM AKADÁLY, ÉS EZ BALÁZS DÖNTÉSE.
+   *
+   * A kérése az volt, hogy a nettó, bruttó és áfa mezők ne jelenjenek meg sem
+   * a weben, sem az appban; két utat tettünk elé, és a "B"-t választotta:
+   * tűnjön el mindenhonnan, és akkor a lezárásból is ki kell venni az
+   * ár-feltételt.
+   *
+   * MIÉRT NEM TÖRÖLTEM EZT A TESZTET, HANEM MEGFORDÍTOTTAM: egy törölt teszt
+   * után semmi nem mondaná meg, hogy a viselkedés MEGVÁLTOZOTT, és nem
+   * elfelejtettük. Ha valaki egyszer visszateszi a feltételt -- jó szándékkal,
+   * a séma régi kommentjét olvasva --, EZ pirosodik ki, és a neve megmondja,
+   * hogy döntés volt.
    */
-  it("ár nélküli tétellel nem zárható le", () => {
-    assert.equal(
-      worksheetCloseBlocker({ ...closable(), linesWithoutPrice: 1 }),
-      "LINE_PRICE_MISSING",
-    );
+  it("az állapot NEM ISMER ár-mezőt, tehát a feltétel nem is tehető vissza csendben", () => {
+    /*
+      MIÉRT ÍGY, ÉS NEM EGY `null`-t VÁRÓ ÁLLÍTÁSSAL: az első változatom ez volt --
+
+          assert.equal(worksheetCloseBlocker(closable()), null);
+
+      -- és az DÍSZLET. A `closable()` fixtúrából kivettem az ár-mezőt, tehát az
+      az állítás BETŰRE ugyanazt méri, mint a fenti "teljes lapon nincs akadály".
+      Nem tudott volna elbukni semmitől, ami az ár-feltétellel kapcsolatos.
+
+      A `@ts-expect-error` viszont AKKOR pirosodik, amikor a hiba MEGSZŰNIK:
+      ha valaki visszateszi a `linesWithoutPrice` mezőt az állapotba, a jelölt
+      sor már nem hibás, és a fordító panaszkodik a feleslegessé vált jelölésre.
+      Ez fordításidejű őrző arra, amit egy futásidejű állítás nem tud megfogni.
+    */
+    const blocker = worksheetCloseBlocker({
+      ...closable(),
+      // A PRETTIER ELMOZDITOTTA EZT A JELOLEST, es a forditó szolt rola
+      // (TS2578: unused directive). A direktiva a HIBAS SOR elott kell allnia,
+      // nem a kifejezes elott -- a formazas ugyanis tobb sorra tordelte a
+      // hivast, es a hiba a mezo soraba kerult.
+      // @ts-expect-error -- az ár-feltétel 2026-09-17-én kikerült (Balázs döntése)
+      linesWithoutPrice: 1,
+    });
+    // És ha valaki mégis visszateszi: a lap ár nélkül is lezárható marad.
+    assert.equal(blocker, null);
   });
 
   it("tétel nélkül nem zárható le", () => {
@@ -63,7 +92,7 @@ describe("mi akadályozza a munkalap lezárását", () => {
       worksheetCloseBlocker({
         ...closable(),
         status: "SIGNED",
-        linesWithoutPrice: 3,
+        lineCount: 0,
       }),
       "NOT_DRAFT",
     );

@@ -74,7 +74,9 @@ export class WorksheetLineDto {
    * lapon ÉRTÉKKÉNT állna: aki ránéz, nem tudja megkülönböztetni az ingyenes
    * munkától.
    *
-   * A HIÁNY NEM MARAD ÉSZREVÉTLEN: ár nélküli tétellel a lap nem zárható le.
+   * A HIÁNY 2026-09-17 ÓTA NEM AKADÁLY: Balázs döntése szerint az ár sehol
+   * nem jelenik meg, és ezért a lezárási feltétel is kikerült. Az adat
+   * megmarad, ár továbbra is rendelhető -- csak a hiánya nem állít meg semmit.
    */
   @IsNumber({ maxDecimalPlaces: 4 }) @IsOptional() unitNet?: number;
   @IsNumber({ maxDecimalPlaces: 2 })

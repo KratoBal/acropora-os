@@ -1048,12 +1048,17 @@ export default function WorksheetDetailScreen() {
                 </View>
                 {/*
                   AZ AR NINCS ITT, ES EZ DONTES: az arat az iroda adja meg
-                  (Balazs, 2026-09-02). Ar nelkuli tetellel a lap nem zarhato
-                  le, tehat a hiany nem marad eszrevetlen.
+                  (Balazs, 2026-09-02).
+
+                  A KORABBI SZOVEG 2026-09-17 OTA HAMIS VOLT, ezert kikerult:
+                  azt allitotta a szerelonek, hogy "enelkul a lap nem zarhato
+                  le". Balazs aznap ugy dontott, hogy az ar-mezok sehol nem
+                  jelennek meg, es ezert a lezarasi feltetel is kikerult -- a
+                  lap ma ar nelkul is lezarhato.
+
+                  Egy felhasznaloi mondat, ami egy megszunt feltetelt ir le,
+                  rosszabb a semminel: a szerelo olyasmit keres, ami nem all.
                 */}
-                <Text style={styles.muted}>
-                  Az árat az irodából teszik rá; enélkül a lap nem zárható le.
-                </Text>
                 {lineError ? (
                   <Text style={styles.lineError}>{lineError}</Text>
                 ) : null}

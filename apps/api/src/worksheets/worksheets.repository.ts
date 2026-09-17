@@ -1105,24 +1105,20 @@ export class WorksheetsRepository extends Repository {
       /**
        * A LEZÁRÁS FELTÉTELEI EGY HELYEN ÁLLNAK, nem itt egymás után.
        *
-       * A lista NŐNI FOG: tudjuk, hogy jön a hibajegy-feltétel (hibajegy
-       * nélküli lap nem zárható le és nem írható alá). Egy beágyazott `if`
+       * A lista VÁLTOZIK: az ár-feltétel 2026-09-17-én KIKERÜLT belőle
+       * (Balázs döntése), és tudjuk, hogy jön a hibajegy-feltétel. Egy
+       * beágyazott `if`
        * mellett minden új feltétel ezt a tranzakciót írná át; így egy sor a
        * `worksheet-close-blockers.ts` fájlban.
        *
        * A lekérdezés MARAD itt, mert tranzakció kell hozzá; a DÖNTÉS megy át,
        * mert ahhoz nem.
        */
-      const linesWithoutPrice = await transaction.worksheetLine.count({
-        where: { worksheetVersionId: current.id, unitNet: null },
-      });
-
       const partnerCode = worksheet.customer.worksheetPartnerCode;
       const departmentCode = worksheet.department.code;
       const blocker = worksheetCloseBlocker({
         status: current.status,
         lineCount: current._count.lines,
-        linesWithoutPrice,
         partnerCode,
         departmentCode,
         hasNumber: Boolean(worksheet.number),

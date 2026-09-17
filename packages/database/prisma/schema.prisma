@@ -3732,9 +3732,21 @@ model WorksheetLine {
   /// megkülönböztetni az ingyenes munkától, és semmi nem szól, ha valaki
   /// elfelejti kitölteni.
   ///
-  /// A HIÁNY NEM MARAD ÉSZREVÉTLEN: ár nélküli tétellel a lap nem zárható le.
-  /// A feltétel ma a LEZÁRÁSHOZ tartozik, mert az átadás fogalma a
-  /// rendszerben még nem létezik - amikor megszületik, oda kerül át.
+  /// AZ ÁR HIÁNYA 2026-09-17 ÓTA NEM AKADÁLY, ÉS EZ BALÁZS DÖNTÉSE.
+  ///
+  /// Eddig ár nélküli tétellel a lap nem volt lezárható. Balázs azt kérte, hogy
+  /// a nettó, bruttó és áfa mezők SEHOL ne jelenjenek meg (sem a weben, sem az
+  /// appban, sem a nyomtatott lapon), és a két elé tett út közül a "B"-t
+  /// választotta: tűnjenek el mindenhonnan, és akkor a lezárásból is ki kell
+  /// venni az ár-feltételt.
+  ///
+  /// Ha az ár sehol nem látszik, nincs hol megadni -- egy megmaradó feltétel
+  /// mellett EGYETLEN lapot sem lehetett volna lezárni.
+  ///
+  /// AZ OSZLOP MARAD (Balázs: "ne töröljük ezeket"), és ár továbbra is
+  /// RENDELHETŐ egy tételhez. Ami megszűnt, az az, hogy a hiánya megállít
+  /// valamit -- és ebből következik, hogy a számlázási alap nem a munkalapról
+  /// jön.
   unitNet            Decimal? @db.Decimal(19, 4)
   vatRatePercent     Decimal? @db.Decimal(5, 2)
   /// Az összegek az egységárból számolnak, tehát nélküle nincs mit tárolni.
