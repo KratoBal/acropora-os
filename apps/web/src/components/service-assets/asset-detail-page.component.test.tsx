@@ -314,3 +314,71 @@ describe("AssetDetailPage kapcsolat nélkül", () => {
     expect(await savotMond("empty")).toBeTruthy();
   });
 });
+
+/**
+ * A MATRICAKOD LATSZIK AZ ADATLAPON.
+ *
+ * A MERT HIANY (nautilus, 2026-09-17): a matricat FEL lehetett vinni -- a
+ * szerkesztoben van mezo, es a mentes el is kuldi --, de aki ranezett egy gepre,
+ * amin ott a matrica, a rendszerben NEM tudta szemre visszakeresni. Egyetlen
+ * adatlapon sem jelent meg. Beolvasassal mar mukodott, szemre nem.
+ *
+ * EZ NEM DONTES VOLT, HANEM HIANY: nem kepzelheto olyan olvasat, amiben
+ * szandekos, hogy egy felvitt azonosito sehol nem latszik.
+ */
+describe("az eszköz matricakódja az adatlapon", () => {
+  it("kiírja a matricakódot a többi azonosító közé", async () => {
+    api.detail.mockResolvedValue({
+      ...asset,
+      labelCode: "V2196",
+    } as unknown as AssetDetail);
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    expect(await screen.findByText("Matricakód")).toBeTruthy();
+    expect(screen.getByText("V2196")).toBeTruthy();
+  });
+
+  /**
+   * MATRICA NELKUL A MEZO OTT MARAD, GONDOLATJELLEL.
+   *
+   * MI PIROSIT: ha a mezot csak akkor rajzolnank ki, amikor van erteke. Az
+   * ELREJTES ugyanugy nez ki, mint a mai hiba: a kezelo nem tudna megmondani,
+   * hogy ezen a gepen NINCS matrica, vagy a lap nem mutatja. A tobbi
+   * kitoltetlen mezo (sorozatszam, leltari szam) is gondolatjelet ir.
+   */
+  it("matrica nélkül a mező ott marad, gondolatjellel", async () => {
+    render(<AssetDetailPage assetId="asset-1" />);
+
+    expect(await screen.findByText("Matricakód")).toBeTruthy();
+    // A FIXTURE-ON NINCS `labelCode`, tehat a mezo erteke gondolatjel. Tobb
+    // kitoltetlen mezo is van a lapon, ezert a DARABSZAMRA nem allitunk -- a
+    // mezo LETEZESE az allitas.
+    const cimke = screen.getByText("Matricakód");
+    expect(cimke.nextElementSibling?.textContent).toBe("—");
+  });
+
+  /**
+   * A KIRAJZOLT QR NEM A MATRICAKODBOL KESZUL, ES EZ KIMONDOTT DONTES.
+   *
+   * A lapon KET kod all. A QR a `qrToken`-en (128 bit), a matricakod egy kiadott
+   * keszletbol jon -- 260 ezer lehetoseg, amit egy belepett partner
+   * vegigprobalhatna. Ezert nem cserelheto fel a ketto.
+   *
+   * MI PIROSIT: ha valaki a QR-t a matricakodra allitana at. A ket kod
+   * OSSZEKEVERESE kivulrol nem latszik -- a QR ugyanugy kirajzolodna.
+   */
+  it("a QR továbbra is a saját tokenjéből készül, nem a matricakódból", async () => {
+    api.detail.mockResolvedValue({
+      ...asset,
+      labelCode: "V2196",
+    } as unknown as AssetDetail);
+    render(<AssetDetailPage assetId="asset-1" />);
+    await screen.findByText("V2196");
+
+    // A HIVAS HARMADIK ARGUMENTUMA egy AbortSignal, ami koronkent mas peldany --
+    // ezert az ELSO KETTORE allitunk, nem a teljes listara.
+    expect(api.qr.mock.calls[0]?.[1]).toBe("asset-1");
+    // ES A MATRICAKOD NEM MEGY AT a QR-lekerdezesbe egyik argumentumkent sem.
+    expect(api.qr.mock.calls[0]).not.toContain("V2196");
+  });
+});

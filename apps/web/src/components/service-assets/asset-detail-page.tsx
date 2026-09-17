@@ -433,6 +433,29 @@ export function AssetDetailPage({ assetId }: { assetId: string }) {
                   <Data label="Sorozatszám" value={asset.serialNumber} />
                   <Data label="Leltári szám" value={asset.inventoryNumber} />
                   {/*
+                    AZ ELORE NYOMTATOTT MATRICA KODJA -- A BEGEPELT AZONOSITOK
+                    KOZOTT, NEM A QR-PANELBEN.
+
+                    A MERT HIANY (nautilus, 2026-09-17): a matricat FEL lehetett
+                    vinni (a szerkesztoben van mezo, es a mentes el is kuldi), de
+                    aki ranezett egy gepre, amin ott a matrica, a rendszerben NEM
+                    tudta szemre visszakeresni -- egyetlen adatlapon sem jelent
+                    meg. Beolvasassal mar mukodott, szemre nem.
+
+                    MIERT ITT, ES NEM A QR-PANELBEN: a lapon KET kod all, es a
+                    ketto MAS fajta. A QR a `qrToken`-en all (128 bit,
+                    kitalalhatatlan), a matricakod egy kiadott keszletbol jon, es
+                    SZEMMEL osszeolvashato a gepre ragasztott cimkevel. A
+                    sorozatszam es a leltari szam ugyanez a fajta: BEGEPELT,
+                    emberi azonositok. Egy panelbe teve a ketto osszemosodna.
+
+                    ES A KIRAJZOLT QR SZANDEKOSAN MARAD A `qrToken`-en (acrobot
+                    dontese, Balazs 2026-09-03-i ervelesebol): a matricakod 260
+                    ezer lehetoseg, amit egy belepett partner vegigprobalhatna.
+                    KET kod marad, de MIND A KETTO latszik.
+                  */}
+                  <Data label="Matricakód" value={asset.labelCode} />
+                  {/*
                     A TELJESITMENY AZ ERTEKEVEL ES A MERTEKEGYSEGEVEL EGYUTT,
                     EGY MEZOBEN. A szerkeszto ket mezobe keri be, mert ott ket
                     dolgot kell megadni; az adatlapon viszont EGY adat all, es
