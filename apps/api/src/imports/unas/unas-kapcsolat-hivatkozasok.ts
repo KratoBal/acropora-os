@@ -53,6 +53,36 @@ export interface KapcsolatOlvasas {
    * A hianyzo `SimilarProducts` mezo OLVASHATO: az azt jelenti, hogy a termek
    * nem visel kapcsolatot. A hianyzo vagy nem-objektum `rawPayload` viszont
    * nem.
+   *
+   * === ES EZ MERT FELTETEL, NEM MAGATOL ERTETODO (acrobot, 2026-09-17) ===
+   *
+   * A mezo CSAK azt nezi, hogy a `rawPayload` objektum-e. Egy REGEBBI
+   * kinyeresbol valo pillanatkep ettol meg olvashato lenne -- es ha abban nincs
+   * kapcsolat-mezo, a torlo ag HELYES sorokat vinne el. A kerdes tehat az, hogy
+   * a HIANYZO kulcs ma mit jelent, es erre az adat valaszolt, ket fuggetlen
+   * meressel az acropora_staging adatbazison:
+   *
+   *   pillanatkep osszesen                      1897
+   *   SimilarProducts kulccsal                  1310
+   *   AdditionalProducts kulccsal               1012
+   *   nem-objektum rawPayload                      0
+   *
+   *   1. AZ IDOK ATFEDNEK: a kulcs NELKULI sorok legkorabbi irasa
+   *      2026-09-04 05:39:59.643, a kulcsosake 05:39:59.227 -- ugyanaz a
+   *      masodperc. A kulcs hianya tehat NEM regi alakot jelent.
+   *   2. NINCS URES TAROLO: az 1310 kozott NULLA olyan van, ahol a
+   *      `SimilarProducts` ott all, de nincs benne gyerek. Az export SOHA nem ir
+   *      ki ures tarolot.
+   *
+   * VAGYIS MA a hianyzo kulcs azt jelenti, hogy a terméknek NINCS kapcsolata --
+   * nem azt, hogy nem kerdeztuk meg.
+   *
+   * A FELTETEL, AMI EZT MEGFORDITANA: ha a kinyeres valaha RESZLEGESSE valik --
+   * vagyis ugy irunk pillanatkepet, hogy a kapcsolat-mezoket nem kerdezzuk le
+   * --, akkor ugyanaz a hiany mar azt jelentene, hogy NEM TUDJUK, es a torlo ag
+   * helyes sorokat vinne el. Aki ilyen valtozast vezet be, ezt a mezot is
+   * atirja: az `olvashato` akkor mar nem a payload alakjarol szol, hanem arrol,
+   * hogy a kapcsolat-mezoket LEKERDEZTUK-e.
    */
   olvashato: boolean;
   /**
