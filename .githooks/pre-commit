@@ -29,6 +29,32 @@ staged=$(git diff --cached --name-only --diff-filter=ACMR)
 # telepitett. Egy fajl, ket hivo, tehat nem tudnak elcsuszni egymastol.
 node scripts/scan-secrets.mjs --staged
 
+# A HIANYZO ESZKOZ NEM FORMAZASI HIBA, ES EDDIG ANNAK LATSZOTT.
+#
+# Merve 2026-09-17 (acrobot jelezte, murena reprodukalta): egy `node_modules`
+# nelkuli munkapeldanyban a `pnpm exec prettier` NEM formazasi hibat ad, hanem
+# `Command "prettier" not found`, 1-es kilepessel. A lenti `if !` ezt nem tudta
+# megkulonboztetni, es kiirta, hogy "a fenti fajlok nincsenek formazva" -- egy
+# olyan allitast, ami HAMIS, es ami a fajlokrol szol, nem az eszkozrol.
+#
+# ES AMI EZ UTAN TORTENIK, AZ A VALODI KAR: aki ezt latja, `--no-verify`-jal
+# commitol. Azzal viszont a TITOK-KERESES is kimarad -- pont az, amirol ez a
+# fajl fentebb kimondja, hogy visszavonhatatlan. Egy felrevezeto formazasi
+# uzenet tehat a titok-kaput szereli le, nem a formazast.
+#
+# Ezert: ha a prettier NEM FUTTATHATO, azt kimondjuk, es a commit MEHET. A
+# titok-kereses addigra mar lefutott, a formazas hiteles fele pedig a CI-ben
+# all. Ha a prettier futtathato, minden marad a regiben.
+if ! pnpm exec prettier --version >/dev/null 2>&1
+then
+  echo >&2
+  echo "A formazas-ellenorzes NEM FUTOTT LE: a prettier nem futtathato ebben a" >&2
+  echo 'munkapeldanyban (lefutott mar a pnpm install?). Ez NEM azt jelenti, hogy a' >&2
+  echo "fajlok formazatlanok -- azt most nem tudjuk. A CI megmeri." >&2
+  echo "A titok-kereses lefutott, a commit mehet." >&2
+  exit 0
+fi
+
 # --no-error-on-unmatched-pattern: after .gitignore/.prettierignore filtering
 # the list can end up empty, which is a pass, not a failure.
 # A listat itt a git adja ujra, `-z`-vel, nem a `$staged`: a NUL bajtot egy
