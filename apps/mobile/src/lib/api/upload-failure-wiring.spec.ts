@@ -78,22 +78,17 @@ describe("a feltöltés bukása megmondja, mi történt", () => {
   });
 
   /**
-   * ÉS EGYIK SEM ÍR SAJÁT, NÉMA MONDATOT A BUKÁS ÁGÁRA. Ez a hiba KONKRÉT
-   * alakja volt: `error instanceof Error ? error.message : "..."` -- ami
-   * hálózati hibánál épp a fix, semmitmondó szöveget adta vissza.
+   * AMI ITT NINCS, ÉS AZÉRT NINCS: „egyik sem esik vissza a néma mondatra".
    *
-   * A MINTA A `catch` ÁGRA SZŰKÍT: a `describeRejection` ugyanezt az alakot
-   * használja, és ott HELYES -- ott a szerver VÁLASZOLT, tehát az ő üzenete a
-   * jó. Egy szűkítés nélküli tiltás ezt is elvágná.
+   * MEGÍRTAM, ÉS A KALIBRÁCIÓ KIDOBTA. A néma alakot visszaírva a fenti három
+   * állítás pirosra váltott, ez a negyedik VISZONT NEM -- a mintája a `catch`
+   * és a hívás KÖZÖTTI szóközre illesztett, és a visszaírt alak fölött ott
+   * maradt egy magyarázó komment. Vagyis pontosan attól maradt zöld, ami a
+   * kódban esetleges.
+   *
+   * NEM JAVÍTOTTAM, HANEM KIVETTEM: amit védeni akart (a `catch` ág elveszti a
+   * diagnózist), azt a második állítás MÁR MÉRI, és robusztusabban. Egy
+   * negyedik, törékeny minta nem ad hozzá védelmet, csak egy állítást, ami a
+   * következő formázásnál elnémul.
    */
-  it("egyik sem esik vissza a néma mondatra a catch ágon", () => {
-    for (const ut of KEPERNYOK) {
-      const s = olvas(ut);
-      assert.doesNotMatch(
-        s,
-        /\} catch \((?:error|cause)\) \{\s*set\w+\(\s*(?:error|cause) instanceof Error/,
-        `${ut}: a catch ág megint a néma mondatra esik vissza`,
-      );
-    }
-  });
 });
