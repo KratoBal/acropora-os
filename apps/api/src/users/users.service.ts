@@ -45,6 +45,9 @@ export class UsersService {
     this.requirePartnerRole(
       input.customerId === undefined ? existing.customerId : input.customerId,
       input.role ?? existing.role,
+      // A SZALLITOI KOTES A MEGLEVO SORBOL JON: ez a modul nem irja, de ha all,
+      // akkor a fiok KOTOTT, es a partner-szerep jogos.
+      existing.supplierId,
     );
     try {
       return await this.repository.update(id, input, actorId);
@@ -103,21 +106,50 @@ export class UsersService {
   }
 
   /**
-   * A PARTNER-FIOK SZEREPE NEM FELULETI SZABALY.
+   * A PARTNER-FIOK SZEREPE NEM FELULETI SZABALY -- ES A VIZSGALAT KETIRANYU.
    *
    * A szerep-valaszto csak kenyelmi kapu. Egy kozvetlen API-hivas, egy regebbi
    * kliens vagy egy kesobbi kepernyo nem adhat a partnerhez kotott fioknak
    * belso szerepet, mert akkor a partner-hatokor csak az adatokat szurne, a
    * menu es a vegpontjogok mar tul tagok lennenek. Update-nel a tenylegesen
    * megmarado ket erteket ellenorizzuk: a kihagyott mezo nem jelenthet kiskaput.
+   *
+   * === A MASIK IRANY, ES AZ A VESZELYESEBB (2026-09-17) ===
+   *
+   * A vizsgalat 2026-09-17-ig CSAK azt allitotta, hogy KOTOTT fiok nem kaphat
+   * belso szerepet. A forditottja nem volt benne: `PARTNER_SERVICE` szerep
+   * KOTES NELKUL atment.
+   *
+   * Es a kovetkezmenye nem szuk, hanem a leheto legtagabb: a `partnerScopeOf`
+   * kotes hianyaban `{ kind: "internal" }` erteket ad -- helyesen, mert az a
+   * SAJAT KOLLEGA esete. Egy kotes nelkuli `PARTNER_SERVICE` fiok tehat
+   * megkapja a partner-szerep JOGAIT (`SERVICE_VIEW`, `SERVICE_MANAGE`), a
+   * HATOKORE viszont belsos: MINDEN vevo szerviz-sorat latja es kezeli.
+   *
+   * A FELULET ELO IS TUDTA ALLITANI: a partner-valaszto `onClear` aga a vevot
+   * torolte, a szerepet nem. Aki valasztott egy partnert, aztan meggondolta
+   * magat, pontosan ilyen fiokot mentett.
+   *
+   * A SZALLITOI KOTES IS SZAMIT, nem csak a vevoi: a ket oszlop kulon all
+   * (`User.customerId`, `User.supplierId`), es a `partnerScopeOf` mind a
+   * kettobol ad hatokort. Ez a modul supplier-t nem IR (a DTO-kon nincs ilyen
+   * mezo), de OLVASNIA kell, kulonben egy szallitohoz kotott partner-fiok
+   * minden mentesnel elbukna.
    */
   private requirePartnerRole(
     customerId: string | null | undefined,
     role: string,
+    supplierId?: string | null,
   ) {
     if (customerId && role !== "PARTNER_SERVICE")
       throw new BadRequestException(
         "Partnerhez kötött felhasználó csak a Partner szerviz szerepkört kaphatja.",
+      );
+    if (role === "PARTNER_SERVICE" && !customerId && !supplierId)
+      throw new BadRequestException(
+        "A Partner szerviz szerepkörhöz partnert is választani kell. Partner nélkül " +
+          "ez a fiók minden vevő szerviz-adatát látná és kezelhetné, mert a hatóköre " +
+          "belsősként viselkedne.",
       );
   }
 

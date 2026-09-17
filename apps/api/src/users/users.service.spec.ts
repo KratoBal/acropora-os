@@ -267,6 +267,136 @@ describe("a felhasználó vevőhöz kötése", () => {
     assert.equal(updated.id, "user-1");
   });
 
+  /**
+   * A KOTES NELKULI PARTNER-SZEREP A LEGTAGABB FIOK, AMIT LETRE LEHET HOZNI.
+   *
+   * A `partnerScopeOf` kotes hianyaban `{ kind: "internal" }` erteket ad --
+   * helyesen, mert az a SAJAT KOLLEGA esete. Egy kotes nelkuli
+   * `PARTNER_SERVICE` fiok tehat megkapja a partner-szerep JOGAIT
+   * (`SERVICE_VIEW` es `SERVICE_MANAGE`), a HATOKORE viszont belsos: minden
+   * vevo szerviz-sorat latja es kezeli.
+   *
+   * MI PIROSIT: a vizsgalat masodik iranyanak elhagyasa. 2026-09-17-ig CSAK az
+   * elso irany allt (kotott fiok nem kaphat belso szerepet).
+   */
+  it("kötés nélkül nem ad Partner szerviz szerepet (létrehozás)", async () => {
+    await assert.rejects(
+      () =>
+        new UsersService(repository()).create(
+          {
+            firstName: "Réka",
+            lastName: "Kovács",
+            email: "reka.kovacs@acropora.hu",
+            role: "PARTNER_SERVICE",
+          } as never,
+          "actor-1",
+        ),
+      (error: unknown) => {
+        assert.ok(error instanceof BadRequestException);
+        // A HIBAUZENET MONDJA MEG, MIERT: egy nyers megszoritas-sertes a
+        // kepernyon ertelmezhetetlen, es a kezelo a partner mezot nem
+        // hozna osszefuggesbe a szerepkorrel.
+        assert.match(
+          String((error as Error).message),
+          /partnert is választani/,
+        );
+        return true;
+      },
+    );
+  });
+
+  /**
+   * UGYANEZ MODOSITASNAL, ES EZ AZ AZ UT, AMIT A FELULET ELO IS TUDOTT ALLITANI:
+   * a partner-valaszto torlese a vevot vette vissza, a szerepet nem.
+   *
+   * A `customerId: null` a TENYLEGES vegallapotot adja: a szolgaltatas a
+   * megmarado erteket nezi, nem a bemenet meglétét.
+   */
+  it("kötés nélkül nem ad Partner szerviz szerepet (módosítás)", async () => {
+    await assert.rejects(
+      () =>
+        new UsersService(
+          repository({
+            detail: async () => ({
+              ...user,
+              role: "PARTNER_SERVICE" as const,
+              customerId: "customer-1",
+            }),
+          }),
+        ).update(
+          "user-1",
+          { customerId: null, expectedUpdatedAt: user.updatedAt } as never,
+          "actor-1",
+        ),
+      BadRequestException,
+    );
+  });
+
+  /**
+   * ELSO POZITIV KONTROLL: A KOTOTT PARTNER-FIOK TOVABBRA IS LETREHOZHATO.
+   *
+   * Enelkul a fenti ket allitas egy olyan javitastol is zold lenne, ami MINDEN
+   * `PARTNER_SERVICE` fiokot elutasit -- es akkor partner-fiokot egyaltalan nem
+   * lehetne nyitni. Balazs eppen ma hoz letre ilyeneket.
+   */
+  it("kontroll: a kötött partner-fiók létrehozható", async () => {
+    const created = await new UsersService(repository()).create(
+      {
+        firstName: "Réka",
+        lastName: "Kovács",
+        email: "reka.kovacs@acropora.hu",
+        role: "PARTNER_SERVICE",
+        customerId: "customer-1",
+      } as never,
+      "actor-1",
+    );
+    assert.equal(created.id, "user-1");
+  });
+
+  /**
+   * MASODIK POZITIV KONTROLL: A KOTES NELKULI BELSOS FIOK IS MENTHETO.
+   *
+   * Ez a SAJAT KOLLEGANK esete, es ez a gyakoribb. Enelkul egy olyan javitas is
+   * zold lenne, ami minden kotes nelkuli fiokot elutasit -- vagyis a sajat
+   * kollegaink letrehozasat vagna el. A ket kontroll KET KULONBOZO iranyt zar
+   * le: az egyik a partnert, a masik a belsost.
+   */
+  it("kontroll: a kötés nélküli belsős fiók menthető", async () => {
+    const created = await new UsersService(repository()).create(
+      {
+        firstName: "Réka",
+        lastName: "Kovács",
+        email: "reka.kovacs@acropora.hu",
+        role: "SERVICE",
+      } as never,
+      "actor-1",
+    );
+    assert.equal(created.id, "user-1");
+  });
+
+  /**
+   * A SZALLITOI KOTES IS KOTES. A ket oszlop kulon all, es a `partnerScopeOf`
+   * mind a kettobol ad hatokort -- egy csak a `customerId` mezot nezo vizsgalat
+   * a szallitohoz kotott partner-fiok MINDEN mentesét elvagna.
+   */
+  it("kontroll: a szállítóhoz kötött partner-fiók módosítható", async () => {
+    const updated = await new UsersService(
+      repository({
+        detail: async () => ({
+          ...user,
+          role: "PARTNER_SERVICE" as const,
+          customerId: null,
+          supplierId: "supplier-1",
+        }),
+      }),
+    ).update(
+      "user-1",
+      { lastName: "Kovács", expectedUpdatedAt: user.updatedAt },
+      "actor-1",
+    );
+    assert.equal(updated.id, "user-1");
+  });
+
   it("MAR SZALLITOHOZ kotott fiokot nem enged vevohoz kotni", async () => {
     /*
       Az adatbazisban `CHECK` all ra, tehat a masodik kotes ott ugyis elbukna.

@@ -29,14 +29,32 @@ vi.mock("@acropora/types", () => ({
   isNavigationEntryVisible: () => false,
 }));
 vi.mock("@/components/service-jobs/partner-picker", () => ({
+  /**
+   * A VALASZTO KET AGA KULON GOMB, es a masodik 2026-09-17-en kerult ide.
+   *
+   * Az `onClear` addig nem volt a duplaban -- ezert a torles utani allapotot
+   * SEMMI nem merte, holott epp az allitott elo egy kotes nelkuli
+   * `PARTNER_SERVICE` fiokot. Amit a hivo hasznal, de a teszt-dupla nem ad
+   * vissza, az a dupla biztos hibaja.
+   */
   PartnerPicker: ({
     onPick,
+    onClear,
   }: {
     onPick: (partner: { customerId: string }) => void;
+    onClear: () => void;
   }) => (
-    <button type="button" onClick={() => onPick({ customerId: "customer-1" })}>
-      Vevő kiválasztása
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={() => onPick({ customerId: "customer-1" })}
+      >
+        Vevő kiválasztása
+      </button>
+      <button type="button" onClick={() => onClear()}>
+        Vevő törlése
+      </button>
+    </>
   ),
 }));
 vi.mock("./role-labels", () => ({
@@ -84,5 +102,33 @@ describe("UserEditorPage partner szerepköre", () => {
     expect(
       screen.getByText(/szándékosan csak Partner szerviz lehet/i),
     ).toBeInTheDocument();
+  });
+
+  /**
+   * A PARTNER TORLESE A SZEREPET IS VISSZAVESZI.
+   *
+   * MI PIROSIT: a korabbi `onClear={() => setCustomerId("")}` alak. Az a vevot
+   * vette vissza, a szerepet nem -- es az igy mentett fiok a LEGTAGABB, amit
+   * letre lehet hozni: a `PARTNER_SERVICE` JOGAIT kapja, a HATOKORE viszont
+   * belsos (a `partnerScopeOf` kotes hianyaban `internal`-t ad), tehat MINDEN
+   * vevo szerviz-sorat latna.
+   *
+   * A SORREND A LENYEG: eloszor valasztunk, hogy a szerep tenyleg elmozduljon
+   * -- kulonben a lenti allitas egy olyan kepernyon is zold lenne, ahol a
+   * valasztas SEM allitja at a szerepet.
+   */
+  it("a vevő törlése a szerepkört is visszaveszi", async () => {
+    render(<UserEditorPage />);
+    const role = screen.getByLabelText("Szerepkör") as HTMLSelectElement;
+
+    fireEvent.click(screen.getByRole("button", { name: "Vevő kiválasztása" }));
+    await waitFor(() => expect(role.value).toBe("PARTNER_SERVICE"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Vevő törlése" }));
+
+    await waitFor(() => expect(role.value).toBe("VIEWER"));
+    // ES A VALASZTO UJRA A TELJES LISTAT KINALJA: a szerep tudatos dontes marad,
+    // nem egy ottfelejtett ertek.
+    expect(within(role).getAllByRole("option")).toHaveLength(2);
   });
 });
