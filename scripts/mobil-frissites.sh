@@ -109,6 +109,18 @@ if [ -f "$FP" ]; then
   #   a VALODI fajl all ott          ios ba70c226   android a5666bdb
   #                                  (a harmadik acrobot merese, az o fajan)
   #
+  # A KOZEPSO SZAM A FIXTURATOL FUGG, ES EZT KI KELL MONDANI (nautilus, 09-18).
+  # Az ujjlenyomat a fajl TARTALMAT hasheli, tehat egy MASIK placeholder MASIK
+  # szamot ad. A flotta kozos parja (mobil-ota.sh) ugyanide 862c5f53-at ir, mert
+  # mas dummyval merte -- EGYIK SEM ELAVULT. Aki a ket szkriptet egymas melle
+  # teszi, ket szamot lat egy sorra, es azt hiszi, az egyik regi.
+  #
+  # A SZELSO KET ERTEK PINNELHETO (a bemenetuk adott: nincs fajl, illetve a
+  # valodi fajl), a kozepso NEM. Amit a kozepso sor bizonyit, az nem a szam,
+  # hanem az, hogy BARMILYEN nem-valodi tartalom HARMADIK, a masik kettotol
+  # kulonbozo hasht ad. Ha valaha ujramered, a sajat szamod mas lesz, es az is
+  # helyes -- a sajat bemenetere.
+  #
   # Harom kulonbozo android szam, es az ios MIND A HAROMSZOR AZONOS. Ebbol ket
   # dolog kovetkezik: a fajl tenyleg benne van az android ujjlenyomatban (a
   # placeholder megmozditotta), es az IOS SZAM BARHOL MERHETO -- akkor is, ahol
