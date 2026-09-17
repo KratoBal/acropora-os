@@ -274,12 +274,22 @@ export function AssetLabelBatchesPage() {
         elgepeles otven felesleges matricat nyomtatna.
       */}
       <Card className="space-y-3 p-4">
+        {/*
+          A CÍM AZT MONDJA MEG, MIKOR KELL, NEM AZT, MIT CSINÁL -- és ez mért
+          hiba javítása. Balázs 2026-09-03-án szó szerint ezt írta a dobozról:
+          „amiről soha nem volt szó és nem is tudom mire való". A régi cím
+          („Már kinyomtatott kódok betöltése") a MŰVELETET nevezte meg, az
+          ESETET nem, és a doboz épp a generálás gombja mellett áll -- aki nem
+          tudja, mikor van rá szükség, a kettőt egymás változatának nézi.
+        */}
         <h2 className="text-sm font-semibold">
-          Már kinyomtatott kódok betöltése
+          Kinyomtatott kódok felvétele, amik még nincsenek a készletben
         </h2>
         <p className="text-xs text-dusk-500">
-          Soronként vagy vesszővel elválasztva. Megismételhető: a már felvett
-          kódok nem duplikálódnak, és a válasz megmondja, melyek voltak azok.
+          Akkor kell, ha a matricák a készlet-nyilvántartás előtt készültek,
+          vagy máshonnan kaptad a kódokat. Soronként vagy vesszővel elválasztva.
+          Megismételhető: a már felvett kódok nem duplikálódnak, és a válasz
+          megmondja, melyek voltak azok.
         </p>
         {importError ? (
           <Alert
@@ -333,9 +343,15 @@ export function AssetLabelBatchesPage() {
             megnyitásakor számolódik abból, hány kód van már eszközhöz rendelve
             -- tehát SOHA nem nő, csak csökkenhet két megnyitás között. Egy
             statikusnak látszó mező mellett a kezelő elakadtnak hinné.
+
+            A „KÖTEGENKÉNT" SZÓ NÉLKÜL A MONDAT MÁST ÁLLÍT, MINT AMIT MÉR, és ez
+            mért félreértés: Balázs 2026-09-03-án jelezte, hogy nem érti. A szám
+            EGY KÖTEGEN BELÜL nem nő, mert abban a kötegben a kódok csak
+            elfogyhatnak. A TELJES készlet viszont NŐ, valahányszor generálsz --
+            a cím nélküli mondat épp az ellenkezőjét ígérte.
           */}
           <Badge variant="neutral">
-            a szabad darabszám élő: soha nem nő, csak csökkenhet
+            kötegenként: a szabad darabszám soha nem nő, csak csökkenhet
           </Badge>
         </div>
 
