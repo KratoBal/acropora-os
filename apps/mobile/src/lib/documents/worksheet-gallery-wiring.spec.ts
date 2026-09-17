@@ -26,9 +26,19 @@ describe("a munkalap csatolmány-szakasza", () => {
   });
 
   it("a kliens lekéri a csatolmányok listáját", () => {
+    /**
+     * A FÜGGVÉNY NEVÉVEL EGYÜTT, NEM CSAK AZ ÚTVONALLAL.
+     *
+     * MÉRVE: ugyanaz az útvonal KÉT helyen áll ebben a fájlban, mert a
+     * FELTÖLTÉS is oda megy. Egy pusztán útvonalra illesztő állítás tehát zöld
+     * maradna akkor is, ha a lekérő függvényt kivennék -- a feltöltés egyedül
+     * tartaná életben.
+     */
+    const s = olvas(KLIENS);
+    assert.match(s, /export function listWorksheetDocuments\(id: string\)/);
     assert.match(
-      olvas(KLIENS),
-      /\$\{BASE\}\/\$\{encodeURIComponent\(id\)\}\/documents/,
+      s,
+      /listWorksheetDocuments[\s\S]{0,200}\$\{BASE\}\/\$\{encodeURIComponent\(id\)\}\/documents/,
     );
   });
 
@@ -69,9 +79,27 @@ describe("a munkalap csatolmány-szakasza", () => {
    * és nincs sehol.
    */
   it("a feltöltés a csatolmány-listát is érvényteleníti", () => {
+    /**
+     * AZ ÉRVÉNYTELENÍTÉS ALAKJÁRA ÁLL, NEM A KULCSRA -- és ezt a kalibráció
+     * tanította meg, harmadszor ugyanabban az alakban.
+     *
+     * A puszta `queryKey: ["worksheet-documents", id]` minta ZÖLD MARADT,
+     * amikor az érvénytelenítést kivettem: ugyanaz a kulcs ott áll a
+     * `useQuery` DEFINÍCIÓJÁBAN is. A „hívás alakjára illessz" szabály tehát
+     * SZÜKSÉGES, de nem elég -- a mintának EGYEDINEK is kell lennie arra, amit
+     * véd. Ezért méri a darabszámot is: kettő kell belőle, a lekérdezés és az
+     * érvénytelenítés.
+     */
+    const s = olvas(KEPERNYO);
+    const db = s.split('queryKey: ["worksheet-documents", id]').length - 1;
+    assert.equal(
+      db,
+      2,
+      `a kulcs ${db} helyen áll: a lekérdezés ÉS az érvénytelenítés kell, különben a friss kép nem jelenne meg`,
+    );
     assert.match(
-      olvas(KEPERNYO),
-      /queryKey: \["worksheet-documents", id\]/,
+      s,
+      /invalidateQueries\(\{\s*queryKey: \["worksheet-documents", id\],\s*\}\)/,
       "a feltöltés után a galéria nem frissül: a friss kép nem jelenne meg",
     );
   });
