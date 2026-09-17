@@ -1,4 +1,5 @@
 import { apiRequest } from "./client";
+import type { ServiceDocumentSummary } from "@/lib/documents/document-view";
 import { buildDocumentUpload, type PickedFile } from "./document-upload";
 
 /**
@@ -383,6 +384,23 @@ export function createWorksheet(input: CreateWorksheetInput) {
  * vegponton ugyanazt a mezonevet es ugyanazt a darabszam-hatart varja. Ket
  * kulon osszerako ket helyen romlana el.
  */
+/**
+ * A LAP CSATOLMANYAI.
+ *
+ * `service.view` jogot ker, ugyanugy, mint maga a lap -- aki a lapot latja,
+ * a hozza tartozo fenykepeket is lathatja.
+ *
+ * A LISTA A LEIRO ADAT, NEM A BAJTOK. A kepet magat a
+ * `<gazda>/documents/<id>` ut adja, es azt a kepernyo HITELESITETT
+ * kep-forraskent keri le (`lib/documents/document-view.ts`) -- ez a vegpont
+ * csak azt mondja meg, MI van a lapon.
+ */
+export function listWorksheetDocuments(id: string) {
+  return apiRequest<{ items: ServiceDocumentSummary[] }>(
+    `${BASE}/${encodeURIComponent(id)}/documents`,
+  );
+}
+
 export async function uploadWorksheetDocuments(
   id: string,
   input: { files: readonly PickedFile[] },
