@@ -25,7 +25,8 @@ import {
   setWorksheetAssignees,
   uploadWorksheetDocuments,
 } from "@/lib/api/worksheets";
-import { ApiError } from "@/lib/api/client";
+import { ApiError, ApiNetworkError } from "@/lib/api/client";
+import { describeUploadFailure } from "@/lib/api/network-failure";
 import { useIsOnline } from "@/lib/offline/connectivity";
 import { describeCachedWorksheetNotice } from "@/lib/offline/offline-notice";
 import {
@@ -367,6 +368,10 @@ export default function WorksheetDetailScreen() {
         },
         statusOf: (cause) => (cause instanceof ApiError ? cause.status : null),
         describeRejection: (cause) =>
+          /**
+           * A SZERVER VALASZOLT, tehat az O uzenete a helyes: az megmondja, mi
+           * a baj (tul nagy fajl, rossz formatum, nincs jog).
+           */
           cause instanceof Error
             ? cause.message
             : "A feltöltés nem sikerült. Próbáld újra.",
@@ -398,10 +403,19 @@ export default function WorksheetDetailScreen() {
         });
       }
     } catch (cause) {
+      /**
+       * IDE MA CSAK AZ JUT EL, AMI NEM A KULDES BUKASA (a `uploadOrQueuePhotos`
+       * a halozati hibat sorba teszi, a valaszolt hibat pedig visszaadja).
+       * A jelzes megis ugyanaz, mert ha valaha ide MEGIS halozati hiba kerul,
+       * a kepernyo mondja meg, MI panaszol -- ne megint egy nema mondat alljon
+       * itt. Lasd `lib/api/network-failure.ts`.
+       */
       setPhotoNotice(
-        cause instanceof Error
-          ? cause.message
-          : "A feltöltés nem sikerült. Próbáld újra.",
+        describeUploadFailure({
+          error: cause,
+          uris: photos.map((f) => f.uri),
+          networkFailure: cause instanceof ApiNetworkError,
+        }),
       );
     } finally {
       setUploading(false);
