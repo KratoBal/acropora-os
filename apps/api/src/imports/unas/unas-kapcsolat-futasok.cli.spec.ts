@@ -43,12 +43,28 @@ function futas(reszlet: Partial<FutasSor> = {}): FutasSor {
   };
 }
 
+/**
+ * A DUPLA MIND A KET VARRATOT KITOLTI.
+ *
+ * A `utemezoBekapcsolva` KOTELEZO mezo, es ez szandekos: amikor felvettem, a
+ * fordito mind a nyolc hivohelyen szolt. Egy opcionalis mezo csendben
+ * `undefined` maradt volna, es a dupla tobbet allitott volna a valosagnal.
+ */
+function d(
+  futasok: (limit: number) => Promise<FutasSor[]>,
+  utemezoBekapcsolva = false,
+) {
+  return { futasok, utemezoBekapcsolva: () => utemezoBekapcsolva };
+}
+
 describe("kapcsolat-újraépítés futásainak olvasása", () => {
   it("a terv-futást tervnek nevezi, és kiírja a változást", async () => {
     const { out, sorok } = kimenet();
-    const kod = await runKapcsolatFutasokCli([], out, {
-      futasok: async () => [futas()],
-    });
+    const kod = await runKapcsolatFutasokCli(
+      [],
+      out,
+      d(async () => [futas()]),
+    );
 
     assert.equal(kod, 0);
     const szoveg = sorok.join("");
@@ -65,9 +81,11 @@ describe("kapcsolat-újraépítés futásainak olvasása", () => {
    */
   it("a megállt futást megkülönbözteti a tervtől", async () => {
     const { out, sorok } = kimenet();
-    await runKapcsolatFutasokCli([], out, {
-      futasok: async () => [futas({ stopped: true })],
-    });
+    await runKapcsolatFutasokCli(
+      [],
+      out,
+      d(async () => [futas({ stopped: true })]),
+    );
 
     const szoveg = sorok.join("");
     assert.match(szoveg, /MEGALLT a nagy változás határán/);
@@ -76,19 +94,21 @@ describe("kapcsolat-újraépítés futásainak olvasása", () => {
 
   it("az író futást írónak nevezi", async () => {
     const { out, sorok } = kimenet();
-    await runKapcsolatFutasokCli([], out, {
-      futasok: async () => [futas({ applied: true })],
-    });
+    await runKapcsolatFutasokCli(
+      [],
+      out,
+      d(async () => [futas({ applied: true })]),
+    );
     assert.match(sorok.join(""), /ÍRT/);
   });
 
   it("a hibás futás hibakódját kiírja", async () => {
     const { out, sorok } = kimenet();
-    await runKapcsolatFutasokCli([], out, {
-      futasok: async () => [
-        futas({ errorCode: "UNAS_RELATION_REBUILD_FAILED" }),
-      ],
-    });
+    await runKapcsolatFutasokCli(
+      [],
+      out,
+      d(async () => [futas({ errorCode: "UNAS_RELATION_REBUILD_FAILED" })]),
+    );
     assert.match(sorok.join(""), /HIBA \(UNAS_RELATION_REBUILD_FAILED\)/);
   });
 
@@ -96,11 +116,49 @@ describe("kapcsolat-újraépítés futásainak olvasása", () => {
    * AZ URES EREDMENY IS VALASZ. Egy ures kimenet megkulonboztethetetlen attol,
    * mintha a parancs el sem indult volna.
    */
+  /**
+   * ES AZ URES EREDMENY HARMADIK OKA KULON SZO -- MERT A TEENDO ELLENTETES.
+   *
+   * "Meg korai" (be van kapcsolva, a csendes ora nem jott el) -> VARNI kell.
+   * "Nincs felhuzva" (a kapcsolo sehol nem all) -> DONTENI kell.
+   *
+   * Merve 2026-09-17 este: ot bement PR keszult el ugy, hogy egyik sem futott
+   * meg soha, mert a kornyezeti valtozo sehol nem allt. Ezt kezzel kellett
+   * kinyomozni, konteneren belul.
+   */
+  it("az üres eredménynél kimondja, hogy az ütemező nincs bekapcsolva", async () => {
+    const { out, sorok } = kimenet();
+    await runKapcsolatFutasokCli(
+      [],
+      out,
+      d(async () => [], false),
+    );
+
+    const szoveg = sorok.join("");
+    assert.match(szoveg, /AZ ÜTEMEZŐ NINCS BEKAPCSOLVA/);
+    assert.match(szoveg, /nem várakozás kérdése, hanem döntésé/);
+  });
+
+  it("bekapcsolt ütemezőnél viszont várakozást mond", async () => {
+    const { out, sorok } = kimenet();
+    await runKapcsolatFutasokCli(
+      [],
+      out,
+      d(async () => [], true),
+    );
+
+    const szoveg = sorok.join("");
+    assert.match(szoveg, /BE VAN KAPCSOLVA/);
+    assert.doesNotMatch(szoveg, /NINCS BEKAPCSOLVA/);
+  });
+
   it("az üres eredményt kimondja", async () => {
     const { out, sorok } = kimenet();
-    const kod = await runKapcsolatFutasokCli([], out, {
-      futasok: async () => [],
-    });
+    const kod = await runKapcsolatFutasokCli(
+      [],
+      out,
+      d(async () => []),
+    );
 
     assert.equal(kod, 0);
     assert.match(sorok.join(""), /Egyetlen futás sincs feljegyezve/);
@@ -113,14 +171,16 @@ describe("kapcsolat-újraépítés futásainak olvasása", () => {
    */
   it("az átlagba csak a terv-futások számítanak bele", async () => {
     const { out, sorok } = kimenet();
-    await runKapcsolatFutasokCli([], out, {
-      futasok: async () => [
+    await runKapcsolatFutasokCli(
+      [],
+      out,
+      d(async () => [
         futas({ rowsBefore: 100, rowsPlanned: 110 }),
         futas({ rowsBefore: 200, rowsPlanned: 210 }),
         futas({ applied: true, rowsBefore: 100, rowsPlanned: 900 }),
         futas({ errorCode: "X", rowsBefore: 100, rowsPlanned: 900 }),
-      ],
-    });
+      ]),
+    );
 
     // KET terv-futas van, a valtozasuk 10 es 10 -- az iro futas 800-a nem szamit.
     assert.match(
@@ -132,12 +192,14 @@ describe("kapcsolat-újraépítés futásainak olvasása", () => {
   it("a rossz --limit értéket elutasítja, és nem kérdez le", async () => {
     const { out, hibak } = kimenet();
     let hivas = 0;
-    const kod = await runKapcsolatFutasokCli(["--limit", "0"], out, {
-      futasok: async () => {
+    const kod = await runKapcsolatFutasokCli(
+      ["--limit", "0"],
+      out,
+      d(async () => {
         hivas += 1;
         return [];
-      },
-    });
+      }),
+    );
 
     assert.equal(kod, 1);
     assert.equal(hivas, 0);
@@ -147,22 +209,26 @@ describe("kapcsolat-újraépítés futásainak olvasása", () => {
   it("a --limit értékét átadja a lekérdezésnek", async () => {
     const { out } = kimenet();
     const kapott: number[] = [];
-    await runKapcsolatFutasokCli(["--limit", "3"], out, {
-      futasok: async (limit) => {
+    await runKapcsolatFutasokCli(
+      ["--limit", "3"],
+      out,
+      d(async (limit) => {
         kapott.push(limit);
         return [];
-      },
-    });
+      }),
+    );
     assert.deepEqual(kapott, [3]);
   });
 
   it("a hibát megnevezi, és nem nulla kóddal tér vissza", async () => {
     const { out, hibak } = kimenet();
-    const kod = await runKapcsolatFutasokCli([], out, {
-      futasok: async () => {
+    const kod = await runKapcsolatFutasokCli(
+      [],
+      out,
+      d(async () => {
         throw new Error("a tábla nem olvasható");
-      },
-    });
+      }),
+    );
 
     assert.equal(kod, 1);
     assert.match(hibak.join(""), /a tábla nem olvasható/);

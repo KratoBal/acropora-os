@@ -51,6 +51,19 @@ export interface CliOutput {
 
 export interface FutasokDeps {
   futasok(limit: number): Promise<FutasSor[]>;
+  /**
+   * AZ UTEMEZO KAPCSOLOJA -- MERT AZ URES EREDMENY LEGGYAKORIBB OKA EZ.
+   *
+   * Merve 2026-09-17 23:14 (acrobot, mind a ket kornyezeten): a tabla LETEZIK
+   * es URES, es nem azert, mert a csendes ora meg nem jott el, hanem mert az
+   * `UNAS_RELATION_REBUILD_SCHEDULE_ENABLED` valtozo SEHOL nem all. Ot bement
+   * PR keszult el ugy, hogy egyik sem futott meg soha.
+   *
+   * O ezt kezzel nyomozta ki, konteneren belul. Egy ures lista magatol nem
+   * mondja meg, hogy "meg korai" vagy hogy "nincs felhuzva" -- pedig a ketto
+   * teljesen mas teendo.
+   */
+  utemezoBekapcsolva(): boolean;
 }
 
 /** Alapertelmezett darabszam. Egy napi futasnal ez ket hetnyi tortenet. */
@@ -103,6 +116,22 @@ export async function runKapcsolatFutasokCli(
         "Egyetlen futás sincs feljegyezve. Ez vagy azt jelenti, hogy a " +
           "parancs még sosem futott ezen az adatbázison, vagy hogy rossz " +
           "adatbázisra néztünk.\n",
+      );
+      /*
+        ES A HARMADIK OK, AMI A LEGGYAKORIBB -- ES AMIT EDDIG KEZZEL KELLETT
+        KINYOMOZNI. Egy ures lista magatol nem valaszt el ket teljesen kulonbozo
+        allapotot: "meg korai" (be van kapcsolva, de a csendes ora meg nem jott
+        el) es "nincs felhuzva" (a kapcsolo sehol nem all). A teendo ellentetes:
+        az elsonel VARNI kell, a masodiknal DONTENI.
+      */
+      out.stdout(
+        deps.utemezoBekapcsolva()
+          ? "Az ütemező BE VAN KAPCSOLVA ebben a környezetben, tehát a " +
+              "csendes ablak még nem jött el, vagy a folyamat nem futott " +
+              "azóta. Várni kell rá.\n"
+          : "AZ ÜTEMEZŐ NINCS BEKAPCSOLVA ebben a környezetben " +
+              "(UNAS_RELATION_REBUILD_SCHEDULE_ENABLED). Nem késik: fel sem " +
+              "húztuk. Ez nem várakozás kérdése, hanem döntésé.\n",
       );
       return 0;
     }
@@ -162,6 +191,8 @@ if (
       stderr: (t) => process.stderr.write(t),
     },
     {
+      utemezoBekapcsolva: () =>
+        process.env.UNAS_RELATION_REBUILD_SCHEDULE_ENABLED === "true",
       futasok: (limit) =>
         prisma.unasRelationRebuildRun.findMany({
           orderBy: { startedAt: "desc" },
