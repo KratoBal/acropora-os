@@ -61,7 +61,7 @@ describe("a mentett másolat kimondja, mi nem megy", () => {
    * VOLNA. A `photo` sor hiánya pontosan az az állapot volt, amiben a szakasz
    * némán eltűnt.
    */
-  it("a képernyő MIND A KÉT mondatot kiteszi", () => {
+  it("a képernyő MINDEN mondatot kitesz, amit a tábla hordoz", () => {
     const forras = kepernyo();
     /**
      * A KULCSOKAT A TABLABOL VESSZUK, NEM KEZZEL FELSOROLVA.

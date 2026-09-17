@@ -167,10 +167,28 @@ describe("a hibajegy csatolmány-szakasza", () => {
   it("a felirat a csempén látszik, és a nagy képnél írható", () => {
     const kod = kodSzoveg(olvas(KEPERNYO));
 
-    // A CSEMPEN: a sor tartalma.
-    assert.match(kod, /kep\.caption/);
-    // A NAGY KEPNEL: a mento hivas, a kliens fuggvenyevel.
-    assert.match(kod, /setServiceJobDocumentCaption\(/);
+    /**
+     * A CSEMPEN: A KIIRT SORRA MERUNK, NEM A MEZO EMLITESERE.
+     *
+     * EZT EGY KALIBRACIO KENYSZERITETTE KI. Az elso alakom `/kep\.caption/`
+     * volt, es amikor kivettem a csempe felirat-sorat, a teszt ZOLD MARADT: a
+     * `kep.caption` ott all a csempe megnyitasaban is
+     * (`setFelirat(kep.caption ?? "")`). Egy emlitesre mero allitas nem a
+     * KIIRAST meri.
+     *
+     * A `styles.csempeFelirat` viszont EGYETLEN helyen all: abban a sorban,
+     * ami a feliratot kirajzolja.
+     */
+    assert.match(kod, /styles\.csempeFelirat/);
+    assert.match(kod, /\{kep\.caption\}/);
+
+    /**
+     * A NAGY KEPNEL: A GOMB, nem csak a hivas neve. A `setServiceJobDocumentCaption(`
+     * minta a mutacio definiciojara IS illeszkedik, tehat a gomb kivetele utan is
+     * zold maradna -- ugyanaz a csapda, mint fent.
+     */
+    assert.match(kod, /accessibilityLabel="Felirat mentése"/);
+    assert.match(kod, /feliratMentes\.mutate\(\{/);
     assert.match(
       olvas(KLIENS),
       /export function setServiceJobDocumentCaption\(/,
