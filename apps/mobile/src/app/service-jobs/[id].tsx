@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import * as ImagePicker from "expo-image-picker";
+import type * as ImagePicker from "expo-image-picker";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -15,9 +15,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { OfflineNoticeCard } from "@/components/offline/OfflineNoticeCard";
-import { MAX_FILES_PER_UPLOAD } from "@/lib/api/document-upload";
-import { photoPermissionDeniedNotice } from "@/lib/api/photo-permission-notice";
 import { toPickedImages } from "@/lib/api/picked-image";
+import {
+  pickPhotosFromLibrary,
+  takePhotoFromCamera,
+  type PhotoPickResult,
+} from "@/lib/photos/pick-photos";
 import { describeUploadFailure } from "@/lib/api/network-failure";
 import { ApiNetworkError } from "@/lib/api/client";
 import {
@@ -157,15 +160,20 @@ export default function ServiceJobDetailScreen() {
   });
 
   /**
-   * A FÉNYKÉP FELTÖLTÉSE -- ÉS EZ A NEGYEDIK PÉLDÁNYA UGYANENNEK A MENETNEK.
+   * A FÉNYKÉP FELTÖLTÉSE -- ÉS EZ MARAD A KÉPERNYŐN, SZÁNDÉKOSAN.
    *
-   * Mérve 2026-09-16: a `assets/[id].tsx`, a `assets/new.tsx` és a
-   * `worksheets/new.tsx` ugyanezt a sort írja (engedély, választó, `toPickedImages`,
-   * részleges siker kimondása). A KIEMELÉS külön kártya, mert három BEOLVASZTOTT
-   * képernyő viselkedését mozgatná, és ez a kör amúgy is nagy.
+   * A készülék felé néző fél (engedély, választó, megszakítás) 2026-09-17 óta a
+   * `lib/photos/pick-photos.ts`-ben áll, és ez a képernyő volt az utolsó, ami
+   * kézzel írta. A KÉPEK SORSA viszont nem költözik oda: ez egy MÁR LÉTEZŐ lap,
+   * tehát a kép azonnal felmegy, és a hívás a jegy azonosítóját meg a jegy saját
+   * lista-kulcsát használja.
    *
-   * KIMONDVA ÁLL ITT, mert egy negyedik másolat nem új kockázatot hoz, hanem
-   * MEGSOKSZOROZZA a meglévőt -- és épp attól láthatatlan, hogy mind egyforma.
+   * ÉS EZÉRT NEM A `usePhotoAttachments` HOROG JÁR IDE. Az GYŰJT: állapotban
+   * tartja a képeket, amíg a rekord el nem készül. Egy ilyen már létező lapon a
+   * gyűjtés a BUKÁSNÁL romlana el -- egy sikertelen feltöltés után a képek bent
+   * maradnának, és a következő választás MEGINT elküldené őket, tehát két
+   * példány kerülne ugyanabból a képből. A `pick-photos.ts` fejléce ezt a két
+   * fajtát külön is megnevezi.
    */
   const uploadPicked = async (assets: ImagePicker.ImagePickerAsset[]) => {
     const { files, skipped } = toPickedImages(assets);
@@ -214,36 +222,34 @@ export default function ServiceJobDetailScreen() {
     }
   };
 
+  /**
+   * A HÁROM ÁLLAPOT SZÉTVÁLASZTVA, ÉS EZ NEM KOZMETIKA.
+   *
+   * A megszakítás NEM üzenet: a szerelő tudja, hogy ő lépett vissza. A
+   * megtagadás viszont IGEN, mert különben egy letiltott kamera ugyanúgy néz
+   * ki, mint a saját visszalépése -- semmi nem történik.
+   */
+  const feltoltAValasztasbol = async (eredmeny: PhotoPickResult) => {
+    if (eredmeny.kind === "denied") {
+      setNotice(eredmeny.notice);
+      return;
+    }
+    if (eredmeny.kind === "cancelled") return;
+    await uploadPicked(eredmeny.assets);
+  };
+
+  /** AZ ELSŐDLEGES ÚT: most készül a kép, a helyszínen. */
   const takePhoto = async () => {
     if (!id || uploading) return;
     setNotice(null);
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      setNotice(photoPermissionDeniedNotice("camera"));
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ["images"],
-    });
-    if (result.canceled) return;
-    await uploadPicked(result.assets);
+    await feltoltAValasztasbol(await takePhotoFromCamera());
   };
 
+  /** A MÁSODIK ÚT: egy korábban készült kép a galériából. */
   const pickPhotos = async () => {
     if (!id || uploading) return;
     setNotice(null);
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      setNotice(photoPermissionDeniedNotice("library"));
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsMultipleSelection: true,
-      selectionLimit: MAX_FILES_PER_UPLOAD,
-    });
-    if (result.canceled) return;
-    await uploadPicked(result.assets);
+    await feltoltAValasztasbol(await pickPhotosFromLibrary());
   };
 
   if (status === "unauthenticated") return <Redirect href="/login" />;

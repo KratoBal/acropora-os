@@ -12,6 +12,10 @@ import { describe, it } from "node:test";
  * sajat kezzel kerte az engedelyt es inditotta a valasztot: az eszkoz es a
  * hibajegy adatlapja. Ugyanaz a nyolc sor, ketszer.
  *
+ * MA MAR EGY SEM: az eszkoz adatlapja a #775-ben, a hibajegye 2026-09-17 este
+ * kerult at. Ez a szakasz azert marad, mert a mert allapot MULT ideju -- a
+ * lenti allitas viszont a JELENT meri, es egy hetedik masolatnal pirosodik.
+ *
  * MIERT SZAMIT: a #772 pont egy ilyen masolt reszben allitott valamit, es EGY
  * helyen ment be. Ha a tobbi masolat elter, a javitas nem all mindenhol -- es
  * ezt ugy talaljak meg, hogy az egyik kepernyon megy a feltoltes, a masikon
@@ -78,18 +82,17 @@ describe("a keszulek fele nezo kep-valaszto", () => {
    * MI PIROSIT: egy hetedik masolat. Az uzenet NEVEN nevezi a fajlt es a
    * hivast, mert egy puszta "valahol tobb van" nem mondja meg, hol.
    *
-   * A HIBAJEGY ADATLAPJA MA MEG KIVETEL, es ez KIMONDVA all, nem elhallgatva:
-   * azt a fajlt nautilus gallery-kartyaja (cc118129) is nyitva tarthatja,
-   * tehat kulon korben vezetjuk at. Amikor az megtortenik, ezt a kivetelt
-   * TOROLNI kell -- es ha valaki elfelejti, ez az allitas tovabbra is zold
-   * marad, tehat a torles nem magatol ertetodo.
+   * 2026-09-17 ESTEIG ITT EGY KIVETEL ALLT a hibajegy adatlapjara, es melle egy
+   * KULON allitas, ami azt merte, hogy a kivetel INDOKA meg fennall-e. Az az
+   * allitas tette elo a torlest: a hibajegy atvezetesekor PIROSRA valtott, es a
+   * kivetel nem tudott csendben tulelni a sajat okat. Egy kivetel, amit senki
+   * nem mer, evekig allhat ugy, hogy az indoka regen megszunt.
    */
   it("a képernyők nem hívják közvetlenül a választót", () => {
-    const KIVETEL = "src/app/service-jobs/[id].tsx";
     const vetkesek: string[] = [];
 
     for (const fajl of forrasFajlok(SRC)) {
-      if (fajl === KOZOS || fajl === KIVETEL) continue;
+      if (fajl === KOZOS) continue;
       const kod = kodSzoveg(readFileSync(fajl, "utf8"));
       for (const hivas of KESZULEK_HIVASOK)
         if (kod.includes(hivas)) vetkesek.push(`${fajl}: ${hivas}`);
@@ -99,25 +102,6 @@ describe("a keszulek fele nezo kep-valaszto", () => {
       vetkesek,
       [],
       `A képernyő közvetlenül hívja a választót. Használd a lib/photos/pick-photos.ts függvényeit:\n  ${vetkesek.join("\n  ")}`,
-    );
-  });
-
-  /**
-   * A KIVETEL MAGA IS ALLITAS -- KULONBEN CSENDBEN TULELNE A SAJAT OKAT.
-   *
-   * Ha a hibajegy adatlapja MAR atvezetodott, ez az allitas pirosra valt, es a
-   * kovetkezo ember a KIVETELT torli, nem a mai allapotot irja at. Egy kivetel,
-   * amit senki nem mer, evekig allhat ugy, hogy az indoka regen megszunt.
-   */
-  it("a hibajegy adatlapja MA még kivétel, és ezt mérjük is", () => {
-    const kod = kodSzoveg(
-      readFileSync("src/app/service-jobs/[id].tsx", "utf8"),
-    );
-    const meg_kezi = KESZULEK_HIVASOK.filter((hivas) => kod.includes(hivas));
-    assert.notDeepEqual(
-      meg_kezi,
-      [],
-      "A hibajegy adatlapja már nem hívja közvetlenül a választót: vedd ki a KIVETEL sorból a fenti állításban, és töröld ezt az állítást.",
     );
   });
 });
