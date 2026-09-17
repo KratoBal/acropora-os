@@ -63,12 +63,33 @@ import { describe, it } from "node:test";
  * hagyatkozva azt hiszi, hogy a Prisma-hivasok mezonevei fedve vannak, tevedni
  * fog az iro oldalon.
  *
- * AMIT NEM SIKERULT LEMERNI, ES A KONTROLL MONDTA MEG: hogy futaskor a Prisma
- * MEGFOGJA-E a nem letezo `data` kulcsot (dob-e, vagy csendben kihagyja). A
- * probam mind a harom hivasra ugyanazt a `PrismaClientInitializationError`-t
- * adta -- BELEERTVE A HELYES KONTROLL-HIVAST --, mert ebben a kontenerben nincs
- * elerheto adatbazis, es a kapcsolati hiba mindent elfed. Harom azonos eredmeny
- * nem lelet: a meres ERVENYTELEN, nem negativ. Ehhez elerheto adatbazis kell.
+ * AMI EGY IDEIG MERETLEN VOLT, ES AMI VEGUL MEGLETT: hogy futaskor a Prisma
+ * MEGFOGJA-E a nem letezo `data` kulcsot. Az elso probanal mind a harom hivas
+ * ugyanazt a `PrismaClientInitializationError`-t adta -- BELEERTVE A HELYES
+ * KONTROLL-HIVAST --, mert abban a kontenerben nem volt elerheto adatbazis, es
+ * a kapcsolati hiba mindent elfedett. Harom azonos eredmeny nem lelet: az a
+ * meres ERVENYTELEN volt, nem negativ.
+ *
+ * ELERHETO ADATBAZISSAL UJRAMERVE (acrobot, 2026-09-17 20:25, a fejlesztoi
+ * peldanyon, nem letezo azonositora, tehat iras nelkul):
+ *
+ *     kontroll olvasas (a kapcsolat el)            SIKER
+ *     update HELYES mezovel, nem letezo sorra      P2022 -- eljut az adatbazisig
+ *     nem letezo `data` kulcs, sima literal        PrismaClientValidationError
+ *     nem letezo `data` kulcs, SPREAD-del          PrismaClientValidationError
+ *     nem letezo `select` kulcs                    PrismaClientValidationError
+ *
+ * A VALASZ TEHAT: DOB, ES NEV SZERINT MEGMONDJA, melyik kulcs a rossz (a hiba
+ * alahuzza a kulcsot es kiirja a modell letezo mezoit). NEM hagyja ki csendben,
+ * es ezt a SPREAD alak sem valtoztatja meg: a szorast a FORDITO nem nezi, a
+ * FUTAS viszont igen, mert futaskor mar egyetlen objektum all ott.
+ *
+ * ES EZ NEM TESZI FELESLEGESSE AZ IRO OLDALI ORZOT, UGYANAZON AZ ALAPON, AMIN
+ * EZ A FAJL IS LETEZIK: az OLVASO oldal is hangosan bukik futaskor (`Unknown
+ * field externalId for select statement`, eles adatbazison, 2026-09-17) -- csak
+ * epp egy olyan parancsban, ami ritkan fut, es tizenkilenc zold allitas UTAN.
+ * A hangos futaskori hiba nem ugyanaz, mint egy kapu: az elso az eles futasban
+ * all meg, a masodik a CI-ben.
  *
  * (Az OLVASO oldalrol viszont van megfigyelesunk: a 2026-09-17-i futas eles
  * adatbazison `Unknown field externalId for select statement` hibaval allt meg,
