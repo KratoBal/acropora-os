@@ -254,8 +254,10 @@ export interface WorksheetLineDetail {
    * összemosása azt a csendet hozná vissza, amit ez a megkülönböztetés
    * elkerül - egy nulla forintos tétel a lapon ÉRTÉKNEK látszik.
    *
-   * Ár nélküli tétellel a lap nem zárható le, tehát a hiány nem marad
-   * észrevétlen.
+   * AZ ÁR HIÁNYA 2026-09-17 ÓTA NEM AKADÁLY a lezárásnál: Balázs döntése
+   * szerint a nettó, bruttó és áfa mezők sehol nem jelennek meg, és ezért a
+   * lezárási feltétel is kikerült. Az adat megmarad, ár továbbra is
+   * rendelhető -- csak a hiánya nem állít meg semmit.
    */
   unitNet: string | null;
   vatRatePercent: string | null;
@@ -297,8 +299,10 @@ export interface WorksheetLineInput {
    * irodában egészül ki. A hiány a `undefined`, NEM a nulla - egy nulla
    * forintos tétel a lapon értéknek látszik, nem hiánynak.
    *
-   * Ár nélküli tétellel a lap nem zárható le, tehát a hiány nem marad
-   * észrevétlen.
+   * AZ ÁR HIÁNYA 2026-09-17 ÓTA NEM AKADÁLY a lezárásnál: Balázs döntése
+   * szerint a nettó, bruttó és áfa mezők sehol nem jelennek meg, és ezért a
+   * lezárási feltétel is kikerült. Az adat megmarad, ár továbbra is
+   * rendelhető -- csak a hiánya nem állít meg semmit.
    */
   unitNet?: number;
   vatRatePercent?: number;

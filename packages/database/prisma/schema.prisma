@@ -3762,9 +3762,21 @@ model WorksheetLine {
   /// megkülönböztetni az ingyenes munkától, és semmi nem szól, ha valaki
   /// elfelejti kitölteni.
   ///
-  /// A HIÁNY NEM MARAD ÉSZREVÉTLEN: ár nélküli tétellel a lap nem zárható le.
-  /// A feltétel ma a LEZÁRÁSHOZ tartozik, mert az átadás fogalma a
-  /// rendszerben még nem létezik - amikor megszületik, oda kerül át.
+  /// AZ ÁR HIÁNYA 2026-09-17 ÓTA NEM AKADÁLY, ÉS EZ BALÁZS DÖNTÉSE.
+  ///
+  /// Eddig ár nélküli tétellel a lap nem volt lezárható. Balázs azt kérte, hogy
+  /// a nettó, bruttó és áfa mezők SEHOL ne jelenjenek meg (sem a weben, sem az
+  /// appban, sem a nyomtatott lapon), és a két elé tett út közül a "B"-t
+  /// választotta: tűnjenek el mindenhonnan, és akkor a lezárásból is ki kell
+  /// venni az ár-feltételt.
+  ///
+  /// Ha az ár sehol nem látszik, nincs hol megadni -- egy megmaradó feltétel
+  /// mellett EGYETLEN lapot sem lehetett volna lezárni.
+  ///
+  /// AZ OSZLOP MARAD (Balázs: "ne töröljük ezeket"), és ár továbbra is
+  /// RENDELHETŐ egy tételhez. Ami megszűnt, az az, hogy a hiánya megállít
+  /// valamit -- és ebből következik, hogy a számlázási alap nem a munkalapról
+  /// jön.
   unitNet            Decimal?          @db.Decimal(19, 4)
   vatRatePercent     Decimal?          @db.Decimal(5, 2)
   /// Az összegek az egységárból számolnak, tehát nélküle nincs mit tárolni.
@@ -4187,11 +4199,11 @@ model UnasProductSyncRun {
 /// viselkedest, csak FELJEGYZI, mi tortent. Amikor a gazda-atvetel megtortenik,
 /// egy `DROP TABLE` a teljes ara.
 model UnasRelationRebuildRun {
-  id          String   @id @default(cuid())
-  startedAt   DateTime @default(now())
-  completedAt DateTime?
+  id                              String    @id @default(cuid())
+  startedAt                       DateTime  @default(now())
+  completedAt                     DateTime?
   /// Irt-e a futas (`--apply`), vagy csak tervet keszitett.
-  applied     Boolean  @default(false)
+  applied                         Boolean   @default(false)
   /// MEGALLT-E a nagy valtozas hatarán -- es a sor ILYENKOR IS letrejon.
   ///
   /// Ez a legerdekesebb futas, amit rogziteni lehet: ha epp az nem hagyna
@@ -4204,11 +4216,11 @@ model UnasRelationRebuildRun {
   /// ovatos terv nyoma, hanem egy visszafogott IRAS-e. Enelkul a kovetkezo
   /// olvaso ezt a levezetest nem fogja megtenni, es az `applied = false`
   /// alapjan probalkozasnak nezi. (acrobot kikotese, 2026-09-17.)
-  stopped     Boolean  @default(false)
+  stopped                         Boolean   @default(false)
   /// Az osszes UNAS kapcsolat-sor a futas ELOTT, es amennyi a TERV szerint utana
   /// allna. A ketto kulonbsege az, amin a hatar all.
-  rowsBefore  Int      @default(0)
-  rowsPlanned Int      @default(0)
+  rowsBefore                      Int       @default(0)
+  rowsPlanned                     Int       @default(0)
   /// Hany termek visel hivatkozast, es mi tortent velük -- fajtankent.
   ///
   /// AZ ONHIVATKOZAS ES A DUPLIKATUM SZANDEKOSAN NINCS ITT: azok nem
@@ -4216,23 +4228,23 @@ model UnasRelationRebuildRun {
   /// ugyanaz. Egy oszlop, ami sosem mozdul, nem jelzes, hanem alapzaj -- a
   /// kimeneten viszont ott allnak. (Ugyanaz a dontes, mint a
   /// `UnasProductSyncRun` kapcsolat-szamlaloinal.)
-  similarProductsWithReferences   Int @default(0)
-  similarRelationsPlanned         Int @default(0)
-  similarRelationsWritten         Int @default(0)
-  similarRelationsRemoved         Int @default(0)
-  similarReferencesUnresolved     Int @default(0)
-  accessoryProductsWithReferences Int @default(0)
-  accessoryRelationsPlanned       Int @default(0)
-  accessoryRelationsWritten       Int @default(0)
-  accessoryRelationsRemoved       Int @default(0)
-  accessoryReferencesUnresolved   Int @default(0)
+  similarProductsWithReferences   Int       @default(0)
+  similarRelationsPlanned         Int       @default(0)
+  similarRelationsWritten         Int       @default(0)
+  similarRelationsRemoved         Int       @default(0)
+  similarReferencesUnresolved     Int       @default(0)
+  accessoryProductsWithReferences Int       @default(0)
+  accessoryRelationsPlanned       Int       @default(0)
+  accessoryRelationsWritten       Int       @default(0)
+  accessoryRelationsRemoved       Int       @default(0)
+  accessoryReferencesUnresolved   Int       @default(0)
   /// Amin NEM dolgoztunk, es az okuk kulon: a pillanatkep nem volt olvashato,
   /// illetve a termeknek nincs kulso azonositoja. Egy kozos szam a ket
   /// kulonbozo teendot mosna ossze.
-  unreadableSnapshots Int @default(0)
-  withoutExternalId   Int @default(0)
-  errorCode   String?
-  createdAt   DateTime @default(now())
+  unreadableSnapshots             Int       @default(0)
+  withoutExternalId               Int       @default(0)
+  errorCode                       String?
+  createdAt                       DateTime  @default(now())
 
   @@index([startedAt])
 }
