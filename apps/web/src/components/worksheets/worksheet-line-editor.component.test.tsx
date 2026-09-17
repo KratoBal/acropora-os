@@ -23,8 +23,61 @@ describe("WorksheetLineEditor feliratai", () => {
 
     // A feliratok a DOM-ban állnak; hogy MELYIK nézetben látszanak, az a
     // CSS dolga. Ami itt mérhető: hogy egyáltalán ott vannak-e.
-    for (const label of ["Mennyiség", "Mértékegység", "Egységár", "ÁFA"])
+    for (const label of ["Mennyiség", "Mértékegység"])
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
+
+    /*
+      ES A KET AR-CIMKE MAR NEM ALLHAT ITT. 2026-09-17-ig a fenti felsorolas
+      NEVEN NEVEZVE kovetelte az "Egysegar" es az "AFA" cimket -- azutan is,
+      hogy a ket beviteli mezo kikerult. Az allitas zold volt, es epp a hibat
+      orizte: hat cimke allt negy cella folott.
+    */
+    expect(screen.queryByText("Egységár")).toBeNull();
+    expect(screen.queryByText("ÁFA")).toBeNull();
+  });
+
+  /**
+   * A FEJLEC ANNYI CELLA, AMENNYI A SOR -- ES ENNYI OSZLOPA VAN A RACSNAK.
+   *
+   * === A MERT ESET, AMI EZT KIVALTOTTA (2026-09-17) ===
+   *
+   * A #811 kivette az egysegar es az AFA mezojet a SORBOL, a fejlecet es a
+   * racs-osztalyt viszont nem. Renderelve merve: fejlec 6 cella, sor 4, racs 6
+   * oszlop -- vagyis a "Torles" gomb az "Egysegar" cimke ala esett.
+   *
+   * SEMMI NEM SZOLT ROLA: a fordito nem latja, hogy ket lista osszetartozik, a
+   * lint sem, es a komponens-teszt a cimkeket NEV SZERINT kovetelte, tehat epp
+   * a hibas allapotot rogzitette helyesnek.
+   *
+   * === MIERT A DOM-BOL MEREM, ES NEM A KONSTANSOKBOL ===
+   *
+   * A konstansokat osszevetni annyit bizonyitana, hogy ket szam egyezik a
+   * forrasban. Ami elromlott, az a MEGJELENITETT szerkezet volt: harom kulon
+   * hely (racs-osztaly, fejlec, sor-cellak) csak a renderelt lapon talalkozik.
+   */
+  it("a fejléc, a sor és a rács oszlopszáma együtt mozog", () => {
+    const { container } = render(
+      <WorksheetLineEditor lines={[line()]} onChange={vi.fn()} />,
+    );
+
+    /*
+      A HAROM HORGONY, ES MINDEGYIK HIANYA DOBAS, NEM ZOLD. Ha barmelyik
+      elcsuszna (atirt osztalynev, mas elrendezes), az osszehasonlitasok ket
+      nullat vetnenek ossze -- es a teszt pont akkor hallgatna, amikor a
+      szerkezet megvaltozott.
+    */
+    const fejlec = container.querySelector('[aria-hidden="true"]');
+    if (!fejlec) throw new Error("nincs fejlécsor a szerkesztőben");
+    const sor = container.querySelector("div.grid.gap-2.border-b");
+    if (!sor) throw new Error("nincs tétel-sor a szerkesztőben");
+    const oszlopok = /md:grid-cols-\[([^\]]+)\]/.exec(sor.className)?.[1];
+    if (!oszlopok)
+      throw new Error(`a rács oszlop-osztálya nem olvasható: ${sor.className}`);
+
+    const fejlecCellak = fejlec.children.length;
+    expect(fejlecCellak).toBeGreaterThan(1);
+    expect(sor.children.length).toBe(fejlecCellak);
+    expect(oszlopok.split("_").length).toBe(fejlecCellak);
   });
 
   /**
