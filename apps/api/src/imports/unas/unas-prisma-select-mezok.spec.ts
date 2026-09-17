@@ -108,14 +108,62 @@ const GYOKER = "src";
 /**
  * AMIT A MINTA LAT, ES AMIT NEM -- PADLO, NEM GARANCIA.
  *
- * A `prisma.<modell>.<muvelet>({` alakra illeszkedik, tehat a `this.prisma.x`
+ * A `<kliens>.<modell>.<muvelet>({` alakra illeszkedik, tehat a `this.prisma.x`
  * es a `const { prisma } = ...; prisma.x` alakot is megfogja (reszsztringkent).
- * NEM fogja meg a tranzakcios `tx.x` alakot es a valtozoba tett klienst.
+ * NEM fogja meg azt, amikor a kliens egy TETSZOLEGES valtozoba kerul es a neve
+ * sehol nem derul ki a fajlbol.
  *
  * Ezt KIMONDVA hagyom itt, mert egy orzo, aminek a hatokorét nem ismerjuk,
  * pont annyira veszelyes, mint egy hianyzo: teljesnek latszik.
  */
-const HIVAS_MINTA = /prisma\.(\w+)\.\w+\(\s*\{/;
+
+/**
+ * A TRANZAKCIOS KLIENS NEVE A FORRASBOL JON, NEM KEZZEL FELSOROLVA.
+ *
+ * === MIERT KELL (acrobot merese, 2026-09-17, a #807 beolvasztasa elott) ===
+ *
+ * Egy nem letezo mezot tett a `worksheets.repository.ts` fajlba, es a teszt
+ * ZOLD MARADT: az a fajl a TRANZAKCIOS kliensen dolgozik
+ * (`transaction.supplier.findFirst` es tarsai), amit a `prisma.`-ra kotott
+ * minta nem lat. Epp ezt a fajlt bovitette aznap a #806.
+ *
+ * Egy orzo, ami a LEGFRISSEBB kodot hagyja ki, rosszabb a hianyzonal: teljesnek
+ * latszik. Ezert jott ez a kiterjesztes a `data` blokk ellenorzese ELE, es nem
+ * utana.
+ *
+ * === ES MIERT NEM EGY `["tx", "transaction"]` LISTA ===
+ *
+ * Mert az ugyanaz a hiba lenne, amit ez a fajl ma este mar ketszer megnevezett:
+ * egy kezzel felsorolt halmaz ott, ahol a halmazt a FORRAS maga megmondja. Egy
+ * holnap irt `trx` nev csendben kimaradna.
+ *
+ * Ket helyrol derul ki a nev, es mind a kettot olvassuk:
+ *
+ *     prisma.$transaction(async (NEV) => ...)   a visszahivas parametere
+ *     NEV: Prisma.TransactionClient             kiirt tipusu parameter
+ *
+ * (Merve ma: a fan `transaction` es `tx` fordul elo, 29+17, illetve 6+10
+ * helyen. A szam nem szamit -- az szamit, hogy nem ITT all.)
+ */
+const TRANZAKCIO_NEV_MINTAK = [
+  /\$transaction\(\s*async\s*\(\s*(\w+)/g,
+  /(\w+)\s*:\s*Prisma\.TransactionClient/g,
+];
+
+function kliensNevek(kod: string): string[] {
+  const nevek = new Set(["prisma"]);
+  for (const minta of TRANZAKCIO_NEV_MINTAK)
+    for (const m of kod.matchAll(minta)) nevek.add(m[1]!);
+  return [...nevek];
+}
+
+/** A fajlban elofordulo OSSZES kliensre szolo hivas-minta. */
+function hivasMinta(kod: string, globalis = false): RegExp {
+  return new RegExp(
+    `(?:${kliensNevek(kod).join("|")})\\.(\\w+)\\.\\w+\\(\\s*\\{`,
+    globalis ? "g" : "",
+  );
+}
 
 /**
  * UGYANAZ A MINTA SZURI A FAJLOKAT ES OLVASSA A HIVASOKAT -- KET KULON PELDANY
@@ -146,7 +194,7 @@ function vizsgaltFajlok(): string[] {
   return forrasFajlok(GYOKER)
     .filter((ut) => {
       const kod = readFileSync(ut, "utf8");
-      return HIVAS_MINTA.test(kod) && kod.includes("select:");
+      return hivasMinta(kod).test(kod) && kod.includes("select:");
     })
     .sort();
 }
@@ -207,14 +255,19 @@ interface SelectAg {
  * A NYITO `{` PAROS ZAROJELE. Stringeket es kommenteket atugorja, mert egy
  * `"}"` egy hibauzenetben ugyanugy `}` karakter.
  */
+const PAROK: Record<string, string> = { "{": "}", "[": "]", "(": ")" };
+
 function blokkVege(kod: string, nyito: number): number {
+  const nyitoJel = kod[nyito]!;
+  const zaroJel = PAROK[nyitoJel];
+  if (!zaroJel) return -1;
   let melyseg = 0;
   for (let i = nyito; i < kod.length; i += 1) {
     const c = kod[i]!;
     if (c === '"' || c === "'" || c === "`") {
-      const zaroJel = c;
+      const idezet = c;
       i += 1;
-      while (i < kod.length && kod[i] !== zaroJel) {
+      while (i < kod.length && kod[i] !== idezet) {
         if (kod[i] === "\\") i += 1;
         i += 1;
       }
@@ -231,8 +284,8 @@ function blokkVege(kod: string, nyito: number): number {
       i += 1;
       continue;
     }
-    if (c === "{") melyseg += 1;
-    else if (c === "}") {
+    if (c === nyitoJel) melyseg += 1;
+    else if (c === zaroJel) {
       melyseg -= 1;
       if (melyseg === 0) return i;
     }
@@ -240,7 +293,26 @@ function blokkVege(kod: string, nyito: number): number {
   return -1;
 }
 
-/** Egy objektum-literal FELSO SZINTU kulcsai: a nev es az ertek kezdete. */
+/**
+ * EGY OBJEKTUM-LITERAL FELSO SZINTU KULCSAI: a nev es az ertek kezdete.
+ *
+ * === EGY KULCS CSAK `{` VAGY `,` UTAN KEZDODHET, ES EZT HAROM HAMIS PIROS
+ * TANITOTTA MEG (2026-09-17) ===
+ *
+ * Az elso alak barhol elfogadta a `nev:` mintat a blokkon belul. Egy HAROMTAGU
+ * FELTETEL erteke viszont ugyanigy nez ki:
+ *
+ *     valamiMezo: feltetel ? null : { ... }
+ *                            ^^^^^^ a scanner ezt `null` NEVU kulcsnak latta
+ *
+ * Harom fajlon jelentett `null` nevu "mezot", ket masikon pedig a kornyezo kod
+ * helyi valtozoneveit. Egyik sem volt valodi hiba -- es epp ez a veszelyes:
+ * ot hamis piros utan az elso reakcio az orzo kikapcsolasa.
+ *
+ * A megkotes ezert szerkezeti: a kulcsot MEGELOZO jelentos karakter csak a
+ * blokk nyitasa vagy egy vesszo lehet. Ez a haromtagu feltetel ket agat es a
+ * cimke-szeru alakokat egyarant kizarja, es nem kell hozza kivetel-lista.
+ */
 function felsoKulcsok(
   kod: string,
   nyito: number,
@@ -248,24 +320,30 @@ function felsoKulcsok(
   const zaro = blokkVege(kod, nyito);
   if (zaro === -1) return [];
   const kulcsok: Array<{ nev: string; ertekKezd: number }> = [];
+  /** Az utolso JELENTOS karakter: ebbol derul ki, hogy kulcs kovetkezhet-e. */
+  let elozo = "{";
   let i = nyito + 1;
   while (i < zaro) {
     const c = kod[i]!;
+    if (/\s/.test(c)) {
+      i += 1;
+      continue;
+    }
     if (c === "{" || c === "[" || c === "(") {
-      const belsoZaro =
-        c === "{" ? blokkVege(kod, i) : kod.indexOf(c === "[" ? "]" : ")", i);
+      const belsoZaro = blokkVege(kod, i);
       if (belsoZaro === -1) return kulcsok;
       i = belsoZaro + 1;
+      elozo = "}";
       continue;
     }
     if (c === '"' || c === "'" || c === "`") {
-      const zaroJel = c;
       i += 1;
-      while (i < zaro && kod[i] !== zaroJel) {
+      while (i < zaro && kod[i] !== c) {
         if (kod[i] === "\\") i += 1;
         i += 1;
       }
       i += 1;
+      elozo = "s";
       continue;
     }
     if (c === "/" && kod[i + 1] === "/") {
@@ -278,12 +356,19 @@ function felsoKulcsok(
       i = vege === -1 ? zaro : vege + 2;
       continue;
     }
-    const m = /^(\w+)\s*:\s*/.exec(kod.slice(i, i + 80));
-    if (m) {
-      kulcsok.push({ nev: m[1]!, ertekKezd: i + m[0]!.length });
-      i += m[0]!.length;
+    if (c === ",") {
+      elozo = ",";
+      i += 1;
       continue;
     }
+    const m = /^(\w+)\s*:\s*/.exec(kod.slice(i, i + 80));
+    if (m && (elozo === "{" || elozo === ",")) {
+      kulcsok.push({ nev: m[1]!, ertekKezd: i + m[0]!.length });
+      i += m[0]!.length;
+      elozo = ":";
+      continue;
+    }
+    elozo = c;
     i += 1;
   }
   return kulcsok;
@@ -384,7 +469,7 @@ function agKezdete(kod: string, ertekKezd: number): number | null {
  */
 function selectMezok(kod: string, sema: string): Map<string, Set<string>> {
   const talalt = new Map<string, Set<string>>();
-  for (const m of kod.matchAll(new RegExp(HIVAS_MINTA.source, "g"))) {
+  for (const m of kod.matchAll(hivasMinta(kod, true))) {
     const modell = m[1]![0]!.toUpperCase() + m[1]!.slice(1);
     if (!sema.includes(`model ${modell} {`)) continue;
     const argKezd = kod.indexOf("{", m.index!);
@@ -454,30 +539,39 @@ describe("a parancsok select-mezői léteznek a sémán", () => {
       mezok.size >= 1,
       `gyanúsan kevés select-blokkot találtam: ${[...mezok.keys()].join(", ")}`,
     );
+
+    /*
+      ES A KLIENS-NEV KIOLVASASANAK IS KELL ISMERT POZITIV ESET. Ha a ket minta
+      elromlik (atnevezes, mas alak), a `kliensNevek` csendben csak `prisma`-t
+      adna vissza: nem hibazna, csak visszaszukulne a regi hatokorre -- es a
+      tranzakcion belul iro fajlok ujra lathatatlanok lennenek. Ez az allitas
+      azt meri, hogy a kiolvasas TALAL is, nem csak fut.
+    */
+    const osszesNev = new Set(FAJLOK.flatMap((ut) => kliensNevek(forras(ut))));
+    assert.ok(
+      [...osszesNev].some((nev) => nev !== "prisma"),
+      `a tranzakciós kliens nevét sehol nem olvastam ki: ${[...osszesNev].join(", ")}`,
+    );
   });
 
   /**
-   * AMIT A BEJARAS BEHUZ, DE AZ OLVASO NEM LAT -- NEVVEL, ES OKKAL.
+   * AMIT A BEJARAS BEHUZ, DE AZ OLVASO NEM LAT -- ES MA EZ A LISTA URES.
    *
-   * EZ NEM KIVETEL-LISTA, HANEM MERT VAKFOLT. Ket kulonbozo dolog, es a
-   * kulonbseg az, hogy ez a lista KOTELEZOEN PONTOS: ha egy uj fajl kerul bele
-   * (mert olyan alakban ir, amit az olvaso nem lat), a teszt PIROS lesz, es
-   * valakinek el kell dontenie, hogy az olvasot bovitjuk-e vagy tudomasul
-   * vesszuk. Enelkul a vakfolt csendben nohetne.
+   * EZ NEM KIVETEL-LISTA, HANEM MERT VAKFOLT, es KOTELEZOEN PONTOS: ha egy uj
+   * fajl kerul bele (mert olyan alakban ir, amit az olvaso nem lat), a teszt
+   * PIROS lesz, es valakinek el kell dontenie, hogy az olvasot bovitjuk-e vagy
+   * tudomasul vesszuk.
    *
-   *   brands.repository.ts   az egyetlen olvasasa egy `include` konstanson megy,
-   *                          amiben csak `_count` es egy relacio all -- tehat
-   *                          nincs is ellenorizheto mezoneve --, az irasai
-   *                          pedig a TRANZAKCIOS kliensen (`tx.<modell>`)
+   * HOGY LETT URES: ket lepesben. A `data` blokk beemelese elvitte az egyik
+   * fajlt, a TRANZAKCIOS KLIENS bevonasa a masikat (`brands.repository.ts`
+   * minden irasa `tx.<modell>` alakban megy). Vagyis a lista nem attol urult
+   * ki, hogy engedtunk a mercebol, hanem attol, hogy az olvaso tobbet lat.
    *
-   * A TRANZAKCIOS KLIENS A TAGABB FAJTA, es kulon kerdes: ott a modell neve
-   * ugyanugy ott van, de a valtozo neve nem rogzitett (`tx`, `trx`, barmi).
-   *
-   * EGY FAJL KIKERULT EBBOL A LISTABOL, amikor az iro oldal is bekerult
-   * (`nav-incoming-invoice.repository.ts`): a `data` blokkjai lathatova valtak.
-   * Ez a lista tehat nem allando -- epp ezert all rajta pontos allitas.
+   * ES AZ URES LISTA IS ALLITAS, sot a legerosebb alakja: ma MINDEN behuzott
+   * fajlon tenylegesen merunk valamit. Az elso fajl, amelyik ebbol kiesik,
+   * pirosra viszi ezt a sort.
    */
-  const LATATLAN = ["src/brands/brands.repository.ts"];
+  const LATATLAN: string[] = [];
 
   it("a vakfolt listája pontos: se több, se kevesebb", () => {
     const uresek = FAJLOK.filter(
