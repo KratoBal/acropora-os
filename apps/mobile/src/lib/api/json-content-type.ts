@@ -12,13 +12,33 @@
  * mező egyszerre bukik el a validáción, pontosan úgy, mintha az űrlapot üresen
  * küldték volna be.
  *
- * A FORMDATA NEM KAP. A fénykép- és dokumentum-feltöltés a saját `boundary`
- * értékét viszi, amit a futtató maga ír a fejlécbe; egy kézzel beírt
- * `application/json` felülírná, és a szerver az egész törzset egyetlen
- * értelmezhetetlen blokknak látná. A kérés megérkezne, a fájl nélkül.
+ * A FORMDATA NEM KAP. A többrészes törzs a saját `boundary` értékét viszi, és
+ * egy kézzel beírt `application/json` mellett a szerver az egész törzset egyetlen
+ * értelmezhetetlen blokknak látná: a kérés megérkezne, a fájl nélkül. A hiba
+ * CSENDES -- a hívás nem dob, a válasz egy sima elutasítás, és a telefonon úgy
+ * néz ki, mintha magával a fájllal lenne baj.
  *
- * ÉS EZ A HIBA CSENDES: a hívás nem dob, a válasz egy sima elutasítás, és a
- * telefonon úgy néz ki, mintha magával a fájllal lenne baj.
+ * === ÉS A MAI FUTTATÓ EGY RÉTEGGEL MEGVÉD -- DE EZ NEM OK A LAZÍTÁSRA ===
+ *
+ * Mérve (nautilus, 2026-09-17, Expo 57.0.11): a futtató globális `fetch`-e a
+ * `FormData` törzsnél FELÜLÍRJA a Content-Type fejlécet a saját boundary-jával.
+ * A két sor, ahonnan ez jön:
+ *
+ *     // expo/src/winter/fetch/RequestUtils.ts
+ *     overriddenHeaders: [['Content-Type', `multipart/form-data; boundary=...`]]
+ *     // expo/src/winter/fetch/fetch.ts
+ *     headers = overrideHeaders(headers, overriddenHeaders);
+ *
+ * Vagyis MA egy tévesen beírt `application/json` nem okozna kárt: a futtató
+ * eldobná. Ezt ki kell mondani, mert enélkül ez a döntés ERŐSEBB védelemnek
+ * látszik, mint amilyen -- és egy megjegyzés, ami többet ígér a valóságnál,
+ * rosszabb a semminél.
+ *
+ * AMIÉRT A DÖNTÉS MÉGIS MARAD: a felülírás a FUTTATÓ választásán múlik, nem a
+ * miénken. Az `expo/src/winter/runtime.native.ts` végén ott az
+ * `EXPO_PUBLIC_USE_RN_FETCH` kapcsoló, ami visszaadja a React Native saját
+ * `fetch`-ét -- és az nem ír felül semmit. Egy ilyen váltás egyetlen sor, és
+ * ettől a ma ártalmatlan hiba némán élessé válna.
  *
  * A webes kliens ugyanezt a különbséget már megteszi (`jsonContentType`),
  * ugyanabból az okból.
