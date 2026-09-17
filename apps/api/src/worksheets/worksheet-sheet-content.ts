@@ -16,15 +16,21 @@
  * látható jelöléssel. Az ÁR, az ÁFA és a bruttó SEHOL nem jelenik meg (2026-09-17
  * 19:17 és 19:21, a „b" út).
  *
- * NYOLC MEZŐRŐL NINCS DÖNTÉS, és ezért SZÁNDÉKOSAN nincs benne egyik sem:
- * a hibajegy-szám, a partner-azonosító, a mi eszközszámunk a tételeken, az
- * aláírást RÖGZÍTŐ kolléga neve, és a fizetési határidő. Ezek nem elrendezési
- * kérdések: arról szólnak, mi a mienk és mi az ügyfélé. Amíg nincs válasz, egy
- * találgatás a VEVŐ kezében jelenne meg.
+ * A MARADÉK NYOLC MEZŐ 2026-09-17 23:08-KOR DŐLT EL (acrobot, a döntése a
+ * 6c2edc0d kártyán áll):
  *
- * Három továbbit magam döntöttem el, mert megjelenítési kérdés: a tétel fajtája
- * nem kap külön oszlopot (ott áll mellette a munkaóra, vagy nem áll); az alegység
- * kódja a neve mellett, zárójelben; az előzmény-lap csak akkor, ha van.
+ *   RÁKERÜL     hibajegy-szám, partner-azonosító, a MI eszközszámunk a
+ *               tételeken, az aláírást RÖGZÍTŐ kolléga neve (külön címkével),
+ *               az alegység kódja, és az előzmény-lap (csak ha van)
+ *   NEM KERÜL   a fizetési határidő, és a tétel fajtája külön oszlopként
+ *
+ * A HATÁRIDŐ KIMARADÁSÁNAK INDOKA KÜLÖN ÁLL, mert ez a leggyengébb pont: az
+ * ár-döntés után egy határidő ÖSSZEG NÉLKÜL többet kérdez, mint amennyit mond.
+ * A kihagyás a visszafordítható irány -- ha később mégis kell, egy sor.
+ * Fordítva nem: egy értelmetlen dátum a vevő előtt már kiment.
+ *
+ * A TÉTEL FAJTÁJA azért nem kap oszlopot, mert ott áll mellette a munkaóra, vagy
+ * nem áll -- egy külön „fajta" oszlop ugyanazt mondaná kétszer.
  */
 
 /** A lap egy tétele -- csak az, amit a lap kiír. */
@@ -32,7 +38,12 @@ export interface WorksheetSheetLine {
   position: number;
   description: string;
   detail: string | null;
-  /** Az ÜGYFÉL saját eszközkódja. A mienk (assetNumber) NEM kerül a lapra. */
+  /**
+   * A MI eszközszámunk. 2026-09-17 23:08 óta RÁKERÜL: a készüléken ott a
+   * matrica, tehát a helyszínen ez azonosítja a gépet, nem csak nálunk.
+   */
+  assetNumber: string | null;
+  /** Az ÜGYFÉL saját eszközkódja. Külön mező, mert külön jelentés. */
   inventoryNumber: string | null;
   quantity: string;
   unit: string;
@@ -47,6 +58,10 @@ export interface WorksheetSheetInput {
   label: string;
   status: "DRAFT" | "AWAITING_SIGNATURE" | "SIGNED" | "REJECTED";
   customerName: string;
+  /** A mi vevőkódunk a partnerről. A partner saját rendszerében ez azonosít. */
+  customerNumber: string | null;
+  /** A hibajegy száma, ha a munka egy bejelentésből indult. */
+  jobNumber: string | null;
   departmentName: string;
   departmentCode: string;
   subject: string;
@@ -63,7 +78,16 @@ export interface WorksheetSheetInput {
   laborHours: string;
   signature: {
     decision: "ACCEPTED" | "REJECTED";
+    /** Az ÜGYFÉL embere, aki aláírt. */
     signerName: string;
+    /**
+     * A KOLLÉGÁNK, aki az aláírást rögzítette. NEM az aláíró.
+     *
+     * Két név áll egy helyen, és ez összekeverhető -- de a megoldás a KÜLÖN
+     * CÍMKE, nem a mező elhagyása: az aláírás hitelének része, hogy valakinek a
+     * jelenlétében született.
+     */
+    signedByName: string | null;
     signedAt: string;
     note: string | null;
   } | null;
@@ -154,7 +178,15 @@ export function worksheetSheetLines(
   if (input.status !== "SIGNED") out.push(DRAFT_MARK, "");
 
   out.push(`MUNKALAP  ${input.label}`, "");
-  out.push(label("Partner", input.customerName));
+  /*
+    A VEVŐKÓD A NÉV MELLETT, ZÁRÓJELBEN -- ugyanaz az alak, mint az alegységnél.
+    Nem külön sor: a kód a nevet AZONOSÍTJA, nem egy második tény róla.
+  */
+  out.push(
+    input.customerNumber
+      ? `Partner: ${input.customerName} (${input.customerNumber})`
+      : `Partner: ${input.customerName}`,
+  );
   out.push(`Alegység: ${input.departmentName} (${input.departmentCode})`);
   out.push(label("Tárgy", input.subject));
   out.push(label("Leírás", input.description));
@@ -166,6 +198,7 @@ export function worksheetSheetLines(
       ? `Dolgozott rajta: ${input.assigneeNames.join(", ")}`
       : null,
   );
+  out.push(label("Hibajegy", input.jobNumber));
   out.push(label("Lezárva", sheetDate(input.closedAt)));
   out.push(label("Folytatás", input.continuesLabel ?? null));
 
@@ -176,6 +209,12 @@ export function worksheetSheetLines(
     for (const line of input.lines) {
       out.push(`${line.position}. ${line.description}`);
       out.push(line.detail ? `   ${line.detail}` : null);
+      /*
+        A KÉT KÓD KÜLÖN CÍMKÉT KAP, ÉS EZ NEM BŐBESZÉDŰSÉG. A felső a MIENK (a
+        készüléken lévő matrica), az alsó az ÜGYFÉLÉ. Két csupasz kód egymás
+        alatt pont azt a keveredést hozná, ami ellen a mező külön nevet kapott.
+      */
+      out.push(line.assetNumber ? `   Eszköz: ${line.assetNumber}` : null);
       out.push(
         line.inventoryNumber
           ? `   Leltári szám: ${line.inventoryNumber}`
@@ -209,6 +248,7 @@ export function worksheetSheetLines(
       `${decision}. Aláírta: ${input.signature.signerName}, ` +
         `${sheetDate(input.signature.signedAt)}`,
     );
+    out.push(label("Az aláírást rögzítette", input.signature.signedByName));
     out.push(label("Megjegyzés", input.signature.note));
   }
 
