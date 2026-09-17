@@ -265,10 +265,25 @@ export function listAssignableWorksheetUsers() {
  *
  * A válasz a TELJES lap, tehát a képernyő frissül külön lekérdezés nélkül.
  */
+/**
+ * A KÉRÉS TÖRZSE NEVESÍTETT TÍPUS, HOLOTT EGY MEZŐ.
+ *
+ * Nem stílus: az `apps/api/src/mobile/mobile-request-body.spec.ts` hálója a
+ * NEVESÍTETT típusokat tudja a szerver DTO-jához mérni. Egy helyben megírt
+ * `{ userIds }` objektumnak nincs mihez kötni a nevét, tehát abba a halmazba
+ * kerülne, amit ma semmi nem mér -- és épp az a hibafajta maradna fedetlen,
+ * amiért az a háló létezik: egy mezőnév, amit a telefon küld és a DTO nem
+ * ismer, 400-at ad, térerő nélkül pedig a sorban ragad.
+ */
+export interface SetWorksheetAssigneesInput {
+  userIds: string[];
+}
+
 export function setWorksheetAssignees(id: string, userIds: readonly string[]) {
+  const torzs: SetWorksheetAssigneesInput = { userIds: [...userIds] };
   return apiRequest<WorksheetDetail>(
     `${BASE}/${encodeURIComponent(id)}/assignees`,
-    { method: "PUT", body: JSON.stringify({ userIds: [...userIds] }) },
+    { method: "PUT", body: JSON.stringify(torzs) },
   );
 }
 
